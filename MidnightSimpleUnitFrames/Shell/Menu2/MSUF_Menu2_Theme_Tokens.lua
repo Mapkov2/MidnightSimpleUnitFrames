@@ -200,13 +200,19 @@ groupframes gf_layout gf_bars gf_auras gf_indicators gf_priority=0.659,0.706,0.7
 modules=0.231,0.510,0.965
 profiles=0.659,0.706,0.780
 ]]
+-- Glass material layers, painted back-to-front by `T.ApplyGlass`.
+-- `grain` and `glow` were removed deliberately: both sat at 0.008-0.014 alpha
+-- carrying a color within ~0.01 of the surface beneath them, so their per-pixel
+-- delta landed below one 8-bit level and rendered nothing on any display. They
+-- cost three textures per glassed frame to be invisible. Keep new layers above
+-- ~0.02 alpha, or with a color that actually differs from the surface below.
 T.glassVariants = T.glassVariants or GlassVariants [[
-shell tint=0.020,0.039,0.071,0.170 wash=0.035,0.067,0.114,0.026 depth=0.000,0.000,0.000,0.220 grain=0.035,0.067,0.114,0.014 top=0.231,0.510,0.965,0.046 bottom=0.000,0.000,0.000,0.300 glow=0.231,0.510,0.965,0.014 side=0.102,0.173,0.259,0.044
-rail tint=0.027,0.063,0.106,0.165 wash=0.035,0.067,0.114,0.024 depth=0.000,0.000,0.000,0.200 grain=0.035,0.067,0.114,0.014 top=0.231,0.510,0.965,0.040 bottom=0.000,0.000,0.000,0.275 glow=0.231,0.510,0.965,0.012 side=0.102,0.173,0.259,0.040
-host tint=0.035,0.067,0.114,0.150 wash=0.055,0.098,0.161,0.020 depth=0.000,0.000,0.000,0.180 grain=0.035,0.067,0.114,0.012 top=0.231,0.510,0.965,0.034 bottom=0.000,0.000,0.000,0.255 glow=0.231,0.510,0.965,0.010 side=0.102,0.173,0.259,0.036
-status tint=0.035,0.067,0.114,0.145 wash=0.055,0.098,0.161,0.020 depth=0.000,0.000,0.000,0.170 top=0.231,0.510,0.965,0.036 bottom=0.000,0.000,0.000,0.260 glow=0.231,0.510,0.965,0.012 side=0.102,0.173,0.259,0.038
-popup tint=0.020,0.039,0.071,0.200 wash=0.035,0.067,0.114,0.024 depth=0.000,0.000,0.000,0.220 grain=0.035,0.067,0.114,0.014 top=0.231,0.510,0.965,0.038 bottom=0.000,0.000,0.000,0.310 glow=0.231,0.510,0.965,0.012 side=0.102,0.173,0.259,0.040
-card tint=0.055,0.098,0.161,0.145 wash=0.035,0.067,0.114,0.018 depth=0.000,0.000,0.000,0.175 grain=0.035,0.067,0.114,0.010 top=0.231,0.510,0.965,0.030 bottom=0.000,0.000,0.000,0.245 glow=0.231,0.510,0.965,0.008 side=0.102,0.173,0.259,0.032
+shell tint=0.020,0.039,0.071,0.170 wash=0.035,0.067,0.114,0.026 depth=0.000,0.000,0.000,0.220 top=0.231,0.510,0.965,0.046 bottom=0.000,0.000,0.000,0.300 side=0.102,0.173,0.259,0.044
+rail tint=0.027,0.063,0.106,0.165 wash=0.035,0.067,0.114,0.024 depth=0.000,0.000,0.000,0.200 top=0.231,0.510,0.965,0.040 bottom=0.000,0.000,0.000,0.275 side=0.102,0.173,0.259,0.040
+host tint=0.035,0.067,0.114,0.150 wash=0.055,0.098,0.161,0.020 depth=0.000,0.000,0.000,0.180 top=0.231,0.510,0.965,0.034 bottom=0.000,0.000,0.000,0.255 side=0.102,0.173,0.259,0.036
+status tint=0.035,0.067,0.114,0.145 wash=0.055,0.098,0.161,0.020 depth=0.000,0.000,0.000,0.170 top=0.231,0.510,0.965,0.036 bottom=0.000,0.000,0.000,0.260 side=0.102,0.173,0.259,0.038
+popup tint=0.020,0.039,0.071,0.200 wash=0.035,0.067,0.114,0.024 depth=0.000,0.000,0.000,0.220 top=0.231,0.510,0.965,0.038 bottom=0.000,0.000,0.000,0.310 side=0.102,0.173,0.259,0.040
+card tint=0.055,0.098,0.161,0.145 wash=0.035,0.067,0.114,0.018 depth=0.000,0.000,0.000,0.175 top=0.231,0.510,0.965,0.030 bottom=0.000,0.000,0.000,0.245 side=0.102,0.173,0.259,0.032
 ]]
 local function DefaultToken(tbl, key, value)
     if tbl[key] == nil then tbl[key] = value end

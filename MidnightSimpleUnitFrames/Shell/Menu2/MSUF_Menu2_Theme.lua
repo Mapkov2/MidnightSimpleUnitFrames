@@ -1115,10 +1115,6 @@ local function EnsurePanelAssetDepth(frame)
     local bottom = frame:CreateTexture(nil, "BORDER", nil, -8)
     bottom:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 6, 5)
     bottom:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -6, 5)
-    local grain = frame:CreateTexture(nil, "BORDER", nil, -7)
-    grain:SetPoint("TOPLEFT", frame, "TOPLEFT", 5, -5)
-    grain:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -5, 5)
-    if grain.SetBlendMode then grain:SetBlendMode("BLEND") end
     local leftGlint = frame:CreateTexture(nil, "ARTWORK", nil, 1)
     leftGlint:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -4)
     leftGlint:SetHeight(2)
@@ -1136,7 +1132,7 @@ local function EnsurePanelAssetDepth(frame)
     cornerGlow:SetSize(76, 18)
     cornerGlow:SetTexture(T.media.bgSmooth or WHITE8)
     if cornerGlow.SetBlendMode then cornerGlow:SetBlendMode("ADD") end
-    frame._msuf2PanelAssetDepth = { top = top, bottom = bottom, grain = grain, leftGlint = leftGlint, rightGlint = rightGlint, cornerGlow = cornerGlow }
+    frame._msuf2PanelAssetDepth = { top = top, bottom = bottom, leftGlint = leftGlint, rightGlint = rightGlint, cornerGlow = cornerGlow }
     return frame._msuf2PanelAssetDepth
 end
 local function StopPanelNeonPulse(depth)
@@ -1220,11 +1216,6 @@ local function ApplyPanelAssetDepth(frame, variant)
             false)
         depth.bottom:Show()
     end
-    if depth.grain then
-        if T.media and T.media.bgCharcoal then depth.grain:SetTexture(T.media.bgCharcoal) end
-        depth.grain:SetVertexColor(glow[1], glow[2], glow[3], strong and 0.007 or 0.005)
-        depth.grain:Show()
-    end
     if frame._msuf2NoPanelNeon or not frame._msuf2NeonEdge then
         StopPanelNeonPulse(depth)
         if depth.leftGlint and depth.leftGlint.Hide then depth.leftGlint:Hide() end
@@ -1272,7 +1263,6 @@ local function HidePanelAssetDepth(frame)
     StopPanelNeonPulse(depth)
     if depth.top and depth.top.Hide then depth.top:Hide() end
     if depth.bottom and depth.bottom.Hide then depth.bottom:Hide() end
-    if depth.grain and depth.grain.Hide then depth.grain:Hide() end
     if depth.leftGlint and depth.leftGlint.Hide then depth.leftGlint:Hide() end
     if depth.rightGlint and depth.rightGlint.Hide then depth.rightGlint:Hide() end
     if depth.cornerGlow and depth.cornerGlow.Hide then depth.cornerGlow:Hide() end
@@ -1367,17 +1357,16 @@ function T.ApplyGlass(frame, variant)
     if tint and tint.Show then tint:Show() end
     PaintGlassLayer(frame, "_msuf2GlassWash", 1, spec.wash, T.media.bgSmooth, 3, "ADD")
     PaintGlassLayer(frame, "_msuf2GlassDepth", 2, spec.depth, T.media.bgSmooth, 3, "BLEND", { 0, 0, 1, 0, 0, 1, 1, 1 })
-    PaintGlassLayer(frame, "_msuf2GlassGrain", 3, spec.grain, T.media.bgCharcoal, 2)
-    PaintGlassLayer(frame, "_msuf2GlassOuterGlow", -1, spec.glow, T.media.bgSmooth, -3, "ADD")
+    -- Grain, outer glow, and the top-line bloom are gone: at 0.008-0.014 alpha
+    -- over a surface of nearly the same color they resolved to a sub-1/255
+    -- delta, so they only ever cost draw calls. See the glassVariants note.
+    HideFrameTexture(frame, "_msuf2GlassGrain")
+    HideFrameTexture(frame, "_msuf2GlassOuterGlow")
+    HideFrameTexture(frame, "_msuf2GlassTopGlow")
     local top = GlassTexture(frame, "_msuf2GlassTopLine", "ARTWORK", 0)
     PlaceGlassLine(top, frame, "TOP", 1)
     ColorTexture(top, spec.top)
     if top and top.Show then top:Show() end
-    local topGlow = GlassTexture(frame, "_msuf2GlassTopGlow", "ARTWORK", 1)
-    PlaceGlassLine(topGlow, frame, "TOP", 3)
-    ColorTexture(topGlow, spec.glow)
-    if topGlow and topGlow.SetBlendMode then topGlow:SetBlendMode("ADD") end
-    if topGlow and topGlow.Show then topGlow:Show() end
     local bottom = GlassTexture(frame, "_msuf2GlassBottomLine", "ARTWORK", 0)
     PlaceGlassLine(bottom, frame, "BOTTOM", 1)
     ColorTexture(bottom, spec.bottom)
