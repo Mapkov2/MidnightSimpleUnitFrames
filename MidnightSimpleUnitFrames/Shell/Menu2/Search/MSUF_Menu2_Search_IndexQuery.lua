@@ -1395,6 +1395,17 @@ function SearchPages(query)
         CancelSearchBackgroundIndex()
         return {}
     end
+    -- Raw setting keys ("gf_party.hpTextMode") reach search from exports and
+    -- Assistant answers. The baked index is pre-normalized without camelCase
+    -- tokens, and the scope prefix names the provider rather than the control,
+    -- so its tokens ("party") never appear in a page haystack. Drop the prefix
+    -- and split the remaining camelCase into words. Only single-token queries
+    -- shaped like a key are touched; typed text never is.
+    if not query:find("%s") and (query:find("%l%u") or query:find("%.")) then
+        local stripped = query:gsub("^[%w_]+%.", "")
+        if stripped ~= "" then query = stripped end
+        query = query:gsub("(%l)(%u)", "%1 %2")
+    end
     local normalized, clauses = BuildSearchQueryClauses(query)
     if #clauses == 0 then return {} end
     if #normalized < MIN_SEARCH_QUERY_LEN then return {} end

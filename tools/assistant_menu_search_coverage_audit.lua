@@ -46,6 +46,8 @@ for _, file in ipairs({
     "MSUF_Menu2_Search_FAQ_Catalog_03.lua",
     "MSUF_Menu2_Search_FAQ_Catalog_04.lua",
     "MSUF_Menu2_Search_Text.lua",
+    "MSUF_Menu2_Search_StaticIndex_Data.lua",
+    "MSUF_Menu2_Search_StaticIndex.lua",
     "MSUF_Menu2_Search_IndexQuery.lua",
 }) do
     loadSearch(file)
@@ -201,17 +203,31 @@ else
         if not setting then
             fail("main-menu exact search setting", probe.key)
         else
-            local exactRecord
+            -- Live widget records used to stamp _msufAssistantSettingKey via the
+            -- retired Assistant registry search layer; static rows carry their
+            -- routing target on record.exactTarget instead. Group pages serve
+            -- three provider scopes (party/raid/mythicraid) with one control, so
+            -- a static row structurally cannot carry a per-scope setting key -
+            -- for those the contract is that the raw key still routes to the
+            -- owning page. When any record does carry an identity it must match.
+            local exactRecord, pageRecord
             for _, record in ipairs(mainMenuSearch(probe.key) or {}) do
-                if record._msufAssistantSettingKey == probe.key then
+                local recordKey = record._msufAssistantSettingKey
+                    or (type(record.exactTarget) == "table" and record.exactTarget.settingKey)
+                if recordKey == probe.key then
                     exactRecord = record
                     break
                 end
+                if pageRecord == nil and record.key == probe.page then
+                    pageRecord = record
+                end
             end
-            if not exactRecord then
+            if exactRecord then
+                if exactRecord.key ~= probe.page then
+                    fail("main-menu exact search page", probe.key .. " expected " .. probe.page .. ", got " .. tostring(exactRecord.key))
+                end
+            elseif not pageRecord then
                 fail("main-menu exact search result", probe.key .. " (" .. probe.area .. ")")
-            elseif exactRecord.key ~= probe.page then
-                fail("main-menu exact search page", probe.key .. " expected " .. probe.page .. ", got " .. tostring(exactRecord.key))
             end
         end
     end
