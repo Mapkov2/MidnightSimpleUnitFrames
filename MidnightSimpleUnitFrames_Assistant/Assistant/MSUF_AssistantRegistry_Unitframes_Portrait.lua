@@ -247,7 +247,7 @@ function A.UnitframesRegistry.RegisterPortraitSettings(ctx, unit)
         PORTRAIT_BORDER_DIRECTION_VALUES,
         MakeAliases(unit, "portrait border direction", "portrait border rotation"), {
         category = "Portrait",
-        description = "Rotates the relief border art in 90 degree steps, which is where its light comes from.",
+        description = "Rotates the relief border art in 90 degree steps; the lit edge follows the chosen direction.",
         valueAliases = {
             up = "UP", top = "UP", oben = "UP",
             right = "RIGHT", rechts = "RIGHT",
