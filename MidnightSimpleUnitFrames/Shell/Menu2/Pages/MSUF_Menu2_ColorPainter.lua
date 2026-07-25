@@ -828,7 +828,14 @@ function P.Build(ctx, builder, categories)
             if ApplyBrushToOwner(initialOwner, spec.label) then return true end
         end
         if type(W.OpenColorContextPicker) ~= "function" then return false end
-        W.OpenColorContextPicker(spec.label or category.title, owners, category.pickerNote, initialOwner)
+        W.OpenColorContextPicker(
+            spec.label or category.title,
+            owners,
+            category.pickerNote,
+            initialOwner,
+            nil,
+            nil,
+            function() RefreshPreviews("MSUF2_COLOR_PAINTER_LIVE") end)
         return true
     end
     -- The external Editing navigator filters preview AND section list.  Keep a

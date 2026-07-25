@@ -21,7 +21,7 @@ Has('self.more:SetText(Tr(advanced and "Back to controls" or "More Options"))',
 Has("self.advanced = false", "picker must always open in the simple state")
 Has('self.title:SetText(Tr("MSUF Color Picker") .. (visibleScope ~= "" and (" · " .. visibleScope) or ""))',
     "picker cannot show a compact visible scope tag")
-Has("function W.OpenColorContextPicker(contextTitle, owners, contextNote, initialOwner, onFinish, scopeTag)",
+Has("function W.OpenColorContextPicker(contextTitle, owners, contextNote, initialOwner, onFinish, scopeTag, onLiveChange)",
     "public color-picker bridge does not carry the visible scope tag")
 
 Has('M.CreateWindowControlButton(panel, "close")', "picker close control does not use the MSUF window style")
@@ -149,9 +149,18 @@ local applyStart = assert(source:find("function panel:Apply", 1, true))
 local applyEnd = assert(source:find("function panel:Finish", applyStart, true))
 local applySource = source:sub(applyStart, applyEnd - 1)
 assert(applySource:find("self:RefreshColorReadout", 1, true), "color drag lost its direct readout refresh")
+assert(applySource:find("self:NotifyLiveChange(self.owner)", 1, true),
+    "color drag no longer notifies specialized live preview owners")
 assert(not applySource:find("self:Refresh()", 1, true), "color drag still triggers the full picker refresh")
 assert(not applySource:find("RefreshPalettes", 1, true), "color drag still scans palette controls")
 assert(not applySource:find("RefreshRows", 1, true), "color drag still scans context rows")
+
+local painterPath = "MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_ColorPainter.lua"
+local painterHandle = assert(io.open(painterPath, "rb"))
+local painterSource = painterHandle:read("*a")
+painterHandle:close()
+assert(painterSource:find('function() RefreshPreviews("MSUF2_COLOR_PAINTER_LIVE") end', 1, true),
+    "Color Painter does not refresh all of its preview boxes during picker changes")
 
 local controlsPath = "MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_WindowControls.lua"
 local controlsHandle = assert(io.open(controlsPath, "rb"))
