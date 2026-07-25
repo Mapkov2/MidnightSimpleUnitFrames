@@ -1,5 +1,36 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-Beta29 - 2026-07-25
+
+### Highlights
+
+- Added a "Border Style" choice for aura icons. Solid is the crisp pixel ring you already had, Soft Glow adds a halo around the icon, and Shadow shades the icon's own edges the way a drop shadow falls across artwork. Blizzard's tooltip, dialog and achievement frames plus every LibSharedMedia border can also be picked as icon border art, and Thickness scales the edge.
+- Replaced the aura icon shadow with a real soft drop shadow. It used to be two stacked hard rectangles, which read as chunky black steps around every icon; it is now a single smooth falloff with rounded corners. It is drawn once when a button is created, so it still costs nothing while playing.
+- Aura icon border and shadow can now be switched off per frame: Player, Target, Focus, Boss, Party, and Raid each have their own "Use icon border & shadow on ... frames" toggle, while the style itself stays one shared block. An excluded frame compiles the style away completely instead of drawing hidden regions.
+- Fixed Boss frame borders going soft or uneven at some heights. Boss frames now place their border, health bar, power bar, and attached castbar on one shared absolute physical-pixel rectangle instead of inheriting the half-pixel phase a centered container picks up at odd heights, so every edge stays a crisp 1 px at any Boss height and UI scale. Attached Boss castbars move to an edge-to-edge anchor; an existing offset is converted once and keeps its position on screen.
+- `/msuf edit` now starts MSUF Edit Mode instead of opening an empty "native page missing" page, and it accepts a frame name: `/msuf edit target` drops you straight onto the Target frame, and typing it again while Edit Mode runs switches frames rather than closing it. `/msuf lock` leaves Edit Mode.
+- Added profile slash commands. `/msuf profile` lists your profiles and marks the active one, `/msuf profile <name>` saves the current settings as a new profile and switches to it, `/msuf load <name>` loads one by full name or by a unique prefix, and `/msuf delete <name>` removes one once you repeat the command. `/msuf default` resets every setting in the active profile, which is what `/msuf reset` never did: that one only moves frames back.
+
+### Changes
+
+- Added six bundled bar textures contributed by Aur0r4 - "MSUF Dreamy", "MSUF Dreamy Soft", "MSUF Dreamy Ultra Soft", "MSUF Foggy", "MSUF Glass", and "MSUF Mirrored Glass" - which show up in every texture dropdown: health and power bars, bar backgrounds, castbars, class resources, and group frames.
+- Added a per-unit "Layer (0-30)" slider for the castbar icon under Castbar > Advanced > Icon Style, on Player, Target, Focus, and Boss. 0 keeps the icon just above the bar and moves it together with the whole-castbar layer, exactly as before; 1-30 pins the icon to that frame level on the shared layer scale, so a large icon can be ordered in front of or behind the bar, texts, and other frame elements. Copy-between-units, reset, and the Assistant all know the new setting.
+- Every `/msuf` sub-command now registers itself in one shared list that both the dispatcher and the help text read, so `/msuf help` shows exactly what is loaded. The everyday commands are grouped by topic, and `/msuf help all` adds the diagnostics. The Dashboard's "Print Help" button prints that complete list.
+- Added `/msuf search <text>`, which runs a menu search and opens the results, plus `/msuf version` for the version, active profile, and Edit Mode state, and `/msuf reload` as a spelled-out `/rl`.
+- Anything `/msuf` does not recognise as a command or a page name is now treated as a menu search instead of opening a blank page, so a typo or a half-remembered setting name still lands somewhere useful.
+- The Gameplay page's "Preview" and "Reset TotemFrame layout" buttons now measure their translated label instead of assuming the English width, and wrap onto a second row when the pair no longer fits side by side. The Preview button lights up while the preview is running, and the From/To anchor dropdowns no longer overlap each other at narrow menu widths.
+- Updated all supported locales for the new aura border styles and per-frame icon styling, the castbar icon layer, and the slash-command help and profile messages.
+
+### Fixes & Performance
+
+- Fixed the Blizzard TotemFrame preview ignoring the mouse: `SetOnUpdateMode` takes an enum value rather than a name, so passing it a string left the drag driver switched off and the preview only moved by arrow keys. Every call site is corrected in the same pass - the TotemFrame preview, aura group dragging in MSUF Edit Mode, the class resource preview animation, and the position debug overlay - and each one now tolerates a client that does not offer the method at all.
+- Fixed the TotemFrame keeping MSUF's position after the feature was turned off during combat, which held until the next enable or UI reload; the restore now completes when you leave combat.
+- Stopped refreshing the TotemFrame on every successful player cast. Blizzard's own rebuild is hooked instead, which covers totem drops, shapeshifts, talents, and spec changes in one place, so the two timers that ran per cast are gone. Each refresh also verifies parent, anchor, scale, and strata before writing, so a Blizzard-driven rebuild costs a handful of getters instead of a full re-layout.
+- Fixed `/msuf gfhoverdebug` doing nothing at all: only a handful of sub-commands were forwarded from `/msuf` to the older handler, and everything else fell through to the page opener and drew an empty page.
+- Dropped `!msuf help` and `/msufdbgpos` from the help output. The chat trigger was removed a while ago and the position debugger is not shipped, so the help listed two commands that did not exist. Diagnostic commands now add themselves to the help from the file that owns them, which makes that class of drift impossible.
+- The compiled aura icon style is memoized per runtime configuration, so all lanes in a refresh share one style table instead of each re-reading the database and re-resolving its border media.
+- Expanded the Core Lua 5.1 suite to 161 passing tests, including new aura border style and slash-command registry regressions.
+
 ## 6.0-Beta28 - 2026-07-25
 
 ### Highlights
@@ -26,7 +57,6 @@
 - Made the menu accent color own only the interactive layer by default: navigation, tabs, pills, focus rings, and highlights follow the accent while panels stay midnight. The new "Tint menu surfaces" toggle under Global > Misc > Menu behavior restores the full re-tint of panels, borders, and the navigation rail, and applies after a UI reload just like the accent itself.
 - Split the Custom Aura "Icon Style" card into the same accordion sub-sections the Buff and Debuff style pages already use - Basics, Stack Count, Cooldown Text, and Duration Bar - for every custom container including Dots on target. Detail controls now gray out while their master toggle is off, so it is visible at a glance which sliders belong to which feature.
 - Brought Custom 1-3 and Dots on target to full feature parity with the Buff and Debuff lanes: Basics gained Icon Zoom, a container Opacity slider, and a Dispel-type Border choice for harmful containers, and a new Ordering section carries the same Sort By and Order options the lanes have. The shared "Lane Padding" inset now applies to custom containers as well, and all custom style sections show the same collapsed-header summary badges as their lane counterparts.
-- Added six bundled bar textures contributed by Aur0r4 - "MSUF Dreamy", "MSUF Dreamy Soft", "MSUF Dreamy Ultra Soft", "MSUF Foggy", "MSUF Glass", and "MSUF Mirrored Glass" - which show up in every texture dropdown: health and power bars, bar backgrounds, castbars, class resources, and group frames.
 - Updated all supported locales for the new aura color, shape outline, icon border/shadow, new character profile, and menu surface tinting controls.
 
 ### Fixes & Performance
