@@ -571,8 +571,16 @@ do
       Equal(button._msufA3SpellIndicatorEdges[2].point[2], healthFill,
         kind .. " bottom edge did not follow the current-health fill")
     elseif kind == "glow" then
-      Equal(rootFrame._msufA3AnimatedGlow.halo.point[2], healthFill,
-        "Glow did not follow the current-health fill")
+      -- The full-frame glow is an 8-slice static halo (4 corner quarters plus 4
+      -- edge strips), not the single animated halo texture it replaced. Every
+      -- slice has to anchor to the fill, otherwise a corner or edge stays
+      -- pinned to the bar while the rest tracks current health.
+      local glow = assert(rootFrame._msufA3FrameGlow, "Glow did not build its frame halo")
+      Equal(glow.target, healthFill, "Glow did not follow the current-health fill")
+      for slice = 1, 8 do
+        Equal(glow.pieces[slice].point[2], healthFill,
+          "Glow slice " .. slice .. " did not follow the current-health fill")
+      end
     elseif kind == "namecolor" then
       Equal(button._msufA3SpellIndicatorNameOverlay.allPoints, parent.nameText,
         "Name Color lost its name-text target")

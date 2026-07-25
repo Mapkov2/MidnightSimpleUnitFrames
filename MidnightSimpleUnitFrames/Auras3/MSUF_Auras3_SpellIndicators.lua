@@ -1,6 +1,6 @@
 --- Auras3/MSUF_Auras3_SpellIndicators.lua
 --- Group-frame spell indicators on WoW 12.1 CustomAuraContainer aura slots.
-local _, MSUF = ...
+local addonName, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
 
 local A3 = MSUF.MSUF_Auras3
@@ -30,6 +30,8 @@ local MAX_FINITE_AURA_DURATION = 2147483647
 local EXPIRING_EFFECT_UPDATE_INTERVAL = 0.20
 local ICON_ALERT_TEXTURE = [[Interface\SpellActivationOverlay\IconAlert]]
 local ICON_ALERT_ANTS_TEXTURE = [[Interface\SpellActivationOverlay\IconAlertAnts]]
+local FRAME_GLOW_TEXTURE = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames")
+    .. "\\Media\\Borders\\frame_glow_radial.tga"
 local expiringEffectCurves = {}
 local activeExpiringEffectGates = {}
 local expiringEffectDriver
@@ -572,9 +574,10 @@ end
 
 -- Genuine animated action-button glow. The 22-frame ants animation is driven
 -- by a C-side AnimationGroup, so active indicators add no Lua OnUpdate work.
--- Both the full-frame and icon effects use this renderer; because their roots
--- are children of the native AuraSlot button, Blizzard's secret visibility is
--- inherited without reading or branching on it in addon Lua.
+-- Only the square icon effect uses this renderer; the full-frame glow has its
+-- own aspect-ratio-safe halo below. Because the roots are children of the
+-- native AuraSlot button, Blizzard's secret visibility is inherited without
+-- reading or branching on it in addon Lua.
 local function EnsureAnimatedGlow(owner)
     if not owner then return nil end
     local data = owner._msufA3AnimatedGlow
@@ -642,6 +645,89 @@ local function StopAnimatedGlow(owner)
     if data.animation:IsPlaying() then data.animation:Stop() end
     data.halo:Hide()
     data.ants:Hide()
+end
+
+-- Full-frame glow: a soft halo built from eight static slices of one radial
+-- gradient (4 corner quarters + 4 center-cross edge strips). Corners stay
+-- round at any bar aspect ratio instead of smearing Blizzard's square
+-- action-button alert art across a wide health bar, and there is no
+-- animation, so an active glow costs zero Lua and zero C-side ticks.
+local FRAME_GLOW_EDGE_LOW, FRAME_GLOW_EDGE_HIGH = 31 / 64, 33 / 64
+-- The glow rectangle sits this many pixels inside the bar edge, so the bright
+-- core overlaps the bar's own border art and the halo reads as attached to
+-- the frame instead of floating next to it.
+local FRAME_GLOW_INSET = 2
+
+local function EnsureFrameGlow(owner)
+    if not owner then return nil end
+    local data = owner._msufA3FrameGlow
+    if data then return data end
+    local pieces = {}
+    for i = 1, 8 do
+        local tex = owner:CreateTexture(nil, "OVERLAY", nil, 6)
+        tex:SetTexture(FRAME_GLOW_TEXTURE)
+        pieces[i] = tex
+    end
+    pieces[1]:SetTexCoord(0, 0.5, 0, 0.5)                                   -- top-left corner
+    pieces[2]:SetTexCoord(0.5, 1, 0, 0.5)                                   -- top-right corner
+    pieces[3]:SetTexCoord(0, 0.5, 0.5, 1)                                   -- bottom-left corner
+    pieces[4]:SetTexCoord(0.5, 1, 0.5, 1)                                   -- bottom-right corner
+    pieces[5]:SetTexCoord(FRAME_GLOW_EDGE_LOW, FRAME_GLOW_EDGE_HIGH, 0, 0.5) -- top edge
+    pieces[6]:SetTexCoord(FRAME_GLOW_EDGE_LOW, FRAME_GLOW_EDGE_HIGH, 0.5, 1) -- bottom edge
+    pieces[7]:SetTexCoord(0, 0.5, FRAME_GLOW_EDGE_LOW, FRAME_GLOW_EDGE_HIGH) -- left edge
+    pieces[8]:SetTexCoord(0.5, 1, FRAME_GLOW_EDGE_LOW, FRAME_GLOW_EDGE_HIGH) -- right edge
+    data = { pieces = pieces }
+    owner._msufA3FrameGlow = data
+    return data
+end
+
+local function AnchorFrameGlow(data, target, extent)
+    if not (data and target) or (data.target == target and data.extent == extent) then return end
+    data.target = target
+    data.extent = extent
+    local pieces = data.pieces
+    local inset = FRAME_GLOW_INSET
+    for i = 1, 8 do pieces[i]:ClearAllPoints() end
+    pieces[1]:SetPoint("BOTTOMRIGHT", target, "TOPLEFT", inset, -inset)
+    pieces[2]:SetPoint("BOTTOMLEFT", target, "TOPRIGHT", -inset, -inset)
+    pieces[3]:SetPoint("TOPRIGHT", target, "BOTTOMLEFT", inset, inset)
+    pieces[4]:SetPoint("TOPLEFT", target, "BOTTOMRIGHT", -inset, inset)
+    for i = 1, 4 do pieces[i]:SetSize(extent, extent) end
+    pieces[5]:SetPoint("BOTTOMLEFT", target, "TOPLEFT", inset, -inset)
+    pieces[5]:SetPoint("BOTTOMRIGHT", target, "TOPRIGHT", -inset, -inset)
+    pieces[5]:SetHeight(extent)
+    pieces[6]:SetPoint("TOPLEFT", target, "BOTTOMLEFT", inset, inset)
+    pieces[6]:SetPoint("TOPRIGHT", target, "BOTTOMRIGHT", -inset, inset)
+    pieces[6]:SetHeight(extent)
+    pieces[7]:SetPoint("TOPRIGHT", target, "TOPLEFT", inset, -inset)
+    pieces[7]:SetPoint("BOTTOMRIGHT", target, "BOTTOMLEFT", inset, inset)
+    pieces[7]:SetWidth(extent)
+    pieces[8]:SetPoint("TOPLEFT", target, "TOPRIGHT", -inset, -inset)
+    pieces[8]:SetPoint("BOTTOMLEFT", target, "BOTTOMRIGHT", -inset, inset)
+    pieces[8]:SetWidth(extent)
+end
+
+local function StartFrameGlow(owner, target, r, g, b, a, extent)
+    local data = EnsureFrameGlow(owner)
+    if not data then return false end
+    extent = ClampNumber(extent, 8, 4, 48)
+    AnchorFrameGlow(data, target or owner, extent)
+    local pieces = data.pieces
+    if data.r ~= r or data.g ~= g or data.b ~= b or data.a ~= a then
+        data.r, data.g, data.b, data.a = r, g, b, a
+        for i = 1, 8 do pieces[i]:SetVertexColor(r, g, b, a) end
+    end
+    data.active = true
+    for i = 1, 8 do pieces[i]:Show() end
+    return true
+end
+
+local function StopFrameGlow(owner)
+    local data = owner and owner._msufA3FrameGlow
+    if not (data and data.active) then return end
+    data.active = nil
+    local pieces = data.pieces
+    for i = 1, 8 do pieces[i]:Hide() end
 end
 
 local function NameFontString(parentFrame)
@@ -734,6 +820,7 @@ local function HideButtonFrameEffect(button)
     if root then
         StopPulse(root)
         StopAnimatedGlow(root)
+        StopFrameGlow(root)
         root:Hide()
     end
     UnregisterNameOverlay(button)
@@ -850,6 +937,7 @@ local function HideEffectRegions(button)
         end
     end
     StopAnimatedGlow(button and button._msufA3SpellIndicatorEffectRoot)
+    StopFrameGlow(button and button._msufA3SpellIndicatorEffectRoot)
     UnregisterNameOverlay(button)
 end
 
@@ -913,7 +1001,11 @@ local function ApplyButtonFrameEffect(button, slot, parentFrame)
             name:Show()
         end
     elseif kind == "glow" then
-        StartAnimatedGlow(root, target, r, g, b, a, ClampNumber(effect.thickness, 3, 1, 16) + 2)
+        -- The +0.16 alpha boost matches the Menu2 effect preview; the halo's
+        -- soft falloff otherwise reads dimmer than the same alpha on a solid
+        -- border. Extent compensates for the inset overlap into the bar.
+        StartFrameGlow(root, target, r, g, b, math_min(1, a + 0.16),
+            Round((ClampNumber(effect.thickness, 3, 1, 16) + 2) * 2.5) + FRAME_GLOW_INSET)
     else
         LayoutEdges(button, parentFrame, target, effect)
         if kind == "pulse" then StartPulse(root) end

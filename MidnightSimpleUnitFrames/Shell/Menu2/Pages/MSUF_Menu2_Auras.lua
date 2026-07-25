@@ -3867,10 +3867,50 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
     end
 
     if tool == "appearance" then
-        local section = b:CollapsibleSection(CustomStyleSectionId(index, "appearance"), "Icon Style", 292, true)
+        -- One accordion sub-section per topic, mirroring the Buff/Debuff lane
+        -- style sections. Assistant semantic paths keep the historical
+        -- "appearance" segment so the generated control schema stays stable.
+        local function StyleGrid(section)
+            local w = section._msuf2Width or b.width or 720
+            local col4, gap = Grid(w, 4)
+            local function X(col) return 24 + (col - 1) * (col4 + gap) end
+            local function Number(label, col, y, minValue, maxValue, key, fallback)
+                return BindSlider(ctx, section, label, X(col), y, minValue, maxValue, 1, col4,
+                    function() return tonumber(item.placed[key]) or fallback end,
+                    function(value) item.placed[key] = tonumber(value) or fallback; Apply("AURAS3_CUSTOM_APPEARANCE_" .. key:upper()) end,
+                    AuraControlMeta(ctx, "custom-container.appearance." .. AuraCatalogToken(key)))
+            end
+            return col4, X, Number
+        end
+        local function GateControls(readEnabled, controls)
+            M.TrackRefresh(ctx, function() W.SetControlsEnabled(controls, readEnabled()) end)
+        end
+
+        local basics = b:CollapsibleSection(CustomStyleSectionId(index, "basics"), "Basics", 80, true)
+        local basicsCol, basicsX = StyleGrid(basics)
+        BindSwitch(ctx, basics, "Tooltip", basicsX(1), -42, basicsCol, function() return item.placed.showTooltip ~= false end,
+            function(value) item.placed.showTooltip = value == true; Apply("AURAS3_CUSTOM_TOOLTIP") end,
+            AuraControlMeta(ctx, "custom-container.appearance.tooltip"))
+
+        local stack = b:CollapsibleSection(CustomStyleSectionId(index, "stack"), "Stack Count", 130, false)
+        local stackCol, stackX, StackNumber = StyleGrid(stack)
+        BindSwitch(ctx, stack, "Stack count", stackX(1), -42, stackCol, function() return item.placed.showStacks ~= false end,
+            function(value) item.placed.showStacks = value == true; Apply("AURAS3_CUSTOM_STACKS") end,
+            AuraControlMeta(ctx, "custom-container.appearance.stack-count"))
+        GateControls(function() return item.placed.showStacks ~= false end, {
+            StackNumber("Stack size", 1, -76, 6, 40, "stackSize", 14),
+            BindDropdown(ctx, stack, "Stack anchor", stackX(2), -76, Model.AuraAnchorValues(), stackCol,
+                function() return item.placed.stackAnchor or "BOTTOMRIGHT" end,
+                function(value) item.placed.stackAnchor = value or "BOTTOMRIGHT"; Apply("AURAS3_CUSTOM_STACK_ANCHOR") end,
+                AuraControlMeta(ctx, "custom-container.appearance.stack-anchor")),
+            StackNumber("Stack X", 3, -76, -40, 40, "stackX", 0),
+            StackNumber("Stack Y", 4, -76, -40, 40, "stackY", 0),
+        })
+
+        local cooldown = b:CollapsibleSection(CustomStyleSectionId(index, "cooldown"), "Cooldown Text", 184, true)
         if W.AttachContextColorShortcut then
-            W.AttachContextColorShortcut(section, {
-                title = containerLabel .. " Text Settings",
+            W.AttachContextColorShortcut(cooldown, {
+                title = containerLabel .. " Cooldown Text Settings",
                 historyLabel = "Custom aura cooldown text color",
                 historySource = "menu:custom-auras-cooldown-text-color",
                 scopeTag = "Shared",
@@ -3889,62 +3929,50 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                 },
             })
         end
-        local w = section._msuf2Width or b.width or 720
-        local col4, gap = Grid(w, 4)
-        local function X(col) return 24 + (col - 1) * (col4 + gap) end
-        local function Number(label, col, y, minValue, maxValue, key, fallback)
-            return BindSlider(ctx, section, label, X(col), y, minValue, maxValue, 1, col4,
-                function() return tonumber(item.placed[key]) or fallback end,
-                function(value) item.placed[key] = tonumber(value) or fallback; Apply("AURAS3_CUSTOM_APPEARANCE_" .. key:upper()) end,
-                AuraControlMeta(ctx, "custom-container.appearance." .. AuraCatalogToken(key)))
-        end
-        BindSwitch(ctx, section, "Tooltip", X(1), -42, col4, function() return item.placed.showTooltip ~= false end,
-            function(value) item.placed.showTooltip = value == true; Apply("AURAS3_CUSTOM_TOOLTIP") end,
-            AuraControlMeta(ctx, "custom-container.appearance.tooltip"))
-        BindSwitch(ctx, section, "Cooldown text", X(2), -42, col4, function() return item.placed.showCooldown ~= false end,
+        local cdCol, cdX, CdNumber = StyleGrid(cooldown)
+        BindSwitch(ctx, cooldown, "Cooldown text", cdX(1), -42, cdCol, function() return item.placed.showCooldown ~= false end,
             function(value) item.placed.showCooldown = value == true; Apply("AURAS3_CUSTOM_COOLDOWN") end,
             AuraControlMeta(ctx, "custom-container.appearance.cooldown-text"))
-        BindSwitch(ctx, section, "Cooldown swipe", X(3), -42, col4, function() return item.placed.showCooldownSwipe ~= false end,
+        BindSwitch(ctx, cooldown, "Cooldown swipe", cdX(2), -42, cdCol, function() return item.placed.showCooldownSwipe ~= false end,
             function(value) item.placed.showCooldownSwipe = value == true; Apply("AURAS3_CUSTOM_SWIPE") end,
             AuraControlMeta(ctx, "custom-container.appearance.cooldown-swipe"))
-        BindSwitch(ctx, section, "Stack count", X(4), -42, col4, function() return item.placed.showStacks ~= false end,
-            function(value) item.placed.showStacks = value == true; Apply("AURAS3_CUSTOM_STACKS") end,
-            AuraControlMeta(ctx, "custom-container.appearance.stack-count"))
-        BindDropdown(ctx, section, "Swipe", X(1), -76, COOLDOWN_SWIPE_DIRECTION_VALUES, col4,
-            function() return item.placed.cooldownSwipeReverse == true and "REVERSE" or "NORMAL" end,
-            function(value) item.placed.cooldownSwipeReverse = value == "REVERSE"; Apply("AURAS3_CUSTOM_SWIPE_DIRECTION") end,
-            AuraControlMeta(ctx, "custom-container.appearance.swipe-direction"))
-        Number("Cooldown size", 2, -76, 6, 40, "cooldownSize", 14)
-        BindDropdown(ctx, section, "Cooldown anchor", X(3), -76, Model.AuraAnchorValues(), col4,
-            function() return item.placed.cooldownAnchor or "CENTER" end,
-            function(value) item.placed.cooldownAnchor = value or "CENTER"; Apply("AURAS3_CUSTOM_COOLDOWN_ANCHOR") end,
-            AuraControlMeta(ctx, "custom-container.appearance.cooldown-anchor"))
-        Number("Decimals", 4, -76, 0, 30, "cooldownDecimalSeconds", 3)
-        Number("Cooldown X", 1, -130, -40, 40, "cooldownX", 0)
-        Number("Cooldown Y", 2, -130, -40, 40, "cooldownY", 0)
-        Number("Stack size", 3, -130, 6, 40, "stackSize", 14)
-        BindDropdown(ctx, section, "Stack anchor", X(4), -130, Model.AuraAnchorValues(), col4,
-            function() return item.placed.stackAnchor or "BOTTOMRIGHT" end,
-            function(value) item.placed.stackAnchor = value or "BOTTOMRIGHT"; Apply("AURAS3_CUSTOM_STACK_ANCHOR") end,
-            AuraControlMeta(ctx, "custom-container.appearance.stack-anchor"))
-        Number("Stack X", 1, -184, -40, 40, "stackX", 0)
-        Number("Stack Y", 2, -184, -40, 40, "stackY", 0)
-        BindSwitch(ctx, section, "Duration bar", X(3), -192, col4, function() return item.placed.showDurationBar == true end,
+        GateControls(function() return item.placed.showCooldown ~= false end, {
+            CdNumber("Cooldown size", 1, -76, 6, 40, "cooldownSize", 14),
+            BindDropdown(ctx, cooldown, "Cooldown anchor", cdX(3), -76, Model.AuraAnchorValues(), cdCol,
+                function() return item.placed.cooldownAnchor or "CENTER" end,
+                function(value) item.placed.cooldownAnchor = value or "CENTER"; Apply("AURAS3_CUSTOM_COOLDOWN_ANCHOR") end,
+                AuraControlMeta(ctx, "custom-container.appearance.cooldown-anchor")),
+            CdNumber("Decimals", 4, -76, 0, 30, "cooldownDecimalSeconds", 3),
+            CdNumber("Cooldown X", 1, -130, -40, 40, "cooldownX", 0),
+            CdNumber("Cooldown Y", 2, -130, -40, 40, "cooldownY", 0),
+        })
+        GateControls(function() return item.placed.showCooldownSwipe ~= false end, {
+            BindDropdown(ctx, cooldown, "Swipe", cdX(2), -76, COOLDOWN_SWIPE_DIRECTION_VALUES, cdCol,
+                function() return item.placed.cooldownSwipeReverse == true and "REVERSE" or "NORMAL" end,
+                function(value) item.placed.cooldownSwipeReverse = value == "REVERSE"; Apply("AURAS3_CUSTOM_SWIPE_DIRECTION") end,
+                AuraControlMeta(ctx, "custom-container.appearance.swipe-direction")),
+        })
+
+        local durationBar = b:CollapsibleSection(CustomStyleSectionId(index, "duration_bar"), "Duration Bar", 130, false)
+        local barCol, barX, BarNumber = StyleGrid(durationBar)
+        BindSwitch(ctx, durationBar, "Duration bar", barX(1), -42, barCol, function() return item.placed.showDurationBar == true end,
             function(value) item.placed.showDurationBar = value == true; Apply("AURAS3_CUSTOM_DURATION_BAR") end,
             AuraControlMeta(ctx, "custom-container.appearance.duration-bar"))
-        Number("Bar height", 4, -184, 1, 16, "durationBarHeight", 2)
-        BindDropdown(ctx, section, "Bar display", X(1), -238, DURATION_BAR_DISPLAY_VALUES, col4,
-            function() return item.placed.durationBarDisplay or "BAR_ONLY" end,
-            function(value) item.placed.durationBarDisplay = value or "BAR_ONLY"; Apply("AURAS3_CUSTOM_DURATION_DISPLAY") end,
-            AuraControlMeta(ctx, "custom-container.appearance.duration-display"))
-        BindDropdown(ctx, section, "Bar position", X(2), -238, DURATION_BAR_POSITION_VALUES, col4,
-            function() return item.placed.durationBarPosition or "BOTTOM" end,
-            function(value) item.placed.durationBarPosition = value or "BOTTOM"; Apply("AURAS3_CUSTOM_DURATION_POSITION") end,
-            AuraControlMeta(ctx, "custom-container.appearance.duration-position"))
-        BindDropdown(ctx, section, "Bar fill", X(3), -238, DURATION_BAR_DIRECTION_VALUES, col4,
-            function() return item.placed.durationBarDirection or "REMAINING" end,
-            function(value) item.placed.durationBarDirection = value or "REMAINING"; Apply("AURAS3_CUSTOM_DURATION_DIRECTION") end,
-            AuraControlMeta(ctx, "custom-container.appearance.duration-direction"))
+        GateControls(function() return item.placed.showDurationBar == true end, {
+            BarNumber("Bar height", 1, -76, 1, 16, "durationBarHeight", 2),
+            BindDropdown(ctx, durationBar, "Bar display", barX(2), -76, DURATION_BAR_DISPLAY_VALUES, barCol,
+                function() return item.placed.durationBarDisplay or "BAR_ONLY" end,
+                function(value) item.placed.durationBarDisplay = value or "BAR_ONLY"; Apply("AURAS3_CUSTOM_DURATION_DISPLAY") end,
+                AuraControlMeta(ctx, "custom-container.appearance.duration-display")),
+            BindDropdown(ctx, durationBar, "Bar position", barX(3), -76, DURATION_BAR_POSITION_VALUES, barCol,
+                function() return item.placed.durationBarPosition or "BOTTOM" end,
+                function(value) item.placed.durationBarPosition = value or "BOTTOM"; Apply("AURAS3_CUSTOM_DURATION_POSITION") end,
+                AuraControlMeta(ctx, "custom-container.appearance.duration-position")),
+            BindDropdown(ctx, durationBar, "Bar fill", barX(4), -76, DURATION_BAR_DIRECTION_VALUES, barCol,
+                function() return item.placed.durationBarDirection or "REMAINING" end,
+                function(value) item.placed.durationBarDirection = value or "REMAINING"; Apply("AURAS3_CUSTOM_DURATION_DIRECTION") end,
+                AuraControlMeta(ctx, "custom-container.appearance.duration-direction")),
+        })
         return
     end
 
