@@ -50,17 +50,19 @@ local function PlainBool(v)
     return nil
 end
 
-local function ReadFrameMember(frame, key)
-    return frame[key]
-end
-
 -- Forbidden/tainted frames can throw even when IsForbidden() just returned
--- false. Every method reached by the EnumerateFrames fallback therefore needs
--- its own protected boundary.
-local function SafeFrameCall(frame, methodName, ...)
+-- false. Every method reached through the mouse-focus chain therefore needs
+-- its own protected boundary. Bind the native ScriptRegion methods from the
+-- known-safe root once, so a tainted candidate cannot trap us in member lookup
+-- and Perfy never wraps a throwing AnchorPicker Lua helper in pcall.
+local scriptRegion = UIParent or WorldFrame
+local FrameIsForbidden = scriptRegion and scriptRegion.IsForbidden
+local FrameGetName = scriptRegion and scriptRegion.GetName
+local FrameGetParent = scriptRegion and scriptRegion.GetParent
+local FrameGetRect = scriptRegion and scriptRegion.GetRect
+
+local function SafeFrameCall(method, frame, ...)
     if not frame then return false, false end
-    local readOK, method = pcall(ReadFrameMember, frame, methodName)
-    if not readOK then return false, false end
     if type(method) ~= "function" then return true, false end
     local callOK, a, b, c, d = pcall(method, frame, ...)
     return callOK, true, a, b, c, d
@@ -68,7 +70,7 @@ end
 
 local function IsForbiddenFrame(frame)
     if not frame then return true end
-    local ok, hasMethod, forbidden = SafeFrameCall(frame, "IsForbidden")
+    local ok, hasMethod, forbidden = SafeFrameCall(FrameIsForbidden, frame)
     if not ok then return true end
     if not hasMethod then return false end
     return PlainBool(forbidden) ~= false
@@ -81,8 +83,8 @@ local function IsBlocked(frame)
     if not frame then return true end
     if frame == UIParent or frame == WorldFrame then return true end
     if IsForbiddenFrame(frame) then return true end
-    local unitOK, unitToken = pcall(ReadFrameMember, frame, "unitToken")
-    if not unitOK or (isSecretValue and isSecretValue(unitToken)) or unitToken then return true end
+    local unitToken = type(frame) == "table" and rawget(frame, "unitToken") or nil
+    if (isSecretValue and isSecretValue(unitToken)) or unitToken then return true end
     local ov = _G.MSUF_AnchorPicker
     if ov and (frame == ov or frame == ov._highlight) then return true end
     return false
@@ -107,7 +109,7 @@ end
 
 local function SafeGetRect(frame)
     if IsForbiddenFrame(frame) then return nil end
-    local ok, hasMethod, l, b, w, h = SafeFrameCall(frame, "GetRect")
+    local ok, hasMethod, l, b, w, h = SafeFrameCall(FrameGetRect, frame)
     if not ok or not hasMethod then return nil end
     if isSecretValue and (isSecretValue(l) or isSecretValue(b) or isSecretValue(w) or isSecretValue(h)) then return nil end
     l = tonumber(l); b = tonumber(b); w = tonumber(w); h = tonumber(h)
@@ -120,13 +122,13 @@ local function NamedFromFocus(frame)
     -- Mouse focus often lands on anonymous child regions, so climb to a named parent.
     local seen = 0
     while frame and seen < 40 do
-        local nameOK, hasName, n = SafeFrameCall(frame, "GetName")
+        local nameOK, hasName, n = SafeFrameCall(FrameGetName, frame)
         if nameOK and hasName and not (isSecretValue and isSecretValue(n)) then
             if not IsBlocked(frame, n) then
                 if not IsBlockedName(n) then return frame, n end
             end
         end
-        local parentOK, hasParent, parent = SafeFrameCall(frame, "GetParent")
+        local parentOK, hasParent, parent = SafeFrameCall(FrameGetParent, frame)
         if not parentOK or not hasParent or (isSecretValue and isSecretValue(parent)) then break end
         frame = parent
         seen = seen + 1
@@ -134,81 +136,17 @@ local function NamedFromFocus(frame)
     return nil, nil
 end
 
--- The EnumerateFrames fallback visits every frame in the UI, so its per-frame
--- work must stay near-zero: direct method calls inside a single protected
--- boundary (any throw or secret value skips that frame), and the cursor rect
--- test runs before the name is even read. The expensive IsBlocked chain -
--- including the caller's _isCandidateAllowed anchor-cycle walk - may only ever
--- see the handful of named frames actually under the cursor, never the whole
--- enumeration.
-local function EvaluateFrameUnderCursor(fr, cx, cy)
-    local forbidden = fr:IsForbidden()
-    if isSecretValue and isSecretValue(forbidden) then return nil end
-    if forbidden then return nil end
-    local visible = fr:IsVisible()
-    if isSecretValue and isSecretValue(visible) then return nil end
-    if visible ~= true and visible ~= 1 then return nil end
-    local l, b, w, h = fr:GetRect()
-    if isSecretValue and (isSecretValue(l) or isSecretValue(b) or isSecretValue(w) or isSecretValue(h)) then return nil end
-    l = tonumber(l); b = tonumber(b); w = tonumber(w); h = tonumber(h)
-    if not (l and b and w and h) then return nil end
-    if w <= 0 or h <= 0 then return nil end
-    if cx < l or cx > (l + w) or cy < b or cy > (b + h) then return nil end
-    local name = fr:GetName()
-    if isSecretValue and isSecretValue(name) then return nil end
-    if type(name) ~= "string" or name == "" then return nil end
-    return name, w * h
-end
-
-local scanFrames, scanNames, scanAreas = {}, {}, {}
-
-local function SmallestAllowedCandidate(count)
-    while true do
-        local best
-        for i = 1, count do
-            local area = scanAreas[i]
-            if area and (not best or area < scanAreas[best]) then best = i end
-        end
-        if not best then return nil, nil end
-        local frame, name = scanFrames[best], scanNames[best]
-        if not IsBlockedName(name) and not IsBlocked(frame, name) then return frame, name end
-        scanAreas[best] = false
-    end
-end
-
--- The full-UI scan stays too heavy for every 33 ms hover tick even with the
--- cheap ordering above, so it runs at most every 4th tick and serves the
--- cached result in between. The cache starts empty on each open so the first
--- tick always scans.
-local ENUM_SCAN_TICKS = 4
-local enumTicksLeft = 0
-local enumCachedFrame, enumCachedName = nil, nil
-
--- 5.5-proven behaviour: the picker keeps the last frame it managed to name and
--- highlights that until a better hit appears. Hover never flickers back to
--- "nothing" just because one tick found no candidate.
-local stickyFrame, stickyName = nil, nil
-
-local function RememberNamed(frame, name)
-    if name then stickyFrame, stickyName = frame, name end
-    return stickyFrame, stickyName
-end
-
-local function ResetHoverCaches()
-    enumTicksLeft = 0
-    enumCachedFrame, enumCachedName = nil, nil
-    stickyFrame, stickyName = nil, nil
-end
-
-local function GetNamed()
-    -- WoW's focus stack is authoritative and avoids selecting a transient
-    -- decorative child merely because it has the smallest rectangle.
+local function FindNamedFromFocus()
+    -- WoW's focus stack is the authoritative hit-test result. It respects
+    -- layering, clipping and mouse enablement, while a global EnumerateFrames
+    -- geometry walk does not. Climb anonymous focus regions to their first
+    -- usable named parent and never scan the entire UI from this picker.
     if GetMouseFoci then
         local ok, foci = pcall(GetMouseFoci)
         if ok and type(foci) == "table" then
             for i = 1, #foci do
                 local f, n = NamedFromFocus(foci[i])
-                if n then return RememberNamed(f, n) end
+                if n then return f, n end
             end
         end
     end
@@ -216,40 +154,10 @@ local function GetNamed()
         local ok, focus = pcall(GetMouseFocus)
         if ok then
             local f, n = NamedFromFocus(focus)
-            if n then return RememberNamed(f, n) end
+            if n then return f, n end
         end
     end
-
-    -- No named frame in the focus stack (unnamed UI trees, mouse-disabled
-    -- frames, older clients). Fall back to the smallest valid named frame
-    -- currently under the cursor.
-    if EnumerateFrames then
-        if enumTicksLeft > 0 then
-            enumTicksLeft = enumTicksLeft - 1
-        else
-            enumTicksLeft = ENUM_SCAN_TICKS - 1
-
-            local cx, cy = GetCursorPosition()
-            local sc = UIParent:GetEffectiveScale() or 1
-            cx, cy = cx / sc, cy / sc
-
-            local count = 0
-            local fr = EnumerateFrames()
-            while fr do
-                local evalOK, name, area = pcall(EvaluateFrameUnderCursor, fr, cx, cy)
-                if evalOK and name then
-                    count = count + 1
-                    scanFrames[count], scanNames[count], scanAreas[count] = fr, name, area
-                end
-                fr = EnumerateFrames(fr)
-            end
-            local bestF, bestN = SmallestAllowedCandidate(count)
-            for i = 1, count do scanFrames[i], scanNames[i] = nil, nil end
-            enumCachedFrame, enumCachedName = bestF, bestN
-        end
-        if enumCachedName then return RememberNamed(enumCachedFrame, enumCachedName) end
-    end
-    return stickyFrame, stickyName
+    return nil, nil
 end
 
 local function EnsureAnchorPicker()
@@ -324,42 +232,8 @@ local function EnsureAnchorPicker()
     hl:Hide()
     ov._highlight = hl
 
-    ov:SetScript("OnShow", function(self)
-        if type(_G.MSUF_BlockConfigCombatLocked) == "function" and _G.MSUF_BlockConfigCombatLocked() then
-            self:Hide()
-            return
-        end
-        -- Cache localized strings per open to keep the 33 ms hover loop allocation-light.
-        self._elapsed = 0; self._pickedFrame = nil; self._pickedName = nil
-        ResetHoverCaches()
-        self._lCtrlHeld = Tr("CTRL: held - click to anchor!")
-        self._lCtrlNotHeld = Tr("CTRL: not held")
-        self._lHoverNone = Tr("Hover: no named frame found")
-        self._lHoverFmt = Tr("Hover: %s")
-        self._lCtrlRequired = Tr("|cffff6060CTRL required:|r |cffffffffhold |r|cff55ff55CTRL + Left-Click|r|cffffffff to confirm the anchor target.|r")
-        self._lNoNamedFrame = Tr("|cffffcc33No named frame found under cursor.|r |cffffffffTry a different spot.|r")
-        self._lTargetNotAllowed = Tr("|cffff6060Target not allowed:|r |cffffffffanchoring to this frame would create a loop. Hover a different frame.|r")
-        self._info:SetText(Tr("Anchor Picker"))
-        self._sub:SetText(Tr("|cffffffffHover a frame, then hold |r|cff55ff55CTRL + Left-Click|r|cffffffff to anchor.  |  Right-Click or Escape cancels.|r"))
-        self._hover:SetText(self._lHoverNone)
-        self._ctrlHint:SetText(self._lCtrlNotHeld)
-        self._ctrlHint:SetTextColor(danger[1], danger[2], danger[3], 1)
-        self._highlight:Hide()
-        if self.RegisterEvent then self:RegisterEvent("GLOBAL_MOUSE_DOWN") end
-        if self.RegisterEvent then self:RegisterEvent("PLAYER_REGEN_DISABLED") end
-    end)
-
-    ov:SetScript("OnHide", function(self)
-        if self.UnregisterEvent then self:UnregisterEvent("GLOBAL_MOUSE_DOWN") end
-        if self.UnregisterEvent then self:UnregisterEvent("PLAYER_REGEN_DISABLED") end
-        self._pickedFrame = nil; self._pickedName = nil; self._highlight:Hide()
-        self._onPick = nil; self._isCandidateAllowed = nil
-        ResetHoverCaches()
-        if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
-    end)
-
-    ov:SetScript("OnUpdate", function(self, elapsed)
-        -- Hit-testing all visible frames is expensive; throttle while keeping hover feedback responsive.
+    local function AnchorPickerOnUpdate(self, elapsed)
+        -- Mouse focus is cheap, but 30 Hz is ample for responsive hover feedback.
         self._elapsed = (self._elapsed or 0) + elapsed
         if self._elapsed < 0.03 then return end
         self._elapsed = 0
@@ -373,7 +247,7 @@ local function EnsureAnchorPicker()
             self._ctrlHint:SetTextColor(danger[1], danger[2], danger[3], 1)
         end
 
-        local frame, name = GetNamed()
+        local frame, name = FindNamedFromFocus()
         self._pickedFrame = frame
         self._pickedName = name
         if name then
@@ -396,6 +270,40 @@ local function EnsureAnchorPicker()
             self._hover:SetText(self._lHoverNone)
             self._highlight:Hide()
         end
+    end
+
+    ov:SetScript("OnShow", function(self)
+        if type(_G.MSUF_BlockConfigCombatLocked) == "function" and _G.MSUF_BlockConfigCombatLocked() then
+            self:Hide()
+            return
+        end
+        -- Cache localized strings per open to keep the 33 ms hover loop allocation-light.
+        self._elapsed = 0; self._pickedFrame = nil; self._pickedName = nil
+        self._lCtrlHeld = Tr("CTRL: held - click to anchor!")
+        self._lCtrlNotHeld = Tr("CTRL: not held")
+        self._lHoverNone = Tr("Hover: no named frame found")
+        self._lHoverFmt = Tr("Hover: %s")
+        self._lCtrlRequired = Tr("|cffff6060CTRL required:|r |cffffffffhold |r|cff55ff55CTRL + Left-Click|r|cffffffff to confirm the anchor target.|r")
+        self._lNoNamedFrame = Tr("|cffffcc33No named frame found under cursor.|r |cffffffffTry a different spot.|r")
+        self._lTargetNotAllowed = Tr("|cffff6060Target not allowed:|r |cffffffffanchoring to this frame would create a loop. Hover a different frame.|r")
+        self._info:SetText(Tr("Anchor Picker"))
+        self._sub:SetText(Tr("|cffffffffHover a frame, then hold |r|cff55ff55CTRL + Left-Click|r|cffffffff to anchor.  |  Right-Click or Escape cancels.|r"))
+        self._hover:SetText(self._lHoverNone)
+        self._ctrlHint:SetText(self._lCtrlNotHeld)
+        self._ctrlHint:SetTextColor(danger[1], danger[2], danger[3], 1)
+        self._highlight:Hide()
+        if self.RegisterEvent then self:RegisterEvent("GLOBAL_MOUSE_DOWN") end
+        if self.RegisterEvent then self:RegisterEvent("PLAYER_REGEN_DISABLED") end
+        self:SetScript("OnUpdate", AnchorPickerOnUpdate)
+    end)
+
+    ov:SetScript("OnHide", function(self)
+        self:SetScript("OnUpdate", nil)
+        if self.UnregisterEvent then self:UnregisterEvent("GLOBAL_MOUSE_DOWN") end
+        if self.UnregisterEvent then self:UnregisterEvent("PLAYER_REGEN_DISABLED") end
+        self._elapsed = 0; self._pickedFrame = nil; self._pickedName = nil; self._highlight:Hide()
+        self._onPick = nil; self._isCandidateAllowed = nil
+        if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
     end)
 
     ov:SetScript("OnEvent", function(self, event, button)
@@ -411,12 +319,15 @@ local function EnsureAnchorPicker()
             self._sub:SetText(self._lCtrlRequired)
             return
         end
-        local name = self._pickedName
+        -- Resolve the current top focus again on confirmation instead of using
+        -- a potentially stale 30 ms hover sample.
+        local frame, name = FindNamedFromFocus()
+        self._pickedFrame, self._pickedName = frame, name
         if not name or name == "" then
             self._sub:SetText(self._lNoNamedFrame)
             return
         end
-        if not PickAllowed(self, self._pickedFrame, name) then
+        if not PickAllowed(self, frame, name) then
             self._sub:SetText(self._lTargetNotAllowed)
             return
         end
