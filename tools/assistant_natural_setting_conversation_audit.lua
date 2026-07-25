@@ -1136,7 +1136,11 @@ local cases = {
     {
         input = "position target power text top left",
         status = "ambiguous",
-        contains = { "does not have that fixed anchor choice", "Target Power Text X Offset", "Target Power Text Y Offset", "kept it unchanged" },
+        -- Power Text owns no anchor control at all, so the reply must say that
+        -- outright. "Not that fixed anchor choice" is reserved for objects that
+        -- do have an Anchor control and only rejected the requested value, as
+        -- Target Name Text does above.
+        contains = { "has no anchor control in MSUF", "Target Power Text X Offset", "Target Power Text Y Offset", "kept it unchanged" },
         notContains = { "Target Buff Duration Bar Position", "Done. I changed" },
         unchanged = { "target", "powerOffsetX" },
     },

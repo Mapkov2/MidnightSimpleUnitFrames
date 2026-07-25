@@ -539,4 +539,55 @@ assert(selectedStaleToggle.status == "applied", tostring(selectedStaleToggle.tex
 assert(targetEnabledValue == false, "Selecting the explicit stale-context option did not apply it")
 targetEnabled.get, targetEnabled.set, targetEnabled.apply = originalTargetEnabled.get, originalTargetEnabled.set, originalTargetEnabled.apply
 
+-- A terse text follow-up names the text object but not the frame that owns it.
+-- Without the remembered subject the request reached the fuzzy search, which
+-- resolved "power text" to the unrelated Class Resource Text.
+clearContext()
+assert((A.Submit("detach player power bar") or {}).status == "applied")
+local playerPowerYBefore = numberValue("player.powerOffsetY")
+local classPowerYBefore = numberValue("bars.classPowerTextOffsetY")
+local tersePowerText = assert(A.Submit("move now power text up"), "Missing terse power-text follow-up")
+assert(tersePowerText.status == "applied", tostring(tersePowerText.text))
+assert(numberValue("player.powerOffsetY") == playerPowerYBefore + 10,
+    "Terse power-text follow-up did not move Player Power Text Y Offset")
+assert(numberValue("bars.classPowerTextOffsetY") == classPowerYBefore,
+    "Terse power-text follow-up leaked onto Class Resource Text Offset Y")
+
+-- An explicit frame in the sentence must still outrank the remembered one.
+local targetPowerYBefore = numberValue("target.powerOffsetY")
+assert((A.Submit("move target power text up") or {}).status == "applied")
+assert(numberValue("target.powerOffsetY") == targetPowerYBefore + 10,
+    "Named unit lost to the remembered conversation scope")
+
+-- The same terse sentence with no remembered subject must not invent a frame.
+clearContext()
+local unprimedPlayerPowerY = numberValue("player.powerOffsetY")
+A.Submit("move now power text up")
+assert(numberValue("player.powerOffsetY") == unprimedPlayerPowerY,
+    "Contextless terse follow-up silently picked the Player frame")
+
+-- Health Text has X/Y offsets but no anchor at all. A pronoun anchor follow-up
+-- must say so and point at the real controls instead of refusing with a vague
+-- "name the exact object", and it must not touch the retained offsets.
+clearContext()
+assert((A.Submit("move player hp text left 10") or {}).status == "applied")
+local hpXBefore = numberValue("player.hpOffsetX")
+local hpAnchorFollowup = assert(A.Submit("anchor it to the left"), "Missing hp-text anchor follow-up")
+assert(hpAnchorFollowup.status == "ambiguous", tostring(hpAnchorFollowup.text))
+assert(tostring(hpAnchorFollowup.text):find("has no anchor control", 1, true),
+    "HP text anchor follow-up did not name the missing control: " .. tostring(hpAnchorFollowup.text))
+assert(tostring(hpAnchorFollowup.text):find("Player HP Text X Offset", 1, true),
+    "HP text anchor follow-up did not offer the real position controls")
+assert(numberValue("player.hpOffsetX") == hpXBefore, "HP text anchor follow-up changed the retained offset")
+
+-- Name Text does own an anchor, so the identical follow-up must still apply it.
+clearContext()
+local nameAnchor = assert(Registry:GetSetting("player.nameTextAnchor"))
+nameAnchor.set("CENTER")
+assert((A.Submit("move player name text left 10") or {}).status == "applied")
+local nameAnchorFollowup = assert(A.Submit("anchor it to the left"), "Missing name-text anchor follow-up")
+assert(nameAnchorFollowup.status == "applied" or nameAnchorFollowup.status == "unchanged",
+    tostring(nameAnchorFollowup.text))
+assert(tostring(nameAnchor.get()) == "LEFT", "Name text anchor follow-up stopped applying the anchor")
+
 io.write("assistant_context_alignment_regression: ok\n")

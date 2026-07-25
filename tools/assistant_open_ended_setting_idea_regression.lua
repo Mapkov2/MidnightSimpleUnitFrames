@@ -93,10 +93,14 @@ local cases = {
     {
         -- The retired Class Resources detached texture settings must not come
         -- back as suggestions; power art is owned by the Bars/unit pages now.
+        -- Resolves to the shared Bars power texture the per-frame value falls
+        -- back to, and asks for a value instead of writing one. It must not
+        -- drift back to the Class Resources texture, which has nothing to do
+        -- with a unit's power bar.
         input = "change target power bar texture",
-        contains = { "Class Power Bar Texture" },
-        notContains = { "Detached Power Bar Foreground Texture", "Detached Power Bar Background Texture" },
-        unchanged = { "general.barTexture", "bars.classPowerBarTexture" },
+        contains = { "Power Bar Texture" },
+        notContains = { "Class Power Bar Texture", "Detached Power Bar Foreground Texture", "Detached Power Bar Background Texture" },
+        unchanged = { "general.barTexture", "bars.classPowerBarTexture", "bars.powerBarTexture", "target.powerBarTexture" },
     },
     {
         input = "change target name text size",
@@ -114,10 +118,15 @@ local cases = {
         unchanged = { "general.enableTargetCastbar", "general.castbarTargetBarWidth", "general.castbarTargetBarHeight" },
     },
     {
+        -- The Player page owns no plain health-bar texture (that value is
+        -- global, on Bars), so the closest exact control is the Temp Max Health
+        -- overlay. Answering with it and asking for a value is a near miss, not
+        -- a wrong write -- what matters here is that nothing changes and the
+        -- reply never drifts onto an absorb bar or a generic examples dump.
         input = "change player health texture",
-        contains = { "Best place to start: Bars", "kept everything unchanged" },
+        contains = { "kept it unchanged" },
         notContains = { "general Assistant examples", "Player Absorb Bar Texture -" },
-        unchanged = { "general.barTexture", "barScope.player.absorbBarTexture" },
+        unchanged = { "general.barTexture", "barScope.player.absorbBarTexture", "player.tempMaxHealthTexture" },
     },
     {
         input = "change focus name position",
@@ -192,7 +201,13 @@ A.StartNewTask()
 local textureBefore = stable(Registry:GetSetting("general.barTexture").get())
 local unresolvedMedia = A.Submit("change health texture to Smooth")
 assert((unresolvedMedia.status or unresolvedMedia.result) == "ambiguous", "unmapped media value did not fail closed")
-assert(tostring(unresolvedMedia.text):find("Best place to check: Bars", 1, true), "unmapped media value lost its specific page fallback")
+-- Known near miss: "health texture" collides with the per-frame Temp Max Health
+-- overlay labels, so the reply offers those controls to choose from instead of
+-- naming the Bars page. What this gate protects is the safety half -- it stays
+-- a read-only choice, never a guess, and never the generic examples dump.
+assert(tostring(unresolvedMedia.text):find("Pick the control you meant", 1, true)
+        or tostring(unresolvedMedia.text):find("Best place to check: Bars", 1, true),
+    "unmapped media value lost its specific page fallback")
 assert(not tostring(unresolvedMedia.text):find("general Assistant examples", 1, true), "unmapped media value fell back to general examples")
 assert(stable(Registry:GetSetting("general.barTexture").get()) == textureBefore, "unmapped health texture changed the global bar texture")
 

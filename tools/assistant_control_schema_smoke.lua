@@ -21,6 +21,10 @@ local function AddState(stateId) expectedStateIds[#expectedStateIds + 1] = state
 local units = { "player", "target", "focus", "boss" }
 local normalTools = { "layout", "filters", "blacklist" }
 local customTools = { "setup", "layout", "filters", "whitelist" }
+-- custom4 is the "Dots on target" container. It tracks the player's own dots
+-- rather than filtering an arbitrary aura set, so it carries its own tool strip
+-- (UNIT_AURA_TARGET_DOT_TOOLS) instead of the filters/whitelist pair.
+local targetDotTools = { "setup", "layout", "dots" }
 for _, unit in ipairs(units) do
     for _, container in ipairs({ "buff", "debuff" }) do
         for _, tool in ipairs(normalTools) do AddState("unit_" .. unit .. "_" .. container .. "_" .. tool) end
@@ -28,6 +32,7 @@ for _, unit in ipairs(units) do
     for index = 1, 3 do
         for _, tool in ipairs(customTools) do AddState("unit_" .. unit .. "_custom" .. index .. "_" .. tool) end
     end
+    for _, tool in ipairs(targetDotTools) do AddState("unit_" .. unit .. "_custom4_" .. tool) end
     AddState("unit_" .. unit .. "_custom1_filters_debuff")
 end
 for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
@@ -38,13 +43,13 @@ for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
 end
 for _, scope in ipairs({ "shared", "player", "target", "focus", "boss", "party", "raid" }) do
     local containers = (scope == "player" or scope == "target" or scope == "focus" or scope == "boss")
-        and { "buff", "debuff", "custom1", "custom2", "custom3" } or { "buff", "debuff" }
+        and { "buff", "debuff", "custom1", "custom2", "custom3", "custom4" } or { "buff", "debuff" }
     for _, container in ipairs(containers) do AddState("style_" .. scope .. "_" .. container) end
 end
 for _, scope in ipairs({ "shared", "player", "target", "focus", "boss", "party", "raid" }) do
     for _, lane in ipairs({ "buff", "debuff" }) do AddState("compat_" .. lane .. "_" .. scope) end
 end
-Check(#expectedStateIds == 138, "finite state-matrix test definition")
+Check(#expectedStateIds == 154, "finite state-matrix test definition")
 
 local collectionStates, stateOrder = {}, {}
 for i = 1, #(Data.collectionStates or {}) do
@@ -55,9 +60,9 @@ for i = 1, #(Data.collectionStates or {}) do
     collectionStates[stateId] = count
     stateOrder[stateId] = i
 end
-Check(#(Data.collectionStates or {}) == #expectedStateIds, "complete 138-state inventory")
-Check(collectionStates.base == 2141, "reviewed complete-catalog baseline")
-Check(Data.collectionUnionControls == 2796 and #Data.records == Data.collectionUnionControls,
+Check(#(Data.collectionStates or {}) == #expectedStateIds, "complete 154-state inventory")
+Check(collectionStates.base == 1559, "reviewed complete-catalog baseline")
+Check(Data.collectionUnionControls == 2361 and #Data.records == Data.collectionUnionControls,
     "reviewed exhaustive finite-state control union")
 for i = 1, #Data.columns do columns[Data.columns[i]] = i end
 for _, column in ipairs({ "actionFixedArgs", "actionInputArg", "actionInputKind", "actionInputDomain",
@@ -158,7 +163,7 @@ Check(FunctionFree(Data), "generated schema data must remain function-free")
 local before = Schema.Stats()
 Check(before.version == 3, "schema version must be 3")
 Check(before.contexts == 40, "all 40 class/spec contexts must be present")
-Check(before.records == 2796, "public control inventory must equal the reviewed exhaustive finite-state union")
+Check(before.records == 2361, "public control inventory must equal the reviewed exhaustive finite-state union")
 Check(before.indexed == false, "schema index must remain lazy")
 
 local coldStart = os.clock()
@@ -192,16 +197,19 @@ local unknown, reason = Schema.Resolve("setting:does.not.exist")
 Check(unknown == false and reason == "unknown_control", "unknown semantic IDs must fail closed")
 
 local modes = Schema.ListModes({ contextId = "MAGE-62" })
-Check(type(modes) == "table" and #modes == 70, "reviewed test and preview mode inventory")
+Check(type(modes) == "table" and #modes == 45, "reviewed test and preview mode inventory")
 local modeSemanticIds = {}
 for i = 1, #modes do
     if modes[i].semanticId then modeSemanticIds[modes[i].semanticId] = true end
 end
-for _, category in ipairs({ "auras", "cast", "group", "resources", "unit" }) do
-    local path = "opt/colors/advanced/preview/scope/option/" .. category
+-- The Color Painter scope picker is one selector control, not one control per
+-- category: the categories are its values. It chooses what the painter previews
+-- and must never be offered as an executable test/preview mode.
+do
+    local path = "opt/colors/advanced/preview/scope/selector"
     local semanticId = "control:opt_colors/" .. path .. "@opt_colors/" .. path
-    Check(semanticIds[semanticId] == true, "missing Color Painter selector identity " .. category)
-    Check(not modeSemanticIds[semanticId], "Color Painter selector leaked into executable preview modes: " .. category)
+    Check(semanticIds[semanticId] == true, "missing Color Painter selector identity")
+    Check(not modeSemanticIds[semanticId], "Color Painter selector leaked into executable preview modes")
 end
 local expectedModeActions = {
     class_power_preview_animate=true, preview_castbar=true, preview_group_status_icon=true,
@@ -210,10 +218,13 @@ local expectedModeActions = {
     ["assistant.action.editMode.auras"]=true, ["assistant.action.editMode.groupPreview"]=true,
     ["assistant.action.editMode.preview"]=true, toggle_highlight_border_test=true,
 }
+-- Control-backed test/preview modes, per page, as the generated schema actually
+-- carries them. Only pet, focus-target and target-of-target expose the six
+-- status-indicator preview controls individually; the player/target/focus/boss
+-- pages do not contribute them to the schema union.
 local expectedControlPages = {
-    gameplay=1, gf_auras=1, gf_indicators=4, gf_priority=2, opt_bars=7, opt_castbar=1,
-    uf_boss=6, uf_focus=6, uf_focustarget=6, uf_pet=6, uf_player=6,
-    uf_target=6, uf_targettarget=6,
+    gameplay=1, gf_auras=1, gf_indicators=4, opt_bars=8, opt_castbar=1,
+    uf_focustarget=6, uf_pet=6, uf_targettarget=6,
 }
 local seenModeActions, seenControlPages, foundPredictionMode = {}, {}, nil
 for i = 1, #modes do

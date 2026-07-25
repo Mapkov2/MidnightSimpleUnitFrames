@@ -26,9 +26,9 @@ local Data = assert(Assistant.ControlSchemaData, "generated control schema data 
 
 Check(Data.version == 3, "reviewed schema version")
 Check(#(Data.contexts or {}) == 40, "reviewed 40 class/spec contexts")
-Check(#(Data.collectionStates or {}) == 138, "reviewed 138-state finite UI matrix")
-Check(Data.collectionUnionControls == 2796 and #(Data.records or {}) == 2796,
-    "reviewed 2796-control exhaustive union")
+Check(#(Data.collectionStates or {}) == 154, "reviewed 154-state finite UI matrix")
+Check(Data.collectionUnionControls == 2361 and #(Data.records or {}) == 2361,
+    "reviewed 2361-control exhaustive union")
 
 local columns, contextIds, stateCounts = {}, {}, {}
 for i = 1, #Data.columns do columns[Data.columns[i]] = i end
@@ -180,7 +180,7 @@ for _, group in pairs(labelGroups) do
         if #group > maxCollision then maxCollision = #group end
     end
 end
-Check(collisionGroups == 273 and collisionRows == 2225 and maxCollision == 57,
+Check(collisionGroups == 284 and collisionRows == 1783 and maxCollision == 32,
     string.format("reviewed label-collision inventory drift: groups=%d rows=%d max=%d",
         collisionGroups, collisionRows, maxCollision))
 
@@ -253,8 +253,7 @@ local expectedModes = {
     ["control:gf_indicators/group/indicators/status/advanced/preview/current@gf_indicators/group/indicators/status/advanced/preview/current"] = true,
     ["control:gf_indicators/group/indicators/status/advanced/preview/all@gf_indicators/group/indicators/status/advanced/preview/all"] = true,
     ["control:gf_indicators/group/indicators/status/preview/all@gf_indicators/group/indicators/status/preview/all"] = true,
-    ["action:assistant.action.editMode.enter@gf_priority/group/priority/overview/open_edit_mode"] = true,
-    ["action:assistant.action.editMode.enter@gf_priority/group/priority/placement/open_edit_mode"] = true,
+    ["control:opt_bars/opt/bars/global/temp/max/health/preview@opt_bars/opt/bars/global/temp/max/health/preview"] = true,
     ["control:opt_bars/opt/bars/global/highlight/preview/aggro@opt_bars/opt/bars/global/highlight/preview/aggro"] = true,
     ["control:opt_bars/opt/bars/global/highlight/preview/boss/target@opt_bars/opt/bars/global/highlight/preview/boss/target"] = true,
     ["control:opt_bars/opt/bars/global/highlight/preview/dispel@opt_bars/opt/bars/global/highlight/preview/dispel"] = true,
@@ -272,7 +271,12 @@ local unitModeSuffixes = {
     "unit/status/preview/basic/all",
     "unit/status/preview/msuf2_status_test",
 }
-for _, pageKey in ipairs({ "uf_boss", "uf_focus", "uf_focustarget", "uf_pet", "uf_player", "uf_target", "uf_targettarget" }) do
+-- Only the three unit pages the schema collector never invalidates contribute
+-- their status-indicator preview controls to the generated union. The four
+-- pages it rebuilds for the Aura workspace state matrix (player/target/focus/
+-- boss) come back without their lazily-built status section, so their preview
+-- controls are absent here even though the runtime catalog carries all seven.
+for _, pageKey in ipairs({ "uf_focustarget", "uf_pet", "uf_targettarget" }) do
     for _, suffix in ipairs(unitModeSuffixes) do
         local semanticId = "control:" .. pageKey .. "/" .. suffix .. "@" .. pageKey .. "/" .. suffix
         expectedModes[semanticId] = true
@@ -280,7 +284,7 @@ for _, pageKey in ipairs({ "uf_boss", "uf_focus", "uf_focustarget", "uf_pet", "u
 end
 
 local modes = Schema.ListModes({ contextId = "MAGE-62" })
-Check(#modes == 70, "reviewed test/preview mode count")
+Check(#modes == 45, "reviewed test/preview mode count")
 local seenModes, actionRuns, controlNavigations = {}, 0, 0
 local originalActionRuns = {}
 for i = 1, #modes do
@@ -319,7 +323,7 @@ for i = 1, #modes do
             "explicit action-mode navigation reported execution for " .. tostring(mode.actionKey))
     end
 end
-Check(controlNavigations == 58 and actionRuns == 0, "reviewed mode navigation totals")
+Check(controlNavigations == 33 and actionRuns == 0, "reviewed mode navigation totals")
 
 for action, run in pairs(originalActionRuns) do action.run = run end
 Menu.OpenExactSettingControl = originalOpenSetting

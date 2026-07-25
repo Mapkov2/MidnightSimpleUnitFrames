@@ -152,7 +152,7 @@ for pageKey in pairs(navPageKeys) do
         if not found then fail("page label search", pageKey .. " via " .. tostring(label or "")) end
     end
 end
-if checkedPages ~= 28 then fail("canonical page count", "expected 28, got " .. tostring(checkedPages)) end
+if checkedPages ~= 29 then fail("canonical page count", "expected 29, got " .. tostring(checkedPages)) end
 
 local keywordProbes = {
     { page = "gameplay", query = "combat timer" },

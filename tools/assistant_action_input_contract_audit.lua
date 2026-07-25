@@ -20,7 +20,7 @@ assert(A.NormalizeAssistantActionInput == Inputs.Normalize, "Assistant normalize
 assert(#(Inputs.CatalogErrors or {}) == 0, table.concat(Inputs.CatalogErrors or {}, "\n"))
 
 local actions = Registry:AllActions() or {}
-assert(#actions == 177, "expected 177 registered actions, got " .. tostring(#actions))
+assert(#actions == 178, "expected 178 registered actions, got " .. tostring(#actions))
 
 -- Reuse the existing action-contract inventory's desktop-only source-range
 -- technique as a drift detector.  Production contracts never inspect source;
@@ -65,7 +65,7 @@ for key in pairs(Inputs.Contracts or {}) do
     contractCount = contractCount + 1
     assert(Registry:GetAction(key), "orphan action input contract: " .. tostring(key))
 end
-assert(contractCount == 177, "expected 177 explicit contracts, got " .. tostring(contractCount))
+assert(contractCount == 178, "expected 178 explicit contracts, got " .. tostring(contractCount))
 
 local function ValidateDescriptor(descriptor, path, seen)
     assert(type(descriptor) == "table", path .. " descriptor missing")

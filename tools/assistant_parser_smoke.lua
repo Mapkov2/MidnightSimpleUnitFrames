@@ -1417,8 +1417,11 @@ end
 expectSetting("move it to the middle", "player.nameTextAnchor", "CENTER", "nameTextAnchor")
 for key in pairs(parserContext) do parserContext[key] = nil end
 _G.MSUF_DB.player.showName = false
-expectSettingAt("move player name to middle", 1, "player.showName", true, "name")
-expectSettingAt("move player name to middle", 2, "player.nameTextAnchor", "CENTER", "nameTextAnchor")
+-- The anchor is the request; enabling Show Name is only the companion that
+-- makes the newly anchored name visible, so the anchor stays the primary
+-- reported change.
+expectSettingAt("move player name to middle", 1, "player.nameTextAnchor", "CENTER", "nameTextAnchor")
+expectSettingAt("move player name to middle", 2, "player.showName", true, "name")
 _G.MSUF_DB.player.showName = true
 expectSetting("move player name text 5 right", "player.nameOffsetX", nil, "nameOffsetX", 5)
 expectSetting("put player name above the frame", "player.nameOffsetY", nil, "nameOffsetY", 10)

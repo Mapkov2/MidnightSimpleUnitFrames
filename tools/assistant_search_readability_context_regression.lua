@@ -47,7 +47,9 @@ end
 
 local canonical = {
     { "search class resources player power width", "Player Detached Power Bar Width", "player.detachedPowerBarWidth" },
-    { "search class resources player power bar texture", "Detached Power Bar Foreground Texture", "bars.detachedPowerBarTexture" },
+    -- The separate detached-power texture layer was retired; the Player page's
+    -- own power texture now owns the detached bar's art too.
+    { "search class resources player power bar texture", "Player Power Texture", "player.powerBarTexture" },
     { "search global font outline", "Shared Font Outline", "fontScope.shared.outline" },
     { "search global font monochrome", "Shared Rendering", "fontScope.shared.fontMonochrome" },
     { "search global bar right absorb", "Absorb Bar Anchor", "general.absorbAnchorMode" },

@@ -733,6 +733,8 @@ general.absorbBarColorB
 general.absorbBarColorG
 general.absorbBarColorMigrationV2
 general.absorbBarColorR
+general.absorbBarHeight
+general.absorbBarOffsetY
 general.aggroBorderColorB
 general.aggroBorderColorG
 general.aggroBorderColorR
@@ -763,6 +765,7 @@ general.castbarFocusTimeOutline
 general.castbarGlobalHeight
 general.castbarGlobalWidth
 general.castbarGraceMs
+general.castbarIconZoom
 general.castbarInterruptColor
 general.castbarPlayerMatchUnitframe
 general.castbarPlayerPreviewEnabled
@@ -821,7 +824,15 @@ general.gradientDirLeft
 general.gradientDirRight
 general.gradientDirUp
 general.hasMovedFramesInEditMode
+general.healAbsorbAnchorMode
+general.healAbsorbBarHeight
+general.healAbsorbBarOffsetY
 general.healAbsorbEnabled
+general.healPredEnabled
+general.healPredictionBarHeight
+general.healPredictionBarOffsetY
+general.healPredictionBarOpacity
+general.healPredictionBarTexture
 general.healthBarGradientColorB
 general.healthBarGradientColorG
 general.healthBarGradientColorR
@@ -943,6 +954,13 @@ general.showTotalAbsorbAmount
 general.stateIconsTestMode
 general.suppressBCDMHandoffNotice
 general.targetCastbarTestMode
+general.tempMaxHealthBackgroundOpacity
+general.tempMaxHealthColorB
+general.tempMaxHealthColorG
+general.tempMaxHealthColorR
+general.tempMaxHealthEnabled
+general.tempMaxHealthOpacity
+general.tempMaxHealthTexture
 general.tipCycleIndex
 general.unifiedBarB
 general.unifiedBarG

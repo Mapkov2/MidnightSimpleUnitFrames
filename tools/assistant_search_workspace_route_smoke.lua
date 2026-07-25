@@ -34,6 +34,10 @@ M.Search._RoutingContext = {
     DASHBOARD_ROUTE_CHANGELOG = { state = { dashboardChangelogOpen = true } },
 }
 local namespace = { MSUF2 = M }
+-- The routing module binds `local C_Timer = M.MenuTimer or _G.C_Timer` once at
+-- load, so the table has to exist before it loads and every later stub must
+-- mutate this same table rather than replace _G.C_Timer.
+_G.C_Timer = _G.C_Timer or { After = function(_, fn) if type(fn) == "function" then fn() end end }
 assert(loadfile("MidnightSimpleUnitFrames/Shell/Menu2/Search/MSUF_Menu2_Search_Routing.lua"))(
     "MidnightSimpleUnitFrames", namespace)
 local routing = assert(M.Search._RoutingAPI)
@@ -78,6 +82,8 @@ local declaredUnits = Words(unitWords)
 local declaredUnitContainers = VTPKeys(auraSource, "UNIT_AURA_WORKSPACE_TABS")
 local declaredUnitNormalTools = VTPKeys(auraSource, "UNIT_AURA_NORMAL_TOOLS")
 local declaredUnitCustomTools = VTPKeys(auraSource, "UNIT_AURA_CUSTOM_TOOLS")
+-- custom4 is the "Dots on target" container and carries its own tool strip.
+local declaredUnitTargetDotTools = VTPKeys(auraSource, "UNIT_AURA_TARGET_DOT_TOOLS")
 local declaredGroupScopes = VTPKeys(groupSpecsSource, "SCOPE_VALUES")
 local declaredGroupLanes = TableValueKeys(groupAuraSource, "GF_AURA_WORKSPACE_LANES")
 local declaredGroupTools = TableValueKeys(groupAuraSource, "GF_AURA_WORKSPACE_TOOLS")
@@ -117,12 +123,14 @@ assert(M.gfAuraToolSelection.raid.debuff == "filters" and M.invalidated == "gf_a
 local unitMatrix, groupMatrix, styleMatrix = 0, 0, 0
 local unitToolTerms = {
     layout = "layout size", filters = "filter only mine", blacklist = "blacklist spell id",
-    setup = "setup", whitelist = "whitelist",
+    setup = "setup", whitelist = "whitelist", dots = "dots",
 }
 for _, unitName in ipairs(declaredUnits) do
     for _, container in ipairs(declaredUnitContainers) do
         local customContainer = container:match("^custom%d$") ~= nil
-        local tools = customContainer and declaredUnitCustomTools or declaredUnitNormalTools
+        local tools = declaredUnitNormalTools
+        if container == "custom4" then tools = declaredUnitTargetDotTools
+        elseif customContainer then tools = declaredUnitCustomTools end
         for _, tool in ipairs(tools) do
             local toolTerm = assert(unitToolTerms[tool], "missing unit tool term " .. tool)
             local query = table.concat({ unitName, container, "aura", toolTerm }, " ")
@@ -222,7 +230,7 @@ local exactNavigationMatrix = 0
 for _, row in ipairs({ { 434, 406 }, { 1128, 786 } }) do
     for _, initiallyOpen in ipairs({ false, true }) do
         local callbacks = {}
-        _G.C_Timer = { After = function(_, fn) callbacks[#callbacks + 1] = fn end }
+        _G.C_Timer.After = function(_, fn) callbacks[#callbacks + 1] = fn end
         local staleMeasured, genericMeasured, exactMeasured = { count = 0 }, { count = 0 }, { count = 0 }
         local oldWrapper = FakeWrapper(1000, row[1])
         local newWrapper = FakeWrapper(1000, row[1])
@@ -339,7 +347,7 @@ end
 M.Search.ApplyRoute = routing.ApplySearchRoute
 M.Search.OpenTarget = routing.OpenSearchTarget
 _G.SlashCmdList = _G.SlashCmdList or {}
-_G.C_Timer = { After = function(_, fn) fn() end }
+_G.C_Timer.After = function(_, fn) fn() end
 assert(loadfile("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_SearchBridge.lua"))(
     "MidnightSimpleUnitFrames", namespace)
 assert(loadfile("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_API.lua"))(

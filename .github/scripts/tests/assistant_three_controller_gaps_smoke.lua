@@ -99,13 +99,26 @@ local function RegisterBarsEnum(dbKey, attr, label, defaultValue, values, aliase
         apply = opts.apply,
     })
 end
+-- The shared bar outline moved off the frame-strata enum onto the unified
+-- numeric Layer scale, so that is the control this gate has to follow.
+local function RegisterBarsNumber(dbKey, attr, label, defaultValue, minValue, maxValue, aliases, opts)
+    if dbKey ~= "barOutlineLayer" then return end
+    Registry:RegisterSetting({
+        key = "bars." .. dbKey, label = label, category = opts.category, unit = "global",
+        frameType = opts.frameType, attribute = attr, type = "number", aliases = aliases,
+        min = minValue, max = maxValue, step = opts.step,
+        get = function() return tonumber(_G.MSUF_DB.bars[dbKey]) or defaultValue end,
+        set = function(value) _G.MSUF_DB.bars[dbKey] = tonumber(value) or defaultValue end,
+        apply = opts.apply,
+    })
+end
 local noop = function() end
 A.GlobalBarRegistry.RegisterBaseBarSettings({
     GeneralDB = function() return _G.MSUF_DB.general end,
     ApplyBars = Apply, ApplyBarOutline = Apply, ApplyRoundedBars = Apply, ApplyAggroBorder = Apply,
     ApplyDispelPurgeBorder = Apply, ApplyBossTargetBorder = Apply, ApplyHighlightBorders = Apply,
     RegisterGeneralBoolean = noop, RegisterGeneralNumberSetting = noop, RegisterGeneralEnum = noop,
-    RegisterGeneralMappedEnum = noop, RegisterBarsBoolean = noop, RegisterBarsNumber = noop,
+    RegisterGeneralMappedEnum = noop, RegisterBarsBoolean = noop, RegisterBarsNumber = RegisterBarsNumber,
     RegisterBarsEnum = RegisterBarsEnum,
     OUTLINE_STRATA_VALUES = barData.OUTLINE_STRATA_VALUES,
     OUTLINE_STRATA_ALIASES = barData.OUTLINE_STRATA_ALIASES,
@@ -118,19 +131,33 @@ local function ScopeTables(scope)
     return { _G.MSUF_DB[scope] }
 end
 local function RegisterScopedSetting(kind, scope, dbKey, attr, label, settingType, defaultValue, aliases, opts)
-    if dbKey ~= "barOutlineStrata" then return end
+    if dbKey ~= "barOutlineLayer" then return end
     local allowed = {}
     for i = 1, #(opts.values or {}) do allowed[opts.values[i]] = true end
     Registry:RegisterSetting({
         key = kind .. "." .. scope .. "." .. dbKey, label = label, category = "Global / Bars / Scoped",
         unit = scope, frameType = "globalBars", attribute = attr, type = settingType, aliases = aliases,
         values = opts.values, valueAliases = opts.valueAliases, sharedKind = opts.shared,
+        min = opts.min, max = opts.max, step = opts.step,
         get = function()
             local value = ScopeTables(scope)[1][dbKey]
+            if settingType == "number" then
+                value = tonumber(value)
+                if not value then return defaultValue end
+                if opts.min and value < opts.min then return opts.min end
+                if opts.max and value > opts.max then return opts.max end
+                return value
+            end
             return allowed[value] and value or defaultValue
         end,
         set = function(value)
-            value = allowed[value] and value or defaultValue
+            if settingType == "number" then
+                value = tonumber(value) or defaultValue
+                if opts.min and value < opts.min then value = opts.min end
+                if opts.max and value > opts.max then value = opts.max end
+            else
+                value = allowed[value] and value or defaultValue
+            end
             local tables = ScopeTables(scope)
             for i = 1, #tables do tables[i][dbKey] = value end
         end,
@@ -157,11 +184,19 @@ A.GlobalBarRegistry.RegisterScopedBarSettings({
     OUTLINE_STRATA_ALIASES = barData.OUTLINE_STRATA_ALIASES,
 })
 
-local sharedOutline = assert(Registry:GetSetting("bars.barOutlineStrata"))
-AssertValues(sharedOutline, outlineValues)
+-- Bar outline draw order: one shared Bars value plus a per-scope override, all
+-- on the unified 0-30 Layer scale.
+local function AssertLayerDomain(setting)
+    assert(setting.type == "number", tostring(setting.key) .. " is not a numeric Layer control")
+    assert(tonumber(setting.min) == 0 and tonumber(setting.max) == 30,
+        tostring(setting.key) .. " left the 0-30 Layer scale")
+    assert(tonumber(setting.step) == 1, tostring(setting.key) .. " left the whole-step Layer scale")
+end
+local sharedOutline = assert(Registry:GetSetting("bars.barOutlineLayer"))
+AssertLayerDomain(sharedOutline)
 for i = 1, #scopes do
-    local setting = assert(Registry:GetSetting("barScope." .. scopes[i] .. ".barOutlineStrata"))
-    AssertValues(setting, outlineValues)
+    local setting = assert(Registry:GetSetting("barScope." .. scopes[i] .. ".barOutlineLayer"))
+    AssertLayerDomain(setting)
     assert(setting.sharedKind == "bars", setting.key .. " does not inherit the shared Bars value")
 end
 
@@ -220,7 +255,7 @@ A.ControlSchemaData = {
     version = 3,
     columns = { "semanticId", "controlId", "familyId", "memberKey", "pageKey", "controlPath", "classification", "kind", "settingKey", "actionKey", "navigationKey", "safety", "valueKind", "min", "max", "step", "percentIsValue", "confirmRequired", "identityStable", "label", "help", "values", "states", "contexts" },
     records = {
-        { "outline.player", "menu2.outline.player", "", "", "opt_bars", "outline/strata", "setting", "slider", "barScope.player.barOutlineStrata", "", "", "direct", "enum", "", "", "", "0", "0", "1", "Player outline strata", "", "", "*", "*" },
+        { "outline.player", "menu2.outline.player", "", "", "opt_bars", "outline/layer", "setting", "slider", "barScope.player.barOutlineLayer", "", "", "direct", "number", "0", "30", "1", "0", "0", "1", "Player outline layer", "", "", "*", "*" },
         { "boss.detach", "menu2.boss.detach", "", "", "opt_castbars", "boss/attachment", "setting", "toggle", "general.bossCastbarDetached", "", "", "direct", "boolean", "", "", "", "0", "0", "1", "Boss castbar detached", "", "", "*", "*" },
         { "preview.guides", "menu2.preview.guides", "", "", "classpower", "preview/guides", "setting", "toggle", "general.classPowerPreviewGuidesEnabled", "", "", "direct", "boolean", "", "", "", "0", "0", "1", "Preview guides", "", "", "*", "*" },
     },
@@ -231,15 +266,15 @@ local Schema = assert(A.ControlSchema)
 -- Scoped outline: invalid choice is zero-write; valid write stays scoped and
 -- undo/redo uses the normal Assistant transaction.
 ResetHistory()
-local playerOutline = assert(Registry:GetSetting("barScope.player.barOutlineStrata"))
+local playerOutline = assert(Registry:GetSetting("barScope.player.barOutlineLayer"))
 local beforeApply = applyCount
-local ok, reason = Schema.Execute("outline.player", "NOT_A_STRATA")
+local ok, reason = Schema.Execute("outline.player", "NOT_A_LAYER")
 assert(ok == false and reason == "invalid_value")
-assert(_G.MSUF_DB.player.barOutlineStrata == nil and _G.MSUF_DB.bars.barOutlineStrata == "AUTO" and applyCount == beforeApply)
-assert(Schema.Execute("outline.player", "DIALOG") == true)
-assert(_G.MSUF_DB.player.barOutlineStrata == "DIALOG" and _G.MSUF_DB.bars.barOutlineStrata == "AUTO")
-assert(A.UndoLast() == true and playerOutline.get() == "AUTO")
-assert(A.RedoLast() == true and playerOutline.get() == "DIALOG")
+assert(_G.MSUF_DB.player.barOutlineLayer == nil and _G.MSUF_DB.bars.barOutlineLayer == nil and applyCount == beforeApply)
+assert(Schema.Execute("outline.player", 12) == true)
+assert(_G.MSUF_DB.player.barOutlineLayer == 12 and _G.MSUF_DB.bars.barOutlineLayer == nil)
+assert(A.UndoLast() == true and playerOutline.get() == 0)
+assert(A.RedoLast() == true and playerOutline.get() == 12)
 
 -- Boss attachment: a later failure rolls back all three owner fields. A
 -- committed detach preserves exact before/after offsets through undo/redo.

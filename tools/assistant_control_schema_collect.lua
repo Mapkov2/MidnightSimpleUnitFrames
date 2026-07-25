@@ -478,11 +478,38 @@ local function EnsureTable(owner, key)
     return value
 end
 
+-- Menu2 slices hidden lazy sections through construction timers. The crosswalk
+-- drives those synchronously for its own build pass and then restores the real
+-- stubs, so a page rebuilt here would come back missing every lazily-built
+-- section. That is how the unit status-preview controls silently dropped out of
+-- the generated schema for exactly the four rebuilt unit pages while the units
+-- this harness never rebuilds kept theirs.
 local function RebuildCollectionPage(M, pageKey)
     assert(type(M.InvalidatePage) == "function", "real Menu2 page invalidation API did not load")
     assert(type(M.BuildPageEntry) == "function", "real Menu2 page builder API did not load")
+    local timer = _G.C_Timer
+    local menuTimer = M.MenuTimer
+    local originalAfter = timer and timer.After
+    local originalMenuAfter = menuTimer and menuTimer.After
+    local originalMenuNewTimer = menuTimer and menuTimer.NewTimer
+    local function RunNow(_, callback)
+        if type(callback) == "function" then callback() end
+    end
+    if timer then timer.After = RunNow end
+    if menuTimer then
+        menuTimer.After = RunNow
+        menuTimer.NewTimer = function(_, callback)
+            if type(callback) == "function" then callback() end
+            return { Cancel = function() end }
+        end
+    end
     M.InvalidatePage(pageKey)
     local ok, result = pcall(M.BuildPageEntry, pageKey, true)
+    if timer then timer.After = originalAfter end
+    if menuTimer then
+        menuTimer.After = originalMenuAfter
+        menuTimer.NewTimer = originalMenuNewTimer
+    end
     assert(ok, "control-schema state failed to build " .. tostring(pageKey) .. ": " .. tostring(result))
     assert(result ~= nil, "control-schema state did not produce a page entry for " .. tostring(pageKey))
 end
