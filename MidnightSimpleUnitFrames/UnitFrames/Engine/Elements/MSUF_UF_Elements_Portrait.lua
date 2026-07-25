@@ -62,6 +62,37 @@ local DYNAMIC_PORTRAIT_BORDER = V.DYNAMIC_PORTRAIT_BORDER or {
   CLASS_COLOR = true,
   REACTION = true,
 }
+local ANCHOR_POINTS = {
+  TOPLEFT = true, TOP = true, TOPRIGHT = true,
+  LEFT = true, CENTER = true, RIGHT = true,
+  BOTTOMLEFT = true, BOTTOM = true, BOTTOMRIGHT = true,
+}
+--- Shapes whose mask does not line up with the four straight border edges.
+--- These get the ring renderer instead so the outline follows the silhouette.
+local SHAPED_PORTRAIT_BORDER = {
+  CIRCLE = true,
+  ROUNDED = true,
+  DIAMOND = true,
+}
+--- Beveled ring art, one file per portrait shape. The art is greyscale so the
+--- configured border colour tints it: white reads as steel, a warm colour gives
+--- the classic gold look, and Class/Reaction colour keep working unchanged.
+local PORTRAIT_RING_ART = V.PORTRAIT_RING_ART or {
+  SQUARE = ADDON_PATH .. "\\Media\\Borders\\msuf_portrait_ring_square.tga",
+  CIRCLE = ADDON_PATH .. "\\Media\\Borders\\msuf_portrait_ring_circle.tga",
+  ROUNDED = ADDON_PATH .. "\\Media\\Borders\\msuf_portrait_ring_rounded.tga",
+  DIAMOND = ADDON_PATH .. "\\Media\\Borders\\msuf_portrait_ring_diamond.tga",
+}
+--- Pre-baked 90 degree rotations for the 8-argument SetTexCoord form
+--- (ULx,ULy, LLx,LLy, URx,URy, LRx,LRy). The art is lit from the top, so these
+--- move the highlight to the named edge. Constant tables: applying a direction
+--- never allocates and never computes anything at runtime.
+local PORTRAIT_RING_ROTATION = {
+  UP    = { 0, 0, 0, 1, 1, 0, 1, 1 },
+  RIGHT = { 0, 1, 1, 1, 0, 0, 1, 0 },
+  DOWN  = { 1, 1, 1, 0, 0, 1, 0, 0 },
+  LEFT  = { 1, 0, 0, 0, 1, 1, 0, 1 },
+}
 local QUEUED_2D_PORTRAIT_EVENTS = V.QUEUED_2D_PORTRAIT_EVENTS or {
   UNIT_PORTRAIT_UPDATE = true,
   UNIT_MODEL_CHANGED = true,
@@ -413,51 +444,108 @@ local function ApplyPortraitMask(holder, p)
   SetTextureCached(mask, PORTRAIT_MASKS[p and p.shape or "SQUARE"] or WHITE)
 end
 
+--- Placement resolves to (ownPoint, relativePoint) pairs. ATTACHED keeps the
+--- historic "hug the health bar edge" contract, DETACHED lets the user pick both
+--- points freely, OVERLAY parks the portrait inside the frame.
+local function ResolvePortraitAnchor(frame, p, placement)
+  if placement == "DETACHED" then
+    local anchor = frame
+    local point = ANCHOR_POINTS[p and p.point] and p.point or "RIGHT"
+    local relPoint = ANCHOR_POINTS[p and p.relPoint] and p.relPoint or "LEFT"
+    return anchor, point, relPoint
+  end
+
+  local anchor = frame.Health or frame.hpBar or frame
+  if placement == "OVERLAY" then
+    local align = p and p.overlayAlign
+    if align == "CENTER" then
+      return anchor, "CENTER", "CENTER"
+    elseif align == "RIGHT" then
+      return anchor, "RIGHT", "RIGHT"
+    elseif align == "FULL" then
+      return anchor, "FULL", "FULL"
+    end
+    return anchor, "LEFT", "LEFT"
+  end
+
+  if frame._msufPowerBarReserved then
+    anchor = frame
+  end
+  if p and p.side == "RIGHT" then
+    return anchor, "LEFT", "RIGHT"
+  end
+  return anchor, "RIGHT", "LEFT"
+end
+
 local function LayoutPortrait(frame, p)
   local holder = frame.MSUFPortraitHolder
   if not holder then
     return
   end
 
-  local size = tonumber(p and p.size) or tonumber(frame._msufPortraitFrameHeight) or tonumber(frame.MSUFSpec and frame.MSUFSpec.height) or 30
-  if size < 1 then
-    size = 1
-  end
-  local side = p and p.side == "RIGHT" and "RIGHT" or "LEFT"
+  local fallbackSize = tonumber(frame._msufPortraitFrameHeight) or tonumber(frame.MSUFSpec and frame.MSUFSpec.height) or 30
+  local width = tonumber(p and p.width) or tonumber(p and p.size) or fallbackSize
+  local height = tonumber(p and p.height) or tonumber(p and p.size) or fallbackSize
+  if width < 1 then width = 1 end
+  if height < 1 then height = 1 end
   local x = tonumber(p and p.x) or 0
   local y = tonumber(p and p.y) or 0
-  local anchor = frame.Health or frame.hpBar or frame
-  if frame._msufPowerBarReserved then
-    anchor = frame
-  end
+  local placement = p and p.placement or "ATTACHED"
+  local anchor, point, relPoint = ResolvePortraitAnchor(frame, p, placement)
 
+  -- Layer rides the shared 0..30 unit-frame scale measured from the frame, not
+  -- from the health bar: the health bar itself sits at frame + HEALTH_OFFSET, so
+  -- layer 0 renders an overlay portrait behind the bars while the default 7
+  -- reproduces the pre-6.0 "health bar + PORTRAIT_OFFSET" stacking.
   local baseLevel = frame:GetFrameLevel() or 1
-  if frame.Health and frame.Health.GetFrameLevel then
-    baseLevel = frame.Health:GetFrameLevel() or baseLevel
+  local defaultLevel = (Layers.HEALTH_OFFSET or 1) + (Layers.PORTRAIT_OFFSET or 6)
+  local levelOffset = tonumber(p and p.levelOffset) or defaultLevel
+  if levelOffset < 0 then
+    levelOffset = 0
+  elseif levelOffset > 30 then
+    levelOffset = 30
   end
-  local portraitLevel = baseLevel + (Layers.PORTRAIT_OFFSET or 6)
+  local portraitLevel = baseLevel + levelOffset
+  if portraitLevel < 0 then
+    portraitLevel = 0
+  end
   if holder._msufLevel ~= portraitLevel then
     holder:SetFrameLevel(portraitLevel)
     holder._msufLevel = portraitLevel
   end
-  local borderLevel = baseLevel + (Layers.PORTRAIT_BORDER_OFFSET or 7)
+  local borderGap = (Layers.PORTRAIT_BORDER_OFFSET or 7) - (Layers.PORTRAIT_OFFSET or 6)
+  if borderGap < 1 then
+    borderGap = 1
+  end
+  local borderLevel = portraitLevel + borderGap
   if holder.border and holder.border._msufLevel ~= borderLevel then
     holder.border:SetFrameLevel(borderLevel)
     holder.border._msufLevel = borderLevel
   end
 
-  if holder._msufSize ~= size then
-    holder:SetSize(size, size)
-    holder._msufSize = size
+  local alpha = tonumber(p and p.alpha) or 1
+  if holder._msufHolderAlpha ~= alpha then
+    holder:SetAlpha(alpha)
+    holder._msufHolderAlpha = alpha
   end
-  if holder._msufSide ~= side or holder._msufX ~= x or holder._msufY ~= y or holder._msufAnchor ~= anchor then
+
+  -- FULL overlay derives its size from the two anchors, so skip SetSize there.
+  if point ~= "FULL" and (holder._msufWidth ~= width or holder._msufHeight ~= height) then
+    holder:SetSize(width, height)
+    holder._msufWidth, holder._msufHeight = width, height
+  end
+  if holder._msufPoint ~= point or holder._msufRelPoint ~= relPoint
+    or holder._msufX ~= x or holder._msufY ~= y or holder._msufAnchor ~= anchor then
     holder:ClearAllPoints()
-    if side == "RIGHT" then
-      holder:SetPoint("LEFT", anchor, "RIGHT", x, y)
+    if point == "FULL" then
+      holder:SetPoint("TOPLEFT", anchor, "TOPLEFT", x, -y)
+      holder:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", -x, y)
+      holder._msufWidth, holder._msufHeight = nil, nil
     else
-      holder:SetPoint("RIGHT", anchor, "LEFT", x, y)
+      holder:SetPoint(point, anchor, relPoint, x, y)
     end
-    holder._msufSide, holder._msufX, holder._msufY, holder._msufAnchor = side, x, y, anchor
+    holder._msufPoint, holder._msufRelPoint = point, relPoint
+    holder._msufX, holder._msufY, holder._msufAnchor = x, y, anchor
   end
 end
 
@@ -672,6 +760,147 @@ PortraitBorderNeedsUpdate = function(event, p)
   return DYNAMIC_PORTRAIT_BORDER[style] == true
 end
 
+--- Ring renderer for masked portrait shapes.
+---
+--- A straight four-edge border cannot follow a circle or diamond silhouette, so
+--- shaped portraits get a single quad that is inflated by the border thickness
+--- and clipped by the *same* mask shape at the *inflated* size. The portrait art
+--- (masked at holder size) then covers the middle, leaving exactly a `thick`
+--- wide outline that traces the shape. One texture plus one mask, both created
+--- lazily and only ever touched from Apply -- there is no per-event cost.
+---
+--- The ring sits below the art on purpose. With a 2D portrait the art is opaque,
+--- so only the outline stays visible; a class icon with a transparent glyph
+--- margin will show the ring colour through it, which is what the portrait
+--- background option is there for.
+local function EnsurePortraitRing(holder)
+  local ring = holder.ring
+  if ring then
+    return ring
+  end
+  if not holder.CreateTexture then
+    return nil
+  end
+  ring = holder:CreateTexture(nil, "BACKGROUND", nil, -2)
+  ring:SetTexture(WHITE)
+  ring._msufTexture = WHITE
+  if holder.CreateMaskTexture and ring.AddMaskTexture then
+    local mask = holder:CreateMaskTexture()
+    ring:AddMaskTexture(mask)
+    holder.ringMask = mask
+  end
+  holder.ring = ring
+  return ring
+end
+
+local function LayoutPortraitRing(holder, shape, thick, r, g, b, a)
+  local ring = EnsurePortraitRing(holder)
+  if not ring then
+    return
+  end
+  local key = shape .. "|" .. thick
+  if holder._msufRingKey ~= key then
+    local mask = holder.ringMask
+    ring:ClearAllPoints()
+    ring:SetPoint("TOPLEFT", holder, "TOPLEFT", -thick, thick)
+    ring:SetPoint("BOTTOMRIGHT", holder, "BOTTOMRIGHT", thick, -thick)
+    if mask then
+      mask:ClearAllPoints()
+      mask:SetPoint("TOPLEFT", holder, "TOPLEFT", -thick, thick)
+      mask:SetPoint("BOTTOMRIGHT", holder, "BOTTOMRIGHT", thick, -thick)
+      SetTextureCached(mask, PORTRAIT_MASKS[shape] or WHITE)
+    end
+    holder._msufRingKey = key
+  end
+  SetVertexColorCached(ring, r, g, b, a)
+  SetShown(ring, true)
+end
+
+--- Art border renderer: one texture, no mask, drawn on the border frame so it
+--- sits on the portrait rim the way Blizzard's own portrait rings do. Because it
+--- is above the art it also stays correct for class icons with a transparent
+--- glyph margin, which the solid ring cannot do.
+---
+--- Everything here runs from Apply only, and re-running with an unchanged
+--- shape/thickness/direction short-circuits on _msufArtKey, so a portrait with a
+--- static border colour costs exactly nothing once the frame is built.
+local function EnsurePortraitArtBorder(holder)
+  local art = holder.artBorder
+  if art then
+    return art
+  end
+  local border = holder.border
+  if not (border and border.CreateTexture) then
+    return nil
+  end
+  art = border:CreateTexture(nil, "OVERLAY", nil, 2)
+  holder.artBorder = art
+  return art
+end
+
+--- The ring art has a fixed proportion: its opening is PORTRAIT_RING_OPENING of
+--- the texture. So the quad cannot pin both the opening and an absolute band
+--- width -- inflating by a raw pixel thickness would make a *thin* border eat
+--- further into the portrait, which is backwards. Instead the inflation is
+--- derived from the portrait size so the opening lands on the portrait rim at
+--- the default thickness, and the slider scales the whole ring from there:
+--- thicker really does mean a bigger, chunkier ring sitting further out.
+local PORTRAIT_RING_OPENING = 0.84
+local PORTRAIT_RING_REFERENCE_THICKNESS = 2
+
+--- Per axis: a non-square portrait needs a different inflation on each axis or
+--- the ring opening only meets the rim on the shorter side and cuts into (or
+--- floats off) the longer one. The mask stretches with the holder, and the ring
+--- quad stretches the same way, so matching each axis keeps the two silhouettes
+--- congruent at any aspect ratio.
+local function PortraitRingAxisInflation(extent, thick)
+  local inflation = extent
+    * ((1 - PORTRAIT_RING_OPENING) / (2 * PORTRAIT_RING_OPENING))
+    * (thick / PORTRAIT_RING_REFERENCE_THICKNESS)
+  if inflation < 1 then
+    inflation = 1
+  end
+  return math.floor(inflation + 0.5)
+end
+
+local function PortraitRingInflation(holder, p, thick)
+  local width = tonumber(p and p.width) or tonumber(holder._msufWidth) or 0
+  local height = tonumber(p and p.height) or tonumber(holder._msufHeight) or 0
+  if width <= 0 then
+    width = tonumber(p and p.size) or 36
+  end
+  if height <= 0 then
+    height = tonumber(p and p.size) or 36
+  end
+  return PortraitRingAxisInflation(width, thick), PortraitRingAxisInflation(height, thick)
+end
+
+local function LayoutPortraitArtBorder(holder, p, shape, thick, direction, r, g, b, a)
+  local art = EnsurePortraitArtBorder(holder)
+  if not art then
+    return false
+  end
+  local texture = PORTRAIT_RING_ART[shape] or PORTRAIT_RING_ART.SQUARE
+  local inflateX, inflateY = PortraitRingInflation(holder, p, thick)
+  local key = shape .. "|" .. inflateX .. "|" .. inflateY .. "|" .. direction
+  if holder._msufArtKey ~= key then
+    art:ClearAllPoints()
+    art:SetPoint("TOPLEFT", holder, "TOPLEFT", -inflateX, inflateY)
+    art:SetPoint("BOTTOMRIGHT", holder, "BOTTOMRIGHT", inflateX, -inflateY)
+    SetTextureCached(art, texture)
+    local rotation = PORTRAIT_RING_ROTATION[direction] or PORTRAIT_RING_ROTATION.UP
+    art:SetTexCoord(rotation[1], rotation[2], rotation[3], rotation[4],
+      rotation[5], rotation[6], rotation[7], rotation[8])
+    -- SetTextureCached tracks the 4-argument coords; the 8-argument rotation
+    -- lives on _msufArtKey instead, so clear the stale 4-argument memo.
+    art._msufL, art._msufR, art._msufT, art._msufB = nil, nil, nil, nil
+    holder._msufArtKey = key
+  end
+  SetVertexColorCached(art, r, g, b, a)
+  SetShown(art, true)
+  return true
+end
+
 LayoutPortraitBorder = function(holder, p, r, g, b, a)
   local border = holder and holder.border
   local edges = holder and holder.edges
@@ -679,16 +908,49 @@ LayoutPortraitBorder = function(holder, p, r, g, b, a)
     return
   end
   if not r then
-    if edges then
-      for i = 1, 4 do
-        SetShown(edges[i], false)
-      end
+    for i = 1, 4 do
+      SetShown(edges[i], false)
+    end
+    if holder.ring then
+      SetShown(holder.ring, false)
+    end
+    if holder.artBorder then
+      SetShown(holder.artBorder, false)
     end
     return
   end
 
   local cfg = p and p.border
   local thick = max(1, tonumber(cfg and cfg.thickness) or 2)
+  local shape = p and p.shape or "SQUARE"
+
+  -- Relief art replaces both geometric renderers for every shape.
+  if cfg and cfg.art == "RELIEF" then
+    local direction = cfg.direction or "UP"
+    if LayoutPortraitArtBorder(holder, p, shape, thick, direction, r, g, b, a) then
+      for i = 1, 4 do
+        SetShown(edges[i], false)
+      end
+      if holder.ring then
+        SetShown(holder.ring, false)
+      end
+      return
+    end
+  elseif holder.artBorder then
+    SetShown(holder.artBorder, false)
+  end
+
+  if SHAPED_PORTRAIT_BORDER[shape] == true then
+    for i = 1, 4 do
+      SetShown(edges[i], false)
+    end
+    LayoutPortraitRing(holder, shape, thick, r, g, b, a)
+    return
+  end
+  if holder.ring then
+    SetShown(holder.ring, false)
+  end
+
   local fill = cfg and cfg.fill == true
   local key = thick .. "|" .. (fill and "1" or "0")
   local top, bottom, left, right = edges[1], edges[2], edges[3], edges[4]
@@ -845,6 +1107,8 @@ function Portrait.Disable(frame)
   if holder then
     SetShown(holder, false)
     if holder.bg then SetShown(holder.bg, false) end
+    if holder.ring then SetShown(holder.ring, false) end
+    if holder.artBorder then SetShown(holder.artBorder, false) end
     if holder.edges then
       for i = 1, 4 do
         SetShown(holder.edges[i], false)
@@ -938,5 +1202,10 @@ function Portrait.Update(frame, event, unit)
     LayoutPortraitBorder(frame.MSUFPortraitHolder, p, ResolvePortraitBorderColor(frame, p, class))
   end
 end
+
+--- Exposed because it is a load-bearing performance contract, not an internal
+--- detail: a portrait whose border colour is static must answer false here for
+--- every gameplay event, which is what keeps an art border free in combat.
+Portrait.BorderNeedsUpdate = function(event, p) return PortraitBorderNeedsUpdate(event, p) end
 
 UF.RegisterElement("Portrait", Portrait)

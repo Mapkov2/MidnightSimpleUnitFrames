@@ -2572,6 +2572,16 @@ end
     --- runtime and Unit Frame options use per-unit portrait fields directly.
     if g.portraitShape == nil then g.portraitShape = "SQUARE" end
     if g.portraitSizeOverride == nil then g.portraitSizeOverride = 0 end
+    if g.portraitPlacement == nil then g.portraitPlacement = "ATTACHED" end
+    if g.portraitWidth == nil then g.portraitWidth = 0 end
+    if g.portraitHeight == nil then g.portraitHeight = 0 end
+    if g.portraitDetachedPoint == nil then g.portraitDetachedPoint = "RIGHT" end
+    if g.portraitDetachedTo == nil then g.portraitDetachedTo = "LEFT" end
+    if g.portraitLevelOffset == nil then g.portraitLevelOffset = 7 end
+    if g.portraitOverlayAlign == nil then g.portraitOverlayAlign = "LEFT" end
+    if g.portraitAlpha == nil then g.portraitAlpha = 100 end
+    if g.portraitPanX == nil then g.portraitPanX = 0 end
+    if g.portraitPanY == nil then g.portraitPanY = 0 end
     if g.portraitOffsetX == nil then g.portraitOffsetX = 0 end
     if g.portraitOffsetY == nil then g.portraitOffsetY = 0 end
     if g.portraitZoom == nil then g.portraitZoom = 100 end
@@ -2589,6 +2599,8 @@ end
     if g.portraitClassStyle == nil then g.portraitClassStyle = "BLIZZARD" end
     g.portraitClassStyle = MSUF_Defaults_NormalizePortraitClassStyleValue(g.portraitClassStyle)
     if g.portraitFillBorder == nil then g.portraitFillBorder = false end
+    if g.portraitBorderArt == nil then g.portraitBorderArt = "FLAT" end
+    if g.portraitBorderDirection == nil then g.portraitBorderDirection = "UP" end
     --- Retired Portrait panel UI state / old shared render value. Kept for imports only.
     if g._portraitScopeKey == nil then g._portraitScopeKey = "shared" end
     --- Initialize _portraitSharedRender from player's actual render type (migration from old layout)
@@ -3949,6 +3961,19 @@ local function fill(key, defaults)
         u.portraitClassStyle = MSUF_Defaults_NormalizePortraitClassStyleValue(u.portraitClassStyle)
         PortraitDefault("portraitShape", "SQUARE")
         PortraitDefault("portraitSizeOverride", 0)
+        --- 6.0: detached/overlay placement, free width+height, art pan and the
+        --- per-unit frame level. All default to the pre-6.0 attached square, so
+        --- an untouched profile keeps its exact old geometry.
+        PortraitDefault("portraitPlacement", "ATTACHED")
+        PortraitDefault("portraitWidth", 0)
+        PortraitDefault("portraitHeight", 0)
+        PortraitDefault("portraitDetachedPoint", "RIGHT")
+        PortraitDefault("portraitDetachedTo", "LEFT")
+        PortraitDefault("portraitLevelOffset", 7)
+        PortraitDefault("portraitOverlayAlign", "LEFT")
+        PortraitDefault("portraitAlpha", 100)
+        PortraitDefault("portraitPanX", 0)
+        PortraitDefault("portraitPanY", 0)
         PortraitDefault("portraitOffsetX", 0)
         PortraitDefault("portraitOffsetY", 0)
         PortraitDefault("portraitZoom", 100)
@@ -3964,6 +3989,9 @@ local function fill(key, defaults)
         PortraitDefault("portraitBgColorB", 0.05)
         PortraitDefault("portraitBgColorA", 0.85)
         PortraitDefault("portraitFillBorder", false)
+        --- 6.0: relief ring art plus the 90-degree direction it is lit from.
+        PortraitDefault("portraitBorderArt", "FLAT")
+        PortraitDefault("portraitBorderDirection", "UP")
         u.portraitDecoOverride = nil
     end
     g._msufPortraitPerUnitMigrated_v4324 = true

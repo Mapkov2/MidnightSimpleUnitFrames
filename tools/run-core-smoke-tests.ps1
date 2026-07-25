@@ -139,6 +139,7 @@ $tests = @(
     ".github/scripts/tests/npc_kind_dispatch_cache_smoke.lua",
     ".github/scripts/tests/player_alpha_apply_smoke.lua",
     ".github/scripts/tests/portrait_identity_hotpath_smoke.lua",
+    ".github/scripts/tests/portrait_placement_smoke.lua",
     ".github/scripts/tests/power_bar_visibility_hotpath_smoke.lua",
     ".github/scripts/tests/power_text_meta_hotpath_smoke.lua",
     ".github/scripts/tests/mouseover_highlight_runtime_smoke.lua",

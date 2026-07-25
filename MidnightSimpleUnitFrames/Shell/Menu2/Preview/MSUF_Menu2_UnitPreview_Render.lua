@@ -588,14 +588,104 @@ function Render.Install(Preview, deps)
             end
         end
     end
+    -- Portrait rectangle in preview frame space (origin = frame bottom-left).
+    -- Mirrors ResolvePortraitAnchor in the live element so the preview bounding
+    -- box and the mock frame agree with what the unit frame actually renders.
+    local PREVIEW_PORTRAIT_X = { TOPLEFT = 0, LEFT = 0, BOTTOMLEFT = 0, TOPRIGHT = 1, RIGHT = 1, BOTTOMRIGHT = 1 }
+    local PREVIEW_PORTRAIT_Y = { TOPLEFT = 1, TOP = 1, TOPRIGHT = 1, BOTTOMLEFT = 0, BOTTOM = 0, BOTTOMRIGHT = 0 }
+    local function PreviewPortraitRect(placement, point, relPoint, overlayAlign, frameW, frameH, pw, ph, ox, oy)
+        if placement == "OVERLAY" then
+            if overlayAlign == "FULL" then
+                return ox, oy, frameW - ox * 2, frameH - oy * 2
+            end
+            local left = ox
+            if overlayAlign == "CENTER" then
+                left = (frameW - pw) * 0.5 + ox
+            elseif overlayAlign == "RIGHT" then
+                left = frameW - pw + ox
+            end
+            return left, (frameH - ph) * 0.5 + oy, pw, ph
+        end
+        if placement == "DETACHED" then
+            local relX = (PREVIEW_PORTRAIT_X[relPoint] or 0.5) * frameW
+            local relY = (PREVIEW_PORTRAIT_Y[relPoint] or 0.5) * frameH
+            local ownX = (PREVIEW_PORTRAIT_X[point] or 0.5) * pw
+            local ownY = (PREVIEW_PORTRAIT_Y[point] or 0.5) * ph
+            return relX + ox - ownX, relY + oy - ownY, pw, ph
+        end
+        -- ATTACHED: hug the outer edge of the bar area.
+        local left = point == "LEFT" and (frameW + ox) or (ox - pw)
+        return left, (frameH - ph) * 0.5 + oy, pw, ph
+    end
+    renderState.PreviewPortraitRect = PreviewPortraitRect
+    -- Mirrors the live element's relief renderer: the same greyscale ring art,
+    -- the same pre-baked 90 degree tex-coord rotations, tinted by the same
+    -- border colour. Kept in this file rather than reaching into the engine so
+    -- the preview keeps working when the engine has not compiled a spec yet.
+    local PREVIEW_RING_ART_BASE = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Borders\\msuf_portrait_ring_"
+    local PREVIEW_RING_ROTATION = {
+        UP    = { 0, 0, 0, 1, 1, 0, 1, 1 },
+        RIGHT = { 0, 1, 1, 1, 0, 0, 1, 0 },
+        DOWN  = { 1, 1, 1, 0, 0, 1, 0, 0 },
+        LEFT  = { 1, 0, 0, 0, 1, 1, 0, 1 },
+    }
+    local PREVIEW_RING_SHAPES = { SQUARE = "square", CIRCLE = "circle", ROUNDED = "rounded", DIAMOND = "diamond" }
+    -- (1 - opening) / (2 * opening) for the 0.84 opening baked into the art.
+    local PREVIEW_RING_OPENING_INFLATE = 0.0952380952
+    local PREVIEW_RING_REFERENCE_THICKNESS = 2
+    local function LayoutPreviewPortraitArtBorder(portrait, thickness, r, g, b, a)
+        local art = portrait._msufPreviewArtBorder
+        if not art then
+            if not portrait.CreateTexture then return false end
+            art = portrait:CreateTexture(nil, "OVERLAY", nil, 2)
+            portrait._msufPreviewArtBorder = art
+        end
+        local shape = PREVIEW_RING_SHAPES[portrait._msufPreviewBorderShape or "SQUARE"] or "square"
+        local direction = portrait._msufPreviewBorderDirection or "UP"
+        -- Same derivation as the live element: the ring art's opening is a fixed
+        -- fraction of the texture, so the inflation comes from the portrait size
+        -- rather than from a raw pixel thickness.
+        -- Per axis, like the live element: a non-square portrait stretches the
+        -- mask and the ring quad identically only if each axis is inflated from
+        -- its own extent.
+        local pw = portrait:GetWidth() or 36
+        local ph = portrait:GetHeight() or 36
+        if not (pw and pw > 0) then pw = 36 end
+        if not (ph and ph > 0) then ph = 36 end
+        local scale = PREVIEW_RING_OPENING_INFLATE * (thickness / PREVIEW_RING_REFERENCE_THICKNESS)
+        local ix = math.floor(math.max(1, pw * scale) + 0.5)
+        local iy = math.floor(math.max(1, ph * scale) + 0.5)
+        local key = shape .. "|" .. ix .. "|" .. iy .. "|" .. direction
+        if portrait._msufPreviewArtKey ~= key then
+            art:ClearAllPoints()
+            art:SetPoint("TOPLEFT", portrait, "TOPLEFT", -ix, iy)
+            art:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", ix, -iy)
+            art:SetTexture(PREVIEW_RING_ART_BASE .. shape .. ".tga")
+            local rotation = PREVIEW_RING_ROTATION[direction] or PREVIEW_RING_ROTATION.UP
+            art:SetTexCoord(rotation[1], rotation[2], rotation[3], rotation[4],
+                rotation[5], rotation[6], rotation[7], rotation[8])
+            portrait._msufPreviewArtKey = key
+        end
+        art:SetVertexColor(r, g, b, a or 1)
+        art:Show()
+        return true
+    end
     local function LayoutPreviewPortraitBorder(portrait, thickness, fill, r, g, b, a)
         local border = portrait and portrait.border
         if not border then return end
         if not r then
             if PreviewHelpers.SetEdgeLinesShown then PreviewHelpers.SetEdgeLinesShown(border, false, border._msufPreviewEdgeOpts) end
             border:Hide()
+            if portrait._msufPreviewArtBorder then portrait._msufPreviewArtBorder:Hide() end
             return
         end
+        if portrait._msufPreviewBorderArt == "RELIEF"
+            and LayoutPreviewPortraitArtBorder(portrait, thickness, r, g, b, a) then
+            if PreviewHelpers.SetEdgeLinesShown then PreviewHelpers.SetEdgeLinesShown(border, false, border._msufPreviewEdgeOpts) end
+            border:Hide()
+            return
+        end
+        if portrait._msufPreviewArtBorder then portrait._msufPreviewArtBorder:Hide() end
         thickness = math.floor((tonumber(thickness) or 1) + 0.5)
         if thickness < 1 then thickness = 1 end
         if thickness > 30 then thickness = 30 end
@@ -741,6 +831,24 @@ function Preview.Refresh(box, reason)
     if hasPortrait and mode ~= "RIGHT" then mode = "LEFT" end
     local pSize = hasPortrait and (tonumber(runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.size) or tonumber(PortraitStyleGet(key, "portraitSizeOverride", 0)) or 0) or 0
     if pSize <= 0 then pSize = max(22, h - 4) end
+    -- Placement/geometry mirrors of the live spec. Parked on the box because
+    -- Refresh already sits at the Lua 5.1 ceiling of 200 locals per function.
+    box._runtimePortraitPlacement = (runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.placement)
+        or PortraitStyleGet(key, "portraitPlacement", "ATTACHED") or "ATTACHED"
+    box._runtimePortraitPoint = (runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.point)
+        or PortraitStyleGet(key, "portraitDetachedPoint", "RIGHT") or "RIGHT"
+    box._runtimePortraitRelPoint = (runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.relPoint)
+        or PortraitStyleGet(key, "portraitDetachedTo", "LEFT") or "LEFT"
+    box._runtimePortraitOverlayAlign = (runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.overlayAlign)
+        or PortraitStyleGet(key, "portraitOverlayAlign", "LEFT") or "LEFT"
+    box._runtimePortraitAlpha = tonumber(runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.alpha)
+        or ((tonumber(PortraitStyleGet(key, "portraitAlpha", 100)) or 100) / 100)
+    box._runtimePortraitW = tonumber(runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.width)
+        or (tonumber(PortraitStyleGet(key, "portraitWidth", 0)) or 0)
+    box._runtimePortraitH = tonumber(runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.height)
+        or (tonumber(PortraitStyleGet(key, "portraitHeight", 0)) or 0)
+    if box._runtimePortraitW <= 0 then box._runtimePortraitW = pSize end
+    if box._runtimePortraitH <= 0 then box._runtimePortraitH = pSize end
     box._runtimePortraitBorderStyle = (runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.border and runtimeSpec.portrait.border.style) or PortraitStyleGet(key, "portraitBorderStyle", "NONE") or "NONE"
     box._runtimePortraitBorderThickness = 0
     box._runtimePortraitBorderFill = false
@@ -954,15 +1062,14 @@ function Preview.Refresh(box, reason)
     if hasPortrait and PreviewLayerWanted(box, "portrait") then
         local poX = tonumber(runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.x) or tonumber(PortraitStyleGet(key, "portraitOffsetX", 0)) or 0
         local poY = tonumber(runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.y) or tonumber(PortraitStyleGet(key, "portraitOffsetY", 0)) or 0
-        local left, right
-        if mode == "RIGHT" then
-            left, right = w + poX, w + poX + pSize
-        else
-            left, right = poX - pSize, poX
-        end
-        if box._runtimePortraitBorderThickness > 0 and not box._runtimePortraitBorderFill then left, right = left - box._runtimePortraitBorderThickness, right + box._runtimePortraitBorderThickness end
-        minX, maxX = min(minX, left), max(maxX, right)
-        minY, maxY = min(minY, poY - pSize * 0.5 + h * 0.5 - (box._runtimePortraitBorderFill and 0 or box._runtimePortraitBorderThickness)), max(maxY, poY + pSize * 0.5 + h * 0.5 + (box._runtimePortraitBorderFill and 0 or box._runtimePortraitBorderThickness))
+        local left, bottom, pw, ph = R.PreviewPortraitRect(
+            box._runtimePortraitPlacement,
+            box._runtimePortraitPlacement == "ATTACHED" and (mode == "RIGHT" and "LEFT" or "RIGHT") or box._runtimePortraitPoint,
+            box._runtimePortraitRelPoint, box._runtimePortraitOverlayAlign,
+            w, h, box._runtimePortraitW, box._runtimePortraitH, poX, poY)
+        local grow = box._runtimePortraitBorderFill and 0 or box._runtimePortraitBorderThickness
+        minX, maxX = min(minX, left - grow), max(maxX, left + pw + grow)
+        minY, maxY = min(minY, bottom - grow), max(maxY, bottom + ph + grow)
     end
     if classPowerOn and PreviewLayerWanted(box, "classPower") then
         local cpW = box._runtimeClassPowerW or PreviewClassPowerWidth(bars, w, cpH, classPowerSegCount)
@@ -1055,7 +1162,9 @@ function Preview.Refresh(box, reason)
             S(tonumber(conf[spec.x]) or tonumber(statusCfg and statusCfg.x) or tonumber(g[spec.x]) or spec.defaultX or 0),
             S(tonumber(conf[spec.y]) or tonumber(statusCfg and statusCfg.y) or tonumber(g[spec.y]) or spec.defaultY or 0)
     end
-    local sw, sh, sp = S(w), S(h), S(pSize)
+    -- Portrait size now comes from box._runtimePortraitW/H (independent axes), so
+    -- the scaled square is no longer derived here.
+    local sw, sh = S(w), S(h)
     local mockOffsetX, mockOffsetY = ResolvePreviewBodyOffsets(
         centerX,
         centerY,
@@ -1077,7 +1186,9 @@ function Preview.Refresh(box, reason)
     if mock.classPower and mock.classPower.SetFrameLevel then mock.classPower:SetFrameLevel(baseLevel + ClampPreviewLayer(bars.classPowerFrameLevelOffset, 5)) end
     if mock.detachedPower and mock.detachedPower.SetFrameLevel then mock.detachedPower:SetFrameLevel(baseLevel + ClampPreviewLayer(runtimePower and runtimePower.detachedLevel or conf.detachedPowerBarFrameLevelOffset, Layers.POWER_DETACHED_DEFAULT or 6)) end
     local textBase = (Layers.HealthLevel and Layers.HealthLevel(baseLevel) or (baseLevel + (Layers.HEALTH_OFFSET or 1))) + (Layers.TEXT_BASE_OFFSET or 10)
-    if mock.portrait and mock.portrait.SetFrameLevel then mock.portrait:SetFrameLevel(textBase - (Layers.TEXT_BASE_OFFSET or 10) + (Layers.PORTRAIT_OFFSET or 6)) end
+    -- Portrait rides the shared 0..30 layer scale from the frame, so layer 0
+    -- previews behind the bars exactly like the live element does.
+    if mock.portrait and mock.portrait.SetFrameLevel then mock.portrait:SetFrameLevel(baseLevel + ClampPreviewLayer(runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.levelOffset or conf.portraitLevelOffset, (Layers.HEALTH_OFFSET or 1) + (Layers.PORTRAIT_OFFSET or 6))) end
     if type(_G.MSUF_GetCastbarFrameLevelOffset) == "function" then
         box._runtimeCastbarLayer = _G.MSUF_GetCastbarFrameLevelOffset(key, g)
     else
@@ -1779,13 +1890,26 @@ function Preview.Refresh(box, reason)
     end
     if hasPortrait then
         mock.portrait:Show()
-        mock.portrait:SetSize(sp, sp)
+        mock.portrait:SetSize(S(box._runtimePortraitW), S(box._runtimePortraitH))
+        mock.portrait:SetAlpha(box._runtimePortraitAlpha or 1)
         mock.portrait:ClearAllPoints()
         if mock.portrait.border and mock.portrait.border.SetFrameLevel and mock.portrait.GetFrameLevel then mock.portrait.border:SetFrameLevel((mock.portrait:GetFrameLevel() or 1) + 1) end
         local ox = S(tonumber(runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.x) or tonumber(PortraitStyleGet(key, "portraitOffsetX", 0)) or 0)
         local oy = S(tonumber(runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.y) or tonumber(PortraitStyleGet(key, "portraitOffsetY", 0)) or 0)
-        if mode == "RIGHT" then mock.portrait:SetPoint("LEFT", mock, "RIGHT", ox, oy)
-        else mock.portrait:SetPoint("RIGHT", mock, "LEFT", ox, oy) end
+        if box._runtimePortraitPlacement == "DETACHED" then
+            mock.portrait:SetPoint(box._runtimePortraitPoint, mock, box._runtimePortraitRelPoint, ox, oy)
+        elseif box._runtimePortraitPlacement == "OVERLAY" then
+            if box._runtimePortraitOverlayAlign == "FULL" then
+                mock.portrait:SetPoint("TOPLEFT", mock, "TOPLEFT", ox, -oy)
+                mock.portrait:SetPoint("BOTTOMRIGHT", mock, "BOTTOMRIGHT", -ox, oy)
+            else
+                mock.portrait:SetPoint(box._runtimePortraitOverlayAlign, mock, box._runtimePortraitOverlayAlign, ox, oy)
+            end
+        elseif mode == "RIGHT" then
+            mock.portrait:SetPoint("LEFT", mock, "RIGHT", ox, oy)
+        else
+            mock.portrait:SetPoint("RIGHT", mock, "LEFT", ox, oy)
+        end
         local cr, cg, cb = R.ClassColor(data.class)
         local renderMode = (runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.render) or PortraitStyleGet(key, "portraitRender", "2D")
         if renderMode == "CLASS" then
@@ -1846,6 +1970,12 @@ function Preview.Refresh(box, reason)
             mock.portrait:SetBackdropColor(0, 0, 0, 0)
         end
         local portraitBorder = runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.border
+        mock.portrait._msufPreviewBorderArt = (portraitBorder and portraitBorder.art)
+            or PortraitStyleGet(key, "portraitBorderArt", "FLAT")
+        mock.portrait._msufPreviewBorderDirection = (portraitBorder and portraitBorder.direction)
+            or PortraitStyleGet(key, "portraitBorderDirection", "UP")
+        mock.portrait._msufPreviewBorderShape = (runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.shape)
+            or PortraitStyleGet(key, "portraitShape", "SQUARE")
         local bStyle = box._runtimePortraitBorderStyle or (portraitBorder and portraitBorder.style) or PortraitStyleGet(key, "portraitBorderStyle", "NONE")
         if bStyle == "NONE" then
             R.LayoutPreviewPortraitBorder(mock.portrait, 0, false)
@@ -1867,7 +1997,9 @@ function Preview.Refresh(box, reason)
         else
             R.LayoutPreviewPortraitBorder(mock.portrait, S(box._runtimePortraitBorderThickness), box._runtimePortraitBorderFill, 1, 1, 1, 1)
         end
-        box.handlePortrait:SetSize(max(18, sp + ((box._runtimePortraitBorderFill and 0 or S(box._runtimePortraitBorderThickness)) * 2)), max(18, sp + ((box._runtimePortraitBorderFill and 0 or S(box._runtimePortraitBorderThickness)) * 2)))
+        box.handlePortrait:SetSize(
+            max(18, S(box._runtimePortraitW) + ((box._runtimePortraitBorderFill and 0 or S(box._runtimePortraitBorderThickness)) * 2)),
+            max(18, S(box._runtimePortraitH) + ((box._runtimePortraitBorderFill and 0 or S(box._runtimePortraitBorderThickness)) * 2)))
         PlaceHandle(box.handlePortrait, mock.portrait)
     else
         mock.portrait:Hide()

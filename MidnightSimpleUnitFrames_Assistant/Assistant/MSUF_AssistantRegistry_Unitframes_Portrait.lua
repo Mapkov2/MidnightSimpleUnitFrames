@@ -17,6 +17,24 @@ local PORTRAIT_MODE_VALUES = UnitframeData.PORTRAIT_MODE_VALUES or {}
 local PORTRAIT_RENDER_VALUES = UnitframeData.PORTRAIT_RENDER_VALUES or {}
 local PORTRAIT_SHAPE_VALUES = UnitframeData.PORTRAIT_SHAPE_VALUES or {}
 local PORTRAIT_BORDER_VALUES = UnitframeData.PORTRAIT_BORDER_VALUES or {}
+local PORTRAIT_PLACEMENT_VALUES = UnitframeData.PORTRAIT_PLACEMENT_VALUES or {}
+local PORTRAIT_ANCHOR_POINT_VALUES = UnitframeData.PORTRAIT_ANCHOR_POINT_VALUES or {}
+local PORTRAIT_OVERLAY_ALIGN_VALUES = UnitframeData.PORTRAIT_OVERLAY_ALIGN_VALUES or {}
+local PORTRAIT_BORDER_ART_VALUES = UnitframeData.PORTRAIT_BORDER_ART_VALUES or {}
+local PORTRAIT_BORDER_DIRECTION_VALUES = UnitframeData.PORTRAIT_BORDER_DIRECTION_VALUES or {}
+-- Anchor points are spoken in many shapes ("top left", "upper-left", "topleft").
+-- One shared alias table keeps both anchor dropdowns talking the same language.
+local PORTRAIT_ANCHOR_POINT_ALIASES = {
+    ["top left"] = "TOPLEFT", ["upper left"] = "TOPLEFT", topleft = "TOPLEFT",
+    top = "TOP", ["top center"] = "TOP", ["top middle"] = "TOP",
+    ["top right"] = "TOPRIGHT", ["upper right"] = "TOPRIGHT", topright = "TOPRIGHT",
+    left = "LEFT", ["middle left"] = "LEFT",
+    center = "CENTER", middle = "CENTER", centre = "CENTER", mitte = "CENTER",
+    right = "RIGHT", ["middle right"] = "RIGHT",
+    ["bottom left"] = "BOTTOMLEFT", ["lower left"] = "BOTTOMLEFT", bottomleft = "BOTTOMLEFT",
+    bottom = "BOTTOM", ["bottom center"] = "BOTTOM", ["bottom middle"] = "BOTTOM",
+    ["bottom right"] = "BOTTOMRIGHT", ["lower right"] = "BOTTOMRIGHT", bottomright = "BOTTOMRIGHT",
+}
 
 local function NormalizePortraitClassStyle(value)
     value = tostring(value or "")
@@ -145,4 +163,96 @@ function A.UnitframesRegistry.RegisterPortraitSettings(ctx, unit)
         MakeAliases(unit, "portrait fill border", "fill portrait border gap"), { category = "Portrait" })
     RegisterUnitBooleanSetting(unit, "portraitBgEnabled", "portraitBgEnabled", "Portrait Background", false,
         MakeAliases(unit, "portrait background", "portrait bg"), { category = "Portrait" })
+    RegisterUnitEnum(unit, "portraitPlacement", "portraitPlacement", "Portrait Placement", "ATTACHED",
+        PORTRAIT_PLACEMENT_VALUES,
+        MakeAliases(unit, "portrait placement", "detach portrait", "detached portrait", "portrait overlay"), {
+        category = "Portrait",
+        description = "Attached hugs the bar edge, Detached anchors the portrait freely to the frame, Overlay puts it on top of the bar.",
+        valueAliases = {
+            attached = "ATTACHED",
+            attach = "ATTACHED",
+            default = "ATTACHED",
+            ["attached to bar"] = "ATTACHED",
+            detached = "DETACHED",
+            detach = "DETACHED",
+            free = "DETACHED",
+            floating = "DETACHED",
+            overlay = "OVERLAY",
+            inside = "OVERLAY",
+            ["on bar"] = "OVERLAY",
+            ["overlay on bar"] = "OVERLAY",
+        },
+    })
+    RegisterUnitEnum(unit, "portraitDetachedPoint", "portraitDetachedPoint", "Portrait Anchor Point", "RIGHT",
+        PORTRAIT_ANCHOR_POINT_VALUES,
+        MakeAliases(unit, "portrait anchor point", "detached portrait anchor"), {
+        category = "Portrait",
+        description = "Which point of the detached portrait is pinned to the frame.",
+        valueAliases = PORTRAIT_ANCHOR_POINT_ALIASES,
+    })
+    RegisterUnitEnum(unit, "portraitDetachedTo", "portraitDetachedTo", "Portrait Attach To Frame Point", "LEFT",
+        PORTRAIT_ANCHOR_POINT_VALUES,
+        MakeAliases(unit, "portrait attach to", "detached portrait frame point"), {
+        category = "Portrait",
+        description = "Which point of the unit frame the detached portrait is pinned to.",
+        valueAliases = PORTRAIT_ANCHOR_POINT_ALIASES,
+    })
+    RegisterUnitEnum(unit, "portraitOverlayAlign", "portraitOverlayAlign", "Portrait Overlay Alignment", "LEFT",
+        PORTRAIT_OVERLAY_ALIGN_VALUES,
+        MakeAliases(unit, "portrait overlay alignment", "portrait overlay align"), {
+        category = "Portrait",
+        valueAliases = {
+            left = "LEFT",
+            center = "CENTER",
+            centre = "CENTER",
+            middle = "CENTER",
+            right = "RIGHT",
+            full = "FULL",
+            fill = "FULL",
+            ["fill bar"] = "FULL",
+            stretch = "FULL",
+        },
+    })
+    RegisterUnitNumberSetting(unit, "portraitWidth", "portraitWidth", "Portrait Width Override",
+        0, 0, 256, MakeAliases(unit, "portrait width", "portrait width override"), { category = "Portrait" })
+    RegisterUnitNumberSetting(unit, "portraitHeight", "portraitHeight", "Portrait Height Override",
+        0, 0, 256, MakeAliases(unit, "portrait height", "portrait height override"), { category = "Portrait" })
+    RegisterUnitNumberSetting(unit, "portraitPanX", "portraitPanX", "Portrait Zoom Center X",
+        0, -100, 100, MakeAliases(unit, "portrait zoom center x", "portrait pan x"), { category = "Portrait" })
+    RegisterUnitNumberSetting(unit, "portraitPanY", "portraitPanY", "Portrait Zoom Center Y",
+        0, -100, 100, MakeAliases(unit, "portrait zoom center y", "portrait pan y"), { category = "Portrait" })
+    RegisterUnitNumberSetting(unit, "portraitLevelOffset", "portraitLevelOffset", "Portrait Layer",
+        7, 0, 30, MakeAliases(unit, "portrait layer", "portrait layer offset", "portrait frame level"), { category = "Portrait" })
+    RegisterUnitNumberSetting(unit, "portraitAlpha", "portraitAlpha", "Portrait Opacity",
+        100, 0, 100, MakeAliases(unit, "portrait opacity", "portrait alpha", "portrait transparency"), { category = "Portrait" })
+    RegisterUnitEnum(unit, "portraitBorderArt", "portraitBorderArt", "Portrait Border Art", "FLAT",
+        PORTRAIT_BORDER_ART_VALUES,
+        MakeAliases(unit, "portrait border art", "portrait relief border", "blizzard portrait border"), {
+        category = "Portrait",
+        description = "Flat draws the plain edges or ring, Relief swaps in the beveled ring art tinted by the border color.",
+        valueAliases = {
+            flat = "FLAT",
+            plain = "FLAT",
+            simple = "FLAT",
+            solid = "FLAT",
+            relief = "RELIEF",
+            beveled = "RELIEF",
+            bevel = "RELIEF",
+            blizzard = "RELIEF",
+            ["blizzard style"] = "RELIEF",
+            ["3d"] = "RELIEF",
+        },
+    })
+    RegisterUnitEnum(unit, "portraitBorderDirection", "portraitBorderDirection", "Portrait Border Direction", "UP",
+        PORTRAIT_BORDER_DIRECTION_VALUES,
+        MakeAliases(unit, "portrait border direction", "portrait border rotation"), {
+        category = "Portrait",
+        description = "Rotates the relief border art in 90 degree steps, which is where its light comes from.",
+        valueAliases = {
+            up = "UP", top = "UP", oben = "UP",
+            right = "RIGHT", rechts = "RIGHT",
+            down = "DOWN", bottom = "DOWN", unten = "DOWN",
+            left = "LEFT", links = "LEFT",
+        },
+    })
 end

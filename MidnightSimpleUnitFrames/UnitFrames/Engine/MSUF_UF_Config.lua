@@ -738,6 +738,17 @@ local function NormalizePortraitBorder(style)
   return "NONE"
 end
 
+--- Border renderer: FLAT is the geometric edge/ring pair, RELIEF swaps in the
+--- beveled ring art. The art is greyscale, so the border colour still tints it.
+local function NormalizePortraitBorderArt(value)
+  return value == "RELIEF" and "RELIEF" or "FLAT"
+end
+
+local PORTRAIT_BORDER_DIRECTIONS = { UP = true, RIGHT = true, DOWN = true, LEFT = true }
+local function NormalizePortraitBorderDirection(value)
+  return PORTRAIT_BORDER_DIRECTIONS[value] == true and value or "UP"
+end
+
 local function NormalizePortraitZoom(value)
   value = Number(value, 100)
   if value > 1 and value <= 2 then
@@ -751,14 +762,74 @@ local function NormalizePortraitZoom(value)
   return value
 end
 
-local function CompilePortraitTexCoords(p, zoom)
+local PORTRAIT_PLACEMENTS = { ATTACHED = true, DETACHED = true, OVERLAY = true }
+local PORTRAIT_ANCHOR_POINTS = {
+  TOPLEFT = true, TOP = true, TOPRIGHT = true,
+  LEFT = true, CENTER = true, RIGHT = true,
+  BOTTOMLEFT = true, BOTTOM = true, BOTTOMRIGHT = true,
+}
+local PORTRAIT_OVERLAY_ALIGNMENTS = { LEFT = true, CENTER = true, RIGHT = true, FULL = true }
+
+local function NormalizePortraitPlacement(value)
+  return PORTRAIT_PLACEMENTS[value] == true and value or "ATTACHED"
+end
+
+local function NormalizePortraitAnchorPoint(value, fallback)
+  return PORTRAIT_ANCHOR_POINTS[value] == true and value or fallback
+end
+
+local function NormalizePortraitOverlayAlign(value)
+  return PORTRAIT_OVERLAY_ALIGNMENTS[value] == true and value or "LEFT"
+end
+
+--- Portrait layer rides the shared 0..30 unit-frame scale, measured from the
+--- frame itself. The health bar sits at frame+1, so layer 0 parks an overlay
+--- portrait behind the bars while the default 7 reproduces the pre-6.0 stacking.
+local function NormalizePortraitLevelOffset(value, fallback)
+  value = math.floor(Number(value, fallback or 7) + 0.5)
+  if value < 0 then
+    return 0
+  elseif value > 30 then
+    return 30
+  end
+  return value
+end
+
+local function NormalizePortraitPan(value)
+  value = Number(value, 0)
+  if value < -100 then
+    return -100
+  elseif value > 100 then
+    return 100
+  end
+  return value
+end
+
+--- 2D portrait art is square. Baking zoom, the holder aspect ratio and the pan
+--- offset into the tex coords here keeps the whole thing free at event time --
+--- the element only ever replays four numbers it never has to recompute.
+--- A square holder at zoom 100 with no pan reproduces the classic 0.08..0.92.
+local function CompilePortraitTexCoords(p, zoom, width, height, panX, panY)
   local span = 0.84 * (100 / zoom)
-  local inset = (1 - span) * 0.5
+  local spanX, spanY = span, span
+  width = Number(width, 0)
+  height = Number(height, 0)
+  if width > 0 and height > 0 and width ~= height then
+    if width > height then
+      spanY = span * (height / width)
+    else
+      spanX = span * (width / height)
+    end
+  end
+  local slackX = (1 - spanX) * 0.5
+  local slackY = (1 - spanY) * 0.5
+  local centerX = 0.5 + (Number(panX, 0) / 100) * slackX
+  local centerY = 0.5 - (Number(panY, 0) / 100) * slackY
   p.zoom = zoom
-  p.texL = inset
-  p.texR = 1 - inset
-  p.texT = inset
-  p.texB = 1 - inset
+  p.texL = centerX - spanX * 0.5
+  p.texR = centerX + spanX * 0.5
+  p.texT = centerY - spanY * 0.5
+  p.texB = centerY + spanY * 0.5
 end
 
 local function CompileRange(out, conf, general, key)
@@ -1437,11 +1508,31 @@ local function CompileUnitPortrait(out, conf, general)
   out.portrait.size = portraitSize
   out.portrait.x = Number(conf.portraitOffsetX, 0)
   out.portrait.y = Number(conf.portraitOffsetY, 0)
-  CompilePortraitTexCoords(out.portrait, NormalizePortraitZoom(conf.portraitZoom))
+  --- Explicit width/height win over the square size; 0 keeps the classic
+  --- "square, derived from the frame height" behaviour.
+  local portraitWidth = Number(conf.portraitWidth, 0)
+  local portraitHeight = Number(conf.portraitHeight, 0)
+  out.portrait.width = portraitWidth > 0 and max(8, portraitWidth) or portraitSize
+  out.portrait.height = portraitHeight > 0 and max(8, portraitHeight) or portraitSize
+  out.portrait.placement = NormalizePortraitPlacement(conf.portraitPlacement)
+  out.portrait.point = NormalizePortraitAnchorPoint(conf.portraitDetachedPoint, "RIGHT")
+  out.portrait.relPoint = NormalizePortraitAnchorPoint(conf.portraitDetachedTo, "LEFT")
+  out.portrait.levelOffset = NormalizePortraitLevelOffset(conf.portraitLevelOffset, 7)
+  out.portrait.overlayAlign = NormalizePortraitOverlayAlign(conf.portraitOverlayAlign)
+  out.portrait.alpha = Clamp01(Number(conf.portraitAlpha, 100) / 100, 1)
+  CompilePortraitTexCoords(
+    out.portrait,
+    NormalizePortraitZoom(conf.portraitZoom),
+    out.portrait.width,
+    out.portrait.height,
+    NormalizePortraitPan(conf.portraitPanX),
+    NormalizePortraitPan(conf.portraitPanY))
   out.portrait.border = out.portrait.border or {}
   out.portrait.border.style = NormalizePortraitBorder(conf.portraitBorderStyle)
   out.portrait.border.thickness = max(1, Number(conf.portraitBorderThickness, 2))
   out.portrait.border.fill = conf.portraitFillBorder == true
+  out.portrait.border.art = NormalizePortraitBorderArt(conf.portraitBorderArt)
+  out.portrait.border.direction = NormalizePortraitBorderDirection(conf.portraitBorderDirection)
   out.portrait.border.r = Number(general.portraitBorderColorR, 1)
   out.portrait.border.g = Number(general.portraitBorderColorG, 1)
   out.portrait.border.b = Number(general.portraitBorderColorB, 1)

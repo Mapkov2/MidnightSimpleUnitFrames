@@ -27,6 +27,18 @@ local CASTBAR_TEXT_ALIGN = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Righ
 local CASTBAR_TRUNCATE_VALUES = VT("AUTO", "Auto fit", "CLIP", "Manual width", "NONE", "No width limit")
 local CASTBAR_ICON_BORDER_VALUES = VT("NONE", "None", "DARK", "Dark Border", "CASTBAR", "Castbar Border")
 local DETACHED_POWER_SHAPE_VALUES = VT("BAR", "Bar", "ROUND", "Round", "CRYSTAL", "Crystal", "ORB", "Orb")
+-- Portrait placement value lists. Kept in one table so the page stays well clear
+-- of the Lua 200-upvalue ceiling that already bites the Auras page.
+local PORTRAIT_PLACEMENT = {
+    modes = VT("ATTACHED", "Attached to bar", "DETACHED", "Detached", "OVERLAY", "Overlay on bar"),
+    points = VT(
+        "TOPLEFT", "Top left", "TOP", "Top", "TOPRIGHT", "Top right",
+        "LEFT", "Left", "CENTER", "Center", "RIGHT", "Right",
+        "BOTTOMLEFT", "Bottom left", "BOTTOM", "Bottom", "BOTTOMRIGHT", "Bottom right"),
+    overlay = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right", "FULL", "Fill bar"),
+    borderArt = VT("FLAT", "Flat", "RELIEF", "Relief"),
+    borderDirection = VT("UP", "Up", "RIGHT", "Right", "DOWN", "Down", "LEFT", "Left"),
+}
 local UnitSectionShared = M.UnitSectionsShared or {}
 local SetSectionHeaderStatus = UnitSectionShared.SetSectionHeaderStatus or function() end
 local CreateSectionNotice = UnitSectionShared.CreateSectionNotice or function() end
@@ -81,21 +93,25 @@ local function PortraitClassStyleValues()
 end
 local NormalizePortraitClassStyle = M.NormalizePortraitClassStyle
 local PORTRAIT_STACK_THRESHOLD = 680
+-- Card heights. BuildPortrait and PortraitLayoutForWidth must agree on these, so
+-- both read them from here instead of repeating literals.
+local PORTRAIT_CARD_H = { main = 224, geometry = 494, placement = 382, border = 380, style = 220 }
 local function PortraitLayoutForWidth(sectionWidth)
     sectionWidth = tonumber(sectionWidth) or 720
     if sectionWidth < PORTRAIT_STACK_THRESHOLD then
         local cardW = max(260, sectionWidth - 32)
         return {
             stacked = true,
-            height = 1092,
+            height = 1878,
             leftX = 16,
             rightX = 16,
             leftW = cardW,
             rightW = cardW,
             mainY = -38,
-            geometryY = -224,
-            borderY = -520,
-            styleY = -850,
+            geometryY = -278,
+            placementY = -788,
+            borderY = -1186,
+            styleY = -1582,
         }
     end
     local cardGap = 28
@@ -106,15 +122,16 @@ local function PortraitLayoutForWidth(sectionWidth)
     local rightW = max(310, min(430, sectionWidth - rightX - 16))
     return {
         stacked = false,
-        height = 612,
+        height = 1100,
         leftX = leftX,
         rightX = rightX,
         leftW = leftW,
         rightW = rightW,
         mainY = -38,
         geometryY = -38,
-        borderY = -224,
-        styleY = -338,
+        placementY = -278,
+        borderY = -684,
+        styleY = -556,
     }
 end
 UP.PortraitLayoutForWidth = PortraitLayoutForWidth
@@ -171,10 +188,11 @@ local function BuildPortrait(ctx, builder, unit)
         return control
     end
     M._msuf2LastPortraitSide = M._msuf2LastPortraitSide or {}
-    local mainCard = W.ControlCard(sec, "Visibility & Mode", nil, leftX, layout.mainY, leftW, 168)
-    local geometryCard = W.ControlCard(sec, "Geometry", nil, rightX, layout.geometryY, rightW, 278)
-    local borderCard = W.ControlCard(sec, "Shape & Border", nil, leftX, layout.borderY, leftW, 312)
-    local styleCard = W.ControlCard(sec, "Class & Background", nil, rightX, layout.styleY, rightW, 220)
+    local mainCard = W.ControlCard(sec, "Visibility & Mode", nil, leftX, layout.mainY, leftW, PORTRAIT_CARD_H.main)
+    local geometryCard = W.ControlCard(sec, "Geometry", nil, rightX, layout.geometryY, rightW, PORTRAIT_CARD_H.geometry)
+    local placementCard = W.ControlCard(sec, "Placement", nil, leftX, layout.placementY, leftW, PORTRAIT_CARD_H.placement)
+    local borderCard = W.ControlCard(sec, "Shape & Border", nil, leftX, layout.borderY, leftW, PORTRAIT_CARD_H.border)
+    local styleCard = W.ControlCard(sec, "Class & Background", nil, rightX, layout.styleY, rightW, PORTRAIT_CARD_H.style)
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(borderCard, { "portrait.border" }, {
             title = "Portrait Border Color",
@@ -216,26 +234,71 @@ local function BuildPortrait(ctx, builder, unit)
         end,
         PortraitControlMeta("portrait.position", tostring(unit) .. ".portraitMode"))
     local render = BindPortraitDropdown(mainCard, "Render", PORTRAIT_RENDER, 16, -116, min(220, leftW - 32), "portraitRender", "2D", "MSUF2_PORTRAIT_RENDER", nil, RefreshPortraitControls)
-    local shape = BindPortraitDropdown(borderCard, "Shape", PORTRAIT_SHAPES, 16, -58, min(220, leftW - 32), "portraitShape", "SQUARE", "MSUF2_PORTRAIT_SHAPE")
+    local shape = BindPortraitDropdown(borderCard, "Shape", PORTRAIT_SHAPES, 16, -58, min(220, leftW - 32), "portraitShape", "SQUARE", "MSUF2_PORTRAIT_SHAPE", nil, RefreshPortraitControls)
     local size = BindPortraitSlider(geometryCard, "Size override", 16, -62, rightW - 58, 0, 128, 1, "portraitSizeOverride", 0, "MSUF2_PORTRAIT_SIZE")
-    local x = BindPortraitSlider(geometryCard, "Portrait X", 16, -116, rightW - 58, -120, 120, 1, "portraitOffsetX", 0, "MSUF2_PORTRAIT_X")
-    local y = BindPortraitSlider(geometryCard, "Portrait Y", 16, -170, rightW - 58, -120, 120, 1, "portraitOffsetY", 0, "MSUF2_PORTRAIT_Y")
-    local zoom = BindPortraitSlider(geometryCard, "Portrait zoom", 16, -224, rightW - 58, 100, 200, 1, "portraitZoom", 100, "MSUF2_PORTRAIT_ZOOM")
+    local widthOverride = BindPortraitSlider(geometryCard, "Width override", 16, -116, rightW - 58, 0, 256, 1, "portraitWidth", 0, "MSUF2_PORTRAIT_WIDTH")
+    local heightOverride = BindPortraitSlider(geometryCard, "Height override", 16, -170, rightW - 58, 0, 256, 1, "portraitHeight", 0, "MSUF2_PORTRAIT_HEIGHT")
+    local x = BindPortraitSlider(geometryCard, "Portrait X", 16, -224, rightW - 58, -400, 400, 1, "portraitOffsetX", 0, "MSUF2_PORTRAIT_X")
+    local y = BindPortraitSlider(geometryCard, "Portrait Y", 16, -278, rightW - 58, -400, 400, 1, "portraitOffsetY", 0, "MSUF2_PORTRAIT_Y")
+    local zoom = BindPortraitSlider(geometryCard, "Portrait zoom", 16, -332, rightW - 58, 100, 200, 1, "portraitZoom", 100, "MSUF2_PORTRAIT_ZOOM")
+    local panX = BindPortraitSlider(geometryCard, "Zoom center X", 16, -386, rightW - 58, -100, 100, 1, "portraitPanX", 0, "MSUF2_PORTRAIT_PAN_X")
+    local panY = BindPortraitSlider(geometryCard, "Zoom center Y", 16, -440, rightW - 58, -100, 100, 1, "portraitPanY", 0, "MSUF2_PORTRAIT_PAN_Y")
+    local placement = BindPortraitDropdown(placementCard, "Placement", PORTRAIT_PLACEMENT.modes, 16, -58, min(220, leftW - 32), "portraitPlacement", "ATTACHED", "MSUF2_PORTRAIT_PLACEMENT", nil, RefreshPortraitControls)
+    placement._msuf2SearchText = "Portrait placement attached detached overlay free position anchor"
+    local detachedPoint = BindPortraitDropdown(placementCard, "Portrait anchor point", PORTRAIT_PLACEMENT.points, 16, -112, min(220, leftW - 32), "portraitDetachedPoint", "RIGHT", "MSUF2_PORTRAIT_DETACHED_POINT")
+    local detachedTo = BindPortraitDropdown(placementCard, "Attach to frame point", PORTRAIT_PLACEMENT.points, 16, -166, min(220, leftW - 32), "portraitDetachedTo", "LEFT", "MSUF2_PORTRAIT_DETACHED_TO")
+    local overlayAlign = BindPortraitDropdown(placementCard, "Overlay alignment", PORTRAIT_PLACEMENT.overlay, 16, -220, min(220, leftW - 32), "portraitOverlayAlign", "LEFT", "MSUF2_PORTRAIT_OVERLAY_ALIGN")
+    local levelOffset = BindPortraitSlider(placementCard, "Layer offset", 16, -274, leftW - 58, 0, 30, 1, "portraitLevelOffset", 7, "MSUF2_PORTRAIT_LEVEL")
+    levelOffset._msuf2SearchText = "Portrait layer offset frame level behind in front of bars"
+    local portraitAlpha = BindPortraitSlider(placementCard, "Portrait opacity", 16, -328, leftW - 58, 0, 100, 1, "portraitAlpha", 100, "MSUF2_PORTRAIT_ALPHA")
     local classStyle = BindPortraitDropdown(styleCard, "Class portrait style", PortraitClassStyleValues, 16, -58, min(220, rightW - 32), "portraitClassStyle", "BLIZZARD", "MSUF2_PORTRAIT_CLASS_STYLE", NormalizePortraitClassStyle)
     classStyle._msuf2SearchText = "Class portrait style Blizzard Rondo Colored Rondo WoW"
     local border = BindPortraitDropdown(borderCard, "Border", PORTRAIT_BORDERS, 16, -112, min(220, leftW - 32), "portraitBorderStyle", "NONE", "MSUF2_PORTRAIT_BORDER", nil, RefreshPortraitControls)
-    local borderSize = BindPortraitSlider(borderCard, "Border thickness", 16, -170, leftW - 58, 1, 12, 1, "portraitBorderThickness", 2, "MSUF2_PORTRAIT_BORDER_SIZE")
-    local fillBorder = BindPortraitToggle(borderCard, "Fill border into frame gap", 16, -238, leftW - 32, "portraitFillBorder", false, "MSUF2_PORTRAIT_FILL_BORDER")
+    local borderArt = BindPortraitDropdown(borderCard, "Border art", PORTRAIT_PLACEMENT.borderArt, 16, -166, min(220, leftW - 32), "portraitBorderArt", "FLAT", "MSUF2_PORTRAIT_BORDER_ART", nil, RefreshPortraitControls)
+    borderArt._msuf2SearchText = "Portrait border art flat relief beveled ring blizzard style"
+    local borderDirection = BindPortraitDropdown(borderCard, "Border direction", PORTRAIT_PLACEMENT.borderDirection, 16, -220, min(220, leftW - 32), "portraitBorderDirection", "UP", "MSUF2_PORTRAIT_BORDER_DIRECTION")
+    borderDirection._msuf2SearchText = "Portrait border direction rotate light up right down left"
+    local borderSize = BindPortraitSlider(borderCard, "Border thickness", 16, -274, leftW - 58, 1, 12, 1, "portraitBorderThickness", 2, "MSUF2_PORTRAIT_BORDER_SIZE")
+    local fillBorder = BindPortraitToggle(borderCard, "Fill border into frame gap", 16, -342, leftW - 32, "portraitFillBorder", false, "MSUF2_PORTRAIT_FILL_BORDER")
     local portraitBg = BindPortraitToggle(styleCard, "Portrait background", 16, -112, rightW - 32, "portraitBgEnabled", false, "MSUF2_PORTRAIT_BG")
     local castSpellIcon = BindPortraitToggle(styleCard, "Show cast spell icon in portrait", 16, -166, rightW - 32, "portraitCastSpellIcon", false, "MSUF2_PORTRAIT_CAST_ICON")
     castSpellIcon._msuf2SearchText = "Portrait cast spell icon casting channel empower"
-    local portraitActiveControls = { portrait, render, shape, size, x, y, border, portraitBg, castSpellIcon }
+    local portraitActiveControls = {
+        render, shape, size, widthOverride, heightOverride, x, y, border, portraitBg, castSpellIcon,
+        placement, levelOffset, portraitAlpha,
+    }
     local function PortraitActive() return NormalizePortrait(unit) ~= "OFF" end
+    local function PortraitPlacementIs(conf, mode)
+        return PortraitActive() and ((conf.portraitPlacement or "ATTACHED") == mode)
+    end
+    local function PortraitIs2D(conf)
+        return PortraitActive() and ((conf.portraitRender or "2D") ~= "CLASS")
+    end
     RefreshPortraitControls = RefreshPortraitControls(M.BindGateGroup(ctx, function() return GetConf(unit) end, {
         { enable = portraitEnable },
         { controls = portraitActiveControls, on = PortraitActive },
-        { controls = zoom, on = function(conf) return PortraitActive() and ((conf.portraitRender or "2D") ~= "CLASS") end },
-        { controls = { borderSize, fillBorder }, on = function(conf) return PortraitActive() and ((conf.portraitBorderStyle or "NONE") ~= "NONE") end },
+        -- The Left/Right segment only steers the attached layout; detached and
+        -- overlay portraits take their position from the Placement card instead.
+        { controls = portrait, on = function(conf) return PortraitPlacementIs(conf, "ATTACHED") end },
+        { controls = { detachedPoint, detachedTo }, on = function(conf) return PortraitPlacementIs(conf, "DETACHED") end },
+        { controls = overlayAlign, on = function(conf) return PortraitPlacementIs(conf, "OVERLAY") end },
+        { controls = { zoom, panX, panY }, on = PortraitIs2D },
+        { controls = { borderSize, borderArt }, on = function(conf) return PortraitActive() and ((conf.portraitBorderStyle or "NONE") ~= "NONE") end },
+        -- Direction rotates the relief art's light; the flat renderers have no
+        -- orientation to speak of.
+        { controls = borderDirection, on = function(conf)
+            return PortraitActive()
+                and ((conf.portraitBorderStyle or "NONE") ~= "NONE")
+                and ((conf.portraitBorderArt or "FLAT") == "RELIEF")
+        end },
+        -- Fill-into-the-gap squares off the four straight edges; shaped portraits
+        -- render a ring that follows the silhouette and relief art replaces both.
+        { controls = fillBorder, on = function(conf)
+            return PortraitActive()
+                and ((conf.portraitBorderStyle or "NONE") ~= "NONE")
+                and ((conf.portraitShape or "SQUARE") == "SQUARE")
+                and ((conf.portraitBorderArt or "FLAT") ~= "RELIEF")
+        end },
         { controls = classStyle, on = function(conf) return PortraitActive() and ((conf.portraitRender or "2D") == "CLASS") end },
     }, {
         also = function() SetSectionHeaderStatus(sec, nil) end,
