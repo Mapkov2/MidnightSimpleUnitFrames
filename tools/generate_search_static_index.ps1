@@ -17,7 +17,7 @@ Set-Location $repo
 
 $lua = Get-Command lua -ErrorAction Stop
 $output = "MidnightSimpleUnitFrames/Shell/Menu2/Search/MSUF_Menu2_Search_StaticIndex_Data.lua"
-$projector = "tools/search_static_index_project.lua"
+$projector = ".github/scripts/search_static_index_project.lua"
 
 # The projector builds every Menu2 page through the real crosswalk harness, which
 # expects a deterministic English context just like the Assistant schema generator.

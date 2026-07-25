@@ -1168,6 +1168,25 @@ local function BuildButtonCommandAction(widget, entry)
     }
 end
 
+local function SearchIdentityComponent(value)
+    local text = tostring(value or "")
+    -- Search identities are baked into a Lua long-string. Escape the separator
+    -- and dotted catalog IDs so code analyzers cannot mistake this derived
+    -- routing key for a SavedVariables setting path.
+    text = text:gsub("%%", "%%25")
+    text = text:gsub("\031", "%%1F")
+    text = text:gsub("%.", "%%2E")
+    return text
+end
+
+local function CatalogSearchIdentity(kind, pageKey, ...)
+    local parts = { kind, SearchIdentityComponent(pageKey) }
+    for i = 1, select("#", ...) do
+        parts[#parts + 1] = SearchIdentityComponent(select(i, ...))
+    end
+    return table.concat(parts, "\031")
+end
+
 BuildRegistrySearchRecord = function(entry)
     if type(entry) ~= "table" then return nil end
     local info = BuildSearchPageInfoForKey(entry.pageKey)
@@ -1182,6 +1201,23 @@ BuildRegistrySearchRecord = function(entry)
     AddSearchText(extra, entry.help)
     local rec = AddSearchRecord(nil, nil, info, entry.label, entry.anchor, entry.kind or "control", extra)
     if rec then
+        local controlId = tostring(entry.controlId or "")
+        local controlPath = tostring(entry.controlPath or "")
+        local settingKey = tostring(entry.settingKey or "")
+        local actionKey = tostring(entry.actionKey or "")
+        if controlId ~= "" then
+            rec.searchIdentity = CatalogSearchIdentity("id", entry.pageKey, controlId)
+        elseif controlPath ~= "" then
+            rec.searchIdentity = CatalogSearchIdentity("path", entry.pageKey, controlPath)
+        elseif settingKey ~= "" then
+            rec.searchIdentity = CatalogSearchIdentity("setting", entry.pageKey, settingKey)
+        elseif actionKey ~= "" then
+            rec.searchIdentity = CatalogSearchIdentity(
+                "action", entry.pageKey, actionKey, rec.labelNorm or "", rec.hint or "")
+        else
+            rec.searchIdentity = CatalogSearchIdentity(
+                "display", entry.pageKey, rec.kind or "", rec.labelNorm or "", rec.hint or "")
+        end
         rec.answer = entry.help
         if type(entry.settingKey) == "string" and entry.settingKey ~= "" then
             rec.exactTarget = {
@@ -1225,8 +1261,8 @@ BuildRegistrySearchRecord = function(entry)
 end
 
 --- Static inventory for controls whose page has never been built. A live widget
---- record for the same page+label always wins: it carries the real anchor and the
---- executable command, while the static row only knows how to route there.
+--- record for the exact same semantic route always wins: it carries the real
+--- anchor and executable command. Equal labels on different controls stay intact.
 local function AddStaticIndexSearchRecords(records, covered)
     local staticIndex = Search.StaticIndex
     if not (staticIndex and type(staticIndex.GetRecords) == "function") then return end
@@ -1234,7 +1270,7 @@ local function AddStaticIndexSearchRecords(records, covered)
     if not ok or type(staticRecords) ~= "table" then return end
     for i = 1, #staticRecords do
         local rec = staticRecords[i]
-        local identity = rec.key .. "" .. rec.labelNorm
+        local identity = rec.searchIdentity
         if not covered[identity] then
             rec.order = #records + 1
             records[#records + 1] = rec
@@ -1287,7 +1323,7 @@ local function BuildSearchRecords()
         if rec then
             rec.order = #records + 1
             records[#records + 1] = rec
-            covered[tostring(rec.key or "") .. "\031" .. tostring(rec.labelNorm or "")] = true
+            covered[rec.searchIdentity] = true
         end
     end
 
@@ -1691,6 +1727,7 @@ Search._CoreAPI = {
     ScheduleSearchInputQuery = ScheduleSearchInputQuery,
     SearchBoxHasText = SearchBoxHasText,
     SearchPages = SearchPages,
+    GetSearchRecords = GetSearchRecords,
     GetFAQRecords = function() return SEARCH_FAQ end,
     ShouldUseAssistantForQuery = ShouldUseAssistantForQuery,
     SubmitAssistantSearchQuery = SubmitAssistantSearchQuery,

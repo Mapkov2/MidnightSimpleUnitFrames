@@ -94,8 +94,8 @@ local function Decode()
     local records, count = {}, 0
 
     for line in blob:gmatch("[^\n]+") do
-        local pageKey, label, kind, settingKey, actionKey, hint, labelNorm, haystack =
-            line:match("^([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t(.*)$")
+        local pageKey, label, kind, settingKey, actionKey, hint, labelNorm, searchIdentity, haystack =
+            line:match("^([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t(.*)$")
         if pageKey and pageKey ~= "" then
             local page = EnsurePage(pageKey)
             local displayLabel = Translate(label)
@@ -129,6 +129,7 @@ local function Decode()
                 title = page.title,
                 group = page.group,
                 labelNorm = labelNorm,
+                searchIdentity = searchIdentity,
                 titleNorm = page.titleNorm,
                 groupNorm = page.groupNorm,
                 hintNorm = hintNorm,

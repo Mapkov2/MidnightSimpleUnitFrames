@@ -54,6 +54,9 @@ M = {
     Tr = function(text) return text end,
     InvalidatePage = function() counts.invalidate = counts.invalidate + 1 end,
     SelectPage = function() counts.select = counts.select + 1 end,
+    -- The production catalog returns the same stable explicit ID declared by
+    -- the widget. This narrow stub is enough to exercise live/static coverage.
+    RegisterRuntimeControl = function(_, meta) return meta and meta.controlId end,
     UnitPage = {
         PumpBackgroundSections = function() counts.pump = counts.pump + 1 end,
     },
@@ -129,6 +132,94 @@ assert(counts.pump > 0, "deferred section draining no longer happens outside com
 local unvisited = SearchPages("Status indicator size")
 assert(#unvisited > 0 and unvisited[1].key:find("^uf_"), string.format(
     "a control from an unbuilt page is unreachable (%d results)", #unvisited))
+
+-- A partially built page may register one of many equally labelled controls.
+-- Only that exact route may replace its static row; the remaining Size/X Offset
+-- controls must stay searchable until their own widgets exist.
+local function StaticSetting(settingKey)
+    for _, rec in ipairs(StaticIndex.GetRecords()) do
+        if rec.exactTarget and rec.exactTarget.settingKey == settingKey then return rec end
+    end
+end
+
+local function ControlId(rec)
+    local prefix = "id\031" .. tostring(rec.key) .. "\031"
+    assert(type(rec.searchIdentity) == "string"
+        and rec.searchIdentity:sub(1, #prefix) == prefix,
+        "static control lost its stable catalog identity")
+    return rec.searchIdentity:sub(#prefix + 1)
+        :gsub("%%2E", ".")
+        :gsub("%%1F", "\031")
+        :gsub("%%25", "%%")
+end
+
+local sizeStatic = assert(StaticSetting("target.nameFontSize"),
+    "target name Size route missing from static index")
+local offsetStatic = assert(StaticSetting("target.nameOffsetX"),
+    "target name X Offset route missing from static index")
+local sizeWidget, offsetWidget = {}, {}
+local expectedSizeRoutes, expectedOffsetRoutes = 0, 0
+for _, rec in ipairs(StaticIndex.GetRecords()) do
+    if rec.key == "uf_target" and rec.labelNorm == "size" then
+        expectedSizeRoutes = expectedSizeRoutes + 1
+    elseif rec.key == "uf_target" and rec.labelNorm == "x offset" then
+        expectedOffsetRoutes = expectedOffsetRoutes + 1
+    end
+end
+assert(expectedSizeRoutes > 2 and expectedOffsetRoutes > 2,
+    "fixture no longer contains multiple target Size/X Offset routes")
+M.RegisterSearchWidget(sizeWidget, {
+    pageKey = "uf_target", label = "Size", kind = "slider",
+    controlId = ControlId(sizeStatic), settingKey = "target.nameFontSize",
+    controlPath = "unit-workspace/unit/portrait/text/name/size",
+    classification = "setting",
+})
+M.RegisterSearchWidget(offsetWidget, {
+    pageKey = "uf_target", label = "X Offset", kind = "slider",
+    controlId = ControlId(offsetStatic), settingKey = "target.nameOffsetX",
+    controlPath = "unit-workspace/unit/portrait/text/name/x-offset",
+    classification = "setting",
+})
+
+local function HasResult(results, predicate)
+    for i = 1, #results do
+        if predicate(results[i]) then return true end
+    end
+    return false
+end
+
+local auraSize = SearchPages("target buff layout size")
+assert(HasResult(auraSize, function(rec)
+    return rec.key == "uf_target" and rec.static == true
+        and rec.labelNorm == "size" and tostring(rec.hintNorm):find("buff", 1, true)
+end), "registering target Name Size hid the distinct target Buff Size route")
+
+local powerOffset = SearchPages("target power position x offset")
+assert(HasResult(powerOffset, function(rec)
+    return rec.static == true and rec.exactTarget
+        and rec.exactTarget.settingKey == "target.powerOffsetX"
+end), "registering target Name X Offset hid the distinct target Power X Offset route")
+
+local merged = assert(API.GetSearchRecords, "GetSearchRecords test hook missing")()
+local sizeRoutes, offsetRoutes, liveSizeRoute, liveOffsetRoute = 0, 0, false, false
+for _, rec in ipairs(merged) do
+    if rec.key == "uf_target" and rec.labelNorm == "size" then
+        sizeRoutes = sizeRoutes + 1
+        if rec.searchIdentity == sizeStatic.searchIdentity and rec.static ~= true then liveSizeRoute = true end
+        assert(not (rec.static == true and rec.searchIdentity == sizeStatic.searchIdentity),
+            "the static Name Size route survived beside its exact live replacement")
+    elseif rec.key == "uf_target" and rec.labelNorm == "x offset" then
+        offsetRoutes = offsetRoutes + 1
+        if rec.searchIdentity == offsetStatic.searchIdentity and rec.static ~= true then liveOffsetRoute = true end
+        assert(not (rec.static == true and rec.searchIdentity == offsetStatic.searchIdentity),
+            "the static Name X Offset route survived beside its exact live replacement")
+    end
+end
+assert(sizeRoutes == expectedSizeRoutes and offsetRoutes == expectedOffsetRoutes,
+    string.format("partial page changed route counts: Size %d/%d, X Offset %d/%d",
+        sizeRoutes, expectedSizeRoutes, offsetRoutes, expectedOffsetRoutes))
+assert(liveSizeRoute and liveOffsetRoute,
+    "the exact live Size/X Offset routes did not replace their static records")
 
 -- The engine must never build pages to answer a query. That path existed as the
 -- background indexer and is gone; nothing may reintroduce it.
