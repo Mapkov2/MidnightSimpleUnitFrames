@@ -350,6 +350,9 @@ modeBuilders.SEGMENTED = function(E)
             end
             if CP.text then CP_StampShown(CP.text, false) end
             StopEssenceOnUpdates()
+            --- A secret power value only blocks the full/empty rules; the combat
+            --- rule still has to run, so pass nil instead of dropping the check.
+            CP_CheckAutoHide(nil, maxPower)
             return
         end
         cur = tonumber(cur) or 0
@@ -499,6 +502,9 @@ modeBuilders.SEGMENTED = function(E)
                 end
             end
             if CP.text then CP_StampShown(CP.text, false) end
+            --- A secret power value only blocks the full/empty rules; the combat
+            --- rule still has to run, so pass nil instead of dropping the check.
+            CP_CheckAutoHide(nil, maxPower)
             return
         end
         cur = tonumber(cur) or 0
@@ -609,6 +615,9 @@ modeBuilders.FRACTIONAL = function(E)
                 end
             end
             if CP.text then CP_StampShown(CP.text, false) end
+            --- A secret power value only blocks the full/empty rules; the combat
+            --- rule still has to run, so pass nil instead of dropping the check.
+            CP_CheckAutoHide(nil, maxPower)
             return
         end
         rawCur = tonumber(rawCur) or 0
@@ -1352,7 +1361,13 @@ modeBuilders.TIMER = function(E)
 
         StopNativeTimer()
         local qPct = math_floor(remaining * 10 + 0.5)
-        if qPct == CP.tbCachedQ then return active end
+        if qPct == CP.tbCachedQ then
+            --- The bar art is unchanged, but combat state may not be. An idle Ebon
+            --- Might sits on qPct 0 forever, so returning here without the check
+            --- would freeze auto-hide at whatever alpha the last repaint left.
+            CP_CheckAutoHide(remaining > 0.1 and 1 or 0, 1)
+            return active
+        end
         CP.tbCachedQ = qPct
 
         local mx = EBON.MAX_DURATION

@@ -65,18 +65,26 @@ for i = 1, 2 do
         SetAlpha = function() end,
     }
 end
+local segmentedAutoHideCalls = 0
+local segmentedAutoHideCur, segmentedAutoHideMax
 local segmented = assert(_G.MSUF_CP_MODE_BUILDERS.SEGMENTED)({
     CP = { bars = secretBars },
     PT = { Essence = 19 },
     PLAYER_CLASS = "ROGUE",
     UnitPower = function() return secretPower end,
     NotSecret = function(v) return v ~= secretPower end,
+    CP_CheckAutoHide = function(cur, maxPower)
+        segmentedAutoHideCalls = segmentedAutoHideCalls + 1
+        segmentedAutoHideCur, segmentedAutoHideMax = cur, maxPower
+    end,
     GetVisual = function() return { smoothInterp = smoothToken, filledAlpha = 1 } end,
 })
 segmented.Update(4, 2)
 assert(secretRanges[1][1] == 0 and secretRanges[1][2] == 1
     and secretRanges[2][1] == 1 and secretRanges[2][2] == 2,
     "secret segmented power must use per-pip C-side ranges")
+assert(segmentedAutoHideCalls == 1 and segmentedAutoHideCur == nil and segmentedAutoHideMax == 2,
+    "secret segmented power must still evaluate auto-hide with an unknown current value")
 
 local fractionalRange
 local fractionalBar = {
@@ -87,16 +95,24 @@ local fractionalBar = {
     SetMinMaxValues = function(_, lo, hi) fractionalRange = { lo, hi } end,
     SetAlpha = function() end,
 }
+local fractionalAutoHideCalls = 0
+local fractionalAutoHideCur, fractionalAutoHideMax
 local fractional = assert(_G.MSUF_CP_MODE_BUILDERS.FRACTIONAL)({
     CP = { bars = { fractionalBar } },
     UnitPower = function() return secretPower end,
     UnitPowerDisplayMod = function() return 100 end,
     NotSecret = function(v) return v ~= secretPower end,
+    CP_CheckAutoHide = function(cur, maxPower)
+        fractionalAutoHideCalls = fractionalAutoHideCalls + 1
+        fractionalAutoHideCur, fractionalAutoHideMax = cur, maxPower
+    end,
     GetVisual = function() return { smoothInterp = smoothToken, filledAlpha = 1 } end,
 })
 fractional.Update(7, 1)
 assert(fractionalRange[1] == 0 and fractionalRange[2] == 100,
     "secret fractional power must use display-mod C-side ranges")
+assert(fractionalAutoHideCalls == 1 and fractionalAutoHideCur == nil and fractionalAutoHideMax == 1,
+    "secret fractional power must still evaluate auto-hide with an unknown current value")
 
 local essenceNow = 100
 local essenceBars = {}
@@ -230,6 +246,7 @@ assert(rune.RuntimeTick(5) == false and runeCP.runeOUAAny == false,
     "completed rune recharge must stop the central tick without another event")
 
 local timerNow, timerExpiration = 10, 11
+local timerAutoHideCalls = 0
 local timerBar = {
     SetValue = function(self, v) self.value = v end,
     SetMinMaxValues = function() end,
@@ -246,7 +263,7 @@ local timer = assert(_G.MSUF_CP_MODE_BUILDERS.TIMER)({
     GetTime = function() return timerNow end,
     EBON = { SPELL_ID = 395296, MAX_DURATION = 20 },
     CPK = { MODE = { TIMER_BAR = 8 } },
-    CP_CheckAutoHide = function() end,
+    CP_CheckAutoHide = function() timerAutoHideCalls = timerAutoHideCalls + 1 end,
     GetFilledAlpha = function() return 1 end,
     GetEmptyAlpha = function() return 0.3 end,
     GetVisual = function() return visual end,
@@ -258,6 +275,15 @@ timer.SetOnUpdate(true)
 timerNow = 12
 assert(timer.RuntimeTick(0.02) == false and timerCP.tbOUA == false,
     "expired Ebon Might must stop the central tick without another aura event")
+
+-- An idle Ebon Might sits on the same quantised remaining time forever, so the
+-- repaint dedupe must not swallow the auto-hide evaluation: combat state can
+-- change without the drawn bar changing.
+timerAutoHideCalls = 0
+timer.Update("EBON_MIGHT", 1)
+timer.Update("EBON_MIGHT", 1)
+assert(timerAutoHideCalls == 2,
+    "idle Ebon Might must re-evaluate auto-hide even when the repaint is deduped")
 
 local staggerColor
 local staggerValue = 30
@@ -390,5 +416,18 @@ playerHP.Update("UNIT_HEALTH")
 assert(playerHPCalls.value == 62 and playerHPCalls.interp == smoothToken
     and playerHPBar._msufInterpolating == true,
     "ordinary Player HP fallback lost configured smooth interpolation")
+
+-- The refresh that turns Class Power on must publish CP.visible before dispatching
+-- the first update: CP_CheckAutoHide gates on that flag, so a late assignment
+-- leaves the bar shown after login regardless of the configured auto-hide rules.
+local controllerFile = assert(io.open(root .. "/MidnightSimpleUnitFrames/ClassPower/MSUF_CP_Controller.lua", "rb"))
+local controllerSource = controllerFile:read("*a"):gsub("\r\n", "\n")
+controllerFile:close()
+local visibleAt = assert(controllerSource:find("\n        CP%.visible = true\n"),
+    "MSUF_CP_Controller must mark Class Power visible inside the active refresh branch")
+local dispatchAt = assert(controllerSource:find("CP_RunActiveUpdate(powerType, maxP)", 1, true),
+    "MSUF_CP_Controller must dispatch the first update from FullRefresh")
+assert(visibleAt < dispatchAt,
+    "CP.visible must be set before the first update dispatch, or FullRefresh skips its own auto-hide check")
 
 print("classpower smooth runtime smoke: ok")

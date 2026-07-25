@@ -2147,6 +2147,12 @@ local function FullRefresh()
         end
         CP_ApplyFont()
 
+        --- Mark the bar active before the first update: CP_CheckAutoHide gates on
+        --- CP.visible, so the refresh that turns Class Power on (login, spec swap,
+        --- feature toggle) would otherwise skip its own auto-hide evaluation and
+        --- leave the bar at the alpha 1 reset below until the next runtime event.
+        CP.visible = true
+
         --- Reset container alpha before update (auto-hide in updateFn may override)
         CP.container:SetAlpha(1)
 
@@ -2155,7 +2161,6 @@ local function FullRefresh()
 
         CP.container._msufAnchorOnly = nil
         CP.container:Show()
-        CP.visible = true
         CP_SetIciclesSensorActive(powerType == "ICICLES")
         --- Belt-and-suspenders: ensure outline survives parent Hide/Show cycle
         if CP._outline then
