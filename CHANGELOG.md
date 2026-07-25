@@ -19,6 +19,8 @@
 - Added `/msuf search <text>`, which runs a menu search and opens the results, plus `/msuf version` for the version, active profile, and Edit Mode state, and `/msuf reload` as a spelled-out `/rl`.
 - Anything `/msuf` does not recognise as a command or a page name is now treated as a menu search instead of opening a blank page, so a typo or a half-remembered setting name still lands somewhere useful.
 - The Gameplay page's "Preview" and "Reset TotemFrame layout" buttons now measure their translated label instead of assuming the English width, and wrap onto a second row when the pair no longer fits side by side. The Preview button lights up while the preview is running, and the From/To anchor dropdowns no longer overlap each other at narrow menu widths.
+- The Assistant now resolves text-movement follow-ups against the object you were just talking about. "move the power text up" names the text but not the frame that owns it, so it used to fall through to a fuzzy search that could land on any control sharing a word - which is how "power text" reached Class Resource Text. Asking a retained text object for a control it does not have, such as an anchor on Health Text, now reports the controls that object really has instead of asking you to name it again.
+- Widened what the Assistant can change directly: profiles, unit frame power, base and bar settings, aura colors, castbar details, and the texture and gradient context all gained registry coverage. Action-backed menu controls now also carry their argument contract, so they are published as real actions rather than being downgraded to guided steps - the new "New character profile" dropdown among them.
 - Updated all supported locales for the new aura border styles and per-frame icon styling, the castbar icon layer, and the slash-command help and profile messages.
 
 ### Fixes & Performance
@@ -29,6 +31,8 @@
 - Fixed `/msuf gfhoverdebug` doing nothing at all: only a handful of sub-commands were forwarded from `/msuf` to the older handler, and everything else fell through to the page opener and drew an empty page.
 - Dropped `!msuf help` and `/msufdbgpos` from the help output. The chat trigger was removed a while ago and the position debugger is not shipped, so the help listed two commands that did not exist. Diagnostic commands now add themselves to the help from the file that owns them, which makes that class of drift impossible.
 - The compiled aura icon style is memoized per runtime configuration, so all lanes in a refresh share one style table instead of each re-reading the database and re-resolving its border media.
+- Fixed Class Resources ignoring auto-hide in three situations, each leaving the bar at whatever opacity the previous repaint happened to set until some unrelated event moved it: a secret power value, which only rules out the full and empty checks but not the combat one; an idle Ebon Might timer whose remaining time never changes; and the refresh that first switches the bar on at login, spec change, or feature toggle.
+- Fixed the Assistant dashboard card showing its "Early Alpha" notice only after the companion had loaded, so the placeholder shell carries it too.
 - Expanded the Core Lua 5.1 suite to 161 passing tests, including new aura border style and slash-command registry regressions.
 
 ## 6.0-Beta28 - 2026-07-25
