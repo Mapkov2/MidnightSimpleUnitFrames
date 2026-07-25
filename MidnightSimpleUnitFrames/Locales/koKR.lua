@@ -3692,6 +3692,8 @@ L["The MSUF menu can now follow your class color, a curated preset like Ember, J
 L["The whole menu re-tints to your accent - surfaces, navigation and controls - applied after a UI reload."] = "메뉴 전체(표면, 탐색, 컨트롤)가 선택한 강조 색상으로 물들며, UI를 다시 불러온 후 적용됩니다."
 L["The accent colors navigation, tabs and highlights; panels stay midnight unless you turn on Tint menu surfaces. Applied after a UI reload."] = "강조색은 탐색, 탭, 강조 표시에 적용되며 '메뉴 표면 색조 적용'을 켜지 않으면 패널은 midnight로 유지됩니다. UI 재로드 후 적용됩니다."
 L["Tint menu surfaces"] = "메뉴 표면 색조 적용"
+L["Zoom %d%%"] = "확대 %d%%"
+L["Opacity %d%%"] = "불투명도 %d%%"
 L["Off (default): the accent colors buttons, tabs and highlights while panels stay midnight. On: panels, borders and the navigation rail are rotated onto the accent hue too. Success, warning and danger colors never change."] = "끄기(기본값): 강조색이 버튼, 탭, 강조 표시에 적용되고 패널은 midnight로 유지됩니다. 켜기: 패널, 테두리, 탐색 바도 강조색 색조로 전환됩니다. 성공, 경고, 위험 색상은 변경되지 않습니다."
 L["class-color, preset and custom accent options for the MSUF menu"] = "MSUF 메뉴의 직업 색상, 프리셋 및 사용자 지정 강조 옵션"
 L["Pick a menu accent"] = "메뉴 강조 색상 선택"

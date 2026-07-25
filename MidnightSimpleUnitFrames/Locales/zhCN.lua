@@ -4340,6 +4340,8 @@ L["The MSUF menu can now follow your class color, a curated preset like Ember, J
 L["The whole menu re-tints to your accent - surfaces, navigation and controls - applied after a UI reload."] = "整个菜单（表面、导航和控件）都会染上你选择的主题色，重载界面后生效。"
 L["The accent colors navigation, tabs and highlights; panels stay midnight unless you turn on Tint menu surfaces. Applied after a UI reload."] = "主题色会用于导航、标签页和高亮；除非开启「为菜单表面着色」，否则面板保持 midnight。重新加载界面后生效。"
 L["Tint menu surfaces"] = "为菜单表面着色"
+L["Zoom %d%%"] = "缩放 %d%%"
+L["Opacity %d%%"] = "不透明度 %d%%"
 L["Off (default): the accent colors buttons, tabs and highlights while panels stay midnight. On: panels, borders and the navigation rail are rotated onto the accent hue too. Success, warning and danger colors never change."] = "关闭（默认）：主题色用于按钮、标签页和高亮，面板保持 midnight。开启：面板、边框和导航栏也会转为主题色色调。成功、警告和危险颜色永不改变。"
 L["class-color, preset and custom accent options for the MSUF menu"] = "MSUF 菜单的职业颜色、预设与自定义主题色选项"
 L["Pick a menu accent"] = "选择菜单主题色"

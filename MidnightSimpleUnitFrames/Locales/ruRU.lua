@@ -3657,6 +3657,8 @@ L["The MSUF menu can now follow your class color, a curated preset like Ember, J
 L["The whole menu re-tints to your accent - surfaces, navigation and controls - applied after a UI reload."] = "Всё меню окрашивается в ваш акцент - поверхности, навигация и элементы управления - после перезагрузки интерфейса."
 L["The accent colors navigation, tabs and highlights; panels stay midnight unless you turn on Tint menu surfaces. Applied after a UI reload."] = "Акцент окрашивает навигацию, вкладки и подсветку; панели остаются midnight, пока вы не включите «Тонировать поверхности меню». Применяется после перезагрузки интерфейса."
 L["Tint menu surfaces"] = "Тонировать поверхности меню"
+L["Zoom %d%%"] = "Масштаб %d%%"
+L["Opacity %d%%"] = "Непрозрачность %d%%"
 L["Off (default): the accent colors buttons, tabs and highlights while panels stay midnight. On: panels, borders and the navigation rail are rotated onto the accent hue too. Success, warning and danger colors never change."] = "Выкл. (по умолчанию): акцент окрашивает кнопки, вкладки и подсветку, а панели остаются midnight. Вкл.: панели, границы и панель навигации также переводятся в оттенок акцента. Цвета успеха, предупреждения и опасности никогда не меняются."
 L["class-color, preset and custom accent options for the MSUF menu"] = "акцент по цвету класса, пресеты и свой акцентный цвет для меню MSUF"
 L["Pick a menu accent"] = "Выбрать акцент меню"

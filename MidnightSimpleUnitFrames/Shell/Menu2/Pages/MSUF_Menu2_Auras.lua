@@ -3997,10 +3997,10 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                 local opacity = floor(((tonumber(placed.alpha) or 1) * 100) + 0.5)
                 local basicsBadges = { ToggleBadge("Tooltip", placed.showTooltip ~= false) }
                 if zoom ~= 100 then
-                    basicsBadges[#basicsBadges + 1] = { text = "Zoom " .. tostring(zoom) .. "%", kind = "info", showWhenClosed = true }
+                    basicsBadges[#basicsBadges + 1] = { text = M.Format("Zoom %d%%", zoom), kind = "info", showWhenClosed = true }
                 end
                 if opacity < 100 then
-                    basicsBadges[#basicsBadges + 1] = { text = "Opacity " .. tostring(opacity) .. "%", kind = "info", showWhenClosed = true }
+                    basicsBadges[#basicsBadges + 1] = { text = M.Format("Opacity %d%%", opacity), kind = "info", showWhenClosed = true }
                 end
                 if harmfulContainer then
                     local borderMode = tostring(placed.debuffTypeBorderMode or "OFF"):upper()

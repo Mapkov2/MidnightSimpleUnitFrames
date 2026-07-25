@@ -3799,6 +3799,8 @@ L["The MSUF menu can now follow your class color, a curated preset like Ember, J
 L["The whole menu re-tints to your accent - surfaces, navigation and controls - applied after a UI reload."] = "Todo el menú se tiñe con tu acento - superficies, navegación y controles - aplicado tras recargar la interfaz."
 L["The accent colors navigation, tabs and highlights; panels stay midnight unless you turn on Tint menu surfaces. Applied after a UI reload."] = "El acento colorea la navegación, las pestañas y los resaltados; las superficies permanecen en midnight salvo que actives «Teñir superficies del menú». Se aplica tras recargar la interfaz."
 L["Tint menu surfaces"] = "Teñir superficies del menú"
+L["Zoom %d%%"] = "Zoom %d%%"
+L["Opacity %d%%"] = "Opacidad %d%%"
 L["Off (default): the accent colors buttons, tabs and highlights while panels stay midnight. On: panels, borders and the navigation rail are rotated onto the accent hue too. Success, warning and danger colors never change."] = "Desactivado (predeterminado): el acento colorea botones, pestañas y resaltados mientras las superficies permanecen en midnight. Activado: las superficies, los bordes y la barra de navegación también se rotan al tono del acento. Los colores de éxito, advertencia y peligro nunca cambian."
 L["class-color, preset and custom accent options for the MSUF menu"] = "opciones de acento por color de clase, preajustes y color personalizado para el menú de MSUF"
 L["Pick a menu accent"] = "Elige un acento del menú"
