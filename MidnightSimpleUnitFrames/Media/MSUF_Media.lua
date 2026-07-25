@@ -50,6 +50,13 @@ Reg("MSUF Frosted Quartz", "MSUF_FrostedQuartz.tga")
 Reg("MSUF Lunar Mist",     "MSUF_LunarMist.tga")
 Reg("MSUF Obsidian Glass", "MSUF_ObsidianGlass.tga")
 Reg("MSUF Runic Circuit",  "MSUF_RunicCircuit.tga")
+--- Bar art contributed by Aur0r4 (bundled with permission).
+Reg("MSUF Dreamy",            "MSUF_Dreamy.tga")
+Reg("MSUF Dreamy Soft",       "MSUF_DreamySoft.tga")
+Reg("MSUF Dreamy Ultra Soft", "MSUF_DreamyUltraSoft.tga")
+Reg("MSUF Foggy",             "MSUF_Foggy.tga")
+Reg("MSUF Glass",             "MSUF_Glass.tga")
+Reg("MSUF Mirrored Glass",    "MSUF_MirroredGlass.tga")
 Reg("Better Blizzard", "BetterBlizzard.blp")
 
 --- DB migration: eliminate broken legacy selections
