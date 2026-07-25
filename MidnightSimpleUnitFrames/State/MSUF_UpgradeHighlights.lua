@@ -119,7 +119,7 @@ local DATA = {
                     },
                     title = "Menu accent colors",
                     summary = "The MSUF menu can now follow your class color, a curated preset like Ember, Jade or Violet, or any custom color.",
-                    impact = "The whole menu re-tints to your accent - surfaces, navigation and controls - applied after a UI reload.",
+                    impact = "The accent colors navigation, tabs and highlights; panels stay midnight unless you turn on Tint menu surfaces. Applied after a UI reload.",
                     missed = "class-color, preset and custom accent options for the MSUF menu",
                     action = "Pick a menu accent",
                 },

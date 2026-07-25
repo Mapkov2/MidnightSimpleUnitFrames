@@ -61,6 +61,10 @@ local function ColorRows(rows)
 end
 -- Accessible midnight palette. Structural surfaces stay neutral, blue owns interaction,
 -- and green/red/amber are reserved for success, danger, and warning semantics.
+-- Text legibility ramp against `panel`, in WCAG contrast: text 17.1:1, muted 8.4:1,
+-- dim 4.9:1, disabled 3.7:1. Disabled is deliberately the floor but must stay
+-- readable: gated controls (see ControlGates) are common, and a user who cannot
+-- read a gated label cannot tell what enabling its parent would unlock.
 T.colors = ColorRows [[
 coreShadow=0.020,0.039,0.071,1.00
 coreInk=0.027,0.063,0.106,1.00
@@ -83,7 +87,7 @@ title=0.957,0.973,1.000,1.00
 muted=0.659,0.706,0.780,0.96
 searchPlaceholder=0.659,0.706,0.780,0.94
 dim=0.500,0.550,0.650,0.92
-disabled=0.388,0.439,0.537,0.68
+disabled=0.460,0.510,0.590,0.82
 accent=0.231,0.510,0.965,1.00
 checkActive=0.141,0.365,0.741,1.00
 checkActiveEdge=0.357,0.608,1.000,0.94
@@ -375,10 +379,127 @@ local function HSVToRGB(h, s, v)
     local m = v - c
     return r + m, g + m, b + m
 end
--- The structural midnight family is a blue-hue ramp; with a custom accent the
--- whole menu body is rotated onto the accent hue (keeping each color's own
--- lightness and relative saturation). Semantic colors (ok green, danger red,
--- warning amber) sit outside the blue band and are skipped by construction.
+-- WCAG relative luminance, used to re-validate the text ramp after an accent has
+-- rewritten the palette. Rotating hue at a constant HSV value is NOT luminance
+-- preserving -- green contributes ~10x what blue does -- so an accent can lift a
+-- surface out from under the low-contrast end of the ramp, or make an accent-
+-- tinted pill bright enough that near-white labels on it stop being readable.
+local function Linearize(c)
+    if c <= 0.03928 then return c / 12.92 end
+    return ((c + 0.055) / 1.055) ^ 2.4
+end
+local function RelativeLuminance(c)
+    return 0.2126 * Linearize(c[1]) + 0.7152 * Linearize(c[2]) + 0.0722 * Linearize(c[3])
+end
+local function ContrastRatio(a, b)
+    local la, lb = RelativeLuminance(a), RelativeLuminance(b)
+    if la < lb then la, lb = lb, la end
+    return (la + 0.05) / (lb + 0.05)
+end
+-- Text tokens carry alpha; flatten onto the surface before measuring.
+local function CompositeOver(fg, surface)
+    local a = fg[4] or 1
+    if a >= 1 then return fg end
+    return {
+        a * fg[1] + (1 - a) * surface[1],
+        a * fg[2] + (1 - a) * surface[2],
+        a * fg[3] + (1 - a) * surface[3],
+    }
+end
+--- Re-values a text token until it clears `floor` against the surface it is drawn
+--- on, keeping its hue and saturation. Sweeps the whole value axis rather than
+--- stepping away from the surface: a near-white label on a bright accent pill
+--- (gold class colors, jade) has no headroom upward, and the correct answer
+--- there is dark text on a light surface, not a brighter white.
+--- Picks the qualifying value closest to the original so the palette moves as
+--- little as possible; if nothing clears the floor it takes the best available.
+--- The surface is treated as opaque -- what sits behind a translucent panel is
+--- the game world, so the surface's own RGB is the only honest reference.
+local function EnforceContrast(colorKey, surfaceKey, floor)
+    local c, surface = T.colors[colorKey], T.colors[surfaceKey]
+    if type(c) ~= "table" or type(surface) ~= "table" or type(c[1]) ~= "number" then return end
+    if ContrastRatio(CompositeOver(c, surface), surface) >= floor then return end
+    local h, s, v0 = RGBToHSV(c[1], c[2], c[3])
+    local nearestV, nearestGap, bestV, bestRatio = nil, math.huge, v0, -1
+    for i = 0, 40 do
+        local v = i / 40
+        local r, g, b = HSVToRGB(h, s, v)
+        local ratio = ContrastRatio(CompositeOver({ r, g, b, c[4] }, surface), surface)
+        if ratio >= floor then
+            local gap = v > v0 and (v - v0) or (v0 - v)
+            if gap < nearestGap then nearestV, nearestGap = v, gap end
+        end
+        if ratio > bestRatio then bestV, bestRatio = v, ratio end
+    end
+    c[1], c[2], c[3] = HSVToRGB(h, s, nearestV or bestV)
+end
+-- Text on a structural (neutral) surface: the surface is the design, so the
+-- label moves. Floors sit at or below what stock midnight already achieves, so
+-- this only ever engages to repair an accent -- it never restyles the shipped
+-- palette.
+local TEXT_CONTRAST_FLOORS = {
+    { "text", "panel", 7.0 },
+    { "title", "panel", 7.0 },
+    { "muted", "panel", 4.5 },
+    { "searchPlaceholder", "panel", 4.5 },
+    { "dim", "panel", 4.5 },
+    { "disabled", "panel", 3.0 },
+    { "navText", "panelNav", 4.5 },
+    { "navHeaderText", "panelNav", 4.5 },
+    { "pillText", "pillBaseSolid", 4.5 },
+}
+--- Re-values an accent-colored *surface* until the label drawn on it clears
+--- `floor`. The surface's own alpha is composited over the backdrop it sits on,
+--- which is what actually reaches the screen.
+local function EnforceSurfaceContrast(surfaceKey, backdropKey, textKey, floor)
+    local surface, backdrop, text = T.colors[surfaceKey], T.colors[backdropKey], T.colors[textKey]
+    if type(surface) ~= "table" or type(backdrop) ~= "table" or type(text) ~= "table" then return end
+    if type(surface[1]) ~= "number" or type(text[1]) ~= "number" then return end
+    local function RatioAt(candidate)
+        return ContrastRatio(CompositeOver(text, candidate), candidate)
+    end
+    if RatioAt(CompositeOver(surface, backdrop)) >= floor then return end
+    local h, s, v0 = RGBToHSV(surface[1], surface[2], surface[3])
+    local nearestV, nearestGap, bestV, bestRatio = nil, math.huge, v0, -1
+    for i = 0, 40 do
+        local v = i / 40
+        local r, g, b = HSVToRGB(h, s, v)
+        local ratio = RatioAt(CompositeOver({ r, g, b, surface[4] }, backdrop))
+        if ratio >= floor then
+            local gap = v > v0 and (v - v0) or (v0 - v)
+            if gap < nearestGap then nearestV, nearestGap = v, gap end
+        end
+        if ratio > bestRatio then bestV, bestRatio = v, ratio end
+    end
+    surface[1], surface[2], surface[3] = HSVToRGB(h, s, nearestV or bestV)
+end
+-- Text on an accent-colored surface: here the *surface* moves instead. An active
+-- pill is meant to carry a near-white label in every accent, and a bright pick
+-- (gold class colors, jade) breaks that. Darkening the pill to a deeper shade of
+-- the same accent preserves the design language; flipping the label to black
+-- would not, and on a marginal failure it looks like a rendering bug.
+-- surface, backdrop it sits on, label drawn on it, minimum contrast.
+local SURFACE_CONTRAST_FLOORS = {
+    { "navPillActive", "panelNav", "navTextActive", 4.5 },
+    { "pillActive", "panel", "pillTextActive", 4.5 },
+}
+local function EnforceTextContrast()
+    for i = 1, #TEXT_CONTRAST_FLOORS do
+        local row = TEXT_CONTRAST_FLOORS[i]
+        EnforceContrast(row[1], row[2], row[3])
+    end
+    for i = 1, #SURFACE_CONTRAST_FLOORS do
+        local row = SURFACE_CONTRAST_FLOORS[i]
+        EnforceSurfaceContrast(row[1], row[2], row[3], row[4])
+    end
+end
+-- The structural midnight family is a blue-hue ramp. When surface tinting is
+-- enabled the whole menu body is rotated onto the accent hue (keeping each
+-- color's own lightness and relative saturation). Semantic colors (ok green,
+-- danger red, warning amber) sit outside the blue band and are skipped by
+-- construction. Tinting is opt-in: the default is that the accent owns
+-- interaction (pills, focus, highlights) while surfaces stay midnight, which is
+-- the conventional split and keeps the addon's identity under any class color.
 local REHUE_MIN_HUE, REHUE_MAX_HUE = 185, 262
 local function LooksLikeColor(t)
     local n = #t
@@ -447,18 +568,26 @@ T.MENU_ACCENT_PRESETS = T.MENU_ACCENT_PRESETS or {
     jade = "2fbf8f",
     violet = "8b5cf6",
 }
+--- Opt-in: rotate the structural surfaces onto the accent hue too, instead of
+--- letting the accent own only the interactive layer. Default off.
+function T.MenuAccentTintsSurfaces(g)
+    return type(g) == "table" and g.menuAccentTintSurfaces == true
+end
 --- Stable identity of the accent a given general DB describes. Compared against
 --- `T._menuAccentApplied` to decide whether a change needs a reload prompt.
+--- Surface tinting is part of the identity: toggling it changes what the palette
+--- bakes at build time, so it needs the same reload the accent itself does.
 function T.MenuAccentSignature(g)
     local mode = type(g) == "table" and g.menuAccent or nil
+    local suffix = T.MenuAccentTintsSurfaces(g) and "+tint" or ""
     if mode == "class" then
         local r, _, _, class = PlayerClassAccent()
-        if r then return "class:" .. tostring(class) end
+        if r then return "class:" .. tostring(class) .. suffix end
     elseif mode == "custom" then
         local hex = type(g) == "table" and g.menuAccentColor or nil
-        if T.MenuAccentHexToRGB(hex) then return "custom:" .. tostring(hex):lower() end
+        if T.MenuAccentHexToRGB(hex) then return "custom:" .. tostring(hex):lower() .. suffix end
     elseif mode ~= nil and T.MENU_ACCENT_PRESETS[mode] then
-        return "preset:" .. tostring(mode)
+        return "preset:" .. tostring(mode) .. suffix
     end
     return "midnight"
 end
@@ -510,19 +639,25 @@ function T.ApplyMenuAccent()
     SwapAccentDeep(T.navIconColors, tones, 1)
     SwapAccentDeep(T.glassVariants, tones, 1)
     SwapAccentDeep(T.gradients, tones, 1)
-    -- Second pass: rotate the structural midnight body onto the accent hue so
-    -- the whole menu follows the accent, not just interactive highlights. The
-    -- saturation scale keeps a muted accent from over-tinting the surfaces
+    -- Optional second pass: rotate the structural midnight body onto the accent
+    -- hue so the whole menu follows the accent, not just interactive highlights.
+    -- The saturation scale keeps a muted accent from over-tinting the surfaces
     -- (0.761 is the stock coreGlow saturation the ramp was tuned against).
-    local hue, sat = RGBToHSV(r, gr, b)
-    T._menuAccentHue = hue
-    local satScale = sat / 0.761
-    if satScale > 1.05 then satScale = 1.05 end
-    T._menuAccentSatScale = satScale
-    RehueDeep(T.colors, 1)
-    RehueDeep(T.navIconColors, 1)
-    RehueDeep(T.glassVariants, 1)
-    RehueDeep(T.gradients, 1)
-    RehueDeep(T.focusVeils, 1)
+    if T.MenuAccentTintsSurfaces(g) then
+        local hue, sat = RGBToHSV(r, gr, b)
+        T._menuAccentHue = hue
+        local satScale = sat / 0.761
+        if satScale > 1.05 then satScale = 1.05 end
+        T._menuAccentSatScale = satScale
+        RehueDeep(T.colors, 1)
+        RehueDeep(T.navIconColors, 1)
+        RehueDeep(T.glassVariants, 1)
+        RehueDeep(T.gradients, 1)
+        RehueDeep(T.focusVeils, 1)
+    end
+    -- Runs for every accent, tinted or not: the tone swap alone already repaints
+    -- pill/nav backgrounds in the accent color, so a bright pick (amber class
+    -- colors, jade) can leave near-white labels sitting on a light surface.
+    EnforceTextContrast()
     return sig
 end

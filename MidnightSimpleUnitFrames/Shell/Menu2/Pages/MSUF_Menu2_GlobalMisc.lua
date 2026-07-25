@@ -160,7 +160,7 @@ local function BuildMisc(ctx)
         "language.selection")
     local languageHelp = W.Text(language, "Follow Blizzard uses the WoW client language. Manual selection affects only MSUF menus.", 30, -96, languageW - 70, T.colors.muted)
     if languageHelp.SetWordWrap then languageHelp:SetWordWrap(true) end
-    local menuBehavior = b:CollapsibleSection("misc_menu_behavior", "Menu behavior", 410, true)
+    local menuBehavior = b:CollapsibleSection("misc_menu_behavior", "Menu behavior", 440, true)
     local menuBehaviorW = menuBehavior._msuf2Width or ctx.width or 720
     BindMiscToggle(menuBehavior, "Enable Windows-style edge snap for this menu", "slashMenuSnapEnabled", true, "MSUF2_MENU_SNAP", nil, nil, nil, MENU_WRITE_OPTS)
     local menuSnapHelp = W.Text(menuBehavior, "Drag the MSUF menu to a screen side for a half-screen layout, to a corner for a quarter layout, or to the top edge for a maximized layout.", 30, -72, menuBehaviorW - 70, T.colors.muted)
@@ -255,8 +255,12 @@ local function BuildMisc(ctx)
             AccentReloadCheck()
         end)
     end
+    local accentTint
     local function RefreshAccentSwatchEnabled()
-        if accentSwatch then W.SetControlEnabled(accentSwatch, ReadAccentMode() == "custom") end
+        local mode = ReadAccentMode()
+        if accentSwatch then W.SetControlEnabled(accentSwatch, mode == "custom") end
+        -- Tinting only means anything once an accent replaces midnight.
+        if accentTint then W.SetControlEnabled(accentTint, mode ~= "midnight") end
     end
     BindMiscDropdown(menuBehavior, "Menu accent color",
         VT("midnight", "Midnight (default)", "class", "Class color",
@@ -290,8 +294,15 @@ local function BuildMisc(ctx)
     end
     accentSwatch:ClearAllPoints()
     accentSwatch:SetPoint("TOPLEFT", menuBehavior, "TOPLEFT", menuFontRightX + 182, -314)
+    accentTint = BindMiscToggle(menuBehavior, "Tint menu surfaces", "menuAccentTintSurfaces", false,
+        "MSUF2_MENU_ACCENT_TINT", 14, -352, 320, MENU_WRITE_OPTS, AccentReloadCheck)
+    -- One string literal, not a concatenation: the locale coverage gate reads
+    -- literals, so a split body would demand a key per fragment.
+    M.AddTooltip(accentTint, "Tint menu surfaces",
+        "Off (default): the accent colors buttons, tabs and highlights while panels stay midnight. On: panels, borders and the navigation rail are rotated onto the accent hue too. Success, warning and danger colors never change.",
+        { hook = true })
     M.TrackRefresh(ctx, RefreshAccentSwatchEnabled)
-    local accentHelp = W.Text(menuBehavior, "Midnight keeps the stock blue accent. Class color follows this character; the accent applies after a UI reload.", 30, -362, menuBehaviorW - 70, T.colors.muted)
+    local accentHelp = W.Text(menuBehavior, "Midnight keeps the stock blue accent. Class color follows this character; the accent applies after a UI reload.", 30, -390, menuBehaviorW - 70, T.colors.muted)
     if accentHelp.SetWordWrap then accentHelp:SetWordWrap(true) end
     local startup = b:CollapsibleSection("misc_startup", "Startup", 124, true)
     BindMiscToggle(startup, "Show welcome message", "showWelcomeMessage", true, "MSUF2_WELCOME", 14, -42, 320)
