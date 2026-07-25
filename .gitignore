@@ -21,6 +21,11 @@ MidnightSimpleUnitFrames/docs/
 MidnightSimpleUnitFrames/.codex-remote-attachments/
 MidnightSimpleUnitFrames/**/.codex-remote-attachments/
 
+# Local planning notes and audit write-ups. Working documents, not product docs:
+# they stay on disk and are never tracked.
+/ASSISTANT_GOAL.md
+/*_AUDIT_*.md
+
 # Local standalone addon worktree; not part of the MSUF repo.
 /MidnightSimpleAuras/
 
