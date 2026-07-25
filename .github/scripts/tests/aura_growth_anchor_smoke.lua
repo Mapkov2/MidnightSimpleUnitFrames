@@ -2152,10 +2152,10 @@ Check(Count(runtimeSource, "EnsureAuraTextOverlay(button) or button") == 1
     and not runtimeSource:find("SyncButtonGeometry", 1, true)
     and not runtimeSource:find("SyncCooldownTextLayering", 1, true),
     "AuraButton initialization regained duplicate overlay or geometry work")
-Check(runtimeSource:find('lane._msufA3DurationFormatter', 1, true)
+Check(runtimeSource:find('lane._msufA3DurationStyle', 1, true)
     and runtimeSource:find('button:SetApplicationCount(count, _applicationCountOptions)', 1, true)
     and runtimeSource:find('button:SetDispelTypeText(symbol, _auraSymbolOptions)', 1, true),
-    "AuraButton initialization no longer reuses formatter and option state")
+    "AuraButton initialization no longer reuses duration-style and option state")
 Check(runtimeSource:find('texture._msufA3IconZoomKey == zoom', 1, true)
     and not runtimeSource:find('local key = tostring(zoom)', 1, true),
     "Aura Icon Zoom regained its per-call string allocation")

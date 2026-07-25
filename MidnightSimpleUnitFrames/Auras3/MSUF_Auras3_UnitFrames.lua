@@ -2161,10 +2161,10 @@ local function ApplyFont(fs, size)
     if useShadow then fs:SetShadowOffset(1, -1) else fs:SetShadowOffset(0, 0) end
 end
 
--- Aura timer text format/color: C-side formatter objects evaluated by
--- Blizzard's DurationTextBinding against the secret aura duration object. MSUF
--- only builds/caches formatter objects when style config changes; there is no
--- addon timer or OnUpdate work per aura.
+-- Aura timer text format/color: a C-side NumericRuleFormatter plus a
+-- DurationTextBinding template, both evaluated by Blizzard against the secret
+-- aura duration object. MSUF only builds/caches them when style config
+-- changes; there is no addon timer or OnUpdate work per aura.
 local _durationFormatterCache
 
 local function NumericRuleFormatRounding(name, fallback)
@@ -2179,37 +2179,67 @@ local function ColorEscape(r, g, b)
     return string.format("|cff%02x%02x%02x", Round(Clamp01(r, 1) * 255), Round(Clamp01(g, 1) * 255), Round(Clamp01(b, 1) * 255))
 end
 
-local AURA_TIMER_MINUTE_SUFFIX_KEY = "MSUF_AURA_TIMER_MINUTE_SUFFIX"
-
 local function EscapeFormatLiteral(text)
     return tostring(text or ""):gsub("%%", "%%%%")
 end
 
-local function LocalizedMinuteSuffix()
+local function LocalizedTimeSuffix(key, fallback)
     local suffix
     if type(MSUF.Translate) == "function" then
-        suffix = MSUF.Translate(AURA_TIMER_MINUTE_SUFFIX_KEY)
-        if suffix == AURA_TIMER_MINUTE_SUFFIX_KEY then suffix = nil end
+        suffix = MSUF.Translate(key)
+        if suffix == key then suffix = nil end
     end
-    if suffix == nil or suffix == "" then suffix = "M" end
+    if suffix == nil or suffix == "" then suffix = fallback end
     return tostring(suffix)
 end
 
-local function BuildAuraDurationFormatter(lane)
+-- The binding template carries the render fallbacks the formatter cannot:
+-- Blizzard's ApplyDurationText only forwards the secret aura duration and
+-- disables the binding when it is zero, so without SetZeroDurationText /
+-- SetExpiredText a recycled pool button keeps the previous aura's countdown on
+-- permanent auras (flasks, food, raid buffs, poisons). The update interval
+-- caps C-side text work at the finest rendered granularity.
+local function BuildAuraDurationBinding(formatter, updateInterval)
+    local durationUtil = _G.C_DurationUtil
+    local createBinding = durationUtil and durationUtil.CreateDurationTextBinding
+    if type(createBinding) ~= "function" then return nil end
+    local ok, binding = pcall(createBinding)
+    if not ok or not binding then return nil end
+    if not (type(binding.SetFormatter) == "function"
+        and type(binding.SetZeroDurationText) == "function"
+        and type(binding.SetExpiredText) == "function"
+        and type(binding.SetUpdateInterval) == "function"
+        and type(binding.SetEnabled) == "function")
+    then
+        return nil
+    end
+    binding:SetFormatter(formatter)
+    binding:SetZeroDurationText("")
+    binding:SetExpiredText("")
+    binding:SetUpdateInterval(updateInterval)
+    binding:SetEnabled(true)
+    return binding
+end
+
+local function BuildAuraDurationStyle(lane)
     -- Compiled lanes are replaced on config/locale invalidation. Cache the
-    -- resolved native formatter there so pool growth does not rebuild its
-    -- signature for every newly initialized AuraButton.
-    local laneFormatter = type(lane) == "table" and lane._msufA3DurationFormatter
-    if laneFormatter ~= nil then return laneFormatter ~= false and laneFormatter or nil end
+    -- resolved style record there so pool growth does not rebuild formatter
+    -- and binding for every newly initialized AuraButton.
+    local cached = type(lane) == "table" and lane._msufA3DurationStyle
+    if cached ~= nil then
+        if cached == false then return nil end
+        return cached
+    end
 
     local general = (_G.MSUF_DB and _G.MSUF_DB.general) or nil
     if not general then return nil end
     local buckets = general.aurasCooldownTextUseBuckets == true
     local decimalSec = ClampNumber(lane and lane.cooldownDecimalSeconds, DEFAULT_SHARED.cooldownDecimalSeconds, 0, 30)
 
-    local C_StringUtil = _G.C_StringUtil
-    if not (C_StringUtil and type(C_StringUtil.CreateNumericRuleFormatter) == "function") then
-        if type(lane) == "table" then lane._msufA3DurationFormatter = false end
+    local stringUtil = _G.C_StringUtil
+    local createFormatter = stringUtil and stringUtil.CreateNumericRuleFormatter
+    if type(createFormatter) ~= "function" then
+        if type(lane) == "table" then lane._msufA3DurationStyle = false end
         return nil
     end
 
@@ -2242,15 +2272,19 @@ local function BuildAuraDurationFormatter(lane)
     if warningSec < urgentSec then warningSec = urgentSec end
     if safeSec < warningSec then safeSec = warningSec end
 
-    local minuteSuffix = LocalizedMinuteSuffix()
-    local minuteFormatSuffix = EscapeFormatLiteral(minuteSuffix)
+    local minuteSuffix = LocalizedTimeSuffix("MSUF_AURA_TIMER_MINUTE_SUFFIX", "M")
+    local hourSuffix = LocalizedTimeSuffix("MSUF_AURA_TIMER_HOUR_SUFFIX", "H")
+    local daySuffix = LocalizedTimeSuffix("MSUF_AURA_TIMER_DAY_SUFFIX", "D")
+    local updateInterval = decimalSec > 0 and 0.1 or 0.25
     local sig = table_concat({
-        "minutes-suffix-color", buckets and 1 or 0, decimalSec, minuteSuffix, sr, sg, sb, wr, wg, wb, ur, ug, ub, urgentSec, warningSec, safeSec,
+        "unit-suffix-binding", buckets and 1 or 0, decimalSec, minuteSuffix, hourSuffix, daySuffix,
+        sr, sg, sb, wr, wg, wb, ur, ug, ub, urgentSec, warningSec, safeSec,
     }, "\030")
-    if _durationFormatterCache and _durationFormatterCache[sig] then
-        local formatter = _durationFormatterCache[sig]
-        if type(lane) == "table" then lane._msufA3DurationFormatter = formatter end
-        return formatter
+    _durationFormatterCache = _durationFormatterCache or {}
+    local shared = _durationFormatterCache[sig]
+    if shared then
+        if type(lane) == "table" then lane._msufA3DurationStyle = shared end
+        return shared
     end
 
     local roundingDown = NumericRuleFormatRounding("Down", 2)
@@ -2269,6 +2303,12 @@ local function BuildAuraDurationFormatter(lane)
         AddThreshold(warningSec)
         AddThreshold(safeSec)
     end
+    -- Unit promotion on Blizzard's own 1 + 1.5x max-interval curve
+    -- (Blizzard_AuraContainerShared's DefaultAuraDurationFormatter): minutes
+    -- run through "90M", hours through "36H", then days. Config thresholds cap
+    -- at 600 s, so they can never collide with these.
+    thresholds[#thresholds + 1] = 5401
+    thresholds[#thresholds + 1] = 129601
     table_sort(thresholds)
 
     local function ColorPrefix(threshold)
@@ -2278,21 +2318,27 @@ local function BuildAuraDurationFormatter(lane)
         if threshold >= urgentSec then return ColorEscape(wr, wg, wb) end
         return ColorEscape(ur, ug, ub)
     end
-    local function BreakpointAt(threshold)
-        local colorPrefix = ColorPrefix(threshold)
+    local function UnitBreakpoint(threshold, div, suffix, colorPrefix)
         local colorSuffix = colorPrefix ~= "" and "|r" or ""
-        if threshold >= 60 then
-            return {
-                threshold = threshold,
-                step = 1,
-                rounding = roundingDown,
-                min = 1,
-                format = colorPrefix .. "%.0f" .. minuteFormatSuffix .. colorSuffix,
-                components = {
-                    { div = 60, step = 1, rounding = roundingDown },
-                },
-            }
-        end
+        return {
+            threshold = threshold,
+            step = 1,
+            rounding = roundingDown,
+            min = 1,
+            format = colorPrefix .. "%.0f" .. EscapeFormatLiteral(suffix) .. colorSuffix,
+            components = {
+                { div = div, step = 1, rounding = roundingDown },
+            },
+        }
+    end
+    local function BreakpointAt(threshold)
+        -- Hour and day lanes sit far above every bucket boundary; they always
+        -- render in the base font color.
+        if threshold >= 129601 then return UnitBreakpoint(threshold, 86400, daySuffix, "") end
+        if threshold >= 5401 then return UnitBreakpoint(threshold, 3600, hourSuffix, "") end
+        local colorPrefix = ColorPrefix(threshold)
+        if threshold >= 60 then return UnitBreakpoint(threshold, 60, minuteSuffix, colorPrefix) end
+        local colorSuffix = colorPrefix ~= "" and "|r" or ""
         local decimalBreakpoint = threshold < decimalSec
         return {
             threshold = threshold,
@@ -2305,15 +2351,19 @@ local function BuildAuraDurationFormatter(lane)
         }
     end
 
-    local formatter = C_StringUtil.CreateNumericRuleFormatter()
+    local formatter = createFormatter()
     for i = 1, #thresholds do
         formatter:AddBreakpoint(BreakpointAt(thresholds[i]))
     end
 
-    _durationFormatterCache = _durationFormatterCache or {}
-    _durationFormatterCache[sig] = formatter
-    if type(lane) == "table" then lane._msufA3DurationFormatter = formatter end
-    return formatter
+    local style = {
+        formatter = formatter,
+        binding = BuildAuraDurationBinding(formatter, updateInterval),
+        updateInterval = updateInterval,
+    }
+    _durationFormatterCache[sig] = style
+    if type(lane) == "table" then lane._msufA3DurationStyle = style end
+    return style
 end
 
 -- Keep the native container backend in its own lexical factory. The compiler
@@ -2327,8 +2377,10 @@ local ApplyLane
 
 -- Blizzard securecopies native AuraButton options on every setter call, so
 -- these cold-path tables are safe to reuse and avoid per-button Lua garbage.
--- Only the duration-text table is temporarily mutated for its formatter.
-local _durationTextOptions = {}
+-- Only the duration-text table is temporarily mutated for its formatter and
+-- binding; the blank zero/expired fallbacks ride along statically for client
+-- generations that read them as plain options.
+local _durationTextOptions = { zeroDurationText = "", expiredText = "" }
 local _durationBarOptions = {}
 local _applicationCountOptions = {}
 local _auraSymbolOptions = { showWhenHarmful = true, showWhenHelpful = false }
@@ -3135,22 +3187,30 @@ local function PrepareAuraButton(button, lane, index)
         if type(duration.SetDrawLayer) == "function" then duration:SetDrawLayer("OVERLAY", 7) end
         PlaceCooldownText(duration, textOverlay, lane)
         duration:Show()
-        -- Hand Blizzard a C-side formatter so the duration text is
-        -- formatted from the secret duration object with no addon cost. MSUF caps
-        -- long buffs at localized whole minutes instead of raw seconds or
-        -- hour/day units.
-        -- PTR 7 duration-text options: the formatter rides `textFormatter`
-        -- (the pre-PTR7 `formatter` key is silently dropped). Smooth C-side
-        -- color curves stay OUT until DurationTextBindingColorOptions is
-        -- source-verified: no pcall probing in initializeFrame, ever.
-        local formatter = BuildAuraDurationFormatter(lane)
-        if formatter then
-            _durationTextOptions.textFormatter = formatter
+        -- Hand Blizzard a C-side formatter plus a duration-text binding
+        -- template so the text renders from the secret duration object with no
+        -- addon cost. Long durations promote to hours/days on Blizzard's own
+        -- curve, and the binding's blank zero/expired fallbacks keep recycled
+        -- pool buttons from showing the previous aura's stale countdown on
+        -- permanent auras (flasks, food, raid buffs).
+        -- PTR 7 duration-text options: the formatter rides `textFormatter` and
+        -- the template rides `binding`; the pre-PTR7 scalar keys stay set too
+        -- so a client on the older contract reads the same style. Smooth
+        -- C-side color curves stay OUT until DurationTextBindingColorOptions
+        -- is source-verified: no pcall probing in initializeFrame, ever.
+        local style = BuildAuraDurationStyle(lane)
+        if style then
+            _durationTextOptions.textFormatter = style.formatter
+            _durationTextOptions.formatter = style.formatter
+            _durationTextOptions.binding = style.binding
+            _durationTextOptions.updateInterval = style.updateInterval
             button:SetDurationText(duration, _durationTextOptions)
             _durationTextOptions.textFormatter = nil
+            _durationTextOptions.formatter = nil
+            _durationTextOptions.binding = nil
+            _durationTextOptions.updateInterval = nil
         else
-            _durationTextOptions.textFormatter = nil
-            button:SetDurationText(duration)
+            button:SetDurationText(duration, _durationTextOptions)
         end
     else
         button:ClearDurationText()
