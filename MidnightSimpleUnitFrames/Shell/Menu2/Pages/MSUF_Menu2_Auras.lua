@@ -20,6 +20,11 @@ local MSUF_SetIconTexture = _G.MSUF_SetIconTexture
 local FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local TEX_W8 = "Interface\\Buttons\\WHITE8X8"
 local AURA_PREVIEW_EDGE_OPTS = { linesKey = "edge", maxEdgeSize = 1, texture = TEX_W8, color = function() return 1, 1, 1, 0.95 end }
+-- Icon-style art shared with the runtime. Parked on M rather than a file local:
+-- this chunk is at Lua 5.1's 200 upvalue ceiling, so new file-scope locals here
+-- break the whole page.
+M.AURA_SHADOW_TEXTURE = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames")
+    .. "\\Media\\Borders\\msuf_aura_border_shadow.tga"
 local floor, ceil, max, min, abs = math.floor, math.ceil, math.max, math.min, math.abs
 local tonumber, tostring, type, ipairs, pairs = tonumber, tostring, type, ipairs, pairs
 local table_concat = table.concat
@@ -1109,10 +1114,13 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
     }
     -- Shared icon style (border/shadow) is one global block; the preview
     -- mirrors it for every scope and lane, matching the live runtime stamp.
+    -- A scope that opted out previews unstyled icons, matching its frames.
+    local styleScopeOn = type(Model.IconStyleScopeEnabled) ~= "function" or Model.IconStyleScopeEnabled(scope)
     if type(Model.ReadBool) == "function" then
-        cfg.styleBorderEnabled = Model.ReadBool("shared", "styleBorderEnabled", false) == true
-        cfg.styleShadowEnabled = Model.ReadBool("shared", "styleShadowEnabled", false) == true
+        cfg.styleBorderEnabled = styleScopeOn and Model.ReadBool("shared", "styleBorderEnabled", false) == true
+        cfg.styleShadowEnabled = styleScopeOn and Model.ReadBool("shared", "styleShadowEnabled", false) == true
     end
+    cfg.styleBorderStyle = type(Model.ReadBorderStyle) == "function" and Model.ReadBorderStyle("shared") or "SOLID"
     if type(Model.ReadNumber) == "function" then
         cfg.styleBorderThickness = Model.ReadNumber("shared", "styleBorderThickness", 1, 1, 8)
         cfg.styleShadowSize = Model.ReadNumber("shared", "styleShadowSize", 4, 1, 16)
@@ -1340,59 +1348,74 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
         icon.durationBar:Hide()
         icon.dispelBorder:Hide()
         if icon.msufStyleBorder then icon.msufStyleBorder:Hide() end
-        if icon.msufStyleShadowIn then icon.msufStyleShadowIn:Hide() end
-        if icon.msufStyleShadowOut then icon.msufStyleShadowOut:Hide() end
+        if icon.msufStyleBorderPieces then MSUF.BorderStyles.Hide(icon.msufStyleBorderPieces) end
+        if icon.msufStyleShadow then MSUF.BorderStyles.Hide(icon.msufStyleShadow) end
     end
-    -- Mirrors the runtime's LayoutButton icon style: BORDER-layer ring below
-    -- the icon plus a two-step BACKGROUND shadow.
+    -- Mirrors the runtime's icon style: a BACKGROUND(-7) soft shadow band and a
+    -- BORDER(-1) ring that is either the flat pixel quad (Solid) or an edgeFile
+    -- drawn by the shared 8-piece renderer.
     local function ApplyPreviewIconStyle(icon, cfg, barOnly)
+        local B = MSUF.BorderStyles
         local border = icon.msufStyleBorder
+        local borderPieces = icon.msufStyleBorderPieces
+        local texture = B and cfg.styleBorderStyle and B.Resolve(cfg.styleBorderStyle) or nil
         if cfg.styleBorderEnabled == true and not barOnly then
-            if not border then
-                border = icon:CreateTexture(nil, "BORDER", nil, -1)
-                border:SetTexture("Interface\\Buttons\\WHITE8X8")
-                icon.msufStyleBorder = border
-            end
-            local t = cfg.styleBorderThickness or 1
             local c = cfg.styleBorderColor
-            border:ClearAllPoints()
-            border:SetPoint("TOPLEFT", icon, "TOPLEFT", -t, t)
-            border:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", t, -t)
-            border:SetVertexColor(c and c[1] or 0, c and c[2] or 0, c and c[3] or 0, c and c[4] or 1)
-            border:Show()
-        elseif border then
-            border:Hide()
+            local cr, cg, cb, ca = c and c[1] or 0, c and c[2] or 0, c and c[3] or 0, c and c[4] or 1
+            local t = cfg.styleBorderThickness or 1
+            if texture then
+                if border then border:Hide() end
+                -- Same split as the runtime: inner styles shade the icon from
+                -- ARTWORK(7) on top, outer styles frame it from BORDER(-1).
+                local inner = B.Placement(cfg.styleBorderStyle) == "inner"
+                local edge = B.EdgeSize(cfg.styleBorderStyle, t)
+                local inset = 0
+                if inner then
+                    edge = max(1, min(edge, floor(cfg.size * 0.3)))
+                    inset = edge * 0.5
+                end
+                if borderPieces and icon.msufStyleBorderInner ~= inner then
+                    B.Hide(borderPieces)
+                    borderPieces = nil
+                end
+                if not borderPieces then
+                    borderPieces = B.Create(icon, inner and "ARTWORK" or "BORDER", inner and 7 or -1, texture)
+                    icon.msufStyleBorderPieces = borderPieces
+                    icon.msufStyleBorderInner = inner
+                else
+                    B.SetTexture(borderPieces, texture)
+                end
+                B.Apply(borderPieces, icon, edge, cfg.size, cfg.size, cr, cg, cb, ca, inset)
+            else
+                if borderPieces then B.Hide(borderPieces) end
+                if not border then
+                    border = icon:CreateTexture(nil, "BORDER", nil, -1)
+                    border:SetTexture("Interface\\Buttons\\WHITE8X8")
+                    icon.msufStyleBorder = border
+                end
+                border:ClearAllPoints()
+                border:SetPoint("TOPLEFT", icon, "TOPLEFT", -t, t)
+                border:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", t, -t)
+                border:SetVertexColor(cr, cg, cb, ca)
+                border:Show()
+            end
+        else
+            if border then border:Hide() end
+            if borderPieces then B.Hide(borderPieces) end
         end
-        local inner = icon.msufStyleShadowIn
-        local outer = icon.msufStyleShadowOut
-        if cfg.styleShadowEnabled == true and not barOnly then
-            if not inner then
-                inner = icon:CreateTexture(nil, "BACKGROUND", nil, -6)
-                inner:SetTexture("Interface\\Buttons\\WHITE8X8")
-                icon.msufStyleShadowIn = inner
-                outer = icon:CreateTexture(nil, "BACKGROUND", nil, -7)
-                outer:SetTexture("Interface\\Buttons\\WHITE8X8")
-                icon.msufStyleShadowOut = outer
+        local shadow = icon.msufStyleShadow
+        if cfg.styleShadowEnabled == true and not barOnly and B then
+            if not shadow then
+                shadow = B.Create(icon, "BACKGROUND", -7, M.AURA_SHADOW_TEXTURE)
+                icon.msufStyleShadow = shadow
             end
             local base = cfg.styleBorderEnabled == true and (cfg.styleBorderThickness or 1) or 0
-            local size = cfg.styleShadowSize or 4
-            local innerE = base + max(1, floor((size * 0.5) + 0.5))
-            local outerE = base + size
+            local extent = (cfg.styleShadowSize or 4) + base
             local c = cfg.styleShadowColor
-            local cr, cg, cb, ca = c and c[1] or 0, c and c[2] or 0, c and c[3] or 0, c and c[4] or 0.8
-            inner:ClearAllPoints()
-            inner:SetPoint("TOPLEFT", icon, "TOPLEFT", -innerE, innerE)
-            inner:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", innerE, -innerE)
-            inner:SetVertexColor(cr, cg, cb, ca * 0.6)
-            inner:Show()
-            outer:ClearAllPoints()
-            outer:SetPoint("TOPLEFT", icon, "TOPLEFT", -outerE, outerE)
-            outer:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", outerE, -outerE)
-            outer:SetVertexColor(cr, cg, cb, ca * 0.3)
-            outer:Show()
-        elseif inner then
-            inner:Hide()
-            if outer then outer:Hide() end
+            B.Apply(shadow, icon, extent * 2, cfg.size, cfg.size,
+                c and c[1] or 0, c and c[2] or 0, c and c[3] or 0, c and c[4] or 0.8)
+        elseif shadow then
+            B.Hide(shadow)
         end
     end
     local function RenderPreviewIcon(icon, index, cfg, isBuffIcon, forceText)
@@ -1907,15 +1930,38 @@ local function BuildUnitStyle(ctx, b, scope)
     -- block: writes apply to every aura lane on all frames (Buffs, Debuffs,
     -- Custom containers incl. the Dot tracker), so after the scope apply we
     -- also request a global aura refresh.
-    local iconStyle = b:CollapsibleSection(baseId .. "_icon_style", "Icon Border & Shadow (all lanes)", 264, false)
+    -- "shared" defines the block; it is not a frame scope, so it has no opt-out
+    -- row and the section stays at its original height there.
+    -- Detail controls gray out while their master toggle is off, matching the
+    -- rest of the aura style pages. Collected here so both the page refresher
+    -- and the icon-style writes can re-apply the gate without a page rebuild.
+    local iconStyleGates = { border = {}, shadow = {} }
+    local iconStyleScoped = scope ~= "shared" and type(Model.IconStyleScopeEnabled) == "function"
+    local iconStyle = b:CollapsibleSection(baseId .. "_icon_style", "Icon Border & Shadow (all lanes)",
+        320 + (iconStyleScoped and 38 or 0), false)
     local isw = BodyWidth(iconStyle)
     local styleCol = max(140, floor((isw - 68) / 2))
     local styleGap = 10
+    -- Re-runs the master-toggle gate. Assigned once the controls below exist;
+    -- called from every icon-style write so flipping a toggle grays its detail
+    -- controls immediately instead of waiting for a page rebuild.
+    function iconStyleGates.Apply(editable)
+        if type(W.SetControlsEnabled) ~= "function" then return end
+        if editable == nil then
+            editable = unit == "shared" or not Model.UseSharedVisuals(unit)
+        end
+        local function On(key)
+            return editable and (type(Model.ReadBool) == "function" and Model.ReadBool(unit, key, false)) == true
+        end
+        W.SetControlsEnabled(iconStyleGates.border, On("styleBorderEnabled"))
+        W.SetControlsEnabled(iconStyleGates.shadow, On("styleShadowEnabled"))
+    end
     local function IconStyleWrite(key, value, reason)
         if type(Model.WriteValue) == "function" then Model.WriteValue(unit, key, value) end
         ApplyUnit(ctx, unit, reason)
         local runtime = _G.MSUF_Auras3
         if runtime and type(runtime.RequestApply) == "function" then runtime.RequestApply(reason) end
+        iconStyleGates.Apply()
         RefreshStylePreview()
     end
     local function IconStyleReadColor(colorKey, defaultColor)
@@ -2000,13 +2046,50 @@ local function BuildUnitStyle(ctx, b, scope)
         })
     end
     IconStyleSwitch("Icon Border", -34, "styleBorderEnabled", "AURAS3_ICON_STYLE_BORDER")
-    IconStyleSlider("Border Thickness", 0, -66, 1, 8, "styleBorderThickness", 1, "AURAS3_ICON_STYLE_BORDER")
-    IconStyleAlphaSlider("Border Alpha (%)", 1, -66, "styleBorderColor", ICON_STYLE_BORDER_DEFAULT, "AURAS3_ICON_STYLE_BORDER_COLOR")
-    IconStyleSwitch("Icon Shadow", -122, "styleShadowEnabled", "AURAS3_ICON_STYLE_SHADOW")
-    IconStyleSlider("Shadow Size", 0, -154, 1, 16, "styleShadowSize", 4, "AURAS3_ICON_STYLE_SHADOW")
-    IconStyleAlphaSlider("Shadow Alpha (%)", 1, -154, "styleShadowColor", ICON_STYLE_SHADOW_DEFAULT, "AURAS3_ICON_STYLE_SHADOW_COLOR")
+    local borderStyleDropdown = AddStyleControl(BindDropdown(ctx, iconStyle, "Border Style", 24, -70,
+        Model.BorderStyleValues, isw - 48,
+        function() return Model.ReadBorderStyle(unit) end,
+        function(v)
+            Model.WriteBorderStyle(unit, v)
+            ApplyUnit(ctx, unit, "AURAS3_ICON_STYLE_BORDER")
+            local runtime = _G.MSUF_Auras3
+            if runtime and type(runtime.RequestApply) == "function" then runtime.RequestApply("AURAS3_ICON_STYLE_BORDER") end
+            RefreshStylePreview()
+        end,
+        AuraControlMeta(ctx, "style.shared.icon-style.border-style")))
+    AddTooltip(borderStyleDropdown, "Icon border style",
+        "Solid draws a crisp pixel ring around the icon. Soft Glow adds a halo, and Shadow shades the icon's own edges. The Blizzard entries and any LibSharedMedia border are drawn as edge art. Thickness scales the edge.")
+    iconStyleGates.border[1] = borderStyleDropdown
+    iconStyleGates.border[2] = IconStyleSlider("Border Thickness", 0, -122, 1, 8, "styleBorderThickness", 1, "AURAS3_ICON_STYLE_BORDER")
+    iconStyleGates.border[3] = IconStyleAlphaSlider("Border Alpha (%)", 1, -122, "styleBorderColor", ICON_STYLE_BORDER_DEFAULT, "AURAS3_ICON_STYLE_BORDER_COLOR")
+    IconStyleSwitch("Icon Shadow", -178, "styleShadowEnabled", "AURAS3_ICON_STYLE_SHADOW")
+    iconStyleGates.shadow[1] = IconStyleSlider("Shadow Size", 0, -210, 1, 16, "styleShadowSize", 4, "AURAS3_ICON_STYLE_SHADOW")
+    iconStyleGates.shadow[2] = IconStyleAlphaSlider("Shadow Alpha (%)", 1, -210, "styleShadowColor", ICON_STYLE_SHADOW_DEFAULT, "AURAS3_ICON_STYLE_SHADOW_COLOR")
     -- PTR 7 native flow padding: inner inset between the lane box and icons.
-    IconStyleSlider("Lane Padding", 0, -196, 0, 16, "stylePadding", 0, "AURAS3_LANE_PADDING")
+    IconStyleSlider("Lane Padding", 0, -252, 0, 16, "stylePadding", 0, "AURAS3_LANE_PADDING")
+    if iconStyleScoped then
+        -- Per-scope opt-out. The block above stays global; this only decides
+        -- whether THIS frame scope renders it, resolved once while a lane is
+        -- compiled, so an excluded scope costs nothing at all at runtime.
+        local scopeSwitch = AddStyleControl(BindSwitch(ctx, iconStyle,
+            M.Format("Use icon border & shadow on %s frames", ScopeLabel(scope)), 24, -294, isw - 48,
+            function() return Model.IconStyleScopeEnabled(scope) end,
+            function(v)
+                if Model.SetIconStyleScopeEnabled(scope, v == true) then
+                    ApplyUnit(ctx, unit, "AURAS3_ICON_STYLE_SCOPE")
+                    local runtime = _G.MSUF_Auras3
+                    if runtime and type(runtime.RequestApply) == "function" then runtime.RequestApply("AURAS3_ICON_STYLE_SCOPE") end
+                end
+                RefreshStylePreview()
+            end,
+            -- The scope belongs in the identity: the styling block itself is
+            -- shared, but this switch is per-scope and its label names the
+            -- scope, so one shared ID would collapse several differently
+            -- labelled controls into one and break schema generation.
+            AuraControlMeta(ctx, "style.scope." .. AuraCatalogToken(scope) .. ".icon-style.enabled")))
+        AddTooltip(scopeSwitch, "Icon border and shadow on this scope",
+            "Turn this off to leave this frame's aura icons unstyled while other frames keep the shared border and shadow.")
+    end
 
     local stack = b:CollapsibleSection(baseId .. "_stack", "Stack Count", 296, false)
     if W.AttachContextColorShortcut then
@@ -2174,6 +2257,9 @@ local function BuildUnitStyle(ctx, b, scope)
     M.TrackRefresh(ctx, function()
         local editable = unit == "shared" or not Model.UseSharedVisuals(unit)
         W.SetControlsEnabled(styleControls, editable)
+        -- Must come after the blanket pass above, which would otherwise
+        -- re-enable detail controls whose master toggle is off.
+        iconStyleGates.Apply(editable)
         if W.SetCollapsibleBadges then
             local function ToggleBadge(label, enabled)
                 return { text = label .. (enabled and " On" or " Off"), kind = enabled and "accent" or "muted", showWhenClosed = true }
@@ -2256,6 +2342,28 @@ local function BuildGroupStyle(ctx, b, scope)
                 RefreshStylePreview()
             end,
             AuraControlMeta(ctx, "group-style.lane." .. AuraCatalogToken(lane) .. ".dispel-border-mode"))
+    end
+
+    -- Group frames render the same shared icon border/shadow as unit frames.
+    -- The block itself is edited on the Shared scope; group scopes only choose
+    -- whether they take part, which is resolved once per lane compile.
+    if type(Model.IconStyleScopeEnabled) == "function" then
+        local iconStyle = b:CollapsibleSection(baseId .. "_icon_style", "Icon Border & Shadow (all lanes)", 108, false)
+        local isw = BodyWidth(iconStyle)
+        local scopeSwitch = BindSwitch(ctx, iconStyle,
+            M.Format("Use icon border & shadow on %s frames", ScopeLabel(scope)), 24, -44, isw - 48,
+            function() return Model.IconStyleScopeEnabled(scope) end,
+            function(v)
+                if Model.SetIconStyleScopeEnabled(scope, v == true) then
+                    QueueGroupScope(scope, "visual")
+                    local runtime = _G.MSUF_Auras3
+                    if runtime and type(runtime.RequestApply) == "function" then runtime.RequestApply("AURAS3_ICON_STYLE_SCOPE") end
+                end
+                RefreshStylePreview()
+            end,
+            AuraControlMeta(ctx, "group-style.scope." .. AuraCatalogToken(scope) .. ".icon-style.enabled"))
+        AddTooltip(scopeSwitch, "Icon border and shadow on this scope",
+            "Turn this off to leave these group aura icons unstyled. Edit the border style, thickness, shadow and colors on Aura Style > Shared.")
     end
 
     local cooldown = b:CollapsibleSection(baseId .. "_cooldown", "Cooldown Text", 336, true)

@@ -141,6 +141,7 @@ local DEFAULT_SHARED = {
     showWeaponEnchants = false,
     stylePadding = 0,
     styleBorderEnabled = false,
+    styleBorderStyle = "SOLID",
     styleBorderThickness = 1,
     styleBorderColor = { 0, 0, 0, 1 },
     styleShadowEnabled = false,
@@ -330,6 +331,7 @@ local STYLE_SHARED_LAYOUT_KEYS = {
     showWeaponEnchants = true,
     stylePadding = true,
     styleBorderEnabled = true,
+    styleBorderStyle = true,
     styleBorderThickness = true,
     styleBorderColor = true,
     styleShadowEnabled = true,
@@ -1054,8 +1056,14 @@ local function SharedIconStyle()
     local _, shared = EnsureDB()
     local bc = type(shared.styleBorderColor) == "table" and shared.styleBorderColor or DEFAULT_SHARED.styleBorderColor
     local sc = type(shared.styleShadowColor) == "table" and shared.styleShadowColor or DEFAULT_SHARED.styleShadowColor
+    local BorderStyles = MSUF.BorderStyles
+    local borderStyle = BorderStyles and BorderStyles.Normalize(shared.styleBorderStyle) or "SOLID"
     local style = {
         borderEnabled = shared.styleBorderEnabled == true,
+        borderStyle = borderStyle,
+        -- nil for SOLID (and for a style whose media went missing), which keeps
+        -- the flat single-quad ring as the fallback everywhere downstream.
+        borderTexture = BorderStyles and BorderStyles.Resolve(borderStyle) or nil,
         borderThickness = Round(ClampNumber(shared.styleBorderThickness, DEFAULT_SHARED.styleBorderThickness, 1, 8)),
         borderR = Clamp01(bc[1] or bc.r, 0),
         borderG = Clamp01(bc[2] or bc.g, 0),
@@ -1068,8 +1076,13 @@ local function SharedIconStyle()
         shadowB = Clamp01(sc[3] or sc.b, 0),
         shadowA = Clamp01(sc[4] or sc.a, 0.8),
     }
+    style.borderEdge = style.borderTexture and BorderStyles.EdgeSize(borderStyle, style.borderThickness) or nil
+    -- "inner" styles shade the icon from on top; "outer" ones frame it from
+    -- behind. The renderer needs this before it creates the textures.
+    style.borderPlacement = style.borderTexture and BorderStyles.Placement(borderStyle) or nil
     style.signature = table_concat({
-        style.borderEnabled and "B" or "b", style.borderThickness,
+        style.borderEnabled and "B" or "b", style.borderStyle, tostring(style.borderPlacement),
+        tostring(style.borderTexture), style.borderThickness,
         style.borderR, style.borderG, style.borderB, style.borderA,
         style.shadowEnabled and "S" or "s", style.shadowSize,
         style.shadowR, style.shadowG, style.shadowB, style.shadowA,
@@ -1078,9 +1091,43 @@ local function SharedIconStyle()
     return style
 end
 
-local function FinalizeLane(lane)
+-- Scopes that opted out of the shared icon style get this instead, so their
+-- lanes carry a real (cacheable) style object whose signature differs from the
+-- live one -- containers still rebuild correctly when the opt-out is toggled.
+local ICON_STYLE_OFF = {
+    borderEnabled = false,
+    shadowEnabled = false,
+    borderStyle = "SOLID",
+    borderThickness = 1,
+    shadowSize = 0,
+    signature = "off",
+}
+
+--- Aura scope key for a runtime unit: the four unit-frame scopes the Auras page
+--- exposes, with every boss token folded onto "boss". Group lanes pass their
+--- group kind ("party"/"raid"/"mythicraid") in explicitly instead.
+local function IconStyleScope(unit)
+    if type(unit) ~= "string" then return nil end
+    if unit:match("^boss%d+$") then return "boss" end
+    return unit
+end
+
+local _iconStyleOffScopes, _iconStyleOffScopesGen
+local function IconStyleForScope(scope)
+    local gen = A3._runtimeConfigGen or 1
+    if _iconStyleOffScopesGen ~= gen then
+        local _, shared = EnsureDB()
+        local disabled = type(shared) == "table" and shared.styleScopeDisabled or nil
+        _iconStyleOffScopes = type(disabled) == "table" and disabled or nil
+        _iconStyleOffScopesGen = gen
+    end
+    if scope and _iconStyleOffScopes and _iconStyleOffScopes[scope] == true then return ICON_STYLE_OFF end
+    return SharedIconStyle()
+end
+
+local function FinalizeLane(lane, scope)
     if lane then
-        lane.iconStyle = SharedIconStyle()
+        lane.iconStyle = IconStyleForScope(scope or IconStyleScope(lane.unit))
         lane._msufA3TrackingSignature = LaneTrackingSignature(lane)
         lane._msufA3StructuralSignature = LaneStructuralSignature(lane)
         lane._msufA3LayoutSignature = LaneLayoutSignature(lane)
@@ -1341,7 +1388,7 @@ local function CompileUnitLane(unit, shared, layout, filtersRoot, kind, candidat
     })
 end
 
-local function CompileGroupLane(unit, source, kind)
+local function CompileGroupLane(unit, source, kind, groupKind)
     local spec = GROUP_LANE_SPECS[kind]
     if not (spec and type(source) == "table") then return nil end
     local candidateFilters, candidateFilterSignature
@@ -1434,7 +1481,7 @@ local function CompileGroupLane(unit, source, kind)
         stackSize = ClampNumber(source[spec.stackSizeKey] or source.stackSize, DEFAULT_SHARED.stackTextSize, 6, 40),
         stackX = ClampNumber(source[spec.stackXKey] or source.stackX, 0, -2000, 2000),
         stackY = ClampNumber(source[spec.stackYKey] or source.stackY, 0, -2000, 2000),
-    })
+    }, groupKind)
 end
 
 local function InvalidateUnitRuntimeConfig(unit)
@@ -1874,6 +1921,9 @@ local function ResolveGroupFrameConfig(frame, unit)
     local spellSource = spec and spec.spellIndicators
     local cornerSource = spec and spec.cornerIndicators
     local partyRangeGate = frame._msufGFKind == "party" and frame._msufGFIsPreviewFrame ~= true
+    -- The group kind doubles as the aura scope key for the shared icon style
+    -- opt-out; party/raid/mythicraid can each be excluded independently.
+    local groupKind = frame._msufGFKind
     local gen = A3._runtimeConfigGen or 1
     local visualGen = A3._nativeVisualGen or 0
     local cached = frame._msufA3NativeGroupConfig
@@ -1890,7 +1940,7 @@ local function ResolveGroupFrameConfig(frame, unit)
     -- tables without changing the result. Share that cold-path config on the spec;
     -- live frames with distinct unit tokens still receive distinct entries.
     local sharedCache = spec and spec._msufA3NativeGroupConfigCache
-    local sharedKey = tostring(unit) .. (partyRangeGate and "\031party" or "\031shared")
+    local sharedKey = tostring(unit) .. "\031" .. tostring(groupKind) .. (partyRangeGate and "\031party" or "\031shared")
     local shared = sharedCache and sharedCache[sharedKey]
     if shared and shared.source == source and shared.spellSource == spellSource
         and shared.cornerSource == cornerSource and shared.gen == gen and shared.visualGen == visualGen
@@ -1917,16 +1967,16 @@ local function ResolveGroupFrameConfig(frame, unit)
         _msufA3VisualGen = visualGen,
         _msufA3Source = source,
     }
-    local buff = type(source) == "table" and CompileGroupLane(unit, source, "buff") or nil
+    local buff = type(source) == "table" and CompileGroupLane(unit, source, "buff", groupKind) or nil
     local combinedSpellSource = BuildGroupSpellIndicatorSource(spellSource, cornerSource)
     local spellIndicatorRoot = type(unit) == "string" and unit ~= ""
         and SpellIndicatorsRuntime.CompileSlots(unit, combinedSpellSource, buff) or nil
     cfg.spellIndicators = spellIndicatorRoot
     cfg.enabled = spellIndicatorRoot and spellIndicatorRoot.enabled == true or false
     if type(source) == "table" and type(unit) == "string" and unit ~= "" and source.enabled ~= false then
-        local trackedBuff = CompileGroupLane(unit, source, "trackedBuff")
-        local debuff = CompileGroupLane(unit, source, "debuff")
-        local external = CompileGroupLane(unit, source, "external")
+        local trackedBuff = CompileGroupLane(unit, source, "trackedBuff", groupKind)
+        local debuff = CompileGroupLane(unit, source, "debuff", groupKind)
+        local external = CompileGroupLane(unit, source, "external", groupKind)
         cfg.lanes.buff = buff
         cfg.lanes.trackedBuff = trackedBuff
         cfg.lanes.debuff = debuff
@@ -2616,6 +2666,98 @@ local function LayoutAuraBorder(button, border, lane)
     border:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", pad, -pad)
 end
 
+-- Shared icon style rendering. Both the border and the shadow are edge bands
+-- straddling the icon rect, drawn as eight plain textures by
+-- MSUF.BorderStyles -- no BackdropTemplate child frame, so the aura button
+-- keeps its draw layers and cannot pick up frame protection from a child.
+local ICON_SHADOW_TEXTURE = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames")
+    .. "\\Media\\Borders\\msuf_aura_border_shadow.tga"
+
+--- Soft drop shadow behind the icon. `shadowSize` is the visible extent in
+--- pixels, so the band is twice that: its inner half hides behind the icon and
+--- the whole falloff lands outside.
+local function ApplyIconStyleShadow(button, style, size)
+    local pieces = button._msufA3StyleShadow
+    if not (style and style.shadowEnabled) then
+        if pieces then MSUF.BorderStyles.Hide(pieces) end
+        return
+    end
+    local BorderStyles = MSUF.BorderStyles
+    if not BorderStyles then return end
+    if not pieces then
+        pieces = BorderStyles.Create(button, "BACKGROUND", -7, ICON_SHADOW_TEXTURE)
+        button._msufA3StyleShadow = pieces
+    end
+    -- The shadow starts outside the border ring when both are on, so a thick
+    -- ring never eats the halo.
+    local base = (style.borderEnabled and style.borderThickness or 0)
+    local extent = style.shadowSize + base
+    BorderStyles.Apply(pieces, button, extent * 2, size, size,
+        style.shadowR, style.shadowG, style.shadowB, style.shadowA)
+end
+
+--- Largest inner band we allow, as a share of the icon. An "inner" style shades
+--- the artwork itself, so an unclamped thickness would black the icon out.
+--- 0.3 matches the reach of the classic Masque shadow skins, whose dark band
+--- covers a little under a third of the icon.
+local ICON_INNER_BAND_MAX = 0.3
+
+--- Border ring. SOLID keeps the original single stretched quad (one texture,
+--- pixel-crisp at any thickness); every other style is an edgeFile band.
+---
+--- Outer styles frame the icon: the band straddles its edge and draws behind
+--- it at BORDER(-1). Inner styles (Shadow) shade the icon instead: the band
+--- sits wholly inside and draws on top at ARTWORK(7), above the icon but still
+--- below the OVERLAY dispel border.
+local function ApplyIconStyleBorder(button, style, size)
+    local flat = button._msufA3StyleBorder
+    local pieces = button._msufA3StyleBorderPieces
+    if not (style and style.borderEnabled) then
+        if flat then flat:Hide() end
+        if pieces then MSUF.BorderStyles.Hide(pieces) end
+        return
+    end
+    local texture = style.borderTexture
+    if texture and MSUF.BorderStyles then
+        if flat then flat:Hide() end
+        local inner = style.borderPlacement == "inner"
+        local edge = style.borderEdge or 8
+        local inset = 0
+        if inner then
+            edge = math_max(1, math_min(edge, math_floor(size * ICON_INNER_BAND_MAX)))
+            inset = edge * 0.5
+        end
+        -- The draw layer is baked into the textures, so a placement change has
+        -- to rebuild them rather than just re-anchor.
+        if pieces and button._msufA3StyleBorderInner ~= inner then
+            MSUF.BorderStyles.Hide(pieces)
+            pieces = nil
+        end
+        if not pieces then
+            pieces = MSUF.BorderStyles.Create(button, inner and "ARTWORK" or "BORDER", inner and 7 or -1, texture)
+            button._msufA3StyleBorderPieces = pieces
+            button._msufA3StyleBorderInner = inner
+        else
+            MSUF.BorderStyles.SetTexture(pieces, texture)
+        end
+        MSUF.BorderStyles.Apply(pieces, button, edge, size, size,
+            style.borderR, style.borderG, style.borderB, style.borderA, inset)
+        return
+    end
+    if pieces then MSUF.BorderStyles.Hide(pieces) end
+    if not flat then
+        flat = button:CreateTexture(nil, "BORDER", nil, -1)
+        flat:SetTexture("Interface\\Buttons\\WHITE8X8")
+        button._msufA3StyleBorder = flat
+    end
+    local inset = style.borderThickness
+    flat:ClearAllPoints()
+    flat:SetPoint("TOPLEFT", button, "TOPLEFT", -inset, inset)
+    flat:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", inset, -inset)
+    flat:SetVertexColor(style.borderR, style.borderG, style.borderB, style.borderA)
+    flat:Show()
+end
+
 local function LayoutDurationBar(button, bar, lane)
     if not (button and bar and lane) then return end
     local height = ClampNumber(lane.durationBarHeight, DEFAULT_SHARED.durationBarHeight, 1, math_max(1, lane.size or DEFAULT_SHARED.iconSize))
@@ -3074,56 +3216,16 @@ local function PrepareAuraButton(button, lane, index)
         if button._msufA3AuraSymbol and button._msufA3AuraSymbol.Hide then button._msufA3AuraSymbol:Hide() end
     end
 
-    -- Shared icon style: static border ring + two-step soft shadow. All
-    -- regions are button-owned textures created once here (initializeFrame);
-    -- draw order BACKGROUND(-7,-6) shadow < BORDER(-1) ring < ARTWORK icon <
-    -- OVERLAY dispel border, so the dispel-type border overdraws the static
-    -- ring for typed debuffs.
+    -- Shared icon style: border ring + soft drop shadow. All regions are
+    -- button-owned textures created once here (initializeFrame); draw order
+    -- BACKGROUND(-7) shadow < BORDER(-1) ring < ARTWORK icon < OVERLAY dispel
+    -- border, so the dispel-type border overdraws the static ring for typed
+    -- debuffs. Scopes that opted out arrive with ICON_STYLE_OFF and take the
+    -- hide branches below.
     local style = lane.iconStyle
-    local styleBorder = button._msufA3StyleBorder
-    if style and style.borderEnabled then
-        if not styleBorder then
-            styleBorder = button:CreateTexture(nil, "BORDER", nil, -1)
-            styleBorder:SetTexture("Interface\\Buttons\\WHITE8X8")
-            button._msufA3StyleBorder = styleBorder
-        end
-        local inset = style.borderThickness
-        styleBorder:ClearAllPoints()
-        styleBorder:SetPoint("TOPLEFT", button, "TOPLEFT", -inset, inset)
-        styleBorder:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", inset, -inset)
-        styleBorder:SetVertexColor(style.borderR, style.borderG, style.borderB, style.borderA)
-        styleBorder:Show()
-    elseif styleBorder then
-        styleBorder:Hide()
-    end
-    local shadowInner = button._msufA3StyleShadowInner
-    local shadowOuter = button._msufA3StyleShadowOuter
-    if style and style.shadowEnabled then
-        if not shadowInner then
-            shadowInner = button:CreateTexture(nil, "BACKGROUND", nil, -6)
-            shadowInner:SetTexture("Interface\\Buttons\\WHITE8X8")
-            button._msufA3StyleShadowInner = shadowInner
-            shadowOuter = button:CreateTexture(nil, "BACKGROUND", nil, -7)
-            shadowOuter:SetTexture("Interface\\Buttons\\WHITE8X8")
-            button._msufA3StyleShadowOuter = shadowOuter
-        end
-        local base = (style.borderEnabled and style.borderThickness or 0)
-        local innerExtent = base + math_max(1, math_floor((style.shadowSize * 0.5) + 0.5))
-        local outerExtent = base + style.shadowSize
-        shadowInner:ClearAllPoints()
-        shadowInner:SetPoint("TOPLEFT", button, "TOPLEFT", -innerExtent, innerExtent)
-        shadowInner:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", innerExtent, -innerExtent)
-        shadowInner:SetVertexColor(style.shadowR, style.shadowG, style.shadowB, style.shadowA * 0.6)
-        shadowInner:Show()
-        shadowOuter:ClearAllPoints()
-        shadowOuter:SetPoint("TOPLEFT", button, "TOPLEFT", -outerExtent, outerExtent)
-        shadowOuter:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", outerExtent, -outerExtent)
-        shadowOuter:SetVertexColor(style.shadowR, style.shadowG, style.shadowB, style.shadowA * 0.3)
-        shadowOuter:Show()
-    elseif shadowInner then
-        shadowInner:Hide()
-        if shadowOuter then shadowOuter:Hide() end
-    end
+    local size = lane.size or 0
+    ApplyIconStyleShadow(button, style, size)
+    ApplyIconStyleBorder(button, style, size)
 
     -- PTR 7 aura tooltips are wired natively: the AuraButton intrinsic ships a
     -- default tooltipAnchorPoint ("ANCHOR_BOTTOMLEFT" KeyValue) and shows the

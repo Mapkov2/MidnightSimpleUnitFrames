@@ -83,6 +83,7 @@ Shell\MSUF_MinimapButton.lua
 Shell\MSUF_AddonCompartment.lua
 Shell\MSUF_GameMenu.lua
 Media\MSUF_Media.lua
+Runtime\MSUF_BorderStyles.lua
 Runtime\MSUF_PortraitMedia.lua
 State\MSUF_ProfileIO.lua
 Runtime\MSUF_ChatAndTooltips.lua

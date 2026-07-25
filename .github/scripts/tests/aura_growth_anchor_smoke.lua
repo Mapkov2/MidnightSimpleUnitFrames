@@ -367,6 +367,10 @@ _G.MSUF_NS = MSUF
 
 local layersChunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Layers.lua"))
 layersChunk("MidnightSimpleUnitFrames", MSUF)
+-- Shared border-style catalog/renderer: the aura icon style draws its border
+-- and shadow bands through it.
+local borderStylesChunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/Runtime/MSUF_BorderStyles.lua"))
+borderStylesChunk("MidnightSimpleUnitFrames", MSUF)
 local spellIndicatorChunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_SpellIndicators.lua"))
 spellIndicatorChunk("MidnightSimpleUnitFrames", MSUF)
 local backendChunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua"))
@@ -1962,6 +1966,14 @@ end
 do
     local baseline = UnitLane("TOPRIGHT", "RIGHT")
     Check(type(baseline.iconStyle) == "table", "lane missing shared icon style stamp")
+    -- The compiled style is memoized per runtime-config generation: every lane
+    -- compiled in one generation must share a single style table, so stamping a
+    -- lane costs one table read and never re-reads the DB or re-resolves media.
+    do
+        local shared = assert(A3.ResolveUnitFrameConfig("player", {}))
+        Check(shared.lanes.buff.iconStyle == shared.lanes.debuff.iconStyle,
+            "icon style must be memoized per runtime-config generation, not recompiled per lane")
+    end
     Check(baseline.iconStyle.borderEnabled == false and baseline.iconStyle.shadowEnabled == false,
         "icon style default is not off")
     local baselineSig = baseline._msufA3LayoutSignature
@@ -1982,18 +1994,99 @@ do
     local container = ApplyLane(styled)
     local frames = assert(container:GetAuraGroup(container._msufA3ManagedGroupKey)):GetFramesByIndex()
     Check(#frames > 0, "styled lane created no buttons")
+    Equal(styled.iconStyle.borderStyle, "SOLID", "default border style is the flat pixel ring")
+    Check(styled.iconStyle.borderTexture == nil, "SOLID must not resolve an edge texture")
     for i = 1, #frames do
         local button = frames[i]
         local border = button._msufA3StyleBorder
         Check(border ~= nil, "styled button missing border texture")
         Equal(border.point and border.point[4], 2, "border ring x inset")
         Equal(border.point and border.point[5], -2, "border ring y inset")
-        Check(button._msufA3StyleShadowInner ~= nil and button._msufA3StyleShadowOuter ~= nil,
-            "styled button missing shadow steps")
-        Equal(button._msufA3StyleShadowOuter.point and button._msufA3StyleShadowOuter.point[4], 6,
-            "shadow outer extent (border 2 + size 4)")
+        Check(button._msufA3StyleBorderPieces == nil, "SOLID must not build edge pieces")
+        -- The shadow is one soft edge band: eight pieces straddling the icon,
+        -- edge = 2 * (border 2 + size 4), so it reaches 6px past the ring.
+        local shadow = button._msufA3StyleShadow
+        Check(type(shadow) == "table" and #shadow == 8, "styled button missing the 8-piece soft shadow")
+        Equal(shadow[1].point and shadow[1].point[4], -6, "shadow band x offset (border 2 + size 4)")
+        Equal(shadow[1].point and shadow[1].point[5], 6, "shadow band y offset (border 2 + size 4)")
+        Equal(shadow[1].width, 12, "shadow corner spans the full band")
+        -- 10px icon with a 12px band: the corners overlap and cover the whole
+        -- ring, so the degenerate edge strips must be hidden, not left alive
+        -- as zero-area regions.
+        for piece = 1, 4 do Check(shadow[piece].shown == true, "shadow corner not shown") end
+        for piece = 5, 8 do Check(shadow[piece].shown == false, "degenerate shadow strip left shown") end
     end
     A3._HideLane(container)
+
+    -- A textured border style swaps the flat quad for the shared 8-piece edge
+    -- renderer and re-signs the lane so containers rebuild.
+    local solidSig = styled._msufA3LayoutSignature
+    shared.styleBorderStyle = "GLOW"
+    A3._runtimeConfigGen = (A3._runtimeConfigGen or 1) + 1
+    local glowLane = assert(assert(A3.ResolveUnitFrameConfig("player", {})).lanes.buff)
+    Equal(glowLane.iconStyle.borderStyle, "GLOW", "border style did not compile onto the lane")
+    Check(glowLane.iconStyle.borderTexture ~= nil, "GLOW did not resolve its edge texture")
+    Equal(glowLane.iconStyle.borderEdge, 6, "GLOW edge size (thickness 2 x 3)")
+    Check(glowLane._msufA3LayoutSignature ~= solidSig,
+        "border style change did not alter the lane layout signature")
+    local glowContainer = ApplyLane(glowLane)
+    local glowFrames = assert(glowContainer:GetAuraGroup(glowContainer._msufA3ManagedGroupKey)):GetFramesByIndex()
+    Check(#glowFrames > 0, "textured lane created no buttons")
+    for i = 1, #glowFrames do
+        local button = glowFrames[i]
+        local pieces = button._msufA3StyleBorderPieces
+        Check(type(pieces) == "table" and #pieces == 8, "textured border did not build 8 pieces")
+        Equal(pieces[1].point and pieces[1].point[4], -3, "textured border straddles the icon edge")
+        Equal(pieces[1].width, 6, "textured border corner spans the edge size")
+        Check(button._msufA3StyleBorder == nil or button._msufA3StyleBorder.shown == false,
+            "flat ring must be hidden while a textured style is active")
+    end
+    A3._HideLane(glowContainer)
+
+    -- Shadow is an INNER style: it shades the icon's own edges instead of
+    -- framing it. The band must sit wholly inside the icon (no negative corner
+    -- offset) and be clamped so a large thickness cannot black the artwork out.
+    -- Drawn behind the icon or hanging outside it, the effect is invisible on a
+    -- packed aura lane -- which is exactly how this shipped broken once.
+    shared.styleBorderStyle = "SHADOW"
+    A3._runtimeConfigGen = (A3._runtimeConfigGen or 1) + 1
+    local shadeLane = assert(assert(A3.ResolveUnitFrameConfig("player", {})).lanes.buff)
+    Equal(shadeLane.iconStyle.borderPlacement, "inner", "Shadow must compile as an inner style")
+    local shadeContainer = ApplyLane(shadeLane)
+    local shadeFrames = assert(shadeContainer:GetAuraGroup(shadeContainer._msufA3ManagedGroupKey)):GetFramesByIndex()
+    Check(#shadeFrames > 0, "shaded lane created no buttons")
+    for i = 1, #shadeFrames do
+        local pieces = assert(shadeFrames[i]._msufA3StyleBorderPieces, "inner shadow built no pieces")
+        local offset = pieces[1].point and pieces[1].point[4]
+        Check(type(offset) == "number" and offset >= 0,
+            "inner shadow must not hang outside the icon (offset " .. tostring(offset) .. ")")
+        Check(pieces[1].width <= shadeLane.size * 0.3 + 0.001,
+            "inner shadow band must stay within 30% of the icon")
+        Check(pieces[1].shown == true, "inner shadow not shown")
+    end
+    A3._HideLane(shadeContainer)
+    shared.styleBorderStyle = "SOLID"
+
+    -- Per-scope opt-out: an excluded scope compiles the shared block away
+    -- entirely, so its buttons draw neither band.
+    shared.styleBorderStyle = "SOLID"
+    shared.styleScopeDisabled = { player = true }
+    A3._runtimeConfigGen = (A3._runtimeConfigGen or 1) + 1
+    local offLane = assert(assert(A3.ResolveUnitFrameConfig("player", {})).lanes.buff)
+    Check(offLane.iconStyle.borderEnabled == false and offLane.iconStyle.shadowEnabled == false,
+        "an opted-out scope still compiled the shared icon style")
+    Equal(offLane.iconStyle.signature, "off", "opted-out scopes need their own layout signature")
+    local offContainer = ApplyLane(offLane)
+    local offFrames = assert(offContainer:GetAuraGroup(offContainer._msufA3ManagedGroupKey)):GetFramesByIndex()
+    for i = 1, #offFrames do
+        local button = offFrames[i]
+        Check(button._msufA3StyleBorder == nil or button._msufA3StyleBorder.shown == false,
+            "opted-out scope still drew a border ring")
+        Check(button._msufA3StyleShadow == nil, "opted-out scope still built shadow pieces")
+    end
+    A3._HideLane(offContainer)
+    shared.styleScopeDisabled = nil
+    A3._runtimeConfigGen = (A3._runtimeConfigGen or 1) + 1
 end
 
 -- Relational layering contract: ONE 0..30 scale per frame kind, shared by

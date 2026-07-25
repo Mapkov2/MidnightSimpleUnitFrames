@@ -4235,3 +4235,19 @@ L["Shape Outline"] = "Formkontur"
 L["Icon Border & Shadow Colors"] = "Rand- und Schattenfarben des Symbols"
 L["Icon Border Color"] = "Randfarbe des Symbols"
 L["Icon Shadow Color"] = "Schattenfarbe des Symbols"
+
+--- Aura icon border style + per-scope icon styling (6.0 Beta 29)
+L["Border Style"] = "Randstil"
+L["Icon border style"] = "Symbolrandstil"
+L["Use icon border & shadow on %s frames"] = "Symbolrand & Schatten auf %s-Frames verwenden"
+L["Icon border and shadow on this scope"] = "Symbolrand und Schatten in diesem Bereich"
+L["Turn this off to leave this frame's aura icons unstyled while other frames keep the shared border and shadow."] = "Schalte dies aus, damit die Aurensymbole dieses Frames ungestylt bleiben, während andere Frames den gemeinsamen Rand und Schatten behalten."
+L["Turn this off to leave these group aura icons unstyled. Edit the border style, thickness, shadow and colors on Aura Style > Shared."] = "Schalte dies aus, damit diese Gruppen-Aurensymbole ungestylt bleiben. Randstil, Dicke, Schatten und Farben bearbeitest du unter Aurenstil > Geteilt."
+L["Shadow"] = "Schatten"
+L["Blizzard Dialog"] = "Blizzard-Dialog"
+
+--- Aura border style catalog rename (6.0 Beta 29)
+L["Soft Glow"] = "Weiches Leuchten"
+L["Blizzard Tooltip"] = "Blizzard-Tooltip"
+L["Blizzard Achievement"] = "Blizzard-Erfolg"
+L["Solid draws a crisp pixel ring around the icon. Soft Glow adds a halo, and Shadow shades the icon's own edges. The Blizzard entries and any LibSharedMedia border are drawn as edge art. Thickness scales the edge."] = "Einfarbig zeichnet einen scharfen Pixelrand um das Symbol. Weiches Leuchten ergänzt einen Schein, und Schatten schattiert die Kanten des Symbols selbst. Die Blizzard-Einträge und jeder LibSharedMedia-Rand werden als Kantengrafik gezeichnet. Die Dicke skaliert die Kante."

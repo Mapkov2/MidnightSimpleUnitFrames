@@ -3851,3 +3851,19 @@ L["Shape Outline"] = "모양 윤곽선"
 L["Icon Border & Shadow Colors"] = "아이콘 테두리 및 그림자 색상"
 L["Icon Border Color"] = "아이콘 테두리 색상"
 L["Icon Shadow Color"] = "아이콘 그림자 색상"
+
+--- Aura icon border style + per-scope icon styling (6.0 Beta 29)
+L["Border Style"] = "테두리 스타일"
+L["Icon border style"] = "아이콘 테두리 스타일"
+L["Use icon border & shadow on %s frames"] = "%s 프레임에 아이콘 테두리 및 그림자 사용"
+L["Icon border and shadow on this scope"] = "이 범위의 아이콘 테두리 및 그림자"
+L["Turn this off to leave this frame's aura icons unstyled while other frames keep the shared border and shadow."] = "이 옵션을 끄면 이 프레임의 오라 아이콘만 스타일이 적용되지 않고, 다른 프레임은 공유 테두리와 그림자를 유지합니다."
+L["Turn this off to leave these group aura icons unstyled. Edit the border style, thickness, shadow and colors on Aura Style > Shared."] = "이 옵션을 끄면 이 공대 오라 아이콘에 스타일이 적용되지 않습니다. 테두리 스타일, 두께, 그림자, 색상은 오라 스타일 > 공유에서 편집하세요."
+L["Shadow"] = "그림자"
+L["Blizzard Dialog"] = "블리자드 대화창"
+
+--- Aura border style catalog rename (6.0 Beta 29)
+L["Soft Glow"] = "부드러운 광채"
+L["Blizzard Tooltip"] = "블리자드 툴팁"
+L["Blizzard Achievement"] = "블리자드 업적"
+L["Solid draws a crisp pixel ring around the icon. Soft Glow adds a halo, and Shadow shades the icon's own edges. The Blizzard entries and any LibSharedMedia border are drawn as edge art. Thickness scales the edge."] = "단색은 아이콘 주위에 선명한 픽셀 테두리를 그립니다. 부드러운 광채는 후광을 더하고, 그림자는 아이콘 자체의 가장자리를 어둡게 합니다. Blizzard 항목과 모든 LibSharedMedia 테두리는 가장자리 이미지로 그려집니다. 두께가 가장자리 크기를 조절합니다."

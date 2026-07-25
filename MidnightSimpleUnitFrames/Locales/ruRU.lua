@@ -3891,3 +3891,19 @@ L["Shape Outline"] = "Контур фигуры"
 L["Icon Border & Shadow Colors"] = "Цвета рамки и тени значка"
 L["Icon Border Color"] = "Цвет рамки значка"
 L["Icon Shadow Color"] = "Цвет тени значка"
+
+--- Aura icon border style + per-scope icon styling (6.0 Beta 29)
+L["Border Style"] = "Стиль рамки"
+L["Icon border style"] = "Стиль рамки значка"
+L["Use icon border & shadow on %s frames"] = "Использовать рамку и тень значка на рамках «%s»"
+L["Icon border and shadow on this scope"] = "Рамка и тень значка в этой области"
+L["Turn this off to leave this frame's aura icons unstyled while other frames keep the shared border and shadow."] = "Отключи это, чтобы значки аур этой рамки остались без оформления, пока остальные рамки сохраняют общую рамку и тень."
+L["Turn this off to leave these group aura icons unstyled. Edit the border style, thickness, shadow and colors on Aura Style > Shared."] = "Отключи это, чтобы значки аур этой группы остались без оформления. Стиль рамки, толщину, тень и цвета настраивай в «Стиль аур > Общие»."
+L["Shadow"] = "Тень"
+L["Blizzard Dialog"] = "Диалог Blizzard"
+
+--- Aura border style catalog rename (6.0 Beta 29)
+L["Soft Glow"] = "Мягкое свечение"
+L["Blizzard Tooltip"] = "Подсказка Blizzard"
+L["Blizzard Achievement"] = "Достижение Blizzard"
+L["Solid draws a crisp pixel ring around the icon. Soft Glow adds a halo, and Shadow shades the icon's own edges. The Blizzard entries and any LibSharedMedia border are drawn as edge art. Thickness scales the edge."] = "Сплошная рисует чёткую пиксельную рамку вокруг значка. Мягкое свечение добавляет ореол, а Тень затеняет собственные края значка. Записи Blizzard и любая рамка LibSharedMedia отрисовываются как краевая графика. Толщина масштабирует край."

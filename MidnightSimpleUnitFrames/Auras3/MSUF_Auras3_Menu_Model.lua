@@ -14,7 +14,7 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
     return value
 end
 
-local type, tonumber, tostring, pairs, ipairs = type, tonumber, tostring, pairs, ipairs
+local type, tonumber, tostring, pairs, ipairs, next = type, tonumber, tostring, pairs, ipairs, next
 local math_floor = math.floor
 local table_sort = table.sort
 local C_Spell = _G.C_Spell
@@ -1437,6 +1437,79 @@ end
 
 function Model.DebuffTypeBorderModeValues()
     return DEBUFF_TYPE_BORDER_MODE_VALUES
+end
+
+--- Border styles for the shared aura icon style. Built fresh because
+--- LibSharedMedia borders can be registered after login; only ever called
+--- while a dropdown is opening.
+function Model.BorderStyleValues()
+    local B = MSUF.BorderStyles
+    if not (B and type(B.List) == "function") then
+        return { { value = "SOLID", text = "Solid" } }
+    end
+    return B.List()
+end
+
+function Model.ReadBorderStyle(unit)
+    local B = MSUF.BorderStyles
+    local value = Model.ReadValue(unit, "styleBorderStyle", "SOLID")
+    if B and type(B.Normalize) == "function" then return B.Normalize(value) end
+    return type(value) == "string" and value ~= "" and value or "SOLID"
+end
+
+function Model.WriteBorderStyle(unit, value)
+    local B = MSUF.BorderStyles
+    if B and type(B.Normalize) == "function" then value = B.Normalize(value) end
+    Model.WriteValue(unit, "styleBorderStyle", value)
+end
+
+-- The aura icon border/shadow is one shared block, but every frame scope can
+-- opt out of it. Opt-outs live as a sparse hash on the shared block so the
+-- runtime resolves them with one table read while compiling a lane -- there is
+-- no per-frame or per-update cost either way. Group scopes key off their group
+-- kind, and the Raid editor drives both raid and mythicraid.
+local ICON_STYLE_SCOPE_KEYS = {
+    player = true, target = true, focus = true, boss = true,
+    party = true, raid = true, mythicraid = true,
+}
+
+local function IconStyleScopeKeys(scope)
+    if scope == "raid" then return "raid", "mythicraid" end
+    if ICON_STYLE_SCOPE_KEYS[scope] == true then return scope end
+    return nil
+end
+
+--- True when `scope` renders the shared icon border/shadow. "shared" and any
+--- unknown scope answer true: there is nothing scope-specific to switch off.
+function Model.IconStyleScopeEnabled(scope)
+    local key = IconStyleScopeKeys(scope)
+    if not key then return true end
+    local _, shared = Model.EnsureDB()
+    local disabled = type(shared) == "table" and shared.styleScopeDisabled or nil
+    return not (type(disabled) == "table" and disabled[key] == true)
+end
+
+--- Returns true when the stored value changed (callers apply on change only).
+function Model.SetIconStyleScopeEnabled(scope, enabled)
+    local key, alias = IconStyleScopeKeys(scope)
+    if not key then return false end
+    local _, shared = Model.EnsureDB()
+    if type(shared) ~= "table" then return false end
+    local value = enabled == false and true or nil
+    local disabled = shared.styleScopeDisabled
+    if type(disabled) ~= "table" then
+        if value == nil then return false end
+        disabled = {}
+        shared.styleScopeDisabled = disabled
+    end
+    local changed = disabled[key] ~= value
+    disabled[key] = value
+    if alias then
+        if disabled[alias] ~= value then changed = true end
+        disabled[alias] = value
+    end
+    if next(disabled) == nil then shared.styleScopeDisabled = nil end
+    return changed
 end
 
 function Model.DurationBarDisplayValues()

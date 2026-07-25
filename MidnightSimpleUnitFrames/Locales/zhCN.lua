@@ -4495,3 +4495,19 @@ L["Shape Outline"] = "形状轮廓"
 L["Icon Border & Shadow Colors"] = "图标边框与阴影颜色"
 L["Icon Border Color"] = "图标边框颜色"
 L["Icon Shadow Color"] = "图标阴影颜色"
+
+--- Aura icon border style + per-scope icon styling (6.0 Beta 29)
+L["Border Style"] = "边框样式"
+L["Icon border style"] = "图标边框样式"
+L["Use icon border & shadow on %s frames"] = "在%s框架上使用图标边框与阴影"
+L["Icon border and shadow on this scope"] = "该范围的图标边框与阴影"
+L["Turn this off to leave this frame's aura icons unstyled while other frames keep the shared border and shadow."] = "关闭此项可让该框架的光环图标不套用样式，其他框架仍保留共享的边框与阴影。"
+L["Turn this off to leave these group aura icons unstyled. Edit the border style, thickness, shadow and colors on Aura Style > Shared."] = "关闭此项可让这些团队光环图标不套用样式。边框样式、厚度、阴影与颜色请在“光环样式 > 共享”中编辑。"
+L["Shadow"] = "阴影"
+L["Blizzard Dialog"] = "暴雪对话框"
+
+--- Aura border style catalog rename (6.0 Beta 29)
+L["Soft Glow"] = "柔和发光"
+L["Blizzard Tooltip"] = "暴雪提示框"
+L["Blizzard Achievement"] = "暴雪成就"
+L["Solid draws a crisp pixel ring around the icon. Soft Glow adds a halo, and Shadow shades the icon's own edges. The Blizzard entries and any LibSharedMedia border are drawn as edge art. Thickness scales the edge."] = "纯色在图标周围绘制清晰的像素边框。柔和发光添加光晕，阴影则为图标自身的边缘上色。暴雪条目以及任何 LibSharedMedia 边框都会作为边缘贴图绘制。厚度用于缩放边缘。"

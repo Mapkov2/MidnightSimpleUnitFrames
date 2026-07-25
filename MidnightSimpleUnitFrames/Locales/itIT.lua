@@ -3874,3 +3874,19 @@ L["Shape Outline"] = "Contorno della forma"
 L["Icon Border & Shadow Colors"] = "Colori del bordo e dell'ombra dell'icona"
 L["Icon Border Color"] = "Colore del bordo dell'icona"
 L["Icon Shadow Color"] = "Colore dell'ombra dell'icona"
+
+--- Aura icon border style + per-scope icon styling (6.0 Beta 29)
+L["Border Style"] = "Stile bordo"
+L["Icon border style"] = "Stile del bordo dell'icona"
+L["Use icon border & shadow on %s frames"] = "Usa bordo e ombra icona sui riquadri %s"
+L["Icon border and shadow on this scope"] = "Bordo e ombra dell'icona in questo ambito"
+L["Turn this off to leave this frame's aura icons unstyled while other frames keep the shared border and shadow."] = "Disattiva questa opzione per lasciare senza stile le icone delle aure di questo riquadro mentre gli altri mantengono bordo e ombra condivisi."
+L["Turn this off to leave these group aura icons unstyled. Edit the border style, thickness, shadow and colors on Aura Style > Shared."] = "Disattiva questa opzione per lasciare senza stile queste icone delle aure di gruppo. Modifica stile del bordo, spessore, ombra e colori in Stile aure > Condiviso."
+L["Shadow"] = "Ombra"
+L["Blizzard Dialog"] = "Finestra Blizzard"
+
+--- Aura border style catalog rename (6.0 Beta 29)
+L["Soft Glow"] = "Bagliore morbido"
+L["Blizzard Tooltip"] = "Descrizione Blizzard"
+L["Blizzard Achievement"] = "Impresa Blizzard"
+L["Solid draws a crisp pixel ring around the icon. Soft Glow adds a halo, and Shadow shades the icon's own edges. The Blizzard entries and any LibSharedMedia border are drawn as edge art. Thickness scales the edge."] = "Pieno disegna un bordo di pixel netto attorno all'icona. Bagliore morbido aggiunge un alone e Ombra ombreggia i bordi dell'icona stessa. Le voci Blizzard e qualsiasi bordo LibSharedMedia vengono disegnati come grafica di bordo. Lo spessore scala il bordo."
