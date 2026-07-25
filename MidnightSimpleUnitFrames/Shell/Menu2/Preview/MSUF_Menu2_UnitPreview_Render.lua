@@ -758,14 +758,16 @@ function Preview.Refresh(box, reason)
     if castOffsetY == nil then castOffsetY = tonumber(castDefY) or 0 end
     local castDetached = castEnabled and CastbarDetached(key, g)
     local castPreviewVisible = castEnabled and PreviewLayerWanted(box, "castbar")
-    local bossBorderInset = 0
+    -- Kept on the box instead of in locals: Refresh already sits at the Lua 5.1
+    -- ceiling of 200 locals per function, so two more would fail to compile.
+    box._bossBorderInset = 0
     if key == "boss"
         and runtimeSpec and runtimeSpec.border
         and runtimeSpec.border.enabled == true
     then
-        bossBorderInset = max(1, floor((tonumber(runtimeSpec.border.thickness) or 1) + 0.5))
+        box._bossBorderInset = max(1, floor((tonumber(runtimeSpec.border.thickness) or 1) + 0.5))
     end
-    local bossCastbarGap = 3
+    box._bossCastbarGap = 3
     local bars = _G.MSUF_DB and _G.MSUF_DB.bars or {}
     local classPowerPreviewSpec
     if key == "player" then
@@ -994,8 +996,8 @@ function Preview.Refresh(box, reason)
             cLeft = (w - castW) * 0.5 + castOffsetX
             cBottom = h + castOffsetY
         elseif key == "boss" then
-            cLeft = castOffsetX - bossBorderInset
-            cBottom = castOffsetY - bossBorderInset - bossCastbarGap - castBarH
+            cLeft = castOffsetX - box._bossBorderInset
+            cBottom = castOffsetY - box._bossBorderInset - box._bossCastbarGap - castBarH
         else
             cLeft = castOffsetX
             cBottom = h + castOffsetY
@@ -1913,8 +1915,8 @@ function Preview.Refresh(box, reason)
             mock.cast:SetPoint("BOTTOM", mock, "TOP", S(castOffsetX), S(castOffsetY))
         elseif key == "boss" then
             mock.cast:SetPoint("TOPLEFT", mock, "BOTTOMLEFT",
-                S(castOffsetX - bossBorderInset),
-                S(castOffsetY - bossBorderInset - bossCastbarGap))
+                S(castOffsetX - box._bossBorderInset),
+                S(castOffsetY - box._bossBorderInset - box._bossCastbarGap))
         else
             mock.cast:SetPoint("BOTTOMLEFT", mock, "TOPLEFT", S(castOffsetX), S(castOffsetY))
         end
