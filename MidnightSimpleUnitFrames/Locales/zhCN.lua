@@ -4593,3 +4593,23 @@ L["|cffff0000MSUF:|r Cannot change absorb bars while in combat."] = "|cffff0000M
 
 --- Castbar icon layer (6.0 Beta 29)
 L["0 keeps the icon just above the bar and moves it together with the whole-castbar layer. 1-30 pins the icon to that frame level on the shared layer scale, so it can be ordered in front of or behind the bar, texts, and other frame elements."] = "0 会让图标紧贴在条上方，并随整个施法条图层一起移动。1-30 会将图标固定在共享图层刻度的该框架层级上，从而可以排在条、文字和其他框架元素之前或之后。"
+
+--- Detached / overlay portrait placement (6.0 Beta 30)
+L["Width override"] = "宽度覆盖"
+L["Height override"] = "高度覆盖"
+L["Zoom center X"] = "缩放中心 X"
+L["Zoom center Y"] = "缩放中心 Y"
+L["Layer offset"] = "图层偏移"
+L["Portrait opacity"] = "肖像不透明度"
+L["Portrait anchor point"] = "肖像锚点"
+L["Attach to frame point"] = "锚定到框架点"
+L["Overlay alignment"] = "叠加对齐"
+L["Attached to bar"] = "附着在条上"
+L["Detached"] = "分离"
+L["Overlay on bar"] = "叠加在条上"
+L["Fill bar"] = "填满条"
+
+--- Portrait relief border art (6.0 Beta 30)
+L["Border art"] = "边框样式"
+L["Border direction"] = "边框方向"
+L["Relief"] = "浮雕"

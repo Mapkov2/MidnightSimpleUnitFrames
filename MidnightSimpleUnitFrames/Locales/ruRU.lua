@@ -3989,3 +3989,23 @@ L["|cffff0000MSUF:|r Cannot change absorb bars while in combat."] = "|cffff0000M
 
 --- Castbar icon layer (6.0 Beta 29)
 L["0 keeps the icon just above the bar and moves it together with the whole-castbar layer. 1-30 pins the icon to that frame level on the shared layer scale, so it can be ordered in front of or behind the bar, texts, and other frame elements."] = "0 держит значок сразу над полосой и двигает его вместе со слоем всей полосы заклинания. 1-30 закрепляет значок на этом уровне общей шкалы слоёв, чтобы размещать его перед полосой, текстами и другими элементами рамки или позади них."
+
+--- Detached / overlay portrait placement (6.0 Beta 30)
+L["Width override"] = "Переопределение ширины"
+L["Height override"] = "Переопределение высоты"
+L["Zoom center X"] = "Центр масштаба X"
+L["Zoom center Y"] = "Центр масштаба Y"
+L["Layer offset"] = "Смещение слоя"
+L["Portrait opacity"] = "Непрозрачность портрета"
+L["Portrait anchor point"] = "Точка привязки портрета"
+L["Attach to frame point"] = "Привязать к точке рамки"
+L["Overlay alignment"] = "Выравнивание наложения"
+L["Attached to bar"] = "Прикреплён к полосе"
+L["Detached"] = "Откреплён"
+L["Overlay on bar"] = "Поверх полосы"
+L["Fill bar"] = "Заполнить полосу"
+
+--- Portrait relief border art (6.0 Beta 30)
+L["Border art"] = "Стиль рамки"
+L["Border direction"] = "Направление рамки"
+L["Relief"] = "Рельеф"

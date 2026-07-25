@@ -4333,3 +4333,27 @@ L["|cffff0000MSUF:|r Cannot change absorb bars while in combat."] = "|cffff0000M
 
 --- Castbar icon layer (6.0 Beta 29)
 L["0 keeps the icon just above the bar and moves it together with the whole-castbar layer. 1-30 pins the icon to that frame level on the shared layer scale, so it can be ordered in front of or behind the bar, texts, and other frame elements."] = "0 hält das Symbol direkt über der Leiste und bewegt es zusammen mit der Gesamt-Zauberleisten-Ebene. 1-30 fixiert das Symbol auf dieser Frame-Ebene der geteilten Ebenen-Skala, sodass es vor oder hinter Leiste, Texten und anderen Frame-Elementen einsortiert werden kann."
+
+--- Detached / overlay portrait placement (6.0 Beta 30)
+L["Width override"] = "Breiten-Override"
+L["Height override"] = "Höhen-Override"
+L["Zoom center X"] = "Zoom-Zentrum X"
+L["Zoom center Y"] = "Zoom-Zentrum Y"
+L["Layer offset"] = "Ebenen-Versatz"
+L["Portrait opacity"] = "Porträt-Deckkraft"
+L["Portrait anchor point"] = "Porträt-Ankerpunkt"
+L["Attach to frame point"] = "Andocken an Frame-Punkt"
+L["Overlay alignment"] = "Overlay-Ausrichtung"
+L["Attached to bar"] = "An Leiste angedockt"
+L["Detached"] = "Abgekoppelt"
+L["Overlay on bar"] = "Über der Leiste"
+L["Fill bar"] = "Leiste ausfüllen"
+L["Top left"] = "Oben links"
+L["Top right"] = "Oben rechts"
+L["Bottom left"] = "Unten links"
+L["Bottom right"] = "Unten rechts"
+
+--- Portrait relief border art (6.0 Beta 30)
+L["Border art"] = "Rahmen-Art"
+L["Border direction"] = "Rahmenrichtung"
+L["Relief"] = "Relief"

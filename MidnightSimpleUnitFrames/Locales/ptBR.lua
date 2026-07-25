@@ -3898,3 +3898,23 @@ L["|cffff0000MSUF:|r Cannot change absorb bars while in combat."] = "|cffff0000M
 
 --- Castbar icon layer (6.0 Beta 29)
 L["0 keeps the icon just above the bar and moves it together with the whole-castbar layer. 1-30 pins the icon to that frame level on the shared layer scale, so it can be ordered in front of or behind the bar, texts, and other frame elements."] = "0 mantém o ícone logo acima da barra e o move junto com a camada da barra de lançamento inteira. 1-30 fixa o ícone nesse nível da escala de camadas compartilhada, para ordená-lo na frente ou atrás da barra, dos textos e de outros elementos do quadro."
+
+--- Detached / overlay portrait placement (6.0 Beta 30)
+L["Width override"] = "Substituição de largura"
+L["Height override"] = "Substituição de altura"
+L["Zoom center X"] = "Centro do zoom X"
+L["Zoom center Y"] = "Centro do zoom Y"
+L["Layer offset"] = "Deslocamento de camada"
+L["Portrait opacity"] = "Opacidade do retrato"
+L["Portrait anchor point"] = "Ponto de ancoragem do retrato"
+L["Attach to frame point"] = "Ancorar ao ponto do quadro"
+L["Overlay alignment"] = "Alinhamento da sobreposição"
+L["Attached to bar"] = "Anexado à barra"
+L["Detached"] = "Separado"
+L["Overlay on bar"] = "Sobreposto à barra"
+L["Fill bar"] = "Preencher a barra"
+
+--- Portrait relief border art (6.0 Beta 30)
+L["Border art"] = "Estilo da borda"
+L["Border direction"] = "Direção da borda"
+L["Relief"] = "Relevo"

@@ -2663,3 +2663,29 @@ L["|cffff0000MSUF:|r Cannot change absorb bars while in combat."] = "|cffff0000M
 
 --- Castbar icon layer (6.0 Beta 29)
 L["0 keeps the icon just above the bar and moves it together with the whole-castbar layer. 1-30 pins the icon to that frame level on the shared layer scale, so it can be ordered in front of or behind the bar, texts, and other frame elements."] = "0 keeps the icon just above the bar and moves it together with the whole-castbar layer. 1-30 pins the icon to that frame level on the shared layer scale, so it can be ordered in front of or behind the bar, texts, and other frame elements."
+
+--- Detached / overlay portrait placement (6.0 Beta 30)
+L["Width override"] = "Width override"
+L["Height override"] = "Height override"
+L["Zoom center X"] = "Zoom center X"
+L["Zoom center Y"] = "Zoom center Y"
+L["Layer offset"] = "Layer offset"
+L["Portrait opacity"] = "Portrait opacity"
+L["Portrait anchor point"] = "Portrait anchor point"
+L["Attach to frame point"] = "Attach to frame point"
+L["Overlay alignment"] = "Overlay alignment"
+L["Attached to bar"] = "Attached to bar"
+L["Detached"] = "Detached"
+L["Overlay on bar"] = "Overlay on bar"
+L["Fill bar"] = "Fill bar"
+L["Top left"] = "Top left"
+L["Top right"] = "Top right"
+L["Bottom left"] = "Bottom left"
+L["Bottom right"] = "Bottom right"
+L["Center"] = "Center"
+
+--- Portrait relief border art (6.0 Beta 30)
+L["Border art"] = "Border art"
+L["Border direction"] = "Border direction"
+L["Relief"] = "Relief"
+L["Flat"] = "Flat"

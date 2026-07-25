@@ -3949,3 +3949,23 @@ L["|cffff0000MSUF:|r Cannot change absorb bars while in combat."] = "|cffff0000M
 
 --- Castbar icon layer (6.0 Beta 29)
 L["0 keeps the icon just above the bar and moves it together with the whole-castbar layer. 1-30 pins the icon to that frame level on the shared layer scale, so it can be ordered in front of or behind the bar, texts, and other frame elements."] = "0은 아이콘을 바 바로 위에 유지하고 시전 바 전체 레이어와 함께 이동합니다. 1-30은 아이콘을 공유 레이어 첩도의 해당 프레임 레벨에 고정하여 바, 글자, 다른 프레임 요소의 앞이나 뒤로 정렬할 수 있습니다."
+
+--- Detached / overlay portrait placement (6.0 Beta 30)
+L["Width override"] = "너비 재정의"
+L["Height override"] = "높이 재정의"
+L["Zoom center X"] = "확대 중심 X"
+L["Zoom center Y"] = "확대 중심 Y"
+L["Layer offset"] = "레이어 오프셋"
+L["Portrait opacity"] = "인물 불투명도"
+L["Portrait anchor point"] = "인물 고정점"
+L["Attach to frame point"] = "프레임 고정점에 연결"
+L["Overlay alignment"] = "오버레이 정렬"
+L["Attached to bar"] = "바에 붙임"
+L["Detached"] = "분리됨"
+L["Overlay on bar"] = "바 위에 겹침"
+L["Fill bar"] = "바 채우기"
+
+--- Portrait relief border art (6.0 Beta 30)
+L["Border art"] = "테두리 아트"
+L["Border direction"] = "테두리 방향"
+L["Relief"] = "입체"

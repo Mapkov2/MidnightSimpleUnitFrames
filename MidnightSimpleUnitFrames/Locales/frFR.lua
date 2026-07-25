@@ -4373,3 +4373,23 @@ L["|cffff0000MSUF:|r Cannot change absorb bars while in combat."] = "|cffff0000M
 
 --- Castbar icon layer (6.0 Beta 29)
 L["0 keeps the icon just above the bar and moves it together with the whole-castbar layer. 1-30 pins the icon to that frame level on the shared layer scale, so it can be ordered in front of or behind the bar, texts, and other frame elements."] = "0 garde l’icône juste au-dessus de la barre et la déplace avec le calque de toute la barre d’incantation. 1-30 fixe l’icône à ce niveau sur l’échelle de calques partagée, pour l’ordonner devant ou derrière la barre, les textes et les autres éléments du cadre."
+
+--- Detached / overlay portrait placement (6.0 Beta 30)
+L["Width override"] = "Remplacement de la largeur"
+L["Height override"] = "Remplacement de la hauteur"
+L["Zoom center X"] = "Centre du zoom X"
+L["Zoom center Y"] = "Centre du zoom Y"
+L["Layer offset"] = "Décalage de calque"
+L["Portrait opacity"] = "Opacité du portrait"
+L["Portrait anchor point"] = "Point d’ancrage du portrait"
+L["Attach to frame point"] = "Ancrer au point du cadre"
+L["Overlay alignment"] = "Alignement de la superposition"
+L["Attached to bar"] = "Attaché à la barre"
+L["Detached"] = "Détaché"
+L["Overlay on bar"] = "Superposé à la barre"
+L["Fill bar"] = "Remplir la barre"
+
+--- Portrait relief border art (6.0 Beta 30)
+L["Border art"] = "Style de bordure"
+L["Border direction"] = "Direction de la bordure"
+L["Relief"] = "Relief"
