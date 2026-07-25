@@ -20,6 +20,11 @@ local type, tonumber, pairs = type, tonumber, pairs
 local math_floor = math.floor
 local MSUF_ResolveIconTexturePath = _G.MSUF_ResolveIconTexturePath
 
+-- SetOnUpdateMode takes an Enum.OnUpdateMode value, not a name; a string argument leaves the
+-- driver disabled and silently kills the drag OnUpdate.
+local ONUPDATE_MODE_DISABLED = (Enum and Enum.OnUpdateMode and Enum.OnUpdateMode.Disabled) or 0
+local ONUPDATE_MODE_RUN_WHEN_VISIBLE = (Enum and Enum.OnUpdateMode and Enum.OnUpdateMode.RunWhenVisible) or 1
+
 local function Tr(text)
     if type(text) ~= "string" then return text end
     if type(MSUF.Translate) == "function" then return MSUF.Translate(text) end
@@ -34,6 +39,9 @@ end
 local _L_BLIZZARD_TOTEM_PREVIEW = Tr("Blizzard TotemFrame Preview")
 local _L_DRAG_OR_ARROW_KEYS = Tr("Drag or arrow keys to move.")
 local _EnsureGameplayDefaults = MSUF.MSUF_EnsureGameplayDefaults
+-- EnsureGameplayDefaults re-seeds ~33 keys on every call; the fast variant returns the cached
+-- table and only falls back to the full seed before the first one has run.
+local _GetGameplayDB = MSUF.MSUF_GetGameplayDBFast or _EnsureGameplayDefaults
 local _GetPlayerSpecID = S.GetPlayerSpecID
 local _Clamp = S.Clamp
 local _RoundInt = S.RoundInt
@@ -44,8 +52,13 @@ local _CheckpointHistory = S.CheckpointHistory
 local _SelectNudgeFrame = S.SelectNudgeFrame
 
 local function _SyncTotemOffsetSliders()
-    local opt = _G.MSUF_GameplayPanel
-    if opt and opt.MSUF_SyncTotemOffsetSliders then opt:MSUF_SyncTotemOffsetSliders() end
+    -- Menu2 owns the offset sliders. RequestRefresh coalesces through a queued flag, so calling
+    -- this once per drag pixel collapses into one page resync per MENU_REFRESH_DELAY.
+    local menu = _G.MSUF2
+    if not (menu and menu.RequestRefresh) then return end
+    local frame = menu.frame
+    if not (frame and frame.IsShown and frame:IsShown()) then return end
+    menu.RequestRefresh(nil, "gameplay-totems-offset")
 end
 
 do
@@ -72,14 +85,19 @@ do
 
     local _RefreshBlizzardTotems
 
+    -- The player's class cannot change within a session, but UnitClass can still answer nil
+    -- during very early load, so only a resolved token is cached.
+    local playerClassCache
     local function _GetPlayerTotemFrameClass()
-        if UnitClass then
-            local _, class = UnitClass("player")
-            if TOTEM_FRAME_CLASSES[class] then
-                return class
-            end
+        local class = playerClassCache
+        if class == nil then
+            if not UnitClass then return nil end
+            local _, token = UnitClass("player")
+            if token == nil then return nil end
+            class = TOTEM_FRAME_CLASSES[token] and token or false
+            playerClassCache = class
         end
-        return nil
+        return class or nil
     end
 
     local function _PlayerHasBlizzardTotemFrame()
@@ -143,38 +161,33 @@ do
         end
     end
 
-    local function _ForEachTotemManagedContainer(frame, callback)
-        local seen = {}
-        local function Visit(container)
-            if not container or seen[container] then return end
-            seen[container] = true
-            callback(container)
-        end
+    -- Container fan-out runs on every apply, so it stays allocation-free: no `seen` table and no
+    -- per-call closures. There are only four candidates, so dedupe is done by direct comparison.
+    local function _InvokeManagedContainer(container, frame, method, a, b, c)
+        if not container or container == a or container == b or container == c then return container end
+        local fn = container[method]
+        if type(fn) == "function" then fn(container, frame) end
+        return container
+    end
 
-        Visit(frame and frame.layoutParent)
-        if type(_G.GetPlayerBottomManagedFrameContainer) == "function" then
-            Visit(_G.GetPlayerBottomManagedFrameContainer())
+    local function _ForEachTotemManagedContainer(frame, method)
+        local a = _InvokeManagedContainer(frame and frame.layoutParent, frame, method)
+        local b
+        local getter = _G.GetPlayerBottomManagedFrameContainer
+        if type(getter) == "function" then
+            b = _InvokeManagedContainer(getter(), frame, method, a)
         end
-        Visit(_G.PlayerBottomManagedFrameContainer)
-        Visit(_G.PlayerFrameBottomManagedFramesContainer)
+        local c = _InvokeManagedContainer(_G.PlayerBottomManagedFrameContainer, frame, method, a, b)
+        _InvokeManagedContainer(_G.PlayerFrameBottomManagedFramesContainer, frame, method, a, b, c)
     end
 
     local function _RemoveFromTotemManagedContainers(frame)
-        _ForEachTotemManagedContainer(frame, function(container)
-            if type(container.RemoveManagedFrame) == "function" then
-                container:RemoveManagedFrame(frame)
-            end
-        end)
+        _ForEachTotemManagedContainer(frame, "RemoveManagedFrame")
     end
 
     local function _ReturnToTotemManagedContainer(frame)
         if not (frame and frame.IsShown and frame:IsShown()) then return end
-
-        _ForEachTotemManagedContainer(frame, function(container)
-            if type(container.AddManagedFrame) == "function" then
-                container:AddManagedFrame(frame)
-            end
-        end)
+        _ForEachTotemManagedContainer(frame, "AddManagedFrame")
     end
 
     local function _StoreOriginalLayout(frame)
@@ -205,16 +218,24 @@ do
         originalLayout = info
     end
 
+    local function _OnBlizzardTotemFrameTouched()
+        if _RefreshBlizzardTotems then
+            _RefreshBlizzardTotems()
+        end
+    end
+
     local function _HookBlizzardTotemFrame(frame)
         if not frame or hooked then return end
         hooked = true
-        -- Blizzard may recreate or relayout the frame after our preview state changes; refresh
-        -- when it becomes visible instead of polling.
-        frame:HookScript("OnShow", function()
-            if _RefreshBlizzardTotems then
-                _RefreshBlizzardTotems()
-            end
-        end)
+        -- TotemFrameMixin:Update ends with Layout() + SetShown(), so a post-hook lands exactly
+        -- once after Blizzard finished rebuilding, for every reason Blizzard rebuilds
+        -- (PLAYER_TOTEM_UPDATE, shapeshift, talents, spec). That replaces guessing with timers
+        -- off UNIT_SPELLCAST_SUCCEEDED.
+        if type(frame.Update) == "function" and _G.hooksecurefunc then
+            _G.hooksecurefunc(frame, "Update", _OnBlizzardTotemFrameTouched)
+        end
+        -- Kept as a net for third parties that Show() the frame without going through Update.
+        frame:HookScript("OnShow", _OnBlizzardTotemFrameTouched)
     end
 
     local function _RestoreBlizzardTotemFrame()
@@ -262,6 +283,20 @@ do
         return true
     end
 
+    -- SetScale stores a 32-bit float, so a value read back never compares equal to the double we
+    -- computed. Geometry offsets are integers and round-trip exactly.
+    local SCALE_EPSILON = 0.0005
+
+    local function _TotemAnchorMatches(frame, anchorFrom, relativeTo, anchorTo, x, y)
+        if frame:GetNumPoints() ~= 1 then return false end
+        local point, currentRelativeTo, relativePoint, currentX, currentY = frame:GetPoint(1)
+        return point == anchorFrom
+            and currentRelativeTo == relativeTo
+            and relativePoint == anchorTo
+            and currentX == x
+            and currentY == y
+    end
+
     local function _ApplyBlizzardTotemFrame(g)
         local frame = _G.TotemFrame
         if not frame then return false end
@@ -274,31 +309,64 @@ do
         _StoreOriginalLayout(frame)
         _HookBlizzardTotemFrame(frame)
 
+        -- Blizzard rebuilds TotemFrame far more often than the user changes these settings, so
+        -- every write below is verified first. A redundant refresh then costs a handful of
+        -- getters instead of a parent/anchor/scale/strata rewrite.
         managed = true
+
+        -- ManagedFrameMixin:OnShow re-adds the frame on every show, so this cannot be gated to
+        -- the first apply. Both sides are self-guarding: AddManagedFrame bails on
+        -- ignoreFramePositionManager, RemoveManagedFrame bails when the frame is not tracked, so
+        -- repeat calls cost one table lookup and never trigger a container Layout.
         frame.ignoreFramePositionManager = true
         _RemoveFromTotemManagedContainers(frame)
 
-        if frame.SetParent then
-            frame:SetParent(playerFrame or UIParent)
+        local wantParent = playerFrame or UIParent
+        if frame.SetParent and frame:GetParent() ~= wantParent then
+            frame:SetParent(wantParent)
         end
-        _AnchorFrameToPlayer(frame, g)
+
+        local anchorFrom = _AnchorValue(g and g.playerTotemsAnchorFrom, "TOPLEFT")
+        local anchorTo = _AnchorValue(g and g.playerTotemsAnchorTo, "BOTTOMLEFT")
+        local x = tonumber(g and g.playerTotemsOffsetX) or 0
+        local y = tonumber(g and g.playerTotemsOffsetY) or -6
+        if playerFrame then
+            if not _TotemAnchorMatches(frame, anchorFrom, playerFrame, anchorTo, x, y) then
+                frame:ClearAllPoints()
+                frame:SetPoint(anchorFrom, playerFrame, anchorTo, x, y)
+            end
+        elseif not _TotemAnchorMatches(frame, "CENTER", UIParent, "CENTER", x, y) then
+            frame:ClearAllPoints()
+            frame:SetPoint("CENTER", UIParent, "CENTER", x, y)
+        end
 
         if frame.SetScale then
             local baseScale = (originalLayout and originalLayout.scale) or 1
             local scale = _Clamp((_TotemIconSize(g) / BLIZZ_TOTEM_BASE_SIZE) * baseScale, 0.35, 2.50)
-            frame:SetScale(scale)
+            local current = frame:GetScale() or 1
+            if current > scale + SCALE_EPSILON or current < scale - SCALE_EPSILON then
+                frame:SetScale(scale)
+            end
         end
 
         if playerFrame then
             if frame.SetFrameStrata and playerFrame.GetFrameStrata then
-                frame:SetFrameStrata(playerFrame:GetFrameStrata())
+                local strata = playerFrame:GetFrameStrata()
+                if strata and frame:GetFrameStrata() ~= strata then
+                    frame:SetFrameStrata(strata)
+                end
             end
             if frame.SetFrameLevel and playerFrame.GetFrameLevel then
-                frame:SetFrameLevel((playerFrame:GetFrameLevel() or 0) + 5)
+                local level = (playerFrame:GetFrameLevel() or 0) + 5
+                if frame:GetFrameLevel() ~= level then
+                    frame:SetFrameLevel(level)
+                end
             end
         end
 
-        if frame.Layout then frame:Layout() end
+        -- No Layout() here on purpose: LayoutMixin:Layout has no dirty check and allocates a
+        -- child list on every call, while parent/anchor/scale/strata changes never affect child
+        -- layout. Blizzard already calls Layout() at the end of its own Update.
         return true
     end
 
@@ -317,7 +385,7 @@ do
         else
             overlay:EnableMouse(false)
             overlay:SetScript("OnUpdate", nil)
-            overlay:SetOnUpdateMode("Disabled")
+            if overlay.SetOnUpdateMode then overlay:SetOnUpdateMode(ONUPDATE_MODE_DISABLED) end
             overlay._msufDragging = nil
             overlay:Hide()
         end
@@ -338,7 +406,7 @@ do
         previewButton:EnableMouse(false)
         if previewButton.SetScript then
             previewButton:SetScript("OnUpdate", nil)
-            previewButton:SetOnUpdateMode("Disabled")
+            if previewButton.SetOnUpdateMode then previewButton:SetOnUpdateMode(ONUPDATE_MODE_DISABLED) end
         end
         if previewButton.Icon and previewButton.Icon.Cooldown then previewButton.Icon.Cooldown:Hide() end
         if previewButton.Duration then
@@ -377,18 +445,43 @@ do
             if self._msufHi then self._msufHi:Hide() end
             if GameTooltip then GameTooltip:Hide() end
         end)
+        -- Hoisted out of OnMouseDown: one closure for the module instead of a fresh one per drag.
+        local function _DragOnUpdate(frame)
+            if not frame._msufDragging then return end
+            local dragG = frame._msufDragG
+            if not dragG then return end
+
+            local x, y = GetCursorPosition()
+            local uiScale = frame._msufDragScale
+            x = x / uiScale
+            y = y / uiScale
+
+            local offX = _RoundInt(frame._msufDragStartOffX + (x - frame._msufDragStartCursorX))
+            local offY = _RoundInt(frame._msufDragStartOffY + (y - frame._msufDragStartCursorY))
+            if offX == frame._msufDragLastOffX and offY == frame._msufDragLastOffY then return end
+
+            frame._msufDragLastOffX = offX
+            frame._msufDragLastOffY = offY
+            dragG.playerTotemsOffsetX = offX
+            dragG.playerTotemsOffsetY = offY
+            _ApplyPreviewAnchorOnly(dragG, offX, offY)
+
+            _SyncTotemOffsetSliders()
+        end
+
         overlay:SetScript("OnMouseDown", function(self, button)
             if button ~= "LeftButton" then return end
 
-            local g = _EnsureGameplayDefaults()
+            local g = _GetGameplayDB()
+            -- Sampled once: the drag delta must be measured against the same scale it started
+            -- with, and it saves a C call per rendered frame.
             local scale = (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
             local cursorX, cursorY = GetCursorPosition()
-            cursorX = cursorX / scale
-            cursorY = cursorY / scale
 
             self._msufDragG = g
-            self._msufDragStartCursorX = cursorX
-            self._msufDragStartCursorY = cursorY
+            self._msufDragScale = scale
+            self._msufDragStartCursorX = cursorX / scale
+            self._msufDragStartCursorY = cursorY / scale
             self._msufDragStartOffX = tonumber(g.playerTotemsOffsetX) or 0
             self._msufDragStartOffY = tonumber(g.playerTotemsOffsetY) or -6
             self._msufDragLastOffX = self._msufDragStartOffX
@@ -396,35 +489,14 @@ do
             self._msufDragging = true
             _BeginHistory(self, "TotemFrame position", "gameplay:totems:position")
 
-            self:SetOnUpdateMode("RunWhenVisible")
-            self:SetScript("OnUpdate", function(frame)
-                if not frame._msufDragging then return end
-                local dragG = frame._msufDragG
-                if not dragG then return end
-
-                local uiScale = (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
-                local x, y = GetCursorPosition()
-                x = x / uiScale
-                y = y / uiScale
-
-                local offX = _RoundInt((frame._msufDragStartOffX or 0) + (x - (frame._msufDragStartCursorX or x)))
-                local offY = _RoundInt((frame._msufDragStartOffY or -6) + (y - (frame._msufDragStartCursorY or y)))
-                if offX == frame._msufDragLastOffX and offY == frame._msufDragLastOffY then return end
-
-                frame._msufDragLastOffX = offX
-                frame._msufDragLastOffY = offY
-                dragG.playerTotemsOffsetX = offX
-                dragG.playerTotemsOffsetY = offY
-                _ApplyPreviewAnchorOnly(dragG, offX, offY)
-
-                _SyncTotemOffsetSliders()
-            end)
+            if self.SetOnUpdateMode then self:SetOnUpdateMode(ONUPDATE_MODE_RUN_WHEN_VISIBLE) end
+            self:SetScript("OnUpdate", _DragOnUpdate)
         end)
         overlay:SetScript("OnMouseUp", function(self, button)
             if button ~= "LeftButton" then return end
             self._msufDragging = nil
             self:SetScript("OnUpdate", nil)
-            self:SetOnUpdateMode("Disabled")
+            if self.SetOnUpdateMode then self:SetOnUpdateMode(ONUPDATE_MODE_DISABLED) end
             _SelectNudgeFrame(self, true)
 
             if _RefreshBlizzardTotems then
@@ -437,7 +509,7 @@ do
 
         _SetupArrowNudge(overlay,
             function(_, dx, dy)
-                local g = _EnsureGameplayDefaults()
+                local g = _GetGameplayDB()
                 if not previewFrame or not previewFrame._msufPreviewActive then return false end
 
                 local offX = _RoundInt((tonumber(g.playerTotemsOffsetX) or 0) + (dx or 0))
@@ -464,26 +536,41 @@ do
 
     local function _ApplyPreview(g)
         local frame = _EnsurePreviewFrame()
+        local firstApply = not frame._msufPreviewActive
         frame._msufPreviewActive = true
 
-        frame:SetSize(BLIZZ_TOTEM_BASE_SIZE, BLIZZ_TOTEM_BASE_SIZE)
-        frame:SetScale(_Clamp(_TotemIconSize(g) / BLIZZ_TOTEM_BASE_SIZE, 0.35, 2.50))
+        -- Every Blizzard TotemFrame rebuild now reaches this function too, so the button
+        -- decoration only runs when the preview is opened or the icon size actually changed.
+        local iconSize = _TotemIconSize(g)
+        if firstApply or frame._msufAppliedIconSize ~= iconSize then
+            frame._msufAppliedIconSize = iconSize
+            frame:SetSize(BLIZZ_TOTEM_BASE_SIZE, BLIZZ_TOTEM_BASE_SIZE)
+            frame:SetScale(_Clamp(iconSize / BLIZZ_TOTEM_BASE_SIZE, 0.35, 2.50))
+        end
 
         if previewButton then
-            previewButton:SetAllPoints(frame)
-            previewButton.layoutIndex = 1
-            previewButton.slot = 0
-            local texture = (previewButton.Icon and previewButton.Icon.Texture) or previewButton._msufFallbackIcon
-            if texture then
-                texture:SetTexture(_GetPreviewIconTexture())
-                texture:Show()
+            if firstApply then
+                previewButton:SetAllPoints(frame)
+                previewButton.layoutIndex = 1
+                previewButton.slot = 0
+                if previewButton.Icon and previewButton.Icon.Cooldown then previewButton.Icon.Cooldown:Hide() end
+                if previewButton.Duration then
+                    previewButton.Duration:SetText("")
+                    previewButton.Duration:Hide()
+                end
+                previewButton:Show()
             end
-            if previewButton.Icon and previewButton.Icon.Cooldown then previewButton.Icon.Cooldown:Hide() end
-            if previewButton.Duration then
-                previewButton.Duration:SetText("")
-                previewButton.Duration:Hide()
+            -- Resolved every time rather than gated on firstApply: the Monk statue icon depends
+            -- on spec, and a spec change reaches us through Blizzard's own rebuild.
+            local icon = _GetPreviewIconTexture()
+            if frame._msufAppliedIcon ~= icon then
+                frame._msufAppliedIcon = icon
+                local texture = (previewButton.Icon and previewButton.Icon.Texture) or previewButton._msufFallbackIcon
+                if texture then
+                    texture:SetTexture(icon)
+                    texture:Show()
+                end
             end
-            previewButton:Show()
         end
 
         _AnchorFrameToPlayer(frame, g)
@@ -499,9 +586,17 @@ do
         _SetPreviewDragEnabled(false)
     end
 
+    local refreshing = false
     function _RefreshBlizzardTotems()
-        local g = _EnsureGameplayDefaults()
-        if not (g and g.enablePlayerTotems) and not previewWanted then return end
+        local g = _GetGameplayDB()
+        -- `managed` keeps the door open while the feature is already off: a restore refused
+        -- during combat still has to run once the lockdown lifts.
+        if not (g and g.enablePlayerTotems) and not previewWanted and not managed then return end
+        -- The OnShow hook fires from inside Blizzard's Update, which the post-hook also covers.
+        -- Re-entry would just redo the work the outer pass is about to verify anyway.
+        if refreshing then return end
+        refreshing = true
+
         local hasTotemFrame = _PlayerHasBlizzardTotemFrame()
 
         if not hasTotemFrame then
@@ -516,37 +611,30 @@ do
 
         if not hasTotemFrame or not (g and g.enablePlayerTotems) then
             _RestoreBlizzardTotemFrame()
-            return
+        else
+            _ApplyBlizzardTotemFrame(g)
         end
 
-        _ApplyBlizzardTotemFrame(g)
+        refreshing = false
     end
 
     local function _EnsureEventFrame()
         if eventFrame then return end
 
         eventFrame = CreateFrame("Frame", "MSUF_PlayerTotemsBlizzardEventFrame", UIParent)
-        eventFrame:SetScript("OnEvent", function(_, event, ...)
-            if event == "UNIT_SPELLCAST_SUCCEEDED" then
-                local unit = ...
-                if unit ~= "player" then return end
-                local generation = eventFrame._msufTotemGeneration
-                local function RefreshIfCurrent()
-                    local gd = _EnsureGameplayDefaults()
-                    if eventFrame._msufTotemGeneration == generation and gd and gd.enablePlayerTotems then
-                        _RefreshBlizzardTotems()
-                    end
-                end
-                C_Timer.After(0, RefreshIfCurrent)
-                C_Timer.After(0.10, RefreshIfCurrent)
-                return
-            end
-
+        eventFrame:SetScript("OnEvent", function(self, event)
             if event == "ADDON_LOADED" and not _G.TotemFrame then
                 return
             end
 
             _RefreshBlizzardTotems()
+
+            -- Turning the feature off during combat leaves this frame registered for exactly one
+            -- event so the deferred restore can finish. Drop it again once ownership is back.
+            if self._msufRestorePending and not managed then
+                self._msufRestorePending = nil
+                self:UnregisterAllEvents()
+            end
         end)
     end
 
@@ -557,24 +645,31 @@ do
             previewWanted = false
             _ClearPreview()
             if eventFrame then
-                eventFrame._msufTotemGeneration = (eventFrame._msufTotemGeneration or 0) + 1
+                eventFrame._msufRestorePending = nil
                 eventFrame:UnregisterAllEvents()
             end
-            if totemWasActive then _RestoreBlizzardTotemFrame() end
+            if totemWasActive and not _RestoreBlizzardTotemFrame() and eventFrame then
+                -- Combat refused the restore. Without this the frame would keep MSUF's anchor
+                -- until the next enable or reload, because every event was just dropped.
+                eventFrame._msufRestorePending = true
+                eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+            end
             totemWasActive = false
             return
         end
 
         _EnsureEventFrame()
-        eventFrame._msufTotemGeneration = (eventFrame._msufTotemGeneration or 0) + 1
         eventFrame:UnregisterAllEvents()
         eventFrame:RegisterEvent("ADDON_LOADED")
         eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
         eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 
+        -- PLAYER_TOTEM_UPDATE is a cheap safety net for the window before the Update post-hook is
+        -- installed. Totem changes afterwards arrive through that hook, so no cast-driven
+        -- refresh is registered: it fired on every successful cast and only ever re-did work the
+        -- hook already covers.
         if _PlayerHasBlizzardTotemFrame() then
             eventFrame:RegisterEvent("PLAYER_TOTEM_UPDATE")
-            eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
         end
 
         totemWasActive = true
