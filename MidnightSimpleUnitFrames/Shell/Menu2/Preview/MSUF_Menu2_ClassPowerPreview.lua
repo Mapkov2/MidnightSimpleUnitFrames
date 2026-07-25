@@ -19,6 +19,10 @@ local CPPreview = M.ClassPowerPreview or {}
 local Helpers = M.PreviewHelpers or {}
 local ZoomPan = Preview.ZoomPan or {}
 Preview.ZoomPan = ZoomPan
+-- SetOnUpdateMode takes an Enum.OnUpdateMode value, not a name; a string argument leaves the
+-- animation driver's OnUpdate disabled.
+local ONUPDATE_MODE_DISABLED = (_G.Enum and _G.Enum.OnUpdateMode and _G.Enum.OnUpdateMode.Disabled) or 0
+local ONUPDATE_MODE_RUN_WHEN_VISIBLE = (_G.Enum and _G.Enum.OnUpdateMode and _G.Enum.OnUpdateMode.RunWhenVisible) or 1
 local function NormalizeControlPath(value)
     local path = tostring(value or "")
     path = path:gsub("([%l%d])([%u])", "%1_%2"):lower()
@@ -1940,7 +1944,7 @@ local function StopAnimationDriver(preview)
     local driver = preview and preview.animationDriver
     if not driver then return end
     driver:SetScript("OnUpdate", nil)
-    if driver.SetOnUpdateMode then driver:SetOnUpdateMode("Disabled") end
+    if driver.SetOnUpdateMode then driver:SetOnUpdateMode(ONUPDATE_MODE_DISABLED) end
     driver:Hide()
 end
 local function AnimationOnUpdate(driver, elapsed)
@@ -1974,7 +1978,7 @@ local function StartAnimationDriver(preview)
         preview.animationDriver._preview = preview
     end
     preview.animationDriver._preview = preview
-    if preview.animationDriver.SetOnUpdateMode then preview.animationDriver:SetOnUpdateMode("RunWhenVisible") end
+    if preview.animationDriver.SetOnUpdateMode then preview.animationDriver:SetOnUpdateMode(ONUPDATE_MODE_RUN_WHEN_VISIBLE) end
     preview.animationDriver:SetScript("OnUpdate", AnimationOnUpdate)
     preview.animationDriver:Show()
 end

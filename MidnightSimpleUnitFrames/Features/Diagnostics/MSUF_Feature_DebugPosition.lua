@@ -17,6 +17,11 @@ end
 
 ExportPublic("MSUF_DebugPositions", false)
 
+-- SetOnUpdateMode takes an Enum.OnUpdateMode value, not a name; a string argument leaves the
+-- overlay's OnUpdate disabled.
+local ONUPDATE_MODE_DISABLED = (_G.Enum and _G.Enum.OnUpdateMode and _G.Enum.OnUpdateMode.Disabled) or 0
+local ONUPDATE_MODE_RUN_WHEN_VISIBLE = (_G.Enum and _G.Enum.OnUpdateMode and _G.Enum.OnUpdateMode.RunWhenVisible) or 1
+
 --- ── helpers ──────────────────────────────────────────────────────────────────
 
 local function Dbg(msg)
@@ -125,7 +130,7 @@ local function StartOverlayUpdates()
     if _overlay._updatesActive then return end
     _overlay._updatesActive = true
     _overlay._updateAccum = 0.5
-    _overlay:SetOnUpdateMode("RunWhenVisible")
+    if _overlay.SetOnUpdateMode then _overlay:SetOnUpdateMode(ONUPDATE_MODE_RUN_WHEN_VISIBLE) end
     _overlay:SetScript("OnUpdate", OverlayOnUpdate)
 end
 
@@ -164,7 +169,7 @@ local function StopOverlayUpdates()
         _overlay._updatesActive = nil
         _overlay._updateAccum = nil
         _overlay:SetScript("OnUpdate", nil)
-        _overlay:SetOnUpdateMode("Disabled")
+        if _overlay.SetOnUpdateMode then _overlay:SetOnUpdateMode(ONUPDATE_MODE_DISABLED) end
     end
 end
 

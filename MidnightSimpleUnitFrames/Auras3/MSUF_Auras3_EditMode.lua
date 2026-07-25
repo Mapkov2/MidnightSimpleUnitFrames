@@ -25,6 +25,12 @@ local C_Timer = _G.C_Timer
 local issecretvalue = _G.issecretvalue
 local TextureKitConstants = _G.TextureKitConstants
 
+-- SetOnUpdateMode takes an Enum.OnUpdateMode value, not a name; a string argument leaves the
+-- driver disabled and silently kills the drag OnUpdate.
+local Enum = _G.Enum
+local ONUPDATE_MODE_DISABLED = (Enum and Enum.OnUpdateMode and Enum.OnUpdateMode.Disabled) or 0
+local ONUPDATE_MODE_RUN_WHEN_VISIBLE = (Enum and Enum.OnUpdateMode and Enum.OnUpdateMode.RunWhenVisible) or 1
+
 local A3 = MSUF.MSUF_Auras3
 if type(A3) ~= "table" then
     A3 = {}
@@ -855,7 +861,7 @@ end
 local function AuraGroupDragOnUpdate(me, elapsed)
     if not me._dragging then
         me:SetScript("OnUpdate", nil)
-        if me.SetOnUpdateMode then me:SetOnUpdateMode("Disabled") end
+        if me.SetOnUpdateMode then me:SetOnUpdateMode(ONUPDATE_MODE_DISABLED) end
         return
     end
     if IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then
@@ -1079,7 +1085,7 @@ BeginAuraGroupDrag = function(self, fromMotion)
     self._snapHW = (r - l) * 0.5
     self._snapHH = (t - b) * 0.5
 
-    if self.SetOnUpdateMode then self:SetOnUpdateMode("RunWhenVisible") end
+    if self.SetOnUpdateMode then self:SetOnUpdateMode(ONUPDATE_MODE_RUN_WHEN_VISIBLE) end
     self:SetScript("OnUpdate", AuraGroupDragOnUpdate)
     StartAuraDragCapture(self)
     return true
@@ -1103,7 +1109,7 @@ local function EndAuraGroupDrag(self, button, suppressClick)
     self._dragging = false
     self:SetScript("OnUpdate", nil)
     StopAuraDragCapture(self)
-    if self.SetOnUpdateMode then self:SetOnUpdateMode("Disabled") end
+    if self.SetOnUpdateMode then self:SetOnUpdateMode(ONUPDATE_MODE_DISABLED) end
     self._dragAuras = nil
     self._dragShared = nil
     self._dragRuntimeElapsed = nil
