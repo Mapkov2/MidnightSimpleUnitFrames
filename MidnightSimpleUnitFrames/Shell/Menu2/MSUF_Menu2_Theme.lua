@@ -2608,6 +2608,35 @@ end
 function T.RoleButton(parent, text, role, width, height)
     return T.ApplyButtonRole(T.Button(parent, text, width, height), role)
 end
+-- T.Button pins its label to LEFT +12 / RIGHT -12, so any label wider than width-24 is silently
+-- clipped. Hardcoded button widths therefore only ever fit the English string; every other locale
+-- loses characters. This measures the translated label and resizes to it.
+local BUTTON_LABEL_INSET = 24
+function T.MeasureButtonWidth(btn, minWidth, maxWidth)
+    if not btn then return tonumber(minWidth) or 0 end
+    local label = btn._msuf2Label
+    local width
+    if label and label.GetStringWidth then
+        local ok, measured = pcall(label.GetStringWidth, label)
+        if ok and type(measured) == "number" and measured > 0 then
+            width = measured + BUTTON_LABEL_INSET + 1
+        end
+    end
+    if not width then
+        -- GetStringWidth answers 0 before the font is realized; fall back to the current width so
+        -- callers never collapse a button to nothing.
+        width = (btn.GetWidth and tonumber(btn:GetWidth())) or tonumber(minWidth) or 0
+    end
+    width = math.floor(width + 0.5)
+    if minWidth and width < minWidth then width = minWidth end
+    if maxWidth and width > maxWidth then width = maxWidth end
+    return width
+end
+function T.FitButtonWidth(btn, minWidth, maxWidth)
+    if not btn then return btn end
+    btn:SetWidth(T.MeasureButtonWidth(btn, minWidth, maxWidth))
+    return btn
+end
 local function CloseButtonVisual(btn, hover, down)
     if not btn then return end
     local fill = btn._msuf2CloseFill

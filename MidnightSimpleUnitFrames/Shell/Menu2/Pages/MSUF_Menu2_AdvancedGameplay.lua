@@ -245,8 +245,10 @@ local function BuildGameplay(ctx)
         totemEnable = SwitchAt(ctx, classSec, "Blizzard TotemFrame", 30, -92, min(300, classControlW), Gameplay, "enablePlayerTotems", false, ApplyGameplayUI, Meta("totem_frame.enabled"))
         previewBtn = T.Button(classSec, "Preview", min(120, classControlW), 22)
         previewBtn:SetPoint("TOPLEFT", classSec, "TOPLEFT", 32, -128)
+        T.FitButtonWidth(previewBtn, 90, max(120, classCardW - 64))
         resetTotemBtn = T.Button(classSec, "Reset TotemFrame layout", min(190, classControlW), 22)
         resetTotemBtn:SetPoint("TOPLEFT", classSec, "TOPLEFT", 32, -160)
+        T.FitButtonWidth(resetTotemBtn, 140, max(190, classCardW - 64))
         LabelAt(classSec, "Tip: Move the preview via mousedrag or arrow keys.", 30, -196, min(520, classW - 60), "GameFontDisableSmall", T.colors.muted)
         AddControls(totemControls, classSec, {
             { "slider", "Icon size", 30, -238, 8, 64, 1, classControlW, "playerTotemsIconSize", 24 },
@@ -263,19 +265,47 @@ local function BuildGameplay(ctx)
         previewBtn = T.Button(classSec, "Preview", 120, 22)
         previewBtn:SetPoint("TOPLEFT", classSec, "TOPLEFT", classLeftX, -128)
         resetTotemBtn = T.Button(classSec, "Reset TotemFrame layout", 190, 22)
-        resetTotemBtn:SetPoint("TOPLEFT", classSec, "TOPLEFT", classLeftX + 132, -128)
-        LabelAt(classSec, "Tip: Move the preview via mousedrag or arrow keys.", classLeftX, -158, min(520, classCardW - 32), "GameFontDisableSmall", T.colors.muted)
+        -- Buttons live in the left column; the sliders own everything from classRightX on.
+        local btnRowW = max(160, classRightX - classLeftX - 12)
+        T.FitButtonWidth(previewBtn, 90, btnRowW)
+        local previewW = previewBtn:GetWidth() or 120
+        local resetW = T.MeasureButtonWidth(resetTotemBtn, 140, btnRowW)
+        resetTotemBtn:SetWidth(resetW)
+        -- Long translations ("Réinitialiser la disposition TotemFrame") cannot share the row with
+        -- Preview, so the pair wraps to a second line instead of truncating.
+        local wrapped = (previewW + 12 + resetW) > btnRowW
+        local rowShift = wrapped and 30 or 0
+        if wrapped then
+            resetTotemBtn:SetPoint("TOPLEFT", previewBtn, "BOTTOMLEFT", 0, -8)
+        else
+            resetTotemBtn:SetPoint("TOPLEFT", previewBtn, "TOPRIGHT", 12, 0)
+        end
+        LabelAt(classSec, "Tip: Move the preview via mousedrag or arrow keys.", classLeftX, -158 - rowShift, min(520, classCardW - 32), "GameFontDisableSmall", T.colors.muted)
+        -- From/To share one row, so both come out of the same split. Sizing the width and the
+        -- second column from unrelated formulas let them overlap each other and bleed into the
+        -- slider column at every content width.
+        local anchorGap = 12
+        local anchorW = min(180, max(96, floor((btnRowW - anchorGap) * 0.5)))
         AddControls(totemControls, classSec, {
             { "slider", "Icon size", classRightX, -84, 8, 64, 1, classColW, "playerTotemsIconSize", 24 },
             { "slider", "X offset", classRightX, -168, -200, 200, 1, classColW, "playerTotemsOffsetX", 0 },
             { "slider", "Y offset", classRightX, -252, -200, 200, 1, classColW, "playerTotemsOffsetY", -6 },
-            { "dropdown", "From", classLeftX, -202, frameAnchors, min(180, classColW), "playerTotemsAnchorFrom", "TOPLEFT" },
-            { "dropdown", "To", classLeftX + min(196, classColW * 0.55), -202, frameAnchors, min(180, classColW), "playerTotemsAnchorTo", "BOTTOMLEFT" },
+            { "dropdown", "From", classLeftX, -202 - rowShift, frameAnchors, anchorW, "playerTotemsAnchorFrom", "TOPLEFT" },
+            { "dropdown", "To", classLeftX + anchorW + anchorGap, -202 - rowShift, frameAnchors, anchorW, "playerTotemsAnchorTo", "BOTTOMLEFT" },
         })
+    end
+    -- The runtime owns preview state and drops it on its own (class without a TotemFrame, or the
+    -- master toggle going off), so the button reads it back rather than tracking a local flag.
+    local function SyncTotemPreviewButton()
+        local active = type(MSUF.MSUF_PlayerTotems_IsPreviewActive) == "function"
+            and MSUF.MSUF_PlayerTotems_IsPreviewActive() == true
+        T.ApplyButtonRole(previewBtn, active and "success" or "normal")
     end
     previewBtn:SetScript("OnClick", function()
         if MSUF and type(MSUF.MSUF_PlayerTotems_TogglePreview) == "function" then MSUF.MSUF_PlayerTotems_TogglePreview() end
+        SyncTotemPreviewButton()
     end)
+    SyncTotemPreviewButton()
     RegisterControl(previewBtn, Meta("totem_frame.preview", "ephemeral"), "Preview", "button")
     resetTotemBtn:SetScript("OnClick", function()
         local g = Gameplay()
@@ -433,7 +463,10 @@ local function BuildGameplay(ctx)
         { controls = meleeControls, on = function(g)
             return g.enableCombatCrosshair == true and g.enableCombatCrosshairMeleeRangeColor == true
         end },
-    }, { also = previewRefresh })
+    }, { also = function()
+        M.CallIf(previewRefresh)
+        SyncTotemPreviewButton()
+    end })
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 M.RegisterPage("gameplay", { title = "MSUF Gameplay", build = BuildGameplay, version = 3 })
