@@ -63,11 +63,12 @@ local function IsFiniteNumber(value)
   return type(value) == "number" and value == value and (value - value) == 0
 end
 
-local function SetPowerBarValue(bar, value, animate, valueSecret)
-  -- Opaque combat values cannot be deduplicated, so interpolating each event
-  -- would create a second native workload on top of the required SetValue.
-  -- Keep configured smoothing for ordinary values only.
-  local interp = animate == true and valueSecret ~= true and bar._msufSmoothInterp or nil
+local function SetPowerBarValue(bar, value, animate)
+  -- Opaque combat values cannot be deduplicated, but they must keep the
+  -- configured native interpolation: SetValue accepts secret values with an
+  -- interpolation mode, and stripping it here turned smoothing off exactly
+  -- in combat, where power values are secret.
+  local interp = animate == true and bar._msufSmoothInterp or nil
   if interp then
     bar:SetValue(value, interp)
     bar._msufInterpolating = true
@@ -715,7 +716,7 @@ local function UpdatePercent(frame, event, unit, animate)
   end
   local cachedPct = bar._msufPowerPercentValue
   if secret or cachedPct ~= pct then
-    SetPowerBarValue(bar, pct, animate, secret)
+    SetPowerBarValue(bar, pct, animate)
     if secret then
       bar._msufPowerPercentValue = nil
     else
@@ -777,7 +778,7 @@ local function UpdateAbsolute(frame, event, unit, animate)
   end
   local cachedValue = bar._msufPowerValue
   if valueSecret or cachedValue ~= value or bar._msufPowerValueUnit ~= unit then
-    SetPowerBarValue(bar, value, animate, valueSecret)
+    SetPowerBarValue(bar, value, animate)
   end
   if valueSecret then
     bar._msufPowerValue = nil
@@ -936,7 +937,7 @@ local function UpdateGroupPercentPathLean(frame, event, unit, eventPowerToken)
     bar._msufMinMax = 100
   end
   if secret or bar._msufPowerPercentValue ~= pct then
-    SetPowerBarValue(bar, pct, animate, secret)
+    SetPowerBarValue(bar, pct, animate)
     if secret then
       bar._msufPowerPercentValue = nil
     else

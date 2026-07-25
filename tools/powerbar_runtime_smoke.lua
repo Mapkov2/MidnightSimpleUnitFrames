@@ -183,8 +183,8 @@ power.frequent = true
 currentPercent = SECRET
 Power.Update(frame, "UNIT_POWER_FREQUENT", "player")
 assert(bar.value == SECRET, "secret power value did not reach the StatusBar")
-assert(bar.interpolation == nil and bar._msufInterpolating == nil,
-    "secret power created a native interpolation job")
+assert(bar.interpolation == INTERP and bar._msufInterpolating == true,
+    "secret power lost configured smooth fill")
 assert(bar._msufPowerPercentValue == nil, "secret power leaked into a Lua comparison cache")
 local valueCalls = bar.valueCalls
 Power.Update(frame, "UNIT_POWER_FREQUENT", "player", "RAGE")

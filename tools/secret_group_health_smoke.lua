@@ -88,8 +88,8 @@ local playerFrame = {
 Health.Update(playerFrame, "UNIT_HEALTH", "player")
 assert(playerBar.maximum == 100 and playerBar.value == SECRET_PCT,
   "secret player percent must still reach the StatusBar")
-assert(playerBar.interpolation == nil and playerBar._msufInterpolating == nil,
-  "secret player health created a native interpolation job")
+assert(playerBar.interpolation == INTERP and playerBar._msufInterpolating == true,
+  "secret player health lost configured smooth fill")
 assert(playerBar._msufMinMax == 100 and playerBar._msufHealthPercentValue == nil
     and playerBar._msufHealthPercentUnit == nil,
   "secret player values must never remain in Lua comparison caches")

@@ -255,11 +255,11 @@ local function UpdatePercent(frame, unit, animate)
   if secret
     or bar._msufHealthPercentValue ~= pct
     or bar._msufHealthPercentUnit ~= unit then
-    -- Restricted values already arrive through event-gated native updates and
-    -- cannot be deduplicated. Do not also create a native interpolation job
-    -- for every opaque combat tick; configured smoothing remains active for
-    -- ordinary values outside the restricted path.
-    local interp = animate == true and not secret and bar._msufSmoothInterp or nil
+    -- Restricted values cannot be deduplicated, but they must keep the
+    -- configured native interpolation: SetValue accepts secret values with an
+    -- interpolation mode (only the enum itself must stay plain), and stripping
+    -- it here turned smoothing off exactly in combat, where values are secret.
+    local interp = animate == true and bar._msufSmoothInterp or nil
     if interp then
       bar:SetValue(pct, interp)
       bar._msufInterpolating = true
@@ -329,7 +329,7 @@ local function UpdateAbsoluteValues(frame, unit, hp, maxHP, refreshMax, animate)
   if hpSecret
     or bar._msufHealthValue ~= hp
     or bar._msufHealthValueUnit ~= unit then
-    local interp = animate == true and not hpSecret and bar._msufSmoothInterp or nil
+    local interp = animate == true and bar._msufSmoothInterp or nil
     if interp then
       bar:SetValue(hp, interp)
       bar._msufInterpolating = true
@@ -530,7 +530,7 @@ local function UpdateGroupPercentLean(frame, event, unit)
   if secret
     or bar._msufHealthPercentValue ~= pct
     or bar._msufHealthPercentUnit ~= unit then
-    local interp = event == "UNIT_HEALTH" and not secret and bar._msufSmoothInterp or nil
+    local interp = event == "UNIT_HEALTH" and bar._msufSmoothInterp or nil
     if interp then
       bar:SetValue(pct, interp)
       bar._msufInterpolating = true

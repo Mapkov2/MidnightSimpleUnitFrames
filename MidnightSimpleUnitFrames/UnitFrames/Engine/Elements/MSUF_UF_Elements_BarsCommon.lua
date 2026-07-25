@@ -233,7 +233,7 @@ local SetBarMinMaxPlain = SetBarMinMaxKnown
 local function SetBarValue(bar, value, directValue, animate)
   if directValue then
     local valueSecret = issecretvalue(value) == true
-    local interp = animate and not valueSecret and bar._msufSmoothInterp or nil
+    local interp = animate and bar._msufSmoothInterp or nil
     if not valueSecret and bar._msufDirectValuePlain == true and bar._msufDirectValue == value then
       return false
     end
@@ -278,7 +278,7 @@ local function SetBarValueKnown(bar, value, valueSecret, animate)
   if valueSecret == nil then
     valueSecret = issecretvalue(value) == true
   end
-  local interp = animate and not valueSecret and bar._msufSmoothInterp or nil
+  local interp = animate and bar._msufSmoothInterp or nil
   if not valueSecret and bar._msufDirectValuePlain == true and bar._msufDirectValue == value then
     return false
   end
@@ -306,7 +306,7 @@ local function SetBarValuePlain(bar, value, animate)
   if not valueSecret and bar._msufDirectValuePlain == true and bar._msufDirectValue == value then
     return false
   end
-  local interp = animate and not valueSecret and bar._msufSmoothInterp or nil
+  local interp = animate and bar._msufSmoothInterp or nil
   if interp then
     bar:SetValue(value, interp)
     bar._msufInterpolating = true
