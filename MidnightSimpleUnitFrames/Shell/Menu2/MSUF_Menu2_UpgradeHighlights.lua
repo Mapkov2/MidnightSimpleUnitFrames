@@ -324,6 +324,16 @@ local function BuildActive(ctx, scene, T, releaseKey, spec, record, contentWidth
             if type(assistant) == "table" and type(assistant.StartNewTaskWithRuntime) == "function" then
                 assistant.StartNewTaskWithRuntime("upgrade-highlights")
             end
+        -- Edit Mode has no page to land on, so its action starts the mode
+        -- itself. `M.ToggleDashboardEditMode` is not an option here: it is
+        -- created inside the Dashboard build, which early-returns into this
+        -- scene, so it does not exist while the tour owns Home. The shared
+        -- lifecycle setter is file scope, is a no-op when the mode already
+        -- runs, and shows the standard combat-lock message on its own.
+        elseif item.id == "edit_mode" then
+            if type(M.SetMSUFEditModeActive) == "function" then
+                M.SetMSUFEditModeActive(true, nil, { source = "upgrade_highlights" })
+            end
         end
     end
     if compact then

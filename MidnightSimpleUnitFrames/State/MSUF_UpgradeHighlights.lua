@@ -25,7 +25,7 @@ local DATA = {
     releaseOrder = { "6.0" },
     releases = {
         ["6.0"] = {
-            sourceVersion = "5.71 and older",
+            sourceVersion = "5.76 and older",
             title = "Your MSUF 6.0 highlights",
             intro = "Your current profile stays exactly as it is. Take a quick tour of the new controls, then decide what you want to configure.",
             highlights = {
@@ -50,19 +50,32 @@ local DATA = {
                     icon = "auras3_styling",
                     pageKey = "auras3_styling",
                     title = "Auras3: a full Aura menu rework",
-                    summary = "The 5.71 Auras2 page has been rebuilt as Auras3, with separate Unitframe and Group workspaces plus Buff, Debuff and Custom lanes.",
+                    summary = "The old Auras2 page has been rebuilt as Auras3, with separate Unitframe and Group workspaces plus Buff, Debuff and Custom lanes.",
                     impact = "Each lane gets its own live preview, layout, growth, sorting, filters, blacklist or whitelist, cooldown text, swipe, stacks and duration bars.",
                     missed = "the rebuilt Auras3 workspace, lane-specific previews, layouts, sorting, filters and styling",
                     action = "Explore the Aura rework",
+                },
+                {
+                    id = "priority_frames",
+                    icon = "gf_priority",
+                    pageKey = "gf_priority",
+                    route = {
+                        accordion = "gf_priority:who_appears",
+                    },
+                    title = "Priority Frames for the units that matter",
+                    summary = "Pin up to five group members by hand, or let MSUF pick the tanks automatically, and give them their own strip that never reshuffles mid-fight.",
+                    impact = "The people you have to watch keep one fixed spot on screen, with the Party or Raid look and click-casting they already had.",
+                    missed = "Priority Frames, manual and automatic pinning, and their own placement",
+                    action = "Set up Priority Frames",
                 },
                 {
                     id = "group_frames",
                     icon = "gf_layout",
                     pageKey = "gf_layout",
                     title = "Adaptive Party and Raid layouts",
-                    summary = "Group frames gained smarter layouts, stronger status handling, range behavior and clearer health feedback.",
-                    impact = "You can make one group setup adapt more cleanly between party, raid and encounter needs.",
-                    missed = "adaptive group layouts, range behavior and group status controls",
+                    summary = "Party, Raid and Mythic Raid gained adaptive layouts and scaling, per-lane aura filters and blacklists, a focused Dispel Overlay page, role icons and range fade.",
+                    impact = "One group setup can follow you from a five-man into a raid, and you decide per lane which auras are allowed to show at all.",
+                    missed = "adaptive group layouts and scaling, group aura filters and blacklists, the Dispel Overlay page and range fade",
                     action = "Open Group Layout",
                 },
                 {
@@ -99,6 +112,43 @@ local DATA = {
                     impact = "You can identify the destination of an important cast without shifting attention away from the cast bar.",
                     missed = "cast-target names and their text styling on Target, Focus and Boss frames",
                     action = "Open Target Cast Bar",
+                },
+                {
+                    id = "colors_painter",
+                    icon = "opt_colors",
+                    pageKey = "opt_colors",
+                    title = "One Colors page with click-to-paint",
+                    summary = "Every color moved onto one page, grouped into Player & Target, Party & Raid, Castbar, Aura, Power and Class Resource workspaces with their own live preview.",
+                    impact = "You can click the element in the preview to paint it instead of hunting for the matching swatch, and reuse any color from a recent or saved palette.",
+                    missed = "the rebuilt Colors page, click-to-paint previews, palettes and the new color picker",
+                    action = "Open the Colors page",
+                },
+                {
+                    id = "frame_layers",
+                    icon = "uf_player",
+                    pageKey = "uf_player",
+                    route = {
+                        unit = "player",
+                        accordion = "uf_player:status_icons",
+                    },
+                    title = "One 0-30 layer scale for everything",
+                    summary = "Text, status icons, auras, borders, bar outlines, group indicators and class resources all order themselves on one shared 0-30 layer scale.",
+                    impact = "You decide exactly what draws in front of what, and the Layer Overview beside any layer slider shows the whole stack at once.",
+                    missed = "the addon-wide 0-30 layer scale and the Layer Overview",
+                    action = "See the layer controls",
+                },
+                {
+                    -- Edit Mode is a screen mode, not a menu page. Its action is
+                    -- special-cased in the scene so the button starts the mode
+                    -- instead of only landing on the Dashboard behind it.
+                    id = "edit_mode",
+                    icon = "modules",
+                    pageKey = "home",
+                    title = "MSUF Edit Mode, rebuilt",
+                    summary = "Edit Mode gained a dockable toolbar, redesigned quick popups on every frame, and Undo and Redo that behave the same there as in the menu.",
+                    impact = "You can move, size and copy frames directly on screen and step back out of any mistake without reopening the menu.",
+                    missed = "the rebuilt Edit Mode toolbar, its quick popups and shared Undo and Redo",
+                    action = "Start Edit Mode",
                 },
                 {
                     id = "assistant",
