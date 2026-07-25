@@ -20,6 +20,7 @@ function A.GlobalBarRegistry.RegisterTextureGradientSettings(ctx)
     local RegisterGeneralString = ctx.RegisterGeneralString
     local RegisterGeneralBoolean = ctx.RegisterGeneralBoolean
     local RegisterGeneralNumberSetting = ctx.RegisterGeneralNumberSetting
+    local RegisterBarsString = ctx.RegisterBarsString
     local ApplyBars = ctx.ApplyBars
     local ApplyBarGradients = ctx.ApplyBarGradients
     local NormalizeTextureKeyForAssistant = ctx.NormalizeTextureKeyForAssistant
@@ -52,6 +53,34 @@ function A.GlobalBarRegistry.RegisterTextureGradientSettings(ctx)
         reason = "MSUF_ASSISTANT_BAR_BACKGROUND_TEXTURE",
         normalizeValue = NormalizeTextureKeyForAssistant,
     })
+    -- Shared power-bar art for every unit power bar, detached or not. It lives
+    -- in the bars table rather than general, and an empty value means "follow
+    -- the bar texture" -- the same sentinel the menu dropdown shows as
+    -- "Use bar texture". These replaced the retired detached-power textures, so
+    -- without them the Class Resources power-texture phrasings resolve to a key
+    -- that no longer exists.
+    if type(RegisterBarsString) == "function" then
+        RegisterBarsString("powerBarTexture", "texture", "Power Bar Texture", "", {
+            "power bar texture", "power texture", "mana bar texture", "resource bar texture",
+            "power bar foreground texture", "power foreground texture",
+        }, {
+            category = "Global / Bars / Textures",
+            apply = ApplyBars,
+            reason = "MSUF_ASSISTANT_POWER_BAR_TEXTURE",
+            normalizeValue = NormalizeTextureKeyForAssistant,
+            description = "Art for every unit's power bar. Leave empty to follow the shared bar texture; each unit page can override it.",
+        })
+        RegisterBarsString("powerBarBgTexture", "backgroundTexture", "Power Bar Background Texture", "", {
+            "power bar background texture", "power background texture", "power bar bg texture",
+            "mana bar background texture", "resource bar background texture",
+        }, {
+            category = "Global / Bars / Textures",
+            apply = ApplyBars,
+            reason = "MSUF_ASSISTANT_POWER_BAR_BACKGROUND_TEXTURE",
+            normalizeValue = NormalizeTextureKeyForAssistant,
+            description = "Background art behind every unit's power bar. Overridable per unit on the unit page.",
+        })
+    end
     RegisterGeneralBoolean("enableGradient", "healthGradient", "HP Bar Gradient", false, {
         "hp bar gradient", "health bar gradient", "health gradient", "hp gradient",
         "bar gradient", "bars gradient", "bar gradients", "unitframe gradient",

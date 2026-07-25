@@ -26,9 +26,11 @@ local PROFILE_ACTION_BY_PATH = {
     ["import.legacy"] = "import_legacy_profile_string",
     ["import.execute"] = "import_profile_string",
     ["profiles.browse_wago"] = "copy_wago_profiles_link",
+    ["new_character.default_profile"] = "set_new_character_profile",
 }
 local PROFILE_ACTION_INPUT_BY_PATH = {
     ["active_profile.select"] = "name",
+    ["new_character.default_profile"] = "name",
     ["profile.create"] = "name",
     ["profile.copy_current"] = "name",
     ["import.legacy"] = "value",
@@ -401,7 +403,7 @@ local function BuildProfiles(ctx)
             CallMSUF("MSUF_SetDefaultProfileForNewCharacters", (v ~= "None") and v or nil)
             RefreshAfterProfileChange(ctx)
         end,
-        ProfilesMeta("new_character.default_profile"))
+        ProfilesMeta("new_character.default_profile", "action"))
     local newCharHelp = W.Text(current, "The active profile is saved per character. New characters start on this profile instead of Default.", rightX, -228, buttonGridW, T.colors.muted)
     if newCharHelp and newCharHelp.SetWordWrap then newCharHelp:SetWordWrap(true) end
     local specs = GetSpecMeta()

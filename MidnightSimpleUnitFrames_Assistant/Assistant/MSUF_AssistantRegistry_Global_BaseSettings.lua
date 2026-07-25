@@ -82,6 +82,22 @@ function A.GlobalRegistry.RegisterBaseSettings(ctx)
         requiresReload = true,
     })
 
+    -- Companion to the accent choice above: whether the accent hue is rotated
+    -- onto panels, borders and the nav rail, or stays on buttons and highlights
+    -- only. Like the accent itself, the rehue happens once at login, so this
+    -- needs a reload to take effect.
+    RegisterGeneralBoolean("menuAccentTintSurfaces", "menuAccentTintSurfaces", "Tint Menu Surfaces", false, {
+        "tint menu surfaces", "menu surface tint", "tint menu panels", "accent tint surfaces",
+        "tint the menu background", "menu accent tint", "tint options panels",
+    }, {
+        category = "Global / Misc",
+        frameType = "misc",
+        combatSafe = true,
+        requiresReload = true,
+        apply = function() return true end,
+        description = "Off keeps panels midnight while the accent colors buttons, tabs and highlights. On rotates panels, borders and the navigation rail onto the accent hue too.",
+    })
+
     RegisterGeneralString("menuFontKey", "menuFont", "MSUF Menu Font", "", {
         "msuf menu font", "menu font", "options menu font", "options font", "dashboard menu font",
         "font of the msuf menu", "font for the msuf menu", "msuf menu typeface", "menu typeface",

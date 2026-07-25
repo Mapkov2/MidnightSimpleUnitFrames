@@ -505,7 +505,8 @@ reset_profile
 -- affected profile names are covered by CaptureProfileSnapshot.
 DefineActionPolicies([[
 clear_broken_spec_profile_mappings clear_spec_profile copy_profile create_profile
-delete_profile import_profile_string_new set_spec_profile switch_profile
+delete_profile import_profile_string_new set_new_character_profile set_spec_profile
+switch_profile
 ]], {
     mutability = "savedState",
     readOnly = false,

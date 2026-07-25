@@ -103,6 +103,7 @@ function A.UnitframesRegistry.BuildCoreSettingsContext(ctx)
         RegisterUnitBooleanSetting = RegisterUnitBooleanSetting,
         RegisterUnitNumberSetting = RegisterUnitNumberSetting,
         RegisterUnitEnum = RegisterUnitEnum,
+        RegisterUnitString = RegisterUnitString,
         DETACHED_POWER_SHAPE_VALUES = UnitframeData.DETACHED_POWER_SHAPE_VALUES,
         DETACHED_POWER_SHAPE_ALIASES = UnitframeData.DETACHED_POWER_SHAPE_ALIASES,
     }

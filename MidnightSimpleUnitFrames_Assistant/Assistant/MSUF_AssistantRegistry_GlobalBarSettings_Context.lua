@@ -26,6 +26,7 @@ function A.GlobalBarRegistry.BuildGlobalBarSettingsContext(ctx)
     local RegisterBarsBoolean = C.RegisterBarsBoolean
     local RegisterBarsNumber = C.RegisterBarsNumber
     local RegisterBarsEnum = C.RegisterBarsEnum
+    local RegisterBarsString = C.RegisterBarsString
     local RegisterGeneralBoolean = C.RegisterGeneralBoolean
     local RegisterGeneralNumberSetting = C.RegisterGeneralNumberSetting
     local RegisterGeneralEnum = C.RegisterGeneralEnum
@@ -108,6 +109,7 @@ function A.GlobalBarRegistry.BuildGlobalBarSettingsContext(ctx)
         RegisterBarsBoolean = RegisterBarsBoolean,
         RegisterBarsNumber = RegisterBarsNumber,
         RegisterBarsEnum = RegisterBarsEnum,
+        RegisterBarsString = RegisterBarsString,
         GLOBAL_SCOPE_ORDER = GLOBAL_SCOPE_ORDER,
         GlobalScopeIsGroup = GlobalScopeIsGroup,
         GlobalScopeHasOverride = GlobalScopeHasOverride,

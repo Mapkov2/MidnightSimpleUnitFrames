@@ -87,6 +87,46 @@ if type(RegisterLifecycleActions) == "function" then
     })
 end
 
+-- The Profiles page dropdown "New character profile" picks what a character
+-- that has never run MSUF starts on. It is modelled as an action rather than a
+-- setting for the same reason "Active profile" is: the valid values are the
+-- live profile pool, which no static enum can describe. "None" clears it and
+-- restores the historical "new characters land on Default" behaviour.
+Registry:RegisterAction({
+    key = "set_new_character_profile",
+    label = "Set New Character Default Profile",
+    type = "profile",
+    combatSafe = false,
+    captureSnapshot = true,
+    captureProfileSnapshot = true,
+    run = function(args)
+        local requested = args and args.name
+        if type(requested) ~= "string" or requested == "" then
+            return false, "Which profile do you want new characters to start on? Say a profile name, or None to clear it."
+        end
+        if type(Profile.SetNewCharacterProfile) ~= "function" then
+            return false, "Open Profiles first so I can set the profile for new characters."
+        end
+        -- Clearing is a real outcome, so it must not be routed through the
+        -- name resolver -- "None" is a sentinel, never a profile to look up.
+        if requested == "None" or requested:lower() == "none" then
+            if not Profile.SetNewCharacterProfile(nil) then
+                return false, "Open Profiles first so I can set the profile for new characters."
+            end
+            Profile.Refresh()
+            return true, "Done. New characters now start on Default."
+        end
+        local resolved, how = ResolveProfileName(requested)
+        if how == "multiple" then return false, "I found multiple matching profiles. Which full profile name do you want me to use?" end
+        if not ProfileExists(resolved) then return false, "I don't see that profile: " .. tostring(requested) .. "." end
+        if not Profile.SetNewCharacterProfile(resolved) then
+            return false, "Open Profiles first so I can set the profile for new characters."
+        end
+        Profile.Refresh()
+        return true, "Done. New characters now start on profile " .. tostring(resolved) .. "."
+    end,
+})
+
 Registry:RegisterAction({
     key = "set_spec_profile",
     label = "Set Spec Profile",

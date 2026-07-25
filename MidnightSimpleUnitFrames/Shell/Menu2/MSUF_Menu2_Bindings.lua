@@ -1778,6 +1778,12 @@ local function AttachCommandAction(ctx, widget, kind, getValue, setValue, opts)
         controlPath = opts.controlPath,
         settingKey = opts.settingKey,
         actionKey = opts.actionKey,
+        -- An action-backed bound widget carries its argument contract here too.
+        -- RuntimeControlCatalog reads both off the command, and without them an
+        -- action control looks argument-less and is downgraded to "guided",
+        -- which the release schema refuses to publish.
+        actionInputArg = opts.actionInputArg,
+        actionFixedArgs = opts.actionFixedArgs,
         navigationKey = opts.navigationKey,
         assistantDisposition = opts.assistantDisposition,
         assistantDispositionReason = opts.assistantDispositionReason,
@@ -1831,6 +1837,8 @@ local function AttachCommandAction(ctx, widget, kind, getValue, setValue, opts)
             controlPath = command.controlPath,
             settingKey = command.settingKey,
             actionKey = command.actionKey,
+            actionInputArg = command.actionInputArg,
+            actionFixedArgs = command.actionFixedArgs,
             navigationKey = command.navigationKey,
             assistantDisposition = command.assistantDisposition,
             assistantDispositionReason = command.assistantDispositionReason,

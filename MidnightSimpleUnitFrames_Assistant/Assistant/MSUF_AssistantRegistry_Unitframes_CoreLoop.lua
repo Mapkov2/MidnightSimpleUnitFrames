@@ -46,6 +46,17 @@ function A.UnitframesRegistry.RegisterCoreLoopSettings(ctx)
             category = "Frame",
             reason = "MSUF_ASSISTANT_REVERSE_FILL",
         })
+        -- The menu shows the fill axis and the in-axis direction as one
+        -- four-way "Fill Direction" dropdown, but they are two independent
+        -- booleans in the DB. Registering the axis beside reverseFillBars keeps
+        -- both halves reachable ("fill the player bars vertically") instead of
+        -- leaving the axis addressable only through the merged control.
+        RegisterUnitBooleanSetting(unit, "verticalFillBars", "verticalFillBars", "Vertical Bar Fill", false,
+            MakeAliases(unit, "vertical bar fill", "vertical fill", "fill bars vertically", "vertical health fill"), {
+            category = "Frame",
+            reason = "MSUF_ASSISTANT_VERTICAL_FILL",
+            description = "Fills the Health and Power bars along the vertical axis. Combine with Reverse Fill Direction to choose bottom-to-top or top-to-bottom.",
+        })
         RegisterUnitBooleanSetting(unit, "smoothFill", "smoothFill", "Smooth Health Fill", false, MakeAliases(unit, "smooth fill", "smooth health fill", "smooth frame fill"), {
             category = "Frame",
             reason = "MSUF_ASSISTANT_SMOOTH_FILL",

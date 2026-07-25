@@ -103,5 +103,27 @@ function A.ProfileWorkflowBuilders.InstallSpecProfileHelpers(Profile)
         return true
     end
 
+    -- Which profile a character that has never run MSUF starts on. This is
+    -- account-wide meta in MSUF_GlobalDB.global, deliberately outside the
+    -- profile tables so switching, resetting, or importing a profile never
+    -- rewrites it. `nil` keeps the historical "new characters land on Default"
+    -- behaviour, which is why clearing is a supported outcome rather than an
+    -- error.
+    function Profile.NewCharacterProfile()
+        if type(_G.MSUF_GetDefaultProfileForNewCharacters) ~= "function" then return nil end
+        local name = _G.MSUF_GetDefaultProfileForNewCharacters()
+        return type(name) == "string" and name ~= "" and name or nil
+    end
+
+    function Profile.SetNewCharacterProfile(profileName)
+        if type(_G.MSUF_SetDefaultProfileForNewCharacters) ~= "function" then return false end
+        -- "None" is the shared dropdown sentinel for "no selection"; the engine
+        -- treats nil as clear and validates any real name against the pool.
+        if type(profileName) ~= "string" or profileName == "" or profileName == "None" then
+            return _G.MSUF_SetDefaultProfileForNewCharacters(nil) ~= false
+        end
+        return _G.MSUF_SetDefaultProfileForNewCharacters(profileName) ~= false
+    end
+
     return true
 end

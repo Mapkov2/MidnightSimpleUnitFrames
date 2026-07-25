@@ -1112,7 +1112,18 @@ local function IsLaunchableMode(row)
     if kind ~= "button" and kind ~= "toggle" and kind ~= "segment" and kind ~= "dropdown" then return false end
     local path = tostring(row.controlPath or ""):lower()
     if path:find("/section/", 1, true) and path:find("/expanded", 1, true) then return false end
-    if path:find("/preview/scope/option/", 1, true) then return false end
+    -- The Color Painter's scope picker only chooses what the painter previews;
+    -- it starts nothing. Matched on the whole "/preview/scope/" segment rather
+    -- than one leaf so the taxonomy can change (it went from one control per
+    -- category to a single selector) without silently re-listing it as a
+    -- launchable test mode.
+    if path:find("/preview/scope/", 1, true) then return false end
+    -- Two more families sit under a "preview" path segment without starting
+    -- anything: the painter's palette swatches are colour values, and the
+    -- preview pane's height toggle is window chrome. Both would otherwise be
+    -- offered as runnable test modes because the marker matches the path.
+    if path:find("/preview/palette/", 1, true) then return false end
+    if path:find("/preview/height/", 1, true) then return false end
     local text = " " .. ModeText(row) .. " "
     local marked = HasAny(text, MODE_MARKERS)
     if not marked then return false end

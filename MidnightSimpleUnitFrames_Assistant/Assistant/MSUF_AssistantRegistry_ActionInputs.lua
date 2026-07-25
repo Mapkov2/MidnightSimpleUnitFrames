@@ -485,6 +485,8 @@ DefineObject("rename_profile", {
 DefineObject("start_profile_copy_flow start_profile_rename_flow", { source = NAME })
 DefineObject("clear_spec_profile", { spec = SPEC_VALUE }, { required = { "spec" } })
 DefineObject("set_spec_profile", { spec = SPEC_VALUE, name = NAME }, { required = { "spec", "name" } })
+-- "None" clears the choice, so the name is required but may be the sentinel.
+DefineObject("set_new_character_profile", { name = NAME }, { required = { "name" } })
 DefineObject("export_profile", { kind = PROFILE_EXPORT_KIND })
 DefineObject("import_profile_string import_legacy_profile_string", {
     value = IMPORT_TEXT,

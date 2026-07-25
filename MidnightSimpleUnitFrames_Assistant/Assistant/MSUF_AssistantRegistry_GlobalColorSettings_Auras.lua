@@ -48,6 +48,25 @@ function A.GlobalRegistry.CreateAuraAndPortraitColorSettings(ctx)
         end
     end
 
+    -- Shared Auras3 icon style colors. These match the Colors page defaults in
+    -- MSUF_Menu2_AdvancedColors.lua; the fourth component is the alpha the Auras
+    -- page sliders own.
+    local ICON_STYLE_BORDER_DEFAULT = { 0, 0, 0, 1 }
+    local ICON_STYLE_SHADOW_DEFAULT = { 0, 0, 0, 0.8 }
+    local function IconStyleRGB(key, default)
+        local stored = AuraSharedDB()[key]
+        if type(stored) ~= "table" then stored = default end
+        return tonumber(stored[1]) or default[1],
+            tonumber(stored[2]) or default[2],
+            tonumber(stored[3]) or default[3]
+    end
+    local function SetIconStyleRGB(key, default, r, g, b)
+        local shared = AuraSharedDB()
+        local stored = shared[key]
+        local alpha = (type(stored) == "table" and tonumber(stored[4])) or default[4]
+        shared[key] = { r, g, b, alpha }
+    end
+
     local function RegisterSettings()
         ColorSetting("general.aurasOwnBuffHighlightColor", "Own Buff Highlight Color", {
             "own buff highlight color", "my buff highlight color", "aura own buff color", "own buff aura highlight color", "buff aura highlight color",
@@ -90,6 +109,33 @@ function A.GlobalRegistry.CreateAuraAndPortraitColorSettings(ctx)
         end, { category = "Colors / Auras", attribute = "pandemicColor", defaultR = 0, defaultG = 0.4, defaultB = 1, apply = ApplyAuraColors,
             menuControlDisposition = "standalone", menuControlDispositionReason = "This color is edited through contextual top-card color shortcuts rather than a dedicated scalar Colors-page row.",
             menuControlDispositionEvidence = "MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_AdvancedColors.lua:2173-2187" })
+        -- The icon border and shadow colors are the only shared aura colors
+        -- stored as a single {r,g,b,a} table instead of the R/G/B scalar triple
+        -- the rest of this domain uses. Alpha belongs to the Auras page sliders,
+        -- so a color change must carry the stored alpha through untouched --
+        -- writing a bare triple here would silently reset the icon to opaque.
+        ColorSetting("auras3.shared.styleBorderColor", "Aura Icon Border Color", {
+            "aura icon border color", "aura border color", "icon border color",
+            "buff border color", "debuff border color", "aura icon border colour",
+        }, function()
+            return IconStyleRGB("styleBorderColor", ICON_STYLE_BORDER_DEFAULT)
+        end, function(r, g, b)
+            SetIconStyleRGB("styleBorderColor", ICON_STYLE_BORDER_DEFAULT, r, g, b)
+        end, { category = "Colors / Auras", attribute = "auraIconBorderColor",
+            defaultR = ICON_STYLE_BORDER_DEFAULT[1], defaultG = ICON_STYLE_BORDER_DEFAULT[2], defaultB = ICON_STYLE_BORDER_DEFAULT[3],
+            apply = ApplyAuraColors,
+            exactAliases = { "aura icon border color", "aura border color", "icon border color" } })
+        ColorSetting("auras3.shared.styleShadowColor", "Aura Icon Shadow Color", {
+            "aura icon shadow color", "aura shadow color", "icon shadow color",
+            "aura icon drop shadow color", "buff shadow color", "debuff shadow color",
+        }, function()
+            return IconStyleRGB("styleShadowColor", ICON_STYLE_SHADOW_DEFAULT)
+        end, function(r, g, b)
+            SetIconStyleRGB("styleShadowColor", ICON_STYLE_SHADOW_DEFAULT, r, g, b)
+        end, { category = "Colors / Auras", attribute = "auraIconShadowColor",
+            defaultR = ICON_STYLE_SHADOW_DEFAULT[1], defaultG = ICON_STYLE_SHADOW_DEFAULT[2], defaultB = ICON_STYLE_SHADOW_DEFAULT[3],
+            apply = ApplyAuraColors,
+            exactAliases = { "aura icon shadow color", "aura shadow color", "icon shadow color" } })
         RegisterGeneralBoolean("aurasCooldownTextUseBuckets", "auraCooldownBuckets", "Color Aura Timers By Remaining Time", false, {
             "color aura timers by remaining time", "aura timer bucket colors", "aura timer color buckets", "aura cooldown bucket colors", "aura cooldown color buckets", "aura cooldown buckets", "aura timer buckets",
         }, { category = "Colors / Auras", frameType = "colors", apply = ApplyAuraColors, reason = "MSUF_ASSISTANT_AURA_TIMER_BUCKETS",

@@ -24,6 +24,17 @@ local DetachedPowerMoveAliases = UnitframesRegistry.DetachedPowerMoveAliases
 local DetachedPowerMoveGuard = UnitframesRegistry.DetachedPowerMoveGuard
 local InitDetachedPowerBar = UnitframesRegistry.InitDetachedPowerBar
 
+-- The shared texture-name normalizer lives in the Global Bars data module,
+-- which loads long after this registry runs. Resolving it at call time keeps
+-- the per-unit power textures on the same alias table as every other texture
+-- setting without forcing a load-order change.
+local function NormalizeTextureKeyForAssistant(value)
+    local Data = A.GlobalBarRegistry and A.GlobalBarRegistry.Data
+    local normalize = Data and Data.NormalizeTextureKeyForAssistant
+    if type(normalize) == "function" then return normalize(value) end
+    return value
+end
+
 local function AppendAliases(aliases, ...)
     if type(aliases) ~= "table" then return aliases end
     for i = 1, select("#", ...) do
@@ -44,6 +55,7 @@ function A.UnitframesRegistry.RegisterPowerSettings(ctx, unit)
     local RegisterUnitBooleanSetting = ctx.RegisterUnitBooleanSetting
     local RegisterUnitNumberSetting = ctx.RegisterUnitNumberSetting
     local RegisterUnitEnum = ctx.RegisterUnitEnum
+    local RegisterUnitString = ctx.RegisterUnitString
     local DETACHED_POWER_SHAPE_VALUES = ctx.DETACHED_POWER_SHAPE_VALUES or {}
     local DETACHED_POWER_SHAPE_ALIASES = ctx.DETACHED_POWER_SHAPE_ALIASES or {}
 
@@ -55,6 +67,28 @@ function A.UnitframesRegistry.RegisterPowerSettings(ctx, unit)
 
     RegisterUnitBooleanSetting(unit, "powerBar", "showPowerBar", "Power Bar", UnitDefaultPowerBar(unit),
         MakeAliases(unit, "power bar", "show power bar"), { category = "Power Bar", power = true })
+    -- Per-unit override of the shared bars power art, applying whether the bar
+    -- is detached or not. Empty means "follow the shared texture", which is the
+    -- menu's "Use global power texture" entry -- so an empty value is a real
+    -- choice here and must not be normalized into a texture name.
+    if type(RegisterUnitString) == "function" then
+        RegisterUnitString(unit, "texture", "powerBarTexture", "Power Texture", "",
+            MakeAliases(unit, "power texture", "power bar texture", "power bar foreground texture", "mana bar texture"), {
+            category = "Power Bar",
+            power = true,
+            mediaType = "statusbar",
+            normalizeValue = NormalizeTextureKeyForAssistant,
+            description = "Art for this frame's power bar. Leave empty to follow the shared Bars power texture.",
+        })
+        RegisterUnitString(unit, "backgroundTexture", "powerBarBgTexture", "Power Background Texture", "",
+            MakeAliases(unit, "power background texture", "power bar background texture", "power bar bg texture"), {
+            category = "Power Bar",
+            power = true,
+            mediaType = "statusbar",
+            normalizeValue = NormalizeTextureKeyForAssistant,
+            description = "Background art behind this frame's power bar. Leave empty to follow the shared Bars power background.",
+        })
+    end
     RegisterUnitBooleanSetting(unit, "powerBarBorder", "powerBarBorderEnabled", "Power Bar Border", false, MakeAliases(unit, "power bar border", "power border"), {
         category = "Power Bar",
         power = true,

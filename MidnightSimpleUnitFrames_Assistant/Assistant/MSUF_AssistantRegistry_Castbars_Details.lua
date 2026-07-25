@@ -96,6 +96,8 @@ function A.CastbarsRegistry.RegisterDetailSettings(ctx)
         RegisterGeneralNumber(spec.prefix .. "IconBorderThickness", unit, "castbar", "iconBorderThickness", "Castbar Icon Border Thickness", 0, 0, 8, aliases)
         aliases = UnitCastbarAliases(unit, "castbar icon border", "castbar icon border style")
         RegisterGeneralEnumSetting(spec.prefix .. "IconBorderStyle", unit, "castbar", "iconBorderStyle", "Castbar Icon Border Style", "NONE", CASTBAR_ICON_BORDER_VALUES, aliases, CASTBAR_ICON_BORDER_ALIASES)
+        aliases = UnitCastbarAliases(unit, "castbar icon layer", "castbar icon frame level", "castbar icon level")
+        RegisterGeneralNumber(spec.prefix .. "IconFrameLevelOffset", unit, "castbar", "iconFrameLevelOffset", "Castbar Icon Layer", 0, 0, 30, aliases)
         aliases = UnitCastbarAliases(unit, "castbar layer", "castbar frame layer", "castbar frame level")
         RegisterGeneralNumber(spec.prefix .. "FrameLevelOffset", unit, "castbar", "frameLevelOffset", "Castbar Frame Layer", 6, 0, 30, aliases)
 
