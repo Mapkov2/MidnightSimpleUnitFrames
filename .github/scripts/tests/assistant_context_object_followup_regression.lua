@@ -181,9 +181,14 @@ assert(type(borderColor) == "table" and tonumber(borderColor.r) == 1 and tonumbe
 reset()
 submit("set target portrait position left")
 local widthBefore = boxes["target.width"].value
-local unsupportedSibling = A.Submit("make it wider")
-assert(status(unsupportedSibling) ~= "applied", "unsupported portrait width follow-up guessed another control")
-expectValue("target.width", widthBefore, "unsupported portrait width fell back to Target Width")
+-- Portraits gained a real "Portrait Width Override" in 6.0 Beta 30, so this
+-- follow-up is no longer unsupported: it must resolve against the retained
+-- portrait object and must still never leak onto the frame's own width.
+local portraitWiden = A.Submit("make it wider")
+assert(status(portraitWiden) == "applied", "portrait width follow-up no longer resolves the retained portrait")
+local portraitWidth = tonumber(_G.MSUF_DB and _G.MSUF_DB.target and _G.MSUF_DB.target.portraitWidth)
+assert(portraitWidth ~= nil and portraitWidth > 0, "portrait width follow-up did not write target.portraitWidth")
+expectValue("target.width", widthBefore, "portrait width follow-up leaked onto Target Width")
 
 local retainedContext = {
     turnSerial = 2,
