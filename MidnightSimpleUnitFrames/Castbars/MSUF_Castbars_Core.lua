@@ -710,6 +710,28 @@ local function SyncCastbarFrameStrata(frame, anchor, unit)
     if wanted and wanted ~= "" and wanted ~= currentStrata then frame:SetFrameStrata(wanted) end
 end
 
+local CASTBAR_ICON_LAYER_KEYS = {
+    player = "castbarPlayerIconFrameLevelOffset",
+    target = "castbarTargetIconFrameLevelOffset",
+    focus = "castbarFocusIconFrameLevelOffset",
+    boss = "bossCastIconFrameLevelOffset",
+}
+
+--- Returns the manual icon frame level (1-30) or nil for 0/unset, which means
+--- "follow the castbar": the icon keeps its established stack slot just above
+--- the statusbar and moves together with the 0-30 whole-castbar layer.
+local function ResolveCastbarIconFrameLevel(unit, general)
+    unit = NormalizeCastbarUnit(unit)
+    local key = unit and CASTBAR_ICON_LAYER_KEYS[unit]
+    local value = tonumber(key and general and general[key])
+    if not value then return nil end
+    value = math_floor(value + 0.5)
+    if value <= 0 then return nil end
+    if value > 30 then return 30 end
+    return value
+end
+ExportPublic("MSUF_ResolveCastbarIconFrameLevel", ResolveCastbarIconFrameLevel)
+
 -- The user-facing 0-30 value is the castbar root's actual frame level. Keep
 -- every child frame at its established relative offset so the icon, texts,
 -- effects, and outline all move together with that root.
@@ -723,11 +745,12 @@ local function ApplyCastbarFrameLayer(frame, general, forcedUnit)
     SyncCastbarFrameStrata(frame, anchor, unit)
     local rootLevel = layer
     local statusLevel = rootLevel + 1
+    local iconLevel = ResolveCastbarIconFrameLevel(unit, general)
     SetCastbarFrameLevel(frame, rootLevel)
     SetCastbarFrameLevel(frame.statusBar, statusLevel)
-    SetCastbarFrameLevel(frame._msufPCIconHost, statusLevel + 3)
-    SetCastbarFrameLevel(frame._msufDetailIconHost, statusLevel + 6)
-    SetCastbarFrameLevel(frame._msufDetailIconBorder, statusLevel + 8)
+    SetCastbarFrameLevel(frame._msufPCIconHost, iconLevel or (statusLevel + 3))
+    SetCastbarFrameLevel(frame._msufDetailIconHost, iconLevel or (statusLevel + 6))
+    SetCastbarFrameLevel(frame._msufDetailIconBorder, iconLevel and (iconLevel + 2) or (statusLevel + 8))
     SetCastbarFrameLevel(frame._msufTextOverlay, statusLevel + 10)
     SetCastbarFrameLevel(frame._msufOutlineHost, statusLevel + 20)
 end

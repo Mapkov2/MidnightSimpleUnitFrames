@@ -21,7 +21,7 @@ local CASTBAR_ICON_POSITIONS = VT("LEFT", "Left", "RIGHT", "Right", "INSIDE_LEFT
 local CASTBAR_TEXT_POSITIONS = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right", "ABOVE", "Above", "BELOW", "Below")
 local CASTBAR_TIME_FORMATS = VT("CURRENT", "Remaining", "ELAPSED", "Elapsed", "ELAPSED_MAX", "Elapsed / Total", "CURRENT_MAX", "Remaining / Total")
 local CASTBAR_TAB_VALUES = VT("general", "General", "icon", "Icon", "spell", "Spell Text", "time", "Time Text", "advanced", "Advanced")
-local CASTBAR_TAB_HEIGHTS = { general = 392, icon = 594, spell = 486, time = 486, advanced = 350 }
+local CASTBAR_TAB_HEIGHTS = { general = 392, icon = 594, spell = 486, time = 486, advanced = 440 }
 local CASTBAR_WIDTH_SOURCE_VALUES = VT("manual", "Manual width", "unitframe", "Auto: Unit Frame", "essential", "Auto: Essential Cooldowns", "utility", "Auto: Utility Cooldowns")
 local CASTBAR_TEXT_ALIGN = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right")
 local CASTBAR_TRUNCATE_VALUES = VT("AUTO", "Auto fit", "CLIP", "Manual width", "NONE", "No width limit")
@@ -758,8 +758,8 @@ local function BuildCastbar(ctx, builder, unit)
     local targetNameCard = fields.targetName and W.ControlCard(spellTab, "Cast Target Text", nil, rightX, -4, rightW, 370) or nil
     local timeCard = W.ControlCard(timeTab, nil, nil, leftX, -4, leftW, 370)
     local textAdvancedCard = W.ControlCard(advancedTab, "Spell Text Behavior", nil, leftX, -4, leftW, 190)
-    local iconAdvancedCard = W.ControlCard(advancedTab, "Icon Style", nil, rightX, -4, rightW, 118)
-    local layerAdvancedCard = W.ControlCard(advancedTab, "Whole Castbar Layer", nil, rightX, -140, rightW, 164)
+    local iconAdvancedCard = W.ControlCard(advancedTab, "Icon Style", nil, rightX, -4, rightW, 212)
+    local layerAdvancedCard = W.ControlCard(advancedTab, "Whole Castbar Layer", nil, rightX, -230, rightW, 164)
     if W.AttachContextColorReferences then
         local function GeneralCastbarColorRefs()
             local refs = {}
@@ -1037,7 +1037,12 @@ local function BuildCastbar(ctx, builder, unit)
         { "dropdown", "Border style", 16, -52, min(260, controlWRight), CASTBAR_ICON_BORDER_VALUES, DetailKey("IconBorderStyle"), "DARK", "MSUF2_CASTBAR_ICON_BORDER", function()
             if M.Refresh then M.Refresh(ctx) end
         end },
+        { "slider", "Layer (0-30)", 16, -106, controlWRight, 0, 30, 1, DetailKey("IconFrameLevelOffset"), 0, "MSUF2_CASTBAR_ICON_LAYER" },
     })
+    local iconLayerDescription = W.Text(iconAdvancedCard,
+        "0 keeps the icon just above the bar and moves it together with the whole-castbar layer. 1-30 pins the icon to that frame level on the shared layer scale, so it can be ordered in front of or behind the bar, texts, and other frame elements.",
+        16, -160, rightW - 32)
+    if iconLayerDescription.SetWordWrap then iconLayerDescription:SetWordWrap(true) end
     local castbarLayer = W.Slider(layerAdvancedCard, "Layer (0-30)", 0, 30, 1, controlWRight)
     W.MoveWidget(castbarLayer, layerAdvancedCard, 16, -52, controlWRight)
     AddControl(nil, castbarLayer)

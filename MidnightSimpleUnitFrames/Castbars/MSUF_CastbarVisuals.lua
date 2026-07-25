@@ -469,7 +469,9 @@ local function ApplyIconLayout(frame, g, unit, prefix)
             else
                 host:SetPoint("LEFT", frame, "LEFT", x, y)
             end
-            if host.SetFrameLevel and statusBar.GetFrameLevel then host:SetFrameLevel((statusBar:GetFrameLevel() or 0) + 6) end
+            local resolveIconLevel = _G.MSUF_ResolveCastbarIconFrameLevel
+            local manualIconLevel = type(resolveIconLevel) == "function" and resolveIconLevel(unit, g) or nil
+            if host.SetFrameLevel and statusBar.GetFrameLevel then host:SetFrameLevel(manualIconLevel or ((statusBar:GetFrameLevel() or 0) + 6)) end
             host:Show()
             if icon.SetParent and ((not icon.GetParent) or icon:GetParent() ~= host) then icon:SetParent(host) end
             icon:ClearAllPoints()

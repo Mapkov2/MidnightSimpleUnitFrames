@@ -3867,3 +3867,5 @@ L["Soft Glow"] = "부드러운 광채"
 L["Blizzard Tooltip"] = "블리자드 툴팁"
 L["Blizzard Achievement"] = "블리자드 업적"
 L["Solid draws a crisp pixel ring around the icon. Soft Glow adds a halo, and Shadow shades the icon's own edges. The Blizzard entries and any LibSharedMedia border are drawn as edge art. Thickness scales the edge."] = "단색은 아이콘 주위에 선명한 픽셀 테두리를 그립니다. 부드러운 광채는 후광을 더하고, 그림자는 아이콘 자체의 가장자리를 어둡게 합니다. Blizzard 항목과 모든 LibSharedMedia 테두리는 가장자리 이미지로 그려집니다. 두께가 가장자리 크기를 조절합니다."
+--- Castbar icon layer (6.0 Beta 29)
+L["0 keeps the icon just above the bar and moves it together with the whole-castbar layer. 1-30 pins the icon to that frame level on the shared layer scale, so it can be ordered in front of or behind the bar, texts, and other frame elements."] = "0은 아이콘을 바 바로 위에 유지하고 시전 바 전체 레이어와 함께 이동합니다. 1-30은 아이콘을 공유 레이어 첩도의 해당 프레임 레벨에 고정하여 바, 글자, 다른 프레임 요소의 앞이나 뒤로 정렬할 수 있습니다."

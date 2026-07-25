@@ -908,7 +908,12 @@ function MSUF_ApplyPlayerCastbarIconLayout(bar, g, topInset, bottomInset)
             host:ClearAllPoints()
             host:SetPoint("LEFT", bar, "LEFT", iconOffsetX, iconOffsetY)
             if statusBar.GetFrameLevel and host.SetFrameLevel then
-                host:SetFrameLevel((statusBar:GetFrameLevel() or 0) + 3)
+                local resolveIconLevel = _G.MSUF_ResolveCastbarIconFrameLevel
+                local unitFromFrame = _G.MSUF_GetCastbarUnitFromFrame
+                local manualIconLevel = type(resolveIconLevel) == "function"
+                    and resolveIconLevel(type(unitFromFrame) == "function" and unitFromFrame(bar) or "player", g)
+                    or nil
+                host:SetFrameLevel(manualIconLevel or ((statusBar:GetFrameLevel() or 0) + 3))
             end
             host:Show()
 

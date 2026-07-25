@@ -4291,3 +4291,5 @@ L["Soft Glow"] = "Lueur douce"
 L["Blizzard Tooltip"] = "Infobulle Blizzard"
 L["Blizzard Achievement"] = "Haut fait Blizzard"
 L["Solid draws a crisp pixel ring around the icon. Soft Glow adds a halo, and Shadow shades the icon's own edges. The Blizzard entries and any LibSharedMedia border are drawn as edge art. Thickness scales the edge."] = "Uni trace une bordure de pixels nette autour de l'icône. Lueur douce ajoute un halo et Ombre ombre les bords de l'icône elle-même. Les entrées Blizzard et toute bordure LibSharedMedia sont dessinées comme un habillage de bord. L'épaisseur met le bord à l'échelle."
+--- Castbar icon layer (6.0 Beta 29)
+L["0 keeps the icon just above the bar and moves it together with the whole-castbar layer. 1-30 pins the icon to that frame level on the shared layer scale, so it can be ordered in front of or behind the bar, texts, and other frame elements."] = "0 garde l’icône juste au-dessus de la barre et la déplace avec le calque de toute la barre d’incantation. 1-30 fixe l’icône à ce niveau sur l’échelle de calques partagée, pour l’ordonner devant ou derrière la barre, les textes et les autres éléments du cadre."

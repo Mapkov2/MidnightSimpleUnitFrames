@@ -4251,3 +4251,5 @@ L["Soft Glow"] = "Weiches Leuchten"
 L["Blizzard Tooltip"] = "Blizzard-Tooltip"
 L["Blizzard Achievement"] = "Blizzard-Erfolg"
 L["Solid draws a crisp pixel ring around the icon. Soft Glow adds a halo, and Shadow shades the icon's own edges. The Blizzard entries and any LibSharedMedia border are drawn as edge art. Thickness scales the edge."] = "Einfarbig zeichnet einen scharfen Pixelrand um das Symbol. Weiches Leuchten ergänzt einen Schein, und Schatten schattiert die Kanten des Symbols selbst. Die Blizzard-Einträge und jeder LibSharedMedia-Rand werden als Kantengrafik gezeichnet. Die Dicke skaliert die Kante."
+--- Castbar icon layer (6.0 Beta 29)
+L["0 keeps the icon just above the bar and moves it together with the whole-castbar layer. 1-30 pins the icon to that frame level on the shared layer scale, so it can be ordered in front of or behind the bar, texts, and other frame elements."] = "0 hält das Symbol direkt über der Leiste und bewegt es zusammen mit der Gesamt-Zauberleisten-Ebene. 1-30 fixiert das Symbol auf dieser Frame-Ebene der geteilten Ebenen-Skala, sodass es vor oder hinter Leiste, Texten und anderen Frame-Elementen einsortiert werden kann."

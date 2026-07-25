@@ -3911,3 +3911,5 @@ L["Soft Glow"] = "柔和發光"
 L["Blizzard Tooltip"] = "暴雪提示框"
 L["Blizzard Achievement"] = "暴雪成就"
 L["Solid draws a crisp pixel ring around the icon. Soft Glow adds a halo, and Shadow shades the icon's own edges. The Blizzard entries and any LibSharedMedia border are drawn as edge art. Thickness scales the edge."] = "純色會在圖示周圍繪製銳利的像素邊框。柔和發光會加上光暈，陰影則為圖示自身的邊緣上色。暴雪項目以及任何 LibSharedMedia 邊框都會以邊緣貼圖繪製。厚度用於縮放邊緣。"
+--- Castbar icon layer (6.0 Beta 29)
+L["0 keeps the icon just above the bar and moves it together with the whole-castbar layer. 1-30 pins the icon to that frame level on the shared layer scale, so it can be ordered in front of or behind the bar, texts, and other frame elements."] = "0 會讓圖示緊貼在條上方，並隨整個施法條圖層一起移動。1-30 會將圖示固定在共享圖層刻度的該框架層級上，從而可以排在條、文字和其他框架元素之前或之後。"

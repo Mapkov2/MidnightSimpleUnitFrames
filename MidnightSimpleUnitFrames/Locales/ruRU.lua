@@ -3907,3 +3907,5 @@ L["Soft Glow"] = "Мягкое свечение"
 L["Blizzard Tooltip"] = "Подсказка Blizzard"
 L["Blizzard Achievement"] = "Достижение Blizzard"
 L["Solid draws a crisp pixel ring around the icon. Soft Glow adds a halo, and Shadow shades the icon's own edges. The Blizzard entries and any LibSharedMedia border are drawn as edge art. Thickness scales the edge."] = "Сплошная рисует чёткую пиксельную рамку вокруг значка. Мягкое свечение добавляет ореол, а Тень затеняет собственные края значка. Записи Blizzard и любая рамка LibSharedMedia отрисовываются как краевая графика. Толщина масштабирует край."
+--- Castbar icon layer (6.0 Beta 29)
+L["0 keeps the icon just above the bar and moves it together with the whole-castbar layer. 1-30 pins the icon to that frame level on the shared layer scale, so it can be ordered in front of or behind the bar, texts, and other frame elements."] = "0 держит значок сразу над полосой и двигает его вместе со слоем всей полосы заклинания. 1-30 закрепляет значок на этом уровне общей шкалы слоёв, чтобы размещать его перед полосой, текстами и другими элементами рамки или позади них."
