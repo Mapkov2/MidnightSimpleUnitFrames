@@ -1221,6 +1221,44 @@ local function BuildFollowup(text, ctx)
             or ContainsAny(text, FollowupData.TEXT_SLOT_RESIZE_TERMS)
         )
 
+    -- A retained text object can be asked for a property MSUF simply does not
+    -- give it: Health Text has X/Y offsets but no anchor at all. Replying
+    -- "name the exact object" there is useless -- the object was never
+    -- ambiguous, the control does not exist. Let the router answer with the
+    -- controls that object really has. Objects that do own the requested
+    -- control never reach this helper; the generic candidate search above
+    -- already resolved and applied those.
+    local function MissingTextControlAnswer(prev, targetAttr)
+        if targetAttr ~= "anchor" and targetAttr ~= "alignment" then return nil end
+        local Router = A.RouterPrivate
+        if type(Router) ~= "table" or type(Router.TextMovementIntent) ~= "function"
+            or type(Router.TextMovementMissingAnchorGuidance) ~= "function"
+        then
+            return nil
+        end
+        local previousSetting = prev and prev.key and Registry:GetSetting(prev.key) or nil
+        local unit = tostring((prev and prev.unit) or (previousSetting and previousSetting.unit) or "")
+        local frameType = tostring((prev and prev.frameType) or (previousSetting and previousSetting.frameType) or "")
+        if unit == "" or (frameType ~= "unitframe" and frameType ~= "group") then return nil end
+        local textKind = FollowupData.TEXT_KIND_BY_RELATED_PREFIX[
+            RelatedPrefixFromAttribute((prev and prev.attribute) or (previousSetting and previousSetting.attribute))]
+        if not textKind then return nil end
+        local intent = Router.TextMovementIntent(text, {
+            unit = unit,
+            isGroup = frameType == "group",
+            textKind = textKind,
+        })
+        local guidance = intent and Router.TextMovementMissingAnchorGuidance(intent) or nil
+        if not guidance then return nil end
+        return {
+            kind = "answer",
+            status = guidance.status or "ambiguous",
+            text = guidance.text,
+            summary = guidance.summary,
+            searchResults = guidance.searchResults,
+        }
+    end
+
     local genericObjectFollowupReference = HasGenericObjectFollowupReference(text) or bareDirectionalFollowup
     local genericTargetAttr = genericObjectFollowupReference and GenericFollowupTargetAttr(text, followDirection) or nil
     local genericContextEligible = ContextSubjectRecent(ctx, 3)
@@ -1279,6 +1317,8 @@ local function BuildFollowup(text, ctx)
                 }
             end
             local previous = ctx.lastChangeBundle[1]
+            local missingTextControl = MissingTextControlAnswer(previous, targetAttr)
+            if missingTextControl then return missingTextControl end
             local previousSetting = previous and previous.key and Registry:GetSetting(previous.key) or nil
             local subject = tostring(previousSetting and (previousSetting.category or previousSetting.label) or "the retained MSUF object")
             local property = type(A.HumanizeDisplayKey) == "function" and A.HumanizeDisplayKey(targetAttr) or tostring(targetAttr)

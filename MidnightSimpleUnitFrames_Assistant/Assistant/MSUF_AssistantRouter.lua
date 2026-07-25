@@ -5347,10 +5347,10 @@ function R.TextSettingFromText(norm)
 end
 
 local TEXT_MOVEMENT_ATTRS = {
-    name = { x = "nameOffsetX", y = "nameOffsetY", anchorUnit = "nameTextAnchor", anchorGroup = "nameAnchor", noun = "name text" },
-    health = { x = "hpOffsetX", y = "hpOffsetY", noun = "hp text" },
-    power = { x = "powerOffsetX", y = "powerOffsetY", noun = "power text" },
-    status = { x = "statusTextOffsetX", y = "statusTextOffsetY", anchorUnit = "statusTextAnchor", anchorGroup = "statusTextAnchor", noun = "status text" },
+    name = { x = "nameOffsetX", y = "nameOffsetY", anchorUnit = "nameTextAnchor", anchorGroup = "nameAnchor", noun = "name text", kindLabel = "Name Text" },
+    health = { x = "hpOffsetX", y = "hpOffsetY", noun = "hp text", kindLabel = "Health Text" },
+    power = { x = "powerOffsetX", y = "powerOffsetY", noun = "power text", kindLabel = "Power Text" },
+    status = { x = "statusTextOffsetX", y = "statusTextOffsetY", anchorUnit = "statusTextAnchor", anchorGroup = "statusTextAnchor", noun = "status text", kindLabel = "Status Text" },
 }
 
 local TEXT_MOVEMENT_DIRECTION_WORDS = {
@@ -5410,33 +5410,90 @@ function R.TextMovementAmount(text)
     return nil
 end
 
-function R.TextMovementIntent(text)
+-- A follow-up such as "move now power text up" names the text object but never
+-- the frame that owns it. The remembered conversation subject is the only
+-- honest referent for that sentence; without it the request falls through to
+-- the fuzzy registry search, which happily lands on an unrelated object that
+-- merely shares a word (that is how "power text" became Class Resource Text).
+-- Only a recent unitframe/group subject is trusted, and the caller still
+-- requires the sentence to name a text object explicitly.
+function R.RememberedTextMovementScope()
+    if type(A.GetContext) ~= "function" then return nil end
+    local ctx = A.GetContext()
+    if type(ctx) ~= "table" then return nil end
+    local subjectTurn = tonumber(ctx.lastSubjectTurn or ctx.lastMentionedTurn)
+    if not subjectTurn then return nil end
+    local age = (tonumber(ctx.turnSerial or ctx.lastTurnSerial) or 0) - subjectTurn
+    if age < 0 or age > 3 then return nil end
+    local unit = tostring(ctx.lastUnit or "")
+    if unit == "" then return nil end
+    local frameType = tostring(ctx.lastFrameType or "")
+    if frameType == "unitframe" then
+        local scope, label = R.UnitScopeFromText(unit)
+        if scope == unit and label then return unit, label, false end
+    elseif frameType == "group" then
+        local scope, label = R.GroupScopeFromText(unit)
+        if scope == unit and label then return unit, label, true end
+    end
+    return nil
+end
+
+-- `subject` lets a caller that already knows the retained conversational object
+-- (unit, group flag, text kind) skip the sentence-based resolution. It exists
+-- so a pronoun follow-up such as "anchor it to the left" can be answered about
+-- the object it really refers to instead of being refused for lack of a noun.
+function R.TextMovementIntent(text, subject)
     local norm = R.Normalize(text)
     if norm == "" then return nil end
     local parser = A.Parser or {}
     local actionable = type(parser.ActionableText) == "function" and parser.ActionableText(text) or norm
     actionable = R.Normalize(actionable):gsub("^the%s+", "")
 
-    local unit, unitLabel = R.UnitScopeFromText(actionable)
-    if not unit then unit, unitLabel = R.UnitScopeFromText(norm) end
-    local settingScope = unit
-    local isGroup = false
-    if not unit then
-        unit, unitLabel = R.GroupScopeFromText(actionable)
-        if not unit then unit, unitLabel = R.GroupScopeFromText(norm) end
-        if unit then settingScope, isGroup = "gf_" .. tostring(unit), true end
+    local unit, unitLabel, settingScope, isGroup, textKind, settingKindLabel
+    if type(subject) == "table" then
+        unit = tostring(subject.unit or "")
+        isGroup = subject.isGroup and true or false
+        local resolvedUnit, resolvedLabel
+        if isGroup then
+            resolvedUnit, resolvedLabel = R.GroupScopeFromText(unit)
+        else
+            resolvedUnit, resolvedLabel = R.UnitScopeFromText(unit)
+        end
+        -- Only accept a scope the router recognizes as exactly that unit, so a
+        -- stale or malformed remembered subject cannot build a bogus key.
+        if resolvedUnit ~= unit then return nil end
+        unitLabel = resolvedLabel
+        settingScope = isGroup and ("gf_" .. unit) or unit
+        textKind = tostring(subject.textKind or "")
+    else
+        unit, unitLabel = R.UnitScopeFromText(actionable)
+        if not unit then unit, unitLabel = R.UnitScopeFromText(norm) end
+        settingScope = unit
+        isGroup = false
+        if not unit then
+            unit, unitLabel = R.GroupScopeFromText(actionable)
+            if not unit then unit, unitLabel = R.GroupScopeFromText(norm) end
+            if unit then settingScope, isGroup = "gf_" .. tostring(unit), true end
+        end
+        if not unit then
+            unit, unitLabel, isGroup = R.RememberedTextMovementScope()
+            settingScope = isGroup and ("gf_" .. tostring(unit)) or unit
+        end
     end
     if not unit or not unitLabel then return nil end
 
-    local textKind, settingKindLabel = R.TextSettingFromText(actionable)
+    if not textKind then textKind, settingKindLabel = R.TextSettingFromText(actionable) end
     local attrs = TEXT_MOVEMENT_ATTRS[textKind]
     if not attrs then return nil end
-    local namesPlainText = actionable:match("%f[%a]name%f[%A]") ~= nil
-    if not namesPlainText and not R.ContainsAny(actionable, {
-        "name text", "unit name", "health text", "hp text", "power text", "mana text",
-        "energy text", "rage text", "status text", "dead text", "offline text",
-    }) then
-        return nil
+    settingKindLabel = settingKindLabel or attrs.kindLabel
+    if type(subject) ~= "table" then
+        local namesPlainText = actionable:match("%f[%a]name%f[%A]") ~= nil
+        if not namesPlainText and not R.ContainsAny(actionable, {
+            "name text", "unit name", "health text", "hp text", "power text", "mana text",
+            "energy text", "rage text", "status text", "dead text", "offline text",
+        }) then
+            return nil
+        end
     end
     if R.ContainsAny(actionable, {
         "font size", "text size", "smaller", "bigger", "larger", "shrink", "enlarge",
@@ -5598,17 +5655,42 @@ function R.TextMovementFixedAnchorResult(intent)
             sourceText = "set " .. tostring(setting.label or setting.key) .. " to " .. tostring(validValue),
         })
     end
+    return R.TextMovementMissingAnchorGuidance(intent)
+end
+
+-- Guidance for a fixed-anchor request the object cannot satisfy. It is split
+-- out of the result path so the follow-up engine can answer a pronoun
+-- reference such as "anchor it to the left" about the object the user really
+-- means, without routing through the applying branches above.
+function R.TextMovementMissingAnchorGuidance(intent)
+    if type(intent) ~= "table" or not intent.fixedAnchorValue then return nil end
+    local item = intent.anchorKey and R.RegistrySettingItemForKey
+        and R.RegistrySettingItemForKey(intent.anchorKey) or nil
+    local setting = item and item.setting
+    -- A satisfiable request is not this function's business: leave it to the
+    -- applying path so an external caller can never turn a real anchor change
+    -- into a refusal.
+    if setting and setting.type == "enum" then
+        for i = 1, #(setting.values or {}) do
+            if tostring(setting.values[i]):upper() == tostring(intent.fixedAnchorValue):upper() then return nil end
+        end
+    end
     local requestedAxis = intent.axis
     intent.axis = nil
     local guidance = R.TextMovementGuidance(intent, true)
     intent.axis = requestedAxis
-    if guidance then
-        guidance.status = "ambiguous"
-        guidance.result = "ambiguous"
-        guidance.text = tostring(intent.label) .. " does not have that fixed anchor choice in MSUF. I kept it unchanged.\n"
-            .. tostring(guidance.text or "Use its X Offset and Y Offset controls to place it instead.")
-        guidance.summary = "Offers the supported text-position controls instead of guessing an anchor."
-    end
+    if not guidance then return nil end
+    guidance.status = "ambiguous"
+    guidance.result = "ambiguous"
+    -- Which of the two cases applies changes what the user should do next.
+    -- "No anchor control at all" tells them to stop looking for one; "not
+    -- that choice" means the control exists and only the value was wrong.
+    local lead = item ~= nil
+        and (tostring(intent.label) .. " does not have that fixed anchor choice in MSUF. I kept it unchanged.")
+        or (tostring(intent.label) .. " has no anchor control in MSUF. Its position comes from its X and Y offsets, and I kept it unchanged.")
+    guidance.text = lead .. "\n"
+        .. tostring(guidance.text or "Use its X Offset and Y Offset controls to place it instead.")
+    guidance.summary = "Offers the supported text-position controls instead of guessing an anchor."
     return guidance
 end
 

@@ -934,6 +934,14 @@ local function RestoreProfileSnapshot(snapshot)
     if type(gdb.profiles) ~= "table" then gdb.profiles = {} end
     if type(gdb.char) ~= "table" then gdb.char = {} end
 
+    -- Only touch the account-wide meta when the snapshot actually recorded it,
+    -- so older snapshots keep restoring exactly what they used to.
+    if snapshot.globalMetaExists == true and type(snapshot.globalMeta) == "table" then
+        gdb.global = DeepCopy(snapshot.globalMeta)
+    elseif snapshot.globalMetaExists == false then
+        gdb.global = nil
+    end
+
     if type(snapshot.profileStates) == "table" then
         for name, state in pairs(snapshot.profileStates) do
             if type(name) == "string" and name ~= "" then
@@ -1116,10 +1124,17 @@ function A.CaptureProfileSnapshot(actionKey, args)
         }
     end
     local char = type(gdb.char) == "table" and type(charKey) == "string" and gdb.char[charKey] or nil
+    -- Account-wide preferences (which profile new characters start on, guided
+    -- tour state) live beside the profile pool rather than inside it, so a
+    -- profile action that writes them would otherwise have nothing to roll back
+    -- to. Captured separately from `globalDB` so restore stays a narrow write.
+    local globalMeta = type(gdb.global) == "table" and gdb.global or nil
     return {
         version = 2,
         profileStates = profileStates,
         db = DeepCopy(_G.MSUF_DB or {}),
+        globalMetaExists = globalMeta ~= nil,
+        globalMeta = globalMeta and DeepCopy(globalMeta) or nil,
         activeProfile = active,
         charKey = charKey,
         charExists = type(char) == "table",

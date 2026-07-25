@@ -228,6 +228,15 @@ Data.FOLLOWUPS_PARSER = {
     ALIGNMENT_TERMS = { "alignment", "align", "left aligned", "right aligned", "centered", "centred" },
     OPACITY_TERMS = { "opacity", "alpha", "transparent", "transparency", "opaque", "faded", "fade" },
     GENERIC_SIZE_TERMS = { "icon size", "text size", "font size", "size", "bigger", "larger", "smaller", "shrink", "groesse", "grosse", "groesser", "kleiner" },
+    -- Object prefix of a retained text setting mapped to the router's text
+    -- kind. Unit frames store hp/power/name, group frames store the
+    -- healthText/powerText/nameText spelling of the same objects.
+    TEXT_KIND_BY_RELATED_PREFIX = {
+        hp = "health", healthText = "health",
+        power = "power", powerText = "power",
+        name = "name", nameText = "name",
+        status = "status", statusText = "status",
+    },
     POWER_TEXT_TERMS = { "power text", "mana text", "power number", "mana number", "power value", "mana value" },
     HP_TEXT_TERMS = { "hp text", "health text", "health number", "hp number", "health value", "hp value" },
     NAME_TEXT_TERMS = { "name text", "name" },
