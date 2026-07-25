@@ -2277,6 +2277,7 @@ local MSUF_LOCALE_COVERAGE_zhCN = {
     ["MSUF Edit Mode moves frames and supported castbars. Aura icon placement is controlled from Unit Auras or Group Frames > Buffs & Debuffs."] = "MSUF 编辑模式移动框架和支持的castbar。光环图标的位置由单位光环或组框架 > 增益和减益控制。",
     ["MSUF group frames do not use per-player castbars over the health frame. For MSUF castbar positioning, use MSUF Edit Mode and Global Style > Castbar."] = "MSUF 团体框架不会在健康框架上使用每个玩家的施法条。对于 MSUF Castbar 定位，请使用 MSUF 编辑模式和全局样式 > Castbar。",
     ["Most shared colors are in Global Style > Colors. Bar texture and border style controls are in Global Style > Bars."] = "大多数共享颜色位于“全局样式”>“颜色”中。条形纹理和边框样式控件位于“全局样式”>“条形”中。",
+    ["New character profile"] = "新角色档案",
     ["Okay"] = "好的",
     ["Open Class Resources for combo points, holy power, soul shards, chi, maelstrom, essence, runes, stagger, detached power, and alternative mana."] = "开放课程资源，包括组合点、神圣力量、灵魂碎片、真气、漩涡、精华、符文、交错、超然力量和替代法力。",
     ["Open Class Resources for global class-resource bars. Per-unit detached power options are in the unit page > Power Bar."] = "全球课程资源栏的开放课程资源。每个单元的独立电源选项位于单元页面 > 电源栏中。",
@@ -2417,6 +2418,7 @@ local MSUF_LOCALE_COVERAGE_zhCN = {
     ["Set Bar Background Tint to white and enable Custom color in Dark Mode. If black, enable Preserve HP color on all unit frames."] = "将栏背景色调设置为白色，并在深色模式下启用自定义颜色。如果是黑色，请在所有单元框架上启用保留 HP 颜色。",
     ["Slot"] = "插槽",
     ["Some layout changes rebuild frames, while visual changes apply instantly. If needed, close and reopen the menu or reload after large profile/import changes."] = "一些布局更改会重建框架，而视觉更改会立即应用。如果需要，关闭并重新打开菜单或在大型配置文件 /import 更改后重新加载。",
+    ["The active profile is saved per character. New characters start on this profile instead of Default."] = "活动档案按角色分别保存。新角色将使用此档案，而不是 Default。",
     ["This layer is off in settings and cannot be shown in preview."] = "该图层在设置中处于关闭状态，无法在预览中显示。",
     ["Type a name here before creating or copying a profile."] = "创建或复制配置文件之前，请在此处键入名称。",
     ["Unit Frame Preview"] = "单位框架预览",
@@ -4336,6 +4338,9 @@ L["The menu accent color is baked in while the menu is built, so a UI reload is 
 L["Menu accent colors"] = "菜单主题色"
 L["The MSUF menu can now follow your class color, a curated preset like Ember, Jade or Violet, or any custom color."] = "MSUF 菜单现在可以跟随你的职业颜色、Ember/Jade/Violet 等预设，或任意自定义颜色。"
 L["The whole menu re-tints to your accent - surfaces, navigation and controls - applied after a UI reload."] = "整个菜单（表面、导航和控件）都会染上你选择的主题色，重载界面后生效。"
+L["The accent colors navigation, tabs and highlights; panels stay midnight unless you turn on Tint menu surfaces. Applied after a UI reload."] = "主题色会用于导航、标签页和高亮；除非开启「为菜单表面着色」，否则面板保持 midnight。重新加载界面后生效。"
+L["Tint menu surfaces"] = "为菜单表面着色"
+L["Off (default): the accent colors buttons, tabs and highlights while panels stay midnight. On: panels, borders and the navigation rail are rotated onto the accent hue too. Success, warning and danger colors never change."] = "关闭（默认）：主题色用于按钮、标签页和高亮，面板保持 midnight。开启：面板、边框和导航栏也会转为主题色色调。成功、警告和危险颜色永不改变。"
 L["class-color, preset and custom accent options for the MSUF menu"] = "MSUF 菜单的职业颜色、预设与自定义主题色选项"
 L["Pick a menu accent"] = "选择菜单主题色"
 

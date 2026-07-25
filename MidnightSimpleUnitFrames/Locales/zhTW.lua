@@ -1650,6 +1650,7 @@ local MSUF_LOCALE_COVERAGE_zhTW = {
     ["MSUF group frames do not use per-player castbars over the health frame. For MSUF castbar positioning, use MSUF Edit Mode and Global Style > Castbar."] = "MSUF 團體框架不會在健康框架上使用每位玩家的施法條。對於 MSUF Castbar 定位，請使用 MSUF 編輯模式和全域樣式 > Castbar。",
     ["Match width: Essential Cooldowns"] = "比賽寬度：基本冷卻時間",
     ["Most shared colors are in Global Style > Colors. Bar texture and border style controls are in Global Style > Bars."] = "大多數共享顏色位於“全域樣式”>“顏色”中。條形紋理和邊框樣式控制項位於「全域樣式」>「條形」中。",
+    ["New character profile"] = "新角色檔案",
     ["Not Now"] = "不是現在",
     ["Okay"] = "好的",
     ["One-click setup for a ready-to-use class bar:"] = "一鍵設定即可使用的類別欄：",
@@ -1797,6 +1798,7 @@ local MSUF_LOCALE_COVERAGE_zhTW = {
     ["Slot"] = "插槽",
     ["Some layout changes rebuild frames, while visual changes apply instantly. If needed, close and reopen the menu or reload after large profile/import changes."] = "有些佈局變更會重建框架，而視覺變更會立即套用。如果需要，請關閉並重新開啟選單或在大型設定檔 /import 變更後重新載入。",
     ["Syncs & anchors power bar to class resources"] = "將功率條同步並錨定到班級資源",
+    ["The active profile is saved per character. New characters start on this profile instead of Default."] = "使用中的檔案會依角色分別儲存。新角色會使用此檔案，而非 Default。",
     ["This layer is off in settings and cannot be shown in preview."] = "此圖層在設定中處於關閉狀態，無法在預覽中顯示。",
     ["Type a name here before creating or copying a profile."] = "在建立或複製設定檔之前，請在此處鍵入名稱。",
     ["Undo"] = "撤銷",
@@ -3732,6 +3734,9 @@ L["The menu accent color is baked in while the menu is built, so a UI reload is 
 L["Menu accent colors"] = "選單主題色"
 L["The MSUF menu can now follow your class color, a curated preset like Ember, Jade or Violet, or any custom color."] = "MSUF 選單現在可以跟隨你的職業顏色、Ember/Jade/Violet 等預設，或任意自訂顏色。"
 L["The whole menu re-tints to your accent - surfaces, navigation and controls - applied after a UI reload."] = "整個選單（表面、導覽與控制項）都會染上你選擇的主題色，重新載入介面後生效。"
+L["The accent colors navigation, tabs and highlights; panels stay midnight unless you turn on Tint menu surfaces. Applied after a UI reload."] = "主題色會用於導覽、分頁與高亮；除非開啟「為選單表面上色」，否則面板維持 midnight。重新載入介面後生效。"
+L["Tint menu surfaces"] = "為選單表面上色"
+L["Off (default): the accent colors buttons, tabs and highlights while panels stay midnight. On: panels, borders and the navigation rail are rotated onto the accent hue too. Success, warning and danger colors never change."] = "關閉（預設）：主題色用於按鈕、分頁與高亮，面板維持 midnight。開啟：面板、邊框與導覽列也會轉為主題色色調。成功、警告與危險顏色永不改變。"
 L["class-color, preset and custom accent options for the MSUF menu"] = "MSUF 選單的職業顏色、預設與自訂主題色選項"
 L["Pick a menu accent"] = "選擇選單主題色"
 

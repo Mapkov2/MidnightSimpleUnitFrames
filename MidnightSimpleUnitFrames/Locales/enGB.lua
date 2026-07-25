@@ -182,6 +182,7 @@ local MSUF_LOCALE_COVERAGE_enGB = {
     ["Modules"] = "Modules",
     ["Most shared colors are in Global Style > Colors. Bar texture and border style controls are in Global Style > Bars."] = "Most shared colors are in Global Style > Colors. Bar texture and border style controls are in Global Style > Bars.",
     ["Name"] = "Name",
+    ["New character profile"] = "New character profile",
     ["Not Now"] = "Not Now",
     ["Okay"] = "Okay",
     ["One-click setup for a ready-to-use class bar:"] = "One-click setup for a ready-to-use class bar:",
@@ -355,6 +356,7 @@ local MSUF_LOCALE_COVERAGE_enGB = {
     ["Text X"] = "Text X",
     ["Text Y"] = "Text Y",
     ["Textures"] = "Textures",
+    ["The active profile is saved per character. New characters start on this profile instead of Default."] = "The active profile is saved per character. New characters start on this profile instead of Default.",
     ["This layer is off in settings and cannot be shown in preview."] = "This layer is off in settings and cannot be shown in preview.",
     ["ToT"] = "ToT",
     ["Tooltip"] = "Tooltip",
@@ -2318,6 +2320,9 @@ L["The menu accent color is baked in while the menu is built, so a UI reload is 
 L["Menu accent colors"] = "Menu accent colours"
 L["The MSUF menu can now follow your class color, a curated preset like Ember, Jade or Violet, or any custom color."] = "The MSUF menu can now follow your class colour, a curated preset like Ember, Jade or Violet, or any custom colour."
 L["The whole menu re-tints to your accent - surfaces, navigation and controls - applied after a UI reload."] = "The whole menu re-tints to your accent - surfaces, navigation and controls - applied after a UI reload."
+L["The accent colors navigation, tabs and highlights; panels stay midnight unless you turn on Tint menu surfaces. Applied after a UI reload."] = "The accent colours navigation, tabs and highlights; panels stay midnight unless you turn on Tint menu surfaces. Applied after a UI reload."
+L["Tint menu surfaces"] = "Tint menu surfaces"
+L["Off (default): the accent colors buttons, tabs and highlights while panels stay midnight. On: panels, borders and the navigation rail are rotated onto the accent hue too. Success, warning and danger colors never change."] = "Off (default): the accent colours buttons, tabs and highlights while panels stay midnight. On: panels, borders and the navigation rail are rotated onto the accent hue too. Success, warning and danger colours never change."
 L["class-color, preset and custom accent options for the MSUF menu"] = "class-colour, preset and custom accent options for the MSUF menu"
 L["Pick a menu accent"] = "Pick a menu accent"
 

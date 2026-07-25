@@ -1566,6 +1566,7 @@ local MSUF_LOCALE_COVERAGE_itIT = {
     ["MSUF group frames do not use per-player castbars over the health frame. For MSUF castbar positioning, use MSUF Edit Mode and Global Style > Castbar."] = "I frame di gruppo MSUF non utilizzano barre di cast per giocatore sul frame della salute. Per il posizionamento della barra di cast MSUF, utilizzare la modalità Modifica MSUF e Stile globale > Barra di cast.",
     ["Match width: Essential Cooldowns"] = "Ampiezza della partita: tempi di recupero essenziali",
     ["Most shared colors are in Global Style > Colors. Bar texture and border style controls are in Global Style > Bars."] = "La maggior parte dei colori condivisi si trova in Stile globale > Colori. I controlli per la texture delle barre e lo stile dei bordi si trovano in Stile globale > Barre.",
+    ["New character profile"] = "Profilo per nuovi personaggi",
     ["Not Now"] = "Non adesso",
     ["Okay"] = "Ok",
     ["One-click setup for a ready-to-use class bar:"] = "Configurazione con un clic per una barra di classe pronta all'uso:",
@@ -1713,6 +1714,7 @@ local MSUF_LOCALE_COVERAGE_itIT = {
     ["Slot"] = "Scanalatura",
     ["Some layout changes rebuild frames, while visual changes apply instantly. If needed, close and reopen the menu or reload after large profile/import changes."] = "Alcune modifiche al layout ricostruiscono i fotogrammi, mentre le modifiche visive vengono applicate immediatamente. Se necessario, chiudi e riapri il menu o ricaricalo dopo modifiche importanti al profilo/import.",
     ["Syncs & anchors power bar to class resources"] = "Sincronizza e ancora la barra di alimentazione alle risorse della classe",
+    ["The active profile is saved per character. New characters start on this profile instead of Default."] = "Il profilo attivo viene salvato per personaggio. I nuovi personaggi iniziano con questo profilo invece di Default.",
     ["This layer is off in settings and cannot be shown in preview."] = "Questo livello è disattivato nelle impostazioni e non può essere mostrato in anteprima.",
     ["Type a name here before creating or copying a profile."] = "Digitare qui un nome prima di creare o copiare un profilo.",
     ["Undo"] = "Annulla",
@@ -3636,6 +3638,9 @@ L["The menu accent color is baked in while the menu is built, so a UI reload is 
 L["Menu accent colors"] = "Colori d'accento del menu"
 L["The MSUF menu can now follow your class color, a curated preset like Ember, Jade or Violet, or any custom color."] = "Il menu di MSUF può ora seguire il colore della tua classe, un preset curato come Ember, Jade o Violet, o qualsiasi colore personalizzato."
 L["The whole menu re-tints to your accent - surfaces, navigation and controls - applied after a UI reload."] = "L'intero menu si tinge del tuo accento - superfici, navigazione e controlli - applicato dopo un ricaricamento dell'interfaccia."
+L["The accent colors navigation, tabs and highlights; panels stay midnight unless you turn on Tint menu surfaces. Applied after a UI reload."] = "L'accento colora la navigazione, le schede e le evidenziazioni; le superfici restano midnight a meno che non attivi «Colora le superfici del menu». Applicato dopo un ricaricamento dell'interfaccia."
+L["Tint menu surfaces"] = "Colora le superfici del menu"
+L["Off (default): the accent colors buttons, tabs and highlights while panels stay midnight. On: panels, borders and the navigation rail are rotated onto the accent hue too. Success, warning and danger colors never change."] = "Disattivato (predefinito): l'accento colora pulsanti, schede ed evidenziazioni mentre le superfici restano midnight. Attivato: anche superfici, bordi e barra di navigazione vengono ruotati sulla tonalità dell'accento. I colori di successo, avviso e pericolo non cambiano mai."
 L["class-color, preset and custom accent options for the MSUF menu"] = "opzioni di accento per colore di classe, preset e colore personalizzato per il menu di MSUF"
 L["Pick a menu accent"] = "Scegli un accento del menu"
 

@@ -1644,6 +1644,7 @@ local MSUF_LOCALE_COVERAGE_ruRU = {
     ["MSUF group frames do not use per-player castbars over the health frame. For MSUF castbar positioning, use MSUF Edit Mode and Global Style > Castbar."] = "Групповые кадры MSUF не используют панели каста для каждого игрока поверх кадра здоровья. Для позиционирования панели приведения MSUF используйте режим редактирования MSUF и выберите «Глобальный стиль» > «Кастбар».",
     ["Match width: Essential Cooldowns"] = "Ширина матча: важные кулдауны",
     ["Most shared colors are in Global Style > Colors. Bar texture and border style controls are in Global Style > Bars."] = "Наиболее распространенные цвета находятся в разделе «Глобальный стиль» > «Цвета». Элементы управления текстурой полос и стилем границ находятся в разделе «Глобальный стиль» > «Барсы».",
+    ["New character profile"] = "Профиль для новых персонажей",
     ["Not Now"] = "Не сейчас",
     ["Okay"] = "Хорошо",
     ["One-click setup for a ready-to-use class bar:"] = "Настройка готовой панели классов в один клик:",
@@ -1791,6 +1792,7 @@ local MSUF_LOCALE_COVERAGE_ruRU = {
     ["Slot"] = "Слот",
     ["Some layout changes rebuild frames, while visual changes apply instantly. If needed, close and reopen the menu or reload after large profile/import changes."] = "Некоторые изменения макета перестраивают кадры, а визуальные изменения применяются мгновенно. При необходимости закройте и снова откройте меню или перезагрузите компьютер после больших изменений профиля /import.",
     ["Syncs & anchors power bar to class resources"] = "Синхронизирует и привязывает панель мощности к ресурсам класса.",
+    ["The active profile is saved per character. New characters start on this profile instead of Default."] = "Активный профиль сохраняется отдельно для каждого персонажа. Новые персонажи начинают с этого профиля вместо Default.",
     ["This layer is off in settings and cannot be shown in preview."] = "Этот слой отключен в настройках и не может быть отображен при предварительном просмотре.",
     ["Type a name here before creating or copying a profile."] = "Введите здесь имя перед созданием или копированием профиля.",
     ["Undo"] = "Отменить",
@@ -3653,6 +3655,9 @@ L["The menu accent color is baked in while the menu is built, so a UI reload is 
 L["Menu accent colors"] = "Акцентные цвета меню"
 L["The MSUF menu can now follow your class color, a curated preset like Ember, Jade or Violet, or any custom color."] = "Меню MSUF теперь может использовать цвет вашего класса, готовый пресет вроде Ember, Jade или Violet либо любой свой цвет."
 L["The whole menu re-tints to your accent - surfaces, navigation and controls - applied after a UI reload."] = "Всё меню окрашивается в ваш акцент - поверхности, навигация и элементы управления - после перезагрузки интерфейса."
+L["The accent colors navigation, tabs and highlights; panels stay midnight unless you turn on Tint menu surfaces. Applied after a UI reload."] = "Акцент окрашивает навигацию, вкладки и подсветку; панели остаются midnight, пока вы не включите «Тонировать поверхности меню». Применяется после перезагрузки интерфейса."
+L["Tint menu surfaces"] = "Тонировать поверхности меню"
+L["Off (default): the accent colors buttons, tabs and highlights while panels stay midnight. On: panels, borders and the navigation rail are rotated onto the accent hue too. Success, warning and danger colors never change."] = "Выкл. (по умолчанию): акцент окрашивает кнопки, вкладки и подсветку, а панели остаются midnight. Вкл.: панели, границы и панель навигации также переводятся в оттенок акцента. Цвета успеха, предупреждения и опасности никогда не меняются."
 L["class-color, preset and custom accent options for the MSUF menu"] = "акцент по цвету класса, пресеты и свой акцентный цвет для меню MSUF"
 L["Pick a menu accent"] = "Выбрать акцент меню"
 

@@ -1600,6 +1600,7 @@ local MSUF_LOCALE_COVERAGE_koKR = {
     ["MSUF group frames do not use per-player castbars over the health frame. For MSUF castbar positioning, use MSUF Edit Mode and Global Style > Castbar."] = "MSUF 그룹 프레임은 체력 프레임에 대해 플레이어별 시전바를 사용하지 않습니다. MSUF 캐스트바 위치를 지정하려면 MSUF 편집 모드 및 전역 스타일 > 캐스트바를 사용하세요.",
     ["Match width: Essential Cooldowns"] = "경기 폭: 필수 쿨다운",
     ["Most shared colors are in Global Style > Colors. Bar texture and border style controls are in Global Style > Bars."] = "대부분의 공유 색상은 글로벌 스타일 > 색상에 있습니다. 막대 텍스처 및 테두리 스타일 컨트롤은 전역 스타일 > 막대에 있습니다.",
+    ["New character profile"] = "새 캐릭터 프로필",
     ["Not Now"] = "지금은 아님",
     ["Okay"] = "알았어",
     ["One-click setup for a ready-to-use class bar:"] = "즉시 사용 가능한 클래스 표시줄을 위한 원클릭 설정:",
@@ -1747,6 +1748,7 @@ local MSUF_LOCALE_COVERAGE_koKR = {
     ["Slot"] = "슬롯",
     ["Some layout changes rebuild frames, while visual changes apply instantly. If needed, close and reopen the menu or reload after large profile/import changes."] = "일부 레이아웃 변경 사항은 프레임을 다시 작성하는 반면 시각적 변경 사항은 즉시 적용됩니다. 필요한 경우 메뉴를 닫았다가 다시 열거나 대규모 프로필/import가 변경된 후 다시 로드하세요.",
     ["Syncs & anchors power bar to class resources"] = "클래스 리소스에 전원 표시줄을 동기화하고 고정합니다.",
+    ["The active profile is saved per character. New characters start on this profile instead of Default."] = "활성 프로필은 캐릭터별로 저장됩니다. 새 캐릭터는 Default 대신 이 프로필로 시작합니다.",
     ["This layer is off in settings and cannot be shown in preview."] = "이 레이어는 설정에서 꺼져 있으므로 미리보기에 표시할 수 없습니다.",
     ["Type a name here before creating or copying a profile."] = "프로필을 생성하거나 복사하기 전에 여기에 이름을 입력하세요.",
     ["Undo"] = "실행 취소",
@@ -3688,6 +3690,9 @@ L["The menu accent color is baked in while the menu is built, so a UI reload is 
 L["Menu accent colors"] = "메뉴 강조 색상"
 L["The MSUF menu can now follow your class color, a curated preset like Ember, Jade or Violet, or any custom color."] = "이제 MSUF 메뉴가 직업 색상, Ember·Jade·Violet 같은 프리셋 또는 원하는 사용자 지정 색상을 따를 수 있습니다."
 L["The whole menu re-tints to your accent - surfaces, navigation and controls - applied after a UI reload."] = "메뉴 전체(표면, 탐색, 컨트롤)가 선택한 강조 색상으로 물들며, UI를 다시 불러온 후 적용됩니다."
+L["The accent colors navigation, tabs and highlights; panels stay midnight unless you turn on Tint menu surfaces. Applied after a UI reload."] = "강조색은 탐색, 탭, 강조 표시에 적용되며 '메뉴 표면 색조 적용'을 켜지 않으면 패널은 midnight로 유지됩니다. UI 재로드 후 적용됩니다."
+L["Tint menu surfaces"] = "메뉴 표면 색조 적용"
+L["Off (default): the accent colors buttons, tabs and highlights while panels stay midnight. On: panels, borders and the navigation rail are rotated onto the accent hue too. Success, warning and danger colors never change."] = "끄기(기본값): 강조색이 버튼, 탭, 강조 표시에 적용되고 패널은 midnight로 유지됩니다. 켜기: 패널, 테두리, 탐색 바도 강조색 색조로 전환됩니다. 성공, 경고, 위험 색상은 변경되지 않습니다."
 L["class-color, preset and custom accent options for the MSUF menu"] = "MSUF 메뉴의 직업 색상, 프리셋 및 사용자 지정 강조 옵션"
 L["Pick a menu accent"] = "메뉴 강조 색상 선택"
 
