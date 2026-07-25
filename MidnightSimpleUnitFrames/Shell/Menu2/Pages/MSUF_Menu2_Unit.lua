@@ -29,7 +29,12 @@ local CASTBAR_FIELDS = {
     boss = { enable = "enableBossCastbar", backend = "bossCastbarBackend", providerMemory = "bossCastbarBackendBeforeHide", time = "showBossCastTime", icon = "showBossCastIcon", text = "showBossCastName", targetName = "showBossCastTargetName", timeFormat = "bossCastTimeFormat", w = "bossCastbarWidth", h = "bossCastbarHeight", match = "bossCastbarMatchWidth" },
 }
 local CASTBAR_PREFIX = { player = "castbarPlayer", target = "castbarTarget", focus = "castbarFocus", boss = "bossCast" }
-local CASTBAR_COPY_SUFFIXES = WL [[IconPosition IconSize IconZoom IconOffsetX IconOffsetY IconSpacing IconBorderThickness IconBorderStyle IconFrameLevelOffset SpellNamePosition SpellNameFontSize TextOffsetX TextOffsetY SpellNameAlign SpellNameMaxWidth SpellNameTruncate TimePosition TimeFontSize TimeOffsetX TimeOffsetY]]
+local CASTBAR_COPY_SUFFIXES = WL [[IconPosition IconSize IconZoom IconOffsetX IconOffsetY IconSpacing IconBorderThickness IconBorderStyle IconFrameLevelOffset SpellNamePosition SpellNameFontSize TextOffsetX TextOffsetY SpellNameAlign SpellNameMaxWidth SpellNameTruncate TimePosition TimeFontSize TimeOffsetX TimeOffsetY FrameLevelOffset]]
+--- OffsetX/OffsetY mean two different things depending on the detach state: anchored
+--- to the unit frame they are a relative gap and safe to copy, detached they are an
+--- absolute UIParent position (see MSUF_CastbarAnchors) and copying them would stack
+--- both castbars on the same screen spot. Only the relative case travels.
+local CASTBAR_ANCHORED_OFFSET_SUFFIXES = WL [[OffsetX OffsetY]]
 local CASTBAR_TARGET_NAME_COPY_SUFFIXES = WL [[TargetNamePosition TargetNameFontSize TargetNameAlign TargetNameOffsetX TargetNameOffsetY]]
 local LOAD_CONDITIONS = KLR [[
 loadCondHideMounted=Mounted
@@ -172,21 +177,60 @@ local function DeepCopy(src)
     if type(CopyTable) == "function" then return CopyTable(src) end
     return M.DeepCopy(src)
 end
-local COPY_POWER_BAR_FIELDS = WL [[showPowerBar powerBarHeight embedPowerBarIntoHealth powerBarBorderEnabled powerBarBorderThickness powerSmoothFill powerBarDetached detachedPowerBarShape detachedPowerOrbSize detachedPowerBarWidth detachedPowerBarHeight detachedPowerBarOffsetX detachedPowerBarOffsetY detachedPowerBarAnchorMode detachedPowerBarFrameLevelOffset detachedPowerBarTextOnBar detachedPowerBarSyncClassPower detachedPowerBarAnchorToClassPower]]
-local COPY_PORTRAIT_FIELDS = WL [[portraitMode portraitRender portraitClassStyle portraitCastSpellIcon portraitShape portraitSizeOverride portraitOffsetX portraitOffsetY portraitZoom portraitBorderStyle portraitBorderThickness portraitBgEnabled portraitFillBorder]]
-local COPY_TEXT_FIELDS = WL [[showName showHP showPower showPowerText nameTextAnchor nameOffsetX nameOffsetY nameFontSize showRaidGroupInName raidGroupNameAnchor raidGroupNameOffsetX raidGroupNameOffsetY raidGroupNameLayer raidGroupNameStyle hpOffsetX hpOffsetY hpFontSize hpTextMode textLeft textCenter textRight hpTextLeftHidePercentSymbol hpTextCenterHidePercentSymbol hpTextRightHidePercentSymbol hpTextLeftAbsorbIcon hpTextCenterAbsorbIcon hpTextRightAbsorbIcon hpTextReverse hpTextSeparator healthTextDecimals hpFullValueShort hpAbsorbIcon powerOffsetX powerOffsetY powerFontSize powerTextMode powerTextLeft powerTextCenter powerTextRight powerTextLeftHidePercentSymbol powerTextCenterHidePercentSymbol powerTextRightHidePercentSymbol powerTextSeparator nameTextLayer hpTextLayer powerTextLayer]]
+local COPY_POWER_BAR_FIELDS = WL [[showPowerBar powerBarHeight embedPowerBarIntoHealth powerBarBorderEnabled powerBarBorderThickness powerSmoothFill powerBarDetached detachedPowerBarShape detachedPowerOrbSize detachedPowerBarWidth detachedPowerBarHeight detachedPowerBarOffsetX detachedPowerBarOffsetY detachedPowerBarAnchorMode detachedPowerBarFrameLevelOffset detachedPowerBarTextOnBar detachedPowerBarSyncClassPower detachedPowerBarAnchorToClassPower powerBarTexture powerBarBgTexture]]
+local COPY_PORTRAIT_FIELDS = WL [[portraitMode portraitRender portraitClassStyle portraitCastSpellIcon portraitShape portraitSizeOverride portraitOffsetX portraitOffsetY portraitZoom portraitBorderStyle portraitBorderThickness portraitBgEnabled portraitFillBorder portraitDecoOverride]]
+local COPY_TEXT_FIELDS = WL [[
+    showName showHP showPower showPowerText nameTextAnchor nameOffsetX nameOffsetY nameFontSize
+    showRaidGroupInName raidGroupNameAnchor raidGroupNameOffsetX raidGroupNameOffsetY raidGroupNameLayer raidGroupNameStyle
+    hpOffsetX hpOffsetY hpFontSize hpTextMode textLeft textCenter textRight
+    hpTextLeftHidePercentSymbol hpTextCenterHidePercentSymbol hpTextRightHidePercentSymbol
+    hpTextLeftAbsorbIcon hpTextCenterAbsorbIcon hpTextRightAbsorbIcon
+    hpTextReverse hpTextSeparator healthTextDecimals hpFullValueShort hpAbsorbIcon
+    powerOffsetX powerOffsetY powerFontSize powerTextMode powerTextLeft powerTextCenter powerTextRight
+    powerTextLeftHidePercentSymbol powerTextCenterHidePercentSymbol powerTextRightHidePercentSymbol powerTextSeparator
+    nameTextLayer hpTextLayer powerTextLayer
+    hpTextLeftOffsetX hpTextLeftOffsetY hpTextCenterOffsetX hpTextCenterOffsetY hpTextRightOffsetX hpTextRightOffsetY
+    powerTextLeftOffsetX powerTextLeftOffsetY powerTextCenterOffsetX powerTextCenterOffsetY powerTextRightOffsetX powerTextRightOffsetY
+    hpPowerTextOverride
+    fontOverride fontKey boldText noOutline textBackdrop fontMonochrome fontOutline
+    fontShadowStrength fontShadowOpacity fontShadowDistance fontTextAlpha fontBaselineOffset
+    useGlobalFontColor fontR fontG fontB nameColorMode nameClassColor npcNameRed nameNpcClassColor
+    colorPowerTextByType colorHealthTextByHealth
+    nameShortenEnabled nameClipSide nameMaxChars nameNoEllipsis
+    shortenNames shortenNameClipSide shortenNameMaxChars shortenNameShowDots
+]]
 local COPY_INDICATOR_FIELDS = M.CopyFieldsFromSpecs(STATUS_CONTROLS, "leader assist raidmarker raidgroupname eliteicon", nil, "show iconStyle customIcon x y anchor size layer symbol")
 local COPY_STATUSICON_FIELDS = M.CopyFieldsFromSpecs(STATUS_CONTROLS, "level raceText classText statusText statusGhostText statusAFKText statusDNDText statusCombat statusResting statusIncomingRes statusPvp", "statusIconsTestMode statusIconsMidnightStyle statusIconsAlpha statusTextEnabled", "show iconStyle customIcon x y anchor size layer symbol")
-local COPY_FRAME_BASIC_FIELDS = WL [[enabled showName showHP showPower reverseFillBars verticalFillBars smoothFill healthColorMode]]
+--- Everything below "healthColorMode" is the per-unit Bars override scope (gated by
+--- hlOverride, see MSUF_Menu2_Bindings BARS_SCOPE_KEYS). Copying the gate flag along
+--- with the values keeps a destination that follows the global Bars page following it.
+--- powerSmoothFill is owned by the Power Bar category, hpPowerTextOverride by Text.
+local COPY_FRAME_BASIC_FIELDS = WL [[
+    enabled showName showHP showPower reverseFillBars verticalFillBars smoothFill healthColorMode
+    hlOverride barTexture barBackgroundTexture barBgTexture
+    barOutlineThickness barOutlineLayer barOutlineStrata barOutlineColorR barOutlineColorG barOutlineColorB barOutlineColorA
+    highlightBorderThickness hlAggroSize aggroOutlineMode dispelOutlineMode purgeOutlineMode dispelBorderTrigger
+    unitDispelOverlayEnabled unitDispelOverlayStyle unitDispelOverlayOnHealth unitDispelOverlayAlpha unitDispelOverlayTrigger
+    hlPrioEnabled hlPrioOrder
+    enableAbsorbBar absorbTextMode absorbAnchorMode absorbBarHeight absorbBarOffsetY absorbBarOpacity
+    healAbsorbEnabled healAbsorbAnchorMode healAbsorbBarHeight healAbsorbBarOffsetY healAbsorbBarOpacity
+    healPredEnabled healPredAnchorMode healPredictionBarHeight healPredictionBarOffsetY healPredictionBarOpacity healPredictionBarTexture
+    overAbsorbOverlay fullHealthAbsorbStripe
+    enableGradient enablePowerGradient gradientStrength gradientDirection
+    gradientDirRight gradientDirLeft gradientDirUp gradientDirDown
+    gradientOverride gradientOverrideVersion gradientOverrideKeys
+    healthBarGradientColorR healthBarGradientColorG healthBarGradientColorB
+    powerBarGradientColorR powerBarGradientColorG powerBarGradientColorB
+]]
 local COPY_TRANSPARENCY_FIELDS = WL [[hpBarAlpha powerBarAlpha hpBgAlpha powerBarBgAlpha alphaExcludeTextPortrait rangeFadeEnabled rangeFadeAlpha rangeFadeLayerMode]]
 local COPY_LOAD_CONDITION_FIELDS = WL [[loadCondHideMounted loadCondHideInVehicle loadCondHideResting loadCondHideInCombat loadCondHideOutOfCombat loadCondHideStealthed loadCondHideSolo loadCondHideInGroup loadCondHideInInstance loadCondHideInHousing loadCondActive]]
-local COPY_LAYOUT_FIELDS = WL [[width height offsetX offsetY point relativePoint anchorFrameName anchorToUnitframe]]
+local COPY_LAYOUT_FIELDS = WL [[width height offsetX offsetY point relativePoint anchorFrameName anchorToUnitframe bossLayoutMode invertBossOrder spacing]]
 local AURA_COPY_UNITS = KSW("player target focus boss")
 local AURA_COPY_FLAGS = { player = "showPlayer", target = "showTarget", focus = "showFocus", boss = "showBoss" }
 local AURA_BOSS_RUNTIME_UNITS = WL("boss1 boss2 boss3 boss4 boss5")
 local UF_COPY_CATEGORIES = {
-    { key = "basics",       label = "Frame Basics",     default = true },
-    { key = "text",         label = "Text",             default = true },
+    { key = "basics",       label = "Frame Basics",     default = true, description = "Copies the frame toggle, fill direction and health coloring, plus this unit's Bars overrides: bar textures, outline, highlight priority, gradient, absorb and heal prediction." },
+    { key = "text",         label = "Text",             default = true, description = "Copies every text slot with its content, size and position, plus this unit's font overrides: font, outline, shadow, text color and name shortening." },
     { key = "portrait",     label = "Portrait",         default = true },
     { key = "power",        label = "Power Bar",        default = true },
     { key = "auras",        label = "Auras · All",      default = true, description = "Copies the complete Aura workspace: visibility, layout, Blizzard filters, Buff/Debuff blacklists, Custom 1-3, Dots on target, Strata, and Full-Frame effects." },
@@ -244,7 +288,13 @@ local function EnsureUnitDB(key)
 end
 local function CopyFields(dst, src, fields)
     for i = 1, #fields do
-        dst[fields[i]] = src[fields[i]]
+        local key = fields[i]
+        local value = src[key]
+        --- Table-valued scope keys (highlight priority order, gradient key sets) must be
+        --- cloned: a shallow assign would alias both unit configs onto one table, so a
+        --- later edit on either unit would silently change the other.
+        if type(value) == "table" then value = DeepCopy(value) end
+        dst[key] = value
     end
 end
 local PB_SHOW_KEY_MAP = {
@@ -336,6 +386,14 @@ local function CopyCastbar(g, src, dst)
     if not srcPrefix or not dstPrefix then return true end
     for i = 1, #CASTBAR_COPY_SUFFIXES do
         g[dstPrefix .. CASTBAR_COPY_SUFFIXES[i]] = g[srcPrefix .. CASTBAR_COPY_SUFFIXES[i]]
+    end
+    --- Only meaningful while both castbars hang off their own unit frame. A detached
+    --- source stores an absolute screen position, and a detached destination would
+    --- reinterpret the copied gap as one, so leave the destination where it is.
+    if g[srcPrefix .. "Detached"] ~= true and g[dstPrefix .. "Detached"] ~= true then
+        for i = 1, #CASTBAR_ANCHORED_OFFSET_SUFFIXES do
+            g[dstPrefix .. CASTBAR_ANCHORED_OFFSET_SUFFIXES[i]] = g[srcPrefix .. CASTBAR_ANCHORED_OFFSET_SUFFIXES[i]]
+        end
     end
     if s.targetName and d.targetName then
         for i = 1, #CASTBAR_TARGET_NAME_COPY_SUFFIXES do
@@ -488,14 +546,11 @@ local function CopyUnitSettings(unit, target, scopes)
         local dst, dstKey = EnsureUnitDB(toKey)
         if not dst or not dstKey or dstKey == srcKey then return end
         if scopes.basics then CopyFields(dst, src, COPY_FRAME_BASIC_FIELDS) end
-        if scopes.text then
-            CopyFields(dst, src, COPY_TEXT_FIELDS)
-            dst.hpPowerTextOverride = nil
-        end
-        if scopes.portrait then
-            CopyFields(dst, src, COPY_PORTRAIT_FIELDS)
-            dst.portraitDecoOverride = nil
-        end
+        --- The override gate flags travel with their values on purpose. Clearing them
+        --- here would leave the destination showing the copied values on the frame while
+        --- the Global pages still report the shared ones for that scope.
+        if scopes.text then CopyFields(dst, src, COPY_TEXT_FIELDS) end
+        if scopes.portrait then CopyFields(dst, src, COPY_PORTRAIT_FIELDS) end
         if scopes.power then CopyPowerBarFields(dst, src, srcKey) end
         local copiedAuras = scopes.auras and CopyAuras3UnitSettings(srcKey, dstKey) or false
         if scopes.status then
@@ -518,6 +573,9 @@ local function CopyUnitSettings(unit, target, scopes)
             alpha = scopes.transparency,
             castbar = scopes.castbar,
             auras = copiedAuras,
+            --- Text carries this unit's font override scope, which needs the font runtime
+            --- rebuilt for the destination rather than a plain layout pass.
+            fonts = scopes.text,
         })
     end
     local function FinishCopy(statusUnit)
