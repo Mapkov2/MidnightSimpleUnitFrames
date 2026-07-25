@@ -243,7 +243,7 @@ local function CreatePlayerCastbarFrame()
         barTexture = _G.MSUF_GetCastbarTexture() or barTexture
     end
     statusBar:SetStatusBarTexture(barTexture)
-    statusBar:GetStatusBarTexture():SetHorizTile(true)
+    statusBar:GetStatusBarTexture():SetHorizTile(false)
     frame.statusBar = statusBar
 
     local backgroundBar = frame:CreateTexture(nil, "ARTWORK")

@@ -452,7 +452,9 @@ local function UpdateTextureForFrame(frame, texture, bgTexture, revision)
     if frame and frame.statusBar then
         frame.statusBar:SetStatusBarTexture(texture)
         local statusTexture = frame.statusBar:GetStatusBarTexture()
-        if statusTexture then statusTexture:SetHorizTile(true) end
+        -- Keep the fill stretched on every media swap; tiling repeats the 256px
+        -- art and seams near the right edge on default 271/272px castbars.
+        if statusTexture then statusTexture:SetHorizTile(false) end
         frame.MSUF_castbarStyleRev = revision
         frame.MSUF_cachedCastbarTexture = texture
         frame.MSUF_cachedReverseFillNormal = GetCastbarReverseFill(false) and true or false

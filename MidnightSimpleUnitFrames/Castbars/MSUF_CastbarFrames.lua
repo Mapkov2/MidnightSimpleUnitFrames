@@ -90,8 +90,11 @@ function G.MSUF_BuildCastbarFrameElements(frame)
     statusBar:SetSize(frame:GetWidth() - barHeight - 1, frame:GetHeight())
     statusBar:SetStatusBarTexture(CastbarTexture())
 
+    -- Statusbar art is 256px wide while castbars default to 271/272px, so tiling
+    -- would repeat the texture and leave a visible seam near the right edge.
+    -- Stretch instead, matching how health/power bars consume the same media.
     if statusBar:GetStatusBarTexture() then
-        statusBar:GetStatusBarTexture():SetHorizTile(true)
+        statusBar:GetStatusBarTexture():SetHorizTile(false)
     end
 
     if type(G.MSUF_ApplyCastbarTimerDirection) == "function" then
@@ -174,7 +177,7 @@ function G.MSUF_CreateCastbarPreviewFrame(unit, name, options)
     statusBar:SetStatusBarTexture(CastbarTexture())
 
     if statusBar:GetStatusBarTexture() then
-        statusBar:GetStatusBarTexture():SetHorizTile(true)
+        statusBar:GetStatusBarTexture():SetHorizTile(false)
     end
 
     statusBar:SetMinMaxValues(0, 1)

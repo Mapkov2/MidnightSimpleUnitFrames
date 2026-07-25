@@ -16,6 +16,7 @@ $tests = @(
     ".github/scripts/tests/anchor_picker_scan_budget_smoke.lua",
     ".github/scripts/tests/arcui_anchor_contract_smoke.lua",
     "tools/apply_service_dedup_smoke.lua",
+    ".github/scripts/tests/castbar_fill_stretch_contract_smoke.lua",
     "tools/castbar_native_manager_smoke.lua",
     "tools/castbar_refresh_ownership_smoke.lua",
     "tools/classpower_native_duration_smoke.lua",
