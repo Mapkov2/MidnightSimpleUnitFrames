@@ -34,6 +34,8 @@ Has('{ "quick", "Quick" }, { "class", "Class" }, { "recent", "Recent" }, { "save
     "palette tabs are incomplete")
 Has('local opacity = OpacityDisplay(wheelCard, 160)', "opacity control is missing from the redesigned picker")
 Has('local frame = CreateFrame("Slider", nil, parent)', "opacity control is not a native draggable slider")
+Has("if frame.EnableMouse then frame:EnableMouse(true) end",
+    "opacity slider is mouse-disabled, so its thumb cannot be dragged")
 Has("frame:SetMinMaxValues(0, 1)", "opacity slider range is not normalized")
 Has('opacity:SetScript("OnValueChanged"', "opacity slider is not wired to live changes")
 Has("function panel:ApplyOpacity(alpha)", "picker has no alpha-channel apply path")
@@ -105,6 +107,10 @@ Has('local copy = T.Button(advancedCard, Tr("Copy"), 54, 22)',
     "Copy action must reuse the shared MSUF menu-button style")
 Has('local save = T.Button(advancedCard, Tr("Save"), 54, 22)',
     "Save action must reuse the shared MSUF menu-button style")
+Has('local colorSelect = CreateFrame("ColorSelect", nil, wheelCard)',
+    "picker no longer embeds Blizzard's native ColorSelect engine")
+Has("colorSelect:EnableMouse(true)",
+    "color wheel and brightness bar are mouse-disabled, so the picker cannot be dragged at all")
 Has('valueThumb:SetAlpha(0.001)', "native side-arrow value thumb must be replaced")
 Has('valueHandle:SetSize(31, 6)', "brightness slider must use the mock-up handle")
 Has('AddFlatButtonIcon(copy, "copy")', "Copy action icon missing")

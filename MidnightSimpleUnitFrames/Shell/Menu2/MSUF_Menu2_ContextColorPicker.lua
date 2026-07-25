@@ -349,6 +349,9 @@ end
 local function OpacityDisplay(parent, width)
     local frame = CreateFrame("Slider", nil, parent)
     frame:SetSize(width, 20)
+    -- Bare CreateFrame sliders start mouse-disabled, so the thumb cannot be
+    -- dragged until mouse input is enabled explicitly (same as W.Slider).
+    if frame.EnableMouse then frame:EnableMouse(true) end
     frame:SetOrientation("HORIZONTAL")
     frame:SetMinMaxValues(0, 1)
     frame:SetValueStep(0.01)
@@ -542,6 +545,10 @@ local function EnsurePicker()
     -- interaction as ColorPickerFrame, embedded in the MSUF surface so the
     -- target selector, live preview and palettes remain one compact workflow.
     local colorSelect = CreateFrame("ColorSelect", nil, wheelCard)
+    -- Blizzard declares its own ColorSelect with enableMouse="true"; the native
+    -- wheel/value dragging is frame mouse input, so without this the wheel and
+    -- the brightness bar render correctly but never respond to clicks.
+    colorSelect:EnableMouse(true)
     colorSelect:SetPoint("TOPLEFT", 80, -27); colorSelect:SetSize(150, 112)
     local wheel = colorSelect:CreateTexture(nil, "ARTWORK")
     wheel:SetPoint("TOPLEFT", 0, -4); wheel:SetSize(102, 102)
