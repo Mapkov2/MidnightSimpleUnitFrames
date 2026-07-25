@@ -1,12 +1,11 @@
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-_G.MSUF = MSUF
 
 
 local Apply = MSUF.Apply or {}
 MSUF.Apply = Apply
 
---- UnitFrames/Engine/MSUF_UF_Apply.lua
+--- Libs/MSUFUnitFrames/MSUF_UF_Apply.lua
 ---
 --- Tiny idempotent wrappers around common Region/StatusBar setters. Elements
 --- use these in hot and warm paths to avoid repeated SetTexture/SetPoint/SetText

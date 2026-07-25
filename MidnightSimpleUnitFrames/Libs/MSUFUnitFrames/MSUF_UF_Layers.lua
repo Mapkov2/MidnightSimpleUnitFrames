@@ -1,4 +1,4 @@
---- UnitFrames/Engine/MSUF_UF_Layers.lua
+--- Libs/MSUFUnitFrames/MSUF_UF_Layers.lua
 --- Shared frame-level contract for live unit frames and menu previews.
 
 local _, MSUF = ...

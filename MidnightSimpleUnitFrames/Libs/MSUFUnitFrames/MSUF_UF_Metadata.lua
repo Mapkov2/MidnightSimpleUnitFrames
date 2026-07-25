@@ -1,3 +1,4 @@
+-- Instance-local runtime metadata for the embedded MSUFUnitFrames framework.
 local addonName, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}

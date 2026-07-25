@@ -1,8 +1,8 @@
 _G = _G or _ENV
 
-local path = "MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Runtime.lua"
+local path = "MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Runtime.lua"
 local handle = io.open(path, "r")
-if not handle then path = "UnitFrames/Engine/MSUF_UF_Runtime.lua" else handle:close() end
+if not handle then path = "Libs/MSUFUnitFrames/MSUF_UF_Runtime.lua" else handle:close() end
 
 local refreshAll = 0
 local refreshUnit = 0

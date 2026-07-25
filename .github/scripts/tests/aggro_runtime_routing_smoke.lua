@@ -179,13 +179,19 @@ end
 _G.MSUF_NS = MSUF
 
 local engineRoot = "MidnightSimpleUnitFrames/UnitFrames/Engine/"
+local libraryRoot = "MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/"
+local libraryFiles = {
+  ["MSUF_UF_Metadata.lua"] = true,
+  ["MSUF_UF_Core.lua"] = true,
+}
 local function LoadEngine(relativePath)
-  local path = engineRoot .. relativePath
+  local inLibrary = libraryFiles[relativePath] == true
+  local path = (inLibrary and libraryRoot or engineRoot) .. relativePath
   local handle = io.open(path, "r")
   if handle then
     handle:close()
   else
-    path = "UnitFrames/Engine/" .. relativePath
+    path = (inLibrary and "Libs/MSUFUnitFrames/" or "UnitFrames/Engine/") .. relativePath
   end
   local chunk, err = loadfile(path)
   Check(chunk, err)

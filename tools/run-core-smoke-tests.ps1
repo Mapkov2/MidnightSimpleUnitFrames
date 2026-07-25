@@ -171,6 +171,8 @@ $tests = @(
     ".github/scripts/tests/temp_max_health_smoke.lua",
     ".github/scripts/tests/typography_role_smoke.lua",
     ".github/scripts/tests/unit_status_indicator_layout_smoke.lua",
+    ".github/scripts/tests/unitframes_embed_isolation_smoke.lua",
+    ".github/scripts/tests/unitframes_legacy_compat_smoke.lua",
     ".github/scripts/tests/version_check_prerelease_smoke.lua",
     ".github/scripts/tests/aura_menu_default_seed_cache_smoke.lua",
     ".github/scripts/tests/aura_preview_style_parity_smoke.lua",

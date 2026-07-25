@@ -1,10 +1,10 @@
 _G = _G or _ENV
 
-local corePath = "MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Core.lua"
+local corePath = "MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Core.lua"
 local rangePath = "MidnightSimpleUnitFrames/UnitFrames/Range/MSUF_UF_Group_RangeFade.lua"
 local handle = io.open(corePath, "r")
 if not handle then
-    corePath = "UnitFrames/Engine/MSUF_UF_Core.lua"
+    corePath = "Libs/MSUFUnitFrames/MSUF_UF_Core.lua"
     rangePath = "UnitFrames/Range/MSUF_UF_Group_RangeFade.lua"
 else
     handle:close()

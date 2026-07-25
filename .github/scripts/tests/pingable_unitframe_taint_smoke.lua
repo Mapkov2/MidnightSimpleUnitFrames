@@ -20,7 +20,7 @@ local function Excludes(source, text, message)
 end
 
 local factory = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Factory.lua")
-local core = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Core.lua")
+local core = Read("MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Core.lua")
 local adapter = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Adapter.lua")
 local headers = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Headers.lua")
 local auras = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua")

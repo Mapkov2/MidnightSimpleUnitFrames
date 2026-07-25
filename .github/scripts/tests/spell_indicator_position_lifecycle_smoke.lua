@@ -209,7 +209,7 @@ function Frame:SetDurationBar(bar, options)
 end
 local MSUF = { MSUF_Auras3 = {}, UF = {} }
 _G.MSUF_NS = MSUF
-local layersChunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Layers.lua"))
+local layersChunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Layers.lua"))
 layersChunk("MidnightSimpleUnitFrames", MSUF)
 local chunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_SpellIndicators.lua"))
 chunk("MidnightSimpleUnitFrames", MSUF)

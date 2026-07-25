@@ -6,7 +6,7 @@ _G.UnitExists = function() return true end
 _G.issecretvalue = function() return false end
 _G.InCombatLockdown = function() return false end
 
-assert(loadfile("MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Core.lua"))(
+assert(loadfile("MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Core.lua"))(
   "MidnightSimpleUnitFrames",
   MSUF
 )

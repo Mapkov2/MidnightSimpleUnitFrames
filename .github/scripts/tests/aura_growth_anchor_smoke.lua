@@ -365,7 +365,7 @@ local MSUF = {
 }
 _G.MSUF_NS = MSUF
 
-local layersChunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Layers.lua"))
+local layersChunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Layers.lua"))
 layersChunk("MidnightSimpleUnitFrames", MSUF)
 -- Shared border-style catalog/renderer: the aura icon style draws its border
 -- and shadow bands through it.
@@ -2206,7 +2206,7 @@ end
 -- advanced override (default AUTO = inherit frame strata); the container is
 -- the single layering authority and AuraButtons are never re-leveled.
 do
-    local layersSource = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Layers.lua")
+    local layersSource = Read("MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Layers.lua")
     local runtimeSource = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua")
     Check(layersSource:find("Layers.TEXT_BASE_OFFSET = 10", 1, true)
         and layersSource:find("Layers.STATUS_BASE_OFFSET = 10", 1, true)
@@ -2236,7 +2236,7 @@ end
 -- the group External lane all preserve the same full-capacity rectangle and
 -- selected-anchor/internal-flow split.
 local runtimeSource = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua")
-local coreSource = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Core.lua")
+local coreSource = Read("MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Core.lua")
 local eventElementsStart = assert(coreSource:find("local EVENT_ELEMENTS = {", 1, true))
 local eventElementsStop = assert(coreSource:find("local STATUS_EVENT_ELEMENTS = {", eventElementsStart, true))
 Check(coreSource:sub(eventElementsStart, eventElementsStop):find("Auras = true", 1, true),

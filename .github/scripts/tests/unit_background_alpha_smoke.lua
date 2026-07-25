@@ -321,7 +321,7 @@ local groupConfig = Read(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Gr
 Check(groupConfig:find("backgroundClassColor = healthVisual.backgroundClassColor == true", 1, true),
     "group specs do not compile class-background state")
 
-local core = Read(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Core.lua")
+local core = Read(root .. "/MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Core.lua")
 Check(core:find("RefreshIdentityHealthBackground(frame)", 1, true),
     "identity lifecycle does not refresh class backgrounds")
 

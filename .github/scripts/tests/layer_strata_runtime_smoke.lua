@@ -56,7 +56,7 @@ local MSUF = {
 }
 _G.MSUF_NS = MSUF
 
-assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Layers.lua"))(
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Layers.lua"))(
     "MidnightSimpleUnitFrames", MSUF)
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Borders.lua"))(
     "MidnightSimpleUnitFrames", MSUF)

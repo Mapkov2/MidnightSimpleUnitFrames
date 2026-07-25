@@ -72,7 +72,7 @@ end
 
 local MSUF = { UF = { Metadata = { defaultApplyMask = { Prediction = true } } } }
 _G.MSUF_NS = MSUF
-assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Core.lua"))(
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Core.lua"))(
     "MidnightSimpleUnitFrames", MSUF)
 local UF = assert(MSUF.UF)
 

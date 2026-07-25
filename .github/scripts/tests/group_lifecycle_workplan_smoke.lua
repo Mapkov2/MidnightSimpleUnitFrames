@@ -56,7 +56,7 @@ local MSUF = {
 }
 _G.MSUF_NS = MSUF
 
-local chunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Core.lua"))
+local chunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Core.lua"))
 chunk("MidnightSimpleUnitFrames", MSUF)
 local UF = assert(MSUF.UF)
 

@@ -604,7 +604,7 @@ def check_group_refresh_contracts() -> None:
 
 def check_powerbar_contracts() -> None:
     power = read(ADDON_ROOT / "UnitFrames" / "Engine" / "Elements" / "MSUF_UF_Elements_Power.lua")
-    metadata = read(ADDON_ROOT / "UnitFrames" / "Engine" / "MSUF_UF_Metadata.lua")
+    metadata = read(ADDON_ROOT / "Libs" / "MSUFUnitFrames" / "MSUF_UF_Metadata.lua")
     textures = read(ADDON_ROOT / "Runtime" / "MSUF_TextureRuntime.lua")
     backgrounds = read(ADDON_ROOT / "Runtime" / "MSUF_BarBackgroundRuntime.lua")
 

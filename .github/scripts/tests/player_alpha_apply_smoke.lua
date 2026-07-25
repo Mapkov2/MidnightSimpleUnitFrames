@@ -60,7 +60,7 @@ local function Load(relativePath)
     return chunk("MidnightSimpleUnitFrames", MSUF)
 end
 
-Load("MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Metadata.lua")
+Load("MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Metadata.lua")
 
 MSUF.UFVisuals = {
     UF = MSUF.UF,
@@ -82,7 +82,7 @@ MSUF.UFVisuals = {
     end,
 }
 
-Load("MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Core.lua")
+Load("MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Core.lua")
 Load("MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Alpha.lua")
 
 local UF = assert(MSUF.UF)

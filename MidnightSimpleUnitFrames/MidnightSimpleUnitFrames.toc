@@ -15,6 +15,9 @@
 ## X-MSUF-IconFolder: Media\Icons\UXPro
 ## X-MSUF-HasMidnightSuffix: 1
 ## X-MSUF-UFCore: MidnightSimpleUnitFrames
+## X-MSUF-UnitFrames: MidnightSimpleUnitFramesUF
+## X-MSUF-UnitFrames-Prefix: MSUF
+## X-MSUF-UnitFrames-LegacyGlobals: 1
 ## X-Localizations: enUS, deDE, zhCN, zhTW, frFR, esES, esMX, itIT, koKR, ptBR, ruRU, enGB
 ## AddonCompartmentFunc: MSUF_AddonCompartment_OnClick
 ## AddonCompartmentFuncOnEnter: MSUF_AddonCompartment_OnEnter
@@ -87,7 +90,9 @@ Runtime\MSUF_BorderStyles.lua
 Runtime\MSUF_PortraitMedia.lua
 State\MSUF_ProfileIO.lua
 Runtime\MSUF_ChatAndTooltips.lua
-UnitFrames\Embeds\MSUF_UFCore\MSUF_UFCore.xml
+Libs\MSUFUnitFrames\MSUFUnitFrames.xml
+UnitFrames\Engine\MSUF_UF_Config.lua
+UnitFrames\Engine\MSUF_UF_PreviewAnimation.lua
 Runtime\MSUF_Colors.lua
 Kernel\MSUF_BlizzardFrames.lua
 

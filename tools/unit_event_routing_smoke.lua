@@ -1,8 +1,8 @@
 _G = _G or _ENV
 
-local path = "MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Core.lua"
+local path = "MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Core.lua"
 local handle = io.open(path, "r")
-if not handle then path = "UnitFrames/Engine/MSUF_UF_Core.lua" else handle:close() end
+if not handle then path = "Libs/MSUFUnitFrames/MSUF_UF_Core.lua" else handle:close() end
 
 local MSUF = { UF = { Metadata = { runtimeUpdateOwners = {
     GroupStatusRuntime = true,
@@ -141,9 +141,9 @@ UF.Config = {
 UF.frames.targettarget = frame
 UF.frameList[1] = frame
 
-local runtimePath = "MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Runtime.lua"
+local runtimePath = "MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Runtime.lua"
 local runtimeHandle = io.open(runtimePath, "r")
-if not runtimeHandle then runtimePath = "UnitFrames/Engine/MSUF_UF_Runtime.lua" else runtimeHandle:close() end
+if not runtimeHandle then runtimePath = "Libs/MSUFUnitFrames/MSUF_UF_Runtime.lua" else runtimeHandle:close() end
 local runtimeChunk, runtimeErr = loadfile(runtimePath)
 assert(runtimeChunk, runtimeErr)
 runtimeChunk("MidnightSimpleUnitFrames", MSUF)

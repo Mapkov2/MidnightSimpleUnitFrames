@@ -112,7 +112,9 @@ for _, relativePath in ipairs({
   "Elements/MSUF_UF_Elements_Power.lua",
   "MSUF_UF_Config.lua",
 }) do
-  assert(loadfile(ADDON .. "UnitFrames/Engine/" .. relativePath))("MidnightSimpleUnitFrames", configMSUF)
+  local inLibrary = relativePath == "MSUF_UF_Metadata.lua" or relativePath == "MSUF_UF_Core.lua"
+  local base = inLibrary and "Libs/MSUFUnitFrames/" or "UnitFrames/Engine/"
+  assert(loadfile(ADDON .. base .. relativePath))("MidnightSimpleUnitFrames", configMSUF)
 end
 
 local Config = assert(configMSUF.UF.Config, "UF.Config was not built")

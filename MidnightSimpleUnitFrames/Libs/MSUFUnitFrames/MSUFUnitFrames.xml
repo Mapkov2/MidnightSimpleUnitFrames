@@ -1,0 +1,11 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/">
+  <Script file="init.lua"/>
+  <Script file="MSUF_UF_Secrets.lua"/>
+  <Script file="MSUF_UF_Apply.lua"/>
+  <Script file="MSUF_UF_Metadata.lua"/>
+  <Script file="MSUF_UF_Layers.lua"/>
+  <Script file="MSUF_UF_Core.lua"/>
+  <Script file="MSUF_UF_Runtime.lua"/>
+  <Script file="api.lua"/>
+  <Script file="finalize.lua"/>
+</Ui>

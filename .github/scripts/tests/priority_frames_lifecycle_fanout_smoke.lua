@@ -16,7 +16,7 @@ _G.CreateFrame = function()
   return frame
 end
 
-assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Core.lua"))(
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Core.lua"))(
   "MidnightSimpleUnitFrames", MSUF)
 local UF = MSUF.UF
 local fullUpdates, globalUpdates = {}, {}

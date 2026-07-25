@@ -16,7 +16,7 @@ local function Join(path)
 end
 
 local MSUF = { UF = {} }
-assert(loadfile(Join("MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Layers.lua")))(
+assert(loadfile(Join("MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Layers.lua")))(
     "MidnightSimpleUnitFrames", MSUF)
 
 local Layers = assert(MSUF.UF.Layers)

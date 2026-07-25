@@ -1171,7 +1171,7 @@ _G.UnitIsDead = function() return false end
 _G.UnitIsDeadOrGhost = function() return false end
 local RoutedMSUF = { UF = { Metadata = { defaultApplyMask = { Prediction = true } } } }
 _G.MSUF_NS = RoutedMSUF
-local coreChunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Core.lua"))
+local coreChunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Core.lua"))
 coreChunk("MidnightSimpleUnitFrames", RoutedMSUF)
 local worldEntryRegistration
 local worldEntryRegisterCount = 0

@@ -1,3 +1,4 @@
+-- Instance-local runtime kernel for the embedded MSUFUnitFrames framework.
 local addonName, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
@@ -7,6 +8,7 @@ MSUF.UF.Elements = MSUF.UF.Elements or {}
 local UF = MSUF.UF
 local Elements = UF.Elements
 local Metadata = UF.Metadata or {}
+local Framework = MSUF.MSUFUnitFrames or MSUF.UFCore
 
 local type = type
 local pairs = pairs
@@ -35,7 +37,10 @@ UF.elementOrder = UF.elementOrder or {}
 UF.pendingApply = UF.pendingApply or {}
 UF.pendingElementRefreshes = UF.pendingElementRefreshes or {}
 UF.visualRefreshCallbacks = UF.visualRefreshCallbacks or {}
+UF.elementTraits = UF.elementTraits or {}
 UF.initialized = UF.initialized or false
+
+local HOST_VALUES = UF._hostValues or _G
 
 UF.unitOrder = UF.unitOrder or {
   "player", "target", "focus", "targettarget", "focustarget", "pet",
@@ -71,6 +76,9 @@ local BASIC_ELEMENTS = {
   InlineToT = true,
 }
 UF.basicElements = BASIC_ELEMENTS
+local FORCE_UPDATE_ELEMENTS = UF.forceUpdateElements or {}
+UF.forceUpdateElements = FORCE_UPDATE_ELEMENTS
+for name in pairs(BASIC_ELEMENTS) do FORCE_UPDATE_ELEMENTS[name] = true end
 
 local EVENT_ELEMENTS = {
   -- Native AuraContainer owns steady-state UNIT_AURA deltas, but party aura
@@ -131,6 +139,7 @@ local IDENTITY_ELEMENTS = {
   IncomingResIndicator = true,
   PVPIndicator = true,
 }
+UF.identityElements = IDENTITY_ELEMENTS
 
 local IDENTITY_BAR_ELEMENTS = {
   Health = true,
@@ -484,15 +493,15 @@ local function PredictionTestBucketEnabled(bucket, category)
 end
 
 local function AbsorbTextureTestEnabledForScope(scope, category)
-  local modes = _G.MSUF_PredictionTestModes
+  local modes = HOST_VALUES.MSUF_PredictionTestModes
   if type(modes) == "table" then
     local normalized = NormalizeAbsorbTestScope(scope)
     if PredictionTestBucketEnabled(modes.shared, category) then return true end
     if normalized ~= "shared" and PredictionTestBucketEnabled(modes[normalized], category) then return true end
     return normalized == "shared" and PredictionTestBucketEnabled(modes.shared, category) or false
   end
-  if _G.MSUF_AbsorbTextureTestMode ~= true then return false end
-  local wanted = NormalizeAbsorbTestScope(_G.MSUF_AbsorbTextureTestScope)
+  if HOST_VALUES.MSUF_AbsorbTextureTestMode ~= true then return false end
+  local wanted = NormalizeAbsorbTestScope(HOST_VALUES.MSUF_AbsorbTextureTestScope)
   return wanted == "shared" or wanted == NormalizeAbsorbTestScope(scope)
 end
 UF.AbsorbTextureTestEnabledForScope = AbsorbTextureTestEnabledForScope
@@ -640,7 +649,10 @@ function UF.UnitsForConfigKey(key)
 end
 
 function UF.FrameName(unit)
-  return "MSUF_" .. tostring(unit or "unknown")
+  local prefix = UF.frameNamePrefix
+    or (Framework and Framework.framePrefix)
+    or "MSUF"
+  return tostring(prefix) .. "_" .. tostring(unit or "unknown")
 end
 
 local UPDATE_KEYS = UF._updateKeys or setmetatable({}, {
@@ -667,12 +679,16 @@ end
 UF.CoreElementAllowed = HotElementAllowed
 
 local function EventElementAllowed(name)
-  return HotElementAllowed(name) == true
+  local traits = UF.elementTraits[name]
+  return (traits and traits.events == true)
+    or HotElementAllowed(name) == true
     or EVENT_ELEMENTS[name] == true
     or STATUS_EVENT_ELEMENTS[name] == true
 end
 
 local function ApplyElementAllowed(name)
+  local traits = UF.elementTraits[name]
+  if traits and traits.apply == true then return true end
   if HotElementAllowed(name) == true then return true end
   if Metadata.runtimeUpdateOwners and Metadata.runtimeUpdateOwners[name] == true then return true end
   if Metadata.defaultApplyMask and Metadata.defaultApplyMask[name] == true then return true end
@@ -684,13 +700,22 @@ function UF.ElementEnabled(element, frame, spec)
   return not element or type(element.IsEnabled) ~= "function" or element.IsEnabled(frame, spec) ~= false
 end
 
-function UF.RegisterElement(name, element)
+function UF.RegisterElement(name, element, traits)
   if type(name) ~= "string" or type(element) ~= "table" then return false end
+  if UF.elements[name] ~= nil and UF.elements[name] ~= element then return false end
   if not UF.elements[name] then
     UF.elementOrder[#UF.elementOrder + 1] = name
   end
   UF.elements[name] = element
   Elements[name] = element
+  if type(traits) == "table" then
+    UF.elementTraits[name] = traits
+    if traits.defaultApply == true and type(Metadata.defaultApplyMask) == "table" then
+      Metadata.defaultApplyMask[name] = true
+    end
+    if traits.forceUpdate == true then FORCE_UPDATE_ELEMENTS[name] = true end
+    if traits.identity == true then IDENTITY_ELEMENTS[name] = true end
+  end
   GetUpdateKey(name)
   return true
 end
@@ -707,9 +732,9 @@ local function FrameVisibleForEvent(frame)
 
   local visible = frame._msufCoreVisible
   if visible == true then return true end
-  if _G.MSUF_PreviewTestMode == true
-    or _G.MSUF_BossTestMode == true
-    or _G.MSUF2_BossUnitframePreviewActive == true then
+  if HOST_VALUES.MSUF_PreviewTestMode == true
+    or HOST_VALUES.MSUF_BossTestMode == true
+    or HOST_VALUES.MSUF2_BossUnitframePreviewActive == true then
     return true
   end
   if visible == false then return false end
@@ -722,10 +747,10 @@ UF.FrameVisibleForEvent = FrameVisibleForEvent
 
 local function IdentityUnitExists(frame, unit)
   if not IsUnitToken(unit) then return false end
-  if _G.MSUF_PreviewTestMode == true
-    or _G.MSUF_BossTestMode == true
-    or _G.MSUF2_BossUnitframePreviewActive == true
-    or _G.MSUF_UnitEditModeActive == true then
+  if HOST_VALUES.MSUF_PreviewTestMode == true
+    or HOST_VALUES.MSUF_BossTestMode == true
+    or HOST_VALUES.MSUF2_BossUnitframePreviewActive == true
+    or HOST_VALUES.MSUF_UnitEditModeActive == true then
     return true
   end
   local exists = ReadUnitExistsCached(frame, unit)
@@ -915,7 +940,7 @@ local function FrameOnHide(frame)
   -- every target/focus swap. The diagnostic flag overrides both ways:
   --   MSUF_GF_SuspendHidden == false -> force OFF (A/B baseline via /msufgp)
   --   MSUF_GF_SuspendHidden == true  -> force ON for every scope (single too)
-  local suspendFlag = _G.MSUF_GF_SuspendHidden
+  local suspendFlag = HOST_VALUES.MSUF_GF_SuspendHidden
   if suspendFlag ~= false
     and (suspendFlag == true or frame._msufCoreScope == "group")
     and frame._msufCoreEventsSuspended ~= true
@@ -1874,7 +1899,8 @@ local function QueueDependentIdentity(frame, event)
     frame._msufDependentIdentityCallback = callback
   end
 
-  local scheduleOnce = _G.MSUF_ScheduleOnce
+  local scheduleOnce = UF.GetService and UF.GetService("ScheduleOnce")
+    or HOST_VALUES.MSUF_ScheduleOnce
   if type(scheduleOnce) == "function" then
     scheduleOnce(callback, callback)
   elseif _G.C_Timer and _G.C_Timer.After then
@@ -2135,7 +2161,7 @@ function UF.RebuildRuntimeStatusState(frame)
   local identityPlan = BuildRuntimeSequencePlan(frame, IDENTITY_ELEMENTS, true)
   AssignRuntimeSequencePlan(frame, identityPlan,
     "_msufIdentityFns", "_msufIdentityCount", "_msufIdentityLabels", "_msufIdentityPath")
-  local runtimePlan = BuildRuntimeSequencePlan(frame, BASIC_ELEMENTS)
+  local runtimePlan = BuildRuntimeSequencePlan(frame, FORCE_UPDATE_ELEMENTS)
   AssignRuntimeSequencePlan(frame, runtimePlan,
     "_msufRuntimeAllFns", "_msufRuntimeAllCount", "_msufRuntimeAllLabels", "_msufRuntimeAllPath")
   frame._msufGroupIdentityFns = frame._msufIdentityFns
