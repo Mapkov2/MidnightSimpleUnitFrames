@@ -17,19 +17,30 @@ function ConvertTo-Sha256Hex {
     }
 }
 
-function Get-RawFileSha256 {
+function Get-NormalizedTextFileSha256 {
     param([Parameter(Mandatory = $true)][string]$Path)
 
+    $raw = [System.IO.File]::ReadAllBytes($Path)
+    $normalized = [System.IO.MemoryStream]::new($raw.Length)
     $sha = [System.Security.Cryptography.SHA256]::Create()
-    $stream = [System.IO.File]::Open(
-        $Path,
-        [System.IO.FileMode]::Open,
-        [System.IO.FileAccess]::Read,
-        [System.IO.FileShare]::Read)
     try {
-        return ([System.BitConverter]::ToString($sha.ComputeHash($stream))).Replace('-', '')
+        for ($index = 0; $index -lt $raw.Length; $index++) {
+            if ($raw[$index] -eq 13) {
+                # Git may materialize the same text blob as LF or CRLF depending
+                # on checkout platform/config. Canonicalize both (and lone CR)
+                # to LF without decoding or otherwise changing file bytes.
+                $normalized.WriteByte(10)
+                if ($index + 1 -lt $raw.Length -and $raw[$index + 1] -eq 10) {
+                    $index++
+                }
+            } else {
+                $normalized.WriteByte($raw[$index])
+            }
+        }
+        $normalized.Position = 0
+        return ([System.BitConverter]::ToString($sha.ComputeHash($normalized))).Replace('-', '')
     } finally {
-        $stream.Dispose()
+        $normalized.Dispose()
         $sha.Dispose()
     }
 }
@@ -49,26 +60,32 @@ $pathByRelative = [System.Collections.Generic.Dictionary[string, string]]::new(
     [System.StringComparer]::Ordinal)
 
 foreach ($addonRoot in $addonRoots) {
-    $fullAddonRoot = Join-Path $repoRoot $addonRoot
-    if (-not (Test-Path -LiteralPath $fullAddonRoot -PathType Container)) {
+    if (-not (Test-Path -LiteralPath (Join-Path $repoRoot $addonRoot) -PathType Container)) {
         throw "Graphify source root is missing: $addonRoot"
     }
-    foreach ($path in [System.IO.Directory]::GetFiles(
-        $fullAddonRoot, "*", [System.IO.SearchOption]::AllDirectories)) {
-        $extension = [System.IO.Path]::GetExtension($path)
-        if (-not ($extension.Equals(".lua", [System.StringComparison]::OrdinalIgnoreCase) -or
-            $extension.Equals(".xml", [System.StringComparison]::OrdinalIgnoreCase) -or
-            $extension.Equals(".toc", [System.StringComparison]::OrdinalIgnoreCase))) {
-            continue
-        }
-        $relative = $path.Substring($repoRoot.Length).TrimStart(
-            [System.IO.Path]::DirectorySeparatorChar,
-            [System.IO.Path]::AltDirectorySeparatorChar).Replace('\', '/')
-        if ($pathByRelative.ContainsKey($relative)) {
-            throw "Duplicate Graphify source-manifest path: $relative"
-        }
-        $pathByRelative.Add($relative, $path)
+}
+
+# Match the future release closure: tracked files plus non-ignored new files
+# that can be added to the same commit. Local ignored audit helpers must never
+# make a Graphify inventory impossible to reproduce from a clean checkout.
+$relativeCandidates = @(& git -C $repoRoot ls-files --cached --others --exclude-standard -- @addonRoots)
+if ($LASTEXITCODE -ne 0) {
+    throw "Could not enumerate the Git-owned Graphify source closure."
+}
+foreach ($candidate in $relativeCandidates) {
+    $relative = ([string]$candidate).Replace('\', '/')
+    $extension = [System.IO.Path]::GetExtension($relative)
+    if (-not ($extension.Equals(".lua", [System.StringComparison]::OrdinalIgnoreCase) -or
+        $extension.Equals(".xml", [System.StringComparison]::OrdinalIgnoreCase) -or
+        $extension.Equals(".toc", [System.StringComparison]::OrdinalIgnoreCase))) {
+        continue
     }
+    $path = Join-Path $repoRoot $relative
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { continue }
+    if ($pathByRelative.ContainsKey($relative)) {
+        throw "Duplicate Graphify source-manifest path: $relative"
+    }
+    $pathByRelative.Add($relative, $path)
 }
 
 $relativePaths = @($pathByRelative.Keys)
@@ -77,19 +94,20 @@ if ($relativePaths.Count -eq 0) {
     throw "Graphify source manifest is empty."
 }
 
-# v1 is an ordinal list of `relative/path<TAB>RAW_FILE_SHA256<LF>` rows.
-# Both the path separator and final LF are explicit so locale, filesystem
-# enumeration order, and Windows newline settings cannot change the digest.
+# v2 is an ordinal list of
+# `relative/path<TAB>LF_NORMALIZED_TEXT_FILE_SHA256<LF>` rows. Paths, manifest
+# newlines, and source newlines are canonical so Windows and Unix checkouts of
+# the same Git blobs certify the same source snapshot.
 $manifestRows = [System.Collections.Generic.List[string]]::new()
 foreach ($relative in $relativePaths) {
-    $manifestRows.Add(("{0}`t{1}" -f $relative, (Get-RawFileSha256 -Path $pathByRelative[$relative])))
+    $manifestRows.Add(("{0}`t{1}" -f $relative, (Get-NormalizedTextFileSha256 -Path $pathByRelative[$relative])))
 }
 $manifestText = [string]::Join("`n", $manifestRows.ToArray()) + "`n"
 $manifestBytes = [System.Text.UTF8Encoding]::new($false).GetBytes($manifestText)
 
 [pscustomobject]@{
-    schemaVersion = 1
-    manifestFormat = "msuf-addon-source-sha256-v1"
+    schemaVersion = 2
+    manifestFormat = "msuf-addon-source-sha256-v2"
     algorithm = "SHA256"
     manifestSha256 = ConvertTo-Sha256Hex -Bytes $manifestBytes
     fileCount = $relativePaths.Count

@@ -155,8 +155,8 @@ function Assert-GraphifySourceInventoryFreshness {
         manifestSha256 = & $readString "manifestSha256"
         fileCount = & $readInteger "fileCount"
     }
-    if ($tracked.schemaVersion -ne 1 -or
-        $tracked.manifestFormat -ne "msuf-addon-source-sha256-v1" -or
+    if ($tracked.schemaVersion -ne 2 -or
+        $tracked.manifestFormat -ne "msuf-addon-source-sha256-v2" -or
         $tracked.algorithm -ne "SHA256" -or
         $tracked.manifestSha256 -notmatch '^[0-9A-F]{64}$' -or
         $tracked.fileCount -le 0) {
@@ -441,8 +441,16 @@ $releaseAssets = @(
     "MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantRegistry_ActionInputs.lua"
 )
 
-$schemaGateMutex = [System.Threading.Mutex]::new(
-    $false, "Local\MSUF_AssistantSchemaAndReleaseGate_v1")
+$schemaGateMutexName = if (
+    [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
+) {
+    "Local\MSUF_AssistantSchemaAndReleaseGate_v1"
+} else {
+    # Global\ / Local\ are Windows session namespaces. On Unix the mutex name
+    # is file-system backed and must not carry a Windows namespace prefix.
+    "MSUF_AssistantSchemaAndReleaseGate_v1"
+}
+$schemaGateMutex = [System.Threading.Mutex]::new($false, $schemaGateMutexName)
 $schemaGateMutexHeld = $false
 Write-Host "[gate-lock] Waiting for exclusive Assistant schema/release access..."
 try {

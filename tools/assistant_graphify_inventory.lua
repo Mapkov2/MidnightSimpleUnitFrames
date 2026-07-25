@@ -5,8 +5,8 @@
 
 local M = {
     schemaVersion = 2,
-    sourceSnapshotSchemaVersion = 1,
-    sourceSnapshotManifestFormat = "msuf-addon-source-sha256-v1",
+    sourceSnapshotSchemaVersion = 2,
+    sourceSnapshotManifestFormat = "msuf-addon-source-sha256-v2",
     sourceSnapshotAlgorithm = "SHA256",
     sourceSnapshotSidecarName = ".msuf-assistant-source-snapshot.json",
 }

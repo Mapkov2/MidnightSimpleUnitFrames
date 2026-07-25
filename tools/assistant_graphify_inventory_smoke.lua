@@ -4,8 +4,8 @@ local Inventory = require("assistant_graphify_inventory")
 local tracked = Inventory.Load("tools/assistant_graphify_inventory_data.lua")
 assert(tracked.recordCount == 1798, "reviewed Graphify setting-inventory count drifted")
 assert(tracked.schemaVersion == 2, "Graphify inventory source-snapshot contract is not current")
-assert(tracked.sourceSnapshot.schemaVersion == 1
-        and tracked.sourceSnapshot.manifestFormat == "msuf-addon-source-sha256-v1"
+assert(tracked.sourceSnapshot.schemaVersion == 2
+        and tracked.sourceSnapshot.manifestFormat == "msuf-addon-source-sha256-v2"
         and tracked.sourceSnapshot.algorithm == "SHA256"
         and #tracked.sourceSnapshot.manifestSha256 == 64
         and tracked.sourceSnapshot.fileCount > 0,

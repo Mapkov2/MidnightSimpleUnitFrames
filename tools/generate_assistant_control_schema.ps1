@@ -12,8 +12,14 @@ Set-StrictMode -Version Latest
 $schemaGateMutex = $null
 $schemaGateMutexHeld = $false
 if ($env:MSUF_ASSISTANT_SCHEMA_GATE_LOCK_HELD -ne "1") {
-    $schemaGateMutex = [System.Threading.Mutex]::new(
-        $false, "Local\MSUF_AssistantSchemaAndReleaseGate_v1")
+    $schemaGateMutexName = if (
+        [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
+    ) {
+        "Local\MSUF_AssistantSchemaAndReleaseGate_v1"
+    } else {
+        "MSUF_AssistantSchemaAndReleaseGate_v1"
+    }
+    $schemaGateMutex = [System.Threading.Mutex]::new($false, $schemaGateMutexName)
     Write-Host "[gate-lock] Waiting for exclusive Assistant schema/release access..."
     try {
         try {

@@ -1,4 +1,4 @@
-## Interface: 120100
+## Interface: 120007, 120100
 ## Title: |cff38c7f0Midnight|r |cffcce0ffSimple Unit Frames|r - Assistant
 ## Notes: Load-on-demand Assistant for Midnight Simple Unit Frames.
 ## Author: Mapko
