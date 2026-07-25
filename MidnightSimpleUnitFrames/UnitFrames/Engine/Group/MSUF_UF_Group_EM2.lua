@@ -1580,7 +1580,10 @@ local function BuildGFPopup(mode)
     QuickPopup().OpenPage(pageKey, popup)
   end
 
-  local function CopyBoundsTo(targetMode)
+  --- Copies the source group's size only. Position stays untouched on purpose: two
+  --- group frames sharing offsetX/offsetY end up stacked, and the lower one can no
+  --- longer be grabbed for dragging.
+  local function CopySizeTo(targetMode)
     targetMode = NormalizeKind(targetMode)
     if not targetMode or targetMode == mode then return end
     Apply()
@@ -1588,9 +1591,6 @@ local function BuildGFPopup(mode)
     local dst = GetConf(targetMode)
     if not src or not dst then return end
     if _G.MSUF_EM_UndoBeforeChange then _G.MSUF_EM_UndoBeforeChange("gf", targetMode) end
-    dst.offsetX = San(src.offsetX, 0)
-    dst.offsetY = San(src.offsetY, 0)
-    dst.positionMode = STABLE_GRID_POSITION_MODE
     if src.width ~= nil then dst.width = floor(max(40, min(400, tonumber(src.width) or 120)) + 0.5) end
     if src.height ~= nil then dst.height = floor(max(16, min(200, tonumber(src.height) or 40)) + 0.5) end
     RefreshAfterPopupApply(targetMode)
@@ -1598,7 +1598,7 @@ local function BuildGFPopup(mode)
     if targetKey and EM2.Focus and EM2.Focus.Pulse then
       EM2.Focus.Pulse(targetKey, "layout", nil, { source = "group-copy", duration = 0.32 })
     end
-    SetHUDStatus("Copied group bounds", "ok")
+    SetHUDStatus("Copied group size", "ok")
     if popup and popup:IsShown() then Sync() end
   end
 
@@ -1685,14 +1685,14 @@ local function BuildGFPopup(mode)
     variant = "primary",
     hoverWash = true,
   })
-  Q.MenuButtonAt(popup, "Copy to...", 366, -250, 174, 36, function()
+  Q.MenuButtonAt(popup, "Copy size to...", 366, -250, 174, 36, function()
     local entries = {}
     for _, target in ipairs(GROUP_COPY_TARGETS) do
       if target[1] ~= mode then entries[#entries + 1] = { key = target[1], label = target[2] } end
     end
     return entries
   end, function(entry)
-    if entry.key ~= mode then CopyBoundsTo(entry.key) end
+    if entry.key ~= mode then CopySizeTo(entry.key) end
   end, { palette = Q.RefreshPalette() })
 
   local Quick = EM2.QuickPopup or (_G.MSUF_EM2_Menu2Style and _G.MSUF_EM2_Menu2Style.QuickPopup)

@@ -376,7 +376,11 @@ local function ResetPosition()
     if pf and pf:IsShown() then Sync() end
 end
 
-local function CopyBoundsTo(targetKey)
+--- Copies the source frame's size only. Position is deliberately excluded: two unit
+--- frames sharing offsetX/offsetY always end up stacked on top of each other, which
+--- also makes the lower one unreachable for dragging. Use the unit page copy dialog
+--- ("Size & Anchoring") when position really should travel with the copy.
+local function CopySizeTo(targetKey)
     if BlockConfigCombatLocked() then return end
     if not pf or not pf.unit or not targetKey then return end
     local db = DB()
@@ -388,8 +392,6 @@ local function CopyBoundsTo(targetKey)
     if type(_G.MSUF_EM_UndoBeforeChange)=="function" then _G.MSUF_EM_UndoBeforeChange("unit", targetKey) end
     local dst = db[targetKey]
     if not dst then db[targetKey] = {}; dst = db[targetKey] end
-    dst.offsetX = San(src.offsetX, 0)
-    dst.offsetY = San(src.offsetY, 0)
     if src.width ~= nil then dst.width = floor(max(40, min(800, tonumber(src.width) or 250)) + 0.5) end
     if src.height ~= nil then dst.height = floor(max(8, min(200, tonumber(src.height) or 40)) + 0.5) end
     local applied = false
@@ -402,9 +404,9 @@ local function CopyBoundsTo(targetKey)
     ApplyPowerLayoutForUnitKey(targetKey, dst.powerBarDetached == true and CanDetachPower(targetKey))
     if not applied and not ApplyAllSettingsSafe() and type(_G.MSUF_UpdateAllFrames)=="function" then _G.MSUF_UpdateAllFrames() end
     SyncMovers()
-    RefreshUFPreview("EM2_UNIT_POPUP_COPY_BOUNDS", targetKey)
+    RefreshUFPreview("EM2_UNIT_POPUP_COPY_SIZE", targetKey)
     if EM2.Focus and EM2.Focus.Pulse then EM2.Focus.Pulse(targetKey, "frame", nil, { source = "unit-copy", duration = 0.32 }) end
-    SetHUDStatus("Copied frame bounds", "ok")
+    SetHUDStatus("Copied frame size", "ok")
     Sync()
 end
 
@@ -470,10 +472,10 @@ local function Build()
         if entry.key == "__all__" then
             local srcKey = pf and pf.unit and CK(pf.unit)
             for _, target in ipairs(UNIT_COPY_TARGETS) do
-                if target.key ~= srcKey then CopyBoundsTo(target.key) end
+                if target.key ~= srcKey then CopySizeTo(target.key) end
             end
         else
-            CopyBoundsTo(entry.key)
+            CopySizeTo(entry.key)
         end
     end
 
@@ -494,7 +496,7 @@ local function Build()
     WirePopupFocus(Quick.ButtonAt(pf, "Cast", 436, -204, 104, 34, function() OpenMenu2Page(nil, "castbar") end), "castbar")
 
     Quick.ButtonAt(pf, "Open detailed settings", 20, -250, 334, 36, OpenMenu2Settings, { variant = "primary" })
-    Quick.MenuButtonAt(pf, "Copy to...", 366, -250, 174, 36, CopyMenuEntries, CopyMenuSelect, { palette = C })
+    Quick.MenuButtonAt(pf, "Copy size to...", 366, -250, 174, 36, CopyMenuEntries, CopyMenuSelect, { palette = C })
     pf.detachBtn = Quick.ToggleAt(pf, "Detach power bar", 174, -300, 212, 30, ApplyDetachPower, toggleOpts)
 
     pf.dpbPanel = CreateFrame("Frame", nil, pf, "BackdropTemplate")
