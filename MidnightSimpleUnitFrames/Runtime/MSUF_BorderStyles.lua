@@ -181,6 +181,20 @@ local EDGE_U = {
     [8] = { 0.1328125, 0.2421875 },  -- right
 }
 
+--- Edge UVs deliberately run past 1 so patterned edgeFile art repeats instead
+--- of clamping its last texel across the strip.  Blizzard's PTR
+--- BackdropTemplate passes tiling for both axes when it assigns edge art; keep
+--- that contract on the four strips only.  Corners never leave their 0..1 tile
+--- and stay clamped.
+local function SetPieceTexture(piece, texture, repeatEdge)
+    if not piece then return end
+    if repeatEdge then
+        piece:SetTexture(texture, "REPEAT", "REPEAT")
+    else
+        piece:SetTexture(texture)
+    end
+end
+
 --- Create the eight textures for one owner. `layer`/`subLayer` place the whole
 --- border in the owner's draw order; `texture` is the resolved edgeFile.
 function B.Create(owner, layer, subLayer, texture)
@@ -188,7 +202,7 @@ function B.Create(owner, layer, subLayer, texture)
     local pieces = {}
     for i = 1, 8 do
         local tex = owner:CreateTexture(nil, layer or "OVERLAY", nil, subLayer or 0)
-        if texture then tex:SetTexture(texture) end
+        if texture then SetPieceTexture(tex, texture, i > 4) end
         pieces[i] = tex
     end
     for i = 1, 4 do
@@ -202,7 +216,7 @@ end
 function B.SetTexture(pieces, texture)
     if not pieces then return end
     for i = 1, 8 do
-        if pieces[i] then pieces[i]:SetTexture(texture) end
+        SetPieceTexture(pieces[i], texture, i > 4)
     end
 end
 

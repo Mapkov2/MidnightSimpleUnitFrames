@@ -2395,7 +2395,10 @@ local function MSUF_ProfileIO_ConvertLegacyAuras2Geometry(auras, profile)
             local layerKey = kind .. "Layer"
             local strataKey = kind .. "Strata"
             if layout[layerKey] == nil then layout[layerKey] = 30; changed = true end
-            if layout[strataKey] == nil then layout[strataKey] = "MEDIUM"; changed = true end
+            -- The relational 0..30 layer model inherits the unit frame's
+            -- strata.  Seeding MEDIUM here made a generated compatibility
+            -- value indistinguishable from a user's explicit MEDIUM choice.
+            if layout[strataKey] == nil then layout[strataKey] = "AUTO"; changed = true end
         end
 
         ConvertLane("buff", "buffGroupOffsetX", "buffGroupOffsetY", "buffAnchor", "buffOffsetX", "buffOffsetY")

@@ -720,35 +720,7 @@ local function ReadDurationBarDisplay(primary, secondary, key, fallback)
     return NormalizeDurationBarDisplay(ReadRaw(primary, secondary, key), fallback)
 end
 
--- One-shot saved-variables normalization: legacy builds/imports left aura lane
--- strata pinned to "MEDIUM" across profiles, which overrides AUTO and parks the
--- whole aura chain a strata ABOVE every LOW frame element — at that point no
--- 0..30 layer value can order auras against bars/texts (strata beats level).
--- AUTO resolves to the unit frame's own strata (relational model, same as the
--- reference addons), so MEDIUM-pinned lanes are folded back to AUTO exactly
--- once; a user who deliberately re-picks a strata afterwards keeps it.
-local AURA_LANE_STRATA_KEYS = {
-    buffStrata = true, debuffStrata = true,
-    trackedBuffStrata = true, externalStrata = true,
-}
-local function NormalizeLegacyAuraStrata(node, depth, seen)
-    if type(node) ~= "table" or depth > 12 or seen[node] then return end
-    seen[node] = true
-    for key, value in pairs(node) do
-        if AURA_LANE_STRATA_KEYS[key] then
-            if value == "MEDIUM" then node[key] = "AUTO" end
-        elseif type(value) == "table" then
-            NormalizeLegacyAuraStrata(value, depth + 1, seen)
-        end
-    end
-end
-
 local function EnsureDB()
-    local rootDB = _G.MSUF_DB
-    if type(rootDB) == "table" and rootDB.auras3StrataNormalized ~= 1 then
-        rootDB.auras3StrataNormalized = 1
-        NormalizeLegacyAuraStrata(rootDB, 1, {})
-    end
     if A3.EnsureDB then
         local auras, shared = A3.EnsureDB()
         if type(auras) == "table" then
@@ -3282,7 +3254,8 @@ local function PrepareAuraButton(button, lane, index)
     -- border, so the dispel-type border overdraws the static ring for typed
     -- debuffs. Scopes that opted out arrive with ICON_STYLE_OFF and take the
     -- hide branches below.
-    local style = lane.iconStyle
+    local style
+    if not barOnly then style = lane.iconStyle end
     local size = lane.size or 0
     ApplyIconStyleShadow(button, style, size)
     ApplyIconStyleBorder(button, style, size)
@@ -4252,6 +4225,10 @@ A3._DirectIdentityRefreshUnit = function(unit, forceSpellIndicatorGeometry)
     local byUnit = A3._directIdentityAuraContainers
     local containers = byUnit and byUnit[unit]
     if not containers then return false end
+    -- Only Party/Raid registry units (plus the Party self-frame shared under
+    -- "player") can own the range-gated Party aura parent. Target, focus and
+    -- boss identity refreshes must not inspect every container for group work.
+    local seedPartyParents = unit == "player" or A3._directIdentityRefreshUnits[unit] ~= true
 
     if forceSpellIndicatorGeometry ~= true then
         -- Target/focus swaps use this direct route. Keep the exceptional
@@ -4259,7 +4236,9 @@ A3._DirectIdentityRefreshUnit = function(unit, forceSpellIndicatorGeometry)
         -- still consuming any one-shot geometry marker left by a hidden frame.
         local any, partyParents = false, nil
         for container in pairs(containers) do
-            partyParents = CollectPartyAuraParent(partyParents, container)
+            if seedPartyParents then
+                partyParents = CollectPartyAuraParent(partyParents, container)
+            end
             local update = container and container.UpdateAllAuras
             if type(update) == "function" then
                 if A3._NativeContainerVisible(container) then update(container) end
@@ -4270,13 +4249,15 @@ A3._DirectIdentityRefreshUnit = function(unit, forceSpellIndicatorGeometry)
                 any = true
             end
         end
-        SeedPartyAuraParents(partyParents, unit)
+        if seedPartyParents then SeedPartyAuraParents(partyParents, unit) end
         return any
     end
 
     local any, spellRecreates, partyParents = false, nil, nil
     for container in pairs(containers) do
-        partyParents = CollectPartyAuraParent(partyParents, container)
+        if seedPartyParents then
+            partyParents = CollectPartyAuraParent(partyParents, container)
+        end
         local deferSpellRecreate = container and container._msufA3SpellIndicatorRoot == true
         if deferSpellRecreate then
             spellRecreates = spellRecreates or {}
@@ -4315,7 +4296,7 @@ A3._DirectIdentityRefreshUnit = function(unit, forceSpellIndicatorGeometry)
             any = SpellIndicatorsRuntime.Recreate(spellRecreates[i]) ~= nil or any
         end
     end
-    SeedPartyAuraParents(partyParents, unit)
+    if seedPartyParents then SeedPartyAuraParents(partyParents, unit) end
     return any
 end
 

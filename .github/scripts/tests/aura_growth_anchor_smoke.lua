@@ -905,6 +905,82 @@ local GROWTHS = {
 }
 local GROWTH_ORDER = { "RIGHTDOWN", "LEFTDOWN", "RIGHTUP", "LEFTUP", "UP", "DOWN" }
 
+-- Runtime must never infer whether a stored MEDIUM value came from an old
+-- translator default or from an explicit user choice. New translations seed
+-- AUTO directly; existing saved choices remain byte-for-byte authoritative.
+do
+    _G.MSUF_DB = {
+        auras3 = {
+            _msufAuras3TranslatedFromLegacyAuras2 = true,
+            _msufAuras3LegacyGeometry_v3 = true,
+            enabled = true,
+            showPlayer = true,
+            shared = {
+                showBuffs = true,
+                showDebuffs = true,
+                trackedBuffStrata = "MEDIUM",
+                externalStrata = "MEDIUM",
+            },
+            perUnit = {
+                player = {
+                    overrideLayout = true,
+                    layout = {
+                        buffLayer = 30, debuffLayer = 30,
+                        buffStrata = "MEDIUM", debuffStrata = "MEDIUM",
+                    },
+                },
+                target = {
+                    overrideLayout = true,
+                    layout = {
+                        buffLayer = 12, debuffLayer = 30,
+                        buffStrata = "MEDIUM", debuffStrata = "MEDIUM",
+                    },
+                },
+                focus = {
+                    overrideLayout = false,
+                    layout = {
+                        buffLayer = 30, debuffLayer = 30,
+                        buffStrata = "MEDIUM", debuffStrata = "MEDIUM",
+                    },
+                },
+            },
+        },
+        profiles = {
+            Native = {
+                auras3 = {
+                    perUnit = {
+                        player = {
+                            overrideLayout = true,
+                            layout = {
+                                buffLayer = 30, debuffLayer = 30,
+                                buffStrata = "MEDIUM", debuffStrata = "MEDIUM",
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    }
+    A3._runtimeConfigGen = (A3._runtimeConfigGen or 1) + 1
+    Check(A3.ResolveUnitFrameConfig("player", {}) ~= nil, "Aura config did not reach EnsureDB")
+    local migrated = _G.MSUF_DB.auras3.perUnit.player.layout
+    Equal(migrated.buffStrata, "MEDIUM", "legacy-fingerprint Buff MEDIUM was overwritten")
+    Equal(migrated.debuffStrata, "MEDIUM", "legacy-fingerprint Debuff MEDIUM was overwritten")
+    local deliberate = _G.MSUF_DB.auras3.perUnit.target.layout
+    Equal(deliberate.buffStrata, "MEDIUM", "non-fingerprint explicit Buff MEDIUM was overwritten")
+    Equal(deliberate.debuffStrata, "MEDIUM", "non-fingerprint explicit Debuff MEDIUM was overwritten")
+    local inactive = _G.MSUF_DB.auras3.perUnit.focus.layout
+    Equal(inactive.buffStrata, "MEDIUM", "inactive layout Buff MEDIUM was overwritten")
+    Equal(inactive.debuffStrata, "MEDIUM", "inactive layout Debuff MEDIUM was overwritten")
+    Equal(_G.MSUF_DB.auras3.shared.trackedBuffStrata, "MEDIUM",
+        "tracked Buff strata was incorrectly treated as an Auras2 unit-lane seed")
+    Equal(_G.MSUF_DB.auras3.shared.externalStrata, "MEDIUM",
+        "External strata was incorrectly treated as an Auras2 unit-lane seed")
+    Equal(_G.MSUF_DB.profiles.Native.auras3.perUnit.player.layout.buffStrata, "MEDIUM",
+        "native profile explicit MEDIUM was overwritten")
+    Equal(_G.MSUF_DB.auras3StrataNormalized, nil, "runtime wrote the retired strata migration marker")
+end
+
 local function UnitLane(anchor, growth)
     _G.MSUF_DB = {
         auras3 = {
@@ -2018,6 +2094,42 @@ do
     end
     A3._HideLane(container)
 
+    -- BAR_ONLY owns no icon artwork. A recycled button must hide already-created
+    -- style regions, while a fresh BAR_ONLY lane must not allocate them at all.
+    do
+        local recycled = frames[1]
+        local oldBorder = recycled._msufA3StyleBorder
+        local oldShadow = recycled._msufA3StyleShadow
+        styled.showDurationBar = true
+        styled.durationBarDisplay = "BAR_ONLY"
+        nativeButtonAccess = true
+        container.groupOptions[container._msufA3ManagedGroupKey].initializeFrame(recycled)
+        nativeButtonAccess = false
+        Check(oldBorder and oldBorder.shown == false, "BAR_ONLY left an existing icon-style border visible")
+        for piece = 1, #(oldShadow or {}) do
+            Check(oldShadow[piece].shown == false, "BAR_ONLY left an existing icon-style shadow piece visible")
+        end
+        styled.showDurationBar = false
+        styled.durationBarDisplay = "OVERLAY"
+
+        shared.buffShowDurationBar = true
+        shared.buffDurationBarDisplay = "BAR_ONLY"
+        A3._runtimeConfigGen = (A3._runtimeConfigGen or 1) + 1
+        local barOnlyLane = assert(assert(A3.ResolveUnitFrameConfig("player", {})).lanes.buff)
+        local barOnlyContainer = ApplyLane(barOnlyLane)
+        local barOnlyFrames = assert(barOnlyContainer:GetAuraGroup(barOnlyContainer._msufA3ManagedGroupKey)):GetFramesByIndex()
+        for i = 1, #barOnlyFrames do
+            local button = barOnlyFrames[i]
+            Check(button._msufA3StyleBorder == nil, "fresh BAR_ONLY button allocated a flat icon border")
+            Check(button._msufA3StyleBorderPieces == nil, "fresh BAR_ONLY button allocated border pieces")
+            Check(button._msufA3StyleShadow == nil, "fresh BAR_ONLY button allocated shadow pieces")
+        end
+        A3._HideLane(barOnlyContainer)
+        shared.buffShowDurationBar = false
+        shared.buffDurationBarDisplay = nil
+        A3._runtimeConfigGen = (A3._runtimeConfigGen or 1) + 1
+    end
+
     -- A textured border style swaps the flat quad for the shared 8-piece edge
     -- renderer and re-signs the lane so containers rebuild.
     local solidSig = styled._msufA3LayoutSignature
@@ -2113,8 +2225,11 @@ do
         "lane AuraButtons regained level/strata writes (container must stay the only authority)")
     Check(runtimeSource:find("DispelSensorFrameLevel(parentFrame, sensor, target)", 1, true),
         "dispel sensor buttons lost their per-visual level writes")
-    Check(runtimeSource:find("auras3StrataNormalized", 1, true),
-        "legacy MEDIUM aura strata migration removed")
+    local profilesSource = Read("MidnightSimpleUnitFrames/State/MSUF_Profiles.lua")
+    Check(not runtimeSource:find("auras3StrataNormalized", 1, true)
+        and not runtimeSource:find("NormalizeLegacyAuraStrata", 1, true)
+        and profilesSource:find('layout[strataKey] = "AUTO"', 1, true),
+        "strata compatibility must seed AUTO at translation time without rewriting stored MEDIUM values")
 end
 
 -- Static integration guards: live, Edit Mode, Menu2 unit/group previews, and

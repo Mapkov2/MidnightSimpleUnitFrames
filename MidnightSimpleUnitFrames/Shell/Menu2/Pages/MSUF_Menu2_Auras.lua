@@ -25,6 +25,7 @@ local AURA_PREVIEW_EDGE_OPTS = { linesKey = "edge", maxEdgeSize = 1, texture = T
 -- break the whole page.
 M.AURA_SHADOW_TEXTURE = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames")
     .. "\\Media\\Borders\\msuf_aura_border_shadow.tga"
+M.AURA_ICON_STYLE_APPLY_DELAY = 0.18
 local floor, ceil, max, min, abs = math.floor, math.ceil, math.max, math.min, math.abs
 local tonumber, tostring, type, ipairs, pairs = tonumber, tostring, type, ipairs, pairs
 local table_concat = table.concat
@@ -1926,10 +1927,9 @@ local function BuildUnitStyle(ctx, b, scope)
             fw - 48, ReadScopeDebuffBorderMode, WriteScopeDebuffBorderMode, "AURAS3_DEBUFF_TYPE_BORDER_MODE")
     end
 
-    -- Shared icon style (static border + soft shadow). One global
-    -- block: writes apply to every aura lane on all frames (Buffs, Debuffs,
-    -- Custom containers incl. the Dot tracker), so after the scope apply we
-    -- also request a global aura refresh.
+    -- Shared icon style (static border + soft shadow). One global block: writes
+    -- apply to every aura lane on all frames (Buffs, Debuffs, Custom containers
+    -- incl. the Dot tracker), so one shared runtime apply is authoritative.
     -- "shared" defines the block; it is not a frame scope, so it has no opt-out
     -- row and the section stays at its original height there.
     -- Detail controls gray out while their master toggle is off, matching the
@@ -1956,13 +1956,73 @@ local function BuildUnitStyle(ctx, b, scope)
         W.SetControlsEnabled(iconStyleGates.border, On("styleBorderEnabled"))
         W.SetControlsEnabled(iconStyleGates.shadow, On("styleShadowEnabled"))
     end
-    local function IconStyleWrite(key, value, reason)
+    local iconStyleApplyTimer
+    local iconStyleApplyPending
+    local iconStyleApplyReason
+    local iconStyleReleaseScheduled
+    local function CancelIconStyleApplyTimer()
+        if iconStyleApplyTimer and type(iconStyleApplyTimer.Cancel) == "function" then
+            iconStyleApplyTimer:Cancel()
+        end
+        iconStyleApplyTimer = nil
+    end
+    local function ApplyIconStyleRuntime(reason)
+        iconStyleApplyPending = nil
+        iconStyleApplyReason = nil
+        iconStyleReleaseScheduled = nil
+        CancelIconStyleApplyTimer()
+        return RequestAuraRuntime("shared", reason or "AURAS3_ICON_STYLE")
+    end
+    local function IconStyleWrite(key, value, reason, previewOnly)
         if type(Model.WriteValue) == "function" then Model.WriteValue(unit, key, value) end
-        ApplyUnit(ctx, unit, reason)
-        local runtime = _G.MSUF_Auras3
-        if runtime and type(runtime.RequestApply) == "function" then runtime.RequestApply(reason) end
-        iconStyleGates.Apply()
+        if previewOnly ~= true then ApplyIconStyleRuntime(reason) end
+        if key == "styleBorderEnabled" or key == "styleShadowEnabled" then iconStyleGates.Apply() end
         RefreshStylePreview()
+    end
+    local function FlushIconStyleApply()
+        if not iconStyleApplyPending then return end
+        iconStyleApplyPending = nil
+        iconStyleReleaseScheduled = nil
+        CancelIconStyleApplyTimer()
+        local reason = iconStyleApplyReason
+        iconStyleApplyReason = nil
+        ApplyIconStyleRuntime(reason)
+    end
+    local function ScheduleIconStyleReleaseApply()
+        if not iconStyleApplyPending then return end
+        CancelIconStyleApplyTimer()
+        if C_Timer and type(C_Timer.NewTimer) == "function" then
+            -- The native Slider may emit its final OnValueChanged after
+            -- OnMouseUp. Flush on the next event tick so that final value joins
+            -- this single runtime apply instead of scheduling a second one.
+            iconStyleReleaseScheduled = true
+            iconStyleApplyTimer = C_Timer.NewTimer(0, function()
+                iconStyleApplyTimer = nil
+                iconStyleReleaseScheduled = nil
+                FlushIconStyleApply()
+            end)
+        else
+            FlushIconStyleApply()
+        end
+    end
+    local function QueueIconStyleApply(slider, reason)
+        iconStyleApplyPending = true
+        iconStyleApplyReason = reason or iconStyleApplyReason
+        -- Pointer drags write SavedVariables and repaint only this menu preview.
+        -- MouseUp flushes once on the next event tick. Wheel, +/- and text input
+        -- have no drag state, so they share one cancellable trailing apply.
+        if slider and slider._msuf2SliderActive then
+            iconStyleReleaseScheduled = nil
+            CancelIconStyleApplyTimer()
+            return
+        end
+        if iconStyleReleaseScheduled then return end
+        CancelIconStyleApplyTimer()
+        if C_Timer and type(C_Timer.NewTimer) == "function" then
+            iconStyleApplyTimer = C_Timer.NewTimer(M.AURA_ICON_STYLE_APPLY_DELAY, FlushIconStyleApply)
+        else
+            FlushIconStyleApply()
+        end
     end
     local function IconStyleReadColor(colorKey, defaultColor)
         local c = type(Model.ReadValue) == "function" and Model.ReadValue(unit, colorKey, defaultColor) or defaultColor
@@ -1976,21 +2036,29 @@ local function BuildUnitStyle(ctx, b, scope)
             AuraControlMeta(ctx, "style.shared.icon-style." .. AuraCatalogToken(key))))
     end
     local function IconStyleSlider(label, col, y, minVal, maxVal, key, defaultValue, reason)
-        return AddStyleControl(BindSlider(ctx, iconStyle, label, 24 + col * (styleCol + styleGap), y,
+        local slider
+        slider = AddStyleControl(BindSlider(ctx, iconStyle, label, 24 + col * (styleCol + styleGap), y,
             minVal, maxVal, 1, styleCol,
             function()
                 local value = type(Model.ReadValue) == "function" and Model.ReadValue(unit, key, defaultValue) or defaultValue
                 return tonumber(value) or defaultValue
             end,
-            function(value) IconStyleWrite(key, tonumber(value) or defaultValue, reason) end,
+            function(value)
+                IconStyleWrite(key, tonumber(value) or defaultValue, reason, true)
+                QueueIconStyleApply(slider, reason)
+            end,
             AuraControlMeta(ctx, "style.shared.icon-style." .. AuraCatalogToken(key))))
+        slider:HookScript("OnMouseUp", ScheduleIconStyleReleaseApply)
+        slider:HookScript("OnHide", FlushIconStyleApply)
+        return slider
     end
     -- Border/Shadow color swatches now live on the Colors page (Auras section)
     -- and are reachable from this section via the three-dot context-color
     -- shortcut attached below; only the enable toggles, thickness/size and the
     -- alpha sliders remain inline here.
     local function IconStyleAlphaSlider(label, col, y, colorKey, defaultColor, reason)
-        return AddStyleControl(BindSlider(ctx, iconStyle, label, 24 + col * (styleCol + styleGap), y,
+        local slider
+        slider = AddStyleControl(BindSlider(ctx, iconStyle, label, 24 + col * (styleCol + styleGap), y,
             0, 100, 1, styleCol,
             function()
                 local c = IconStyleReadColor(colorKey, defaultColor)
@@ -1998,9 +2066,13 @@ local function BuildUnitStyle(ctx, b, scope)
             end,
             function(value)
                 local c = IconStyleReadColor(colorKey, defaultColor)
-                IconStyleWrite(colorKey, { c[1] or defaultColor[1], c[2] or defaultColor[2], c[3] or defaultColor[3], (tonumber(value) or 100) / 100 }, reason)
+                IconStyleWrite(colorKey, { c[1] or defaultColor[1], c[2] or defaultColor[2], c[3] or defaultColor[3], (tonumber(value) or 100) / 100 }, reason, true)
+                QueueIconStyleApply(slider, reason)
             end,
             AuraControlMeta(ctx, "style.shared.icon-style." .. AuraCatalogToken(colorKey) .. "-alpha")))
+        slider:HookScript("OnMouseUp", ScheduleIconStyleReleaseApply)
+        slider:HookScript("OnHide", FlushIconStyleApply)
+        return slider
     end
     local ICON_STYLE_BORDER_DEFAULT = { 0, 0, 0, 1 }
     local ICON_STYLE_SHADOW_DEFAULT = { 0, 0, 0, 0.8 }
@@ -2051,9 +2123,7 @@ local function BuildUnitStyle(ctx, b, scope)
         function() return Model.ReadBorderStyle(unit) end,
         function(v)
             Model.WriteBorderStyle(unit, v)
-            ApplyUnit(ctx, unit, "AURAS3_ICON_STYLE_BORDER")
-            local runtime = _G.MSUF_Auras3
-            if runtime and type(runtime.RequestApply) == "function" then runtime.RequestApply("AURAS3_ICON_STYLE_BORDER") end
+            ApplyIconStyleRuntime("AURAS3_ICON_STYLE_BORDER")
             RefreshStylePreview()
         end,
         AuraControlMeta(ctx, "style.shared.icon-style.border-style")))
@@ -2076,9 +2146,7 @@ local function BuildUnitStyle(ctx, b, scope)
             function() return Model.IconStyleScopeEnabled(scope) end,
             function(v)
                 if Model.SetIconStyleScopeEnabled(scope, v == true) then
-                    ApplyUnit(ctx, unit, "AURAS3_ICON_STYLE_SCOPE")
-                    local runtime = _G.MSUF_Auras3
-                    if runtime and type(runtime.RequestApply) == "function" then runtime.RequestApply("AURAS3_ICON_STYLE_SCOPE") end
+                    ApplyIconStyleRuntime("AURAS3_ICON_STYLE_SCOPE")
                 end
                 RefreshStylePreview()
             end,
@@ -2355,9 +2423,7 @@ local function BuildGroupStyle(ctx, b, scope)
             function() return Model.IconStyleScopeEnabled(scope) end,
             function(v)
                 if Model.SetIconStyleScopeEnabled(scope, v == true) then
-                    QueueGroupScope(scope, "visual")
-                    local runtime = _G.MSUF_Auras3
-                    if runtime and type(runtime.RequestApply) == "function" then runtime.RequestApply("AURAS3_ICON_STYLE_SCOPE") end
+                    RequestAuraRuntime("shared", "AURAS3_ICON_STYLE_SCOPE")
                 end
                 RefreshStylePreview()
             end,

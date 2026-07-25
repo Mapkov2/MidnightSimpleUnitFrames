@@ -40,7 +40,10 @@ if not read(ADDON .. "MidnightSimpleUnitFrames.toc") then ADDON = "" end
 local textures = {}
 local function NewTexture(layer, subLayer)
     local tex = { layer = layer, subLayer = subLayer, points = {}, shown = false }
-    function tex:SetTexture(path) self.texture = path end
+    function tex:SetTexture(path, wrapH, wrapV)
+        self.texture = path
+        self.wrapH, self.wrapV = wrapH, wrapV
+    end
     function tex:SetTexCoord(...) self.coords = { ... } end
     function tex:ClearAllPoints() self.points = {} end
     function tex:SetPoint(...) self.points[#self.points + 1] = { ... } end
@@ -135,6 +138,23 @@ check(#pieces == 8, "a border is exactly eight textures")
 for i = 1, 8 do
     check(pieces[i].layer == "BORDER" and pieces[i].subLayer == -1, "pieces honor the caller's draw layer")
     check(pieces[i].texture == "tex", "pieces take the requested texture")
+end
+for i = 1, 4 do
+    check(pieces[i].wrapH == nil and pieces[i].wrapV == nil,
+        "corner pieces stay clamped instead of enabling unnecessary tiling")
+end
+for i = 5, 8 do
+    check(pieces[i].wrapH == "REPEAT" and pieces[i].wrapV == "REPEAT",
+        "edge pieces enable REPEAT wrap for UVs above 1")
+end
+B.SetTexture(pieces, "tex2")
+for i = 1, 4 do
+    check(pieces[i].texture == "tex2" and pieces[i].wrapH == nil and pieces[i].wrapV == nil,
+        "SetTexture keeps corner pieces clamped")
+end
+for i = 5, 8 do
+    check(pieces[i].texture == "tex2" and pieces[i].wrapH == "REPEAT" and pieces[i].wrapV == "REPEAT",
+        "SetTexture preserves edge REPEAT wrap")
 end
 
 local EDGE, SIZE = 8, 32
@@ -257,6 +277,24 @@ for _, name in ipairs({ "ApplyIconStyleShadow", "ApplyIconStyleBorder" }) do
 end
 check(auraSource:find("style.signature", 1, true) ~= nil,
     "the icon style still contributes to the lane layout signature")
+
+local menuSource = assert(read(ADDON .. "Shell/Menu2/Pages/MSUF_Menu2_Auras.lua"))
+local iconStyleStart = assert(menuSource:find("local function ApplyIconStyleRuntime", 1, true))
+local iconStyleEnd = assert(menuSource:find("local ICON_STYLE_BORDER_DEFAULT", iconStyleStart, true))
+local iconStyleBlock = menuSource:sub(iconStyleStart, iconStyleEnd)
+check(iconStyleBlock:find('RequestAuraRuntime("shared"', 1, true) ~= nil
+    and iconStyleBlock:find("runtime.RequestApply", 1, true) == nil
+    and iconStyleBlock:find("ApplyUnit(ctx", 1, true) == nil,
+    "icon-style changes must use exactly one authoritative shared Aura apply")
+check(iconStyleBlock:find("if slider and slider._msuf2SliderActive then", 1, true) ~= nil
+    and iconStyleBlock:find("C_Timer.NewTimer(M.AURA_ICON_STYLE_APPLY_DELAY, FlushIconStyleApply)", 1, true) ~= nil
+    and iconStyleBlock:find("if iconStyleReleaseScheduled then return end", 1, true) ~= nil
+    and iconStyleBlock:find("C_Timer.NewTimer(0, function()", 1, true) ~= nil
+    and iconStyleBlock:find('slider:HookScript("OnMouseUp", ScheduleIconStyleReleaseApply)', 1, true) ~= nil,
+    "icon-style sliders lost preview-only drag plus bounded release/debounce apply")
+check(iconStyleBlock:find("OnUpdate", 1, true) == nil
+    and iconStyleBlock:find("RegisterEvent", 1, true) == nil,
+    "icon-style slider batching added polling or event work")
 
 if failures > 0 then
     print(("aura_border_style_smoke: %d failure(s)"):format(failures))

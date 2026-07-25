@@ -351,9 +351,9 @@ local bossDebuff = fresh.auras3.perUnit.boss1.layout
 assert(bossDebuff.debuffAnchor == "TOPRIGHT"
     and bossDebuff.debuffGroupOffsetX == -194 and bossDebuff.debuffGroupOffsetY == 2,
     "LEFT/DOWN boss debuff first-icon rectangle moved")
-assert(targetBuff.buffLayer == 30 and targetBuff.buffStrata == "MEDIUM"
-    and playerDebuff.debuffLayer == 30 and playerDebuff.debuffStrata == "MEDIUM",
-    "legacy Aura2 z-order was not retained above unit text")
+assert(targetBuff.buffLayer == 30 and targetBuff.buffStrata == "AUTO"
+    and playerDebuff.debuffLayer == 30 and playerDebuff.debuffStrata == "AUTO",
+    "legacy Aura2 z-order did not adopt the relational AUTO-strata layer model")
 for _, unit in ipairs({ "player", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5" }) do
     assert(type(fresh.auras3.perUnit[unit]) == "table"
         and fresh.auras3.perUnit[unit].overrideLayout == true,
