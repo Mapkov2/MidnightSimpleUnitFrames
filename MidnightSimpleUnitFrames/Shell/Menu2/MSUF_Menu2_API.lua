@@ -230,24 +230,102 @@ do
         end
     end
 end
-SLASH_MSUF2OPTIONS1 = "/msuf"
-SlashCmdList["MSUF2OPTIONS"] = function(msg)
-    msg = tostring(msg or ""):gsub("^%s+", ""):gsub("%s+$", "")
-    msg = msg:lower()
-    local cmd = msg:match("^(%S+)") or ""
-    if cmd == "versiontest" then
-        if type(_G.MSUF_VersionCheck_DebugFakeUpdate) == "function" then
-            _G.MSUF_VersionCheck_DebugFakeUpdate()
-        else
-            print("|cffffd700MSUF:|r Version test helper is not loaded.")
+--- ==========================================================================
+--- Menu-owned slash commands
+---
+--- The registry itself lives in Runtime/MSUF_ChatAndTooltips.lua, which loads
+--- long before Menu2. Everything registered here needs the menu window, the
+--- search index or MSUF Edit Mode, so it cannot live in the runtime file.
+--- Registration is load-time table work only: no events, no hooks, no timers.
+--- ==========================================================================
+local Commands = MSUF.SlashCommands
+
+--- `/msuf edit target` should land on the target frame. The menu already owns
+--- the "word the player typed -> page" mapping, so reuse it and strip the page
+--- prefix instead of maintaining a second unit-name table that can drift.
+local function SlashEditUnitKey(rest)
+    rest = tostring(rest or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+    if rest == "" then return nil end
+    local aliases = M.ALIASES or {}
+    local pageKey = aliases[rest] or rest
+    if pageKey == "gf_priority" then return "gf_priority" end
+    return pageKey:match("^uf_(.+)$")
+end
+
+local function SlashOpenSearch(query)
+    query = tostring(query or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    if query == "" then return M.Open("search") end
+    --- The window must exist before the search page can be selected. M.Open
+    --- returns false when combat blocks the menu, which ends the command here.
+    if not M.Open("search") then return false end
+    local bridge = M.SearchBridge
+    if not (bridge and type(bridge.RunSearchQuery) == "function") then return false end
+    local ok, err = bridge.RunSearchQuery(query)
+    if not ok and err then print("|cffff0000MSUF:|r " .. tostring(err)) end
+    return ok
+end
+
+if type(Commands) == "table" and type(Commands.Register) == "function" then
+Commands.Register({
+    name = "edit",
+    aliases = { "editmode", "move", "unlock" },
+    group = "frames",
+    usage = "/msuf edit [unit]",
+    help = "Toggle MSUF Edit Mode. Add a unit such as player or target to open it there.",
+    run = function(rest)
+        local unitKey = SlashEditUnitKey(rest)
+        if rest ~= "" and not unitKey then
+            print(string.format(M.Tr("|cffff0000MSUF:|r Unknown frame '%s'. Try player, target, focus, pet, boss or priority."), rest))
+            return
         end
-        return
-    end
-    if cmd == "inputdebug" then
-        if _G.SlashCmdList and type(_G.SlashCmdList["MIDNIGHTSUF"]) == "function" then _G.SlashCmdList["MIDNIGHTSUF"](msg) end
-        return
-    end
-    if cmd == "tour" or cmd == "guide" or cmd == "setup" then
+        if type(M.EditModeLifecycleStatus) ~= "function" then return end
+        local status = M.EditModeLifecycleStatus()
+        --- Edit Mode is already running: re-entering with a unit retargets it
+        --- rather than toggling the whole mode off under the player.
+        if unitKey and status.active then
+            local setFn = rawget(_G, "MSUF_SetMSUFEditModeDirect")
+            if type(setFn) == "function" then setFn(true, unitKey) end
+            return
+        end
+        if unitKey then return M.SetMSUFEditModeActive(true, unitKey, { source = "slash" }) end
+        return M.ToggleMSUFEditMode(nil, { source = "slash" })
+    end,
+})
+
+Commands.Register({
+    name = "lock",
+    aliases = { "unedit" },
+    group = "frames",
+    usage = "/msuf lock",
+    help = "Leave MSUF Edit Mode.",
+    run = function()
+        if type(M.EditModeLifecycleStatus) ~= "function" then return end
+        if not M.EditModeLifecycleStatus().active then
+            print(M.Tr("|cffffd700MSUF:|r MSUF Edit Mode is not running."))
+            return
+        end
+        return M.SetMSUFEditModeActive(false, nil, { source = "slash" })
+    end,
+})
+
+Commands.Register({
+    name = "search",
+    aliases = { "find" },
+    group = "general",
+    usage = "/msuf search <text>",
+    help = "Search the options menu and open the matching settings.",
+    run = function(rest)
+        return SlashOpenSearch(rest)
+    end,
+})
+
+Commands.Register({
+    name = "tour",
+    aliases = { "guide", "setup" },
+    group = "general",
+    usage = "/msuf tour",
+    help = "Start or resume the guided setup.",
+    run = function()
         if M.BlockCombatAction and M.BlockCombatAction() then return end
         local tour = MSUF and MSUF.GuidedTour6
         local active = type(tour) == "table" and type(tour.IsActive) == "function" and tour:IsActive()
@@ -258,15 +336,53 @@ SlashCmdList["MSUF2OPTIONS"] = function(msg)
         else
             M.Open("home")
         end
-        return
-    end
-    if cmd == "firstload" then
+    end,
+})
+
+Commands.Register({
+    name = "locale",
+    aliases = { "locales", "loc" },
+    group = "diagnostics",
+    dev = true,
+    usage = "/msuf locale",
+    help = "Report how much of the current language is translated.",
+    run = function()
+        local total, missing = 0, 0
+        if type(M.GetLocaleCoverage) == "function" then total, missing = M.GetLocaleCoverage() end
+        local locale = MSUF.LOCALE or ((type(GetLocale) == "function" and GetLocale()) or "enUS")
+        print(string.format("|cff00b7ebMSUF2|r locale %s: %d keys seen, %d missing translations.", locale, total or 0, missing or 0))
+    end,
+})
+
+Commands.Register({
+    name = "versiontest",
+    group = "diagnostics",
+    dev = true,
+    usage = "/msuf versiontest",
+    help = "Fake an available update to test the version-check popup.",
+    run = function()
+        if type(_G.MSUF_VersionCheck_DebugFakeUpdate) == "function" then
+            _G.MSUF_VersionCheck_DebugFakeUpdate()
+        else
+            print("|cffffd700MSUF:|r Version test helper is not loaded.")
+        end
+    end,
+})
+
+Commands.Register({
+    name = "firstload",
+    group = "diagnostics",
+    dev = true,
+    usage = "/msuf firstload [fresh/upgrade/status]",
+    help = "Replay the first-start flow or the upgrade highlights.",
+    run = function(rest)
+        local msg = rest:lower()
         local firstLoad = MSUF and MSUF.FirstLoad6
         if type(firstLoad) ~= "table" or type(firstLoad.Reset) ~= "function" then
             print("|cff00b7ebMSUF|r: First-load module is not loaded.")
             return
         end
-        local arg = msg:match("^%S+%s+(%S+)") or ""
+        local arg = msg:match("^(%S+)") or ""
         if arg == "status" then
             local shows = type(firstLoad.ShouldShowDashboard) == "function" and firstLoad:ShouldShowDashboard()
             local state = type(firstLoad.GetState) == "function" and firstLoad:GetState() or {}
@@ -306,25 +422,38 @@ SlashCmdList["MSUF2OPTIONS"] = function(msg)
         if type(M.InvalidatePage) == "function" then M.InvalidatePage("home") end
         M.Open("home")
         print("|cff00b7ebMSUF|r: First-start preview re-armed (" .. tostring(firstLoad:GetInstallKind()) .. "). Guided-tour progress was reset.")
-        return
-    end
-    if cmd == "help" or cmd == "reset" or cmd == "fullreset" or cmd == "absorb" or cmd == "analytics" then
-        if cmd ~= "help" and M.BlockCombatAction and M.BlockCombatAction() then return end
-        if _G.SlashCmdList and type(_G.SlashCmdList["MIDNIGHTSUF"]) == "function" then _G.SlashCmdList["MIDNIGHTSUF"](msg) end
-        return
-    end
-    if msg == "locale" or msg == "locales" or msg == "loc" then
-        local total, missing = 0, 0
-        if type(M.GetLocaleCoverage) == "function" then total, missing = M.GetLocaleCoverage() end
-        local locale = MSUF.LOCALE or ((type(GetLocale) == "function" and GetLocale()) or "enUS")
-        print(string.format("|cff00b7ebMSUF2|r locale %s: %d keys seen, %d missing translations.", locale, total or 0, missing or 0))
-        return
+    end,
+})
+
+--- Anything that is not a registered command is a page name, and anything that
+--- is not a page name is a search. The old handler opened an empty "native page
+--- missing" placeholder for every typo, which is what made /msuf edit look
+--- broken before Edit Mode had a command of its own.
+Commands.SetFallback(function(msg)
+    msg = tostring(msg or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    if msg == "" then return M.Open() end
+    local aliases = M.ALIASES or {}
+    local word = msg:lower()
+    local pageKey = aliases[word] or word
+    if type(M.pages) == "table" and M.pages[pageKey] then return M.Open(pageKey) end
+    return SlashOpenSearch(msg)
+end)
+end
+
+SLASH_MSUF2OPTIONS1 = "/msuf"
+SlashCmdList["MSUF2OPTIONS"] = function(msg)
+    if type(Commands) == "table" and type(Commands.Dispatch) == "function" then
+        return Commands.Dispatch(msg)
     end
     local aliases = M.ALIASES or {}
+    msg = tostring(msg or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
     M.Open(msg ~= "" and (aliases[msg] or msg) or nil)
 end
 SLASH_MSUFOPTIONS1 = SLASH_MSUFOPTIONS1 or "/msufoptions"
 SlashCmdList["MSUFOPTIONS"] = SlashCmdList["MSUFOPTIONS"] or function(msg)
+    if type(Commands) == "table" and type(Commands.Dispatch) == "function" then
+        return Commands.Dispatch(msg)
+    end
     local aliases = M.ALIASES or {}
     msg = tostring(msg or ""):lower()
     local pageKey = msg ~= "" and (aliases[msg] or msg) or nil

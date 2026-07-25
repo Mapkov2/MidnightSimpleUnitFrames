@@ -81,3 +81,11 @@ _G.SlashCmdList["MSUFAURALAYERS"] = function()
     ProbeLane("target", "Debuffs")
     Say("done - paste this output when reporting layering issues")
 end
+--- Listed in /msuf help only while this file is actually loaded.
+if _MSUF and _MSUF.SlashCommands and _MSUF.SlashCommands.RegisterExternal then
+    _MSUF.SlashCommands.RegisterExternal({
+        usage = "/msufauralayers",
+        help = "Dump the aura frame levels for a layering bug report.",
+        dev = true,
+    })
+end

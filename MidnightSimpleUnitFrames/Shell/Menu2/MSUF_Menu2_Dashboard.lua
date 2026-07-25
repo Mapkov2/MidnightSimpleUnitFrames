@@ -842,9 +842,14 @@ local function BuildDashboardUX(ctx)
         local helpY, factoryY = -94, (recoveryWrap and -126 or -94)
         if recoveryNarrow then helpX, helpY, discordX, factoryY = 16, -126, 114, -158 end
         Button(recovery, "Wago Profiles", wagoX, -94, 112, 22, CopyWagoLink, nil, "display_recovery.copy_wago_link")
-        Button(recovery, "Print Help", helpX, helpY, 86, 22, function()
-            if _G.SlashCmdList and type(_G.SlashCmdList["MIDNIGHTSUF"]) == "function" then _G.SlashCmdList["MIDNIGHTSUF"]("help") end
+        --- "all" includes the diagnostic commands: someone who opened this card
+        --- is usually troubleshooting and wants the complete list, not a subset.
+        local printHelp = Button(recovery, "Print Help", helpX, helpY, 86, 22, function()
+            if not RunMSUFSlashCommand("help all") and M.ShowStatusFeedback then
+                M.ShowStatusFeedback(M.Tr("Help unavailable"), "danger", 1.4)
+            end
         end, nil, "display_recovery.print_help")
+        AddTooltip(printHelp, "Print Help", "Lists every MSUF slash command in chat, diagnostics included.")
         Button(recovery, "Discord", discordX, helpY, 80, 22, function()
             if type(_G.MSUF_ShowCopyLink) == "function" then _G.MSUF_ShowCopyLink("Discord", "https://discord.gg/2Gf9b2Wprz") end
         end, nil, "display_recovery.copy_discord_link")

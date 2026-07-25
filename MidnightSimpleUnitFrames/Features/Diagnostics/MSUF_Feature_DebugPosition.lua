@@ -265,3 +265,12 @@ SLASH_MSUFDBGPOS1 = "/msufdbgpos"
 SlashCmdList["MSUFDBGPOS"] = function()
     _G.MSUF_DebugPositions_Toggle()
 end
+--- This file is excluded from the shipped TOC, so the registration keeps
+--- /msuf help honest: the command is listed only where it actually exists.
+if MSUF and MSUF.SlashCommands and MSUF.SlashCommands.RegisterExternal then
+    MSUF.SlashCommands.RegisterExternal({
+        usage = "/msufdbgpos",
+        help = "Toggle the position drift debugger.",
+        dev = true,
+    })
+end

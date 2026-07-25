@@ -384,3 +384,11 @@ _G.SlashCmdList["MSUFGROUPPULSE"] = function(msg)
     print("|cff7fd5ffMSUF|r group pulse: /msufgp on | dump | drivers | reset | off | leanscope on|off | leanabsorb on|off")
   end
 end
+--- Listed in /msuf help only while this file is actually loaded.
+if MSUF and MSUF.SlashCommands and MSUF.SlashCommands.RegisterExternal then
+  MSUF.SlashCommands.RegisterExternal({
+    usage = "/msufgp on|dump|reset|off",
+    help = "Profile which events drive the group frames in combat.",
+    dev = true,
+  })
+end

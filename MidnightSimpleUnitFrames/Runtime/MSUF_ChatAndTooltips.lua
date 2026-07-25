@@ -113,22 +113,130 @@ local function MSUF_DoFullReset(opts)
  end
 --- Expose for the Slash Menu (button click = hardware event, safe for ReloadUI)
 PublishCompat("MSUF_DoFullReset", MSUF_DoFullReset)
-local function MSUF_PrintHelp()
+--- ==========================================================================
+--- Slash command registry
+---
+--- Every /msuf sub-command registers itself here: the generic ones below, the
+--- menu-owned ones from Shell/Menu2/MSUF_Menu2_API.lua once Menu2 has loaded,
+--- and the standalone diagnostic commands from the files that own them.
+--- Dispatch and the help text read the same table, so a command can never
+--- exist without being listed, and help can never advertise something that is
+--- not actually loaded (the old hand-written list drifted into both).
+---
+--- Cost model: building this table is load-time only. Nothing here registers
+--- an event, hooks a frame, or schedules a ticker, so the whole command
+--- surface costs exactly zero while the player is in combat.
+--- ==========================================================================
+local Commands = MSUF.SlashCommands or {}
+MSUF.SlashCommands = Commands
+Commands.order = Commands.order or {}
+Commands.byWord = Commands.byWord or {}
+Commands.external = Commands.external or {}
+
+local COMMAND_GROUPS = { "general", "frames", "profiles", "diagnostics" }
+local COMMAND_GROUP_TITLES = {
+    general = "General",
+    frames = "Frames and Edit Mode",
+    profiles = "Profiles and resets",
+    diagnostics = "Diagnostics",
+}
+
+--- entry = { name, aliases, usage, help, group, dev, run(rest, fullMessage) }
+function Commands.Register(entry)
+    if type(entry) ~= "table" then return false, "invalid entry" end
+    local name = tostring(entry.name or ""):lower()
+    if name == "" or type(entry.run) ~= "function" then return false, "invalid command" end
+    local words = { name }
+    if type(entry.aliases) == "table" then
+        for i = 1, #entry.aliases do words[#words + 1] = tostring(entry.aliases[i]):lower() end
+    end
+    --- Validate before publishing: a half-registered command would answer to
+    --- some of its words and fall through to the page/search fallback on others.
+    for i = 1, #words do
+        if Commands.byWord[words[i]] then return false, "duplicate command word: " .. words[i] end
+    end
+    entry.name = name
+    entry.group = COMMAND_GROUP_TITLES[entry.group] and entry.group or "general"
+    entry.usage = entry.usage or ("/msuf " .. name)
+    for i = 1, #words do Commands.byWord[words[i]] = entry end
+    Commands.order[#Commands.order + 1] = entry
+    return true
+end
+
+--- Standalone slash commands (/rl and the diagnostics) list themselves from the
+--- file that owns them, so a command that ships unloaded never reaches help.
+function Commands.RegisterExternal(entry)
+    if type(entry) ~= "table" or type(entry.usage) ~= "string" then return false end
+    Commands.external[#Commands.external + 1] = entry
+    return true
+end
+
+function Commands.Get(word)
+    return Commands.byWord[tostring(word or ""):lower()]
+end
+
+--- Menu2 installs the fallback for bare /msuf, page names, and unknown words.
+function Commands.SetFallback(fn)
+    if type(fn) ~= "function" then return false end
+    Commands.fallback = fn
+    return true
+end
+
+local function PrintCommandLine(usage, help)
+    print("  |cffffff00" .. tostring(usage) .. "|r  " .. Tr(help or ""))
+end
+
+function Commands.PrintHelp(includeDev)
     print(Tr("|cff00ff00MSUF commands:|r"))
-    print(Tr("  /msuf help      - Show this help."))
-    print(Tr("  /msuf tour      - Start or resume the guided setup."))
-    print(Tr("  /msuf firstload - Preview first start or upgrade highlights (fresh|upgrade|status)."))
-    print(Tr("  /msuf reset     - Reset all MSUF frame positions and visibility to defaults."))
-    print(Tr("  /msuf fullreset - FULL factory reset (all profiles/settings)."))
-    print(Tr("                   Confirm stages the reset; reload via /reload or MSUF Menu > Advanced > Factory Reset."))
-    print(Tr("  /msuf absorb    - Toggle absorb bars."))
-    print(Tr("  /msuf analytics off|on|status - Toggle Wago Analytics beta telemetry."))
-    print(Tr("  /msuf gfhoverdebug on|off|status - Debug group-frame hover + tooltip paths."))
-    print(Tr("  /msuf inputdebug - Print keyboard-capture frames for movement-lock diagnosis."))
-    print(Tr("  /rl             - Reload the UI."))
-    print(Tr("  /msufdbgpos     - Toggle position drift debugger (overlay + chat log)."))
-    print(Tr("  !msuf help      - Print this help via chat (from your own character)."))
- end
+    local shown = 0
+    for groupIndex = 1, #COMMAND_GROUPS do
+        local group = COMMAND_GROUPS[groupIndex]
+        local header = false
+        for i = 1, #Commands.order do
+            local entry = Commands.order[i]
+            if entry.group == group and (includeDev or not entry.dev) then
+                if not header then
+                    header = true
+                    print("|cff7aa2f7" .. Tr(COMMAND_GROUP_TITLES[group]) .. "|r")
+                end
+                shown = shown + 1
+                PrintCommandLine(entry.usage, entry.help)
+            end
+        end
+    end
+    local externalHeader = false
+    for i = 1, #Commands.external do
+        local entry = Commands.external[i]
+        if includeDev or not entry.dev then
+            if not externalHeader then
+                externalHeader = true
+                print("|cff7aa2f7" .. Tr("Other commands") .. "|r")
+            end
+            shown = shown + 1
+            PrintCommandLine(entry.usage, entry.help)
+        end
+    end
+    if not includeDev then
+        print(Tr("Type /msuf help all to also list the diagnostic commands."))
+    end
+    return shown
+end
+
+function Commands.Dispatch(msg)
+    msg = tostring(msg or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    local word, rest = msg:match("^(%S+)%s*(.-)$")
+    local entry = word and Commands.byWord[word:lower()] or nil
+    --- Only the command word is lowercased. Arguments keep their original case
+    --- because profile names are free text and stored verbatim.
+    if entry then return entry.run(rest or "", msg) end
+    if type(Commands.fallback) == "function" then return Commands.fallback(msg) end
+    Commands.PrintHelp(false)
+end
+
+local function MSUF_PrintHelp(includeDev)
+    return Commands.PrintHelp(includeDev == true)
+end
+PublishCompat("MSUF_PrintHelp", MSUF_PrintHelp)
 
 local function MSUF_FrameDebugName(frame)
     if not frame then return "nil" end
@@ -191,43 +299,246 @@ local function MSUF_PrintInputDebug()
         print("... " .. tostring(found - 20) .. " more keyboard-enabled frames hidden.")
     end
 end
---- The old "!msuf help" chat trigger is gone: it kept 12 CHAT_MSG_* events
---- registered for the whole session (every trade/guild/say line paid string
---- work) to duplicate what /msuf help already does.
-SLASH_MIDNIGHTSUF1 = "/msufold"
-SlashCmdList["MIDNIGHTSUF"] = function(msg)
-    msg = msg and msg:lower() or ""
-    msg = msg:gsub("^%s+", "")
-    local cmd = msg:match("^(%S+)") or ""
-    if cmd == "" or cmd == "help" then
-        MSUF_PrintHelp()
-         return
+--- ==========================================================================
+--- Generic command registrations
+---
+--- Menu-owned commands (edit mode, search, guided setup, page navigation) are
+--- registered from Shell/Menu2/MSUF_Menu2_API.lua, which loads later.
+--- ==========================================================================
+local function CommandsInCombat()
+    return (InCombatLockdown and InCombatLockdown()) and true or false
+end
+
+local function CommandsAddonVersion()
+    local getMeta = (_G.C_AddOns and _G.C_AddOns.GetAddOnMetadata) or _G.GetAddOnMetadata
+    if type(getMeta) == "function" then
+        local version = getMeta(addonName or "MidnightSimpleUnitFrames", "Version")
+        if type(version) == "string" and version ~= "" then return version end
     end
---- Should clean this up since we have now a button for full reset.
-    if cmd == "fullreset" then
-        if not MSUF_FullResetPending then
-            MSUF_FullResetPending = true
-            print(Tr("|cffff0000MSUF WARNING:|r This will delete |cffff0000ALL|r MSUF profiles & settings for this account."))
-            print(Tr("|cffffcc00MSUF:|r Type |cffffff00/msuf fullreset confirm|r to stage the reset."))
-            print(Tr("|cffffcc00MSUF:|r Then click: MSUF Menu > Advanced > Factory Reset (or type /reload)."))
-             return
+    return "unknown"
+end
+
+local function CommandsProfileList()
+    if type(_G.MSUF_GetAllProfiles) ~= "function" then return nil end
+    local list = _G.MSUF_GetAllProfiles()
+    return (type(list) == "table") and list or nil
+end
+
+--- Profile names are free text, so a chat argument matches case-insensitively
+--- and by unique prefix. An ambiguous prefix must never silently pick one:
+--- loading the wrong profile is a destructive-feeling surprise.
+local function CommandsResolveProfile(name)
+    local list = CommandsProfileList()
+    if not list then return nil, "unavailable" end
+    name = tostring(name or "")
+    if name == "" then return nil, "empty" end
+    local lowered = name:lower()
+    local prefix
+    for i = 1, #list do
+        local candidate = list[i]
+        if candidate == name or candidate:lower() == lowered then return candidate end
+        if candidate:lower():sub(1, #lowered) == lowered then
+            if prefix and prefix ~= candidate then return nil, "ambiguous" end
+            prefix = candidate
         end
-        if msg ~= "fullreset confirm" then
-            MSUF_FullResetPending = false
-            print(Tr("|cffffcc00MSUF:|r Full reset cancelled. If you still want it, type:"))
-            print("  /msuf fullreset")
-            print("  /msuf fullreset confirm")
-            print(Tr("  (then /reload OR MSUF Menu > Advanced > Factory Reset)"))
-             return
-        end
-        MSUF_FullResetPending = false
-        MSUF_DoFullReset({ skipReload = true })
-         return
     end
-    if cmd == "reset" then
-        if InCombatLockdown and InCombatLockdown() then
+    if prefix then return prefix end
+    return nil, "unknown"
+end
+
+local function CommandsProfilesUnavailable()
+    print(Tr("|cffff0000MSUF:|r The profile module is not loaded."))
+end
+
+Commands.Register({
+    name = "help",
+    aliases = { "commands" },
+    group = "general",
+    usage = "/msuf help [all]",
+    help = "List every MSUF command that is currently loaded.",
+    run = function(rest)
+        rest = rest:lower()
+        Commands.PrintHelp(rest == "all" or rest == "full" or rest == "dev")
+    end,
+})
+
+Commands.Register({
+    name = "version",
+    aliases = { "ver", "status" },
+    group = "general",
+    usage = "/msuf version",
+    help = "Print the addon version, the active profile and the Edit Mode state.",
+    run = function()
+        local list = CommandsProfileList()
+        local editing = type(_G.MSUF_IsInEditMode) == "function" and _G.MSUF_IsInEditMode() == true
+        print("|cff00b7ebMSUF|r " .. CommandsAddonVersion())
+        print(string.format(Tr("  Profile: %s (%d saved)"),
+            tostring(_G.MSUF_ActiveProfile or "?"), list and #list or 0))
+        print(string.format(Tr("  Edit Mode: %s - In combat: %s"),
+            editing and "|cff73dacaON|r" or "|cfff7768eOFF|r",
+            CommandsInCombat() and "|cff73dacaYES|r" or "|cfff7768eNO|r"))
+    end,
+})
+
+Commands.Register({
+    name = "reload",
+    group = "general",
+    usage = "/msuf reload",
+    help = "Reload the interface, same as /rl.",
+    run = function()
+        if type(ReloadUI) == "function" then ReloadUI() end
+    end,
+})
+
+Commands.Register({
+    name = "absorb",
+    group = "frames",
+    usage = "/msuf absorb",
+    help = "Toggle the absorb bars on and off.",
+    run = function()
+        --- The toggle runs the full apply pipeline, which writes layout. The
+        --- old routing leaned on Menu2's blanket combat check for this.
+        if CommandsInCombat() then
+            print(Tr("|cffff0000MSUF:|r Cannot change absorb bars while in combat."))
+            return
+        end
+        MSUF_Chat_RunEnsureDB()
+        local g = (type(MSUF_DB) == "table" and type(MSUF_DB.general) == "table") and MSUF_DB.general or nil
+        if not g then
+            print(Tr("|cffff0000MSUF:|r DB not initialized."))
+            return
+        end
+        g.enableAbsorbBar = not (g.enableAbsorbBar == true)
+        g.absorbTextMode = g.enableAbsorbBar and 2 or 1
+        g.showTotalAbsorbAmount = false
+        MSUF_Chat_RunApplyAllSettings()
+        if g.enableAbsorbBar then
+            print(Tr("|cff00ff00MSUF:|r Absorb bars ENABLED."))
+        else
+            print(Tr("|cff00ff00MSUF:|r Absorb bars DISABLED."))
+        end
+    end,
+})
+
+Commands.Register({
+    name = "profile",
+    aliases = { "profiles" },
+    group = "profiles",
+    usage = "/msuf profile [name]",
+    help = "List your profiles, or save the current settings as a new profile.",
+    run = function(rest)
+        local list = CommandsProfileList()
+        if not list then return CommandsProfilesUnavailable() end
+        if rest == "" then
+            local active = tostring(_G.MSUF_ActiveProfile or "")
+            print(Tr("|cff00b7ebMSUF|r profiles:"))
+            for i = 1, #list do
+                if list[i] == active then
+                    print("  |cff00ff00> " .. list[i] .. "|r")
+                else
+                    print("    " .. list[i])
+                end
+            end
+            print(Tr("  /msuf load <name> switches profile, /msuf profile <name> saves a new one."))
+            return
+        end
+        if type(_G.MSUF_CreateProfile) ~= "function" or type(_G.MSUF_SwitchProfile) ~= "function" then
+            return CommandsProfilesUnavailable()
+        end
+        --- Creating only copies a table, but the switch that follows runs the
+        --- full apply pipeline, so the whole command stays out of combat.
+        if CommandsInCombat() then
+            print(Tr("|cffff0000MSUF:|r Cannot change profiles while in combat."))
+            return
+        end
+        if _G.MSUF_CreateProfile(rest) then _G.MSUF_SwitchProfile(rest) end
+    end,
+})
+
+Commands.Register({
+    name = "load",
+    aliases = { "use", "switch" },
+    group = "profiles",
+    usage = "/msuf load <name>",
+    help = "Load one of your saved profiles.",
+    run = function(rest)
+        if type(_G.MSUF_SwitchProfile) ~= "function" then return CommandsProfilesUnavailable() end
+        if rest == "" then
+            print(Tr("|cffffcc00MSUF:|r Usage: /msuf load <name>. Type /msuf profile to list them."))
+            return
+        end
+        if CommandsInCombat() then
+            print(Tr("|cffff0000MSUF:|r Cannot change profiles while in combat."))
+            return
+        end
+        local name, reason = CommandsResolveProfile(rest)
+        if not name then
+            if reason == "ambiguous" then
+                print(string.format(Tr("|cffff0000MSUF:|r '%s' matches more than one profile. Type the full name."), rest))
+            elseif reason == "unavailable" then
+                CommandsProfilesUnavailable()
+            else
+                print(string.format(Tr("|cffff0000MSUF:|r Unknown profile '%s'. Type /msuf profile to list them."), rest))
+            end
+            return
+        end
+        if name == _G.MSUF_ActiveProfile then
+            print(string.format(Tr("|cffffd700MSUF:|r Profile '%s' is already active."), name))
+            return
+        end
+        _G.MSUF_SwitchProfile(name)
+    end,
+})
+
+local MSUF_PendingProfileDelete
+Commands.Register({
+    name = "delete",
+    aliases = { "deleteprofile" },
+    group = "profiles",
+    usage = "/msuf delete <name>",
+    help = "Delete one of your saved profiles. Repeat the command to confirm.",
+    run = function(rest)
+        if type(_G.MSUF_DeleteProfile) ~= "function" then return CommandsProfilesUnavailable() end
+        if rest == "" then
+            print(Tr("|cffffcc00MSUF:|r Usage: /msuf delete <name>. Type /msuf profile to list them."))
+            return
+        end
+        --- Deleting the active profile switches to a survivor, which runs the
+        --- apply pipeline, so this is combat-guarded like every profile write.
+        if CommandsInCombat() then
+            print(Tr("|cffff0000MSUF:|r Cannot change profiles while in combat."))
+            return
+        end
+        local name, reason = CommandsResolveProfile(rest)
+        if not name then
+            if reason == "ambiguous" then
+                print(string.format(Tr("|cffff0000MSUF:|r '%s' matches more than one profile. Type the full name."), rest))
+            elseif reason == "unavailable" then
+                CommandsProfilesUnavailable()
+            else
+                print(string.format(Tr("|cffff0000MSUF:|r Unknown profile '%s'. Type /msuf profile to list them."), rest))
+            end
+            return
+        end
+        if MSUF_PendingProfileDelete ~= name then
+            MSUF_PendingProfileDelete = name
+            print(string.format(Tr("|cffffcc00MSUF:|r Repeat |cffffff00/msuf delete %s|r to delete that profile for good."), name))
+            return
+        end
+        MSUF_PendingProfileDelete = nil
+        _G.MSUF_DeleteProfile(name)
+    end,
+})
+
+Commands.Register({
+    name = "reset",
+    group = "profiles",
+    usage = "/msuf reset",
+    help = "Reset all frame positions and visibility to the defaults.",
+    run = function()
+        if CommandsInCombat() then
             print(Tr("|cffff0000MSUF:|r Cannot reset while in combat."))
-             return
+            return
         end
         MSUF_Chat_RunEnsureDB()
         if MSUF_DB then
@@ -252,37 +563,89 @@ SlashCmdList["MIDNIGHTSUF"] = function(msg)
             updateFonts()
         end
         print(Tr("|cff00ff00MSUF:|r Positions and visibility reset to defaults."))
-         return
-    end
-    if cmd == "absorb" then
-        MSUF_Chat_RunEnsureDB()
-        local g = (type(MSUF_DB) == "table" and type(MSUF_DB.general) == "table") and MSUF_DB.general or nil
-        if not g then
-            print(Tr("|cffff0000MSUF:|r DB not initialized."))
-             return
+    end,
+})
+
+local MSUF_ProfileResetPending = false
+Commands.Register({
+    name = "default",
+    aliases = { "defaults", "resetprofile" },
+    group = "profiles",
+    usage = "/msuf default [confirm]",
+    help = "Reset every setting in the active profile back to the defaults.",
+    run = function(rest)
+        if type(_G.MSUF_ResetProfile) ~= "function" then return CommandsProfilesUnavailable() end
+        if CommandsInCombat() then
+            print(Tr("|cffff0000MSUF:|r Cannot reset a profile while in combat."))
+            return
         end
-        g.enableAbsorbBar = not (g.enableAbsorbBar == true)
-        g.absorbTextMode = g.enableAbsorbBar and 2 or 1
-        g.showTotalAbsorbAmount = false
-        MSUF_Chat_RunApplyAllSettings()
-        if g.enableAbsorbBar then
-            print(Tr("|cff00ff00MSUF:|r Absorb bars ENABLED."))
-        else
-            print(Tr("|cff00ff00MSUF:|r Absorb bars DISABLED."))
+        local active = tostring(_G.MSUF_ActiveProfile or "")
+        if rest:lower() ~= "confirm" then
+            MSUF_ProfileResetPending = true
+            print(string.format(Tr("|cffffcc00MSUF:|r This resets every setting in profile '%s', not just positions."), active))
+            print(Tr("|cffffcc00MSUF:|r Type |cffffff00/msuf default confirm|r to go ahead."))
+            return
         end
-         return
-    end
-    if cmd == "analytics" then
+        if not MSUF_ProfileResetPending then
+            print(Tr("|cffffcc00MSUF:|r Type |cffffff00/msuf default|r first, then confirm it."))
+            return
+        end
+        MSUF_ProfileResetPending = false
+        _G.MSUF_ResetProfile(active ~= "" and active or nil)
+    end,
+})
+
+--- Should clean this up since we have now a button for full reset.
+Commands.Register({
+    name = "fullreset",
+    group = "profiles",
+    usage = "/msuf fullreset [confirm]",
+    help = "Delete every MSUF profile and setting on this account.",
+    run = function(rest)
+        if not MSUF_FullResetPending then
+            MSUF_FullResetPending = true
+            print(Tr("|cffff0000MSUF WARNING:|r This will delete |cffff0000ALL|r MSUF profiles & settings for this account."))
+            print(Tr("|cffffcc00MSUF:|r Type |cffffff00/msuf fullreset confirm|r to stage the reset."))
+            print(Tr("|cffffcc00MSUF:|r Then click: MSUF Menu > Advanced > Factory Reset (or type /reload)."))
+            return
+        end
+        if rest:lower() ~= "confirm" then
+            MSUF_FullResetPending = false
+            print(Tr("|cffffcc00MSUF:|r Full reset cancelled. If you still want it, type:"))
+            print("  /msuf fullreset")
+            print("  /msuf fullreset confirm")
+            print(Tr("  (then /reload OR MSUF Menu > Advanced > Factory Reset)"))
+            return
+        end
+        MSUF_FullResetPending = false
+        MSUF_DoFullReset({ skipReload = true })
+    end,
+})
+
+Commands.Register({
+    name = "analytics",
+    group = "general",
+    --- "/" and not "|" between the choices: the usage is printed inside a
+    --- |cRRGGBB colour block and a stray pipe starts an escape sequence there.
+    usage = "/msuf analytics on/off/status",
+    help = "Turn the Wago Analytics beta telemetry on or off.",
+    run = function(rest)
         if type(_G.MSUF_Analytics_HandleSlash) == "function" then
-            _G.MSUF_Analytics_HandleSlash(msg:match("^%S+%s*(.-)%s*$") or "")
+            _G.MSUF_Analytics_HandleSlash(rest)
         else
             print(Tr("|cffff0000MSUF:|r Analytics module not loaded."))
         end
-         return
-    end
-    if cmd == "gfhoverdebug" then
-        local arg = msg:match("^%S+%s*(.-)%s*$") or ""
-        arg = arg:gsub("^%s+", ""):gsub("%s+$", "")
+    end,
+})
+
+Commands.Register({
+    name = "gfhoverdebug",
+    group = "diagnostics",
+    dev = true,
+    usage = "/msuf gfhoverdebug on/off/status",
+    help = "Debug the group-frame hover and tooltip paths.",
+    run = function(rest)
+        local arg = rest:lower()
         if arg == "" or arg == "toggle" then
             Debug.gfHover = not (Debug.gfHover == true)
         elseif arg == "on" then
@@ -296,21 +659,34 @@ SlashCmdList["MIDNIGHTSUF"] = function(msg)
             return
         end
         print(string.format("|cff7aa2f7MSUF|r: Group-frame hover debug is %s.", Debug.gfHover == true and "|cff73dacaON|r" or "|cfff7768eOFF|r"))
-        return
-    end
-    if cmd == "inputdebug" then
+    end,
+})
+
+Commands.Register({
+    name = "inputdebug",
+    group = "diagnostics",
+    dev = true,
+    usage = "/msuf inputdebug",
+    help = "Print the keyboard-capture frames for movement-lock diagnosis.",
+    run = function()
         MSUF_PrintInputDebug()
-        return
-    end
-    --- Unknown
-    MSUF_PrintHelp()
- end
+    end,
+})
+
+--- The old "!msuf help" chat trigger is gone: it kept 12 CHAT_MSG_* events
+--- registered for the whole session (every trade/guild/say line paid string
+--- work) to duplicate what /msuf help already does.
+SLASH_MIDNIGHTSUF1 = "/msufold"
+SlashCmdList["MIDNIGHTSUF"] = function(msg)
+    return Commands.Dispatch(msg)
+end
 SLASH_MSUFRELOADUI1 = "/rl"
 SlashCmdList["MSUFRELOADUI"] = function()
     if type(ReloadUI) == "function" then
         ReloadUI()
     end
 end
+Commands.RegisterExternal({ usage = "/rl", help = "Reload the interface." })
 local MSUF_PlayerInfoFrame
 local function MSUF_GetPlayerInfoFrame()
     if MSUF_PlayerInfoFrame then

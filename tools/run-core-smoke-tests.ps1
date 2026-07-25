@@ -62,6 +62,7 @@ $tests = @(
     "tools/ready_check_timer_lifecycle_smoke.lua",
     "tools/ready_check_targeting_smoke.lua",
     "tools/secret_group_health_smoke.lua",
+    "tools/slash_command_registry_smoke.lua",
     ".github/scripts/tests/unit_info_tooltip_secret_smoke.lua",
     "tools/text_lazy_sinks_smoke.lua",
     "tools/uf_notify_config_refresh_smoke.lua",

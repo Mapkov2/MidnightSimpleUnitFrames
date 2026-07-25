@@ -152,3 +152,11 @@ end
 _G.SLASH_MSUFMENUCHECK1 = "/msufmenucheck"
 -- Blizzard owns this table; reassigning the global taints protected commands such as /tm.
 _G.SlashCmdList.MSUFMENUCHECK = RunChecks
+--- Listed in /msuf help only while this file is actually loaded.
+if MSUF and MSUF.SlashCommands and MSUF.SlashCommands.RegisterExternal then
+    MSUF.SlashCommands.RegisterExternal({
+        usage = "/msufmenucheck",
+        help = "Check the options menu for structural problems.",
+        dev = true,
+    })
+end
