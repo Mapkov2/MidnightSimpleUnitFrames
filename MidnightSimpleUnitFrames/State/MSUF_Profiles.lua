@@ -844,13 +844,79 @@ local function MSUF_ProfileIO_EnsureProfileRoots()
     end
     return MSUF_GlobalDB.profiles, MSUF_GlobalDB.char
 end
-local function MSUF_ProfileIO_FirstProfileTable(profiles)
-    for _, tbl in pairs(profiles) do
-        if type(tbl) == "table" then
-            return tbl
-        end
+--- Account-wide preferences that must survive a profile switch live beside the
+--- other `MSUF_GlobalDB.global` state (first-load, guided tour). Keeping this
+--- out of the profile tables is deliberate: switching, resetting, or importing
+--- a profile must never rewrite which profile future characters start on.
+local function MSUF_ProfileIO_EnsureGlobalMeta()
+    if type(MSUF_GlobalDB) ~= "table" then
+        MSUF_GlobalDB = {}
+    end
+    if type(MSUF_GlobalDB.global) ~= "table" then
+        MSUF_GlobalDB.global = {}
+    end
+    return MSUF_GlobalDB.global
+end
+--- Starting profile for characters that have never picked one. `nil` keeps the
+--- historical behaviour (new characters land on "Default").
+function MSUF_GetDefaultProfileForNewCharacters()
+    local name = MSUF_ProfileIO_EnsureGlobalMeta().defaultProfileForNewChars
+    if type(name) ~= "string" or name == "" then return nil end
+    return name
+end
+function MSUF_SetDefaultProfileForNewCharacters(name)
+    --- Ensure the profile roots first: both helpers rebuild `MSUF_GlobalDB`
+    --- when it is missing, and capturing `meta` before that could hand back a
+    --- table that is about to be replaced.
+    local profiles = MSUF_ProfileIO_EnsureProfileRoots()
+    local meta = MSUF_ProfileIO_EnsureGlobalMeta()
+    --- "None" is the shared dropdown sentinel for "no selection" (same contract
+    --- as MSUF_SetSpecProfile), so it clears unless a real profile owns the name.
+    if type(name) ~= "string" or name == ""
+        or (name == "None" and type(profiles["None"]) ~= "table") then
+        meta.defaultProfileForNewChars = nil
+        return true
+    end
+    if type(profiles[name]) ~= "table" then
+        print("|cffff0000MSUF:|r Unknown profile: " .. tostring(name))
+        return false, "unknown profile"
+    end
+    meta.defaultProfileForNewChars = name
+    return true
+end
+--- A stale configured name must fall through to "Default" instead of being
+--- honoured: the init path clones a donor into any missing profile name, so an
+--- unvalidated value here would resurrect a deleted profile as a ghost copy.
+--- Reads the stored field directly rather than through the public getter, so a
+--- third party replacing that global cannot steer login profile selection.
+local function MSUF_ProfileIO_NewCharacterProfile(profiles)
+    local configured = MSUF_ProfileIO_EnsureGlobalMeta().defaultProfileForNewChars
+    if type(configured) ~= "string" or configured == "" then return nil end
+    if type(profiles) == "table" and type(profiles[configured]) == "table" then
+        return configured
     end
     return nil
+end
+--- Pick the donor profile for a repair without depending on `pairs()` order.
+--- Two characters hitting this same path must clone the same source, otherwise
+--- an account silently grows divergent copies of an arbitrary profile. Only
+--- string keys are eligible because `MSUF_GetAllProfiles` never lists any other
+--- kind, so a numeric-keyed leftover must not become somebody's live settings.
+local function MSUF_ProfileIO_FallbackProfileTable(profiles)
+    if type(profiles) ~= "table" then return nil, nil end
+    if type(profiles["Default"]) == "table" then
+        return profiles["Default"], "Default"
+    end
+    local names
+    for name, tbl in pairs(profiles) do
+        if type(name) == "string" and name ~= "" and type(tbl) == "table" then
+            names = names or {}
+            names[#names + 1] = name
+        end
+    end
+    if not names then return nil, nil end
+    table.sort(names)
+    return profiles[names[1]], names[1]
 end
 local function MSUF_ProfileIO_EnsureProfileMenuDefaults(profile)
     if type(profile) ~= "table" then return end
@@ -883,10 +949,14 @@ function MSUF_InitProfiles()
         end
     end
     if not active then
-        active = "Default"
+        --- A character that has never chosen a profile follows the account-wide
+        --- preference when it still names a live profile. Everything else keeps
+        --- landing on "Default" exactly as before, and a character that already
+        --- has `activeProfile` set never reaches this branch at all.
+        active = MSUF_ProfileIO_NewCharacterProfile(profiles) or "Default"
     end
     if type(profiles[active]) ~= "table" then
-        local fallback = MSUF_ProfileIO_FirstProfileTable(profiles)
+        local fallback = MSUF_ProfileIO_FallbackProfileTable(profiles)
         profiles[active] = CopyTable(fallback or {})
     end
     if MSUF_ProfileIO_TranslateProfilesToCurrent then
@@ -1007,6 +1077,14 @@ function MSUF_DeleteProfile(name)
             end
         end
     end
+    --- Clear rather than retarget: the account chose this specific profile as
+    --- the starting point for new characters, and silently pointing that at an
+    --- arbitrary survivor would change what the setting means. New characters
+    --- fall back to "Default" until the account picks a replacement.
+    local globalMeta = MSUF_ProfileIO_EnsureGlobalMeta()
+    if globalMeta.defaultProfileForNewChars == name then
+        globalMeta.defaultProfileForNewChars = nil
+    end
     profiles[name] = nil
     if MSUF_ActiveProfile == name then
         MSUF_SwitchProfile(fallbackName)
@@ -1091,6 +1169,12 @@ function MSUF_RenameProfile(sourceName, destName)
                 end
             end
         end
+    end
+    --- The profile itself survives a rename, so the new-character preference
+    --- follows it instead of being cleared.
+    local globalMeta = MSUF_ProfileIO_EnsureGlobalMeta()
+    if globalMeta.defaultProfileForNewChars == sourceName then
+        globalMeta.defaultProfileForNewChars = destName
     end
     if MSUF_ActiveProfile == sourceName then
         MSUF_SwitchProfile(destName)

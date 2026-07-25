@@ -697,4 +697,117 @@ assert(migrationProfile.general.hlPrioOrder == migratedOrder, "completed migrati
 assert(migrateDispel(migrationProfile, true) == true, "forced import migration did not run")
 assert(migrationProfile.general.hlPrioOrder ~= migratedOrder, "forced import migration did not rebuild validation output")
 
+-- ---------------------------------------------------------------------------
+-- New-character profile selection.
+--
+-- MSUF_InitProfiles is the only place a character that never picked a profile
+-- receives one, so both the account-wide preference and the donor used to
+-- repair a missing profile are pinned here. Defaults filling is stubbed back
+-- out: this block is about which profile gets selected, not what lands in it.
+-- ---------------------------------------------------------------------------
+local playerName = "Tester"
+_G.UnitName = function() return playerName end
+_G.MSUF_EnsureDB = function() end
+
+local function freshAccount(names, globalMeta)
+    local profiles = {}
+    for _, name in ipairs(names) do
+        profiles[name] = { general = {}, _smokeDonor = name }
+    end
+    _G.MSUF_GlobalDB = { profiles = profiles, char = {}, global = globalMeta or {} }
+    return _G.MSUF_GlobalDB
+end
+
+local function loginAs(name)
+    playerName = name
+    _G.MSUF_InitProfiles()
+    return _G.MSUF_GlobalDB.char[name .. "-Realm"]
+end
+
+freshAccount({ "Default", "Other" })
+assert(loginAs("Alt").activeProfile == "Default",
+    "new character without a configured default must still start on Default")
+
+freshAccount({ "Default", "Raid" })
+assert(_G.MSUF_SetDefaultProfileForNewCharacters("Raid") == true, "configuring a live profile failed")
+assert(loginAs("Newbie").activeProfile == "Raid", "configured new-character profile was ignored")
+assert(_G.MSUF_DB == _G.MSUF_GlobalDB.profiles.Raid,
+    "new character cloned the configured profile instead of sharing it")
+
+-- The preference only ever applies to characters that never chose a profile.
+_G.MSUF_GlobalDB.char["Veteran-Realm"] = { activeProfile = "Default" }
+assert(loginAs("Veteran").activeProfile == "Default",
+    "configured new-character profile overrode an existing character's own choice")
+
+-- A stale name must not be honoured: init clones a donor into any missing
+-- profile name, so an unvalidated preference would resurrect a ghost profile.
+freshAccount({ "Default", "Raid" }, { defaultProfileForNewChars = "Deleted" })
+assert(loginAs("Ghost").activeProfile == "Default", "stale new-character preference was honoured")
+assert(_G.MSUF_GlobalDB.profiles.Deleted == nil, "stale preference resurrected a deleted profile")
+
+freshAccount({ "Default", "Raid" })
+_G.MSUF_ActiveProfile = "Default"
+_G.MSUF_SetDefaultProfileForNewCharacters("Raid")
+assert(_G.MSUF_DeleteProfile("Raid") == true, "profile delete failed")
+assert(_G.MSUF_GetDefaultProfileForNewCharacters() == nil,
+    "deleting the configured profile left a dangling new-character preference")
+
+freshAccount({ "Default", "Raid" })
+_G.MSUF_ActiveProfile = "Default"
+_G.MSUF_SetDefaultProfileForNewCharacters("Raid")
+assert(_G.MSUF_RenameProfile("Raid", "Mythic") == true, "profile rename failed")
+assert(_G.MSUF_GetDefaultProfileForNewCharacters() == "Mythic",
+    "rename did not carry the new-character preference to the new name")
+
+local refused, refusedReason = _G.MSUF_SetDefaultProfileForNewCharacters("NoSuchProfile")
+assert(refused == false and refusedReason == "unknown profile",
+    "new-character preference accepted a profile that does not exist")
+assert(_G.MSUF_GetDefaultProfileForNewCharacters() == "Mythic",
+    "rejected preference overwrote the stored value")
+assert(_G.MSUF_SetDefaultProfileForNewCharacters("None") == true, "clearing the preference failed")
+assert(_G.MSUF_GetDefaultProfileForNewCharacters() == nil,
+    "None did not clear the new-character preference")
+
+-- Hand-edited or corrupted SavedVariables must never steer login selection.
+for _, junk in ipairs({ 42, true, {}, "" }) do
+    freshAccount({ "Default", "Raid" }, { defaultProfileForNewChars = junk })
+    assert(loginAs("Junk").activeProfile == "Default",
+        "a non-string new-character preference was honoured")
+    assert(_G.MSUF_GetDefaultProfileForNewCharacters() == nil,
+        "a non-string new-character preference was reported as configured")
+end
+
+-- "None" is the dropdown's empty sentinel, but it must not permanently shadow
+-- a real profile that happens to carry that name.
+freshAccount({ "Default", "Raid" })
+assert(_G.MSUF_SetDefaultProfileForNewCharacters("None") == true, "sentinel clear failed")
+assert(_G.MSUF_GetDefaultProfileForNewCharacters() == nil, "sentinel did not clear the preference")
+freshAccount({ "Default", "None" })
+assert(_G.MSUF_SetDefaultProfileForNewCharacters("None") == true, "a real profile named None was rejected")
+assert(_G.MSUF_GetDefaultProfileForNewCharacters() == "None",
+    "a real profile named None was swallowed by the empty sentinel")
+assert(loginAs("Nobody").activeProfile == "None", "a real profile named None was not applied")
+
+-- Repairing a missing active profile must clone the same donor on every
+-- character. Sort order is the contract; "Mid" wins over "Zulu"/"alpha"
+-- because uppercase sorts first, and pairs() order must not leak through.
+local donors = {}
+for _ = 1, 6 do
+    freshAccount({ "Zulu", "alpha", "Mid" })
+    _G.MSUF_GlobalDB.char["Repair-Realm"] = { activeProfile = "Vanished" }
+    loginAs("Repair")
+    donors[#donors + 1] = _G.MSUF_GlobalDB.profiles.Vanished._smokeDonor
+end
+for i = 2, #donors do
+    assert(donors[i] == donors[1], "missing-profile repair picked a non-deterministic donor")
+end
+assert(donors[1] == "Mid", "missing-profile repair did not clone the first profile by sort order")
+
+-- "Default" is the canonical donor even when another name sorts ahead of it.
+freshAccount({ "Default", "Aaa" })
+_G.MSUF_GlobalDB.char["Rebuild-Realm"] = { activeProfile = "Vanished" }
+loginAs("Rebuild")
+assert(_G.MSUF_GlobalDB.profiles.Vanished._smokeDonor == "Default",
+    "missing-profile repair ignored the canonical Default donor")
+
 io.write("profile_apply_smoke: ok\n")

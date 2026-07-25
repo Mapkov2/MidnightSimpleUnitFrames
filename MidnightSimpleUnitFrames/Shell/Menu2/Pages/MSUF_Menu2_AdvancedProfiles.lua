@@ -251,7 +251,7 @@ local function BuildProfiles(ctx)
 
     -- Profile switches rebuild live frames and can taint secure state in combat, so every
     -- entry point on this page goes through BlockCombatAction before touching profile APIs.
-    local current = b:CollapsibleSection("profiles_management", "Profile Management", 238, true)
+    local current = b:CollapsibleSection("profiles_management", "Profile Management", 310, true)
     local fieldW = min(360, max(300, rightX - 42))
     local profileDrop = W.Dropdown(current, "Active profile", {}, fieldW)
     RegisterControl(profileDrop, ProfilesMeta("active_profile.select", "action", { historyMode = "none" }), "Active profile", "dropdown", ProfileValues)
@@ -384,6 +384,26 @@ local function BuildProfiles(ctx)
     M.TrackRefresh(ctx, function()
         if delete.SetEnabled then delete:SetEnabled(ActiveProfileName() ~= "Default") end
     end)
+
+    -- "Active profile" above is a per-character binding into an account-wide
+    -- pool of profiles. This picks what a character that has never run MSUF
+    -- starts on. The engine validates the stored name on every login and falls
+    -- back to "Default" if the profile was deleted, so "None" is always safe.
+    local newCharW = min(360, buttonGridW)
+    local newCharDrop = W.Dropdown(current, "New character profile", function() return ProfileValues(true) end, newCharW)
+    MoveWidget(newCharDrop, current, rightX, -168, newCharW)
+    M.BindDropdownWidget(ctx, newCharDrop,
+        function()
+            local fn = _G.MSUF_GetDefaultProfileForNewCharacters
+            return (type(fn) == "function" and fn()) or "None"
+        end,
+        function(v)
+            CallMSUF("MSUF_SetDefaultProfileForNewCharacters", (v ~= "None") and v or nil)
+            RefreshAfterProfileChange(ctx)
+        end,
+        ProfilesMeta("new_character.default_profile"))
+    local newCharHelp = W.Text(current, "The active profile is saved per character. New characters start on this profile instead of Default.", rightX, -228, buttonGridW, T.colors.muted)
+    if newCharHelp and newCharHelp.SetWordWrap then newCharHelp:SetWordWrap(true) end
     local specs = GetSpecMeta()
     local specRows = max(1, math.ceil((#specs > 0 and #specs or 1) / 2))
 
