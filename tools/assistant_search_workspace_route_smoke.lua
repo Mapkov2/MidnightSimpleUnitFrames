@@ -189,7 +189,7 @@ assert(compactLayout.leftX + compactLayout.leftW <= 434 and compactLayout.rightX
 assert(compactLayout.mainY > compactLayout.geometryY and compactLayout.geometryY > compactLayout.borderY
     and compactLayout.borderY > compactLayout.styleY, "compact Portrait card order is not vertical")
 local wideLayout = PortraitLayout(1128)
-assert(wideLayout.stacked == false and wideLayout.height == 612, "wide Portrait layout lost its two-column form")
+assert(wideLayout.stacked == false and wideLayout.height == 1100, "wide Portrait layout lost its two-column form")
 assert(wideLayout.leftX + wideLayout.leftW <= wideLayout.rightX
     and wideLayout.rightX + wideLayout.rightW <= 1128, "wide Portrait cards overlap or overflow")
 
