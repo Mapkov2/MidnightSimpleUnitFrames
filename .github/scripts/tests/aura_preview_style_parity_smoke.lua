@@ -20,12 +20,29 @@ Check(model:find('buffShowDurationBar = Model.ReadLaneStyleBool(unit, "buff", "s
     "unit preview config lost lane-specific duration-bar styling")
 
 local unitPreview = Read("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Auras.lua")
-Check(unitPreview:find('local anchor = tostring(cfg.cooldownAnchor or "CENTER"):upper()', 1, true)
-    and unitPreview:find('fs:SetPoint(anchor, icon, anchor, x, y)', 1, true)
-    and unitPreview:find('PlaceCooldown(icon.timer, icon, textCfg, S)', 1, true),
-    "unit-frame dummy aura cooldown text no longer follows its configured anchor")
-Check(unitPreview:find('cooldownAnchor = placed.cooldownAnchor or "CENTER"', 1, true),
+Check(unitPreview:find('fs:SetPoint(anchor, icon, anchor, x, y)', 1, true)
+    and unitPreview:find('PlaceAuraText(icon.timer, icon, cdAnchor, cdX, cdY)', 1, true)
+    and unitPreview:find('PlaceAuraText(icon.stack, icon, stackAnchor, stackX, stackY)', 1, true),
+    "unit-frame dummy aura text no longer follows its configured anchor")
+-- The placement helper reads textCfg.cooldownAnchor, so pinning the helper alone
+-- passes even when the lane config never carries the key -- which is exactly how
+-- buff/debuff timers silently stayed centred. Pin the data contract too.
+Check(unitPreview:find('cooldownAnchor = NormalizeAnchor(cfg.buffCooldownAnchor or cfg.cooldownAnchor, "CENTER")', 1, true)
+    and unitPreview:find('cooldownAnchor = NormalizeAnchor(cfg.debuffCooldownAnchor or cfg.cooldownAnchor, "CENTER")', 1, true)
+    and unitPreview:find('stackAnchor = NormalizeAnchor(cfg.buffStackAnchor or cfg.stackAnchor, "TOPRIGHT")', 1, true)
+    and unitPreview:find('stackAnchor = NormalizeAnchor(cfg.debuffStackAnchor or cfg.stackAnchor, "TOPRIGHT")', 1, true),
+    "unit-frame dummy buff/debuff lanes no longer read their configured text anchors")
+Check(unitPreview:find('cooldownAnchor = NormalizeAnchor(placed.cooldownAnchor, "CENTER")', 1, true),
     "custom-container dummy aura lost its cooldown anchor")
+-- Lane-wide text state must stay hoisted out of the per-icon loop, and the font
+-- cache must expire with the addon-wide font epoch -- the pre-cache code re-stamped
+-- every repaint, so only the epoch keeps a late font switch reaching the dummies.
+Check(unitPreview:find('local stackFont = ResolveAuraFont(_stackFontState, stackSize)', 1, true)
+    and unitPreview:find('local timerFont = ResolveAuraFont(_timerFontState, cooldownSize)', 1, true),
+    "unit-frame dummy aura font resolve fell back into the per-icon loop")
+Check(unitPreview:find('out.epoch = tonumber(_G.MSUF_FontApplyEpoch) or 0', 1, true)
+    and unitPreview:find('fs._msufAuraFontEpoch ~= font.epoch', 1, true),
+    "unit-frame dummy aura font cache no longer expires with the font epoch")
 Check(unitPreview:find('decimalThreshold = tonumber(cfg and cfg.cooldownDecimalSeconds) or 3', 1, true),
     "unit-frame dummy aura lost the configured decimal threshold")
 

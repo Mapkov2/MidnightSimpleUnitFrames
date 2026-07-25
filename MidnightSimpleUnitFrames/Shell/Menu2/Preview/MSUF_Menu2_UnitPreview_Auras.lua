@@ -51,6 +51,20 @@ local AURA_ANCHOR_OK = {
     LEFT=true, CENTER=true, RIGHT=true,
     BOTTOMLEFT=true, BOTTOM=true, BOTTOMRIGHT=true,
 }
+--- Justification the live runtime derives from each aura text anchor. Baked into
+--- a lookup so per-icon placement costs one table read instead of the runtime's
+--- if-chain over anchor strings.
+local AURA_TEXT_JUSTIFY = {
+    TOPLEFT     = { "LEFT",   "TOP" },
+    TOP         = { "CENTER", "TOP" },
+    TOPRIGHT    = { "RIGHT",  "TOP" },
+    LEFT        = { "LEFT",   "MIDDLE" },
+    CENTER      = { "CENTER", "MIDDLE" },
+    RIGHT       = { "RIGHT",  "MIDDLE" },
+    BOTTOMLEFT  = { "LEFT",   "BOTTOM" },
+    BOTTOM      = { "CENTER", "BOTTOM" },
+    BOTTOMRIGHT = { "RIGHT",  "BOTTOM" },
+}
 local AURA_TEXTURES = {
     buff = { 135987, 136116, 135932, 136085, 132333, 135981, 136048, 135964 },
     debuff = { 136118, 136139, 136197, 135817, 132851, 136188, 136170, 135813 },
@@ -609,26 +623,52 @@ function Auras.ExpandFootprint(state, minX, maxX, minY, maxY)
     end
     return minX, maxX, minY, maxY
 end
-local function ApplyAuraFont(fs, size)
-    if not fs then return end
+-- Reused per-lane font state. Lanes are laid out one after another and nothing
+-- retains a reference past its own LayoutHandle call, so two scratch tables keep
+-- the resolve allocation-free.
+local _stackFontState, _timerFontState = {}, {}
+--- Resolves the shared aura font once per lane. The global font lookup and the
+--- safe-path resolve are cold-path calls, and every icon in a lane shares their
+--- result, so running them per icon only multiplied the work by the sample count.
+local function ResolveAuraFont(out, size)
     size = max(7, tonumber(size) or 14)
     local fontPath, fontFlags, r, g, b, _, useShadow
     if type(_G.MSUF_GetGlobalFontSettings) == "function" then fontPath, fontFlags, r, g, b, _, useShadow = _G.MSUF_GetGlobalFontSettings() end
     fontPath = fontPath or FONT
     fontFlags = fontFlags or "OUTLINE"
-    if fs.SetFont then
-        local resolveSafe = _G.MSUF_ResolveSafeFontPath
-        if type(resolveSafe) == "function" then
-            local gdb = _G.MSUF_DB and _G.MSUF_DB.general
-            fontPath = resolveSafe(fontPath, size, fontFlags, gdb and gdb.fontKey)
-        end
-        local ok = pcall(fs.SetFont, fs, fontPath, size, fontFlags)
-        if not ok then
-            pcall(fs.SetFont, fs, FONT, size, fontFlags)
-        end
+    local resolveSafe = _G.MSUF_ResolveSafeFontPath
+    if type(resolveSafe) == "function" then
+        local gdb = _G.MSUF_DB and _G.MSUF_DB.general
+        fontPath = resolveSafe(fontPath, size, fontFlags, gdb and gdb.fontKey) or fontPath
     end
-    if fs.SetTextColor then fs:SetTextColor(r or 1, g or 1, b or 1, 1) end
-    if fs.SetShadowOffset then fs:SetShadowOffset(useShadow and 1 or 0, useShadow and -1 or 0) end
+    out.path, out.size, out.flags = fontPath, size, fontFlags
+    out.r, out.g, out.b = r or 1, g or 1, b or 1
+    out.shadow = useShadow and 1 or 0
+    -- Carries the addon-wide font epoch, so a late LibSharedMedia registration or
+    -- a font switch re-stamps the dummy icons instead of holding a cached path.
+    out.epoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
+    return out
+end
+--- Stamps a resolved font, skipping the setters while nothing changed. Dragging a
+--- slider repaints the preview continuously with identical font state.
+local function ApplyAuraFont(fs, font)
+    if not (fs and font) then return end
+    if fs.SetFont and (fs._msufAuraFontPath ~= font.path or fs._msufAuraFontSize ~= font.size
+        or fs._msufAuraFontFlags ~= font.flags or fs._msufAuraFontEpoch ~= font.epoch) then
+        if not pcall(fs.SetFont, fs, font.path, font.size, font.flags) then
+            pcall(fs.SetFont, fs, FONT, font.size, font.flags)
+        end
+        fs._msufAuraFontPath, fs._msufAuraFontSize = font.path, font.size
+        fs._msufAuraFontFlags, fs._msufAuraFontEpoch = font.flags, font.epoch
+    end
+    if fs.SetTextColor and (fs._msufAuraFontR ~= font.r or fs._msufAuraFontG ~= font.g or fs._msufAuraFontB ~= font.b) then
+        fs:SetTextColor(font.r, font.g, font.b, 1)
+        fs._msufAuraFontR, fs._msufAuraFontG, fs._msufAuraFontB = font.r, font.g, font.b
+    end
+    if fs.SetShadowOffset and fs._msufAuraFontShadow ~= font.shadow then
+        fs:SetShadowOffset(font.shadow, -font.shadow)
+        fs._msufAuraFontShadow = font.shadow
+    end
 end
 local function EnsureVisual(box, kind, baseLevel)
     if not box then return nil end
@@ -746,10 +786,11 @@ local function LaneTextConfig(cfg, kind)
             showCooldownText = cfg.buffShowCooldownText,
             showCooldownSwipe = cfg.buffShowCooldownSwipe,
             cooldownSwipeReverse = cfg.buffCooldownSwipeReverse,
-            stackAnchor = cfg.buffStackAnchor or cfg.stackAnchor,
+            stackAnchor = NormalizeAnchor(cfg.buffStackAnchor or cfg.stackAnchor, "TOPRIGHT"),
             stackSize = cfg.buffStackSize or cfg.stackSize,
             stackX = cfg.buffStackX or cfg.stackX,
             stackY = cfg.buffStackY or cfg.stackY,
+            cooldownAnchor = NormalizeAnchor(cfg.buffCooldownAnchor or cfg.cooldownAnchor, "CENTER"),
             cooldownSize = cfg.buffCooldownSize or cfg.cooldownSize,
             cooldownX = cfg.buffCooldownX or cfg.cooldownX,
             cooldownY = cfg.buffCooldownY or cfg.cooldownY,
@@ -766,10 +807,11 @@ local function LaneTextConfig(cfg, kind)
         showCooldownText = cfg.debuffShowCooldownText,
         showCooldownSwipe = cfg.debuffShowCooldownSwipe,
         cooldownSwipeReverse = cfg.debuffCooldownSwipeReverse,
-        stackAnchor = cfg.debuffStackAnchor or cfg.stackAnchor,
+        stackAnchor = NormalizeAnchor(cfg.debuffStackAnchor or cfg.stackAnchor, "TOPRIGHT"),
         stackSize = cfg.debuffStackSize or cfg.stackSize,
         stackX = cfg.debuffStackX or cfg.stackX,
         stackY = cfg.debuffStackY or cfg.stackY,
+        cooldownAnchor = NormalizeAnchor(cfg.debuffCooldownAnchor or cfg.cooldownAnchor, "CENTER"),
         cooldownSize = cfg.debuffCooldownSize or cfg.cooldownSize,
         cooldownX = cfg.debuffCooldownX or cfg.cooldownX,
         cooldownY = cfg.debuffCooldownY or cfg.cooldownY,
@@ -789,12 +831,12 @@ local function CustomTextConfig(bounds)
         showCooldownText = placed.showCooldown ~= false,
         showCooldownSwipe = placed.showCooldownSwipe ~= false,
         cooldownSwipeReverse = placed.cooldownSwipeReverse == true,
-        stackAnchor = placed.stackAnchor or "BOTTOMRIGHT",
+        stackAnchor = NormalizeAnchor(placed.stackAnchor, "BOTTOMRIGHT"),
         stackSize = tonumber(placed.stackSize) or 14,
         stackX = tonumber(placed.stackX) or 0,
         stackY = tonumber(placed.stackY) or 0,
         cooldownSize = tonumber(placed.cooldownSize) or 14,
-        cooldownAnchor = placed.cooldownAnchor or "CENTER",
+        cooldownAnchor = NormalizeAnchor(placed.cooldownAnchor, "CENTER"),
         cooldownX = tonumber(placed.cooldownX) or 0,
         cooldownY = tonumber(placed.cooldownY) or 0,
         showDurationBar = placed.showDurationBar == true,
@@ -868,53 +910,19 @@ local function LayoutPreviewDurationBar(bar, icon, cfg, size, auraState)
     bar:Show()
 end
 
-local function PlaceStack(fs, icon, cfg, S)
+--- Places a stack or cooldown text on a dummy icon. Anchor, scaled offsets and
+--- justification are resolved once per lane, so this mirrors the live runtime's
+--- placement without repeating its per-anchor branching for every icon.
+local function PlaceAuraText(fs, icon, anchor, x, y)
     if not fs then return end
-    local stackAnchor = cfg.stackAnchor or "TOPRIGHT"
-    local stackX = S(cfg.stackX or -1)
-    local stackY = S(cfg.stackY or 1)
-    fs:ClearAllPoints()
-    if stackAnchor == "TOPLEFT" then
-        fs:SetPoint("TOPLEFT", icon, "TOPLEFT", stackX, stackY)
-        fs:SetJustifyH("LEFT")
-        if fs.SetJustifyV then fs:SetJustifyV("TOP") end
-    elseif stackAnchor == "BOTTOMLEFT" then
-        fs:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", stackX, stackY)
-        fs:SetJustifyH("LEFT")
-        if fs.SetJustifyV then fs:SetJustifyV("BOTTOM") end
-    elseif stackAnchor == "BOTTOMRIGHT" then
-        fs:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", stackX, stackY)
-        fs:SetJustifyH("RIGHT")
-        if fs.SetJustifyV then fs:SetJustifyV("BOTTOM") end
-    else
-        fs:SetPoint("TOPRIGHT", icon, "TOPRIGHT", stackX, stackY)
-        fs:SetJustifyH("RIGHT")
-        if fs.SetJustifyV then fs:SetJustifyV("TOP") end
+    local justify = AURA_TEXT_JUSTIFY[anchor]
+    if not justify then
+        anchor, justify = "CENTER", AURA_TEXT_JUSTIFY.CENTER
     end
-end
-local function PlaceCooldown(fs, icon, cfg, S)
-    if not fs then return end
-    local anchor = tostring(cfg.cooldownAnchor or "CENTER"):upper()
-    local x = S(cfg.cooldownX or 0)
-    local y = S(cfg.cooldownY or 0)
     fs:ClearAllPoints()
     fs:SetPoint(anchor, icon, anchor, x, y)
-    if anchor == "TOPLEFT" or anchor == "LEFT" or anchor == "BOTTOMLEFT" then
-        fs:SetJustifyH("LEFT")
-    elseif anchor == "TOPRIGHT" or anchor == "RIGHT" or anchor == "BOTTOMRIGHT" then
-        fs:SetJustifyH("RIGHT")
-    else
-        fs:SetJustifyH("CENTER")
-    end
-    if fs.SetJustifyV then
-        if anchor == "TOPLEFT" or anchor == "TOP" or anchor == "TOPRIGHT" then
-            fs:SetJustifyV("TOP")
-        elseif anchor == "BOTTOMLEFT" or anchor == "BOTTOM" or anchor == "BOTTOMRIGHT" then
-            fs:SetJustifyV("BOTTOM")
-        else
-            fs:SetJustifyV("MIDDLE")
-        end
-    end
+    fs:SetJustifyH(justify[1])
+    if fs.SetJustifyV then fs:SetJustifyV(justify[2]) end
 end
 local function PreviewDebuffBorderMode(cfg)
     local mode = cfg and cfg.debuffTypeBorderMode
@@ -964,6 +972,19 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
     local step = S((bounds.size or 0) + (bounds.spacing or 0))
     local stackSize = max(7, S(textCfg.stackSize or 14))
     local cooldownSize = max(7, S(textCfg.cooldownSize or 14))
+    -- Text state is lane-wide: anchors, scaled offsets, the resolved font and the
+    -- show flags are identical for every sample icon, so they are resolved once
+    -- here instead of once per icon inside the loop below.
+    local stackAnchor, stackX, stackY = textCfg.stackAnchor or "TOPRIGHT", S(textCfg.stackX or -1), S(textCfg.stackY or 1)
+    local cdAnchor, cdX, cdY = textCfg.cooldownAnchor or "CENTER", S(textCfg.cooldownX or 0), S(textCfg.cooldownY or 0)
+    local stackFont = ResolveAuraFont(_stackFontState, stackSize)
+    local timerFont = ResolveAuraFont(_timerFontState, cooldownSize)
+    local showStacks = textCfg.showStackCount ~= false
+    local showCooldown = textCfg.showCooldownText ~= false
+    local showSwipe = textCfg.showCooldownSwipe ~= false
+    local swipeReverse = textCfg.cooldownSwipeReverse == true
+    local barOnly = textCfg.showDurationBar == true and textCfg.durationBarDisplay == "BAR_ONLY"
+    local verticalGrowth = bounds.verticalGrowth == true
     local layer = tonumber(bounds.layer) or (kind == "buff" and 5 or 6)
     local debuffBorderMode = textureKind == "debuff" and (bounds.custom and PreviewDebuffBorderMode(bounds.item and bounds.item.placed) or PreviewDebuffBorderMode(cfg)) or "OFF"
     local laneX = S(bounds.laneLeft or ((bounds.baseX or 0) + (bounds.x or 0)))
@@ -989,8 +1010,7 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
         BindDragProxy(icon, handle)
         if icon.SetFrameLevel then icon:SetFrameLevel((visual:GetFrameLevel() or 0) + 1) end
         local auraState = PreviewAuraState(kind, i, icon, textCfg)
-        local barOnly = textCfg.showDurationBar == true and textCfg.durationBarDisplay == "BAR_ONLY"
-        local col, row = IconGridCoord(i, bounds.perRow, bounds.verticalGrowth == true)
+        local col, row = IconGridCoord(i, bounds.perRow, verticalGrowth)
         icon:SetSize(size, size)
         icon:ClearAllPoints()
         icon:SetPoint(bounds.initialAnchor or "TOPLEFT", visual, bounds.initialAnchor or "TOPLEFT", col * step * bounds.growthX, row * step * bounds.growthY)
@@ -1001,8 +1021,8 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
         icon.tex:SetShown(not barOnly)
         icon.edge:SetVertexColor(0, 0, 0, 0)
         if icon.swipe then
-            if textCfg.showCooldownSwipe ~= false and not barOnly then
-                LayoutPreviewAuraSwipe(icon.swipe, icon, size, auraState and auraState.remainingFrac, textCfg.cooldownSwipeReverse == true)
+            if showSwipe and not barOnly then
+                LayoutPreviewAuraSwipe(icon.swipe, icon, size, auraState and auraState.remainingFrac, swipeReverse)
                 icon.swipe:Show()
             else
                 icon.swipe:Hide()
@@ -1010,12 +1030,12 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
         end
         LayoutPreviewDurationBar(icon.durationBar, icon, textCfg, size, auraState)
         LayoutPreviewDispelBorder(icon, size, barOnly and "OFF" or debuffBorderMode)
-        ApplyAuraFont(icon.stack, stackSize)
-        PlaceStack(icon.stack, icon, textCfg, S)
-        icon.stack:SetText(textCfg.showStackCount ~= false and (auraState and auraState.stacks or (i % 3 == 1 and "2" or "")) or "")
-        ApplyAuraFont(icon.timer, cooldownSize)
-        PlaceCooldown(icon.timer, icon, textCfg, S)
-        icon.timer:SetText(textCfg.showCooldownText ~= false and (auraState and auraState.text or (i % 2 == 0 and "18" or "")) or "")
+        ApplyAuraFont(icon.stack, stackFont)
+        PlaceAuraText(icon.stack, icon, stackAnchor, stackX, stackY)
+        icon.stack:SetText(showStacks and (auraState and auraState.stacks or (i % 3 == 1 and "2" or "")) or "")
+        ApplyAuraFont(icon.timer, timerFont)
+        PlaceAuraText(icon.timer, icon, cdAnchor, cdX, cdY)
+        icon.timer:SetText(showCooldown and (auraState and auraState.text or (i % 2 == 0 and "18" or "")) or "")
         icon:Show()
     end
     for i = bounds.shown + 1, #(visual._icons or {}) do
