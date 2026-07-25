@@ -36,7 +36,7 @@ Has('local function CustomStyleSectionId(index, suffix)',
     "Custom Aura accordions have no persistent per-container identity")
 Has('b:CollapsibleSection(CustomStyleSectionId(index, "preview"), "Preview", 452, true)',
     "Custom Aura preview is not an accordion")
-Has('b:CollapsibleSection(CustomStyleSectionId(index, "basics"), "Basics", 80, true)',
+Has('b:CollapsibleSection(CustomStyleSectionId(index, "basics"), "Basics", 130, true)',
     "Custom Aura basics is not an accordion")
 Has('b:CollapsibleSection(CustomStyleSectionId(index, "stack"), "Stack Count", 130, false)',
     "Custom Aura stack count is not an accordion")
@@ -46,6 +46,8 @@ Has('b:CollapsibleSection(CustomStyleSectionId(index, "duration_bar"), "Duration
     "Custom Aura duration bar is not an accordion")
 Has('b:CollapsibleSection(CustomStyleSectionId(index, "full_frame"), "Full-Frame Effect", 210, false)',
     "Custom Aura full-frame effect is not an accordion")
+Has('b:CollapsibleSection(CustomStyleSectionId(index, "behavior"), "Ordering", 96, false)',
+    "Custom Aura ordering is not an accordion")
 assert(not source:find('"Icon Style"', 1, true),
     "the monolithic Custom Aura Icon Style card is back")
 

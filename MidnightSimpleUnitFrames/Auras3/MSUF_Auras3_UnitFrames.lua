@@ -1572,7 +1572,7 @@ local function CompileUnitCustomDisplays(auras, unit)
     })
 end
 
-local function CompileUnitCustomLane(unit, entry, index)
+local function CompileUnitCustomLane(unit, entry, index, lanePadding)
     if type(entry) ~= "table" or entry.enabled ~= true then return nil, nil end
     local includeSpellIDs = CustomSpellIDHash(entry.spellIDs or entry.includeSpellIDs)
     local targetDots = index == 4 or entry.targetDots == true
@@ -1602,6 +1602,7 @@ local function CompileUnitCustomLane(unit, entry, index)
     local maxCount = ClampNumber(placed.max, 8, 0, 40)
     local growthX, growthY, xSign, ySign, verticalGrowth = GrowthParts(placed.growth or "LEFTDOWN", "DOWN")
     local cols, rows = GridShape(maxCount, perRow, verticalGrowth)
+    lanePadding = Round(ClampNumber(lanePadding, 0, 0, 16))
     local lane = FinalizeLane({
         kind = "custom" .. tostring(index),
         rootKey = "CustomAuras" .. tostring(index),
@@ -1612,13 +1613,15 @@ local function CompileUnitCustomLane(unit, entry, index)
         candidateFilterSignature = candidateFilterSignature,
         max = Round(maxCount),
         size = size,
+        iconZoom = ClampNumber(placed.iconZoom, 100, 100, 200),
         spacing = spacing,
         step = size + spacing,
         perRow = Round(perRow),
         cols = cols,
         rows = rows,
-        width = math_max(1, cols * size + math_max(cols - 1, 0) * spacing),
-        height = math_max(1, rows * size + math_max(rows - 1, 0) * spacing),
+        padding = lanePadding,
+        width = math_max(1, cols * size + math_max(cols - 1, 0) * spacing + 2 * lanePadding),
+        height = math_max(1, rows * size + math_max(rows - 1, 0) * spacing + 2 * lanePadding),
         x = Round(ClampNumber(placed.x, 0, -4096, 4096)),
         y = Round(ClampNumber(placed.y, 0, -4096, 4096)),
         anchor = ReadAnchor(placed, nil, "anchor", "TOPRIGHT"),
@@ -1634,6 +1637,8 @@ local function CompileUnitCustomLane(unit, entry, index)
         showCooldownText = placed.showCooldown ~= false,
         showCooldownSwipe = placed.showCooldownSwipe ~= false,
         cooldownSwipeReverse = placed.cooldownSwipeReverse == true,
+        sortMethod = NormalizeAuraSortMethod(placed.sortMethod),
+        sortReverse = placed.sortReverse == true,
         showDurationBar = placed.showDurationBar == true,
         durationBarHeight = ClampNumber(placed.durationBarHeight, DEFAULT_SHARED.durationBarHeight, 1, 16),
         durationBarDisplay = NormalizeDurationBarDisplay(placed.durationBarDisplay, DEFAULT_SHARED.durationBarDisplay),
@@ -1675,9 +1680,13 @@ end
 local function CompileUnitCustomContainers(auras, unit)
     local source = EffectiveUnitCustomContainers(auras, unit)
     if type(source) ~= "table" then return nil, nil end
+    -- Custom containers honor the shared "Lane Padding" slider exactly like
+    -- the Buff/Debuff lanes; the per-container record carries no padding key.
+    local layout, sharedLayout = EffectiveUnitTables(auras, unit)
+    local lanePadding = ReadRaw(layout, sharedLayout, "stylePadding")
     local lanes, effectItems, targetDotEffectItems = {}, {}, {}
     for i = 1, 4 do
-        local lane, effect = CompileUnitCustomLane(unit, source[i], i)
+        local lane, effect = CompileUnitCustomLane(unit, source[i], i, lanePadding)
         if lane then lanes["custom" .. tostring(i)] = lane end
         if effect then
             local bucket = i == 4 and targetDotEffectItems or effectItems

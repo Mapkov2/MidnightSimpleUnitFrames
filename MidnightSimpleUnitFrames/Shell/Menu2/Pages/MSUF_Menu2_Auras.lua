@@ -2494,6 +2494,7 @@ local function BuildAuraStylePage(ctx)
         BuildCustomAuraStylePreview(ctx, b, scope, index)
         M.BuildAuras3CompactCustomWorkspace(ctx, b, scope, index, "appearance")
         M.BuildAuras3CompactCustomWorkspace(ctx, b, scope, index, "effect")
+        M.BuildAuras3CompactCustomWorkspace(ctx, b, scope, index, "behavior")
     elseif IsGroupScope(scope) then
         BuildGroupStyle(ctx, b, scope)
     else
@@ -3886,11 +3887,23 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             M.TrackRefresh(ctx, function() W.SetControlsEnabled(controls, readEnabled()) end)
         end
 
-        local basics = b:CollapsibleSection(CustomStyleSectionId(index, "basics"), "Basics", 80, true)
-        local basicsCol, basicsX = StyleGrid(basics)
+        local harmfulContainer = isTargetDots or tostring(item.auraType or "BUFF"):upper() == "DEBUFF"
+        local basics = b:CollapsibleSection(CustomStyleSectionId(index, "basics"), "Basics", 130, true)
+        local basicsCol, basicsX, BasicsNumber = StyleGrid(basics)
         BindSwitch(ctx, basics, "Tooltip", basicsX(1), -42, basicsCol, function() return item.placed.showTooltip ~= false end,
             function(value) item.placed.showTooltip = value == true; Apply("AURAS3_CUSTOM_TOOLTIP") end,
             AuraControlMeta(ctx, "custom-container.appearance.tooltip"))
+        BasicsNumber("Icon Zoom (%)", 1, -76, 100, 200, "iconZoom", 100)
+        BindSlider(ctx, basics, "Opacity", basicsX(2), -76, 10, 100, 5, basicsCol,
+            function() return floor(((tonumber(item.placed.alpha) or 1) * 100) + 0.5) end,
+            function(value) item.placed.alpha = (tonumber(value) or 100) / 100; Apply("AURAS3_CUSTOM_ALPHA") end,
+            AuraControlMeta(ctx, "custom-container.appearance.opacity"))
+        if harmfulContainer then
+            BindDropdown(ctx, basics, "Dispel-type Border", basicsX(3), -76, DEBUFF_TYPE_BORDER_MODE_VALUES, basicsCol,
+                function() return item.placed.debuffTypeBorderMode or "OFF" end,
+                function(value) item.placed.debuffTypeBorderMode = value or "OFF"; Apply("AURAS3_CUSTOM_DEBUFF_TYPE_BORDER") end,
+                AuraControlMeta(ctx, "custom-container.appearance.dispel-type-border"))
+        end
 
         local stack = b:CollapsibleSection(CustomStyleSectionId(index, "stack"), "Stack Count", 130, false)
         local stackCol, stackX, StackNumber = StyleGrid(stack)
@@ -3973,6 +3986,51 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                 function(value) item.placed.durationBarDirection = value or "REMAINING"; Apply("AURAS3_CUSTOM_DURATION_DIRECTION") end,
                 AuraControlMeta(ctx, "custom-container.appearance.duration-direction")),
         })
+
+        if W.SetCollapsibleBadges then
+            local function ToggleBadge(label, enabled)
+                return { text = label .. (enabled and " On" or " Off"), kind = enabled and "accent" or "muted", showWhenClosed = true }
+            end
+            M.TrackRefresh(ctx, function()
+                local placed = item.placed
+                local zoom = Round(tonumber(placed.iconZoom) or 100)
+                local opacity = floor(((tonumber(placed.alpha) or 1) * 100) + 0.5)
+                local basicsBadges = { ToggleBadge("Tooltip", placed.showTooltip ~= false) }
+                if zoom ~= 100 then
+                    basicsBadges[#basicsBadges + 1] = { text = "Zoom " .. tostring(zoom) .. "%", kind = "info", showWhenClosed = true }
+                end
+                if opacity < 100 then
+                    basicsBadges[#basicsBadges + 1] = { text = "Opacity " .. tostring(opacity) .. "%", kind = "info", showWhenClosed = true }
+                end
+                if harmfulContainer then
+                    local borderMode = tostring(placed.debuffTypeBorderMode or "OFF"):upper()
+                    basicsBadges[#basicsBadges + 1] = {
+                        text = "Border " .. ChoiceLabel(DEBUFF_TYPE_BORDER_MODE_VALUES, borderMode, borderMode),
+                        kind = borderMode == "OFF" and "muted" or "accent", showWhenClosed = true,
+                    }
+                end
+                W.SetCollapsibleBadges(basics, basicsBadges)
+
+                local stackEnabled = placed.showStacks ~= false
+                W.SetCollapsibleBadges(stack, {{
+                    text = stackEnabled and (tostring(Round(tonumber(placed.stackSize) or 14)) .. "px / " .. AnchorLabel(placed.stackAnchor or "BOTTOMRIGHT")) or "Off",
+                    kind = stackEnabled and "accent" or "muted", showWhenClosed = true,
+                }})
+
+                local cooldownEnabled = placed.showCooldown ~= false
+                local decimal = Round(tonumber(placed.cooldownDecimalSeconds) or 3)
+                W.SetCollapsibleBadges(cooldown, {
+                    { text = cooldownEnabled and (tostring(Round(tonumber(placed.cooldownSize) or 14)) .. "px / " .. AnchorLabel(placed.cooldownAnchor or "CENTER") .. " / " .. ChoiceLabel(COOLDOWN_SWIPE_DIRECTION_VALUES, placed.cooldownSwipeReverse == true and "REVERSE" or "NORMAL", "Normal")) or "Off", kind = cooldownEnabled and "accent" or "muted", showWhenClosed = true },
+                    { text = decimal > 0 and ("Decimals below " .. tostring(decimal) .. "s") or "Whole seconds", kind = "info", showWhenClosed = true },
+                })
+
+                local durationEnabled = placed.showDurationBar == true
+                W.SetCollapsibleBadges(durationBar, {{
+                    text = durationEnabled and (tostring(Round(tonumber(placed.durationBarHeight) or 2)) .. "px / " .. ChoiceLabel(DURATION_BAR_DISPLAY_VALUES, placed.durationBarDisplay or "BAR_ONLY", "Bar Only") .. " / " .. ChoiceLabel(DURATION_BAR_POSITION_VALUES, placed.durationBarPosition or "BOTTOM", "Bottom")) or "Off",
+                    kind = durationEnabled and "accent" or "muted", showWhenClosed = true,
+                }})
+            end)
+        end
         return
     end
 
@@ -4006,6 +4064,47 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             function() return tonumber(item.frame.priority) or 5 end,
             function(value) item.frame.priority = tonumber(value) or 5; Apply("AURAS3_CUSTOM_EFFECT_PRIORITY") end,
             AuraControlMeta(ctx, "custom-container.effect.priority"))
+        if W.SetCollapsibleBadges then
+            M.TrackRefresh(ctx, function()
+                local effectType = tostring(item.frame.type or "none")
+                W.SetCollapsibleBadges(section, {{
+                    text = ChoiceLabel(CUSTOM_FRAME_EFFECTS, effectType, effectType),
+                    kind = effectType == "none" and "muted" or "accent", showWhenClosed = true,
+                }})
+            end)
+        end
+        return
+    end
+
+    if tool == "behavior" then
+        local sortLane = (isTargetDots or tostring(item.auraType or "BUFF"):upper() == "DEBUFF") and "debuff" or "buff"
+        local section = b:CollapsibleSection(CustomStyleSectionId(index, "behavior"), "Ordering", 96, false)
+        local w = section._msuf2Width or b.width or 720
+        local col4, gap = Grid(w, 4)
+        -- The sort-method choice list differs between helpful and harmful
+        -- containers, so the catalog path carries the lane type exactly like
+        -- the Buff/Debuff style pages do; a shared path would merge two
+        -- different value domains into one schema row.
+        local sortMethod = BindDropdown(ctx, section, "Sort By", 24, -34, AuraSortMethodValues(sortLane), col4,
+            function() return NormalizeAuraSortMethodForLane(sortLane, item.placed.sortMethod) end,
+            function(value) item.placed.sortMethod = value or "DEFAULT"; Apply("AURAS3_CUSTOM_SORT_METHOD") end,
+            AuraControlMeta(ctx, "custom-container.behavior." .. sortLane .. "-sort-method"))
+        AddTooltip(sortMethod, "Aura sorting", "Only relevant sorting methods are shown for buffs and debuffs.")
+        local sortDirection = BindDropdown(ctx, section, "Order", 24 + col4 + gap, -34, AURA_SORT_DIRECTION_VALUES, col4,
+            function() return item.placed.sortReverse == true and "REVERSE" or "NORMAL" end,
+            function(value) item.placed.sortReverse = value == "REVERSE"; Apply("AURAS3_CUSTOM_SORT_DIRECTION") end,
+            AuraControlMeta(ctx, "custom-container.behavior.sort-direction"))
+        AddTooltip(sortDirection, "Aura sort order", "Reversed flips the complete priority order.")
+        if W.SetCollapsibleBadges then
+            M.TrackRefresh(ctx, function()
+                local sortKey = NormalizeAuraSortMethodForLane(sortLane, item.placed.sortMethod)
+                W.SetCollapsibleBadges(section, {{
+                    text = (AURA_SORT_SUMMARY_LABELS[sortKey] or sortKey) .. " / "
+                        .. ChoiceLabel(AURA_SORT_DIRECTION_VALUES, item.placed.sortReverse == true and "REVERSE" or "NORMAL", "Normal"),
+                    kind = "info", showWhenClosed = true,
+                }})
+            end)
+        end
         return
     end
 
