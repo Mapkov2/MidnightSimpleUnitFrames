@@ -203,16 +203,31 @@ local elementUF = { Layers = { HEALTH_OFFSET = 1, PORTRAIT_OFFSET = 6, PORTRAIT_
 function elementUF.RegisterElement(name, element) elements[name] = element end
 
 local portraitWrites = 0
+local unitGuidReads, unitExistsReads = 0, 0
+local unitConnectedReads, unitVisibleReads = 0, 0
+local currentUnitGUID = "Player-0-1"
 local elementMSUF = {
   UF = elementUF,
   UFVisuals = {
     UF = elementUF,
     CreateFrame = function(_, parent) return NewRegion(parent) end,
     UnitClass = function() return "Warrior", "WARRIOR" end,
-    UnitGUID = function() return "Player-0-1" end,
-    UnitExists = function() return true end,
-    UnitIsConnected = function() return true end,
-    UnitIsVisible = function() return true end,
+    UnitGUID = function()
+      unitGuidReads = unitGuidReads + 1
+      return currentUnitGUID
+    end,
+    UnitExists = function()
+      unitExistsReads = unitExistsReads + 1
+      return true
+    end,
+    UnitIsConnected = function()
+      unitConnectedReads = unitConnectedReads + 1
+      return true
+    end,
+    UnitIsVisible = function()
+      unitVisibleReads = unitVisibleReads + 1
+      return true
+    end,
     SetPortraitTexture = function(texture, unit)
       portraitWrites = portraitWrites + 1
       texture.unitPortrait = unit
@@ -346,6 +361,10 @@ local function ReliefCfg(extra, portraitSize, portraitHeight)
   return Cfg({
     shape = extra.shape or "CIRCLE",
     size = size, width = size, height = height,
+    placement = extra.placement,
+    overlayAlign = extra.overlayAlign,
+    x = extra.x,
+    y = extra.y,
     border = {
       style = "SOLID", art = "RELIEF",
       thickness = extra.thickness or 4,
@@ -395,6 +414,61 @@ Check(math.abs(openingX - 60) <= 1.5,
 Check(math.abs(openingY - 30) <= 1.5,
   string.format("non-square ring opening Y (%.1f) must land on the 30 px axis", openingY))
 Check(ix > iy, "the wider axis must carry the larger inflation")
+
+-- FULL + OVERLAY has no configured portrait extent: both the live ring and the
+-- preview ring must use the stretched anchor rectangle instead of the old 36px
+-- portrait size. Insets are part of that effective geometry.
+frame, holder = ApplyPortrait(ReliefCfg({
+  placement = "OVERLAY", overlayAlign = "FULL", thickness = 2, x = 2, y = 3,
+}))
+local fullInflateX = -holder.artBorder.points[1][4]
+local fullInflateY = holder.artBorder.points[1][5]
+Check(holder._msufLayoutWidth == 271 and holder._msufLayoutHeight == 34,
+  string.format("FULL overlay cached %sx%s instead of its 271x34 anchor geometry",
+    tostring(holder._msufLayoutWidth), tostring(holder._msufLayoutHeight)))
+Check(fullInflateX == 26 and fullInflateY == 3,
+  string.format("FULL relief ring used configured portrait size (%s,%s), expected anchor inflation 26,3",
+    tostring(fullInflateX), tostring(fullInflateY)))
+
+-- Initial layout can observe a zero-sized health anchor. The compiled frame
+-- geometry is the bounded fallback; it must still beat the stale portrait size.
+frame = NewFrame()
+frame.Health.GetWidth = function() return 0 end
+frame.Health.GetHeight = function() return 0 end
+frame.MSUFSpec = { width = 180, height = 30 }
+Portrait.Apply(frame, { height = 30, portrait = ReliefCfg({
+  placement = "OVERLAY", overlayAlign = "FULL", thickness = 2, x = 2, y = 3,
+}) })
+Check(frame.MSUFPortraitHolder._msufLayoutWidth == 176
+    and frame.MSUFPortraitHolder._msufLayoutHeight == 24,
+  "FULL relief did not use compiled frame geometry before its anchor resolved")
+
+-- The preview owns an equivalent cold-path helper. Feed it the same resolved
+-- geometry and pin exact parity with the live relief offsets.
+local previewMSUF = { MSUF2 = {}, UF = { Layers = {} } }
+_G.MSUF_NS = previewMSUF
+assert(loadfile(ADDON .. "Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua"))(
+  "MidnightSimpleUnitFrames", previewMSUF)
+local PreviewInflation = assert(previewMSUF.UFPreviewRender.PreviewPortraitRingInflation,
+  "preview portrait ring inflation helper missing")
+local CachePreviewExtents = assert(previewMSUF.UFPreviewRender.CachePreviewFullPortraitExtents,
+  "preview FULL portrait extent cache missing")
+local previewPortrait = NewRegion(nil)
+previewPortrait._msufPreviewLayoutWidth = holder._msufLayoutWidth
+previewPortrait._msufPreviewLayoutHeight = holder._msufLayoutHeight
+local previewInflateX, previewInflateY = PreviewInflation(previewPortrait, 2)
+Check(previewInflateX == fullInflateX and previewInflateY == fullInflateY,
+  string.format("preview/live FULL relief mismatch: preview %s,%s live %s,%s",
+    tostring(previewInflateX), tostring(previewInflateY),
+    tostring(fullInflateX), tostring(fullInflateY)))
+local unresolvedPreviewAnchor = NewRegion(nil)
+unresolvedPreviewAnchor.GetWidth = function() return 0 end
+unresolvedPreviewAnchor.GetHeight = function() return 0 end
+CachePreviewExtents(previewPortrait, unresolvedPreviewAnchor, 180, 30, 2, 3)
+Check(previewPortrait._msufPreviewLayoutWidth == 176
+    and previewPortrait._msufPreviewLayoutHeight == 24,
+  "preview FULL relief did not use bounded fallback geometry before anchor layout")
+_G.MSUF_NS = elementMSUF
 
 local previous = 0
 for _, thickness in ipairs({ 1, 2, 4, 8, 12 }) do
@@ -494,5 +568,23 @@ Check(holder.sizeWrites == sizeWrites, "unchanged portrait spec re-sized the hol
 Check(holder.alphaWrites == alphaWrites, "unchanged portrait spec rewrote the holder alpha")
 Check(#holder.points == anchors, "unchanged portrait spec re-anchored the holder")
 
+-- A 2D identity event first checks whether the unit portrait key changed and
+-- then applies the new portrait. The key snapshot must flow into the apply path
+-- so GUID/availability APIs and key-part conversion run once, not twice.
+frame = NewFrame()
+Portrait.Apply(frame, { height = 40, portrait = Cfg({ placement = "ATTACHED", side = "LEFT" }) })
+local guidReads = unitGuidReads
+local existsReads = unitExistsReads
+local connectedReads = unitConnectedReads
+local visibleReads = unitVisibleReads
+local writes = portraitWrites
+currentUnitGUID = "Player-0-2"
+Portrait.Update(frame, "PLAYER_TARGET_CHANGED", "target")
+Check(unitGuidReads == guidReads + 1, "2D identity refresh read UnitGUID more than once")
+Check(unitExistsReads == existsReads + 1, "2D identity refresh reread UnitExists for availability")
+Check(unitConnectedReads == connectedReads + 1, "2D identity refresh reread connection state")
+Check(unitVisibleReads == visibleReads + 1, "2D identity refresh reread visibility state")
+Check(portraitWrites == writes + 1, "2D identity refresh stopped applying a changed portrait")
+
 print("PASS portrait placement: detached/overlay anchors, shaped ring + relief art borders, "
-  .. "4-way rotation, aspect+pan coords, layout-time dedupe, no per-event border work")
+  .. "4-way rotation, aspect+pan coords, layout-time dedupe, single identity key, no per-event border work")

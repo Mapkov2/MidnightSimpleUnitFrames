@@ -253,7 +253,8 @@ local function PortraitFrameVisible(frame)
   return holder ~= nil
 end
 
-local function ApplyPortraitUpdate(frame, castAlreadyChecked)
+local function ApplyPortraitUpdate(frame, castAlreadyChecked,
+    keyPrepared, preparedKey, preparedGuid, preparedExists)
   if not frame then
     return
   end
@@ -271,7 +272,8 @@ local function ApplyPortraitUpdate(frame, castAlreadyChecked)
       if p.render == "CLASS" then
         ApplyClassPortrait(texture, frame.MSUFUnitKey, p, nil, frame, force or restorePortrait)
       else
-        ApplyUnitPortrait(texture, frame.MSUFUnitKey, frame, p, force or restorePortrait)
+        ApplyUnitPortrait(texture, frame.MSUFUnitKey, frame, p, force or restorePortrait,
+          keyPrepared, preparedKey, preparedGuid, preparedExists)
       end
     end
   elseif p and p.enabled == true and texture and not PortraitFrameVisible(frame) then
@@ -308,8 +310,8 @@ local function PlainUnitBool(fn, unit, fallback)
   return value == true or value == 1
 end
 
-local function PortraitUnitAvailable(unit)
-  if not UnitExistsPlain(unit) then
+local function PortraitUnitAvailable(unit, exists)
+  if exists ~= true then
     return false
   end
   return PlainUnitBool(UnitIsConnected, unit, true) and PlainUnitBool(UnitIsVisible, unit, true)
@@ -324,7 +326,7 @@ end
 
 local function BuildUnitPortraitKey(unit, frame, p, guid)
   local exists = UnitExistsPlain(unit)
-  local available = exists and PortraitUnitAvailable(unit)
+  local available = PortraitUnitAvailable(unit, exists)
   if exists and guid == nil then
     local generation = portraitUnitGeneration[unit]
     if generation == nil then
@@ -365,11 +367,11 @@ local function UnitPortraitKeyChanged(texture, unit, frame, p)
       guid = nil
     end
   end
-  local key = BuildUnitPortraitKey(unit, frame, p, guid)
+  local key, exists = BuildUnitPortraitKey(unit, frame, p, guid)
   if key == nil then
-    return true
+    return true, true, key, guid, exists
   end
-  return texture._msufPortraitKey ~= key
+  return texture._msufPortraitKey ~= key, true, key, guid, exists
 end
 
 local function BuildClassPortraitKey(unit, frame, p, class)
@@ -477,6 +479,44 @@ local function ResolvePortraitAnchor(frame, p, placement)
   return anchor, "RIGHT", "LEFT"
 end
 
+--- Cache the effective portrait extents while layout already owns the anchor
+--- geometry. FULL overlays have no configured size: their two points stretch to
+--- the health bar, with x/y acting as insets. Keeping these values on the holder
+--- lets identity-driven border colour updates reuse them without GetWidth calls.
+--- Before the anchor has a usable size, fall back to the compiled portrait extent.
+local function CachePortraitLayoutExtents(holder, anchor, frame, point, p, width, height, x, y)
+  if point ~= "FULL" or not (p and p.border and p.border.art == "RELIEF") then
+    if holder._msufLayoutWidth ~= nil then holder._msufLayoutWidth = nil end
+    if holder._msufLayoutHeight ~= nil then holder._msufLayoutHeight = nil end
+    return
+  end
+  local effectiveWidth, effectiveHeight = width, height
+  local anchorWidth = anchor and anchor.GetWidth and tonumber(anchor:GetWidth()) or 0
+  local anchorHeight = anchor and anchor.GetHeight and tonumber(anchor:GetHeight()) or 0
+  if anchorWidth <= 0 then
+    anchorWidth = tonumber(frame and frame.MSUFSpec and frame.MSUFSpec.width)
+      or (frame and frame.GetWidth and tonumber(frame:GetWidth())) or 0
+  end
+  if anchorHeight <= 0 then
+    anchorHeight = tonumber(frame and frame.MSUFSpec and frame.MSUFSpec.height)
+      or (frame and frame.GetHeight and tonumber(frame:GetHeight())) or 0
+  end
+  local fullWidth = anchorWidth - (2 * x)
+  local fullHeight = anchorHeight - (2 * y)
+  if fullWidth > 0 then
+    effectiveWidth = fullWidth
+  end
+  if fullHeight > 0 then
+    effectiveHeight = fullHeight
+  end
+  if holder._msufLayoutWidth ~= effectiveWidth then
+    holder._msufLayoutWidth = effectiveWidth
+  end
+  if holder._msufLayoutHeight ~= effectiveHeight then
+    holder._msufLayoutHeight = effectiveHeight
+  end
+end
+
 local function LayoutPortrait(frame, p)
   local holder = frame.MSUFPortraitHolder
   if not holder then
@@ -547,6 +587,7 @@ local function LayoutPortrait(frame, p)
     holder._msufPoint, holder._msufRelPoint = point, relPoint
     holder._msufX, holder._msufY, holder._msufAnchor = x, y, anchor
   end
+  CachePortraitLayoutExtents(holder, anchor, frame, point, p, width, height, x, y)
 end
 
 local function UnitClassToken(unit)
@@ -636,7 +677,8 @@ ApplyClassPortrait = function(texture, unit, p, class, frame, force)
   ApplyUnitPortrait(texture, unit, frame, p, force)
 end
 
-ApplyUnitPortrait = function(texture, unit, frame, p, force)
+ApplyUnitPortrait = function(texture, unit, frame, p, force,
+    keyPrepared, preparedKey, preparedGuid, preparedExists)
   ClearClassPortraitCache(texture)
   local l, r, t, b = Get2DPortraitTexCoords(p)
   if BossPreviewActive(unit, frame) then
@@ -646,15 +688,19 @@ ApplyUnitPortrait = function(texture, unit, frame, p, force)
     texture._msufPortraitKey = "BOSS_PREVIEW|" .. PortraitKeyPart(unit)
     return
   end
-  local guid
-  if unit then
-    guid = UnitGUID(unit)
-    if issecretvalue(guid) == true then
-      guid = nil
+  local key, guid, exists
+  if keyPrepared == true then
+    key, guid, exists = preparedKey, preparedGuid, preparedExists
+  else
+    if unit then
+      guid = UnitGUID(unit)
+      if issecretvalue(guid) == true then
+        guid = nil
+      end
     end
+    key, exists = BuildUnitPortraitKey(unit, frame, p, guid)
   end
 
-  local key, exists = BuildUnitPortraitKey(unit, frame, p, guid)
   if force ~= true and key ~= nil and texture._msufPortraitKey == key then
     return
   end
@@ -864,8 +910,8 @@ local function PortraitRingAxisInflation(extent, thick)
 end
 
 local function PortraitRingInflation(holder, p, thick)
-  local width = tonumber(p and p.width) or tonumber(holder._msufWidth) or 0
-  local height = tonumber(p and p.height) or tonumber(holder._msufHeight) or 0
+  local width = tonumber(holder._msufLayoutWidth) or tonumber(p and p.width) or tonumber(holder._msufWidth) or 0
+  local height = tonumber(holder._msufLayoutHeight) or tonumber(p and p.height) or tonumber(holder._msufHeight) or 0
   if width <= 0 then
     width = tonumber(p and p.size) or 36
   end
@@ -1185,8 +1231,19 @@ function Portrait.Update(frame, event, unit)
       frame._msufPortraitForceRefresh = nil
       ApplyUnitPortrait(texture, unit, frame, p, true)
     elseif ShouldRefresh2DPortraitForEvent(event, identityVisual) then
-      if forceRefresh == true or UnitPortraitKeyChanged(texture, unit, frame, p) then
-        ApplyPortraitUpdate(frame, true)
+      local changed, keyPrepared, preparedKey, preparedGuid, preparedExists
+      if forceRefresh == true then
+        changed = true
+      else
+        changed, keyPrepared, preparedKey, preparedGuid, preparedExists =
+          UnitPortraitKeyChanged(texture, unit, frame, p)
+      end
+      if changed then
+        -- The identity predicate already paid for the complete 2D key. Reuse
+        -- that exact snapshot in ApplyUnitPortrait instead of repeating GUID,
+        -- availability and sixteen key-part conversions in the same event.
+        ApplyPortraitUpdate(frame, true,
+          keyPrepared, preparedKey, preparedGuid, preparedExists)
       else
         frame._msufPortraitNeedsVisibleRefresh = nil
         frame._msufPortraitForceRefresh = nil

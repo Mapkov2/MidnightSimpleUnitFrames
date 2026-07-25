@@ -12,6 +12,36 @@ local F = MenuState.Fallbacks or {}
 local PreviewHelpers = MenuState.PreviewHelpers or {}
 local CPPreview = MenuState.ClassPowerPreview or {}
 local Layers = MSUF.UF and MSUF.UF.Layers or {}
+-- Mirrors the live relief renderer. FULL overlays cache their resolved anchor
+-- extents before this runs, avoiding stale configured portraitWidth/Height.
+local PREVIEW_RING_OPENING_INFLATE = 0.0952380952
+local PREVIEW_RING_REFERENCE_THICKNESS = 2
+local function PreviewPortraitRingInflation(portrait, thickness)
+    local pw = tonumber(portrait and portrait._msufPreviewLayoutWidth)
+        or (portrait and portrait.GetWidth and tonumber(portrait:GetWidth())) or 36
+    local ph = tonumber(portrait and portrait._msufPreviewLayoutHeight)
+        or (portrait and portrait.GetHeight and tonumber(portrait:GetHeight())) or 36
+    if pw <= 0 then pw = 36 end
+    if ph <= 0 then ph = 36 end
+    local scale = PREVIEW_RING_OPENING_INFLATE
+        * ((tonumber(thickness) or PREVIEW_RING_REFERENCE_THICKNESS) / PREVIEW_RING_REFERENCE_THICKNESS)
+    return math.floor(math.max(1, pw * scale) + 0.5),
+        math.floor(math.max(1, ph * scale) + 0.5)
+end
+Render.PreviewPortraitRingInflation = PreviewPortraitRingInflation
+
+local function CachePreviewFullPortraitExtents(portrait, anchor, fallbackWidth, fallbackHeight, x, y)
+    local width = anchor and anchor.GetWidth and tonumber(anchor:GetWidth()) or 0
+    local height = anchor and anchor.GetHeight and tonumber(anchor:GetHeight()) or 0
+    if width <= 0 then width = tonumber(fallbackWidth) or 1 end
+    if height <= 0 then height = tonumber(fallbackHeight) or 1 end
+    width = math.max(1, width - (2 * x))
+    height = math.max(1, height - (2 * y))
+    if portrait._msufPreviewLayoutWidth ~= width then portrait._msufPreviewLayoutWidth = width end
+    if portrait._msufPreviewLayoutHeight ~= height then portrait._msufPreviewLayoutHeight = height end
+end
+Render.CachePreviewFullPortraitExtents = CachePreviewFullPortraitExtents
+
 local function ResolvePreviewBodyOffsets(centerX, centerY, scale, manualZoom, frozenX, frozenY)
     if frozenX ~= nil and frozenY ~= nil then return frozenX, frozenY end
     -- Fit mode centers the complete configured footprint. At a manual zoom,
@@ -630,9 +660,6 @@ function Render.Install(Preview, deps)
         LEFT  = { 1, 0, 0, 0, 1, 1, 0, 1 },
     }
     local PREVIEW_RING_SHAPES = { SQUARE = "square", CIRCLE = "circle", ROUNDED = "rounded", DIAMOND = "diamond" }
-    -- (1 - opening) / (2 * opening) for the 0.84 opening baked into the art.
-    local PREVIEW_RING_OPENING_INFLATE = 0.0952380952
-    local PREVIEW_RING_REFERENCE_THICKNESS = 2
     local function LayoutPreviewPortraitArtBorder(portrait, thickness, r, g, b, a)
         local art = portrait._msufPreviewArtBorder
         if not art then
@@ -648,13 +675,7 @@ function Render.Install(Preview, deps)
         -- Per axis, like the live element: a non-square portrait stretches the
         -- mask and the ring quad identically only if each axis is inflated from
         -- its own extent.
-        local pw = portrait:GetWidth() or 36
-        local ph = portrait:GetHeight() or 36
-        if not (pw and pw > 0) then pw = 36 end
-        if not (ph and ph > 0) then ph = 36 end
-        local scale = PREVIEW_RING_OPENING_INFLATE * (thickness / PREVIEW_RING_REFERENCE_THICKNESS)
-        local ix = math.floor(math.max(1, pw * scale) + 0.5)
-        local iy = math.floor(math.max(1, ph * scale) + 0.5)
+        local ix, iy = PreviewPortraitRingInflation(portrait, thickness)
         local key = shape .. "|" .. ix .. "|" .. iy .. "|" .. direction
         if portrait._msufPreviewArtKey ~= key then
             art:ClearAllPoints()
@@ -1976,6 +1997,15 @@ function Preview.Refresh(box, reason)
             or PortraitStyleGet(key, "portraitBorderDirection", "UP")
         mock.portrait._msufPreviewBorderShape = (runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.shape)
             or PortraitStyleGet(key, "portraitShape", "SQUARE")
+        if mock.portrait._msufPreviewBorderArt == "RELIEF"
+            and box._runtimePortraitPlacement == "OVERLAY"
+            and box._runtimePortraitOverlayAlign == "FULL"
+        then
+            CachePreviewFullPortraitExtents(mock.portrait, mock, S(w), S(h), ox, oy)
+        else
+            if mock.portrait._msufPreviewLayoutWidth ~= nil then mock.portrait._msufPreviewLayoutWidth = nil end
+            if mock.portrait._msufPreviewLayoutHeight ~= nil then mock.portrait._msufPreviewLayoutHeight = nil end
+        end
         local bStyle = box._runtimePortraitBorderStyle or (portraitBorder and portraitBorder.style) or PortraitStyleGet(key, "portraitBorderStyle", "NONE")
         if bStyle == "NONE" then
             R.LayoutPreviewPortraitBorder(mock.portrait, 0, false)

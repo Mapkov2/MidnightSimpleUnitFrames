@@ -683,12 +683,18 @@ def check_portrait_refresh_contracts() -> None:
             require(source, event, label)
     require(
         portrait,
-        "if forceRefresh == true or UnitPortraitKeyChanged(texture, unit, frame, p) then",
+        "if forceRefresh == true then\n        changed = true\n      else",
         "Portrait forced-refresh cache bypass",
     )
     require(
         portrait,
-        "ApplyUnitPortrait(texture, frame.MSUFUnitKey, frame, p, force or restorePortrait)",
+        "changed, keyPrepared, preparedKey, preparedGuid, preparedExists =\n          UnitPortraitKeyChanged(texture, unit, frame, p)",
+        "Portrait identity refresh must prepare one reusable cache key",
+    )
+    require(
+        portrait,
+        "ApplyUnitPortrait(texture, frame.MSUFUnitKey, frame, p, force or restorePortrait,\n"
+        "          keyPrepared, preparedKey, preparedGuid, preparedExists)",
         "Portrait force must reach the queued update path",
     )
     require(
