@@ -27,8 +27,6 @@ local SEARCH_KEYWORDS = SearchText.KEYWORDS or SearchData.KEYWORDS or {}
 
 local MIN_SEARCH_QUERY_LEN = 2
 local SEARCH_TEXT_MAX_LEN = 170
-local SEARCH_BACKGROUND_STEP_SEC = 1.75
-local SEARCH_BACKGROUND_FIRST_STEP_SEC = 2.50
 local SEARCH_INPUT_DEBOUNCE_SEC = 0.10
 local SEARCH_MAX_RESULTS = 24
 local SEARCH_VISIBLE_RESULTS = 12
@@ -39,6 +37,8 @@ local SEARCH_MAX_TERMS_PER_CLAUSE = 18
 local SEARCH_MAX_RECORD_TOKENS = 90
 local SEARCH_CONTROL_MAX_TOKENS = 36
 local SEARCH_CONTROL_HAYSTACK_MAX_LEN = 1200
+-- Shared empty result, so a combat-gated read never allocates.
+local EMPTY_SEARCH_RECORDS = {}
 local SEARCH_STATE = {
     records = nil,
     recordsDirty = true,
@@ -79,12 +79,6 @@ end
 local function SearchCombatLocked()
     return (_G.InCombatLockdown and _G.InCombatLockdown())
         or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
-end
-
-local function SearchHiddenPageIndexEnabled()
-    if _G.MSUF_SEARCH_ALLOW_HIDDEN_PAGE_INDEX == true then return true end
-    local g = type(M.GetGeneralDB) == "function" and M.GetGeneralDB() or nil
-    return type(g) == "table" and g.searchHiddenPageIndex == true
 end
 
 local function CancelSearchBackgroundIndex()
@@ -158,18 +152,32 @@ local DASHBOARD_ROUTE_RECOVERY = { state = { dashboardRecoveryOpen = true } }
 local DASHBOARD_ROUTE_SCALING = { state = { dashboardScalingOpen = true } }
 local DASHBOARD_ROUTE_CHANGELOG = { state = { dashboardChangelogOpen = true } }
 
-local function AddSearchTermUnique(list, seen, term)
+--- allowSoftStop keeps words like "enable"/"visible"/"off" usable as search terms.
+--- They are normally dropped because they are filler in a sentence, but they are
+--- also real control labels, and a query made only of them must not collapse.
+local function AddSearchTermUnique(list, seen, term, allowSoftStop)
     if #list >= SEARCH_MAX_TERMS_PER_CLAUSE then return end
     term = NormalizeSearchText(term)
-    if term == "" or SearchIgnoreQueryWord(term) or seen[term] then return end
+    if term == "" or seen[term] then return end
+    if allowSoftStop then
+        if SEARCH_STOP_WORDS[term] then return end
+    elseif SearchIgnoreQueryWord(term) then
+        return
+    end
     seen[term] = true
     list[#list + 1] = term
 end
 
-local function SearchRawWords(normalized)
+local function SearchRawWords(normalized, allowSoftStop)
     local raw = {}
     for word in tostring(normalized or ""):gmatch("%S+") do
-        if not SearchIgnoreQueryWord(word) then raw[#raw + 1] = word end
+        local ignored
+        if allowSoftStop then
+            ignored = SEARCH_STOP_WORDS[word]
+        else
+            ignored = SearchIgnoreQueryWord(word)
+        end
+        if not ignored then raw[#raw + 1] = word end
         if #raw >= SEARCH_MAX_RAW_WORDS then break end
     end
     return raw
@@ -277,29 +285,40 @@ local function BuildSearchQueryClauses(query)
     if normalized == SEARCH_STATE.queryClauseCacheNorm and SEARCH_STATE.queryClauseCacheClauses then
         return normalized, SEARCH_STATE.queryClauseCacheClauses
     end
-    local raw = SearchRawWords(normalized)
-    local words = SearchCanonicalWords(raw)
-    local clauses = {}
-    for i = 1, #words do
-        if #clauses >= SEARCH_MAX_QUERY_CLAUSES then break end
-        local word = words[i]
-        local terms, seen = {}, {}
-        AddSearchTermUnique(terms, seen, word)
-        local aliases = SEARCH_QUERY_ALIASES[word]
-        if not aliases then
-            local aliasKey = SearchAliasKeyForTypo(word)
-            if aliasKey then
-                AddSearchTermUnique(terms, seen, aliasKey)
-                aliases = SEARCH_QUERY_ALIASES[aliasKey]
+
+    local function Collect(allowSoftStop)
+        local raw = SearchRawWords(normalized, allowSoftStop)
+        local words = SearchCanonicalWords(raw)
+        local clauses = {}
+        for i = 1, #words do
+            if #clauses >= SEARCH_MAX_QUERY_CLAUSES then break end
+            local word = words[i]
+            local terms, seen = {}, {}
+            AddSearchTermUnique(terms, seen, word, allowSoftStop)
+            local aliases = SEARCH_QUERY_ALIASES[word]
+            if not aliases then
+                local aliasKey = SearchAliasKeyForTypo(word)
+                if aliasKey then
+                    AddSearchTermUnique(terms, seen, aliasKey, allowSoftStop)
+                    aliases = SEARCH_QUERY_ALIASES[aliasKey]
+                end
+            end
+            if aliases then
+                for k = 1, #aliases do AddSearchTermUnique(terms, seen, aliases[k], allowSoftStop) end
+            end
+            if #terms > 0 then
+                clauses[#clauses + 1] = { word = word, terms = terms }
             end
         end
-        if aliases then
-            for k = 1, #aliases do AddSearchTermUnique(terms, seen, aliases[k]) end
-        end
-        if #terms > 0 then
-            clauses[#clauses + 1] = { word = word, terms = terms }
-        end
+        return clauses
     end
+
+    local clauses = Collect(false)
+    -- "enable", "visible", "off", "aktivieren" and friends are soft stop words, so a
+    -- query consisting only of them produced no clauses at all and search returned
+    -- nothing. Those are real control labels; retry keeping them as terms.
+    if #clauses == 0 and normalized ~= "" then clauses = Collect(true) end
+
     SEARCH_STATE.queryClauseCacheNorm = normalized
     SEARCH_STATE.queryClauseCacheClauses = clauses
     return normalized, clauses
@@ -1205,213 +1224,20 @@ BuildRegistrySearchRecord = function(entry)
     return rec
 end
 
-local ASSISTANT_UNIT_PAGE = {
-    player = "uf_player",
-    target = "uf_target",
-    focus = "uf_focus",
-    pet = "uf_pet",
-    boss = "uf_boss",
-    targettarget = "uf_targettarget",
-    focustarget = "uf_focustarget",
-}
-
-local ASSISTANT_FRAME_PAGE = {
-    dashboard = "home",
-    misc = "opt_misc",
-    castbar = "opt_castbar",
-    bars = "opt_bars",
-    globalBars = "opt_bars",
-    fonts = "opt_fonts",
-    modules = "modules",
-    classPower = "classpower",
-    classPowerPlayerHP = "classpower",
-    detachedPowerBar = "classpower",
-    altMana = "classpower",
-    gameplay = "gameplay",
-    combatTimer = "gameplay",
-    combatState = "gameplay",
-    playerTotems = "gameplay",
-    combatCrosshair = "gameplay",
-    profiles = "profiles",
-    groupAura = "gf_auras",
-    aura = "auras3_styling",
-}
-
-local ASSISTANT_GROUP_INDICATOR_PARTS = M.KeySetFromWords([[
-roleicon leadericon assisticon raidmarker readycheck summonicon summonanchor
-summonx summony summonlayer resurrecticon resurrectanchor resurrectx resurrecty
-resurrectlayer phaseicon pvpicon warmode threaticon aggroicon spellindicator
-spellindicators cornerindicator cornerindicators
-]])
-
-local ASSISTANT_GROUP_EFFECT_PARTS = M.KeySetFromWords([[
-dispeloverlay debuffstripe
-]])
-
-local function AssistantRegistryGroupPage(setting)
-    local attr = tostring(setting and setting.attribute or "")
-    local attrNorm = NormalizeSearchText(attr):gsub("%s+", "")
-    local keyNorm = NormalizeSearchText(setting and setting.key or ""):gsub("%s+", "")
-    if attrNorm:find("priority", 1, true) or keyNorm:find("priority", 1, true) then return "gf_priority" end
-    for part in pairs(ASSISTANT_GROUP_INDICATOR_PARTS) do
-        if attrNorm:find(part, 1, true) or keyNorm:find(part, 1, true) then return "gf_indicators" end
-    end
-    for part in pairs(ASSISTANT_GROUP_EFFECT_PARTS) do
-        if attrNorm:find(part, 1, true) or keyNorm:find(part, 1, true) then return "gf_bars" end
-    end
-    return "gf_layout"
-end
-
-local function AssistantRegistryPageForSetting(setting)
-    if type(setting) ~= "table" then return nil end
-    if type(setting.page) == "string" and setting.page ~= "" then return setting.page end
-    if type(setting.pageKey) == "string" and setting.pageKey ~= "" then return setting.pageKey end
-    local unitPage = ASSISTANT_UNIT_PAGE[tostring(setting.unit or "")]
-    if unitPage then return unitPage end
-    local frameType = tostring(setting.frameType or "")
-    if frameType == "group" then return AssistantRegistryGroupPage(setting) end
-    local framePage = ASSISTANT_FRAME_PAGE[frameType]
-    if framePage then return framePage end
-    local category = NormalizeSearchText(setting.category or "")
-    if category:find("dashboard", 1, true) then return "home" end
-    if category:find("profile", 1, true) then return "profiles" end
-    if category:find("castbar", 1, true) then return "opt_castbar" end
-    if category:find("font", 1, true) then return "opt_fonts" end
-    if category:find("color", 1, true) or category:find("colour", 1, true) then return "opt_colors" end
-    if category:find("class resource", 1, true) or category:find("class power", 1, true) then return "classpower" end
-    if category:find("gameplay", 1, true) then return "gameplay" end
-    return nil
-end
-
-local function AssistantRegistryPageForAction(action)
-    if type(action) ~= "table" then return nil end
-    if type(action.page) == "string" and action.page ~= "" then return action.page end
-    if type(action.pageKey) == "string" and action.pageKey ~= "" then return action.pageKey end
-    local key = NormalizeSearchText(action.key or ""):gsub("%s+", "")
-    local typ = tostring(action.type or "")
-    if key:find("priority", 1, true) then return "gf_priority" end
-    if key:find("profile", 1, true) or typ == "profile" then return "profiles" end
-    if key:find("aura", 1, true) then return key:find("group", 1, true) and "gf_auras" or "auras3" end
-    if key:find("groupstatus", 1, true) or key:find("groupcorner", 1, true) then return "gf_indicators" end
-    if key:find("group", 1, true) then return "gf_layout" end
-    if key:find("castbar", 1, true) or key:find("kick", 1, true) then return "opt_castbar" end
-    if key:find("classpower", 1, true) or typ == "classPower" then return "classpower" end
-    if key:find("totem", 1, true) or key:find("crosshair", 1, true) or typ == "gameplay" then return "gameplay" end
-    if key:find("font", 1, true) or typ == "fonts" then return "opt_fonts" end
-    if key:find("color", 1, true) or typ == "color" then return "opt_colors" end
-    if typ == "globalBars" then return "opt_bars" end
-    return "home"
-end
-
-local function AssistantRegistryControlKind(setting)
-    local kind = tostring(setting and setting.type or "")
-    if kind == "boolean" then return "toggle" end
-    if kind == "number" then return "slider" end
-    if kind == "enum" then return "dropdown" end
-    if kind == "color" then return "color" end
-    if kind == "string" or kind == "text" then return "textinput" end
-    return "control"
-end
-
-local function AddAssistantRegistryListText(parts, values, limit)
-    if type(values) == "string" then
-        if values:find("|", 1, true) then
-            local count = 0
-            for value in values:gmatch("[^|]+") do
-                count = count + 1
-                AddSearchText(parts, value)
-                if limit and count >= limit then break end
-            end
-        else
-            AddSearchText(parts, values)
-        end
-        return
-    end
-    if type(values) ~= "table" then return end
-    local maxValues = math.min(#values, tonumber(limit) or 24)
-    for i = 1, maxValues do AddSearchText(parts, SearchValueText(values[i])) end
-end
-
-local function AddAssistantRegistryMapKeys(parts, values, limit)
-    if type(values) ~= "table" then return end
-    local count = 0
-    for key in pairs(values) do
-        count = count + 1
-        AddSearchText(parts, key)
-        if limit and count >= limit then break end
-    end
-end
-
-local function AddAssistantRegistrySettingRecord(records, seenRecords, pageInfoByKey, assistant, setting)
-    if type(setting) ~= "table" or tostring(setting.key or "") == "" then return end
-    local pageKey = AssistantRegistryPageForSetting(setting)
-    if type(pageKey) ~= "string" or pageKey == "" or pageKey == "search" then return end
-    local info = pageInfoByKey[pageKey] or BuildSearchPageInfoForKey(pageKey)
-    local label = type(assistant.DisplaySettingLabel) == "function"
-        and assistant.DisplaySettingLabel(setting)
-        or (setting.label or setting.name or setting.key)
-    local extra = {}
-    AddSearchText(extra, setting.key)
-    AddSearchText(extra, setting.category)
-    AddSearchText(extra, setting.attribute)
-    AddSearchText(extra, setting.unit)
-    AddSearchText(extra, setting.frameType)
-    AddSearchText(extra, setting.description or setting.summary)
-    AddAssistantRegistryListText(extra, setting.aliases, 24)
-    AddAssistantRegistryListText(extra, setting.exactAliases, 24)
-    AddAssistantRegistryListText(extra, setting.keywords, 24)
-    AddAssistantRegistryMapKeys(extra, setting.valueAliases, 24)
-    AddAssistantRegistryMapKeys(extra, setting.booleanAliases, 24)
-    if type(setting.values) == "table" then AddValuesSearchText(extra, setting.values) end
-    if type(setting.options) == "table" then AddValuesSearchText(extra, setting.options) end
-    local rec = AddSearchRecord(records, seenRecords, info, label, "assistant:" .. tostring(setting.key), AssistantRegistryControlKind(setting), extra)
-    if rec then
-        rec.answer = setting.description or setting.summary
-        rec.target = info.title and ("Opens: " .. tostring(info.title)) or nil
-        rec._msufAssistantSettingKey = setting.key
-        rec.exactTarget = { pageKey = pageKey, settingKey = setting.key, label = label }
-        rec.priority = (tonumber(rec.priority) or 0) + 35
-    end
-end
-
-local function AddAssistantRegistryActionRecord(records, seenRecords, pageInfoByKey, assistant, action)
-    if type(action) ~= "table" or tostring(action.key or "") == "" then return end
-    local pageKey = AssistantRegistryPageForAction(action)
-    if type(pageKey) ~= "string" or pageKey == "" or pageKey == "search" then return end
-    local info = pageInfoByKey[pageKey] or BuildSearchPageInfoForKey(pageKey)
-    local label = type(assistant.DisplayActionLabel) == "function"
-        and assistant.DisplayActionLabel(action)
-        or (action.label or action.name or action.key)
-    local extra = {}
-    AddSearchText(extra, action.key)
-    AddSearchText(extra, action.category or action.type)
-    AddSearchText(extra, action.description or action.summary)
-    AddAssistantRegistryListText(extra, action.aliases, 24)
-    AddAssistantRegistryListText(extra, action.exactAliases, 24)
-    AddAssistantRegistryListText(extra, action.keywords, 24)
-    local rec = AddSearchRecord(records, seenRecords, info, label, "assistant-action:" .. tostring(action.key), "button", extra)
-    if rec then
-        rec.answer = action.description or action.summary
-        rec.target = info.title and ("Opens: " .. tostring(info.title)) or nil
-        rec._msufAssistantActionKey = action.key
-        rec.priority = (tonumber(action.priority) or 0) + 15
-    end
-end
-
-local function AddAssistantRegistrySearchRecords(records, seenRecords, pageInfoByKey)
-    local assistant = (MSUF and MSUF.Assistant) or M.Assistant
-    local registry = assistant and assistant.Registry
-    if type(registry) ~= "table" then return end
-    if type(registry.AllSettings) == "function" then
-        local settings = registry:AllSettings() or {}
-        for i = 1, #settings do
-            AddAssistantRegistrySettingRecord(records, seenRecords, pageInfoByKey, assistant, settings[i])
-        end
-    end
-    if type(registry.AllActions) == "function" then
-        local actions = registry:AllActions() or {}
-        for i = 1, #actions do
-            AddAssistantRegistryActionRecord(records, seenRecords, pageInfoByKey, assistant, actions[i])
+--- Static inventory for controls whose page has never been built. A live widget
+--- record for the same page+label always wins: it carries the real anchor and the
+--- executable command, while the static row only knows how to route there.
+local function AddStaticIndexSearchRecords(records, covered)
+    local staticIndex = Search.StaticIndex
+    if not (staticIndex and type(staticIndex.GetRecords) == "function") then return end
+    local ok, staticRecords = pcall(staticIndex.GetRecords)
+    if not ok or type(staticRecords) ~= "table" then return end
+    for i = 1, #staticRecords do
+        local rec = staticRecords[i]
+        local identity = rec.key .. "" .. rec.labelNorm
+        if not covered[identity] then
+            rec.order = #records + 1
+            records[#records + 1] = rec
         end
     end
 end
@@ -1451,6 +1277,7 @@ local function BuildSearchRecords()
         AddSearchRecord(records, seenRecords, info, info.label or info.title or info.key, nil, "page", pageParts)
     end
 
+    local covered = {}
     for _, entry in pairs(SEARCH_STATE.registry) do
         local rec = SEARCH_STATE.registryRecords[entry.id]
         if not rec and BuildRegistrySearchRecord then
@@ -1460,10 +1287,11 @@ local function BuildSearchRecords()
         if rec then
             rec.order = #records + 1
             records[#records + 1] = rec
+            covered[tostring(rec.key or "") .. "\031" .. tostring(rec.labelNorm or "")] = true
         end
     end
 
-    AddAssistantRegistrySearchRecords(records, seenRecords, pageInfoByKey)
+    AddStaticIndexSearchRecords(records, covered)
 
     for i = 1, #SEARCH_FAQ do
         local faq = SEARCH_FAQ[i]
@@ -1499,12 +1327,11 @@ end
 
 local SearchPages, SetSearchResults
 
-local function SearchSurfaceActive()
-    return M.activeKey == "search" or M.searchPaletteActive == true
-end
-
 local function RefreshSearchResultsPage()
     if M.activeKey ~= "search" then return end
+    -- SearchPages already returns nothing in combat, but the refresh below still
+    -- invalidated and rebuilt the search page. Stop before any of that runs.
+    if SearchCombatLocked() then return end
     local query = TrimText(M.searchQuery or "")
     if query == "" or #NormalizeSearchText(query) < MIN_SEARCH_QUERY_LEN then return end
     SetSearchResults(SearchPages(query), query)
@@ -1512,90 +1339,26 @@ local function RefreshSearchResultsPage()
     if M.SelectPage then M.SelectPage("search") end
 end
 
-local function FinishSearchBackgroundIndex()
-    SEARCH_STATE.indexing = false
-    SEARCH_STATE.indexQueue = nil
-    local query = TrimText(M.searchQuery or "")
-    local refreshPage = M.activeKey == "search" and query ~= "" and #NormalizeSearchText(query) >= MIN_SEARCH_QUERY_LEN
-    local refreshPalette = M.searchPaletteActive == true and query ~= ""
-        and #NormalizeSearchText(query) >= MIN_SEARCH_QUERY_LEN
-    local shouldRefresh = refreshPage or refreshPalette
-    if shouldRefresh and SEARCH_STATE.recordsDirty then
-        SEARCH_STATE.records = BuildSearchRecords()
-        SEARCH_STATE.recordsDirty = false
-    end
-    if shouldRefresh then
-        SetSearchResults(SearchPages(query), query)
-        if refreshPage then
-            if M.InvalidatePage then M.InvalidatePage("search") end
-            if M.SelectPage then M.SelectPage("search") end
-        end
-        if refreshPalette and type(M.RefreshNavSearchPalette) == "function" then
-            M.RefreshNavSearchPalette(query)
-        end
-    end
-end
-
-local function StartSearchBackgroundIndex()
-    if SEARCH_STATE.indexing then return end
-    if not SearchHiddenPageIndexEnabled() then return end
-    if SearchCombatLocked() then return end
-    if not (M.frame and M.frame.IsShown and M.frame:IsShown()) then return end
-    if not M.scrollChild then return end
-    if not (C_Timer and type(C_Timer.After) == "function") then return end
-
-    local pageInfos = BuildSearchPageInfos()
-    local queue = {}
-    for i = 1, #pageInfos do
-        local info = pageInfos[i]
-        local cached = M.cache and M.cache[info.key]
-        if info.key ~= "search" and not (cached and cached.wrapper) then
-            queue[#queue + 1] = info.key
-        end
-    end
-    if #queue == 0 then return end
-
-    SEARCH_STATE.indexing = true
-    SEARCH_STATE.indexQueue = queue
-
-    local function Step()
-        if not SEARCH_STATE.indexing then return end
-        if not SearchSurfaceActive() or SearchCombatLocked() or not (M.frame and M.frame.IsShown and M.frame:IsShown()) then
-            CancelSearchBackgroundIndex()
-            return
-        end
-
-        local key = table.remove(SEARCH_STATE.indexQueue, 1)
-        if key then
-            if M.BuildPageEntry then M.BuildPageEntry(key, true) end
-            MarkSearchIndexDirty()
-        end
-
-        if SEARCH_STATE.indexQueue and #SEARCH_STATE.indexQueue > 0 then
-            C_Timer.After(SEARCH_BACKGROUND_STEP_SEC, Step)
-        else
-            FinishSearchBackgroundIndex()
-        end
-    end
-
-    C_Timer.After(SEARCH_BACKGROUND_FIRST_STEP_SEC, Step)
-end
+-- The background indexer used to build every unvisited page just to register its
+-- widgets. The generated static index supersedes it, so search no longer has any
+-- path that constructs frames, runs on a timer, or touches the DB per query.
+-- CancelSearchBackgroundIndex stays: menu chrome still calls it on close/hide.
 
 local function GetSearchRecords()
+    -- Combat does no search work at all. Everything below this line either builds
+    -- UI (the deferred section pump) or rebuilds/decodes the index, so the gate has
+    -- to sit above it rather than relying on every caller checking first.
+    if SearchCombatLocked() then return SEARCH_STATE.records or EMPTY_SEARCH_RECORDS end
     EnsureSearchLocaleFresh()
     -- Search usage is what starts draining deferred section content (closed
     -- sections of visited pages). Until then those jobs stay parked so cold
     -- page builds remain shell-only.
     local pumpSections = M.UnitPage and M.UnitPage.PumpBackgroundSections
     if type(pumpSections) == "function" then pumpSections() end
-    if SEARCH_STATE.indexing and SEARCH_STATE.records then
-        return SEARCH_STATE.records
-    end
     if not SEARCH_STATE.records or SEARCH_STATE.recordsDirty then
         SEARCH_STATE.records = BuildSearchRecords()
         SEARCH_STATE.recordsDirty = false
     end
-    StartSearchBackgroundIndex()
     return SEARCH_STATE.records
 end
 
@@ -1675,7 +1438,14 @@ function SearchPages(query)
             end
         end
         if matched and matchedClauses >= requiredMatches then
-            if rec.labelNorm == normalized or rec.titleNorm == normalized then score = score + 260 end
+            if rec.labelNorm == normalized or rec.titleNorm == normalized then
+                -- SearchClauseScore pays an exact/prefix label bonus per clause, so a
+                -- short label that nails one clause accumulates more than a record
+                -- whose entire label is the query. "Status indicator size" lost every
+                -- slot to sliders simply labelled "Size" on the same page. A whole
+                -- label match has to scale with the clause count to stay ahead.
+                score = score + 260 + 220 * #clauses
+            end
             if rec.labelNorm:find(normalized, 1, true) == 1 then score = score + 130 end
             if rec.haystack and rec.haystack:find(normalized, 1, true) then score = score + 80 end
             if rec.kind == "section" then score = score + 70 end
@@ -1837,6 +1607,9 @@ local function ScheduleSearchInputQuery(searchBox, query, openPage, onComplete)
 
     local function RunLatest()
         if serial ~= SEARCH_STATE.inputSerial then return end
+        -- Combat can start inside the debounce window. Drop the pending query
+        -- instead of running it against a locked-down UI.
+        if SearchCombatLocked() then return end
         if searchBox and searchBox.GetText then
             local latest = TrimText(searchBox:GetText() or "")
             if latest ~= query then return end
@@ -1898,7 +1671,6 @@ Search._CoreAPI = {
     CancelSearchBackgroundIndex = CancelSearchBackgroundIndex,
     ClearSearchLocaleCaches = ClearSearchLocaleCaches,
     ClearSearchRegistryPage = ClearSearchRegistryPage,
-    HiddenPageIndexEnabled = SearchHiddenPageIndexEnabled,
     MarkSearchIndexDirty = MarkSearchIndexDirty,
     OpenSearchResults = OpenSearchResults,
     OpenSearchTarget = OpenSearchTarget,

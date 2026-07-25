@@ -50,7 +50,12 @@ Contains(searchPalette, 'clickOff:UnregisterEvent("GLOBAL_MOUSE_DOWN")', "hidden
 assert(not nav:find("searchPalette:IsMouseOver()", 1, true),
     "edit-box focus loss can still close the palette before a result receives mouse-up")
 Contains(nav, 'SetScript("OnArrowPressed"', "keyboard result selection is missing")
-Contains(search, 'M.searchPaletteActive == true', "lazy hidden-page indexing stops when the palette is open")
+-- Hidden-page indexing is gone: the index no longer builds pages to discover
+-- controls, it reads the generated inventory. The palette-open guard that used to
+-- pause that work has nothing left to pause.
+assert(not search:find("BuildPageEntry", 1, true),
+    "search builds menu pages again instead of reading the generated static index")
+Contains(search, "AddStaticIndexSearchRecords", "search no longer merges the generated control inventory")
 Contains(search, 'rec.key == activeKey', "results on the current page are no longer ranked first")
 Contains(search, 'normalized:find("can you", 1, true)', "English change requests do not promote to the Assistant")
 Contains(search, 'normalized:find("kannst du", 1, true)', "German change requests do not promote to the Assistant")
