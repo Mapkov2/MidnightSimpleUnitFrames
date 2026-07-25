@@ -37,6 +37,7 @@ local data = {
                     bullets = {
                         "Opening search for the first time no longer pauses the game to harvest every page: the shipped index replaces an on-demand rebuild that could take over a second the first time search was used.",
                         "Search is now fully quiescent in combat. The query itself was already blocked, but the paths around it were not: reading the record set drained deferred menu sections and decoded the index, and the results page rebuilt itself on refresh. All of it now waits until combat ends.",
+                        "Pasting a raw settings key such as gf_party.hpTextMode into search works again. Those queries used to resolve through the retired on-demand index; the baked index has no camelCase tokens and a key's scope prefix names the provider rather than the control, so search now strips the prefix and splits the camelCase before matching. Typed text is never touched.",
                     },
                 },
             },
