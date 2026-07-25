@@ -136,8 +136,8 @@ builders.ALT_MANA = function(E)
         if not curSecret and cur == nil then cur = 0 end
         if not maxSecret and mx == nil then mx = 100 end
 
-        local rangeInterp = _cpDB.altManaSmooth and not maxSecret and SMOOTH_INTERP or nil
-        local valueInterp = _cpDB.altManaSmooth and not curSecret and SMOOTH_INTERP or nil
+        local rangeInterp = _cpDB.altManaSmooth and SMOOTH_INTERP or nil
+        local valueInterp = rangeInterp
         if maxSecret or AM._maxValue ~= mx then
             if rangeInterp then AM.bar:SetMinMaxValues(0, mx, rangeInterp) else AM.bar:SetMinMaxValues(0, mx) end
             if maxSecret then AM._maxValue = nil else AM._maxValue = mx end

@@ -172,6 +172,31 @@ K.POWER_TYPE_TOKENS = {
 }
 
 K.MAX_CLASS_POWER = 10
+
+--- Devourer Demon Hunter segment count.
+--- Blizzard's own bar (DemonHunterSoulFragmentsBar:GetCurrentMinMaxPower) reads
+--- an integer maximum: the collapsing star cost inside Void Metamorphosis, Dark
+--- Heart's max cumulative applications outside it. Returning 1 means "not
+--- usable as a segment count" and keeps the caller on the normalized
+--- single-bar rendering, which is what older clients and secret-value states
+--- get. The meta state is passed in because every caller already knows it.
+function K.ResolveDevourerSegments(inMeta, notSecret)
+    local raw
+    if inMeta then
+        local cost = _G.GetCollapsingStarCost
+        raw = (type(cost) == "function") and cost() or nil
+    else
+        local C_Spell = _G.C_Spell
+        local spellMax = C_Spell and C_Spell.GetSpellMaxCumulativeAuraApplications
+        raw = (type(spellMax) == "function") and spellMax(K.CPK.SPELL.DARK_HEART) or nil
+    end
+    if type(notSecret) == "function" and not notSecret(raw) then return 1 end
+    raw = math.floor((tonumber(raw) or 0) + 0.5)
+    if raw < 2 then return 1 end
+    if raw > K.MAX_CLASS_POWER then return K.MAX_CLASS_POWER end
+    return raw
+end
+
 K.CDM_FRAMES = {
     cooldown      = "EssentialCooldownViewer",
     utility       = "UtilityCooldownViewer",

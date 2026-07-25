@@ -20,6 +20,7 @@ $tests = @(
     ".github/scripts/tests/castbar_fill_stretch_contract_smoke.lua",
     "tools/castbar_native_manager_smoke.lua",
     "tools/castbar_refresh_ownership_smoke.lua",
+    "tools/classpower_devourer_pips_smoke.lua",
     "tools/classpower_native_duration_smoke.lua",
     "tools/classpower_smooth_runtime_smoke.lua",
     ".github/scripts/tests/smoothing_opt_in_defaults_smoke.lua",

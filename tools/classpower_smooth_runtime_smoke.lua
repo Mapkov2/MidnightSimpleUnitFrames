@@ -7,6 +7,11 @@ _G.MSUF_NS = {
     end,
 }
 
+--- Modes captures issecretvalue at load time for the value-write dedupe.
+--- Every secret sentinel in this smoke is a plain Lua table, so tables count
+--- as secret; the PlayerHP section narrows this to its own sentinels later.
+_G.issecretvalue = function(v) return type(v) == "table" end
+
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/ClassPower/MSUF_CP_Modes.lua"))()
 
 local smoothToken = 73
@@ -56,8 +61,8 @@ local secretBars = {}
 for i = 1, 2 do
     secretBars[i] = {
         SetValue = function(_, v, interp)
-            assert(v == secretPower and interp == nil,
-                "secret segmented power must use immediate native StatusBar writes")
+            assert(v == secretPower and interp == smoothToken,
+                "secret segmented power must keep native interpolation")
         end,
         SetMinMaxValues = function(_, lo, hi)
             secretRanges[i] = { lo, hi }
@@ -89,8 +94,8 @@ assert(segmentedAutoHideCalls == 1 and segmentedAutoHideCur == nil and segmented
 local fractionalRange
 local fractionalBar = {
     SetValue = function(_, v, interp)
-        assert(v == secretPower and interp == nil,
-            "secret fractional power must use immediate native StatusBar writes")
+        assert(v == secretPower and interp == smoothToken,
+            "secret fractional power must keep native interpolation")
     end,
     SetMinMaxValues = function(_, lo, hi) fractionalRange = { lo, hi } end,
     SetAlpha = function() end,
@@ -358,8 +363,8 @@ altCurrent, altMax = secretAltCurrent, secretAltMax
 alt.AM_UpdateValue()
 assert(altCalls.lastValue == secretAltCurrent and altCalls.hi == secretAltMax,
     "secret Alternative Mana values must still reach the native StatusBar")
-assert(altCalls.valueInterp == nil and altCalls.rangeInterp == nil,
-    "secret Alternative Mana value/range writes must be immediate")
+assert(altCalls.valueInterp == smoothToken and altCalls.rangeInterp == smoothToken,
+    "secret Alternative Mana value/range writes must keep native interpolation")
 assert(am._currentValue == nil and am._maxValue == nil,
     "secret Alternative Mana values must not enter comparison caches")
 
@@ -406,8 +411,8 @@ local playerHP = assert(_G.MSUF_CP_CORE_BUILDERS.PLAYER_HP)({
 playerHP.Update("UNIT_HEALTH")
 assert(playerHPCalls.value == secretHP and playerHPCalls.hi == secretMaxHP,
     "secret Player HP values must still reach the native StatusBar fallback")
-assert(playerHPCalls.interp == nil and playerHPBar._msufInterpolating == nil,
-    "secret Player HP fallback must cancel interpolation and write immediately")
+assert(playerHPCalls.interp == smoothToken and playerHPBar._msufInterpolating == true,
+    "secret Player HP fallback lost configured smooth interpolation")
 assert(playerHPState._hp == nil and playerHPState._maxHP == nil,
     "secret Player HP values must not enter comparison caches")
 

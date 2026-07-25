@@ -1031,7 +1031,7 @@ builders.PLAYER_HP = function(E)
             if common and type(common.SetBarValueKnown) == "function" then
                 common.SetBarValueKnown(PHP.bar, hp, hpSecret, true)
             else
-                local interp = not hpSecret and PHP.bar._msufSmoothInterp or nil
+                local interp = PHP.bar._msufSmoothInterp
                 if interp then
                     PHP.bar:SetValue(hp, interp)
                     PHP.bar._msufInterpolating = true
