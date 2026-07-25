@@ -259,12 +259,17 @@ local cases = {
     { input = "where are support links", status = "navigated", contains = "MSUF support links" },
     { input = "where is changelog", status = "navigated", contains = "Opened Dashboard changelog" },
     { input = "search spell indicator growth", status = "info", contains = "Set Group Spell Indicator Aura" },
-    { input = "search spell indicator anchor", status = "info", contains = "Group Status & Indicators" },
+    -- Spell indicators kept enabled/layer/spec when the targeted variants were
+    -- removed; there is no anchor control to find any more, so Layer is what
+    -- proves the page is still reachable by property name.
+    { input = "search spell indicator layer", status = "info", contains = "Group Status & Indicators" },
     { input = "search spell indicator tint alpha", status = "info", contains = "Set Group Spell Indicator Aura" },
     { input = "anchor class resources player power to class resource", status = "applied", contains = "Player Detached Power Bar Anchors to Class Resource" },
     { input = "sync class resources player power width", status = "unchanged", contains = "Player Detached Power Bar Syncs to Class Resource Width" },
     { input = "search class resources player power width", status = "info", contains = "Player Detached Power Bar Width" },
-    { input = "search class resources player power bar texture", status = "info", contains = "Detached Power Bar Foreground Texture" },
+    -- The detached power textures were retired; the Player page's own power
+    -- texture owns the detached bar's art now.
+    { input = "search class resources player power bar texture", status = "info", contains = "Player Power Texture" },
     { input = "set class resources player power width to 300", status = "applied", contains = "Player Detached Power Bar Width" },
     { input = "i want to change target width to 300", status = "applied", contains = "Target Width" },
     { input = "i am trying to change target width to 300", status = "unchanged", contains = "Target Width" },
@@ -273,7 +278,9 @@ local cases = {
     { input = "search unit text size", status = "info", contains = "HP Font Size" },
     { input = "search global font outline", status = "info", contains = "Shared Font Outline" },
     { input = "search global font monochrome", status = "info", contains = "Shared Rendering" },
-    { input = "search shared font shadow strength", status = "info", contains = "Shared Shadow Strength" },
+    -- fontShadowStrength is now presented as the legacy preset, with Opacity
+    -- and Distance as the current controls.
+    { input = "search shared font shadow strength", status = "info", contains = "Shared Legacy Shadow Preset" },
     { input = "search global bar right absorb", status = "info", contains = "Absorb Bar Anchor" },
     { input = "search global bar absorb color", status = "info", contains = "Absorb Bar Color" },
     { input = "search global bar right color", status = "info", contains = "Bar Gradient Direction" },

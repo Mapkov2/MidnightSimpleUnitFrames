@@ -177,7 +177,10 @@ local coverageProbes = {
     { "coverage combat timer page", "search combat timer anchor", "Combat Timer Anchor - Gameplay" },
     { "coverage class resources player hp page", "search class resources player hp height", "Class Resources Player HP Height - Class Resources" },
     { "coverage alternative mana page", "search alternative mana height", "Alternative Mana Height - Class Resources" },
-    { "coverage detached power page", "search detached power bar texture", "Detached Power Bar Foreground Texture - Class Resources" },
+    -- The detached power textures were retired; the unit page's own power
+    -- texture owns that art now. Class Resources kept the shape outline, so
+    -- that is what proves this page is still searchable.
+    { "coverage detached power page", "search detached power bar outline", "Detached Power Bar Outline - Class Resources" },
     { "coverage dashboard scaling page", "search menu scale", "MSUF Menu Scale - Dashboard" },
     { "coverage unit status page", "search status icons midnight style", "Status Icons Use Midnight Style - Player" },
     { "coverage totem page", "search totem frame icon size", "Totem Frame Icon Size - Gameplay" },
