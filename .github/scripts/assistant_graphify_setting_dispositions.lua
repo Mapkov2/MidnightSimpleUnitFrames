@@ -149,7 +149,9 @@ Profile.ExportKind
 Profile.GetSpecProfile
 Profile.KindLabels
 Profile.List
+Profile.NewCharacterProfile
 Profile.ProfileExists
+Profile.SetNewCharacterProfile
 Profile.Refresh
 Profile.ResolveProfileName
 Profile.ResolveSpecID
@@ -179,8 +181,11 @@ bars.classPower
 bars.classPowerFullColorEnabled
 bars.classPowerSlotColorModes
 bars.classPowerTextOffset
+bars._msufDetachedPowerBorderMigrated_v1
 bars.cpCond
 bars.cpSound
+bars.detachedPowerBarBgTexture
+bars.detachedPowerBarTexture
 bars.highlightBorderThickness
 bars.playerHPBar
 bars.powerBarBgMatchBarColor
@@ -232,6 +237,7 @@ general.aggroBorderG
 general.aggroBorderR
 general.barBackgroundAlpha
 general.barBgTexture
+general.castbarNativeTimer
 general.barBorderA
 general.barBorderB
 general.barBorderG
