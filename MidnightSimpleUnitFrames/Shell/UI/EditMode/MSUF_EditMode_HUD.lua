@@ -588,7 +588,10 @@ local HELP_KEYS = {
     "CDM & Anchor", "Copy Settings", "Exit Edit Mode", "Discard", "Edit Mode", "Groups", "Frames",
     "Position", "Toolbar position", "Top", "Bottom", "Left", "Right", "Snap to screen edge",
     "Auto-hide", "Edge offset", "Drag the six-dot handle to move and dock the toolbar.",
-    "Dock the Edit Mode toolbar at any screen edge.", "Open settings for the selected frame or group.",
+    "Dock the Edit Mode toolbar at any screen edge.",
+    "Pick the frame or group to edit, including ones hidden behind another frame.",
+    "Choose which frame's settings page to open.",
+    "Selected", "No frames to select",
 }
 
 local EN_HELP = (type(MSUF) == "table" and MSUF.LocaleRegistry and MSUF.LocaleRegistry.enUS) or {}
@@ -674,6 +677,209 @@ local function RefreshDockContext(key)
     if btn._msufContextText == text then return end
     btn._msufContextText = text
     btn._label:SetText(text)
+end
+
+--- Frame picker
+---
+--- Clicking a mover is the normal way to select something, but a frame that sits
+--- underneath another one cannot be clicked at all - which leaves the user with no
+--- way to move it back out. The toolbar's context button therefore opens this list
+--- of every placeable element, so selection never depends on hitting a mover.
+local PICKER_ROW_H = 24
+local PICKER_WIDTH = 190
+
+--- Rows for the picker: everything the Edit Mode registry can currently place.
+--- Elements without a live frame have no mover on screen, so listing them would
+--- offer a selection that cannot go anywhere.
+local function FramePickerRows()
+    local registry = EM2.Registry
+    local rows = {}
+    if not (registry and registry.Order) then return rows end
+    local selected = CurrentSelectionKey()
+    local keys = registry.Order()
+    for i = 1, #keys do
+        local key = keys[i]
+        local cfg = registry.Get and registry.Get(key)
+        local frame = cfg and cfg.getFrame and cfg.getFrame()
+        local enabled = not (cfg and cfg.isEnabled) or cfg.isEnabled() ~= false
+        if cfg and frame and enabled then
+            rows[#rows + 1] = {
+                key = key,
+                label = HelpText(cfg.label or LABEL_BY_KEY[key] or key),
+                selected = key == selected,
+            }
+        end
+    end
+    return rows
+end
+
+local function SelectFrameFromPicker(key)
+    if BlockHUDConfigLocked() then return end
+    if not key then return end
+    if EM2.State and EM2.State.SetUnitKey then EM2.State.SetUnitKey(key) end
+    if EM2.Focus and EM2.Focus.SetSelection then
+        EM2.Focus.SetSelection(key, nil, nil, { source = "hud-picker" })
+    end
+    --- Anchoring to the mover puts the popup next to the frame it edits, exactly
+    --- like clicking the mover would.
+    local mover = EM2.Movers and EM2.Movers.Get and EM2.Movers.Get(key)
+    if EM2.Popups and EM2.Popups.Open then EM2.Popups.Open(key, mover) end
+    if EM2.Focus and EM2.Focus.Pulse then
+        EM2.Focus.Pulse(key, "frame", nil, { source = "hud-picker", duration = 0.32 })
+    end
+    HUD.SetStatus(HelpText("Selected") .. " " .. HelpText(LABEL_BY_KEY[key] or key), "ok")
+    HUD.RefreshControls()
+end
+
+--- The inspector row's picker: jump straight into a frame's settings page and do
+--- nothing else. No mover popup, no pulse - this is pure menu navigation, which is
+--- what the row's chevron has always advertised.
+local function OpenSettingsForKey(key)
+    if BlockHUDConfigLocked() then return end
+    if not key then return end
+    if EM2.Focus and EM2.Focus.SetSelection then
+        EM2.Focus.SetSelection(key, nil, nil, { source = "hud-menu-picker", openSettings = true })
+    end
+    local opener = (EM2.Focus and EM2.Focus.OpenFullSettings) or _G.MSUF_EM2_OpenFocusSettings
+    if type(opener) == "function" and opener() then
+        HUD.SetStatus(HelpText("Opened settings"), "ok")
+    else
+        HUD.SetStatus(HelpText("Settings unavailable"), "warn")
+    end
+    HUD.RefreshControls()
+end
+
+local function PositionFramePicker(picker, btn)
+    picker:ClearAllPoints()
+    local dock = EnsureDockState().dock
+    if dock == "BOTTOM" then
+        picker:SetPoint("BOTTOM", btn, "TOP", 0, 4)
+    elseif dock == "LEFT" then
+        picker:SetPoint("TOPLEFT", btn, "TOPRIGHT", 6, 0)
+    elseif dock == "RIGHT" then
+        picker:SetPoint("TOPRIGHT", btn, "TOPLEFT", -6, 0)
+    else
+        picker:SetPoint("TOP", btn, "BOTTOM", 0, -4)
+    end
+end
+
+--- One list frame serves both dropdowns; the owning button and the action to run
+--- are set per open, so the toolbar picker and the inspector menu picker cannot be
+--- on screen at once and share all chrome.
+local function EnsureFramePicker()
+    if DockUI.framePicker then return DockUI.framePicker end
+    local picker = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+    picker:SetFrameStrata("TOOLTIP")
+    picker:SetFrameLevel(960)
+    picker:SetClampedToScreen(true)
+    picker:EnableMouse(true)
+    picker:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1,
+                         insets = { left = 1, right = 1, top = 1, bottom = 1 } })
+    picker:SetBackdropColor(TH.r1Bg[1], TH.r1Bg[2], TH.r1Bg[3], 0.98)
+    picker:SetBackdropBorderColor(TH.edge[1], TH.edge[2], TH.edge[3], 0.90)
+    picker:Hide()
+    picker._rows = {}
+    --- Close once the pointer has left both the button and the list, the same
+    --- forgiving behaviour the quick popups use for their small menus.
+    picker:SetScript("OnUpdate", function(self)
+        if not self:IsShown() then return end
+        local owner = self._owner
+        if (owner and owner:IsMouseOver()) or self:IsMouseOver() then
+            self._closeAt = nil
+        elseif not self._closeAt then
+            self._closeAt = GetTime() + 0.4
+        elseif GetTime() >= self._closeAt then
+            self:Hide()
+        end
+    end)
+    DockUI.framePicker = picker
+    return picker
+end
+
+local function BuildFramePickerRows(picker)
+    local rows = FramePickerRows()
+    local widgets = picker._rows
+    for i = 1, #rows do
+        local data = rows[i]
+        local item = widgets[i]
+        if not item then
+            item = CreateFrame("Button", nil, picker)
+            item:SetSize(PICKER_WIDTH - 6, PICKER_ROW_H)
+            item._bg = item:CreateTexture(nil, "BACKGROUND")
+            item._bg:SetAllPoints()
+            item._fs = MakeFS(item, "caption", TH.textR, TH.textG, TH.textB, 0.94)
+            --- Both edges anchored plus no wrapping: a long localized label is
+            --- truncated inside its row instead of spilling out of the list.
+            item._fs:SetPoint("LEFT", item, "LEFT", 9, 0)
+            item._fs:SetPoint("RIGHT", item, "RIGHT", -8, 0)
+            item._fs:SetJustifyH("LEFT")
+            item._fs:SetWordWrap(false)
+            local hl = item:CreateTexture(nil, "HIGHLIGHT")
+            hl:SetAllPoints()
+            hl:SetColorTexture(TH.onR, TH.onG, TH.onB, 0.18)
+            item:SetScript("OnClick", function(self)
+                local action = picker._onPick
+                picker:Hide()
+                if action then action(self._msufKey) end
+            end)
+            widgets[i] = item
+        end
+        item:SetPoint("TOPLEFT", picker, "TOPLEFT", 3, -(3 + (i - 1) * PICKER_ROW_H))
+        item._msufKey = data.key
+        item._fs:SetText(data.label)
+        if data.selected then
+            item._bg:SetColorTexture(TH.onR, TH.onG, TH.onB, 0.16)
+            item._fs:SetTextColor(TH.onR, TH.onG, TH.onB, 1)
+        else
+            item._bg:SetColorTexture(0, 0, 0, 0)
+            item._fs:SetTextColor(TH.textR, TH.textG, TH.textB, 0.94)
+        end
+        item:Show()
+    end
+    for i = #rows + 1, #widgets do widgets[i]:Hide() end
+    picker:SetSize(PICKER_WIDTH, math.max(PICKER_ROW_H, #rows * PICKER_ROW_H) + 6)
+    return #rows
+end
+
+local function TogglePicker(owner, onPick)
+    if not owner then return end
+    local picker = EnsureFramePicker()
+    --- Clicking the button that already owns the open list closes it; clicking the
+    --- other one hands the list over instead of stacking a second menu.
+    if picker:IsShown() then
+        picker:Hide()
+        if picker._owner == owner then return end
+    end
+    picker._owner, picker._onPick = owner, onPick
+    if BuildFramePickerRows(picker) == 0 then
+        HUD.SetStatus(HelpText("No frames to select"), "warn")
+        return
+    end
+    picker._closeAt = nil
+    PositionFramePicker(picker, owner)
+    picker:Show()
+end
+
+--- Deliberately reached through HUD rather than file-scope locals: the toolbar
+--- builder and the refresh path are both close to the Lua 5.1 upvalue ceiling, and
+--- every new local they capture counts against it.
+function HUD.ToggleFramePicker()
+    TogglePicker(DockUI.contextBtn, SelectFrameFromPicker)
+end
+
+--- The inspector row's chevron: choose which settings page to open, nothing else.
+function HUD.ToggleMenuPicker()
+    TogglePicker(DockUI.inspectorSelection, OpenSettingsForKey)
+end
+
+--- Re-renders the open list so its highlight follows the current selection.
+function HUD.RefreshFramePicker()
+    local picker = DockUI.framePicker
+    if picker and picker:IsShown() then BuildFramePickerRows(picker) end
+end
+
+function HUD.CloseFramePicker()
+    if DockUI.framePicker then DockUI.framePicker:Hide() end
 end
 
 local function ApplyButtonRole(btn, role)
@@ -796,7 +1002,12 @@ end
 SetDockExpanded = function(expanded)
     if not hudFrame then return end
     local state = EnsureDockState()
-    if not state.autoHide or expanded or DockMouseOver(DockUI.positionPopup) then
+    --- Both dropdowns hang off UIParent, so the pointer sitting in one of them no
+    --- longer counts as hovering the toolbar. Without this the dock fades out from
+    --- under an open list.
+    if not state.autoHide or expanded
+        or DockMouseOver(DockUI.positionPopup) or DockMouseOver(DockUI.framePicker)
+    then
         hudFrame:SetAlpha(1)
         if row2Frame and hudFrame:IsShown() then row2Frame:Show() end
     else
@@ -816,7 +1027,11 @@ ScheduleDockAutoHide = function()
         if generation ~= autoHideGeneration then return end
         if not (hudFrame and hudFrame:IsShown()) then return end
         if InCombatLockdown and InCombatLockdown() then return end
-        if DockMouseOver(hudFrame) or DockMouseOver(row2Frame) or DockMouseOver(DockUI.positionPopup) then return end
+        if DockMouseOver(hudFrame) or DockMouseOver(row2Frame)
+            or DockMouseOver(DockUI.positionPopup) or DockMouseOver(DockUI.framePicker)
+        then
+            return
+        end
         SetDockExpanded(false)
     end)
 end
@@ -1389,7 +1604,7 @@ local function EnsureHUD()
     DockUI.title:SetText(HelpText("Edit Mode"))
 
     DockUI.contextBtn = MakeBtn(hudFrame, "Groups", 96, BTN_H, "caption", function()
-        HUD.OpenSelectedSettings()
+        HUD.ToggleFramePicker()
     end)
     if DockUI.contextBtn._label then
         DockUI.contextBtn._label:ClearAllPoints()
@@ -1400,7 +1615,7 @@ local function EnsureHUD()
     local contextChevron = MakeFS(DockUI.contextBtn, "micro", TH.mutedR, TH.mutedG, TH.mutedB, 0.88)
     contextChevron:SetPoint("RIGHT", DockUI.contextBtn, "RIGHT", -7, 1)
     contextChevron:SetText("v")
-    SetTip(DockUI.contextBtn, "Open settings for the selected frame or group.")
+    SetTip(DockUI.contextBtn, "Pick the frame or group to edit, including ones hidden behind another frame.")
 
     --- Guided help remains available, but no longer dominates the toolbar.
     helpBtn = CreateFrame("Button", nil, hudFrame, "BackdropTemplate")
@@ -1667,8 +1882,8 @@ local function EnsureHUD()
     local selectionHL = DockUI.inspectorSelection:CreateTexture(nil, "HIGHLIGHT")
     selectionHL:SetAllPoints()
     selectionHL:SetColorTexture(TH.onR, TH.onG, TH.onB, 0.10)
-    DockUI.inspectorSelection:SetScript("OnClick", function() HUD.OpenSelectedSettings() end)
-    SetTip(DockUI.inspectorSelection, "Open settings for the selected frame or component.")
+    DockUI.inspectorSelection:SetScript("OnClick", function() HUD.ToggleMenuPicker() end)
+    SetTip(DockUI.inspectorSelection, "Choose which frame's settings page to open.")
 
     selectionFS = MakeFS(DockUI.inspectorSelection, "caption", TH.textR, TH.textG, TH.textB, 0.92)
     selectionFS:SetPoint("LEFT", DockUI.inspectorSelection, "LEFT", 12, 0)
@@ -1787,6 +2002,9 @@ function HUD.RefreshControls(force)
         end
     end
     RefreshDockContext(key)
+    --- Keep the open list's highlight on whatever is selected now, even when the
+    --- selection changed through a mover click instead of the list itself.
+    HUD.RefreshFramePicker()
     if hintFS then
         local now = GetTime and GetTime() or 0
         if InCombatLockdown and InCombatLockdown() then
@@ -1882,6 +2100,7 @@ function HUD.Hide()
     if helpBtn and helpBtn._pulse then helpBtn._pulse:Stop() end
     if row2Frame then row2Frame:Hide() end; if hudFrame then hudFrame:Hide() end
     if DockUI.positionPopup then DockUI.positionPopup:Hide() end
+    HUD.CloseFramePicker()
     autoHideGeneration = autoHideGeneration + 1
 end
 

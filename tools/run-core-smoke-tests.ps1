@@ -67,6 +67,7 @@ $tests = @(
     ".github/scripts/tests/unit_info_tooltip_secret_smoke.lua",
     "tools/text_lazy_sinks_smoke.lua",
     "tools/uf_notify_config_refresh_smoke.lua",
+    ".github/scripts/tests/editmode_frame_picker_smoke.lua",
     "tools/unit_copy_coverage_smoke.lua",
     "tools/unit_event_routing_smoke.lua",
     "tools/value_source_hotpath_smoke.lua",
