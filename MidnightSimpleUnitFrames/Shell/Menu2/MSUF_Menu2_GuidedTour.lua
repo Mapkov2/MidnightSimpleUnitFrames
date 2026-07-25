@@ -73,9 +73,9 @@ local STAGES = {
         impact = "Skipping keeps the current Player power text.",
     },
     {
-        id = "uf_player_portrait", pageKey = "uf_player", icon = "uf_player", area = "unitframes", title = "Shape the Player portrait",
-        includeSections = { portrait = true }, controlLimit = 4,
-        controlPaths = { "unit/portrait/enabled", "unit/portrait/position", "unit/portrait/portraitrender", "unit/portrait/portraitshape" },
+        id = "uf_player_portrait", pageKey = "uf_player", icon = "uf_player", area = "unitframes", title = "Set up the Player portrait",
+        includeSections = { portrait = true }, prepareSection = "portrait", prepareTab = "general", prepareState = "unitPortraitTabSelection", controlLimit = 3,
+        controlPaths = { "unit/portrait/enabled", "unit/portrait/position", "unit/portrait/portraitrender" },
         impact = "Skipping keeps the current Player portrait.",
     },
     {

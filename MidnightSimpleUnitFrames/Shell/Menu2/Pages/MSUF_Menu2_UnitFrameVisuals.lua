@@ -92,57 +92,61 @@ local function PortraitClassStyleValues()
     return values
 end
 local NormalizePortraitClassStyle = M.NormalizePortraitClassStyle
-local PORTRAIT_STACK_THRESHOLD = 680
 -- Card heights. BuildPortrait and PortraitLayoutForWidth must agree on these, so
 -- both read them from here instead of repeating literals.
 local PORTRAIT_CARD_H = { main = 224, geometry = 494, placement = 382, border = 380, style = 220 }
-local function PortraitLayoutForWidth(sectionWidth)
-    sectionWidth = tonumber(sectionWidth) or 720
-    if sectionWidth < PORTRAIT_STACK_THRESHOLD then
-        local cardW = max(260, sectionWidth - 32)
-        return {
-            stacked = true,
-            height = 1878,
-            leftX = 16,
-            rightX = 16,
-            leftW = cardW,
-            rightW = cardW,
-            mainY = -38,
-            geometryY = -278,
-            placementY = -788,
-            borderY = -1186,
-            styleY = -1582,
-        }
+local PORTRAIT_TAB_HEIGHTS = {
+    general = PORTRAIT_CARD_H.main + 116,
+    geometry = PORTRAIT_CARD_H.geometry + 116,
+    placement = PORTRAIT_CARD_H.placement + 116,
+    border = PORTRAIT_CARD_H.border + 116,
+    advanced = PORTRAIT_CARD_H.style + 116,
+}
+local function NormalizePortraitTabKey(key)
+    if key ~= "general" and key ~= "geometry" and key ~= "placement" and key ~= "border" and key ~= "advanced" then
+        key = "general"
     end
-    local cardGap = 28
-    local leftX = 16
-    local leftW = floor((sectionWidth - 48 - cardGap) * 0.5)
-    leftW = max(310, min(430, leftW))
-    local rightX = leftX + leftW + cardGap
-    local rightW = max(310, min(430, sectionWidth - rightX - 16))
+    return key
+end
+local function CurrentPortraitTab(unit)
+    if unit == nil then return "general" end
+    M.unitPortraitTabSelection = M.unitPortraitTabSelection or {}
+    local key = NormalizePortraitTabKey(M.unitPortraitTabSelection[unit])
+    M.unitPortraitTabSelection[unit] = key
+    return key
+end
+local function PortraitTabHeight(tab)
+    return PORTRAIT_TAB_HEIGHTS[NormalizePortraitTabKey(tab)] or PORTRAIT_TAB_HEIGHTS.general
+end
+local function PortraitTabValues(sectionWidth)
+    if (tonumber(sectionWidth) or 720) < 700 then
+        return VT("general", "General", "placement", "Place", "geometry", "Size", "border", "Border", "advanced", "More")
+    end
+    return VT(
+        "general", "General",
+        "placement", "Placement",
+        "geometry", "Size & Zoom",
+        "border", "Shape & Border",
+        "advanced", "More Options")
+end
+local function PortraitLayoutForWidth(sectionWidth, tab)
+    sectionWidth = tonumber(sectionWidth) or 720
     return {
-        stacked = false,
-        height = 1100,
-        leftX = leftX,
-        rightX = rightX,
-        leftW = leftW,
-        rightW = rightW,
-        mainY = -38,
-        geometryY = -38,
-        placementY = -278,
-        borderY = -684,
-        styleY = -556,
+        height = PortraitTabHeight(tab),
+        cardX = 16,
+        cardW = max(260, min(620, sectionWidth - 32)),
+        tabW = max(260, min(780, sectionWidth - 40)),
     }
 end
 UP.PortraitLayoutForWidth = PortraitLayoutForWidth
 
 local function BuildPortrait(ctx, builder, unit)
-    local layout = PortraitLayoutForWidth((ctx and ctx.width) or 720)
+    local layout = PortraitLayoutForWidth((ctx and ctx.width) or 720, CurrentPortraitTab(unit))
     local sec = builder:CollapsibleSection("portrait", "Portrait", layout.height, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
-    layout = PortraitLayoutForWidth(sectionW)
-    local leftX, rightX = layout.leftX, layout.rightX
-    local leftW, rightW = layout.leftW, layout.rightW
+    layout = PortraitLayoutForWidth(sectionW, CurrentPortraitTab(unit))
+    local leftX, rightX = layout.cardX, layout.cardX
+    local leftW, rightW = layout.cardW, layout.cardW
     local RefreshPortraitControls = M.RefreshProxy()
     local function PortraitControlMeta(path, settingKey)
         local meta = ControlMeta(ctx, path)
@@ -188,11 +192,26 @@ local function BuildPortrait(ctx, builder, unit)
         return control
     end
     M._msuf2LastPortraitSide = M._msuf2LastPortraitSide or {}
-    local mainCard = W.ControlCard(sec, "Visibility & Mode", nil, leftX, layout.mainY, leftW, PORTRAIT_CARD_H.main)
-    local geometryCard = W.ControlCard(sec, "Geometry", nil, rightX, layout.geometryY, rightW, PORTRAIT_CARD_H.geometry)
-    local placementCard = W.ControlCard(sec, "Placement", nil, leftX, layout.placementY, leftW, PORTRAIT_CARD_H.placement)
-    local borderCard = W.ControlCard(sec, "Shape & Border", nil, leftX, layout.borderY, leftW, PORTRAIT_CARD_H.border)
-    local styleCard = W.ControlCard(sec, "Class & Background", nil, rightX, layout.styleY, rightW, PORTRAIT_CARD_H.style)
+    local function SetPortraitSectionHeight(height)
+        height = max(120, floor((tonumber(height) or PORTRAIT_TAB_HEIGHTS.general) + 0.5))
+        local entry = sec and sec._msuf2CollapsibleEntry
+        if sec and sec.SetHeight then sec:SetHeight(height) end
+        if entry then
+            local changed = entry.contentHeight ~= height
+            entry.contentHeight = height
+            if entry.body and entry.body.SetHeight then entry.body:SetHeight(height) end
+            if entry.outer and entry.outer.SetHeight then entry.outer:SetHeight((entry.headerHeight or 28) + (entry.open and height or 0)) end
+            if changed and entry.builder and entry.builder.RelayoutCollapsibles then entry.builder:RelayoutCollapsibles() end
+        end
+    end
+    local tabFrames = {}
+    local generalTab, geometryTab, placementTab, borderTab, advancedTab =
+        UnitSectionShared.MakeTabFrames(sec, -64, sectionW, tabFrames, "general", "geometry", "placement", "border", "advanced")
+    local mainCard = W.ControlCard(generalTab, "Visibility & Mode", nil, leftX, -4, leftW, PORTRAIT_CARD_H.main)
+    local geometryCard = W.ControlCard(geometryTab, "Geometry", nil, rightX, -4, rightW, PORTRAIT_CARD_H.geometry)
+    local placementCard = W.ControlCard(placementTab, "Placement", nil, leftX, -4, leftW, PORTRAIT_CARD_H.placement)
+    local borderCard = W.ControlCard(borderTab, "Shape & Border", nil, leftX, -4, leftW, PORTRAIT_CARD_H.border)
+    local styleCard = W.ControlCard(advancedTab, "Class & Background", nil, rightX, -4, rightW, PORTRAIT_CARD_H.style)
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(borderCard, { "portrait.border" }, {
             title = "Portrait Border Color",
@@ -204,6 +223,35 @@ local function BuildPortrait(ctx, builder, unit)
             note = "Configure the optional portrait background color.",
             historySource = "menu:unit-portrait-background-color",
         })
+    end
+    local portraitTabs, RefreshPortraitTabs, ReadPortraitTab, SetGuidedPortraitTab = W.SegmentTabs(ctx, sec, {
+        label = "",
+        values = PortraitTabValues(sectionW),
+        width = layout.tabW,
+        frames = tabFrames,
+        defaultTab = "general",
+        get = function() return CurrentPortraitTab(unit) end,
+        set = function(v)
+            M.unitPortraitTabSelection = M.unitPortraitTabSelection or {}
+            M.unitPortraitTabSelection[unit] = NormalizePortraitTabKey(v)
+        end,
+        afterRefresh = function(tab) SetPortraitSectionHeight(PortraitTabHeight(tab)) end,
+        x = 20,
+        y = -12,
+    })
+    if portraitTabs._msuf2Title then portraitTabs._msuf2Title:Hide() end
+    RegisterControl(portraitTabs, ctx, "portrait.workspace_tab", "Portrait area", "segment", "ephemeral")
+    sec._msuf2GuidedSelectTab = function(tab)
+        tab = NormalizePortraitTabKey(tab)
+        if type(ReadPortraitTab) == "function" and ReadPortraitTab() == tab then return true end
+        if type(SetGuidedPortraitTab) == "function" then
+            SetGuidedPortraitTab(tab)
+        else
+            M.unitPortraitTabSelection = M.unitPortraitTabSelection or {}
+            M.unitPortraitTabSelection[unit] = tab
+            if type(RefreshPortraitTabs) == "function" then RefreshPortraitTabs() end
+        end
+        return type(ReadPortraitTab) ~= "function" or ReadPortraitTab() == tab
     end
     local portraitEnable = W.SwitchAt(mainCard, "Portrait", leftW - 62, -24, 0, "HIDDEN")
     M.BindBoolWidget(ctx, portraitEnable,
@@ -1161,7 +1209,7 @@ local function BuildCastbar(ctx, builder, unit)
     }))
 end
 if type(UP.RegisterSection) == "function" then
-    UP.RegisterSection({ id = "portrait", title = "Portrait", height = function(ctx) return PortraitLayoutForWidth(ctx and ctx.width).height end, placement = "after_inline_text", order = 10, build = BuildPortrait })
+    UP.RegisterSection({ id = "portrait", title = "Portrait", height = function(ctx, _, unit) return PortraitLayoutForWidth(ctx and ctx.width, CurrentPortraitTab(unit)).height end, placement = "after_inline_text", order = 10, build = BuildPortrait })
     UP.RegisterSection({ id = "power", sectionId = "power_bar", title = "Power Bar", height = function(_, _, unit) return PowerSectionHeight(unit) end, placement = "after_inline_text", order = 20, units = POWER_UNITS, build = BuildPower })
     UP.RegisterSection({ id = "castbar", title = "Castbar", height = function(_, _, unit) return CastbarTabHeight(unit, CurrentCastbarTab(unit)) end, placement = "after_inline_text", order = 30, units = CASTBAR_UNITS, build = BuildCastbar })
 end

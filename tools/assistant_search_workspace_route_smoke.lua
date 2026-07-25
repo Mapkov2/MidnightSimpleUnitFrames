@@ -171,9 +171,9 @@ for _, scope in ipairs(declaredStyleScopes) do
     end
 end
 
--- Portrait cards must remain reachable in the minimum-width menu. The helper
--- is pure layout math, so load the page module with only its declaration-time
--- dependencies and exercise both responsive branches.
+-- Portrait workspaces must remain reachable in the minimum-width menu. The
+-- helper is pure layout math, so load the page module with only its
+-- declaration-time dependencies and exercise compact and wide tab layouts.
 local portraitNS = { MSUF2 = { Widgets = {}, UnitPage = {} } }
 portraitNS.MSUF2.ValueTextList = function() return {} end
 portraitNS.MSUF2.KeySetFromWords = function() return {} end
@@ -182,16 +182,30 @@ portraitNS.MSUF2.Pick = function() end
 assert(loadfile("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_UnitFrameVisuals.lua"))(
     "MidnightSimpleUnitFrames", portraitNS)
 local PortraitLayout = assert(portraitNS.MSUF2.UnitPage.PortraitLayoutForWidth)
-local compactLayout = PortraitLayout(434)
-assert(compactLayout.stacked == true and compactLayout.height > 612, "compact Portrait cards did not stack")
-assert(compactLayout.leftX + compactLayout.leftW <= 434 and compactLayout.rightX + compactLayout.rightW <= 434,
-    "compact Portrait cards extend outside the scroll content")
-assert(compactLayout.mainY > compactLayout.geometryY and compactLayout.geometryY > compactLayout.borderY
-    and compactLayout.borderY > compactLayout.styleY, "compact Portrait card order is not vertical")
-local wideLayout = PortraitLayout(1128)
-assert(wideLayout.stacked == false and wideLayout.height == 1100, "wide Portrait layout lost its two-column form")
-assert(wideLayout.leftX + wideLayout.leftW <= wideLayout.rightX
-    and wideLayout.rightX + wideLayout.rightW <= 1128, "wide Portrait cards overlap or overflow")
+local compactLayout = PortraitLayout(434, "general")
+assert(compactLayout.height == 340, "compact Portrait General tab has the wrong section height")
+assert(compactLayout.cardX + compactLayout.cardW <= 434 and compactLayout.tabW <= 434,
+    "compact Portrait tab or card extends outside the scroll content")
+local compactGeometry = PortraitLayout(434, "geometry")
+assert(compactGeometry.height == 610 and compactGeometry.cardW == compactLayout.cardW,
+    "compact Portrait Geometry tab lost its full card or stable width")
+local wideLayout = PortraitLayout(1128, "border")
+assert(wideLayout.height == 496 and wideLayout.cardW == 620 and wideLayout.tabW == 780,
+    "wide Portrait tab layout lost its bounded card or tab width")
+
+for _, row in ipairs({
+    { "player portrait render", "general" },
+    { "player portrait width override", "geometry" },
+    { "player portrait detached anchor point", "placement" },
+    { "player portrait border thickness", "border" },
+    { "player portrait background", "advanced" },
+    { "right", "placement", "player.portraitDetachedPoint" },
+    { "flat", "border", "player.portraitBorderArt" },
+}) do
+    local route = assert(routing.SearchRouteForTarget("uf_player", row[1], row[3] or ""), row[1])
+    assert(route.tables.unitPortraitTabSelection.player == row[2],
+        row[1] .. " did not route to Portrait tab " .. row[2])
+end
 
 -- Exercise real Search routing across a route-driven page rebuild. The exact
 -- descriptor must reacquire the new widget, and compact scrolling must reserve

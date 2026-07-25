@@ -3377,6 +3377,7 @@ L["Set up Party power text"] = "Настроить текст партийной
 L["Set up Player health text"] = "Настройка текста о состоянии здоровья игрока"
 L["Set up Player power text"] = "Настройка текста силы игрока"
 L["Set up the Player name"] = "Настройте имя игрока"
+L["Set up the Player portrait"] = "Настройте портрет игрока"
 L["Setting"] = "Настройка"
 L["Shaman - Elemental Maelstrom"] = "Шаман - Водоворот стихий"
 L["Shaman - Enhancement Maelstrom Weapon"] = "Шаман - Улучшение оружия Водоворота"

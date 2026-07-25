@@ -769,11 +769,37 @@ local function SearchRouteStatusTab(route, tableName, scope, normalized, advance
     if value then SearchRouteSetTable(route, tableName, scope, value) end
 end
 
+local function SearchRoutePortraitTab(route, unit, normalized)
+    if not SearchRouteHasAny(normalized, "portrait|class icon|avatar|face") then return end
+    local tab
+    if SearchRouteHasAny(normalized,
+        "class portrait style|class icon|portrait background|cast spell icon|portraitclassstyle|portraitbgenabled|portraitcastspellicon")
+    then
+        tab = "advanced"
+    elseif SearchRouteHasAny(normalized,
+        "shape|border|square|circle|rounded|diamond|portraitshape|portraitborderstyle|portraitborderart|portraitborderdirection|portraitborderthickness|portraitfillborder")
+    then
+        tab = "border"
+    elseif SearchRouteHasAny(normalized,
+        "placement|detached|attach to frame|anchor point|overlay alignment|layer offset|portrait opacity|portraitplacement|portraitdetachedpoint|portraitdetachedto|portraitoverlayalign|portraitleveloffset|portraitalpha")
+    then
+        tab = "placement"
+    elseif SearchRouteHasAny(normalized,
+        "size override|width override|height override|portrait x|portrait y|portrait zoom|zoom center|portraitsizeoverride|portraitwidth|portraitheight|portraitoffsetx|portraitoffsety|portraitzoom|portraitpanx|portraitpany")
+    then
+        tab = "geometry"
+    else
+        tab = "general"
+    end
+    SearchRouteSetTable(route, "unitPortraitTabSelection", unit, tab)
+end
+
 local function SearchRouteUnitPage(route, pageKey, normalized)
     local unit = SEARCH_UNIT_BY_PAGE[pageKey]
     if not unit then return end
     if SearchTextKindForText(normalized) then SearchRouteOpenAccordion(route, pageKey, "text") end
     SearchRouteTextState(route, "unitTextTabSelection", "unitTextSlotSelection", unit, normalized)
+    SearchRoutePortraitTab(route, unit, normalized)
     SearchRouteStatusTab(route, "unitStatusTabSelection", unit, normalized,
         "advanced status|status icon advanced|advanced x offset|advanced y offset|extended x offset|extended y offset|wide x offset|wide y offset",
         "status icons|status icon|indicator|level|raid group|group number|raid marker|leader|assist|elite|rare|dead|offline|combat icon|rested|incoming rez")
@@ -1051,7 +1077,11 @@ local function ScrollToSearchAnchor(pageKey, query, fallback, preferredAnchor, e
 end
 local function OpenSearchTarget(pageKey, query, fallback, preferredAnchor, route, exactTarget)
     if M.nav and M.nav.searchBox then M.nav.searchBox:ClearFocus() end
-    route = route or SearchRouteForTarget(pageKey, query, fallback)
+    local routingFallback = fallback
+    if type(exactTarget) == "table" and type(exactTarget.settingKey) == "string" then
+        routingFallback = tostring(fallback or "") .. " " .. exactTarget.settingKey
+    end
+    route = route or SearchRouteForTarget(pageKey, query, routingFallback)
     local routeChanged = ApplySearchRoute(pageKey, route)
     if routeChanged then preferredAnchor = nil end
     local selected = M.SelectPage(pageKey)

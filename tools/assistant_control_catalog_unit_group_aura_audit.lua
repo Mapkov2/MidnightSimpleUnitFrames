@@ -246,7 +246,7 @@ end
 -- Group Preview button, Group Layout transparency/bar controls,
 -- spell-indicator style controls, and the four explicit compact-preview
 -- controls added across Unit, Group, and Class Resources.
-Check(factorySites == 202, string.format("interactive factory inventory drifted: expected 202, got %d", factorySites))
+Check(factorySites == 203, string.format("interactive factory inventory drifted: expected 203, got %d", factorySites))
 
 local function AddUnique(list, seen, value)
     value = tostring(value or "")

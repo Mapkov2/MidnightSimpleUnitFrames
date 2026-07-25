@@ -14,7 +14,7 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local MENU_STATE_VERSION = 4
 local MENU_STATE_TABLE_FIELDS = M.WordList [[
-    accordionState previewPinState navHeaderState unitTextTabSelection unitTextSlotSelection
+    accordionState previewPinState navHeaderState unitTextTabSelection unitTextSlotSelection unitPortraitTabSelection
     unitStatusSelection unitStatusTabSelection gfTextTabSelection gfTextSlotSelection
     gfStatusIconTabSelection gfSpellMultiSpecSelection gfSpellIndicatorSelection
     collapseHintClickState
