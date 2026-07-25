@@ -147,6 +147,9 @@ local generatedNoMenuReview = CoverageDispositions.ValidateGeneratedNoMenuSettin
                 and type(setting.apply) == "function"
         end,
     })
+for _, key in ipairs(generatedNoMenuReview.unclassified or {}) do
+    print("GENERATED_NOMENU_UNCLASSIFIED	" .. tostring(key))
+end
 Check(generatedNoMenuReview.pass == true, string.format(
     "Generated no-Menu disposition gate failed: unclassified=%d stale=%d invalidEvidence=%d invalidOwners=%d staleKeys=%s",
     #generatedNoMenuReview.unclassified, #generatedNoMenuReview.stale,
@@ -219,10 +222,11 @@ for i = 1, nativeStages do
             .. tostring(stageId) .. " -> " .. tostring(page))
     end
 end
--- Forty reviewed native stages are the production baseline. Derive the live
--- count from STAGES so additions do not require an unrelated audit update,
--- while an accidental catalog collapse still fails closed.
-Check(nativeStages >= 40, "Native guided-tour stage matrix collapsed below the 40-stage baseline: got "
+-- Thirty-nine reviewed native stages are the production baseline since the
+-- Beta 29 tour refresh retargeted the 6.0 upgrade tour at 5.76 upgraders.
+-- Derive the live count from STAGES so additions do not require an unrelated
+-- audit update, while an accidental catalog collapse still fails closed.
+Check(nativeStages >= 39, "Native guided-tour stage matrix collapsed below the 39-stage baseline: got "
     .. tostring(nativeStages))
 Check(guidedTourSource:find("M.guidedTourStageCount = #STAGES", 1, true) ~= nil,
     "Native guided-tour runtime count is no longer derived from STAGES")
