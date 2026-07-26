@@ -9,8 +9,8 @@ end
 
 local data = {
     currentVersion = "6.0-Beta30",
-    previousVersion = "6.0-beta29",
-    rangeLabel = "6.0-beta29 -> 6.0-Beta30",
+    previousVersion = "6.0-Beta29",
+    rangeLabel = "6.0-Beta29 -> 6.0-Beta30",
     entries = {
         {
             version = "6.0-Beta30",
@@ -30,7 +30,9 @@ local data = {
                     bullets = {
                         "Portrait placement and border controls now route through the correct unit workspaces, guided-tour targets, search routes, and Assistant settings.",
                         "The unit-frame core was extracted into an isolated embeddable MSUFUnitFrames framework while preserving the existing MSUF API and legacy compatibility bridges.",
-                        "Updated all supported locales for portrait placement, geometry, border art, and long-duration aura suffixes.",
+                        "The 6.0 upgrade tour grew to sixteen curated highlights: Spell Indicators, Fill Direction, the portrait overhaul, and status icon packs joined the lineup, existing cards were refreshed for the newest features, and the layer card now shows an inline preview of the layer sub-menu instead of routing away.",
+                        "Updated all supported locales for portrait placement, geometry, border art, long-duration aura suffixes, and the expanded upgrade tour.",
+                        "The Assistant companion now declares the MSUF addon icon, so the load-on-demand module carries MSUF branding in the addon list.",
                         "Assistant control schemas, reviewed inventory evidence, and reproducible release gates were refreshed for the Beta 30 control surface and three-addon package.",
                     },
                 },
@@ -46,6 +48,7 @@ local data = {
                         "Search is fully quiescent in combat, understands raw keys such as gf_party.hpTextMode, and deduplicates controls by stable route identity.",
                         "Group frames now apply their one-time startup visuals only after Blizzard's secure header bounds have settled, preventing saved opacity and visual state from being applied against transient login geometry.",
                         "The Options loader is zero-idle until configuration demand, preserves saved UI-scale behavior in the always-loaded core, and keeps configuration loading blocked safely during combat.",
+                        "Fixed the options unit preview clamping tall or narrow frames to landscape proportions. Edit Mode writes and the preview mock now share one legal size range (40-800 wide, 8-200 high), so frame-relative elements such as the raid marker preview exactly where they land on the live frame.",
                     },
                 },
             },
