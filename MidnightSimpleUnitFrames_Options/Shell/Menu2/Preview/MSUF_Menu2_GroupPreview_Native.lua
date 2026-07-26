@@ -991,6 +991,7 @@ local function StatusSpecInMode(spec, selectedSpec)
 end
 local GFTextFocus = (M.GroupPreviewTextFocus and M.GroupPreviewTextFocus.Install and M.GroupPreviewTextFocus.Install({
     CurrentScope = CurrentScope,
+    Conf = Conf,
     min = min,
     max = max,
 })) or {}

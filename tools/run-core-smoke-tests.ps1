@@ -187,6 +187,7 @@ $tests = @(
     ".github/scripts/tests/menu2_perfy_hotpath_contract_smoke.lua",
     ".github/scripts/tests/slider_history_release_smoke.lua",
     ".github/scripts/tests/text_slot_font_size_smoke.lua",
+    ".github/scripts/tests/hp_text_reverse_slot_settings_smoke.lua",
     ".github/scripts/tests/menu2_accordion_open_highlight_smoke.lua",
     ".github/scripts/tests/unit_background_alpha_smoke.lua"
 )

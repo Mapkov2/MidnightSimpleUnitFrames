@@ -200,6 +200,15 @@ function Handles.Install(box, deps)
         if not (handle and box._mock) then return nil end
         local kind = handle._cfgTextKind or H.CurrentTextKind()
         local slot = handle._cfgTextSlot
+        if kind == "hp" and (slot == "left" or slot == "right") then
+            -- Under reverse order the configured left slot renders on the
+            -- physical right FontString (and vice versa); pair the handle with
+            -- the FontString that shows its slot's content.
+            local conf = H.Conf(H.CurrentScope())
+            if conf and conf.hpTextReverse == true then
+                slot = slot == "left" and "right" or "left"
+            end
+        end
         if type(H.TextRegions) == "function" then
             local regions = H.TextRegions(box._mock, kind, slot)
             if regions then return regions end

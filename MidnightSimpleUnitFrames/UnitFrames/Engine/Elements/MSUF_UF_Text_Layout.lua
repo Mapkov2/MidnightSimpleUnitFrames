@@ -862,6 +862,33 @@ local function TextApplySignature(spec, text)
   return concat(parts, "\031", 1, n)
 end
 
+--- Reverse order renders the configured Right slot on the physical left
+--- FontString and vice versa. ResolveHealthTextModes already mirrors the slot
+--- contents (mode / hide-% / absorb icon); these mirror the per-slot font
+--- sizes, offsets, direct anchors, and direct colors so every slot setting
+--- follows its content to the mirrored side. Apply/cold path only.
+local function HealthSlotLayoutKeys(text)
+  local leftSize, rightSize = text.healthLeftFontSize, text.healthRightFontSize
+  local leftX, leftY = text.healthLeftX, text.healthLeftY
+  local rightX, rightY = text.healthRightX, text.healthRightY
+  local leftDirect, rightDirect = "directHealthLeft", "directHealthRight"
+  if text.healthReverse == true then
+    leftSize, rightSize = rightSize, leftSize
+    leftX, rightX = rightX, leftX
+    leftY, rightY = rightY, leftY
+    leftDirect, rightDirect = rightDirect, leftDirect
+  end
+  return leftSize, rightSize, leftX, leftY, rightX, rightY, leftDirect, rightDirect
+end
+
+local function HealthSlotDirectColors(text)
+  local leftColor, rightColor = text.directHealthLeftColor, text.directHealthRightColor
+  if text.healthReverse == true then
+    leftColor, rightColor = rightColor, leftColor
+  end
+  return leftColor, rightColor
+end
+
 local function RefreshAppliedTextColors(frame, spec, text)
   local rt = frame._msufTextRuntime
   local base = spec and spec.textColor
@@ -875,9 +902,10 @@ local function RefreshAppliedTextColors(frame, spec, text)
   end
   if text and text.directLayout == true then
     if text.healthColorByHealth ~= true and text.healthColorByClass ~= true then
-      ApplyTextColor(frame.hpTextLeft, text.directHealthLeftColor)
+      local hpLeftDirectColor, hpRightDirectColor = HealthSlotDirectColors(text)
+      ApplyTextColor(frame.hpTextLeft, hpLeftDirectColor)
       ApplyTextColor(frame.hpTextCenter, text.directHealthCenterColor)
-      ApplyTextColor(frame.hpTextRight, text.directHealthRightColor)
+      ApplyTextColor(frame.hpTextRight, hpRightDirectColor)
     end
     if text.powerColorByType ~= true then
       ApplyTextColor(frame.powerTextLeft, text.directPowerLeftColor)
@@ -969,9 +997,10 @@ function Text.Apply(frame, spec)
     if SetFont(frame.totInlineSep, spec, spec and spec.nameFontSize, "name") == false then fontsReady = false end
     if SetFont(frame.totInlineText, spec, spec and spec.nameFontSize, "name") == false then fontsReady = false end
   end
-  if SetFont(frame.hpTextLeft, spec, text.healthLeftFontSize or (spec and spec.healthFontSize), "health") == false then fontsReady = false end
+  local hpLeftSize, hpRightSize, hpLeftX, hpLeftY, hpRightX, hpRightY, hpLeftDirect, hpRightDirect = HealthSlotLayoutKeys(text)
+  if SetFont(frame.hpTextLeft, spec, hpLeftSize or (spec and spec.healthFontSize), "health") == false then fontsReady = false end
   if SetFont(frame.hpTextCenter, spec, text.healthCenterFontSize or (spec and spec.healthFontSize), "health") == false then fontsReady = false end
-  if SetFont(frame.hpTextRight, spec, text.healthRightFontSize or (spec and spec.healthFontSize), "health") == false then fontsReady = false end
+  if SetFont(frame.hpTextRight, spec, hpRightSize or (spec and spec.healthFontSize), "health") == false then fontsReady = false end
   if SetFont(frame.powerTextLeft, spec, text.powerLeftFontSize or (spec and spec.powerFontSize), "power") == false then fontsReady = false end
   if SetFont(frame.powerTextCenter, spec, text.powerCenterFontSize or (spec and spec.powerFontSize), "power") == false then fontsReady = false end
   if SetFont(frame.powerTextRight, spec, text.powerRightFontSize or (spec and spec.powerFontSize), "power") == false then fontsReady = false end
@@ -1026,39 +1055,39 @@ function Text.Apply(frame, spec)
     HideDots(frame._msufInlineDotsFS)
   end
   if directText and detachedPowerText then
-    LayoutDirectText(frame.hpTextLeft, text, "directHealthLeft", "LEFT", "LEFT", 4, 0, "LEFT")
+    LayoutDirectText(frame.hpTextLeft, text, hpLeftDirect, "LEFT", "LEFT", 4, 0, "LEFT")
     LayoutDirectText(frame.hpTextCenter, text, "directHealthCenter", "CENTER", "CENTER", 0, 0, "CENTER")
-    LayoutDirectText(frame.hpTextRight, text, "directHealthRight", "RIGHT", "RIGHT", -4, 0, "RIGHT")
+    LayoutDirectText(frame.hpTextRight, text, hpRightDirect, "RIGHT", "RIGHT", -4, 0, "RIGHT")
     LayoutText(frame.powerTextLeft, "LEFT", "LEFT", 4 + (text.powerLeftX or 0), text.powerLeftY or 0, "LEFT", frame.targetPowerBar)
     LayoutText(frame.powerTextCenter, "CENTER", "CENTER", text.powerCenterX or 0, text.powerCenterY or 0, "CENTER", frame.targetPowerBar)
     LayoutText(frame.powerTextRight, "RIGHT", "RIGHT", -4 + (text.powerRightX or 0), text.powerRightY or 0, "RIGHT", frame.targetPowerBar)
   elseif directText then
-    LayoutDirectText(frame.hpTextLeft, text, "directHealthLeft", "LEFT", "LEFT", 4, 0, "LEFT")
+    LayoutDirectText(frame.hpTextLeft, text, hpLeftDirect, "LEFT", "LEFT", 4, 0, "LEFT")
     LayoutDirectText(frame.hpTextCenter, text, "directHealthCenter", "CENTER", "CENTER", 0, 0, "CENTER")
-    LayoutDirectText(frame.hpTextRight, text, "directHealthRight", "RIGHT", "RIGHT", -4, 0, "RIGHT")
+    LayoutDirectText(frame.hpTextRight, text, hpRightDirect, "RIGHT", "RIGHT", -4, 0, "RIGHT")
     LayoutDirectText(frame.powerTextLeft, text, "directPowerLeft", "LEFT", "LEFT", 4, 0, "LEFT")
     LayoutDirectText(frame.powerTextCenter, text, "directPowerCenter", "CENTER", "CENTER", 0, 0, "CENTER")
     LayoutDirectText(frame.powerTextRight, text, "directPowerRight", "RIGHT", "RIGHT", -4, 0, "RIGHT")
   elseif barAnchoredText then
     local health = BarTextHealthAnchor(frame)
     local powerAnchor = BarTextPowerAnchor(frame, power)
-    LayoutText(frame.hpTextLeft, "LEFT", "LEFT", 3 + (text.healthLeftX or 0), text.healthLeftY or 0, "LEFT", health)
+    LayoutText(frame.hpTextLeft, "LEFT", "LEFT", 3 + (hpLeftX or 0), hpLeftY or 0, "LEFT", health)
     LayoutTextSpan(frame.hpTextCenter, health, 3 + (text.healthCenterX or 0), -3 + (text.healthCenterX or 0), text.healthCenterY or 0, "CENTER")
-    LayoutText(frame.hpTextRight, "RIGHT", "RIGHT", -3 + (text.healthRightX or 0), text.healthRightY or 0, "RIGHT", health)
+    LayoutText(frame.hpTextRight, "RIGHT", "RIGHT", -3 + (hpRightX or 0), hpRightY or 0, "RIGHT", health)
     LayoutText(frame.powerTextLeft, "LEFT", "LEFT", 2 + (text.powerLeftX or 0), text.powerLeftY or 0, "LEFT", powerAnchor)
     LayoutText(frame.powerTextCenter, "CENTER", "CENTER", text.powerCenterX or 0, text.powerCenterY or 0, "CENTER", powerAnchor)
     LayoutText(frame.powerTextRight, "RIGHT", "RIGHT", -2 + (text.powerRightX or 0), text.powerRightY or 0, "RIGHT", powerAnchor)
   elseif detachedPowerText then
-    LayoutText(frame.hpTextLeft, "TOPLEFT", "TOPLEFT", 4 + (text.healthLeftX or 0), text.healthLeftY or 0, "LEFT")
+    LayoutText(frame.hpTextLeft, "TOPLEFT", "TOPLEFT", 4 + (hpLeftX or 0), hpLeftY or 0, "LEFT")
     LayoutText(frame.hpTextCenter, "TOP", "TOP", text.healthCenterX or 0, text.healthCenterY or 0, "CENTER")
-    LayoutText(frame.hpTextRight, "TOPRIGHT", "TOPRIGHT", -4 + (text.healthRightX or 0), text.healthRightY or 0, "RIGHT")
+    LayoutText(frame.hpTextRight, "TOPRIGHT", "TOPRIGHT", -4 + (hpRightX or 0), hpRightY or 0, "RIGHT")
     LayoutText(frame.powerTextLeft, "LEFT", "LEFT", 4 + (text.powerLeftX or 0), text.powerLeftY or 0, "LEFT", frame.targetPowerBar)
     LayoutText(frame.powerTextCenter, "CENTER", "CENTER", text.powerCenterX or 0, text.powerCenterY or 0, "CENTER", frame.targetPowerBar)
     LayoutText(frame.powerTextRight, "RIGHT", "RIGHT", -4 + (text.powerRightX or 0), text.powerRightY or 0, "RIGHT", frame.targetPowerBar)
   else
-    LayoutText(frame.hpTextLeft, "TOPLEFT", "TOPLEFT", 4 + (text.healthLeftX or 0), text.healthLeftY or 0, "LEFT")
+    LayoutText(frame.hpTextLeft, "TOPLEFT", "TOPLEFT", 4 + (hpLeftX or 0), hpLeftY or 0, "LEFT")
     LayoutText(frame.hpTextCenter, "TOP", "TOP", text.healthCenterX or 0, text.healthCenterY or 0, "CENTER")
-    LayoutText(frame.hpTextRight, "TOPRIGHT", "TOPRIGHT", -4 + (text.healthRightX or 0), text.healthRightY or 0, "RIGHT")
+    LayoutText(frame.hpTextRight, "TOPRIGHT", "TOPRIGHT", -4 + (hpRightX or 0), hpRightY or 0, "RIGHT")
     LayoutText(frame.powerTextLeft, "BOTTOMLEFT", "BOTTOMLEFT", 4 + (text.powerLeftX or 0), text.powerLeftY or 0, "LEFT")
     LayoutText(frame.powerTextCenter, "BOTTOM", "BOTTOM", text.powerCenterX or 0, text.powerCenterY or 0, "CENTER")
     LayoutText(frame.powerTextRight, "BOTTOMRIGHT", "BOTTOMRIGHT", -4 + (text.powerRightX or 0), text.powerRightY or 0, "RIGHT")
@@ -1071,9 +1100,10 @@ function Text.Apply(frame, spec)
   SetTextLayer(frame.powerTextRight, text.powerLayer)
   if directText then
     if text.healthColorByHealth ~= true and text.healthColorByClass ~= true then
-      ApplyTextColor(frame.hpTextLeft, text.directHealthLeftColor)
+      local hpLeftDirectColor, hpRightDirectColor = HealthSlotDirectColors(text)
+      ApplyTextColor(frame.hpTextLeft, hpLeftDirectColor)
       ApplyTextColor(frame.hpTextCenter, text.directHealthCenterColor)
-      ApplyTextColor(frame.hpTextRight, text.directHealthRightColor)
+      ApplyTextColor(frame.hpTextRight, hpRightDirectColor)
     end
     if text.powerColorByType ~= true then
       ApplyTextColor(frame.powerTextLeft, text.directPowerLeftColor)

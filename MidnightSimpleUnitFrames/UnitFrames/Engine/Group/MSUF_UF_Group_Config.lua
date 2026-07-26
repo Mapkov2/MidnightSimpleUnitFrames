@@ -410,11 +410,14 @@ local function ResolveNameTextOptions(kind, conf)
 end
 
 local function TextSlots(conf)
-  if GF.ResolveHealthTextSlots then
-    local left, center, right = GF.ResolveHealthTextSlots(conf)
-    return left or "NONE", center or "NONE", right or "NONE"
+  -- Raw configured slots only. The engine's ResolveHealthTextModes applies the
+  -- reverse-order mirror exactly once at apply time; routing through
+  -- GF.ResolveHealthTextSlots pre-swapped the modes here, so the engine's own
+  -- swap undid the reversal while the hide-%/absorb flags stayed mirrored.
+  if conf and conf.showHPText == false then
+    return "NONE", "NONE", "NONE"
   end
-  return conf.textLeft or "NONE", conf.textCenter or "NONE", conf.textRight or "NONE"
+  return (conf and conf.textLeft) or "NONE", (conf and conf.textCenter) or "NONE", (conf and conf.textRight) or "NONE"
 end
 
 local function IsPowerTextEnabled(kind, conf)

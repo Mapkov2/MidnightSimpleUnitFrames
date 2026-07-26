@@ -786,6 +786,12 @@ local function PreviewTextFocusRegions(mock, kind, slot)
     if kind == "name" then
         return { mock.nameText, mock.totInlineSep, mock.totInlineText, mock.raidGroupNameText }
     elseif kind == "hp" then
+        -- Under reverse order the configured left slot renders on the physical
+        -- right FontString (and vice versa); ring the visible text.
+        local box = Preview.active
+        if box and TextScopeGet(box.key, "hpTextReverse", false) == true then
+            if slot == "left" then slot = "right" elseif slot == "right" then slot = "left" end
+        end
         if slot == "left" then return { mock.hpTextLeft } end
         if slot == "center" then return { mock.hpTextCenter } end
         if slot == "right" then return { mock.hpText } end

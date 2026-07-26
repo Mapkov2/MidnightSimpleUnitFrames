@@ -1017,27 +1017,36 @@ function Preview.Refresh(box, reason)
             if v == nil and generalAlias then v = g[generalAlias] end
             return tonumber(v) or fallback or 0
         end
-        local function TextOffsets(prefix, fallbackY)
+        local function TextOffsets(prefix, fallbackY, mirrorSlots)
             local baseX = NumField(prefix .. "OffsetX", prefix .. "TextOffsetX", prefix .. "OffsetX", prefix .. "TextOffsetX", -4)
             local baseY = NumField(prefix .. "OffsetY", prefix .. "TextOffsetY", prefix .. "OffsetY", prefix .. "TextOffsetY", fallbackY) + rawBaseline
             local function Slot(side, axis)
                 return NumField(prefix .. "Text" .. side .. "Offset" .. axis, prefix .. side .. "Offset" .. axis, prefix .. "Text" .. side .. "Offset" .. axis, prefix .. side .. "Offset" .. axis, 0)
             end
+            -- Reverse order renders the configured Right slot on the physical
+            -- left side (and vice versa); its offsets follow the content.
+            local leftSide = mirrorSlots and "Right" or "Left"
+            local rightSide = mirrorSlots and "Left" or "Right"
             return {
-                leftX = baseX + Slot("Left", "X"),
-                leftY = baseY + Slot("Left", "Y"),
+                leftX = baseX + Slot(leftSide, "X"),
+                leftY = baseY + Slot(leftSide, "Y"),
                 centerX = baseX + Slot("Center", "X"),
                 centerY = baseY + Slot("Center", "Y"),
-                rightX = baseX + Slot("Right", "X"),
-                rightY = baseY + Slot("Right", "Y"),
+                rightX = baseX + Slot(rightSide, "X"),
+                rightY = baseY + Slot(rightSide, "Y"),
             }
         end
         local hpTextVisible = PreviewLayerWanted(box, "hpText") and conf.showHP ~= false and (not runtimeSpec or runtimeSpec.showHealthText ~= false)
         if hpTextVisible then
-            local o = TextOffsets("hp", -4)
-            minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "LEFT", "LEFT", 4 + o.leftX, o.leftY, ApproxTextWidth("410K - 41%", ResolvePreviewTextSlotSize(runtimeText, conf, "healthLeftFontSize", "hpTextLeftFontSize", rawHPSize), 10), ResolvePreviewTextSlotSize(runtimeText, conf, "healthLeftFontSize", "hpTextLeftFontSize", rawHPSize) + 6, w, h)
+            local hpRev = R.TextScopeGet(key, "hpTextReverse", false) == true
+            local leftSizeRuntimeKey = hpRev and "healthRightFontSize" or "healthLeftFontSize"
+            local leftSizeDbKey = hpRev and "hpTextRightFontSize" or "hpTextLeftFontSize"
+            local rightSizeRuntimeKey = hpRev and "healthLeftFontSize" or "healthRightFontSize"
+            local rightSizeDbKey = hpRev and "hpTextLeftFontSize" or "hpTextRightFontSize"
+            local o = TextOffsets("hp", -4, hpRev)
+            minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "LEFT", "LEFT", 4 + o.leftX, o.leftY, ApproxTextWidth("410K - 41%", ResolvePreviewTextSlotSize(runtimeText, conf, leftSizeRuntimeKey, leftSizeDbKey, rawHPSize), 10), ResolvePreviewTextSlotSize(runtimeText, conf, leftSizeRuntimeKey, leftSizeDbKey, rawHPSize) + 6, w, h)
             minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "CENTER", "CENTER", o.centerX, o.centerY, ApproxTextWidth("410K - 41%", ResolvePreviewTextSlotSize(runtimeText, conf, "healthCenterFontSize", "hpTextCenterFontSize", rawHPSize), 10), ResolvePreviewTextSlotSize(runtimeText, conf, "healthCenterFontSize", "hpTextCenterFontSize", rawHPSize) + 6, w, h)
-            minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "RIGHT", "RIGHT", -4 + o.rightX, o.rightY, ApproxTextWidth("410K - 41%", ResolvePreviewTextSlotSize(runtimeText, conf, "healthRightFontSize", "hpTextRightFontSize", rawHPSize), 10), ResolvePreviewTextSlotSize(runtimeText, conf, "healthRightFontSize", "hpTextRightFontSize", rawHPSize) + 6, w, h)
+            minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "RIGHT", "RIGHT", -4 + o.rightX, o.rightY, ApproxTextWidth("410K - 41%", ResolvePreviewTextSlotSize(runtimeText, conf, rightSizeRuntimeKey, rightSizeDbKey, rawHPSize), 10), ResolvePreviewTextSlotSize(runtimeText, conf, rightSizeRuntimeKey, rightSizeDbKey, rawHPSize) + 6, w, h)
         end
         local powerTextVisible = PreviewLayerWanted(box, "powerText") and ((key ~= "focustarget" and conf.showPower ~= false) or conf.showPower == true) and (not runtimeSpec or runtimeSpec.showPowerText ~= false)
         if powerTextVisible then
@@ -1733,9 +1742,13 @@ function Preview.Refresh(box, reason)
     box._fontPreviewBaselineOffset = tonumber(conf.fontOverride == true and conf.fontBaselineOffset) or tonumber(g.fontBaselineOffset) or 0
     if box._fontPreviewBaselineOffset < -4 then box._fontPreviewBaselineOffset = -4 elseif box._fontPreviewBaselineOffset > 4 then box._fontPreviewBaselineOffset = 4 end
     ApplyPreviewFontSet(ApplyPreviewFont, nameSize, mock.nameText, mock.raidGroupNameText, mock.totInlineSep, mock.totInlineText)
-    ApplyPreviewFont(mock.hpTextLeft, max(7, S(ResolvePreviewTextSlotSize(runtimeText, conf, "healthLeftFontSize", "hpTextLeftFontSize", hpSize))))
+    -- Reverse order renders the configured Right slot on the physical left
+    -- FontString (and vice versa); size and offsets follow the content, so
+    -- swap the per-slot keys the physical sides read from.
+    local hpRev = R.TextScopeGet(key, "hpTextReverse", false) == true
+    ApplyPreviewFont(mock.hpTextLeft, max(7, S(ResolvePreviewTextSlotSize(runtimeText, conf, hpRev and "healthRightFontSize" or "healthLeftFontSize", hpRev and "hpTextRightFontSize" or "hpTextLeftFontSize", hpSize))))
     ApplyPreviewFont(mock.hpTextCenter, max(7, S(ResolvePreviewTextSlotSize(runtimeText, conf, "healthCenterFontSize", "hpTextCenterFontSize", hpSize))))
-    ApplyPreviewFontSet(ApplyPreviewFont, max(7, S(ResolvePreviewTextSlotSize(runtimeText, conf, "healthRightFontSize", "hpTextRightFontSize", hpSize))), mock.hpText, mock.hpTextPct)
+    ApplyPreviewFontSet(ApplyPreviewFont, max(7, S(ResolvePreviewTextSlotSize(runtimeText, conf, hpRev and "healthLeftFontSize" or "healthRightFontSize", hpRev and "hpTextLeftFontSize" or "hpTextRightFontSize", hpSize))), mock.hpText, mock.hpTextPct)
     ApplyPreviewFont(mock.powerTextLeft, max(7, S(ResolvePreviewTextSlotSize(runtimeText, conf, "powerLeftFontSize", "powerTextLeftFontSize", pwrSize))))
     ApplyPreviewFont(mock.powerTextCenter, max(7, S(ResolvePreviewTextSlotSize(runtimeText, conf, "powerCenterFontSize", "powerTextCenterFontSize", pwrSize))))
     ApplyPreviewFontSet(ApplyPreviewFont, max(7, S(ResolvePreviewTextSlotSize(runtimeText, conf, "powerRightFontSize", "powerTextRightFontSize", pwrSize))), mock.powerText, mock.powerTextPct)
@@ -1893,19 +1906,22 @@ function Preview.Refresh(box, reason)
         if v == nil and generalAlias then v = g[generalAlias] end
         return tonumber(v) or fallback or 0
     end
-    local function TextOffsets(prefix, fallbackY)
+    local function TextOffsets(prefix, fallbackY, mirrorSlots)
         local baseX = NumField(prefix .. "OffsetX", prefix .. "TextOffsetX", prefix .. "OffsetX", prefix .. "TextOffsetX", -4)
         local baseY = NumField(prefix .. "OffsetY", prefix .. "TextOffsetY", prefix .. "OffsetY", prefix .. "TextOffsetY", fallbackY) + box._fontPreviewBaselineOffset
         local function Slot(side, axis)
             return NumField(prefix .. "Text" .. side .. "Offset" .. axis, prefix .. side .. "Offset" .. axis, prefix .. "Text" .. side .. "Offset" .. axis, prefix .. side .. "Offset" .. axis, 0)
         end
+        -- Reverse order: the mirrored physical sides read the other slot's offsets.
+        local leftSide = mirrorSlots and "Right" or "Left"
+        local rightSide = mirrorSlots and "Left" or "Right"
         return {
-            leftX = baseX + Slot("Left", "X"),
-            leftY = baseY + Slot("Left", "Y"),
+            leftX = baseX + Slot(leftSide, "X"),
+            leftY = baseY + Slot(leftSide, "Y"),
             centerX = baseX + Slot("Center", "X"),
             centerY = baseY + Slot("Center", "Y"),
-            rightX = baseX + Slot("Right", "X"),
-            rightY = baseY + Slot("Right", "Y"),
+            rightX = baseX + Slot(rightSide, "X"),
+            rightY = baseY + Slot(rightSide, "Y"),
         }
     end
     local function PlaceTextSet(left, center, right, pct, parent, lPoint, lRel, cPoint, cRel, rPoint, rRel, offsets, yAdd)
@@ -1915,7 +1931,7 @@ function Preview.Refresh(box, reason)
         PlacePreviewSlot(right, parent, rPoint, rRel, S(-4 + offsets.rightX), S(yAdd + offsets.rightY), "RIGHT")
         PlacePreviewSlot(pct, parent, rPoint, rRel, S(-4 + offsets.rightX), S(yAdd + offsets.rightY), "RIGHT")
     end
-    local hpOffsets = TextOffsets("hp", -4)
+    local hpOffsets = TextOffsets("hp", -4, hpRev)
     PlaceTextSet(mock.hpTextLeft, mock.hpTextCenter, mock.hpText, mock.hpTextPct, mock.textFrame, "TOPLEFT", "TOPLEFT", "TOP", "TOP", "TOPRIGHT", "TOPRIGHT", hpOffsets)
     local powerOffsets = TextOffsets("power", 4)
     if detachedPowerInUnitPreview and box._runtimeDetachedPowerTextOnBar and mock.detachedPower:IsShown() then
@@ -2265,7 +2281,14 @@ function Preview.Refresh(box, reason)
         PlaceTextSlotHandle(centerHandle, centerRegion)
         PlaceTextSlotHandle(rightHandle, rightRegion)
     end
-    PlaceValueTextHandles("hp", box.handleHP, box.handleHPLeft, box.handleHPCenter, box.handleHPRight, mock.hpTextLeft, mock.hpTextCenter, mock.hpText)
+    -- Under reverse order the configured left slot renders on the physical
+    -- right FontString (and vice versa); pair each slot handle with the
+    -- FontString that actually shows its content so drags edit visible text.
+    if R.TextScopeGet(key, "hpTextReverse", false) == true then
+        PlaceValueTextHandles("hp", box.handleHP, box.handleHPLeft, box.handleHPCenter, box.handleHPRight, mock.hpText, mock.hpTextCenter, mock.hpTextLeft)
+    else
+        PlaceValueTextHandles("hp", box.handleHP, box.handleHPLeft, box.handleHPCenter, box.handleHPRight, mock.hpTextLeft, mock.hpTextCenter, mock.hpText)
+    end
     PlaceValueTextHandles("power", box.handlePower, box.handlePowerLeft, box.handlePowerCenter, box.handlePowerRight, mock.powerTextLeft, mock.powerTextCenter, mock.powerText)
     R.ApplyPreviewTextFocus(box, canvas, mock)
     ApplyPreviewLayerVisibility(box)

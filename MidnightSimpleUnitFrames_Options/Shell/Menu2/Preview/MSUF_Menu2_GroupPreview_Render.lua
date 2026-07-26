@@ -1665,9 +1665,14 @@ function Render.Install(box, ctx, deps)
         if mock._nameFS.SetNonSpaceWrap then mock._nameFS:SetNonSpaceWrap(false) end
         mock._nameFS:SetShown(showText and ((runtimeSpec and runtimeSpec.showName == true) or (not runtimeSpec and conf.showName ~= false)))
         local hpSize = (runtimeSpec and runtimeSpec.healthFontSize) or conf.hpFontSize or 10
-        local hpLeftSize = max(7, ScaleValue(runtimeText.healthLeftFontSize or conf.hpTextLeftFontSize or hpSize, previewScale, 6))
+        -- Reverse order renders the configured Right slot on the physical left
+        -- side (and vice versa); per-slot size and offsets follow the content,
+        -- mirroring the live engine's apply-time swap.
+        local hpRev = (runtimeSpec and runtimeText.healthReverse == true)
+            or ((not runtimeSpec) and conf.hpTextReverse == true)
+        local hpLeftSize = max(7, ScaleValue(runtimeText[hpRev and "healthRightFontSize" or "healthLeftFontSize"] or conf[hpRev and "hpTextRightFontSize" or "hpTextLeftFontSize"] or hpSize, previewScale, 6))
         local hpCenterSize = max(7, ScaleValue(runtimeText.healthCenterFontSize or conf.hpTextCenterFontSize or hpSize, previewScale, 6))
-        local hpRightSize = max(7, ScaleValue(runtimeText.healthRightFontSize or conf.hpTextRightFontSize or hpSize, previewScale, 6))
+        local hpRightSize = max(7, ScaleValue(runtimeText[hpRev and "healthLeftFontSize" or "healthRightFontSize"] or conf[hpRev and "hpTextLeftFontSize" or "hpTextRightFontSize"] or hpSize, previewScale, 6))
         local hpTextOn = showText and ((runtimeSpec and runtimeSpec.showHealthText == true) or (not runtimeSpec and conf.showHPText ~= false))
         local hpLeftMode, hpCenterMode, hpRightMode
         if runtimeSpec then
@@ -1734,8 +1739,8 @@ function Render.Install(box, ctx, deps)
             return mode == "PERCENT" and (hidePercentSymbol and "72" or "72%") or "720k"
         end
         PaintPreviewText(mock._hpLeftFS, hpLeftSize, hpLeftMode, "LEFT", "LEFT",
-            pad4 + ConfigToOffset(runtimeText.healthLeftX or ((conf.hpOffsetX or 0) + (conf.hpTextLeftOffsetX or 0)), previewScale),
-            ConfigToOffset(runtimeText.healthLeftY or ((conf.hpOffsetY or 0) + (conf.hpTextLeftOffsetY or 0) + baselineOffset), previewScale),
+            pad4 + ConfigToOffset(runtimeText[hpRev and "healthRightX" or "healthLeftX"] or ((conf.hpOffsetX or 0) + (conf[hpRev and "hpTextRightOffsetX" or "hpTextLeftOffsetX"] or 0)), previewScale),
+            ConfigToOffset(runtimeText[hpRev and "healthRightY" or "healthLeftY"] or ((conf.hpOffsetY or 0) + (conf[hpRev and "hpTextRightOffsetY" or "hpTextLeftOffsetY"] or 0) + baselineOffset), previewScale),
             "LEFT", hpTextR, hpTextG, hpTextB, textAlpha, hpTextOn, PreviewHealthText(hpLeftMode, hpLeftHidePercent,
                 runtimeText.healthReverse == true and "healthRightAbsorbIcon" or "healthLeftAbsorbIcon",
                 conf.hpTextReverse == true and "hpTextRightAbsorbIcon" or "hpTextLeftAbsorbIcon"))
@@ -1745,8 +1750,8 @@ function Render.Install(box, ctx, deps)
             "CENTER", hpTextR, hpTextG, hpTextB, textAlpha, hpTextOn, PreviewHealthText(hpCenterMode, hpCenterHidePercent,
                 "healthCenterAbsorbIcon", "hpTextCenterAbsorbIcon"))
         PaintPreviewText(mock._hpRightFS, hpRightSize, hpRightMode, "RIGHT", "RIGHT",
-            -pad4 + ConfigToOffset(runtimeText.healthRightX or ((conf.hpOffsetX or 0) + (conf.hpTextRightOffsetX or 0)), previewScale),
-            ConfigToOffset(runtimeText.healthRightY or ((conf.hpOffsetY or 0) + (conf.hpTextRightOffsetY or 0) + baselineOffset), previewScale),
+            -pad4 + ConfigToOffset(runtimeText[hpRev and "healthLeftX" or "healthRightX"] or ((conf.hpOffsetX or 0) + (conf[hpRev and "hpTextLeftOffsetX" or "hpTextRightOffsetX"] or 0)), previewScale),
+            ConfigToOffset(runtimeText[hpRev and "healthLeftY" or "healthRightY"] or ((conf.hpOffsetY or 0) + (conf[hpRev and "hpTextLeftOffsetY" or "hpTextRightOffsetY"] or 0) + baselineOffset), previewScale),
             "RIGHT", hpTextR, hpTextG, hpTextB, textAlpha, hpTextOn, PreviewHealthText(hpRightMode, hpRightHidePercent,
                 runtimeText.healthReverse == true and "healthLeftAbsorbIcon" or "healthRightAbsorbIcon",
                 conf.hpTextReverse == true and "hpTextLeftAbsorbIcon" or "hpTextRightAbsorbIcon"))

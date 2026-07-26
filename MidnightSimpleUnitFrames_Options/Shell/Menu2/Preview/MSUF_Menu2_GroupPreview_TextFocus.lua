@@ -12,6 +12,19 @@ local PreviewHelpers = M.PreviewHelpers or {}
 function TextFocus.Install(deps)
     deps = deps or {}
     local CurrentScope = deps.CurrentScope or function() return M.gfScope or "party" end
+    local Conf = deps.Conf or function(_) return {} end
+    -- Under reverse order the configured left HP slot renders on the physical
+    -- right FontString (and vice versa); map slot-addressed visuals to the
+    -- FontString that actually shows the slot's content.
+    local function GFPreviewMapHpSlot(kind, slot)
+        if kind == "hp" and (slot == "left" or slot == "right") then
+            local conf = Conf(CurrentScope())
+            if conf and conf.hpTextReverse == true then
+                return slot == "left" and "right" or "left"
+            end
+        end
+        return slot
+    end
 local function GFPreviewCurrentTextKind()
     local scope = CurrentScope()
     local selected = M.gfTextTabSelection and M.gfTextTabSelection[scope] or "name"
@@ -64,6 +77,7 @@ local function GFPreviewTextFocusRegions(mock, kind, slot)
     if kind == "name" then
         return { mock._nameFS }
     elseif kind == "hp" then
+        slot = GFPreviewMapHpSlot(kind, slot)
         if slot == "left" then return { mock._hpLeftFS } end
         if slot == "center" then return { mock._hpCenterFS } end
         if slot == "right" then return { mock._hpRightFS } end
