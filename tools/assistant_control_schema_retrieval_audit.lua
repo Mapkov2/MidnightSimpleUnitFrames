@@ -27,8 +27,8 @@ local Data = assert(Assistant.ControlSchemaData, "generated control schema data 
 Check(Data.version == 3, "reviewed schema version")
 Check(#(Data.contexts or {}) == 40, "reviewed 40 class/spec contexts")
 Check(#(Data.collectionStates or {}) == 154, "reviewed 154-state finite UI matrix")
-Check(Data.collectionUnionControls == 2384 and #(Data.records or {}) == 2384,
-    "reviewed 2384-control exhaustive union")
+Check(Data.collectionUnionControls == 2388 and #(Data.records or {}) == 2388,
+    "reviewed 2388-control exhaustive union")
 
 local columns, contextIds, stateCounts = {}, {}, {}
 for i = 1, #Data.columns do columns[Data.columns[i]] = i end
