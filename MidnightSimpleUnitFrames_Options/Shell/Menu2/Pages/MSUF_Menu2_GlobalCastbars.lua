@@ -69,6 +69,11 @@ function M.SetCastbarPreviewUnit(unit)
         preview.layoutUnit = unit
         if preview.Refresh then preview:Refresh() end
     end
+    -- The out-of-menu castbar preview follows the selected unit while the
+    -- castbar page is open (boss borrows the boss frame preview for anchoring).
+    if M.activeKey == "opt_castbar" and type(M.RequestBossPagePreviewForKey) == "function" then
+        M.RequestBossPagePreviewForKey("opt_castbar", true)
+    end
     return true, unit
 end
 function M.SetCastbarPreviewType(kind, progress)

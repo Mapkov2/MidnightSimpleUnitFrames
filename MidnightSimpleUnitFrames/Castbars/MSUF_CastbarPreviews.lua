@@ -723,3 +723,116 @@ local function HideAllCastbarPreviews()
 end
 
 ExportPublic("MSUF_HideAllCastbarPreviews", HideAllCastbarPreviews)
+
+--- Menu2 castbar-page preview: while the castbar page is open, the selected
+--- unit's castbar preview runs a fake cast out on the real frames. Transient by
+--- design - it never writes the persistent preview/test-mode settings, only
+--- exists while the page is active, and deactivates itself on combat start, so
+--- combat overhead stays zero.
+local pagePreviewUnit
+local pagePreviewCombatWatcher
+local ApplyCastbarPagePreviewState
+
+local function EnsurePagePreviewCombatWatcher()
+    if pagePreviewCombatWatcher then return pagePreviewCombatWatcher end
+    local CreateFrame = _G.CreateFrame
+    if type(CreateFrame) ~= "function" then return nil end
+    pagePreviewCombatWatcher = CreateFrame("Frame")
+    pagePreviewCombatWatcher:Hide()
+    pagePreviewCombatWatcher:SetScript("OnEvent", function(self)
+        self:UnregisterAllEvents()
+        ApplyCastbarPagePreviewState(nil)
+    end)
+    return pagePreviewCombatWatcher
+end
+
+local function PagePreviewMaxBossFrames()
+    local maxBossFrames = tonumber(_G.MSUF_MAX_BOSS_FRAMES or _G.MAX_BOSS_FRAMES) or 5
+    if maxBossFrames < 1 or maxBossFrames > 12 then maxBossFrames = 5 end
+    return maxBossFrames
+end
+
+local function PagePreviewRestoreDefaults(unit)
+    if PREVIEW_UNITS[unit] then
+        local frame = _G[PREVIEW_UNITS[unit].name]
+        if frame then
+            ClearPreviewTest(frame, unit)
+            frame:Hide()
+        end
+        if EnsureGeneralDB().castbarPlayerPreviewEnabled then
+            UpdatePlayerCastbarPreview()
+        end
+        return
+    end
+    if unit ~= "boss" then return end
+    ForEachBossPreview(function(frame)
+        ClearPreviewTest(frame, "boss")
+        HideBossPreviewFill(frame)
+        frame:Hide()
+    end)
+    if not IsInCombat() and type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+        _G.MSUF_UpdateBossCastbarPreview()
+    end
+end
+
+local function PagePreviewActivate(unit)
+    if PREVIEW_UNITS[unit] then
+        local frame = CreatePreview(unit)
+        if not frame then return false end
+        PositionPreview(unit, frame)
+        StartPreviewTest(frame)
+        if type(_G.MSUF_RefreshCastbarFrame) == "function" then
+            _G.MSUF_RefreshCastbarFrame(frame)
+        end
+        frame:Show()
+        return true
+    end
+    if unit ~= "boss" then return false end
+    local createBossPreview = _G.MSUF_CreateBossCastbarPreview
+    if type(createBossPreview) ~= "function" then return false end
+    local shown = false
+    for index = 1, PagePreviewMaxBossFrames() do
+        local frame = createBossPreview(index)
+        if frame then
+            if type(_G.MSUF_ApplyBossCastbarPreviewLayout) == "function" then
+                _G.MSUF_ApplyBossCastbarPreviewLayout(frame, index)
+            end
+            if type(_G.MSUF_PositionBossCastbarPreview) == "function" then
+                _G.MSUF_PositionBossCastbarPreview(frame, index)
+            end
+            frame.unit = "boss"
+            frame._msufTestShowTime = EnsureGeneralDB().showBossCastTime ~= false
+            StartPreviewTest(frame)
+            frame:Show()
+            shown = true
+        end
+    end
+    return shown
+end
+
+ApplyCastbarPagePreviewState = function(unit)
+    unit = tostring(unit or ""):lower()
+    if unit ~= "player" and unit ~= "target" and unit ~= "focus" and unit ~= "boss" then unit = nil end
+    if unit and IsInCombat() then unit = nil end
+    local previous = pagePreviewUnit
+    -- Published before restore/activation: UpdateBossCastbarPreview consults it
+    -- so texture/layout re-applies keep (or drop) the page preview correctly.
+    pagePreviewUnit = unit
+    _G.MSUF2_CastbarPagePreviewUnit = unit
+    if previous and previous ~= unit then
+        PagePreviewRestoreDefaults(previous)
+    end
+    if unit and not PagePreviewActivate(unit) then
+        pagePreviewUnit = nil
+        _G.MSUF2_CastbarPagePreviewUnit = nil
+        unit = nil
+    end
+    if unit then
+        local watcher = EnsurePagePreviewCombatWatcher()
+        if watcher then watcher:RegisterEvent("PLAYER_REGEN_DISABLED") end
+    elseif pagePreviewCombatWatcher then
+        pagePreviewCombatWatcher:UnregisterAllEvents()
+    end
+    return pagePreviewUnit
+end
+ExportPublic("MSUF_ApplyCastbarPagePreviewState", ApplyCastbarPagePreviewState)

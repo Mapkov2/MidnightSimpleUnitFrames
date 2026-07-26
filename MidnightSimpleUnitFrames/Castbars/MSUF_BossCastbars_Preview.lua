@@ -45,6 +45,12 @@ end
 
 local function PreviewEnabled()
     local general = GeneralDB()
+    -- The Menu2 castbar page's transient boss preview must survive texture and
+    -- layout re-applies that funnel through UpdateBossCastbarPreview, even
+    -- while the persistent preview option is off.
+    if _G.MSUF2_CastbarPagePreviewUnit == "boss" then
+        return not (MSUF_DB.boss and MSUF_DB.boss.enabled == false)
+    end
     if not general.castbarPlayerPreviewEnabled then
         return false
     end

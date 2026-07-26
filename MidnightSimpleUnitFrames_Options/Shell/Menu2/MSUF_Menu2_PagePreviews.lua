@@ -47,27 +47,72 @@ local function BossPreviewFramesVisible()
 end
 local lastBossPreviewActive
 local lastBossPreviewFn
+local lastCastbarPagePreviewUnit
 local bossPreviewRequestSerial = 0
+
+-- Out-of-menu castbar preview target for the global castbar page: the page's
+-- unit segment picks which castbar runs a fake cast on the real frames.
+local function CastbarPagePreviewUnitForKey(key)
+    if key ~= "opt_castbar" then return nil end
+    if not (M.frame and M.frame.IsShown and M.frame:IsShown()) then return nil end
+    local unit = tostring(M._msuf2CastbarPreviewUnit or "player"):lower()
+    if unit ~= "player" and unit ~= "target" and unit ~= "focus" and unit ~= "boss" then unit = "player" end
+    return unit
+end
+
+local function SyncCastbarPagePreviewForKey(key, force)
+    local apply = _G.MSUF_ApplyCastbarPagePreviewState
+    if type(apply) ~= "function" then return end
+    local unit = not BossPagePreviewInCombat() and CastbarPagePreviewUnitForKey(key) or nil
+    if not force and lastCastbarPagePreviewUnit == unit then return end
+    lastCastbarPagePreviewUnit = apply(unit) or nil
+end
+
+-- Boss aura lanes render on the out-of-menu boss preview frames only while the
+-- boss page itself owns the preview; Auras3 edit-mode reads this flag.
+local function SyncBossPageAuraPreviewFlag(auraActive)
+    auraActive = auraActive == true and not BossPagePreviewInCombat()
+    local current = _G.MSUF2_BossPageAuraPreviewActive == true
+    if current == auraActive then return end
+    _G.MSUF2_BossPageAuraPreviewActive = auraActive or nil
+    local a3 = (MSUF and MSUF.MSUF_Auras3)
+        or (_G.MSUF_NS and _G.MSUF_NS.MSUF_Auras3)
+        or _G.MSUF_Auras3
+    if a3 and type(a3.RefreshEditPreview) == "function" then a3.RefreshEditPreview("boss") end
+end
+
 local function SyncBossPagePreviewForKey(key, force)
-    local active = (key == "uf_boss")
-        and M.frame and M.frame.IsShown and M.frame:IsShown()
+    local frameShown = M.frame and M.frame.IsShown and M.frame:IsShown()
+    local active = (key == "uf_boss") and frameShown
     if BossPagePreviewInCombat() then
         _G.MSUF2_BossUnitframePreviewActive = nil
+        _G.MSUF2_BossPageAuraPreviewActive = nil
         lastBossPreviewActive = nil
+        SyncCastbarPagePreviewForKey(key, false)
         return
     end
+    SyncBossPageAuraPreviewFlag(active == true)
+    -- The castbar page's boss segment borrows the boss frame preview so its
+    -- castbar previews anchor under visible boss frames, exactly like live.
+    local castbarUnit = CastbarPagePreviewUnitForKey(key)
+    local bossActive = (active or castbarUnit == "boss") and true or false
     local fn = M.UnitPage and M.UnitPage.SetBossPagePreviewActive
     local globalActive = (_G.MSUF2_BossUnitframePreviewActive == true)
-    local visible = (not active) or BossPreviewFramesVisible()
-    if not force and lastBossPreviewActive == active and lastBossPreviewFn == fn and globalActive == (active == true) and visible then return end
-    lastBossPreviewActive = active
-    lastBossPreviewFn = fn
-    if type(fn) == "function" then
-        fn(active and true or false)
-        if active and type(_G.MSUF_ApplyBossUnitframePreviewState) == "function" and not BossPagePreviewInCombat() then _G.MSUF_ApplyBossUnitframePreviewState(true, "MSUF2_BOSS_PAGE_CORE") end
+    local visible = (not bossActive) or BossPreviewFramesVisible()
+    if not force and lastBossPreviewActive == bossActive and lastBossPreviewFn == fn
+        and globalActive == bossActive and visible
+        and lastCastbarPagePreviewUnit == castbarUnit then
         return
     end
-    ApplyBossPagePreviewFallback(active and true or false, "MSUF2_BOSS_PAGE_FALLBACK")
+    lastBossPreviewActive = bossActive
+    lastBossPreviewFn = fn
+    if type(fn) == "function" then
+        fn(bossActive)
+        if bossActive and type(_G.MSUF_ApplyBossUnitframePreviewState) == "function" and not BossPagePreviewInCombat() then _G.MSUF_ApplyBossUnitframePreviewState(true, "MSUF2_BOSS_PAGE_CORE") end
+    else
+        ApplyBossPagePreviewFallback(bossActive, "MSUF2_BOSS_PAGE_FALLBACK")
+    end
+    SyncCastbarPagePreviewForKey(key, force)
 end
 local function RequestBossPagePreviewForKey(key, force)
     bossPreviewRequestSerial = bossPreviewRequestSerial + 1
@@ -90,6 +135,7 @@ end
 local function ResetBossPagePreviewCache()
     lastBossPreviewActive = nil
     lastBossPreviewFn = nil
+    lastCastbarPagePreviewUnit = nil
     bossPreviewRequestSerial = bossPreviewRequestSerial + 1
 end
 local GF_PAGE_KEYS = M.KeySetFromWords "gf_layout gf_bars gf_auras gf_indicators"
