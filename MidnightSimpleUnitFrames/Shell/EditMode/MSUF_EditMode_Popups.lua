@@ -32,6 +32,11 @@ local Tr = Factory.Tr or Quick.Tr or U.Tr or function(text) return text end
 local RefreshPalette = Factory.RefreshPalette or Quick.RefreshPalette or function() return C end
 local BlockConfigCombatLocked = Factory.BlockConfigCombatLocked or Quick.BlockConfigCombatLocked or U.BlockConfigCombatLocked or function() return false end
 local RefreshUFPreview = Factory.RefreshUFPreview or U.RefreshUFPreview or function() end
+--- Shared legal unit-frame size range (State/MSUF_Defaults.lua). Every
+--- width/height write below clamps against this table; the options unit
+--- preview clamps its mock to the same table, so popup writes and preview
+--- geometry cannot drift apart.
+local SizeBounds = _G.MSUF_UnitFrameSizeBounds or { minW = 40, maxW = 800, minH = 8, maxH = 200 }
 
 --- Popup router. All popups are Midnight-native (EM2).
 local Popups = {}
@@ -198,8 +203,8 @@ local function Apply()
     local key=CK(pf.unit); local conf=key and Conf(key); if not conf then return end
     if type(_G.MSUF_EM_UndoBeforeChange)=="function" then _G.MSUF_EM_UndoBeforeChange("unit", key) end
     conf.offsetX=San(pf.xBox and tonumber(pf.xBox:GetText()),0); conf.offsetY=San(pf.yBox and tonumber(pf.yBox:GetText()),0)
-    local w=pf.wBox and tonumber(pf.wBox:GetText()); if w then conf.width=floor(max(40,min(800,w))+0.5) end
-    local h=pf.hBox and tonumber(pf.hBox:GetText()); if h then conf.height=floor(max(8,min(200,h))+0.5) end
+    local w=pf.wBox and tonumber(pf.wBox:GetText()); if w then conf.width=floor(max(SizeBounds.minW,min(SizeBounds.maxW,w))+0.5) end
+    local h=pf.hBox and tonumber(pf.hBox:GetText()); if h then conf.height=floor(max(SizeBounds.minH,min(SizeBounds.maxH,h))+0.5) end
     if conf.powerBarDetached and CanDetachPower(key) then
         local dx=pf.dpbXBox and tonumber(pf.dpbXBox:GetText()); if dx then conf.detachedPowerBarOffsetX=San(dx,0) end
         local dy=pf.dpbYBox and tonumber(pf.dpbYBox:GetText()); if dy then conf.detachedPowerBarOffsetY=San(dy,-4) end
@@ -392,8 +397,8 @@ local function CopySizeTo(targetKey)
     if type(_G.MSUF_EM_UndoBeforeChange)=="function" then _G.MSUF_EM_UndoBeforeChange("unit", targetKey) end
     local dst = db[targetKey]
     if not dst then db[targetKey] = {}; dst = db[targetKey] end
-    if src.width ~= nil then dst.width = floor(max(40, min(800, tonumber(src.width) or 250)) + 0.5) end
-    if src.height ~= nil then dst.height = floor(max(8, min(200, tonumber(src.height) or 40)) + 0.5) end
+    if src.width ~= nil then dst.width = floor(max(SizeBounds.minW, min(SizeBounds.maxW, tonumber(src.width) or 250)) + 0.5) end
+    if src.height ~= nil then dst.height = floor(max(SizeBounds.minH, min(SizeBounds.maxH, tonumber(src.height) or 40)) + 0.5) end
     local applied = false
     if type(_G.MSUF_ApplyUnitFrameKey_Immediate)=="function" then
         _G.MSUF_ApplyUnitFrameKey_Immediate(targetKey)
@@ -423,9 +428,9 @@ local function ApplySize(changed)
         local h = pf.hBox and tonumber(pf.hBox:GetText())
         if ratio and ratio > 0 then
             if changed == "width" and w then
-                Quick.SetBoxText(pf.hBox, floor(max(8, min(200, w / ratio)) + 0.5))
+                Quick.SetBoxText(pf.hBox, floor(max(SizeBounds.minH, min(SizeBounds.maxH, w / ratio)) + 0.5))
             elseif changed == "height" and h then
-                Quick.SetBoxText(pf.wBox, floor(max(40, min(800, h * ratio)) + 0.5))
+                Quick.SetBoxText(pf.wBox, floor(max(SizeBounds.minW, min(SizeBounds.maxW, h * ratio)) + 0.5))
             end
         end
     end

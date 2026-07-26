@@ -529,6 +529,21 @@ function Render.Install(Preview, deps)
         LayoutUnitPreviewOverlay PositionFromAnchor PositionRuntimeLayoutIconPreview PositionStatusCornerPreview PositionSameAnchorPreview PositionLevelPreview ResolveStatusPreviewAnchor SetPreviewIconTexture NormalizeStatusPreviewId
     ]])
     renderState.ZOOM_MIN = tonumber(deps.ZOOM_MIN) or 0.35
+    --- Mock body clamp = the shared legal size range every conf.width/height
+    --- writer enforces (State/MSUF_Defaults.lua exports it; the EM2 popup
+    --- clamps writes against the same table). Clamping the mock any narrower
+    --- makes the preview lie about tall/narrow frames — and every
+    --- frame-relative offset (status icons, drag targets) with it.
+    renderState.ClampUnitPreviewSize = function(w, h)
+        local b = _G.MSUF_UnitFrameSizeBounds
+        local minW = tonumber(b and b.minW) or 40
+        local maxW = tonumber(b and b.maxW) or 800
+        local minH = tonumber(b and b.minH) or 8
+        local maxH = tonumber(b and b.maxH) or 200
+        if w < minW then w = minW elseif w > maxW then w = maxW end
+        if h < minH then h = minH elseif h > maxH then h = maxH end
+        return w, h
+    end
     renderState.UnitPreviewPortraitTexture = deps.UnitPreviewPortraitTexture
     renderState.ClassPortraitVisual = deps.ClassPortraitVisual
     renderState.PreviewStatus = MSUF.UFPreviewStatus or {}
@@ -840,8 +855,7 @@ function Preview.Refresh(box, reason)
     if ch <= 1 then ch = 180 end
     local w = tonumber(runtimeSpec and runtimeSpec.width) or tonumber(conf.width or conf.frameWidth) or (key == "boss" and 180 or (key == "focus" and 180 or 275))
     local h = tonumber(runtimeSpec and runtimeSpec.height) or tonumber(conf.height or conf.frameHeight) or (key == "boss" and 30 or (key == "focus" and 30 or 40))
-    if w < 60 then w = 60 elseif w > 520 then w = 520 end
-    if h < 18 then h = 18 elseif h > 140 then h = 140 end
+    w, h = R.ClampUnitPreviewSize(w, h)
     local mode = (runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.side) or conf.portraitMode
     local hasPortrait
     if runtimeSpec and runtimeSpec.portrait then

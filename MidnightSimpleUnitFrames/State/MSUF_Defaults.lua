@@ -742,6 +742,13 @@ local function MSUF_GetDefaultUnitOffsets(unit)
 end
 ExportPublic("MSUF_GetDefaultUnitOffsets", MSUF_GetDefaultUnitOffsets)
 
+--- Legal unit-frame size range. Single source of truth for every conf.width/
+--- conf.height writer (Edit Mode popup) and renderer (options unit preview
+--- mock): both clamp against this table, so the preview can never render a
+--- different frame rectangle than a size the writers allow. Coldpath only.
+local MSUF_UNIT_FRAME_SIZE_BOUNDS = { minW = 40, maxW = 800, minH = 8, maxH = 200 }
+ExportPublic("MSUF_UnitFrameSizeBounds", MSUF_UNIT_FRAME_SIZE_BOUNDS)
+
 local MSUF_DEFAULT_EXPRESSWAY_LOCALES = {
     enUS = true,
     enGB = true,
