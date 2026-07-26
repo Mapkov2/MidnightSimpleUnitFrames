@@ -345,6 +345,12 @@ local function PlayerCastbarApplyBackendState()
         enabled = isCastbarEnabled("player") == true
     end
 
+    -- Coldpath apply pass: re-sync the GCD bar's event registration so profile
+    -- switches enable/disable it without a reload.
+    if type(_G.MSUF_GCDBar_SyncRegistration) == "function" then
+        _G.MSUF_GCDBar_SyncRegistration()
+    end
+
     if enabled then
         InitSafePlayerCastbar()
         if _G.MSUF_PlayerCastbar then

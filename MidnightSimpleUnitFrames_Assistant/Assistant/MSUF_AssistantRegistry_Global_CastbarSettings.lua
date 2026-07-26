@@ -38,6 +38,15 @@ function A.GlobalRegistry.RegisterCastbarSettings(ctx)
     RegisterGeneralBoolean("castbarShowChannelTicks", "channelTicks", "Spell-Specific Channel Tick Markers", false, {
         "channel ticks", "castbar ticks", "tick lines", "kanal ticks",
     }, { category = "Global / Cast Bar", frameType = "castbarGlobal", apply = ApplyCastbar, reason = "MSUF_ASSISTANT_CASTBAR_TICKS" })
+    RegisterGeneralBoolean("showGCDBar", "gcdBar", "GCD Bar for Instant Casts", false, {
+        "gcd bar", "gcd castbar", "global cooldown bar", "instant cast bar", "gcd leiste",
+    }, { category = "Global / Cast Bar", frameType = "castbarGlobal", apply = ApplyCastbar, reason = "MSUF_ASSISTANT_CASTBAR_GCD" })
+    RegisterGeneralBoolean("showGCDBarTime", "gcdBarTime", "GCD Bar Time Text", true, {
+        "gcd bar time", "gcd time text", "gcd bar timer", "gcd zeittext",
+    }, { category = "Global / Cast Bar", frameType = "castbarGlobal", apply = ApplyCastbar, reason = "MSUF_ASSISTANT_CASTBAR_GCD_TIME" })
+    RegisterGeneralBoolean("showGCDBarSpell", "gcdBarSpell", "GCD Bar Spell Name and Icon", true, {
+        "gcd bar spell", "gcd spell name", "gcd bar icon", "gcd zaubername",
+    }, { category = "Global / Cast Bar", frameType = "castbarGlobal", apply = ApplyCastbar, reason = "MSUF_ASSISTANT_CASTBAR_GCD_SPELL" })
     RegisterGeneralBoolean("castbarInterruptShake", "interruptShake", "Cast Bar Interrupt Shake", false, {
         "interrupt shake", "castbar shake", "shake on interrupt", "unterbrechung wackeln",
     }, { category = "Global / Cast Bar", frameType = "castbarGlobal", apply = ApplyCastbar, reason = "MSUF_ASSISTANT_CASTBAR_SHAKE" })

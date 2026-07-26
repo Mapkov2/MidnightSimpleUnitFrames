@@ -149,6 +149,7 @@ Castbars\MSUF_FocusKick_StateDriver.lua
 Castbars\MSUF_BossCastbars.lua
 Castbars\MSUF_BossCastbars_Preview.lua
 Castbars\MSUF_Castbars.lua
+Castbars\MSUF_CastbarGCD.lua
 ClassPower\MSUF_CP_Constants.lua
 ClassPower\MSUF_CP_Modes.lua
 ClassPower\MSUF_CP_Core.lua

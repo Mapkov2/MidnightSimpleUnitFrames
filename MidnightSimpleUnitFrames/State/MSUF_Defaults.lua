@@ -2160,8 +2160,18 @@ if g.castbarUnifiedFillDirection ~= nil then
     if g.castbarOpositeDirectionTarget == nil then
         g.castbarOpositeDirectionTarget = false
     end
-    --- Removed GCD/instant-cast bar. Force-disable legacy profiles that had it enabled.
-    g.showGCDBar = false
+    --- GCD/instant-cast bar (12.1 native-duration rebuild in Castbars/MSUF_CastbarGCD.lua).
+    --- Opt-in: the v32 factory profile pins showGCDBar = false, and removal-era
+    --- profiles carry an explicit false from the old force-disable.
+    if g.showGCDBar == nil then
+        g.showGCDBar = false
+    end
+    if g.showGCDBarTime == nil then
+        g.showGCDBarTime = true
+    end
+    if g.showGCDBarSpell == nil then
+        g.showGCDBarSpell = true
+    end
     if g.empowerColorStages == nil then
         g.empowerColorStages = true
     end

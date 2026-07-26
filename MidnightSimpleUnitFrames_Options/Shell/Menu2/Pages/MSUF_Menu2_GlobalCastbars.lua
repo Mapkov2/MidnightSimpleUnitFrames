@@ -1104,6 +1104,31 @@ local function BuildCastbars(ctx)
     end
     end
     LazyCastbarSection({ sectionId = "castbar_behavior", title = "Shake & Fill Direction", height = 196, defaultOpen = true, build = BuildBehaviorSection })
+    local function BuildGCDSection(_, secBuilder)
+    local gcd = secBuilder:CollapsibleSection("castbar_gcd", "GCD Bar", 148, false)
+    local gcdLeftX = 14
+    local syncGCD
+    local gcdControls = BuildCastControlSpecs(gcd, {
+        { "toggle", "Show GCD bar for instant casts", gcdLeftX, -46, 300, "showGCDBar", false, "MSUF2_CASTBAR_GCD", nil, { switch = true,
+            afterSet = function(_, enabled)
+                Call("MSUF_SetGCDBarEnabled", enabled and true or false)
+                if syncGCD then syncGCD() end
+            end } },
+        { "toggle", "GCD bar: show time text", gcdLeftX, -78, 300, "showGCDBarTime", true, "MSUF2_CASTBAR_GCD_TIME" },
+        { "toggle", "GCD bar: show spell name + icon", gcdLeftX, -104, 300, "showGCDBarSpell", true, "MSUF2_CASTBAR_GCD_SPELL" },
+    }, "gcd")
+    if M.AddTooltip then
+        M.AddTooltip(gcdControls.showGCDBar,
+            "Show GCD bar for instant casts",
+            "Runs a short castbar for the global cooldown whenever an instant spell triggers it.\n\nThe fill and time text are driven natively by the client from the real (haste-scaled) GCD duration - no per-frame addon work while the bar runs. A real cast, channel or empower always takes priority.",
+            { hook = true, titleAsLine = true, labelHit = true, owner = "ANCHOR_RIGHT" })
+    end
+    syncGCD = function()
+        SetControlsEnabled({ gcdControls.showGCDBarTime, gcdControls.showGCDBarSpell }, ReadGBool("showGCDBar", false))
+    end
+    M.TrackRefresh(ctx, syncGCD)
+    end
+    LazyCastbarSection({ sectionId = "castbar_gcd", title = "GCD Bar", height = 148, build = BuildGCDSection })
     local function BuildTexturesSection(_, secBuilder)
     local textures = secBuilder:CollapsibleSection("castbar_textures", "Textures & Outline", 220, false)
     if W.AttachContextColorReferences then

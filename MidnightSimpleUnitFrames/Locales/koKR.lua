@@ -2897,6 +2897,7 @@ L["Shorten unit names (except Player)"] = "유닛 이름 단축(플레이어 제
 L["Spell IDs (comma-separated)"] = "철자 ID(쉼표로 구분)"
 L["Druid - Balance (no class bar)"] = "드루이드 - 균형 (클래스 바 없음)"
 L["Spell-specific channel tick markers"] = "주문별 채널 틱 마커"
+L["Runs a short castbar for the global cooldown whenever an instant spell triggers it.\n\nThe fill and time text are driven natively by the client from the real (haste-scaled) GCD duration - no per-frame addon work while the bar runs. A real cast, channel or empower always takes priority."] = "즉시 시전 주문이 전역 재사용 대기시간을 발동하면 짧은 시전바를 표시합니다.\n\n채우기와 시간 텍스트는 실제(가속 반영) 전역 재사용 대기시간을 기준으로 클라이언트가 기본 처리하므로, 바가 표시되는 동안 애드온의 프레임별 작업이 없습니다. 실제 시전, 정신집중, 강화 시전이 항상 우선합니다."
 L["Shows tick separators on the Player castbar while channeling.\n\nSupported spells use their actual tick count, including supported talent and channel-duration changes. Unsupported channels keep five evenly spaced fallback lines. Custom channel tick settings override the automatic layout.\n\nThe markers are event-driven and add no recurring channel polling."] = "채널링하는 동안 플레이어 시전 막대에 틱 구분 기호를 표시합니다. \n\n지원되는 주문은 지원되는 특성 및 채널 지속 시간 변경을 포함하여 실제 틱 수를 사용합니다. 지원되지 않는 채널은 5개의 균등한 간격으로 대체 라인을 유지합니다. 사용자 정의 채널 틱 설정은 자동 레이아웃을 재정의합니다. \n\n마커는 이벤트 기반이며 반복 채널 폴링을 추가하지 않습니다."
 L["Class Color (Reaction fallback)"] = "클래스 색상(반응 대체)"
 L["Ready color (kick available)"] = "준비된 색상(킥 가능)"
