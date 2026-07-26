@@ -199,7 +199,7 @@ for scope, paths in pairs(canonicalOwners) do
         assertCuratedOwner(scope, dbKey, expectedKey)
     end
 end
-assert(canonicalOwnerCount == 92,
+assert(canonicalOwnerCount == 108,
     "canonical-owner identity count drifted: " .. tostring(canonicalOwnerCount))
 
 assertCuratedOwner("gf_party", "groupBorderR", "gf_party.groupBorderColor")
@@ -242,6 +242,13 @@ assertCuratedOwner("general", "barOutlineColorB", "general.barOutlineColor")
 local compatibilityReason = assert(runtimeA.AutoCoverage and runtimeA.AutoCoverage.CompatibilityProjectionReason,
     "AutoCoverage compatibility-projection policy missing")
 local retiredProjectionIdentities = {
+    { "general", "castbarPlayerBackendBeforeHide" },
+    { "general", "castbarTargetBackendBeforeHide" },
+    { "general", "classBarBgA" },
+    { "general", "editModePopupScale" },
+    { "general", "healPredictionColorR" },
+    { "general", "healPredictionColorG" },
+    { "general", "healPredictionColorB" },
     { "bars", "classPowerOutlineColorR" },
     { "bars", "classPowerOutlineColorG" },
     { "bars", "classPowerOutlineColorB" },
@@ -295,7 +302,7 @@ local retiredProjectionIdentities = {
     { "gf_mythicraid", "privateAuraY" },
     { "gf_mythicraid", "privateAurasEnabled" },
 }
-assert(#retiredProjectionIdentities == 52,
+assert(#retiredProjectionIdentities == 59,
     "retired compatibility-projection identity count drifted")
 for _, identity in ipairs(retiredProjectionIdentities) do
     local scope, dbKey = identity[1], identity[2]
