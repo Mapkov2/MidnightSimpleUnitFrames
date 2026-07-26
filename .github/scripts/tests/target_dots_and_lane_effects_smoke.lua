@@ -80,8 +80,10 @@ assert(menu:find('b:CollapsibleSection(baseId .. "_full_frame", "Full-Frame Effe
 
 local preview = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Auras.lua")
 assert(preview:find("tonumber(customIndex) <= 4", 1, true), "custom4 preview kind is rejected")
-assert(preview:find('item.enabled ~= true and not trackedPreview', 1, true),
+assert(preview:find('item.enabled ~= true and not (kind == "custom4" and trackedPreview)', 1, true),
     "selected target DoTs do not reveal the unit-frame preview")
+assert(preview:find("model.CustomContainerPreviewEntries", 1, true),
+    "unit-frame preview does not resolve tracked custom container entries")
 assert(preview:find("bounds.previewTextures and bounds.previewTextures[i]", 1, true),
     "unit-frame preview does not render selected target DoT icons")
 

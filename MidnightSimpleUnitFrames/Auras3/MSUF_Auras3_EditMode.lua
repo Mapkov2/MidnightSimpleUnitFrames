@@ -246,8 +246,20 @@ local function IsEditModeActive()
     return (st and st.active == true) or rawget(_G, "MSUF_UnitEditModeActive") == true
 end
 
-local function UnitPreviewActive(unit)
+local function EditPreviewActive()
     return IsEditModeActive() and rawget(_G, "MSUF_UnitPreviewActive") == true
+end
+
+--- Menu2's boss page keeps the out-of-menu boss frame preview alive; boss aura
+--- lanes follow that flag so the page shows auras 1:1 without edit mode.
+local function BossPageAuraPreviewActive()
+    return rawget(_G, "MSUF2_BossPageAuraPreviewActive") == true
+end
+
+local function UnitPreviewActive(unit)
+    if EditPreviewActive() then return true end
+    if unit == nil then return BossPageAuraPreviewActive() end
+    return (BOSS_UNITS[unit] == true or IsBossScope(unit)) and BossPageAuraPreviewActive() or false
 end
 
 local function IsConfigBlocked()
@@ -274,6 +286,32 @@ local function CustomItem(unit, index, create)
     local model = A3 and A3.MenuModel
     if not (model and type(model.CustomContainer) == "function") then return nil end
     return model.CustomContainer(unit, index, create == true)
+end
+
+--- Real tracked spells for a custom lane so previews mirror the runtime 1:1:
+--- each preview icon shows an actually configured spell (dots keep the runtime
+--- include filter). Returns nil while nothing is configured; edit mode then
+--- keeps a placeholder drag surface, the boss page preview shows nothing.
+local function CustomPreviewEntries(unit, kind)
+    local spec = GROUPS[kind]
+    local customIndex = spec and spec.customIndex
+    if not customIndex then return nil end
+    local model = A3 and A3.MenuModel
+    local fetch = model and (model.CustomContainerPreviewEntries or model.CustomContainerSpellEntries)
+    if type(fetch) ~= "function" then return nil end
+    local entries = fetch(unit, customIndex)
+    if type(entries) ~= "table" or #entries == 0 then return nil end
+    return entries
+end
+
+local function CustomPreviewEntriesSignature(entries)
+    if type(entries) ~= "table" then return "none" end
+    local out = ""
+    for i = 1, #entries do
+        local entry = entries[i]
+        out = out .. tostring(entry and (entry.spellID or entry.value) or "?") .. ","
+    end
+    return out
 end
 
 local function UnitLabel(unit)
@@ -314,7 +352,12 @@ local function UnitHasCustomPreview(unit)
     for index = 1, 4 do
         local item = CustomItem and CustomItem(unit, index, false)
         local placed = item and item.placed
-        if item and item.enabled == true and (tonumber(placed and placed.max) or 8) > 0 then return true end
+        if item and (tonumber(placed and placed.max) or 8) > 0 then
+            if item.enabled == true then return true end
+            -- Tracked target-DoTs reveal their lane even while the container
+            -- itself is still disabled (parity with the in-menu preview).
+            if index == 4 and type(item.spellIDs) == "string" and item.spellIDs:find("%d") then return true end
+        end
     end
     return false
 end
@@ -547,7 +590,10 @@ local function ReadGroupConfig(unit, kind)
             growth = placed.growth or "LEFTDOWN",
             rowWrap = "DOWN",
             show = item and item.enabled == true or false,
-            texture = auraType == "DEBUFF" and "Interface\\Icons\\Spell_Shadow_ShadowWordPain" or "Interface\\Icons\\Spell_Holy_WordFortitude",
+            -- The dots container keeps its own placeholder (Garrote) instead of
+            -- the generic debuff icon; tracked entries override it anyway.
+            texture = spec.customIndex == 4 and spec.texture
+                or (auraType == "DEBUFF" and "Interface\\Icons\\Spell_Shadow_ShadowWordPain" or "Interface\\Icons\\Spell_Holy_WordFortitude"),
         }
     end
     local auras, shared = EnsureDB()
@@ -1806,6 +1852,30 @@ local function RefreshSignature(unit, kind, cfg, metrics, textCfg, shownIcons, s
         .. "\030" .. tostring(textCfg and textCfg.debuffBorderMode)
 end
 
+--- Edit mode shows draggable chrome (header, tinted backdrop, mouse). The boss
+--- page preview renders the same lanes chromeless and click-through so they
+--- read as pure aura previews on top of the previewed frames.
+local function ApplyGroupChrome(group, spec, chrome)
+    if not group or group._msufA3ChromeMode == chrome then return end
+    group._msufA3ChromeMode = chrome
+    if group.Header then group.Header:SetShown(chrome) end
+    if group.SetBackdropColor then group:SetBackdropColor(0.02, 0.03, 0.08, chrome and 0.28 or 0) end
+    if group.SetBackdropBorderColor then
+        local color = (spec and spec.color) or {}
+        group:SetBackdropBorderColor(color[1] or 1, color[2] or 1, color[3] or 1, chrome and 0.72 or 0)
+    end
+    local interactive = chrome == true
+    group:EnableMouse(interactive)
+    if group.SetMouseClickEnabled then group:SetMouseClickEnabled(interactive) end
+    if group.SetMouseMotionEnabled then group:SetMouseMotionEnabled(interactive) end
+    local hitbox = group.Hitbox
+    if hitbox then
+        hitbox:EnableMouse(interactive)
+        if hitbox.SetMouseClickEnabled then hitbox:SetMouseClickEnabled(interactive) end
+        if hitbox.SetMouseMotionEnabled then hitbox:SetMouseMotionEnabled(interactive) end
+    end
+end
+
 function EM.HideUnit(unit)
     if IsBossScope(unit) then
         ForEachBossUnit(EM.HideUnit)
@@ -1834,7 +1904,10 @@ function EM.RefreshUnit(unit)
     end
 
     local auras, shared = EnsureDB()
-    if not shared or shared.showInEditMode == false or (not UnitEnabled(auras, unit) and not UnitHasCustomPreview(unit)) then
+    -- showInEditMode is an edit-mode-only toggle; the boss page preview keeps
+    -- rendering lanes regardless because it is the page's whole purpose.
+    if not shared or (EditPreviewActive() and shared.showInEditMode == false)
+        or (not UnitEnabled(auras, unit) and not UnitHasCustomPreview(unit)) then
         EM.HideUnit(unit)
         return
     end
@@ -1844,20 +1917,42 @@ function EM.RefreshUnit(unit)
         EM.HideUnit(unit)
         return
     end
+    -- Outside edit mode (boss page preview) lanes only make sense on frames the
+    -- preview actually shows; edit mode forces its frames visible itself.
+    if not EditPreviewActive() and frame.IsShown and not frame:IsShown() then
+        EM.HideUnit(unit)
+        return
+    end
 
     SetRuntimeAuraHidden(unit, true)
     local frameSig = FrameRefreshSignature(frame)
 
+    local chrome = EditPreviewActive()
     for kind, spec in pairs(GROUPS) do
         local cfg = ReadGroupConfig(unit, kind)
         local metrics = type(A3.BuildAuraLaneMetrics) == "function" and A3.BuildAuraLaneMetrics(unit, kind) or nil
         local group = CreateGroup(unit, kind)
-        if not (cfg.show and cfg.max > 0 and (not metrics or metrics.enabled ~= false)) then
+        local entries = spec.customIndex and CustomPreviewEntries(unit, kind) or nil
+        -- Tracked target-DoTs reveal their lane exactly like the in-menu
+        -- preview does, even while the container itself is still disabled.
+        local laneShown = cfg.show or (spec.customIndex == 4 and entries ~= nil)
+        -- Outside edit mode custom lanes stay strictly 1:1 with the runtime:
+        -- nothing tracked means nothing to preview. Placeholder-only custom
+        -- lanes exist purely as edit-mode drag surfaces.
+        if laneShown and spec.customIndex and not entries and not chrome then laneShown = false end
+        if not (laneShown and cfg.max > 0 and (not metrics or metrics.enabled ~= false)) then
             group._msufA3RefreshSignature = nil
             group:Hide()
         else
             local textCfg = ReadTextConfig(unit, kind)
-            local shownIcons = math_min(PREVIEW_ICONS, (metrics and metrics.num) or cfg.max)
+            local shownIcons
+            if entries then
+                -- Custom lanes preview the tracked spells 1:1: one icon per
+                -- configured spell, capped by the lane's own max.
+                shownIcons = math_min((metrics and metrics.num) or cfg.max, #entries)
+            else
+                shownIcons = math_min(PREVIEW_ICONS, (metrics and metrics.num) or cfg.max)
+            end
             if shownIcons < 1 then shownIcons = 1 end
             local size = (metrics and metrics.size) or cfg.size
             local step = (metrics and metrics.step) or (cfg.size + cfg.spacing)
@@ -1874,6 +1969,7 @@ function EM.RefreshUnit(unit)
             local y = (metrics and metrics.y) or cfg.y
             local anchor = (metrics and metrics.anchor) or cfg.anchor
             local signature = RefreshSignature(unit, kind, cfg, metrics, textCfg, shownIcons, size, step, perRow, laneW, laneH, growthX, growthY, vertical, initialAnchor, x, y, anchor, frameSig)
+                .. "\030" .. CustomPreviewEntriesSignature(entries) .. "\030" .. tostring(chrome)
 
             if group._msufA3RefreshSignature ~= signature or not (group.IsShown and group:IsShown()) then
                 group._msufA3RefreshSignature = signature
@@ -1890,6 +1986,7 @@ function EM.RefreshUnit(unit)
                     group.Label:SetText(UnitLabel(unit) .. " " .. spec.label)
                     StyleLabel(group.Label)
                 end
+                ApplyGroupChrome(group, spec, chrome)
 
                 for i = 1, shownIcons do
                     local icon = EnsureIcon(group, i)
@@ -1899,7 +1996,8 @@ function EM.RefreshUnit(unit)
                     local body = group.Body or group
                     icon:SetPoint(initialAnchor, body, initialAnchor, col * step * growthX, row * step * growthY)
                     if icon.Icon then
-                        icon.Icon:SetTexture(cfg.texture or spec.texture)
+                        local entry = entries and entries[i]
+                        icon.Icon:SetTexture((entry and entry.icon) or cfg.texture or spec.texture)
                         ApplyIconZoom(icon.Icon, metrics and metrics.iconZoom or cfg.iconZoom)
                     end
                     if icon.Count then icon.Count:SetText(i == 1 and "3" or "") end
@@ -2079,6 +2177,8 @@ local function OnEditModeChanged(active)
         EM.HideAll()
         ExportPublic("MSUF_EM2_ActiveAuraGroup", nil)
         ExportPublic("MSUF_EM2_ActiveAuraUnit", nil)
+        -- Leaving edit mode must not strip the boss page's aura preview lanes.
+        if BossPageAuraPreviewActive() then RequestEditModeAurasRefresh(0) end
     end
 end
 

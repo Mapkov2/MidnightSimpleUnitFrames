@@ -523,8 +523,10 @@ end
 
 local function CustomLaneBounds(item, kind, frameW, frameH, metrics, previewEntries)
     if type(item) ~= "table" then return nil end
-    local trackedPreview = kind == "custom4" and type(previewEntries) == "table" and #previewEntries > 0
-    if item.enabled ~= true and not trackedPreview then return nil end
+    -- Any custom lane with configured spells previews them 1:1 with the real
+    -- spell icons; only the dot container may show while disabled.
+    local trackedPreview = type(previewEntries) == "table" and #previewEntries > 0
+    if item.enabled ~= true and not (kind == "custom4" and trackedPreview) then return nil end
     local placed = type(item.placed) == "table" and item.placed or {}
     local count = metrics and metrics.num or RuntimeRound(ClampNumber(placed.max, 8, 0, 40))
     if trackedPreview then count = min(count, #previewEntries) end
@@ -532,7 +534,7 @@ local function CustomLaneBounds(item, kind, frameW, frameH, metrics, previewEntr
     local size = ClampNumber(metrics and metrics.size or placed.size, 24, 1, 128)
     local spacing = ClampNumber(metrics and metrics.spacing or placed.spacing, 2, 0, 64)
     local perRow = metrics and metrics.perRow or RuntimeRound(ClampNumber(placed.perRow, 4, 1, 40))
-    local shown = min(max(1, count), PREVIEW_ICONS)
+    local shown = min(max(1, count), trackedPreview and count or PREVIEW_ICONS)
     local anchor = NormalizeAnchor(metrics and metrics.anchor or placed.anchor, "TOPRIGHT")
     local x = metrics and metrics.x or RuntimeRound(ClampNumber(placed.x, 0, -4096, 4096))
     local y = metrics and metrics.y or RuntimeRound(ClampNumber(placed.y, 0, -4096, 4096))
@@ -603,8 +605,12 @@ function Auras.BuildState(key, frameW, frameH, runtimeSpec)
     for index = 1, 4 do
         local kind = "custom" .. tostring(index)
         local metrics = type(cfg.customMetrics) == "table" and cfg.customMetrics[index] or nil
-        local previewEntries = index == 4 and type(model.CustomContainerSpellEntries) == "function"
-            and model.CustomContainerSpellEntries(key, index) or nil
+        local previewEntries
+        if type(model.CustomContainerPreviewEntries) == "function" then
+            previewEntries = model.CustomContainerPreviewEntries(key, index)
+        elseif type(model.CustomContainerSpellEntries) == "function" then
+            previewEntries = model.CustomContainerSpellEntries(key, index)
+        end
         state[kind] = CustomLaneBounds(CustomItem(model, key, index, false), kind, frameW, frameH, metrics, previewEntries)
     end
     if not state.buff and not state.debuff and not state.custom1 and not state.custom2 and not state.custom3 and not state.custom4 then return nil end

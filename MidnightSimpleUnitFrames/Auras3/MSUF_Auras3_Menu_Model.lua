@@ -2068,6 +2068,24 @@ function Model.CustomContainerSpellEntries(unit, index)
     return out
 end
 
+--- Entries the runtime would actually track for a custom container, for 1:1
+--- previews. The target-dot container mirrors the runtime include filter: only
+--- curated dot IDs plus explicitly allowed custom IDs survive. Empty means
+--- empty - previews outside edit mode render nothing for this container.
+function Model.CustomContainerPreviewEntries(unit, index)
+    index = math_floor(ClampNumber(index, 1, 1, CUSTOM_CONTAINER_MAX))
+    local entries = Model.CustomContainerSpellEntries(unit, index)
+    if index ~= TARGET_DOT_CONTAINER_INDEX or #entries == 0 then return entries end
+    local out = {}
+    for i = 1, #entries do
+        local entry = entries[i]
+        if entry.customID == true or Model.IsTargetDotSpell(entry.spellID) then
+            out[#out + 1] = entry
+        end
+    end
+    return out
+end
+
 local TARGET_DOT_CLASS_ORDER = {
     "DEATHKNIGHT", "DEMONHUNTER", "DRUID", "EVOKER", "HUNTER", "MAGE", "MONK",
     "PALADIN", "PRIEST", "ROGUE", "SHAMAN", "WARLOCK", "WARRIOR",
