@@ -905,6 +905,17 @@ local function RefreshNameRelativeAnchors(frame)
   return refreshed == true
 end
 
+local function ApplyDefaultRaidMarkerTexture(tex, index)
+  -- 12.x SetRaidTargetIconTexture is texture:SetSpriteSheetCell(): it slices whatever texture is
+  -- currently set and moves the real tex coords behind the SetTexCoord dedupe cache. Re-assert the
+  -- stock marker sheet first (cached no-op while it is already set, and required after a custom
+  -- icon or pack texture was on this region), then drop the coord cache so a later custom/pack
+  -- application cannot be dedupe-skipped against coords the sprite-cell call changed underneath.
+  SetTexture(tex, RAID_MARKER_TEXTURE)
+  SetRaidTargetIconTexture(tex, index)
+  tex._msufStatusL, tex._msufStatusR, tex._msufStatusT, tex._msufStatusB = nil, nil, nil, nil
+end
+
 local function UpdateRaidMarker(frame, status)
   local cfg = status and status.raidMarker
   local tex = frame.raidTargetIcon
@@ -918,10 +929,20 @@ local function UpdateRaidMarker(frame, status)
     end
     return
   end
+  -- tex._msufRaidMarkerIndex contract: non-nil only while the region shows the default sheet cell
+  -- for that plain index; every other render nils it so the dedupe below can never skip a repaint.
   local index = GetRaidTargetIndex(unit)
   if issecretvalue(index) == true then
     tex._msufRaidMarkerIndex = nil
-    SetRaidTargetIconTexture(tex, index)
+    -- A custom icon override is one fixed texture for all eight markers, so it renders without
+    -- knowing the secret index; only the default sheet needs the C-side sprite-cell helper.
+    local custom = cfg.customIcon
+    if type(custom) == "string" and custom ~= "" then
+      SetTexture(tex, custom)
+      SetTexCoord(tex, 0, 1, 0, 1)
+    else
+      ApplyDefaultRaidMarkerTexture(tex, index)
+    end
     SetShown(tex, true)
     return
   end
@@ -931,15 +952,15 @@ local function UpdateRaidMarker(frame, status)
     return
   end
   if ApplyStatusIconPackTexture(tex, cfg, status, "raidMarker", index) then
-    tex._msufRaidMarkerIndex = index
+    tex._msufRaidMarkerIndex = nil
     SetShown(tex, true)
     return
   end
-  if (status and status.group) or issecretvalue(index) == true then
+  if status.group then
     tex._msufRaidMarkerIndex = nil
-    SetRaidTargetIconTexture(tex, index)
+    ApplyDefaultRaidMarkerTexture(tex, index)
   elseif tex._msufRaidMarkerIndex ~= index then
-    SetRaidTargetIconTexture(tex, index)
+    ApplyDefaultRaidMarkerTexture(tex, index)
     tex._msufRaidMarkerIndex = index
   end
   SetShown(tex, true)
