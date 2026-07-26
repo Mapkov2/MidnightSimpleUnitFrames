@@ -15,7 +15,7 @@ local function Omits(source, needle, label)
     assert(not source:find(needle, 1, true), label)
 end
 
-local specs = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GroupSpecs.lua")
+local specs = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupSpecs.lua")
 for _, value in ipairs({ "MSUF", "AUTO", "SHOW", "NONE" }) do
     Contains(specs, 'value = "' .. value .. '"', "missing frame-provider value " .. value)
 end
@@ -24,14 +24,14 @@ Contains(specs, 'text = "Force Blizzard frames"', "forced Blizzard ownership is 
 Contains(specs, "tooltipTitle", "frame-provider entries have no hover titles")
 Contains(specs, "tooltip =", "frame-provider entries have no hover explanations")
 
-local group = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_Group.lua")
+local group = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Group.lua")
 Contains(group, "local function FrameProvider(kind)", "combined provider getter is missing")
 Contains(group, "local function SetFrameProvider(kind, provider)", "combined provider setter is missing")
 Contains(group, "conf.enabled = nextEnabled", "provider setter does not update MSUF ownership")
 Contains(group, "conf.blizzardFallbackMode = provider", "provider setter does not update Blizzard fallback ownership")
 Contains(group, 'Frame providers | Party: ', "all-scope provider summary is missing")
 
-local layout = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GroupLayout.lua")
+local layout = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupLayout.lua")
 Contains(layout, '"Frames used in this scope"', "combined provider dropdown is missing")
 Contains(layout, "FrameProviderTooltip(CurrentScope())", "selected provider has no hover explanation")
 Contains(layout, "Party, Raid, and Mythic Raid are independent.", "scope independence is not explained")
@@ -42,7 +42,7 @@ Omits(layout, '"If this switch is off"', "legacy two-control ownership UX is sti
 Omits(layout, 'W.SwitchAt(general, "Use MSUF group frames"', "legacy MSUF ownership switch is still visible")
 Omits(layout, "another MSUF group scope is on", "menu still claims inactive scopes override the live scope")
 
-local dropdowns = Read("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Dropdowns.lua")
+local dropdowns = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Dropdowns.lua")
 Contains(dropdowns, 'row:SetScript("OnEnter", ShowDropdownItemTooltip)', "dropdown rows do not show item help on hover")
 Contains(dropdowns, 'row:SetScript("OnLeave"', "dropdown row help is not dismissed on mouse leave")
 

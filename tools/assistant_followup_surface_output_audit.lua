@@ -219,8 +219,8 @@ local function loadNativeGroupCopyContract()
     end
 
     local nativeNS = { MSUF2 = nativeM }
-    local specsPath = "MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GroupSpecs.lua"
-    local groupPath = "MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_Group.lua"
+    local specsPath = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupSpecs.lua"
+    local groupPath = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Group.lua"
     if not exists(specsPath) then
         specsPath = "../../" .. specsPath
         groupPath = "../../" .. groupPath

@@ -75,7 +75,7 @@ assert(nr == 0.17 and ng == 0.39 and nb == 0.83 and na == 0.66,
       .. tostring(nr) .. "," .. tostring(ng) .. "," .. tostring(nb) .. "," .. tostring(na))
 assert(classReads == 1, "NPC name class color repeated UnitClass")
 
-local menu = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GlobalFonts.lua")
+local menu = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GlobalFonts.lua")
 assert(menu:find('{ value = "CLASS", text = "Class Color"', 1, true),
     "HP Text Color dropdown is missing Class Color")
 
@@ -84,8 +84,8 @@ assert(not healthElement:find("healthColorByClass", 1, true),
     "static class-color HP text leaked into the UNIT_HEALTH value hotpath")
 
 for _, path in ipairs({
-    "MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua",
-    "MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Render.lua",
+    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua",
+    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Render.lua",
     "MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Preview.lua",
 }) do
     assert(Read(path):find("healthColorByClass", 1, true), "preview is missing HP class-color support: " .. path)

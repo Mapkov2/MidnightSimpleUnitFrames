@@ -74,6 +74,7 @@ end
 local function ResolveRepositoryRoot()
     for _, root in ipairs({ ".", "..", "../.." }) do
         if Exists(Join(root, "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames.toc"))
+            and Exists(Join(root, "MidnightSimpleUnitFrames_Options/MidnightSimpleUnitFrames_Options.toc"))
             and Exists(Join(root, "MidnightSimpleUnitFrames_Assistant/MidnightSimpleUnitFrames_Assistant.toc"))
             and Exists(Join(root, "tools/assistant_graphify_inventory_data.lua"))
         then
@@ -89,6 +90,7 @@ local dispositionChunk, dispositionError = loadfile(Join(
 assert(dispositionChunk, "Graphify disposition ledger could not load: " .. tostring(dispositionError))
 local GraphifyDispositions = assert(dispositionChunk(), "Graphify disposition ledger returned no contract")
 local CORE = Join(ROOT, "MidnightSimpleUnitFrames")
+local OPTIONS = Join(ROOT, "MidnightSimpleUnitFrames_Options")
 local MSUF = assert(_G.MSUF_NS, "WoW stubs did not create MSUF_NS")
 local M = assert(MSUF.MSUF2, "WoW stubs did not create MSUF2")
 _G.SlashCmdList = _G.SlashCmdList or {}
@@ -204,7 +206,7 @@ local MENU_XML = {
 
 local loadedMenuFiles = 0
 for _, relativeXml in ipairs(MENU_XML) do
-    local xmlPath = Join(CORE, relativeXml)
+    local xmlPath = Join(OPTIONS, relativeXml)
     local xmlDir = Dirname(xmlPath)
     for relativeLua in Read(xmlPath):gmatch('<Script%s+file="([^"]+)"') do
         local path = Join(xmlDir, relativeLua:gsub("\\", "/"))

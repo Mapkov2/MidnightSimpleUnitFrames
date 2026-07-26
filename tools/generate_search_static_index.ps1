@@ -16,7 +16,7 @@ if (-not $repo) { throw "Repository root was not found." }
 Set-Location $repo
 
 $lua = Get-Command lua -ErrorAction Stop
-$output = "MidnightSimpleUnitFrames/Shell/Menu2/Search/MSUF_Menu2_Search_StaticIndex_Data.lua"
+$output = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_StaticIndex_Data.lua"
 $projector = ".github/scripts/search_static_index_project.lua"
 
 # The projector builds every Menu2 page through the real crosswalk harness, which

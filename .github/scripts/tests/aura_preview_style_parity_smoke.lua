@@ -19,7 +19,7 @@ Check(model:find('buffShowDurationBar = Model.ReadLaneStyleBool(unit, "buff", "s
     and model:find('debuffDurationBarDirection = Model.ReadLaneDurationBarDirection(unit, "debuff")', 1, true),
     "unit preview config lost lane-specific duration-bar styling")
 
-local unitPreview = Read("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Auras.lua")
+local unitPreview = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Auras.lua")
 Check(unitPreview:find('fs:SetPoint(anchor, icon, anchor, x, y)', 1, true)
     and unitPreview:find('PlaceAuraText(icon.timer, icon, cdAnchor, cdX, cdY)', 1, true)
     and unitPreview:find('PlaceAuraText(icon.stack, icon, stackAnchor, stackX, stackY)', 1, true),
@@ -65,14 +65,14 @@ Check(editPreview:find('cooldownDecimalSeconds = "buffCooldownDecimalSeconds"', 
     and editPreview:find('decimalThreshold = tonumber(cfg and cfg.cooldownDecimalSeconds) or 3', 1, true),
     "Edit Mode dummy aura lost its lane-specific decimal threshold")
 
-local auraMenu = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_Auras.lua")
+local auraMenu = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras.lua")
 local queueStart = assert(auraMenu:find("local function QueueGroupScope", 1, true))
 local queueEnd = assert(auraMenu:find("local function GFAurasRoot", queueStart, true))
 local queueBody = auraMenu:sub(queueStart, queueEnd)
 Check(queueBody:find("RefreshGFPreview()", 1, true),
     "group Aura writes no longer request an immediate menu-preview repaint")
 
-local groupPreview = Read("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Render.lua")
+local groupPreview = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Render.lua")
 Check(groupPreview:find("local function OverlayRawAuraPreviewStyle", 1, true)
     and groupPreview:find("OverlayRawAuraPreviewStyle(scene.buffCfg, rawAuras.buff)", 1, true)
     and groupPreview:find("OverlayRawAuraPreviewStyle(scene.debuffCfg, rawAuras.debuff)", 1, true),

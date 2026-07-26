@@ -273,7 +273,7 @@ do
             end,
         },
     }
-    local modelChunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Model.lua"))
+    local modelChunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Model.lua"))
     modelChunk("MidnightSimpleUnitFrames", modelNamespace)
     local Model = assert(modelNamespace.UFPreview and modelNamespace.UFPreview.Model, "preview model missing")
     local LiveUnitData = assert(Model.LiveUnitData, "LiveUnitData missing from preview model")
@@ -324,7 +324,7 @@ end
 
 -- ================================================================ 3) wiring contracts
 do
-    local render = ReadSource("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua")
+    local render = ReadSource("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua")
     Check(render:find("local data = (D.LiveUnitData and D.LiveUnitData(key)) or UNIT_DATA[key] or UNIT_DATA.player or {}", 1, true) ~= nil,
         "unit preview refresh no longer prefers the live snapshot")
     Check(render:find("tonumber(data.hpMax) or 1000000", 1, true) ~= nil
@@ -339,14 +339,14 @@ do
     Check(render:find("_G.SetPortraitTexture(mock.portrait.tex, data.liveUnit)", 1, true) ~= nil,
         "unit preview no longer mirrors the live portrait")
 
-    local view = ReadSource("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_View.lua")
+    local view = ReadSource("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_View.lua")
     Check(view:find('driver:RegisterEvent("PLAYER_REGEN_DISABLED")', 1, true) ~= nil
         and view:find("driver:UnregisterAllEvents()", 1, true) ~= nil,
         "unit live-state driver lost its combat drop contract")
     Check(view:find("ReleaseUnitPreviewLiveState(self)", 1, true) ~= nil,
         "unit live-state driver is not released on hide")
 
-    local groupRender = ReadSource("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Render.lua")
+    local groupRender = ReadSource("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Render.lua")
     Check(groupRender:find('MSUF.UFPreview.LiveUnitData("player")', 1, true) ~= nil,
         "group preview scene no longer samples the live player")
     Check(groupRender:find("(liveData and liveData.hp) or 0.72", 1, true) ~= nil,
@@ -357,12 +357,12 @@ do
     Check(groupRender:find("(scene.liveData and scene.liveData.name)", 1, true) ~= nil,
         "group preview name no longer mirrors the live player")
 
-    local groupNative = ReadSource("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Native.lua")
+    local groupNative = ReadSource("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Native.lua")
     Check(groupNative:find("function box:ArmLiveStateDriver()", 1, true) ~= nil
         and groupNative:find("function box:ReleaseLiveStateDriver()", 1, true) ~= nil,
         "group live-state driver lifecycle missing")
 
-    local model = ReadSource("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Model.lua")
+    local model = ReadSource("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Model.lua")
     Check(model:find("MSUF_UFCore_RequestLayoutForUnit", 1, true) == nil,
         "dead MSUF_UFCore_RequestLayoutForUnit call must stay removed")
     Check(model:find("elseif type(_G.MSUF_UFCore_NotifyConfigChanged) == \"function\" then", 1, true) ~= nil,

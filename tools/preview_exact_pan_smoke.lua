@@ -1,7 +1,7 @@
 -- Executable smoke for the allocation-free exact preview-pan primitive used by
 -- Unit, Group, and Class Resources canvas commands.
 
-local addonRoot = arg[1] or "MidnightSimpleUnitFrames"
+local addonRoot = arg[1] or "MidnightSimpleUnitFrames_Options"
 local ns = { MSUF2 = { Fallbacks = {} } }
 local chunk, err = loadfile(addonRoot .. "/Shell/Menu2/MSUF_Menu2_PreviewHelpers.lua")
 assert(chunk, err)

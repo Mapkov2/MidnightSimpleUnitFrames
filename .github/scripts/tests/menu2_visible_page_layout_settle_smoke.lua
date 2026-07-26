@@ -1,4 +1,4 @@
-local path = "MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Window.lua"
+local path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Window.lua"
 local file = assert(io.open(path, "rb"))
 local source = file:read("*a")
 file:close()

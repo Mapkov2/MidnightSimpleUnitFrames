@@ -8,7 +8,7 @@
 local repoRoot = ...
 repoRoot = tostring(repoRoot or "."):gsub("[/\\]+$", "")
 
-local SEARCH_DIR = repoRoot .. "/MidnightSimpleUnitFrames/Shell/Menu2/Search/"
+local SEARCH_DIR = repoRoot .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/"
 local LOCALE_DIR = repoRoot .. "/MidnightSimpleUnitFrames/Locales/"
 local LOCALES = { "deDE", "esES", "esMX", "frFR", "itIT", "koKR", "ptBR", "ruRU", "zhCN", "zhTW" }
 

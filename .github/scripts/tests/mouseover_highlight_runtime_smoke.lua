@@ -162,7 +162,7 @@ assert(not groupRoundedHover:find("ShowRoundedEdgeStack", 1, true)
     and not groupRoundedHover:find("highlightBorder", 1, true),
   "rounded group mouseover still performs per-texture or native-border work")
 
-local misc = Read(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GlobalMisc.lua")
+local misc = Read(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GlobalMisc.lua")
 Has(misc, 'CollapsibleSection("misc_mouseover_highlight"', "mouseover controls were not moved to Miscellaneous")
 Has(misc, '"Frame Highlights"', "mouseover and group-target controls are not grouped under Frame Highlights")
 Has(misc, '"highlightStyle"', "Miscellaneous is missing the mouseover style control")
@@ -172,14 +172,14 @@ Has(misc, '"gf_" .. kind .. ".targetIndicator"', "group-target switches do not e
 Has(misc, 'groupPage.Set(kind, "targetIndicator", value and true or false, "visual")',
   "group-target switches do not use the existing scoped live-apply path")
 
-local groupIndicators = Read(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GroupIndicators.lua")
+local groupIndicators = Read(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupIndicators.lua")
 assert(not groupIndicators:find('BindScopeToggle(ctx, W.SwitchAt(highlightCard', 1, true),
   "Group Status still owns the hard-to-discover target-highlight toggle")
 Has(groupIndicators, 'pageKey = "opt_misc"', "old target-highlight location does not link to Frame Highlights")
 Has(groupIndicators, 'sectionId = "misc_mouseover_highlight"',
   "old target-highlight location does not focus the Frame Highlights section")
 
-local colors = Read(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_AdvancedColors.lua")
+local colors = Read(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AdvancedColors.lua")
 assert(not colors:find('Meta("highlight.mouseover.enabled")', 1, true),
   "Colors still owns the mouseover enable toggle")
 Has(colors, 'Meta("highlight.mouseover.color")', "Colors lost the mouseover color control")
@@ -199,7 +199,7 @@ end
 MSUF_RefreshAllFrameColors = function() colorRefreshCalls = colorRefreshCalls + 1 end
 MSUF.MSUF2 = MSUF.MSUF2 or {}
 MSUF.MSUF2.ApplyService = nil
-assert(loadfile(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_ApplyService.lua"))(
+assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ApplyService.lua"))(
   "MidnightSimpleUnitFrames",
   MSUF
 )

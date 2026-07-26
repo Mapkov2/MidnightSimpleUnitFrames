@@ -48,7 +48,7 @@ end
 local auraRuntime = Read(Join("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua"))
 local spellRuntime = Read(Join("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_SpellIndicators.lua"))
 local cornerRuntime = Read(Join("MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Indicators.lua"))
-local previewRuntime = Read(Join("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Render.lua"))
+local previewRuntime = Read(Join("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Render.lua"))
 
 assert(auraRuntime:find("AuraIconBaseOffset(parentFrame)", 1, true)
         and auraRuntime:find("sensor.visual == \"corner\"", 1, true),

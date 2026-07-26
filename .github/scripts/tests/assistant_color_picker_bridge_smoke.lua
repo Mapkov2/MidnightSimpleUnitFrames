@@ -13,7 +13,7 @@ local function TestLoadfile(path)
 end
 loadfile = TestLoadfile
 
-local apiHandle = assert(io.open("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_API.lua", "r"))
+local apiHandle = assert(io.open("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_API.lua", "r"))
 local apiSource = apiHandle:read("*a")
 apiHandle:close()
 assert(apiSource:find("MSUF_OpenExactColorSettingPicker", 1, true), "public color-picker bridge missing")

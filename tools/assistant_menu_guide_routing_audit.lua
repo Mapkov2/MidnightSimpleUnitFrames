@@ -24,7 +24,7 @@ local M = assert(MSUF.MSUF2)
 assert(A.AutoCoverage and A.AutoCoverage.Fill)
 A.AutoCoverage.Fill()
 
-assert(loadfile("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Navigation.lua"))(
+assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Navigation.lua"))(
     "MidnightSimpleUnitFrames", MSUF)
 
 local failures = {}
@@ -191,7 +191,7 @@ end
 -- The removed Assistant text wizard intentionally has no guide rows. The
 -- release surface is the native Menu2 tour, so audit its real stage catalog
 -- instead of accepting guides=0/steps=0 as a green result.
-local guidedTourPath = "MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_GuidedTour.lua"
+local guidedTourPath = "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_GuidedTour.lua"
 local guidedTourFile = assert(io.open(guidedTourPath, "rb"), "native guided-tour source is missing")
 local guidedTourSource = guidedTourFile:read("*a") or ""
 guidedTourFile:close()
@@ -297,7 +297,7 @@ for i = 1, #auraRoutes do
 end
 
 local classPowerSource = assert(io.open(
-    "MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_AdvancedClassPower.lua", "rb"))
+    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AdvancedClassPower.lua", "rb"))
 local classPowerText = classPowerSource:read("*a")
 classPowerSource:close()
 Check(classPowerText:find('Meta("layout.independent_powerbar_shape", "setting", { settingKey = "player.detachedPowerBarShape" })', 1, true),
@@ -312,7 +312,7 @@ Check(detachedShape and A.ResolveMenuPageForSetting(detachedShape) == "classpowe
 local bridgeNS = { MSUF2 = { Search = {
     OpenTarget = function() return true, true end,
 } } }
-assert(loadfile("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_SearchBridge.lua"))(
+assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_SearchBridge.lua"))(
     "MidnightSimpleUnitFrames", bridgeNS)
 local bridgeCalled, bridgeOpened, bridgeFocused = bridgeNS.MSUF2.SearchBridge.OpenSearchTarget(
     "opt_misc", "MSUF Menu Font", "MSUF Menu Font")
@@ -340,7 +340,7 @@ local apiNS = {
     MSUF2 = apiM,
     ExportPublic = function(_, value) return value end,
 }
-assert(loadfile("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_API.lua"))(
+assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_API.lua"))(
     "MidnightSimpleUnitFrames", apiNS)
 local exactOpened, exactMessage = apiM.OpenExactSettingControl("general.menuFontKey", "MSUF Menu Font", "opt_misc")
 Check(exactOpened == true and apiM.openedPage == "opt_misc",

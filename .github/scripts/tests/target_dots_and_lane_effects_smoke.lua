@@ -67,7 +67,7 @@ local indicators = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_SpellIndica
 assert(indicators:find("item.allowAnyAura ~= true", 1, true), "lane effects still require an exact SpellID")
 assert(indicators:find('spellIndicators.rootKey or "SpellIndicators"', 1, true), "independent effect roots are unsupported")
 
-local menu = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_Auras.lua")
+local menu = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras.lua")
 assert(menu:find("custom4=Dots on target", 1, true), "Dots on target tab is missing")
 assert(menu:find('tool == "dots" and isTargetDots', 1, true), "curated DoT dropdown workspace is missing")
 assert(menu:find('"Custom Spell ID"', 1, true), "custom target DoT Spell ID input is missing")
@@ -78,7 +78,7 @@ assert(menu:find('title = index == 4 and "Tracked DoT Style Preview"', 1, true),
 assert(menu:find('b:CollapsibleSection(baseId .. "_full_frame", "Full-Frame Effect"', 1, true),
     "Buff/Debuff Full-Frame accordion is missing")
 
-local preview = Read("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Auras.lua")
+local preview = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Auras.lua")
 assert(preview:find("tonumber(customIndex) <= 4", 1, true), "custom4 preview kind is rejected")
 assert(preview:find('item.enabled ~= true and not trackedPreview', 1, true),
     "selected target DoTs do not reveal the unit-frame preview")

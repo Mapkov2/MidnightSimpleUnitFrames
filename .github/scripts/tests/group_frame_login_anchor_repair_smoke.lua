@@ -246,10 +246,10 @@ RunCase("mythicraid")
 
 -- Saved addon/UI scale is itself applied after login. Its existing coalesced
 -- reanchor flush must include group geometry as well as ordinary unit frames.
-local support = Read("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Support.lua")
-Check(support:find("local function RefreshGroupFrameGeometryAfterScale()", 1, true),
+local scaleRuntime = Read("MidnightSimpleUnitFrames/Runtime/MSUF_UIScaleRuntime.lua")
+Check(scaleRuntime:find("local function RefreshGroupFrameGeometryAfterScale()", 1, true),
   "saved-scale reanchor has no group-frame bridge")
-Check(Count(support, "RefreshGroupFrameGeometryAfterScale()") >= 3,
+Check(Count(scaleRuntime, "RefreshGroupFrameGeometryAfterScale()") >= 3,
   "saved-scale reanchor does not cover both OOC and combat-deferred paths")
 
 print("PASS group frame login anchor repair: raid/mythic secure settle, coalesced roster/difficulty replay, saved-scale bridge")

@@ -165,7 +165,7 @@ function MSUF.MSUF_Menu2_CreateUnitPreviewBox(parent, panel, width, height)
     return box
 end
 
-local path = "MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_ColorPainter.lua"
+local path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_ColorPainter.lua"
 assert(loadfile(path))("MidnightSimpleUnitFrames", MSUF)
 local painter = assert(M.ColorPainter and M.ColorPainter.Build, "Color Painter builder missing")
 local ctx = { key = "opt_colors", width = 900, wrapper = wrapper }

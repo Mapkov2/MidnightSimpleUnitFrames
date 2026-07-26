@@ -17,7 +17,7 @@ function M.PickDefaults()
     }
 end
 
-assert(loadfile("MidnightSimpleUnitFrames/Shell/Menu2/Search/MSUF_Menu2_Search_Text.lua"))(
+assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_Text.lua"))(
     "MidnightSimpleUnitFrames", root)
 
 local normalize = assert(M.Search and M.Search.Text and M.Search.Text.NormalizeSearchText,

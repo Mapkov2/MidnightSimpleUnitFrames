@@ -7,7 +7,7 @@ local F = {
 }
 local M = { Fallbacks = F }
 local MSUF = { MSUF2 = M, UF = { Layers = {} } }
-assert(loadfile("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Render.lua"))(nil, MSUF)
+assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Render.lua"))(nil, MSUF)
 
 local Render = assert(M.GroupPreviewRender, "renderer module missing")
 for _, name in ipairs({ "Plan", "Auras", "Finalize" }) do
@@ -75,7 +75,7 @@ M.gfPreviewLayerVisible = "invalid"
 scene = Render.Components.Plan(box, "INVALID_LAYER_STATE")
 assert(type(scene.layerVisible) == "table", "invalid layer visibility state was not contained")
 
-local file = assert(io.open("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Render.lua", "rb"))
+local file = assert(io.open("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Render.lua", "rb"))
 local source = file:read("*a")
 file:close()
 local contracts = {
@@ -88,7 +88,7 @@ for _, token in ipairs(contracts) do assert(source:find(token, 1, true), "missin
 assert(not source:match("function box:Refresh.-local function LayoutAuraGroup"),
     "aura component was folded back into Refresh")
 
-local nativeFile = assert(io.open("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Native.lua", "rb"))
+local nativeFile = assert(io.open("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Native.lua", "rb"))
 local nativeSource = nativeFile:read("*a")
 nativeFile:close()
 assert(nativeSource:find("PreviewHelpers.CreateLayerButton", 1, true),

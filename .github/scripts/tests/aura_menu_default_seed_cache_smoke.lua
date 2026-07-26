@@ -49,7 +49,7 @@ local compiledBlacklist = assert(auraFilter.BuildBlacklistHash({
 assert(compiledBlacklist[57723] == true and compiledBlacklist[409895] == true,
     "published aura presets did not reach the group blacklist hash")
 
-local groupAuraFile = assert(io.open("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GroupAuras.lua", "rb"))
+local groupAuraFile = assert(io.open("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupAuras.lua", "rb"))
 local groupAuraSource = groupAuraFile:read("*a")
 groupAuraFile:close()
 assert(groupAuraSource:find("local GF_AURA_BLACKLIST_AVAILABLE = true", 1, true),

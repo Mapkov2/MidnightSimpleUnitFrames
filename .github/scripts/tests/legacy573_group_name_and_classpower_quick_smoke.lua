@@ -16,7 +16,7 @@ local groupConfig = Read(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Gr
 local textLayout = Read(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Text_Layout.lua")
 local textFormat = Read(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Text_Format.lua")
 local textRuntime = Read(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Text_Runtime.lua")
-local classPower = Read(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_AdvancedClassPower.lua")
+local classPower = Read(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AdvancedClassPower.lua")
 
 Contains(profile, "conf._msufLegacyNameAnchorToFrame = true",
     "5.73 Group profiles do not persist the full-frame name anchor contract")

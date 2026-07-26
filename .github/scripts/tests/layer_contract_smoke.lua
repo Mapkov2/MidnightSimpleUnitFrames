@@ -245,7 +245,7 @@ assert(controlSchema:find("/custom-container/effect/layer", 1, true)
 -- The quiet white three-dot button is a shared hook, while the popup always reads the same
 -- addon-wide cold collector. Keep this as a source contract instead of a full
 -- Menu2/WoW widget mock.
-local menuRoot = Join(ROOT, "MidnightSimpleUnitFrames/Shell/Menu2")
+local menuRoot = Join(ROOT, "MidnightSimpleUnitFrames_Options/Shell/Menu2")
 local overviewPath = Join(menuRoot, "MSUF_Menu2_LayerOverview.lua")
 assert(Exists(overviewPath), "global LayerOverview module is missing")
 local overview = Read(overviewPath)

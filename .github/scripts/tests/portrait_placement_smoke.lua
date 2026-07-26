@@ -25,6 +25,7 @@ local function Near(value, expected, message)
 end
 
 local ADDON = root .. "/MidnightSimpleUnitFrames/"
+local OPTIONS = root .. "/MidnightSimpleUnitFrames_Options/"
 
 local function NewRegion(parent)
   local region = { parent = parent, shown = true, points = {}, frameLevel = 1 }
@@ -449,8 +450,8 @@ Check(frame.MSUFPortraitHolder._msufLayoutWidth == 176
 -- geometry and pin exact parity with the live relief offsets.
 local previewMSUF = { MSUF2 = {}, UF = { Layers = {} } }
 _G.MSUF_NS = previewMSUF
-assert(loadfile(ADDON .. "Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua"))(
-  "MidnightSimpleUnitFrames", previewMSUF)
+assert(loadfile(OPTIONS .. "Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua"))(
+  "MidnightSimpleUnitFrames_Options", previewMSUF)
 local PreviewInflation = assert(previewMSUF.UFPreviewRender.PreviewPortraitRingInflation,
   "preview portrait ring inflation helper missing")
 local CachePreviewExtents = assert(previewMSUF.UFPreviewRender.CachePreviewFullPortraitExtents,

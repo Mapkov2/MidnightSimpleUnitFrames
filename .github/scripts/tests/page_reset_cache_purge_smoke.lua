@@ -122,7 +122,7 @@ M.ApplyService = {
     RequestGroupReset = function() return true end,
 }
 
-assert(loadfile(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Bindings.lua"))(
+assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings.lua"))(
     "MidnightSimpleUnitFrames", namespace)
 
 assert(type(M.ResetPageToDefaults) == "function", "Bindings did not export ResetPageToDefaults")

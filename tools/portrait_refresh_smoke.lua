@@ -22,11 +22,11 @@ local configPath = ResolvePath(
     "UnitFrames/Engine/MSUF_UF_Config.lua"
 )
 local unitMenuPath = ResolvePath(
-    "MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_Unit.lua",
+    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Unit.lua",
     "Shell/Menu2/Pages/MSUF_Menu2_Unit.lua"
 )
 local unitVisualsMenuPath = ResolvePath(
-    "MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_UnitFrameVisuals.lua",
+    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitFrameVisuals.lua",
     "Shell/Menu2/Pages/MSUF_Menu2_UnitFrameVisuals.lua"
 )
 

@@ -174,9 +174,9 @@ _G.CreateFrame = function()
     function frame:UnregisterAllEvents() end
     return frame
 end
-assert(loadfile('MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Theme_Tokens.lua'))(
+assert(loadfile('MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme_Tokens.lua'))(
     'MidnightSimpleUnitFrames', root)
-assert(loadfile('MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Theme.lua'))(
+assert(loadfile('MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme.lua'))(
     'MidnightSimpleUnitFrames', root)
 _G.CreateFrame = previousCreateFrame
 
@@ -197,7 +197,7 @@ local accordionTitle = FontString()
 M.Theme.StyleFontString(accordionTitle, nil, 0, 'accordion')
 AssertEqual(accordionTitle.font, regular, 'configured accordion font face')
 AssertEqual(accordionTitle.size, 15, 'configured accordion font size')
-local widgetsFile = assert(io.open('MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Widgets.lua', 'rb'))
+local widgetsFile = assert(io.open('MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Widgets.lua', 'rb'))
 local widgetsSource = widgetsFile:read('*a')
 widgetsFile:close()
 assert(widgetsSource:find('T.Font(header, "GameFontNormal", Tr(title or ""), T.colors.text, "accordion")', 1, true),

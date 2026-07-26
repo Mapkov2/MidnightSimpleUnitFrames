@@ -1,6 +1,6 @@
 _G = _G or _ENV
 
-local path = "MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_ApplyService.lua"
+local path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ApplyService.lua"
 local handle = io.open(path, "r")
 if not handle then path = "Shell/Menu2/MSUF_Menu2_ApplyService.lua" else handle:close() end
 

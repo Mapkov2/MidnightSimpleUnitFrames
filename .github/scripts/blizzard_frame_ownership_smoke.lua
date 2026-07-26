@@ -144,7 +144,7 @@ Omits(factory, "UF.ShouldUseMSUFUnitFrame", "factory has no Blizzard-ownership b
 
 local profiles = Read("MidnightSimpleUnitFrames/State/MSUF_Profiles.lua")
 
-local menu = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_UnitSections.lua")
+local menu = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitSections.lua")
 Contains(menu, "Force Blizzard frame on", "Frame Basics exposes Blizzard ownership")
 Contains(menu, 'SettingMeta(ctx, "basics.force_blizzard_frame", unit, "useBlizzardFrame")', "ownership control has exact setting metadata")
 Contains(menu, "Independent from MSUF Enable; /reload required.", "menu explains independent ownership")

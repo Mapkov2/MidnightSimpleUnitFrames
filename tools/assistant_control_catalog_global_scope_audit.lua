@@ -1,5 +1,9 @@
 -- Local-only static audit for the global/advanced Menu2 catalog migration.
-local addonRoot = arg[1] or "MidnightSimpleUnitFrames"
+local requestedRoot = arg[1] or "MidnightSimpleUnitFrames"
+local addonRoot = requestedRoot:gsub("MidnightSimpleUnitFrames$", "MidnightSimpleUnitFrames_Options")
+if addonRoot == requestedRoot and not requestedRoot:match("MidnightSimpleUnitFrames_Options$") then
+    addonRoot = requestedRoot .. "/MidnightSimpleUnitFrames_Options"
+end
 
 local files = {
     "Shell/Menu2/Pages/MSUF_Menu2_Global.lua",

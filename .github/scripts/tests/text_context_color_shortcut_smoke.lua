@@ -7,9 +7,9 @@ local function Read(path)
     return source
 end
 
-local widgets = Read("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Widgets.lua")
-local unitText = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_UnitText.lua")
-local quickSettings = Read("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_TextQuickSettings.lua")
+local widgets = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Widgets.lua")
+local unitText = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitText.lua")
+local quickSettings = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_TextQuickSettings.lua")
 
 local helperStart = assert(widgets:find("local CONTEXT_COLOR_SHORTCUT_TEXT", 1, true),
     "card-local RGB shortcut helper is missing")

@@ -1,5 +1,5 @@
 local root = arg and arg[1] or "."
-local path = root .. "/MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Native.lua"
+local path = root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Native.lua"
 
 local selectedPage
 local invalidatedPage

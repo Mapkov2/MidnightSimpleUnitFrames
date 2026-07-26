@@ -36,7 +36,7 @@ local M = {
     end,
 }
 local MSUF = { MSUF2 = M, GuidedTour6 = tour }
-assert(loadfile(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_GuidedTour.lua"))(
+assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_GuidedTour.lua"))(
     "MidnightSimpleUnitFrames", MSUF)
 
 local frame, status, host = {}, {}, {}

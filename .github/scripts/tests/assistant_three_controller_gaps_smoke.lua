@@ -330,7 +330,7 @@ assert(_G.MSUF_DB.general.classPowerPreviewGuidesEnabled == false and M._msuf2Cl
 assert(A.UndoLast() == true and guides.get() == true and M._msuf2ClassPowerInlinePreview.layerVisibility.guides == true)
 assert(A.RedoLast() == true and guides.get() == false and M._msuf2ClassPowerInlinePreview.layerVisibility.guides == false)
 
-local previewFile = assert(io.open("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_ClassPowerPreview.lua", "rb"))
+local previewFile = assert(io.open("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_ClassPowerPreview.lua", "rb"))
 local previewSource = previewFile:read("*a")
 previewFile:close()
 assert(previewSource:find('settingKey = "general.classPowerPreviewGuidesEnabled"', 1, true), "Guides catalog control is not linked to its persisted setting")

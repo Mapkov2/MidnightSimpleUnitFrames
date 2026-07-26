@@ -179,8 +179,8 @@ local function ReadSource(relativePath)
     return source
 end
 
-local unitMenu = ReadSource("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_UnitSections.lua")
-local colorMenu = ReadSource("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_AdvancedColors.lua")
+local unitMenu = ReadSource("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitSections.lua")
+local colorMenu = ReadSource("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AdvancedColors.lua")
 Check(unitMenu:find("basics.use_player_class_color", 1, true),
     "the player class-color toggle is missing from Pet Frame Basics")
 Check(colorMenu:find("unit.pet.use_player_class_color", 1, true),

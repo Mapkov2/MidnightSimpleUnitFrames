@@ -14,17 +14,17 @@ local function Contains(source, value, message)
     assert(source:find(value, 1, true), message or ("missing contract: " .. value))
 end
 
-local nav = Read("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_NavRail.lua")
-local bridge = Read("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_SearchBridge.lua")
-local search = Read("MidnightSimpleUnitFrames/Shell/Menu2/Search/MSUF_Menu2_Search_IndexQuery.lua")
-local searchAPI = Read("MidnightSimpleUnitFrames/Shell/Menu2/Search/MSUF_Menu2_Search_API.lua")
-local searchRender = Read("MidnightSimpleUnitFrames/Shell/Menu2/Search/MSUF_Menu2_Search_Render.lua")
-local searchPalette = Read("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_SearchPalette.lua")
-local menuXML = Read("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2.xml")
-local searchText = Read("MidnightSimpleUnitFrames/Shell/Menu2/Search/MSUF_Menu2_Search_Text.lua")
-local guided = Read("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_GuidedTour.lua")
-local firstLoad = Read("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_FirstLoad.lua")
-local dashboard = Read("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Dashboard.lua")
+local nav = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_NavRail.lua")
+local bridge = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_SearchBridge.lua")
+local search = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_IndexQuery.lua")
+local searchAPI = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_API.lua")
+local searchRender = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_Render.lua")
+local searchPalette = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_SearchPalette.lua")
+local menuXML = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2.xml")
+local searchText = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_Text.lua")
+local guided = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_GuidedTour.lua")
+local firstLoad = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_FirstLoad.lua")
+local dashboard = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Dashboard.lua")
 local editMode = Read("MidnightSimpleUnitFrames/Shell/UI/EditMode/MSUF_EditMode_HUD.lua")
 
 Contains(searchText, 'M.Tr("Ask MSUF anything...")', "smart search lost its unified prompt")
@@ -130,7 +130,7 @@ local searchNamespace = {
     },
 }
 _G.C_Timer = _G.C_Timer or { After = function(_, callback) callback() end }
-assert(loadfile(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/Search/MSUF_Menu2_Search_IndexQuery.lua"))(
+assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_IndexQuery.lua"))(
     "MidnightSimpleUnitFrames", searchNamespace)
 local editDistance = assert(searchM.Search._RoutingContext.SearchEditDistanceWithin)
 assert(editDistance("player", "player", 1), "fuzzy identity match changed")

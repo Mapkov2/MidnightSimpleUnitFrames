@@ -252,7 +252,7 @@ M.RequestRefresh = function() end
 M.SelectPage = function() end
 M.RegisterPage = function(key, page) assert(key == "opt_bars"); registeredPage = page end
 
-assert(loadfile("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GlobalBars.lua"))("MidnightSimpleUnitFrames", MSUF)
+assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GlobalBars.lua"))("MidnightSimpleUnitFrames", MSUF)
 assert(registeredPage and type(registeredPage.build) == "function", "Bars page was not registered")
 local ctx = { width = 900, key = "opt_bars", SetContentHeight = function(self, value) self.contentHeight = value end }
 registeredPage.build(ctx)

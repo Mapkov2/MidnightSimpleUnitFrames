@@ -13,7 +13,7 @@ _G.CreateFrame = function()
     }
 end
 
-assert(loadfile(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Support.lua"))(
+assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua"))(
     "MidnightSimpleUnitFrames", MSUF)
 
 local proxy = assert(MSUF.MSUF2.RefreshProxy, "RefreshProxy was not exported")()

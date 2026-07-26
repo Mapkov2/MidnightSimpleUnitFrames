@@ -18,7 +18,7 @@ local function Contains(source, needle, message)
     assert(source:find(needle, 1, true), message or ("missing contract: " .. needle))
 end
 
-local support = Read(Join("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Support.lua"))
+local support = Read(Join("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua"))
 Contains(support, "local menuRuntimeTasks = {}", "Menu2 has no central delayed-task registry")
 Contains(support, "rawTimerAPI.NewTimer", "Menu2 delayed tasks are not cancellable")
 Contains(support, "local Runtime = M.MenuRuntime", "Menu2 has no cohesive runtime lifecycle service")
@@ -86,7 +86,7 @@ do
     _G.MSUF_IsConfigCombatLocked = nil
 end
 
-local window = Read(Join("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Window.lua"))
+local window = Read(Join("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Window.lua"))
 local combatEvent = assert(window:find('if event == "PLAYER_REGEN_DISABLED"', 1, true))
 local hide = assert(window:find("M.HideSlashMenuAndMinibar(f)", combatEvent, true))
 local quiesce = assert(window:find("MenuRuntime:Quiesce(reason)", hide, true))
@@ -99,12 +99,12 @@ assert(not window:find("SuspendMenuRuntimeForCombat", 1, true), "Window still or
 assert(not window:find("QuiesceScaleTasksForMenuHide", 1, true), "Window still orchestrates scale teardown directly")
 assert(not window:find("CancelMenuRuntimeTasks", 1, true), "Window still orchestrates timer teardown directly")
 
-local api = Read(Join("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_API.lua"))
+local api = Read(Join("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_API.lua"))
 Contains(api, 'MenuRuntime:Quiesce("combat")',
     "minimized Menu2 does not run the same combat quiescence path")
 Contains(api, "status._msuf2EventsRegistered == true", "full Menu2 registers duplicate combat listeners")
 
-local apply = Read(Join("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_ApplyService.lua"))
+local apply = Read(Join("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ApplyService.lua"))
 Contains(apply, "C_Timer.NewTimer", "Menu2 apply flush still relies only on non-cancellable After")
 Contains(apply, "function Apply.Quiesce(combat)", "pending settings apply is outside the unified lifecycle")
 Contains(apply, "pcall(flushTimer.Cancel, flushTimer)", "pending settings apply timer is not cancelled")
@@ -120,7 +120,7 @@ for _, legacy in ipairs({
     assert(not support:find(legacy, 1, true), "legacy lifecycle helper survived refactor: " .. legacy)
 end
 
-local command = 'git ls-files -- ":(glob)MidnightSimpleUnitFrames/Shell/Menu2/**/*.lua"'
+local command = 'git ls-files -- ":(glob)MidnightSimpleUnitFrames_Options/Shell/Menu2/**/*.lua"'
 local pipe = assert(io.popen(command, "r"))
 local exceptions = {
     ["MSUF_Menu2_Support.lua"] = true,       -- owns the tracked timer implementation and non-menu startup scale work

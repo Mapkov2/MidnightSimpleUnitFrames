@@ -107,7 +107,7 @@ assert(type(Registry:NormalizeActionInput(action, {})) == "table", "empty bar-gr
 local normalized = Registry:NormalizeActionInput(action, { scope = "player" })
 assert(normalized == nil, "selector-bound bar-gradient reset accepted a scope argument")
 
-local menuSourceFile = assert(io.open("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_AdvancedColors.lua", "rb"))
+local menuSourceFile = assert(io.open("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AdvancedColors.lua", "rb"))
 local menuSource = menuSourceFile:read("*a") or ""
 menuSourceFile:close()
 assert(menuSource:find('["bar_gradient.reset"] = "reset_bar_gradient_colors"', 1, true),

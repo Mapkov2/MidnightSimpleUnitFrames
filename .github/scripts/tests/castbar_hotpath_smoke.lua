@@ -530,14 +530,21 @@ local function ReadSource(relativePath)
     return source
 end
 
+local function ReadOptionsSource(relativePath)
+    local handle = assert(io.open(root .. "/MidnightSimpleUnitFrames_Options/" .. relativePath, "rb"))
+    local source = handle:read("*a")
+    handle:close()
+    return source
+end
+
 local defaultsSource = ReadSource("State/MSUF_Defaults.lua")
-local castbarMenuSource = ReadSource("Shell/Menu2/Pages/MSUF_Menu2_UnitFrameVisuals.lua")
-local castbarCopySource = ReadSource("Shell/Menu2/Pages/MSUF_Menu2_Unit.lua")
-local castbarResetSource = ReadSource("Shell/Menu2/MSUF_Menu2_Bindings.lua")
+local castbarMenuSource = ReadOptionsSource("Shell/Menu2/Pages/MSUF_Menu2_UnitFrameVisuals.lua")
+local castbarCopySource = ReadOptionsSource("Shell/Menu2/Pages/MSUF_Menu2_Unit.lua")
+local castbarResetSource = ReadOptionsSource("Shell/Menu2/MSUF_Menu2_Bindings.lua")
 local castbarVisualSource = ReadSource("Castbars/MSUF_CastbarVisuals.lua")
 local castbarAnchorSource = ReadSource("Castbars/MSUF_CastbarAnchors.lua")
 local castbarDriverSource = ReadSource("Castbars/MSUF_CastbarDriver.lua")
-local castbarPreviewSource = ReadSource("Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua")
+local castbarPreviewSource = ReadOptionsSource("Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua")
 local immediateRefresh = assert(castbarDriverSource:find("local function RefreshTargetFocusImmediate", 1, true))
 local idleFastPath = assert(castbarDriverSource:find("if CastbarAlreadyIdle(frame) then", immediateRefresh, true))
 local inactiveIdentityClear = assert(castbarDriverSource:find("StoreActiveStateIdentity(frame, nil)", immediateRefresh, true))

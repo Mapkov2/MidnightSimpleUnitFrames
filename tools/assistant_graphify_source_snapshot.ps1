@@ -54,6 +54,7 @@ $repoRoot = [System.IO.Path]::GetFullPath($RepositoryRoot).TrimEnd(
 
 $addonRoots = @(
     "MidnightSimpleUnitFrames",
+    "MidnightSimpleUnitFrames_Options",
     "MidnightSimpleUnitFrames_Assistant"
 )
 $pathByRelative = [System.Collections.Generic.Dictionary[string, string]]::new(

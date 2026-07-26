@@ -1,4 +1,4 @@
-local path = "MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_UnitStatusSection.lua"
+local path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitStatusSection.lua"
 local file = assert(io.open(path, "rb"))
 local source = file:read("*a")
 file:close()
@@ -38,7 +38,7 @@ assert(layout:find("Shared.PlaceSlider(placementCard, layer, placeLeftX, -178, p
 assert(not layout:find("placeLeftX, -212", 1, true),
     "status indicator layer still uses the clipped fourth-row position")
 
-local unitPath = "MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_Unit.lua"
+local unitPath = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Unit.lua"
 local unitFile = assert(io.open(unitPath, "rb"))
 local unitSource = unitFile:read("*a")
 unitFile:close()
@@ -60,7 +60,7 @@ assert(unitSource:find('StatusControl("classText", "Class Text"', 1, true),
 assert(not unitSource:find('StatusControl("unitInfoText"', 1, true),
     "combined identity text still exists instead of three separate Status Icon controls")
 
-local previewPath = "MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Specs.lua"
+local previewPath = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Specs.lua"
 local previewFile = assert(io.open(previewPath, "rb"))
 local previewSource = previewFile:read("*a")
 previewFile:close()
@@ -71,14 +71,14 @@ end
 assert(not previewSource:find("\nunitInfoText|", 1, true),
     "combined identity preview still exists instead of three separate previews")
 
-local viewPath = "MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_View.lua"
+local viewPath = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_View.lua"
 local viewFile = assert(io.open(viewPath, "rb"))
 local viewSource = viewFile:read("*a")
 viewFile:close()
 assert(viewSource:find('fn(key, moveReason)', 1, true),
     "status preview movement does not refresh the affected unit")
 
-local renderPath = "MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua"
+local renderPath = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua"
 local renderFile = assert(io.open(renderPath, "rb"))
 local renderSource = renderFile:read("*a")
 renderFile:close()

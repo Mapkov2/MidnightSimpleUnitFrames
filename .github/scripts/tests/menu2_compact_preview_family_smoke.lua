@@ -5,15 +5,15 @@ local function Read(path)
     return source
 end
 
-local unitPage = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_UnitSections.lua")
-local unitView = Read("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_View.lua")
-local groupPage = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GroupPreview.lua")
-local groupView = Read("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Native.lua")
-local classView = Read("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_ClassPowerPreview.lua")
-local previewHelpers = Read("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_PreviewHelpers.lua")
-local widgets = Read("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Widgets.lua")
-local castbarPage = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GlobalCastbars.lua")
-local castbarView = Read("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Castbar.lua")
+local unitPage = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitSections.lua")
+local unitView = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_View.lua")
+local groupPage = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupPreview.lua")
+local groupView = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Native.lua")
+local classView = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_ClassPowerPreview.lua")
+local previewHelpers = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_PreviewHelpers.lua")
+local widgets = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Widgets.lua")
+local castbarPage = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GlobalCastbars.lua")
+local castbarView = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Castbar.lua")
 
 assert(unitPage:find("UNIT_PREVIEW_COMPACT_BOX_HEIGHT = 132", 1, true)
     and unitPage:find('SetPoint("RIGHT", previewHeader, "RIGHT", -12, 0)', 1, true),
@@ -40,7 +40,7 @@ assert(not castbarPage:find("castbarPreviewExpanded", 1, true)
     "Castbar preview was pulled into the compact-preview family")
 
 local ns = { MSUF2 = {} }
-assert(loadfile("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_PreviewHelpers.lua"))("MidnightSimpleUnitFrames", ns)
+assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_PreviewHelpers.lua"))("MidnightSimpleUnitFrames", ns)
 local switchZoom = assert(ns.MSUF2.PreviewHelpers.SwitchCompactZoomMode)
 local box = { _manualZoom = nil, _zoomPanX = 7, _zoomPanY = -4 }
 assert(switchZoom(box, true, 1.50) and box._manualZoom == 1.50

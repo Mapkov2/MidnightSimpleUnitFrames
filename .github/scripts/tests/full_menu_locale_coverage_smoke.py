@@ -8,6 +8,7 @@ from pathlib import Path
 
 ROOT = Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
 ADDON = ROOT / "MidnightSimpleUnitFrames"
+OPTIONS = ROOT / "MidnightSimpleUnitFrames_Options"
 LOCALES = ADDON / "Locales"
 LOCALE_NAMES = (
     "enUS", "enGB", "deDE", "esES", "esMX", "frFR",
@@ -54,7 +55,7 @@ def add_groups(target: set[str], pattern: str, source: str, group: int | None = 
 
 def source_menu_keys() -> set[str]:
     roots = (
-        ADDON / "Shell" / "Menu2",
+        OPTIONS / "Shell" / "Menu2",
         ADDON / "Shell" / "EditMode",
         ADDON / "Shell" / "UI" / "EditMode",
         ADDON / "Shell" / "UI" / "MSUF_EditPopupUI.lua",

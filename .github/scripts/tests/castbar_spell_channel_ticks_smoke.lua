@@ -130,7 +130,7 @@ update(frame, true)
 assert(ShownCount(frame) == 0 and _G.MSUF_IsChannelTickLinesEnabled() == false,
     "global Off did not hide spell-aware channel ticks")
 
-local menuFile = assert(io.open("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GlobalCastbars.lua", "rb"))
+local menuFile = assert(io.open("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GlobalCastbars.lua", "rb"))
 local menuSource = menuFile:read("*a")
 menuFile:close()
 assert(menuSource:find('"Spell-specific channel tick markers"', 1, true),

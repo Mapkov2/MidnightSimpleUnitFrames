@@ -316,7 +316,7 @@ Check(raidSpec.scope == "group" and raidSpec.text.healthCenter == "ABSORB", "rai
 Check(mythicSpec.scope == "group" and mythicSpec.text.healthRight == "ABSORB", "mythic-raid absorb scope did not compile")
 
 local menuAddon = { MSUF2 = {} }
-assert(loadfile(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_UnitSectionShared.lua"))(
+assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitSectionShared.lua"))(
     "MidnightSimpleUnitFrames", menuAddon)
 local shared = menuAddon.MSUF2.UnitSectionsShared
 Check(shared.HealthBaseMode("CURMAXABSORB") == "CURMAX", "combined mode did not split into its base HP value")
@@ -329,7 +329,7 @@ local filteredModes = shared.HealthBaseModeValues({
 Check(#filteredModes == 2 and filteredModes[1].value == "NONE" and filteredModes[2].value == "CURMAX",
     "progressive HP dropdown did not remove absorb duplicates")
 
-local specs = assert(io.open(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GroupSpecs.lua", "r")):read("*a")
+local specs = assert(io.open(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupSpecs.lua", "r")):read("*a")
 local powerModes = specs:match("TEXT_MODES%s*=%s*VTP%s*\"([^\"]+)\"")
 local healthModes = specs:match("HEALTH_TEXT_MODES%s*=%s*VTP%s*\"([^\"]+)\"")
 Check(powerModes and not powerModes:find("ABSORB=", 1, true), "Absorb leaked into group power modes")
@@ -337,9 +337,9 @@ Check(healthModes and healthModes:find("ABSORB=Absorb", 1, true), "Absorb missin
 Check(healthModes and healthModes:find("CURMAXABSORB=Current / Max + Absorb", 1, true),
     "combined absorb modes missing from group health modes")
 
-local unitPage = assert(io.open(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_Unit.lua", "r")):read("*a")
-local unitText = assert(io.open(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_UnitText.lua", "r")):read("*a")
-local unitShared = assert(io.open(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_UnitSectionShared.lua", "r")):read("*a")
+local unitPage = assert(io.open(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Unit.lua", "r")):read("*a")
+local unitText = assert(io.open(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitText.lua", "r")):read("*a")
+local unitShared = assert(io.open(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitSectionShared.lua", "r")):read("*a")
 Check(unitPage:find("CURRENTABSORB=Current + Absorb", 1, true), "combined absorb modes missing from unit health modes")
 Check(unitText:find('absorbIconKey = "hpAbsorbIcon"', 1, true), "unit shield icon control missing")
 Check(unitText:find('W.Segment(content, "Text slots", SLOT_VALUES', 1, true)
@@ -353,7 +353,7 @@ Check(unitText:find('"off", "Off", "value", "+ Value", "icon"', 1, true),
 Check(unitText:find('absorbIconKey = "hpTextLeftAbsorbIcon"', 1, true),
     "slot-aware unit shield style missing")
 
-local groupBars = assert(io.open(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GroupBars.lua", "r")):read("*a")
+local groupBars = assert(io.open(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupBars.lua", "r")):read("*a")
 Check(groupBars:find('W.Segment(content, "Text slots", SLOT_VALUES', 1, true)
         and groupBars:find('"Power value"', 1, true),
     "segmented group slot editors missing")

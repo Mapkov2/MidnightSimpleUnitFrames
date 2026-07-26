@@ -13,19 +13,19 @@ local function Contains(source, value, message)
     assert(source:find(value, 1, true), message or ("missing contract: " .. value))
 end
 
-local guided = Read("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_GuidedTour.lua")
-local bindings = Read("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Bindings.lua")
-local widgets = Read("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Widgets.lua")
-local shared = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_UnitSectionShared.lua")
-local units = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_UnitSections.lua")
-local unitAuras = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_Auras.lua")
-local unitText = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_UnitText.lua")
-local unitVisuals = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_UnitFrameVisuals.lua")
-local unitStatus = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_UnitStatusSection.lua")
-local groups = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_Group.lua")
-local groupBars = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GroupBars.lua")
-local groupIndicators = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GroupIndicators.lua")
-local groupAuras = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GroupAuras.lua")
+local guided = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_GuidedTour.lua")
+local bindings = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings.lua")
+local widgets = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Widgets.lua")
+local shared = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitSectionShared.lua")
+local units = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitSections.lua")
+local unitAuras = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras.lua")
+local unitText = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitText.lua")
+local unitVisuals = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitFrameVisuals.lua")
+local unitStatus = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitStatusSection.lua")
+local groups = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Group.lua")
+local groupBars = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupBars.lua")
+local groupIndicators = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupIndicators.lua")
+local groupAuras = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupAuras.lua")
 local editPopups = Read("MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Popups.lua")
 local editMovers = Read("MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Movers.lua")
 
@@ -191,7 +191,7 @@ local M = {
     },
 }
 local MSUF = { MSUF2 = M, GuidedTour6 = tour }
-assert(loadfile(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_GuidedTour.lua"))(
+assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_GuidedTour.lua"))(
     "MidnightSimpleUnitFrames", MSUF)
 assert(M.guidedTourStageCount == 39, "guided setup lost the thirty-nine-stage core workflow")
 assert(M.GuidedTourOwnsPreviewLayout() == true, "active guided tour did not suppress floating preview pins")

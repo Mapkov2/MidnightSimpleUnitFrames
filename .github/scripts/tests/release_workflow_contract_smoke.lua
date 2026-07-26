@@ -19,14 +19,30 @@ end
 
 local coreInterfaces = InterfaceSet("MidnightSimpleUnitFrames/MidnightSimpleUnitFrames.toc")
 local assistantInterfaces = InterfaceSet("MidnightSimpleUnitFrames_Assistant/MidnightSimpleUnitFrames_Assistant.toc")
-for token in pairs(coreInterfaces) do
-    assert(assistantInterfaces[token], "Assistant TOC is missing Core interface " .. token)
+local optionsTocPath = "MidnightSimpleUnitFrames_Options/MidnightSimpleUnitFrames_Options.toc"
+local optionsInterfaces = InterfaceSet(optionsTocPath)
+local function AssertInterfaceParity(label, interfaces)
+    for token in pairs(coreInterfaces) do
+        assert(interfaces[token], label .. " TOC is missing Core interface " .. token)
+    end
+    for token in pairs(interfaces) do
+        assert(coreInterfaces[token], label .. " TOC has an interface absent from Core: " .. token)
+    end
 end
-for token in pairs(assistantInterfaces) do
-    assert(coreInterfaces[token], "Assistant TOC has an interface absent from Core: " .. token)
-end
+AssertInterfaceParity("Assistant", assistantInterfaces)
+AssertInterfaceParity("Options", optionsInterfaces)
 assert(coreInterfaces["120007"] and coreInterfaces["120100"],
     "release TOCs must support both 12.0.7 and 12.1.0")
+
+local optionsToc = Read(optionsTocPath)
+assert(optionsToc:find("## LoadOnDemand: 1", 1, true),
+    "Options TOC is missing its LoadOnDemand marker")
+assert(optionsToc:find("## Dependencies: MidnightSimpleUnitFrames", 1, true),
+    "Options TOC is missing its Core dependency")
+assert(not optionsToc:match("##%s*SavedVariables[^:]*:"),
+    "Options TOC must not own SavedVariables")
+assert(not optionsToc:find("..\\", 1, true) and not optionsToc:find("../", 1, true),
+    "Options TOC must load only Options-owned files")
 
 local workflow = Read(".github/workflows/release.yml")
 local function Position(needle)
@@ -87,4 +103,4 @@ assert(sourceSnapshot:find('manifestFormat = "msuf-addon-source-sha256-v2"', 1, 
     and sourceSnapshot:find("ls-files --cached --others --exclude-standard", 1, true),
     "Graphify source snapshot is not checkout-newline neutral and Git-closure scoped")
 
-print("PASS release workflow contract: TOC parity and Assistant hard gate before every publish path")
+print("PASS release workflow contract: three-TOC parity, Options LoD ownership, and Assistant hard gate before every publish path")

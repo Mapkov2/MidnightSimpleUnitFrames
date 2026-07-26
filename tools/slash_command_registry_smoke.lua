@@ -19,8 +19,23 @@ local function ResolvePath(relative)
     error("cannot locate " .. relative)
 end
 
+local function ResolveOptionsPath(relative)
+    local candidates = {
+        "MidnightSimpleUnitFrames_Options/" .. relative,
+        "../MidnightSimpleUnitFrames_Options/" .. relative,
+    }
+    for i = 1, #candidates do
+        local handle = io.open(candidates[i], "r")
+        if handle then
+            handle:close()
+            return candidates[i]
+        end
+    end
+    error("cannot locate Options " .. relative)
+end
+
 local CHAT_PATH = ResolvePath("Runtime/MSUF_ChatAndTooltips.lua")
-local MENU_API_PATH = ResolvePath("Shell/Menu2/MSUF_Menu2_API.lua")
+local MENU_API_PATH = ResolveOptionsPath("Shell/Menu2/MSUF_Menu2_API.lua")
 
 --- ---------------------------------------------------------------------------
 --- WoW stubs. Every frame/event entry point counts itself so the zero-overhead
@@ -136,6 +151,22 @@ assert(type(Commands.Dispatch) == "function", "the registry must expose Dispatch
 --- ---------------------------------------------------------------------------
 --- Load the Menu2 half against a stub menu.
 --- ---------------------------------------------------------------------------
+--- The real LoD loader publishes these metadata entries before Menu2 exists.
+--- Seed one exact entry here so the real API must replace it in place instead
+--- of silently losing the command to duplicate-word rejection.
+local deferredEditRun = function() error("deferred Edit command was not replaced") end
+local deferredEditEntry = {
+    name = "edit",
+    aliases = { "editmode", "move", "unlock" },
+    group = "frames",
+    usage = "/msuf edit [unit]",
+    help = "Toggle MSUF Edit Mode. Add a unit such as player or target to open it there.",
+    _msufOptionsLODDeferred = true,
+    run = deferredEditRun,
+}
+assert(Commands.Register(deferredEditEntry),
+    "failed to seed the Options LoD deferred Edit command")
+
 local menuCalls = {}
 local M = {
     frame = nil,
@@ -198,6 +229,11 @@ MSUF.MSUF2 = M
 chunk, err = loadfile(MENU_API_PATH)
 assert(chunk, err)
 chunk("MidnightSimpleUnitFrames", MSUF)
+assert(Commands.Get("edit") == deferredEditEntry,
+    "Menu2 replaced the deferred command table instead of preserving registry order")
+assert(deferredEditEntry._msufOptionsLODDeferred == nil
+    and deferredEditEntry.run ~= deferredEditRun,
+    "Menu2 did not replace the deferred command with its real handler")
 
 local function ResetCalls()
     for i = #menuCalls, 1, -1 do menuCalls[i] = nil end

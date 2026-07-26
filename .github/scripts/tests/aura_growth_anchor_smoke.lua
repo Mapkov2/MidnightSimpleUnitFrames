@@ -1935,7 +1935,7 @@ do
         MSUF_Auras3 = { MenuModel = menuModel },
     }
     local previewChunk = assert(loadfile(root
-        .. "/MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Auras.lua"))
+        .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Auras.lua"))
     previewChunk("MidnightSimpleUnitFrames", previewNS)
     local previewAuras = assert(previewNS.UFPreviewAuras)
     local fractions = {
@@ -2342,7 +2342,7 @@ Check(editModeSource:find('if anchor == "TOP" then return w * 0.5, h end', 1, tr
 Check(not editModeSource:find("PreviewLaneDimensions", 1, true),
     "Edit Mode custom preview still shrinks to its sample icons")
 
-local unitPreviewSource = Read("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Auras.lua")
+local unitPreviewSource = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Auras.lua")
 Check(unitPreviewSource:find("local laneLeft = baseX + x - anchorLocalX", 1, true),
     "unit preview no longer positions lane bounds from the selected anchor")
 Check(unitPreviewSource:find('icon:SetPoint(bounds.initialAnchor or "TOPLEFT", visual, bounds.initialAnchor or "TOPLEFT"', 1, true),
@@ -2369,7 +2369,7 @@ Check(menuModelSource:find('iconZoom = "buffIconZoom"', 1, true)
     and menuModelSource:find('buffIconZoom = buffMetrics and buffMetrics.iconZoom', 1, true),
     "unit Aura Icon Zoom no longer follows Shared/unit and Buff/Debuff scopes")
 
-local aurasMenuSource = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_Auras.lua")
+local aurasMenuSource = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras.lua")
 Check(not aurasMenuSource:find('BindDropdown(ctx, section, "Exclusive"', 1, true)
     and not aurasMenuSource:find("DEBUFF_EXCLUSIVE", 1, true),
     "redundant Exclusive/Raid dropdown returned to the compact Aura filters")
@@ -2403,7 +2403,7 @@ local groupConfigSource = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/Group
 Check(groupConfigSource:find("out.debuffMaxDuration = Num(blacklist and blacklist.maxDuration, 0)", 1, true),
     "group Debuff maximum duration no longer reaches the native AuraContainer compiler")
 
-local groupPreviewSource = Read("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Render.lua")
+local groupPreviewSource = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Render.lua")
 Check(groupPreviewSource:find("handle:SetPoint(anchor, mock, anchor", 1, true),
     "group preview no longer anchors lane bounds with the selected anchor")
 Check(groupPreviewSource:find("tex:SetPoint(rect.anchor, handle, rect.anchor, rect[1], rect[2])", 1, true),
@@ -2420,12 +2420,12 @@ Check(runtimeSource:find("iconZoom = ClampNumber(source.iconZoom, 100, 100, 200)
     "Group Aura Icon Zoom is missing from the live cold-layout contract")
 Check(groupPreviewSource:find("ApplyPreviewIconZoom(tex, cfg.iconZoom or scene.auraIconZoom, 0)", 1, true),
     "Group Aura preview does not mirror the scope-wide Icon Zoom")
-local groupAuraMenuSource = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GroupAuras.lua")
+local groupAuraMenuSource = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupAuras.lua")
 Check(groupAuraMenuSource:find('W.Slider(rootSection, "Icon Zoom (%)", 100, 200, 1', 1, true)
     and groupAuraMenuSource:find('GroupAuraSettingKeys(scope, ".auras.iconZoom")', 1, true),
     "Group Aura scope-aware Icon Zoom slider is missing")
 
-local groupHandlesSource = Read("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Handles.lua")
+local groupHandlesSource = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Handles.lua")
 Check(groupHandlesSource:find("return ResolveAnchor(rx, ry)", 1, true),
     "group aura drag no longer resolves through the nine-anchor helper")
 Check(groupHandlesSource:find('externalHandle._cfgGroup = "externals"', 1, true),

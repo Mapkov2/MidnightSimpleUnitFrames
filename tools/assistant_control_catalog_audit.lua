@@ -2,7 +2,11 @@
 -- This verifies wiring and load order.  It intentionally does not claim full
 -- control coverage; live coverage comes from M.GetRuntimeControlCoverageReport().
 
-local addonRoot = arg[1] or "MidnightSimpleUnitFrames"
+local requestedRoot = arg[1] or "MidnightSimpleUnitFrames"
+local addonRoot = requestedRoot:gsub("MidnightSimpleUnitFrames$", "MidnightSimpleUnitFrames_Options")
+if addonRoot == requestedRoot and not requestedRoot:match("MidnightSimpleUnitFrames_Options$") then
+    addonRoot = requestedRoot .. "/MidnightSimpleUnitFrames_Options"
+end
 
 local function Read(relative)
     local path = addonRoot .. "/" .. relative
@@ -19,7 +23,7 @@ local function Require(condition, message)
 end
 
 local menuXml = Read("Shell/Menu2/MSUF_Menu2.xml")
-local toc = Read("MidnightSimpleUnitFrames.toc")
+local toc = Read("MidnightSimpleUnitFrames_Options.toc")
 local bindings = Read("Shell/Menu2/MSUF_Menu2_Bindings.lua")
 local support = Read("Shell/Menu2/MSUF_Menu2_Support.lua")
 local widgets = Read("Shell/Menu2/MSUF_Menu2_Widgets.lua")

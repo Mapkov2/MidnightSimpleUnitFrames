@@ -26,8 +26,8 @@ local function Slice(source, first, last, label)
     return source:sub(startAt, endAt - 1)
 end
 
-local pagesRoot = "MidnightSimpleUnitFrames/Shell/Menu2/Pages/"
-local widgets = Read("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Widgets.lua")
+local pagesRoot = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/"
+local widgets = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Widgets.lua")
 local colors = Read(pagesRoot .. "MSUF_Menu2_AdvancedColors.lua")
 
 -- The semantic resolver must remain behind the RGB button click. Constructing
@@ -521,9 +521,9 @@ Has(auraModel, "MSUF_GetConfiguredFontColor",
 local auraColorConsumers = {
     Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua"),
     Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_EditMode.lua"),
-    Read("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Auras.lua"),
-    Read("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Handles.lua"),
-    Read("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Render.lua"),
+    Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Auras.lua"),
+    Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Handles.lua"),
+    Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Render.lua"),
     auras,
 }
 for _, source in ipairs(auraColorConsumers) do

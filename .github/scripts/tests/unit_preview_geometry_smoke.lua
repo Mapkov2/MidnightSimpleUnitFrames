@@ -7,9 +7,13 @@ local function Exists(path)
     return true
 end
 
-local addonRoot = arg[1] or "MidnightSimpleUnitFrames"
-if Exists(addonRoot .. "/MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua") then
-    addonRoot = addonRoot .. "/MidnightSimpleUnitFrames"
+local addonRoot = arg[1] or "."
+if Exists(addonRoot .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua") then
+    addonRoot = addonRoot .. "/MidnightSimpleUnitFrames_Options"
+elseif not Exists(addonRoot .. "/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua")
+    and Exists("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua")
+then
+    addonRoot = "MidnightSimpleUnitFrames_Options"
 end
 local renderPath = addonRoot .. "/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua"
 local modelPath = addonRoot .. "/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Model.lua"

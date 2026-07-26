@@ -8,7 +8,7 @@
 local repoRoot = ...
 repoRoot = tostring(repoRoot or "."):gsub("[/\\]+$", "")
 
-local SEARCH_DIR = repoRoot .. "/MidnightSimpleUnitFrames/Shell/Menu2/Search/"
+local SEARCH_DIR = repoRoot .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/"
 
 local inCombat = false
 local counts = { pump = 0, invalidate = 0, select = 0, timer = 0 }

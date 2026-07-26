@@ -107,9 +107,9 @@ local function LoadFixture(saved)
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/State/MSUF_FirstLoad.lua"))("MidnightSimpleUnitFrames", MSUF)
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/State/MSUF_UpgradeHighlights.lua"))("MidnightSimpleUnitFrames", MSUF)
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/State/MSUF_GuidedTour.lua"))("MidnightSimpleUnitFrames", MSUF)
-    assert(loadfile(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_FirstLoad.lua"))("MidnightSimpleUnitFrames", MSUF)
-    assert(loadfile(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_GuidedTour.lua"))("MidnightSimpleUnitFrames", MSUF)
-    assert(loadfile(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_UpgradeHighlights.lua"))("MidnightSimpleUnitFrames", MSUF)
+    assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_FirstLoad.lua"))("MidnightSimpleUnitFrames", MSUF)
+    assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_GuidedTour.lua"))("MidnightSimpleUnitFrames", MSUF)
+    assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_UpgradeHighlights.lua"))("MidnightSimpleUnitFrames", MSUF)
 
     return MSUF, M, registered, effects
 end

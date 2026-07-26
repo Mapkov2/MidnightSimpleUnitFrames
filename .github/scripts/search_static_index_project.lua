@@ -22,7 +22,7 @@ _G = _G or _ENV
 loadstring = loadstring or load
 unpack = unpack or table.unpack
 
-local OUTPUT_PATH = "MidnightSimpleUnitFrames/Shell/Menu2/Search/MSUF_Menu2_Search_StaticIndex_Data.lua"
+local OUTPUT_PATH = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_StaticIndex_Data.lua"
 local SCHEMA_PATH = "MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantControlSchema_Data.lua"
 local HARNESS_PATH = "tools/assistant_v1_catalog_crosswalk.lua"
 -- The crosswalk continues into Graphify-backed release gates that need an ignored

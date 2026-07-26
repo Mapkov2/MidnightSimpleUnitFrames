@@ -301,13 +301,13 @@ local runtimeSource = Read(root .. "/MidnightSimpleUnitFrames/Runtime/MSUF_BarBa
 Check(not runtimeSource:find("_MSUF_BarBackgroundAlphaMul", 1, true),
     "runtime still has a second background-alpha multiplier")
 
-local previewModel = Read(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Model.lua")
+local previewModel = Read(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Model.lua")
 Check(not previewModel:find("a = a * Clamp01(cache and cache.barBackgroundAlpha", 1, true),
     "unit preview model still multiplies resolved background alpha")
 Check(previewModel:find("or UNIT_DATA.player.class", 1, true),
     "unit preview does not show the local-player class fallback for NPCs")
 
-local previewCore = Read(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Core.lua")
+local previewCore = Read(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Core.lua")
 Check(previewCore:find("Core.SetRegionAlpha(mock.hpBG, alpha.flat and alpha.frame or 1)", 1, true),
     "unit preview still multiplies Health background alpha via region alpha")
 Check(previewCore:find("Core.SetRegionAlpha(mock.powerBG, alpha.flat and alpha.frame or 1)", 1, true),
@@ -325,7 +325,7 @@ local core = Read(root .. "/MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF
 Check(core:find("RefreshIdentityHealthBackground(frame)", 1, true),
     "identity lifecycle does not refresh class backgrounds")
 
-local groupPreview = Read(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Render.lua")
+local groupPreview = Read(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Render.lua")
 Check(groupPreview:find("runtimeHealth.backgroundClassColor == true", 1, true),
     "group preview ignores compiled class-background state")
 

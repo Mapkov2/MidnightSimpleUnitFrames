@@ -4,10 +4,11 @@ local function exists(path) local f = io.open(path, "rb"); if f then f:close(); 
 local function read(path) local f = assert(io.open(path, "rb"), path); local s = f:read("*a"); f:close(); return s end
 local prefix = exists("MidnightSimpleUnitFrames/MidnightSimpleUnitFrames.toc") and "" or "../../"
 local core = prefix .. "MidnightSimpleUnitFrames/"
+local optionsRoot = prefix .. "MidnightSimpleUnitFrames_Options/"
 local companionRoot = prefix .. "MidnightSimpleUnitFrames_Assistant/"
-local bridgePath = core .. "Shell/Menu2/MSUF_AssistantBridge.lua"
+local bridgePath = optionsRoot .. "Shell/Menu2/MSUF_AssistantBridge.lua"
 local mainToc = read(core .. "MidnightSimpleUnitFrames.toc")
-local menuXml = read(core .. "Shell/Menu2/MSUF_Menu2.xml")
+local menuXml = read(optionsRoot .. "Shell/Menu2/MSUF_Menu2.xml")
 local runtimeToc = read(companionRoot .. "MidnightSimpleUnitFrames_Assistant.toc")
 local runtimeXml = read(companionRoot .. "MSUF_AssistantRuntime.xml")
 local bridge = read(bridgePath)

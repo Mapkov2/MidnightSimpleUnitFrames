@@ -6,7 +6,7 @@ local M = {
     end,
 }
 local MSUF = { MSUF2 = M }
-local chunk = assert(loadfile("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Window.lua"))
+local chunk = assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Window.lua"))
 chunk("MidnightSimpleUnitFrames", MSUF)
 
 for _, api in ipairs({
@@ -16,7 +16,7 @@ for _, api in ipairs({
     assert(type(M[api]) == "function", "missing window API: " .. api)
 end
 
-local file = assert(io.open("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Window.lua", "rb"))
+local file = assert(io.open("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Window.lua", "rb"))
 local source = file:read("*a")
 file:close()
 

@@ -4,6 +4,7 @@ enable-nolib-creation: no
 move-folders:
   MidnightSimpleUnitFrames/MidnightSimpleUnitFrames: MidnightSimpleUnitFrames
   MidnightSimpleUnitFrames/MidnightSimpleUnitFrames_Assistant: MidnightSimpleUnitFrames_Assistant
+  MidnightSimpleUnitFrames/MidnightSimpleUnitFrames_Options: MidnightSimpleUnitFrames_Options
 
 ignore:
   - .github
@@ -17,9 +18,9 @@ ignore:
   - MidnightSimpleUnitFrames/tools
   - MidnightSimpleUnitFrames/**/graphify-out
   - MidnightSimpleUnitFrames/**/__pycache__
-  - MidnightSimpleUnitFrames/MidnightSimpleUnitFrames/Shell/Menu2/Assistant
-  - MidnightSimpleUnitFrames/MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_AssistantDialogLocale.lua
-  - MidnightSimpleUnitFrames/MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_AssistantDialogLocale_Data.lua
+  - MidnightSimpleUnitFrames/MidnightSimpleUnitFrames_Options/Shell/Menu2/Assistant
+  - MidnightSimpleUnitFrames/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_AssistantDialogLocale.lua
+  - MidnightSimpleUnitFrames/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_AssistantDialogLocale_Data.lua
   - tools
   - README.md
   - VERSION

@@ -33,8 +33,8 @@ local RuntimeManifest = dofile(runtimeLoaderPath)
 
 local addonRoot = ExistingPath("MidnightSimpleUnitFrames/Locales/MSUF_Localization.lua", "Locales/MSUF_Localization.lua")
 local profilePath = ExistingPath("MidnightSimpleUnitFrames/State/MSUF_Profiles.lua", "State/MSUF_Profiles.lua")
-local bindingsPath = ExistingPath("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Bindings.lua", "Shell/Menu2/MSUF_Menu2_Bindings.lua")
-local miscPath = ExistingPath("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GlobalMisc.lua", "Shell/Menu2/Pages/MSUF_Menu2_GlobalMisc.lua")
+local bindingsPath = ExistingPath("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings.lua", "Shell/Menu2/MSUF_Menu2_Bindings.lua")
+local miscPath = ExistingPath("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GlobalMisc.lua", "Shell/Menu2/Pages/MSUF_Menu2_GlobalMisc.lua")
 local assistantPath = RuntimeManifest.ResolveCompanionRoot()
     .. "/Assistant/MSUF_AssistantRegistry_Global_BaseSettings.lua"
 

@@ -4,9 +4,10 @@
 -- Usage from the repository root:
 --   lua tools/assistant_control_catalog_unit_group_aura_audit.lua MidnightSimpleUnitFrames
 
-local addonRoot = arg[1] or "MidnightSimpleUnitFrames"
-local repositoryRoot = addonRoot:match("^(.*)[/\\]MidnightSimpleUnitFrames$") or "."
+local coreRoot = arg[1] or "MidnightSimpleUnitFrames"
+local repositoryRoot = coreRoot:match("^(.*)[/\\]MidnightSimpleUnitFrames$") or "."
 if repositoryRoot == "" then repositoryRoot = "." end
+local addonRoot = repositoryRoot .. "/MidnightSimpleUnitFrames_Options"
 local assistantRoot = repositoryRoot .. "/MidnightSimpleUnitFrames_Assistant"
 
 local failures = {}

@@ -16,7 +16,7 @@ local function Read(relative)
     return (text:gsub("\r\n", "\n"))
 end
 
-local SEARCH_DIR = "MidnightSimpleUnitFrames/Shell/Menu2/Search/"
+local SEARCH_DIR = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/"
 
 local MSUF = { MSUF2 = {} }
 local M = MSUF.MSUF2

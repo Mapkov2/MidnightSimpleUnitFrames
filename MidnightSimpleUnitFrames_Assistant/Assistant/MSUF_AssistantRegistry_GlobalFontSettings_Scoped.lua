@@ -288,7 +288,7 @@ function A.GlobalRegistry.RegisterScopedFontDetailSettings(ctx)
             reason = "MSUF_ASSISTANT_FONT_SHADOW_STRENGTH",
             menuControlDisposition = "standalone",
             menuControlDispositionReason = "Legacy shadow presets remain Assistant-compatible, while Menu2 exposes the replacement opacity and distance controls.",
-            menuControlDispositionEvidence = "MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GlobalFonts.lua:82-96",
+            menuControlDispositionEvidence = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GlobalFonts.lua:82-96",
         })
         if not GlobalScopeIsGroup(scope) then
             if RegisterScopedUnitFontTextSettings(ctx, scope) == false then return false end

@@ -41,13 +41,13 @@ local function TableCount(values)
     return count
 end
 
-local catalogSource = Read("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_ControlCatalog.lua")
-local window = Read("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Window.lua")
-local nav = Read("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_NavRail.lua")
-local bridge = Read("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_AssistantBridge.lua")
+local catalogSource = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ControlCatalog.lua")
+local window = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Window.lua")
+local nav = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_NavRail.lua")
+local bridge = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_AssistantBridge.lua")
 local acceptance = Read("MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantAudit.lua")
-local widgets = Read("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Widgets.lua")
-local dropdowns = Read("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Dropdowns.lua")
+local widgets = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Widgets.lua")
+local dropdowns = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Dropdowns.lua")
 
 local requiredActions = {
     ["menu2.menu-chrome.window-close"] = { source = window, path = "window.close", actionKey = "menu_window_close" },
@@ -143,8 +143,8 @@ Require(acceptance, "catalog.unresolvedTargetCount", "acceptance gate ignores un
 local MSUF = { MSUF2 = {} }
 _G.MSUF_NS = MSUF
 _G.MSUF2 = MSUF.MSUF2
-Load("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_ControlCatalog.lua", "MidnightSimpleUnitFrames", MSUF)
-Load("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_AssistantBridge.lua", "MidnightSimpleUnitFrames", MSUF)
+Load("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ControlCatalog.lua", "MidnightSimpleUnitFrames", MSUF)
+Load("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_AssistantBridge.lua", "MidnightSimpleUnitFrames", MSUF)
 
 local M = assert(MSUF.MSUF2, "Menu2 namespace missing")
 local Catalog = assert(M.RuntimeControlCatalog, "current RuntimeControlCatalog did not load")

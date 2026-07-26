@@ -48,7 +48,7 @@ Equal(y, -2, "scope y fallback")
 assert(defaults:find("scope.fontShadowStrength = nil", 1, true), "legacy preset migration missing")
 assert(defaults:find("MSUF_Defaults_NormalizeFontShadowScope(g, true)", 1, true), "global normalization missing")
 
-local menu = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GlobalFonts.lua")
+local menu = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GlobalFonts.lua")
 assert(menu:find('W.Slider(text, "Shadow opacity", 0.20, 1, 0.05, 300)', 1, true), "opacity slider missing")
 assert(menu:find('BindTextSegment("Shadow distance", VT(1, "1 px", 2, "2 px")', 1, true), "distance segment missing")
 assert(menu:find("SetControlEnabled(shadowOpacity, shadowEnabled)", 1, true), "opacity disabled-state missing")

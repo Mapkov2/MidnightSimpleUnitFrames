@@ -1,4 +1,4 @@
-local widgetsPath = "MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Widgets.lua"
+local widgetsPath = "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Widgets.lua"
 local widgetsFile = assert(io.open(widgetsPath, "rb"))
 local widgets = widgetsFile:read("*a")
 widgetsFile:close()
@@ -70,7 +70,7 @@ assert(not widgets:find("ActiveCollapsible", 1, true)
     and not widgets:find("ActiveAccordion", 1, true),
     "obsolete selected-accordion state is still present")
 
-local dashboardPath = "MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Dashboard.lua"
+local dashboardPath = "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Dashboard.lua"
 local dashboardFile = assert(io.open(dashboardPath, "rb"))
 local dashboard = dashboardFile:read("*a")
 dashboardFile:close()
@@ -86,7 +86,7 @@ assert(dashboard:find("local function CreateDashboardAccordionTone", 1, true)
 assert(not dashboard:find('hover:SetColorTexture(1, 1, 1, 0.025)', 1, true),
     "dashboard disclosures still paint a square hover layer over rounded headers")
 
-local statusPath = "MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_UnitSectionShared.lua"
+local statusPath = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitSectionShared.lua"
 local statusFile = assert(io.open(statusPath, "rb"))
 local status = statusFile:read("*a")
 statusFile:close()
@@ -97,14 +97,14 @@ assert(not status:find("opts.arrowColor", 1, true)
     and not status:find("entry.arrow:SetVertexColor", 1, true),
     "section status can still override the accordion state arrow")
 
-local unitSectionsPath = "MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_UnitSections.lua"
+local unitSectionsPath = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitSections.lua"
 local unitSectionsFile = assert(io.open(unitSectionsPath, "rb"))
 local unitSections = unitSectionsFile:read("*a")
 unitSectionsFile:close()
 assert(not unitSections:find("sectionEntry.arrow:SetVertexColor", 1, true),
     "unit enabled state can still override the accordion state arrow")
 
-local groupLayoutPath = "MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GroupLayout.lua"
+local groupLayoutPath = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupLayout.lua"
 local groupLayoutFile = assert(io.open(groupLayoutPath, "rb"))
 local groupLayout = groupLayoutFile:read("*a")
 groupLayoutFile:close()
@@ -112,9 +112,9 @@ assert(not groupLayout:find("arrowColor", 1, true),
     "group provider status can still override the accordion state arrow")
 
 for _, path in ipairs({
-    "MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_UnitSections.lua",
-    "MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GroupPreview.lua",
-    "MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_ClassPowerPreview.lua",
+    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitSections.lua",
+    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupPreview.lua",
+    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_ClassPowerPreview.lua",
 }) do
     local file = assert(io.open(path, "rb"))
     local source = file:read("*a")

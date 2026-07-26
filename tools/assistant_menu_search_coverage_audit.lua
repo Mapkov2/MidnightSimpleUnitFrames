@@ -15,10 +15,10 @@ local M = assert(MSUF.MSUF2, "Menu namespace missing")
 local A = assert(MSUF.Assistant, "Assistant missing")
 local K = assert(A.Knowledge, "Assistant knowledge missing")
 
-local searchRoot = "MidnightSimpleUnitFrames/Shell/Menu2/Search/"
+local searchRoot = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/"
 if not exists(searchRoot .. "MSUF_Menu2_Search_Data.lua") then searchRoot = "Shell/Menu2/Search/" end
 
-local menuRoot = "MidnightSimpleUnitFrames/Shell/Menu2/"
+local menuRoot = "MidnightSimpleUnitFrames_Options/Shell/Menu2/"
 if not exists(menuRoot .. "MSUF_Menu2_Navigation.lua") then menuRoot = "Shell/Menu2/" end
 
 local function loadMenu(name)

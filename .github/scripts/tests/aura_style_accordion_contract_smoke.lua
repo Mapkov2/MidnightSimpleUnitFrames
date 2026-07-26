@@ -1,6 +1,6 @@
 local root = arg and arg[1] or "."
 
-local file = assert(io.open(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_Auras.lua", "rb"))
+local file = assert(io.open(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras.lua", "rb"))
 local source = file:read("*a")
 file:close()
 

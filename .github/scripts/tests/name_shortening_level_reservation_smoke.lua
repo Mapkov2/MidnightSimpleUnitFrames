@@ -169,7 +169,7 @@ local configSource = Read(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/M
 Check(not configSource:find('if unit == "player" and not %(conf', 1),
     "runtime config still suppresses Shared name shortening for Player")
 
-local fontsSource = Read(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GlobalFonts.lua")
+local fontsSource = Read(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GlobalFonts.lua")
 Check(fontsSource:find('{ "player", "target", "targettarget", "focustarget", "focus", "pet", "boss" }', 1, true),
     "Shared name-shortening apply does not include Player")
 Check(not fontsSource:find('nameScope ~= "player"', 1, true),
@@ -198,7 +198,7 @@ local modelNamespace = {
         end,
     },
 }
-assert(loadfile(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Model.lua"))(
+assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Model.lua"))(
     "MidnightSimpleUnitFrames", modelNamespace)
 local shortenPreviewName = assert(modelNamespace.UFPreview and modelNamespace.UFPreview.Model
     and modelNamespace.UFPreview.Model.ShortenPreviewName, "preview name-shortening resolver missing")

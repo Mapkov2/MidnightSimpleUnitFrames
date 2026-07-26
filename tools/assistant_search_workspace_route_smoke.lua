@@ -38,7 +38,7 @@ local namespace = { MSUF2 = M }
 -- load, so the table has to exist before it loads and every later stub must
 -- mutate this same table rather than replace _G.C_Timer.
 _G.C_Timer = _G.C_Timer or { After = function(_, fn) if type(fn) == "function" then fn() end end }
-assert(loadfile("MidnightSimpleUnitFrames/Shell/Menu2/Search/MSUF_Menu2_Search_Routing.lua"))(
+assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_Routing.lua"))(
     "MidnightSimpleUnitFrames", namespace)
 local routing = assert(M.Search._RoutingAPI)
 
@@ -73,10 +73,10 @@ local function TableValueKeys(source, name)
     return out
 end
 
-local auraSource = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_Auras.lua")
-local groupAuraSource = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GroupAuras.lua")
-local groupSpecsSource = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GroupSpecs.lua")
-local unitSectionsSource = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_UnitSections.lua")
+local auraSource = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras.lua")
+local groupAuraSource = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupAuras.lua")
+local groupSpecsSource = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupSpecs.lua")
+local unitSectionsSource = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitSections.lua")
 local unitWords = assert(unitSectionsSource:match('UNIT_AURAS_MENU_UNITS%s*=%s*M%.KeySetFromWords%s*"([^"]+)"'))
 local declaredUnits = Words(unitWords)
 local declaredUnitContainers = VTPKeys(auraSource, "UNIT_AURA_WORKSPACE_TABS")
@@ -179,7 +179,7 @@ portraitNS.MSUF2.ValueTextList = function() return {} end
 portraitNS.MSUF2.KeySetFromWords = function() return {} end
 portraitNS.MSUF2.PickDefaults = function() return {}, {}, {}, {}, {} end
 portraitNS.MSUF2.Pick = function() end
-assert(loadfile("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_UnitFrameVisuals.lua"))(
+assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitFrameVisuals.lua"))(
     "MidnightSimpleUnitFrames", portraitNS)
 local PortraitLayout = assert(portraitNS.MSUF2.UnitPage.PortraitLayoutForWidth)
 local compactLayout = PortraitLayout(434, "general")
@@ -362,9 +362,9 @@ M.Search.ApplyRoute = routing.ApplySearchRoute
 M.Search.OpenTarget = routing.OpenSearchTarget
 _G.SlashCmdList = _G.SlashCmdList or {}
 _G.C_Timer.After = function(_, fn) fn() end
-assert(loadfile("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_SearchBridge.lua"))(
+assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_SearchBridge.lua"))(
     "MidnightSimpleUnitFrames", namespace)
-assert(loadfile("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_API.lua"))(
+assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_API.lua"))(
     "MidnightSimpleUnitFrames", namespace)
 
 local stateNavigationMatrix = 0

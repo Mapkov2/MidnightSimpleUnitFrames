@@ -15,8 +15,8 @@ local function Contains(source, needle, message)
     assert(source:find(needle, 1, true), message)
 end
 
-local unitVisuals = Compact(Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_UnitFrameVisuals.lua"))
-local classPower = Compact(Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_AdvancedClassPower.lua"))
+local unitVisuals = Compact(Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitFrameVisuals.lua"))
+local classPower = Compact(Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AdvancedClassPower.lua"))
 Contains(unitVisuals, '"powerSmoothFill", false, "MSUF2_POWER_SMOOTH"',
     "Unit Power Smooth fill still presents an implicit Player-on fallback")
 Contains(classPower, '"classPowerSmoothFill", false, ApplyClassPowerSmoothing',

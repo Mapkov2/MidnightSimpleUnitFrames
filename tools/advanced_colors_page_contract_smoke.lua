@@ -47,7 +47,7 @@ function M.RegisterPage(key, page)
 end
 
 local MSUF = { MSUF2 = M }
-local path = "MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_AdvancedColors.lua"
+local path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AdvancedColors.lua"
 assert(loadfile(path))("MidnightSimpleUnitFrames", MSUF)
 assert(registeredPage and type(registeredPage.build) == "function", "colors page was not registered")
 assert(registeredPage.version == 19, "colors page version changed")
@@ -94,10 +94,10 @@ assert(not source:find("local categorySpecs = {}", 1, true)
     "Color settings still insert a redundant category headline between navigation and controls")
 assert(source:find("for i = count + 1, #slotControls do W.SetControlShown(slotControls[i], false) end", 1, true), "class-power slot visibility lost its initial delta path")
 assert(not source:find("M.TrackRefresh(ctx, RefreshSlotControls)\n    RefreshSlotControls()", 1, true), "class-power slot visibility refresh runs twice during page build")
-local widgetsFile = assert(io.open("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Widgets.lua", "rb"))
+local widgetsFile = assert(io.open("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Widgets.lua", "rb"))
 local widgetsSource = widgetsFile:read("*a")
 widgetsFile:close()
-local bindingsFile = assert(io.open("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Bindings.lua", "rb"))
+local bindingsFile = assert(io.open("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings.lua", "rb"))
 local bindingsSource = bindingsFile:read("*a")
 bindingsFile:close()
 assert(widgetsSource:find("AttachBoundColorToCollapsible", 1, true), "missing automatic accordion color swatches")

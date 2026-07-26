@@ -9,7 +9,7 @@ local function exists(path)
     return false
 end
 
-local addonRoot = "MidnightSimpleUnitFrames/Shell/Menu2/"
+local addonRoot = "MidnightSimpleUnitFrames_Options/Shell/Menu2/"
 if not exists(addonRoot .. "Search/MSUF_Menu2_Search_Data.lua") then
     addonRoot = "Shell/Menu2/"
 end

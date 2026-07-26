@@ -79,7 +79,7 @@ local driver = Read("MidnightSimpleUnitFrames/Castbars/MSUF_CastbarDriver.lua")
 assert(driver:find("local getFeedbackDuration = _G.MSUF_GetInterruptFeedbackDuration", 1, true),
     "target/focus/boss interrupt path does not use the shared config resolver")
 
-local menu = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GlobalCastbars.lua")
+local menu = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GlobalCastbars.lua")
 local sliderWrite = assert(menu:find('SetG("castbarInterruptFeedbackDuration", duration, "MSUF2_CASTBAR_INTERRUPT_DURATION", { preview = true })', 1, true))
 local sliderPreview = menu:find("M.PlayCastbarPreviewInterrupt()", sliderWrite, true)
 local interruptButton = assert(menu:find('T.Button(section, "Interrupt"', 1, true))

@@ -80,7 +80,7 @@ M.ApplyService = {
     Flush = function() counters.flush = counters.flush + 1 end,
 }
 
-assert(loadfile("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Bindings.lua"))(
+assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings.lua"))(
     "MidnightSimpleUnitFrames", namespace)
 
 assert(M.StartHistorySession("edit_mode") == true, "Edit Mode history surface did not start")
@@ -232,7 +232,7 @@ local movers = Read("MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Mover
 local auras = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_EditMode.lua")
 local castbars = Read("MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPreviewEdit.lua")
 local groups = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_EM2.lua")
-local window = Read("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Window.lua")
+local window = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Window.lua")
 Contains(core, 'history.StartHistorySession("edit_mode")', "Edit Mode does not join shared history")
 Contains(core, 'history.CancelHistorySurface("edit_mode", true)', "Cancel All does not rewind the Edit Mode history marker")
 Contains(core, 'history.EndHistorySession("edit_mode")', "Edit Mode does not leave shared history")
@@ -252,7 +252,7 @@ for name, source in pairs({ movers = movers, auras = auras, castbars = castbars,
 end
 Contains(window, 'M.CallIf(M.StartHistorySession, "menu")', "Menu2 does not identify its shared history surface")
 Contains(window, 'M.CallIf(M.EndHistorySession, "menu")', "Menu2 does not release its shared history surface")
-local bindings = Read("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Bindings.lua")
+local bindings = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings.lua")
 Contains(bindings, 'if IsConfigCombatLocked() then', "shared history has no combat commit guard")
 Contains(bindings, 'DeferHistoryCommit(tx.label, tx.source, tx.before)',
     "combat-interrupted history is not deferred without a snapshot")

@@ -24,20 +24,20 @@ local function Count(source, needle)
     end
 end
 
-local popupPath = "MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_TextQuickSettings.lua"
+local popupPath = "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_TextQuickSettings.lua"
 local popup = Read(popupPath)
-local global = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_Global.lua")
-local globalFonts = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GlobalFonts.lua")
-local widgets = Read("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Widgets.lua")
-local unitText = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_UnitText.lua")
-local unitSections = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_UnitSections.lua")
-local groupText = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GroupBars.lua")
-local groupPage = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_Group.lua")
-local classPower = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_AdvancedClassPower.lua")
-local castbars = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GlobalCastbars.lua")
-local menuXML = Read("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2.xml")
-    .. Read("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_AfterUnitPreview.xml")
-    .. Read("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_AfterGroupPreview.xml")
+local global = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Global.lua")
+local globalFonts = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GlobalFonts.lua")
+local widgets = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Widgets.lua")
+local unitText = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitText.lua")
+local unitSections = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitSections.lua")
+local groupText = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupBars.lua")
+local groupPage = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Group.lua")
+local classPower = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AdvancedClassPower.lua")
+local castbars = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GlobalCastbars.lua")
+local menuXML = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2.xml")
+    .. Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_AfterUnitPreview.xml")
+    .. Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_AfterGroupPreview.xml")
 
 -- The popup is built only when the card-local entry point is clicked, then
 -- reused. The stable marker makes that lifecycle reviewable without coupling

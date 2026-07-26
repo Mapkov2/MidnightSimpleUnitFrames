@@ -1,4 +1,4 @@
-local path = "MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_ContextColorPicker.lua"
+local path = "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ContextColorPicker.lua"
 local handle = assert(io.open(path, "rb"))
 local source = handle:read("*a")
 handle:close()
@@ -155,14 +155,14 @@ assert(not applySource:find("self:Refresh()", 1, true), "color drag still trigge
 assert(not applySource:find("RefreshPalettes", 1, true), "color drag still scans palette controls")
 assert(not applySource:find("RefreshRows", 1, true), "color drag still scans context rows")
 
-local painterPath = "MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_ColorPainter.lua"
+local painterPath = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_ColorPainter.lua"
 local painterHandle = assert(io.open(painterPath, "rb"))
 local painterSource = painterHandle:read("*a")
 painterHandle:close()
 assert(painterSource:find('function() RefreshPreviews("MSUF2_COLOR_PAINTER_LIVE") end', 1, true),
     "Color Painter does not refresh all of its preview boxes during picker changes")
 
-local controlsPath = "MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_WindowControls.lua"
+local controlsPath = "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_WindowControls.lua"
 local controlsHandle = assert(io.open(controlsPath, "rb"))
 local controlsSource = controlsHandle:read("*a")
 controlsHandle:close()
@@ -171,7 +171,7 @@ assert(controlsSource:find("local WINDOW_CONTROL_LEVEL_OFFSET = 16", 1, true),
 assert(not controlsSource:find("baseLevel + 140", 1, true),
     "window controls can still punch through modal popups")
 
-local widgetsPath = "MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Widgets.lua"
+local widgetsPath = "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Widgets.lua"
 local widgetsHandle = assert(io.open(widgetsPath, "rb"))
 local widgetsSource = widgetsHandle:read("*a")
 widgetsHandle:close()
@@ -180,7 +180,7 @@ assert(widgetsSource:find("while contextEntry.ancestorEntry do contextEntry = co
 assert(widgetsSource:find("colorControl._msuf2ColorContextOwners = contextEntry._msuf2ColorContextOwners", 1, true),
     "color controls do not expose their functional target list")
 
-local dropdownsPath = "MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Dropdowns.lua"
+local dropdownsPath = "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Dropdowns.lua"
 local dropdownsHandle = assert(io.open(dropdownsPath, "rb"))
 local dropdownsSource = dropdownsHandle:read("*a")
 dropdownsHandle:close()
@@ -194,7 +194,7 @@ local dropdownFontSource = dropdownsSource:sub(dropdownFontStart, dropdownFontEn
 assert(not dropdownFontSource:find('SetScript("OnUpdate"', 1, true),
     "dropdown font synchronization added recurring menu work")
 
-local bindingsPath = "MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Bindings.lua"
+local bindingsPath = "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings.lua"
 local bindingsHandle = assert(io.open(bindingsPath, "rb"))
 local bindingsSource = bindingsHandle:read("*a")
 bindingsHandle:close()

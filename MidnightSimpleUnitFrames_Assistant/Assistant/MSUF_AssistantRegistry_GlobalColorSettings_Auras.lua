@@ -76,7 +76,7 @@ function A.GlobalRegistry.CreateAuraAndPortraitColorSettings(ctx)
             SetTableRGB(GeneralDB(), "aurasOwnBuffHighlightColor", r, g, b)
         end, { category = "Colors / Auras", attribute = "ownBuffHighlightColor", defaultR = 1, defaultG = 0.85, defaultB = 0.2, apply = ApplyAuraColors,
             menuControlDisposition = "standalone", menuControlDispositionReason = "This color is edited through contextual top-card color shortcuts rather than a dedicated scalar Colors-page row.",
-            menuControlDispositionEvidence = "MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_AdvancedColors.lua:2173-2187",
+            menuControlDispositionEvidence = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AdvancedColors.lua:2173-2187",
             exactAliases = { "own buff highlight color", "my buff highlight color", "aura own buff color", "own buff aura highlight color", "buff aura highlight color" } })
         ColorSetting("general.aurasOwnDebuffHighlightColor", "Own Debuff Highlight Color", {
             "own debuff highlight color", "my debuff highlight color", "aura own debuff color", "own debuff aura highlight color", "debuff aura highlight color",
@@ -86,7 +86,7 @@ function A.GlobalRegistry.CreateAuraAndPortraitColorSettings(ctx)
             SetTableRGB(GeneralDB(), "aurasOwnDebuffHighlightColor", r, g, b)
         end, { category = "Colors / Auras", attribute = "ownDebuffHighlightColor", defaultR = 1, defaultG = 0.30, defaultB = 0.30, apply = ApplyAuraColors,
             menuControlDisposition = "standalone", menuControlDispositionReason = "This color is edited through contextual top-card color shortcuts rather than a dedicated scalar Colors-page row.",
-            menuControlDispositionEvidence = "MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_AdvancedColors.lua:2173-2187",
+            menuControlDispositionEvidence = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AdvancedColors.lua:2173-2187",
             exactAliases = { "own debuff highlight color", "my debuff highlight color", "aura own debuff color", "own debuff aura highlight color", "debuff aura highlight color" } })
         ColorSetting("general.aurasStackCountColor", "Aura Stack Count Text Color", {
             "stack count text color", "aura stack color", "aura stack count color", "aura stacks color", "aura stack text color", "aura count color",
@@ -96,7 +96,7 @@ function A.GlobalRegistry.CreateAuraAndPortraitColorSettings(ctx)
             SetTableRGB(GeneralDB(), "aurasStackCountColor", r, g, b)
         end, { category = "Colors / Auras", attribute = "auraStackColor", apply = ApplyAuraColors,
             menuControlDisposition = "standalone", menuControlDispositionReason = "This color is edited through contextual top-card color shortcuts rather than a dedicated scalar Colors-page row.",
-            menuControlDispositionEvidence = "MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_AdvancedColors.lua:2173-2187",
+            menuControlDispositionEvidence = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AdvancedColors.lua:2173-2187",
             exactAliases = { "stack count text color", "aura stack color", "aura stack count color", "aura stacks color", "aura stack text color", "aura count color" } })
         ColorSetting("auras3.shared.pandemicColor", "Pandemic Window Color", {
             "pandemic window color", "pandemic color", "aura pandemic color",
@@ -108,7 +108,7 @@ function A.GlobalRegistry.CreateAuraAndPortraitColorSettings(ctx)
             sh.pandemicR, sh.pandemicG, sh.pandemicB = r, g, b
         end, { category = "Colors / Auras", attribute = "pandemicColor", defaultR = 0, defaultG = 0.4, defaultB = 1, apply = ApplyAuraColors,
             menuControlDisposition = "standalone", menuControlDispositionReason = "This color is edited through contextual top-card color shortcuts rather than a dedicated scalar Colors-page row.",
-            menuControlDispositionEvidence = "MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_AdvancedColors.lua:2173-2187" })
+            menuControlDispositionEvidence = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AdvancedColors.lua:2173-2187" })
         -- The icon border and shadow colors are the only shared aura colors
         -- stored as a single {r,g,b,a} table instead of the R/G/B scalar triple
         -- the rest of this domain uses. Alpha belongs to the Auras page sliders,

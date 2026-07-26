@@ -13,6 +13,7 @@ import re
 import shutil
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 
@@ -23,6 +24,9 @@ LOCALE_TOC = REPO_ROOT / "MidnightSimpleUnitFrames_Locales" / "MidnightSimpleUni
 ASSISTANT_TOC = REPO_ROOT / "MidnightSimpleUnitFrames_Assistant" / "MidnightSimpleUnitFrames_Assistant.toc"
 ASSISTANT_ROOT = ASSISTANT_TOC.parent
 ASSISTANT_MANIFEST = ASSISTANT_ROOT / "MSUF_AssistantRuntime.xml"
+OPTIONS_TOC = REPO_ROOT / "MidnightSimpleUnitFrames_Options" / "MidnightSimpleUnitFrames_Options.toc"
+OPTIONS_ROOT = OPTIONS_TOC.parent
+ADDON_ROOTS = (ADDON_ROOT, ASSISTANT_ROOT, OPTIONS_ROOT)
 MENU_LOCALE_AUDIT = REPO_ROOT / ".github" / "scripts" / "tests" / "full_menu_locale_coverage_smoke.py"
 ASSISTANT_SCRIPT_COUNT = 328
 ASSISTANT_ORDER_SHA256 = "6D93B5BB79D3EDAFDF14D2838216E6ACEE814645ED37AFDEFB28863A9F232A39"
@@ -57,14 +61,15 @@ class CheckError(RuntimeError):
 
 def rel(path: Path) -> str:
     resolved = path.resolve()
-    try:
-        return resolved.relative_to(ADDON_ROOT.resolve()).as_posix()
-    except ValueError:
+    for root in ADDON_ROOTS:
         try:
-            companion_rel = resolved.relative_to(ASSISTANT_ROOT.resolve()).as_posix()
-        except ValueError as exc:
-            raise CheckError(f"runtime source is outside an addon root: {path}") from exc
-        return f"../MidnightSimpleUnitFrames_Assistant/{companion_rel}"
+            relative = resolved.relative_to(root.resolve()).as_posix()
+        except ValueError:
+            continue
+        if root == ADDON_ROOT:
+            return relative
+        return f"../{root.name}/{relative}"
+    raise CheckError(f"runtime source is outside an addon root: {path}")
 
 
 def read(path: Path) -> str:
@@ -72,30 +77,43 @@ def read(path: Path) -> str:
 
 
 def should_skip(path: Path) -> bool:
-    try:
-        relative = path.resolve().relative_to(ADDON_ROOT.resolve())
-    except ValueError:
+    resolved = path.resolve()
+    owner: Path | None = None
+    relative: Path | None = None
+    for root in ADDON_ROOTS:
         try:
-            relative = path.resolve().relative_to(ASSISTANT_ROOT.resolve())
+            relative = resolved.relative_to(root.resolve())
         except ValueError:
-            return True
-        return any(part in SKIP_DIRS for part in relative.parts)
-    if relative.parts[:3] == ("Shell", "Menu2", "Assistant"):
-        return True  # forbidden core-owned V1 is reported by the ownership contract
-    if relative.as_posix() in {
-        "Shell/Menu2/MSUF_Menu2_AssistantDialogLocale.lua",
-        "Shell/Menu2/MSUF_Menu2_AssistantDialogLocale_Data.lua",
-    }:
+            continue
+        owner = root
+        break
+    if owner is None or relative is None:
         return True
+    if owner == ADDON_ROOT:
+        if relative.parts[:3] == ("Shell", "Menu2", "Assistant"):
+            return True  # forbidden core-owned V1 is reported by the ownership contract
+        if relative.as_posix() in {
+            "Shell/Menu2/MSUF_Menu2_AssistantDialogLocale.lua",
+            "Shell/Menu2/MSUF_Menu2_AssistantDialogLocale_Data.lua",
+        }:
+            return True
     return any(part in SKIP_DIRS for part in relative.parts)
 
 
 def all_lua_files() -> list[Path]:
-    roots = (ADDON_ROOT, ASSISTANT_ROOT)
     return sorted(
         path
-        for root in roots
+        for root in ADDON_ROOTS
         for path in root.rglob("*.lua")
+        if not should_skip(path)
+    )
+
+
+def all_xml_files() -> list[Path]:
+    return sorted(
+        path
+        for root in ADDON_ROOTS
+        for path in root.rglob("*.xml")
         if not should_skip(path)
     )
 
@@ -109,18 +127,18 @@ def resolve_ref(owner: Path, value: str) -> Path:
     return (owner.parent / value).resolve()
 
 
-def parse_load_refs() -> tuple[set[str], list[str]]:
-    if not TOC.exists():
-        raise CheckError(f"missing TOC: {TOC}")
+def parse_load_refs() -> tuple[set[str], set[str], list[str]]:
+    manifests = (TOC, ASSISTANT_TOC, OPTIONS_TOC)
+    for toc in manifests:
+        if not toc.exists():
+            raise CheckError(f"missing TOC: {toc}")
 
     loaded_lua: set[str] = set()
+    loaded_xml: set[str] = set()
     missing: list[str] = []
     xml_queue: list[Path] = []
     seen_xml: set[Path] = set()
 
-    manifests = [TOC]
-    if ASSISTANT_TOC.exists():
-        manifests.append(ASSISTANT_TOC)
     for toc in manifests:
         for line_no, line in enumerate(read(toc).splitlines(), 1):
             item = line.strip()
@@ -143,6 +161,7 @@ def parse_load_refs() -> tuple[set[str], list[str]]:
         if xml in seen_xml:
             continue
         seen_xml.add(xml)
+        loaded_xml.add(rel(xml))
         for line_no, line in enumerate(read(xml).splitlines(), 1):
             for match in file_attr.finditer(line):
                 child = resolve_ref(xml, match.group(1))
@@ -154,7 +173,7 @@ def parse_load_refs() -> tuple[set[str], list[str]]:
                 elif child.suffix.lower() == ".xml":
                     xml_queue.append(child)
 
-    return loaded_lua, missing
+    return loaded_lua, loaded_xml, missing
 
 
 def check_locale_contracts() -> None:
@@ -200,13 +219,46 @@ def toc_field(text: str, name: str) -> str:
     return match.group(1).strip() if match else ""
 
 
+def check_options_runtime_contracts() -> None:
+    if not OPTIONS_TOC.exists():
+        raise CheckError(f"missing load-on-demand Options companion: {OPTIONS_TOC}")
+
+    menu2 = OPTIONS_ROOT / "Shell" / "Menu2"
+    if not menu2.is_dir():
+        raise CheckError(f"Options companion is missing its physical Menu2 tree: {menu2}")
+    core_menu2 = ADDON_ROOT / "Shell" / "Menu2"
+    if core_menu2.exists():
+        raise CheckError(f"Menu2 must be Options-owned; core tree still exists: {core_menu2}")
+
+    options_toc = read(OPTIONS_TOC)
+    require(options_toc, "## LoadOnDemand: 1", "Options LoD metadata")
+    require(options_toc, "## Dependencies: MidnightSimpleUnitFrames", "Options core dependency")
+    if "..\\" in options_toc or "../" in options_toc:
+        raise CheckError("Options TOC must load only files owned by the Options addon")
+    if re.search(r"(?im)^##\s*SavedVariables(?:PerCharacter)?\s*:", options_toc):
+        raise CheckError("Options TOC must not own SavedVariables; persistence remains core-owned")
+    toc_payload = [
+        normalize_ref(line)
+        for line in options_toc.splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+    if not toc_payload:
+        raise CheckError("Options TOC has no Lua/XML payload")
+    if not any(item.lower().endswith((".lua", ".xml")) for item in toc_payload):
+        raise CheckError(f"Options TOC has no loadable Lua/XML payload: {toc_payload}")
+
+    main_toc = read(TOC)
+    if re.search(r"(?im)^[^#\r\n]*Shell[\\/]Menu2[\\/]", main_toc):
+        raise CheckError("main TOC must not eagerly load the Options-owned Menu2 tree")
+
+
 def check_assistant_runtime_contracts() -> None:
     if not ASSISTANT_TOC.exists():
         raise CheckError(f"missing load-on-demand Assistant V1 companion: {ASSISTANT_TOC}")
     if not ASSISTANT_MANIFEST.exists():
         raise CheckError(f"missing Assistant V1 runtime manifest: {ASSISTANT_MANIFEST}")
 
-    menu2 = ADDON_ROOT / "Shell" / "Menu2"
+    menu2 = OPTIONS_ROOT / "Shell" / "Menu2"
     forbidden_core = (
         menu2 / "Assistant",
         menu2 / "MSUF_Menu2_AssistantRuntime.xml",
@@ -219,7 +271,7 @@ def check_assistant_runtime_contracts() -> None:
 
     v2_artifacts = sorted(
         path
-        for root in (ADDON_ROOT, ASSISTANT_ROOT)
+        for root in ADDON_ROOTS
         for path in root.rglob("*")
         if "assistantv2" in path.name.lower()
     )
@@ -378,8 +430,19 @@ def check_luac(lua_files: list[Path]) -> None:
             raise CheckError(f"{relative_path} main chunk uses {local_count} locals; budget is {budget}")
 
 
-def check_load_reachability(lua_files: list[Path]) -> None:
-    loaded_lua, missing = parse_load_refs()
+def check_xml(xml_files: list[Path]) -> None:
+    failures: list[str] = []
+    for path in xml_files:
+        try:
+            ET.parse(path)
+        except (ET.ParseError, OSError) as exc:
+            failures.append(f"{rel(path)}: {exc}")
+    if failures:
+        raise CheckError("XML parse failures:\n" + "\n".join(failures[:30]))
+
+
+def check_load_reachability(lua_files: list[Path], xml_files: list[Path]) -> None:
+    loaded_lua, loaded_xml, missing = parse_load_refs()
     if missing:
         raise CheckError("missing load references:\n" + "\n".join(missing[:30]))
 
@@ -391,6 +454,18 @@ def check_load_reachability(lua_files: list[Path]) -> None:
     unreachable = sorted(production_lua - loaded_lua - INTENTIONALLY_UNLOADED_LUA)
     if unreachable:
         raise CheckError("Lua files not reachable from TOC/XML:\n" + "\n".join(unreachable[:30]))
+
+    options_root_resolved = OPTIONS_ROOT.resolve()
+    production_options_xml: set[str] = set()
+    for path in xml_files:
+        try:
+            path.resolve().relative_to(options_root_resolved)
+        except ValueError:
+            continue
+        production_options_xml.add(rel(path))
+    unreachable_xml = sorted(production_options_xml - loaded_xml)
+    if unreachable_xml:
+        raise CheckError("Options XML files not reachable from TOC/XML:\n" + "\n".join(unreachable_xml[:30]))
 
 
 def require(text: str, needle: str, label: str) -> None:
@@ -629,9 +704,9 @@ def check_classpower_smoothing_contracts() -> None:
     modes = read(ADDON_ROOT / "ClassPower" / "MSUF_CP_Modes.lua")
     alt_mana = read(ADDON_ROOT / "ClassPower" / "MSUF_CP_AltMana.lua")
     defaults = read(ADDON_ROOT / "State" / "MSUF_Defaults.lua")
-    page = read(ADDON_ROOT / "Shell" / "Menu2" / "Pages" / "MSUF_Menu2_AdvancedClassPower.lua")
-    global_page = read(ADDON_ROOT / "Shell" / "Menu2" / "Pages" / "MSUF_Menu2_Global.lua")
-    bars_page = read(ADDON_ROOT / "Shell" / "Menu2" / "Pages" / "MSUF_Menu2_GlobalBars.lua")
+    page = read(OPTIONS_ROOT / "Shell" / "Menu2" / "Pages" / "MSUF_Menu2_AdvancedClassPower.lua")
+    global_page = read(OPTIONS_ROOT / "Shell" / "Menu2" / "Pages" / "MSUF_Menu2_Global.lua")
+    bars_page = read(OPTIONS_ROOT / "Shell" / "Menu2" / "Pages" / "MSUF_Menu2_GlobalBars.lua")
 
     for needle in [
         "visual.smoothInterp = _cpDB.classSmooth and SMOOTH_INTERP or nil",
@@ -725,20 +800,20 @@ def check_edit_mode_mover_contracts() -> None:
 
 
 def check_unit_preview_lifecycle_contracts() -> None:
-    api = read(ADDON_ROOT / "Shell" / "Menu2" / "Preview" / "MSUF_Menu2_UnitPreview_API.lua")
-    core = read(ADDON_ROOT / "Shell" / "Menu2" / "Preview" / "MSUF_Menu2_UnitPreview_Core.lua")
-    auras = read(ADDON_ROOT / "Shell" / "Menu2" / "Preview" / "MSUF_Menu2_UnitPreview_Auras.lua")
+    api = read(OPTIONS_ROOT / "Shell" / "Menu2" / "Preview" / "MSUF_Menu2_UnitPreview_API.lua")
+    core = read(OPTIONS_ROOT / "Shell" / "Menu2" / "Preview" / "MSUF_Menu2_UnitPreview_Core.lua")
+    auras = read(OPTIONS_ROOT / "Shell" / "Menu2" / "Preview" / "MSUF_Menu2_UnitPreview_Auras.lua")
     aura_edit_mode = read(ADDON_ROOT / "Auras3" / "MSUF_Auras3_EditMode.lua")
-    sections = read(ADDON_ROOT / "Shell" / "Menu2" / "Pages" / "MSUF_Menu2_UnitSections.lua")
-    group_preview = read(ADDON_ROOT / "Shell" / "Menu2" / "Pages" / "MSUF_Menu2_GroupPreview.lua")
-    group_native = read(ADDON_ROOT / "Shell" / "Menu2" / "Preview" / "MSUF_Menu2_GroupPreview_Native.lua")
-    group_render = read(ADDON_ROOT / "Shell" / "Menu2" / "Preview" / "MSUF_Menu2_GroupPreview_Render.lua")
-    class_power = read(ADDON_ROOT / "Shell" / "Menu2" / "Preview" / "MSUF_Menu2_ClassPowerPreview.lua")
-    window_priority = read(ADDON_ROOT / "Shell" / "Menu2" / "MSUF_Menu2_WindowPriority.lua")
-    widgets = read(ADDON_ROOT / "Shell" / "Menu2" / "MSUF_Menu2_Widgets.lua")
-    dropdowns = read(ADDON_ROOT / "Shell" / "Menu2" / "MSUF_Menu2_Dropdowns.lua")
-    theme = read(ADDON_ROOT / "Shell" / "Menu2" / "MSUF_Menu2_Theme.lua")
-    window = read(ADDON_ROOT / "Shell" / "Menu2" / "MSUF_Menu2_Window.lua")
+    sections = read(OPTIONS_ROOT / "Shell" / "Menu2" / "Pages" / "MSUF_Menu2_UnitSections.lua")
+    group_preview = read(OPTIONS_ROOT / "Shell" / "Menu2" / "Pages" / "MSUF_Menu2_GroupPreview.lua")
+    group_native = read(OPTIONS_ROOT / "Shell" / "Menu2" / "Preview" / "MSUF_Menu2_GroupPreview_Native.lua")
+    group_render = read(OPTIONS_ROOT / "Shell" / "Menu2" / "Preview" / "MSUF_Menu2_GroupPreview_Render.lua")
+    class_power = read(OPTIONS_ROOT / "Shell" / "Menu2" / "Preview" / "MSUF_Menu2_ClassPowerPreview.lua")
+    window_priority = read(OPTIONS_ROOT / "Shell" / "Menu2" / "MSUF_Menu2_WindowPriority.lua")
+    widgets = read(OPTIONS_ROOT / "Shell" / "Menu2" / "MSUF_Menu2_Widgets.lua")
+    dropdowns = read(OPTIONS_ROOT / "Shell" / "Menu2" / "MSUF_Menu2_Dropdowns.lua")
+    theme = read(OPTIONS_ROOT / "Shell" / "Menu2" / "MSUF_Menu2_Theme.lua")
+    window = read(OPTIONS_ROOT / "Shell" / "Menu2" / "MSUF_Menu2_Window.lua")
 
     combat_gate = re.search(
         r'function\s+Core\.InCombat\s*\(\s*\)\s*'
@@ -907,11 +982,14 @@ def check_unit_preview_lifecycle_contracts() -> None:
 
 def main() -> int:
     lua_files = all_lua_files()
+    xml_files = all_xml_files()
     check_luac(lua_files)
+    check_xml(xml_files)
     check_locale_contracts()
     check_full_menu_locale_coverage()
+    check_options_runtime_contracts()
     check_assistant_runtime_contracts()
-    check_load_reachability(lua_files)
+    check_load_reachability(lua_files, xml_files)
     check_kernel_castbar_contracts()
     check_group_refresh_contracts()
     check_powerbar_contracts()
@@ -919,7 +997,7 @@ def main() -> int:
     check_portrait_refresh_contracts()
     check_edit_mode_mover_contracts()
     check_unit_preview_lifecycle_contracts()
-    print(f"MSUF static checks: ok ({len(lua_files)} Lua files)")
+    print(f"MSUF static checks: ok ({len(lua_files)} Lua files, {len(xml_files)} XML files)")
     return 0
 
 

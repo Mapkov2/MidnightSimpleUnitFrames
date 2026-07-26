@@ -107,7 +107,7 @@ Check(layoutSource:find("Text.EnsureNameAnchorProxy = EnsureNameAnchorProxy", 1,
     "secret-safe bar-name anchor proxy is not exported")
 Check(layoutSource:find("proxy:SetAlpha(0)", 1, true) ~= nil,
     "bar-name anchor proxy is not visually inert")
-local menuSource = assert(io.open(root .. "/MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_Unit.lua", "rb")):read("*a")
+local menuSource = assert(io.open(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Unit.lua", "rb")):read("*a")
 Check(menuSource:find('local STATUS_LEVEL_ANCHORS = WithNameAnchors("Right to name", "Left to name")', 1, true) ~= nil,
     "unit status menu still labels name-relative anchors as player-only")
 

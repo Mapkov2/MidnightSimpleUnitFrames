@@ -23,14 +23,14 @@ end
 
 local function ResolveRepositoryRoot()
     for _, root in ipairs({ ".", "..", "../..", "../../.." }) do
-        if Exists(Join(root, "MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_PreviewHelpers.lua")) then return root end
+        if Exists(Join(root, "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_PreviewHelpers.lua")) then return root end
     end
     error("repository root not found")
 end
 
 local ROOT = ResolveRepositoryRoot()
 local MSUF = { MSUF2 = {} }
-local helperPath = Join(ROOT, "MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_PreviewHelpers.lua")
+local helperPath = Join(ROOT, "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_PreviewHelpers.lua")
 local chunk, err = loadfile(helperPath)
 assert(chunk, err)
 chunk("MidnightSimpleUnitFrames", MSUF)
@@ -109,7 +109,7 @@ assert(ResolveWidth({
     classWidth = 280, widthMode = "cooldown", manualWidth = 333,
 }) == 160, "orb size must remain independent and clamped to its runtime range")
 
-local advancedSource = Read(Join(ROOT, "MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_AdvancedClassPower.lua"))
+local advancedSource = Read(Join(ROOT, "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AdvancedClassPower.lua"))
 assert(advancedSource:find('APPLY_DETACHED_POWER_WIDTH_MODE = { preview = true, power = true, applyAll = false, classpowerApplied = true }', 1, true),
     "global detached width mode is not routed through the all-Power apply scope")
 assert(advancedSource:find('self:Controls(layout, Bars, ApplyDetachedPowerWidthMode, "detached_power.layout"', 1, true),
@@ -131,10 +131,10 @@ assert(factorySource:find("cooldownWidthSourceGeneration", 1, true),
 assert(factorySource:find('self:UnregisterEvent("PLAYER_REGEN_ENABLED")', 1, true),
     "combat cooldown width changes have no one-shot regen replay")
 
-local renderSource = Read(Join(ROOT, "MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua"))
+local renderSource = Read(Join(ROOT, "MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua"))
 assert(renderSource:find("liveFrame = PreviewLiveFrame(key)", 1, true),
     "live Target frame is not forwarded into the detached width resolver")
-local helperSource = Read(Join(ROOT, "MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_PreviewHelpers.lua"))
+local helperSource = Read(Join(ROOT, "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_PreviewHelpers.lua"))
 assert(helperSource:find("return liveResolver(liveFrame, livePower)", 1, true),
     "live Target preview still re-simulates detached width instead of using the live resolver")
 

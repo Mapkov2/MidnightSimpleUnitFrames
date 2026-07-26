@@ -17,7 +17,7 @@ local addon = {
         UnitPage = {},
     },
 }
-assert(loadfile("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_UnitLazy.lua"))("MSUF", addon)
+assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitLazy.lua"))("MSUF", addon)
 
 local function NewBuilder(open)
     local builder = { relayouts = 0 }
@@ -70,7 +70,7 @@ local hiddenBuilder = NewBuilder(false)
 addon.MSUF2.UnitPage.BuildSectionLazy({ key = "gf_layout", entry = { hiddenBuild = true }, refreshers = {} }, hiddenBuilder, nil, spec)
 assert(builds == 3, "search hidden-build no longer materializes the complete searchable page")
 
-local layout = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GroupLayout.lua")
+local layout = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupLayout.lua")
 for _, sectionId in ipairs({ "general", "text", "power", "range", "transparency", "layout_advanced", "sorting", "scaling", "anchor" }) do
     assert(layout:find('sectionId = "' .. sectionId .. '"', 1, true), "missing lazy Group Layout section: " .. sectionId)
 end
@@ -82,7 +82,7 @@ assert(layout:find('{ sectionId = "text", title = "Text", height = 690', 1, true
     "Group Layout Text section no longer reserves enough height for the HP Appearance card")
 assert(layout:find('version = 24', 1, true), "Group Layout cache version was not bumped")
 
-local globalBars = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GlobalBars.lua")
+local globalBars = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GlobalBars.lua")
 for _, sectionId in ipairs({ "bars_outline", "bars_unit_dispel_overlay", "bars_power" }) do
     assert(globalBars:find('sectionId = "' .. sectionId .. '"', 1, true),
         "closed Global Bars section still builds eagerly: " .. sectionId)
@@ -91,12 +91,12 @@ assert(globalBars:find("BuildGlobalBarsSectionLazy", 1, true)
     and globalBars:find('version = 17', 1, true),
     "Global Bars closed-section cold path is not cache-versioned and lazy")
 
-local previewPage = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GroupPreview.lua")
+local previewPage = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupPreview.lua")
 assert(previewPage:find("GroupPreview._sharedNativeBox", 1, true)
     and previewPage:find("RebindNativeGFPreview", 1, true)
     and previewPage:find("EnsurePreviewAttachment", 1, true),
     "Group Preview is not rebound with its pinning contract")
-local previewNative = Read("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Native.lua")
+local previewNative = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Native.lua")
 assert(previewNative:find("function box:RegisterRuntimeControlsForPage", 1, true)
     and previewNative:find("R.RegisterPreviewControl = RegisterPreviewControl", 1, true),
     "shared Group Preview does not preserve Search/Assistant control ownership")
@@ -187,7 +187,7 @@ previewM.frame = FakeFrame()
 previewM.groupPreviewExpanded = false
 previewM.formContentMaxWidth = 980
 
-assert(loadfile("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GroupPreview.lua"))("MSUF", previewAddon)
+assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupPreview.lua"))("MSUF", previewAddon)
 local function BuildPreviewPage(key)
     local wrapper = FakeFrame()
     local builder = { width = 720 }

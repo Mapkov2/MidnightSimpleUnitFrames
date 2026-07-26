@@ -169,11 +169,11 @@ local unitFrames = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.
 local groupConfig = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Config.lua")
 local indicatorConfig = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Config_Indicators.lua")
 local spellRuntime = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_SpellIndicators.lua")
-local menuSupport = Read("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Support.lua")
-local groupPage = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_Group.lua")
-local previewNative = Read("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Native.lua")
-local previewRender = Read("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Render.lua")
-local menu = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GroupIndicators.lua")
+local menuSupport = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua")
+local groupPage = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Group.lua")
+local previewNative = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Native.lua")
+local previewRender = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Render.lua")
+local menu = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupIndicators.lua")
 
 Check(unitFrames:find("SpellIndicatorsRuntime.CompileSlots(unit, combinedSpellSource, buff)", 1, true),
   "live group config no longer passes Buff style to Spell Indicators")

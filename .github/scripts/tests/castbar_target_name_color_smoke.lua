@@ -1,4 +1,5 @@
 local root = "MidnightSimpleUnitFrames/"
+local optionsRoot = "MidnightSimpleUnitFrames_Options/"
 
 local function read(path)
     local file, err = io.open(path, "rb")
@@ -137,8 +138,8 @@ assert(contains(castbarVisuals, 'local targetTextAlpha = colorSuffix == "TargetN
     and contains(castbarVisuals, "fontString:SetAlpha(alpha)"),
     "cast-target recoloring can reset the shared Fonts text opacity")
 
-local unitPreview = read(root .. "Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua")
-local castbarPage = read(root .. "Shell/Menu2/Pages/MSUF_Menu2_GlobalCastbars.lua")
+local unitPreview = read(optionsRoot .. "Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua")
+local castbarPage = read(optionsRoot .. "Shell/Menu2/Pages/MSUF_Menu2_GlobalCastbars.lua")
 local unitCastbarPreview = read(root .. "Castbars/MSUF_CastbarPreviews.lua")
 local bossCastbarPreview = read(root .. "Castbars/MSUF_BossCastbars_Preview.lua")
 assert(contains(unitPreview, "MSUF_GetCastbarTargetNameColor")

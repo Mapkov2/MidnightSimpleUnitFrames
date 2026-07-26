@@ -32,6 +32,8 @@ end
 
 local ADDON = "MidnightSimpleUnitFrames/"
 if not read(ADDON .. "MidnightSimpleUnitFrames.toc") then ADDON = "" end
+local OPTIONS = ADDON ~= "" and "MidnightSimpleUnitFrames_Options/"
+    or "../MidnightSimpleUnitFrames_Options/"
 
 -------------------------------------------------------------------------------
 --  Harness
@@ -278,7 +280,7 @@ end
 check(auraSource:find("style.signature", 1, true) ~= nil,
     "the icon style still contributes to the lane layout signature")
 
-local menuSource = assert(read(ADDON .. "Shell/Menu2/Pages/MSUF_Menu2_Auras.lua"))
+local menuSource = assert(read(OPTIONS .. "Shell/Menu2/Pages/MSUF_Menu2_Auras.lua"))
 local iconStyleStart = assert(menuSource:find("local function ApplyIconStyleRuntime", 1, true))
 local iconStyleEnd = assert(menuSource:find("local ICON_STYLE_BORDER_DEFAULT", iconStyleStart, true))
 local iconStyleBlock = menuSource:sub(iconStyleStart, iconStyleEnd)

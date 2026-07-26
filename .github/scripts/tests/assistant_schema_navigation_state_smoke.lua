@@ -104,9 +104,9 @@ M.RuntimeControlCatalog = {
     end,
 }
 
-assert(loadfile("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_SearchBridge.lua"))(
+assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_SearchBridge.lua"))(
     "MidnightSimpleUnitFrames", namespace)
-assert(loadfile("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_API.lua"))(
+assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_API.lua"))(
     "MidnightSimpleUnitFrames", namespace)
 
 local ok, message = M.OpenExactCatalogControl(semanticId, "Edit", "gf_auras")

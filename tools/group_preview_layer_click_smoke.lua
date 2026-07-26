@@ -97,7 +97,7 @@ M.GroupPreviewRender = { Install = function(box)
 end }
 
 local MSUF = { MSUF2 = M, ExportPublic = function(name, value) _G[name] = value return value end }
-assert(loadfile("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_PreviewHelpers.lua"))("MidnightSimpleUnitFrames", MSUF)
+assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_PreviewHelpers.lua"))("MidnightSimpleUnitFrames", MSUF)
 local H = assert(M.PreviewHelpers)
 H.BuildZoomBar = function(box)
     box._zoomBar = Frame(box)
@@ -107,7 +107,7 @@ end
 H.BuildZoomCommand = function() return {} end
 H.EnsurePreviewControlsHint = function() return nil end
 
-assert(loadfile("MidnightSimpleUnitFrames/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Native.lua"))(
+assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Native.lua"))(
     "MidnightSimpleUnitFrames", MSUF)
 local parent = Frame(UIParent)
 local box = assert(M.GroupPreview.CreateNative(parent, { width = 720, key = "group" }))

@@ -54,7 +54,7 @@ local namespace = {
         return value
     end,
 }
-assert(loadfile(ROOT .. "/MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_Unit.lua"))(
+assert(loadfile(ROOT .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Unit.lua"))(
     "MidnightSimpleUnitFrames", namespace)
 local CopyUnitSettings = assert(M.UnitPage and M.UnitPage.CopyUnitSettings)
 

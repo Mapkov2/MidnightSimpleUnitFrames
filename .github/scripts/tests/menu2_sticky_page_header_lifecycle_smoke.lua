@@ -91,7 +91,7 @@ local env = setmetatable({
     },
 }, { __index = _G })
 
-local windowSource = Read("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Window.lua")
+local windowSource = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Window.lua")
 local buildScrollHost = assert(windowSource:match(
     "(local function BuildWindowScrollHost.-\nend)\n\nlocal function BuildWindow%(")
     or windowSource:match("(local function BuildWindowScrollHost.-\r\nend)\r\n\r\nlocal function BuildWindow%(") ,
@@ -99,7 +99,7 @@ local buildScrollHost = assert(windowSource:match(
 buildScrollHost = buildScrollHost:gsub("local function BuildWindowScrollHost", "BuildWindowScrollHost = function", 1)
 Compile(buildScrollHost, "@sticky-window-host", env)()
 
-local widgetsSource = Read("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Widgets.lua")
+local widgetsSource = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Widgets.lua")
 local attachHeader = assert(widgetsSource:match(
     "(function W%.AttachStickyPageHeader.-\nend)\n\nlocal function InstallPinnedPreviewUpdater")
     or widgetsSource:match("(function W%.AttachStickyPageHeader.-\r\nend)\r\n\r\nlocal function InstallPinnedPreviewUpdater"),
@@ -197,7 +197,7 @@ assert(section:GetParent() == wrapper and next(M.pageHeaderHost.children) == nil
 assert(timerCount == 0, "sticky lifecycle used a deferred timer")
 assert(pinnedRefreshes >= 4, "sticky transitions did not refresh dependent pinned geometry")
 
-local castbarSource = Read("MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_GlobalCastbars.lua")
+local castbarSource = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GlobalCastbars.lua")
 assert(not castbarSource:find("AttachStickyPageHeader", 1, true),
     "Castbar Preview is still incorrectly registered as an Editing header")
 

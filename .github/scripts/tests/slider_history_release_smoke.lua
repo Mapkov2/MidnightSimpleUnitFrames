@@ -82,7 +82,7 @@ M.ApplyService = {
     Flush = function() end,
 }
 
-assert(loadfile("MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Bindings.lua"))(
+assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings.lua"))(
     "MidnightSimpleUnitFrames", namespace)
 
 local slider = {

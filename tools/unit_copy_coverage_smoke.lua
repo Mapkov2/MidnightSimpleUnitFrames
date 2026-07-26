@@ -12,8 +12,8 @@
 ---
 --- A new key must land in a copy list or in the ALLOWLIST below with a reason.
 
-local UNIT_PAGE = "MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_Unit.lua"
-local BINDINGS = "MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_Bindings.lua"
+local UNIT_PAGE = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Unit.lua"
+local BINDINGS = "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings.lua"
 local DEFAULTS = "MidnightSimpleUnitFrames/State/MSUF_Defaults.lua"
 
 --- Keys that are deliberately not copied. Keep the reason with the entry.
@@ -121,7 +121,7 @@ end
 local castbarRequired = {}
 for _, path in ipairs({ UNIT_PAGE, BINDINGS, DEFAULTS,
     "MidnightSimpleUnitFrames/Castbars/MSUF_CastbarAnchors.lua",
-    "MidnightSimpleUnitFrames/Shell/Menu2/Pages/MSUF_Menu2_UnitFrameVisuals.lua",
+    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitFrameVisuals.lua",
 }) do
     for suffix in Read(path):gmatch("castbarPlayer(%u[%w]*)") do castbarRequired[suffix] = true end
 end

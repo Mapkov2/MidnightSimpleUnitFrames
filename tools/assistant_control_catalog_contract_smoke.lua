@@ -2,7 +2,11 @@
 -- Usage from repository root:
 --   lua tools/lua51_bom_runner.lua tools/assistant_control_catalog_contract_smoke.lua
 
-local addonRoot = arg[1] or "MidnightSimpleUnitFrames"
+local requestedRoot = arg[1] or "MidnightSimpleUnitFrames"
+local addonRoot = requestedRoot:gsub("MidnightSimpleUnitFrames$", "MidnightSimpleUnitFrames_Options")
+if addonRoot == requestedRoot and not requestedRoot:match("MidnightSimpleUnitFrames_Options$") then
+    addonRoot = requestedRoot .. "/MidnightSimpleUnitFrames_Options"
+end
 
 local function Check(value, message)
     if not value then error("CONTROL CATALOG CONTRACT FAIL: " .. tostring(message), 2) end

@@ -25,6 +25,8 @@ end
 
 local ADDON = Exists("MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Config.lua")
   and "MidnightSimpleUnitFrames/" or ""
+local OPTIONS = ADDON ~= "" and "MidnightSimpleUnitFrames_Options/"
+  or "../MidnightSimpleUnitFrames_Options/"
 
 local function Read(relativePath)
   local file = assert(io.open(ADDON .. relativePath, "rb"), "missing source: " .. relativePath)
@@ -293,7 +295,13 @@ Check(not rounded:find("bars.detachedPowerBarOutline", 1, true),
 Check(rounded:find("if power.borderEnabled ~= true then return 0 end", 1, true),
   "rounded detached power edge ignores the unit power border toggle")
 
-local classPowerPage = Read("Shell/Menu2/Pages/MSUF_Menu2_AdvancedClassPower.lua")
+local classPowerPage = (function()
+  local file = assert(io.open(OPTIONS .. "Shell/Menu2/Pages/MSUF_Menu2_AdvancedClassPower.lua", "rb"),
+    "missing Options Class Resources source")
+  local source = file:read("*a")
+  file:close()
+  return source
+end)()
 Check(classPowerPage:find('SetControlEnabled(self.dpbTextures.outline, playerDetached and playerShape ~= "BAR")', 1, true),
   "Class Resources outline slider is not gated to the detached shapes it still owns")
 Check(not classPowerPage:find("detachedPowerBarTexture", 1, true)
