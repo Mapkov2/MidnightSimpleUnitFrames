@@ -886,10 +886,15 @@ local function ResolveHealthTextModes(text)
   local healthLeft = text.healthLeft
   local healthCenter = text.healthCenter
   local healthRight = text.healthRight
+  -- Same nil/false distinction the absorb icons below already make: a per-slot
+  -- false is an explicit "show the % sign" and must win over the global flag,
+  -- which `slot ~= nil and slot == true or fallback` collapsed back to hidden.
   local fallbackHide = text.hidePercentSymbol == true
-  local hideLeft = text.healthLeftHidePercentSymbol ~= nil and text.healthLeftHidePercentSymbol == true or fallbackHide
-  local hideCenter = text.healthCenterHidePercentSymbol ~= nil and text.healthCenterHidePercentSymbol == true or fallbackHide
-  local hideRight = text.healthRightHidePercentSymbol ~= nil and text.healthRightHidePercentSymbol == true or fallbackHide
+  local hideLeft, hideCenter, hideRight =
+    text.healthLeftHidePercentSymbol, text.healthCenterHidePercentSymbol, text.healthRightHidePercentSymbol
+  if hideLeft == nil then hideLeft = fallbackHide else hideLeft = hideLeft == true end
+  if hideCenter == nil then hideCenter = fallbackHide else hideCenter = hideCenter == true end
+  if hideRight == nil then hideRight = fallbackHide else hideRight = hideRight == true end
   local iconLeft, iconCenter, iconRight = text.healthLeftAbsorbIcon, text.healthCenterAbsorbIcon, text.healthRightAbsorbIcon
   if iconLeft == nil then iconLeft = text.healthAbsorbIcon == true else iconLeft = iconLeft == true end
   if iconCenter == nil then iconCenter = text.healthAbsorbIcon == true else iconCenter = iconCenter == true end
@@ -1003,7 +1008,12 @@ local function CompileThreeTextSlots(slots, frame, show, fields, mode1, mode2, m
       local fs = frame[fields[i]]
       if fs and fs:IsShown() then
         local mode = i == 1 and mode1 or (i == 2 and mode2 or mode3)
-        local hidePercentSymbol = i == 1 and hidePercentSymbol1 or (i == 2 and hidePercentSymbol2 or hidePercentSymbol3)
+        -- Branch-selected for the same reason as the health slots: a false flag
+        -- would otherwise fall through to the Right slot's flag.
+        local hidePercentSymbol
+        if i == 1 then hidePercentSymbol = hidePercentSymbol1
+        elseif i == 2 then hidePercentSymbol = hidePercentSymbol2
+        else hidePercentSymbol = hidePercentSymbol3 end
         local slotNeeds, slotMissing, slotCurrent, slotMax
         nextIndex, slotNeeds, slotMissing, slotCurrent, slotMax = AddTextSlot(slots, nextIndex, fs, mode, delimiter, short, hidePercentSymbol, percentDecimals)
         needsPercent = needsPercent or slotNeeds
@@ -1026,8 +1036,18 @@ local function CompileHealthTextSlots(valueSlots, absorbSlots, frame, show, mode
       local fs = frame[HEALTH_SLOT_FIELDS[i]]
       if fs and fs:IsShown() then
         local mode = i == 1 and mode1 or (i == 2 and mode2 or mode3)
-        local hidePercentSymbol = i == 1 and hidePercentSymbol1 or (i == 2 and hidePercentSymbol2 or hidePercentSymbol3)
-        local absorbIcon = i == 1 and absorbIcon1 or (i == 2 and absorbIcon2 or absorbIcon3)
+        -- Booleans must be selected by branch, never by and/or: a slot whose
+        -- flag is false makes `i == n and flagN` yield false and fall through
+        -- to the Right slot's flag, so a Left/Center slot silently inherited
+        -- Right's "Hide % sign" and absorb icon.
+        local hidePercentSymbol, absorbIcon
+        if i == 1 then
+          hidePercentSymbol, absorbIcon = hidePercentSymbol1, absorbIcon1
+        elseif i == 2 then
+          hidePercentSymbol, absorbIcon = hidePercentSymbol2, absorbIcon2
+        else
+          hidePercentSymbol, absorbIcon = hidePercentSymbol3, absorbIcon3
+        end
         local absorbOnly = mode == "ABSORB"
         local slots = absorbOnly and absorbSlots or valueSlots
         local index = absorbOnly and absorbIndex or valueIndex
@@ -1163,13 +1183,18 @@ local function CompileTextRuntime(frame, spec, text)
 
   local showPower = spec and spec.showPowerText ~= false
   local powerUnused
+  -- Per-slot override wins whenever it is set, including an explicit false.
+  local powerFallbackHide = text.hidePercentSymbol == true
+  local powerHideLeft, powerHideCenter, powerHideRight =
+    text.powerLeftHidePercentSymbol, text.powerCenterHidePercentSymbol, text.powerRightHidePercentSymbol
+  if powerHideLeft == nil then powerHideLeft = powerFallbackHide else powerHideLeft = powerHideLeft == true end
+  if powerHideCenter == nil then powerHideCenter = powerFallbackHide else powerHideCenter = powerHideCenter == true end
+  if powerHideRight == nil then powerHideRight = powerFallbackHide else powerHideRight = powerHideRight == true end
   rt.powerSlotCount, needsPercent, powerUnused, needsCurrent, needsMax = CompileThreeTextSlots(
     rt.powerSlots, frame, showPower, POWER_SLOT_FIELDS,
     text.powerLeft, text.powerCenter, text.powerRight,
     text.powerDelimiter, text.shortNumbers,
-    text.powerLeftHidePercentSymbol ~= nil and text.powerLeftHidePercentSymbol == true or text.hidePercentSymbol == true,
-    text.powerCenterHidePercentSymbol ~= nil and text.powerCenterHidePercentSymbol == true or text.hidePercentSymbol == true,
-    text.powerRightHidePercentSymbol ~= nil and text.powerRightHidePercentSymbol == true or text.hidePercentSymbol == true)
+    powerHideLeft, powerHideCenter, powerHideRight)
   rt.powerNeedsPercent = needsPercent
   rt.powerNeedsCurrent = needsCurrent
   rt.powerNeedsMax = needsMax
