@@ -164,4 +164,46 @@ assert(db.target.bossLayoutMode == "target-sentinel"
     and db.target.spacing == "target-sentinel",
     "Boss-only container layout leaked into a normal unit")
 
-print("PASS unit copy semantics: Boss castbar mapping, detached guard, nil safety, Boss layout isolation")
+-- Portrait copy completeness. The Visuals page binds every per-unit portrait key as
+-- a quoted "portrait<Upper>..." literal; extract them from the source so a new
+-- portrait control that never made it into COPY_PORTRAIT_FIELDS fails here instead
+-- of shipping a half-applied "copy to" (the 6.0 width/height Treppenstufe bug).
+local visualsPath = ROOT .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitFrameVisuals.lua"
+local visualsFile = assert(io.open(visualsPath, "rb"), "cannot open " .. visualsPath)
+local visualsSource = visualsFile:read("*a")
+visualsFile:close()
+local portraitKeys, portraitKeySeen = {}, {}
+for key in visualsSource:gmatch('"(portrait[A-Z][%w]*)"') do
+    if not portraitKeySeen[key] then
+        portraitKeySeen[key] = true
+        portraitKeys[#portraitKeys + 1] = key
+    end
+end
+assert(#portraitKeys >= 20,
+    "portrait key extraction broke: only " .. #portraitKeys .. " keys found in Visuals page")
+
+db = NewDB()
+for i = 1, #portraitKeys do
+    db.player[portraitKeys[i]] = "src:" .. portraitKeys[i]
+end
+CopyUnitSettings("player", "target", { portrait = true })
+for i = 1, #portraitKeys do
+    local key = portraitKeys[i]
+    assert(db.target[key] == "src:" .. key,
+        "portrait key not copied Player->Target (missing from COPY_PORTRAIT_FIELDS?): " .. key)
+end
+
+-- A source at defaults (nil) must clear the destination's explicit value, otherwise
+-- stale destination overrides survive the copy and misalign the frames again.
+db = NewDB()
+for i = 1, #portraitKeys do
+    db.target[portraitKeys[i]] = "stale:" .. portraitKeys[i]
+end
+CopyUnitSettings("player", "target", { portrait = true })
+for i = 1, #portraitKeys do
+    local key = portraitKeys[i]
+    assert(db.target[key] == nil,
+        "default (nil) source did not clear stale destination portrait key: " .. key)
+end
+
+print("PASS unit copy semantics: Boss castbar mapping, detached guard, nil safety, Boss layout isolation, portrait completeness")

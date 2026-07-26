@@ -204,7 +204,12 @@ local function DeepCopy(src)
     return M.DeepCopy(src)
 end
 local COPY_POWER_BAR_FIELDS = WL [[showPowerBar powerBarHeight embedPowerBarIntoHealth powerBarBorderEnabled powerBarBorderThickness powerSmoothFill powerBarDetached detachedPowerBarShape detachedPowerOrbSize detachedPowerBarWidth detachedPowerBarHeight detachedPowerBarOffsetX detachedPowerBarOffsetY detachedPowerBarAnchorMode detachedPowerBarFrameLevelOffset detachedPowerBarTextOnBar detachedPowerBarSyncClassPower detachedPowerBarAnchorToClassPower powerBarTexture powerBarBgTexture]]
-local COPY_PORTRAIT_FIELDS = WL [[portraitMode portraitRender portraitClassStyle portraitCastSpellIcon portraitShape portraitSizeOverride portraitOffsetX portraitOffsetY portraitZoom portraitBorderStyle portraitBorderThickness portraitBgEnabled portraitFillBorder portraitDecoOverride]]
+--- Must cover every per-unit portrait key the engine reads (CompileUnitPortrait in
+--- MSUF_UF_Config.lua) and the Visuals page binds. Border/background COLORS are
+--- intentionally absent: those live in MSUF_DB.general and are shared by all units.
+--- unit_copy_semantics_smoke extracts the bound keys from the Visuals page source and
+--- fails when a new portrait control is missing here.
+local COPY_PORTRAIT_FIELDS = WL [[portraitMode portraitRender portraitClassStyle portraitCastSpellIcon portraitShape portraitSizeOverride portraitWidth portraitHeight portraitOffsetX portraitOffsetY portraitZoom portraitPanX portraitPanY portraitPlacement portraitDetachedPoint portraitDetachedTo portraitOverlayAlign portraitLevelOffset portraitAlpha portraitBorderStyle portraitBorderArt portraitBorderDirection portraitBorderThickness portraitBgEnabled portraitFillBorder portraitDecoOverride]]
 local COPY_TEXT_FIELDS = WL [[
     showName showHP showPower showPowerText nameTextAnchor nameOffsetX nameOffsetY nameFontSize
     showRaidGroupInName raidGroupNameAnchor raidGroupNameOffsetX raidGroupNameOffsetY raidGroupNameLayer raidGroupNameStyle
