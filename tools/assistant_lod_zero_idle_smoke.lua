@@ -192,10 +192,12 @@ for _, value in ipairs(regions) do
     if value:GetText() == greeting then foundGreeting = true; break end
 end
 assert(foundGreeting, "cold dashboard lacks the personalized afternoon greeting")
+-- The maturity tag was retired. Pinned negatively so neither the shell bridge
+-- nor the loaded card can reintroduce it on the cold path.
 for _, value in ipairs(regions) do
     if value:GetText() == "(Early Alpha)" then foundAlpha = true; break end
 end
-assert(foundAlpha, "cold dashboard lacks the Early Alpha maturity label")
+assert(not foundAlpha, "cold dashboard still shows the retired Early Alpha maturity label")
 
 local input, send
 for _, value in ipairs(frames) do
