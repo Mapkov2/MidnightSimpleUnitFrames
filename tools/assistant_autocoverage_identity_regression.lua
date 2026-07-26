@@ -156,7 +156,7 @@ for scope, paths in pairs(canonicalOwners) do
             scope .. "." .. dbKey .. " became a duplicate generated identity")
     end
 end
-assert(canonicalOwnerCount == 92,
+assert(canonicalOwnerCount == 108,
     "canonical owner ledger count drifted: " .. tostring(canonicalOwnerCount))
 
 local compatibilityProjectionCount = 0
@@ -170,7 +170,7 @@ for scope, paths in pairs(assert(A.AutoCoverage.CompatibilityProjections,
             scope .. "." .. dbKey .. " became a retired generated identity")
     end
 end
-assert(compatibilityProjectionCount == 52,
+assert(compatibilityProjectionCount == 59,
     "compatibility projection ledger count drifted: " .. tostring(compatibilityProjectionCount))
 
 -- The canonical ledger must fail closed when its reviewed owner is absent,
