@@ -828,6 +828,11 @@ local function MSUF_SetMSUFEditModeDirect(active, unitKey)
         if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then _G.MSUF_ShowConfigCombatLockMessage() end
         return false
     end
+    if active and type(_G.MSUF_EnsureOptionsLoaded) == "function"
+        and not _G.MSUF_EnsureOptionsLoaded("edit-mode")
+    then
+        return false
+    end
     if active then EM2.State.Enter(unitKey)
     else EM2.State.Exit("direct") end
     return true

@@ -165,14 +165,12 @@ UnitFrames\Embeds\MSUF_UFCore\MSUF_UFCore_Group.xml
 # ---------------------------------------------------------------
 # OPTIONS
 # ---------------------------------------------------------------
-# MENU2
-Shell\Menu2\MSUF_Menu2.xml
-Shell\Menu2\Search\MSUF_Menu2_Search.xml
-Shell\Menu2\MSUF_Menu2_AfterSearch.xml
-Shell\Menu2\Preview\MSUF_Menu2_UnitPreview.xml
-Shell\Menu2\MSUF_Menu2_AfterUnitPreview.xml
-Shell\Menu2\Preview\MSUF_Menu2_GroupPreview.xml
-Shell\Menu2\MSUF_Menu2_AfterGroupPreview.xml
+# The 5 MB Menu2 implementation lives in MidnightSimpleUnitFrames_Options and
+# is loaded synchronously on first configuration demand. Only runtime contracts
+# that already apply before the menu opens stay in the main addon.
+Runtime\MSUF_UIScaleRuntime.lua
+Runtime\MSUF_PreviewBuildWarning.lua
+Kernel\MSUF_OptionsLoader.lua
 
 # ---------------------------------------------------------------
 # OPTIONAL VISUAL / CASTBAR FEATURES

@@ -1209,7 +1209,7 @@ end
 ExportPublic("MSUF_EnsureAddonLoaded", MSUF_EnsureAddonLoaded)
 
 --- Compatibility hook retained for older callers. The current scale owner in
---- Menu2_Support is itself combat-safe and creates a PLAYER_REGEN_ENABLED
+--- Runtime/MSUF_UIScaleRuntime.lua is itself combat-safe and creates a PLAYER_REGEN_ENABLED
 --- watcher only while an apply is pending, so a second permanent gate/frame is
 --- unnecessary.
 local function MSUF_InstallGlobalScaleGate()

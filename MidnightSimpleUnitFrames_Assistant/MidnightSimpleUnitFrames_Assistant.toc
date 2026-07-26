@@ -3,7 +3,7 @@
 ## Notes: Load-on-demand Assistant for Midnight Simple Unit Frames.
 ## Author: Mapko
 ## Version: 6.0-beta27
-## Dependencies: MidnightSimpleUnitFrames
+## Dependencies: MidnightSimpleUnitFrames, MidnightSimpleUnitFrames_Options
 ## LoadOnDemand: 1
 
 MSUF_AssistantRuntime.xml

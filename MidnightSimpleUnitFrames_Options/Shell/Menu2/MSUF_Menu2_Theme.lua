@@ -3001,10 +3001,17 @@ end
 -- themed consumer (window shell, popups, edit-mode chrome) bakes the same
 -- accent family. BuildWindow keeps a guarded second call as a fallback.
 do
-    local accentInit = _G.CreateFrame("Frame")
-    accentInit:RegisterEvent("PLAYER_LOGIN")
-    accentInit:SetScript("OnEvent", function(self)
-        self:UnregisterAllEvents()
+    local function ApplySavedAccent()
         if type(T.ApplyMenuAccent) == "function" then T.ApplyMenuAccent() end
-    end)
+    end
+    if type(_G.IsLoggedIn) == "function" and _G.IsLoggedIn() then
+        ApplySavedAccent()
+    else
+        local accentInit = _G.CreateFrame("Frame")
+        accentInit:RegisterEvent("PLAYER_LOGIN")
+        accentInit:SetScript("OnEvent", function(self)
+            self:UnregisterAllEvents()
+            ApplySavedAccent()
+        end)
+    end
 end

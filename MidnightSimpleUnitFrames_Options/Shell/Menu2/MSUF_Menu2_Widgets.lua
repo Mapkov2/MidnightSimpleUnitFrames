@@ -8,6 +8,8 @@
 
 local addonName, MSUF = ...
 MSUF = MSUF or {}
+addonName = (type(MSUF.AddonName) == "string" and MSUF.AddonName ~= "" and MSUF.AddonName)
+    or "MidnightSimpleUnitFrames"
 local ExportPublic = MSUF.ExportPublic or function(name, value)
     _G[name] = value
     return value

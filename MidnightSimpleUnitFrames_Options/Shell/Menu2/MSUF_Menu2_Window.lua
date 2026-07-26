@@ -9,6 +9,8 @@
 --- Must not own runtime unitframe/groupframe gameplay logic.
 local addonName, MSUF = ...
 MSUF = MSUF or {}
+addonName = (type(MSUF.AddonName) == "string" and MSUF.AddonName ~= "" and MSUF.AddonName)
+    or "MidnightSimpleUnitFrames"
 local ExportPublic = MSUF.ExportPublic or function(name, value)
     _G[name] = value
     return value
@@ -108,16 +110,6 @@ local function ShowPreviewWarning(source)
     previewWarningShown[source] = true
     for i = 1, #PREVIEW_WARNING_LINES do
         AddPreviewWarningLine(PREVIEW_WARNING_LINES[i])
-    end
-end
-do
-    if IsMSUF60PreviewBuild() then
-        local loginWarningFrame = CreateFrame("Frame")
-        loginWarningFrame:RegisterEvent("PLAYER_LOGIN")
-        loginWarningFrame:SetScript("OnEvent", function(self)
-            self:UnregisterEvent("PLAYER_LOGIN")
-            C_Timer.After(2, function() ShowPreviewWarning("login") end)
-        end)
     end
 end
 local ApplyMenuFramePriority = M.ApplyMenuFramePriority

@@ -117,7 +117,8 @@ PublishCompat("MSUF_DoFullReset", MSUF_DoFullReset)
 --- Slash command registry
 ---
 --- Every /msuf sub-command registers itself here: the generic ones below, the
---- menu-owned ones from Shell/Menu2/MSUF_Menu2_API.lua once Menu2 has loaded,
+--- menu-owned ones from the Options addon's Shell/Menu2/MSUF_Menu2_API.lua
+--- once that LoadOnDemand addon has loaded,
 --- and the standalone diagnostic commands from the files that own them.
 --- Dispatch and the help text read the same table, so a command can never
 --- exist without being listed, and help can never advertise something that is
@@ -303,7 +304,8 @@ end
 --- Generic command registrations
 ---
 --- Menu-owned commands (edit mode, search, guided setup, page navigation) are
---- registered from Shell/Menu2/MSUF_Menu2_API.lua, which loads later.
+--- registered from the Options addon's Shell/Menu2/MSUF_Menu2_API.lua, which
+--- loads on first configuration demand.
 --- ==========================================================================
 local function CommandsInCombat()
     return (InCombatLockdown and InCombatLockdown()) and true or false

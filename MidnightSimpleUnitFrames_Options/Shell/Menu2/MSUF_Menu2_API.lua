@@ -265,8 +265,42 @@ local function SlashOpenSearch(query)
     return ok
 end
 
+local function RegisterMenuCommand(entry)
+    if type(Commands) ~= "table" or type(Commands.Register) ~= "function" then return false end
+    local existing = type(Commands.Get) == "function" and Commands.Get(entry and entry.name) or nil
+    if type(existing) ~= "table" or existing._msufOptionsLODDeferred ~= true then
+        return Commands.Register(entry)
+    end
+
+    --- Replace the cold metadata entry in place so Commands.order keeps the
+    --- exact eager-load ordering and every alias starts calling the real
+    --- implementation immediately after the Options addon finishes loading.
+    local byWord = Commands.byWord
+    if type(byWord) ~= "table" then return false end
+    local function Words(value)
+        local words = { tostring(value.name or ""):lower() }
+        for i = 1, #(value.aliases or {}) do
+            words[#words + 1] = tostring(value.aliases[i]):lower()
+        end
+        return words
+    end
+    local oldWords, newWords = Words(existing), Words(entry)
+    for i = 1, #newWords do
+        local owner = byWord[newWords[i]]
+        if owner ~= nil and owner ~= existing then return false end
+    end
+    for i = 1, #oldWords do
+        if byWord[oldWords[i]] == existing then byWord[oldWords[i]] = nil end
+    end
+    for key in pairs(existing) do existing[key] = nil end
+    for key, value in pairs(entry) do existing[key] = value end
+    existing.name = tostring(existing.name or ""):lower()
+    for i = 1, #newWords do byWord[newWords[i]] = existing end
+    return true
+end
+
 if type(Commands) == "table" and type(Commands.Register) == "function" then
-Commands.Register({
+RegisterMenuCommand({
     name = "edit",
     aliases = { "editmode", "move", "unlock" },
     group = "frames",
@@ -292,7 +326,7 @@ Commands.Register({
     end,
 })
 
-Commands.Register({
+RegisterMenuCommand({
     name = "lock",
     aliases = { "unedit" },
     group = "frames",
@@ -308,7 +342,7 @@ Commands.Register({
     end,
 })
 
-Commands.Register({
+RegisterMenuCommand({
     name = "search",
     aliases = { "find" },
     group = "general",
@@ -319,7 +353,7 @@ Commands.Register({
     end,
 })
 
-Commands.Register({
+RegisterMenuCommand({
     name = "tour",
     aliases = { "guide", "setup" },
     group = "general",
@@ -339,7 +373,7 @@ Commands.Register({
     end,
 })
 
-Commands.Register({
+RegisterMenuCommand({
     name = "locale",
     aliases = { "locales", "loc" },
     group = "diagnostics",
@@ -354,7 +388,7 @@ Commands.Register({
     end,
 })
 
-Commands.Register({
+RegisterMenuCommand({
     name = "versiontest",
     group = "diagnostics",
     dev = true,
@@ -369,7 +403,7 @@ Commands.Register({
     end,
 })
 
-Commands.Register({
+RegisterMenuCommand({
     name = "firstload",
     group = "diagnostics",
     dev = true,
@@ -450,7 +484,7 @@ SlashCmdList["MSUF2OPTIONS"] = function(msg)
     M.Open(msg ~= "" and (aliases[msg] or msg) or nil)
 end
 SLASH_MSUFOPTIONS1 = SLASH_MSUFOPTIONS1 or "/msufoptions"
-SlashCmdList["MSUFOPTIONS"] = SlashCmdList["MSUFOPTIONS"] or function(msg)
+local optionsSlashHandler = function(msg)
     if type(Commands) == "table" and type(Commands.Dispatch) == "function" then
         return Commands.Dispatch(msg)
     end
@@ -459,6 +493,12 @@ SlashCmdList["MSUFOPTIONS"] = SlashCmdList["MSUFOPTIONS"] or function(msg)
     local pageKey = msg ~= "" and (aliases[msg] or msg) or nil
     M.Open(pageKey)
 end
+if not SlashCmdList["MSUFOPTIONS"]
+    or SlashCmdList["MSUFOPTIONS"] == MSUF.OptionsLODMSUFOptionsStub
+then
+    SlashCmdList["MSUFOPTIONS"] = optionsSlashHandler
+end
+MSUF.OptionsLODMSUFOptionsStub = nil
 
 -- Stable integration points for Edit Mode and external launchers. Resolve the
 -- controller at click time because it is loaded after all Menu2 pages.
