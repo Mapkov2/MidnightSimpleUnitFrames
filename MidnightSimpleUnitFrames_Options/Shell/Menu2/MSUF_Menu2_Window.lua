@@ -1943,10 +1943,18 @@ local function BuildWindowToolbar(state)
             historyMode = "none", help = "Starts a new Assistant task.",
         })
     end
-    local toolbarReset = T.Button(status, "Reset All", 88, 24)
+    local toolbarReset = T.Button(status, "Reset page", 88, 24)
     toolbarReset:SetPoint("RIGHT", toolbarTask, "LEFT", -12, 0)
     T.CenterButtonLabel(toolbarReset)
     if T.SkinDangerButton then T.SkinDangerButton(toolbarReset) end
+    if M.AddTooltip then
+        M.AddTooltip(toolbarReset, "Reset page", function()
+            local key = M.activeKey
+            local route = key and type(M.GetMenuBreadcrumb) == "function" and M.GetMenuBreadcrumb(key) or ""
+            if route == "" then return nil end
+            return M.Format("Resets all settings on %s to their defaults. Asks for confirmation first.", route)
+        end, { hook = true })
+    end
     toolbarReset:SetScript("OnClick", function()
         local key = M.activeKey
         if key and M.ShowPageResetConfirm and M.PageHasReset and M.PageHasReset(key) then
