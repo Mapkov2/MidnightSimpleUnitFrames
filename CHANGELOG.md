@@ -16,6 +16,7 @@
 - The 6.0 upgrade tour grew to sixteen curated highlights: Spell Indicators, Fill Direction, the portrait overhaul, and status icon packs joined the lineup, existing cards were refreshed for the newest features, and the layer card now shows an inline preview of the layer sub-menu instead of routing away.
 - Updated all supported locales for portrait placement, geometry, border art, long-duration aura suffixes, and the expanded upgrade tour.
 - The Assistant companion now declares the MSUF addon icon, so the load-on-demand module carries MSUF branding in the addon list.
+- The support card now credits Aur0r4 for the shipped default profile alongside Mapko and R41z0r, in every supported locale.
 - Assistant control schemas, reviewed inventory evidence, and reproducible release gates were refreshed for the Beta 30 control surface and three-addon package.
 
 ### Fixes & Performance
