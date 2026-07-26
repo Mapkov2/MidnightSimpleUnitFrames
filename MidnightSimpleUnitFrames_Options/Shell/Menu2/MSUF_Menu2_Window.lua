@@ -2125,7 +2125,10 @@ local function InstallWindowLifecycle(state)
         ResetBossPagePreviewCache()
         M.CallIf(M.SuspendPinnedPreviews, "WINDOW_HIDE")
         M.CallIf(M.ReleaseGFNativePreviews, "WINDOW_HIDE", nil)
-        SyncBossPagePreviewForKey(nil)
+        -- Force: ResetBossPagePreviewCache just cleared lastCastbarPagePreviewUnit,
+        -- so the castbar-page fake cast would dedupe against nil and never be
+        -- stopped when the window closes straight from the castbar page.
+        SyncBossPagePreviewForKey(nil, true)
         RequestGroupPagePreviewForKey(nil)
         M.CallIf(M.UpdateMenuCombatListener)
         if type(MenuRuntime.Quiesce) == "function" then
