@@ -652,9 +652,25 @@ local FALLBACK_PUBLIC_AURA_SPELLS = {
     SATED = {
         [57723] = true, [57724] = true, [80354] = true,
         [95809] = true, [160455] = true, [264689] = true,
+        [390435] = true,
     },
     DESERTER = {
         [26013] = true, [71041] = true,
+    },
+    --- Never-secret debuff sets shared by EnhanceQoL's Global Aura Ignore list
+    --- (copied with permission; EQoL re-verifies them daily against the Wago
+    --- SpellMisc "Aura never secret" attribute).
+    CHALLENGE_DEBUFFS = {
+        [206151] = true, [308312] = true, [1254550] = true,
+    },
+    CLASS_UTILITY = {
+        [124255] = true, [405189] = true, [462742] = true,
+        [462757] = true, [1217607] = true,
+    },
+    SKYRIDING = {
+        [369968] = true, [377234] = true, [388367] = true,
+        [404464] = true, [404468] = true, [418590] = true,
+        [427490] = true, [447959] = true, [447960] = true,
     },
 }
 
@@ -676,6 +692,9 @@ local FALLBACK_PUBLIC_AURA_META = {
     { key = "COOLDOWNS", label = "Cooldowns", category = "Utility", tooltip = "Hearthstone and Shaman Reincarnation. Mythic+ teleports are not listed by Wowhead." },
     { key = "SATED", label = "Sated / Exhaustion", category = "Utility", tooltip = "Bloodlust/Heroism exhaustion lockout auras." },
     { key = "DESERTER", label = "Deserter", category = "Utility", tooltip = "Dungeon and battleground deserter lockout auras." },
+    { key = "CHALLENGE_DEBUFFS", label = "Challenge/Instance Debuffs", category = "Utility", tooltip = "Challenger's Burden and other instance-wide timer debuffs." },
+    { key = "CLASS_UTILITY", label = "Class/Utility Auras", category = "Utility", tooltip = "Stagger and similar class utility debuffs (Demon Hunter, Druid, Monk, Shaman)." },
+    { key = "SKYRIDING", label = "Skyriding/Ride Along Auras", category = "Utility", tooltip = "Skyriding and Ride Along utility auras." },
 }
 
 local PRESET_CATEGORY_ORDER = { "Raid", "Healer", "Support", "Class", "Utility", "Other" }
@@ -698,6 +717,9 @@ local PRESET_LABELS = {
     COOLDOWNS = "Cooldowns",
     SATED = "Sated / Exhaustion",
     DESERTER = "Deserter",
+    CHALLENGE_DEBUFFS = "Challenge/Instance Debuffs",
+    CLASS_UTILITY = "Class/Utility Auras",
+    SKYRIDING = "Skyriding/Ride Along Auras",
 }
 local PRESET_CATEGORIES = {
     RAID_BUFFS = "Raid",
@@ -717,6 +739,9 @@ local PRESET_CATEGORIES = {
     COOLDOWNS = "Utility",
     SATED = "Utility",
     DESERTER = "Utility",
+    CHALLENGE_DEBUFFS = "Utility",
+    CLASS_UTILITY = "Utility",
+    SKYRIDING = "Utility",
 }
 
 local function DeepCopy(value)

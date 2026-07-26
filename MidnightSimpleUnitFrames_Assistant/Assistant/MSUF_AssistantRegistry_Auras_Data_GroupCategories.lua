@@ -31,4 +31,7 @@ Data.GF_AURA_CATEGORY_FALLBACK = {
     { key = "COOLDOWNS", label = "Cooldowns", aliases = { "cooldowns", "cooldown auras" } },
     { key = "SATED", label = "Sated / Exhaustion", aliases = { "sated", "exhaustion", "heroism exhaustion", "bloodlust exhaustion" } },
     { key = "DESERTER", label = "Deserter", aliases = { "deserter", "deserteur" } },
+    { key = "CHALLENGE_DEBUFFS", label = "Challenge/Instance Debuffs", aliases = { "challenge debuffs", "instance debuffs", "challengers burden" } },
+    { key = "CLASS_UTILITY", label = "Class/Utility Auras", aliases = { "class utility", "class utility auras" } },
+    { key = "SKYRIDING", label = "Skyriding/Ride Along Auras", aliases = { "skyriding", "skyriding auras", "ride along" } },
 }

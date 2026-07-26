@@ -17,7 +17,7 @@ Data.AURA_BLACKLIST_PRESET_VALUES = {
     "RAID_BUFFS", "PRESERVATION_EVOKER", "AUGMENTATION_EVOKER", "RESTO_DRUID", "DISC_PRIEST",
     "HOLY_PRIEST", "MISTWEAVER_MONK", "RESTO_SHAMAN", "HOLY_PALADIN", "BLESSING_BRONZE",
     "SELF_BUFFS", "ROGUE_POISONS", "SHAMAN_IMBUE", "RESOURCE_AURAS", "COOLDOWNS",
-    "SATED", "DESERTER",
+    "SATED", "DESERTER", "CHALLENGE_DEBUFFS", "CLASS_UTILITY", "SKYRIDING",
 }
 Data.AURA_BLACKLIST_PRESET_ALIASES = {
     raidbuffs = "RAID_BUFFS",
@@ -55,4 +55,16 @@ Data.AURA_BLACKLIST_PRESET_ALIASES = {
     exhaustion = "SATED",
     deserter = "DESERTER",
     deserteur = "DESERTER",
+    challengedebuffs = "CHALLENGE_DEBUFFS",
+    ["challenge debuffs"] = "CHALLENGE_DEBUFFS",
+    ["challenge instance debuffs"] = "CHALLENGE_DEBUFFS",
+    ["instance debuffs"] = "CHALLENGE_DEBUFFS",
+    ["challengers burden"] = "CHALLENGE_DEBUFFS",
+    classutility = "CLASS_UTILITY",
+    ["class utility"] = "CLASS_UTILITY",
+    ["class utility auras"] = "CLASS_UTILITY",
+    skyriding = "SKYRIDING",
+    ["skyriding auras"] = "SKYRIDING",
+    ["ride along"] = "SKYRIDING",
+    ridealong = "SKYRIDING",
 }

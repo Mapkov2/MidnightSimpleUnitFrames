@@ -180,6 +180,7 @@ local BLACKLIST_PRESET_VALUES = {
     "RAID_BUFFS", "PRESERVATION_EVOKER", "AUGMENTATION_EVOKER", "RESTO_DRUID", "DISC_PRIEST",
     "HOLY_PRIEST", "MISTWEAVER_MONK", "RESTO_SHAMAN", "HOLY_PALADIN", "BLESSING_BRONZE",
     "SELF_BUFFS", "ROGUE_POISONS", "SHAMAN_IMBUE", "RESOURCE_AURAS", "COOLDOWNS", "SATED", "DESERTER",
+    "CHALLENGE_DEBUFFS", "CLASS_UTILITY", "SKYRIDING",
 }
 local BLACKLIST_PRESET = Enum(BLACKLIST_PRESET_VALUES, {
     ["raid buffs"] = "RAID_BUFFS", ["preservation evoker"] = "PRESERVATION_EVOKER",
@@ -190,6 +191,9 @@ local BLACKLIST_PRESET = Enum(BLACKLIST_PRESET_VALUES, {
     ["blessing bronze"] = "BLESSING_BRONZE", ["self buffs"] = "SELF_BUFFS",
     ["rogue poisons"] = "ROGUE_POISONS", ["shaman imbue"] = "SHAMAN_IMBUE",
     ["resource auras"] = "RESOURCE_AURAS", exhaustion = "SATED", deserteur = "DESERTER",
+    ["challenge debuffs"] = "CHALLENGE_DEBUFFS", ["instance debuffs"] = "CHALLENGE_DEBUFFS",
+    ["class utility"] = "CLASS_UTILITY", ["class utility auras"] = "CLASS_UTILITY",
+    ["skyriding auras"] = "SKYRIDING", ["ride along"] = "SKYRIDING",
 })
 local GROUP_AURA_CATEGORY = BLACKLIST_PRESET
 local PROFILE_EXPORT_KIND = Enum({ "all", "unitframe", "castbar", "colors", "gameplay", "groupframe" }, {

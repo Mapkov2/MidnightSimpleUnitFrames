@@ -56,7 +56,7 @@ A3.TargetDotData = {
         { 12654, "Ignite" }, { 114923, "Nether Tempest" },
         { 155158, "Meteor Burn" }, { 217694, "Living Bomb" },
         { 438671, "Living Bomb" }, { 449561, "Meteorite Burn" },
-        { 468655, "Frostfire Bolt" },
+        { 468655, "Frostfire Bolt" }, { 1221389, "Freezing" },
     },
     MONK = {
         { 123725, "Breath of Fire" }, { 124280, "Touch of Karma" },

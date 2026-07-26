@@ -65,6 +65,9 @@ local AURA_BLACKLIST_PRESETS = {
     { key = "COOLDOWNS", aliases = { "cooldowns", "cooldown aura", "cooldown auras" } },
     { key = "SATED", aliases = { "sated", "exhaustion", "heroism exhaustion", "bloodlust exhaustion" } },
     { key = "DESERTER", aliases = { "deserter", "deserteur" } },
+    { key = "CHALLENGE_DEBUFFS", aliases = { "challenge debuffs", "instance debuffs", "challenge instance debuffs", "challengers burden" } },
+    { key = "CLASS_UTILITY", aliases = { "class utility", "class utility auras", "utility auras" } },
+    { key = "SKYRIDING", aliases = { "skyriding", "skyriding auras", "ride along", "ridealong" } },
 }
 
 local function AuraBlacklistScope(text)

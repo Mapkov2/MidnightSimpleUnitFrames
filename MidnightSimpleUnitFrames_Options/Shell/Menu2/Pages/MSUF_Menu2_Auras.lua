@@ -2744,7 +2744,7 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
     local originY = embedded and (tonumber(opts.originY) or -400) or 0
     local blacklistY = showFilter and (originY - (laneKey == "debuff" and 362 or 304)) or (originY - 42)
     local directY = blacklistY - categoryHeight - 24
-    local standaloneHeight = max(930, abs(directY) + 324)
+    local standaloneHeight = max(930, abs(directY) + (laneKey == "debuff" and 270 or 324))
     local section = opts.parent or b:CollapsibleSection("group_aura_filters_" .. tostring(scope) .. "_" .. laneKey, "Group Frame Blizzard Filters & Lists", standaloneHeight, false)
     local w = section._msuf2Width or b.width or 720
     local lane = laneKey
@@ -2823,43 +2823,49 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
         if cat.tooltip then AddTooltip(toggle, CategoryLabel(cat), cat.tooltip) end
         categoryControls[#categoryControls + 1] = toggle
     end
-    local direct = Card(section, "Exact SpellID Blacklist", "Frame-specific exclusions for this Group Frame lane.", 24, directY, w - 48, 300)
-    local directInputValue = ""
-    local directInputW = max(260, floor((w - 96) * 0.46))
-    local directInput = BindTextInput(ctx, direct, "Spell ID, spell link, or spell name", 16, -72, directInputW,
-        function() return directInputValue end,
-        function(value) directInputValue = value or "" end,
-        false, AuraControlMeta(ctx, "group-blacklist.lane." .. AuraCatalogToken(lane) .. ".manual-input", "ephemeral"))
-    local directAdd = ActionButton(direct, "Add", 90)
-    directAdd:SetPoint("TOPLEFT", direct, "TOPLEFT", 28 + directInputW, -92)
-    directAdd:SetScript("OnClick", function()
-        local value = directInput and directInput.GetText and directInput:GetText() or directInputValue
-        local changed = Model.AddGroupBlacklistSpell(scope, lane, value)
-        if changed then
-            if directInput and directInput.SetText then directInput:SetText("") end
-            directInputValue = ""
-            QueueGroupScope(scope, "visual")
-            Rebuild(ctx)
-        end
-        return changed and true or false
-    end)
-    RegisterAuraTextAction(ctx, directAdd, directInput, "Add", groupActionPath .. ".add", {
-        actionKey = "aura_group_blacklist_add_spell", actionFixedArgs = { scope = scope, lane = lane }, actionInputArg = "value",
-    })
-    local directRemove = ActionButton(direct, "Remove", 96)
-    directRemove:SetPoint("LEFT", directAdd, "RIGHT", 8, 0)
-    directRemove:SetScript("OnClick", function()
-        local value = directInput and directInput.GetText and directInput:GetText() or directInputValue
-        local changed = Model.RemoveGroupBlacklistSpell(scope, lane, value)
-        if changed then
-            QueueGroupScope(scope, "visual")
-            Rebuild(ctx)
-        end
-        return changed and true or false
-    end)
-    RegisterAuraTextAction(ctx, directRemove, directInput, "Remove", groupActionPath .. ".remove", {
-        actionKey = "aura_group_blacklist_remove_spell", actionFixedArgs = { scope = scope, lane = lane }, actionInputArg = "value",
-    })
+    local direct = Card(section, "Exact SpellID Blacklist", "Frame-specific exclusions for this Group Frame lane.", 24, directY, w - 48, lane == "debuff" and 246 or 300)
+    -- Debuff lane only: the free-form spell-ID entry was removed on purpose.
+    -- 12.x debuff data is secret at runtime, so only the curated never-secret
+    -- preset spells can actually match; entries come from the presets below.
+    local directInput, directAdd, directRemove
+    if lane ~= "debuff" then
+        local directInputValue = ""
+        local directInputW = max(260, floor((w - 96) * 0.46))
+        directInput = BindTextInput(ctx, direct, "Spell ID, spell link, or spell name", 16, -72, directInputW,
+            function() return directInputValue end,
+            function(value) directInputValue = value or "" end,
+            false, AuraControlMeta(ctx, "group-blacklist.lane." .. AuraCatalogToken(lane) .. ".manual-input", "ephemeral"))
+        directAdd = ActionButton(direct, "Add", 90)
+        directAdd:SetPoint("TOPLEFT", direct, "TOPLEFT", 28 + directInputW, -92)
+        directAdd:SetScript("OnClick", function()
+            local value = directInput and directInput.GetText and directInput:GetText() or directInputValue
+            local changed = Model.AddGroupBlacklistSpell(scope, lane, value)
+            if changed then
+                if directInput and directInput.SetText then directInput:SetText("") end
+                directInputValue = ""
+                QueueGroupScope(scope, "visual")
+                Rebuild(ctx)
+            end
+            return changed and true or false
+        end)
+        RegisterAuraTextAction(ctx, directAdd, directInput, "Add", groupActionPath .. ".add", {
+            actionKey = "aura_group_blacklist_add_spell", actionFixedArgs = { scope = scope, lane = lane }, actionInputArg = "value",
+        })
+        directRemove = ActionButton(direct, "Remove", 96)
+        directRemove:SetPoint("LEFT", directAdd, "RIGHT", 8, 0)
+        directRemove:SetScript("OnClick", function()
+            local value = directInput and directInput.GetText and directInput:GetText() or directInputValue
+            local changed = Model.RemoveGroupBlacklistSpell(scope, lane, value)
+            if changed then
+                QueueGroupScope(scope, "visual")
+                Rebuild(ctx)
+            end
+            return changed and true or false
+        end)
+        RegisterAuraTextAction(ctx, directRemove, directInput, "Remove", groupActionPath .. ".remove", {
+            actionKey = "aura_group_blacklist_remove_spell", actionFixedArgs = { scope = scope, lane = lane }, actionInputArg = "value",
+        })
+    end
     local presetW = max(152, floor((w - 96) * 0.22))
     local spellW = max(210, floor((w - 96) * 0.30))
     local function CurrentPreset()
@@ -2868,15 +2874,16 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
         for i = 1, #values do if values[i].value == key then return key end end
         return values[1] and values[1].value or "RAID_BUFFS"
     end
+    local directPresetY = lane == "debuff" and -72 or -126
     local preset = W.Dropdown(direct, "Preset", function() return Model.BlacklistPresetValues() end, presetW)
-    W.MoveWidget(preset, direct, 16, -126, presetW)
+    W.MoveWidget(preset, direct, 16, directPresetY, presetW)
     M.BindDropdownWidget(ctx, preset, CurrentPreset, function(value)
         M.auraBlacklistPreset = value
         M.auraBlacklistSpell = nil
         QueueAurasPageRefresh(ctx, "group-aura-blacklist-preset")
     end, AuraControlMeta(ctx, "group-blacklist.lane." .. AuraCatalogToken(lane) .. ".preset-selection", "ephemeral"))
     local spell = W.Dropdown(direct, "Spell", function() return Model.BlacklistSpellValues(CurrentPreset()) end, spellW)
-    W.MoveWidget(spell, direct, 26 + presetW, -126, spellW)
+    W.MoveWidget(spell, direct, 26 + presetW, directPresetY, spellW)
     M.BindDropdownWidget(ctx, spell,
         function()
             local values, selected = Model.BlacklistSpellValues(CurrentPreset()), M.auraBlacklistSpell
@@ -2886,7 +2893,7 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
         function(value) M.auraBlacklistSpell = value end,
         AuraControlMeta(ctx, "group-blacklist.lane." .. AuraCatalogToken(lane) .. ".spell-selection", "ephemeral"))
     local addSpell = ActionButton(direct, "Add spell", 96)
-    addSpell:SetPoint("TOPLEFT", direct, "TOPLEFT", 36 + presetW + spellW, -148)
+    addSpell:SetPoint("TOPLEFT", direct, "TOPLEFT", 36 + presetW + spellW, directPresetY - 22)
     addSpell:SetScript("OnClick", function()
         local values = Model.BlacklistSpellValues(CurrentPreset())
         local spellID = M.auraBlacklistSpell or (values[1] and values[1].value)
@@ -2909,10 +2916,11 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
     RegisterAuraControl(ctx, addSet, "Add set", "button", groupActionPath .. ".add-preset-set", "action", {
         actionKey = "aura_group_blacklist_add_preset", actionFixedArgs = { scope = scope, lane = lane }, actionInputArg = "preset",
     })
-    local prepared = W.Text(direct, "", 16, -210, w - 80, T.colors.accent)
-    local empty = W.Text(direct, "No blacklisted spells. Add one above or use a preset.", 16, -246, w - 80, T.colors.muted)
+    local prepared = W.Text(direct, "", 16, directPresetY - 84, w - 80, T.colors.accent)
+    local empty = W.Text(direct, lane == "debuff" and "No blacklisted spells. Add one from the presets above."
+        or "No blacklisted spells. Add one above or use a preset.", 16, directPresetY - 120, w - 80, T.colors.muted)
     local listScroll = CreateFrame("ScrollFrame", nil, direct, "UIPanelScrollFrameTemplate")
-    listScroll:SetPoint("TOPLEFT", direct, "TOPLEFT", 16, -236)
+    listScroll:SetPoint("TOPLEFT", direct, "TOPLEFT", 16, directPresetY - 110)
     listScroll:SetSize(w - 108, 48)
     if listScroll.EnableMouseWheel then listScroll:EnableMouseWheel(true) end
     local listChild = CreateFrame("Frame", nil, listScroll)
@@ -2944,7 +2952,10 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
     end
     M.TrackRefresh(ctx, function()
         W.SetControlsEnabled(categoryControls, NATIVE_EXACT_AURA_FILTERS_ENABLED)
-        W.SetControlsEnabled({ directInput, directAdd, directRemove, preset, spell, addSpell, addSet }, NATIVE_EXACT_AURA_FILTERS_ENABLED)
+        W.SetControlsEnabled({ preset, spell, addSpell, addSet }, NATIVE_EXACT_AURA_FILTERS_ENABLED)
+        if directInput then
+            W.SetControlsEnabled({ directInput, directAdd, directRemove }, NATIVE_EXACT_AURA_FILTERS_ENABLED)
+        end
         local entries = type(Model.GroupBlacklistEntries) == "function" and Model.GroupBlacklistEntries(scope, lane) or {}
         prepared:SetText((#entries == 1 and "1 blocked spell" or tostring(#entries) .. " blocked spells") .. " · click an entry to remove")
         empty:SetShown(#entries == 0)
@@ -3238,28 +3249,34 @@ end
 
 local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
     local laneTitle = lane == "debuff" and "Debuff" or "Buff"
-    local section = b:Section(laneTitle .. " Blacklist", 286)
+    local isDebuff = lane == "debuff"
+    local section = b:Section(laneTitle .. " Blacklist", isDebuff and 230 or 286)
     local w = section._msuf2Width or b.width or 720
     local inner = w - 48
-    local inputValue = ""
-    local inputW = max(260, floor(inner * 0.46))
-    local input = BindTextInput(ctx, section, "Spell ID, link, or name", 24, -36, inputW,
-        function() return inputValue end, function(value) inputValue = value or "" end,
-        false, AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.manual-input", "ephemeral"))
-    local add = ActionButton(section, "Add", 86)
-    add:SetPoint("TOPLEFT", section, "TOPLEFT", 36 + inputW, -60)
-    add:SetScript("OnClick", function()
-        local value = input and input.GetText and input:GetText() or inputValue
-        local changed = Model.AddBlacklistSpell(unit, value, lane)
-        if changed then ApplyUnit(ctx, unit, "AURAS3_BLACKLIST_ADD", true) end
-        if input and input.SetText then input:SetText("") end
-        inputValue = ""
-        return changed and true or false
-    end)
-    RegisterAuraTextAction(ctx, add, input, "Add", "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.add", {
-        actionKey = "aura_blacklist_add_spell", actionFixedArgs = { scope = unit, lane = lane }, actionInputArg = "value",
-    })
-    local hidePermanent = BindSwitch(ctx, section, "Hide permanent auras", 24, -252, inner,
+    -- Debuff lane only: the free-form spell-ID entry was removed on purpose.
+    -- 12.x debuff data is secret at runtime, so only the curated never-secret
+    -- preset spells can actually match; entries come from the presets below.
+    if not isDebuff then
+        local inputValue = ""
+        local inputW = max(260, floor(inner * 0.46))
+        local input = BindTextInput(ctx, section, "Spell ID, link, or name", 24, -36, inputW,
+            function() return inputValue end, function(value) inputValue = value or "" end,
+            false, AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.manual-input", "ephemeral"))
+        local add = ActionButton(section, "Add", 86)
+        add:SetPoint("TOPLEFT", section, "TOPLEFT", 36 + inputW, -60)
+        add:SetScript("OnClick", function()
+            local value = input and input.GetText and input:GetText() or inputValue
+            local changed = Model.AddBlacklistSpell(unit, value, lane)
+            if changed then ApplyUnit(ctx, unit, "AURAS3_BLACKLIST_ADD", true) end
+            if input and input.SetText then input:SetText("") end
+            inputValue = ""
+            return changed and true or false
+        end)
+        RegisterAuraTextAction(ctx, add, input, "Add", "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.add", {
+            actionKey = "aura_blacklist_add_spell", actionFixedArgs = { scope = unit, lane = lane }, actionInputArg = "value",
+        })
+    end
+    local hidePermanent = BindSwitch(ctx, section, "Hide permanent auras", 24, isDebuff and -196 or -252, inner,
         function()
             return type(Model.ReadBlacklistHidePermanent) == "function"
                 and Model.ReadBlacklistHidePermanent(unit, lane) == true
@@ -3281,12 +3298,13 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
         for i = 1, #values do if values[i].value == key then return key end end
         return values[1] and values[1].value or "RAID_BUFFS"
     end
+    local presetY = isDebuff and -36 or -92
     local preset = W.Dropdown(section, "Preset", function() return Model.BlacklistPresetValues() end, presetW)
-    W.MoveWidget(preset, section, 24, -92, presetW)
+    W.MoveWidget(preset, section, 24, presetY, presetW)
     M.BindDropdownWidget(ctx, preset, CurrentPreset, function(value) M.auraBlacklistPreset = value; M.auraBlacklistSpell = nil; QueueAurasPageRefresh(ctx, "aura-blacklist-preset") end,
         AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.preset-selection", "ephemeral"))
     local spell = W.Dropdown(section, "Spell", function() return Model.BlacklistSpellValues(CurrentPreset()) end, spellW)
-    W.MoveWidget(spell, section, 34 + presetW, -92, spellW)
+    W.MoveWidget(spell, section, 34 + presetW, presetY, spellW)
     M.BindDropdownWidget(ctx, spell,
         function()
             local values, selected = Model.BlacklistSpellValues(CurrentPreset()), M.auraBlacklistSpell
@@ -3296,7 +3314,7 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
         function(value) M.auraBlacklistSpell = value end,
         AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.spell-selection", "ephemeral"))
     local addSpell = ActionButton(section, "Add spell", 96)
-    addSpell:SetPoint("TOPLEFT", section, "TOPLEFT", 44 + presetW + spellW, -114)
+    addSpell:SetPoint("TOPLEFT", section, "TOPLEFT", 44 + presetW + spellW, presetY - 22)
     addSpell:SetScript("OnClick", function()
         local values = Model.BlacklistSpellValues(CurrentPreset())
         local spellID = M.auraBlacklistSpell or (values[1] and values[1].value)
@@ -3313,10 +3331,11 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
     RegisterAuraControl(ctx, addSet, "Add set", "button", "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.add-preset-set", "action", {
         actionKey = "aura_blacklist_add_preset", actionFixedArgs = { scope = unit, lane = lane }, actionInputArg = "preset",
     })
-    local prepared = W.Text(section, "", 24, -154, inner, T.colors.accent)
-    local empty = W.Text(section, "No blocked spells. Add one above or use a preset.", 24, -184, inner, T.colors.muted)
+    local prepared = W.Text(section, "", 24, presetY - 62, inner, T.colors.accent)
+    local empty = W.Text(section, isDebuff and "No blocked spells. Add one from the presets above."
+        or "No blocked spells. Add one above or use a preset.", 24, presetY - 92, inner, T.colors.muted)
     local listScroll = CreateFrame("ScrollFrame", nil, section, "UIPanelScrollFrameTemplate")
-    listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -178)
+    listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, presetY - 86)
     listScroll:SetSize(inner - 20, 56)
     if listScroll.EnableMouseWheel then listScroll:EnableMouseWheel(true) end
     local listChild = CreateFrame("Frame", nil, listScroll)
@@ -3441,32 +3460,38 @@ end
 
 local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
     local laneTitle = lane == "debuff" and "Debuff" or "Buff"
-    local section = b:Section(laneTitle .. " Blacklist", lane == "debuff" and 292 or 250)
+    local isDebuff = lane == "debuff"
+    local section = b:Section(laneTitle .. " Blacklist", isDebuff and 236 or 250)
     local groupActionPath = "group-workspace.scope." .. AuraCatalogToken(scope)
         .. ".lane." .. AuraCatalogToken(lane) .. ".blacklist"
     local w = section._msuf2Width or b.width or 720
     local inner = w - 48
-    local inputValue = ""
-    local inputW = max(260, floor(inner * 0.46))
-    local input = BindTextInput(ctx, section, "Spell ID, link, or name", 24, -36, inputW,
-        function() return inputValue end, function(value) inputValue = value or "" end,
-        false, AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.manual-input", "ephemeral"))
-    local add = ActionButton(section, "Add", 86)
-    add:SetPoint("TOPLEFT", section, "TOPLEFT", 36 + inputW, -60)
-    add:SetScript("OnClick", function()
-        local value = input and input.GetText and input:GetText() or inputValue
-        local changed = Model.AddGroupBlacklistSpell(scope, lane, value)
-        if changed then
-            QueueGroupScope(scope, "visual")
-            Rebuild(ctx)
-        end
-        if input and input.SetText then input:SetText("") end
-        inputValue = ""
-        return changed and true or false
-    end)
-    RegisterAuraTextAction(ctx, add, input, "Add", groupActionPath .. ".add", {
-        actionKey = "aura_group_blacklist_add_spell", actionFixedArgs = { scope = scope, lane = lane }, actionInputArg = "value",
-    })
+    -- Debuff lane only: the free-form spell-ID entry was removed on purpose.
+    -- 12.x debuff data is secret at runtime, so only the curated never-secret
+    -- preset spells can actually match; entries come from the presets below.
+    if not isDebuff then
+        local inputValue = ""
+        local inputW = max(260, floor(inner * 0.46))
+        local input = BindTextInput(ctx, section, "Spell ID, link, or name", 24, -36, inputW,
+            function() return inputValue end, function(value) inputValue = value or "" end,
+            false, AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.manual-input", "ephemeral"))
+        local add = ActionButton(section, "Add", 86)
+        add:SetPoint("TOPLEFT", section, "TOPLEFT", 36 + inputW, -60)
+        add:SetScript("OnClick", function()
+            local value = input and input.GetText and input:GetText() or inputValue
+            local changed = Model.AddGroupBlacklistSpell(scope, lane, value)
+            if changed then
+                QueueGroupScope(scope, "visual")
+                Rebuild(ctx)
+            end
+            if input and input.SetText then input:SetText("") end
+            inputValue = ""
+            return changed and true or false
+        end)
+        RegisterAuraTextAction(ctx, add, input, "Add", groupActionPath .. ".add", {
+            actionKey = "aura_group_blacklist_add_spell", actionFixedArgs = { scope = scope, lane = lane }, actionInputArg = "value",
+        })
+    end
     local presetW = max(152, floor(inner * 0.22))
     local spellW = max(210, floor(inner * 0.30))
     local function CurrentPreset()
@@ -3476,15 +3501,16 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
         for i = 1, #values do if values[i].value == key then return key end end
         return values[1] and values[1].value or defaultKey
     end
+    local presetY = isDebuff and -36 or -92
     local preset = W.Dropdown(section, "Preset", function() return Model.BlacklistPresetValues() end, presetW)
-    W.MoveWidget(preset, section, 24, -92, presetW)
+    W.MoveWidget(preset, section, 24, presetY, presetW)
     M.BindDropdownWidget(ctx, preset, CurrentPreset, function(value)
         M.auraBlacklistPreset = value
         M.auraBlacklistSpell = nil
         QueueAurasPageRefresh(ctx, "group-aura-blacklist-preset")
     end, AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.preset-selection", "ephemeral"))
     local spell = W.Dropdown(section, "Spell", function() return Model.BlacklistSpellValues(CurrentPreset()) end, spellW)
-    W.MoveWidget(spell, section, 34 + presetW, -92, spellW)
+    W.MoveWidget(spell, section, 34 + presetW, presetY, spellW)
     M.BindDropdownWidget(ctx, spell,
         function()
             local values, selected = Model.BlacklistSpellValues(CurrentPreset()), M.auraBlacklistSpell
@@ -3494,7 +3520,7 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
         function(value) M.auraBlacklistSpell = value end,
         AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.spell-selection", "ephemeral"))
     local addSpell = ActionButton(section, "Add spell", 96)
-    addSpell:SetPoint("TOPLEFT", section, "TOPLEFT", 44 + presetW + spellW, -114)
+    addSpell:SetPoint("TOPLEFT", section, "TOPLEFT", 44 + presetW + spellW, presetY - 22)
     addSpell:SetScript("OnClick", function()
         local values = Model.BlacklistSpellValues(CurrentPreset())
         local spellID = M.auraBlacklistSpell or (values[1] and values[1].value)
@@ -3517,10 +3543,11 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
     RegisterAuraControl(ctx, addSet, "Add set", "button", groupActionPath .. ".add-preset-set", "action", {
         actionKey = "aura_group_blacklist_add_preset", actionFixedArgs = { scope = scope, lane = lane }, actionInputArg = "preset",
     })
-    local prepared = W.Text(section, "", 24, -154, inner, T.colors.accent)
-    local empty = W.Text(section, "No blocked spells. Add one above or use a preset.", 24, -184, inner, T.colors.muted)
+    local prepared = W.Text(section, "", 24, presetY - 62, inner, T.colors.accent)
+    local empty = W.Text(section, isDebuff and "No blocked spells. Add one from the presets above."
+        or "No blocked spells. Add one above or use a preset.", 24, presetY - 92, inner, T.colors.muted)
     local listScroll = CreateFrame("ScrollFrame", nil, section, "UIPanelScrollFrameTemplate")
-    listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -178)
+    listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, presetY - 86)
     listScroll:SetSize(inner - 20, 56)
     if listScroll.EnableMouseWheel then listScroll:EnableMouseWheel(true) end
     local listChild = CreateFrame("Frame", nil, listScroll)
@@ -3572,7 +3599,7 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
     if lane == "debuff" then
         W.Text(section,
             "Friendly debuffs: exact blocking is limited to Blizzard NeverSecret auras such as Sated/Exhaustion.",
-            24, -246, inner, T.colors.muted)
+            24, -190, inner, T.colors.muted)
     end
 end
 

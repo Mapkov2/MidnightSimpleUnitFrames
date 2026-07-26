@@ -8,10 +8,23 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-Beta31",
-    previousVersion = "6.0-Beta30",
-    rangeLabel = "6.0-Beta30 -> 6.0-Beta31",
+    currentVersion = "6.0-Beta32",
+    previousVersion = "6.0-Beta31",
+    rangeLabel = "6.0-Beta31 -> 6.0-Beta32",
     entries = {
+        {
+            version = "6.0-Beta32",
+            date = "2026-07-26",
+            sections = {
+                {
+                    title = "Changes",
+                    bullets = {
+                        "The debuff blacklist is now fully preset-driven. Three curated preset groups joined the list - Challenge/Instance Debuffs (Challenger's Burden and other instance-wide timers), Class/Utility Auras (Stagger and similar class debuffs), and Skyriding/Ride Along Auras - and Sated/Exhaustion now also covers the Evoker's Fury of the Aspects lockout. The spell sets are shared with EnhanceQoL's daily-verified never-secret list, with thanks to R41z0r.",
+                        "The free-form \"Spell ID, link, or name\" entry was removed from the Debuff blacklists on unit and group frames. Debuff data is secret at runtime on 12.x clients, so a hand-typed spell ID could never match anything outside the curated never-secret sets; the presets above are now the way to build the debuff list, and existing entries keep working. Buff blacklists are unchanged and keep their free-form entry.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-Beta31",
             date = "2026-07-26",
@@ -136,65 +149,6 @@ local data = {
                         "MSUF Edit Mode's quick popup \"Copy to...\" copied the source frame's position as well, which dropped the destination exactly on top of it \" and a stacked frame cannot be grabbed to drag it back off. It now copies size only and says \"Copy size to...\", on both unit and group popups. Use the unit page's copy dialog when position really should travel.",
                         "Fixed aura preview stack and timer text ignoring their configured anchor, so a corner placement no longer renders centered, and resolved the preview font once per font, size, and outline instead of re-resolving it on every stack and timer update.",
                         "Expanded the Core Lua 5.1 suite to 164 passing tests, including new aura border style, slash-command registry, Devourer class resource, and unit copy coverage regressions.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-Beta28",
-            date = "2026-07-25",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "Fixed unit frame and group frame tooltips not appearing on hover at all; hovering Player, Target, Focus, Pet, Party, and Raid frames shows the unit tooltip again, and the related tooltip settings do something once more.",
-                        "Rebuilt aura icon layering on one shared 0-30 scale per frame kind, so an aura lane at layer 7 now renders above a text at layer 5 and below one at layer 9 instead of sinking below every text and status element.",
-                        "Added \"Show Weapon Enchants (Player)\", which renders temporary weapon enchants as native icons inside the Player buff lane.",
-                        "Menu previews now mirror the live frame: real name, class, portrait, level, reaction, and exact Health/Power/absorb values, with the stylized sample kept as the fallback.",
-                        "Fixed the Anchor Picker freezing the game while open by moving the expensive anchor-cycle walk out of the hover loop; rejected targets are now reported when you confirm one.",
-                        "Retired the separate Class Resources detached power textures so the Bars page and the Player unit page own the power bar's art whether it is detached or not; a customized detached texture migrates onto the Player page once.",
-                        "Fixed the MSUF Color Picker's color wheel, brightness bar, and opacity slider ignoring the mouse, which left the compact picker looking frozen; dragging them changes the color live again.",
-                        "Fixed the Castbar texture not stretching across the bar: the fill repeated the 256 px art instead of scaling it, which showed a seam near the right edge of the default Player and Target castbars and cut the gradient short on narrower ones.",
-                        "Rebuilt the Custom Aura full-frame Glow effect: instead of stretching Blizzard's square action-button alert art over the wide health bar, the glow is now a crisp radial halo with round corners that fits any bar shape. It renders from eight static slices of one small texture with no animation, so an active glow costs nothing per frame; the marching-ants glow stays on square aura icons where it belongs.",
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Moved the Aura \"Icon Border Color\" and \"Icon Shadow Color\" swatches to the Colors page under a new \"Icon Border & Shadow\" card, reachable from the Aura style section through the three-dot color shortcut. Thickness, size, and alpha stay inline.",
-                        "Added a \"Lane Padding\" slider that insets aura icons from the lane box using the native flow padding.",
-                        "Replaced the Class Resources \"Power Textures\" card with a \"Shape Outline\" card that only keeps the Round/Crystal/Orb edge it still owns.",
-                        "Made \"Reset to defaults\" drop the matching runtime caches, so a reset frame no longer keeps pre-reset aura offsets, spell-indicator anchors, textures, castbar styling, or positions.",
-                        "Hidden group frames now unregister their unit events by default instead of only when opted in; single frames are excluded because their unit is already gone when hidden. /msufgp suspendhidden default restores the automatic behavior.",
-                        "Added the /msufauralayers diagnostic, which dumps the aura level/strata chain and probes host and container layering live. It is inert until invoked.",
-                        "Added \"New character profile\" to Profiles > Profile Management, which picks the profile a brand-new character starts on instead of always landing on Default. The active profile itself stays a per-character choice, and the setting clears itself if the profile it points at is deleted.",
-                        "Made the menu accent color own only the interactive layer by default: navigation, tabs, pills, focus rings, and highlights follow the accent while panels stay midnight. The new \"Tint menu surfaces\" toggle under Global > Misc > Menu behavior restores the full re-tint of panels, borders, and the navigation rail, and applies after a UI reload just like the accent itself.",
-                        "Split the Custom Aura \"Icon Style\" card into the same accordion sub-sections the Buff and Debuff style pages already use - Basics, Stack Count, Cooldown Text, and Duration Bar - for every custom container including Dots on target. Detail controls now gray out while their master toggle is off, so it is visible at a glance which sliders belong to which feature.",
-                        "Brought Custom 1-3 and Dots on target to full feature parity with the Buff and Debuff lanes: Basics gained Icon Zoom, a container Opacity slider, and a Dispel-type Border choice for harmful containers, and a new Ordering section carries the same Sort By and Order options the lanes have. The shared \"Lane Padding\" inset now applies to custom containers as well, and all custom style sections show the same collapsed-header summary badges as their lane counterparts.",
-                        "Updated all supported locales for the new aura color, shape outline, icon border/shadow, new character profile, and menu surface tinting controls.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Folded aura lanes that legacy builds and imports had pinned to the MEDIUM strata back to AUTO exactly once, so aura layering can be ordered against bars and texts again; a deliberately re-picked strata is kept.",
-                        "Made the aura container the single layering authority and stopped writing AuraButton levels and strata entirely, which is the surface PTR 7 restricts hardest.",
-                        "Fixed spell indicator icons on unit frames rendering a full band below every text at the same layer.",
-                        "Fixed an aura lane dying when a filter token Blizzard rejects reached the native validator; the lane now falls back to its plain base filter and reports the reason.",
-                        "Fixed the group and unit preview raid group number, target-of-target name, and portrait so they follow the live roster and unit instead of a fixed sample.",
-                        "Fixed preview edits not reaching the live frame when no host panel was attached, and when the text-layout entry point was unavailable.",
-                        "Made in-combat hovers cost a single flag read while tooltips are set to Never or Out of combat, recomputed only on combat transitions and setting changes.",
-                        "Debounced group frame tooltips by a short hover delay, so sweeping the cursor across raid frames only builds a tooltip for the frame it settles on.",
-                        "Collapsed the aura combat check to a single upvalue read after the aura container has loaded once, so combat identity refreshes pay no C calls there.",
-                        "Moved aura strata and level writes behind the geometry signature guard, so content-only refreshes such as aura swaps and identity updates perform no widget calls.",
-                        "Coalesced live preview refreshes on a wider window, capping value streams at five renders per second, and dropped every listener for the duration of a fight.",
-                        "Removed the pcall wrappers from aura font application and validated SetFont through its return value instead.",
-                        "Fixed the detached power bar preview and the global texture refresh still resolving the retired detached texture keys.",
-                        "Made the repair that runs when a character's active profile has gone missing always clone the same source \" Default when it exists, otherwise the first profile by name \" instead of whichever profile the table happened to hand back first.",
-                        "Fixed menu labels becoming unreadable under a bright accent. Rotating the palette onto a new hue does not preserve luminance, so accents like the gold class colors or Jade could leave near-white text on a light pill. The text ramp is now re-validated against WCAG contrast after an accent is applied, and an accent-colored pill darkens to a deeper shade of itself rather than flipping its label to black. Success, warning, and danger colors are never touched.",
-                        "Brightened disabled control labels from a 2.4:1 to a 3.7:1 contrast ratio against the panel, so a gated control still reads well enough to tell what enabling its parent would unlock.",
-                        "Dropped three menu textures per glassed frame \" the grain, the outer glow, and the top-line bloom \" plus the panel depth grain. All of them carried 0.008-0.014 alpha in a color within ~0.01 of the surface beneath, which resolves to less than one 8-bit level: they cost draw calls to render nothing visible.",
-                        "Expanded the Core Lua 5.1 suite to 159 passing tests, including new anchor picker scan budget, preview live parity, page reset cache purge, and new-character profile selection regressions.",
                     },
                 },
             },
