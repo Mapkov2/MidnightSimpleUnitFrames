@@ -9,35 +9,43 @@ end
 
 local data = {
     currentVersion = "6.0-Beta30",
-    previousVersion = "6.0-Beta29",
-    rangeLabel = "6.0-Beta29 -> 6.0-Beta30",
+    previousVersion = "6.0-beta29",
+    rangeLabel = "6.0-beta29 -> 6.0-Beta30",
     entries = {
         {
             version = "6.0-Beta30",
-            date = "2026-07-25",
+            date = "2026-07-26",
             sections = {
                 {
                     title = "Highlights",
                     bullets = {
-                        "The portrait is no longer stuck to the edge of the health bar. A new \"Placement\" card on every unit page offers Attached, which is the old behaviour, Detached, which pins any of the portrait's nine anchor points to any of the frame's nine anchor points so it can sit above, below, or well away from the frame, and Overlay, which puts it inside the bar aligned left, centered, right, or stretched across the whole bar. A \"Layer\" slider on the shared 0-30 scale decides whether it renders in front of or behind the bars, texts, and icons, and \"Portrait opacity\" fades it for the classic watermark look. All of it is worked out once when settings are applied, so a detached portrait costs exactly as much while playing as an attached one - nothing.",
-                        "Portraits can now be any rectangle. \"Width override\" and \"Height override\" size the two axes independently, and a non-square portrait crops the picture instead of stretching it: the long axis keeps the full frame and the short axis takes a centered slice. \"Zoom center X/Y\" moves that slice around, so a portrait zoomed in on a tall model can be pushed up to the head rather than always sitting dead center.",
-                        "Added a \"Relief\" portrait border: a thin beveled gold ring in the spirit of Blizzard's own portrait rings, with matching art for all four portrait shapes. \"Border direction\" turns the lighting in 90 degree steps so the ring still reads correctly when a detached portrait sits above, below, or beside its frame. The portrait border color tints the metal - Class color and Reaction color included - and the ring hugs the portrait rim at every size, aspect ratio, and thickness, overlapping the portrait edge slightly so no background seam can show. It is a single texture set up once when settings are applied: with a static border color it costs nothing at all while playing.",
-                        "Circle, Rounded, and Diamond portraits finally get a flat border that follows their outline. The old border drew four straight lines regardless of shape, which left a square box around a round portrait; those shapes now render a single ring clipped to the silhouette at whatever thickness you pick. Square portraits keep the four-edge border and its \"Fill border into frame gap\" option, which never applied to the other shapes.",
-                        "Menu search now finds every setting, not only the ones on pages you had already opened. Search records used to be created while a page was built, so anything on an unvisited page was invisible - in practice almost the whole menu after a fresh login. The index is now generated ahead of time and ships with the addon, pre-normalized, with your language's labels layered on top, so the very first search after login already sees all pages.",
+                        "The complete options interface now lives in its own Load-on-Demand companion and is loaded only when configuration is requested. Normal gameplay no longer eagerly loads the large Menu2 implementation, while the minimap button, slash commands, Edit Mode, search, guided setup, and Assistant routes keep their existing entry points.",
+                        "Portraits can now be Attached, freely Detached, or placed as an Overlay inside the health bar. Independent width and height, nine-point anchoring, layer, opacity, and pannable zoom controls make rectangular and watermark-style portraits possible without adding per-frame work.",
+                        "Added Relief portrait rings and shape-following flat borders for Square, Circle, Rounded, and Diamond portraits. Border direction rotates the relief lighting, and static colors remain zero-cost after settings are applied.",
+                        "Menu search now ships with a complete prebuilt index, so the first search sees controls on every page without building those pages or causing the previous first-use pause.",
                     },
                 },
                 {
                     title = "Changes",
                     bullets = {
-                        "Updated all supported locales for the new portrait placement, geometry, and border-art controls.",
+                        "Portrait placement and border controls now route through the correct unit workspaces, guided-tour targets, search routes, and Assistant settings.",
+                        "The unit-frame core was extracted into an isolated embeddable MSUFUnitFrames framework while preserving the existing MSUF API and legacy compatibility bridges.",
+                        "Updated all supported locales for portrait placement, geometry, border art, and long-duration aura suffixes.",
+                        "Assistant control schemas, reviewed inventory evidence, and reproducible release gates were refreshed for the Beta 30 control surface and three-addon package.",
                     },
                 },
                 {
                     title = "Fixes & Performance",
                     bullets = {
-                        "Opening search for the first time no longer pauses the game to harvest every page: the shipped index replaces an on-demand rebuild that could take over a second the first time search was used.",
-                        "Search is now fully quiescent in combat. The query itself was already blocked, but the paths around it were not: reading the record set drained deferred menu sections and decoded the index, and the results page rebuilt itself on refresh. All of it now waits until combat ends.",
-                        "Pasting a raw settings key such as gf_party.hpTextMode into search works again. Those queries used to resolve through the retired on-demand index; the baked index has no camelCase tokens and a key's scope prefix names the provider rather than the control, so search now strips the prefix and splits the camelCase before matching. Typed text is never touched.",
+                        "Fixed permanent auras retaining a recycled countdown, and promoted long aura durations to localized hour and day displays.",
+                        "Batched aura style applies, removed redundant native calls, and trimmed icon artwork work when the resulting aura state did not change.",
+                        "Fixed color controls that did not apply their new color live while the picker was open.",
+                        "Fixed unit-to-unit copy operations losing source semantics for settings whose meaning differs by unit.",
+                        "Reused portrait identity keys and aligned live and preview overlay sizing to avoid unnecessary portrait work and geometry drift.",
+                        "Removed the Anchor Picker's full-UI hover scans; hover validation now stays within a bounded candidate set.",
+                        "Search is fully quiescent in combat, understands raw keys such as gf_party.hpTextMode, and deduplicates controls by stable route identity.",
+                        "Group frames now apply their one-time startup visuals only after Blizzard's secure header bounds have settled, preventing saved opacity and visual state from being applied against transient login geometry.",
+                        "The Options loader is zero-idle until configuration demand, preserves saved UI-scale behavior in the always-loaded core, and keeps configuration loading blocked safely during combat.",
                     },
                 },
             },
