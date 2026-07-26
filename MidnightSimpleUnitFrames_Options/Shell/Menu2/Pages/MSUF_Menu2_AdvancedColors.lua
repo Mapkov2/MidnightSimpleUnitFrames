@@ -2478,7 +2478,7 @@ local function BuildBackgroundAndAppearance(ctx, b, CH, part)
     end, "background.reset_to_black")
     end
     if part == "background" then return end
-    local appearance = b:CollapsibleSection("colors_appearance", "Unitframe Global Coloring", 330, true)
+    local appearance = b:CollapsibleSection("colors_appearance", "Unitframe Global Coloring", 290, true)
     local refreshBarModeControls
     local function CurrentBarMode()
         local g = G()
@@ -2496,8 +2496,8 @@ local function BuildBackgroundAndAppearance(ctx, b, CH, part)
         if M.RequestRefresh then M.RequestRefresh(ctx, "colors-bar-mode") end
     end
     -- Mode-first: the four coloring modes are the most consequential choice on
-    -- this page, so they lead the section as cards. The dropdown below stays
-    -- the canonical bound control for search and Assistant automation.
+    -- this page, so they lead the section as one segmented card row. That row
+    -- is the canonical bound control for search and Assistant automation.
     local BAR_MODE_CARDS = {
         { mode = "dark", title = "Dark Mode", desc = "Dark, neutral bars for every frame." },
         { mode = "class", title = "Class Colors", desc = "Health bars use Blizzard class colors." },
@@ -2505,29 +2505,21 @@ local function BuildBackgroundAndAppearance(ctx, b, CH, part)
         { mode = "gradient", title = "Gradient", desc = "Bar color follows health percent (low / mid / high)." },
     }
     local appearanceW = appearance._msuf2Width or ctx.width or 720
-    local modeCardGap = 8
-    local modeCardW = min(172, max(120, floor((min(appearanceW, 740) - 24 - modeCardGap * 3) / 4)))
-    local modeCards = {}
+    local modeRowW = min(appearanceW, 740) - 24
+    local modeValues = {}
     for i = 1, #BAR_MODE_CARDS do
-        local cardSpec = BAR_MODE_CARDS[i]
-        local card = T.Button(appearance, cardSpec.title, modeCardW, 26)
-        card:SetPoint("TOPLEFT", appearance, "TOPLEFT", 12 + (i - 1) * (modeCardW + modeCardGap), -10)
-        if M.AddTooltip then M.AddTooltip(card, TrText(cardSpec.title), TrText(cardSpec.desc), { hook = true }) end
-        card:SetScript("OnClick", function() SetBarMode(cardSpec.mode) end)
-        RegisterControl(card, Meta("appearance.bar_mode_card." .. cardSpec.mode, "ephemeral"), cardSpec.title, "button")
-        modeCards[cardSpec.mode] = card
+        modeValues[i] = { value = BAR_MODE_CARDS[i].mode, text = BAR_MODE_CARDS[i].title }
     end
-    local modeDescLabel = LabelAt(appearance, "", 12, -44, appearanceW - 24, "GameFontHighlightSmall", T.colors.muted)
-    ValueDropdownAt(ctx, appearance, "Bar mode", 12, -70, ValueTextPairs "dark=Dark Mode (dark black bars)|class=Class Color Mode (color HP bars)|unified=Unified Color Mode (one color for all frames)|gradient=Color Gradient", 320,
-        function()
-            return CurrentBarMode()
-        end,
-        function(mode)
-            SetBarMode(mode)
-        end,
-        Meta("appearance.bar_mode"))
-    local unifiedColor = CH.GeneralColorAt(ctx, appearance, "Unified bar color", 12, -134, "unifiedBar", 0.10, 0.60, 0.90, ApplyUnitframeColorWithReload)
-    local darkColor = ValueSliderAt(ctx, appearance, "Dark mode bar color", 12, -176, 0, 100, 1, 300,
+    local modeRow = W.Segment(appearance, "Bar mode", modeValues, modeRowW)
+    MoveWidget(modeRow, appearance, 12, -10, modeRowW)
+    M.BindSegment(ctx, modeRow, CurrentBarMode, SetBarMode, Meta("appearance.bar_mode"))
+    for i = 1, #BAR_MODE_CARDS do
+        local btn = modeRow.buttons[i]
+        if btn and M.AddTooltip then M.AddTooltip(btn, TrText(BAR_MODE_CARDS[i].title), TrText(BAR_MODE_CARDS[i].desc), { hook = true }) end
+    end
+    local modeDescLabel = LabelAt(appearance, "", 12, -64, appearanceW - 24, "GameFontHighlightSmall", T.colors.muted)
+    local unifiedColor = CH.GeneralColorAt(ctx, appearance, "Unified bar color", 12, -94, "unifiedBar", 0.10, 0.60, 0.90, ApplyUnitframeColorWithReload)
+    local darkColor = ValueSliderAt(ctx, appearance, "Dark mode bar color", 12, -136, 0, 100, 1, 300,
         function()
             local v = tonumber(G().darkBarGray)
             if not v then return 7 end
@@ -2540,16 +2532,16 @@ local function BuildBackgroundAndAppearance(ctx, b, CH, part)
             ApplyUnitframeColorWithReload()
         end,
         Meta("appearance.dark_mode_tone"))
-    local gradientStrength = SliderAt(ctx, appearance, "Gradient strength", 360, -134, 0, 1, 0.05, 250, G, "gradientStrength", 0.45, ApplyUnitframeColorWithReload, Meta("appearance.gradient.strength"))
-    local healthGradient = SwitchAt(ctx, appearance, "Health Gradient", 360, -182, 230, G, "enableHealthGradient", true, function()
+    local gradientStrength = SliderAt(ctx, appearance, "Gradient strength", 360, -94, 0, 1, 0.05, 250, G, "gradientStrength", 0.45, ApplyUnitframeColorWithReload, Meta("appearance.gradient.strength"))
+    local healthGradient = SwitchAt(ctx, appearance, "Health Gradient", 360, -142, 230, G, "enableHealthGradient", true, function()
         ApplyUnitframeColorWithReload()
         if refreshBarModeControls then refreshBarModeControls() end
     end, Meta("appearance.gradient.enabled"))
-    local gradientStopsLabel = LabelAt(appearance, "Health gradient stops", 12, -230, 220, "GameFontNormalSmall", T.colors.muted)
-    local gradientLow = CH.GeneralColorAt(ctx, appearance, "Low", 12, -260, "healthGradientLow", 1, 0, 0, ApplyUnitframeColorWithReload, 58, 34)
-    local gradientMid = CH.GeneralColorAt(ctx, appearance, "Mid", 170, -260, "healthGradientMid", 1, 1, 0, ApplyUnitframeColorWithReload, 58, 34)
-    local gradientHigh = CH.GeneralColorAt(ctx, appearance, "High", 328, -260, "healthGradientHigh", 0, 1, 0, ApplyUnitframeColorWithReload, 58, 34)
-    local gradientReset = CH.ButtonAt(appearance, "Reset gradient", 486, -260, 150, function()
+    local gradientStopsLabel = LabelAt(appearance, "Health gradient stops", 12, -190, 220, "GameFontNormalSmall", T.colors.muted)
+    local gradientLow = CH.GeneralColorAt(ctx, appearance, "Low", 12, -220, "healthGradientLow", 1, 0, 0, ApplyUnitframeColorWithReload, 58, 34)
+    local gradientMid = CH.GeneralColorAt(ctx, appearance, "Mid", 170, -220, "healthGradientMid", 1, 1, 0, ApplyUnitframeColorWithReload, 58, 34)
+    local gradientHigh = CH.GeneralColorAt(ctx, appearance, "High", 328, -220, "healthGradientHigh", 0, 1, 0, ApplyUnitframeColorWithReload, 58, 34)
+    local gradientReset = CH.ButtonAt(appearance, "Reset gradient", 486, -220, 150, function()
         local g = G()
         g.healthGradientLowR, g.healthGradientLowG, g.healthGradientLowB = 1, 0, 0
         g.healthGradientMidR, g.healthGradientMidG, g.healthGradientMidB = 1, 1, 0
@@ -2565,12 +2557,10 @@ local function BuildBackgroundAndAppearance(ctx, b, CH, part)
         SetControlEnabled(darkColor, mode == "dark")
         SetControlEnabled(healthGradient, gradientMode)
         SetControlsEnabled(gradientEditControls, gradientEnabled)
+        if modeRow and modeRow.SetValue then modeRow:SetValue(mode) end
         for i = 1, #BAR_MODE_CARDS do
-            local cardSpec = BAR_MODE_CARDS[i]
-            local card = modeCards[cardSpec.mode]
-            if card and card.SetActive then card:SetActive(cardSpec.mode == mode) end
-            if cardSpec.mode == mode and modeDescLabel and modeDescLabel.SetText then
-                modeDescLabel:SetText(TrText(cardSpec.desc))
+            if BAR_MODE_CARDS[i].mode == mode and modeDescLabel and modeDescLabel.SetText then
+                modeDescLabel:SetText(TrText(BAR_MODE_CARDS[i].desc))
             end
         end
     end

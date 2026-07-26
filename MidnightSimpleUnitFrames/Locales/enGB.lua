@@ -1934,6 +1934,7 @@ L["Auto-switch profile by specialization"] = "Auto-switch profile by specializat
 L["Background"] = "Background"
 L["Bar Animation + Text Accuracy"] = "Bar Animation + Text Accuracy"
 L["Bar Background Tint"] = "Bar Background Tint"
+L["Bar mode"] = "Bar mode"
 L["Bar outline thickness"] = "Bar outline thickness"
 L["Bars"] = "Bars"
 L["Behavior"] = "Behavior"
