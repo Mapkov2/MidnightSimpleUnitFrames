@@ -1123,10 +1123,10 @@ local function BuildDashboardUX(ctx)
     if supportDesc.SetNonSpaceWrap then supportDesc:SetNonSpaceWrap(true) end
     local aboutVer
     if _G.C_AddOns and type(_G.C_AddOns.GetAddOnMetadata) == "function" then aboutVer = _G.C_AddOns.GetAddOnMetadata("MidnightSimpleUnitFrames", "Version") end
-    local aboutText = M.Tr("by Mapko with the help from R41z0r")
+    local aboutText = M.Tr("by Mapko with the help from R41z0r, defaults made by Aur0r4")
     if type(aboutVer) == "string" and aboutVer ~= "" then
         local displayVersion = aboutVer:match("^%d") and ("v" .. aboutVer) or aboutVer
-        aboutText = M.Format(M.Tr("%s  -  by Mapko with the help from R41z0r"), displayVersion)
+        aboutText = M.Format(M.Tr("%s  -  by Mapko with the help from R41z0r, defaults made by Aur0r4"), displayVersion)
     end
     local supportDescH = (supportDesc.GetStringHeight and supportDesc:GetStringHeight()) or 0
     if supportDescH < 12 then supportDescH = 12 end
