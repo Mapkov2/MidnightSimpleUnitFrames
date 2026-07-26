@@ -1388,7 +1388,11 @@ function Render.Install(box, ctx, deps)
         end
         if not hr then hr, hg, hb = HealthColor(conf, hpPct or 0.72, cls) end
         local groupVisual = (runtimeSpec and runtimeSpec.group) or {}
-        mock._health:SetStatusBarColor(hr, hg, hb, tonumber(groupVisual.hpBarAlpha) or tonumber(conf.hpBarAlpha) or 1)
+        -- Live parity: the engine dims the fill texture (Elements_Alpha), never
+        -- the status-bar color's alpha channel, which the client drops on refill.
+        local hpFillAlpha = tonumber(groupVisual.hpBarAlpha) or tonumber(conf.hpBarAlpha) or 1
+        if _G.MSUF_UnitEditModeActive == true and hpFillAlpha < 0.35 then hpFillAlpha = 0.35 end
+        mock._health:SetStatusBarColor(hr, hg, hb)
         if mock._health.SetMinMaxValues then mock._health:SetMinMaxValues(0, 1) end
         mock._health:SetValue(hpPct)
         local hpReverse = runtimeHealth.reverse == true or (not runtimeSpec and conf.reverseFill == true)
@@ -1432,6 +1436,7 @@ function Render.Install(box, ctx, deps)
             runtimeTempMaxHealth.backgroundAlpha or (gen and gen.tempMaxHealthBackgroundOpacity) or 0.65)
         mock._tempMaxHealth:SetShown(tempMaxShown)
         local hpTex = mock._health.GetStatusBarTexture and mock._health:GetStatusBarTexture()
+        if hpTex and hpTex.SetAlpha then hpTex:SetAlpha(hpFillAlpha) end
         local healPredMode = tonumber(runtimePrediction.healAnchorMode) or H.HealPredAnchorMode(conf)
         local healPredShown
         if runtimeSpec then
@@ -1444,7 +1449,7 @@ function Render.Install(box, ctx, deps)
             runtimePrediction.healR or (gen and gen.healPredictionColorR) or 0,
             runtimePrediction.healG or (gen and gen.healPredictionColorG) or 1,
             runtimePrediction.healB or (gen and gen.healPredictionColorB) or 0,
-            runtimePrediction.healA or (gen and gen.healPredictionColorA) or 0.45
+            (runtimePrediction.healA or (gen and gen.healPredictionColorA) or 0.45) * hpFillAlpha
         )
         mock._healPred:ClearAllPoints()
         if (healPredMode == 3 or healPredMode == 4) and hpTex then
@@ -1471,7 +1476,7 @@ function Render.Install(box, ctx, deps)
             runtimePrediction.absorbR or (gen and gen.absorbBarColorR) or 1,
             runtimePrediction.absorbG or (gen and gen.absorbBarColorG) or 1,
             runtimePrediction.absorbB or (gen and gen.absorbBarColorB) or 1,
-            runtimePrediction.absorbA or (gen and gen.absorbBarOpacity) or (gen and gen.absorbBarColorA) or 0.75
+            (runtimePrediction.absorbA or (gen and gen.absorbBarOpacity) or (gen and gen.absorbBarColorA) or 0.75) * hpFillAlpha
         )
         local absorbMode = tonumber(runtimePrediction.absorbAnchorMode) or tonumber((conf.hlOverride and conf.absorbAnchorMode ~= nil and conf.absorbAnchorMode) or (gen and gen.absorbAnchorMode)) or 2
         if absorbMode < 1 or absorbMode > 5 then absorbMode = 2 end
@@ -1522,7 +1527,7 @@ function Render.Install(box, ctx, deps)
             runtimePrediction.healAbsorbR or (gen and gen.healAbsorbBarColorR) or 0.7,
             runtimePrediction.healAbsorbG or (gen and gen.healAbsorbBarColorG) or 0,
             runtimePrediction.healAbsorbB or (gen and gen.healAbsorbBarColorB) or 0,
-            runtimePrediction.healAbsorbA or (gen and gen.healAbsorbBarOpacity) or (gen and gen.healAbsorbBarColorA) or 1
+            (runtimePrediction.healAbsorbA or (gen and gen.healAbsorbBarOpacity) or (gen and gen.healAbsorbBarColorA) or 1) * hpFillAlpha
         )
         if hpReverse then
             mock._healAbsorb:SetPoint("TOPLEFT", hpTex or mock._health, "TOPLEFT", 0, 0)
@@ -1636,6 +1641,11 @@ function Render.Install(box, ctx, deps)
         local textAlpha = tonumber(runtimeSpec and runtimeSpec.textColor and runtimeSpec.textColor.a)
             or (gf and gf.ResolveFontTextAlpha and gf.ResolveFontTextAlpha(kind))
             or 1
+        -- Text follows the foreground fade unless "Keep text + portrait visible"
+        -- is on, matching SetTextLayerAlpha in the live alpha element.
+        local alphaExcludeText = runtimeSpec and runtimeSpec.alpha and runtimeSpec.alpha.excludeTextPortrait == true
+            or (not runtimeSpec and conf.alphaExcludeTextPortrait == true)
+        if not alphaExcludeText then textAlpha = textAlpha * hpFillAlpha end
         local baselineOffset = (runtimeSpec and 0) or (gf and gf.ResolveFontBaselineOffset and gf.ResolveFontBaselineOffset(kind)) or 0
         SetPreviewFont(mock._nameFS, max(6, ScaleValue((runtimeSpec and runtimeSpec.nameFontSize) or conf.nameFontSize or 12, previewScale, 6)))
         local previewName = (scene.liveData and scene.liveData.name) or self._msufGFRenderState.GF_PREVIEW_NAMES[5]
