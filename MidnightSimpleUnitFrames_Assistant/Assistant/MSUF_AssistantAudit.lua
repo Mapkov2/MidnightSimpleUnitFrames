@@ -946,5 +946,11 @@ local function RunCommand(msg)
 end
 
 _G.SLASH_MSUFCOVERAGE1 = "/msufcoverage"
-_G.SlashCmdList = _G.SlashCmdList or {}
+if _G.SlashCmdList == nil then
+    -- Headless smoke stubs only; never reassign the live global. Writing the
+    -- SlashCmdList global from addon code taints it, and Blizzard's secure
+    -- ImportListToHash(SlashCmdList, hash_SlashCmdList) then carries that taint
+    -- into every protected slash handler (e.g. /pvp -> C_PvP.TogglePVP()).
+    _G.SlashCmdList = {}
+end
 _G.SlashCmdList.MSUFCOVERAGE = RunCommand

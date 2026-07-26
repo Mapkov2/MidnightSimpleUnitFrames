@@ -269,7 +269,15 @@ local function DispatchSlash(msg)
     return DispatchSlashAfterLoad(msg)
 end
 
-_G.SlashCmdList = _G.SlashCmdList or {}
+if _G.SlashCmdList == nil then
+    --- Headless smoke stubs only. In the client Blizzard defines SlashCmdList
+    --- before any addon loads, and reassigning that global (even with the same
+    --- table) taints the variable slot: secure chat dispatch re-reads it on
+    --- every slash command (ChatFrameUtil.ImportAllListsToHash), which would
+    --- carry MSUF taint into protected handlers (/pvp -> C_PvP.TogglePVP()
+    --- => ADDON_ACTION_FORBIDDEN). Never write this global when it exists.
+    _G.SlashCmdList = {}
+end
 _G.SLASH_MSUF2OPTIONS1 = "/msuf"
 _G.SlashCmdList.MSUF2OPTIONS = DispatchSlash
 _G.SLASH_MSUFOPTIONS1 = _G.SLASH_MSUFOPTIONS1 or "/msufoptions"
