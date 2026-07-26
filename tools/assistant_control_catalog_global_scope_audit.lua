@@ -49,7 +49,7 @@ for _, relative in ipairs(files) do
     for _ in content:gmatch("T%.Button%s*%(") do factorySites = factorySites + 1 end
     for _ in content:gmatch("CreateFrame%s*%(%s*['\"]Button['\"]") do factorySites = factorySites + 1 end
 end
-if factorySites ~= 113 then Fail(string.format("global/advanced interactive factory inventory drifted: expected 113, got %d", factorySites)) end
+if factorySites ~= 112 then Fail(string.format("global/advanced interactive factory inventory drifted: expected 112, got %d", factorySites)) end
 
 local function BalancedCall(content, openAt)
     local depth, quote, escaped, lineComment = 0, nil, false, false
@@ -244,7 +244,7 @@ end
 print("GLOBAL/ADVANCED CONTROL CATALOG STATIC AUDIT PASS")
 print(string.format("Files: %d; annotated Bind call sites: %d/%d; direct semantic declarations: %d",
     #files, annotatedBinds, bindCalls, declarations))
-print(string.format("Interactive factory drift sentinel: %d/%d", factorySites, 113))
+print(string.format("Interactive factory drift sentinel: %d/%d", factorySites, 112))
 print("Normalized semantic-path collisions: 0; required raw-button/selector coverage markers: present")
 print(string.format("Class Resources preview: %d registration call sites; %d generated canonical controls; collisions: 0",
     previewRegistrationCalls, #previewSemanticPaths))
