@@ -124,7 +124,9 @@ assert(runtime:ApplyActive(frame, state, { skipRegister = true }))
 runtime:PrepareWork(frame)
 assert(frame.MSUF_durationObj == stable, "same cast replaced the bound duration container")
 assert(assignCalls == 1, "same cast did not update the stable container exactly once")
-assert(frame.statusBar.timerCalls == 1, "same cast rebound the native statusbar")
+-- SetTimerDuration snapshots contents C-side, so re-assigned times (pushback,
+-- channel updates) must rebind the fill timer even for the same container.
+assert(frame.statusBar.timerCalls == 2, "duration update did not rebind the native fill timer")
 assert(bindingCalls.duration == 1 and bindingCalls.enabled == 1,
     "same cast rebound or re-enabled native duration text")
 assert(stable.remaining == 6 and stable.total == 7, "stable duration did not receive updated values")
@@ -137,8 +139,9 @@ assert(runtime:ApplyActive(frame, state, { skipRegister = true }))
 runtime:PrepareWork(frame)
 assert(frame.MSUF_durationObj == stable and assignCalls == 2,
     "new cast failed to reuse the frame-owned native container")
-assert(frame.statusBar.timerCalls == 1 and bindingCalls.duration == 1,
-    "new cast rebound native consumers instead of assigning the stable container")
+assert(frame.statusBar.timerCalls == 3, "new cast did not rebind the native fill timer")
+assert(bindingCalls.duration == 1,
+    "new cast rebound the duration text binding instead of assigning the stable container")
 
 frame._msufCastbarWorkMask = 0
 frame._msufPlainEndTime = 105

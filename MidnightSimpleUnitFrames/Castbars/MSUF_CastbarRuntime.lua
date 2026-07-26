@@ -815,7 +815,11 @@ end
 --- Prefer Blizzard's StatusBar timer object when available. That lets the
 --- client drive smooth progress while MSUF only updates text/glow at its own
 --- managed cadence.
-function Runtime:ApplyTimer(statusBar, durationObj, reverseFill, isChanneled)
+--- SetTimerDuration snapshots the duration contents C-side (LuaDurationObject
+--- is a value type: Assign/Copy are copies), so mutating the stable container
+--- never reaches an already-bound bar. Callers that just re-assigned contents
+--- must pass forceRebind; the identity skip only covers direction refreshes.
+function Runtime:ApplyTimer(statusBar, durationObj, reverseFill, isChanneled, forceRebind)
     if not statusBar then
         return false
     end
@@ -832,7 +836,8 @@ function Runtime:ApplyTimer(statusBar, durationObj, reverseFill, isChanneled)
 
     local parent = statusBar.GetParent and statusBar:GetParent() or nil
     local timerDirection = TimerDirection(parent, isChanneled)
-    if statusBar._msufTimerDuration == durationObj
+    if forceRebind ~= true
+        and statusBar._msufTimerDuration == durationObj
         and statusBar._msufTimerDirection == timerDirection then
         return true
     end
@@ -982,7 +987,9 @@ function Runtime:ApplyActive(frame, state, options)
 
     local reverseFill = ResolveReverseFill(frame, state, isChanneled)
     frame._msufStripeReverseFill = reverseFill and true or false
-    local timerDriven = self:ApplyTimer(frame.statusBar, durationObj, reverseFill, isChanneled) and true or false
+    -- StableDuration just re-assigned this cast's times into the shared
+    -- container, so the bar must rebind even when the object identity matches.
+    local timerDriven = self:ApplyTimer(frame.statusBar, durationObj, reverseFill, isChanneled, true) and true or false
     frame.MSUF_timerDriven = timerDriven
     if timerDriven then
         frame._msufNativeTimerUnsafe = nil
@@ -1229,8 +1236,8 @@ end
 
 --- Compatibility globals for older castbar files. New code should call Runtime
 --- methods through ns when possible, but these exports keep load order flexible.
-ExportPublic("MSUF_ApplyTimerAndFill", function(statusBar, durationObj, reverseFill, isChanneled)
-    return Runtime:ApplyTimer(statusBar, durationObj, reverseFill, isChanneled)
+ExportPublic("MSUF_ApplyTimerAndFill", function(statusBar, durationObj, reverseFill, isChanneled, forceRebind)
+    return Runtime:ApplyTimer(statusBar, durationObj, reverseFill, isChanneled, forceRebind)
 end)
 
 ExportPublic("MSUF_ApplyCastbarTimerDirection", function(statusBar, durationObj, reverseFill, isChanneled)

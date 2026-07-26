@@ -580,7 +580,7 @@ local function PlayerCastbarEmpowerStart(frame)
         durationObj = runtime:RetainDuration(frame, durationObj)
     end
 
-    _G.MSUF_ApplyTimerAndFill(frame.statusBar, durationObj, reverseFill, false)
+    _G.MSUF_ApplyTimerAndFill(frame.statusBar, durationObj, reverseFill, false, true)
     frame.MSUF_durationObj = durationObj
     frame.statusBar:SetMinMaxValues(0, frame.empowerTotalWithGrace)
 
