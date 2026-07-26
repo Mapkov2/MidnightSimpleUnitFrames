@@ -330,7 +330,7 @@ do
     Check(highlights:ShouldShow() == true, "5.71 profile did not receive the upgrade highlight tour")
     local releaseKey, spec, record = highlights:GetCurrent()
     Equal(releaseKey, "6.0", "wrong release highlight tour selected")
-    Equal(#spec.highlights, 12, "6.0 highlight tour lost its curated twelve-item contract")
+    Equal(#spec.highlights, 16, "6.0 highlight tour lost its curated sixteen-item contract")
     Equal(spec.highlights[1].id, "custom_aura_tracking", "first 6.0 highlight is not the new Unitframe Custom Aura gameplay feature")
     Equal(spec.highlights[1].pageKey, "uf_player", "Custom Aura highlight does not open a supported Unitframe")
     Equal(spec.highlights[1].route.unitAuraTab, "custom1", "Custom Aura highlight does not select a Custom lane")
@@ -341,23 +341,40 @@ do
     Equal(priority.id, "priority_frames", "third 6.0 highlight is not Priority Frames")
     Equal(priority.pageKey, "gf_priority", "Priority Frames highlight does not open the Priority Frames page")
     Equal(priority.route.accordion, "gf_priority:who_appears", "Priority Frames highlight does not expand Who Appears")
-    local healthText = spec.highlights[5]
-    Equal(healthText.id, "health_text", "fifth 6.0 highlight is not the HP text editor")
+    local spellIndicators = spec.highlights[5]
+    Equal(spellIndicators.id, "spell_indicators", "fifth 6.0 highlight is not Spell Indicators")
+    Equal(spellIndicators.pageKey, "gf_indicators", "Spell Indicator highlight does not open Group Indicators")
+    Equal(spellIndicators.route.accordion, "gf_indicators:si", "Spell Indicator highlight does not expand the Spell Indicators workspace")
+    local healthText = spec.highlights[6]
+    Equal(healthText.id, "health_text", "sixth 6.0 highlight is not the HP text editor")
     Equal(healthText.pageKey, "uf_player", "HP values highlight does not open a Unitframe editor")
     Equal(healthText.route.unit, "player", "HP values highlight does not target Player")
     Equal(healthText.route.unitTextTab, "hp", "HP values highlight does not select the HP Text tab")
     Equal(healthText.route.accordion, "uf_player:text", "HP values highlight does not expand the Text editor")
-    Equal(spec.highlights[8].id, "colors_painter", "eighth 6.0 highlight is not the rebuilt Colors page")
-    Equal(spec.highlights[8].pageKey, "opt_colors", "Colors highlight does not open the Colors page")
-    local layers = spec.highlights[9]
-    Equal(layers.id, "frame_layers", "ninth 6.0 highlight is not the shared layer scale")
-    Equal(layers.route.accordion, "uf_player:status_icons", "layer highlight does not open a section that owns a layer slider")
+    local fillDirection = spec.highlights[7]
+    Equal(fillDirection.id, "fill_direction", "seventh 6.0 highlight is not the Fill Direction control")
+    Equal(fillDirection.pageKey, "uf_player", "Fill Direction highlight does not open a Unitframe editor")
+    Equal(fillDirection.route.accordion, "uf_player:frame_basics", "Fill Direction highlight does not expand Frame Basics")
+    local portraits = spec.highlights[8]
+    Equal(portraits.id, "portraits", "eighth 6.0 highlight is not the portrait overhaul")
+    Equal(portraits.route.accordion, "uf_player:portrait", "portrait highlight does not expand the Portrait section")
+    Equal(spec.highlights[11].id, "colors_painter", "eleventh 6.0 highlight is not the rebuilt Colors page")
+    Equal(spec.highlights[11].pageKey, "opt_colors", "Colors highlight does not open the Colors page")
+    local statusIcons = spec.highlights[12]
+    Equal(statusIcons.id, "status_icon_packs", "twelfth 6.0 highlight is not the status icon packs")
+    Equal(statusIcons.route.accordion, "uf_player:status_icons", "status icon highlight does not expand Status Icons")
+    local layers = spec.highlights[13]
+    Equal(layers.id, "frame_layers", "thirteenth 6.0 highlight is not the shared layer scale")
+    -- The layer card is deliberately linkless: the scene renders an inline
+    -- dummy of the layer sub-menu instead of routing to a settings page.
+    Check(layers.route == nil, "layer highlight regained a route despite its inline dummy preview")
+    Check(layers.action == nil, "layer highlight regained an action button despite its inline dummy preview")
     -- Edit Mode is the one highlight without a page of its own: it must land on
     -- Home and rely on the scene's explicit lifecycle call to start the mode.
-    Equal(spec.highlights[10].id, "edit_mode", "tenth 6.0 highlight is not the Edit Mode rework")
-    Equal(spec.highlights[10].pageKey, "home", "Edit Mode highlight must fall back to Home, not a missing page")
-    local menuAccent = spec.highlights[12]
-    Equal(menuAccent.id, "menu_accent", "twelfth 6.0 highlight is not the menu accent editor")
+    Equal(spec.highlights[14].id, "edit_mode", "fourteenth 6.0 highlight is not the Edit Mode rework")
+    Equal(spec.highlights[14].pageKey, "home", "Edit Mode highlight must fall back to Home, not a missing page")
+    local menuAccent = spec.highlights[16]
+    Equal(menuAccent.id, "menu_accent", "sixteenth 6.0 highlight is not the menu accent editor")
     Equal(menuAccent.pageKey, "opt_misc", "menu accent highlight does not open Miscellaneous")
     Equal(menuAccent.route.accordion, "opt_misc:misc_menu_behavior", "menu accent highlight does not open Menu behavior")
     MSUF.MSUF2.ApplyUpgradeHighlightTargetRoute(healthText)
@@ -373,13 +390,13 @@ do
     Equal(record.outcomes.custom_aura_tracking, "reviewed", "highlight outcome was not persisted")
     Check(highlights:RequestSkip() == true, "skip warning could not be requested")
     Equal(record.status, "skip_warning", "skip did not require the consequence warning")
-    Equal(record.pendingSkipCount, 11, "skip warning did not count only unreviewed highlights")
+    Equal(record.pendingSkipCount, 15, "skip warning did not count only unreviewed highlights")
     Check(highlights:CancelSkip() == true, "skip warning could not return to the tour")
     Equal(record.status, "active", "cancelled skip did not resume the tour")
     Check(highlights:RequestSkip() == true, "second skip warning could not be requested")
     Check(highlights:ConfirmSkip() == true, "confirmed highlight skip failed")
     Equal(record.status, "skipped", "confirmed release tour was not persisted as skipped")
-    Equal(record.skippedCount, 11, "confirmed skip lost the remaining-highlight count")
+    Equal(record.skippedCount, 15, "confirmed skip lost the remaining-highlight count")
     Check(highlights:ShouldShow() == false, "skipped release tour resurfaced")
     Equal(firstLoad:GetState().status, "completed", "skipping release highlights did not close generic onboarding")
 end

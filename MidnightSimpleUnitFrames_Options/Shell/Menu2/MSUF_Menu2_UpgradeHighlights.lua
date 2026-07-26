@@ -280,6 +280,55 @@ local function Progress(scene, T, count, current, contentWidth, top)
     end
 end
 
+-- Non-interactive mock of the layer sub-menu for the linkless layer card:
+-- a dummy 0-30 slider plus a miniature Layer Overview stack, built entirely
+-- from already-localized strings. Purely decorative, no mouse handling.
+local function BuildLayerDummyPreview(card, T, x, width)
+    local panel = T.Panel(card, nil, T.colors.pillBaseSolid or T.colors.panel2, T.colors.pillEdge or T.colors.borderSoft)
+    panel:SetPoint("BOTTOMLEFT", card, "BOTTOMLEFT", x, 16)
+    panel:SetSize(width, 76)
+    if type(T.ApplySurface) == "function" then T.ApplySurface(panel, "card") end
+
+    local half = floor(width / 2)
+    local accent = T.colors.coreHot or T.colors.accent
+    local label = T.Font(panel, "GameFontDisableSmall", Tr("Layer (0-30)"), T.colors.muted)
+    label:SetPoint("TOPLEFT", panel, "TOPLEFT", 14, -12)
+
+    local trackWidth = max(56, half - 58)
+    local track = panel:CreateTexture(nil, "ARTWORK", nil, 1)
+    track:SetPoint("TOPLEFT", panel, "TOPLEFT", 14, -40)
+    track:SetSize(trackWidth, 4)
+    local trackColor = T.colors.borderSoft
+    track:SetColorTexture(trackColor[1], trackColor[2], trackColor[3], 0.9)
+
+    local fillWidth = floor(trackWidth * 0.4)
+    local fill = panel:CreateTexture(nil, "ARTWORK", nil, 2)
+    fill:SetPoint("TOPLEFT", track, "TOPLEFT", 0, 0)
+    fill:SetSize(fillWidth, 4)
+    fill:SetColorTexture(accent[1], accent[2], accent[3], 0.95)
+
+    local knob = panel:CreateTexture(nil, "ARTWORK", nil, 3)
+    knob:SetSize(10, 14)
+    knob:SetPoint("CENTER", track, "LEFT", fillWidth, 0)
+    knob:SetColorTexture(accent[1], accent[2], accent[3], 1)
+
+    local value = T.Font(panel, "GameFontHighlightSmall", "12", T.colors.text)
+    value:SetPoint("LEFT", track, "RIGHT", 10, 0)
+
+    local overviewX = half + 12
+    local overviewTitle = T.Font(panel, "GameFontDisableSmall", Tr("Layer Overview"), T.colors.muted)
+    overviewTitle:SetPoint("TOPLEFT", panel, "TOPLEFT", overviewX, -12)
+    local rows = { { "18", "Text" }, { "12", "Auras" }, { "5", "Border" } }
+    for i = 1, #rows do
+        local y = -28 - ((i - 1) * 15)
+        local num = T.Font(panel, "GameFontHighlightSmall", rows[i][1], accent)
+        num:SetPoint("TOPLEFT", panel, "TOPLEFT", overviewX, y)
+        local name = T.Font(panel, "GameFontHighlightSmall", Tr(rows[i][2]), T.colors.text)
+        name:SetPoint("TOPLEFT", panel, "TOPLEFT", overviewX + 26, y)
+    end
+    return panel
+end
+
 local function BuildActive(ctx, scene, T, releaseKey, spec, record, contentWidth, compact, sceneTop)
     local count = #spec.highlights
     local index = max(1, min(count, tonumber(record.index) or 1))
@@ -288,7 +337,8 @@ local function BuildActive(ctx, scene, T, releaseKey, spec, record, contentWidth
     Progress(scene, T, count, index, contentWidth, -156)
 
     local cardTop = -184
-    local cardHeight = compact and 280 or 240
+    local hasLayerPreview = item.id == "frame_layers"
+    local cardHeight = (compact and 280 or 240) + (hasLayerPreview and 96 or 0)
     local card = T.Panel(scene, nil, T.colors.coreShadow or T.colors.bg, T.colors.cardBorder or T.colors.borderSoft)
     card:SetPoint("TOPLEFT", scene, "TOPLEFT", floor((scene:GetWidth() - contentWidth) / 2), cardTop)
     card:SetSize(contentWidth, cardHeight)
@@ -311,6 +361,9 @@ local function BuildActive(ctx, scene, T, releaseKey, spec, record, contentWidth
     local impact = T.Font(card, "GameFontHighlight", Tr(item.impact), T.colors.text)
     impact:SetPoint("TOPLEFT", card, "TOPLEFT", textX, titleTop - 124)
     SetTextLayout(impact, textWidth, "LEFT")
+    if hasLayerPreview then
+        BuildLayerDummyPreview(card, T, textX, textWidth)
+    end
 
     local buttonsTop = cardTop - cardHeight - 20
     local buttonY = buttonsTop
@@ -336,25 +389,37 @@ local function BuildActive(ctx, scene, T, releaseKey, spec, record, contentWidth
             end
         end
     end
+    -- Linkless cards (inline dummy preview instead of a route) offer only the
+    -- review flow, so "Next" takes over the primary role there.
+    local nextLabel = index == count and "Finish tour" or "Next highlight"
+    local nextRole = item.action and nil or "primary"
+    local function AdvanceReviewed()
+        Controller():Advance("reviewed")
+        RefreshHome()
+    end
     if compact then
         local w = min(250, contentWidth)
         local x = floor((scene:GetWidth() - w) / 2)
-        Button(scene, T, releaseKey, "configure_" .. item.id, item.action, x, buttonY, w,
-            ConfigureCurrent, "primary", item.impact)
-        Button(scene, T, releaseKey, "next_" .. item.id, index == count and "Finish tour" or "Next highlight", x, buttonY - 36, w, function()
-            Controller():Advance("reviewed")
-            RefreshHome()
-        end, nil, "Mark this highlight as reviewed and continue.")
-        buttonY = buttonY - 36
+        if item.action then
+            Button(scene, T, releaseKey, "configure_" .. item.id, item.action, x, buttonY, w,
+                ConfigureCurrent, "primary", item.impact)
+            buttonY = buttonY - 36
+        end
+        Button(scene, T, releaseKey, "next_" .. item.id, nextLabel, x, buttonY, w,
+            AdvanceReviewed, nextRole, "Mark this highlight as reviewed and continue.")
     else
         local w, gap = 172, 12
-        local x = floor((scene:GetWidth() - (w * 2) - gap) / 2)
-        Button(scene, T, releaseKey, "configure_" .. item.id, item.action, x, buttonY, w,
-            ConfigureCurrent, "primary", item.impact)
-        Button(scene, T, releaseKey, "next_" .. item.id, index == count and "Finish tour" or "Next highlight", x + w + gap, buttonY, w, function()
-            Controller():Advance("reviewed")
-            RefreshHome()
-        end, nil, "Mark this highlight as reviewed and continue.")
+        local x
+        if item.action then
+            x = floor((scene:GetWidth() - (w * 2) - gap) / 2)
+            Button(scene, T, releaseKey, "configure_" .. item.id, item.action, x, buttonY, w,
+                ConfigureCurrent, "primary", item.impact)
+            x = x + w + gap
+        else
+            x = floor((scene:GetWidth() - w) / 2)
+        end
+        Button(scene, T, releaseKey, "next_" .. item.id, nextLabel, x, buttonY, w,
+            AdvanceReviewed, nextRole, "Mark this highlight as reviewed and continue.")
     end
 
     local utilityTop = buttonY - 44
