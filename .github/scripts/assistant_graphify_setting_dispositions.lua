@@ -958,9 +958,6 @@ general.roundedUnitframes
 general.shortenNameFrontMaskPx
 general.showBossCastTargetName
 general.showCombatStateIndicator
-general.showGCDBar
-general.showGCDBarSpell
-general.showGCDBarTime
 general.showIncomingResIndicator
 general.showLeaderIcon
 general.showLevel

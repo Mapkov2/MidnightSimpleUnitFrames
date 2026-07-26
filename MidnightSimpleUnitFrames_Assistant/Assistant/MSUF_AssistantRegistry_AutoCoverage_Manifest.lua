@@ -19,7 +19,7 @@ M.Assistant = A
 local Manifest = A.AutoCoverageManifest or {}
 A.AutoCoverageManifest = Manifest
 
--- Defaults generated offline on 2026-07-26 from the current factory profile
+-- Defaults generated offline on 2026-07-27 from the current factory profile
 -- through the same decode and normalization path used by MSUF in game.
 -- Regenerate and verify with tools/assistant_autocoverage_manifest_regression.py.
 -- 3618 top-level scalar fallbacks across every required AutoCoverage scope.
