@@ -2761,6 +2761,7 @@ end
 
 local function BarOutlineHighlightGlobalKey(attr)
     if attr == "barOutlineThickness" then return "bars.barOutlineThickness" end
+    if attr == "barOutlineLayer" then return "bars.barOutlineLayer" end
     if attr == "barOutlineColorA" then return "general.barOutlineColorA" end
     if attr == "highlightBorderThickness" then return "general.highlightBorderThickness" end
     if attr == "hlPrioEnabled" then return "general.hlPrioEnabled" end
@@ -2776,6 +2777,12 @@ local function BarOutlineHighlightSpec(text)
     end
     if ContainsAny(text, GeometryPhrases[159]) then
         return "barOutlineColorA", "Bar Outline Opacity"
+    end
+    -- Draw order before thickness: the layer phrases in [285] are supersets of
+    -- the thickness phrases in [160] ("bar outline strata" contains "bar
+    -- outline"), so probing thickness first would never leave a layer match.
+    if ContainsAny(text, GeometryPhrases[285]) then
+        return "barOutlineLayer", "Bar Outline Layer"
     end
     if ContainsAny(text, GeometryPhrases[160]) then
         return "barOutlineThickness", "Bar Outline Thickness"

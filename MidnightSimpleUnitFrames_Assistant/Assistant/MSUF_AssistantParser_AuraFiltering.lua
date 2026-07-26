@@ -1067,6 +1067,13 @@ function P.ParseAuraFilteringConversationShortcut(text, ctx, raw)
     then
         return nil
     end
+    -- Group externals also own a draw-order setting whose exact alias carries
+    -- the same filter-token wording ("party external defensive layer"). Draw
+    -- order is never a live-filter mutation, so leave layer language to the
+    -- exact aliases on the gf_<scope>.auras.externals.layer settings.
+    if HasAny(text, { "layer", "strata", "draw layer", "draw order", "frame level" }) then
+        return nil
+    end
     if not P.LooksLikeAuraFilteringConversation(text, ctx) then return nil end
 
     local categoryPlan = GroupCategoryPlan(text, ctx)

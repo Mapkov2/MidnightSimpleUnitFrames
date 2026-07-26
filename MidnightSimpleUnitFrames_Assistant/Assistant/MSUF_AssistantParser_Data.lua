@@ -983,6 +983,12 @@ Data.ROOT_PARSER = {
         "detached power", "second hp", "player hp", "absorb", "heal absorb",
         "gradient", "color", "colour", "opacity", "alpha", "outline", "border",
     },
+        -- Power art lives in bars.powerBarTexture / bars.powerBarBgTexture,
+        -- not in the shared general.barTexture pair. The global texture
+        -- shortcut owns this phrasing family and uses these terms to pick the
+        -- power keys; letting it fall through to alias matching instead would
+        -- be ambiguous against the per-unit power textures.
+        [813] = { "power bar", "power texture", "mana bar", "mana texture", "resource bar", "power foreground" },
         [557] = { "bar background texture", "global bar background texture", "background bar texture", "bar bg texture", "background texture" },
         [558] = { "gradient strength", "bar gradient strength", "health gradient strength", "power gradient strength" },
         [559] = {

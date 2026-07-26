@@ -335,8 +335,24 @@ local function AuraGeometryDelta(text, setting, attr, direction)
     return FirstNumber(text), nil
 end
 
+--- Custom aura containers (Custom 1-4, including the Target DoT lane) are
+--- separate settings with their own exact aliases, e.g. "player custom 1 aura
+--- layer". They are not Buff/Debuff lanes, so this Buff/Debuff-only geometry
+--- shortcut must not answer for them -- it would drop the container identity
+--- and read the container index as the value. Matching the four registered
+--- alias shapes keeps generic wording such as "custom aura style" untouched,
+--- because only an indexed mention resolves to a container.
+local function MentionsCustomAuraContainer(text)
+    if type(text) ~= "string" then return false end
+    return text:find("custom%s*%d") ~= nil
+        or text:find("custom%s+aura%s*%d") ~= nil
+        or text:find("custom%s+container%s*%d") ~= nil
+        or text:find("custom%s+aura%s+container%s*%d") ~= nil
+end
+
 local function ParseAuraGeometryShortcut(text)
     if not ContainsAny(text, AurasPhrases[24]) then return nil end
+    if MentionsCustomAuraContainer(text) then return nil end
     if ContainsAny(text, { "private aura", "private auras", "private-aura", "private-auras" }) then
         return {
             kind = "answer",

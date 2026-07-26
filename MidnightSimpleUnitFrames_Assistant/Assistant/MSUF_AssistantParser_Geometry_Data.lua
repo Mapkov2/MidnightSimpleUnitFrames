@@ -598,5 +598,15 @@ Data.GEOMETRY_PARSER = {
         "full-health absorb stripe", "full health absorb stripe", "full hp absorb stripe",
         "absorb stripe at full health", "absorb stripe on full health",
     },
+        -- Outline draw order. Must be probed before the thickness phrases in
+        -- [160]: every phrase here also contains a bare "bar outline"/"outline"
+        -- substring, so a thickness-first probe would swallow all of them.
+        [285] = {
+        "bar outline strata", "bar outline layer", "bar outline draw layer", "bar outline draw order",
+        "frame outline strata", "frame outline layer", "frame outline draw layer", "frame outline draw order",
+        "bar border strata", "bar border layer", "frame border strata", "frame border layer",
+        "outline strata", "outline layer", "outline draw layer", "outline draw order",
+        "border strata", "border layer", "border draw layer", "border draw order",
+    },
     },
 }

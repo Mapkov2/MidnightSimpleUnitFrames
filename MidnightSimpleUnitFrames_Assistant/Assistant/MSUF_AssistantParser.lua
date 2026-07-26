@@ -4749,11 +4749,17 @@ local function ParseGlobalBarTexturePriorityShortcut(normalized, raw)
         return nil
     end
 
+    -- Power art is a separate shared pair in the bars table. This shortcut
+    -- owns the whole "<something> bar texture" phrasing family, so it resolves
+    -- the power keys here rather than letting them fall through to alias
+    -- matching, where they would tie with the per-unit power textures.
+    local power = ContainsAny(normalized, P.RootPhrases[813])
+    local background = ContainsAny(normalized, P.RootPhrases[557])
     local key
-    if ContainsAny(normalized, P.RootPhrases[557]) then
-        key = "general.barBackgroundTexture"
+    if background then
+        key = power and "bars.powerBarBgTexture" or "general.barBackgroundTexture"
     else
-        key = "general.barTexture"
+        key = power and "bars.powerBarTexture" or "general.barTexture"
     end
 
     local setting = A.Registry and A.Registry:GetSetting(key)

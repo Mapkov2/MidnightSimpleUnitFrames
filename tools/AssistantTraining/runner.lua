@@ -1730,9 +1730,13 @@ local seedCases = {
         category = "class-resource",
     },
     {
+        -- bars.detachedPowerBarTexture is retired: State/MSUF_Defaults.lua
+        -- migrates any stored value to the unit power texture and clears the
+        -- key, and bars.powerBarTexture now owns power art for every unit bar
+        -- whether it is detached or not.
         id = "detached-power-foreground-texture-fast",
         prompt = "set detached power bar foreground texture to Minimalist",
-        expect = { kind = "changes", key = "bars.detachedPowerBarTexture", value = "Minimalist" },
+        expect = { kind = "changes", key = "bars.powerBarTexture", value = "Minimalist" },
         category = "class-resource",
     },
     {
@@ -2975,11 +2979,17 @@ local publicSmokeCases = {
                 return false, "relative no-op did not nudge nameOffsetX; result=" .. tostring(first and (first.result or first.status))
             end
 
+            -- A movement verb aimed at a direction is a position request, never
+            -- a Name Text Anchor change: "move ... to the right" nudges the X
+            -- offset and leaves the anchor alone, whatever the anchor happens to
+            -- be. Only an explicit anchor/align word or centering reaches the
+            -- anchor. See the move-vs-anchor guard in
+            -- MSUF_AssistantParser_Geometry_Text.lua.
             clearConversationState(A)
             setSettingValue(anchor, "LEFT")
             setSettingValue(offsetX, 0)
             local second = A.HandleInput("move target of target name to the right")
-            if tostring(settingValue(anchor)) ~= "RIGHT" or tonumber(settingValue(offsetX)) ~= 0 then
+            if tostring(settingValue(anchor)) ~= "LEFT" or tonumber(settingValue(offsetX)) ~= 10 then
                 return false, "plain movement changed wrong setting; anchor=" .. tostring(settingValue(anchor)) .. " offsetX=" .. tostring(settingValue(offsetX)) .. " result=" .. tostring(second and (second.result or second.status))
             end
 
