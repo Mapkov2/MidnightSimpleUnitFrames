@@ -477,10 +477,18 @@ function GF.RefreshHeaderLayout(kind)
   return result
 end
 
+local startupVisualsPending = false
+
+local function RefreshStartupVisuals()
+  if not startupVisualsPending then return false end
+  startupVisualsPending = false
+  return GF.RefreshVisuals(nil, GF.DIRTY_VISUAL)
+end
+
 -- SecureGroupHeader can change its measured footprint after MSUF's roster or
 -- entering-world handler returns (including from our layout nonce). Re-read the
--- live kind/count once on the next frame so anchor sizing and screen clamping
--- use Blizzard's settled bounds instead of the transient login footprint.
+-- live kind/count and apply saved visuals once on the next frame so secure
+-- children have settled before anchor sizing, screen clamping, and opacity.
 local headerLayoutSettlePending = false
 local headerLayoutSettleNeedsRosterState = false
 
@@ -495,6 +503,7 @@ local function FlushHeaderLayoutSettle()
   end
 
   local did = GF.RefreshHeaderLayout()
+  did = RefreshStartupVisuals() or did
   if not refreshRosterState then return did end
   did = RefreshVisiblePartyState("GROUP_ROSTER_UPDATE") or did
   return RefreshVisibleRoleState("PLAYER_ROLES_ASSIGNED") or did
@@ -724,8 +733,6 @@ local function FlushDeferred()
   return GF.RefreshAll()
 end
 
-local startupVisualsPending = true
-
 local function RuntimeOnEvent(self, event, unit)
   -- SavedVariables/config caches are only reliable at the startup event
   -- boundary. Handle it before the disabled fast-exit so a cold cache cannot
@@ -734,10 +741,7 @@ local function RuntimeOnEvent(self, event, unit)
     SyncCombatState()
     GF.RefreshHeaderLayout(event)
     if event == "PLAYER_ENTERING_WORLD" then
-      if startupVisualsPending then
-        startupVisualsPending = false
-        GF.RefreshVisuals(nil, GF.DIRTY_VISUAL)
-      end
+      startupVisualsPending = true
       RefreshVisiblePartyState(event)
       RefreshVisibleRoleState("PLAYER_ROLES_ASSIGNED")
       ScheduleHeaderLayoutSettle()
@@ -751,6 +755,7 @@ local function RuntimeOnEvent(self, event, unit)
   if event == "PLAYER_REGEN_ENABLED" then
     SyncCombatState(false)
     if GF._pendingGroupRuntime then FlushDeferred() end
+    RefreshStartupVisuals()
     -- Priority selection is orthogonal to the broader pending reason. Catch up
     -- once unless the broad flush already rebuilt the active Priority header.
     if GF._pendingPriorityRefresh then GF.RefreshPriorityFrames("deferred-priority") end
