@@ -157,10 +157,23 @@ local CANONICAL_PATH_OWNERS = {
         shortenNames = "gf_mythicraid.nameShortenEnabled",
     },
     general = {
+        aggroBorderR = "general.aggroBorderColor",
+        aggroBorderG = "general.aggroBorderColor",
+        aggroBorderB = "general.aggroBorderColor",
         barBgTexture = "general.barBackgroundTexture",
         barOutlineColorR = "general.barOutlineColor",
         barOutlineColorG = "general.barOutlineColor",
         barOutlineColorB = "general.barOutlineColor",
+        castbarInterruptibleR = "general.castbarInterruptibleColor",
+        castbarInterruptibleG = "general.castbarInterruptibleColor",
+        castbarInterruptibleB = "general.castbarInterruptibleColor",
+        castbarNonInterruptibleR = "general.castbarNonInterruptibleColor",
+        castbarNonInterruptibleG = "general.castbarNonInterruptibleColor",
+        castbarNonInterruptibleB = "general.castbarNonInterruptibleColor",
+        healAbsorbBarColorR = "general.healAbsorbBarColor",
+        healAbsorbBarColorG = "general.healAbsorbBarColor",
+        healAbsorbBarColorB = "general.healAbsorbBarColor",
+        healAbsorbBarColorA = "general.healAbsorbBarColor",
         shortenNameShowDots = "fontScope.shared.shortenNameNoEllipsis",
     },
 }
@@ -171,6 +184,12 @@ local CANONICAL_PATH_OWNERS = {
 -- broad name-pattern exclusion, any newly introduced field remains visible to
 -- the normal coverage gate.
 local COMPATIBILITY_PROJECTIONS = {
+    general = {
+        classBarBgA = "Retired class-bar background alpha channel; the live control writes the class-power background color.",
+        healPredictionColorR = "Heal-prediction color channel written by the color picker; the curated color control owns the user-facing identity.",
+        healPredictionColorG = "Heal-prediction color channel written by the color picker; the curated color control owns the user-facing identity.",
+        healPredictionColorB = "Heal-prediction color channel written by the color picker; the curated color control owns the user-facing identity.",
+    },
     bars = {
         classPowerOutlineColorR = "Retired class-resource outline color channel; the runtime exposes outline thickness only.",
         classPowerOutlineColorG = "Retired class-resource outline color channel; the runtime exposes outline thickness only.",
