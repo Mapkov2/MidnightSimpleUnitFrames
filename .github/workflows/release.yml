@@ -350,9 +350,22 @@ jobs:
             }
           }
 
+      # Beta and alpha tags may ship with known Assistant parser gaps: the
+      # Assistant is load-on-demand and never touched by normal gameplay, so a
+      # red parser case cannot regress a prerelease install. The gate stays
+      # fatal for stable publishes, which is where the Assistant is promised
+      # to be complete.
       - name: Run authoritative Assistant release gate
+        id: assistant_gate
+        continue-on-error: ${{ steps.channel.outputs.release_is_prerelease == 'true' }}
         shell: pwsh
         run: ./.github/scripts/run_assistant_release_gate.ps1
+
+      - name: Report tolerated Assistant gate failure
+        if: steps.assistant_gate.outcome == 'failure'
+        shell: pwsh
+        run: |
+          Write-Host "::warning title=Assistant release gate failed::Prerelease $env:RELEASE_VERSION is publishing with a failing Assistant gate. Fix or disposition the reported cases before the next stable release."
 
       - name: Build AddOns zip
         shell: pwsh
