@@ -288,16 +288,10 @@ BridgeBuildDashboardCard = function(parent, cardW, cardH)
     local previous = A._bridgeDashboardCard
     if previous then previous.cancelled = true end
 
-    local kicker, maturity, title
+    local kicker, title
     if T and type(T.Font) == "function" then
         kicker = T.Font(parent, "GameFontDisableSmall", "MSUF Assistant", T.colors and T.colors.accent or { 0.45, 0.75, 1, 1 })
         kicker:SetPoint("TOPLEFT", parent, "TOPLEFT", 24, -24)
-        -- The loaded card carries this beside the kicker, and shellRegions
-        -- below already expected it. Building it here keeps the maturity notice
-        -- from appearing only after the companion has loaded.
-        maturity = T.Font(parent, "GameFontDisableSmall", "(Early Alpha)", T.colors and T.colors.danger or { 1, 0.28, 0.28, 1 })
-        maturity:SetPoint("LEFT", kicker, "RIGHT", 4, 0)
-        maturity:SetJustifyH("LEFT")
         title = T.Font(parent, "GameFontNormalLarge", "MSUF Assistant", T.colors and T.colors.text)
         title:SetPoint("TOPLEFT", parent, "TOPLEFT", 24, -48)
     end
@@ -374,7 +368,7 @@ BridgeBuildDashboardCard = function(parent, cardW, cardH)
         status = status,
         input = input,
         sendButton = send,
-        shellRegions = { kicker, maturity, title, welcome, help, status, input, send },
+        shellRegions = { kicker, title, welcome, help, status, input, send },
     }
 
     local function RestoreAfterFailure(query, reason)
