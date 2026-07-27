@@ -173,6 +173,10 @@ local GROUP_THREAT_EVENTS = {
 
 local NONPREFIX_UNIT_EVENTS = {
   INCOMING_RESURRECT_CHANGED = true,
+  -- Unit payload despite the PLAYER_ prefix (AFK/DND flag edges); without this
+  -- entry a frame-routed subscription would fall back to an unfiltered
+  -- RegisterEvent and fire for every unit's toggle.
+  PLAYER_FLAGS_CHANGED = true,
 }
 
 local BOSS_UNITS = {

@@ -1817,6 +1817,10 @@ local ELITE_EVENTS = { "UNIT_CLASSIFICATION_CHANGED", "UNIT_LEVEL" }
 local STATUS_TEXT_EVENTS = { "UNIT_CONNECTION", "UNIT_FLAGS" }
 local STATUS_TEXT_CONNECTION_EVENTS = { "UNIT_CONNECTION" }
 local STATUS_TEXT_FLAGS_EVENTS = { "UNIT_FLAGS" }
+-- AFK/DND edges on observed units arrive as PLAYER_FLAGS_CHANGED (a unit event
+-- despite the prefix); UNIT_FLAGS never fires for another unit's AFK toggle.
+local STATUS_TEXT_AFK_EVENTS = { "UNIT_CONNECTION", "UNIT_FLAGS", "PLAYER_FLAGS_CHANGED" }
+local STATUS_TEXT_FLAGS_AFK_EVENTS = { "UNIT_FLAGS", "PLAYER_FLAGS_CHANGED" }
 local STATUS_TEXT_UNITLESS_EVENTS = { "PLAYER_FLAGS_CHANGED" }
 local STATUS_TEXT_LIFECYCLE_EVENTS = { "PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UNGHOST" }
 local STATUS_TEXT_PLAYER_UNITLESS_EVENTS = { "PLAYER_FLAGS_CHANGED", "PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UNGHOST" }
@@ -1869,8 +1873,17 @@ local function StatusTextEvents(spec, frame)
   local player = frame and frame.MSUFUnitKey == "player"
   local needsConnection = cfg.showDead == true and player ~= true
   local needsFlags = cfg.showDead == true or cfg.showGhost == true or cfg.showAFK == true or cfg.showDND == true
+  -- The player frame already receives PLAYER_FLAGS_CHANGED through its
+  -- unitless route below; every other frame needs it unit-filtered.
+  local needsPlayerFlags = player ~= true and (cfg.showAFK == true or cfg.showDND == true)
   if needsConnection then
+    if needsPlayerFlags then
+      return STATUS_TEXT_AFK_EVENTS
+    end
     return needsFlags and STATUS_TEXT_EVENTS or STATUS_TEXT_CONNECTION_EVENTS
+  end
+  if needsPlayerFlags then
+    return STATUS_TEXT_FLAGS_AFK_EVENTS
   end
   return needsFlags and STATUS_TEXT_FLAGS_EVENTS or EMPTY_EVENTS
 end
