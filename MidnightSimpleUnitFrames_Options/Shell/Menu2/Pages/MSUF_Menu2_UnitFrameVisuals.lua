@@ -183,11 +183,14 @@ local function BuildPortrait(ctx, builder, unit)
             end)())
         return control
     end
-    local function BindPortraitToggle(parent, label, x, y, width, key, defaultValue, reason)
+    local function BindPortraitToggle(parent, label, x, y, width, key, defaultValue, reason, after)
         local control = W.ToggleAt(parent, label, x, y, width)
         M.BindBoolWidget(ctx, control,
             function() return ReadBool(unit, key, defaultValue) end,
-            function(v) SetPortraitValue(unit, key, v and true or false, reason) end,
+            function(v)
+                SetPortraitValue(unit, key, v and true or false, reason)
+                if after then after() end
+            end,
             PortraitControlMeta("portrait." .. tostring(key), tostring(unit) .. "." .. tostring(key)))
         return control
     end
@@ -309,7 +312,11 @@ local function BuildPortrait(ctx, builder, unit)
     local borderSize = BindPortraitSlider(borderCard, "Border thickness", 16, -274, leftW - 58, 1, 12, 1, "portraitBorderThickness", 2, "MSUF2_PORTRAIT_BORDER_SIZE")
     local fillBorder = BindPortraitToggle(borderCard, "Fill border into frame gap", 16, -342, leftW - 32, "portraitFillBorder", false, "MSUF2_PORTRAIT_FILL_BORDER")
     local portraitBg = BindPortraitToggle(styleCard, "Portrait background", 16, -112, rightW - 32, "portraitBgEnabled", false, "MSUF2_PORTRAIT_BG")
-    local castSpellIcon = BindPortraitToggle(styleCard, "Show cast spell icon in portrait", 16, -166, rightW - 32, "portraitCastSpellIcon", false, "MSUF2_PORTRAIT_CAST_ICON")
+    -- The Castbar section's Icon tab hosts a second toggle for this same key on
+    -- every unit that has a castbar. Re-run the page refreshers so the twin
+    -- surface picks up the new state instead of showing a stale checkbox.
+    local castSpellIcon = BindPortraitToggle(styleCard, "Show cast spell icon in portrait", 16, -166, rightW - 32, "portraitCastSpellIcon", false, "MSUF2_PORTRAIT_CAST_ICON",
+        CASTBAR_UNITS[unit] and function() M.RequestRefresh(ctx, "portrait-cast-icon-mirror") end or nil)
     castSpellIcon._msuf2SearchText = "Portrait cast spell icon casting channel empower"
     local portraitActiveControls = {
         render, shape, size, widthOverride, heightOverride, x, y, border, portraitBg, castSpellIcon,
@@ -865,6 +872,7 @@ local function BuildCastbar(ctx, builder, unit)
     local providerCard = W.ControlCard(generalTab, "Provider & Surface", nil, rightX, -4, rightW, 132)
     local sizeCard = W.ControlCard(generalTab, "Size", "Width can use manual bounds or follow another frame.", leftX, -154, sectionW - 32, 166)
     local iconCard = W.ControlCard(iconTab, nil, nil, leftX, -4, leftW, 478)
+    local portraitIconCard = W.ControlCard(iconTab, "Portrait Cast Icon", nil, rightX, -4, rightW, 156)
     local spellCard = W.ControlCard(spellTab, nil, nil, leftX, -4, leftW, 370)
     local targetNameCard = fields.targetName and W.ControlCard(spellTab, "Cast Target Text", nil, rightX, -4, rightW, 370) or nil
     local timeCard = W.ControlCard(timeTab, nil, nil, leftX, -4, leftW, 370)
@@ -1074,6 +1082,26 @@ local function BuildCastbar(ctx, builder, unit)
             end
         end },
     })
+    -- Second surface for the Portrait section's cast-icon toggle: players look for
+    -- it next to the castbar icon options. Both toggles write the same per-unit key
+    -- and request a page refresh, so whichever one is clicked updates the other.
+    -- It stays out of allCastbarControls/iconControls on purpose - the portrait
+    -- cast icon is a portrait feature and works with any castbar backend.
+    local portraitCastIcon = W.ToggleAt(portraitIconCard, "Show cast spell icon in portrait", 16, -52, rightW - 32)
+    W.AttachUnitEditFocus(portraitCastIcon, unit, "portrait")
+    M.BindBoolWidget(ctx, portraitCastIcon,
+        function() return ReadBool(unit, "portraitCastSpellIcon", false) end,
+        function(v)
+            SetPortraitValue(unit, "portraitCastSpellIcon", v and true or false, "MSUF2_PORTRAIT_CAST_ICON")
+            M.RequestRefresh(ctx, "portrait-cast-icon-mirror")
+        end,
+        ReviewedMeta(ctx, "castbar.portrait_cast_icon", "setting", "duplicate",
+            "Second surface for the Portrait section cast-icon toggle; that control owns the Assistant target for portraitCastSpellIcon."))
+    portraitCastIcon._msuf2SearchText = "Portrait cast spell icon casting channel empower castbar icon"
+    local portraitCastIconNote = W.Text(portraitIconCard,
+        "The same setting as Portrait > More Options. It swaps the portrait for the spell icon while the unit casts, so the portrait has to be enabled.",
+        16, -86, rightW - 32)
+    if portraitCastIconNote.SetWordWrap then portraitCastIconNote:SetWordWrap(true) end
     local text = BindCastbarFeatureToggle(spellCard, fields.text, "MSUF2_CASTBAR_TEXT")
     BuildDetailControls(spellCard, spellControls, {
         { "dropdown", "Position preset", 16, -88, min(260, controlWLeft), CASTBAR_TEXT_POSITIONS, DetailKey("SpellNamePosition"), "LEFT", "MSUF2_CASTBAR_SPELL_POSITION" },
@@ -1190,6 +1218,8 @@ local function BuildCastbar(ctx, builder, unit)
         { controls = targetNameControls, on = function() return MsufOn() and fields.targetName and ReadGeneralBool(fields.targetName, false) end },
         { controls = spellTextManualWidth, on = function() return MsufOn() and ReadGeneralBool(fields.text, true) and IsManualSpellTextWidth() end },
         { controls = timeControls, on = function() return MsufOn() and ReadGeneralBool(fields.time, true) end },
+        -- Mirrored portrait setting: gated by the portrait, never by the castbar.
+        { controls = portraitCastIcon, on = function() return NormalizePortrait(unit) ~= "OFF" end },
     }, {
         also = function()
             local backend = ReadCastbarBackend()
