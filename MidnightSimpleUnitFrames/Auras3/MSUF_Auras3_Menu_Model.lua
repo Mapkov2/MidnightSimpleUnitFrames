@@ -3190,6 +3190,7 @@ function Model.ReadPreviewConfig(unit)
         buffIconZoom = buffMetrics and buffMetrics.iconZoom or Model.ReadLaneStyleNumber(unit, "buff", "iconZoom", 100, 100, 200),
         debuffIconZoom = debuffMetrics and debuffMetrics.iconZoom or Model.ReadLaneStyleNumber(unit, "debuff", "iconZoom", 100, 100, 200),
         spacing = (buffMetrics and buffMetrics.spacing) or (debuffMetrics and debuffMetrics.spacing) or Model.ReadNumber(unit, "spacing", 2, 0, 64),
+        stylePadding = (buffMetrics and buffMetrics.padding) or (debuffMetrics and debuffMetrics.padding) or Model.ReadNumber(unit, "stylePadding", 0, 0, 16),
         perRow = (buffMetrics and buffMetrics.perRow) or (debuffMetrics and debuffMetrics.perRow) or Model.ReadNumber(unit, "perRow", 12, 1, 40),
         buffPerRow = buffMetrics and buffMetrics.perRow or Model.ReadLanePerRow(unit, "buff"),
         debuffPerRow = debuffMetrics and debuffMetrics.perRow or Model.ReadLanePerRow(unit, "debuff"),

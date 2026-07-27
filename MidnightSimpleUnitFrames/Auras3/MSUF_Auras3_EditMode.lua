@@ -754,6 +754,28 @@ local function IconGridCoord(index, perRow, vertical)
     return col, (idx - col) / per
 end
 
+--- Inward offset from the lane's initial corner for the shared style padding,
+--- mirroring the runtime container's SetFlowLayoutPadding inset.
+local function PaddingInset(anchor, pad)
+    pad = tonumber(pad) or 0
+    if pad == 0 then return 0, 0 end
+    anchor = tostring(anchor or "TOPLEFT")
+    local dx = anchor:find("LEFT", 1, true) and pad or (anchor:find("RIGHT", 1, true) and -pad or 0)
+    local dy = anchor:find("BOTTOM", 1, true) and pad or (anchor:find("TOP", 1, true) and -pad or 0)
+    return dx, dy
+end
+
+--- Shared icon style for a previewed lane: the compiled runtime style when the
+--- lane metrics carry one, otherwise the scope-resolved preview style. Bar-only
+--- lanes pass nil downstream, matching the runtime's chrome-off rendering.
+local function LaneIconStyle(metrics, unit)
+    if metrics and metrics.iconStyle then return metrics.iconStyle end
+    if type(A3.IconStylePreviewForScope) == "function" then
+        return A3.IconStylePreviewForScope(unit)
+    end
+    return nil
+end
+
 local function PositionPreviewGroup(group, frame, anchor, x, y, laneW, laneH)
     if not (group and frame) then return end
     local baseX, baseY = AnchorBase(anchor, frame)
@@ -1968,8 +1990,14 @@ function EM.RefreshUnit(unit)
             local x = (metrics and metrics.x) or cfg.x
             local y = (metrics and metrics.y) or cfg.y
             local anchor = (metrics and metrics.anchor) or cfg.anchor
+            -- Shared icon style + lane padding, 1:1 with the runtime lane. A
+            -- bar-only lane renders no icon chrome, so the style stays off.
+            local padding = Clamp(metrics and metrics.padding, 0, 0, 16)
+            local barOnly = textCfg.showDurationBar == true and textCfg.durationBarDisplay == "BAR_ONLY"
+            local iconStyle = (not barOnly) and LaneIconStyle(metrics, unit) or nil
             local signature = RefreshSignature(unit, kind, cfg, metrics, textCfg, shownIcons, size, step, perRow, laneW, laneH, growthX, growthY, vertical, initialAnchor, x, y, anchor, frameSig)
                 .. "\030" .. CustomPreviewEntriesSignature(entries) .. "\030" .. tostring(chrome)
+                .. "\030" .. tostring(padding) .. "\030" .. tostring(iconStyle and iconStyle.signature)
 
             if group._msufA3RefreshSignature ~= signature or not (group.IsShown and group:IsShown()) then
                 group._msufA3RefreshSignature = signature
@@ -1988,13 +2016,14 @@ function EM.RefreshUnit(unit)
                 end
                 ApplyGroupChrome(group, spec, chrome)
 
+                local padX, padY = PaddingInset(initialAnchor, padding)
                 for i = 1, shownIcons do
                     local icon = EnsureIcon(group, i)
                     icon:SetSize(size, size)
                     icon:ClearAllPoints()
                     local col, row = IconGridCoord(i, perRow, vertical)
                     local body = group.Body or group
-                    icon:SetPoint(initialAnchor, body, initialAnchor, col * step * growthX, row * step * growthY)
+                    icon:SetPoint(initialAnchor, body, initialAnchor, col * step * growthX + padX, row * step * growthY + padY)
                     if icon.Icon then
                         local entry = entries and entries[i]
                         icon.Icon:SetTexture((entry and entry.icon) or cfg.texture or spec.texture)
@@ -2003,6 +2032,9 @@ function EM.RefreshUnit(unit)
                     if icon.Count then icon.Count:SetText(i == 1 and "3" or "") end
                     if icon.CooldownText then icon.CooldownText:SetText(i == 1 and "1m" or "32") end
                     ApplyPreviewIconText(icon, unit, textCfg)
+                    if type(A3.ApplyIconStylePreview) == "function" then
+                        A3.ApplyIconStylePreview(icon, iconStyle, size)
+                    end
                     icon:Show()
                 end
 

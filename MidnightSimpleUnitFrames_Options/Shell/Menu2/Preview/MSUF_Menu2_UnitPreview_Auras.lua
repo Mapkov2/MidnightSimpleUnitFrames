@@ -393,6 +393,26 @@ local function NormalizeAnchor(anchor, fallback)
     anchor = tostring(anchor or "")
     return AURA_ANCHOR_OK[anchor] and anchor or fallback or "TOPLEFT"
 end
+--- Inward offset from a lane's initial corner for the shared style padding,
+--- mirroring the runtime container's SetFlowLayoutPadding inset.
+local function PaddingInset(anchor, pad)
+    pad = tonumber(pad) or 0
+    if pad == 0 then return 0, 0 end
+    anchor = tostring(anchor or "TOPLEFT")
+    local dx = anchor:find("LEFT", 1, true) and pad or (anchor:find("RIGHT", 1, true) and -pad or 0)
+    local dy = anchor:find("BOTTOM", 1, true) and pad or (anchor:find("TOP", 1, true) and -pad or 0)
+    return dx, dy
+end
+--- Shared icon style for a previewed lane: the compiled runtime style when the
+--- lane metrics carry one, otherwise the scope-resolved preview style.
+local function LaneIconStyle(metrics, unit)
+    if metrics and metrics.iconStyle then return metrics.iconStyle end
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    if a3 and type(a3.IconStylePreviewForScope) == "function" then
+        return a3.IconStylePreviewForScope(unit)
+    end
+    return nil
+end
 local function AnchorBase(anchor, frameW, frameH)
     return AnchorOffset(anchor, frameW, frameH)
 end
@@ -418,7 +438,7 @@ local function IconRect(anchor, laneW, laneH, size, x, y)
     local bottom = laneAnchorY + y - iconAnchorY
     return left, bottom, left + size, bottom + size
 end
-local function LaneBounds(cfg, kind, frameW, frameH)
+local function LaneBounds(cfg, kind, frameW, frameH, unit)
     if not cfg then return nil end
     local isBuff = kind == "buff"
     if isBuff and cfg.showBuffs ~= true then return nil end
@@ -450,21 +470,26 @@ local function LaneBounds(cfg, kind, frameW, frameH)
         growthX, growthY, vertical, initialAnchor = Growth(cfg, kind)
     end
     local baseX, baseY = AnchorBase(anchor, frameW, frameH)
+    -- Runtime lane metrics already include the shared style padding in their
+    -- width/height; the raw-config fallback adds it the same way the runtime
+    -- compile does.
+    local padding = RuntimeRound(ClampNumber(metrics and metrics.padding or cfg.stylePadding, 0, 0, 16))
     local laneW, laneH
     if metrics and metrics.width and metrics.height then
         laneW, laneH = max(1, metrics.width), max(1, metrics.height)
     else
         local cols, rows = GridShape(count, perRow, vertical)
-        laneW = max(1, cols * size + max(cols - 1, 0) * spacing)
-        laneH = max(1, rows * size + max(rows - 1, 0) * spacing)
+        laneW = max(1, cols * size + max(cols - 1, 0) * spacing + 2 * padding)
+        laneH = max(1, rows * size + max(rows - 1, 0) * spacing + 2 * padding)
     end
     local anchorLocalX, anchorLocalY = AnchorOffset(anchor, laneW, laneH)
     local laneLeft = baseX + x - anchorLocalX
     local laneBottom = baseY + y - anchorLocalY
+    local padX, padY = PaddingInset(initialAnchor, padding)
     local iconMinX, iconMinY, iconMaxX, iconMaxY
     for i = 1, shown do
         local col, row = IconGridCoord(i, perRow, vertical)
-        local l, b, r, t = IconRect(initialAnchor, laneW, laneH, size, col * step * growthX, row * step * growthY)
+        local l, b, r, t = IconRect(initialAnchor, laneW, laneH, size, col * step * growthX + padX, row * step * growthY + padY)
         iconMinX = iconMinX and min(iconMinX, l) or l
         iconMinY = iconMinY and min(iconMinY, b) or b
         iconMaxX = iconMaxX and max(iconMaxX, r) or r
@@ -508,6 +533,8 @@ local function LaneBounds(cfg, kind, frameW, frameH)
         point = "BOTTOMLEFT",
         relativePoint = "BOTTOMLEFT",
         initialAnchor = initialAnchor,
+        padding = padding,
+        iconStyle = LaneIconStyle(metrics, unit),
     }
 end
 
@@ -521,7 +548,7 @@ local function CustomGrowth(growth)
     return -1, -1, false
 end
 
-local function CustomLaneBounds(item, kind, frameW, frameH, metrics, previewEntries)
+local function CustomLaneBounds(item, kind, frameW, frameH, metrics, previewEntries, unit, fallbackPadding)
     if type(item) ~= "table" then return nil end
     -- Any custom lane with configured spells previews them 1:1 with the real
     -- spell icons; only the dot container may show while disabled.
@@ -548,13 +575,14 @@ local function CustomLaneBounds(item, kind, frameW, frameH, metrics, previewEntr
         growthX, growthY, vertical = CustomGrowth(placed.growth)
         initialAnchor = ButtonAnchor(growthX, growthY)
     end
+    local padding = RuntimeRound(ClampNumber(metrics and metrics.padding or fallbackPadding, 0, 0, 16))
     local laneW, laneH
     if metrics and metrics.width and metrics.height then
         laneW, laneH = max(1, metrics.width), max(1, metrics.height)
     else
         local cols, rows = GridShape(count, perRow, vertical)
-        laneW = max(1, cols * size + max(cols - 1, 0) * spacing)
-        laneH = max(1, rows * size + max(rows - 1, 0) * spacing)
+        laneW = max(1, cols * size + max(cols - 1, 0) * spacing + 2 * padding)
+        laneH = max(1, rows * size + max(rows - 1, 0) * spacing + 2 * padding)
     end
     local baseX, baseY = AnchorBase(anchor, frameW, frameH)
     local anchorLocalX, anchorLocalY = AnchorOffset(anchor, laneW, laneH)
@@ -589,6 +617,8 @@ local function CustomLaneBounds(item, kind, frameW, frameH, metrics, previewEntr
         item = item,
         auraType = item.auraType == "DEBUFF" and "debuff" or "buff",
         previewTextures = previewTextures,
+        padding = padding,
+        iconStyle = LaneIconStyle(metrics, unit),
     }
 end
 
@@ -599,8 +629,8 @@ function Auras.BuildState(key, frameW, frameH, runtimeSpec)
     if not (key and model and type(model.ReadPreviewConfig) == "function") then return nil end
     local cfg = model.ReadPreviewConfig(key)
     if not cfg then return nil end
-    local buff = LaneBounds(cfg, "buff", frameW, frameH)
-    local debuff = LaneBounds(cfg, "debuff", frameW, frameH)
+    local buff = LaneBounds(cfg, "buff", frameW, frameH, key)
+    local debuff = LaneBounds(cfg, "debuff", frameW, frameH, key)
     local state = { unit = key, cfg = cfg, runtime = runtimeAuras, buff = buff, debuff = debuff }
     for index = 1, 4 do
         local kind = "custom" .. tostring(index)
@@ -611,7 +641,7 @@ function Auras.BuildState(key, frameW, frameH, runtimeSpec)
         elseif type(model.CustomContainerSpellEntries) == "function" then
             previewEntries = model.CustomContainerSpellEntries(key, index)
         end
-        state[kind] = CustomLaneBounds(CustomItem(model, key, index, false), kind, frameW, frameH, metrics, previewEntries)
+        state[kind] = CustomLaneBounds(CustomItem(model, key, index, false), kind, frameW, frameH, metrics, previewEntries, key, cfg.stylePadding)
     end
     if not state.buff and not state.debuff and not state.custom1 and not state.custom2 and not state.custom3 and not state.custom4 then return nil end
     return state
@@ -993,6 +1023,11 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
     local verticalGrowth = bounds.verticalGrowth == true
     local layer = tonumber(bounds.layer) or (kind == "buff" and 5 or 6)
     local debuffBorderMode = textureKind == "debuff" and (bounds.custom and PreviewDebuffBorderMode(bounds.item and bounds.item.placed) or PreviewDebuffBorderMode(cfg)) or "OFF"
+    local padX, padY = PaddingInset(bounds.initialAnchor or "TOPLEFT", S(bounds.padding or 0))
+    -- Bar-only lanes render no icon chrome at runtime, so the style stays off.
+    local iconStyle = (not barOnly) and bounds.iconStyle or nil
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    local applyIconStyle = a3 and a3.ApplyIconStylePreview
     local laneX = S(bounds.laneLeft or ((bounds.baseX or 0) + (bounds.x or 0)))
     local laneY = S(bounds.laneBottom or ((bounds.baseY or 0) + (bounds.y or 0)))
     local handleLeft = S(bounds.left or bounds.laneLeft or 0)
@@ -1019,13 +1054,14 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
         local col, row = IconGridCoord(i, bounds.perRow, verticalGrowth)
         icon:SetSize(size, size)
         icon:ClearAllPoints()
-        icon:SetPoint(bounds.initialAnchor or "TOPLEFT", visual, bounds.initialAnchor or "TOPLEFT", col * step * bounds.growthX, row * step * bounds.growthY)
+        icon:SetPoint(bounds.initialAnchor or "TOPLEFT", visual, bounds.initialAnchor or "TOPLEFT", col * step * bounds.growthX + padX, row * step * bounds.growthY + padY)
         local previewTexture = bounds.previewTextures and bounds.previewTextures[i]
         icon.tex:SetTexture(previewTexture or textures[((i - 1) % #textures) + 1])
         ApplyIconZoom(icon.tex, bounds.iconZoom)
         if icon.bg then icon.bg:SetShown(not barOnly) end
         icon.tex:SetShown(not barOnly)
         icon.edge:SetVertexColor(0, 0, 0, 0)
+        if type(applyIconStyle) == "function" then applyIconStyle(icon, iconStyle, size) end
         if icon.swipe then
             if showSwipe and not barOnly then
                 LayoutPreviewAuraSwipe(icon.swipe, icon, size, auraState and auraState.remainingFrac, swipeReverse)

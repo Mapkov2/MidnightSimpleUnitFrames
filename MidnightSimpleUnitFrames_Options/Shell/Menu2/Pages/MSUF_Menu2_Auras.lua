@@ -1973,7 +1973,16 @@ local function BuildUnitStyle(ctx, b, scope)
         iconStyleApplyReason = nil
         iconStyleReleaseScheduled = nil
         CancelIconStyleApplyTimer()
-        return RequestAuraRuntime("shared", reason or "AURAS3_ICON_STYLE")
+        local ok = RequestAuraRuntime("shared", reason or "AURAS3_ICON_STYLE")
+        -- The shared aura batch flushes on a delayed timer, but the workbench
+        -- (and its Live container) re-reads the compiled runtime config. Flush
+        -- now and repaint afterwards, or the preview keeps the previous style
+        -- until some unrelated interaction repaints it. Combat defers the
+        -- flush; the preview refresh below is combat-gated as well.
+        local apply = M.ApplyService or _G.MSUF_Menu2_ApplyService
+        if apply and type(apply.Flush) == "function" then apply.Flush() end
+        RefreshStylePreview()
+        return ok
     end
     local function IconStyleWrite(key, value, reason, previewOnly)
         if type(Model.WriteValue) == "function" then Model.WriteValue(unit, key, value) end

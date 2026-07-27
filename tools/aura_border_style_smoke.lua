@@ -271,12 +271,17 @@ check(auraSource:find("_iconStyleCompiled and _iconStyleCompiledGen == gen", 1, 
     "the compiled icon style stays memoized per runtime-config generation")
 check(auraSource:find("_iconStyleOffScopesGen ~= gen", 1, true) ~= nil,
     "the per-scope opt-out lookup stays memoized per runtime-config generation")
--- Both renderers may only be reached while a button is being initialized.
+-- Both renderers may only be reached from cold paths: one definition, the
+-- initializeFrame call, and the shared preview export (edit mode / menu mocks).
 for _, name in ipairs({ "ApplyIconStyleShadow", "ApplyIconStyleBorder" }) do
     local uses = 0
     for _ in auraSource:gmatch(name .. "%(") do uses = uses + 1 end
-    check(uses == 2, name .. " must have exactly one definition and one call site (found " .. uses .. ")")
+    check(uses == 3, name .. " must have exactly one definition, the initializeFrame call, and the preview export (found " .. uses .. ")")
 end
+check(auraSource:find("function A3.ApplyIconStylePreview(button, style, size)", 1, true) ~= nil,
+    "the preview surfaces lost their shared icon-style stamp export")
+check(auraSource:find("function A3.IconStylePreviewForScope(scope)", 1, true) ~= nil,
+    "the preview surfaces lost the scope-resolved icon-style accessor")
 check(auraSource:find("style.signature", 1, true) ~= nil,
     "the icon style still contributes to the lane layout signature")
 

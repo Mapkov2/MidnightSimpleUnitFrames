@@ -2087,7 +2087,16 @@ function A3.BuildAuraLaneMetrics(configOrUnit, kind)
         x = lane.x,
         y = lane.y,
         anchor = lane.anchor,
+        padding = lane.padding,
+        iconStyle = lane.iconStyle,
     }
+end
+
+--- Compiled shared icon style for preview surfaces (edit mode, menu mocks).
+--- Resolves the per-scope opt-out exactly like a compiled lane, so a preview
+--- can style icons even where no runtime lane exists yet.
+function A3.IconStylePreviewForScope(scope)
+    return IconStyleForScope(IconStyleScope(scope) or scope)
 end
 
 function A3.UnitFrameAuraEnabled(unit)
@@ -2780,6 +2789,16 @@ local function ApplyIconStyleBorder(button, style, size)
     flat:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", inset, -inset)
     flat:SetVertexColor(style.borderR, style.borderG, style.borderB, style.borderA)
     flat:Show()
+end
+
+--- Stamps the shared icon style onto a preview dummy with the same renderer
+--- real buttons use in initializeFrame, so edit-mode lanes and menu mocks stay
+--- pixel-identical to the runtime. Cold path only; passing nil (opted-out
+--- scope, bar-only lane) hides any pieces a previous stamp created.
+function A3.ApplyIconStylePreview(button, style, size)
+    if not button then return end
+    ApplyIconStyleShadow(button, style, size)
+    ApplyIconStyleBorder(button, style, size)
 end
 
 local function LayoutDurationBar(button, bar, lane)

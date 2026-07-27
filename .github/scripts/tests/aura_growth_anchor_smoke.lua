@@ -2333,8 +2333,8 @@ Check(editModeSource:find("if not UnitPreviewActive(unit) then", 1, true)
     "Aura preview refresh paths do not immediately hide when Preview is off")
 Check(editModeSource:find("PositionPreviewGroup(group, frame, anchor, x, y, laneW, laneH)", 1, true),
     "Edit Mode preview no longer anchors lane bounds with the selected anchor")
-Check(editModeSource:find("icon:SetPoint(initialAnchor, body, initialAnchor, col * step * growthX, row * step * growthY)", 1, true),
-    "Edit Mode preview no longer flows icons from initialAnchor")
+Check(editModeSource:find("icon:SetPoint(initialAnchor, body, initialAnchor, col * step * growthX + padX, row * step * growthY + padY)", 1, true),
+    "Edit Mode preview no longer flows icons from initialAnchor (with the shared padding inset)")
 Check(editModeSource:find('if anchor == "TOP" then return w * 0.5, h end', 1, true)
     and editModeSource:find('if anchor == "RIGHT" then return w, h * 0.5 end', 1, true)
     and editModeSource:find('if anchor == "BOTTOM" then return w * 0.5, 0 end', 1, true),

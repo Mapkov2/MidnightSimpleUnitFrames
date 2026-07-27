@@ -18,6 +18,19 @@ Check(model:find('buffShowDurationBar = Model.ReadLaneStyleBool(unit, "buff", "s
     and model:find('debuffShowDurationBar = Model.ReadLaneStyleBool(unit, "debuff", "showDurationBar", false)', 1, true)
     and model:find('debuffDurationBarDirection = Model.ReadLaneDurationBarDirection(unit, "debuff")', 1, true),
     "unit preview config lost lane-specific duration-bar styling")
+Check(model:find('stylePadding = (buffMetrics and buffMetrics.padding) or (debuffMetrics and debuffMetrics.padding) or Model.ReadNumber(unit, "stylePadding", 0, 0, 16)', 1, true),
+    "unit preview config lost the shared lane padding")
+
+-- Shared icon border/shadow parity: the runtime exposes its compiled style and
+-- initializeFrame renderer to the preview surfaces, so dummies stamp the exact
+-- same border ring, drop shadow, and lane padding as real buttons.
+local auraRuntime = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua")
+Check(auraRuntime:find("padding = lane.padding", 1, true)
+    and auraRuntime:find("iconStyle = lane.iconStyle", 1, true),
+    "aura lane metrics no longer carry the compiled padding/icon style")
+Check(auraRuntime:find("function A3.ApplyIconStylePreview(button, style, size)", 1, true)
+    and auraRuntime:find("function A3.IconStylePreviewForScope(scope)", 1, true),
+    "the runtime lost the preview icon-style exports")
 
 local unitPreview = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Auras.lua")
 Check(unitPreview:find('fs:SetPoint(anchor, icon, anchor, x, y)', 1, true)
@@ -45,6 +58,11 @@ Check(unitPreview:find('out.epoch = tonumber(_G.MSUF_FontApplyEpoch) or 0', 1, t
     "unit-frame dummy aura font cache no longer expires with the font epoch")
 Check(unitPreview:find('decimalThreshold = tonumber(cfg and cfg.cooldownDecimalSeconds) or 3', 1, true),
     "unit-frame dummy aura lost the configured decimal threshold")
+Check(unitPreview:find("iconStyle = LaneIconStyle(metrics, unit)", 1, true)
+    and unitPreview:find("applyIconStyle(icon, iconStyle, size)", 1, true),
+    "unit-frame dummy auras no longer stamp the shared icon border/shadow style")
+Check(unitPreview:find("col * step * bounds.growthX + padX, row * step * bounds.growthY + padY", 1, true),
+    "unit-frame dummy auras no longer inset icons by the shared lane padding")
 
 local editPreview = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_EditMode.lua")
 Check(editPreview:find('showStackCount = ReadLaneTextBool(shared, ls, kind, "showStackCount", true)', 1, true)
@@ -64,8 +82,24 @@ Check(editPreview:find('cooldownDecimalSeconds = "buffCooldownDecimalSeconds"', 
     and editPreview:find('cooldownDecimalSeconds = "debuffCooldownDecimalSeconds"', 1, true)
     and editPreview:find('decimalThreshold = tonumber(cfg and cfg.cooldownDecimalSeconds) or 3', 1, true),
     "Edit Mode dummy aura lost its lane-specific decimal threshold")
+Check(editPreview:find("A3.ApplyIconStylePreview(icon, iconStyle, size)", 1, true)
+    and editPreview:find("iconStyle = (not barOnly) and LaneIconStyle(metrics, unit) or nil", 1, true),
+    "Edit Mode dummy auras no longer stamp the shared icon border/shadow style")
+Check(editPreview:find('tostring(padding) .. "\\030" .. tostring(iconStyle and iconStyle.signature)', 1, true),
+    "Edit Mode refresh signature no longer invalidates on icon-style changes")
+Check(editPreview:find("col * step * growthX + padX, row * step * growthY + padY", 1, true),
+    "Edit Mode dummy auras no longer inset icons by the shared lane padding")
 
 local auraMenu = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras.lua")
+-- Icon-style writes must flush the batched runtime apply before repainting:
+-- the workbench (and its Live container) re-reads the compiled config, so a
+-- deferred flush leaves the preview showing the previous style.
+local iconStyleApplyStart = assert(auraMenu:find("local function ApplyIconStyleRuntime", 1, true))
+local iconStyleApplyEnd = assert(auraMenu:find("local function IconStyleWrite", iconStyleApplyStart, true))
+local iconStyleApplyBody = auraMenu:sub(iconStyleApplyStart, iconStyleApplyEnd)
+Check(iconStyleApplyBody:find('if apply and type(apply.Flush) == "function" then apply.Flush() end', 1, true)
+    and iconStyleApplyBody:find("RefreshStylePreview()", 1, true),
+    "icon-style runtime applies no longer flush and repaint the style workbench")
 local queueStart = assert(auraMenu:find("local function QueueGroupScope", 1, true))
 local queueEnd = assert(auraMenu:find("local function GFAurasRoot", queueStart, true))
 local queueBody = auraMenu:sub(queueStart, queueEnd)
