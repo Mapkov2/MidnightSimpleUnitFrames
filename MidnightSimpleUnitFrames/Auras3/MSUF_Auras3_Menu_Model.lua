@@ -1408,7 +1408,11 @@ local function ReadKeyRaw(auras, shared, unit, key)
     local styleActive = UnitStyleOverrideActive(pu)
     if LAYOUT_KEYS[key] then
         if layout and layout[key] ~= nil and (not STYLE_LAYOUT_KEYS[key] or styleActive) then return layout[key] end
-    elseif SHARED_LAYOUT_KEYS[key] then
+    end
+    -- Keys in both sets (the cooldown decimal trio) are written to layoutShared
+    -- by WriteUnitLayoutValue, so a layout miss must still consult it; layout
+    -- keeps precedence to match the runtime's effective-table resolution.
+    if SHARED_LAYOUT_KEYS[key] then
         if sharedLayout and sharedLayout[key] ~= nil and (not STYLE_SHARED_LAYOUT_KEYS[key] or styleActive) then return sharedLayout[key] end
     end
     return shared and shared[key]
