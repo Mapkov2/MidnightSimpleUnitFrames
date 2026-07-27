@@ -1243,6 +1243,7 @@ function Auto.Fill()
     -- curated sibling supplies one.  Runs after every generated spec is
     -- registered so the curated/generated split is fully visible.
     Auto.PromoteInheritedNumberDomains()
+    Auto.PromoteInheritedValueLists()
     Auto._fillComplete = true
     return added
 end
@@ -1417,6 +1418,192 @@ function Auto.PromoteInheritedNumberDomains()
         end
     end
     Auto.lastDomainPromotionCount = promoted
+    return promoted
+end
+
+-- Curation pass for generated STRINGS, mirroring the number pass above.
+--
+-- A generated string ships read-only because an arbitrary string write can put
+-- a value into the DB that the runtime never expects. A closed list of allowed
+-- values removes exactly that risk, and for these fields the list already
+-- exists: the same attribute is a reviewed enum on another frame, e.g. every
+-- curated *.restedStateIndicatorAnchor offers the same four corners. Same leaf
+-- means the same attribute, so when every curated sibling agrees on the value
+-- set it transfers without any guessing; one disagreement and the field stays
+-- read-only.
+--
+-- Only static metadata is copied onto an already-registered spec, so this adds
+-- no events and no combat cost, exactly like the number pass.
+-- Exact paths that share a leaf with a reviewed control but are deliberately
+-- NOT the same control, so a sibling's value list must not transfer to them.
+-- Recorded exactly rather than by pattern, like every other reviewed ledger
+-- here; assistant_autocoverage_safety_regression pins the same decision from
+-- the opposite side ("must remain a read-only generated setting").
+local NON_ALIAS_PROMOTION_KEYS = {
+    ["general.hpTextSeparator"] = true,
+    ["general.powerTextSeparator"] = true,
+}
+Auto.NonAliasPromotionKeys = NON_ALIAS_PROMOTION_KEYS
+
+-- Frame strata is a closed Blizzard enum, not an MSUF invention, and the two
+-- options tables that offer it (FRAME_STRATA_CHOICES in MSUF_Menu2_LayerOverview
+-- and FRAME_STRATA_VALUES in Pages/MSUF_Menu2_Group) list exactly these nine in
+-- this order; only their display text differs. AUTO means "inherit from the
+-- frame" and is a real choice in both, so it belongs in the list.
+local FRAME_STRATA_VALUES = {
+    "AUTO", "BACKGROUND", "LOW", "MEDIUM", "HIGH",
+    "DIALOG", "FULLSCREEN", "FULLSCREEN_DIALOG", "TOOLTIP",
+}
+
+-- Reviewed value lists for generated strings whose control exists in the menu
+-- but has no curated registry sibling to inherit from. Same contract as
+-- REVIEWED_MENU_DOMAINS: transcribed from the options source, and
+-- assistant_value_list_promotion_smoke re-reads that source so an entry cannot
+-- drift from the dropdown the player sees.
+local REVIEWED_MENU_VALUES = {
+    barOutlineStrata = { values = FRAME_STRATA_VALUES, source = "layer.frame_strata",
+        sharedValues = { file = "MSUF_Menu2_LayerOverview.lua", table = "FRAME_STRATA_CHOICES" } },
+    ciStrata = { values = FRAME_STRATA_VALUES, source = "layer.frame_strata",
+        sharedValues = { file = "MSUF_Menu2_LayerOverview.lua", table = "FRAME_STRATA_CHOICES" } },
+    dispelOverlayStrata = { values = FRAME_STRATA_VALUES, source = "layer.frame_strata",
+        sharedValues = { file = "MSUF_Menu2_LayerOverview.lua", table = "FRAME_STRATA_CHOICES" } },
+
+    -- Numeric enums: stored as numbers, chosen from a dropdown. The runtime
+    -- reads them per scope with a general fallback (MSUF_UF_Config.lua:1941),
+    -- so every scope is a live control. Heal-absorb deliberately omits mode 4
+    -- ("Follow HP bar (overflow)"), which is why it cannot share the
+    -- heal-prediction list; both are bound unambiguously.
+    healAbsorbAnchorMode = { values = { 1, 2, 3, 5 }, numeric = true,
+        source = "absorb.negative.anchor",
+        sharedValues = { file = "Pages/MSUF_Menu2_GlobalBars.lua", table = "negativeAnchorValues" } },
+    healPredAnchorMode = { values = { 1, 2, 3, 4, 5 }, numeric = true,
+        source = "absorb.heal_prediction.anchor",
+        sharedValues = { file = "Pages/MSUF_Menu2_GlobalBars.lua", table = "healAnchorValues" } },
+
+    -- The status placement anchors are declared as a packed "VALUE=Label|..."
+    -- string rather than a table, so the smoke parses that form instead.
+    -- Off/On stored as 0/1: VT(0, "Off", 1, "On") in the highlight section.
+    bossTargetOutlineMode = { values = { 0, 1 }, numeric = true,
+        source = "highlight.boss_target.border",
+        sharedValues = { file = "Pages/MSUF_Menu2_GlobalBars.lua", table = "borderModes", inlineVT = true } },
+
+    -- One shared "Castbar provider" dropdown drives whichever castbar spec is
+    -- selected. MSUF_Castbars_Backend.lua:87-91 normalizes to exactly this
+    -- pair (it also tolerates the legacy BLIZZ/DEFAULT/SHOW spellings, which
+    -- are not offered as choices).
+    bossCastbarBackend = { values = { "MSUF", "BLIZZARD" }, source = "castbar.provider",
+        sharedValues = { file = "Pages/MSUF_Menu2_UnitFrameVisuals.lua",
+            table = "CASTBAR_BACKEND_VALUES", inlineVT = true, strings = true } },
+    castbarTargetBackend = { values = { "MSUF", "BLIZZARD" }, source = "castbar.provider",
+        sharedValues = { file = "Pages/MSUF_Menu2_UnitFrameVisuals.lua",
+            table = "CASTBAR_BACKEND_VALUES", inlineVT = true, strings = true } },
+    castbarFocusBackend = { values = { "MSUF", "BLIZZARD" }, source = "castbar.provider",
+        sharedValues = { file = "Pages/MSUF_Menu2_UnitFrameVisuals.lua",
+            table = "CASTBAR_BACKEND_VALUES", inlineVT = true, strings = true } },
+
+    -- The options page keys its per-direction toggles by these four tokens
+    -- (POWER_GRADIENT_DIR_KEYS), and the engine compares the stored string
+    -- against exactly LEFT/UP/DOWN with RIGHT as the default
+    -- (MSUF_UF_Core.lua:600-603).
+    powerGradientDirection = { values = { "LEFT", "RIGHT", "UP", "DOWN" },
+        source = "gradient.power.direction",
+        sharedValues = { file = "Pages/MSUF_Menu2_GlobalBars.lua",
+            table = "POWER_GRADIENT_DIR_KEYS", keyedTable = true } },
+
+    statusDNDTextAnchor = {
+        values = { "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT", "CENTER",
+                   "TOP", "BOTTOM", "LEFT", "RIGHT" },
+        source = "status.placement.anchor",
+        sharedValues = { file = "Pages/MSUF_Menu2_Unit.lua", table = "STATUS_ANCHORS", packed = true } },
+}
+Auto.ReviewedMenuValues = REVIEWED_MENU_VALUES
+
+function Auto.PromoteInheritedValueLists()
+    local Registry = A.Registry
+    if not (Registry and type(Registry.AllSettings) == "function") then return 0 end
+    local settings = Registry:AllSettings()
+
+    local function ValueSignature(values)
+        local sorted = {}
+        for i = 1, #values do sorted[i] = tostring(values[i]) end
+        table.sort(sorted)
+        return table.concat(sorted, "\1")
+    end
+
+    -- Reviewed menu lists seed the table first, exactly like the number pass:
+    -- a transcribed dropdown is evidence, so it outranks anything derived from
+    -- a sibling and cannot be invalidated by one.
+    local listByLeaf = {}
+    for leaf, reviewed in pairs(REVIEWED_MENU_VALUES) do
+        listByLeaf[leaf] = {
+            signature = ValueSignature(reviewed.values), values = reviewed.values,
+            source = reviewed.source, reviewed = true, conflict = false,
+        }
+    end
+
+    -- Build per-leaf curated value lists and detect disagreement.
+    for i = 1, #settings do
+        local s = settings[i]
+        if type(s) == "table" and s.generated ~= true
+            and type(s.values) == "table" and #s.values > 0
+        then
+            local leaf = PromotionLeaf(s.key)
+            local signature = ValueSignature(s.values)
+            local entry = listByLeaf[leaf]
+            if entry == nil then
+                listByLeaf[leaf] = {
+                    signature = signature, values = s.values, valueLabels = s.valueLabels,
+                    source = s.key, conflict = false,
+                }
+            elseif entry.reviewed then
+                -- The transcribed dropdown is the control's real list. A
+                -- curated sibling that disagrees describes a different control,
+                -- so it neither overrides nor invalidates the reviewed entry.
+            elseif entry.signature ~= signature then
+                entry.conflict = true
+            end
+        end
+    end
+
+    local promoted = 0
+    for i = 1, #settings do
+        local s = settings[i]
+        -- Strings inherit from any agreeing curated sibling. Numbers only ever
+        -- take an explicitly reviewed list: a numeric field is a value domain
+        -- by default, and turning one into a closed set on a sibling's word
+        -- would silently forbid values the control still accepts.
+        local leaf = type(s) == "table" and PromotionLeaf(s.key) or ""
+        local reviewedNumeric = REVIEWED_MENU_VALUES[leaf] ~= nil
+        if type(s) == "table" and s.generated == true
+            and (s.type == "string" or (s.type == "number" and reviewedNumeric))
+            and s.assistantColorChannel ~= true
+            and not NON_ALIAS_PROMOTION_KEYS[tostring(s.key)]
+            and s.assistantMutationSafe == false and s.values == nil
+        then
+            local list = listByLeaf[PromotionLeaf(s.key)]
+            if list and not list.conflict and type(list.values) == "table" and #list.values > 0 then
+                local values = {}
+                for j = 1, #list.values do values[j] = list.values[j] end
+                s.values = values
+                if type(list.valueLabels) == "table" then
+                    local labels = {}
+                    for key, label in pairs(list.valueLabels) do labels[key] = label end
+                    s.valueLabels = labels
+                end
+                -- A closed list is what makes the write safe, and it is what
+                -- every curated enum looks like.
+                s.type = "enum"
+                s.closedValues = true
+                s.assistantMutationSafe = true
+                s.generatedMutationSafety = list.reviewed
+                    and "reviewed-menu-values" or "inherited-curated-values"
+                s.mutationDomainSource = list.source
+                s.unsafeMutationReason = nil
+                promoted = promoted + 1
+            end
+        end
+    end
+    Auto.lastValueListPromotionCount = promoted
     return promoted
 end
 
