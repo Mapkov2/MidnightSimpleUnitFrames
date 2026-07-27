@@ -113,7 +113,15 @@ local function GetFillDirectionReverseFor(castType, unit)
 
     local unified = (g.castbarUnifiedDirection == true)
 
-    if castType == "CHANNEL" or castType == "EMPOWER" then
+    if castType == "CHANNEL" then
+        -- Channels keep the cast's anchor. Unified direction is realized by
+        -- switching the native timer to fill (ElapsedTime) instead of the
+        -- classic drain (RemainingTime); see MSUF_ApplyTimerAndFill.
+        return baseReverse
+    end
+
+    if castType == "EMPOWER" then
+        -- Empower bars fill up, so the legacy flip applies.
         if unified then
             return baseReverse
         end

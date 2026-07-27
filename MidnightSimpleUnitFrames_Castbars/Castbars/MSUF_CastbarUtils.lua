@@ -459,12 +459,16 @@ function _G.MSUF_GetCastbarReverseFillForFrame(frame, isChanneled)
         end
     end
 
-    if isChanneled == true then
+    if isChanneled == true and frame and frame.isEmpower == true then
+        -- Empower bars fill up: the legacy flip applies.
         if g.castbarUnifiedDirection ~= true then
             return not baseReverse
         end
     end
 
+    -- Channels keep the cast's anchor. Unified direction switches the native
+    -- timer between drain (RemainingTime) and fill (ElapsedTime) instead of
+    -- flipping the anchor; see MSUF_ApplyTimerAndFill / the Style module.
     return baseReverse
 end
 
@@ -473,13 +477,13 @@ end
 -- Contains the full fallback chain with mode-probe cache.
 -- Returns true when timer-driven animation was set up successfully.
 -- =====================================================================
-function _G.MSUF_ApplyTimerAndFill(sb, durationObj, reverseFill)
+function _G.MSUF_ApplyTimerAndFill(sb, durationObj, reverseFill, isChanneled)
     if not sb then return false end
     local okTimer = false
     if type(_G.MSUF_ApplyCastbarTimerDirection) == "function" then
-        okTimer = (_G.MSUF_ApplyCastbarTimerDirection(sb, durationObj, reverseFill) == true)
+        okTimer = (_G.MSUF_ApplyCastbarTimerDirection(sb, durationObj, reverseFill, isChanneled) == true)
     elseif type(_G.MSUF_SetStatusBarTimerDuration) == "function" then
-        okTimer = (_G.MSUF_SetStatusBarTimerDuration(sb, durationObj, reverseFill) == true)
+        okTimer = (_G.MSUF_SetStatusBarTimerDuration(sb, durationObj, reverseFill, isChanneled) == true)
         if sb.SetReverseFill then
             pcall(sb.SetReverseFill, sb, reverseFill and true or false)
         end
@@ -593,7 +597,7 @@ function _G.MSUF_Castbar_ApplyActiveDuration(frame, state, opts)
     local rev = _MSUF_GetReverseFill(frame, state, isChanneled)
 
     -- Phase 1B: Use shared timer-direction application helper.
-    local okTimer = _G.MSUF_ApplyTimerAndFill(frame.statusBar, durObj, rev)
+    local okTimer = _G.MSUF_ApplyTimerAndFill(frame.statusBar, durObj, rev, isChanneled)
     frame.MSUF_timerDriven = okTimer and true or false
 
     if frame.UpdateColorForInterruptible then

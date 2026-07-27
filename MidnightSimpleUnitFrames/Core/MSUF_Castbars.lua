@@ -384,16 +384,10 @@ function MSUF_GetCastbarReverseFill(isChanneled)
          return cached
     end
     local reverseNormal = (dir == "RTL")
-    local reverse
-    if uni then
-        reverse = reverseNormal
-    else
-        if isChanneled then
-            reverse = not reverseNormal
-        else
-            reverse = reverseNormal
-    end
-    end
+    -- Channels keep the cast's anchor: unified direction switches the native
+    -- timer between drain (RemainingTime) and fill (ElapsedTime) instead of
+    -- flipping the anchor, so the anchor is direction-only for every cast type.
+    local reverse = reverseNormal
     cache[ck] = reverse and true or false
     return cache[ck]
 end

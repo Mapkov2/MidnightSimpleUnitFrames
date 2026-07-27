@@ -994,8 +994,10 @@ local function MSUF_ApplyPlayerCastbarSizeAndLayout(bar, g, w, h, preserveWidth)
                 sparkTex:SetSize(16, sparkH)
                 local fillTex = bar.statusBar:GetStatusBarTexture()
                 if fillTex then
+                    -- Moving edge = side opposite the fill anchor.
+                    local rev = bar.statusBar.GetReverseFill and bar.statusBar:GetReverseFill() and true or false
                     sparkTex:ClearAllPoints()
-                    sparkTex:SetPoint("CENTER", fillTex, "RIGHT", 0, 0)
+                    sparkTex:SetPoint("CENTER", fillTex, rev and "LEFT" or "RIGHT", 0, 0)
                 end
             end
         end

@@ -110,11 +110,14 @@ function _G.MSUF_BuildCastbarFrameElements(self)
     spark:SetSize(16, height * 2.1)
     spark:SetBlendMode("ADD")
     do
+        -- Moving edge = side opposite the fill anchor; the timer apply path
+        -- re-anchors via MSUF_Castbar_SyncSparkToDirection on direction changes.
         local ft = statusBar:GetStatusBarTexture()
+        local rev = statusBar.GetReverseFill and statusBar:GetReverseFill() and true or false
         if ft then
-            spark:SetPoint("CENTER", ft, "RIGHT", 0, 0)
+            spark:SetPoint("CENTER", ft, rev and "LEFT" or "RIGHT", 0, 0)
         else
-            spark:SetPoint("CENTER", statusBar, "LEFT", 0, 0)
+            spark:SetPoint("CENTER", statusBar, rev and "RIGHT" or "LEFT", 0, 0)
         end
     end
     spark:Hide()
@@ -268,11 +271,13 @@ function _G.MSUF_CreateCastbarPreviewFrame(kind, frameName, opts)
     sparkPrev:SetSize(16, sbH * 2.1)
     sparkPrev:SetBlendMode("ADD")
     do
+        -- Moving edge = side opposite the fill anchor.
         local ft2 = statusBar:GetStatusBarTexture()
+        local rev2 = statusBar.GetReverseFill and statusBar:GetReverseFill() and true or false
         if ft2 then
-            sparkPrev:SetPoint("CENTER", ft2, "RIGHT", 0, 0)
+            sparkPrev:SetPoint("CENTER", ft2, rev2 and "LEFT" or "RIGHT", 0, 0)
         else
-            sparkPrev:SetPoint("CENTER", statusBar, "LEFT", 0, 0)
+            sparkPrev:SetPoint("CENTER", statusBar, rev2 and "RIGHT" or "LEFT", 0, 0)
         end
     end
     sparkPrev:Hide()

@@ -828,7 +828,7 @@ self._msufStripeReverseFill = __msuf_rf
 MSUF__UpdatePlayerChannelHasteStripes(self, true)
 
 -- Phase 1B: Use shared timer-direction application (replaces 30-line fallback chain).
-okTimer = _G.MSUF_ApplyTimerAndFill(self.statusBar, durationObj, __msuf_rf)
+okTimer = _G.MSUF_ApplyTimerAndFill(self.statusBar, durationObj, __msuf_rf, isChanneled)
 self.MSUF_timerDriven = okTimer and true or false
 
             if self.UpdateColorForInterruptible then

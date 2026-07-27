@@ -356,6 +356,20 @@ function S:SetReverseFill(statusBar, reverseFill)
     return PCallMethod(statusBar.SetReverseFill, statusBar, reverseFill and true or false)
 end
 
+-- Keep the spark on the moving edge of the fill texture. The moving edge is
+-- always the side opposite the fill anchor: LEFT when reverse-filled, RIGHT
+-- otherwise (independent of whether the bar fills or drains).
+local function SyncSparkToDirection(statusBar, reverseFill)
+    local parent = statusBar and statusBar.GetParent and statusBar:GetParent() or nil
+    local spark = parent and parent.spark
+    if not spark then return end
+    local fillTex = statusBar.GetStatusBarTexture and statusBar:GetStatusBarTexture() or nil
+    if not fillTex then return end
+    spark:ClearAllPoints()
+    spark:SetPoint("CENTER", fillTex, reverseFill and "LEFT" or "RIGHT", 0, 0)
+end
+_G.MSUF_Castbar_SyncSparkToDirection = SyncSparkToDirection
+
 local function ResolveTimerDirectionCandidates()
     local out = {}
     local seen = {}
@@ -508,10 +522,32 @@ end
 --   reverseFill=true  -> direction that anchors RIGHT
 S._timerSig = S._timerSig or nil
 
-function S:SetTimerDuration(statusBar, durationObj, reverseFill)
+function S:SetTimerDuration(statusBar, durationObj, reverseFill, isChanneled)
     if not statusBar or not statusBar.SetTimerDuration or not durationObj then return false end
 
     local fn = statusBar.SetTimerDuration
+
+    -- Midnight 12.x fast path: StatusBarTimerDirection is ElapsedTime/RemainingTime
+    -- (fill vs drain), NOT an anchor side. Channels drain by default; unified
+    -- direction makes them fill exactly like a cast. The anchor side stays a
+    -- SetReverseFill concern (handled by ApplyTimerDirection).
+    local interpEnum = _G.Enum and _G.Enum.StatusBarInterpolation
+    local dirEnum = _G.Enum and _G.Enum.StatusBarTimerDirection
+    if interpEnum and dirEnum
+        and type(interpEnum.Immediate) == "number"
+        and type(dirEnum.ElapsedTime) == "number"
+        and type(dirEnum.RemainingTime) == "number" then
+        local direction = dirEnum.ElapsedTime
+        if isChanneled == true then
+            local g = _G.MSUF_DB and _G.MSUF_DB.general
+            if not (g and g.castbarUnifiedDirection == true) then
+                direction = dirEnum.RemainingTime
+            end
+        end
+        if PCallMethod(fn, statusBar, durationObj, interpEnum.Immediate, direction) then
+            return true
+        end
+    end
 
     -- Fast path: use learned mapping.
     local sig = S._timerSig
@@ -578,7 +614,7 @@ function S:SetTimerDuration(statusBar, durationObj, reverseFill)
 end
 
 -- Convenience helper: apply both timer direction + reverse fill consistently.
-function S:ApplyTimerDirection(statusBar, durationObj, reverseFill)
+function S:ApplyTimerDirection(statusBar, durationObj, reverseFill, isChanneled)
     -- IMPORTANT:
     -- On modern 12.0 StatusBars, SetTimerDuration can accept a "direction" argument that already controls
     -- the visual fill side. In that mode, also calling SetReverseFill(true) can double-invert and break
@@ -587,13 +623,15 @@ function S:ApplyTimerDirection(statusBar, durationObj, reverseFill)
     -- Rule:
     --   * If SetTimerDuration succeeded AND we're in the learned "dir" mode => keep ReverseFill OFF.
     --   * Otherwise (no timer / legacy signature) => use ReverseFill as the fallback visual toggle.
-    local okTimer = S:SetTimerDuration(statusBar, durationObj, reverseFill)
+    local okTimer = S:SetTimerDuration(statusBar, durationObj, reverseFill, isChanneled)
 
     local sig = S._timerSig
     if okTimer and sig and sig.mode == "dir" then
         S:SetReverseFill(statusBar, false)
+        SyncSparkToDirection(statusBar, false)
     else
         S:SetReverseFill(statusBar, reverseFill)
+        SyncSparkToDirection(statusBar, reverseFill and true or false)
     end
 
     return okTimer and true or false
@@ -630,16 +668,16 @@ end
 -- Compatibility global exports (keep existing call sites working)
 -- NOTE: Set these UNCONDITIONALLY so hotfixes replace older wrappers.
 -- -------------------------------------------------
-_G.MSUF_SetStatusBarTimerDuration = function(statusBar, durationObj, reverseFill)
-    return S:SetTimerDuration(statusBar, durationObj, reverseFill)
+_G.MSUF_SetStatusBarTimerDuration = function(statusBar, durationObj, reverseFill, isChanneled)
+    return S:SetTimerDuration(statusBar, durationObj, reverseFill, isChanneled)
 end
 
 _G.MSUF_SetStatusBarReverseFill = function(statusBar, reverseFill)
     return S:SetReverseFill(statusBar, reverseFill)
 end
 
-_G.MSUF_ApplyCastbarTimerDirection = function(statusBar, durationObj, reverseFill)
-    return S:ApplyTimerDirection(statusBar, durationObj, reverseFill)
+_G.MSUF_ApplyCastbarTimerDirection = function(statusBar, durationObj, reverseFill, isChanneled)
+    return S:ApplyTimerDirection(statusBar, durationObj, reverseFill, isChanneled)
 end
 
 -- Global export (shared call sites)

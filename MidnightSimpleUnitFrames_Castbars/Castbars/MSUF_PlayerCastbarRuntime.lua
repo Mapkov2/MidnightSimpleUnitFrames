@@ -21,7 +21,15 @@ local function MSUF_PlayerCastbar_ApplyLatencyZone(frame, pct, isChanneled)
     local bw = frame.statusBar:GetWidth() or 0
     local ww = bw * (pct or 0)
     local reverse = _G.MSUF_GetReverseFillSafe(frame, isChanneled and true or false)
-    local anchorOnLeft = reverse and true or false  -- finish edge (value always increases)
+    -- The zone marks the final latency window: filling bars finish opposite
+    -- their anchor; a draining (non-unified) channel finishes on its anchor side.
+    local anchorOnLeft = reverse and true or false
+    if isChanneled then
+        local g = _G.MSUF_DB and _G.MSUF_DB.general
+        if not (g and g.castbarUnifiedDirection == true) then
+            anchorOnLeft = not anchorOnLeft
+        end
+    end
 
     frame.latencyBar:ClearAllPoints()
     if anchorOnLeft then
