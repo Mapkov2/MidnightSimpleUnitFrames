@@ -1,5 +1,12 @@
 # Changelog
 
+## 5.77 - 2026-07-28
+
+### Fixes
+
+- Fixed Unit Frame portraits randomly showing stale or corrupted images (such as a piece of the game world) on Player and Target frames; portraits now refresh automatically after loading screens, cinematics, and model changes such as shapeshifts.
+- Fixed the "Always use fill direction for all casts" Castbar toggle having no effect on channeled casts; channels now fill in the configured direction exactly like regular casts, with the spark and latency zone following the moving edge of the bar.
+
 ## 5.76 - 2026-07-20
 
 ### Highlights

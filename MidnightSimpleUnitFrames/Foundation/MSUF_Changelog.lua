@@ -4,10 +4,23 @@ local _, ns = ...
 ns = ns or {}
 
 local data = {
-    currentVersion = "5.76",
-    previousVersion = "5.75",
-    rangeLabel = "5.75 -> 5.76",
+    currentVersion = "5.77",
+    previousVersion = "5.76",
+    rangeLabel = "5.76 -> 5.77",
     entries = {
+        {
+            version = "5.77",
+            date = "2026-07-28",
+            sections = {
+                {
+                    title = "Fixes",
+                    bullets = {
+                        "Fixed Unit Frame portraits randomly showing stale or corrupted images (such as a piece of the game world) on Player and Target frames; portraits now refresh automatically after loading screens, cinematics, and model changes such as shapeshifts.",
+                        "Fixed the \"Always use fill direction for all casts\" Castbar toggle having no effect on channeled casts; channels now fill in the configured direction exactly like regular casts, with the spark and latency zone following the moving edge of the bar.",
+                    },
+                },
+            },
+        },
         {
             version = "5.76",
             date = "2026-07-20",
@@ -102,37 +115,6 @@ local data = {
                         "Fixed visible Group Frame power bars shifting name text vertically in live frames and previews.",
                         "Fixed split health text updates relying on secret-string comparisons.",
                         "Fixed dragging third-party anchored unit frames and synchronizing cooldown-sized power bars.",
-                    },
-                },
-            },
-        },
-        {
-            version = "5.72",
-            date = "2026-07-18",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "New load-on-demand importer for UnhaltedUnitFrames 12.1 profiles.",
-                        "New Unit and Group preview controls: zoom, pan, quick actions, and direct settings links.",
-                        "Per-unit Blizzard frame ownership for Player, Pet, Target, Target of Target, Focus, Focus Target, and Boss frames.",
-                    },
-                },
-                {
-                    title = "Import & Layout Fidelity",
-                    bullets = {
-                        "Native conversion of supported frame, aura, castbar, indicator, color, texture, alpha, range, text, and position settings.",
-                        "Safer imports with warnings, conversion reports, transactional profiles, and active-profile protection.",
-                        "Improved Target of Target text, per-frame textures, legacy indicator sizes, custom status icons, and matching previews.",
-                        "Automatic on-screen correction for imported and manually moved Unit and Group Frames.",
-                    },
-                },
-                {
-                    title = "Fixes & Polish",
-                    bullets = {
-                        "Fixed range fading for complete Unit Frames.",
-                        "Improved Group previews, aura controls, Edit Mode dragging, change history, font previews, menu scaling, and search.",
-                        "Fixed overlapping Blizzard-frame notices in compact Unit Basics layouts.",
                     },
                 },
             },
