@@ -338,6 +338,7 @@ $luaGates = @(
     [pscustomobject]@{ Category = "controller/safety"; Path = "tools/assistant_autocoverage_safety_regression.lua"; Args = @() },
     [pscustomobject]@{ Category = "controller/safety"; Path = ".github/scripts/tests/assistant_domain_promotion_smoke.lua"; Args = @() },
     [pscustomobject]@{ Category = "controller/safety"; Path = ".github/scripts/tests/assistant_autocoverage_color_triplet_smoke.lua"; Args = @() },
+    [pscustomobject]@{ Category = "controller/safety"; Path = ".github/scripts/tests/assistant_menu_slider_domain_smoke.lua"; Args = @() },
     [pscustomobject]@{ Category = "controller/safety"; Path = "tools/assistant_readonly_submit_e2e.lua"; Args = @() },
     [pscustomobject]@{ Category = "controller/safety"; Path = "tools/assistant_profile_copy_readonly_audit.lua"; Args = @() },
     [pscustomobject]@{ Category = "controller"; Path = "tools/assistant_channel_tick_controller_smoke.lua"; Args = @() },

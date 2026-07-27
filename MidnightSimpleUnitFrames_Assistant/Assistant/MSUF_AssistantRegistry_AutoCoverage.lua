@@ -1263,6 +1263,77 @@ local function PromotionLeaf(key)
     return tostring(key or ""):match("([^.]+)$") or ""
 end
 
+-- Reviewed write domains transcribed from the Menu2 slider that owns each
+-- field. These are not estimates: the options page binds the control with an
+-- explicit range, e.g.
+--   BindSlider(positive, "Bar height (0 = full)", 0, 100, 1, "absorbBarHeight", 0, ...)
+-- in Pages/MSUF_Menu2_GlobalBars.lua, and that page writes through BarScopeSet,
+-- so the same range governs every unit and group scope the bar-scope selector
+-- covers. Without this the generated fallbacks stayed read-only and a plain
+-- "set target absorb bar height to 6" was refused even though the slider for it
+-- is right there in the menu.
+--
+-- Only leaves whose binding is unambiguous belong here; a leaf bound twice with
+-- different ranges must stay read-only rather than pick a winner.
+-- assistant_menu_slider_domain_smoke re-reads the options source and fails if
+-- any entry drifts from its binding, so this table cannot rot silently.
+local REVIEWED_MENU_DOMAINS = {
+    absorbBarHeight = { min = 0, max = 100, step = 1, source = "absorb.absorbBarHeight" },
+    absorbBarOffsetY = { min = -100, max = 100, step = 1, source = "absorb.absorbBarOffsetY" },
+    healAbsorbBarHeight = { min = 0, max = 100, step = 1, source = "absorb.healAbsorbBarHeight" },
+    healAbsorbBarOffsetY = { min = -100, max = 100, step = 1, source = "absorb.healAbsorbBarOffsetY" },
+    healPredictionBarHeight = { min = 0, max = 100, step = 1, source = "absorb.healPredictionBarHeight" },
+    healPredictionBarOffsetY = { min = -100, max = 100, step = 1, source = "absorb.healPredictionBarOffsetY" },
+    healPredictionBarOpacity = { min = 0, max = 1, step = 0.05, source = "absorb.healPredictionBarOpacity" },
+
+    -- Labelled sliders on the same bar-scope page: bound by widget rather than
+    -- by literal key, but still written through BarScopeSet, so one range again
+    -- governs every scope.
+    tempMaxHealthOpacity = { min = 0.05, max = 1, step = 0.05, source = "temp_max_health.opacity",
+        sharedSlider = { file = "Pages/MSUF_Menu2_GlobalBars.lua", label = "Overlay opacity" } },
+    tempMaxHealthBackgroundOpacity = { min = 0, max = 1, step = 0.05,
+        source = "temp_max_health.background_opacity",
+        sharedSlider = { file = "Pages/MSUF_Menu2_GlobalBars.lua", label = "Background opacity" } },
+
+    -- The highlight thickness slider writes highlightBorderThickness and this
+    -- legacy twin in the same setter, so both carry its range.
+    hlAggroSize = { min = 1, max = 30, step = 1, source = "highlight.border_thickness",
+        sharedSlider = { file = "Pages/MSUF_Menu2_GlobalBars.lua", label = "Highlight border thickness" } },
+
+    -- Bound through a shared placement slider rather than by literal key: the
+    -- status section builds one Size slider and drives whichever indicator the
+    -- descriptor selects, so every status size field carries that same range.
+    -- The sibling sizes (combat/pvp/rested/elite/incomingRes) already reach it
+    -- through a curated entry; these two had none.
+    leaderIconSize = { min = 8, max = 64, step = 1, source = "status.placement.size",
+        sharedSlider = { file = "Pages/MSUF_Menu2_UnitStatusSection.lua", label = "Size" } },
+    raidMarkerSize = { min = 8, max = 64, step = 1, source = "status.placement.size",
+        sharedSlider = { file = "Pages/MSUF_Menu2_UnitStatusSection.lua", label = "Size" } },
+    -- The unit text appearance slider and the group text scope slider agree on
+    -- this range, so the name font size is unambiguous across both.
+    nameFontSize = { min = 6, max = 48, step = 1, source = "text.appearance.size",
+        sharedSlider = { file = "Pages/MSUF_Menu2_UnitText.lua", label = "Default size" } },
+    -- Same shared status Size slider as the icon sizes above; the DND text is
+    -- just another descriptor the placement card drives.
+    -- BindGradientStrength computes its label into a variable, so the entry is
+    -- pinned to that helper rather than a label literal; it builds exactly one
+    -- slider, W.Slider(textures, label, 0, 1, 0.05, 220).
+    powerGradientStrength = { min = 0, max = 1, step = 0.05, source = "gradient.power.strength",
+        sharedSlider = { file = "Pages/MSUF_Menu2_GlobalBars.lua",
+            enclosing = "BindGradientStrength" } },
+    statusDNDTextSize = { min = 8, max = 64, step = 1, source = "status.placement.size",
+        sharedSlider = { file = "Pages/MSUF_Menu2_UnitStatusSection.lua", label = "Size" } },
+    -- BindStatusPlacementSlider(card, "Layer", 0, 30, …) states no step literal;
+    -- the widget rounds to whole numbers, so step 1 is the ledger's part.
+    statusDNDTextLayer = { min = 0, max = 30, step = 1, source = "status.placement.layer",
+        sharedSlider = { file = "Pages/MSUF_Menu2_UnitStatusSection.lua", label = "Layer" } },
+    -- ScopeNumberSlider(ctx, card, "Effect Layer (0-30)", 0, 30, 1, …) binds the
+    -- group dispel overlay layer by literal key on the group bars page.
+    dispelOverlayLayer = { min = 0, max = 30, step = 1, source = "visual.dispel.layer",
+        sharedSlider = { file = "Pages/MSUF_Menu2_GroupBars.lua", label = "Effect Layer (0-30)" } },
+}
+Auto.ReviewedMenuDomains = REVIEWED_MENU_DOMAINS
+
 -- Curation pass: give a generated read-only number a safe write domain when a
 -- reviewed, curated (non-generated) sibling with the SAME leaf key exists and
 -- every such sibling AGREES on min, max, and percent.  Same leaf across frames
@@ -1276,8 +1347,20 @@ function Auto.PromoteInheritedNumberDomains()
     if not (Registry and type(Registry.AllSettings) == "function") then return 0 end
     local settings = Registry:AllSettings()
 
-    -- Build per-leaf curated domains and detect disagreement.
+    -- Build per-leaf domains and detect disagreement. The reviewed Menu2
+    -- ranges seed the table first: an explicitly transcribed binding is
+    -- evidence, not inference, so it outranks anything derived from a sibling
+    -- and is never subject to the generic-leaf guard below.
     local domainByLeaf = {}
+    for leaf, reviewed in pairs(REVIEWED_MENU_DOMAINS) do
+        domainByLeaf[leaf] = {
+            min = reviewed.min, max = reviewed.max, step = reviewed.step,
+            -- A 0..1 range is a fraction the menu shows as a percentage, which
+            -- is what lets "set it to 50" mean 0.5 rather than clamping to 1.
+            percent = reviewed.percent == true or (reviewed.max ~= nil and reviewed.max <= 1),
+            source = reviewed.source, reviewed = true, conflict = false,
+        }
+    end
     for i = 1, #settings do
         local s = settings[i]
         if type(s) == "table" and s.generated ~= true and s.type == "number"
@@ -1292,6 +1375,11 @@ function Auto.PromoteInheritedNumberDomains()
                         min = s.min, max = s.max, step = s.step, percent = percent,
                         source = s.key, conflict = false,
                     }
+                elseif entry.reviewed then
+                    -- The transcribed menu binding is the control's real range.
+                    -- A curated sibling that happens to disagree describes a
+                    -- different control, so it neither overrides nor invalidates
+                    -- the reviewed entry.
                 elseif not entry.conflict then
                     if entry.min ~= s.min or entry.max ~= s.max or entry.percent ~= percent then
                         entry.conflict = true
@@ -1320,7 +1408,8 @@ function Auto.PromoteInheritedNumberDomains()
                 if domain.step ~= nil then s.step = domain.step end
                 s.percent = domain.percent
                 s.assistantMutationSafe = true
-                s.generatedMutationSafety = "inherited-curated-domain"
+                s.generatedMutationSafety = domain.reviewed
+                    and "reviewed-menu-domain" or "inherited-curated-domain"
                 s.mutationDomainSource = domain.source
                 s.unsafeMutationReason = nil
                 promoted = promoted + 1
