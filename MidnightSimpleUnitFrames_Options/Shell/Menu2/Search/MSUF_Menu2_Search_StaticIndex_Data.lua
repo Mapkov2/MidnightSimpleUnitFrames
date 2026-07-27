@@ -10,7 +10,7 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local Search = M.Search or {}
 M.Search = Search
-Search.StaticIndexRecordCount = 2371
+Search.StaticIndexRecordCount = 2375
 Search.StaticIndexBlob = [==[
 auras3_buffs	Anchor	dropdown			Style > Buff	anchor	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Elane%2Ebuff%2Eauras3-cooldown-anchor	anchor style buff auras style lane buff auras3 cooldown anchor auras3 buffs dropdown
 auras3_buffs	Anchor	dropdown			Style > Buff	anchor	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Elane%2Ebuff%2Estack-anchor	anchor style buff auras style lane buff stack anchor auras3 buffs dropdown
@@ -1228,6 +1228,7 @@ uf_boss	Show HP Text	toggle	boss.showHP		Text > Hp	show hp text	iduf_bossmenu2
 uf_boss	Show Name	toggle	boss.showName		Text > Name	show name	iduf_bossmenu2%2Euf_boss%2Eunit%2Etext%2Ename%2Eshow	show name text name unit text name show uf boss toggle boss showname
 uf_boss	Show Power	button	boss.showPowerBar		Unit > Power	show power	iduf_bossmenu2%2Euf_boss%2Eunit%2Epower%2Eenable_now	show power unit power unit power enable now uf boss button boss showpowerbar
 uf_boss	Show Power Text	toggle	boss.showPowerText		Text > Power	show power text	iduf_bossmenu2%2Euf_boss%2Eunit%2Etext%2Epower%2Eshow	show power text text power unit text power show uf boss toggle boss showpowertext
+uf_boss	Show cast spell icon in portrait	toggle			Unit > Castbar	show cast spell icon in portrait	iduf_bossmenu2%2Euf_boss%2Eunit%2Ecastbar%2Eportrait_cast_icon	show cast spell icon in portrait unit castbar unit castbar portrait cast icon uf boss toggle
 uf_boss	Show cast spell icon in portrait	toggle	boss.portraitCastSpellIcon		Unit > Portrait	show cast spell icon in portrait	iduf_bossmenu2%2Euf_boss%2Eunit%2Eportrait%2Eportraitcastspellicon	show cast spell icon in portrait unit portrait unit portrait portraitcastspellicon uf boss toggle boss portraitcastspellicon
 uf_boss	Show interrupt	toggle	boss.showInterrupt		Unit > Castbar	show interrupt	iduf_bossmenu2%2Euf_boss%2Eunit%2Ecastbar%2Eshow_interrupt	show interrupt unit castbar unit castbar show interrupt uf boss toggle boss showinterrupt
 uf_boss	Show power bar	toggle	boss.showPowerBar		Unit > Power	show power bar	iduf_bossmenu2%2Euf_boss%2Eunit%2Epower%2Eshow	show power bar unit power unit power show uf boss toggle boss showpowerbar
@@ -1474,6 +1475,7 @@ uf_focus	Show HP Text	toggle	focus.showHP		Text > Hp	show hp text	iduf_focusme
 uf_focus	Show Name	toggle	focus.showName		Text > Name	show name	iduf_focusmenu2%2Euf_focus%2Eunit%2Etext%2Ename%2Eshow	show name text name unit text name show uf focus toggle focus showname
 uf_focus	Show Power	button	focus.showPowerBar		Unit > Power	show power	iduf_focusmenu2%2Euf_focus%2Eunit%2Epower%2Eenable_now	show power unit power unit power enable now uf focus button focus showpowerbar
 uf_focus	Show Power Text	toggle	focus.showPowerText		Text > Power	show power text	iduf_focusmenu2%2Euf_focus%2Eunit%2Etext%2Epower%2Eshow	show power text text power unit text power show uf focus toggle focus showpowertext
+uf_focus	Show cast spell icon in portrait	toggle			Unit > Castbar	show cast spell icon in portrait	iduf_focusmenu2%2Euf_focus%2Eunit%2Ecastbar%2Eportrait_cast_icon	show cast spell icon in portrait unit castbar unit castbar portrait cast icon uf focus toggle
 uf_focus	Show cast spell icon in portrait	toggle	focus.portraitCastSpellIcon		Unit > Portrait	show cast spell icon in portrait	iduf_focusmenu2%2Euf_focus%2Eunit%2Eportrait%2Eportraitcastspellicon	show cast spell icon in portrait unit portrait unit portrait portraitcastspellicon uf focus toggle focus portraitcastspellicon
 uf_focus	Show interrupt	toggle	focus.showInterrupt		Unit > Castbar	show interrupt	iduf_focusmenu2%2Euf_focus%2Eunit%2Ecastbar%2Eshow_interrupt	show interrupt unit castbar unit castbar show interrupt uf focus toggle focus showinterrupt
 uf_focus	Show power bar	toggle	focus.showPowerBar		Unit > Power	show power bar	iduf_focusmenu2%2Euf_focus%2Eunit%2Epower%2Eshow	show power bar unit power unit power show uf focus toggle focus showpowerbar
@@ -1958,6 +1960,7 @@ uf_player	Show HP Text	toggle	player.showHP		Text > Hp	show hp text	iduf_player
 uf_player	Show Name	toggle	player.showName		Text > Name	show name	iduf_playermenu2%2Euf_player%2Eunit%2Etext%2Ename%2Eshow	show name text name unit text name show uf player toggle player showname
 uf_player	Show Power	button		show_player_power_or_open_class_resources	Unit > Power	show power	iduf_playermenu2%2Euf_player%2Eunit%2Epower%2Eenable_now	show power unit power unit power enable now uf player button show player power or open class resources
 uf_player	Show Power Text	toggle	player.showPowerText		Text > Power	show power text	iduf_playermenu2%2Euf_player%2Eunit%2Etext%2Epower%2Eshow	show power text text power unit text power show uf player toggle player showpowertext
+uf_player	Show cast spell icon in portrait	toggle			Unit > Castbar	show cast spell icon in portrait	iduf_playermenu2%2Euf_player%2Eunit%2Ecastbar%2Eportrait_cast_icon	show cast spell icon in portrait unit castbar unit castbar portrait cast icon uf player toggle
 uf_player	Show cast spell icon in portrait	toggle	player.portraitCastSpellIcon		Unit > Portrait	show cast spell icon in portrait	iduf_playermenu2%2Euf_player%2Eunit%2Eportrait%2Eportraitcastspellicon	show cast spell icon in portrait unit portrait unit portrait portraitcastspellicon uf player toggle player portraitcastspellicon
 uf_player	Show interrupt	toggle	player.showInterrupt		Unit > Castbar	show interrupt	iduf_playermenu2%2Euf_player%2Eunit%2Ecastbar%2Eshow_interrupt	show interrupt unit castbar unit castbar show interrupt uf player toggle player showinterrupt
 uf_player	Show power bar	toggle	player.showPowerBar		Unit > Power	show power bar	iduf_playermenu2%2Euf_player%2Eunit%2Epower%2Eshow	show power bar unit power unit power show uf player toggle player showpowerbar
@@ -2206,6 +2209,7 @@ uf_target	Show Name	toggle	target.showName		Text > Name	show name	iduf_targetm
 uf_target	Show Power	button	target.showPowerBar		Unit > Power	show power	iduf_targetmenu2%2Euf_target%2Eunit%2Epower%2Eenable_now	show power unit power unit power enable now uf target button target showpowerbar
 uf_target	Show Power Text	toggle	target.showPowerText		Text > Power	show power text	iduf_targetmenu2%2Euf_target%2Eunit%2Etext%2Epower%2Eshow	show power text text power unit text power show uf target toggle target showpowertext
 uf_target	Show Target of Target text inline	toggle	targettarget.showToTInTargetName		Unit > Inline Text	show target of target text inline	iduf_targetmenu2%2Euf_target%2Eunit%2Einline_text%2Eshow_target_of_target	show target of target text inline unit inline text unit inline text show target of target uf target toggle targettarget showtotintargetname
+uf_target	Show cast spell icon in portrait	toggle			Unit > Castbar	show cast spell icon in portrait	iduf_targetmenu2%2Euf_target%2Eunit%2Ecastbar%2Eportrait_cast_icon	show cast spell icon in portrait unit castbar unit castbar portrait cast icon uf target toggle
 uf_target	Show cast spell icon in portrait	toggle	target.portraitCastSpellIcon		Unit > Portrait	show cast spell icon in portrait	iduf_targetmenu2%2Euf_target%2Eunit%2Eportrait%2Eportraitcastspellicon	show cast spell icon in portrait unit portrait unit portrait portraitcastspellicon uf target toggle target portraitcastspellicon
 uf_target	Show interrupt	toggle	target.showInterrupt		Unit > Castbar	show interrupt	iduf_targetmenu2%2Euf_target%2Eunit%2Ecastbar%2Eshow_interrupt	show interrupt unit castbar unit castbar show interrupt uf target toggle target showinterrupt
 uf_target	Show power bar	toggle	target.showPowerBar		Unit > Power	show power bar	iduf_targetmenu2%2Euf_target%2Eunit%2Epower%2Eshow	show power bar unit power unit power show uf target toggle target showpowerbar
