@@ -48,6 +48,17 @@ Audit.ignore = Audit.ignore or {
         bossPreviewEnabled = true,
         editModeSnapToGrid = true,
         fontColor = true,
+        -- Chrome and selector state the UI persists for itself. These are
+        -- written by the widget that owns them (the tip cycler advances
+        -- tipCycleIndex, the options window saves its own size, a scope tab
+        -- records which unit is on screen), never chosen as a setting. Left
+        -- visible they would compete with real controls in candidate scoring:
+        -- "set the window width" is a frame width request, not a request to
+        -- resize the options panel.
+        hpPowerTextSelectedKey = true,
+        msuf2WindowH = true,
+        msuf2WindowW = true,
+        tipCycleIndex = true,
     },
     -- Compatibility mirror retained in the bars table. The visible/global
     -- owner is general.highlightBorderThickness; scoped overrides are owned by
@@ -64,6 +75,13 @@ Audit.ignore = Audit.ignore or {
         -- Unit frames read the canonical general toggle. This copied legacy
         -- field is not a distinct Player control.
         showSelfHealPrediction = true,
+        -- Migration sentinel, not a value: the engine only ever compares it
+        -- against the literal 2 (MSUF_UF_Core.lua:569) to decide whether a
+        -- profile predates the gradient-override rewrite.
+        gradientOverrideVersion = true,
+    },
+    target = {
+        gradientOverrideVersion = true,
     },
     -- Legacy flat mirrors copied from unit-frame fields into the group scopes;
     -- the canonical group settings are powerHeight and the nested

@@ -58,6 +58,8 @@ M.aliasOwners = {
     ["general.barBorderG"] = "general.barOutlineColor",
     ["general.barBorderR"] = "general.barOutlineColor",
     ["general.barBgTexture"] = "general.barBackgroundTexture",
+    ["player.hpTextMode"] = "player.textRight",
+    ["player.powerTextMode"] = "player.powerTextRight",
     ["general.barOutlineColorB"] = "general.barOutlineColor",
     ["general.barOutlineColorG"] = "general.barOutlineColor",
     ["general.barOutlineColorR"] = "general.barOutlineColor",
@@ -302,6 +304,7 @@ general.hlPurgeColorG
 general.hlPurgeColorR
 general.hpOffsetX
 general.hpOffsetY
+general.hpPowerTextSelectedKey
 general.hpTextLayer
 general.hpTextOffsetX
 general.hpTextOffsetY
@@ -380,7 +383,9 @@ player.class
 player.fontOverride
 player.health
 player.hpPowerTextOverride
+player.hpTextMode
 player.power
+player.powerTextMode
 player.powerTextOffsetX
 player.powerTextOffsetY
 player.showHPText
@@ -853,14 +858,11 @@ general.healthGradientMidG
 general.healthGradientMidR
 general.healthTextThrottleMs
 general.hidePercentSymbol
-general.highlightPrioEnabled
 general.hlAggroColorB
 general.hlAggroColorG
 general.hlAggroColorR
 general.hlAggroSize
 general.hpFontSize
-general.hpPowerTextSelectedKey
-general.hpSpacerSelectedUnitKey
 general.hpTextMode
 general.hpTextSeparator
 general.hpTextSpacerEnabled
@@ -877,8 +879,6 @@ general.levelIndicatorLayer
 general.levelIndicatorOffsetX
 general.levelIndicatorOffsetY
 general.linkEditModes
-general.msuf2WindowH
-general.msuf2WindowW
 general.nameFontSize
 general.npcClassColorBar
 general.petFrameColorB
@@ -976,11 +976,9 @@ general.tempMaxHealthColorR
 general.tempMaxHealthEnabled
 general.tempMaxHealthOpacity
 general.tempMaxHealthTexture
-general.tipCycleIndex
 general.unifiedBarB
 general.unifiedBarG
 general.unifiedBarR
-general.unitInfoTooltipStyle
 general.unitPreviewGuidesEnabled
 general.useBarBorder
 general.useClassColors

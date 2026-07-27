@@ -50,6 +50,12 @@ local FLAT_SCOPES = { general = true, bars = true, gameplay = true }
 -- coverage gap instead of silently falling back to a generated setting.
 local CANONICAL_PATH_OWNERS = {
     player = {
+        -- Fallback for the RIGHT text slot only: MSUF_UF_Config.lua:1687 reads
+        -- conf.textRight first and only then this field, so a write here is
+        -- invisible whenever the slot is set, which migration guarantees.
+        -- The slot control owns the visible identity.
+        hpTextMode = "player.textRight",
+        powerTextMode = "player.powerTextRight",
         anchorMyPoint = "player.point",
         anchorRelPoint = "player.point",
         nameAnchor = "player.nameTextAnchor",
@@ -64,6 +70,12 @@ local CANONICAL_PATH_OWNERS = {
         shortenNames = "fontScope.shared.shortenNames",
     },
     target = {
+        -- Fallback for the RIGHT text slot only: MSUF_UF_Config.lua:1687 reads
+        -- conf.textRight first and only then this field, so a write here is
+        -- invisible whenever the slot is set, which migration guarantees.
+        -- The slot control owns the visible identity.
+        hpTextMode = "target.textRight",
+        powerTextMode = "target.powerTextRight",
         anchorMyPoint = "target.point",
         anchorRelPoint = "target.point",
         nameAnchor = "target.nameTextAnchor",
@@ -75,6 +87,12 @@ local CANONICAL_PATH_OWNERS = {
         shortenNameShowDots = "fontScope.target.shortenNameNoEllipsis",
     },
     targettarget = {
+        -- Fallback for the RIGHT text slot only: MSUF_UF_Config.lua:1687 reads
+        -- conf.textRight first and only then this field, so a write here is
+        -- invisible whenever the slot is set, which migration guarantees.
+        -- The slot control owns the visible identity.
+        hpTextMode = "targettarget.textRight",
+        powerTextMode = "targettarget.powerTextRight",
         anchorMyPoint = "targettarget.point",
         anchorRelPoint = "targettarget.point",
         nameAnchor = "targettarget.nameTextAnchor",
@@ -86,6 +104,12 @@ local CANONICAL_PATH_OWNERS = {
         shortenNameShowDots = "fontScope.targettarget.shortenNameNoEllipsis",
     },
     focustarget = {
+        -- Fallback for the RIGHT text slot only: MSUF_UF_Config.lua:1687 reads
+        -- conf.textRight first and only then this field, so a write here is
+        -- invisible whenever the slot is set, which migration guarantees.
+        -- The slot control owns the visible identity.
+        hpTextMode = "focustarget.textRight",
+        powerTextMode = "focustarget.powerTextRight",
         anchorMyPoint = "focustarget.point",
         anchorRelPoint = "focustarget.point",
         nameAnchor = "focustarget.nameTextAnchor",
@@ -97,6 +121,12 @@ local CANONICAL_PATH_OWNERS = {
         shortenNameShowDots = "fontScope.focustarget.shortenNameNoEllipsis",
     },
     focus = {
+        -- Fallback for the RIGHT text slot only: MSUF_UF_Config.lua:1687 reads
+        -- conf.textRight first and only then this field, so a write here is
+        -- invisible whenever the slot is set, which migration guarantees.
+        -- The slot control owns the visible identity.
+        hpTextMode = "focus.textRight",
+        powerTextMode = "focus.powerTextRight",
         anchorMyPoint = "focus.point",
         anchorRelPoint = "focus.point",
         nameAnchor = "focus.nameTextAnchor",
@@ -108,6 +138,12 @@ local CANONICAL_PATH_OWNERS = {
         shortenNameShowDots = "fontScope.focus.shortenNameNoEllipsis",
     },
     pet = {
+        -- Fallback for the RIGHT text slot only: MSUF_UF_Config.lua:1687 reads
+        -- conf.textRight first and only then this field, so a write here is
+        -- invisible whenever the slot is set, which migration guarantees.
+        -- The slot control owns the visible identity.
+        hpTextMode = "pet.textRight",
+        powerTextMode = "pet.powerTextRight",
         anchorMyPoint = "pet.point",
         anchorRelPoint = "pet.point",
         nameAnchor = "pet.nameTextAnchor",
@@ -119,6 +155,12 @@ local CANONICAL_PATH_OWNERS = {
         shortenNameShowDots = "fontScope.pet.shortenNameNoEllipsis",
     },
     boss = {
+        -- Fallback for the RIGHT text slot only: MSUF_UF_Config.lua:1687 reads
+        -- conf.textRight first and only then this field, so a write here is
+        -- invisible whenever the slot is set, which migration guarantees.
+        -- The slot control owns the visible identity.
+        hpTextMode = "boss.textRight",
+        powerTextMode = "boss.powerTextRight",
         anchorMyPoint = "boss.point",
         anchorRelPoint = "boss.point",
         nameAnchor = "boss.nameTextAnchor",
@@ -131,6 +173,11 @@ local CANONICAL_PATH_OWNERS = {
     },
     gf_party = {
         barBgTexture = "barScope.gf_party.barBackgroundTexture",
+        -- Legacy 0/1 mirror of the group aggro-border toggle. GetHighlightVal
+        -- (MSUF_GroupFrames_DB.lua:1861) reads aggroOutlineMode first and only
+        -- falls back to this field, so it is a projection of the reviewed
+        -- Party Aggro Border control, never an independent switch.
+        hlAggroEnabled = "gf_party.aggroEnabled",
         hpTextSeparator = "gf_party.textDelimiter",
         nameTextAnchor = "gf_party.nameAnchor",
         point = "gf_party.anchorPoint",
@@ -141,6 +188,7 @@ local CANONICAL_PATH_OWNERS = {
         shortenNames = "gf_party.nameShortenEnabled",
     },
     gf_raid = {
+        hlAggroEnabled = "gf_raid.aggroEnabled",
         nameTextAnchor = "gf_raid.nameAnchor",
         point = "gf_raid.anchorPoint",
         shortenNameClipSide = "gf_raid.nameClipSide",
@@ -149,6 +197,7 @@ local CANONICAL_PATH_OWNERS = {
         shortenNames = "gf_raid.nameShortenEnabled",
     },
     gf_mythicraid = {
+        hlAggroEnabled = "gf_mythicraid.aggroEnabled",
         nameTextAnchor = "gf_mythicraid.nameAnchor",
         point = "gf_mythicraid.anchorPoint",
         shortenNameClipSide = "gf_mythicraid.nameClipSide",
@@ -157,6 +206,15 @@ local CANONICAL_PATH_OWNERS = {
         shortenNames = "gf_mythicraid.nameShortenEnabled",
     },
     general = {
+        -- Written only as a side effect of the tooltip anchor dropdown
+        -- (GlobalMisc.lua:88 derives modern/classic from CURSOR/FIXED),
+        -- so the anchor control owns the visible identity.
+        unitInfoTooltipStyle = "general.unitTooltipAnchor",
+        -- Legacy spelling of the highlight-priority switch. The engine reads
+        -- hlPrioEnabled first and only then this alias
+        -- (MSUF_UF_Core.lua:542), so the reviewed Custom Highlight Priority
+        -- toggle owns the identity.
+        highlightPrioEnabled = "general.hlPrioEnabled",
         aggroBorderR = "general.aggroBorderColor",
         aggroBorderG = "general.aggroBorderColor",
         aggroBorderB = "general.aggroBorderColor",
@@ -195,6 +253,7 @@ local COMPATIBILITY_PROJECTIONS = {
         healPredictionColorR = "Heal-prediction color channel written by the color picker; the curated color control owns the user-facing identity.",
         healPredictionColorG = "Heal-prediction color channel written by the color picker; the curated color control owns the user-facing identity.",
         healPredictionColorB = "Heal-prediction color channel written by the color picker; the curated color control owns the user-facing identity.",
+        hpSpacerSelectedUnitKey = "Retired health-spacer scope selector; no runtime or Menu2 consumer reads it, only the default profile still carries the field.",
     },
     bars = {
         classPowerOutlineColorR = "Retired class-resource outline color channel; the runtime exposes outline thickness only.",
@@ -228,6 +287,7 @@ local COMPATIBILITY_PROJECTIONS = {
 }
 local GROUP_COMPATIBILITY_PROJECTIONS = {
     auraSpacing = "Retired flat aura spacing mirror; live group aura geometry uses the nested Buff and Debuff controls.",
+    hlBossTargetEnabled = "Retired group boss-target highlight mirror; no runtime or Menu2 code reads it, and the live control is general.bossTargetHighlightEnabled.",
     nameShorten = "Retired pre-normalization group-name shortening field; the canonical group controls own the effective state.",
     nameShortenMax = "Retired pre-normalization group-name length field; the canonical group controls own the effective state.",
     privateAuraAnchor = "Retired private-aura layout field with no runtime or Menu2 consumer.",

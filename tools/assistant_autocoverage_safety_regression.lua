@@ -199,7 +199,7 @@ for scope, paths in pairs(canonicalOwners) do
         assertCuratedOwner(scope, dbKey, expectedKey)
     end
 end
-assert(canonicalOwnerCount == 108,
+assert(canonicalOwnerCount == 127,
     "canonical-owner identity count drifted: " .. tostring(canonicalOwnerCount))
 
 assertCuratedOwner("gf_party", "groupBorderR", "gf_party.groupBorderColor")
