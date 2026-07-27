@@ -465,25 +465,33 @@ local function BuildActionTabs(ctx, parent, values, x, y, width, getValue, setVa
     local count = #values
     local bw = max(56, floor(((width or 720) - gap * (count - 1)) / count))
     local buttons = {}
+    local RefreshButtons
     for i = 1, count do
         local item = values[i]
-        local btn = (buttonFactory and buttonFactory(parent, item, bw)) or ActionButton(parent, item.text, bw)
+        -- Tab rows show a selection, so they default to the workspace tab
+        -- style: the plain action-button style draws its active state exactly
+        -- like its idle one, so a selected chip would look unselected.
+        local btn = (buttonFactory and buttonFactory(parent, item, bw)) or UnitAuraWorkspaceTabButton(parent, item, bw)
         btn:SetPoint("TOPLEFT", parent, "TOPLEFT", x + (i - 1) * (bw + gap), y)
         btn:SetScript("OnClick", function()
             if item.value == getValue() then return end
             setValue(item.value)
+            -- Selecting a tab is menu state, not a page rebuild, so re-stamp
+            -- the active chip here instead of waiting for a page refresh.
+            if RefreshButtons then RefreshButtons() end
         end)
         RegisterAuraControl(ctx, btn, item.text or item.label or item.value or "Option", "button",
             (catalogPath or "workspace.tabs") .. ".option." .. AuraCatalogToken(item.value, tostring(i)), "ephemeral")
         buttons[i] = btn
         if item.value ~= nil then buttons[item.value] = btn end
     end
-    local function RefreshButtons()
+    RefreshButtons = function()
         local current = getValue()
         for i = 1, count do
             if buttons[i].SetActive then buttons[i]:SetActive(values[i].value == current) end
         end
     end
+    RefreshButtons()
     M.TrackRefresh(ctx, RefreshButtons)
     return getValue(), buttons, RefreshButtons
 end
