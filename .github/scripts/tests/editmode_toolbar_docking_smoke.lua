@@ -240,7 +240,7 @@ Equal(undoQueries + redoQueries, 0, "closed HUD performed history work before fi
 EM2.HUD.Show()
 local toolbar = _G.MSUF_EM2_HUD
 Check(toolbar and toolbar:IsShown(), "compact toolbar was not created")
-Equal(toolbar:GetWidth(), advanced and 1480 or 1280, "top toolbar width")
+Equal(toolbar:GetWidth(), advanced and 1480 or 1428, "top toolbar width")
 Equal(toolbar:GetHeight(), 68, "top toolbar height")
 Equal(toolbar:GetTop(), 1068, "top toolbar edge offset")
 Check(toolbar.scripts.OnUpdate == nil, "toolbar added an idle OnUpdate")

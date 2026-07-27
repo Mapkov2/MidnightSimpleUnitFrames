@@ -56,7 +56,7 @@ local CLUSTER_H     = 52
 local CLUSTER_BTN_H = BTN_H
 local CLUSTER_GAP   = Space("sm", 8)
 local CLUSTER_PAD_X = Space("sm", 8)
-local DOCK_HORIZONTAL_W = 1280
+local DOCK_HORIZONTAL_W = 1428
 local DOCK_HORIZONTAL_H = 68
 local DOCK_VERTICAL_W   = 82
 local DOCK_EDGE_DEFAULT = 12
@@ -1824,7 +1824,6 @@ local function EnsureHUD()
         HUD.OpenSelectedSettings()
     end, "Open Menu2 at the selected\nframe or component settings.")
 
-    if advancedHUD then
     cdmBtn = AddRowButton(linksItems, linksCluster, "Cooldown", 72, CLUSTER_BTN_H, "caption", function()
         local db = _G.MSUF_DB; if not db then return end
         db.general = db.general or {}
@@ -1860,7 +1859,6 @@ local function EnsureHUD()
         end
         ov:Show()
     end, "Pick any frame as global anchor\nfor all unitframes.\nOverrides CDM anchor.")
-    end
     FinishCluster(linksCluster, linksItems, CLUSTER_H, -7)
 
     LayoutClusterRow(DockUI.primaryContainer, DockUI.row1)
