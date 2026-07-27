@@ -390,7 +390,40 @@ local COLOR_CHANNEL_STEM_WORDS = {
     "color", "colour", "background", "border", "bg", "gradient", "aggro",
     "namecolor", "glow", "tick", "altmana", "absorb", "highlight", "hl",
 }
-local function IsColorChannelKey(key)
+
+-- scope -> { stem = true } for every stem the manifest proves is a composite
+-- color by carrying the whole R, G and B sibling set in that scope. Three
+-- sibling numbers differing only by an R/G/B suffix are a color by
+-- construction, so this needs no vocabulary. The word list below stays as the
+-- fallback for live-DB paths the manifest never saw, but it cannot be kept
+-- complete by hand: castbarText, unifiedBar, fontR/G/B, classPowerRampStart
+-- and targetedSpellsText* are all real colors whose names contain none of its
+-- words, and each one used to be published as an unbounded standalone number.
+local colorTripletStems = {}
+
+local function NoteColorTripletStems(scope, keys)
+    local channels = {}
+    for i = 1, #keys do
+        local key = keys[i]
+        local channel = key:match("([RGBA])$")
+        if channel then
+            local stem = key:sub(1, #key - 1)
+            if stem ~= "" and stem:sub(-1):match("[%l%d]") then
+                local seen = channels[stem]
+                if not seen then seen = {}; channels[stem] = seen end
+                seen[channel] = true
+            end
+        end
+    end
+    local stems = {}
+    for stem, seen in pairs(channels) do
+        if seen.R and seen.G and seen.B then stems[stem] = true end
+    end
+    colorTripletStems[scope] = stems
+    return stems
+end
+
+local function IsColorChannelKey(key, scope)
     key = tostring(key or "")
     local channel = key:match("([RGBA])$")
     if not channel then return nil end
@@ -398,9 +431,12 @@ local function IsColorChannelKey(key)
     -- digit, so real words ending in an uppercase R/G/B/A are not misread.
     local prev = key:sub(-2, -2)
     if not prev:match("[%l%d]") then return nil end
-    local stem = key:sub(1, #key - 1):lower()
+    local stem = key:sub(1, #key - 1)
+    local proven = scope and colorTripletStems[scope]
+    if proven and proven[stem] then return channel end
+    local lowerStem = stem:lower()
     for i = 1, #COLOR_CHANNEL_STEM_WORDS do
-        if stem:find(COLOR_CHANNEL_STEM_WORDS[i], 1, true) then return channel end
+        if lowerStem:find(COLOR_CHANNEL_STEM_WORDS[i], 1, true) then return channel end
     end
     return nil
 end
@@ -993,10 +1029,13 @@ local function BuildSpec(scope, key, value, fromManifest)
         -- One channel of a composite color.  Flag it so a color-value request
         -- never resolves to a single channel; MSUF colors are set through a
         -- color picker, so this points the user there instead.
-        if IsColorChannelKey(key) then
+        if IsColorChannelKey(key, scope) then
             spec.assistantColorChannel = true
             spec.generatedMutationSafety = "color-channel-component"
-            spec.unsafeMutationReason = "This is one channel of a composite color. Set the whole color instead, for example 'set " .. tostring(scope) .. " color to red'."
+            -- The example has to be typeable. scopeLabel is the English name
+            -- the player sees ("Party"); the raw scope token ("gf_party") is
+            -- not something they would ever enter.
+            spec.unsafeMutationReason = "This is one channel of a composite color. Set the whole color instead, for example 'set " .. string.lower(scopeLabel) .. " color to red'."
         end
         spec.get = function()
             local tbl = ScopeTable(scope)
@@ -1180,6 +1219,14 @@ function Auto.Fill()
         if type(manifestScope) ~= "table" then return end
         local coveredSet = covered[scope] or {}
         covered[scope] = coveredSet
+        -- Learn this scope's proven color triplets before any spec is built:
+        -- BuildSpec must already know that "fontR" is a channel and not a
+        -- standalone unbounded number.
+        local scopeKeys = {}
+        WalkScalarPaths(manifestScope, function(key)
+            if not key:find(".", 1, true) then scopeKeys[#scopeKeys + 1] = key end
+        end)
+        NoteColorTripletStems(scope, scopeKeys)
         WalkScalarPaths(manifestScope, function(key, value)
             -- The checked-in factory manifest is the identity authority.
             -- Saved profiles may contain legacy or future fields, but those
@@ -1257,7 +1304,11 @@ function Auto.PromoteInheritedNumberDomains()
     local promoted = 0
     for i = 1, #settings do
         local s = settings[i]
+        -- A color channel is never promotable: whatever domain a curated
+        -- sibling proves, one channel is still not an independently settable
+        -- control, so it must keep pointing at the whole-color path.
         if type(s) == "table" and s.generated == true and s.type == "number"
+            and s.assistantColorChannel ~= true
             and s.assistantMutationSafe == false and s.min == nil and s.max == nil
         then
             local domain = domainByLeaf[PromotionLeaf(s.key)]
