@@ -311,6 +311,7 @@ $luaGates = @(
     [pscustomobject]@{ Category = "schema/transaction"; Path = "tools/assistant_control_schema_transaction_regression.lua"; Args = @() },
     [pscustomobject]@{ Category = "schema/search"; Path = "tools/assistant_control_schema_retrieval_audit.lua"; Args = @() },
     [pscustomobject]@{ Category = "schema/navigation"; Path = ".github/scripts/tests/assistant_schema_navigation_state_smoke.lua"; Args = @() },
+    [pscustomobject]@{ Category = "schema/choice"; Path = ".github/scripts/tests/assistant_schema_ambiguous_choice_smoke.lua"; Args = @() },
 
     [pscustomobject]@{ Category = "search"; Path = "tools/assistant_menu_search_coverage_audit.lua"; Args = @() },
     [pscustomobject]@{ Category = "search"; Path = "tools/assistant_search_workspace_route_smoke.lua"; Args = @() },

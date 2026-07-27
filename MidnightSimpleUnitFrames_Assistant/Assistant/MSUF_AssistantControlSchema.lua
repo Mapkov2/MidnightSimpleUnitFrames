@@ -1373,17 +1373,89 @@ function Schema.TryConversation(text)
         if ok then return { text = tostring(message or ("Opened " .. top.label .. ".")), status = "navigated", summary = top.label } end
     end
 
-    local lines = {}
     local count = confident and 1 or math.min(#results, 3)
+
+    -- An ambiguous mutation must offer a choice the player can actually answer.
+    -- Reuse the shared pending-choice mechanism (A.SetPendingChoices) that the
+    -- parser, router, diagnostics and workflows already share, so a numbered
+    -- reply resolves here exactly as it does everywhere else.
+    --
+    -- Most controls that reach this lane are catalog-backed and have no
+    -- registry owner at all, which is the whole reason the lane exists. Those
+    -- are offered by semantic id and settled by Schema.Execute at selection
+    -- time -- resolving them up front would have to open all three pages just
+    -- to render a list.
+    if mutation and not confident and count > 1 and type(A.SetPendingChoices) == "function" then
+        local Registry, Parser = A.Registry, A.Parser
+        -- Unpadded, matching the confident branch above; the outer `normalized`
+        -- is space-padded for whole-phrase matching and is not what the value
+        -- parser expects.
+        local valueText = Normalize(text)
+        -- Candidates in this lane routinely share one label ("Opacity" on three
+        -- different aura pages). A numbered list of identical names is no more
+        -- answerable than no list at all, so every entry carries the page that
+        -- tells them apart.
+        local function ChoiceLabel(row)
+            local label = tostring(row.label or row.matchedValue or row.semanticId or "")
+            local pageKey = tostring(row.pageKey or "")
+            local page = type(M.GetMenuBreadcrumb) == "function" and M.GetMenuBreadcrumb(pageKey)
+                or pageKey:gsub("_", " ")
+            page = tostring(page or "")
+            if label == "" then return page ~= "" and page or "Option" end
+            if page == "" or label:find(page, 1, true) or page:find(label, 1, true) then return label end
+            return label .. " - " .. page
+        end
+
+        local choices = {}
+        for i = 1, count do
+            local row = results[i]
+            local label = ChoiceLabel(row)
+            local settingKey = Trim(row.settingKey)
+            local setting = settingKey ~= "" and Registry and type(Registry.GetSetting) == "function"
+                and Registry:GetSetting(settingKey) or nil
+            if setting then
+                local value
+                if Parser and type(Parser.ValueForRegistrySetting) == "function" then
+                    value = Parser.ValueForRegistrySetting(setting, valueText, text)
+                end
+                if value ~= nil then
+                    choices[#choices + 1] = { setting = setting, value = value, label = label }
+                end
+            elseif row.classification == "setting" and row.safety ~= "readOnly" and row.safety ~= "guided" then
+                local value, parsed = ParseDescriptorValue(row, text)
+                if parsed then
+                    choices[#choices + 1] = {
+                        schemaSemanticId = row.semanticId,
+                        schemaSourceText = text,
+                        value = value,
+                        label = label,
+                    }
+                end
+            end
+        end
+        -- All of them, or none: a partial list would silently drop a candidate
+        -- the player was choosing between.
+        if #choices == count then
+            local choiceText = A.SetPendingChoices(choices)
+            if choiceText then
+                return { text = choiceText, status = "ambiguous", result = "ambiguous",
+                    summary = "Ambiguous MSUF control" }
+            end
+        end
+    end
+
+    local lines = {}
     for i = 1, count do
         local row = results[i]
         local displayLabel = row.matchedValue or row.label or row.semanticId
-        lines[#lines + 1] = (i == 1 and "" or (tostring(i) .. ". ")) .. tostring(displayLabel)
+        lines[#lines + 1] = (count == 1 and "" or (tostring(i) .. ". ")) .. tostring(displayLabel)
             .. " is at " .. HumanPath(row) .. "."
     end
     if count > 1 then table.insert(lines, 1, "I found a few close controls:") end
     if mutation and not confident then
+        -- No selectable owner, so the reply must not imply a number works.
         lines[#lines + 1] = "I kept MSUF unchanged because the request does not identify one control uniquely."
+        lines[#lines + 1] = "Name the frame or page with the control, for example 'set target health bar height to 20'."
         return { text = table.concat(lines, "\n"), status = "needs_choice", result = "needs_choice",
             summary = "Ambiguous MSUF control" }
     end

@@ -1924,6 +1924,10 @@ local function SerializeChoices(choices)
         end
         out[#out + 1] = {
             key = setting and setting.key,
+            -- A generated-schema control has no registry owner to serialize;
+            -- its semantic id is the stable handle Schema.Execute resolves.
+            schemaSemanticId = choice and choice.schemaSemanticId,
+            schemaSourceText = choice and choice.schemaSourceText,
             actionKey = (action and action.key) or choice and choice.actionKey,
             args = choice and choice.args,
             confirmRequired = choice and choice.confirmRequired,
@@ -1994,6 +1998,14 @@ local function RehydrateChoices(serialized)
                 textArea = item.textArea,
                 textSlot = item.textSlot,
                 successText = item.successText,
+            }
+        elseif item and type(item.schemaSemanticId) == "string" and item.schemaSemanticId ~= "" then
+            choices[#choices + 1] = {
+                schemaSemanticId = item.schemaSemanticId,
+                schemaSourceText = item.schemaSourceText,
+                value = item.value,
+                label = item.label,
+                valueLabel = item.valueLabel,
             }
         elseif item and item.actionKey and type(Registry.GetAction) == "function" then
             local action = Registry:GetAction(item.actionKey)
@@ -5880,6 +5892,24 @@ ExecuteChoice = function(choice)
             label = "Assistant selected option",
             successText = choice.successText,
         })
+    end
+    -- A generated-schema control the player picked out of an ambiguity list.
+    -- Schema.Execute owns the whole transaction (resolve, value normalization,
+    -- undo snapshot), so this stays a thin hand-off.
+    if choice and type(choice.schemaSemanticId) == "string" and choice.schemaSemanticId ~= "" then
+        local Schema = A.ControlSchema
+        if not (Schema and type(Schema.Execute) == "function") then
+            return { text = "That option list changed. Start that change again and I'll rebuild the list.", result = "failed" }
+        end
+        local label = ChoiceDisplayLabel(choice) or choice.label or "that control"
+        local ok, result = Schema.Execute(choice.schemaSemanticId, choice.value,
+            { sourceText = choice.schemaSourceText })
+        if type(result) == "table" then return result end
+        if ok then
+            return { text = "Done. I changed " .. tostring(label) .. ".", result = "applied", summary = label }
+        end
+        return { text = "I found " .. tostring(label) .. ", but the change could not be applied safely.",
+            result = tostring(result or "failed"), summary = label }
     end
     if choice and (choice.action or choice.actionKey) then
         local action = choice.action
