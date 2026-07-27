@@ -374,14 +374,10 @@ local function GetCastbarReverseFill(isChanneled)
     if cached ~= nil then return cached end
 
     local normalReverse = fillDirection == "RTL"
-    local reverseFill
-    if unifiedDirection then
-        reverseFill = normalReverse
-    elseif isChanneled then
-        reverseFill = not normalReverse
-    else
-        reverseFill = normalReverse
-    end
+    -- Channels keep the cast's anchor: unified direction switches the native
+    -- timer between drain (RemainingTime) and fill (ElapsedTime) instead of
+    -- flipping the anchor, so the anchor is direction-only for every cast type.
+    local reverseFill = normalReverse
     cache[cacheKey] = reverseFill and true or false
     return cache[cacheKey]
 end
@@ -601,8 +597,16 @@ local function ApplySparkLayout(frame, statusBar, general, height)
         spark:SetSize(16, sparkHeight)
         local texture = statusBar:GetStatusBarTexture()
         if texture then
+            -- Moving edge = side opposite the fill anchor: LEFT when
+            -- reverse-filled, RIGHT otherwise (fill and drain alike).
+            local reversed = false
+            if type(_G.MSUF_GetCastbarReverseFillForFrame) == "function" then
+                reversed = _G.MSUF_GetCastbarReverseFillForFrame(frame, false) == true
+            elseif statusBar.GetReverseFill then
+                reversed = statusBar:GetReverseFill() and true or false
+            end
             spark:ClearAllPoints()
-            spark:SetPoint("CENTER", texture, "RIGHT", 0, 0)
+            spark:SetPoint("CENTER", texture, reversed and "LEFT" or "RIGHT", 0, 0)
         end
     end
 end

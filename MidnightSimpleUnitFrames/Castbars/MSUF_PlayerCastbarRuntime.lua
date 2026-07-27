@@ -119,6 +119,15 @@ local function ApplyLatencyBar(frame, pct, isChanneled)
     local reverseFill = _G.MSUF_GetReverseFillSafe(frame, isChanneled and true or false)
     reverseFill = reverseFill and true or false
 
+    -- The zone marks the final latency window: filling bars finish opposite
+    -- their anchor; a draining (non-unified) channel finishes on its anchor side.
+    if isChanneled then
+        local general = _G.MSUF_DB and _G.MSUF_DB.general
+        if not (general and general.castbarUnifiedDirection == true) then
+            reverseFill = not reverseFill
+        end
+    end
+
     frame.latencyBar:ClearAllPoints()
     if reverseFill then
         frame.latencyBar:SetPoint("TOPLEFT", frame.statusBar, "TOPLEFT", 0, 0)

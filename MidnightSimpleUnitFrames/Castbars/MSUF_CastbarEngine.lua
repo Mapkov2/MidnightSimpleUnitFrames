@@ -194,7 +194,15 @@ local function ReverseFillForCastType(castType, unit)
     end
 
     local unifiedDirection = general.castbarUnifiedDirection == true
-    if castType == "CHANNEL" or castType == "EMPOWER" then
+    if castType == "CHANNEL" then
+        -- Channels keep the cast's anchor. Unified direction is realized by
+        -- switching the native timer to ElapsedTime (fill like a cast) instead
+        -- of RemainingTime (classic drain); see TimerDirection in the runtime.
+        return reverseFill
+    end
+
+    if castType == "EMPOWER" then
+        -- Empower bars fill on ElapsedTime timers, so the legacy flip applies.
         if unifiedDirection then
             return reverseFill
         end

@@ -784,12 +784,22 @@ local function SetText(frame, textKey, value)
     end
 end
 
+local function UnifiedDirectionEnabled()
+    local general = _G.MSUF_DB and _G.MSUF_DB.general
+    return general ~= nil and general.castbarUnifiedDirection == true
+end
+
 local function TimerDirection(parent, isChanneled)
     if parent and parent.isEmpower == true then
         return TIMER_DIRECTION_ELAPSED
     end
 
     if isChanneled == true then
+        -- Unified direction means channels fill up exactly like casts instead
+        -- of draining; the classic drain look stays the non-unified default.
+        if UnifiedDirectionEnabled() then
+            return TIMER_DIRECTION_ELAPSED
+        end
         return TIMER_DIRECTION_REMAINING
     end
 
@@ -828,6 +838,16 @@ function Runtime:ApplyTimer(statusBar, durationObj, reverseFill, isChanneled, fo
     if statusBar.SetReverseFill and statusBar._msufTimerReverseFill ~= reverseFill then
         statusBar:SetReverseFill(reverseFill and true or false)
         statusBar._msufTimerReverseFill = reverseFill
+        -- Keep the spark on the moving edge (side opposite the fill anchor).
+        local sparkParent = statusBar.GetParent and statusBar:GetParent() or nil
+        local spark = sparkParent and sparkParent.spark
+        if spark then
+            local fillTexture = statusBar.GetStatusBarTexture and statusBar:GetStatusBarTexture() or nil
+            if fillTexture then
+                spark:ClearAllPoints()
+                spark:SetPoint("CENTER", fillTexture, reverseFill and "LEFT" or "RIGHT", 0, 0)
+            end
+        end
     end
 
     if not durationObj or not statusBar.SetTimerDuration then
@@ -996,7 +1016,7 @@ function Runtime:ApplyActive(frame, state, options)
     else
         frame._msufNativeTimerUnsafe = true
     end
-    frame._msufTimerAssumeCountdown = timerDriven and (isChanneled == true) or nil
+    frame._msufTimerAssumeCountdown = (timerDriven and isChanneled == true and not UnifiedDirectionEnabled()) or nil
 
     if options.skipSnapshot ~= true then
         self:SnapshotDuration(frame, durationObj, timerDriven)

@@ -53,8 +53,15 @@ local function CreateSpark(statusBar, height)
     spark:SetBlendMode("ADD")
     spark:SetSize(16, height * 2.1)
 
+    -- Moving edge = side opposite the fill anchor; the timer apply path
+    -- re-anchors on direction changes (see Runtime:ApplyTimer).
     local statusBarTexture = statusBar:GetStatusBarTexture()
-    spark:SetPoint("CENTER", statusBarTexture or statusBar, statusBarTexture and "RIGHT" or "LEFT", 0, 0)
+    local reversed = statusBar.GetReverseFill and statusBar:GetReverseFill() and true or false
+    if statusBarTexture then
+        spark:SetPoint("CENTER", statusBarTexture, reversed and "LEFT" or "RIGHT", 0, 0)
+    else
+        spark:SetPoint("CENTER", statusBar, reversed and "RIGHT" or "LEFT", 0, 0)
+    end
     spark:Hide()
 
     return spark

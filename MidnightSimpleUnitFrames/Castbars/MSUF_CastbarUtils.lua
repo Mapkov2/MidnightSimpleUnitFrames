@@ -354,10 +354,16 @@ local function GetCastbarReverseFillForFrame(frame, isChanneled)
         end
     end
 
-    if isChanneled == true and general.castbarUnifiedDirection ~= true then
-        return not reverseFill
+    if isChanneled == true and frame and frame.isEmpower == true then
+        -- Empower bars fill on ElapsedTime timers: the legacy flip applies.
+        if general.castbarUnifiedDirection ~= true then
+            return not reverseFill
+        end
     end
 
+    -- Channels keep the cast's anchor. Unified direction is realized by
+    -- switching the native timer to ElapsedTime (fill like a cast) instead of
+    -- RemainingTime (classic drain); see TimerDirection in the runtime.
     return reverseFill
 end
 ExportPublic("MSUF_GetCastbarReverseFillForFrame", GetCastbarReverseFillForFrame)

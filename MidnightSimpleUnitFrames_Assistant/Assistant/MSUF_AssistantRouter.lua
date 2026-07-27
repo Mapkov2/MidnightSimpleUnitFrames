@@ -7483,6 +7483,89 @@ function R.TryVisibilityDiagnosticShortcut(text, coreHandler)    if type(coreHan
     return nil
 end
 
+-- Calibrated against the knowledge index: a correct near-miss such as "rested
+-- icon" scores ~760 and a full phrase like "portrait shape" ~1049, while a
+-- typo that lands on an unrelated control scores ~507. Below this only generic
+-- help is offered.
+local UNCERTAIN_PAGE_OFFER_MIN_SCORE = 700
+
+-- Command verbs and fillers that carry no control identity. Stripped from the
+-- front of an unresolved request before it is searched.
+local UNCERTAIN_SEARCH_STOP_WORDS = {
+    change = true, set = true, make = true, turn = true, adjust = true,
+    switch = true, enable = true, disable = true, toggle = true, show = true,
+    hide = true, move = true, open = true, edit = true, update = true,
+    please = true, the = true, my = true, a = true, an = true, some = true,
+}
+
+-- Edit distance capped at 2: beyond that a "correction" stops being a typo fix
+-- and starts inventing a different word.
+local function WithinEditDistance(a, b, limit)
+    local la, lb = #a, #b
+    if math.abs(la - lb) > limit then return false end
+    local prev = {}
+    for j = 0, lb do prev[j] = j end
+    for i = 1, la do
+        local cur, best = { [0] = i }, i
+        local ca = a:byte(i)
+        for j = 1, lb do
+            local cost = (ca == b:byte(j)) and 0 or 1
+            local v = prev[j] + 1
+            local d = cur[j - 1] + 1
+            if d < v then v = d end
+            d = prev[j - 1] + cost
+            if d < v then v = d end
+            cur[j] = v
+            if v < best then best = v end
+        end
+        if best > limit then return false end
+        prev = cur
+    end
+    return prev[lb] <= limit
+end
+
+-- Vocabulary of words that actually appear in MSUF control labels, built once
+-- per session. Only reached from the uncertain-request path, which runs while
+-- the dashboard is open and never during combat.
+local uncertainVocabulary
+local function ControlLabelVocabulary()
+    if uncertainVocabulary then return uncertainVocabulary end
+    uncertainVocabulary = {}
+    local registry = A.Registry
+    local settings = registry and type(registry.AllSettings) == "function" and registry:AllSettings() or {}
+    for i = 1, #settings do
+        local label = settings[i] and tostring(settings[i].label or "")
+        for word in label:lower():gmatch("[%a]+") do
+            if #word >= 4 then uncertainVocabulary[word] = true end
+        end
+    end
+    return uncertainVocabulary
+end
+
+--- Rewrites words that are one or two edits away from a real control word.
+--- Returns nil when nothing was corrected, so callers can skip the retry.
+function R.CorrectControlTypos(text)
+    local vocabulary = ControlLabelVocabulary()
+    if not next(vocabulary) then return nil end
+    local changed = false
+    local out = tostring(text or ""):gsub("[%a]+", function(word)
+        local lower = word:lower()
+        if #lower < 4 or vocabulary[lower] then return word end
+        local best, bestDistance
+        for candidate in pairs(vocabulary) do
+            if not bestDistance or #candidate ~= #best then
+                if WithinEditDistance(lower, candidate, 1) then
+                    if not bestDistance or bestDistance > 1 then best, bestDistance = candidate, 1 end
+                end
+            end
+        end
+        if best then changed = true; return best end
+        return word
+    end)
+    if not changed then return nil end
+    return out
+end
+
 function R.TryUncertainContextChoices(text)
     local norm = R.Normalize(text)
     if norm == "" or not (R.LooksLikeMutation(norm) or R.StartsWithMutationCommand(norm)) then return nil end
@@ -7563,6 +7646,81 @@ function R.TryUncertainContextChoices(text)
                 label = "Show color-setting examples",
                 summary = "Shows color-related Assistant examples without changing MSUF.",
             }, "scope:opt_colors")
+        end
+    end
+
+    -- An unresolved request that still resembles a real control should hand the
+    -- player that part of the menu, not a generic examples list. "change rested
+    -- icon" must not end at "Show general Assistant examples" when the knowledge
+    -- index can point straight at the page the rested icon lives on.
+    --
+    -- Knowledge.Search returns nil while its index is still cold -- that is the
+    -- documented cold sentinel, NOT "no matches" -- so this branch stays silent
+    -- in that case rather than claiming there is nothing to show.
+    local knowledge = A.Knowledge
+    if scopeHelp and knowledge and type(knowledge.Search) == "function" then
+        -- Search the noun phrase, not the command. The leading verb drags the
+        -- ranking onto unrelated pages: "rested icon" scores 760 on the Player
+        -- page, "change rested icon" only 485 on Group Auras.
+        local searchText = tostring(text or "")
+        for _ = 1, 2 do
+            searchText = searchText:gsub("^%s*(%a+)%s+", function(word)
+                local lower = word:lower()
+                if UNCERTAIN_SEARCH_STOP_WORDS[lower] then return "" end
+                return word .. " "
+            end, 1)
+        end
+        if R.Trim(searchText) == "" then searchText = text end
+        local ok, hits = pcall(knowledge.Search, searchText, 6)
+        -- A misspelling scores far below a real hit, so retry once with the
+        -- typo repaired against the real control vocabulary. Without this
+        -- "change reseted icon" answers with an unrelated control instead of
+        -- the Rested Indicator page.
+        local function TopScore(list)
+            local top = 0
+            for i = 1, #(type(list) == "table" and list or {}) do
+                local score = tonumber(list[i] and list[i].score) or 0
+                if score > top then top = score end
+            end
+            return top
+        end
+        if ok and TopScore(hits) < UNCERTAIN_PAGE_OFFER_MIN_SCORE then
+            -- Correct the stripped noun phrase, not the raw command: the verb
+            -- would otherwise be carried back into the retry and depress the
+            -- score exactly as it did the first time.
+            local corrected = R.CorrectControlTypos(searchText)
+            if corrected and corrected ~= searchText then
+                local retryOk, retryHits = pcall(knowledge.Search, corrected, 6)
+                if retryOk and TopScore(retryHits) > TopScore(hits) then hits = retryHits end
+            end
+        end
+        if ok and type(hits) == "table" then
+            local seenPage, offered = {}, 0
+            for i = 1, #hits do
+                local hit = hits[i]
+                local item = hit and hit.item
+                local pageKey = item and R.Trim(tostring(item.page or "")) or ""
+                -- Only a solidly scoring hit may name a page. A weak match still
+                -- returns something plausible-looking on the wrong page (the
+                -- index answers "reseted icon" with Mythic Raid Assist Icon at
+                -- roughly two thirds the score of a real hit), and pointing the
+                -- player confidently at the wrong panel is worse than admitting
+                -- the request was not understood.
+                if (tonumber(hit and hit.score) or 0) < UNCERTAIN_PAGE_OFFER_MIN_SCORE then
+                    pageKey = ""
+                end
+                if pageKey ~= "" and not seenPage[pageKey] and offered < 2 then
+                    seenPage[pageKey] = true
+                    offered = offered + 1
+                    local pageLabel = tostring(item.pageLabel or pageKey)
+                    AddChoice({
+                        action = scopeHelp,
+                        args = { page = pageKey, label = pageLabel },
+                        label = "Show the " .. pageLabel .. " controls",
+                        summary = "Shows the controls on that page without changing MSUF.",
+                    }, "scope:" .. pageKey)
+                end
+            end
         end
     end
 

@@ -456,7 +456,13 @@ local function BuildCastbars(ctx)
             if direction == "RIGHT" then direction = "LTR" end
             local reverse = direction ~= "LTR"
             if unit == "target" and ((g and g.castbarOpositeDirectionTarget == true) or ReadGBool("castbarOpositeDirectionTarget", false)) then reverse = not reverse end
-            if isChanneled and not ((g and g.castbarUnifiedDirection == true) or ReadGBool("castbarUnifiedDirection", false)) then reverse = not reverse end
+            local unified = (g and g.castbarUnifiedDirection == true) or ReadGBool("castbarUnifiedDirection", false)
+            if kind == "empowered" then
+                -- The empower preview fills, so the legacy flip applies.
+                if not unified then reverse = not reverse end
+            end
+            -- Channels keep the cast's anchor; unified direction instead makes
+            -- them fill like a cast (see the visual progress computation).
             return reverse
         end
         local function GlowBlend(r, g, b, progress)
@@ -631,7 +637,8 @@ local function BuildCastbars(ctx)
             local duration = CastDuration(kind)
             local progress = self.progress or 0
             local reverse = ResolvePreviewReverse(self, unit, kind, g)
-            local visual = (kind == "channel") and (1 - progress) or progress
+            local unifiedFill = (g and g.castbarUnifiedDirection == true) or ReadGBool("castbarUnifiedDirection", false)
+            local visual = (kind == "channel" and not unifiedFill) and (1 - progress) or progress
             visual = max(0.01, min(1, visual))
             local fillW = max(1, floor(barWLocal * visual + 0.5))
             local baseR, baseG, baseB = 0.20, 0.78, 0.94
