@@ -1488,6 +1488,10 @@ Elements.Portrait = {
     dirty = DIRTY_PORTRAIT,
     events = {
         "UNIT_PORTRAIT_UPDATE",
+        -- Model swaps (shapeshift, transform, vehicle morph) invalidate the
+        -- portrait render without a guaranteed UNIT_PORTRAIT_UPDATE; Blizzard's
+        -- UnitFrame refreshes on it too, so mirror that or the portrait sticks.
+        "UNIT_MODEL_CHANGED",
     },
     Enable = function(f, conf) end,
     Disable = function(f) end,
@@ -2757,6 +2761,11 @@ local _UF_DISPATCH = {
         self._msufPortraitNextAt = 0
         Core.MarkDirty(self, DIRTY_PORTRAIT, false, "UNIT_PORTRAIT_UPDATE")
     end,
+    UNIT_MODEL_CHANGED = function(self)
+        self._msufPortraitDirty = true
+        self._msufPortraitNextAt = 0
+        Core.MarkDirty(self, DIRTY_PORTRAIT, false, "UNIT_MODEL_CHANGED")
+    end,
     -- Threat
     UNIT_THREAT_SITUATION_UPDATE = function(self)
         Core.MarkDirty(self, DIRTY_THREAT, nil, "UNIT_THREAT_SITUATION_UPDATE")
@@ -3227,6 +3236,11 @@ Global:RegisterEvent("GROUP_ROSTER_UPDATE")
 Global:RegisterEvent("PARTY_LEADER_CHANGED")
 Global:RegisterEvent("RAID_TARGET_UPDATE")
 Global:RegisterEvent("UNIT_PET")
+-- The client drops all portrait render targets on loading screens, cinematics
+-- and display-setting changes; whoever misses this shows recycled-target
+-- garbage until the next unit swap. Blizzard's UnitFrame registers it on
+-- every frame; one global registration covers all MSUF unitframes.
+Global:RegisterEvent("PORTRAITS_UPDATED")
 
 local function MarkUnit(unit, mask, urgent, reason)
     local f = FramesByUnit[unit]
@@ -3514,6 +3528,24 @@ Global:SetScript("OnEvent", function(_, event, arg1)
         -- Coalesce to one next-frame pass and queue only live/visible boss units.
         -- This removes redundant urgent-lane spikes while preserving exact frame state.
         _UFCore_ScheduleBossEngage()
+        return
+    end
+
+    if event == "PORTRAITS_UPDATED" then
+        -- All portrait render targets were invalidated at once. Re-request every
+        -- enabled portrait through the normal dirty lane: the per-render-frame
+        -- budget in MSUF_Portraits.lua spreads the SetPortraitTexture calls out,
+        -- so a mass invalidation never spikes a single frame.
+        for _, f in pairs(FramesByUnit) do
+            if f.portrait then
+                local conf = GetFrameConf(f)
+                if conf and (conf.portraitMode or "OFF") ~= "OFF" then
+                    f._msufPortraitDirty = true
+                    f._msufPortraitNextAt = 0
+                    Core.MarkDirty(f, DIRTY_PORTRAIT, false, "PORTRAITS_UPDATED")
+                end
+            end
+        end
         return
     end
 
