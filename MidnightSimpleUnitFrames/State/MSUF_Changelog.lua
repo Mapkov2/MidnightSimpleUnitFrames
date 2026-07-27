@@ -8,10 +8,41 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-Beta32",
-    previousVersion = "6.0-Beta31",
-    rangeLabel = "6.0-Beta31 -> 6.0-Beta32",
+    currentVersion = "6.0-Beta33",
+    previousVersion = "6.0-Beta32",
+    rangeLabel = "6.0-Beta32 -> 6.0-Beta33",
     entries = {
+        {
+            version = "6.0-Beta33",
+            date = "2026-07-27",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "The MSUF Assistant can now change close to two hundred settings it used to refuse. A setting stayed read-only whenever nothing proved which values it accepts, so ordinary requests like \"set target absorb bar height to 6\" were declined even though the slider for exactly that sits in the options window. Those ranges are now taken from the control that owns them: 112 settings gained the range of their menu slider, another 76 gained the closed list of choices their dropdown offers, and texture and portrait-pack fields are checked against the media you actually have installed instead of a fixed list. Anything without that evidence stays read-only, and a build check re-reads the options source, so the range the Assistant writes can never drift away from the slider you see.",
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "\"Show cast spell icon in portrait\" now also sits on the Cast Bars section's Icon tab, in its own \"Portrait Cast Icon\" card. It is the same setting as the one under Portrait > More Options and either one updates the other; it is there because that is where it gets looked for. It still needs the portrait enabled, and it works with both castbar providers.",
+                        "The Cooldown Manager and global anchor buttons are no longer limited to the advanced Edit Mode layout. They were built only for that layout, so the standard toolbar had no way to reach either one; the toolbar is a little wider now to hold them.",
+                        "The Assistant no longer offers a dozen fields that were never controls: legacy mirrors of the health and power text slot modes, of the group aggro border and the highlight priority toggle, the tooltip style derived from the anchor dropdown, and interface state the options window keeps for itself, such as its own size and the dashboard's tip counter. Each of them was answered as if it were a setting, so \"set the window width\" could land on the options panel instead of a frame.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Fixed AFK and DND text never appearing on anything but the player frame. The client does not report another unit's away toggle through the event MSUF was listening to, so a target or party member going AFK changed nothing until something unrelated happened to refresh the frame. Frames that show AFK or DND now listen for the event that actually carries it, filtered to their own unit.",
+                        "Fixed AFK, DND, dead and ghost text falling back to the base position and size after a refresh that did not come from a flag change - a font change, a PvP context change, or a group reseed. The placement that belongs to the shown state is now applied at the same moment the rest of the text is.",
+                        "Fixed the aura \"Decimals below sec\" sliders reading back the global value in the options window. The per-unit value is stored in the shared layout, and the menu stopped looking before it got there, so the slider could show something other than what the frame was using.",
+                        "Fixed the Assistant losing the subject of a help answer on /reload. \"Where is it\" or \"explain that simpler\" then resolved against the last setting you changed instead, so you could ask about range fade, reload, ask where it is, and be handed the menu location of an unrelated control. The subject now survives a reload and a logout, and starting a new topic retires it.",
+                        "Fixed the Assistant asking a question it could not accept an answer to. When a request matched several controls it listed them numbered, but replying \"2\" fell through to \"I'm not sure which MSUF request you mean yet\". A numbered reply now works in that list, entries sharing a name carry the page that tells them apart, and where no list can be offered the answer says so and suggests a phrasing that names one control.",
+                        "Fixed color requests being refused for colors whose setting name does not contain the word \"color\". Castbar text, the unified bar, the class resource ramp, the group frame font and the targeted-spells text were each published as three unrelated numbers, so asking for one of them got a \"no reviewed range\" refusal instead of a pointer to the color picker. A color is now recognised from its red, green and blue parts existing together, which no naming convention can defeat.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-Beta32",
             date = "2026-07-27",
@@ -112,58 +143,6 @@ local data = {
                         "Group frames now apply their one-time startup visuals only after Blizzard's secure header bounds have settled, preventing saved opacity and visual state from being applied against transient login geometry.",
                         "The Options loader is zero-idle until configuration demand, preserves saved UI-scale behavior in the always-loaded core, and keeps configuration loading blocked safely during combat.",
                         "Fixed the options unit preview clamping tall or narrow frames to landscape proportions. Edit Mode writes and the preview mock now share one legal size range (40-800 wide, 8-200 high), so frame-relative elements such as the raid marker preview exactly where they land on the live frame.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-Beta29",
-            date = "2026-07-25",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "Added a \"Border Style\" choice for aura icons. Solid is the crisp pixel ring you already had, Soft Glow adds a halo around the icon, and Shadow shades the icon's own edges the way a drop shadow falls across artwork. Blizzard's tooltip, dialog and achievement frames plus every LibSharedMedia border can also be picked as icon border art, and Thickness scales the edge.",
-                        "Replaced the aura icon shadow with a real soft drop shadow. It used to be two stacked hard rectangles, which read as chunky black steps around every icon; it is now a single smooth falloff with rounded corners. It is drawn once when a button is created, so it still costs nothing while playing.",
-                        "Aura icon border and shadow can now be switched off per frame: Player, Target, Focus, Boss, Party, and Raid each have their own \"Use icon border & shadow on ... frames\" toggle, while the style itself stays one shared block. An excluded frame compiles the style away completely instead of drawing hidden regions.",
-                        "Fixed Boss frame borders going soft or uneven at some heights. Boss frames now place their border, health bar, power bar, and attached castbar on one shared absolute physical-pixel rectangle instead of inheriting the half-pixel phase a centered container picks up at odd heights, so every edge stays a crisp 1 px at any Boss height and UI scale. Attached Boss castbars move to an edge-to-edge anchor; an existing offset is converted once and keeps its position on screen.",
-                        "/msuf edit now starts MSUF Edit Mode instead of opening an empty \"native page missing\" page, and it accepts a frame name: /msuf edit target drops you straight onto the Target frame, and typing it again while Edit Mode runs switches frames rather than closing it. /msuf lock leaves Edit Mode.",
-                        "Added profile slash commands. /msuf profile lists your profiles and marks the active one, /msuf profile <name> saves the current settings as a new profile and switches to it, /msuf load <name> loads one by full name or by a unique prefix, and /msuf delete <name> removes one once you repeat the command. /msuf default resets every setting in the active profile, which is what /msuf reset never did: that one only moves frames back.",
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Added six bundled bar textures contributed by Aur0r4 - \"MSUF Dreamy\", \"MSUF Dreamy Soft\", \"MSUF Dreamy Ultra Soft\", \"MSUF Foggy\", \"MSUF Glass\", and \"MSUF Mirrored Glass\" - which show up in every texture dropdown: health and power bars, bar backgrounds, castbars, class resources, and group frames.",
-                        "Added a per-unit \"Layer (0-30)\" slider for the castbar icon under Castbar > Advanced > Icon Style, on Player, Target, Focus, and Boss. 0 keeps the icon just above the bar and moves it together with the whole-castbar layer, exactly as before; 1-30 pins the icon to that frame level on the shared layer scale, so a large icon can be ordered in front of or behind the bar, texts, and other frame elements. Copy-between-units, reset, and the Assistant all know the new setting.",
-                        "Every /msuf sub-command now registers itself in one shared list that both the dispatcher and the help text read, so /msuf help shows exactly what is loaded. The everyday commands are grouped by topic, and /msuf help all adds the diagnostics. The Dashboard's \"Print Help\" button prints that complete list.",
-                        "Added /msuf search <text>, which runs a menu search and opens the results, plus /msuf version for the version, active profile, and Edit Mode state, and /msuf reload as a spelled-out /rl.",
-                        "Anything /msuf does not recognise as a command or a page name is now treated as a menu search instead of opening a blank page, so a typo or a half-remembered setting name still lands somewhere useful.",
-                        "The Gameplay page's \"Preview\" and \"Reset TotemFrame layout\" buttons now measure their translated label instead of assuming the English width, and wrap onto a second row when the pair no longer fits side by side. The Preview button lights up while the preview is running, and the From/To anchor dropdowns no longer overlap each other at narrow menu widths.",
-                        "MSUF Edit Mode gained a frame picker. Overlapping frames used to be a dead end \" the frame on top swallows the click and the one underneath cannot be selected at all \" so the HUD now lists the placeable elements and selects the one you pick, no dragging things out of the way first. The list follows your current selection, closes with the HUD, and is unavailable in combat.",
-                        "The 6.0 upgrade tour now targets 5.76 and older, and covers the features an upgrader would otherwise never stumble onto: Priority Frames, the Colors painter, and MSUF Edit Mode, whose card starts Edit Mode directly since it has no settings page to open. The group frames and Auras3 cards now name what actually changed \" adaptive layouts and scaling, per-lane aura filters and blacklists, the Dispel Overlay page, role icons and range fade \" instead of describing the area in general terms.",
-                        "\"Copy to...\" on a unit page now carries what the page actually owns. Frame Basics takes the whole per-unit Bars override \" bar and background texture, outline, highlight priority and triggers, dispel overlay, absorb, heal prediction, and gradient \" along with the override switch itself, so a frame that was following the global Bars page keeps following it. Text takes the per-slot offsets and the unit's font settings (font, outline, shadow, color, name shortening). Portrait, Power Bar, Castbar, and Layout pick up the fields that were quietly skipped, including portrait decoration, power bar textures, castbar frame level, and the Boss layout mode and spacing. Group frame copying gains the absorb text icons and the DND status text. Castbar X/Y still only travel while the castbar is anchored to its frame: detached, those are absolute screen coordinates and copying them would stack both castbars in one spot.",
-                        "The Assistant now resolves text-movement follow-ups against the object you were just talking about. \"move the power text up\" names the text but not the frame that owns it, so it used to fall through to a fuzzy search that could land on any control sharing a word - which is how \"power text\" reached Class Resource Text. Asking a retained text object for a control it does not have, such as an anchor on Health Text, now reports the controls that object really has instead of asking you to name it again.",
-                        "Widened what the Assistant can change directly: profiles, unit frame power, base and bar settings, aura colors, castbar details, and the texture and gradient context all gained registry coverage. Action-backed menu controls now also carry their argument contract, so they are published as real actions rather than being downgraded to guided steps - the new \"New character profile\" dropdown among them.",
-                        "Updated all supported locales for the new aura border styles and per-frame icon styling, the castbar icon layer, and the slash-command help and profile messages.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed the Blizzard TotemFrame preview ignoring the mouse: SetOnUpdateMode takes an enum value rather than a name, so passing it a string left the drag driver switched off and the preview only moved by arrow keys. Every call site is corrected in the same pass - the TotemFrame preview, aura group dragging in MSUF Edit Mode, the class resource preview animation, and the position debug overlay - and each one now tolerates a client that does not offer the method at all.",
-                        "Fixed the TotemFrame keeping MSUF's position after the feature was turned off during combat, which held until the next enable or UI reload; the restore now completes when you leave combat.",
-                        "Stopped refreshing the TotemFrame on every successful player cast. Blizzard's own rebuild is hooked instead, which covers totem drops, shapeshifts, talents, and spec changes in one place, so the two timers that ran per cast are gone. Each refresh also verifies parent, anchor, scale, and strata before writing, so a Blizzard-driven rebuild costs a handful of getters instead of a full re-layout.",
-                        "Fixed /msuf gfhoverdebug doing nothing at all: only a handful of sub-commands were forwarded from /msuf to the older handler, and everything else fell through to the page opener and drew an empty page.",
-                        "Dropped !msuf help and /msufdbgpos from the help output. The chat trigger was removed a while ago and the position debugger is not shipped, so the help listed two commands that did not exist. Diagnostic commands now add themselves to the help from the file that owns them, which makes that class of drift impossible.",
-                        "The compiled aura icon style is memoized per runtime configuration, so all lanes in a refresh share one style table instead of each re-reading the database and re-resolving its border media.",
-                        "Fixed Class Resources ignoring auto-hide in three situations, each leaving the bar at whatever opacity the previous repaint happened to set until some unrelated event moved it: a secret power value, which only rules out the full and empty checks but not the combat one; an idle Ebon Might timer whose remaining time never changes; and the refresh that first switches the bar on at login, spec change, or feature toggle.",
-                        "Fixed Smooth fill doing nothing in combat since Beta 26. The hot-path rework started writing restricted (secret) health and power values without the configured native interpolation, and in combat live values are restricted - so health bars, the Player power bar, Class Resources, Alternative Mana, and the Class Resources Player HP bar all snapped exactly when smoothing is meant to show. The StatusBar API accepts a restricted value together with an interpolation mode and animates it client-side, so those writes now keep the configured smoothing; only the write deduplication still skips restricted values, which never enter Lua comparisons. Class Resources also stopped paying for repaints that change nothing: pip values and the resource text are deduplicated Lua-side now, so an aura or power event that leaves a pip as it was no longer issues a native call for it.",
-                        "Fixed the Devourer Demon Hunter class resource ignoring Separator and Pip gap. It was drawn as a single continuous bar, so Outline was the only style slider that changed anything. It now draws one segment per soul fragment - counted the way Blizzard's own bar counts them, from Dark Heart outside Void Metamorphosis and from the collapsing star cost inside it - so separators, pip gap, and hide-when-full or hide-when-empty behave like they do on every other class resource. A client that does not report a usable count keeps the previous single-bar fill.",
-                        "Fixed the Assistant dashboard card showing its \"Early Alpha\" notice only after the companion had loaded, so the placeholder shell carries it too.",
-                        "MSUF Edit Mode's quick popup \"Copy to...\" copied the source frame's position as well, which dropped the destination exactly on top of it \" and a stacked frame cannot be grabbed to drag it back off. It now copies size only and says \"Copy size to...\", on both unit and group popups. Use the unit page's copy dialog when position really should travel.",
-                        "Fixed aura preview stack and timer text ignoring their configured anchor, so a corner placement no longer renders centered, and resolved the preview font once per font, size, and outline instead of re-resolving it on every stack and timer update.",
-                        "Expanded the Core Lua 5.1 suite to 164 passing tests, including new aura border style, slash-command registry, Devourer class resource, and unit copy coverage regressions.",
                     },
                 },
             },
