@@ -1267,6 +1267,7 @@ local function RememberKnowledgeHelpContext(result)
         clarification = "Name the exact MSUF frame, page, or option before I change anything from this help topic, so I do not guess wrong.",
         nextStep = "Start by opening the matching page or using one of the examples. If you want me to change a setting, name the exact MSUF frame and option.",
     }
+    if type(A.RouterPersistHelpContext) == "function" then A.RouterPersistHelpContext() end
     return result
 end
 

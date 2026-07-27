@@ -1896,6 +1896,7 @@ function R.TryReadabilityShortcut(text)    local norm = R.Normalize(text)
         )
         if type(A.lastAssistantHelpContext) == "table" then
             A.lastAssistantHelpContext.nextStep = "Start with the least destructive visible setting: open Auras and adjust the named lane's Icon Size first. Then tune spacing or count only if the icons are still crowded."
+            A.RouterPersistHelpContext()
         end
         return reply
     end
@@ -1918,6 +1919,7 @@ function R.TryReadabilityShortcut(text)    local norm = R.Normalize(text)
         )
         if type(A.lastAssistantHelpContext) == "table" then
             A.lastAssistantHelpContext.nextStep = "Start with the least destructive visible setting: open Group Layout and adjust scale or frame spacing first. If the frames are large enough but the words are not, adjust name or health text next."
+            A.RouterPersistHelpContext()
         end
         return reply
     end
@@ -4778,6 +4780,7 @@ function R.AuraFilterOverviewReply(norm)
         clarification = "Name the exact frame and Buff or Debuff lane before I change a live filter, so I do not guess wrong.",
         nextStep = "Open Aura Filters to inspect the lists, or name a frame and lane before applying a live filter.",
     }
+    A.RouterPersistHelpContext()
     return {
         kind = "answer",
         status = "info",
@@ -14352,6 +14355,9 @@ function A.RouteInput(text, coreHandler)
             end
             A.lastAssistantHelpContext = nil
             A.lastAssistantPlanningContext = nil
+            -- A new topic must retire the persisted copy too, or the old help
+            -- subject would come back on the next reload.
+            A.RouterPersistHelpContext()
             if hadPending or hadPendingResults then
                 answer.text = tostring(answer.text or "")
                     .. "\nI cleared the previous pending choice or change because you started a new topic."

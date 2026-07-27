@@ -137,6 +137,7 @@ function R.ReadabilityReply(title, body, examples, actions, clarification)
         actions = tostring(actions or "Open Dashboard Scaling | Open Fonts"),
         clarification = clarification,
     }
+    A.RouterPersistHelpContext()
     return {
         text = tostring(title or "Readability help") .. "\n" .. tostring(body or "") .. "\nExamples: " .. tostring(examples or "set player width to 300; set target cast bar height to 24.") .. "\nYou can ask: " .. tostring(actions or "Open Dashboard Scaling | Open Fonts"),
         status = "info",
@@ -198,10 +199,72 @@ function R.LooksLikeHelpContextFollowup(norm)    return R.ContainsAny(norm, R.HE
         or (R.ContainsAny(norm, R.HELP_CONTEXT_PRONOUN_CHANGE_TERMS) and R.ContainsAny(norm, R.HELP_CONTEXT_PRONOUN_TERMS))
 end
 
-function R.ClearStaleHelpContextForInput(text)    if type(A.lastAssistantHelpContext) ~= "table" then return end
+-- The help topic that "where is it" or "explain that simpler" refers to used to
+-- live only in this session's Lua table. A /reload dropped it silently and the
+-- same follow-up then resolved against the last CHANGED setting instead: ask
+-- about range fade, reload, ask "where is it", and the assistant answers with
+-- the menu location of an unrelated control -- plausible, wrong, and with no
+-- sign the referent was lost. The topic is plain strings, so it round-trips
+-- through MSUF_DB.assistant.context exactly like the change subject already
+-- does. No age bound: the persisted change subject has none either, and
+-- ClearStaleHelpContextForInput already drops the topic on the first input that
+-- is not a follow-up.
+local HELP_CONTEXT_FIELDS = { "kind", "title", "examples", "actions", "clarification", "nextStep" }
+
+function A.RouterPersistHelpContext()
+    local ctx = A.GetContext and A.GetContext()
+    if type(ctx) ~= "table" then return end
+    local live = A.lastAssistantHelpContext
+    if type(live) ~= "table" then
+        ctx.helpContext = nil
+        return
+    end
+    local stored = {}
+    for i = 1, #HELP_CONTEXT_FIELDS do
+        local field = HELP_CONTEXT_FIELDS[i]
+        local value = live[field]
+        -- SavedVariables only; never persist a function or frame reference that
+        -- a caller happened to hang on the topic table.
+        local valueType = type(value)
+        if valueType == "string" or valueType == "number" or valueType == "boolean" then
+            stored[field] = value
+        end
+    end
+    ctx.helpContext = next(stored) ~= nil and stored or nil
+end
+
+-- Restoring is a reload event, not a per-input fallback: it happens at most
+-- once per loaded Assistant, on the first input after the Lua state was built.
+-- After that the live field is authoritative, so code that deliberately drops
+-- the topic mid-conversation stays dropped instead of being resurrected by the
+-- next input. A real /reload rebuilds the Lua state and clears this flag with
+-- it, which is exactly when the SavedVariables copy should speak again.
+function A.RouterRestoreHelpContext()
+    if type(A.lastAssistantHelpContext) == "table" then return A.lastAssistantHelpContext end
+    if A._helpContextRestored == true then return nil end
+    A._helpContextRestored = true
+    local ctx = A.GetContext and A.GetContext()
+    local stored = type(ctx) == "table" and ctx.helpContext or nil
+    if type(stored) ~= "table" then return nil end
+    local live = {}
+    for i = 1, #HELP_CONTEXT_FIELDS do
+        local field = HELP_CONTEXT_FIELDS[i]
+        if stored[field] ~= nil then live[field] = stored[field] end
+    end
+    if next(live) == nil then
+        ctx.helpContext = nil
+        return nil
+    end
+    A.lastAssistantHelpContext = live
+    return live
+end
+
+function R.ClearStaleHelpContextForInput(text)    A.RouterRestoreHelpContext()
+    if type(A.lastAssistantHelpContext) ~= "table" then return end
     local norm = R.Normalize(text)
     if norm == "" or R.LooksLikeHelpContextFollowup(norm) then return end
     A.lastAssistantHelpContext = nil
+    A.RouterPersistHelpContext()
 end
 
 function R.TryContextlessReferenceClarification(text)

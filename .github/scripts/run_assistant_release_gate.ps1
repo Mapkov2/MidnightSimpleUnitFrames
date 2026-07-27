@@ -361,6 +361,7 @@ $luaGates = @(
     [pscustomobject]@{ Category = "conversation"; Path = "tools/assistant_context_alignment_regression.lua"; Args = @() },
     [pscustomobject]@{ Category = "conversation"; Path = ".github/scripts/tests/assistant_context_object_followup_regression.lua"; Args = @() },
     [pscustomobject]@{ Category = "conversation"; Path = ".github/scripts/tests/assistant_reach_back_subject_smoke.lua"; Args = @() },
+    [pscustomobject]@{ Category = "conversation"; Path = ".github/scripts/tests/assistant_help_context_reload_smoke.lua"; Args = @() },
     [pscustomobject]@{ Category = "conversation"; Path = "tools/assistant_natural_setting_conversation_audit.lua"; Args = @() },
     [pscustomobject]@{ Category = "conversation"; Path = "tools/assistant_planning_followup_regression.lua"; Args = @() },
     [pscustomobject]@{ Category = "conversation"; Path = "tools/assistant_real_prompt_output_audit.lua"; Args = @("--quiet") },
