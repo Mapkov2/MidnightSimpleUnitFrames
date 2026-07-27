@@ -1244,6 +1244,7 @@ function Auto.Fill()
     -- registered so the curated/generated split is fully visible.
     Auto.PromoteInheritedNumberDomains()
     Auto.PromoteInheritedValueLists()
+    Auto.PromoteReviewedMediaTypes()
     Auto._fillComplete = true
     return added
 end
@@ -1517,6 +1518,57 @@ local REVIEWED_MENU_VALUES = {
         sharedValues = { file = "Pages/MSUF_Menu2_Unit.lua", table = "STATUS_ANCHORS", packed = true } },
 }
 Auto.ReviewedMenuValues = REVIEWED_MENU_VALUES
+
+-- Media fields cannot use a closed list: the installed texture set depends on
+-- which media addons the player has. Curated texture settings solve this by
+-- carrying `mediaType` and letting the media resolver validate the value at
+-- write time (see any curated *.powerBarTexture: type "string", mediaType
+-- "statusbar", no values). These generated twins are bound to the same texture
+-- dropdown in the options page, so they get the same treatment rather than a
+-- fabricated value list.
+local REVIEWED_MENU_MEDIA = {
+    healPredictionBarTexture = { mediaType = "statusbar",
+        source = "absorb.heal_prediction.texture", menuKey = "healPredictionBarTexture" },
+    tempMaxHealthTexture = { mediaType = "statusbar",
+        source = "temp_max_health.texture", menuKey = "tempMaxHealthTexture" },
+    -- Not LibSharedMedia: the class portrait dropdown is filled from
+    -- MSUF.PortraitMedia.GetPackOptions(), so the installed packs decide the
+    -- choices. A fixed list would be wrong for the same reason it is wrong for
+    -- textures; the resolver's portraitpack branch validates at write time.
+    portraitClassStyle = { mediaType = "portraitpack",
+        source = "portrait.class_style", menuKey = "portraitClassStyle",
+        menuFile = "Pages/MSUF_Menu2_UnitFrameVisuals.lua", menuBuilder = "PortraitClassStyleValues" },
+}
+Auto.ReviewedMenuMedia = REVIEWED_MENU_MEDIA
+
+--- Gives generated media strings the same resolver-backed write path curated
+--- texture settings use. Static metadata only, so no runtime or combat cost.
+function Auto.PromoteReviewedMediaTypes()
+    local Registry = A.Registry
+    if not (Registry and type(Registry.AllSettings) == "function") then return 0 end
+    local settings = Registry:AllSettings()
+    local promoted = 0
+    for i = 1, #settings do
+        local s = settings[i]
+        if type(s) == "table" and s.generated == true and s.type == "string"
+            and s.assistantColorChannel ~= true
+            and not NON_ALIAS_PROMOTION_KEYS[tostring(s.key)]
+            and s.assistantMutationSafe == false and s.mediaType == nil and s.values == nil
+        then
+            local reviewed = REVIEWED_MENU_MEDIA[PromotionLeaf(s.key)]
+            if reviewed then
+                s.mediaType = reviewed.mediaType
+                s.assistantMutationSafe = true
+                s.generatedMutationSafety = "reviewed-menu-media"
+                s.mutationDomainSource = reviewed.source
+                s.unsafeMutationReason = nil
+                promoted = promoted + 1
+            end
+        end
+    end
+    Auto.lastMediaPromotionCount = promoted
+    return promoted
+end
 
 function Auto.PromoteInheritedValueLists()
     local Registry = A.Registry

@@ -154,7 +154,36 @@ local function LooksLikeTextureSetting(setting)
     return false
 end
 
+-- Portrait packs are not LibSharedMedia: the options page builds its dropdown
+-- from MSUF.PortraitMedia.GetPackOptions(), so the installed set decides what
+-- exists. That is the same shape as the texture list, and the same reason a
+-- fixed value list would be wrong for these settings.
+function R.PortraitPackItems()
+    local out, usedValue, usedLabel = {}, {}, {}
+    local media = MSUF and MSUF.PortraitMedia
+    local provider = type(media) == "table" and media.GetPackOptions or nil
+    local items = type(provider) == "function" and provider() or nil
+    if type(items) == "table" then
+        for i = 1, #items do
+            local item = items[i]
+            if type(item) == "table" then
+                local value = item.value or item.key
+                AddItem(out, usedValue, usedLabel, value,
+                    item.text or item.label or value, value, nil, "MSUF")
+            end
+        end
+    end
+    if #out == 0 then
+        -- The Blizzard class icon is the built-in default and is always present
+        -- even with no packs installed.
+        AddItem(out, usedValue, usedLabel, "BLIZZARD", "Blizzard Class Icon", "BLIZZARD", nil, "Fallback")
+    end
+    return out
+end
+
 function R.MediaTypeForSetting(setting)
+    -- Declared media wins over the name heuristics below.
+    if type(setting) == "table" and setting.mediaType == "portraitpack" then return "portraitpack" end
     if LooksLikeFontSetting(setting) then return "font" end
     if LooksLikeTextureSetting(setting) then return "statusbar" end
     return nil
@@ -297,7 +326,9 @@ function R.Find(mediaType, query, opts)
     opts = opts or {}
     query = Trim(query or "")
     if query == "" then return nil end
-    local items = mediaType == "font" and R.FontItems() or R.StatusbarItems()
+    local items = mediaType == "font" and R.FontItems()
+        or mediaType == "portraitpack" and R.PortraitPackItems()
+        or R.StatusbarItems()
     local limit = tonumber(opts.limit) or 8
     local top = {}
     local exacts = {}
@@ -356,6 +387,8 @@ function R.ResolveSetting(setting, text, raw)
 end
 
 function R.NoMatchMessage(mediaType, query)
-    local label = mediaType == "font" and "font" or "texture"
+    local label = mediaType == "font" and "font"
+        or mediaType == "portraitpack" and "portrait pack"
+        or "texture"
     return "I don't see a matching " .. label .. " in the current MSUF media list. Pick one of the names shown there."
 end
