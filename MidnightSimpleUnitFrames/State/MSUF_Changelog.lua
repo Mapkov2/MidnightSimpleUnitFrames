@@ -8,10 +8,31 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-Beta33",
-    previousVersion = "6.0-Beta32",
-    rangeLabel = "6.0-Beta32 -> 6.0-Beta33",
+    currentVersion = "6.0-Beta34",
+    previousVersion = "6.0-Beta33",
+    rangeLabel = "6.0-Beta33 -> 6.0-Beta34",
     entries = {
+        {
+            version = "6.0-Beta34",
+            date = "2026-07-28",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "When the Assistant cannot work out which control you meant, it now hands you the relevant part of the menu instead of a generic list. Asking it to \"change reseted icon\" used to offer \"Show options for the current Group Layout page\" or \"Show general Assistant examples\", neither of which has anything to do with the rested icon. Three separate things caused that: the uncertain branch never consulted the Assistant's own knowledge index, the leading command verb dragged the ranking onto an unrelated page, and the misspelling was never corrected. Typos are now repaired against the words that actually appear in MSUF's control labels, command verbs are stripped before searching, and the match has to clear a relevance floor - below it the Assistant still says it does not know rather than confidently opening the wrong page.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Fixed \"Always use fill direction for all casts\" not applying to channelled casts. Channels kept draining from full to empty, so the one option whose entire purpose is to make every cast move the same way left channels running opposite to everything else. A channel now fills from empty to full in the direction you configured, timed by the client itself, and the classic drain remains the default while the option is off. The spark also stays on the bar's moving edge in both modes instead of sitting on the anchor side, and the Cast Bars page preview shows the same thing the frame does.",
+                        "Fixed the aura icon border and drop shadow never showing up in any preview. The Icon Border & Shadow settings reached real frames, but none of the preview surfaces drew them - not the Sample and Live preview on the Auras page, not the unit frame preview in the options window, and not the Edit Mode aura lanes - so there was no way to judge a border style without closing the menu and looking at the frames. All three now draw through the same renderer the live buttons use, including the per-scope opt-out and the lane padding, which the previews had been ignoring as well.",
+                        "Fixed the Auras page preview not reacting to an icon border or shadow change. The preview repainted before the queued aura update had run and re-read the previous configuration, so it kept showing the old style until some unrelated interaction happened to refresh it - the reason the frames updated but the preview did not.",
+                        "Fixed the \"Preview as\" row and the Sample/Live switch on the Auras page showing no selection at all. Both were built from the plain action button, which draws its selected state exactly like its unselected one, and the selection was never re-stamped on click because switching tabs repaints the preview without rebuilding the page.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-Beta33",
             date = "2026-07-27",
@@ -101,48 +122,6 @@ local data = {
                         "Fixed \"Copy to\" carrying only part of a portrait. Width, height, placement, detached anchors, overlay alignment, layer, opacity, pan, and border art were left behind, so the copy's geometry disagreed with the portrait it was copied from. Border and background colors are still shared by all units and deliberately stay out of the copy.",
                         "Fixed health bar opacity in the group preview not matching the frames. The preview faded the bar in a way the client discards on the next value change; it now fades the fill texture like the live frames, scales the heal, absorb, and heal-absorb overlays with it, and fades the texts along unless \"Keep text + portrait visible\" is on.",
                         "Fixed four Assistant phrasings landing on a neighbouring setting: bar outline draw order was swallowed by outline thickness, Custom aura container geometry was answered by the Buff/Debuff shortcut, aura live-filtering claimed the group externals layer, and power bar textures were written to the global bar texture.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-Beta30",
-            date = "2026-07-26",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "The complete options interface now lives in its own Load-on-Demand companion and is loaded only when configuration is requested. Normal gameplay no longer eagerly loads the large Menu2 implementation, while the minimap button, slash commands, Edit Mode, search, guided setup, and Assistant routes keep their existing entry points.",
-                        "Portraits can now be Attached, freely Detached, or placed as an Overlay inside the health bar. Independent width and height, nine-point anchoring, layer, opacity, and pannable zoom controls make rectangular and watermark-style portraits possible without adding per-frame work.",
-                        "Added Relief portrait rings and shape-following flat borders for Square, Circle, Rounded, and Diamond portraits. Border direction rotates the relief lighting, and static colors remain zero-cost after settings are applied.",
-                        "Menu search now ships with a complete prebuilt index, so the first search sees controls on every page without building those pages or causing the previous first-use pause.",
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Portrait placement and border controls now route through the correct unit workspaces, guided-tour targets, search routes, and Assistant settings.",
-                        "The unit-frame core was extracted into an isolated embeddable MSUFUnitFrames framework while preserving the existing MSUF API and legacy compatibility bridges.",
-                        "The 6.0 upgrade tour grew to sixteen curated highlights: Spell Indicators, Fill Direction, the portrait overhaul, and status icon packs joined the lineup, existing cards were refreshed for the newest features, and the layer card now shows an inline preview of the layer sub-menu instead of routing away.",
-                        "Updated all supported locales for portrait placement, geometry, border art, long-duration aura suffixes, and the expanded upgrade tour.",
-                        "The Assistant companion now declares the MSUF addon icon, so the load-on-demand module carries MSUF branding in the addon list.",
-                        "The support card now credits Aur0r4 for the shipped default profile alongside Mapko and R41z0r, in every supported locale.",
-                        "Assistant control schemas, reviewed inventory evidence, and reproducible release gates were refreshed for the Beta 30 control surface and three-addon package.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed permanent auras retaining a recycled countdown, and promoted long aura durations to localized hour and day displays.",
-                        "Batched aura style applies, removed redundant native calls, and trimmed icon artwork work when the resulting aura state did not change.",
-                        "Fixed color controls that did not apply their new color live while the picker was open.",
-                        "Fixed unit-to-unit copy operations losing source semantics for settings whose meaning differs by unit.",
-                        "Reused portrait identity keys and aligned live and preview overlay sizing to avoid unnecessary portrait work and geometry drift.",
-                        "Removed the Anchor Picker's full-UI hover scans; hover validation now stays within a bounded candidate set.",
-                        "Search is fully quiescent in combat, understands raw keys such as gf_party.hpTextMode, and deduplicates controls by stable route identity.",
-                        "Group frames now apply their one-time startup visuals only after Blizzard's secure header bounds have settled, preventing saved opacity and visual state from being applied against transient login geometry.",
-                        "The Options loader is zero-idle until configuration demand, preserves saved UI-scale behavior in the always-loaded core, and keeps configuration loading blocked safely during combat.",
-                        "Fixed the options unit preview clamping tall or narrow frames to landscape proportions. Edit Mode writes and the preview mock now share one legal size range (40-800 wide, 8-200 high), so frame-relative elements such as the raid marker preview exactly where they land on the live frame.",
                     },
                 },
             },
