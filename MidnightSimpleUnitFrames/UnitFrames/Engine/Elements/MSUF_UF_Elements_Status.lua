@@ -1794,6 +1794,15 @@ function Status.Apply(frame, spec)
     frame._msufStatusTextLayout = nil
   end
   ApplyConfiguredRegions(frame, spec)
+  -- ApplyConfiguredRegions lays the status text out with its base table, but a
+  -- visible AFK/DND/DEAD/GHOST text owns a per-state layout. Parent-only
+  -- refreshes (font runtime, PvP context, group reseeds) have no child update
+  -- following them, so re-resolve the state here or the shown text keeps the
+  -- base position/size until the next flags event.
+  local status = spec and spec.status
+  if frame and status then
+    UpdateStatusText(frame, status, "MSUF_ELEMENT_APPLY")
+  end
 end
 
 function Status.Disable(frame)
