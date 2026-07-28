@@ -23,8 +23,21 @@ local data = {
                     },
                 },
                 {
+                    title = "Changes",
+                    bullets = {
+                        "Cast Bars gained a \"Filtering & Feedback\" section with two new options, both off by default. \"Hide profession casts\" drops crafting and gathering casts before they reach a frame - the profession flag is never a protected value, so this also holds for units whose spell data is restricted in PvP. \"Show cast pushback\" appends the delay a cast has accumulated to its name, for example \"Fireball +0.4\".",
+                        "The per-unit \"Power texture\" and \"Power background\" dropdowns are gone from each frame's Visuals page. Power bar art is set once on the Bars page now, and any per-unit override you already had keeps resolving the same way.",
+                    },
+                },
+                {
                     title = "Fixes & Performance",
                     bullets = {
+                        "Fixed channels no longer draining when a cast reports no duration object, which the client hits often. Every manual bar write had started reading fill direction from the unified-direction setting instead of the cast type, so those channels filled like a cast instead of counting down. Channels now always count down unless \"Always use fill direction for all casts\" is on; casts and empowered casts are unaffected either way, and the native timer and the manual fallback render the same bar.",
+                        "Fixed MSUF fighting another unitframe addon over the same frame's parent. The client's frame-hiding accepts a parent that another addon already hid, so MSUF re-asserting its own hidden parent bounced the frame between both addons' hooks until the stack overflowed.",
+                        "The \"/rl\" reload shortcut is only claimed while it is still free, instead of unconditionally. It is a shared convenience command, and claiming it outright let load order alone decide which addon's handler answered it.",
+                        "\"Sync width to Class Resource\" now follows the class power bar's own show/hide transition. Nothing else was watching for that specific change, so a detached power bar could keep a stale synced width after the bar it was following disappeared.",
+                        "A detached power bar's fallback width no longer sticks to its last value after its source is hidden. Resolving the width and refreshing it are now separate steps, so a hidden source clears its cached width instead of keeping the stale number.",
+                        "The Group Indicators status-icon preview now highlights whichever of \"Current\" or \"All\" is the active preview mode, matching the unit frame visuals page and its preview helpers.",
                         "Fixed the Dashboard's changelog and support disclosures jumping the whole page back to the top every time you opened or closed one. Auras and Group Auras already restored the reader's scroll position after this kind of rebuild; Dashboard used a plain page reselect that never carried the offset over. All three now share one implementation, so opening a card near the bottom of a long page no longer sends you back to the first line.",
                     },
                 },
