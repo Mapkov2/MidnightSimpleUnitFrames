@@ -10,6 +10,7 @@ $lua = Get-Command $LuaCommand -ErrorAction Stop
 # This is intentionally explicit: adding a non-Assistant smoke without adding
 # it here fails the manifest check instead of silently leaving CI coverage red.
 $tests = @(
+    "tools/addon_interop_guard_smoke.lua",
     "tools/advanced_colors_page_contract_smoke.lua",
     ".github/scripts/tests/aggro_runtime_routing_smoke.lua",
     ".github/scripts/tests/anchor_picker_forbidden_smoke.lua",
@@ -80,6 +81,8 @@ $tests = @(
     ".github/scripts/tests/boss_castbar_lifecycle_smoke.lua",
     ".github/scripts/tests/castbar_auto_width_geometry_smoke.lua",
     ".github/scripts/tests/castbar_width_source_dirty_routing_smoke.lua",
+    ".github/scripts/tests/castbar_channel_drain_direction_smoke.lua",
+    ".github/scripts/tests/castbar_filter_feedback_smoke.lua",
     ".github/scripts/tests/castbar_duration_identity_smoke.lua",
     ".github/scripts/tests/castbar_engine_identity_smoke.lua",
     ".github/scripts/tests/castbar_focus_subscription_smoke.lua",

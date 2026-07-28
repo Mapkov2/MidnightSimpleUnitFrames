@@ -729,6 +729,7 @@ L["Detached Y"] = "Separate bar Y"
 L["Detached height"] = "Separate bar height"
 L["Detached layer"] = "Separate bar draw order"
 L["Detached width"] = "Separate bar width"
+L["A width set here overrides the shared Class Resources width mode. A visible Class Resource bar still wins while width sync is on."] = "A width set here overrides the shared Class Resources width mode. A visible Class Resource bar still wins while width sync is on."
 L["Detaches power bar from unit frame"] = "Shows the power bar separately"
 L["Dispel"] = "Cleanse"
 L["Dispel Glow"] = "Cleanse Glow"
@@ -2777,3 +2778,12 @@ L["Border art"] = "Border art"
 L["Border direction"] = "Border direction"
 L["Relief"] = "Relief"
 L["Flat"] = "Flat"
+
+--- Castbar filtering & feedback (6.0)
+L["Filtering & Feedback"] = "Filtering & Feedback"
+L["Hide profession casts"] = "Hide profession casts"
+L["Show cast pushback"] = "Show cast pushback"
+
+--- Castbar filtering & feedback tooltips (6.0)
+L["Keeps crafting and gathering casts off every castbar.\n\nThe profession flag is never a protected value, so this filter also holds for units whose spell data is restricted in PvP."] = "Keeps crafting and gathering casts off every castbar.\n\nThe profession flag is never a protected value, so this filter also holds for units whose spell data is restricted in PvP."
+L["Appends the delay a cast has accumulated to the spell name, for example \"Fireball +0.4\".\n\nThe delay is read once per cast from the same event that starts the bar."] = "Appends the delay a cast has accumulated to the spell name, for example \"Fireball +0.4\".\n\nThe delay is read once per cast from the same event that starts the bar."

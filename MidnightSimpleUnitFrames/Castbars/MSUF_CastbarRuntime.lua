@@ -789,17 +789,24 @@ local function UnifiedDirectionEnabled()
     return general ~= nil and general.castbarUnifiedDirection == true
 end
 
-local function TimerDirection(parent, isChanneled)
-    if parent and parent.isEmpower == true then
-        return TIMER_DIRECTION_ELAPSED
+--- Single source of truth for "does the bar value count down?", shared with the
+--- Lua fallback paths through MSUF_GetCastbarCountsDown so both renderings of a
+--- channel agree.
+local function CountsDown(frame, isChanneled)
+    local resolver = _G.MSUF_GetCastbarCountsDown
+    if type(resolver) == "function" then
+        return resolver(frame, isChanneled and true or false) == true
     end
 
-    if isChanneled == true then
-        -- Unified direction means channels fill up exactly like casts instead
-        -- of draining; the classic drain look stays the non-unified default.
-        if UnifiedDirectionEnabled() then
-            return TIMER_DIRECTION_ELAPSED
-        end
+    if isChanneled ~= true then return false end
+    if frame and frame.isEmpower == true then return false end
+    return not UnifiedDirectionEnabled()
+end
+
+local function TimerDirection(parent, isChanneled)
+    -- Unified direction means channels fill up exactly like casts instead of
+    -- draining; the classic drain look stays the non-unified default.
+    if CountsDown(parent, isChanneled) then
         return TIMER_DIRECTION_REMAINING
     end
 
@@ -1007,6 +1014,13 @@ function Runtime:ApplyActive(frame, state, options)
 
     local reverseFill = ResolveReverseFill(frame, state, isChanneled)
     frame._msufStripeReverseFill = reverseFill and true or false
+    -- The anchor is direction-only, so every value-writing path has to read the
+    -- count direction from the cast type instead of inferring it from the anchor.
+    local countsDown = CountsDown(frame, isChanneled)
+    frame._msufCountsDown = countsDown
+    -- Pushback: NeverSecret, captured once per cast so the text writer only
+    -- reads a frame field. nil when the state carries no delay.
+    frame._msufPushbackMS = PlainNumber(state.delayTimeMS)
     -- StableDuration just re-assigned this cast's times into the shared
     -- container, so the bar must rebind even when the object identity matches.
     local timerDriven = self:ApplyTimer(frame.statusBar, durationObj, reverseFill, isChanneled, true) and true or false
@@ -1016,7 +1030,7 @@ function Runtime:ApplyActive(frame, state, options)
     else
         frame._msufNativeTimerUnsafe = true
     end
-    frame._msufTimerAssumeCountdown = (timerDriven and isChanneled == true and not UnifiedDirectionEnabled()) or nil
+    frame._msufTimerAssumeCountdown = (timerDriven and countsDown) or nil
 
     if options.skipSnapshot ~= true then
         self:SnapshotDuration(frame, durationObj, timerDriven)

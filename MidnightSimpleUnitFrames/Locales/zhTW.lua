@@ -445,6 +445,7 @@ local MSUF2_MENU_AUTO_zhTW = {
     ["Detached height"] = "分離高度",
     ["Detached layer"] = "分離層",
     ["Detached width"] = "分離寬度",
+    ["A width set here overrides the shared Class Resources width mode. A visible Class Resource bar still wins while width sync is on."] = "在此設定的寬度會覆蓋共用的職業資源寬度模式。開啟寬度同步時，可見的職業資源條仍會優先。",
     ["Disable MSUF unitframe tooltips"] = "禁用 MSUF 单位框架工具提示",
     ["Dispel Glow"] = "消除輝光",
     ["Dispel Overlay"] = "消除疊加",
@@ -4040,3 +4041,12 @@ L["Fill bar"] = "填滿條"
 L["Border art"] = "邊框樣式"
 L["Border direction"] = "邊框方向"
 L["Relief"] = "浮雕"
+
+--- Castbar filtering & feedback (6.0)
+L["Filtering & Feedback"] = "過濾與回饋"
+L["Hide profession casts"] = "隱藏專業技能施法"
+L["Show cast pushback"] = "顯示施法延遲"
+
+--- Castbar filtering & feedback tooltips (6.0)
+L["Keeps crafting and gathering casts off every castbar.\n\nThe profession flag is never a protected value, so this filter also holds for units whose spell data is restricted in PvP."] = "讓製造與採集類施法不再出現在任何施法條上。\n\n專業標記從來不是受保護的數值，因此該過濾在 PvP 中法術資料受限的單位上同樣有效。"
+L["Appends the delay a cast has accumulated to the spell name, for example \"Fireball +0.4\".\n\nThe delay is read once per cast from the same event that starts the bar."] = "在法術名稱後附加已累積的施法延遲，例如 \"火球術 +0.4\"。\n\n該延遲在每次施法時從啟動施法條的同一事件中讀取一次。"

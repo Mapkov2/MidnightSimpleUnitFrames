@@ -1133,7 +1133,9 @@ local function InferRemainingFromStatusBar(frame)
     local total = maxValue - minValue
     local assumeCountdown = frame._msufTimerAssumeCountdown
     if assumeCountdown == nil then
-        if frame.MSUF_timerDriven == true then
+        if frame._msufCountsDown ~= nil then
+            assumeCountdown = frame._msufCountsDown == true
+        elseif frame.MSUF_timerDriven == true then
             assumeCountdown = frame.MSUF_isChanneled == true
         else
             local fromMin = math.abs(value - minValue)
@@ -1264,7 +1266,9 @@ local function UpdateEndTimeFrame(frame, now)
 
     local total = frame._msufPlainTotal
     if total and total > 0 and frame.statusBar and frame.statusBar.SetValue then
-        local value = frame._msufStripeReverseFill and remaining or (total - remaining)
+        -- Cast type decides the count direction; the anchor only decides which
+        -- edge the fill grows from (see MSUF_GetCastbarCountsDown).
+        local value = frame._msufCountsDown and remaining or (total - remaining)
         if value < 0 then value = 0 end
         if value > total then value = total end
         frame.statusBar:SetValue(value)

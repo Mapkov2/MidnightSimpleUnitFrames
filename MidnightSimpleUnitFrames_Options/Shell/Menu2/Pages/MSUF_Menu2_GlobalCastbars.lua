@@ -1111,6 +1111,25 @@ local function BuildCastbars(ctx)
     end
     end
     LazyCastbarSection({ sectionId = "castbar_behavior", title = "Shake & Fill Direction", height = 196, defaultOpen = true, build = BuildBehaviorSection })
+    local function BuildFilterSection(_, secBuilder)
+    local filters = secBuilder:CollapsibleSection("castbar_filters", "Filtering & Feedback", 110, false)
+    local filterLeftX = 14
+    local filterControls = BuildCastControlSpecs(filters, {
+        { "toggle", "Hide profession casts", filterLeftX, -46, 320, "castbarHideTradeSkills", false, "MSUF2_CASTBAR_HIDE_TRADESKILLS", ApplyAndRefresh },
+        { "toggle", "Show cast pushback", filterLeftX, -72, 320, "castbarShowPushback", false, "MSUF2_CASTBAR_PUSHBACK", ApplyAndRefresh },
+    }, "filters")
+    if M.AddTooltip then
+        M.AddTooltip(filterControls.castbarHideTradeSkills,
+            "Hide profession casts",
+            "Keeps crafting and gathering casts off every castbar.\n\nThe profession flag is never a protected value, so this filter also holds for units whose spell data is restricted in PvP.",
+            { hook = true, titleAsLine = true, labelHit = true, owner = "ANCHOR_RIGHT" })
+        M.AddTooltip(filterControls.castbarShowPushback,
+            "Show cast pushback",
+            "Appends the delay a cast has accumulated to the spell name, for example \"Fireball +0.4\".\n\nThe delay is read once per cast from the same event that starts the bar.",
+            { hook = true, titleAsLine = true, labelHit = true, owner = "ANCHOR_RIGHT" })
+    end
+    end
+    LazyCastbarSection({ sectionId = "castbar_filters", title = "Filtering & Feedback", height = 110, build = BuildFilterSection })
     local function BuildGCDSection(_, secBuilder)
     local gcd = secBuilder:CollapsibleSection("castbar_gcd", "GCD Bar", 148, false)
     local gcdLeftX = 14

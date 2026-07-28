@@ -347,10 +347,11 @@ local function GetRemainingFromStatusBar(frame)
     local previous = frame._msufLastSBValue
     frame._msufLastSBValue = value
     if assumeCountdown == nil then
-        if frame.MSUF_timerDriven == true then
+        local countsDown = frame._msufCountsDown
+        if countsDown ~= nil then
+            assumeCountdown = countsDown == true
+        elseif frame.MSUF_timerDriven == true then
             assumeCountdown = frame.MSUF_isChanneled == true
-        elseif frame._msufStripeReverseFill == true then
-            assumeCountdown = true
         else
             assumeCountdown = previous ~= nil and value < (previous - 0.0001)
         end
@@ -431,6 +432,8 @@ local function ResetFallbackTiming(frame)
     frame._msufLastTimeDecimal = nil
     frame._msufLastTimeTotalDecimal = nil
     frame._msufTimerAssumeCountdown = nil
+    frame._msufCountsDown = nil
+    frame._msufPushbackMS = nil
     frame._msufLastSBValue = nil
     frame._msufZeroCount = nil
 end
@@ -468,7 +471,7 @@ local function CaptureFallbackTiming(frame, state)
     return remaining, total
 end
 
-local function SetFallbackStatusBar(frame, remaining, total, reverseFill)
+local function SetFallbackStatusBar(frame, remaining, total, reverseFill, countsDown)
     local statusBar = frame and frame.statusBar
     if not (statusBar and statusBar.SetMinMaxValues and statusBar.SetValue) then
         return false
@@ -485,7 +488,9 @@ local function SetFallbackStatusBar(frame, remaining, total, reverseFill)
         remaining = total
     end
     statusBar:SetMinMaxValues(0, total)
-    statusBar:SetValue(reverseFill and remaining or (total - remaining))
+    -- The anchor stays where the fill direction put it; only the value decides
+    -- whether the bar fills (elapsed) or drains (remaining).
+    statusBar:SetValue(countsDown and remaining or (total - remaining))
     return true
 end
 
@@ -520,7 +525,11 @@ local function ApplyFallbackActiveDuration(frame, state, isChannel)
     end
     reverseFill = reverseFill == true
     frame._msufStripeReverseFill = reverseFill
-    if not SetFallbackStatusBar(frame, remaining, total, reverseFill) then
+    local countsDown = type(_G.MSUF_GetCastbarCountsDown) == "function"
+        and _G.MSUF_GetCastbarCountsDown(frame, isChannel and true or false) == true
+    frame._msufCountsDown = countsDown
+    frame._msufPushbackMS = ToPlainNumber(state.delayTimeMS)
+    if not SetFallbackStatusBar(frame, remaining, total, reverseFill, countsDown) then
         return false
     end
 

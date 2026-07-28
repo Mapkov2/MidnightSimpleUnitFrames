@@ -428,6 +428,8 @@ local function ResetTimingFields(frame)
     frame._msufZeroCount = nil
     frame._msufLastDurationObj = nil
     frame._msufTimerAssumeCountdown = nil
+    frame._msufCountsDown = nil
+    frame._msufPushbackMS = nil
 end
 
 local function CaptureCastTimes(frame, startMS, endMS)
@@ -456,7 +458,7 @@ local function CaptureCastTimes(frame, startMS, endMS)
     end
 end
 
-local function SetStatusBarRemaining(frame, totalSeconds, remainingSeconds, reverseFill)
+local function SetStatusBarRemaining(frame, totalSeconds, remainingSeconds, countsDown)
     if not (frame and frame.statusBar and frame.statusBar.SetMinMaxValues and frame.statusBar.SetValue) then return end
 
     totalSeconds = PlainNumber(totalSeconds) or 0
@@ -467,7 +469,9 @@ local function SetStatusBarRemaining(frame, totalSeconds, remainingSeconds, reve
     if totalSeconds <= 0 then totalSeconds = 0.001 end
 
     frame.statusBar:SetMinMaxValues(0, totalSeconds)
-    if reverseFill then
+    -- Draining is a channel property, not an anchor property: the fill keeps the
+    -- cast's anchor and only the value runs the other way.
+    if countsDown then
         frame.statusBar:SetValue(remainingSeconds)
     else
         frame.statusBar:SetValue(totalSeconds - remainingSeconds)
@@ -518,6 +522,10 @@ local function ApplyActiveCast(
     frame.MSUF_channelTotal = nil
 
     local reverseFill = _G.MSUF_GetReverseFillSafe(frame, isChannel)
+    -- The anchor never flips per cast type any more, so the drain has to come
+    -- from the value: channels count down unless unified direction is on.
+    local countsDown = type(_G.MSUF_GetCastbarCountsDown) == "function"
+        and _G.MSUF_GetCastbarCountsDown(frame, isChannel) == true
     local timerDriven = false
 
     if durationObj then
@@ -565,9 +573,12 @@ local function ApplyActiveCast(
     end
     frame.isNotInterruptible = notInterruptible
 
+    -- CaptureCastTimes resets the timing fields, so restore the count direction
+    -- after it and before anything reads the bar back for the time text.
     CaptureCastTimes(frame, startMS, endMS)
+    frame._msufCountsDown = countsDown
     if not timerDriven and frame._msufPlainTotal and frame._msufRemaining then
-        SetStatusBarRemaining(frame, frame._msufPlainTotal, frame._msufRemaining, reverseFill)
+        SetStatusBarRemaining(frame, frame._msufPlainTotal, frame._msufRemaining, countsDown)
     end
 
     UpdateColorForInterruptible(frame)
@@ -622,6 +633,13 @@ local function ApplyCastState(frame, state)
         state.spellSequenceID,
         state.durationObj
     )
+    -- After ApplyActiveCast: it runs CaptureCastTimes, which resets the timing
+    -- fields this value lives next to. delayTimeMs is NeverSecret, so it needs
+    -- no secret-safe unwrapping.
+    frame._msufPushbackMS = PlainNumber(state.delayTimeMS)
+    if frame.castText and type(_G.MSUF_RefreshCastbarSpellNameText) == "function" then
+        _G.MSUF_RefreshCastbarSpellNameText(frame)
+    end
     return true
 end
 

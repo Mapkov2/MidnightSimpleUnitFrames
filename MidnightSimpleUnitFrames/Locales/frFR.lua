@@ -835,6 +835,7 @@ local MSUF2_MENU_AUTO_frFR = {
     ["Detached height"] = "Hauteur détachée",
     ["Detached layer"] = "Couche détachée",
     ["Detached width"] = "Largeur détachée",
+    ["A width set here overrides the shared Class Resources width mode. A visible Class Resource bar still wins while width sync is on."] = "Une largeur définie ici remplace le mode de largeur partagé des Ressources de classe. Une barre de ressources de classe visible reste prioritaire lorsque la synchronisation de largeur est activée.",
     ["Disable MSUF unitframe tooltips"] = "Désactiver les info-bulles du cadre unitaire MSUF",
     ["Dispel Glow"] = "Dissiper la lueur",
     ["Dispel Overlay"] = "Dissiper la superposition",
@@ -4420,3 +4421,12 @@ L["Fill bar"] = "Remplir la barre"
 L["Border art"] = "Style de bordure"
 L["Border direction"] = "Direction de la bordure"
 L["Relief"] = "Relief"
+
+--- Castbar filtering & feedback (6.0)
+L["Filtering & Feedback"] = "Filtrage et retour"
+L["Hide profession casts"] = "Masquer les incantations de métier"
+L["Show cast pushback"] = "Afficher le retard d'incantation"
+
+--- Castbar filtering & feedback tooltips (6.0)
+L["Keeps crafting and gathering casts off every castbar.\n\nThe profession flag is never a protected value, so this filter also holds for units whose spell data is restricted in PvP."] = "Empêche les incantations d'artisanat et de récolte d'apparaître sur les barres.\n\nL'indicateur de métier n'est jamais une valeur protégée, ce filtre fonctionne donc aussi pour les unités dont les données de sort sont restreintes en JcJ."
+L["Appends the delay a cast has accumulated to the spell name, for example \"Fireball +0.4\".\n\nThe delay is read once per cast from the same event that starts the bar."] = "Ajoute au nom du sort le retard accumulé, par exemple \"Boule de feu +0.4\".\n\nLe retard est lu une fois par incantation depuis l\'événement qui démarre la barre."

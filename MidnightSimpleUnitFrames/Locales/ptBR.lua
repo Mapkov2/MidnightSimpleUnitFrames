@@ -282,6 +282,7 @@ local MSUF2_MENU_AUTO_ptBR = {
     ["Detached height"] = "Altura destacada",
     ["Detached layer"] = "Camada destacada",
     ["Detached width"] = "Largura destacada",
+    ["A width set here overrides the shared Class Resources width mode. A visible Class Resource bar still wins while width sync is on."] = "Uma largura definida aqui substitui o modo de largura compartilhado dos Recursos de classe. Uma barra de recursos de classe visível ainda prevalece enquanto a sincronização de largura estiver ativada.",
     ["Disable Blizzard unitframes"] = "Desativar quadros unitários Blizzard",
     ["Disable MSUF unitframe tooltips"] = "Desativar dicas de ferramentas de unitframe MSUF",
     ["Dispel Glow"] = "Dissipar Brilho",
@@ -3945,3 +3946,12 @@ L["Fill bar"] = "Preencher a barra"
 L["Border art"] = "Estilo da borda"
 L["Border direction"] = "Direção da borda"
 L["Relief"] = "Relevo"
+
+--- Castbar filtering & feedback (6.0)
+L["Filtering & Feedback"] = "Filtros e retorno"
+L["Hide profession casts"] = "Ocultar conjurações de profissão"
+L["Show cast pushback"] = "Mostrar atraso de conjuração"
+
+--- Castbar filtering & feedback tooltips (6.0)
+L["Keeps crafting and gathering casts off every castbar.\n\nThe profession flag is never a protected value, so this filter also holds for units whose spell data is restricted in PvP."] = "Mantém conjurações de criação e coleta fora de todas as barras.\n\nO indicador de profissão nunca é um valor protegido, portanto este filtro também vale para unidades cujos dados de magia são restritos no JxJ."
+L["Appends the delay a cast has accumulated to the spell name, for example \"Fireball +0.4\".\n\nThe delay is read once per cast from the same event that starts the bar."] = "Acrescenta ao nome da magia o atraso acumulado, por exemplo \"Bola de Fogo +0.4\".\n\nO atraso é lido uma vez por conjuração no mesmo evento que inicia a barra."

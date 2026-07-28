@@ -181,6 +181,14 @@ local EnsureDBLazy = _G.MSUF_EnsureDBLazy or function()
     end
 end
 
+--- Profession casts are filtered out before any frame work happens. The flag is
+--- NeverSecret in 12.x, so the filter also holds for PvP-restricted units.
+local function HideTradeSkillCasts()
+    EnsureDBLazy()
+    local general = (MSUF_DB and MSUF_DB.general) or {}
+    return general.castbarHideTradeSkills == true
+end
+
 --- Fill direction is part of cast-state because channels/empower casts can run
 --- opposite to normal casts unless the profile requests unified direction.
 local function ReverseFillForCastType(castType, unit)
@@ -300,6 +308,11 @@ function Engine:BuildState(unit, previousState)
     end
 
     local name, text, icon, startTimeMS, endTimeMS, isTradeskill, castID, apiNotInterruptible, spellId, castBarID, delayTimeMS = UnitCastingInfo(unit)
+    if name and HideTradeSkillCasts() and isTradeskill == true then
+        -- isTradeskill is NeverSecret, so this comparison also holds for
+        -- PvP-restricted units. Drop the cast before any frame work happens.
+        name = nil
+    end
     if name then
         ResetState(state, unit)
         state._msufInactiveNormalized = nil
@@ -332,6 +345,9 @@ function Engine:BuildState(unit, previousState)
     end
 
     name, text, icon, startTimeMS, endTimeMS, isTradeskill, apiNotInterruptible, spellId, isEmpowered, numEmpowerStages, castBarID = UnitChannelInfo(unit)
+    if name and HideTradeSkillCasts() and isTradeskill == true then
+        name = nil
+    end
     if name then
         ResetState(state, unit)
         state._msufInactiveNormalized = nil

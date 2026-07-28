@@ -581,6 +581,7 @@ local MSUF2_MENU_AUTO_esMX = {
     ["Detached height"] = "Altura independiente",
     ["Detached layer"] = "capa separada",
     ["Detached width"] = "Ancho separado",
+    ["A width set here overrides the shared Class Resources width mode. A visible Class Resource bar still wins while width sync is on."] = "Una anchura definida aquí anula el modo de anchura compartido de Recursos de clase. Una barra de recursos de clase visible sigue teniendo prioridad mientras la sincronización de anchura esté activada.",
     ["Disable MSUF unitframe tooltips"] = "Deshabilitar la información sobre herramientas del marco unitario MSUF",
     ["Dispel Glow"] = "Disipar resplandor",
     ["Dispel Overlay"] = "Disipar superposición",
@@ -4179,3 +4180,12 @@ L["Fill bar"] = "Rellenar la barra"
 L["Border art"] = "Estilo del borde"
 L["Border direction"] = "Dirección del borde"
 L["Relief"] = "Relieve"
+
+--- Castbar filtering & feedback (6.0)
+L["Filtering & Feedback"] = "Filtros y respuesta"
+L["Hide profession casts"] = "Ocultar lanzamientos de profesión"
+L["Show cast pushback"] = "Mostrar retraso de lanzamiento"
+
+--- Castbar filtering & feedback tooltips (6.0)
+L["Keeps crafting and gathering casts off every castbar.\n\nThe profession flag is never a protected value, so this filter also holds for units whose spell data is restricted in PvP."] = "Mantiene los lanzamientos de fabricación y recolección fuera de todas las barras.\n\nEl indicador de profesión nunca es un valor protegido, por lo que este filtro también funciona con unidades cuyos datos de hechizo están restringidos en JcJ."
+L["Appends the delay a cast has accumulated to the spell name, for example \"Fireball +0.4\".\n\nThe delay is read once per cast from the same event that starts the bar."] = "Añade al nombre del hechizo el retraso acumulado, por ejemplo \"Bola de Fuego +0.4\".\n\nEl retraso se lee una vez por lanzamiento desde el mismo evento que inicia la barra."

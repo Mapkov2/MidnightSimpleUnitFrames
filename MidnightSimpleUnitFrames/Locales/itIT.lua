@@ -282,6 +282,7 @@ local MSUF2_MENU_AUTO_itIT = {
     ["Detached height"] = "Altezza staccata",
     ["Detached layer"] = "Strato staccato",
     ["Detached width"] = "Larghezza staccata",
+    ["A width set here overrides the shared Class Resources width mode. A visible Class Resource bar still wins while width sync is on."] = "Una larghezza impostata qui sovrascrive la modalità larghezza condivisa delle Risorse di classe. Una barra delle risorse di classe visibile ha comunque la precedenza mentre la sincronizzazione della larghezza è attiva.",
     ["Disable Blizzard unitframes"] = "Disabilita Blizzard frame unitari",
     ["Disable MSUF unitframe tooltips"] = "Disabilita i tooltip MSUF unitframe",
     ["Dispel Glow"] = "Dissipa il bagliore",
@@ -4019,3 +4020,12 @@ L["Fill bar"] = "Riempi la barra"
 L["Border art"] = "Stile del bordo"
 L["Border direction"] = "Direzione del bordo"
 L["Relief"] = "Rilievo"
+
+--- Castbar filtering & feedback (6.0)
+L["Filtering & Feedback"] = "Filtri e riscontro"
+L["Hide profession casts"] = "Nascondi lanci di professione"
+L["Show cast pushback"] = "Mostra ritardo di lancio"
+
+--- Castbar filtering & feedback tooltips (6.0)
+L["Keeps crafting and gathering casts off every castbar.\n\nThe profession flag is never a protected value, so this filter also holds for units whose spell data is restricted in PvP."] = "Tiene i lanci di artigianato e raccolta fuori da ogni barra.\n\nIl contrassegno di professione non è mai un valore protetto, quindi questo filtro vale anche per unità i cui dati di incantesimo sono limitati in PvP."
+L["Appends the delay a cast has accumulated to the spell name, for example \"Fireball +0.4\".\n\nThe delay is read once per cast from the same event that starts the bar."] = "Aggiunge al nome dell\'incantesimo il ritardo accumulato, ad esempio \"Palla di Fuoco +0.4\".\n\nIl ritardo viene letto una volta per lancio dallo stesso evento che avvia la barra."

@@ -315,6 +315,22 @@ local function GetReverseFillSafe(frame, isChanneled)
 end
 ExportPublic("MSUF_GetReverseFillSafe", GetReverseFillSafe)
 
+--- How the bar value moves is a cast-type property, never an anchor property.
+--- Casts and empower bars count up (elapsed time) so they fill toward the far
+--- edge; a channel counts down (remaining time) so the same anchor drains and
+--- its moving edge travels the opposite way. Unified direction makes channels
+--- fill like a cast. This mirrors TimerDirection in the runtime, so the Lua
+--- fallback paths render exactly what the native 12.1 timer renders.
+local function GetCastbarCountsDown(frame, isChanneled)
+    if isChanneled ~= true then return false end
+    if frame and frame.isEmpower == true then return false end
+
+    EnsureDBLazy()
+    local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
+    return general.castbarUnifiedDirection ~= true
+end
+ExportPublic("MSUF_GetCastbarCountsDown", GetCastbarCountsDown)
+
 local function GetCastbarUnitKey(frame)
     if not frame then return nil end
 
@@ -811,12 +827,40 @@ local function ShortenCastbarSpellName(frame, text)
 end
 ExportPublic("MSUF_ShortenCastbarSpellName", ShortenCastbarSpellName)
 
+--- Pushback suffix ("+0.4"). delayTimeMs is NeverSecret in 12.x and is captured
+--- once per cast into frame._msufPushbackMS, so this costs one field read per
+--- text write. It is deliberately applied *after* shortening: the suffix must
+--- survive truncation, and folding it into the shortener would also poison that
+--- function's raw/short text cache. The active-cast guard keeps it off the
+--- interrupt and failure labels, which reuse the same writer.
+local function PushbackSuffix(frame)
+    if not frame or frame.MSUF_castActive ~= true or frame.interrupted then return nil end
+
+    local delayMS = frame._msufPushbackMS
+    if type(delayMS) ~= "number" or delayMS <= 0 then return nil end
+
+    EnsureDBLazy()
+    local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
+    if general.castbarShowPushback ~= true then return nil end
+
+    return string.format(" +%.1f", delayMS / 1000)
+end
+
+local function ComposeCastText(frame, text)
+    local out = ShortenCastbarSpellName(frame, text)
+    if type(out) ~= "string" then return out end
+
+    local suffix = PushbackSuffix(frame)
+    if suffix then return out .. suffix end
+    return out
+end
+
 local function RefreshCastbarSpellNameText(frame)
     if not (frame and frame.castText) then return end
 
     local rawText = frame._msufRawCastText
     if rawText == nil then return end
-    SetText(frame.castText, ShortenCastbarSpellName(frame, rawText))
+    SetText(frame.castText, ComposeCastText(frame, rawText))
 end
 ExportPublic("MSUF_RefreshCastbarSpellNameText", RefreshCastbarSpellNameText)
 
@@ -827,7 +871,7 @@ local function ApplyCastbarTexts(frame, source, castText, timeText)
         if castText == nil then castText = source.castText end
         if timeText == nil then timeText = source.timeText end
     end
-    if castText ~= nil and frame.castText then SetText(frame.castText, ShortenCastbarSpellName(frame, castText)) end
+    if castText ~= nil and frame.castText then SetText(frame.castText, ComposeCastText(frame, castText)) end
     if timeText ~= nil and frame.timeText then SetText(frame.timeText, timeText) end
 end
 ExportPublic("MSUF_CB_ApplyTexts", ApplyCastbarTexts)

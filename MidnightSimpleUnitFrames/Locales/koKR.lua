@@ -351,6 +351,7 @@ local MSUF2_MENU_AUTO_koKR = {
     ["Detached height"] = "분리 높이",
     ["Detached layer"] = "분리된 레이어",
     ["Detached width"] = "분리된 폭",
+    ["A width set here overrides the shared Class Resources width mode. A visible Class Resource bar still wins while width sync is on."] = "여기서 설정한 너비는 공용 직업 자원 너비 모드를 덮어씁니다. 너비 동기화가 켜져 있으면 표시된 직업 자원 바가 계속 우선합니다.",
     ["Disable Blizzard unitframes"] = "Blizzard 단위프레임 비활성화",
     ["Disable MSUF unitframe tooltips"] = "MSUF 유닛프레임 툴팁 비활성화",
     ["Dispel Glow"] = "디스펠 글로우",
@@ -3996,3 +3997,12 @@ L["Fill bar"] = "바 채우기"
 L["Border art"] = "테두리 아트"
 L["Border direction"] = "테두리 방향"
 L["Relief"] = "입체"
+
+--- Castbar filtering & feedback (6.0)
+L["Filtering & Feedback"] = "필터 및 피드백"
+L["Hide profession casts"] = "전문 기술 시전 숨기기"
+L["Show cast pushback"] = "시전 지연 표시"
+
+--- Castbar filtering & feedback tooltips (6.0)
+L["Keeps crafting and gathering casts off every castbar.\n\nThe profession flag is never a protected value, so this filter also holds for units whose spell data is restricted in PvP."] = "제작 및 채집 시전을 모든 시전 막대에서 숨깁니다.\n\n전문 기술 표시는 보호된 값이 아니므로, PvP에서 주문 정보가 제한된 대상에도 이 필터가 적용됩니다."
+L["Appends the delay a cast has accumulated to the spell name, for example \"Fireball +0.4\".\n\nThe delay is read once per cast from the same event that starts the bar."] = "주문 이름 뒤에 누적된 지연 시간을 붙입니다. 예: \"화염구 +0.4\".\n\n지연 값은 막대를 시작하는 같은 이벤트에서 시전당 한 번만 읽습니다."

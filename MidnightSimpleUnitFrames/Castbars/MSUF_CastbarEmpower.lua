@@ -581,6 +581,8 @@ local function PlayerCastbarEmpowerStart(frame)
     end
 
     _G.MSUF_ApplyTimerAndFill(frame.statusBar, durationObj, reverseFill, false, true)
+    -- Empower bars fill on elapsed time; clear any drain flag left by a channel.
+    frame._msufCountsDown = false
     frame.MSUF_durationObj = durationObj
     frame.statusBar:SetMinMaxValues(0, frame.empowerTotalWithGrace)
 

@@ -57,6 +57,12 @@ function A.GlobalRegistry.RegisterCastbarSettings(ctx)
         "opposite target castbar direction", "target opposite fill direction", "target castbar opposite direction",
         "target castbar normal direction", "target castbar same direction", "target castbar not opposite",
     }, { category = "Global / Cast Bar", frameType = "castbarGlobal", apply = ApplyCastbar, reason = "MSUF_ASSISTANT_CASTBAR_TARGET_DIRECTION" })
+    RegisterGeneralBoolean("castbarHideTradeSkills", "hideTradeSkills", "Hide Profession Casts", false, {
+        "hide profession casts", "hide tradeskill casts", "hide crafting castbar", "berufszauber ausblenden",
+    }, { category = "Global / Cast Bar", frameType = "castbarGlobal", apply = ApplyCastbar, reason = "MSUF_ASSISTANT_CASTBAR_HIDE_TRADESKILLS" })
+    RegisterGeneralBoolean("castbarShowPushback", "pushback", "Cast Bar Pushback Text", false, {
+        "castbar pushback", "show cast delay", "cast pushback text", "zauberverzoegerung anzeigen",
+    }, { category = "Global / Cast Bar", frameType = "castbarGlobal", apply = ApplyCastbar, reason = "MSUF_ASSISTANT_CASTBAR_PUSHBACK" })
     RegisterGeneralNumberSetting("castbarShakeStrength", "shakeStrength", "Cast Bar Shake Strength", 8, 0, 30, {
         "castbar shake strength", "shake strength", "interrupt shake strength",
     }, { category = "Global / Cast Bar", frameType = "castbarGlobal", apply = ApplyCastbar, reason = "MSUF_ASSISTANT_CASTBAR_SHAKE_STRENGTH" })

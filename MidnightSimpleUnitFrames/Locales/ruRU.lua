@@ -430,6 +430,7 @@ local MSUF2_MENU_AUTO_ruRU = {
     ["Detached height"] = "Отдельная высота",
     ["Detached layer"] = "Отдельный слой",
     ["Detached width"] = "Отдельная ширина",
+    ["A width set here overrides the shared Class Resources width mode. A visible Class Resource bar still wins while width sync is on."] = "Заданная здесь ширина переопределяет общий режим ширины «Ресурсов класса». Видимая полоса ресурсов класса по-прежнему имеет приоритет, пока включена синхронизация ширины.",
     ["Disable MSUF unitframe tooltips"] = "Отключить всплывающие подсказки MSUF unitframe",
     ["Dispel Glow"] = "Рассеять свечение",
     ["Dispel Overlay"] = "Рассеивание наложения",
@@ -4036,3 +4037,12 @@ L["Fill bar"] = "Заполнить полосу"
 L["Border art"] = "Стиль рамки"
 L["Border direction"] = "Направление рамки"
 L["Relief"] = "Рельеф"
+
+--- Castbar filtering & feedback (6.0)
+L["Filtering & Feedback"] = "Фильтры и отклик"
+L["Hide profession casts"] = "Скрывать профессиональные заклинания"
+L["Show cast pushback"] = "Показывать задержку заклинания"
+
+--- Castbar filtering & feedback tooltips (6.0)
+L["Keeps crafting and gathering casts off every castbar.\n\nThe profession flag is never a protected value, so this filter also holds for units whose spell data is restricted in PvP."] = "Скрывает ремесленные и собирательские заклинания со всех полос заклинаний.\n\nПризнак профессии никогда не является защищённым значением, поэтому фильтр работает и для целей с ограниченными данными заклинаний в PvP."
+L["Appends the delay a cast has accumulated to the spell name, for example \"Fireball +0.4\".\n\nThe delay is read once per cast from the same event that starts the bar."] = "Добавляет к названию заклинания накопленную задержку, например \"Огненный шар +0.4\".\n\nЗадержка читается один раз за заклинание из того же события, которое запускает полосу."
