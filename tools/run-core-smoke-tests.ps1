@@ -180,6 +180,7 @@ $tests = @(
     ".github/scripts/tests/temp_max_health_smoke.lua",
     ".github/scripts/tests/typography_role_smoke.lua",
     ".github/scripts/tests/unit_preview_size_parity_smoke.lua",
+    ".github/scripts/tests/unit_onshow_perf_contract_smoke.lua",
     ".github/scripts/tests/unit_status_indicator_layout_smoke.lua",
     ".github/scripts/tests/unitframes_embed_isolation_smoke.lua",
     ".github/scripts/tests/unitframes_legacy_compat_smoke.lua",

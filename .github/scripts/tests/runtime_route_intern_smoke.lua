@@ -333,6 +333,25 @@ Check(target.nameCalls == 1 and target.lastNameEvent == "MSUF_UF_ONSHOW",
     "single OnShow did not reseed the lean identity plan")
 Check(target.statusCalls == 1 and target.lastStatusEvent == "MSUF_UF_ONSHOW",
     "single OnShow did not reseed status for the visible unit identity")
+Check(target._msufCoreOnShowIdentityRefreshed == true
+    and target._msufRuntimeOnShowNeedsFull ~= true,
+    "single OnShow did not expose the covered lean-refresh result")
+
+local ExternalForce = {
+    IsEnabled = function() return true end,
+    Create = function() end,
+    Apply = function() end,
+}
+function ExternalForce.Update(frame)
+    frame.externalForceCalls = (frame.externalForceCalls or 0) + 1
+end
+UF.RegisterElement("ExternalForce", ExternalForce, { apply = true, forceUpdate = true })
+local external = NewFrame("target")
+UF.AttachFrame(external, { scope = "single" })
+UF.ApplyElementToFrame(external, "Health", targetSpec)
+UF.ApplyElementToFrame(external, "ExternalForce", targetSpec)
+Check(external._msufRuntimeOnShowNeedsFull == true,
+    "external force-update element lost the full OnShow fallback")
 
 Check(UF.PrivatizeRuntimeStatusStateForDiagnostics == nil,
     "removed in-game diagnostics runtime API was reintroduced")

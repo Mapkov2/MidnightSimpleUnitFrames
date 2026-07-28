@@ -8,6 +8,7 @@ end
 local classification, classToken, reaction = "normal", "WARRIOR", 3
 local dead = false
 local classificationReads, playerReads, classReads, reactionReads = 0, 0, 0, 0
+local curveCreates = 0
 local secretValue
 
 _G.issecretvalue = function(value) return secretValue ~= nil and value == secretValue end
@@ -39,6 +40,7 @@ end
 _G.CreateColor = function(r, g, b, a) return { r = r, g = g, b = b, a = a } end
 _G.C_CurveUtil = {
     CreateColorCurve = function()
+        curveCreates = curveCreates + 1
         return { AddPoint = function() end }
     end,
 }
@@ -77,6 +79,11 @@ assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MS
 
 local Common = assert(MSUF.UFBarTextCommon, "bar/text common missing")
 local Text = assert(MSUF.UFText, "text common missing")
+local prewarmHealth = { mode = "gradient" }
+local prewarmedCurve = Common.PrepareHealthGradientCurve(prewarmHealth)
+Check(prewarmedCurve and Common.PrepareHealthGradientCurve(prewarmHealth) == prewarmedCurve
+    and curveCreates == 1,
+    "health gradient prewarm did not retain one compiled curve")
 local spec = {
     key = "target",
     health = {

@@ -1620,17 +1620,31 @@ function Prediction.Apply(frame, spec)
   ApplyHealAbsorbBar(frame, cfg, spec, frame.healAbsorbBar)
 end
 
-local function SuspendPrediction(frame)
-  if not frame or frame._msufPredictionDisabled == true then return end
+local function SuspendPrediction(frame, preserveRuntime)
+  if not frame then return end
+  if frame._msufPredictionDisabled == true
+    and (preserveRuntime == true or frame._msufPredictionRuntimeCfg == nil) then
+    return
+  end
   for i = 1, #PREDICTION_BAR_DEFS do
     HideBar(frame[PREDICTION_BAR_DEFS[i][2]])
   end
   HideOverAbsorbGlow(frame)
   ClearPredictionCache(frame)
-  for i = 1, #PREDICTION_DISABLE_FIELDS do
-    frame[PREDICTION_DISABLE_FIELDS[i]] = nil
+  if preserveRuntime == true then
+    -- The unit token (for example "target") can reappear with a different
+    -- identity. Keep immutable compiled routes, but invalidate unit-owned state.
+    frame._msufPredictionConnectionUnit = nil
+    frame._msufPredictionConnectionOnline = nil
+    frame._msufPredictionFullHealthAlphaReady = nil
+    frame._msufPredictionFullHealthAlphaDirty = true
+    frame._msufPredictionFullHealthAlphaUnit = nil
+  else
+    for i = 1, #PREDICTION_DISABLE_FIELDS do
+      frame[PREDICTION_DISABLE_FIELDS[i]] = nil
+    end
+    frame._msufPredictionMask = 0
   end
-  frame._msufPredictionMask = 0
   frame._msufPredictionDisabled = true
 end
 
@@ -1861,7 +1875,7 @@ function Prediction.UpdateHealthValue(frame, event, unit, seedHP, seedMaxHP)
     return
   end
   if UnitMissing(frame, unit, issecretvalue(unit) == true) then
-    SuspendPrediction(frame)
+    SuspendPrediction(frame, true)
     return
   end
   if frame._msufPredictionCacheReady ~= true
@@ -2227,7 +2241,7 @@ UpdateFull = function(frame, event, unit, seedHP, seedMaxHP, boundUnit, trustedA
     end
 
     if cfg.test ~= true and UnitMissing(frame, unit, unitSecret) then
-      SuspendPrediction(frame)
+      SuspendPrediction(frame, true)
       return
     end
   end

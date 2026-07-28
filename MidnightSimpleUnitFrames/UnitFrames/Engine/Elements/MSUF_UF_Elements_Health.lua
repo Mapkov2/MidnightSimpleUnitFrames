@@ -16,6 +16,7 @@ local SetBarSmoothing = C and C.SetBarSmoothing
 local ApplyHealthStatusColor = C and C.ApplyHealthStatusColor
 local ApplyBackgrounds = C and C.ApplyBackgrounds
 local ApplyBarGradient = C and C.ApplyBarGradient
+local PrepareHealthGradientCurve = C and C.PrepareHealthGradientCurve
 local issecretvalue = _G.issecretvalue or function(_) return false end
 local ExportPublic = MSUF.ExportPublic or function(name, value)
   _G[name] = value
@@ -185,6 +186,9 @@ function Health.Apply(frame, spec)
   frame._msufIsGroupFrame = spec and spec.scope == "group" or nil
   local h = spec and spec.health or nil
   local mode = h and h.mode
+  if mode == "gradient" and PrepareHealthGradientCurve then
+    PrepareHealthGradientCurve(h)
+  end
   frame._msufHealthRuntimeColorEnabled = mode ~= "dark" and mode ~= "unified"
   frame._msufHealthRuntimeGradient = mode == "gradient"
   SetTexture(frame.hpBar, h and h.texture or spec and spec.texture or WHITE)

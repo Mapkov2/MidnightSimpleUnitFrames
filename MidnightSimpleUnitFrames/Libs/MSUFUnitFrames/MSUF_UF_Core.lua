@@ -890,6 +890,7 @@ end
 
 local function FrameOnShow(frame)
   frame._msufCoreVisible = true
+  frame._msufCoreOnShowIdentityRefreshed = nil
   -- Restore the full event set suspended by the aggressive hidden-frame path.
   -- Re-registering from the recorded recipe reactivates every unit event; the
   -- identity/lifecycle refresh below then catches up on any state the frame
@@ -923,7 +924,8 @@ local function FrameOnShow(frame)
     -- Identity events can arrive while target/focus/dependent frames are
     -- hidden. Re-seed the existing lean plan once when the frame becomes
     -- visible so no status from the previous unit can bleed through.
-    UF.RunLeanIdentity(frame, "MSUF_UF_ONSHOW")
+    frame._msufCoreOnShowIdentityRefreshed =
+      UF.RunLeanIdentity(frame, "MSUF_UF_ONSHOW") == true or nil
   end
 end
 
@@ -2168,6 +2170,18 @@ function UF.RebuildRuntimeStatusState(frame)
   local runtimePlan = BuildRuntimeSequencePlan(frame, FORCE_UPDATE_ELEMENTS)
   AssignRuntimeSequencePlan(frame, runtimePlan,
     "_msufRuntimeAllFns", "_msufRuntimeAllCount", "_msufRuntimeAllLabels", "_msufRuntimeAllPath")
+  local runtimeLabels = frame._msufRuntimeAllLabels
+  local onShowNeedsFull
+  if runtimeLabels then
+    for i = 1, #runtimeLabels do
+      local name = runtimeLabels[i]
+      if IDENTITY_ELEMENTS[name] ~= true and IDENTITY_BAR_ELEMENTS[name] ~= true then
+        onShowNeedsFull = true
+        break
+      end
+    end
+  end
+  frame._msufRuntimeOnShowNeedsFull = onShowNeedsFull
   frame._msufGroupIdentityFns = frame._msufIdentityFns
   frame._msufGroupIdentityCount = frame._msufIdentityCount
   frame._msufGroupIdentityLabels = frame._msufIdentityLabels

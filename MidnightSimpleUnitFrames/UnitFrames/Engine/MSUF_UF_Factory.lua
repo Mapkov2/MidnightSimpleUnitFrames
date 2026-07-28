@@ -618,9 +618,13 @@ local function SetSecureUnitAttributes(frame, unit)
 end
 
 local function FrameOnShow(frame)
-  if not frame or frame._msufDisabledByConfig == true or frame._msufRuntimeOnShowBusy == true then return end
+  if not frame then return end
+  local identityRefreshed = frame._msufCoreOnShowIdentityRefreshed == true
+  frame._msufCoreOnShowIdentityRefreshed = nil
+  if frame._msufDisabledByConfig == true or frame._msufRuntimeOnShowBusy == true then return end
   if not frame.MSUFSpec or frame.MSUFSpec.enabled == false then return end
   if not frame._msufRuntimeAllPath and not frame._msufIdentityPath then return end
+  if identityRefreshed and frame._msufRuntimeOnShowNeedsFull ~= true then return end
   frame._msufRuntimeOnShowBusy = true
   if UF.FrameRuntimeUpdate then UF.FrameRuntimeUpdate(frame, "MSUF_FRAME_SHOWN") end
   frame._msufRuntimeOnShowBusy = nil

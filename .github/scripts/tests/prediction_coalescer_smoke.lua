@@ -334,13 +334,18 @@ Equal(calls.detailed, 0, "disabled frame processed stale prediction data")
 Prediction.Apply(frame, spec)
 Prediction.Update(frame, "MSUF_TEST_RESEED", "player")
 
--- A transiently missing startup unit may clear Prediction's compiled mask.
--- The first later data event must revalidate the live spec instead of being
--- discarded forever by the coalescer's cached disabled state.
+-- A transiently missing startup unit hides dynamic state but keeps the
+-- immutable compiled plan. The first later data event can therefore recover
+-- through the existing coalesced drain without recompiling the live spec.
+local startupPlans = frame._msufPredictionEventPlans
+local startupFlush = frame._msufPredictionFlushData
 unitExists = false
 Prediction.Update(frame, "MSUF_STARTUP_UNIT_MISSING", "player")
 Check(frame._msufPredictionDisabled == true, "missing startup unit did not disable prediction")
-Equal(frame._msufPredictionMask, 0, "missing startup unit did not clear prediction mask")
+Equal(frame._msufPredictionMask, 7, "missing startup unit discarded the compiled prediction mask")
+Check(frame._msufPredictionEventPlans == startupPlans
+    and frame._msufPredictionFlushData == startupFlush,
+    "missing startup unit discarded the compiled coalescer runtime")
 unitExists = true
 ResetCalls()
 for _ = 1, 10 do queueAbsorb(frame, "UNIT_ABSORB_AMOUNT_CHANGED", "player") end

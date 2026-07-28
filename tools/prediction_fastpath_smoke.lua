@@ -3,11 +3,12 @@ _G = _G or _ENV
 local now = 10
 local detailedReads = 0
 local incomingReads = 0
+local unitExists = true
 local Prediction
 
 _G.GetTime = function() return now end
 _G.issecretvalue = function() return false end
-_G.UnitExists = function() return true end
+_G.UnitExists = function() return unitExists end
 _G.UnitIsConnected = function() return true end
 _G.UnitHealth = function() return 80 end
 _G.UnitHealthMax = function() return 100 end
@@ -47,6 +48,10 @@ local frame = {
   _msufPredictionHealActive = true,
   _msufPredictionNeedsHealth = false,
   _msufPredictionHealMode = 3,
+  _msufPredictionConnectionUnit = "party1",
+  _msufPredictionConnectionOnline = true,
+  _msufPredictionFullHealthAlphaReady = true,
+  _msufPredictionFullHealthAlphaUnit = "party1",
   _msufPredictionEventPlans = {
     UNIT_HEAL_PREDICTION = refreshHeal,
   },
@@ -67,5 +72,35 @@ Prediction.Update(frame, "UNIT_HEALTH", "party1", 80, 100)
 assert(incomingReads == 1 and detailedReads == 0,
   "UNIT_HEALTH re-entered a prediction data/calculator path")
 assert(bar.valueWrites == valueWrites, "health event rewrote mode-3 prediction")
+
+local compiledPlans = frame._msufPredictionEventPlans
+unitExists = false
+Prediction.Update(frame, "MSUF_UF_ONSHOW", "party1")
+assert(frame._msufPredictionDisabled == true and bar.shown == false,
+  "missing unit did not suspend prediction visuals")
+assert(frame._msufPredictionRuntimeCfg == cfg
+    and frame._msufPredictionEventPlans == compiledPlans
+    and frame._msufPredictionMask == 1,
+  "temporary missing unit discarded the compiled prediction runtime")
+assert(frame._msufPredictionConnectionUnit == nil
+    and frame._msufPredictionConnectionOnline == nil
+    and frame._msufPredictionFullHealthAlphaReady == nil
+    and frame._msufPredictionFullHealthAlphaDirty == true
+    and frame._msufPredictionFullHealthAlphaUnit == nil,
+  "temporary missing unit retained stale identity-owned prediction state")
+
+unitExists = true
+Prediction.Update(frame, "MSUF_UF_ONSHOW", "party1")
+assert(frame._msufPredictionDisabled == nil
+    and frame._msufPredictionRuntimeCfg == cfg
+    and frame._msufPredictionEventPlans == compiledPlans,
+  "reappearing unit did not reuse the compiled prediction runtime")
+
+Prediction.Disable(frame)
+assert(frame._msufPredictionDisabled == true
+    and frame._msufPredictionRuntimeCfg == nil
+    and frame._msufPredictionEventPlans == nil
+    and frame._msufPredictionMask == 0,
+  "authoritative prediction disable retained compiled runtime state")
 
 print("prediction fastpath smoke: ok")
