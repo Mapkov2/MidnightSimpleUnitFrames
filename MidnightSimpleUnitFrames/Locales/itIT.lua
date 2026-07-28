@@ -4029,3 +4029,9 @@ L["Show cast pushback"] = "Mostra ritardo di lancio"
 --- Castbar filtering & feedback tooltips (6.0)
 L["Keeps crafting and gathering casts off every castbar.\n\nThe profession flag is never a protected value, so this filter also holds for units whose spell data is restricted in PvP."] = "Tiene i lanci di artigianato e raccolta fuori da ogni barra.\n\nIl contrassegno di professione non è mai un valore protetto, quindi questo filtro vale anche per unità i cui dati di incantesimo sono limitati in PvP."
 L["Appends the delay a cast has accumulated to the spell name, for example \"Fireball +0.4\".\n\nThe delay is read once per cast from the same event that starts the bar."] = "Aggiunge al nome dell\'incantesimo il ritardo accumulato, ad esempio \"Palla di Fuoco +0.4\".\n\nIl ritardo viene letto una volta per lancio dallo stesso evento che avvia la barra."
+
+--- Number abbreviation (6.0)
+L["Number abbreviation"] = "Abbreviazione dei numeri"
+L["Game default"] = "Predefinito del gioco"
+L["Compact"] = "Compatto"
+L["Compact keeps 12.3K / 1.23M on every client language. Game default follows the client, which adds spaces or different letters on some locales."] = "Compatto mantiene 12.3K / 1.23M in ogni lingua del client. Predefinito del gioco segue il client, che in alcune lingue aggiunge spazi o lettere diverse."

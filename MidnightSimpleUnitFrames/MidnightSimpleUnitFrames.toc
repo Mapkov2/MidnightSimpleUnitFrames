@@ -61,6 +61,7 @@ Locales\MSUF_PriorityFrames_FAQ.lua
 Kernel\MSUF_Util.lua
 State\MSUF_Changelog.lua
 State\MSUF_Defaults.lua
+Runtime\MSUF_NumberFormat.lua
 State\MSUF_Profiles.lua
 Shell\UI\MSUF_Style.lua
 Kernel\MSUF_Modules.lua

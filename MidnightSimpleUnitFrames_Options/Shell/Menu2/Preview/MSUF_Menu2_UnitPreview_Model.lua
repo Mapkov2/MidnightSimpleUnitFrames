@@ -20,6 +20,15 @@ local floor, max, min = math.floor, math.max, math.min
 local format = string.format
 local PreviewAbbreviateNumbers = _G.AbbreviateNumbers or _G.AbbreviateLargeNumbers or _G.ShortenNumber
 local PreviewFullNumbers = _G.BreakUpLargeNumbers
+--- Mirrors the live abbreviation style so the preview shows what the frames
+--- will actually render (see Runtime/MSUF_NumberFormat.lua).
+local PreviewNumOpts = nil
+do
+    local NumberFormat = MSUF.NumberFormat
+    if NumberFormat and NumberFormat.Register then
+        NumberFormat.Register(function(options) PreviewNumOpts = options end)
+    end
+end
 local TEX_W8 = "Interface\\Buttons\\WHITE8X8"
 local FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local Preview = MSUF.UFPreview or {}
@@ -963,7 +972,7 @@ local function NumText(v, shortNumbers)
         if PreviewFullNumbers then return PreviewFullNumbers(v) end
         return tostring(v)
     end
-    if PreviewAbbreviateNumbers then return PreviewAbbreviateNumbers(v) end
+    if PreviewAbbreviateNumbers then return PreviewAbbreviateNumbers(v, PreviewNumOpts) end
     if v >= 1000000 then return format("%.1fm", v / 1000000) end
     if v >= 1000 then return format("%.1fk", v / 1000) end
     return tostring(v)

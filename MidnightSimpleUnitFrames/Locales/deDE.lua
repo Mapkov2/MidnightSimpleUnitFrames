@@ -4394,3 +4394,9 @@ L["Show cast pushback"] = "Zauberverzögerung anzeigen"
 --- Castbar filtering & feedback tooltips (6.0)
 L["Keeps crafting and gathering casts off every castbar.\n\nThe profession flag is never a protected value, so this filter also holds for units whose spell data is restricted in PvP."] = "Hält Handwerks- und Sammelzauber von jeder Castbar fern.\n\nDas Berufs-Flag ist nie ein geschützter Wert, daher greift dieser Filter auch bei Einheiten, deren Zauberdaten im PvP eingeschränkt sind."
 L["Appends the delay a cast has accumulated to the spell name, for example \"Fireball +0.4\".\n\nThe delay is read once per cast from the same event that starts the bar."] = "Hängt die aufgelaufene Verzögerung eines Zaubers an den Zaubernamen an, zum Beispiel \"Feuerball +0.4\".\n\nDie Verzögerung wird einmal pro Zauber aus demselben Event gelesen, das die Leiste startet."
+
+--- Number abbreviation (6.0)
+L["Number abbreviation"] = "Zahlenabkürzung"
+L["Game default"] = "Spielstandard"
+L["Compact"] = "Kompakt"
+L["Compact keeps 12.3K / 1.23M on every client language. Game default follows the client, which adds spaces or different letters on some locales."] = "Kompakt behält 12.3K / 1.23M in jeder Client-Sprache. Spielstandard folgt dem Client, der je nach Sprache Leerzeichen oder andere Buchstaben einfügt."

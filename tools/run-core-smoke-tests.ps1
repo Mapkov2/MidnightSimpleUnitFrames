@@ -145,6 +145,7 @@ $tests = @(
     ".github/scripts/tests/options_lod_scale_extraction_smoke.lua",
     ".github/scripts/tests/options_lod_editmode_demand_smoke.lua",
     ".github/scripts/tests/name_shortening_level_reservation_smoke.lua",
+    ".github/scripts/tests/number_abbrev_style_smoke.lua",
     ".github/scripts/tests/npc_class_color_group_smoke.lua",
     ".github/scripts/tests/npc_kind_dispatch_cache_smoke.lua",
     ".github/scripts/tests/player_alpha_apply_smoke.lua",

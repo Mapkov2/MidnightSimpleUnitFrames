@@ -17,6 +17,18 @@ local AbbreviateShortNumber = Text.AbbreviateNumbers or _G.AbbreviateNumbers
 local BreakUpLargeNumbers = Text.BreakUpLargeNumbers or _G.BreakUpLargeNumbers
 local AbbreviateLargeNumber = Text.AbbreviateLargeNumbers or _G.AbbreviateLargeNumbers or _G.ShortenNumber
 local AbbreviateSecretNumber = AbbreviateShortNumber or AbbreviateLargeNumber
+--- Global abbreviation style: nil lets the client decide (locale-dependent),
+--- a table switches the C abbreviator to MSUF's locale-independent breakpoints.
+--- Runtime/MSUF_NumberFormat.lua pushes it on the cold path, so every call site
+--- below stays one direct C call with a constant second argument. Only the
+--- short/abbreviating calls take it - BreakUpLargeNumbers never does.
+local NUM_OPTS = nil
+do
+  local NumberFormat = MSUF.NumberFormat
+  if NumberFormat and NumberFormat.Register then
+    NumberFormat.Register(function(options) NUM_OPTS = options end)
+  end
+end
 local tonumber = Text.tonumber
 local type = Text.type or luaType
 local format = Text.format
@@ -215,7 +227,7 @@ local function FormatValue(value, short, canSecret)
   if issecretvalue(value) == true then
     if short then
       if AbbreviateSecretNumber then
-        return AbbreviateSecretNumber(value)
+        return AbbreviateSecretNumber(value, NUM_OPTS)
       end
     elseif BreakUpLargeNumbers then
       return BreakUpLargeNumbers(value)
@@ -230,7 +242,7 @@ local function FormatValue(value, short, canSecret)
     return SmallIntegerText(value) or format("%d", value or 0)
   end
   if AbbreviateShortNumber then
-    return AbbreviateShortNumber(value)
+    return AbbreviateShortNumber(value, NUM_OPTS)
   end
   return CompactNumber(value)
 end
@@ -359,7 +371,7 @@ local function SlotValuePlain(slot, value)
     return SmallIntegerText(value) or format("%d", value or 0)
   end
   if AbbreviateShortNumber then
-    return AbbreviateShortNumber(value or 0)
+    return AbbreviateShortNumber(value or 0, NUM_OPTS)
   end
   return CompactNumber(value)
 end
@@ -391,7 +403,7 @@ end
 local function SlotFormattedValue(slot, value)
   if issecretvalue(value) == true then
     if slot.short and AbbreviateSecretNumber then
-      return AbbreviateSecretNumber(value), "%s"
+      return AbbreviateSecretNumber(value, NUM_OPTS), "%s"
     elseif (not slot.short) and BreakUpLargeNumbers then
       return BreakUpLargeNumbers(value), "%s"
     end
@@ -786,6 +798,11 @@ local SECRET_SETTERS = {
 local function CompileSecretWriter(slot)
   local fs = slot.fs
   local fn = slot.secretValueFn
+  -- Only the short slot abbreviates; the long slot runs BreakUpLargeNumbers,
+  -- which takes no abbreviation options. Reading NUM_OPTS inside the closure
+  -- (instead of binding it here) keeps compiled slots correct after a style
+  -- change without a recompile pass.
+  local abbreviates = slot.short == true
   local code = slot.secretCode
   local needsCur = slot.secretNeedsCur
   local needsMax = slot.secretNeedsMax
@@ -798,11 +815,12 @@ local function CompileSecretWriter(slot)
     if needsMax and maxSecret == nil then maxSecret = issecretvalue(maxValue) == true end
     if needsPct and pctSecret == nil then pctSecret = issecretvalue(pct) == true end
     if fn then
+      local opts = abbreviates and NUM_OPTS or nil
       if needsCur then
-        cur = curSecret == true and fn(cur) or fn(FiniteNumberOr(cur, 0))
+        cur = curSecret == true and fn(cur, opts) or fn(FiniteNumberOr(cur, 0), opts)
       end
       if needsMax then
-        maxValue = maxSecret == true and fn(maxValue) or fn(FiniteNumberOr(maxValue, 0))
+        maxValue = maxSecret == true and fn(maxValue, opts) or fn(FiniteNumberOr(maxValue, 0), opts)
       end
     else
       if needsCur and curSecret ~= true then cur = FiniteNumberOr(cur, 0) end

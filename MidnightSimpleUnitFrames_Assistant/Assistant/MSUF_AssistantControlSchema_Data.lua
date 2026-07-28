@@ -5,7 +5,7 @@ MSUF.Assistant = MSUF.Assistant or {}
 local Data = { version = 3 }
 Data.columns = { 'semanticId', 'controlId', 'familyId', 'memberKey', 'pageKey', 'controlPath', 'classification', 'kind', 'settingKey', 'actionKey', 'navigationKey', 'safety', 'valueKind', 'min', 'max', 'step', 'percentIsValue', 'confirmRequired', 'identityStable', 'label', 'help', 'values', 'actionFixedArgs', 'actionInputArg', 'actionInputKind', 'actionInputDomain', 'storageUnit', 'displayUnit', 'displayScale', 'states', 'contexts' }
 Data.collectionStates = {
-    { 'base', 1595 },
+    { 'base', 1596 },
     { 'unit_player_buff_layout', 27 },
     { 'unit_player_buff_filters', 31 },
     { 'unit_player_buff_blacklist', 24 },
@@ -160,7 +160,7 @@ Data.collectionStates = {
     { 'compat_buff_raid', 34 },
     { 'compat_debuff_raid', 35 },
 }
-Data.collectionUnionControls = 2385
+Data.collectionUnionControls = 2386
 Data.contexts = {
     { 'WARRIOR-71', 'WARRIOR', 1, 71, 'Arms', 'enUS' },
     { 'WARRIOR-72', 'WARRIOR', 2, 72, 'Fury', 'enUS' },
@@ -1737,6 +1737,7 @@ Data.records = {
     { 'setting:general.npcTypeFocus@opt_colors/opt/colors/advanced/npc/type/option/npc/type/focus', 'menu2.opt.colors.advanced.npc.type.option.npc.type.focus', '', '', 'opt_colors', 'opt/colors/advanced/npc/type/option/npc/type/focus', 'setting', 'toggle', 'general.npcTypeFocus', '', '', 'direct', 'boolean', '', '', '', '0', '0', '1', 'Focus', 'Turns Focus on or off. Available on the Global Colors page.', '', '', '', '', '', '', '', '', 'base', '*' },
     { 'setting:general.npcTypeTarget@opt_colors/opt/colors/advanced/npc/type/option/npc/type/target', 'menu2.opt.colors.advanced.npc.type.option.npc.type.target', '', '', 'opt_colors', 'opt/colors/advanced/npc/type/option/npc/type/target', 'setting', 'toggle', 'general.npcTypeTarget', '', '', 'direct', 'boolean', '', '', '', '0', '0', '1', 'Target', 'Turns Target on or off. Available on the Global Colors page.', '', '', '', '', '', '', '', '', 'base', '*' },
     { 'setting:general.npcTypeToT@opt_colors/opt/colors/advanced/npc/type/option/npc/type/to/t', 'menu2.opt.colors.advanced.npc.type.option.npc.type.to.t', '', '', 'opt_colors', 'opt/colors/advanced/npc/type/option/npc/type/to/t', 'setting', 'toggle', 'general.npcTypeToT', '', '', 'direct', 'boolean', '', '', '', '0', '0', '1', 'Target of Target', 'Turns Target of Target on or off. Available on the Global Colors page.', '', '', '', '', '', '', '', '', 'base', '*' },
+    { 'setting:general.numberAbbrevStyle@opt_misc/opt/misc/global/setting/number/abbrev/style', 'menu2.opt.misc.global.setting.number.abbrev.style', '', '', 'opt_misc', 'opt/misc/global/setting/number/abbrev/style', 'setting', 'segment', 'general.numberAbbrevStyle', '', '', 'direct', 'enum', '', '', '', '0', '0', '1', 'Number abbreviation', 'Selects Number abbreviation. Available on the Global Miscellaneous page. Available choices: Compact, Game default.', 's:COMPACT\030Compact\031s:GAME\030Game default', '', '', '', '', '', '', '', 'base', '*' },
     { 'setting:general.petFrameColor@opt_colors/opt/colors/advanced/api/set/pet/frame/color', 'menu2.opt.colors.advanced.api.set.pet.frame.color', '', '', 'opt_colors', 'opt/colors/advanced/api/set/pet/frame/color', 'setting', 'color', 'general.petFrameColor', '', '', 'direct', 'color', '', '', '', '0', '0', '1', 'Pet Frame Color', 'Chooses the color used by Pet Frame Color. Available on the Global Colors page.', '', '', '', '', '', '', '', '', 'base', '*' },
     { 'setting:general.petFrameUsePlayerClassColor@opt_colors/opt/colors/advanced/unit/pet/use/player/class/color', 'menu2.opt.colors.advanced.unit.pet.use.player.class.color', '', '', 'opt_colors', 'opt/colors/advanced/unit/pet/use/player/class/color', 'setting', 'toggle', 'general.petFrameUsePlayerClassColor', '', '', 'direct', 'boolean', '', '', '', '0', '0', '1', 'Use player\'s class color for Pet Frame', 'Turns Use player\'s class color for Pet Frame on or off. Available on the Global Colors page.', '', '', '', '', '', '', '', '', 'base', '*' },
     { 'setting:general.petFrameUsePlayerClassColor@uf_pet/unit/basics/use_player_class_color', 'menu2.uf_pet.unit.basics.use_player_class_color', '', '', 'uf_pet', 'unit/basics/use_player_class_color', 'setting', 'toggle', 'general.petFrameUsePlayerClassColor', '', '', 'direct', 'boolean', '', '', '', '0', '0', '1', 'Player Class Color', 'Turns Player Class Color on or off. Available on the Pet Unit Frame page.', '', '', '', '', '', '', '', '', 'base', '*' },

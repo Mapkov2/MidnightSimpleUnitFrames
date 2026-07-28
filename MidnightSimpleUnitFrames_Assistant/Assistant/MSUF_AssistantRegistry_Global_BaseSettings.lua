@@ -377,4 +377,53 @@ function A.GlobalRegistry.RegisterBaseSettings(ctx)
         end,
         combatSafe = true,
     })
+
+    Registry:RegisterSetting({
+        key = "general.numberAbbrevStyle",
+        label = "Number Abbreviation",
+        category = "Global / Misc",
+        unit = "global",
+        frameType = "misc",
+        attribute = "numberAbbrevStyle",
+        type = "enum",
+        aliases = {
+            "number abbreviation", "abbreviate numbers", "number format", "abbreviation style",
+            "compact numbers", "short number format", "number suffix",
+            "zahlenabkuerzung", "zahlen abkuerzen", "zahlenformat", "kompakte zahlen", "zahlen kuerzen",
+        },
+        values = { "GAME", "COMPACT" },
+        displayValues = {
+            GAME = "Game default",
+            COMPACT = "Compact",
+        },
+        valueAliases = {
+            game = "GAME",
+            default = "GAME",
+            blizzard = "GAME",
+            client = "GAME",
+            locale = "GAME",
+            spiel = "GAME",
+            standard = "GAME",
+            compact = "COMPACT",
+            short = "COMPACT",
+            english = "COMPACT",
+            kompakt = "COMPACT",
+            kurz = "COMPACT",
+        },
+        get = function()
+            return GeneralDB().numberAbbrevStyle == "COMPACT" and "COMPACT" or "GAME"
+        end,
+        set = function(value)
+            GeneralDB().numberAbbrevStyle = (value == "COMPACT") and "COMPACT" or "GAME"
+        end,
+        apply = function()
+            --- The style lives as an upvalue in every text consumer, so it has
+            --- to be pushed before the repaint formats anything.
+            local numberFormat = _G.MSUF_NumberFormat or (_G.MSUF_NS and _G.MSUF_NS.NumberFormat)
+            if numberFormat and type(numberFormat.Refresh) == "function" then numberFormat.Refresh() end
+            ApplyGeneral("MSUF_ASSISTANT_NUMBER_ABBREV_TEXT", { preview = false, applyAll = false, text = true })
+            if type(_G.MSUF_GF_RefreshVisuals) == "function" then _G.MSUF_GF_RefreshVisuals() end
+        end,
+        combatSafe = true,
+    })
 end

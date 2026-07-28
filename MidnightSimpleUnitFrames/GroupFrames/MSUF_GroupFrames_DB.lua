@@ -132,6 +132,17 @@ local _GF_CSU_TruncateZero = _G.C_StringUtil and _G.C_StringUtil.TruncateWhenZer
 local _GF_CSU_WrapString = _G.C_StringUtil and _G.C_StringUtil.WrapString
 local _GF_ScaleTo100 = _G.CurveConstants and _G.CurveConstants.ScaleTo100
 local _GF_issecretvalue = _G.issecretvalue
+--- Global abbreviation style, pushed on the cold path by
+--- Runtime/MSUF_NumberFormat.lua. nil keeps the client's locale-dependent
+--- output; a table switches the C abbreviator to MSUF's locale-independent
+--- breakpoints. Only the short form takes it - BreakUpLargeNumbers does not.
+local _GF_NUM_OPTS = nil
+do
+    local NumberFormat = MSUF.NumberFormat
+    if NumberFormat and NumberFormat.Register then
+        NumberFormat.Register(function(options) _GF_NUM_OPTS = options end)
+    end
+end
 local _GF_ABSORB_ICON_MARKUP = "|TInterface\\Icons\\INV_Shield_06:0|t"
 local _GF_ABSORB_MODE_BASE = {
     CURRENTABSORB = "CURRENT",
@@ -2247,14 +2258,14 @@ local function _GF_Abbrev(val, shortNumbers)
         --- Secret: must use C-side abbreviator; no type()/tonumber()/arithmetic
         local fn = useShort and (_GF_AbbrShort or _GF_AbbrFallback)
                             or  (_GF_AbbrLong  or _GF_AbbrShort or _GF_AbbrFallback)
-        if fn then return fn(val) end
+        if fn then return fn(val, useShort and _GF_NUM_OPTS or nil) end
         return val   --- raw secret ? SetText handles it C-side
     end
     --- Non-secret
     local n = tonumber(val) or 0
     local fn = useShort and (_GF_AbbrShort or _GF_AbbrFallback)
                         or  (_GF_AbbrLong  or _GF_AbbrShort or _GF_AbbrFallback)
-    if fn then return fn(n) end
+    if fn then return fn(n, useShort and _GF_NUM_OPTS or nil) end
     return tostring(n)
 end
 

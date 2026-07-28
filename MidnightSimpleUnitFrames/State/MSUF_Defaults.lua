@@ -1952,6 +1952,12 @@ end
     if g.shortenNameShowDots == nil then
         g.shortenNameShowDots = true --- show '...' on the clipped edge (secret-safe)
     end
+    --- GAME keeps Blizzard's locale-dependent abbreviation; COMPACT switches to
+    --- MSUF's locale-independent breakpoints. Never default to COMPACT: CJK
+    --- clients abbreviate on purpose differently.
+    if g.numberAbbrevStyle ~= "COMPACT" then
+        g.numberAbbrevStyle = "GAME"
+    end
     if g.useCustomFontColor == nil then
         g.useCustomFontColor = false
     end

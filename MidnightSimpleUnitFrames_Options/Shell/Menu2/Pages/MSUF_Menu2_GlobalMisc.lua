@@ -39,6 +39,11 @@ local VT = M.ValueTextList
 local TOOLTIP_MODES = VT("ALWAYS", "Always", "OOC", "Out of Combat", "MODIFIER", "Modifier Key", "NEVER", "Never")
 local TOOLTIP_MODIFIERS = VT("ALT", "Alt", "CTRL", "Ctrl", "SHIFT", "Shift")
 local MOUSEOVER_STYLES = VT("GRADIENT", "Soft gradient", "BORDER", "Solid border")
+local ABBREV_STYLES = VT("GAME", "Game default", "COMPACT", "Compact")
+--- Sample ladder for the live example line: one value per breakpoint tier so
+--- the difference between the client's locale output and MSUF's compact form is
+--- visible without any explanatory text.
+local ABBREV_SAMPLES = { 123, 12345, 123456, 1234567, 12345678, 1234567890 }
 local MENU_WRITE_OPTS = { preview = false, applyAll = false, notify = false }
 local MOUSEOVER_WRITE_OPTS = { preview = false, applyAll = false, mouseoverHighlight = true }
 local PREVIEW_FALSE = { preview = false }
@@ -142,7 +147,7 @@ local function BuildMisc(ctx)
             }))
         return control
     end
-    local language = b:CollapsibleSection("misc_language", "Language", 146, true)
+    local language = b:CollapsibleSection("misc_language", "Language", 268, true)
     local languageW = language._msuf2Width or ctx.width or 720
     local languageDropW = max(260, min(360, languageW - 70))
     BindMiscDropdown(language, "Menu language", function()
@@ -160,6 +165,57 @@ local function BuildMisc(ctx)
         "language.selection")
     local languageHelp = W.Text(language, "Follow Blizzard uses the WoW client language. Manual selection affects only MSUF menus.", 30, -96, languageW - 70, T.colors.muted)
     if languageHelp.SetWordWrap then languageHelp:SetWordWrap(true) end
+    -- Number abbreviation belongs here, not on the Fonts page: it is a locale
+    -- formatting rule and it is global. The Fonts page is scope-aware, so a
+    -- global control there would sit greyed out in 19 of 20 scopes and read as
+    -- "per unit, but locked".
+    local abbrevSegW = max(220, min(320, languageW - 70))
+    local abbrevSample
+    local function AbbrevStyle()
+        local NumberFormat = MSUF.NumberFormat
+        local style = ReadG("numberAbbrevStyle", "GAME")
+        if NumberFormat and NumberFormat.NormalizeStyle then return NumberFormat.NormalizeStyle(style) end
+        return style == "COMPACT" and "COMPACT" or "GAME"
+    end
+    -- The example line is rendered through the real C abbreviator, so it shows
+    -- the running client's actual locale output instead of a guess.
+    local function RefreshAbbrevSample()
+        if not (abbrevSample and abbrevSample.SetText) then return end
+        local NumberFormat = MSUF.NumberFormat
+        if not (NumberFormat and NumberFormat.FormatWith) then abbrevSample:SetText("") return end
+        local style, parts = AbbrevStyle(), {}
+        for i = 1, #ABBREV_SAMPLES do
+            parts[i] = NumberFormat.FormatWith(ABBREV_SAMPLES[i], style)
+        end
+        abbrevSample:SetText(table.concat(parts, "   "))
+    end
+    local abbrevSegment = W.Segment(language, "Number abbreviation", ABBREV_STYLES, abbrevSegW)
+    W.MoveWidget(abbrevSegment, language, 30, -134, abbrevSegW, "LEFT")
+    M.BindSegment(ctx, abbrevSegment, AbbrevStyle, function(value)
+        value = (value == "COMPACT") and "COMPACT" or "GAME"
+        -- Persist without a runtime apply, push the new style, then repaint
+        -- once - so the refresh already formats with the new options instead of
+        -- painting stale text and correcting it on the next unit event.
+        SetG("numberAbbrevStyle", value, "MSUF2_NUMBER_ABBREV", MENU_WRITE_OPTS)
+        local NumberFormat = MSUF.NumberFormat
+        if NumberFormat and NumberFormat.Refresh then NumberFormat.Refresh() end
+        M.RequestGeneralApply("MSUF2_NUMBER_ABBREV_TEXT", { text = true })
+        if type(_G.MSUF_GF_RefreshVisuals) == "function" then _G.MSUF_GF_RefreshVisuals() end
+        RefreshAbbrevSample()
+    end, Meta("setting.numberAbbrevStyle"))
+    local abbrevHelp = W.Text(language, "Compact keeps 12.3K / 1.23M on every client language. Game default follows the client, which adds spaces or different letters on some locales.", 30, -186, languageW - 70, T.colors.muted)
+    if abbrevHelp.SetWordWrap then abbrevHelp:SetWordWrap(true) end
+    abbrevSample = W.Text(language, "", 30, -232, languageW - 70, T.colors.text)
+    RefreshAbbrevSample()
+    if M.TrackRefresh then
+        M.TrackRefresh(ctx, function()
+            local NumberFormat = MSUF.NumberFormat
+            if type(W.SetControlEnabled) == "function" and NumberFormat and NumberFormat.IsCompactSupported then
+                W.SetControlEnabled(abbrevSegment, NumberFormat.IsCompactSupported() and true or false)
+            end
+            RefreshAbbrevSample()
+        end)
+    end
     local menuBehavior = b:CollapsibleSection("misc_menu_behavior", "Menu behavior", 440, true)
     local menuBehaviorW = menuBehavior._msuf2Width or ctx.width or 720
     BindMiscToggle(menuBehavior, "Enable Windows-style edge snap for this menu", "slashMenuSnapEnabled", true, "MSUF2_MENU_SNAP", nil, nil, nil, MENU_WRITE_OPTS)

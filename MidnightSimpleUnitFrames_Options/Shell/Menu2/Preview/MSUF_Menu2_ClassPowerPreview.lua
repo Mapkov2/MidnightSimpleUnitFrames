@@ -348,7 +348,8 @@ local function ShortValue(value)
     value = tonumber(value) or 0
     local abbrev = _G.AbbreviateShortNumber or _G.AbbreviateLargeNumbers
     if type(abbrev) == "function" then
-        local text = abbrev(value)
+        local NumberFormat = MSUF.NumberFormat
+        local text = abbrev(value, NumberFormat and NumberFormat.GetOptions and NumberFormat.GetOptions() or nil)
         if text ~= nil then return text end
     end
     local absValue = value < 0 and -value or value

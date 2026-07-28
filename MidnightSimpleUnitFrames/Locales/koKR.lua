@@ -4006,3 +4006,9 @@ L["Show cast pushback"] = "시전 지연 표시"
 --- Castbar filtering & feedback tooltips (6.0)
 L["Keeps crafting and gathering casts off every castbar.\n\nThe profession flag is never a protected value, so this filter also holds for units whose spell data is restricted in PvP."] = "제작 및 채집 시전을 모든 시전 막대에서 숨깁니다.\n\n전문 기술 표시는 보호된 값이 아니므로, PvP에서 주문 정보가 제한된 대상에도 이 필터가 적용됩니다."
 L["Appends the delay a cast has accumulated to the spell name, for example \"Fireball +0.4\".\n\nThe delay is read once per cast from the same event that starts the bar."] = "주문 이름 뒤에 누적된 지연 시간을 붙입니다. 예: \"화염구 +0.4\".\n\n지연 값은 막대를 시작하는 같은 이벤트에서 시전당 한 번만 읽습니다."
+
+--- Number abbreviation (6.0)
+L["Number abbreviation"] = "숫자 축약"
+L["Game default"] = "게임 기본값"
+L["Compact"] = "간결"
+L["Compact keeps 12.3K / 1.23M on every client language. Game default follows the client, which adds spaces or different letters on some locales."] = "간결은 모든 클라이언트 언어에서 12.3K / 1.23M 형식을 유지합니다. 게임 기본값은 클라이언트를 따르며, 일부 언어에서는 공백이나 다른 문자가 추가됩니다."

@@ -451,6 +451,14 @@ MSUF_ProfileIO_PostProfileRuntimeApply = function(reason, applyAll)
     --- before the runtime rebuild reads the newly active profile root.
     MSUF_ProfileIO_CallGlobal("MSUF_GF_InvalidateConfCache")
 
+    --- The number-abbreviation style is held as an upvalue in every text
+    --- consumer, so it must be re-resolved from the new profile before the
+    --- rebuild below formats anything.
+    local numberFormat = MSUF and MSUF.NumberFormat
+    if numberFormat and type(numberFormat.Refresh) == "function" then
+        MSUF_ProfileIO_RunProtected("MSUF.NumberFormat.Refresh", numberFormat.Refresh)
+    end
+
     local nsGlobal = _G.MSUF_NS
     local core = nsGlobal and nsGlobal.MSUF_UnitframeCore
     if core and type(core.InvalidateAllFrameConfigs) == "function" then

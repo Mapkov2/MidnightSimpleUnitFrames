@@ -3955,3 +3955,9 @@ L["Show cast pushback"] = "Mostrar atraso de conjuração"
 --- Castbar filtering & feedback tooltips (6.0)
 L["Keeps crafting and gathering casts off every castbar.\n\nThe profession flag is never a protected value, so this filter also holds for units whose spell data is restricted in PvP."] = "Mantém conjurações de criação e coleta fora de todas as barras.\n\nO indicador de profissão nunca é um valor protegido, portanto este filtro também vale para unidades cujos dados de magia são restritos no JxJ."
 L["Appends the delay a cast has accumulated to the spell name, for example \"Fireball +0.4\".\n\nThe delay is read once per cast from the same event that starts the bar."] = "Acrescenta ao nome da magia o atraso acumulado, por exemplo \"Bola de Fogo +0.4\".\n\nO atraso é lido uma vez por conjuração no mesmo evento que inicia a barra."
+
+--- Number abbreviation (6.0)
+L["Number abbreviation"] = "Abreviação de números"
+L["Game default"] = "Padrão do jogo"
+L["Compact"] = "Compacto"
+L["Compact keeps 12.3K / 1.23M on every client language. Game default follows the client, which adds spaces or different letters on some locales."] = "Compacto mantém 12.3K / 1.23M em qualquer idioma do cliente. Padrão do jogo segue o cliente, que adiciona espaços ou letras diferentes em alguns idiomas."

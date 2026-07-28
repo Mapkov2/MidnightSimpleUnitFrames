@@ -4046,3 +4046,9 @@ L["Show cast pushback"] = "Показывать задержку заклина�
 --- Castbar filtering & feedback tooltips (6.0)
 L["Keeps crafting and gathering casts off every castbar.\n\nThe profession flag is never a protected value, so this filter also holds for units whose spell data is restricted in PvP."] = "Скрывает ремесленные и собирательские заклинания со всех полос заклинаний.\n\nПризнак профессии никогда не является защищённым значением, поэтому фильтр работает и для целей с ограниченными данными заклинаний в PvP."
 L["Appends the delay a cast has accumulated to the spell name, for example \"Fireball +0.4\".\n\nThe delay is read once per cast from the same event that starts the bar."] = "Добавляет к названию заклинания накопленную задержку, например \"Огненный шар +0.4\".\n\nЗадержка читается один раз за заклинание из того же события, которое запускает полосу."
+
+--- Number abbreviation (6.0)
+L["Number abbreviation"] = "Сокращение чисел"
+L["Game default"] = "Как в игре"
+L["Compact"] = "Компактно"
+L["Compact keeps 12.3K / 1.23M on every client language. Game default follows the client, which adds spaces or different letters on some locales."] = "Компактно сохраняет вид 12.3K / 1.23M на любом языке клиента. «Как в игре» следует за клиентом, который в некоторых языках добавляет пробелы или другие буквы."

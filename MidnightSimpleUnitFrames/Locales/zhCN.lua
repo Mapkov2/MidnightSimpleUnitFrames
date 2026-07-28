@@ -4650,3 +4650,9 @@ L["Show cast pushback"] = "显示施法延迟"
 --- Castbar filtering & feedback tooltips (6.0)
 L["Keeps crafting and gathering casts off every castbar.\n\nThe profession flag is never a protected value, so this filter also holds for units whose spell data is restricted in PvP."] = "让制造和采集类施法不再出现在任何施法条上。\n\n专业标记从来不是受保护的数值，因此该过滤在 PvP 中法术数据受限的单位上同样有效。"
 L["Appends the delay a cast has accumulated to the spell name, for example \"Fireball +0.4\".\n\nThe delay is read once per cast from the same event that starts the bar."] = "在法术名称后追加已累积的施法延迟，例如 \"火球术 +0.4\"。\n\n该延迟在每次施法时从启动施法条的同一事件中读取一次。"
+
+--- Number abbreviation (6.0)
+L["Number abbreviation"] = "数字缩写"
+L["Game default"] = "游戏默认"
+L["Compact"] = "紧凑"
+L["Compact keeps 12.3K / 1.23M on every client language. Game default follows the client, which adds spaces or different letters on some locales."] = "紧凑模式在所有客户端语言下都保持 12.3K / 1.23M 的格式。游戏默认跟随客户端，部分语言会加入空格或使用不同的字母。"

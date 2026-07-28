@@ -21,6 +21,17 @@ if type(builders) ~= "table" then
     ExportPublic("MSUF_CP_CORE_BUILDERS", builders)
 end
 
+--- Global abbreviation style (see Runtime/MSUF_NumberFormat.lua). Registered at
+--- file scope, not inside the builder, so rebuilding the HP bar never stacks a
+--- second sink.
+local NUM_OPTS = nil
+do
+    local NumberFormat = MSUF.NumberFormat
+    if NumberFormat and NumberFormat.Register then
+        NumberFormat.Register(function(options) NUM_OPTS = options end)
+    end
+end
+
 --- Builds closures bound to the ClassPower controller environment. Nothing in
 --- this file should touch frames at load time; actual frame creation waits until
 --- the player frame exists and the feature is enabled.
@@ -228,7 +239,7 @@ builders.PLAYER_HP = function(E)
         value = tonumber(value) or 0
         local abbrev = _G.AbbreviateShortNumber or _G.AbbreviateLargeNumbers
         if type(abbrev) == "function" then
-            local text = abbrev(value)
+            local text = abbrev(value, NUM_OPTS)
             if text ~= nil then return text end
         end
         local absValue = value < 0 and -value or value
