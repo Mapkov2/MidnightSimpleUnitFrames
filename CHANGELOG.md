@@ -1,5 +1,15 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-Beta35 - 2026-07-28
+
+### Highlights
+
+- MSUF can now format every health, power, and resource number the same way on every client language. Blizzard's own abbreviator takes its breakpoints and letters from the game's locale, which inserts a space on some languages ("123 K"), uses different letters on others, and moves the decimal around, so the same value could read differently from one client language to the next. A new "Number abbreviation" control on the Misc page's Language section - Compact or Game default - switches every text surface (unit frames, group frames, class power) to a fixed, locale-independent breakpoint table (12.3K / 123M / 1.23B), with a live example line so the difference is visible before you commit to it. Game default remains exactly what you had, and CJK languages are left alone on purpose, since their abbreviations are intentionally different and were never the problem. The Assistant can set it too, in English and German ("use compact numbers", "zahlen kuerzen").
+
+### Fixes & Performance
+
+- Fixed the Dashboard's changelog and support disclosures jumping the whole page back to the top every time you opened or closed one. Auras and Group Auras already restored the reader's scroll position after this kind of rebuild; Dashboard used a plain page reselect that never carried the offset over. All three now share one implementation, so opening a card near the bottom of a long page no longer sends you back to the first line.
+
 ## 6.0-Beta34 - 2026-07-28
 
 ### Highlights

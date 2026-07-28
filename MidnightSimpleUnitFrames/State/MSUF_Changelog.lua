@@ -8,10 +8,28 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-Beta34",
-    previousVersion = "6.0-Beta33",
-    rangeLabel = "6.0-Beta33 -> 6.0-Beta34",
+    currentVersion = "6.0-Beta35",
+    previousVersion = "6.0-Beta34",
+    rangeLabel = "6.0-Beta34 -> 6.0-Beta35",
     entries = {
+        {
+            version = "6.0-Beta35",
+            date = "2026-07-28",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "MSUF can now format every health, power, and resource number the same way on every client language. Blizzard's own abbreviator takes its breakpoints and letters from the game's locale, which inserts a space on some languages (\"123 K\"), uses different letters on others, and moves the decimal around, so the same value could read differently from one client language to the next. A new \"Number abbreviation\" control on the Misc page's Language section - Compact or Game default - switches every text surface (unit frames, group frames, class power) to a fixed, locale-independent breakpoint table (12.3K / 123M / 1.23B), with a live example line so the difference is visible before you commit to it. Game default remains exactly what you had, and CJK languages are left alone on purpose, since their abbreviations are intentionally different and were never the problem. The Assistant can set it too, in English and German (\"use compact numbers\", \"zahlen kuerzen\").",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Fixed the Dashboard's changelog and support disclosures jumping the whole page back to the top every time you opened or closed one. Auras and Group Auras already restored the reader's scroll position after this kind of rebuild; Dashboard used a plain page reselect that never carried the offset over. All three now share one implementation, so opening a card near the bottom of a long page no longer sends you back to the first line.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-Beta34",
             date = "2026-07-28",
@@ -88,40 +106,6 @@ local data = {
                         "Fixed custom raid target marker icons and status icon packs never reaching the marker. On 12.x, drawing a default marker slices whichever texture the region is holding at that moment, so once a custom icon or an icon pack had been placed there, the marker could show a cut-out piece of that artwork instead, and switching back to the custom icon afterwards could be skipped altogether. The marker now restores the stock marker sheet before slicing and clears its cached coordinates, and a custom icon is used even on frames whose marker index the client keeps hidden.",
                         "Fixed MSUF blocking Blizzard's protected slash commands. The options loader and the Assistant's coverage command each wrote to the shared slash command table while loading, which marks that table as addon-owned; because the client re-reads it for every slash command, protected ones such as /pvp then failed with an \"action blocked\" error. Neither module writes that global in the game any more.",
                         "Fixed the Cast Bars page leaving its demo cast running on the real castbar when the options window was closed straight from that page.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-Beta31",
-            date = "2026-07-26",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "The global castbar page now previews on the real castbar. While the page is open, the unit picked by its unit segment runs a demo cast on the actual frame out in the world, so size, texture, position, and text are judged where they will really be seen instead of against a mock. Picking Boss brings up the boss frames underneath so boss castbars anchor exactly like they do live. The preview is purely temporary: it never writes the persistent preview or test-mode settings, it follows the selection, it disappears when the page closes, and it tears itself down the moment combat starts, so it costs nothing while playing.",
-                        "Custom aura containers now preview the spells they actually track. A lane used to draw a row of identical placeholder icons that told you nothing; it now shows one icon per configured spell with that spell's own artwork, capped by the lane's icon limit. The Target DoTs container applies the same include filter the runtime uses, so the preview shows exactly the icons that will appear on the frame - and a container with nothing configured previews nothing.",
-                        "Boss aura lanes are visible from the boss page without entering Edit Mode. While the page owns the boss preview, the aura lanes render on those preview frames with no header, backdrop, or drag handling, so they read as a plain preview of the auras rather than an editing surface, and they stay put when you leave Edit Mode.",
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "The shipped default profile has been re-captured against the full 6.0 settings surface, so a fresh install now starts with a considered opinion on the portrait, aura, castbar, and group-frame controls added during this cycle instead of falling back to per-key defaults for them. Existing profiles are untouched; this only applies the first time MSUF sets itself up.",
-                        "\"Bar mode\" on the Global Colors page is now a single segmented row. The four mode cards and the dropdown that repeated the same choice have become one control, which is also the control search and the Assistant address, so the visible widget and the automated one can no longer drift apart. The per-mode tooltips moved onto the segments and the section is more compact.",
-                        "The MSUF Assistant dashboard card no longer carries the red \"Early Alpha\" tag.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed the % sign disappearing from health text on some frames. Each slot's \"Hide % sign\" setting could leak from the Right slot onto the Left and Center ones, so a frame showing its percentage in the center - the shipped default for the target frame - hid the symbol even with its own toggle off. The player frame shows its percentage in the Right slot and was never affected, which is why it looked like a target-only problem. The per-slot absorb icon leaked the same way, and a per-slot \"show the % sign\" is no longer overruled by the global setting.",
-                        "Fixed castbars freezing on their previous timing. Whenever a cast reused the frame's duration container - pushback, channel updates, and every new cast on the same frame - the fill kept drawing the old cast's progress, because the client snapshots the duration when the bar is bound. Empowered casts were affected the same way.",
-                        "Fixed the per-slot health text settings ignoring \"Reverse order\". Reversing mirrors the whole line, but only the slot contents moved: font size, X/Y offset, and the direct-layout anchor and color stayed on the physical side, so the \"Selected slot\" sliders edited the hidden text and appeared dead. Every per-slot setting now follows its content, in the live frames and in both menu previews, where the drag handles and the focus ring now also point at the text you actually see.",
-                        "Fixed reverse order barely working on group frames at all: the reversal was applied twice, so the text modes snapped back to normal order while the hide-% and absorb-icon settings stayed mirrored.",
-                        "Fixed \"Copy to\" carrying only part of a portrait. Width, height, placement, detached anchors, overlay alignment, layer, opacity, pan, and border art were left behind, so the copy's geometry disagreed with the portrait it was copied from. Border and background colors are still shared by all units and deliberately stay out of the copy.",
-                        "Fixed health bar opacity in the group preview not matching the frames. The preview faded the bar in a way the client discards on the next value change; it now fades the fill texture like the live frames, scales the heal, absorb, and heal-absorb overlays with it, and fades the texts along unless \"Keep text + portrait visible\" is on.",
-                        "Fixed four Assistant phrasings landing on a neighbouring setting: bar outline draw order was swallowed by outline thickness, Custom aura container geometry was answered by the Buff/Debuff shortcut, aura live-filtering claimed the group externals layer, and power bar textures were written to the global bar texture.",
                     },
                 },
             },
