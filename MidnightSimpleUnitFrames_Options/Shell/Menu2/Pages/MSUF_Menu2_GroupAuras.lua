@@ -12,16 +12,7 @@ local GP = M.GroupPage or {}
 local floor, ceil, abs = math.floor, math.ceil, math.abs
 local max = math.max
 local min = math.min
-local C_Timer = M.MenuTimer or _G.C_Timer
 local VT = M.ValueTextList
-local AccessibleNumber = M.AccessibleNumber or function(value, fallback)
-    fallback = tonumber(fallback) or 0
-    local canaccessvalue = _G.canaccessvalue
-    if type(canaccessvalue) == "function" and canaccessvalue(value) ~= true then return fallback end
-    local issecretvalue = _G.issecretvalue
-    if type(issecretvalue) == "function" and issecretvalue(value) == true then return fallback end
-    return tonumber(value) or fallback
-end
 local AURA_ANCHORS, STATUS_ICON_ANCHORS, SPELL_GROWTH_VALUES, ScopeSection, CurrentScope, AuraGroup, AurasRoot, QueueGF, RefreshContext, BindNestedSlider, BindNestedDropdown, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, OnOffBadge, BadgeNumber, OptionText = M.Pick(GP, [[AURA_ANCHORS STATUS_ICON_ANCHORS SPELL_GROWTH_VALUES ScopeSection CurrentScope AuraGroup AurasRoot QueueGF RefreshContext BindNestedSlider BindNestedDropdown SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus OnOffBadge BadgeNumber OptionText]])
 AURA_ANCHORS = AURA_ANCHORS or {}
 STATUS_ICON_ANCHORS = STATUS_ICON_ANCHORS or {}
@@ -133,30 +124,8 @@ local function SetAuraWorkspaceLane(scope, lane)
     M.gfAuraLaneSelection = M.gfAuraLaneSelection or {}
     M.gfAuraLaneSelection[scope] = (lane == "debuff" and "debuff") or (lane == "externals" and "externals") or "buff"
 end
-local groupAuraRebuildSerial = 0
-local function RestoreGroupAuraScroll(offset, key, serial)
-    if M.activeKey ~= key or serial ~= groupAuraRebuildSerial then return end
-    local scroll = M.scrollFrame
-    if not (scroll and scroll.SetVerticalScroll) then return end
-    -- The themed setter already clamps against its accessible cached range.
-    -- Avoid GetVerticalScrollRange here: Midnight may return a secret number.
-    scroll:SetVerticalScroll(AccessibleNumber(offset, 0))
-    if M.RefreshPinnedPreviews then M.RefreshPinnedPreviews(scroll) end
-end
 local function RebuildGroupAuraPage(ctx)
-    local key = (ctx and ctx.key) or M.activeKey or "gf_auras"
-    if not (M.InvalidatePage and M.SelectPage and M.frame and M.frame.IsShown and M.frame:IsShown()) then return end
-    local offset = AccessibleNumber(M.scrollFrame and M.scrollFrame.GetVerticalScroll and M.scrollFrame:GetVerticalScroll() or 0, 0)
-    groupAuraRebuildSerial = groupAuraRebuildSerial + 1
-    local serial = groupAuraRebuildSerial
-    M.InvalidatePage(key)
-    M.activeKey = nil
-    M.SelectPage(key)
-    RestoreGroupAuraScroll(offset, key, serial)
-    if C_Timer and C_Timer.After then
-        C_Timer.After(0, function() RestoreGroupAuraScroll(offset, key, serial) end)
-        C_Timer.After(0.05, function() RestoreGroupAuraScroll(offset, key, serial) end)
-    end
+    M.CallIf(M.RebuildPageKeepingScroll, (ctx and ctx.key) or M.activeKey or "gf_auras")
 end
 local function BuildAuraWorkspaceTabs(ctx, section, scope, lane, width)
     local sectionW = tonumber(width) or 720

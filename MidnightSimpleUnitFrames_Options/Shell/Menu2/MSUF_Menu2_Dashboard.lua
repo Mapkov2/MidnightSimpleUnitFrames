@@ -335,6 +335,11 @@ local function CreateDashboardAccordionTone(header, arrow)
     end
     return Refresh
 end
+--- Dashboard disclosures change card heights, so they toggle by rebuilding the
+--- whole page. Keep the viewport so the clicked header stays under the cursor.
+local function RebuildDashboardPage()
+    M.CallIf(M.RebuildPageKeepingScroll, "home")
+end
 local function BuildDashboardChangelog(parent, cardWidth, opts)
     opts = opts or {}
     local data = GetBundledChangelog()
@@ -807,8 +812,7 @@ local function BuildDashboardUX(ctx)
         if type(fillPills) == "function" then fillPills(head, width) end
         head:SetScript("OnClick", function()
             M.SetMenuStateValue(stateKey, not open)
-            M.InvalidatePage("home")
-            M.SelectPage("home")
+            RebuildDashboardPage()
         end)
         head:SetScript("OnEnter", function()
             PaintHeaderTone(open, true)
@@ -1107,8 +1111,7 @@ local function BuildDashboardUX(ctx)
         bottom = 18,
         hideSummaryWhenClosed = true,
         onToggle = function()
-            M.InvalidatePage("home")
-            M.SelectPage("home")
+            RebuildDashboardPage()
         end,
     })
     local supportTop = changelogTop - changelogH - 10

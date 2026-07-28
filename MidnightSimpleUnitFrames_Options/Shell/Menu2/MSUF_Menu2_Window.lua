@@ -49,6 +49,7 @@ RefreshLocaleCache()
 if type(MSUF.RegisterLocaleCallback) == "function" then MSUF.RegisterLocaleCallback("MSUF_Menu2_Window", RefreshLocaleCache) end
 local T = M.Theme
 local W = M.Widgets
+local AccessibleNumber = M.AccessibleNumber
 M.pages = M.pages or {}
 M.pageOrder = M.pageOrder or {}
 M.cache = M.cache or {}
@@ -1315,6 +1316,9 @@ function M.SelectPage(key)
     if M.frame then M.frame._msufCurrentKey = key end
     if M.scrollChild then SetFrameHeightIfChanged(M.scrollChild, entry.height or CONTENT_H) end
     if M.scrollFrame then
+        -- Every rebuild lands the reader at the top. That is right for a page
+        -- switch or a fresh result list; callers that only regrew a card on the
+        -- current page use M.RebuildPageKeepingScroll below instead.
         if M.scrollFrame.SetVerticalScroll then
             M.scrollFrame:SetVerticalScroll(0)
         elseif M.scrollFrame._msuf2RefreshScrollBar then
@@ -1334,6 +1338,40 @@ function M.SelectPage(key)
     RequestGroupPagePreviewForKey(key)
     if hasPendingFocus and type(M.FocusRequestedSection) == "function" then M.FocusRequestedSection(key, { flash = true }) end
     M.CallIf(M.GuidedTourOnPageSelected, key)
+    return true
+end
+local pageScrollRestoreSerial = 0
+local function RestorePageScroll(key, offset, serial)
+    if M.activeKey ~= key or serial ~= pageScrollRestoreSerial then return end
+    local scroll = M.scrollFrame
+    if not (scroll and scroll.SetVerticalScroll) then return end
+    -- The themed setter already clamps against its accessible cached range.
+    -- Avoid GetVerticalScrollRange here: Midnight may return a secret number.
+    scroll:SetVerticalScroll(AccessibleNumber(offset, 0))
+    M.CallIf(M.RefreshPinnedPreviews, scroll)
+end
+--- Rebuilds a page in place and keeps the reader where they were. Disclosures
+--- that only grow or shrink a card need the rebuild for the new heights, but
+--- SelectPage's viewport reset then throws the page back to the top.
+--- Cards below the toggle settle their height after selection, so the immediate
+--- restore covers the common case and the two retries cover the settled layout;
+--- the serial drops stale retries once a newer rebuild has started.
+--- Returns false only when nothing was rebuilt, so callers keep their fallback.
+function M.RebuildPageKeepingScroll(key)
+    key = key or M.activeKey
+    if not (key and M.frame and M.frame.IsShown and M.frame:IsShown()) then return false end
+    local scroll = M.scrollFrame
+    local offset = AccessibleNumber(scroll and scroll.GetVerticalScroll and scroll:GetVerticalScroll() or 0, 0)
+    pageScrollRestoreSerial = pageScrollRestoreSerial + 1
+    local serial = pageScrollRestoreSerial
+    M.InvalidatePage(key)
+    if M.SelectPage(key) ~= false then
+        RestorePageScroll(key, offset, serial)
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0, function() RestorePageScroll(key, offset, serial) end)
+            C_Timer.After(0.05, function() RestorePageScroll(key, offset, serial) end)
+        end
+    end
     return true
 end
 local function CreateMinimizedBar(frame)

@@ -321,35 +321,12 @@ local function Card(parent, title, subtitle, x, y, width, height)
     if card and T.ApplyBackdrop then T.ApplyBackdrop(card, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft) end
     return card
 end
-local auraScrollRestoreSerial = 0
-local function RestoreAuraPageScroll(offset, key, serial)
-    if key and M.activeKey ~= key then return end
-    if serial and serial ~= auraScrollRestoreSerial then return end
-    local scroll = M.scrollFrame
-    if not (scroll and scroll.SetVerticalScroll) then return end
-    -- The themed setter already clamps against its accessible cached range.
-    -- Avoid GetVerticalScrollRange here: Midnight may return a secret number.
-    scroll:SetVerticalScroll(AccessibleNumber(offset, 0))
-    if M.RefreshPinnedPreviews then M.RefreshPinnedPreviews(scroll) end
-end
 local function Rebuild(ctx)
+    -- Nested aura workspaces and pinned previews settle their final height after
+    -- the page is selected; the shared helper reapplies the viewport for us.
     local key = (ctx and ctx.key) or M.activeKey or "auras3"
-    if M.InvalidatePage and M.SelectPage and M.frame and M.frame.IsShown and M.frame:IsShown() then
-        local scrollOffset = AccessibleNumber(M.scrollFrame and M.scrollFrame.GetVerticalScroll and M.scrollFrame:GetVerticalScroll() or 0, 0)
-        auraScrollRestoreSerial = auraScrollRestoreSerial + 1
-        local restoreSerial = auraScrollRestoreSerial
-        M.InvalidatePage(key)
-        M.activeKey = nil
-        M.SelectPage(key)
-        RestoreAuraPageScroll(scrollOffset, key, restoreSerial)
-        -- Nested aura workspaces and pinned previews settle their final height
-        -- after the page is selected. Reapply the same viewport once that
-        -- layout has completed instead of leaving SelectPage's reset at zero.
-        if C_Timer and C_Timer.After then
-            C_Timer.After(0, function() RestoreAuraPageScroll(scrollOffset, key, restoreSerial) end)
-            C_Timer.After(0.05, function() RestoreAuraPageScroll(scrollOffset, key, restoreSerial) end)
-        end
-    elseif M.RequestRefresh then
+    if M.RebuildPageKeepingScroll and M.RebuildPageKeepingScroll(key) then return end
+    if M.RequestRefresh then
         M.RequestRefresh(ctx, "auras-rebuild-fallback")
     elseif M.Refresh then
         M.Refresh(ctx)
