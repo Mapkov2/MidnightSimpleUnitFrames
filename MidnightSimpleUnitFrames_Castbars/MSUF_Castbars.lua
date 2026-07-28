@@ -1168,9 +1168,15 @@ do
 
                             local assumeCountdown = frame._msufTimerAssumeCountdown
                             if assumeCountdown == nil then
-                                local distMin = math.abs(val - minV)
-                                local distMax = math.abs(maxV - val)
-                                assumeCountdown = (distMax < distMin)
+                                if frame._msufCountsDown ~= nil then
+                                    -- The cast type already knows which way the
+                                    -- value runs; trust it over the value trend.
+                                    assumeCountdown = (frame._msufCountsDown == true)
+                                else
+                                    local distMin = math.abs(val - minV)
+                                    local distMax = math.abs(maxV - val)
+                                    assumeCountdown = (distMax < distMin)
+                                end
                                 frame._msufTimerAssumeCountdown = assumeCountdown
                             end
 
@@ -1280,7 +1286,9 @@ do
             local totalNum = frame._msufPlainTotal
             if totalNum and totalNum > 0 and frame.statusBar and frame.statusBar.SetValue then
                 local value
-                if frame._msufStripeReverseFill then
+                -- Cast type decides the count direction; the anchor only decides
+                -- which edge the fill grows from (see MSUF_GetCastbarCountsDown).
+                if frame._msufCountsDown then
                     value = remNum
                 else
                     value = totalNum - remNum

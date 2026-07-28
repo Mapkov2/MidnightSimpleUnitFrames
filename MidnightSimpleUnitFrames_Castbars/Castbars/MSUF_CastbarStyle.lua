@@ -733,7 +733,10 @@ _G.MSUF_UpdateCastbarFillDirection = function()
         -- (If nil, ApplyTimerDirection will fall back to ReverseFill only.)
         local durObj = f.MSUF_durationObj
         if type(_G.MSUF_ApplyCastbarTimerDirection) == "function" then
-            _G.MSUF_ApplyCastbarTimerDirection(f.statusBar, durObj, rf)
+            -- Pass the cast type through: without it a running channel is rebound
+            -- to ElapsedTime and starts filling instead of draining. Empower bars
+            -- fill by nature, so they stay on the cast direction.
+            _G.MSUF_ApplyCastbarTimerDirection(f.statusBar, durObj, rf, (isChan and not f.isEmpower) and true or false)
         elseif f.statusBar.SetReverseFill then
             -- Fallback for ultra-legacy environments.
             pcall(f.statusBar.SetReverseFill, f.statusBar, rf and true or false)

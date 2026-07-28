@@ -1241,6 +1241,7 @@ BossCastbar_Start = function(frame)
         end
 
         frame.MSUF_isChanneled = false
+        frame._msufCountsDown = false
         frame.MSUF_channelDirect = nil
         if type(_G.MSUF_SetChannelStaticStripes) == "function" then
             _G.MSUF_SetChannelStaticStripes(frame, false)
@@ -1330,6 +1331,9 @@ BossCastbar_Start = function(frame)
         end
 
         frame.MSUF_isChanneled = true
+        frame._msufCountsDown = (type(_G.MSUF_GetCastbarCountsDown) == "function")
+            and (_G.MSUF_GetCastbarCountsDown(frame, true) == true)
+            or false
         frame.MSUF_channelDirect = true
         if type(_G.MSUF_SetChannelStaticStripes) == "function" then
             _G.MSUF_SetChannelStaticStripes(frame, true)

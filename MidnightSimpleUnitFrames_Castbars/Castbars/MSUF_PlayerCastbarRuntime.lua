@@ -456,6 +456,7 @@ local function MSUF_PlayerCastbar_ResetPlainTiming(self)
     self._msufZeroCount = nil
     self._msufLastDurationObj = nil
     self._msufTimerAssumeCountdown = nil
+    self._msufCountsDown = nil
 end
 
 local function MSUF_PlayerCastbar_SetPlainTiming(self, startTimeMS, endTimeMS)
@@ -480,7 +481,7 @@ local function MSUF_PlayerCastbar_SetPlainTiming(self, startTimeMS, endTimeMS)
     end
 end
 
-local function MSUF_PlayerCastbar_ApplyManualTimerFallback(self, totalSec, remSec, reverseFill)
+local function MSUF_PlayerCastbar_ApplyManualTimerFallback(self, totalSec, remSec, countsDown)
     if not (self and self.statusBar and self.statusBar.SetMinMaxValues and self.statusBar.SetValue) then return end
 
     local total = (type(totalSec) == "number" and totalSec or 0)
@@ -493,7 +494,9 @@ local function MSUF_PlayerCastbar_ApplyManualTimerFallback(self, totalSec, remSe
     if span <= 0 then span = 0.001 end
 
     self.statusBar:SetMinMaxValues(0, span)
-    if reverseFill then
+    -- Draining is a channel property, not an anchor property: the fill keeps the
+    -- cast's anchor and only the value runs the other way.
+    if countsDown then
         self.statusBar:SetValue(rem)
     else
         self.statusBar:SetValue(span - rem)
@@ -563,6 +566,7 @@ local function MSUF_PlayerCastbar_UnhaltedUpdate(self, event)
 
         self.MSUF_isChanneled = false
         self._msufStripeReverseFill = (__msuf_rf and true or false)
+        self._msufCountsDown = false
         MSUF_PlayerChannelHasteMarkers_Hide(self)
 
         local apiNI = false
@@ -572,8 +576,9 @@ local function MSUF_PlayerCastbar_UnhaltedUpdate(self, event)
         if self.castText then MSUF_SetTextIfChanged(self.castText, castName or "") end
 
         MSUF_PlayerCastbar_SetPlainTiming(self, startTimeMS, endTimeMS)
+        self._msufCountsDown = false
         if (not timerDriven) and self._msufPlainTotal and self._msufRemaining then
-            MSUF_PlayerCastbar_ApplyManualTimerFallback(self, self._msufPlainTotal, self._msufRemaining, __msuf_rf)
+            MSUF_PlayerCastbar_ApplyManualTimerFallback(self, self._msufPlainTotal, self._msufRemaining, false)
         end
 
         MSUF_PlayerCastbar_UpdateColorForInterruptible(self)
@@ -634,13 +639,17 @@ local function MSUF_PlayerCastbar_UnhaltedUpdate(self, event)
         self.MSUF_castDuration = nil
 
         local __msuf_rf = _G.MSUF_GetReverseFillSafe(self, true)
+        -- The 4th argument is what makes the native timer drain (RemainingTime)
+        -- instead of fill; without it a channel counts up like a cast.
+        local __msuf_cd = _G.MSUF_GetCastbarCountsDown(self, true)
         local timerDriven = false
         if channelDuration then
-            timerDriven = _G.MSUF_ApplyTimerAndFill(self.statusBar, channelDuration, __msuf_rf) and true or false
+            timerDriven = _G.MSUF_ApplyTimerAndFill(self.statusBar, channelDuration, __msuf_rf, true) and true or false
         end
 
         self.MSUF_isChanneled = true
         self._msufStripeReverseFill = (__msuf_rf and true or false)
+        self._msufCountsDown = __msuf_cd and true or false
 
         local apiNI = false
         if notInterruptible then apiNI = true end
@@ -649,8 +658,9 @@ local function MSUF_PlayerCastbar_UnhaltedUpdate(self, event)
         if self.castText then MSUF_SetTextIfChanged(self.castText, chanName or "") end
 
         MSUF_PlayerCastbar_SetPlainTiming(self, startTimeMS, endTimeMS)
+        self._msufCountsDown = __msuf_cd and true or false
         if (not timerDriven) and self._msufPlainTotal and self._msufRemaining then
-            MSUF_PlayerCastbar_ApplyManualTimerFallback(self, self._msufPlainTotal, self._msufRemaining, __msuf_rf)
+            MSUF_PlayerCastbar_ApplyManualTimerFallback(self, self._msufPlainTotal, self._msufRemaining, __msuf_cd)
         end
 
         MSUF_PlayerCastbar_UpdateColorForInterruptible(self)

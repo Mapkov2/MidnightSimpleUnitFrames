@@ -473,6 +473,23 @@ function _G.MSUF_GetCastbarReverseFillForFrame(frame, isChanneled)
 end
 
 -- =====================================================================
+-- Canonical count direction for the bar VALUE (never the anchor).
+-- Casts and empower bars count up (elapsed) so they fill toward the far edge;
+-- a channel counts down (remaining) so the same anchor drains and its moving
+-- edge travels the opposite way. Unified direction makes channels fill like a
+-- cast. Mirrors the direction enum picked in Style:SetTimerDuration, so the
+-- manual fallback renders exactly what the native 12.x timer renders.
+-- =====================================================================
+function _G.MSUF_GetCastbarCountsDown(frame, isChanneled)
+    if isChanneled ~= true then return false end
+    if frame and frame.isEmpower == true then return false end
+
+    _EnsureDBLazy()
+    local g = (MSUF_DB and MSUF_DB.general) or {}
+    return g.castbarUnifiedDirection ~= true
+end
+
+-- =====================================================================
 -- Phase 1B: Canonical timer-direction + reverse-fill application.
 -- Contains the full fallback chain with mode-probe cache.
 -- Returns true when timer-driven animation was set up successfully.

@@ -824,6 +824,10 @@ local __msuf_rf = _G.MSUF_GetReverseFillSafe(self, isChanneled)
 -- Player-only: remember reverseFill so stripe anchoring matches bar direction.
 self._msufStripeReverseFill = __msuf_rf
 
+-- The anchor is direction-only, so the drain lives in the value: remember which
+-- way this cast type counts for every manual bar write.
+self._msufCountsDown = _G.MSUF_GetCastbarCountsDown(self, isChanneled and true or false) and true or false
+
 -- Player-only: (re)compute channel haste stripes (positions depend on current haste + bar width).
 MSUF__UpdatePlayerChannelHasteStripes(self, true)
 

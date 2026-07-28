@@ -559,6 +559,8 @@ local function MSUF_PlayerCastbar_EmpowerStart(self, spellID)
         if not okD then empDObj = nil end
     end
     _G.MSUF_ApplyTimerAndFill(self.statusBar, empDObj, rf)
+    -- Empower bars fill on elapsed time; clear any drain flag left by a channel.
+    self._msufCountsDown = false
 
     self.statusBar:SetMinMaxValues(0, self.empowerTotalWithGrace)
     local elapsed0 = now - (self.empowerStartTime or now)
