@@ -280,6 +280,13 @@ for _, handler in ipairs({ "MSUF2OPTIONS", "MIDNIGHTSUF", "MSUFOPTIONS" }) do
 end
 assert(_G.SLASH_MSUF2OPTIONS1 == "/msuf", "/msuf must remain the primary command")
 
+--- No other addon claimed "/rl" in this fixture, so MSUF must still take it.
+--- The yield-when-taken guard (addon_interop_guard_smoke) must never degrade
+--- into "never register".
+assert(type(_G.SlashCmdList["MSUFRELOADUI"]) == "function",
+    "/rl must still be claimed when the token is free")
+assert(_G.SLASH_MSUFRELOADUI1 == "/rl", "the claimed /rl token must be published")
+
 --- ---------------------------------------------------------------------------
 --- 3. Command coverage. Every word here must resolve to a registered command,
 ---    not fall through to the page/search fallback.

@@ -248,7 +248,9 @@ end
 -- spell-indicator style controls, the four explicit compact-preview
 -- controls added across Unit, Group, and Class Resources, and the mirrored
 -- portrait cast-icon toggle on the Castbar Icon tab.
-Check(factorySites == 204, string.format("interactive factory inventory drifted: expected 204, got %d", factorySites))
+-- The per-unit power texture dropdowns are retired: that art is configured once
+-- on the Bars page, so the unit page lost its shared texture factory site.
+Check(factorySites == 203, string.format("interactive factory inventory drifted: expected 203, got %d", factorySites))
 
 local function AddUnique(list, seen, value)
     value = tostring(value or "")

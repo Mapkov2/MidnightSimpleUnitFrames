@@ -977,6 +977,7 @@ function Preview.Refresh(box, reason)
             widthFrameName = runtimePower and runtimePower.detachedWidthFrameName,
             widthMode = bars.detachedPowerBarWidthMode,
             manualWidth = (runtimePower and runtimePower.detachedWidth) or conf.detachedPowerBarWidth,
+            explicitWidth = (runtimePower and runtimePower.detachedWidthExplicit) or tonumber(conf.detachedPowerBarWidth),
             frameWidth = w,
             relativeTo = PreviewLivePowerBar(key),
         })

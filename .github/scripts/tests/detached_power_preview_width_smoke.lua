@@ -61,6 +61,21 @@ assert(ResolveWidth({
 }) == 346, "unavailable Class Resource width did not use its runtime fallback")
 
 assert(ResolveWidth({
+    shape = "BAR", syncClass = true, classWidth = 0, classFallbackWidth = 346,
+    explicitWidth = 180, widthMode = "cooldown", manualWidth = 333, frameWidth = 350,
+}) == 180, "configured Detached width lost to the Class Resource fallback prediction")
+
+assert(ResolveWidth({
+    shape = "BAR", syncClass = true, classWidth = 280, classFallbackWidth = 346,
+    explicitWidth = 180, widthMode = "cooldown", manualWidth = 333, frameWidth = 350,
+}) == 280, "a live Class Resource width lost precedence over the Detached width")
+
+assert(ResolveWidth({
+    shape = "BAR", syncClass = false, explicitWidth = 180,
+    widthMode = "cooldown", manualWidth = 333, frameWidth = 350,
+}) == 180, "the shared cooldown width mode outranked the configured Detached width")
+
+assert(ResolveWidth({
     shape = "BAR", syncClass = false, classWidth = 280,
     widthMode = "manual", manualWidth = 333, frameWidth = 350,
 }) == 333, "manual detached width was not preserved")
@@ -115,6 +130,25 @@ assert(advancedSource:find('APPLY_DETACHED_POWER_WIDTH_MODE = { preview = true, 
 assert(advancedSource:find('self:Controls(layout, Bars, ApplyDetachedPowerWidthMode, "detached_power.layout"', 1, true),
     "detached width mode still uses the Player-only apply callback")
 
+-- Only Class Resources sees its own container appear and disappear, so it must
+-- drive the width-only resync on both transitions (definition plus two calls).
+local controllerSource = Read(Join(ROOT, "MidnightSimpleUnitFrames/ClassPower/MSUF_CP_Controller.lua"))
+assert(controllerSource:find("function CP.RefreshSyncedPowerWidth(playerFrame)", 1, true),
+    "Class Resources lost its synced detached-width notifier")
+local _, notifyCount = controllerSource:gsub("CP%.RefreshSyncedPowerWidth%(playerFrame%)", "")
+assert(notifyCount == 3,
+    "the synced detached-width notifier is not wired to both class bar show and hide")
+assert(controllerSource:find("MSUF_ApplyPowerBarEmbedLayout_ForUnitKey", 1, true),
+    "the synced detached-width notifier does not defer its geometry write in combat")
+
+-- The per-unit Detached width slider stays adjustable: no shared width mode may
+-- disable it, because a width set on the frame itself outranks those modes.
+local visualsSource = Read(Join(ROOT, "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitFrameVisuals.lua"))
+assert(visualsSource:find("controls = detachedWidth, when = function() return detachedWidth ~= nil end, on = function() return DetachedOn() and not OrbSelected() end", 1, true),
+    "the Detached width slider gained a gate beyond its own detached/orb state")
+assert(not visualsSource:find("detachedPowerBarWidthMode", 1, true),
+    "the unit page must not gate the Detached width slider on the shared width mode")
+
 local factorySource = Read(Join(ROOT, "MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Factory.lua"))
 for _, scriptName in ipairs({ "OnSizeChanged", "OnShow", "OnHide" }) do
     assert(factorySource:find('frame:HookScript("' .. scriptName .. '", OnCooldownWidthSourceChanged)', 1, true),
@@ -134,6 +168,8 @@ assert(factorySource:find('self:UnregisterEvent("PLAYER_REGEN_ENABLED")', 1, tru
 local renderSource = Read(Join(ROOT, "MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua"))
 assert(renderSource:find("liveFrame = PreviewLiveFrame(key)", 1, true),
     "live Target frame is not forwarded into the detached width resolver")
+assert(renderSource:find("explicitWidth = (runtimePower and runtimePower.detachedWidthExplicit)", 1, true),
+    "preview cannot tell a configured Detached width from its frame-width default")
 local helperSource = Read(Join(ROOT, "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_PreviewHelpers.lua"))
 assert(helperSource:find("return liveResolver(liveFrame, livePower)", 1, true),
     "live Target preview still re-simulates detached width instead of using the live resolver")

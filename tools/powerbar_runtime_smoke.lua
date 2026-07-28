@@ -251,6 +251,15 @@ assert(bar.width == 222, "visible cooldown width source did not own detached Tar
 assert(bar._msufDetachedExternalWidths and bar._msufDetachedExternalWidths.EssentialCooldownViewer == 222,
     "visible cooldown width was not cached on its live Power bar")
 
+-- The shared width mode lives on another page and applies to every unit, so a
+-- Detached width configured on this frame outranks it.
+power.detachedWidthExplicit = 200
+Power.Apply(frame, spec)
+assert(bar.width == 200, "the shared cooldown width mode outranked the configured Detached width")
+power.detachedWidthExplicit = nil
+Power.Apply(frame, spec)
+assert(bar.width == 222, "an unset Detached width did not return to the cooldown width source")
+
 local widthOnlyBackgrounds, widthOnlyGradients = backgroundApplies, gradientApplies
 local widthOnlyPoints, widthOnlyHeight = #bar.points, bar.height
 local widthOnlyCalls = bar.setWidthCalls or 0
@@ -299,6 +308,41 @@ power.detachedClassWidth = 276
 externalShown = true
 Power.Apply(frame, spec)
 assert(bar.width == 246, "Class Resource sync did not use its own cooldown width source")
+
+-- Specs that never show a Class Resource have nothing to sync against. The
+-- predicted class fallback owns the width only while the Detached width was
+-- never configured; an explicit one must reach the physical bar.
+power.detachedClassWidthFrameName = nil
+Power.Apply(frame, spec)
+assert(bar.width == 276, "unset Detached width lost the Class Resource fallback prediction")
+power.detachedWidthExplicit = 180
+Power.Apply(frame, spec)
+assert(bar.width == 180, "configured Detached width stayed inert without a Class Resource bar")
+power.detachedClassWidthFrameName = "UtilityCooldownViewer"
+Power.Apply(frame, spec)
+assert(bar.width == 180, "a shared Class Resource width mode outranked the configured Detached width")
+local classContainer = NewRegion(nil)
+classContainer.width = 260
+_G.MSUF_ClassPowerContainer = classContainer
+Power.Apply(frame, spec)
+assert(bar.width == 260, "a live Class Resource bar lost precedence while width sync was on")
+
+-- Class Resources notifies the width-only path on its own show/hide transitions:
+-- no cooldown-width observer watches the class container.
+classContainer.shown = false
+assert(Power.RefreshDetachedSyncedWidth(frame) == true and bar.width == 180,
+    "a hidden class bar did not return the synced bar to its configured width")
+classContainer.shown = true
+assert(Power.RefreshDetachedSyncedWidth(frame) == true and bar.width == 260,
+    "a reappearing class bar did not resync the detached width")
+power.detachedSyncClass = false
+assert(Power.RefreshDetachedSyncedWidth(frame) == false and bar.width == 260,
+    "the synced width refresh ran while width sync was off")
+power.detachedSyncClass = true
+
+_G.MSUF_ClassPowerContainer = nil
+power.detachedWidthExplicit = nil
+
 power.detachedSyncClass = false
 power.detachedClassWidthFrameName = nil
 power.detachedWidthFrameName = nil

@@ -822,7 +822,7 @@ function Text.Create(frame, spec)
 end
 
 local SIG_SPEC_KEYS = { "key", "scope", "width", "height", "font", "fontFlags", "nameFontSize", "healthFontSize", "powerFontSize", "fontShadow", "fontShadowAlpha", "fontShadowX", "fontShadowY", "_msufTextLayoutRevision" }
-local SIG_POWER_KEYS = { "enabled", "detached", "textOnDetached", "shape", "orbSize", "detachedLevel", "detachedHeight", "detachedWidth", "detachedX", "detachedY", "detachedAnchorMode", "detachedSyncClass", "detachedAnchorClass", "detachedClassWidth", "detachedWidthFrameName", "detachedClassWidthFrameName" }
+local SIG_POWER_KEYS = { "enabled", "detached", "textOnDetached", "shape", "orbSize", "detachedLevel", "detachedHeight", "detachedWidth", "detachedWidthExplicit", "detachedX", "detachedY", "detachedAnchorMode", "detachedSyncClass", "detachedAnchorClass", "detachedClassWidth", "detachedWidthFrameName", "detachedClassWidthFrameName" }
 local SIG_TEXT_KEYS = {
   "anchorToBars", "nameAnchorToFrame", "nameLegacyTruncation", "nameAnchor", "nameX", "nameY", "nameLayer", "nameShorten", "nameShortenSide", "nameShortenDots", "nameShortenMax", "nameShortenWidth", "nameLeftWidth",
   "nameShortenMaskPx",

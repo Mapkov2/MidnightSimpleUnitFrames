@@ -1857,6 +1857,10 @@ local function CompileUnitPower(out, unit, key, conf, general, bars, health)
   end
   power.detached = conf.powerBarDetached == true
   power.detachedWidth = Number(conf.detachedPowerBarWidth, out.width)
+  -- Same value without the frame-width fallback: nil means the Detached width
+  -- was never configured. Class Resource width sync consults it so a width the
+  -- user actually set stays authoritative when no Class Resource bar exists.
+  power.detachedWidthExplicit = Number(conf.detachedPowerBarWidth, nil)
   power.detachedHeight = Number(conf.detachedPowerBarHeight, power.height)
   power.orbSize = Number(conf.detachedPowerOrbSize, 54)
   if power.orbSize < 20 then

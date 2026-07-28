@@ -334,15 +334,29 @@ local function CachedExternalFrameWidth(name, relativeTo)
   return width
 end
 
+-- Width precedence, widest-reaching source last:
+--   1. a live Class Resource bar, while this frame opted into matching it. That
+--      is a local checkbox on the same card as the width slider, so its effect
+--      is visible where it is configured.
+--   2. a Detached width the user actually configured for this frame.
+--   3. the shared Class Resources width modes (Cooldown Viewer sources and the
+--      predicted class width). They live on another page and silently apply to
+--      every unit, so they must not outrank a width set on the frame itself.
+--   4. the frame width.
 local function ResolveDetachedWidth(frame, power)
   local bar = frame and frame.targetPowerBar
   local width
   if power.detachedSyncClass == true then
     width = FrameWidth(_G.MSUF_ClassPowerContainer)
-      or CachedExternalFrameWidth(power.detachedClassWidthFrameName, bar)
-      or Number(power.detachedClassWidth, nil)
-  else
-    width = CachedExternalFrameWidth(power.detachedWidthFrameName, bar)
+  end
+  width = width or Number(power.detachedWidthExplicit, nil)
+  if width == nil then
+    if power.detachedSyncClass == true then
+      width = CachedExternalFrameWidth(power.detachedClassWidthFrameName, bar)
+        or Number(power.detachedClassWidth, nil)
+    else
+      width = CachedExternalFrameWidth(power.detachedWidthFrameName, bar)
+    end
   end
   width = width or Number(power.detachedWidth, nil)
   width = width or FrameWidth(frame)
@@ -497,29 +511,52 @@ local function LayoutDetached(frame, bar, power, defaultHeight)
   bar._msufDetached = true
 end
 
--- Cooldown-viewer size changes only affect the physical width of an already
--- laid-out detached bar. Keep this path deliberately narrower than Power.Apply:
--- no config compile, element routing, event rebinding, text/media/color work,
--- or protected anchor mutation is needed here.
-function Power.RefreshDetachedExternalWidth(frame, sourceName, power)
-  local bar = frame and frame.targetPowerBar
-  power = power or SpecPower(frame)
-  if not (bar and power and power.enabled == true and power.detached == true) then return false end
-  if power.shape == "ORB" then return false end
-
-  local configuredSource = power.detachedSyncClass == true
-    and power.detachedClassWidthFrameName
-    or power.detachedWidthFrameName
-  if configuredSource ~= sourceName then return false end
-
-  -- Resolve even when the last width stamp matches: outside combat this also
-  -- clears the per-bar protected fallback cache when a source becomes hidden.
+-- Width source changes only affect the physical width of an already laid-out
+-- detached bar. Keep this path deliberately narrower than Power.Apply: no config
+-- compile, element routing, event rebinding, text/media/color work, or protected
+-- anchor mutation is needed here.
+--
+-- Resolve even when the last width stamp matches: outside combat this also
+-- clears the per-bar protected fallback cache when a source becomes hidden.
+local function RefreshDetachedWidthOnly(frame, bar, power)
   local width = ResolveDetachedWidth(frame, power)
   if bar._msufDetachedWidth ~= width then
     bar:SetWidth(math_max(1, width))
     bar._msufDetachedWidth = width
   end
   return true
+end
+
+local function DetachedWidthRefreshable(frame, power)
+  local bar = frame and frame.targetPowerBar
+  if not (bar and power and power.enabled == true and power.detached == true) then return nil end
+  if power.shape == "ORB" then return nil end
+  return bar
+end
+
+function Power.RefreshDetachedExternalWidth(frame, sourceName, power)
+  power = power or SpecPower(frame)
+  local bar = DetachedWidthRefreshable(frame, power)
+  if not bar then return false end
+
+  local configuredSource = power.detachedSyncClass == true
+    and power.detachedClassWidthFrameName
+    or power.detachedWidthFrameName
+  if configuredSource ~= sourceName then return false end
+
+  return RefreshDetachedWidthOnly(frame, bar, power)
+end
+
+-- The live Class Resource bar is matched only while it is actually shown, and no
+-- cooldown-width observer watches that frame. Class Resources calls this on its
+-- own show/hide transitions so a synced bar picks the class width up and returns
+-- to the configured Detached width when the class bar goes away.
+function Power.RefreshDetachedSyncedWidth(frame, power)
+  power = power or SpecPower(frame)
+  if not (power and power.detachedSyncClass == true) then return false end
+  local bar = DetachedWidthRefreshable(frame, power)
+  if not bar then return false end
+  return RefreshDetachedWidthOnly(frame, bar, power)
 end
 
 local function SetColor(frame, force, resolvedPowerType, resolvedToken, resolvedMetaReady)

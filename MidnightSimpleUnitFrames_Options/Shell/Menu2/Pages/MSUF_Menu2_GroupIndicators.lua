@@ -605,6 +605,11 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
     local previewCurrentW = min(142, max(112, floor(previewInnerW * 0.58)))
     local previewAllW = min(112, max(76, previewInnerW - previewCurrentW - previewButtonGap))
     previewCurrentW = max(96, previewInnerW - previewAllW - previewButtonGap)
+    --- Green (success) role marks whichever preview mode is live; the other stays neutral.
+    local RefreshStatusPreviewButtons
+    local function CurrentStatusPreviewMode()
+        return M.gfStatusPreviewMode == "all" and "all" or "current"
+    end
     local function SetStatusPreviewMode(mode)
         local gf = GF()
         M.SetMenuStateValue("gfStatusPreviewMode", mode)
@@ -612,6 +617,7 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
         if gf and gf.SetStatusPreviewMode then gf.SetStatusPreviewMode(mode) end
         if mode == "current" and gf and gf._PreviewSelectStatusIcon then gf._PreviewSelectStatusIcon(CurrentGFStatusSpec().value) end
         M.CallIf(RefreshGFPreview)
+        if RefreshStatusPreviewButtons then RefreshStatusPreviewButtons() end
     end
     local function PreviewActionButton(parent, label, width, semanticPath, onClick)
         local btn = W.Button(parent, label, width)
@@ -733,6 +739,16 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
         if previewAll and previewAll.Click then previewAll:Click() end
     end)
     advanced.previewAll:SetPoint("LEFT", advanced.previewCurrent, "RIGHT", 12, 0)
+    RefreshStatusPreviewButtons = function()
+        local ApplyRole = T.ApplyButtonRole
+        if not ApplyRole then return end
+        local currentRole = CurrentStatusPreviewMode() == "current" and "success" or "normal"
+        local allRole = currentRole == "success" and "normal" or "success"
+        ApplyRole(previewCurrent, currentRole)
+        ApplyRole(previewAll, allRole)
+        ApplyRole(advanced.previewCurrent, currentRole)
+        ApplyRole(advanced.previewAll, allRole)
+    end
     local statusPlacementControls = { statusControls.size, statusControls.anchor, statusControls.x, statusControls.y, statusControls.layer, advanced.x, advanced.y, advanced.layer }
     local statusActionControls = { advanced.reset, advanced.previewCurrent, statusReset, previewCurrent }
     RefreshStatusIconState = function()
@@ -746,6 +762,7 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
         SetOptionsEnabled(statusPlacementControls, enabled)
         SetOptionsEnabled(statusActionControls, spec ~= nil)
         SetManyEnabled(true, advanced.previewAll, previewAll, midnightStyle, statusEnabled)
+        RefreshStatusPreviewButtons()
         local hasIconPack = false
         local hasCustomIcon = spec and spec.customIcon
         if selectedTextShortcut then selectedTextShortcut:SetShown(IsTextStatusIconSpec(spec)) end

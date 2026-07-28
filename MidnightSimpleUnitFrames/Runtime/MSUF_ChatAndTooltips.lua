@@ -682,12 +682,50 @@ SLASH_MIDNIGHTSUF1 = "/msufold"
 SlashCmdList["MIDNIGHTSUF"] = function(msg)
     return Commands.Dispatch(msg)
 end
-SLASH_MSUFRELOADUI1 = "/rl"
-SlashCmdList["MSUFRELOADUI"] = function()
-    if type(ReloadUI) == "function" then
-        ReloadUI()
+--- "/rl" is a shared convenience token rather than ours: ElvUI and others
+--- register it under their own SlashCmdList key, so a second claim does not
+--- collide at the key level and both survive until Blizzard folds every SLASH_*
+--- token into hash_SlashCmdList. There the last key walked wins, and that walk
+--- is unordered, so the reload command would belong to whichever addon the hash
+--- happened to reach last. Claim the token only while it is still free.
+--- Deliberately a plain table read on the load path: the command surface has to
+--- stay inert (no frame, no event, no ticker -- slash_command_registry_smoke).
+local function SlashTokenClaimed(token)
+    local hash = _G.hash_SlashCmdList
+    if type(hash) == "table" and hash[token] ~= nil then
+        return true
+    end
+    local list = _G.SlashCmdList
+    if type(list) ~= "table" then
+        return false
+    end
+    -- Blizzard wipes SlashCmdList into a proxy on each hash import, so this walk
+    -- sees exactly the registrations made since then -- which is where a
+    -- competing addon's "/rl" lives when it loaded ahead of MSUF.
+    for key in pairs(list) do
+        local index = 1
+        local tag = _G["SLASH_" .. key .. index]
+        while type(tag) == "string" do
+            if tag:upper() == token then
+                return true
+            end
+            index = index + 1
+            tag = _G["SLASH_" .. key .. index]
+        end
+    end
+    return false
+end
+
+if not SlashTokenClaimed("/RL") then
+    SLASH_MSUFRELOADUI1 = "/rl"
+    SlashCmdList["MSUFRELOADUI"] = function()
+        if type(ReloadUI) == "function" then
+            ReloadUI()
+        end
     end
 end
+--- Listed either way: when the token was already taken the other addon still
+--- reloads the interface, so the help entry stays truthful.
 Commands.RegisterExternal({ usage = "/rl", help = "Reload the interface." })
 local MSUF_PlayerInfoFrame
 local function MSUF_GetPlayerInfoFrame()

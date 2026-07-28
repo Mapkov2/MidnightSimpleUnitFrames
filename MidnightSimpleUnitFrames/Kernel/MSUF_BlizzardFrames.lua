@@ -166,9 +166,25 @@ local function EnsureWatcher()
     return watcher
 end
 
+-- A second unitframe addon can own the same Blizzard frame and lock it to its
+-- own hidden parent. Re-asserting ours would bounce the frame between both
+-- SetParent hooks until the stack overflows, so any already-hidden parent is
+-- accepted: the frame stays invisible, which is all this hook has to guarantee.
+-- UIParent is excluded because that is exactly the restore this hook defends
+-- against. Mirrors IsHiddenFrameParent in MSUF_UF_Group_Blizzard.lua.
+local function IsHiddenFrameParent(parent)
+    return parent
+        and parent ~= UIParent
+        and parent.IsShown
+        and not parent:IsShown()
+end
+
 local function ResetParent(frame, parent)
     local hidden = HiddenParent()
-    if parent == hidden then
+    if parent == hidden or IsHiddenFrameParent(parent) then
+        return
+    end
+    if frame.GetParent and IsHiddenFrameParent(frame:GetParent()) then
         return
     end
     -- Blizzard code may restore parents after our initial hide. Protected

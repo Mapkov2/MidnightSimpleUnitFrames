@@ -1896,6 +1896,31 @@ local function GetPlayerFrame()
     return CoreUnitFrame("player") or _G.MSUF_player or nil
 end
 
+--- "Sync width to Class Resource" matches the container only while it is really
+--- shown. Nothing else observes that transition - the cooldown-width observers
+--- watch Blizzard viewers, and CP_Layout only runs while the bar is alive - so
+--- notify the Power element from the show/hide path itself. Width-only: no
+--- config compile and no element routing.
+--- Lives on CP instead of a file-scope local: this file is at the Lua 5.1
+--- 200-local ceiling.
+function CP.RefreshSyncedPowerWidth(playerFrame)
+    playerFrame = playerFrame or GetPlayerFrame()
+    local spec = playerFrame and playerFrame.MSUFSpec
+    local power = spec and spec.power
+    if not (power and power.detachedSyncClass == true) then return false end
+    --- Geometry stays out of lockdown like every other layout path here; the
+    --- element refresh queues itself until combat ends.
+    if InCombatLockdown and InCombatLockdown() then
+        local queued = _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey
+        return type(queued) == "function" and queued("player") and true or false
+    end
+    local elements = MSUF and MSUF.UF and MSUF.UF.Elements
+    local element = elements and elements.Power
+    local refresh = element and element.RefreshDetachedSyncedWidth
+    if type(refresh) ~= "function" then return false end
+    return refresh(playerFrame, power) and true or false
+end
+
 local PHP = { visible = false }
 local CP_PlayerHPRefresh = CP_Noop
 local CP_PlayerHPUpdate = CP_Noop
@@ -2174,6 +2199,9 @@ local function FullRefresh()
 
         CP.container._msufAnchorOnly = nil
         CP.container:Show()
+        --- The container is measurable only now, so a synced detached Power bar
+        --- can finally match it.
+        CP.RefreshSyncedPowerWidth(playerFrame)
         CP_SetIciclesSensorActive(powerType == "ICICLES")
         --- Belt-and-suspenders: ensure outline survives parent Hide/Show cycle
         if CP._outline then
@@ -2200,6 +2228,9 @@ local function FullRefresh()
             CP.container:Hide()
         end
         CP.visible = false
+        --- No class bar left to match: return a synced detached Power bar to its
+        --- own configured width instead of freezing at the last class width.
+        CP.RefreshSyncedPowerWidth(playerFrame)
         CP.powerType = nil
         CP.powerToken = nil
         CP.renderMode = CPK.MODE.NONE

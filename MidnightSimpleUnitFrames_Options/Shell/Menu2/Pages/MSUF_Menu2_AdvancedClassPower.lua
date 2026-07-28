@@ -1075,7 +1075,7 @@ function Page:BuildDetachedPower()
     AddTooltip(self.dpbText.x, "Text X", "Moves all detached Player power text slots together. Slot X/Y controls below add per-slot offsets.")
     -- Power art is owned by the Bars page and the Player unit page (detached or
     -- not); this tab keeps only the shape edge that Class Resources still owns.
-    local powerTexturesCard = W.ControlCard(textures, "Shape Outline", "Power textures live on the Bars page and the Player unit page.", 14, -38, cardW, 160)
+    local powerTexturesCard = W.ControlCard(textures, "Shape Outline", "Power textures live on the Bars page.", 14, -38, cardW, 160)
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(powerTexturesCard, function()
             local refs = { "power.current" }

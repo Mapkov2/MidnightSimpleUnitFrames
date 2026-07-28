@@ -87,9 +87,16 @@ function CP.ResolveDetachedPowerWidth(opts)
         -- unit exists, consume the same resolver and its per-bar combat cache.
         return liveResolver(liveFrame, livePower)
     end
+    -- Mirrors the live resolver's precedence: a matched Class Resource bar, then
+    -- a Detached width configured on this frame, then the shared width modes.
     if opts.syncClass == true then
         local classWidth = tonumber(opts.classWidth)
-        if not classWidth or classWidth <= 1 then classWidth = tonumber(opts.classFallbackWidth) end
+        if classWidth and classWidth > 1 then return ClampDetachedPowerWidth(classWidth) end
+    end
+    local explicitWidth = tonumber(opts.explicitWidth)
+    if explicitWidth then return ClampDetachedPowerWidth(explicitWidth) end
+    if opts.syncClass == true then
+        local classWidth = tonumber(opts.classFallbackWidth)
         if classWidth and classWidth > 1 then return ClampDetachedPowerWidth(classWidth) end
     end
     local frameName = opts.widthFrameName

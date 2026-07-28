@@ -43,10 +43,9 @@ local UnitSectionShared = M.UnitSectionsShared or {}
 local SetSectionHeaderStatus = UnitSectionShared.SetSectionHeaderStatus or function() end
 local CreateSectionNotice = UnitSectionShared.CreateSectionNotice or function() end
 -- Power Bar section card geometry. BuildPower and PowerSectionHeight must stay
--- in sync, so both read these instead of repeating the offsets.
-local POWER_TEXTURE_CARD_TOP = -284
-local POWER_TEXTURE_CARD_H = 110
-local POWER_DETACHED_CARD_TOP = POWER_TEXTURE_CARD_TOP - POWER_TEXTURE_CARD_H - 26
+-- in sync, so both read this instead of repeating the offsets. The detached card
+-- follows the two 220pt cards on the first row (-38 - 220 - 26).
+local POWER_DETACHED_CARD_TOP = -284
 local function PowerSectionHeight(unit)
     local isPlayer = unit == "player"
     return math.abs(POWER_DETACHED_CARD_TOP) + (isPlayer and 406 or 304) + 52
@@ -466,36 +465,10 @@ local function BuildPower(ctx, builder, unit)
     end
     local mainCard = PowerCard("Visibility & Size", nil, leftX, -38, cardW, 220)
     local borderCard = PowerCard("Border & fill", "Outline and fill behavior.", rightX, -38, rightW, 220)
-    local textureCard = PowerCard("Power textures", "Overrides the shared power bar art for this frame.", leftX, POWER_TEXTURE_CARD_TOP, fullW, POWER_TEXTURE_CARD_H)
     local detachedCard = PowerCard("Detached placement", "Used only when the power bar is detached from the unit frame.", leftX, detachedCardY, fullW, detachedCardHeight)
-    -- Per-unit power art. Empty follows bars.powerBarTexture, which itself falls
-    -- back to this frame's bar texture; resolution happens in the UF compiler.
-    local function SetPowerTextureKey(key, value, reason)
-        local conf = GetConf(unit)
-        value = value or ""
-        if conf[key] == value then return end
-        conf[key] = value
-        M.RequestUnitApply(unit, reason, POWER_OPTS)
-    end
-    local function BindPowerTexture(label, emptyLabel, key, x, reason, path)
-        local width = max(200, min(320, floor((fullW - 32 - 28) * 0.5)))
-        local control = AddPowerControl(W.Dropdown(textureCard, label,
-            function() return M.StatusBarTextureItems(emptyLabel) end, width))
-        W.MoveWidget(control, textureCard, x, -40, width, "LEFT")
-        M.BindDropdownWidget(ctx, control,
-            function() return GetConf(unit)[key] or "" end,
-            function(v) SetPowerTextureKey(key, v, reason) end,
-            SettingMeta(ctx, path, unit, key))
-        return control, width
-    end
-    local powerFgTexture, powerTextureW = BindPowerTexture("Power texture", "Use global power texture",
-        "powerBarTexture", 16, "MSUF2_POWER_TEXTURE", "power.texture")
-    local powerBgTexture = BindPowerTexture("Power background", "Use global power background",
-        "powerBarBgTexture", 16 + powerTextureW + 28, "MSUF2_POWER_BG_TEXTURE", "power.background_texture")
-    if M.AddTooltip then
-        M.AddTooltip(powerFgTexture, "Power Texture", "Art for this frame's power bar, detached or not. Leave on the global option to follow the shared Bars power texture.", { hook = true, owner = "ANCHOR_RIGHT" })
-        M.AddTooltip(powerBgTexture, "Power Background", "Background art behind this frame's power bar.", { hook = true, owner = "ANCHOR_RIGHT" })
-    end
+    -- Power bar art is configured once on the Bars page. The per-unit keys stay
+    -- scope-aware in the UF compiler (conf -> bars -> unit bar texture); they
+    -- simply have no control on this page anymore.
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(borderCard, function()
             local refs = { "power.current" }
@@ -603,6 +576,11 @@ local function BuildPower(ctx, builder, unit)
         { "slider", "Detached layer", 16, sliderTop - 132, detachedSliderW, 0, 30, 1, "detachedPowerBarFrameLevelOffset", 6, "MSUF2_POWER_DETACHED_LAYER", opts = DETACHED_POWER_OPTS },
     })
     detachedWidth, detachedHeight = detachedFields.width, detachedFields.height
+    if detachedWidth and M.AddTooltip then
+        M.AddTooltip(detachedWidth, "Detached width",
+            "A width set here overrides the shared Class Resources width mode. A visible Class Resource bar still wins while width sync is on.",
+            { hook = true, owner = "ANCHOR_RIGHT" })
+    end
     if isPlayer then
         detachedShape = AddDetachedControl(W.Dropdown(detachedCard, "Detached shape", DETACHED_POWER_SHAPE_VALUES, detachedSliderW))
         W.MoveWidget(detachedShape, detachedCard, detachedRightX, sliderTop - 132, detachedSliderW)
