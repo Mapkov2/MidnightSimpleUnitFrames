@@ -4,10 +4,22 @@ local _, ns = ...
 ns = ns or {}
 
 local data = {
-    currentVersion = "5.77",
-    previousVersion = "5.76",
-    rangeLabel = "5.76 -> 5.77",
+    currentVersion = "5.77b",
+    previousVersion = "5.77",
+    rangeLabel = "5.77 -> 5.77b",
     entries = {
+        {
+            version = "5.77b",
+            date = "2026-07-28",
+            sections = {
+                {
+                    title = "Fixes",
+                    bullets = {
+                        "Fixed channeled spells filling the Castbar like a regular cast instead of draining; channels now start full and empty out from the same edge the cast direction sets, so the bar runs the opposite way unless \"Always use fill direction for all casts\" is enabled. Affects Player, Target, Focus, and Boss Castbars.",
+                    },
+                },
+            },
+        },
         {
             version = "5.77",
             date = "2026-07-28",
@@ -91,30 +103,6 @@ local data = {
                         "Expanded Skyriding aura filtering to include Thrill of the Skies and both Flight Style auras, with per-Boss Unit Aura ignore-list overrides available again.",
                         "Preserved character-specific keybindings by no longer replaying account-wide stored bindings automatically.",
                         "Reopened the options menu on its last active page and corrected custom scrollbar dragging without idle polling.",
-                    },
-                },
-            },
-        },
-        {
-            version = "5.73",
-            date = "2026-07-18",
-            sections = {
-                {
-                    title = "Highlight",
-                    bullets = {
-                        "Import UnhaltedUnitFrames 12.1 profiles directly into MSUF with the load-on-demand UUF importer.",
-                        "Added full support for Coolinator and Skiron CDM",
-                    },
-                },
-                {
-                    title = "Minor Bug Fixes",
-                    bullets = {
-                        "Fixed imported UUF profiles losing independent health-fill and missing-health transparency in live frames and previews.",
-                        "Fixed aura icon size controls not staying synchronized between the menu and Edit Mode.",
-                        "Fixed edge case Blizzard Cooldown Manager anchors shifting unit frames after instance and zone transitions.",
-                        "Fixed visible Group Frame power bars shifting name text vertically in live frames and previews.",
-                        "Fixed split health text updates relying on secret-string comparisons.",
-                        "Fixed dragging third-party anchored unit frames and synchronizing cooldown-sized power bars.",
                     },
                 },
             },

@@ -1,5 +1,11 @@
 # Changelog
 
+## 5.77b - 2026-07-28
+
+### Fixes
+
+- Fixed channeled spells filling the Castbar like a regular cast instead of draining; channels now start full and empty out from the same edge the cast direction sets, so the bar runs the opposite way unless "Always use fill direction for all casts" is enabled. Affects Player, Target, Focus, and Boss Castbars.
+
 ## 5.77 - 2026-07-28
 
 ### Fixes
