@@ -259,7 +259,9 @@ end
 -- drives the menu-owned stand-in tint and is never persisted.
 -- The Party-only Group Portrait workspace adds six factory sites: its tab
 -- selector plus dropdown, slider, toggle, color, and enable-switch families.
-Check(factorySites == 215, string.format("interactive factory inventory drifted: expected 215, got %d", factorySites))
+-- The group preview adds the ephemeral Tank/Healer/DPS member-role button,
+-- which only picks the simulated role the preview draws and is never persisted.
+Check(factorySites == 216, string.format("interactive factory inventory drifted: expected 216, got %d", factorySites))
 
 local function AddUnique(list, seen, value)
     value = tostring(value or "")
