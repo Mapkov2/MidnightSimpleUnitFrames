@@ -166,7 +166,7 @@ Check(FunctionFree(Data), "generated schema data must remain function-free")
 local before = Schema.Stats()
 Check(before.version == 3, "schema version must be 3")
 Check(before.contexts == 40, "all 40 class/spec contexts must be present")
-Check(before.records == 2388, "public control inventory must equal the reviewed exhaustive finite-state union")
+Check(before.records == 2401, "public control inventory must equal the reviewed exhaustive finite-state union")
 Check(before.indexed == false, "schema index must remain lazy")
 
 local coldStart = os.clock()
@@ -200,7 +200,8 @@ local unknown, reason = Schema.Resolve("setting:does.not.exist")
 Check(unknown == false and reason == "unknown_control", "unknown semantic IDs must fail closed")
 
 local modes = Schema.ListModes({ contextId = "MAGE-62" })
-Check(type(modes) == "table" and #modes == 45, "reviewed test and preview mode inventory")
+-- Beta 36 adds the unit and group dispel-overlay preview toggles as modes.
+Check(type(modes) == "table" and #modes == 47, "reviewed test and preview mode inventory")
 local modeSemanticIds = {}
 for i = 1, #modes do
     if modes[i].semanticId then modeSemanticIds[modes[i].semanticId] = true end
@@ -225,8 +226,10 @@ local expectedModeActions = {
 -- carries them. Only pet, focus-target and target-of-target expose the six
 -- status-indicator preview controls individually; the player/target/focus/boss
 -- pages do not contribute them to the schema union.
+-- Beta 36: the dispel-overlay preview toggles add gf_bars (group) and one more
+-- opt_bars entry (unit).
 local expectedControlPages = {
-    gameplay=1, gf_auras=1, gf_indicators=4, opt_bars=8, opt_castbar=1,
+    gameplay=1, gf_auras=1, gf_bars=1, gf_indicators=4, opt_bars=9, opt_castbar=1,
     uf_focustarget=6, uf_pet=6, uf_targettarget=6,
 }
 local seenModeActions, seenControlPages, foundPredictionMode = {}, {}, nil
