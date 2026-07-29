@@ -261,7 +261,11 @@ end
 -- selector plus dropdown, slider, toggle, color, and enable-switch families.
 -- The group preview adds the ephemeral Tank/Healer/DPS member-role button,
 -- which only picks the simulated role the preview draws and is never persisted.
-Check(factorySites == 216, string.format("interactive factory inventory drifted: expected 216, got %d", factorySites))
+-- Reviewed count. 216 -> 219 in 6.0-Beta38: the group Dispel Symbol section adds
+-- its W.SwitchAt master, one W.Dropdown for the trigger, and the W.ToggleAt
+-- preview. Its other controls route through the shared Scope* helpers, which
+-- were already counted.
+Check(factorySites == 219, string.format("interactive factory inventory drifted: expected 219, got %d", factorySites))
 
 local function AddUnique(list, seen, value)
     value = tostring(value or "")
