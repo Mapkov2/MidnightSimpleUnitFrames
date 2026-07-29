@@ -69,11 +69,13 @@ Check(#(Data.collectionStates or {}) == #expectedStateIds, "complete 150-state i
 -- Beta 36: +13 controls from the group Resource Bar parity cards, the group
 -- number style dropdown, the offline-fade toggle and the two dispel-overlay
 -- preview toggles.
--- +30 controls for the Party-only Group Portrait workspace.
-Check(collectionStates.base == 1641, "reviewed complete-catalog baseline")
+-- +30 controls for the Party-only Group Portrait workspace, then -2 when its
+-- border Color and Opacity rows moved to the card's Colors shortcut.
+Check(collectionStates.base == 1639, "reviewed complete-catalog baseline")
 -- -6 against Beta 36: the player frame no longer offers the Dots on target
--- container, so its six player-only custom4 workspace controls are gone.
-Check(Data.collectionUnionControls == 2425 and #Data.records == Data.collectionUnionControls,
+-- container, so its six player-only custom4 workspace controls are gone; -2
+-- more for the group portrait border color rows the Colors shortcut now owns.
+Check(Data.collectionUnionControls == 2423 and #Data.records == Data.collectionUnionControls,
     "reviewed exhaustive finite-state control union")
 for i = 1, #Data.columns do columns[Data.columns[i]] = i end
 for _, column in ipairs({ "actionFixedArgs", "actionInputArg", "actionInputKind", "actionInputDomain",
