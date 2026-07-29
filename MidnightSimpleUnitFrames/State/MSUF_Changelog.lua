@@ -8,10 +8,29 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-Beta37",
-    previousVersion = "6.0-Beta36",
-    rangeLabel = "6.0-Beta36 -> 6.0-Beta37",
+    currentVersion = "6.0-Beta38",
+    previousVersion = "6.0-Beta37",
+    rangeLabel = "6.0-Beta37 -> 6.0-Beta38",
     entries = {
+        {
+            version = "6.0-Beta38",
+            date = "2026-07-29",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "New Dispel Symbol for unit frames and group frames: a placed icon that names which debuff type is on a unit (Magic, Curse, Disease, Poison, Bleed). Choose from three Blizzard sets or four new MSUF sets, each using its own shape per type so it stays readable at small sizes.",
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "The Dispel Symbol can be placed by dragging: switch on its preview in Global Style > Bars or Group Frames > Dispel Symbol and drag the symbols where you want them.",
+                        "The Dispel Symbol shows only the highest-priority debuff type by default, or one symbol per active type if you prefer.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-Beta37",
             date = "2026-07-29",
@@ -114,27 +133,6 @@ local data = {
                         "A detached power bar's fallback width no longer sticks to its last value after its source is hidden. Resolving the width and refreshing it are now separate steps, so a hidden source clears its cached width instead of keeping the stale number.",
                         "The Group Indicators status-icon preview now highlights whichever of \"Current\" or \"All\" is the active preview mode, matching the unit frame visuals page and its preview helpers.",
                         "Fixed the Dashboard's changelog and support disclosures jumping the whole page back to the top every time you opened or closed one. Auras and Group Auras already restored the reader's scroll position after this kind of rebuild; Dashboard used a plain page reselect that never carried the offset over. All three now share one implementation, so opening a card near the bottom of a long page no longer sends you back to the first line.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-Beta34",
-            date = "2026-07-28",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "When the Assistant cannot work out which control you meant, it now hands you the relevant part of the menu instead of a generic list. Asking it to \"change reseted icon\" used to offer \"Show options for the current Group Layout page\" or \"Show general Assistant examples\", neither of which has anything to do with the rested icon. Three separate things caused that: the uncertain branch never consulted the Assistant's own knowledge index, the leading command verb dragged the ranking onto an unrelated page, and the misspelling was never corrected. Typos are now repaired against the words that actually appear in MSUF's control labels, command verbs are stripped before searching, and the match has to clear a relevance floor - below it the Assistant still says it does not know rather than confidently opening the wrong page.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed \"Always use fill direction for all casts\" not applying to channelled casts. Channels kept draining from full to empty, so the one option whose entire purpose is to make every cast move the same way left channels running opposite to everything else. A channel now fills from empty to full in the direction you configured, timed by the client itself, and the classic drain remains the default while the option is off. The spark also stays on the bar's moving edge in both modes instead of sitting on the anchor side, and the Cast Bars page preview shows the same thing the frame does.",
-                        "Fixed the aura icon border and drop shadow never showing up in any preview. The Icon Border & Shadow settings reached real frames, but none of the preview surfaces drew them - not the Sample and Live preview on the Auras page, not the unit frame preview in the options window, and not the Edit Mode aura lanes - so there was no way to judge a border style without closing the menu and looking at the frames. All three now draw through the same renderer the live buttons use, including the per-scope opt-out and the lane padding, which the previews had been ignoring as well.",
-                        "Fixed the Auras page preview not reacting to an icon border or shadow change. The preview repainted before the queued aura update had run and re-read the previous configuration, so it kept showing the old style until some unrelated interaction happened to refresh it - the reason the frames updated but the preview did not.",
-                        "Fixed the \"Preview as\" row and the Sample/Live switch on the Auras page showing no selection at all. Both were built from the plain action button, which draws its selected state exactly like its unselected one, and the selection was never re-stamped on click because switching tabs repaints the preview without rebuilding the page.",
                     },
                 },
             },

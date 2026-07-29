@@ -1,5 +1,16 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-Beta38 - 2026-07-29
+
+### Highlights
+
+- New Dispel Symbol for unit frames and group frames: a placed icon that names which debuff type is on a unit (Magic, Curse, Disease, Poison, Bleed). Choose from three Blizzard sets or four new MSUF sets, each using its own shape per type so it stays readable at small sizes.
+
+### Changes
+
+- The Dispel Symbol can be placed by dragging: switch on its preview in Global Style > Bars or Group Frames > Dispel Symbol and drag the symbols where you want them.
+- The Dispel Symbol shows only the highest-priority debuff type by default, or one symbol per active type if you prefer.
+
 ## 6.0-Beta37 - 2026-07-29
 
 ### Highlights
