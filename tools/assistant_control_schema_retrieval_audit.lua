@@ -185,8 +185,10 @@ end
 -- join label groups their unit-frame counterparts already had. Dropping the
 -- player's Dots on target container removed six rows from groups the remaining
 -- unit scopes still populate, so no group count changed. The Party portrait
--- workspace adds one collision group and 21 rows shared with Unit portraits.
-Check(collisionGroups == 297 and collisionRows == 1836 and maxCollision == 32,
+-- workspace adds one collision group and 21 rows shared with Unit portraits,
+-- then loses two rows when its border Color and Opacity move to the Colors
+-- shortcut.
+Check(collisionGroups == 297 and collisionRows == 1834 and maxCollision == 32,
     string.format("reviewed label-collision inventory drift: groups=%d rows=%d max=%d",
         collisionGroups, collisionRows, maxCollision))
 
