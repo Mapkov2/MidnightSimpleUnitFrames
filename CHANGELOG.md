@@ -9,6 +9,9 @@
 ### Changes
 
 - Role, leader and assist group icons now pick their style per-indicator in Group Frames > Indicators, replacing the old scope-wide "Default role icon style" + "Use Midnight Style" toggle. Midnight art is now its own dropdown entry ("UX Pro (Midnight)") instead of a separate checkbox. Old profiles keep resolving through the previous scope-wide setting until an indicator is given its own style.
+- On clients older than 12.1, MSUF now says once per login that auras, dispel highlighting and a few other 12.1-only features stay disabled until that patch goes live. Everything else keeps working, so there is nothing to act on.
+- The party portrait's border color and opacity moved to the Shape & Border card's Colors shortcut, where the unit frames already keep theirs, instead of two rows on the card itself.
+- The group preview gained a Tank/Healer/DPS switch, so per-role resource bar visibility and the role icon can be judged without swapping specs. Clicking a role toggle in the Resource Bar section jumps the preview to that role.
 - Edit Mode toolbar controls now tint their label on hover instead of just the surrounding pill, matching the page navigation rail.
 
 ### Fixes & Performance
@@ -18,6 +21,7 @@
 - Fixed the Player frame offering a "Dots on target" aura container: it tracks DoTs on your current target, which never made sense on your own frame. Removed from Player's Aura Style page, workspace tabs, Edit Mode, preview, and Layer Overview; Target, Focus and Boss keep it.
 - Fixed toolbar buttons that carry both a tooltip and hover styling (Groups, Exit, Discard All, the frame inspector selector) losing their hover highlight - the tooltip handler was overwriting the button's own hover handlers instead of layering on top.
 - Fixed group frame resource bar text being unable to set its own color mode - the Global Fonts Power Text Color control and the quick text-settings Color Mode row were both hard-disabled for group scopes.
+- Fixed the party portrait being hard to grab in the group preview: its artwork was drawn on a frame sitting above the drag handle, so clicks landed on the wrong thing. The handle owns the artwork now, and portrait opacity no longer fades the selection outline with it.
 
 ## 6.0-Beta36 - 2026-07-29
 
