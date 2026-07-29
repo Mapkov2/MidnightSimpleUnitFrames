@@ -2,7 +2,10 @@ package.path = "tools/?.lua;" .. package.path
 
 local Inventory = require("assistant_graphify_inventory")
 local tracked = Inventory.Load("tools/assistant_graphify_inventory_data.lua")
-assert(tracked.recordCount == 1813, "reviewed Graphify setting-inventory count drifted")
+-- Beta 36 re-certification: the six per-unit powerBarTexture/powerBarBgTexture
+-- pairs retired with the Bars-page consolidation drop out (-12), and the
+-- castbar filtering and number-abbreviation settings join (+3).
+assert(tracked.recordCount == 1804, "reviewed Graphify setting-inventory count drifted")
 assert(tracked.schemaVersion == 2, "Graphify inventory source-snapshot contract is not current")
 assert(tracked.sourceSnapshot.schemaVersion == 2
         and tracked.sourceSnapshot.manifestFormat == "msuf-addon-source-sha256-v2"
