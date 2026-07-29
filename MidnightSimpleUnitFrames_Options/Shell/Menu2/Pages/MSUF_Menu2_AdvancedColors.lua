@@ -2236,6 +2236,10 @@ FixedContextFactory("group.target", function() return ContextGroup("group.target
 FixedContextFactory("group.focus", function() return ContextGroup("group.focus", "Focus highlight", "hlFocusColor", 0.50, 0.50, 1) end)
 FixedContextFactory("group.border", function() return ContextGroup("group.border", "Group border", "groupBorder", 0.38, 0.68, 1, "groupBorderA", 0.95) end)
 FixedContextFactory("group.aggro", function() return ContextGroup("group.aggro", "Corner aggro", "ciAggroColor", 1, 0.55, 0) end)
+FixedContextFactory("group.portrait.border", function()
+    return ContextGroup("group.portrait.border", "Party portrait border",
+        "portraitBorderColor", 1, 1, 1, "portraitBorderColorA", 1)
+end)
 
 FixedContextFactory("gameplay.timer", function() return ContextTable("gameplay.timer", "Combat timer", Gameplay, "combatTimerColor", 1, 1, 1, ApplyGameplayColors) end)
 FixedContextFactory("gameplay.enter", function()

@@ -10,7 +10,7 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local Search = M.Search or {}
 M.Search = Search
-Search.StaticIndexRecordCount = 2403
+Search.StaticIndexRecordCount = 2401
 Search.StaticIndexBlob = [==[
 auras3_buffs	Anchor	dropdown			Style > Buff	anchor	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Elane%2Ebuff%2Eauras3-cooldown-anchor	anchor style buff auras style lane buff auras3 cooldown anchor auras3 buffs dropdown
 auras3_buffs	Anchor	dropdown			Style > Buff	anchor	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Elane%2Ebuff%2Estack-anchor	anchor style buff auras style lane buff stack anchor auras3 buffs dropdown
@@ -545,7 +545,6 @@ gf_indicators	Corner Indicators	toggle			Indicators > Field	corner indicators	id
 gf_indicators	Custom Color	color			Corner > Editor	custom color	idgf_indicatorsmenu2%2Egf_indicators%2Egroup%2Ecorner%2Eeditor%2Ecolor	custom color corner editor group indicators corner editor color gf indicators color
 gf_indicators	Custom icon	dropdown			Status > Selected	custom icon	idgf_indicatorsmenu2%2Egf_indicators%2Egroup%2Estatus%2Eselected%2Ecustomicon	custom icon status selected group indicators status selected customicon gf indicators dropdown
 gf_indicators	DPS	toggle			Indicators > Field	dps	idgf_indicatorsmenu2%2Egf_indicators%2Egroup%2Efield%2Eroleiconshowdps	dps indicators field group indicators field roleiconshowdps gf indicators toggle
-gf_indicators	Default role icon style	dropdown			Indicators > Field	default role icon style	idgf_indicatorsmenu2%2Egf_indicators%2Egroup%2Efield%2Eiconstyle	default role icon style indicators field group indicators field iconstyle gf indicators dropdown
 gf_indicators	Enabled	toggle			Status > Selected	enabled	idgf_indicatorsmenu2%2Egf_indicators%2Egroup%2Estatus%2Eselected%2Eenabled	enabled status selected group indicators status selected enabled gf indicators toggle
 gf_indicators	Filter	dropdown			Corner > Editor	filter	idgf_indicatorsmenu2%2Egf_indicators%2Egroup%2Ecorner%2Eeditor%2Efilter	filter corner editor group indicators corner editor filter gf indicators dropdown
 gf_indicators	Focus Highlight	toggle			Indicators > Field	focus highlight	idgf_indicatorsmenu2%2Egf_indicators%2Egroup%2Efield%2Ehlfocusenabled	focus highlight indicators field group indicators field hlfocusenabled gf indicators toggle
@@ -569,7 +568,6 @@ gf_indicators	Style	dropdown			Indicators > Field	style	idgf_indicatorsmenu2%2
 gf_indicators	Tank	toggle			Indicators > Field	tank	idgf_indicatorsmenu2%2Egf_indicators%2Egroup%2Efield%2Eroleiconshowtank	tank indicators field group indicators field roleiconshowtank gf indicators toggle
 gf_indicators	Top Left Indicator	dropdown			Corner > Assignment	top left indicator	idgf_indicatorsmenu2%2Egf_indicators%2Egroup%2Ecorner%2Eassignment%2Etl	top left indicator corner assignment group indicators corner assignment tl gf indicators dropdown
 gf_indicators	Top Right Indicator	dropdown			Corner > Assignment	top right indicator	idgf_indicatorsmenu2%2Egf_indicators%2Egroup%2Ecorner%2Eassignment%2Etr	top right indicator corner assignment group indicators corner assignment tr gf indicators dropdown
-gf_indicators	Use Midnight Style	toggle			Indicators > Field	use midnight style	idgf_indicatorsmenu2%2Egf_indicators%2Egroup%2Efield%2Eusemidnighticons	use midnight style indicators field group indicators field usemidnighticons gf indicators toggle
 gf_indicators	When	dropdown			Corner > Editor	when	idgf_indicatorsmenu2%2Egf_indicators%2Egroup%2Ecorner%2Eeditor%2Emode	when corner editor group indicators corner editor mode gf indicators dropdown
 gf_indicators	X Offset	slider			Indicators > Field	x offset	idgf_indicatorsmenu2%2Egf_indicators%2Egroup%2Efield%2Egroupnumberx	x offset indicators field group indicators field groupnumberx gf indicators slider
 gf_indicators	X Offset	slider			Status > Selected	x offset	idgf_indicatorsmenu2%2Egf_indicators%2Egroup%2Estatus%2Eselected%2Ex	x offset status selected group indicators status selected x gf indicators slider

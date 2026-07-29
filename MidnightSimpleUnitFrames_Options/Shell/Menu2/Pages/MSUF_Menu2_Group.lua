@@ -809,7 +809,7 @@ end
 --- never receive portrait settings through the dynamic Group binding path.
 function GroupPage.BuildPortrait(ctx, builder)
     local kind = "party"
-    local cardH = { main = 224, geometry = 494, placement = 382, border = 500, style = 330 }
+    local cardH = { main = 224, geometry = 494, placement = 382, border = 380, style = 330 }
     local tabH = {
         general = cardH.main + 116,
         geometry = cardH.geometry + 116,
@@ -967,6 +967,13 @@ function GroupPage.BuildPortrait(ctx, builder)
     local placementCard = W.ControlCard(placementTab, "Placement", nil, cardX, -4, cardW, cardH.placement)
     local borderCard = W.ControlCard(borderTab, "Shape & Border", nil, cardX, -4, cardW, cardH.border)
     local styleCard = W.ControlCard(advancedTab, "Class & Background", nil, cardX, -4, cardW, cardH.style)
+    if W.AttachContextColorReferences then
+        W.AttachContextColorReferences(borderCard, { "group.portrait.border" }, {
+            title = "Portrait Border Color",
+            note = "Configure the Party portrait border color and opacity.",
+            historySource = "menu:group-portrait-border-color",
+        })
+    end
     local narrow = sectionW < 700
     local portraitTabs, RefreshTabs, ReadTab, SetGuidedTab = W.SegmentTabs(ctx, sec, {
         label = "",
@@ -1050,8 +1057,6 @@ function GroupPage.BuildPortrait(ctx, builder)
     local direction = BindDropdown(borderCard, "Border direction", placementValues.borderDirection, 16, -220, min(220, cardW - 32), "portraitBorderDirection", "UP")
     local thickness = BindNumber(borderCard, "Border thickness", 16, -274, cardW - 58, 1, 12, 1, "portraitBorderThickness", 2)
     local fill = BindToggle(borderCard, "Fill border into frame gap", 16, -342, cardW - 32, "portraitFillBorder", false)
-    local borderColor = BindColor(borderCard, "Color", 16, -386, min(260, cardW - 32), "portraitBorderColor", { 1, 1, 1 })
-    local borderAlpha = BindNumber(borderCard, "Opacity", 16, -438, cardW - 58, 0, 1, 0.05, "portraitBorderColorA", 1, true)
     local classStyle = BindDropdown(styleCard, "Class portrait style", ClassStyleValues, 16, -58, min(220, cardW - 32), "portraitClassStyle", "BLIZZARD", M.NormalizePortraitClassStyle)
     local background = BindToggle(styleCard, "Portrait background", 16, -112, cardW - 32, "portraitBgEnabled", false, RefreshPortraitControls)
     local backgroundColor = BindColor(styleCard, "Portrait Background Color", 16, -158, min(260, cardW - 32), "portraitBgColor", { 0.05, 0.05, 0.05 })
@@ -1082,10 +1087,6 @@ function GroupPage.BuildPortrait(ctx, builder)
             return Active(conf) and (conf.portraitBorderStyle or "NONE") ~= "NONE"
                 and (conf.portraitShape or "SQUARE") == "SQUARE"
                 and (conf.portraitBorderArt or "FLAT") ~= "RELIEF"
-        end },
-        { controls = { borderColor, borderAlpha }, on = function(conf)
-            local style = conf.portraitBorderStyle or "NONE"
-            return Active(conf) and (style == "SOLID" or style == "CUSTOM")
         end },
         { controls = classStyle, on = function(conf) return Active(conf) and (conf.portraitRender or "2D") == "CLASS" end },
         { controls = { backgroundColor, backgroundAlpha }, on = function(conf) return Active(conf) and conf.portraitBgEnabled == true end },

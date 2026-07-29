@@ -36,7 +36,7 @@ end
 local LAYER_HEADER_COLOR = { 0.45, 0.50, 0.62, 0.80 }
 local LAYER_TEXT_ON = { 0.76, 0.80, 0.90, 0.95 }
 local HANDLE_FALLBACK_COLOR = { 0.70, 0.80, 1.00 }
-local GF_PREVIEW_ROLE = Specs.ROLE or "HEALER"
+local GF_PREVIEW_ROLE_DEFAULT = Specs.ROLE or "HEALER"
 local SECTION_PAGE, PAGE_FOCUS, GF_PREVIEW_CLASSES, GF_PREVIEW_NAMES, GF_PREVIEW_ANCHOR_FRAC, GF_AURA_MOCK_ICON_IDS, GF_AURA_GROWTH_TABLE, GF_STATUS_RUNTIME_KEYS = PickDefaults(Specs, [[
     SECTION_PAGE PAGE_FOCUS CLASSES NAMES ANCHOR_FRAC AURA_MOCK_ICON_IDS AURA_GROWTH_TABLE STATUS_RUNTIME_KEYS
 ]])
@@ -76,6 +76,38 @@ local function CurrentScope()
     if type(gp.CurrentScope) == "function" then return gp.CurrentScope() end
     return M.gfScope or "party"
 end
+local GF_PREVIEW_ROLE_LABELS = {
+    TANK = "Tank",
+    HEALER = "Healer",
+    DAMAGER = "DPS",
+}
+local GF_PREVIEW_ROLE_ORDER = { "TANK", "HEALER", "DAMAGER" }
+local function NormalizePreviewRole(role)
+    if role == "TANK" or role == "HEALER" or role == "DAMAGER" then return role end
+    return GF_PREVIEW_ROLE_DEFAULT
+end
+local function PreviewRole(kind)
+    kind = kind or CurrentScope()
+    local roles = M.gfPreviewRoles
+    return NormalizePreviewRole(type(roles) == "table" and roles[kind] or nil)
+end
+local function SetPreviewRole(kind, role)
+    kind = kind or CurrentScope()
+    role = NormalizePreviewRole(role)
+    M.gfPreviewRoles = M.gfPreviewRoles or {}
+    if M.gfPreviewRoles[kind] == role then return false end
+    M.gfPreviewRoles[kind] = role
+    return true
+end
+local function NextPreviewRole(kind)
+    local current = PreviewRole(kind)
+    for i = 1, #GF_PREVIEW_ROLE_ORDER do
+        if GF_PREVIEW_ROLE_ORDER[i] == current then
+            return GF_PREVIEW_ROLE_ORDER[(i % #GF_PREVIEW_ROLE_ORDER) + 1]
+        end
+    end
+    return GF_PREVIEW_ROLE_DEFAULT
+end
 local function Conf(kind)
     local gp = GroupPage()
     if type(gp.Conf) == "function" then return gp.Conf(kind) end
@@ -89,6 +121,7 @@ local function CompiledSpec(kind)
         if type(base) ~= "table" then return base end
         local spec = ShallowCopy(base) or {}
         local conf = Conf(kind)
+        local previewRole = PreviewRole(kind)
         spec.key = "gf_" .. tostring(kind)
         spec.groupKind = kind
         spec._msufMenu2PreviewRuntime = true
@@ -96,8 +129,8 @@ local function CompiledSpec(kind)
             local power = ShallowCopy(base.power) or {}
             local powerHeight = tonumber(power.height) or 0
             if type(gf.GetEffectivePowerHeight) == "function" then
-                powerHeight = tonumber(gf.GetEffectivePowerHeight(kind, nil, GF_PREVIEW_ROLE, conf)) or 0
-            elseif type(gf.ShouldShowPowerBarForRole) == "function" and gf.ShouldShowPowerBarForRole(kind, GF_PREVIEW_ROLE, conf) ~= true then
+                powerHeight = tonumber(gf.GetEffectivePowerHeight(kind, nil, previewRole, conf)) or 0
+            elseif type(gf.ShouldShowPowerBarForRole) == "function" and gf.ShouldShowPowerBarForRole(kind, previewRole, conf) ~= true then
                 powerHeight = 0
             end
             power.enabled = powerHeight > 0
@@ -107,7 +140,7 @@ local function CompiledSpec(kind)
         end
         if type(base.status) == "table" then
             local status = ShallowCopy(base.status) or {}
-            status.roleValue = GF_PREVIEW_ROLE
+            status.roleValue = previewRole
             spec.status = status
         end
         return spec
@@ -315,6 +348,45 @@ local function CreatePreviewAnimationButton(box, registerControl)
     box.RefreshAnimationButton = RefreshPreviewAnimationButton
     RefreshPreviewAnimationButton(box)
 end
+local function RefreshPreviewRoleButton(box, kind)
+    local btn = box and box._previewRoleButton
+    if not btn then return end
+    local role = PreviewRole(kind)
+    local text = (M.Tr and M.Tr(GF_PREVIEW_ROLE_LABELS[role])) or GF_PREVIEW_ROLE_LABELS[role]
+    if btn.fs and btn.fs.SetText then btn.fs:SetText(text)
+    elseif btn.SetText then btn:SetText(text) end
+end
+local function CreatePreviewRoleButton(box, registerControl)
+    if not box or box._previewRoleButton then return end
+    local parent = box._stage or box
+    local template = (T and T.Template and T.Template()) or "BackdropTemplate"
+    local btn = CreateFrame("Button", nil, parent, template)
+    btn:SetSize(92, 22)
+    if btn.SetBackdrop then btn:SetBackdrop({ bgFile = WHITE8X8, edgeFile = WHITE8X8, edgeSize = 1 }) end
+    btn.fs = btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    btn.fs:SetPoint("CENTER", btn, "CENTER", 0, 0)
+    btn.fs:SetJustifyH("CENTER")
+    if btn.fs.SetJustifyV then btn.fs:SetJustifyV("MIDDLE") end
+    if T and T.StyleFontString then T.StyleFontString(btn.fs, T.colors and T.colors.text or LAYER_TEXT_ON, 0) end
+    if box._previewAnimationButton then
+        btn:SetPoint("RIGHT", box._previewAnimationButton, "LEFT", -6, 0)
+    elseif box._zoomBar then
+        btn:SetPoint("RIGHT", box._zoomBar, "LEFT", -86, 0)
+    end
+    if PreviewHelpers.StylePreviewPillButton then PreviewHelpers.StylePreviewPillButton(btn, T, { fontField = "fs" }) end
+    if btn.SetFrameLevel and parent.GetFrameLevel then btn:SetFrameLevel((parent:GetFrameLevel() or 0) + 85) end
+    btn:SetScript("OnClick", function()
+        local kind = CurrentScope()
+        SetPreviewRole(kind, NextPreviewRole(kind))
+        RefreshPreviewRoleButton(box, kind)
+        if box.Refresh then box:Refresh("GROUP_PREVIEW_ROLE") end
+    end)
+    local register = registerControl or RegisterGroupPreviewControl
+    register(btn, "member_role", "Group Preview Member Role", "button", "ephemeral")
+    box._previewRoleButton = btn
+    box.RefreshRoleButton = RefreshPreviewRoleButton
+    RefreshPreviewRoleButton(box)
+end
 local function ApplyGroupPreviewFlatBackdrop(frame, texture, bg, border)
     if not (frame and frame.SetBackdrop) then return end
     texture = texture or "Interface\\Buttons\\WHITE8X8"
@@ -399,12 +471,14 @@ local function SetGroupPreviewToolsShown(box, shown)
         box._msuf2CompactToolsHidden = true
         if box._zoomBar then box._zoomBar:Hide() end
         if box._previewAnimationButton then box._previewAnimationButton:Hide() end
+        if box._previewRoleButton then box._previewRoleButton:Hide() end
         if controlsHint then controlsHint:Hide() end
         return
     end
     box._msuf2CompactToolsHidden = nil
     if box._zoomBar then box._zoomBar:Show() end
     if box._previewAnimationButton then box._previewAnimationButton:Show() end
+    if box._previewRoleButton then box._previewRoleButton:Show() end
     if controlsHint and box._msuf2CompactControlsHintWasShown then controlsHint:Show() end
 end
 local function LayoutGroupPreviewHeaderControls(box, compact)
@@ -897,10 +971,11 @@ end
 local function MockPowerHeight(kind, conf, zoom, frameScale)
     local livePowerH
     local gf = MSUF and MSUF.GF
-    if gf and gf.GetEffectivePowerHeight then livePowerH = gf.GetEffectivePowerHeight(kind, nil, GF_PREVIEW_ROLE, conf) end
+    local previewRole = PreviewRole(kind)
+    if gf and gf.GetEffectivePowerHeight then livePowerH = gf.GetEffectivePowerHeight(kind, nil, previewRole, conf) end
     if livePowerH == nil then
         local raw = conf and (tonumber(conf.powerHeight) or 6) or 6
-        if gf and gf.ShouldShowPowerBarForRole and not gf.ShouldShowPowerBarForRole(kind, GF_PREVIEW_ROLE, conf) then raw = 0 end
+        if gf and gf.ShouldShowPowerBarForRole and not gf.ShouldShowPowerBarForRole(kind, previewRole, conf) then raw = 0 end
         livePowerH = raw > 0 and ScaleValue(raw, frameScale or 1, 0) or 0
     end
     livePowerH = tonumber(livePowerH) or 0
@@ -1191,7 +1266,8 @@ local NativeDeps = {
     AURA_MOCK_ICON_IDS = GF_AURA_MOCK_ICON_IDS,
     MIN_W = GF_PREVIEW_MIN_W,
     MIN_H = GF_PREVIEW_MIN_H,
-    ROLE = GF_PREVIEW_ROLE,
+    ROLE = GF_PREVIEW_ROLE_DEFAULT,
+    PreviewRole = PreviewRole,
     ANCHOR_FRAC = GF_PREVIEW_ANCHOR_FRAC,
     AUTO_ZOOM_MIN = Specs.AUTO_ZOOM_MIN or 0.75,
     AUTO_ZOOM_MAX = Specs.AUTO_ZOOM_MAX or 1.65,
@@ -1351,6 +1427,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     end
     R.ZoomWheel = box._zoomWheel or R.ZoomWheel
     CreatePreviewAnimationButton(box, RegisterPreviewControl)
+    CreatePreviewRoleButton(box, RegisterPreviewControl)
     local bounds = CreateFrame("Frame", nil, stage, T.Template())
     bounds:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
     bounds:SetBackdropColor(0, 0, 0, 0)

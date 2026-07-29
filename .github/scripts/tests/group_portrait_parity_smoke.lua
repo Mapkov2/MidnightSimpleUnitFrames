@@ -101,26 +101,36 @@ local menu = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2
 Check(menu:find('local kind = "party"', 1, true), "portrait menu bindings are not fixed to party")
 Check(menu:find('"gf_party." .. tostring(key)', 1, true), "portrait menu lacks exact party Assistant keys")
 Check(menu:find('CurrentScope() == "party"', 1, true), "portrait menu shell is not party-gated")
-Check(menu:find('BindColor(borderCard, "Color"', 1, true), "portrait border swatch label must be Color")
-Check(not menu:find('"Portrait Border Color"', 1, true), "removed Portrait Border Color label returned")
+Check(menu:find('W.AttachContextColorReferences(borderCard, { "group.portrait.border" }', 1, true),
+    "group portrait border lacks the Unitframe-style context color shortcut")
+Check(not menu:find('BindColor(borderCard, "Color"', 1, true),
+    "group portrait border still exposes the removed inline Color row")
+Check(not menu:find('BindNumber(borderCard, "Opacity"', 1, true),
+    "group portrait border still exposes the removed inline Opacity row")
 Check(menu:find('W.AttachGroupEditFocus(widget, stateKey, "portrait")', 1, true),
     "portrait controls do not focus the Party portrait preview layer")
+local colors = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AdvancedColors.lua")
+Check(colors:find('FixedContextFactory("group.portrait.border"', 1, true)
+    and colors:find('"portraitBorderColor", 1, 1, 1, "portraitBorderColorA", 1', 1, true),
+    "group portrait context color does not own the group RGB/opacity settings")
 local preview = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Render.lua")
 Check(preview:find("PaintGroupPreviewPortrait(scene)", 1, true), "group preview does not paint the compiled portrait")
 Check(preview:find('scene.kind ~= "party"', 1, true), "group portrait preview is not party-gated")
 Check(preview:find("scene.S and scene.S.portraitHandle", 1, true),
     "group portrait renderer does not use the interactive preview handle")
+Check(preview:find("local portraitHandle = deps.portraitHandle", 1, true)
+    and preview:find("portraitHandle = portraitHandle", 1, true),
+    "Render.Install drops the portrait handle before the real refresh path")
 Check(preview:find("EnsureGroupPreviewPortrait(scene.mock, handle)", 1, true),
     "group portrait visual is not owned by its mouse handle")
-Check(preview:find('CreateFrame("Frame", nil, handle or mock)', 1, true),
-    "group portrait visual can still cover its handle as a sibling frame")
-Check(preview:find("holder:SetParent(handle)", 1, true),
-    "cached group portrait visuals are not repaired onto the mouse handle")
-Check(preview:find("SetMouseClickEnabled(false)", 1, true)
-    and preview:find("SetMouseMotionEnabled(false)", 1, true),
-    "group portrait visual does not explicitly pass mouse interaction to its handle")
-Check(preview:find("holder:SetAllPoints(handle)", 1, true),
-    "group portrait visual is not attached to the draggable handle")
+Check(preview:find("holder = handle", 1, true)
+    and preview:find("mock._msufGroupPortrait = holder", 1, true),
+    "group portrait Button is not the visible portrait owner")
+Check(preview:find("holder:SetMouseClickEnabled(true)", 1, true)
+    and preview:find("holder:SetMouseMotionEnabled(true)", 1, true),
+    "group portrait Button does not explicitly own click and hover interaction")
+Check(preview:find("if holder ~= handle then", 1, true),
+    "group portrait renderer can still overlay a separate visual frame on its Button")
 Check(preview:find('button._layerKey ~= "portrait" or scene.kind == "party"', 1, true),
     "portrait layer row must be hidden outside Party")
 

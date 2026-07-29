@@ -5,7 +5,7 @@ MSUF.Assistant = MSUF.Assistant or {}
 local Data = { version = 3 }
 Data.columns = { 'semanticId', 'controlId', 'familyId', 'memberKey', 'pageKey', 'controlPath', 'classification', 'kind', 'settingKey', 'actionKey', 'navigationKey', 'safety', 'valueKind', 'min', 'max', 'step', 'percentIsValue', 'confirmRequired', 'identityStable', 'label', 'help', 'values', 'actionFixedArgs', 'actionInputArg', 'actionInputKind', 'actionInputDomain', 'storageUnit', 'displayUnit', 'displayScale', 'states', 'contexts' }
 Data.collectionStates = {
-    { 'base', 1641 },
+    { 'base', 1639 },
     { 'unit_player_buff_layout', 27 },
     { 'unit_player_buff_filters', 31 },
     { 'unit_player_buff_blacklist', 24 },
@@ -156,7 +156,7 @@ Data.collectionStates = {
     { 'compat_buff_raid', 34 },
     { 'compat_debuff_raid', 35 },
 }
-Data.collectionUnionControls = 2425
+Data.collectionUnionControls = 2423
 Data.contexts = {
     { 'WARRIOR-71', 'WARRIOR', 1, 71, 'Arms', 'enUS' },
     { 'WARRIOR-72', 'WARRIOR', 2, 72, 'Fury', 'enUS' },
@@ -1987,8 +1987,6 @@ Data.records = {
     { 'setting:gf_layout/group/layout/portrait/portraitbgcolora@gf_layout/group/layout/portrait/portraitbgcolora', 'menu2.gf_layout.group.portrait.portraitbgcolora', '', '', 'gf_layout', 'group/layout/portrait/portraitbgcolora', 'setting', 'slider', '', '', '', 'direct', 'number', '0', '1', '0.05', '0', '0', '1', 'Background opacity', 'Adjusts Background opacity. Available on the Group Frames > Layout page. Allowed range: 0 to 1 in increments of 0.05.', '', '', '', '', '', '', '', '', 'base', '*' },
     { 'setting:gf_layout/group/layout/portrait/portraitbgenabled@gf_layout/group/layout/portrait/portraitbgenabled', 'menu2.gf_layout.group.portrait.portraitbgenabled', '', '', 'gf_layout', 'group/layout/portrait/portraitbgenabled', 'setting', 'toggle', '', '', '', 'direct', 'boolean', '', '', '', '0', '0', '1', 'Portrait background', 'Turns Portrait background on or off. Available on the Group Frames > Layout page.', '', '', '', '', '', '', '', '', 'base', '*' },
     { 'setting:gf_layout/group/layout/portrait/portraitborderart@gf_layout/group/layout/portrait/portraitborderart', 'menu2.gf_layout.group.portrait.portraitborderart', '', '', 'gf_layout', 'group/layout/portrait/portraitborderart', 'setting', 'dropdown', '', '', '', 'direct', 'enum', '', '', '', '0', '0', '1', 'Border art', 'Selects Border art. Available on the Group Frames > Layout page. Available choices: Flat, Relief.', 's:FLAT\030Flat\031s:RELIEF\030Relief', '', '', '', '', '', '', '', 'base', '*' },
-    { 'setting:gf_layout/group/layout/portrait/portraitbordercolor@gf_layout/group/layout/portrait/portraitbordercolor', 'menu2.gf_layout.group.portrait.portraitbordercolor', '', '', 'gf_layout', 'group/layout/portrait/portraitbordercolor', 'setting', 'color', '', '', '', 'direct', 'color', '', '', '', '0', '0', '1', 'Color', 'Chooses the color used by Color. Available on the Group Frames > Layout page.', '', '', '', '', '', '', '', '', 'base', '*' },
-    { 'setting:gf_layout/group/layout/portrait/portraitbordercolora@gf_layout/group/layout/portrait/portraitbordercolora', 'menu2.gf_layout.group.portrait.portraitbordercolora', '', '', 'gf_layout', 'group/layout/portrait/portraitbordercolora', 'setting', 'slider', '', '', '', 'direct', 'number', '0', '1', '0.05', '0', '0', '1', 'Opacity', 'Adjusts Opacity. Available on the Group Frames > Layout page. Allowed range: 0 to 1 in increments of 0.05.', '', '', '', '', '', '', '', '', 'base', '*' },
     { 'setting:gf_layout/group/layout/portrait/portraitborderdirection@gf_layout/group/layout/portrait/portraitborderdirection', 'menu2.gf_layout.group.portrait.portraitborderdirection', '', '', 'gf_layout', 'group/layout/portrait/portraitborderdirection', 'setting', 'dropdown', '', '', '', 'direct', 'enum', '', '', '', '0', '0', '1', 'Border direction', 'Selects Border direction. Available on the Group Frames > Layout page. Available choices: Down, Left, Right, Up.', 's:DOWN\030Down\031s:LEFT\030Left\031s:RIGHT\030Right\031s:UP\030Up', '', '', '', '', '', '', '', 'base', '*' },
     { 'setting:gf_layout/group/layout/portrait/portraitborderstyle@gf_layout/group/layout/portrait/portraitborderstyle', 'menu2.gf_layout.group.portrait.portraitborderstyle', '', '', 'gf_layout', 'group/layout/portrait/portraitborderstyle', 'setting', 'dropdown', '', '', '', 'direct', 'enum', '', '', '', '0', '0', '1', 'Border', 'Selects Border. Available on the Group Frames > Layout page. Available choices: Class color, Custom color, No border, Reaction color, Solid.', 's:CLASS_COLOR\030Class color\031s:CUSTOM\030Custom color\031s:NONE\030No border\031s:REACTION\030Reaction color\031s:SOLID\030Solid', '', '', '', '', '', '', '', 'base', '*' },
     { 'setting:gf_layout/group/layout/portrait/portraitborderthickness@gf_layout/group/layout/portrait/portraitborderthickness', 'menu2.gf_layout.group.portrait.portraitborderthickness', '', '', 'gf_layout', 'group/layout/portrait/portraitborderthickness', 'setting', 'slider', '', '', '', 'direct', 'number', '1', '12', '1', '0', '0', '1', 'Border thickness', 'Adjusts Border thickness. Available on the Group Frames > Layout page. Allowed range: 1 to 12 in increments of 1.', '', '', '', '', '', '', '', '', 'base', '*' },

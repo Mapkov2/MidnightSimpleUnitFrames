@@ -106,17 +106,26 @@ end
 
 local function EnsureGroupPreviewPortrait(mock, handle)
     local holder = mock and mock._msufGroupPortrait
-    if holder then
-        if handle and holder.GetParent and holder:GetParent() ~= handle and holder.SetParent then
-            holder:SetParent(handle)
-        end
-        DisableGroupPreviewPortraitMouse(holder)
+    if handle and holder ~= handle then
+        if holder then holder:Hide() end
+        holder = handle
+        mock._msufGroupPortrait = holder
+    end
+    if holder and holder._msufGroupPortraitVisual == true then
         DisableGroupPreviewPortraitMouse(holder.border)
         return holder
     end
     if not mock then return nil end
-    holder = CreateFrame("Frame", nil, handle or mock)
-    DisableGroupPreviewPortraitMouse(holder)
+    holder = holder or handle or CreateFrame("Frame", nil, mock)
+    if holder ~= handle then
+        DisableGroupPreviewPortraitMouse(holder)
+    else
+        -- Match the working Unit Preview contract: the portrait Button itself
+        -- owns the visible texture and therefore remains the top mouse target.
+        if holder.EnableMouse then holder:EnableMouse(true) end
+        if holder.SetMouseClickEnabled then holder:SetMouseClickEnabled(true) end
+        if holder.SetMouseMotionEnabled then holder:SetMouseMotionEnabled(true) end
+    end
     holder.bg = holder:CreateTexture(nil, "BACKGROUND", nil, -1)
     holder.bg:SetAllPoints(holder)
     holder.bg:SetTexture("Interface\\Buttons\\WHITE8x8")
@@ -139,6 +148,7 @@ local function EnsureGroupPreviewPortrait(mock, handle)
         holder.edges[i] = edge
     end
     holder:Hide()
+    holder._msufGroupPortraitVisual = true
     mock._msufGroupPortrait = holder
     return holder
 end
@@ -307,25 +317,38 @@ local function PaintGroupPreviewPortrait(scene)
     if handle then
         handle._locked = portrait.placement == "OVERLAY" and portrait.overlayAlign == "FULL"
         handle._previewScale, handle._previewWriteScale = scale, scale
-        holder:ClearAllPoints()
-        holder:SetAllPoints(handle)
+        if holder ~= handle then
+            holder:ClearAllPoints()
+            holder:SetAllPoints(handle)
+        end
     end
     local level = math.max(0, math.min(30, tonumber(portrait.levelOffset) or 7))
     if holder.SetFrameLevel and scene.mock.GetFrameLevel then
         local handleLevel = (scene.mock:GetFrameLevel() or 1) + level
         if handle then SetPreviewFrameLevel(handle, handleLevel) end
-        SetPreviewFrameLevel(holder, handle and (handleLevel + 1) or handleLevel)
+        if holder ~= handle then SetPreviewFrameLevel(holder, handleLevel) end
         SetPreviewFrameLevel(holder.border, (holder:GetFrameLevel() or 1) + 1)
         if handle and handle._selectBorder then
             SetPreviewFrameLevel(handle._selectBorder, (holder.border:GetFrameLevel() or 1) + 1)
         end
     end
     local layerAlpha = scene.soloLayer and scene.soloLayer ~= "portrait" and 0.15 or 1
-    holder:SetAlpha((tonumber(portrait.alpha) or 1) * layerAlpha)
-    if handle then
-        handle:SetAlpha(layerAlpha)
-        handle:Show()
+    local configuredPortraitAlpha = tonumber(portrait.alpha) or 1
+    if holder == handle then
+        -- Keep the Button/selection affordance interactive at full layer alpha;
+        -- only the portrait artwork follows the configured portrait opacity.
+        holder:SetAlpha(layerAlpha)
+        if holder.bg then holder.bg:SetAlpha(configuredPortraitAlpha) end
+        if holder.tex then holder.tex:SetAlpha(configuredPortraitAlpha) end
+        if holder.border then holder.border:SetAlpha(configuredPortraitAlpha) end
+        if holder.ring then holder.ring:SetAlpha(configuredPortraitAlpha) end
+    else
+        holder:SetAlpha(configuredPortraitAlpha * layerAlpha)
     end
+    if handle and holder ~= handle then
+        handle:SetAlpha(layerAlpha)
+    end
+    if handle then handle:Show() end
     if holder.mask then holder.mask:SetTexture(GROUP_PORTRAIT_MASKS[portrait.shape or "SQUARE"] or GROUP_PORTRAIT_MASKS.SQUARE) end
     local classToken = scene.liveData and scene.liveData.class
         or scene.S.GF_PREVIEW_CLASSES[((scene.kind == "party" and 5 or 2) % #scene.S.GF_PREVIEW_CLASSES) + 1]
@@ -363,8 +386,13 @@ local function PaintGroupPreviewPortrait(scene)
         holder.bg:Hide()
     end
     LayoutGroupPreviewPortraitBorder(holder, portrait, scale, ScaleValue, scene.S.ClassColor, classToken)
+    if holder == handle and holder.ring then holder.ring:SetAlpha(configuredPortraitAlpha) end
     holder:Show()
 end
+
+-- Kept as a narrow module seam so the interaction smoke can exercise the
+-- exact production portrait painter with a real preview Button.
+Render.PaintGroupPreviewPortrait = PaintGroupPreviewPortrait
 
 local function DefaultAuraGrowth() return { px = 1, py = 0, sx = 0, sy = -1 } end
 local function DefaultClampLayer(value, fallback) return tonumber(value) or fallback or 0 end
@@ -562,6 +590,7 @@ local function BuildScene(box, reason)
         layerVisible = type(M.gfPreviewLayerVisible) == "table" and M.gfPreviewLayerVisible or {},
         soloLayer = M.gfPreviewSoloLayer,
         textHandles = box._textHandles or {},
+        previewRole = H.PreviewRole and H.PreviewRole(kind) or S.GF_PREVIEW_ROLE,
     }
     local rawAuras = conf.auras or {}
     local trackedRaw = RawTrackedBuffLane(scene, rawAuras.buff)
@@ -1327,6 +1356,7 @@ function Render.Install(box, ctx, deps)
     local debuffHandle = deps.debuffHandle
     local externalHandle = deps.externalHandle
     local powerBarHandle = deps.powerBarHandle
+    local portraitHandle = deps.portraitHandle
     local statusHandles = deps.statusHandles or {}
     local spellHandle = deps.spellHandle
     local selectedSpellEffectOwner = box._msufGFSelectedSpellEffectOwner
@@ -1377,6 +1407,7 @@ function Render.Install(box, ctx, deps)
         debuffHandle = debuffHandle,
         externalHandle = externalHandle,
         powerBarHandle = powerBarHandle,
+        portraitHandle = portraitHandle,
         statusHandles = statusHandles,
         spellHandle = spellHandle,
         statusSpecs = statusSpecs,
@@ -1466,6 +1497,7 @@ function Render.Install(box, ctx, deps)
         end
         local scene = BuildScene(self, reason)
         local S = scene.S
+        if self.RefreshRoleButton then self:RefreshRoleButton(scene.kind) end
         local textHandles, kind, label, conf, gf = scene.textHandles, scene.kind, scene.label, scene.conf, scene.gf
         local previewAnimation, hpPct, powerPct, healPct, absorbPct = scene.previewAnimation,
             scene.hpPct, scene.powerPct, scene.healPct, scene.absorbPct
@@ -2351,7 +2383,7 @@ function Render.Install(box, ctx, deps)
                     elseif spec.customIcon and type(conf[spec.customIcon]) == "string" and conf[spec.customIcon] ~= "" then
                         path, l, r, t, b = conf[spec.customIcon], 0, 1, 0, 1
                     elseif value == "roleIcon" and gf and gf.GetRoleTexture then
-                        path, l, r, t, b = gf.GetRoleTexture(kind, self._msufGFRenderState.GF_PREVIEW_ROLE, runtimeCfg and runtimeCfg.style)
+                        path, l, r, t, b = gf.GetRoleTexture(kind, scene.previewRole, runtimeCfg and runtimeCfg.style)
                     elseif value == "leaderIcon" and gf and gf.GetLeaderTexture then
                         path, l, r, t, b = gf.GetLeaderTexture(kind, runtimeCfg and runtimeCfg.style)
                     elseif value == "assistIcon" and gf and gf.GetAssistTexture then

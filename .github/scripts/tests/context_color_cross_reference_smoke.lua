@@ -113,7 +113,7 @@ local requiredRegistryIds = {
     "cast.kick_ready", "cast.kick_not_ready",
     "aura.cooldown.safe", "aura.cooldown.warning", "aura.cooldown.urgent",
     "group.health", "group.background", "group.dead", "group.debuff_stripe",
-    "group.target", "group.focus", "group.border", "group.aggro",
+    "group.target", "group.focus", "group.border", "group.aggro", "group.portrait.border",
     "gameplay.timer", "gameplay.enter", "gameplay.leave", "gameplay.crosshair_in", "gameplay.crosshair_out",
     "power.current", "class_power.current", "class_power.text", "class_power.alt_mana", "gradient.health", "gradient.power",
 }
@@ -226,6 +226,10 @@ local pageSpecs = {
     {
         name = "Group Indicators", file = "MSUF_Menu2_GroupIndicators.lua",
         ids = { "group.target", "group.focus", "group.border", "group.aggro" },
+    },
+    {
+        name = "Group Portrait", file = "MSUF_Menu2_Group.lua",
+        ids = { "group.portrait.border" },
     },
     {
         name = "Advanced Gameplay", file = "MSUF_Menu2_AdvancedGameplay.lua",

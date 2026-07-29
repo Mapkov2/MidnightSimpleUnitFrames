@@ -186,8 +186,12 @@ function A.GroupFramesRegistry.RegisterPortraitSettings(ctx)
             mode = "config",
             page = page.page,
         })
-    Number("portraitBorderColorA", "portraitBorderColorA", "Portrait Border Opacity", 1, 0, 1, 0.05,
-        Aliases("portrait border opacity", "portrait border alpha"), true)
+    -- The border color and its opacity are edited through the Advanced Colors
+    -- context popup ("group.portrait.border"), not by a slider on the Group
+    -- Layout page, so this stays page-less like the Group Border opacity.
+    RegisterGroupNumber(scope, "portraitBorderColorA", "portraitBorderColorA", "Portrait Border Opacity",
+        1, 0, 1, 0.05, "config", Aliases("portrait border opacity", "portrait border alpha"),
+        { percent = true })
 
     Boolean("portraitBgEnabled", "portraitBgEnabled", "Portrait Background", false,
         Aliases("portrait background", "portrait bg"))

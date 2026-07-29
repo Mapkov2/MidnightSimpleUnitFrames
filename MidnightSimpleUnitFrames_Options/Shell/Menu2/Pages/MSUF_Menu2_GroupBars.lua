@@ -248,6 +248,18 @@ local function BuildGFResourceBarSection(ctx, b)
     local showTank = BindScopeToggle(ctx, W.ToggleAt(powerRoleCard, "Tank", 16, -66, powerLeftW - 32), "powerShowTank", true, "visual")
     local showHealer = BindScopeToggle(ctx, W.ToggleAt(powerRoleCard, "Healer", 16, -100, powerLeftW - 32), "powerShowHealer", true, "visual")
     local showDamager = BindScopeToggle(ctx, W.ToggleAt(powerRoleCard, "DPS", 16, -134, powerLeftW - 32), "powerShowDamager", false, "visual")
+    local function FocusPreviewRole(control, role)
+        if not (control and control.HookScript) then return end
+        control:HookScript("OnClick", function()
+            local scope = CurrentScope()
+            M.gfPreviewRoles = M.gfPreviewRoles or {}
+            M.gfPreviewRoles[scope] = role
+            RequestGroupBarsRefresh(ctx, "gf-bars-preview-role")
+        end)
+    end
+    FocusPreviewRole(showTank, "TANK")
+    FocusPreviewRole(showHealer, "HEALER")
+    FocusPreviewRole(showDamager, "DAMAGER")
     W.MoveWidget(powerHeight, powerMainCard, 16, -76, powerSliderW, "LEFT")
     -- Detached placement: the same fields a non-Player unit frame gets. Class
     -- Resource width sync, anchor and the ROUND/CRYSTAL/ORB shapes are Player-only

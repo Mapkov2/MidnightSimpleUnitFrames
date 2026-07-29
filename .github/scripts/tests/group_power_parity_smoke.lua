@@ -198,6 +198,27 @@ local native = nativeFile:read("*a"):gsub("\r\n", "\n")
 nativeFile:close()
 Check(native:find('{ "Power", { 0.30, 0.62, 0.98 }, "power", "power" }', 1, true),
     "group preview LAYERS panel lost its Power entry")
+Check(native:find("local function PreviewRole(kind)", 1, true)
+    and native:find("M.gfPreviewRoles[kind]", 1, true),
+    "group preview does not retain an independent simulated role per scope")
+Check(native:find('btn:SetSize(92, 22)', 1, true)
+    and native:find('DAMAGER = "DPS"', 1, true),
+    "group preview lacks the visible Tank/Healer/DPS member-role selector")
+Check(native:find("if box._previewRoleButton then box._previewRoleButton:Hide() end", 1, true)
+    and native:find("if box._previewRoleButton then box._previewRoleButton:Show() end", 1, true),
+    "group preview member-role selector ignores compact/pinned tool visibility")
+Check(native:find("gf.GetEffectivePowerHeight(kind, nil, previewRole, conf)", 1, true),
+    "group preview power visibility still uses a fixed member role")
+Check(render:find("gf.GetRoleTexture(kind, scene.previewRole", 1, true),
+    "group preview role icon does not follow the selected simulated role")
+local menuPath = root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupBars.lua"
+local menuFile = assert(io.open(menuPath, "rb"), "group Resource Bar menu missing")
+local menu = menuFile:read("*a"):gsub("\r\n", "\n")
+menuFile:close()
+Check(menu:find('FocusPreviewRole(showTank, "TANK")', 1, true)
+    and menu:find('FocusPreviewRole(showHealer, "HEALER")', 1, true)
+    and menu:find('FocusPreviewRole(showDamager, "DAMAGER")', 1, true),
+    "role visibility toggles do not focus their matching preview member role")
 
 -- 10. Interactive handle contract: the resource bar handle must exist with the
 --     full drag/nudge/exact write dispatch, and the render must lock it while
