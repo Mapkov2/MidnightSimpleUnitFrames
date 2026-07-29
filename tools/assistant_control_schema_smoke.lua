@@ -61,8 +61,11 @@ for i = 1, #(Data.collectionStates or {}) do
     stateOrder[stateId] = i
 end
 Check(#(Data.collectionStates or {}) == #expectedStateIds, "complete 154-state inventory")
-Check(collectionStates.base == 1598, "reviewed complete-catalog baseline")
-Check(Data.collectionUnionControls == 2388 and #Data.records == Data.collectionUnionControls,
+-- Beta 36: +13 controls from the group Resource Bar parity cards, the group
+-- number style dropdown, the offline-fade toggle and the two dispel-overlay
+-- preview toggles.
+Check(collectionStates.base == 1611, "reviewed complete-catalog baseline")
+Check(Data.collectionUnionControls == 2401 and #Data.records == Data.collectionUnionControls,
     "reviewed exhaustive finite-state control union")
 for i = 1, #Data.columns do columns[Data.columns[i]] = i end
 for _, column in ipairs({ "actionFixedArgs", "actionInputArg", "actionInputKind", "actionInputDomain",
