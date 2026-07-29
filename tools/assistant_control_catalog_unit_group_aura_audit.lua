@@ -253,7 +253,9 @@ end
 -- The Group Resource Bar mirrors the unit-frame section, adding four toggle
 -- sites (embed into health, detach from frame, power bar border, text on
 -- detached bar), and Range Fade adds the offline-fade toggle.
-Check(factorySites == 208, string.format("interactive factory inventory drifted: expected 208, got %d", factorySites))
+-- The Group Dispel Overlay adds the ephemeral "Preview overlay" toggle, which
+-- drives the menu-owned stand-in tint and is never persisted.
+Check(factorySites == 209, string.format("interactive factory inventory drifted: expected 209, got %d", factorySites))
 
 local function AddUnique(list, seen, value)
     value = tostring(value or "")
@@ -305,7 +307,9 @@ for key in groupHandlesSource:gmatch('CreatePreviewHandle%(%s*"([^"]+)"') do
     if key ~= "status_" then AddUnique(groupHandles, groupHandleSeen, key) end
 end
 for i = 1, #groupStatus do AddUnique(groupHandles, groupHandleSeen, "status_" .. groupStatus[i]) end
-Check(#groupHandles == 27, string.format("Group preview fixed-handle inventory drifted: expected 27, got %d", #groupHandles))
+-- The detached group resource bar is draggable in the preview, adding the
+-- "powerBar" handle alongside the text and aura handles.
+Check(#groupHandles == 28, string.format("Group preview fixed-handle inventory drifted: expected 28, got %d", #groupHandles))
 Check(groupHandlesSource:find("function box:EnsureSpellIndicatorHandle(item, index)", 1, true) ~= nil
     and groupHandlesSource:find('CreatePreviewHandle(key, "si"', 1, true) ~= nil,
     "Group preview dynamic spell-handle provider is missing")
