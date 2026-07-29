@@ -27,8 +27,8 @@ local Data = assert(Assistant.ControlSchemaData, "generated control schema data 
 Check(Data.version == 3, "reviewed schema version")
 Check(#(Data.contexts or {}) == 40, "reviewed 40 class/spec contexts")
 Check(#(Data.collectionStates or {}) == 154, "reviewed 154-state finite UI matrix")
-Check(Data.collectionUnionControls == 2388 and #(Data.records or {}) == 2388,
-    "reviewed 2388-control exhaustive union")
+Check(Data.collectionUnionControls == 2401 and #(Data.records or {}) == 2401,
+    "reviewed 2401-control exhaustive union")
 
 local columns, contextIds, stateCounts = {}, {}, {}
 for i = 1, #Data.columns do columns[Data.columns[i]] = i end
@@ -180,7 +180,10 @@ for _, group in pairs(labelGroups) do
         if #group > maxCollision then maxCollision = #group end
     end
 end
-Check(collisionGroups == 295 and collisionRows == 1811 and maxCollision == 32,
+-- Beta 36: "Preview overlay" exists on both the unit and group dispel cards,
+-- forming one new collision group, and the group Resource Bar parity controls
+-- join label groups their unit-frame counterparts already had.
+Check(collisionGroups == 296 and collisionRows == 1821 and maxCollision == 32,
     string.format("reviewed label-collision inventory drift: groups=%d rows=%d max=%d",
         collisionGroups, collisionRows, maxCollision))
 
@@ -262,6 +265,10 @@ local expectedModes = {
     ["control:opt_bars/opt/bars/global/absorb/positive/preview/test@opt_bars/opt/bars/global/absorb/positive/preview/test"] = true,
     ["control:opt_bars/opt/bars/global/highlight/preview/purge@opt_bars/opt/bars/global/highlight/preview/purge"] = true,
     ["control:opt_castbar/opt/castbar/global/focus/kick/preview@opt_castbar/opt/castbar/global/focus/kick/preview"] = true,
+    -- Beta 36 dispel-overlay preview toggles: ephemeral stand-in tints that are
+    -- never persisted and drop themselves when their page closes.
+    ["control:gf_bars/group/bars/field/dispeloverlaypreview@gf_bars/group/bars/field/dispeloverlaypreview"] = true,
+    ["control:opt_bars/opt/bars/global/unit/dispel/overlay/preview@opt_bars/opt/bars/global/unit/dispel/overlay/preview"] = true,
 }
 local unitModeSuffixes = {
     "unit/status/preview/advanced/current",
@@ -284,7 +291,8 @@ for _, pageKey in ipairs({ "uf_focustarget", "uf_pet", "uf_targettarget" }) do
 end
 
 local modes = Schema.ListModes({ contextId = "MAGE-62" })
-Check(#modes == 45, "reviewed test/preview mode count")
+-- Beta 36 adds the unit and group dispel-overlay preview toggles as modes.
+Check(#modes == 47, "reviewed test/preview mode count")
 local seenModes, actionRuns, controlNavigations = {}, 0, 0
 local originalActionRuns = {}
 for i = 1, #modes do
@@ -323,7 +331,7 @@ for i = 1, #modes do
             "explicit action-mode navigation reported execution for " .. tostring(mode.actionKey))
     end
 end
-Check(controlNavigations == 33 and actionRuns == 0, "reviewed mode navigation totals")
+Check(controlNavigations == 35 and actionRuns == 0, "reviewed mode navigation totals")
 
 for action, run in pairs(originalActionRuns) do action.run = run end
 Menu.OpenExactSettingControl = originalOpenSetting
