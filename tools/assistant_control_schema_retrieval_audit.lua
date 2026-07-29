@@ -27,8 +27,8 @@ local Data = assert(Assistant.ControlSchemaData, "generated control schema data 
 Check(Data.version == 3, "reviewed schema version")
 Check(#(Data.contexts or {}) == 40, "reviewed 40 class/spec contexts")
 Check(#(Data.collectionStates or {}) == 150, "reviewed 150-state finite UI matrix")
-Check(Data.collectionUnionControls == 2423 and #(Data.records or {}) == 2423,
-    "reviewed 2423-control exhaustive union")
+Check(Data.collectionUnionControls == 2450 and #(Data.records or {}) == 2450,
+    "reviewed 2450-control exhaustive union")
 
 local columns, contextIds, stateCounts = {}, {}, {}
 for i = 1, #Data.columns do columns[Data.columns[i]] = i end
@@ -188,7 +188,12 @@ end
 -- workspace adds one collision group and 21 rows shared with Unit portraits,
 -- then loses two rows when its border Color and Opacity move to the Colors
 -- shortcut.
-Check(collisionGroups == 297 and collisionRows == 1834 and maxCollision == 32,
+-- Beta 38: +5 groups and +16 rows for the two Dispel Symbol sections. They are
+-- deliberate mirrors of each other, so labels like "Symbol set", "Symbol size"
+-- and "Preview symbol (drag to place)" appear once per scope; the rest join
+-- label groups the existing Offset/Grow/Effect Layer controls already had. The
+-- deepest collision is unchanged.
+Check(collisionGroups == 302 and collisionRows == 1850 and maxCollision == 32,
     string.format("reviewed label-collision inventory drift: groups=%d rows=%d max=%d",
         collisionGroups, collisionRows, maxCollision))
 
@@ -274,6 +279,11 @@ local expectedModes = {
     -- never persisted and drop themselves when their page closes.
     ["control:gf_bars/group/bars/field/dispeloverlaypreview@gf_bars/group/bars/field/dispeloverlaypreview"] = true,
     ["control:opt_bars/opt/bars/global/unit/dispel/overlay/preview@opt_bars/opt/bars/global/unit/dispel/overlay/preview"] = true,
+    -- Beta 38 dispel-symbol preview toggles: same contract as the overlay pair
+    -- above -- ephemeral stand-in art, never persisted, dropped when their page
+    -- closes. These two are also the drag surface for symbol placement.
+    ["control:gf_bars/group/bars/field/dispelsymbolpreview@gf_bars/group/bars/field/dispelsymbolpreview"] = true,
+    ["control:opt_bars/opt/bars/global/unit/dispel/symbol/preview@opt_bars/opt/bars/global/unit/dispel/symbol/preview"] = true,
 }
 local unitModeSuffixes = {
     "unit/status/preview/advanced/current",
@@ -296,8 +306,9 @@ for _, pageKey in ipairs({ "uf_focustarget", "uf_pet", "uf_targettarget" }) do
 end
 
 local modes = Schema.ListModes({ contextId = "MAGE-62" })
--- Beta 36 adds the unit and group dispel-overlay preview toggles as modes.
-Check(#modes == 47, "reviewed test/preview mode count")
+-- Beta 38 adds the unit and group dispel-SYMBOL preview toggles as modes, on
+-- top of the Beta 36 dispel-overlay pair.
+Check(#modes == 49, "reviewed test/preview mode count")
 local seenModes, actionRuns, controlNavigations = {}, 0, 0
 local originalActionRuns = {}
 for i = 1, #modes do
@@ -336,7 +347,9 @@ for i = 1, #modes do
             "explicit action-mode navigation reported execution for " .. tostring(mode.actionKey))
     end
 end
-Check(controlNavigations == 35 and actionRuns == 0, "reviewed mode navigation totals")
+-- Beta 38: 35 -> 37 control navigations for the two dispel-symbol preview
+-- toggles. Action modes are still never executed by navigation.
+Check(controlNavigations == 37 and actionRuns == 0, "reviewed mode navigation totals")
 
 for action, run in pairs(originalActionRuns) do action.run = run end
 Menu.OpenExactSettingControl = originalOpenSetting
