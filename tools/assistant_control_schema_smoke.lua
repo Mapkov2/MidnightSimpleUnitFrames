@@ -66,14 +66,14 @@ for i = 1, #(Data.collectionStates or {}) do
     stateOrder[stateId] = i
 end
 Check(#(Data.collectionStates or {}) == #expectedStateIds, "complete 150-state inventory")
--- Beta 38: +27 for the Dispel Symbol sections -- the UnitFrame one on Global
--- Style > Bars (eleven settings plus its drag preview) and the group one on
--- Group Frames (twelve settings plus its drag preview), each with its section
--- and card entry. Nothing dropped out.
-Check(collectionStates.base == 1666, "reviewed complete-catalog baseline")
--- The union moves by the same +27: the Dispel Symbol sections are scope
+-- Beta 38: +29 for the Dispel Symbol sections -- the UnitFrame one on Global
+-- Style > Bars and the group one on Group Frames, thirteen and twelve settings
+-- respectively, each plus its drag preview, section and card entry. Nothing
+-- dropped out.
+Check(collectionStates.base == 1668, "reviewed complete-catalog baseline")
+-- The union moves by the same +29: the Dispel Symbol sections are scope
 -- controls, so no context or finite state adds or removes any of them.
-Check(Data.collectionUnionControls == 2450 and #Data.records == Data.collectionUnionControls,
+Check(Data.collectionUnionControls == 2452 and #Data.records == Data.collectionUnionControls,
     "reviewed exhaustive finite-state control union")
 for i = 1, #Data.columns do columns[Data.columns[i]] = i end
 for _, column in ipairs({ "actionFixedArgs", "actionInputArg", "actionInputKind", "actionInputDomain",
@@ -174,7 +174,7 @@ Check(FunctionFree(Data), "generated schema data must remain function-free")
 local before = Schema.Stats()
 Check(before.version == 3, "schema version must be 3")
 Check(before.contexts == 40, "all 40 class/spec contexts must be present")
-Check(before.records == 2450, "public control inventory must equal the reviewed exhaustive finite-state union")
+Check(before.records == 2452, "public control inventory must equal the reviewed exhaustive finite-state union")
 Check(before.indexed == false, "schema index must remain lazy")
 
 local coldStart = os.clock()

@@ -10,7 +10,7 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local Search = M.Search or {}
 M.Search = Search
-Search.StaticIndexRecordCount = 2422
+Search.StaticIndexRecordCount = 2424
 Search.StaticIndexBlob = [==[
 auras3_buffs	Anchor	dropdown			Style > Buff	anchor	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Elane%2Ebuff%2Eauras3-cooldown-anchor	anchor style buff auras style lane buff auras3 cooldown anchor auras3 buffs dropdown
 auras3_buffs	Anchor	dropdown			Style > Buff	anchor	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Elane%2Ebuff%2Estack-anchor	anchor style buff auras style lane buff stack anchor auras3 buffs dropdown
@@ -802,6 +802,7 @@ menu_chrome	Undo	button		menu_history_undo	Menu Chrome	undo	idmenu_chromemenu2
 modules	MSUF Style	toggle	general.styleEnabled		Advanced > Style	msuf style	idmodulesmenu2%2Emodules%2Eadvanced%2Estyle%2Eenabled	msuf style advanced style modules advanced style enabled modules toggle general styleenabled
 opt_bars	All roles	dropdown			Highlight > Aggro	all roles	idopt_barsmenu2%2Eopt%2Ebars%2Eglobal%2Ehighlight%2Eaggro%2Eroles	all roles highlight aggro opt bars global highlight aggro roles opt bars dropdown
 opt_bars	Any dispel type	dropdown			Highlight > Dispel	any dispel type	idopt_barsmenu2%2Eopt%2Ebars%2Eglobal%2Ehighlight%2Edispel%2Etrigger	any dispel type highlight dispel opt bars global highlight dispel trigger opt bars dropdown
+opt_bars	Automatic	dropdown			Dispel > Symbol	automatic	idopt_barsmenu2%2Eopt%2Ebars%2Eglobal%2Eunit%2Edispel%2Esymbol%2Eunit%2Edispel%2Esymbol%2Estrata	automatic dispel symbol opt bars global unit dispel symbol unit dispel symbol strata opt bars dropdown
 opt_bars	Background opacity	slider			Health > Background	background opacity	idopt_barsmenu2%2Eopt%2Ebars%2Eglobal%2Etemp%2Emax%2Ehealth%2Ebackground%2Eopacity	background opacity health background opt bars global temp max health background opacity opt bars slider
 opt_bars	Bar height (0 = full)	slider			Absorb > Negative	bar height 0 full	idopt_barsmenu2%2Eopt%2Ebars%2Eglobal%2Eabsorb%2Enegative%2Eheight	bar height 0 full absorb negative opt bars global absorb negative height opt bars slider
 opt_bars	Bar height (0 = full)	slider			Absorb > Positive	bar height 0 full	idopt_barsmenu2%2Eopt%2Ebars%2Eglobal%2Eabsorb%2Epositive%2Eheight	bar height 0 full absorb positive opt bars global absorb positive height opt bars slider
@@ -809,6 +810,7 @@ opt_bars	Bar height (0 = full)	slider			Heal > Prediction	bar height 0 full	ido
 opt_bars	Bar outline thickness	slider			Global > Outline	bar outline thickness	idopt_barsmenu2%2Eopt%2Ebars%2Eglobal%2Eoutline%2Ethickness	bar outline thickness global outline opt bars global outline thickness opt bars slider
 opt_bars	Blizzard symbol	dropdown			Dispel > Symbol	blizzard symbol	idopt_barsmenu2%2Eopt%2Ebars%2Eglobal%2Eunit%2Edispel%2Esymbol%2Eunit%2Edispel%2Esymbol%2Estyle	blizzard symbol dispel symbol opt bars global unit dispel symbol unit dispel symbol style opt bars dropdown
 opt_bars	Custom highlight priority	toggle			Highlight > Priority	custom highlight priority	idopt_barsmenu2%2Eopt%2Ebars%2Eglobal%2Ehighlight%2Epriority%2Eenabled	custom highlight priority highlight priority opt bars global highlight priority enabled opt bars toggle
+opt_bars	Effect Layer (0-30)	slider			Dispel > Symbol	effect layer 0 30	idopt_barsmenu2%2Eopt%2Ebars%2Eglobal%2Eunit%2Edispel%2Esymbol%2Eunit%2Edispel%2Esymbol%2Elayer	effect layer 0 30 dispel symbol opt bars global unit dispel symbol unit dispel symbol layer opt bars slider
 opt_bars	Follow HP bar	dropdown			Absorb > Negative	follow hp bar	idopt_barsmenu2%2Eopt%2Ebars%2Eglobal%2Eabsorb%2Enegative%2Eanchor	follow hp bar absorb negative opt bars global absorb negative anchor opt bars dropdown
 opt_bars	Follow HP bar	dropdown			Heal > Prediction	follow hp bar	idopt_barsmenu2%2Eopt%2Ebars%2Eglobal%2Eabsorb%2Eheal%2Eprediction%2Eanchor	follow hp bar heal prediction opt bars global absorb heal prediction anchor opt bars dropdown
 opt_bars	Frame Outline Color	color			Global > Outline	frame outline color	idopt_barsmenu2%2Eopt%2Ebars%2Eglobal%2Eoutline%2Ecolor	frame outline color global outline opt bars global outline color opt bars color

@@ -43,6 +43,8 @@ local UNIT_DISPEL_SYMBOL_STYLES = VT(
     "MSUF_MINIMAL", "MSUF Minimal")
 local UNIT_DISPEL_SYMBOL_MODES = VT("TOP", "Highest priority only", "ALL", "One per dispel type")
 local UNIT_DISPEL_SYMBOL_GROWTH = VT("RIGHT", "Right", "LEFT", "Left", "UP", "Up", "DOWN", "Down")
+local UNIT_DISPEL_SYMBOL_STRATA = VT("AUTO", "Automatic", "BACKGROUND", "Background", "LOW", "Low",
+    "MEDIUM", "Medium", "HIGH", "High", "DIALOG", "Dialog")
 local UNIT_DISPEL_SYMBOL_ANCHORS = VT("TOPLEFT", "Top Left", "TOP", "Top", "TOPRIGHT", "Top Right",
     "LEFT", "Left", "CENTER", "Center", "RIGHT", "Right",
     "BOTTOMLEFT", "Bottom Left", "BOTTOM", "Bottom", "BOTTOMRIGHT", "Bottom Right")
@@ -132,6 +134,8 @@ local BAR_DYNAMIC_SETTING_KEYS_BY_PATH = {
     ["unit_dispel_symbol.unitDispelSymbolGrowth"] = { "general.unitDispelSymbolGrowth" },
     ["unit_dispel_symbol.unitDispelSymbolSpacing"] = { "general.unitDispelSymbolSpacing" },
     ["unit_dispel_symbol.unitDispelSymbolAlpha"] = { "general.unitDispelSymbolAlpha" },
+    ["unit_dispel_symbol.unitDispelSymbolLayer"] = { "general.unitDispelSymbolLayer" },
+    ["unit_dispel_symbol.unitDispelSymbolStrata"] = { "general.unitDispelSymbolStrata" },
     ["power.smooth_fill"] = { "bars.smoothPowerBar" },
 }
 local BAR_DYNAMIC_SETTING_SUFFIX_BY_PATH = {
@@ -203,6 +207,8 @@ local BAR_DYNAMIC_SETTING_SUFFIX_BY_PATH = {
     ["unit_dispel_symbol.unitDispelSymbolGrowth"] = "unitDispelSymbolGrowth",
     ["unit_dispel_symbol.unitDispelSymbolSpacing"] = "unitDispelSymbolSpacing",
     ["unit_dispel_symbol.unitDispelSymbolAlpha"] = "unitDispelSymbolAlpha",
+    ["unit_dispel_symbol.unitDispelSymbolLayer"] = "unitDispelSymbolLayer",
+    ["unit_dispel_symbol.unitDispelSymbolStrata"] = "unitDispelSymbolStrata",
 }
 local BAR_DYNAMIC_SETTING_PATTERNS_BY_PATH = {
     ["absorb.positive.enabled"] = {
@@ -2027,13 +2033,13 @@ local function BuildUnitDispelSymbolSection(ctx, b)
     local probeW = min(900, max(320, (ctx.width or 720) - 40))
     local wide = probeW >= 760
     local section = b:CollapsibleSection("bars_unit_dispel_symbol", "UnitFrame Dispel Symbol",
-        wide and 424 or 534, false)
+        wide and 520 or 630, false)
     local sectionW = section._msuf2Width or ctx.width or 720
     local cardW = min(900, max(320, sectionW - 40))
     wide = cardW >= 760
     local card = W.ControlCard(section, "Symbol & Placement",
         "Shows a symbol naming the dispel type of an active debuff.",
-        20, -38, cardW, wide and 360 or 470)
+        20, -38, cardW, wide and 456 or 566)
     local Sync = M.RefreshProxy()
     local fieldW = min(280, cardW - 32)
     local sliderW = min(360, cardW - 72)
@@ -2092,9 +2098,13 @@ local function BuildUnitDispelSymbolSection(ctx, b)
         "MSUF2_UF_DISPEL_SYMBOL_SPACING", rightX, wide and -270 or -462)
     local alphaSlider = BindSlider("Symbol opacity", "unitDispelSymbolAlpha", 1, 0.05, 1, 0.05,
         "MSUF2_UF_DISPEL_SYMBOL_ALPHA", rightX, wide and -318 or -510)
+    local layerSlider = BindSlider("Effect Layer (0-30)", "unitDispelSymbolLayer", 8, 0, 30, 1,
+        "MSUF2_UF_DISPEL_SYMBOL_LAYER", rightX, wide and -366 or -558)
+    local strataDrop = BindDropdown("Symbol strata", UNIT_DISPEL_SYMBOL_STRATA, "unitDispelSymbolStrata",
+        "AUTO", "MSUF2_UF_DISPEL_SYMBOL_STRATA", rightX, wide and -414 or -606)
     -- Ephemeral, exactly like the overlay preview: never written to the DB, and
     -- it doubles as the drag surface for Offset X/Y.
-    local preview = W.ToggleAt(card, "Preview symbol (drag to place)", rightX, wide and -62 or -558, sliderW)
+    local preview = W.ToggleAt(card, "Preview symbol (drag to place)", rightX, wide and -62 or -654, sliderW)
     M.BindBoolWidget(ctx, preview,
         function() return _G.MSUF_DispelSymbolPreviewMode == true end,
         function(value)
@@ -2124,12 +2134,12 @@ local function BuildUnitDispelSymbolSection(ctx, b)
         end)
     end
     local controls = { styleDrop, modeDrop, triggerDrop, anchorDrop, sizeSlider, offsetXSlider,
-        offsetYSlider, alphaSlider, preview }
+        offsetYSlider, alphaSlider, layerSlider, strataDrop, preview }
     local allModeControls = { growthDrop, spacingSlider }
     local groupHint = W.Text(card, "Group frame scopes use Group Frames > Dispel Symbol.",
-        16, wide and -414 or -606, cardW - 32, T.colors.muted)
+        16, wide and -462 or -702, cardW - 32, T.colors.muted)
     local auraHint = W.Text(card, UNITFRAME_DISPEL_AURA_WARNING,
-        16, wide and -414 or -606, cardW - 32, UNITFRAME_DISPEL_AURA_WARNING_COLOR)
+        16, wide and -462 or -702, cardW - 32, UNITFRAME_DISPEL_AURA_WARNING_COLOR)
     if groupHint.SetWordWrap then groupHint:SetWordWrap(true) end
     if auraHint.SetWordWrap then auraHint:SetWordWrap(true) end
     M.TrackRefresh(ctx, Sync(function()
@@ -2216,7 +2226,7 @@ local GLOBAL_BARS_LAZY_SECTION_SPECS = {
         title = "UnitFrame Dispel Symbol",
         height = function(lazyCtx)
             local width = min(900, max(320, ((lazyCtx and lazyCtx.width) or 720) - 40))
-            return width >= 760 and 424 or 534
+            return width >= 760 and 520 or 630
         end,
         build = BuildUnitDispelSymbolSection,
     },
