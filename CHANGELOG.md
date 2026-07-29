@@ -1,5 +1,24 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-Beta37 - 2026-07-29
+
+### Highlights
+
+- Party group frames gained a Portrait, matching the unit frame version: left/right position, 2D or class art, attached/detached/overlay placement, square/circle/rounded/diamond shapes with flat or relief borders, background tint, and an optional cast-spell-icon overlay. Draggable in the group preview and Assistant-settable ("party portrait", "portrait shape"); Raid and Mythic Raid don't get it.
+
+### Changes
+
+- Role, leader and assist group icons now pick their style per-indicator in Group Frames > Indicators, replacing the old scope-wide "Default role icon style" + "Use Midnight Style" toggle. Midnight art is now its own dropdown entry ("UX Pro (Midnight)") instead of a separate checkbox. Old profiles keep resolving through the previous scope-wide setting until an indicator is given its own style.
+- Edit Mode toolbar controls now tint their label on hover instead of just the surrounding pill, matching the page navigation rail.
+
+### Fixes & Performance
+
+- Fixed the options keybind loading the addon and building the whole options window in the same frame on the first open each session, which could hitch the game. Loading and window construction are now split across two frames; pressing the key again while that's pending is ignored.
+- Fixed Edit Mode drags/resizes occasionally snapping a frame back to its old position or size - the single-frame refresh after a drag could still read a stale compiled spec. The spec is refreshed before applying now.
+- Fixed the Player frame offering a "Dots on target" aura container: it tracks DoTs on your current target, which never made sense on your own frame. Removed from Player's Aura Style page, workspace tabs, Edit Mode, preview, and Layer Overview; Target, Focus and Boss keep it.
+- Fixed toolbar buttons that carry both a tooltip and hover styling (Groups, Exit, Discard All, the frame inspector selector) losing their hover highlight - the tooltip handler was overwriting the button's own hover handlers instead of layering on top.
+- Fixed group frame resource bar text being unable to set its own color mode - the Global Fonts Power Text Color control and the quick text-settings Color Mode row were both hard-disabled for group scopes.
+
 ## 6.0-Beta36 - 2026-07-29
 
 ### Highlights

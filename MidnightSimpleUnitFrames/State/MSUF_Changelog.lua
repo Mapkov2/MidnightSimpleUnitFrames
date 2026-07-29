@@ -8,10 +8,39 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-Beta36",
-    previousVersion = "6.0-Beta35",
-    rangeLabel = "6.0-Beta35 -> 6.0-Beta36",
+    currentVersion = "6.0-Beta37",
+    previousVersion = "6.0-Beta36",
+    rangeLabel = "6.0-Beta36 -> 6.0-Beta37",
     entries = {
+        {
+            version = "6.0-Beta37",
+            date = "2026-07-29",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Party group frames gained a Portrait, matching the unit frame version: left/right position, 2D or class art, attached/detached/overlay placement, square/circle/rounded/diamond shapes with flat or relief borders, background tint, and an optional cast-spell-icon overlay. Draggable in the group preview and Assistant-settable (\"party portrait\", \"portrait shape\"); Raid and Mythic Raid don't get it.",
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Role, leader and assist group icons now pick their style per-indicator in Group Frames > Indicators, replacing the old scope-wide \"Default role icon style\" + \"Use Midnight Style\" toggle. Midnight art is now its own dropdown entry (\"UX Pro (Midnight)\") instead of a separate checkbox. Old profiles keep resolving through the previous scope-wide setting until an indicator is given its own style.",
+                        "Edit Mode toolbar controls now tint their label on hover instead of just the surrounding pill, matching the page navigation rail.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Fixed the options keybind loading the addon and building the whole options window in the same frame on the first open each session, which could hitch the game. Loading and window construction are now split across two frames; pressing the key again while that's pending is ignored.",
+                        "Fixed Edit Mode drags/resizes occasionally snapping a frame back to its old position or size - the single-frame refresh after a drag could still read a stale compiled spec. The spec is refreshed before applying now.",
+                        "Fixed the Player frame offering a \"Dots on target\" aura container: it tracks DoTs on your current target, which never made sense on your own frame. Removed from Player's Aura Style page, workspace tabs, Edit Mode, preview, and Layer Overview; Target, Focus and Boss keep it.",
+                        "Fixed toolbar buttons that carry both a tooltip and hover styling (Groups, Exit, Discard All, the frame inspector selector) losing their hover highlight - the tooltip handler was overwriting the button's own hover handlers instead of layering on top.",
+                        "Fixed group frame resource bar text being unable to set its own color mode - the Global Fonts Power Text Color control and the quick text-settings Color Mode row were both hard-disabled for group scopes.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-Beta36",
             date = "2026-07-29",
@@ -102,37 +131,6 @@ local data = {
                         "Fixed the aura icon border and drop shadow never showing up in any preview. The Icon Border & Shadow settings reached real frames, but none of the preview surfaces drew them - not the Sample and Live preview on the Auras page, not the unit frame preview in the options window, and not the Edit Mode aura lanes - so there was no way to judge a border style without closing the menu and looking at the frames. All three now draw through the same renderer the live buttons use, including the per-scope opt-out and the lane padding, which the previews had been ignoring as well.",
                         "Fixed the Auras page preview not reacting to an icon border or shadow change. The preview repainted before the queued aura update had run and re-read the previous configuration, so it kept showing the old style until some unrelated interaction happened to refresh it - the reason the frames updated but the preview did not.",
                         "Fixed the \"Preview as\" row and the Sample/Live switch on the Auras page showing no selection at all. Both were built from the plain action button, which draws its selected state exactly like its unselected one, and the selection was never re-stamped on click because switching tabs repaints the preview without rebuilding the page.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-Beta33",
-            date = "2026-07-27",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "The MSUF Assistant can now change close to two hundred settings it used to refuse. A setting stayed read-only whenever nothing proved which values it accepts, so ordinary requests like \"set target absorb bar height to 6\" were declined even though the slider for exactly that sits in the options window. Those ranges are now taken from the control that owns them: 112 settings gained the range of their menu slider, another 76 gained the closed list of choices their dropdown offers, and texture and portrait-pack fields are checked against the media you actually have installed instead of a fixed list. Anything without that evidence stays read-only, and a build check re-reads the options source, so the range the Assistant writes can never drift away from the slider you see.",
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "\"Show cast spell icon in portrait\" now also sits on the Cast Bars section's Icon tab, in its own \"Portrait Cast Icon\" card. It is the same setting as the one under Portrait > More Options and either one updates the other; it is there because that is where it gets looked for. It still needs the portrait enabled, and it works with both castbar providers.",
-                        "The Cooldown Manager and global anchor buttons are no longer limited to the advanced Edit Mode layout. They were built only for that layout, so the standard toolbar had no way to reach either one; the toolbar is a little wider now to hold them.",
-                        "The Assistant no longer offers a dozen fields that were never controls: legacy mirrors of the health and power text slot modes, of the group aggro border and the highlight priority toggle, the tooltip style derived from the anchor dropdown, and interface state the options window keeps for itself, such as its own size and the dashboard's tip counter. Each of them was answered as if it were a setting, so \"set the window width\" could land on the options panel instead of a frame.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed AFK and DND text never appearing on anything but the player frame. The client does not report another unit's away toggle through the event MSUF was listening to, so a target or party member going AFK changed nothing until something unrelated happened to refresh the frame. Frames that show AFK or DND now listen for the event that actually carries it, filtered to their own unit.",
-                        "Fixed AFK, DND, dead and ghost text falling back to the base position and size after a refresh that did not come from a flag change - a font change, a PvP context change, or a group reseed. The placement that belongs to the shown state is now applied at the same moment the rest of the text is.",
-                        "Fixed the aura \"Decimals below sec\" sliders reading back the global value in the options window. The per-unit value is stored in the shared layout, and the menu stopped looking before it got there, so the slider could show something other than what the frame was using.",
-                        "Fixed the Assistant losing the subject of a help answer on /reload. \"Where is it\" or \"explain that simpler\" then resolved against the last setting you changed instead, so you could ask about range fade, reload, ask where it is, and be handed the menu location of an unrelated control. The subject now survives a reload and a logout, and starting a new topic retires it.",
-                        "Fixed the Assistant asking a question it could not accept an answer to. When a request matched several controls it listed them numbered, but replying \"2\" fell through to \"I'm not sure which MSUF request you mean yet\". A numbered reply now works in that list, entries sharing a name carry the page that tells them apart, and where no list can be offered the answer says so and suggests a phrasing that names one control.",
-                        "Fixed color requests being refused for colors whose setting name does not contain the word \"color\". Castbar text, the unified bar, the class resource ramp, the group frame font and the targeted-spells text were each published as three unrelated numbers, so asking for one of them got a \"no reviewed range\" refusal instead of a pointer to the color picker. A color is now recognised from its red, green and blue parts existing together, which no naming convention can defeat.",
                     },
                 },
             },
