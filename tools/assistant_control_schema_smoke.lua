@@ -66,16 +66,14 @@ for i = 1, #(Data.collectionStates or {}) do
     stateOrder[stateId] = i
 end
 Check(#(Data.collectionStates or {}) == #expectedStateIds, "complete 150-state inventory")
--- Beta 36: +13 controls from the group Resource Bar parity cards, the group
--- number style dropdown, the offline-fade toggle and the two dispel-overlay
--- preview toggles.
--- +30 controls for the Party-only Group Portrait workspace, then -2 when its
--- border Color and Opacity rows moved to the card's Colors shortcut.
-Check(collectionStates.base == 1639, "reviewed complete-catalog baseline")
--- -6 against Beta 36: the player frame no longer offers the Dots on target
--- container, so its six player-only custom4 workspace controls are gone; -2
--- more for the group portrait border color rows the Colors shortcut now owns.
-Check(Data.collectionUnionControls == 2423 and #Data.records == Data.collectionUnionControls,
+-- Beta 38: +27 for the Dispel Symbol sections -- the UnitFrame one on Global
+-- Style > Bars (eleven settings plus its drag preview) and the group one on
+-- Group Frames (twelve settings plus its drag preview), each with its section
+-- and card entry. Nothing dropped out.
+Check(collectionStates.base == 1666, "reviewed complete-catalog baseline")
+-- The union moves by the same +27: the Dispel Symbol sections are scope
+-- controls, so no context or finite state adds or removes any of them.
+Check(Data.collectionUnionControls == 2450 and #Data.records == Data.collectionUnionControls,
     "reviewed exhaustive finite-state control union")
 for i = 1, #Data.columns do columns[Data.columns[i]] = i end
 for _, column in ipairs({ "actionFixedArgs", "actionInputArg", "actionInputKind", "actionInputDomain",
