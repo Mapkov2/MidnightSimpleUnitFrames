@@ -4070,3 +4070,13 @@ L["One color per resource type, shared with every frame."] = "每種資源類型
 --- Dispel overlay preview toggle (6.0)
 L["Preview overlay"] = "預覽疊加"
 L["Paints a stand-in tint so the overlay can be judged without a real dispellable debuff. Turns itself off when this page closes."] = "繪製範例著色，無需真實的可驅散減益即可檢視疊加效果。關閉本頁面時自動關閉。"
+
+--- Dispel-type symbol indicator (6.0)
+L["Dispel Symbol"] = "驅散符號"
+L["UnitFrame Dispel Symbol"] = "單位框架驅散符號"
+L["Symbol & Placement"] = "符號與位置"
+L["Symbol detects"] = "符號偵測"
+L["Preview symbol"] = "預覽符號"
+L["Preview symbol (drag to place)"] = "預覽符號（拖曳以放置）"
+L["Shows stand-in symbols so placement can be judged without a real debuff, and lets you drag them into position. Turns itself off when this page closes."] = "顯示佔位符號，讓你不需真實減益也能判斷位置，並可拖曳到合適的地方。關閉此頁面時會自動關閉。"
+L["Group frame scopes use Group Frames > Dispel Symbol."] = "團隊框架範圍請使用 團隊框架 > 驅散符號。"

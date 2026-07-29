@@ -4026,3 +4026,13 @@ L["One color per resource type, shared with every frame."] = "자원 종류별�
 --- Dispel overlay preview toggle (6.0)
 L["Preview overlay"] = "오버레이 미리보기"
 L["Paints a stand-in tint so the overlay can be judged without a real dispellable debuff. Turns itself off when this page closes."] = "실제 해제 가능한 약화 효과 없이도 오버레이를 확인할 수 있도록 예시 색조를 표시합니다. 이 페이지를 닫으면 자동으로 꺼집니다."
+
+--- Dispel-type symbol indicator (6.0)
+L["Dispel Symbol"] = "해제 표시"
+L["UnitFrame Dispel Symbol"] = "유닛 프레임 해제 표시"
+L["Symbol & Placement"] = "표시 및 배치"
+L["Symbol detects"] = "표시 감지 대상"
+L["Preview symbol"] = "표시 미리보기"
+L["Preview symbol (drag to place)"] = "표시 미리보기 (끌어서 배치)"
+L["Shows stand-in symbols so placement can be judged without a real debuff, and lets you drag them into position. Turns itself off when this page closes."] = "실제 약화 효과 없이도 배치를 확인할 수 있도록 예시 표시를 보여주고, 끌어서 원하는 위치에 놓을 수 있습니다. 이 페이지를 닫으면 자동으로 꺼집니다."
+L["Group frame scopes use Group Frames > Dispel Symbol."] = "공대 프레임 범위는 공대 프레임 > 해제 표시를 사용합니다."

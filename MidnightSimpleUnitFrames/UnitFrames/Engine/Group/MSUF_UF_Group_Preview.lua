@@ -829,6 +829,10 @@ local function ApplyPreviewFrame(kind, index, reason, layout, w, h, spacing, gro
     and type(_G.MSUF_ApplyDispelOverlayPreviewToFrame) == "function" then
     _G.MSUF_ApplyDispelOverlayPreviewToFrame(frame)
   end
+  if _G.MSUF_DispelSymbolPreviewMode == true
+    and type(_G.MSUF_ApplyDispelSymbolPreviewToFrame) == "function" then
+    _G.MSUF_ApplyDispelSymbolPreviewToFrame(frame)
+  end
   return true
 end
 

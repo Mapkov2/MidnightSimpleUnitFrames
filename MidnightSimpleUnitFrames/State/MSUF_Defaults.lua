@@ -2050,6 +2050,20 @@ end
     if g.unitDispelOverlayOnHealth == nil then g.unitDispelOverlayOnHealth = true end
     if g.unitDispelOverlayAlpha == nil then g.unitDispelOverlayAlpha = 0.35 end
     if g.unitDispelOverlayTrigger == nil then g.unitDispelOverlayTrigger = "BORDER" end
+    --- UnitFrame dispel-type symbol (placed icon naming the debuff type)
+    if g.unitDispelSymbolEnabled == nil then g.unitDispelSymbolEnabled = false end
+    if g.unitDispelSymbolStyle == nil then g.unitDispelSymbolStyle = "BLIZZARD" end
+    if g.unitDispelSymbolMode == nil then g.unitDispelSymbolMode = "TOP" end
+    if g.unitDispelSymbolTrigger == nil then g.unitDispelSymbolTrigger = "BORDER" end
+    if g.unitDispelSymbolSize == nil then g.unitDispelSymbolSize = 14 end
+    if g.unitDispelSymbolSpacing == nil then g.unitDispelSymbolSpacing = 2 end
+    if g.unitDispelSymbolGrowth == nil then g.unitDispelSymbolGrowth = "RIGHT" end
+    if g.unitDispelSymbolAnchor == nil then g.unitDispelSymbolAnchor = "TOPRIGHT" end
+    if g.unitDispelSymbolX == nil then g.unitDispelSymbolX = 0 end
+    if g.unitDispelSymbolY == nil then g.unitDispelSymbolY = 0 end
+    if g.unitDispelSymbolAlpha == nil then g.unitDispelSymbolAlpha = 1 end
+    if g.unitDispelSymbolLayer == nil then g.unitDispelSymbolLayer = 8 end
+    if g.unitDispelSymbolStrata == nil then g.unitDispelSymbolStrata = "AUTO" end
     local si = g.statusIndicators
     if si.showAFK == nil then si.showAFK = false end
     if si.showDND == nil then si.showDND = false end

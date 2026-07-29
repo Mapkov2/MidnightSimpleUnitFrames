@@ -130,6 +130,7 @@ $tests = @(
     ".github/scripts/tests/health_ai_color_hotpath_smoke.lua",
     ".github/scripts/tests/identity_payload_hotpath_smoke.lua",
     ".github/scripts/tests/dispel_overlay_preview_smoke.lua",
+    ".github/scripts/tests/dispel_symbol_indicator_smoke.lua",
     ".github/scripts/tests/layer_contract_smoke.lua",
     ".github/scripts/tests/layer_strata_runtime_smoke.lua",
     ".github/scripts/tests/late_anchor_retry_smoke.lua",

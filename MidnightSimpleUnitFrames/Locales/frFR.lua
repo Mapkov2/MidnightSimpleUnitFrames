@@ -4450,3 +4450,13 @@ L["One color per resource type, shared with every frame."] = "Une couleur par ty
 --- Dispel overlay preview toggle (6.0)
 L["Preview overlay"] = "Aperçu de la superposition"
 L["Paints a stand-in tint so the overlay can be judged without a real dispellable debuff. Turns itself off when this page closes."] = "Applique une teinte de démonstration pour juger la superposition sans véritable affaiblissement dissipable. Se désactive à la fermeture de cette page."
+
+--- Dispel-type symbol indicator (6.0)
+L["Dispel Symbol"] = "Symbole de dissipation"
+L["UnitFrame Dispel Symbol"] = "Symbole de dissipation du cadre d'unité"
+L["Symbol & Placement"] = "Symbole et placement"
+L["Symbol detects"] = "Le symbole détecte"
+L["Preview symbol"] = "Aperçu du symbole"
+L["Preview symbol (drag to place)"] = "Aperçu du symbole (glisser pour placer)"
+L["Shows stand-in symbols so placement can be judged without a real debuff, and lets you drag them into position. Turns itself off when this page closes."] = "Affiche des symboles de substitution afin de juger le placement sans véritable affaiblissement, et permet de les faire glisser en position. S'éteint à la fermeture de cette page."
+L["Group frame scopes use Group Frames > Dispel Symbol."] = "Les portées de cadres de groupe utilisent Cadres de groupe > Symbole de dissipation."

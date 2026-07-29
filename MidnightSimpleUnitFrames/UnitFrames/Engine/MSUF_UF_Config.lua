@@ -1973,6 +1973,23 @@ local function CompileUnitDispel(out, conf, general)
   overlay.style = NormalizeDispelOverlayStyle(ScopedValue(conf, general, "unitDispelOverlayStyle", "FULL"))
   overlay.onHealth = ScopedValue(conf, general, "unitDispelOverlayOnHealth", true) ~= false
   overlay.alpha = Clamp01(ScopedValue(conf, general, "unitDispelOverlayAlpha", 0.35), 0.35)
+  -- Dispel-type symbol indicator. Auras3 normalizes/clamps every field, so this
+  -- only has to forward the raw scoped values.
+  local symbol = out.dispelSymbol or {}
+  out.dispelSymbol = symbol
+  symbol.enabled = ScopedValue(conf, general, "unitDispelSymbolEnabled", false) == true
+  symbol.style = ScopedValue(conf, general, "unitDispelSymbolStyle", "BLIZZARD")
+  symbol.mode = ScopedValue(conf, general, "unitDispelSymbolMode", "TOP")
+  symbol.trigger = ScopedValue(conf, general, "unitDispelSymbolTrigger", "BORDER")
+  symbol.size = ScopedValue(conf, general, "unitDispelSymbolSize", 14)
+  symbol.spacing = ScopedValue(conf, general, "unitDispelSymbolSpacing", 2)
+  symbol.growth = ScopedValue(conf, general, "unitDispelSymbolGrowth", "RIGHT")
+  symbol.anchor = ScopedValue(conf, general, "unitDispelSymbolAnchor", "TOPRIGHT")
+  symbol.x = ScopedValue(conf, general, "unitDispelSymbolX", 0)
+  symbol.y = ScopedValue(conf, general, "unitDispelSymbolY", 0)
+  symbol.alpha = Clamp01(ScopedValue(conf, general, "unitDispelSymbolAlpha", 1), 1)
+  symbol.layer = ScopedValue(conf, general, "unitDispelSymbolLayer", 8)
+  symbol.strata = ScopedValue(conf, general, "unitDispelSymbolStrata", "AUTO")
 end
 
 local function CompileUnitBorder(out, conf, general, bars)
@@ -2027,6 +2044,7 @@ local function CompileUnitTail(out, unit, key, conf, general, bars)
   out.auras.enabled = (A3 and A3.UnitFrameAuraEnabled and A3.UnitFrameAuraEnabled(unit) == true)
     or (out.border and out.border.dispel == true)
     or (out.dispelOverlay and out.dispelOverlay.enabled == true)
+    or (out.dispelSymbol and out.dispelSymbol.enabled == true)
     or false
 
   out.castbar = out.castbar or {}

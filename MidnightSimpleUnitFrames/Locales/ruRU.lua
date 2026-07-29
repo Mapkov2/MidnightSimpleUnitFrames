@@ -4066,3 +4066,13 @@ L["One color per resource type, shared with every frame."] = "По одному 
 --- Dispel overlay preview toggle (6.0)
 L["Preview overlay"] = "Предпросмотр наложения"
 L["Paints a stand-in tint so the overlay can be judged without a real dispellable debuff. Turns itself off when this page closes."] = "Накладывает пробную заливку, чтобы оценить наложение без настоящего снимаемого эффекта. Выключается при закрытии этой страницы."
+
+--- Dispel-type symbol indicator (6.0)
+L["Dispel Symbol"] = "Символ рассеивания"
+L["UnitFrame Dispel Symbol"] = "Символ рассеивания рамки юнита"
+L["Symbol & Placement"] = "Символ и размещение"
+L["Symbol detects"] = "Символ определяет"
+L["Preview symbol"] = "Предпросмотр символа"
+L["Preview symbol (drag to place)"] = "Предпросмотр символа (перетащите для размещения)"
+L["Shows stand-in symbols so placement can be judged without a real debuff, and lets you drag them into position. Turns itself off when this page closes."] = "Показывает символы-заполнители, чтобы оценить размещение без реального дебаффа, и позволяет перетащить их на место. Отключается при закрытии этой страницы."
+L["Group frame scopes use Group Frames > Dispel Symbol."] = "Области рамок группы используют Рамки группы > Символ рассеивания."

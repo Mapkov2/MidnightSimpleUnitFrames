@@ -497,6 +497,21 @@ local PARTY_DEFAULTS = {
     dispelOverlayLayer    = 0,        --- additive 0..30 local FrameLevel offset
     dispelOverlayStrata   = "AUTO",
 
+    --- Dispel-type symbol (placed icon that names WHICH debuff type is up)
+    dispelSymbolEnabled   = false,
+    dispelSymbolStyle     = "BLIZZARD", --- BLIZZARD / BLIZZARD_RING / BLIZZARD_BORDER / MSUF_LETTERS / MSUF_SHAPES / MSUF_GLYPHS / MSUF_MINIMAL
+    dispelSymbolMode      = "TOP",      --- TOP = one symbol, ALL = one per type
+    dispelSymbolTrigger   = "BORDER",   --- BORDER / BY_ME / BY_RAID / DISPEL_TYPE / PLAYER_CAST
+    dispelSymbolSize      = 12,
+    dispelSymbolSpacing   = 2,          --- gap between ALL-mode symbols
+    dispelSymbolGrowth    = "RIGHT",    --- RIGHT / LEFT / UP / DOWN
+    dispelSymbolAnchor    = "TOPRIGHT",
+    dispelSymbolX         = 0,
+    dispelSymbolY         = 0,
+    dispelSymbolAlpha     = 1,
+    dispelSymbolLayer     = 8,          --- additive 0..30 local FrameLevel offset
+    dispelSymbolStrata    = "AUTO",
+
     --- Debuff stripe (thin edge indicator for any debuff)
     debuffStripeEnabled   = false,
     debuffStripeEdge      = "BOTTOM", --- BOTTOM / TOP

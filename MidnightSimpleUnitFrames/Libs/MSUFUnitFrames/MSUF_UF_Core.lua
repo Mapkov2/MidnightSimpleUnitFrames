@@ -2780,6 +2780,10 @@ local function ApplyElementSelection(frame, selection, spec, updateReason, selec
     and type(_G.MSUF_ApplyDispelOverlayPreviewToFrame) == "function" then
     _G.MSUF_ApplyDispelOverlayPreviewToFrame(frame)
   end
+  if _G.MSUF_DispelSymbolPreviewMode == true
+    and type(_G.MSUF_ApplyDispelSymbolPreviewToFrame) == "function" then
+    _G.MSUF_ApplyDispelSymbolPreviewToFrame(frame)
+  end
   return true
 end
 

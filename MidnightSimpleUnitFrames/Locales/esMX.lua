@@ -4209,3 +4209,13 @@ L["One color per resource type, shared with every frame."] = "Un color por tipo 
 --- Dispel overlay preview toggle (6.0)
 L["Preview overlay"] = "Vista previa de superposición"
 L["Paints a stand-in tint so the overlay can be judged without a real dispellable debuff. Turns itself off when this page closes."] = "Pinta un tinte de muestra para poder valorar la superposición sin una desventaja disipable real. Se desactiva sola al cerrar esta página."
+
+--- Dispel-type symbol indicator (6.0)
+L["Dispel Symbol"] = "Símbolo de disipación"
+L["UnitFrame Dispel Symbol"] = "Símbolo de disipación del marco de unidad"
+L["Symbol & Placement"] = "Símbolo y colocación"
+L["Symbol detects"] = "El símbolo detecta"
+L["Preview symbol"] = "Vista previa del símbolo"
+L["Preview symbol (drag to place)"] = "Vista previa del símbolo (arrastra para colocar)"
+L["Shows stand-in symbols so placement can be judged without a real debuff, and lets you drag them into position. Turns itself off when this page closes."] = "Muestra símbolos de marcador de posición para poder juzgar la colocación sin un debuff real, y permite arrastrarlos a su sitio. Se desactiva al cerrar esta página."
+L["Group frame scopes use Group Frames > Dispel Symbol."] = "Los ámbitos de marcos de grupo usan Marcos de grupo > Símbolo de disipación."

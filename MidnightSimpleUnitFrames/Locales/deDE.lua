@@ -4414,3 +4414,13 @@ L["One color per resource type, shared with every frame."] = "Eine Farbe pro Res
 --- Dispel overlay preview toggle (6.0)
 L["Preview overlay"] = "Overlay-Vorschau"
 L["Paints a stand-in tint so the overlay can be judged without a real dispellable debuff. Turns itself off when this page closes."] = "Zeichnet eine Platzhalter-Färbung, damit das Overlay ohne echten dispellbaren Debuff beurteilt werden kann. Schaltet sich beim Schließen dieser Seite selbst ab."
+
+--- Dispel-type symbol indicator (6.0)
+L["Dispel Symbol"] = "Dispel-Symbol"
+L["UnitFrame Dispel Symbol"] = "UnitFrame Dispel-Symbol"
+L["Symbol & Placement"] = "Symbol & Platzierung"
+L["Symbol detects"] = "Symbol erkennt"
+L["Preview symbol"] = "Symbol-Vorschau"
+L["Preview symbol (drag to place)"] = "Symbol-Vorschau (zum Platzieren ziehen)"
+L["Shows stand-in symbols so placement can be judged without a real debuff, and lets you drag them into position. Turns itself off when this page closes."] = "Zeigt Platzhalter-Symbole, damit die Platzierung ohne echten Debuff beurteilt werden kann, und lässt sie an die gewünschte Stelle ziehen. Schaltet sich beim Schließen dieser Seite selbst ab."
+L["Group frame scopes use Group Frames > Dispel Symbol."] = "Gruppenrahmen-Bereiche nutzen Gruppenrahmen > Dispel-Symbol."

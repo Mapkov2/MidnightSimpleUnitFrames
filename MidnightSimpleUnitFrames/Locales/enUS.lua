@@ -2810,3 +2810,13 @@ L["One color per resource type, shared with every frame."] = "One color per reso
 --- Dispel overlay preview toggle (6.0)
 L["Preview overlay"] = "Preview overlay"
 L["Paints a stand-in tint so the overlay can be judged without a real dispellable debuff. Turns itself off when this page closes."] = "Paints a stand-in tint so the overlay can be judged without a real dispellable debuff. Turns itself off when this page closes."
+
+--- Dispel-type symbol indicator (6.0)
+L["Dispel Symbol"] = "Dispel Symbol"
+L["UnitFrame Dispel Symbol"] = "UnitFrame Dispel Symbol"
+L["Symbol & Placement"] = "Symbol & Placement"
+L["Symbol detects"] = "Symbol detects"
+L["Preview symbol"] = "Preview symbol"
+L["Preview symbol (drag to place)"] = "Preview symbol (drag to place)"
+L["Shows stand-in symbols so placement can be judged without a real debuff, and lets you drag them into position. Turns itself off when this page closes."] = "Shows stand-in symbols so placement can be judged without a real debuff, and lets you drag them into position. Turns itself off when this page closes."
+L["Group frame scopes use Group Frames > Dispel Symbol."] = "Group frame scopes use Group Frames > Dispel Symbol."

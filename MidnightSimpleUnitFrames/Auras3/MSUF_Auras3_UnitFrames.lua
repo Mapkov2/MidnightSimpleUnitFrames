@@ -65,6 +65,93 @@ local AURA_SENSOR_OVERLAY_OPTIONS = {
     showWhenHelpful = false,
     showWithoutDispelType = true,
 }
+-- Dispel-type SYMBOL sensors. Unlike border/overlay the visible art IS the
+-- dispel type, so these never use PreserveAsset. Seven sets:
+--   BLIZZARD         -> Icon           (stock RaidFrame-Icon-Debuff<Type>)
+--   BLIZZARD_RING    -> BorderWithIcon (stock ring plus its corner symbol)
+--   BLIZZARD_BORDER  -> Border         (stock ring, no symbol)
+--   MSUF_LETTERS/SHAPES/GLYPHS/MINIMAL -> CustomAsset (Media/Icons/DispelTypes)
+-- Blizzard resolves the secret dispelName inside its secure partition in every
+-- case; MSUF only ever hands over a texture and an options table.
+-- showWithoutDispelType stays FALSE here: a symbol for "no type" would be a
+-- blank texture (DEBUFF_DISPLAY_INFO.None has no dispelIconAtlas).
+-- One namespace rather than a few dozen main-chunk locals: this file runs close
+-- to the Lua 5.1 200-local ceiling (see the static-check budget).
+local DS = {
+    types = { "Magic", "Curse", "Disease", "Poison", "Bleed" },
+    -- Blizzard's own per-type atlases, mirroring AuraUtil's DEBUFF_DISPLAY_INFO
+    -- on 12.1. Held literally so the menu preview -- which has no aura and
+    -- therefore never reaches AuraUtil -- can draw exactly the same art.
+    icons = {
+        Magic = "RaidFrame-Icon-DebuffMagic",
+        Curse = "RaidFrame-Icon-DebuffCurse",
+        Disease = "RaidFrame-Icon-DebuffDisease",
+        Poison = "RaidFrame-Icon-DebuffPoison",
+        Bleed = "RaidFrame-Icon-DebuffBleed",
+    },
+    rings = {
+        Magic = "ui-debuff-border-magic-icon",
+        Curse = "ui-debuff-border-curse-icon",
+        Disease = "ui-debuff-border-disease-icon",
+        Poison = "ui-debuff-border-poison-icon",
+        Bleed = "ui-debuff-border-bleed-icon",
+    },
+    borders = {
+        Magic = "ui-debuff-border-magic-noicon",
+        Curse = "ui-debuff-border-curse-noicon",
+        Disease = "ui-debuff-border-disease-noicon",
+        Poison = "ui-debuff-border-poison-noicon",
+        Bleed = "ui-debuff-border-bleed-noicon",
+    },
+    -- MSUF's own art, one folder per set.
+    folders = {
+        MSUF_LETTERS = "Letters",
+        MSUF_SHAPES = "Shapes",
+        MSUF_GLYPHS = "Glyphs",
+        MSUF_MINIMAL = "Minimal",
+    },
+    options = {
+        showWhenHarmful = true,
+        showWhenHelpful = false,
+        showWithoutDispelType = false,
+    },
+    assetCache = {},
+    -- One immutable candidate-filter table per dispel type. ALL mode compiles
+    -- often (every spec apply, every preview row); allocating five filter
+    -- tables per compile would be pure garbage for values that never change.
+    filters = {
+        Magic = { includeDispelTypes = { Magic = true } },
+        Curse = { includeDispelTypes = { Curse = true } },
+        Disease = { includeDispelTypes = { Disease = true } },
+        Poison = { includeDispelTypes = { Poison = true } },
+        Bleed = { includeDispelTypes = { Bleed = true } },
+    },
+}
+DS.mediaPath = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames")
+    .. "\\Media\\Icons\\DispelTypes\\"
+A3.DispelSymbol = DS
+
+--- Per-type CustomAsset map for one MSUF set, built once and memoized. Cold
+--- path: reached from the sensor prepare and from the menu preview only.
+function DS.AssetMap(style)
+    local cached = DS.assetCache[style]
+    if cached ~= nil then return cached or nil end
+    local folder = DS.folders[style]
+    if not folder then
+        DS.assetCache[style] = false
+        return nil
+    end
+    local map = {}
+    for i = 1, #DS.types do
+        local dispelType = DS.types[i]
+        map[dispelType] = {
+            asset = DS.mediaPath .. folder .. "\\" .. dispelType:lower() .. ".tga",
+            useAtlasSize = false,
+        }
+    end
+    DS.assetCache[style] = map
+    return map
+end
 local IDENTITY_AURA_REFRESH_REASONS = {
     MSUF_UNIT_IDENTITY_AURAS = true,
     MSUF_UNIT_IDENTITY_SOFT_AURAS = true,
@@ -1183,6 +1270,64 @@ local function NormalizeDispelOverlayStyle(value)
     return "FULL"
 end
 
+function DS.Style(value)
+    value = tostring(value or "BLIZZARD"):upper()
+    if DS.folders[value] then return value end
+    -- Pre-multi-set profiles stored a single "MSUF" set; that art is now Letters.
+    if value == "MSUF" or value == "CUSTOM" then return "MSUF_LETTERS" end
+    if value == "BLIZZARD_RING" or value == "RING" then return "BLIZZARD_RING" end
+    if value == "BLIZZARD_BORDER" or value == "BORDER" then return "BLIZZARD_BORDER" end
+    return "BLIZZARD"
+end
+
+--- TOP shows one symbol for the highest-priority matching debuff (one aura
+--- slot). ALL shows one symbol per dispel type that is actually present, which
+--- costs one aura slot per type -- see DS.Slots.
+function DS.Mode(value)
+    value = tostring(value or "TOP"):upper()
+    if value == "ALL" or value == "ALL_TYPES" or value == "EACH" then return "ALL" end
+    return "TOP"
+end
+
+function DS.Growth(value)
+    value = tostring(value or "RIGHT"):upper()
+    if value == "LEFT" or value == "UP" or value == "DOWN" then return value end
+    return "RIGHT"
+end
+
+--- ALL mode: one slot per dispel type, each narrowed by an includeDispelTypes
+--- candidate filter. Blizzard evaluates those against the secret dispelName
+--- inside its own partition (Blizzard_AuraContainerUtil.lua), and unlike
+--- spellID filters they are not gated by CanApplyIdentityCandidateFilters, so
+--- this works on friendly units too. Slot i sits at step i-1 along `growth`,
+--- which means a missing type leaves a hole rather than reshuffling the row --
+--- deliberate: a symbol that keeps its place is readable at a glance.
+function DS.Slots(symbol, size, spacing)
+    local growth = DS.Growth(symbol and symbol.growth)
+    local slots, parts = {}, {}
+    local step = size + spacing
+    for i = 1, #DS.types do
+        local dispelType = DS.types[i]
+        local offset = (i - 1) * step
+        local x, y = 0, 0
+        if growth == "LEFT" then x = -offset
+        elseif growth == "UP" then y = offset
+        elseif growth == "DOWN" then y = -offset
+        else x = offset end
+        slots[i] = {
+            key = dispelType,
+            dispelType = dispelType,
+            x = x,
+            y = y,
+            -- Shared immutable filter table; see DS.filters.
+            candidateFilters = DS.filters[dispelType],
+            candidateFilterSignature = dispelType,
+        }
+        parts[i] = dispelType .. ":" .. tostring(x) .. ":" .. tostring(y)
+    end
+    return slots, table_concat(parts, "|"), growth
+end
+
 local function CompileCornerDispelSlots(corner)
     if not (type(corner) == "table" and corner.enabled == true and corner.needsDispel == true and type(corner.dispelSlots) == "table") then
         return nil, nil
@@ -1211,15 +1356,20 @@ local function CompileDispelSensor(unit, frameSpec, groupMode, visual)
     local group = frameSpec.group
     local overlay = groupMode and group or frameSpec.dispelOverlay
     local corner = groupMode and frameSpec.cornerIndicators or nil
+    -- The symbol sensor is the one dispel visual that is NOT group-only: both
+    -- unit frames and group frames compile it from a dispelSymbol table.
+    local symbol = frameSpec.dispelSymbol
     local cornerSlots, cornerSignature = nil, nil
     if visual == "corner" then
         cornerSlots, cornerSignature = CompileCornerDispelSlots(corner)
     end
     local borderOn = border and border.dispel == true
     local overlayOn = overlay and ((groupMode and overlay.dispelOverlayEnabled == true) or (not groupMode and overlay.enabled == true))
+    local symbolOn = type(symbol) == "table" and symbol.enabled == true
     if visual == "border" and not borderOn then return nil end
     if visual == "overlay" and not overlayOn then return nil end
     if visual == "corner" and not cornerSlots then return nil end
+    if visual == "symbol" and not symbolOn then return nil end
 
     local borderTrigger = NormalizeDispelSensorTrigger(border and border.dispelTrigger, "BY_ME")
     local trigger = borderTrigger
@@ -1228,10 +1378,37 @@ local function CompileDispelSensor(unit, frameSpec, groupMode, visual)
         if trigger == "BORDER" then trigger = borderTrigger end
     elseif visual == "corner" then
         trigger = "BY_ME"
+    elseif visual == "symbol" then
+        trigger = NormalizeDispelSensorTrigger(symbol.trigger, "BORDER")
+        if trigger == "BORDER" then trigger = borderTrigger end
+    end
+
+    local symbolMode, symbolStyle, symbolSlots, symbolSignature, symbolGrowth
+    local symbolSize, symbolSpacing, symbolAnchor, symbolX, symbolY
+    if visual == "symbol" then
+        symbolMode = DS.Mode(symbol.mode)
+        symbolStyle = DS.Style(symbol.style)
+        symbolSize = Round(ClampNumber(symbol.size, 14, 4, 64))
+        symbolSpacing = Round(ClampNumber(symbol.spacing, 2, 0, 32))
+        symbolAnchor = ReadAnchor(symbol, nil, "anchor", "TOPRIGHT")
+        symbolX = Round(ClampNumber(symbol.x, 0, -256, 256))
+        symbolY = Round(ClampNumber(symbol.y, 0, -256, 256))
+        if symbolMode == "ALL" then
+            symbolSlots, symbolSignature, symbolGrowth = DS.Slots(symbol, symbolSize, symbolSpacing)
+        else
+            symbolGrowth = DS.Growth(symbol.growth)
+        end
     end
 
     local nativeFilter, maxCount = DispelSensorNativeFilter(trigger)
-    if visual ~= "corner" and maxCount > 1 then
+    if visual == "symbol" then
+        -- TOP mode is one slot showing the top-priority matching debuff. ALL
+        -- mode is one slot PER dispel type, each carrying its own
+        -- includeDispelTypes candidate filter -- the only way to have several
+        -- types visible at once, because a single slot always resolves to a
+        -- single aura.
+        maxCount = symbolSlots and #symbolSlots or 1
+    elseif visual ~= "corner" and maxCount > 1 then
         -- AuraSlots do not de-duplicate across identical filters: every copy
         -- selects the same top aura. One slot therefore drives the same fixed
         -- border/overlay without duplicate native slot-manager work.
@@ -1245,13 +1422,24 @@ local function CompileDispelSensor(unit, frameSpec, groupMode, visual)
         strata = groupMode and overlay.dispelOverlayStrata or overlay.strata
     elseif visual == "corner" then
         strata = corner and corner.strata
+    elseif visual == "symbol" then
+        strata = symbol.strata
     else
         strata = border and border.strata
     end
+    local kind = "dispelBorder"
+    local rootKey = "DispelBorderSensor"
+    if visual == "corner" then
+        kind, rootKey = "dispelCorner", "DispelCornerSensor"
+    elseif visual == "overlay" then
+        kind, rootKey = "dispelOverlay", "DispelOverlaySensor"
+    elseif visual == "symbol" then
+        kind, rootKey = "dispelSymbol", "DispelSymbolSensor"
+    end
     return {
         sensor = true,
-        kind = visual == "corner" and "dispelCorner" or (visual == "overlay" and "dispelOverlay" or "dispelBorder"),
-        rootKey = visual == "corner" and "DispelCornerSensor" or (visual == "overlay" and "DispelOverlaySensor" or "DispelBorderSensor"),
+        kind = kind,
+        rootKey = rootKey,
         unit = unit,
         enabled = true,
         nativeFilter = nativeFilter,
@@ -1261,17 +1449,29 @@ local function CompileDispelSensor(unit, frameSpec, groupMode, visual)
         -- copies of the same native slot manager doing identical work.
         -- filterCount still records the region count for signatures.
         max = cornerSlots and 1 or maxCount,
-        filterCount = cornerCount,
+        filterCount = cornerCount or (symbolSlots and #symbolSlots) or nil,
         filterMax = cornerCount and 1 or maxCount,
         visual = visual,
         target = target,
-        style = visual == "overlay" and NormalizeDispelOverlayStyle(groupMode and overlay.dispelOverlayStyle or overlay.style) or "FULL",
-        alpha = visual == "corner" and Clamp01(corner and corner.alpha, 1) or (visual == "overlay" and Clamp01(groupMode and overlay.dispelOverlayAlpha or overlay.alpha, 0.35) or 1),
+        style = visual == "overlay" and NormalizeDispelOverlayStyle(groupMode and overlay.dispelOverlayStyle or overlay.style)
+            or (visual == "symbol" and symbolStyle)
+            or "FULL",
+        alpha = visual == "corner" and Clamp01(corner and corner.alpha, 1)
+            or (visual == "overlay" and Clamp01(groupMode and overlay.dispelOverlayAlpha or overlay.alpha, 0.35))
+            or (visual == "symbol" and Clamp01(symbol.alpha, 1))
+            or 1,
         thickness = ClampNumber(border and border.highlightThickness, 3, 1, 32),
-        size = cornerSlots and ClampNumber(corner and corner.size, 8, 1, 64) or nil,
-        slots = cornerSlots,
-        slotSignature = cornerSignature,
+        size = cornerSlots and ClampNumber(corner and corner.size, 8, 1, 64) or symbolSize or nil,
+        slots = cornerSlots or symbolSlots,
+        slotSignature = cornerSignature or symbolSignature,
+        mode = symbolMode,
+        growth = symbolGrowth,
+        spacing = symbolSpacing,
+        anchor = symbolAnchor,
+        x = symbolX,
+        y = symbolY,
         layer = visual == "corner" and (30 + ClampNumber(corner and corner.layer, 7, 0, 30))
+            or (visual == "symbol" and (30 + ClampNumber(symbol.layer, 8, 0, 30)))
             or (visual == "overlay" and ClampNumber(groupMode and overlay.dispelOverlayLayer or overlay.layer, 0, 0, 30) or 45),
         strata = NormalizeFrameStrata(strata, "AUTO"),
         trigger = trigger,
@@ -1773,6 +1973,7 @@ local function BuildUnitFrameConfig(unit, frameSpec)
     local legacyCustomDisplays = not EffectiveUnitCustomContainers(auras, unit) and CompileUnitCustomDisplays(auras, unit) or nil
     local dispelBorder = iconsEnabled and CompileDispelSensor(unit, frameSpec, false, "border") or nil
     local dispelOverlay = iconsEnabled and CompileDispelSensor(unit, frameSpec, false, "overlay") or nil
+    local dispelSymbol = iconsEnabled and CompileDispelSensor(unit, frameSpec, false, "symbol") or nil
     local buff, debuff, laneEffects
     if iconsEnabled then
         local layout, sharedLayout, filtersRoot = EffectiveUnitTables(auras, unit)
@@ -1796,11 +1997,12 @@ local function BuildUnitFrameConfig(unit, frameSpec)
         unit = unit,
         enabled = (buff and buff.enabled == true) or (debuff and debuff.enabled == true)
             or (dispelBorder and dispelBorder.enabled == true) or (dispelOverlay and dispelOverlay.enabled == true)
+            or (dispelSymbol and dispelSymbol.enabled == true)
             or hasCustomContainers or (customEffects and customEffects.enabled == true)
             or (targetDotEffects and targetDotEffects.enabled == true) or (laneEffects and laneEffects.enabled == true)
             or (legacyCustomDisplays and legacyCustomDisplays.enabled == true),
         lanes = lanes,
-        sensors = { dispelBorder = dispelBorder, dispelOverlay = dispelOverlay },
+        sensors = { dispelBorder = dispelBorder, dispelOverlay = dispelOverlay, dispelSymbol = dispelSymbol },
         spellIndicators = customEffects or legacyCustomDisplays,
         laneEffects = laneEffects,
         targetDotEffects = targetDotEffects,
@@ -1895,6 +2097,11 @@ local function ResolveGroupFrameConfig(frame, unit)
     local source = spec and (spec.auras or (spec.group and spec.group.auras))
     local spellSource = spec and spec.spellIndicators
     local cornerSource = spec and spec.cornerIndicators
+    -- ReplaceTableContents keeps table identity across a visual-domain refresh,
+    -- so identity alone cannot detect a symbol edit. The group config compiler
+    -- stamps a signature when it reads the settings; this path only compares it,
+    -- because it runs per frame per identity event.
+    local symbolSignature = (spec and spec.dispelSymbol and spec.dispelSymbol.signature) or "-"
     local partyRangeGate = frame._msufGFKind == "party" and frame._msufGFIsPreviewFrame ~= true
     -- The group kind doubles as the aura scope key for the shared icon style
     -- opt-out; party/raid/mythicraid can each be excluded independently.
@@ -1905,6 +2112,7 @@ local function ResolveGroupFrameConfig(frame, unit)
     if cached and frame._msufA3NativeGroupSpec == spec
         and frame._msufA3NativeGroupSource == source and frame._msufA3NativeGroupSpellSource == spellSource
         and frame._msufA3NativeGroupCornerSource == cornerSource and frame._msufA3NativeGroupUnit == unit
+        and frame._msufA3NativeGroupSymbolSignature == symbolSignature
         and frame._msufA3NativeGroupGen == gen and frame._msufA3NativeGroupVisualGen == visualGen
         and cached.partyRangeGate == partyRangeGate then
         return cached
@@ -1918,13 +2126,15 @@ local function ResolveGroupFrameConfig(frame, unit)
     local sharedKey = tostring(unit) .. "\031" .. tostring(groupKind) .. (partyRangeGate and "\031party" or "\031shared")
     local shared = sharedCache and sharedCache[sharedKey]
     if shared and shared.source == source and shared.spellSource == spellSource
-        and shared.cornerSource == cornerSource and shared.gen == gen and shared.visualGen == visualGen
+        and shared.cornerSource == cornerSource and shared.symbolSignature == symbolSignature
+        and shared.gen == gen and shared.visualGen == visualGen
     then
         cached = shared.config
         frame._msufA3NativeGroupSpec = spec
         frame._msufA3NativeGroupSource = source
         frame._msufA3NativeGroupSpellSource = spellSource
         frame._msufA3NativeGroupCornerSource = cornerSource
+        frame._msufA3NativeGroupSymbolSignature = symbolSignature
         frame._msufA3NativeGroupUnit = unit
         frame._msufA3NativeGroupGen = gen
         frame._msufA3NativeGroupVisualGen = visualGen
@@ -1965,18 +2175,22 @@ local function ResolveGroupFrameConfig(frame, unit)
         local dispelBorder = CompileDispelSensor(unit, spec, true, "border")
         local dispelOverlay = CompileDispelSensor(unit, spec, true, "overlay")
         local dispelCorner = CompileDispelSensor(unit, spec, true, "corner")
+        local dispelSymbol = CompileDispelSensor(unit, spec, true, "symbol")
         cfg.sensors.dispelBorder = dispelBorder
         cfg.sensors.dispelOverlay = dispelOverlay
         cfg.sensors.dispelCorner = dispelCorner
+        cfg.sensors.dispelSymbol = dispelSymbol
         cfg.enabled = cfg.enabled == true
             or (dispelBorder and dispelBorder.enabled == true)
             or (dispelOverlay and dispelOverlay.enabled == true)
             or (dispelCorner and dispelCorner.enabled == true)
+            or (dispelSymbol and dispelSymbol.enabled == true)
     end
     frame._msufA3NativeGroupSpec = spec
     frame._msufA3NativeGroupSource = source
     frame._msufA3NativeGroupSpellSource = spellSource
     frame._msufA3NativeGroupCornerSource = cornerSource
+    frame._msufA3NativeGroupSymbolSignature = symbolSignature
     frame._msufA3NativeGroupUnit = unit
     frame._msufA3NativeGroupGen = gen
     frame._msufA3NativeGroupVisualGen = visualGen
@@ -1988,6 +2202,7 @@ local function ResolveGroupFrameConfig(frame, unit)
             source = source,
             spellSource = spellSource,
             cornerSource = cornerSource,
+            symbolSignature = symbolSignature,
             gen = gen,
             visualGen = visualGen,
             config = cfg,
@@ -2620,10 +2835,13 @@ SensorLayoutSignature = function(sensor)
         .. "\030" .. tostring(sensor.style) .. "\030" .. tostring(sensor.alpha)
         .. "\030" .. tostring(sensor.thickness) .. "\030" .. tostring(sensor.layer) .. "\030" .. tostring(sensor.strata)
         .. "\030" .. tostring(sensor.size) .. "\030" .. tostring(sensor.slotSignature)
+        .. "\030" .. tostring(sensor.mode) .. "\030" .. tostring(sensor.growth)
+        .. "\030" .. tostring(sensor.spacing) .. "\030" .. tostring(sensor.anchor)
+        .. "\030" .. tostring(sensor.x) .. "\030" .. tostring(sensor.y)
         .. "\030" .. tostring(sensor.trigger) .. "\030" .. tostring(A3._nativeVisualGen or 0)
 end
 
-local DISPEL_SENSOR_ORDER = { "dispelBorder", "dispelOverlay", "dispelCorner" }
+local DISPEL_SENSOR_ORDER = { "dispelBorder", "dispelOverlay", "dispelCorner", "dispelSymbol" }
 A3._normalAuraLaneOrder = { "buff", "trackedBuff", "debuff", "external", "custom1", "custom2", "custom3", "custom4" }
 local NORMAL_LANE_ROOT_KEYS = { "Buffs", "TrackedBuffs", "Debuffs", "Externals", "CustomAuras1", "CustomAuras2", "CustomAuras3", "CustomAuras4" }
 local EFFECT_ROOT_FIELDS = { "spellIndicators", "laneEffects", "targetDotEffects" }
@@ -3339,14 +3557,46 @@ local function DispelSensorFrameLevel(parentFrame, sensor, target)
         -- health-effect band above every Spell Indicator priority.
         return math_max(targetLevel + 1, parentLevel + DISPEL_OVERLAY_EFFECT_OFFSET + (sensor.layer or 0))
     end
-    if sensor and sensor.visual == "corner" then
+    if sensor and (sensor.visual == "corner" or sensor.visual == "symbol") then
         return parentLevel + AuraIconBaseOffset(parentFrame) + (sensor.layer or 14)
     end
     return parentLevel + (sensor and sensor.layer or 14)
 end
 
+--- Where symbol slot `index` sits relative to the unit frame. TOP mode has a
+--- single slot at the configured offset; ALL mode steps each type along the
+--- growth axis. Shared by the live button and the menu preview so a dragged
+--- position can never mean two different things.
+function DS.SlotOffset(sensor, index)
+    local x = tonumber(sensor and sensor.x) or 0
+    local y = tonumber(sensor and sensor.y) or 0
+    local slot = sensor and sensor.slots and sensor.slots[index or 1]
+    if slot then
+        x = x + (tonumber(slot.x) or 0)
+        y = y + (tonumber(slot.y) or 0)
+    end
+    return x, y
+end
+
+function DS.LayoutButton(button, sensor, parentFrame, index)
+    local size = ClampNumber(sensor.size, 14, 4, 64)
+    local anchor = sensor.anchor or "TOPRIGHT"
+    local x, y = DS.SlotOffset(sensor, index)
+    button:ClearAllPoints()
+    button:SetSize(size, size)
+    button:SetPoint(anchor, parentFrame, anchor, x, y)
+    SyncFrameStrata(button, ResolveFrameStrata(parentFrame, sensor.strata))
+    if button.SetFrameLevel then button:SetFrameLevel(DispelSensorFrameLevel(parentFrame, sensor, parentFrame)) end
+    return true
+end
+
 local function LayoutDispelSensorButton(button, sensor, parentFrame, index)
     if not (button and sensor and parentFrame) then return false end
+    if sensor.visual == "symbol" then
+        -- Symbols are the one sensor visual with their own rect: they are a
+        -- placed indicator, not a wash over the health bar.
+        return DS.LayoutButton(button, sensor, parentFrame, index)
+    end
     -- The AuraButton owns native assignment/visibility, but its stable geometry
     -- is the health-bar rectangle. The visible region is anchored separately to
     -- the current fill when requested, avoiding a whole-unit-frame fallback.
@@ -3414,6 +3664,26 @@ local function GetSensorBorderOptions()
     return AURA_SENSOR_BORDER_OPTIONS
 end
 
+--- Symbol sensors let Blizzard pick the artwork, because only Blizzard may look
+--- at the aura's dispel type. AddDispelTypeTexture securecopies the options
+--- table at bind time, so reusing this one table across buttons is safe.
+function DS.Options(style)
+    local styles = _G.Enum and _G.Enum.CustomAuraButtonDispelTypeTextureStyle
+    local assets = DS.AssetMap(style)
+    if assets then
+        DS.options.style = styles and styles.CustomAsset or nil
+        DS.options.customDispelAssetMap = assets
+    else
+        DS.options.style = styles
+            and (style == "BLIZZARD_RING" and styles.BorderWithIcon
+                or style == "BLIZZARD_BORDER" and styles.Border
+                or styles.Icon)
+            or nil
+        DS.options.customDispelAssetMap = nil
+    end
+    return DS.options
+end
+
 local function PrepareDispelSensorButton(button, sensor, parentFrame, index)
     if not (button and sensor and parentFrame) then return false end
     ValidateNativeAuraButtonContract(button)
@@ -3439,6 +3709,21 @@ local function PrepareDispelSensorButton(button, sensor, parentFrame, index)
     button:ClearDispelTypeText()
 
     button:ClearDispelTypeTextures()
+    if sensor.visual == "symbol" then
+        -- One texture filling the button rect. Blizzard swaps its atlas/asset
+        -- per dispel type and hides it when the slot holds no typed debuff, so
+        -- MSUF never needs to know which type is up.
+        local region = button._msufA3DispelSymbolRegion
+        if not region then
+            region = button:CreateTexture(nil, "OVERLAY")
+            button._msufA3DispelSymbolRegion = region
+        end
+        region:ClearAllPoints()
+        region:SetAllPoints(button)
+        region:SetAlpha(Clamp01(sensor.alpha, 1))
+        button:AddDispelTypeTexture(region, DS.Options(sensor.style))
+        return true
+    end
     if sensor.visual == "corner" then
         -- PTR 7 multiple dispel textures: the single consolidated corner
         -- button carries one colored region per corner slot. The button covers
@@ -3618,6 +3903,220 @@ end
 ExportPublic("MSUF_SetDispelOverlayPreview", A3.SetDispelOverlayPreview)
 ExportPublic("MSUF_RefreshDispelOverlayPreview", A3.RefreshDispelOverlayPreview)
 ExportPublic("MSUF_ApplyDispelOverlayPreviewToFrame", A3._ApplyDispelOverlayPreview)
+
+--- Dispel-symbol preview (menu-driven, cold path only).
+---
+--- Same contract as the overlay preview above and for the same reason: the live
+--- symbol is a native AuraButton texture whose visibility and artwork Blizzard
+--- owns, so nothing short of a real debuff turns it on. The preview is an
+--- MSUF-owned frame that borrows the live geometry helper
+--- (DS.LayoutButton) and the same compiled sensor, so size, anchor,
+--- offsets, growth, strata and frame level cannot drift. Only Show and the
+--- stand-in artwork are ours -- and the artwork is read from the SAME per-type
+--- atlas/asset tables the live options hand to Blizzard.
+---
+--- It is also the drag surface: the user positions the indicator here and the
+--- menu writes the resulting offset back through A3.DispelSymbolPreviewMoveHandler.
+A3._DISPEL_SYMBOL_PREVIEW_FIELD = "_msufA3DispelSymbolPreview"
+
+A3._DispelSymbolPreviewApplies = function(frame)
+    if not frame then return false end
+    local wanted = A3._NormalizeDispelOverlayPreviewScope(_G.MSUF_DispelSymbolPreviewScope)
+    if wanted == "shared" then return true end
+    local groupKind = frame._msufGFKind
+    if groupKind == nil then
+        local spec = frame.MSUFSpec
+        groupKind = spec and spec.groupKind or nil
+    end
+    if groupKind then
+        if wanted == "raid" then return groupKind == "raid" or groupKind == "mythicraid" end
+        return groupKind == wanted
+    end
+    return frame.MSUFUnitKey == wanted or frame.configKey == wanted
+end
+
+A3._HideDispelSymbolPreview = function(frame)
+    local host = frame and frame[A3._DISPEL_SYMBOL_PREVIEW_FIELD]
+    if host and host:IsShown() then host:Hide() end
+    return false
+end
+
+--- Stand-in artwork for one dispel type, taken from the very tables the live
+--- path passes to Blizzard so the preview cannot show art the runtime wouldn't.
+function DS.PreviewArt(texture, style, dispelType)
+    texture:SetTexCoord(0, 1, 0, 1)
+    local assets = DS.AssetMap(style)
+    if assets then
+        local asset = assets[dispelType]
+        texture:SetTexture(asset and asset.asset or nil)
+        return
+    end
+    local atlas = (style == "BLIZZARD_RING" and DS.rings
+        or style == "BLIZZARD_BORDER" and DS.borders
+        or DS.icons)[dispelType]
+    if atlas and texture.SetAtlas then
+        texture:SetAtlas(atlas, _G.TextureKitConstants and _G.TextureKitConstants.IgnoreAtlasSize)
+    else
+        texture:SetTexture(nil)
+    end
+end
+
+--- Turn the host's current on-screen rect back into the offset pair that
+--- reproduces it from `anchor`. Host and parent share a scale (host is parented
+--- to the frame), so raw edge coordinates are directly comparable.
+function DS.AnchorOffset(host, parent, anchor)
+    local hl, hr, ht, hb = host:GetLeft(), host:GetRight(), host:GetTop(), host:GetBottom()
+    local pl, pr, pt, pb = parent:GetLeft(), parent:GetRight(), parent:GetTop(), parent:GetBottom()
+    if not (hl and hr and ht and hb and pl and pr and pt and pb) then return nil, nil end
+    anchor = tostring(anchor or "TOPRIGHT")
+    local x
+    if anchor:find("LEFT", 1, true) then
+        x = hl - pl
+    elseif anchor:find("RIGHT", 1, true) then
+        x = hr - pr
+    else
+        x = ((hl + hr) * 0.5) - ((pl + pr) * 0.5)
+    end
+    local y
+    if anchor:find("TOP", 1, true) then
+        y = ht - pt
+    elseif anchor:find("BOTTOM", 1, true) then
+        y = hb - pb
+    else
+        y = ((ht + hb) * 0.5) - ((pt + pb) * 0.5)
+    end
+    return Round(x), Round(y)
+end
+
+A3.DispelSymbolPreviewMoveHandler = nil
+
+function DS.OnDragStart(host)
+    if _G.InCombatLockdown and _G.InCombatLockdown() then return end
+    host:StartMoving()
+end
+
+function DS.OnDragStop(host)
+    host:StopMovingOrSizing()
+    local frame = host._msufA3PreviewParent
+    local sensor = host._msufA3PreviewSensor
+    local handler = A3.DispelSymbolPreviewMoveHandler
+    if not (frame and sensor) then return end
+    local x, y = DS.AnchorOffset(host, frame, sensor.anchor)
+    if x == nil then return end
+    -- The dragged tile is slot `index`; the stored offset is the base, so take
+    -- that slot's own step back out. Dragging any symbol therefore moves the
+    -- whole set and keeps the growth spacing intact.
+    local slot = sensor.slots and sensor.slots[host._msufA3PreviewSlotIndex or 1]
+    if slot then
+        x = x - (tonumber(slot.x) or 0)
+        y = y - (tonumber(slot.y) or 0)
+    end
+    if type(handler) == "function" then
+        handler(_G.MSUF_DispelSymbolPreviewScope, x, y, frame)
+    end
+    A3.RefreshDispelSymbolPreview()
+end
+
+function DS.PreviewTile(host, index)
+    local tiles = host._msufA3PreviewTiles
+    if not tiles then
+        tiles = {}
+        host._msufA3PreviewTiles = tiles
+    end
+    local tile = tiles[index]
+    if not tile then
+        tile = CreateFrame("Frame", nil, host)
+        tile.Texture = tile:CreateTexture(nil, "OVERLAY")
+        tile.Texture:SetAllPoints(tile)
+        tiles[index] = tile
+    end
+    return tile
+end
+
+--- Cold path only: menu toggle, spec apply, group preview build.
+A3._ApplyDispelSymbolPreview = function(frame)
+    if _G.MSUF_DispelSymbolPreviewMode ~= true then return A3._HideDispelSymbolPreview(frame) end
+    if not (frame and frame.MSUFSpec) then return A3._HideDispelSymbolPreview(frame) end
+    if not A3._DispelSymbolPreviewApplies(frame) then return A3._HideDispelSymbolPreview(frame) end
+    local sensor = CompileDispelSensor(frame.MSUFUnitKey, frame.MSUFSpec, IsGroupFrame(frame), "symbol")
+    if not (sensor and sensor.enabled == true) then return A3._HideDispelSymbolPreview(frame) end
+    local host = frame[A3._DISPEL_SYMBOL_PREVIEW_FIELD]
+    if not host then
+        -- Previews only switch on out of combat, so first creation always lands
+        -- there. A spec apply arriving mid-combat re-stamps an existing host but
+        -- never parents a fresh frame onto a secure header.
+        if _G.InCombatLockdown and _G.InCombatLockdown() then return false end
+        host = CreateFrame("Frame", nil, frame)
+        host:SetClampedToScreen(false)
+        host:SetMovable(true)
+        host:EnableMouse(true)
+        host:RegisterForDrag("LeftButton")
+        host:SetScript("OnDragStart", DS.OnDragStart)
+        host:SetScript("OnDragStop", DS.OnDragStop)
+        frame[A3._DISPEL_SYMBOL_PREVIEW_FIELD] = host
+    end
+    host._msufA3PreviewParent = frame
+    host._msufA3PreviewSensor = sensor
+    -- The host IS the first symbol's rect, laid out by the live helper. Extra
+    -- ALL-mode tiles hang off it at their compiled step, so what the user drags
+    -- is exactly what the runtime will draw.
+    host._msufA3PreviewSlotIndex = 1
+    if not DS.LayoutButton(host, sensor, frame, 1) then
+        return A3._HideDispelSymbolPreview(frame)
+    end
+    local style = sensor.style or "BLIZZARD"
+    local alpha = Clamp01(sensor.alpha, 1)
+    local size = ClampNumber(sensor.size, 14, 4, 64)
+    local slots = sensor.slots
+    local count = slots and #slots or 1
+    -- Tiles hang off the host, which already sits at slot 1, so every tile is
+    -- placed relative to that one origin.
+    local baseX, baseY = DS.SlotOffset(sensor, 1)
+    for i = 1, count do
+        local tile = DS.PreviewTile(host, i)
+        local slotX, slotY = DS.SlotOffset(sensor, i)
+        tile:ClearAllPoints()
+        tile:SetSize(size, size)
+        tile:SetPoint("TOPLEFT", host, "TOPLEFT", slotX - baseX, slotY - baseY)
+        tile:SetAlpha(alpha)
+        DS.PreviewArt(tile.Texture, style,
+            (slots and slots[i] and slots[i].dispelType) or "Magic")
+        tile:Show()
+    end
+    local tiles = host._msufA3PreviewTiles
+    if tiles then
+        for i = count + 1, #tiles do tiles[i]:Hide() end
+    end
+    host:Show()
+    return true
+end
+
+A3.RefreshDispelSymbolPreview = function()
+    A3._ForEachDispelOverlayPreviewFrame(A3._ApplyDispelSymbolPreview)
+    return true
+end
+
+--- Menu-facing setter, mirroring the overlay preview contract: one flag plus one
+--- scope, cleared by the menu when its page hides. Combat never turns it on.
+A3.SetDispelSymbolPreview = function(active, scope)
+    active = active == true
+    if active and _G.InCombatLockdown and _G.InCombatLockdown() then active = false end
+    ExportPublic("MSUF_DispelSymbolPreviewMode", active)
+    ExportPublic("MSUF_DispelSymbolPreviewScope",
+        active and A3._NormalizeDispelOverlayPreviewScope(scope) or nil)
+    A3.RefreshDispelSymbolPreview()
+    return active
+end
+
+A3.SetDispelSymbolPreviewMoveHandler = function(handler)
+    A3.DispelSymbolPreviewMoveHandler = type(handler) == "function" and handler or nil
+    return true
+end
+
+ExportPublic("MSUF_SetDispelSymbolPreview", A3.SetDispelSymbolPreview)
+ExportPublic("MSUF_RefreshDispelSymbolPreview", A3.RefreshDispelSymbolPreview)
+ExportPublic("MSUF_ApplyDispelSymbolPreviewToFrame", A3._ApplyDispelSymbolPreview)
+ExportPublic("MSUF_SetDispelSymbolPreviewMoveHandler", A3.SetDispelSymbolPreviewMoveHandler)
 
 local function ManagedAuraKey(config)
     return "msuf_" .. tostring(config and config.kind or "auras")
@@ -3848,6 +4347,15 @@ local function CreateManagedDispelSensor(container, sensor, parentFrame)
     return container
 end
 
+--- Symbol sensors in ALL mode narrow each slot to one dispel type; every other
+--- sensor slot runs unfiltered. Returns the signature so the update path can
+--- skip a redundant native call.
+function DS.SlotCandidateFilters(sensor, sensorIndex)
+    local slot = sensor and sensor.visual == "symbol" and sensor.slots and sensor.slots[sensorIndex]
+    if not slot then return nil, nil end
+    return slot.candidateFilters, slot.candidateFilterSignature
+end
+
 local function AddDispelSensorSlots(container, sensor, parentFrame, firstButtonIndex)
     local buttonIndex = firstButtonIndex or 0
     local count = math_max(1, sensor and sensor.max or 1)
@@ -3862,6 +4370,12 @@ local function AddDispelSensorSlots(container, sensor, parentFrame, firstButtonI
         container:AddAuraSlot(slotKey, sensor.nativeFilter, BuildManagedAuraSlotOptions(container, sensor, parentFrame, buttonIndex, sensorIndex))
         container._msufA3SensorSlotFilterStrings = container._msufA3SensorSlotFilterStrings or {}
         container._msufA3SensorSlotFilterStrings[slotKey] = sensor.nativeFilter
+        local candidateFilters, candidateSignature = DS.SlotCandidateFilters(sensor, sensorIndex)
+        if candidateFilters then
+            container:SetAuraSlotCandidateFilters(slotKey, candidateFilters)
+        end
+        container._msufA3SensorSlotCandidateSignatures = container._msufA3SensorSlotCandidateSignatures or {}
+        container._msufA3SensorSlotCandidateSignatures[slotKey] = candidateSignature
     end
     container._msufA3SensorButtonStart = container._msufA3SensorButtonStart or ((firstButtonIndex or 0) + 1)
     container._msufA3SensorButtonEnd = buttonIndex
@@ -3934,6 +4448,7 @@ local function UpdateDispelSensorRootSlots(container, sensorRoot, firstButtonInd
     local sensors = sensorRoot and sensorRoot.sensors
     if not (slots and type(sensors) == "table") then return false end
     container._msufA3SensorSlotFilterStrings = container._msufA3SensorSlotFilterStrings or {}
+    container._msufA3SensorSlotCandidateSignatures = container._msufA3SensorSlotCandidateSignatures or {}
     local oldEnd = container._msufA3SensorButtonEnd or 0
     local buttonIndex = firstButtonIndex or 0
     local first = buttonIndex + 1
@@ -3950,6 +4465,11 @@ local function UpdateDispelSensorRootSlots(container, sensorRoot, firstButtonInd
             if container._msufA3SensorSlotFilterStrings[slotKey] ~= sensor.nativeFilter then
                 container:SetAuraSlotFilterString(slotKey, sensor.nativeFilter)
                 container._msufA3SensorSlotFilterStrings[slotKey] = sensor.nativeFilter
+            end
+            local candidateFilters, candidateSignature = DS.SlotCandidateFilters(sensor, sensorIndex)
+            if container._msufA3SensorSlotCandidateSignatures[slotKey] ~= candidateSignature then
+                container:SetAuraSlotCandidateFilters(slotKey, candidateFilters)
+                container._msufA3SensorSlotCandidateSignatures[slotKey] = candidateSignature
             end
         end
     end

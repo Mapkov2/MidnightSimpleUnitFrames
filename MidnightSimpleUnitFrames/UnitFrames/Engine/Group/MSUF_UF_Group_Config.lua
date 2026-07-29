@@ -832,6 +832,40 @@ local function CompileDispelVisual(kind, conf)
   return out
 end
 
+--- Dispel-type symbol indicator. Auras3 normalizes/clamps every field, so this
+--- only forwards the raw values; the shape must stay identical to the unit-frame
+--- table in MSUF_UF_Config.lua so one compiler serves both scopes.
+local function CompileDispelSymbol(conf)
+  conf = conf or {}
+  local out = {
+    enabled = conf.dispelSymbolEnabled == true,
+    style = conf.dispelSymbolStyle or "BLIZZARD",
+    mode = conf.dispelSymbolMode or "TOP",
+    trigger = conf.dispelSymbolTrigger or "BORDER",
+    size = Num(conf.dispelSymbolSize, 12),
+    spacing = Num(conf.dispelSymbolSpacing, 2),
+    growth = conf.dispelSymbolGrowth or "RIGHT",
+    anchor = conf.dispelSymbolAnchor or "TOPRIGHT",
+    x = Num(conf.dispelSymbolX, 0),
+    y = Num(conf.dispelSymbolY, 0),
+    alpha = Clamp01(conf.dispelSymbolAlpha, 1),
+    layer = Layer(conf.dispelSymbolLayer, 8),
+    strata = NormalizeFrameOutlineStrata(conf.dispelSymbolStrata),
+  }
+  -- Auras3 caches its compiled group config against this. ReplaceTableContents
+  -- keeps table identity across a visual-domain refresh, so identity alone
+  -- cannot detect an edit -- and Auras3 resolves per frame per identity event,
+  -- which is far too hot to rebuild a 13-part string on. Stamp it once here,
+  -- where the settings are actually read.
+  out.signature = table.concat({
+    tostring(out.enabled), out.style, out.mode, out.trigger,
+    tostring(out.size), tostring(out.spacing), out.growth, out.anchor,
+    tostring(out.x), tostring(out.y), tostring(out.alpha),
+    tostring(out.layer), tostring(out.strata),
+  }, "\031")
+  return out
+end
+
 local function CompileGroupVisuals(kind, conf)
   local general = _G.MSUF_DB and _G.MSUF_DB.general
   local hoverR, hoverG, hoverB = ResolveHighlightRGB()
@@ -1253,7 +1287,8 @@ local function CompileCoreAuras(kind, conf)
     enabled = showBuffs == true or showDebuffs == true or showExternals == true
       or trackedBuffsEnabled == true
       or conf.dispelEnabled == true
-      or conf.dispelOverlayEnabled == true,
+      or conf.dispelOverlayEnabled == true
+      or conf.dispelSymbolEnabled == true,
     group = true,
     kind = kind,
     renderer = "NATIVE_12_1",
@@ -1810,6 +1845,7 @@ local function CompileSpecUncached(kind, frame, unit, conf)
       hideInHousing = conf.hideInHousing == true,
     },
     cornerIndicators = GF.CompileCornerIndicators and GF.CompileCornerIndicators(conf) or { enabled = false },
+    dispelSymbol = CompileDispelSymbol(conf),
     spellIndicators = GF.CompileSpellIndicators and GF.CompileSpellIndicators(conf) or { enabled = false, items = {} },
   }
 end
@@ -1938,6 +1974,7 @@ local function RefreshColorDomain(kind, base, conf)
   if GF.CompileCornerIndicators then
     base.cornerIndicators = ReplaceTableContents(base.cornerIndicators, GF.CompileCornerIndicators(conf))
   end
+  base.dispelSymbol = ReplaceTableContents(base.dispelSymbol, CompileDispelSymbol(conf))
   BumpSpecDomain(base, "_msufTextColorRevision")
   BumpSpecDomain(base, "_msufPowerVisualRevision")
   BumpSpecDomain(base, "_msufBorderVisualRevision")
