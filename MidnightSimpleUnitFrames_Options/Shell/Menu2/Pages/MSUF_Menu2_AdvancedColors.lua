@@ -2259,15 +2259,42 @@ end)
 FixedContextFactory("gameplay.crosshair_in", function() return ContextTable("gameplay.crosshair_in", "Crosshair in range", Gameplay, "crosshairInRangeColor", 0, 1, 0, ApplyGameplayColors) end)
 FixedContextFactory("gameplay.crosshair_out", function() return ContextTable("gameplay.crosshair_out", "Crosshair out of range", Gameplay, "crosshairOutRangeColor", 1, 0, 0, ApplyGameplayColors) end)
 
-ContextFactory("power.current", function(context)
-    local token = ContextPowerToken(context)
-    local target = ContextTarget("power.current." .. token, (token:gsub("_", " ")) .. " power",
+local function PowerTokenTarget(id, token, label)
+    local target = ContextTarget(id, label,
         function() return GetPowerOverrideRGB(token) end,
         function(r, g, b) SetPowerOverrideRGB(token, r, g, b) end)
     local state = ContextStoredState(G, { "powerColorOverrides" }, ApplyColors)
     target.captureState, target.restoreState = state.captureState, state.restoreState
     return target
+end
+ContextFactory("power.current", function(context)
+    local token = ContextPowerToken(context)
+    return PowerTokenTarget("power.current." .. token, token, (token:gsub("_", " ")) .. " power")
 end)
+-- A single unit has one resource, so "power.current" resolves it from context.
+-- A party or raid roster mixes every resource type at once, so group cards name
+-- each color instead. Labels are spelled out rather than read from the page's
+-- COLOR_POWER_TOKENS list: this registry is an IIFE sitting at 60 upvalues, and
+-- reaching for one more file-level local breaks Lua 5.1's limit. They must stay
+-- in sync with that list, and each entry edits the same shared override table.
+local POWER_TOKEN_CONTEXT_IDS = {
+    { "power.token.mana", "MANA", "Mana" },
+    { "power.token.rage", "RAGE", "Rage" },
+    { "power.token.energy", "ENERGY", "Energy" },
+    { "power.token.focus", "FOCUS", "Focus" },
+    { "power.token.runic_power", "RUNIC_POWER", "Runic Power" },
+    { "power.token.insanity", "INSANITY", "Insanity" },
+    { "power.token.fury", "FURY", "Fury" },
+    { "power.token.pain", "PAIN", "Pain" },
+    { "power.token.essence", "ESSENCE", "Essence" },
+    { "power.token.lunar_power", "LUNAR_POWER", "Astral Power" },
+    { "power.token.maelstrom", "MAELSTROM", "Maelstrom" },
+}
+for i = 1, #POWER_TOKEN_CONTEXT_IDS do
+    local entry = POWER_TOKEN_CONTEXT_IDS[i]
+    local id, token, label = entry[1], entry[2], entry[3]
+    ContextFactory(id, function() return PowerTokenTarget(id, token, label) end)
+end
 ContextFactory("class_power.current", function(context)
     local token = ContextClassPowerToken(context)
     local spec = type(M.GetClassPowerPreviewSpec) == "function" and M.GetClassPowerPreviewSpec() or nil

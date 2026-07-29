@@ -594,12 +594,28 @@ function GF.Rebuild(kind)
   return GF.RefreshVisuals(kind, GF.DIRTY_ALL)
 end
 
+-- The group block border lives on the anchor, not on a unit frame, so no
+-- element apply can reach it. SetupHeader owns the cold path; without this hook
+-- the setting would only take effect on the next layout rebuild or /reload.
+local function RefreshGroupBorderForMask(kind, mask)
+  if type(GF.ApplyGroupBorder) ~= "function" then return end
+  if mask ~= nil and mask ~= true
+    and not (mask == GF.DIRTY_ALL or mask == GF.DIRTY_CONFIG
+      or MaskHas(mask, GF.DIRTY_BORDER) or MaskHas(mask, GF.DIRTY_VISUAL)
+      or MaskHas(mask, GF.DIRTY_COLOR) or MaskHas(mask, GF.DIRTY_GEOMETRY)
+      or MaskHas(mask, GF.DIRTY_LAYOUT)) then
+    return
+  end
+  GF.ApplyGroupBorder(kind)
+end
+
 local function RefreshVisualsNow(kind, mask)
   local refreshedDomains = GF.RefreshCompiledSpecDomains
     and GF.RefreshCompiledSpecDomains(kind, mask) == true
   if not refreshedDomains and GF.InvalidateCompiledSpecs then
     GF.InvalidateCompiledSpecs(kind)
   end
+  RefreshGroupBorderForMask(kind, mask)
   if not GF.ForEachFrame then return false end
   local applyMask = GF.ApplyMaskForDirtyMask(mask)
   return GF.ForEachFrame(ApplyRefreshFrame, true, kind, mask, applyMask)

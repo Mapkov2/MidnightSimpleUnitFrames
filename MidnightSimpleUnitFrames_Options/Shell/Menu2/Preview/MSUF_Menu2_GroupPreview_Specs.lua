@@ -85,6 +85,7 @@ summonIcon=summon
 resurrectIcon=incomingRes
 pvpIcon=pvp
 phaseIcon=phase
+showGroupNumber=raidGroup
 ]],
     OUTLINE_KEYS = { "top", "bottom", "left", "right" },
 }

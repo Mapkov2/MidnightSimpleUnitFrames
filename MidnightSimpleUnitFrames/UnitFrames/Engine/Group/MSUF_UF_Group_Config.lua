@@ -365,6 +365,94 @@ local function ResolveHealthVisual(conf)
   return out
 end
 
+local POWER_MODE_ALIASES = {
+  TYPE = "type", type = "type",
+  CLASS = "class", class = "class",
+  STATIC = "static", static = "static",
+  CUSTOM = "static", custom = "static",
+  DARK = "dark", dark = "dark",
+  UNIFIED = "unified", unified = "unified",
+}
+
+local function NormalizePowerMode(value)
+  return value ~= nil and POWER_MODE_ALIASES[value] or nil
+end
+
+--- Resolve the effective power-colour model once per compile, mirroring
+--- CompileUnitPower. `static`/`dark`/`unified` publish concrete r/g/b so the
+--- element's SetColor takes its constant-colour branch and never samples the
+--- unit's power type; `type`/`class` deliberately leave them nil so the dynamic
+--- per-token lookup stays in charge. The mode itself is global/legacy-profile
+--- driven - the group page mirrors the unit page, which configures bar art and
+--- colour once on Bars rather than per scope.
+local function ResolvePowerVisual(conf)
+  conf = conf or {}
+  local cache = SettingsCache()
+  local general = GeneralDB()
+  local mode = NormalizePowerMode(conf.powerColorMode) or "type"
+  local out = {
+    mode = mode,
+    -- No engine consumer reads this yet (the live behaviour comes from the
+    -- global bar-background runtime); keep it truthful instead of hardcoded.
+    backgroundMatchHealth = (general and general.powerBarBgMatchBarColor == true) or false,
+  }
+  if mode == "dark" then
+    local gray = Num(general and (general.darkBarGray or general.darkBgBrightness), 0.07)
+    out.r = Num(conf.gfDarkR, cache and cache.darkBarR or general and general.darkBarR or gray)
+    out.g = Num(conf.gfDarkG, cache and cache.darkBarG or general and general.darkBarG or gray)
+    out.b = Num(conf.gfDarkB, cache and cache.darkBarB or general and general.darkBarB or gray)
+  elseif mode == "unified" then
+    out.r = Num(conf.gfUnifiedR, cache and cache.unifiedBarR or general and general.unifiedBarR or 0.10)
+    out.g = Num(conf.gfUnifiedG, cache and cache.unifiedBarG or general and general.unifiedBarG or 0.60)
+    out.b = Num(conf.gfUnifiedB, cache and cache.unifiedBarB or general and general.unifiedBarB or 0.90)
+  elseif mode == "static" then
+    out.r = Num(general and general.powerBarColorR, 0.10)
+    out.g = Num(general and general.powerBarColorG, 0.35)
+    out.b = Num(general and general.powerBarColorB, 0.95)
+  end
+  return out
+end
+
+--- Per-token power colour overrides. Group frames read the same account-wide
+--- tables the unit frames do, so the Color Painter stays a single source of
+--- truth for every frame type.
+local function CompilePowerColorOverrides(dst)
+  dst = type(dst) == "table" and dst or {}
+  wipe(dst)
+  local general = GeneralDB()
+  if not general then return dst end
+  local function Absorb(src, onlyMissing)
+    if type(src) ~= "table" then return end
+    for token, color in pairs(src) do
+      if (not onlyMissing or dst[token] == nil) and type(color) == "table" then
+        local r = tonumber(color.r or color[1])
+        local g = tonumber(color.g or color[2])
+        local b = tonumber(color.b or color[3])
+        if r and g and b then
+          dst[token] = { r = r, g = g, b = b }
+        end
+      end
+    end
+  end
+  Absorb(general.powerColorOverrides)
+  Absorb(general.classPowerColorOverrides, true)
+  return dst
+end
+
+--- Rectangular power-bar border. Thickness is clamped to the same 0..10 band
+--- the unit compiler uses; the colour follows the shared bar outline colour so
+--- the power edge matches the frame outline without a second colour picker.
+local function CompilePowerBorder(power, conf, general)
+  local thickness = Num(conf.powerBarBorderThickness, 1)
+  if thickness < 0 then thickness = 0 elseif thickness > 10 then thickness = 10 end
+  power.borderEnabled = conf.powerBarBorderEnabled == true and thickness > 0
+  power.borderThickness = thickness
+  power.borderR = Num(ScopedValue(conf, general, "barOutlineColorR", conf.borderR or general and general.barBorderR), 0)
+  power.borderG = Num(ScopedValue(conf, general, "barOutlineColorG", conf.borderG or general and general.barBorderG), 0)
+  power.borderB = Num(ScopedValue(conf, general, "barOutlineColorB", conf.borderB or general and general.barBorderB), 0)
+  power.borderA = Num(ScopedValue(conf, general, "barOutlineColorA", conf.borderA or general and general.barBorderA), 1)
+end
+
 local function ResolveNameTextOptions(kind, conf)
   conf = conf or {}
   local text = {}
@@ -752,6 +840,7 @@ local function CompileGroupVisuals(kind, conf)
     rangeFadeAlpha = Clamp01(conf.rangeFadeAlpha, 0.4),
     rangeFadeLayerMode = NormalizeRangeFadeLayerMode(conf.rangeFadeLayerMode),
     offlineAlpha = Clamp01(conf.offlineAlpha, 0.5),
+    offlineFadeEnabled = conf.offlineFadeEnabled == true,
     hideOfflineEnabled = conf.hideOfflineEnabled == true,
     hideOfflineInCombat = conf.hideOfflineInCombat == true,
     hideOfflineDelay = Num(conf.hideOfflineDelay, 0),
@@ -1259,6 +1348,50 @@ local function CompileBarBackground(conf)
   }
 end
 
+--- Single writer for every colour-domain power field. CompileSpecUncached and
+--- RefreshColorDomain both go through this, so the cheap in-place DIRTY_COLOR
+--- lane can never leave a power field stale against a full recompile.
+local function FillPowerVisualDomain(power, conf, general, texture, bgTexture)
+  local visual = ResolvePowerVisual(conf)
+  power.texture = texture
+  power.backgroundTexture = bgTexture
+  power.background = CompileBarBackground(conf)
+  power.backgroundMatchHealth = visual.backgroundMatchHealth
+  power.mode = visual.mode
+  power.r, power.g, power.b = visual.r, visual.g, visual.b
+  power.colors = CompilePowerColorOverrides(power.colors)
+  power.barGradient = ResolveBarGradient(conf, general, "enablePowerGradient")
+  -- Mirrors CompileUnitPower: the power bar follows the health fill direction.
+  power.reverse = conf.reverseFill == true
+  CompilePowerBorder(power, conf, general)
+  return power
+end
+
+--- Embed/detach geometry, mirroring the unit compiler. This is deliberately not
+--- part of the colour domain: it changes layout, so it only recompiles on the
+--- geometry path where the header can re-lay out outside combat.
+local function FillPowerGeometry(power, conf, frameWidth)
+  power.embed = conf.embedPowerBarIntoHealth ~= false
+  power.detached = conf.powerBarDetached == true
+  power.detachedX = Num(conf.detachedPowerBarOffsetX, 0)
+  power.detachedY = Num(conf.detachedPowerBarOffsetY, -4)
+  -- 0 is the group default for "never configured": fall back to the frame width
+  -- and leave detachedWidthExplicit nil so nothing treats it as a chosen value.
+  local width = Num(conf.detachedPowerBarWidth, 0)
+  power.detachedWidthExplicit = width > 0 and width or nil
+  power.detachedWidth = width > 0 and width or Num(frameWidth, 80)
+  power.detachedHeight = Num(conf.detachedPowerBarHeight, 6)
+  power.detachedAnchorMode = "CENTER"
+  power.detachedLevel = Layer(conf.detachedPowerBarFrameLevelOffset, 6)
+  power.textOnDetached = conf.detachedPowerBarTextOnBar == true
+  -- Class Resource sync/anchor and the ROUND/CRYSTAL/ORB shapes are Player-only
+  -- on the unit page; group members get the same plain bar every other unit does.
+  power.shape = "BAR"
+  power.detachedSyncClass = false
+  power.detachedAnchorClass = false
+  return power
+end
+
 local function ReplaceTableContents(dst, src)
   dst = type(dst) == "table" and dst or {}
   wipe(dst)
@@ -1531,19 +1664,11 @@ local function CompileSpecUncached(kind, frame, unit, conf)
       reverse = conf.reverseFill == true,
       smooth = conf.smoothFill == true,
     },
-    power = {
+    power = FillPowerGeometry(FillPowerVisualDomain({
       enabled = powerHeight > 0,
       height = powerHeight,
-      texture = texture,
-      backgroundTexture = bgTexture,
-      background = CompileBarBackground(conf),
-      backgroundMatchHealth = false,
-      embed = true,
-      detached = false,
-      mode = conf.powerColorMode or "type",
-      barGradient = ResolveBarGradient(conf, general, "enablePowerGradient"),
       smooth = conf.powerSmoothFill == true,
-    },
+    }, conf, general, texture, bgTexture), conf, w),
     text = textSpec,
     tempMaxHealth = CompileTempMaxHealth(kind, conf, texture),
     prediction = CompilePrediction(kind, conf, texture),
@@ -1640,11 +1765,7 @@ local function RefreshColorDomain(kind, base, conf)
 
   local power = base.power or {}
   base.power = power
-  power.texture = texture
-  power.backgroundTexture = backgroundTexture
-  power.background = CompileBarBackground(conf)
-  power.mode = conf.powerColorMode or "type"
-  power.barGradient = ResolveBarGradient(conf, general, "enablePowerGradient")
+  FillPowerVisualDomain(power, conf, general, texture, backgroundTexture)
 
   local tr, tg, tb = 1, 1, 1
   if GF.ResolveFontColor then

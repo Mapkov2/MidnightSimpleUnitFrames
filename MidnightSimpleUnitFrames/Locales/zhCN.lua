@@ -161,6 +161,8 @@ local T = {
     ["Portraits"] = "头像",
 
     ["Frame Basics"] = "框架基础",
+    ["Fade offline members"] = "淡化离线成员",
+    ["Hiding offline members in Frame Basics takes precedence over this."] = "「框架基础」中的隐藏离线成员优先于此设置。",
     ["Enable this frame"] = "启用框架",
     ["Show name"] =  "显示名称"       ,
     ["Show HP text"] = "显示生命文本",
@@ -3154,6 +3156,8 @@ L["Power strength"] = "电源强度"
 L["Bar Gradient Colors"] = "条形渐变颜色"
 L["Health gradient color"] = "健康渐变色"
 L["Power gradient color"] = "功率渐变色"
+L["Border & fill"] = "边框和填充"
+L["Detached placement"] = "分离放置"
 L["Reset gradient colors"] = "重置渐变颜色"
 L["Health and Power use separate gradient colors. Choosing a color creates a custom Bars override for the selected scope."] = "生命值和能量使用不同的渐变颜色。选择颜色会为选定范围创建自定义条形覆盖。"
 L["UPGRADED TO MSUF %s"] = "升级至MSUF %s"
@@ -4656,3 +4660,13 @@ L["Number abbreviation"] = "数字缩写"
 L["Game default"] = "游戏默认"
 L["Compact"] = "紧凑"
 L["Compact keeps 12.3K / 1.23M on every client language. Game default follows the client, which adds spaces or different letters on some locales."] = "紧凑模式在所有客户端语言下都保持 12.3K / 1.23M 的格式。游戏默认跟随客户端，部分语言会加入空格或使用不同的字母。"
+
+--- Group class-colored health note (6.0)
+L["Class-colored health uses one color per class. Open Colors > Class Colors to change them."] = "职业着色的生命值每个职业使用一种颜色。请打开 颜色 > 职业颜色 进行修改。"
+
+--- Group resource bar color list (6.0)
+L["One color per resource type, shared with every frame."] = "每种资源类型一种颜色，与所有框体共用。"
+
+--- Dispel overlay preview toggle (6.0)
+L["Preview overlay"] = "预览叠加"
+L["Paints a stand-in tint so the overlay can be judged without a real dispellable debuff. Turns itself off when this page closes."] = "绘制示例着色，无需真实的可驱散减益即可查看叠加效果。关闭本页面时自动关闭。"

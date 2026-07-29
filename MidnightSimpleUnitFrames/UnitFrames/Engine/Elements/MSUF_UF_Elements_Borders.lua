@@ -106,11 +106,17 @@ local function SetBorderOverlayStrata(frame, overlay, strata)
   end
 end
 
+-- Group frames seat the outline in the shared foreground band so its Layer is
+-- relational to text and icons; unit frames keep the legacy band. Cold path.
+local BorderLevelOffset = Layers.BorderOffset or function(_, offset, layer)
+  return (offset or BORDER_LEVEL_DEFAULT) + (layer or 0)
+end
+
 local function SetBorderOverlayLevel(frame, offset, strata, layer)
   if not frame then return end
   -- `layer` is clamped by the cold config compiler. Runtime event updates only
   -- add the already-compiled value and never touch SavedVariables.
-  offset = (offset or BORDER_LEVEL_DEFAULT) + (layer or 0)
+  offset = BorderLevelOffset(frame, offset or BORDER_LEVEL_DEFAULT, layer or 0)
   if frame._msufBorderLevelOffset ~= offset then
     frame._msufBorderLevelOffset = offset
     if frame.MSUFBorderOverlay then
@@ -581,7 +587,7 @@ local function ApplyResolvedBorder(frame, cfg, source, level, thickness, r, g, b
   r, g, b, a = r or 0, g or 0, b or 0, a or 1
   thickness = thickness or 1
   local layer = cfg and cfg.layer or 0
-  local offset = (level or BORDER_LEVEL_DEFAULT) + layer
+  local offset = BorderLevelOffset(frame, level or BORDER_LEVEL_DEFAULT, layer)
   local strata = cfg and cfg.strata or nil
   local secret = IsSecretValue(r) or IsSecretValue(g) or IsSecretValue(b) or IsSecretValue(a)
     or IsSecretValue(strata)

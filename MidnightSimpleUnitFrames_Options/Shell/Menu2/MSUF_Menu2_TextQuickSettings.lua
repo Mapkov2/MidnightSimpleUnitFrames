@@ -609,9 +609,19 @@ local function EnsurePopup()
     popup.title:SetJustifyH("LEFT")
     popup.subtitle = W.Text(popup, "", 16, -38, 396, T.colors.muted)
 
-    popup.close = T.Button(popup, "x", 20, 20, { noSearch = true })
+    -- Close with the shared window control, like the menu shell and the color
+    -- picker. A T.Button anchors its label at LEFT +12 / RIGHT -12, so on a
+    -- 20px-wide button the glyph got a negative width and never drew at all.
+    if M.CreateWindowControlButton then
+        popup.close = M.CreateWindowControlButton(popup, "close")
+        popup.close:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -10, -7)
+    else
+        popup.close = T.Button(popup, "x", 20, 20, { noSearch = true })
+        if T.CenterButtonLabel then T.CenterButtonLabel(popup.close) end
+        popup.close:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -12, -9)
+    end
     popup.close._msuf2SkipHistoryCheckpoint = true
-    popup.close:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -12, -9)
+    popup.closeButton = popup.close
     popup.close:SetScript("OnClick", function() popup:Hide() end)
 
     popup.override = W.SwitchAt(popup, "Use custom settings for this frame", 16, -65, 330)

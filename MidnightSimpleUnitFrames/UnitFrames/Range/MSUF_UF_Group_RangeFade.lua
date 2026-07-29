@@ -62,7 +62,8 @@ local GroupRangeFade = {}
 
 function GroupRangeFade.IsEnabled(frame, spec)
   return spec and spec.scope == "group" and spec.group
-    and (spec.group.rangeFadeEnabled == true or spec.group.hideOfflineEnabled == true)
+    and (spec.group.rangeFadeEnabled == true or spec.group.hideOfflineEnabled == true
+      or spec.group.offlineFadeEnabled == true)
 end
 
 function GroupRangeFade.GetUnitlessEvents(frame, spec)
@@ -223,12 +224,14 @@ end
 local function CompileRangeRuntime(frame, spec)
   if not frame then return end
   local cfg = spec and spec.group
-  local enabled = cfg and (cfg.rangeFadeEnabled == true or cfg.hideOfflineEnabled == true)
+  local enabled = cfg and (cfg.rangeFadeEnabled == true or cfg.hideOfflineEnabled == true
+    or cfg.offlineFadeEnabled == true)
   frame._msufGFRangeRuntimeEnabled = enabled == true or nil
   frame._msufGFRangeFadeEnabled = cfg and cfg.rangeFadeEnabled == true or nil
   frame._msufGFRangeLayerHealth = cfg and cfg.rangeFadeLayerMode == "health" or nil
   frame._msufGFRangeFadeAlphaValue = cfg and (tonumber(cfg.rangeFadeAlpha) or 0.4) or 0.4
   frame._msufGFHideOfflineEnabled = cfg and cfg.hideOfflineEnabled == true or nil
+  frame._msufGFOfflineFadeEnabled = cfg and cfg.offlineFadeEnabled == true or nil
   frame._msufGFHideOfflineInCombat = cfg and cfg.hideOfflineInCombat == true or nil
   frame._msufGFOfflineAlphaValue = cfg and (tonumber(cfg.offlineAlpha) or 0.5) or 0.5
   frame._msufGFOfflineDelayValue = cfg and (tonumber(cfg.hideOfflineDelay) or 0) or 0
@@ -241,6 +244,7 @@ local function ClearRangeRuntime(frame)
   frame._msufGFRangeLayerHealth = nil
   frame._msufGFRangeFadeAlphaValue = nil
   frame._msufGFHideOfflineEnabled = nil
+  frame._msufGFOfflineFadeEnabled = nil
   frame._msufGFHideOfflineInCombat = nil
   frame._msufGFOfflineAlphaValue = nil
   frame._msufGFOfflineDelayValue = nil
@@ -249,7 +253,7 @@ end
 function GroupRangeFade.GetEvents(frame, spec)
   local cfg = spec and spec.group
   local range = cfg and cfg.rangeFadeEnabled == true
-  local offline = cfg and cfg.hideOfflineEnabled == true
+  local offline = cfg and (cfg.hideOfflineEnabled == true or cfg.offlineFadeEnabled == true)
   if range and offline then
     return RANGE_OFFLINE_EVENTS
   elseif range then
@@ -983,11 +987,18 @@ local function BaseAlpha(frame, event)
     ClearRange(frame)
   end
   local base = CoreAlpha(frame)
-  if frame._msufGFHideOfflineEnabled ~= true then
+  local hideOffline = frame._msufGFHideOfflineEnabled == true
+  if not hideOffline and frame._msufGFOfflineFadeEnabled ~= true then
     ClearOfflineDelay(frame)
     return base, false
   end
   if OfflineGone(frame, unit, event == "UNIT_CONNECTION" or event == "MSUF_APPLY") then
+    if not hideOffline then
+      -- Fade-only: the offline state is terminal, so it needs no delay timer and
+      -- no combat-transition subscription. UNIT_CONNECTION is the sole trigger.
+      ClearOfflineDelay(frame)
+      return base * (frame._msufGFOfflineAlphaValue or 0.5), true
+    end
     local hideReady = OfflineHideReady(frame)
     if not (InCombatLockdown and InCombatLockdown()) or frame._msufGFHideOfflineInCombat == true then
       if hideReady then

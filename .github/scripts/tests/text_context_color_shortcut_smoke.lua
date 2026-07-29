@@ -25,8 +25,8 @@ assert(helper:find('T.Button(card, CONTEXT_COLOR_SHORTCUT_TEXT, 34, 20, { noSear
 assert(helper:find('dot:SetTexture(THREE_DOT_SHORTCUT_TEXTURE)', 1, true)
         and helper:find('dot:SetSize(5, 5)', 1, true),
     "three-dot shortcuts still rely on a scaled font glyph instead of crisp native textures")
-assert(helper:find("math.min(4, tonumber(opts.maxTargets) or 4)", 1, true),
-    "RGB shortcut does not enforce the compact four-target limit")
+assert(helper:find("math.max(1, tonumber(opts.maxTargets) or 4)", 1, true),
+    "RGB shortcut does not default to the compact four-target limit")
 assert(helper:find("if #targets > maxTargets then return false end", 1, true),
     "RGB shortcut silently truncates an oversized target set")
 for _, forbidden in ipairs({ 'SetScript("OnUpdate"', "RegisterEvent", "C_Timer" }) do

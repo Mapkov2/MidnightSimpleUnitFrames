@@ -111,6 +111,8 @@ local T = {
     ["Boss"] = "Boss",
     ["Pet"] = "Familier",
     ["Frame Basics"] = "Bases du cadre",
+    ["Fade offline members"] = "Estomper les membres hors ligne",
+    ["Hiding offline members in Frame Basics takes precedence over this."] = "Masquer les membres hors ligne dans « Bases du cadre » est prioritaire sur cette option.",
     ["Enable this frame"] = "Activer ce cadre",
     ["Show name"] = "Afficher le nom",
     ["Show HP text"] = "Afficher le texte PV",
@@ -2921,6 +2923,8 @@ L["Power strength"] = "Force de puissance"
 L["Bar Gradient Colors"] = "Couleurs de dégradé de barres"
 L["Health gradient color"] = "Couleur du dégradé de santé"
 L["Power gradient color"] = "Couleur du dégradé de puissance"
+L["Border & fill"] = "Bordure et remplissage"
+L["Detached placement"] = "Placement détaché"
 L["Reset gradient colors"] = "Réinitialiser les couleurs du dégradé"
 L["Health and Power use separate gradient colors. Choosing a color creates a custom Bars override for the selected scope."] = "La santé et le pouvoir utilisent des couleurs dégradées distinctes. Le choix d'une couleur crée un remplacement de barres personnalisé pour la portée sélectionnée."
 L["UPGRADED TO MSUF %s"] = "MISE À NIVEAU VERS MSUF %s"
@@ -4436,3 +4440,13 @@ L["Number abbreviation"] = "Abréviation des nombres"
 L["Game default"] = "Par défaut du jeu"
 L["Compact"] = "Compact"
 L["Compact keeps 12.3K / 1.23M on every client language. Game default follows the client, which adds spaces or different letters on some locales."] = "Compact conserve 12.3K / 1.23M dans toutes les langues du client. Par défaut du jeu suit le client, qui ajoute des espaces ou d'autres lettres selon la langue."
+
+--- Group class-colored health note (6.0)
+L["Class-colored health uses one color per class. Open Colors > Class Colors to change them."] = "La santé colorée par classe utilise une couleur par classe. Ouvre Couleurs > Couleurs de classe pour les modifier."
+
+--- Group resource bar color list (6.0)
+L["One color per resource type, shared with every frame."] = "Une couleur par type de ressource, partagée avec tous les cadres."
+
+--- Dispel overlay preview toggle (6.0)
+L["Preview overlay"] = "Aperçu de la superposition"
+L["Paints a stand-in tint so the overlay can be judged without a real dispellable debuff. Turns itself off when this page closes."] = "Applique une teinte de démonstration pour juger la superposition sans véritable affaiblissement dissipable. Se désactive à la fermeture de cette page."

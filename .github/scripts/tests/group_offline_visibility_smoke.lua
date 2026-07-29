@@ -214,4 +214,85 @@ end
 assert(settleDriver.events.PLAYER_REGEN_DISABLED == nil,
     "the central combat-transition subscription must disappear with its last consumer")
 
+--- Fade-only mode dims disconnected members without ever hiding them. It shares
+--- the offline opacity with the hide pipeline but must not arm its delay timer
+--- or its combat-transition subscription.
+local function ApplyFadeFrame(unit)
+    local frame = NewFrame(unit)
+    MSUF.GF.frames[frame] = true
+    UF.ApplySpec(frame, {
+        unit = unit,
+        key = "party",
+        scope = "group",
+        enabled = true,
+        group = {
+            rangeFadeEnabled = false,
+            offlineAlpha = 0.35,
+            offlineFadeEnabled = true,
+            hideOfflineEnabled = false,
+            hideOfflineDelay = 30,
+        },
+    })
+    return frame
+end
+
+connected.party5 = false
+local fadeFrame = ApplyFadeFrame("party5")
+assert(fadeFrame.unitEvents.UNIT_CONNECTION == "party5",
+    "offline fade must use a frame-local UNIT_CONNECTION route")
+assert(fadeFrame.alpha == 0.35,
+    "offline fade must dim a disconnected member to the offline opacity")
+assert(settleDriver.events.PLAYER_REGEN_DISABLED == nil,
+    "offline fade must not subscribe to the central combat transition")
+assert(fadeFrame._msufGFOfflineDelayPending == nil,
+    "offline fade must not arm the hide-delay pipeline")
+
+FlushTimers(200)
+assert(fadeFrame.alpha == 0.35,
+    "an elapsed hide delay must not hide a member that is only faded")
+
+inCombat = true
+fadeFrame.OnEvent(fadeFrame, "UNIT_CONNECTION", "party5", false)
+assert(fadeFrame.alpha == 0.35,
+    "offline fade must hold the offline opacity in combat")
+inCombat = false
+
+connected.party5 = true
+fadeFrame.OnEvent(fadeFrame, "UNIT_CONNECTION", "party5", true)
+assert(fadeFrame.alpha == 1,
+    "a reconnected member must return to full opacity from the fade state")
+
+connected.party6 = false
+local bothFrame = NewFrame("party6")
+MSUF.GF.frames[bothFrame] = true
+UF.ApplySpec(bothFrame, {
+    unit = "party6",
+    key = "party",
+    scope = "group",
+    enabled = true,
+    group = {
+        rangeFadeEnabled = false,
+        offlineAlpha = 0.35,
+        offlineFadeEnabled = true,
+        hideOfflineEnabled = true,
+        hideOfflineDelay = 0,
+    },
+})
+assert(bothFrame.alpha == 0,
+    "hiding offline members must take precedence over offline fade")
+
+for _, frame in ipairs({ fadeFrame, bothFrame }) do
+    UF.ApplySpec(frame, {
+        unit = frame.unit,
+        key = "party",
+        scope = "group",
+        enabled = true,
+        group = { rangeFadeEnabled = false, hideOfflineEnabled = false, offlineFadeEnabled = false },
+    })
+end
+assert(fadeFrame.unitEvents.UNIT_CONNECTION == nil and fadeFrame.alpha == 1,
+    "disabling offline fade must remove its unit event and restore full opacity")
+assert(settleDriver.events.PLAYER_REGEN_DISABLED == nil,
+    "disabling the offline modes must leave no combat-transition subscription behind")
+
 print("group offline visibility smoke: ok")

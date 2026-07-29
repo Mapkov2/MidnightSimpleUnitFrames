@@ -160,6 +160,14 @@ function A.GroupFramesRegistry.RegisterVisualSettings(ctx, scope)
     }, "visual", aliases)
 
     aliases = {}
+    AddAliasesForUnit(aliases, scope, "offline fade")
+    AddAliasesForUnit(aliases, scope, "dim offline members")
+    AddAliasesForUnit(aliases, scope, "dim disconnected members")
+    RegisterGroupBoolean(scope, "offlineFade", "offlineFadeEnabled", "Offline Fade", false, "visual", aliases, {
+        description = "Dims group frames of disconnected members to the offline opacity. Hiding offline members takes precedence over this.",
+    })
+
+    aliases = {}
     AddAliasesForUnit(aliases, scope, "offline alpha")
     AddAliasesForUnit(aliases, scope, "offline opacity")
     AddAliasesForUnit(aliases, scope, "offline member opacity")

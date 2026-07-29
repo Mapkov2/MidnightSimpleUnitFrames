@@ -1378,24 +1378,37 @@ local function RaidGroupText(style, subgroup)
   return "(" .. subgroup .. ")"
 end
 
+--- A secure raid header's unit token already encodes the roster index
+--- ("raid7" -> 7), so the group-frame case resolves without an API call and
+--- without depending on UnitInRaid resolving that token. UnitInRaid stays as
+--- the fallback for party tokens and for target/focus unit frames.
+local RAID_TOKEN_INDEX = {}
+for i = 1, 40 do RAID_TOKEN_INDEX["raid" .. i] = i end
+
 local function UpdateRaidGroup(frame, status)
   local cfg = status and status.raidGroup
   local fs = frame.raidGroupNameText
   local unit = frame.MSUFUnitKey
   local unitState = FreshUnitState(frame, unit)
   local exists = UnitExistsRuntime(unit, unitState, frame)
-  if not (cfg and cfg.enabled and fs and UnitInRaid and GetRaidRosterInfo and exists) then
+  if not (cfg and cfg.enabled and fs and GetRaidRosterInfo and exists) then
     SetShown(fs, false)
     return
   end
-  -- Only a PLAYER can be in the raid roster; a mob target never shows a raid
-  -- group number. Skip UnitInRaid/GetRaidRosterInfo for non-players.
-  if UnitIsPlayerRuntime(unit, unitState, frame) == false then
-    SetShown(fs, false)
-    return
+  local index = RAID_TOKEN_INDEX[unit]
+  if not index then
+    -- Only a PLAYER can be in the raid roster, so a mob target never needs the
+    -- roster lookup at all; this keeps rapid target-swaps over mobs cheap.
+    -- Bail only on a positive "not a player": an unknown identity has to fall
+    -- through, or a frame whose identity was never resolved silently loses its
+    -- number.
+    local isPlayer, isPlayerKnown = ReadUnitIsPlayerCached(frame, unit)
+    if isPlayerKnown == true and isPlayer ~= true then
+      SetShown(fs, false)
+      return
+    end
+    index = UnitInRaid and SafeNumber(UnitInRaid(unit)) or nil
   end
-  local index = UnitInRaid(unit)
-  index = SafeNumber(index)
   local subgroup
   if index then
     local _, _, sg = GetRaidRosterInfo(index)
@@ -1966,6 +1979,7 @@ local Runtime = {
   UpdateLevel = UpdateIdentityTexts,
   UpdateIdentityTexts = UpdateIdentityTexts,
   UpdateRaidGroup = UpdateRaidGroup,
+  RaidGroupText = RaidGroupText,
   UpdateElite = UpdateElite,
   UpdateStatusText = UpdateStatusText,
   UpdateCombat = UpdateCombat,

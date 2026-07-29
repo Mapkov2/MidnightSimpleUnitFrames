@@ -1869,13 +1869,13 @@ local function BuildUnitDispelOverlaySection(ctx, b)
     local overlayCardWProbe = min(900, max(320, (ctx.width or 720) - 40))
     local overlayWide = overlayCardWProbe >= 760
     local ufOverlay = b:CollapsibleSection("bars_unit_dispel_overlay", "UnitFrame Dispel Overlay",
-        overlayWide and 358 or 468, false)
+        overlayWide and 402 or 512, false)
     local ufOverlayW = ufOverlay._msuf2Width or ctx.width or 720
     local ufOverlayCardW = min(900, max(320, ufOverlayW - 40))
     overlayWide = ufOverlayCardW >= 760
     local ufOverlayCard = W.ControlCard(ufOverlay, "Behavior & Style",
         "Tints unit-frame health bars when a configured debuff condition is active.",
-        20, -38, ufOverlayCardW, overlayWide and 294 or 404)
+        20, -38, ufOverlayCardW, overlayWide and 338 or 448)
     local SyncUFOverlayControls = M.RefreshProxy()
     local function BindDropdown(label, values, key, defaultValue, normalizer, reason, y)
         local dropdown = W.Dropdown(ufOverlayCard, label, values, 280)
@@ -1934,7 +1934,32 @@ local function BuildUnitDispelOverlaySection(ctx, b)
             "MSUF2_UF_DISPEL_OVERLAY_HEALTH", -174),
         BindSlider("Overlay opacity", "unitDispelOverlayAlpha", 0.35, "MSUF2_UF_DISPEL_OVERLAY_ALPHA", -218),
     }
-    local hintY = overlayWide and -284 or -384
+    -- The live tint is drawn by Blizzard and only appears while a real
+    -- dispellable debuff is up, so style and opacity are impossible to judge
+    -- while configuring. The preview paints an MSUF-owned stand-in with the
+    -- exact same geometry. Ephemeral: never written to the DB.
+    local ufOverlayPreview = W.ToggleAt(ufOverlayCard, "Preview overlay", 16, -266, ufOverlayCardW - 32)
+    M.BindBoolWidget(ctx, ufOverlayPreview,
+        function() return _G.MSUF_DispelOverlayPreviewMode == true end,
+        function(value)
+            local fn = _G.MSUF_SetDispelOverlayPreview
+            if type(fn) == "function" then fn(value and true or false, BorderTestScope()) end
+        end,
+        Meta("unit_dispel_overlay.preview", "ephemeral"))
+    ufOverlayPreview:HookScript("OnHide", function(self)
+        local fn = _G.MSUF_SetDispelOverlayPreview
+        if _G.MSUF_DispelOverlayPreviewMode == true and type(fn) == "function" then
+            fn(false)
+            if self.SetChecked then self:SetChecked(false) end
+        end
+    end)
+    if M.AddTooltip then
+        M.AddTooltip(ufOverlayPreview, "Preview overlay",
+            "Paints a stand-in tint so the overlay can be judged without a real dispellable debuff. Turns itself off when this page closes.",
+            { hook = true })
+    end
+    controls[#controls + 1] = ufOverlayPreview
+    local hintY = overlayWide and -328 or -428
     local groupHint = W.Text(ufOverlayCard,
         "Group frame scopes use Group Frames > Dispel Overlay.",
         16, hintY, ufOverlayCardW - 32, T.colors.muted)
@@ -1945,9 +1970,14 @@ local function BuildUnitDispelOverlaySection(ctx, b)
     M.TrackRefresh(ctx, SyncUFOverlayControls(function()
         local groupScope = GroupScope()
         local activeScope = not groupScope and ScopedControls()
+        local overlayOn = activeScope and BarScopeGet("unitDispelOverlayEnabled", false) == true
+        -- A preview of a disabled overlay would be a lie; drop it with the master.
+        if not overlayOn and _G.MSUF_DispelOverlayPreviewMode == true then
+            local clear = _G.MSUF_SetDispelOverlayPreview
+            if type(clear) == "function" then clear(false) end
+        end
         SetControlEnabled(master, activeScope)
-        SetControlsEnabled(controls,
-            activeScope and BarScopeGet("unitDispelOverlayEnabled", false) == true)
+        SetControlsEnabled(controls, overlayOn)
         groupHint:SetShown(groupScope)
         auraHint:SetShown(not groupScope and not AnyUnitFrameAuraEnabled())
     end))
@@ -2011,7 +2041,7 @@ local GLOBAL_BARS_LAZY_SECTION_SPECS = {
         title = "UnitFrame Dispel Overlay",
         height = function(lazyCtx)
             local width = min(900, max(320, ((lazyCtx and lazyCtx.width) or 720) - 40))
-            return width >= 760 and 358 or 468
+            return width >= 760 and 402 or 512
         end,
         build = BuildUnitDispelOverlaySection,
     },

@@ -52,11 +52,11 @@ local function BuildDispelOverlaySection(ctx, b)
     local sectionW = ctx.width or b.width or 720
     local probeW = min(900, max(320, sectionW - 40))
     local wide = probeW >= 760
-    local dispel = b:CollapsibleSection("dispel", "Dispel Overlay", wide and 412 or 522, false)
+    local dispel = b:CollapsibleSection("dispel", "Dispel Overlay", wide and 456 or 566, false)
     local dispelW = dispel._msuf2Width or b.width or 720
     local dispelCardW = min(900, max(320, dispelW - 40))
     wide = dispelCardW >= 760
-    local dispelCardH = wide and 348 or 458
+    local dispelCardH = wide and 392 or 502
     local dispelCard = W.ControlCard(dispel, "Behavior & Style", "Tints the health bar when a configured debuff condition is active.", 20, -38, dispelCardW, dispelCardH)
     local dispelToggle = BindScopeToggle(ctx, W.SwitchAt(dispelCard, "Dispel Overlay", dispelCardW - 62, -24, 0, "HIDDEN"), "dispelOverlayEnabled", false, "visual")
     local dispelPtrNotice = W.Text(dispelCard, DISPEL_OVERLAY_121_PTR_MESSAGE, 16, -58, min(420, dispelCardW - 32), T.colors.dim)
@@ -75,12 +75,41 @@ local function BuildDispelOverlaySection(ctx, b)
     local dispelAlpha = ScopeNumberSlider(ctx, dispelCard, "Overlay opacity", 0.05, 1, 0.05, 340, "dispelOverlayAlpha", 0.35, "visual", 16, -232, min(360, dispelCardW - 72))
     local dispelLayer = ScopeNumberSlider(ctx, dispelCard, "Effect Layer (0-30)", 0, 30, 1, 340,
         "dispelOverlayLayer", 0, "visual", 16, -286, min(360, dispelCardW - 72))
-    local dispelControls = { dispelTrigger, dispelStyle, dispelCurrent, dispelAlpha, dispelLayer }
+    -- The live tint is drawn by Blizzard and only appears while a real
+    -- dispellable debuff is up, so style, opacity and layer are impossible to
+    -- judge while configuring. The preview paints an MSUF-owned stand-in with
+    -- the exact same geometry. Ephemeral: never written to the DB.
+    local dispelPreview = W.ToggleAt(dispelCard, "Preview overlay", 16, -334, dispelCardW - 32)
+    M.BindBoolWidget(ctx, dispelPreview,
+        function() return _G.MSUF_DispelOverlayPreviewMode == true end,
+        function(value)
+            local fn = _G.MSUF_SetDispelOverlayPreview
+            if type(fn) == "function" then fn(value and true or false, CurrentScope()) end
+        end,
+        ControlMeta(ctx, "field.dispelOverlayPreview", "ephemeral"))
+    dispelPreview:HookScript("OnHide", function(self)
+        local fn = _G.MSUF_SetDispelOverlayPreview
+        if _G.MSUF_DispelOverlayPreviewMode == true and type(fn) == "function" then
+            fn(false)
+            if self.SetChecked then self:SetChecked(false) end
+        end
+    end)
+    if M.AddTooltip then
+        M.AddTooltip(dispelPreview, "Preview overlay",
+            "Paints a stand-in tint so the overlay can be judged without a real dispellable debuff. Turns itself off when this page closes.",
+            { hook = true })
+    end
+    local dispelControls = { dispelTrigger, dispelStyle, dispelCurrent, dispelAlpha, dispelLayer, dispelPreview }
     local function RefreshDispelState()
         if DISPEL_OVERLAY_121_PTR_DISABLED and Bool(CurrentScope(), "dispelOverlayEnabled", false) then
             Set(CurrentScope(), "dispelOverlayEnabled", false, "visual")
         end
         local overlayOn = (not DISPEL_OVERLAY_121_PTR_DISABLED) and Bool(CurrentScope(), "dispelOverlayEnabled", false)
+        -- A preview of a disabled overlay would be a lie; drop it with the master.
+        if not overlayOn and _G.MSUF_DispelOverlayPreviewMode == true then
+            local fn = _G.MSUF_SetDispelOverlayPreview
+            if type(fn) == "function" then fn(false) end
+        end
         SetOptionsEnabled(dispelControls, overlayOn)
         SetOptionEnabled(dispelToggle, not DISPEL_OVERLAY_121_PTR_DISABLED)
         local badges = {
@@ -94,7 +123,11 @@ local function BuildDispelOverlaySection(ctx, b)
     TrackSectionRefresh(ctx, dispel, RefreshDispelState)
 end
 local function BuildGFResourceBarSection(ctx, b)
-    local power = b:CollapsibleSection("power", "Resource Bar", 240, false)
+    -- Self-sizing section: the cards reserve their own rows through W.NextRow and
+    -- b:FinishSection derives the height from the cursor. A hand-declared height
+    -- here silently under-sizes the body and lets the cards bleed over the
+    -- sections below once a card is added or grows.
+    local power = b:CollapsibleSection("power", "Resource Bar", nil, false)
     local powerW = power._msuf2Width or b.width or 720
     local powerGap = 16
     local powerLeftX = 20
@@ -121,21 +154,41 @@ local function BuildGFResourceBarSection(ctx, b)
         if raw and raw > 0 then return raw end
         return DefaultPowerHeight(kind)
     end
-    local powerMainCard = W.ControlCard(power, "Visibility & Size", nil, powerLeftX, -38, powerLeftW, 178)
-    local powerRoleCard = W.ControlCard(power, "Roles", nil, powerRightX, -38, powerRightW, 178)
+    -- Card set mirrors the unit-frame Resource Bar section (Visibility & Size,
+    -- Border & fill, Detached placement); Roles is the group-only addition.
+    -- Bar art and colour stay off this page for the same reason they are off the
+    -- unit page: they are configured once globally.
+    local powerCardH = 220
+    local roleCardH = 178
+    local detachedCardH = 310
+    local _, powerCardY = W.NextRow(power, powerCardH + 12)
+    local _, roleCardY = W.NextRow(power, roleCardH + 12)
+    local _, detachedCardY = W.NextRow(power, detachedCardH)
+    local powerMainCard = W.ControlCard(power, "Visibility & Size", nil, powerLeftX, powerCardY, powerLeftW, powerCardH)
+    local powerBorderCard = W.ControlCard(power, "Border & fill", "Outline and fill behavior.", powerRightX, powerCardY, powerRightW, powerCardH)
+    local powerRoleCard = W.ControlCard(power, "Roles", nil, powerLeftX, roleCardY, powerLeftW, roleCardH)
+    local detachedCard = W.ControlCard(power, "Detached placement", "Used only when the power bar is detached from the frame.", powerLeftX, detachedCardY, powerInnerW, detachedCardH)
+    local detachedGap = 16
+    local detachedColW = floor((powerInnerW - 32 - detachedGap) / 2)
+    local detachedRightX = 16 + detachedColW + detachedGap
+    local detachedSliderW = max(160, min(340, detachedColW - 40))
     if W.AttachContextColorReferences then
-        W.AttachContextColorReferences(powerMainCard, { "power.current", "group.background" }, {
+        -- Party and raid rosters mix every resource type at once, so guessing a
+        -- single token for the whole group only ever named the wrong resource.
+        -- The card lists them instead; each entry is that resource's shared
+        -- color, so the mapping is a list and states its own target bound.
+        W.AttachContextColorReferences(powerMainCard, {
+            "power.token.mana", "power.token.rage", "power.token.energy",
+            "power.token.focus", "power.token.runic_power", "power.token.insanity",
+            "power.token.fury", "power.token.pain", "power.token.essence",
+            "power.token.lunar_power", "power.token.maelstrom",
+            "group.background",
+        }, {
             title = "Group Resource Bar Colors",
-            note = "Resource fill for this preview scope and the shared group-bar background.",
+            note = "One color per resource type, shared with every frame.",
             historySource = "menu:group-resource-bar-colors",
             offsetX = -76,
-            context = function()
-                local scope = tostring(CurrentScope() or "party")
-                return {
-                    unit = "player",
-                    powerToken = (scope == "party" or scope == "gf_party") and "RUNIC_POWER" or "FOCUS",
-                }
-            end,
+            maxTargets = 12,
         })
     end
     local powerEnabled = W.SwitchAt(powerMainCard, "Show Power Bar", powerLeftW - 62, -24, 0, "HIDDEN")
@@ -160,18 +213,71 @@ local function BuildGFResourceBarSection(ctx, b)
             meta.step, meta.roundStep = 1, true
             return meta
         end)())
-    local smoothFill = BindScopeToggle(ctx, W.ToggleAt(powerMainCard, "Smooth fill", 16, -126, powerLeftW - 32), "powerSmoothFill", false, "visual")
-    local powerHint = W.Text(powerMainCard, "Power text modes, delimiter and font size are in Text.", 16, -152, powerLeftW - 32, { 0.60, 0.75, 1.00, 1 })
+    -- Embed/detach change layout, so they take the geometry dirty class; the
+    -- header can only re-lay out its rows outside combat.
+    local embedPower = BindScopeToggle(ctx, W.ToggleAt(powerMainCard, "Embed into health", 16, -138, powerLeftW - 32),
+        "embedPowerBarIntoHealth", true, "geometry")
+    local detachPower = W.ToggleAt(powerMainCard, "Detach from frame", 16, -166, powerLeftW - 32)
+    M.BindBoolWidget(ctx, detachPower,
+        function() return Bool(CurrentScope(), "powerBarDetached", false) end,
+        function(v)
+            local scope = CurrentScope()
+            local conf = Conf(scope)
+            if v and not (tonumber(conf.detachedPowerBarWidth) or 0 > 0) then
+                -- Seed the geometry the detached card edits, mirroring the unit page.
+                conf.detachedPowerBarWidth = tonumber(conf.width) or 80
+            end
+            Set(scope, "powerBarDetached", v and true or false, "geometry")
+            RequestGroupBarsRefresh(ctx, "gf-bars-power-detached")
+        end,
+        ControlMeta(ctx, "field.powerBarDetached"))
+    local powerHint = W.Text(powerMainCard, "Power text modes, delimiter and font size are in Text.", 16, -194, powerLeftW - 32, { 0.60, 0.75, 1.00, 1 })
     if powerHint.SetWordWrap then powerHint:SetWordWrap(true) end
+    local powerBorder = W.ToggleAt(powerBorderCard, "Power bar border", 16, -62, powerRightW - 32)
+    M.BindBoolWidget(ctx, powerBorder,
+        function() return Bool(CurrentScope(), "powerBarBorderEnabled", false) end,
+        function(v)
+            Set(CurrentScope(), "powerBarBorderEnabled", v and true or false, "color")
+            RequestGroupBarsRefresh(ctx, "gf-bars-power-border")
+        end,
+        ControlMeta(ctx, "field.powerBarBorderEnabled"))
+    local powerBorderSize = ScopeSlider(ctx, powerBorderCard, "Border thickness", 0, 6, 1, powerRightW - 72,
+        "powerBarBorderThickness", 1, "color", 16, -108, powerRightW - 72)
+    local smoothFill = BindScopeToggle(ctx, W.ToggleAt(powerBorderCard, "Smooth fill", 16, -158, powerRightW - 32), "powerSmoothFill", false, "visual")
     local roleLabel = powerRoleCard and powerRoleCard.title
-    local showTank = BindScopeToggle(ctx, W.ToggleAt(powerRoleCard, "Tank", 16, -66, powerRightW - 32), "powerShowTank", true, "visual")
-    local showHealer = BindScopeToggle(ctx, W.ToggleAt(powerRoleCard, "Healer", 16, -100, powerRightW - 32), "powerShowHealer", true, "visual")
-    local showDamager = BindScopeToggle(ctx, W.ToggleAt(powerRoleCard, "DPS", 16, -134, powerRightW - 32), "powerShowDamager", false, "visual")
-    W.MoveWidget(powerHeight, powerMainCard, 16, -76, powerSliderW, "LEFT"); local powerControls = { powerHeight, smoothFill, showTank, showHealer, showDamager }
+    local showTank = BindScopeToggle(ctx, W.ToggleAt(powerRoleCard, "Tank", 16, -66, powerLeftW - 32), "powerShowTank", true, "visual")
+    local showHealer = BindScopeToggle(ctx, W.ToggleAt(powerRoleCard, "Healer", 16, -100, powerLeftW - 32), "powerShowHealer", true, "visual")
+    local showDamager = BindScopeToggle(ctx, W.ToggleAt(powerRoleCard, "DPS", 16, -134, powerLeftW - 32), "powerShowDamager", false, "visual")
+    W.MoveWidget(powerHeight, powerMainCard, 16, -76, powerSliderW, "LEFT")
+    -- Detached placement: the same fields a non-Player unit frame gets. Class
+    -- Resource width sync, anchor and the ROUND/CRYSTAL/ORB shapes are Player-only
+    -- on the unit page, so group members do not get them either.
+    local detachedText = BindScopeToggle(ctx, W.ToggleAt(detachedCard, "Text on detached bar", 16, -62, detachedColW),
+        "detachedPowerBarTextOnBar", false, "geometry")
+    local detachedX = ScopeSlider(ctx, detachedCard, "Detached X", -1000, 1000, 1, detachedSliderW,
+        "detachedPowerBarOffsetX", 0, "geometry", 16, -116, detachedSliderW)
+    local detachedY = ScopeSlider(ctx, detachedCard, "Detached Y", -1000, 1000, 1, detachedSliderW,
+        "detachedPowerBarOffsetY", -4, "geometry", detachedRightX, -116, detachedSliderW)
+    local detachedWidth = ScopeSlider(ctx, detachedCard, "Detached width", 20, 800, 1, detachedSliderW,
+        "detachedPowerBarWidth", 80, "geometry", 16, -182, detachedSliderW)
+    local detachedHeight = ScopeSlider(ctx, detachedCard, "Detached height", 2, 80, 1, detachedSliderW,
+        "detachedPowerBarHeight", 6, "geometry", detachedRightX, -182, detachedSliderW)
+    local detachedLayer = ScopeSlider(ctx, detachedCard, "Detached layer", 0, 30, 1, detachedSliderW,
+        "detachedPowerBarFrameLevelOffset", 6, "geometry", 16, -248, detachedSliderW)
+    local powerControls = {
+        powerHeight, smoothFill, showTank, showHealer, showDamager,
+        embedPower, detachPower, powerBorder,
+    }
+    local detachedControls = { detachedText, detachedX, detachedY, detachedWidth, detachedHeight, detachedLayer }
     local function RefreshPowerState()
         local enabled = IsPowerBarEnabled(CurrentScope())
+        local detached = enabled and Bool(CurrentScope(), "powerBarDetached", false)
         SetOptionEnabled(powerEnabled, true)
         SetOptionsEnabled(powerControls, enabled)
+        -- Same gating the unit page applies: detached geometry only while the bar
+        -- is detached, thickness only while the border is on.
+        SetOptionsEnabled(detachedControls, detached)
+        SetOptionEnabled(powerBorderSize, enabled and Bool(CurrentScope(), "powerBarBorderEnabled", false))
         if roleLabel.SetTextColor then
             local c = enabled and T.colors.accent or T.colors.dim
             roleLabel:SetTextColor(c[1], c[2], c[3], c[4] or 1)
@@ -184,9 +290,11 @@ local function BuildGFResourceBarSection(ctx, b)
             OnOffBadge(enabled, "Shown", "Hidden"),
             { text = BadgeNumber(CurrentPowerHeight(CurrentScope())) .. "px", kind = enabled and "info" or "muted" },
             { text = #roles > 0 and table.concat(roles, "/") or "No roles", kind = enabled and "accent" or "muted" },
+            { text = detached and "Detached" or "Attached", kind = enabled and "info" or "muted" },
         })
     end
     TrackSectionRefresh(ctx, power, RefreshPowerState)
+    if b.FinishSection then b:FinishSection(power, 24) end
 end
 
 local function BuildGFTextSection(ctx, b)
@@ -808,7 +916,7 @@ end
 
 local function BuildGFRangeFadeSection(ctx, b)
     local AlphaLabel = M.AlphaLabel
-    local range = b:CollapsibleSection("range", "Range Fade", 220, false)
+    local range = b:CollapsibleSection("range", "Range Fade", 250, false)
     local rangeW = range._msuf2Width or b.width or 720
     local rangeGap = 16
     local rangeLeftX = 20
@@ -816,8 +924,8 @@ local function BuildGFRangeFadeSection(ctx, b)
     local rangeLeftWidth = floor((rangeInnerW - rangeGap) * 0.48)
     local rangeRightX = rangeLeftX + rangeLeftWidth + rangeGap
     local rangeRightWidth = rangeInnerW - rangeLeftWidth - rangeGap
-    local rangeEffectCard = W.ControlCard(range, "Behavior", nil, rangeLeftX, -38, rangeLeftWidth, 160)
-    local rangeAlphaCard = W.ControlCard(range, "Alpha", "Opacity values used by range and offline states.", rangeRightX, -38, rangeRightWidth, 160)
+    local rangeEffectCard = W.ControlCard(range, "Behavior", nil, rangeLeftX, -38, rangeLeftWidth, 190)
+    local rangeAlphaCard = W.ControlCard(range, "Alpha", "Opacity values used by range and offline states.", rangeRightX, -38, rangeRightWidth, 190)
     local rangeToggle = BindScopeToggle(ctx, W.SwitchAt(rangeEffectCard, "Range Fade", rangeLeftWidth - 62, -24, 0, "HIDDEN"), "rangeFadeEnabled", false, "visual")
     local function BindRangeAlphaSlider(key, label, default, y)
         local control = W.Slider(rangeAlphaCard, "", 0, 1, 0.05, rangeRightWidth)
@@ -843,19 +951,36 @@ local function BuildGFRangeFadeSection(ctx, b)
         function(v) Set(CurrentScope(), "rangeFadeLayerMode", v or "frame", "visual") end,
         ControlMeta(ctx, "field.rangeFadeLayerMode"))
     W.MoveWidget(rangeMode, rangeEffectCard, 16, -88, rangeModeW, "LEFT")
+    local offlineFadeToggle = BindScopeToggle(ctx, W.ToggleAt(rangeEffectCard, "Fade offline members", 16, -128, rangeLeftWidth - 32), "offlineFadeEnabled", false, "visual")
+    local offlineHint = W.Text(rangeEffectCard, "Hiding offline members in Frame Basics takes precedence over this.", 16, -156, rangeLeftWidth - 32, T.colors.muted)
+    if offlineHint and offlineHint.SetWordWrap then offlineHint:SetWordWrap(true) end
     local rangeControls = {
         rangeMode,
         BindRangeAlphaSlider("rangeFadeAlpha", "Out of range", 0.4, -70),
-        BindRangeAlphaSlider("offlineAlpha", "Offline", 0.5, -124),
     }
+    -- Offline opacity is independent of range fade: it drives the fade state and
+    -- doubles as the transition value while the Frame Basics hide delay runs.
+    local offlineAlphaSlider = BindRangeAlphaSlider("offlineAlpha", "Offline", 0.5, -124)
     local function RefreshRangeState()
         local enabled = Bool(CurrentScope(), "rangeFadeEnabled", false)
+        local offlineFade = Bool(CurrentScope(), "offlineFadeEnabled", false)
+        local offlineHidden = Bool(CurrentScope(), "hideOfflineEnabled", false)
         SetOptionsEnabled(rangeControls, enabled)
         SetOptionEnabled(rangeToggle, true)
+        SetOptionEnabled(offlineFadeToggle, not offlineHidden)
+        SetOptionEnabled(offlineAlphaSlider, offlineFade or offlineHidden)
+        local offlineText, offlineKind = "Offline visible", "muted"
+        if offlineHidden then
+            offlineText, offlineKind = "Offline hidden", "accent"
+        elseif offlineFade then
+            offlineText = "Offline " .. tostring(floor(Num(CurrentScope(), "offlineAlpha", 0.5) * 100 + 0.5)) .. "%"
+            offlineKind = "accent"
+        end
         SetSectionBadgesAndStatus(range, {
             OnOffBadge(enabled, "Active", "Off"),
             { text = Val(CurrentScope(), "rangeFadeLayerMode", "frame") == "health" and "HP only" or "Whole frame", kind = enabled and "info" or "muted" },
             { text = tostring(floor(Num(CurrentScope(), "rangeFadeAlpha", 0.4) * 100 + 0.5)) .. "%", kind = enabled and "accent" or "muted" },
+            { text = offlineText, kind = offlineKind },
         })
     end
     TrackSectionRefresh(ctx, range, RefreshRangeState)

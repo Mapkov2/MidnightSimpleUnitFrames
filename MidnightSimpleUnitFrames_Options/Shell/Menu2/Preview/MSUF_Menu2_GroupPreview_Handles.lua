@@ -70,7 +70,12 @@ function Handles.Install(box, deps)
     local function SelectHandle(handle)
         box._selectedHandle = handle
         if box.SetFocus then box:SetFocus() end
-        if handle and handle._cfgStatus and handle._statusSpec then M.SetMenuStateValue("gfStatusIconSelection", handle._statusSpec.value) end
+        -- Preview-only entries have no slot in the Status Icons dropdown;
+        -- writing their value into that selection would blank the dropdown and
+        -- hide every real status handle.
+        if handle and handle._cfgStatus and handle._statusSpec and handle._statusSpec.previewOnly ~= true then
+            M.SetMenuStateValue("gfStatusIconSelection", handle._statusSpec.value)
+        end
         if handle and handle._cfgSpellItem then
             local gp = M.GroupPage or {}
             if type(gp.SetCurrentSpellAura) == "function" then
@@ -229,12 +234,24 @@ function Handles.Install(box, deps)
         end
         return nil
     end
+    -- Every anchor is captured, not just the first: the bar-anchored name is a
+    -- LEFT+RIGHT span, and re-setting only point 1 would collapse it to its
+    -- string width for the duration of the drag.
     local function CaptureTextDragFrame(list, frame)
         if not (list and frame and frame.GetPoint and frame.ClearAllPoints and frame.SetPoint) then return end
         if frame.IsShown and not frame:IsShown() then return end
-        local point, relTo, relPoint, xOfs, yOfs = frame:GetPoint(1)
-        if not point then return end
-        list[#list + 1] = { frame = frame, point = point, relTo = relTo, relPoint = relPoint, x = xOfs or 0, y = yOfs or 0 }
+        local count = (frame.GetNumPoints and frame:GetNumPoints()) or 1
+        if count < 1 then return end
+        local points
+        for i = 1, count do
+            local point, relTo, relPoint, xOfs, yOfs = frame:GetPoint(i)
+            if point then
+                points = points or {}
+                points[#points + 1] = { point = point, relTo = relTo, relPoint = relPoint, x = xOfs or 0, y = yOfs or 0 }
+            end
+        end
+        if not points then return end
+        list[#list + 1] = { frame = frame, points = points }
     end
     local function CaptureTextDragRegions(handle)
         if not handle then return end
@@ -253,6 +270,11 @@ function Handles.Install(box, deps)
     end
     local function TextDragNameRight(handle)
         if not (handle and handle._cfgTextKind == "name") then return false end
+        -- The bar-anchored name follows the live span, where +x moves right on
+        -- every anchor. Only the TOPRIGHT fallback layout mirrors the offset,
+        -- so only that one needs the drag delta mirrored back.
+        local fs = box._mock and box._mock._nameFS
+        if fs and fs._msufPreviewSpan == true then return false end
         local conf = H.Conf(H.CurrentScope()) or {}
         return (conf.nameAnchor or "LEFT") == "RIGHT"
     end
@@ -277,9 +299,13 @@ function Handles.Install(box, deps)
             for i = 1, #captured do
                 local item = captured[i]
                 local frame = item and item.frame
-                if frame and frame.ClearAllPoints and frame.SetPoint then
+                local points = item and item.points
+                if frame and points and frame.ClearAllPoints and frame.SetPoint then
                     frame:ClearAllPoints()
-                    frame:SetPoint(item.point, item.relTo or box._mock, item.relPoint or item.point, (item.x or 0) + dx, (item.y or 0) + dy)
+                    for j = 1, #points do
+                        local p = points[j]
+                        frame:SetPoint(p.point, p.relTo or box._mock, p.relPoint or p.point, (p.x or 0) + dx, (p.y or 0) + dy)
+                    end
                     moved = true
                 end
             end
@@ -316,6 +342,19 @@ function Handles.Install(box, deps)
     local function SaveHandlePosition(handle, action)
         if not (handle and box._mock) or handle._locked then return end
         if handle._cfgText then return end
+        if handle._cfgPower then
+            -- The drag preserved the runtime's TOP -> frame BOTTOM anchor, so
+            -- the final point offsets are the detached offsets in preview px.
+            local _, _, _, offX, offY = handle:GetPoint(1)
+            local scale = handle._previewWriteScale or handle._previewScale or box._mock._previewScale or 1
+            local conf = H.Conf(H.CurrentScope())
+            if not conf then return end
+            conf.detachedPowerBarOffsetX = OffsetToConfig(offX or 0, scale)
+            conf.detachedPowerBarOffsetY = OffsetToConfig(offY or 0, scale)
+            RefreshGroupPreviewAfterMove(handle)
+            CheckpointHandleHistory(handle, action)
+            return
+        end
         local m = box._mock
         local anchorFrame = (handle._cfgGroup and handle._previewAnchorFrame) or m
         local mL, mT = anchorFrame:GetLeft() or 0, anchorFrame:GetTop() or 0
@@ -401,6 +440,10 @@ function Handles.Install(box, deps)
             if not placed then return false end
             placed.x = cfgX
             placed.y = cfgY
+        elseif handle._cfgPower then
+            if handle._locked then return false end
+            conf.detachedPowerBarOffsetX = cfgX
+            conf.detachedPowerBarOffsetY = cfgY
         else
             return false
         end
@@ -433,6 +476,8 @@ function Handles.Install(box, deps)
         elseif handle._cfgSpell then
             local placed = SpellPlacedForHandle(handle, false)
             return tonumber(placed and placed.x) or 0, tonumber(placed and placed.y) or 0
+        elseif handle._cfgPower then
+            return tonumber(conf.detachedPowerBarOffsetX) or 0, tonumber(conf.detachedPowerBarOffsetY) or -4
         end
         return nil
     end
@@ -457,6 +502,8 @@ function Handles.Install(box, deps)
             local placed = SpellPlacedForHandle(handle, true)
             if not placed then return false end
             placed.x, placed.y = x, y
+        elseif handle._cfgPower then
+            conf.detachedPowerBarOffsetX, conf.detachedPowerBarOffsetY = x, y
         else
             return false
         end
@@ -858,6 +905,13 @@ function Handles.Install(box, deps)
     -- visible affordance inside the handle's mouse hit area as well.
     if externalHandle.SetHitRectInsets then externalHandle:SetHitRectInsets(0, 0, -14, 0) end
     AddIconPool(externalHandle, 2)
+    -- Resource bar handle. Live parity: only the detached bar owns free
+    -- offsets (the embedded bar's texture cannot move on the live frame), so
+    -- the render locks this handle while the bar is embedded and it degrades
+    -- to select + double-click-to-open like any locked layer.
+    local powerBarHandle = CreatePreviewHandle("powerBar", "power", { 0.30, 0.62, 0.98 }, "POWER", 86, 16, false)
+    powerBarHandle._cfgPower = true
+    powerBarHandle._previewText = "Resource Bar"
     local statusHandles = {}
     local statusSpecs = H.StatusSpecs()
     for i = 1, #statusSpecs do
@@ -1107,6 +1161,7 @@ function Handles.Install(box, deps)
         trackedBuffHandle = trackedBuffHandle,
         debuffHandle = debuffHandle,
         externalHandle = externalHandle,
+        powerBarHandle = powerBarHandle,
         statusHandles = statusHandles,
         spellHandle = spellHandle,
         SelectHandle = SelectHandle,

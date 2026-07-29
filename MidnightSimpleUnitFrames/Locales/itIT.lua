@@ -83,6 +83,8 @@ local T = {
     ["Boss"] = "Boss",
     ["Pet"] = "Compagno",
     ["Frame Basics"] = "Base del riquadro",
+    ["Fade offline members"] = "Attenua membri offline",
+    ["Hiding offline members in Frame Basics takes precedence over this."] = "Nascondere i membri offline in «Base del riquadro» ha la precedenza su questa opzione.",
     ["Enable this frame"] = "Abilita questo riquadro",
     ["Show name"] = "Mostra nome",
     ["Show HP text"] = "Mostra testo PV",
@@ -2503,6 +2505,8 @@ L["Power strength"] = "Forza di potenza"
 L["Bar Gradient Colors"] = "Colori sfumati della barra"
 L["Health gradient color"] = "Colore del gradiente di salute"
 L["Power gradient color"] = "Colore gradiente di potenza"
+L["Border & fill"] = "Bordo e riempimento"
+L["Detached placement"] = "Posizionamento separato"
 L["Reset gradient colors"] = "Ripristina i colori sfumati"
 L["Health and Power use separate gradient colors. Choosing a color creates a custom Bars override for the selected scope."] = "Salute e Potenza utilizzano colori sfumati separati. La scelta di un colore crea una sostituzione Bars personalizzata per l'ambito selezionato."
 L["UPGRADED TO MSUF %s"] = "AGGIORNATO A MSUF %s"
@@ -4035,3 +4039,13 @@ L["Number abbreviation"] = "Abbreviazione dei numeri"
 L["Game default"] = "Predefinito del gioco"
 L["Compact"] = "Compatto"
 L["Compact keeps 12.3K / 1.23M on every client language. Game default follows the client, which adds spaces or different letters on some locales."] = "Compatto mantiene 12.3K / 1.23M in ogni lingua del client. Predefinito del gioco segue il client, che in alcune lingue aggiunge spazi o lettere diverse."
+
+--- Group class-colored health note (6.0)
+L["Class-colored health uses one color per class. Open Colors > Class Colors to change them."] = "La salute colorata per classe usa un colore per classe. Apri Colori > Colori di classe per modificarli."
+
+--- Group resource bar color list (6.0)
+L["One color per resource type, shared with every frame."] = "Un colore per tipo di risorsa, condiviso con tutti i frame."
+
+--- Dispel overlay preview toggle (6.0)
+L["Preview overlay"] = "Anteprima sovrapposizione"
+L["Paints a stand-in tint so the overlay can be judged without a real dispellable debuff. Turns itself off when this page closes."] = "Applica una tinta di prova per valutare la sovrapposizione senza un vero debuff dissolvibile. Si disattiva alla chiusura di questa pagina."

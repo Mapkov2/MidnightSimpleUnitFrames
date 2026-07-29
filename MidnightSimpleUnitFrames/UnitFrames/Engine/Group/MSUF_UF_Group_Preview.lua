@@ -310,6 +310,12 @@ local function PositionContainer(kind, count)
   layout._msufGFPreviewLayout = true
   layout._msufGFDragCenterToGridX = 0
   layout._msufGFDragCenterToGridY = 0
+  --- The live block border is drawn on the header anchor, which the preview
+  --- replaces. Re-draw it on the container (same footprint) or the setting
+  --- stays invisible for as long as a preview is up.
+  if type(GF.ApplyGroupBorderToFrame) == "function" then
+    GF.ApplyGroupBorderToFrame(container, conf)
+  end
   container:Show()
   layout:Show()
   return container, layout, w, h, spacing or 1, growth or "DOWN", upc or 5, primary, blockW, blockH
@@ -321,6 +327,17 @@ end
 
 local function SetText(region, text)
   if region and region.SetText then region:SetText(text or "") end
+end
+
+--- Format a fake subgroup label exactly like the live raid-group indicator, so
+--- the preview does not drift from the runtime formatter.
+local function RaidGroupPreviewText(style, subgroup)
+  local runtime = MSUF.UFStatusRuntime
+  local format = runtime and runtime.RaidGroupText
+  if type(format) == "function" then return format(style, subgroup) end
+  if style == "BRACKET" then return "[" .. subgroup .. "]" end
+  if style == "NONE" then return tostring(subgroup) end
+  return "(" .. subgroup .. ")"
 end
 
 local function SetBar(bar, value, maxValue, r, g, b, a)
@@ -474,8 +491,12 @@ local function ApplyPreviewStatus(frame, kind, index, role)
   else
     SetShown(frame.phaseIcon, false)
   end
-  if frame.raidGroupNameText and frame.MSUFSpec and frame.MSUFSpec.status and frame.MSUFSpec.status.raidGroup then
-    frame.raidGroupNameText:SetText(tostring(((index - 1) % 5) + 1))
+  --- The compiled status always carries a raidGroup table, so gate on its
+  --- enabled flag: testing the table alone kept a stale number on screen after
+  --- the setting was switched off.
+  local raidGroupCfg = frame.MSUFSpec and frame.MSUFSpec.status and frame.MSUFSpec.status.raidGroup
+  if frame.raidGroupNameText and raidGroupCfg and raidGroupCfg.enabled == true then
+    frame.raidGroupNameText:SetText(RaidGroupPreviewText(raidGroupCfg.style, ((index - 1) % 5) + 1))
     frame.raidGroupNameText:Show()
   else
     SetShown(frame.raidGroupNameText, false)
@@ -801,6 +822,13 @@ local function ApplyPreviewFrame(kind, index, reason, layout, w, h, spacing, gro
   local frame = PreparePreviewFrame(kind, index, layout, w, h, spacing, growth, upc, primary, blockW, blockH)
   ApplyPreviewSpecIfNeeded(frame, kind, reason, w, h, dirtyMask, expectedRevision)
   ApplyPreviewData(frame, index, kind)
+  -- Menu dispel-overlay preview: only row 1 owns a native aura container, so
+  -- the MSUF-drawn preview has to be re-stamped per row on every rebuild.
+  -- One boolean read when no preview is active.
+  if _G.MSUF_DispelOverlayPreviewMode == true
+    and type(_G.MSUF_ApplyDispelOverlayPreviewToFrame) == "function" then
+    _G.MSUF_ApplyDispelOverlayPreviewToFrame(frame)
+  end
   return true
 end
 
@@ -918,6 +946,9 @@ function GF.HidePreview(kind)
     end
   end
   if container then container:Hide() end
+  --- Hand the block border back to the live anchor: it was force-hidden for as
+  --- long as this preview owned the block.
+  if type(GF.ApplyGroupBorder) == "function" then GF.ApplyGroupBorder(kind) end
   return true
 end
 

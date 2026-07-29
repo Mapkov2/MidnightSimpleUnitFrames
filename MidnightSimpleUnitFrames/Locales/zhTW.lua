@@ -83,6 +83,8 @@ local T = {
     ["Boss"] = "首領",
     ["Pet"] = "寵物",
     ["Frame Basics"] = "框架基礎",
+    ["Fade offline members"] = "淡化離線成員",
+    ["Hiding offline members in Frame Basics takes precedence over this."] = "「框架基礎」中的隱藏離線成員優先於此設定。",
     ["Enable this frame"] = "啟用此框架",
     ["Show name"] = "顯示名稱",
     ["Show HP text"] = "顯示生命文字",
@@ -2539,6 +2541,8 @@ L["Power strength"] = "電源強度"
 L["Bar Gradient Colors"] = "條形漸層顏色"
 L["Health gradient color"] = "健康漸層色"
 L["Power gradient color"] = "功率漸層色"
+L["Border & fill"] = "邊框和填充"
+L["Detached placement"] = "分離放置"
 L["Reset gradient colors"] = "重設漸層顏色"
 L["Health and Power use separate gradient colors. Choosing a color creates a custom Bars override for the selected scope."] = "生命值和能量使用不同的漸層顏色。選擇顏色會為選定範圍建立自訂條形覆蓋。"
 L["UPGRADED TO MSUF %s"] = "升級至MSUF %s"
@@ -4056,3 +4060,13 @@ L["Number abbreviation"] = "數字縮寫"
 L["Game default"] = "遊戲預設"
 L["Compact"] = "精簡"
 L["Compact keeps 12.3K / 1.23M on every client language. Game default follows the client, which adds spaces or different letters on some locales."] = "精簡模式在所有客戶端語言下都維持 12.3K / 1.23M 的格式。遊戲預設會跟隨客戶端，部分語言會加入空格或使用不同的字母。"
+
+--- Group class-colored health note (6.0)
+L["Class-colored health uses one color per class. Open Colors > Class Colors to change them."] = "職業著色的生命值每個職業使用一種顏色。請開啟 顏色 > 職業顏色 進行修改。"
+
+--- Group resource bar color list (6.0)
+L["One color per resource type, shared with every frame."] = "每種資源類型一種顏色，與所有框體共用。"
+
+--- Dispel overlay preview toggle (6.0)
+L["Preview overlay"] = "預覽疊加"
+L["Paints a stand-in tint so the overlay can be judged without a real dispellable debuff. Turns itself off when this page closes."] = "繪製範例著色，無需真實的可驅散減益即可檢視疊加效果。關閉本頁面時自動關閉。"

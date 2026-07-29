@@ -849,63 +849,87 @@ self:SetAttribute('ping-receiver', true)
 ]], w, h, _initCfgNonce)
 end
 
-local function ApplyGroupBorder(anchor, conf)
-  if not anchor then return end
-  if conf.groupBorderEnabled ~= true then
-    if anchor.MSUFGFGroupBorder then
-      for _, edge in pairs(anchor.MSUFGFGroupBorder) do edge:Hide() end
-    end
-    return
+--- Draw or hide the group block border on `host`. Live headers pass their
+--- anchor, the preview passes its own container, so both surfaces share one
+--- geometry implementation instead of drifting apart. `enabled` lets a caller
+--- force the border off while another surface owns the block.
+local function ApplyGroupBorder(host, conf, enabled)
+  if not host then return false end
+  if enabled == nil then
+    enabled = conf and conf.groupBorderEnabled == true
   end
-  local edges = anchor.MSUFGFGroupBorder or {}
-  anchor.MSUFGFGroupBorder = edges
+  if type(conf) ~= "table" then enabled = false end
+  if enabled ~= true then
+    if host.MSUFGFGroupBorder then
+      for _, edge in pairs(host.MSUFGFGroupBorder) do edge:Hide() end
+    end
+    return false
+  end
+  local edges = host.MSUFGFGroupBorder or {}
+  host.MSUFGFGroupBorder = edges
   local size, pad = conf.groupBorderSize or 1, conf.groupBorderPadding or 2
   local r, g, b, a = conf.groupBorderR or 0.38, conf.groupBorderG or 0.68, conf.groupBorderB or 1, conf.groupBorderA or 0.95
   for i = 1, #BORDER_EDGE_KEYS do
     local key = BORDER_EDGE_KEYS[i]
     local edge = edges[key]
     if not edge then
-      edge = anchor:CreateTexture(nil, "OVERLAY")
+      edge = host:CreateTexture(nil, "OVERLAY")
       edges[key] = edge
     end
     edge:SetColorTexture(r, g, b, a)
     edge:ClearAllPoints()
     if key == "top" then
-      edge:SetPoint("TOPLEFT", anchor, "TOPLEFT", -pad, pad)
-      edge:SetPoint("TOPRIGHT", anchor, "TOPRIGHT", pad, pad)
+      edge:SetPoint("TOPLEFT", host, "TOPLEFT", -pad, pad)
+      edge:SetPoint("TOPRIGHT", host, "TOPRIGHT", pad, pad)
       edge:SetHeight(size)
     elseif key == "bottom" then
-      edge:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", -pad, -pad)
-      edge:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", pad, -pad)
+      edge:SetPoint("BOTTOMLEFT", host, "BOTTOMLEFT", -pad, -pad)
+      edge:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", pad, -pad)
       edge:SetHeight(size)
     elseif key == "left" then
-      edge:SetPoint("TOPLEFT", anchor, "TOPLEFT", -pad, pad)
-      edge:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", -pad, -pad)
+      edge:SetPoint("TOPLEFT", host, "TOPLEFT", -pad, pad)
+      edge:SetPoint("BOTTOMLEFT", host, "BOTTOMLEFT", -pad, -pad)
       edge:SetWidth(size)
     else
-      edge:SetPoint("TOPRIGHT", anchor, "TOPRIGHT", pad, pad)
-      edge:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", pad, -pad)
+      edge:SetPoint("TOPRIGHT", host, "TOPRIGHT", pad, pad)
+      edge:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", pad, -pad)
       edge:SetWidth(size)
     end
     edge:Show()
   end
+  return true
+end
+
+GF.ApplyGroupBorderToFrame = ApplyGroupBorder
+
+--- A preview replaces the whole block for its kind, and the live anchor keeps
+--- its last position/size while the header is retired. Let the preview own the
+--- border for that kind so the two do not draw two boxes at once.
+local function GroupBorderPreviewOwned(anchorKind)
+  if _G.MSUF_UnitEditModeActive == true then return false end
+  local active = GF._previewActive
+  if not active then return false end
+  if anchorKind == "party" then return active.party == true end
+  return active.raid == true or active.mythicraid == true
+end
+
+local function ApplyGroupBorderForKey(key)
+  local anchor = GF.anchors and GF.anchors[key]
+  if not anchor then return end
+  local anchorKind = anchor._msufGFKind or (key == "party" and "party" or "raid")
+  local conf = GF.GetConf and GF.GetConf(anchorKind) or {}
+  local enabled = conf.groupBorderEnabled == true and not GroupBorderPreviewOwned(anchorKind)
+  ApplyGroupBorder(anchor, conf, enabled)
 end
 
 function GF.ApplyGroupBorder(kind)
-  local function ApplyForKey(key)
-    local anchor = GF.anchors and GF.anchors[key]
-    if not anchor then return end
-    local anchorKind = anchor._msufGFKind or (key == "party" and "party" or "raid")
-    local conf = GF.GetConf and GF.GetConf(anchorKind) or {}
-    ApplyGroupBorder(anchor, conf)
-  end
   if kind == "party" then
-    ApplyForKey("party")
+    ApplyGroupBorderForKey("party")
   elseif kind == "raid" or kind == "mythicraid" then
-    ApplyForKey("raid")
+    ApplyGroupBorderForKey("raid")
   else
-    ApplyForKey("party")
-    ApplyForKey("raid")
+    ApplyGroupBorderForKey("party")
+    ApplyGroupBorderForKey("raid")
   end
 end
 
@@ -1194,7 +1218,7 @@ function GF.SetupHeader(key, kind)
   anchor._msufGFKind = kind
   anchor._msufGFDragCenterToGridX = 0
   anchor._msufGFDragCenterToGridY = 0
-  ApplyGroupBorder(anchor, conf)
+  ApplyGroupBorderForKey(key)
 
   local header = GF.headers[key]
   local newHeader = false

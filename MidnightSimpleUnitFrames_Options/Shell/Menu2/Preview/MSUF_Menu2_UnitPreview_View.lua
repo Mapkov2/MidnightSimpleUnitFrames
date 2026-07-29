@@ -55,6 +55,16 @@ local function UnitPreviewHandleNavigationKey(handle, pageKey)
 end
 local function RegisterUnitPreviewRuntimeControls(box, pageKey)
     if not box then return 0 end
+    pageKey = pageKey or M2.activeKey
+    local registrationSentinel = box.zoomBar or box.canvas or box._msuf2PinButton
+    if pageKey
+        and box._msuf2RuntimeControlsPageKey == pageKey
+        and registrationSentinel
+        and type(M2.IsRuntimeControlRegisteredForWidget) == "function"
+        and M2.IsRuntimeControlRegisteredForWidget(registrationSentinel, pageKey)
+    then
+        return 0
+    end
     local count = 0
     local function Register(widget, semanticPath, label, kind, classification, extra)
         if not widget then return end
@@ -119,6 +129,7 @@ local function RegisterUnitPreviewRuntimeControls(box, pageKey)
         end
     end
     Register(box._msuf2PinButton, "pin.toggle", "Pin Unit Preview", "toggle", "ephemeral")
+    box._msuf2RuntimeControlsPageKey = pageKey
     return count
 end
 function Preview.RegisterRuntimeControlsForPage(box, pageKey)

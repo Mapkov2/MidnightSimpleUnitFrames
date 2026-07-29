@@ -757,7 +757,8 @@ local function UpdateNav(key)
     M._msuf2NavLocaleKey = localeKey
     for pageKey, btn in pairs(M.navButtons) do
         if labelsDirty and btn._msuf2RawLabel and btn.SetText then btn:SetText(M.Tr(btn._msuf2RawLabel)) end
-        if btn.SetActive then btn:SetActive(pageKey == activeNavKey) end
+        local active = pageKey == activeNavKey
+        if btn.SetActive and btn._msuf2Active ~= active then btn:SetActive(active) end
     end
     M._msuf2NavActiveKey = activeNavKey
     if labelsDirty and M.navHeaders then
@@ -1299,14 +1300,19 @@ function M.SelectPage(key)
     -- Clear the shared slot before touching either wrapper. Pages without an
     -- Editing/Page header therefore return to the original direct scroll
     -- anchor synchronously instead of inheriting stale chrome.
+    M._msuf2DeferPageHeaderLayout = true
     M.CallIf(M.SetActivePageHeader, nil)
+    M._msuf2DeferPageHeaderLayout = nil
     if previous and previous.wrapper and previous.wrapper.Hide then
         previous.wrapper:Hide()
     else
         HideAllCachedPages()
     end
     local entry = BuildPageEntry(key, false)
-    if not entry then return false end
+    if not entry then
+        M.CallIf(M.SetActivePageHeader, nil)
+        return false
+    end
     entry.hiddenBuild = false
     M.activeKey = key
     M.CallIf(M.SetActivePageHeader, entry)
@@ -2256,8 +2262,10 @@ local function BuildWindowScrollHost(state)
         then
             nextHeader:Activate(pageHeaderHost)
         end
-        LayoutPageHeaderHost()
-        RefreshPinnedHeaderGeometry()
+        if not M._msuf2DeferPageHeaderLayout then
+            LayoutPageHeaderHost()
+            RefreshPinnedHeaderGeometry()
+        end
         return scroll._msuf2StickyPageHeader ~= nil
     end
     function M.DisposePageHeader(entry)

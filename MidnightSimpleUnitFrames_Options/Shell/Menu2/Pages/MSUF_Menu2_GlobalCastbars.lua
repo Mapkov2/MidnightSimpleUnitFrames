@@ -939,10 +939,12 @@ local function BuildCastbars(ctx)
                 end
             end
             for key, btn in pairs(typeButtons) do
-                if btn.SetActive then btn:SetActive(key == kind) end
+                local active = key == kind
+                if btn.SetActive and btn._msuf2Active ~= active then btn:SetActive(active) end
             end
             for key, btn in pairs(unitButtons) do
-                if btn.SetActive then btn:SetActive(key == unit) end
+                local active = key == unit
+                if btn.SetActive and btn._msuf2Active ~= active then btn:SetActive(active) end
             end
         end
         box:SetScript("OnUpdate", function(_, elapsed)

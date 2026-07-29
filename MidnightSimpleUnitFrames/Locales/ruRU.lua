@@ -83,6 +83,8 @@ local T = {
     ["Boss"] = "Босс",
     ["Pet"] = "Питомец",
     ["Frame Basics"] = "Основы рамки",
+    ["Fade offline members"] = "Затемнять офлайн-участников",
+    ["Hiding offline members in Frame Basics takes precedence over this."] = "Скрытие офлайн-участников в «Основы рамки» имеет приоритет над этой настройкой.",
     ["Enable this frame"] = "Включить эту рамку",
     ["Show name"] = "Показать имя",
     ["Show HP text"] = "Показать текст ОЗ",
@@ -2528,6 +2530,8 @@ L["Power strength"] = "Сила силы"
 L["Bar Gradient Colors"] = "Цвета градиента бара"
 L["Health gradient color"] = "Цвет градиента здоровья"
 L["Power gradient color"] = "Цвет градиента мощности"
+L["Border & fill"] = "Рамка и заливка"
+L["Detached placement"] = "Отдельное размещение"
 L["Reset gradient colors"] = "Сбросить цвета градиента"
 L["Health and Power use separate gradient colors. Choosing a color creates a custom Bars override for the selected scope."] = "Здоровье и Сила используют отдельные градиентные цвета. Выбор цвета создает пользовательское переопределение столбцов для выбранной области."
 L["UPGRADED TO MSUF %s"] = "ОБНОВЛЕНО ДО MSUF %s"
@@ -4052,3 +4056,13 @@ L["Number abbreviation"] = "Сокращение чисел"
 L["Game default"] = "Как в игре"
 L["Compact"] = "Компактно"
 L["Compact keeps 12.3K / 1.23M on every client language. Game default follows the client, which adds spaces or different letters on some locales."] = "Компактно сохраняет вид 12.3K / 1.23M на любом языке клиента. «Как в игре» следует за клиентом, который в некоторых языках добавляет пробелы или другие буквы."
+
+--- Group class-colored health note (6.0)
+L["Class-colored health uses one color per class. Open Colors > Class Colors to change them."] = "Здоровье в цветах класса использует по одному цвету на класс. Откройте Цвета > Цвета классов, чтобы изменить их."
+
+--- Group resource bar color list (6.0)
+L["One color per resource type, shared with every frame."] = "По одному цвету на тип ресурса, общий для всех рамок."
+
+--- Dispel overlay preview toggle (6.0)
+L["Preview overlay"] = "Предпросмотр наложения"
+L["Paints a stand-in tint so the overlay can be judged without a real dispellable debuff. Turns itself off when this page closes."] = "Накладывает пробную заливку, чтобы оценить наложение без настоящего снимаемого эффекта. Выключается при закрытии этой страницы."

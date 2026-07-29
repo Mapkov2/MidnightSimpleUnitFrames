@@ -922,12 +922,38 @@ local function ClampLayer(value, fallback)
     if v > 30 then return 30 end
     return v
 end
+--- Preview-only status entries. The group number is a placed status text on the
+--- live frame, but it owns a dedicated menu card instead of a slot in the
+--- Status Icons dropdown. Appending it here gives the preview a draggable
+--- handle (and the generic anchor/x/y write-back) without adding a duplicate
+--- entry to that dropdown, the layer overview, or the Assistant ledgers.
+local PREVIEW_ONLY_STATUS_SPECS = {
+    {
+        value = "showGroupNumber", text = "Group Number", enabled = "showGroupNumber",
+        style = "groupNumberStyle",
+        size = "groupNumberSize", anchor = "groupNumberAnchor",
+        x = "groupNumberX", y = "groupNumberY", layer = "groupNumberLayer",
+        defaultSize = 10, defaultAnchor = "BOTTOMRIGHT", defaultLayer = 7,
+        previewOnly = true, isText = true, alwaysInMode = true, fitTextBounds = true,
+    },
+}
+local previewStatusSpecCache, previewStatusSpecSource
 local function StatusSpecs()
     local gp = GroupPage()
-    if type(gp.GF_STATUS_ICON_SPECS) == "table" and #gp.GF_STATUS_ICON_SPECS > 0 then return gp.GF_STATUS_ICON_SPECS end
-    local sharedSpecs = M.GroupSpecs and M.GroupSpecs.GF_STATUS_ICON_SPECS
-    if type(sharedSpecs) == "table" and #sharedSpecs > 0 then return sharedSpecs end
-    return {}
+    local base
+    if type(gp.GF_STATUS_ICON_SPECS) == "table" and #gp.GF_STATUS_ICON_SPECS > 0 then
+        base = gp.GF_STATUS_ICON_SPECS
+    else
+        local sharedSpecs = M.GroupSpecs and M.GroupSpecs.GF_STATUS_ICON_SPECS
+        if type(sharedSpecs) == "table" and #sharedSpecs > 0 then base = sharedSpecs end
+    end
+    if not base then return PREVIEW_ONLY_STATUS_SPECS end
+    if previewStatusSpecSource == base then return previewStatusSpecCache end
+    local merged = {}
+    for i = 1, #base do merged[i] = base[i] end
+    for i = 1, #PREVIEW_ONLY_STATUS_SPECS do merged[#merged + 1] = PREVIEW_ONLY_STATUS_SPECS[i] end
+    previewStatusSpecSource, previewStatusSpecCache = base, merged
+    return merged
 end
 local function CurrentStatusSpec()
     local gp = GroupPage()
@@ -943,15 +969,31 @@ local function CurrentStatusSpec()
     return specs[1]
 end
 local function StatusSpecIsText(spec)
+    if spec and spec.isText == true then return true end
     local value = spec and spec.value
     return value == "statusText" or value == "statusGhostText"
         or value == "statusAFKText" or value == "statusDNDText"
 end
-local function StatusText(spec)
+--- Sample subgroup label, formatted by the live raid-group formatter so the
+--- preview cannot drift from what the frame actually prints.
+local PREVIEW_RAID_GROUP = 3
+local function PreviewRaidGroupText(style)
+    local runtime = MSUF and MSUF.UFStatusRuntime
+    local format = runtime and runtime.RaidGroupText
+    if type(format) == "function" then return format(style, PREVIEW_RAID_GROUP) end
+    if style == "BRACKET" then return "[" .. PREVIEW_RAID_GROUP .. "]" end
+    if style == "NONE" then return tostring(PREVIEW_RAID_GROUP) end
+    return "(" .. PREVIEW_RAID_GROUP .. ")"
+end
+local function StatusText(spec, runtimeCfg, conf)
     local value = spec and spec.value
     if value == "statusGhostText" then return "GHOST" end
     if value == "statusAFKText" then return "AFK" end
     if value == "statusDNDText" then return "DND" end
+    if value == "showGroupNumber" then
+        return PreviewRaidGroupText((runtimeCfg and runtimeCfg.style)
+            or (conf and spec.style and conf[spec.style]) or "PAREN")
+    end
     return "DEAD"
 end
 local function StatusLabel(spec)
@@ -969,6 +1011,7 @@ local function StatusLabel(spec)
     if value == "statusGhostText" then return "Ghost Text" end
     if value == "statusAFKText" then return "AFK Text" end
     if value == "statusDNDText" then return "DND Text" end
+    if value == "showGroupNumber" then return "Group #" end
     return (spec and spec.text) or "Status"
 end
 local function StatusPreviewMode()
@@ -985,6 +1028,9 @@ local function StatusSpecEnabled(conf, spec)
     return conf[spec.enabled] ~= false
 end
 local function StatusSpecInMode(spec, selectedSpec)
+    -- Entries with no slot in the Status Icons dropdown can never be the
+    -- selected spec, so they must not be gated behind that selection.
+    if spec and spec.alwaysInMode == true then return true end
     if StatusPreviewMode() == "all" then return true end
     local selected = selectedSpec and selectedSpec.value or M.gfStatusIconSelection or "roleIcon"
     return spec and spec.value == selected
@@ -1021,6 +1067,9 @@ local function HandleOffsets(handle)
     elseif handle._cfgSpell then
         local cfg = CurrentSpellPlaced(CurrentScope()) or {}
         return cfg.anchor, tonumber(cfg.x) or 0, tonumber(cfg.y) or 0
+    elseif handle._cfgPower then
+        -- Fixed runtime anchor (TOP -> frame BOTTOM); only the offsets move.
+        return "TOP", tonumber(conf.detachedPowerBarOffsetX) or 0, tonumber(conf.detachedPowerBarOffsetY) or -4
     elseif handle._cfgText then
         local kind = handle._cfgTextKind or CurrentTextKind()
         local slot = handle._cfgTextSlot
@@ -1323,6 +1372,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     local layerDefaults = {
         guides = true,
         bounds = true,
+        power = true,
         buff = true,
         trackedBuff = true,
         debuff = true,
@@ -1340,6 +1390,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     local layerDefs = {
         { "Guides", { 0.42, 0.72, 1.00 }, "layout", "guides" },
         { "Bounds", { 1.00, 0.22, 0.12 }, "layout", "bounds" },
+        { "Power", { 0.30, 0.62, 0.98 }, "power", "power" },
         { "Buffs", { 0.20, 0.90, 0.35 }, "buffs", "buff" },
         { "Tracked", { 0.42, 0.68, 1.00 }, "buffs", "trackedBuff" },
         { "Debuffs", { 0.90, 0.20, 0.22 }, "debuffs", "debuff" },
@@ -1446,6 +1497,9 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     mock:SetScript("OnMouseUp", function()
         if stage._msufGFPreviewPanning then R.StopPan(stage) end
     end)
+    -- Stands in for the live frame's MSUFSpec.scope: the shared preview border
+    -- helper puts group mocks in the group foreground band (Layers.BorderOffset).
+    mock._msufPreviewGroupScope = true
     box._mock = mock
     box.mock, mock.bounds = mock, bounds
     function box:PanExact(dx, dy)
@@ -1528,6 +1582,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     local trackedBuffHandle = handleBundle.trackedBuffHandle
     local debuffHandle = handleBundle.debuffHandle
     local externalHandle = handleBundle.externalHandle
+    local powerBarHandle = handleBundle.powerBarHandle
     local statusHandles = handleBundle.statusHandles or {}
     local spellHandle = handleBundle.spellHandle
     local SelectHandle = handleBundle.SelectHandle or function() end
@@ -1546,6 +1601,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         renderDeps.buffHandle, renderDeps.debuffHandle = buffHandle, debuffHandle
         renderDeps.trackedBuffHandle = trackedBuffHandle
         renderDeps.externalHandle = externalHandle
+        renderDeps.powerBarHandle = powerBarHandle
         renderDeps.statusHandles, renderDeps.spellHandle = statusHandles, spellHandle
         renderDeps.statusSpecs = H.StatusSpecs and H.StatusSpecs()
         renderDeps.SelectHandle = SelectHandle

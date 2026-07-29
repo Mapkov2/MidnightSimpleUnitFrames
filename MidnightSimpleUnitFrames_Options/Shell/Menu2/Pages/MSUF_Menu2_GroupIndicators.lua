@@ -51,6 +51,7 @@ local function IconPackValues()
     return values
 end
 local STATUS_ICON_TAB_VALUES = VT("basic", "Basic", "advanced", "Advanced")
+local GROUP_NUMBER_STYLES = VT("PAREN", "(2)", "BRACKET", "[2]", "NONE", "2")
 local function SetManyEnabled(enabled, ...)
     for i = 1, select("#", ...) do SetOptionEnabled(select(i, ...), enabled) end
 end
@@ -210,7 +211,7 @@ local function DefaultCustomBuffPlaced(index)
 end
 
 local function BuildIndicatorsSection(ctx, b)
-    local indicators = b:CollapsibleSection("indicators", "Frame Indicators", 700, true)
+    local indicators = b:CollapsibleSection("indicators", "Frame Indicators", 810, true)
     local indicatorsW = indicators._msuf2Width or ctx.width or 720
     local cardGap = 16
     local leftX = 20
@@ -256,7 +257,7 @@ local function BuildIndicatorsSection(ctx, b)
     end
     openHighlights:SetScript("OnClick", OpenFrameHighlights)
     RegisterControl(openHighlights, ctx, "navigation.frame_highlights", "Open Highlights", "button", "navigation", { navigationKey = "opt_misc" })
-    local groupNumberCard = W.ControlCard(indicators, "Group Number", nil, leftX, -148, leftW, 296)
+    local groupNumberCard = W.ControlCard(indicators, "Group Number", nil, leftX, -148, leftW, 420)
     if W.AttachContextColorShortcut then
         W.AttachContextColorShortcut(groupNumberCard, {
             title = "Group Number Text Settings",
@@ -276,11 +277,18 @@ local function BuildIndicatorsSection(ctx, b)
     local groupNumberToggle = BindScopeToggle(ctx, W.SwitchAt(groupNumberCard, "Group Number", leftW - 62, -24, 0, "HIDDEN"), "showGroupNumber", false, "visual")
     groupNumberToggle._msuf2GroupFrameGateAlwaysEnabled = true
     local groupNumberControls = {}
-    AddScopeSlider(groupNumberControls, groupNumberCard, "Size", 6, 24, 1, leftW, "groupNumberSize", 10, "font", -66)
-    AddScopeDropdown(groupNumberControls, groupNumberCard, "Anchor", AURA_ANCHORS, leftW, "groupNumberAnchor", "BOTTOMRIGHT", "geometry", -116)
-    AddScopeSlider(groupNumberControls, groupNumberCard, "X Offset", -100, 100, 1, leftW, "groupNumberX", -2, "geometry", -166)
-    AddScopeSlider(groupNumberControls, groupNumberCard, "Y Offset", -100, 100, 1, leftW, "groupNumberY", 2, "geometry", -216)
-    AddScopeSlider(groupNumberControls, groupNumberCard, "Layer", 0, 30, 1, leftW, "groupNumberLayer", 7, "visual", -266)
+    -- Same three styles as the unit-frame Raid Group indicator, so both
+    -- surfaces stay on one shared runtime formatter.
+    AddScopeDropdown(groupNumberControls, groupNumberCard, "Style", GROUP_NUMBER_STYLES, leftW, "groupNumberStyle", "PAREN", "visual", -66)
+    AddScopeSlider(groupNumberControls, groupNumberCard, "Size", 6, 24, 1, leftW, "groupNumberSize", 10, "font", -116)
+    -- The preview handle resolves a drag to any of the nine anchor points, so
+    -- the dropdown has to be able to show all nine too.
+    AddScopeDropdown(groupNumberControls, groupNumberCard, "Anchor", STATUS_ICON_ANCHORS, leftW, "groupNumberAnchor", "BOTTOMRIGHT", "geometry", -166)
+    AddScopeSlider(groupNumberControls, groupNumberCard, "X Offset", -100, 100, 1, leftW, "groupNumberX", -2, "geometry", -216)
+    AddScopeSlider(groupNumberControls, groupNumberCard, "Y Offset", -100, 100, 1, leftW, "groupNumberY", 2, "geometry", -266)
+    AddScopeSlider(groupNumberControls, groupNumberCard, "Layer", 0, 30, 1, leftW, "groupNumberLayer", 7, "visual", -316)
+    local groupNumberScopeHint = W.Text(groupNumberCard, "", 16, -368, leftW - 32, T.colors.muted)
+    if groupNumberScopeHint.SetWordWrap then groupNumberScopeHint:SetWordWrap(true) end
     local focusCard = W.ControlCard(indicators, "Focus Highlight", "Shows a colored border around your Focus target. Priority: Dispel > Aggro > Target > Focus.", rightX, -148, rightW, 190)
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(focusCard, { "group.focus" }, {
@@ -298,7 +306,7 @@ local function BuildIndicatorsSection(ctx, b)
     AddScopeSlider(focusControls, focusCard, "Border Thickness", 1, 6, 1, rightW, "hlFocusSize", 2, "visual", -88)
     local focusColorHint = W.Text(focusCard, "Focus color is in Global Style > Colors > Group Frame Colors.", 16, -142, rightW - 32, T.colors.muted)
     if focusColorHint.SetWordWrap then focusColorHint:SetWordWrap(true) end
-    local groupBorderCard = W.ControlCard(indicators, "Group Border", nil, leftX, -462, leftW, 202)
+    local groupBorderCard = W.ControlCard(indicators, "Group Border", nil, leftX, -586, leftW, 202)
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(groupBorderCard, { "group.border" }, {
             title = "Group Border Color",
@@ -318,6 +326,12 @@ local function BuildIndicatorsSection(ctx, b)
         local groupNumberEnabled = Bool(CurrentScope(), "showGroupNumber", false)
         SetOptionsEnabled(groupNumberControls, groupNumberEnabled)
         SetOptionEnabled(groupNumberToggle, true)
+        -- The number is the raid subgroup, read from the raid roster. A plain
+        -- 5-player party has no subgroups, so say so instead of letting the
+        -- toggle look broken.
+        groupNumberScopeHint:SetText(CurrentScope() == "party"
+            and "Shows the raid subgroup number. Party frames only display it while you are in an actual raid group."
+            or "Shows the raid subgroup number from the raid roster.")
         local targetEnabled = Bool(CurrentScope(), "targetIndicator", true)
         local focusEnabled = Bool(CurrentScope(), "hlFocusEnabled", true)
         SetOptionsEnabled(focusControls, focusEnabled)

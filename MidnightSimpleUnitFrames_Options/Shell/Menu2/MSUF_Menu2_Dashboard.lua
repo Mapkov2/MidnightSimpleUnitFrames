@@ -662,6 +662,7 @@ local function BuildDashboardUX(ctx)
         end
     end
     M.StartNewAssistantTask = StartNewAssistantTask
+    local iconDir = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\"
     local function CopyWagoLink()
         if type(_G.MSUF_ShowCopyLink) == "function" then _G.MSUF_ShowCopyLink("Wago MSUF Profiles", "https://wago.io/search/imports/wow/msuf") end
     end
@@ -749,14 +750,16 @@ local function BuildDashboardUX(ctx)
         and type(firstLoad.ShouldHighlightGuidedSetup) == "function"
         and firstLoad:ShouldHighlightGuidedSetup()
     local launcherNarrow = mainW < 520
-    local launcherH = launcherNarrow and 126 or 78
+    -- The Wago button rides along with the setup action: narrow stacks it below,
+    -- wide seats it left of the action, so both reserve room in the same card.
+    local launcherH = launcherNarrow and 162 or 78
     local launcher = Card(root, "", x0, mainTop, mainW, launcherH, T.colors.panel2, T.colors.borderSoft)
     Kicker(launcher, tourActive and "GUIDED SETUP IN PROGRESS" or (tourCompleted and "GUIDED SETUP COMPLETE" or "GUIDED SETUP"), 16, -14)
     local launcherTitle = tourActive and "Continue your MSUF setup"
         or (tourCompleted and "Review or run setup again" or "Get the essentials right in a few minutes")
     local title = T.Font(launcher, "GameFontNormal", M.Tr(launcherTitle), T.colors.text)
     title:SetPoint("TOPLEFT", launcher, "TOPLEFT", 16, -36)
-    title:SetWidth(max(120, mainW - (launcherNarrow and 32 or 230)))
+    title:SetWidth(max(120, mainW - (launcherNarrow and 32 or 388)))
     title:SetJustifyH("LEFT")
     if tourActive then
         local current, total
@@ -779,6 +782,25 @@ local function BuildDashboardUX(ctx)
         end
     end, highlightGuidedSetup and "success" or "primary", "guided_setup.start_or_resume", "action", { actionKey = "guided_setup" })
     M.CallIf(T.AttachNavIcon, action, "home", false, true)
+    local wagoW = launcherNarrow and actionW or 150
+    local wago = Button(launcher, "Wago Profiles",
+        launcherNarrow and actionX or (mainW - 354),
+        launcherNarrow and -126 or -27,
+        wagoW, 30, CopyWagoLink, nil, "guided_setup.browse_wago_profiles", "action",
+        { actionKey = "copy_wago_profiles_link",
+          keywords = { "Browse Wago profiles", "Wago profile imports" },
+          help = "Opens a copyable link to the MSUF profile imports on Wago." })
+    local wagoIcon = wago:CreateTexture(nil, "ARTWORK", nil, 3)
+    wagoIcon:SetTexture(iconDir .. "Wago.png")
+    wagoIcon:SetSize(22, 22)
+    wagoIcon:SetPoint("LEFT", wago, "LEFT", 8, 0)
+    if wago._msuf2Label then
+        wago._msuf2Label:ClearAllPoints()
+        wago._msuf2Label:SetPoint("LEFT", wagoIcon, "RIGHT", 6, 0)
+        wago._msuf2Label:SetPoint("RIGHT", wago, "RIGHT", -10, 0)
+        wago._msuf2Label:SetJustifyH("CENTER")
+    end
+    AddTooltip(wago, "Wago Profiles", "Browse Wago profiles")
 
     mainTop = mainTop - launcherH - 10
     local tinyHero = mainW < 390
@@ -1146,7 +1168,6 @@ local function BuildDashboardUX(ctx)
         supportH = max(supportH, floor(supportTextBottom + 14))
     end
     support:SetHeight(supportH)
-    local iconDir = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\"
     local supportLinks = {
         { key = "discord", texture = "Discord.png", title = "Discord", tooltip = "Copy Discord Link", url = "https://discord.gg/2Gf9b2Wprz" },
         { key = "patreon", texture = "Patreon.png", title = "Patreon", tooltip = "Click to copy the Patreon support link.", url = "https://www.patreon.com/cw/MidnightSimpleUnitframes" },

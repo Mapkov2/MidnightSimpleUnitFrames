@@ -20,6 +20,62 @@ local function DefaultInt(value, fallback, minValue, maxValue)
     return n
 end
 local function NumberOrOne(value) return tonumber(value) or 1 end
+--- Sample subgroup label for the preview, formatted by the live raid-group
+--- formatter so the preview cannot drift from the runtime text.
+local GROUP_BLOCK_BORDER_EDGES = { "top", "bottom", "left", "right" }
+--- Mirror of ApplyGroupBorder in the group header engine: same edge geometry,
+--- scaled into preview space. Without this the Group Border card had no visual
+--- feedback at all in the menu preview.
+local function PaintGroupBlockBorder(mock, conf, previewScale, ScaleValue)
+    if not mock then return end
+    local edges = mock._msufGroupBlockBorder
+    if conf.groupBorderEnabled ~= true then
+        if edges then
+            for i = 1, #GROUP_BLOCK_BORDER_EDGES do
+                local edge = edges[GROUP_BLOCK_BORDER_EDGES[i]]
+                if edge then edge:Hide() end
+            end
+        end
+        return
+    end
+    edges = edges or {}
+    mock._msufGroupBlockBorder = edges
+    local size = ScaleValue(tonumber(conf.groupBorderSize) or 1, previewScale, 1)
+    local pad = ScaleValue(tonumber(conf.groupBorderPadding) or 2, previewScale, 0)
+    local r = tonumber(conf.groupBorderR) or 0.38
+    local g = tonumber(conf.groupBorderG) or 0.68
+    local b = tonumber(conf.groupBorderB) or 1
+    local a = tonumber(conf.groupBorderA) or 0.95
+    for i = 1, #GROUP_BLOCK_BORDER_EDGES do
+        local key = GROUP_BLOCK_BORDER_EDGES[i]
+        local edge = edges[key]
+        if not edge then
+            edge = mock:CreateTexture(nil, "OVERLAY")
+            edges[key] = edge
+        end
+        edge:SetColorTexture(r, g, b, a)
+        edge:ClearAllPoints()
+        if key == "top" then
+            edge:SetPoint("TOPLEFT", mock, "TOPLEFT", -pad, pad)
+            edge:SetPoint("TOPRIGHT", mock, "TOPRIGHT", pad, pad)
+            edge:SetHeight(size)
+        elseif key == "bottom" then
+            edge:SetPoint("BOTTOMLEFT", mock, "BOTTOMLEFT", -pad, -pad)
+            edge:SetPoint("BOTTOMRIGHT", mock, "BOTTOMRIGHT", pad, -pad)
+            edge:SetHeight(size)
+        elseif key == "left" then
+            edge:SetPoint("TOPLEFT", mock, "TOPLEFT", -pad, pad)
+            edge:SetPoint("BOTTOMLEFT", mock, "BOTTOMLEFT", -pad, -pad)
+            edge:SetWidth(size)
+        else
+            edge:SetPoint("TOPRIGHT", mock, "TOPRIGHT", pad, pad)
+            edge:SetPoint("BOTTOMRIGHT", mock, "BOTTOMRIGHT", pad, -pad)
+            edge:SetWidth(size)
+        end
+        edge:Show()
+    end
+end
+
 local function DefaultAuraGrowth() return { px = 1, py = 0, sx = 0, sy = -1 } end
 local function DefaultClampLayer(value, fallback) return tonumber(value) or fallback or 0 end
 local function AuraDurationBarColor()
@@ -325,8 +381,17 @@ local function BuildScene(box, reason)
     local selectedSpellAvailable = conf.spellIndicators and conf.spellIndicators.enabled == true
         and (scene.selectedSpellPlacedEnabled or scene.selectedSpellNeedsPlacementPreview
             or scene.selectedSpellEffectAvailable)
+    -- Same role-gated enablement the runtime uses: the layer is unavailable
+    -- (not merely hidden) when the bar is off for the preview role.
+    local powerAvailable
+    if runtimeSpec then
+        powerAvailable = scene.runtimePower and scene.runtimePower.enabled == true or false
+    else
+        powerAvailable = (tonumber(H.MockPowerHeight(kind, conf, 1, 1)) or 0) > 0
+    end
     scene.layerAvailable = {
         guides = true, bounds = true,
+        power = powerAvailable,
         buff = SceneAuraLaneAvailable(scene, scene.buffCfg, 6),
         trackedBuff = SceneAuraLaneAvailable(scene, scene.trackedBuffCfg, 4),
         debuff = SceneAuraLaneAvailable(scene, scene.debuffCfg, 6),
@@ -391,7 +456,10 @@ local function PlaceTextHandles(scene)
     local box, mock, H = scene.box, scene.mock, scene.H
     local handles = scene.textHandles
     for i = 1, #TEXT_HANDLE_KEYS do handles[TEXT_HANDLE_KEYS[i]]._previewScale = scene.previewScale end
-    if not H.PlaceHandleAroundRegions(handles.name, mock, { mock._nameFS }, 3) then handles.name:Hide() end
+    -- fitText: the bar-anchored name spans the whole health bar, so the raw
+    -- region rect would make the grab handle bar-wide. Matches the text focus
+    -- ring, which already fits to the drawn string.
+    if not H.PlaceHandleAroundRegions(handles.name, mock, { mock._nameFS }, 3, { fitText = true }) then handles.name:Hide() end
     local function PlaceGroup(groupKey, prefix, regions)
         if H.TextMovesTogether(scene.kind, prefix) then
             handles[prefix .. "Left"]:Hide()
@@ -961,6 +1029,7 @@ function Render.Install(box, ctx, deps)
     local trackedBuffHandle = deps.trackedBuffHandle
     local debuffHandle = deps.debuffHandle
     local externalHandle = deps.externalHandle
+    local powerBarHandle = deps.powerBarHandle
     local statusHandles = deps.statusHandles or {}
     local spellHandle = deps.spellHandle
     local selectedSpellEffectOwner = box._msufGFSelectedSpellEffectOwner
@@ -1010,6 +1079,7 @@ function Render.Install(box, ctx, deps)
         trackedBuffHandle = trackedBuffHandle,
         debuffHandle = debuffHandle,
         externalHandle = externalHandle,
+        powerBarHandle = powerBarHandle,
         statusHandles = statusHandles,
         spellHandle = spellHandle,
         statusSpecs = statusSpecs,
@@ -1350,6 +1420,18 @@ function Render.Install(box, ctx, deps)
         local mockH = max(20, Round(liveH * previewScale))
         local powerH = runtimePower and runtimePower.enabled == true and ScaleValue(runtimePower.height, previewScale, 0) or 0
         if not runtimeSpec then powerH = H.MockPowerHeight(kind, conf, previewScale, frameScale) end
+        -- Runtime parity for Power.Apply's three placements: embedded (inside the
+        -- frame bottom), attached-below (embed off), and detached (free geometry).
+        -- Only the embedded bar insets the health bar (Health.Layout contract).
+        local powerEmbed, powerDetached
+        if runtimeSpec then
+            powerEmbed = runtimePower.embed ~= false
+            powerDetached = runtimePower.detached == true
+        else
+            powerEmbed = conf.embedPowerBarIntoHealth ~= false
+            powerDetached = conf.powerBarDetached == true
+        end
+        local powerInsetH = (powerH > 0 and powerEmbed and not powerDetached) and powerH or 0
         local borderEnabled = runtimeSpec and (runtimeBorder.enabled ~= false) or (not runtimeSpec and conf.borderEnabled ~= false)
         local outline = borderEnabled and (tonumber(runtimeBorder and runtimeBorder.thickness) or 1) or 0
         if not runtimeSpec and borderEnabled and gf and gf.GetBarOutlineThickness then outline = tonumber(gf.GetBarOutlineThickness(kind)) or outline end
@@ -1380,7 +1462,7 @@ function Render.Install(box, ctx, deps)
         mock._health:SetStatusBarTexture(barTex)
         mock._health:ClearAllPoints()
         mock._health:SetPoint("TOPLEFT", mock, "TOPLEFT", inset, -inset)
-        mock._health:SetPoint("BOTTOMRIGHT", mock, "BOTTOMRIGHT", -inset, powerH > 0 and (powerH + inset) or inset)
+        mock._health:SetPoint("BOTTOMRIGHT", mock, "BOTTOMRIGHT", -inset, powerInsetH > 0 and (powerInsetH + inset) or inset)
         local runtimeHealthMode = runtimeHealth and runtimeHealth.mode
         local hr, hg, hb
         if runtimeHealthMode == "dark" or runtimeHealthMode == "unified" or runtimeHealthMode == "custom" then
@@ -1543,12 +1625,68 @@ function Render.Install(box, ctx, deps)
         mock._healAbsorb:SetWidth(max(1, healAbsorbW))
         mock._healAbsorb:SetValue(0.07)
         mock._healAbsorb:SetShown(healAbsorbShown)
-        if powerH > 0 then
+        -- Scoped block: this render function sits near Lua's 200-local limit,
+        -- so the power placement locals must release their slots when done.
+        do
+        -- LayoutDetached geometry (compiler resolves width to the frame width
+        -- when unset; the conf fallback mirrors that for the no-spec path).
+        local detachedPowerW = tonumber(runtimePower.detachedWidth) or tonumber(conf.detachedPowerBarWidth) or 0
+        if detachedPowerW <= 0 then detachedPowerW = liveW end
+        local detachedPowerH = tonumber(runtimePower.detachedHeight) or tonumber(conf.detachedPowerBarHeight) or 6
+        local detachedPowerX = tonumber(runtimePower.detachedX) or tonumber(conf.detachedPowerBarOffsetX) or 0
+        local detachedPowerY = tonumber(runtimePower.detachedY) or tonumber(conf.detachedPowerBarOffsetY) or -4
+        local powerBarHandle = S.powerBarHandle
+        if powerBarHandle then
+            -- Runtime parity for interaction too: only the detached bar owns
+            -- free offsets, so the handle locks itself while the bar is
+            -- embedded/attached (select + double-click still work there).
+            powerBarHandle._locked = not powerDetached
+            if powerBarHandle._dragging ~= true then
+                powerBarHandle._previewScale = previewScale
+                powerBarHandle._previewWriteScale = previewScale
+                powerBarHandle:ClearAllPoints()
+                if powerDetached then
+                    powerBarHandle:SetPoint("TOP", mock, "BOTTOM",
+                        Round(detachedPowerX * previewScale), Round(detachedPowerY * previewScale))
+                    powerBarHandle:SetSize(ScaleValue(detachedPowerW, previewScale, 1),
+                        max(12, ScaleValue(detachedPowerH, previewScale, 1)))
+                elseif not powerEmbed then
+                    powerBarHandle:SetPoint("TOP", mock, "BOTTOM", 0, -max(1, Round(previewScale)))
+                    powerBarHandle:SetSize(max(1, mockW - inset * 2), max(12, powerH))
+                else
+                    powerBarHandle:SetPoint("BOTTOM", mock, "BOTTOM", 0, inset)
+                    powerBarHandle:SetSize(max(1, mockW - inset * 2), max(12, powerH))
+                end
+            end
+            powerBarHandle:SetShown(powerH > 0 and LayerOn("power"))
+            powerBarHandle:SetAlpha(LayerAlpha("power"))
+        end
+        -- Layer gating hides only the drawn bar; the health inset keeps following
+        -- the settings so hiding the preview layer never fakes a layout change.
+        if powerH > 0 and LayerOn("power") then
+            mock._power:SetAlpha(LayerAlpha("power"))
             mock._power:SetStatusBarTexture(runtimePower.texture or barTex)
             mock._power:ClearAllPoints()
-            mock._power:SetPoint("BOTTOMLEFT", mock, "BOTTOMLEFT", inset, inset)
-            mock._power:SetPoint("BOTTOMRIGHT", mock, "BOTTOMRIGHT", -inset, inset)
-            mock._power:SetHeight(powerH)
+            if powerDetached and powerBarHandle then
+                -- Ride the handle so a drag moves the bar live; the handle sits
+                -- at the runtime's TOP -> frame BOTTOM anchor.
+                mock._power:SetPoint("TOP", powerBarHandle, "TOP", 0, 0)
+                mock._power:SetSize(ScaleValue(detachedPowerW, previewScale, 1), ScaleValue(detachedPowerH, previewScale, 1))
+            elseif powerDetached then
+                mock._power:SetPoint("TOP", mock, "BOTTOM",
+                    Round(detachedPowerX * previewScale), Round(detachedPowerY * previewScale))
+                mock._power:SetSize(ScaleValue(detachedPowerW, previewScale, 1), ScaleValue(detachedPowerH, previewScale, 1))
+            elseif not powerEmbed then
+                -- Embed off: attached directly below the frame (frame BOTTOM, -1).
+                local gap = max(1, Round(previewScale))
+                mock._power:SetPoint("TOPLEFT", mock, "BOTTOMLEFT", inset, -gap)
+                mock._power:SetPoint("TOPRIGHT", mock, "BOTTOMRIGHT", -inset, -gap)
+                mock._power:SetHeight(powerH)
+            else
+                mock._power:SetPoint("BOTTOMLEFT", mock, "BOTTOMLEFT", inset, inset)
+                mock._power:SetPoint("BOTTOMRIGHT", mock, "BOTTOMRIGHT", -inset, inset)
+                mock._power:SetHeight(powerH)
+            end
             mock._powerBg:SetTexture(runtimePower.backgroundTexture or bgTex)
             local pbg = runtimePower.background or {}
             mock._powerBg:SetVertexColor(pbg.r or conf.bgR or 0.06, pbg.g or conf.bgG or 0.06, pbg.b or conf.bgB or 0.07, pbg.a or conf.hpBgAlpha or 0.85)
@@ -1559,6 +1697,7 @@ function Render.Install(box, ctx, deps)
         else
             mock._power:Hide()
             mock._powerBg:Hide()
+        end
         end
         if ApplyRounded(mock, conf, powerH > 0, outlineEdge) then
             H.SetOutlineShown(mock, false)
@@ -1626,6 +1765,21 @@ function Render.Install(box, ctx, deps)
             fs:SetPoint(point, relativeTo or fs:GetParent(), relPoint or point, x or 0, y or 0)
             fs:SetJustifyH(justify or "LEFT")
             fs._msufPreviewJustifyH = justify or "LEFT"
+            fs._msufPreviewSpan = nil
+        end
+        -- Live parity with LayoutTextSpan in the engine's text element: a
+        -- LEFT+RIGHT pair spans the bar and defines the width, so the explicit
+        -- SetWidth has to be cleared for the anchors to win.
+        local function LayoutPreviewSpan(fs, relativeTo, leftX, rightX, y, justify)
+            if not (fs and relativeTo) then return end
+            fs:ClearAllPoints()
+            fs:SetPoint("LEFT", relativeTo, "LEFT", leftX or 0, y or 0)
+            fs:SetPoint("RIGHT", relativeTo, "RIGHT", rightX or 0, y or 0)
+            fs:SetJustifyH(justify or "LEFT")
+            fs._msufPreviewJustifyH = justify or "LEFT"
+            -- Read by the handle drag: a span moves with +x on every anchor,
+            -- unlike the mirrored TOPRIGHT fallback.
+            fs._msufPreviewSpan = true
         end
         local function PaintPreviewText(fs, size, mode, point, relPoint, x, y, justify, r, g, b, a, shown, text)
             if not fs then return end
@@ -1662,14 +1816,33 @@ function Render.Install(box, ctx, deps)
         local nox = ConfigToOffset(runtimeText.nameX or conf.nameOffsetX or 0, previewScale)
         local noy = ConfigToOffset(runtimeText.nameY or ((conf.nameOffsetY or 0) + baselineOffset), previewScale)
         local nameAnchor = runtimeText.nameAnchor or conf.nameAnchor or "LEFT"
-        local nameWidth = max(80, (tonumber(runtimeSpec and runtimeSpec.width) or liveW or 120) * 0.80)
-        mock._nameFS:SetWidth(max(40, ScaleValue(nameWidth, previewScale, 40)))
-        if nameAnchor == "CENTER" then
-            LayoutPreviewText(mock._nameFS, "TOP", "TOP", nox, noy, "CENTER", mock)
-        elseif nameAnchor == "RIGHT" then
-            LayoutPreviewText(mock._nameFS, "TOPRIGHT", "TOPRIGHT", -nox, noy, "RIGHT", mock)
+        -- Group specs always compile text.anchorToBars = true, so the live name
+        -- is a span across the health bar (LayoutBarAnchoredName), not a
+        -- TOPLEFT box on the frame like the unit-frame path. The mock health
+        -- bar already matches the live hpBar geometry (no inset, power height
+        -- reserved at the bottom). The TOP* branch stays as the fallback for
+        -- refreshes that run before the runtime spec is compilable.
+        if runtimeText.anchorToBars == true then
+            local nameRef = (runtimeText.nameAnchorToFrame ~= true and mock._health) or mock
+            local pad3 = ScaleValue(3, previewScale, 1)
+            mock._nameFS:SetWidth(0)
+            if nameAnchor == "CENTER" then
+                LayoutPreviewSpan(mock._nameFS, nameRef, pad3 + nox, -pad3 + nox, noy, "CENTER")
+            elseif nameAnchor == "RIGHT" then
+                LayoutPreviewSpan(mock._nameFS, nameRef, pad3 + nox, -pad3 + nox, noy, "RIGHT")
+            else
+                LayoutPreviewSpan(mock._nameFS, nameRef, pad3 + nox, -pad3, noy, "LEFT")
+            end
         else
-            LayoutPreviewText(mock._nameFS, "TOPLEFT", "TOPLEFT", nox, noy, "LEFT", mock)
+            local nameWidth = max(80, (tonumber(runtimeSpec and runtimeSpec.width) or liveW or 120) * 0.80)
+            mock._nameFS:SetWidth(max(40, ScaleValue(nameWidth, previewScale, 40)))
+            if nameAnchor == "CENTER" then
+                LayoutPreviewText(mock._nameFS, "TOP", "TOP", nox, noy, "CENTER", mock)
+            elseif nameAnchor == "RIGHT" then
+                LayoutPreviewText(mock._nameFS, "TOPRIGHT", "TOPRIGHT", -nox, noy, "RIGHT", mock)
+            else
+                LayoutPreviewText(mock._nameFS, "TOPLEFT", "TOPLEFT", nox, noy, "LEFT", mock)
+            end
         end
         if mock._nameFS.SetWordWrap then mock._nameFS:SetWordWrap(false) end
         if mock._nameFS.SetNonSpaceWrap then mock._nameFS:SetNonSpaceWrap(false) end
@@ -1801,6 +1974,11 @@ function Render.Install(box, ctx, deps)
             -pad4 + ConfigToOffset(runtimeText.powerRightX or ((conf.powerOffsetX or 0) + (conf.powerTextRightOffsetX or 0)), previewScale),
             ConfigToOffset(1 + (runtimeText.powerRightY or ((conf.powerOffsetY or 0) + (conf.powerTextRightOffsetY or 0) + baselineOffset)), previewScale),
             "RIGHT", fr or 1, fg or 1, fb or 1, textAlpha, showPowerText, PreviewPowerText(powerRightMode, powerRightHidePercent))
+        -- Group block border. Live it wraps the whole header block; this box
+        -- previews a single frame, so it wraps the mock with the configured
+        -- padding. That still reads as an outer box, distinct from the
+        -- per-frame border, and previews thickness/padding/color faithfully.
+        PaintGroupBlockBorder(mock, conf, previewScale, ScaleValue)
         local boundsEdge = max(1, outlineEdge)
         ApplyBoundsGuide(self, boundsEdge)
         if self._bounds.SetFrameLevel and mock.GetFrameLevel then SetPreviewFrameLevel(self._bounds, (mock:GetFrameLevel() or 1) + (Layers.PREVIEW_BOUNDS_OFFSET or 48)) end
@@ -1835,11 +2013,30 @@ function Render.Install(box, ctx, deps)
                 statusHandle:SetSize(max(42, statusSize * 4), max(18, statusSize + 8))
                 if statusHandle._statusText and statusHandle._statusText.SetFont then SetPreviewFont(statusHandle._statusText, max(12, statusSize)) end
                 if statusHandle._statusText then
-                    statusHandle._statusText:SetText(StatusText(spec))
+                    statusHandle._statusText:SetText(StatusText(spec, runtimeCfg, conf))
                     statusHandle._statusText:SetTextColor(enabled and 1 or 0.45, enabled and 1 or 0.45, enabled and 1 or 0.50, enabled and 1 or 0.60)
                     statusHandle._statusText:ClearAllPoints()
                     statusHandle._statusText:SetPoint("CENTER", statusHandle, "CENTER", 0, 0)
                     statusHandle._statusText:Show()
+                end
+                -- The live region is a bare FontString, so its own edges land on
+                -- the configured anchor. A fixed handle box with centred text
+                -- puts the glyph half a box away from where the frame draws it,
+                -- so shrink the handle onto the text and win the hit area back
+                -- through hit-rect insets instead.
+                if spec.fitTextBounds == true and statusHandle._statusText then
+                    local textW = tonumber(statusHandle._statusText.GetStringWidth
+                        and statusHandle._statusText:GetStringWidth()) or 0
+                    local textH = tonumber(statusHandle._statusText.GetStringHeight
+                        and statusHandle._statusText:GetStringHeight()) or 0
+                    textW = max(4, textW)
+                    textH = max(4, textH)
+                    statusHandle:SetSize(textW, textH)
+                    if statusHandle.SetHitRectInsets then
+                        local padX = max(0, (24 - textW) * 0.5)
+                        local padY = max(0, (20 - textH) * 0.5)
+                        statusHandle:SetHitRectInsets(-padX, -padX, -padY, -padY)
+                    end
                 end
                 if statusHandle._statusTex then statusHandle._statusTex:Hide() end
             else

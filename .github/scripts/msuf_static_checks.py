@@ -768,7 +768,7 @@ def check_portrait_refresh_contracts() -> None:
     )
     require(
         portrait,
-        "ApplyUnitPortrait(texture, frame.MSUFUnitKey, frame, p, force or restorePortrait,\n"
+        "ApplyUnitPortrait(texture, frame.MSUFUnitKey, frame, p, force,\n"
         "          keyPrepared, preparedKey, preparedGuid, preparedExists)",
         "Portrait force must reach the queued update path",
     )
@@ -777,6 +777,18 @@ def check_portrait_refresh_contracts() -> None:
         "ApplyUnitPortrait(texture, unit, frame, p, force)",
         "Portrait force must reach the direct update path",
     )
+    require(
+        portrait,
+        'texture = holder:CreateTexture(nil, "ARTWORK", nil, 1)',
+        "Portrait cast icon must use a separate lazy overlay texture",
+    )
+    require(
+        portrait,
+        "SetShown(frame.portrait, false)\n  SetShown(texture, true)",
+        "Portrait cast icon must preserve the hidden base portrait",
+    )
+    if "restorePortrait" in portrait or "ApplyCastPortraitIcon(frame, frame.portrait" in portrait:
+        raise CheckError("Portrait cast stop must not overwrite or force-rebuild the base portrait")
 
 
 def check_edit_mode_mover_contracts() -> None:

@@ -1591,10 +1591,12 @@ function W.OpenContextColors(card, opts, resolvedTargets, onFinish)
     opts = opts or {}
     local targets = resolvedTargets or ResolveContextColorOption(opts.getTargets or opts.targets, {})
     if type(targets) ~= "table" then return false end
-    local owners, maxTargets = {}, math.max(1, math.min(4, tonumber(opts.maxTargets) or 4))
-    -- Never hide a fifth setting silently. Curated contextual mappings are
-    -- intentionally limited to four; an oversized future mapping must be
-    -- fixed at its source instead of opening an incomplete picker.
+    local owners, maxTargets = {}, math.max(1, tonumber(opts.maxTargets) or 4)
+    -- Never hide a setting silently. Curated contextual mappings stay at four
+    -- unless the card's subject genuinely is a list -- group resource colors
+    -- are one per power type -- in which case it states its own bound. An
+    -- oversized mapping that never asked for the room must be fixed at its
+    -- source instead of opening an incomplete picker.
     if #targets > maxTargets then return false end
     for i = 1, #targets do
         local owner = ContextColorVirtualOwner(targets[i], opts)
@@ -1692,7 +1694,7 @@ function W.AttachContextColorReferences(card, references, opts)
         options.isRelevant = function()
             local resolvedReferences = ResolveContextColorOption(options.references or references, {})
             local count = type(resolvedReferences) == "table" and #resolvedReferences or 0
-            local maxTargets = math.max(1, math.min(4, tonumber(options.maxTargets) or 4))
+            local maxTargets = math.max(1, tonumber(options.maxTargets) or 4)
             return count > 0 and count <= maxTargets
         end
     end
@@ -2673,8 +2675,11 @@ function W.ScopeOverrideBar(ctx, section, opts)
             local active = btn._msuf2Value == value
             local override = false
             if type(opts.hasOverride) == "function" then override = opts.hasOverride(btn._msuf2Value) and true or false end
-            btn._msuf2Override = (not active) and override or false
-            btn:SetActive(active)
+            local nextOverride = (not active) and override or false
+            if btn._msuf2Active ~= active or btn._msuf2Override ~= nextOverride then
+                btn._msuf2Override = nextOverride
+                btn:SetActive(active)
+            end
         end
     end
     M.TrackRefresh(ctx, function() bar:Refresh() end)
@@ -3347,7 +3352,7 @@ function W.AttachPinnedPreview(body, box, opts)
             -- preview remains the visual focus of the card.
             if pinBtn.SetActive then pinBtn:SetActive(opts.quietButton == true and false or enabled) end
         end
-        if pinBtn.SetEnabled then pinBtn:SetEnabled(true) end
+        if pinBtn.SetEnabled and pinBtn._msuf2Enabled ~= true then pinBtn:SetEnabled(true) end
     end
     local function EnsurePinnedScrim()
         if record and record.scrim then return record.scrim end
@@ -3409,11 +3414,11 @@ function W.AttachPinnedPreview(body, box, opts)
             scrim:Hide()
             scrim._msuf2PinnedPreviewOwnerRecord = nil
         end
-        ApplyPinnedPresentation(false)
         if not force and not wasFloating then
             restoring = false
             return
         end
+        ApplyPinnedPresentation(false)
         if not AnchorBoxToRestoreSlot() then
             box:SetParent(originalParent)
             box:ClearAllPoints()

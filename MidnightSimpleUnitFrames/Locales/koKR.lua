@@ -83,6 +83,8 @@ local T = {
     ["Boss"] = "우두머리",
     ["Pet"] = "소환수",
     ["Frame Basics"] = "프레임 기본",
+    ["Fade offline members"] = "오프라인 구성원 흐리게",
+    ["Hiding offline members in Frame Basics takes precedence over this."] = "「프레임 기본」에서 오프라인 구성원 숨기기가 이 설정보다 우선합니다.",
     ["Enable this frame"] = "이 프레임 활성화",
     ["Show name"] = "이름 표시",
     ["Show HP text"] = "HP 텍스트 표시",
@@ -2489,6 +2491,8 @@ L["Power strength"] = "전력 강도"
 L["Bar Gradient Colors"] = "막대 그라데이션 색상"
 L["Health gradient color"] = "건강 그라데이션 색상"
 L["Power gradient color"] = "파워 그래디언트 색상"
+L["Border & fill"] = "테두리 및 채우기"
+L["Detached placement"] = "분리 배치"
 L["Reset gradient colors"] = "그라데이션 색상 재설정"
 L["Health and Power use separate gradient colors. Choosing a color creates a custom Bars override for the selected scope."] = "건강과 전력은 별도의 그라데이션 색상을 사용합니다. 색상을 선택하면 선택한 범위에 대한 사용자 정의 막대 재정의가 생성됩니다."
 L["UPGRADED TO MSUF %s"] = "MSUF %s로 업그레이드됨"
@@ -4012,3 +4016,13 @@ L["Number abbreviation"] = "숫자 축약"
 L["Game default"] = "게임 기본값"
 L["Compact"] = "간결"
 L["Compact keeps 12.3K / 1.23M on every client language. Game default follows the client, which adds spaces or different letters on some locales."] = "간결은 모든 클라이언트 언어에서 12.3K / 1.23M 형식을 유지합니다. 게임 기본값은 클라이언트를 따르며, 일부 언어에서는 공백이나 다른 문자가 추가됩니다."
+
+--- Group class-colored health note (6.0)
+L["Class-colored health uses one color per class. Open Colors > Class Colors to change them."] = "직업 색상 생명력은 직업마다 색상이 하나씩 있습니다. 색상 > 직업 색상에서 변경하세요."
+
+--- Group resource bar color list (6.0)
+L["One color per resource type, shared with every frame."] = "자원 종류별로 색상 하나씩이며, 모든 프레임에 공통 적용됩니다."
+
+--- Dispel overlay preview toggle (6.0)
+L["Preview overlay"] = "오버레이 미리보기"
+L["Paints a stand-in tint so the overlay can be judged without a real dispellable debuff. Turns itself off when this page closes."] = "실제 해제 가능한 약화 효과 없이도 오버레이를 확인할 수 있도록 예시 색조를 표시합니다. 이 페이지를 닫으면 자동으로 꺼집니다."

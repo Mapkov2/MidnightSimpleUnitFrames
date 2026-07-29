@@ -263,16 +263,16 @@ local function ApplyPortraitUpdate(frame, castAlreadyChecked,
   if p and p.enabled == true and texture and PortraitFrameVisible(frame) then
     local force = frame._msufPortraitForceRefresh == true
     frame._msufPortraitNeedsVisibleRefresh = nil
-    frame._msufPortraitForceRefresh = nil
-    local showingCast, restorePortrait = false, false
+    local showingCast = false
     if castAlreadyChecked ~= true then
-      showingCast, restorePortrait = UpdateCastPortrait(frame, p)
+      showingCast = UpdateCastPortrait(frame, p)
     end
     if not showingCast then
+      frame._msufPortraitForceRefresh = nil
       if p.render == "CLASS" then
-        ApplyClassPortrait(texture, frame.MSUFUnitKey, p, nil, frame, force or restorePortrait)
+        ApplyClassPortrait(texture, frame.MSUFUnitKey, p, nil, frame, force)
       else
-        ApplyUnitPortrait(texture, frame.MSUFUnitKey, frame, p, force or restorePortrait,
+        ApplyUnitPortrait(texture, frame.MSUFUnitKey, frame, p, force,
           keyPrepared, preparedKey, preparedGuid, preparedExists)
       end
     end
@@ -436,6 +436,30 @@ local function EnsurePortrait(frame)
   end
   holder.edges = edges
   return holder, tex
+end
+
+-- The cast spell icon must not overwrite frame.portrait. SetPortraitTexture is
+-- a comparatively expensive native call, and sharing one Texture forced every
+-- cast/channel stop to rebuild an otherwise unchanged unit portrait. Create the
+-- overlay only for frames whose compiled spec enables the feature, keep it
+-- under the same mask, and switch visibility without touching the base image.
+local function EnsureCastPortraitIcon(frame)
+  local texture = frame and frame.MSUFPortraitCastIcon
+  if texture then
+    return texture
+  end
+  local holder = frame and frame.MSUFPortraitHolder
+  if not holder then
+    return nil
+  end
+  texture = holder:CreateTexture(nil, "ARTWORK", nil, 1)
+  texture:SetAllPoints(holder)
+  if holder.mask and texture.AddMaskTexture then
+    texture:AddMaskTexture(holder.mask)
+  end
+  SetShown(texture, false)
+  frame.MSUFPortraitCastIcon = texture
+  return texture
 end
 
 local function ApplyPortraitMask(holder, p)
@@ -740,36 +764,51 @@ local function ActiveCastIcon(unit, event)
   return CastingIcon(unit) or ChannelIcon(unit)
 end
 
-local function ApplyCastPortraitIcon(frame, texture, icon)
+local function ApplyCastPortraitIcon(frame, icon)
+  local texture = EnsureCastPortraitIcon(frame)
+  if not texture then
+    return false
+  end
   if issecretvalue(icon) == true then
     texture:SetTexture(icon)
     texture._msufTexture = nil
     texture._msufAtlas = nil
-    texture._msufPortraitGUID = nil
-    texture._msufPortraitKey = nil
-    ClearClassPortraitCache(texture)
   else
     SetTextureCached(texture, icon)
   end
   SetTexCoordCached(texture, 0.08, 0.92, 0.08, 0.92)
   SetVertexColorCached(texture, 1, 1, 1, 1)
+  SetShown(frame.portrait, false)
+  SetShown(texture, true)
   frame._msufPortraitCastIconActive = true
+  return true
+end
+
+local function RestoreCastPortraitIcon(frame)
+  if not frame then
+    return
+  end
+  local texture = frame.MSUFPortraitCastIcon
+  local active = frame._msufPortraitCastIconActive == true
+    or (texture and texture._msufShown == true)
+  frame._msufPortraitCastIconActive = nil
+  if active then
+    SetShown(texture, false)
+    SetShown(frame.portrait, true)
+  end
 end
 
 UpdateCastPortrait = function(frame, p, event)
   if not (frame and p and p.castSpellIcon == true) then
-    local restorePortrait = frame and frame._msufPortraitCastIconActive == true
-    if frame then frame._msufPortraitCastIconActive = nil end
-    return false, restorePortrait
+    RestoreCastPortraitIcon(frame)
+    return false
   end
   local icon = ActiveCastIcon(frame.MSUFUnitKey, event)
   if icon ~= nil then
-    ApplyCastPortraitIcon(frame, frame.portrait, icon)
-    return true, false
+    return ApplyCastPortraitIcon(frame, icon)
   end
-  local restorePortrait = frame._msufPortraitCastIconActive == true
-  frame._msufPortraitCastIconActive = nil
-  return false, restorePortrait
+  RestoreCastPortraitIcon(frame)
+  return false
 end
 
 ResolvePortraitBorderColor = function(frame, p, class)
@@ -1112,6 +1151,9 @@ function Portrait.Apply(frame, spec)
     return
   end
   frame._msufUpdatePortraitConnection = Portrait.UpdateConnectionState
+  if p.castSpellIcon == true then
+    EnsureCastPortraitIcon(frame)
+  end
   LayoutPortrait(frame, p)
   ApplyPortraitMask(holder, p)
   ApplyPortraitBackground(holder, p)
@@ -1120,14 +1162,15 @@ function Portrait.Apply(frame, spec)
   SetShown(frame.portrait, true)
   if frame.portrait then
     if PortraitFrameVisible(frame) then
+      local force = frame._msufPortraitForceRefresh == true
       frame._msufPortraitNeedsVisibleRefresh = nil
-      frame._msufPortraitForceRefresh = nil
-      local showingCast, restorePortrait = UpdateCastPortrait(frame, p)
+      local showingCast = UpdateCastPortrait(frame, p)
       if not showingCast then
+        frame._msufPortraitForceRefresh = nil
         if p.render == "CLASS" then
-          ApplyClassPortrait(frame.portrait, frame.MSUFUnitKey, p, nil, frame, restorePortrait)
+          ApplyClassPortrait(frame.portrait, frame.MSUFUnitKey, p, nil, frame, force)
         else
-          ApplyUnitPortrait(frame.portrait, frame.MSUFUnitKey, frame, p, restorePortrait)
+          ApplyUnitPortrait(frame.portrait, frame.MSUFUnitKey, frame, p, force)
         end
       end
     else
@@ -1147,6 +1190,9 @@ function Portrait.Disable(frame)
   frame._msufPortraitRuntimeCfg = nil
   frame._msufPortraitFrameHeight = nil
   frame._msufPortraitCastIconActive = nil
+  if frame.MSUFPortraitCastIcon then
+    SetShown(frame.MSUFPortraitCastIcon, false)
+  end
   if frame.portrait then
     ClearPortraitGUID(frame.portrait)
   end
@@ -1210,7 +1256,7 @@ function Portrait.Update(frame, event, unit)
     return
   end
 
-  local showingCast, restorePortrait = UpdateCastPortrait(frame, p, event)
+  local showingCast = UpdateCastPortrait(frame, p, event)
   if showingCast then
     if PortraitBorderNeedsUpdate(event, p) then
       LayoutPortraitBorder(frame.MSUFPortraitHolder, p, ResolvePortraitBorderColor(frame, p))
@@ -1220,17 +1266,13 @@ function Portrait.Update(frame, event, unit)
 
   local class
   if p.render == "CLASS" then
-    local force = forceRefresh == true or frame._msufPortraitForceRefresh == true or restorePortrait == true
+    local force = forceRefresh == true or frame._msufPortraitForceRefresh == true
     frame._msufPortraitNeedsVisibleRefresh = nil
     frame._msufPortraitForceRefresh = nil
     class = UnitClassToken(unit)
     ApplyClassPortrait(texture, unit, p, class, frame, force)
   else
-    if restorePortrait == true then
-      frame._msufPortraitNeedsVisibleRefresh = nil
-      frame._msufPortraitForceRefresh = nil
-      ApplyUnitPortrait(texture, unit, frame, p, true)
-    elseif ShouldRefresh2DPortraitForEvent(event, identityVisual) then
+    if ShouldRefresh2DPortraitForEvent(event, identityVisual) then
       local changed, keyPrepared, preparedKey, preparedGuid, preparedExists
       if forceRefresh == true then
         changed = true

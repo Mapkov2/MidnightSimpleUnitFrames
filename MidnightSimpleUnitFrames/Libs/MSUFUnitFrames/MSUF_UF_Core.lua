@@ -2771,6 +2771,15 @@ local function ApplyElementSelection(frame, selection, spec, updateReason, selec
   if wasBatching ~= true then rebuilt = RefreshFrameRoutingAfterElementApply(frame) end
   UF._msufApplyingSpec = wasApplying
   if rebuilt and wasApplying ~= true and UF.SyncRuntimeDriver then UF.SyncRuntimeDriver() end
+  -- Menu dispel-overlay preview. The stand-in tint is MSUF-drawn and therefore
+  -- outside the element/dirty-mask system, so re-stamp it here: this is the one
+  -- funnel both full spec applies (UF.ApplySpec) and targeted element refreshes
+  -- (UF.ApplyElementsToFrame, which is how unit-frame aura settings apply) pass
+  -- through. A single boolean read whenever no preview is active.
+  if _G.MSUF_DispelOverlayPreviewMode == true
+    and type(_G.MSUF_ApplyDispelOverlayPreviewToFrame) == "function" then
+    _G.MSUF_ApplyDispelOverlayPreviewToFrame(frame)
+  end
   return true
 end
 

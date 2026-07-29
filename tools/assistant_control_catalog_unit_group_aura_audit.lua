@@ -250,7 +250,10 @@ end
 -- portrait cast-icon toggle on the Castbar Icon tab.
 -- The per-unit power texture dropdowns are retired: that art is configured once
 -- on the Bars page, so the unit page lost its shared texture factory site.
-Check(factorySites == 203, string.format("interactive factory inventory drifted: expected 203, got %d", factorySites))
+-- The Group Resource Bar mirrors the unit-frame section, adding four toggle
+-- sites (embed into health, detach from frame, power bar border, text on
+-- detached bar), and Range Fade adds the offline-fade toggle.
+Check(factorySites == 208, string.format("interactive factory inventory drifted: expected 208, got %d", factorySites))
 
 local function AddUnique(list, seen, value)
     value = tostring(value or "")

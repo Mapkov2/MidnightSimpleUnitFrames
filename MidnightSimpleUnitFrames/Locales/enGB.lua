@@ -845,6 +845,11 @@ L["Power strength"] = "Power strength"
 L["Bar Gradient Colors"] = "Bar Gradient Colors"
 L["Health gradient color"] = "Health gradient color"
 L["Power gradient color"] = "Power gradient color"
+L["Border & fill"] = "Border & fill"
+L["Detached placement"] = "Detached placement"
+L["Embed into health"] = "Embed into health"
+L["Power bar border"] = "Power bar border"
+L["Text on detached bar"] = "Text on detached bar"
 L["Reset gradient colors"] = "Reset gradient colors"
 L["Health and Power use separate gradient colors. Choosing a color creates a custom Bars override for the selected scope."] = "Health and Power use separate gradient colors. Choosing a color creates a custom Bars override for the selected scope."
 L["UPGRADED TO MSUF %s"] = "UPGRADED TO MSUF %s"
@@ -2028,6 +2033,8 @@ L["For Priority Frames, layout is profile-wide, while pins are character-specifi
 L["Foreground"] = "Foreground"
 L["Frame"] = "Frame"
 L["Frame Basics"] = "Frame Basics"
+L["Fade offline members"] = "Fade offline members"
+L["Hiding offline members in Frame Basics takes precedence over this."] = "Hiding offline members in Frame Basics takes precedence over this."
 L["Frame Outline"] = "Frame Outline"
 L["Frame Scaling"] = "Frame Scaling"
 L["Frames"] = "Frames"
@@ -2735,3 +2742,13 @@ L["Number abbreviation"] = "Number abbreviation"
 L["Game default"] = "Game default"
 L["Compact"] = "Compact"
 L["Compact keeps 12.3K / 1.23M on every client language. Game default follows the client, which adds spaces or different letters on some locales."] = "Compact keeps 12.3K / 1.23M on every client language. Game default follows the client, which adds spaces or different letters on some locales."
+
+--- Group class-colored health note (6.0)
+L["Class-colored health uses one color per class. Open Colors > Class Colors to change them."] = "Class-coloured health uses one colour per class. Open Colors > Class Colours to change them."
+
+--- Group resource bar color list (6.0)
+L["One color per resource type, shared with every frame."] = "One color per resource type, shared with every frame."
+
+--- Dispel overlay preview toggle (6.0)
+L["Preview overlay"] = "Preview overlay"
+L["Paints a stand-in tint so the overlay can be judged without a real dispellable debuff. Turns itself off when this page closes."] = "Paints a stand-in tint so the overlay can be judged without a real dispellable debuff. Turns itself off when this page closes."

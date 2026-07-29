@@ -3489,6 +3489,133 @@ local function PrepareDispelSensorButton(button, sensor, parentFrame, index)
     return true
 end
 
+--- Dispel-overlay preview (menu-driven, cold path only).
+---
+--- The live overlay belongs to Blizzard: MSUF only hands a texture to
+--- AddDispelTypeTexture above, and the native container owns both the button's
+--- visibility and the dispel-type vertex color. Nothing can force that on
+--- without a real dispellable debuff on the unit, so the preview has to be a
+--- separate MSUF-owned frame.
+---
+--- It is laid out by the SAME two helpers as the live sensor button and fed the
+--- same compiled sensor, so style, thickness, alpha, target rect, strata and
+--- frame level cannot drift from the real thing. Only Show and the flat color
+--- are ours -- a live tint is colored by the aura's dispel type, which has no
+--- meaning when there is no aura.
+A3._DISPEL_OVERLAY_PREVIEW_FIELD = "_msufA3DispelOverlayPreview"
+
+A3._NormalizeDispelOverlayPreviewScope = function(scope)
+    scope = tostring(scope or "shared"):lower()
+    if scope == "" or scope == "all" or scope == "global" then return "shared" end
+    if scope == "gf_party" then return "party" end
+    if scope == "gf_raid" then return "raid" end
+    if scope == "gf_mythicraid" then return "mythicraid" end
+    return scope
+end
+
+--- Scope match mirrors the border test modes: "shared" paints every frame, a
+--- group kind paints that kind, anything else matches a unit token.
+A3._DispelOverlayPreviewApplies = function(frame)
+    if not frame then return false end
+    local wanted = A3._NormalizeDispelOverlayPreviewScope(_G.MSUF_DispelOverlayPreviewScope)
+    if wanted == "shared" then return true end
+    local groupKind = frame._msufGFKind
+    if groupKind == nil then
+        local spec = frame.MSUFSpec
+        groupKind = spec and spec.groupKind or nil
+    end
+    if groupKind then
+        if wanted == "raid" then return groupKind == "raid" or groupKind == "mythicraid" end
+        return groupKind == wanted
+    end
+    return frame.MSUFUnitKey == wanted or frame.configKey == wanted
+end
+
+A3._HideDispelOverlayPreview = function(frame)
+    local host = frame and frame[A3._DISPEL_OVERLAY_PREVIEW_FIELD]
+    if host and host:IsShown() then host:Hide() end
+    return false
+end
+
+--- Cold path only: reached from the menu toggle, from the aura apply, and from
+--- the group preview build. Never from an event route.
+A3._ApplyDispelOverlayPreview = function(frame)
+    if _G.MSUF_DispelOverlayPreviewMode ~= true then return A3._HideDispelOverlayPreview(frame) end
+    if not (frame and frame.MSUFSpec) then return A3._HideDispelOverlayPreview(frame) end
+    if not A3._DispelOverlayPreviewApplies(frame) then return A3._HideDispelOverlayPreview(frame) end
+    -- Compiling straight off the frame spec keeps this independent of the
+    -- native aura container, so group preview rows past the first one (which
+    -- deliberately own no container) still preview the overlay.
+    local sensor = CompileDispelSensor(frame.MSUFUnitKey, frame.MSUFSpec, IsGroupFrame(frame), "overlay")
+    if not (sensor and sensor.enabled == true) then return A3._HideDispelOverlayPreview(frame) end
+    local host = frame[A3._DISPEL_OVERLAY_PREVIEW_FIELD]
+    if not host then
+        -- The preview can only be switched on out of combat, so first creation
+        -- always lands there. A spec apply that arrives mid-combat re-stamps an
+        -- existing host but never parents a fresh frame onto a secure header.
+        if _G.InCombatLockdown and _G.InCombatLockdown() then return false end
+        host = CreateFrame("Frame", nil, frame)
+        host:SetMouseMotionEnabled(false)
+        host.Region = host:CreateTexture(nil, "OVERLAY")
+        frame[A3._DISPEL_OVERLAY_PREVIEW_FIELD] = host
+    end
+    if not LayoutDispelSensorButton(host, sensor, frame, 1) then
+        return A3._HideDispelOverlayPreview(frame)
+    end
+    local region = host.Region
+    if not LayoutDispelSensorOverlay(region, host, sensor, DispelSensorTarget(frame, sensor)) then
+        return A3._HideDispelOverlayPreview(frame)
+    end
+    local dispel = frame.MSUFSpec.dispel
+    region:SetColorTexture(tonumber(dispel and dispel.r) or 0.25,
+        tonumber(dispel and dispel.g) or 0.75,
+        tonumber(dispel and dispel.b) or 1, 1)
+    region:SetAlpha(Clamp01(sensor.alpha, 0.35))
+    region:Show()
+    host:Show()
+    return true
+end
+
+A3._ForEachDispelOverlayPreviewFrame = function(fn)
+    if UF and type(UF.ForEachFrame) == "function" then UF.ForEachFrame(fn) end
+    local gf = MSUF and MSUF.GF
+    if not gf then return end
+    if type(gf.ForEachFrame) == "function" then gf.ForEachFrame(fn, true) end
+    -- Group preview rows live outside GF.frameList; walk them explicitly so the
+    -- menu preview covers the rows the user is actually looking at.
+    local previews = gf._previewFrames
+    if type(previews) ~= "table" then return end
+    for _, frames in pairs(previews) do
+        if type(frames) == "table" then
+            for _, frame in pairs(frames) do
+                if type(frame) == "table" then fn(frame) end
+            end
+        end
+    end
+end
+
+A3.RefreshDispelOverlayPreview = function()
+    A3._ForEachDispelOverlayPreviewFrame(A3._ApplyDispelOverlayPreview)
+    return true
+end
+
+--- Menu-facing setter, mirroring the border test-mode contract: one flag plus
+--- one scope, cleared by the menu when its page hides. Combat never turns a
+--- preview on.
+A3.SetDispelOverlayPreview = function(active, scope)
+    active = active == true
+    if active and _G.InCombatLockdown and _G.InCombatLockdown() then active = false end
+    ExportPublic("MSUF_DispelOverlayPreviewMode", active)
+    ExportPublic("MSUF_DispelOverlayPreviewScope",
+        active and A3._NormalizeDispelOverlayPreviewScope(scope) or nil)
+    A3.RefreshDispelOverlayPreview()
+    return active
+end
+
+ExportPublic("MSUF_SetDispelOverlayPreview", A3.SetDispelOverlayPreview)
+ExportPublic("MSUF_RefreshDispelOverlayPreview", A3.RefreshDispelOverlayPreview)
+ExportPublic("MSUF_ApplyDispelOverlayPreviewToFrame", A3._ApplyDispelOverlayPreview)
+
 local function ManagedAuraKey(config)
     return "msuf_" .. tostring(config and config.kind or "auras")
 end
@@ -5257,6 +5384,7 @@ end
 function A3.DisableFrame(frame)
     if not frame then return true end
     HideState(frame)
+    A3._HideDispelOverlayPreview(frame)
     local unit = frame.MSUFUnitKey
     if unit and A3._runtimeFrames and A3._runtimeFrames[unit] == frame then
         A3._runtimeFrames[unit] = nil

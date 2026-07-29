@@ -17,8 +17,13 @@ MSUF.GF = GF
 if not (UF and UF.RegisterElement) then return end
 
 local CreateFrame = _G.CreateFrame
+local InCombatLockdown = _G.InCombatLockdown
 local next = next
 local type = type
+
+local function InCombat()
+  return InCombatLockdown ~= nil and InCombatLockdown() == true
+end
 
 local STATUS_EVENT_KIND = {
   RAID_TARGET_UPDATE = 1,
@@ -101,13 +106,44 @@ local function RunLeaderPair(frame, status)
   UpdateLeaderPair(frame, status)
 end
 
-local function RunLeaderPairRaidGroup(frame, status)
-  UpdateLeaderPair(frame, status)
+--- Subgroup membership is cold data, but GROUP_ROSTER_UPDATE also fires for
+--- joins, leaves and disconnects, so it must not repaint 40 frames mid-fight.
+---
+--- When the raid group is the only consumer of that event, the driver drops the
+--- registration for the duration of combat (see SuspendRosterForCombat), so the
+--- in-combat cost is exactly zero: the event never reaches Lua. Leader/assist
+--- share the event and do need it live, so when either is on the event keeps
+--- firing and this runner short-circuits on a cached boolean instead of an
+--- InCombatLockdown call.
+local combatActive = false
+local raidGroupDeferred = false
+
+local function DeferRaidGroupForCombat()
+  if raidGroupDeferred then return end
+  raidGroupDeferred = true
+  if type(GF.DeferGroupRuntime) == "function" then
+    GF.DeferGroupRuntime("refresh", nil, GF.DIRTY_VISUAL)
+  else
+    GF._pendingGroupRuntime = GF._pendingGroupRuntime or "refresh"
+  end
+end
+
+local function UpdateRaidGroupColdPath(frame, status)
+  if combatActive then
+    DeferRaidGroupForCombat()
+    return
+  end
+  raidGroupDeferred = false
   UpdateRaidGroup(frame, status)
 end
 
+local function RunLeaderPairRaidGroup(frame, status)
+  UpdateLeaderPair(frame, status)
+  UpdateRaidGroupColdPath(frame, status)
+end
+
 local function RunRaidGroup(frame, status)
-  UpdateRaidGroup(frame, status)
+  UpdateRaidGroupColdPath(frame, status)
 end
 
 local function RunReadyCheck(frame, status, event)
@@ -269,12 +305,64 @@ local function RunTargetedUnitlessStatus(frame, unit, event, registered, live)
   return false
 end
 
+local ROSTER_EVENT = "GROUP_ROSTER_UPDATE"
+local rosterSuspended = false
+local BroadcastUnitlessStatus
+local RefreshUnitlessDriverEvent
+
+--- Leader and assist ride the same roster event and do need it live, so the
+--- registration may only be dropped when the raid group is its sole consumer.
+--- One O(frames) walk per combat start, never per event.
+local function RosterEventHasLiveConsumer()
+  local list = unitlessFramesByEvent[ROSTER_EVENT]
+  if not list then return false end
+  for i = 1, #list do
+    local frame = list[i]
+    local status = frame and (frame._msufGFStatusRuntimeStatus
+      or (frame.MSUFSpec and frame.MSUFSpec.status))
+    if status and status.runtimeLeaderPair == true then return true end
+  end
+  return false
+end
+
+local function SuspendRosterForCombat()
+  if rosterSuspended or not unitlessDriver then return end
+  if unitlessRegistered[ROSTER_EVENT] ~= true then return end
+  if RosterEventHasLiveConsumer() then return end
+  unitlessDriver:UnregisterEvent(ROSTER_EVENT)
+  unitlessRegistered[ROSTER_EVENT] = nil
+  rosterSuspended = true
+end
+
+--- The event was off, so a roster change during the fight went unseen. Restore
+--- the registration and repaint once, exactly as the missed event would have.
+local function ResumeRosterAfterCombat()
+  if not rosterSuspended then return end
+  rosterSuspended = false
+  RefreshUnitlessDriverEvent(ROSTER_EVENT)
+  if BroadcastUnitlessStatus then BroadcastUnitlessStatus(ROSTER_EVENT) end
+end
+
 local function EnsureUnitlessDriver()
   if unitlessDriver or not CreateFrame then
     return unitlessDriver
   end
   unitlessDriver = CreateFrame("Frame")
+  -- A driver built mid-combat never sees the PLAYER_REGEN_DISABLED that already
+  -- happened, so seed the cached state once here instead of leaving it stale.
+  combatActive = InCombat()
+  unitlessDriver:RegisterEvent("PLAYER_REGEN_DISABLED")
+  unitlessDriver:RegisterEvent("PLAYER_REGEN_ENABLED")
   unitlessDriver:SetScript("OnEvent", function(_, event, unitTarget)
+    if event == "PLAYER_REGEN_DISABLED" then
+      combatActive = true
+      SuspendRosterForCombat()
+      return
+    elseif event == "PLAYER_REGEN_ENABLED" then
+      combatActive = false
+      ResumeRosterAfterCombat()
+      return
+    end
     local list = unitlessFramesByEvent[event]
     if not list then
       return
@@ -310,20 +398,27 @@ local function EnsureUnitlessDriver()
       -- path on a lookup miss; the indexed steady state remains O(1).
     end
 
-    for i = 1, #list do
-      local frame = list[i]
-      if frame and (not live or live[frame] == true) then
-        local active = frame._msufActiveElements
-        if active and active.GroupStatusRuntime == true then
-          RunStatusRuntimeFrame(frame, event)
-        end
-      end
-    end
+    BroadcastUnitlessStatus(event, list, live)
   end)
   return unitlessDriver
 end
 
-local function RefreshUnitlessDriverEvent(event)
+function BroadcastUnitlessStatus(event, list, live)
+  list = list or unitlessFramesByEvent[event]
+  if not list then return end
+  if live == nil then live = GF and GF.frames end
+  for i = 1, #list do
+    local frame = list[i]
+    if frame and (not live or live[frame] == true) then
+      local active = frame._msufActiveElements
+      if active and active.GroupStatusRuntime == true then
+        RunStatusRuntimeFrame(frame, event)
+      end
+    end
+  end
+end
+
+function RefreshUnitlessDriverEvent(event)
   local want = (unitlessCountByEvent[event] or 0) > 0
   if not unitlessDriver and not want then
     return

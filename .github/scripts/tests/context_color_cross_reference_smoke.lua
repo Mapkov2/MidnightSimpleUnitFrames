@@ -55,8 +55,10 @@ local openHelper = Slice(widgets,
     "context-color open helper")
 Has(openHelper, "ResolveContextColorOption(opts.getTargets or opts.targets, {})",
     "the deferred target provider is not resolved by the open path")
-Has(openHelper, "math.max(1, math.min(4, tonumber(opts.maxTargets) or 4))",
-    "the context-color popup no longer enforces its four-target maximum")
+Has(openHelper, "math.max(1, tonumber(opts.maxTargets) or 4)",
+    "the context-color popup no longer defaults to a four-target maximum")
+Has(openHelper, "if #targets > maxTargets then return false end",
+    "the context-color popup no longer enforces the bound its card declared")
 Has(openHelper, "owner._msuf2ContextColorAllowDisabled == true",
     "opt-in colors can no longer be preconfigured while their feature is disabled")
 
@@ -217,7 +219,9 @@ local pageSpecs = {
     },
     {
         name = "Group Bars", file = "MSUF_Menu2_GroupBars.lua",
-        ids = { "group.debuff_stripe", "power.current", "group.background" },
+        -- A group roster mixes resources, so the resource card names each one
+        -- instead of resolving a single "power.current" from a guessed token.
+        ids = { "group.debuff_stripe", "power.token.mana", "power.token.runic_power", "group.background" },
     },
     {
         name = "Group Indicators", file = "MSUF_Menu2_GroupIndicators.lua",
@@ -289,7 +293,12 @@ local function ExtractReferenceCalls(source, pageName)
     end
 end
 
-local function AssertTableMappingsAtMostFour(call, pageName)
+-- Curated mappings stay at four. A card whose subject genuinely is a list
+-- (group resource colors are one per power type) may declare a larger bound,
+-- but it must declare it: an undeclared fifth color is still a curation bug.
+local function AssertTableMappingsWithinBound(call, pageName)
+    local declaredMax = tonumber(call:match("maxTargets%s*=%s*(%d+)")) or 4
+    assert(declaredMax <= 12, pageName .. " declares an unbounded context-color mapping: " .. declaredMax)
     local stack, quote, value, i = {}, nil, nil, 1
     while i <= #call do
         local ch, nextCh = call:sub(i, i), call:sub(i + 1, i + 1)
@@ -317,7 +326,9 @@ local function AssertTableMappingsAtMostFour(call, pageName)
             local count, names = 0, {}
             for id in pairs(ids) do count, names[#names + 1] = count + 1, id end
             table.sort(names)
-            assert(count <= 4, pageName .. " maps more than four colors in one table: " .. table.concat(names, ", "))
+            assert(count <= declaredMax,
+                pageName .. " maps more colors in one table than its declared maxTargets of "
+                    .. declaredMax .. ": " .. table.concat(names, ", "))
             stack[#stack] = nil
             i = i + 1
         else
@@ -325,8 +336,6 @@ local function AssertTableMappingsAtMostFour(call, pageName)
         end
     end
     assert(#stack == 0, pageName .. " has an unbalanced context-color table")
-    local explicitMax = call:match("maxTargets%s*=%s*(%d+)")
-    assert(not explicitMax or tonumber(explicitMax) <= 4, pageName .. " requests more than four context colors")
 end
 
 local referencedIds = {}
@@ -339,7 +348,7 @@ for _, spec in ipairs(pageSpecs) do
         referencedIds[id] = true
     end
     for _, call in ipairs(calls) do
-        AssertTableMappingsAtMostFour(call, spec.name)
+        AssertTableMappingsWithinBound(call, spec.name)
         for id in call:gmatch('"([a-z_]+%.[a-z0-9_.]+)"') do
             if IsContextId(id) then referencedIds[id] = true end
         end
@@ -436,8 +445,14 @@ Has(groupLayout, 'references = { "group.health" }',
     "Group Layout does not resolve dark/unified/custom through the group health color")
 Has(groupLayout, 'if not GroupBackgroundUsesDerivedColor() then',
     "Group Layout exposes an unused custom background while health/class-follow is active")
-Has(groupLayout, "classToken = GROUP_HEALTH_PREVIEW_CLASS[scope]",
-    "Group Layout class color has no deterministic preview context")
+-- Class-colored group health has one color per member class. Offering a single
+-- one of them wrote an arbitrary global class color, so the class mode must
+-- contribute no foreground reference and may not force a preview class token.
+Has(groupLayout, 'if CurrentGroupEffectiveHealthMode() == "CLASS" then',
+    "Group Layout still hands out one arbitrary class color for class-colored group health")
+assert(not groupLayout:find("GROUP_HEALTH_PREVIEW_CLASS", 1, true)
+    and not groupLayout:find("classToken", 1, true),
+    "Group Layout still forces a hardcoded preview class into the color context")
 Has(groupLayout, 'CurrentGroupEffectiveHealthMode() ~= "GRADIENT"',
     "Group Layout can overflow three gradient stops plus background with a fifth dead color")
 

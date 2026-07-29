@@ -34,7 +34,6 @@ local function AttachGroupFocus(widget, component)
     W.AttachGroupEditFocus(widget, CurrentEditFocusKey, component or "layout")
     return widget
 end
-local GROUP_HEALTH_PREVIEW_CLASS = { party = "HUNTER", raid = "PRIEST", mythicraid = "PALADIN" }
 local function CurrentGroupHealthMode()
     return tostring(Val(CurrentScope(), "gfBarMode", "GLOBAL") or "GLOBAL"):upper()
 end
@@ -54,7 +53,15 @@ local function CurrentGroupHealthColorRefs()
     local mode = CurrentGroupHealthMode()
     local references
     if mode == "GLOBAL" or mode == "CLASS" or mode == "GRADIENT" then
-        references = { "health.current" }
+        -- Class-colored group health is one color per member class, not a
+        -- single editable color. Picking one of them here handed out an
+        -- arbitrary class and wrote it into the shared class color table, so
+        -- the class mode contributes no foreground color of its own.
+        if CurrentGroupEffectiveHealthMode() == "CLASS" then
+            references = {}
+        else
+            references = { "health.current" }
+        end
     else
         references = { "group.health" }
     end
@@ -63,12 +70,16 @@ local function CurrentGroupHealthColorRefs()
     end
     return references
 end
+local function GroupHealthColorNote(sharedNote)
+    if CurrentGroupEffectiveHealthMode() == "CLASS" then
+        return "Class-colored health uses one color per class. Open Colors > Class Colors to change them."
+    end
+    return sharedNote
+end
 local function CurrentGroupHealthColorContext()
-    local scope = tostring(CurrentScope() or "party"):lower():gsub("^gf_", "")
     return {
         unit = "player",
         unitKey = "player",
-        classToken = GROUP_HEALTH_PREVIEW_CLASS[scope] or "HUNTER",
         healthMode = CurrentGroupHealthMode(),
     }
 end
@@ -81,7 +92,16 @@ local function RefreshFrameBasicsProviderHeader(section)
     }
     if usesMSUF then
         badges[#badges + 1] = { text = Bool(CurrentScope(), "showPlayer", true) and "Player shown" or "Player hidden", kind = Bool(CurrentScope(), "showPlayer", true) and "info" or "muted" }
-        badges[#badges + 1] = { text = offlineHidden and ("Offline " .. BadgeNumber(Num(CurrentScope(), "hideOfflineDelay", 0)) .. "s") or "Offline visible", kind = offlineHidden and "accent" or "muted" }
+        local offlineFaded = not offlineHidden and Bool(CurrentScope(), "offlineFadeEnabled", false)
+        local offlineText
+        if offlineHidden then
+            offlineText = "Offline " .. BadgeNumber(Num(CurrentScope(), "hideOfflineDelay", 0)) .. "s"
+        elseif offlineFaded then
+            offlineText = "Offline faded"
+        else
+            offlineText = "Offline visible"
+        end
+        badges[#badges + 1] = { text = offlineText, kind = (offlineHidden or offlineFaded) and "accent" or "muted" }
     end
     local status
     if usesMSUF then
@@ -118,7 +138,7 @@ local function BuildGFGeneralSection(ctx, b)
             return references
         end, {
             title = "Group Frame Colors",
-            note = "Shared by Party, Raid and Mythic Raid.",
+            note = function() return GroupHealthColorNote("Shared by Party, Raid and Mythic Raid.") end,
             historySource = "menu:group-frame-basics-colors",
             offsetY = -10,
             context = CurrentGroupHealthColorContext,
@@ -239,7 +259,9 @@ local function BuildGFTransparencySection(ctx, b)
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(healthOpacityCard, CurrentGroupHealthColorRefs, {
             title = "Group Health Bar Colors",
-            note = "Foreground follows the selected group color mode; editable group colors are shared by Party, Raid and Mythic Raid.",
+            note = function()
+                return GroupHealthColorNote("Foreground follows the selected group color mode; editable group colors are shared by Party, Raid and Mythic Raid.")
+            end,
             historySource = "menu:group-transparency-colors",
             context = CurrentGroupHealthColorContext,
         })
@@ -281,7 +303,7 @@ local function BuildGFGeometrySection(ctx, b)
     end
     LayoutSlider(sizeCard, "Width", 40, 300, 1, "width", 120, -66)
     LayoutSlider(sizeCard, "Height", 16, 120, 1, "height", 40, -114)
-    LayoutSlider(sizeCard, "Spacing", 0, 20, 1, "spacing", 1, -162)
+    LayoutSlider(sizeCard, "Spacing", 0, 60, 1, "spacing", 1, -162)
     BuildGrowthDirectionTiles(ctx, growthCard, { x = 16, y = -68, tileWidth = 64, tileHeight = 64, gap = 8, advanceCursor = false })
     LayoutSlider(gridCard, "Units per column", 1, 40, 1, "unitsPerColumn", 5, -28)
     LayoutSlider(gridCard, "Max columns", 1, 8, 1, "maxColumns", 8, -86)
@@ -617,7 +639,7 @@ local GROUP_LAYOUT_SECTION_SPECS = {
         end,
     },
     { sectionId = "text", title = "Text", height = 690, build = BuildGFTextSection },
-    { sectionId = "power", title = "Resource Bar", height = 240, build = BuildGFResourceBarSection },
+    { sectionId = "power", title = "Resource Bar", autoHeight = true, build = BuildGFResourceBarSection },
     { sectionId = "range", title = "Range Fade", height = 220, build = BuildGFRangeFadeSection },
     { sectionId = "transparency", title = "Transparency", autoHeight = true, build = BuildGFTransparencySection },
     { sectionId = "layout_advanced", title = "Geometry", height = 448, build = BuildGFGeometrySection },
@@ -638,4 +660,4 @@ local function BuildGFLayout(ctx)
     end
     FinalizeScopePage(ctx, b)
 end
-M.RegisterPage("gf_layout", { title = "MSUF Group Layout", build = BuildGFLayout, version = 24 })
+M.RegisterPage("gf_layout", { title = "MSUF Group Layout", build = BuildGFLayout, version = 25 })

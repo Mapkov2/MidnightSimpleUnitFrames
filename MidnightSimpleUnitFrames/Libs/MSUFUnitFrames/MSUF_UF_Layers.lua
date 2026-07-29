@@ -47,6 +47,16 @@ Layers.DISPEL_OVERLAY_EFFECT_OFFSET = 12
 Layers.FRAME_BORDER_NORMAL_OFFSET = 35
 Layers.FRAME_BORDER_DEFAULT_OFFSET = 40
 Layers.FRAME_BORDER_OVER_NATIVE_DISPEL_OFFSET = 50
+-- The Frame Outline is a foreground surface as well, but its legacy band
+-- (border offset + user Layer 0..30) is measured from the frame while the Group
+-- foreground band is measured from the health bar one level higher. The normal
+-- outline therefore topped out exactly where Group text starts, and its Layer
+-- slider could never lift it above a name. Group outlines run on the text base
+-- instead, seated one level below the shared band at Layer 0 -- the unchanged
+-- default of text over outline -- and climb through it from there. The spacing
+-- between the normal and highlight border levels is preserved, so an activating
+-- dispel/aggro border never drops below the outline it replaces.
+Layers.GROUP_BORDER_BASE_OFFSET = Layers.GROUP_FOREGROUND_BASE_OFFSET - 1
 -- Kept as a compatibility alias for preview code loaded against this contract.
 Layers.PREVIEW_FRAME_BORDER_OFFSET = Layers.FRAME_BORDER_NORMAL_OFFSET
 Layers.PREVIEW_BOUNDS_OFFSET = 48
@@ -89,6 +99,32 @@ function Layers.StatusLevel(frameOrLevel, layer, fallback)
     and frameOrLevel.MSUFSpec.scope == "group" and Layers.GROUP_FOREGROUND_BASE_OFFSET
     or Layers.STATUS_BASE_OFFSET
   return base + offset + Layers.ClampLayer(layer, fallback or 7)
+end
+
+--- Offset added to a frame's own level for its Frame Outline overlay.
+--- `offset` is one of the FRAME_BORDER_* constants (normal vs highlight), the
+--- caller's already-compiled 0..30 `layer` rides on top. Unit frames keep the
+--- legacy band; group frames move to the foreground band (see above).
+function Layers.BorderOffset(frame, offset, layer)
+  offset = tonumber(offset) or Layers.FRAME_BORDER_DEFAULT_OFFSET
+  layer = Layers.ClampLayer(layer, 0)
+  local spec = type(frame) == "table" and frame.MSUFSpec
+  if not (spec and spec.scope == "group") then
+    return offset + layer
+  end
+  local frameLevel = frame.GetFrameLevel and (frame:GetFrameLevel() or 0) or 0
+  return (Layers.BaseFrameLevel(frame) - frameLevel)
+    + Layers.GROUP_BORDER_BASE_OFFSET
+    + (offset - Layers.FRAME_BORDER_NORMAL_OFFSET)
+    + layer
+end
+
+--- Preview mirror of Layers.BorderOffset for group mocks, which carry no
+--- MSUFSpec and reach their health bar through a preview-private field.
+function Layers.GroupBorderLevel(frameLevel, layer)
+  return Layers.HealthLevel(tonumber(frameLevel) or 0)
+    + Layers.GROUP_BORDER_BASE_OFFSET
+    + Layers.ClampLayer(layer, 0)
 end
 
 function Layers.PreviewBoundsLevel(frameOrLevel)

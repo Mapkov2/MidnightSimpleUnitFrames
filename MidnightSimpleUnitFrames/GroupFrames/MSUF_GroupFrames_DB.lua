@@ -300,6 +300,7 @@ local PARTY_DEFAULTS = {
     rangeFadeAlpha    = 0.4,
     rangeFadeLayerMode = "frame", --- frame / health
     offlineAlpha      = 0.5,
+    offlineFadeEnabled = false,
     hideOfflineEnabled = false,
     hideOfflineInCombat = false,
     hideOfflineDelay  = 0,
@@ -477,6 +478,7 @@ local PARTY_DEFAULTS = {
     overAbsorbOverlay    = true,
     --- Group number (raid subgroup on frame)
     showGroupNumber       = false,
+    groupNumberStyle      = "PAREN",
     groupNumberSize       = 10,
     groupNumberAnchor     = "BOTTOMRIGHT",
     groupNumberX          = -2,
@@ -536,6 +538,19 @@ local PARTY_DEFAULTS = {
     powerTextDelimiter    = " / ",
     --- Power smooth fill
     powerSmoothFill       = false,
+    --- Power bar parity with the unit-frame Resource Bar section. Bar art and
+    --- colour stay global (same as the unit page, which configures them once on
+    --- Bars); these are the per-scope keys that page actually exposes.
+    powerBarBorderEnabled = false,
+    powerBarBorderThickness = 1,
+    embedPowerBarIntoHealth = true,
+    powerBarDetached      = false,
+    detachedPowerBarTextOnBar = false,
+    detachedPowerBarOffsetX = 0,
+    detachedPowerBarOffsetY = -4,
+    detachedPowerBarWidth = 0,
+    detachedPowerBarHeight = 6,
+    detachedPowerBarFrameLevelOffset = 6,
     --- Auras (Phase 4, stubs)
     aurasEnabled      = true,
     auraMaxIcons      = 4,

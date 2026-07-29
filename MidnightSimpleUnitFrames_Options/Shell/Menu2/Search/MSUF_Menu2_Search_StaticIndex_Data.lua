@@ -10,7 +10,7 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local Search = M.Search or {}
 M.Search = Search
-Search.StaticIndexRecordCount = 2364
+Search.StaticIndexRecordCount = 2377
 Search.StaticIndexBlob = [==[
 auras3_buffs	Anchor	dropdown			Style > Buff	anchor	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Elane%2Ebuff%2Eauras3-cooldown-anchor	anchor style buff auras style lane buff auras3 cooldown anchor auras3 buffs dropdown
 auras3_buffs	Anchor	dropdown			Style > Buff	anchor	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Elane%2Ebuff%2Estack-anchor	anchor style buff auras style lane buff stack anchor auras3 buffs dropdown
@@ -565,6 +565,7 @@ gf_indicators	Selected Slot Indicator	dropdown			Corner > Editor	selected slot i
 gf_indicators	Size	slider			Indicators > Field	size	idgf_indicatorsmenu2%2Egf_indicators%2Egroup%2Efield%2Egroupnumbersize	size indicators field group indicators field groupnumbersize gf indicators slider
 gf_indicators	Size	slider			Status > Selected	size	idgf_indicatorsmenu2%2Egf_indicators%2Egroup%2Estatus%2Eselected%2Esize	size status selected group indicators status selected size gf indicators slider
 gf_indicators	Spell IDs (comma-separated)	textinput			Corner > Editor	spell ids comma separated	idgf_indicatorsmenu2%2Egf_indicators%2Egroup%2Ecorner%2Eeditor%2Espell_ids	spell ids comma separated corner editor group indicators corner editor spell ids gf indicators textinput
+gf_indicators	Style	dropdown			Indicators > Field	style	idgf_indicatorsmenu2%2Egf_indicators%2Egroup%2Efield%2Egroupnumberstyle	style indicators field group indicators field groupnumberstyle gf indicators dropdown
 gf_indicators	Tank	toggle			Indicators > Field	tank	idgf_indicatorsmenu2%2Egf_indicators%2Egroup%2Efield%2Eroleiconshowtank	tank indicators field group indicators field roleiconshowtank gf indicators toggle
 gf_indicators	Top Left Indicator	dropdown			Corner > Assignment	top left indicator	idgf_indicatorsmenu2%2Egf_indicators%2Egroup%2Ecorner%2Eassignment%2Etl	top left indicator corner assignment group indicators corner assignment tl gf indicators dropdown
 gf_indicators	Top Right Indicator	dropdown			Corner > Assignment	top right indicator	idgf_indicatorsmenu2%2Egf_indicators%2Egroup%2Ecorner%2Eassignment%2Etr	top right indicator corner assignment group indicators corner assignment tr gf indicators dropdown
@@ -580,6 +581,7 @@ gf_layout	Absorb	segment			Hp > Slot	absorb	idgf_layoutmenu2%2Egf_layout%2Egro
 gf_layout	Affects	segment			Layout > Field	affects	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Erangefadelayermode	affects layout field group layout field rangefadelayermode gf layout segment
 gf_layout	Background	slider			Layout > Field	background	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Ehpbgalpha	background layout field group layout field hpbgalpha gf layout slider
 gf_layout	Blizzard frames (WoW settings)	dropdown			Layout > Basics	blizzard frames wow settings	idgf_layoutmenu2%2Egf_layout%2Egroup%2Ebasics%2Eframe_provider	blizzard frames wow settings layout basics group layout basics frame provider gf layout dropdown
+gf_layout	Border thickness	slider			Layout > Field	border thickness	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Epowerbarborderthickness	border thickness layout field group layout field powerbarborderthickness gf layout slider
 gf_layout	CENTER	dropdown			Layout > Field	center	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Eanchorpoint	center layout field group layout field anchorpoint gf layout dropdown
 gf_layout	Clear	button		clear_group_custom_anchor	Anchor > Custom	clear	idgf_layoutmenu2%2Egf_layout%2Egroup%2Eanchor%2Ecustom%2Eclear	clear anchor custom group layout anchor custom clear gf layout button clear group custom anchor
 gf_layout	Click casting / Clique	toggle			Layout > Field	click casting clique	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Eclickcastenabled	click casting clique layout field group layout field clickcastenabled gf layout toggle
@@ -591,6 +593,14 @@ gf_layout	Default size	slider			Layout > Field	default size	idgf_layoutmenu2%2
 gf_layout	Default size	slider			Layout > Field	default size	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Epowerfontsize	default size layout field group layout field powerfontsize gf layout slider
 gf_layout	Delimiter	dropdown			Layout > Field	delimiter	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Epowertextdelimiter	delimiter layout field group layout field powertextdelimiter gf layout dropdown
 gf_layout	Delimiter	dropdown			Layout > Field	delimiter	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Etextdelimiter	delimiter layout field group layout field textdelimiter gf layout dropdown
+gf_layout	Detach from frame	toggle			Layout > Field	detach from frame	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Epowerbardetached	detach from frame layout field group layout field powerbardetached gf layout toggle
+gf_layout	Detached X	slider			Layout > Field	detached x	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Edetachedpowerbaroffsetx	detached x layout field group layout field detachedpowerbaroffsetx gf layout slider
+gf_layout	Detached Y	slider			Layout > Field	detached y	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Edetachedpowerbaroffsety	detached y layout field group layout field detachedpowerbaroffsety gf layout slider
+gf_layout	Detached height	slider			Layout > Field	detached height	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Edetachedpowerbarheight	detached height layout field group layout field detachedpowerbarheight gf layout slider
+gf_layout	Detached layer	slider			Layout > Field	detached layer	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Edetachedpowerbarframeleveloffset	detached layer layout field group layout field detachedpowerbarframeleveloffset gf layout slider
+gf_layout	Detached width	slider			Layout > Field	detached width	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Edetachedpowerbarwidth	detached width layout field group layout field detachedpowerbarwidth gf layout slider
+gf_layout	Embed into health	toggle			Layout > Field	embed into health	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Eembedpowerbarintohealth	embed into health layout field group layout field embedpowerbarintohealth gf layout toggle
+gf_layout	Fade offline members	toggle			Layout > Field	fade offline members	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Eofflinefadeenabled	fade offline members layout field group layout field offlinefadeenabled gf layout toggle
 gf_layout	Foreground	slider			Layout > Field	foreground	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Ehpbaralpha	foreground layout field group layout field hpbaralpha gf layout slider
 gf_layout	Frame scaling	toggle			Layout > Field	frame scaling	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Eframescaleenabled	frame scaling layout field group layout field framescaleenabled gf layout toggle
 gf_layout	Free (UIParent)	dropdown			Layout > Field	free uiparent	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Eanchortoframe	free uiparent layout field group layout field anchortoframe gf layout dropdown
@@ -621,6 +631,7 @@ gf_layout	Percent	dropdown			Hp > Slot	percent	idgf_layoutmenu2%2Egf_layout%2E
 gf_layout	Percent	dropdown			Power > Slot	percent	idgf_layoutmenu2%2Egf_layout%2Egroup%2Etext%2Epower%2Eslot%2Emode	percent power slot group layout text power slot mode gf layout dropdown
 gf_layout	Pick	button		start_group_custom_anchor_picker	Anchor > Custom	pick	idgf_layoutmenu2%2Egf_layout%2Egroup%2Eanchor%2Ecustom%2Epick	pick anchor custom group layout anchor custom pick gf layout button start group custom anchor picker
 gf_layout	Player first in role	toggle			Layout > Field	player first in role	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Eplayerfirstinrole	player first in role layout field group layout field playerfirstinrole gf layout toggle
+gf_layout	Power bar border	toggle			Layout > Field	power bar border	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Epowerbarborderenabled	power bar border layout field group layout field powerbarborderenabled gf layout toggle
 gf_layout	Power height	slider			Layout > Field	power height	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Epowerheight	power height layout field group layout field powerheight gf layout slider
 gf_layout	Power layer	slider			Layout > Field	power layer	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Epowertextlayer	power layer layout field group layout field powertextlayer gf layout slider
 gf_layout	Preserve raid groups	toggle			Layout > Field	preserve raid groups	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Epreserveraidgroups	preserve raid groups layout field group layout field preserveraidgroups gf layout toggle
@@ -653,6 +664,7 @@ gf_layout	Sort by Role	toggle			Layout > Field	sort by role	idgf_layoutmenu2%2
 gf_layout	Spacing	slider			Layout > Field	spacing	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Espacing	spacing layout field group layout field spacing gf layout slider
 gf_layout	Tank	dragrow			Role Priority > Row	tank	idgf_layoutmenu2%2Egf_layout%2Egroup%2Esorting%2Erole_priority%2Erow%2Etank	tank role priority row group sorting role priority row tank gf layout dragrow
 gf_layout	Tank	toggle			Layout > Field	tank	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Epowershowtank	tank layout field group layout field powershowtank gf layout toggle
+gf_layout	Text on detached bar	toggle			Layout > Field	text on detached bar	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Edetachedpowerbartextonbar	text on detached bar layout field group layout field detachedpowerbartextonbar gf layout toggle
 gf_layout	Units per column	slider			Layout > Field	units per column	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Eunitspercolumn	units per column layout field group layout field unitspercolumn gf layout slider
 gf_layout	Use MSUF	button			Layout > Scope	use msuf	idgf_layoutmenu2%2Egf_layout%2Egroup%2Escope%2Euse_msuf_now	use msuf layout scope group layout scope use msuf now gf layout button
 gf_layout	Width	slider			Layout > Field	width	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Ewidth	width layout field group layout field width gf layout slider
@@ -720,6 +732,7 @@ home	Revert MSUF Frame Scale	button		dashboard.msufFrameScale.revertPending	Fram
 home	Revert MSUF Menu Scale	button		dashboard.menuScale.revertPending	Menu > Revert	revert msuf menu scale	idhomemenu2%2Ehome%2Edashboard%2Escaling%2Emenu%2Erevert%2Epending	revert msuf menu scale menu revert home dashboard scaling menu revert pending home button dashboard menuscale revertpending
 home	Start Quick Setup	button		guided_setup	Start > Or	start quick setup	idhomemenu2%2Ehome%2Edashboard%2Eguided%2Esetup%2Estart%2Eor%2Eresume	start quick setup start or home dashboard guided setup start or resume home button guided setup
 home	Use the current defaults	button		first_load.use_defaults	First Load 6	use the current defaults	idhomemenu2%2Ehome%2Efirst_load_6%2Euse_defaults	use the current defaults first load 6 home first load 6 use defaults home button first load use defaults
+home	Wago Profiles	button		copy_wago_profiles_link	Browse > Wago	wago profiles	idhomemenu2%2Ehome%2Edashboard%2Eguided%2Esetup%2Ebrowse%2Ewago%2Eprofiles	wago profiles browse wago home dashboard guided setup browse wago profiles home button copy wago profiles link
 home	Wago Profiles	button		copy_wago_profiles_link	Copy > Wago	wago profiles	idhomemenu2%2Ehome%2Edashboard%2Edisplay%2Erecovery%2Ecopy%2Ewago%2Elink	wago profiles copy wago home dashboard display recovery copy wago link home button copy wago profiles link
 home	What is new in 6.0	button		first_load.whats_new	First Load 6	what is new in 6 0	idhomemenu2%2Ehome%2Efirst_load_6%2Ewhats_new	what is new in 6 0 first load 6 home first load 6 whats new home button first load whats new
 menu_chrome	Clear menu search	button		menu_search_clear	Menu Chrome	clear menu search	idmenu_chromemenu2%2Emenu-chrome%2Esearch-clear	clear menu search menu chrome menu chrome search clear menu chrome button menu search clear

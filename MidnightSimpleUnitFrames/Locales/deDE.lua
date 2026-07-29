@@ -16,6 +16,8 @@ L["Power strength"] = "Ressourcenleisten-Stärke"
 L["Bar Gradient Colors"] = "Balken-Gradientenfarben"
 L["Health gradient color"] = "Lebensleisten-Gradientenfarbe"
 L["Power gradient color"] = "Ressourcenleisten-Gradientenfarbe"
+L["Border & fill"] = "Rahmen & Füllung"
+L["Detached placement"] = "Abgetrennte Platzierung"
 L["Reset gradient colors"] = "Gradientenfarben zurücksetzen"
 L["Health and Power use separate gradient colors. Choosing a color creates a custom Bars override for the selected scope."] = "Lebens- und Ressourcenleiste verwenden getrennte Gradientenfarben. Eine Farbauswahl erstellt eigene Balken-Einstellungen für den gewählten Bereich."
 
@@ -581,6 +583,8 @@ local MSUF2_DE = {
     ["Font style is shared in |cff38c7f0Global Style > Fonts|r. Position can be adjusted here or dragged in |cff38c7f0Edit Mode|r."] = "Der Schriftstil wird unter |cff38c7f0Globaler Stil > Schriften|r geteilt. Die Position kann hier angepasst oder im |cff38c7f0Bearbeitungsmodus|r gezogen werden.",
     ["Foreground Texture"] = "Vordergrundtextur",
     ["Frame Basics"] = "Frame-Grundlagen",
+    ["Fade offline members"] = "Offline-Mitglieder abblenden",
+    ["Hiding offline members in Frame Basics takes precedence over this."] = "Offline-Mitglieder unter „Frame-Grundlagen“ auszublenden hat Vorrang.",
     ["Frame Effect"] = "Frame-Effekt",
     ["Frame Outline"] = "Frame-Kontur",
     ["Frame Scaling"] = "Frame-Skalierung",
@@ -4400,3 +4404,13 @@ L["Number abbreviation"] = "Zahlenabkürzung"
 L["Game default"] = "Spielstandard"
 L["Compact"] = "Kompakt"
 L["Compact keeps 12.3K / 1.23M on every client language. Game default follows the client, which adds spaces or different letters on some locales."] = "Kompakt behält 12.3K / 1.23M in jeder Client-Sprache. Spielstandard folgt dem Client, der je nach Sprache Leerzeichen oder andere Buchstaben einfügt."
+
+--- Group class-colored health note (6.0)
+L["Class-colored health uses one color per class. Open Colors > Class Colors to change them."] = "Klassenfarbige Lebensbalken nutzen eine Farbe pro Klasse. Öffne Farben > Klassenfarben, um sie zu ändern."
+
+--- Group resource bar color list (6.0)
+L["One color per resource type, shared with every frame."] = "Eine Farbe pro Ressourcentyp, geteilt mit allen Frames."
+
+--- Dispel overlay preview toggle (6.0)
+L["Preview overlay"] = "Overlay-Vorschau"
+L["Paints a stand-in tint so the overlay can be judged without a real dispellable debuff. Turns itself off when this page closes."] = "Zeichnet eine Platzhalter-Färbung, damit das Overlay ohne echten dispellbaren Debuff beurteilt werden kann. Schaltet sich beim Schließen dieser Seite selbst ab."

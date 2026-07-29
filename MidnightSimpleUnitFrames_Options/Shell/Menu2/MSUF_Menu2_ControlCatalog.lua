@@ -2424,6 +2424,12 @@ end
 -- Direct alias instead of a wrapper: this sits on the per-control
 -- registration path of every page build.
 M.RegisterRuntimeControl = Catalog.Register
+function M.IsRuntimeControlRegisteredForWidget(widget, pageKey)
+    local record = Catalog.GetForWidget(widget)
+    if not record then return false end
+    if pageKey == nil then return true end
+    return record.pageKey == CleanText(pageKey)
+end
 
 -- Composite widgets (segments, scope selectors, slider +/- buttons) expose one
 -- logical command on the parent. Their child buttons remain visible UI parts,

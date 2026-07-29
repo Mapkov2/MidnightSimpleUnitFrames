@@ -80,7 +80,12 @@ assert(layout:find("M.GroupPreview.Add(ctx, b)", 1, true),
     "visible Group Preview was removed from the page cold path")
 assert(layout:find('{ sectionId = "text", title = "Text", height = 690', 1, true),
     "Group Layout Text section no longer reserves enough height for the HP Appearance card")
-assert(layout:find('version = 24', 1, true), "Group Layout cache version was not bumped")
+assert(layout:find('version = 25', 1, true), "Group Layout cache version was not bumped")
+-- The Resource Bar section grew an Appearance card; it must derive its height
+-- from the cursor instead of the lazy spec's reserved number, or the cards
+-- overflow the section body and paint over the sections below it.
+assert(layout:find('{ sectionId = "power", title = "Resource Bar", autoHeight = true', 1, true),
+    "Group Layout Resource Bar section must stay self-sizing")
 
 local globalBars = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GlobalBars.lua")
 for _, sectionId in ipairs({ "bars_outline", "bars_unit_dispel_overlay", "bars_power" }) do
