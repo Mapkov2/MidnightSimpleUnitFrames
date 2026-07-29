@@ -10,7 +10,7 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local Search = M.Search or {}
 M.Search = Search
-Search.StaticIndexRecordCount = 2401
+Search.StaticIndexRecordCount = 2399
 Search.StaticIndexBlob = [==[
 auras3_buffs	Anchor	dropdown			Style > Buff	anchor	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Elane%2Ebuff%2Eauras3-cooldown-anchor	anchor style buff auras style lane buff auras3 cooldown anchor auras3 buffs dropdown
 auras3_buffs	Anchor	dropdown			Style > Buff	anchor	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Elane%2Ebuff%2Estack-anchor	anchor style buff auras style lane buff stack anchor auras3 buffs dropdown
@@ -588,7 +588,6 @@ gf_layout	Border thickness	slider			Layout > Portrait	border thickness	idgf_lay
 gf_layout	CENTER	dropdown			Layout > Field	center	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Eanchorpoint	center layout field group layout field anchorpoint gf layout dropdown
 gf_layout	Clear	button		clear_group_custom_anchor	Anchor > Custom	clear	idgf_layoutmenu2%2Egf_layout%2Egroup%2Eanchor%2Ecustom%2Eclear	clear anchor custom group layout anchor custom clear gf layout button clear group custom anchor
 gf_layout	Click casting / Clique	toggle			Layout > Field	click casting clique	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Eclickcastenabled	click casting clique layout field group layout field clickcastenabled gf layout toggle
-gf_layout	Color	color			Layout > Portrait	color	idgf_layoutmenu2%2Egf_layout%2Egroup%2Eportrait%2Eportraitbordercolor	color layout portrait group layout portrait portraitbordercolor gf layout color
 gf_layout	Custom Anchor Frame	textinput			Anchor > Custom	custom anchor frame	idgf_layoutmenu2%2Egf_layout%2Egroup%2Eanchor%2Ecustom%2Evalue	custom anchor frame anchor custom group anchor custom value gf layout textinput
 gf_layout	DPS	dragrow			Role Priority > Row	dps	idgf_layoutmenu2%2Egf_layout%2Egroup%2Esorting%2Erole_priority%2Erow%2Edamager	dps role priority row group sorting role priority row damager gf layout dragrow
 gf_layout	DPS	toggle			Layout > Field	dps	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Epowershowdamager	dps layout field group layout field powershowdamager gf layout toggle
@@ -638,7 +637,6 @@ gf_layout	Name layer	slider			Layout > Field	name layer	idgf_layoutmenu2%2Egf_
 gf_layout	No border	dropdown			Layout > Portrait	no border	idgf_layoutmenu2%2Egf_layout%2Egroup%2Eportrait%2Eportraitborderstyle	no border layout portrait group layout portrait portraitborderstyle gf layout dropdown
 gf_layout	Offline Members	toggle			Layout > Field	offline members	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Ehideofflineenabled	offline members layout field group layout field hideofflineenabled gf layout toggle
 gf_layout	Offline Opacity	slider			Layout > Field	offline opacity	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Eofflinealpha	offline opacity layout field group layout field offlinealpha gf layout slider
-gf_layout	Opacity	slider			Layout > Portrait	opacity	idgf_layoutmenu2%2Egf_layout%2Egroup%2Eportrait%2Eportraitbordercolora	opacity layout portrait group layout portrait portraitbordercolora gf layout slider
 gf_layout	Percent	dropdown			Hp > Slot	percent	idgf_layoutmenu2%2Egf_layout%2Egroup%2Etext%2Ehp%2Eslot%2Emode	percent hp slot group layout text hp slot mode gf layout dropdown
 gf_layout	Percent	dropdown			Power > Slot	percent	idgf_layoutmenu2%2Egf_layout%2Egroup%2Etext%2Epower%2Eslot%2Emode	percent power slot group layout text power slot mode gf layout dropdown
 gf_layout	Pick	button		start_group_custom_anchor_picker	Anchor > Custom	pick	idgf_layoutmenu2%2Egf_layout%2Egroup%2Eanchor%2Ecustom%2Epick	pick anchor custom group layout anchor custom pick gf layout button start group custom anchor picker
