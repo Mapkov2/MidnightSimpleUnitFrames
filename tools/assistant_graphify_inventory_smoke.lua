@@ -2,10 +2,11 @@ package.path = "tools/?.lua;" .. package.path
 
 local Inventory = require("assistant_graphify_inventory")
 local tracked = Inventory.Load("tools/assistant_graphify_inventory_data.lua")
--- Beta 37 re-certification: the Party-only group portrait workspace joins with
--- five reachable settings (portraitMode, portraitRender, portraitBorderStyle,
--- portraitClassStyle, portraitLevelOffset); nothing dropped out.
-assert(tracked.recordCount == 1809, "reviewed Graphify setting-inventory count drifted")
+-- Beta 38 re-certification: the UnitFrame Dispel Symbol section joins with its
+-- eleven reachable settings (style, mode, trigger, anchor, size, x, y, growth,
+-- spacing, alpha, enabled); nothing dropped out. Layer and strata stay out of
+-- reach because no control routes to them yet.
+assert(tracked.recordCount == 1820, "reviewed Graphify setting-inventory count drifted")
 assert(tracked.schemaVersion == 2, "Graphify inventory source-snapshot contract is not current")
 assert(tracked.sourceSnapshot.schemaVersion == 2
         and tracked.sourceSnapshot.manifestFormat == "msuf-addon-source-sha256-v2"
