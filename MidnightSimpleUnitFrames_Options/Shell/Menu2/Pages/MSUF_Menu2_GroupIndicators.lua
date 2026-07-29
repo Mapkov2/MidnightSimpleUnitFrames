@@ -35,9 +35,11 @@ end
 local function IconPackValues()
     -- Style options come from the group runtime when available, with a small fallback for
     -- early load or test contexts where the runtime has not registered styles yet.
+    -- No "follow global style" entry: every indicator picks its own style, and the Midnight
+    -- art of each pack is listed as its own entry instead of a separate toggle.
     local gf = GF()
-    if gf and type(gf.GetIconStyleItems) == "function" then return gf.GetIconStyleItems(true) end
-    local values = { { value = "DEFAULT", text = "Follow global style" } }
+    if gf and type(gf.GetIconStyleItems) == "function" then return gf.GetIconStyleItems(false, true) end
+    local values = {}
     local src = type(IconStyleValues) == "function" and IconStyleValues() or {}
     for i = 1, #src do
         local item = src[i]
@@ -392,8 +394,10 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
         return value == "statusText" or value == "statusGhostText"
             or value == "statusAFKText" or value == "statusDNDText"
     end
-    local styleCard = W.ControlCard(siconBasicTab, "Style", nil, siconLeftX, -38, siconLeftW, 132)
-    local selectedCard = W.ControlCard(siconBasicTab, "Selected Indicator", nil, siconLeftX, -188, siconLeftW, 316)
+    --- The scope-wide style card is gone: it only ever changed role/leader/assist art while
+    --- sitting above a per-indicator selector, which read as if it applied to the selection.
+    --- Each indicator now carries its own style dropdown inside the Selected card instead.
+    local selectedCard = W.ControlCard(siconBasicTab, "Selected Indicator", nil, siconLeftX, -38, siconLeftW, 316)
     local selectedTextShortcut
     if W.AttachContextColorShortcut then
         selectedTextShortcut = W.AttachContextColorShortcut(selectedCard, {
@@ -494,7 +498,7 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
         return value == "roleIcon" or value == "leaderIcon" or value == "assistIcon"
     end
     local function StatusIconStyleLabel(spec)
-        return "Role icon style"
+        return spec and spec.value == "roleIcon" and "Role icon style" or "Indicator style"
     end
     local function SpecificIconLabel(spec)
         return "Custom icon"
@@ -504,6 +508,8 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
             control._msuf2Title:SetText(Tr(label))
         end
     end
+    --- Each style value carries its own Midnight flag now, so the support probe runs per entry
+    --- and silently drops packs that ship no art for the selected indicator.
     local function IconPackValuesForCurrentStatus()
         local values = IconPackValues()
         local spec = CurrentGFStatusSpec()
@@ -511,20 +517,20 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
         local supports = _G.MSUF_StatusIconPackSupports
         if type(supports) ~= "function" or type(entries) ~= "table" then return values end
         local out = {}
-        local useMidnight = Bool(CurrentScope(), "useMidnightIcons", false)
         for i = 1, #values do
             local item = values[i]
             local value = item and (item.value or item.key)
-            local keep = value == "DEFAULT"
+            local keep = false
             for j = 1, #entries do
                 local entry = entries[j]
-                if supports(value, entry[1], entry[2], useMidnight) then
+                if supports(value, entry[1], entry[2], false) then
                     keep = true
                     break
                 end
             end
             if keep then out[#out + 1] = item end
         end
+        if #out == 0 then out[1] = { value = "BLIZZARD", text = "Blizzard (Default)" } end
         return out
     end
     local function IconAssetValuesForCurrentStatus()
@@ -559,8 +565,6 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
         if type(resolver) ~= "function" then return nil end
         return resolver(style, iconType, variant, useMidnight == true)
     end
-    local iconStyle = ScopeDropdown(ctx, styleCard, "Default role icon style", IconStyleValues, siconLeftW, "iconStyle", "MSUF_ROLES", "visual", 16, -56, siconLeftW - 32)
-    local midnightStyle = BindScopeToggle(ctx, W.ToggleAt(styleCard, "Use Midnight Style", 16, -106, siconLeftW - 32), "useMidnightIcons", false, "visual")
     local statusSelector = W.Dropdown(selectedCard, "Indicator", GF_STATUS_ICON_VALUES, siconLeftW)
     M.BindDropdownWidget(ctx, statusSelector,
         function() return CurrentGFStatusSpec().value end,
@@ -591,11 +595,48 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
         end,
         ControlMeta(ctx, "status.selected.enabled"))
     local RefreshStatusIconState
-    local iconPack = BindStatusDropdown(selectedCard, "Role icon style", IconPackValuesForCurrentStatus, siconLeftW, "iconStyle", "DEFAULT", "visual", 16, -106, siconLeftW - 32,
-        function()
+    --- Profiles saved before the per-indicator split still store "DEFAULT"; resolve it through
+    --- the runtime so the dropdown shows the style that is actually drawn rather than an entry
+    --- the list no longer offers.
+    local function CurrentStatusIconStyle()
+        local spec = CurrentGFStatusSpec()
+        local key = spec and spec.iconStyle
+        local resolved
+        local stored = key and Val(CurrentScope(), key, "DEFAULT") or "DEFAULT"
+        if type(stored) == "string" and stored ~= "" and stored ~= "DEFAULT" then
+            resolved = stored
+        else
+            local gf = GF()
+            if spec and gf and type(gf.GetIndicatorIconStyle) == "function" then
+                local style, midnight = gf.GetIndicatorIconStyle(CurrentScope(), spec.value)
+                if type(style) == "string" and style ~= "" then
+                    resolved = (midnight and type(gf.JoinIconStyle) == "function")
+                        and gf.JoinIconStyle(style, true) or style
+                end
+            end
+        end
+        -- The inherited style can be one this indicator has no art for (the old global default
+        -- was role-only), and that style is filtered out of the list. Show Blizzard instead of
+        -- a value the dropdown cannot render.
+        local values = IconPackValuesForCurrentStatus()
+        for i = 1, #values do
+            local item = values[i]
+            if item and (item.value or item.key) == resolved then return resolved end
+        end
+        return "BLIZZARD"
+    end
+    local iconPack = W.Dropdown(selectedCard, "Indicator style", IconPackValuesForCurrentStatus, siconLeftW)
+    M.BindDropdownWidget(ctx, iconPack, CurrentStatusIconStyle,
+        function(value)
+            local spec = CurrentGFStatusSpec()
+            local key = spec and spec.iconStyle
+            if not key then return end
+            Set(CurrentScope(), key, value or "DEFAULT", "visual")
             M.CallIf(RefreshGFPreview)
             if RefreshStatusIconState then RefreshStatusIconState() end
-        end)
+        end,
+        ControlMeta(ctx, "status.selected.iconStyle"))
+    W.MoveWidget(iconPack, selectedCard, 16, -106, siconLeftW - 32, "LEFT")
     local customIcon = BindStatusDropdown(selectedCard, "Custom icon", IconAssetValuesForCurrentStatus, siconLeftW, "customIcon", "", "visual", 16, -158, siconLeftW - 32,
         function()
             M.CallIf(RefreshGFPreview)
@@ -692,10 +733,11 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
         iconPreviewLabel:SetShown(shown and true or false)
         iconPreviewStrip:SetShown(shown and true or false)
         if not shown then return end
-        local style = IsRoleStatusIconSpec(spec) and Val(CurrentScope(), "iconStyle", "MSUF_ROLES") or "BLIZZARD"
+        --- Preview the style the indicator itself carries; the value may hold the Midnight
+        --- suffix, which the texture resolver splits off on its own.
+        local style = CurrentStatusIconStyle()
         if type(style) ~= "string" or style == "" or style == "DEFAULT" then style = "BLIZZARD" end
         local customPath = spec and spec.customIcon and Val(CurrentScope(), spec.customIcon, "") or ""
-        local useMidnight = Bool(CurrentScope(), "useMidnightIcons", false)
         iconPreviewStrip:SetAlpha(enabled and 1 or 0.46)
         for i = 1, #iconPreviewTextures do
             local holder = iconPreviewTextures[i]
@@ -705,7 +747,7 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
                 if type(customPath) == "string" and customPath ~= "" then
                     path, l, r, t, b = customPath, 0, 1, 0, 1
                 else
-                    path, l, r, t, b = ResolvePreviewStatusIcon(style, entry[1], entry[2], useMidnight)
+                    path, l, r, t, b = ResolvePreviewStatusIcon(style, entry[1], entry[2], false)
                 end
                 if type(path) == "string" and path ~= "" then
                     holder.tex:SetTexture(path)
@@ -775,9 +817,14 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
         end
         SetOptionsEnabled(statusPlacementControls, enabled)
         SetOptionsEnabled(statusActionControls, spec ~= nil)
-        SetManyEnabled(true, advanced.previewAll, previewAll, midnightStyle, statusEnabled)
+        SetManyEnabled(true, advanced.previewAll, previewAll, statusEnabled)
         RefreshStatusPreviewButtons()
-        local hasIconPack = false
+        --- Style packs are only a meaningful knob for the role/leader/assist glyphs -- the
+        --- remaining indicators are canonical game symbols where people replace a single
+        --- texture, so they keep just the Custom icon dropdown. The count guard stays as a
+        --- safety net in case a pack set ever leaves nothing but Blizzard to pick.
+        local hasIconPack = IsRoleStatusIconSpec(spec) and spec.iconStyle
+            and #IconPackValuesForCurrentStatus() > 1
         local hasCustomIcon = spec and spec.customIcon
         if selectedTextShortcut then selectedTextShortcut:SetShown(IsTextStatusIconSpec(spec)) end
         if W.SetControlShown then

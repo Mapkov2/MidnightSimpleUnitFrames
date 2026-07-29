@@ -1958,6 +1958,9 @@ function EM.RefreshUnit(unit)
         -- Tracked target-DoTs reveal their lane exactly like the in-menu
         -- preview does, even while the container itself is still disabled.
         local laneShown = cfg.show or (spec.customIndex == 4 and entries ~= nil)
+        -- The player frame has no Dots on target container; its edit-mode
+        -- lane never shows.
+        if spec.customIndex == 4 and unit == "player" then laneShown = false end
         -- Outside edit mode custom lanes stay strictly 1:1 with the runtime:
         -- nothing tracked means nothing to preview. Placeholder-only custom
         -- lanes exist purely as edit-mode drag surfaces.

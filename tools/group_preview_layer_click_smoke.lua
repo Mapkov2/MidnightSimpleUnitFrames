@@ -111,8 +111,8 @@ assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2
     "MidnightSimpleUnitFrames", MSUF)
 local parent = Frame(UIParent)
 local box = assert(M.GroupPreview.CreateNative(parent, { width = 720, key = "group" }))
--- 11 rows: the frame-anatomy Power layer joined the aura/status/text set.
-assert(#box._layerButtons == 11, "group layer buttons missing")
+-- 12 rows: the Party Portrait layer joins Power, aura, status, and text.
+assert(#box._layerButtons == 12, "group layer buttons missing")
 local button = box._layerButtons[1]
 assert(M.gfPreviewLayerVisible.guides == true, "guides did not start enabled")
 assert(type(button.scripts.OnClick) == "function", "group layer click handler missing")

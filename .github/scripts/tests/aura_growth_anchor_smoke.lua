@@ -1851,42 +1851,53 @@ do
 
     A3.TargetDotData = { ROGUE = { { 703, "Garrote" } } }
     A3._targetDotRuntimeLookup = nil
+    local function TargetDotRecord()
+        return {
+            items = {
+                [4] = {
+                    enabled = true,
+                    targetDots = true,
+                    auraType = "DEBUFF",
+                    spellIDs = "703,17",
+                    filters = { enabled = true, onlyMine = true },
+                    placed = { max = 1 },
+                },
+            },
+        }
+    end
     _G.MSUF_DB = {
         auras3 = {
             enabled = true,
             showPlayer = false,
+            showTarget = true,
             customContainers = {
                 perUnit = {
-                    player = {
-                        items = {
-                            [4] = {
-                                enabled = true,
-                                targetDots = true,
-                                auraType = "DEBUFF",
-                                spellIDs = "703,17",
-                                filters = { enabled = true, onlyMine = true },
-                                placed = { max = 1 },
-                            },
-                        },
-                    },
+                    target = TargetDotRecord(),
+                    player = TargetDotRecord(),
                 },
             },
         },
     }
     A3._runtimeConfigGen = (A3._runtimeConfigGen or 1) + 1
-    local targetDots = assert(assert(A3.ResolveUnitFrameConfig("player", {})).lanes.custom4)
+    local targetDots = assert(assert(A3.ResolveUnitFrameConfig("target", {})).lanes.custom4)
     Equal(targetDots.unit, "target", "target DoT source unit")
     Equal(targetDots.nativeFilter, "HARMFUL|PLAYER", "target DoT native ownership filter")
     Check(assert(targetDots.candidateFilters).includeSpellIDs[703] == true,
         "curated Garrote target DoT was not compiled")
     Check(targetDots.candidateFilters.includeSpellIDs[17] == nil,
         "non-DoT spell escaped the runtime target DoT registry")
-    _G.MSUF_DB.auras3.customContainers.perUnit.player.items[4].customSpellIDs = { [17] = true }
+    -- The player frame has no Dots on target container: an enabled record left
+    -- behind by an older profile must not compile a lane there.
+    Check(assert(A3.ResolveUnitFrameConfig("player", {})).lanes.custom4 == nil,
+        "player frame still compiled a Dots on target lane")
+    Check(A3.BuildAuraLaneMetrics("player", "custom4") == nil,
+        "player frame still reported Dots on target lane metrics")
+    _G.MSUF_DB.auras3.customContainers.perUnit.target.items[4].customSpellIDs = { [17] = true }
     A3._runtimeConfigGen = (A3._runtimeConfigGen or 1) + 1
-    local manualTargetDots = assert(assert(A3.ResolveUnitFrameConfig("player", {})).lanes.custom4)
+    local manualTargetDots = assert(assert(A3.ResolveUnitFrameConfig("target", {})).lanes.custom4)
     Check(assert(manualTargetDots.candidateFilters).includeSpellIDs[17] == true,
         "manually approved target DoT ID was removed by the runtime registry guard")
-    local targetDotMetrics = assert(A3.BuildAuraLaneMetrics("player", "custom4"))
+    local targetDotMetrics = assert(A3.BuildAuraLaneMetrics("target", "custom4"))
     Equal(targetDotMetrics.num, 1, "custom4 lane metrics")
 
     local groupFrame = NewFrame(nil)
@@ -1915,7 +1926,7 @@ do
     local customItems = {}
     local previewModel = {
         CanonKey = function(value) return value end,
-        CurrentPanelKey = function() return "player" end,
+        CurrentPanelKey = function() return "target" end,
     }
     local menuModel = {
         ReadPreviewConfig = function() return previewConfig end,
@@ -1978,7 +1989,7 @@ do
                 },
             }
         end
-        local state = assert(previewAuras.BuildState("player", 200, 100))
+        local state = assert(previewAuras.BuildState("target", 200, 100))
         local frac = fractions[anchor]
         local function AssertPreviewLane(bounds, metrics, label, expectedShown)
             Near(bounds.laneLeft, frac[1] * 200 + metrics.x - frac[1] * metrics.width,
@@ -1999,10 +2010,16 @@ do
             "unit preview custom4 did not use the first tracked DoT icon")
         Equal(state.custom4.previewTextures[2], 101943,
             "unit preview custom4 did not use the second tracked DoT icon")
+        -- The player frame has no Dots on target container, so its preview
+        -- stops at Custom 3 even with a tracked record present.
+        local playerState = assert(previewAuras.BuildState("player", 200, 100))
+        Check(playerState.custom3 ~= nil, "player preview lost Custom 3 " .. anchor)
+        Check(playerState.custom4 == nil,
+            "player preview still built a Dots on target lane " .. anchor)
     end
 
     customItems[4].enabled = false
-    local selectedWhileDisabled = assert(previewAuras.BuildState("player", 200, 100).custom4)
+    local selectedWhileDisabled = assert(previewAuras.BuildState("target", 200, 100).custom4)
     Equal(selectedWhileDisabled.shown, 2,
         "selected target DoTs did not reveal the disabled unit-frame preview lane")
     customItems[4].enabled = true

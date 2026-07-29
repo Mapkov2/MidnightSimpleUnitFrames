@@ -632,7 +632,10 @@ function Auras.BuildState(key, frameW, frameH, runtimeSpec)
     local buff = LaneBounds(cfg, "buff", frameW, frameH, key)
     local debuff = LaneBounds(cfg, "debuff", frameW, frameH, key)
     local state = { unit = key, cfg = cfg, runtime = runtimeAuras, buff = buff, debuff = debuff }
-    for index = 1, 4 do
+    -- The player frame has no Dots on target container, so its preview never
+    -- builds the custom4 lane.
+    local maxCustomIndex = key == "player" and 3 or 4
+    for index = 1, maxCustomIndex do
         local kind = "custom" .. tostring(index)
         local metrics = type(cfg.customMetrics) == "table" and cfg.customMetrics[index] or nil
         local previewEntries

@@ -6,8 +6,8 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$expectedAssistantScriptCount = 328
-$expectedAssistantOrderSha256 = "6D93B5BB79D3EDAFDF14D2838216E6ACEE814645ED37AFDEFB28863A9F232A39"
+$expectedAssistantScriptCount = 329
+$expectedAssistantOrderSha256 = "52DF9145FC82BBC86BA9117147DEA2238F7F0237156065264FC8902594891662"
 $startingLocation = Get-Location
 $previousEnglishSuiteFull = $env:MSUF_ENGLISH_SUITE_FULL
 $previousPerfMultiplier = $env:MSUF_ASSISTANT_PERF_BUDGET_MULTIPLIER
@@ -364,6 +364,7 @@ $luaGates = @(
 
     [pscustomobject]@{ Category = "conversation"; Path = "tools/assistant_context_alignment_regression.lua"; Args = @() },
     [pscustomobject]@{ Category = "conversation"; Path = ".github/scripts/tests/assistant_context_object_followup_regression.lua"; Args = @() },
+    [pscustomobject]@{ Category = "conversation/group-portrait"; Path = ".github/scripts/tests/assistant_group_portrait_routing_smoke.lua"; Args = @() },
     [pscustomobject]@{ Category = "conversation"; Path = ".github/scripts/tests/assistant_reach_back_subject_smoke.lua"; Args = @() },
     [pscustomobject]@{ Category = "conversation"; Path = ".github/scripts/tests/assistant_help_context_reload_smoke.lua"; Args = @() },
     [pscustomobject]@{ Category = "conversation"; Path = ".github/scripts/tests/assistant_uncertain_menu_section_smoke.lua"; Args = @() },

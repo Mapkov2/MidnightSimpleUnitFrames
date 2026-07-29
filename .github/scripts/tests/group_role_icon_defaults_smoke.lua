@@ -88,4 +88,64 @@ Check(partyWithGroupNumber.status.raidGroup.enabled == true,
 Check(partyWithGroupNumber.status.raidGroup.layer == 29,
     "party group number still reused the dead-text layer")
 
+-- Midnight art rides inside the style value ("UXPRO@MIDNIGHT") so one per-indicator dropdown
+-- covers every icon type. Packs without midnight art must not gain a phantom second entry.
+Check(select(1, GF.SplitIconStyle("UXPRO@MIDNIGHT")) == "UXPRO"
+    and select(2, GF.SplitIconStyle("UXPRO@MIDNIGHT")) == true,
+    "suffixed style did not split into pack and midnight flag")
+Check(select(2, GF.SplitIconStyle("UXPRO")) == false, "plain style reported midnight art")
+Check(GF.JoinIconStyle("UXPRO", true) == "UXPRO@MIDNIGHT", "midnight style value did not round-trip")
+Check(GF.JoinIconStyle("UXPRO", false) == "UXPRO", "non-midnight style value gained a suffix")
+
+local midnightRole = GF.GetStatusIconTexture("UXPRO@MIDNIGHT", "role", "TANK")
+Check(midnightRole == "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Icons\\UXPro\\tank_midnight",
+    "suffixed style did not resolve the midnight asset")
+Check(GF.GetStatusIconTexture("UXPRO", "role", "TANK")
+    == "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Icons\\UXPro\\tank",
+    "plain style stopped resolving the classic asset")
+Check(GF.StatusIconPackSupports("UXPRO@MIDNIGHT", "role", "TANK", false) == true,
+    "suffixed style was not reported as supported")
+
+local styleItems = GF.GetIconStyleItems(false, true)
+local seenStyle = {}
+for i = 1, #styleItems do seenStyle[styleItems[i].value] = styleItems[i].text end
+Check(seenStyle["DEFAULT"] == nil, "per-indicator style list still offers the retired global entry")
+Check(seenStyle["UXPRO"] and seenStyle["UXPRO@MIDNIGHT"] == "UX Pro (Midnight)",
+    "pack with midnight art is missing its own dropdown entry")
+Check(seenStyle["MSUF_ROLES"] and seenStyle["MSUF_ROLES@MIDNIGHT"] == nil,
+    "suffix-less pack gained a duplicate midnight entry")
+Check(seenStyle["BLIZZARD@MIDNIGHT"] == nil, "Blizzard art gained a midnight entry")
+Check(#GF.GetIconStyleItems(true, false) == #GF.ICON_STYLE_ITEMS + 1,
+    "legacy style list shape changed")
+
+-- Profiles saved before the split keep "DEFAULT" per indicator plus the retired scope-wide
+-- pair; both must still drive the art now that the menu no longer exposes them.
+_G.MSUF_DB.gf_party.iconStyle = "UXPRO"
+_G.MSUF_DB.gf_party.useMidnightIcons = true
+_G.MSUF_DB.gf_party.roleIconStyle = "DEFAULT"
+GF.InvalidateConfCache()
+Check(GF.GetRoleTexture("party", "TANK")
+    == "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Icons\\UXPro\\tank_midnight",
+    "legacy global style plus midnight toggle stopped resolving")
+local legacyStyle, legacyMidnight = GF.GetIndicatorIconStyle("party", "roleIcon")
+Check(legacyStyle == "UXPRO" and legacyMidnight == true,
+    "indicator resolver did not inherit the legacy global style and midnight flag")
+
+-- An explicit per-indicator pick wins over the legacy pair.
+_G.MSUF_DB.gf_party.roleIconStyle = "DOTS"
+GF.InvalidateConfCache()
+Check(GF.GetRoleTexture("party", "TANK")
+    == "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Icons\\Dots\\tank",
+    "explicit indicator style did not override the legacy pair")
+
+-- Non-role indicators carry their own style into the compiled spec now.
+_G.MSUF_DB.gf_party.raidMarkerStyle = "DOTS@MIDNIGHT"
+GF.InvalidateConfCache()
+GF.InvalidateCompiledSpecs("party")
+local styledSpec = GF.CompileSpec("party", nil, "party1")
+Check(styledSpec.status.raidMarker.style == "DOTS@MIDNIGHT",
+    "raid marker style never reached the compiled spec")
+Check(styledSpec.status.phase.style == GF.PARTY_DEFAULTS.phaseIconStyle,
+    "phase icon style never reached the compiled spec")
+
 print("PASS MSUF role icons: default style, larger sizes, asset resolution, and safe fallback")

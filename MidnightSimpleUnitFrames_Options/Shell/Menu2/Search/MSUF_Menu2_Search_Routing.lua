@@ -644,6 +644,7 @@ boss_layout=boss layout|boss preview|boss frames
 ]],
     gf_layout = [[
 general=general|enable|disable|turn off|off|hide group frames|hide raid frames|hide party frames|group frames off|raid frames off|party frames off|use msuf group frames|show player|show solo|solo|visibility|party frames not showing|raid frames not showing|ausschalten|deaktivieren|ausblenden
+portrait=portrait|class icon|2d portrait|avatar|face
 text=text|name text|health text|hp text|power text|font size|text slot|delimiter|hide percent
 power=resource bar|power bar|mana bar|role power|smooth fill|tank power|healer power|dps power
 range=range fade|range check|distance check|out of range
@@ -850,6 +851,11 @@ local function SearchRouteGroupPage(route, pageKey, normalized)
     if pageKey == "gf_layout" then
         if SearchTextKindForText(normalized) then SearchRouteOpenAccordion(route, pageKey, "text") end
         SearchRouteTextState(route, "gfTextTabSelection", "gfTextSlotSelection", scope or M.gfScope or "party", normalized)
+        if SearchRouteHasAny(normalized, "portrait|class icon|2d portrait|avatar|face") then
+            SearchRouteOpenAccordion(route, pageKey, "portrait")
+            SearchRouteSetState(route, "gfScope", "party")
+            SearchRoutePortraitTab(route, "gf_party", normalized)
+        end
     elseif pageKey == "gf_indicators" then
         local tabScope = scope or M.gfScope or "party"
         SearchRouteStatusTab(route, "gfStatusIconTabSelection", tabScope, normalized,

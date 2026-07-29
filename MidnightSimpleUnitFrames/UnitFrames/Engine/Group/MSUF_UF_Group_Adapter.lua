@@ -50,6 +50,7 @@ local BASIC_GROUP_MASK = {
   Health = true,
   Power = true,
   Text = true,
+  Portrait = true,
   NameText = true,
   HealthText = true,
   PowerText = true,

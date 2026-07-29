@@ -164,13 +164,16 @@ function A.GroupFramesRegistry.BuildRegisterCoreContext(ctx)
             valueLabels = opts.valueLabels,
             closedValues = opts.closedValues,
             refreshValues = opts.refreshValues,
+            normalizesValue = opts.normalizeValue ~= nil,
             get = function()
                 if opts.get then return opts.get(scope) end
                 local value = GroupDB(scope)[dbKey]
                 if type(value) ~= "string" or value == "" then return defaultValue or "" end
+                if opts.normalizeValue then value = opts.normalizeValue(value) end
                 return value
             end,
             set = function(value)
+                if opts.normalizeValue then value = opts.normalizeValue(value) end
                 if opts.set then opts.set(scope, value); return end
                 GroupDB(scope)[dbKey] = tostring(value or "")
             end,

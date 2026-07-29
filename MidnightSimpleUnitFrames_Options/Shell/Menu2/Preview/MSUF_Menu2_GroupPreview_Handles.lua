@@ -342,6 +342,19 @@ function Handles.Install(box, deps)
     local function SaveHandlePosition(handle, action)
         if not (handle and box._mock) or handle._locked then return end
         if handle._cfgText then return end
+        if handle._cfgPortrait then
+            -- Portrait placement keeps its configured anchor/side. Dragging only
+            -- edits the same X/Y offsets exposed by the Portrait geometry tab.
+            local _, _, _, offX, offY = handle:GetPoint(1)
+            local scale = handle._previewWriteScale or handle._previewScale or box._mock._previewScale or 1
+            local conf = H.Conf(H.CurrentScope())
+            if not conf then return end
+            conf.portraitOffsetX = OffsetToConfig(offX or 0, scale)
+            conf.portraitOffsetY = OffsetToConfig(offY or 0, scale)
+            RefreshGroupPreviewAfterMove(handle)
+            CheckpointHandleHistory(handle, action)
+            return
+        end
         if handle._cfgPower then
             -- The drag preserved the runtime's TOP -> frame BOTTOM anchor, so
             -- the final point offsets are the detached offsets in preview px.
@@ -440,6 +453,10 @@ function Handles.Install(box, deps)
             if not placed then return false end
             placed.x = cfgX
             placed.y = cfgY
+        elseif handle._cfgPortrait then
+            if handle._locked then return false end
+            conf.portraitOffsetX = cfgX
+            conf.portraitOffsetY = cfgY
         elseif handle._cfgPower then
             if handle._locked then return false end
             conf.detachedPowerBarOffsetX = cfgX
@@ -476,6 +493,8 @@ function Handles.Install(box, deps)
         elseif handle._cfgSpell then
             local placed = SpellPlacedForHandle(handle, false)
             return tonumber(placed and placed.x) or 0, tonumber(placed and placed.y) or 0
+        elseif handle._cfgPortrait then
+            return tonumber(conf.portraitOffsetX) or 0, tonumber(conf.portraitOffsetY) or 0
         elseif handle._cfgPower then
             return tonumber(conf.detachedPowerBarOffsetX) or 0, tonumber(conf.detachedPowerBarOffsetY) or -4
         end
@@ -502,6 +521,8 @@ function Handles.Install(box, deps)
             local placed = SpellPlacedForHandle(handle, true)
             if not placed then return false end
             placed.x, placed.y = x, y
+        elseif handle._cfgPortrait then
+            conf.portraitOffsetX, conf.portraitOffsetY = x, y
         elseif handle._cfgPower then
             conf.detachedPowerBarOffsetX, conf.detachedPowerBarOffsetY = x, y
         else
@@ -712,8 +733,8 @@ function Handles.Install(box, deps)
         box._dragFrame:Show()
         RefreshHandleSelection(box)
     end
-    local function CreatePreviewHandle(key, sectionKey, color, label, width, height, locked)
-        local handle = CreateFrame("Button", nil, mock, T.Template())
+    local function CreatePreviewHandle(key, sectionKey, color, label, width, height, locked, parent)
+        local handle = CreateFrame("Button", nil, parent or mock, T.Template())
         handle:SetSize(width or 32, height or 32)
         handle:SetMovable(true)
         handle:EnableMouse(true)
@@ -912,6 +933,12 @@ function Handles.Install(box, deps)
     local powerBarHandle = CreatePreviewHandle("powerBar", "power", { 0.30, 0.62, 0.98 }, "POWER", 86, 16, false)
     powerBarHandle._cfgPower = true
     powerBarHandle._previewText = "Resource Bar"
+    -- Attached portraits can sit completely outside the mock frame. Keep their
+    -- mouse handle on the preview stage so WoW does not clip hit-testing to
+    -- the mock parent's bounds; rendering/offsets remain anchored to the mock.
+    local portraitHandle = CreatePreviewHandle("portrait", "portrait", { 0.90, 0.42, 1.00 }, "PORTRAIT", 36, 36, false, dragParent)
+    portraitHandle._cfgPortrait = true
+    portraitHandle._previewText = "Portrait"
     local statusHandles = {}
     local statusSpecs = H.StatusSpecs()
     for i = 1, #statusSpecs do
@@ -1162,6 +1189,7 @@ function Handles.Install(box, deps)
         debuffHandle = debuffHandle,
         externalHandle = externalHandle,
         powerBarHandle = powerBarHandle,
+        portraitHandle = portraitHandle,
         statusHandles = statusHandles,
         spellHandle = spellHandle,
         SelectHandle = SelectHandle,

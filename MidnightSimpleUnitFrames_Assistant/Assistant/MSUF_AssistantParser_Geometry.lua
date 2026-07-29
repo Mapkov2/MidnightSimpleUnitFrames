@@ -246,8 +246,12 @@ local function ParsePortraitDetailShortcut(text)
     if ContainsAny(text, GeometryPhrases[6]) then return nil end
     if ContainsAny(text, GeometryPhrases[7]) then return nil end
     if ContainsAny(text, GeometryPhrases[8]) and DetectDirection(text, {}) then return nil end
-    local hasX = ContainsAny(text, GeometryPhrases[9]) or HasPhrase(text, "x")
-    local hasY = ContainsAny(text, GeometryPhrases[10]) or HasPhrase(text, "y")
+    local hasPanX = HasPhrase(text, "portrait zoom center x") or HasPhrase(text, "portrait pan x")
+        or HasPhrase(text, "group frame portrait zoom center x") or HasPhrase(text, "group frame portrait pan x")
+    local hasPanY = HasPhrase(text, "portrait zoom center y") or HasPhrase(text, "portrait pan y")
+        or HasPhrase(text, "group frame portrait zoom center y") or HasPhrase(text, "group frame portrait pan y")
+    local hasX = not hasPanX and (ContainsAny(text, GeometryPhrases[9]) or HasPhrase(text, "x"))
+    local hasY = not hasPanY and (ContainsAny(text, GeometryPhrases[10]) or HasPhrase(text, "y"))
     if hasX and hasY then
         local numberCount = 0
         for _ in Normalize(text):gmatch("[-+]?%d+%.?%d*") do numberCount = numberCount + 1 end
@@ -259,16 +263,23 @@ local function ParsePortraitDetailShortcut(text)
     local relativeDelta
     local direction
 
-    if hasX then
+    if hasPanX then
+        attr = "portraitPanX"
+        value = FirstNumber(text)
+    elseif hasPanY then
+        attr = "portraitPanY"
+        value = FirstNumber(text)
+    elseif hasX then
         attr = "portraitOffsetX"
         value = FirstNumber(text)
     elseif hasY then
         attr = "portraitOffsetY"
         value = FirstNumber(text)
     elseif ContainsAny(text, GeometryPhrases[11]) then
-        attr = "portraitClassStyle"
-        value = RawAfterLastConnector and RawAfterLastConnector(text) or nil
-        if value == nil and ContainsAny(text, GeometryPhrases[12]) then value = "default" end
+        -- Portrait packs are media values, not free-form strings. Let the
+        -- registry/media resolver translate display labels to their stable
+        -- stored keys (for example Blizzard Class Icon -> BLIZZARD).
+        return nil
     elseif ContainsAny(text, GeometryPhrases[13]) and not ContainsAny(text, GeometryPhrases[14]) then
         attr = "portraitRender"
         if ContainsAny(text, GeometryPhrases[15]) then
@@ -323,6 +334,18 @@ local function ParsePortraitDetailShortcut(text)
             value = "CUSTOM"
         end
     else
+        if ContainsAny(text, {
+            "cast spell icon", "portrait cast icon", "portrait spell icon",
+            "portrait width", "portrait height", "portrait placement",
+            "portrait anchor", "attach to frame point", "detached portrait",
+            "overlay alignment", "overlay align", "portrait layer", "portrait frame level",
+            "portrait opacity", "portrait alpha", "portrait transparency",
+            "portrait border color", "portrait border opacity", "portrait border alpha",
+            "portrait border art", "portrait border direction", "portrait border rotation",
+            "portrait background color", "portrait background opacity", "portrait background alpha",
+        }) then
+            return nil
+        end
         attr = "portraitMode"
         if ContainsAny(text, GeometryPhrases[34]) then
             value = "OFF"
@@ -334,6 +357,31 @@ local function ParsePortraitDetailShortcut(text)
     end
 
     if not attr or (value == nil and relativeDelta == nil) then return nil end
+    local explicitGroups = DetectGroups(text)
+    local explicitUnits = DetectUnits(text)
+    if #explicitGroups > 0 and #explicitUnits == 0 then
+        local changes = {}
+        for i = 1, #explicitGroups do
+            local setting = Registry and Registry:GetSetting("gf_" .. tostring(explicitGroups[i]) .. "." .. attr)
+            if setting then
+                changes[#changes + 1] = {
+                    setting = setting,
+                    value = value,
+                    relativeDelta = relativeDelta,
+                    direction = direction,
+                }
+            end
+        end
+        if #changes == 0 then return nil end
+        return {
+            kind = "changes",
+            changes = changes,
+            label = "Group Frame Portrait detail",
+            bulkSafe = #changes > 1,
+            summary = "Changes a Group Frame portrait detail option.",
+        }
+    end
+
     local units, ambiguous
     if HasAllUnitDetailScopeIntent(text) then
         units = AllUnitDetailUnits()

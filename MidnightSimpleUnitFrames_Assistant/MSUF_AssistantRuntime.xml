@@ -136,6 +136,7 @@
     <Script file="Assistant\MSUF_AssistantRegistry_GroupFramesVisual.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_GroupFramesScaling.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_GroupFramesLayout.lua"/>
+    <Script file="Assistant\MSUF_AssistantRegistry_GroupFramesPortrait.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_GroupFramesSettings_Basic.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_GroupFramesSettings_Bars_Power.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_GroupFramesSettings_Bars.lua"/>

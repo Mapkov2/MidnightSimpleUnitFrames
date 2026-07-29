@@ -22,6 +22,7 @@ local RegisterGroupTextSettings = A.GroupFramesRegistry and A.GroupFramesRegistr
 local RegisterGroupVisualSettings = A.GroupFramesRegistry and A.GroupFramesRegistry.RegisterVisualSettings
 local RegisterGroupScalingSettings = A.GroupFramesRegistry and A.GroupFramesRegistry.RegisterScalingSettings
 local RegisterGroupLayoutSettings = A.GroupFramesRegistry and A.GroupFramesRegistry.RegisterLayoutSettings
+local RegisterGroupPortraitSettings = A.GroupFramesRegistry and A.GroupFramesRegistry.RegisterPortraitSettings
 local RegisterGroupBasicSettings = A.GroupFramesRegistry and A.GroupFramesRegistry.RegisterBasicSettings
 local RegisterPrioritySettings = A.GroupFramesRegistry and A.GroupFramesRegistry.RegisterPrioritySettings
 local RegisterGroupBarAndPowerSettings = A.GroupFramesRegistry and A.GroupFramesRegistry.RegisterBarAndPowerSettings
@@ -62,6 +63,10 @@ for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
             maxColumns = maxColumnsDefault,
             powerHeight = powerHeightDefault,
         })
+    end
+
+    if scope == "party" and type(RegisterGroupPortraitSettings) == "function" then
+        RegisterGroupPortraitSettings(ctx)
     end
 
     if type(RegisterFrameOrderingSettings) == "function" then

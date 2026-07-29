@@ -11629,6 +11629,15 @@ function R.OpenEndedManualSettingEntries(subject)
                     scope .. ".portraitMode", scope .. ".portraitRender",
                     scope .. ".portraitBorderStyle", scope .. ".portraitClassStyle",
                 }
+            elseif subject == "party portrait"
+                or subject == "group portrait"
+                or subject == "group frame portrait"
+                or subject == "group frames portrait"
+            then
+                keys = {
+                    "gf_party.portraitMode", "gf_party.portraitRender",
+                    "gf_party.portraitBorderStyle", "gf_party.portraitClassStyle",
+                }
             end
         end
     end
@@ -11867,6 +11876,14 @@ function R.OpenEndedLikelyPage(subject, norm)
     elseif R.ContainsAny(subject, { "portrait" }) then
         local unit, unitLabel = R.UnitScopeFromText(norm)
         if unit and unitLabel then return { unit = unit, label = unitLabel, detail = unitLabel .. " portrait controls live on the " .. unitLabel .. " page." } end
+        local groupScope = R.GroupScopeFromText(norm)
+        if groupScope == "party" then
+            return {
+                page = "gf_layout",
+                label = "Group Layout",
+                detail = "Party Group Frame portrait controls live in Group Layout.",
+            }
+        end
     elseif R.ContainsAny(subject, { "font", "text outline", "text rendering" }) then
         page, label, detail = "opt_fonts", "Fonts", "Font family, outline, rendering, and scoped font overrides live in Fonts."
     elseif R.ContainsAny(subject, { "color", "colour", "tint" }) then

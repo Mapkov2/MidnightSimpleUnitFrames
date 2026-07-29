@@ -633,7 +633,7 @@ local function BuildFonts(ctx)
             context = function() return { scope = CurrentFontScope() } end,
         })
     end
-    local scopedFontControls = { outline, sharp, shadow, shadowOpacity, shadowDistance, opacity, baseline, nameColor, healthColor }
+    local scopedFontControls = { outline, sharp, shadow, shadowOpacity, shadowDistance, opacity, baseline, nameColor, healthColor, powerColor }
     RefreshScopedFontControls = RefreshScopedFontControls(function()
         local scopeKey = CurrentFontScope()
         local canEdit = CurrentFontScopeCanEdit()
@@ -643,7 +643,6 @@ local function BuildFonts(ctx)
         SetControlEnabled(shadowOpacity, shadowEnabled)
         SetControlEnabled(shadowDistance, shadowEnabled)
         SetControlEnabled(npcColor, canEdit and not gfScope)
-        SetControlEnabled(powerColor, canEdit and not gfScope)
     end)
     M.TrackRefresh(ctx, RefreshScopedFontControls)
     local nameScope = CurrentFontScope()

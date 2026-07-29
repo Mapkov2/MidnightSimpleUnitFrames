@@ -503,8 +503,20 @@ local function RebuildCollectionPage(M, pageKey)
             return { Cancel = function() end }
         end
     end
+    -- Group Layout's hidden queue may already have a scheduled pump from the
+    -- crosswalk. Build its finite collector snapshot synchronously instead of
+    -- depending on that queue's prior state.
+    local unitPage = M.UnitPage
+    local originalBuildSectionLazy
+    if pageKey == "gf_layout" and type(unitPage) == "table" then
+        originalBuildSectionLazy = unitPage.BuildSectionLazy
+        unitPage.BuildSectionLazy = nil
+    end
     M.InvalidatePage(pageKey)
     local ok, result = pcall(M.BuildPageEntry, pageKey, true)
+    if originalBuildSectionLazy then
+        unitPage.BuildSectionLazy = originalBuildSectionLazy
+    end
     if timer then timer.After = originalAfter end
     if menuTimer then
         menuTimer.After = originalMenuAfter
@@ -561,6 +573,7 @@ local function CollectAssistantControlSchemaStates(M, Catalog, Registry)
     SetStyleState(M, "shared", "debuff")
 
     for i = 1, #UNIT_PAGES do RebuildCollectionPage(M, UNIT_PAGES[i].page) end
+    RebuildCollectionPage(M, "gf_layout")
     RebuildCollectionPage(M, "gf_auras")
     RebuildCollectionPage(M, "auras3_styling")
     RebuildCollectionPage(M, "auras3_buffs")
@@ -568,8 +581,9 @@ local function CollectAssistantControlSchemaStates(M, Catalog, Registry)
     CaptureAssistantControlSchemaState("base", Catalog, Registry)
 
     -- Four units x (two native lanes x three tools + three custom lanes x
-    -- four tools + one target-DoT lane x three tools) = 84 finite unit-frame
-    -- Aura workspace states.
+    -- four tools) + three non-player units x (one target-DoT lane x three
+    -- tools) = 81 finite unit-frame Aura workspace states; the player page
+    -- does not offer the Dots on target container.
     for i = 1, #UNIT_PAGES do
         local row = UNIT_PAGES[i]
         for _, container in ipairs({ "buff", "debuff" }) do
@@ -591,12 +605,14 @@ local function CollectAssistantControlSchemaStates(M, Catalog, Registry)
                     Catalog, Registry, row.page)
             end
         end
-        for _, tool in ipairs(TARGET_DOT_TOOLS) do
-            SetUnitAuraState(M, row.unit, "custom4", tool)
-            RebuildCollectionPage(M, row.page)
-            CaptureAssistantControlSchemaState(
-                "unit_" .. row.unit .. "_custom4_" .. tool,
-                Catalog, Registry, row.page)
+        if row.unit ~= "player" then
+            for _, tool in ipairs(TARGET_DOT_TOOLS) do
+                SetUnitAuraState(M, row.unit, "custom4", tool)
+                RebuildCollectionPage(M, row.page)
+                CaptureAssistantControlSchemaState(
+                    "unit_" .. row.unit .. "_custom4_" .. tool,
+                    Catalog, Registry, row.page)
+            end
         end
 
         -- Custom filter controls have a second finite branch by Aura type.
@@ -633,11 +649,12 @@ local function CollectAssistantControlSchemaStates(M, Catalog, Registry)
     end
 
     -- Shared and group scopes expose two lanes; four unit scopes expose those
-    -- lanes plus Custom 1-3 and Dots on target. This is the complete 30-state
-    -- style matrix.
+    -- lanes plus Custom 1-3, and every unit scope except the player adds Dots
+    -- on target. This is the complete 29-state style matrix.
     for _, scope in ipairs(STYLE_SCOPES) do
-        local containers = (scope == "player" or scope == "target" or scope == "focus" or scope == "boss")
+        local containers = (scope == "target" or scope == "focus" or scope == "boss")
             and { "buff", "debuff", "custom1", "custom2", "custom3", "custom4" }
+            or (scope == "player" and { "buff", "debuff", "custom1", "custom2", "custom3" })
             or { "buff", "debuff" }
         for _, container in ipairs(containers) do
             SetStyleState(M, scope, container)
@@ -661,8 +678,8 @@ local function CollectAssistantControlSchemaStates(M, Catalog, Registry)
         end
     end
 
-    assert(#collectionStates == 154,
-        "finite control-schema matrix drifted: expected 154 states, got " .. tostring(#collectionStates))
+    assert(#collectionStates == 150,
+        "finite control-schema matrix drifted: expected 150 states, got " .. tostring(#collectionStates))
     return true
 end
 
@@ -677,7 +694,7 @@ local function CollectionStateMembership(record)
 end
 
 local function EmitAssistantControlSchema()
-    assert(#collectionStates == 154, "control-schema collection did not capture the complete finite state matrix")
+    assert(#collectionStates == 150, "control-schema collection did not capture the complete finite state matrix")
     local specId, specName = _G.GetSpecializationInfo and _G.GetSpecializationInfo(specIndex)
     print(table.concat({ "CONTEXT", Encode(contextId), Encode(classToken), Encode(specIndex),
         Encode(specId), Encode(specName), Encode(_G.GetLocale and _G.GetLocale() or "enUS") }, "\t"))

@@ -20,6 +20,7 @@ anchor=gf_layout
 hcolor=opt_colors
 bars=opt_bars
 power=gf_layout
+portrait=gf_layout
 text=gf_layout
 dispel=gf_bars
 dstripe=gf_bars

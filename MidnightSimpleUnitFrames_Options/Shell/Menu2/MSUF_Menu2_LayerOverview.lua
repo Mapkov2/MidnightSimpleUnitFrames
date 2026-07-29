@@ -397,7 +397,9 @@ Overview.RegisterProvider("unit-auras", function(sink)
         local customPerUnit = customRoot and type(customRoot.perUnit) == "table" and customRoot.perUnit or nil
         local record = customPerUnit and customPerUnit[scope.key]
         local items = type(record) == "table" and type(record.items) == "table" and record.items or nil
-        for index = 1, 4 do
+        -- The player frame has no Dots on target container, so its custom
+        -- layer rows stop at Custom 3.
+        for index = 1, (scope.key == "player" and 3 or 4) do
             local item = items and items[index]
             local present = type(item) == "table"
             local token = tostring(present and item.id or index)
@@ -460,6 +462,20 @@ Overview.RegisterProvider("group-frames", function(sink)
                 value = conf[spec.key], default = spec.default, enabled = frameEnabled and shown,
                 settingKey = scope.dbKey .. "." .. spec.key,
                 edit = { kind = "group", scope = scope.key, dbKey = scope.dbKey, path = { spec.key } },
+            })
+        end
+        if scope.key == "party" then
+            local portraitMode = tostring(conf.portraitMode or "OFF"):upper()
+            sink:Layer({
+                id = "group.party.portraitLevelOffset",
+                area = "Group Frames", scope = scope.label, label = "Portrait",
+                value = conf.portraitLevelOffset, default = 7,
+                enabled = frameEnabled and (portraitMode == "LEFT" or portraitMode == "RIGHT"),
+                settingKey = "gf_party.portraitLevelOffset",
+                edit = {
+                    kind = "group", scope = "party", dbKey = "gf_party",
+                    path = { "portraitLevelOffset" }, mode = "config",
+                },
             })
         end
         for j = 1, #statusSpecs do

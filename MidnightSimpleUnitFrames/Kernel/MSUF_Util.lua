@@ -1149,6 +1149,15 @@ local function MSUF_SyncCurrentBindingsIntoGlobalStore()
     end
 end
 
+local keybindOptionsOpenPending = false
+local function MSUF_OpenLoadedOptionsFromKeybind()
+    keybindOptionsOpenPending = false
+    local open = _G.MSUF_OpenStandaloneOptionsWindow
+    if type(open) == "function" then
+        open()
+    end
+end
+
 function MSUF_Keybind_ToggleOptions()
     if type(_G.MSUF_OpenStandaloneOptionsWindow) == "function" then
         local win = _G.MSUF_StandaloneOptionsWindow
@@ -1159,7 +1168,20 @@ function MSUF_Keybind_ToggleOptions()
                 win:Hide()
             end
         else
-            _G.MSUF_OpenStandaloneOptionsWindow()
+            if keybindOptionsOpenPending then return end
+            local isLoaded = _G.MSUF_IsOptionsLoaded
+            local ensureLoaded = _G.MSUF_EnsureOptionsLoaded
+            if type(isLoaded) == "function" and isLoaded() ~= true
+                and type(ensureLoaded) == "function" then
+                if ensureLoaded("MSUF_OpenStandaloneOptionsWindow") ~= true then return end
+                local timer = _G.C_Timer
+                if timer and type(timer.After) == "function" then
+                    keybindOptionsOpenPending = true
+                    timer.After(0, MSUF_OpenLoadedOptionsFromKeybind)
+                    return
+                end
+            end
+            MSUF_OpenLoadedOptionsFromKeybind()
         end
     end
 end

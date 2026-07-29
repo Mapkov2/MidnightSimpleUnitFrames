@@ -23,6 +23,7 @@ local function NumberOrOne(value) return tonumber(value) or 1 end
 --- Sample subgroup label for the preview, formatted by the live raid-group
 --- formatter so the preview cannot drift from the runtime text.
 local GROUP_BLOCK_BORDER_EDGES = { "top", "bottom", "left", "right" }
+local SetPreviewFrameLevel
 --- Mirror of ApplyGroupBorder in the group header engine: same edge geometry,
 --- scaled into preview space. Without this the Group Border card had no visual
 --- feedback at all in the menu preview.
@@ -76,6 +77,295 @@ local function PaintGroupBlockBorder(mock, conf, previewScale, ScaleValue)
     end
 end
 
+local GROUP_PORTRAIT_MASKS = {
+    SQUARE = "Interface\\Buttons\\WHITE8x8",
+    CIRCLE = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\circle_mask.tga",
+    ROUNDED = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\rounded_mask.tga",
+    DIAMOND = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\diamond_mask.tga",
+}
+local GROUP_PORTRAIT_SHAPED = { CIRCLE = true, ROUNDED = true, DIAMOND = true }
+local GROUP_PORTRAIT_RING_ART = {
+    SQUARE = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Borders\\msuf_portrait_ring_square.tga",
+    CIRCLE = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Borders\\msuf_portrait_ring_circle.tga",
+    ROUNDED = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Borders\\msuf_portrait_ring_rounded.tga",
+    DIAMOND = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Borders\\msuf_portrait_ring_diamond.tga",
+}
+local GROUP_PORTRAIT_RING_ROTATION = {
+    UP = { 0, 0, 0, 1, 1, 0, 1, 1 },
+    RIGHT = { 0, 1, 1, 1, 0, 0, 1, 0 },
+    DOWN = { 1, 1, 1, 0, 0, 1, 0, 0 },
+    LEFT = { 1, 0, 0, 0, 1, 1, 0, 1 },
+}
+
+local function DisableGroupPreviewPortraitMouse(frame)
+    if not frame then return end
+    if frame.EnableMouse then frame:EnableMouse(false) end
+    if frame.SetMouseClickEnabled then frame:SetMouseClickEnabled(false) end
+    if frame.SetMouseMotionEnabled then frame:SetMouseMotionEnabled(false) end
+end
+
+local function EnsureGroupPreviewPortrait(mock, handle)
+    local holder = mock and mock._msufGroupPortrait
+    if holder then
+        if handle and holder.GetParent and holder:GetParent() ~= handle and holder.SetParent then
+            holder:SetParent(handle)
+        end
+        DisableGroupPreviewPortraitMouse(holder)
+        DisableGroupPreviewPortraitMouse(holder.border)
+        return holder
+    end
+    if not mock then return nil end
+    holder = CreateFrame("Frame", nil, handle or mock)
+    DisableGroupPreviewPortraitMouse(holder)
+    holder.bg = holder:CreateTexture(nil, "BACKGROUND", nil, -1)
+    holder.bg:SetAllPoints(holder)
+    holder.bg:SetTexture("Interface\\Buttons\\WHITE8x8")
+    holder.tex = holder:CreateTexture(nil, "ARTWORK")
+    holder.tex:SetAllPoints(holder)
+    if holder.CreateMaskTexture and holder.tex.AddMaskTexture then
+        holder.mask = holder:CreateMaskTexture()
+        holder.mask:SetAllPoints(holder)
+        holder.tex:AddMaskTexture(holder.mask)
+        holder.bg:AddMaskTexture(holder.mask)
+    end
+    holder.border = CreateFrame("Frame", nil, holder)
+    DisableGroupPreviewPortraitMouse(holder.border)
+    holder.border:SetAllPoints(holder)
+    holder.edges = {}
+    for i = 1, 4 do
+        local edge = holder.border:CreateTexture(nil, "OVERLAY")
+        edge:SetTexture("Interface\\Buttons\\WHITE8x8")
+        edge:Hide()
+        holder.edges[i] = edge
+    end
+    holder:Hide()
+    mock._msufGroupPortrait = holder
+    return holder
+end
+
+local function HideGroupPreviewPortraitBorder(holder)
+    if not holder then return end
+    for i = 1, #(holder.edges or {}) do holder.edges[i]:Hide() end
+    if holder.ring then holder.ring:Hide() end
+    if holder.artBorder then holder.artBorder:Hide() end
+end
+
+local function LayoutGroupPreviewPortraitBorder(holder, portrait, previewScale, ScaleValue, ClassColor, classToken)
+    local cfg = portrait and portrait.border
+    local style = cfg and cfg.style or "NONE"
+    if style == "NONE" then
+        HideGroupPreviewPortraitBorder(holder)
+        return
+    end
+    local r, g, b, a
+    if style == "CLASS_COLOR" then
+        r, g, b = ClassColor(classToken, 1, 1, 1)
+        a = 1
+    elseif style == "REACTION" then
+        r, g, b, a = 0.1, 0.85, 0.1, 1
+    else
+        r, g, b, a = cfg.r or 1, cfg.g or 1, cfg.b or 1, cfg.a or 1
+    end
+    local thick = ScaleValue(cfg.thickness or 2, previewScale, 1)
+    local shape = portrait.shape or "SQUARE"
+    if cfg.art == "RELIEF" then
+        local art = holder.artBorder
+        if not art then
+            art = holder.border:CreateTexture(nil, "OVERLAY", nil, 2)
+            holder.artBorder = art
+        end
+        local width = tonumber(holder._msufPreviewWidth) or tonumber(holder:GetWidth()) or 36
+        local height = tonumber(holder._msufPreviewHeight) or tonumber(holder:GetHeight()) or 36
+        local multiplier = 0.0952380952 * ((tonumber(thick) or 2) / 2)
+        local inflateX = math.floor(math.max(1, width * multiplier) + 0.5)
+        local inflateY = math.floor(math.max(1, height * multiplier) + 0.5)
+        local direction = cfg.direction or "UP"
+        local key = shape .. "|" .. inflateX .. "|" .. inflateY .. "|" .. direction
+        if holder._msufPreviewArtKey ~= key then
+            art:ClearAllPoints()
+            art:SetPoint("TOPLEFT", holder, "TOPLEFT", -inflateX, inflateY)
+            art:SetPoint("BOTTOMRIGHT", holder, "BOTTOMRIGHT", inflateX, -inflateY)
+            art:SetTexture(GROUP_PORTRAIT_RING_ART[shape] or GROUP_PORTRAIT_RING_ART.SQUARE)
+            local rotation = GROUP_PORTRAIT_RING_ROTATION[direction] or GROUP_PORTRAIT_RING_ROTATION.UP
+            art:SetTexCoord(rotation[1], rotation[2], rotation[3], rotation[4],
+                rotation[5], rotation[6], rotation[7], rotation[8])
+            holder._msufPreviewArtKey = key
+        end
+        art:SetVertexColor(r, g, b, a)
+        art:Show()
+        for i = 1, #holder.edges do holder.edges[i]:Hide() end
+        if holder.ring then holder.ring:Hide() end
+        return
+    end
+    if holder.artBorder then holder.artBorder:Hide() end
+    if GROUP_PORTRAIT_SHAPED[shape] then
+        local ring = holder.ring
+        if not ring then
+            ring = holder:CreateTexture(nil, "BACKGROUND", nil, -2)
+            ring:SetTexture("Interface\\Buttons\\WHITE8x8")
+            if holder.CreateMaskTexture and ring.AddMaskTexture then
+                holder.ringMask = holder:CreateMaskTexture()
+                ring:AddMaskTexture(holder.ringMask)
+            end
+            holder.ring = ring
+        end
+        local key = shape .. "|" .. thick
+        if holder._msufPreviewRingKey ~= key then
+            ring:ClearAllPoints()
+            ring:SetPoint("TOPLEFT", holder, "TOPLEFT", -thick, thick)
+            ring:SetPoint("BOTTOMRIGHT", holder, "BOTTOMRIGHT", thick, -thick)
+            if holder.ringMask then
+                holder.ringMask:ClearAllPoints()
+                holder.ringMask:SetPoint("TOPLEFT", holder, "TOPLEFT", -thick, thick)
+                holder.ringMask:SetPoint("BOTTOMRIGHT", holder, "BOTTOMRIGHT", thick, -thick)
+                holder.ringMask:SetTexture(GROUP_PORTRAIT_MASKS[shape])
+            end
+            holder._msufPreviewRingKey = key
+        end
+        ring:SetVertexColor(r, g, b, a)
+        ring:Show()
+        for i = 1, #holder.edges do holder.edges[i]:Hide() end
+        return
+    end
+    if holder.ring then holder.ring:Hide() end
+    local fill = cfg.fill == true
+    local key = thick .. "|" .. (fill and "1" or "0")
+    local top, bottom, left, right = holder.edges[1], holder.edges[2], holder.edges[3], holder.edges[4]
+    if holder._msufPreviewBorderKey ~= key then
+        for i = 1, #holder.edges do holder.edges[i]:ClearAllPoints() end
+        local pad = fill and 0 or thick
+        top:SetPoint("TOPLEFT", holder, "TOPLEFT", -pad, pad)
+        top:SetPoint("TOPRIGHT", holder, "TOPRIGHT", pad, pad)
+        bottom:SetPoint("BOTTOMLEFT", holder, "BOTTOMLEFT", -pad, -pad)
+        bottom:SetPoint("BOTTOMRIGHT", holder, "BOTTOMRIGHT", pad, -pad)
+        left:SetPoint("TOPLEFT", holder, "TOPLEFT", -pad, pad)
+        left:SetPoint("BOTTOMLEFT", holder, "BOTTOMLEFT", -pad, -pad)
+        right:SetPoint("TOPRIGHT", holder, "TOPRIGHT", pad, pad)
+        right:SetPoint("BOTTOMRIGHT", holder, "BOTTOMRIGHT", pad, -pad)
+        top:SetHeight(thick)
+        bottom:SetHeight(thick)
+        left:SetWidth(thick)
+        right:SetWidth(thick)
+        holder._msufPreviewBorderKey = key
+    end
+    for i = 1, #holder.edges do
+        holder.edges[i]:SetVertexColor(r, g, b, a)
+        holder.edges[i]:Show()
+    end
+end
+
+local function PaintGroupPreviewPortrait(scene)
+    local portrait = scene.runtimeSpec and scene.runtimeSpec.portrait
+    local holder = scene.mock and scene.mock._msufGroupPortrait
+    local handle = scene.S and scene.S.portraitHandle
+    if scene.kind ~= "party" or not (portrait and portrait.enabled == true) then
+        if holder then
+            HideGroupPreviewPortraitBorder(holder)
+            holder:Hide()
+        end
+        if handle then handle:Hide() end
+        return
+    end
+    holder = EnsureGroupPreviewPortrait(scene.mock, handle)
+    if not holder then return end
+    local layerAvailable = scene.layerAvailable and scene.layerAvailable.portrait ~= false
+    local layerOn = layerAvailable and scene.layerVisible.portrait ~= false
+    if not layerOn then
+        holder:Hide()
+        if handle then handle:Hide() end
+        return
+    end
+    local scale, ScaleValue = scene.previewScale, scene.S.ScaleValue
+    local width = ScaleValue(portrait.width or portrait.size or 36, scale, 1)
+    local height = ScaleValue(portrait.height or portrait.size or 36, scale, 1)
+    local x = ScaleValue(portrait.x or 0, scale)
+    local y = ScaleValue(portrait.y or 0, scale)
+    holder._msufPreviewWidth, holder._msufPreviewHeight = width, height
+    local owner = handle or holder
+    if not (handle and handle._dragging == true) then
+        owner:ClearAllPoints()
+        if portrait.placement == "DETACHED" then
+            owner:SetSize(width, height)
+            owner:SetPoint(portrait.point or "RIGHT", scene.mock, portrait.relPoint or "LEFT", x, y)
+        elseif portrait.placement == "OVERLAY" then
+            if portrait.overlayAlign == "FULL" then
+                owner:SetPoint("TOPLEFT", scene.mock, "TOPLEFT", x, -y)
+                owner:SetPoint("BOTTOMRIGHT", scene.mock, "BOTTOMRIGHT", -x, y)
+                holder._msufPreviewWidth = math.max(1, (tonumber(scene.mock:GetWidth()) or width) - x * 2)
+                holder._msufPreviewHeight = math.max(1, (tonumber(scene.mock:GetHeight()) or height) - y * 2)
+            else
+                owner:SetSize(width, height)
+                local align = portrait.overlayAlign or "LEFT"
+                owner:SetPoint(align, scene.mock, align, x, y)
+            end
+        else
+            owner:SetSize(width, height)
+            if portrait.side == "RIGHT" then owner:SetPoint("LEFT", scene.mock, "RIGHT", x, y)
+            else owner:SetPoint("RIGHT", scene.mock, "LEFT", x, y) end
+        end
+    end
+    if handle then
+        handle._locked = portrait.placement == "OVERLAY" and portrait.overlayAlign == "FULL"
+        handle._previewScale, handle._previewWriteScale = scale, scale
+        holder:ClearAllPoints()
+        holder:SetAllPoints(handle)
+    end
+    local level = math.max(0, math.min(30, tonumber(portrait.levelOffset) or 7))
+    if holder.SetFrameLevel and scene.mock.GetFrameLevel then
+        local handleLevel = (scene.mock:GetFrameLevel() or 1) + level
+        if handle then SetPreviewFrameLevel(handle, handleLevel) end
+        SetPreviewFrameLevel(holder, handle and (handleLevel + 1) or handleLevel)
+        SetPreviewFrameLevel(holder.border, (holder:GetFrameLevel() or 1) + 1)
+        if handle and handle._selectBorder then
+            SetPreviewFrameLevel(handle._selectBorder, (holder.border:GetFrameLevel() or 1) + 1)
+        end
+    end
+    local layerAlpha = scene.soloLayer and scene.soloLayer ~= "portrait" and 0.15 or 1
+    holder:SetAlpha((tonumber(portrait.alpha) or 1) * layerAlpha)
+    if handle then
+        handle:SetAlpha(layerAlpha)
+        handle:Show()
+    end
+    if holder.mask then holder.mask:SetTexture(GROUP_PORTRAIT_MASKS[portrait.shape or "SQUARE"] or GROUP_PORTRAIT_MASKS.SQUARE) end
+    local classToken = scene.liveData and scene.liveData.class
+        or scene.S.GF_PREVIEW_CLASSES[((scene.kind == "party" and 5 or 2) % #scene.S.GF_PREVIEW_CLASSES) + 1]
+    local castTexture = portrait.castSpellIcon == true and scene.box._animationEnabled == true
+        and scene.S.CurrentSpellTexture(scene.kind) or nil
+    if castTexture then
+        holder.tex:SetTexture(castTexture)
+        holder.tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    elseif portrait.render == "CLASS" then
+        local media = scene.MSUF and scene.MSUF.PortraitMedia
+        local visual = media and media.ResolveClassPortrait and media.ResolveClassPortrait(classToken, portrait.classStyle)
+        if not visual then
+            local coords = classToken and _G.CLASS_ICON_TCOORDS and _G.CLASS_ICON_TCOORDS[classToken]
+            visual = {
+                texture = "Interface\\GLUES\\CHARACTERCREATE\\UI-CHARACTERCREATE-CLASSES",
+                left = coords and coords[1] or 0, right = coords and coords[2] or 1,
+                top = coords and coords[3] or 0, bottom = coords and coords[4] or 1,
+            }
+        end
+        if visual.atlas and holder.tex.SetAtlas then holder.tex:SetAtlas(visual.atlas)
+        else
+            holder.tex:SetTexture(visual.texture or "Interface\\ICONS\\INV_Misc_QuestionMark")
+            holder.tex:SetTexCoord(visual.left or 0, visual.right or 1, visual.top or 0, visual.bottom or 1)
+        end
+    else
+        if type(_G.SetPortraitTexture) == "function" then _G.SetPortraitTexture(holder.tex, "player")
+        else holder.tex:SetTexture("Interface\\ICONS\\INV_Misc_QuestionMark") end
+        holder.tex:SetTexCoord(portrait.texL or 0.08, portrait.texR or 0.92, portrait.texT or 0.08, portrait.texB or 0.92)
+    end
+    holder.tex:SetVertexColor(1, 1, 1, 1)
+    if portrait.bg and portrait.bg.enabled == true then
+        holder.bg:SetVertexColor(portrait.bg.r or 0.05, portrait.bg.g or 0.05, portrait.bg.b or 0.05, portrait.bg.a or 0.85)
+        holder.bg:Show()
+    else
+        holder.bg:Hide()
+    end
+    LayoutGroupPreviewPortraitBorder(holder, portrait, scale, ScaleValue, scene.S.ClassColor, classToken)
+    holder:Show()
+end
+
 local function DefaultAuraGrowth() return { px = 1, py = 0, sx = 0, sy = -1 } end
 local function DefaultClampLayer(value, fallback) return tonumber(value) or fallback or 0 end
 local function AuraDurationBarColor()
@@ -108,7 +398,7 @@ local function SafePreviewFrameLevel(value)
     if value > PREVIEW_FRAME_LEVEL_MAX then return PREVIEW_FRAME_LEVEL_MAX end
     return value
 end
-local function SetPreviewFrameLevel(frame, value)
+SetPreviewFrameLevel = function(frame, value)
     if not (frame and frame.SetFrameLevel) then return 0 end
     value = SafePreviewFrameLevel(value)
     frame:SetFrameLevel(value)
@@ -392,6 +682,8 @@ local function BuildScene(box, reason)
     scene.layerAvailable = {
         guides = true, bounds = true,
         power = powerAvailable,
+        portrait = kind == "party" and runtimeSpec and runtimeSpec.portrait
+            and runtimeSpec.portrait.enabled == true or false,
         buff = SceneAuraLaneAvailable(scene, scene.buffCfg, 6),
         trackedBuff = SceneAuraLaneAvailable(scene, scene.trackedBuffCfg, 4),
         debuff = SceneAuraLaneAvailable(scene, scene.debuffCfg, 6),
@@ -632,12 +924,17 @@ local function FinalizeScene(scene)
         handle:SetAlpha(SceneLayerAlpha(scene, "si"))
     end
     for i = 1, #TEXT_HANDLE_KEYS do scene.textHandles[TEXT_HANDLE_KEYS[i]]:SetAlpha(SceneLayerAlpha(scene, "text")) end
+    local visibleLayerButtonCount = 0
     for i = 1, #box._layerButtons do
         local button = box._layerButtons[i]
+        local visible = button._layerKey ~= "portrait" or scene.kind == "party"
+        if button.SetShown then button:SetShown(visible) end
+        if visible then visibleLayerButtonCount = visibleLayerButtonCount + 1 end
         local available = scene.layerAvailable[button._layerKey] ~= false
         button._layerAvailable = available
         if button.Refresh then button:Refresh() end
     end
+    box._visibleLayerButtonCount = visibleLayerButtonCount
     if box._selectedHandle and box._selectedHandle.IsShown and not box._selectedHandle:IsShown() then S.SelectHandle(nil) end
     S.RefreshHandleSelection(box)
 end
@@ -1706,6 +2003,8 @@ function Render.Install(box, ctx, deps)
             H.SetOutlineShown(mock, false)
             ApplyFrameBorder(self, runtimeBorder, previewScale)
         end
+        scene.previewScale = previewScale
+        PaintGroupPreviewPortrait(scene)
         local textBaseLevel = (Layers.HealthLevel and Layers.HealthLevel((mock.GetFrameLevel and mock:GetFrameLevel()) or 1)
             or (((mock.GetFrameLevel and mock:GetFrameLevel()) or 1) + (Layers.HEALTH_OFFSET or 1)))
             + (Layers.GROUP_FOREGROUND_BASE_OFFSET or 64)

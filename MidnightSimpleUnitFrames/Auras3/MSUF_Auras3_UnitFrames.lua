@@ -1593,6 +1593,9 @@ end
 
 local function CompileUnitCustomLane(unit, entry, index, lanePadding)
     if type(entry) ~= "table" or entry.enabled ~= true then return nil, nil end
+    -- The player frame has no Dots on target container; an orphaned enabled
+    -- record from an older profile must not render there.
+    if index == 4 and unit == "player" then return nil, nil end
     local includeSpellIDs = CustomSpellIDHash(entry.spellIDs or entry.includeSpellIDs)
     local targetDots = index == 4 or entry.targetDots == true
     if targetDots and includeSpellIDs then

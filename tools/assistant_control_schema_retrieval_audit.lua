@@ -26,9 +26,9 @@ local Data = assert(Assistant.ControlSchemaData, "generated control schema data 
 
 Check(Data.version == 3, "reviewed schema version")
 Check(#(Data.contexts or {}) == 40, "reviewed 40 class/spec contexts")
-Check(#(Data.collectionStates or {}) == 154, "reviewed 154-state finite UI matrix")
-Check(Data.collectionUnionControls == 2401 and #(Data.records or {}) == 2401,
-    "reviewed 2401-control exhaustive union")
+Check(#(Data.collectionStates or {}) == 150, "reviewed 150-state finite UI matrix")
+Check(Data.collectionUnionControls == 2425 and #(Data.records or {}) == 2425,
+    "reviewed 2425-control exhaustive union")
 
 local columns, contextIds, stateCounts = {}, {}, {}
 for i = 1, #Data.columns do columns[Data.columns[i]] = i end
@@ -182,8 +182,11 @@ for _, group in pairs(labelGroups) do
 end
 -- Beta 36: "Preview overlay" exists on both the unit and group dispel cards,
 -- forming one new collision group, and the group Resource Bar parity controls
--- join label groups their unit-frame counterparts already had.
-Check(collisionGroups == 296 and collisionRows == 1821 and maxCollision == 32,
+-- join label groups their unit-frame counterparts already had. Dropping the
+-- player's Dots on target container removed six rows from groups the remaining
+-- unit scopes still populate, so no group count changed. The Party portrait
+-- workspace adds one collision group and 21 rows shared with Unit portraits.
+Check(collisionGroups == 297 and collisionRows == 1836 and maxCollision == 32,
     string.format("reviewed label-collision inventory drift: groups=%d rows=%d max=%d",
         collisionGroups, collisionRows, maxCollision))
 

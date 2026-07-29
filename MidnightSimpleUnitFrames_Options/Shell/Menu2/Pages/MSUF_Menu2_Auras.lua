@@ -52,6 +52,9 @@ local SHARED_PREVIEW_SCOPE_VALUES = VTP "player=Player|target=Target|focus=Focus
 local AURA_PREVIEW_MODE_VALUES = VTP "sample=Sample|live=Live"
 local LANE_VALUES = VTP "buff=Buffs|debuff=Debuffs"
 local UNIT_STYLE_CONTAINER_VALUES = VTP "buff=Buffs|debuff=Debuffs|custom1=Custom 1|custom2=Custom 2|custom3=Custom 3|custom4=Dots on target"
+-- The player frame has no Dots on target container, so its style scope
+-- offers no custom4 entry.
+local UNIT_STYLE_CONTAINER_VALUES_PLAYER = VTP "buff=Buffs|debuff=Debuffs|custom1=Custom 1|custom2=Custom 2|custom3=Custom 3"
 local CUSTOM_FRAME_EFFECTS = VTP "none=None|healthtint=Health Tint|border=Border|glow=Glow|pulse=Pulse|namecolor=Name Overlay"
 local DEBUFF_TYPE_BORDER_MODE_VALUES = VTP "OFF=Off|BORDER=Border|SYMBOL=Border + Symbol"
 local COOLDOWN_SWIPE_DIRECTION_VALUES = VTP "NORMAL=Normal|REVERSE=Reverse"
@@ -646,6 +649,9 @@ local function CurrentAuraStyleContainer(scope)
     if (scope == "shared" or IsGroupScope(scope)) and custom then
         container = CurrentLane("auraStyleGFLane", "debuff")
     end
+    if scope == "player" and container == "custom4" then
+        container = CurrentLane("auraStyleGFLane", "debuff")
+    end
     return container
 end
 local function BuildAuraStyleNav(ctx, b, scope)
@@ -659,7 +665,9 @@ local function BuildAuraStyleNav(ctx, b, scope)
     b.y = b.y - h - 12
     if ctx and ctx.SetContentHeight then ctx:SetContentHeight(abs(b.y) + 28) end
     local w = section._msuf2Width or b.width or 720
-    local values = (scope ~= "shared" and not IsGroupScope(scope)) and UNIT_STYLE_CONTAINER_VALUES or LANE_VALUES
+    local values = (scope ~= "shared" and not IsGroupScope(scope))
+        and (scope == "player" and UNIT_STYLE_CONTAINER_VALUES_PLAYER or UNIT_STYLE_CONTAINER_VALUES)
+        or LANE_VALUES
     local bar = RegisterAuraChoiceBar(ctx, W.ScopeOverrideBar(ctx, section, {
         values = values,
         width = w,
@@ -2978,6 +2986,9 @@ local function UniformChoiceWidths(values, width)
 end
 local UNIT_AURA_CHOICE_WIDTH = 92
 local UNIT_AURA_WORKSPACE_TABS = UniformChoiceWidths(VTP "buff=Buffs|debuff=Debuffs|custom1=Custom 1|custom2=Custom 2|custom3=Custom 3|custom4=Dots on target", UNIT_AURA_CHOICE_WIDTH)
+-- custom4 mirrors auras you applied to your target, so the player frame
+-- never offers that container.
+local UNIT_AURA_WORKSPACE_TABS_PLAYER = UniformChoiceWidths(VTP "buff=Buffs|debuff=Debuffs|custom1=Custom 1|custom2=Custom 2|custom3=Custom 3", UNIT_AURA_CHOICE_WIDTH)
 local UNIT_AURA_NORMAL_TOOLS = UniformChoiceWidths(VTP "layout=Layout|filters=Filters|blacklist=Blacklist", UNIT_AURA_CHOICE_WIDTH)
 local UNIT_AURA_CUSTOM_TOOLS = UniformChoiceWidths(VTP "setup=Setup|layout=Layout|filters=Filters|whitelist=Whitelist", UNIT_AURA_CHOICE_WIDTH)
 local UNIT_AURA_TARGET_DOT_TOOLS = UniformChoiceWidths(VTP "setup=Setup|layout=Layout|dots=Dots", UNIT_AURA_CHOICE_WIDTH)
@@ -3642,9 +3653,11 @@ end
 function M.BuildAuras3UnitSection(ctx, builder, unit)
     if not Model.UnitSupported(unit) then return end
     M.unitAuraTabSelection = M.unitAuraTabSelection or {}
+    local workspaceTabs = unit == "player" and UNIT_AURA_WORKSPACE_TABS_PLAYER or UNIT_AURA_WORKSPACE_TABS
     local function CurrentTab()
         local tab = M.unitAuraTabSelection[unit] or "buff"
         if tab ~= "buff" and tab ~= "debuff" and tab ~= "custom1" and tab ~= "custom2" and tab ~= "custom3" and tab ~= "custom4" then tab = "buff" end
+        if tab == "custom4" and unit == "player" then tab = "buff" end
         return tab
     end
     local currentTab = CurrentTab()
@@ -3655,7 +3668,7 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
     local sectionW = auraBuilder.width or 720
     local tools = normalLane and UNIT_AURA_NORMAL_TOOLS or (currentTab == "custom4" and UNIT_AURA_TARGET_DOT_TOOLS or UNIT_AURA_CUSTOM_TOOLS)
     local containerCenterY = -28
-    local containerMetrics = W.MeasureScopeOverrideBar and W.MeasureScopeOverrideBar(UNIT_AURA_WORKSPACE_TABS, {
+    local containerMetrics = W.MeasureScopeOverrideBar and W.MeasureScopeOverrideBar(workspaceTabs, {
         width = sectionW,
         labelWidth = 72,
         centerY = containerCenterY,
@@ -3673,7 +3686,7 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
         W.RegisterGuidedRegion(ctx, top, "Aura container and tools", "unit_aura_tools")
     end
     local containerBar = RegisterAuraChoiceBar(ctx, W.ScopeOverrideBar(ctx, top, {
-        values = UNIT_AURA_WORKSPACE_TABS,
+        values = workspaceTabs,
         width = sectionW,
         label = "Container:",
         labelWidth = 72,
@@ -3683,7 +3696,7 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
             M.unitAuraTabSelection[unit] = value
             Rebuild(ctx)
         end,
-    }), UNIT_AURA_WORKSPACE_TABS, "unit-workspace.container-selector")
+    }), workspaceTabs, "unit-workspace.container-selector")
     local toolBar = RegisterAuraChoiceBar(ctx, W.ScopeOverrideBar(ctx, top, {
         values = tools,
         width = sectionW,

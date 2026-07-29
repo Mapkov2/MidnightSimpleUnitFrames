@@ -638,6 +638,23 @@ local GROUP_LAYOUT_SECTION_SPECS = {
             return RefreshProviderHeader
         end,
     },
+    {
+        sectionId = function(ctx)
+            if ctx and ctx.entry and ctx.entry.hiddenBuild then
+                local state = type(M.GetPersistentMenuStateTable) == "function"
+                    and M.GetPersistentMenuStateTable("accordionState") or M.accordionState
+                if type(state) == "table" and state["gf_layout:portrait"] == true then
+                    return nil
+                end
+            end
+            return "portrait"
+        end,
+        title = "Portrait", height = 616,
+        -- Resolve through GroupPage at build time. The desktop Assistant
+        -- collector loads page specs before exercising lazy section builders.
+        build = function(ctx, builder) return GP.BuildPortrait(ctx, builder) end,
+        prepareShell = function(...) return GP.PreparePortraitShell(...) end,
+    },
     { sectionId = "text", title = "Text", height = 690, build = BuildGFTextSection },
     { sectionId = "power", title = "Resource Bar", autoHeight = true, build = BuildGFResourceBarSection },
     { sectionId = "range", title = "Range Fade", height = 220, build = BuildGFRangeFadeSection },

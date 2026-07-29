@@ -803,6 +803,331 @@ local function ScopeColor(ctx, parent, label, width, rKey, gKey, bKey, defaults,
     if x then W.MoveWidget(control, parent, x, y, placeWidth or width or 220, justify or "LEFT") end
     return control
 end
+
+--- Party portrait workspace. Bindings are intentionally fixed to gf_party
+--- rather than CurrentScope: the shell is hidden outside Party and Raid/Mythic
+--- never receive portrait settings through the dynamic Group binding path.
+function GroupPage.BuildPortrait(ctx, builder)
+    local kind = "party"
+    local cardH = { main = 224, geometry = 494, placement = 382, border = 500, style = 330 }
+    local tabH = {
+        general = cardH.main + 116,
+        geometry = cardH.geometry + 116,
+        placement = cardH.placement + 116,
+        border = cardH.border + 116,
+        advanced = cardH.style + 116,
+    }
+    local placementValues = {
+        modes = VT("ATTACHED", "Attached to bar", "DETACHED", "Detached", "OVERLAY", "Overlay on bar"),
+        points = VT(
+            "TOPLEFT", "Top left", "TOP", "Top", "TOPRIGHT", "Top right",
+            "LEFT", "Left", "CENTER", "Center", "RIGHT", "Right",
+            "BOTTOMLEFT", "Bottom left", "BOTTOM", "Bottom", "BOTTOMRIGHT", "Bottom right"),
+        overlay = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right", "FULL", "Fill bar"),
+        borderArt = VT("FLAT", "Flat", "RELIEF", "Relief"),
+        borderDirection = VT("UP", "Up", "RIGHT", "Right", "DOWN", "Down", "LEFT", "Left"),
+    }
+    local renderValues = VT("2D", "2D portrait", "CLASS", "Class portrait")
+    local shapeValues = VT("SQUARE", "Square", "CIRCLE", "Circle", "ROUNDED", "Rounded", "DIAMOND", "Diamond")
+    local borderValues = VT("NONE", "No border", "SOLID", "Solid", "CLASS_COLOR", "Class color", "REACTION", "Reaction color", "CUSTOM", "Custom color")
+    local function ClassStyleValues()
+        local media = MSUF and MSUF.PortraitMedia
+        local source = media and media.GetPackOptions and media.GetPackOptions()
+            or { { value = "BLIZZARD", text = "Blizzard Class Icon" } }
+        local values = {}
+        for i = 1, #source do
+            local item = source[i]
+            values[#values + 1] = {
+                value = item.value or item.key,
+                text = item.text or item.label or item.value or item.key,
+            }
+        end
+        return values
+    end
+    local function NormalizeTab(value)
+        if value ~= "general" and value ~= "geometry" and value ~= "placement"
+            and value ~= "border" and value ~= "advanced" then
+            return "general"
+        end
+        return value
+    end
+    M.unitPortraitTabSelection = M.unitPortraitTabSelection or {}
+    local stateKey = "gf_party"
+    local currentTab = NormalizeTab(M.unitPortraitTabSelection[stateKey])
+    M.unitPortraitTabSelection[stateKey] = currentTab
+    local initialHeight = tabH[currentTab] or tabH.general
+    local sec = builder:CollapsibleSection("portrait", "Portrait", initialHeight, false)
+    local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
+    local cardX = 16
+    local cardW = max(260, min(620, sectionW - 32))
+    local tabW = max(260, min(780, sectionW - 40))
+    local RefreshPortraitControls = M.RefreshProxy()
+    local function AttachPortraitFocus(widget)
+        W.AttachGroupEditFocus(widget, stateKey, "portrait")
+        return widget
+    end
+    local function PortraitMeta(path, key, extraKeys)
+        local meta = GroupControlMeta(ctx, "portrait." .. tostring(path))
+        meta.assistantDisposition, meta.assistantDispositionReason = nil, nil
+        if key then
+            meta.assistantDisposition = "dynamic"
+            meta.assistantDispositionReason = "This Party portrait control writes the declared fixed Party setting."
+            meta.assistantSettingKeys = { "gf_party." .. tostring(key) }
+        end
+        if extraKeys then
+            meta.assistantDisposition = "dynamic"
+            meta.assistantDispositionReason = "This Party portrait RGB swatch writes three persisted color channels as one visible color."
+            meta.assistantSettingKeys = extraKeys
+        end
+        return meta
+    end
+    local function SetValue(key, value)
+        Set(kind, key, value, "config")
+        RefreshContext(ctx)
+    end
+    local function BindDropdown(parent, label, values, x, y, width, key, defaultValue, normalize, after)
+        local control = W.Dropdown(parent, label, values, 220)
+        W.MoveWidget(control, parent, x, y, width)
+        M.BindDropdownWidget(ctx, control,
+            function()
+                local value = Val(kind, key, defaultValue)
+                return normalize and normalize(value) or value
+            end,
+            function(value)
+                value = normalize and normalize(value or defaultValue) or (value or defaultValue)
+                SetValue(key, value)
+                if after then after() end
+            end,
+            PortraitMeta(key, key))
+        return AttachPortraitFocus(control)
+    end
+    local function BindNumber(parent, label, x, y, width, minValue, maxValue, step, key, defaultValue, percent, after)
+        local control = W.Slider(parent, label, minValue, maxValue, step, 280)
+        if percent and M.UsePercentInput then M.UsePercentInput(control) end
+        W.MoveWidget(control, parent, x, y, width, "CENTER")
+        local meta = PortraitMeta(key, key)
+        meta.step, meta.roundStep = step, true
+        M.BindNumberWidget(ctx, control,
+            function() return Num(kind, key, defaultValue) end,
+            function(value)
+                SetValue(key, tonumber(value) or defaultValue)
+                if after then after() end
+            end,
+            defaultValue, meta)
+        return AttachPortraitFocus(control)
+    end
+    local function BindToggle(parent, label, x, y, width, key, defaultValue, after)
+        local control = W.ToggleAt(parent, label, x, y, width)
+        M.BindBoolWidget(ctx, control,
+            function() return Bool(kind, key, defaultValue) end,
+            function(value)
+                SetValue(key, value and true or false)
+                if after then after() end
+            end,
+            PortraitMeta(key, key))
+        return AttachPortraitFocus(control)
+    end
+    local function BindColor(parent, label, x, y, width, prefix, defaults)
+        local control = W.Color(parent, label)
+        local rKey, gKey, bKey = prefix .. "R", prefix .. "G", prefix .. "B"
+        local settingKeys = { "gf_party." .. rKey, "gf_party." .. gKey, "gf_party." .. bKey }
+        M.BindColor(ctx, control,
+            function()
+                return Num(kind, rKey, defaults[1]), Num(kind, gKey, defaults[2]), Num(kind, bKey, defaults[3])
+            end,
+            function(r, g, b)
+                local conf = Conf(kind)
+                if conf[rKey] == r and conf[gKey] == g and conf[bKey] == b then return end
+                conf[rKey], conf[gKey], conf[bKey] = r, g, b
+                QueueGF(kind, "config")
+                RefreshContext(ctx)
+            end,
+            PortraitMeta(prefix, nil, settingKeys))
+        W.MoveWidget(control, parent, x, y, width, "LEFT")
+        return AttachPortraitFocus(control)
+    end
+    local function SetSectionHeight(height)
+        height = max(120, floor((tonumber(height) or tabH.general) + 0.5))
+        local entry = sec and sec._msuf2CollapsibleEntry
+        if sec and sec.SetHeight then sec:SetHeight(height) end
+        if entry then
+            entry.contentHeight = height
+            if entry.body and entry.body.SetHeight then entry.body:SetHeight(height) end
+            if entry.outer and entry.outer.SetHeight then
+                entry.outer:SetHeight((entry.headerHeight or 28) + (entry.open and height or 0))
+            end
+            if entry.builder and entry.builder.RequestRelayoutCollapsibles then entry.builder:RequestRelayoutCollapsibles() end
+        end
+    end
+    local tabFrames = {}
+    local generalTab, geometryTab, placementTab, borderTab, advancedTab =
+        Shared.MakeTabFrames(sec, -64, sectionW, tabFrames, "general", "geometry", "placement", "border", "advanced")
+    local mainCard = W.ControlCard(generalTab, "Visibility & Mode", nil, cardX, -4, cardW, cardH.main)
+    local geometryCard = W.ControlCard(geometryTab, "Geometry", nil, cardX, -4, cardW, cardH.geometry)
+    local placementCard = W.ControlCard(placementTab, "Placement", nil, cardX, -4, cardW, cardH.placement)
+    local borderCard = W.ControlCard(borderTab, "Shape & Border", nil, cardX, -4, cardW, cardH.border)
+    local styleCard = W.ControlCard(advancedTab, "Class & Background", nil, cardX, -4, cardW, cardH.style)
+    local narrow = sectionW < 700
+    local portraitTabs, RefreshTabs, ReadTab, SetGuidedTab = W.SegmentTabs(ctx, sec, {
+        label = "",
+        values = narrow
+            and VT("general", "General", "placement", "Place", "geometry", "Size", "border", "Border", "advanced", "More")
+            or VT("general", "General", "placement", "Placement", "geometry", "Size & Zoom", "border", "Shape & Border", "advanced", "More Options"),
+        width = tabW,
+        frames = tabFrames,
+        defaultTab = "general",
+        get = function() return NormalizeTab(M.unitPortraitTabSelection[stateKey]) end,
+        set = function(value) M.unitPortraitTabSelection[stateKey] = NormalizeTab(value) end,
+        afterRefresh = function(tab) SetSectionHeight(tabH[NormalizeTab(tab)] or tabH.general) end,
+        x = 20,
+        y = -12,
+    })
+    if portraitTabs._msuf2Title then portraitTabs._msuf2Title:Hide() end
+    AttachPortraitFocus(portraitTabs)
+    RegisterGroupControl(portraitTabs, ctx, "portrait.workspace_tab", "Portrait area", "segment", "ephemeral")
+    sec._msuf2GuidedSelectTab = function(tab)
+        tab = NormalizeTab(tab)
+        if type(ReadTab) == "function" and ReadTab() == tab then return true end
+        if type(SetGuidedTab) == "function" then SetGuidedTab(tab)
+        else
+            M.unitPortraitTabSelection[stateKey] = tab
+            if type(RefreshTabs) == "function" then RefreshTabs() end
+        end
+        return type(ReadTab) ~= "function" or ReadTab() == tab
+    end
+    M._msuf2LastGroupPortraitSide = M._msuf2LastGroupPortraitSide or "LEFT"
+    local portraitEnable = W.SwitchAt(mainCard, "Portrait", cardW - 62, -24, 0, "HIDDEN")
+    local portraitEnableMeta = PortraitMeta("enabled")
+    portraitEnableMeta.assistantDisposition = "compound"
+    portraitEnableMeta.assistantDispositionReason =
+        "This boolean projection toggles the Party portrait enum between OFF and the remembered LEFT or RIGHT side."
+    M.BindBoolWidget(ctx, portraitEnable,
+        function() return Val(kind, "portraitMode", "OFF") ~= "OFF" end,
+        function(value)
+            local mode = Val(kind, "portraitMode", "OFF")
+            if value then
+                SetValue("portraitMode", M._msuf2LastGroupPortraitSide)
+            else
+                if mode == "LEFT" or mode == "RIGHT" then M._msuf2LastGroupPortraitSide = mode end
+                SetValue("portraitMode", "OFF")
+            end
+            RefreshPortraitControls()
+        end,
+        portraitEnableMeta)
+    AttachPortraitFocus(portraitEnable)
+    local side = W.Segment(mainCard, "Position", VT("LEFT", "Left", "RIGHT", "Right"), min(220, cardW - 32))
+    W.MoveWidget(side, mainCard, 16, -62, min(220, cardW - 32))
+    M.BindSegment(ctx, side,
+        function() return Val(kind, "portraitMode", "OFF") == "RIGHT" and "RIGHT" or "LEFT" end,
+        function(value)
+            value = value == "RIGHT" and "RIGHT" or "LEFT"
+            M._msuf2LastGroupPortraitSide = value
+            SetValue("portraitMode", value)
+            RefreshPortraitControls()
+        end,
+        PortraitMeta("position", "portraitMode"))
+    AttachPortraitFocus(side)
+    local render = BindDropdown(mainCard, "Render", renderValues, 16, -116, min(220, cardW - 32), "portraitRender", "2D", nil, RefreshPortraitControls)
+    local shape = BindDropdown(borderCard, "Shape", shapeValues, 16, -58, min(220, cardW - 32), "portraitShape", "SQUARE", nil, RefreshPortraitControls)
+    local size = BindNumber(geometryCard, "Size override", 16, -62, cardW - 58, 0, 128, 1, "portraitSizeOverride", 0)
+    local width = BindNumber(geometryCard, "Width override", 16, -116, cardW - 58, 0, 256, 1, "portraitWidth", 0)
+    local height = BindNumber(geometryCard, "Height override", 16, -170, cardW - 58, 0, 256, 1, "portraitHeight", 0)
+    local offsetX = BindNumber(geometryCard, "Portrait X", 16, -224, cardW - 58, -400, 400, 1, "portraitOffsetX", 0)
+    local offsetY = BindNumber(geometryCard, "Portrait Y", 16, -278, cardW - 58, -400, 400, 1, "portraitOffsetY", 0)
+    local zoom = BindNumber(geometryCard, "Portrait zoom", 16, -332, cardW - 58, 100, 200, 1, "portraitZoom", 100)
+    local panX = BindNumber(geometryCard, "Zoom center X", 16, -386, cardW - 58, -100, 100, 1, "portraitPanX", 0)
+    local panY = BindNumber(geometryCard, "Zoom center Y", 16, -440, cardW - 58, -100, 100, 1, "portraitPanY", 0)
+    local placement = BindDropdown(placementCard, "Placement", placementValues.modes, 16, -58, min(220, cardW - 32), "portraitPlacement", "ATTACHED", nil, RefreshPortraitControls)
+    placement._msuf2SearchText = "Portrait placement attached detached overlay free position anchor"
+    local detachedPoint = BindDropdown(placementCard, "Portrait anchor point", placementValues.points, 16, -112, min(220, cardW - 32), "portraitDetachedPoint", "RIGHT")
+    local detachedTo = BindDropdown(placementCard, "Attach to frame point", placementValues.points, 16, -166, min(220, cardW - 32), "portraitDetachedTo", "LEFT")
+    local overlayAlign = BindDropdown(placementCard, "Overlay alignment", placementValues.overlay, 16, -220, min(220, cardW - 32), "portraitOverlayAlign", "LEFT")
+    local level = BindNumber(placementCard, "Layer offset", 16, -274, cardW - 58, 0, 30, 1, "portraitLevelOffset", 7)
+    level._msuf2SearchText = "Portrait layer offset frame level behind in front of bars"
+    local alpha = BindNumber(placementCard, "Portrait opacity", 16, -328, cardW - 58, 0, 100, 1, "portraitAlpha", 100)
+    local border = BindDropdown(borderCard, "Border", borderValues, 16, -112, min(220, cardW - 32), "portraitBorderStyle", "NONE", nil, RefreshPortraitControls)
+    local borderArt = BindDropdown(borderCard, "Border art", placementValues.borderArt, 16, -166, min(220, cardW - 32), "portraitBorderArt", "FLAT", nil, RefreshPortraitControls)
+    local direction = BindDropdown(borderCard, "Border direction", placementValues.borderDirection, 16, -220, min(220, cardW - 32), "portraitBorderDirection", "UP")
+    local thickness = BindNumber(borderCard, "Border thickness", 16, -274, cardW - 58, 1, 12, 1, "portraitBorderThickness", 2)
+    local fill = BindToggle(borderCard, "Fill border into frame gap", 16, -342, cardW - 32, "portraitFillBorder", false)
+    local borderColor = BindColor(borderCard, "Color", 16, -386, min(260, cardW - 32), "portraitBorderColor", { 1, 1, 1 })
+    local borderAlpha = BindNumber(borderCard, "Opacity", 16, -438, cardW - 58, 0, 1, 0.05, "portraitBorderColorA", 1, true)
+    local classStyle = BindDropdown(styleCard, "Class portrait style", ClassStyleValues, 16, -58, min(220, cardW - 32), "portraitClassStyle", "BLIZZARD", M.NormalizePortraitClassStyle)
+    local background = BindToggle(styleCard, "Portrait background", 16, -112, cardW - 32, "portraitBgEnabled", false, RefreshPortraitControls)
+    local backgroundColor = BindColor(styleCard, "Portrait Background Color", 16, -158, min(260, cardW - 32), "portraitBgColor", { 0.05, 0.05, 0.05 })
+    local backgroundAlpha = BindNumber(styleCard, "Background opacity", 16, -210, cardW - 58, 0, 1, 0.05, "portraitBgColorA", 0.85, true)
+    local castIcon = BindToggle(styleCard, "Show cast spell icon in portrait", 16, -274, cardW - 32, "portraitCastSpellIcon", false)
+    castIcon._msuf2SearchText = "Portrait cast spell icon casting channel empower"
+    local activeControls = {
+        render, shape, size, width, height, offsetX, offsetY, placement, level, alpha,
+        border, background, castIcon,
+    }
+    local function Active(conf) return (conf.portraitMode or "OFF") ~= "OFF" end
+    local function Placed(conf, value)
+        return Active(conf) and (conf.portraitPlacement or "ATTACHED") == value
+    end
+    RefreshPortraitControls = RefreshPortraitControls(M.BindGateGroup(ctx, function() return Conf(kind) end, {
+        { enable = portraitEnable },
+        { controls = activeControls, on = Active },
+        { controls = side, on = function(conf) return Placed(conf, "ATTACHED") end },
+        { controls = { detachedPoint, detachedTo }, on = function(conf) return Placed(conf, "DETACHED") end },
+        { controls = overlayAlign, on = function(conf) return Placed(conf, "OVERLAY") end },
+        { controls = { zoom, panX, panY }, on = function(conf) return Active(conf) and (conf.portraitRender or "2D") ~= "CLASS" end },
+        { controls = { thickness, borderArt }, on = function(conf) return Active(conf) and (conf.portraitBorderStyle or "NONE") ~= "NONE" end },
+        { controls = direction, on = function(conf)
+            return Active(conf) and (conf.portraitBorderStyle or "NONE") ~= "NONE"
+                and (conf.portraitBorderArt or "FLAT") == "RELIEF"
+        end },
+        { controls = fill, on = function(conf)
+            return Active(conf) and (conf.portraitBorderStyle or "NONE") ~= "NONE"
+                and (conf.portraitShape or "SQUARE") == "SQUARE"
+                and (conf.portraitBorderArt or "FLAT") ~= "RELIEF"
+        end },
+        { controls = { borderColor, borderAlpha }, on = function(conf)
+            local style = conf.portraitBorderStyle or "NONE"
+            return Active(conf) and (style == "SOLID" or style == "CUSTOM")
+        end },
+        { controls = classStyle, on = function(conf) return Active(conf) and (conf.portraitRender or "2D") == "CLASS" end },
+        { controls = { backgroundColor, backgroundAlpha }, on = function(conf) return Active(conf) and conf.portraitBgEnabled == true end },
+    }, {
+        also = function() SetSectionHeaderStatus(sec, nil) end,
+        track = function(c, refresh) return M.TrackCollapsibleRefresh(c, sec, refresh) end,
+    }))
+    if sec._msufPartyPortraitRefresh then sec._msufPartyPortraitRefresh() end
+end
+
+--- Hide and collapse the Portrait shell outside Party without destroying the
+--- cached page. Restoring the original geometry makes scope switching cheap
+--- and keeps Raid/Mythic controls completely inaccessible.
+function GroupPage.PreparePortraitShell(ctx, section)
+    local entry = section and section._msuf2CollapsibleEntry
+    if not entry then return end
+    entry._msufPartyPortraitHeaderHeight = entry._msufPartyPortraitHeaderHeight or entry.headerHeight
+    entry._msufPartyPortraitContentHeight = entry._msufPartyPortraitContentHeight or entry.contentHeight
+    local function Refresh()
+        local shown = CurrentScope() == "party"
+        if shown then
+            entry.headerHeight = entry._msufPartyPortraitHeaderHeight or 28
+            entry.contentHeight = entry._msufPartyPortraitContentHeight or entry.contentHeight or 340
+            if entry.outer then entry.outer:Show() end
+        else
+            if (entry.contentHeight or 0) > 0 then entry._msufPartyPortraitContentHeight = entry.contentHeight end
+            entry.headerHeight, entry.contentHeight = 0, 0
+            if entry.outer then entry.outer:Hide() end
+        end
+        if entry.body and entry.body.SetHeight then entry.body:SetHeight(entry.contentHeight or 0) end
+        if entry.outer and entry.outer.SetHeight then
+            entry.outer:SetHeight((entry.headerHeight or 0) + (entry.open and (entry.contentHeight or 0) or 0))
+        end
+        if entry.builder and entry.builder.RequestRelayoutCollapsibles then entry.builder:RequestRelayoutCollapsibles() end
+    end
+    section._msufPartyPortraitRefresh = Refresh
+    if M.AddRefresherOnce then M.AddRefresherOnce(ctx, "group-party-portrait-shell", Refresh)
+    elseif M.AddRefresher then M.AddRefresher(ctx, Refresh) end
+    Refresh()
+    return Refresh
+end
+
 local GROWTH_TILE_VALUES = {
     { value = "DOWN", text = "Down", dx = 0, dy = -1, arrow = "v" },
     { value = "UP", text = "Up", dx = 0, dy = 1, arrow = "^" },

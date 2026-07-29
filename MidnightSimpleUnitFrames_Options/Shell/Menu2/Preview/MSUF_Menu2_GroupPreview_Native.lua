@@ -462,7 +462,7 @@ local function ApplyGroupCompactPresentation(box, compact, sideW)
         end
         local layersBtn = EnsureGroupLayersButton(box)
         if layers and stage then
-            local rows = #(box._layerButtons or {})
+            local rows = box._visibleLayerButtonCount or #(box._layerButtons or {})
             layers:ClearAllPoints()
             if box._msuf2CompactHeader then layers:SetPoint("TOPRIGHT", layersBtn, "BOTTOMRIGHT", 0, -6)
             else layers:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -28) end
@@ -1067,6 +1067,8 @@ local function HandleOffsets(handle)
     elseif handle._cfgSpell then
         local cfg = CurrentSpellPlaced(CurrentScope()) or {}
         return cfg.anchor, tonumber(cfg.x) or 0, tonumber(cfg.y) or 0
+    elseif handle._cfgPortrait then
+        return "PORTRAIT", tonumber(conf.portraitOffsetX) or 0, tonumber(conf.portraitOffsetY) or 0
     elseif handle._cfgPower then
         -- Fixed runtime anchor (TOP -> frame BOTTOM); only the offsets move.
         return "TOP", tonumber(conf.detachedPowerBarOffsetX) or 0, tonumber(conf.detachedPowerBarOffsetY) or -4
@@ -1373,6 +1375,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         guides = true,
         bounds = true,
         power = true,
+        portrait = true,
         buff = true,
         trackedBuff = true,
         debuff = true,
@@ -1399,6 +1402,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         { "Spells", { 0.86, 0.50, 1.00 }, "si", "si" },
         { "CD/Stack", { 1.00, 0.82, 0.28 }, "textcolor", "auraText" },
         { "Text", { 0.70, 0.90, 1.00 }, "text", "text" },
+        { "Portrait", { 0.90, 0.42, 1.00 }, "portrait", "portrait" },
     }
     box._layerButtons = {}
     box.layerVisibility = layerVisibility
@@ -1483,6 +1487,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             end,
         }
         RegisterPreviewControl(btn, "layer." .. tostring(def[4]), def[1] .. " preview layer", "button", "ephemeral")
+        if def[4] == "portrait" then btn:Hide() end
         box._layerButtons[#box._layerButtons + 1] = btn
     end
     local mock = CreateFrame("Frame", nil, stage, T.Template())
@@ -1583,6 +1588,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     local debuffHandle = handleBundle.debuffHandle
     local externalHandle = handleBundle.externalHandle
     local powerBarHandle = handleBundle.powerBarHandle
+    local portraitHandle = handleBundle.portraitHandle
     local statusHandles = handleBundle.statusHandles or {}
     local spellHandle = handleBundle.spellHandle
     local SelectHandle = handleBundle.SelectHandle or function() end
@@ -1602,6 +1608,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         renderDeps.trackedBuffHandle = trackedBuffHandle
         renderDeps.externalHandle = externalHandle
         renderDeps.powerBarHandle = powerBarHandle
+        renderDeps.portraitHandle = portraitHandle
         renderDeps.statusHandles, renderDeps.spellHandle = statusHandles, spellHandle
         renderDeps.statusSpecs = H.StatusSpecs and H.StatusSpecs()
         renderDeps.SelectHandle = SelectHandle

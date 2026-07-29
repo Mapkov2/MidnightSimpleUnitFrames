@@ -154,6 +154,7 @@ UI.colors = UI.colors or {
     pillEdge = { 0.130, 0.165, 0.290, 0.520 },
     pillEdgeHover = { 0.150, 0.280, 0.540, 0.660 },
     pillEdgeActive = { 0.210, 0.420, 0.860, 0.760 },
+    navHeaderHover = { 0.357, 0.608, 1.000, 1.000 },
 }
 
 function UI.BindMenu2Theme(theme)
@@ -263,10 +264,14 @@ local function FallbackButtonVisual(btn, active, hover)
     local fill, edge, label = btn._msufUIFill, btn._msufUIEdge, btn._label
     if not fill or not edge then return end
     local enabled = not (btn.IsEnabled and not btn:IsEnabled())
+    -- Mirrors the themed painter: opt-in text-only hover leaves the pill at rest
+    -- so the label is the sole hover affordance.
+    local textOnlyHover = hover and btn._msuf2HoverTextAccent
+    local pillHover = hover and not textOnlyHover
     local bg = active and UI.Color("pillActive", UI.colors.pillActive)
-        or (hover and UI.Color("pillHover", UI.colors.pillHover) or UI.Color("pillBase", UI.colors.pillBase))
+        or (pillHover and UI.Color("pillHover", UI.colors.pillHover) or UI.Color("pillBase", UI.colors.pillBase))
     local br = active and UI.Color("pillEdgeActive", UI.colors.pillEdgeActive)
-        or (hover and UI.Color("pillEdgeHover", UI.colors.pillEdgeHover) or UI.Color("pillEdge", UI.colors.pillEdge))
+        or (pillHover and UI.Color("pillEdgeHover", UI.colors.pillEdgeHover) or UI.Color("pillEdge", UI.colors.pillEdge))
     if btn._msufUIDanger then bg, br = { 0.145, 0.032, 0.050, 0.940 }, UI.Color("danger", UI.colors.danger) end
     if btn._msufUIPrimary then bg, br = { 0.160, 0.560, 0.720, 0.970 }, UI.Color("accent", UI.colors.accent) end
     if btn._msufUISuccess then bg, br = { 0.040, 0.280, 0.130, 0.950 }, UI.Color("ok", UI.colors.ok) end
@@ -276,6 +281,9 @@ local function FallbackButtonVisual(btn, active, hover)
     if edge.SetBackdropBorderColor then edge:SetBackdropBorderColor(br[1], br[2], br[3], (br[4] or 1) * alpha) end
     if label then
         local tc = enabled and UI.Color("text", UI.colors.text) or UI.Color("dim", UI.colors.dim)
+        if enabled and textOnlyHover then
+            tc = UI.Color("navHeaderHover", UI.colors.navHeaderHover)
+        end
         label:SetTextColor(tc[1], tc[2], tc[3], tc[4] or 1)
     end
 end

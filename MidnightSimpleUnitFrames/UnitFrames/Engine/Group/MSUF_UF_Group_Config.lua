@@ -684,17 +684,26 @@ local function CompileStatus(kind, conf)
   statusText.dnd = StatusRegionDef(conf, conf.statusDNDText == true, "statusDND")
   local raidGroup = StatusRegionDef(conf, raidGroupEnabled, "raidGroup")
   raidGroup.style = conf.groupNumberStyle or "PAREN"
+  --- Every icon carries its own style now, so the non-role indicators stop falling back to the
+  --- retired scope-wide default. The value may carry the "@MIDNIGHT" suffix; the DB resolvers
+  --- split it, so it is forwarded untouched.
   local raidMarker = StatusRegionDef(conf, raidMarkerEnabled, "raidMarker")
+  raidMarker.style = conf.raidMarkerStyle
   raidMarker.customIcon = conf.raidMarkerCustomIcon
   local readyCheck = StatusRegionDef(conf, readyCheckEnabled, "readyCheck")
+  readyCheck.style = conf.readyCheckIconStyle
   readyCheck.customIcon = conf.readyCheckIconCustomIcon
   local summon = StatusRegionDef(conf, summonEnabled, "summon")
+  summon.style = conf.summonIconStyle
   summon.customIcon = conf.summonIconCustomIcon
   local incomingRes = StatusRegionDef(conf, incomingResEnabled, "incomingRes")
+  incomingRes.style = conf.resurrectIconStyle
   incomingRes.customIcon = conf.resurrectIconCustomIcon
   local pvp = StatusRegionDef(conf, pvpEnabled, "pvp")
+  pvp.style = conf.pvpIconStyle
   pvp.customIcon = conf.pvpIconCustomIcon
   local phase = StatusRegionDef(conf, phaseEnabled, "phase")
+  phase.style = conf.phaseIconStyle
   phase.customIcon = conf.phaseIconCustomIcon
 
   return {
@@ -1348,6 +1357,121 @@ local function CompileBarBackground(conf)
   }
 end
 
+local PORTRAIT_SHAPES = { CIRCLE = true, ROUNDED = true, DIAMOND = true }
+local PORTRAIT_BORDERS = { SOLID = true, CLASS_COLOR = true, REACTION = true, CUSTOM = true }
+local PORTRAIT_PLACEMENTS = { ATTACHED = true, DETACHED = true, OVERLAY = true }
+local PORTRAIT_POINTS = {
+  TOPLEFT = true, TOP = true, TOPRIGHT = true,
+  LEFT = true, CENTER = true, RIGHT = true,
+  BOTTOMLEFT = true, BOTTOM = true, BOTTOMRIGHT = true,
+}
+local PORTRAIT_OVERLAY_ALIGNMENTS = { LEFT = true, CENTER = true, RIGHT = true, FULL = true }
+local PORTRAIT_BORDER_DIRECTIONS = { UP = true, RIGHT = true, DOWN = true, LEFT = true }
+
+local function PortraitClassStyle(value)
+  local normalize = _G.MSUF_NormalizePortraitClassStyleValue
+  if type(normalize) == "function" then return normalize(value) end
+  local media = MSUF and MSUF.PortraitMedia
+  if media and type(media.NormalizeClassPack) == "function" then return media.NormalizeClassPack(value) end
+  if value == "RONDO_COLOR" or value == "RONDO_WOW" or value == "BLIZZARD" then return value end
+  return "BLIZZARD"
+end
+
+local function PortraitLevel(value)
+  value = floor(Num(value, 7) + 0.5)
+  if value < 0 then return 0 end
+  if value > 30 then return 30 end
+  return value
+end
+
+local function PortraitPan(value)
+  value = Num(value, 0)
+  if value < -100 then return -100 end
+  if value > 100 then return 100 end
+  return value
+end
+
+local function CompilePortraitTexCoords(portrait, zoom, width, height, panX, panY)
+  zoom = Num(zoom, 100)
+  if zoom > 1 and zoom <= 2 then zoom = zoom * 100 end
+  if zoom < 100 then zoom = 100 elseif zoom > 200 then zoom = 200 end
+  local span = 0.84 * (100 / zoom)
+  local spanX, spanY = span, span
+  if width > 0 and height > 0 and width ~= height then
+    if width > height then spanY = span * (height / width)
+    else spanX = span * (width / height) end
+  end
+  local slackX, slackY = (1 - spanX) * 0.5, (1 - spanY) * 0.5
+  local centerX = 0.5 + (PortraitPan(panX) / 100) * slackX
+  local centerY = 0.5 - (PortraitPan(panY) / 100) * slackY
+  portrait.zoom = zoom
+  portrait.texL, portrait.texR = centerX - spanX * 0.5, centerX + spanX * 0.5
+  portrait.texT, portrait.texB = centerY - spanY * 0.5, centerY + spanY * 0.5
+end
+
+--- Party is the only GroupFrames scope that owns portrait settings. Returning
+--- an explicit disabled spec for every other kind keeps stale/imported keys
+--- from allocating a Portrait holder on recycled raid buttons.
+local function CompilePortrait(kind, conf, frameHeight)
+  if kind ~= "party" then return { enabled = false } end
+  conf = conf or {}
+  local mode = conf.portraitMode
+  if mode ~= "LEFT" and mode ~= "RIGHT" then mode = conf.showPortrait == true and "LEFT" or "OFF" end
+  local override = Num(conf.portraitSizeOverride, Num(conf.portraitSize, 0))
+  local autoSize = math.max(16, Num(frameHeight, 40) - 4)
+  local size = override > 0 and math.max(16, override) or autoSize
+  local width = Num(conf.portraitWidth, 0)
+  local height = Num(conf.portraitHeight, 0)
+  width = width > 0 and math.max(8, width) or size
+  height = height > 0 and math.max(8, height) or size
+  local shape = PORTRAIT_SHAPES[conf.portraitShape] and conf.portraitShape or "SQUARE"
+  local borderStyle = PORTRAIT_BORDERS[conf.portraitBorderStyle] and conf.portraitBorderStyle or "NONE"
+  local placement = PORTRAIT_PLACEMENTS[conf.portraitPlacement] and conf.portraitPlacement or "ATTACHED"
+  local point = PORTRAIT_POINTS[conf.portraitDetachedPoint] and conf.portraitDetachedPoint or "RIGHT"
+  local relPoint = PORTRAIT_POINTS[conf.portraitDetachedTo] and conf.portraitDetachedTo or "LEFT"
+  local overlayAlign = PORTRAIT_OVERLAY_ALIGNMENTS[conf.portraitOverlayAlign] and conf.portraitOverlayAlign or "LEFT"
+  local direction = PORTRAIT_BORDER_DIRECTIONS[conf.portraitBorderDirection] and conf.portraitBorderDirection or "UP"
+  local portrait = {
+    enabled = mode ~= "OFF",
+    side = mode == "RIGHT" and "RIGHT" or "LEFT",
+    render = conf.portraitRender == "CLASS" and "CLASS" or "2D",
+    classStyle = PortraitClassStyle(conf.portraitClassStyle),
+    castSpellIcon = conf.portraitCastSpellIcon == true,
+    shape = shape,
+    size = size,
+    width = width,
+    height = height,
+    x = Num(conf.portraitOffsetX, 0),
+    y = Num(conf.portraitOffsetY, 0),
+    placement = placement,
+    point = point,
+    relPoint = relPoint,
+    levelOffset = PortraitLevel(conf.portraitLevelOffset),
+    overlayAlign = overlayAlign,
+    alpha = Clamp01(Num(conf.portraitAlpha, 100) / 100, 1),
+    border = {
+      style = borderStyle,
+      thickness = math.max(1, Num(conf.portraitBorderThickness, 2)),
+      fill = conf.portraitFillBorder == true,
+      art = conf.portraitBorderArt == "RELIEF" and "RELIEF" or "FLAT",
+      direction = direction,
+      r = Num(conf.portraitBorderColorR, 1),
+      g = Num(conf.portraitBorderColorG, 1),
+      b = Num(conf.portraitBorderColorB, 1),
+      a = Num(conf.portraitBorderColorA, 1),
+    },
+    bg = {
+      enabled = conf.portraitBgEnabled == true,
+      r = Num(conf.portraitBgColorR, 0.05),
+      g = Num(conf.portraitBgColorG, 0.05),
+      b = Num(conf.portraitBgColorB, 0.05),
+      a = Num(conf.portraitBgColorA, 0.85),
+    },
+  }
+  CompilePortraitTexCoords(portrait, conf.portraitZoom, width, height, conf.portraitPanX, conf.portraitPanY)
+  return portrait
+end
+
 --- Single writer for every colour-domain power field. CompileSpecUncached and
 --- RefreshColorDomain both go through this, so the cheap in-place DIRTY_COLOR
 --- lane can never leave a power field stale against a full recompile.
@@ -1609,6 +1733,7 @@ local function CompileSpecUncached(kind, frame, unit, conf)
   local status = CompileStatus(kind, conf)
   local group = CompileGroupVisuals(kind, conf)
   local alpha = CompileAlpha(conf)
+  local portrait = CompilePortrait(kind, conf, h)
   local nameFontSize = Num(conf.nameFontSize, 12)
 
   return {
@@ -1676,6 +1801,7 @@ local function CompileSpecUncached(kind, frame, unit, conf)
     status = status,
     border = CompileBorderSpec(kind, conf, general),
     alpha = alpha,
+    portrait = portrait,
     auras = CompileCoreAuras(kind, conf),
     group = group,
     groupLayout = {

@@ -134,6 +134,7 @@ local function GroupSectionForComponent(pageKey, component)
         if component == "corners" or component == "ci" then return "ci" end
         return "indicators"
     end
+    if component == "portrait" then return "portrait" end
     if component == "power" then return "power" end
     if component == "name" or component == "hp" or component == "text" then return "text" end
     if component == "range" then return "range" end

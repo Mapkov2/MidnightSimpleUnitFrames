@@ -560,7 +560,6 @@ end
 local function ColorModeVisible()
     return HasCapability("colorMode", true)
         and (HasCustomColorMode() or HasNativeColorMode())
-        and not (IsGroupSettings(activeSettings, CurrentModeScope()) and CurrentKind() == "power")
 end
 
 local function TextColorPickerOptions(options, targets)

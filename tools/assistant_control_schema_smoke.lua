@@ -23,7 +23,8 @@ local normalTools = { "layout", "filters", "blacklist" }
 local customTools = { "setup", "layout", "filters", "whitelist" }
 -- custom4 is the "Dots on target" container. It tracks the player's own dots
 -- rather than filtering an arbitrary aura set, so it carries its own tool strip
--- (UNIT_AURA_TARGET_DOT_TOOLS) instead of the filters/whitelist pair.
+-- (UNIT_AURA_TARGET_DOT_TOOLS) instead of the filters/whitelist pair. It reads
+-- the player's dots off the target, so the player frame does not offer it.
 local targetDotTools = { "setup", "layout", "dots" }
 for _, unit in ipairs(units) do
     for _, container in ipairs({ "buff", "debuff" }) do
@@ -32,7 +33,9 @@ for _, unit in ipairs(units) do
     for index = 1, 3 do
         for _, tool in ipairs(customTools) do AddState("unit_" .. unit .. "_custom" .. index .. "_" .. tool) end
     end
-    for _, tool in ipairs(targetDotTools) do AddState("unit_" .. unit .. "_custom4_" .. tool) end
+    if unit ~= "player" then
+        for _, tool in ipairs(targetDotTools) do AddState("unit_" .. unit .. "_custom4_" .. tool) end
+    end
     AddState("unit_" .. unit .. "_custom1_filters_debuff")
 end
 for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
@@ -42,14 +45,16 @@ for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
     AddState("gf_" .. scope .. "_externals_layout")
 end
 for _, scope in ipairs({ "shared", "player", "target", "focus", "boss", "party", "raid" }) do
-    local containers = (scope == "player" or scope == "target" or scope == "focus" or scope == "boss")
-        and { "buff", "debuff", "custom1", "custom2", "custom3", "custom4" } or { "buff", "debuff" }
+    local containers = (scope == "target" or scope == "focus" or scope == "boss")
+        and { "buff", "debuff", "custom1", "custom2", "custom3", "custom4" }
+        or (scope == "player" and { "buff", "debuff", "custom1", "custom2", "custom3" })
+        or { "buff", "debuff" }
     for _, container in ipairs(containers) do AddState("style_" .. scope .. "_" .. container) end
 end
 for _, scope in ipairs({ "shared", "player", "target", "focus", "boss", "party", "raid" }) do
     for _, lane in ipairs({ "buff", "debuff" }) do AddState("compat_" .. lane .. "_" .. scope) end
 end
-Check(#expectedStateIds == 154, "finite state-matrix test definition")
+Check(#expectedStateIds == 150, "finite state-matrix test definition")
 
 local collectionStates, stateOrder = {}, {}
 for i = 1, #(Data.collectionStates or {}) do
@@ -60,12 +65,15 @@ for i = 1, #(Data.collectionStates or {}) do
     collectionStates[stateId] = count
     stateOrder[stateId] = i
 end
-Check(#(Data.collectionStates or {}) == #expectedStateIds, "complete 154-state inventory")
+Check(#(Data.collectionStates or {}) == #expectedStateIds, "complete 150-state inventory")
 -- Beta 36: +13 controls from the group Resource Bar parity cards, the group
 -- number style dropdown, the offline-fade toggle and the two dispel-overlay
 -- preview toggles.
-Check(collectionStates.base == 1611, "reviewed complete-catalog baseline")
-Check(Data.collectionUnionControls == 2401 and #Data.records == Data.collectionUnionControls,
+-- +30 controls for the Party-only Group Portrait workspace.
+Check(collectionStates.base == 1641, "reviewed complete-catalog baseline")
+-- -6 against Beta 36: the player frame no longer offers the Dots on target
+-- container, so its six player-only custom4 workspace controls are gone.
+Check(Data.collectionUnionControls == 2425 and #Data.records == Data.collectionUnionControls,
     "reviewed exhaustive finite-state control union")
 for i = 1, #Data.columns do columns[Data.columns[i]] = i end
 for _, column in ipairs({ "actionFixedArgs", "actionInputArg", "actionInputKind", "actionInputDomain",
@@ -166,7 +174,7 @@ Check(FunctionFree(Data), "generated schema data must remain function-free")
 local before = Schema.Stats()
 Check(before.version == 3, "schema version must be 3")
 Check(before.contexts == 40, "all 40 class/spec contexts must be present")
-Check(before.records == 2401, "public control inventory must equal the reviewed exhaustive finite-state union")
+Check(before.records == 2425, "public control inventory must equal the reviewed exhaustive finite-state union")
 Check(before.indexed == false, "schema index must remain lazy")
 
 local coldStart = os.clock()

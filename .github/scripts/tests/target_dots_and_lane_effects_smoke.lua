@@ -62,6 +62,16 @@ assert(runtime:find('rootKey = "TargetDotEffects"', 1, true), "target DoT Full-F
 assert(runtime:find('"custom3", "custom4"', 1, true), "fourth native lane is missing from runtime order")
 assert(runtime:find("math_min(4, math_max(1, tonumber(customIndex) or 1))", 1, true),
     "custom4 lane metrics still clamp to Custom 3")
+assert(runtime:find('if index == 4 and unit == "player" then return nil, nil end', 1, true),
+    "player frame can still compile a Dots on target lane")
+
+local editMode = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_EditMode.lua")
+assert(editMode:find('if spec.customIndex == 4 and unit == "player" then laneShown = false end', 1, true),
+    "player Edit Mode still offers a Dots on target lane")
+
+local layers = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_LayerOverview.lua")
+assert(layers:find('for index = 1, (scope.key == "player" and 3 or 4) do', 1, true),
+    "Layer overview still lists Dots on target for the player scope")
 
 local indicators = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_SpellIndicators.lua")
 assert(indicators:find("item.allowAnyAura ~= true", 1, true), "lane effects still require an exact SpellID")
@@ -69,6 +79,16 @@ assert(indicators:find('spellIndicators.rootKey or "SpellIndicators"', 1, true),
 
 local menu = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras.lua")
 assert(menu:find("custom4=Dots on target", 1, true), "Dots on target tab is missing")
+-- The player frame has no Dots on target container: its workspace tab bar and
+-- its Aura Style container bar both stop at Custom 3.
+assert(menu:find("UNIT_AURA_WORKSPACE_TABS_PLAYER", 1, true),
+    "player Aura workspace still offers the Dots on target tab")
+assert(menu:find("UNIT_STYLE_CONTAINER_VALUES_PLAYER", 1, true),
+    "player Aura Style page still offers the Dots on target container")
+assert(menu:find('if tab == "custom4" and unit == "player" then tab = "buff" end', 1, true),
+    "a stored player custom4 tab selection is not redirected")
+assert(menu:find('if scope == "player" and container == "custom4" then', 1, true),
+    "a stored player custom4 style container is not redirected")
 assert(menu:find('tool == "dots" and isTargetDots', 1, true), "curated DoT dropdown workspace is missing")
 assert(menu:find('"Custom Spell ID"', 1, true), "custom target DoT Spell ID input is missing")
 assert(menu:find("Model.AddCustomContainerSpell(unit, index, value, true)", 1, true),
@@ -80,6 +100,8 @@ assert(menu:find('b:CollapsibleSection(baseId .. "_full_frame", "Full-Frame Effe
 
 local preview = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Auras.lua")
 assert(preview:find("tonumber(customIndex) <= 4", 1, true), "custom4 preview kind is rejected")
+assert(preview:find('local maxCustomIndex = key == "player" and 3 or 4', 1, true),
+    "player preview still builds a Dots on target lane")
 assert(preview:find('item.enabled ~= true and not (kind == "custom4" and trackedPreview)', 1, true),
     "selected target DoTs do not reveal the unit-frame preview")
 assert(preview:find("model.CustomContainerPreviewEntries", 1, true),
@@ -88,7 +110,9 @@ assert(preview:find("bounds.previewTextures and bounds.previewTextures[i]", 1, t
     "unit-frame preview does not render selected target DoT icons")
 
 local collector = Read("tools/assistant_control_schema_collect.lua")
-assert(collector:find("#collectionStates == 154", 1, true), "Assistant schema state matrix omits target DoTs")
+assert(collector:find("#collectionStates == 150", 1, true), "Assistant schema state matrix omits target DoTs")
+assert(collector:find('if row.unit ~= "player" then', 1, true),
+    "player page must not collect Dots on target workspace states")
 assert(collector:find('{ "buff", "debuff", "custom1", "custom2", "custom3", "custom4" }', 1, true),
     "Assistant Aura style matrix omits target DoTs")
 

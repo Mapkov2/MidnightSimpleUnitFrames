@@ -630,6 +630,42 @@ do
     end
 end
 
+--- Party-only portrait defaults. Keep these assignments after the Raid/Mythic
+--- clone blocks above: those scopes intentionally do not own portrait config.
+PARTY_DEFAULTS.portraitMode = "OFF"
+PARTY_DEFAULTS.portraitRender = "2D"
+PARTY_DEFAULTS.portraitClassStyle = "BLIZZARD"
+PARTY_DEFAULTS.portraitShape = "SQUARE"
+PARTY_DEFAULTS.portraitSizeOverride = 0
+PARTY_DEFAULTS.portraitWidth = 0
+PARTY_DEFAULTS.portraitHeight = 0
+PARTY_DEFAULTS.portraitOffsetX = 0
+PARTY_DEFAULTS.portraitOffsetY = 0
+PARTY_DEFAULTS.portraitZoom = 100
+PARTY_DEFAULTS.portraitPanX = 0
+PARTY_DEFAULTS.portraitPanY = 0
+PARTY_DEFAULTS.portraitPlacement = "ATTACHED"
+PARTY_DEFAULTS.portraitDetachedPoint = "RIGHT"
+PARTY_DEFAULTS.portraitDetachedTo = "LEFT"
+PARTY_DEFAULTS.portraitOverlayAlign = "LEFT"
+PARTY_DEFAULTS.portraitLevelOffset = 7
+PARTY_DEFAULTS.portraitAlpha = 100
+PARTY_DEFAULTS.portraitCastSpellIcon = false
+PARTY_DEFAULTS.portraitBorderStyle = "NONE"
+PARTY_DEFAULTS.portraitBorderThickness = 2
+PARTY_DEFAULTS.portraitFillBorder = false
+PARTY_DEFAULTS.portraitBorderArt = "FLAT"
+PARTY_DEFAULTS.portraitBorderDirection = "UP"
+PARTY_DEFAULTS.portraitBorderColorR = 1
+PARTY_DEFAULTS.portraitBorderColorG = 1
+PARTY_DEFAULTS.portraitBorderColorB = 1
+PARTY_DEFAULTS.portraitBorderColorA = 1
+PARTY_DEFAULTS.portraitBgEnabled = false
+PARTY_DEFAULTS.portraitBgColorR = 0.05
+PARTY_DEFAULTS.portraitBgColorG = 0.05
+PARTY_DEFAULTS.portraitBgColorB = 0.05
+PARTY_DEFAULTS.portraitBgColorA = 0.85
+
 --- Priority Frames are a small secure duplicate strip for important raid
 --- members. Visuals intentionally inherit the active raid/mythic-raid spec;
 --- this table owns only activation, selection policy, and container geometry.
@@ -2967,9 +3003,29 @@ local INDICATOR_STYLE_KEYS = {
     phaseIcon      = "phaseIconStyle",
 }
 
+--- Midnight art is a "_midnight" file variant of a pack, not a pack of its own, so it used to
+--- ride on the scope-wide useMidnightIcons flag. The flag now travels inside the per-indicator
+--- style value ("UXPRO@MIDNIGHT") instead, which lets one dropdown per indicator cover every
+--- icon type. Splitting happens in the texture entry points, so any caller that just forwards a
+--- stored style value keeps working. useMidnightIcons stays as the fallback for older profiles.
+local MIDNIGHT_STYLE_SUFFIX = "@MIDNIGHT"
+
+local function SplitIconStyle(style)
+    if type(style) ~= "string" then return nil, false end
+    local base = style:match("^(.+)@MIDNIGHT$")
+    if base then return base, true end
+    return style, false
+end
+
+local function JoinIconStyle(style, useMidnight)
+    if type(style) ~= "string" or style == "" or useMidnight ~= true then return style end
+    return style .. MIDNIGHT_STYLE_SUFFIX
+end
+
 local function NormalizeIconStyle(style, fallback)
+    style = (SplitIconStyle(style))
     if type(style) ~= "string" or style == "" or style == "DEFAULT" then
-        style = fallback or "BLIZZARD"
+        style = (SplitIconStyle(fallback)) or "BLIZZARD"
     end
     if style == "BLIZZARD" or CUSTOM_STYLES[style] then return style end
     if ExternalIconPackByKey(style) then return style end
@@ -2979,11 +3035,21 @@ end
 local function IndicatorIconStyle(conf, indicatorKey)
     conf = (type(conf) == "table") and conf or {}
     local styleKey = INDICATOR_STYLE_KEYS[indicatorKey]
-    local style = styleKey and conf[styleKey] or nil
+    local style, midnight = SplitIconStyle(styleKey and conf[styleKey] or nil)
     if type(style) ~= "string" or style == "" or style == "DEFAULT" then
-        style = conf.iconStyle or "MSUF_ROLES"
+        style, midnight = SplitIconStyle(conf.iconStyle or "MSUF_ROLES")
+        if not midnight then midnight = conf.useMidnightIcons == true end
     end
-    return NormalizeIconStyle(style, "BLIZZARD")
+    return NormalizeIconStyle(style, "BLIZZARD"), midnight == true
+end
+
+--- Per-indicator override wins over the stored indicator style; both may carry the suffix.
+local function ResolveIndicatorIconStyle(conf, indicatorKey, styleOverride)
+    local base, midnight = SplitIconStyle(styleOverride)
+    if type(base) == "string" and base ~= "" and base ~= "DEFAULT" then
+        return NormalizeIconStyle(base, "BLIZZARD"), midnight == true
+    end
+    return IndicatorIconStyle(conf, indicatorKey)
 end
 
 local function CustomIconPath(style, file, useMidnight)
@@ -3166,7 +3232,9 @@ function GF.GetStatusIconAssetItems(iconType, variant, includeDefault, includeSt
 end
 
 function GF.GetStatusIconTexture(style, iconType, variant, useMidnight)
-    style = NormalizeIconStyle(style, "BLIZZARD")
+    local base, midnight = SplitIconStyle(style)
+    useMidnight = (useMidnight == true) or midnight
+    style = NormalizeIconStyle(base, "BLIZZARD")
     local file = StatusIconFile(iconType, variant)
     local folder = CUSTOM_STYLES[style]
     if folder and file then
@@ -3182,6 +3250,9 @@ function GF.GetStatusIconTexture(style, iconType, variant, useMidnight)
 end
 
 function GF.StatusIconPackSupports(style, iconType, variant, useMidnight)
+    local base, midnight = SplitIconStyle(style)
+    useMidnight = (useMidnight == true) or midnight
+    style = base
     if type(style) ~= "string" or style == "" or style == "DEFAULT" then return true end
     style = NormalizeIconStyle(style, "BLIZZARD")
     if style == "BLIZZARD" then return BuiltinStatusIconTexture(iconType, variant) ~= nil end
@@ -3200,20 +3271,20 @@ end
 
 function GF.GetRoleTexture(kind, role, styleOverride)
     local conf = GF.GetConf(kind)
-    local style = NormalizeIconStyle(styleOverride, IndicatorIconStyle(conf, "roleIcon"))
-    return GF.GetStatusIconTexture(style, "role", role, conf and conf.useMidnightIcons == true)
+    local style, useMidnight = ResolveIndicatorIconStyle(conf, "roleIcon", styleOverride)
+    return GF.GetStatusIconTexture(style, "role", role, useMidnight)
 end
 
 function GF.GetLeaderTexture(kind, styleOverride)
     local conf = GF.GetConf(kind)
-    local style = NormalizeIconStyle(styleOverride, IndicatorIconStyle(conf, "leaderIcon"))
-    return GF.GetStatusIconTexture(style, "leader", nil, conf and conf.useMidnightIcons == true)
+    local style, useMidnight = ResolveIndicatorIconStyle(conf, "leaderIcon", styleOverride)
+    return GF.GetStatusIconTexture(style, "leader", nil, useMidnight)
 end
 
 function GF.GetAssistTexture(kind, styleOverride)
     local conf = GF.GetConf(kind)
-    local style = NormalizeIconStyle(styleOverride, IndicatorIconStyle(conf, "assistIcon"))
-    return GF.GetStatusIconTexture(style, "assist", nil, conf and conf.useMidnightIcons == true)
+    local style, useMidnight = ResolveIndicatorIconStyle(conf, "assistIcon", styleOverride)
+    return GF.GetStatusIconTexture(style, "assist", nil, useMidnight)
 end
 
 GF.ICON_STYLE_ITEMS = {
@@ -3233,7 +3304,10 @@ GF.ICON_STYLE_ITEMS = {
     { key = "SQUARES",       label = "Squares"            },
 }
 
-function GF.GetIconStyleItems(includeDefault)
+--- includeMidnight appends the "_midnight" art of every pack that ships one as its own entry,
+--- so a single dropdown covers all icon types instead of pairing a style list with a separate
+--- Midnight toggle. Packs without midnight art (and BLIZZARD) contribute one entry only.
+function GF.GetIconStyleItems(includeDefault, includeMidnight)
     local out = {}
     local seenValues, seenLabels = {}, {}
     local function LabelKey(label)
@@ -3241,7 +3315,7 @@ function GF.GetIconStyleItems(includeDefault)
         label = label:gsub("^%s+", ""):gsub("%s+$", ""):gsub("%s+", " "):lower()
         return label ~= "" and label or nil
     end
-    local function AddStyleItem(value, text)
+    local function AddStyleItem(value, text, hasMidnight)
         value = type(value) == "string" and value or nil
         text = type(text) == "string" and text or value
         if not value or value == "" then return end
@@ -3250,25 +3324,41 @@ function GF.GetIconStyleItems(includeDefault)
         seenValues[value] = true
         if lk then seenLabels[lk] = true end
         out[#out + 1] = { value = value, text = text }
+        if not (includeMidnight and hasMidnight) then return end
+        local midnightValue = JoinIconStyle(value, true)
+        local midnightText = text .. " (Midnight)"
+        local mlk = LabelKey(midnightText)
+        if seenValues[midnightValue] or (mlk and seenLabels[mlk]) then return end
+        seenValues[midnightValue] = true
+        if mlk then seenLabels[mlk] = true end
+        out[#out + 1] = { value = midnightValue, text = midnightText }
     end
     if includeDefault then
         AddStyleItem("DEFAULT", "Follow global style")
     end
     for i = 1, #GF.ICON_STYLE_ITEMS do
         local item = GF.ICON_STYLE_ITEMS[i]
-        AddStyleItem(item.value or item.key, item.text or item.label or item.value or item.key)
+        local key = item.value or item.key
+        AddStyleItem(key, item.text or item.label or key,
+            CUSTOM_STYLES[key] ~= nil and not CUSTOM_STYLES_NO_MIDNIGHT_SUFFIX[key])
     end
     GF.RefreshExternalStatusIconPacks()
     for i = 1, #(_externalIconPackOrder or {}) do
         local pack = _externalIconPackOrder[i]
-        AddStyleItem(pack.key, pack.label)
+        AddStyleItem(pack.key, pack.label, pack.noMidnightSuffix ~= true)
     end
     return out
 end
 
-ExportPublic("MSUF_GetStatusIconPackValues", function(includeDefault)
-    return GF.GetIconStyleItems(includeDefault == true)
+--- Options/EditMode need the same encoding to show a stored style in a dropdown.
+GF.SplitIconStyle = SplitIconStyle
+GF.JoinIconStyle = JoinIconStyle
+
+ExportPublic("MSUF_GetStatusIconPackValues", function(includeDefault, includeMidnight)
+    return GF.GetIconStyleItems(includeDefault == true, includeMidnight == true)
 end)
+
+ExportPublic("MSUF_SplitStatusIconStyle", SplitIconStyle)
 
 ExportPublic("MSUF_GetStatusIconTexture", function(style, iconType, variant, useMidnight)
     return GF.GetStatusIconTexture(style, iconType, variant, useMidnight == true)

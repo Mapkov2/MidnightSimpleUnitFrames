@@ -146,7 +146,9 @@ for _, list in ipairs({ unitFiles, groupFiles, auraFiles }) do
                 elseif call:find("ControlMeta%(") or call:find("SettingMeta%(") or call:find("ReviewedMeta%(")
                     or call:find("FixedSettingMeta%(") or call:find("SelectedSlotMeta%(")
                     or call:find("AuraControlMeta%(") or call:find("StepMeta%(")
+                    or call:find("PortraitMeta%(")
                     or call:find("ResolveGroupControlMeta%(") or call:find("SharedControlMeta%(")
+                    or call:find("portraitEnableMeta", 1, true)
                     or call:find("metadata", 1, true) or call:match("[,%(]%s*meta%s*[,)%s]")
                     or (relative == "Shell/Menu2/Pages/MSUF_Menu2_UnitStatusSection.lua"
                         and content:sub(openAt + #call, openAt + #call + 900):find("RegisterStatusSearch%("))
@@ -255,7 +257,9 @@ end
 -- detached bar), and Range Fade adds the offline-fade toggle.
 -- The Group Dispel Overlay adds the ephemeral "Preview overlay" toggle, which
 -- drives the menu-owned stand-in tint and is never persisted.
-Check(factorySites == 209, string.format("interactive factory inventory drifted: expected 209, got %d", factorySites))
+-- The Party-only Group Portrait workspace adds six factory sites: its tab
+-- selector plus dropdown, slider, toggle, color, and enable-switch families.
+Check(factorySites == 215, string.format("interactive factory inventory drifted: expected 215, got %d", factorySites))
 
 local function AddUnique(list, seen, value)
     value = tostring(value or "")
@@ -308,8 +312,9 @@ for key in groupHandlesSource:gmatch('CreatePreviewHandle%(%s*"([^"]+)"') do
 end
 for i = 1, #groupStatus do AddUnique(groupHandles, groupHandleSeen, "status_" .. groupStatus[i]) end
 -- The detached group resource bar is draggable in the preview, adding the
--- "powerBar" handle alongside the text and aura handles.
-Check(#groupHandles == 28, string.format("Group preview fixed-handle inventory drifted: expected 28, got %d", #groupHandles))
+-- "powerBar" handle alongside the text and aura handles. Party Portrait adds
+-- one fixed "portrait" mouse handle for selection, drag, and menu navigation.
+Check(#groupHandles == 29, string.format("Group preview fixed-handle inventory drifted: expected 29, got %d", #groupHandles))
 Check(groupHandlesSource:find("function box:EnsureSpellIndicatorHandle(item, index)", 1, true) ~= nil
     and groupHandlesSource:find('CreatePreviewHandle(key, "si"', 1, true) ~= nil,
     "Group preview dynamic spell-handle provider is missing")

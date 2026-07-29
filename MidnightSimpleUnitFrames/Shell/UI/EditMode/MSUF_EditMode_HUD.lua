@@ -167,14 +167,25 @@ local function RegisterPreviewAnimationRefreshOwner()
     previewAnimRefreshRegistered = true
 end
 
+--- Hooks rather than SetScript: the shared themed button installs its hover
+--- repaint through SetScript("OnEnter"/"OnLeave"), and Menu2's ButtonSetScript
+--- only chains OnClick -- everything else is passed straight to the raw setter.
+--- Replacing those handlers here silently removed the hover styling from every
+--- toolbar button that carries a tooltip. Keeping the text on the widget makes
+--- re-tipping cheap and keeps exactly one handler pair installed.
 local function SetTip(widget, text)
     if not widget or not text then return end
-    widget:SetScript("OnEnter", function(self)
+    widget._msufTipText = text
+    if widget._msufTipHooked or not widget.HookScript then return end
+    widget._msufTipHooked = true
+    widget:HookScript("OnEnter", function(self)
+        local tip = self._msufTipText
+        if not tip then return end
         GameTooltip:SetOwner(self, "ANCHOR_BOTTOM", 0, -6)
-        GameTooltip:SetText(HelpText(text), 1, 1, 1, 1, true)
+        GameTooltip:SetText(HelpText(tip), 1, 1, 1, 1, true)
         GameTooltip:Show()
     end)
-    widget:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    widget:HookScript("OnLeave", function() GameTooltip:Hide() end)
 end
 
 local UNIT_KEYS = { player = true, target = true, focus = true, focustarget = true, targettarget = true, pet = true, boss = true }
@@ -457,6 +468,46 @@ function HUD.ResetCurrentPosition()
     HUD.RefreshControls()
 end
 
+--- The nav rail tints a hovered entry's label instead of only brightening it, so
+--- the toolbar controls do the same. Themed buttons carry a flag the shared
+--- painter reads (that survives SetActive/RefreshVisual repaints mid-hover);
+--- plain font strings on frames get a hook that captures and restores their own
+--- resting color, so theme swaps never bake in a stale base.
+local HOVER_TEXT_ACCENT = { 0.357, 0.608, 1.000, 1.000 }
+local function HoverTextAccentColor()
+    local ui = SharedUI()
+    if ui and ui.Color then return ui.Color("navHeaderHover", HOVER_TEXT_ACCENT) end
+    return HOVER_TEXT_ACCENT
+end
+
+local function AttachHoverTextAccent(widget, label)
+    if not widget or widget._msufHoverAccentHooked then return widget end
+    widget._msufHoverAccentHooked = true
+    widget._msuf2HoverTextAccent = true
+    --- Anything that owns a painter (themed button or the shared UI fallback)
+    --- repaints its label on OnLeave itself. Hooking on top of that would capture
+    --- the accent as the resting color and leave the label tinted for good.
+    if widget._msuf2Label or widget._msufUIFill then return widget end
+    label = label or widget._label
+    if not (label and label.SetTextColor and widget.HookScript) then return widget end
+    widget._msufHoverAccentLabel = label
+    widget:HookScript("OnEnter", function(self)
+        local fs = self._msufHoverAccentLabel
+        if not fs or self._msufHoverAccentActive then return end
+        self._msufHoverAccentActive = true
+        self._msufHoverAccentBase = { fs:GetTextColor() }
+        local c = HoverTextAccentColor()
+        fs:SetTextColor(c[1], c[2], c[3], c[4] or 1)
+    end)
+    widget:HookScript("OnLeave", function(self)
+        local fs = self._msufHoverAccentLabel
+        local base = self._msufHoverAccentBase
+        self._msufHoverAccentActive = nil
+        if fs and base then fs:SetTextColor(base[1], base[2], base[3], base[4] or 1) end
+    end)
+    return widget
+end
+
 local function MakeBtn(parent, text, w, h, fontRole, onClick)
     w = w or (#text * 8 + 18); h = h or BTN_H
     local ui = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
@@ -479,6 +530,7 @@ local function MakeBtn(parent, text, w, h, fontRole, onClick)
     dot:SetColorTexture(TH.onR, TH.onG, TH.onB, 0.90); dot:Hide()
     btn._dot = dot
     if onClick and not (ui and ui.Button) then btn:SetScript("OnClick", onClick) end
+    AttachHoverTextAccent(btn, label)
     return btn
 end
 
@@ -572,6 +624,9 @@ local function AddAdjustWidget(row, parent, width, height, withStateBg, onMouseW
     if onMouseUp then f:SetScript("OnMouseUp", onMouseUp) end
     if onMouseWheel then f:SetScript("OnMouseWheel", onMouseWheel) end
     if tip then SetTip(f, tip) end
+    --- After SetTip: it installs OnEnter/OnLeave with SetScript, which would drop
+    --- an earlier hook chain.
+    AttachHoverTextAccent(f, fs)
     row[#row + 1] = f
     return f, fs
 end
@@ -1589,7 +1644,6 @@ local function EnsureHUD()
             dot:SetColorTexture(TH.mutedR, TH.mutedG, TH.mutedB, 0.86)
         end
     end
-    SetTip(DockUI.grip, "Drag the six-dot handle to move and dock the toolbar.")
 
     DockUI.logo = CreateFrame("Frame", nil, hudFrame)
     local logoTexture = DockUI.logo:CreateTexture(nil, "ARTWORK")

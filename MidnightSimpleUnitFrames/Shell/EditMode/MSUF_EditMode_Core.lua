@@ -98,6 +98,23 @@ local function ApplyCastbarSettingsForKeySafe(unit)
     return did
 end
 
+--- Edit Mode writes offsets/sizes straight into MSUF_DB and never routes through
+--- MSUF_UFCore_NotifyConfigChanged the way Menu2 does, so nothing marks the
+--- UFCore config dirty. Factory.Apply(key) only refreshes the compiled spec for
+--- Apply(nil), which means a scoped apply would run against the pre-change spec
+--- and can re-anchor the frame to its old offsets. Refresh the spec first.
+local function RefreshUnitConfigSpec(UF, key)
+    local config = UF and UF.Config
+    if not (key and config and type(config.RefreshUnit) == "function") then return false end
+    local units = type(UF.UnitsForConfigKey) == "function" and UF.UnitsForConfigKey(key) or nil
+    if units then
+        for i = 1, #units do config.RefreshUnit(units[i]) end
+        return true
+    end
+    config.RefreshUnit(key)
+    return true
+end
+
 function Util.ApplySettingsForKeySafe(key)
     local groupKind = EditGroupKindForKey(key)
     if groupKind then return ApplyGroupSettingsForKeySafe(groupKind) end
@@ -108,6 +125,7 @@ function Util.ApplySettingsForKeySafe(key)
 
     local UF = MSUF and MSUF.UF
     if UF and UF.Apply then
+        RefreshUnitConfigSpec(UF, key)
         return UF.Apply(key) == true
     end
     if type(_G.MSUF_ApplyUnitFrameKey_Immediate) == "function" and key then

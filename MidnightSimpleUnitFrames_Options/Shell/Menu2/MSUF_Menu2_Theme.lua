@@ -2358,6 +2358,14 @@ local function ButtonVisual(btn, active, hover)
     local fill = btn._msuf2Fill
     local edge = btn._msuf2Edge
     local enabled = not (btn.IsEnabled and not btn:IsEnabled())
+    -- Opt-in text-only hover (Edit Mode toolbar): the label is the entire hover
+    -- affordance and the pill stays at its resting paint, whatever the state.
+    -- Declared up here because the role branches below return early -- a primary
+    -- or danger skinned button would otherwise never reach the generic painter.
+    -- Living in the painter rather than an OnEnter hook keeps it through the
+    -- SetActive and RefreshVisual repaints that fire while the cursor is on it.
+    local textOnlyHover = hover and btn._msuf2HoverTextAccent
+    local roleLit = active or (hover and not textOnlyHover)
     if not enabled then
         HideNavPillArt(btn)
         SetNavActiveFX(btn, false)
@@ -2378,40 +2386,52 @@ local function ButtonVisual(btn, active, hover)
     if btn._msuf2Danger then
         HideNavPillArt(btn)
         SetNavActiveFX(btn, false)
-        if active or hover then
+        if roleLit then
             SetFillGradient(fill, { 0.180, 0.040, 0.065, 0.97 }, 0.18, -0.18)
             edge:SetVertexColor(c.danger[1], c.danger[2], c.danger[3], 0.95)
         else
             SetFillGradient(fill, { 0.140, 0.030, 0.050, 0.94 }, 0.14, -0.20)
             edge:SetVertexColor(c.danger[1], c.danger[2], c.danger[3], 0.82)
         end
-        btn._msuf2Label:SetTextColor(c.text[1], c.text[2], c.text[3], 1)
+        if textOnlyHover then
+            SetLabelColor(btn._msuf2Label, c.navHeaderHover)
+        else
+            btn._msuf2Label:SetTextColor(c.text[1], c.text[2], c.text[3], 1)
+        end
         return
     end
     if btn._msuf2Primary then
         HideNavPillArt(btn)
         SetNavActiveFX(btn, false)
-        if active or hover then
+        if roleLit then
             SetFillGradient(fill, { c.coreBlue[1], c.coreBlue[2], c.coreBlue[3], 0.64 }, 0.08, -0.28)
             edge:SetVertexColor(c.coreGlow[1], c.coreGlow[2], c.coreGlow[3], 0.46)
         else
             SetFillGradient(fill, { c.coreBlue[1], c.coreBlue[2], c.coreBlue[3], 0.56 }, 0.07, -0.30)
             edge:SetVertexColor(c.coreGlow[1], c.coreGlow[2], c.coreGlow[3], 0.38)
         end
-        btn._msuf2Label:SetTextColor(1, 1, 1, 1)
+        if textOnlyHover then
+            SetLabelColor(btn._msuf2Label, c.navHeaderHover)
+        else
+            btn._msuf2Label:SetTextColor(1, 1, 1, 1)
+        end
         return
     end
     if btn._msuf2Success then
         HideNavPillArt(btn)
         SetNavActiveFX(btn, false)
-        if active or hover then
+        if roleLit then
             SetFillGradient(fill, { 0.060, 0.380, 0.180, 0.98 }, 0.18, -0.18)
             edge:SetVertexColor(0.220, 0.860, 0.420, 0.90)
         else
             SetFillGradient(fill, { 0.040, 0.280, 0.130, 0.95 }, 0.14, -0.20)
             edge:SetVertexColor(0.140, 0.660, 0.310, 0.82)
         end
-        btn._msuf2Label:SetTextColor(0.92, 1.00, 0.94, 1)
+        if textOnlyHover then
+            SetLabelColor(btn._msuf2Label, c.navHeaderHover)
+        else
+            btn._msuf2Label:SetTextColor(0.92, 1.00, 0.94, 1)
+        end
         return
     end
     if btn._msuf2NavItem then
@@ -2458,16 +2478,18 @@ local function ButtonVisual(btn, active, hover)
     if active then
         if btn._msuf2NavStripe then btn._msuf2NavStripe:Show() end
         local bg, br, tx = c.pillActive, c.pillEdgeActive, c.pillTextActive
+        if textOnlyHover then tx = c.navHeaderHover or tx end
         PaintButtonParts(fill, edge, btn._msuf2Label, bg, br, tx, 0.16, -0.15)
         PaintStoredNavIcon(btn, 1.00)
-    elseif hover then
+    elseif hover and not textOnlyHover then
         if btn._msuf2NavStripe then btn._msuf2NavStripe:Hide() end
         local bg, br = c.pillHover, c.pillEdgeHover
         PaintButtonParts(fill, edge, btn._msuf2Label, bg, br, c.text, 0.14, -0.18, 1)
         PaintStoredNavIcon(btn, 0.85)
     else
         if btn._msuf2NavStripe then btn._msuf2NavStripe:Hide() end
-        local bg, br, tx = c.pillBase, c.pillEdge, c.pillText
+        local bg, br = c.pillBase, c.pillEdge
+        local tx = textOnlyHover and (c.navHeaderHover or c.text) or c.pillText
         if btn._msuf2SolidPill then bg = c.pillBaseSolid end
         PaintButtonParts(fill, edge, btn._msuf2Label, bg, br, tx, 0.12, -0.20, 0.95)
         PaintStoredNavIcon(btn, 0.50)

@@ -448,7 +448,11 @@ for _, row in ipairs(layerRows) do
         emptyCustomDefaults = emptyCustomDefaults + 1
     end
 end
-assert(emptyCustomDefaults == 16, "combined Layer collector must expose all 16 empty Custom/Dots slots")
+-- Target/Focus/Boss expose Custom 1-3 plus Dots on target; the player frame has
+-- no Dots on target container and stops at Custom 3.
+assert(emptyCustomDefaults == 15, "combined Layer collector must expose all 15 empty Custom/Dots slots")
+assert(rowsById["auras3.player.custom.4.layer"] == nil,
+    "Layer collector still exposes a player Dots on target slot")
 assert(rowsById["unit.player.nameTextLayer"].layer == 30, "combined Layer collector did not clamp an upper sentinel")
 assert(rowsById["group.party.ciLayer"].layer == 0, "combined Layer collector did not clamp a lower sentinel")
 assert(rowsById["class-resources.classPowerFrameLevelOffset"].layer == 30,
