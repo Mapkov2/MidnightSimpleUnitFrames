@@ -1,5 +1,23 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-Beta39 - 2026-07-30
+
+### Highlights
+
+- Player frames gained a dedicated Defensive Buffs lane. MSUF tracks the curated defensive buffs for your class, lets you add or exclude individual spells, and can show the currently active defensive directly in the Player Portrait instead of beside the frame.
+- Dispel Symbols now show one symbol for each active dispel type by default on both unit and group frames. The previous single highest-priority symbol remains available as an option.
+
+### Changes
+
+- The player Defensive Buffs lane has its own setup, layout and defensive-spell controls in the Auras page, including a matching preview.
+- Group-frame previews now render multiple active Dispel Symbol types just like the live frames.
+- Aura management is easier to navigate: unit and group blacklists, Custom Aura whitelists, tracked DoTs and player Defensive Buffs gained search, clearer icon-and-Spell-ID entries and explicit Remove buttons. Blacklists can add an entire curated set or a single spell from it; Buff blacklists still accept an exact custom spell, while Debuff blacklists stay curated for 12.x.
+- Removed duplicate permanent-aura toggles from the Auras page.
+
+### Fixes & Performance
+
+- Fixed Group Portrait size overrides being forced to at least 16 pixels. Every positive slider value is now kept exactly; 0 still means automatic sizing.
+
 ## 6.0-Beta38 - 2026-07-29
 
 ### Highlights

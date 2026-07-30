@@ -8,10 +8,38 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-Beta38",
-    previousVersion = "6.0-Beta37",
-    rangeLabel = "6.0-Beta37 -> 6.0-Beta38",
+    currentVersion = "6.0-Beta39",
+    previousVersion = "6.0-beta38",
+    rangeLabel = "6.0-beta38 -> 6.0-Beta39",
     entries = {
+        {
+            version = "6.0-Beta39",
+            date = "2026-07-30",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Player frames gained a dedicated Defensive Buffs lane. MSUF tracks the curated defensive buffs for your class, lets you add or exclude individual spells, and can show the currently active defensive directly in the Player Portrait instead of beside the frame.",
+                        "Dispel Symbols now show one symbol for each active dispel type by default on both unit and group frames. The previous single highest-priority symbol remains available as an option.",
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "The player Defensive Buffs lane has its own setup, layout and defensive-spell controls in the Auras page, including a matching preview.",
+                        "Group-frame previews now render multiple active Dispel Symbol types just like the live frames.",
+                        "Aura management is easier to navigate: unit and group blacklists, Custom Aura whitelists, tracked DoTs and player Defensive Buffs gained search, clearer icon-and-Spell-ID entries and explicit Remove buttons. Blacklists can add an entire curated set or a single spell from it; Buff blacklists still accept an exact custom spell, while Debuff blacklists stay curated for 12.x.",
+                        "Removed duplicate permanent-aura toggles from the Auras page.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Fixed Group Portrait size overrides being forced to at least 16 pixels. Every positive slider value is now kept exactly; 0 still means automatic sizing.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-Beta38",
             date = "2026-07-29",
@@ -102,37 +130,6 @@ local data = {
                         "Fixed the options window rebuilding page header chrome twice on every page switch, and leaving the previous page's header in place when a page failed to build.",
                         "Less work on a target swap. A frame becoming visible skips the full runtime sequence when the identity pass that just ran already covered every element it has, the health gradient curve is prepared once when the bar is configured rather than on the first unit it sees, and a unit token with nothing behind it keeps its compiled prediction routes instead of rebuilding them.",
                         "Menu refreshes no longer restyle navigation buttons, castbar segments, scope selectors and the preview pin button that were already in the state being set.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-Beta35",
-            date = "2026-07-28",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "MSUF can now format every health, power, and resource number the same way on every client language. Blizzard's own abbreviator takes its breakpoints and letters from the game's locale, which inserts a space on some languages (\"123 K\"), uses different letters on others, and moves the decimal around, so the same value could read differently from one client language to the next. A new \"Number abbreviation\" control on the Misc page's Language section - Compact or Game default - switches every text surface (unit frames, group frames, class power) to a fixed, locale-independent breakpoint table (12.3K / 123M / 1.23B), with a live example line so the difference is visible before you commit to it. Game default remains exactly what you had, and CJK languages are left alone on purpose, since their abbreviations are intentionally different and were never the problem. The Assistant can set it too, in English and German (\"use compact numbers\", \"zahlen kuerzen\").",
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Cast Bars gained a \"Filtering & Feedback\" section with two new options, both off by default. \"Hide profession casts\" drops crafting and gathering casts before they reach a frame - the profession flag is never a protected value, so this also holds for units whose spell data is restricted in PvP. \"Show cast pushback\" appends the delay a cast has accumulated to its name, for example \"Fireball +0.4\".",
-                        "The per-unit \"Power texture\" and \"Power background\" dropdowns are gone from each frame's Visuals page. Power bar art is set once on the Bars page now, and any per-unit override you already had keeps resolving the same way.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed channels no longer draining when a cast reports no duration object, which the client hits often. Every manual bar write had started reading fill direction from the unified-direction setting instead of the cast type, so those channels filled like a cast instead of counting down. Channels now always count down unless \"Always use fill direction for all casts\" is on; casts and empowered casts are unaffected either way, and the native timer and the manual fallback render the same bar.",
-                        "Fixed MSUF fighting another unitframe addon over the same frame's parent. The client's frame-hiding accepts a parent that another addon already hid, so MSUF re-asserting its own hidden parent bounced the frame between both addons' hooks until the stack overflowed.",
-                        "The \"/rl\" reload shortcut is only claimed while it is still free, instead of unconditionally. It is a shared convenience command, and claiming it outright let load order alone decide which addon's handler answered it.",
-                        "\"Sync width to Class Resource\" now follows the class power bar's own show/hide transition. Nothing else was watching for that specific change, so a detached power bar could keep a stale synced width after the bar it was following disappeared.",
-                        "A detached power bar's fallback width no longer sticks to its last value after its source is hidden. Resolving the width and refreshing it are now separate steps, so a hidden source clears its cached width instead of keeping the stale number.",
-                        "The Group Indicators status-icon preview now highlights whichever of \"Current\" or \"All\" is the active preview mode, matching the unit frame visuals page and its preview helpers.",
-                        "Fixed the Dashboard's changelog and support disclosures jumping the whole page back to the top every time you opened or closed one. Auras and Group Auras already restored the reader's scroll position after this kind of rebuild; Dashboard used a plain page reselect that never carried the offset over. All three now share one implementation, so opening a card near the bottom of a long page no longer sends you back to the first line.",
                     },
                 },
             },
