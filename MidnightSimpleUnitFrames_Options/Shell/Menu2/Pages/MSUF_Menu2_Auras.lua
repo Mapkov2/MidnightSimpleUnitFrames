@@ -3259,19 +3259,16 @@ end
 local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
     local laneTitle = lane == "debuff" and "Debuff" or "Buff"
     local isDebuff = lane == "debuff"
-    local section = b:Section(laneTitle .. " Blacklist", isDebuff and 194 or 250)
+    local section = b:Section(laneTitle .. " Blacklist", isDebuff and 446 or 528)
     local w = section._msuf2Width or b.width or 720
     local inner = w - 48
-    -- Debuff lane only: the free-form spell-ID entry was removed on purpose.
-    -- 12.x debuff data is secret at runtime, so only the curated never-secret
-    -- preset spells can actually match; entries come from the presets below.
     if not isDebuff then
         local inputValue = ""
-        local inputW = max(260, floor(inner * 0.46))
-        local input = BindTextInput(ctx, section, "Spell ID, link, or name", 24, -36, inputW,
+        local inputW = max(140, min(floor(inner * 0.62), inner - 130))
+        local input = BindTextInput(ctx, section, "Enter buff Spell ID, link, or name", 24, -36, inputW,
             function() return inputValue end, function(value) inputValue = value or "" end,
-            false, AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.manual-input", "ephemeral"))
-        local add = ActionButton(section, "Add", 86)
+            false, AuraControlMeta(ctx, "unit-workspace.lane.buff.blacklist.manual-input", "ephemeral"))
+        local add = ActionButton(section, "Add custom buff", 118, "primary")
         add:SetPoint("TOPLEFT", section, "TOPLEFT", 36 + inputW, -60)
         add:SetScript("OnClick", function()
             local value = input and input.GetText and input:GetText() or inputValue
@@ -3281,102 +3278,156 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
             inputValue = ""
             return changed and true or false
         end)
-        RegisterAuraTextAction(ctx, add, input, "Add", "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.add", {
+        RegisterAuraTextAction(ctx, add, input, "Add custom buff", "unit-workspace.lane.buff.blacklist.add", {
             actionKey = "aura_blacklist_add_spell", actionFixedArgs = { scope = unit, lane = lane }, actionInputArg = "value",
         })
+        AddTooltip(add, "Add custom buff", "Adds one exact buff to this frame's blacklist.")
     end
-    local presetW = max(152, floor(inner * 0.22))
-    local spellW = max(210, floor(inner * 0.30))
+    local curatedOffset = isDebuff and 0 or -82
+    local presetW = max(130, min(floor(inner * 0.62), inner - 138))
+    local spellW = max(160, min(floor(inner * 0.68), inner - 108))
     local function CurrentPreset()
         local key = M.auraBlacklistPreset or "RAID_BUFFS"
         local values = Model.BlacklistPresetValues()
         for i = 1, #values do if values[i].value == key then return key end end
         return values[1] and values[1].value or "RAID_BUFFS"
     end
-    local presetY = isDebuff and -36 or -92
+    local function CurrentSpell()
+        local values, selected = Model.BlacklistSpellValues(CurrentPreset()), M.auraBlacklistSpell
+        for i = 1, #values do if values[i].value == selected then return selected end end
+        return values[1] and values[1].value or nil
+    end
     local preset = W.Dropdown(section, "Preset", function() return Model.BlacklistPresetValues() end, presetW)
-    W.MoveWidget(preset, section, 24, presetY, presetW)
+    W.MoveWidget(preset, section, 24, -36 + curatedOffset, presetW)
     M.BindDropdownWidget(ctx, preset, CurrentPreset, function(value) M.auraBlacklistPreset = value; M.auraBlacklistSpell = nil; QueueAurasPageRefresh(ctx, "aura-blacklist-preset") end,
         AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.preset-selection", "ephemeral"))
+    local addSet = ActionButton(section, "Add entire set", 126, "primary")
+    addSet:SetPoint("TOPLEFT", section, "TOPLEFT", 36 + presetW, -60 + curatedOffset)
+    addSet:SetScript("OnClick", function()
+        local count = Model.AddBlacklistPresetGroup(unit, CurrentPreset(), lane)
+        if count > 0 then ApplyUnit(ctx, unit, "AURAS3_BLACKLIST_PRESET_GROUP_ADD", true) end
+        return count > 0
+    end)
+    RegisterAuraControl(ctx, addSet, "Add entire set", "button", "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.add-preset-set", "action", {
+        actionKey = "aura_blacklist_add_preset", actionFixedArgs = { scope = unit, lane = lane }, actionInputArg = "preset",
+    })
+    AddTooltip(addSet, "Add entire set", "Blocks every aura in the selected curated MSUF set.")
+    local selectedSummary = W.Text(section, "", 24, -92 + curatedOffset, inner, T.colors.muted)
     local spell = W.Dropdown(section, "Spell", function() return Model.BlacklistSpellValues(CurrentPreset()) end, spellW)
-    W.MoveWidget(spell, section, 34 + presetW, presetY, spellW)
+    W.MoveWidget(spell, section, 24, -120 + curatedOffset, spellW)
     M.BindDropdownWidget(ctx, spell,
-        function()
-            local values, selected = Model.BlacklistSpellValues(CurrentPreset()), M.auraBlacklistSpell
-            for i = 1, #values do if values[i].value == selected then return selected end end
-            return values[1] and values[1].value or nil
-        end,
+        CurrentSpell,
         function(value) M.auraBlacklistSpell = value end,
         AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.spell-selection", "ephemeral"))
     local addSpell = ActionButton(section, "Add spell", 96)
-    addSpell:SetPoint("TOPLEFT", section, "TOPLEFT", 44 + presetW + spellW, presetY - 22)
+    addSpell:SetPoint("TOPLEFT", section, "TOPLEFT", 36 + spellW, -144 + curatedOffset)
     addSpell:SetScript("OnClick", function()
-        local values = Model.BlacklistSpellValues(CurrentPreset())
-        local spellID = M.auraBlacklistSpell or (values[1] and values[1].value)
-        if Model.AddBlacklistPresetSpell(unit, spellID, lane) then ApplyUnit(ctx, unit, "AURAS3_BLACKLIST_PRESET_ADD", true) end
+        local changed = Model.AddBlacklistPresetSpell(unit, CurrentSpell(), lane)
+        if changed then ApplyUnit(ctx, unit, "AURAS3_BLACKLIST_PRESET_ADD", true) end
+        return changed and true or false
     end)
     RegisterAuraControl(ctx, addSpell, "Add spell", "button", "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.add-preset-spell", "action", {
         actionKey = "aura_blacklist_add_spell", actionFixedArgs = { scope = unit, lane = lane }, actionInputArg = "value",
     })
-    local addSet = ActionButton(section, "Add set", 88)
-    addSet:SetPoint("LEFT", addSpell, "RIGHT", 8, 0)
-    addSet:SetScript("OnClick", function()
-        if Model.AddBlacklistPresetGroup(unit, CurrentPreset(), lane) then ApplyUnit(ctx, unit, "AURAS3_BLACKLIST_PRESET_GROUP_ADD", true) end
-    end)
-    RegisterAuraControl(ctx, addSet, "Add set", "button", "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.add-preset-set", "action", {
-        actionKey = "aura_blacklist_add_preset", actionFixedArgs = { scope = unit, lane = lane }, actionInputArg = "preset",
-    })
-    local prepared = W.Text(section, "", 24, presetY - 62, inner, T.colors.accent)
-    local empty = W.Text(section, isDebuff and "No blocked spells. Add one from the presets above."
-        or "No blocked spells. Add one above or use a preset.", 24, presetY - 92, inner, T.colors.muted)
+    AddTooltip(addSpell, "Add spell", "Blocks only the selected aura from the curated set.")
+    local prepared = W.Text(section, "", 24, -186 + curatedOffset, inner, T.colors.accent)
+    local searchValue = ""
+    local refreshList
+    local searchInput = BindTextInput(ctx, section, "Search", 24, -210 + curatedOffset, inner,
+        function() return searchValue end,
+        function(value)
+            searchValue = tostring(value or "")
+            if refreshList then refreshList() end
+        end,
+        true, AuraControlMeta(ctx,
+            "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.search", "ephemeral"))
+    if searchInput and searchInput.HookScript then
+        searchInput:HookScript("OnTextChanged", function(self)
+            searchValue = self.GetText and tostring(self:GetText() or "") or ""
+            if refreshList then refreshList() end
+        end)
+    end
+    local emptyText = isDebuff and "No blocked spells. Add one from the presets above."
+        or "No blocked spells. Add one above or use a preset."
+    local empty = W.Text(section, emptyText, 24, -284 + curatedOffset, inner, T.colors.muted)
     local listScroll = CreateFrame("ScrollFrame", nil, section, "UIPanelScrollFrameTemplate")
-    listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, presetY - 86)
-    listScroll:SetSize(inner - 20, 56)
+    listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -260 + curatedOffset)
+    listScroll:SetSize(inner - 20, 150)
     if listScroll.EnableMouseWheel then listScroll:EnableMouseWheel(true) end
     local listChild = CreateFrame("Frame", nil, listScroll)
-    listChild:SetSize(inner - 44, 56)
+    listChild:SetSize(inner - 44, 150)
     listScroll:SetScrollChild(listChild)
     if listScroll.SetPropagateMouseWheel then listScroll:SetPropagateMouseWheel(false) end
-    listScroll:SetScript("OnMouseWheel", function(self, delta) HandleNestedScrollWheel(self, delta, 32) end)
+    listScroll:SetScript("OnMouseWheel", function(self, delta) HandleNestedScrollWheel(self, delta, 44) end)
     local rows = {}
     local function EnsureRow(i)
         local row = rows[i]
         if row then return row end
-        row = CreateFrame("Button", nil, listChild)
-        row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((i - 1) * 24))
-        row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((i - 1) * 24))
-        row:SetHeight(20)
+        row = CreateFrame("Frame", nil, listChild)
+        row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((i - 1) * 44))
+        row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((i - 1) * 44))
+        row:SetHeight(40)
+        if T.ApplyBackdrop then T.ApplyBackdrop(row, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft) end
         row.icon = row:CreateTexture(nil, "ARTWORK")
-        row.icon:SetPoint("LEFT", row, "LEFT", 3, 0)
-        row.icon:SetSize(17, 17)
-        row.text = T.Font(row, "GameFontHighlightSmall", "", T.colors.text)
-        row.text:SetPoint("LEFT", row.icon, "RIGHT", 8, 0)
-        row:SetScript("OnClick", function(self)
-            Model.RemoveBlacklistSpell(unit, self._spellID, lane)
-            ApplyUnit(ctx, unit, "AURAS3_BLACKLIST_REMOVE", true)
+        row.icon:SetPoint("LEFT", row, "LEFT", 7, 0)
+        row.icon:SetSize(28, 28)
+        row.name = T.Font(row, "GameFontHighlightSmall", "", T.colors.text)
+        row.name:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 9, -1)
+        row.id = T.Font(row, "GameFontDisableSmall", "", T.colors.muted)
+        row.id:SetPoint("BOTTOMLEFT", row.icon, "BOTTOMRIGHT", 9, 1)
+        row.remove = ActionButton(row, "Remove", 80)
+        row.remove:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+        row.remove:SetScript("OnClick", function()
+            if row._spellID and Model.RemoveBlacklistSpell(unit, row._spellID, lane) then
+                ApplyUnit(ctx, unit, "AURAS3_BLACKLIST_REMOVE", true)
+            end
         end)
+        AddTooltip(row.remove, "Remove from blacklist", "Stops blocking this aura.")
         rows[i] = row
         return row
     end
-    M.TrackRefresh(ctx, function()
+    refreshList = function()
         local entries = Model.BlacklistEntries(unit, lane)
-        prepared:SetText((#entries == 1 and "1 blocked spell" or tostring(#entries) .. " blocked spells") .. " · click an entry to remove")
-        empty:SetShown(#entries == 0)
-        listScroll:SetShown(#entries > 0)
-        listChild:SetHeight(max(56, #entries * 24))
-        for i = 1, max(#rows, #entries) do
-            local row, entry = rows[i], entries[i]
+        local blocked = {}
+        for i = 1, #entries do blocked[tostring(entries[i].value)] = true end
+        local setSpells = Model.BlacklistSpellValues(CurrentPreset())
+        local missing = 0
+        for i = 1, #setSpells do if not blocked[tostring(setSpells[i].value)] then missing = missing + 1 end end
+        selectedSummary:SetText(tostring(#setSpells) .. " spells in this set - "
+            .. (missing == 0 and "all already blocked" or (tostring(missing) .. " can still be added")))
+        W.SetControlEnabled(addSet, missing > 0)
+        local selectedSpell = CurrentSpell()
+        W.SetControlEnabled(addSpell, selectedSpell ~= nil and not blocked[tostring(selectedSpell)])
+        local query = tostring(searchValue or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+        local visible = {}
+        for i = 1, #entries do
+            local entry = entries[i]
+            local haystack = (tostring(entry.text or "") .. " "
+                .. tostring(entry.spellID or entry.value or "")):lower()
+            if query == "" or haystack:find(query, 1, true) then visible[#visible + 1] = entry end
+        end
+        prepared:SetText((#entries == 1 and "Blocked spells (1)" or ("Blocked spells (" .. tostring(#entries) .. ")"))
+            .. (query ~= "" and (" - " .. tostring(#visible) .. " matches") or ""))
+        empty:SetText(#entries == 0 and Tr(emptyText) or M.Format(Tr("No results for \"%s\"."), query))
+        empty:SetShown(#visible == 0)
+        listScroll:SetShown(#visible > 0)
+        listChild:SetHeight(max(150, #visible * 44))
+        for i = 1, max(#rows, #visible) do
+            local row, entry = rows[i], visible[i]
             if entry then
                 row = EnsureRow(i)
                 row._spellID = entry.value
                 row.icon:SetTexture(entry.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
-                row.text:SetText(entry.text or entry.value)
-                RegisterAuraControl(ctx, row, entry.text or entry.value or "Blacklist entry", "button",
+                local name = tostring(entry.text or entry.value or "Spell"):gsub("%s*%(#%d+%)$", "")
+                row.name:SetText(name)
+                row.id:SetText(entry.spellID and (tostring("Spell ID ") .. tostring(entry.spellID)) or tostring(entry.value or ""))
+                RegisterAuraControl(ctx, row.remove, "Remove " .. name, "button",
                     "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.entry." .. AuraCatalogToken(entry.value) .. ".remove", "action")
                 row:Show()
             elseif row then row._spellID = nil; row:Hide() end
         end
-    end)
+    end
+    M.TrackRefresh(ctx, refreshList)
 end
 
 local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
@@ -3456,21 +3507,18 @@ end
 local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
     local laneTitle = lane == "debuff" and "Debuff" or "Buff"
     local isDebuff = lane == "debuff"
-    local section = b:Section(laneTitle .. " Blacklist", isDebuff and 236 or 250)
+    local section = b:Section(laneTitle .. " Blacklist", isDebuff and 502 or 528)
     local groupActionPath = "group-workspace.scope." .. AuraCatalogToken(scope)
         .. ".lane." .. AuraCatalogToken(lane) .. ".blacklist"
     local w = section._msuf2Width or b.width or 720
     local inner = w - 48
-    -- Debuff lane only: the free-form spell-ID entry was removed on purpose.
-    -- 12.x debuff data is secret at runtime, so only the curated never-secret
-    -- preset spells can actually match; entries come from the presets below.
     if not isDebuff then
         local inputValue = ""
-        local inputW = max(260, floor(inner * 0.46))
-        local input = BindTextInput(ctx, section, "Spell ID, link, or name", 24, -36, inputW,
+        local inputW = max(140, min(floor(inner * 0.62), inner - 130))
+        local input = BindTextInput(ctx, section, "Enter buff Spell ID, link, or name", 24, -36, inputW,
             function() return inputValue end, function(value) inputValue = value or "" end,
-            false, AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.manual-input", "ephemeral"))
-        local add = ActionButton(section, "Add", 86)
+            false, AuraControlMeta(ctx, "group-workspace.lane.buff.blacklist.manual-input", "ephemeral"))
+        local add = ActionButton(section, "Add custom buff", 118, "primary")
         add:SetPoint("TOPLEFT", section, "TOPLEFT", 36 + inputW, -60)
         add:SetScript("OnClick", function()
             local value = input and input.GetText and input:GetText() or inputValue
@@ -3483,12 +3531,14 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
             inputValue = ""
             return changed and true or false
         end)
-        RegisterAuraTextAction(ctx, add, input, "Add", groupActionPath .. ".add", {
+        RegisterAuraTextAction(ctx, add, input, "Add custom buff", groupActionPath .. ".add", {
             actionKey = "aura_group_blacklist_add_spell", actionFixedArgs = { scope = scope, lane = lane }, actionInputArg = "value",
         })
+        AddTooltip(add, "Add custom buff", "Adds one exact buff to this group's blacklist.")
     end
-    local presetW = max(152, floor(inner * 0.22))
-    local spellW = max(210, floor(inner * 0.30))
+    local curatedOffset = isDebuff and 0 or -82
+    local presetW = max(130, min(floor(inner * 0.62), inner - 138))
+    local spellW = max(160, min(floor(inner * 0.68), inner - 108))
     local function CurrentPreset()
         local defaultKey = lane == "debuff" and "SATED" or "RAID_BUFFS"
         local key = M.auraBlacklistPreset or defaultKey
@@ -3496,105 +3546,155 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
         for i = 1, #values do if values[i].value == key then return key end end
         return values[1] and values[1].value or defaultKey
     end
-    local presetY = isDebuff and -36 or -92
+    local function CurrentSpell()
+        local values, selected = Model.BlacklistSpellValues(CurrentPreset()), M.auraBlacklistSpell
+        for i = 1, #values do if values[i].value == selected then return selected end end
+        return values[1] and values[1].value or nil
+    end
     local preset = W.Dropdown(section, "Preset", function() return Model.BlacklistPresetValues() end, presetW)
-    W.MoveWidget(preset, section, 24, presetY, presetW)
+    W.MoveWidget(preset, section, 24, -36 + curatedOffset, presetW)
     M.BindDropdownWidget(ctx, preset, CurrentPreset, function(value)
         M.auraBlacklistPreset = value
         M.auraBlacklistSpell = nil
         QueueAurasPageRefresh(ctx, "group-aura-blacklist-preset")
     end, AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.preset-selection", "ephemeral"))
-    local spell = W.Dropdown(section, "Spell", function() return Model.BlacklistSpellValues(CurrentPreset()) end, spellW)
-    W.MoveWidget(spell, section, 34 + presetW, presetY, spellW)
-    M.BindDropdownWidget(ctx, spell,
-        function()
-            local values, selected = Model.BlacklistSpellValues(CurrentPreset()), M.auraBlacklistSpell
-            for i = 1, #values do if values[i].value == selected then return selected end end
-            return values[1] and values[1].value or nil
-        end,
-        function(value) M.auraBlacklistSpell = value end,
-        AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.spell-selection", "ephemeral"))
-    local addSpell = ActionButton(section, "Add spell", 96)
-    addSpell:SetPoint("TOPLEFT", section, "TOPLEFT", 44 + presetW + spellW, presetY - 22)
-    addSpell:SetScript("OnClick", function()
-        local values = Model.BlacklistSpellValues(CurrentPreset())
-        local spellID = M.auraBlacklistSpell or (values[1] and values[1].value)
-        if Model.AddGroupBlacklistSpell(scope, lane, spellID) then
+    local addSet = ActionButton(section, "Add entire set", 126, "primary")
+    addSet:SetPoint("TOPLEFT", section, "TOPLEFT", 36 + presetW, -60 + curatedOffset)
+    addSet:SetScript("OnClick", function()
+        local count = Model.AddGroupBlacklistPresetGroup(scope, lane, CurrentPreset())
+        if count > 0 then
             QueueGroupScope(scope, "visual")
             Rebuild(ctx)
         end
+        return count > 0
+    end)
+    RegisterAuraControl(ctx, addSet, "Add entire set", "button", groupActionPath .. ".add-preset-set", "action", {
+        actionKey = "aura_group_blacklist_add_preset", actionFixedArgs = { scope = scope, lane = lane }, actionInputArg = "preset",
+    })
+    AddTooltip(addSet, "Add entire set", "Blocks every aura in the selected curated MSUF set.")
+    local selectedSummary = W.Text(section, "", 24, -92 + curatedOffset, inner, T.colors.muted)
+    local spell = W.Dropdown(section, "Spell", function() return Model.BlacklistSpellValues(CurrentPreset()) end, spellW)
+    W.MoveWidget(spell, section, 24, -120 + curatedOffset, spellW)
+    M.BindDropdownWidget(ctx, spell,
+        CurrentSpell,
+        function(value) M.auraBlacklistSpell = value end,
+        AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.spell-selection", "ephemeral"))
+    local addSpell = ActionButton(section, "Add spell", 96)
+    addSpell:SetPoint("TOPLEFT", section, "TOPLEFT", 36 + spellW, -144 + curatedOffset)
+    addSpell:SetScript("OnClick", function()
+        local changed = Model.AddGroupBlacklistSpell(scope, lane, CurrentSpell())
+        if changed then
+            QueueGroupScope(scope, "visual")
+            Rebuild(ctx)
+        end
+        return changed and true or false
     end)
     RegisterAuraControl(ctx, addSpell, "Add spell", "button", groupActionPath .. ".add-preset-spell", "action", {
         actionKey = "aura_group_blacklist_add_spell", actionFixedArgs = { scope = scope, lane = lane }, actionInputArg = "value",
     })
-    local addSet = ActionButton(section, "Add set", 88)
-    addSet:SetPoint("LEFT", addSpell, "RIGHT", 8, 0)
-    addSet:SetScript("OnClick", function()
-        if Model.AddGroupBlacklistPresetGroup(scope, lane, CurrentPreset()) > 0 then
-            QueueGroupScope(scope, "visual")
-            Rebuild(ctx)
-        end
-    end)
-    RegisterAuraControl(ctx, addSet, "Add set", "button", groupActionPath .. ".add-preset-set", "action", {
-        actionKey = "aura_group_blacklist_add_preset", actionFixedArgs = { scope = scope, lane = lane }, actionInputArg = "preset",
-    })
-    local prepared = W.Text(section, "", 24, presetY - 62, inner, T.colors.accent)
-    local empty = W.Text(section, isDebuff and "No blocked spells. Add one from the presets above."
-        or "No blocked spells. Add one above or use a preset.", 24, presetY - 92, inner, T.colors.muted)
+    AddTooltip(addSpell, "Add spell", "Blocks only the selected aura from the curated set.")
+    local prepared = W.Text(section, "", 24, -186 + curatedOffset, inner, T.colors.accent)
+    local searchValue = ""
+    local refreshList
+    local searchInput = BindTextInput(ctx, section, "Search", 24, -210 + curatedOffset, inner,
+        function() return searchValue end,
+        function(value)
+            searchValue = tostring(value or "")
+            if refreshList then refreshList() end
+        end,
+        true, AuraControlMeta(ctx, groupActionPath .. ".search", "ephemeral"))
+    if searchInput and searchInput.HookScript then
+        searchInput:HookScript("OnTextChanged", function(self)
+            searchValue = self.GetText and tostring(self:GetText() or "") or ""
+            if refreshList then refreshList() end
+        end)
+    end
+    local emptyText = isDebuff and "No blocked spells. Add one from the presets above."
+        or "No blocked spells. Add one above or use a preset."
+    local empty = W.Text(section, emptyText, 24, -284 + curatedOffset, inner, T.colors.muted)
     local listScroll = CreateFrame("ScrollFrame", nil, section, "UIPanelScrollFrameTemplate")
-    listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, presetY - 86)
-    listScroll:SetSize(inner - 20, 56)
+    listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -260 + curatedOffset)
+    listScroll:SetSize(inner - 20, 150)
     if listScroll.EnableMouseWheel then listScroll:EnableMouseWheel(true) end
     local listChild = CreateFrame("Frame", nil, listScroll)
-    listChild:SetSize(inner - 44, 56)
+    listChild:SetSize(inner - 44, 150)
     listScroll:SetScrollChild(listChild)
     if listScroll.SetPropagateMouseWheel then listScroll:SetPropagateMouseWheel(false) end
-    listScroll:SetScript("OnMouseWheel", function(self, delta) HandleNestedScrollWheel(self, delta, 32) end)
+    listScroll:SetScript("OnMouseWheel", function(self, delta) HandleNestedScrollWheel(self, delta, 44) end)
     local rows = {}
     local function EnsureRow(i)
         local row = rows[i]
         if row then return row end
-        row = CreateFrame("Button", nil, listChild)
-        row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((i - 1) * 24))
-        row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((i - 1) * 24))
-        row:SetHeight(20)
+        row = CreateFrame("Frame", nil, listChild)
+        row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((i - 1) * 44))
+        row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((i - 1) * 44))
+        row:SetHeight(40)
+        if T.ApplyBackdrop then T.ApplyBackdrop(row, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft) end
         row.icon = row:CreateTexture(nil, "ARTWORK")
-        row.icon:SetPoint("LEFT", row, "LEFT", 3, 0)
-        row.icon:SetSize(17, 17)
-        row.text = T.Font(row, "GameFontHighlightSmall", "", T.colors.text)
-        row.text:SetPoint("LEFT", row.icon, "RIGHT", 8, 0)
-        row:SetScript("OnClick", function(self)
-            if self._spellID and Model.RemoveGroupBlacklistSpell(scope, lane, self._spellID) then
+        row.icon:SetPoint("LEFT", row, "LEFT", 7, 0)
+        row.icon:SetSize(28, 28)
+        row.name = T.Font(row, "GameFontHighlightSmall", "", T.colors.text)
+        row.name:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 9, -1)
+        row.id = T.Font(row, "GameFontDisableSmall", "", T.colors.muted)
+        row.id:SetPoint("BOTTOMLEFT", row.icon, "BOTTOMRIGHT", 9, 1)
+        row.remove = ActionButton(row, "Remove", 80)
+        row.remove:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+        row.remove:SetScript("OnClick", function()
+            if row._spellID and Model.RemoveGroupBlacklistSpell(scope, lane, row._spellID) then
                 QueueGroupScope(scope, "visual")
                 Rebuild(ctx)
             end
         end)
+        AddTooltip(row.remove, "Remove from blacklist", "Stops blocking this aura.")
         rows[i] = row
         return row
     end
-    M.TrackRefresh(ctx, function()
+    refreshList = function()
         local entries = type(Model.GroupBlacklistEntries) == "function" and Model.GroupBlacklistEntries(scope, lane) or {}
-        prepared:SetText((#entries == 1 and "1 blocked spell" or tostring(#entries) .. " blocked spells") .. " · click an entry to remove")
-        empty:SetShown(#entries == 0)
-        listScroll:SetShown(#entries > 0)
-        listChild:SetHeight(max(56, #entries * 24))
-        for i = 1, max(#rows, #entries) do
-            local row, entry = rows[i], entries[i]
+        local blocked = {}
+        for i = 1, #entries do blocked[tostring(entries[i].value)] = true end
+        local setSpells = Model.BlacklistSpellValues(CurrentPreset())
+        local missing = 0
+        for i = 1, #setSpells do if not blocked[tostring(setSpells[i].value)] then missing = missing + 1 end end
+        selectedSummary:SetText(tostring(#setSpells) .. " spells in this set - "
+            .. (missing == 0 and "all already blocked" or (tostring(missing) .. " can still be added")))
+        W.SetControlEnabled(addSet, missing > 0)
+        local selectedSpell = CurrentSpell()
+        W.SetControlEnabled(addSpell, selectedSpell ~= nil and not blocked[tostring(selectedSpell)])
+        local query = tostring(searchValue or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+        local visible = {}
+        for i = 1, #entries do
+            local entry = entries[i]
+            local haystack = (tostring(entry.text or "") .. " "
+                .. tostring(entry.spellID or entry.value or "")):lower()
+            if query == "" or haystack:find(query, 1, true) then visible[#visible + 1] = entry end
+        end
+        prepared:SetText((#entries == 1 and "Blocked spells (1)" or ("Blocked spells (" .. tostring(#entries) .. ")"))
+            .. (query ~= "" and (" - " .. tostring(#visible) .. " matches") or ""))
+        empty:SetText(#entries == 0 and Tr(emptyText) or M.Format(Tr("No results for \"%s\"."), query))
+        empty:SetShown(#visible == 0)
+        listScroll:SetShown(#visible > 0)
+        listChild:SetHeight(max(150, #visible * 44))
+        for i = 1, max(#rows, #visible) do
+            local row, entry = rows[i], visible[i]
             if entry then
                 row = EnsureRow(i)
                 row._spellID = entry.value
                 row.icon:SetTexture(entry.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
-                row.text:SetText(entry.text or entry.value)
-                RegisterAuraControl(ctx, row, entry.text or entry.value or "Blacklist entry", "button",
+                local name = tostring(entry.text or entry.value or "Spell"):gsub("%s*%(#%d+%)$", "")
+                row.name:SetText(name)
+                row.id:SetText(entry.spellID and (tostring("Spell ID ") .. tostring(entry.spellID)) or tostring(entry.value or ""))
+                RegisterAuraControl(ctx, row.remove, "Remove " .. name, "button",
                     groupActionPath .. ".entry." .. AuraCatalogToken(entry.value) .. ".remove", "action")
                 row:Show()
             elseif row then row._spellID = nil; row:Hide() end
         end
-    end)
+    end
+    M.TrackRefresh(ctx, refreshList)
     if lane == "debuff" then
         W.Text(section,
             "Friendly debuffs: exact blocking is limited to Blizzard NeverSecret auras such as Sated/Exhaustion.",
-            24, -190, inner, T.colors.muted)
+            24, -458, inner, T.colors.muted)
     end
 end
 
@@ -3761,14 +3861,32 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
     end
 
     if tool == "defensives" and isPlayerDefensives then
-        local section = b:Section("Defensive Buffs", 500)
+        local section = b:Section("Defensive Buffs", 560)
         local w = section._msuf2Width or b.width or 720
         local inner = w - 48
         local predefined = type(Model.PlayerDefensiveClassEntries) == "function"
             and Model.PlayerDefensiveClassEntries(true) or {}
         local predefinedStatus = W.Text(section, "", 24, -34, inner, T.colors.accent)
+        local searchValue = ""
+        local RefreshPredefined
+        local refreshCustom
+        local searchInput = BindTextInput(ctx, section, "Search", 24, -58, inner,
+            function() return searchValue end,
+            function(value)
+                searchValue = tostring(value or "")
+                if RefreshPredefined then RefreshPredefined() end
+                if refreshCustom then refreshCustom() end
+            end,
+            true, AuraControlMeta(ctx, "custom-container.player-defensives.search", "ephemeral"))
+        if searchInput and searchInput.HookScript then
+            searchInput:HookScript("OnTextChanged", function(self)
+                searchValue = self.GetText and tostring(self:GetText() or "") or ""
+                if RefreshPredefined then RefreshPredefined() end
+                if refreshCustom then refreshCustom() end
+            end)
+        end
         local predefinedScroll = CreateFrame("ScrollFrame", nil, section, "UIPanelScrollFrameTemplate")
-        predefinedScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -62)
+        predefinedScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -108)
         predefinedScroll:SetSize(inner - 20, 184)
         if predefinedScroll.EnableMouseWheel then predefinedScroll:EnableMouseWheel(true) end
         local predefinedChild = CreateFrame("Frame", nil, predefinedScroll)
@@ -3777,17 +3895,39 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
         if predefinedScroll.SetPropagateMouseWheel then predefinedScroll:SetPropagateMouseWheel(false) end
         predefinedScroll:SetScript("OnMouseWheel", function(self, delta) HandleNestedScrollWheel(self, delta, 30) end)
         local predefinedSwitches = {}
-        local function RefreshPredefined()
+        local predefinedIcons = {}
+        RefreshPredefined = function()
             local enabledCount = 0
+            local visibleCount = 0
+            local query = tostring(searchValue or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
             for i = 1, #predefined do
                 local entry = predefined[i]
                 local enabled = Model.PlayerDefensiveSpellEnabled(unit, entry.spellID)
                 if enabled then enabledCount = enabledCount + 1 end
                 local switch = predefinedSwitches[i]
                 if switch then switch:SetChecked(enabled) end
+                local icon = predefinedIcons[i]
+                local haystack = (tostring(entry.text or "") .. " " .. tostring(entry.spellID or "")):lower()
+                local shown = query == "" or haystack:find(query, 1, true) ~= nil
+                if shown then
+                    local y = -(visibleCount * 30)
+                    visibleCount = visibleCount + 1
+                    if icon then
+                        icon:ClearAllPoints()
+                        icon:SetPoint("TOPLEFT", predefinedChild, "TOPLEFT", 0, y)
+                    end
+                    if switch then
+                        switch:ClearAllPoints()
+                        switch:SetPoint("TOPLEFT", predefinedChild, "TOPLEFT", 30, y - 1)
+                    end
+                end
+                if icon then icon:SetShown(shown) end
+                if switch then switch:SetShown(shown) end
             end
             predefinedStatus:SetText(tostring(enabledCount) .. " / " .. tostring(#predefined)
-                .. " predefined enabled · active abilities and passive talent procs")
+                .. " predefined enabled"
+                .. (query ~= "" and (" - " .. tostring(visibleCount) .. " matches") or ""))
+            predefinedChild:SetHeight(max(184, visibleCount * 30))
         end
         for i = 1, #predefined do
             local entry = predefined[i]
@@ -3796,6 +3936,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             icon:SetPoint("TOPLEFT", predefinedChild, "TOPLEFT", 0, -((i - 1) * 30))
             icon:SetSize(22, 22)
             icon:SetTexture(entry.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
+            predefinedIcons[i] = icon
             local switch = W.SwitchAt(predefinedChild, entry.text or tostring(spellID),
                 30, -((i - 1) * 30) - 1, inner - 104)
             switch:SetScript("OnClick", function(self)
@@ -3809,12 +3950,12 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
         end
         M.TrackRefresh(ctx, RefreshPredefined)
         local customInputValue = ""
-        local customInput = BindTextInput(ctx, section, "Custom Buff Spell ID", 24, -278, max(300, inner - 132),
+        local customInput = BindTextInput(ctx, section, "Custom Buff Spell ID", 24, -322, max(140, inner - 132),
             function() return customInputValue end,
             function(value) customInputValue = value or "" end,
             false, AuraControlMeta(ctx, "custom-container.player-defensives.custom-id", "ephemeral"))
         local addCustom = ActionButton(section, "Add Custom ID", 108)
-        addCustom:SetPoint("TOPRIGHT", section, "TOPRIGHT", -24, -300)
+        addCustom:SetPoint("TOPRIGHT", section, "TOPRIGHT", -24, -344)
         addCustom:SetScript("OnClick", function()
             local value = customInput and customInput.GetText and customInput:GetText() or customInputValue
             local changed = Model.AddCustomContainerSpell(unit, index, value, true)
@@ -3834,11 +3975,11 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             })
         AddTooltip(customInput, "Custom Buff Spell ID",
             "Adds an exact helpful player aura ID in addition to the complete predefined list for your current class.")
-        local status = W.Text(section, "", 24, -348, inner, T.colors.accent)
-        local empty = W.Text(section, "No custom buffs added.", 24, -380, inner, T.colors.muted)
+        local status = W.Text(section, "", 24, -392, inner, T.colors.accent)
+        local empty = W.Text(section, "No custom buffs added.", 24, -442, inner, T.colors.muted)
         local listScroll = CreateFrame("ScrollFrame", nil, section, "UIPanelScrollFrameTemplate")
-        listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -374)
-        listScroll:SetSize(inner - 20, 96)
+        listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -418)
+        listScroll:SetSize(inner - 20, 118)
         if listScroll.EnableMouseWheel then listScroll:EnableMouseWheel(true) end
         local listChild = CreateFrame("Frame", nil, listScroll)
         listChild:SetSize(inner - 44, 104)
@@ -3867,17 +4008,27 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             rows[i] = row
             return row
         end
-        M.TrackRefresh(ctx, function()
+        refreshCustom = function()
             local entries = Model.CustomContainerSpellEntries(unit, index)
             local enabledPredefined = type(Model.PlayerDefensivePreviewEntries) == "function"
                 and #Model.PlayerDefensivePreviewEntries() or 0
+            local query = tostring(searchValue or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+            local visible = {}
+            for i = 1, #entries do
+                local entry = entries[i]
+                local haystack = (tostring(entry.text or "") .. " " .. tostring(entry.spellID or "")):lower()
+                if query == "" or haystack:find(query, 1, true) then visible[#visible + 1] = entry end
+            end
             status:SetText(tostring(enabledPredefined) .. " predefined enabled · "
-                .. tostring(#entries) .. " custom · click a custom entry to remove")
-            empty:SetShown(#entries == 0)
-            listScroll:SetShown(#entries > 0)
-            listChild:SetHeight(max(104, #entries * 24))
-            for i = 1, max(#rows, #entries) do
-                local row, entry = rows[i], entries[i]
+                .. tostring(#entries) .. " custom · click a custom entry to remove"
+                .. (query ~= "" and (" - " .. tostring(#visible) .. " matches") or ""))
+            empty:SetText(#entries == 0 and Tr("No custom buffs added.")
+                or M.Format(Tr("No results for \"%s\"."), query))
+            empty:SetShown(#visible == 0)
+            listScroll:SetShown(#visible > 0)
+            listChild:SetHeight(max(118, #visible * 24))
+            for i = 1, max(#rows, #visible) do
+                local row, entry = rows[i], visible[i]
                 if entry then
                     row = EnsureRow(i)
                     row._spellID = entry.spellID
@@ -3888,12 +4039,13 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                     row:Show()
                 elseif row then row._spellID = nil; row:Hide() end
             end
-        end)
+        end
+        M.TrackRefresh(ctx, refreshCustom)
         return
     end
 
     if tool == "dots" and isTargetDots then
-        local section = b:Section("Dots on target", 318)
+        local section = b:Section("Dots on target", 370)
         local w = section._msuf2Width or b.width or 720
         local inner = w - 48
         local values = type(Model.TargetDotValues) == "function" and Model.TargetDotValues() or {}
@@ -3901,7 +4053,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
         for i = 1, #values do
             if values[i].value then selected = values[i].value; break end
         end
-        local dropdown = BindDropdown(ctx, section, "DoT", 24, -34, values, max(300, inner - 132),
+        local dropdown = BindDropdown(ctx, section, "DoT", 24, -34, values, max(140, inner - 132),
             function() return selected end,
             function(value) selected = value end,
             AuraControlMeta(ctx, "custom-container.target-dots.selection", "ephemeral"))
@@ -3921,7 +4073,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
         })
         AddTooltip(dropdown, "Target DoT", "Curated Retail 12.0+ and 12.1 DoT auras. Tracking is always restricted to your current target and your own aura source.")
         local customInputValue = ""
-        local customInput = BindTextInput(ctx, section, "Custom Spell ID", 24, -94, max(300, inner - 132),
+        local customInput = BindTextInput(ctx, section, "Custom Spell ID", 24, -94, max(140, inner - 132),
             function() return customInputValue end,
             function(value) customInputValue = value or "" end,
             false, AuraControlMeta(ctx, "custom-container.target-dots.custom-id", "ephemeral"))
@@ -3946,9 +4098,24 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
         AddTooltip(customInput, "Custom Spell ID",
             "Adds an exact harmful aura ID that is missing from the curated list. The aura is still restricted to your current target and your own aura source.")
         local status = W.Text(section, "", 24, -162, inner, T.colors.accent)
-        local empty = W.Text(section, "No DoT selected. Choose one above or add a custom Spell ID.", 24, -194, inner, T.colors.muted)
+        local searchValue = ""
+        local refreshList
+        local searchInput = BindTextInput(ctx, section, "Search", 24, -186, inner,
+            function() return searchValue end,
+            function(value)
+                searchValue = tostring(value or "")
+                if refreshList then refreshList() end
+            end,
+            true, AuraControlMeta(ctx, "custom-container.target-dots.search", "ephemeral"))
+        if searchInput and searchInput.HookScript then
+            searchInput:HookScript("OnTextChanged", function(self)
+                searchValue = self.GetText and tostring(self:GetText() or "") or ""
+                if refreshList then refreshList() end
+            end)
+        end
+        local empty = W.Text(section, "No DoT selected. Choose one above or add a custom Spell ID.", 24, -260, inner, T.colors.muted)
         local listScroll = CreateFrame("ScrollFrame", nil, section, "UIPanelScrollFrameTemplate")
-        listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -188)
+        listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -236)
         listScroll:SetSize(inner - 20, 104)
         if listScroll.EnableMouseWheel then listScroll:EnableMouseWheel(true) end
         local listChild = CreateFrame("Frame", nil, listScroll)
@@ -3978,14 +4145,25 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             rows[i] = row
             return row
         end
-        M.TrackRefresh(ctx, function()
+        refreshList = function()
             local entries = Model.CustomContainerSpellEntries(unit, index)
-            status:SetText((#entries == 1 and "1 tracked DoT" or tostring(#entries) .. " tracked DoTs") .. " · click an entry to remove")
-            empty:SetShown(#entries == 0)
-            listScroll:SetShown(#entries > 0)
-            listChild:SetHeight(max(104, #entries * 24))
-            for i = 1, max(#rows, #entries) do
-                local row, entry = rows[i], entries[i]
+            local query = tostring(searchValue or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+            local visible = {}
+            for i = 1, #entries do
+                local entry = entries[i]
+                local haystack = (tostring(entry.text or "") .. " " .. tostring(entry.spellID or "")):lower()
+                if query == "" or haystack:find(query, 1, true) then visible[#visible + 1] = entry end
+            end
+            status:SetText((#entries == 1 and "1 tracked DoT" or tostring(#entries) .. " tracked DoTs")
+                .. " · click an entry to remove"
+                .. (query ~= "" and (" - " .. tostring(#visible) .. " matches") or ""))
+            empty:SetText(#entries == 0 and Tr("No DoT selected. Choose one above or add a custom Spell ID.")
+                or M.Format(Tr("No results for \"%s\"."), query))
+            empty:SetShown(#visible == 0)
+            listScroll:SetShown(#visible > 0)
+            listChild:SetHeight(max(104, #visible * 24))
+            for i = 1, max(#rows, #visible) do
+                local row, entry = rows[i], visible[i]
                 if entry then
                     row = EnsureRow(i)
                     row._spellID = entry.spellID
@@ -3996,21 +4174,27 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                     row:Show()
                 elseif row then row._spellID = nil; row:Hide() end
             end
-        end)
+        end
+        M.TrackRefresh(ctx, refreshList)
         return
     end
 
     if tool == "whitelist" then
-        local section = b:Section(containerLabel .. " Whitelist", 212)
+        local section = b:Section(containerLabel .. " Whitelist", 430)
         local w = section._msuf2Width or b.width or 720
         local inner = w - 48
+        local auraType = item.auraType == "DEBUFF" and "DEBUFF" or "BUFF"
+        local auraNoun = auraType == "DEBUFF" and "debuff" or "buff"
+        local auraPlural = auraNoun .. "s"
+        W.Text(section, auraType, 24, -36, 58, T.colors.accent)
+        W.Text(section, Tr(NATIVE_EXACT_AURA_FILTERS_TEXT), 88, -36, inner - 64, T.colors.muted)
         local inputValue = ""
-        local inputW = max(280, floor(inner * 0.62))
-        local input = BindTextInput(ctx, section, "Spell ID, link, or name", 24, -36, inputW,
+        local inputW = max(140, min(floor(inner * 0.62), inner - 120))
+        local input = BindTextInput(ctx, section, "Track a " .. auraNoun .. " - Spell ID, link, or name", 24, -76, inputW,
             function() return inputValue end, function(value) inputValue = value or "" end,
             false, AuraControlMeta(ctx, "custom-container.whitelist.input", "ephemeral"))
-        local add = ActionButton(section, "Add spell", 108)
-        add:SetPoint("TOPLEFT", section, "TOPLEFT", 36 + inputW, -60)
+        local add = ActionButton(section, "Add " .. auraNoun, 108, "primary")
+        add:SetPoint("TOPLEFT", section, "TOPLEFT", 36 + inputW, -100)
         add:SetScript("OnClick", function()
             local value = input and input.GetText and input:GetText() or inputValue
             local changed = Model.AddCustomContainerSpell(unit, index, value)
@@ -4022,61 +4206,100 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             end
             return changed and true or false
         end)
-        RegisterAuraTextAction(ctx, add, input, "Add spell", customActionPath .. ".whitelist.add", {
+        RegisterAuraTextAction(ctx, add, input, "Add " .. auraNoun, customActionPath .. ".whitelist.add", {
             actionKey = "aura_custom_whitelist_add_spell", actionFixedArgs = { scope = unit, index = index }, actionInputArg = "value",
         })
-        local status = W.Text(section, "", 24, -94, inner, T.colors.accent)
-        local empty = W.Text(section, "No spells tracked. Add up to 40 exact SpellIDs.", 24, -126, inner, T.colors.muted)
+        AddTooltip(input, "Exact aura tracking",
+            "Enter a Spell ID, paste a spell link, or type a spell name. This whitelist tracks exact Spell IDs.")
+        AddTooltip(add, "Add " .. auraNoun, "Adds this exact " .. auraNoun .. " to the custom container.")
+        local status = W.Text(section, "", 24, -136, floor(inner * 0.52), T.colors.accent)
+        local empty = W.Text(section, "No spells tracked. Add up to 40 exact SpellIDs.",
+            24, -238, inner, T.colors.muted)
+        local searchValue = ""
+        local refreshList
+        local searchInput = BindTextInput(ctx, section, "Search", 24, -164, inner,
+            function() return searchValue end,
+            function(value)
+                searchValue = tostring(value or "")
+                if refreshList then refreshList() end
+            end,
+            true, AuraControlMeta(ctx, "custom-container.whitelist.search", "ephemeral"))
+        if searchInput and searchInput.HookScript then
+            searchInput:HookScript("OnTextChanged", function(self)
+                searchValue = self.GetText and tostring(self:GetText() or "") or ""
+                if refreshList then refreshList() end
+            end)
+        end
         local listScroll = CreateFrame("ScrollFrame", nil, section, "UIPanelScrollFrameTemplate")
-        listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -116)
-        listScroll:SetSize(inner - 20, 84)
+        listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -214)
+        listScroll:SetSize(inner - 20, 190)
         if listScroll.EnableMouseWheel then listScroll:EnableMouseWheel(true) end
         local listChild = CreateFrame("Frame", nil, listScroll)
-        listChild:SetSize(inner - 44, 84)
+        listChild:SetSize(inner - 44, 190)
         listScroll:SetScrollChild(listChild)
         if listScroll.SetPropagateMouseWheel then listScroll:SetPropagateMouseWheel(false) end
-        listScroll:SetScript("OnMouseWheel", function(self, delta) HandleNestedScrollWheel(self, delta, 32) end)
+        listScroll:SetScript("OnMouseWheel", function(self, delta) HandleNestedScrollWheel(self, delta, 44) end)
         local rows = {}
         local function EnsureRow(i)
             local row = rows[i]
             if row then return row end
-            row = CreateFrame("Button", nil, listChild)
-            row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((i - 1) * 24))
-            row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((i - 1) * 24))
-            row:SetHeight(20)
+            row = CreateFrame("Frame", nil, listChild)
+            row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((i - 1) * 44))
+            row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((i - 1) * 44))
+            row:SetHeight(40)
+            if T.ApplyBackdrop then T.ApplyBackdrop(row, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft) end
             row.icon = row:CreateTexture(nil, "ARTWORK")
-            row.icon:SetPoint("LEFT", row, "LEFT", 3, 0)
-            row.icon:SetSize(17, 17)
-            row.text = T.Font(row, "GameFontHighlightSmall", "", T.colors.text)
-            row.text:SetPoint("LEFT", row.icon, "RIGHT", 8, 0)
-            row:SetScript("OnClick", function(self)
-                if self._spellID and Model.RemoveCustomContainerSpell(unit, index, self._spellID) then
+            row.icon:SetPoint("LEFT", row, "LEFT", 7, 0)
+            row.icon:SetSize(28, 28)
+            row.name = T.Font(row, "GameFontHighlightSmall", "", T.colors.text)
+            row.name:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 9, -1)
+            row.id = T.Font(row, "GameFontDisableSmall", "", T.colors.muted)
+            row.id:SetPoint("BOTTOMLEFT", row.icon, "BOTTOMRIGHT", 9, 1)
+            row.remove = ActionButton(row, "Remove", 80)
+            row.remove:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+            row.remove:SetScript("OnClick", function()
+                if row._spellID and Model.RemoveCustomContainerSpell(unit, index, row._spellID) then
                     Apply("AURAS3_CUSTOM_WHITELIST_REMOVE", true)
                     Rebuild(ctx)
                 end
             end)
+            AddTooltip(row.remove, "Remove from whitelist",
+                "Stops tracking this " .. auraNoun .. " in the custom container.")
             rows[i] = row
             return row
         end
-        M.TrackRefresh(ctx, function()
+        refreshList = function()
             local entries = Model.CustomContainerSpellEntries(unit, index)
-            status:SetText((#entries == 1 and "1 tracked spell" or tostring(#entries) .. " tracked spells") .. " · click an entry to remove")
-            empty:SetShown(#entries == 0)
-            listScroll:SetShown(#entries > 0)
-            listChild:SetHeight(max(84, #entries * 24))
-            for i = 1, max(#rows, #entries) do
-                local row, entry = rows[i], entries[i]
+            local query = tostring(searchValue or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+            local visible = {}
+            for i = 1, #entries do
+                local entry = entries[i]
+                local haystack = (tostring(entry.text or "") .. " " .. tostring(entry.spellID or "")):lower()
+                if query == "" or haystack:find(query, 1, true) then visible[#visible + 1] = entry end
+            end
+            status:SetText(tostring("Tracked ") .. auraPlural .. " (" .. tostring(#entries) .. " of 40)"
+                .. (query ~= "" and (" - " .. tostring(#visible) .. " matches") or ""))
+            empty:SetText(#entries == 0 and Tr("No spells tracked. Add up to 40 exact SpellIDs.")
+                or M.Format(Tr("No results for \"%s\"."), query))
+            empty:SetShown(#visible == 0)
+            listScroll:SetShown(#visible > 0)
+            listChild:SetHeight(max(190, #visible * 44))
+            for i = 1, max(#rows, #visible) do
+                local row, entry = rows[i], visible[i]
                 if entry then
                     row = EnsureRow(i)
                     row._spellID = entry.spellID
                     row.icon:SetTexture(entry.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
-                    row.text:SetText(entry.text or tostring(entry.spellID))
-                    RegisterAuraControl(ctx, row, entry.text or tostring(entry.spellID), "button",
+                    local name = tostring(entry.text or entry.spellID or "Spell"):gsub("%s*%(#%d+%)$", "")
+                    row.name:SetText(name)
+                    row.id:SetText(tostring("Spell ID ") .. tostring(entry.spellID))
+                    RegisterAuraControl(ctx, row.remove, "Remove " .. name, "button",
                         customActionPath .. ".whitelist.entry." .. AuraCatalogToken(entry.spellID) .. ".remove", "action")
                     row:Show()
                 elseif row then row._spellID = nil; row:Hide() end
             end
-        end)
+        end
+        M.TrackRefresh(ctx, refreshList)
         return
     end
 
