@@ -14,7 +14,10 @@ local floor = math.floor
 local max = math.max
 local min = math.min
 local GF_PREVIEW_NOTE = "Preview updates live here. Enter MSUF Edit Mode to drag the group container. Buff and Debuff handles can be adjusted in Group Frames > Auras."
-local GF_PREVIEW_EXPANDED_BOX_HEIGHT = 292
+-- The expanded stage grew by the height of the layer rail and the selection
+-- bar, which moved out of the stage's right-hand column and underneath it. The
+-- preview surface itself keeps its size and gains the freed column width.
+local GF_PREVIEW_EXPANDED_BOX_HEIGHT = 358
 local GF_PREVIEW_COMPACT_BOX_HEIGHT = 132
 local Tr = M.TranslateText or M.Tr or function(text) return text end
 local function SetPreviewHeaderStatus(body)
@@ -35,7 +38,7 @@ local function GFPreviewIntroMetrics(width)
     local noteLineH = 14
     local noteGap = 18
     local boxY = -(noteTop + (lines * noteLineH) + noteGap)
-    local contentH = max(378, -boxY + 292 + 14)
+    local contentH = max(378, -boxY + GF_PREVIEW_EXPANDED_BOX_HEIGHT + 14)
     return contentH, boxY
 end
 local function GroupPreviewScopeLabel()

@@ -622,6 +622,134 @@ function H.EnsurePreviewHandleGear(handle, opts)
     gear:SetShown(opts.shown == true)
     return gear
 end
+-- Zoom lock glyph, drawn from flat rects like the handle gear so it cannot fall
+-- back to a missing texture. "Locked" means the preview keeps the zoom the user
+-- dialled in instead of refitting whenever the footprint changes.
+local LOCK_ICON_RECTS = {
+    body = { 10, 7, 0, -3 },
+    postLeft = { 2, 5, -3, 2 },
+    postRight = { 2, 5, 3, 2 },
+    bow = { 8, 2, 0, 4 },
+}
+local function CreateZoomLockIcon(button)
+    if not (button and button.CreateTexture) or button._msuf2ZoomLockParts then return end
+    local parts = {}
+    for name, r in pairs(LOCK_ICON_RECTS) do
+        local tex = button:CreateTexture(nil, "ARTWORK", nil, 6)
+        tex:SetTexture("Interface\\Buttons\\WHITE8X8")
+        tex:SetSize(r[1], r[2])
+        tex:SetPoint("CENTER", button, "CENTER", r[3], r[4])
+        parts[name] = tex
+    end
+    button._msuf2ZoomLockParts = parts
+end
+local function PaintZoomLockIcon(button, locked, hover)
+    local parts = button and button._msuf2ZoomLockParts
+    if not parts then return end
+    local r, g, b = 0.55, 0.62, 0.74
+    if locked then r, g, b = 0.30, 0.86, 1.00 end
+    if hover then r, g, b = min(r * 1.25, 1), min(g * 1.25, 1), min(b * 1.25, 1) end
+    for _, tex in pairs(parts) do tex:SetVertexColor(r, g, b, locked and 1 or 0.82) end
+    -- An open shackle reads as "unlocked" at a glance; the closed one is the
+    -- only state in which the zoom survives a layer toggle.
+    parts.postRight:SetShown(locked)
+    parts.bow:ClearAllPoints()
+    parts.bow:SetPoint("CENTER", button, "CENTER", locked and 0 or 2, locked and 4 or 5)
+end
+
+--- Opt-in zoom lock: pins the current scale so layer toggles stop refitting the
+--- canvas. Only previews that pass `lockButton` get it; the shared zoom bar is
+--- otherwise unchanged.
+function H.EnsureZoomLockButton(box, zoomBar, opts)
+    if not (box and zoomBar) then return nil end
+    opts = opts or {}
+    local tr = opts.Tr or opts.TR or (M and M.Tr) or F.Identity
+    local T = opts.T or (M and M.Theme)
+    local btn = box.zoomLockButton
+    if not btn then
+        btn = CreateFrame("Button", nil, zoomBar, (T and T.Template and T.Template()) or "BackdropTemplate")
+        btn:SetSize(20, opts.buttonHeight or 20)
+        CreateZoomLockIcon(btn)
+        if H.StylePreviewPillButton then H.StylePreviewPillButton(btn, T, {}) end
+        box.zoomLockButton = btn
+    end
+    local function Locked() return box._manualZoom ~= nil end
+    local function Refresh()
+        local locked = Locked()
+        PaintZoomLockIcon(btn, locked, btn._msuf2PreviewPillHover == true)
+        if btn.MSUF2RefreshPreviewPill then btn:MSUF2RefreshPreviewPill(locked) end
+    end
+    box.RefreshZoomLock = Refresh
+    local function SetLocked(locked)
+        local setZoom = opts.SetZoom
+        if type(setZoom) ~= "function" then return false end
+        if locked then
+            local scale = tonumber(box._manualZoom) or tonumber(box._mockScale) or tonumber(box._mockAutoScale) or 1
+            setZoom(box, scale, opts.lockReason or "PREVIEW_ZOOM_LOCK")
+        else
+            setZoom(box, nil, opts.unlockReason or "PREVIEW_ZOOM_UNLOCK")
+        end
+        Refresh()
+        return Locked() == (locked == true)
+    end
+    btn:SetScript("OnClick", function() SetLocked(not Locked()) end)
+    -- The pill styling owns OnEnter/OnLeave through SetScript, so the tooltip
+    -- chains behind it. Hook exactly once; a second Ensure call would otherwise
+    -- stack duplicate tooltip handlers.
+    if not btn._msuf2ZoomLockHooked then
+        btn._msuf2ZoomLockHooked = true
+        btn:HookScript("OnEnter", function(self)
+            if type(box.RefreshZoomLock) == "function" then box.RefreshZoomLock() end
+            if GameTooltip then
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText(tr("Lock zoom"), 1, 1, 1)
+                GameTooltip:AddLine(tr("Locked: the preview keeps this zoom and position when you toggle layers."), 0.82, 0.82, 0.82, true)
+                GameTooltip:AddLine(tr("Unlocked: the preview refits itself whenever the frame footprint changes."), 0.55, 0.68, 0.86, true)
+                GameTooltip:Show()
+            end
+        end)
+        btn:HookScript("OnLeave", function()
+            if type(box.RefreshZoomLock) == "function" then box.RefreshZoomLock() end
+            if GameTooltip then GameTooltip:Hide() end
+        end)
+    end
+    btn._msuf2CommandAction = {
+        kind = "toggle",
+        historyMode = "none",
+        get = Locked,
+        set = SetLocked,
+    }
+    Refresh()
+    return btn
+end
+-- Right-click drag moves the preview canvas, which is the least discoverable
+-- gesture the preview has. The hint counts real moves (not bare clicks) and
+-- retires itself after three; the tally is persisted so it stays retired.
+local PREVIEW_MOVE_HINT_TARGET = 3
+function H.PreviewMoveHintState()
+    if M and type(M.GetPersistentMenuStateTable) == "function" then
+        return M.GetPersistentMenuStateTable("previewMoveHintState")
+    end
+    H._previewMoveHintFallback = H._previewMoveHintFallback or {}
+    return H._previewMoveHintFallback
+end
+function H.PreviewMoveHintRemaining()
+    local state = H.PreviewMoveHintState()
+    local done = tonumber(state and state.count) or 0
+    local remaining = PREVIEW_MOVE_HINT_TARGET - done
+    if remaining < 0 then return 0 end
+    return remaining
+end
+function H.NotePreviewCanvasMoved(button)
+    if button ~= "RightButton" then return H.PreviewMoveHintRemaining() end
+    local state = H.PreviewMoveHintState()
+    if type(state) ~= "table" then return 0 end
+    local done = tonumber(state.count) or 0
+    if done >= PREVIEW_MOVE_HINT_TARGET then return 0 end
+    state.count = done + 1
+    if M and type(M.SavePersistentMenuState) == "function" then M.SavePersistentMenuState() end
+    return H.PreviewMoveHintRemaining()
+end
 local function PreviewControlsLines(tr)
     tr = tr or F.Identity
     return {
@@ -872,6 +1000,8 @@ function H.InstallZoomPan(ZoomPan, opts)
         end
         local fitText = PathValue(box, opts.fitButtonTextPath or { "zoomFitButton", "fs" })
         if fitText then fitText:SetTextColor(zoom and 0.72 or 0.25, zoom and 0.78 or 0.95, zoom and 0.90 or 1.00, 1) end
+        -- Previews that opted into the zoom lock mirror the same state on it.
+        if type(box.RefreshZoomLock) == "function" then box.RefreshZoomLock() end
     end
     function ZoomPan.ApplyPan(box)
         if opts.panMode == "topLeft" then
@@ -967,10 +1097,20 @@ function H.InstallZoomPan(ZoomPan, opts)
     function ZoomPan.Stop(surface)
         if not surface then return end
         local box = surface[PAN_BOX]
+        -- Capture the completed gesture before the pan slots are cleared so a
+        -- preview can count real moves (button held AND position changed) and
+        -- retire its own onboarding hint.
+        local button = surface[PAN_BUTTON]
+        local startX, startY = surface[PAN_START_X], surface[PAN_START_Y]
         surface[PAN_PANNING], surface[PAN_BOX], surface[PAN_BUTTON] = nil, nil, nil
         surface[PAN_CURSOR_X], surface[PAN_CURSOR_Y] = nil, nil
         surface[PAN_START_X], surface[PAN_START_Y] = nil, nil
         surface:SetScript("OnUpdate", nil)
+        if box and type(box.OnPreviewCanvasMoved) == "function" and button then
+            local moved = (tonumber(box._zoomPanX) or 0) ~= (tonumber(startX) or 0)
+                or (tonumber(box._zoomPanY) or 0) ~= (tonumber(startY) or 0)
+            if moved then box.OnPreviewCanvasMoved(box, button) end
+        end
         local update = deps[opts.updateHintKey or "UpdateHandleHint"]
         if box and type(update) == "function" then update(box, box._selectedHandle) end
     end
@@ -1123,7 +1263,7 @@ function H.BuildZoomBar(box, surface, opts)
     end
     local prefix = opts.fieldPrefix or ""
     local zoomBar = CreateFrame("Frame", nil, surface, template)
-    zoomBar:SetSize(opts.width or 200, opts.height or 24)
+    zoomBar:SetSize(opts.width or (opts.lockButton and 226 or 200), opts.height or 24)
     zoomBar:SetPoint("TOPRIGHT", surface, "TOPRIGHT", -8, -8)
     zoomBar:SetBackdrop({ bgFile = tex, edgeFile = tex, edgeSize = 1 })
     if opts.flatChrome ~= false and (opts.T or opts.flatChrome == true) then
@@ -1178,9 +1318,16 @@ function H.BuildZoomBar(box, surface, opts)
     local fitButton = AddZoomButton("zoomFitButton", "Fit", 30, "Fit preview", function() setZoom(box, nil, opts.fitReason) end, readout)
     local oneButton = AddZoomButton("zoomOneButton", "1:1", 32, "Pixel preview", function() setZoom(box, 1, opts.oneReason) end, fitButton)
     local zoomIn = AddZoomButton("zoomInButton", "+", 20, "Zoom in", function() stepZoom(box, 1) end, oneButton)
-    AddZoomButton("zoomHelpButton", "?", 20, "Preview controls", function(self)
+    local helpButton = AddZoomButton("zoomHelpButton", "?", 20, "Preview controls", function(self)
         H.ShowPreviewControlsHelp(self, { M = opts.M or M, T = opts.T, W = opts.W, Tr = tr })
     end, zoomIn)
+    if opts.lockButton then
+        local lock = H.EnsureZoomLockButton(box, zoomBar, {
+            T = opts.T, Tr = tr, SetZoom = setZoom, buttonHeight = buttonH,
+            lockReason = opts.lockReason, unlockReason = opts.unlockReason,
+        })
+        if lock then lock:SetPoint("LEFT", helpButton, "RIGHT", 3, 0) end
+    end
     local function ZoomWheel(self, delta)
         local dir = (delta or 0) > 0 and 1 or -1
         -- Route the event explicitly. Toggling propagation from inside the
@@ -1548,26 +1695,44 @@ function H.RefreshLayerButton(btn, owner, opts)
         if btn.off then btn.off:SetTextColor(textOff[1], textOff[2], textOff[3], 0.78) end
     end
 end
+--- Chip rows measure themselves so a caller can flow them horizontally; the
+--- docked row layout keeps its fixed column width.
+local function LayoutLayerChip(btn, h)
+    btn.bar:SetSize(7, 7)
+    btn.bar:SetPoint("LEFT", btn, "LEFT", 8, 0)
+    btn.fs:ClearAllPoints()
+    btn.fs:SetPoint("LEFT", btn.bar, "RIGHT", 6, 0)
+    btn.fs:SetJustifyH("LEFT")
+    local textWidth = btn.fs.GetStringWidth and btn.fs:GetStringWidth() or 0
+    if not textWidth or textWidth <= 0 then textWidth = #tostring(btn.fs:GetText() or btn.key or "") * 6 end
+    btn:SetSize(floor(textWidth + 0.5) + 30, h)
+end
 function H.CreateLayerButton(parent, owner, def, index, sideW, opts)
     if not (parent and def) then return nil end
     opts = opts or {}
     local tr = opts.Tr or F.Identity
+    local chip = opts.layout == "chip"
     local btn = CreateFrame("Button", nil, parent)
     local h = opts.height or 20
-    btn:SetSize((sideW or 80) - 12, h)
-    btn:SetPoint("TOP", parent, "TOP", 0, -((opts.topOffset or 20) + ((index or 1) - 1) * (opts.rowHeight or h)))
+    if not chip then
+        btn:SetSize((sideW or 80) - 12, h)
+        btn:SetPoint("TOP", parent, "TOP", 0, -((opts.topOffset or 20) + ((index or 1) - 1) * (opts.rowHeight or h)))
+    end
     btn:EnableMouse(true)
     btn.key, btn.color, btn.tooltip = def.key, def.color, def.tooltip
     btn.bg = btn:CreateTexture(nil, "BACKGROUND")
     btn.bg:SetAllPoints()
     btn.bar = btn:CreateTexture(nil, "ARTWORK")
-    btn.bar:SetSize(3, h - 5)
-    btn.bar:SetPoint("LEFT", btn, "LEFT", 3, 0)
     btn.fs = btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    btn.fs:SetPoint("LEFT", btn.bar, "RIGHT", 8, 0)
-    btn.fs:SetPoint("RIGHT", btn, "RIGHT", opts.showOffText == true and -24 or -8, 0)
-    btn.fs:SetJustifyH("LEFT")
+    if not chip then
+        btn.bar:SetSize(3, h - 5)
+        btn.bar:SetPoint("LEFT", btn, "LEFT", 3, 0)
+        btn.fs:SetPoint("LEFT", btn.bar, "RIGHT", 8, 0)
+        btn.fs:SetPoint("RIGHT", btn, "RIGHT", opts.showOffText == true and -24 or -8, 0)
+        btn.fs:SetJustifyH("LEFT")
+    end
     btn.fs:SetText(tr(def.label))
+    if chip then LayoutLayerChip(btn, h) end
     if T and T.StyleFontString then T.StyleFontString(btn.fs, { 0.78, 0.84, 0.96, 1 }, 0) end
     btn.off = btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     btn.off:SetPoint("RIGHT", btn, "RIGHT", -2, 0)
@@ -1640,6 +1805,38 @@ function H.CreateLayerButton(parent, owner, def, index, sideW, opts)
     end)
     btn:Refresh()
     return btn
+end
+--- Flows measured layer chips into `rail`, wrapping when a row is full.
+--- Returns the height the rail needs, so callers can let the canvas absorb
+--- whatever the chips do not use instead of reserving a fixed strip.
+function H.FlowLayerChips(rail, buttons, opts)
+    opts = opts or {}
+    if not (rail and buttons) then return 0 end
+    local padX, padY = opts.padX or 8, opts.padY or 5
+    local gapX, gapY = opts.gapX or 5, opts.gapY or 4
+    local rowH = opts.rowHeight or 20
+    local available = (tonumber(opts.width) or (rail.GetWidth and rail:GetWidth()) or 0) - padX * 2
+    if available <= 0 then available = 480 end
+    local x, rows = 0, 1
+    for i = 1, #buttons do
+        local btn = buttons[i]
+        -- Hidden layer buttons (a feature the surface does not expose) must not
+        -- leave a gap in the flow.
+        if btn and (not btn.IsShown or btn:IsShown()) then
+            local w = (btn.GetWidth and btn:GetWidth()) or 60
+            if x > 0 and (x + w) > available then
+                x = 0
+                rows = rows + 1
+            end
+            btn:ClearAllPoints()
+            btn:SetPoint("TOPLEFT", rail, "TOPLEFT", padX + x, -(padY + (rows - 1) * (rowH + gapY)))
+            x = x + w + gapX
+        end
+    end
+    local height = padY * 2 + rows * rowH + (rows - 1) * gapY
+    if rail.SetHeight then rail:SetHeight(height) end
+    rail._msuf2ChipRows = rows
+    return height
 end
 local TEXT_FOCUS_SIDES = { "top", "bottom", "left", "right" }
 local EDGE_ANCHORS = {

@@ -2775,12 +2775,22 @@ function Render.Install(box, ctx, deps)
             RefreshHandleSelection(self)
             return
         end
+        local focusFrame = GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus()
+        -- Tab steps through the placed handles. Overlapping elements in dense
+        -- corners cannot all be reached by clicking, so keyboard traversal is
+        -- the only way to select what sits underneath. It also works with
+        -- nothing selected yet, and never while an edit box has focus.
+        if key == "TAB" and not focusFrame and M.PreviewSelectionBar then
+            if M.PreviewSelectionBar.CycleHandle(self, IsShiftKeyDown and IsShiftKeyDown()) then
+                if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(false) end
+                return
+            end
+        end
         local handle = self._selectedHandle
         if not handle or handle._locked then
             if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
             return
         end
-        local focusFrame = GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus()
         if focusFrame then
             if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
             return

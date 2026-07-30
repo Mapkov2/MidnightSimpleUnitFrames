@@ -64,5 +64,5 @@ classPower|Class|0.30,0.78,0.55
 castbar|Cast|0.20,0.90,0.85
 auras|Auras|0.42,0.72,1.00
 status|Status|0.85,0.70,0.25
-bounds|Bounds|1.00,0.22,0.12
+bounds|Bounds|0.25,0.75,0.88
 ]]

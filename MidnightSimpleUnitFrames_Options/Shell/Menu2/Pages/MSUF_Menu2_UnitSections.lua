@@ -251,7 +251,10 @@ local SetSectionHeaderStatus = UnitSectionShared.SetSectionHeaderStatus or funct
 -- Compact-by-default preview: the frame stays visible as a live reference
 -- while the settings keep the viewport; "Expand Preview" restores the full
 -- canvas. The mode is one shared, persisted state across all unit pages.
-local UNIT_PREVIEW_EXPANDED_BOX_HEIGHT = 292
+-- The expanded canvas grew by the height of the layer rail and the selection
+-- bar, which moved out of the canvas' right-hand column and underneath it. The
+-- preview surface itself keeps its size and gains the freed column width.
+local UNIT_PREVIEW_EXPANDED_BOX_HEIGHT = 358
 local UNIT_PREVIEW_COMPACT_BOX_HEIGHT = 132
 local function UnitPreviewBoxHeight()
     return M.unitPreviewExpanded == true and UNIT_PREVIEW_EXPANDED_BOX_HEIGHT or UNIT_PREVIEW_COMPACT_BOX_HEIGHT

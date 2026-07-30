@@ -216,7 +216,10 @@ local function RefreshPreviewAnimationButton(box)
     local btn = box and box._previewAnimationButton
     if not btn then return end
     local active = PreviewAnimationActive(box)
-    local text = active and "Stop" or "Combat"
+    -- The button plays an animation loop; it does not switch the preview into a
+    -- combat state. Label it after what it does, matching the Unit preview.
+    local label = active and "Stop" or "Animate"
+    local text = (M.Tr and M.Tr(label)) or label
     if btn.fs then
         btn.fs:SetText(text)
     elseif btn.SetText then
@@ -340,9 +343,9 @@ local function CreatePreviewAnimationButton(box, registerControl)
             return PreviewAnimationActive(box) == (enabled == true)
         end,
     }
-    (registerControl or RegisterGroupPreviewControl)(btn, "combat_animation", "Group Preview Combat Animation", "button", "ephemeral")
+    (registerControl or RegisterGroupPreviewControl)(btn, "combat_animation", "Group Preview Animation", "button", "ephemeral")
     if M.AddTooltip then
-        M.AddTooltip(btn, "Combat Preview", "Animates health, power, prediction bars, text values, aura timers, and combat-state indicators in this preview only. Pauses during combat.", { hook = true })
+        M.AddTooltip(btn, "Animate Preview", "Animates health, power, prediction bars, text values, aura timers, and combat-state indicators in this preview only. Pauses during combat.", { hook = true })
     end
     box._previewAnimationButton = btn
     box.RefreshAnimationButton = RefreshPreviewAnimationButton
@@ -419,27 +422,8 @@ local function ApplyGroupPinnedPresentation(box, pinned, opts, sideW)
         line:SetTexture(WHITE8X8)
         box._msuf2PinnedHeaderLine = line
     end
-    local canvasBottom = 12
-    if box._stage then
-        box._stage:ClearAllPoints()
-        box._stage:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -30)
-        box._stage:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -((sideW or 104) + 18), canvasBottom)
-    end
-    if box._layers and box._stage then
-        -- Height follows the row list, not the preview box. Pinning to
-        -- BOTTOMRIGHT stretched the panel to whatever the box happened to be and
-        -- silently clipped the tail of the strip on a short preview -- the last
-        -- layers simply were not there. The panel still starts at the stage's top
-        -- right and never grows past the box bottom.
-        local rows = box._visibleLayerButtonCount or #(box._layerButtons or {})
-        box._layers:ClearAllPoints()
-        box._layers:SetPoint("TOPLEFT", box._stage, "TOPRIGHT", 8, 0)
-        box._layers:SetPoint("TOPRIGHT", box, "TOPRIGHT", -12, 0)
-        local wanted = 32 + rows * 18 + 10
-        local available = (box.GetHeight and box:GetHeight() or 0) - 30 - canvasBottom
-        if available > 0 and wanted > available then wanted = available end
-        box._layers:SetHeight(wanted)
-    end
+    if M.PreviewSelectionBar then M.PreviewSelectionBar.SetShown(box, true) end
+    if box.ApplyDockedPreviewLayout then box:ApplyDockedPreviewLayout(12) end
     if box._footer then box._footer:SetShown(not pinned) end
     if shade then
         local bg = colors.coreShadow or { 0.006, 0.016, 0.032, 1 }
@@ -451,12 +435,7 @@ local function ApplyGroupPinnedPresentation(box, pinned, opts, sideW)
         line:SetColorTexture(border[1], border[2], border[3], pinned and 0.52 or 0)
         line:SetShown(pinned)
     end
-    if pinned and box._hint and not box._selectedHandle then
-        local text = "select a handle - gear opens exact settings - right-click quick actions - arrows nudge"
-        box._hint:SetText((M.Tr and M.Tr(text)) or text)
-    elseif not pinned and UpdateHint then
-        UpdateHint(box, box._selectedHandle)
-    end
+    if UpdateHint then UpdateHint(box, box._selectedHandle) end
 end
 local function EnsureGroupLayersButton(box)
     if box._msuf2LayersButton then return box._msuf2LayersButton end
@@ -545,12 +524,17 @@ local function ApplyGroupCompactPresentation(box, compact, sideW)
             stage:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -8, 8)
         end
         local layersBtn = EnsureGroupLayersButton(box)
+        if M.PreviewSelectionBar then M.PreviewSelectionBar.SetShown(box, false) end
         if layers and stage then
-            local rows = box._visibleLayerButtonCount or #(box._layerButtons or {})
             layers:ClearAllPoints()
             if box._msuf2CompactHeader then layers:SetPoint("TOPRIGHT", layersBtn, "BOTTOMRIGHT", 0, -6)
             else layers:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -28) end
-            layers:SetSize((sideW or 104) + 8, 32 + rows * 18 + 10)
+            -- The chips keep their flow inside the popover, sized to a readable
+            -- column; the caption is redundant behind a "Layers" button.
+            local popoverWidth = 268
+            layers:SetWidth(popoverWidth)
+            if box._msuf2LayerRailHeader then box._msuf2LayerRailHeader:Hide() end
+            if box.LayoutLayerRail then box:LayoutLayerRail(popoverWidth + 24) end
             if layers.SetFrameLevel and stage.GetFrameLevel then layers:SetFrameLevel((stage:GetFrameLevel() or 1) + 90) end
             layers:Hide()
         end
@@ -562,18 +546,8 @@ local function ApplyGroupCompactPresentation(box, compact, sideW)
     if box._hint then box._hint:Show() end
     SetGroupPreviewToolsShown(box, true)
     LayoutGroupPreviewHeaderControls(box, false)
-    if stage then
-        stage:ClearAllPoints()
-        stage:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -30)
-        stage:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -((sideW or 104) + 18), 12)
-    end
-    if layers and stage then
-        layers:ClearAllPoints()
-        layers:SetPoint("TOPLEFT", stage, "TOPRIGHT", 8, 0)
-        layers:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, 12)
-        if layers.SetFrameLevel and stage.GetFrameLevel then layers:SetFrameLevel((stage:GetFrameLevel() or 1) + 1) end
-        layers:Show()
-    end
+    if M.PreviewSelectionBar then M.PreviewSelectionBar.SetShown(box, true) end
+    if box.ApplyDockedPreviewLayout then box:ApplyDockedPreviewLayout(12) end
     if box._msuf2LayersButton then box._msuf2LayersButton:Hide() end
 end
 local function PreviewScopeLabel(kind)
@@ -1165,20 +1139,23 @@ local function HandleOffsets(handle)
     end
     return nil
 end
+--- The hint line is a message surface, nothing else. Selected element, offsets
+--- and actions live in the selection bar, the full control list behind the ?
+--- button, so the text no longer changes shape per selection.
+local function GroupPreviewDefaultHint()
+    local base = Tr("drag to move - Tab picks the next element - ? lists every control")
+    local remaining = PreviewHelpers.PreviewMoveHintRemaining and PreviewHelpers.PreviewMoveHintRemaining() or 0
+    if remaining > 0 then
+        return string.format("|cffff4d3f%s|r   %s",
+            string.format(Tr("Rightclick to move (%dx)"), remaining), base)
+    end
+    return base
+end
 UpdateHint = function(box, handle)
-    if not (box and box._hint) then return end
-    if not handle then
-        box._hint:SetText(Tr("drag handles - double-click/settings opens options - right-click actions - Ctrl+wheel zoom"))
-        return
-    end
-    local anchor, x, y = HandleOffsets(handle)
-    local nudgeHint = Tr("double-click/settings opens options - right-click actions - arrows nudge")
-    if anchor then
-        box._hint:SetText(string.format("%s   %s   x: %d   y: %d   %s",
-            HandleText(handle), tostring(anchor or "CENTER"), Round(x or 0), Round(y or 0), nudgeHint))
-    else
-        box._hint:SetText(string.format("%s   %s", HandleText(handle), nudgeHint))
-    end
+    if not box then return end
+    if M.PreviewSelectionBar then M.PreviewSelectionBar.Refresh(box) end
+    if not box._hint then return end
+    box._hint:SetText(GroupPreviewDefaultHint())
 end
 local NudgeStep = PreviewHelpers.NudgeStep or F.One
 local function RefreshHandleSelection(box)
@@ -1358,8 +1335,8 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         chrome = { title = T.colors.title or T.colors.text, layerHeader = T.colors.muted }
         ApplyGroupPreviewFlatBackdrop(box, R.WHITE8X8, T.colors.panel or T.colors.panel2, T.colors.borderSoft or T.colors.border)
     end
-    box:SetSize(width, 292)
-    box._msufStaticH = 292
+    box:SetSize(width, 358)
+    box._msufStaticH = 358
     box.ApplyPinnedPreviewPresentation = function(self, pinned, opts)
         if pinned then
             if PreviewHelpers.SwitchCompactZoomMode then PreviewHelpers.SwitchCompactZoomMode(self, false, 1.50) end
@@ -1380,12 +1357,14 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     title:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -8)
     title:SetText(string.format((M.Tr and M.Tr("%s - %s")) or "%s - %s", (M.Tr and M.Tr("Group Frame Preview")) or "Group Frame Preview", H.PreviewScopeLabel(H.CurrentScope())))
     box._title = title
-    local hint = T.Font(box, "GameFontDisableSmall", R.Tr("drag handles - double-click/settings opens options - right-click actions - Ctrl+wheel zoom"), T.colors.muted)
+    local hint = T.Font(box, "GameFontDisableSmall", "", T.colors.muted)
     hint:SetPoint("LEFT", title, "RIGHT", 12, 0)
     box._hint = hint
+    -- The stage is re-anchored against the selection bar by
+    -- ApplyDockedPreviewLayout once the layer rail exists.
     local stage = CreateFrame("Frame", nil, box, T.Template())
     stage:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -30)
-    stage:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -(layerW + 18), 12)
+    stage:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, 12)
     if PreviewHelpers.ApplyPreviewChrome then
         PreviewHelpers.ApplyPreviewChrome(stage, "canvas", T, function(frame, bg, border)
             ApplyGroupPreviewFlatBackdrop(frame, R.WHITE8X8, bg, border)
@@ -1413,6 +1392,9 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         StopPan = R.StopPan,
         fitReason = "GROUP_PREVIEW_ZOOM_FIT",
         oneReason = "GROUP_PREVIEW_ZOOM_1TO1",
+        lockButton = true,
+        lockReason = "GROUP_PREVIEW_ZOOM_LOCK",
+        unlockReason = "GROUP_PREVIEW_ZOOM_UNLOCK",
     })
     box._msuf2ZoomCommand = box._msuf2ZoomCommand
         or (PreviewHelpers.BuildZoomCommand and PreviewHelpers.BuildZoomCommand(box, GFZoomPan, "GROUP_PREVIEW_ASSISTANT_ZOOM"))
@@ -1426,6 +1408,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         { "_zoomOneButton", "zoom.one_to_one", "Pixel preview" },
         { "_zoomInButton", "zoom.in", "Zoom in" },
         { "_zoomHelpButton", "zoom.help", "Preview controls help" },
+        { "zoomLockButton", "zoom.lock", "Lock preview zoom" },
     }
     for i = 1, #zoomControls do
         local info = zoomControls[i]
@@ -1441,7 +1424,8 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     local bounds = CreateFrame("Frame", nil, stage, T.Template())
     bounds:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
     bounds:SetBackdropColor(0, 0, 0, 0)
-    bounds:SetBackdropBorderColor(0.90, 0.05, 0.02, 0.95)
+    -- Bounds mark a measurement, not a problem; cyan matches the Unit preview.
+    bounds:SetBackdropBorderColor(0.25, 0.75, 0.88, 0.92)
     box._bounds = bounds
     local layers = CreateFrame("Frame", nil, box, T.Template())
     local layerColors = T.colors or {}
@@ -1452,12 +1436,15 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     else
         ApplyGroupPreviewFlatBackdrop(layers, R.WHITE8X8, layerColors.coreShadow or layerColors.panel, layerColors.borderSoft)
     end
-    layers:SetPoint("TOPLEFT", stage, "TOPRIGHT", 8, 0)
+    -- Layer chips flow along the bottom edge instead of holding a fixed column,
+    -- so the stage keeps the full card width. Same treatment as the Unit preview.
+    layers:SetPoint("BOTTOMLEFT", box, "BOTTOMLEFT", 12, 12)
     layers:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, 12)
-    if layers.SetClipsChildren then layers:SetClipsChildren(true) end
+    layers:SetHeight(30)
     box._layers = layers
     local layersTitle = R.LayerFont(layers, "LAYERS", chrome.layerHeader or (T.colors and T.colors.muted) or R.LayerHeaderColor)
-    layersTitle:SetPoint("TOP", layers, "TOP", 0, -5)
+    layersTitle:SetPoint("LEFT", layers, "LEFT", 10, 0)
+    box._msuf2LayerRailHeader = layersTitle
     local layerDefaults = {
         guides = true,
         bounds = true,
@@ -1480,7 +1467,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     local layerVisibility = M.gfPreviewLayerVisible
     local layerDefs = {
         { "Guides", { 0.42, 0.72, 1.00 }, "layout", "guides" },
-        { "Bounds", { 1.00, 0.22, 0.12 }, "layout", "bounds" },
+        { "Bounds", { 0.25, 0.75, 0.88 }, "layout", "bounds" },
         { "Power", { 0.30, 0.62, 0.98 }, "power", "power" },
         { "Buffs", { 0.20, 0.90, 0.35 }, "buffs", "buff" },
         { "Tracked", { 0.42, 0.68, 1.00 }, "buffs", "trackedBuff" },
@@ -1500,8 +1487,9 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     local disabledLayerText = layerColors.dim or { 0.36, 0.46, 0.60, 0.82 }
     local groupLayerButtonOpts = {
         Tr = R.Tr,
-        height = 18,
-        rowHeight = 18,
+        layout = "chip",
+        height = 20,
+        rowHeight = 20,
         topOffset = 23,
         showOffText = false,
         quiet = true,
@@ -1578,6 +1566,50 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         RegisterPreviewControl(btn, "layer." .. tostring(def[4]), def[1] .. " preview layer", "button", "ephemeral")
         if def[4] == "portrait" then btn:Hide() end
         box._layerButtons[#box._layerButtons + 1] = btn
+    end
+    box.LayoutLayerRail = function(self, railWidth)
+        if not PreviewHelpers.FlowLayerChips then return 30 end
+        railWidth = tonumber(railWidth) or (self._layers and self._layers.GetWidth and self._layers:GetWidth()) or 0
+        local headerWidth = 0
+        local header = self._msuf2LayerRailHeader
+        if header and header:IsShown() then
+            headerWidth = ((header.GetStringWidth and header:GetStringWidth()) or 44) + 18
+        end
+        return PreviewHelpers.FlowLayerChips(self._layers, self._layerButtons, {
+            width = railWidth - headerWidth,
+            padX = 10 + headerWidth,
+            rowHeight = 20,
+        })
+    end
+    -- One layout path for the docked and floating states: chips on the bottom
+    -- edge, selection bar above them, stage takes whatever is left.
+    box.ApplyDockedPreviewLayout = function(self, bottomInset)
+        bottomInset = tonumber(bottomInset) or 12
+        local rail, selection, surface = self._layers, self._msuf2SelectionBar, self._stage
+        if not surface then return end
+        if rail then
+            rail:ClearAllPoints()
+            rail:SetPoint("BOTTOMLEFT", self, "BOTTOMLEFT", 12, bottomInset)
+            rail:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", -12, bottomInset)
+            if rail.SetFrameLevel and surface.GetFrameLevel then
+                rail:SetFrameLevel((surface:GetFrameLevel() or 1) + 1)
+            end
+            if self._msuf2LayerRailHeader then self._msuf2LayerRailHeader:Show() end
+            rail:Show()
+            self:LayoutLayerRail((self.GetWidth and self:GetWidth() or 0) - 24)
+        end
+        surface:ClearAllPoints()
+        surface:SetPoint("TOPLEFT", self, "TOPLEFT", 12, -30)
+        if selection and rail then
+            selection:ClearAllPoints()
+            selection:SetPoint("BOTTOMLEFT", rail, "TOPLEFT", 0, 6)
+            selection:SetPoint("BOTTOMRIGHT", rail, "TOPRIGHT", 0, 6)
+            selection:Show()
+            surface:SetPoint("BOTTOMRIGHT", selection, "TOPRIGHT", 0, 6)
+        else
+            surface:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", -12, bottomInset)
+        end
+        if self._msuf2ElementPicker then self._msuf2ElementPicker:Show() end
     end
     local mock = CreateFrame("Frame", nil, stage, T.Template())
     mock:SetBackdrop({ bgFile = R.WHITE8X8 })
@@ -1691,6 +1723,70 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             box._dragFrame:Hide()
         end
     end
+    if M.PreviewSelectionBar then
+        M.PreviewSelectionBar.Create(box, {
+            Tr = R.Tr,
+            Theme = function() return T end,
+            ApplyBackdrop = function(frame, bg, border)
+                ApplyGroupPreviewFlatBackdrop(frame, R.WHITE8X8, bg, border)
+            end,
+            Round = R.Round,
+            HandleList = function(owner) return owner._handleList end,
+            HandleLabel = R.HandleText,
+            -- Locked handles are shown but not movable, so they are not a
+            -- selectable row or a Tab stop either.
+            IsPlaced = function(handle)
+                if handle._locked then return false end
+                return not (handle.IsShown and not handle:IsShown())
+            end,
+            ReadOffsets = function(_, handle)
+                local _, x, y = R.HandleOffsets(handle)
+                return tonumber(x) or 0, tonumber(y) or 0
+            end,
+            -- NudgeHandleExact owns the audited write path (readback plus
+            -- rollback and one history entry), so exact entry is expressed as
+            -- the delta to the current value rather than a second writer.
+            WriteOffsets = function(owner, handle, x, y)
+                local _, curX, curY = R.HandleOffsets(handle)
+                local dx = (tonumber(x) or 0) - (tonumber(curX) or 0)
+                local dy = (tonumber(y) or 0) - (tonumber(curY) or 0)
+                if dx == 0 and dy == 0 then return true end
+                if type(owner.NudgeHandleExact) ~= "function" then return false end
+                return owner:NudgeHandleExact(handle._key, dx, dy) == true
+            end,
+            NudgeDelta = function(owner, dx, dy)
+                local handle = owner._selectedHandle
+                if not (handle and type(owner.NudgeHandleExact) == "function") then return false end
+                return owner:NudgeHandleExact(handle._key, dx, dy) == true
+            end,
+            -- Mirrors the fallbacks ReadHandlePositionExact already treats as
+            -- each handle type's default.
+            DefaultOffsets = function(_, handle)
+                if handle._cfgPower then return 0, -4 end
+                return 0, 0
+            end,
+            OpenSettings = function(_, handle)
+                local open = M.GroupPreview and M.GroupPreview.OpenSection
+                if not (handle._sectionKey and type(open) == "function") then return false end
+                open(handle._sectionKey)
+                return true
+            end,
+            SelectHandle = function(_, handle) return SelectHandle(handle) end,
+            UpdateHint = function(owner, handle) return UpdateHint(owner, handle) end,
+        })
+        M.PreviewSelectionBar.CreatePicker(box, stage)
+        local registerControl = box._msuf2RegisterGroupPreviewControl or RegisterGroupPreviewControl
+        registerControl(box._msuf2ElementPicker, "element_picker", "Group Preview Element Picker", "button", "ephemeral")
+        local selectionBar = box._msuf2SelectionBar
+        if selectionBar then
+            registerControl(selectionBar.resetButton, "selection.reset", "Reset selected preview element offset", "button", "ephemeral")
+            registerControl(selectionBar.openButton, "selection.open_settings", "Open selected preview element settings", "button", "ephemeral")
+        end
+    end
+    box.OnPreviewCanvasMoved = function(_, button)
+        if PreviewHelpers.NotePreviewCanvasMoved then PreviewHelpers.NotePreviewCanvasMoved(button) end
+    end
+    if box.ApplyDockedPreviewLayout then box:ApplyDockedPreviewLayout(12) end
     if M.GroupPreviewRender and M.GroupPreviewRender.Install then
         local renderDeps = ShallowCopy(R) or {}
         renderDeps.width, renderDeps.mock = width, mock

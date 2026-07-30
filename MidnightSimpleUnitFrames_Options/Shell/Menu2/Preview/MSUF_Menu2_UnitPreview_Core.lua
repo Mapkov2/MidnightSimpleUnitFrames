@@ -195,12 +195,15 @@ function Core.ApplyFrameBorder(box, border, scale)
     SetFrameBorderShown(mock, true)
 end
 local BOUNDS_GUIDE_KEYS = { "top", "bottom", "left", "right" }
+-- The bounds guide marks a measurement, not a problem. Red is reserved for
+-- destructive actions and error states elsewhere in Menu2, so the guide uses
+-- the same cyan the rest of the preview chrome speaks in.
 local BOUNDS_GUIDE_OPTS = {
     keys = BOUNDS_GUIDE_KEYS,
     linesKey = "_msufGuideLines",
     texture = TEX_W8,
     snapOff = PreviewSnapOff,
-    color = function() return 1, 0.14, 0.08, 0.95 end,
+    color = function() return 0.25, 0.75, 0.88, 0.92 end,
 }
 function Core.ApplyBoundsGuide(box, edgeSize)
     local mock = box and box.mock

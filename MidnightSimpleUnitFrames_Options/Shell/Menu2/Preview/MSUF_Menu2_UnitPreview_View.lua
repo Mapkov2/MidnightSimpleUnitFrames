@@ -47,6 +47,7 @@ local UNIT_PREVIEW_ZOOM_CONTROLS = {
     { "zoomOneButton", "zoom.one_to_one", "Pixel preview" },
     { "zoomInButton", "zoom.in", "Zoom in" },
     { "zoomHelpButton", "zoom.help", "Preview controls help" },
+    { "zoomLockButton", "zoom.lock", "Lock preview zoom" },
 }
 local function UnitPreviewHandleNavigationKey(handle, pageKey)
     local fields = handle and handle._fields
@@ -98,7 +99,7 @@ local function RegisterUnitPreviewRuntimeControls(box, pageKey)
         help = "Pans this exact Unit preview canvas by an explicit X/Y delta.",
         command = box._msuf2PanCommand,
     })
-    Register(box.animateCombatButton, "combat_animation", "Unit Preview Combat Animation", "button", "ephemeral")
+    Register(box.animateCombatButton, "combat_animation", "Unit Preview Animation", "button", "ephemeral")
     for i = 1, #(box.layerButtons or {}) do
         local button = box.layerButtons[i]
         Register(button, "layer." .. tostring(button and button.key),
@@ -129,6 +130,17 @@ local function RegisterUnitPreviewRuntimeControls(box, pageKey)
         end
     end
     Register(box._msuf2PinButton, "pin.toggle", "Pin Unit Preview", "toggle", "ephemeral")
+    -- Selection chrome. The X/Y inputs deliberately stay unregistered: they
+    -- write the same offsets the bound sliders already expose, exactly like the
+    -- drag handles above.
+    Register(box._msuf2ElementPicker, "element_picker", "Unit Preview Element Picker", "button", "ephemeral")
+    local selectionBar = box._msuf2SelectionBar
+    if selectionBar then
+        Register(selectionBar.resetButton, "selection.reset", "Reset selected preview element offset", "button", "ephemeral")
+        Register(selectionBar.openButton, "selection.open_settings", "Open selected preview element settings", "button", "navigation", {
+            navigationKey = UnitPreviewHandleNavigationKey(box._selectedHandle, pageKey),
+        })
+    end
     box._msuf2RuntimeControlsPageKey = pageKey
     return count
 end
@@ -224,21 +236,30 @@ local function PreviewGuidesVisible(box)
     if type(layers) == "table" and layers.guides ~= nil then return layers.guides ~= false end
     return PreviewGuidesEnabled()
 end
+--- The hint line is a message surface, nothing else. The selected element, its
+--- offsets and its actions live in the selection bar, and the full control list
+--- lives behind the ? button, so this text no longer changes shape per
+--- selection. Layer rows still borrow it for transient feedback and restore it
+--- through UpdateHandleHint.
 local function DefaultPreviewHint(box)
-    if box and not PreviewGuidesVisible(box) then return TR("guides hidden - selected element still nudges with arrows - turn Guides on to drag another element") end
-    return TR("drag handles - double-click/settings opens options - right-click actions - Ctrl+wheel zoom")
+    local base
+    if box and not PreviewGuidesVisible(box) then
+        base = TR("guides hidden - arrows still nudge the selected element")
+    else
+        base = TR("drag to move - Tab picks the next element - ? lists every control")
+    end
+    -- Red, and only until the gesture has actually been used three times.
+    local remaining = PreviewHelpers.PreviewMoveHintRemaining and PreviewHelpers.PreviewMoveHintRemaining() or 0
+    if remaining > 0 then
+        return format("|cffff4d3f%s|r   %s", format(TR("Rightclick to move (%dx)"), remaining), base)
+    end
+    return base
 end
 local function UpdateHandleHint(box, handle)
-    if not box or not box.hint then return end
-    if not handle then
-        box.hint:SetText(DefaultPreviewHint(box))
-        return
-    end
-    local x, y = ReadHandleOffsets(handle)
-    local help = PreviewGuidesVisible(box)
-        and TR("double-click/settings opens options - right-click actions - arrows nudge")
-        or TR("guides hidden - arrows still nudge selected element")
-    box.hint:SetText(format("%s   x: %d   y: %d   %s", TR(handle._label or handle._key or "?"), x, y, help))
+    if not box then return end
+    if M2.PreviewSelectionBar then M2.PreviewSelectionBar.Refresh(box) end
+    if not box.hint then return end
+    box.hint:SetText(DefaultPreviewHint(box))
 end
 local OpenPreviewHandleSettings
 local MenuTheme
@@ -857,6 +878,17 @@ ExportPublic("MSUF_UFPreview_ClearTextFocus", function()
     return Preview.FocusTextSlot(nil, nil, nil, false)
 end)
 local function PreviewArrowKeyDown(self, keyName)
+    -- Tab steps through the placed handles. Overlapping elements in dense
+    -- corners cannot all be reached by clicking, so keyboard traversal is the
+    -- only way to select what sits underneath.
+    if keyName == "TAB" then
+        local box = (self and self.handles and self) or Preview.active
+        if box and M2.PreviewSelectionBar
+            and M2.PreviewSelectionBar.CycleHandle(box, IsShiftKeyDown and IsShiftKeyDown()) then
+            if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(false) end
+            return
+        end
+    end
     if PreviewHelpers.ArrowKeyDown then
         return PreviewHelpers.ArrowKeyDown(self, keyName, {
             active = function() return Preview.active end,
@@ -1085,7 +1117,9 @@ local function RefreshPreviewAnimationButton(box)
     if not btn then return end
     local active = PreviewAnimationActive(box)
     if btn.fs then
-        btn.fs:SetText(active and TR("Stop") or TR("Combat"))
+        -- The button plays an animation loop; it does not switch the preview
+        -- into a combat state. Label it after what it does.
+        btn.fs:SetText(active and TR("Stop") or TR("Animate"))
         btn.fs:SetTextColor(active and 0.06 or 0.78, active and 0.95 or 0.84, active and 1.00 or 0.96, 1)
     end
     if btn.MSUF2RefreshPreviewPill then btn:MSUF2RefreshPreviewPill(active) end
@@ -1275,7 +1309,7 @@ local function CreatePreviewAnimationButton(box)
         end,
     }
     if M2.AddTooltip then
-        M2.AddTooltip(btn, "Combat Preview", "Animates health, power, absorbs, cast progress, and combat indicators in this preview only. Pauses during combat.", { hook = true })
+        M2.AddTooltip(btn, "Animate Preview", "Animates health, power, absorbs, cast progress, and combat indicators in this preview only. Pauses during combat.", { hook = true })
     end
     box.animateCombatButton = btn
     box.RefreshAnimationButton = RefreshPreviewAnimationButton
@@ -1303,17 +1337,8 @@ local function ApplyUnitPinnedPresentation(box, pinned, opts, sideW)
         line:SetTexture(TEX_W8)
         box._msuf2PinnedHeaderLine = line
     end
-    local canvasBottom = 12
-    if box.canvas then
-        box.canvas:ClearAllPoints()
-        box.canvas:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -30)
-        box.canvas:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -((sideW or 72) + 18), canvasBottom)
-    end
-    if box.sidebar and box.canvas then
-        box.sidebar:ClearAllPoints()
-        box.sidebar:SetPoint("TOPLEFT", box.canvas, "TOPRIGHT", 8, 0)
-        box.sidebar:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, canvasBottom)
-    end
+    if M2.PreviewSelectionBar then M2.PreviewSelectionBar.SetShown(box, true) end
+    if box.ApplyDockedPreviewLayout then box:ApplyDockedPreviewLayout(12) end
     if box.footer then box.footer:SetShown(not pinned) end
     if shade then
         local bg = colors.coreShadow or { 0.006, 0.016, 0.032, 1 }
@@ -1325,11 +1350,7 @@ local function ApplyUnitPinnedPresentation(box, pinned, opts, sideW)
         line:SetColorTexture(border[1], border[2], border[3], pinned and 0.52 or 0)
         line:SetShown(pinned)
     end
-    if pinned and box.hint and not box._selectedHandle then
-        box.hint:SetText(TR("select a handle - gear opens exact settings - right-click quick actions - arrows nudge"))
-    elseif not pinned then
-        UpdateHandleHint(box, box._selectedHandle)
-    end
+    UpdateHandleHint(box, box._selectedHandle)
 end
 --- Compact inline presentation: the preview shrinks to a reference strip, the
 --- canvas takes the full box width, and the docked layer sidebar becomes a
@@ -1432,8 +1453,8 @@ local function ApplyUnitCompactPresentation(box, compact, sideW)
             canvas:SetPoint("TOPLEFT", box, "TOPLEFT", 8, -8)
             canvas:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -8, 8)
         end
+        if M2.PreviewSelectionBar then M2.PreviewSelectionBar.SetShown(box, false) end
         if sidebar and canvas then
-            local rows = #(box.layerButtons or {})
             sidebar:ClearAllPoints()
             local layersBtn = EnsureUnitLayersButton(box)
             if layersBtn and box._msuf2CompactHeader then
@@ -1441,7 +1462,13 @@ local function ApplyUnitCompactPresentation(box, compact, sideW)
             else
                 sidebar:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -28)
             end
-            sidebar:SetSize((sideW or 104) + 8, 32 + rows * 18 + 10)
+            -- The chips keep their flow inside the popover; it is sized to a
+            -- readable column rather than the full box width, and the rail
+            -- caption is redundant behind a button already labelled "Layers".
+            local popoverWidth = 268
+            sidebar:SetWidth(popoverWidth)
+            if box._msuf2LayerRailHeader then box._msuf2LayerRailHeader:Hide() end
+            if box.LayoutLayerRail then box:LayoutLayerRail(popoverWidth + 24) end
             if sidebar.SetFrameLevel and canvas.GetFrameLevel then
                 sidebar:SetFrameLevel((canvas:GetFrameLevel() or 1) + 90)
             end
@@ -1459,23 +1486,17 @@ local function ApplyUnitCompactPresentation(box, compact, sideW)
         if box.hint then box.hint:Show() end
         SetUnitCanvasToolsShown(box, true)
         LayoutUnitHeaderControls(box, false)
-        if canvas then
-            canvas:ClearAllPoints()
-            canvas:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -30)
-            canvas:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -((sideW or 104) + 18), 12)
-        end
-        if sidebar and canvas then
-            sidebar:ClearAllPoints()
-            sidebar:SetPoint("TOPLEFT", canvas, "TOPRIGHT", 8, 0)
-            sidebar:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, 12)
-            if sidebar.SetFrameLevel and canvas.GetFrameLevel then
+        if sidebar then
+            if sidebar.SetFrameLevel and canvas and canvas.GetFrameLevel then
                 sidebar:SetFrameLevel((canvas:GetFrameLevel() or 1) + 1)
             end
             if PreviewHelpers.ApplyPreviewChrome then
                 PreviewHelpers.ApplyPreviewChrome(sidebar, "sidebar", T, ApplyPreviewBackdrop)
             end
-            sidebar:Show()
+            if box._msuf2LayerRailHeader then box._msuf2LayerRailHeader:Show() end
         end
+        if M2.PreviewSelectionBar then M2.PreviewSelectionBar.SetShown(box, true) end
+        if box.ApplyDockedPreviewLayout then box:ApplyDockedPreviewLayout(12) end
         if box._msuf2LayersButton then box._msuf2LayersButton:Hide() end
     end
 end
@@ -1534,9 +1555,11 @@ local function BuildPreview(parent, panel, width, height)
     hint:SetText(DefaultPreviewHint())
     if T and T.StyleFontString then T.StyleFontString(hint, colors.muted or { 0.55, 0.60, 0.70, 0.90 }, 0) end
     box.hint = hint
+    -- The canvas is anchored against the selection bar rather than the box, so
+    -- whatever the chip rail does not need stays with the preview surface.
     local canvas = CreateFrame("Frame", nil, box, "BackdropTemplate")
     canvas:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -30)
-    canvas:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -(sideW + 18), 12)
+    canvas:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, 12)
     if PreviewHelpers.ApplyPreviewChrome then
         PreviewHelpers.ApplyPreviewChrome(canvas, "canvas", T, ApplyPreviewBackdrop)
     else
@@ -1559,17 +1582,22 @@ local function BuildPreview(parent, panel, width, height)
         StopPan = StopPreviewPan,
         fitReason = "UNIT_PREVIEW_ZOOM_FIT",
         oneReason = "UNIT_PREVIEW_ZOOM_1TO1",
+        lockButton = true,
+        lockReason = "UNIT_PREVIEW_ZOOM_LOCK",
+        unlockReason = "UNIT_PREVIEW_ZOOM_UNLOCK",
     })
     if PreviewHelpers.EnsurePreviewControlsHint then
         PreviewHelpers.EnsurePreviewControlsHint(box, canvas, { M = M2, T = T, Tr = TR })
     end
     CreatePreviewAnimationButton(box)
+    -- Layer chips flow along the bottom instead of holding a fixed column: the
+    -- canvas keeps the full box width, and the rail only claims the rows it
+    -- actually fills. `box.sidebar` stays the field name because the compact
+    -- popover and the colour page already address the layer surface by it.
     local sidebar = CreateFrame("Frame", nil, box, "BackdropTemplate")
-    sidebar:SetPoint("TOPLEFT", canvas, "TOPRIGHT", 8, 0)
+    sidebar:SetPoint("BOTTOMLEFT", box, "BOTTOMLEFT", 12, 12)
     sidebar:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, 12)
-    -- The layer rows are fixed-offset children; without clipping they spill
-    -- past the sidebar whenever the box is shorter than the row stack.
-    if sidebar.SetClipsChildren then sidebar:SetClipsChildren(true) end
+    sidebar:SetHeight(30)
     if PreviewHelpers.ApplyPreviewChrome then
         PreviewHelpers.ApplyPreviewChrome(sidebar, "sidebar", T, ApplyPreviewBackdrop)
     else
@@ -1577,11 +1605,12 @@ local function BuildPreview(parent, panel, width, height)
     end
     box.sidebar = sidebar
     local sHdr = sidebar:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    sHdr:SetPoint("TOP", sidebar, "TOP", 0, -5)
+    sHdr:SetPoint("LEFT", sidebar, "LEFT", 10, 0)
     sHdr:SetText(TR("LAYERS"))
     local layerHeaderColor = chrome.layerHeader or colors.muted or { 0.62, 0.70, 0.82, 0.82 }
     sHdr:SetTextColor(layerHeaderColor[1], layerHeaderColor[2], layerHeaderColor[3], layerHeaderColor[4] or 0.82)
     if T and T.StyleFontString then T.StyleFontString(sHdr, layerHeaderColor, 0) end
+    box._msuf2LayerRailHeader = sHdr
     box.layerVisibility = {}
     box.layerButtons = {}
     local function UnitLayerAvailable(owner, key)
@@ -1592,8 +1621,9 @@ local function BuildPreview(parent, panel, width, height)
     local disabledLayerText = colors.dim or { 0.36, 0.46, 0.60, 0.82 }
     local unitLayerButtonOpts = {
         Tr = TR,
-        height = 18,
-        rowHeight = 18,
+        layout = "chip",
+        height = 20,
+        rowHeight = 20,
         topOffset = 23,
         showOffText = false,
         quiet = true,
@@ -1611,8 +1641,10 @@ local function BuildPreview(parent, panel, width, height)
             end
             owner.layerVisibility[self.key] = owner.layerVisibility[self.key] == false
             if self.key == "guides" then SetPreviewGuidesEnabled(owner.layerVisibility[self.key] ~= false) end
-            if self.key ~= "guides" then
-                owner._manualZoom = nil
+            -- Hiding a layer changes the footprint, so auto-fit has to recenter.
+            -- A zoom the user dialled in by hand is a deliberate viewport and
+            -- must survive the toggle; _manualZoom is exactly that marker.
+            if self.key ~= "guides" and owner._manualZoom == nil then
                 owner._zoomPanX, owner._zoomPanY = 0, 0
             end
             for j = 1, #owner.layerButtons do owner.layerButtons[j]:refresh() end
@@ -1655,6 +1687,71 @@ local function BuildPreview(parent, panel, width, height)
         end
         box.layerButtons[#box.layerButtons + 1] = btn
     end
+    box.LayoutLayerRail = function(self, railWidth)
+        if not PreviewHelpers.FlowLayerChips then return 30 end
+        railWidth = tonumber(railWidth) or (self.sidebar and self.sidebar.GetWidth and self.sidebar:GetWidth()) or 0
+        local headerWidth = 0
+        local header = self._msuf2LayerRailHeader
+        if header and header:IsShown() then
+            headerWidth = (header.GetStringWidth and header:GetStringWidth()) or 44
+            headerWidth = headerWidth + 18
+        end
+        return PreviewHelpers.FlowLayerChips(self.sidebar, self.layerButtons, {
+            width = railWidth - headerWidth,
+            padX = 10 + headerWidth,
+            rowHeight = 20,
+        })
+    end
+    if M2.PreviewSelectionBar then
+        M2.PreviewSelectionBar.Create(box, {
+            Tr = TR,
+            Theme = MenuTheme,
+            ApplyBackdrop = ApplyPreviewBackdrop,
+            Round = RoundOffset,
+            HandleList = function(owner) return owner.handles end,
+            HandleLabel = function(handle) return handle._label or handle._key end,
+            ReadOffsets = function(_, handle) return ReadHandleOffsets(handle) end,
+            WriteOffsets = function(_, handle, x, y, reason) return WriteHandleOffsets(handle, x, y, reason) end,
+            NudgeDelta = function(owner, dx, dy) return NudgeSelectedHandleDelta(owner, dx, dy) end,
+            DefaultOffsets = function(_, handle)
+                local fields = handle._fields or {}
+                return tonumber(fields.defaultX) or 0, tonumber(fields.defaultY) or 0
+            end,
+            OpenSettings = function(_, handle, source) return OpenPreviewHandleSettings(handle, source) end,
+            SelectHandle = function(_, handle) return SelectPreviewHandle(handle, true) end,
+            UpdateHint = function(owner, handle) return UpdateHandleHint(owner, handle) end,
+        })
+        M2.PreviewSelectionBar.CreatePicker(box, canvas)
+    end
+    -- One layout path for the docked (inline expanded) and floating states: the
+    -- rail sits on the bottom edge, the selection bar rides above it, and the
+    -- canvas takes whatever is left instead of a fixed-width column.
+    box.ApplyDockedPreviewLayout = function(self, bottomInset)
+        bottomInset = tonumber(bottomInset) or 12
+        local rail, selection, surface = self.sidebar, self._msuf2SelectionBar, self.canvas
+        if not surface then return end
+        if rail then
+            rail:ClearAllPoints()
+            rail:SetPoint("BOTTOMLEFT", self, "BOTTOMLEFT", 12, bottomInset)
+            rail:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", -12, bottomInset)
+            rail:Show()
+            if self.LayoutLayerRail then
+                self:LayoutLayerRail((self.GetWidth and self:GetWidth() or 0) - 24)
+            end
+        end
+        surface:ClearAllPoints()
+        surface:SetPoint("TOPLEFT", self, "TOPLEFT", 12, -30)
+        if selection and rail then
+            selection:ClearAllPoints()
+            selection:SetPoint("BOTTOMLEFT", rail, "TOPLEFT", 0, 6)
+            selection:SetPoint("BOTTOMRIGHT", rail, "TOPRIGHT", 0, 6)
+            selection:Show()
+            surface:SetPoint("BOTTOMRIGHT", selection, "TOPRIGHT", 0, 6)
+        else
+            surface:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", -12, bottomInset)
+        end
+        if self._msuf2ElementPicker then self._msuf2ElementPicker:Show() end
+    end
     local mock = CreateFrame("Frame", nil, canvas, "BackdropTemplate")
     mock:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
     mock:SetBackdropColor(0, 0, 0, 0.92)
@@ -1686,13 +1783,13 @@ local function BuildPreview(parent, panel, width, height)
     mock.bounds = CreateFrame("Frame", nil, mock, "BackdropTemplate")
     mock.bounds:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
     mock.bounds:SetBackdropColor(0, 0, 0, 0)
-    mock.bounds:SetBackdropBorderColor(1, 0.14, 0.08, 0.95)
+    mock.bounds:SetBackdropBorderColor(0.25, 0.75, 0.88, 0.92)
     mock.bounds:SetFrameLevel((mock:GetFrameLevel() or 0) + 28)
     mock.bounds:SetAllPoints(mock)
     mock.sizeTag = mock.bounds:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     mock.sizeTag:SetPoint("BOTTOM", mock.bounds, "TOP", 0, 2)
-    mock.sizeTag:SetTextColor(1, 0.35, 0.25, 0.95)
-    if T and T.StyleFontString then T.StyleFontString(mock.sizeTag, { 1, 0.35, 0.25, 0.95 }, 0) end
+    mock.sizeTag:SetTextColor(0.62, 0.84, 0.94, 0.95)
+    if T and T.StyleFontString then T.StyleFontString(mock.sizeTag, { 0.62, 0.84, 0.94, 0.95 }, 0) end
     MockTexture("hpBG", "BACKGROUND", TEX_W8, { 0, 0, 0, 0.82 }, "color")
     MockTexture("hp", "ARTWORK", type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture() or TEX_W8, nil, "settex")
     MockTexture("tempMaxHealthBg", "ARTWORK", TEX_W8, { 0, 0, 0, 0.65 }, "color")
@@ -1936,8 +2033,18 @@ local function BuildPreview(parent, panel, width, height)
         if self._msufUFPreviewRefreshWidth == changedWidth and self._msufUFPreviewRefreshHeight == changedHeight then return end
         self._msufUFPreviewRefreshWidth = changedWidth
         self._msufUFPreviewRefreshHeight = changedHeight
+        -- The chip rail wraps on width, and the canvas hangs off its top edge,
+        -- so a resize has to reflow the rail before the render measures the
+        -- canvas.
+        if self._msuf2CompactPreview ~= true and self.ApplyDockedPreviewLayout then
+            self:ApplyDockedPreviewLayout(12)
+        end
         self:RequestRefresh("UNIT_PREVIEW_SIZE")
     end)
+    box.OnPreviewCanvasMoved = function(_, button)
+        if PreviewHelpers.NotePreviewCanvasMoved then PreviewHelpers.NotePreviewCanvasMoved(button) end
+    end
+    box:ApplyDockedPreviewLayout(12)
     RegisterUnitPreviewRuntimeControls(box, M2.activeKey)
     return box
 end
