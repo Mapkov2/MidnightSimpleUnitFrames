@@ -4666,28 +4666,37 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
     end
 
     if isPlayerDefensives then
-        local section = b:Section("Defensive Buffs Setup", 304)
+        local section = b:Section("Defensive Buffs Setup", 390)
         local w = section._msuf2Width or b.width or 720
         local inner = w - 48
-        BindSwitch(ctx, section, "Enabled", 24, -48, 112,
+        local enabled = BindSwitch(ctx, section, "Enabled", 24, -48, 112,
             function() return item.enabled == true end,
             function(value)
                 item.enabled = value == true
-                if item.enabled then item.portraitIcon = false end
                 Apply("AURAS3_PLAYER_DEFENSIVES_ENABLE", true)
             end,
             AuraControlMeta(ctx, "custom-container.player-defensives.enabled"))
-        local portrait = BindSwitch(ctx, section, "Show active buff on portrait", 24, -86, 260,
+        AddTooltip(enabled, "Enable defensive buffs",
+            "Core feature enabled by default for new profiles and once for existing profiles. It works as a normal defensive buff bar without an enabled portrait. Turn this off to disable both bar and portrait-position display.")
+        local portrait = BindSwitch(ctx, section, "Show buffs at portrait position", 24, -86, 280,
             function() return item.portraitIcon == true end,
             function(value)
                 item.portraitIcon = value == true
-                if item.portraitIcon then item.enabled = false end
                 Apply("AURAS3_PLAYER_DEFENSIVE_PORTRAIT", true)
             end,
             AuraControlMeta(ctx, "custom-container.player-defensives.portrait-icon"))
-        AddTooltip(portrait, "Show active buff on portrait",
-            "Shows one active defensive buff directly on the player portrait instead of duplicating it in the defensive buff bar. The defensive icon, swipe, and duration text stay together and take priority over a cast icon.")
-        local cooldownText = BindSwitch(ctx, section, "Show cooldown text on portrait", 24, -124, 280,
+        AddTooltip(portrait, "Show buffs at portrait position",
+            "Optional presentation mode; the Defensive Buffs feature itself does not require a portrait. With an enabled portrait, the first icon occupies it. When the portrait is off, enable the position option below to keep the icons there; otherwise MSUF safely falls back to the normal defensive bar.")
+        local portraitMax = BindSlider(ctx, section, "Max portrait icons", 24, -128, 1, 8, 1, inner,
+            function() return tonumber(item.portraitMaxIcons) or 1 end,
+            function(value)
+                item.portraitMaxIcons = max(1, min(8, floor((tonumber(value) or 1) + 0.5)))
+                Apply("AURAS3_PLAYER_DEFENSIVE_PORTRAIT_MAX", true)
+            end,
+            AuraControlMeta(ctx, "custom-container.player-defensives.portrait-max-icons"))
+        AddTooltip(portraitMax, "Max portrait icons",
+            "Limits the number of simultaneous defensive icons at the portrait from 1 to 8. Existing profiles remain at 1 until this value is changed.")
+        local cooldownText = BindSwitch(ctx, section, "Show cooldown text on portrait", 24, -198, 280,
             function() return item.portraitCooldownText ~= false end,
             function(value)
                 item.portraitCooldownText = value == true
@@ -4696,7 +4705,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             AuraControlMeta(ctx, "custom-container.player-defensives.portrait-cooldown-text"))
         AddTooltip(cooldownText, "Show cooldown text on portrait",
             "Shows the active defensive buff's remaining duration over its portrait icon. Blizzard updates the text natively.")
-        local positionOnly = BindSwitch(ctx, section, "Use portrait position while portrait is off", 24, -162, 326,
+        local positionOnly = BindSwitch(ctx, section, "Use portrait position while portrait is off", 24, -236, 326,
             function() return item.portraitPositionWhenDisabled == true end,
             function(value)
                 item.portraitPositionWhenDisabled = value == true
@@ -4705,7 +4714,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             AuraControlMeta(ctx, "custom-container.player-defensives.portrait-position-when-disabled"))
         AddTooltip(positionOnly, "Use portrait position while portrait is off",
             "Keeps the configured portrait size and position as an invisible anchor so the defensive icon can remain there while the portrait itself is disabled.")
-        local autoBlacklist = BindSwitch(ctx, section, "Auto-blacklist from player buffs", 24, -200, 280,
+        local autoBlacklist = BindSwitch(ctx, section, "Auto-blacklist from player buffs", 24, -274, 280,
             function() return item.autoBlacklistPlayerBuffs ~= false end,
             function(value)
                 item.autoBlacklistPlayerBuffs = value == true
@@ -4731,7 +4740,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
         local custom = #Model.CustomContainerSpellEntries(unit, index)
         W.Text(section, "Source: player buffs · " .. tostring(predefined) .. " / "
             .. tostring(predefinedTotal) .. " predefined enabled · " .. tostring(custom)
-            .. " custom · passive talent procs included", 24, -258, inner, T.colors.muted)
+            .. " custom · passive talent procs included", 24, -344, inner, T.colors.muted)
         return
     end
 

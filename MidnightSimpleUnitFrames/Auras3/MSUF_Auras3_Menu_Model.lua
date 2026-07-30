@@ -1863,19 +1863,27 @@ end
 local CUSTOM_CONTAINER_MAX = 4
 local TARGET_DOT_CONTAINER_INDEX = 4
 local PLAYER_DEFENSIVE_CONTAINER_INDEX = 4
+local PLAYER_DEFENSIVE_CORE_DEFAULT_MARKER =
+    A3.PlayerDefensiveCoreDefaultMarker or "_msufA3PlayerDefensivesCoreDefault_v1"
 
 local function EnforcePlayerDefensiveContainer(item)
     if type(item) ~= "table" then return item end
+    -- Fallback for standalone menu-model consumers and old profiles that have
+    -- not passed through Auras3 Core yet. This is one-shot by design: once the
+    -- user turns the feature off in Menu2, later normalization preserves it.
+    if item[PLAYER_DEFENSIVE_CORE_DEFAULT_MARKER] ~= true then
+        item.enabled = true
+        item[PLAYER_DEFENSIVE_CORE_DEFAULT_MARKER] = true
+    end
     item.name = "Defensive Buffs"
     item.auraType = "BUFF"
     item.sourceUnit = "player"
     item.targetDots = nil
     item.playerDefensives = true
     item.portraitIcon = item.portraitIcon == true
-    -- The portrait is an alternative presentation of the same active
-    -- defensive set. Keeping the normal lane enabled at the same time draws
-    -- the selected aura twice (once on the portrait and once beside it).
-    if item.portraitIcon then item.enabled = false end
+    -- Preserve the original one-icon portrait behavior for existing profiles.
+    -- Users can opt into a wider outward-growing row from the setup slider.
+    item.portraitMaxIcons = math_floor(ClampNumber(item.portraitMaxIcons, 1, 1, 8))
     item.portraitCooldownText = item.portraitCooldownText ~= false
     item.portraitPositionWhenDisabled = item.portraitPositionWhenDisabled == true
     item.autoBlacklistPlayerBuffs = item.autoBlacklistPlayerBuffs ~= false
@@ -1907,6 +1915,7 @@ local function EnforceTargetDotContainer(item)
     item.targetDots = true
     item.playerDefensives = nil
     item.portraitIcon = nil
+    item.portraitMaxIcons = nil
     item.portraitCooldownText = nil
     item.portraitPositionWhenDisabled = nil
     item.autoBlacklistPlayerBuffs = nil

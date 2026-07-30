@@ -22,6 +22,116 @@ end
 
 local FRAME_LIST_RUNTIME_UNITS = { "player", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5" }
 local FRAME_LIST_SCOPES = { "player", "target", "focus", "boss" }
+local PLAYER_DEFENSIVE_CORE_DEFAULT_MARKER = "_msufA3PlayerDefensivesCoreDefault_v1"
+local PLAYER_DEFENSIVE_FACTORY_POLICY_MARKER = "_msufFactoryPlayerDefensivesEnabled_v1"
+
+local function FillMissing(dst, defaults)
+    if type(dst) ~= "table" or type(defaults) ~= "table" then return dst end
+    for key, value in pairs(defaults) do
+        if type(value) == "table" then
+            if type(dst[key]) ~= "table" then dst[key] = {} end
+            FillMissing(dst[key], value)
+        elseif dst[key] == nil then
+            dst[key] = value
+        end
+    end
+    return dst
+end
+
+local function NewPlayerDefensiveContainer()
+    return {
+        enabled = true,
+        [PLAYER_DEFENSIVE_CORE_DEFAULT_MARKER] = true,
+        name = "Defensive Buffs",
+        auraType = "BUFF",
+        sourceUnit = "player",
+        playerDefensives = true,
+        portraitIcon = false,
+        portraitMaxIcons = 1,
+        portraitCooldownText = true,
+        portraitPositionWhenDisabled = false,
+        autoBlacklistPlayerBuffs = true,
+        disabledPredefinedSpellIDs = {},
+        spellIDs = "",
+        filters = {
+            enabled = true,
+            hidePermanent = false,
+            onlyMine = false,
+            onlyImportant = false,
+            raid = false,
+            raidInCombat = false,
+            includeNameplateOnly = false,
+            includeDispellable = false,
+            dispellableAny = false,
+            cancelable = false,
+            notCancelable = false,
+            crowdControl = false,
+            externalDefensive = false,
+            bigDefensive = false,
+            exclusive = "none",
+        },
+        placed = {
+            type = "icon", anchor = "TOPRIGHT", growth = "LEFTDOWN",
+            x = 0, y = 0, size = 24, barWidth = 54,
+            max = 8, perRow = 4, spacing = 2,
+            showCooldown = true, showCooldownSwipe = true, showStacks = true,
+        },
+        layer = 9,
+        strata = "AUTO",
+        frame = {
+            type = "none", color = { 0.69, 0.50, 0.88, 0.80 },
+            priority = 5, thickness = 2, layer = 0, strata = "AUTO",
+        },
+    }
+end
+
+local function EnsurePlayerDefensiveCoreDefault(auras, factoryEnabled)
+    if type(auras) ~= "table" then return nil end
+    local root = type(auras.customContainers) == "table" and auras.customContainers or {}
+    auras.customContainers = root
+    root.perUnit = type(root.perUnit) == "table" and root.perUnit or {}
+    local record = type(root.perUnit.player) == "table" and root.perUnit.player or { items = {} }
+    root.perUnit.player = record
+    record.items = type(record.items) == "table" and record.items or {}
+    local item = record.items[4]
+    if type(item) ~= "table" then
+        item = NewPlayerDefensiveContainer()
+        record.items[4] = item
+    end
+    if type(factoryEnabled) == "boolean" then
+        -- Factory resets own this one initial value. The policy marker is
+        -- consumed below, so later user toggles remain ordinary saved choices.
+        item.enabled = factoryEnabled
+        item[PLAYER_DEFENSIVE_CORE_DEFAULT_MARKER] = true
+    else
+        -- This is intentionally a one-shot opt-out migration. Every profile
+        -- that predates the Core feature starts enabled once; after the marker
+        -- is stored, a user's explicit menu choice is never overwritten.
+        if item[PLAYER_DEFENSIVE_CORE_DEFAULT_MARKER] ~= true then
+            item.enabled = true
+            item[PLAYER_DEFENSIVE_CORE_DEFAULT_MARKER] = true
+        end
+    end
+    FillMissing(item, NewPlayerDefensiveContainer())
+    item.name = "Defensive Buffs"
+    item.auraType = "BUFF"
+    item.sourceUnit = "player"
+    item.playerDefensives = true
+    item.targetDots = nil
+    return item
+end
+
+local function EnsurePlayerDefensiveProfileDefault(db, auras)
+    local factoryEnabled
+    if type(db) == "table" then
+        factoryEnabled = db[PLAYER_DEFENSIVE_FACTORY_POLICY_MARKER]
+    end
+    local item = EnsurePlayerDefensiveCoreDefault(auras, factoryEnabled)
+    if item and type(factoryEnabled) == "boolean" then
+        db[PLAYER_DEFENSIVE_FACTORY_POLICY_MARKER] = nil
+    end
+    return item
+end
 
 local function MigrateFrameOwnedAuraLists(auras)
     if type(auras) ~= "table" then return end
@@ -92,6 +202,10 @@ A3.backendEnabled = true
 A3.unitFrameAuras = true
 A3._runtimeConfigGen = A3._runtimeConfigGen or 1
 A3._unitFrameOwners = A3._unitFrameOwners or {}
+A3.PlayerDefensiveCoreDefaultMarker = PLAYER_DEFENSIVE_CORE_DEFAULT_MARKER
+A3.PlayerDefensiveFactoryPolicyMarker = PLAYER_DEFENSIVE_FACTORY_POLICY_MARKER
+A3.NewPlayerDefensiveContainer = NewPlayerDefensiveContainer
+A3.EnsurePlayerDefensiveCoreDefault = EnsurePlayerDefensiveCoreDefault
 
 MSUF.AuraBackendEnabled = true
 MSUF.AuraCore = MSUF.AuraCore or _G.MSUF_AuraCore or {}
@@ -127,6 +241,7 @@ function A3.EnsureDB()
         db.auras2 = nil
         current._msufAurasRuntime = 3
         MigrateFrameOwnedAuraLists(current)
+        EnsurePlayerDefensiveProfileDefault(db, current)
         A3.DBRef = current
         return current, current.shared
     end
@@ -136,6 +251,7 @@ function A3.EnsureDB()
     db.auras2 = nil
     current._msufAurasRuntime = 3
     MigrateFrameOwnedAuraLists(current)
+    EnsurePlayerDefensiveProfileDefault(db, current)
     A3.DBRef = current
     return current, current.shared
 end

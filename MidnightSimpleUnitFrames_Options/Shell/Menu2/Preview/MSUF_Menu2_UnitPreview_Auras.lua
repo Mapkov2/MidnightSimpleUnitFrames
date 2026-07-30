@@ -100,7 +100,8 @@ function Auras.WantsDefensivePortraitAnchor(key, runtimeSpec)
     local model = MenuModel()
     local item = CustomItem(model, key, 4, false)
     local portrait = runtimeSpec and runtimeSpec.portrait
-    return item and item.portraitIcon == true
+    return item and item.enabled == true
+        and item.portraitIcon == true
         and item.portraitPositionWhenDisabled == true
         and portrait and portrait.enabled ~= true
         or false
@@ -564,7 +565,12 @@ local function CustomLaneBounds(item, kind, frameW, frameH, metrics, previewEntr
     -- Any custom lane with configured spells previews them 1:1 with the real
     -- spell icons; curated index-4 lanes may show while disabled.
     local trackedPreview = type(previewEntries) == "table" and #previewEntries > 0
-    if item.enabled ~= true and not (kind == "custom4" and trackedPreview) then return nil end
+    local playerDefensives = unit == "player" and kind == "custom4"
+    if item.enabled ~= true
+        and not (kind == "custom4" and not playerDefensives and trackedPreview) then
+        return nil
+    end
+    if playerDefensives and item.portraitIcon == true then return nil end
     local placed = type(item.placed) == "table" and item.placed or {}
     local count = metrics and metrics.num or RuntimeRound(ClampNumber(placed.max, 8, 0, 40))
     if trackedPreview then count = min(count, #previewEntries) end
@@ -634,20 +640,34 @@ local function CustomLaneBounds(item, kind, frameW, frameH, metrics, previewEntr
 end
 
 local function DefensivePortraitBounds(item, runtimeSpec, previewEntries, unit, metrics)
-    if not (unit == "player" and item and item.portraitIcon == true) then return nil end
+    if not (unit == "player" and item and item.enabled == true and item.portraitIcon == true) then return nil end
     local portrait = runtimeSpec and runtimeSpec.portrait
     if not (portrait and (portrait.enabled == true or item.portraitPositionWhenDisabled == true)) then return nil end
-    local width = ClampNumber(portrait.width or portrait.size, 24, 1, 128)
-    local height = ClampNumber(portrait.height or portrait.size, 24, 1, 128)
+    local placed = type(item.placed) == "table" and item.placed or {}
+    local maxCount = RuntimeRound(ClampNumber(item.portraitMaxIcons, 1, 1, 8))
+    if maxCount <= 0 then return nil end
+    local trackedCount = type(previewEntries) == "table" and #previewEntries or 0
+    local shown = min(maxCount, trackedCount > 0 and trackedCount or PREVIEW_ICONS, PREVIEW_ICONS)
+    local previewTextures = {}
+    for i = 1, shown do
+        previewTextures[i] = previewEntries and previewEntries[i] and previewEntries[i].icon
+            or AURA_TEXTURES.buff[((i - 1) % #AURA_TEXTURES.buff) + 1]
+    end
+    local growRight = portrait.side == "RIGHT"
+    local portraitWidth = ClampNumber(portrait.width or portrait.size, 24, 1, 128)
+    local portraitHeight = ClampNumber(portrait.height or portrait.size, 24, 1, 128)
     return {
-        size = min(width, height),
+        size = min(portraitWidth, portraitHeight),
+        spacing = 0,
+        shown = shown,
+        growthX = growRight and 1 or -1,
+        initialAnchor = growRight and "LEFT" or "RIGHT",
         item = item,
-        previewTexture = type(previewEntries) == "table"
-            and previewEntries[1] and previewEntries[1].icon or AURA_TEXTURES.buff[1],
+        previewTextures = previewTextures,
         iconStyle = LaneIconStyle(metrics, unit),
         showCooldownText = item.portraitCooldownText ~= false,
         showCooldownSwipe = true,
-        cooldownSwipeReverse = item.placed and item.placed.cooldownSwipeReverse == true,
+        cooldownSwipeReverse = placed.cooldownSwipeReverse == true,
     }
 end
 
@@ -847,7 +867,7 @@ function Auras.Hide(box)
     if box.auraPreviewVisuals then
         for _, kind in ipairs(AURA_PREVIEW_KINDS) do HideVisual(box.auraPreviewVisuals[kind]) end
     end
-    if box.defensivePortraitPreview then box.defensivePortraitPreview:Hide() end
+    HideVisual(box.defensivePortraitPreview)
 end
 local function ValueOr(value, fallback)
     if value ~= nil then return value end
@@ -1131,13 +1151,14 @@ end
 local function LayoutDefensivePortrait(box, mock, state, S)
     local bounds = state and state.defensivePortrait
     if not (bounds and mock and mock.portrait and mock.portrait.IsShown and mock.portrait:IsShown()) then
-        if box and box.defensivePortraitPreview then box.defensivePortraitPreview:Hide() end
+        if box then HideVisual(box.defensivePortraitPreview) end
         return
     end
-    local icon = box.defensivePortraitPreview
-    if not icon then
-        icon = CreateIcon(mock.portrait)
-        box.defensivePortraitPreview = icon
+    local visual = box.defensivePortraitPreview
+    if not visual then
+        visual = CreateFrame("Frame", nil, mock.portrait)
+        visual._icons = {}
+        box.defensivePortraitPreview = visual
     end
     local textCfg = CustomTextConfig(bounds)
     textCfg.showCooldownText = bounds.showCooldownText == true
@@ -1146,36 +1167,61 @@ local function LayoutDefensivePortrait(box, mock, state, S)
     textCfg.cooldownSwipeReverse = bounds.cooldownSwipeReverse == true
     textCfg.showDurationBar = false
     local size = max(8, S(bounds.size))
-    icon:SetSize(size, size)
-    icon:ClearAllPoints()
-    icon:SetPoint("CENTER", mock.portrait, "CENTER", 0, 0)
-    if icon.SetFrameLevel and mock.portrait.GetFrameLevel then
-        icon:SetFrameLevel((mock.portrait:GetFrameLevel() or 1) + 1)
+    local spacing = max(0, S(bounds.spacing or 0))
+    local shown = max(1, tonumber(bounds.shown) or 1)
+    local step = size + spacing
+    visual:SetSize(max(1, shown * size + max(shown - 1, 0) * spacing), size)
+    visual:ClearAllPoints()
+    if bounds.growthX == 1 then
+        visual:SetPoint("LEFT", mock.portrait, "CENTER", -size * 0.5, 0)
+    else
+        visual:SetPoint("RIGHT", mock.portrait, "CENTER", size * 0.5, 0)
     end
-    icon.tex:SetTexture(bounds.previewTexture or AURA_TEXTURES.buff[1])
-    ApplyIconZoom(icon.tex, bounds.item and bounds.item.placed and bounds.item.placed.iconZoom)
-    icon.bg:Show()
-    icon.tex:Show()
-    icon.edge:SetVertexColor(0, 0, 0, 0)
+    if visual.SetFrameLevel and mock.portrait.GetFrameLevel then
+        visual:SetFrameLevel((mock.portrait:GetFrameLevel() or 1) + 1)
+    end
     local a3 = MSUF and MSUF.MSUF_Auras3
-    if a3 and type(a3.ApplyIconStylePreview) == "function" then
-        a3.ApplyIconStylePreview(icon, bounds.iconStyle, size)
-    end
-    if icon.durationBar then icon.durationBar:Hide() end
-    if icon.dispelBorder then icon.dispelBorder:Hide() end
-    icon.stack:SetText("")
-    local auraState = PreviewAuraState("custom4", 1, icon, textCfg)
-    if icon.swipe then
-        LayoutPreviewAuraSwipe(icon.swipe, icon, size,
-            auraState and auraState.remainingFrac, textCfg.cooldownSwipeReverse == true)
-        icon.swipe:Show()
-    end
+    local applyIconStyle = a3 and a3.ApplyIconStylePreview
     local timerFont = ResolveAuraFont(_timerFontState, max(7, S(textCfg.cooldownSize or 14)))
-    ApplyAuraFont(icon.timer, timerFont)
-    PlaceAuraText(icon.timer, icon, textCfg.cooldownAnchor or "CENTER",
-        S(textCfg.cooldownX or 0), S(textCfg.cooldownY or 0))
-    icon.timer:SetText(bounds.showCooldownText == true and (auraState and auraState.text or "8") or "")
-    icon:Show()
+    for i = 1, shown do
+        local icon = EnsureIcon(visual, i)
+        icon:SetSize(size, size)
+        icon:ClearAllPoints()
+        icon:SetPoint(bounds.initialAnchor, visual, bounds.initialAnchor,
+            (i - 1) * step * bounds.growthX, 0)
+        if icon.SetFrameLevel then icon:SetFrameLevel((visual:GetFrameLevel() or 1) + 1) end
+        icon.tex:SetTexture(bounds.previewTextures and bounds.previewTextures[i] or AURA_TEXTURES.buff[1])
+        ApplyIconZoom(icon.tex, bounds.item and bounds.item.placed and bounds.item.placed.iconZoom)
+        icon.bg:Show()
+        icon.tex:Show()
+        icon.edge:SetVertexColor(0, 0, 0, 0)
+        if type(applyIconStyle) == "function" then
+            applyIconStyle(icon, bounds.iconStyle, size)
+        end
+        if icon.durationBar then icon.durationBar:Hide() end
+        if icon.dispelBorder then icon.dispelBorder:Hide() end
+        icon.stack:SetText("")
+        local auraState = PreviewAuraState("custom4", i, icon, textCfg)
+        if icon.swipe then
+            if bounds.showCooldownSwipe ~= false then
+                LayoutPreviewAuraSwipe(icon.swipe, icon, size,
+                    auraState and auraState.remainingFrac, textCfg.cooldownSwipeReverse == true)
+                icon.swipe:Show()
+            else
+                icon.swipe:Hide()
+            end
+        end
+        ApplyAuraFont(icon.timer, timerFont)
+        PlaceAuraText(icon.timer, icon, textCfg.cooldownAnchor or "CENTER",
+            S(textCfg.cooldownX or 0), S(textCfg.cooldownY or 0))
+        icon.timer:SetText(bounds.showCooldownText == true
+            and (auraState and auraState.text or tostring(7 + i)) or "")
+        icon:Show()
+    end
+    for i = shown + 1, #(visual._icons or {}) do
+        visual._icons[i]:Hide()
+    end
+    visual:Show()
 end
 
 function Auras.Layout(box, mock, state, S, baseLevel)

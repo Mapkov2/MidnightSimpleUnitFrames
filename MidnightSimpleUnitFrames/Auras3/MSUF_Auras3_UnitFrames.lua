@@ -1787,7 +1787,7 @@ end
 
 A3._AddPlayerDefensiveAutoBlacklist = function(candidateFilters, candidateFilterSignature, entry, tracked)
     if type(entry) ~= "table" or entry.autoBlacklistPlayerBuffs == false
-        or (entry.enabled ~= true and entry.portraitIcon ~= true)
+        or entry.enabled ~= true
     then
         return candidateFilters, candidateFilterSignature
     end
@@ -1925,9 +1925,15 @@ A3._CompilePlayerDefensivePortraitLane = function(lane, frameSpec, entry)
     local portrait = frameSpec and frameSpec.portrait
     local usePortraitPosition = entry and entry.portraitPositionWhenDisabled == true
     if not (lane and portrait and (portrait.enabled == true or usePortraitPosition)) then return nil end
-    local width = ClampNumber(portrait.width, portrait.size or 24, 8, 128)
-    local height = ClampNumber(portrait.height, portrait.size or 24, 8, 128)
-    local size = math_min(width, height)
+    -- Preserve the proven single portrait icon exactly: same square derived
+    -- from the portrait, same centring, full opacity, mask, text, and swipe.
+    -- The optional count merely appends equally-sized buttons outward.
+    local portraitWidth = ClampNumber(portrait.width, portrait.size or 24, 8, 128)
+    local portraitHeight = ClampNumber(portrait.height, portrait.size or 24, 8, 128)
+    local size = math_min(portraitWidth, portraitHeight)
+    local spacing = 0
+    local maxCount = Round(ClampNumber(entry and entry.portraitMaxIcons, 1, 1, 8))
+    local growRight = portrait.side == "RIGHT"
     local out = {}
     for key, value in pairs(lane) do
         if tostring(key):find("^_msufA3") == nil then out[key] = value end
@@ -1938,28 +1944,30 @@ A3._CompilePlayerDefensivePortraitLane = function(lane, frameSpec, entry)
     out.portraitOverlay = true
     out.portraitLevelOffset = portrait.levelOffset
     out.portraitPositionWhenDisabled = usePortraitPosition
-    out.max = 1
+    out.enabled = maxCount > 0
+    out.max = maxCount
     out.size = size
-    out.spacing = 0
-    out.step = size
-    out.perRow = 1
-    out.cols = 1
+    out.spacing = spacing
+    out.step = size + spacing
+    out.perRow = math_max(maxCount, 1)
+    out.cols = math_max(maxCount, 1)
     out.rows = 1
     out.padding = 0
-    out.width = size
+    out.width = math_max(1,
+        maxCount * size + math_max(maxCount - 1, 0) * spacing)
     out.height = size
-    out.x = 0
+    out.x = (portraitWidth - size) * (growRight and 0.5 or -0.5)
     out.y = 0
-    out.anchor = "CENTER"
+    out.anchor = growRight and "LEFT" or "RIGHT"
     out.layer = 0
     out.strata = "AUTO"
     out.alpha = 1
-    out.growthX = "RIGHT"
+    out.growthX = growRight and "RIGHT" or "LEFT"
     out.growthY = "DOWN"
-    out.xSign = 1
+    out.xSign = growRight and 1 or -1
     out.ySign = -1
     out.verticalGrowth = false
-    out.initialAnchor = "CENTER"
+    out.initialAnchor = growRight and "LEFT" or "RIGHT"
     out.showCooldownText = entry and entry.portraitCooldownText ~= false or false
     -- The AuraButton itself is the portrait replacement. Keep Blizzard's
     -- native duration swipe on that same button so icon, swipe, and duration
@@ -1973,12 +1981,10 @@ end
 local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec)
     if type(entry) ~= "table" then return nil, nil end
     local playerDefensives = unit == "player" and (index == 4 or entry.playerDefensives == true)
-    local portraitEnabled = playerDefensives and entry.portraitIcon == true
-    -- Portrait mode replaces the standalone Defensive Buffs lane. Both lanes
-    -- use the same candidate set, so compiling both can only render a duplicate
-    -- of the selected active defensive beside the portrait.
-    local barEnabled = entry.enabled == true and not portraitEnabled
-    if not barEnabled and not portraitEnabled then return nil, nil end
+    -- `enabled` is the Core feature's master switch. Portrait mode is only a
+    -- presentation choice and cannot keep a disabled feature alive.
+    if entry.enabled ~= true then return nil, nil end
+    local portraitRequested = playerDefensives and entry.portraitIcon == true
     local includeSpellIDs = CustomSpellIDHash(entry.spellIDs or entry.includeSpellIDs)
     local targetDots = not playerDefensives and (index == 4 or entry.targetDots == true)
     if playerDefensives then
@@ -2067,6 +2073,11 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec)
         stackX = ClampNumber(placed.stackX, 0, -2000, 2000),
         stackY = ClampNumber(placed.stackY, 0, -2000, 2000),
     })
+    local portraitLane = portraitRequested
+        and A3._CompilePlayerDefensivePortraitLane(lane, frameSpec, entry) or nil
+    -- If the visible portrait is disabled and its position-only option is also
+    -- off, fall back to the normal bar instead of silently losing defensives.
+    local barEnabled = portraitLane == nil
     local effect
     if barEnabled and type(entry.frame) == "table" and entry.frame.type and entry.frame.type ~= "none" then
         effect = {
@@ -2083,8 +2094,6 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec)
             color = entry.frame.color,
         }
     end
-    local portraitLane = portraitEnabled
-        and A3._CompilePlayerDefensivePortraitLane(lane, frameSpec, entry) or nil
     return barEnabled and lane or nil, effect, portraitLane
 end
 
@@ -3378,16 +3387,23 @@ local function EnsureAuraTextOverlay(button, lane)
     -- Inbound duration regions must remain descendants of the native
     -- AuraButton (Blizzard_AuraContainerUtil validates this before applying
     -- secret aspects). For portrait mode the child frame is nevertheless
-    -- anchored and levelled against the final portrait holder, so a later
-    -- portrait frame level cannot strand text/swipe underneath its border.
+    -- levelled against the final portrait holder, so a later portrait frame
+    -- level cannot strand text/swipe underneath its border. Retain the proven
+    -- full-holder surface for the first portrait icon; appended icons use
+    -- button-local surfaces so their swipes/text cannot overlap each other.
     local anchor = button
+    local level = button.GetFrameLevel and (button:GetFrameLevel() or 0) or 0
     if lane and lane.portraitOverlay == true then
-        anchor = button._msufA3ParentFrame or button
         overlay._msufA3PortraitDurationSurface = true
+        local holder = button._msufA3ParentFrame
+        if holder and holder.GetFrameLevel then
+            level = math_max(level, holder:GetFrameLevel() or 0)
+        end
+        if button._msufA3LaneIndex == 1 then anchor = holder or button end
     end
     overlay:ClearAllPoints()
     overlay:SetAllPoints(anchor)
-    if overlay.SetFrameLevel then overlay:SetFrameLevel((anchor:GetFrameLevel() or 0) + 4) end
+    if overlay.SetFrameLevel then overlay:SetFrameLevel(level + 4) end
     overlay:Show()
     return overlay
 end
@@ -3509,6 +3525,7 @@ local function PrepareAuraButton(button, lane, index)
     ValidateNativeAuraButtonContract(button)
     button._msufA3NativeButton = true
     button._msufA3LaneKind = lane.kind
+    button._msufA3LaneIndex = index
     LayoutButton(button, lane, index)
     button:SetAlpha(1)
     -- Reference-addon model: never touch AuraButton level or strata. Buttons
@@ -3545,7 +3562,9 @@ local function PrepareAuraButton(button, lane, index)
         icon:SetAlpha(1)
         icon:Show()
         button:SetIcon(icon)
-        if lane.portraitOverlay == true then
+        -- Preserve the original portrait mask on icon 1. Reusing that
+        -- screen-space mask on appended icons would clip them to the portrait.
+        if lane.portraitOverlay == true and index == 1 then
             local holder = button._msufA3ParentFrame
             local mask = holder and holder.mask
             if mask and icon.AddMaskTexture then icon:AddMaskTexture(mask) end
