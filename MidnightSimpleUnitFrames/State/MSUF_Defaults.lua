@@ -2887,6 +2887,31 @@ end
         g.raidGroupNameStyle = 'PAREN'
     end
     --- Misc -> Indicators
+    ---
+    --- Combat/IncomingRes shipped their anchor as `...Pos` while every other
+    --- status indicator uses `...Anchor`. The unitframe status compiler only
+    --- reads the `...Anchor` schema (MSUF_UF_Config PrefixedStatusDef), so a
+    --- profile carrying a moved `...Pos` was silently rendered at the default
+    --- while the menu preview still honoured the old key. Lift the legacy value
+    --- once, never overwriting an anchor the user has already set.
+    --- One-shot: after this runs, the seeded `...Pos` defaults below must not be
+    --- lifted again, or every later login would materialize an explicit anchor
+    --- where the profile intentionally had none.
+    if g._msufStatusPosAnchorMigrated_v1 ~= true then
+        g._msufStatusPosAnchorMigrated_v1 = true
+        for _, aliasPair in ipairs({
+            { "combatStateIndicatorAnchor", "combatStateIndicatorPos" },
+            { "incomingResIndicatorAnchor", "incomingResIndicatorPos" },
+        }) do
+            MSUF_Defaults_CopyIfMissing(g, aliasPair[1], aliasPair[2])
+            for _, unitKey in ipairs(MSUF_DEFAULTS_TEXT_SCOPE_KEYS) do
+                local conf = MSUF_DB[unitKey]
+                if type(conf) == "table" then
+                    MSUF_Defaults_CopyIfMissing(conf, aliasPair[1], aliasPair[2])
+                end
+            end
+        end
+    end
     if g.showIncomingResIndicator == nil then
         g.showIncomingResIndicator = true
     end
