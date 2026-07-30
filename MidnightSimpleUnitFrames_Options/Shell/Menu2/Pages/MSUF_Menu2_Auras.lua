@@ -3259,7 +3259,7 @@ end
 local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
     local laneTitle = lane == "debuff" and "Debuff" or "Buff"
     local isDebuff = lane == "debuff"
-    local section = b:Section(laneTitle .. " Blacklist", isDebuff and 230 or 286)
+    local section = b:Section(laneTitle .. " Blacklist", isDebuff and 194 or 250)
     local w = section._msuf2Width or b.width or 720
     local inner = w - 48
     -- Debuff lane only: the free-form spell-ID entry was removed on purpose.
@@ -3285,20 +3285,6 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
             actionKey = "aura_blacklist_add_spell", actionFixedArgs = { scope = unit, lane = lane }, actionInputArg = "value",
         })
     end
-    local hidePermanent = BindSwitch(ctx, section, "Hide permanent auras", 24, isDebuff and -196 or -252, inner,
-        function()
-            return type(Model.ReadBlacklistHidePermanent) == "function"
-                and Model.ReadBlacklistHidePermanent(unit, lane) == true
-        end,
-        function(value)
-            if type(Model.WriteBlacklistHidePermanent) == "function"
-                and Model.WriteBlacklistHidePermanent(unit, lane, value) then
-                ApplyUnit(ctx, unit, "AURAS3_HIDE_PERMANENT", true)
-            end
-        end,
-        AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.hide-permanent", nil,
-            "auras3." .. unit .. "." .. lane .. ".blacklist.hidePermanent"))
-    AddTooltip(hidePermanent, "Hide permanent auras", "Always excludes auras without a duration. This rule is applied after the blacklist.")
     local presetW = max(152, floor(inner * 0.22))
     local spellW = max(210, floor(inner * 0.30))
     local function CurrentPreset()
@@ -4015,7 +4001,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
     end
 
     if tool == "whitelist" then
-        local section = b:Section(containerLabel .. " Whitelist", 244)
+        local section = b:Section(containerLabel .. " Whitelist", 212)
         local w = section._msuf2Width or b.width or 720
         local inner = w - 48
         local inputValue = ""
@@ -4039,15 +4025,10 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
         RegisterAuraTextAction(ctx, add, input, "Add spell", customActionPath .. ".whitelist.add", {
             actionKey = "aura_custom_whitelist_add_spell", actionFixedArgs = { scope = unit, index = index }, actionInputArg = "value",
         })
-        local hidePermanent = BindSwitch(ctx, section, "Hide permanent auras", 24, -94, inner,
-            function() return item.filters.hidePermanent == true end,
-            function(value) item.filters.hidePermanent = value == true; Apply("AURAS3_CUSTOM_HIDE_PERMANENT", true) end,
-            AuraControlMeta(ctx, "custom-container.whitelist.hide-permanent"))
-        AddTooltip(hidePermanent, "Hide permanent auras", "Always excludes auras without a duration, even when their SpellID is explicitly whitelisted.")
-        local status = W.Text(section, "", 24, -126, inner, T.colors.accent)
-        local empty = W.Text(section, "No spells tracked. Add up to 40 exact SpellIDs.", 24, -158, inner, T.colors.muted)
+        local status = W.Text(section, "", 24, -94, inner, T.colors.accent)
+        local empty = W.Text(section, "No spells tracked. Add up to 40 exact SpellIDs.", 24, -126, inner, T.colors.muted)
         local listScroll = CreateFrame("ScrollFrame", nil, section, "UIPanelScrollFrameTemplate")
-        listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -148)
+        listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -116)
         listScroll:SetSize(inner - 20, 84)
         if listScroll.EnableMouseWheel then listScroll:EnableMouseWheel(true) end
         local listChild = CreateFrame("Frame", nil, listScroll)
