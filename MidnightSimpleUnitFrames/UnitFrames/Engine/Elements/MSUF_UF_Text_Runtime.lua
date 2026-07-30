@@ -1859,6 +1859,14 @@ end
 PowerText.Update = UpdatePowerTextValues
 
 function PowerText.SelectEventUpdate(frame, spec, event, update)
+  -- The explicit realtime player option promises event-accurate text. Keep
+  -- UNIT_POWER_FREQUENT on the direct compiled Power -> PowerText route so the
+  -- text consumes the value the bar already resolved in this event. Ordinary
+  -- power text remains on the shared 250 ms coalescer.
+  if event == "UNIT_POWER_FREQUENT"
+    and spec and spec.power and spec.power.frequent == true then
+    return UpdatePowerTextValues
+  end
   if event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT" then
     local rt = frame and frame._msufTextRuntime
     -- Flat inline write: a group frame with a single percent-only power
