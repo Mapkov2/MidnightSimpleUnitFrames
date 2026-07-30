@@ -10,6 +10,8 @@
 ### Changes
 
 - The player Defensive Buffs lane has its own setup, layout and defensive-spell controls in the Auras page, including a matching preview.
+- Defensive Buffs are now enabled by default for new and existing profiles. They stay a normal saved choice afterwards, and the portrait mode can show one to eight defensive icons while retaining the proven single-icon layout by default.
+- Unit and group previews gained an element picker, exact X/Y offset inputs, reset and jump-to-settings actions, plus Tab/Shift+Tab selection for handles hidden behind other preview elements. Their layer controls now flow below the canvas, and zoom/pan can be locked while layers change.
 - Group-frame previews now render multiple active Dispel Symbol types just like the live frames.
 - Aura management is easier to navigate: unit and group blacklists, Custom Aura whitelists, tracked DoTs and player Defensive Buffs gained search, clearer icon-and-Spell-ID entries and explicit Remove buttons. Blacklists can add an entire curated set or a single spell from it; Buff blacklists still accept an exact custom spell, while Debuff blacklists stay curated for 12.x.
 - Removed duplicate permanent-aura toggles from the Auras page.
