@@ -30,7 +30,7 @@ end
 
 local hudFrame, row2Frame
 local DockUI = {}
-local ApplyDockLayout, RefreshPositionPopup, SetDockExpanded, ScheduleDockAutoHide
+local ApplyDockLayout, RefreshPositionPopup, SetDockExpanded, ScheduleDockAutoHide, StopDockDrag
 local previewBtn, previewAnimBtn, auraBtn, snapToggle, resetBtn, settingsBtn, cdmBtn, anchorBtn
 local previewAddonSlot
 local previewAnimRefreshRegistered
@@ -60,6 +60,7 @@ local DOCK_HORIZONTAL_W = 1428
 local DOCK_HORIZONTAL_H = 68
 local DOCK_VERTICAL_W   = 82
 local DOCK_EDGE_DEFAULT = 12
+local DOCK_SNAP_EDGE_PX = 24
 local DOCK_ALLOWED = { TOP = true, BOTTOM = true, LEFT = true, RIGHT = true, FREE = true }
 
 local TH = {
@@ -1410,15 +1411,54 @@ local function NearestDockEdge()
         distance = math.abs(tonumber(distance) or math.huge)
         if distance < best then nearest, best = dock, distance end
     end
-    return nearest
+    return nearest, best
 end
 
-local function StopDockDrag()
+local function CursorPositionInUIParent()
+    if not (UIParent and UIParent.GetEffectiveScale and GetCursorPosition) then return nil, nil end
+    local scale = tonumber(UIParent:GetEffectiveScale()) or 1
+    if scale == 0 then scale = 1 end
+    local x, y = GetCursorPosition()
+    if not (x and y) then return nil, nil end
+    return x / scale, y / scale
+end
+
+local function ClampDockDragOffset(offsetX, offsetY)
+    local screenW = tonumber(UIParent and UIParent:GetWidth()) or 1920
+    local screenH = tonumber(UIParent and UIParent:GetHeight()) or 1080
+    local frameW = tonumber(hudFrame and hudFrame:GetWidth()) or DOCK_HORIZONTAL_W
+    local frameH = tonumber(hudFrame and hudFrame:GetHeight()) or DOCK_HORIZONTAL_H
+    local maxX = max(0, (screenW - frameW) * 0.5)
+    local maxY = max(0, (screenH - frameH) * 0.5)
+    return ClampDockNumber(offsetX, -maxX, maxX, 0), ClampDockNumber(offsetY, -maxY, maxY, 0)
+end
+
+local function UpdateDockDrag()
+    local drag = DockUI.drag
+    if not (drag and hudFrame and UIParent) then return end
+    if (InCombatLockdown and InCombatLockdown())
+        or (IsMouseButtonDown and not IsMouseButtonDown("LeftButton")) then
+        StopDockDrag()
+        return
+    end
+    local cursorX, cursorY = CursorPositionInUIParent()
+    if not cursorX then return end
+    local offsetX = drag.frameX + cursorX - drag.cursorX
+    local offsetY = drag.frameY + cursorY - drag.cursorY
+    offsetX, offsetY = ClampDockDragOffset(offsetX, offsetY)
+    hudFrame:ClearAllPoints()
+    hudFrame:SetPoint("CENTER", UIParent, "CENTER", offsetX, offsetY)
+end
+
+StopDockDrag = function()
     if not hudFrame then return end
-    hudFrame:StopMovingOrSizing()
+    DockUI.drag = nil
+    hudFrame:SetScript("OnUpdate", nil)
+    if DockUI.grip then DockUI.grip._dockDragging = nil end
     local state = EnsureDockState()
-    if state.snapToEdge then
-        state.dock = NearestDockEdge()
+    local nearestDock, nearestDistance = NearestDockEdge()
+    if state.snapToEdge and nearestDistance <= DOCK_SNAP_EDGE_PX then
+        state.dock = nearestDock
     else
         local cx, cy = hudFrame:GetCenter()
         local ux, uy = UIParent:GetCenter()
@@ -1431,6 +1471,22 @@ local function StopDockDrag()
     ApplyDockLayout()
     DockUI.ScheduleLayoutSettle()
     RefreshPositionPopup()
+end
+
+DockUI.BeginDrag = function()
+    if not (hudFrame and UIParent) or (InCombatLockdown and InCombatLockdown()) then return false end
+    local cursorX, cursorY = CursorPositionInUIParent()
+    local frameX, frameY = hudFrame:GetCenter()
+    local parentX, parentY = UIParent:GetCenter()
+    if not (cursorX and cursorY and frameX and frameY and parentX and parentY) then return false end
+    DockUI.drag = {
+        cursorX = cursorX,
+        cursorY = cursorY,
+        frameX = frameX - parentX,
+        frameY = frameY - parentY,
+    }
+    hudFrame:SetScript("OnUpdate", UpdateDockDrag)
+    return true
 end
 
 ApplyDockLayout = function()
@@ -1625,11 +1681,9 @@ local function EnsureHUD()
     DockUI.grip = CreateFrame("Button", nil, hudFrame)
     DockUI.grip:RegisterForDrag("LeftButton")
     DockUI.grip:SetScript("OnDragStart", function()
-        if InCombatLockdown and InCombatLockdown() then return end
         if DockUI.positionPopup then DockUI.positionPopup:Hide() end
         SetDockExpanded(true)
-        DockUI.grip._dockDragging = true
-        hudFrame:StartMoving()
+        DockUI.grip._dockDragging = DockUI.BeginDrag() or nil
     end)
     DockUI.grip:SetScript("OnDragStop", function()
         if not DockUI.grip._dockDragging then return end
@@ -2147,6 +2201,7 @@ end
 
 function HUD.Hide()
     HUD.StopTour()
+    if DockUI.drag then StopDockDrag() end
     local cf = _G["MSUF_EM2_CancelConfirm"]; if cf then cf:Hide() end
     SetLayoutEventsEnabled(false)
     if helpBtn and helpBtn._pulse then helpBtn._pulse:Stop() end
