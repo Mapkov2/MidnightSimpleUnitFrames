@@ -1,5 +1,27 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-Beta41 - 2026-07-30
+
+### Highlights
+
+- Aura and Spell Indicator icons can now scale independently from their unit or group frame. Buffs, Debuffs, External Defensives and Spell Icons each support 20% to 300% scaling without changing the surrounding frame.
+- Aura and Spell Indicator previews now consume the same finalized layout configuration as the live runtime across unit frames, Party, Raid, Mythic Raid and Edit Mode dummies.
+
+### Changes
+
+- Preview geometry now mirrors live anchor, growth, rows, spacing, offsets, alpha, layer, icon zoom, cooldown text, stacks, duration bars, borders and shadows.
+- Player Defensive Buffs placed inside the portrait now respect the configured growth direction, per-row layout, offsets and shared Aura appearance.
+- Removed the legacy automatic changelog popup; release notes remain available through the normal addon and distribution pages.
+
+### Fixes & Performance
+
+- Aura and Spell preview refreshes stay on the out-of-combat cold path, use targeted pooled updates and add no recurring combat work.
+- Fixed deferred unit- and group-frame refresh requests overwriting earlier queued work during combat; all accumulated reasons and element sets now flush together.
+- Added a PlayerFrame compatibility mode that keeps Blizzard-owned resource bars functional while the visible Blizzard PlayerFrame remains hidden.
+- Migrated legacy Combat and Incoming Resurrection indicator positions to the runtime anchor schema without overwriting explicit profile choices.
+- Fixed Raid Group Indicator font-size changes not reaching the compiled live group-frame configuration immediately.
+- Fixed spacing and clipping in the Group Frames Range Fade section.
+
 ## 6.0-Beta40 - 2026-07-30
 
 ### Highlights
