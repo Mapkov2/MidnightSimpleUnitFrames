@@ -2848,3 +2848,15 @@ L["Lists every element the preview placed, including those hidden behind another
 L["drag to move - Tab picks the next element - ? lists every control"] = "drag to move - Tab picks the next element - ? lists every control"
 L["guides hidden - arrows still nudge the selected element"] = "guides hidden - arrows still nudge the selected element"
 L["Rightclick to move (%dx)"] = "Rightclick to move (%dx)"
+
+-- Preview canvas backgrounds.
+L["Preview background"] = "Preview background"
+L["Bright stone"] = "Bright stone"
+L["A bright surface for checking dark borders and text."] = "A bright surface for checking dark borders and text."
+L["City scene"] = "City scene"
+L["A mixed game scene for checking readability in normal play."] = "A mixed game scene for checking readability in normal play."
+L["Dark stone"] = "Dark stone"
+L["A dark surface for checking bright borders and text."] = "A dark surface for checking bright borders and text."
+L["Studio"] = "Studio"
+L["The original neutral preview gradient."] = "The original neutral preview gradient."
+L["Choose a background to check frame readability on bright and dark game surfaces."] = "Choose a background to check frame readability on bright and dark game surfaces."
