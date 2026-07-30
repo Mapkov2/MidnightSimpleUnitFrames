@@ -1454,7 +1454,9 @@ local function CompilePortrait(kind, conf, frameHeight)
   if mode ~= "LEFT" and mode ~= "RIGHT" then mode = conf.showPortrait == true and "LEFT" or "OFF" end
   local override = Num(conf.portraitSizeOverride, Num(conf.portraitSize, 0))
   local autoSize = math.max(16, Num(frameHeight, 40) - 4)
-  local size = override > 0 and math.max(16, override) or autoSize
+  -- `0` deliberately means automatic sizing. Every positive slider value is
+  -- an explicit override and must therefore reach the portrait layout intact.
+  local size = override > 0 and math.max(1, override) or autoSize
   local width = Num(conf.portraitWidth, 0)
   local height = Num(conf.portraitHeight, 0)
   width = width > 0 and math.max(8, width) or size
