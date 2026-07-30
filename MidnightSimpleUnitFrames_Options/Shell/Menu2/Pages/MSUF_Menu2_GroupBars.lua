@@ -1006,7 +1006,10 @@ end
 
 local function BuildGFRangeFadeSection(ctx, b)
     local AlphaLabel = M.AlphaLabel
-    local range = b:CollapsibleSection("range", "Range Fade", 250, false)
+    -- 220 mirrors the registered section height in MSUF_Menu2_GroupLayout; the
+    -- lazy shell wins over this call, so a larger value here only desynced the
+    -- non-lazy fallback path from what the page actually renders.
+    local range = b:CollapsibleSection("range", "Range Fade", 220, false)
     local rangeW = range._msuf2Width or b.width or 720
     local rangeGap = 16
     local rangeLeftX = 20
@@ -1014,8 +1017,12 @@ local function BuildGFRangeFadeSection(ctx, b)
     local rangeLeftWidth = floor((rangeInnerW - rangeGap) * 0.48)
     local rangeRightX = rangeLeftX + rangeLeftWidth + rangeGap
     local rangeRightWidth = rangeInnerW - rangeLeftWidth - rangeGap
-    local rangeEffectCard = W.ControlCard(range, "Behavior", nil, rangeLeftX, -38, rangeLeftWidth, 190)
-    local rangeAlphaCard = W.ControlCard(range, "Alpha", "Opacity values used by range and offline states.", rangeRightX, -38, rangeRightWidth, 190)
+    -- Both cards sit at -18 so the 190pt card body ends 12pt above the section
+    -- floor instead of overflowing it by 8pt while leaving a dead band under
+    -- the accordion header.
+    local rangeCardY = -18
+    local rangeEffectCard = W.ControlCard(range, "Behavior", nil, rangeLeftX, rangeCardY, rangeLeftWidth, 190)
+    local rangeAlphaCard = W.ControlCard(range, "Alpha", "Opacity values used by range and offline states.", rangeRightX, rangeCardY, rangeRightWidth, 190)
     local rangeToggle = BindScopeToggle(ctx, W.SwitchAt(rangeEffectCard, "Range Fade", rangeLeftWidth - 62, -24, 0, "HIDDEN"), "rangeFadeEnabled", false, "visual")
     local function BindRangeAlphaSlider(key, label, default, y)
         local control = W.Slider(rangeAlphaCard, "", 0, 1, 0.05, rangeRightWidth)
@@ -1040,9 +1047,12 @@ local function BuildGFRangeFadeSection(ctx, b)
         function() return Val(CurrentScope(), "rangeFadeLayerMode", "frame") end,
         function(v) Set(CurrentScope(), "rangeFadeLayerMode", v or "frame", "visual") end,
         ControlMeta(ctx, "field.rangeFadeLayerMode"))
-    W.MoveWidget(rangeMode, rangeEffectCard, 16, -88, rangeModeW, "LEFT")
-    local offlineFadeToggle = BindScopeToggle(ctx, W.ToggleAt(rangeEffectCard, "Fade offline members", 16, -128, rangeLeftWidth - 32), "offlineFadeEnabled", false, "visual")
-    local offlineHint = W.Text(rangeEffectCard, "Hiding offline members in Frame Basics takes precedence over this.", 16, -156, rangeLeftWidth - 32, T.colors.muted)
+    -- Rows mirror the alpha card on the right: -70 lines up with "Out of range",
+    -- -122 with "Offline", so both cards read as one grid instead of a gap plus
+    -- a segment overlapping the offline toggle.
+    W.MoveWidget(rangeMode, rangeEffectCard, 16, -70, rangeModeW, "LEFT")
+    local offlineFadeToggle = BindScopeToggle(ctx, W.ToggleAt(rangeEffectCard, "Fade offline members", 16, -122, rangeLeftWidth - 32), "offlineFadeEnabled", false, "visual")
+    local offlineHint = W.Text(rangeEffectCard, "Hiding offline members in Frame Basics takes precedence over this.", 16, -154, rangeLeftWidth - 32, T.colors.muted)
     if offlineHint and offlineHint.SetWordWrap then offlineHint:SetWordWrap(true) end
     local rangeControls = {
         rangeMode,
