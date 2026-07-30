@@ -279,6 +279,7 @@ SlotLayoutSignature = function(slot)
         .. "\030" .. tostring(slot.stackAnchor) .. "\030" .. tostring(slot.stackX) .. "\030" .. tostring(slot.stackY)
         .. "\030" .. tostring(slot.showTooltip) .. "\030" .. tostring(color[1]) .. "\030" .. tostring(color[2])
         .. "\030" .. tostring(color[3]) .. "\030" .. tostring(color[4]) .. "\030" .. tostring(slot.iconEffect)
+        .. "\030" .. tostring(slot.iconStyle and slot.iconStyle.signature)
         .. "\030" .. tostring(frame and frame.type)
         .. "\030" .. tostring(frame and frame.timing) .. "\030" .. tostring(frame and frame.expireThreshold)
         .. "\030" .. tostring(frame and frame.priority) .. "\030" .. tostring(frame and frame.thickness)
@@ -339,8 +340,8 @@ local function CompileSlot(unit, item, index, fallbackLayer, fallbackStrata, fal
     -- Raid never expose a second, drifting cooldown/stack style surface.
     -- Corner custom slots deliberately retain their explicit no-text contract.
     local appearance = item.cornerSlotKey == nil and type(sharedBuffStyle) == "table" and sharedBuffStyle or nil
-    local size = ClampNumber(placed and placed.size, hiddenVisual and 1 or 18, 1, 128)
-    local width = visual == "bar" and ClampNumber(placed and placed.barWidth, size * 3, size, 256) or size
+    local size = ClampNumber(placed and placed.size, hiddenVisual and 1 or 18, 1, 256)
+    local width = visual == "bar" and ClampNumber(placed and placed.barWidth, size * 3, size, 384) or size
     local color = type(item.color) == "table" and item.color or nil
     local nativeFilter = item.nativeFilter or item.customFilter or (item.onlyOwn ~= false and "HELPFUL|PLAYER" or "HELPFUL")
     local rawStrata = item.strata
@@ -351,6 +352,8 @@ local function CompileSlot(unit, item, index, fallbackLayer, fallbackStrata, fal
         kind = "spellIndicator",
         slotKey = SpellIndicatorSlotKey(item, index),
         itemKey = item.key,
+        specKey = item.specKey,
+        auraName = item.auraName,
         display = item.display or item.auraName or tostring(index or ""),
         unit = unit,
         enabled = true,
@@ -367,6 +370,10 @@ local function CompileSlot(unit, item, index, fallbackLayer, fallbackStrata, fal
             Clamp01(color and color[3], 0.88),
             Clamp01(color and color[4], 1),
         },
+        -- Spell icons inherit the Buff lane's complete shared appearance.
+        -- PrepareAuraButton consumes this exact compiled style; previews read
+        -- the same slot, so the border/shadow opt-out cannot drift by surface.
+        iconStyle = appearance and appearance.iconStyle or nil,
         iconEffect = iconEffect,
         frameEffect = frameEffect,
         size = size,

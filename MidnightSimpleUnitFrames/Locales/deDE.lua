@@ -3997,6 +3997,7 @@ L["State Tints"] = "Statusfärbungen"
 L["Up/Down  Enter"] = "Hoch/Runter  Eingabe"
 L["Whole Castbar Layer"] = "Ebene der gesamten Zauberleiste"
 L["Icon Zoom (%)"] = "Symbol-Zoom (%)"
+L["Icon Scale (%)"] = "Symbolskalierung (%)"
 
 -- Einsteiger-Workflow und intelligente Suche.
 L["Best %d match(es). Open one or ask MSUF for a guided answer."] = "Die besten %d Treffer. Öffne einen oder frage MSUF nach einer geführten Antwort."

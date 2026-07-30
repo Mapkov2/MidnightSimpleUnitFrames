@@ -3639,6 +3639,7 @@ L["State Tints"] = "상태 색조"
 L["Up/Down  Enter"] = "위/아래  Enter"
 L["Whole Castbar Layer"] = "전체 시전 바 레벨"
 L["Icon Zoom (%)"] = "아이콘 확대/축소 (%)"
+L["Icon Scale (%)"] = "아이콘 크기 (%)"
 
 -- 초보자 작업 흐름 및 스마트 검색.
 L["Best %d match(es). Open one or ask MSUF for a guided answer."] = "가장 적합한 결과 %d개입니다. 하나를 열거나 MSUF에게 안내 답변을 요청하세요."

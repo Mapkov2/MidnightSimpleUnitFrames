@@ -645,6 +645,12 @@ local function OverlayRawAuraPreviewStyle(compiled, raw)
     return compiled
 end
 
+local function PreviewIconScale(value)
+    value = tonumber(value) or 100
+    if value < 20 then value = 20 elseif value > 300 then value = 300 end
+    return value / 100
+end
+
 local function BuildScene(box, reason)
     local S = box._msufGFRenderState
     local H, M, MSUF = S.H, S.M, S.MSUF
@@ -688,20 +694,36 @@ local function BuildScene(box, reason)
     }
     local rawAuras = conf.auras or {}
     local trackedRaw = RawTrackedBuffLane(scene, rawAuras.buff)
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    local runtimeAuraConfig
+    if runtimeSpec and a3 and type(a3.ResolveAuraPreviewConfig) == "function" then
+        local proxy = box._msufA3GroupPreviewConfigProxy or {}
+        box._msufA3GroupPreviewConfigProxy = proxy
+        proxy._msufIsGroupFrame = true
+        proxy._msufGFIsPreviewFrame = true
+        proxy._msufGFKind = kind
+        proxy.MSUFUnitKey = "player"
+        proxy.MSUFSpec = runtimeSpec
+        runtimeAuraConfig = a3.ResolveAuraPreviewConfig(proxy, "player")
+    end
+    scene.runtimeAuraConfig = runtimeAuraConfig
+    local runtimeLanes = runtimeAuraConfig and runtimeAuraConfig.lanes
     scene.rawAuras = rawAuras
     scene.auraIconZoom = tonumber(rawAuras.iconZoom) or tonumber(scene.runtimeAuras and scene.runtimeAuras.iconZoom) or 100
-    scene.buffCfg = scene.runtimeAuras
+    scene.buffCfg = runtimeLanes and runtimeLanes.buff or scene.runtimeAuras
         and S.CompiledAuraLane(scene.runtimeAuras, "buff", rawAuras.buff or {}) or rawAuras.buff or {}
-    scene.trackedBuffCfg = scene.runtimeAuras
+    scene.trackedBuffCfg = runtimeLanes and runtimeLanes.trackedBuff or scene.runtimeAuras
         and S.CompiledAuraLane(scene.runtimeAuras, "trackedBuff", trackedRaw) or trackedRaw
-    scene.debuffCfg = scene.runtimeAuras
+    scene.debuffCfg = runtimeLanes and runtimeLanes.debuff or scene.runtimeAuras
         and S.CompiledAuraLane(scene.runtimeAuras, "debuff", rawAuras.debuff or {}) or rawAuras.debuff or {}
-    scene.externalCfg = scene.runtimeAuras
+    scene.externalCfg = runtimeLanes and runtimeLanes.external or scene.runtimeAuras
         and S.CompiledAuraLane(scene.runtimeAuras, "external", rawAuras.externals or {}) or rawAuras.externals or {}
-    OverlayRawAuraPreviewStyle(scene.buffCfg, rawAuras.buff)
-    OverlayRawAuraPreviewStyle(scene.trackedBuffCfg, trackedRaw)
-    OverlayRawAuraPreviewStyle(scene.debuffCfg, rawAuras.debuff)
-    OverlayRawAuraPreviewStyle(scene.externalCfg, rawAuras.externals)
+    if not runtimeLanes then
+        OverlayRawAuraPreviewStyle(scene.buffCfg, rawAuras.buff)
+        OverlayRawAuraPreviewStyle(scene.trackedBuffCfg, trackedRaw)
+        OverlayRawAuraPreviewStyle(scene.debuffCfg, rawAuras.debuff)
+        OverlayRawAuraPreviewStyle(scene.externalCfg, rawAuras.externals)
+    end
     scene.statusSpec = S.CurrentStatusSpec()
     scene.selectedSpellCfg = S.CurrentSpellConfig(kind)
     -- The selected frame effect belongs to the selected spell, not to whichever
@@ -720,10 +742,13 @@ local function BuildScene(box, reason)
     scene.selectedSpellPlacedEnabled = scene.selectedPlaced
         and (scene.selectedPlaced.type or "icon") ~= "none"
     scene.selectedSpellNeedsPlacementPreview = scene.selectedSpellCfg ~= nil and scene.rawSelectedPlaced == nil
-    scene.runtimeSpellIndicators = runtimeSpec and runtimeSpec.spellIndicators
+    local exactSpellRoot = runtimeAuraConfig and runtimeAuraConfig.spellIndicators
+    scene.runtimeSpellIndicators = exactSpellRoot or (runtimeSpec and runtimeSpec.spellIndicators)
     scene.spellIconZoom = tonumber(scene.runtimeSpellIndicators and scene.runtimeSpellIndicators.iconZoom)
         or tonumber(conf.spellIndicators and conf.spellIndicators.iconZoom) or 100
-    scene.runtimeSpellItems = scene.runtimeSpellIndicators and scene.runtimeSpellIndicators.items
+    scene.spellIconScale = PreviewIconScale(conf.spellIndicators and conf.spellIndicators.iconScale)
+    scene.runtimeSpellItems = exactSpellRoot and exactSpellRoot.slots
+        or (scene.runtimeSpellIndicators and scene.runtimeSpellIndicators.items)
     local previewSpellItems = box._msufGFPreviewSpellItemsScratch or {}
     box._msufGFPreviewSpellItemsScratch = previewSpellItems
     wipe(previewSpellItems)
@@ -733,15 +758,17 @@ local function BuildScene(box, reason)
     if type(scene.runtimeSpellItems) == "table" then
         for i = 1, #scene.runtimeSpellItems do
             local item = scene.runtimeSpellItems[i]
+            local exactSlot = item and item.spellIndicatorSlot == true
             local selectedItem = item and item.specKey == selectedSpellSpecKey and item.auraName == selectedSpellAuraName
-            local placed = item and item.placed
-            local placedShown = placed and (placed.type or "icon") ~= "none"
+            local placed = exactSlot and item or (item and item.placed)
+            local placedType = placed and (exactSlot and placed.visual or placed.type) or "none"
+            local placedShown = placed and placedType ~= "none" and item.hiddenVisual ~= true
             if selectedItem or (scene.previewAllSpecSpellIcons and item and item.specKey == selectedSpellSpecKey and placedShown) then
-                scene.previewSpellItems[#scene.previewSpellItems + 1] = item
+                if placedShown then scene.previewSpellItems[#scene.previewSpellItems + 1] = item end
             end
             if selectedItem then
-                if placed and (placed.type or "icon") ~= "none" then scene.runtimeSpellPlacedAvailable = true end
-                local effect = item.frame
+                if placedShown then scene.runtimeSpellPlacedAvailable = true end
+                local effect = exactSlot and item.frameEffect or item.frame
                 if effect ~= nil then
                     scene.selectedSpellEffect = effect
                     local effectKind = type(effect) == "table" and tostring(effect.type or "none"):lower() or "none"
@@ -750,7 +777,6 @@ local function BuildScene(box, reason)
                 if effect and effect.type and effect.type ~= "none" then
                     scene.runtimeSpellEffectAvailable = true
                 end
-                if not scene.previewAllSpecSpellIcons then break end
             elseif scene.previewAllSpecSpellIcons and item and item.specKey == selectedSpellSpecKey and placedShown then
                 scene.runtimeSpellPlacedAvailable = true
             end
@@ -951,9 +977,13 @@ local function FinalizeScene(scene)
     for i = 1, #auraHandles do
         local item, handle = auraHandles[i], auraHandles[i][1]
         if handle then
-            SetPreviewFrameLevel(handle, baseLevel + foregroundBase
+            local level = SetPreviewFrameLevel(handle, baseLevel + foregroundBase
                 + ApplyHandleStrata(scene, handle, "AUTO", liveStrata, hostStrata)
                 + S.ClampLayer(item[2].layer, item[3]))
+            for j = 1, #(handle._auraStyleOwners or {}) do
+                local owner = handle._auraStyleOwners[j]
+                if owner and owner.SetFrameLevel then SetPreviewFrameLevel(owner, level) end
+            end
         end
     end
     for i = 1, #S.statusHandles do
@@ -1248,18 +1278,24 @@ local function RenderAuras(scene)
     local function LayoutAuraGroup(handle, groupKey, cfg, defaults)
         cfg = cfg or {}
         defaults = defaults or {}
+        local runtimeLane = cfg._msufA3LayoutSignature ~= nil
+            and cfg.initialAnchor ~= nil and cfg.xSign ~= nil and cfg.ySign ~= nil
         local maxIcons = Int(cfg.max, defaults.max or 6, 0, 40)
         local perRow = Int(cfg.perRow, defaults.perRow or maxIcons, 1, 40)
         local rawSize = cfg.size or defaults.size or 16
-        local minSize = defaults.minSize or 8
-        local laneScale = cfg._compiled and previewScale or (previewScale * auraDynamicScale)
+        local compiledLane = runtimeLane or cfg._compiled == true
+        if not compiledLane then rawSize = rawSize * PreviewIconScale(cfg.iconScale) end
+        local minSize = (compiledLane or cfg.iconScale ~= nil) and 1 or (defaults.minSize or 8)
+        local laneScale = compiledLane and previewScale or (previewScale * auraDynamicScale)
         local size = max(minSize, ScaleValue(rawSize, laneScale, minSize))
         local spacing = max(0, ScaleValue(cfg.spacing or defaults.spacing or 1, previewScale, 0))
         local anchor = RuntimeAuraAnchor(cfg.anchor, defaults.anchor or "CENTER")
         if not GF_PREVIEW_ANCHOR_FRAC[anchor] then anchor = defaults.anchor or "CENTER" end
         if not GF_PREVIEW_ANCHOR_FRAC[anchor] then anchor = "CENTER" end
-        local textScale = cfg._compiled and previewScale or laneScale
-        local showCooldown = cfg.showCooldown ~= false
+        local textScale = compiledLane and previewScale or laneScale
+        local showCooldown
+        if runtimeLane then showCooldown = cfg.showCooldownText == true
+        else showCooldown = cfg.showCooldown ~= false end
         local showStacks = cfg.showStacks ~= false
         local showSwipe = cfg.showCooldownSwipe ~= false
         local barOnly = cfg.showDurationBar == true and (cfg.durationBarDisplay or "BAR_ONLY") == "BAR_ONLY"
@@ -1275,6 +1311,7 @@ local function RenderAuras(scene)
         local dispelMode = groupKey == "debuff" and NormalizeDispelBorderMode(cfg.dispelBorderMode, cfg.showDispelBorder == true or cfg.showDispelSymbol == true) or "OFF"
         local growth = cfg.growth or defaults.growth or "RIGHTDOWN"
         local gv = AuraGrowth(growth)
+        local centered = runtimeLane ~= true and gv.centered == true
         local anchorTarget = mock
         local anchorFrac = GF_PREVIEW_ANCHOR_FRAC[anchor] or GF_PREVIEW_ANCHOR_FRAC.CENTER
         local ids = GF_AURA_MOCK_ICON_IDS[groupKey] or GF_AURA_MOCK_ICON_IDS.debuff
@@ -1282,7 +1319,7 @@ local function RenderAuras(scene)
         AddIconPool(handle, maxIcons)
         handle._previewRects = handle._previewRects or {}
         local handleW, handleH, originX, originY
-        if gv.centered then
+        if centered then
             local minL, minB, maxR, maxT
             for i = 1, maxIcons do
                 local left, bottom
@@ -1310,8 +1347,22 @@ local function RenderAuras(scene)
             handleH = max(1, Round(maxT - minB))
             originX, originY = -minL, -minB
         else
-            local xSign, ySign, verticalGrowth, initialAnchor = RuntimeAuraGrowth(growth)
-            local cols, rows = RuntimeAuraGridShape(maxIcons, perRow, verticalGrowth)
+            local xSign, ySign, verticalGrowth, initialAnchor
+            if runtimeLane then
+                xSign = tonumber(cfg.xSign) or 1
+                ySign = tonumber(cfg.ySign) or -1
+                verticalGrowth = cfg.verticalGrowth == true
+                initialAnchor = cfg.initialAnchor
+            else
+                xSign, ySign, verticalGrowth, initialAnchor = RuntimeAuraGrowth(growth)
+            end
+            local cols, rows
+            if runtimeLane then
+                cols = max(1, tonumber(cfg.cols) or 1)
+                rows = max(1, tonumber(cfg.rows) or 1)
+            else
+                cols, rows = RuntimeAuraGridShape(maxIcons, perRow, verticalGrowth)
+            end
             handleW = max(1, Round(cols * size + max(cols - 1, 0) * spacing))
             handleH = max(1, Round(rows * size + max(rows - 1, 0) * spacing))
             originX = Round(anchorFrac[1] * handleW)
@@ -1335,9 +1386,9 @@ local function RenderAuras(scene)
         handle._previewOriginY = originY
         handle._previewAnchorFrame = anchorTarget
         handle._previewScale = previewScale
-        handle._previewWriteScale = cfg._compiled and (previewScale * max(0.0001, auraDynamicScale)) or previewScale
+        handle._previewWriteScale = compiledLane and (previewScale * max(0.0001, auraDynamicScale)) or previewScale
         handle:ClearAllPoints()
-        if gv.centered then
+        if centered then
             handle:SetPoint(
                 "BOTTOMLEFT",
                 anchorTarget,
@@ -1363,6 +1414,17 @@ local function RenderAuras(scene)
             local durationBar = handle._iconDurationBars and handle._iconDurationBars[i]
             local rect = handle._previewRects[i]
             if tex and rect then
+                local styleOwner
+                if runtimeLane then
+                    handle._auraStyleOwners = handle._auraStyleOwners or {}
+                    styleOwner = handle._auraStyleOwners[i]
+                    if not styleOwner then
+                        styleOwner = CreateFrame("Frame", nil, handle)
+                        styleOwner:EnableMouse(false)
+                        if styleOwner.SetMouseMotionEnabled then styleOwner:SetMouseMotionEnabled(false) end
+                        handle._auraStyleOwners[i] = styleOwner
+                    end
+                end
                 local auraState = PreviewAuraState(groupKey, i, handle, cfg)
                 tex:SetTexture(MockSpellTexture(ids[((i - 1) % #ids) + 1]))
                 ApplyPreviewIconZoom(tex, cfg.iconZoom or scene.auraIconZoom, 0)
@@ -1373,6 +1435,18 @@ local function RenderAuras(scene)
                     tex:SetPoint(rect.anchor, handle, rect.anchor, rect[1], rect[2])
                 else
                     tex:SetPoint("BOTTOMLEFT", handle, "BOTTOMLEFT", rect[1] + originX, rect[2] + originY)
+                end
+                if styleOwner then
+                    styleOwner:ClearAllPoints()
+                    styleOwner:SetAllPoints(tex)
+                    if styleOwner.SetFrameLevel and handle.GetFrameLevel then
+                        SetPreviewFrameLevel(styleOwner, handle:GetFrameLevel() or 0)
+                    end
+                    local a3 = MSUF and MSUF.MSUF_Auras3
+                    if a3 and type(a3.ApplyIconStylePreview) == "function" then
+                        a3.ApplyIconStylePreview(styleOwner, barOnly and nil or cfg.iconStyle, size)
+                    end
+                    styleOwner:Show()
                 end
                 if swipe then
                     if showSwipe and not barOnly then
@@ -1408,6 +1482,13 @@ local function RenderAuras(scene)
             if handle._iconStacks and handle._iconStacks[i] then handle._iconStacks[i]:Hide() end
             if handle._iconTimers and handle._iconTimers[i] then handle._iconTimers[i]:Hide() end
             if handle._iconDurationBars and handle._iconDurationBars[i] then handle._iconDurationBars[i]:Hide() end
+            if handle._auraStyleOwners and handle._auraStyleOwners[i] then
+                local a3 = MSUF and MSUF.MSUF_Auras3
+                if a3 and type(a3.ApplyIconStylePreview) == "function" then
+                    a3.ApplyIconStylePreview(handle._auraStyleOwners[i], nil)
+                end
+                handle._auraStyleOwners[i]:Hide()
+            end
         end
         return size
     end
@@ -2553,7 +2634,8 @@ function Render.Install(box, ctx, deps)
             root:Hide()
         end
         local function ApplySpellIconEffectPreview(handle, placed, spellSize)
-            if not (handle and placed and placed.type == "icon" and placed.iconEffect == "glow") then
+            local visual = placed and (placed.visual or placed.type)
+            if not (handle and placed and visual == "icon" and placed.iconEffect == "glow") then
                 HideSpellIconEffectPreview(handle)
                 return
             end
@@ -2573,9 +2655,11 @@ function Render.Install(box, ctx, deps)
         local function ConfigureSpellPreviewHandle(handle, item, placed, appearance, fallbackTexture, fallbackColor)
             if not (handle and placed) then return false end
             appearance = appearance or {}
-            local spellType = placed.type or "icon"
-            local spellBaseSize = tonumber(placed.size) or 20
-            local spellSize = max(14, ScaleValue(spellBaseSize, previewScale, 10))
+            local exactSlot = placed.spellIndicatorSlot == true
+            local spellType = exactSlot and (placed.visual or "none") or (placed.type or "icon")
+            local placedScale = (exactSlot or placed._msufIconScaleApplied == true) and 1 or scene.spellIconScale
+            local spellBaseSize = (tonumber(placed.size) or 20) * placedScale
+            local spellSize = max(1, ScaleValue(spellBaseSize, previewScale, 1))
             local color = item and item.color or fallbackColor
             local spellR, spellG, spellB = (color and color[1]) or 0.69, (color and color[2]) or 0.50, (color and color[3]) or 0.88
             if handle.SetBackdropColor then handle:SetBackdropColor(spellR * 0.12, spellG * 0.12, spellB * 0.12, 0.42) end
@@ -2602,7 +2686,9 @@ function Render.Install(box, ctx, deps)
             if spellTimer then spellTimer:Hide() end
             if spellDurationBar then spellDurationBar:Hide() end
             if spellType == "bar" then
-                local barW = max(spellSize * 2, ScaleValue(placed.barWidth or (spellBaseSize * 3), previewScale, 16))
+                local barWidth = tonumber(exactSlot and placed.width or placed.barWidth)
+                if barWidth then barWidth = barWidth * placedScale end
+                local barW = max(spellSize * 2, ScaleValue(barWidth or (spellBaseSize * 3), previewScale, 16))
                 handle:SetSize(barW, spellSize)
                 if spellTex then
                     spellTex:SetTexture(WHITE8X8)
@@ -2639,7 +2725,7 @@ function Render.Install(box, ctx, deps)
                 handle:SetSize(spellSize, spellSize)
                 if spellTex then
                     spellTex:SetTexture((item and item.icon) or fallbackTexture or CurrentSpellTexture(kind))
-                    ApplyPreviewIconZoom(spellTex, scene.spellIconZoom, 0)
+                    ApplyPreviewIconZoom(spellTex, exactSlot and placed.iconZoom or scene.spellIconZoom, 0)
                     spellTex:SetVertexColor(1, 1, 1, 1)
                     spellTex:ClearAllPoints()
                     spellTex:SetAllPoints(handle)
@@ -2682,6 +2768,16 @@ function Render.Install(box, ctx, deps)
                     spellStack:SetText("2")
                     spellStack:Show()
                 end
+                local a3 = MSUF and MSUF.MSUF_Auras3
+                if a3 and type(a3.ApplyIconStylePreview) == "function" then
+                    a3.ApplyIconStylePreview(handle, barOnly and nil or appearance.iconStyle, spellSize)
+                end
+            end
+            if spellType ~= "icon" then
+                local a3 = MSUF and MSUF.MSUF_Auras3
+                if a3 and type(a3.ApplyIconStylePreview) == "function" then
+                    a3.ApplyIconStylePreview(handle, nil)
+                end
             end
             handle._msufSpellIndicatorLayer = item and item.layer or nil
             handle._msufSpellIndicatorStrata = item and item.strata or nil
@@ -2692,12 +2788,14 @@ function Render.Install(box, ctx, deps)
         if runtimeSpellIndicators and runtimeSpellIndicators.enabled == true and type(runtimeSpellItems) == "table" and box.EnsureSpellIndicatorHandle then
             for i = 1, #runtimeSpellItems do
                 local item = runtimeSpellItems[i]
-                local placed = item and item.placed
+                local exactSlot = item and item.spellIndicatorSlot == true
+                local placed = exactSlot and item or (item and item.placed)
                 local selectedItem = item and item.specKey == scene.selectedSpellSpecKey
                     and item.auraName == scene.selectedSpellAuraName
-                local effect = selectedItem and (item.frame or selectedSpellEffect) or nil
+                local effect = selectedItem and ((exactSlot and item.frameEffect) or item.frame or selectedSpellEffect) or nil
                 local handle = box:EnsureSpellIndicatorHandle(item, i)
-                local placedShown = placed and (placed.type or "icon") ~= "none"
+                local placedType = placed and (exactSlot and placed.visual or placed.type) or "none"
+                local placedShown = placed and placedType ~= "none" and item.hiddenVisual ~= true
                 if handle and placedShown and ConfigureSpellPreviewHandle(handle, item, placed, item) then
                     if selectedItem then selectedRuntimeSpellHandleUsed = true end
                 elseif handle and effect then

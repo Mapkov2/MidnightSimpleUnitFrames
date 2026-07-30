@@ -14,6 +14,7 @@ local floor = math.floor
 local max = math.max
 local min = math.min
 local table_concat = table.concat
+local C_Timer = M.MenuTimer or _G.C_Timer
 local MSUF_SetIconTexture = _G.MSUF_SetIconTexture
 local VT = M.ValueTextList
 local WHITE_RGB = { 1, 1, 1 }
@@ -60,16 +61,19 @@ end
 local function StepMeta(ctx, path, step)
     local meta = ControlMeta(ctx, path)
     meta.step, meta.roundStep = step, true
-    if path == "spell.icon_zoom" then
+    if path == "spell.icon_zoom" or path == "spell.icon_scale" then
         local scope = CurrentScope()
         meta.assistantDisposition = "dynamic"
-        meta.assistantDispositionReason = "Icon Zoom targets Spell Indicator icons in the selected Group scope."
+        meta.assistantDispositionReason = path == "spell.icon_scale"
+            and "Icon Scale targets Spell Indicator geometry in the selected Group scope."
+            or "Icon Zoom targets Spell Indicator icons in the selected Group scope."
+        local setting = path == "spell.icon_scale" and "iconScale" or "iconZoom"
         if scope == "party" then
-            meta.assistantSettingKeys = { "gf_party.spellIndicators.iconZoom" }
+            meta.assistantSettingKeys = { "gf_party.spellIndicators." .. setting }
         else
             meta.assistantSettingKeys = {
-                "gf_raid.spellIndicators.iconZoom",
-                "gf_mythicraid.spellIndicators.iconZoom",
+                "gf_raid.spellIndicators." .. setting,
+                "gf_mythicraid.spellIndicators." .. setting,
             }
         end
     end
@@ -1810,13 +1814,69 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         end,
         100, StepMeta(ctx, "spell.icon_zoom", 1))
     W.MoveWidget(spellIconZoom, spells, siRightX, -974, siRightW, "LEFT")
+    local spellIconScale = W.Slider(spells, Tr("Icon Scale (%)"), 20, 300, 1, siRightW)
+    do
+        local scaleScope = CurrentScope()
+        local pendingApply, releaseScheduled
+        local function CombatLocked()
+            if type(M.IsConfigCombatLocked) == "function" then return M.IsConfigCombatLocked() == true end
+            return (_G.InCombatLockdown and _G.InCombatLockdown()) or _G.MSUF_InCombat == true
+        end
+        local function RefreshPreviewOnly()
+            if CombatLocked() then return false end
+            if type(RefreshGFPreview) == "function" then
+                RefreshGFPreview(scaleScope, { spellOnly = true })
+            end
+            return true
+        end
+        local function FlushRuntime()
+            if not pendingApply then return end
+            if CombatLocked() then
+                releaseScheduled = nil
+                return false
+            end
+            pendingApply = nil
+            releaseScheduled = nil
+            QueueSpellIndicators(scaleScope, "auras")
+            return true
+        end
+        local function ScheduleRelease()
+            if not pendingApply or releaseScheduled then return end
+            if CombatLocked() then return end
+            releaseScheduled = true
+            if C_Timer and type(C_Timer.After) == "function" then
+                C_Timer.After(0, FlushRuntime)
+            else
+                FlushRuntime()
+            end
+        end
+        M.BindNumberWidget(ctx, spellIconScale,
+            function() return tonumber(SpellIndicators(scaleScope).iconScale) or 100 end,
+            function(value)
+                value = floor((tonumber(value) or 100) + 0.5)
+                local cfg = SpellIndicators(scaleScope)
+                if cfg.iconScale == value then return end
+                cfg.iconScale = value
+                pendingApply = true
+                if spellIconScale._msuf2SliderActive == true or releaseScheduled then
+                    RefreshPreviewOnly()
+                else
+                    FlushRuntime()
+                end
+            end,
+            100, StepMeta(ctx, "spell.icon_scale", 1))
+        spellIconScale:HookScript("OnMouseUp", ScheduleRelease)
+        spellIconScale:HookScript("OnHide", FlushRuntime)
+        spellIconScale:HookScript("OnShow", FlushRuntime)
+    end
+    W.MoveWidget(spellIconScale, spells, siRightX, -1028, siRightW, "LEFT")
     local appearanceHint = W.Text(spells,
         Tr("Cooldowns, stacks, and tooltips use the Buff style for this frame."),
-        siRightX, -1028, siRightW, T.colors.muted)
+        siRightX, -1082, siRightW, T.colors.muted)
     if appearanceHint.SetWordWrap then appearanceHint:SetWordWrap(true) end
     local openBuffAppearance = T.Button(spells, Tr("Edit Buff Style"), siRightW, 28)
     openBuffAppearance._msuf2GroupFrameGateAlwaysEnabled = true
-    openBuffAppearance:SetPoint("TOPLEFT", spells, "TOPLEFT", siRightX, -1092)
+    openBuffAppearance:SetPoint("TOPLEFT", spells, "TOPLEFT", siRightX, -1146)
     if T.CenterButtonLabel then T.CenterButtonLabel(openBuffAppearance) end
     openBuffAppearance:SetScript("OnClick", function()
         local scope = CurrentScope() == "party" and "party" or "raid"
@@ -1849,7 +1909,7 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         W.MoveWidget(placedBarWidth, spells, siLeftX, -762 - extra, siLeftW, "LEFT")
         W.MoveWidget(placedGrowth, spells, siLeftX, -816 - extra, siLeftW, "LEFT")
         W.MoveWidget(placedIconEffect, spells, siLeftX, -870 - extra, siLeftW, "LEFT")
-        local contentHeight = max(1154, 930 + extra)
+        local contentHeight = max(1208, 984 + extra)
         local entry = spells._msuf2CollapsibleEntry
         if entry and entry.contentHeight ~= contentHeight then
             entry.contentHeight = contentHeight
@@ -1899,6 +1959,8 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         SetOptionEnabled(frameType, hasSpell)
         SetManyEnabled(hasFrame, frameTiming, frameColor, framePriority, frameAlpha, frameThickness, frameLayer)
         SetOptionEnabled(frameExpireThreshold, expiringFrame)
+        SetOptionEnabled(spellIconZoom, indicatorsOn)
+        SetOptionEnabled(spellIconScale, indicatorsOn)
         local badges = {
             OnOffBadge(indicatorsOn, "Enabled", "Disabled"),
         }

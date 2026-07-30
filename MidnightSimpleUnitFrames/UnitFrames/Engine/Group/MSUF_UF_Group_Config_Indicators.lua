@@ -46,6 +46,19 @@ local function IconZoom(value)
   return value
 end
 
+local function IconScale(value)
+  value = Num(value, 100)
+  if value < 20 then value = 20 end
+  if value > 300 then value = 300 end
+  return value / 100
+end
+
+local function Scaled(value, scale, fallback)
+  value = Num(value, fallback)
+  scale = tonumber(scale) or 1
+  return floor((value * scale) + 0.5)
+end
+
 local function NormalizeFrameStrata(value, fallback)
   local normalize = _G.MSUF_NormalizeFrameStrata
   if type(normalize) == "function" then return normalize(value, fallback or "AUTO") end
@@ -372,7 +385,7 @@ local function MergeSpellEntry(saved, defaults)
   return out
 end
 
-local function NormalizePlaced(placed)
+local function NormalizePlaced(placed, iconScale)
   if type(placed) ~= "table" then return nil end
   local kind = tostring(placed.type or "icon"):lower()
   if kind ~= "icon" and kind ~= "square" and kind ~= "bar" and kind ~= "number" and kind ~= "none" then
@@ -383,8 +396,8 @@ local function NormalizePlaced(placed)
     anchor = tostring(placed.anchor or "TOPLEFT"):upper(),
     x = Num(placed.x, 0),
     y = Num(placed.y, 0),
-    size = Num(placed.size, 18),
-    barWidth = Num(placed.barWidth, Num(placed.width, 54)),
+    size = Scaled(placed.size, iconScale, 18),
+    barWidth = Scaled(placed.barWidth, iconScale, Num(placed.width, 54)),
     growth = placed.growth,
     iconEffect = tostring(placed.iconEffect or "none"):lower(),
     missing = false,
@@ -392,6 +405,7 @@ local function NormalizePlaced(placed)
     showCooldown = placed.showCooldown ~= false,
     cooldownSize = Num(placed.cooldownSize, 8),
     showStacks = placed.showStacks ~= false,
+    _msufIconScaleApplied = true,
   }
 end
 
@@ -423,12 +437,12 @@ local function NormalizeFrameEffect(frame)
   }
 end
 
-local function CompileSpellIndicatorItem(si, specKey, auraName, entry, order, globalLayer)
+local function CompileSpellIndicatorItem(si, specKey, auraName, entry, order, globalLayer, iconScale)
   if type(entry) ~= "table" or entry.enabled == false then return nil end
   local ids, hash = {}, {}
   local idCount = AddSpellIDsForAura(hash, ids, si, specKey, auraName, entry)
   if idCount <= 0 then return nil end
-  local placed = NormalizePlaced(entry.placed)
+  local placed = NormalizePlaced(entry.placed, iconScale)
   local frame = NormalizeFrameEffect(entry.frame)
   if placed and placed.type == "none" and not frame then placed = nil end
   if not placed and not frame then return nil end
@@ -468,7 +482,7 @@ local function CompileSpellIndicatorItem(si, specKey, auraName, entry, order, gl
   }
 end
 
-local function CompileSpecItems(out, si, siCfg, specKey, globalLayer)
+local function CompileSpecItems(out, si, siCfg, specKey, globalLayer, iconScale)
   local specCfg = type(siCfg and siCfg.specs) == "table" and siCfg.specs[specKey] or nil
   local defaults = si and si.SpecDefaults and si.SpecDefaults[specKey] or nil
   local trackable = si and si.TrackableAuras and si.TrackableAuras[specKey] or nil
@@ -479,7 +493,7 @@ local function CompileSpecItems(out, si, siCfg, specKey, globalLayer)
       if auraName then
         seen[auraName] = true
         local entry = MergeSpellEntry(type(specCfg) == "table" and specCfg[auraName] or nil, type(defaults) == "table" and defaults[auraName] or nil)
-        local item = CompileSpellIndicatorItem(si, specKey, auraName, entry, i, globalLayer)
+        local item = CompileSpellIndicatorItem(si, specKey, auraName, entry, i, globalLayer, iconScale)
         if item then out[#out + 1] = item end
       end
     end
@@ -493,7 +507,7 @@ local function CompileSpecItems(out, si, siCfg, specKey, globalLayer)
     for i = 1, #extras do
       local auraName = extras[i]
       local entry = MergeSpellEntry(specCfg[auraName], type(defaults) == "table" and defaults[auraName] or nil)
-      local item = CompileSpellIndicatorItem(si, specKey, auraName, entry, 1000 + i, globalLayer)
+      local item = CompileSpellIndicatorItem(si, specKey, auraName, entry, 1000 + i, globalLayer, iconScale)
       if item then out[#out + 1] = item end
     end
   end
@@ -510,6 +524,7 @@ function GF.CompileSpellIndicators(conf)
       enabled = false,
       layer = 9,
       iconZoom = IconZoom(siCfg and siCfg.iconZoom),
+      iconScale = IconScale(siCfg and siCfg.iconScale),
       strata = NormalizeFrameStrata(siCfg and siCfg.strata, "AUTO"),
       spec = siCfg and siCfg.spec or "auto",
       activeSpec = nil,
@@ -522,10 +537,11 @@ function GF.CompileSpellIndicators(conf)
   end
   local layer = Layer(siCfg.layer, 9)
   local strata = NormalizeFrameStrata(siCfg.strata, "AUTO")
+  local iconScale = IconScale(siCfg.iconScale)
   local specs = CollectSpecs(siCfg, si)
   local items, watched, watchedCount = {}, {}, 0
   for i = 1, #specs do
-    CompileSpecItems(items, si, siCfg, specs[i], layer)
+    CompileSpecItems(items, si, siCfg, specs[i], layer, iconScale)
   end
   table_sort(items, function(a, b)
     if a.specKey ~= b.specKey then return tostring(a.specKey) < tostring(b.specKey) end
@@ -552,6 +568,7 @@ function GF.CompileSpellIndicators(conf)
     enabled = #items > 0,
     layer = layer,
     iconZoom = IconZoom(siCfg.iconZoom),
+    iconScale = iconScale,
     strata = strata,
     spec = siCfg.spec or "auto",
     activeSpec = specs[1],

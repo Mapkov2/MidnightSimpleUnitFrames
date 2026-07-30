@@ -256,6 +256,12 @@ local function ScaleAuraValue(value, scale, minValue)
   return value
 end
 
+local function AuraIconScale(value)
+  value = tonumber(value) or 100
+  if value < 20 then value = 20 elseif value > 300 then value = 300 end
+  return value / 100
+end
+
 local function ResolveTexture(resolver, kind)
   if type(resolver) == "function" then
     local texture = resolver(kind)
@@ -1031,7 +1037,14 @@ local AURA_LANE_DEFAULTS = {
 
 local function ApplyAuraLane(out, prefix, groupKey, group, defaults, maxCount, iconSize, growthX, growthY, scale, kind)
   out[defaults[1]] = Num(group.max, maxCount)
-  out[prefix .. "IconSize"] = scale(group.size, iconSize, 1)
+  local iconScale = AuraIconScale(group.iconScale)
+  out[prefix .. "IconScale"] = iconScale
+  local iconZoom = group.iconZoom
+  if iconZoom == nil and (prefix == "trackedBuff" or prefix == "external") then
+    iconZoom = out.buffIconZoom
+  end
+  out[prefix .. "IconZoom"] = Num(iconZoom, Num(out.iconZoom, 100))
+  out[prefix .. "IconSize"] = scale(Num(group.size, iconSize) * iconScale, iconSize, 1)
   out[prefix .. "Spacing"] = scale(group.spacing, 1, 0)
   out[prefix .. "PerRow"] = Num(group.perRow, defaults[2])
   out[prefix .. "GrowthX"] = growthX
@@ -1331,6 +1344,7 @@ local function CompileCoreAuras(kind, conf)
   local trackedBuff = {
     max = trackedBuffMax,
     size = Num(buff.trackedSize, Num(buff.size, defaultTrackedBuffSize)),
+    iconScale = Num(buff.trackedIconScale, Num(buff.iconScale, 100)),
     spacing = Num(buff.trackedSpacing, Num(buff.spacing, 1)),
     perRow = Num(buff.trackedPerRow, Num(buff.perRow, 4)),
     growth = buff.trackedGrowth or buff.growth or "RIGHTDOWN",

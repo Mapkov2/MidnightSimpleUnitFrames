@@ -642,6 +642,8 @@ local function CustomLaneBounds(item, kind, frameW, frameH, metrics, previewEntr
         previewTextures = previewTextures,
         padding = padding,
         iconStyle = LaneIconStyle(metrics, unit),
+        alpha = ClampNumber(placed.alpha, 1, 0, 1),
+        iconZoom = ClampNumber(placed.iconZoom, 100, 100, 200),
     }
 end
 
@@ -686,8 +688,12 @@ local function DefensivePortraitBounds(item, runtimeSpec, previewEntries, unit, 
         item = item,
         previewTextures = previewTextures,
         iconStyle = LaneIconStyle(metrics, unit),
-        showCooldownText = item.portraitCooldownText ~= false,
-        showCooldownSwipe = true,
+        alpha = ClampNumber(placed.alpha, 1, 0, 1),
+        iconZoom = ClampNumber(placed.iconZoom, 100, 100, 200),
+        showCooldownText = placed.showCooldown ~= false and item.portraitCooldownText ~= false,
+        showCooldownSwipe = placed.showCooldownSwipe ~= false,
+        showStacks = placed.showStacks ~= false,
+        showDurationBar = placed.showDurationBar == true,
         cooldownSwipeReverse = placed.cooldownSwipeReverse == true,
         x = RuntimeRound(ClampNumber(placed.x, 0, -4096, 4096)),
         y = RuntimeRound(ClampNumber(placed.y, 0, -4096, 4096)),
@@ -1123,6 +1129,7 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
     visual:SetSize(max(1, S(bounds.laneW)), max(1, S(bounds.laneH)))
     visual:ClearAllPoints()
     visual:SetPoint("BOTTOMLEFT", box.mock, "BOTTOMLEFT", laneX, laneY)
+    if visual.SetAlpha then visual:SetAlpha(ClampNumber(bounds.alpha, 1, 0, 1)) end
     if visual.SetFrameLevel then visual:SetFrameLevel((baseLevel or 0) + layer) end
     visual:Show()
     if handle.SetFrameLevel then handle:SetFrameLevel((baseLevel or 0) + max(50, layer + 45)) end
@@ -1193,10 +1200,10 @@ local function LayoutDefensivePortrait(box, mock, state, S)
     BindDragProxy(visual, handle)
     local textCfg = CustomTextConfig(bounds)
     textCfg.showCooldownText = bounds.showCooldownText == true
-    textCfg.showStackCount = false
+    textCfg.showStackCount = bounds.showStacks ~= false
     textCfg.showCooldownSwipe = bounds.showCooldownSwipe ~= false
     textCfg.cooldownSwipeReverse = bounds.cooldownSwipeReverse == true
-    textCfg.showDurationBar = false
+    textCfg.showDurationBar = bounds.showDurationBar == true
     local size = max(8, S(bounds.size))
     local spacing = max(0, S(bounds.spacing or 0))
     local shown = max(1, tonumber(bounds.shown) or 1)
@@ -1209,12 +1216,25 @@ local function LayoutDefensivePortrait(box, mock, state, S)
     local offsetY = S((bounds.y or 0) + (bounds.portraitInsetY or 0))
     local initialAnchor = bounds.initialAnchor or "TOPLEFT"
     visual:SetPoint(initialAnchor, mock.portrait, initialAnchor, offsetX, offsetY)
+    if visual.SetAlpha then visual:SetAlpha(ClampNumber(bounds.alpha, 1, 0, 1)) end
     if visual.SetFrameLevel and mock.portrait.GetFrameLevel then
         visual:SetFrameLevel((mock.portrait:GetFrameLevel() or 1) + 1)
     end
+    local stackSize = max(7, S(textCfg.stackSize or 14))
+    local cooldownSize = max(7, S(textCfg.cooldownSize or 14))
+    local stackAnchor = textCfg.stackAnchor or "BOTTOMRIGHT"
+    local stackX, stackY = S(textCfg.stackX or 0), S(textCfg.stackY or 0)
+    local cdAnchor = textCfg.cooldownAnchor or "CENTER"
+    local cdX, cdY = S(textCfg.cooldownX or 0), S(textCfg.cooldownY or 0)
+    local stackFont = ResolveAuraFont(_stackFontState, stackSize)
+    local timerFont = ResolveAuraFont(_timerFontState, cooldownSize)
+    local showStacks = textCfg.showStackCount ~= false
+    local showCooldown = textCfg.showCooldownText ~= false
+    local showSwipe = textCfg.showCooldownSwipe ~= false
+    local barOnly = textCfg.showDurationBar == true and textCfg.durationBarDisplay == "BAR_ONLY"
     local a3 = MSUF and MSUF.MSUF_Auras3
     local applyIconStyle = a3 and a3.ApplyIconStylePreview
-    local timerFont = ResolveAuraFont(_timerFontState, max(7, S(textCfg.cooldownSize or 14)))
+    local iconStyle = (not barOnly) and bounds.iconStyle or nil
     for i = 1, shown do
         local icon = EnsureIcon(visual, i)
         icon:SetSize(size, size)
@@ -1224,19 +1244,17 @@ local function LayoutDefensivePortrait(box, mock, state, S)
             col * step * bounds.growthX, row * step * bounds.growthY)
         if icon.SetFrameLevel then icon:SetFrameLevel((visual:GetFrameLevel() or 1) + 1) end
         icon.tex:SetTexture(bounds.previewTextures and bounds.previewTextures[i] or AURA_TEXTURES.buff[1])
-        ApplyIconZoom(icon.tex, bounds.item and bounds.item.placed and bounds.item.placed.iconZoom)
-        icon.bg:Show()
-        icon.tex:Show()
+        ApplyIconZoom(icon.tex, bounds.iconZoom)
+        icon.bg:SetShown(not barOnly)
+        icon.tex:SetShown(not barOnly)
         icon.edge:SetVertexColor(0, 0, 0, 0)
         if type(applyIconStyle) == "function" then
-            applyIconStyle(icon, bounds.iconStyle, size)
+            applyIconStyle(icon, iconStyle, size)
         end
-        if icon.durationBar then icon.durationBar:Hide() end
         if icon.dispelBorder then icon.dispelBorder:Hide() end
-        icon.stack:SetText("")
         local auraState = PreviewAuraState("custom4", i, icon, textCfg)
         if icon.swipe then
-            if bounds.showCooldownSwipe ~= false then
+            if showSwipe and not barOnly then
                 LayoutPreviewAuraSwipe(icon.swipe, icon, size,
                     auraState and auraState.remainingFrac, textCfg.cooldownSwipeReverse == true)
                 icon.swipe:Show()
@@ -1244,16 +1262,24 @@ local function LayoutDefensivePortrait(box, mock, state, S)
                 icon.swipe:Hide()
             end
         end
+        LayoutPreviewDurationBar(icon.durationBar, icon, textCfg, size, auraState)
+        ApplyAuraFont(icon.stack, stackFont)
+        PlaceAuraText(icon.stack, icon, stackAnchor, stackX, stackY)
+        icon.stack:SetText(showStacks
+            and (auraState and auraState.stacks or (i % 3 == 1 and "2" or "")) or "")
         ApplyAuraFont(icon.timer, timerFont)
-        PlaceAuraText(icon.timer, icon, textCfg.cooldownAnchor or "CENTER",
-            S(textCfg.cooldownX or 0), S(textCfg.cooldownY or 0))
-        icon.timer:SetText(bounds.showCooldownText == true
+        PlaceAuraText(icon.timer, icon, cdAnchor, cdX, cdY)
+        icon.timer:SetText(showCooldown
             and (auraState and auraState.text or tostring(7 + i)) or "")
         icon:Show()
         BindDragProxy(icon, handle)
     end
     for i = shown + 1, #(visual._icons or {}) do
-        visual._icons[i]:Hide()
+        local icon = visual._icons[i]
+        if icon.swipe then icon.swipe:Hide() end
+        if icon.durationBar then icon.durationBar:Hide() end
+        if icon.dispelBorder then icon.dispelBorder:Hide() end
+        icon:Hide()
     end
     visual:Show()
     if handle then

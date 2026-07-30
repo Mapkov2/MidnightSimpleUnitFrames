@@ -13,7 +13,8 @@ local floor, ceil, abs = math.floor, math.ceil, math.abs
 local max = math.max
 local min = math.min
 local VT = M.ValueTextList
-local AURA_ANCHORS, STATUS_ICON_ANCHORS, SPELL_GROWTH_VALUES, ScopeSection, CurrentScope, AuraGroup, AurasRoot, QueueGF, RefreshContext, BindNestedSlider, BindNestedDropdown, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, OnOffBadge, BadgeNumber, OptionText = M.Pick(GP, [[AURA_ANCHORS STATUS_ICON_ANCHORS SPELL_GROWTH_VALUES ScopeSection CurrentScope AuraGroup AurasRoot QueueGF RefreshContext BindNestedSlider BindNestedDropdown SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus OnOffBadge BadgeNumber OptionText]])
+local C_Timer = M.MenuTimer or _G.C_Timer
+local GF, RefreshGFPreview, AURA_ANCHORS, STATUS_ICON_ANCHORS, SPELL_GROWTH_VALUES, ScopeSection, CurrentScope, AuraGroup, AurasRoot, QueueGF, RefreshContext, BindNestedSlider, BindNestedDropdown, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, OnOffBadge, BadgeNumber, OptionText = M.Pick(GP, [[GF RefreshGFPreview AURA_ANCHORS STATUS_ICON_ANCHORS SPELL_GROWTH_VALUES ScopeSection CurrentScope AuraGroup AurasRoot QueueGF RefreshContext BindNestedSlider BindNestedDropdown SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus OnOffBadge BadgeNumber OptionText]])
 AURA_ANCHORS = AURA_ANCHORS or {}
 STATUS_ICON_ANCHORS = STATUS_ICON_ANCHORS or {}
 SPELL_GROWTH_VALUES = SPELL_GROWTH_VALUES or {}
@@ -288,6 +289,96 @@ local function BuildGFAuras(ctx)
     ScopeSection(ctx, b)
     M.GroupPreview.Add(ctx, b)
     local function RefreshPage() M.CallIf(M.SelectPage, ctx.key) end
+    local function CombatLocked()
+        if type(M.IsConfigCombatLocked) == "function" then return M.IsConfigCombatLocked() == true end
+        return _G.InCombatLockdown and _G.InCombatLockdown() or false
+    end
+    local function RefreshAuraPreviews(scope)
+        if CombatLocked() then return false end
+        M.CallIf(RefreshGFPreview, scope, { auraOnly = true })
+        return true
+    end
+    local function BindLiveAuraSlider(widget, scope, lane, key, fallback, meta)
+        local pendingApply, pendingScope, releaseScheduled
+        local function RefreshPreviewOnly()
+            RefreshAuraPreviews(pendingScope or scope)
+        end
+        local function FlushRuntime()
+            if not pendingApply then return end
+            if CombatLocked() then
+                releaseScheduled = nil
+                return false
+            end
+            local applyScope = pendingScope or scope
+            pendingApply = nil
+            pendingScope = nil
+            releaseScheduled = nil
+            QueueGF(applyScope, "auras")
+            return true
+        end
+        local function ScheduleRelease()
+            if not pendingApply or releaseScheduled then return end
+            if CombatLocked() then return end
+            releaseScheduled = true
+            -- Tracked Menu2 timer only (file-local proxy above). A raw global
+            -- timer callback outlives the combat teardown that hides this page,
+            -- so the runtime apply would still fire after the menu quiesced on
+            -- PLAYER_REGEN_DISABLED.
+            if C_Timer and type(C_Timer.After) == "function" then
+                C_Timer.After(0, FlushRuntime)
+            else
+                FlushRuntime()
+            end
+        end
+        meta = meta or AuraControlMeta(ctx,
+            "group-workspace.lane." .. AuraCatalogToken(lane) .. ".layout." .. AuraCatalogToken(key))
+        meta.step, meta.roundStep = 1, true
+        M.BindNumberWidget(ctx, widget,
+            function() return tonumber(AuraGroup(CurrentScope(), lane)[key]) or fallback end,
+            function(value)
+                local activeScope = CurrentScope()
+                value = floor((tonumber(value) or fallback or 0) + 0.5)
+                local group = AuraGroup(activeScope, lane)
+                if group[key] == value then return end
+                group[key] = value
+                pendingApply = true
+                pendingScope = activeScope
+                -- Every drag tick repaints both preview surfaces from the same
+                -- freshly compiled Aura lane, while live GroupFrames stay on
+                -- the bounded release-time apply below.
+                RefreshPreviewOnly()
+                if widget._msuf2SliderActive == true or releaseScheduled then
+                    return
+                else
+                    FlushRuntime()
+                end
+            end,
+            fallback, meta)
+        widget:HookScript("OnMouseUp", ScheduleRelease)
+        widget:HookScript("OnHide", FlushRuntime)
+        -- If combat interrupts a drag, MenuRuntime cancels the release timer
+        -- and hides the page. Retain the pending OOC apply locally and flush it
+        -- only when the user next opens this control after combat.
+        widget:HookScript("OnShow", FlushRuntime)
+        return widget
+    end
+    local function BindLiveAuraDropdown(widget, scope, lane, key, fallback, meta)
+        M.BindDropdownWidget(ctx, widget,
+            function() return AuraGroup(CurrentScope(), lane)[key] or fallback end,
+            function(value)
+                if CombatLocked() then return end
+                local activeScope = CurrentScope()
+                local group = AuraGroup(activeScope, lane)
+                value = value or fallback
+                if group[key] == value then return end
+                group[key] = value
+                RefreshAuraPreviews(activeScope)
+                QueueGF(activeScope, "auras")
+            end,
+            meta or AuraControlMeta(ctx,
+                "group-workspace.lane." .. AuraCatalogToken(lane) .. ".layout." .. AuraCatalogToken(key)))
+        return widget
+    end
     local scope = CurrentScope()
     local lane = CurrentAuraWorkspaceLane(scope)
     local tool = CurrentAuraWorkspaceTool(scope, lane)
@@ -313,20 +404,11 @@ local function BuildGFAuras(ctx)
         M.AttachAuraFontsAndColors(top, "Auras", scope)
     end
 
-    local rootSection = auraBuilder:Section("Group Aura Visibility", 132)
+    local rootSection = auraBuilder:Section("Group Aura Visibility", 88)
     local rootWidth = rootSection._msuf2Width or auraBuilder.width or 720
     local rootEnabled = BindAuraRootEnabled(ctx,
         W.SwitchAt(rootSection, "Enable group auras", 24, -50, rootWidth - 48))
     rootEnabled._msuf2GroupFrameGateAlwaysEnabled = true
-    local rootZoom = BindNestedSlider(ctx,
-        W.Slider(rootSection, "Icon Zoom (%)", 100, 200, 1, min(320, rootWidth - 48)),
-        function() return AurasRoot(CurrentScope()) end, "iconZoom", 100, "auras",
-        AuraControlMeta(ctx, "group-workspace.root.icon_zoom", nil, {
-            assistantDisposition = "dynamic",
-            assistantDispositionReason = "Icon Zoom targets every Aura icon in the selected Group scope.",
-            assistantSettingKeys = GroupAuraSettingKeys(scope, ".auras.iconZoom"),
-        }))
-    W.MoveWidget(rootZoom, rootSection, 24, -88, min(320, rootWidth - 48), "LEFT")
 
     if tool == "layout" then
         local title = lane == "debuff" and "Debuff Layout"
@@ -341,8 +423,8 @@ local function BuildGFAuras(ctx)
         local anchorX = 24 + 126 + gap
         local growthX = anchorX + dropdownW + gap
         local function Dropdown(label, x, values, key, fallback)
-            local widget = BindNestedDropdown(ctx, W.Dropdown(section, label, values, dropdownW),
-                function() return AuraGroup(CurrentScope(), lane) end, key, fallback, "auras",
+            local widget = BindLiveAuraDropdown(W.Dropdown(section, label, values, dropdownW),
+                scope, lane, key, fallback,
                 AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".layout." .. AuraCatalogToken(key)))
             W.MoveWidget(widget, section, x, -34, dropdownW, "LEFT")
             controls[#controls + 1] = widget
@@ -360,8 +442,8 @@ local function BuildGFAuras(ctx)
                     assistantSettingKeys = GroupAuraSettingKeys(scope, ".auras.externals.layer"),
                 }
             end
-            local widget = BindNestedSlider(ctx, W.Slider(section, label, minValue, maxValue, 1, col4),
-                function() return AuraGroup(CurrentScope(), lane) end, key, fallback, "auras",
+            local widget = BindLiveAuraSlider(W.Slider(section, label, minValue, maxValue, 1, col4),
+                scope, lane, key, fallback,
                 AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".layout." .. AuraCatalogToken(key), nil,
                     assistantContract))
             W.MoveWidget(widget, section, 24 + (col - 1) * (col4 + gap), y, col4)
@@ -375,6 +457,16 @@ local function BuildGFAuras(ctx)
         local perRowControl = Slider("Per row", 1, -146, 1, 20, "perRow", defaults.perRow)
         Slider("Gap", 2, -146, 0, 12, "spacing", defaults.spacing)
         Slider("Layer (0-30)", 3, -146, 0, 30, "layer", defaults.layer)
+        local iconScale = BindLiveAuraSlider(W.Slider(section, "Icon Scale (%)", 20, 300, 1, col4),
+            scope, lane, "iconScale", 100,
+            AuraControlMeta(ctx,
+                "group-workspace.lane." .. AuraCatalogToken(lane) .. ".layout.icon-scale", nil, {
+                    assistantDisposition = "dynamic",
+                    assistantDispositionReason = "Icon Scale targets the selected Group scope's Aura container.",
+                    assistantSettingKeys = GroupAuraSettingKeys(scope, ".auras." .. tostring(lane) .. ".iconScale"),
+                }))
+        W.MoveWidget(iconScale, section, 24 + 3 * (col4 + gap), -146, col4)
+        controls[#controls + 1] = iconScale
         M.TrackRefresh(ctx, function()
             local shown = LaneBackendEnabled(CurrentScope(), lane)
             SetOptionEnabled(enable, true)

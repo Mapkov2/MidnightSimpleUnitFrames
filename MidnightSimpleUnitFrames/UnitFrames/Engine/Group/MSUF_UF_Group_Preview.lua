@@ -24,6 +24,7 @@ local GetNumGroupMembers = GetNumGroupMembers
 local UnitName = UnitName
 local RAID_CLASS_COLORS = RAID_CLASS_COLORS
 local C_Timer = _G.C_Timer
+local STANDARD_TEXT_FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local floor, max, min = math.floor, math.max, math.min
 local type, tonumber, tostring = type, tonumber, tostring
 local NormalizeKind
@@ -329,6 +330,691 @@ local function SetText(region, text)
   if region and region.SetText then region:SetText(text or "") end
 end
 
+--- Native aura elements deliberately stay disabled on synthetic group-preview
+--- rows because each Blizzard CustomAuraContainer allocates AuraButtons in
+--- batches and can only show the real player's current auras. These tiny
+--- addon-owned regions mirror only already-compiled aura/spell placement data
+--- on every Party/Raid/Mythic dummy. They are pooled with the preview button,
+--- never query UnitAura, and never register an event or OnUpdate.
+local PREVIEW_WHITE = "Interface\\Buttons\\WHITE8X8"
+local PREVIEW_QUESTION = "Interface\\Icons\\INV_Misc_QuestionMark"
+local PREVIEW_AURA_SAMPLE_LIMIT = 2
+local PREVIEW_AURA_LANES = {
+  {
+    key = "buff",
+    textures = {
+      "Interface\\Icons\\Spell_Holy_WordFortitude",
+      "Interface\\Icons\\Spell_Holy_Renew",
+    },
+  },
+  {
+    key = "trackedBuff",
+    textures = {
+      "Interface\\Icons\\Spell_Holy_PrayerOfMendingtga",
+      "Interface\\Icons\\Spell_Holy_PowerWordShield",
+    },
+  },
+  {
+    key = "debuff",
+    textures = {
+      "Interface\\Icons\\Spell_Shadow_CurseOfTounges",
+      "Interface\\Icons\\Spell_Shadow_AbominationExplosion",
+    },
+  },
+  {
+    key = "external",
+    textures = {
+      "Interface\\Icons\\Spell_Holy_SealOfProtection",
+      "Interface\\Icons\\Spell_Holy_PowerWordShield",
+    },
+  },
+}
+
+local function SetPreviewFont(fontString, size)
+  if not (fontString and fontString.SetFont) then return end
+  size = max(6, tonumber(size) or 10)
+  if fontString._msufGFPreviewFontSize == size then return end
+  fontString._msufGFPreviewFontSize = size
+  fontString:SetFont(STANDARD_TEXT_FONT, size, "OUTLINE")
+end
+
+local function PlacePreviewText(fontString, owner, point, x, y)
+  if not (fontString and owner) then return end
+  point = tostring(point or "CENTER"):upper()
+  if not VALID_POINTS[point] then point = "CENTER" end
+  fontString:ClearAllPoints()
+  fontString:SetPoint(point, owner, point, tonumber(x) or 0, tonumber(y) or 0)
+end
+
+local function EnsureSpellIndicatorPreview(frame, index)
+  local pool = frame._msufGFSpellIndicatorPreviews
+  if not pool then
+    pool = {}
+    frame._msufGFSpellIndicatorPreviews = pool
+  end
+  local visual = pool[index]
+  if visual then return visual end
+
+  visual = CreateFrame("Frame", nil, frame)
+  visual:EnableMouse(false)
+  if visual.SetMouseMotionEnabled then visual:SetMouseMotionEnabled(false) end
+  visual._texture = visual:CreateTexture(nil, "ARTWORK")
+  visual._texture:SetAllPoints(visual)
+  pool[index] = visual
+  return visual
+end
+
+local function EnsurePreviewTexture(visual, key, layer, sublevel)
+  local texture = visual[key]
+  if not texture then
+    texture = visual:CreateTexture(nil, layer, nil, sublevel)
+    visual[key] = texture
+  end
+  return texture
+end
+
+local function EnsurePreviewFontString(visual, key)
+  local fontString = visual[key]
+  if not fontString then
+    fontString = visual:CreateFontString(nil, "OVERLAY")
+    visual[key] = fontString
+  end
+  return fontString
+end
+
+local function EnsureFrameAuraPreview(frame, index)
+  local pool = frame._msufGFFrameAuraPreviews
+  if not pool then
+    pool = {}
+    frame._msufGFFrameAuraPreviews = pool
+  end
+  local visual = pool[index]
+  if visual then return visual end
+
+  visual = CreateFrame("Frame", nil, frame)
+  visual:EnableMouse(false)
+  if visual.SetMouseMotionEnabled then visual:SetMouseMotionEnabled(false) end
+  visual._texture = visual:CreateTexture(nil, "ARTWORK")
+  visual._texture:SetAllPoints(visual)
+  pool[index] = visual
+  return visual
+end
+
+local function EnsureFrameAuraLaneHost(frame, key)
+  local hosts = frame._msufGFFrameAuraPreviewHosts
+  if not hosts then
+    hosts = {}
+    frame._msufGFFrameAuraPreviewHosts = hosts
+  end
+  local host = hosts[key]
+  if host then return host end
+  host = CreateFrame("Frame", nil, frame)
+  host:EnableMouse(false)
+  if host.SetMouseMotionEnabled then host:SetMouseMotionEnabled(false) end
+  hosts[key] = host
+  return host
+end
+
+local function HideFrameAuraPreview(visual)
+  if not visual then return end
+  visual:Hide()
+  if visual._texture then visual._texture:Hide() end
+  if visual._swipe then visual._swipe:Hide() end
+  if visual._timer then visual._timer:Hide() end
+  if visual._stack then visual._stack:Hide() end
+  if visual._durationBar then visual._durationBar:Hide() end
+  local A3 = MSUF and MSUF.MSUF_Auras3
+  if A3 and type(A3.ApplyIconStylePreview) == "function" then
+    A3.ApplyIconStylePreview(visual, nil)
+  end
+end
+
+local function FrameAuraPreviewOffset(lane, slot)
+  local step = tonumber(lane.step) or ((tonumber(lane.size) or 1) + (tonumber(lane.spacing) or 0))
+  if lane.verticalGrowth == true then
+    return 0, slot * step * (tonumber(lane.ySign) or -1)
+  end
+  local perRow = max(1, floor((tonumber(lane.perRow) or 1) + 0.5))
+  local column = slot % perRow
+  local row = floor(slot / perRow)
+  local x = column * step * (tonumber(lane.xSign) or 1)
+  local y = row * step * (tonumber(lane.ySign) or -1)
+  return x, y
+end
+
+local function ApplyFrameAuraPreview(frame, kind, visual, lane, descriptor, slot, sampleIndex, host)
+  local size = max(1, tonumber(lane.size) or 18)
+  local initialAnchor = tostring(lane.initialAnchor or "TOPLEFT"):upper()
+  if not VALID_POINTS[initialAnchor] then initialAnchor = "TOPLEFT" end
+  local x, y = FrameAuraPreviewOffset(lane, slot)
+
+  visual:ClearAllPoints()
+  visual:SetSize(size, size)
+  visual:SetPoint(initialAnchor, host, initialAnchor, x, y)
+  if visual.SetFrameLevel and host.GetFrameLevel then visual:SetFrameLevel((host:GetFrameLevel() or 0) + 1) end
+  if visual.SetAlpha then visual:SetAlpha(1) end
+
+  local texture = visual._texture
+  local textures = descriptor.textures
+  texture:SetTexture(textures[((sampleIndex - 1) % #textures) + 1] or PREVIEW_QUESTION)
+  local zoom = max(100, min(200, tonumber(lane.iconZoom) or 100))
+  local inset = (1 - (100 / zoom)) * 0.5
+  texture:SetTexCoord(inset, 1 - inset, inset, 1 - inset)
+  texture:SetVertexColor(1, 1, 1, 1)
+
+  local swipe, timer, stack, durationBar, dispelBorder = visual._swipe, visual._timer,
+    visual._stack, visual._durationBar, visual._dispelBorder
+  if swipe then swipe:Hide() end
+  if timer then timer:Hide() end
+  if stack then stack:Hide() end
+  if durationBar then durationBar:Hide() end
+  if dispelBorder then dispelBorder:Hide() end
+  local barOnly = lane.showDurationBar == true and lane.durationBarDisplay == "BAR_ONLY"
+  texture:SetShown(not barOnly)
+
+  if lane.showCooldownSwipe == true and not barOnly then
+    swipe = EnsurePreviewTexture(visual, "_swipe", "OVERLAY", 1)
+    swipe:ClearAllPoints()
+    swipe:SetPoint("TOPLEFT", visual, "TOPLEFT", 0, 0)
+    swipe:SetPoint("BOTTOMRIGHT", visual, "BOTTOMRIGHT", 0, size * 0.42)
+    swipe:SetTexture(PREVIEW_WHITE)
+    swipe:SetVertexColor(0, 0, 0, 0.38)
+    swipe:Show()
+  end
+
+  if lane.showCooldownText == true then
+    timer = EnsurePreviewFontString(visual, "_timer")
+    SetPreviewFont(timer, lane.cooldownSize or 8)
+    timer:SetText(sampleIndex == 1 and "12" or "8")
+    timer:SetTextColor(1, 1, 1, 1)
+    PlacePreviewText(timer, visual, lane.cooldownAnchor or "CENTER", lane.cooldownX or 0, lane.cooldownY or 0)
+    timer:Show()
+  end
+
+  if lane.showStacks == true then
+    stack = EnsurePreviewFontString(visual, "_stack")
+    SetPreviewFont(stack, lane.stackSize or 10)
+    stack:SetText("2")
+    local A3 = MSUF and MSUF.MSUF_Auras3
+    local r, g, b
+    if A3 and type(A3._StackCountColor) == "function" then r, g, b = A3._StackCountColor() end
+    stack:SetTextColor(r or 1, g or 1, b or 1, 1)
+    PlacePreviewText(stack, visual, lane.stackAnchor or "BOTTOMRIGHT", lane.stackX or 0, lane.stackY or 0)
+    stack:Show()
+  end
+
+  if lane.showDurationBar == true then
+    durationBar = EnsurePreviewTexture(visual, "_durationBar", "OVERLAY", 2)
+    local height = max(1, min(size, tonumber(lane.durationBarHeight) or 2))
+    durationBar:ClearAllPoints()
+    if lane.durationBarPosition == "TOP" then
+      durationBar:SetPoint("TOPLEFT", visual, "TOPLEFT", 1, -1)
+      durationBar:SetPoint("TOPRIGHT", visual, "TOPRIGHT", -1, -1)
+    else
+      durationBar:SetPoint("BOTTOMLEFT", visual, "BOTTOMLEFT", 1, 1)
+      durationBar:SetPoint("BOTTOMRIGHT", visual, "BOTTOMRIGHT", -1, 1)
+    end
+    durationBar:SetHeight(height)
+    durationBar:SetTexture(PREVIEW_WHITE)
+    local A3 = MSUF and MSUF.MSUF_Auras3
+    local r, g, b
+    if A3 and type(A3.GetDurationBarColor) == "function" then r, g, b = A3.GetDurationBarColor() end
+    durationBar:SetVertexColor(r or 1, g or 1, b or 1, 1)
+    durationBar:Show()
+  end
+
+  local A3 = MSUF and MSUF.MSUF_Auras3
+  if A3 and type(A3.ApplyIconStylePreview) == "function" then
+    A3.ApplyIconStylePreview(visual, barOnly and nil or lane.iconStyle, size)
+  end
+  if lane.showAuraBorder == true and not barOnly then
+    dispelBorder = EnsurePreviewTexture(visual, "_dispelBorder", "OVERLAY", 5)
+    dispelBorder:ClearAllPoints()
+    dispelBorder:SetAllPoints(visual)
+    if dispelBorder.SetAtlas then
+      dispelBorder:SetAtlas(lane.showAuraSymbol == true
+        and "ui-debuff-border-magic-icon" or "ui-debuff-border-magic-noicon", false)
+    else
+      dispelBorder:SetTexture(PREVIEW_WHITE)
+      dispelBorder:SetVertexColor(0.2, 0.6, 1, 0.85)
+    end
+    dispelBorder:Show()
+  end
+  visual:Show()
+  return true
+end
+
+function GF.HideFrameAuras(frame)
+  local pool = frame and frame._msufGFFrameAuraPreviews
+  if pool then
+    for i = 1, #pool do HideFrameAuraPreview(pool[i]) end
+  end
+  local hosts = frame and frame._msufGFFrameAuraPreviewHosts
+  if hosts then
+    for _, host in pairs(hosts) do host:Hide() end
+  end
+  return pool ~= nil or hosts ~= nil
+end
+
+function GF.PreviewFrameAuras(frame, kind, previewIndex, compiledAuras, compiledSpec)
+  if InCombat() then return false end
+  local spec = frame and frame.MSUFSpec
+  local auras = compiledAuras or (spec and spec.auras)
+  if not (auras and auras.enabled == true) then
+    GF.HideFrameAuras(frame)
+    return false
+  end
+
+  local A3 = MSUF and MSUF.MSUF_Auras3
+  local runtimeConfig = A3 and type(A3.ResolveAuraPreviewConfig) == "function"
+    and A3.ResolveAuraPreviewConfig(frame, frame.MSUFUnitKey, compiledSpec) or nil
+  local lanes = runtimeConfig and runtimeConfig.lanes
+  if not lanes then
+    GF.HideFrameAuras(frame)
+    return false
+  end
+
+  local used = 0
+  previewIndex = max(1, floor((tonumber(previewIndex) or 1) + 0.5))
+  for laneIndex = 1, #PREVIEW_AURA_LANES do
+    local descriptor = PREVIEW_AURA_LANES[laneIndex]
+    local lane = lanes[descriptor.key]
+    local maxCount = max(0, floor((tonumber(lane and lane.max) or 0) + 0.5))
+    local host = EnsureFrameAuraLaneHost(frame, descriptor.key)
+    if lane and lane.enabled == true and maxCount > 0 then
+      local anchor = tostring(lane.anchor or "CENTER"):upper()
+      if not VALID_POINTS[anchor] then anchor = "CENTER" end
+      host:ClearAllPoints()
+      host:SetPoint(anchor, frame, anchor, tonumber(lane.x) or 0, tonumber(lane.y) or 0)
+      host:SetSize(max(1, tonumber(lane.width) or lane.size or 1),
+        max(1, tonumber(lane.height) or lane.size or 1))
+      if host.SetFrameLevel and frame.GetFrameLevel then
+        host:SetFrameLevel((frame:GetFrameLevel() or 0) + 64 + (tonumber(lane.layer) or 1))
+      end
+      if host.SetAlpha then host:SetAlpha(tonumber(lane.alpha) or 1) end
+      host:Show()
+      local sampleCount = min(PREVIEW_AURA_SAMPLE_LIMIT, maxCount)
+      for sampleIndex = 1, sampleCount do
+        used = used + 1
+        ApplyFrameAuraPreview(frame, kind, EnsureFrameAuraPreview(frame, used),
+          lane, descriptor, sampleIndex - 1, sampleIndex + previewIndex + laneIndex, host)
+      end
+    else
+      host:Hide()
+    end
+  end
+  local pool = frame._msufGFFrameAuraPreviews
+  for i = used + 1, pool and #pool or 0 do HideFrameAuraPreview(pool[i]) end
+  return used > 0
+end
+
+--- Refresh only the pooled Aura stand-ins on active Edit Mode group dummies.
+--- Menu sliders use this path while dragging so raw DB geometry reaches the
+--- dummy frames immediately without reapplying live frames or rebuilding the
+--- rest of each preview button. No preview survives combat, and the hard guard
+--- keeps this entry point inert even if an external caller races combat entry.
+function GF.RefreshPreviewAuras(kind)
+  if InCombat() then return false end
+  if kind == nil then
+    local any = false
+    for i = 1, #PREVIEW_KINDS do
+      local activeKind = PREVIEW_KINDS[i]
+      if GF._previewActive and GF._previewActive[activeKind] then
+        any = GF.RefreshPreviewAuras(activeKind) or any
+      end
+    end
+    return any
+  end
+  kind = NormalizeKind(kind)
+  if not kind then return false end
+  if type(GF.InvalidateCompiledSpecs) == "function" then GF.InvalidateCompiledSpecs(kind) end
+  if not (GF._previewActive and GF._previewActive[kind]) then return false end
+  local compile = GF.GetCompiledSpec or GF.CompileSpec
+  local spec = type(compile) == "function" and compile(kind) or nil
+  local auras = spec and spec.auras
+  local frames = GF._previewFrames and GF._previewFrames[kind]
+  if not (auras and frames) then return false end
+
+  local refreshed = false
+  for i = 1, #frames do
+    local frame = frames[i]
+    if frame and frame.IsShown and frame:IsShown() then
+      GF.PreviewFrameAuras(frame, kind, i, auras, spec)
+      refreshed = true
+    end
+  end
+  return refreshed
+end
+
+local function HideSpellIndicatorPreview(visual)
+  if not visual then return end
+  visual:Hide()
+  if visual._glow then visual._glow:Hide() end
+  if visual._texture then visual._texture:Hide() end
+  if visual._swipe then visual._swipe:Hide() end
+  if visual._timer then visual._timer:Hide() end
+  if visual._stack then visual._stack:Hide() end
+  if visual._durationBar then visual._durationBar:Hide() end
+  local effectRoot = visual._frameEffectRoot
+  if effectRoot then
+    if effectRoot._tint then effectRoot._tint:Hide() end
+    if effectRoot._name then effectRoot._name:Hide() end
+    for i = 1, #(effectRoot._edges or {}) do effectRoot._edges[i]:Hide() end
+    effectRoot:Hide()
+  end
+  local A3 = MSUF and MSUF.MSUF_Auras3
+  if A3 and type(A3.ApplyIconStylePreview) == "function" then
+    A3.ApplyIconStylePreview(visual, nil)
+  end
+end
+
+local function EnsureSpellFrameEffectPreview(visual, frame)
+  local root = visual._frameEffectRoot
+  if root then return root end
+  root = CreateFrame("Frame", nil, frame)
+  root:EnableMouse(false)
+  if root.SetMouseMotionEnabled then root:SetMouseMotionEnabled(false) end
+  root._tint = root:CreateTexture(nil, "OVERLAY")
+  root._tint:SetTexture(PREVIEW_WHITE)
+  root._edges = {}
+  for i = 1, 4 do
+    root._edges[i] = root:CreateTexture(nil, "OVERLAY")
+    root._edges[i]:SetTexture(PREVIEW_WHITE)
+  end
+  root._name = root:CreateFontString(nil, "OVERLAY")
+  visual._frameEffectRoot = root
+  return root
+end
+
+local function ApplySpellFrameEffectPreview(visual, frame, slot)
+  local effect = slot and slot.frameEffect
+  local effectKind = type(effect) == "table" and tostring(effect.type or "none"):lower() or "none"
+  if effectKind ~= "healthtint" and effectKind ~= "border" and effectKind ~= "glow"
+    and effectKind ~= "pulse" and effectKind ~= "namecolor" then
+    local root = visual._frameEffectRoot
+    if root then
+      if root._tint then root._tint:Hide() end
+      if root._name then root._name:Hide() end
+      for i = 1, #(root._edges or {}) do root._edges[i]:Hide() end
+      root:Hide()
+    end
+    return false
+  end
+
+  local health = frame and (frame.hpBar or frame.Health or frame.health)
+  local target = health and health.GetStatusBarTexture and health:GetStatusBarTexture()
+  local nameSource = frame and (frame.Name or frame.name or frame.NameText or frame.nameText or frame._nameFS)
+  if (effectKind == "namecolor" and not nameSource)
+    or (effectKind ~= "namecolor" and not (health and target)) then
+    return false
+  end
+
+  local root = EnsureSpellFrameEffectPreview(visual, frame)
+  root:ClearAllPoints()
+  root:SetAllPoints(health or frame)
+  local layers = MSUF and MSUF.UF and MSUF.UF.Layers or {}
+  if root.SetFrameLevel and frame.GetFrameLevel then
+    root:SetFrameLevel((frame:GetFrameLevel() or 0)
+      + (tonumber(layers.SPELL_FRAME_EFFECT_BASE_OFFSET) or 1)
+      + (11 - max(1, min(10, tonumber(effect.priority) or 5)))
+      + max(0, min(30, tonumber(effect.layer) or 0)))
+  end
+  root._tint:Hide()
+  root._name:Hide()
+  for i = 1, #root._edges do root._edges[i]:Hide() end
+
+  local color = type(effect.color) == "table" and effect.color or {}
+  local r, g, b, a = tonumber(color[1]) or 1, tonumber(color[2]) or 1,
+    tonumber(color[3]) or 1, tonumber(color[4]) or 1
+  if effectKind == "healthtint" then
+    root._tint:ClearAllPoints()
+    root._tint:SetAllPoints(target)
+    if root._tint.SetBlendMode then root._tint:SetBlendMode("BLEND") end
+    root._tint:SetVertexColor(r, g, b, tonumber(effect.tintAlpha) or a)
+    root._tint:Show()
+  elseif effectKind == "namecolor" then
+    local name = root._name
+    local font, fontSize, flags
+    if nameSource.GetFont then font, fontSize, flags = nameSource:GetFont() end
+    if font and fontSize then name:SetFont(font, fontSize, flags) end
+    name:ClearAllPoints()
+    name:SetAllPoints(nameSource)
+    name:SetText(nameSource.GetText and nameSource:GetText() or "")
+    name:SetTextColor(r, g, b, a)
+    name:Show()
+  else
+    local thickness = max(1, min(32, tonumber(effect.thickness) or (effectKind == "glow" and 3 or 2)))
+    if effectKind == "glow" then thickness = thickness + 2 end
+    local top, bottom, left, right = root._edges[1], root._edges[2], root._edges[3], root._edges[4]
+    top:ClearAllPoints()
+    top:SetPoint("TOPLEFT", target, "TOPLEFT", -thickness, thickness)
+    top:SetPoint("TOPRIGHT", target, "TOPRIGHT", thickness, thickness)
+    top:SetHeight(thickness)
+    bottom:ClearAllPoints()
+    bottom:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", -thickness, -thickness)
+    bottom:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", thickness, -thickness)
+    bottom:SetHeight(thickness)
+    left:ClearAllPoints()
+    left:SetPoint("TOPLEFT", top, "BOTTOMLEFT")
+    left:SetPoint("BOTTOMLEFT", bottom, "TOPLEFT")
+    left:SetWidth(thickness)
+    right:ClearAllPoints()
+    right:SetPoint("TOPRIGHT", top, "BOTTOMRIGHT")
+    right:SetPoint("BOTTOMRIGHT", bottom, "TOPRIGHT")
+    right:SetWidth(thickness)
+    local edgeAlpha = effectKind == "glow" and min(1, a + 0.16)
+      or (effectKind == "pulse" and a * 0.72 or a)
+    for i = 1, 4 do
+      root._edges[i]:SetVertexColor(r, g, b, edgeAlpha)
+      root._edges[i]:Show()
+    end
+  end
+  root:Show()
+  return true
+end
+
+local function ApplySpellIndicatorPreview(frame, kind, visual, slot)
+  local visualType = slot and tostring(slot.visual or "none"):lower() or "none"
+  local hiddenVisual = slot and slot.hiddenVisual == true
+  local effectShown = ApplySpellFrameEffectPreview(visual, frame, slot)
+  if not slot or (visualType == "none" and not effectShown) then
+    HideSpellIndicatorPreview(visual)
+    return false
+  end
+
+  local size = max(1, tonumber(slot.size) or 18)
+  local width = max(1, tonumber(slot.width) or size)
+  local height = max(1, tonumber(slot.height) or size)
+  local anchor = tostring(slot.anchor or "TOPLEFT"):upper()
+  if not VALID_POINTS[anchor] then anchor = "TOPLEFT" end
+  visual:ClearAllPoints()
+  visual:SetSize(width, height)
+  visual:SetPoint(anchor, frame, anchor, tonumber(slot.x) or 0, tonumber(slot.y) or 0)
+  if visual.SetFrameLevel and frame.GetFrameLevel then
+    visual:SetFrameLevel((frame:GetFrameLevel() or 0) + 64 + (tonumber(slot.layer) or 9))
+  end
+
+  local color = type(slot.color) == "table" and slot.color or nil
+  local r = tonumber(color and color[1]) or 0.69
+  local g = tonumber(color and color[2]) or 0.50
+  local b = tonumber(color and color[3]) or 0.88
+  local a = tonumber(color and color[4]) or 1
+  local texture = visual._texture
+  local swipe, timer, stack, glow, durationBar = visual._swipe, visual._timer,
+    visual._stack, visual._glow, visual._durationBar
+  local A3 = MSUF and MSUF.MSUF_Auras3
+  texture:ClearAllPoints()
+  texture:SetAllPoints(visual)
+  if swipe then swipe:Hide() end
+  if timer then timer:Hide() end
+  if stack then stack:Hide() end
+  if glow then glow:Hide() end
+  if durationBar then durationBar:Hide() end
+  if visualType ~= "icon" and A3 and type(A3.ApplyIconStylePreview) == "function" then
+    A3.ApplyIconStylePreview(visual, nil)
+  end
+
+  local barOnly = slot.showDurationBar == true and slot.durationBarDisplay == "BAR_ONLY"
+  if hiddenVisual then
+    texture:Hide()
+  elseif visualType == "square" or visualType == "bar" then
+    texture:SetTexture(PREVIEW_WHITE)
+    texture:SetTexCoord(0, 1, 0, 1)
+    texture:SetVertexColor(r, g, b, a)
+    texture:Show()
+  elseif visualType == "number" then
+    texture:Hide()
+    stack = EnsurePreviewFontString(visual, "_stack")
+    SetPreviewFont(stack, size * 0.72)
+    stack:SetText("2")
+    stack:SetTextColor(r, g, b, a)
+    PlacePreviewText(stack, visual, "CENTER", 0, 0)
+    stack:Show()
+  else
+    texture:SetTexture(slot.icon or PREVIEW_QUESTION)
+    local zoom = max(100, min(200, tonumber(slot.iconZoom) or 100))
+    local inset = (1 - (100 / zoom)) * 0.5
+    texture:SetTexCoord(inset, 1 - inset, inset, 1 - inset)
+    texture:SetVertexColor(1, 1, 1, 1)
+    texture:SetShown(not barOnly)
+
+    if slot.showCooldownSwipe == true and not barOnly then
+      swipe = EnsurePreviewTexture(visual, "_swipe", "OVERLAY", 1)
+      swipe:ClearAllPoints()
+      swipe:SetPoint("TOPLEFT", visual, "TOPLEFT", 0, 0)
+      swipe:SetPoint("BOTTOMRIGHT", visual, "BOTTOMRIGHT", 0, size * 0.42)
+      swipe:SetTexture(PREVIEW_WHITE)
+      swipe:SetVertexColor(0, 0, 0, 0.38)
+      swipe:Show()
+    end
+
+    if slot.showCooldownText == true then
+      timer = EnsurePreviewFontString(visual, "_timer")
+      SetPreviewFont(timer, slot.cooldownSize or 8)
+      timer:SetText("12")
+      timer:SetTextColor(1, 1, 1, 1)
+      PlacePreviewText(timer, visual, slot.cooldownAnchor or "CENTER", slot.cooldownX or 0, slot.cooldownY or 0)
+      timer:Show()
+    end
+
+    if slot.showStacks == true then
+      stack = EnsurePreviewFontString(visual, "_stack")
+      SetPreviewFont(stack, slot.stackSize or 10)
+      stack:SetText("2")
+      local sr, sg, sb
+      if A3 and type(A3._StackCountColor) == "function" then sr, sg, sb = A3._StackCountColor() end
+      stack:SetTextColor(sr or 1, sg or 1, sb or 1, 1)
+      PlacePreviewText(stack, visual, slot.stackAnchor or "BOTTOMRIGHT", slot.stackX or 0, slot.stackY or 0)
+      stack:Show()
+    end
+
+    if slot.showDurationBar == true then
+      durationBar = EnsurePreviewTexture(visual, "_durationBar", "OVERLAY", 2)
+      durationBar:ClearAllPoints()
+      if slot.durationBarPosition == "TOP" then
+        durationBar:SetPoint("TOPLEFT", visual, "TOPLEFT", 1, -1)
+        durationBar:SetPoint("TOPRIGHT", visual, "TOPRIGHT", -1, -1)
+      else
+        durationBar:SetPoint("BOTTOMLEFT", visual, "BOTTOMLEFT", 1, 1)
+        durationBar:SetPoint("BOTTOMRIGHT", visual, "BOTTOMRIGHT", -1, 1)
+      end
+      durationBar:SetHeight(max(1, min(size, tonumber(slot.durationBarHeight) or 2)))
+      durationBar:SetTexture(PREVIEW_WHITE)
+      local dr, dg, db
+      if A3 and type(A3.GetDurationBarColor) == "function" then dr, dg, db = A3.GetDurationBarColor() end
+      durationBar:SetVertexColor(dr or 1, dg or 1, db or 1, 1)
+      durationBar:Show()
+    end
+
+    if A3 and type(A3.ApplyIconStylePreview) == "function" then
+      A3.ApplyIconStylePreview(visual, barOnly and nil or slot.iconStyle, size)
+    end
+  end
+
+  if slot.iconEffect == "glow" and visualType == "icon" and not barOnly then
+    glow = EnsurePreviewTexture(visual, "_glow", "BACKGROUND", -1)
+    glow:ClearAllPoints()
+    glow:SetPoint("TOPLEFT", visual, "TOPLEFT", -2, 2)
+    glow:SetPoint("BOTTOMRIGHT", visual, "BOTTOMRIGHT", 2, -2)
+    glow:SetTexture(PREVIEW_WHITE)
+    glow:SetVertexColor(r, g, b, min(0.55, a))
+    glow:Show()
+  end
+  visual:SetShown(not hiddenVisual)
+  return not hiddenVisual or effectShown
+end
+
+function GF.HideSpellIndicators(frame)
+  local pool = frame and frame._msufGFSpellIndicatorPreviews
+  if not pool then return false end
+  for i = 1, #pool do HideSpellIndicatorPreview(pool[i]) end
+  return true
+end
+
+function GF.PreviewSpellIndicators(frame, kind, compiledSpec)
+  if InCombat() then return false end
+  local A3 = MSUF and MSUF.MSUF_Auras3
+  local runtimeConfig = A3 and type(A3.ResolveAuraPreviewConfig) == "function"
+    and A3.ResolveAuraPreviewConfig(frame, frame and frame.MSUFUnitKey, compiledSpec) or nil
+  local root = runtimeConfig and runtimeConfig.spellIndicators
+  local slots = root and root.slots
+  if not (root and root.enabled == true and type(slots) == "table") then
+    GF.HideSpellIndicators(frame)
+    return false
+  end
+
+  local used = 0
+  for i = 1, #slots do
+    local slot = slots[i]
+    if slot and slot.enabled == true then
+      used = used + 1
+      ApplySpellIndicatorPreview(frame, kind, EnsureSpellIndicatorPreview(frame, used), slot)
+    end
+  end
+  local pool = frame._msufGFSpellIndicatorPreviews
+  for i = used + 1, pool and #pool or 0 do HideSpellIndicatorPreview(pool[i]) end
+  return used > 0
+end
+
+--- Refresh only pooled Spell Indicator stand-ins on active Edit Mode dummies.
+--- This is a configuration/preview cold path: no aura queries, subscriptions,
+--- timers, or idle scripts are installed, and combat exits before invalidation.
+function GF.RefreshPreviewSpellIndicators(kind)
+  if InCombat() then return false end
+  if kind == nil then
+    local any = false
+    for i = 1, #PREVIEW_KINDS do
+      local activeKind = PREVIEW_KINDS[i]
+      if GF._previewActive and GF._previewActive[activeKind] then
+        any = GF.RefreshPreviewSpellIndicators(activeKind) or any
+      end
+    end
+    return any
+  end
+  kind = NormalizeKind(kind)
+  if not kind then return false end
+  local spellIndicators = GF.SpellIndicators
+  if spellIndicators and type(spellIndicators.InvalidateRuntimeCaches) == "function" then
+    spellIndicators.InvalidateRuntimeCaches()
+  end
+  if type(GF.InvalidateCompiledSpecs) == "function" then GF.InvalidateCompiledSpecs(kind) end
+  if not (GF._previewActive and GF._previewActive[kind]) then return false end
+  local compile = GF.GetCompiledSpec or GF.CompileSpec
+  local spec = type(compile) == "function" and compile(kind) or nil
+  local frames = GF._previewFrames and GF._previewFrames[kind]
+  if not (spec and frames) then return false end
+
+  local refreshed = false
+  for i = 1, #frames do
+    local frame = frames[i]
+    if frame and frame.IsShown and frame:IsShown() then
+      GF.PreviewSpellIndicators(frame, kind, spec)
+      refreshed = true
+    end
+  end
+  return refreshed
+end
+
 --- Format a fake subgroup label exactly like the live raid-group indicator, so
 --- the preview does not drift from the runtime formatter.
 local function RaidGroupPreviewText(style, subgroup)
@@ -508,6 +1194,7 @@ end
 --- Seed fake unit state into one preview frame after UF.ApplySpec has built the
 --- regions. Keep this data fake/local; live group frames own real roster state.
 local function ApplyPreviewData(frame, index, kind)
+  if InCombat() then return false end
   if not frame then return false end
   if not frame.MSUFSpec then return false end
   kind = NormalizeKind(kind) or "party"
@@ -841,6 +1528,7 @@ local function QueuePreviewBuild(kind, serial, visibleCount, reason, layout, w, 
   end
   local index = 1
   local function Step()
+    if InCombat() then return end
     if CurrentPreviewBuildSerial(kind) ~= serial then return end
     if not (GF._previewActive and GF._previewActive[kind]) then return end
     local limit = min(visibleCount, index + PREVIEW_BUILD_SLICE_COUNT - 1)
@@ -1039,4 +1727,6 @@ ExportPublic("MSUF_GF_HidePreview", function(kind) return GF.HidePreview(kind) e
 ExportPublic("MSUF_GF_SetPreviewAnchor", function(kind, parent) return GF.SetPreviewAnchor(kind, parent) end)
 ExportPublic("MSUF_GF_RefreshPreviewLayout", function(kind, opts) return GF.RefreshPreviewLayout(kind, opts) end)
 ExportPublic("MSUF_GF_RefreshPreviewBox", _G.MSUF_GF_RefreshPreviewLayout)
+ExportPublic("MSUF_GF_RefreshPreviewAuras", function(kind) return GF.RefreshPreviewAuras(kind) end)
+ExportPublic("MSUF_GF_RefreshPreviewSpellIndicators", function(kind) return GF.RefreshPreviewSpellIndicators(kind) end)
 ExportPublic("MSUF_GF_RefreshPreviewAnimation", function() return GF.RefreshPreviewAnimation() end)

@@ -1534,7 +1534,7 @@ end
 
 local LEGACY_BUFF_DEFAULTS = {
     enabled = true, anchor = "BOTTOMRIGHT", growth = "LEFTUP",
-    x = 0, y = 0, size = 22, perRow = 4, max = 6, spacing = 1,
+    x = 0, y = 0, size = 22, iconScale = 100, iconZoom = 100, perRow = 4, max = 6, spacing = 1,
     layer = 5, filterMode = "RAID_PLAYER",
     showCooldownSwipe = true, showCooldown = true, cooldownAnchor = "CENTER",
     cooldownOffsetX = 0, cooldownOffsetY = 0, cooldownSize = 8, cooldownOutline = "OUTLINE",
@@ -1544,7 +1544,7 @@ local LEGACY_BUFF_DEFAULTS = {
 
 local LEGACY_DEBUFF_DEFAULTS = {
     enabled = true, anchor = "TOPLEFT", growth = "RIGHTDOWN",
-    x = 0, y = 0, size = 20, perRow = 3, max = 6, spacing = 1,
+    x = 0, y = 0, size = 20, iconScale = 100, iconZoom = 100, perRow = 3, max = 6, spacing = 1,
     layer = 6, showDispelBorder = true,
     showCooldownSwipe = true, showCooldown = true, cooldownAnchor = "CENTER",
     cooldownOffsetX = 0, cooldownOffsetY = 0, cooldownSize = 8, cooldownOutline = "OUTLINE",
@@ -1554,7 +1554,7 @@ local LEGACY_DEBUFF_DEFAULTS = {
 
 local LEGACY_EXTERNAL_DEFAULTS = {
     enabled = true, anchor = "CENTER", growth = "RIGHTDOWN",
-    x = 0, y = 0, size = 28, perRow = 3, max = 2, spacing = 1,
+    x = 0, y = 0, size = 28, iconScale = 100, perRow = 3, max = 2, spacing = 1,
     layer = 7,
     showCooldownSwipe = true, showCooldown = true, cooldownAnchor = "CENTER",
     cooldownOffsetX = 0, cooldownOffsetY = 0, cooldownSize = 10, cooldownOutline = "OUTLINE",
@@ -1669,14 +1669,18 @@ function GF.MigrateAuraConfig(conf, isRaid)
     if type(conf.auras.debuff) ~= "table" then conf.auras.debuff = LegacyDebuffDefaults(); changed = true end
     if type(conf.auras.externals) ~= "table" then conf.auras.externals = LegacyExternalDefaults(); changed = true end
     if conf.auras.iconZoom == nil then conf.auras.iconZoom = 100; changed = true end
+    local legacyIconZoom = tonumber(conf.auras.iconZoom) or 100
+    if conf.auras.buff.iconZoom == nil then conf.auras.buff.iconZoom = legacyIconZoom; changed = true end
+    if conf.auras.debuff.iconZoom == nil then conf.auras.debuff.iconZoom = legacyIconZoom; changed = true end
     FillMissingAuraFields(conf.auras.buff, LEGACY_BUFF_DEFAULTS)
     FillMissingAuraFields(conf.auras.debuff, LEGACY_DEBUFF_DEFAULTS)
     FillMissingAuraFields(conf.auras.externals, LEGACY_EXTERNAL_DEFAULTS)
     if type(conf.spellIndicators) ~= "table" then
-        conf.spellIndicators = { enabled = false, spec = "auto", specs = {}, layer = 9, iconZoom = 100 }
+        conf.spellIndicators = { enabled = false, spec = "auto", specs = {}, layer = 9, iconZoom = 100, iconScale = 100 }
         changed = true
     end
     if conf.spellIndicators.iconZoom == nil then conf.spellIndicators.iconZoom = 100; changed = true end
+    if conf.spellIndicators.iconScale == nil then conf.spellIndicators.iconScale = 100; changed = true end
     return changed
 end
 

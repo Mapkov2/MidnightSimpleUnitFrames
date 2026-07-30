@@ -2285,6 +2285,7 @@ L["Style Unitframes"] = "Style Unitframes"
 L["What do you want to do?"] = "What do you want to do?"
 L["YOUR MOVE - Choose what you want to set up."] = "YOUR MOVE - Choose what you want to set up."
 L["Icon Zoom (%)"] = "Icon Zoom (%)"
+L["Icon Scale (%)"] = "Icon Scale (%)"
 
 -- Beta 22 Menu2 additions.
 L["Advanced color tools"] = "Advanced colour tools"

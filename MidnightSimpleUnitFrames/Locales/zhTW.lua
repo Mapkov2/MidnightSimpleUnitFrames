@@ -3683,6 +3683,7 @@ L["State Tints"] = "狀態色調"
 L["Up/Down  Enter"] = "上/下  Enter"
 L["Whole Castbar Layer"] = "整個施法條層級"
 L["Icon Zoom (%)"] = "圖示縮放 (%)"
+L["Icon Scale (%)"] = "圖示大小 (%)"
 
 -- 新手流程與智慧搜尋。
 L["Best %d match(es). Open one or ask MSUF for a guided answer."] = "最佳符合項目：%d 個。開啟一個，或向 MSUF 取得引導式回答。"

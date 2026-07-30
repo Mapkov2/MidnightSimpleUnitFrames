@@ -10,7 +10,7 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local Search = M.Search or {}
 M.Search = Search
-Search.StaticIndexRecordCount = 2420
+Search.StaticIndexRecordCount = 2424
 Search.StaticIndexBlob = [==[
 auras3_buffs	Anchor	dropdown			Style > Buff	anchor	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Elane%2Ebuff%2Eauras3-cooldown-anchor	anchor style buff auras style lane buff auras3 cooldown anchor auras3 buffs dropdown
 auras3_buffs	Anchor	dropdown			Style > Buff	anchor	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Elane%2Ebuff%2Estack-anchor	anchor style buff auras style lane buff stack anchor auras3 buffs dropdown
@@ -472,6 +472,10 @@ gf_auras	Hide duplicate Buff icon	toggle			Spell > Selected	hide duplicate buff 
 gf_auras	Hide permanent	toggle			Buff > Filters	hide permanent	idgf_aurasmenu2%2Egf_auras%2Eauras%2Egroup-workspace%2Elane%2Ebuff%2Efilters%2Ehide-permanent	hide permanent buff filters auras group workspace lane buff filters hide permanent gf auras toggle
 gf_auras	Hide permanent	toggle			Debuff > Filters	hide permanent	idgf_aurasmenu2%2Egf_auras%2Eauras%2Egroup-workspace%2Elane%2Edebuff%2Efilters%2Ehide-permanent	hide permanent debuff filters auras group workspace lane debuff filters hide permanent gf auras toggle
 gf_auras	Icon Effect	dropdown			Spell > Placed	icon effect	idgf_aurasmenu2%2Egf_auras%2Egroup%2Espell%2Eplaced%2Eiconeffect	icon effect spell placed group auras spell placed iconeffect gf auras dropdown
+gf_auras	Icon Scale (%)	slider			Auras > Spell	icon scale	idgf_aurasmenu2%2Egf_auras%2Egroup%2Espell%2Eicon_scale	icon scale auras spell group auras spell icon scale gf auras slider
+gf_auras	Icon Scale (%)	slider			Buff > Layout	icon scale	idgf_aurasmenu2%2Egf_auras%2Eauras%2Egroup-workspace%2Elane%2Ebuff%2Elayout%2Eicon-scale	icon scale buff layout auras group workspace lane buff layout icon scale gf auras slider
+gf_auras	Icon Scale (%)	slider			Debuff > Layout	icon scale	idgf_aurasmenu2%2Egf_auras%2Eauras%2Egroup-workspace%2Elane%2Edebuff%2Elayout%2Eicon-scale	icon scale debuff layout auras group workspace lane debuff layout icon scale gf auras slider
+gf_auras	Icon Scale (%)	slider			Externals > Layout	icon scale	idgf_aurasmenu2%2Egf_auras%2Eauras%2Egroup-workspace%2Elane%2Eexternals%2Elayout%2Eicon-scale	icon scale externals layout auras group workspace lane externals layout icon scale gf auras slider
 gf_auras	Icon Zoom (%)	slider			Auras	icon zoom	idgf_aurasmenu2%2Egf_auras%2Eauras%2Egroup-workspace%2Eroot%2Eicon_zoom	icon zoom auras auras group workspace root icon zoom gf auras slider
 gf_auras	Icon Zoom (%)	slider			Auras > Spell	icon zoom	idgf_aurasmenu2%2Egf_auras%2Egroup%2Espell%2Eicon_zoom	icon zoom auras spell group auras spell icon zoom gf auras slider
 gf_auras	Important	toggle			Filters > Native	important	idgf_aurasmenu2%2Egf_auras%2Eauras%2Egroup-workspace%2Elane%2Ebuff%2Efilters%2Enative%2Eimportant	important filters native auras group workspace lane buff filters native important gf auras toggle

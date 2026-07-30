@@ -161,7 +161,31 @@ function Handles.Install(box, deps)
             "groupPreview:" .. tostring(H.CurrentScope()) .. ":" .. tostring(handle and handle._key or "handle") .. ":" .. tostring(action or "move")
         )
     end
+    local function ConfigCombatLocked()
+        if type(M.IsConfigCombatLocked) == "function" and M.IsConfigCombatLocked() then return true end
+        return type(InCombatLockdown) == "function" and InCombatLockdown() == true
+    end
+    local function RefreshGroupIndicatorDragPreview(handle)
+        if ConfigCombatLocked() then return false end
+        local gf = MSUF and MSUF.GF
+        local refreshKind = H.CurrentScope()
+        if handle and handle._cfgSpell then
+            if gf and type(gf.RefreshPreviewSpellIndicators) == "function" then
+                return gf.RefreshPreviewSpellIndicators(refreshKind) == true
+            end
+            local refreshSpell = _G.MSUF_GF_RefreshPreviewSpellIndicators
+            if type(refreshSpell) == "function" then return refreshSpell(refreshKind) == true end
+            return false
+        end
+        if gf and type(gf.RefreshPreviewAuras) == "function" then
+            return gf.RefreshPreviewAuras(refreshKind) == true
+        end
+        local refresh = _G.MSUF_GF_RefreshPreviewAuras
+        if type(refresh) == "function" then return refresh(refreshKind) == true end
+        return false
+    end
     local function RefreshGroupPreviewAfterMove(handle, skipPreviewRefresh)
+        if ConfigCombatLocked() then return false end
         local gf = MSUF and MSUF.GF
         local refreshKind = H.CurrentScope()
         local auraGroupMove = handle and handle._cfgGroup
@@ -196,6 +220,7 @@ function Handles.Install(box, deps)
             end
         end
         RefreshHandleSelection(box)
+        return true
     end
     local function RefreshTextDragPreview(handle)
         UpdateHint(box, handle)
@@ -339,8 +364,8 @@ function Handles.Install(box, deps)
     local function ResolveGroupAuraAnchor(rx, ry)
         return ResolveAnchor(rx, ry)
     end
-    local function SaveHandlePosition(handle, action)
-        if not (handle and box._mock) or handle._locked then return end
+    local function SaveHandlePosition(handle, action, previewOnly)
+        if not (handle and box._mock) or handle._locked or ConfigCombatLocked() then return false end
         if handle._cfgText then return end
         if handle._cfgDispelSymbol then
             -- The symbol row keeps its configured anchor; dragging edits the same
@@ -433,8 +458,16 @@ function Handles.Install(box, deps)
                 placed.y = cfgY
             end
         end
-        RefreshGroupPreviewAfterMove(handle)
-        CheckpointHandleHistory(handle, action)
+        if previewOnly and (handle._cfgGroup or handle._cfgSpell) then
+            -- Pointer-drag hot path: write raw Aura/Spell geometry and repaint
+            -- only pooled Edit Mode dummy indicators. Runtime group frames,
+            -- history, and the full preview refresh remain release-only.
+            RefreshGroupIndicatorDragPreview(handle)
+        else
+            RefreshGroupPreviewAfterMove(handle)
+            CheckpointHandleHistory(handle, action)
+        end
+        return true
     end
     local function NudgeHandlePosition(handle, dx, dy)
         if not handle then return false end
@@ -677,6 +710,10 @@ function Handles.Install(box, deps)
     local function UpdateHandleDrag(df)
         local handle = df and df._handle
         if not (handle and handle._dragging) then return end
+        if ConfigCombatLocked() then
+            StopHandleDrag(handle, "LeftButton")
+            return
+        end
         if IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then
             StopHandleDrag(handle, "LeftButton")
             return
@@ -711,8 +748,10 @@ function Handles.Install(box, deps)
         handle:ClearAllPoints()
         handle:SetPoint(handle._dragPoint or "CENTER", handle._dragRelTo or box._mock, handle._dragRelPoint or "CENTER", nextX, nextY)
         UpdateHint(box, handle)
+        if handle._cfgGroup or handle._cfgSpell then SaveHandlePosition(handle, "Move", true) end
     end
     local function StartHandleDrag(handle, button)
+        if ConfigCombatLocked() then return end
         if button and button ~= "LeftButton" then return end
         if button == "LeftButton" and IsControlKeyDown and IsControlKeyDown() and StartPan(box._stage, box, button) then
             handle._suppressNextClick = true
@@ -991,7 +1030,7 @@ function Handles.Install(box, deps)
     AddIconPool(spellHandle, 1)
     local spellIndicatorHandles = {}
     local function SpellIndicatorHandleKey(item, index)
-        local key = tostring(item and item.key or index or "spell")
+        local key = tostring(item and (item.key or item.slotKey) or index or "spell")
         key = key:gsub("[^%w_]+", "_")
         if key == "" then key = tostring(index or "spell") end
         return "si_" .. key

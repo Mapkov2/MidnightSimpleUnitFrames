@@ -929,7 +929,7 @@ local function BindGroupRootSwitch(ctx, parent, label, x, y, width, scope, key, 
         end,
         AuraControlMeta(ctx, "group-style.root." .. AuraCatalogToken(key)))
 end
-local function BindGroupSlider(ctx, parent, label, x, y, minVal, maxVal, step, width, scope, groupKey, key, defaultValue, mode, afterSet)
+local function BindGroupSlider(ctx, parent, label, x, y, minVal, maxVal, step, width, scope, groupKey, key, defaultValue, mode, afterSet, assistantContract)
     return BindSlider(ctx, parent, label, x, y, minVal, maxVal, step, width,
         function()
             local group = GFReadGroup(scope, groupKey)
@@ -940,7 +940,7 @@ local function BindGroupSlider(ctx, parent, label, x, y, minVal, maxVal, step, w
             GFWriteGroupValue(scope, groupKey, key, v, mode or "visual")
             if afterSet then afterSet(v) end
         end,
-        AuraControlMeta(ctx, "group-style.lane." .. AuraCatalogToken(groupKey, "lane") .. "." .. AuraCatalogToken(key)))
+        AuraControlMeta(ctx, "group-style.lane." .. AuraCatalogToken(groupKey, "lane") .. "." .. AuraCatalogToken(key), nil, assistantContract))
 end
 local function BindGroupDropdown(ctx, parent, label, x, y, values, width, scope, groupKey, key, defaultValue, mode, afterSet)
     return BindDropdown(ctx, parent, label, x, y, values, width,
@@ -1125,8 +1125,10 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
     if isGroup then
         local group = GFReadGroup(scope, lane or "debuff")
         local root = GFReadRoot(scope)
-        cfg.iconZoom = tonumber(root and root.iconZoom) or 100
-        cfg.size = tonumber(group.size) or GroupAuraPreviewDefaultSize(scope, lane)
+        cfg.iconZoom = tonumber(group.iconZoom) or tonumber(root and root.iconZoom) or 100
+        local iconScale = ClampNumber(group.iconScale, 100, 20, 300) / 100
+        cfg.size = (tonumber(group.size) or GroupAuraPreviewDefaultSize(scope, lane)) * iconScale
+        cfg.allowTinyIconScale = true
         cfg.spacing = tonumber(group.spacing) or 1
         cfg.perRow = tonumber(group.perRow) or (lane == "buff" and 4 or 3)
         cfg.maxIcons = tonumber(group.max) or cfg.perRow * 2
@@ -1224,7 +1226,7 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
         end
     end
     local maxSize = max(12, min(128, floor((height or 104) - 38), floor((width or 300) - 20)))
-    cfg.actualSize = max(10, tonumber(cfg.size) or 24)
+    cfg.actualSize = max(cfg.allowTinyIconScale == true and 1 or 10, tonumber(cfg.size) or 24)
     cfg.size = min(maxSize, cfg.actualSize)
     cfg.spacing = min(10, max(0, tonumber(cfg.spacing) or 2))
     cfg.perRow = max(1, Round(cfg.perRow))
@@ -1255,6 +1257,8 @@ local function ReadCustomAuraPreviewConfig(scope, index, width, height)
         spacing = tonumber(placed.spacing) or 2,
         perRow = tonumber(placed.perRow) or 4,
         maxIcons = tonumber(placed.max) or 8,
+        alpha = min(1, max(0, tonumber(placed.alpha) or 1)),
+        iconZoom = min(200, max(100, tonumber(placed.iconZoom) or 100)),
         showStacks = placed.showStacks ~= false,
         showTimers = placed.showCooldown ~= false,
         showSwipe = placed.showCooldownSwipe ~= false,
@@ -1278,6 +1282,24 @@ local function ReadCustomAuraPreviewConfig(scope, index, width, height)
         isBuff = not item or item.auraType ~= "DEBUFF",
         previewTextures = {},
     }
+    -- Custom lanes use the same shared border/shadow scope as their live
+    -- AuraButtons. Keep their Style-page sample on that exact contract.
+    local styleScopeOn = type(Model.IconStyleScopeEnabled) ~= "function" or Model.IconStyleScopeEnabled(scope)
+    if type(Model.ReadBool) == "function" then
+        cfg.styleBorderEnabled = styleScopeOn and Model.ReadBool("shared", "styleBorderEnabled", false) == true
+        cfg.styleShadowEnabled = styleScopeOn and Model.ReadBool("shared", "styleShadowEnabled", false) == true
+    end
+    cfg.styleBorderStyle = type(Model.ReadBorderStyle) == "function" and Model.ReadBorderStyle("shared") or "SOLID"
+    if type(Model.ReadNumber) == "function" then
+        cfg.styleBorderThickness = Model.ReadNumber("shared", "styleBorderThickness", 1, 1, 8)
+        cfg.styleShadowSize = Model.ReadNumber("shared", "styleShadowSize", 4, 1, 16)
+    end
+    if type(Model.ReadValue) == "function" then
+        local bc = Model.ReadValue("shared", "styleBorderColor", nil)
+        cfg.styleBorderColor = type(bc) == "table" and bc or nil
+        local sc = Model.ReadValue("shared", "styleShadowColor", nil)
+        cfg.styleShadowColor = type(sc) == "table" and sc or nil
+    end
     for i = 1, #entries do cfg.previewTextures[i] = entries[i] and entries[i].icon end
     local maxSize = max(12, min(128, floor((height or 104) - 38), floor((width or 300) - 20)))
     cfg.actualSize = max(8, cfg.size)
@@ -1411,6 +1433,7 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
     end
     local function RenderPreviewIcon(icon, index, cfg, isBuffIcon, forceText)
         icon:SetSize(cfg.size, cfg.size)
+        icon:SetAlpha(tonumber(cfg.alpha) or 1)
         local barOnly = cfg.showDurationBar == true and cfg.durationBarDisplay == "BAR_ONLY"
         local tex = isBuffIcon and buffTex or debuffTex
         local previewTextures = cfg.previewTextures
@@ -1627,6 +1650,9 @@ local function BuildLiveAuraPreview(ctx, parent, scope, laneKind, x, y, width, h
     box:HookScript("OnShow", function() RefreshLive() end)
     return box, RefreshLive
 end
+local EnsureCustomPreviewEffect
+local RefreshCustomPreviewEffect
+local RefreshAuraFrameEffectPreview
 local function BuildAuraStylePreviewWorkbench(ctx, b, scope, lane)
     local rowY = -(T.Space("xxl", 32) + T.Space("md", 12))
     local panelY = rowY - T.Space("xxl", 32) - T.Space("optical", 2)
@@ -1675,6 +1701,17 @@ local function BuildAuraStylePreviewWorkbench(ctx, b, scope, lane)
             return tostring(Round(cfg.actualSize or cfg.size or 0)) .. "px / " .. swipe .. " / " .. source
         end,
     })
+    local refreshLanePreview = refreshPreview
+    local function RefreshLaneFrameEffect()
+        if box and type(RefreshAuraFrameEffectPreview) == "function" then
+            RefreshAuraFrameEffectPreview(box, PreviewScope(), lane)
+        end
+    end
+    refreshPreview = function()
+        if type(refreshLanePreview) == "function" then refreshLanePreview() end
+        RefreshLaneFrameEffect()
+    end
+    M.TrackRefresh(ctx, RefreshLaneFrameEffect)
     if box then
         local modeW = T.Space("xxl", 32) * 4 + T.Space("md", 12)
         local pinReserve = 90
@@ -1898,21 +1935,25 @@ local function BuildUnitStyle(ctx, b, scope)
 
     refreshMiniPreview = BuildAuraStylePreviewWorkbench(ctx, b, unit, lane)
 
-    local featuresH = 244 + extraDebuffControls + (lane == "buff" and 32 or 0)
+    local scaling = b:CollapsibleSection(baseId .. "_scaling", "Scaling", 112, true)
+    local scalingWidth = BodyWidth(scaling)
+    BindStyleSlider(scaling, "Icon Zoom (%)", 24, -48, 100, 200, 1, scalingWidth - 48,
+        "iconZoom", 100, 100, 200, 100, 200, "AURAS3_ICON_ZOOM")
+
+    local featuresH = 188 + extraDebuffControls + (lane == "buff" and 32 or 0)
     local features = b:CollapsibleSection(baseId .. "_features", "Basics", featuresH, true)
     local fw = BodyWidth(features)
     local featuresY = -44
-    BindStyleSlider(features, "Icon Zoom (%)", 24, featuresY, 100, 200, 1, fw - 48, "iconZoom", 100, 100, 200, 100, 200, "AURAS3_ICON_ZOOM")
-    BindStyleSwitch(features, "Show Cooldown Text", 24, featuresY - 56, fw - 48, "showCooldownText", true, "AURAS3_SHOW_COOLDOWN_TEXT")
-    BindStyleSwitch(features, "Show Cooldown Swipe", 24, featuresY - 88, fw - 48, "showCooldownSwipe", true, "AURAS3_SHOW_COOLDOWN_SWIPE")
-    BindStyleSwitch(features, "Show Tooltip", 24, featuresY - 120, fw - 48, "showTooltip", true, "AURAS3_TOOLTIP")
+    BindStyleSwitch(features, "Show Cooldown Text", 24, featuresY, fw - 48, "showCooldownText", true, "AURAS3_SHOW_COOLDOWN_TEXT")
+    BindStyleSwitch(features, "Show Cooldown Swipe", 24, featuresY - 32, fw - 48, "showCooldownSwipe", true, "AURAS3_SHOW_COOLDOWN_SWIPE")
+    BindStyleSwitch(features, "Show Tooltip", 24, featuresY - 64, fw - 48, "showTooltip", true, "AURAS3_TOOLTIP")
     if lane == "buff" then
         -- PTR 7 item enchantments: temporary weapon enchants as native
         -- buttons inside the player buff flow (player scope only at runtime).
-        BindStyleSwitch(features, "Show Weapon Enchants (Player)", 24, featuresY - 152, fw - 48, "showWeaponEnchants", false, "AURAS3_WEAPON_ENCHANTS")
+        BindStyleSwitch(features, "Show Weapon Enchants (Player)", 24, featuresY - 96, fw - 48, "showWeaponEnchants", false, "AURAS3_WEAPON_ENCHANTS")
     end
     if lane == "debuff" then
-        BindStyleDropdown(features, "Dispel-type Border", 24, featuresY - 170,
+        BindStyleDropdown(features, "Dispel-type Border", 24, featuresY - 114,
             type(Model.DebuffTypeBorderModeValues) == "function" and Model.DebuffTypeBorderModeValues() or DEBUFF_TYPE_BORDER_MODE_VALUES,
             fw - 48, ReadScopeDebuffBorderMode, WriteScopeDebuffBorderMode, "AURAS3_DEBUFF_TYPE_BORDER_MODE")
     end
@@ -2261,6 +2302,7 @@ local function BuildUnitStyle(ctx, b, scope)
     local function WriteEffectValue(suffix, value, reason)
         Model.WriteValue(unit, EffectKey(suffix), value)
         ApplyUnit(ctx, unit, reason)
+        RefreshStylePreview()
     end
     local frameEffect = b:CollapsibleSection(baseId .. "_full_frame", "Full-Frame Effect", 210, false)
     local few = BodyWidth(frameEffect)
@@ -2337,6 +2379,10 @@ local function BuildUnitStyle(ctx, b, scope)
                 ToggleBadge("Swipe", ReadScopeBool("showCooldownSwipe", true)),
                 ToggleBadge("Tooltip", ReadScopeBool("showTooltip", true)),
             }
+            W.SetCollapsibleBadges(scaling, {{
+                text = M.Format("Zoom %d%%", Round(ReadScopeNumber("iconZoom", 100, 100, 200))),
+                kind = "info", showWhenClosed = true,
+            }})
             if lane == "debuff" then
                 local borderMode = ReadScopeDebuffBorderMode()
                 featureBadges[#featureBadges + 1] = {
@@ -2393,6 +2439,15 @@ local function BuildGroupStyle(ctx, b, scope)
     local baseId = "aura_style_group_" .. tostring(scope or "group") .. "_" .. lane
 
     refreshMiniPreview = BuildAuraStylePreviewWorkbench(ctx, b, scope, lane)
+
+    local scaling = b:CollapsibleSection(baseId .. "_scaling", "Scaling", 112, true)
+    local scalingWidth = BodyWidth(scaling)
+    BindGroupSlider(ctx, scaling, "Icon Zoom (%)", 24, -48, 100, 200, 1, scalingWidth - 48,
+        scope, lane, "iconZoom", 100, "visual", RefreshStylePreview, {
+            assistantDisposition = "dynamic",
+            assistantDispositionReason = "Icon Zoom targets the selected Group scope's selected Aura Style lane.",
+            assistantSettingKeys = GroupAssistantSettingKeys(scope, ".auras." .. lane .. ".iconZoom"),
+        })
 
     local features = b:CollapsibleSection(baseId .. "_features", "Basics", 186 + extraDebuffControls, true)
     local fw = BodyWidth(features)
@@ -2542,6 +2597,10 @@ local function BuildGroupStyle(ctx, b, scope)
         local cooldownEnabled = group.showCooldown ~= false
         local swipeEnabled = group.showCooldownSwipe ~= false
         local tooltipEnabled = group.showTooltip ~= false
+        W.SetCollapsibleBadges(scaling, {{
+            text = M.Format("Zoom %d%%", Round(tonumber(group.iconZoom) or tonumber(root.iconZoom) or 100)),
+            kind = "info", showWhenClosed = true,
+        }})
         local featureBadges = {
             { text = ScopeLabel(scope) .. " style", kind = "info", showWhenClosed = true },
             ToggleBadge("Text", cooldownEnabled),
@@ -2584,7 +2643,7 @@ local function BuildGroupStyle(ctx, b, scope)
         })
     end)
 end
-local function EnsureCustomPreviewEffect(box)
+EnsureCustomPreviewEffect = function(box)
     if box._msufCustomEffectOverlay then return box._msufCustomEffectOverlay, box._msufCustomEffectEdges, box._msufCustomEffectName end
     local overlay = box:CreateTexture(nil, "BACKGROUND", nil, 1)
     overlay:SetPoint("TOPLEFT", box, "TOPLEFT", 2, -2)
@@ -2605,19 +2664,19 @@ local function EnsureCustomPreviewEffect(box)
     box._msufCustomEffectName = name
     return overlay, edges, name
 end
-local function RefreshCustomPreviewEffect(box, item)
+RefreshCustomPreviewEffect = function(box, item)
     if not box then return end
     local overlay, edges, name = EnsureCustomPreviewEffect(box)
     local frame = item and type(item.frame) == "table" and item.frame or {}
     local effect = tostring(frame.type or "none"):lower()
     local color = type(frame.color) == "table" and frame.color or { 0.69, 0.50, 0.88, 0.8 }
     local r, g, blue, alpha = color[1] or 0.69, color[2] or 0.50, color[3] or 0.88, color[4] or 0.8
-    overlay:SetVertexColor(r, g, blue, min(0.32, alpha * 0.34))
-    overlay:SetShown(effect == "healthtint" or effect == "pulse")
-    name:SetTextColor(r, g, blue, 1)
+    overlay:SetVertexColor(r, g, blue, alpha)
+    overlay:SetShown(effect == "healthtint")
+    name:SetTextColor(r, g, blue, alpha)
     name:SetShown(effect == "namecolor")
     local showEdges = effect == "border" or effect == "glow" or effect == "pulse"
-    local thickness = min(12, max(1, tonumber(frame.thickness) or 2))
+    local thickness = min(16, max(1, tonumber(frame.thickness) or 2))
     for i = 1, #edges do
         edges[i]:ClearAllPoints()
         edges[i]:SetVertexColor(r, g, blue, effect == "glow" and min(1, alpha + 0.16) or alpha)
@@ -2627,6 +2686,17 @@ local function RefreshCustomPreviewEffect(box, item)
     edges[2]:SetPoint("BOTTOMLEFT", box, "BOTTOMLEFT", 1, 1); edges[2]:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -1, 1); edges[2]:SetHeight(thickness)
     edges[3]:SetPoint("TOPLEFT", box, "TOPLEFT", 1, -1); edges[3]:SetPoint("BOTTOMLEFT", box, "BOTTOMLEFT", 1, 1); edges[3]:SetWidth(thickness)
     edges[4]:SetPoint("TOPRIGHT", box, "TOPRIGHT", -1, -1); edges[4]:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -1, 1); edges[4]:SetWidth(thickness)
+end
+RefreshAuraFrameEffectPreview = function(box, scope, lane)
+    local prefix = lane == "buff" and "buff" or "debuff"
+    local unit = scope == "shared" and "shared" or scope
+    RefreshCustomPreviewEffect(box, {
+        frame = {
+            type = Model.ReadValue(unit, prefix .. "FrameEffectType", "none"),
+            color = Model.ReadValue(unit, prefix .. "FrameEffectColor", { 0.69, 0.50, 0.88, 0.80 }),
+            thickness = Model.ReadValue(unit, prefix .. "FrameEffectThickness", 2),
+        },
+    })
 end
 local function CustomStyleSectionId(index, suffix)
     return "aura_style_custom_" .. tostring(index or 1) .. "_" .. tostring(suffix or "section")
@@ -4442,18 +4512,21 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
         end
 
         local harmfulContainer = isTargetDots or tostring(item.auraType or "BUFF"):upper() == "DEBUFF"
+        local scaling = b:CollapsibleSection(CustomStyleSectionId(index, "scaling"), "Scaling", 112, true)
+        local _, _, ScalingNumber = StyleGrid(scaling)
+        ScalingNumber("Icon Zoom (%)", 1, -48, 100, 200, "iconZoom", 100)
+
         local basics = b:CollapsibleSection(CustomStyleSectionId(index, "basics"), "Basics", 130, true)
-        local basicsCol, basicsX, BasicsNumber = StyleGrid(basics)
+        local basicsCol, basicsX = StyleGrid(basics)
         BindSwitch(ctx, basics, "Tooltip", basicsX(1), -42, basicsCol, function() return item.placed.showTooltip ~= false end,
             function(value) item.placed.showTooltip = value == true; Apply("AURAS3_CUSTOM_TOOLTIP") end,
             AuraControlMeta(ctx, "custom-container.appearance.tooltip"))
-        BasicsNumber("Icon Zoom (%)", 1, -76, 100, 200, "iconZoom", 100)
-        BindSlider(ctx, basics, "Opacity", basicsX(2), -76, 10, 100, 5, basicsCol,
+        BindSlider(ctx, basics, "Opacity", basicsX(1), -76, 10, 100, 5, basicsCol,
             function() return floor(((tonumber(item.placed.alpha) or 1) * 100) + 0.5) end,
             function(value) item.placed.alpha = (tonumber(value) or 100) / 100; Apply("AURAS3_CUSTOM_ALPHA") end,
             AuraControlMeta(ctx, "custom-container.appearance.opacity"))
         if harmfulContainer then
-            BindDropdown(ctx, basics, "Dispel-type Border", basicsX(3), -76, DEBUFF_TYPE_BORDER_MODE_VALUES, basicsCol,
+            BindDropdown(ctx, basics, "Dispel-type Border", basicsX(2), -76, DEBUFF_TYPE_BORDER_MODE_VALUES, basicsCol,
                 function() return item.placed.debuffTypeBorderMode or "OFF" end,
                 function(value) item.placed.debuffTypeBorderMode = value or "OFF"; Apply("AURAS3_CUSTOM_DEBUFF_TYPE_BORDER") end,
                 AuraControlMeta(ctx, "custom-container.appearance.dispel-type-border"))
@@ -4553,9 +4626,9 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                 local zoom = Round(tonumber(placed.iconZoom) or 100)
                 local opacity = floor(((tonumber(placed.alpha) or 1) * 100) + 0.5)
                 local basicsBadges = { ToggleBadge("Tooltip", placed.showTooltip ~= false) }
-                if zoom ~= 100 then
-                    basicsBadges[#basicsBadges + 1] = { text = M.Format("Zoom %d%%", zoom), kind = "info", showWhenClosed = true }
-                end
+                W.SetCollapsibleBadges(scaling, {{
+                    text = M.Format("Zoom %d%%", zoom), kind = "info", showWhenClosed = true,
+                }})
                 if opacity < 100 then
                     basicsBadges[#basicsBadges + 1] = { text = M.Format("Opacity %d%%", opacity), kind = "info", showWhenClosed = true }
                 end

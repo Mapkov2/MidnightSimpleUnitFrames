@@ -3661,6 +3661,7 @@ L["State Tints"] = "Tinte di stato"
 L["Up/Down  Enter"] = "Su/Giù  Invio"
 L["Whole Castbar Layer"] = "Livello dell’intera barra d’incantazione"
 L["Icon Zoom (%)"] = "Zoom icona (%)"
+L["Icon Scale (%)"] = "Scala icona (%)"
 
 -- Percorso per principianti e ricerca intelligente.
 L["Best %d match(es). Open one or ask MSUF for a guided answer."] = "I migliori %d risultati. Aprine uno o chiedi a MSUF una risposta guidata."

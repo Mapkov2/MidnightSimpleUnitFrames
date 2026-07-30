@@ -4289,6 +4289,7 @@ L["State Tints"] = "状态色调"
 L["Up/Down  Enter"] = "上/下  回车"
 L["Whole Castbar Layer"] = "整个施法条层级"
 L["Icon Zoom (%)"] = "图标缩放 (%)"
+L["Icon Scale (%)"] = "图标大小 (%)"
 
 -- 新手工作流和智能搜索。
 L["Best %d match(es). Open one or ask MSUF for a guided answer."] = "最佳匹配项：%d 个。打开一个，或向 MSUF 获取引导式回答。"

@@ -361,22 +361,9 @@ local STYLE_LAYOUT_KEYS = {
 }
 
 local STYLE_SHARED_LAYOUT_KEYS = {
-    -- Per-unit imports (notably UUF) may legitimately use different lane
-    -- visibility, counts, wrapping, and growth. These values live in
-    -- layoutShared so they can override the shared profile without changing
-    -- unrelated units.
-    showBuffs = true,
-    showDebuffs = true,
-    maxBuffs = true,
-    maxDebuffs = true,
-    buffPerRow = true,
-    debuffPerRow = true,
-    growth = true,
-    rowWrap = true,
-    buffGrowthX = true,
-    buffGrowthY = true,
-    debuffGrowthX = true,
-    debuffGrowthY = true,
+    -- Keep this set identical to the Menu Model. Basic per-unit layout values
+    -- (visibility, counts, wrapping, and growth) must remain active even while
+    -- the unit inherits shared styling.
     showTooltip = true,
     showCooldownSwipe = true,
     cooldownSwipeReverse = true,
@@ -390,6 +377,8 @@ local STYLE_SHARED_LAYOUT_KEYS = {
     useDebuffTypeBorders = true,
     buffShowCooldownSwipe = true,
     buffCooldownSwipeReverse = true,
+    buffSortMethod = true,
+    buffSortReverse = true,
     buffShowDurationBar = true,
     buffDurationBarDisplay = true,
     buffDurationBarPosition = true,
@@ -401,6 +390,8 @@ local STYLE_SHARED_LAYOUT_KEYS = {
     buffCooldownTextAnchor = true,
     debuffShowCooldownSwipe = true,
     debuffCooldownSwipeReverse = true,
+    debuffSortMethod = true,
+    debuffSortReverse = true,
     debuffShowDurationBar = true,
     debuffDurationBarDisplay = true,
     debuffDurationBarPosition = true,
@@ -415,15 +406,6 @@ local STYLE_SHARED_LAYOUT_KEYS = {
     cooldownDecimalSeconds = true,
     buffCooldownDecimalSeconds = true,
     debuffCooldownDecimalSeconds = true,
-    showWeaponEnchants = true,
-    stylePadding = true,
-    styleBorderEnabled = true,
-    styleBorderStyle = true,
-    styleBorderThickness = true,
-    styleBorderColor = true,
-    styleShadowEnabled = true,
-    styleShadowSize = true,
-    styleShadowColor = true,
     buffFrameEffectType = true,
     buffFrameEffectColor = true,
     buffFrameEffectPriority = true,
@@ -442,6 +424,7 @@ local GROUP_LANE_SPECS = {
     buff = {
         rootKey = "Buffs", filter = "HELPFUL",
         showKey = "showBuffs", maxKey = "maxBuffs", sizeKey = "buffIconSize",
+        iconZoomKey = "buffIconZoom",
         spacingKey = "buffSpacing", perRowKey = "buffPerRow", growthXKey = "buffGrowthX",
         growthYKey = "buffGrowthY", anchorKey = "buffAnchor", xKey = "buffOffsetX",
         yKey = "buffOffsetY", layerKey = "buffLayer", filterKey = "buffFilter",
@@ -465,6 +448,7 @@ local GROUP_LANE_SPECS = {
     trackedBuff = {
         rootKey = "TrackedBuffs", filter = "HELPFUL",
         showKey = "showTrackedBuffs", maxKey = "maxTrackedBuffs", sizeKey = "trackedBuffIconSize",
+        iconZoomKey = "trackedBuffIconZoom",
         spacingKey = "trackedBuffSpacing", perRowKey = "trackedBuffPerRow", growthXKey = "trackedBuffGrowthX",
         growthYKey = "trackedBuffGrowthY", anchorKey = "trackedBuffAnchor", xKey = "trackedBuffOffsetX",
         yKey = "trackedBuffOffsetY", layerKey = "trackedBuffLayer", filterKey = "trackedBuffFilter",
@@ -488,6 +472,7 @@ local GROUP_LANE_SPECS = {
     debuff = {
         rootKey = "Debuffs", filter = "HARMFUL",
         showKey = "showDebuffs", maxKey = "maxDebuffs", sizeKey = "debuffIconSize",
+        iconZoomKey = "debuffIconZoom",
         spacingKey = "debuffSpacing", perRowKey = "debuffPerRow", growthXKey = "debuffGrowthX",
         growthYKey = "debuffGrowthY", anchorKey = "debuffAnchor", xKey = "debuffOffsetX",
         yKey = "debuffOffsetY", layerKey = "debuffLayer", filterKey = "debuffFilter",
@@ -512,6 +497,7 @@ local GROUP_LANE_SPECS = {
     external = {
         rootKey = "Externals", filter = "HELPFUL|RAID",
         showKey = "showExternals", maxKey = "maxExternals", sizeKey = "externalIconSize",
+        iconZoomKey = "externalIconZoom",
         spacingKey = "externalSpacing", perRowKey = "externalPerRow", growthXKey = "externalGrowthX",
         growthYKey = "externalGrowthY", anchorKey = "externalAnchor", xKey = "externalOffsetX",
         yKey = "externalOffsetY", layerKey = "externalLayer", filterKey = "externalFilter",
@@ -1597,7 +1583,7 @@ local function CompileGroupLane(unit, source, kind, groupKind)
     candidateFilters, candidateFilterSignature = AddMaxDurationCandidateFilter(
         candidateFilters, candidateFilterSignature,
         spec.maxDurationKey and source[spec.maxDurationKey], source[spec.hidePermanentKey] == true)
-    local size = ClampNumber(source[spec.sizeKey] or source.iconSize, spec.defaultSize, 1, 128)
+    local size = ClampNumber(source[spec.sizeKey] or source.iconSize, spec.defaultSize, 1, 256)
     local spacing = ClampNumber(source[spec.spacingKey] or source.spacing, 1, 0, 64)
     local perRow = ClampNumber(source[spec.perRowKey] or source.perRow, spec.defaultPerRow, 1, 40)
     local maxCount = ClampNumber(source[spec.maxKey], spec.defaultMax, 0, 80)
@@ -1635,7 +1621,7 @@ local function CompileGroupLane(unit, source, kind, groupKind)
         partyAccessGate = partyAccessGate == true,
         max = Round(maxCount),
         size = size,
-        iconZoom = ClampNumber(source.iconZoom, 100, 100, 200),
+        iconZoom = ClampNumber(source[spec.iconZoomKey] or source.iconZoom, 100, 100, 200),
         spacing = spacing,
         step = size + spacing,
         perRow = Round(perRow),
@@ -1926,9 +1912,9 @@ A3._CompilePlayerDefensivePortraitLane = function(lane, frameSpec, entry)
     local usePortraitPosition = entry and entry.portraitPositionWhenDisabled == true
     if not (lane and portrait and (portrait.enabled == true or usePortraitPosition)) then return nil end
     local placed = type(entry and entry.placed) == "table" and entry.placed or {}
-    -- Preserve the proven single portrait icon exactly: same square derived
-    -- from the portrait, same centring, full opacity, mask, text, and swipe.
-    -- Additional icons use the custom lane's normal Growth/Per row contract.
+    -- Preserve the proven portrait geometry while retaining the custom lane's
+    -- complete Aura Style contract. Portrait mode changes placement only; it
+    -- must not silently discard opacity, text, swipe, stacks or duration bars.
     local portraitWidth = ClampNumber(portrait.width, portrait.size or 24, 8, 128)
     local portraitHeight = ClampNumber(portrait.height, portrait.size or 24, 8, 128)
     local size = math_min(portraitWidth, portraitHeight)
@@ -1970,20 +1956,21 @@ A3._CompilePlayerDefensivePortraitLane = function(lane, frameSpec, entry)
     out.anchor = initialAnchor
     out.layer = 0
     out.strata = "AUTO"
-    out.alpha = 1
+    out.alpha = lane.alpha
     out.growthX = lane.growthX
     out.growthY = lane.growthY
     out.xSign = xSign
     out.ySign = ySign
     out.verticalGrowth = verticalGrowth
     out.initialAnchor = initialAnchor
-    out.showCooldownText = entry and entry.portraitCooldownText ~= false or false
+    out.showCooldownText = lane.showCooldownText == true
+        and entry and entry.portraitCooldownText ~= false or false
     -- The AuraButton itself is the portrait replacement. Keep Blizzard's
     -- native duration swipe on that same button so icon, swipe, and duration
     -- text can never split into separate visual owners.
-    out.showCooldownSwipe = true
-    out.showDurationBar = false
-    out.showStacks = false
+    out.showCooldownSwipe = lane.showCooldownSwipe == true
+    out.showDurationBar = lane.showDurationBar == true
+    out.showStacks = lane.showStacks == true
     return FinalizeLane(out, "player")
 end
 
@@ -2088,7 +2075,9 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec)
     -- off, fall back to the normal bar instead of silently losing defensives.
     local barEnabled = portraitLane == nil
     local effect
-    if barEnabled and type(entry.frame) == "table" and entry.frame.type and entry.frame.type ~= "none" then
+    -- Full-frame effects are independent aura sensors. Portrait mode replaces
+    -- only the icon lane and must not suppress the selected frame effect.
+    if type(entry.frame) == "table" and entry.frame.type and entry.frame.type ~= "none" then
         effect = {
             key = "ufcustom_effect:" .. tostring(index),
             display = entry.name or ("Custom " .. tostring(index)),
@@ -2488,6 +2477,29 @@ local function FrameAuraConfig(frame, unit)
     return A3.ResolveUnitFrameConfig(unit or (frame and frame.MSUFUnitKey), frame and frame.MSUFSpec)
 end
 
+--- Cold-path preview bridge. Menu mocks and synthetic Edit Mode rows consume
+--- the exact finalized runtime lanes/slots instead of reimplementing their
+--- geometry. Preview entry points are combat-guarded by their owners; this
+--- function only resolves/caches immutable configuration and creates no frame,
+--- event, timer, or OnUpdate.
+function A3.ResolveAuraPreviewConfig(frame, unit, frameSpec)
+    if (_G.InCombatLockdown and _G.InCombatLockdown()) or _G.MSUF_InCombat == true then return nil end
+    if frameSpec ~= nil and frame and frameSpec ~= frame.MSUFSpec and IsGroupFrame(frame) then
+        local proxy = frame._msufA3AuraPreviewConfigProxy
+        if not proxy then
+            proxy = {}
+            frame._msufA3AuraPreviewConfigProxy = proxy
+        end
+        proxy._msufIsGroupFrame = true
+        proxy._msufGFIsPreviewFrame = true
+        proxy._msufGFKind = frame._msufGFKind
+        proxy.MSUFUnitKey = unit or frame.MSUFUnitKey
+        proxy.MSUFSpec = frameSpec
+        return ResolveGroupFrameConfig(proxy, proxy.MSUFUnitKey)
+    end
+    return FrameAuraConfig(frame, unit or (frame and frame.MSUFUnitKey))
+end
+
 function A3.BuildAuraLaneMetrics(configOrUnit, kind)
     local rawKind = tostring(kind or "buff"):lower()
     local customIndex = rawKind:match("^custom(%d)$")
@@ -2511,6 +2523,8 @@ function A3.BuildAuraLaneMetrics(configOrUnit, kind)
         rows = lane.rows,
         width = lane.width,
         height = lane.height,
+        alpha = lane.alpha,
+        iconZoom = lane.iconZoom,
         growth = lane.growthX,
         rowWrap = lane.growthY,
         growthX = lane.xSign,
@@ -2575,6 +2589,36 @@ local function ApplyFont(fs, size)
     end
     fs:SetTextColor(r or 1, g or 1, b or 1, 1)
     if useShadow then fs:SetShadowOffset(1, -1) else fs:SetShadowOffset(0, 0) end
+end
+
+-- Stack-count text color. ApplyFont paints every aura fontstring with the
+-- global font color; the stack count carries its own optional override. Cached
+-- on the same visual generation as the font cache, so the menu's aura-color
+-- apply (which bumps _nativeVisualGen) invalidates it and no per-button DB read
+-- happens in between. Shape-tolerant: legacy Auras 2.0 profiles stored these
+-- colors with string keys.
+--- On A3 rather than a main-chunk local: this file sits under a deliberate
+--- local budget that keeps structural reserve below WoW Lua's 200-local cliff.
+function A3._StackCountColor()
+    local gen = A3._nativeVisualGen or 0
+    if A3._auraStackColorGen == gen then
+        return A3._auraStackColorR, A3._auraStackColorG, A3._auraStackColorB
+    end
+    A3._auraStackColorGen = gen
+    A3._auraStackColorR, A3._auraStackColorG, A3._auraStackColorB = nil, nil, nil
+    local general = _G.MSUF_DB and _G.MSUF_DB.general
+    local color = general and general.aurasStackCountColor
+    if type(color) == "table" then
+        local cr = color[1] or color.r or color["1"]
+        local cg = color[2] or color.g or color["2"]
+        local cb = color[3] or color.b or color["3"]
+        if cr ~= nil or cg ~= nil or cb ~= nil then
+            A3._auraStackColorR = Clamp01(cr, 1)
+            A3._auraStackColorG = Clamp01(cg, 1)
+            A3._auraStackColorB = Clamp01(cb, 1)
+        end
+    end
+    return A3._auraStackColorR, A3._auraStackColorG, A3._auraStackColorB
 end
 
 -- Aura timer text format/color: a C-side NumericRuleFormatter plus a
@@ -3704,6 +3748,8 @@ local function PrepareAuraButton(button, lane, index)
         button.Count = count
         count:Hide()
         ApplyFont(count, lane.stackSize)
+        local scr, scg, scb = A3._StackCountColor()
+        if scr then count:SetTextColor(scr, scg, scb, 1) end
         if type(count.SetDrawLayer) == "function" then count:SetDrawLayer("OVERLAY", 6) end
         PlaceStackText(count, textOverlay, lane)
         count:Show()
@@ -6594,9 +6640,7 @@ function AurasElement.SelectEventUpdate(_frame, _spec, event)
 end
 
 function AurasElement.IsEnabled(frame)
-    if IsGroupFrame(frame) and frame._msufGFIsPreviewFrame == true
-        and (tonumber(frame._msufGFPreviewIndex) or 1) > 1
-    then
+    if IsGroupFrame(frame) and frame._msufGFIsPreviewFrame == true then
         return false
     end
     local cfg = FrameAuraConfig(frame, frame and frame.MSUFUnitKey)
@@ -6622,12 +6666,11 @@ end
 
 function AurasElement.Enable(frame)
     if IsGroupFrame(frame) then
-        -- Native CustomAuraContainer:AddAuraGroup allocates a frame batch up
-        -- front. Group previews can contain 5-40 identical synthetic player
-        -- frames, so duplicating the same native player auras on every row turns
-        -- opening Edit Mode into thousands of AuraButtons. Keep one exact native
-        -- aura sample per preview kind; live group frames are untouched.
-        if frame._msufGFIsPreviewFrame == true and (tonumber(frame._msufGFPreviewIndex) or 1) > 1 then
+        -- Edit Mode uses pooled addon-owned stand-ins compiled from the same
+        -- lane geometry. Never attach a native player AuraContainer to a
+        -- synthetic row: it would show the player's current auras instead of
+        -- deterministic dummy data and allocate AuraButtons in batches.
+        if frame._msufGFIsPreviewFrame == true then
             frame._msufA3GroupRuntime = nil
             HideState(frame)
             return false

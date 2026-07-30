@@ -187,17 +187,30 @@ local function RequestGFPagePreview()
         return M.SyncGFPagePreviewForKey(M.activeKey)
     end
 end
-local function RefreshGFPreview(kind)
+local function RefreshGFPreview(kind, opts)
     -- Preview and live group frames have separate render paths. Refresh both when controls
     -- change so the page does not hide a stale runtime configuration.
     local gf = GF()
-    if gf and type(gf.RefreshPreviewLayout) == "function" then
+    if opts and opts.auraOnly == true and gf and type(gf.RefreshPreviewAuras) == "function" then
+        gf.RefreshPreviewAuras(kind)
+    elseif opts and opts.auraOnly == true and type(_G.MSUF_GF_RefreshPreviewAuras) == "function" then
+        _G.MSUF_GF_RefreshPreviewAuras(kind)
+    elseif opts and opts.spellOnly == true and gf and type(gf.RefreshPreviewSpellIndicators) == "function" then
+        gf.RefreshPreviewSpellIndicators(kind)
+    elseif opts and opts.spellOnly == true and type(_G.MSUF_GF_RefreshPreviewSpellIndicators) == "function" then
+        _G.MSUF_GF_RefreshPreviewSpellIndicators(kind)
+    elseif gf and type(gf.RefreshPreviewLayout) == "function" then
         gf.RefreshPreviewLayout(kind)
     end
     if type(M.RefreshGFNativePreviews) == "function" then
         M.RefreshGFNativePreviews("GF_PAGE_REFRESH")
     end
-    if type(M.RequestGFPagePreviewForKey) == "function" or type(M.SyncGFPagePreviewForKey) == "function" then
+    -- Targeted Aura/Spell drag refreshes already update the active Edit Mode
+    -- dummies directly. Do not queue the page-preview ownership settle too;
+    -- that would perform a delayed full ShowPreview for every slider stream.
+    if not (opts and (opts.auraOnly == true or opts.spellOnly == true))
+        and (type(M.RequestGFPagePreviewForKey) == "function" or type(M.SyncGFPagePreviewForKey) == "function")
+    then
         RequestGFPagePreview()
     end
 end
@@ -1478,10 +1491,11 @@ local function AuraGroup(kind, groupKey)
 end
 local function SpellIndicators(kind)
     local conf = Conf(kind)
-    if type(conf.spellIndicators) ~= "table" then conf.spellIndicators = { enabled = false, spec = "auto", specs = {}, layer = 9, strata = "AUTO", iconZoom = 100 } end
+    if type(conf.spellIndicators) ~= "table" then conf.spellIndicators = { enabled = false, spec = "auto", specs = {}, layer = 9, strata = "AUTO", iconZoom = 100, iconScale = 100 } end
     conf.spellIndicators.specs = conf.spellIndicators.specs or {}
     if conf.spellIndicators.strata == nil then conf.spellIndicators.strata = "AUTO" end
     if conf.spellIndicators.iconZoom == nil then conf.spellIndicators.iconZoom = 100 end
+    if conf.spellIndicators.iconScale == nil then conf.spellIndicators.iconScale = 100 end
     return conf.spellIndicators
 end
 local function IconStyleValues()
@@ -1502,11 +1516,11 @@ local function CurrentGFStatusSpec()
     M.SetMenuStateValue("gfStatusIconSelection", GF_STATUS_ICON_SPECS[1].value)
     return GF_STATUS_ICON_SPECS[1]
 end
-local function QueueSpellIndicators(kind)
+local function QueueSpellIndicators(kind, mode)
     local gf = GF()
     local si = gf and gf.SpellIndicators
     if si and type(si.InvalidateRuntimeCaches) == "function" then si.InvalidateRuntimeCaches() end
-    QueueGF(kind or CurrentScope(), "visual")
+    QueueGF(kind or CurrentScope(), mode or "visual")
 end
 local spellSpecIconCache = {}
 local function SpellSpecIcon(info)

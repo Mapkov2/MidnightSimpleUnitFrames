@@ -588,6 +588,8 @@ local function ReadGroupConfig(unit, kind)
             y = Round(placed.y or 0),
             anchor = anchor,
             layer = Clamp(item and item.layer, spec.defaultLayer, 0, 30),
+            alpha = Clamp(placed.alpha, 1, 0, 1),
+            iconZoom = Clamp(placed.iconZoom, 100, 100, 200),
             size = Clamp(placed.size, 24, 1, 128),
             spacing = Clamp(placed.spacing, 2, 0, 64),
             perRow = Clamp(placed.perRow, 4, 1, 40),
@@ -1788,13 +1790,18 @@ local function ApplyEditModeCustomEffect(group, frame, item)
     local effect = item and item.frame
     local kind = type(effect) == "table" and tostring(effect.type or "none"):lower() or "none"
     local root = group and group._msufA3CustomEffectPreview
-    if kind == "none" or kind == "namecolor" then
+    if kind == "none" then
         if root then root:Hide() end
         return
     end
     local health = frame and (frame.hpBar or frame.Health or frame.health)
     local target = health and health.GetStatusBarTexture and health:GetStatusBarTexture()
-    if not (health and target) then
+    local nameSource = frame and (frame.Name or frame.name or frame.NameText or frame.nameText or frame._nameFS)
+    if kind ~= "namecolor" and not (health and target) then
+        if root then root:Hide() end
+        return
+    end
+    if kind == "namecolor" and not nameSource then
         if root then root:Hide() end
         return
     end
@@ -1808,16 +1815,20 @@ local function ApplyEditModeCustomEffect(group, frame, item)
             root.edges[i] = root:CreateTexture(nil, "OVERLAY")
             root.edges[i]:SetTexture(W8)
         end
+        root.name = root:CreateFontString(nil, "OVERLAY")
         group._msufA3CustomEffectPreview = root
     end
+    if not root.name then root.name = root:CreateFontString(nil, "OVERLAY") end
     root:ClearAllPoints()
-    root:SetAllPoints(health)
+    root:SetAllPoints(health or frame)
     if root.SetFrameLevel then
         root:SetFrameLevel((group:GetFrameLevel() or 900) + SPELL_FRAME_EFFECT_BASE_OFFSET
-            + (11 - Clamp(effect.priority, 5, 1, 10)))
+            + (11 - Clamp(effect.priority, 5, 1, 10))
+            + Clamp(effect.layer, 0, 0, 30))
     end
     root.tint:Hide()
     for i = 1, 4 do root.edges[i]:Hide() end
+    root.name:Hide()
     local color = effect.color or {}
     local r, g, b, a = color[1] or 1, color[2] or 1, color[3] or 1, color[4] or 0.8
     if kind == "healthtint" then
@@ -1825,6 +1836,19 @@ local function ApplyEditModeCustomEffect(group, frame, item)
         root.tint:SetAllPoints(target)
         root.tint:SetVertexColor(r, g, b, tonumber(effect.tintAlpha) or a)
         root.tint:Show()
+    elseif kind == "namecolor" then
+        local path, size, flags
+        if nameSource.GetFont then path, size, flags = nameSource:GetFont() end
+        if path and size then root.name:SetFont(path, size, flags) end
+        if nameSource.GetJustifyH then root.name:SetJustifyH(nameSource:GetJustifyH()) end
+        if nameSource.GetJustifyV then root.name:SetJustifyV(nameSource:GetJustifyV()) end
+        if nameSource.GetShadowColor then root.name:SetShadowColor(nameSource:GetShadowColor()) end
+        if nameSource.GetShadowOffset then root.name:SetShadowOffset(nameSource:GetShadowOffset()) end
+        root.name:ClearAllPoints()
+        root.name:SetAllPoints(nameSource)
+        root.name:SetText(nameSource.GetText and nameSource:GetText() or "")
+        root.name:SetTextColor(r, g, b, a)
+        root.name:Show()
     elseif kind == "border" or kind == "glow" or kind == "pulse" then
         local thickness = Clamp(effect.thickness, kind == "glow" and 3 or 2, 1, 16)
         local top, bottom, left, right = root.edges[1], root.edges[2], root.edges[3], root.edges[4]
@@ -1832,7 +1856,7 @@ local function ApplyEditModeCustomEffect(group, frame, item)
         bottom:ClearAllPoints(); bottom:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", -thickness, -thickness); bottom:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", thickness, -thickness); bottom:SetHeight(thickness)
         left:ClearAllPoints(); left:SetPoint("TOPLEFT", top, "BOTTOMLEFT"); left:SetPoint("BOTTOMLEFT", bottom, "TOPLEFT"); left:SetWidth(thickness)
         right:ClearAllPoints(); right:SetPoint("TOPRIGHT", top, "BOTTOMRIGHT"); right:SetPoint("BOTTOMRIGHT", bottom, "TOPRIGHT"); right:SetWidth(thickness)
-        for i = 1, 4 do root.edges[i]:SetVertexColor(r, g, b, kind == "glow" and math_min(1, a * 0.85) or a); root.edges[i]:Show() end
+        for i = 1, 4 do root.edges[i]:SetVertexColor(r, g, b, kind == "glow" and math_min(1, a + 0.16) or a); root.edges[i]:Show() end
     end
     root:Show()
 end
@@ -1858,6 +1882,7 @@ local function RefreshSignature(unit, kind, cfg, metrics, textCfg, shownIcons, s
         .. "\030" .. EditModeThemeRevision()
         .. "\030" .. tostring(cfg and cfg.show) .. "\030" .. tostring(cfg and cfg.max)
         .. "\030" .. tostring(cfg and cfg.layer) .. "\030" .. tostring(cfg and cfg.spacing)
+        .. "\030" .. tostring(metrics and metrics.alpha or cfg and cfg.alpha)
         .. "\030" .. tostring(shownIcons) .. "\030" .. tostring(size)
         .. "\030" .. tostring(step) .. "\030" .. tostring(perRow)
         .. "\030" .. tostring(laneW) .. "\030" .. tostring(laneH)
@@ -2011,6 +2036,7 @@ function EM.RefreshUnit(unit)
                 PositionPreviewGroup(group, frame, anchor, x, y, laneW, laneH)
                 group:SetSize(laneW, laneH + HEADER_H)
                 if group.Body then group.Body:SetSize(laneW, laneH) end
+                if group.Body then group.Body:SetAlpha(Clamp(metrics and metrics.alpha or cfg.alpha, 1, 0, 1)) end
                 group:SetFrameLevel(900 + Clamp(cfg.layer, 5, 0, 30))
                 if group.Hitbox and group.Hitbox.SetFrameLevel then
                     group.Hitbox:SetFrameLevel((group:GetFrameLevel() or 0) + 20)
