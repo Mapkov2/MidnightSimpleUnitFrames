@@ -1979,7 +1979,7 @@ local function CompileUnitDispel(out, conf, general)
   out.dispelSymbol = symbol
   symbol.enabled = ScopedValue(conf, general, "unitDispelSymbolEnabled", false) == true
   symbol.style = ScopedValue(conf, general, "unitDispelSymbolStyle", "BLIZZARD")
-  symbol.mode = ScopedValue(conf, general, "unitDispelSymbolMode", "TOP")
+  symbol.mode = ScopedValue(conf, general, "unitDispelSymbolMode", "ALL")
   symbol.trigger = ScopedValue(conf, general, "unitDispelSymbolTrigger", "BORDER")
   symbol.size = ScopedValue(conf, general, "unitDispelSymbolSize", 14)
   symbol.spacing = ScopedValue(conf, general, "unitDispelSymbolSpacing", 2)

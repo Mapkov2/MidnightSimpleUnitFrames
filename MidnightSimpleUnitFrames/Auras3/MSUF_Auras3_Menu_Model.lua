@@ -1862,6 +1862,42 @@ end
 
 local CUSTOM_CONTAINER_MAX = 4
 local TARGET_DOT_CONTAINER_INDEX = 4
+local PLAYER_DEFENSIVE_CONTAINER_INDEX = 4
+
+local function EnforcePlayerDefensiveContainer(item)
+    if type(item) ~= "table" then return item end
+    item.name = "Defensive Buffs"
+    item.auraType = "BUFF"
+    item.sourceUnit = "player"
+    item.targetDots = nil
+    item.playerDefensives = true
+    item.portraitIcon = item.portraitIcon == true
+    -- The portrait is an alternative presentation of the same active
+    -- defensive set. Keeping the normal lane enabled at the same time draws
+    -- the selected aura twice (once on the portrait and once beside it).
+    if item.portraitIcon then item.enabled = false end
+    item.portraitCooldownText = item.portraitCooldownText ~= false
+    item.portraitPositionWhenDisabled = item.portraitPositionWhenDisabled == true
+    item.autoBlacklistPlayerBuffs = item.autoBlacklistPlayerBuffs ~= false
+    item.disabledPredefinedSpellIDs = type(item.disabledPredefinedSpellIDs) == "table"
+        and item.disabledPredefinedSpellIDs or {}
+    item.filters = type(item.filters) == "table" and item.filters or {}
+    item.filters.enabled = true
+    item.filters.onlyMine = false
+    item.filters.onlyImportant = false
+    item.filters.raid = false
+    item.filters.raidInCombat = false
+    item.filters.includeNameplateOnly = false
+    item.filters.includeDispellable = false
+    item.filters.dispellableAny = false
+    item.filters.cancelable = false
+    item.filters.notCancelable = false
+    item.filters.crowdControl = false
+    item.filters.externalDefensive = false
+    item.filters.bigDefensive = false
+    item.filters.exclusive = "none"
+    return item
+end
 
 local function EnforceTargetDotContainer(item)
     if type(item) ~= "table" then return item end
@@ -1869,6 +1905,12 @@ local function EnforceTargetDotContainer(item)
     item.auraType = "DEBUFF"
     item.sourceUnit = "target"
     item.targetDots = true
+    item.playerDefensives = nil
+    item.portraitIcon = nil
+    item.portraitCooldownText = nil
+    item.portraitPositionWhenDisabled = nil
+    item.autoBlacklistPlayerBuffs = nil
+    item.disabledPredefinedSpellIDs = nil
     item.filters = type(item.filters) == "table" and item.filters or {}
     item.filters.enabled = true
     item.filters.onlyMine = true
@@ -1887,7 +1929,7 @@ local function EnforceTargetDotContainer(item)
     return item
 end
 
-local function NewCustomContainer(index)
+local function NewCustomContainer(index, unit)
     local item = {
         enabled = false,
         name = "Custom " .. tostring(index),
@@ -1923,6 +1965,9 @@ local function NewCustomContainer(index)
             priority = 5, thickness = 2, layer = 0, strata = "AUTO",
         },
     }
+    if index == PLAYER_DEFENSIVE_CONTAINER_INDEX and NormalizeScope(unit) == "player" then
+        return EnforcePlayerDefensiveContainer(item)
+    end
     return index == TARGET_DOT_CONTAINER_INDEX and EnforceTargetDotContainer(item) or item
 end
 
@@ -1962,7 +2007,7 @@ local function EnsureUnitCustomContainers(unit, create)
         if type(oldItems) == "table" then
             for i = 1, math.min(CUSTOM_CONTAINER_MAX, #oldItems) do
                 if type(record.items[i]) ~= "table" then
-                    record.items[i] = UpgradeLegacyCustomContainer(NewCustomContainer(i), oldItems[i], i)
+                    record.items[i] = UpgradeLegacyCustomContainer(NewCustomContainer(i, unit), oldItems[i], i)
                 end
             end
         end
@@ -1976,15 +2021,21 @@ function Model.CustomContainerMax()
 end
 
 function Model.CustomContainer(unit, index, create)
+    unit = NormalizeScope(unit)
+    if unit == "shared" then unit = "player" end
     index = math_floor(ClampNumber(index, 1, 1, CUSTOM_CONTAINER_MAX))
     local record = EnsureUnitCustomContainers(unit, create == true)
     if not record then return nil end
     local item = record.items[index]
     if type(item) ~= "table" and create == true then
-        item = NewCustomContainer(index)
+        item = NewCustomContainer(index, unit)
         record.items[index] = item
     end
-    if index == TARGET_DOT_CONTAINER_INDEX then EnforceTargetDotContainer(item) end
+    if index == PLAYER_DEFENSIVE_CONTAINER_INDEX and unit == "player" then
+        EnforcePlayerDefensiveContainer(item)
+    elseif index == TARGET_DOT_CONTAINER_INDEX then
+        EnforceTargetDotContainer(item)
+    end
     return item
 end
 
@@ -1994,9 +2045,11 @@ function Model.CustomContainers(unit, create)
 end
 
 function Model.ResetCustomContainer(unit, index)
+    unit = NormalizeScope(unit)
+    if unit == "shared" then unit = "player" end
     local record = EnsureUnitCustomContainers(unit, true)
     index = math_floor(ClampNumber(index, 1, 1, CUSTOM_CONTAINER_MAX))
-    record.items[index] = NewCustomContainer(index)
+    record.items[index] = NewCustomContainer(index, unit)
     return record.items[index]
 end
 
@@ -2028,10 +2081,19 @@ local function WriteCustomContainerSpellSet(item, set)
 end
 
 function Model.AddCustomContainerSpell(unit, index, value, allowCustomID)
+    unit = NormalizeScope(unit)
+    if unit == "shared" then unit = "player" end
     local spellID = SpellIDFromInput(value)
     local item = Model.CustomContainer(unit, index, true)
     if not (spellID and item) then return false, "invalid" end
-    local customTargetDot = index == TARGET_DOT_CONTAINER_INDEX and not Model.IsTargetDotSpell(spellID)
+    if unit == "player" and index == PLAYER_DEFENSIVE_CONTAINER_INDEX
+        and Model.IsPlayerDefensiveSpell(spellID)
+        and type(Model.SetPlayerDefensiveSpellEnabled) == "function"
+    then
+        return Model.SetPlayerDefensiveSpellEnabled(unit, spellID, true)
+    end
+    local customTargetDot = unit ~= "player" and index == TARGET_DOT_CONTAINER_INDEX
+        and not Model.IsTargetDotSpell(spellID)
     if customTargetDot and allowCustomID ~= true then return false, "not-dot" end
     local set = CustomContainerSpellSet(item)
     if set[spellID] == true then
@@ -2102,8 +2164,30 @@ end
 --- curated dot IDs plus explicitly allowed custom IDs survive. Empty means
 --- empty - previews outside edit mode render nothing for this container.
 function Model.CustomContainerPreviewEntries(unit, index)
+    unit = NormalizeScope(unit)
+    if unit == "shared" then unit = "player" end
     index = math_floor(ClampNumber(index, 1, 1, CUSTOM_CONTAINER_MAX))
     local entries = Model.CustomContainerSpellEntries(unit, index)
+    if unit == "player" and index == PLAYER_DEFENSIVE_CONTAINER_INDEX then
+        local out, seen = {}, {}
+        local builtins = type(Model.PlayerDefensivePreviewEntries) == "function"
+            and Model.PlayerDefensivePreviewEntries() or {}
+        for i = 1, #builtins do
+            local entry = builtins[i]
+            if entry and entry.spellID then
+                seen[entry.spellID] = true
+                out[#out + 1] = entry
+            end
+        end
+        for i = 1, #entries do
+            local entry = entries[i]
+            if entry and entry.spellID and not seen[entry.spellID] then
+                seen[entry.spellID] = true
+                out[#out + 1] = entry
+            end
+        end
+        return out
+    end
     if index ~= TARGET_DOT_CONTAINER_INDEX or #entries == 0 then return entries end
     local out = {}
     for i = 1, #entries do
@@ -2169,6 +2253,117 @@ function Model.TargetDotValues()
         end
     end
     return values
+end
+
+local function PlayerDefensiveLookup()
+    local lookup = A3._playerDefensiveLookup
+    if lookup then return lookup end
+    lookup = {}
+    for _, spells in pairs(A3.PlayerDefensiveData or {}) do
+        for i = 1, #spells do lookup[tonumber(spells[i][1])] = true end
+    end
+    A3._playerDefensiveLookup = lookup
+    return lookup
+end
+
+function Model.IsPlayerDefensiveSpell(value)
+    local spellID = SpellIDFromInput(value)
+    return spellID and PlayerDefensiveLookup()[spellID] == true or false
+end
+
+local function PlayerClassToken()
+    if type(UnitClass) == "function" then
+        local _, class = UnitClass("player")
+        if type(class) == "string" and class ~= "" then return class end
+    end
+end
+
+local function DefensiveEntry(spellID, fallback, class)
+    local id, name, icon = SpellInfo(spellID)
+    id = id or spellID
+    return {
+        value = tostring(id), spellID = id, icon = icon,
+        text = (type(name) == "string" and name ~= "" and name or fallback or "Spell")
+            .. " (#" .. tostring(id) .. ")",
+        class = class,
+        predefined = true,
+    }
+end
+
+local function PlayerDefensiveDisabledSet(unit, create)
+    local item = Model.CustomContainer(unit or "player", PLAYER_DEFENSIVE_CONTAINER_INDEX, create == true)
+    if not item then return nil end
+    local disabled = item.disabledPredefinedSpellIDs
+    if type(disabled) ~= "table" and create == true then
+        disabled = {}
+        item.disabledPredefinedSpellIDs = disabled
+    end
+    return type(disabled) == "table" and disabled or nil
+end
+
+function Model.PlayerDefensiveSpellEnabled(unit, value)
+    local spellID = SpellIDFromInput(value)
+    if not (spellID and PlayerDefensiveLookup()[spellID] == true) then return false end
+    local disabled = PlayerDefensiveDisabledSet(unit, false)
+    return not (disabled and (disabled[spellID] == true or disabled[tostring(spellID)] == true))
+end
+
+function Model.SetPlayerDefensiveSpellEnabled(unit, value, enabled)
+    local spellID = SpellIDFromInput(value)
+    if not (spellID and PlayerDefensiveLookup()[spellID] == true) then return false, "invalid" end
+    local disabled = PlayerDefensiveDisabledSet(unit, true)
+    local wasEnabled = not (disabled[spellID] == true or disabled[tostring(spellID)] == true)
+    enabled = enabled == true
+    if wasEnabled == enabled then return false, "unchanged" end
+    if enabled then
+        disabled[spellID] = nil
+    else
+        disabled[spellID] = true
+    end
+    disabled[tostring(spellID)] = nil
+    return true
+end
+
+function Model.PlayerDefensiveClassEntries(includeDisabled)
+    local class = PlayerClassToken()
+    local spells = class and A3.PlayerDefensiveData and A3.PlayerDefensiveData[class]
+    local out = {}
+    if type(spells) ~= "table" then return out end
+    for i = 1, #spells do
+        local entry = DefensiveEntry(tonumber(spells[i][1]), spells[i][2], class)
+        entry.enabled = Model.PlayerDefensiveSpellEnabled("player", entry.spellID)
+        if includeDisabled == true or entry.enabled then out[#out + 1] = entry end
+    end
+    return out
+end
+
+function Model.PlayerDefensiveValues()
+    local values, playerClass, order = {}, PlayerClassToken(), {}
+    if playerClass and A3.PlayerDefensiveData and A3.PlayerDefensiveData[playerClass] then
+        order[#order + 1] = playerClass
+    end
+    for i = 1, #TARGET_DOT_CLASS_ORDER do
+        local class = TARGET_DOT_CLASS_ORDER[i]
+        if class ~= playerClass then order[#order + 1] = class end
+    end
+    for i = 1, #order do
+        local class = order[i]
+        local spells = A3.PlayerDefensiveData and A3.PlayerDefensiveData[class]
+        if type(spells) == "table" and #spells > 0 then
+            values[#values + 1] = {
+                text = TARGET_DOT_CLASS_LABELS[class] or class,
+                header = true, disabled = true, translate = false,
+            }
+            for j = 1, #spells do
+                values[#values + 1] = DefensiveEntry(tonumber(spells[j][1]), spells[j][2], class)
+            end
+        end
+    end
+    return values
+end
+
+function Model.PlayerDefensivePreviewEntries()
+    return Model.PlayerDefensiveClassEntries(false)
 end
 
 function Model.WriteLaneLayer(unit, kind, value)

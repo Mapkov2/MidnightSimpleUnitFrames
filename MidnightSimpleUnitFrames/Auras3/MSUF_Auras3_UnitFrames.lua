@@ -1280,19 +1280,40 @@ function DS.Style(value)
     return "BLIZZARD"
 end
 
---- TOP shows one symbol for the highest-priority matching debuff (one aura
---- slot). ALL shows one symbol per dispel type that is actually present, which
---- costs one aura slot per type -- see DS.Slots.
+--- ALL (the default) shows one symbol per dispel type that is actually present,
+--- so two debuffs of different types read as two symbols. It costs one aura slot
+--- per type -- see DS.Slots -- but only once the symbol itself is switched on,
+--- which is off by default. TOP is the one-slot fallback that shows only the
+--- highest-priority matching debuff.
 function DS.Mode(value)
-    value = tostring(value or "TOP"):upper()
-    if value == "ALL" or value == "ALL_TYPES" or value == "EACH" then return "ALL" end
-    return "TOP"
+    value = tostring(value or "ALL"):upper()
+    if value == "TOP" or value == "HIGHEST" or value == "PRIORITY" then return "TOP" end
+    return "ALL"
 end
 
 function DS.Growth(value)
     value = tostring(value or "RIGHT"):upper()
     if value == "LEFT" or value == "UP" or value == "DOWN" then return value end
     return "RIGHT"
+end
+
+--- Resolve the row direction against its anchor.
+---
+--- A right-edge anchor growing RIGHT (or a left anchor growing LEFT, a top
+--- anchor growing UP, a bottom anchor growing DOWN) marches the row straight off
+--- the frame: symbol 1 lands on the corner and the rest sit outside, over the
+--- world or -- in a raid -- on top of the neighbouring frame. That reads as "only
+--- one symbol shows". Outward choices are mirrored so the row always runs ALONG
+--- the frame from its anchored corner. Perpendicular choices and CENTER anchors
+--- pass through untouched, so "TOPRIGHT + Down" still stacks downwards.
+function DS.ResolveGrowth(growth, anchor)
+    growth = DS.Growth(growth)
+    anchor = tostring(anchor or "TOPRIGHT"):upper()
+    if growth == "RIGHT" and anchor:find("RIGHT", 1, true) then return "LEFT" end
+    if growth == "LEFT" and anchor:find("LEFT", 1, true) then return "RIGHT" end
+    if growth == "UP" and anchor:find("TOP", 1, true) then return "DOWN" end
+    if growth == "DOWN" and anchor:find("BOTTOM", 1, true) then return "UP" end
+    return growth
 end
 
 --- ALL mode: one slot per dispel type, each narrowed by an includeDispelTypes
@@ -1303,17 +1324,21 @@ end
 --- which means a missing type leaves a hole rather than reshuffling the row --
 --- deliberate: a symbol that keeps its place is readable at a glance.
 function DS.Slots(symbol, size, spacing)
-    local growth = DS.Growth(symbol and symbol.growth)
+    local growth = DS.ResolveGrowth(symbol and symbol.growth, symbol and symbol.anchor)
     local slots, parts = {}, {}
     local step = size + spacing
     for i = 1, #DS.types do
         local dispelType = DS.types[i]
         local offset = (i - 1) * step
         local x, y = 0, 0
-        if growth == "LEFT" then x = -offset
-        elseif growth == "UP" then y = offset
-        elseif growth == "DOWN" then y = -offset
-        else x = offset end
+        -- Guard the first slot explicitly: negating zero yields "-0", which would
+        -- put a pointless variant into the layout signature.
+        if offset ~= 0 then
+            if growth == "LEFT" then x = -offset
+            elseif growth == "UP" then y = offset
+            elseif growth == "DOWN" then y = -offset
+            else x = offset end
+        end
         slots[i] = {
             key = dispelType,
             dispelType = dispelType,
@@ -1396,7 +1421,7 @@ local function CompileDispelSensor(unit, frameSpec, groupMode, visual)
         if symbolMode == "ALL" then
             symbolSlots, symbolSignature, symbolGrowth = DS.Slots(symbol, symbolSize, symbolSpacing)
         else
-            symbolGrowth = DS.Growth(symbol.growth)
+            symbolGrowth = DS.ResolveGrowth(symbol.growth, symbol.anchor)
         end
     end
 
@@ -1740,6 +1765,53 @@ local function CustomSpellIDHash(value)
     return count > 0 and out or nil
 end
 
+A3._PlayerDefensiveTrackedSpellIDHash = function(entry)
+    if type(entry) ~= "table" then return nil end
+    local disabled = CustomSpellIDHash(entry.disabledPredefinedSpellIDs)
+    local combined, count = {}, 0
+    for spellID in pairs(A3._PlayerDefensiveSpellIDHash()) do
+        if not (disabled and disabled[spellID] == true) then
+            combined[spellID] = true
+            count = count + 1
+        end
+    end
+    local custom = CustomSpellIDHash(entry.spellIDs or entry.includeSpellIDs)
+    for spellID in pairs(custom or {}) do
+        if combined[spellID] ~= true then
+            combined[spellID] = true
+            count = count + 1
+        end
+    end
+    return count > 0 and combined or nil
+end
+
+A3._AddPlayerDefensiveAutoBlacklist = function(candidateFilters, candidateFilterSignature, entry, tracked)
+    if type(entry) ~= "table" or entry.autoBlacklistPlayerBuffs == false
+        or (entry.enabled ~= true and entry.portraitIcon ~= true)
+    then
+        return candidateFilters, candidateFilterSignature
+    end
+    tracked = tracked or A3._PlayerDefensiveTrackedSpellIDHash(entry)
+    if not tracked then return candidateFilters, candidateFilterSignature end
+    candidateFilters = candidateFilters or {}
+    local excluded = candidateFilters.excludeSpellIDs
+    if type(excluded) ~= "table" then
+        excluded = {}
+        candidateFilters.excludeSpellIDs = excluded
+    end
+    local parts, count = {}, 0
+    for spellID in pairs(tracked) do
+        excluded[spellID] = true
+        count = count + 1
+        parts[count] = tostring(spellID)
+    end
+    table_sort(parts)
+    local autoSignature = "autoPlayerDefensives:" .. table_concat(parts, ",")
+    candidateFilterSignature = candidateFilterSignature
+        and (candidateFilterSignature .. ";" .. autoSignature) or autoSignature
+    return candidateFilters, candidateFilterSignature
+end
+
 local function TargetDotSpellIDHash()
     local cached = A3._targetDotRuntimeLookup
     if cached then return cached end
@@ -1751,6 +1823,64 @@ local function TargetDotSpellIDHash()
         end
     end
     A3._targetDotRuntimeLookup = cached
+    return cached
+end
+
+local function ManagedLaneFrameLevel(parentFrame, lane)
+    local parentLevel = parentFrame and parentFrame.GetFrameLevel and (parentFrame:GetFrameLevel() or 0) or 0
+    if lane and lane.portraitOverlay == true then
+        -- Native AuraButton is born one level above the container. Keep the
+        -- container on the portrait-holder level so Blizzard's secret-driven
+        -- button visibility alone places icon, swipe, and text above the base
+        -- portrait, cast texture, and border. Never observe that visibility
+        -- with scripts: CustomAuraButtonTemplate blocks OnShow/OnHide hooks.
+        return parentLevel
+    end
+    return parentLevel + AuraIconBaseOffset(parentFrame) + (lane and lane.layer or 1)
+end
+
+local function ResolveLaneParentFrame(parentFrame, lane)
+    if lane and lane.anchorTarget == "portrait" and parentFrame then
+        if lane.portraitPositionWhenDisabled == true then
+            local portrait = parentFrame.MSUFSpec and parentFrame.MSUFSpec.portrait
+            if portrait and portrait.enabled ~= true then
+                local element = UF and UF.elements and UF.elements.Portrait
+                if element and type(element.AcquirePositionAnchor) == "function" then
+                    element.AcquirePositionAnchor(parentFrame, portrait)
+                end
+            end
+        end
+        return parentFrame.MSUFPortraitHolder or parentFrame
+    end
+    return parentFrame
+end
+
+A3._PlayerDefensiveSpellIDHash = function()
+    local playerClass
+    if type(UnitClass) == "function" then
+        local _
+        _, playerClass = UnitClass("player")
+    end
+    if type(playerClass) ~= "string" or playerClass == "" then playerClass = "__ALL" end
+    A3._playerDefensiveRuntimeLookup = A3._playerDefensiveRuntimeLookup or {}
+    local cached = A3._playerDefensiveRuntimeLookup[playerClass]
+    if cached then return cached end
+    cached = {}
+    if playerClass == "__ALL" then
+        for _, spells in pairs(A3.PlayerDefensiveData or {}) do
+            for i = 1, #spells do
+                local spellID = tonumber(spells[i][1])
+                if spellID then cached[spellID] = true end
+            end
+        end
+    else
+        local spells = A3.PlayerDefensiveData and A3.PlayerDefensiveData[playerClass]
+        for i = 1, type(spells) == "table" and #spells or 0 do
+            local spellID = tonumber(spells[i][1])
+            if spellID then cached[spellID] = true end
+        end
+    end
+    A3._playerDefensiveRuntimeLookup[playerClass] = cached
     return cached
 end
 
@@ -1791,13 +1921,69 @@ local function CompileUnitCustomDisplays(auras, unit)
     })
 end
 
-local function CompileUnitCustomLane(unit, entry, index, lanePadding)
-    if type(entry) ~= "table" or entry.enabled ~= true then return nil, nil end
-    -- The player frame has no Dots on target container; an orphaned enabled
-    -- record from an older profile must not render there.
-    if index == 4 and unit == "player" then return nil, nil end
+A3._CompilePlayerDefensivePortraitLane = function(lane, frameSpec, entry)
+    local portrait = frameSpec and frameSpec.portrait
+    local usePortraitPosition = entry and entry.portraitPositionWhenDisabled == true
+    if not (lane and portrait and (portrait.enabled == true or usePortraitPosition)) then return nil end
+    local width = ClampNumber(portrait.width, portrait.size or 24, 8, 128)
+    local height = ClampNumber(portrait.height, portrait.size or 24, 8, 128)
+    local size = math_min(width, height)
+    local out = {}
+    for key, value in pairs(lane) do
+        if tostring(key):find("^_msufA3") == nil then out[key] = value end
+    end
+    out.kind = "defensivePortrait"
+    out.rootKey = "DefensivePortrait"
+    out.anchorTarget = "portrait"
+    out.portraitOverlay = true
+    out.portraitLevelOffset = portrait.levelOffset
+    out.portraitPositionWhenDisabled = usePortraitPosition
+    out.max = 1
+    out.size = size
+    out.spacing = 0
+    out.step = size
+    out.perRow = 1
+    out.cols = 1
+    out.rows = 1
+    out.padding = 0
+    out.width = size
+    out.height = size
+    out.x = 0
+    out.y = 0
+    out.anchor = "CENTER"
+    out.layer = 0
+    out.strata = "AUTO"
+    out.alpha = 1
+    out.growthX = "RIGHT"
+    out.growthY = "DOWN"
+    out.xSign = 1
+    out.ySign = -1
+    out.verticalGrowth = false
+    out.initialAnchor = "CENTER"
+    out.showCooldownText = entry and entry.portraitCooldownText ~= false or false
+    -- The AuraButton itself is the portrait replacement. Keep Blizzard's
+    -- native duration swipe on that same button so icon, swipe, and duration
+    -- text can never split into separate visual owners.
+    out.showCooldownSwipe = true
+    out.showDurationBar = false
+    out.showStacks = false
+    return FinalizeLane(out, "player")
+end
+
+local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec)
+    if type(entry) ~= "table" then return nil, nil end
+    local playerDefensives = unit == "player" and (index == 4 or entry.playerDefensives == true)
+    local portraitEnabled = playerDefensives and entry.portraitIcon == true
+    -- Portrait mode replaces the standalone Defensive Buffs lane. Both lanes
+    -- use the same candidate set, so compiling both can only render a duplicate
+    -- of the selected active defensive beside the portrait.
+    local barEnabled = entry.enabled == true and not portraitEnabled
+    if not barEnabled and not portraitEnabled then return nil, nil end
     local includeSpellIDs = CustomSpellIDHash(entry.spellIDs or entry.includeSpellIDs)
-    local targetDots = index == 4 or entry.targetDots == true
+    local targetDots = not playerDefensives and (index == 4 or entry.targetDots == true)
+    if playerDefensives then
+        includeSpellIDs = A3._PlayerDefensiveTrackedSpellIDHash(entry)
+    end
     if targetDots and includeSpellIDs then
         local allowed, customAllowed, count = TargetDotSpellIDHash(), CustomSpellIDHash(entry.customSpellIDs), 0
         for spellID in pairs(includeSpellIDs) do
@@ -1830,7 +2016,8 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding)
         rootKey = "CustomAuras" .. tostring(index),
         unit = sourceUnit,
         enabled = maxCount > 0,
-        nativeFilter = targetDots and "HARMFUL|PLAYER" or NativeFilter(helpful and "HELPFUL" or "HARMFUL", filters),
+        nativeFilter = targetDots and "HARMFUL|PLAYER"
+            or (playerDefensives and "HELPFUL" or NativeFilter(helpful and "HELPFUL" or "HARMFUL", filters)),
         candidateFilters = candidateFilters,
         candidateFilterSignature = candidateFilterSignature,
         max = Round(maxCount),
@@ -1881,7 +2068,7 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding)
         stackY = ClampNumber(placed.stackY, 0, -2000, 2000),
     })
     local effect
-    if type(entry.frame) == "table" and entry.frame.type and entry.frame.type ~= "none" then
+    if barEnabled and type(entry.frame) == "table" and entry.frame.type and entry.frame.type ~= "none" then
         effect = {
             key = "ufcustom_effect:" .. tostring(index),
             display = entry.name or ("Custom " .. tostring(index)),
@@ -1896,10 +2083,12 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding)
             color = entry.frame.color,
         }
     end
-    return lane, effect
+    local portraitLane = portraitEnabled
+        and A3._CompilePlayerDefensivePortraitLane(lane, frameSpec, entry) or nil
+    return barEnabled and lane or nil, effect, portraitLane
 end
 
-local function CompileUnitCustomContainers(auras, unit)
+local function CompileUnitCustomContainers(auras, unit, frameSpec)
     local source = EffectiveUnitCustomContainers(auras, unit)
     if type(source) ~= "table" then return nil, nil end
     -- Custom containers honor the shared "Lane Padding" slider exactly like
@@ -1908,10 +2097,11 @@ local function CompileUnitCustomContainers(auras, unit)
     local lanePadding = ReadRaw(layout, sharedLayout, "stylePadding")
     local lanes, effectItems, targetDotEffectItems = {}, {}, {}
     for i = 1, 4 do
-        local lane, effect = CompileUnitCustomLane(unit, source[i], i, lanePadding)
+        local lane, effect, portraitLane = CompileUnitCustomLane(unit, source[i], i, lanePadding, frameSpec)
         if lane then lanes["custom" .. tostring(i)] = lane end
+        if portraitLane then lanes.defensivePortrait = portraitLane end
         if effect then
-            local bucket = i == 4 and targetDotEffectItems or effectItems
+            local bucket = i == 4 and unit ~= "player" and targetDotEffectItems or effectItems
             bucket[#bucket + 1] = effect
         end
     end
@@ -1968,7 +2158,7 @@ local function BuildUnitFrameConfig(unit, frameSpec)
     if not unit then return nil end
     local auras = EnsureDB()
     local iconsEnabled = UnitAuraIconsEnabled(auras, unit)
-    local customLanes, customEffects, targetDotEffects = CompileUnitCustomContainers(auras, unit)
+    local customLanes, customEffects, targetDotEffects = CompileUnitCustomContainers(auras, unit, frameSpec)
     local hasCustomContainers = customLanes and next(customLanes) ~= nil
     local legacyCustomDisplays = not EffectiveUnitCustomContainers(auras, unit) and CompileUnitCustomDisplays(auras, unit) or nil
     local dispelBorder = iconsEnabled and CompileDispelSensor(unit, frameSpec, false, "border") or nil
@@ -1982,6 +2172,15 @@ local function BuildUnitFrameConfig(unit, frameSpec)
         local debuffBlacklist = type(blacklist) == "table" and type(blacklist.debuffs) == "table" and blacklist.debuffs or blacklist
         local buffCandidates, buffCandidateSignature = CandidateFiltersFromBlacklist(buffBlacklist)
         local debuffCandidates, debuffCandidateSignature = CandidateFiltersFromBlacklist(debuffBlacklist)
+        if unit == "player" then
+            local customContainers = EffectiveUnitCustomContainers(auras, unit)
+            local defensiveLane = customLanes and (customLanes.custom4 or customLanes.defensivePortrait)
+            local tracked = defensiveLane and defensiveLane.candidateFilters
+                and defensiveLane.candidateFilters.includeSpellIDs
+            buffCandidates, buffCandidateSignature = A3._AddPlayerDefensiveAutoBlacklist(
+                buffCandidates, buffCandidateSignature,
+                type(customContainers) == "table" and customContainers[4] or nil, tracked)
+        end
         buff = CompileUnitLane(unit, sharedLayout, layout, filtersRoot, "buff", buffCandidates, buffCandidateSignature)
         debuff = CompileUnitLane(unit, sharedLayout, layout, filtersRoot, "debuff", debuffCandidates, debuffCandidateSignature)
         laneEffects = CompileUnitLaneEffects(unit, sharedLayout, buff, debuff)
@@ -2815,6 +3014,8 @@ LaneLayoutSignature = function(lane)
         .. "\030" .. tostring(lane.showAuraBorder) .. "\030" .. tostring(lane.showAuraSymbol)
         .. "\030" .. tostring(lane.alpha)
         .. "\030" .. tostring(lane.padding)
+        .. "\030" .. tostring(lane.portraitPositionWhenDisabled)
+        .. "\030" .. tostring(lane.portraitLevelOffset)
         .. "\030" .. tostring(lane.iconStyle and lane.iconStyle.signature)
         .. "\030" .. tostring(A3._nativeVisualGen or 0)
 end
@@ -2842,8 +3043,14 @@ SensorLayoutSignature = function(sensor)
 end
 
 local DISPEL_SENSOR_ORDER = { "dispelBorder", "dispelOverlay", "dispelCorner", "dispelSymbol" }
-A3._normalAuraLaneOrder = { "buff", "trackedBuff", "debuff", "external", "custom1", "custom2", "custom3", "custom4" }
-local NORMAL_LANE_ROOT_KEYS = { "Buffs", "TrackedBuffs", "Debuffs", "Externals", "CustomAuras1", "CustomAuras2", "CustomAuras3", "CustomAuras4" }
+A3._normalAuraLaneOrder = {
+    "buff", "trackedBuff", "debuff", "external",
+    "custom1", "custom2", "custom3", "custom4", "defensivePortrait",
+}
+local NORMAL_LANE_ROOT_KEYS = {
+    "Buffs", "TrackedBuffs", "Debuffs", "Externals",
+    "CustomAuras1", "CustomAuras2", "CustomAuras3", "CustomAuras4", "DefensivePortrait",
+}
 local EFFECT_ROOT_FIELDS = { "spellIndicators", "laneEffects", "targetDotEffects" }
 local EFFECT_ROOT_KEYS = { "SpellIndicators", "LaneEffects", "TargetDotEffects" }
 
@@ -3159,7 +3366,7 @@ end
 
 A3._GetGroupSlotsRootConfig = GetGroupSlotsRootConfig
 
-local function EnsureAuraTextOverlay(button)
+local function EnsureAuraTextOverlay(button, lane)
     if not button then return nil end
     local overlay = button._msufA3TextOverlay
     if not overlay then
@@ -3168,9 +3375,19 @@ local function EnsureAuraTextOverlay(button)
         if overlay.EnableMouse then overlay:EnableMouse(false) end
         button._msufA3TextOverlay = overlay
     end
+    -- Inbound duration regions must remain descendants of the native
+    -- AuraButton (Blizzard_AuraContainerUtil validates this before applying
+    -- secret aspects). For portrait mode the child frame is nevertheless
+    -- anchored and levelled against the final portrait holder, so a later
+    -- portrait frame level cannot strand text/swipe underneath its border.
+    local anchor = button
+    if lane and lane.portraitOverlay == true then
+        anchor = button._msufA3ParentFrame or button
+        overlay._msufA3PortraitDurationSurface = true
+    end
     overlay:ClearAllPoints()
-    overlay:SetAllPoints(button)
-    if overlay.SetFrameLevel then overlay:SetFrameLevel((button:GetFrameLevel() or 0) + 4) end
+    overlay:SetAllPoints(anchor)
+    if overlay.SetFrameLevel then overlay:SetFrameLevel((anchor:GetFrameLevel() or 0) + 4) end
     overlay:Show()
     return overlay
 end
@@ -3198,6 +3415,7 @@ end
 
 local function SyncContainerGeometry(container, lane, parentFrame, forceGeometry, preserveAlpha)
     if not (container and lane) then return false end
+    parentFrame = ResolveLaneParentFrame(parentFrame, lane)
     forceGeometry = forceGeometry == true or container._msufA3ForceManagedAuraGeometry == true
     parentFrame = parentFrame or container._msufA3ParentFrame or container:GetParent()
     container._msufA3NativeLaneConfig = lane
@@ -3269,7 +3487,7 @@ local function SyncContainerGeometry(container, lane, parentFrame, forceGeometry
     end
     if preserveAlpha ~= true then container:SetAlpha(lane.alpha or 1) end
     if parentFrame then
-        local level = (parentFrame:GetFrameLevel() or 0) + AuraIconBaseOffset(parentFrame) + (lane.layer or 1)
+        local level = ManagedLaneFrameLevel(parentFrame, lane)
         if layoutHost and layoutHost.SetFrameLevel then
             layoutHost:SetFrameLevel(level)
         end
@@ -3313,8 +3531,13 @@ local function PrepareAuraButton(button, lane, index)
         end
     else
         if not icon then
-            icon = button:CreateTexture(nil, "ARTWORK")
+            -- The portrait itself is ARTWORK sublevel 0. Use the same sublevel
+            -- contract as the proven cast-icon overlay; normal aura lanes keep
+            -- their existing draw order.
+            icon = button:CreateTexture(nil, "ARTWORK", nil, lane.portraitOverlay == true and 1 or 0)
             button.Icon = icon
+        elseif lane.portraitOverlay == true and icon.SetDrawLayer then
+            icon:SetDrawLayer("ARTWORK", 1)
         end
         icon:ClearAllPoints()
         icon:SetAllPoints(button)
@@ -3322,6 +3545,11 @@ local function PrepareAuraButton(button, lane, index)
         icon:SetAlpha(1)
         icon:Show()
         button:SetIcon(icon)
+        if lane.portraitOverlay == true then
+            local holder = button._msufA3ParentFrame
+            local mask = holder and holder.mask
+            if mask and icon.AddMaskTexture then icon:AddMaskTexture(mask) end
+        end
     end
 
     -- Native cooldown swipe. Blizzard's ApplyDurationCooldown drives this from
@@ -3331,10 +3559,12 @@ local function PrepareAuraButton(button, lane, index)
     -- out of countdown numbers, bling, and edge drawing. Created once per button
     -- and reused.
     if lane.showCooldownSwipe == true and not barOnly then
+        local cooldownOwner = lane.portraitOverlay == true
+            and (EnsureAuraTextOverlay(button, lane) or button) or button
         local cooldown = button._msufA3Cooldown
         if not cooldown then
-            local cd = CreateFrame("Cooldown", nil, button, "CooldownFrameTemplate")
-            cd:SetAllPoints(button)
+            local cd = CreateFrame("Cooldown", nil, cooldownOwner, "CooldownFrameTemplate")
+            cd:SetAllPoints(cooldownOwner)
             if type(cd.SetDrawSwipe) == "function" then cd:SetDrawSwipe(true) end
             if type(cd.SetSwipeColor) == "function" then cd:SetSwipeColor(0, 0, 0, 0.58) end
             if type(cd.SetHideCountdownNumbers) == "function" then cd:SetHideCountdownNumbers(true) end
@@ -3347,7 +3577,9 @@ local function PrepareAuraButton(button, lane, index)
             if type(cooldown.SetDrawSwipe) == "function" then cooldown:SetDrawSwipe(true) end
             if type(cooldown.SetSwipeColor) == "function" then cooldown:SetSwipeColor(0, 0, 0, 0.58) end
             if type(cooldown.SetReverse) == "function" then cooldown:SetReverse(lane.cooldownSwipeReverse == true) end
-            if type(cooldown.SetFrameLevel) == "function" then cooldown:SetFrameLevel((button:GetFrameLevel() or 0) + 1) end
+            if type(cooldown.SetFrameLevel) == "function" then
+                cooldown:SetFrameLevel((cooldownOwner:GetFrameLevel() or button:GetFrameLevel() or 0) + 1)
+            end
             cooldown:Show()
             button:SetDurationCooldown(cooldown)
         end
@@ -3377,7 +3609,7 @@ local function PrepareAuraButton(button, lane, index)
 
     local textOverlay
     if lane.showCooldownText == true or lane.showStacks == true then
-        textOverlay = EnsureAuraTextOverlay(button) or button
+        textOverlay = EnsureAuraTextOverlay(button, lane) or button
     end
 
     if lane.showCooldownText == true then
@@ -3919,19 +4151,19 @@ ExportPublic("MSUF_ApplyDispelOverlayPreviewToFrame", A3._ApplyDispelOverlayPrev
 --- menu writes the resulting offset back through A3.DispelSymbolPreviewMoveHandler.
 A3._DISPEL_SYMBOL_PREVIEW_FIELD = "_msufA3DispelSymbolPreview"
 
+--- Group frames are deliberately excluded: their symbol is previewed inside the
+--- menu's group preview as its own "Dispel" layer, like every other group
+--- element, so painting a second stand-in onto the live raid frames would be a
+--- duplicate the user cannot turn off from that layer strip. Unit frames keep
+--- the on-frame preview because their Dispel Symbol card lives on Global Style >
+--- Bars, which hosts no frame preview of its own.
 A3._DispelSymbolPreviewApplies = function(frame)
     if not frame then return false end
+    if IsGroupFrame(frame) or frame._msufGFKind ~= nil then return false end
+    local spec = frame.MSUFSpec
+    if spec and (spec.scope == "group" or spec.groupKind ~= nil) then return false end
     local wanted = A3._NormalizeDispelOverlayPreviewScope(_G.MSUF_DispelSymbolPreviewScope)
     if wanted == "shared" then return true end
-    local groupKind = frame._msufGFKind
-    if groupKind == nil then
-        local spec = frame.MSUFSpec
-        groupKind = spec and spec.groupKind or nil
-    end
-    if groupKind then
-        if wanted == "raid" then return groupKind == "raid" or groupKind == "mythicraid" end
-        return groupKind == wanted
-    end
     return frame.MSUFUnitKey == wanted or frame.configKey == wanted
 end
 
@@ -5183,7 +5415,9 @@ A3._CreateNativeLane = function(root, lane, parentFrame)
     -- user-selected MSUF anchor on a fixed addon-owned host so that native
     -- layout can remain completely unwrapped without shifting right/bottom
     -- anchored lanes as aura counts change.
-    local host = CreateFrame("Frame", nil, root)
+    parentFrame = ResolveLaneParentFrame(parentFrame, lane)
+    local host = CreateFrame("Frame", nil,
+        lane and lane.portraitOverlay == true and parentFrame or root)
     if not host then return nil end
     -- Birth-order levels: the host receives its final strata/level BEFORE the
     -- container (and later its batch-created AuraButtons) are born as its
@@ -5195,8 +5429,7 @@ A3._CreateNativeLane = function(root, lane, parentFrame)
         local hostStrata = ResolveFrameStrata(parentFrame, lane and lane.strata)
         if hostStrata then SyncFrameStrata(host, hostStrata) end
         if host.SetFrameLevel and parentFrame.GetFrameLevel then
-            host:SetFrameLevel((parentFrame:GetFrameLevel() or 0)
-                + AuraIconBaseOffset(parentFrame) + (lane and lane.layer or 1))
+            host:SetFrameLevel(ManagedLaneFrameLevel(parentFrame, lane))
         end
     end
     local container = CreateNativeAuraContainer(root, host)
@@ -5215,6 +5448,15 @@ A3._HideLane = function(lane)
         lane:Hide()
         if lane._msufA3LayoutHost and lane._msufA3LayoutHost.Hide then
             lane._msufA3LayoutHost:Hide()
+        end
+        local config = lane._msufA3NativeLaneConfig
+        local holder = config and config.portraitOverlay == true and lane._msufA3ParentFrame
+        if config and config.portraitPositionWhenDisabled == true then
+            local frame = holder and holder.GetParent and holder:GetParent()
+            local element = UF and UF.elements and UF.elements.Portrait
+            if frame and element and type(element.ReleasePositionAnchor) == "function" then
+                element.ReleasePositionAnchor(frame)
+            end
         end
     end
 end
@@ -5653,6 +5895,7 @@ local function HideState(frame)
     A3._HideLane(root.CustomAuras2)
     A3._HideLane(root.CustomAuras3)
     A3._HideLane(root.CustomAuras4)
+    A3._HideLane(root.DefensivePortrait)
     A3._HideLane(root.GroupSlots)
     A3._HideLane(root.GroupAuraFlow)
     A3._HideLane(root.DispelSensor)
@@ -5685,6 +5928,7 @@ local function HideState(frame)
     root.CustomAuras2 = nil
     root.CustomAuras3 = nil
     root.CustomAuras4 = nil
+    root.DefensivePortrait = nil
     root.GroupSlots = nil
     root.GroupAuraFlow = nil
     root.DispelSensor = nil

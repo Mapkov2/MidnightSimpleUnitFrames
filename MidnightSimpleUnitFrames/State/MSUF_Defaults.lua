@@ -1254,7 +1254,7 @@ local function MSUF_Defaults_NormalizeFontField(tbl)
     end
 end
 
-local MSUF_DISPEL_PRIORITY_MIGRATION = 4
+local MSUF_DISPEL_PRIORITY_MIGRATION = 5
 local MSUF_DISPEL_TYPE_PRIORITY_KEYS = {
     magic = true,
     curse = true,
@@ -1353,6 +1353,16 @@ local function MSUF_Defaults_MigratePriorityScope(scope, includeTargetFocus)
     scope.dispelOverlayPrioEnabled = nil
     scope.dispelOverlayPrioOrder = nil
     scope.dispelOverlayUseHighlightPriority = nil
+
+    --- The dispel symbol shipped in Beta 38 defaulting to a single symbol for the
+    --- highest-priority debuff. Beta 39 makes "one per dispel type" the default,
+    --- because two debuffs of different types have to read as two symbols. TOP was
+    --- only ever the default in the one build that had it, so lift existing
+    --- profiles once rather than leaving them silently on the old behaviour. The
+    --- marker below keeps it one-time, so a deliberate TOP survives from here on.
+    for _, key in ipairs({ "unitDispelSymbolMode", "dispelSymbolMode" }) do
+        if tostring(scope[key] or ""):upper() == "TOP" then scope[key] = "ALL" end
+    end
 
     --- PTR 5 replaces the old catch-all debuff choice with the precise native
     --- DISPELLABLE meaning: any aura carrying a dispel type. Preserve old
@@ -2053,7 +2063,7 @@ end
     --- UnitFrame dispel-type symbol (placed icon naming the debuff type)
     if g.unitDispelSymbolEnabled == nil then g.unitDispelSymbolEnabled = false end
     if g.unitDispelSymbolStyle == nil then g.unitDispelSymbolStyle = "BLIZZARD" end
-    if g.unitDispelSymbolMode == nil then g.unitDispelSymbolMode = "TOP" end
+    if g.unitDispelSymbolMode == nil then g.unitDispelSymbolMode = "ALL" end
     if g.unitDispelSymbolTrigger == nil then g.unitDispelSymbolTrigger = "BORDER" end
     if g.unitDispelSymbolSize == nil then g.unitDispelSymbolSize = 14 end
     if g.unitDispelSymbolSpacing == nil then g.unitDispelSymbolSpacing = 2 end

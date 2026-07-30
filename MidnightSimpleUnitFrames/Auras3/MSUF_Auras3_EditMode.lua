@@ -322,6 +322,11 @@ local function UnitLabel(unit)
     return tostring(unit or "")
 end
 
+local function GroupLabel(unit, kind, spec)
+    if unit == "player" and kind == "custom4" then return "Defensive Buffs" end
+    return spec and spec.label or tostring(kind or "")
+end
+
 local function EnsureDB()
     local auras, shared
     if A3.EnsureDB then
@@ -354,9 +359,9 @@ local function UnitHasCustomPreview(unit)
         local placed = item and item.placed
         if item and (tonumber(placed and placed.max) or 8) > 0 then
             if item.enabled == true then return true end
-            -- Tracked target-DoTs reveal their lane even while the container
-            -- itself is still disabled (parity with the in-menu preview).
-            if index == 4 and type(item.spellIDs) == "string" and item.spellIDs:find("%d") then return true end
+            -- Curated index-4 lanes reveal their real tracked entries even
+            -- while disabled (player defensives or target DoTs).
+            if index == 4 and CustomPreviewEntries(unit, "custom4") then return true end
         end
     end
     return false
@@ -1709,7 +1714,7 @@ local function CreateGroup(unit, kind)
     label:SetPoint("RIGHT", header, "RIGHT", -6, 0)
     label:SetJustifyH("LEFT")
     StyleLabel(label)
-    label:SetText(UnitLabel(unit) .. " " .. spec.label)
+    label:SetText(UnitLabel(unit) .. " " .. GroupLabel(unit, kind, spec))
     group.Label = label
 
     local body = CreateFrame("Frame", nil, group)
@@ -1955,12 +1960,9 @@ function EM.RefreshUnit(unit)
         local metrics = type(A3.BuildAuraLaneMetrics) == "function" and A3.BuildAuraLaneMetrics(unit, kind) or nil
         local group = CreateGroup(unit, kind)
         local entries = spec.customIndex and CustomPreviewEntries(unit, kind) or nil
-        -- Tracked target-DoTs reveal their lane exactly like the in-menu
-        -- preview does, even while the container itself is still disabled.
+        -- Curated player defensives and target DoTs reveal their real entries
+        -- exactly like the in-menu preview, even while disabled.
         local laneShown = cfg.show or (spec.customIndex == 4 and entries ~= nil)
-        -- The player frame has no Dots on target container; its edit-mode
-        -- lane never shows.
-        if spec.customIndex == 4 and unit == "player" then laneShown = false end
         -- Outside edit mode custom lanes stay strictly 1:1 with the runtime:
         -- nothing tracked means nothing to preview. Placeholder-only custom
         -- lanes exist purely as edit-mode drag surfaces.
@@ -2014,7 +2016,7 @@ function EM.RefreshUnit(unit)
                     group.Hitbox:SetFrameLevel((group:GetFrameLevel() or 0) + 20)
                 end
                 if group.Label then
-                    group.Label:SetText(UnitLabel(unit) .. " " .. spec.label)
+                    group.Label:SetText(UnitLabel(unit) .. " " .. GroupLabel(unit, kind, spec))
                     StyleLabel(group.Label)
                 end
                 ApplyGroupChrome(group, spec, chrome)

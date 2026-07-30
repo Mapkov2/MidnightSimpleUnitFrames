@@ -779,6 +779,10 @@ local function ApplyCastPortraitIcon(frame, icon)
   SetTexCoordCached(texture, 0.08, 0.92, 0.08, 0.92)
   SetVertexColorCached(texture, 1, 1, 1, 1)
   SetShown(frame.portrait, false)
+  -- The native defensive AuraButton lives on the next absolute frame level.
+  -- Keep normal cast state independent underneath it; Blizzard's secret
+  -- button visibility reveals this texture automatically when no defensive is
+  -- assigned, without an OnShow/OnHide hook on the restricted AuraButton.
   SetShown(texture, true)
   frame._msufPortraitCastIconActive = true
   return true
@@ -794,7 +798,7 @@ local function RestoreCastPortraitIcon(frame)
   frame._msufPortraitCastIconActive = nil
   if active then
     SetShown(texture, false)
-    SetShown(frame.portrait, true)
+    SetShown(frame.portrait, frame._msufPortraitPositionAnchorOnly ~= true)
   end
 end
 
@@ -1139,6 +1143,50 @@ function Portrait.Create(frame)
   EnsurePortrait(frame)
 end
 
+--- Keeps the configured portrait geometry available as an invisible anchor for
+--- another portrait-plane element. Defensive auras use this only on the player
+--- frame when the portrait itself is disabled. It is a config-apply cold path:
+--- no events, timers, portrait texture reads, or per-frame updates are added.
+function Portrait.AcquirePositionAnchor(frame, p)
+  if not frame then
+    return nil
+  end
+  p = p or (frame.MSUFSpec and frame.MSUFSpec.portrait)
+  if not p then
+    return nil
+  end
+  local holder = EnsurePortrait(frame)
+  frame._msufPortraitFrameHeight = frame.MSUFSpec and frame.MSUFSpec.height or nil
+  LayoutPortrait(frame, p)
+  ApplyPortraitMask(holder, p)
+  frame._msufPortraitPositionAnchorOnly = true
+  SetShown(frame.portrait, false)
+  if frame.MSUFPortraitCastIcon then SetShown(frame.MSUFPortraitCastIcon, false) end
+  if holder.bg then SetShown(holder.bg, false) end
+  if holder.ring then SetShown(holder.ring, false) end
+  if holder.artBorder then SetShown(holder.artBorder, false) end
+  if holder.edges then
+    for i = 1, 4 do SetShown(holder.edges[i], false) end
+  end
+  SetShown(holder, true)
+  return holder
+end
+
+function Portrait.ReleasePositionAnchor(frame)
+  if not (frame and frame._msufPortraitPositionAnchorOnly == true) then
+    return false
+  end
+  frame._msufPortraitPositionAnchorOnly = nil
+  local p = frame.MSUFSpec and frame.MSUFSpec.portrait
+  if p and p.enabled == true then
+    return true
+  end
+  local holder = frame.MSUFPortraitHolder
+  if holder then SetShown(holder, false) end
+  if frame.portrait then SetShown(frame.portrait, false) end
+  return true
+end
+
 function Portrait.Apply(frame, spec)
   local p = spec and spec.portrait
   local holder = EnsurePortrait(frame)
@@ -1150,6 +1198,7 @@ function Portrait.Apply(frame, spec)
     Portrait.Disable(frame)
     return
   end
+  frame._msufPortraitPositionAnchorOnly = nil
   frame._msufUpdatePortraitConnection = Portrait.UpdateConnectionState
   if p.castSpellIcon == true then
     EnsureCastPortraitIcon(frame)
@@ -1159,6 +1208,9 @@ function Portrait.Apply(frame, spec)
   ApplyPortraitBackground(holder, p)
   LayoutPortraitBorder(holder, p, ResolvePortraitBorderColor(frame, p))
   SetShown(holder, true)
+  -- Base portrait and optional cast texture remain normal background regions.
+  -- A visible native defensive AuraButton covers both from the next frame
+  -- level; when Blizzard hides it, no MSUF visibility transition is required.
   SetShown(frame.portrait, true)
   if frame.portrait then
     if PortraitFrameVisible(frame) then
@@ -1189,6 +1241,7 @@ function Portrait.Disable(frame)
   frame._msufUpdatePortraitConnection = nil
   frame._msufPortraitRuntimeCfg = nil
   frame._msufPortraitFrameHeight = nil
+  frame._msufPortraitPositionAnchorOnly = nil
   frame._msufPortraitCastIconActive = nil
   if frame.MSUFPortraitCastIcon then
     SetShown(frame.MSUFPortraitCastIcon, false)

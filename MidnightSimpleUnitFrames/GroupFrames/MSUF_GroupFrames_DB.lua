@@ -500,7 +500,7 @@ local PARTY_DEFAULTS = {
     --- Dispel-type symbol (placed icon that names WHICH debuff type is up)
     dispelSymbolEnabled   = false,
     dispelSymbolStyle     = "BLIZZARD", --- BLIZZARD / BLIZZARD_RING / BLIZZARD_BORDER / MSUF_LETTERS / MSUF_SHAPES / MSUF_GLYPHS / MSUF_MINIMAL
-    dispelSymbolMode      = "TOP",      --- TOP = one symbol, ALL = one per type
+    dispelSymbolMode      = "ALL",      --- ALL = one symbol per type, TOP = highest priority only
     dispelSymbolTrigger   = "BORDER",   --- BORDER / BY_ME / BY_RAID / DISPEL_TYPE / PLAYER_CAST
     dispelSymbolSize      = 12,
     dispelSymbolSpacing   = 2,          --- gap between ALL-mode symbols
