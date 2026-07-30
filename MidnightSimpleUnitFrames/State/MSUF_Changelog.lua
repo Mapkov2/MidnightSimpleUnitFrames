@@ -8,10 +8,37 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-Beta41",
-    previousVersion = "6.0-beta40",
-    rangeLabel = "6.0-beta40 -> 6.0-Beta41",
+    currentVersion = "6.0-Beta42",
+    previousVersion = "6.0-beta41",
+    rangeLabel = "6.0-beta41 -> 6.0-Beta42",
     entries = {
+        {
+            version = "6.0-Beta42",
+            date = "2026-07-30",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Group External Defensives now use Blizzard's native 12.1 classification and can automatically stay out of the normal Buff lane while their dedicated lane is visible.",
+                        "Unit and Group preview canvases can now use bright stone, a city scene, dark stone, Studio, or a custom color to check readability before applying settings.",
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Preview canvases start expanded after reload, keep configured frame outlines visible, and handle overlapping Aura controls more reliably.",
+                        "Menu2 dropdowns stay inside their owning window; non-Midnight accents use a calmer shared highlight ramp across navigation and window controls.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Fixed Edit Mode dock dragging so it follows the cursor reliably, remains within the screen, and only snaps to an edge when released near one.",
+                        "The explicit realtime Player Power Text option now follows the direct power-event update path; normal Power Text keeps its existing coalesced update behavior.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-Beta41",
             date = "2026-07-30",
@@ -89,39 +116,6 @@ local data = {
                     bullets = {
                         "The Dispel Symbol can be placed by dragging: switch on its preview in Global Style > Bars or Group Frames > Dispel Symbol and drag the symbols where you want them.",
                         "The Dispel Symbol shows only the highest-priority debuff type by default, or one symbol per active type if you prefer.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-Beta37",
-            date = "2026-07-29",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "Party group frames gained a Portrait, matching the unit frame version: left/right position, 2D or class art, attached/detached/overlay placement, square/circle/rounded/diamond shapes with flat or relief borders, background tint, and an optional cast-spell-icon overlay. Draggable in the group preview and Assistant-settable (\"party portrait\", \"portrait shape\"); Raid and Mythic Raid don't get it.",
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Role, leader and assist group icons now pick their style per-indicator in Group Frames > Indicators, replacing the old scope-wide \"Default role icon style\" + \"Use Midnight Style\" toggle. Midnight art is now its own dropdown entry (\"UX Pro (Midnight)\") instead of a separate checkbox. Old profiles keep resolving through the previous scope-wide setting until an indicator is given its own style.",
-                        "On clients older than 12.1, MSUF now says once per login that auras, dispel highlighting and a few other 12.1-only features stay disabled until that patch goes live. Everything else keeps working, so there is nothing to act on.",
-                        "The party portrait's border color and opacity moved to the Shape & Border card's Colors shortcut, where the unit frames already keep theirs, instead of two rows on the card itself.",
-                        "The group preview gained a Tank/Healer/DPS switch, so per-role resource bar visibility and the role icon can be judged without swapping specs. Clicking a role toggle in the Resource Bar section jumps the preview to that role.",
-                        "Edit Mode toolbar controls now tint their label on hover instead of just the surrounding pill, matching the page navigation rail.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed the options keybind loading the addon and building the whole options window in the same frame on the first open each session, which could hitch the game. Loading and window construction are now split across two frames; pressing the key again while that's pending is ignored.",
-                        "Fixed Edit Mode drags/resizes occasionally snapping a frame back to its old position or size - the single-frame refresh after a drag could still read a stale compiled spec. The spec is refreshed before applying now.",
-                        "Fixed the Player frame offering a \"Dots on target\" aura container: it tracks DoTs on your current target, which never made sense on your own frame. Removed from Player's Aura Style page, workspace tabs, Edit Mode, preview, and Layer Overview; Target, Focus and Boss keep it.",
-                        "Fixed toolbar buttons that carry both a tooltip and hover styling (Groups, Exit, Discard All, the frame inspector selector) losing their hover highlight - the tooltip handler was overwriting the button's own hover handlers instead of layering on top.",
-                        "Fixed group frame resource bar text being unable to set its own color mode - the Global Fonts Power Text Color control and the quick text-settings Color Mode row were both hard-disabled for group scopes.",
-                        "Fixed the party portrait being hard to grab in the group preview: its artwork was drawn on a frame sitting above the drag handle, so clicks landed on the wrong thing. The handle owns the artwork now, and portrait opacity no longer fades the selection outline with it.",
                     },
                 },
             },

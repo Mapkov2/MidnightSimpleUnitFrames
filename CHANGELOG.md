@@ -1,5 +1,22 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-Beta42 - 2026-07-30
+
+### Highlights
+
+- Group External Defensives now use Blizzard's native 12.1 classification and can automatically stay out of the normal Buff lane while their dedicated lane is visible.
+- Unit and Group preview canvases can now use bright stone, a city scene, dark stone, Studio, or a custom color to check readability before applying settings.
+
+### Changes
+
+- Preview canvases start expanded after reload, keep configured frame outlines visible, and handle overlapping Aura controls more reliably.
+- Menu2 dropdowns stay inside their owning window; non-Midnight accents use a calmer shared highlight ramp across navigation and window controls.
+
+### Fixes & Performance
+
+- Fixed Edit Mode dock dragging so it follows the cursor reliably, remains within the screen, and only snaps to an edge when released near one.
+- The explicit realtime Player Power Text option now follows the direct power-event update path; normal Power Text keeps its existing coalesced update behavior.
+
 ## 6.0-Beta41 - 2026-07-30
 
 ### Highlights
