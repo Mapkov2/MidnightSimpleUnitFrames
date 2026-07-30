@@ -840,7 +840,7 @@ local function CompileDispelSymbol(conf)
   local out = {
     enabled = conf.dispelSymbolEnabled == true,
     style = conf.dispelSymbolStyle or "BLIZZARD",
-    mode = conf.dispelSymbolMode or "TOP",
+    mode = conf.dispelSymbolMode or "ALL",
     trigger = conf.dispelSymbolTrigger or "BORDER",
     size = Num(conf.dispelSymbolSize, 12),
     spacing = Num(conf.dispelSymbolSpacing, 2),

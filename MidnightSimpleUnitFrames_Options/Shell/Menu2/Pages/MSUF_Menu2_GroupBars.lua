@@ -153,7 +153,7 @@ local function BuildGFDispelSymbolSection(ctx, b)
     local style = ScopeDropdown(ctx, card, "Symbol set", GF_DISPEL_SYMBOL_STYLES, 300,
         "dispelSymbolStyle", "BLIZZARD", "visual", 16, -62, fieldW)
     local mode = ScopeDropdown(ctx, card, "Show", GF_DISPEL_SYMBOL_MODES, 300,
-        "dispelSymbolMode", "TOP", "visual", 16, -114, fieldW)
+        "dispelSymbolMode", "ALL", "visual", 16, -114, fieldW)
     local trigger = W.Dropdown(card, "Symbol detects", GF_DISPEL_OVERLAY_TRIGGERS, 300)
     M.BindDropdownWidget(ctx, trigger,
         function() return NormalizeGFDispelOverlayTrigger(Val(CurrentScope(), "dispelSymbolTrigger", "BORDER")) end,
@@ -180,44 +180,20 @@ local function BuildGFDispelSymbolSection(ctx, b)
         "dispelSymbolAlpha", 1, "visual", rightX, -318, sliderW)
     local layer = ScopeNumberSlider(ctx, card, "Effect Layer (0-30)", 0, 30, 1, 340,
         "dispelSymbolLayer", 8, "visual", rightX, -366, sliderW)
-    -- Ephemeral, exactly like the overlay preview: never written to the DB, and
-    -- it doubles as the drag surface for Offset X/Y.
-    local preview = W.ToggleAt(card, "Preview symbol (drag to place)", 16, -62, fieldW)
-    W.MoveWidget(preview, card, rightX, -62, sliderW, "LEFT")
-    M.BindBoolWidget(ctx, preview,
-        function() return _G.MSUF_DispelSymbolPreviewMode == true end,
-        function(value)
-            local fn = _G.MSUF_SetDispelSymbolPreview
-            if type(fn) == "function" then fn(value and true or false, CurrentScope()) end
-        end,
-        ControlMeta(ctx, "field.dispelSymbolPreview", "ephemeral"))
-    preview:HookScript("OnHide", function(self)
-        local fn = _G.MSUF_SetDispelSymbolPreview
-        if _G.MSUF_DispelSymbolPreviewMode == true and type(fn) == "function" then
-            fn(false)
-            if self.SetChecked then self:SetChecked(false) end
-        end
-    end)
-    if M.AddTooltip then
-        M.AddTooltip(preview, "Preview symbol",
-            "Shows stand-in symbols so placement can be judged without a real debuff, and lets you drag them into position. Turns itself off when this page closes.",
-            { hook = true })
-    end
-    local controls = { style, mode, trigger, anchor, size, offsetX, offsetY, alpha, layer, preview }
+    -- No preview toggle here. The symbols are previewed in the group preview
+    -- above as their own "Dispel" layer -- like every other group element -- and
+    -- that layer's handle is also the drag surface for Offset X/Y.
+    local controls = { style, mode, trigger, anchor, size, offsetX, offsetY, alpha, layer }
     local allModeControls = { growth, spacing }
     local function RefreshDispelSymbolState()
         local on = Bool(CurrentScope(), "dispelSymbolEnabled", false)
-        if not on and _G.MSUF_DispelSymbolPreviewMode == true then
-            local fn = _G.MSUF_SetDispelSymbolPreview
-            if type(fn) == "function" then fn(false) end
-        end
         SetOptionsEnabled(controls, on)
-        SetOptionsEnabled(allModeControls, on and Val(CurrentScope(), "dispelSymbolMode", "TOP") == "ALL")
+        SetOptionsEnabled(allModeControls, on and Val(CurrentScope(), "dispelSymbolMode", "ALL") == "ALL")
         SetOptionEnabled(toggle, true)
         local badges = {
             OnOffBadge(on, "Active", "Off"),
             { text = OptionText(GF_DISPEL_SYMBOL_STYLES, Val(CurrentScope(), "dispelSymbolStyle", "BLIZZARD"), "Blizzard symbol"), kind = on and "accent" or "muted" },
-            { text = OptionText(GF_DISPEL_SYMBOL_MODES, Val(CurrentScope(), "dispelSymbolMode", "TOP"), "Highest priority only"), kind = on and "info" or "muted" },
+            { text = OptionText(GF_DISPEL_SYMBOL_MODES, Val(CurrentScope(), "dispelSymbolMode", "ALL"), "One per dispel type"), kind = on and "info" or "muted" },
         }
         SetSectionBadgesAndStatus(section, badges)
     end
@@ -1112,18 +1088,6 @@ local function BuildGFBars(ctx)
     BuildDispelOverlaySection(ctx, b)
     BuildGFDispelSymbolSection(ctx, b)
     BuildGFDebuffStripeSection(ctx, b)
-    -- Dragging a preview symbol writes the offset back through the normal scope
-    -- setter, so undo/redo and profile writes behave exactly as if the Offset
-    -- sliders had been used. Registered per page build because the handler
-    -- closes over this page's ctx.
-    local setMoveHandler = _G.MSUF_SetDispelSymbolPreviewMoveHandler
-    if type(setMoveHandler) == "function" then
-        setMoveHandler(function(_scope, x, y)
-            Set(CurrentScope(), "dispelSymbolX", tonumber(x) or 0, "visual")
-            Set(CurrentScope(), "dispelSymbolY", tonumber(y) or 0, "visual")
-            RequestGroupBarsRefresh(ctx, "gf-bars-dispel-symbol-drag")
-        end)
-    end
     FinalizeScopePage(ctx, b)
 end
 M.RegisterPage("gf_bars", { title = "MSUF Group Dispel Overlay", build = BuildGFBars, version = 18 })

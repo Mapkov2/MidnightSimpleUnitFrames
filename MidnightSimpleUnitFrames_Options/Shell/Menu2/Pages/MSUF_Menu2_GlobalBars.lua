@@ -2081,7 +2081,7 @@ local function BuildUnitDispelSymbolSection(ctx, b)
     local styleDrop = BindDropdown("Symbol set", UNIT_DISPEL_SYMBOL_STYLES, "unitDispelSymbolStyle",
         "BLIZZARD", "MSUF2_UF_DISPEL_SYMBOL_STYLE", 16, -62)
     local modeDrop = BindDropdown("Show", UNIT_DISPEL_SYMBOL_MODES, "unitDispelSymbolMode",
-        "TOP", "MSUF2_UF_DISPEL_SYMBOL_MODE", 16, -114)
+        "ALL", "MSUF2_UF_DISPEL_SYMBOL_MODE", 16, -114)
     local triggerDrop = BindDropdown("Symbol detects", UNIT_DISPEL_TRIGGERS, "unitDispelSymbolTrigger",
         "BORDER", "MSUF2_UF_DISPEL_SYMBOL_TRIGGER", 16, -166)
     local anchorDrop = BindDropdown("Symbol anchor", UNIT_DISPEL_SYMBOL_ANCHORS, "unitDispelSymbolAnchor",
@@ -2153,7 +2153,7 @@ local function BuildUnitDispelSymbolSection(ctx, b)
         end
         SetControlEnabled(master, activeScope)
         SetControlsEnabled(controls, symbolOn)
-        SetControlsEnabled(allModeControls, symbolOn and BarScopeGet("unitDispelSymbolMode", "TOP") == "ALL")
+        SetControlsEnabled(allModeControls, symbolOn and BarScopeGet("unitDispelSymbolMode", "ALL") == "ALL")
         groupHint:SetShown(groupScope)
         auraHint:SetShown(not groupScope and not AnyUnitFrameAuraEnabled())
     end))

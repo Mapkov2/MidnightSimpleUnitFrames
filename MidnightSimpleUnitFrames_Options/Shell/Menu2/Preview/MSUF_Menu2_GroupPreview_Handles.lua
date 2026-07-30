@@ -342,6 +342,21 @@ function Handles.Install(box, deps)
     local function SaveHandlePosition(handle, action)
         if not (handle and box._mock) or handle._locked then return end
         if handle._cfgText then return end
+        if handle._cfgDispelSymbol then
+            -- The symbol row keeps its configured anchor; dragging edits the same
+            -- X/Y offsets the Dispel Symbol card exposes. In "one per dispel type"
+            -- mode the handle spans the whole row, so the stored offset stays the
+            -- row origin and the per-type steps are re-derived on render.
+            local _, _, _, offX, offY = handle:GetPoint(1)
+            local scale = handle._previewWriteScale or handle._previewScale or box._mock._previewScale or 1
+            local conf = H.Conf(H.CurrentScope())
+            if not conf then return end
+            conf.dispelSymbolX = OffsetToConfig(offX or 0, scale)
+            conf.dispelSymbolY = OffsetToConfig(offY or 0, scale)
+            RefreshGroupPreviewAfterMove(handle)
+            CheckpointHandleHistory(handle, action)
+            return
+        end
         if handle._cfgPortrait then
             -- Portrait placement keeps its configured anchor/side. Dragging only
             -- edits the same X/Y offsets exposed by the Portrait geometry tab.
@@ -453,6 +468,10 @@ function Handles.Install(box, deps)
             if not placed then return false end
             placed.x = cfgX
             placed.y = cfgY
+        elseif handle._cfgDispelSymbol then
+            if handle._locked then return false end
+            conf.dispelSymbolX = cfgX
+            conf.dispelSymbolY = cfgY
         elseif handle._cfgPortrait then
             if handle._locked then return false end
             conf.portraitOffsetX = cfgX
@@ -493,6 +512,8 @@ function Handles.Install(box, deps)
         elseif handle._cfgSpell then
             local placed = SpellPlacedForHandle(handle, false)
             return tonumber(placed and placed.x) or 0, tonumber(placed and placed.y) or 0
+        elseif handle._cfgDispelSymbol then
+            return tonumber(conf.dispelSymbolX) or 0, tonumber(conf.dispelSymbolY) or 0
         elseif handle._cfgPortrait then
             return tonumber(conf.portraitOffsetX) or 0, tonumber(conf.portraitOffsetY) or 0
         elseif handle._cfgPower then
@@ -521,6 +542,8 @@ function Handles.Install(box, deps)
             local placed = SpellPlacedForHandle(handle, true)
             if not placed then return false end
             placed.x, placed.y = x, y
+        elseif handle._cfgDispelSymbol then
+            conf.dispelSymbolX, conf.dispelSymbolY = x, y
         elseif handle._cfgPortrait then
             conf.portraitOffsetX, conf.portraitOffsetY = x, y
         elseif handle._cfgPower then
@@ -939,6 +962,14 @@ function Handles.Install(box, deps)
     local portraitHandle = CreatePreviewHandle("portrait", "portrait", { 0.90, 0.42, 1.00 }, "PORTRAIT", 36, 36, false, dragParent)
     portraitHandle._cfgPortrait = true
     portraitHandle._previewText = "Portrait"
+    -- Dispel-type symbol row. Like the portrait it can sit outside the mock
+    -- frame, so its mouse handle lives on the preview stage; rendering and
+    -- offsets stay anchored to the mock. Five icon slots: one per dispel type in
+    -- "one per dispel type" mode, of which only the first is used in TOP mode.
+    local dispelSymbolHandle = CreatePreviewHandle("dispelSymbol", "dispel", { 0.30, 0.80, 1.00 }, "DISPEL", 44, 20, false, dragParent)
+    dispelSymbolHandle._cfgDispelSymbol = true
+    dispelSymbolHandle._previewText = "Dispel Symbol"
+    AddIconPool(dispelSymbolHandle, 5)
     local statusHandles = {}
     local statusSpecs = H.StatusSpecs()
     for i = 1, #statusSpecs do
@@ -1190,6 +1221,7 @@ function Handles.Install(box, deps)
         externalHandle = externalHandle,
         powerBarHandle = powerBarHandle,
         portraitHandle = portraitHandle,
+        dispelSymbolHandle = dispelSymbolHandle,
         statusHandles = statusHandles,
         spellHandle = spellHandle,
         SelectHandle = SelectHandle,

@@ -397,13 +397,14 @@ Overview.RegisterProvider("unit-auras", function(sink)
         local customPerUnit = customRoot and type(customRoot.perUnit) == "table" and customRoot.perUnit or nil
         local record = customPerUnit and customPerUnit[scope.key]
         local items = type(record) == "table" and type(record.items) == "table" and record.items or nil
-        -- The player frame has no Dots on target container, so its custom
-        -- layer rows stop at Custom 3.
-        for index = 1, (scope.key == "player" and 3 or 4) do
+        for index = 1, 4 do
             local item = items and items[index]
             local present = type(item) == "table"
             local token = tostring(present and item.id or index)
-            local label = tostring(present and item.name or (index == 4 and "Dots on target" or ("Custom " .. index)))
+            local fallback = index == 4
+                and (scope.key == "player" and "Defensive Buffs" or "Dots on target")
+                or ("Custom " .. index)
+            local label = tostring(present and item.name or fallback)
             local enabled = present and unitEnabled and item.enabled == true
             sink:Layer({
                 id = "auras3." .. scope.key .. ".custom." .. token .. ".layer",

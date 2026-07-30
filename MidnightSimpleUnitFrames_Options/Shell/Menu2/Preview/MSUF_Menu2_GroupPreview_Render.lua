@@ -264,6 +264,100 @@ local function LayoutGroupPreviewPortraitBorder(holder, portrait, previewScale, 
     end
 end
 
+--- Dispel-type symbol row.
+---
+--- The live symbol is a native AuraButton texture whose visibility and artwork
+--- Blizzard owns, so it only ever appears with a real debuff on the unit. The
+--- preview therefore draws stand-in art -- but it reads that art from the SAME
+--- per-type tables Auras3 hands to Blizzard (MSUF.MSUF_Auras3.DispelSymbol), so
+--- the preview cannot show a set the runtime would not.
+---
+--- "One per dispel type" is the default, so the row shows all five types side by
+--- side along the configured growth axis; TOP mode shows only the first.
+local DISPEL_SYMBOL_PREVIEW_ORDER = { "Magic", "Curse", "Disease", "Poison", "Bleed" }
+
+local function DispelSymbolPreviewArt(texture, DS, style, dispelType)
+    texture:SetTexCoord(0, 1, 0, 1)
+    local assets = DS and DS.AssetMap and DS.AssetMap(style)
+    if assets then
+        local asset = assets[dispelType]
+        texture:SetTexture(asset and asset.asset or nil)
+        return
+    end
+    local atlas = DS and ((style == "BLIZZARD_RING" and DS.rings)
+        or (style == "BLIZZARD_BORDER" and DS.borders)
+        or DS.icons)
+    atlas = atlas and atlas[dispelType]
+    if atlas and texture.SetAtlas then
+        texture:SetAtlas(atlas, _G.TextureKitConstants and _G.TextureKitConstants.IgnoreAtlasSize)
+    else
+        texture:SetTexture(nil)
+    end
+end
+
+local function PaintGroupPreviewDispelSymbol(scene)
+    local symbol = scene.runtimeSpec and scene.runtimeSpec.dispelSymbol
+    local handle = scene.S and scene.S.dispelSymbolHandle
+    if not handle then return end
+    local layerOn = symbol and symbol.enabled == true
+        and scene.layerAvailable and scene.layerAvailable.dispelSymbol ~= false
+        and scene.layerVisible and scene.layerVisible.dispelSymbol ~= false
+    if not layerOn then
+        handle:Hide()
+        return
+    end
+    local DS = scene.MSUF and scene.MSUF.MSUF_Auras3 and scene.MSUF.MSUF_Auras3.DispelSymbol
+    local scale, ScaleValue = scene.previewScale, scene.S.ScaleValue
+    local size = ScaleValue(tonumber(symbol.size) or 12, scale, 1)
+    local spacing = ScaleValue(tonumber(symbol.spacing) or 2, scale, 0)
+    local count = (tostring(symbol.mode or "ALL"):upper() ~= "TOP") and #DISPEL_SYMBOL_PREVIEW_ORDER or 1
+    -- Resolved through the runtime helper so the preview row and the live row
+    -- can never disagree about which way the symbols march.
+    local growth = (DS and DS.ResolveGrowth and DS.ResolveGrowth(symbol.growth, symbol.anchor))
+        or tostring(symbol.growth or "RIGHT"):upper()
+    local vertical = growth == "UP" or growth == "DOWN"
+    local step = size + spacing
+    local span = size + (count - 1) * step
+    -- The handle is the whole row so a single drag moves the set, exactly like
+    -- the live sensor keeps its per-type steps relative to one stored origin.
+    if not (handle._dragging == true) then
+        handle:ClearAllPoints()
+        handle:SetSize(vertical and size or span, vertical and span or size)
+        local anchor = tostring(symbol.anchor or "TOPRIGHT")
+        handle:SetPoint(anchor, scene.mock, anchor,
+            ScaleValue(tonumber(symbol.x) or 0, scale), ScaleValue(tonumber(symbol.y) or 0, scale))
+    end
+    -- Same solo-layer dimming SceneLayerAlpha applies; that helper is declared
+    -- further down the file, so the two lines are inlined here.
+    handle:SetAlpha(scene.soloLayer and scene.soloLayer ~= "dispelSymbol" and 0.15 or 1)
+    local icons = handle._icons or {}
+    for i = 1, #icons do
+        local tex = icons[i]
+        if i > count then
+            tex:Hide()
+        else
+            local offset = (i - 1) * step
+            tex:ClearAllPoints()
+            tex:SetSize(size, size)
+            if growth == "LEFT" then
+                tex:SetPoint("TOPRIGHT", handle, "TOPRIGHT", -offset, 0)
+            elseif growth == "UP" then
+                tex:SetPoint("BOTTOMLEFT", handle, "BOTTOMLEFT", 0, offset)
+            elseif growth == "DOWN" then
+                tex:SetPoint("TOPLEFT", handle, "TOPLEFT", 0, -offset)
+            else
+                tex:SetPoint("TOPLEFT", handle, "TOPLEFT", offset, 0)
+            end
+            local iconAlpha = tonumber(symbol.alpha) or 1
+            if iconAlpha < 0 then iconAlpha = 0 elseif iconAlpha > 1 then iconAlpha = 1 end
+            tex:SetAlpha(iconAlpha)
+            DispelSymbolPreviewArt(tex, DS, symbol.style, DISPEL_SYMBOL_PREVIEW_ORDER[i])
+            tex:Show()
+        end
+    end
+    handle:Show()
+end
+
 local function PaintGroupPreviewPortrait(scene)
     local portrait = scene.runtimeSpec and scene.runtimeSpec.portrait
     local holder = scene.mock and scene.mock._msufGroupPortrait
@@ -723,6 +817,8 @@ local function BuildScene(box, reason)
             or selectedSpellAvailable or false,
         auraText = aurasEnabled and customAuraText,
         text = textAvailable,
+        dispelSymbol = runtimeSpec and runtimeSpec.dispelSymbol
+            and runtimeSpec.dispelSymbol.enabled == true or false,
     }
     box._layerAvailable = scene.layerAvailable
     if scene.soloLayer and scene.layerAvailable[scene.soloLayer] == false then
@@ -868,6 +964,18 @@ local function FinalizeScene(scene)
             SetPreviewFrameLevel(handle, healthBaseLevel + foregroundBase
                 + S.ClampLayer(cfg and cfg.layer or spec and conf[spec.layer], spec and spec.defaultLayer or 7))
         end
+    end
+    -- Dispel symbol row. Same foreground band as the aura handles so its Effect
+    -- Layer slider is judgeable against them in the preview, mirroring the live
+    -- DispelSensorFrameLevel (frame base + aura icon base + configured layer).
+    -- Without this the handle kept its creation-time level and the slider looked
+    -- dead in the preview while it worked on the real frame.
+    local dispelSymbolCfg = scene.runtimeSpec and scene.runtimeSpec.dispelSymbol
+    if S.dispelSymbolHandle then
+        SetPreviewFrameLevel(S.dispelSymbolHandle, baseLevel + foregroundBase
+            + ApplyHandleStrata(scene, S.dispelSymbolHandle,
+                dispelSymbolCfg and dispelSymbolCfg.strata or "AUTO", liveStrata, hostStrata)
+            + S.ClampLayer(dispelSymbolCfg and dispelSymbolCfg.layer, 8))
     end
     local rawIndicators = conf.spellIndicators or {}
     local runtimeIndicators = scene.runtimeSpellIndicators or {}
@@ -1357,6 +1465,7 @@ function Render.Install(box, ctx, deps)
     local externalHandle = deps.externalHandle
     local powerBarHandle = deps.powerBarHandle
     local portraitHandle = deps.portraitHandle
+    local dispelSymbolHandle = deps.dispelSymbolHandle
     local statusHandles = deps.statusHandles or {}
     local spellHandle = deps.spellHandle
     local selectedSpellEffectOwner = box._msufGFSelectedSpellEffectOwner
@@ -1408,6 +1517,7 @@ function Render.Install(box, ctx, deps)
         externalHandle = externalHandle,
         powerBarHandle = powerBarHandle,
         portraitHandle = portraitHandle,
+        dispelSymbolHandle = dispelSymbolHandle,
         statusHandles = statusHandles,
         spellHandle = spellHandle,
         statusSpecs = statusSpecs,
@@ -2037,6 +2147,7 @@ function Render.Install(box, ctx, deps)
         end
         scene.previewScale = previewScale
         PaintGroupPreviewPortrait(scene)
+        PaintGroupPreviewDispelSymbol(scene)
         local textBaseLevel = (Layers.HealthLevel and Layers.HealthLevel((mock.GetFrameLevel and mock:GetFrameLevel()) or 1)
             or (((mock.GetFrameLevel and mock:GetFrameLevel()) or 1) + (Layers.HEALTH_OFFSET or 1)))
             + (Layers.GROUP_FOREGROUND_BASE_OFFSET or 64)

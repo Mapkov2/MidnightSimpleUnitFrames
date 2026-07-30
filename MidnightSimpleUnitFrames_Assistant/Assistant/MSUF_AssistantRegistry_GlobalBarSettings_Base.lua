@@ -172,7 +172,7 @@ function A.GlobalBarRegistry.RegisterBaseBarSettings(ctx)
     RegisterGeneralEnum("unitDispelSymbolStyle", "unitDispelSymbolStyle", "UnitFrame Dispel Symbol Set", "BLIZZARD", UNIT_DISPEL_SYMBOL_STYLE_VALUES, {
         "dispel symbol set", "unitframe dispel symbol set", "debuff type symbol set", "dispel symbol style",
     }, { category = "Global / Bars / UnitFrame Dispel Symbol", frameType = "globalBars", apply = ApplyDispelPurgeBorder, reason = "MSUF_ASSISTANT_UNIT_DISPEL_SYMBOL_STYLE" })
-    RegisterGeneralEnum("unitDispelSymbolMode", "unitDispelSymbolMode", "UnitFrame Dispel Symbol Shows", "TOP", UNIT_DISPEL_SYMBOL_MODE_VALUES, {
+    RegisterGeneralEnum("unitDispelSymbolMode", "unitDispelSymbolMode", "UnitFrame Dispel Symbol Shows", "ALL", UNIT_DISPEL_SYMBOL_MODE_VALUES, {
         "dispel symbol shows", "dispel symbol mode", "one symbol per dispel type",
     }, { category = "Global / Bars / UnitFrame Dispel Symbol", frameType = "globalBars", apply = ApplyDispelPurgeBorder, reason = "MSUF_ASSISTANT_UNIT_DISPEL_SYMBOL_MODE" })
     RegisterGeneralEnum("unitDispelSymbolTrigger", "unitDispelSymbolTrigger", "UnitFrame Dispel Symbol Detects", "BORDER", UNIT_DISPEL_TRIGGER_VALUES, {

@@ -426,9 +426,19 @@ local function ApplyGroupPinnedPresentation(box, pinned, opts, sideW)
         box._stage:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -((sideW or 104) + 18), canvasBottom)
     end
     if box._layers and box._stage then
+        -- Height follows the row list, not the preview box. Pinning to
+        -- BOTTOMRIGHT stretched the panel to whatever the box happened to be and
+        -- silently clipped the tail of the strip on a short preview -- the last
+        -- layers simply were not there. The panel still starts at the stage's top
+        -- right and never grows past the box bottom.
+        local rows = box._visibleLayerButtonCount or #(box._layerButtons or {})
         box._layers:ClearAllPoints()
         box._layers:SetPoint("TOPLEFT", box._stage, "TOPRIGHT", 8, 0)
-        box._layers:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, canvasBottom)
+        box._layers:SetPoint("TOPRIGHT", box, "TOPRIGHT", -12, 0)
+        local wanted = 32 + rows * 18 + 10
+        local available = (box.GetHeight and box:GetHeight() or 0) - 30 - canvasBottom
+        if available > 0 and wanted > available then wanted = available end
+        box._layers:SetHeight(wanted)
     end
     if box._footer then box._footer:SetShown(not pinned) end
     if shade then
@@ -1461,6 +1471,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         si = true,
         auraText = true,
         text = true,
+        dispelSymbol = true,
     }
     if type(M.gfPreviewLayerVisible) ~= "table" then M.gfPreviewLayerVisible = {} end
     for key, value in pairs(layerDefaults) do
@@ -1480,6 +1491,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         { "CD/Stack", { 1.00, 0.82, 0.28 }, "textcolor", "auraText" },
         { "Text", { 0.70, 0.90, 1.00 }, "text", "text" },
         { "Portrait", { 0.90, 0.42, 1.00 }, "portrait", "portrait" },
+        { "Dispel", { 0.30, 0.80, 1.00 }, "dispel", "dispelSymbol" },
     }
     box._layerButtons = {}
     box.layerVisibility = layerVisibility
@@ -1666,6 +1678,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     local externalHandle = handleBundle.externalHandle
     local powerBarHandle = handleBundle.powerBarHandle
     local portraitHandle = handleBundle.portraitHandle
+    local dispelSymbolHandle = handleBundle.dispelSymbolHandle
     local statusHandles = handleBundle.statusHandles or {}
     local spellHandle = handleBundle.spellHandle
     local SelectHandle = handleBundle.SelectHandle or function() end
@@ -1686,6 +1699,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         renderDeps.externalHandle = externalHandle
         renderDeps.powerBarHandle = powerBarHandle
         renderDeps.portraitHandle = portraitHandle
+        renderDeps.dispelSymbolHandle = dispelSymbolHandle
         renderDeps.statusHandles, renderDeps.spellHandle = statusHandles, spellHandle
         renderDeps.statusSpecs = H.StatusSpecs and H.StatusSpecs()
         renderDeps.SelectHandle = SelectHandle
