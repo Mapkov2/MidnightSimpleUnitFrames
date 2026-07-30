@@ -236,6 +236,12 @@ local function Rect(frame)
     if not (left and right and top and bottom) then return nil end
     return left, right, top, bottom
 end
+local function DropdownBounds(owner)
+    local clampFrame = owner and owner._msuf2DropdownClampFrame
+    local left, right, top, bottom = Rect(clampFrame)
+    if left then return left, right, top, bottom end
+    return Rect(_G.UIParent)
+end
 local function DropdownOwnerVisible(owner)
     if not owner then return false end
     if owner.IsVisible and not owner:IsVisible() then return false end
@@ -253,10 +259,9 @@ end
 local function DropdownAvailableSpace(owner)
     local ownerTop = owner and owner.GetTop and owner:GetTop()
     local ownerBottom = owner and owner.GetBottom and owner:GetBottom()
-    local screenTop = _G.UIParent and _G.UIParent.GetTop and _G.UIParent:GetTop()
-    local screenBottom = _G.UIParent and _G.UIParent.GetBottom and _G.UIParent:GetBottom()
-    if not (ownerTop and ownerBottom and screenTop and screenBottom) then return nil, nil end
-    return max(0, ownerBottom - screenBottom - 10), max(0, screenTop - ownerTop - 10)
+    local _, _, boundaryTop, boundaryBottom = DropdownBounds(owner)
+    if not (ownerTop and ownerBottom and boundaryTop and boundaryBottom) then return nil, nil end
+    return max(0, ownerBottom - boundaryBottom - 10), max(0, boundaryTop - ownerTop - 10)
 end
 local function DropdownVisibleRows(owner, rowCount, preferred, rowHeight)
     preferred = min(rowCount or 0, preferred or 12)
@@ -285,11 +290,11 @@ local function PositionDropdown(owner)
     local ownerRight = owner.GetRight and owner:GetRight()
     local ownerTop = owner.GetTop and owner:GetTop()
     local ownerBottom = owner.GetBottom and owner:GetBottom()
-    local screenBottom = _G.UIParent and _G.UIParent.GetBottom and _G.UIParent:GetBottom() or 0
+    local boundaryLeft, boundaryRight, boundaryTop, boundaryBottom = DropdownBounds(owner)
+    boundaryBottom = boundaryBottom or 0
     local openAbove = owner._msuf2DropdownOpenAbove
-    if openAbove == nil then openAbove = ownerBottom and ownerBottom - frameH - 2 < screenBottom + 8 end
-    local screenRight = _G.UIParent and _G.UIParent.GetRight and _G.UIParent:GetRight()
-    local anchorRight = ownerLeft and screenRight and ownerLeft + frameW > screenRight - 8
+    if openAbove == nil then openAbove = ownerBottom and ownerBottom - frameH - 2 < boundaryBottom + 8 end
+    local anchorRight = ownerLeft and boundaryRight and ownerLeft + frameW > boundaryRight - 8
     local point, relPoint, xOff, yOff
     if openAbove and anchorRight then
         point, relPoint, xOff, yOff = "BOTTOMRIGHT", "TOPRIGHT", 0, 2
@@ -300,11 +305,24 @@ local function PositionDropdown(owner)
     else
         point, relPoint, xOff, yOff = "TOPLEFT", "BOTTOMLEFT", 0, -2
     end
+    -- SetClampedToScreen protects the physical screen. These offsets also keep
+    -- specialized dropdowns inside their owning options window.
+    if ownerLeft and ownerRight and boundaryLeft and boundaryRight then
+        local expectedLeft = anchorRight and (ownerRight - frameW) or ownerLeft
+        local expectedRight = expectedLeft + frameW
+        if expectedLeft < boundaryLeft + 8 then
+            xOff = xOff + (boundaryLeft + 8 - expectedLeft)
+        elseif expectedRight > boundaryRight - 8 then
+            xOff = xOff - (expectedRight - (boundaryRight - 8))
+        end
+    end
     local anchorKey = point .. ":" .. relPoint .. ":" ..
         DropdownAnchorCoord(ownerLeft) .. ":" .. DropdownAnchorCoord(ownerRight) .. ":" ..
         DropdownAnchorCoord(ownerTop) .. ":" .. DropdownAnchorCoord(ownerBottom) .. ":" ..
         DropdownAnchorCoord(frameW) .. ":" .. DropdownAnchorCoord(frameH) .. ":" ..
-        DropdownAnchorCoord(screenRight) .. ":" .. DropdownAnchorCoord(screenBottom)
+        DropdownAnchorCoord(boundaryLeft) .. ":" .. DropdownAnchorCoord(boundaryRight) .. ":" ..
+        DropdownAnchorCoord(boundaryTop) .. ":" .. DropdownAnchorCoord(boundaryBottom) .. ":" ..
+        DropdownAnchorCoord(xOff)
     if dropdownFrame._msuf2AnchorKey ~= anchorKey then
         dropdownFrame._msuf2AnchorKey = anchorKey
         dropdownFrame:ClearAllPoints()
@@ -939,7 +957,9 @@ local function OpenDropdown(owner, valuesTable)
     local ownerWidth = (owner.GetWidth and owner:GetWidth()) or 240
     local rowHeight = hasBarPreviews and DROPDOWN_BAR_PREVIEW_ROW_H or DROPDOWN_ROW_H
     dropdownActiveRowHeight = rowHeight
-    local rowWidth = math.max(ownerWidth, hasBarPreviews and 430 or (hasStatusbarPreviews and 360 or (hasIcons and 300 or 180)))
+    local preferredWidth = tonumber(owner._msuf2DropdownPreferredWidth)
+    local rowWidth = math.max(ownerWidth, preferredWidth
+        or (hasBarPreviews and 430 or (hasStatusbarPreviews and 360 or (hasIcons and 300 or 180))))
     local visible, openAbove = DropdownVisibleRows(owner, #valuesTable,
         (hasIcons or hasStatusbarPreviews or hasBarPreviews) and 12 or 14, rowHeight)
     owner._msuf2DropdownOpenAbove = openAbove

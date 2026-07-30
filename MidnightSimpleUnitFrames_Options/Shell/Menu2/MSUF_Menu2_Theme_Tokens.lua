@@ -322,6 +322,15 @@ local ACCENT_SOURCE_TONES = {
     { 0.231, 0.510, 0.965 }, -- base (coreGlow family)
     { 0.357, 0.608, 1.000 }, -- bright (coreHot family)
 }
+-- Non-midnight hues can be much more luminous than the stock blue at the same
+-- numeric value (especially class greens). Keep their shared interaction ramp
+-- subdued so nav, tabs, pinned controls, focus and hover highlights stay accents
+-- instead of becoming the brightest surfaces in the menu. Midnight never enters
+-- ApplyMenuAccent(), so its shipped palette remains byte-for-byte unchanged.
+local NON_MIDNIGHT_ACCENT_VALUE_SCALE = 0.72
+local NON_MIDNIGHT_ACCENT_MIN_VALUE = 0.40
+local NON_MIDNIGHT_ACCENT_BRIGHT_MAX_VALUE = 0.82
+local NON_MIDNIGHT_ACCENT_BRIGHT_SCALE = 1.14
 local function AccentToneIndex(color)
     for i = 1, 3 do
         local ref = ACCENT_SOURCE_TONES[i]
@@ -619,23 +628,33 @@ function T.ApplyMenuAccent()
         r, gr, b = T.MenuAccentHexToRGB(presetHex or g.menuAccentColor)
     end
     if not r then return sig end
-    -- Hover/active states sit on very dark surfaces; lift murky picks so the
-    -- accent stays readable without touching already-bright class colors.
+    -- Keep murky picks readable, then dim every non-midnight pick before
+    -- deriving the shared deep/base/bright interaction ramp.
     local maxComponent = math.max(r, gr, b)
     if maxComponent <= 0.001 then
         r, gr, b = 0.45, 0.45, 0.45
+        maxComponent = 0.45
     elseif maxComponent < 0.45 then
         local lift = 0.45 / maxComponent
         r, gr, b = r * lift, gr * lift, b * lift
+        maxComponent = 0.45
     end
+    local dimmedValue = math.max(
+        NON_MIDNIGHT_ACCENT_MIN_VALUE,
+        maxComponent * NON_MIDNIGHT_ACCENT_VALUE_SCALE
+    )
+    local dim = dimmedValue / maxComponent
+    r, gr, b = r * dim, gr * dim, b * dim
+    maxComponent = dimmedValue
+    local brightValue = math.min(
+        NON_MIDNIGHT_ACCENT_BRIGHT_MAX_VALUE,
+        maxComponent * NON_MIDNIGHT_ACCENT_BRIGHT_SCALE
+    )
+    local brightScale = brightValue / maxComponent
     local tones = {
         { r * 0.72, gr * 0.72, b * 0.72 },
         { r, gr, b },
-        {
-            math.min(1, r + (1 - r) * 0.30),
-            math.min(1, gr + (1 - gr) * 0.30),
-            math.min(1, b + (1 - b) * 0.30),
-        },
+        { r * brightScale, gr * brightScale, b * brightScale },
     }
     SwapAccentDeep(T.colors, tones, 1)
     SwapAccentDeep(T.navIconColors, tones, 1)

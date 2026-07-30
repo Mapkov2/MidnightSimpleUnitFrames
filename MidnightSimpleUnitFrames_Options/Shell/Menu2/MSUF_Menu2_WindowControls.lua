@@ -33,6 +33,10 @@ local function ColorOr(name, fallback)
     return (T and T.colors and T.colors[name]) or fallback
 end
 
+local function MenuAccentActive()
+    return T and type(T.MenuAccentActive) == "function" and T.MenuAccentActive()
+end
+
 local function PrepareAtlasTexture(texture, path)
     texture:SetTexture(path)
     if texture.SetSnapToPixelGrid then texture:SetSnapToPixelGrid(false) end
@@ -46,6 +50,27 @@ end
 
 local function PaintGroupHover(btn, hover, down)
     local group = btn and btn._msuf2ControlGroup
+    if group and group._msuf2AccentControlChrome then
+        local highlight = btn._msuf2AccentControlHover
+        local edge = group._msuf2AccentControlEdge
+        if not (hover or down) then
+            if highlight then highlight:Hide() end
+            if edge then
+                local glow = ColorOr("coreGlow", { 0.231, 0.510, 0.965, 1 })
+                edge:SetVertexColor(glow[1], glow[2], glow[3], 0.66)
+            end
+            return
+        end
+        local accent = down
+            and ColorOr("coreHot", ColorOr("coreGlow", { 0.357, 0.608, 1.000, 1 }))
+            or ColorOr("coreGlow", { 0.231, 0.510, 0.965, 1 })
+        if highlight then
+            highlight:SetColorTexture(accent[1], accent[2], accent[3], down and 0.26 or 0.18)
+            highlight:Show()
+        end
+        if edge then edge:SetVertexColor(accent[1], accent[2], accent[3], down and 0.88 or 0.78) end
+        return
+    end
     local overlay = group and group._msuf2ControlGroupHover
     if not overlay then return end
     if not (hover or down) then
@@ -70,10 +95,11 @@ local function PaintStandaloneSurface(btn, hover, down, close, alpha)
     local raised = ColorOr("coreRaised", { 0.026, 0.070, 0.110, 1 })
     local glow = ColorOr("coreGlow", { 0.090, 0.360, 0.540, 1 })
     local danger = ColorOr("danger", { 0.880, 0.280, 0.280, 1 })
+    local accentActive = MenuAccentActive()
     local base
-    if close and down then
+    if close and not accentActive and down then
         base = { 0.160, 0.036, 0.052, 0.62 * alpha }
-    elseif close and hover then
+    elseif close and not accentActive and hover then
         base = { 0.120, 0.028, 0.044, 0.54 * alpha }
     elseif down then
         base = { shadow[1], shadow[2], shadow[3], 0.62 * alpha }
@@ -90,7 +116,7 @@ local function PaintStandaloneSurface(btn, hover, down, close, alpha)
         end
     end
     if edge then
-        if close and (hover or down) then
+        if close and not accentActive and (hover or down) then
             edge:SetVertexColor(danger[1], danger[2], danger[3], (down and 0.58 or 0.44) * alpha)
         elseif hover or down then
             edge:SetVertexColor(glow[1], glow[2], glow[3], (down and 0.44 or 0.34) * alpha)
@@ -113,7 +139,15 @@ local function PaintWindowControlButton(btn, hover, down)
 
     local active = hover or down
     local r, g, b
-    if close then
+    if MenuAccentActive() then
+        -- The glyph atlas is monochrome, so one vertex-color path can keep all
+        -- three window controls on the selected accent ramp. The stock Midnight
+        -- blue/pink treatment remains unchanged in the fallback branches below.
+        local accent = active
+            and ColorOr("coreHot", ColorOr("coreGlow", { 0.357, 0.608, 1.000, 1 }))
+            or ColorOr("coreGlow", { 0.231, 0.510, 0.965, 1 })
+        r, g, b = accent[1], accent[2], accent[3]
+    elseif close then
         r, g, b = active and 1.00 or 0.90, active and 0.74 or 0.62, active and 0.80 or 0.68
     else
         local glow = ColorOr("coreHot", ColorOr("coreGlow", { 0.357, 0.608, 1.000, 1 }))
@@ -123,6 +157,33 @@ local function PaintWindowControlButton(btn, hover, down)
     end
     if btn._msuf2ControlIcon then btn._msuf2ControlIcon:SetVertexColor(r, g, b, active and alpha or 0.92 * alpha) end
     if btn._msuf2ControlIconShadow then btn._msuf2ControlIconShadow:SetVertexColor(0.002, 0.008, 0.018, 0.82 * alpha) end
+end
+
+local function CreateAccentControlChrome(group, segmentCount)
+    if not (MenuAccentActive() and T and T.CreateSuperellipseLayers) then return false end
+    local chrome = CreateFrame("Frame", nil, group)
+    chrome:SetSize(SEGMENT_WIDTH * segmentCount + 6, CONTROL_HEIGHT + 2)
+    chrome:SetPoint("CENTER", group, "CENTER", 0, 0)
+    if chrome.EnableMouse then chrome:EnableMouse(false) end
+    local fill, edge = T.CreateSuperellipseLayers(chrome, "_msuf2AccentControl", 2, "BACKGROUND", "BORDER")
+    if not (fill and edge) then return false end
+    local shadow = ColorOr("coreShadow", { 0.006, 0.016, 0.032, 1 })
+    local glow = ColorOr("coreGlow", { 0.231, 0.510, 0.965, 1 })
+    if T.SetFillGradient then
+        T.SetFillGradient(fill, { shadow[1], shadow[2], shadow[3], 0.96 }, 0.10, -0.16)
+    else
+        fill:SetVertexColor(shadow[1], shadow[2], shadow[3], 0.96)
+    end
+    edge:SetVertexColor(glow[1], glow[2], glow[3], 0.66)
+    for i = 1, segmentCount - 1 do
+        local separator = chrome:CreateTexture(nil, "ARTWORK", nil, 0)
+        separator:SetSize(1, CONTROL_HEIGHT - 8)
+        separator:SetPoint("LEFT", chrome, "LEFT", 3 + i * SEGMENT_WIDTH, 0)
+        separator:SetColorTexture(glow[1], glow[2], glow[3], 0.24)
+    end
+    group._msuf2AccentControlChrome = chrome
+    group._msuf2AccentControlEdge = edge
+    return true
 end
 
 local function SetWindowControlIcon(btn, kind)
@@ -164,6 +225,10 @@ local function CreateWindowControlGroup(parent, segmentCount)
     PrepareAtlasTexture(hover, T.media.windowControls)
     hover:Hide()
     group._msuf2ControlGroupHover = hover
+    if CreateAccentControlChrome(group, segmentCount) then
+        base:Hide()
+        hover:Hide()
+    end
     return group
 end
 
@@ -176,6 +241,13 @@ local function CreateWindowControlButton(parent, kind, tooltipTitle, tooltipText
         local count = parent._msuf2ControlSegmentCount or 3
         btn._msuf2ControlGroup = parent
         btn._msuf2ControlSegmentIndex = min(count, max(1, tonumber(segmentIndex) or 1))
+        if parent._msuf2AccentControlChrome then
+            local highlight = btn:CreateTexture(nil, "BACKGROUND", nil, 1)
+            highlight:SetPoint("TOPLEFT", btn, "TOPLEFT", 2, -3)
+            highlight:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -2, 3)
+            highlight:Hide()
+            btn._msuf2AccentControlHover = highlight
+        end
     else
         local fill, edge = T.CreateSuperellipseLayers(btn, "_msuf2Control", 2, "BACKGROUND", "BORDER")
         btn._msuf2ControlFill = fill
