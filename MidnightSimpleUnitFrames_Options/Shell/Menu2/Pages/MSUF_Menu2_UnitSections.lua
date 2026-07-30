@@ -2,6 +2,9 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+-- Expanded is the deliberate hardcoded startup presentation shared by every
+-- Unit page. Compact remains available as a session toggle only.
+M.unitPreviewExpanded = true
 local C_Timer = M.MenuTimer or _G.C_Timer
 
 -- Shared Unit page sections.
@@ -248,9 +251,8 @@ local function ApplyUnitFrameEnabledGate(ctx, unit)
 end
 local UnitSectionShared = M.UnitSectionsShared or {}
 local SetSectionHeaderStatus = UnitSectionShared.SetSectionHeaderStatus or function() end
--- Compact-by-default preview: the frame stays visible as a live reference
--- while the settings keep the viewport; "Expand Preview" restores the full
--- canvas. The mode is one shared, persisted state across all unit pages.
+-- Expanded-by-default preview. The mode is shared across all Unit pages for
+-- the current Menu2 session; a reload always returns to the full canvas.
 -- The expanded canvas grew by the height of the layer rail and the selection
 -- bar, which moved out of the canvas' right-hand column and underneath it. The
 -- preview surface itself keeps its size and gains the freed column width.

@@ -807,7 +807,10 @@ local function EnsureVisual(box, kind, baseLevel)
     return visual
 end
 local function CreateIcon(parent)
-    local f = CreateFrame("Frame", nil, parent)
+    -- The visible icon can sit above the canvas-owned mover (notably the
+    -- portrait defensive lane). Use a Button so the proxy can preserve the
+    -- mover's complete click contract in addition to drag forwarding.
+    local f = CreateFrame("Button", nil, parent)
     f:SetSize(18, 18)
     f.bg = f:CreateTexture(nil, "BACKGROUND")
     f.bg:SetAllPoints()
@@ -856,6 +859,11 @@ end
 local function BindDragProxy(frame, handle)
     if not (frame and handle) then return end
     if frame.EnableMouse then frame:EnableMouse(true) end
+    if frame.RegisterForClicks then
+        frame:RegisterForClicks("LeftButtonDown", "LeftButtonUp", "RightButtonUp")
+        frame:SetScript("OnClick", function(_, button) ForwardHandleScript(handle, "OnClick", button) end)
+        frame:SetScript("OnDoubleClick", function(_, button) ForwardHandleScript(handle, "OnDoubleClick", button) end)
+    end
     if frame.RegisterForDrag then frame:RegisterForDrag("LeftButton") end
     frame:SetScript("OnMouseDown", function(_, button) ForwardHandleScript(handle, "OnMouseDown", button) end)
     frame:SetScript("OnMouseUp", function(_, button) ForwardHandleScript(handle, "OnMouseUp", button) end)
@@ -1308,7 +1316,15 @@ function Auras.Layout(box, mock, state, S, baseLevel)
     LayoutHandle(box, box.handleAuraDebuffs, state, "debuff", S, baseLevel)
     for index = 1, 4 do
         local kind = "custom" .. tostring(index)
-        LayoutHandle(box, box["handleAuraCustom" .. tostring(index)], state, kind, S, baseLevel)
+        if kind == "custom4" and state.defensivePortrait then
+            -- The portrait presentation reuses the custom4 mover. Hiding that
+            -- shared handle here fires its OnHide path, which drops the active
+            -- selection immediately before LayoutDefensivePortrait shows it
+            -- again. Only retire the unused bar visual during this handoff.
+            if box.auraPreviewVisuals then HideVisual(box.auraPreviewVisuals[kind]) end
+        else
+            LayoutHandle(box, box["handleAuraCustom" .. tostring(index)], state, kind, S, baseLevel)
+        end
     end
     LayoutDefensivePortrait(box, mock, state, S)
 end

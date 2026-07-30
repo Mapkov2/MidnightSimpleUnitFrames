@@ -6,6 +6,9 @@ local T = M.Theme
 local W = M.Widgets
 local GroupPreview = M.GroupPreview or {}
 M.GroupPreview = GroupPreview
+-- Expanded is the deliberate hardcoded startup presentation. Compact remains
+-- available as a session toggle, but never becomes the next login's default.
+M.groupPreviewExpanded = true
 
 -- Menu2 Group preview page section.
 -- Hosts the group preview box, explanatory note, and preview refresh hooks. The actual mock

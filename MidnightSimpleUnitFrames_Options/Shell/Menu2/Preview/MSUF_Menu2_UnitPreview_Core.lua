@@ -151,10 +151,12 @@ local function EnsureFrameBorderOverlay(mock, border)
             overlay:SetFrameLevel((mock:GetFrameLevel() or 0) + (Layers.FRAME_BORDER_NORMAL_OFFSET or Layers.PREVIEW_FRAME_BORDER_OFFSET or 35) + layer)
         end
     end
-    if overlay.SetFrameStrata and border and border.strata and border.strata ~= "AUTO" then
-        local currentStrata = overlay.GetFrameStrata and overlay:GetFrameStrata() or nil
-        if issecretvalue(currentStrata) == true or currentStrata ~= border.strata then overlay:SetFrameStrata(border.strata) end
-    elseif overlay.SetFrameStrata and mock.GetFrameStrata then
+    -- A profile's absolute runtime strata cannot be copied into the options
+    -- canvas: migrated 5.x profiles commonly use BACKGROUND, which places the
+    -- outline behind the preview card. Keep the configured relative layer
+    -- above, but render on the mock's local strata so UF and GF outlines stay
+    -- visible independently of the optional Bounds guide.
+    if overlay.SetFrameStrata and mock.GetFrameStrata then
         local strata = mock:GetFrameStrata()
         if issecretvalue(strata) ~= true and strata then
             local currentStrata = overlay.GetFrameStrata and overlay:GetFrameStrata() or nil

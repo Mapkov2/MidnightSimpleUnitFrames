@@ -490,8 +490,10 @@ OpenPreviewHandleSettings = function(handle, source)
         local unit = box and box.key or "player"
         local lane = fields.auraPreviewKind
         if lane ~= "debuff" and lane ~= "custom1" and lane ~= "custom2" and lane ~= "custom3" and lane ~= "custom4" then lane = "buff" end
+        local previousAuraLane
         if menu then
             menu.unitAuraTabSelection = menu.unitAuraTabSelection or {}
+            previousAuraLane = menu.unitAuraTabSelection[unit] or "buff"
             menu.unitAuraTabSelection[unit] = lane
         end
         local pageKey = "uf_" .. tostring(unit)
@@ -506,6 +508,12 @@ OpenPreviewHandleSettings = function(handle, source)
                 explicit = true,
                 changedAt = GetTime and GetTime() or 0,
             }
+            -- The Aura workspace captures its selected container while the
+            -- Unit page is built. Refreshers cannot replace that cached
+            -- container, so rebuild only when this preview opens another one.
+            if lane ~= previousAuraLane and type(menu.InvalidatePage) == "function" then
+                menu.InvalidatePage(pageKey)
+            end
             return menu.SelectPage(pageKey) ~= false
         end
         return false
@@ -1677,7 +1685,16 @@ local function BuildPreview(parent, panel, width, height)
     }
     for i = 1, #PREVIEW_LAYERS do
         local def = PREVIEW_LAYERS[i]
-        box.layerVisibility[def.key] = (def.key == "guides") and PreviewGuidesEnabled() or true
+        -- Bounds are an optional measurement overlay, not part of the frame's
+        -- configured visual. Keep the real frame outline visible and start the
+        -- separate cyan measurement guide hidden.
+        if def.key == "guides" then
+            box.layerVisibility[def.key] = PreviewGuidesEnabled()
+        elseif def.key == "bounds" then
+            box.layerVisibility[def.key] = false
+        else
+            box.layerVisibility[def.key] = true
+        end
         local btn = PreviewHelpers.CreateLayerButton(sidebar, box, def, i, sideW, unitLayerButtonOpts)
         if M2.AddTooltip then
             M2.AddTooltip(btn, "Layer disabled", "Turn this feature on in settings to make the preview layer available.", {

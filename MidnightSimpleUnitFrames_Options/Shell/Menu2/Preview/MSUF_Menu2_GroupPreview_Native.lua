@@ -1447,7 +1447,9 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     box._msuf2LayerRailHeader = layersTitle
     local layerDefaults = {
         guides = true,
-        bounds = true,
+        -- The configured frame outline is rendered independently. Bounds is
+        -- only the optional cyan measurement guide and therefore starts off.
+        bounds = false,
         power = true,
         portrait = true,
         buff = true,
@@ -1467,18 +1469,21 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     local layerVisibility = M.gfPreviewLayerVisible
     local layerDefs = {
         { "Guides", { 0.42, 0.72, 1.00 }, "layout", "guides" },
-        { "Bounds", { 0.25, 0.75, 0.88 }, "layout", "bounds" },
+        -- Follow the Unit preview's semantic order wherever the two previews
+        -- share concepts: guides, text, portrait, resources, content, status,
+        -- then the optional bounds measurement at the far right.
+        { "Text", { 0.70, 0.90, 1.00 }, "text", "text" },
+        { "Portrait", { 0.90, 0.42, 1.00 }, "portrait", "portrait" },
         { "Power", { 0.30, 0.62, 0.98 }, "power", "power" },
         { "Buffs", { 0.20, 0.90, 0.35 }, "buffs", "buff" },
         { "Tracked", { 0.42, 0.68, 1.00 }, "buffs", "trackedBuff" },
         { "Debuffs", { 0.90, 0.20, 0.22 }, "debuffs", "debuff" },
         { "External", { 0.30, 0.72, 1.00 }, "externals", "external" },
-        { "Status", { 0.95, 0.78, 0.22 }, "sicons", "status" },
         { "Spells", { 0.86, 0.50, 1.00 }, "si", "si" },
         { "CD/Stack", { 1.00, 0.82, 0.28 }, "textcolor", "auraText" },
-        { "Text", { 0.70, 0.90, 1.00 }, "text", "text" },
-        { "Portrait", { 0.90, 0.42, 1.00 }, "portrait", "portrait" },
+        { "Status", { 0.95, 0.78, 0.22 }, "sicons", "status" },
         { "Dispel", { 0.30, 0.80, 1.00 }, "dispel", "dispelSymbol" },
+        { "Bounds", { 0.25, 0.75, 0.88 }, "layout", "bounds" },
     }
     box._layerButtons = {}
     box.layerVisibility = layerVisibility
