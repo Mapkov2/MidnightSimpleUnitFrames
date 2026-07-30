@@ -39,7 +39,28 @@ local function QueueDeferredElementRefresh(unit, names, reason)
   local pending = UF.pendingElementRefreshes
   local key = unit or DEFERRED_REFRESH_ALL
   if key == DEFERRED_REFRESH_ALL then
-    for existing in pairs(pending) do pending[existing] = nil end
+    -- A global request widens the scope of every queued entry, but it must
+    -- inherit their element names: the flush only ever applies the surviving
+    -- entry's name set, so dropping the entries dropped that queued work.
+    -- Widening per-unit names to all frames is what the branch below already
+    -- does when a global entry is pending, and re-applying an element is
+    -- idempotent. Creating the global entry before the walk keeps the pairs()
+    -- traversal legal -- only removals happen inside it.
+    local global = pending[DEFERRED_REFRESH_ALL]
+    if not global then
+      global = { names = {} }
+      pending[DEFERRED_REFRESH_ALL] = global
+    end
+    for existing, entry in pairs(pending) do
+      if existing ~= DEFERRED_REFRESH_ALL then
+        local existingNames = entry and entry.names
+        if existingNames then
+          for name in pairs(existingNames) do global.names[name] = true end
+        end
+        if global.reason == nil and entry then global.reason = entry.reason end
+        pending[existing] = nil
+      end
+    end
   elseif pending[DEFERRED_REFRESH_ALL] then
     key = DEFERRED_REFRESH_ALL
   end

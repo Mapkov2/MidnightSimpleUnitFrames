@@ -434,9 +434,24 @@ local function NotifyRuntimeObservers(operation, kind, mask, result)
   return result
 end
 
+--- Deferred reasons accumulate as a set. Keeping only the newest one dropped
+--- whole work units: a "visibility" defer landing after a "roster" defer used to
+--- lose the party/role state refresh that only the roster branch performs. The
+--- dirty mask was already merged; the reason now is too.
+local function AddPendingReason(reason)
+  if type(reason) ~= "string" or reason == "" then return end
+  local reasons = GF._pendingGroupRuntimeReasons
+  if not reasons then
+    reasons = {}
+    GF._pendingGroupRuntimeReasons = reasons
+  end
+  reasons[reason] = true
+end
+
 function GF.DeferGroupRuntime(reason, kind, mask)
   GF._pendingGroupRuntime = true
   reason = reason or GF._pendingGroupRuntimeReason or "refresh"
+  AddPendingReason(reason)
   local currentReason = GF._pendingGroupRuntimeReason
   if not currentReason or currentReason == "refresh" then
     GF._pendingGroupRuntimeReason = reason
@@ -569,6 +584,7 @@ function GF.RefreshPriorityFrames(reason)
   if InCombat() then
     GF._pendingPriorityRefresh = reason or true
     GF._pendingGroupRuntime = true
+    AddPendingReason("priority")
     if not GF._pendingGroupRuntimeReason or GF._pendingGroupRuntimeReason == "refresh" then
       GF._pendingGroupRuntimeReason = "priority"
     end
@@ -711,42 +727,77 @@ function GF.EM2_NudgePreview(key, dx, dy)
   return GF.RefreshGeometry(kind)
 end
 
+--- Reasons that map to a work unit in FlushDeferred. Anything else falls back to
+--- the RefreshAll catch-all, exactly as the previous single-reason dispatch did.
+local DEFERRED_REASON_UNITS = {
+  refresh = true,
+  roster = true,
+  visibility = true,
+  layout = true,
+  rebuild = true,
+  refreshAll = true,
+  priority = true,
+}
+
+--- Runs the union of everything deferred during combat. Reasons are orthogonal
+--- work units, not alternatives: only rebuild/refreshAll subsume the rest. Each
+--- unit below is an idempotent cold-path pass, so overlapping reasons are safe.
 local function FlushDeferred()
-  local reason = GF._pendingGroupRuntimeReason
+  local reasons = GF._pendingGroupRuntimeReasons
   local kind = GF._pendingGroupRuntimeKind
   local mask = GF._pendingGroupRuntimeMask
   GF._pendingGroupRuntime = nil
   GF._pendingGroupRuntimeReason = nil
+  GF._pendingGroupRuntimeReasons = nil
   GF._pendingGroupRuntimeKind = nil
   GF._pendingGroupRuntimeMask = nil
-  if reason == "refresh" then return GF.RefreshVisuals(kind, mask) end
-  if reason == "roster" then
-    local did = GF.RefreshHeaderLayout(kind)
-    did = RefreshVisiblePartyState("GROUP_ROSTER_UPDATE") or did
-    return RefreshVisibleRoleState("PLAYER_ROLES_ASSIGNED") or did
+
+  --- No reason recorded (only the bare pending flag, e.g. the Headers fallback
+  --- path): keep the established catch-all.
+  if not reasons or next(reasons) == nil then return GF.RefreshAll() end
+
+  --- A reason without its own work unit ("setup" from the header rebind path)
+  --- used to land on the single-dispatch catch-all. RefreshAll is the strongest
+  --- pass and subsumes every unit below, so it still stands in for them.
+  for reason in pairs(reasons) do
+    if not DEFERRED_REASON_UNITS[reason] then return GF.RefreshAll() end
   end
-  if reason == "visibility" then return GF.UpdateGroupVisibility() end
-  if reason == "layout" then
-    local did = GF.RefreshHeaderLayout(kind)
-    if mask and type(GF.RefreshVisuals) == "function" then
-      did = GF.RefreshVisuals(kind, mask) or did
-    end
-    return did
-  end
-  if reason == "rebuild" then
+
+  if reasons.rebuild then
     if kind and type(GF.Rebuild) == "function" then return GF.Rebuild(kind) end
     local result = RefreshAllNow()
     return NotifyRuntimeObservers("rebuildAll", nil, GF.DIRTY_ALL, result)
   end
-  if reason == "refreshAll" then return GF.RefreshAll() end
-  if reason == "priority" then
-    local did = GF.RefreshPriorityFrames("deferred")
-    if mask and type(GF.RefreshVisuals) == "function" then
-      did = GF.RefreshVisuals(kind, mask) or did
-    end
-    return did
+  if reasons.refreshAll then return GF.RefreshAll() end
+
+  local did = false
+  --- Header setup. roster/layout scope it to `kind`; visibility always covers
+  --- every wanted kind, and carries no SetRuntimeEventsEnabled/seed-event work,
+  --- so both passes run when both were deferred.
+  if reasons.roster or reasons.layout then
+    did = GF.RefreshHeaderLayout(kind) or did
   end
-  return GF.RefreshAll()
+  if reasons.visibility then
+    did = GF.UpdateGroupVisibility() or did
+  end
+  if reasons.roster then
+    did = RefreshVisiblePartyState("GROUP_ROSTER_UPDATE") or did
+    did = RefreshVisibleRoleState("PLAYER_ROLES_ASSIGNED") or did
+  end
+  --- No priority work unit on purpose: SetupWantedHeaders already ends in
+  --- SetupWantedPriority (the one switching secure header follows whichever base
+  --- kind is active) and clears _pendingPriorityRefresh, and RuntimeOnEvent
+  --- catches up straight after this flush when no header pass ran. Refreshing it
+  --- here as well rebuilt the Priority header twice per regen.
+  --- "refresh" always repaints visuals; layout/priority only when a mask came
+  --- with them, matching the previous per-reason behaviour.
+  if reasons.refresh then
+    did = GF.RefreshVisuals(kind, mask) or did
+  elseif mask and type(GF.RefreshVisuals) == "function"
+    and (reasons.layout or reasons.priority) then
+    did = GF.RefreshVisuals(kind, mask) or did
+  end
+  return did
 end
 
 local function RuntimeOnEvent(self, event, unit)
