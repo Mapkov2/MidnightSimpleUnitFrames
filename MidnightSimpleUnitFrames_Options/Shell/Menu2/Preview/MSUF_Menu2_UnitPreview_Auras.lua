@@ -280,12 +280,18 @@ function Auras.DragOffsets(handle, x, y)
     local dy = RoundOffset((y - startY) * scale)
     handle._msufAuraDragX = x
     handle._msufAuraDragY = y
-    local visual = box.auraPreviewVisuals and box.auraPreviewVisuals[kind]
-    local moved = SetDragPoint(handle, "Handle", handle, dx, dy)
-    if not moved and (dx ~= 0 or dy ~= 0) then moved = MoveFrameBy(handle, dx, dy) end
+    local portraitVisual = handle._msufAuraPortraitVisual
+    local visual = portraitVisual or (box.auraPreviewVisuals and box.auraPreviewVisuals[kind])
+    local moved = false
+    if not portraitVisual then
+        moved = SetDragPoint(handle, "Handle", handle, dx, dy)
+        if not moved and (dx ~= 0 or dy ~= 0) then moved = MoveFrameBy(handle, dx, dy) end
+    end
     if visual then
         if not SetDragPoint(handle, "Visual", visual, dx, dy) and (dx ~= 0 or dy ~= 0) then
-            MoveFrameBy(visual, dx, dy)
+            moved = MoveFrameBy(visual, dx, dy) or moved
+        else
+            moved = true
         end
     end
     return moved == true
@@ -653,21 +659,38 @@ local function DefensivePortraitBounds(item, runtimeSpec, previewEntries, unit, 
         previewTextures[i] = previewEntries and previewEntries[i] and previewEntries[i].icon
             or AURA_TEXTURES.buff[((i - 1) % #AURA_TEXTURES.buff) + 1]
     end
-    local growRight = portrait.side == "RIGHT"
     local portraitWidth = ClampNumber(portrait.width or portrait.size, 24, 1, 128)
     local portraitHeight = ClampNumber(portrait.height or portrait.size, 24, 1, 128)
+    local size = min(portraitWidth, portraitHeight)
+    local growthX, growthY, verticalGrowth = CustomGrowth(placed.growth)
+    local initialAnchor = ButtonAnchor(growthX, growthY)
+    local perRow = verticalGrowth and 1 or RuntimeRound(ClampNumber(placed.perRow, 4, 1, 40))
+    local cols, rows = GridShape(shown, perRow, verticalGrowth)
+    local insetX = (portraitWidth - size) * 0.5
+    local insetY = (portraitHeight - size) * 0.5
     return {
-        size = min(portraitWidth, portraitHeight),
+        size = size,
         spacing = 0,
         shown = shown,
-        growthX = growRight and 1 or -1,
-        initialAnchor = growRight and "LEFT" or "RIGHT",
+        perRow = perRow,
+        cols = cols,
+        rows = rows,
+        width = max(1, cols * size),
+        height = max(1, rows * size),
+        growthX = growthX,
+        growthY = growthY,
+        verticalGrowth = verticalGrowth == true,
+        initialAnchor = initialAnchor,
+        portraitInsetX = initialAnchor:find("RIGHT", 1, true) and -insetX or insetX,
+        portraitInsetY = initialAnchor:find("BOTTOM", 1, true) and insetY or -insetY,
         item = item,
         previewTextures = previewTextures,
         iconStyle = LaneIconStyle(metrics, unit),
         showCooldownText = item.portraitCooldownText ~= false,
         showCooldownSwipe = true,
         cooldownSwipeReverse = placed.cooldownSwipeReverse == true,
+        x = RuntimeRound(ClampNumber(placed.x, 0, -4096, 4096)),
+        y = RuntimeRound(ClampNumber(placed.y, 0, -4096, 4096)),
     }
 end
 
@@ -861,6 +884,9 @@ local function HideVisual(visual)
 end
 function Auras.Hide(box)
     if not box then return end
+    if box.handleAuraCustom4 then
+        box.handleAuraCustom4._msufAuraPortraitVisual = nil
+    end
     HideHandle(box.handleAuraBuffs)
     HideHandle(box.handleAuraDebuffs)
     for index = 1, 4 do HideHandle(box["handleAuraCustom" .. tostring(index)]) end
@@ -1149,6 +1175,10 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
 end
 
 local function LayoutDefensivePortrait(box, mock, state, S)
+    local handle = box and box.handleAuraCustom4
+    if handle then
+        handle._msufAuraPortraitVisual = nil
+    end
     local bounds = state and state.defensivePortrait
     if not (bounds and mock and mock.portrait and mock.portrait.IsShown and mock.portrait:IsShown()) then
         if box then HideVisual(box.defensivePortraitPreview) end
@@ -1160,6 +1190,7 @@ local function LayoutDefensivePortrait(box, mock, state, S)
         visual._icons = {}
         box.defensivePortraitPreview = visual
     end
+    BindDragProxy(visual, handle)
     local textCfg = CustomTextConfig(bounds)
     textCfg.showCooldownText = bounds.showCooldownText == true
     textCfg.showStackCount = false
@@ -1170,13 +1201,14 @@ local function LayoutDefensivePortrait(box, mock, state, S)
     local spacing = max(0, S(bounds.spacing or 0))
     local shown = max(1, tonumber(bounds.shown) or 1)
     local step = size + spacing
-    visual:SetSize(max(1, shown * size + max(shown - 1, 0) * spacing), size)
+    local visualWidth = max(1, S(bounds.width or size))
+    local visualHeight = max(1, S(bounds.height or size))
+    visual:SetSize(visualWidth, visualHeight)
     visual:ClearAllPoints()
-    if bounds.growthX == 1 then
-        visual:SetPoint("LEFT", mock.portrait, "CENTER", -size * 0.5, 0)
-    else
-        visual:SetPoint("RIGHT", mock.portrait, "CENTER", size * 0.5, 0)
-    end
+    local offsetX = S((bounds.x or 0) + (bounds.portraitInsetX or 0))
+    local offsetY = S((bounds.y or 0) + (bounds.portraitInsetY or 0))
+    local initialAnchor = bounds.initialAnchor or "TOPLEFT"
+    visual:SetPoint(initialAnchor, mock.portrait, initialAnchor, offsetX, offsetY)
     if visual.SetFrameLevel and mock.portrait.GetFrameLevel then
         visual:SetFrameLevel((mock.portrait:GetFrameLevel() or 1) + 1)
     end
@@ -1187,8 +1219,9 @@ local function LayoutDefensivePortrait(box, mock, state, S)
         local icon = EnsureIcon(visual, i)
         icon:SetSize(size, size)
         icon:ClearAllPoints()
-        icon:SetPoint(bounds.initialAnchor, visual, bounds.initialAnchor,
-            (i - 1) * step * bounds.growthX, 0)
+        local col, row = IconGridCoord(i, bounds.perRow, bounds.verticalGrowth == true)
+        icon:SetPoint(initialAnchor, visual, initialAnchor,
+            col * step * bounds.growthX, row * step * bounds.growthY)
         if icon.SetFrameLevel then icon:SetFrameLevel((visual:GetFrameLevel() or 1) + 1) end
         icon.tex:SetTexture(bounds.previewTextures and bounds.previewTextures[i] or AURA_TEXTURES.buff[1])
         ApplyIconZoom(icon.tex, bounds.item and bounds.item.placed and bounds.item.placed.iconZoom)
@@ -1217,11 +1250,26 @@ local function LayoutDefensivePortrait(box, mock, state, S)
         icon.timer:SetText(bounds.showCooldownText == true
             and (auraState and auraState.text or tostring(7 + i)) or "")
         icon:Show()
+        BindDragProxy(icon, handle)
     end
     for i = shown + 1, #(visual._icons or {}) do
         visual._icons[i]:Hide()
     end
     visual:Show()
+    if handle then
+        handle._msufAuraPortraitVisual = visual
+        if handle.SetFrameLevel then
+            handle:SetFrameLevel((visual:GetFrameLevel() or 0) + 50)
+        end
+        if handle._selBorder and handle._selBorder.SetFrameLevel then
+            handle._selBorder:SetFrameLevel((handle:GetFrameLevel() or 0) + 1)
+        end
+        handle:SetSize(max(18, visualWidth + 8), max(18, visualHeight + 8))
+        handle:ClearAllPoints()
+        handle:SetPoint("CENTER", visual, "CENTER", 0, 0)
+        handle._msufPlaced = true
+        handle:Show()
+    end
 end
 
 function Auras.Layout(box, mock, state, S, baseLevel)

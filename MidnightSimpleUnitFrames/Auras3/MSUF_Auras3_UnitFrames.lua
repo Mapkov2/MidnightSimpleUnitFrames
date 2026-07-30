@@ -1925,15 +1925,25 @@ A3._CompilePlayerDefensivePortraitLane = function(lane, frameSpec, entry)
     local portrait = frameSpec and frameSpec.portrait
     local usePortraitPosition = entry and entry.portraitPositionWhenDisabled == true
     if not (lane and portrait and (portrait.enabled == true or usePortraitPosition)) then return nil end
+    local placed = type(entry and entry.placed) == "table" and entry.placed or {}
     -- Preserve the proven single portrait icon exactly: same square derived
     -- from the portrait, same centring, full opacity, mask, text, and swipe.
-    -- The optional count merely appends equally-sized buttons outward.
+    -- Additional icons use the custom lane's normal Growth/Per row contract.
     local portraitWidth = ClampNumber(portrait.width, portrait.size or 24, 8, 128)
     local portraitHeight = ClampNumber(portrait.height, portrait.size or 24, 8, 128)
     local size = math_min(portraitWidth, portraitHeight)
     local spacing = 0
     local maxCount = Round(ClampNumber(entry and entry.portraitMaxIcons, 1, 1, 8))
-    local growRight = portrait.side == "RIGHT"
+    local verticalGrowth = lane.verticalGrowth == true
+    local perRow = verticalGrowth and 1 or math_max(1, Round(ClampNumber(lane.perRow, 4, 1, 40)))
+    local cols, rows = GridShape(maxCount, perRow, verticalGrowth)
+    local xSign = tonumber(lane.xSign) or 1
+    local ySign = tonumber(lane.ySign) or -1
+    local initialAnchor = ButtonAnchor(xSign, ySign)
+    local insetX = (portraitWidth - size) * 0.5
+    local insetY = (portraitHeight - size) * 0.5
+    local anchorX = initialAnchor:find("RIGHT", 1, true) and -insetX or insetX
+    local anchorY = initialAnchor:find("BOTTOM", 1, true) and insetY or -insetY
     local out = {}
     for key, value in pairs(lane) do
         if tostring(key):find("^_msufA3") == nil then out[key] = value end
@@ -1949,25 +1959,24 @@ A3._CompilePlayerDefensivePortraitLane = function(lane, frameSpec, entry)
     out.size = size
     out.spacing = spacing
     out.step = size + spacing
-    out.perRow = math_max(maxCount, 1)
-    out.cols = math_max(maxCount, 1)
-    out.rows = 1
+    out.perRow = perRow
+    out.cols = cols
+    out.rows = rows
     out.padding = 0
-    out.width = math_max(1,
-        maxCount * size + math_max(maxCount - 1, 0) * spacing)
-    out.height = size
-    out.x = (portraitWidth - size) * (growRight and 0.5 or -0.5)
-    out.y = 0
-    out.anchor = growRight and "LEFT" or "RIGHT"
+    out.width = math_max(1, cols * size + math_max(cols - 1, 0) * spacing)
+    out.height = math_max(1, rows * size + math_max(rows - 1, 0) * spacing)
+    out.x = anchorX + Round(ClampNumber(placed.x, 0, -4096, 4096))
+    out.y = anchorY + Round(ClampNumber(placed.y, 0, -4096, 4096))
+    out.anchor = initialAnchor
     out.layer = 0
     out.strata = "AUTO"
     out.alpha = 1
-    out.growthX = growRight and "RIGHT" or "LEFT"
-    out.growthY = "DOWN"
-    out.xSign = growRight and 1 or -1
-    out.ySign = -1
-    out.verticalGrowth = false
-    out.initialAnchor = growRight and "LEFT" or "RIGHT"
+    out.growthX = lane.growthX
+    out.growthY = lane.growthY
+    out.xSign = xSign
+    out.ySign = ySign
+    out.verticalGrowth = verticalGrowth
+    out.initialAnchor = initialAnchor
     out.showCooldownText = entry and entry.portraitCooldownText ~= false or false
     -- The AuraButton itself is the portrait replacement. Keep Blizzard's
     -- native duration swipe on that same button so icon, swipe, and duration
