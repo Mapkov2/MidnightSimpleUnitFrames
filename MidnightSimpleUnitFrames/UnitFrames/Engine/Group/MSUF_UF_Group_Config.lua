@@ -1906,6 +1906,12 @@ local function RefreshFontDomain(kind, base, conf)
   base.showHealthText = conf.showHPText ~= false
   base.showPowerText = IsPowerTextEnabled(kind, conf)
   base.text = ReplaceTableContents(base.text, CompileTextSpec(kind, conf, general, baselineOffset, nameTextOptions))
+  -- RaidGroupIndicator is part of the font apply mask, but its font size lives
+  -- below status instead of the regular text domain. Keep the shared compiled
+  -- table in place so existing frame specs and the menu preview see the new
+  -- value without invalidating/recompiling the full group spec on slider drag.
+  local raidGroup = base.status and base.status.raidGroup
+  if raidGroup then raidGroup.size = Num(conf.groupNumberSize, 10) end
   BumpSpecDomain(base, "_msufTextLayoutRevision")
   BumpSpecDomain(base, "_msufTextColorRevision")
 end
