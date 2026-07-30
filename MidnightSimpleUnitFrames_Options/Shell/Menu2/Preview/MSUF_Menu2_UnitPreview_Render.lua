@@ -863,8 +863,15 @@ function Preview.Refresh(box, reason)
     else
         hasPortrait = (mode == "LEFT" or mode == "RIGHT")
     end
-    if hasPortrait and mode ~= "RIGHT" then mode = "LEFT" end
-    local pSize = hasPortrait and (tonumber(runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.size) or tonumber(PortraitStyleGet(key, "portraitSizeOverride", 0)) or 0) or 0
+    box._runtimeDefensivePortraitPositionOnly = not hasPortrait
+        and Auras and Auras.WantsDefensivePortraitAnchor
+        and Auras.WantsDefensivePortraitAnchor(key, runtimeSpec) == true
+        or false
+    if (hasPortrait or box._runtimeDefensivePortraitPositionOnly) and mode ~= "RIGHT" then mode = "LEFT" end
+    local pSize = (hasPortrait or box._runtimeDefensivePortraitPositionOnly)
+        and (tonumber(runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.size)
+            or tonumber(PortraitStyleGet(key, "portraitSizeOverride", 0)) or 0)
+        or 0
     if pSize <= 0 then pSize = max(22, h - 4) end
     -- Placement/geometry mirrors of the live spec. Parked on the box because
     -- Refresh already sits at the Lua 5.1 ceiling of 200 locals per function.
@@ -1104,7 +1111,8 @@ function Preview.Refresh(box, reason)
             end
         end
     end
-    if hasPortrait and PreviewLayerWanted(box, "portrait") then
+    if (hasPortrait and PreviewLayerWanted(box, "portrait"))
+        or (box._runtimeDefensivePortraitPositionOnly and PreviewLayerWanted(box, "auras")) then
         local poX = tonumber(runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.x) or tonumber(PortraitStyleGet(key, "portraitOffsetX", 0)) or 0
         local poY = tonumber(runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.y) or tonumber(PortraitStyleGet(key, "portraitOffsetY", 0)) or 0
         local left, bottom, pw, ph = R.PreviewPortraitRect(
@@ -1112,7 +1120,7 @@ function Preview.Refresh(box, reason)
             box._runtimePortraitPlacement == "ATTACHED" and (mode == "RIGHT" and "LEFT" or "RIGHT") or box._runtimePortraitPoint,
             box._runtimePortraitRelPoint, box._runtimePortraitOverlayAlign,
             w, h, box._runtimePortraitW, box._runtimePortraitH, poX, poY)
-        local grow = box._runtimePortraitBorderFill and 0 or box._runtimePortraitBorderThickness
+        local grow = hasPortrait and (box._runtimePortraitBorderFill and 0 or box._runtimePortraitBorderThickness) or 0
         minX, maxX = min(minX, left - grow), max(maxX, left + pw + grow)
         minY, maxY = min(minY, bottom - grow), max(maxY, bottom + ph + grow)
     end
@@ -1940,7 +1948,7 @@ function Preview.Refresh(box, reason)
     else
         PlaceTextSet(mock.powerTextLeft, mock.powerTextCenter, mock.powerText, mock.powerTextPct, mock.textFrame, "BOTTOMLEFT", "BOTTOMLEFT", "BOTTOM", "BOTTOM", "BOTTOMRIGHT", "BOTTOMRIGHT", powerOffsets, 1)
     end
-    if hasPortrait then
+    if hasPortrait or box._runtimeDefensivePortraitPositionOnly then
         mock.portrait:Show()
         mock.portrait:SetSize(S(box._runtimePortraitW), S(box._runtimePortraitH))
         mock.portrait:SetAlpha(box._runtimePortraitAlpha or 1)
@@ -1962,6 +1970,8 @@ function Preview.Refresh(box, reason)
         else
             mock.portrait:SetPoint("RIGHT", mock, "LEFT", ox, oy)
         end
+        if hasPortrait then
+        mock.portrait.tex:Show()
         local cr, cg, cb = R.ClassColor(data.class)
         local renderMode = (runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.render) or PortraitStyleGet(key, "portraitRender", "2D")
         if renderMode == "CLASS" then
@@ -2062,6 +2072,14 @@ function Preview.Refresh(box, reason)
             max(18, S(box._runtimePortraitW) + ((box._runtimePortraitBorderFill and 0 or S(box._runtimePortraitBorderThickness)) * 2)),
             max(18, S(box._runtimePortraitH) + ((box._runtimePortraitBorderFill and 0 or S(box._runtimePortraitBorderThickness)) * 2)))
         PlaceHandle(box.handlePortrait, mock.portrait)
+        else
+            mock.portrait.tex:Hide()
+            mock.portrait.initial:Hide()
+            if mock.portrait.bg then mock.portrait.bg:Hide() end
+            mock.portrait:SetBackdropColor(0, 0, 0, 0)
+            R.LayoutPreviewPortraitBorder(mock.portrait, 0, false)
+            box.handlePortrait:Hide()
+        end
     else
         mock.portrait:Hide()
         R.LayoutPreviewPortraitBorder(mock.portrait, 0, false)

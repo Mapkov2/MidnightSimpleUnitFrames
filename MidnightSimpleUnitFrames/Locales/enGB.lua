@@ -2762,3 +2762,9 @@ L["Preview symbol"] = "Preview symbol"
 L["Preview symbol (drag to place)"] = "Preview symbol (drag to place)"
 L["Shows stand-in symbols so placement can be judged without a real debuff, and lets you drag them into position. Turns itself off when this page closes."] = "Shows stand-in symbols so placement can be judged without a real debuff, and lets you drag them into position. Turns itself off when this page closes."
 L["Group frame scopes use Group Frames > Dispel Symbol."] = "Group frame scopes use Group Frames > Dispel Symbol."
+
+--- Player Defensive Buffs (6.0)
+L["Custom 1-3, player Defensive Buffs, and Dots on target are stored per frame. Icon styling and Full-Frame effects here only change %s."] = "Custom 1-3, player Defensive Buffs, and Dots on target are stored per frame. Icon styling and Full-Frame effects here only change %s."
+L["No custom buffs added."] = "No custom buffs added."
+L["Open the frame and expand Auras. Buffs and Debuffs contain their own Blizzard filters and blacklists; Custom 1-3 use whitelists, player Defensive Buffs uses its class list plus custom IDs, and Dots on target uses its curated DoT list."] = "Open the frame and expand Auras. Buffs and Debuffs contain their own Blizzard filters and blacklists; Custom 1-3 use whitelists, player Defensive Buffs uses its class list plus custom IDs, and Dots on target uses its curated DoT list."
+L["Source: player buffs · "] = "Source: player buffs · "

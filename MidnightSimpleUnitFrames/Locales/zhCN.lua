@@ -4680,3 +4680,9 @@ L["Preview symbol"] = "预览符号"
 L["Preview symbol (drag to place)"] = "预览符号（拖动以放置）"
 L["Shows stand-in symbols so placement can be judged without a real debuff, and lets you drag them into position. Turns itself off when this page closes."] = "显示占位符号，让你无需真实减益也能判断位置，并可拖动到合适的地方。关闭此页面时会自动关闭。"
 L["Group frame scopes use Group Frames > Dispel Symbol."] = "团队框体范围请使用 团队框体 > 驱散符号。"
+
+--- 玩家防御增益 (6.0)
+L["Custom 1-3, player Defensive Buffs, and Dots on target are stored per frame. Icon styling and Full-Frame effects here only change %s."] = "自定义 1-3、玩家防御增益和目标持续伤害按框体分别保存。此处的图标样式和全框体效果只会更改 %s。"
+L["No custom buffs added."] = "尚未添加自定义增益。"
+L["Open the frame and expand Auras. Buffs and Debuffs contain their own Blizzard filters and blacklists; Custom 1-3 use whitelists, player Defensive Buffs uses its class list plus custom IDs, and Dots on target uses its curated DoT list."] = "打开框体并展开光环。增益和减益各自使用 Blizzard 过滤器和黑名单；自定义 1-3 使用白名单，玩家防御增益使用职业列表和自定义 ID，目标持续伤害使用精选的 DoT 列表。"
+L["Source: player buffs · "] = "来源：玩家增益 · "

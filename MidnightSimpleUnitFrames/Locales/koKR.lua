@@ -4036,3 +4036,9 @@ L["Preview symbol"] = "표시 미리보기"
 L["Preview symbol (drag to place)"] = "표시 미리보기 (끌어서 배치)"
 L["Shows stand-in symbols so placement can be judged without a real debuff, and lets you drag them into position. Turns itself off when this page closes."] = "실제 약화 효과 없이도 배치를 확인할 수 있도록 예시 표시를 보여주고, 끌어서 원하는 위치에 놓을 수 있습니다. 이 페이지를 닫으면 자동으로 꺼집니다."
 L["Group frame scopes use Group Frames > Dispel Symbol."] = "공대 프레임 범위는 공대 프레임 > 해제 표시를 사용합니다."
+
+--- 플레이어 생존 강화 효과 (6.0)
+L["Custom 1-3, player Defensive Buffs, and Dots on target are stored per frame. Icon styling and Full-Frame effects here only change %s."] = "사용자 설정 1-3, 플레이어 생존 강화 효과, 대상 도트는 프레임별로 저장됩니다. 여기의 아이콘 모양과 전체 프레임 효과는 %s만 변경합니다."
+L["No custom buffs added."] = "추가한 사용자 설정 강화 효과가 없습니다."
+L["Open the frame and expand Auras. Buffs and Debuffs contain their own Blizzard filters and blacklists; Custom 1-3 use whitelists, player Defensive Buffs uses its class list plus custom IDs, and Dots on target uses its curated DoT list."] = "프레임을 열고 오라를 펼치세요. 강화 및 약화 효과에는 각각 Blizzard 필터와 차단 목록이 있습니다. 사용자 설정 1-3은 허용 목록을, 플레이어 생존 강화 효과는 직업 목록과 사용자 ID를, 대상 도트는 선별된 도트 목록을 사용합니다."
+L["Source: player buffs · "] = "출처: 플레이어 강화 효과 · "

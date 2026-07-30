@@ -94,6 +94,17 @@ local function CustomItem(model, unit, index, create)
     if not (model and type(model.CustomContainer) == "function") then return nil end
     return model.CustomContainer(unit, index, create == true)
 end
+function Auras.WantsDefensivePortraitAnchor(key, runtimeSpec)
+    key = Auras.PreviewUnitKey(key)
+    if key ~= "player" then return false end
+    local model = MenuModel()
+    local item = CustomItem(model, key, 4, false)
+    local portrait = runtimeSpec and runtimeSpec.portrait
+    return item and item.portraitIcon == true
+        and item.portraitPositionWhenDisabled == true
+        and portrait and portrait.enabled ~= true
+        or false
+end
 function Auras.PreviewUnitKey(unit)
     if unit == nil then return nil end
     unit = CanonKey(unit)
@@ -352,7 +363,7 @@ function Auras.CreateHandles(box, makeHandle)
                 clearDragOffsets = Auras.ClearDragOffsets,
                 commitOffsets = Auras.CommitOffsets,
                 section = "auras3",
-            }, spec.label, spec.color)
+            }, (index == 4 and PreviewUnit(box) == "player") and "Defensive Buffs" or spec.label, spec.color)
         end
     end
 end
@@ -551,7 +562,7 @@ end
 local function CustomLaneBounds(item, kind, frameW, frameH, metrics, previewEntries, unit, fallbackPadding)
     if type(item) ~= "table" then return nil end
     -- Any custom lane with configured spells previews them 1:1 with the real
-    -- spell icons; only the dot container may show while disabled.
+    -- spell icons; curated index-4 lanes may show while disabled.
     local trackedPreview = type(previewEntries) == "table" and #previewEntries > 0
     if item.enabled ~= true and not (kind == "custom4" and trackedPreview) then return nil end
     local placed = type(item.placed) == "table" and item.placed or {}
@@ -622,6 +633,24 @@ local function CustomLaneBounds(item, kind, frameW, frameH, metrics, previewEntr
     }
 end
 
+local function DefensivePortraitBounds(item, runtimeSpec, previewEntries, unit, metrics)
+    if not (unit == "player" and item and item.portraitIcon == true) then return nil end
+    local portrait = runtimeSpec and runtimeSpec.portrait
+    if not (portrait and (portrait.enabled == true or item.portraitPositionWhenDisabled == true)) then return nil end
+    local width = ClampNumber(portrait.width or portrait.size, 24, 1, 128)
+    local height = ClampNumber(portrait.height or portrait.size, 24, 1, 128)
+    return {
+        size = min(width, height),
+        item = item,
+        previewTexture = type(previewEntries) == "table"
+            and previewEntries[1] and previewEntries[1].icon or AURA_TEXTURES.buff[1],
+        iconStyle = LaneIconStyle(metrics, unit),
+        showCooldownText = item.portraitCooldownText ~= false,
+        showCooldownSwipe = true,
+        cooldownSwipeReverse = item.placed and item.placed.cooldownSwipeReverse == true,
+    }
+end
+
 function Auras.BuildState(key, frameW, frameH, runtimeSpec)
     local runtimeAuras = runtimeSpec and runtimeSpec.auras
     local model = MenuModel()
@@ -632,21 +661,26 @@ function Auras.BuildState(key, frameW, frameH, runtimeSpec)
     local buff = LaneBounds(cfg, "buff", frameW, frameH, key)
     local debuff = LaneBounds(cfg, "debuff", frameW, frameH, key)
     local state = { unit = key, cfg = cfg, runtime = runtimeAuras, buff = buff, debuff = debuff }
-    -- The player frame has no Dots on target container, so its preview never
-    -- builds the custom4 lane.
-    local maxCustomIndex = key == "player" and 3 or 4
-    for index = 1, maxCustomIndex do
+    for index = 1, 4 do
         local kind = "custom" .. tostring(index)
         local metrics = type(cfg.customMetrics) == "table" and cfg.customMetrics[index] or nil
+        local item = CustomItem(model, key, index, false)
         local previewEntries
         if type(model.CustomContainerPreviewEntries) == "function" then
             previewEntries = model.CustomContainerPreviewEntries(key, index)
         elseif type(model.CustomContainerSpellEntries) == "function" then
             previewEntries = model.CustomContainerSpellEntries(key, index)
         end
-        state[kind] = CustomLaneBounds(CustomItem(model, key, index, false), kind, frameW, frameH, metrics, previewEntries, key, cfg.stylePadding)
+        state[kind] = CustomLaneBounds(item, kind, frameW, frameH, metrics, previewEntries, key, cfg.stylePadding)
+        if index == 4 then
+            state.defensivePortrait = DefensivePortraitBounds(
+                item, runtimeSpec, previewEntries, key, metrics)
+        end
     end
-    if not state.buff and not state.debuff and not state.custom1 and not state.custom2 and not state.custom3 and not state.custom4 then return nil end
+    if not state.buff and not state.debuff and not state.custom1 and not state.custom2
+        and not state.custom3 and not state.custom4 and not state.defensivePortrait then
+        return nil
+    end
     return state
 end
 function Auras.ExpandFootprint(state, minX, maxX, minY, maxY)
@@ -813,6 +847,7 @@ function Auras.Hide(box)
     if box.auraPreviewVisuals then
         for _, kind in ipairs(AURA_PREVIEW_KINDS) do HideVisual(box.auraPreviewVisuals[kind]) end
     end
+    if box.defensivePortraitPreview then box.defensivePortraitPreview:Hide() end
 end
 local function ValueOr(value, fallback)
     if value ~= nil then return value end
@@ -1092,6 +1127,57 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
     end
     handle:Show()
 end
+
+local function LayoutDefensivePortrait(box, mock, state, S)
+    local bounds = state and state.defensivePortrait
+    if not (bounds and mock and mock.portrait and mock.portrait.IsShown and mock.portrait:IsShown()) then
+        if box and box.defensivePortraitPreview then box.defensivePortraitPreview:Hide() end
+        return
+    end
+    local icon = box.defensivePortraitPreview
+    if not icon then
+        icon = CreateIcon(mock.portrait)
+        box.defensivePortraitPreview = icon
+    end
+    local textCfg = CustomTextConfig(bounds)
+    textCfg.showCooldownText = bounds.showCooldownText == true
+    textCfg.showStackCount = false
+    textCfg.showCooldownSwipe = bounds.showCooldownSwipe ~= false
+    textCfg.cooldownSwipeReverse = bounds.cooldownSwipeReverse == true
+    textCfg.showDurationBar = false
+    local size = max(8, S(bounds.size))
+    icon:SetSize(size, size)
+    icon:ClearAllPoints()
+    icon:SetPoint("CENTER", mock.portrait, "CENTER", 0, 0)
+    if icon.SetFrameLevel and mock.portrait.GetFrameLevel then
+        icon:SetFrameLevel((mock.portrait:GetFrameLevel() or 1) + 1)
+    end
+    icon.tex:SetTexture(bounds.previewTexture or AURA_TEXTURES.buff[1])
+    ApplyIconZoom(icon.tex, bounds.item and bounds.item.placed and bounds.item.placed.iconZoom)
+    icon.bg:Show()
+    icon.tex:Show()
+    icon.edge:SetVertexColor(0, 0, 0, 0)
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    if a3 and type(a3.ApplyIconStylePreview) == "function" then
+        a3.ApplyIconStylePreview(icon, bounds.iconStyle, size)
+    end
+    if icon.durationBar then icon.durationBar:Hide() end
+    if icon.dispelBorder then icon.dispelBorder:Hide() end
+    icon.stack:SetText("")
+    local auraState = PreviewAuraState("custom4", 1, icon, textCfg)
+    if icon.swipe then
+        LayoutPreviewAuraSwipe(icon.swipe, icon, size,
+            auraState and auraState.remainingFrac, textCfg.cooldownSwipeReverse == true)
+        icon.swipe:Show()
+    end
+    local timerFont = ResolveAuraFont(_timerFontState, max(7, S(textCfg.cooldownSize or 14)))
+    ApplyAuraFont(icon.timer, timerFont)
+    PlaceAuraText(icon.timer, icon, textCfg.cooldownAnchor or "CENTER",
+        S(textCfg.cooldownX or 0), S(textCfg.cooldownY or 0))
+    icon.timer:SetText(bounds.showCooldownText == true and (auraState and auraState.text or "8") or "")
+    icon:Show()
+end
+
 function Auras.Layout(box, mock, state, S, baseLevel)
     if not (box and mock and type(S) == "function") then return end
     if not state then
@@ -1104,4 +1190,5 @@ function Auras.Layout(box, mock, state, S, baseLevel)
         local kind = "custom" .. tostring(index)
         LayoutHandle(box, box["handleAuraCustom" .. tostring(index)], state, kind, S, baseLevel)
     end
+    LayoutDefensivePortrait(box, mock, state, S)
 end

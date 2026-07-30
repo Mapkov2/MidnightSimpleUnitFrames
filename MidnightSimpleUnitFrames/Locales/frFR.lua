@@ -4460,3 +4460,9 @@ L["Preview symbol"] = "Aperçu du symbole"
 L["Preview symbol (drag to place)"] = "Aperçu du symbole (glisser pour placer)"
 L["Shows stand-in symbols so placement can be judged without a real debuff, and lets you drag them into position. Turns itself off when this page closes."] = "Affiche des symboles de substitution afin de juger le placement sans véritable affaiblissement, et permet de les faire glisser en position. S'éteint à la fermeture de cette page."
 L["Group frame scopes use Group Frames > Dispel Symbol."] = "Les portées de cadres de groupe utilisent Cadres de groupe > Symbole de dissipation."
+
+--- Améliorations défensives du joueur (6.0)
+L["Custom 1-3, player Defensive Buffs, and Dots on target are stored per frame. Icon styling and Full-Frame effects here only change %s."] = "Personnalisés 1-3, les améliorations défensives du joueur et les DoT de la cible sont enregistrés par cadre. Le style des icônes et les effets plein cadre ne modifient ici que %s."
+L["No custom buffs added."] = "Aucune amélioration personnalisée ajoutée."
+L["Open the frame and expand Auras. Buffs and Debuffs contain their own Blizzard filters and blacklists; Custom 1-3 use whitelists, player Defensive Buffs uses its class list plus custom IDs, and Dots on target uses its curated DoT list."] = "Ouvrez le cadre et développez Auras. Améliorations et affaiblissements ont leurs filtres et listes noires Blizzard ; Personnalisés 1-3 utilisent des listes blanches, les défensifs du joueur sa liste de classe plus les ID personnalisés, et les DoT de la cible leur liste sélectionnée."
+L["Source: player buffs · "] = "Source : améliorations du joueur · "

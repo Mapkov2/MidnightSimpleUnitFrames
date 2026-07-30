@@ -390,7 +390,7 @@ function Core.ApplyLayerVisibility(box)
         Core.SetShownSafe(box.handlePowerCenter, false)
         Core.SetShownSafe(box.handlePowerRight, false)
     end
-    if not portraitOn then
+    if not portraitOn and not (box._runtimeDefensivePortraitPositionOnly == true and LayerOn("auras")) then
         Core.SetShownSafe(mock.portrait, false)
         Core.SetShownSafe(box.handlePortrait, false)
     end

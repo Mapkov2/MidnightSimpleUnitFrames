@@ -4219,3 +4219,9 @@ L["Preview symbol"] = "Vista previa del símbolo"
 L["Preview symbol (drag to place)"] = "Vista previa del símbolo (arrastra para colocar)"
 L["Shows stand-in symbols so placement can be judged without a real debuff, and lets you drag them into position. Turns itself off when this page closes."] = "Muestra símbolos de marcador de posición para poder juzgar la colocación sin un debuff real, y permite arrastrarlos a su sitio. Se desactiva al cerrar esta página."
 L["Group frame scopes use Group Frames > Dispel Symbol."] = "Los ámbitos de marcos de grupo usan Marcos de grupo > Símbolo de disipación."
+
+--- Beneficios defensivos del jugador (6.0)
+L["Custom 1-3, player Defensive Buffs, and Dots on target are stored per frame. Icon styling and Full-Frame effects here only change %s."] = "Personalizado 1-3, los beneficios defensivos del jugador y los DoT del objetivo se guardan por marco. El estilo de iconos y los efectos de marco completo solo cambian %s."
+L["No custom buffs added."] = "No se han añadido beneficios personalizados."
+L["Open the frame and expand Auras. Buffs and Debuffs contain their own Blizzard filters and blacklists; Custom 1-3 use whitelists, player Defensive Buffs uses its class list plus custom IDs, and Dots on target uses its curated DoT list."] = "Abre el marco y despliega Auras. Beneficios y perjuicios tienen filtros y listas negras de Blizzard; Personalizado 1-3 usa listas blancas, los defensivos del jugador usan su lista de clase más ID personalizados y los DoT del objetivo usan su lista seleccionada."
+L["Source: player buffs · "] = "Fuente: beneficios del jugador · "

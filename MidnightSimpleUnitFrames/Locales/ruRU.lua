@@ -4076,3 +4076,9 @@ L["Preview symbol"] = "Предпросмотр символа"
 L["Preview symbol (drag to place)"] = "Предпросмотр символа (перетащите для размещения)"
 L["Shows stand-in symbols so placement can be judged without a real debuff, and lets you drag them into position. Turns itself off when this page closes."] = "Показывает символы-заполнители, чтобы оценить размещение без реального дебаффа, и позволяет перетащить их на место. Отключается при закрытии этой страницы."
 L["Group frame scopes use Group Frames > Dispel Symbol."] = "Области рамок группы используют Рамки группы > Символ рассеивания."
+
+--- Защитные эффекты игрока (6.0)
+L["Custom 1-3, player Defensive Buffs, and Dots on target are stored per frame. Icon styling and Full-Frame effects here only change %s."] = "Пользовательские 1-3, защитные эффекты игрока и DoT на цели сохраняются отдельно для каждой рамки. Стиль значков и эффекты всей рамки здесь изменяют только %s."
+L["No custom buffs added."] = "Пользовательские эффекты не добавлены."
+L["Open the frame and expand Auras. Buffs and Debuffs contain their own Blizzard filters and blacklists; Custom 1-3 use whitelists, player Defensive Buffs uses its class list plus custom IDs, and Dots on target uses its curated DoT list."] = "Откройте рамку и разверните Ауры. Баффы и дебаффы используют свои фильтры и чёрные списки Blizzard; Пользовательские 1-3 используют белые списки, защитные эффекты игрока — список класса и пользовательские ID, а DoT на цели — отобранный список DoT."
+L["Source: player buffs · "] = "Источник: эффекты игрока · "

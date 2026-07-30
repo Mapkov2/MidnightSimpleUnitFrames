@@ -887,7 +887,15 @@ local function NormalizePortrait(unit)
     return value
 end
 local function SetPortraitValue(unit, key, value, reason)
-    M.SetUnitValue(unit, key, value, reason or "MSUF2_PORTRAIT", { preview = true })
+    local mask = { preview = true }
+    if unit == "player" then
+        local a3 = MSUF and MSUF.MSUF_Auras3
+        local model = a3 and a3.MenuModel
+        local defensive = model and type(model.CustomContainer) == "function"
+            and model.CustomContainer("player", 4, false)
+        if defensive and defensive.portraitIcon == true then mask.auras = true end
+    end
+    M.SetUnitValue(unit, key, value, reason or "MSUF2_PORTRAIT", mask)
 end
 local function NormalizeBossLayoutMode(value, legacyInvert)
     if type(value) == "string" and BOSS_LAYOUT_VALID[value] then return value end

@@ -52,9 +52,7 @@ local SHARED_PREVIEW_SCOPE_VALUES = VTP "player=Player|target=Target|focus=Focus
 local AURA_PREVIEW_MODE_VALUES = VTP "sample=Sample|live=Live"
 local LANE_VALUES = VTP "buff=Buffs|debuff=Debuffs"
 local UNIT_STYLE_CONTAINER_VALUES = VTP "buff=Buffs|debuff=Debuffs|custom1=Custom 1|custom2=Custom 2|custom3=Custom 3|custom4=Dots on target"
--- The player frame has no Dots on target container, so its style scope
--- offers no custom4 entry.
-local UNIT_STYLE_CONTAINER_VALUES_PLAYER = VTP "buff=Buffs|debuff=Debuffs|custom1=Custom 1|custom2=Custom 2|custom3=Custom 3"
+local UNIT_STYLE_CONTAINER_VALUES_PLAYER = VTP "buff=Buffs|debuff=Debuffs|custom1=Custom 1|custom2=Custom 2|custom3=Custom 3|custom4=Defensive Buffs"
 local CUSTOM_FRAME_EFFECTS = VTP "none=None|healthtint=Health Tint|border=Border|glow=Glow|pulse=Pulse|namecolor=Name Overlay"
 local DEBUFF_TYPE_BORDER_MODE_VALUES = VTP "OFF=Off|BORDER=Border|SYMBOL=Border + Symbol"
 local COOLDOWN_SWIPE_DIRECTION_VALUES = VTP "NORMAL=Normal|REVERSE=Reverse"
@@ -595,7 +593,7 @@ local function BuildAuraStyleScopeOverrideSection(ctx, b)
             hint:SetText("")
         elseif custom then
             overrideInfo:SetText("|cffffffff" .. M.Format("%s Custom style", ScopeLabel(current)) .. "|r")
-            hint:SetText(M.Format("Custom 1-3 and Dots on target are stored per frame. Icon styling and Full-Frame effects here only change %s.", ScopeLabel(current)))
+            hint:SetText(M.Format("Custom 1-3, player Defensive Buffs, and Dots on target are stored per frame. Icon styling and Full-Frame effects here only change %s.", ScopeLabel(current)))
         elseif not Model.UseSharedVisuals(current) then
             hint:SetText(Tr("Override active: this scope keeps its own aura style. Shared style changes will not replace it until the override is reset."))
         else
@@ -649,9 +647,6 @@ local function CurrentAuraStyleContainer(scope)
     if (scope == "shared" or IsGroupScope(scope)) and custom then
         container = CurrentLane("auraStyleGFLane", "debuff")
     end
-    if scope == "player" and container == "custom4" then
-        container = CurrentLane("auraStyleGFLane", "debuff")
-    end
     return container
 end
 local function BuildAuraStyleNav(ctx, b, scope)
@@ -687,7 +682,7 @@ local function BuildAuraStyleNav(ctx, b, scope)
         end,
     }), values, "style.container.selector")
     local current = CurrentAuraStyleContainer(scope)
-    local title = current == "custom4" and "Dots on target Aura Style"
+    local title = current == "custom4" and (scope == "player" and "Defensive Buff Aura Style" or "Dots on target Aura Style")
         or (tostring(current):match("^custom[123]$") and ("Custom " .. tostring(current):match("(%d)$") .. " Aura Style"))
         or (LaneTitle(current) .. " Aura Style")
     M.AttachAuraFontsAndColors(section, title, scope)
@@ -2642,7 +2637,9 @@ local function BuildCustomAuraStylePreview(ctx, b, scope, index)
     local liveRefresh = select(2, BuildLiveAuraPreview(ctx, section, scope, "custom" .. tostring(index), 24, -34, w - 48, 176))
     local dummyBox, dummyRefresh = BuildMiniAuraPreview(ctx, section, scope, 24, -220, w - 48, 176, nil, {
         customIndex = index,
-        title = index == 4 and "Tracked DoT Style Preview" or "Dummy + Whitelist Style Preview",
+        title = index == 4
+            and (scope == "player" and "Defensive Buff Style Preview" or "Tracked DoT Style Preview")
+            or "Dummy + Whitelist Style Preview",
     })
     local meta = W.Text(section, "", 24, -414, w - 48, T.colors.muted)
     local function RefreshCustomPreview()
@@ -2651,7 +2648,13 @@ local function BuildCustomAuraStylePreview(ctx, b, scope, index)
         local item = Model.CustomContainer(scope, index, true)
         local placed = item and type(item.placed) == "table" and item.placed or {}
         local frame = item and type(item.frame) == "table" and item.frame or {}
-        local count = type(Model.CustomContainerSpellEntries) == "function" and #Model.CustomContainerSpellEntries(scope, index) or 0
+        local count
+        if type(Model.CustomContainerPreviewEntries) == "function" then
+            count = #Model.CustomContainerPreviewEntries(scope, index)
+        else
+            count = type(Model.CustomContainerSpellEntries) == "function"
+                and #Model.CustomContainerSpellEntries(scope, index) or 0
+        end
         meta:SetText(tostring(tonumber(placed.size) or 24) .. "px · " .. tostring(tonumber(placed.spacing) or 2)
             .. " gap · " .. tostring(tonumber(placed.perRow) or 4) .. " per row · " .. tostring(count)
             .. " whitelisted · Full-Frame: " .. tostring(frame.type or "none"))
@@ -2986,12 +2989,11 @@ local function UniformChoiceWidths(values, width)
 end
 local UNIT_AURA_CHOICE_WIDTH = 92
 local UNIT_AURA_WORKSPACE_TABS = UniformChoiceWidths(VTP "buff=Buffs|debuff=Debuffs|custom1=Custom 1|custom2=Custom 2|custom3=Custom 3|custom4=Dots on target", UNIT_AURA_CHOICE_WIDTH)
--- custom4 mirrors auras you applied to your target, so the player frame
--- never offers that container.
-local UNIT_AURA_WORKSPACE_TABS_PLAYER = UniformChoiceWidths(VTP "buff=Buffs|debuff=Debuffs|custom1=Custom 1|custom2=Custom 2|custom3=Custom 3", UNIT_AURA_CHOICE_WIDTH)
+M._unitAuraWorkspaceTabsPlayer = UniformChoiceWidths(VTP "buff=Buffs|debuff=Debuffs|custom1=Custom 1|custom2=Custom 2|custom3=Custom 3|custom4=Defensives", UNIT_AURA_CHOICE_WIDTH)
 local UNIT_AURA_NORMAL_TOOLS = UniformChoiceWidths(VTP "layout=Layout|filters=Filters|blacklist=Blacklist", UNIT_AURA_CHOICE_WIDTH)
 local UNIT_AURA_CUSTOM_TOOLS = UniformChoiceWidths(VTP "setup=Setup|layout=Layout|filters=Filters|whitelist=Whitelist", UNIT_AURA_CHOICE_WIDTH)
 local UNIT_AURA_TARGET_DOT_TOOLS = UniformChoiceWidths(VTP "setup=Setup|layout=Layout|dots=Dots", UNIT_AURA_CHOICE_WIDTH)
+M._unitAuraPlayerDefensiveTools = UniformChoiceWidths(VTP "setup=Setup|layout=Layout|defensives=Defensives", UNIT_AURA_CHOICE_WIDTH)
 local UNIT_AURA_NORMAL_TOOL_OK = { layout = true, filters = true, blacklist = true }
 local UNIT_AURA_CUSTOM_TOOL_OK = { setup = true, whitelist = true, filters = true, layout = true }
 local UNIT_AURA_TARGET_DOT_TOOL_OK = { setup = true, layout = true, dots = true }
@@ -3001,9 +3003,11 @@ local function CurrentUnitAuraTool(unit, container)
     local unitState = M.unitAuraToolSelection[unit]
     if type(unitState) ~= "table" then unitState = {}; M.unitAuraToolSelection[unit] = unitState end
     local custom = tostring(container or ""):match("^custom") ~= nil
-    local targetDots = container == "custom4"
+    local playerDefensives = unit == "player" and container == "custom4"
+    local targetDots = unit ~= "player" and container == "custom4"
     local tool = unitState[container]
-    local valid = targetDots and UNIT_AURA_TARGET_DOT_TOOL_OK or (custom and UNIT_AURA_CUSTOM_TOOL_OK or UNIT_AURA_NORMAL_TOOL_OK)
+    local valid = playerDefensives and { setup = true, layout = true, defensives = true }
+        or (targetDots and UNIT_AURA_TARGET_DOT_TOOL_OK or (custom and UNIT_AURA_CUSTOM_TOOL_OK or UNIT_AURA_NORMAL_TOOL_OK))
     if not valid[tool] then tool = custom and "setup" or "layout"; unitState[container] = tool end
     return tool
 end
@@ -3653,11 +3657,10 @@ end
 function M.BuildAuras3UnitSection(ctx, builder, unit)
     if not Model.UnitSupported(unit) then return end
     M.unitAuraTabSelection = M.unitAuraTabSelection or {}
-    local workspaceTabs = unit == "player" and UNIT_AURA_WORKSPACE_TABS_PLAYER or UNIT_AURA_WORKSPACE_TABS
+    local workspaceTabs = unit == "player" and M._unitAuraWorkspaceTabsPlayer or UNIT_AURA_WORKSPACE_TABS
     local function CurrentTab()
         local tab = M.unitAuraTabSelection[unit] or "buff"
         if tab ~= "buff" and tab ~= "debuff" and tab ~= "custom1" and tab ~= "custom2" and tab ~= "custom3" and tab ~= "custom4" then tab = "buff" end
-        if tab == "custom4" and unit == "player" then tab = "buff" end
         return tab
     end
     local currentTab = CurrentTab()
@@ -3666,7 +3669,10 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
     local outer = builder:CollapsibleSection("auras", "Auras", 120, false)
     local auraBuilder = CreateNestedAuraBuilder(ctx, builder, outer)
     local sectionW = auraBuilder.width or 720
-    local tools = normalLane and UNIT_AURA_NORMAL_TOOLS or (currentTab == "custom4" and UNIT_AURA_TARGET_DOT_TOOLS or UNIT_AURA_CUSTOM_TOOLS)
+    local tools = normalLane and UNIT_AURA_NORMAL_TOOLS
+        or (currentTab == "custom4"
+            and (unit == "player" and M._unitAuraPlayerDefensiveTools or UNIT_AURA_TARGET_DOT_TOOLS)
+            or UNIT_AURA_CUSTOM_TOOLS)
     local containerCenterY = -28
     local containerMetrics = W.MeasureScopeOverrideBar and W.MeasureScopeOverrideBar(workspaceTabs, {
         width = sectionW,
@@ -3749,8 +3755,10 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
     -- identity.  Reusing one path for Custom 1/2/3 made the generated schema
     -- collapse three different fixed argument contracts into one action.
     local customActionPath = "custom-container.custom" .. tostring(index)
-    local isTargetDots = index == 4
-    local containerLabel = isTargetDots and "Dots on target" or ("Custom " .. tostring(index))
+    local isPlayerDefensives = unit == "player" and index == 4
+    local isTargetDots = unit ~= "player" and index == 4
+    local containerLabel = isPlayerDefensives and "Defensive Buffs"
+        or (isTargetDots and "Dots on target" or ("Custom " .. tostring(index)))
     local item = Model.CustomContainer(unit, index, true)
     if not item then return end
     item.filters = type(item.filters) == "table" and item.filters or {}
@@ -3764,6 +3772,138 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
     local function Grid(w, count, gap)
         gap = gap or 10
         return floor(((w - 48) - gap * (count - 1)) / count), gap
+    end
+
+    if tool == "defensives" and isPlayerDefensives then
+        local section = b:Section("Defensive Buffs", 500)
+        local w = section._msuf2Width or b.width or 720
+        local inner = w - 48
+        local predefined = type(Model.PlayerDefensiveClassEntries) == "function"
+            and Model.PlayerDefensiveClassEntries(true) or {}
+        local predefinedStatus = W.Text(section, "", 24, -34, inner, T.colors.accent)
+        local predefinedScroll = CreateFrame("ScrollFrame", nil, section, "UIPanelScrollFrameTemplate")
+        predefinedScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -62)
+        predefinedScroll:SetSize(inner - 20, 184)
+        if predefinedScroll.EnableMouseWheel then predefinedScroll:EnableMouseWheel(true) end
+        local predefinedChild = CreateFrame("Frame", nil, predefinedScroll)
+        predefinedChild:SetSize(inner - 44, max(184, #predefined * 30))
+        predefinedScroll:SetScrollChild(predefinedChild)
+        if predefinedScroll.SetPropagateMouseWheel then predefinedScroll:SetPropagateMouseWheel(false) end
+        predefinedScroll:SetScript("OnMouseWheel", function(self, delta) HandleNestedScrollWheel(self, delta, 30) end)
+        local predefinedSwitches = {}
+        local function RefreshPredefined()
+            local enabledCount = 0
+            for i = 1, #predefined do
+                local entry = predefined[i]
+                local enabled = Model.PlayerDefensiveSpellEnabled(unit, entry.spellID)
+                if enabled then enabledCount = enabledCount + 1 end
+                local switch = predefinedSwitches[i]
+                if switch then switch:SetChecked(enabled) end
+            end
+            predefinedStatus:SetText(tostring(enabledCount) .. " / " .. tostring(#predefined)
+                .. " predefined enabled · active abilities and passive talent procs")
+        end
+        for i = 1, #predefined do
+            local entry = predefined[i]
+            local spellID = entry.spellID
+            local icon = predefinedChild:CreateTexture(nil, "ARTWORK")
+            icon:SetPoint("TOPLEFT", predefinedChild, "TOPLEFT", 0, -((i - 1) * 30))
+            icon:SetSize(22, 22)
+            icon:SetTexture(entry.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
+            local switch = W.SwitchAt(predefinedChild, entry.text or tostring(spellID),
+                30, -((i - 1) * 30) - 1, inner - 104)
+            switch:SetScript("OnClick", function(self)
+                local changed = Model.SetPlayerDefensiveSpellEnabled(unit, spellID, self:GetChecked())
+                if changed then Apply("AURAS3_PLAYER_DEFENSIVE_PREDEFINED_TOGGLE", true) end
+                RefreshPredefined()
+            end)
+            AddTooltip(switch, entry.text or tostring(spellID),
+                "Track this predefined defensive buff. The setting applies to both the defensive bar and the optional portrait icon.")
+            predefinedSwitches[i] = switch
+        end
+        M.TrackRefresh(ctx, RefreshPredefined)
+        local customInputValue = ""
+        local customInput = BindTextInput(ctx, section, "Custom Buff Spell ID", 24, -278, max(300, inner - 132),
+            function() return customInputValue end,
+            function(value) customInputValue = value or "" end,
+            false, AuraControlMeta(ctx, "custom-container.player-defensives.custom-id", "ephemeral"))
+        local addCustom = ActionButton(section, "Add Custom ID", 108)
+        addCustom:SetPoint("TOPRIGHT", section, "TOPRIGHT", -24, -300)
+        addCustom:SetScript("OnClick", function()
+            local value = customInput and customInput.GetText and customInput:GetText() or customInputValue
+            local changed = Model.AddCustomContainerSpell(unit, index, value, true)
+            if changed then
+                if customInput and customInput.SetText then customInput:SetText("") end
+                customInputValue = ""
+                Apply("AURAS3_PLAYER_DEFENSIVE_CUSTOM_ADD", true)
+                Rebuild(ctx)
+            end
+            return changed and true or false
+        end)
+        RegisterAuraTextAction(ctx, addCustom, customInput, "Add Custom ID",
+            customActionPath .. ".defensives.custom-id.add", {
+                actionKey = "aura_custom_whitelist_add_spell",
+                actionFixedArgs = { scope = unit, index = index },
+                actionInputArg = "value",
+            })
+        AddTooltip(customInput, "Custom Buff Spell ID",
+            "Adds an exact helpful player aura ID in addition to the complete predefined list for your current class.")
+        local status = W.Text(section, "", 24, -348, inner, T.colors.accent)
+        local empty = W.Text(section, "No custom buffs added.", 24, -380, inner, T.colors.muted)
+        local listScroll = CreateFrame("ScrollFrame", nil, section, "UIPanelScrollFrameTemplate")
+        listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -374)
+        listScroll:SetSize(inner - 20, 96)
+        if listScroll.EnableMouseWheel then listScroll:EnableMouseWheel(true) end
+        local listChild = CreateFrame("Frame", nil, listScroll)
+        listChild:SetSize(inner - 44, 104)
+        listScroll:SetScrollChild(listChild)
+        if listScroll.SetPropagateMouseWheel then listScroll:SetPropagateMouseWheel(false) end
+        listScroll:SetScript("OnMouseWheel", function(self, delta) HandleNestedScrollWheel(self, delta, 32) end)
+        local rows = {}
+        local function EnsureRow(i)
+            local row = rows[i]
+            if row then return row end
+            row = CreateFrame("Button", nil, listChild)
+            row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((i - 1) * 24))
+            row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((i - 1) * 24))
+            row:SetHeight(20)
+            row.icon = row:CreateTexture(nil, "ARTWORK")
+            row.icon:SetPoint("LEFT", row, "LEFT", 3, 0)
+            row.icon:SetSize(17, 17)
+            row.text = T.Font(row, "GameFontHighlightSmall", "", T.colors.text)
+            row.text:SetPoint("LEFT", row.icon, "RIGHT", 8, 0)
+            row:SetScript("OnClick", function(self)
+                if self._spellID and Model.RemoveCustomContainerSpell(unit, index, self._spellID) then
+                    Apply("AURAS3_PLAYER_DEFENSIVE_CUSTOM_REMOVE", true)
+                    Rebuild(ctx)
+                end
+            end)
+            rows[i] = row
+            return row
+        end
+        M.TrackRefresh(ctx, function()
+            local entries = Model.CustomContainerSpellEntries(unit, index)
+            local enabledPredefined = type(Model.PlayerDefensivePreviewEntries) == "function"
+                and #Model.PlayerDefensivePreviewEntries() or 0
+            status:SetText(tostring(enabledPredefined) .. " predefined enabled · "
+                .. tostring(#entries) .. " custom · click a custom entry to remove")
+            empty:SetShown(#entries == 0)
+            listScroll:SetShown(#entries > 0)
+            listChild:SetHeight(max(104, #entries * 24))
+            for i = 1, max(#rows, #entries) do
+                local row, entry = rows[i], entries[i]
+                if entry then
+                    row = EnsureRow(i)
+                    row._spellID = entry.spellID
+                    row.icon:SetTexture(entry.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
+                    row.text:SetText(entry.text or tostring(entry.spellID))
+                    RegisterAuraControl(ctx, row, entry.text or tostring(entry.spellID), "button",
+                        customActionPath .. ".defensives.entry." .. AuraCatalogToken(entry.spellID) .. ".remove", "action")
+                    row:Show()
+                elseif row then row._spellID = nil; row:Hide() end
+            end
+        end)
+        return
     end
 
     if tool == "dots" and isTargetDots then
@@ -4159,13 +4299,16 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
         BindSwitch(ctx, cooldown, "Cooldown swipe", cdX(2), -42, cdCol, function() return item.placed.showCooldownSwipe ~= false end,
             function(value) item.placed.showCooldownSwipe = value == true; Apply("AURAS3_CUSTOM_SWIPE") end,
             AuraControlMeta(ctx, "custom-container.appearance.cooldown-swipe"))
+        local customDecimal = CdNumber("Decimals below sec", 4, -76, 0, 30, "cooldownDecimalSeconds", 3)
+        AddTooltip(customDecimal, "Cooldown text format",
+            "Remaining time below this value uses one decimal place. Timers show unitless seconds below 1 minute and localized minutes above it. Set 0 for whole seconds only.")
         GateControls(function() return item.placed.showCooldown ~= false end, {
             CdNumber("Cooldown size", 1, -76, 6, 40, "cooldownSize", 14),
             BindDropdown(ctx, cooldown, "Cooldown anchor", cdX(3), -76, Model.AuraAnchorValues(), cdCol,
                 function() return item.placed.cooldownAnchor or "CENTER" end,
                 function(value) item.placed.cooldownAnchor = value or "CENTER"; Apply("AURAS3_CUSTOM_COOLDOWN_ANCHOR") end,
                 AuraControlMeta(ctx, "custom-container.appearance.cooldown-anchor")),
-            CdNumber("Decimals", 4, -76, 0, 30, "cooldownDecimalSeconds", 3),
+            customDecimal,
             CdNumber("Cooldown X", 1, -130, -40, 40, "cooldownX", 0),
             CdNumber("Cooldown Y", 2, -130, -40, 40, "cooldownY", 0),
         })
@@ -4318,6 +4461,76 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
         return
     end
 
+    if isPlayerDefensives then
+        local section = b:Section("Defensive Buffs Setup", 304)
+        local w = section._msuf2Width or b.width or 720
+        local inner = w - 48
+        BindSwitch(ctx, section, "Enabled", 24, -48, 112,
+            function() return item.enabled == true end,
+            function(value)
+                item.enabled = value == true
+                if item.enabled then item.portraitIcon = false end
+                Apply("AURAS3_PLAYER_DEFENSIVES_ENABLE", true)
+            end,
+            AuraControlMeta(ctx, "custom-container.player-defensives.enabled"))
+        local portrait = BindSwitch(ctx, section, "Show active buff on portrait", 24, -86, 260,
+            function() return item.portraitIcon == true end,
+            function(value)
+                item.portraitIcon = value == true
+                if item.portraitIcon then item.enabled = false end
+                Apply("AURAS3_PLAYER_DEFENSIVE_PORTRAIT", true)
+            end,
+            AuraControlMeta(ctx, "custom-container.player-defensives.portrait-icon"))
+        AddTooltip(portrait, "Show active buff on portrait",
+            "Shows one active defensive buff directly on the player portrait instead of duplicating it in the defensive buff bar. The defensive icon, swipe, and duration text stay together and take priority over a cast icon.")
+        local cooldownText = BindSwitch(ctx, section, "Show cooldown text on portrait", 24, -124, 280,
+            function() return item.portraitCooldownText ~= false end,
+            function(value)
+                item.portraitCooldownText = value == true
+                Apply("AURAS3_PLAYER_DEFENSIVE_PORTRAIT_COOLDOWN", true)
+            end,
+            AuraControlMeta(ctx, "custom-container.player-defensives.portrait-cooldown-text"))
+        AddTooltip(cooldownText, "Show cooldown text on portrait",
+            "Shows the active defensive buff's remaining duration over its portrait icon. Blizzard updates the text natively.")
+        local positionOnly = BindSwitch(ctx, section, "Use portrait position while portrait is off", 24, -162, 326,
+            function() return item.portraitPositionWhenDisabled == true end,
+            function(value)
+                item.portraitPositionWhenDisabled = value == true
+                Apply("AURAS3_PLAYER_DEFENSIVE_PORTRAIT_POSITION", true)
+            end,
+            AuraControlMeta(ctx, "custom-container.player-defensives.portrait-position-when-disabled"))
+        AddTooltip(positionOnly, "Use portrait position while portrait is off",
+            "Keeps the configured portrait size and position as an invisible anchor so the defensive icon can remain there while the portrait itself is disabled.")
+        local autoBlacklist = BindSwitch(ctx, section, "Auto-blacklist from player buffs", 24, -200, 280,
+            function() return item.autoBlacklistPlayerBuffs ~= false end,
+            function(value)
+                item.autoBlacklistPlayerBuffs = value == true
+                Apply("AURAS3_PLAYER_DEFENSIVE_AUTO_BLACKLIST", true)
+            end,
+            AuraControlMeta(ctx, "custom-container.player-defensives.auto-blacklist"))
+        AddTooltip(autoBlacklist, "Auto-blacklist from player buffs",
+            "While the defensive bar or portrait icon is enabled, hides every enabled tracked defensive from the normal player Buffs lane. Disabled defensive entries remain visible there.")
+        local reset = ActionButton(section, "Reset", 88)
+        reset:SetPoint("TOPRIGHT", section, "TOPRIGHT", -24, -42)
+        reset:SetScript("OnClick", function()
+            Model.ResetCustomContainer(unit, index)
+            Apply("AURAS3_PLAYER_DEFENSIVES_RESET", true)
+            Rebuild(ctx)
+        end)
+        RegisterAuraControl(ctx, reset, "Reset", "button", customActionPath .. ".setup.reset", "action", {
+            actionKey = "reset_aura_custom_container", actionFixedArgs = { scope = unit, index = index },
+        })
+        local predefined = type(Model.PlayerDefensivePreviewEntries) == "function"
+            and #Model.PlayerDefensivePreviewEntries() or 0
+        local predefinedTotal = type(Model.PlayerDefensiveClassEntries) == "function"
+            and #Model.PlayerDefensiveClassEntries(true) or predefined
+        local custom = #Model.CustomContainerSpellEntries(unit, index)
+        W.Text(section, "Source: player buffs · " .. tostring(predefined) .. " / "
+            .. tostring(predefinedTotal) .. " predefined enabled · " .. tostring(custom)
+            .. " custom · passive talent procs included", 24, -258, inner, T.colors.muted)
+        return
+    end
+
     if isTargetDots then
         local section = b:Section("Dots on target Setup", 132)
         local w = section._msuf2Width or b.width or 720
@@ -4384,7 +4597,7 @@ local function BuildMovedAuraPage(ctx)
         RegisterAuraControl(ctx, button, page[1], "button", "moved-page.open." .. AuraCatalogToken(page[2]), "navigation", page[2])
         x = x + (i == 5 and 144 or 104)
     end
-    W.Text(section, "Open the frame and expand Auras. Buffs and Debuffs contain their own Blizzard filters and blacklists; Custom 1-3 use whitelists, and Dots on target uses its curated DoT list.", 24, -118, w - 48, T.colors.muted)
+    W.Text(section, "Open the frame and expand Auras. Buffs and Debuffs contain their own Blizzard filters and blacklists; Custom 1-3 use whitelists, player Defensive Buffs uses its class list plus custom IDs, and Dots on target uses its curated DoT list.", 24, -118, w - 48, T.colors.muted)
     FinishPage(ctx, b)
 end
 
