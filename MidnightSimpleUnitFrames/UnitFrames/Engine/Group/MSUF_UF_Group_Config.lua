@@ -992,9 +992,22 @@ local function AuraFilterString(groupKey, group)
   if groupKey == "buff" or groupKey == "trackedBuff" then
     return filter and filter.ResolveBuffFilter and filter.ResolveBuffFilter(token) or "HELPFUL"
   elseif groupKey == "externals" then
-    return filter and filter.EXTERNALS_TOKEN or "HELPFUL|EXTERNAL_DEFENSIVE|!PLAYER"
+    -- Match Blizzard's 12.1 ExternalDefensivesFrame. EXTERNAL_DEFENSIVE already
+    -- identifies defensives received from other players; !PLAYER only adds an
+    -- avoidable caster-identity restriction for group units.
+    return filter and filter.EXTERNALS_TOKEN or "HELPFUL|EXTERNAL_DEFENSIVE"
   end
   return filter and filter.ResolveDebuffFilter and filter.ResolveDebuffFilter(token) or "HARMFUL"
+end
+
+local function ExcludeAuraFilterToken(filterString, token)
+  filterString = tostring(filterString or "")
+  token = tostring(token or "")
+  if token == "" then return filterString end
+  local exclusion = "!" .. token
+  if filterString:find(exclusion, 1, true) then return filterString end
+  if filterString == "" then return exclusion end
+  return filterString .. "|" .. exclusion
 end
 
 local function AuraTextAnchor(value, fallback)
@@ -1214,6 +1227,12 @@ local function BuildSpellIndicatorAuraHashes(conf)
   local specs = CollectSpellIndicatorSpecs(siCfg, si)
   local hash, count, autoBlacklistHash, autoBlacklistCount = {}, 0, nil, 0
   local autoBlacklistEnabled = siCfg.enabled == true
+  local auraRoot = type(conf and conf.auras) == "table" and conf.auras or nil
+  local externals = auraRoot and type(auraRoot.externals) == "table" and auraRoot.externals or {}
+  local externalLaneActive = (auraRoot == nil or auraRoot.enabled ~= false)
+    and externals.enabled ~= false and Num(externals.max, 2) > 0
+  local externalAutoBlacklistActive = externalLaneActive
+    and externals.autoBlacklistBuffs ~= false
   for i = 1, #specs do
     local specKey = specs[i]
     local specCfg = siCfg.specs and siCfg.specs[specKey]
@@ -1233,7 +1252,17 @@ local function BuildSpellIndicatorAuraHashes(conf)
           if not (type(defaults) == "table" and defaults[auraName] ~= nil) then
             count = count + AddSpellIDsForAura(hash, si, specKey, auraName, entry)
           end
-          if autoBlacklistEnabled and entry.autoBlacklist == true then
+          local externalDefensive = type(si.IsExternalDefensiveAura) == "function"
+            and si.IsExternalDefensiveAura(specKey, auraName, entry) == true
+          -- The native !EXTERNAL_DEFENSIVE filter already owns this case and
+          -- is both broader and cheaper than duplicating every external ID.
+          -- Without the External lane, an own-cast-only Spell Icon must not
+          -- blacklist the ID globally: that would also erase another player's
+          -- Ironbark (or equivalent) from Buffs with nowhere else to show it.
+          local safeToBlacklist = not externalDefensive
+            or (not externalAutoBlacklistActive
+              and (externalLaneActive or entry.onlyOwn == false))
+          if autoBlacklistEnabled and entry.autoBlacklist == true and safeToBlacklist then
             autoBlacklistHash = autoBlacklistHash or {}
             autoBlacklistCount = autoBlacklistCount + AddSpellIDsForAura(autoBlacklistHash, si, specKey, auraName, entry)
           end
@@ -1340,6 +1369,12 @@ local function CompileCoreAuras(kind, conf)
     showStealableBuffs = false,
   }
   ApplyAuraLane(out, "buff", "buff", buff, AURA_LANE_DEFAULTS.buff, Num(conf.auraMaxIcons, 4), defaultBuffSize, buffGrowthX, buffGrowthY, S, kind)
+  -- 12.1 filter components are natively negatable. Keep external defensives
+  -- out of the normal Buff lane only while their dedicated lane is actually
+  -- active; disabling that lane immediately restores them to Buffs.
+  if showExternals == true and Num(externals.max, 2) > 0 and externals.autoBlacklistBuffs ~= false then
+    out.buffFilter = ExcludeAuraFilterToken(out.buffFilter, "EXTERNAL_DEFENSIVE")
+  end
   out.buffBlacklistHash = MergeSpellIDHashes(out.buffBlacklistHash, spellIndicatorAutoBlacklistHash)
   local trackedBuff = {
     max = trackedBuffMax,

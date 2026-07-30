@@ -495,7 +495,11 @@ local GROUP_LANE_SPECS = {
         defaultLayer = 6,
     },
     external = {
-        rootKey = "Externals", filter = "HELPFUL|RAID",
+        -- EXTERNAL_DEFENSIVE already means a defensive received from another
+        -- player. Match Blizzard's 12.1 ExternalDefensivesFrame exactly; adding
+        -- !PLAYER needlessly makes the query depend on caster identity and can
+        -- suppress valid externals such as Ironbark on restricted group units.
+        rootKey = "Externals", filter = "HELPFUL|EXTERNAL_DEFENSIVE",
         showKey = "showExternals", maxKey = "maxExternals", sizeKey = "externalIconSize",
         iconZoomKey = "externalIconZoom",
         spacingKey = "externalSpacing", perRowKey = "externalPerRow", growthXKey = "externalGrowthX",

@@ -27,7 +27,16 @@ SI.SecretSpellIDs = SI.SecretSpellIDs or {}
 SI.IconTextures = SI.IconTextures or {}
 SI.TrackableAuras = SI.TrackableAuras or {}
 SI.SpecDefaults = SI.SpecDefaults or {}
+SI.ExternalDefensiveAuras = SI.ExternalDefensiveAuras or {}
 SI.SpecMap = SI.SpecMap or {}
+
+function SI.IsExternalDefensiveAura(specKey, auraName, entry)
+  if type(entry) == "table" and entry.externalDefensive ~= nil then
+    return entry.externalDefensive == true
+  end
+  local specAuras = SI.ExternalDefensiveAuras[specKey]
+  return type(specAuras) == "table" and specAuras[auraName] == true
+end
 
 local function SpellID(value)
   local id = tonumber(value)

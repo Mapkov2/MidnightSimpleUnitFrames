@@ -1112,7 +1112,10 @@ end
 GF_AURA_FILTER.ResolveDebuffFilter = function(token)
     return ResolveGFNativeFilter(token, "HARMFUL", GF_NATIVE_DEBUFF_FILTERS)
 end
-GF_AURA_FILTER.EXTERNALS_TOKEN = "HELPFUL|EXTERNAL_DEFENSIVE|!PLAYER"
+-- Blizzard's 12.1 external-defensive token already selects defensives received
+-- from other players. Keep the dedicated lane identical to the native viewer;
+-- !PLAYER adds a redundant caster-identity dependency on restricted group units.
+GF_AURA_FILTER.EXTERNALS_TOKEN = "HELPFUL|EXTERNAL_DEFENSIVE"
 GF_AURA_FILTER.BuildBlacklistHash = GF_AURA_FILTER.BuildBlacklistHash or BuildGroupBlacklistHash
 GF_AURA_FILTER.InvalidateBlacklistHash = GF_AURA_FILTER.InvalidateBlacklistHash or function(group)
     if type(group) == "table" then _gfBlacklistHashCache[group] = nil end

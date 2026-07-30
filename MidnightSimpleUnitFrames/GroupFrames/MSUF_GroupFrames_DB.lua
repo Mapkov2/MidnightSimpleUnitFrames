@@ -1555,7 +1555,7 @@ local LEGACY_DEBUFF_DEFAULTS = {
 local LEGACY_EXTERNAL_DEFAULTS = {
     enabled = true, anchor = "CENTER", growth = "RIGHTDOWN",
     x = 0, y = 0, size = 28, iconScale = 100, perRow = 3, max = 2, spacing = 1,
-    layer = 7,
+    layer = 7, autoBlacklistBuffs = true,
     showCooldownSwipe = true, showCooldown = true, cooldownAnchor = "CENTER",
     cooldownOffsetX = 0, cooldownOffsetY = 0, cooldownSize = 10, cooldownOutline = "OUTLINE",
     showStacks = false, stackAnchor = "BOTTOMRIGHT",

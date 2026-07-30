@@ -456,6 +456,13 @@ local function CompileSpellIndicatorItem(si, specKey, auraName, entry, order, gl
   else
     onlyOwn = entry.onlyOwn ~= false
   end
+  local externalDefensive = type(si.IsExternalDefensiveAura) == "function"
+    and si.IsExternalDefensiveAura(specKey, auraName, entry) == true
+  local nativeFilter
+  if externalDefensive then
+    nativeFilter = onlyOwn and "HELPFUL|EXTERNAL_DEFENSIVE|PLAYER"
+      or "HELPFUL|EXTERNAL_DEFENSIVE"
+  end
   return {
     key = tostring(specKey) .. ":" .. tostring(auraName),
     specKey = specKey,
@@ -467,6 +474,8 @@ local function CompileSpellIndicatorItem(si, specKey, auraName, entry, order, gl
     layer = Layer(entry.layer, globalLayer or 9),
     strata = entry.strata ~= nil and NormalizeFrameStrata(entry.strata, "AUTO") or nil,
     onlyOwn = onlyOwn,
+    externalDefensive = externalDefensive,
+    nativeFilter = nativeFilter,
     spellIDs = ids,
     includeSpellIDs = hash,
     spellIDSignature = SpellIDSignature(ids),

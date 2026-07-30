@@ -185,6 +185,25 @@ SI.SecretSpellIDs = {
   RetributionPaladin = PALADIN_SECRET_BLESSINGS,
 }
 
+-- Built-in Spell Icons that Blizzard's 12.1 aura system classifies through
+-- HELPFUL|EXTERNAL_DEFENSIVE. Keep this explicit instead of inferring from a
+-- spell name or the opaque SecretAuraInfo signature: both the compiler and
+-- Menu2 need the same stable answer before aura data exists.
+local PALADIN_EXTERNAL_DEFENSIVES = {
+  BlessingOfProtection = true,
+  BlessingOfSacrifice = true,
+}
+SI.ExternalDefensiveAuras = {
+  PreservationEvoker = { TimeDilation = true },
+  RestorationDruid = { IronBark = true },
+  DisciplinePriest = { PainSuppression = true },
+  HolyPriest = { GuardianSpirit = true },
+  MistweaverMonk = { LifeCocoon = true },
+  HolyPaladin = PALADIN_EXTERNAL_DEFENSIVES,
+  ProtectionPaladin = PALADIN_EXTERNAL_DEFENSIVES,
+  RetributionPaladin = PALADIN_EXTERNAL_DEFENSIVES,
+}
+
 local function Sig(signature)
   return { signature = signature }
 end

@@ -410,6 +410,28 @@ local function BuildGFAuras(ctx)
         W.SwitchAt(rootSection, "Enable group auras", 24, -50, rootWidth - 48))
     rootEnabled._msuf2GroupFrameGateAlwaysEnabled = true
 
+    if tool == "layout" and lane == "externals" then
+        local filterSection = auraBuilder:Section("External Defensive Filtering", 88)
+        local filterWidth = filterSection._msuf2Width or auraBuilder.width or 720
+        local autoBlacklist = W.SwitchAt(filterSection, "Auto-blacklist from Buffs", 24, -50, filterWidth - 48)
+        M.BindBoolWidget(ctx, autoBlacklist,
+            function()
+                return AuraGroup(CurrentScope(), "externals").autoBlacklistBuffs ~= false
+            end,
+            function(value)
+                local activeScope = CurrentScope()
+                AuraGroup(activeScope, "externals").autoBlacklistBuffs = value == true
+                if QueueGF then QueueGF(activeScope, "auras") end
+                M.CallIf(RefreshContext, ctx)
+            end,
+            AuraControlMeta(ctx, "group-workspace.lane.externals.auto-blacklist-buffs", nil, {}))
+        if type(M.AddTooltip) == "function" then
+            M.AddTooltip(autoBlacklist, "Auto-blacklist from Buffs",
+                "While External Defensives is visible and Max is above 0, hides every aura Blizzard classifies as EXTERNAL_DEFENSIVE from the normal Buffs container. If External Defensives is disabled, those auras remain visible in Buffs.",
+                { hook = true, titleAsLine = true })
+        end
+    end
+
     if tool == "layout" then
         local title = lane == "debuff" and "Debuff Layout"
             or (lane == "externals" and "External Defensive Layout" or "Buff Layout")
@@ -481,4 +503,4 @@ local function BuildGFAuras(ctx)
     if GP.BuildSpellIndicatorsSection then GP.BuildSpellIndicatorsSection(ctx, b, RefreshPage) end
     FinalizeScopePage(ctx, b)
 end
-M.RegisterPage("gf_auras", { title = "MSUF Group Auras", build = BuildGFAuras, version = 28 })
+M.RegisterPage("gf_auras", { title = "MSUF Group Auras", build = BuildGFAuras, version = 29 })

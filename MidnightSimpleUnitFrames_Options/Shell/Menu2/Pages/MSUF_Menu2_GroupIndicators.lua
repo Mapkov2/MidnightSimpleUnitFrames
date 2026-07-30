@@ -884,6 +884,21 @@ local function CurrentAuraInfo(kind)
     end
     return nil, specKey, auraName
 end
+local function CurrentSpellIsExternalDefensive(kind)
+    local cfg, specKey, auraName = CurrentSpellConfig(kind, false)
+    local runtime = SpellIndicatorRuntime()
+    return runtime and type(runtime.IsExternalDefensiveAura) == "function"
+        and runtime.IsExternalDefensiveAura(specKey, auraName, cfg) == true
+end
+local function ExternalAutoBlacklistActive(kind)
+    local conf = Conf(kind)
+    local root = type(conf and conf.auras) == "table" and conf.auras or nil
+    local externals = root and type(root.externals) == "table" and root.externals or {}
+    return (root == nil or root.enabled ~= false)
+        and externals.enabled ~= false
+        and (tonumber(externals.max) or 2) > 0
+        and externals.autoBlacklistBuffs ~= false
+end
 local function CurrentAuraColor(kind)
     local info = CurrentAuraInfo(kind)
     return (info and info.color) or WHITE_RGB
@@ -1615,6 +1630,10 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
     M.BindBoolWidget(ctx, autoBlacklist,
         function()
             local cfg = CurrentSpellConfig(CurrentScope(), false)
+            if CurrentSpellIsExternalDefensive(CurrentScope())
+                and ExternalAutoBlacklistActive(CurrentScope()) then
+                return true
+            end
             return cfg and cfg.autoBlacklist == true or false
         end,
         function(value)
@@ -1625,7 +1644,7 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         ControlMeta(ctx, "spell.selected.auto_blacklist"))
     if M.AddTooltip then
         M.AddTooltip(autoBlacklist, "Hide duplicate Buff icon",
-            "Hides this aura from the regular Buff icons while this spell indicator is enabled.",
+            "Hides this aura from the regular Buff icons while this spell indicator is enabled. External-defensive Spell Icons follow the active External Defensives container's Auto-blacklist from Buffs setting.",
             { hook = true, titleAsLine = true })
     end
     local function BindPlacedDropdown(label, values, key, default, y, afterSet)
@@ -1951,7 +1970,11 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         SetManyEnabled(indicatorsOn, siLayer, specDrop)
         SetOptionEnabled(multiSpecDrop, indicatorsOn and multi)
         SetOptionEnabled(multiSpecEnabled, indicatorsOn and multi and CurrentSpellMultiSpec(CurrentScope()) ~= "")
-        SetManyEnabled(hasSpell, spellEnabled, onlyMine, autoBlacklist, placedType)
+        local externalBlacklistManaged = hasSpell
+            and CurrentSpellIsExternalDefensive(CurrentScope())
+            and ExternalAutoBlacklistActive(CurrentScope())
+        SetManyEnabled(hasSpell, spellEnabled, onlyMine, placedType)
+        SetOptionEnabled(autoBlacklist, hasSpell and not externalBlacklistManaged)
         SetOptionEnabled(customSpellIDs, customSpell)
         SetManyEnabled(placedEnabled, placedAnchor, placedSize, placedX, placedY, placedGrowth)
         SetOptionEnabled(placedBarWidth, barRelevant)
