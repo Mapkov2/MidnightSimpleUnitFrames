@@ -19,6 +19,8 @@ local UIParent = UIParent
 local MAX_BOSS_FRAMES = _G.MAX_BOSS_FRAMES or 5
 local hiddenParent
 local hookedFrames = {}
+local hookedShowFrames = {}
+local softHiddenFrames = {}
 local looseFrames = {}
 local visibleFrames = {}
 local watcher
@@ -48,6 +50,17 @@ end
 local function ShouldHideBlizzardUnitFrames()
     local g = General()
     return not (g and g.disableBlizzardUnitFrames == false)
+end
+
+--- Blizzard's player resource bars (class resource, alt power) are anchored to
+--- PlayerFrame and driven by its events. Hard-hiding that frame -- unregister
+--- plus reparent onto the hidden parent -- takes them down with it. Compat mode
+--- therefore only hides the frame and keeps it on UIParent with its events
+--- intact. Default stays the hard hide, so existing profiles do not change
+--- behaviour. Matches the hard/soft split in MSUF_UF_Group_Blizzard.lua.
+local function HardKillBlizzardPlayerFrame()
+    local g = General()
+    return not (g and g.hardKillBlizzardPlayerFrame == false)
 end
 
 local function UnitGroup(unit)
@@ -230,6 +243,33 @@ local function HideBlizzardCastbar(frame)
     Hide(frame)
 end
 
+local function HideIfSoftHidden(frame)
+    if softHiddenFrames[frame] and frame and frame.Hide then
+        frame:Hide()
+    end
+end
+
+--- Compat mode for PlayerFrame: hide only. Events stay registered so Blizzard
+--- keeps driving the resource bars that anchor to this frame, and the parent
+--- stays UIParent so their placement survives. Blizzard re-shows PlayerFrame on
+--- vehicle/art transitions, so an OnShow hook re-hides it -- the soft-path
+--- counterpart to the SetParent hook the hard path installs.
+local function SoftHideFrame(frame)
+    if type(frame) == "string" then
+        frame = _G[frame]
+    end
+    if not frame then
+        return
+    end
+    softHiddenFrames[frame] = true
+    Hide(frame)
+    if frame.HookScript and not hookedShowFrames[frame] then
+        frame:HookScript("OnShow", HideIfSoftHidden)
+        hookedShowFrames[frame] = true
+    end
+    return frame
+end
+
 local function HandleFrame(frame, doNotReparent, unit)
     if type(frame) == "string" then
         frame = _G[frame]
@@ -301,7 +341,17 @@ local function DisableBlizzardFrames()
         return
     end
 
-    if ShouldHideBlizzardUnitFrame("player") then HandleFrame(_G.PlayerFrame, nil, "player") end
+    if ShouldHideBlizzardUnitFrame("player") then
+        --- PlayerFrame owns no castbar on 12.x (Blizzard_UnitFrame/Mainline/
+        --- PlayerFrame.lua), so the compat path loses no castbar handling; it
+        --- only skips the unregister/reparent that would take the anchored
+        --- resource bars down with the frame.
+        if HardKillBlizzardPlayerFrame() then
+            HandleFrame(_G.PlayerFrame, nil, "player")
+        else
+            SoftHideFrame(_G.PlayerFrame)
+        end
+    end
     if ShouldHideBlizzardUnitFrame("pet") then HandleFrame(_G.PetFrame, nil, "pet") end
 
     -- Blizzard Target-of-Target and Focus-Target are children of their parent

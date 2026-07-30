@@ -470,7 +470,10 @@ local function BuildMisc(ctx)
             Call("MSUF_GF_DisableBlizzard")
             M.CallIf(print, "|cffffd700MSUF:|r Changing Blizzard unitframes visibility requires a /reload.")
         end)
-    BindMiscToggle(blizzard, "Fully Hide Blizzard PlayerFrame - resource bar compatibility", "hardKillBlizzardPlayerFrame", false, "MSUF2_HARDKILL_PLAYERFRAME", nil, nil, nil, nil,
+    --- Default true mirrors MSUF_Defaults and MSUF_BlizzardFrames, which both
+    --- treat an unset value as the hard hide. A false default here showed the
+    --- switch off while the runtime was hard-hiding.
+    BindMiscToggle(blizzard, "Fully Hide Blizzard PlayerFrame - resource bar compatibility", "hardKillBlizzardPlayerFrame", true, "MSUF2_HARDKILL_PLAYERFRAME", nil, nil, nil, nil,
         function() M.CallIf(StaticPopup_Show, "MSUF_RELOAD_PLAYERFRAME_HIDE_MODE") end)
     BindMiscToggle(blizzard, "Show MSUF minimap icon", "showMinimapIcon", true, "MSUF2_MINIMAP_ICON", nil, nil, nil, nil,
         function(v)
