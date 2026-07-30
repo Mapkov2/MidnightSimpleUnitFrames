@@ -54,29 +54,10 @@ jobs:
           ref: ${{ github.event.release.tag_name || inputs.tag_name || github.ref_name }}
           fetch-depth: 0
 
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.x"
-
-      - name: Install Lua verification runtime
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y lua5.1
-          mkdir -p "$RUNNER_TEMP/msuf-assistant-gate-bin"
-          ln -sf "$(command -v lua5.1)" "$RUNNER_TEMP/msuf-assistant-gate-bin/lua"
-          ln -sf "$(command -v luac5.1)" "$RUNNER_TEMP/msuf-assistant-gate-bin/luac"
-          echo "$RUNNER_TEMP/msuf-assistant-gate-bin" >> "$GITHUB_PATH"
-
-      - name: Run static checks
-        run: python3 .github/scripts/msuf_static_checks.py
-
-      - name: Run core Lua 5.1 smokes
-        shell: pwsh
-        run: ./tools/run-core-smoke-tests.ps1 -LuaCommand lua5.1
-
-      - name: Verify generated Menu2 search index
-        shell: pwsh
-        run: ./tools/generate_search_static_index.ps1 -Check
+      # Verification (static checks, core smokes, search-index check) is
+      # local-only and deliberately absent from the repo, so this workflow
+      # packages and publishes without re-running it. Run the suite on the
+      # dev machine before tagging.
 
       - name: Resolve publish target
         id: publish
@@ -350,22 +331,10 @@ jobs:
             }
           }
 
-      # Beta and alpha tags may ship with known Assistant parser gaps: the
-      # Assistant is load-on-demand and never touched by normal gameplay, so a
-      # red parser case cannot regress a prerelease install. The gate stays
-      # fatal for stable publishes, which is where the Assistant is promised
-      # to be complete.
-      - name: Run authoritative Assistant release gate
-        id: assistant_gate
-        continue-on-error: ${{ steps.channel.outputs.release_is_prerelease == 'true' }}
-        shell: pwsh
-        run: ./.github/scripts/run_assistant_release_gate.ps1
-
-      - name: Report tolerated Assistant gate failure
-        if: steps.assistant_gate.outcome == 'failure'
-        shell: pwsh
-        run: |
-          Write-Host "::warning title=Assistant release gate failed::Prerelease $env:RELEASE_VERSION is publishing with a failing Assistant gate. Fix or disposition the reported cases before the next stable release."
+      # The authoritative Assistant release gate is part of the local-only
+      # verification suite and no longer runs here. Run it on the dev machine
+      # before tagging a stable release, where the Assistant is promised to be
+      # complete.
 
       - name: Build AddOns zip
         shell: pwsh

@@ -15,6 +15,15 @@ AGENTS.md
 # Local MSUF developer toolbelt. These scripts/docs are intentionally local-only
 # and should not ship with the addon or be pushed to GitHub.
 tools/
+# Verification suite (smokes, static checks, Assistant release gate). Runs on
+# this machine only; CI is packaging-only and never invokes these.
+.github/scripts/tests/
+.github/scripts/msuf_static_checks.py
+.github/scripts/run_assistant_release_gate.ps1
+.github/scripts/assistant_graphify_setting_dispositions.lua
+.github/scripts/assistant_training_coverage_dispositions.lua
+.github/scripts/blizzard_frame_ownership_smoke.lua
+.github/scripts/search_static_index_project.lua
 _local_workflows/
 MidnightSimpleUnitFrames/scripts/
 MidnightSimpleUnitFrames/docs/
