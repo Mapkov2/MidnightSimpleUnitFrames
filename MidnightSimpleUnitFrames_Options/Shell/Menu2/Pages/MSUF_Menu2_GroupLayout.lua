@@ -253,9 +253,13 @@ local function BuildGFTransparencySection(ctx, b)
     local transparencyRightX = transparencyLeftX + transparencyCardW + transparencyGap
     local transparencyRightW = transparencyInnerW - transparencyCardW - transparencyGap
     local transparencyCardH = 180
+    -- State tab row: base cards edit the always-on opacities ("In Combat"),
+    -- the second tab holds the whole-member-frame out-of-combat fade.
+    local _, transparencyBarY = W.NextRow(transparency, 34)
     local _, transparencyCardY = W.NextRow(transparency, transparencyCardH)
     local healthOpacityCard = W.ControlCard(transparency, "Health Bar", nil, transparencyLeftX, transparencyCardY, transparencyCardW, transparencyCardH)
     local opacityOptionsCard = W.ControlCard(transparency, "Options", nil, transparencyRightX, transparencyCardY, transparencyRightW, transparencyCardH)
+    local oocCard = W.ControlCard(transparency, "Out of Combat", nil, transparencyLeftX, transparencyCardY, transparencyInnerW, transparencyCardH)
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(healthOpacityCard, CurrentGroupHealthColorRefs, {
             title = "Group Health Bar Colors",
@@ -282,6 +286,49 @@ local function BuildGFTransparencySection(ctx, b)
     BindScopeToggle(ctx,
         AttachGroupFocus(W.ToggleAt(opacityOptionsCard, "Keep text + portrait visible", 16, -62, transparencyRightW - 32), "bars"),
         "alphaExcludeTextPortrait", false, "visual", "field.alphaExcludeTextPortrait")
+
+    -- Out of Combat tab: whole-member-frame fade; min-composed with range and
+    -- offline fades at runtime (strongest fade wins). Slider greys while off.
+    BindScopeToggle(ctx,
+        AttachGroupFocus(W.ToggleAt(oocCard, "Fade frame out of combat", 16, -54, transparencyCardW + 40), "bars"),
+        "oocFadeEnabled", false, "visual", "field.oocFadeEnabled")
+    local oocSlider = AddAlphaSlider(oocCard, transparencyCardW, { label = "Out of Combat Opacity", key = "oocFadeAlpha", default = 0.5, y = -112 })
+    local function RefreshOocState()
+        SetOptionEnabled(oocSlider, Bool(CurrentScope(), "oocFadeEnabled", false))
+    end
+    TrackSectionRefresh(ctx, transparency, RefreshOocState)
+    RefreshOocState()
+
+    -- Tab switch between the base opacity cards and the OOC fade card.
+    local transparencyTab = "combat"
+    local transparencyCombatCards = { healthOpacityCard, opacityOptionsCard }
+    local function ApplyTransparencyTab()
+        local ooc = transparencyTab == "ooc"
+        for i = 1, #transparencyCombatCards do
+            W.SetControlShown(transparencyCombatCards[i], not ooc)
+        end
+        W.SetControlShown(oocCard, ooc)
+    end
+    local stateBar = W.ScopeOverrideBar(ctx, transparency, {
+        values = {
+            { value = "combat", text = "In Combat" },
+            { value = "ooc", text = "Out of Combat" },
+        },
+        width = transparencyW,
+        label = "Editing:",
+        labelX = transparencyLeftX,
+        labelWidth = 64,
+        centerY = transparencyBarY - 16,
+        getValue = function() return transparencyTab end,
+        setValue = function(value)
+            transparencyTab = value == "ooc" and "ooc" or "combat"
+            ApplyTransparencyTab()
+        end,
+    })
+    if RegisterControl then
+        RegisterControl(stateBar, ctx, "transparency.state_selector", "Editing", "segment", "ephemeral")
+    end
+    ApplyTransparencyTab()
     if b.FinishSection then b:FinishSection(transparency, 48) end
 end
 

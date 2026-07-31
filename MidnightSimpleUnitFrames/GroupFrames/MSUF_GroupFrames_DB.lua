@@ -238,6 +238,10 @@ local PARTY_DEFAULTS = {
     --- Unified alpha: HP fill opacity, background opacity, keep-text/portrait toggle
     hpBarAlpha        = 1,
     hpBgAlpha         = 0.85,
+    --- Out-of-combat fade: whole-member-frame alpha while out of combat.
+    --- Composed min() with range/offline fade in GroupRangeFade; off by default.
+    oocFadeEnabled    = false,
+    oocFadeAlpha      = 0.5,
     --- Border
     borderEnabled     = true,
     borderSize        = 1,

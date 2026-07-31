@@ -87,6 +87,21 @@ function A.GroupFramesRegistry.RegisterFrameAlphaAnchorSettings(ctx, scope)
     RegisterGroupBoolean(scope, "alphaExcludeTextPortrait", "alphaExcludeTextPortrait", "Keep Text & Portrait Visible", false, "visual", aliases)
 
     aliases = {}
+    AddAliasesForUnit(aliases, scope, "fade out of combat")
+    AddAliasesForUnit(aliases, scope, "out of combat fade")
+    AddAliasesForUnit(aliases, scope, "ooc fade")
+    AddAliasesForUnit(aliases, scope, "fade frame out of combat")
+    AddAliasesForUnit(aliases, scope, "fade when out of combat")
+    RegisterGroupBoolean(scope, "oocFadeEnabled", "oocFadeEnabled", "Fade Frame Out of Combat", false, "visual", aliases)
+
+    aliases = {}
+    AddAliasesForUnit(aliases, scope, "out of combat opacity")
+    AddAliasesForUnit(aliases, scope, "out of combat alpha")
+    AddAliasesForUnit(aliases, scope, "ooc opacity")
+    AddAliasesForUnit(aliases, scope, "ooc alpha")
+    RegisterGroupNumber(scope, "oocFadeAlpha", "oocFadeAlpha", "Out of Combat Opacity", 0.5, 0, 1, 0.05, "visual", aliases, { percent = true })
+
+    aliases = {}
     AddAliasesForUnit(aliases, scope, "group backdrop color")
     AddAliasesForUnit(aliases, scope, "group background color")
     AddAliasesForUnit(aliases, scope, "frame background color")

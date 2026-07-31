@@ -19,9 +19,93 @@ local EMPTY_EVENTS = V.EMPTY_EVENTS or {}
 local Clamp01 = V.Clamp01
 local SetFrameAlpha = V.SetFrameAlpha
 local SetAlphaCached = V.SetAlphaCached
+local CreateFrame = _G.CreateFrame
+local InCombatLockdown = _G.InCombatLockdown
 
 
 local Alpha = {}
+
+-- Out-of-combat fade driver. The regen pair is registered only while at least
+-- one frame's compiled spec carries oocFade, so a profile without the feature
+-- pays nothing. In combat oocInCombat short-circuits OocMul to 1, which makes
+-- the composition byte-identical to the pre-feature values; the only work a
+-- combat transition costs is one coalesced RequestRefresh pass.
+local oocInCombat = false
+local oocFrames = {}
+local oocFrameCount = 0
+local oocDriver
+
+-- Stateless per-apply resolve: no per-frame ooc state can race the range
+-- writer, so refresh ordering across regen/range events cannot matter.
+local function OocMul(cfg)
+  if oocInCombat
+    or not cfg
+    or cfg.oocFade ~= true
+    or _G.MSUF_UnitEditModeActive == true then
+    return 1
+  end
+  return Clamp01(cfg.oocAlpha, 0.5)
+end
+-- Group frames own their whole-frame alpha in the GroupRangeFade element
+-- (cfg.externalOoc); it composes this mul itself via CoreAlpha.
+UF.OocFadeMul = OocMul
+
+local function OocCombatFlip(entering)
+  if oocInCombat == entering then
+    return
+  end
+  oocInCombat = entering
+  -- Write the tracked frames directly instead of Alpha.RequestRefresh():
+  -- that path funnels into UF.RefreshElements, which DEFERS entirely while
+  -- InCombat() (menu combat quiescence), so the un-fade on combat start
+  -- would queue until regen and never show in combat. Alpha writes are not
+  -- protected, so the direct per-frame update is combat-safe, cheaper (only
+  -- tracked frames), and lands in the same frame as the regen event.
+  for frame in pairs(oocFrames) do
+    local poke = frame._msufUpdateGroupRangeConnection
+    if poke then
+      -- Group member: its composer owns the frame lane (min with range/offline).
+      poke(frame, "MSUF_OOC")
+    else
+      Alpha.Update(frame, "MSUF_OOC")
+    end
+  end
+end
+
+local function OocSyncDriver()
+  local want = oocFrameCount > 0
+  if want and not oocDriver then
+    oocDriver = CreateFrame("Frame")
+    oocDriver:SetScript("OnEvent", function(_, event)
+      OocCombatFlip(event == "PLAYER_REGEN_DISABLED")
+    end)
+  end
+  if not oocDriver or (oocDriver._msufActive == true) == want then
+    return
+  end
+  oocDriver._msufActive = want or nil
+  if want then
+    -- Event-tracked from here on; seed from the lockdown state because a
+    -- /reload or profile swap can happen mid-combat.
+    oocInCombat = InCombatLockdown and InCombatLockdown() == true or false
+    oocDriver:RegisterEvent("PLAYER_REGEN_DISABLED")
+    oocDriver:RegisterEvent("PLAYER_REGEN_ENABLED")
+  else
+    oocDriver:UnregisterEvent("PLAYER_REGEN_DISABLED")
+    oocDriver:UnregisterEvent("PLAYER_REGEN_ENABLED")
+  end
+end
+
+local function OocTrackFrame(frame, hasOoc)
+  local hadOoc = oocFrames[frame] == true
+  if hasOoc == hadOoc then
+    return
+  end
+  oocFrames[frame] = hasOoc or nil
+  oocFrameCount = oocFrameCount + (hasOoc and 1 or -1)
+  if oocFrameCount < 0 then oocFrameCount = 0 end
+  OocSyncDriver()
+end
 
 local function CastbarForUnit(unit)
   if not unit then
@@ -160,9 +244,11 @@ end
 local function CompileAlphaRuntime(frame, spec)
   if not frame then return end
   local range = spec and spec.range
-  frame._msufAlphaRuntimeCfg = spec and spec.alpha or nil
+  local cfg = spec and spec.alpha or nil
+  frame._msufAlphaRuntimeCfg = cfg
   frame._msufAlphaRangeActive = range and range.active == true
   frame._msufAlphaRangeHealthLayer = range and range.layerMode == "health"
+  OocTrackFrame(frame, cfg ~= nil and cfg.oocFade == true)
 end
 UF.CompileAlphaRuntime = CompileAlphaRuntime
 
@@ -209,8 +295,17 @@ local function ApplyAlpha(frame, cfg, force)
 
   local mul = RangeMul(frame)
   local wholeFrame = RangeFadesWholeFrame(frame)
+  -- Group frames (cfg.externalOoc): GroupRangeFade composes the ooc mul via
+  -- CoreAlpha/UF.OocFadeMul; this element must not bake it into the frame
+  -- lane, or a combat flip would read a stale composed value.
+  -- Gated on the compiled flag first so a frame without the feature (and
+  -- every call while it is off) pays one field test, never a call.
+  local oocMul = 1
+  if cfg ~= nil and cfg.oocFade == true and cfg.externalOoc ~= true then
+    oocMul = OocMul(cfg)
+  end
 
-  if not (cfg and cfg.active == true) and mul == 1 then
+  if not (cfg and cfg.active == true) and mul == 1 and oocMul == 1 then
     if frame._msufAlphaActive == true then
       ResetFrameLayers(frame, force)
     end
@@ -222,7 +317,9 @@ local function ApplyAlpha(frame, cfg, force)
 
   local foregroundAlpha = excludeTextPortrait and 1 or hp
 
+  -- min-composed: the strongest whole-frame fade wins, values never compound.
   local frameAlpha = wholeFrame and mul or 1
+  if oocMul < frameAlpha then frameAlpha = oocMul end
   local hpAlpha = hp * (wholeFrame and 1 or mul)
   frame._msufAlphaEffective = frameAlpha
 
@@ -246,7 +343,8 @@ local function ApplyAlpha(frame, cfg, force)
 end
 
 function Alpha.IsEnabled(frame, spec)
-  return spec and spec.alpha and spec.alpha.active == true
+  local cfg = spec and spec.alpha
+  return cfg and (cfg.active == true or cfg.oocFade == true)
 end
 
 function Alpha.GetEvents(frame, spec)
@@ -276,6 +374,7 @@ function Alpha.Disable(frame)
   if not frame then
     return
   end
+  OocTrackFrame(frame, false)
   frame._msufAlphaLastFrame = nil
   frame._msufAlphaLastHP = nil
   frame._msufAlphaLastFG = nil
@@ -300,7 +399,7 @@ UF.ApplyRangeModifier = function(frame, mul, force)
   end
   frame._msufRangeMul = mul
   local cfg = frame._msufAlphaRuntimeCfg or (frame.MSUFSpec and frame.MSUFSpec.alpha)
-  if (cfg and cfg.active == true) or frame._msufAlphaActive == true then
+  if (cfg and (cfg.active == true or cfg.oocFade == true)) or frame._msufAlphaActive == true then
     ApplyAlpha(frame, cfg, force == true)
   elseif mul ~= 1 then
     ApplyRangeOnly(frame, mul, force == true)

@@ -28,6 +28,9 @@ local GetTime = GetTime
 
 local Secrets = MSUF.Secrets or {}
 local issecretvalue = _G.issecretvalue or function(_) return false end
+-- Lazily resolved from the shared Alpha element (load-order safe); only
+-- consulted for members whose compiled spec carries oocFade.
+local OocFadeMul
 local IsUnitToken = UF.IsUnitToken
 local FreshUnitState = UF.FreshUnitState
 local ReadConnectedCached = UF.ReadConnectedCached
@@ -63,7 +66,10 @@ local GroupRangeFade = {}
 function GroupRangeFade.IsEnabled(frame, spec)
   return spec and spec.scope == "group" and spec.group
     and (spec.group.rangeFadeEnabled == true or spec.group.hideOfflineEnabled == true
-      or spec.group.offlineFadeEnabled == true)
+      or spec.group.offlineFadeEnabled == true
+      -- Out-of-combat fade needs this element as the member-frame alpha
+      -- writer even when every range/offline feature is off.
+      or (spec.alpha and spec.alpha.oocFade == true))
 end
 
 function GroupRangeFade.GetUnitlessEvents(frame, spec)
@@ -770,15 +776,27 @@ local function CoreAlpha(frame)
     spec = frame and frame.MSUFSpec
     alpha = spec and spec.alpha
   end
+  local base = 1
   if alpha and alpha.active == true then
     local element = UF.elements and UF.elements.Alpha
     if frame._msufAlphaEffective == nil and element and element.Apply then
       spec = spec or frame.MSUFSpec
       element.Apply(frame, spec)
     end
-    return tonumber(frame._msufAlphaEffective) or 1
+    base = tonumber(frame._msufAlphaEffective) or 1
   end
-  return 1
+  -- Out-of-combat fade: resolved statelessly per pass (never cached on the
+  -- frame), min-composed so the strongest whole-frame fade wins. Gated on
+  -- the compiled flag so this warm path (per member, per range event) pays
+  -- a single field test unless the member actually has the feature on.
+  if alpha ~= nil and alpha.oocFade == true then
+    OocFadeMul = OocFadeMul or UF.OocFadeMul
+    local oocMul = OocFadeMul ~= nil and OocFadeMul(alpha) or 1
+    if oocMul < base then
+      base = oocMul
+    end
+  end
+  return base
 end
 
 local function ClearFrameRangeBool(frame)
@@ -993,11 +1011,15 @@ local function BaseAlpha(frame, event)
     return base, false
   end
   if OfflineGone(frame, unit, event == "UNIT_CONNECTION" or event == "MSUF_APPLY") then
+    -- min-composed with the ooc-aware base: the strongest whole-frame fade
+    -- wins (identical to the old base * offline while base is 1).
+    local offlineAlpha = frame._msufGFOfflineAlphaValue or 0.5
+    if base < offlineAlpha then offlineAlpha = base end
     if not hideOffline then
       -- Fade-only: the offline state is terminal, so it needs no delay timer and
       -- no combat-transition subscription. UNIT_CONNECTION is the sole trigger.
       ClearOfflineDelay(frame)
-      return base * (frame._msufGFOfflineAlphaValue or 0.5), true
+      return offlineAlpha, true
     end
     local hideReady = OfflineHideReady(frame)
     if not (InCombatLockdown and InCombatLockdown()) or frame._msufGFHideOfflineInCombat == true then
@@ -1005,7 +1027,7 @@ local function BaseAlpha(frame, event)
         return 0, true
       end
     end
-    return base * (frame._msufGFOfflineAlphaValue or 0.5), true
+    return offlineAlpha, true
   end
   ClearOfflineDelay(frame)
   return base, false
@@ -1047,14 +1069,18 @@ function ApplyAlpha(frame, event, rangeValue, rangeSecret)
       return
     end
     ApplyHealthRangeAlpha(frame, 1)
-    if inRangeKnown and ApplyFrameAlphaFromBoolean(frame, inRange, baseAlpha, baseAlpha * rangeAlpha, inRangeSecret) then
+    -- min-composed out-of-range value (identical to baseAlpha * rangeAlpha
+    -- while baseAlpha is 1; with an ooc-faded base the strongest fade wins).
+    local outAlpha = rangeAlpha
+    if baseAlpha < outAlpha then outAlpha = baseAlpha end
+    if inRangeKnown and ApplyFrameAlphaFromBoolean(frame, inRange, baseAlpha, outAlpha, inRangeSecret) then
       return
     end
 
     local safe = SafeBool(inRange)
     if safe ~= nil then
       ClearFrameRangeBool(frame)
-      SetAlphaCached(frame, baseAlpha * (safe and 1 or rangeAlpha), "_msufGFRangeFrameAlpha")
+      SetAlphaCached(frame, safe and baseAlpha or outAlpha, "_msufGFRangeFrameAlpha")
       return
     end
   end

@@ -30,10 +30,15 @@ local function BuildAlpha(ctx, builder, unit)
     local resourceX = healthX + cardW + gap
     local optionsX = resourceX + cardW + gap
     local optionsW = innerW - (cardW * 2) - (gap * 2)
+    -- State tab row: the base cards edit the always-on opacities ("In Combat"),
+    -- the second tab holds the whole-frame out-of-combat fade. Menu-session
+    -- state only, never persisted.
+    local _, barY = W.NextRow(sec, 34)
     local _, cardY = W.NextRow(sec, cardH)
     local healthCard = W.ControlCard(sec, "Health Bar", nil, healthX, cardY, cardW, cardH)
     local resourceCard = W.ControlCard(sec, "Resource Bar", nil, resourceX, cardY, cardW, cardH)
     local optionsCard = W.ControlCard(sec, "Options", nil, optionsX, cardY, optionsW, cardH)
+    local oocCard = W.ControlCard(sec, "Out of Combat", nil, healthX, cardY, innerW, cardH)
     if W.AttachContextColorReferences and GetGeneral then
         local function EffectiveHealthMode()
             local conf = GetConf and GetConf(unit) or {}
@@ -105,6 +110,62 @@ local function BuildAlpha(ctx, builder, unit)
             SetBool(unit, "alphaExcludeTextPortrait", v, "MSUF2_ALPHA_EXCLUDE", { alpha = true, preview = true })
         end,
         SettingMeta(ctx, "transparency.alpha_exclude_text_portrait", unit, "alphaExcludeTextPortrait"))
+
+    -- Out of Combat tab: whole-frame fade while out of combat. The slider is
+    -- greyed while the toggle is off; runtime min-composes with range fade.
+    local oocToggle = W.ToggleAt(oocCard, "Fade frame out of combat", 16, -54, cardW + 40)
+    local oocSlider = W.Slider(oocCard, "Out of Combat Opacity", 0, 1, 0.05, cardW)
+    M.UsePercentInput(oocSlider)
+    local function UpdateOocEnabledState()
+        if UP.SetControlEnabled then
+            UP.SetControlEnabled(oocSlider, ReadBool(unit, "oocFadeEnabled", false))
+        end
+    end
+    M.BindBoolWidget(ctx, oocToggle,
+        function() return ReadBool(unit, "oocFadeEnabled", false) end,
+        function(v)
+            SetBool(unit, "oocFadeEnabled", v, "MSUF2_ALPHA_OOC_FADE", { alpha = true })
+            UpdateOocEnabledState()
+        end,
+        SettingMeta(ctx, "transparency.ooc_fade_enabled", unit, "oocFadeEnabled"))
+    M.BindNumberWidget(ctx, oocSlider,
+        function() return ReadNumber(unit, "oocFadeAlpha", 0.5) end,
+        function(v) SetNumber(unit, "oocFadeAlpha", v, "MSUF2_ALPHA_OOC_ALPHA", { alpha = true }) end,
+        0.5,
+        SettingMeta(ctx, "transparency.ooc_fade_alpha", unit, "oocFadeAlpha"))
+    W.MoveWidget(oocSlider, oocCard, 16, -112, cardW - 58, "LEFT")
+    UpdateOocEnabledState()
+
+    -- Tab switch: show either the base opacity cards or the OOC fade card.
+    local alphaTab = "combat"
+    local combatCards = { healthCard, resourceCard, optionsCard }
+    local function ApplyAlphaTab()
+        local ooc = alphaTab == "ooc"
+        for i = 1, #combatCards do
+            W.SetControlShown(combatCards[i], not ooc)
+        end
+        W.SetControlShown(oocCard, ooc)
+    end
+    local stateBar = W.ScopeOverrideBar(ctx, sec, {
+        values = {
+            { value = "combat", text = "In Combat" },
+            { value = "ooc", text = "Out of Combat" },
+        },
+        width = sectionW,
+        label = "Editing:",
+        labelX = leftX,
+        labelWidth = 64,
+        centerY = barY - 16,
+        getValue = function() return alphaTab end,
+        setValue = function(value)
+            alphaTab = value == "ooc" and "ooc" or "combat"
+            ApplyAlphaTab()
+        end,
+    })
+    if UP.RegisterControl then
+        UP.RegisterControl(stateBar, ctx, "transparency.state_selector", "Editing", "segment", "ephemeral")
+    end
+    ApplyAlphaTab()
     if builder.FinishSection then builder:FinishSection(sec, 48) end
 end
 if type(UP.RegisterSection) == "function" then

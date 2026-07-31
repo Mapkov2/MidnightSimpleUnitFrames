@@ -67,6 +67,17 @@ function A.UnitframesRegistry.RegisterTransparencyAndRangeSettings(ctx, unit)
             "keep text visible", "keep text portrait visible", "keep text and portrait visible",
             "exclude text from opacity", "keep portrait visible", "exclude portrait from opacity"
         ), { category = "Transparency", alpha = true })
+    RegisterUnitBooleanSetting(unit, "oocFadeEnabled", "oocFadeEnabled",
+        "Fade Frame Out of Combat", false,
+        MakeAliases(unit,
+            "fade out of combat", "out of combat fade", "ooc fade", "fade frame out of combat",
+            "fade when out of combat"
+        ), { category = "Transparency", alpha = true })
+    RegisterUnitNumberSetting(unit, "oocFadeAlpha", "oocFadeAlpha", "Out of Combat Opacity", 0.5, 0, 1,
+        MakeAliases(unit,
+            "out of combat opacity", "out of combat alpha", "ooc opacity", "ooc alpha",
+            "out of combat frame opacity"
+        ), { category = "Transparency", alpha = true, step = 0.05, percent = true })
 
     if RANGE_FADE_UNITS[unit] then
         RegisterUnitNumberSetting(unit, "rangeFadeAlpha", "rangeFadeAlpha", "Range Fade Opacity",
