@@ -1815,6 +1815,7 @@ local MSUF2_ROUNDED_SEARCH_deDE = {
     ["Opens: Global Style > Bars > Rounded Texture"] = "Oeffnet: Globaler Stil > Bars > Abgerundete Textur",
     ["Power bars"] = "Powerbars",
     ["Rounded frame texture"] = "Abgerundete Frame-Textur",
+    ["Corner rounding"] = "Eckenabrundung",
     ["Rounded Texture"] = "Abgerundete Textur",
 }
 for k, v in pairs(MSUF2_ROUNDED_SEARCH_deDE) do
@@ -4461,6 +4462,8 @@ L["City scene"] = "Stadtszene"
 L["A mixed game scene for checking readability in normal play."] = "Eine gemischte Spielszene, um die Lesbarkeit im normalen Spiel zu prüfen."
 L["Dark stone"] = "Dunkler Stein"
 L["A dark surface for checking bright borders and text."] = "Eine dunkle Oberfläche, um helle Rahmen und Texte zu prüfen."
+L["Transparent"] = "Transparent"
+L["Remove the preview canvas background to see the game world through the menu."] = "Entfernt den Hintergrund der Vorschaufläche, damit du die Spielwelt durch das Menü sehen kannst."
 L["Studio"] = "Studio"
 L["The original neutral preview gradient."] = "Der ursprüngliche neutrale Vorschauverlauf."
 L["Choose a background to check frame readability on bright and dark game surfaces."] = "Wähle einen Hintergrund, um die Lesbarkeit der Frames auf hellen und dunklen Spielflächen zu prüfen."
