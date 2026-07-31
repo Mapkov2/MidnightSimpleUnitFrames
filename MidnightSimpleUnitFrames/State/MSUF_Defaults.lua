@@ -890,6 +890,8 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
         if conf.hpBgAlpha == nil then conf.hpBgAlpha = 0.85 end
         if conf.powerBarBgAlpha == nil then conf.powerBarBgAlpha = conf.hpBgAlpha or 0.85 end
         if conf.alphaExcludeTextPortrait == nil then conf.alphaExcludeTextPortrait = false end
+        if conf.oocFadeEnabled == nil then conf.oocFadeEnabled = false end
+        if conf.oocFadeAlpha == nil then conf.oocFadeAlpha = 0.5 end
     end
     local function EnsureFreshUnitframeScreenPosition(conf, x, y)
         if type(conf) ~= "table" then return end
@@ -982,6 +984,7 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     SetDefault(db.bars, "roundedGroupFrames", true)
     SetDefault(db.bars, "roundedPowerBars", true)
     SetDefault(db.bars, "roundedMouseover", true)
+    SetDefault(db.bars, "roundedAuraBorders", true)
     SetDefault(db.bars, "roundedCornerStrength", 3)
     --- Fresh-install defaults: status indicators (AFK/DND) off by default
     local g = db.general
@@ -1550,10 +1553,6 @@ local function MSUF_EnsureDB_Heavy()
         g.fontKey = MSUF_Defaults_GetGlobalFontDefault()
     end
     MSUF_Defaults_NormalizeFontField(g)
-    if g.hardKillBlizzardPlayerFrame == nil then
-        --- Default: Hard-hide Blizzard PlayerFrame (compat mode OFF).
-        g.hardKillBlizzardPlayerFrame = true
-    end
 if g.anchorName == nil then
     g.anchorName = "UIParent"
 end
@@ -3236,6 +3235,9 @@ if MSUF_DB.bars == nil then
     if MSUF_DB.bars.roundedMouseover == nil then
         MSUF_DB.bars.roundedMouseover = true
     end
+    if MSUF_DB.bars.roundedAuraBorders == nil then
+        MSUF_DB.bars.roundedAuraBorders = true
+    end
     if MSUF_DB.bars.roundedCornerStrength == nil then
         MSUF_DB.bars.roundedCornerStrength = 3
     end
@@ -3268,6 +3270,12 @@ end
 if MSUF_DB.bars.barOutlineLayer == nil then
     -- Additive 0..30 FrameLevel offset. Zero preserves legacy outline order.
     MSUF_DB.bars.barOutlineLayer = 0
+end
+if MSUF_DB.bars.barOutlineTexture == nil then
+    -- Optional statusbar texture for the square frame outline. Empty keeps the
+    -- classic solid-color outline, so 5.x profiles are unaffected. Rounded
+    -- frames always ignore this and keep the tinted rounded edge.
+    MSUF_DB.bars.barOutlineTexture = ""
 end
 --- Bar background alpha (0..100). Independent from unit alpha in/out of combat.
 if MSUF_DB.bars.barBackgroundAlpha == nil then
@@ -4029,6 +4037,47 @@ local function fill(key, defaults)
         if u.hpBgAlpha == nil then u.hpBgAlpha = 0.85 end
         if u.powerBarBgAlpha == nil then u.powerBarBgAlpha = u.hpBgAlpha or 0.85 end
         if u.alphaExcludeTextPortrait == nil then u.alphaExcludeTextPortrait = false end
+        --- Out-of-combat fade: whole-frame alpha while out of combat (min-composed
+        --- with range fade at runtime; strongest fade wins). Off by default.
+        if u.oocFadeEnabled == nil then u.oocFadeEnabled = false end
+        if u.oocFadeAlpha == nil then u.oocFadeAlpha = 0.5 end
+        --- Decorative texture layers (3 slots, Blizzard name-bar style):
+        --- SharedMedia texture per slot with own alpha, strata/level, anchor
+        --- target, color/gradient modes, blend, mirroring, combat visibility
+        --- and rounded clipping. Applied purely cold path.
+        for _, texP in ipairs({ "texLayer", "texLayer2", "texLayer3" }) do
+            if u[texP .. "Enabled"] == nil then u[texP .. "Enabled"] = false end
+            if u[texP .. "Texture"] == nil then u[texP .. "Texture"] = "" end
+            if u[texP .. "CustomTexturePath"] == nil then u[texP .. "CustomTexturePath"] = "" end
+            if u[texP .. "Alpha"] == nil then u[texP .. "Alpha"] = 1 end
+            if u[texP .. "FollowFrameAlpha"] == nil then u[texP .. "FollowFrameAlpha"] = true end
+            if u[texP .. "Strata"] == nil then u[texP .. "Strata"] = "AUTO" end
+            if u[texP .. "Level"] == nil then u[texP .. "Level"] = 1 end
+            if u[texP .. "AnchorTarget"] == nil then u[texP .. "AnchorTarget"] = "FRAME" end
+            if u[texP .. "Anchor"] == nil then u[texP .. "Anchor"] = "TOP" end
+            if u[texP .. "OffsetX"] == nil then u[texP .. "OffsetX"] = 0 end
+            if u[texP .. "OffsetY"] == nil then u[texP .. "OffsetY"] = 0 end
+            if u[texP .. "Width"] == nil then u[texP .. "Width"] = 0 end
+            if u[texP .. "Height"] == nil then u[texP .. "Height"] = 16 end
+            if u[texP .. "ColorMode"] == nil then u[texP .. "ColorMode"] = "CUSTOM" end
+            if u[texP .. "ColorR"] == nil then u[texP .. "ColorR"] = 1 end
+            if u[texP .. "ColorG"] == nil then u[texP .. "ColorG"] = 1 end
+            if u[texP .. "ColorB"] == nil then u[texP .. "ColorB"] = 1 end
+            if u[texP .. "GradientEnabled"] == nil then u[texP .. "GradientEnabled"] = false end
+            if u[texP .. "Gradient2R"] == nil then u[texP .. "Gradient2R"] = 0 end
+            if u[texP .. "Gradient2G"] == nil then u[texP .. "Gradient2G"] = 0 end
+            if u[texP .. "Gradient2B"] == nil then u[texP .. "Gradient2B"] = 0 end
+            --- Bars-style multi-direction gradient: independent per-edge toggles.
+            if u[texP .. "GradientDirRight"] == nil then u[texP .. "GradientDirRight"] = true end
+            if u[texP .. "GradientDirLeft"] == nil then u[texP .. "GradientDirLeft"] = false end
+            if u[texP .. "GradientDirUp"] == nil then u[texP .. "GradientDirUp"] = false end
+            if u[texP .. "GradientDirDown"] == nil then u[texP .. "GradientDirDown"] = false end
+            if u[texP .. "BlendMode"] == nil then u[texP .. "BlendMode"] = "BLEND" end
+            if u[texP .. "MirrorH"] == nil then u[texP .. "MirrorH"] = false end
+            if u[texP .. "MirrorV"] == nil then u[texP .. "MirrorV"] = false end
+            if u[texP .. "Visibility"] == nil then u[texP .. "Visibility"] = "ALWAYS" end
+            if u[texP .. "RoundedClip"] == nil then u[texP .. "RoundedClip"] = false end
+        end
         --- Portrait defaults used by the clean UF Portrait element.
         --- v4.324+: portraits are always per-unit. Older shared/override profiles
         --- are flattened once: override=true keeps unit values, non-overrides adopt
@@ -4161,7 +4210,6 @@ local function MSUF_Defaults_IsCurrentProfileDB(db)
     end
     local g = db.general
     if type(g.fontKey) ~= "string" or g.fontKey == ""
-        or g.hardKillBlizzardPlayerFrame == nil
         or db.shortenNames == nil
         or db.bars.barBackgroundAlpha == nil
         or db.gameplay.enableCombatTimer == nil then
