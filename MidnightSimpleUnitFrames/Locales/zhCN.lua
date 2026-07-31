@@ -4410,6 +4410,13 @@ L["Off (default): the accent colors buttons, tabs and highlights while panels st
 L["class-color, preset and custom accent options for the MSUF menu"] = "MSUF 菜单的职业颜色、预设与自定义主题色选项"
 L["Pick a menu accent"] = "选择菜单主题色"
 
+-- 6.0 upgrade highlight: the rebuilt rounded corner style.
+L["Rounded frames, corner for corner"] = "圆角框体，每个角都对齐"
+L["Rounded unit and group frames now share one clean corner style with five strength levels, used by Health, embedded or detached Power, frame outlines and the aggro, dispel and highlight borders."] = "圆角单位框体与团队框体现在共用一套干净的圆角样式，提供五档强度，适用于生命值、内嵌或分离的能量条、框体轮廓以及仇恨、驱散和高亮边框。"
+L["Every rounded element follows the same geometry, so corners no longer disagree with each other or lose their mask after a reload."] = "所有圆角元素遵循同一套几何形状，边角不再互相冲突，也不会在重载后丢失遮罩。"
+L["the rebuilt rounded corner style and its five strength levels"] = "重制的圆角样式及其五档强度"
+L["Open Rounded Texture"] = "打开圆角材质"
+
 -- Menu2/Edit Mode 完整源码覆盖（Assistant 有意保持仅英文）。
 L[" relevant color"] = " 相关颜色"
 L[" relevant colors"] = " 相关颜色"

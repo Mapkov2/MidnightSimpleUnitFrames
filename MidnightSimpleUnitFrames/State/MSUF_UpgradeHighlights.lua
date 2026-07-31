@@ -226,6 +226,24 @@ local DATA = {
                     missed = "class-color, preset and custom accent options for the MSUF menu",
                     action = "Pick a menu accent",
                 },
+                {
+                    -- The only highlight with a screenshot: rounded corners are
+                    -- the one 6.0 change that a description cannot demonstrate.
+                    -- `preview` is a media key the menu resolves; this module
+                    -- stays free of presentation paths.
+                    id = "rounded_frames",
+                    icon = "opt_bars",
+                    pageKey = "opt_bars",
+                    preview = "rounded_frames",
+                    route = {
+                        accordion = "opt_bars:bars_rounded",
+                    },
+                    title = "Rounded frames, corner for corner",
+                    summary = "Rounded unit and group frames now share one clean corner style with five strength levels, used by Health, embedded or detached Power, frame outlines and the aggro, dispel and highlight borders.",
+                    impact = "Every rounded element follows the same geometry, so corners no longer disagree with each other or lose their mask after a reload.",
+                    missed = "the rebuilt rounded corner style and its five strength levels",
+                    action = "Open Rounded Texture",
+                },
             },
         },
     },

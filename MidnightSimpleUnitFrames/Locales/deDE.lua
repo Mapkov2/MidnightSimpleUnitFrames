@@ -4046,6 +4046,13 @@ L["Off (default): the accent colors buttons, tabs and highlights while panels st
 L["class-color, preset and custom accent options for the MSUF menu"] = "Klassenfarben-, Preset- und eigene Akzent-Optionen für das MSUF-Menü"
 L["Pick a menu accent"] = "Wähle einen Menü-Akzent"
 
+-- 6.0 upgrade highlight: the rebuilt rounded corner style.
+L["Rounded frames, corner for corner"] = "Abgerundete Frames, Ecke für Ecke"
+L["Rounded unit and group frames now share one clean corner style with five strength levels, used by Health, embedded or detached Power, frame outlines and the aggro, dispel and highlight borders."] = "Abgerundete Unit- und Gruppenframes nutzen jetzt einen sauberen Eckenstil mit fünf Stärkestufen - für Leben, eingebettete oder abgetrennte Ressource, Frame-Umrandungen sowie Aggro-, Dispel- und Hervorhebungsrahmen."
+L["Every rounded element follows the same geometry, so corners no longer disagree with each other or lose their mask after a reload."] = "Jedes abgerundete Element folgt derselben Geometrie, dadurch passen die Ecken zueinander und verlieren ihre Maske nach einem Reload nicht mehr."
+L["the rebuilt rounded corner style and its five strength levels"] = "den überarbeiteten Eckenstil für abgerundete Frames und seine fünf Stärkestufen"
+L["Open Rounded Texture"] = "Abgerundete Textur öffnen"
+
 -- Colors page redesign: mode cards, modified badges, click-to-paint preview.
 L["Class Colors"] = "Klassenfarben"
 L["Unified"] = "Einheitlich"

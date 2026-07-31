@@ -2989,6 +2989,31 @@ local function InfoCard(builder, T, title, body, iconKey, height)
     return card
 end
 
+-- InfoCard with a screenshot below the copy. Rounded corners are the one thing
+-- on the overview page that a sentence cannot demonstrate, so that card shows a
+-- real frame instead. The art is 2:1, so the card height follows the width.
+local TOUR_PREVIEW_MAX_WIDTH = 320
+local TOUR_PREVIEW_COPY_HEIGHT = 76
+
+local function TourPreview(key)
+    local helpers = M.PreviewHelpers
+    local previews = type(helpers) == "table" and helpers.TourPreviews or nil
+    local spec = type(previews) == "table" and previews[key] or nil
+    if type(spec) ~= "table" or type(spec.texture) ~= "string" then return nil end
+    return spec
+end
+
+local function PreviewCard(builder, T, W, title, body, iconKey, spec)
+    if not (type(spec) == "table" and type(W.PreviewImage) == "function") then
+        return InfoCard(builder, T, title, body, iconKey, 92)
+    end
+    local imageWidth = min(TOUR_PREVIEW_MAX_WIDTH, max(180, builder.width - 72))
+    local imageHeight = floor(imageWidth / (tonumber(spec.aspect) or 2) + 0.5)
+    local card = InfoCard(builder, T, title, body, iconKey, TOUR_PREVIEW_COPY_HEIGHT + imageHeight + 16)
+    W.PreviewImage(card, spec, 56, -TOUR_PREVIEW_COPY_HEIGHT, imageWidth)
+    return card
+end
+
 local function Header(builder, title, subtitle)
     return builder:Header(Tr(title), Tr(subtitle), 72)
 end
@@ -3265,6 +3290,9 @@ local function BuildPowerMovesPage(ctx, T, W)
     local b = W.PageBuilder(ctx)
     Header(b, "MSUF power moves", "A focused frame workflow with direct control over the details that matter in combat.")
     InfoCard(b, T, "Touch the preview", "Drag its handles. Double-click a handle or use its gear to open the exact setting; right-click exposes related actions.", "uf_player", 86)
+    PreviewCard(b, T, W, "Rounded frames that match, corner for corner",
+        "One clean corner style with five strength levels covers Health, embedded or detached Power, frame outlines, aggro, dispel and highlight borders, on Unitframes and Group Frames alike.",
+        "opt_bars", TourPreview("rounded_frames"))
     InfoCard(b, T, "Spell Icons by spec", "Track presets or custom Spell IDs per spec, then choose icon or bar placement, cooldown behavior, and full-frame effects.", "gf_auras", 92)
     InfoCard(b, T, "Party combat intelligence", "Corner Indicators and External Defensives keep critical group information compact.", "gf_indicators", 92)
     InfoCard(b, T, "Cooldown-aware layouts", "Anchor Unitframes and Class Resources to Essential Cooldowns, or keep every frame independently placed.", "classpower", 86)

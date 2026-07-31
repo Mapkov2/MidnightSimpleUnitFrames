@@ -19,6 +19,14 @@ local min = math.min
 CP.WHITE8 = CP.WHITE8 or "Interface\\Buttons\\WHITE8X8"
 CP.MEDIA = CP.MEDIA or ("Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\ClassPower\\")
 local PREVIEW_BACKGROUND_MEDIA = "Interface\\AddOns\\MidnightSimpleUnitFrames_Options\\Media\\PreviewBackgrounds\\"
+-- Onboarding tour screenshots. They live beside the preview backgrounds in the
+-- Options companion and deliberately stay out of `T.media`: theme media must
+-- resolve against the core addon (options_lod_namespace_media_smoke). Every
+-- entry is authored 2:1 so a tour card can size it from its width alone.
+local TOUR_PREVIEW_MEDIA = "Interface\\AddOns\\MidnightSimpleUnitFrames_Options\\Media\\Tour\\"
+H.TourPreviews = {
+    rounded_frames = { texture = TOUR_PREVIEW_MEDIA .. "rounded_frames.png", aspect = 2 },
+}
 local PREVIEW_BACKGROUND_DEFAULT = "bright_stone"
 local PREVIEW_BACKGROUND_ASPECT = 2
 local PREVIEW_BACKGROUND_CLEAR = { 0, 0, 0, 0 }

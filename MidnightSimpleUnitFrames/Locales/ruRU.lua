@@ -3727,6 +3727,13 @@ L["Off (default): the accent colors buttons, tabs and highlights while panels st
 L["class-color, preset and custom accent options for the MSUF menu"] = "акцент по цвету класса, пресеты и свой акцентный цвет для меню MSUF"
 L["Pick a menu accent"] = "Выбрать акцент меню"
 
+-- 6.0 upgrade highlight: the rebuilt rounded corner style.
+L["Rounded frames, corner for corner"] = "Скруглённые рамки, угол в угол"
+L["Rounded unit and group frames now share one clean corner style with five strength levels, used by Health, embedded or detached Power, frame outlines and the aggro, dispel and highlight borders."] = "Скруглённые рамки юнитов и группы теперь используют единый аккуратный стиль углов с пятью уровнями силы - для здоровья, встроенного или отделённого ресурса, контуров рамки, а также рамок угрозы, рассеивания и подсветки."
+L["Every rounded element follows the same geometry, so corners no longer disagree with each other or lose their mask after a reload."] = "Каждый скруглённый элемент следует одной геометрии, поэтому углы больше не расходятся между собой и не теряют маску после перезагрузки."
+L["the rebuilt rounded corner style and its five strength levels"] = "переработанный стиль скруглённых углов и его пять уровней силы"
+L["Open Rounded Texture"] = "Открыть Скруглённую текстуру"
+
 
 -- Бета 24: раздел цветов и поддержка Помощника.
 L["A new on-demand Assistant can find exact settings, explain controls and prepare reversible changes."] = "Новый Помощник по запросу находит точные настройки, объясняет элементы управления и готовит обратимые изменения."

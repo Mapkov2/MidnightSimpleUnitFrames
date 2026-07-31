@@ -14,8 +14,22 @@ local format = string.format
 local tostring = tostring
 local type = type
 
+local PREVIEW_MAX_WIDTH = 320
+
 local function Tr(text)
     return type(M.Tr) == "function" and M.Tr(text) or text
+end
+
+-- A highlight's `preview` is a media key, not a path: the release registry in
+-- State/ must stay free of menu art. PreviewHelpers owns the resolution.
+local function PreviewSpec(item)
+    local key = type(item) == "table" and item.preview or nil
+    if type(key) ~= "string" then return nil end
+    local helpers = M.PreviewHelpers
+    local previews = type(helpers) == "table" and helpers.TourPreviews or nil
+    local spec = type(previews) == "table" and previews[key] or nil
+    if type(spec) ~= "table" or type(spec.texture) ~= "string" then return nil end
+    return spec
 end
 
 local function Controller()
@@ -338,7 +352,11 @@ local function BuildActive(ctx, scene, T, releaseKey, spec, record, contentWidth
 
     local cardTop = -184
     local hasLayerPreview = item.id == "frame_layers"
+    local previewSpec = PreviewSpec(item)
+    local previewWidth = previewSpec and min(PREVIEW_MAX_WIDTH, max(160, contentWidth - (compact and 40 or 112))) or 0
+    local previewHeight = previewSpec and floor(previewWidth / (previewSpec.aspect or 2) + 0.5) or 0
     local cardHeight = (compact and 280 or 240) + (hasLayerPreview and 96 or 0)
+        + (previewSpec and (previewHeight + 16) or 0)
     local card = T.Panel(scene, nil, T.colors.coreShadow or T.colors.bg, T.colors.cardBorder or T.colors.borderSoft)
     card:SetPoint("TOPLEFT", scene, "TOPLEFT", floor((scene:GetWidth() - contentWidth) / 2), cardTop)
     card:SetSize(contentWidth, cardHeight)
@@ -363,6 +381,9 @@ local function BuildActive(ctx, scene, T, releaseKey, spec, record, contentWidth
     SetTextLayout(impact, textWidth, "LEFT")
     if hasLayerPreview then
         BuildLayerDummyPreview(card, T, textX, textWidth)
+    end
+    if previewSpec and type(M.Widgets) == "table" and type(M.Widgets.PreviewImage) == "function" then
+        M.Widgets.PreviewImage(card, previewSpec, textX, -(cardHeight - previewHeight - 16), previewWidth)
     end
 
     local buttonsTop = cardTop - cardHeight - 20

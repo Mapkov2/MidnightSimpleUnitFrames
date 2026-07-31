@@ -3869,6 +3869,13 @@ L["Off (default): the accent colors buttons, tabs and highlights while panels st
 L["class-color, preset and custom accent options for the MSUF menu"] = "opciones de acento por color de clase, preajustes y color personalizado para el menú de MSUF"
 L["Pick a menu accent"] = "Elige un acento del menú"
 
+-- 6.0 upgrade highlight: the rebuilt rounded corner style.
+L["Rounded frames, corner for corner"] = "Marcos redondeados, esquina por esquina"
+L["Rounded unit and group frames now share one clean corner style with five strength levels, used by Health, embedded or detached Power, frame outlines and the aggro, dispel and highlight borders."] = "Los marcos de unidad y de grupo redondeados comparten ahora un estilo de esquina limpio con cinco niveles de intensidad, usado por la Salud, la Energía incrustada o separada, los contornos del marco y los bordes de aggro, disipación y resaltado."
+L["Every rounded element follows the same geometry, so corners no longer disagree with each other or lose their mask after a reload."] = "Cada elemento redondeado sigue la misma geometría, así que las esquinas ya no se contradicen entre sí ni pierden su máscara tras recargar."
+L["the rebuilt rounded corner style and its five strength levels"] = "el estilo de esquina redondeada rediseñado y sus cinco niveles de intensidad"
+L["Open Rounded Texture"] = "Abrir Textura redondeada"
+
 
 -- Beta 24: espacio de trabajo de colores y cobertura del Asistente.
 L["A new on-demand Assistant can find exact settings, explain controls and prepare reversible changes."] = "Un nuevo Asistente bajo demanda puede encontrar ajustes exactos, explicar controles y preparar cambios reversibles."

@@ -3762,6 +3762,13 @@ L["Off (default): the accent colors buttons, tabs and highlights while panels st
 L["class-color, preset and custom accent options for the MSUF menu"] = "MSUF 메뉴의 직업 색상, 프리셋 및 사용자 지정 강조 옵션"
 L["Pick a menu accent"] = "메뉴 강조 색상 선택"
 
+-- 6.0 upgrade highlight: the rebuilt rounded corner style.
+L["Rounded frames, corner for corner"] = "모서리까지 일치하는 둥근 프레임"
+L["Rounded unit and group frames now share one clean corner style with five strength levels, used by Health, embedded or detached Power, frame outlines and the aggro, dispel and highlight borders."] = "둥근 유닛 및 그룹 프레임이 이제 5단계 강도를 가진 하나의 깔끔한 모서리 스타일을 공유하며, 생명력, 내장형 또는 분리형 자원, 프레임 외곽선, 어그로·해제·강조 테두리에 모두 적용됩니다."
+L["Every rounded element follows the same geometry, so corners no longer disagree with each other or lose their mask after a reload."] = "모든 둥근 요소가 동일한 형태를 따르므로 모서리가 서로 어긋나거나 재시작 후 마스크를 잃는 일이 없습니다."
+L["the rebuilt rounded corner style and its five strength levels"] = "새로 만든 둥근 모서리 스타일과 5단계 강도"
+L["Open Rounded Texture"] = "둥근 텍스처 열기"
+
 -- Menu2/Edit Mode 전체 소스 범위(Assistant는 의도적으로 영어 전용).
 L[" relevant color"] = " 관련 색상"
 L[" relevant colors"] = " 관련 색상들"

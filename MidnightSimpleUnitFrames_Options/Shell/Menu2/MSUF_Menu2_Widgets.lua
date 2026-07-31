@@ -2465,6 +2465,34 @@ function W.ControlCardBackdrop(parent, x, y, width, height, bg, border)
     if card.SetHitRectInsets then card:SetHitRectInsets(0, 0, 0, 0) end
     return card
 end
+-- Screenshot preview used by the onboarding tours. The art is plain, so the
+-- well only has to letterbox it at `spec.aspect` (2:1 by default) into the
+-- width the caller has left, and match the rim of the card it sits in.
+-- Returns the well plus the height it consumed so callers can size the card.
+function W.PreviewImage(parent, spec, x, y, width)
+    if not (parent and type(spec) == "table" and type(spec.texture) == "string" and spec.texture ~= "") then
+        return nil, 0
+    end
+    local frameWidth = max(80, floor((tonumber(width) or 200) + 0.5))
+    local aspect = tonumber(spec.aspect) or 2
+    if aspect <= 0 then aspect = 2 end
+    local frameHeight = max(40, floor(frameWidth / aspect + 0.5))
+    local well = T.Panel(parent, nil, T.colors.coreShadow or T.colors.bg, T.colors.pillEdge or T.colors.borderSoft)
+    well:SetPoint("TOPLEFT", parent, "TOPLEFT", floor((tonumber(x) or 0) + 0.5), floor((tonumber(y) or 0) + 0.5))
+    well:SetSize(frameWidth, frameHeight)
+    if type(T.ApplySurface) == "function" then T.ApplySurface(well, "card") end
+    if well.EnableMouse then well:EnableMouse(false) end
+    local image = well:CreateTexture(nil, "ARTWORK", nil, 2)
+    image:SetPoint("TOPLEFT", well, "TOPLEFT", 3, -3)
+    image:SetPoint("BOTTOMRIGHT", well, "BOTTOMRIGHT", -3, 3)
+    image:SetTexture(spec.texture)
+    local coords = spec.texCoord
+    if type(coords) == "table" and #coords >= 4 then
+        image:SetTexCoord(coords[1], coords[2], coords[3], coords[4])
+    end
+    well.image = image
+    return well, frameHeight
+end
 function W.Toggle(section, label)
     local x, y = NextRow(section, 32)
     return CreateToggle(section, label, x, y)
