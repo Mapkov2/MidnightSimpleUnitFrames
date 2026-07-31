@@ -274,6 +274,16 @@ function A.GlobalBarRegistry.RegisterScopedBarSettings(ctx)
             reason = "MSUF_ASSISTANT_SCOPED_BAR_OUTLINE_LAYER",
             description = "Controls this scope's bar and frame outline draw order on the unified Layer 0-30 scale.",
         })
+        RegisterScopedSetting("barScope", scope, "barOutlineTexture", "outlineTexture", "Frame Outline Texture", "string", "", GlobalScopeAliases(scope, {
+            "frame outline texture", "bar outline texture", "outline texture", "border texture",
+        }), {
+            flag = "hlOverride",
+            shared = "bars",
+            normalizeValue = NormalizeTextureKeyForAssistant,
+            apply = ctx.ApplyBarOutline,
+            reason = "MSUF_ASSISTANT_SCOPED_BAR_OUTLINE_TEXTURE",
+            description = "Optional texture for this scope's square frame outline. Empty keeps the classic solid color; rounded frames always keep the solid outline color.",
+        })
         if RegisterScopedOverlaySettings(ctx, scope) == false then return false end
     end
 

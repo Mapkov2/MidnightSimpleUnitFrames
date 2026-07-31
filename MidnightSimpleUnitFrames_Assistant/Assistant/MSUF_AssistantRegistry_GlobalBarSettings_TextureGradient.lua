@@ -80,6 +80,18 @@ function A.GlobalBarRegistry.RegisterTextureGradientSettings(ctx)
             normalizeValue = NormalizeTextureKeyForAssistant,
             description = "Background art behind every unit's power bar. Overridable per unit on the unit page.",
         })
+        -- Square frame outline art. Empty means the classic solid-color outline;
+        -- Rounded Frames ignores the texture and keeps its tinted rounded edge.
+        RegisterBarsString("barOutlineTexture", "outlineTexture", "Global Frame Outline Texture", "", {
+            "frame outline texture", "bar outline texture", "outline texture",
+            "border texture", "frame border texture",
+        }, {
+            category = "Global / Bars / Outline",
+            apply = type(ctx.ApplyBarOutline) == "function" and ctx.ApplyBarOutline or ApplyBars,
+            reason = "MSUF_ASSISTANT_BAR_OUTLINE_TEXTURE",
+            normalizeValue = NormalizeTextureKeyForAssistant,
+            description = "Optional texture for the square frame outline. Leave empty for the classic solid color; rounded frames always keep the solid outline color.",
+        })
     end
     RegisterGeneralBoolean("enableGradient", "healthGradient", "HP Bar Gradient", false, {
         "hp bar gradient", "health bar gradient", "health gradient", "hp gradient",

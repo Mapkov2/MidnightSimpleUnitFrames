@@ -145,6 +145,14 @@ local function EnsureEdge(parent, key)
   end
   edge = overlay:CreateTexture(nil, "OVERLAY")
   edge:SetColorTexture(0, 0, 0, 1)
+  -- A rebuilt edge starts as a plain color texture; drop the applied-texture
+  -- cache so the next SetBorder pass restores the configured outline texture.
+  parent._msufBorderTexPath = nil
+  -- Rounded Frames owns the visible border once this flag is set. Boss frames
+  -- can rebuild their physical-pixel edges after that handoff; newly-created
+  -- textures are shown by default, so suppress them at the creation boundary
+  -- instead of relying on a later highlight event to hide the square border.
+  if parent._msufRUFModernBorderSuppressed == true then edge:Hide() end
   parent.MSUFBorderEdges[key] = edge
   return edge
 end
@@ -194,6 +202,12 @@ local function LayoutPhysicalBossBorder(frame, thickness)
   local bottomEdge = EnsureEdge(frame, "bottom")
   local leftEdge = EnsureEdge(frame, "left")
   local rightEdge = EnsureEdge(frame, "right")
+  if frame._msufRUFModernBorderSuppressed == true then
+    topEdge:Hide()
+    bottomEdge:Hide()
+    leftEdge:Hide()
+    rightEdge:Hide()
+  end
   SetPhysicalEdgeRect(topEdge, left - edgeSize, top, right + edgeSize, top + edgeSize)
   SetPhysicalEdgeRect(bottomEdge, left - edgeSize, bottom - edgeSize, right + edgeSize, bottom)
   SetPhysicalEdgeRect(leftEdge, left - edgeSize, bottom, left, top)
@@ -436,9 +450,14 @@ local function SetBorder(frame, show, r, g, b, a)
     return
   end
   r, g, b, a = r or 0, g or 0, b or 0, a or 1
+  -- Optional outline texture, resolved at compile time. All runtime states
+  -- (normal + highlights) tint it via SetVertexColor, so event updates keep
+  -- the same per-edge call count as the solid-color path.
+  local texture = frame._msufBorderRuntimeTexture
+  local textureChanged = frame._msufBorderTexPath ~= texture
   local secretColor = IsSecretValue(r) or IsSecretValue(g) or IsSecretValue(b) or IsSecretValue(a)
   local showChanged = frame._msufBorderShown ~= show
-  local colorChanged = secretColor == true
+  local colorChanged = secretColor == true or textureChanged
   if not colorChanged then
     if frame._msufBorderSecretColor == true then
       colorChanged = true
@@ -453,6 +472,7 @@ local function SetBorder(frame, show, r, g, b, a)
     return
   end
   frame._msufBorderShown = show
+  frame._msufBorderTexPath = texture
   if secretColor then
     frame._msufBorderSecretColor = true
     frame._msufBorderR, frame._msufBorderG, frame._msufBorderB, frame._msufBorderA = nil, nil, nil, nil
@@ -464,11 +484,18 @@ local function SetBorder(frame, show, r, g, b, a)
     local edge = frame.MSUFBorderEdges[EDGE_KEYS[i]]
     if edge then
       if colorChanged then
-        edge:SetVertexColor(1, 1, 1, 1)
-        edge:SetColorTexture(r, g, b, a)
+        if texture then
+          if textureChanged then
+            edge:SetTexture(texture)
+          end
+          edge:SetVertexColor(r, g, b, a)
+        else
+          edge:SetVertexColor(1, 1, 1, 1)
+          edge:SetColorTexture(r, g, b, a)
+        end
       end
       if showChanged then
-        SetShown(edge, show)
+        SetShown(edge, show and frame._msufRUFModernBorderSuppressed ~= true)
       end
     end
   end
@@ -711,6 +738,7 @@ function Borders.Apply(frame, spec)
     frame._msufBorderRuntimeAggroMode = cfg and NormalizeAggroMode(cfg.aggroMode) or nil
     frame._msufBorderRuntimeHighlightThickness = tonumber(cfg and cfg.highlightThickness) or 3
     frame._msufBorderRuntimeNormalThickness = BorderNormalThickness(cfg)
+    frame._msufBorderRuntimeTexture = cfg and cfg.texture or nil
     frame._msufBorderRuntimePriority = customPriority and cfg.prioOrder or nil
     frame._msufBorderRuntimeCustomPriority = customPriority and true or nil
     frame._msufBorderRuntimeLevelDispel = cfg and HighlightBorderLevel(cfg, "dispel") or nil
@@ -789,6 +817,7 @@ function Borders.Disable(frame)
     frame._msufBorderRuntimeAggroMode = nil
     frame._msufBorderRuntimeHighlightThickness = nil
     frame._msufBorderRuntimeNormalThickness = nil
+    frame._msufBorderRuntimeTexture = nil
     frame._msufBorderRuntimePriority = nil
     frame._msufBorderRuntimeCustomPriority = nil
     frame._msufBorderRuntimeLevelDispel = nil

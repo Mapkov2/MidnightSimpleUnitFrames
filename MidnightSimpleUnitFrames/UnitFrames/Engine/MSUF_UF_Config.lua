@@ -577,6 +577,14 @@ local function ResolveNameColorFlags(general, conf)
   local npcColor = general and general.npcNameRed == true
   local npcClassColor = general and general.nameNpcClassColor == true
   if conf and conf.fontOverride == true then
+    -- A CUSTOM name color is a full replacement, resolved exactly as group
+    -- frames resolve theirs: the runtime's nameColor override short-circuits
+    -- every class/NPC rule, so no flag may survive next to it. Components are
+    -- returned loose; the caller owns the reusable color table.
+    if conf.nameColorMode == "CUSTOM" then
+      return false, false, false,
+        Clamp01(conf.nameColorR, 1), Clamp01(conf.nameColorG, 1), Clamp01(conf.nameColorB, 1)
+    end
     if conf.nameClassColor ~= nil then
       classColor = conf.nameClassColor == true
     end
@@ -586,6 +594,12 @@ local function ResolveNameColorFlags(general, conf)
     if conf.nameNpcClassColor ~= nil then
       npcClassColor = conf.nameNpcClassColor == true
     end
+  elseif general and general.nameColorMode == "CUSTOM" then
+    -- The shared Fonts scope stores its mode on general. A frame with its own
+    -- font override never reaches here, so an explicit per-frame DEFAULT still
+    -- beats a shared CUSTOM instead of being overridden by it.
+    return false, false, false,
+      Clamp01(general.nameColorR, 1), Clamp01(general.nameColorG, 1), Clamp01(general.nameColorB, 1)
   end
   return classColor, npcColor, npcClassColor
 end
@@ -724,8 +738,10 @@ local function NormalizePortraitClassStyle(value)
   return "BLIZZARD"
 end
 
+--- BLIZZARD is the stock player-frame dressing: the client's own circular
+--- portrait mask plus the untinted gold ring cut from Blizzard's frame atlas.
 local function NormalizePortraitShape(shape)
-  if shape == "CIRCLE" or shape == "ROUNDED" or shape == "DIAMOND" then
+  if shape == "CIRCLE" or shape == "ROUNDED" or shape == "DIAMOND" or shape == "BLIZZARD" then
     return shape
   end
   return "SQUARE"
@@ -809,8 +825,12 @@ end
 --- offset into the tex coords here keeps the whole thing free at event time --
 --- the element only ever replays four numbers it never has to recompute.
 --- A square holder at zoom 100 with no pan reproduces the classic 0.08..0.92.
+--- The BLIZZARD shape starts from the full texture instead: the stock player
+--- frame renders its circular portrait without any crop, so zoom 100 must be
+--- pixel-identical to Blizzard before the zoom/pan sliders take over.
 local function CompilePortraitTexCoords(p, zoom, width, height, panX, panY)
-  local span = 0.84 * (100 / zoom)
+  local baseSpan = p.shape == "BLIZZARD" and 1 or 0.84
+  local span = baseSpan * (100 / zoom)
   local spanX, spanY = span, span
   width = Number(width, 0)
   height = Number(height, 0)
@@ -850,6 +870,13 @@ local function CompileAlpha(out, conf, general, key)
   alpha.hpAlpha = hpAlpha
   alpha.excludeTextPortrait = conf.alphaExcludeTextPortrait == true
   alpha.active = hpAlpha < 1
+
+  -- Out-of-combat fade: whole-frame multiplier applied only while out of
+  -- combat; min-composed with the range fade in the alpha element so the
+  -- strongest single fade wins. oocFade with an alpha of 1 is inert.
+  local oocAlpha = Clamp01(conf.oocFadeAlpha, 0.5)
+  alpha.oocFade = conf.oocFadeEnabled == true and oocAlpha < 1
+  alpha.oocAlpha = oocAlpha
 end
 
 local function ClampStatusLayer(value, fallback)
@@ -1052,15 +1079,38 @@ local function CompileStatusEntry(status, id, conf, general, key, showKey, fallb
   return entry
 end
 
-local function StatusEntryDef(id, showKey, showDefault, sizeKey, sizeDefault, anchorKey, anchorDefault, xKey, xDefault, yKey, yDefault, layerKey, layerDefault, style, symbol, customIcon, legacyLayerKey)
-  return { id, showKey, showDefault, sizeKey, sizeDefault, anchorKey, anchorDefault, xKey, xDefault, yKey, yDefault, layerKey, layerDefault, style = style, symbol = symbol, customIcon = customIcon, legacyLayerKey = legacyLayerKey }
+--- Indicator text colors are stored as a complete R/G/B triple or not at all.
+--- Unlike StatusNumber this read is nil-preserving on purpose: an unset triple
+--- has to keep inheriting the frame's resolved font color, so profiles that
+--- never picked a color are not silently pinned to white.
+local function ApplyStatusColor(entry, conf, general, colorPrefix)
+  local r, g, b
+  if colorPrefix then
+    r = conf and conf[colorPrefix .. "ColorR"]
+    if r == nil then r = general and general[colorPrefix .. "ColorR"] end
+    g = conf and conf[colorPrefix .. "ColorG"]
+    if g == nil then g = general and general[colorPrefix .. "ColorG"] end
+    b = conf and conf[colorPrefix .. "ColorB"]
+    if b == nil then b = general and general[colorPrefix .. "ColorB"] end
+    r, g, b = tonumber(r), tonumber(g), tonumber(b)
+  end
+  if r and g and b then
+    entry.colorR, entry.colorG, entry.colorB = Clamp01(r, 1), Clamp01(g, 1), Clamp01(b, 1)
+  else
+    entry.colorR, entry.colorG, entry.colorB = nil, nil, nil
+  end
+  return entry
+end
+
+local function StatusEntryDef(id, showKey, showDefault, sizeKey, sizeDefault, anchorKey, anchorDefault, xKey, xDefault, yKey, yDefault, layerKey, layerDefault, style, symbol, customIcon, legacyLayerKey, colorPrefix)
+  return { id, showKey, showDefault, sizeKey, sizeDefault, anchorKey, anchorDefault, xKey, xDefault, yKey, yDefault, layerKey, layerDefault, style = style, symbol = symbol, customIcon = customIcon, legacyLayerKey = legacyLayerKey, colorPrefix = colorPrefix }
 end
 
 local function PrefixedStatusDef(id, showKey, showDefault, prefix, sizeDefault, anchorDefault, xDefault, yDefault, layerDefault, style, symbol, customIcon)
   return StatusEntryDef(id, showKey, showDefault,
     prefix .. "Size", sizeDefault, prefix .. "Anchor", anchorDefault,
     prefix .. "OffsetX", xDefault, prefix .. "OffsetY", yDefault,
-    prefix .. "Layer", layerDefault, style, symbol, customIcon)
+    prefix .. "Layer", layerDefault, style, symbol, customIcon, nil, prefix)
 end
 
 local UNIT_STATUS_ENTRY_DEFS = {
@@ -1070,7 +1120,7 @@ local UNIT_STATUS_ENTRY_DEFS = {
   PrefixedStatusDef("level", "showLevelIndicator", true, "levelIndicator", 14, "NAMERIGHT", 0, 0, 7),
   PrefixedStatusDef("race", "showRaceIndicator", false, "raceIndicator", 14, "NAMERIGHT", 0, 0, 7),
   PrefixedStatusDef("classText", "showClassTextIndicator", false, "classTextIndicator", 14, "NAMERIGHT", 0, 0, 7),
-  StatusEntryDef("raidGroup", "showRaidGroupInName", false, "nameFontSize", 12, "raidGroupNameAnchor", "NAMERIGHT", "raidGroupNameOffsetX", 3, "raidGroupNameOffsetY", 0, "raidGroupNameLayer", 5, { "raidGroupNameStyle", "PAREN" }, nil, nil, "nameTextLayer"),
+  StatusEntryDef("raidGroup", "showRaidGroupInName", false, "nameFontSize", 12, "raidGroupNameAnchor", "NAMERIGHT", "raidGroupNameOffsetX", 3, "raidGroupNameOffsetY", 0, "raidGroupNameLayer", 5, { "raidGroupNameStyle", "PAREN" }, nil, nil, "nameTextLayer", "raidGroupName"),
   PrefixedStatusDef("elite", "showEliteIcon", true, "eliteIcon", 20, "TOPRIGHT", 2, 2, 7, nil, nil, { "eliteIconCustomIcon", "" }),
   PrefixedStatusDef("combat", "showCombatStateIndicator", true, "combatStateIndicator", 18, "TOPLEFT", 0, 0, 7, nil, { "combatStateIndicatorSymbol", "DEFAULT" }, { "combatStateIndicatorCustomIcon", "" }),
   PrefixedStatusDef("resting", "showRestingIndicator", false, "restedStateIndicator", 18, "TOPLEFT", 0, 0, 7, nil, { "restedStateIndicatorSymbol", "DEFAULT", "restingStateIndicatorSymbol" }, { "restedStateIndicatorCustomIcon", "" }),
@@ -1105,6 +1155,7 @@ local function CompileUnitStatusTextState(status, conf, general, def, fallbackSi
   entry.x = StatusNumber(conf, general, prefix .. "OffsetX", 0, legacyPrefix and (legacyPrefix .. "OffsetX"))
   entry.y = StatusNumber(conf, general, prefix .. "OffsetY", 0, legacyPrefix and (legacyPrefix .. "OffsetY"))
   entry.layer = ClampStatusLayer(StatusNumber(conf, general, prefix .. "Layer", 7, legacyPrefix and (legacyPrefix .. "Layer")), 7)
+  ApplyStatusColor(entry, conf, general, prefix)
   return entry
 end
 
@@ -1124,6 +1175,7 @@ local function CompileStatusEntryDef(status, conf, general, key, def, fallbackSi
   if customIcon then
     entry.customIcon = StatusString(conf, general, customIcon[1], customIcon[2])
   end
+  ApplyStatusColor(entry, conf, general, def.colorPrefix)
   return entry
 end
 
@@ -1584,6 +1636,7 @@ local function CompileUnitStatus(out, conf, general, key)
   statusText.enabled = deadText.enabled or ghostText.enabled or afkText.enabled or dndText.enabled
   statusText.size, statusText.anchor = baseText.size, baseText.anchor
   statusText.x, statusText.y, statusText.layer = baseText.x, baseText.y, baseText.layer
+  statusText.colorR, statusText.colorG, statusText.colorB = baseText.colorR, baseText.colorG, baseText.colorB
   statusText.showDead, statusText.showGhost = deadText.enabled, ghostText.enabled
   statusText.showAFK, statusText.showDND = afkText.enabled, dndText.enabled
   statusText.dead, statusText.ghost, statusText.afk, statusText.dnd = deadText, ghostText, afkText, dndText
@@ -1731,8 +1784,24 @@ local function CompileUnitText(out, db, unit, key, conf, general, bars)
   text.healthLayer = ClampStatusLayer(conf.hpTextLayer or conf.textLayer or general.hpTextLayer or general.textLayer, 5)
   text.powerLayer = ClampStatusLayer(conf.powerTextLayer or general.powerTextLayer, 2)
   ResolveNameShortening(db, general, conf, unit, text)
-  text.nameClassColor, text.nameNpcColor, text.nameNpcClassColor = ResolveNameColorFlags(general, conf)
+  local customR, customG, customB
+  text.nameClassColor, text.nameNpcColor, text.nameNpcClassColor, customR, customG, customB =
+    ResolveNameColorFlags(general, conf)
   ApplyNpcTypeFlags(text, general, "npcTypeColorText")
+  local nameCustomColor
+  if customR then
+    -- The table is reused across compiles so a config apply allocates nothing.
+    nameCustomColor = text.nameCustomColor
+    if not nameCustomColor then
+      nameCustomColor = {}
+      text.nameCustomColor = nameCustomColor
+    end
+    nameCustomColor.r, nameCustomColor.g, nameCustomColor.b, nameCustomColor.a = customR, customG, customB, 1
+    -- An explicit per-frame color has to beat the global NPC-type name rule,
+    -- which NameTextColor checks before it honors the override. Only this
+    -- frame's text flag is cleared; the global setting stays untouched.
+    text.npcTypeColorText = false
+  end
   ResolveToTInline(db, general, unit, text)
   local healthTextColorMode = ResolveHealthTextColorMode(general, conf)
   text.healthColorByHealth = healthTextColorMode == "HEALTH"
@@ -1743,12 +1812,12 @@ local function CompileUnitText(out, db, unit, key, conf, general, bars)
     CopyDirectTextLayout(text, conf)
     local npcTypeNameColor = NPCTypeTextColorEnabled(text)
     if text.nameClassColor ~= true and text.nameNpcColor ~= true and text.nameNpcClassColor ~= true and not npcTypeNameColor then
-      text.nameColor = text.directNameColor
+      text.nameColor = nameCustomColor or text.directNameColor
     else
       text.nameColor = nil
     end
   else
-    text.nameColor = nil
+    text.nameColor = nameCustomColor
     ClearDirectTextLayout(text)
   end
   text.shortNumbers = general.useShortNumbers ~= false
@@ -2004,6 +2073,15 @@ local function CompileUnitBorder(out, conf, general, bars)
   local outlineLayer = conf.hlOverride == true and conf.barOutlineLayer ~= nil and conf.barOutlineLayer or bars.barOutlineLayer
   border.layer = max(0, min(30, floor((tonumber(outlineLayer) or 0) + 0.5)))
   border.strata = NormalizeFrameOutlineStrata(conf.hlOverride == true and conf.barOutlineStrata ~= nil and conf.barOutlineStrata or bars.barOutlineStrata)
+  -- Optional outline texture. Resolved to a file path at compile time; nil
+  -- keeps the solid-color edges. Rounded Frames ignores this and keeps its
+  -- tinted rounded edge, so the outline color stays authoritative there.
+  border.texture = nil
+  local outlineTextureKey = conf.hlOverride == true and conf.barOutlineTexture ~= nil and conf.barOutlineTexture or bars.barOutlineTexture
+  if type(outlineTextureKey) == "string" and outlineTextureKey ~= "" then
+    border.texture = ResolveStatusbarTextureKey(outlineTextureKey, nil)
+    if border.texture == WHITE then border.texture = nil end
+  end
   border.r = Number(ScopedValue(conf, general, "barOutlineColorR", general.barBorderR), 0)
   border.g = Number(ScopedValue(conf, general, "barOutlineColorG", general.barBorderG), 0)
   border.b = Number(ScopedValue(conf, general, "barOutlineColorB", general.barBorderB), 0)

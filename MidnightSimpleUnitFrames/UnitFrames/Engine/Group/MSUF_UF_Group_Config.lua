@@ -486,6 +486,15 @@ local function ResolveNameTextOptions(kind, conf)
         a = 1,
       }
     end
+  elseif general and general.nameColorMode == "CUSTOM" then
+    -- Shared Fonts scope custom name color. Mirrored here so one shared choice
+    -- does not colour unit frames while leaving group names on the font color.
+    text.nameColor = {
+      r = Num(general.nameColorR, 1),
+      g = Num(general.nameColorG, 1),
+      b = Num(general.nameColorB, 1),
+      a = 1,
+    }
   else
     text.nameClassColor = general and general.nameClassColor == true
     text.nameNpcColor = general and general.npcNameRed == true
@@ -1436,10 +1445,17 @@ end
 
 local function CompileAlpha(conf)
   local hpAlpha = Clamp01(conf and conf.hpBarAlpha, 1)
+  local oocAlpha = Clamp01(conf and conf.oocFadeAlpha, 0.5)
   return {
     active = hpAlpha < 1,
     hpAlpha = hpAlpha,
     excludeTextPortrait = conf and conf.alphaExcludeTextPortrait == true,
+    -- Out-of-combat fade: composed by GroupRangeFade (CoreAlpha) rather than
+    -- the shared Alpha element; externalOoc keeps the element's frame lane
+    -- untouched so the group composer never reads a stale ooc value.
+    oocFade = conf ~= nil and conf.oocFadeEnabled == true and oocAlpha < 1,
+    oocAlpha = oocAlpha,
+    externalOoc = true,
   }
 end
 
@@ -1735,9 +1751,18 @@ local function CompileBorderSpec(kind, conf, general)
   local bars = _G.MSUF_DB and _G.MSUF_DB.bars or nil
   local borderStrata = NormalizeFrameOutlineStrata(conf.hlOverride == true and conf.barOutlineStrata ~= nil and conf.barOutlineStrata or (bars and bars.barOutlineStrata))
   local borderLayer = Layer(conf.hlOverride == true and conf.barOutlineLayer ~= nil and conf.barOutlineLayer or (bars and bars.barOutlineLayer), 0)
+  -- Optional outline texture, same scope rails as thickness/layer. nil keeps
+  -- the solid-color edges; Rounded group frames ignore it (tinted edge only).
+  local borderTexture
+  local borderTextureKey = conf.hlOverride == true and conf.barOutlineTexture ~= nil and conf.barOutlineTexture or (bars and bars.barOutlineTexture)
+  if type(borderTextureKey) == "string" and borderTextureKey ~= "" then
+    borderTexture = ResolveStatusbarTextureKey(borderTextureKey, nil)
+    if borderTexture == WHITE then borderTexture = nil end
+  end
   return {
     enabled = conf.borderEnabled ~= false,
     thickness = borderThickness,
+    texture = borderTexture,
     layer = borderLayer,
     strata = borderStrata,
     r = Num(ScopedValue(conf, general, "barOutlineColorR", conf.borderR or general and general.barBorderR), 0),
