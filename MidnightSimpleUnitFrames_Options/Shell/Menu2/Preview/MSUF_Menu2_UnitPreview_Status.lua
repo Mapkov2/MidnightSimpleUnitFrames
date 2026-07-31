@@ -264,12 +264,31 @@ function Status.SetIconTexture(icon, spec, conf, g, key, data, runtimeCfg, statu
             txt:SetText(Status.IsIdentityText(spec) and Status.IdentityPreviewText(spec, data)
                 or STATUS_TEXT_STATE_IDS[spec.id]
                 or statusPreviewText or Status.StatusTextPreviewText(runtimeCfg or g) or "")
-            txt:SetTextColor(FontColor())
+            txt:SetTextColor(Status.TextIndicatorColor(spec, conf, g))
             txt:Show()
         end
     else
         if tex then tex:SetTexture("Interface\\Buttons\\WHITE8X8"); tex:SetVertexColor((spec.color and spec.color[1]) or 1, (spec.color and spec.color[2]) or 1, (spec.color and spec.color[3]) or 1, 0.85) end
     end
+end
+--- A text indicator may carry its own color, and the preview has to show it or
+--- the swatch and the live frame disagree. The DB prefix is derived from the
+--- spec's size key ("levelIndicatorSize" -> "levelIndicator") so this cannot
+--- drift from the engine's PrefixedStatusDef naming. No stored triple means the
+--- indicator is still following the frame font color.
+function Status.TextIndicatorColor(spec, conf, g)
+    local sizeKey = spec and spec.size
+    local prefix = type(sizeKey) == "string" and sizeKey:match("^(.*)Size$") or nil
+    if prefix then
+        local function Component(suffix)
+            local value = conf and conf[prefix .. suffix]
+            if value == nil then value = g and g[prefix .. suffix] end
+            return tonumber(value)
+        end
+        local r, green, b = Component("ColorR"), Component("ColorG"), Component("ColorB")
+        if r and green and b then return r, green, b end
+    end
+    return FontColor()
 end
 function Status.ResolveAnchor(spec, conf, g)
     if not spec then return "TOPLEFT" end

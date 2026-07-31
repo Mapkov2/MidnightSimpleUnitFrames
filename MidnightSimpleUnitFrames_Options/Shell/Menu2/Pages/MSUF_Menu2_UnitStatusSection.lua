@@ -70,7 +70,7 @@ local function BuildStatus(ctx, builder, unit)
     local placementCardX = leftX - 2
     local placementCardW = max(320, sectionW - placementCardX - 28)
     local placementCardY = topCardY - topCardH - cardRowGap
-    local placementCard = W.ControlCard(basicTab, "Placement", nil, placementCardX, placementCardY, placementCardW, 262)
+    local placementCard = W.ControlCard(basicTab, "Placement", nil, placementCardX, placementCardY, placementCardW, 316)
     local placeLeftX = 16
     local placeGap = 24
     local placeAvailableW = max(280, placementCardW - 32)
@@ -426,8 +426,19 @@ local function BuildStatus(ctx, builder, unit)
                 scope = unit,
                 unit = unit,
                 kind = "status",
-                subtitle = "Font style and color are synchronized with the Fonts menu for this frame.",
+                subtitle = "Font style follows the Fonts menu for this frame; the color can be set per indicator.",
                 colorTitle = "Status text color",
+                -- Resolves to the selected indicator's own color, falling back to
+                -- the frame font color while that indicator has none.
+                colorReferences = { "status.text.current" },
+                colorContext = function()
+                    local spec = CurrentStatusSpec(unit)
+                    return {
+                        unit = unit,
+                        colorPrefix = spec and spec.colorPrefix or nil,
+                        colorLabel = spec and spec.text or nil,
+                    }
+                end,
                 capabilities = { baseline = false },
             },
         })
@@ -490,6 +501,66 @@ local function BuildStatus(ctx, builder, unit)
     local layer = BindStatusPlacementSlider(placementCard, "Layer", 0, 30, placeLeftX, -178, placeLeftW, "layer", "defaultLayer", 7, "MSUF2_STATUS_LAYER", "Status indicator layer", {
         "level layer", "level draw order", "indicator layer", "draw order", "above text", "behind text",
     }, ClampSelectedStatusLayer)
+    -- Text indicators inherit the frame's resolved font color until a complete
+    -- triple is stored, so the swatch shows the effective color and a
+    -- right-click clears the override rather than pinning the inherited value.
+    -- Icon indicators have no colorPrefix and never show this control.
+    local function SelectedStatusColorRGB()
+        local spec = CurrentStatusSpec(unit)
+        local prefix = spec and spec.colorPrefix
+        if prefix then
+            local conf = GetConf(unit)
+            local r = tonumber(conf and conf[prefix .. "ColorR"])
+            local g = tonumber(conf and conf[prefix .. "ColorG"])
+            local b = tonumber(conf and conf[prefix .. "ColorB"])
+            if r and g and b then return r, g, b end
+        end
+        local getFont = _G.MSUF_GetConfiguredFontColor
+        if type(getFont) == "function" then
+            local r, g, b = getFont()
+            return tonumber(r) or 1, tonumber(g) or 1, tonumber(b) or 1
+        end
+        return 1, 1, 1
+    end
+    local function WriteSelectedStatusColor(r, g, b)
+        local spec = CurrentStatusSpec(unit)
+        local prefix = spec and spec.colorPrefix
+        if not prefix then return end
+        SetNumber(unit, prefix .. "ColorR", r, "MSUF2_STATUS_TEXT_COLOR", { preview = true })
+        SetNumber(unit, prefix .. "ColorG", g, "MSUF2_STATUS_TEXT_COLOR", { preview = true })
+        SetNumber(unit, prefix .. "ColorB", b, "MSUF2_STATUS_TEXT_COLOR", { preview = true })
+        RefreshStatusRuntime(unit, spec)
+    end
+    local textColor = W.Color(placementCard, "Text color")
+    M.BindColor(ctx, textColor, SelectedStatusColorRGB, WriteSelectedStatusColor)
+    if textColor.RegisterForClicks then textColor:RegisterForClicks("LeftButtonUp", "RightButtonUp") end
+    local textColorBaseClick = textColor.GetScript and textColor:GetScript("OnClick")
+    textColor:SetScript("OnClick", function(self, mouseButton, ...)
+        if mouseButton == "RightButton" then
+            if self.IsEnabled and not self:IsEnabled() then return end
+            local spec = CurrentStatusSpec(unit)
+            local prefix = spec and spec.colorPrefix
+            if not prefix then return end
+            M.RunWithHistory("Reset: " .. tostring(spec.text or spec.value or "Status text") .. " color",
+                "status:color-reset:" .. tostring(unit) .. ":" .. tostring(spec.value), function()
+                    local conf = GetConf(unit)
+                    conf[prefix .. "ColorR"], conf[prefix .. "ColorG"], conf[prefix .. "ColorB"] = nil, nil, nil
+                    RefreshStatusRuntime(unit, spec)
+                end)
+            self:SetRGB(SelectedStatusColorRGB())
+            return
+        end
+        if type(textColorBaseClick) == "function" then textColorBaseClick(self, mouseButton, ...) end
+    end)
+    if M.AddTooltip then
+        M.AddTooltip(textColor, "Text color",
+            "Color for the selected text indicator. Right-click to follow the frame font color again.", { hook = true })
+    end
+    RegisterStatusSearch(textColor, "Status text color", {
+        "level color", "level text color", "race text color", "class text color",
+        "raid group color", "dead text color", "ghost text color", "afk text color", "dnd text color",
+        "status text color", "indicator color",
+    }, nil, nil, "status.selected.text_color", nil, selectedStatusContract)
     local reset = W.Button(placementCard, "Reset selected", 150)
     PlaceButton(reset, placementCard, placeRightX, -178, 150)
     reset._msuf2SkipHistoryCheckpoint = true
@@ -505,6 +576,11 @@ local function BuildStatus(ctx, builder, unit)
                 if spec.symbol then conf[spec.symbol] = nil end
                 if spec.iconStyle then conf[spec.iconStyle] = nil end
                 if spec.customIcon then conf[spec.customIcon] = nil end
+            end
+            if spec.colorPrefix then
+                conf[spec.colorPrefix .. "ColorR"] = nil
+                conf[spec.colorPrefix .. "ColorG"] = nil
+                conf[spec.colorPrefix .. "ColorB"] = nil
             end
             RefreshStatusRuntime(unit, spec)
             RefreshStatusMenu()
@@ -621,6 +697,15 @@ local function BuildStatus(ctx, builder, unit)
         Shared.PlaceSlider(placementCard, y, placeRightX, -116, placeRightW)
         Shared.PlaceSlider(placementCard, layer, placeLeftX, -178, placeLeftW)
         PlaceButton(reset, placementCard, placeRightX, -178, 150)
+        if textColor and textColor._msuf2Title then
+            local labelW = math.max(86, math.min(160, placeLeftW - 60))
+            textColor._msuf2Title:ClearAllPoints()
+            textColor._msuf2Title:SetPoint("TOPLEFT", placementCard, "TOPLEFT", placeLeftX, -240)
+            textColor._msuf2Title:SetWidth(labelW)
+            textColor:SetSize(44, 18)
+            textColor:ClearAllPoints()
+            textColor:SetPoint("TOPLEFT", placementCard, "TOPLEFT", placeLeftX + labelW + 12, -238)
+        end
     end
     local function ShowControl(control, shown)
         if W.SetControlShown then
@@ -654,6 +739,7 @@ local function BuildStatus(ctx, builder, unit)
         ShowControl(iconPack, hasIconPack)
         ShowControl(customIcon, hasCustomIcon)
         ShowControl(selectedTextShortcut, isTextIndicator)
+        ShowControl(textColor, spec ~= nil and spec.colorPrefix ~= nil)
         ShowControl(raidGroupStyle, inlineName)
         ShowControl(test, showTestMode)
         ShowControls(true, anchor, x, y, layer, advanced.x, advanced.y, advanced.layer)
@@ -667,6 +753,8 @@ local function BuildStatus(ctx, builder, unit)
         SetControlEnabled(iconPack, hasIconPack and isEnabled)
         SetControlEnabled(customIcon, hasCustomIcon and isEnabled)
         SetControlEnabled(raidGroupStyle, inlineName and isEnabled)
+        SetControlEnabled(textColor, spec ~= nil and spec.colorPrefix ~= nil and isEnabled)
+        if textColor and textColor.SetRGB then textColor:SetRGB(SelectedStatusColorRGB()) end
         SetControlsEnabled(statusEnabledControls, isEnabled)
         SetControlsEnabled(statusDetachedControls, (not inlineName) and isEnabled)
         SetControlEnabled(reset, spec ~= nil)

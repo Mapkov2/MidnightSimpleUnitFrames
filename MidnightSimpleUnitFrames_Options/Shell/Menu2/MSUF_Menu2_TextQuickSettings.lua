@@ -504,6 +504,13 @@ local function ResolveTextColorTargets()
             return targets
         end
         local unit, data = PreviewUnitData(settings)
+        -- Unit scopes gained the same CUSTOM name color group frames already had.
+        -- Offering the swatch only in that mode keeps the picker from listing a
+        -- color the frame is not currently using.
+        if mode == "CUSTOM" then
+            targets[#targets + 1] = ScopedRGBTarget(scope, "Custom name color", "nameColorR", "nameColorG", "nameColorB",
+                { modeKey = "nameColorMode", modeValue = "CUSTOM" })
+        end
         if CurrentModeKind() == "npc_name" then
             targets[#targets + 1] = NPCColorTarget(ResolveNPCPreviewKind(unit, data))
         end

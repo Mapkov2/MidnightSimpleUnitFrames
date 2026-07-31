@@ -318,7 +318,7 @@ local function BuildPortrait(ctx, builder, unit)
         CASTBAR_UNITS[unit] and function() M.RequestRefresh(ctx, "portrait-cast-icon-mirror") end or nil)
     castSpellIcon._msuf2SearchText = "Portrait cast spell icon casting channel empower"
     local portraitActiveControls = {
-        render, shape, size, widthOverride, heightOverride, x, y, border, portraitBg, castSpellIcon,
+        render, shape, size, widthOverride, heightOverride, x, y, portraitBg, castSpellIcon,
         placement, levelOffset, portraitAlpha,
     }
     local function PortraitActive() return NormalizePortrait(unit) ~= "OFF" end
@@ -327,6 +327,11 @@ local function BuildPortrait(ctx, builder, unit)
     end
     local function PortraitIs2D(conf)
         return PortraitActive() and ((conf.portraitRender or "2D") ~= "CLASS")
+    end
+    -- The Blizzard ring shape brings the stock gold ring with it, so every MSUF
+    -- border control is inert while it is selected.
+    local function PortraitShapeIsBlizzard(conf)
+        return (conf.portraitShape or "SQUARE") == "BLIZZARD"
     end
     RefreshPortraitControls = RefreshPortraitControls(M.BindGateGroup(ctx, function() return GetConf(unit) end, {
         { enable = portraitEnable },
@@ -337,13 +342,19 @@ local function BuildPortrait(ctx, builder, unit)
         { controls = { detachedPoint, detachedTo }, on = function(conf) return PortraitPlacementIs(conf, "DETACHED") end },
         { controls = overlayAlign, on = function(conf) return PortraitPlacementIs(conf, "OVERLAY") end },
         { controls = { zoom, panX, panY }, on = PortraitIs2D },
-        { controls = { borderSize, borderArt }, on = function(conf) return PortraitActive() and ((conf.portraitBorderStyle or "NONE") ~= "NONE") end },
+        { controls = border, on = function(conf) return PortraitActive() and not PortraitShapeIsBlizzard(conf) end },
+        { controls = { borderSize, borderArt }, on = function(conf)
+            return PortraitActive()
+                and ((conf.portraitBorderStyle or "NONE") ~= "NONE")
+                and not PortraitShapeIsBlizzard(conf)
+        end },
         -- Direction rotates the relief art's light; the flat renderers have no
         -- orientation to speak of.
         { controls = borderDirection, on = function(conf)
             return PortraitActive()
                 and ((conf.portraitBorderStyle or "NONE") ~= "NONE")
                 and ((conf.portraitBorderArt or "FLAT") == "RELIEF")
+                and not PortraitShapeIsBlizzard(conf)
         end },
         -- Fill-into-the-gap squares off the four straight edges; shaped portraits
         -- render a ring that follows the silhouette and relief art replaces both.
@@ -754,10 +765,70 @@ local function BuildCastbar(ctx, builder, unit)
             end)())
         return control
     end
+    -- Castbar detail text colors are stored as a complete triple or not at all:
+    -- the castbar font path falls back to the shared castbar text color when the
+    -- override is absent. The swatch therefore shows the *effective* color, and a
+    -- right-click clears the override rather than pinning the inherited value as
+    -- an explicit one, which is the only way back to "follow the shared color".
+    local function DetailColorRGB(detail)
+        local get = _G.MSUF_GetCastbarDetailTextColor
+        if type(get) == "function" then
+            local r, g, b, custom = get(unit, detail)
+            if custom == true then return r, g, b end
+        end
+        local shared = _G.MSUF_GetCastbarTextColor
+        if type(shared) == "function" then
+            local r, g, b = shared()
+            return tonumber(r) or 1, tonumber(g) or 1, tonumber(b) or 1
+        end
+        return 1, 1, 1
+    end
+    local function BindDetailColor(parent, list, label, x, y, labelWidth, detail, reason)
+        local control = W.Color(parent, label)
+        AddControl(list, control)
+        W.AttachUnitEditFocus(control, unit, "castbar")
+        local colorKey = DetailKey(detail .. "Color")
+        M.BindColor(ctx, control,
+            function() return DetailColorRGB(detail) end,
+            function(r, g, b)
+                SetGeneralValue(colorKey .. "R", r, reason)
+                SetGeneralValue(colorKey .. "G", g, reason)
+                SetGeneralValue(colorKey .. "B", b, reason)
+            end,
+            SettingMeta(ctx, "castbar.detail." .. tostring(reason), "general", colorKey .. "R"))
+        if control._msuf2Title then
+            local width = tonumber(labelWidth) or 150
+            control._msuf2Title:ClearAllPoints()
+            control._msuf2Title:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+            control._msuf2Title:SetWidth(width)
+            control:SetSize(44, 18)
+            control:ClearAllPoints()
+            control:SetPoint("TOPLEFT", parent, "TOPLEFT", x + width + 12, y + 2)
+        end
+        if control.RegisterForClicks then control:RegisterForClicks("LeftButtonUp", "RightButtonUp") end
+        local baseClick = control.GetScript and control:GetScript("OnClick")
+        control:SetScript("OnClick", function(self, mouseButton, ...)
+            if mouseButton == "RightButton" then
+                if self.IsEnabled and not self:IsEnabled() then return end
+                SetGeneralValue(colorKey .. "R", nil, reason)
+                SetGeneralValue(colorKey .. "G", nil, reason)
+                SetGeneralValue(colorKey .. "B", nil, reason)
+                self:SetRGB(DetailColorRGB(detail))
+                return
+            end
+            if type(baseClick) == "function" then baseClick(self, mouseButton, ...) end
+        end)
+        if M.AddTooltip then
+            M.AddTooltip(control, label,
+                "Right-click to follow the shared castbar text color again.", { hook = true })
+        end
+        return control
+    end
     local function BuildDetailControls(parent, list, specs)
         M.BuildControlSpecs(specs, {
             dropdown = function(s) return BindDetailDropdown(parent, list, s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10]) end,
             slider = function(s) return BindDetailSlider(parent, list, s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10], s[11], s[12]) end,
+            color = function(s) return BindDetailColor(parent, list, s[2], s[3], s[4], s[5], s[6], s[7]) end,
         })
     end
     local function NormalizeBackend(value)
@@ -851,9 +922,9 @@ local function BuildCastbar(ctx, builder, unit)
     local sizeCard = W.ControlCard(generalTab, "Size", "Width can use manual bounds or follow another frame.", leftX, -154, sectionW - 32, 166)
     local iconCard = W.ControlCard(iconTab, nil, nil, leftX, -4, leftW, 478)
     local portraitIconCard = W.ControlCard(iconTab, "Portrait Cast Icon", nil, rightX, -4, rightW, 156)
-    local spellCard = W.ControlCard(spellTab, nil, nil, leftX, -4, leftW, 370)
-    local targetNameCard = fields.targetName and W.ControlCard(spellTab, "Cast Target Text", nil, rightX, -4, rightW, 370) or nil
-    local timeCard = W.ControlCard(timeTab, nil, nil, leftX, -4, leftW, 370)
+    local spellCard = W.ControlCard(spellTab, nil, nil, leftX, -4, leftW, 418)
+    local targetNameCard = fields.targetName and W.ControlCard(spellTab, "Cast Target Text", nil, rightX, -4, rightW, 418) or nil
+    local timeCard = W.ControlCard(timeTab, nil, nil, leftX, -4, leftW, 418)
     local textAdvancedCard = W.ControlCard(advancedTab, "Spell Text Behavior", nil, leftX, -4, leftW, 190)
     local iconAdvancedCard = W.ControlCard(advancedTab, "Icon Style", nil, rightX, -4, rightW, 212)
     local layerAdvancedCard = W.ControlCard(advancedTab, "Whole Castbar Layer", nil, rightX, -230, rightW, 164)
@@ -900,20 +971,24 @@ local function BuildCastbar(ctx, builder, unit)
                 textSettings = {
                     scope = "shared",
                     unit = unit,
-                    kind = colorId == "cast.target_text" and "cast_target" or "cast",
+                    kind = colorId == "cast.target_text.current" and "cast_target" or "cast",
                     colorReferences = { colorId },
+                    colorContext = castContext,
                     colorTitle = title,
-                    subtitle = "Castbar text follows the shared Fonts settings.",
+                    subtitle = "Castbar text follows the shared Fonts settings until this text gets its own color.",
                     capabilities = { baseline = false },
                 },
             })
         end
-        AttachCastTextSettings(spellCard, "cast.text", "Cast Spell Text Color", "menu:unit-castbar-spell-text-color")
+        -- Each text gets its own detail reference. They resolve to the shared
+        -- castbar text color while no per-castbar override exists, so the three
+        -- cards no longer all edit one value behind three different labels.
+        AttachCastTextSettings(spellCard, "cast.spell_text.current", "Cast Spell Text Color", "menu:unit-castbar-spell-text-color")
         if targetNameCard then
-            AttachCastTextSettings(targetNameCard, "cast.target_text", "Cast Target Text Color", "menu:unit-castbar-target-text-color")
+            AttachCastTextSettings(targetNameCard, "cast.target_text.current", "Cast Target Text Color", "menu:unit-castbar-target-text-color")
         end
-        AttachCastTextSettings(timeCard, "cast.text", "Cast Time Text Color", "menu:unit-castbar-time-text-color")
-        AttachCastTextSettings(textAdvancedCard, "cast.text", "Cast Spell Text Color", "menu:unit-castbar-advanced-text-color")
+        AttachCastTextSettings(timeCard, "cast.time_text.current", "Cast Time Text Color", "menu:unit-castbar-time-text-color")
+        AttachCastTextSettings(textAdvancedCard, "cast.spell_text.current", "Cast Spell Text Color", "menu:unit-castbar-advanced-text-color")
         W.AttachContextColorReferences(iconAdvancedCard, IconBorderColorRefs, {
             title = "Castbar Icon Border Color",
             note = "Used by the Castbar icon-border style.",
@@ -1087,6 +1162,7 @@ local function BuildCastbar(ctx, builder, unit)
         { "dropdown", "Alignment", 16, -196, min(260, controlWLeft), CASTBAR_TEXT_ALIGN, DetailKey("SpellNameAlign"), "LEFT", "MSUF2_CASTBAR_SPELL_ALIGN" },
         { "slider", "X offset", 16, -250, controlWLeft, -300, 300, 1, DetailKey("TextOffsetX"), 0, "MSUF2_CASTBAR_SPELL_X" },
         { "slider", "Y offset", 16, -304, controlWLeft, -300, 300, 1, DetailKey("TextOffsetY"), 0, "MSUF2_CASTBAR_SPELL_Y" },
+        { "color", "Spell text color", 16, -358, min(200, controlWLeft - 60), "SpellName", "MSUF2_CASTBAR_SPELL_COLOR" },
     })
     local targetNameToggle
     if fields.targetName and targetNameCard then
@@ -1106,6 +1182,7 @@ local function BuildCastbar(ctx, builder, unit)
             { "dropdown", "Alignment", 16, -196, min(260, controlWRight), CASTBAR_TEXT_ALIGN, DetailKey("TargetNameAlign"), "RIGHT", "MSUF2_CASTBAR_TARGET_NAME_ALIGN" },
             { "slider", "X offset", 16, -250, controlWRight, -300, 300, 1, DetailKey("TargetNameOffsetX"), 0, "MSUF2_CASTBAR_TARGET_NAME_X" },
             { "slider", "Y offset", 16, -304, controlWRight, -300, 300, 1, DetailKey("TargetNameOffsetY"), 1, "MSUF2_CASTBAR_TARGET_NAME_Y" },
+            { "color", "Target text color", 16, -358, min(200, controlWRight - 60), "TargetName", "MSUF2_CASTBAR_TARGET_NAME_COLOR" },
         })
     end
     local function ReadSpellTextWidthMode()
@@ -1183,6 +1260,7 @@ local function BuildCastbar(ctx, builder, unit)
         { "slider", "Size", 16, -196, controlWLeft, 0, 48, 1, DetailKey("TimeFontSize"), 0, "MSUF2_CASTBAR_TIME_SIZE" },
         { "slider", "X offset", 16, -250, controlWLeft, -300, 300, 1, DetailKey("TimeOffsetX"), unit == "boss" and 0 or -2, "MSUF2_CASTBAR_TIME_X" },
         { "slider", "Y offset", 16, -304, controlWLeft, -300, 300, 1, DetailKey("TimeOffsetY"), 0, "MSUF2_CASTBAR_TIME_Y" },
+        { "color", "Cast time color", 16, -358, min(200, controlWLeft - 60), "Time", "MSUF2_CASTBAR_TIME_COLOR" },
     })
     local castbarFeatureToggles = { time, interrupt, icon, text, targetNameToggle }
     local function MsufOn() return ReadCastbarBackend() == "MSUF" end

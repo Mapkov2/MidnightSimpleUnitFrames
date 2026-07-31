@@ -834,6 +834,18 @@ end
 local function ApplyCastTargetTextColor(frame, classFilename)
     local fs = frame and frame.castTargetText
     if not fs then return end
+    -- A per-castbar target-name color is the most specific choice the user can
+    -- make, so it wins over the shared custom color and over the class-color
+    -- fallback below. Checked here because this path recolors on every cast and
+    -- would otherwise overwrite what the castbar font pass applied.
+    local getDetailColor = _G.MSUF_GetCastbarDetailTextColor
+    if type(getDetailColor) == "function" and frame.unit then
+        local r, g, b, custom = getDetailColor(frame.unit, "TargetName")
+        if custom == true then
+            SetCastTargetTextPlainColorIfChanged(fs, r, g, b)
+            return
+        end
+    end
     local getCustomColor = _G.MSUF_GetCastbarTargetNameColor
     if type(getCustomColor) == "function" then
         local r, g, b, custom = getCustomColor()

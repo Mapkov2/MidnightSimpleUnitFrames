@@ -511,7 +511,11 @@ local function _MSUF_ApplyFontsToFrame(f)
     if f.classificationIndicatorText then _MSUF_ApplyFontCached(f.classificationIndicatorText, (conf and conf.classificationIndicatorSize) or nameSize, true, S.fr, S.fg, S.fb, S.textAlpha) end
 
     local statusSize = _MSUF_NormalizeFontSize(nameSize, 14) + 2
-    if f.statusIndicatorText then _MSUF_ApplyFontCached(f.statusIndicatorText, statusSize, true, S.fr, S.fg, S.fb, S.textAlpha) end
+    -- Status text owns its color in the Status element, which resolves the
+    -- optional per-state override before falling back to this same font color.
+    -- Writing it here too would win the last write after any font change and
+    -- silently drop a configured Dead/Ghost/AFK/DND color, so size only.
+    if f.statusIndicatorText then _MSUF_ApplyFontCached(f.statusIndicatorText, statusSize, false, 0, 0, 0) end
     if f.statusIndicatorOverlayText then _MSUF_ApplyFontCached(f.statusIndicatorOverlayText, statusSize, true, S.fr, S.fg, S.fb, S.textAlpha) end
 
     if f.nameText and S.UpdateNameColor then S.UpdateNameColor(f) end

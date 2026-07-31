@@ -87,6 +87,12 @@ local COLOR_SETTING_KEY_BY_PATH = {
     ["portrait.background_color"] = "general.portraitBgColor",
     ["portrait.border_color"] = "general.portraitBorderColor",
     ["table.bossTargetHighlightColor"] = "general.bossTargetHighlightColor",
+    ["texture_layer.color"] = "general.texLayerColor",
+    ["texture_layer.gradient_color"] = "general.texLayerGradient2",
+    ["texture_layer2.color"] = "general.texLayer2Color",
+    ["texture_layer2.gradient_color"] = "general.texLayer2Gradient2",
+    ["texture_layer3.color"] = "general.texLayer3Color",
+    ["texture_layer3.gradient_color"] = "general.texLayer3Gradient2",
     ["table.combatStateLeaveColor"] = "gameplay.combatStateLeaveColor",
     ["table.combatTimerColor"] = "gameplay.combatTimerColor",
     ["table.crosshairInRangeColor"] = "gameplay.crosshairInRangeColor",
@@ -1050,6 +1056,24 @@ local function SetAllPortraitRGB(prefix, r, g, b)
     end
     ApplyPortraitColors(prefix)
 end
+--- Texture layer colors mirror the portrait pattern: the Colors page writes the
+--- general baseline plus every unit's copy, while the unit accordion edits only
+--- its own frame. Refreshes are cold path (one re-stamp per frame). Stored on M
+--- instead of file locals: this file rides the 200 active-local ceiling.
+function M._ApplyTextureLayerColors()
+    CallGlobal("MSUF_RefreshUnitTextureLayers")
+    CallGlobal("MSUF_UFPreview_RequestRefresh", "MSUF2_TEXLAYER")
+end
+function M._SetAllTextureLayerRGB(prefix, r, g, b)
+    local db = DB()
+    db.general = db.general or {}
+    db.general[prefix .. "R"], db.general[prefix .. "G"], db.general[prefix .. "B"] = r, g, b
+    for _, key in ipairs({ "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" }) do
+        db[key] = db[key] or {}
+        db[key][prefix .. "R"], db[key][prefix .. "G"], db[key][prefix .. "B"] = r, g, b
+    end
+    M._ApplyTextureLayerColors()
+end
 local function BuildPowerAndClassPowerColors(ctx, b, CH)
     local power = b:CollapsibleSection("colors_power", "Power Bar Colors", 150, false)
     M.colorsPowerToken = M.colorsPowerToken or "MANA"
@@ -1362,10 +1386,26 @@ local function PowerTypeSwatch()
     local r, g, b = GetPowerOverrideRGB(token and token ~= "" and token or "MANA")
     return { r, g, b }
 end
+-- Frame and indicator choices for the canonical status text color surface. The
+-- indicator value IS the DB key prefix, which keeps this list and the engine's
+-- PrefixedStatusDef naming in one piece. Parked on M rather than a file local:
+-- this chunk is at Lua 5.1's 200-local ceiling and one more breaks the page.
+M._statusTextColor = {
+    units = ValueTextPairs "player=Player|target=Target|focus=Focus|targettarget=Target of Target|focustarget=Focus Target|pet=Pet|boss=Boss Frames",
+    indicators = ValueTextPairs "levelIndicator=Level Text|raceIndicator=Race Text|classTextIndicator=Class Text|raidGroupName=Raid Group|statusText=Dead / Offline Text|statusGhostText=Ghost Text|statusAFKText=AFK Text|statusDNDText=DND Text",
+    unitKeys = {},
+    prefixKeys = {},
+}
+for i = 1, #M._statusTextColor.units do M._statusTextColor.unitKeys[M._statusTextColor.units[i].value] = true end
+for i = 1, #M._statusTextColor.indicators do M._statusTextColor.prefixKeys[M._statusTextColor.indicators[i].value] = true end
 local FONT_TEXT_MODE_VALUES = {
     name = {
         { value = "DEFAULT", text = "Default (Font Color)", swatchColor = FontColorSwatch },
         { value = "CLASS", text = "Class Color", swatchColor = PlayerClassSwatch },
+        { value = "CUSTOM", text = "Custom Color", swatchColor = function()
+            local g = G()
+            return tonumber(g.nameColorR) or 1, tonumber(g.nameColorG) or 1, tonumber(g.nameColorB) or 1
+        end },
     },
     npc = {
         { value = "DEFAULT", text = "Default (Font Color)", swatchColor = FontColorSwatch },
@@ -1391,7 +1431,7 @@ local function ApplySharedFontTextColors(reason)
 end
 local function BuildFontAndClassColors(ctx, b, CH, part)
     if part ~= "classes" then
-    local font = b:CollapsibleSection("colors_font", "Text Colors", 252, false)
+    local font = b:CollapsibleSection("colors_font", "Text Colors", 296, false)
     local fontW = font._msuf2Width or ctx.width or 720
     CH.ApiColorAt(ctx, font, "Global font color", 12, -10, "GetGlobalFontColor", "SetGlobalFontColor", 1, 1, 1)
     CH.ButtonAt(font, "Use font palette", 360, -10, 170, function()
@@ -1401,11 +1441,22 @@ local function BuildFontAndClassColors(ctx, b, CH, part)
             ApplyColors()
         end
     end, "font.use_palette")
+    local refreshNameCustomColor
     local nameModeDropdown = ValueDropdownAt(ctx, font, "Player Name Color", 12, -52, FONT_TEXT_MODE_VALUES.name, 300,
-        function() return G().nameClassColor and "CLASS" or "DEFAULT" end,
+        function()
+            local g = G()
+            if g.nameColorMode == "CUSTOM" then return "CUSTOM" end
+            return g.nameClassColor and "CLASS" or "DEFAULT"
+        end,
         function(v)
-            G().nameClassColor = v == "CLASS"
+            local g = G()
+            if v ~= "CLASS" and v ~= "CUSTOM" then v = "DEFAULT" end
+            -- nameColorMode is the new source of truth; nameClassColor stays in
+            -- sync so the engine fallback and older profiles keep working.
+            g.nameColorMode = v
+            g.nameClassColor = v == "CLASS"
             ApplySharedFontTextColors("MSUF2_NAME_CLASS_COLOR")
+            if refreshNameCustomColor then refreshNameCustomColor() end
         end,
         Meta("font.text_mode.player_name", "ephemeral"))
     local npcModeDropdown = ValueDropdownAt(ctx, font, "NPC / Boss Name Color", 360, -52, FONT_TEXT_MODE_VALUES.npc, 300,
@@ -1452,17 +1503,102 @@ local function BuildFontAndClassColors(ctx, b, CH, part)
         M.AddTooltip(powerModeDropdown, TrText("Power Text Color"),
             TrText("Power text color mode for all frames that follow the shared text settings."), { hook = true })
     end
+    local nameCustomColor = ColorValueAt(ctx, font, "Custom name color", 12, -166,
+        function()
+            local g = G()
+            return tonumber(g.nameColorR) or 1, tonumber(g.nameColorG) or 1, tonumber(g.nameColorB) or 1
+        end,
+        function(r, g2, b2)
+            local g = G()
+            g.nameColorR, g.nameColorG, g.nameColorB = r, g2, b2
+            -- Choosing a color is the intent to use it, so the mode follows.
+            if g.nameColorMode ~= "CUSTOM" then
+                g.nameColorMode = "CUSTOM"
+                g.nameClassColor = false
+                if nameModeDropdown and nameModeDropdown.SetValue then nameModeDropdown:SetValue("CUSTOM") end
+            end
+            ApplySharedFontTextColors("MSUF2_NAME_CUSTOM_COLOR")
+        end,
+        nil, nil, Meta("font.name_custom.color"), { 1, 1, 1 })
+    refreshNameCustomColor = function()
+        SetControlEnabled(nameCustomColor, G().nameColorMode == "CUSTOM")
+    end
+    refreshNameCustomColor()
+    M.TrackRefresh(ctx, refreshNameCustomColor)
     local sharedNote = W.Text(font, "Shared defaults for all frames. Per-frame and group overrides live in Fonts > Text Colors.",
-        12, -172, fontW - 28, T.colors.muted)
+        12, -212, fontW - 28, T.colors.muted)
     sharedNote:SetJustifyH("LEFT")
     local openFonts = T.Button(font, "Fonts > Text Colors", 190, 22)
-    openFonts:SetPoint("TOPLEFT", font, "TOPLEFT", 12, -204)
+    openFonts:SetPoint("TOPLEFT", font, "TOPLEFT", 12, -248)
     if T.CenterButtonLabel then T.CenterButtonLabel(openFonts) end
     if M.AddTooltip then
         M.AddTooltip(openFonts, "Fonts > Text Colors", "Open the Fonts page at its Text Colors section.", { hook = true })
     end
     openFonts:SetScript("OnClick", OpenFontsTextColors)
     RegisterControl(openFonts, Meta("font.open_text_colors", "navigation", { navigationKey = "opt_fonts" }), "Fonts > Text Colors", "button")
+
+    -- Canonical surface for the per-indicator status text colors that Unit >
+    -- Status also exposes. Frame and indicator are picked one at a time so the
+    -- eight indicators across seven frames stay a single swatch. An indicator
+    -- with no stored color shows the font color it currently inherits.
+    local statusText = b:CollapsibleSection("colors_status_text", "Status Text Colors", 250, false)
+    local statusTextW = statusText._msuf2Width or ctx.width or 720
+    local function StatusTextUnit()
+        local value = tostring(M._colorsStatusTextUnit or "player")
+        return M._statusTextColor.unitKeys[value] and value or "player"
+    end
+    local function StatusTextPrefix()
+        local value = tostring(M._colorsStatusTextIndicator or "levelIndicator")
+        return M._statusTextColor.prefixKeys[value] and value or "levelIndicator"
+    end
+    local function StatusTextConf()
+        local db = DB()
+        local key = StatusTextUnit()
+        local conf = db[key]
+        if type(conf) ~= "table" then conf = {}; db[key] = conf end
+        return conf
+    end
+    local function ApplyStatusTextColors()
+        M.RequestGeneralApply("MSUF2_STATUS_TEXT_COLOR", { preview = true, applyAll = false })
+    end
+    LabelAt(statusText, "Color for a single text indicator on one frame. Unset indicators follow that frame's font color.",
+        12, -8, statusTextW - 28, "GameFontHighlightSmall", T.colors.muted)
+    local statusUnitDropdown = ValueDropdownAt(ctx, statusText, "Frame", 12, -44, M._statusTextColor.units, min(260, statusTextW - 32),
+        StatusTextUnit,
+        function(value)
+            M._colorsStatusTextUnit = value
+            if M.RequestRefresh then M.RequestRefresh(ctx, "status-text-color-unit") elseif M.Refresh then M.Refresh(ctx) end
+        end,
+        Meta("status_text.color.unit", "ephemeral"))
+    RegisterControl(statusUnitDropdown, Meta("status_text.color.unit", "ephemeral"), "Frame", "dropdown", M._statusTextColor.units)
+    local statusIndicatorDropdown = ValueDropdownAt(ctx, statusText, "Indicator", 12, -100, M._statusTextColor.indicators, min(260, statusTextW - 32),
+        StatusTextPrefix,
+        function(value)
+            M._colorsStatusTextIndicator = value
+            if M.RequestRefresh then M.RequestRefresh(ctx, "status-text-color-indicator") elseif M.Refresh then M.Refresh(ctx) end
+        end,
+        Meta("status_text.color.indicator", "ephemeral"))
+    RegisterControl(statusIndicatorDropdown, Meta("status_text.color.indicator", "ephemeral"), "Indicator", "dropdown", M._statusTextColor.indicators)
+    ColorValueAt(ctx, statusText, "Text color", 12, -156,
+        function()
+            local conf, prefix = StatusTextConf(), StatusTextPrefix()
+            local r = tonumber(conf[prefix .. "ColorR"])
+            local g = tonumber(conf[prefix .. "ColorG"])
+            local bcol = tonumber(conf[prefix .. "ColorB"])
+            if r and g and bcol then return r, g, bcol end
+            return M._ContextConfiguredGlobalFontRGB()
+        end,
+        function(r, g, bcol)
+            local conf, prefix = StatusTextConf(), StatusTextPrefix()
+            conf[prefix .. "ColorR"], conf[prefix .. "ColorG"], conf[prefix .. "ColorB"] = r, g, bcol
+            ApplyStatusTextColors()
+        end,
+        nil, nil, Meta("status_text.color.value"))
+    CH.ButtonAt(statusText, "Follow font color", 12, -196, 190, function()
+        local conf, prefix = StatusTextConf(), StatusTextPrefix()
+        conf[prefix .. "ColorR"], conf[prefix .. "ColorG"], conf[prefix .. "ColorB"] = nil, nil, nil
+        ApplyStatusTextColors()
+    end, "status_text.color.reset")
     end
     if part == "font" then return end
     local tokens = GetClassTokens()
@@ -2083,6 +2219,31 @@ FixedContextFactory("portrait.background", function()
     target.captureState, target.restoreState = state.captureState, state.restoreState
     return target
 end)
+for _, texSlot in ipairs({
+    { id = "texture_layer", prefix = "texLayer", label = "Texture layer" },
+    { id = "texture_layer2", prefix = "texLayer2", label = "Texture layer 2" },
+    { id = "texture_layer3", prefix = "texLayer3", label = "Texture layer 3" },
+}) do
+    local slotId, slotPrefix, slotLabel = texSlot.id, texSlot.prefix, texSlot.label
+    FixedContextFactory(slotId .. ".color", function()
+        local target = ContextTarget(slotId .. ".color", slotLabel,
+            function() return GeneralRGB(slotPrefix .. "Color", 1, 1, 1) end,
+            function(r, g, b) M._SetAllTextureLayerRGB(slotPrefix .. "Color", r, g, b) end)
+        local state = ContextDBRowsState({ "general", "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" },
+            { slotPrefix .. "ColorR", slotPrefix .. "ColorG", slotPrefix .. "ColorB" }, M._ApplyTextureLayerColors)
+        target.captureState, target.restoreState = state.captureState, state.restoreState
+        return target
+    end)
+    FixedContextFactory(slotId .. ".gradient", function()
+        local target = ContextTarget(slotId .. ".gradient", slotLabel .. " gradient end",
+            function() return GeneralRGB(slotPrefix .. "Gradient2", 0, 0, 0) end,
+            function(r, g, b) M._SetAllTextureLayerRGB(slotPrefix .. "Gradient2", r, g, b) end)
+        local state = ContextDBRowsState({ "general", "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" },
+            { slotPrefix .. "Gradient2R", slotPrefix .. "Gradient2G", slotPrefix .. "Gradient2B" }, M._ApplyTextureLayerColors)
+        target.captureState, target.restoreState = state.captureState, state.restoreState
+        return target
+    end)
+end
 FixedContextFactory("font.global", function()
     local target = ContextTarget("font.global", "Default font", M._ContextConfiguredGlobalFontRGB,
         function(r, g, b)
@@ -2203,6 +2364,75 @@ FixedContextFactory("cast.background", function()
 end)
 FixedContextFactory("cast.kick_ready", function() return ContextTable("cast.kick_ready", "Kick ready", G, "kickReadyColor", 0, 1, 0, ApplyCastbarColors) end)
 FixedContextFactory("cast.kick_not_ready", function() return ContextTable("cast.kick_not_ready", "Kick not ready", G, "kickNotReadyColor", 1, 0, 0, ApplyCastbarColors) end)
+-- Per-castbar detail text colors. A detail with no complete stored triple is
+-- still following the shared castbar color, so the factory hands back that
+-- shared target instead of a swatch whose first click would quietly create an
+-- override nobody asked for. Locals stay inside this IIFE: it sits at the Lua
+-- 5.1 upvalue ceiling, so the DB reach-through goes via the exported globals.
+local CAST_DETAIL_PREFIX = {
+    player = "castbarPlayer", target = "castbarTarget", focus = "castbarFocus", boss = "bossCast",
+}
+local function CastDetailContextTarget(context, detail, label, sharedId)
+    local unit = ContextUnit(context)
+    local read = _G.MSUF_GetCastbarDetailTextColor
+    local write = _G.MSUF_SetCastbarDetailTextColor
+    local prefix = CAST_DETAIL_PREFIX[unit]
+    if not (prefix and type(read) == "function" and type(write) == "function") then
+        return CONTEXT_COLOR_FACTORIES[sharedId]()
+    end
+    local _, _, _, custom = read(unit, detail)
+    if custom ~= true then return CONTEXT_COLOR_FACTORIES[sharedId]() end
+    local key = prefix .. detail .. "Color"
+    local target = ContextTarget("cast.detail." .. unit .. "." .. detail, label,
+        function()
+            local r, g, b = read(unit, detail)
+            return r, g, b
+        end,
+        function(r, g, b)
+            write(unit, detail, r, g, b)
+            ApplyCastbarColors()
+        end)
+    local state = ContextStoredState(G, { key .. "R", key .. "G", key .. "B" }, ApplyCastbarColors)
+    target.captureState, target.restoreState = state.captureState, state.restoreState
+    return target
+end
+ContextFactory("cast.spell_text.current", function(context)
+    return CastDetailContextTarget(context, "SpellName", "Cast spell text", "cast.text")
+end)
+ContextFactory("cast.time_text.current", function(context)
+    return CastDetailContextTarget(context, "Time", "Cast time text", "cast.text")
+end)
+ContextFactory("cast.target_text.current", function(context)
+    return CastDetailContextTarget(context, "TargetName", "Cast target text", "cast.target_text")
+end)
+-- Status text indicators (level/race/class/raid group and the Dead, Ghost, AFK
+-- and DND states). An unset indicator follows the frame's font color, so it
+-- resolves to the shared font target for the same reason as the castbar
+-- details above.
+ContextFactory("status.text.current", function(context)
+    local unit = ContextUnit(context)
+    local prefix = ContextValue(context and context.colorPrefix, context)
+    local conf = type(prefix) == "string" and prefix ~= "" and DB()[unit] or nil
+    if not conf then return CONTEXT_COLOR_FACTORIES["font.global"]() end
+    local target = ContextTarget("status.text." .. unit .. "." .. prefix,
+        ContextValue(context and context.colorLabel, context) or "Status text",
+        function()
+            local r = tonumber(conf[prefix .. "ColorR"])
+            local g = tonumber(conf[prefix .. "ColorG"])
+            local b = tonumber(conf[prefix .. "ColorB"])
+            if r and g and b then return r, g, b end
+            return M._ContextConfiguredGlobalFontRGB()
+        end,
+        function(r, g, b)
+            conf[prefix .. "ColorR"], conf[prefix .. "ColorG"], conf[prefix .. "ColorB"] = r, g, b
+            M.RequestGeneralApply("MSUF2_STATUS_TEXT_COLOR", { preview = true, applyAll = false })
+        end)
+    local state = ContextStoredState(function() return conf end,
+        { prefix .. "ColorR", prefix .. "ColorG", prefix .. "ColorB" },
+        function() M.RequestGeneralApply("MSUF2_STATUS_TEXT_COLOR", { preview = true, applyAll = false }) end)
+    target.captureState, target.restoreState = state.captureState, state.restoreState
+    return target
+end)
 
 local function AuraTableFactory(id, label, key, dr, dg, db)
     FixedContextFactory(id, function() return ContextTable(id, label, G, key, dr, dg, db, ApplyAuraColors) end)
@@ -2839,6 +3069,66 @@ local function BuildCastbarColors(ctx, b, CH)
         if not apiOwnsRefresh then ApplyCastbarColors() end
     end, "castbar.reset")
     M.TrackRefresh(ctx, RefreshCastbarOverrideControls)
+
+    -- Canonical surface for the per-castbar text colors that the Unit > Castbar
+    -- cards also expose. One castbar is edited at a time so four units stay
+    -- three swatches instead of twelve. An unset detail shows the shared castbar
+    -- text color it is currently inheriting; the reset button restores that.
+    local detail = b:CollapsibleSection("colors_castbar_text", "Castbar Text Colors", 280, false)
+    local detailW = detail._msuf2Width or ctx.width or 720
+    local function DetailUnit()
+        local value = tostring(M._colorsCastbarDetailUnit or "player")
+        if value == "target" or value == "focus" or value == "boss" then return value end
+        return "player"
+    end
+    local function DetailRGB(suffix)
+        local read = _G.MSUF_GetCastbarDetailTextColor
+        if type(read) == "function" then
+            local r, g, bcol, custom = read(DetailUnit(), suffix)
+            if custom == true then return r, g, bcol end
+        end
+        return ApiRGB("GetCastbarTextColor", 1, 1, 1)
+    end
+    local function SetDetailRGB(suffix, r, g, bcol)
+        local write = _G.MSUF_SetCastbarDetailTextColor
+        if type(write) == "function" then write(DetailUnit(), suffix, r, g, bcol) end
+        ApplyCastbarColors()
+    end
+    LabelAt(detail, "Each castbar text can override the shared castbar text color. Target text exists on Target and Focus only.",
+        12, -8, detailW - 28, "GameFontHighlightSmall", T.colors.muted)
+    local detailUnitDropdown = ValueDropdownAt(ctx, detail, "Editing:", 12, -44,
+        ValueTextPairs "player=Player|target=Target|focus=Focus|boss=Boss", min(260, detailW - 32),
+        DetailUnit,
+        function(value)
+            M._colorsCastbarDetailUnit = value
+            if M.RequestRefresh then M.RequestRefresh(ctx, "castbar-text-color-unit") elseif M.Refresh then M.Refresh(ctx) end
+        end,
+        Meta("castbar.text_color.unit", "ephemeral"))
+    RegisterControl(detailUnitDropdown, Meta("castbar.text_color.unit", "ephemeral"), "Editing:", "dropdown")
+    ColorValueAt(ctx, detail, "Spell text color", 12, -100,
+        function() return DetailRGB("SpellName") end,
+        function(r, g, bcol) SetDetailRGB("SpellName", r, g, bcol) end,
+        nil, nil, Meta("castbar.text_color.spell_name"))
+    ColorValueAt(ctx, detail, "Cast time color", 12, -136,
+        function() return DetailRGB("Time") end,
+        function(r, g, bcol) SetDetailRGB("Time", r, g, bcol) end,
+        nil, nil, Meta("castbar.text_color.time"))
+    local detailTargetColor = ColorValueAt(ctx, detail, "Target text color", 12, -172,
+        function() return DetailRGB("TargetName") end,
+        function(r, g, bcol) SetDetailRGB("TargetName", r, g, bcol) end,
+        nil, nil, Meta("castbar.text_color.target_name"))
+    CH.ButtonAt(detail, "Follow shared color", 12, -218, 190, function()
+        local reset = _G.MSUF_ResetCastbarDetailTextColor
+        if type(reset) ~= "function" then return end
+        local castUnit = DetailUnit()
+        reset(castUnit, "SpellName")
+        reset(castUnit, "Time")
+        reset(castUnit, "TargetName")
+        ApplyCastbarColors()
+    end, "castbar.text_color.reset")
+    M.TrackRefresh(ctx, function()
+        SetControlEnabled(detailTargetColor, DetailUnit() == "target" or DetailUnit() == "focus")
+    end)
 end
 
 local function BuildHighlightAndGameplayColors(ctx, b, CH, part)
@@ -2847,6 +3137,26 @@ local function BuildHighlightAndGameplayColors(ctx, b, CH, part)
     ColorValueAt(ctx, highlight, "Mouseover highlight color", 12, -10, HighlightRGB, SetHighlightRGB,
         nil, nil, Meta("highlight.mouseover.color"), { 1, 1, 1 })
     CH.TableColorAt(ctx, highlight, "Boss target highlight color", 12, -66, G, "bossTargetHighlightColor", 1, 0.82, 0, ApplyBossTargetHighlightColor)
+    -- Texture layers: each slot's swatch pair writes the general baseline plus
+    -- every unit's per-frame copy (portrait pattern); the unit accordions link
+    -- here via context color references instead of hosting swatches.
+    local texLayer = b:CollapsibleSection("colors_texture_layer", "Texture Layer Colors", 340, false)
+    for texIndex, texSlot in ipairs({
+        { id = "texture_layer", prefix = "texLayer", suffix = "" },
+        { id = "texture_layer2", prefix = "texLayer2", suffix = " 2" },
+        { id = "texture_layer3", prefix = "texLayer3", suffix = " 3" },
+    }) do
+        local rowY = -10 - (texIndex - 1) * 108
+        local slotPrefix = texSlot.prefix
+        ColorValueAt(ctx, texLayer, M.Tr("Texture layer color") .. texSlot.suffix, 12, rowY,
+            function() return GeneralRGB(slotPrefix .. "Color", 1, 1, 1) end,
+            function(r, g, c) M._SetAllTextureLayerRGB(slotPrefix .. "Color", r, g, c) end,
+            nil, nil, Meta(texSlot.id .. ".color"), { 1, 1, 1 })
+        ColorValueAt(ctx, texLayer, M.Tr("Texture layer gradient end") .. texSlot.suffix, 12, rowY - 36,
+            function() return GeneralRGB(slotPrefix .. "Gradient2", 0, 0, 0) end,
+            function(r, g, c) M._SetAllTextureLayerRGB(slotPrefix .. "Gradient2", r, g, c) end,
+            nil, nil, Meta(texSlot.id .. ".gradient_color"), { 0, 0, 0 })
+    end
     end
     if part == "highlight" then return end
     local gameplay = b:CollapsibleSection("colors_gameplay", "Combat Feedback", 310, false)
@@ -2958,7 +3268,7 @@ local COLOR_CATEGORY_ORDER = { "unit", "group", "cast", "auras", "resources" }
 local COLOR_CATEGORY_SECTIONS = {
     unit = { "colors_appearance", "colors_bar_colors", "colors_bar_gradients", "colors_background",
         "colors_font", "colors_classes", "colors_unit", "colors_npc_type", "colors_highlight",
-        "colors_gameplay", "colors_portrait" },
+        "colors_texture_layer", "colors_gameplay", "colors_portrait" },
     group = { "colors_group_frames", "colors_group_frames_background", "colors_group_frames_state", "colors_group_frames_highlights" },
     cast = { "colors_castbar" },
     auras = { "colors_auras" },

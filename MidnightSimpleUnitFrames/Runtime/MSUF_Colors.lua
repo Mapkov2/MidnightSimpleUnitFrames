@@ -373,6 +373,48 @@ local function ResetCastbarTargetNameColor()
     PushCastbarVisualUpdates()
 end
 
+--- - Per-castbar detail text colors -
+--- The castbar font path already reads these keys directly. This API exists so
+--- the Options surfaces and the cast-target recolor path resolve them the same
+--- way, and so an unset detail keeps inheriting the shared castbar text color
+--- instead of being pinned. A complete triple is the opt-in signal, matching
+--- the target-name contract above.
+local CASTBAR_DETAIL_PREFIX = {
+    player = "castbarPlayer", target = "castbarTarget", focus = "castbarFocus", boss = "bossCast",
+}
+local function CastbarDetailColorKey(unit, detail)
+    if type(unit) ~= "string" or type(detail) ~= "string" or detail == "" then return nil end
+    -- Boss frames arrive as boss1..boss5 from the driver but share one config row.
+    local prefix = CASTBAR_DETAIL_PREFIX[unit] or (unit:match("^boss%d*$") and "bossCast") or nil
+    if not prefix then return nil end
+    return prefix .. detail .. "Color"
+end
+local function GetCastbarDetailTextColor(unit, detail)
+    local g = _general()
+    if not g then return 1, 1, 1, false end
+    local key = CastbarDetailColorKey(unit, detail)
+    if not key then return 1, 1, 1, false end
+    local r, green, b = tonumber(g[key .. "R"]), tonumber(g[key .. "G"]), tonumber(g[key .. "B"])
+    if r ~= nil and green ~= nil and b ~= nil then return r, green, b, true end
+    return 1, 1, 1, false
+end
+ExportPublic("MSUF_GetCastbarDetailTextColor", GetCastbarDetailTextColor)
+local function SetCastbarDetailTextColor(unit, detail, r, g, b)
+    local key = CastbarDetailColorKey(unit, detail)
+    if not key then return end
+    _setRGB(key .. "R", key .. "G", key .. "B", r, g, b, 1, 1, 1, PushCastbarVisualUpdates)
+end
+ExportPublic("MSUF_SetCastbarDetailTextColor", SetCastbarDetailTextColor)
+local function ResetCastbarDetailTextColor(unit, detail)
+    local gen = _general()
+    if not gen then return end
+    local key = CastbarDetailColorKey(unit, detail)
+    if not key then return end
+    gen[key .. "R"], gen[key .. "G"], gen[key .. "B"] = nil, nil, nil
+    PushCastbarVisualUpdates()
+end
+ExportPublic("MSUF_ResetCastbarDetailTextColor", ResetCastbarDetailTextColor)
+
 --- - Castbar Border Color -
 local function GetCastbarBorderColor() return _getRGBA("castbarBorderR", "castbarBorderG", "castbarBorderB", "castbarBorderA", 0, 0, 0, 1) end
 local function SetCastbarBorderColor(r, g, b, a) _setRGBA("castbarBorderR", "castbarBorderG", "castbarBorderB", "castbarBorderA", r, g, b, a, 0, 0, 0, 1, PushCastbarVisualUpdates) end
@@ -569,6 +611,9 @@ MSUF._colorsAPI = {
     GetCastbarTargetNameColor       = GetCastbarTargetNameColor,
     SetCastbarTargetNameColor       = SetCastbarTargetNameColor,
     ResetCastbarTargetNameColor     = ResetCastbarTargetNameColor,
+    GetCastbarDetailTextColor       = GetCastbarDetailTextColor,
+    SetCastbarDetailTextColor       = SetCastbarDetailTextColor,
+    ResetCastbarDetailTextColor     = ResetCastbarDetailTextColor,
     GetCastbarBorderColor           = GetCastbarBorderColor,
     SetCastbarBorderColor           = SetCastbarBorderColor,
     ResetCastbarBorderColor         = ResetCastbarBorderColor,

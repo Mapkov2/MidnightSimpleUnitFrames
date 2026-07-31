@@ -204,7 +204,9 @@ end
 local function CurrentHealthGradientPreview()
     return RGB(1, 0.7, 0)
 end
-local function GroupCustomNameColorPreview(scope)
+-- Unit and group scopes both store the custom name color in nameColorR/G/B,
+-- so one preview reader serves the whole Fonts scope selector.
+local function CustomNameColorPreview(scope)
     scope = NormalizeScopeKey(scope or CurrentFontScope())
     local getFor = GP.FontScopeGetFor
     if type(getFor) == "function" then
@@ -214,18 +216,11 @@ local function GroupCustomNameColorPreview(scope)
 end
 local function NameColorValues(scope)
     scope = NormalizeScopeKey(scope or CurrentFontScope())
-    local values = {
+    return {
         { value = "DEFAULT", text = "Default (Font Color)", swatchColor = function() return ConfiguredFontColorPreview(scope) end },
         { value = "CLASS", text = "Class Color", swatchColor = PlayerClassColorPreview },
+        { value = "CUSTOM", text = "Custom Color", swatchColor = function() return CustomNameColorPreview(scope) end },
     }
-    if IsGFScope(scope) then
-        values[#values + 1] = {
-            value = "CUSTOM",
-            text = "Custom Color",
-            swatchColor = function() return GroupCustomNameColorPreview(scope) end,
-        }
-    end
-    return values
 end
 local function NPCColorValues(scope)
     scope = NormalizeScopeKey(scope or CurrentFontScope())

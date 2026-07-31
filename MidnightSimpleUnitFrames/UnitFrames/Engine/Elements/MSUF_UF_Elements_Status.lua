@@ -384,9 +384,18 @@ local function SetFont(region, spec, size)
   return fontReady
 end
 
-local function ApplyTextColor(region, spec)
+--- A per-indicator color is opt-in: only a complete stored triple overrides the
+--- frame's resolved font color, so profiles that never set one keep their exact
+--- current look. Alpha stays with the shared font text alpha - an indicator owns
+--- its hue, not the global text opacity.
+local function ApplyTextColor(region, spec, cfg)
   local c = spec and spec.textColor
   local r, g, b, a = c and c.r or 1, c and c.g or 1, c and c.b or 1, c and c.a or 1
+  local cr = cfg and cfg.colorR
+  if cr then
+    local cg, cb = cfg.colorG, cfg.colorB
+    if cg and cb then r, g, b = cr, cg, cb end
+  end
   if region and region.SetTextColor
     and (region._msufStatusR ~= r or region._msufStatusG ~= g or region._msufStatusB ~= b or region._msufStatusA ~= a) then
     region:SetTextColor(r, g, b, a)
@@ -484,7 +493,7 @@ local function LayoutRegion(region, frame, spec, cfg, isText)
     end
   else
     SetFont(region, spec, cfg.size)
-    ApplyTextColor(region, spec)
+    ApplyTextColor(region, spec, cfg)
     if region.SetJustifyH then
       local anchor = cfg.anchor
       local justify = (anchor == "RIGHT" or anchor == "TOPRIGHT" or anchor == "BOTTOMRIGHT" or anchor == "NAMELEFT") and "RIGHT" or ((anchor == "CENTER" or anchor == "TOP" or anchor == "BOTTOM") and "CENTER" or "LEFT")
