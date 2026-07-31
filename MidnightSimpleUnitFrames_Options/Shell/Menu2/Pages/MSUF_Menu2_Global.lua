@@ -379,6 +379,10 @@ local function FontTextColorModeGetFor(scope, kind)
         if value == "CLASS" or value == "CUSTOM" then return value end
         return "DEFAULT"
     elseif kind == "player" then
+        -- CUSTOM is stored in nameColorMode, the same key group frames use. The
+        -- legacy nameClassColor boolean stays in sync on write, so the engine's
+        -- fallback and older profiles keep resolving CLASS/DEFAULT correctly.
+        if tostring(FontScopeGetFor(scope, "nameColorMode", "") or ""):upper() == "CUSTOM" then return "CUSTOM" end
         return FontScopeGetFor(scope, "nameClassColor", false) and "CLASS" or "DEFAULT"
     elseif kind == "npc" then
         if FontScopeGetFor(scope, "nameNpcClassColor", false) then return "CLASS" end
@@ -401,7 +405,8 @@ local function FontTextColorModeSetFor(scope, kind, value, reason)
         ScopeWrite(scope, "fontOverride", G(), "nameColorMode", value)
         ApplyFontsFor(scope, reason or "MSUF2_GF_NAME_COLOR")
     elseif kind == "player" then
-        value = value == "CLASS" and "CLASS" or "DEFAULT"
+        if value ~= "CLASS" and value ~= "CUSTOM" then value = "DEFAULT" end
+        ScopeWrite(scope, "fontOverride", G(), "nameColorMode", value)
         ScopeWrite(scope, "fontOverride", G(), "nameClassColor", value == "CLASS")
         ApplyFontsFor(scope, reason or "MSUF2_NAME_CLASS_COLOR")
     elseif kind == "npc" then

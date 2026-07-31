@@ -4811,6 +4811,10 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
         local predefinedTotal = type(Model.PlayerDefensiveClassEntries) == "function"
             and #Model.PlayerDefensiveClassEntries(true) or predefined
         local custom = #Model.CustomContainerSpellEntries(unit, index)
+        -- The 12.1 native aura buttons render their icon unmaskable; shaping
+        -- was attempted exhaustively and reverted (2026-07-31). Keep users
+        -- informed instead of letting them hunt for a shape option.
+        W.Text(section, "Portrait icons are always square and cannot take the portrait's shape.", 24, -312, inner, T.colors.muted)
         W.Text(section, "Source: player buffs · " .. tostring(predefined) .. " / "
             .. tostring(predefinedTotal) .. " predefined enabled · " .. tostring(custom)
             .. " custom · passive talent procs included", 24, -344, inner, T.colors.muted)
