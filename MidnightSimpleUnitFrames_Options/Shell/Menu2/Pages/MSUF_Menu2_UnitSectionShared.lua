@@ -199,6 +199,21 @@ local function CopyPopupButton(parent, text, width, role)
     btn:SetHeight(24)
     return btn
 end
+-- Category switches flow top-to-bottom into a fixed number of columns. Pages keep
+-- adding categories, so the grid has to grow rows instead of wrapping back onto
+-- column 1 -- the old "column 1 once past rowsPerColumn" rule stacked entry 11 on
+-- top of entry 6 (the last category drawn over Castbar on the Unit page). Grow the
+-- panel with it so the last row still clears the All/None/run footer.
+local COPY_POPUP_CATEGORY_FOOTER = 66
+local function CopyPopupCategoryLayout(opts, count)
+    local columns = math.max(1, tonumber(opts.categoryColumns) or 2)
+    local rows = math.max(1, tonumber(opts.categoryRowsPerColumn) or 5)
+    if count > rows * columns then rows = math.ceil(count / columns) end
+    local topY = tonumber(opts.categoryY) or -110
+    local rowHeight = tonumber(opts.categoryRowHeight) or 28
+    local height = math.max(tonumber(opts.height) or 276, math.abs(topY) + (rows - 1) * rowHeight + COPY_POPUP_CATEGORY_FOOTER)
+    return rows, topY, rowHeight, height
+end
 function Shared.MakeScopeCopyPopup(anchorButton, opts)
     -- Unit and group pages both expose a "copy this scope to another scope" popup.
     -- Keep the chrome and checkbox bookkeeping here; callers keep the actual copy action
@@ -264,8 +279,9 @@ function Shared.MakeScopeCopyPopup(anchorButton, opts)
     function api.Show(anchor)
         if popup and popup:IsShown() then popup:Hide(); return end
         if not popup then
+            local rowsPerColumn, categoryTopY, categoryRowHeight, popupHeight = CopyPopupCategoryLayout(opts, #categories)
             popup = M.CreateMenuPopupPanel(UIParent)
-            popup:SetSize(opts.width or 420, opts.height or 276)
+            popup:SetSize(opts.width or 420, popupHeight)
             local title = T.Font(popup, "GameFontNormal", "", T.colors.accent)
             title:SetPoint("TOPLEFT", popup, "TOPLEFT", 16, -12)
             popup._title = title
@@ -295,12 +311,11 @@ function Shared.MakeScopeCopyPopup(anchorButton, opts)
             local catLabel = T.Font(popup, "GameFontDisableSmall", M.Tr(opts.categoryLabel or "Copy categories"), T.colors.dim)
             catLabel:SetPoint("TOPLEFT", popup, "TOPLEFT", 16, opts.categoryLabelY or -90)
             popup._checks = {}
-            local rowsPerColumn = opts.categoryRowsPerColumn or 5
             for i = 1, #categories do
                 local cat = categories[i]
-                local col = (i > rowsPerColumn) and 1 or 0
+                local col = math.floor((i - 1) / rowsPerColumn)
                 local row = (i - 1) % rowsPerColumn
-                local cb = W.SwitchAt(popup, cat.label, 16 + col * (opts.categoryColumnWidth or 198), (opts.categoryY or -110) - row * (opts.categoryRowHeight or 28), opts.categoryWidth or 140)
+                local cb = W.SwitchAt(popup, cat.label, 16 + col * (opts.categoryColumnWidth or 198), categoryTopY - row * categoryRowHeight, opts.categoryWidth or 140)
                 cb:SetChecked(scopes[cat.key] == true)
                 cb:SetScript("OnClick", function(self)
                     NotifyGuidedInteraction(self)

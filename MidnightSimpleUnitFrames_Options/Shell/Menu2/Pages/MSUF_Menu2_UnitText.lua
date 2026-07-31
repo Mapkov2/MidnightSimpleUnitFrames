@@ -32,7 +32,39 @@ local function BuildText(ctx, builder, unit)
         return ReviewedMeta(ctx, path, "setting", "dynamic",
             "This control targets the HP or power text slot selected in the slot editor.")
     end
-    local sec = builder:CollapsibleSection("text", "Text", 620, false)
+    -- The four text tabs share one section frame, so its height has to follow the
+    -- tallest card stack of the selected tab. A single fixed height either clipped
+    -- HP (its Appearance card overflowed into the next accordion header) or left
+    -- the shorter tabs with dead space.
+    local TAB_SECTION_HEIGHT = { name = 478, hp = 680, power = 620, advanced = 346 }
+    M.unitTextTabSelection = M.unitTextTabSelection or {}
+    local function CurrentTextTab()
+        local key = M.unitTextTabSelection[unit] or "name"
+        if key ~= "name" and key ~= "hp" and key ~= "power" and key ~= "advanced" then key = "name" end
+        return key
+    end
+    local sec = builder:CollapsibleSection("text", "Text", TAB_SECTION_HEIGHT[CurrentTextTab()], false)
+    local function SetTextSectionHeight(tab)
+        local height = TAB_SECTION_HEIGHT[tab] or TAB_SECTION_HEIGHT.name
+        local entry = sec and sec._msuf2CollapsibleEntry
+        if not entry then
+            if sec and sec.SetHeight then sec:SetHeight(height) end
+            return
+        end
+        if entry.contentHeight == height then return end
+        entry.contentHeight = height
+        if sec.SetHeight then sec:SetHeight(height) end
+        if entry.body and entry.body.SetHeight then entry.body:SetHeight(height) end
+        if entry.outer and entry.outer.SetHeight then
+            entry.outer:SetHeight((entry.headerHeight or 28) + (entry.open and height or 0))
+        end
+        local owner = entry.builder or builder
+        if owner and owner.RequestRelayoutCollapsibles then
+            owner:RequestRelayoutCollapsibles()
+        elseif owner and owner.RelayoutCollapsibles then
+            owner:RelayoutCollapsibles()
+        end
+    end
     sec._msuf2CollapsibleBadgesOnlyWhenOpen = true
     do
         -- Edit Mode can request that Menu2 opens directly on the text section/component the
@@ -85,12 +117,6 @@ local function BuildText(ctx, builder, unit)
         local text = sampleNames[unit] or UnitTopLabel(unit)
         if RaidGroupNameAllowed(unit) and ReadStatusBool(unit, "showRaidGroupInName", false) then text = text .. " " .. RaidGroupNamePreviewValue() end
         return text
-    end
-    M.unitTextTabSelection = M.unitTextTabSelection or {}
-    local function CurrentTextTab()
-        local key = M.unitTextTabSelection[unit] or "name"
-        if key ~= "name" and key ~= "hp" and key ~= "power" and key ~= "advanced" then key = "name" end
-        return key
     end
     M.unitTextSlotSelection = M.unitTextSlotSelection or {}
     M.unitTextMoveTogether = M.unitTextMoveTogether or {}
@@ -335,6 +361,7 @@ local function BuildText(ctx, builder, unit)
         frames = tabFrames, defaultTab = "name",
         get = CurrentTextTab,
         set = function(v) M.unitTextTabSelection[unit] = v or "name" end,
+        afterRefresh = SetTextSectionHeight,
         afterSet = function()
             FocusActivePreviewText()
             RefreshTextControlState()

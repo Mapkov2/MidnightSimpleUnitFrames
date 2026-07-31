@@ -17,7 +17,13 @@ local MENU_NORMAL_FRAME_STRATA = "DIALOG"
 local MENU_EDIT_FRAME_STRATA = "FULLSCREEN_DIALOG"
 local MENU_NORMAL_FRAME_LEVEL = 10
 local MENU_EDIT_FRAME_LEVEL = MENU_NORMAL_FRAME_LEVEL
-local MENU_NORMAL_POPUP_FRAME_LEVEL = 120
+-- Popups live on UIParent but share the window's strata, so they only win on the
+-- numeric level. They must clear everything the window floats *inside* itself: a
+-- pinned preview parks its card at scroll parent + 80 and stacks sidebars, handles
+-- and bounds another ~90 above that. At 120 the Copy To panel was drawn under a
+-- pinned preview and read as see-through. Raising only the popup band is safe --
+-- these frames are not descendants of the window, so nothing ratchets with them.
+local MENU_NORMAL_POPUP_FRAME_LEVEL = 400
 local MENU_EDIT_POPUP_FRAME_LEVEL = MENU_NORMAL_POPUP_FRAME_LEVEL
 local function IsMenuEditPriorityActive()
     if type(M.IsMSUFEditModeActive) ~= "function" then return false end

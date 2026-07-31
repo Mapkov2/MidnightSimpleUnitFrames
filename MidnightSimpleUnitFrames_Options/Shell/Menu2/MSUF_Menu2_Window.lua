@@ -1431,6 +1431,26 @@ local function CreateMinimizedBar(frame)
     M.minimizedBar = bar
     return bar
 end
+-- The window shell is one big mouse surface, so a click that misses a control
+-- used to start dragging the whole window (and arm edge snapping). Only the
+-- chrome may move the window: the title strip above the content area plus the
+-- bands along the other three edges that match the content insets.
+local WINDOW_DRAG_TITLE_H = 40
+local WINDOW_DRAG_EDGE_X = 16
+local WINDOW_DRAG_EDGE_BOTTOM = 30
+local function WindowDragStartAllowed(frame)
+    if not (frame and frame.GetLeft and _G.GetCursorPosition) then return true end
+    local left, right, top, bottom = frame:GetLeft(), frame:GetRight(), frame:GetTop(), frame:GetBottom()
+    if not (left and right and top and bottom) then return true end
+    local scale = (frame.GetEffectiveScale and frame:GetEffectiveScale()) or 1
+    if not scale or scale == 0 then scale = 1 end
+    local x, y = _G.GetCursorPosition()
+    x, y = (x or 0) / scale, (y or 0) / scale
+    if y >= top - WINDOW_DRAG_TITLE_H then return true end
+    if y <= bottom + WINDOW_DRAG_EDGE_BOTTOM then return true end
+    if x <= left + WINDOW_DRAG_EDGE_X or x >= right - WINDOW_DRAG_EDGE_X then return true end
+    return false
+end
 local function BuildWindowShell()
     EnsurePersistentMenuState()
     SetWindowMetrics(ReadSavedWindowSize())
@@ -1446,7 +1466,9 @@ local function BuildWindowShell()
     if f.SetClampedToScreen then f:SetClampedToScreen(true) end
     ApplyWindowResizeBounds(f)
     f:RegisterForDrag("LeftButton")
-    f:SetScript("OnDragStart", function(self) self:_msuf2BeginWindowDrag() end)
+    f:SetScript("OnDragStart", function(self)
+        if WindowDragStartAllowed(self) then self:_msuf2BeginWindowDrag() end
+    end)
     f:SetScript("OnDragStop", function(self) self:_msuf2FinishWindowDrag(true) end)
     f:SetScript("OnSizeChanged", function(self)
         if self._msuf2LiveResizing then
@@ -1544,9 +1566,10 @@ local function InstallMenuScaleControl(f)
     slider:SetMinMaxValues(MENU_SCALE_MIN * 100, MENU_SCALE_MAX * 100)
     slider:SetValueStep(MENU_SCALE_STEP * 100)
     if slider.SetObeyStepOnDrag then slider:SetObeyStepOnDrag(true) end
-    if slider.SetStepsPerPage then slider:SetStepsPerPage(1) end
+    if slider.SetStepsPerPage then slider:SetStepsPerPage(0) end
     if slider.EnableMouseWheel then slider:EnableMouseWheel(true) end
     if slider.SetPropagateMouseWheel then slider:SetPropagateMouseWheel(false) end
+    slider._msuf2CursorDrag = true
     if type(T.StyleSlider) == "function" then T.StyleSlider(slider) end
 
     local function Percent(value)
@@ -1599,7 +1622,23 @@ local function InstallMenuScaleControl(f)
         if not effectiveScale or effectiveScale == 0 then effectiveScale = 1 end
         local fraction = ((cursorX / effectiveScale) - left) / width
         if fraction < 0 then fraction = 0 elseif fraction > 1 then fraction = 1 end
-        slider:SetValue(Percent((MENU_SCALE_MIN * 100) + (((MENU_SCALE_MAX - MENU_SCALE_MIN) * 100) * fraction)))
+        local target = Percent((MENU_SCALE_MIN * 100) + (((MENU_SCALE_MAX - MENU_SCALE_MIN) * 100) * fraction))
+        if target ~= tonumber(slider:GetValue()) then slider:SetValue(target) end
+    end
+    -- Same cursor-follow contract as W.Slider: the press keeps driving the
+    -- value until the button is released, not just on the down-click.
+    local function FollowScaleCursor(self)
+        if not self._msuf2MenuScaleDragging then
+            self:SetScript("OnUpdate", nil)
+            return
+        end
+        if _G.IsMouseButtonDown and not _G.IsMouseButtonDown("LeftButton") then
+            self._msuf2MenuScaleDragging = nil
+            self:SetScript("OnUpdate", nil)
+            Commit(self:GetValue())
+            return
+        end
+        SetValueFromCursor()
     end
 
     slider:HookScript("OnValueChanged", function(self, value)
@@ -1609,10 +1648,12 @@ local function InstallMenuScaleControl(f)
         if button and button ~= "LeftButton" then return end
         self._msuf2MenuScaleDragging = true
         SetValueFromCursor()
+        self:SetScript("OnUpdate", FollowScaleCursor)
     end)
     slider:SetScript("OnMouseUp", function(self, button)
         if button and button ~= "LeftButton" then return end
         self._msuf2MenuScaleDragging = nil
+        self:SetScript("OnUpdate", nil)
         Commit(self:GetValue())
     end)
     slider:SetScript("OnMouseWheel", function(self, delta)
@@ -1621,7 +1662,10 @@ local function InstallMenuScaleControl(f)
         self:SetValue(Percent((tonumber(self:GetValue()) or 100) + (delta > 0 and step or -step)))
         Commit(self:GetValue())
     end)
-    slider:HookScript("OnHide", function(self) self._msuf2MenuScaleDragging = nil end)
+    slider:HookScript("OnHide", function(self)
+        self._msuf2MenuScaleDragging = nil
+        self:SetScript("OnUpdate", nil)
+    end)
 
     local tooltip = "Scales only the MSUF menu. Drag the bar or use the mouse wheel; changes apply immediately."
     if type(M.AddTooltip) == "function" then

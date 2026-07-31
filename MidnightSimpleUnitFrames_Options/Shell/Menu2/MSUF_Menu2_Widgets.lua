@@ -1489,7 +1489,14 @@ local LAYER_SHORTCUT_DOTS = {
 
 local function AddThreeDotShortcutTextures(shortcut, colors)
     if not (shortcut and shortcut.CreateTexture and type(colors) == "table") then return end
-    if shortcut._msuf2Label and shortcut._msuf2Label.Hide then shortcut._msuf2Label:Hide() end
+    if shortcut._msuf2Label and shortcut._msuf2Label.Hide then
+        shortcut._msuf2Label:Hide()
+        -- The dots are textures from here on; the button's own bullet label is
+        -- decoration that must never come back. SetControlShown re-shows
+        -- _msuf2Label for ordinary controls, which would paint the coloured
+        -- bullets on top of - and offset from - the textures.
+        shortcut._msuf2Label._msuf2AlwaysHidden = true
+    end
     local dots = {}
     for i = 1, 3 do
         local color = colors[i] or LAYER_SHORTCUT_DOTS[i]
@@ -2718,7 +2725,7 @@ function W.SetControlShown(control, shown)
     shown = shown and true or false
     if control.SetShown then control:SetShown(shown) elseif shown then control:Show() else control:Hide() end
     if control._msuf2Title then control._msuf2Title:SetShown(shown) end
-    if control._msuf2Label then control._msuf2Label:SetShown(shown) end
+    if control._msuf2Label and not control._msuf2Label._msuf2AlwaysHidden then control._msuf2Label:SetShown(shown) end
     if control._msuf2LabelHit then control._msuf2LabelHit:SetShown(shown) end
     if not shown and control._msuf2RefreshToggleFeedback then
         control._msuf2ToggleHovered = nil
@@ -3688,7 +3695,10 @@ function W.Slider(section, label, minVal, maxVal, step, width)
     slider:SetMinMaxValues(minVal or 0, maxVal or 1)
     slider:SetValueStep(step or 1)
     if slider.SetObeyStepOnDrag then slider:SetObeyStepOnDrag(true) end
-    if slider.SetStepsPerPage then slider:SetStepsPerPage(1) end
+    -- Steps-per-page 0 disables the engine's own track-click jump; the press is
+    -- handled entirely by the cursor-follow drag below.
+    if slider.SetStepsPerPage then slider:SetStepsPerPage(0) end
+    slider._msuf2CursorDrag = true
     slider._msuf2Step = step or 1
     slider._msuf2RequestedWidth = width
     slider._msuf2MinRowWidth = compactMinTrackW
@@ -3848,15 +3858,30 @@ function W.Slider(section, label, minVal, maxVal, step, width)
     local function SetValueFromCursor()
         if slider.IsEnabled and not slider:IsEnabled() then return end
         local value = SliderValueFromCursor()
-        if value ~= nil then
+        if value ~= nil and value ~= tonumber(slider:GetValue()) then
             slider:SetValue(value)
             if slider._msuf2UpdateFill then slider:_msuf2UpdateFill() end
         end
     end
     local function StopSliderInteraction()
+        slider:SetScript("OnUpdate", nil)
         slider._msuf2SliderActive = nil
         if type(slider._msuf2CommitSliderHistory) == "function" then slider:_msuf2CommitSliderHistory() end
         if T.StyleSlider then T.StyleSlider(slider) end
+    end
+    -- The styled thumb is only a texture, so the engine never runs its own
+    -- thumb drag: the press must keep following the cursor until release
+    -- instead of jumping once on the down-click.
+    local function FollowCursorWhileHeld()
+        if not slider._msuf2SliderActive then
+            slider:SetScript("OnUpdate", nil)
+            return
+        end
+        if IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then
+            StopSliderInteraction()
+            return
+        end
+        SetValueFromCursor()
     end
     slider:SetScript("OnMouseDown", function(_, button)
         if button and button ~= "LeftButton" then return end
@@ -3864,6 +3889,7 @@ function W.Slider(section, label, minVal, maxVal, step, width)
         if type(slider._msuf2BeginSliderHistory) == "function" then slider:_msuf2BeginSliderHistory() end
         slider._msuf2SliderActive = true
         SetValueFromCursor()
+        slider:SetScript("OnUpdate", FollowCursorWhileHeld)
     end)
     slider:SetScript("OnMouseUp", function(_, button)
         if button and button ~= "LeftButton" then return end

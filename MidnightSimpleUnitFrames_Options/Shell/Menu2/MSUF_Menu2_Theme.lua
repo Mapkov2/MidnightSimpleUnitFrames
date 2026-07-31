@@ -1767,7 +1767,10 @@ local function UpdateSliderThumb(slider)
     if not thumb then return end
     local nativeThumb = slider.GetThumbTexture and slider:GetThumbTexture()
     if nativeThumb and nativeThumb ~= thumb then
-        if nativeThumb.SetSize then nativeThumb:SetSize(18, 18) end
+        -- Cursor-drag sliders own the whole press; collapse the native thumb so
+        -- the engine's thumb-grab drag can't fight the cursor-follow OnUpdate.
+        local hit = slider._msuf2CursorDrag and 1 or 18
+        if nativeThumb.SetSize then nativeThumb:SetSize(hit, hit) end
         if nativeThumb.SetAlpha then nativeThumb:SetAlpha(0.001) end
         if nativeThumb.Show then nativeThumb:Show() end
     end
@@ -1886,7 +1889,8 @@ function T.StyleSlider(slider)
     end
     local nativeThumb = slider.GetThumbTexture and slider:GetThumbTexture()
     if nativeThumb then
-        if nativeThumb.SetSize then nativeThumb:SetSize(18, 18) end
+        local hit = slider._msuf2CursorDrag and 1 or 18
+        if nativeThumb.SetSize then nativeThumb:SetSize(hit, hit) end
         if nativeThumb.SetAlpha then nativeThumb:SetAlpha(0.001) end
         if nativeThumb.Show then nativeThumb:Show() end
     end

@@ -483,6 +483,15 @@ function M.CopyFieldsFromSpecs(specs, values, seed, props)
             local spec = specs[i]
             if spec.value == value then
                 for prop in tostring(spec.copyProps or props):gmatch("%S+") do local key = spec[prop]; if key then out[#out + 1] = key end end
+                -- colorPrefix names a key family rather than one key, so it is
+                -- expanded here: a copied text indicator has to bring its color
+                -- along with its placement or the copy looks half applied.
+                local colorPrefix = spec.colorPrefix
+                if colorPrefix then
+                    out[#out + 1] = colorPrefix .. "ColorR"
+                    out[#out + 1] = colorPrefix .. "ColorG"
+                    out[#out + 1] = colorPrefix .. "ColorB"
+                end
                 local extra = spec.copyExtra; if extra then for j = 1, #extra do out[#out + 1] = extra[j] end end
                 break
             end
@@ -934,10 +943,10 @@ function M.ApplyPopupFramePriority(frame)
     if type(M.ApplyMenuPopupFramePriority) == "function" then
         M.ApplyMenuPopupFramePriority(frame)
     elseif type(M.ApplyMenuFramePriority) == "function" then
-        M.ApplyMenuFramePriority(frame, M.MENU_POPUP_FRAME_LEVEL or 120)
+        M.ApplyMenuFramePriority(frame, M.MENU_POPUP_FRAME_LEVEL or 400)
     else
         if frame.SetFrameStrata then frame:SetFrameStrata("FULLSCREEN_DIALOG") end
-        if frame.SetFrameLevel then frame:SetFrameLevel(120) end
+        if frame.SetFrameLevel then frame:SetFrameLevel(M.MENU_POPUP_FRAME_LEVEL or 400) end
     end
 end
 function M.CreateMenuPopupPanel(parent, opts)
