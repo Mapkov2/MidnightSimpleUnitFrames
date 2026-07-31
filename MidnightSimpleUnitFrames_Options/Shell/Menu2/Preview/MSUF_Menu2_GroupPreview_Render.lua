@@ -20,6 +20,61 @@ local function DefaultInt(value, fallback, minValue, maxValue)
     return n
 end
 local function NumberOrOne(value) return tonumber(value) or 1 end
+local SPELL_PREVIEW_ROUNDED_OPTS = {
+    bgKey = "_msufSpellRoundedBg",
+    edgeKey = "_msufSpellRoundedEdge",
+    stackKey = "_msufSpellRoundedEdgeStack",
+    countKey = "_msufSpellRoundedEdgeCount",
+    whiteTexture = "Interface\\Buttons\\WHITE8X8",
+    edgeLayer = "OVERLAY",
+    edgeSubLevel = 1,
+    maxEdgeSize = 16,
+    baseEdgeColor = function(host)
+        return host._msufSpellRoundedR or 1, host._msufSpellRoundedG or 1,
+            host._msufSpellRoundedB or 1, host._msufSpellRoundedA or 1
+    end,
+}
+local function RoundedSpellPreviewEnabled()
+    local bars = _G.MSUF_DB and _G.MSUF_DB.bars
+    return bars and bars.roundedFramesEnabled == true and bars.roundedGroupFrames ~= false
+end
+local function SetRoundedSpellPreview(root, target, shown, thickness, r, g, b, a, blendMode)
+    local helpers = M.PreviewHelpers or {}
+    local host = root and root._msufSpellRoundedHost
+    if not shown or not RoundedSpellPreviewEnabled()
+        or not (helpers.ResolveRoundedMedia and helpers.EnsureRoundedVisuals
+            and helpers.ApplyRoundedEdgeStack) then
+        if host and helpers.SetRoundedEdgeStackShown then
+            helpers.SetRoundedEdgeStackShown(host, false, SPELL_PREVIEW_ROUNDED_OPTS)
+        end
+        return false
+    end
+    if not host then
+        host = CreateFrame("Frame", nil, root)
+        host:EnableMouse(false)
+        root._msufSpellRoundedHost = host
+    end
+    host:ClearAllPoints()
+    host:SetAllPoints(target)
+    host._msufSpellRoundedR, host._msufSpellRoundedG = r, g
+    host._msufSpellRoundedB, host._msufSpellRoundedA = b, a
+    local _, edgePath, strength = helpers.ResolveRoundedMedia()
+    SPELL_PREVIEW_ROUNDED_OPTS.edgeTexture = edgePath
+    SPELL_PREVIEW_ROUNDED_OPTS.mediaStrength = strength
+    SPELL_PREVIEW_ROUNDED_OPTS.snapOff = helpers.SnapOff
+    if not helpers.EnsureRoundedVisuals(host, SPELL_PREVIEW_ROUNDED_OPTS)
+        or not helpers.ApplyRoundedEdgeStack(host, thickness, SPELL_PREVIEW_ROUNDED_OPTS) then
+        return false
+    end
+    if host._msufSpellRoundedBg then host._msufSpellRoundedBg:Hide() end
+    if helpers.ForEachRoundedEdge then
+        helpers.ForEachRoundedEdge(host, SPELL_PREVIEW_ROUNDED_OPTS, function(edge)
+            if edge.SetBlendMode then edge:SetBlendMode(blendMode or "BLEND") end
+        end)
+    end
+    host:Show()
+    return true
+end
 --- Sample subgroup label for the preview, formatted by the live raid-group
 --- formatter so the preview cannot drift from the runtime text.
 local GROUP_BLOCK_BORDER_EDGES = { "top", "bottom", "left", "right" }
@@ -37,6 +92,8 @@ local function PaintGroupBlockBorder(mock, conf, previewScale, ScaleValue)
                 if edge then edge:Hide() end
             end
         end
+        local rounded = _G.MSUF_RoundedUF_OnGroupBlockBorder
+        if rounded then rounded(mock, conf, false) end
         return
     end
     edges = edges or {}
@@ -47,6 +104,11 @@ local function PaintGroupBlockBorder(mock, conf, previewScale, ScaleValue)
     local g = tonumber(conf.groupBorderG) or 0.68
     local b = tonumber(conf.groupBorderB) or 1
     local a = tonumber(conf.groupBorderA) or 0.95
+    local roundedConf = mock._msufGroupBlockRoundedConf or {}
+    mock._msufGroupBlockRoundedConf = roundedConf
+    roundedConf.groupBorderSize, roundedConf.groupBorderPadding = size, pad
+    roundedConf.groupBorderR, roundedConf.groupBorderG = r, g
+    roundedConf.groupBorderB, roundedConf.groupBorderA = b, a
     for i = 1, #GROUP_BLOCK_BORDER_EDGES do
         local key = GROUP_BLOCK_BORDER_EDGES[i]
         local edge = edges[key]
@@ -74,6 +136,13 @@ local function PaintGroupBlockBorder(mock, conf, previewScale, ScaleValue)
             edge:SetWidth(size)
         end
         edge:Show()
+    end
+    local rounded = _G.MSUF_RoundedUF_OnGroupBlockBorder
+    if rounded and rounded(mock, roundedConf, true) then
+        for i = 1, #GROUP_BLOCK_BORDER_EDGES do
+            local edge = edges[GROUP_BLOCK_BORDER_EDGES[i]]
+            if edge then edge:Hide() end
+        end
     end
 end
 
@@ -1194,6 +1263,11 @@ local function RenderAuras(scene)
     end
     local function LayoutAuraPreviewBorder(border, icon, size, mode)
         local atlas = DEBUFF_TYPE_BORDER_PREVIEW_ATLAS[mode]
+        local a3 = MSUF and MSUF.MSUF_Auras3
+        if a3 and type(a3.ApplyRoundedAuraDispelPreview) == "function"
+            and a3.ApplyRoundedAuraDispelPreview(border, icon, size, mode) then
+            return
+        end
         if not (border and icon and atlas and border.SetAtlas) then
             if border then border:Hide() end
             return
@@ -1800,6 +1874,7 @@ function Render.Install(box, ctx, deps)
             if root._msufSpellPreviewName then root._msufSpellPreviewName:Hide() end
             local edges = root._msufSpellPreviewEdges
             for i = 1, type(edges) == "table" and #edges or 0 do edges[i]:Hide() end
+            SetRoundedSpellPreview(root, nil, false)
             StopPreviewAnimation(root._msufSpellPreviewPulse)
             root:SetAlpha(1)
             HidePreviewGlow(root)
@@ -1850,6 +1925,12 @@ function Render.Install(box, ctx, deps)
                 if edges[i].SetBlendMode then edges[i]:SetBlendMode(glowLike and "ADD" or "BLEND") end
                 edges[i]:SetVertexColor(r, g, b, a)
                 edges[i]:Show()
+            end
+            if not glowLike and SetRoundedSpellPreview(root, target, true, thickness, r, g, b, a, "BLEND") then
+                for i = 1, 4 do edges[i]:Hide() end
+            elseif effect.type == "pulse"
+                and SetRoundedSpellPreview(root, target, true, thickness, r, g, b, a, "ADD") then
+                for i = 1, 4 do edges[i]:Hide() end
             end
         end
         local function ApplySpellEffectPreview(handle, effect)
@@ -1956,6 +2037,13 @@ function Render.Install(box, ctx, deps)
         local outline = borderEnabled and (tonumber(runtimeBorder and runtimeBorder.thickness) or 1) or 0
         if not runtimeSpec and borderEnabled and gf and gf.GetBarOutlineThickness then outline = tonumber(gf.GetBarOutlineThickness(kind)) or outline end
         local outlineEdge = max(0, Round(outline * previewScale))
+        local powerOutline = 0
+        if runtimePower then
+            if runtimePower.borderEnabled == true then powerOutline = tonumber(runtimePower.borderThickness) or 1 end
+        elseif conf.powerBarBorderEnabled == true then
+            powerOutline = tonumber(conf.powerBarBorderThickness) or 1
+        end
+        local powerOutlineEdge = max(0, Round(powerOutline * previewScale))
         local inset = 0
         local startX = Round((stageW - mockW) * 0.5)
         local startY = -Round((stageH - mockH) * 0.5)
@@ -1977,6 +2065,10 @@ function Render.Install(box, ctx, deps)
         mock._msufGFPreviewBorderG = bg
         mock._msufGFPreviewBorderB = bb
         mock._msufGFPreviewBorderA = borderEnabled and (runtimeBorder.a or conf.borderA or 1) or 0
+        mock._msufGFPreviewPowerBorderR = runtimePower and runtimePower.borderR or br
+        mock._msufGFPreviewPowerBorderG = runtimePower and runtimePower.borderG or bg
+        mock._msufGFPreviewPowerBorderB = runtimePower and runtimePower.borderB or bb
+        mock._msufGFPreviewPowerBorderA = runtimePower and runtimePower.borderA or mock._msufGFPreviewBorderA
         local barTex = runtimeHealth.texture or (runtimeSpec and runtimeSpec.texture) or (gf and gf.ResolveBarTexture and gf.ResolveBarTexture(kind)) or ResolvePreviewStatusbarTexture(conf, "barTexture")
         local bgTex = runtimeHealth.backgroundTexture or (runtimeSpec and runtimeSpec.backgroundTexture) or (gf and gf.ResolveBarBgTexture and gf.ResolveBarBgTexture(kind)) or WHITE8X8
         mock._health:SetStatusBarTexture(barTex)
@@ -2219,7 +2311,8 @@ function Render.Install(box, ctx, deps)
             mock._powerBg:Hide()
         end
         end
-        if ApplyRounded(mock, conf, powerH > 0, outlineEdge) then
+        if ApplyRounded(mock, conf, powerH > 0, outlineEdge,
+            powerEmbed, powerDetached, powerOutlineEdge) then
             H.SetOutlineShown(mock, false)
             ApplyFrameBorder(self, nil, previewScale)
         else

@@ -356,6 +356,9 @@ local function CommitHandleMove(handle, reason)
         if type(_G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey) == "function" then _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey(key, true) end
     elseif fields.castbar then
         ApplyCastbarRuntimeForKey(key)
+    elseif fields.texLayer then
+        local fn = _G.MSUF_RefreshUnitTextureLayers
+        if type(fn) == "function" then fn(key) end
     elseif fields.statusRefresh then
         local fn = _G[fields.statusRefresh]
         if type(fn) == "function" then fn(key, moveReason) end
@@ -471,6 +474,7 @@ local UNIT_SECTION_IDS = {
     castbar = "castbar",
     auras = "auras",
     auras3 = "auras",
+    texture_layer = "texture_layer",
 }
 OpenPreviewHandleSettings = function(handle, source)
     if not handle then return false end
@@ -917,6 +921,7 @@ local HANDLE_BORDER_SPECS = {
 }
 local function UnitPreviewLayerForHandle(key, fields)
     fields = fields or {}
+    if fields.texLayer or tostring(key or ""):match("^texLayer") then return "texLayer" end
     if fields.auraPreviewKind then return "auras" end
     if fields.portrait then return "portrait" end
     if fields.detachedPower then return "power" end
@@ -1834,6 +1839,17 @@ local function BuildPreview(parent, panel, width, height)
     MockTexture("healAbsorb", "ARTWORK", TEX_W8, { 0.70, 0, 0, 1 })
     MockTexture("powerBG", "BACKGROUND", TEX_W8, { 0, 0, 0, 0.9 }, "color")
     MockTexture("power", "ARTWORK", type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture() or TEX_W8, nil, "settex")
+    -- Decorative texture layer preview regions (3 slots): child frames so the
+    -- render pass can mirror the runtime's per-slot frame-level offsets (see
+    -- RenderTextureLayerPreview).
+    mock.texLayers = {}
+    for i = 1, 3 do
+        local texLayerHolder = CreateFrame("Frame", nil, mock)
+        texLayerHolder.tex = texLayerHolder:CreateTexture(nil, "ARTWORK")
+        texLayerHolder.tex:SetAllPoints(texLayerHolder)
+        texLayerHolder:Hide()
+        mock.texLayers[i] = texLayerHolder
+    end
     mock.classPower = CreateFrame("Frame", nil, canvas, "BackdropTemplate")
     mock.classPower:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
     mock.classPower:SetBackdropColor(0, 0, 0, 0.55)
@@ -2000,6 +2016,11 @@ local function BuildPreview(parent, panel, width, height)
     box.handlePowerRight = MakeHandle(box, "powerRight", { x = "powerTextRightOffsetX", y = "powerTextRightOffsetY", defaultX = 0, defaultY = 0, text = true, section = "text" }, "Power right text", { 0.95, 0.72, 0.18 })
     box.handlePortrait = MakeHandle(box, "portrait", { x = "portraitOffsetX", y = "portraitOffsetY", defaultX = 0, defaultY = 0, portrait = true, section = "portrait" }, "Portrait", { 0.90, 0.42, 1.0 })
     box.handleDetachedPower = MakeHandle(box, "detachedPower", { x = "detachedPowerBarOffsetX", y = "detachedPowerBarOffsetY", defaultX = 0, defaultY = -4, detachedPower = true, section = "power" }, "Detached power bar", { 0.95, 0.72, 0.18 })
+    box.texLayerHandles = {
+        MakeHandle(box, "texLayer", { x = "texLayerOffsetX", y = "texLayerOffsetY", defaultX = 0, defaultY = 0, texLayer = true, section = "texture_layer" }, "Texture layer 1", { 0.80, 0.55, 0.25 }),
+        MakeHandle(box, "texLayer2", { x = "texLayer2OffsetX", y = "texLayer2OffsetY", defaultX = 0, defaultY = 0, texLayer = true, section = "texture_layer" }, "Texture layer 2", { 0.80, 0.55, 0.25 }),
+        MakeHandle(box, "texLayer3", { x = "texLayer3OffsetX", y = "texLayer3OffsetY", defaultX = 0, defaultY = 0, texLayer = true, section = "texture_layer" }, "Texture layer 3", { 0.80, 0.55, 0.25 }),
+    }
     box.handleClassPower = MakeHandle(box, "classPower", { barsX = "classPowerOffsetX", barsY = "classPowerOffsetY", defaultX = 0, defaultY = 0, classPower = true, readOffsets = ReadBarsHandleOffsets, writeOffsets = WriteBarsHandleOffsets, section = "classPower" }, "Class power", { 0.30, 0.78, 0.55 })
     box.handleClassPowerText = MakeHandle(box, "classPowerText", { barsX = "classPowerTextOffsetX", barsY = "classPowerTextOffsetY", defaultX = 0, defaultY = 0, classPower = true, readOffsets = ReadBarsHandleOffsets, writeOffsets = WriteBarsHandleOffsets, section = "classPower" }, "Class power text", { 0.30, 0.78, 0.55 })
     box.handleCastbar = MakeHandle(box, "castbar", { castbar = true, global = true, section = "castbar" }, "Castbar", { 0.20, 0.90, 0.85 })

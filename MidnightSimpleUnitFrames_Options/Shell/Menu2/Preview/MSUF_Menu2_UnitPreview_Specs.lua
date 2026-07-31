@@ -59,6 +59,7 @@ nameText|Name|0.30,0.66,1.00
 hpText|HP Text|0.25,0.90,0.42
 powerText|Pwr Text|0.95,0.72,0.18
 portrait|Portrait|0.90,0.42,1.00
+texLayer|Texture|0.80,0.55,0.25|Decorative texture layer.
 power|Power|0.95,0.72,0.18
 classPower|Class|0.30,0.78,0.55
 castbar|Cast|0.20,0.90,0.85

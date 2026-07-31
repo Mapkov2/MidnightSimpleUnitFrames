@@ -11,8 +11,9 @@ local issecretvalue = _G.issecretvalue or function(_) return false end
 local TEX_W8 = "Interface\\Buttons\\WHITE8X8"
 local MEDIA = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\"
 local MASK_MEDIA = MEDIA .. "Masks\\"
-local PREVIEW_ROUNDED_MASK = MASK_MEDIA .. "rounded_bar_4x.tga"
-local PREVIEW_ROUNDED_EDGE = MASK_MEDIA .. "rounded_bar_edge_4x.tga"
+local previewRoundedMask = MASK_MEDIA .. "rounded_clean_mask_s3.png"
+local previewRoundedEdge = MASK_MEDIA .. "rounded_clean_edge_s3.png"
+local previewRoundedStrength = 3
 local Preview = MSUF.UFPreview or {}
 MSUF.UFPreview = Preview
 ExportPublic("MSUF_UFPreview", Preview)
@@ -111,7 +112,7 @@ local function PreviewSnapOff(region)
 end
 local function EnsurePreviewRoundedMask(mock, key, anchor, tex)
     if not PreviewHelpers.EnsureRoundedMask then return nil end
-    return PreviewHelpers.EnsureRoundedMask(mock, key, anchor, tex, "_msufPreviewRoundedMasks", PREVIEW_ROUNDED_MASK, PreviewSnapOff)
+    return PreviewHelpers.EnsureRoundedMask(mock, key, anchor, tex, "_msufPreviewRoundedMasks", previewRoundedMask, PreviewSnapOff)
 end
 local function PreviewSetMask(mock, tex, mask)
     if PreviewHelpers.SetMask then PreviewHelpers.SetMask(mock, tex, mask, "_msufPreviewRoundedMasked") end
@@ -226,11 +227,55 @@ local PREVIEW_ROUNDED_OPTS = {
     stackKey = "_msufPreviewRoundedEdgeStack",
     countKey = "_msufPreviewRoundedEdgeCount",
     whiteTexture = TEX_W8,
-    edgeTexture = PREVIEW_ROUNDED_EDGE,
+    edgeTexture = previewRoundedEdge,
     snapOff = PreviewSnapOff,
     clamp01 = Clamp01,
     baseEdgeColor = function() return Core.BaseEdgeColor() end,
 }
+local function PreviewPowerEdgeColor(mock)
+    if mock and mock._msufPreviewPowerBorderR ~= nil then
+        return mock._msufPreviewPowerBorderR, mock._msufPreviewPowerBorderG,
+            mock._msufPreviewPowerBorderB, mock._msufPreviewPowerBorderA
+    end
+    return Core.BaseEdgeColor()
+end
+local DETACHED_POWER_ROUNDED_OPTS = {
+    bgKey = "_msufPreviewRoundedBg",
+    edgeKey = "_msufPreviewRoundedEdge",
+    stackKey = "_msufPreviewRoundedEdgeStack",
+    countKey = "_msufPreviewRoundedEdgeCount",
+    whiteTexture = TEX_W8,
+    edgeTexture = previewRoundedEdge,
+    edgeLayer = "OVERLAY",
+    edgeSubLevel = 6,
+    snapOff = PreviewSnapOff,
+    clamp01 = Clamp01,
+    baseEdgeColor = PreviewPowerEdgeColor,
+}
+local INLINE_POWER_ROUNDED_OPTS = {
+    bgKey = "_msufPreviewRoundedBg",
+    edgeKey = "_msufPreviewRoundedEdge",
+    stackKey = "_msufPreviewRoundedEdgeStack",
+    countKey = "_msufPreviewRoundedEdgeCount",
+    whiteTexture = TEX_W8,
+    edgeTexture = previewRoundedEdge,
+    edgeLayer = "OVERLAY",
+    edgeSubLevel = 6,
+    snapOff = PreviewSnapOff,
+    baseEdgeColor = PreviewPowerEdgeColor,
+}
+local function UpdatePreviewRoundedMedia(mock)
+    if type(PreviewHelpers.ResolveRoundedMedia) == "function" then
+        previewRoundedMask, previewRoundedEdge, previewRoundedStrength = PreviewHelpers.ResolveRoundedMedia()
+    end
+    mock._msufPreviewRoundedMediaStrength = previewRoundedStrength
+    PREVIEW_ROUNDED_OPTS.edgeTexture = previewRoundedEdge
+    PREVIEW_ROUNDED_OPTS.mediaStrength = previewRoundedStrength
+    DETACHED_POWER_ROUNDED_OPTS.edgeTexture = previewRoundedEdge
+    DETACHED_POWER_ROUNDED_OPTS.mediaStrength = previewRoundedStrength
+    INLINE_POWER_ROUNDED_OPTS.edgeTexture = previewRoundedEdge
+    INLINE_POWER_ROUNDED_OPTS.mediaStrength = previewRoundedStrength
+end
 local function EnsurePreviewRoundedVisuals(mock)
     return PreviewHelpers.EnsureRoundedVisuals and PreviewHelpers.EnsureRoundedVisuals(mock, PREVIEW_ROUNDED_OPTS)
 end
@@ -243,27 +288,55 @@ end
 local function PreviewApplyRoundedEdgeStack(mock, edgeSize)
     return PreviewHelpers.ApplyRoundedEdgeStack and PreviewHelpers.ApplyRoundedEdgeStack(mock, edgeSize, PREVIEW_ROUNDED_OPTS)
 end
-function Core.ApplyRounded(box, key, powerOn, outlineThickness)
+local function SetDetachedRoundedShown(detached, shown)
+    if PreviewHelpers.SetRoundedEdgeStackShown then
+        PreviewHelpers.SetRoundedEdgeStackShown(detached, shown, DETACHED_POWER_ROUNDED_OPTS)
+    end
+    if detached and detached._msufPreviewRoundedBg then detached._msufPreviewRoundedBg:Hide() end
+end
+local function SetInlinePowerRoundedShown(host, shown)
+    if PreviewHelpers.SetRoundedEdgeStackShown then
+        PreviewHelpers.SetRoundedEdgeStackShown(host, shown, INLINE_POWER_ROUNDED_OPTS)
+    end
+    if host and host._msufPreviewRoundedBg then host._msufPreviewRoundedBg:Hide() end
+end
+local function EnsureInlinePowerHost(mock)
+    local host = mock and mock._msufPreviewInlinePowerRoundedHost
+    if host then return host end
+    if not (mock and type(_G.CreateFrame) == "function") then return nil end
+    host = CreateFrame("Frame", nil, mock)
+    if host.EnableMouse then host:EnableMouse(false) end
+    if host.SetFrameLevel and mock.GetFrameLevel then host:SetFrameLevel(mock:GetFrameLevel() + 3) end
+    mock._msufPreviewInlinePowerRoundedHost = host
+    return host
+end
+function Core.ApplyRounded(box, key, powerOn, outlineThickness, powerEmbedded, powerEdgeSize, detachedRounded, detachedEdgeSize)
     if not (box and box.mock) then return end
     local mock = box.mock
     local rounded = PreviewRoundedUnitFramesEnabled()
+    if rounded then UpdatePreviewRoundedMedia(mock) end
     if not rounded or not EnsurePreviewRoundedVisuals(mock) then
         mock._msufPreviewRoundedActive = nil
         mock._msufPreviewRoundedEdgeEnabled = nil
         ClearPreviewRoundedMasks(mock)
         Core.SetShownSafe(mock.roundedBg, false)
         PreviewSetRoundedEdgeStackShown(mock, false)
+        SetInlinePowerRoundedShown(mock._msufPreviewInlinePowerRoundedHost, false)
+        SetDetachedRoundedShown(mock.detachedPower, false)
         return
     end
     mock._msufPreviewRoundedActive = true
+    local roundedPower = powerOn and PreviewRoundedPowerBarsEnabled()
+    local sharedPowerBody = roundedPower and powerEmbedded ~= false
+    local healthAnchor = sharedPowerBody and mock or mock.hpBG
     local bodyMask = EnsurePreviewRoundedMask(mock, "body", mock, mock.roundedBg)
-    local hpBgMask = EnsurePreviewRoundedMask(mock, "health", mock.hpBG, mock.hpBG)
-    local hpMask = EnsurePreviewRoundedMask(mock, "health", mock.hpBG, mock.hp)
-    local tempMaxBgMask = EnsurePreviewRoundedMask(mock, "tempMaxHealthBg", mock.hpBG, mock.tempMaxHealthBg)
-    local tempMaxMask = EnsurePreviewRoundedMask(mock, "tempMaxHealth", mock.hpBG, mock.tempMaxHealth)
-    local healPredMask = EnsurePreviewRoundedMask(mock, "healPred", mock.hpBG, mock.healPred)
-    local absorbMask = EnsurePreviewRoundedMask(mock, "absorb", mock.hpBG, mock.absorb)
-    local healAbsorbMask = EnsurePreviewRoundedMask(mock, "healAbsorb", mock.hpBG, mock.healAbsorb)
+    local hpBgMask = EnsurePreviewRoundedMask(mock, "health", healthAnchor, mock.hpBG)
+    local hpMask = EnsurePreviewRoundedMask(mock, "health", healthAnchor, mock.hp)
+    local tempMaxBgMask = EnsurePreviewRoundedMask(mock, "tempMaxHealthBg", healthAnchor, mock.tempMaxHealthBg)
+    local tempMaxMask = EnsurePreviewRoundedMask(mock, "tempMaxHealth", healthAnchor, mock.tempMaxHealth)
+    local healPredMask = EnsurePreviewRoundedMask(mock, "healPred", healthAnchor, mock.healPred)
+    local absorbMask = EnsurePreviewRoundedMask(mock, "absorb", healthAnchor, mock.absorb)
+    local healAbsorbMask = EnsurePreviewRoundedMask(mock, "healAbsorb", healthAnchor, mock.healAbsorb)
     local conf, g = UnitDB(key)
     local healPredMode = PreviewResolveHealPredAnchorMode(conf, g)
     local absorbMode = PreviewResolveAbsorbAnchorMode(conf, g)
@@ -275,10 +348,59 @@ function Core.ApplyRounded(box, key, powerOn, outlineThickness)
     PreviewSetMask(mock, mock.healPred, healPredMode == 4 and nil or healPredMask)
     PreviewSetMask(mock, mock.absorb, absorbMode == 4 and nil or absorbMask)
     PreviewSetMask(mock, mock.healAbsorb, healAbsorbMask)
-    local powerBgMask = (powerOn and PreviewRoundedPowerBarsEnabled()) and EnsurePreviewRoundedMask(mock, "power", mock.powerBG, mock.powerBG) or nil
-    local powerMask = (powerOn and PreviewRoundedPowerBarsEnabled()) and EnsurePreviewRoundedMask(mock, "power", mock.powerBG, mock.power) or nil
+    local powerAnchor = sharedPowerBody and mock or mock.powerBG
+    local powerBgMask = roundedPower and EnsurePreviewRoundedMask(mock, "power", powerAnchor, mock.powerBG) or nil
+    local powerMask = roundedPower and EnsurePreviewRoundedMask(mock, "power", powerAnchor, mock.power) or nil
     PreviewSetMask(mock, mock.powerBG, powerBgMask)
     PreviewSetMask(mock, mock.power, powerMask)
+    local inlinePowerHost = mock._msufPreviewInlinePowerRoundedHost
+    if roundedPower and not sharedPowerBody then
+        inlinePowerHost = EnsureInlinePowerHost(mock)
+        if inlinePowerHost then
+            inlinePowerHost:ClearAllPoints()
+            inlinePowerHost:SetAllPoints(mock.powerBG)
+            inlinePowerHost:Show()
+        end
+        if inlinePowerHost and PreviewHelpers.EnsureRoundedVisuals
+            and PreviewHelpers.EnsureRoundedVisuals(inlinePowerHost, INLINE_POWER_ROUNDED_OPTS) then
+            local edge = ClampPreviewEdgeSize(powerEdgeSize, 1, 8)
+            if edge > 0 and PreviewHelpers.ApplyRoundedEdgeStack then
+                PreviewHelpers.ApplyRoundedEdgeStack(inlinePowerHost, edge, INLINE_POWER_ROUNDED_OPTS)
+            else
+                SetInlinePowerRoundedShown(inlinePowerHost, false)
+            end
+            if inlinePowerHost._msufPreviewRoundedBg then inlinePowerHost._msufPreviewRoundedBg:Hide() end
+        else
+            SetInlinePowerRoundedShown(inlinePowerHost, false)
+        end
+    else
+        SetInlinePowerRoundedShown(inlinePowerHost, false)
+        if inlinePowerHost then inlinePowerHost:Hide() end
+    end
+    local detached = mock.detachedPower
+    local detachedActive = detachedRounded == true and PreviewRoundedPowerBarsEnabled()
+        and detached and (not detached.IsShown or detached:IsShown())
+    if detachedActive and PreviewHelpers.EnsureRoundedVisuals
+        and PreviewHelpers.EnsureRoundedVisuals(detached, DETACHED_POWER_ROUNDED_OPTS) then
+        local detachedBgMask = EnsurePreviewRoundedMask(mock, "detachedPowerBg", detached, detached.bg)
+        local detachedFillMask = EnsurePreviewRoundedMask(mock, "detachedPowerFill", detached, detached.fill)
+        PreviewSetMask(mock, detached.bg, detachedBgMask)
+        PreviewSetMask(mock, detached.fill, detachedFillMask)
+        local edge = ClampPreviewEdgeSize(detachedEdgeSize, 1, 8)
+        if edge > 0 and PreviewHelpers.ApplyRoundedEdgeStack then
+            PreviewHelpers.ApplyRoundedEdgeStack(detached, edge, DETACHED_POWER_ROUNDED_OPTS)
+        else
+            SetDetachedRoundedShown(detached, false)
+        end
+        if detached.SetBackdropBorderColor then detached:SetBackdropBorderColor(0, 0, 0, 0) end
+        if detached._msufPreviewRoundedBg then detached._msufPreviewRoundedBg:Hide() end
+    else
+        if detached then
+            PreviewSetMask(mock, detached.bg, nil)
+            PreviewSetMask(mock, detached.fill, nil)
+        end
+        SetDetachedRoundedShown(detached, false)
+    end
     mock.roundedBg:ClearAllPoints()
     mock.roundedBg:SetAllPoints(mock)
     mock.roundedBg:SetColorTexture(0, 0, 0, 0.92)
@@ -416,6 +538,10 @@ function Core.ApplyLayerVisibility(box)
         Core.SetShownSafe(mock.raidGroupNameText, false)
         for _, handle in pairs(box.statusHandles or {}) do Core.SetShownSafe(handle, false) end
     end
+    if not LayerOn("texLayer") then
+        for i = 1, #(mock.texLayers or {}) do Core.SetShownSafe(mock.texLayers[i], false) end
+        for i = 1, #(box.texLayerHandles or {}) do Core.SetShownSafe(box.texLayerHandles[i], false) end
+    end
     Core.SetShownSafe(mock.bounds, boundsOn)
 end
 function Core.InCombat()
@@ -433,13 +559,19 @@ end
 -- Unified preview alpha: hp/resource each have foreground and background opacity.
 -- Foreground text, portrait, cast, and icons follow the HP value unless the
 -- "keep text + portrait visible" toggle is on.
-local function PreviewAlphaState(conf)
-    local hp = Clamp01(conf and conf.hpBarAlpha, 1)
-    local power = Clamp01(conf and conf.powerBarAlpha, 1)
-    local bg = Clamp01(conf and conf.hpBgAlpha, 0.85)
-    local powerBg = Clamp01(conf and conf.powerBarBgAlpha, bg)
+local function PreviewAlphaState(conf, runtimeSpec)
+    local runtimeAlpha = runtimeSpec and runtimeSpec.alpha
+    local runtimePower = runtimeSpec and runtimeSpec.power
+    local runtimeHealthBg = runtimeSpec and runtimeSpec.health and runtimeSpec.health.background
+    local runtimePowerBg = runtimePower and runtimePower.background
+    local hp = Clamp01(runtimeAlpha and runtimeAlpha.hpAlpha or (conf and conf.hpBarAlpha), 1)
+    local power = Clamp01(runtimePower and runtimePower.alpha or (conf and conf.powerBarAlpha), 1)
+    local bg = Clamp01(runtimeHealthBg and runtimeHealthBg.a or (conf and conf.hpBgAlpha), 0.85)
+    local powerBg = Clamp01(runtimePowerBg and runtimePowerBg.a or (conf and conf.powerBarBgAlpha), bg)
     if _G.MSUF_UnitEditModeActive == true and hp < 0.35 then hp = 0.35 end
-    local fg = (conf and conf.alphaExcludeTextPortrait == true) and 1 or hp
+    local excludeTextPortrait = runtimeAlpha and runtimeAlpha.excludeTextPortrait == true
+        or (not runtimeAlpha and conf and conf.alphaExcludeTextPortrait == true)
+    local fg = excludeTextPortrait and 1 or hp
     return {
         flat = false,
         frame = 1,
@@ -461,10 +593,10 @@ function Core.SetFrameBackdropAlpha(frame, bgAlpha, borderAlpha)
     frame:SetBackdropColor(0, 0, 0, Clamp01(bgAlpha, 1))
     if frame.SetBackdropBorderColor then frame:SetBackdropBorderColor(0, 0, 0, Clamp01(borderAlpha, 1)) end
 end
-function Core.ApplyPreviewTransparency(box, conf)
+function Core.ApplyPreviewTransparency(box, conf, runtimeSpec)
     if not box or not box.mock then return end
     local mock = box.mock
-    local alpha = PreviewAlphaState(conf)
+    local alpha = PreviewAlphaState(conf, runtimeSpec)
     local v = box.layerVisibility or {}
     local available = box.layerAvailable or {}
     local bodyOn = available.body ~= false and v.body ~= false

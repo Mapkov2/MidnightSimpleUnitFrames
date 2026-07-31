@@ -695,8 +695,10 @@ local function DefensivePortraitBounds(item, runtimeSpec, previewEntries, unit, 
         showStacks = placed.showStacks ~= false,
         showDurationBar = placed.showDurationBar == true,
         cooldownSwipeReverse = placed.cooldownSwipeReverse == true,
-        x = RuntimeRound(ClampNumber(placed.x, 0, -4096, 4096)),
-        y = RuntimeRound(ClampNumber(placed.y, 0, -4096, 4096)),
+        -- Runtime parity: the standalone bar's saved Edit Mode offsets never
+        -- move the portrait icon; it sits exactly inside the portrait.
+        x = 0,
+        y = 0,
     }
 end
 
@@ -1074,6 +1076,11 @@ end
 local function LayoutPreviewDispelBorder(icon, size, mode)
     local atlas = DEBUFF_TYPE_BORDER_PREVIEW_ATLAS[mode]
     local border = icon and icon.dispelBorder
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    if a3 and type(a3.ApplyRoundedAuraDispelPreview) == "function"
+        and a3.ApplyRoundedAuraDispelPreview(border, icon, size, mode) then
+        return
+    end
     if not (atlas and border and border.SetAtlas) then
         if border then border:Hide() end
         return
