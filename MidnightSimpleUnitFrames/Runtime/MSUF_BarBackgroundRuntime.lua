@@ -18,6 +18,7 @@ end
 local type, tonumber = type, tonumber
 local UnitClass = _G.UnitClass
 local issecretvalue = _G.issecretvalue
+local hasanysecretvalues = _G.hasanysecretvalues
 local UF = MSUF.UF or {}
 local ReadUnitExistsCached = UF.ReadUnitExistsCached
 local ReadUnitIsPlayerCached = UF.ReadUnitIsPlayerCached
@@ -132,6 +133,13 @@ local function MSUF_IsSecretValue(value)
     return type(fn) == "function" and fn(value) == true
 end
 
+local function MSUF_HasAnySecretColor(r, g, b)
+    if type(hasanysecretvalues) == "function" then
+        return hasanysecretvalues(r, g, b) == true
+    end
+    return MSUF_IsSecretValue(r) or MSUF_IsSecretValue(g) or MSUF_IsSecretValue(b)
+end
+
 MSUF.Bars._DarkTint = function(g, r, gg, b)
     if g and g.darkMode and not g.darkBgCustomColor then
         local br = MSUF_Clamp01(g.darkBgBrightness)
@@ -214,27 +222,46 @@ _MSUF_GetBgKeys("HP")
 _MSUF_GetBgKeys("Power")
 _MSUF_GetBgKeys("Frame")
 
-local function _MSUF_ApplyBgColor(frame, t, prefix, cr, cg, cb, ca)
+local function _MSUF_ApplyBgColor(frame, t, prefix, cr, cg, cb, ca, colorSecret)
     if not t then return end
     local k = _MSUF_GetBgKeys(prefix)
+    if colorSecret == true then
+        -- Blizzard permits secret VertexColor arguments on SetVertexColor.
+        -- Forward opaque values without Lua comparisons and keep them out of
+        -- the plain-value cache so a later repaint cannot compare against one.
+        t:SetVertexColor(cr, cg, cb, ca)
+        frame[k.r], frame[k.g], frame[k.b], frame[k.a] = nil, nil, nil, nil
+        return
+    end
     if frame[k.r] ~= cr or frame[k.g] ~= cg or frame[k.b] ~= cb or frame[k.a] ~= ca then
         t:SetVertexColor(cr, cg, cb, ca)
         frame[k.r], frame[k.g], frame[k.b], frame[k.a] = cr, cg, cb, ca
     end
 end
 
-local function _MSUF_ApplyBgToTexture(frame, tex, t, prefix, cr, cg, cb, ca)
+local function _MSUF_ApplyBgToTexture(frame, tex, t, prefix, cr, cg, cb, ca, colorSecret)
     if not t or not tex then return end
     local k = _MSUF_GetBgKeys(prefix)
     if frame[k.tex] ~= tex then
         t:SetTexture(tex)
         frame[k.tex] = tex
     end
-    _MSUF_ApplyBgColor(frame, t, prefix, cr, cg, cb, ca)
+    _MSUF_ApplyBgColor(frame, t, prefix, cr, cg, cb, ca, colorSecret)
 end
 
 MSUF.Bars._MatchHPColor = function(frame, gen, cache, defR, defG, defB)
     local fr, fg, fb = frame.hpBar:GetStatusBarColor()
+    local colorSecret = MSUF_HasAnySecretColor(fr, fg, fb)
+    if colorSecret then
+        -- GetStatusBarColor may return secret VertexColor values in Midnight.
+        -- They can be forwarded to SetVertexColor, but Lua must not compare,
+        -- clamp, cache, or multiply them. A dark tint needs multiplication, so
+        -- retain the already-compiled dark background in that one case.
+        if gen and gen.darkMode and not gen.darkBgCustomColor then
+            return defR, defG, defB, false
+        end
+        return fr, fg, fb, true
+    end
     if type(fr) ~= "number" or type(fg) ~= "number" or type(fb) ~= "number" then return defR, defG, defB end
     if gen and gen.darkMode and not gen.darkBgCustomColor then
         local br = (cache and cache.darkBgBrightness) or gen.darkBgBrightness
@@ -243,7 +270,7 @@ MSUF.Bars._MatchHPColor = function(frame, gen, cache, defR, defG, defB)
             fr, fg, fb = fr * br, fg * br, fb * br
         end
     end
-    return MSUF_Clamp01(fr), MSUF_Clamp01(fg), MSUF_Clamp01(fb)
+    return MSUF_Clamp01(fr), MSUF_Clamp01(fg), MSUF_Clamp01(fb), false
 end
 
 local _MSUF_PlayerClassToken
@@ -323,7 +350,7 @@ local function _MSUF_ResolveGlobalBackgroundAlpha(cache, bars)
 end
 
 local function _MSUF_ResolveHealthBackgroundRGBA(frame, cache, gen, bars)
-    local r, gg, b, a
+    local r, gg, b, a, colorSecret
     if cache then
         r, gg, b, a = cache.barBgTintR, cache.barBgTintG, cache.barBgTintB, cache.barBgTintA
     else
@@ -333,7 +360,7 @@ local function _MSUF_ResolveHealthBackgroundRGBA(frame, cache, gen, bars)
     if (cache and cache.barBgClassColor) or (gen and gen.barBgClassColor) then
         r, gg, b = MSUF.Bars._ClassBackgroundColor(frame, r, gg, b)
     elseif frame and (cache and cache.barBgMatchHPColor or (gen and gen.barBgMatchHPColor)) and frame.hpBar and frame.hpBar.GetStatusBarColor then
-        r, gg, b = MSUF.Bars._MatchHPColor(frame, gen, cache, r, gg, b)
+        r, gg, b, colorSecret = MSUF.Bars._MatchHPColor(frame, gen, cache, r, gg, b)
     end
 
     -- Compiled specs own the final per-unit opacity. The cache alpha is already
@@ -345,7 +372,7 @@ local function _MSUF_ResolveHealthBackgroundRGBA(frame, cache, gen, bars)
     elseif not cache then
         a = MSUF_Clamp01(type(a) == "number" and a or 1) * _MSUF_ResolveGlobalBackgroundAlpha(nil, bars)
     end
-    return r, gg, b, a
+    return r, gg, b, a, colorSecret
 end
 
 local function MSUF_GetEffectiveHealthBarBackgroundTintRGBA(frame)
@@ -378,9 +405,9 @@ local function MSUF_ApplyBarBackgroundVisual(frame)
     local gen = (cache and cache.generalRef) or (_G.MSUF_DB and _G.MSUF_DB.general)
     local bars = (cache and cache.barsRef) or (_G.MSUF_DB and _G.MSUF_DB.bars)
 
-    local r, gg, b, a = _MSUF_ResolveHealthBackgroundRGBA(frame, cache, gen, bars)
+    local r, gg, b, a, healthColorSecret = _MSUF_ResolveHealthBackgroundRGBA(frame, cache, gen, bars)
 
-    _MSUF_ApplyBgToTexture(frame, hpTex, frame.hpBarBG, "HP", r, gg, b, a)
+    _MSUF_ApplyBgToTexture(frame, hpTex, frame.hpBarBG, "HP", r, gg, b, a, healthColorSecret)
 
     local pr, pg, pb, pa
     if cache then
@@ -395,19 +422,20 @@ local function MSUF_ApplyBarBackgroundVisual(frame)
         pa = MSUF_Clamp01(type(pa) == "number" and pa or 1) * _MSUF_ResolveGlobalBackgroundAlpha(nil, bars)
     end
 
+    local powerColorSecret
     if (cache and cache.powerBarBgMatchHPColor or ((gen and gen.powerBarBgMatchHPColor) or (bars and bars.powerBarBgMatchBarColor))) and frame.hpBar and frame.hpBar.GetStatusBarColor then
-        pr, pg, pb = MSUF.Bars._MatchHPColor(frame, gen, cache, pr, pg, pb)
+        pr, pg, pb, powerColorSecret = MSUF.Bars._MatchHPColor(frame, gen, cache, pr, pg, pb)
     end
 
     local shapedPower = frame.targetPowerBar and frame.targetPowerBar._msufPowerShapeActive == true
     if shapedPower then
         -- Shape backgrounds are fixed media owned by the Power element. Refresh
         -- only their tint; replacing the texture turns the shape back into a bar.
-        _MSUF_ApplyBgColor(frame, frame.powerBarBG, "Power", pr, pg, pb, pa)
+        _MSUF_ApplyBgColor(frame, frame.powerBarBG, "Power", pr, pg, pb, pa, powerColorSecret)
     else
         -- The compiled spec already resolves the full power-background
         -- precedence for detached bars too, so no per-frame override remains.
-        _MSUF_ApplyBgToTexture(frame, powerTex, frame.powerBarBG, "Power", pr, pg, pb, pa)
+        _MSUF_ApplyBgToTexture(frame, powerTex, frame.powerBarBG, "Power", pr, pg, pb, pa, powerColorSecret)
     end
 
     if (not frame.hpBarBG) and (not frame.powerBarBG) and frame.bg then

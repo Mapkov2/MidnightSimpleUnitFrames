@@ -272,6 +272,17 @@ local function ResolveTexture(resolver, kind)
   return WHITE
 end
 
+local function ResolveStatusbarTextureKey(key, fallback)
+  if type(key) == "string" and key ~= "" then
+    local resolve = _G.MSUF_ResolveStatusbarTextureKey
+    local texture = type(resolve) == "function" and resolve(key) or nil
+    if type(texture) == "string" and texture ~= "" then
+      return texture
+    end
+  end
+  return fallback or WHITE
+end
+
 local function ResolveHighlightRGB()
   local general = _G.MSUF_DB and _G.MSUF_DB.general
   local color = general and general.highlightColor
@@ -1563,8 +1574,12 @@ end
 --- lane can never leave a power field stale against a full recompile.
 local function FillPowerVisualDomain(power, conf, general, texture, bgTexture)
   local visual = ResolvePowerVisual(conf)
-  power.texture = texture
-  power.backgroundTexture = bgTexture
+  -- The Bars page owns shared power art. Resolve it once in the cached group
+  -- spec; an empty/invalid key preserves the scope's effective Health texture.
+  -- Runtime power events therefore only consume a finished path.
+  local bars = _G.MSUF_DB and _G.MSUF_DB.bars
+  power.texture = ResolveStatusbarTextureKey(bars and bars.powerBarTexture, texture)
+  power.backgroundTexture = ResolveStatusbarTextureKey(bars and bars.powerBarBgTexture, bgTexture)
   power.background = CompileBarBackground(conf)
   power.backgroundMatchHealth = visual.backgroundMatchHealth
   power.mode = visual.mode
