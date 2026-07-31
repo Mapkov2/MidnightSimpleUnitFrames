@@ -442,6 +442,10 @@ Data.GEOMETRY_PARSER = {
         "bar outline", "outline opacity", "outline alpha", "border opacity", "border alpha",
         "highlight border", "group border", "dead background", "dead bg", "dead member",
         "dead offline", "offline opacity", "health fade",
+        -- The portrait owns its own opacity pair (portraitAlpha and
+        -- portraitBgColorA). Without these the health-bar shortcut claimed
+        -- "party portrait opacity" and wrote hpBarAlpha instead.
+        "portrait", "portraits", "portraet",
     },
         [228] = { "background", "backdrop", "track", "hp track", "health track", "bg", "bar background" },
         [229] = { "range fade", "dispel overlay", "debuff overlay" },

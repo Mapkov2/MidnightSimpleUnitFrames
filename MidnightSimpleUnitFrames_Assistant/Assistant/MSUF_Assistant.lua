@@ -7503,6 +7503,25 @@ function AP.PendingCandidateFollowupResult(text)
     return ExecuteChoice(choice)
 end
 
+-- A pending confirmation must not swallow a brand-new question. Re-prompting
+-- the same one-line reminder for "why is my health bar empty" discarded the
+-- question and read as the Assistant ignoring the player. Only a request that
+-- parses into its own plan counts as a topic switch, so vague replies still get
+-- the reminder -- and abandoning an unanswered confirmation is always the safe
+-- direction, because nothing is applied.
+function AP.PendingTopicSwitchRequest(text)
+    if type(A.Parse) ~= "function" then return false end
+    local normalized = NormalizeReply(text)
+    if normalized == "" or #normalized < 6 then return false end
+    -- Parsing is the expensive part, so only pay for it when the reply already
+    -- reads like a fresh command rather than an answer to the question asked.
+    if not LooksLikeFreshCommand(text) then return false end
+    local ok, parsed = pcall(A.Parse, text)
+    if not ok or type(parsed) ~= "table" then return false end
+    local kind = tostring(parsed.kind or "")
+    return kind == "changes" or kind == "action" or kind == "answer" or kind == "diagnostic"
+end
+
 local function HandlePending(text)
     if type(A.HandlePendingFlow) == "function" then
         local flowResult = A.HandlePendingFlow(text)
@@ -7529,6 +7548,12 @@ local function HandlePending(text)
             A.pendingConfirmation = nil
             ClearPendingConfirmationContext()
             return A.ExecutePlan(plan, { confirmed = true })
+        end
+        if AP.PendingTopicSwitchRequest(text) then
+            A.pendingConfirmation = nil
+            ClearPendingConfirmationContext()
+            A._droppedPendingConfirmation = true
+            return nil
         end
         return { text = "Yes, do it, or apply will continue. Cancel stops it.", result = "confirmation_needed" }
     else
@@ -7757,6 +7782,7 @@ function A.HandleInput(text, handleOpts)
     end
     local hadPendingResults = CurrentPendingResults() ~= nil
     A._pendingResultFollowupHandled = nil
+    A._droppedPendingConfirmation = nil
     local result
     local routed, routeResult
     local semanticBarOutlineColor = AP.BarOutlineColorSemanticPlan(text)
@@ -7787,6 +7813,13 @@ function A.HandleInput(text, handleOpts)
     local pendingResultReply = A._pendingResultFollowupHandled == true
     A._pendingResultFollowupHandled = nil
     if ShouldClearPendingResultsAfterHandledInput(result, hadPendingResults, pendingResultReply) then ClearPendingResults() end
+    -- Never drop a confirmation silently: the player asked for it and is
+    -- entitled to know it was not applied.
+    if A._droppedPendingConfirmation and type(result) == "table" then
+        result.text = tostring(result.text or "")
+            .. "\nI dropped the confirmation that was waiting, because you moved on to something else. Nothing was applied."
+    end
+    A._droppedPendingConfirmation = nil
     return result
 end
 
@@ -8044,6 +8077,40 @@ function AP.InheritedBatchCommand(before, after)    local actionTail = AP.Inheri
     return Trim(lead .. " " .. after)
 end
 
+-- "set target width to 250 and set height to 60" repeats the verb but not the
+-- frame. Batch parts are planned independently, so the second clause arrived
+-- without a frame and fell back to a default unit -- writing Player Height for
+-- a sentence that only ever named the target. Carry the first clause's frame
+-- over when the follow-up clause names none of its own.
+function AP.InheritBatchScope(before, after)
+    local parser = A.Parser
+    if type(parser) ~= "table" then return after end
+    local detectUnits = parser.DetectUnits
+    local detectGroups = parser.DetectGroups
+    if type(detectUnits) ~= "function" or type(detectGroups) ~= "function" then return after end
+    if #detectUnits(after) > 0 or #detectGroups(after) > 0 then return after end
+
+    local units, groups = detectUnits(before), detectGroups(before)
+    local scope
+    if #units == 1 and #groups == 0 then
+        scope = units[1]
+    elseif #groups == 1 and #units == 0 then
+        scope = groups[1]
+    end
+    if not scope then return after end
+
+    local trimmed = Trim(after)
+    local starter = trimmed:match("^(%a+)")
+    if not starter then return after end
+    local starterNorm = starter:lower()
+    for i = 1, #AP.BATCH_COMMAND_STARTERS do
+        if starterNorm == AP.BATCH_COMMAND_STARTERS[i] then
+            return starter .. " " .. scope .. " " .. Trim(trimmed:sub(#starter + 1))
+        end
+    end
+    return after
+end
+
 function AP.IsNamedConjunctionBoundary(before, after)
     before = AP.NormalizeForBatch(before)
     after = AP.NormalizeForBatch(after)
@@ -8100,7 +8167,7 @@ function AP.SplitBatchCommands(text)    if A.pendingConfirmation or CurrentPendi
                         and (AP.StartsBatchCommand(after) or AP.IsReadOnlyBatchTail(after))
                     then
                         parts[p] = before
-                        table.insert(parts, p + 1, after)
+                        table.insert(parts, p + 1, AP.InheritBatchScope(before, after))
                         changed = true
                         break
                     end
@@ -8526,6 +8593,15 @@ function AP.TryImmediateMutationResult(text, opts)
     if normalized == "" then return nil end
     if AP.BarOutlineColorSemanticPlan(text) then return nil end
     local routePrivate = A.RouterPrivate
+    -- A build request is not a mutation. "I want to track a spell on my player
+    -- frame" contains "player frame", which this fast path matched to Player
+    -- Frame Enabled and answered "already enabled". Let the Router explain how
+    -- to build the thing instead.
+    if routePrivate and type(routePrivate.TryCreationGuidance) == "function"
+        and routePrivate.TryCreationGuidance(text)
+    then
+        return nil
+    end
     -- Context-aware Aura filtering intentionally bypasses some broad
     -- read-only heuristics for concrete filter commands. Subjective planning
     -- phrases are the exception: a retained group-Aura scope must never turn

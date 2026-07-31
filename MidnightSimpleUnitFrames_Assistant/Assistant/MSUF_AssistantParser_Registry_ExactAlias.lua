@@ -112,6 +112,23 @@ local function EnsureIndex(settings)
     end
 
     local index = { byLength = {}, maxTokens = 0, triggerTokens = {} }
+
+    -- Visible labels are only safe to index when they identify one setting.
+    -- Several families deliberately share a label between a scoped twin and its
+    -- base ("Party Aggro Shows For" is both barScope.gf_party.aggroMode and
+    -- gf_party.aggroMode), and curated aliases are what disambiguate them --
+    -- indexing the shared label makes both claim it and the curated choice
+    -- loses. Count first, index only the unambiguous ones.
+    local actionAliases = type(P.ExactActionAliasSet) == "function" and P.ExactActionAliasSet() or {}
+    local labelOwners = {}
+    for i = 1, #settings do
+        local label = type(settings[i]) == "table" and settings[i].label or nil
+        if type(label) == "string" and label ~= "" then
+            local normalized = Normalize(label)
+            if normalized ~= "" then labelOwners[normalized] = (labelOwners[normalized] or 0) + 1 end
+        end
+    end
+
     local aliasWork = 0
     local function MaybeYieldAliasWork()
         aliasWork = aliasWork + 1
@@ -132,6 +149,39 @@ local function EnsureIndex(settings)
         for j = 1, #(aliases or {}) do
             if ShouldIndexNormalAlias(setting, aliases[j]) then
                 AddIndexAlias(index, setting, PreparedSettingAlias(setting, aliases[j], j, false), 2)
+                MaybeYieldAliasWork()
+            end
+        end
+        -- The name the player reads in the menu must always reach its own
+        -- setting. Several families only carry attribute-derived aliases
+        -- ("party buffs category blacklist Cooldowns") and never the visible
+        -- label, so "turn on Party Buff Hidden Category Cooldowns" missed the
+        -- exact lane entirely and a broad aura shortcut claimed it -- reading
+        -- "Hidden" out of the label as an off-cue and disabling the whole Buff
+        -- lane instead. Indexing the label closes that whole class.
+        -- Normalize directly: PreparedSettingAlias only skips normalization for
+        -- aliases the registry pre-normalized at a known index, and the label
+        -- is not one of them, so routing it through there would index the raw
+        -- capitalized string and never match a normalized query.
+        local label = type(setting) == "table" and setting.label or nil
+        if type(label) == "string" and label ~= "" then
+            local normalizedLabel = Normalize(label)
+            -- Actions outrank settings in the regular pipeline; a label that
+            -- also names an action ("Crosshair Melee Range Spell") must not
+            -- invert that from inside the pre-pass. Action aliases usually
+            -- carry the command verb ("set crosshair melee range spell") that a
+            -- label never has, so compare the verb-prefixed forms as well.
+            local shadowsAction = actionAliases[normalizedLabel] == true
+            if not shadowsAction then
+                for _, verb in ipairs({ "set", "change", "show", "open", "reset" }) do
+                    if actionAliases[verb .. " " .. normalizedLabel] then
+                        shadowsAction = true
+                        break
+                    end
+                end
+            end
+            if normalizedLabel ~= "" and labelOwners[normalizedLabel] == 1 and not shadowsAction then
+                AddIndexAlias(index, setting, normalizedLabel, 1)
                 MaybeYieldAliasWork()
             end
         end
@@ -299,15 +349,58 @@ local COMMAND_VERB_TOKENS = {
 local POSITIVE_VERBS = { enable = true, show = true }
 local NEGATIVE_VERBS = { disable = true, hide = true }
 
+-- Politeness and address tokens carry no meaning for matching, but they sit in
+-- front of the verb, so the verb scan below never started and "please set
+-- Player Width to 100" matched nothing.
+-- "msuf" is deliberately absent: it is a real VALUE ("set general boss castbar
+-- backend to MSUF"), and stripping it as trailing filler silently retargeted
+-- those commands. It stays in the post-verb determiner list below, where a
+-- value can never appear.
+local COMMAND_FILLER_TOKENS = {
+    please = true, pls = true, kindly = true, just = true, now = true,
+    hey = true, hi = true, hello = true, assistant = true,
+    ok = true, okay = true, also = true,
+    bitte = true, mal = true, jetzt = true,
+}
+
+-- Determiners and possessives sit between the verb and the option name ("set
+-- MY player width", "set MSUF player width"). They are never part of a label.
+local COMMAND_DETERMINER_TOKENS = {
+    the = true, my = true, our = true, its = true, msuf = true,
+    der = true, die = true, das = true, den = true, dem = true, mein = true, meine = true,
+}
+
 local function SubjectPhrase(tokens)
     local i = 1
     local boolFromVerb
+    while tokens[i] and COMMAND_FILLER_TOKENS[tokens[i]] do i = i + 1 end
+    -- A trailing "please" is politeness, not a value.
+    local last = #tokens
+    while last > i and COMMAND_FILLER_TOKENS[tokens[last]] do last = last - 1 end
+    if last < #tokens then
+        local trimmed = {}
+        for k = 1, last do trimmed[k] = tokens[k] end
+        tokens = trimmed
+    end
+    local afterFiller = i
     while tokens[i] and COMMAND_VERB_TOKENS[tokens[i]] do
         if POSITIVE_VERBS[tokens[i]] then boolFromVerb = true end
         if NEGATIVE_VERBS[tokens[i]] then boolFromVerb = false end
         i = i + 1
+        while tokens[i] and COMMAND_DETERMINER_TOKENS[tokens[i]] do i = i + 1 end
     end
-    if i == 1 then return nil end
+    if i == afterFiller then
+        -- Players drop the verb once they know the option name ("Boss Absorb
+        -- Bar Height to 51"). That is only a command when an explicit value
+        -- tail follows, so require a "to <value>"; a bare option name stays a
+        -- question. The caller still demands that everything before the tail
+        -- equal exactly one indexed alias, which keeps this from being eager.
+        local hasValueTail = false
+        for k = 2, #tokens - 1 do
+            if tokens[k] == "to" or tokens[k] == "=" then hasValueTail = true break end
+        end
+        if not hasValueTail then return nil end
+    end
     if tokens[i] == "on" then
         boolFromVerb = true
         i = i + 1
@@ -322,9 +415,17 @@ local function SubjectPhrase(tokens)
     if boolFromVerb == nil then
         local lastTo
         for k = i + 1, #tokens - 1 do
-            if tokens[k] == "to" then lastTo = k end
+            if tokens[k] == "to" or tokens[k] == "=" then lastTo = k end
         end
-        if lastTo then j = lastTo - 1 end
+        if lastTo then
+            j = lastTo - 1
+        elseif j > i and tokens[j]:match("^[-+]?%d+%.?%d*$") then
+            -- "make Boss Absorb Bar Height 51" drops the "to" as well as the
+            -- verb. A trailing bare number is the value, never part of an
+            -- option name -- labels that genuinely end in a digit were already
+            -- matched whole by the caller before this tail is considered.
+            j = j - 1
+        end
     end
     if j < i then return nil end
     return table.concat(tokens, " ", i, j), (j - i + 1), boolFromVerb
@@ -359,6 +460,10 @@ local function ActionAliasSet()
     P._exactActionAliasCount = #actions
     return set
 end
+
+-- Exposed on P because EnsureIndex is defined above this point and so cannot
+-- capture the local; the label pass needs it to avoid shadowing an action.
+P.ExactActionAliasSet = ActionAliasSet
 
 -- Registration domains can register the same feature twice (e.g.
 -- "gf_party.dispelOverlayStyle" and "barScope.gf_party.dispelOverlayStyle"). When
@@ -571,6 +676,12 @@ function P.ParseRegistryExactAliasShortcut(text, raw, opts)
         if not setting.generated and setting.type ~= "boolean" and setting.type ~= "number" then
             local fixedString = setting.type == "string" and setting.closedValues == true
                 and type(setting.values) == "table" and #setting.values > 0
+            -- Colours are deliberately NOT claimed here: a colour lane upstream
+            -- of this pre-pass owns them, and widening this guard regressed the
+            -- gate without reaching that lane. The known consequence is that a
+            -- fully-named colour ("Arcane Mage Arcane Charges 1 Color to red")
+            -- is answered by the broader Mage Class Bar Color instead; fixing
+            -- that belongs in the colour lane's own precedence, not here.
             if not fixedString and (setting.type ~= "enum" or text:find("|", 1, true)) then return nil end
         end
         matches[1] = { setting = setting, score = #Compact(subject) }

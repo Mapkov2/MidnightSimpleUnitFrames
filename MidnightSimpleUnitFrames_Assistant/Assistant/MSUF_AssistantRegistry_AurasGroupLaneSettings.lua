@@ -71,6 +71,107 @@ function A.AurasRegistry.RegisterGroupExternalLayerSettings(ctx)
             apply = function() ApplyGroup(scopeKey, "auras") end,
             combatSafe = false,
         })
+
+        -- Layer was the only reachable external-defensive control, so the lane
+        -- could be drawn but not turned on, capped or aimed. These are the rest
+        -- of the record the group config reads
+        -- (MSUF_UF_Group_Config.lua: externals.enabled/max/growth/auto/
+        -- autoBlacklistBuffs).
+        local EXTERNAL_FIELDS = {
+            -- Deliberately "Lane": a bare "external defensives" is the Buff
+            -- filter token, and giving this setting that wording made the two
+            -- indistinguishable. The lane toggle keeps the explicit noun.
+            { field = "enabled", label = "External Defensive Lane", type = "boolean", default = true,
+              nouns = { "external defensive lane", "externals lane", "external defensive strip" } },
+            { field = "auto", label = "External Defensive Auto List", type = "boolean", default = true,
+              nouns = { "external defensive auto list", "externals auto list", "automatic externals" } },
+            { field = "autoBlacklistBuffs", label = "External Defensive Auto-blacklist from Buffs",
+              type = "boolean", default = false,
+              nouns = { "external defensive auto blacklist", "externals auto blacklist from buffs" } },
+            { field = "max", label = "External Defensive Max Icons", type = "number", default = 3,
+              min = 0, max = 40, step = 1,
+              nouns = { "external defensive max icons", "externals max icons", "external defensive count" } },
+            { field = "growth", label = "External Defensive Growth", type = "enum", default = "RIGHTDOWN",
+              values = { "RIGHTDOWN", "LEFTDOWN", "RIGHTUP", "LEFTUP", "UP", "DOWN", "LEFT", "RIGHT" },
+              nouns = { "external defensive growth", "externals growth", "external defensive grow direction" } },
+        }
+
+        for _, spec in ipairs(EXTERNAL_FIELDS) do
+            local externalField, fieldSpec = spec.field, spec
+            local fieldAliases = {}
+            for _, noun in ipairs(spec.nouns) do
+                fieldAliases[#fieldAliases + 1] = scope .. " " .. noun
+                AddAliasesForUnit(fieldAliases, scope, noun)
+            end
+
+            local descriptor = {
+                key = "gf_" .. scope .. ".auras.externals." .. externalField,
+                label = (UNIT_LABELS[scope] or scope) .. " " .. spec.label,
+                category = (UNIT_LABELS[scope] or scope) .. " / Group Auras",
+                page = "gf_auras",
+                unit = scope,
+                frameType = "groupAura",
+                attribute = "external" .. spec.field:sub(1, 1):upper() .. spec.field:sub(2),
+                type = spec.type,
+                aliases = fieldAliases,
+                exactAliases = fieldAliases,
+                get = function()
+                    local root = GFAurasRoot(scopeKey)
+                    local externals = root and root.externals
+                    local current = type(externals) == "table" and externals[externalField] or nil
+                    if fieldSpec.type == "boolean" then
+                        if current == nil then return fieldSpec.default end
+                        return current == true
+                    end
+                    if fieldSpec.type == "number" then
+                        local value = tonumber(current)
+                        if value == nil then return fieldSpec.default end
+                        value = math.floor(value + 0.5)
+                        if value < fieldSpec.min then return fieldSpec.min end
+                        if value > fieldSpec.max then return fieldSpec.max end
+                        return value
+                    end
+                    current = tostring(current or "")
+                    for i = 1, #fieldSpec.values do
+                        if fieldSpec.values[i] == current then return current end
+                    end
+                    return fieldSpec.default
+                end,
+                set = function(value)
+                    local root = GFAurasRoot(scopeKey)
+                    if not root then return end
+                    root.externals = type(root.externals) == "table" and root.externals or {}
+                    if fieldSpec.type == "boolean" then
+                        root.externals[externalField] = value and true or false
+                        return
+                    end
+                    if fieldSpec.type == "number" then
+                        local number = tonumber(value)
+                        if number == nil then return end
+                        number = math.floor(number + 0.5)
+                        if number < fieldSpec.min then number = fieldSpec.min end
+                        if number > fieldSpec.max then number = fieldSpec.max end
+                        root.externals[externalField] = number
+                        return
+                    end
+                    local text = tostring(value or ""):upper()
+                    for i = 1, #fieldSpec.values do
+                        if fieldSpec.values[i] == text then
+                            root.externals[externalField] = text
+                            return
+                        end
+                    end
+                end,
+                apply = function() ApplyGroup(scopeKey, "auras") end,
+                combatSafe = false,
+            }
+            if spec.type == "number" then
+                descriptor.min, descriptor.max, descriptor.step = spec.min, spec.max, spec.step
+            elseif spec.type == "enum" then
+                descriptor.values, descriptor.closedValues = spec.values, true
+            end
+            Registry:RegisterSetting(descriptor)
+        end
     end
 end
 

@@ -288,8 +288,16 @@ local function DurationIntent(text)
 end
 
 local function DurationValue(text)
+    -- The control is named "Hide Permanent Auras", so the label itself contains
+    -- "hide". Any explicit off token therefore has to win over the label, or
+    -- "put Boss Buff Hide Permanent Auras off" reads the "hide" in the NAME as
+    -- the intent and switches the filter ON -- the exact opposite of the
+    -- request. Previously only "turn off"/"disable" were recognised, so a bare
+    -- "off" fell through to the generic "hide" branch below.
     if HasAny(text, { "do not hide permanent", "dont hide permanent", "never hide permanent" })
-        or (HasAny(text, { "turn off", "disable" }) and HasAny(text, { "hide permanent" }))
+        or (HasAny(text, {
+            "turn off", "disable", "deactivate", "switch off", "off", "false", "no",
+        }) and HasAny(text, { "hide permanent" }))
     then
         return false
     end
@@ -1071,7 +1079,24 @@ function P.ParseAuraFilteringConversationShortcut(text, ctx, raw)
     -- the same filter-token wording ("party external defensive layer"). Draw
     -- order is never a live-filter mutation, so leave layer language to the
     -- exact aliases on the gf_<scope>.auras.externals.layer settings.
-    if HasAny(text, { "layer", "strata", "draw layer", "draw order", "frame level" }) then
+    -- A numbered Custom Aura container names one exact control, and each
+    -- container carries its own copy of every filter token. Claiming that
+    -- wording as a live-filter mutation made settings like
+    -- "player custom aura 1 hide permanent" unreachable: the exact alias
+    -- resolves them correctly, this lane answered "ambiguous" first.
+    if text:find("custom%s+aura%s+%d") or text:find("custom%s+container%s+%d") then
+        return nil
+    end
+    -- The externals record owns more than draw order now (lane toggle, auto
+    -- list, max icons, growth). None of those wordings is a live-filter
+    -- mutation, so they belong to the exact aliases on
+    -- gf_<scope>.auras.externals.*. A bare "external defensives" stays here:
+    -- that is the Buff filter token.
+    if HasAny(text, {
+        "layer", "strata", "draw layer", "draw order", "frame level",
+        "external defensive lane", "externals lane", "external defensive strip",
+        "auto list", "auto blacklist", "max icons", "growth", "grow direction",
+    }) then
         return nil
     end
     if not P.LooksLikeAuraFilteringConversation(text, ctx) then return nil end

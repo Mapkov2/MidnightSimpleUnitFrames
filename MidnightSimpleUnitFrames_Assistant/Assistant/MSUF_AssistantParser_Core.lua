@@ -435,7 +435,65 @@ local NORMALIZE_WORD_REPLACEMENTS = {
     interupt = "interrupt",
     trennzeichen = "separator",
     trenner = "separator",
+    -- The German infinitive "verstecken" is wired through the visibility
+    -- parsers; the imperative a player actually types was not. Fold it onto the
+    -- form that already works instead of translating to English, so every
+    -- German-specific path keeps matching.
+    verstecke = "verstecken",
+    versteck = "verstecken",
+    verberge = "verstecken",
+    verbergen = "verstecken",
 }
+
+-- German writes "target width" as one word, so "zielbreite" never matched the
+-- unit or the attribute and the whole request fell through to a generic
+-- fallback. Split the compounds the same way "targetframe" is already split,
+-- and fold the genitive ("die Breite des Ziels") onto the plain noun so the
+-- unit still resolves. Generated rather than listed: the combinations are
+-- mechanical, and a hand-written list would drift as terms are added.
+do
+    local units = {
+        ziel = "ziel", ziels = "ziel", zieles = "ziel",
+        spieler = "spieler", spielers = "spieler",
+        fokus = "fokus", fokusses = "fokus",
+        begleiter = "begleiter", begleiters = "begleiter",
+        boss = "boss", bosses = "boss",
+        gruppe = "gruppe", gruppen = "gruppe",
+    }
+    -- Emit the English attribute: replacement happens in a single token pass,
+    -- so a German word produced here would never be translated afterwards, and
+    -- the parsers resolve a German unit next to an English attribute fine
+    -- ("setze ziel width auf 260" already works). Declensions are listed
+    -- explicitly because German inflects the noun, not the compound.
+    local attributes = {
+        breite = "width", breiten = "width",
+        hoehe = "height", hoehen = "height",
+        groesse = "size", groessen = "size",
+        farbe = "color", farben = "color",
+        transparenz = "opacity", opazitaet = "opacity",
+        schrift = "font", schriften = "font",
+        schriftgroesse = "font size",
+        abstand = "spacing", abstaende = "spacing",
+        skalierung = "scale",
+        name = "name", namen = "name",
+        rahmen = "frame",
+        portraet = "portrait", portraets = "portrait",
+        textur = "texture", texturen = "texture",
+        position = "position",
+    }
+    for compoundPrefix, unitWord in pairs(units) do
+        -- The bare genitive on its own still has to reach the unit.
+        if compoundPrefix ~= unitWord and not NORMALIZE_WORD_REPLACEMENTS[compoundPrefix] then
+            NORMALIZE_WORD_REPLACEMENTS[compoundPrefix] = unitWord
+        end
+        for germanAttribute, englishAttribute in pairs(attributes) do
+            local compound = compoundPrefix .. germanAttribute
+            if not NORMALIZE_WORD_REPLACEMENTS[compound] then
+                NORMALIZE_WORD_REPLACEMENTS[compound] = unitWord .. " " .. englishAttribute
+            end
+        end
+    end
+end
 
 local ACTIONABLE_LEADING_PREFIXES = {
     "can you please",
@@ -1154,12 +1212,19 @@ end
 local OFF_WORDS = {
     "off", "disable", "disabled", "hide", "hidden", "false", "no",
     "dont", "dont show", "do not", "do not show", "never", "never show",
+    -- Everyday synonyms the German list already had ("deaktiviere",
+    -- "ausschalten") but English did not, so "deactivate player name" and
+    -- "switch off party bold text" were understood as neither on nor off.
+    "deactivate", "deactivated", "switch off", "switched off", "shut off",
+    "toggle off", "turned off",
     "aus", "deaktivieren", "deaktiviert", "ausschalten", "ausgeschaltet",
     "deaktiviere", "schalte aus", "mach aus", "verstecken", "versteckt",
     "verstecke", "ausblenden", "ausgeblendet", "blende aus", "nein",
 }
 local ON_WORDS = {
     "on", "enable", "enabled", "show", "visible", "true", "yes",
+    "activate", "activated", "switch on", "switched on", "unhide",
+    "toggle on", "turned on",
     "an", "aktivieren", "aktiviert", "einschalten", "eingeschaltet",
     "aktiviere", "schalte an", "mach an", "anzeigen", "zeige",
     "zeig", "einblenden", "eingeblendet", "blende ein", "sichtbar",
@@ -1514,7 +1579,9 @@ local NON_MUTATING_PROBLEM_TERMS = {
     "filtered out", "filtered", "blacklisted", "blocked", "disappeared", "vanished", "not shown", "not showing",
     "not displayed", "not appearing", "does not show", "doesnt show", "cannot see",
     "cant see", "not visible", "invisible", "hidden", "not working", "does not work", "doesnt work",
-    "wrong place", "wrong position", "too faded", "too transparent", "too small",
+    "wrong place", "wrong position", "weird place", "weird position", "out of place",
+    "misplaced", "empty", "not filling", "does not fill", "doesnt fill",
+    "too faded", "too transparent", "too small",
     "too far apart", "too busy", "hard to see", "hard to read",
     "weg", "fehlt", "fehlen", "fehlende", "fehlender", "fehlendes", "fehlenden", "fehlgeschlagen",
     "verschwunden", "nicht angezeigt", "wird nicht angezeigt",
@@ -1525,8 +1592,9 @@ local NON_MUTATING_PROBLEM_TERMS = {
 local EXPLICIT_MUTATION_PREFIXES = {
     "set", "change", "make", "adjust", "use", "apply", "turn", "enable", "disable", "show", "hide", "move", "nudge",
     "shift", "increase", "decrease", "raise", "lower", "reset", "restore", "recover",
-    "open", "close", "copy", "create", "delete", "remove", "add", "clear", "toggle",
+    "open", "close", "copy", "create", "delete", "remove", "add", "clear", "empty", "toggle",
     "allow", "unhide", "unblacklist", "unblock", "whitelist", "unwhitelist",
+    "dont", "do not", "never",
     "setze", "stelle", "mache", "aendere", "verwende", "nutze", "aktiviere", "aktivieren", "deaktiviere", "deaktivieren",
     "einschalten", "ausschalten", "zeige", "anzeigen", "verstecke", "verstecken",
     "einblenden", "ausblenden", "verschiebe", "verschieben", "erhoehe", "senke",
@@ -1568,7 +1636,11 @@ local READ_ONLY_QUESTION_PREFIXES = {
 
 local READ_ONLY_LOOKUP_PREFIXES = {
     "explain", "describe", "list", "current", "status", "tell me",
+    -- "help with X" asks about X; it is not permission to switch X on.
+    "help with", "help me with", "help on", "help for", "info about",
+    "information about", "i want to know about", "what page is",
     "erklaere", "beschreibe", "liste", "aktuell", "aktueller", "aktuelle", "aktuelles", "status",
+    "hilfe zu", "hilfe bei", "info ueber", "infos ueber",
 }
 
 local EMBEDDED_QUESTION_PHRASES = {
@@ -1634,13 +1706,19 @@ local function NonMutatingIntent(text)
     local actionable = ActionableText(normalized)
     local explicitMutation = StartsWithAnyPhrase(actionable, EXPLICIT_MUTATION_PREFIXES)
     local questionPrefix = StartsWithAnyPhrase(actionable, READ_ONLY_QUESTION_PREFIXES)
+    -- Check the raw text too: ActionableText strips conversational leads such
+    -- as "i want to", which would delete the very prefix that marks the request
+    -- as a lookup ("i want to know about X" became "know about X").
     local lookupPrefix = StartsWithAnyPhrase(actionable, READ_ONLY_LOOKUP_PREFIXES)
+        or StartsWithAnyPhrase(normalized, READ_ONLY_LOOKUP_PREFIXES)
     local embeddedQuestion = HasAnyExactPhrase(normalized, EMBEDDED_QUESTION_PHRASES)
     local bareCapability = StartsWithAnyPhrase(actionable, { "can", "could", "does" })
         and not StartsWithAnyPhrase(actionable, { "can you", "could you" })
+    -- "Show me X" asks to be shown X, whatever X is; only "show X" without the
+    -- pronoun is the command to switch X on. Requiring a page/location word on
+    -- top meant "show me Boss Absorb Bar Texture" was treated as an imperative
+    -- and wrote to the texture.
     local presentationLookup = StartsWithAnyPhrase(actionable, { "show me", "zeige mir" })
-        and (HasAnyExactPhrase(actionable, INFORMATION_TARGET_TERMS)
-            or HasAnyExactPhrase(actionable, { "where", "location", "wo", "seite", "page" }))
     local explicitImportantAuraFilter = explicitMutation
         and HasAnyExactPhrase(normalized, { "aura", "auras", "buff", "buffs", "debuff", "debuffs" })
         and HasAnyExactPhrase(normalized, {
@@ -1662,11 +1740,21 @@ local function NonMutatingIntent(text)
     -- setting/value. Diagnose it first instead of guessing an enable/reset.
     -- Specific workflows such as "fix profile mappings" do not name one of
     -- these visual areas and continue to their explicit action parser.
-    if not explicitMutation and HasAnyExactPhrase(normalized, REPAIR_PROBLEM_TERMS)
+    -- "Why would I change X" asks for the rationale behind a control; it is not
+    -- a report that X is broken. Both start with "why", so the repair branch
+    -- claimed it and the request was routed to diagnostics instead of an
+    -- explanation.
+    local rationaleQuestion = StartsWithAnyPhrase(actionable, {
+        "why would i", "why should i", "why do i need", "why would you",
+        "why is it useful", "what is the point of", "whats the point of",
+    })
+    if not rationaleQuestion and not explicitMutation
+        and HasAnyExactPhrase(normalized, REPAIR_PROBLEM_TERMS)
         and HasAnyExactPhrase(normalized, SUBJECTIVE_SETTING_AREAS)
     then
         return "problem"
     end
+    if rationaleQuestion then return "lookup" end
 
     -- Fail closed for questions and read-only inspection requests. A genuine
     -- imperative still wins ("set hp text to current", "copy current

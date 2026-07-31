@@ -957,11 +957,82 @@ function A._ParseTextSlotDropdownValueShortcut(text)
     if ContainsAny(text, GeometryTextPhrases[77]) then
         return nil
     end
+    if ContainsAny(text, {
+        "bigger", "larger", "smaller", "increase", "decrease",
+        "font", "font size", "text size",
+    }) then
+        return nil
+    end
 
     local tab = TextSelectorTab(text)
-    if tab ~= "hp" and tab ~= "power" then return nil end
+    if tab ~= "hp" and tab ~= "power" then
+        -- "Show percentages instead of numbers" names only the display mode --
+        -- not the text area, the slot, or the frame. It is still a real
+        -- request, so name the three things that are missing instead of
+        -- dropping it into a generic examples list. Kept deliberately narrow:
+        -- a bare mode word plus a display verb, with nothing else identified.
+        if #DetectUnits(text) > 0 or #DetectGroups(text) > 0 then return nil end
+        if not ContainsAny(text, { "percent", "percentage", "percentages", "prozent", "prozentzahl" }) then return nil end
+        if not ContainsAny(text, { "show", "display", "use", "instead", "statt", "zeige", "anzeigen" }) then return nil end
+        if ContainsAny(text, {
+            "aura", "buff", "debuff", "castbar", "cast bar", "class power", "class resource",
+            "range", "fade", "scale", "size", "font", "color", "colour", "opacity", "alpha",
+        }) then
+            return nil
+        end
+        return {
+            kind = "unknown",
+            status = "failed",
+            text = "I can switch text between percentages and numbers, but I need to know where."
+                .. "\nEach frame has a left, center, and right slot for health text and for power text."
+                .. "\nTell me the frame and the slot, for example 'set player hp right slot to percent'"
+                .. " or 'set raid health text to percent'.",
+            summary = "Asks which text area, slot, and frame a percent/number mode applies to.",
+        }
+    end
     local slot = A._TextSlotForDetail(text, tab)
-    if not slot then return nil end
+    local hasExplicitFrame = #DetectUnits(text) > 0 or #DetectGroups(text) > 0
+    if not slot and hasExplicitFrame then
+        local bareSlot = TextSelectorSlot(text)
+        if not bareSlot then
+            if ContainsAny(text, GeometryTextPhrases[40]) then bareSlot = "left"
+            elseif ContainsAny(text, GeometryTextPhrases[41]) then bareSlot = "center"
+            elseif ContainsAny(text, GeometryTextPhrases[42]) then bareSlot = "right" end
+        end
+        if bareSlot == "left" then slot = "Left"
+        elseif bareSlot == "center" then slot = "Center"
+        elseif bareSlot == "right" then slot = "Right" end
+    end
+    if not slot and A._HasTextSlotShowIntent(text) and hasExplicitFrame then
+        -- Existing natural shorthand uses the right slot when the frame,
+        -- health/power area, display mode, and explicit show intent are all
+        -- present ("show target health as current and percent").
+        slot = "right"
+    end
+    if not slot then
+        if ContainsAny(text, { "it", "that", "this", "now" }) then
+            -- Contextual follow-ups are owned by the later follow-up parser,
+            -- which can reuse the previously selected frame and slot.
+            return nil
+        end
+        -- "Show percentages instead of numbers" names the mode but neither the
+        -- slot nor the frame. It is a real, understandable request, so say what
+        -- is missing rather than falling through to a generic examples list.
+        local modeProbe = TextSlotSetting("unitframe", "player", tab, "center")
+        local modeValue = modeProbe and A._TextSlotDropdownValueForText(modeProbe, text) or nil
+        if modeValue == nil then return nil end
+        local modeArea = tab == "power" and "power" or "health"
+        local modeExample = tostring(DisplayValue(modeProbe, modeValue) or modeValue):lower()
+        return {
+            kind = "unknown",
+            status = "failed",
+            text = "I can show " .. modeArea .. " text as " .. modeExample
+                .. ", but I need to know where. Each frame has a left, center, and right "
+                .. modeArea .. " slot -- tell me the frame and the slot, for example 'set player "
+                .. (tab == "power" and "power" or "hp") .. " right slot to " .. modeExample .. "'.",
+            summary = "Asks which frame and text slot the requested mode applies to.",
+        }
+    end
 
     local groups = DetectGroups(text)
     local units = {}
@@ -975,7 +1046,25 @@ function A._ParseTextSlotDropdownValueShortcut(text)
             if pageUnit then units = { pageUnit } end
         end
     end
-    if #groups == 0 and #units == 0 then return nil end
+    if #groups == 0 and #units == 0 then
+        -- The text area, the slot and the value are all unambiguous here; only
+        -- the frame is missing. Returning nil sent "put the health number in
+        -- the middle" to the generic examples list, which never mentions this
+        -- control. Ask for the one missing piece instead.
+        local probe = TextSlotSetting("unitframe", "player", tab, slot)
+        local probeValue = probe and A._TextSlotDropdownValueForText(probe, text) or nil
+        if probeValue == nil then return nil end
+        local areaWord = tab == "power" and "power" or "health"
+        local exampleValue = tostring(DisplayValue(probe, probeValue) or probeValue):lower()
+        return {
+            kind = "unknown",
+            status = "failed",
+            text = "Which frame's " .. areaWord .. " text do you mean? Name the frame and I will set its "
+                .. tostring(slot) .. " slot, for example 'set player " .. (tab == "power" and "power" or "hp")
+                .. " " .. tostring(slot) .. " slot to " .. exampleValue .. "'.",
+            summary = "Asks which frame owns the requested text slot.",
+        }
+    end
 
     local changes = {}
     local function AddTarget(frameType, unitOrScope)

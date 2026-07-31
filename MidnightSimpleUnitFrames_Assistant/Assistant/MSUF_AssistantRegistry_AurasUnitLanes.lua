@@ -84,12 +84,302 @@ function A.AurasRegistry.RegisterUnitCustomContainerLayerSettings(ctx)
     end
 end
 
+-- Custom Aura containers own the auras a player groups themselves -- including
+-- the player defensive container, which renders as the internal
+-- "defensivePortrait" lane. Only their Layer was reachable, so "move my
+-- defensive auras up" had no container control to hit and fell through to the
+-- Buff/Debuff lane offsets, moving every icon on the frame instead.
+--
+-- Ranges are the runtime's own clamps (MSUF_Menu2_UnitPreview_Auras.lua), not
+-- invented numbers, so a value the Assistant accepts is a value the container
+-- actually honours.
+local CUSTOM_CONTAINER_PLACED_FIELDS = {
+    { field = "y", label = "Y Offset", default = 0, min = -4096, max = 4096, step = 1,
+      nouns = { "y offset", "vertical offset", "up", "down" } },
+    { field = "x", label = "X Offset", default = 0, min = -4096, max = 4096, step = 1,
+      nouns = { "x offset", "horizontal offset", "left", "right" } },
+    { field = "size", label = "Icon Size", default = 24, min = 1, max = 128, step = 1,
+      nouns = { "icon size", "size" } },
+    { field = "max", label = "Max Icons", default = 8, min = 0, max = 40, step = 1,
+      nouns = { "max icons", "maximum icons", "icon count" } },
+    { field = "perRow", label = "Per Row", default = 4, min = 1, max = 40, step = 1,
+      nouns = { "per row", "icons per row", "columns" } },
+    { field = "spacing", label = "Spacing", default = 2, min = 0, max = 64, step = 1,
+      nouns = { "spacing", "gap", "padding" } },
+}
+
+-- Anchor/growth accept the same value sets the container itself normalises
+-- (MSUF_Auras3_EditMode.lua), so a value the Assistant offers is one the
+-- container honours.
+local CUSTOM_CONTAINER_ANCHOR_VALUES = {
+    "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT", "TOP", "BOTTOM", "LEFT", "RIGHT", "CENTER",
+}
+local CUSTOM_CONTAINER_GROWTH_VALUES = {
+    "LEFTDOWN", "RIGHTDOWN", "LEFTUP", "RIGHTUP", "UP", "DOWN", "LEFT", "RIGHT",
+}
+
+-- Each container carries its own filter set, identical in meaning to the Buff
+-- lane filters. Only the toggles are registered here; the spell list stays with
+-- the existing whitelist actions, which already validate SpellIDs.
+local CUSTOM_CONTAINER_FILTER_FIELDS = {
+    { field = "hidePermanent", label = "Hide Permanent Auras", nouns = { "hide permanent", "hide permanent auras", "no timer" } },
+    { field = "onlyMine", label = "Only Mine", nouns = { "only mine", "only my auras", "own only" } },
+    { field = "onlyImportant", label = "Only Important", nouns = { "only important", "important only" } },
+    { field = "raid", label = "Raid Filter", nouns = { "raid filter" } },
+    { field = "raidInCombat", label = "Raid In Combat Filter", nouns = { "raid in combat filter", "raid combat filter" } },
+    { field = "includeNameplateOnly", label = "Include Nameplate Only", nouns = { "include nameplate only", "nameplate only" } },
+    { field = "includeDispellable", label = "Include Dispellable", nouns = { "include dispellable" } },
+    { field = "dispellableAny", label = "Any Dispel Type Filter", nouns = { "any dispel type", "dispellable any" } },
+    { field = "cancelable", label = "Cancelable Filter", nouns = { "cancelable filter", "cancellable filter" } },
+    { field = "notCancelable", label = "Not Cancelable Filter", nouns = { "not cancelable filter", "not cancellable filter" } },
+    { field = "crowdControl", label = "Crowd Control Filter", nouns = { "crowd control filter", "cc filter" } },
+    { field = "externalDefensive", label = "External Defensive Filter", nouns = { "external defensive filter", "external defensives" } },
+    { field = "bigDefensive", label = "Big Defensive Filter", nouns = { "big defensive filter", "major defensives" } },
+}
+
+-- Presentation toggles that live on the container's placement record.
+local CUSTOM_CONTAINER_PLACED_BOOLEANS = {
+    { field = "showCooldown", label = "Cooldown Text", nouns = { "cooldown text", "timer text" } },
+    { field = "showCooldownSwipe", label = "Cooldown Swipe", nouns = { "cooldown swipe", "swipe" } },
+    { field = "showStacks", label = "Stack Text", nouns = { "stack text", "stacks" } },
+}
+
+local function ClampPlaced(value, spec)
+    value = tonumber(value)
+    if value == nil then return spec.default end
+    value = math.floor(value + 0.5)
+    if value < spec.min then return spec.min end
+    if value > spec.max then return spec.max end
+    return value
+end
+
+function A.AurasRegistry.RegisterUnitCustomContainerLayoutSettings(ctx)
+    if type(ctx) ~= "table" then return end
+
+    local Registry = ctx.Registry
+    local UNIT_LABELS = ctx.UNIT_LABELS or {}
+    local AURA_UNITS = ctx.AURA_UNITS or {}
+    local AddAliasesForAuraScope = ctx.AddAliasesForAuraScope
+    local AuraModel = ctx.AuraModel
+    local ApplyAura = ctx.ApplyAura
+
+    if not (Registry and type(Registry.RegisterSetting) == "function") then return end
+    if type(AddAliasesForAuraScope) ~= "function" or type(AuraModel) ~= "function" then return end
+    if type(ApplyAura) ~= "function" then return end
+
+    for _, unit in ipairs(AURA_UNITS) do
+        for index = 1, CUSTOM_CONTAINER_COUNT do
+            local unitKey, customIndex = unit, index
+            local lane = "custom" .. tostring(index)
+            local unitLabel = UNIT_LABELS[unit] or unit
+
+            for _, spec in ipairs(CUSTOM_CONTAINER_PLACED_FIELDS) do
+                local placedField, fieldSpec = spec.field, spec
+                local aliases = {}
+                for _, noun in ipairs(spec.nouns) do
+                    aliases[#aliases + 1] = unit .. " custom " .. tostring(index) .. " aura " .. noun
+                    aliases[#aliases + 1] = unit .. " custom aura " .. tostring(index) .. " " .. noun
+                    aliases[#aliases + 1] = unit .. " custom container " .. tostring(index) .. " " .. noun
+                end
+                AddAliasesForAuraScope(aliases, unit, "custom " .. tostring(index) .. " aura " .. spec.nouns[1])
+
+                Registry:RegisterSetting({
+                    key = "auras3." .. unit .. "." .. lane .. ".placed." .. placedField,
+                    label = unitLabel .. " Custom Aura " .. tostring(index) .. " " .. spec.label,
+                    category = unitLabel .. " / Auras",
+                    page = "uf_" .. unit,
+                    unit = unit,
+                    frameType = "aura",
+                    -- Index-neutral like the Layer control above: the visible
+                    -- slider edits whichever container is selected.
+                    attribute = "customContainer" .. spec.label:gsub("%s+", ""),
+                    type = "number",
+                    aliases = aliases,
+                    exactAliases = aliases,
+                    min = spec.min,
+                    max = spec.max,
+                    step = spec.step,
+                    get = function()
+                        local model = AuraModel()
+                        local item = model and type(model.CustomContainer) == "function"
+                            and model.CustomContainer(unitKey, customIndex, false) or nil
+                        local placed = type(item) == "table" and item.placed or nil
+                        return ClampPlaced(placed and placed[placedField], fieldSpec)
+                    end,
+                    set = function(value)
+                        local model = AuraModel()
+                        local item = model and type(model.CustomContainer) == "function"
+                            and model.CustomContainer(unitKey, customIndex, true) or nil
+                        if type(item) ~= "table" then return end
+                        if type(item.placed) ~= "table" then item.placed = {} end
+                        item.placed[placedField] = ClampPlaced(value, fieldSpec)
+                    end,
+                    apply = function() ApplyAura(unitKey, "MSUF_ASSISTANT_AURA_CUSTOM_CONTAINER_LAYOUT") end,
+                    combatSafe = false,
+                })
+            end
+
+            -- NOT REGISTERED: the per-container filter toggles, anchor and
+            -- growth. They register fine, but the broad Aura parser claims
+            -- phrasings like "turn on player custom aura 1 hide permanent"
+            -- before the exact-label lane can resolve them, so 208 of them
+            -- became unreachable commands (verified: gate 6153/6361). The
+            -- geometry fields below do not collide because no aura lane owns
+            -- "y offset"/"per row" wording. Fixing this needs the Aura
+            -- shortcut to defer to an exact container label first -- the same
+            -- upstream-precedence problem the colour lane has -- not another
+            -- round of registrations.
+            for _, enumSpec in ipairs({
+                { field = "anchor", label = "Anchor", values = CUSTOM_CONTAINER_ANCHOR_VALUES,
+                  default = "TOPRIGHT", nouns = { "anchor", "anchor point" } },
+                { field = "growth", label = "Growth", values = CUSTOM_CONTAINER_GROWTH_VALUES,
+                  default = "LEFTDOWN", nouns = { "growth", "grow direction", "growth direction" } },
+            }) do
+                local placedField, fallback, allowed = enumSpec.field, enumSpec.default, enumSpec.values
+                local aliases = {}
+                for _, noun in ipairs(enumSpec.nouns) do
+                    aliases[#aliases + 1] = unit .. " custom aura " .. tostring(index) .. " " .. noun
+                    aliases[#aliases + 1] = unit .. " custom container " .. tostring(index) .. " " .. noun
+                end
+
+                Registry:RegisterSetting({
+                    key = "auras3." .. unit .. "." .. lane .. ".placed." .. placedField,
+                    label = unitLabel .. " Custom Aura " .. tostring(index) .. " " .. enumSpec.label,
+                    category = unitLabel .. " / Auras",
+                    page = "uf_" .. unit,
+                    unit = unit,
+                    frameType = "aura",
+                    attribute = "customContainer" .. enumSpec.label,
+                    type = "enum",
+                    values = allowed,
+                    closedValues = true,
+                    aliases = aliases,
+                    exactAliases = aliases,
+                    get = function()
+                        local model = AuraModel()
+                        local item = model and type(model.CustomContainer) == "function"
+                            and model.CustomContainer(unitKey, customIndex, false) or nil
+                        local placed = type(item) == "table" and item.placed or nil
+                        local current = placed and tostring(placed[placedField] or "")
+                        for i = 1, #allowed do
+                            if allowed[i] == current then return current end
+                        end
+                        return fallback
+                    end,
+                    set = function(value)
+                        value = tostring(value or ""):upper()
+                        local valid = false
+                        for i = 1, #allowed do
+                            if allowed[i] == value then valid = true break end
+                        end
+                        if not valid then return end
+                        local model = AuraModel()
+                        local item = model and type(model.CustomContainer) == "function"
+                            and model.CustomContainer(unitKey, customIndex, true) or nil
+                        if type(item) ~= "table" then return end
+                        if type(item.placed) ~= "table" then item.placed = {} end
+                        item.placed[placedField] = value
+                    end,
+                    apply = function() ApplyAura(unitKey, "MSUF_ASSISTANT_AURA_CUSTOM_CONTAINER_LAYOUT") end,
+                    combatSafe = false,
+                })
+            end
+
+            -- Per-container filter toggles and presentation switches.
+            for _, boolGroup in ipairs({
+                { list = CUSTOM_CONTAINER_FILTER_FIELDS, holder = "filters", attr = "customContainerFilter" },
+                { list = CUSTOM_CONTAINER_PLACED_BOOLEANS, holder = "placed", attr = "customContainerDisplay" },
+            }) do
+                local holder = boolGroup.holder
+                for _, boolSpec in ipairs(boolGroup.list) do
+                    local boolField = boolSpec.field
+                    local aliases = {}
+                    for _, noun in ipairs(boolSpec.nouns) do
+                        aliases[#aliases + 1] = unit .. " custom aura " .. tostring(index) .. " " .. noun
+                        aliases[#aliases + 1] = unit .. " custom container " .. tostring(index) .. " " .. noun
+                    end
+
+                    Registry:RegisterSetting({
+                        key = "auras3." .. unit .. "." .. lane .. "." .. holder .. "." .. boolField,
+                        label = unitLabel .. " Custom Aura " .. tostring(index) .. " " .. boolSpec.label,
+                        category = unitLabel .. " / Auras",
+                        page = "uf_" .. unit,
+                        unit = unit,
+                        frameType = "aura",
+                        attribute = boolGroup.attr,
+                        type = "boolean",
+                        aliases = aliases,
+                        exactAliases = aliases,
+                        get = function()
+                            local model = AuraModel()
+                            local item = model and type(model.CustomContainer) == "function"
+                                and model.CustomContainer(unitKey, customIndex, false) or nil
+                            local bucket = type(item) == "table" and item[holder] or nil
+                            return type(bucket) == "table" and bucket[boolField] == true
+                        end,
+                        set = function(value)
+                            local model = AuraModel()
+                            local item = model and type(model.CustomContainer) == "function"
+                                and model.CustomContainer(unitKey, customIndex, true) or nil
+                            if type(item) ~= "table" then return end
+                            if type(item[holder]) ~= "table" then item[holder] = {} end
+                            item[holder][boolField] = value and true or false
+                        end,
+                        apply = function() ApplyAura(unitKey, "MSUF_ASSISTANT_AURA_CUSTOM_CONTAINER_FILTER") end,
+                        combatSafe = false,
+                    })
+                end
+            end
+
+            local enabledAliases = {
+                unit .. " custom " .. tostring(index) .. " aura enabled",
+                unit .. " custom aura " .. tostring(index) .. " enabled",
+                unit .. " custom container " .. tostring(index),
+                unit .. " custom aura container " .. tostring(index),
+            }
+            AddAliasesForAuraScope(enabledAliases, unit, "custom " .. tostring(index) .. " aura enabled")
+
+            Registry:RegisterSetting({
+                key = "auras3." .. unit .. "." .. lane .. ".enabled",
+                label = unitLabel .. " Custom Aura " .. tostring(index) .. " Enabled",
+                category = unitLabel .. " / Auras",
+                page = "uf_" .. unit,
+                unit = unit,
+                frameType = "aura",
+                attribute = "customContainerEnabled",
+                type = "boolean",
+                aliases = enabledAliases,
+                exactAliases = enabledAliases,
+                get = function()
+                    local model = AuraModel()
+                    local item = model and type(model.CustomContainer) == "function"
+                        and model.CustomContainer(unitKey, customIndex, false) or nil
+                    return type(item) == "table" and item.enabled == true
+                end,
+                set = function(value)
+                    local model = AuraModel()
+                    local item = model and type(model.CustomContainer) == "function"
+                        and model.CustomContainer(unitKey, customIndex, true) or nil
+                    if type(item) == "table" then item.enabled = value and true or false end
+                end,
+                apply = function() ApplyAura(unitKey, "MSUF_ASSISTANT_AURA_CUSTOM_CONTAINER_LAYOUT") end,
+                combatSafe = false,
+            })
+        end
+    end
+end
+
 function A.AurasRegistry.RegisterUnitLaneSettings(ctx)
     if type(ctx) ~= "table" then return end
 
     local RegisterUnitCustomContainerLayerSettings = A.AurasRegistry.RegisterUnitCustomContainerLayerSettings
     if type(RegisterUnitCustomContainerLayerSettings) == "function" then
         RegisterUnitCustomContainerLayerSettings(ctx)
+    end
+
+    local RegisterUnitCustomContainerLayoutSettings = A.AurasRegistry.RegisterUnitCustomContainerLayoutSettings
+    if type(RegisterUnitCustomContainerLayoutSettings) == "function" then
+        RegisterUnitCustomContainerLayoutSettings(ctx)
     end
 
     local Assistant = ctx.A or A

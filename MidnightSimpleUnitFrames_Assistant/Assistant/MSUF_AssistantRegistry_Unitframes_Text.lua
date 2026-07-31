@@ -72,8 +72,21 @@ function A.UnitframesRegistry.RegisterTextSettings(ctx, unit)
             valueAliases = HP_MODE_ALIASES,
             get = function(unitKey) return TextValue(unitKey, "textLeft", TextValue(unitKey, "hpTextMode", "NONE")) end,
         })
-    local hpCenterAliases = MakeAliases(unit, "hp center slot", "health center slot", "center hp text")
+    -- Players say where they want the text, not which "slot" it is:
+    -- "put the health number in the middle" names this control.
+    local hpCenterAliases = MakeAliases(unit, "hp center slot", "health center slot", "center hp text",
+        "health text in the middle", "health number in the middle", "hp in the middle",
+        "health in the middle", "health text in the center", "health number in the center",
+        "hp in the center", "health in the center", "middle health text", "middle hp text",
+        "lebenspunkte in der mitte", "hp in der mitte", "leben in der mitte")
     AppendAliases(hpCenterAliases, "unit text slot", "unit text center slot", "unit text middle slot", "unit hp center slot", "unit health center slot", "unit health text center slot")
+    -- The same phrases unscoped, so a request that names no frame still finds
+    -- this control on every unit and can be answered with "which frame?"
+    -- instead of a generic examples list.
+    AppendAliases(hpCenterAliases,
+        "health text in the middle", "health number in the middle", "hp in the middle",
+        "health in the middle", "health number in the center", "health text in the center",
+        "lebenspunkte in der mitte", "hp in der mitte")
     RegisterUnitEnum(unit, "hpTextCenter", "textCenter", "HP Center Slot", "NONE", HP_MODE_VALUES,
         hpCenterAliases,
         {

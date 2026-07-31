@@ -1985,6 +1985,31 @@ P.DirectionalNumberDeltaForSetting = function(setting, text, fallbackAmount)
     return amount
 end
 
+-- "by 20" / "um 20" states a delta; "to 20" / "auf 20" states the final value.
+-- Both readings can carry an increase/decrease verb ("increase the width to 250"
+-- means "make it 250", not "add 250"), so the connector decides, not the verb.
+P.RELATIVE_AMOUNT_PATTERNS = {
+    "%f[%w]by%f[%W]%s+[-+]?%d",
+    "%f[%w]um%f[%W]%s+[-+]?%d",
+}
+P.ABSOLUTE_TARGET_PATTERNS = {
+    "%f[%w]to%f[%W]%s+[-+]?%d",
+    "%f[%w]auf%f[%W]%s+[-+]?%d",
+    "%f[%w]at%f[%W]%s+[-+]?%d",
+    "=%s*[-+]?%d",
+}
+
+P.HasAbsoluteNumberTarget = function(text)
+    text = tostring(text or "")
+    for i = 1, #P.RELATIVE_AMOUNT_PATTERNS do
+        if text:find(P.RELATIVE_AMOUNT_PATTERNS[i]) then return false end
+    end
+    for i = 1, #P.ABSOLUTE_TARGET_PATTERNS do
+        if text:find(P.ABSOLUTE_TARGET_PATTERNS[i]) then return true end
+    end
+    return false
+end
+
 RelativeNumberDeltaForText = function(setting, text, fallbackAmount)
     local directional = P.DirectionalNumberDeltaForSetting(setting, text, fallbackAmount)
     if directional ~= nil then return directional end
@@ -1992,6 +2017,7 @@ RelativeNumberDeltaForText = function(setting, text, fallbackAmount)
     if ContainsAny(text, RELATIVE_INCREASE_TERMS) then sign = 1 end
     if ContainsAny(text, RELATIVE_DECREASE_TERMS) then sign = -1 end
     if not sign then return nil end
+    if P.HasAbsoluteNumberTarget(text) then return nil end
     local amount = A._RelativeNumberAmountForText(text)
     if amount == nil then
         amount = fallbackAmount
@@ -2080,6 +2106,52 @@ local function ToggleBooleanValueForRegistrySetting(setting, text)
     return not current
 end
 
+-- Unambiguous on/off command verbs. "show"/"hide" are deliberately absent:
+-- they appear inside many setting names, where they describe the control
+-- rather than the requested polarity, and the branches above already own them.
+P.EXPLICIT_BOOLEAN_OFF_TERMS = {
+    "turn off", "turned off", "switch off", "switched off", "toggle off",
+    "disable", "disabled", "deactivate", "deactivated", "hide",
+    "schalte aus", "ausschalten", "deaktiviere", "deaktivieren", "verstecken",
+}
+P.EXPLICIT_BOOLEAN_ON_TERMS = {
+    "turn on", "turned on", "switch on", "switched on", "toggle on",
+    "enable", "enabled", "activate", "activated", "show",
+    "schalte ein", "einschalten", "aktiviere", "aktivieren", "anzeigen",
+}
+
+function P.ExplicitBooleanCommandValue(setting, text)
+    text = tostring(text or "")
+    -- "show me X" asks to be shown the control, not to switch it on. Without
+    -- this, "show me Boss Absorb Bar Texture" was read as an explicit ON
+    -- command and wrote to a texture setting. "hide me" is not a phrasing, so
+    -- only the positive side needs the guard.
+    if text:find("%f[%w]show%s+me%f[%W]") or text:find("%f[%w]zeig[e]?%s+mir%f[%W]") then
+        return nil
+    end
+    -- "set X to off" states the value outright as the tail of the command.
+    -- This is never ambiguous, so it is checked before anything else.
+    local tail = text:match("%f[%w]to%s+(%a+)%s*$") or text:match("=%s*(%a+)%s*$")
+    if tail == "off" or tail == "false" or tail == "aus" then return false end
+    if tail == "on" or tail == "true" or tail == "an" or tail == "ein" then return true end
+
+    local hay = (tostring(setting and setting.attribute or "") .. " "
+        .. tostring(setting and setting.label or "")):lower()
+    -- If the setting is itself named after the polarity word ("Disable
+    -- Blizzard Frames", "Hide Permanent Auras"), the word describes the
+    -- control, not the request. Leave those to the existing inference.
+    local function stated(terms)
+        for i = 1, #terms do
+            local term = terms[i]
+            if ContainsAny(text, { term }) and not hay:find(term, 1, true) then return true end
+        end
+        return false
+    end
+    if stated(P.EXPLICIT_BOOLEAN_OFF_TERMS) then return false end
+    if stated(P.EXPLICIT_BOOLEAN_ON_TERMS) then return true end
+    return nil
+end
+
 ValueForRegistrySetting = function(setting, text, raw)
     if not setting then return nil end
     if setting.type == "boolean" then
@@ -2103,6 +2175,13 @@ ValueForRegistrySetting = function(setting, text, raw)
             if ContainsAny(text, RegistryPhrases[51]) then return false end
             if ContainsAny(text, RegistryPhrases[52]) then return true end
         end
+        -- An explicit on/off command states the polarity outright, so the
+        -- inference below may only fill in a polarity that was never stated.
+        -- "turn off Boss Custom Aura Filters" contains the setting's own alias
+        -- ("custom aura filters"); the alias reader scored that as a positive
+        -- mention and turned the setting ON -- the exact opposite of the order.
+        local explicitValue = P.ExplicitBooleanCommandValue(setting, text)
+        if explicitValue ~= nil then return explicitValue end
         local aliasValue = P.BooleanAliasValueForText and P.BooleanAliasValueForText(setting, text)
         if aliasValue ~= nil then return aliasValue end
         local contextualValue = ContextualBooleanValueForRegistrySetting(setting, text)
@@ -3708,6 +3787,18 @@ local function BarGradientDirectionValue(text)
     return nil
 end
 
+-- The power bar reads `powerGradientDirection` / `powerGradientStrength` at
+-- runtime, while the unsuffixed keys drive the health bar
+-- (MSUF_UF_Core.lua:597-610 picks the prefix from `power`). So a request that
+-- names the POWER gradient and only the power gradient must not be written to
+-- the health key. Not every scope has the power pair; when it does not, the
+-- caller keeps its existing barScope key.
+function P.PowerGradientKeyForScope(scope, suffix, power, health)
+    if not power or health then return nil end
+    local key = tostring(scope) .. "." .. tostring(suffix)
+    return Registry and Registry:GetSetting(key) and key or nil
+end
+
 function P.ParseBarGradientRegistryShortcut(text)
     if ContainsAny(text, RegistryPhrases[214]) then return nil end
     if ContainsAny(text, BAR_GRADIENT_COLOR_TERMS) then return nil end
@@ -3783,7 +3874,17 @@ function P.ParseBarGradientRegistryShortcut(text)
         if only and scope ~= "shared" then AddRegisteredChange(changes, "barScope." .. tostring(scope) .. ".override", true) end
         if value ~= nil and health then AddRegisteredChange(changes, "barScope." .. tostring(scope) .. ".enableGradient", value) end
         if value ~= nil and power then AddRegisteredChange(changes, "barScope." .. tostring(scope) .. ".enablePowerGradient", value) end
-        if direction then AddRegisteredChange(changes, "barScope." .. tostring(scope) .. ".gradientDirection", direction) end
+        if direction then
+            -- "Turn on the power bar gradient from the left" operates the
+            -- barScope gradient as a whole, so its direction belongs to that
+            -- system. Only a direction-only request ("set player power gradient
+            -- direction to left") targets the power bar's own key.
+            local directionOnly = value == nil
+            AddRegisteredChange(changes,
+                P.PowerGradientKeyForScope(scope, "powerGradientDirection", power and directionOnly, health)
+                    or ("barScope." .. tostring(scope) .. ".gradientDirection"),
+                direction)
+        end
     end
 
     for i = 1, #units do AddScopedBarGradient(units[i]) end
@@ -3792,7 +3893,12 @@ function P.ParseBarGradientRegistryShortcut(text)
     if #changes == 0 then
         if value ~= nil and health then AddRegisteredChange(changes, "general.enableGradient", value) end
         if value ~= nil and power then AddRegisteredChange(changes, "general.enablePowerGradient", value) end
-        if direction then AddRegisteredChange(changes, "general.gradientDirection", direction) end
+        if direction then
+            AddRegisteredChange(changes,
+                P.PowerGradientKeyForScope("general", "powerGradientDirection", power, health)
+                    or "general.gradientDirection",
+                direction)
+        end
     end
 
     if #changes == 0 then return nil end
@@ -5415,10 +5521,21 @@ P.ParseRegistryAliasCandidates = function(text, raw, settings, suppressNoMatch)
     local changes = {}
     local missingValue = {}
     local bestScore = 0
+    -- Resolved once for the whole candidate sweep: almost no request carries a
+    -- styling qualifier, and testing every setting for one would tax the
+    -- broadest matcher in the parser.
+    local stylingQualifiers = P.StylingQualifiersInText(text)
     for i = 1, #settings do
         if i % 8 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
         local setting = settings[i]
         local score = SettingMatchScore(setting, text)
+        -- "bold" names Bold Text / Font Outline. A candidate that owns neither
+        -- is not what was asked for, however well the rest of the sentence
+        -- scores against it.
+        if score > 0 and stylingQualifiers
+            and P.SettingDropsStylingQualifiers(setting, stylingQualifiers) then
+            score = 0
+        end
         if score > 0 and A.Knowledge and type(A.Knowledge.SettingPageBoost) == "function" then
             score = score + A.Knowledge.SettingPageBoost(setting)
         end
@@ -5780,7 +5897,62 @@ P.RegistrySettingMayMatchExactAlias = function(setting, text)
             return false
         end
     end
+    if P.ExactAliasDropsStylingQualifier(setting, text) then return false end
     return SettingAllowedByExplicitScopes(setting, text)
+end
+
+-- Each of these names a distinct control family, so a request containing one is
+-- only satisfied by a setting that owns it. Same failure shape as the name-dots
+-- rule above: an alias matched a trailing scope phrase ("player name") while the
+-- meaningful qualifier ("bold") was ignored, and "set player name bold text on"
+-- silently toggled Player Name instead of admitting it was not understood.
+P.STYLING_QUALIFIER_TERMS = P.STYLING_QUALIFIER_TERMS or {
+    { term = "bold", owns = { "bold", "outline" } },
+    { term = "italic", owns = { "italic" } },
+    { term = "outline", owns = { "outline" } },
+    { term = "shadow", owns = { "shadow" } },
+    { term = "monochrome", owns = { "monochrome" } },
+    { term = "fett", owns = { "bold", "outline" } },
+    { term = "kursiv", owns = { "italic" } },
+    { term = "umriss", owns = { "outline" } },
+    { term = "schatten", owns = { "shadow" } },
+}
+
+-- Returns the qualifier entries present in the request, or nil. Callers that
+-- sweep many settings resolve this once instead of per candidate.
+P.StylingQualifiersInText = function(text)
+    local found
+    for i = 1, #P.STYLING_QUALIFIER_TERMS do
+        local entry = P.STYLING_QUALIFIER_TERMS[i]
+        if ContainsAny(text, { entry.term }) then
+            found = found or {}
+            found[#found + 1] = entry
+        end
+    end
+    return found
+end
+
+P.SettingDropsStylingQualifiers = function(setting, qualifiers)
+    if not qualifiers then return false end
+    local hay = (tostring(setting and setting.key or "") .. " "
+        .. tostring(setting and setting.label or "") .. " "
+        .. tostring(setting and setting.attribute or "")):lower()
+    for i = 1, #qualifiers do
+        local owns = qualifiers[i].owns
+        local owned = false
+        for j = 1, #owns do
+            if hay:find(owns[j], 1, true) then
+                owned = true
+                break
+            end
+        end
+        if not owned then return true end
+    end
+    return false
+end
+
+P.ExactAliasDropsStylingQualifier = function(setting, text)
+    return P.SettingDropsStylingQualifiers(setting, P.StylingQualifiersInText(text))
 end
 P.EnumValueForText = EnumValueForText
 P.StringValueForText = StringValueForText

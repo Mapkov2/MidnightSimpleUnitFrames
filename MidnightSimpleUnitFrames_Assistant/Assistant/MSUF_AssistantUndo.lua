@@ -1001,7 +1001,11 @@ function A.UndoLast()
     A.redoStack = A.redoStack or {}
     local bundle = A.undoStack[#A.undoStack]
     if not bundle then
-        return false, "I have no Assistant change to undo."
+        -- Players reach this by saying "that is not what I wanted", so it has to
+        -- offer a way forward rather than just closing the door.
+        return false, "I have no Assistant change to undo -- I have not changed anything yet."
+            .. "\nIf something still looks wrong, describe what you are seeing and I will track it down, for example 'why are target buffs hidden' or 'my player frame disappeared'."
+            .. "\nIf you changed it in the menu yourself I cannot undo that, but I can reset a frame or a page: 'reset player options'."
     end
     local restored = false
     local restoreError

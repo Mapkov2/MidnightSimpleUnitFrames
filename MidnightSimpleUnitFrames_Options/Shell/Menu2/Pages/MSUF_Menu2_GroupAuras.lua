@@ -424,7 +424,11 @@ local function BuildGFAuras(ctx)
                 if QueueGF then QueueGF(activeScope, "auras") end
                 M.CallIf(RefreshContext, ctx)
             end,
-            AuraControlMeta(ctx, "group-workspace.lane.externals.auto-blacklist-buffs", nil, {}))
+            AuraControlMeta(ctx, "group-workspace.lane.externals.auto-blacklist-buffs", nil, {
+                assistantDisposition = "dynamic",
+                assistantDispositionReason = "This toggle targets duplicate handling between the selected Group scope's External Defensive and Buff containers.",
+                assistantSettingKeys = GroupAuraSettingKeys(scope, ".auras.externals.autoBlacklistBuffs"),
+            }))
         if type(M.AddTooltip) == "function" then
             M.AddTooltip(autoBlacklist, "Auto-blacklist from Buffs",
                 "While External Defensives is visible and Max is above 0, hides every aura Blizzard classifies as EXTERNAL_DEFENSIVE from the normal Buffs container. If External Defensives is disabled, those auras remain visible in Buffs.",

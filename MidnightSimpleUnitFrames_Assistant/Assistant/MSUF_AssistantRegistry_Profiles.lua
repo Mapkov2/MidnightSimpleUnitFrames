@@ -96,6 +96,41 @@ Registry:RegisterAction({
     key = "set_new_character_profile",
     label = "Set New Character Default Profile",
     type = "profile",
+    -- No alias may contain "default profile": that phrase is already owned by
+    -- "reset profile to default", and these aliases resolved there instead --
+    -- offering to reset the active profile when the player asked which profile
+    -- new characters start on.
+    aliases = {
+        "set new character profile", "new character profile",
+        "profile for new characters", "set profile for new characters",
+        "new characters profile",
+        "profil fuer neue charaktere", "neues charakter profil",
+        "profil neuer charaktere",
+    },
+    -- The profile name is free-form (the live profile pool), so it is read off
+    -- the value tail rather than matched against a list. Returning an empty
+    -- table for the bare alias is deliberate: `run` then asks which profile to
+    -- use instead of guessing one.
+    parseAliasArgs = function(text, raw)
+        local source = tostring(raw or text or "")
+        local normalized = source:lower()
+        if not (normalized:find("new character", 1, true)
+            or normalized:find("new characters", 1, true)
+            or normalized:find("neue charaktere", 1, true)
+            or normalized:find("neuer charaktere", 1, true)
+            or normalized:find("charakter profil", 1, true))
+        then
+            return false
+        end
+        local name = source:match("%f[%a][Tt][Oo]%f[%A]%s+(.+)$")
+            or source:match("%f[%a][Aa][Uu][Ff]%f[%A]%s+(.+)$")
+        if name then
+            name = name:gsub("^%s+", ""):gsub("%s+$", ""):gsub("^[\"']", ""):gsub("[\"']$", "")
+            name = name:gsub("%s*%.$", "")
+        end
+        if name and name ~= "" then return { name = name } end
+        return {}
+    end,
     combatSafe = false,
     captureSnapshot = true,
     captureProfileSnapshot = true,

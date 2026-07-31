@@ -47,6 +47,21 @@ Data.HP_MODE_ALIASES = {
     none = "NONE",
     off = "NONE",
     hidden = "NONE",
+    -- How players actually name these two modes. "Show percentages instead of
+    -- numbers" and "put the health number in the middle" both failed purely
+    -- because "percentage" and "number" were not spelled out here.
+    percentage = "PERCENT",
+    percentages = "PERCENT",
+    prozent = "PERCENT",
+    prozentzahl = "PERCENT",
+    prozentwert = "PERCENT",
+    number = "CURRENT",
+    numbers = "CURRENT",
+    ["actual value"] = "CURRENT",
+    absolute = "CURRENT",
+    zahl = "CURRENT",
+    zahlen = "CURRENT",
+    wert = "CURRENT",
 }
 Data.POWER_MODE_VALUES = { "CURRENT", "MAX", "CURMAX", "PERCENT", "CURPERCENT", "CURMAXPERCENT", "NONE" }
 Data.POWER_MODE_ALIASES = {

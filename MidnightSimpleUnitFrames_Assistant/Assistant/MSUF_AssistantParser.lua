@@ -1575,6 +1575,21 @@ local function ParseClassColorFastShortcut(normalized, raw)
     end
     if not token then return nil end
     if not hasClassColorPhrase and not hasMutationVerb then return nil end
+    -- A numbered resource pip ("Arcane Mage Arcane Charges 1 Color") is its own
+    -- classPowerColorOverrides setting, which the exact-alias lane resolves.
+    -- This lane owns only the single class BAR colour, so claiming that wording
+    -- wrote Mage Class Bar Color and left the named charge untouched.
+    if normalized:find("%f[%w]charges?%s+%d")
+        or normalized:find("%f[%w]points?%s+%d")
+        or normalized:find("%f[%w]runes?%s+%d")
+        or normalized:find("%f[%w]shards?%s+%d")
+        or normalized:find("%f[%w]chi%s+%d")
+        or normalized:find("%f[%w]essences?%s+%d")
+        or normalized:find("%f[%w]orbs?%s+%d")
+        or normalized:find("%f[%w]holy%s+power%s+%d")
+    then
+        return nil
+    end
     local setting = A.Registry and A.Registry:GetSetting("classColors." .. token)
     if not setting then return nil end
     local extract = P.ExtractColor
@@ -1661,6 +1676,12 @@ local GLOBAL_BAR_COLOR_SCOPE_BLOCKERS = {
 P.BAR_OUTLINE_COLOR_SEMANTIC_BLOCKERS = P.BAR_OUTLINE_COLOR_SEMANTIC_BLOCKERS or {
     "castbar", "cast bar", "font", "text", "portrait", "highlight", "aggro",
     "dispel", "purge", "aura", "buff", "debuff", "spell",
+    -- In "bar outline color blue channel" the colour word names the channel,
+    -- not a value to write. Without this the composite-colour path claimed the
+    -- sentence and then declined it, so the exact channel setting was never
+    -- reached and could not report why it is read-only. The same words already
+    -- block the composite path through BAR_OUTLINE_COLOR_CONFLICT_TERMS.
+    "channel", "channels", "component", "components",
 }
 P.BAR_OUTLINE_COLOR_CONFLICT_TERMS = P.BAR_OUTLINE_COLOR_CONFLICT_TERMS or {
     "thickness", "thicker", "thinner", "size", "width", "strata", "layer", "offset", "style",
@@ -1674,6 +1695,12 @@ P.BAR_OUTLINE_COLOR_CONFLICT_TERMS = P.BAR_OUTLINE_COLOR_CONFLICT_TERMS or {
 P.BAR_OUTLINE_COLOR_MUTATION_WORDS = P.BAR_OUTLINE_COLOR_MUTATION_WORDS or {
     set = true, change = true, make = true, use = true, paint = true, want = true,
     turn = true, give = true,
+    -- The Router already treats these as setting-mutation verbs
+    -- (OPEN_ENDED_SETTING_MUTATION_VERBS). Omitting them here made the same
+    -- request succeed or be refused as "a statement" purely by verb choice:
+    -- "set bar outline color to blue" applied, "adjust ... to blue" did not.
+    adjust = true, update = true, switch = true, modify = true, edit = true,
+    alter = true, tweak = true, configure = true, put = true, choose = true,
     setze = true, stelle = true, aendere = true, mach = true, mache = true, verwende = true,
 }
 P.BAR_OUTLINE_COLOR_SHORTHAND_OBJECTS = P.BAR_OUTLINE_COLOR_SHORTHAND_OBJECTS or {
@@ -2392,7 +2419,19 @@ local function ParseScopedBarOutlineColorFastShortcut(normalized, raw)
 
     local actionable = P.ActionableText and P.ActionableText(normalized) or Normalize(normalized)
     local mutation = false
-    local firstActionWord = tostring(actionable or ""):match("^(%S+)")
+    -- Politeness and sequencing words sit in front of the verb ("just set ...",
+    -- "now set ..."). Reading only the very first word saw "just" and refused
+    -- the request as declarative, so skip that filler before looking for the
+    -- verb.
+    local verbScan = tostring(actionable or "")
+    for _ = 1, 3 do
+        local previous = verbScan
+        verbScan = verbScan:gsub("^please%s+", ""):gsub("^just%s+", ""):gsub("^now%s+", "")
+            :gsub("^kindly%s+", ""):gsub("^hey%s+", ""):gsub("^ok%s+", ""):gsub("^okay%s+", "")
+            :gsub("^also%s+", ""):gsub("^then%s+", "")
+        if verbScan == previous then break end
+    end
+    local firstActionWord = verbScan:match("^(%S+)")
     if firstActionWord and P.BAR_OUTLINE_COLOR_MUTATION_WORDS[firstActionWord] then mutation = true end
     if tostring(actionable or ""):match("^i%s+want%s+")
         or tostring(actionable or ""):match("^ich%s+will%s+")
@@ -4787,7 +4826,11 @@ local function ParseGlobalGradientStrengthPriorityShortcut(normalized)
     if not setting then return nil end
     local value = FirstNumber(normalized)
     if value == nil then return nil end
-    if value > 1 and tostring(normalized):find("%%") then
+    -- Gradient strength is stored 0..1. Requiring a literal "%" made this lane
+    -- disagree with the central value path, which converts whenever the number
+    -- exceeds the range: "set ... to 50" resolved to 0.5 while "i want ... to
+    -- be 50" kept 50 and clamped to full strength. Nobody means 1.0 by "50".
+    if value > 1 then
         value = value / 100
     end
     return {
@@ -5022,9 +5065,20 @@ local function ParseScopedGradientStrengthPriorityShortcut(normalized)
 
     local value = FirstNumber(normalized)
     if value == nil then return nil end
-    if value > 1 and tostring(normalized):find("%%") then
+    -- Gradient strength is stored 0..1. Requiring a literal "%" made this lane
+    -- disagree with the central value path, which converts whenever the number
+    -- exceeds the range: "set ... to 50" resolved to 0.5 while "i want ... to
+    -- be 50" kept 50 and clamped to full strength. Nobody means 1.0 by "50".
+    if value > 1 then
         value = value / 100
     end
+
+    -- "power gradient strength" names the power bar's own key; the unsuffixed
+    -- one belongs to the health bar (see P.PowerGradientKeyForScope).
+    local powerOnly = ContainsAny(normalized, {
+        "power", "power bar", "mana", "energy", "rage", "focus bar", "resource",
+        "energieleiste", "manaleiste", "ressource",
+    }) and not ContainsAny(normalized, { "health", "hp", "hitpoints", "leben", "lebensleiste" })
 
     local changes = {}
     local seen = {}
@@ -5032,7 +5086,10 @@ local function ParseScopedGradientStrengthPriorityShortcut(normalized)
         local scope = tostring(scopes[i])
         if not seen[scope] then
             seen[scope] = true
-            local setting = A.Registry and A.Registry:GetSetting("barScope." .. scope .. ".gradientStrength")
+            local key = P.PowerGradientKeyForScope
+                and P.PowerGradientKeyForScope(scope, "powerGradientStrength", powerOnly, false)
+                or nil
+            local setting = A.Registry and A.Registry:GetSetting(key or ("barScope." .. scope .. ".gradientStrength"))
             if setting then changes[#changes + 1] = { setting = setting, value = value } end
         end
     end
@@ -5040,7 +5097,7 @@ local function ParseScopedGradientStrengthPriorityShortcut(normalized)
     return {
         kind = "changes",
         changes = changes,
-        label = "Bar Gradient Strength",
+        label = powerOnly and "Power Bar Gradient Strength" or "Bar Gradient Strength",
         bulkSafe = #changes > 1,
         summary = "Changes scoped MSUF bar gradient strength.",
     }
@@ -5772,6 +5829,20 @@ function A.Parse(text, ctxOverride)
     end
     local nonMutatingIntent = not ctx._nonMutatingSafeParse
         and P.NonMutatingIntent and P.NonMutatingIntent(normalized)
+    -- Tour requests are executable onboarding commands even when phrased as a
+    -- polite question ("can you show me around MSUF"). Only override the
+    -- question guard here; imperative setup commands continue through the
+    -- normal action priorities so "quick setup class resources" keeps its
+    -- more specific action owner.
+    if nonMutatingIntent then
+        local guidedSetupParsed = (P.ParseGuidedSetupFollowup and P.ParseGuidedSetupFollowup(normalized, ctx))
+            or (P.ParseGuidedSetup and P.ParseGuidedSetup(normalized))
+        if guidedSetupParsed then
+            guidedSetupParsed.raw = raw
+            guidedSetupParsed.normalized = normalized
+            return guidedSetupParsed
+        end
+    end
     if nonMutatingIntent then
         -- Procedural/capability questions must remain read-only, but should
         -- still get the most specific help available instead of a generic

@@ -89,6 +89,17 @@ function A.GlobalBarRegistry.RegisterBaseBarSettings(ctx)
     RegisterBarsBoolean("roundedFramesEnabled", "rounded", "Rounded Frame Texture", false, {
         "rounded frame texture", "rounded frames", "round corners", "rounded corners", "rounded texture",
     }, { category = "Global / Bars / Rounded", frameType = "globalBars", apply = ApplyRoundedBars, reason = "MSUF_ASSISTANT_ROUNDED_FRAMES", requiresReload = true })
+    RegisterBarsNumber("roundedCornerStrength", "roundedCornerStrength", "Rounded Corner Strength", 3, 1, 5, {
+        "rounded corner strength", "corner rounding", "rounding strength", "corner radius", "rounded radius",
+        "stronger rounded corners", "weaker rounded corners", "subtle rounded corners",
+    }, {
+        category = "Global / Bars / Rounded",
+        frameType = "globalBars",
+        apply = ApplyRoundedBars,
+        reason = "MSUF_ASSISTANT_ROUNDED_CORNER_STRENGTH",
+        step = 1,
+        description = "Controls the shared corner shape used by rounded masks, outlines, highlights, mouseover edges, and power bars.",
+    })
     RegisterBarsBoolean("roundedUnitFrames", "roundedUnitFrames", "Rounded Unit Frames", true, {
         "rounded unit frames", "rounded unitframes", "unit frame corners", "unitframe corners",
     }, { category = "Global / Bars / Rounded", frameType = "globalBars", apply = ApplyRoundedBars, reason = "MSUF_ASSISTANT_ROUNDED_UNIT_FRAMES" })

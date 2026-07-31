@@ -1985,6 +1985,15 @@ local function ParseSetting(text, ctx)
     local movementIntent = direction and ContainsAny(text, FollowupData.PARSE_MOVEMENT_TERMS) and not ContainsAny(text, FollowupData.PARSE_ANCHOR_TERMS)
     local attr = movementIntent and ((direction == "left" or direction == "right") and "offsetX" or "offsetY") or DetectAttribute(text, frameType)
     if not attr then return nil end
+    -- "bold" names Bold Text or Font Outline. Resolving "set player name bold
+    -- text on" to the plain name toggle drops the qualifier and writes a
+    -- control the player never asked about.
+    if type(P.StylingQualifiersInText) == "function" then
+        local qualifiers = P.StylingQualifiersInText(text)
+        if qualifiers and P.SettingDropsStylingQualifiers({ key = attr, label = attr, attribute = attr }, qualifiers) then
+            return nil
+        end
+    end
     if attr == "enabled" and ContainsAny(text, FollowupData.ENABLED_GUARD_TERMS) then
         return nil
     end

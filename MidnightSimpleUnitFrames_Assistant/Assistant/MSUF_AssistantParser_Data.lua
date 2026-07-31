@@ -233,6 +233,12 @@ Data.ROOT_PARSER = {
         "aura", "auras", "buff", "buffs", "debuff", "debuffs", "castbar", "cast bar",
         "color", "colour", "texture", "textures", "gradient", "gradients", "anchor",
         "offset", " x", "x ", " y", "y ", "size", "layer", "style", "font",
+        -- Text-styling words belong to Font Outline / Bold Text, not to the
+        -- show/hide toggle. Without them "set player name bold text on" matched
+        -- on "name" + "on" and silently toggled Player Name instead of saying
+        -- it did not understand "bold".
+        "bold", "italic", "outline", "shadow", "monochrome", "thickness",
+        "fett", "kursiv", "umriss", "schatten",
     },
         [101] = { "power smooth fill", "power bar smooth fill", "smooth power fill", "smooth power bar", "smooth mana bar", "smooth resource bar" },
         [102] = { "smooth fill", "smooth health fill", "smooth frame fill" },

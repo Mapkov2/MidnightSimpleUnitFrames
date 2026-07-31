@@ -1728,6 +1728,17 @@ local function ParseReset(text)
         } or nil
     end
     if ContainsAny(text, ActionsPhrases[111]) then
+        -- "default" reaches this parser as a reset word, but it is also an
+        -- ordinary adjective: "set new character default profile" and "default
+        -- profile for new characters" are about which profile new characters
+        -- start on, and were answered by offering to wipe the active profile.
+        -- Resetting a profile is destructive, so it needs a real reset verb.
+        if not ContainsAny(text, {
+            "reset", "restore", "zuruecksetzen", "zurucksetzen",
+            "werksreset", "werkseinstellungen", "vollreset",
+        }) then
+            return nil
+        end
         local action = Registry and Registry:GetAction("reset_profile")
         return action and {
             kind = "action",

@@ -20,6 +20,11 @@ local K = A.Knowledge or {}
 A.Knowledge = K
 
 local MAX_RESULTS = 6
+-- Measured against the live index from a neutral page: conversational input
+-- with no option in it tops out around 250, while the weakest genuine option
+-- query ("aura icon size") still scores 336. Unmatched query tokens already
+-- subtract from the score, so this doubles as a coverage bar.
+K.MIN_GENERIC_LIST_SCORE = 300
 local INDEX_VERSION = 11
 local SEARCH_CACHE_LIMIT = 32
 local SEARCH_TEXT_LIMIT = 360
@@ -65,6 +70,39 @@ local function SplitTokens(text)
         end
     end
     return out
+end
+
+-- Short query tokens are words, not stems. "are you an ai" must not match
+-- "Mythic Raid" through the "ai" in "raid", and "me" must not match "frame".
+-- Anchoring short tokens to a word start keeps prefix recall ("hp" still finds
+-- "hpbaralpha") while removing the infix noise that made every unrecognised
+-- question answer with a list of group-frame settings.
+local KNOWLEDGE_SHORT_TOKEN_MAX = 3
+
+local function HaystackHasToken(haystack, token)
+    if #token > KNOWLEDGE_SHORT_TOKEN_MAX then
+        return haystack:find(token, 1, true) ~= nil
+    end
+    return haystack:find("%f[%w]" .. token:gsub("(%W)", "%%%1")) ~= nil
+end
+
+-- Conversational filler carries no MSUF meaning. Scoring it produced matches
+-- driven entirely by pronouns and question words. Boolean-ish words such as
+-- "on", "off", "yes", "no" and "all" stay out of this list: they are real
+-- MSUF values.
+K.QUERY_STOPWORDS = {}
+for word in ([[i me my mine we us our you your yours it its this that these those
+a an the and or but if then than as so of in at for with from by to too very
+is are was were be been am do does did doing done have has had
+can could would should will shall may might must
+what whats which who whom whose why how
+please thanks thank hey hi hello ok okay
+not dont cant wont im ive id ill lets let
+mir mich mein meine du dein deine wir uns ich es das der die den dem ein eine
+und oder aber wenn dann als so von in an fuer mit aus bei zu auch sehr
+ist sind war waren sein bin habe hat hatte kann koennte wuerde soll wird
+was welche welcher welches wer wem wessen warum wie bitte danke hallo nicht]]):gmatch("%S+") do
+    K.QUERY_STOPWORDS[word] = true
 end
 
 local function StringContainsPhrase(haystack, phrase)
@@ -910,11 +948,13 @@ local function TokenScore(item, queryTokens, queryNorm, intent, pageKey, exactQu
     if exactNorm ~= queryNorm and item.haystack:find(exactNorm, 1, true) then score = score + 180; matched = true end
     for i = 1, #queryTokens do
         local token = queryTokens[i]
-        if item.haystack:find(token, 1, true) then
-            score = score + 70 + math.min(#token * 3, 30)
-            matched = true
-        else
-            score = score - 25
+        if not K.QUERY_STOPWORDS[token] then
+            if HaystackHasToken(item.haystack, token) then
+                score = score + 70 + math.min(#token * 3, 30)
+                matched = true
+            else
+                score = score - 25
+            end
         end
     end
     if not matched then return 0 end
@@ -940,7 +980,16 @@ local function TokenScore(item, queryTokens, queryNorm, intent, pageKey, exactQu
         if item.kind == "faq" then score = score + 120 end
     end
     score = score + SearchScopeScore(item, requestedSearchUnit)
-    if applyPageBoost then score = score + SettingPageBoost(item.setting, pageKey) end
+    -- The page boost is a tie-breaker ("width" on the Player page means Player
+    -- Width), never a source of relevance on its own. Left uncapped it exceeded
+    -- a whole matched token, so any weakly-matching setting on the open page
+    -- outranked a real match elsewhere and every unrecognised question answered
+    -- with the current page's settings. Capping it at the text score keeps the
+    -- ordering effect while forcing the query itself to earn the place.
+    if applyPageBoost then
+        local boost = SettingPageBoost(item.setting, pageKey)
+        if boost > 0 and score > 0 then score = score + math.min(boost, score) end
+    end
     return score
 end
 
@@ -2538,6 +2587,24 @@ local function DirectHelpAnswer(query, opts)
             summary = "Assistant focus target help",
         }
     end
+    -- The Focus *Target* answer above does not cover Focus itself, and "why
+    -- would I use a focus frame" is a question about the game concept, not
+    -- about a setting. Matched on whole phrases so it cannot shadow a real
+    -- lookup such as "what is focus width".
+    if ContainsAny(norm, {
+        "what is a focus frame", "what is the focus frame", "what is focus frame",
+        "what is focus", "what is the focus", "what does focus do", "what does the focus do",
+        "why would i use a focus frame", "why would i use the focus frame",
+        "why use a focus frame", "why use the focus frame", "why would i use focus",
+        "why use focus", "when should i use focus", "when do i use focus",
+        "purpose of the focus frame", "point of the focus frame", "focus frame help",
+    }) then
+        return {
+            text = "Focus frame help\nFocus is a second target you set and keep: WoW remembers it while you target other things, so you can watch one unit continuously without switching targets. Set it with /focus while a unit is targeted, or a focus macro.\nIt is most useful when you need to track something that is not your current target -- an interrupt or crowd-control target in a dungeon, a healer in PvP, or a boss while you damage adds. Its cast bar is the reason most players enable it: you can see and interrupt the unit you are not looking at.\nIn MSUF, Focus has its own unit-frame page: visibility, size, health and power text, cast bar, auras, range fade, colours and position, all independent of Target. Focus Target is a separate frame again -- the unit your Focus is targeting.\nExamples: show focus frame; set focus width to 180; open focus; turn on focus castbar.\nYou can ask: Open Focus | Open Cast Bars | Open Focus Target",
+            status = "applied",
+            summary = "Assistant focus frame help",
+        }
+    end
     if ContainsAny(norm, { "target of target", "targettarget" })
         and ContainsAny(norm, { "what", "what is", "what does", "help", "explain", "where" })
     then
@@ -2968,6 +3035,13 @@ function K.Answer(query, opts)
         return AsReadOnlyKnowledgeResult(RememberKnowledgeHelpContext({ text = table.concat(lines, "\n"), status = "info", summary = "Assistant FAQ answer" }))
     end
 
+    -- Last resort: a bare list of settings. Only worth showing when the query
+    -- actually earned it. Below this bar the list was pure noise ("are you an
+    -- ai" answering with corner-filter settings), and an honest "I did not
+    -- understand that" is more useful than a confident wrong list. Location and
+    -- FAQ intents are answered above and keep their own thresholds.
+    if (topResult.score or 0) < K.MIN_GENERIC_LIST_SCORE then return nil end
+
     local lines = { "I found these MSUF matches:" }
     for i = 1, math.min(#results, 5) do lines[#lines + 1] = FormatResultLine(i, results[i].item) end
     lines[#lines + 1] = "You can ask me to open a page, explain a result, or change an option directly."
@@ -3035,11 +3109,198 @@ function K.NoMatch(query)
             searchResults = ResultFollowups(results, 3),
         }
     end
+    -- Nothing scored well enough to list confidently. That is not a reason to
+    -- dead-end: name the area the words point at, so the player always leaves
+    -- with somewhere to go. Read-only throughout.
+    local topic = K.TopicGuidance(query)
+    -- A misspelling should not cost the player the topic answer: "playr nam
+    -- siz" is still clearly about name text size. The router already owns a
+    -- corrector against the real control vocabulary, so reuse it rather than
+    -- keeping a second spelling list here.
+    if not topic and A.RouterPrivate and type(A.RouterPrivate.CorrectControlTypos) == "function" then
+        local corrected = A.RouterPrivate.CorrectControlTypos(query)
+        if corrected and corrected ~= query then topic = K.TopicGuidance(corrected) end
+    end
+    if topic then
+        local lines = { topic.title }
+        lines[#lines + 1] = topic.body
+        if topic.examples then lines[#lines + 1] = "Try: " .. topic.examples end
+        lines[#lines + 1] = "If that is not the area you meant, name the frame and the option and I will take you straight there."
+        return {
+            text = table.concat(lines, "\n"),
+            status = "info",
+            summary = "Assistant topic guidance fallback",
+        }
+    end
+
+    local norm = Normalize(query)
+
+    -- The query may name a real control that simply scored below every bar
+    -- above ("how does Combat Crosshair work"). Naming its page beats the
+    -- generic catch-all, and it costs one cold-path scan on a path that has
+    -- already given up.
+    local named = K.SettingNamedInQuery(norm)
+    if named then
+        local label = tostring(named.label or "")
+        local page = tostring(named.pageLabel or named.category or "")
+        local lines = { label .. " is a real MSUF option, I just could not tell what you wanted to do with it." }
+        if page ~= "" then
+            lines[#lines + 1] = "It lives on " .. page .. "."
+        end
+        lines[#lines + 1] = "Ask me to open it, explain it, or give it a value -- for example 'explain "
+            .. label .. "' or 'open " .. label .. "'."
+        return {
+            text = table.concat(lines, "\n"),
+            status = "info",
+            summary = "Assistant named-setting fallback",
+        }
+    end
+
+    -- Out of scope is a real answer. Saying "I did not understand" to "what is
+    -- the weather" is worse than admitting the question is not mine, because it
+    -- implies the player phrased it badly.
+    if ContainsAny(norm, {
+        "weather", "meaning of life", "joke", "who won", "news", "time is it",
+        "dps rotation", "best rotation", "best spec", "best talents", "talent build",
+        "how do i play", "how to play", "leveling", "mythic plus route", "raid strategy",
+        "boss strategy", "how much damage", "gear score", "best gear", "stat priority",
+    }) then
+        return {
+            text = "That one is outside what I can answer."
+                .. "\nI am MSUF's own assistant: I run locally inside the addon and only know its settings, your profile, and how its frames behave. I have no live game data, no class guides, and no connection to the internet."
+                .. "\nFor rotations, talents or strategy, use a current guide site or a class Discord -- those change every patch and I would only guess."
+                .. "\nWhat I can do is set up how you see the fight: frames, cast bars, auras, class resources, raid frames and profiles. Ask 'what can you do' for the full list.",
+            status = "info",
+            summary = "Assistant out-of-scope answer",
+        }
+    end
+
+    -- Nothing recognisable at all: no MSUF noun and nothing that reads as a
+    -- request. A lone unknown word ("hmm", "asdfgh") is not a badly phrased
+    -- command, so answer the person rather than lecturing about phrasing.
+    local hasWord = false
+    for token in norm:gmatch("%a+") do
+        if #token >= 3 then hasWord = true break end
+    end
+    local tokenCount = 0
+    for _ in norm:gmatch("%S+") do tokenCount = tokenCount + 1 end
+    local looksLikeRequest = tokenCount >= 3 or ContainsAny(norm, NO_MATCH_SEARCH_SIGNAL_TERMS)
+    if not hasWord or not looksLikeRequest then
+        return {
+            text = "I could not read a request out of that."
+                .. "\nTell me what you want in plain words and I will find it: 'make the target frame bigger', 'hide player name', 'why are target buffs hidden'."
+                .. "\nOr ask 'what can you do' and I will show you what I can reach.",
+            status = "info",
+            summary = "Assistant unreadable input fallback",
+        }
+    end
+
     return {
-        text = "I'm not sure which MSUF request you mean yet.\nI can help once I can match the request to an MSUF menu option. Include the frame or page plus the option, for example 'set target cast bar height to 20' or 'turn on party dead background'. For aura requests, I change aura options that exist in the MSUF menu.\nIf that wording should work, share the exact text in Discord: " .. DISCORD_INVITE,
+        text = "I did not catch which MSUF option you meant."
+            .. "\nI work from MSUF's own menu, so the fastest way to reach anything is to name the frame and the option: 'set target cast bar height to 20', 'turn on party dead background', 'hide player name'."
+            .. "\nI can also work the other way round -- describe the problem or the result you want: 'why are target buffs hidden', 'make raid frames easier to read', 'what can I change here'."
+            .. "\nAsk 'what can you do' for the full list of what I can reach."
+            .. "\nIf you think that wording should have worked, share the exact text in Discord: " .. DISCORD_INVITE,
         status = "info",
         summary = "Assistant help fallback",
     }
+end
+
+-- Maps the MSUF nouns in a request to the area that owns them. Ordered most
+-- specific first, so "raid buff" lands on group auras rather than group frames.
+K.TOPIC_GUIDANCE = {
+    { terms = { "buff", "buffs", "debuff", "debuffs", "aura", "auras", "dispel", "purge" },
+      title = "That sounds like auras",
+      body = "Buffs, debuffs and aura filtering live on the frame they belong to: Player, Target, Focus and Boss each have their own aura lanes, and Party/Raid aura filters live under Group Frames.",
+      examples = "open target; hide player buffs with no timer; show only dispellable raid debuffs; set target buff icon size to 30" },
+    { terms = { "castbar", "cast bar", "casting", "interrupt", "kick", "spell name" },
+      title = "That sounds like cast bars",
+      body = "Cast bars are configured per unit -- size, position, text, icon, colours and interrupt handling are all on the Cast Bars page.",
+      examples = "open cast bars; set target cast bar height to 20; why is target cast bar hidden" },
+    { terms = { "profile", "profiles", "import", "export", "backup", "spec profile" },
+      title = "That sounds like profiles",
+      body = "Profiles store a whole MSUF configuration. You can switch, copy, rename, import and export them, and bind them per character or specialisation.",
+      examples = "open profiles; export current profile; copy current profile to Backup; switch to profile Raid" },
+    { terms = { "color", "colour", "colors", "colours", "class color", "class colour" },
+      title = "That sounds like colours",
+      body = "Colours are grouped on the Colors page: bars, backgrounds, borders, text, cast bars, class resources, auras and portraits each have their own entries.",
+      examples = "open colors; set player health color mode to class; change target border color blue" },
+    { terms = { "font", "text size", "text", "name text", "hp text", "power text" },
+      title = "That sounds like text and fonts",
+      body = "Each frame has left, center and right text slots plus its own font, size and outline. Global font choices live on the Fonts page.",
+      examples = "open fonts; set player name font size to 14; set player hp right slot to percent" },
+    { terms = { "party", "raid", "mythic raid", "group frame", "group frames", "group" },
+      title = "That sounds like group frames",
+      body = "Party, Raid and Mythic Raid frames share one engine: layout and spacing, health and name text, range fade, status indicators, dispel overlays and aura filters.",
+      examples = "open group layout; make raid frames wider; set raid range fade to 40; turn on party bold text" },
+    { terms = { "class power", "class resource", "combo point", "combo points", "runes", "holy power", "soul shard" },
+      title = "That sounds like class resources",
+      body = "Class resources are the combo points, runes, shards and similar bars for your specialisation, with their own size, spacing, colours and placement.",
+      examples = "open class resources; set class resource width to 200; why are my class resources missing" },
+    { terms = { "position", "move", "anchor", "offset", "drag", "edit mode", "placement" },
+      title = "That sounds like positioning",
+      body = "Frames are placed with Edit Mode or with exact X/Y offsets and anchors per frame. Nothing is locked to a preset layout.",
+      examples = "enter edit mode; move target frame up 20; reset player position; set player x position to -200" },
+    { terms = { "size", "scale", "width", "height", "bigger", "smaller", "scaling" },
+      title = "That sounds like size and scale",
+      body = "Every frame has its own width and height, and MSUF has separate scaling for the frames, the menu and the WoW UI.",
+      examples = "open dashboard scaling; set target width to 250; make player frame bigger" },
+    { terms = { "portrait", "portraits" },
+      title = "That sounds like portraits",
+      body = "Portraits are per frame: shape, size, position, background and border are all separate options.",
+      examples = "open player; set player portrait size to 40; make the portrait round" },
+    { terms = { "icon", "icons", "indicator", "indicators", "marker", "role", "ready check", "status" },
+      title = "That sounds like status icons and indicators",
+      body = "Role icons, raid markers, ready check, leader, rested, combat and PvP indicators each have their own visibility, size, position and layer.",
+      examples = "open group status & indicators; show party ready check icon; set player combat indicator size to 20" },
+    { terms = { "transparent", "transparency", "opacity", "alpha", "fade", "faded" },
+      title = "That sounds like transparency",
+      body = "Opacity is set per frame and separately for the bar, its background, and out-of-range or dead members.",
+      examples = "set player alpha to 50; set raid range fade to 40; set party health bar opacity to 80" },
+    { terms = { "health", "hp", "power", "mana", "energy", "rage", "bar", "bars" },
+      title = "That sounds like the health and power bars",
+      body = "Health and power bars have their own texture, colour mode, gradient, opacity, outline and text on every frame.",
+      examples = "open bars; set player health bar opacity to 80; set target power gradient direction to left" },
+    -- Last on purpose: the unit nouns are the most generic terms here, so every
+    -- more specific topic above ("player buff", "target castbar") must win
+    -- first. This is the catch-all for a request that names only a frame.
+    { terms = { "player", "target", "focus", "pet", "boss", "targettarget", "focustarget", "frame", "frames", "unitframe" },
+      title = "That sounds like the unit frames",
+      body = "Player, Target, Focus, Pet, Boss, Target of Target and Focus Target each have their own page: size and position, health and power bars, name and status text, portrait, auras and cast bar.",
+      examples = "open player; set target width to 250; hide player name; set focus name font size to 14" },
+}
+
+-- Longest visible label contained in the query wins, so "Combat Crosshair Size"
+-- beats "Combat Crosshair" when both appear.
+function K.SettingNamedInQuery(norm)
+    norm = Normalize(norm)
+    if norm == "" then return nil end
+    local settings = Registry and Registry.AllSettings and Registry:AllSettings() or {}
+    local best, bestLength = nil, 0
+    for i = 1, #settings do
+        local setting = settings[i]
+        local label = tostring(setting.label or "")
+        -- Very short labels appear inside unrelated sentences by accident.
+        if #label > bestLength and #label >= 8 then
+            local normalizedLabel = Normalize(label)
+            if normalizedLabel ~= "" and norm:find(normalizedLabel, 1, true) then
+                best, bestLength = setting, #label
+            end
+        end
+    end
+    return best
+end
+
+function K.TopicGuidance(query)
+    local norm = Normalize(query)
+    if norm == "" then return nil end
+    for i = 1, #K.TOPIC_GUIDANCE do
+        local topic = K.TOPIC_GUIDANCE[i]
+        for j = 1, #topic.terms do
+            if StringContainsPhrase(norm, topic.terms[j]) then return topic end
+        end
+    end
+    return nil
 end
 
 function K.Summary()

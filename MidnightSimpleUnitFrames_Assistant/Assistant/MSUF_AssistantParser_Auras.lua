@@ -364,6 +364,24 @@ local function ParseAuraGeometryShortcut(text)
             summary = "Keeps retired private-aura layout wording from changing ordinary Aura lanes.",
         }
     end
+    -- Defensives are never their own positionable lane. They are either a
+    -- filter on the Buff lane, or -- when the player set them up that way -- a
+    -- Custom Aura container (auras3.customContainers), whose portrait render
+    -- mode produces the internal "defensivePortrait" lane. Neither is moved by
+    -- the Buff/Debuff offsets this shortcut owns, so dropping the word and
+    -- moving those lanes shifted every buff and debuff icon instead of the one
+    -- group the player named.
+    if ContainsAny(text, { "defensive", "defensives", "defensive aura", "defensive auras", "defensive buff", "defensive buffs" }) then
+        return {
+            kind = "answer",
+            status = "info",
+            text = "Defensives are not their own aura lane, so I did not touch your Buff or Debuff offsets -- moving those would have shifted every icon in both lanes, not just your defensives."
+                .. "\nDefensives live in a Custom Aura container (the player defensive container is Custom 4), and each container has its own position, size and layout."
+                .. "\nSo move the container itself, for example 'set player custom aura 4 y offset to 20', 'set player custom aura 4 icon size to 30', or 'set player custom aura 4 per row to 3'."
+                .. "\nIf you meant the whole Buff lane instead, say 'move player buffs up 10'. To change which defensives show, say 'turn on player big defensive filter' or 'turn on player external defensive filter'.",
+            summary = "Explains that defensives are a Buff-lane filter or a Custom Aura container rather than a positionable lane.",
+        }
+    end
     if ContainsAny(text, AurasPhrases[25]) then return nil end
     local explicitNonGroupAuraScope = ContainsAny(text, AurasPhrases[26])
     local groupFastIntent = not explicitNonGroupAuraScope
@@ -1259,6 +1277,12 @@ end
 
 local function ParseAuraDirectSettingShortcut(text, raw)
     if not ContainsAny(text, AurasPhrases[92]) then return nil end
+    -- Asking about an aura control is not asking to change one. Without this,
+    -- "what is Boss Buff Anchor" reached the enable branch below and switched
+    -- unit auras on, because the sentence mentions auras and the boolean
+    -- reader defaulted to true. The same guard already protects the exact-alias
+    -- lane; questions must never reach a write here either.
+    if type(P.NonMutatingIntent) == "function" and P.NonMutatingIntent(text) then return nil end
     -- Sorting language belongs to the reviewed lane sortMethod/sortReverse
     -- descriptors. Resolve their exact aliases here, before broad registry
     -- priorities and AuraBooleanValue can select a filter or enable the lane.

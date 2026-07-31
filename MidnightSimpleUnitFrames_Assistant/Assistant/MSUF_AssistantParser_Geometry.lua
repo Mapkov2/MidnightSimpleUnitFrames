@@ -2391,6 +2391,12 @@ P.TEXT_VISIBILITY_VALUE_TERMS = {
     "slot", "slots", "text slot", "anchor", "anchoring", "side", "left side", "right side",
     "offset", "position", "pos", "x offset", "y offset", "move", "nudge", "shift",
     "layer", "size", "font", "font size", "decimal", "decimals", "color", "colour",
+    -- Styling words name Font Outline / Bold Text, never the show-hide toggle.
+    -- "set player name bold text on" otherwise matched on "name" plus "on" and
+    -- silently toggled Player Name off instead of admitting it did not
+    -- understand "bold".
+    "bold", "italic", "outline", "shadow", "monochrome", "thickness",
+    "fett", "kursiv", "umriss", "schatten",
     "shorten", "shortened", "shortening", "short names", "shorten names", "shorten group names",
     "dot", "dots", "ellipsis", "ellipses", "trailing dots", "three dots", "two dots",
     "raid group name", "raid group in name", "group name",

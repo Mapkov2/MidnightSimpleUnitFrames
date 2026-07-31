@@ -1342,6 +1342,126 @@ local function ConversationPlayerName()
     return name ~= "" and name or nil
 end
 
+-- "How do I create X" is a build request, not a setting lookup. Without this
+-- the aura lanes answered "create a custom aura" with a generic disclaimer, and
+-- "track shield wall on my player frame" matched the words "player frame" and
+-- reported that the Player Frame was already enabled. Creation intent is
+-- answered with the actual sequence of commands, and never writes anything.
+R.CREATION_VERB_TERMS = {
+    "create", "make", "set up", "setup", "add", "build", "new",
+    "how do i create", "how do i make", "how do i add", "how do i set up",
+    "i want to create", "i want to make", "i want to add", "i want to set up",
+    "i want to track", "i want to see when", "track", "show me when",
+}
+
+R.CREATION_GUIDES = {
+    {
+        terms = { "custom aura", "custom auras", "custom container", "custom aura container",
+                  "own aura", "own auras", "aura group", "aura display", "track a spell",
+                  "track spell", "track a buff", "track a debuff" },
+        Build = function()
+            return "Making your own aura group in MSUF"
+                .. "\nMSUF calls these Custom Aura containers. Each frame has four (Custom 1-4), and each one is an independent group with its own spell list, filters, position and size. On the Player frame, Custom 4 is the defensive container."
+                .. "\nWalk it with me -- say each line and I will do it:"
+                .. "\n1. Turn the container on:  turn on player custom aura 1 enabled"
+                .. "\n2. Add the spells you want to see:  whitelist 871 in player custom aura 1   (a SpellID, a spell name, or a spell link all work; repeat for each spell)"
+                .. "\n3. Place it:  set player custom aura 1 y offset to 20  and  set player custom aura 1 x offset to 0"
+                .. "\n4. Size it:  set player custom aura 1 icon size to 30,  set player custom aura 1 per row to 4,  set player custom aura 1 spacing to 2"
+                .. "\n5. Cap how many show at once:  set player custom aura 1 max icons to 8"
+                .. "\nSwap 'player' for target, focus or boss, and 1 for 2-4. To see what a container currently holds, ask 'list player custom aura 1'. To start over, say 'reset player custom aura 1'."
+                .. "\nI can also just open the page for you -- say 'open player auras'."
+        end,
+    },
+    {
+        terms = { "profile", "profiles" },
+        Build = function()
+            return "Making a new MSUF profile"
+                .. "\nProfiles hold a complete MSUF configuration, and you can bind them per character or per specialisation."
+                .. "\n1. Copy what you have as a starting point:  copy current profile to Raid"
+                .. "\n2. Or start clean:  create profile Raid"
+                .. "\n3. Switch to it:  switch to profile Raid"
+                .. "\n4. Share or back it up:  export current profile   (and 'import profile' to bring one in)"
+                .. "\nI will always confirm before overwriting or deleting a profile."
+        end,
+    },
+    {
+        terms = { "spell indicator", "spell indicators", "corner icon", "corner indicator" },
+        Build = function()
+            return "Adding a group-frame spell indicator"
+                .. "\nSpell indicators are the small corner icons on Party/Raid frames that show one tracked spell per corner."
+                .. "\n1. Open the page:  open group status & indicators"
+                .. "\n2. Pick the corner and assign the spell you want that slot to watch."
+                .. "\n3. Size and place it with the corner's own controls on that page."
+                .. "\nTell me the scope and corner and I will take you straight there, for example 'open party spell indicators'."
+        end,
+    },
+}
+
+function R.TryCreationGuidance(text)
+    local norm = R.Normalize(text)
+    if norm == "" or #norm > 120 then return nil end
+    if not R.ContainsAny(norm, R.CREATION_VERB_TERMS) then return nil end
+
+    -- A concrete container command is not a build question. "add 871 to player
+    -- custom aura 1" must still execute rather than be answered with the
+    -- recipe it is already following.
+    if norm:find("custom aura%s+%d") and norm:find("%d%d") then return nil end
+
+    -- "Track shield wall on my player frame" and "I want to see when I have
+    -- Power Infusion" name a spell rather than the word "spell", so the term
+    -- lists below cannot match them -- yet they are the single most common way
+    -- players ask for a custom aura. Match the shape instead of the noun.
+    if norm:find("%f[%w]track%f[%W].+%f[%w]on%f[%W].+%f[%w]frame%f[%W]")
+        or norm:find("^i want to see when")
+        or norm:find("^show me when")
+        or norm:find("^i want to know when")
+    then
+        return {
+            text = R.CREATION_GUIDES[1].Build(),
+            status = "info",
+            result = "info",
+            summary = "Guides the player through building this without changing MSUF.",
+        }
+    end
+
+    for i = 1, #R.CREATION_GUIDES do
+        local guide = R.CREATION_GUIDES[i]
+        if R.ContainsAny(norm, guide.terms) then
+            return {
+                text = guide.Build(),
+                status = "info",
+                result = "info",
+                summary = "Guides the player through building this without changing MSUF.",
+            }
+        end
+    end
+    return nil
+end
+
+-- Asked point blank what it is, the Assistant must not imply it is ChatGPT or
+-- a language model. It is a local rule-based system.
+--
+-- Every phrase below starts with "are you"/"bist du" or names a model vendor,
+-- so a cheap pre-check keeps the fuzzy phrase scan off the common path.
+function R.IsDirectAiIdentityQuestion(norm)
+    norm = R.Normalize(norm)
+    if #norm > 40 then return false end
+    if not (norm:find("are you", 1, true) or norm:find("bist du", 1, true)
+        or norm:find("chatgpt", 1, true) or norm:find("gpt", 1, true)
+        or norm:find("is this", 1, true) or norm:find("ist das", 1, true)
+        or norm:find("benutzt du", 1, true) or norm:find("do you use", 1, true))
+    then
+        return false
+    end
+    return R.ContainsAny(norm, {
+        "are you an ai", "are you a ai", "are you ai", "are you chatgpt", "are you gpt",
+        "are you a bot", "are you a robot", "are you a real ai", "are you a language model",
+        "do you use chatgpt", "are you an llm", "are you using chatgpt", "is this chatgpt",
+        "bist du eine ki", "bist du ki", "bist du ein bot", "bist du chatgpt",
+        "benutzt du chatgpt", "ist das chatgpt",
+    })
+end
+
 function R.HumanConversationReply(text)    local norm = R.Normalize(text)
     if norm == "" then return nil end
 
@@ -1541,7 +1661,11 @@ function R.HumanConversationReply(text)    local norm = R.Normalize(text)
         return R.AssistantCapabilityReply()
     end
 
-    if R.ContainsAny(norm, {
+    -- "Can you be like ChatGPT for MSUF?" is a capability question and "yes,
+    -- that is the goal" answers it. "Are you ChatGPT?" is an identity question
+    -- and the same reply reads as claiming to be ChatGPT, which is false. The
+    -- direct form is answered honestly further down.
+    if not R.IsDirectAiIdentityQuestion(norm) and R.ContainsAny(norm, {
         "chatgpt", "chat gpt", "ai assistant", "ai chat", "like chatgpt", "like chat gpt",
         "be like chatgpt", "talk like chatgpt", "wie chatgpt", "wie chat gpt",
         "how close are you to chatgpt", "close to chatgpt", "chatgpt in game", "chatgpt ingame",
@@ -1655,6 +1779,65 @@ function R.HumanConversationReply(text)    local norm = R.Normalize(text)
         }
     end
 
+    -- A bare "yes"/"no" only means something when something is waiting. With
+    -- nothing pending it is not an unrecognised command, it is a reply to a
+    -- question nobody asked -- so say that rather than "I did not understand".
+    if norm == "yes" or norm == "yeah" or norm == "yep" or norm == "sure" or norm == "ok"
+        or norm == "okay" or norm == "no" or norm == "nope" or norm == "ja" or norm == "nein"
+    then
+        return {
+            text = "There is nothing waiting for a yes or no right now, so I have not done anything."
+                .. "\nTell me what you want changed and I will either do it or show you the choices, for example 'set target width to 250' or 'why are target buffs hidden'.",
+            status = "info",
+            summary = "Assistant conversation",
+        }
+    end
+
+    -- A bare question word is a real attempt at a question, just an incomplete
+    -- one. Ask for the missing half instead of rejecting it.
+    if norm == "why" or norm == "how" or norm == "what" or norm == "where" or norm == "which"
+        or norm == "warum" or norm == "wie" or norm == "was" or norm == "wo"
+    then
+        return {
+            text = "Happy to answer -- about what?"
+                .. "\nFinish the question with the frame or the option you mean, for example 'why are target buffs hidden', 'how do I change the font', or 'where do I change colors'.",
+            status = "info",
+            summary = "Assistant conversation",
+        }
+    end
+
+    -- "Never mind" with nothing pending is a conversational close, not a
+    -- request. Answering it with the generic "I did not understand" made the
+    -- Assistant look like it had missed a command.
+    if norm == "never mind" or norm == "nevermind" or norm == "forget it"
+        or norm == "forget that" or norm == "no worries" or norm == "its fine"
+        or norm == "it's fine" or norm == "schon gut" or norm == "vergiss es"
+    then
+        return {
+            text = "No problem — I left everything as it is. Say the word when you want to change something in MSUF.",
+            status = "info",
+            summary = "Assistant conversation",
+        }
+    end
+
+    -- A bare offer of help, with no command attached, is a request for the
+    -- capability overview. Wrapped commands such as "can you help me set the
+    -- target width" are handled by the mutation lanes and never reach here.
+    if norm == "can you help me" or norm == "can you help" or norm == "could you help me"
+        or norm == "can u help me" or norm == "will you help me" or norm == "kannst du mir helfen"
+        or norm == "kannst du helfen"
+    then
+        return R.AssistantCapabilityReply()
+    end
+
+    if R.IsDirectAiIdentityQuestion(norm) then
+        return {
+            text = "No — I'm not a language model and I don't call ChatGPT or any online service. I'm a local, rule-based assistant that runs entirely inside your WoW client and reads MSUF's own menu data and your current profile. That's why I work offline and never send your settings anywhere. The trade-off is that I understand MSUF well and general chit-chat poorly, so keep requests about MSUF and I'll be useful.",
+            status = "info",
+            summary = "Assistant conversation",
+        }
+    end
+
     if R.ContainsAny(norm, { "who are you", "what are you", "whats your name", "what is your name", "tell me about yourself", "wer bist du", "was bist du" }) then
         return {
             text = "I'm the local MSUF Assistant—an in-game setup partner built around MSUF's own settings and current profile. I can find controls, explain how they connect, guide you to them, apply safe changes, and offer choices when your request could mean several things.",
@@ -1664,6 +1847,36 @@ function R.HumanConversationReply(text)    local norm = R.Normalize(text)
     end
 
     return nil
+end
+
+-- Questions about MSUF or the Assistant itself are exact, high-confidence
+-- intents. Fuzzy option search must not answer them first: "what is msuf"
+-- otherwise returned a list of settings whose labels merely start with "MSUF".
+R.IDENTITY_QUESTION_MARKERS = {
+    "msuf", "you", "chatgpt", "chat gpt", "gpt", "bot", "robot", "llm",
+    "midnight", "bist du", "eine ki", "yourself",
+}
+
+function R.LooksLikeAssistantIdentityQuestion(text)
+    local norm = R.Normalize(text)
+    if norm == "" or #norm > 64 then return false end
+    -- This runs on every routed input, so the expensive phrase scan below needs
+    -- a near-free gate in front of it. Every phrase in that list contains one of
+    -- these markers, so text without them cannot match and can skip the scan.
+    local marked = false
+    for i = 1, #R.IDENTITY_QUESTION_MARKERS do
+        if norm:find(R.IDENTITY_QUESTION_MARKERS[i], 1, true) then marked = true break end
+    end
+    if not marked then return false end
+    return R.ContainsAny(norm, {
+        "what is msuf", "what is midnight simple unit frames", "what are midnight simple unit frames",
+        "was ist msuf", "was sind midnight simple unit frames",
+        "who are you", "what are you", "whats your name", "what is your name",
+        "tell me about yourself", "wer bist du", "was bist du",
+        "are you an ai", "are you a ai", "are you ai", "are you chatgpt", "are you gpt",
+        "are you a bot", "are you a robot", "are you a language model", "are you an llm",
+        "do you use chatgpt", "bist du eine ki", "bist du ki", "bist du ein bot", "bist du chatgpt",
+    })
 end
 
 function R.IsAdjacentJokeFollowup(norm)
@@ -2161,10 +2374,36 @@ end
 R.VISIBILITY_PROBLEM_TERMS = {    "hidden", "missing", "gone", "invisible", "not visible", "not showing",
     "not shown", "not displayed", "not appearing", "does not show", "doesn't show", "cannot see", "can't see", "cant see",
     "not working", "does not work", "doesn't work", "broken", "fix", "repair",
+    -- Players report a frame in the past tense far more often than as a state.
+    "disappeared", "vanished", "went missing", "no longer shows", "no longer showing",
+    "isn't showing", "isnt showing", "wont show", "won't show", "will not show",
+    "cannot find", "can't find", "cant find", "nowhere to be seen", "not there",
+    -- A bar that renders but shows nothing is broken from the player's side
+    -- just as much as one that is hidden.
+    "empty", "stays empty", "is blank", "blank", "not filling", "isn't filling",
+    "isnt filling", "does not fill", "doesnt fill", "doesn't fill", "never fills",
+    -- ... and "somewhere odd" is the same report as "in the wrong place".
+    "weird place", "weird position", "weird spot", "strange place", "strange position",
+    "odd place", "odd position", "out of place", "misplaced", "wrong spot",
     "weg", "fehlt", "unsichtbar", "nicht sichtbar", "nicht da", "nicht angezeigt",
     "wird nicht angezeigt", "werden nicht angezeigt", "zeigt nicht", "zeigt keine",
-    "versteckt", "ausgeblendet", "verschwunden",
+    "versteckt", "ausgeblendet", "verschwunden", "verschwindet",
 }
+
+-- "why cant i see my target buffs" puts a pronoun between the negation and the
+-- verb, so no fixed phrase above can match it. Mirror the German
+-- "sehe/sehen" + "nicht" pair check for English instead of trying to enumerate
+-- every pronoun ordering.
+R.VISIBILITY_SEE_TERMS = { "see", "seeing", "find", "finding", "spot" }
+R.VISIBILITY_NEGATION_TERMS = {
+    "not", "cant", "can't", "cannot", "can not", "dont", "don't", "do not",
+    "didnt", "didn't", "never", "unable", "no longer",
+}
+
+function R.HasNegatedPerceptionPhrase(norm)
+    return R.ContainsAny(norm, R.VISIBILITY_SEE_TERMS)
+        and R.ContainsAny(norm, R.VISIBILITY_NEGATION_TERMS)
+end
 
 R.VISIBILITY_AURA_TERMS = {    "aura", "auras", "buff", "buffs", "debuff", "debuffs",
     "auren",
@@ -2176,9 +2415,11 @@ R.VISIBILITY_CASTBAR_TERMS = { "castbar", "cast bar", "zauberleiste" }
 R.VISIBILITY_PARTY_TERMS = { "party", "party frame", "party frames", "party group", "party group frames" }
 R.VISIBILITY_RAID_TERMS = { "raid", "raid frame", "raid frames", "raid group", "raid group frames", "schlachtzug" }
 R.VISIBILITY_MYTHIC_TERMS = { "mythic raid", "mythicraid", "mythic raid frame", "mythic raid frames" }
-R.VISIBILITY_PLAYER_TERMS = { "player", "player frame", "player unitframe", "spieler", "spieler frame", "spieler unitframe", "spieler rahmen", "ich" }
+-- Possessive forms ("my target's buffs", typed without the apostrophe) reach
+-- the matcher as a plural, so the bare unit noun alone never matches them.
+R.VISIBILITY_PLAYER_TERMS = { "player", "players", "player frame", "player unitframe", "spieler", "spieler frame", "spieler unitframe", "spieler rahmen", "ich" }
 R.VISIBILITY_TARGETTARGET_TERMS = { "targettarget", "target of target", "target of target frame", "ziel des ziels" }
-R.VISIBILITY_TARGET_TERMS = { "target", "target frame", "target unitframe", "ziel", "ziel frame", "ziel rahmen" }
+R.VISIBILITY_TARGET_TERMS = { "target", "targets", "target frame", "target unitframe", "ziel", "ziel frame", "ziel rahmen" }
 R.VISIBILITY_FOCUSTARGET_TERMS = { "focustarget", "focus target", "focus target frame", "fokus ziel" }
 R.VISIBILITY_FOCUS_TERMS = { "focus", "focus frame", "focus unitframe", "fokus", "fokus frame", "fokus rahmen" }
 R.VISIBILITY_PET_TERMS = { "pet", "pet frame", "pet unitframe", "begleiter", "begleiter frame", "begleiter rahmen" }
@@ -5046,6 +5287,11 @@ A.RouterCastbarProblemTerms = A.RouterCastbarProblemTerms or {
         "wrong place", "wrong position", "position is wrong", "anchor is wrong",
         "offset is wrong", "offset wrong", "off screen", "stuck", "not moving",
         "does not move", "doesn't move", "cannot move", "can't move", "cant move",
+        -- "Somewhere odd" is the same report as "in the wrong place", and it
+        -- should reach position help rather than a visibility check.
+        "weird place", "weird position", "weird spot", "strange place",
+        "strange position", "odd place", "odd position", "out of place",
+        "misplaced", "wrong spot",
     },
     preview = {
         "preview", "test cast", "test mode",
@@ -7420,6 +7666,7 @@ function R.TryVisibilityDiagnosticShortcut(text, coreHandler)    if type(coreHan
     if R.StartsWithVisibilityMutation and R.StartsWithVisibilityMutation(norm) then return nil end
     if not R.ContainsAny(norm, R.VISIBILITY_PROBLEM_TERMS)
         and not (R.ContainsAny(norm, { "sehe", "sehen" }) and R.ContainsAny(norm, { "nicht" }))
+        and not R.HasNegatedPerceptionPhrase(norm)
     then
         return nil
     end
@@ -7452,6 +7699,31 @@ function R.TryVisibilityDiagnosticShortcut(text, coreHandler)    if type(coreHan
         if castbarUnit then
             query = "diagnose " .. castbarUnit .. " castbar"
         end
+    elseif R.ContainsAny(norm, { "health bar", "healthbar", "hp bar", "life bar" })
+        and R.ContainsAny(norm, {
+            "empty", "blank", "not filling", "isn't filling", "isnt filling",
+            "does not fill", "doesnt fill", "doesn't fill", "never fills",
+        })
+    then
+        -- A bar that is present but shows nothing is a different problem from a
+        -- hidden bar, and there is no single diagnostic for it: it is almost
+        -- always one of four settings. Name them, change nothing.
+        local scopeWord = unit and (tostring(unit):gsub("^%l", string.upper)) or (group and tostring(group)) or nil
+        local lines = {
+            (scopeWord and (scopeWord .. " health bar") or "Health bar") .. " looks empty",
+            "A bar that is visible but never fills is usually one of these, in the order worth checking:",
+            "1. Health Bar Opacity is very low, so the bar is drawn but almost invisible.",
+            "2. The health colour matches the background colour -- check the health colour mode and the bar background colour.",
+            "3. The bar texture is a blank or fully transparent texture.",
+            "4. The unit is dead, a ghost, or offline, so MSUF is showing its dead/offline background instead.",
+            "Tell me the frame and I will read those values back, for example 'what is player health bar opacity' or 'open player'.",
+        }
+        return {
+            text = table.concat(lines, "\n"),
+            status = "info",
+            result = "info",
+            summary = "Explains why a health bar can look empty without changing MSUF.",
+        }
     else
         for i = 1, #R.VISIBILITY_GAMEPLAY_FEATURE_TERMS do
             local spec = R.VISIBILITY_GAMEPLAY_FEATURE_TERMS[i]
@@ -8507,6 +8779,11 @@ R.CORRECTION_UNDO_TERMS = {    "undo", "undo that", "undo this", "undo last", "u
     "restore previous", "restore previous value", "restore previous change",
     "restore last value", "restore last change", "put it back", "put that back",
     "make it like before", "that was wrong", "this was wrong", "wrong change",
+    -- How players actually phrase a correction.
+    "thats not what i wanted", "that is not what i wanted", "not what i wanted",
+    "thats not what i meant", "that is not what i meant", "not what i meant",
+    "thats not right", "that is not right", "thats wrong", "that is wrong",
+    "das wollte ich nicht", "das meinte ich nicht", "das ist nicht richtig",
     "i changed the wrong thing", "i changed wrong thing", "i did the wrong change",
     "i do not like that", "i dont like that", "i do not like this", "i dont like this",
     "do not like that", "dont like that", "not like that", "bad change",
@@ -8540,6 +8817,36 @@ function R.CoreControl(coreHandler, command, fallbackText, fallbackStatus)    if
     return R.ControlResult(fallbackText, fallbackStatus)
 end
 
+-- Every phrase in the undo/redo correction lists contains one of these. A
+-- marker hit only means "worth scanning"; the scan still decides.
+R.CORRECTION_MARKER_TOKENS = {
+    "undo", "redo", "revert", "rollback", "roll back", "restore", "reapply",
+    "again", "repeat", "back", "wrong", "bad", "cancel", "never", "actually",
+    "put it", "put that", "like before", "not like", "dont like", "do not like",
+    "wanted", "meant", "not right", "apply",
+    "rueckgaengig", "zurueck", "falsch", "wollte", "meinte", "richtig",
+    "wiederhol", "erneut", "anwenden", "nimm",
+}
+R.CORRECTION_CANDIDATE_MAX_SHORT = 24
+
+function R.LooksLikeCorrectionCandidate(norm)
+    norm = R.Normalize(norm)
+    if #norm <= R.CORRECTION_CANDIDATE_MAX_SHORT then return true end
+    for i = 1, #R.CORRECTION_MARKER_TOKENS do
+        local token = R.CORRECTION_MARKER_TOKENS[i]
+        -- Whole words only: MSUF option names are full of "background",
+        -- "backdrop" and "backup", and matching "back" inside them put every
+        -- such command straight back onto the slow scan this gate exists to
+        -- avoid. Multi-word markers already carry their own boundaries.
+        if token:find(" ", 1, true) then
+            if norm:find(token, 1, true) then return true end
+        elseif norm:find("%f[%w]" .. token .. "%f[%W]") then
+            return true
+        end
+    end
+    return false
+end
+
 function R.TryCorrectionShortcut(text, coreHandler)    local norm = R.Normalize(text)
     if norm == "" then return nil end
     if norm:match("^can%s+i%s+undo") or norm:match("^can%s+you%s+undo")
@@ -8553,12 +8860,26 @@ function R.TryCorrectionShortcut(text, coreHandler)    local norm = R.Normalize(
         return nil
     end
 
-    if R.ContainsAny(norm, R.CORRECTION_REDO_TERMS) then
-        return R.CoreControl(coreHandler, "redo", "I have no Assistant change to redo.", "failed")
-    end
+    -- ContainsAny falls back to fuzzy matching across every phrase when nothing
+    -- matches exactly. Across these two lists that costs about half a
+    -- millisecond, and every routed option command was paying it. Corrections
+    -- are short conversational replies, so a long sentence sharing no marker
+    -- word with any correction phrase can skip the scan; short input still gets
+    -- the full fuzzy pass, which is where typo tolerance actually matters.
+    if R.LooksLikeCorrectionCandidate(norm) then
+        if R.ContainsAny(norm, R.CORRECTION_REDO_TERMS) then
+            return R.CoreControl(coreHandler, "redo", "I have no Assistant change to redo.", "failed")
+        end
 
-    if R.ContainsAny(norm, R.CORRECTION_UNDO_TERMS) then
-        return R.CoreControl(coreHandler, "undo", "I have no Assistant change to undo.", "failed")
+        if R.ContainsAny(norm, R.CORRECTION_UNDO_TERMS) then
+            -- "That is not what I wanted" with an empty undo stack still needs
+            -- a way forward: the player is telling us something is wrong.
+            return R.CoreControl(coreHandler, "undo",
+                "I have no Assistant change to undo -- I have not changed anything this session."
+                .. "\nIf something still looks wrong, tell me what you are seeing and I will find it, for example 'why are target buffs hidden' or 'my player frame disappeared'."
+                .. "\nIf you meant a change you made in the menu yourself, I cannot undo that, but I can reset a frame or a page: 'reset player options'.",
+                "failed")
+        end
     end
 
     if R.ContainsAny(norm, R.CORRECTION_HISTORY_TERMS) then
@@ -10549,7 +10870,16 @@ function R.LooksLikeRegistrySettingDecisionQuestion(text)
         "would it be better with", "would i be better off with",
         "would it be better if", "would i be better with",
         "what do you recommend for", "do you recommend", "which", "recommend for",
+        -- Direct comparisons are advice questions too. Without these the
+        -- request fell through to the mutation lane, so asking "what's better,
+        -- class color or custom color" silently switched the colour mode.
+        "whats better", "what is better", "which is better", "which one is better",
+        "is it better", "is it better to", "are they better", "is that better",
+        "better than", "better or", "or better",
+        "worth it", "is it worth", "should we",
         "soll ich", "sollte ich", "darf ich", "empfiehlst du",
+        "was ist besser", "welches ist besser", "ist es besser", "besser als",
+        "lohnt sich", "lohnt es sich",
     }) then
         return false
     end
@@ -11954,6 +12284,39 @@ local function OpenEndedEnumContainsValue(setting, value)
     return false
 end
 
+-- Words the label-prefix fallback may ignore in a value tail. Anything else
+-- left over means part of the request was never understood.
+R.VALUE_TAIL_FILLER_WORDS = {
+    to = true, as = true, is = true, be = true, ["="] = true, value = true,
+    please = true, now = true, it = true, the = true, a = true, an = true,
+    auf = true, zu = true, als = true, wert = true, bitte = true, jetzt = true,
+}
+
+-- "set player name bold text on" has no Bold Text control on a unit frame, so
+-- the label-prefix scan matched "player name" and treated "bold text on" as its
+-- value -- silently toggling the name off instead of saying it did not
+-- understand "bold". A value tail may only contain the value itself plus
+-- filler; leftover content words mean the request was only partly understood.
+function R.ValueTailIsOnlyValue(setting, valueText)
+    local norm = R.Normalize(valueText or "")
+    if norm == "" then return false end
+    -- Free-form text (names, spell IDs, custom strings) legitimately carries
+    -- arbitrary words, so only closed value domains are checked here.
+    local settingType = tostring(setting and setting.type or "")
+    if settingType ~= "boolean" then return true end
+    for word in norm:gmatch("%S+") do
+        if not R.VALUE_TAIL_FILLER_WORDS[word] then
+            local isBooleanWord = R.ContainsAny(word, {
+                "on", "off", "true", "false", "yes", "no", "enable", "enabled",
+                "disable", "disabled", "show", "shown", "hide", "hidden",
+                "an", "aus", "ja", "nein", "ein", "einschalten", "ausschalten",
+            })
+            if not isBooleanWord then return false end
+        end
+    end
+    return true
+end
+
 -- A specialist parser may safely break a generic name tie when it produced one
 -- fixed-list change and the supplied value belongs to exactly one of the
 -- candidate settings. Example: "portrait to 2D" fits Portrait Render, but not
@@ -12032,6 +12395,18 @@ local function ExactMutationBody(text)
     local verb, body = norm:match("^(%S+)%s+(.+)$")
     if not (verb and R.OPEN_ENDED_SETTING_MUTATION_VERBS[verb]) then return nil end
     body = R.Trim(body:gsub("%s+please$", ""))
+    -- A determiner or possessive between the verb and the control name is not
+    -- part of the label ("set MY player width to 300", "set THE target width").
+    -- Leaving it in meant the body never matched a control, so the request lost
+    -- its exact-mutation exemption further up and the fail-closed guard turned
+    -- an explicit command into a read-only answer that changed nothing.
+    for _ = 1, 2 do
+        local previous = body
+        body = body:gsub("^the%s+", ""):gsub("^my%s+", ""):gsub("^our%s+", "")
+            :gsub("^its%s+", ""):gsub("^msuf%s+", ""):gsub("^a%s+", ""):gsub("^an%s+", "")
+        if body == previous then break end
+    end
+    body = R.Trim(body)
     return body ~= "" and body or nil
 end
 
@@ -12097,7 +12472,7 @@ local function ExactMutationMatch(text)
                 local synthetic = "set " .. tostring(setting.label or subject) .. " to " .. valueText
                 local parsedValue = type(parser.ValueForRegistrySetting) == "function"
                     and parser.ValueForRegistrySetting(setting, R.Normalize(synthetic), synthetic) or nil
-                if parsedValue ~= nil then
+                if parsedValue ~= nil and R.ValueTailIsOnlyValue(setting, valueText) then
                     bestItem = candidate
                     bestValue = valueText
                     break
@@ -12291,6 +12666,61 @@ function R.TryComparativeSizeRelationshipRequest(text)
     }
 end
 
+-- A request for a recommendation is not an instruction. Every mutation lane
+-- below the decision shortcut treats a matched control as something to write,
+-- so "what's better, class colour or custom colour" silently switched the
+-- colour mode. These two detectors let routing fail closed instead.
+R.ADVICE_QUESTION_TERMS = {
+    "whats better", "what is better", "which is better", "which one is better",
+    "is it better", "are they better", "is that better", "better than",
+    "should i", "should we", "do i need", "do you recommend", "what do you recommend",
+    "is it worth", "worth it", "does it help", "do i have to",
+    "worth changing", "worth using", "worth turning on", "worth enabling",
+    "was ist besser", "welches ist besser", "ist es besser", "besser als",
+    "soll ich", "sollte ich", "empfiehlst du", "lohnt sich", "lohnt es sich",
+    "brauche ich", "muss ich",
+}
+
+R.COMPARATIVE_RELATION_TERMS = {
+    "bigger than", "larger than", "smaller than", "wider than", "narrower than",
+    "taller than", "shorter than", "higher than", "lower than",
+    "groesser als", "kleiner als", "breiter als", "schmaler als",
+}
+
+function R.IsAdviceQuestion(text)
+    local norm = R.Normalize(text)
+    if norm == "" then return false end
+    return R.ContainsAny(norm, R.ADVICE_QUESTION_TERMS)
+end
+
+-- "Make debuffs bigger than buffs" states an ordering, never a final amount.
+-- Any value written here would be invented, so without a number this is a
+-- question about two controls, not a command.
+function R.IsAmountlessComparativeRequest(text)
+    local norm = R.Normalize(text)
+    if norm:match("%d") then return false end
+    return R.ContainsAny(norm, R.COMPARATIVE_RELATION_TERMS)
+end
+
+-- One exact label must not swallow a multi-clause sentence. In
+-- "set target width to 250 and height to 60" the unique label match is
+-- "target width", but the value scan then reads the sentence's last number and
+-- writes 60 into the width while the height is never set. When the sentence
+-- really describes several option changes, the compound pipeline owns it.
+function R.ExactMutationSpansSeveralChanges(text)
+    local normalized = R.Normalize(text)
+    if not (normalized:find(" and ", 1, true) or normalized:find(" und ", 1, true)) then return false end
+    local numbers = 0
+    for _ in normalized:gmatch("[-+]?%d+%.?%d*") do
+        numbers = numbers + 1
+        if numbers >= 2 then break end
+    end
+    if numbers < 2 then return false end
+    local parsed = type(A.Parse) == "function" and A.Parse(text) or nil
+    return type(parsed) == "table" and parsed.kind == "changes"
+        and type(parsed.changes) == "table" and #parsed.changes >= 2
+end
+
 -- Exact visible setting names own their commands before broad feature parsers.
 -- This is deliberately bounded to one unique label/alias and a clear mutation
 -- verb, so natural ideas still receive semantic guidance instead of raw writes.
@@ -12298,6 +12728,7 @@ function R.TryExactRegistrySettingMutation(text)
     local item, hasExplicitValue = ExactMutationMatch(text)
     local setting = item and item.setting
     if not setting then return nil end
+    if hasExplicitValue and R.ExactMutationSpansSeveralChanges(text) then return nil end
     if not hasExplicitValue then return ExactSettingValuePrompt(item, false) end
 
     local parser = A.Parser or {}
@@ -12355,6 +12786,22 @@ end
 
 function R.TryOpenEndedSettingIdea(text, coreHandler)
     local parser = A.Parser or {}
+    -- This lane ranks fuzzy candidates and asks when several look plausible.
+    -- That is right for a vague idea, but wrong once the player has typed a
+    -- control's exact visible name: "set my Boss Absorb Bar Opacity to 75"
+    -- resolves to exactly one setting, yet the fuzzy list still contained
+    -- near-misses and the request was answered with a chooser. An exact
+    -- whole-phrase match is not an idea -- it is the answer.
+    if type(parser.ParseRegistryExactAliasShortcut) == "function" then
+        local normalized = R.Normalize(text)
+        local ok, exact = pcall(parser.ParseRegistryExactAliasShortcut, normalized, text,
+            { minTokens = 3, fullPhrase = true })
+        if ok and type(exact) == "table" and exact.kind == "changes"
+            and type(exact.changes) == "table" and #exact.changes == 1
+        then
+            return nil
+        end
+    end
     local actionable = type(parser.ActionableText) == "function" and parser.ActionableText(text) or nil
     if actionable and R.Normalize(actionable) ~= "" and R.Normalize(actionable) ~= R.Normalize(text)
         and R.OpenEndedMutationSubject(actionable) ~= nil
@@ -13805,6 +14252,166 @@ function A.RouterTryRegistrySettingCurrentValueShortcut(text, coreHandler, preco
     }
 end
 
+-- Recurring "which is better" questions have real answers inside MSUF's own
+-- domain, and refusing to give one is not neutrality -- it is just unhelpful.
+-- Each entry states a recommendation, says what it depends on, and hands over
+-- the exact command for either choice. Nothing here mutates.
+R.ADVICE_TOPICS = {
+    {
+        match = { "class color", "class colour", "custom color", "custom colour", "klassenfarbe", "eigene farbe" },
+        needs = { "class", "custom", "klassenfarbe", "eigene" },
+        lines = {
+            "Class colour vs custom colour",
+            "Use class colour when you need to identify people fast -- healing, dispelling, any group content. It is the reason most raiders keep it on.",
+            "Use a custom colour for frames that are always the same unit anyway: your own player frame, or a target frame you want to match a UI theme.",
+            "Many setups mix them: class colour on group frames, custom on the player frame.",
+            "Say 'set party health color mode to class' or 'set player health color mode to custom' and I will apply it.",
+        },
+    },
+    {
+        match = { "auras on top", "auras on bottom", "buffs on top", "buffs on bottom", "aura anchor", "auren oben", "auren unten" },
+        needs = { "top", "bottom", "oben", "unten" },
+        lines = {
+            "Auras above or below the frame",
+            "Below the frame is the safer default: auras grow away from the health bar, so a long buff list never covers the health text you are reading.",
+            "Above works well when the frame sits at the bottom of the screen, or when you want auras closer to your eye line during a fight.",
+            "Whichever you pick, keep the growth direction pointing away from the frame so the list expands into empty space.",
+            "Say 'set target buff anchor to top' or 'set target buff anchor to bottom' and I will apply it.",
+        },
+    },
+    {
+        match = { "percent", "percentage", "numbers", "prozent", "zahlen" },
+        needs = { "percent", "percentage", "percentages", "number", "numbers", "prozent", "zahl", "zahlen" },
+        lines = {
+            "Percentages vs raw numbers",
+            "Percentages are the better default: they mean the same thing on every unit, so you can judge a target at a glance without knowing its maximum health.",
+            "Raw numbers matter when the absolute amount does -- healers watching an effective-health pool, or tracking whether a heal will overheal.",
+            "You do not have to choose: MSUF gives each frame a left, center and right slot, so many setups put the percentage in one and the number in another.",
+            "Say 'set player hp right slot to percent' or 'set player hp left slot to current' and I will apply it.",
+        },
+    },
+}
+
+function R.AdviceTopicReply(text)
+    local norm = R.Normalize(text)
+    for i = 1, #R.ADVICE_TOPICS do
+        local topic = R.ADVICE_TOPICS[i]
+        if R.ContainsAny(norm, topic.match) then
+            -- Both sides of the comparison must actually be present, or a
+            -- passing mention of one word would trigger a lecture.
+            local hits = 0
+            for j = 1, #topic.needs do
+                if R.ContainsAny(norm, { topic.needs[j] }) then hits = hits + 1 end
+            end
+            if hits >= 2 then
+                return {
+                    text = table.concat(topic.lines, "\n") .. "\nI did not change anything yet.",
+                    status = "info",
+                    result = "info",
+                    summary = "Answers a preference question with a recommendation, without changing MSUF.",
+                }
+            end
+        end
+    end
+    return nil
+end
+
+-- A "bold" request names a control that only exists per frame (Font Outline),
+-- or per group (Party's Bold Text). The parser correctly refuses to write the
+-- name/text control the phrase happens to mention -- but refusing silently
+-- leaves "I want my name text bold" with no answer at all. Say where bold
+-- actually lives instead.
+function R.TryStylingQualifierGuidance(text)
+    local norm = R.Normalize(text)
+    if not R.ContainsAny(norm, { "bold", "italic" }) then return nil end
+    local parser = A.Parser
+    if type(parser) ~= "table" or type(parser.StylingQualifiersInText) ~= "function" then return nil end
+    if not parser.StylingQualifiersInText(norm) then return nil end
+
+    local units = type(parser.DetectUnits) == "function" and parser.DetectUnits(norm) or {}
+    local groups = type(parser.DetectGroups) == "function" and parser.DetectGroups(norm) or {}
+    local scope = (#units == 1 and tostring(units[1])) or (#groups == 1 and ("gf_" .. tostring(groups[1]))) or nil
+
+    local lines = {}
+    if R.ContainsAny(norm, { "italic" }) then
+        lines[#lines + 1] = "MSUF has no italic option: WoW fonts expose outline and shadow, not italics."
+        lines[#lines + 1] = "The closest look is a heavier outline -- say 'set player font outline to thick outline'."
+        return {
+            text = table.concat(lines, "\n"),
+            status = "info",
+            result = "info",
+            summary = "Explains that MSUF exposes outline rather than italics.",
+        }
+    end
+
+    lines[#lines + 1] = "Bold text in MSUF"
+    lines[#lines + 1] = "Unit frames have no separate bold switch, and no per-element one either -- what makes their text read as bold is the frame's Font Outline, which applies to every text on that frame."
+    lines[#lines + 1] = "Party frames are the exception: they have their own Bold Text toggle."
+    if scope and scope:find("^gf_") then
+        lines[#lines + 1] = "For that group, say 'turn on party bold text'."
+    elseif scope then
+        local label = scope:gsub("^%l", string.upper)
+        lines[#lines + 1] = "For " .. label .. ", say 'set " .. scope .. " font outline to thick outline'."
+    else
+        lines[#lines + 1] = "Name the frame and I will set it, for example 'set player font outline to thick outline' or 'turn on party bold text'."
+    end
+    lines[#lines + 1] = "I did not change anything."
+    return {
+        text = table.concat(lines, "\n"),
+        status = "info",
+        result = "info",
+        summary = "Explains where bold text lives without changing MSUF.",
+    }
+end
+
+-- Read-only answer for advice questions and amount-less comparisons that the
+-- decision shortcut could not pin to a single control. It names the controls
+-- involved so the player can decide, and states plainly that nothing changed.
+function R.AdvisoryNoMutationReply(text, comparative)
+    local topicReply = not comparative and R.AdviceTopicReply(text) or nil
+    if topicReply then return topicReply end
+    local norm = R.Normalize(text)
+    local subject = R.RegistryDecisionSubject and R.RegistryDecisionSubject(norm) or ""
+    if subject == "" then subject = norm end
+    local entries = R.RegistrySettingSearchEntries and R.RegistrySettingSearchEntries(subject, norm, 5) or nil
+
+    local lines = {}
+    if comparative == "lookup" then
+        -- Asked *about* a control rather than asked to change one.
+        lines[#lines + 1] = "Here is what I can point you at — I did not change anything."
+    elseif comparative then
+        lines[#lines + 1] = "That tells me the order you want, not the size, so I kept MSUF unchanged."
+        lines[#lines + 1] = "Give me the exact amount and I will set it, for example 'set target debuff icon size to 30'."
+    else
+        lines[#lines + 1] = "That is a preference call, so I did not change anything."
+    end
+
+    if entries and #entries > 0 then
+        lines[#lines + 1] = comparative and "The controls involved:" or "The controls this affects:"
+        for i = 1, math.min(#entries, 5) do
+            local item = entries[i].item or {}
+            lines[#lines + 1] = string.format("%d. %s - %s",
+                i, tostring(item.label or "MSUF setting"), tostring(item.pageLabel or "MSUF page"))
+        end
+        lines[#lines + 1] = "Ask me to open or explain any of them, or name the exact value you want."
+        return {
+            text = table.concat(lines, "\n"),
+            status = "info",
+            result = "info",
+            summary = "Answers a preference question without changing MSUF.",
+            searchResults = R.RegistryLocationResultFollowups and R.RegistryLocationResultFollowups(entries, 5) or nil,
+        }
+    end
+
+    lines[#lines + 1] = "Name the frame and the option you are weighing up and I will explain both sides, for example 'explain target health bar color mode'."
+    return {
+        text = table.concat(lines, "\n"),
+        status = "info",
+        result = "info",
+        summary = "Answers a preference question without changing MSUF.",
+    }
+end
+
 function A.RouterTryRegistrySettingDecisionShortcut(text, coreHandler)
     local norm = R.Normalize(text)
     if not R.LooksLikeRegistrySettingDecisionQuestion(norm) then return nil end
@@ -14597,6 +15204,21 @@ function A.RouteInput(text, coreHandler)
         result.summary = "Applies only the included MSUF control and preserves the explicitly excluded control."
         return result
     end
+    -- "What is MSUF" / "who are you" / "are you an AI" are exact identity
+    -- questions, not fuzzy option searches. Answered this late they were
+    -- intercepted by a no-match lane that offered settings whose labels merely
+    -- contain "MSUF". Pending confirmations are untouched: this only answers.
+    if R.LooksLikeAssistantIdentityQuestion(text) then
+        local identityReply = R.HumanConversationReply(text)
+        if identityReply then return identityReply end
+    end
+
+    -- Build requests are answered with the real sequence, before any lane can
+    -- read a stray "player frame" out of "track shield wall on my player frame"
+    -- and report on an unrelated toggle. This never writes.
+    local creationGuidance = R.TryCreationGuidance(text)
+    if creationGuidance then return creationGuidance end
+
     local routedText = R.StripResponseLanguageDirective(text)
     if routedText ~= "" then text = routedText end
     text = R.NormalizeNumericAddCommand(text) or text
@@ -14619,6 +15241,14 @@ function A.RouteInput(text, coreHandler)
             coreCache[value] = result or false
         end
         return coreCache[value] ~= false and coreCache[value] or nil
+    end
+
+    -- Guided-tour wording is an explicit onboarding action, not a page-help or
+    -- fuzzy setting query. Resolve it before those read-only lanes can consume
+    -- phrases such as "show me around MSUF" as generic guidance.
+    if R.LooksLikeGuidedTourRequest(text) and hasCore then
+        local guidedResult = Core(text)
+        if guidedResult and not A.RouterIsUnknownResult(guidedResult) then return guidedResult end
     end
 
     -- Priority Frames have two state owners: eight profile settings are safe
@@ -15255,6 +15885,31 @@ function A.RouteInput(text, coreHandler)
             end
         end
 
+        -- When the whole command (minus verb, determiner and value tail) equals
+        -- exactly one indexed control name, the player has named the control --
+        -- there is nothing to disambiguate. Several fuzzy lanes below rank
+        -- near-misses and answer with a chooser, which is right for a vague
+        -- idea and wrong here; "set my Boss Absorb Bar Opacity to 75" was met
+        -- with "several MSUF controls fit the setting name". The parser's own
+        -- pre-pass already resolves these, so hand the text to the core handler
+        -- rather than re-implementing the write. This is deliberately the
+        -- strict full-phrase form, not a fuzzy match.
+        if hasCore then
+            local parser = A.Parser or {}
+            if type(parser.ParseRegistryExactAliasShortcut) == "function" then
+                local ok, exact = pcall(parser.ParseRegistryExactAliasShortcut,
+                    R.Normalize(text), text, { minTokens = 3, fullPhrase = true })
+                if ok and type(exact) == "table" and exact.kind == "changes"
+                    and type(exact.changes) == "table" and #exact.changes == 1
+                then
+                    local exactResult = Core(text)
+                    if exactResult and not A.RouterIsUnknownResult(exactResult) then
+                        return exactResult
+                    end
+                end
+            end
+        end
+
         local exactSettingMutation = R.TryExactRegistrySettingMutation(text)
         if exactSettingMutation then return exactSettingMutation end
 
@@ -15422,11 +16077,52 @@ function A.RouteInput(text, coreHandler)
         local registrySettingDecisionResult = A.RouterTryRegistrySettingDecisionShortcut and A.RouterTryRegistrySettingDecisionShortcut(text, Core)
         if registrySettingDecisionResult then return registrySettingDecisionResult end
 
+        -- The decision shortcut only answers when one control resolves
+        -- confidently. Everything below this point can write, so an advice
+        -- question that got this far has to be answered read-only rather than
+        -- being executed as if it were an instruction.
+        local amountlessComparative = R.IsAmountlessComparativeRequest(text)
+        if amountlessComparative or R.IsAdviceQuestion(text) then
+            return R.AdvisoryNoMutationReply(text, amountlessComparative)
+        end
+
+        local stylingReply = R.TryStylingQualifierGuidance(text)
+        if stylingReply then return stylingReply end
+
         local registrySettingExplainResult = A.RouterTryRegistrySettingExplainShortcut and A.RouterTryRegistrySettingExplainShortcut(text, Core)
         if registrySettingExplainResult then return registrySettingExplainResult end
 
         local registrySettingTroubleshootingResult = A.RouterTryRegistrySettingTroubleshootingShortcut and A.RouterTryRegistrySettingTroubleshootingShortcut(text, Core)
         if registrySettingTroubleshootingResult then return registrySettingTroubleshootingResult end
+
+        -- Everything from here down can write. The read-only specialists above
+        -- have already had their chance, so an input the parser classified as a
+        -- question/lookup must not fall into a mutation lane now: "help with
+        -- Boss Buff Duration Bar Display" was reaching one and answering "I
+        -- changed Boss Buffs from disabled to enabled". The immediate fast path
+        -- already honours this classification; this is the same rule for the
+        -- full pipeline, in one place rather than per lane.
+        -- Only the intents that are genuinely "tell me about this". A problem
+        -- report also classifies as non-mutating, but its visibility
+        -- diagnostics live further down and answer it far better than a generic
+        -- control list would, so those must pass through untouched.
+        do
+            local parser = A.Parser or {}
+            local intent = type(parser.NonMutatingIntent) == "function"
+                and parser.NonMutatingIntent(R.Normalize(text)) or nil
+            if intent == "lookup" or intent == "capability" then
+                -- The knowledge lane normally answers these, but it sits below
+                -- the mutation lanes, so consult it here rather than replacing
+                -- a real answer ("why would I use a focus frame") with a
+                -- generic control list. Failing closed is the fallback, not the
+                -- first move.
+                if A.Knowledge and type(A.Knowledge.Answer) == "function" then
+                    local knowledgeAnswer = A.Knowledge.Answer(text, { currentPage = M and M.activeKey })
+                    if knowledgeAnswer then return knowledgeAnswer end
+                end
+                return R.AdvisoryNoMutationReply(text, "lookup")
+            end
+        end
 
         -- Human wrappers such as "can you help me to" must not turn a valid
         -- setting command into a generic help article. Keep the narrower Aura,
@@ -15700,11 +16396,6 @@ function A.RouteInput(text, coreHandler)
     local helpContextResult = R.TryHelpContextFollowup(text, Core)
     if helpContextResult then return helpContextResult end
 
-    if R.LooksLikeGuidedTourRequest(text) and hasCore then
-        local guidedResult = Core(text)
-        if guidedResult and not A.RouterIsUnknownResult(guidedResult) then return guidedResult end
-    end
-
     local generalGuidanceResult = R.TryGeneralGuidanceShortcut(text, Core)
     if generalGuidanceResult then return generalGuidanceResult end
 
@@ -15716,7 +16407,9 @@ function A.RouteInput(text, coreHandler)
         if noMatch then return noMatch end
     end
 
-    if not hasBlockingPendingState and not pendingResultReply and R.LooksLikeLocalWowUiKnowledgeRequest(text)
+    if not hasBlockingPendingState and not pendingResultReply
+        and not R.LooksLikeAssistantIdentityQuestion(text)
+        and R.LooksLikeLocalWowUiKnowledgeRequest(text)
         and A.Knowledge and type(A.Knowledge.Answer) == "function" then
         local answer = A.Knowledge.Answer(text, { currentPage = M and M.activeKey })
         if answer then return answer end

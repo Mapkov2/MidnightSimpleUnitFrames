@@ -61,6 +61,15 @@ function A.GlobalRegistry.RegisterScopedFontDetailSettings(ctx)
         local outlineAliases = {
             "font outline", "text outline", "outline style",
         }
+        -- Only Party owns a dedicated "Bold Text" switch. Everywhere else the
+        -- outline is what makes text read as bold, so "bold" routes here --
+        -- except for the shared scope, which would shadow Party's own control.
+        if not isShared and scope ~= "gf_party" then
+            outlineAliases[#outlineAliases + 1] = "bold"
+            outlineAliases[#outlineAliases + 1] = "bold text"
+            outlineAliases[#outlineAliases + 1] = "text bold"
+            outlineAliases[#outlineAliases + 1] = "font bold"
+        end
         if isShared then
             outlineAliases[#outlineAliases + 1] = "global font outline"
             outlineAliases[#outlineAliases + 1] = "global text outline"
