@@ -218,7 +218,13 @@ local function SetEdgesShown(edges, shown)
   end
 end
 
-local function PrepareUnitEdges(frame, enabled, edgesKey, shownKey, layer, size, r, g, b)
+local function PrepareUnitEdges(frame, enabled, edgesKey, shownKey, layer, size, r, g, b, indicatorKind)
+  local rounded = _G.MSUF_RoundedUF_OnGroupIndicatorPrepared
+  if rounded and rounded(frame, indicatorKind, enabled == true, frame and frame[shownKey] == true, size, r, g, b, 1) then
+    HideEdges(frame and frame[edgesKey])
+    if frame and enabled ~= true then frame[shownKey] = false end
+    return
+  end
   if not (frame and enabled) then
     HideEdges(frame and frame[edgesKey])
     if frame then frame[shownKey] = false end
@@ -240,7 +246,7 @@ local function PrepareUnitEdges(frame, enabled, edgesKey, shownKey, layer, size,
   frame[shownKey] = false
 end
 
-local function UpdateUnitEdges(frame, cfg, enabled, unit, edgesKey, shownKey, showOverride)
+local function UpdateUnitEdges(frame, cfg, enabled, unit, edgesKey, shownKey, showOverride, indicatorKind)
   if not (frame and cfg) then
     if frame then frame[shownKey] = false end
     SetEdgesShown(frame and frame[edgesKey], false)
@@ -255,6 +261,12 @@ local function UpdateUnitEdges(frame, cfg, enabled, unit, edgesKey, shownKey, sh
   else
     show = show == true and enabled
   end
+  local rounded = _G.MSUF_RoundedUF_OnGroupIndicatorChanged
+  if rounded and rounded(frame, indicatorKind, show) then
+    frame[shownKey] = show
+    HideEdges(frame[edgesKey])
+    return
+  end
   if frame[shownKey] == show then
     return
   end
@@ -265,12 +277,12 @@ end
 local function PrepareTarget(frame, cfg)
   PrepareUnitEdges(frame, cfg and cfg.targetIndicator == true,
     "MSUFGFTargetEdges", "_msufGFTargetVisualShown", 7, 2,
-    cfg and cfg.targetR or 1, cfg and cfg.targetG or 1, cfg and cfg.targetB or 1)
+    cfg and cfg.targetR or 1, cfg and cfg.targetG or 1, cfg and cfg.targetB or 1, "target")
 end
 
 local function UpdateTarget(frame, cfg, showOverride)
   UpdateUnitEdges(frame, cfg, cfg and cfg.targetIndicator == true,
-    "target", "MSUFGFTargetEdges", "_msufGFTargetVisualShown", showOverride)
+    "target", "MSUFGFTargetEdges", "_msufGFTargetVisualShown", showOverride, "target")
 end
 
 local function PrepareFocus(frame, cfg)
@@ -278,12 +290,12 @@ local function PrepareFocus(frame, cfg)
   local offset = tonumber(cfg and cfg.focusOffset) or 0
   PrepareUnitEdges(frame, cfg and cfg.focusIndicator == true,
     "MSUFGFFocusEdges", "_msufGFFocusVisualShown", 6, size + offset,
-    cfg and cfg.focusR or 0.5, cfg and cfg.focusG or 0.5, cfg and cfg.focusB or 1)
+    cfg and cfg.focusR or 0.5, cfg and cfg.focusG or 0.5, cfg and cfg.focusB or 1, "focus")
 end
 
 local function UpdateFocus(frame, cfg, showOverride)
   UpdateUnitEdges(frame, cfg, cfg and cfg.focusIndicator == true,
-    "focus", "MSUFGFFocusEdges", "_msufGFFocusVisualShown", showOverride)
+    "focus", "MSUFGFFocusEdges", "_msufGFFocusVisualShown", showOverride, "focus")
 end
 
 local function LayoutAuraVisual(tex, target, edge, size)
@@ -331,6 +343,8 @@ local function EnsureAuraTexture(frame, key)
   tex:SetColorTexture(1, 1, 1, 1)
   tex:Hide()
   frame[key] = tex
+  local rounded = _G.MSUF_RoundedUF_OnGroupAuraVisualCreated
+  if rounded then rounded(frame, tex) end
   return tex
 end
 

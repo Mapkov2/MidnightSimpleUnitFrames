@@ -863,6 +863,8 @@ local function ApplyGroupBorder(host, conf, enabled)
     if host.MSUFGFGroupBorder then
       for _, edge in pairs(host.MSUFGFGroupBorder) do edge:Hide() end
     end
+    local rounded = _G.MSUF_RoundedUF_OnGroupBlockBorder
+    if rounded then rounded(host, conf, false) end
     return false
   end
   local edges = host.MSUFGFGroupBorder or {}
@@ -896,6 +898,10 @@ local function ApplyGroupBorder(host, conf, enabled)
       edge:SetWidth(size)
     end
     edge:Show()
+  end
+  local rounded = _G.MSUF_RoundedUF_OnGroupBlockBorder
+  if rounded and rounded(host, conf, true) then
+    for _, edge in pairs(edges) do edge:Hide() end
   end
   return true
 end

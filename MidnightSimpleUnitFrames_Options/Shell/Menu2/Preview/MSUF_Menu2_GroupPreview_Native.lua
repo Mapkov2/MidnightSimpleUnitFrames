@@ -659,8 +659,8 @@ local function HealthColor(conf, pct, classToken)
         conf.healthCustomB or 0.2
 end
 local maskRoot = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\"
-local GF_PREVIEW_ROUNDED_MASK = Specs.ROUNDED_MASK or (maskRoot .. "rounded_bar_4x.tga")
-local GF_PREVIEW_ROUNDED_EDGE = Specs.ROUNDED_EDGE or (maskRoot .. "rounded_bar_edge_4x.tga")
+local GF_PREVIEW_ROUNDED_MASK = Specs.ROUNDED_MASK or (maskRoot .. "rounded_clean_mask_s3.png")
+local GF_PREVIEW_ROUNDED_EDGE = Specs.ROUNDED_EDGE or (maskRoot .. "rounded_clean_edge_s3.png")
 local GF_PREVIEW_MIN_W = Specs.MIN_W or 380
 local GF_PREVIEW_MIN_H = Specs.MIN_H or 130
 local GF_PREVIEW_ZOOM_MIN = Specs.ZOOM_MIN or 0.35

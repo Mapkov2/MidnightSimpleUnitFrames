@@ -932,6 +932,11 @@ local function LayoutEdges(button, parentFrame, target, effect)
         edge:SetVertexColor(r, g, b, a)
         edge:Show()
     end
+    local rounded = _G.MSUF_RoundedUF_OnSpellIndicatorEdge
+    if rounded and rounded(button, parentFrame, target, true, thickness, r, g, b, a,
+        effect and effect.type == "pulse" and "ADD" or "BLEND") then
+        for i = 1, 4 do edges[i]:Hide() end
+    end
 end
 
 local function HideEffectRegions(button)
@@ -943,6 +948,8 @@ local function HideEffectRegions(button)
             if edges[i] then edges[i]:Hide() end
         end
     end
+    local rounded = _G.MSUF_RoundedUF_OnSpellIndicatorEdge
+    if rounded then rounded(button, nil, nil, false) end
     StopAnimatedGlow(button and button._msufA3SpellIndicatorEffectRoot)
     StopFrameGlow(button and button._msufA3SpellIndicatorEffectRoot)
     UnregisterNameOverlay(button)

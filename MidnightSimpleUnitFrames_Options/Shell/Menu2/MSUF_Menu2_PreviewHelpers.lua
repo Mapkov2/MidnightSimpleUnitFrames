@@ -18,6 +18,10 @@ local floor = math.floor
 local min = math.min
 CP.WHITE8 = CP.WHITE8 or "Interface\\Buttons\\WHITE8X8"
 CP.MEDIA = CP.MEDIA or ("Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\ClassPower\\")
+local ROUNDED_MEDIA_ROOT = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\"
+local ROUNDED_SLICE_MARGIN = 9.5
+local STRETCHED_SLICE_MODE = _G.Enum and _G.Enum.UITextureSliceMode
+    and _G.Enum.UITextureSliceMode.Stretched
 local PREVIEW_BACKGROUND_MEDIA = "Interface\\AddOns\\MidnightSimpleUnitFrames_Options\\Media\\PreviewBackgrounds\\"
 -- Onboarding tour screenshots. They live beside the preview backgrounds in the
 -- Options companion and deliberately stay out of `T.media`: theme media must
@@ -27,6 +31,32 @@ local TOUR_PREVIEW_MEDIA = "Interface\\AddOns\\MidnightSimpleUnitFrames_Options\
 H.TourPreviews = {
     rounded_frames = { texture = TOUR_PREVIEW_MEDIA .. "rounded_frames.png", aspect = 2 },
 }
+
+-- Full Unit/Group previews use the exact clean media family selected by the
+-- live rounded runtime. Resolving this only while a preview is repainted keeps
+-- slider feedback accurate without putting any work on gameplay paths.
+function H.ResolveRoundedMedia()
+    local bars = _G.MSUF_DB and _G.MSUF_DB.bars
+    local strength = floor((tonumber(bars and bars.roundedCornerStrength) or 3) + 0.5)
+    if strength < 1 then strength = 1 elseif strength > 5 then strength = 5 end
+    return ROUNDED_MEDIA_ROOT .. "rounded_clean_mask_s" .. strength .. ".png",
+        ROUNDED_MEDIA_ROOT .. "rounded_clean_edge_s" .. strength .. ".png",
+        strength
+end
+
+function H.ApplyRoundedMediaSlice(region, strength)
+    if not region then return end
+    strength = tonumber(strength) or 3
+    if region._msufPreviewRoundedSliceStrength == strength then return end
+    region._msufPreviewRoundedSliceStrength = strength
+    if type(region.SetTextureSliceMargins) == "function" then
+        region:SetTextureSliceMargins(ROUNDED_SLICE_MARGIN, ROUNDED_SLICE_MARGIN,
+            ROUNDED_SLICE_MARGIN, ROUNDED_SLICE_MARGIN)
+    end
+    if STRETCHED_SLICE_MODE ~= nil and type(region.SetTextureSliceMode) == "function" then
+        region:SetTextureSliceMode(STRETCHED_SLICE_MODE)
+    end
+end
 local PREVIEW_BACKGROUND_DEFAULT = "bright_stone"
 local PREVIEW_BACKGROUND_ASPECT = 2
 local PREVIEW_BACKGROUND_CLEAR = { 0, 0, 0, 0 }
@@ -2362,6 +2392,7 @@ function H.EnsureRoundedMask(mock, key, anchor, tex, maskStoreKey, maskTexture, 
         mask:SetTexture(maskTexture, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
         mask:SetAllPoints(anchor)
     end
+    H.ApplyRoundedMediaSlice(mask, mock._msufPreviewRoundedMediaStrength)
     return mask
 end
 function H.SetMask(mock, tex, mask, maskedStoreKey)
@@ -2460,6 +2491,7 @@ function H.EnsureRoundedVisuals(mock, opts)
         mock[edgeKey]._msufPreviewRoundedEdgeTexture = opts.edgeTexture
         mock[edgeKey]:SetTexture(opts.edgeTexture, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
     end
+    H.ApplyRoundedMediaSlice(mock[edgeKey], opts.mediaStrength)
     return true
 end
 function H.ForEachRoundedEdge(mock, opts, fn)
@@ -2526,6 +2558,7 @@ function H.ApplyRoundedEdgeStack(mock, edgeSize, opts)
             edge._msufPreviewRoundedEdgeTexture = edgeTexture
             edge:SetTexture(edgeTexture, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
         end
+        H.ApplyRoundedMediaSlice(edge, opts.mediaStrength)
         if edge._msufPreviewRoundedAnchor ~= mock or edge._msufPreviewRoundedPad ~= i then
             edge._msufPreviewRoundedAnchor = mock
             edge._msufPreviewRoundedPad = i

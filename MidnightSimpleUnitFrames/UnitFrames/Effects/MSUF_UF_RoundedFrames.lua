@@ -44,6 +44,9 @@ local ACTIVE_BORDER_A = 1.00
 local forceDisabled = false
 local unitMouseoverHotEnabled = false
 local groupMouseoverHotEnabled = false
+local groupIndicatorHotEnabled = false
+local unitRoundedVisualHotEnabled = false
+local roundedGroupBlockHosts = setmetatable({}, { __mode = "k" })
 local roundedMediaStrength = DEFAULT_ROUNDED_STRENGTH
 local roundedMaskPath = CLEAN_MASK_PATHS[DEFAULT_ROUNDED_STRENGTH]
 local roundedEdgePath = CLEAN_EDGE_PATHS[DEFAULT_ROUNDED_STRENGTH]
@@ -233,7 +236,7 @@ end
 
 local function LayoutRoundedEdge(edge, anchor, thickness, padOverride)
   if not (edge and anchor) then return false end
-  local pad = padOverride and ClampEdgeSize(padOverride, 1, 8) or RoundedEdgeLayoutPad(thickness, 1)
+  local pad = padOverride and ClampEdgeSize(padOverride, 1, 16) or RoundedEdgeLayoutPad(thickness, 1)
   if pad <= 0 then
     edge:Hide()
     return false
@@ -604,7 +607,10 @@ local function ApplyUnitRoundedEdge(f, enabled, active, activeThickness)
     HideRoundedEdgeStack(f, edge, "_msufRUF_EdgeStack")
     return
   end
-  local anchor = f.bg or f
+  -- The Unit frame is the physical outer body. Boss-frame layout can shrink
+  -- f.bg to the health-only rectangle when power is embedded, so using f.bg
+  -- here would make the outline/highlight disagree with the shared mask.
+  local anchor = f
   local thickness = ResolveUnitEdgeThickness(f, active, activeThickness)
   if not edge then
     if not CanCreateRoundedRegion(edge) then return end
@@ -637,11 +643,11 @@ local function SetUnitRoundedEdgeColor(f, active, r, g, b, a, thickness)
     return true
   end
   if active then
-    if not ApplyRoundedEdgeStack(f, f, edge, f.bg or f, resolvedThickness, "_msufRUF_EdgeStack", "_msufRUF_MaskedTextures", "BACKGROUND", -7) then return false end
+    if not ApplyRoundedEdgeStack(f, f, edge, f, resolvedThickness, "_msufRUF_EdgeStack", "_msufRUF_MaskedTextures", "BACKGROUND", -7) then return false end
     SetRoundedEdgeStackColor(f, edge, "_msufRUF_EdgeStack", r or 1, g or 1, b or 1, a or ACTIVE_BORDER_A)
   else
     local br, bgc, bb, ba = ResolveBaseEdgeColor(f)
-    if not ApplyRoundedEdgeStack(f, f, edge, f.bg or f, resolvedThickness, "_msufRUF_EdgeStack", "_msufRUF_MaskedTextures", "BACKGROUND", -7) then return false end
+    if not ApplyRoundedEdgeStack(f, f, edge, f, resolvedThickness, "_msufRUF_EdgeStack", "_msufRUF_MaskedTextures", "BACKGROUND", -7) then return false end
     SetRoundedEdgeStackColor(f, edge, "_msufRUF_EdgeStack", br, bgc, bb, ba)
   end
   return true
@@ -671,7 +677,7 @@ local function ApplyUnitRoundedHoverEdge(f, enabled)
     return edge
   end
 
-  local anchor = f.bg or f
+  local anchor = f
   if f.highlightBorder and f.highlightBorder.Hide then f.highlightBorder:Hide() end
   container = container or EnsureRoundedHoverContainer(f, f, "_msufRUF_HoverContainer")
   if not container then return nil end
@@ -918,6 +924,241 @@ ApplyGroupRoundedEdge = function(f, enabled)
   return edge
 end
 
+local function GroupIndicatorKeys(kind)
+  if kind == "target" then
+    return "_msufRGFTargetEdge", "_msufRGFTargetEdgeStack", "_msufRGFTargetIndicator"
+  end
+  if kind == "focus" then
+    return "_msufRGFFocusEdge", "_msufRGFFocusEdgeStack", "_msufRGFFocusIndicator"
+  end
+end
+
+local function ApplyGroupRoundedIndicator(f, kind, enabled, shown, thickness, r, g, b, a)
+  if not f then return false end
+  local edgeKey, stackKey, stateKey = GroupIndicatorKeys(kind)
+  if not edgeKey then return false end
+  if not groupIndicatorHotEnabled then return false end
+
+  local state = f[stateKey]
+  if enabled == nil and thickness == nil and r == nil and g == nil and b == nil and a == nil then
+    if not state then return true end
+    state.shown = shown == true
+    if state.enabled == true and state.shown then
+      ShowRoundedEdgeStack(f, f[edgeKey], stackKey)
+    else
+      HideRoundedEdgeStack(f, f[edgeKey], stackKey)
+    end
+    return true
+  end
+  if not state and enabled ~= true then return true end
+  if not state then
+    state = {}
+    f[stateKey] = state
+  end
+  if enabled ~= nil then state.enabled = enabled == true end
+  if shown ~= nil then state.shown = shown == true end
+  if thickness ~= nil then state.thickness = ClampEdgeSize(thickness, 1, 16) end
+  if r ~= nil then state.r = r end
+  if g ~= nil then state.g = g end
+  if b ~= nil then state.b = b end
+  if a ~= nil then state.a = a end
+
+  local edge = f[edgeKey]
+  if state.enabled ~= true then
+    HideRoundedEdgeStack(f, edge, stackKey)
+    return true
+  end
+
+  local parent = f.barGroup or f
+  if not edge then
+    if not CanCreateRoundedRegion(edge) then return false end
+    edge = parent:CreateTexture(nil, "OVERLAY", nil, kind == "target" and 7 or 6)
+    SE_SnapOff(edge)
+    f[edgeKey] = edge
+  end
+  local size = state.thickness or 2
+  if not ApplyRoundedEdgeStack(f, parent, edge, parent, size, stackKey,
+      "_msufRGF_MaskedTextures", "OVERLAY", kind == "target" and 7 or 6) then
+    return false
+  end
+  SetRoundedEdgeStackColor(f, edge, stackKey, state.r or 1, state.g or 1, state.b or 1, state.a or 1)
+  if state.shown then ShowRoundedEdgeStack(f, edge, stackKey) else HideRoundedEdgeStack(f, edge, stackKey) end
+  return true
+end
+
+local GROUP_INDICATOR_EDGE_KEYS = { "top", "bottom", "left", "right" }
+local function HideGroupIndicatorSquareEdges(edges)
+  if type(edges) ~= "table" then return end
+  for i = 1, #GROUP_INDICATOR_EDGE_KEYS do
+    local edge = edges[GROUP_INDICATOR_EDGE_KEYS[i]]
+    if edge and edge.Hide then edge:Hide() end
+  end
+end
+
+local function PrepareCurrentGroupRoundedIndicators(f)
+  local cfg = f and f.MSUFSpec and f.MSUFSpec.group
+  if not cfg then return end
+  local targetHandled = ApplyGroupRoundedIndicator(f, "target", cfg.targetIndicator == true,
+    f._msufGFTargetVisualShown == true, 2, cfg.targetR or 1, cfg.targetG or 1, cfg.targetB or 1, 1)
+  if targetHandled then HideGroupIndicatorSquareEdges(f.MSUFGFTargetEdges) end
+
+  local focusSize = math.max(1, math.floor((tonumber(cfg.focusSize) or 2) + 0.5))
+    + (tonumber(cfg.focusOffset) or 0)
+  local focusHandled = ApplyGroupRoundedIndicator(f, "focus", cfg.focusIndicator == true,
+    f._msufGFFocusVisualShown == true, focusSize,
+    cfg.focusR or 0.5, cfg.focusG or 0.5, cfg.focusB or 1, 1)
+  if focusHandled then HideGroupIndicatorSquareEdges(f.MSUFGFFocusEdges) end
+end
+
+local function SetGroupBlockSquareBorderShown(host, shown)
+  local edges = host and host.MSUFGFGroupBorder
+  if type(edges) ~= "table" then return end
+  for i = 1, #GROUP_INDICATOR_EDGE_KEYS do
+    local edge = edges[GROUP_INDICATOR_EDGE_KEYS[i]]
+    if edge then
+      if shown and edge.Show then edge:Show() elseif edge.Hide then edge:Hide() end
+    end
+  end
+end
+
+local function ApplyGroupBlockRoundedBorder(host, conf, enabled)
+  if not host then return false end
+  local state = host._msufRGFBlockBorderState
+  if not groupIndicatorHotEnabled then return false end
+  if enabled ~= true then
+    if state then state.enabled = false end
+    HideRoundedEdgeStack(host, host._msufRGFBlockBorderEdge, "_msufRGFBlockBorderEdgeStack")
+    return true
+  end
+  if type(conf) ~= "table" then return false end
+  if not state then
+    state = {}
+    host._msufRGFBlockBorderState = state
+  end
+  state.enabled = true
+  state.size = ClampEdgeSize(conf.groupBorderSize or conf.size, 1, 16)
+  state.pad = tonumber(conf.groupBorderPadding or conf.pad) or 2
+  state.r, state.g, state.b, state.a = conf.groupBorderR or conf.r or 0.38,
+    conf.groupBorderG or conf.g or 0.68, conf.groupBorderB or conf.b or 1,
+    conf.groupBorderA or conf.a or 0.95
+  roundedGroupBlockHosts[host] = true
+
+  local anchor = host._msufRGFBlockBorderAnchor
+  if not anchor then
+    if not (CreateFrame and CanCreateRoundedRegion(anchor)) then return false end
+    anchor = CreateFrame("Frame", nil, host)
+    if anchor.EnableMouse then anchor:EnableMouse(false) end
+    host._msufRGFBlockBorderAnchor = anchor
+  end
+  local offset = state.pad - state.size
+  anchor:ClearAllPoints()
+  anchor:SetPoint("TOPLEFT", host, "TOPLEFT", -offset, offset)
+  anchor:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", offset, -offset)
+
+  local edge = host._msufRGFBlockBorderEdge
+  if not edge then
+    if not CanCreateRoundedRegion(edge) then return false end
+    edge = host:CreateTexture(nil, "OVERLAY")
+    SE_SnapOff(edge)
+    host._msufRGFBlockBorderEdge = edge
+  end
+  if not ApplyRoundedEdgeStack(host, host, edge, anchor, state.size,
+      "_msufRGFBlockBorderEdgeStack", "_msufRGFBlockBorderMasked", "OVERLAY", 0) then
+    return false
+  end
+  SetRoundedEdgeStackColor(host, edge, "_msufRGFBlockBorderEdgeStack",
+    state.r, state.g, state.b, state.a)
+  SetGroupBlockSquareBorderShown(host, false)
+  return true
+end
+
+local function RefreshGroupBlockRoundedBorders(enabled)
+  for host in pairs(roundedGroupBlockHosts) do
+    local state = host and host._msufRGFBlockBorderState
+    if state and state.enabled == true then
+      if enabled then
+        ApplyGroupBlockRoundedBorder(host, state, true)
+      else
+        HideRoundedEdgeStack(host, host._msufRGFBlockBorderEdge, "_msufRGFBlockBorderEdgeStack")
+        SetGroupBlockSquareBorderShown(host, true)
+      end
+    end
+  end
+end
+
+local function SetSpellIndicatorSquareEdgesShown(edges, shown)
+  if type(edges) ~= "table" then return end
+  for i = 1, 4 do
+    local edge = edges[i]
+    if edge then
+      if shown and edge.Show then edge:Show() elseif edge.Hide then edge:Hide() end
+    end
+  end
+end
+
+local function ApplySpellIndicatorRoundedEdge(button, frame, target, shown, thickness, r, g, b, a, blendMode)
+  if not button then return false end
+  local state = button._msufRUFSpellIndicator
+  if shown ~= true then
+    if state then
+      state.shown = false
+      HideRoundedEdgeStack(button, button._msufRUFSpellIndicatorEdge, "_msufRUFSpellIndicatorEdgeStack")
+    end
+    return state ~= nil
+  end
+
+  local rounded = FrameIsGroup(frame) and groupIndicatorHotEnabled or unitRoundedVisualHotEnabled
+  if not rounded or not (frame and target) then return false end
+  local root = button._msufA3SpellIndicatorEffectRoot
+  if not root then return false end
+  if not state then
+    state = {}
+    button._msufRUFSpellIndicator = state
+  end
+  state.frame, state.target, state.shown = frame, target, true
+  state.thickness = ClampEdgeSize(thickness, 1, 16)
+  state.r, state.g, state.b, state.a = r or 1, g or 1, b or 1, a or 1
+  state.blendMode = blendMode or "BLEND"
+
+  local edge = button._msufRUFSpellIndicatorEdge
+  if not edge then
+    if not CanCreateRoundedRegion(edge) then return false end
+    edge = root:CreateTexture(nil, "OVERLAY")
+    SE_SnapOff(edge)
+    button._msufRUFSpellIndicatorEdge = edge
+  end
+  if not ApplyRoundedEdgeStack(button, root, edge, target, state.thickness,
+      "_msufRUFSpellIndicatorEdgeStack", "_msufRUFSpellIndicatorMasked", "OVERLAY", 0) then
+    return false
+  end
+  SetRoundedEdgeStackColor(button, edge, "_msufRUFSpellIndicatorEdgeStack",
+    state.r, state.g, state.b, state.a)
+  local stack = button._msufRUFSpellIndicatorEdgeStack
+  local count = stack and ClampEdgeSize(stack._msufCount, 0, 16) or 0
+  for i = 1, count do
+    local part = (i == 1) and edge or stack[i]
+    if part and part.SetBlendMode then part:SetBlendMode(state.blendMode) end
+  end
+  return true
+end
+
+local function RefreshSpellIndicatorRoundedEdges(frame, enabled)
+  local buttons = frame and frame._msufA3SpellIndicatorEffectButtons
+  if type(buttons) ~= "table" then return end
+  for button in pairs(buttons) do
+    local state = button and button._msufRUFSpellIndicator
+    if state and state.shown == true then
+      if enabled and ApplySpellIndicatorRoundedEdge(button, frame, state.target, true, state.thickness,
+          state.r, state.g, state.b, state.a, state.blendMode) then
+        SetSpellIndicatorSquareEdgesShown(button._msufA3SpellIndicatorEdges, false)
+      else
+        HideRoundedEdgeStack(button, button._msufRUFSpellIndicatorEdge, "_msufRUFSpellIndicatorEdgeStack")
+        SetSpellIndicatorSquareEdgesShown(button._msufA3SpellIndicatorEdges, true)
+      end
+    end
+  end
+end
+
 local MODERN_BORDER_EDGE_KEYS = { "top", "bottom", "left", "right" }
 
 local function SetModernBorderEdgesSuppressed(f, suppressed)
@@ -966,7 +1207,7 @@ local function ApplyModernRoundedBorderVisual(f, shown, thickness, r, g, b, a)
   end
 
   local parent = group and (f.barGroup or f) or f
-  local anchor = group and (f.barGroup or f) or (f.bg or f)
+  local anchor = group and (f.barGroup or f) or f
   local layer = "BACKGROUND"
   local subLevel = group and -8 or -7
   if not edge then
@@ -1227,7 +1468,7 @@ local function ApplyDispelOverlayMask(f, region)
     MaskGroupTexture(f, region, shared or f.health or f.barGroup or f)
   else
     if not RoundedUnitFramesEnabled() then return false end
-    local shared = RoundedPowerBarsEnabled() and PowerIsEmbedded(f) and (f.bg or f) or nil
+    local shared = RoundedPowerBarsEnabled() and PowerIsEmbedded(f) and f or nil
     MaskTexture(f, region, shared or f.hpBar or f.bg or f)
   end
   return true
@@ -1329,6 +1570,7 @@ local function ApplyToUnitFrame(f)
     ApplyUnitRoundedEdge(f, false)
     ApplyUnitRoundedHoverEdge(f, false)
     ApplyPowerRoundedEdge(f, false)
+    RefreshSpellIndicatorRoundedEdges(f, false)
     SetModernBorderEdgesSuppressed(f, false)
     if SUPPRESS_NATIVE_OUTLINE then
       if f and f.ForceUpdate then f:ForceUpdate("ROUNDED_OFF") end
@@ -1344,12 +1586,15 @@ local function ApplyToUnitFrame(f)
   PrewarmAndApplyModernBorderVisual(f)
   ApplyUnitRoundedHoverEdge(f, RoundedMouseoverEnabled())
   ApplyPowerRoundedEdge(f, roundPower)
-  local embeddedPower = roundPower and PowerIsEmbedded(f)
-  local sharedFrameMaskAnchor = embeddedPower and (f.bg or f) or nil
+  RefreshSpellIndicatorRoundedEdges(f, true)
+  local powerBar = f.targetPowerBar or f.powerBar
+  local roundPowerSurface = roundPower and not (powerBar and powerBar._msufPowerShapeActive == true)
+  local embeddedPower = roundPowerSurface and PowerIsEmbedded(f)
+  local sharedFrameMaskAnchor = embeddedPower and f or nil
   local healthMaskAnchor = sharedFrameMaskAnchor or f.hpBar
 
   if f.bg then
-    MaskTexture(f, f.bg, f.bg)
+    MaskTexture(f, f.bg, sharedFrameMaskAnchor or f.bg)
   end
 
   if f.hpBar and type(f.hpBar.GetStatusBarTexture) == "function" then
@@ -1366,14 +1611,14 @@ local function ApplyToUnitFrame(f)
     MaskTexture(f, f.tempMaxHealthBackground, sharedFrameMaskAnchor or f.tempMaxHealthBar or f.hpBar)
   end
   MaskStatusBarsAt(f, false, sharedFrameMaskAnchor, f.tempMaxHealthBar, f.absorbBar, f.healAbsorbBar)
+  MaskStatusBarFill(f, f.overAbsorbGlowBar, false, healthMaskAnchor)
   MaskOverlayList(f, f._msufUFDispelOverlays or f._msufUFDispelOverlay, false, sharedFrameMaskAnchor)
   MaskStatusBarFill(f, f.incomingHealBar or f.selfHealPredBar, false, sharedFrameMaskAnchor)
   if f.selfHealPredBar ~= f.incomingHealBar then
     MaskStatusBarFill(f, f.selfHealPredBar, false, sharedFrameMaskAnchor)
   end
 
-  if roundPower then
-    local powerBar = f.targetPowerBar or f.powerBar
+  if roundPowerSurface then
     local powerMaskAnchor = sharedFrameMaskAnchor or powerBar
     if powerBar and type(powerBar.GetStatusBarTexture) == "function" then
       local pbFill = powerBar:GetStatusBarTexture()
@@ -1410,6 +1655,9 @@ ApplyToGroupFrame = function(f, kind)
     ApplyGroupRoundedEdge(f, false)
     ApplyGroupRoundedHoverEdge(f, false)
     ApplyPowerRoundedEdge(f, false)
+    RefreshSpellIndicatorRoundedEdges(f, false)
+    HideRoundedEdgeStack(f, f._msufRGFTargetEdge, "_msufRGFTargetEdgeStack")
+    HideRoundedEdgeStack(f, f._msufRGFFocusEdge, "_msufRGFFocusEdgeStack")
     SetModernBorderEdgesSuppressed(f, false)
     if f._msufRGF_Background then f._msufRGF_Background:Hide() end
     SE_ApplyGroupFrameShellVisuals(f, false)
@@ -1453,6 +1701,8 @@ ApplyToGroupFrame = function(f, kind)
   PrewarmAndApplyModernBorderVisual(f)
   ApplyGroupRoundedHoverEdge(f, mouseoverEnabled)
   ApplyPowerRoundedEdge(f, roundPower)
+  RefreshSpellIndicatorRoundedEdges(f, true)
+  PrepareCurrentGroupRoundedIndicators(f)
   local embeddedPower = roundPower and PowerIsEmbedded(f)
   local sharedFrameMaskAnchor = embeddedPower and (f.barGroup or f) or nil
   if f._msufRGF_Background then MaskGroupTexture(f, f._msufRGF_Background, f.barGroup) end
@@ -1467,8 +1717,12 @@ ApplyToGroupFrame = function(f, kind)
   end
   MaskStatusBarsAt(f, true, sharedFrameMaskAnchor,
     f.tempMaxHealthBar, f.incomingHealBar, f.absorbBar, f.healAbsorbBar)
+  MaskStatusBarFill(f, f.overAbsorbGlowBar, true, sharedFrameMaskAnchor or f.health)
   MaskOverlayList(f, f._msufGFDispelOverlays or f._msufGFDispelOverlay, true, sharedFrameMaskAnchor)
-  MaskStatusBarFill(f, f._msufGFDebuffStripe, true, sharedFrameMaskAnchor)
+  local debuffStripe = f.MSUFGFDebuffStripe or f._msufGFDebuffStripe
+  if debuffStripe then
+    MaskGroupTexture(f, debuffStripe, sharedFrameMaskAnchor or f.health or f.barGroup or f)
+  end
 
   MaskGFGradientTable(f, f.health, sharedFrameMaskAnchor)
   if roundPower then MaskGFGradientTable(f, f.power, sharedFrameMaskAnchor) end
@@ -1532,6 +1786,8 @@ local function ApplyAll()
   UpdateRoundedMediaState()
   MSUF.__msufRoundedPending = nil
   local enabled = IsEnabled()
+  unitRoundedVisualHotEnabled = enabled and RoundedUnitFramesEnabled() or false
+  groupIndicatorHotEnabled = enabled and RoundedGroupFramesEnabled() or false
   if not enabled and not MSUF.__msufRoundedUF_Hooked then
     ExportPublic("MSUF_RoundedUF_Active", nil)
     UpdateMouseoverHotState(false)
@@ -1544,6 +1800,11 @@ local function ApplyAll()
   ExportPublic("MSUF_RoundedUF_Active", enabled and true or nil)
   UpdateMouseoverHotState(enabled)
   local bulkGF = ResolveGF()
+  if bulkGF and type(bulkGF.ApplyGroupBorder) == "function" then
+    -- Re-enter the existing cold Group-border painter so anchors created while
+    -- Rounded was disabled are adopted immediately on enable/startup.
+    bulkGF.ApplyGroupBorder()
+  end
   local restoreKinds = bulkGF and type(bulkGF.RefreshVisuals) == "function" and {} or nil
   roundedBulkRestoreKinds = restoreKinds
   ForEachUnitFrame(function(f)
@@ -1554,6 +1815,7 @@ local function ApplyAll()
     end
   end)
   ForEachGroupFrame(ApplyToGroupFrame)
+  RefreshGroupBlockRoundedBorders(groupIndicatorHotEnabled)
   roundedBulkRestoreKinds = nil
   if restoreKinds and next(restoreKinds) then
     local GF = bulkGF
@@ -1654,6 +1916,25 @@ local function HookOnce()
   ExportPublic("MSUF_RoundedUF_OnGroupHighlightChanged", function(border)
     return HandleGroupHighlightChanged(border)
   end)
+  ExportPublic("MSUF_RoundedUF_OnGroupIndicatorPrepared", function(frame, kind, enabled, shown, thickness, r, g, b, a)
+    return ApplyGroupRoundedIndicator(frame, kind, enabled, shown, thickness, r, g, b, a)
+  end)
+  ExportPublic("MSUF_RoundedUF_OnGroupIndicatorChanged", function(frame, kind, shown)
+    return ApplyGroupRoundedIndicator(frame, kind, nil, shown)
+  end)
+  ExportPublic("MSUF_RoundedUF_OnGroupAuraVisualCreated", function(frame, region)
+    if not (frame and region and RoundedGroupFramesEnabled()) then return false end
+    if IsCombatLocked() then DeferApply(); return false end
+    local shared = RoundedPowerBarsEnabled() and PowerIsEmbedded(frame) and (frame.barGroup or frame) or nil
+    MaskGroupTexture(frame, region, shared or frame.health or frame.barGroup or frame)
+    return true
+  end)
+  ExportPublic("MSUF_RoundedUF_OnSpellIndicatorEdge", function(button, frame, target, shown, thickness, r, g, b, a, blendMode)
+    return ApplySpellIndicatorRoundedEdge(button, frame, target, shown, thickness, r, g, b, a, blendMode)
+  end)
+  ExportPublic("MSUF_RoundedUF_OnGroupBlockBorder", function(host, conf, enabled)
+    return ApplyGroupBlockRoundedBorder(host, conf, enabled)
+  end)
   ExportPublic("MSUF_RoundedUF_OnModulesApplied", function()
     ApplyAll()
   end)
@@ -1685,6 +1966,11 @@ local ROUNDED_CALLBACK_NAMES = {
   "MSUF_RoundedUF_OnGroupFrameApplied",
   "MSUF_RoundedUF_OnGroupBackdropAlphaChanged",
   "MSUF_RoundedUF_OnGroupHighlightChanged",
+  "MSUF_RoundedUF_OnGroupIndicatorPrepared",
+  "MSUF_RoundedUF_OnGroupIndicatorChanged",
+  "MSUF_RoundedUF_OnGroupAuraVisualCreated",
+  "MSUF_RoundedUF_OnSpellIndicatorEdge",
+  "MSUF_RoundedUF_OnGroupBlockBorder",
   "MSUF_RoundedUF_OnModulesApplied",
   "MSUF_RoundedUF_OnRareVisualsRefreshed",
 }

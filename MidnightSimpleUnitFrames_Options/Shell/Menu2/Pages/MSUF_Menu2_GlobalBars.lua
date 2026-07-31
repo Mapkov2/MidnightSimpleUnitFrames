@@ -75,6 +75,7 @@ local BAR_SETTING_BY_PATH = {
     ["rounded.roundedGroupFrames"] = "bars.roundedGroupFrames",
     ["rounded.roundedPowerBars"] = "bars.roundedPowerBars",
     ["rounded.roundedMouseover"] = "bars.roundedMouseover",
+    ["rounded.roundedAuraBorders"] = "bars.roundedAuraBorders",
     ["rounded.roundedCornerStrength"] = "bars.roundedCornerStrength",
     ["power.realtime_text"] = "bars.realtimePowerText",
     ["textures.power_foreground"] = "bars.powerBarTexture",
@@ -129,6 +130,7 @@ local BAR_DYNAMIC_SETTING_KEYS_BY_PATH = {
     ["absorb.full_health_stripe"] = { "general.fullHealthAbsorbStripe" },
     ["outline.thickness"] = { "bars.barOutlineThickness" },
     ["outline.layer"] = { "bars.barOutlineLayer" },
+    ["outline.texture"] = { "bars.barOutlineTexture" },
     ["outline.color"] = { "general.barOutlineColor" },
     ["highlight.border_thickness"] = { "general.highlightBorderThickness" },
     ["highlight.border_mode.aggroOutlineMode"] = { "general.aggroOutlineMode" },
@@ -202,6 +204,7 @@ local BAR_DYNAMIC_SETTING_SUFFIX_BY_PATH = {
     ["absorb.full_health_stripe"] = "fullHealthAbsorbStripe",
     ["outline.thickness"] = "barOutlineThickness",
     ["outline.layer"] = "barOutlineLayer",
+    ["outline.texture"] = "barOutlineTexture",
     ["outline.color"] = "barOutlineColor",
     ["highlight.border_thickness"] = "highlightBorderThickness",
     ["highlight.border_mode.aggroOutlineMode"] = "aggroOutlineMode",
@@ -418,8 +421,16 @@ local function RequestUnitDispelOverlayRuntime(reason)
     end
     return result
 end
-local function ApplyRoundedRuntime()
-    return RequestApply("RequestRoundedBars", "MSUF2_ROUNDED", CurrentBarsScope())
+local function ApplyRoundedRuntime(refreshAuraBorders)
+    if refreshAuraBorders == nil then refreshAuraBorders = ReadB("roundedAuraBorders", true) == true end
+    local result = RequestApply("RequestRoundedBars", "MSUF2_ROUNDED", CurrentBarsScope())
+    if refreshAuraBorders == true then
+        local service = M.ApplyService or _G.MSUF_Menu2_ApplyService
+        if service and type(service.RequestAuras) == "function" then
+            service.RequestAuras("shared", "MSUF2_ROUNDED_AURA_BORDERS", { visuals = true })
+        end
+    end
+    return result
 end
 
 local function ShowRoundedReloadRequiredPopup()
@@ -445,7 +456,7 @@ local function SetRoundedBool(key, value, requireReload)
     local bars = Bars()
     if bars[key] == value then return end
     bars[key] = value
-    ApplyRoundedRuntime()
+    ApplyRoundedRuntime(key == "roundedAuraBorders" or key == "roundedFramesEnabled")
     if requireReload then ShowRoundedReloadRequiredPopup() end
 end
 local function RegisterRoundedSearch(control, label, extraKeywords, help, kind, meta)
@@ -464,7 +475,7 @@ local function RegisterRoundedSearch(control, label, extraKeywords, help, kind, 
         anchor = control._msuf2Title or control._msuf2Label or control,
         values = { "On", "Off", "Enable", "Disable", "Einschalten", "Ausschalten" },
         keywords = keywords,
-        help = help or "Controls the rounded frame texture style for unit frames, group frames, power bars, and mouseover highlights.",
+        help = help or "Controls the rounded frame texture style for unit frames, group frames, power bars, aura borders, and mouseover highlights.",
     }
     if type(meta) == "table" then for key, value in pairs(meta) do payload[key] = value end end
     M.RegisterSearchWidget(control, payload)
@@ -1625,7 +1636,7 @@ local function BuildAbsorbSection(ctx, b)
 end
 
 local function BuildOutlineSection(ctx, b)
-    local outline = b:CollapsibleSection("bars_outline", "Frame Outline", 178, false)
+    local outline = b:CollapsibleSection("bars_outline", "Frame Outline", 252, false)
     local outlineSlider = W.Slider(outline, "Bar outline thickness", 0, 8, 1, 300)
     M.BindNumberWidget(ctx, outlineSlider,
         function() return tonumber(BarScopeGetBars("barOutlineThickness", 1)) or 1 end,
@@ -1642,6 +1653,19 @@ local function BuildOutlineSection(ctx, b)
             RequestOutlineRuntime()
         end,
         0, Meta("outline.layer", "setting", { step = 1, roundStep = true }))
+    local outlineTexture = W.Dropdown(outline, "Outline texture",
+        function() return TextureValues("None (solid color)") end, 300)
+    M.BindDropdownWidget(ctx, outlineTexture,
+        function() return BarScopeGetBars("barOutlineTexture", "") end,
+        function(value)
+            BarScopeSetBars("barOutlineTexture", value or "", "MSUF2_BAR_OUTLINE_TEXTURE", true)
+            RequestOutlineRuntime()
+        end,
+        Meta("outline.texture"))
+    local hintY = outline._msuf2CursorY or -184
+    outline._msuf2CursorY = hintY - 26
+    W.Text(outline, "Rounded frames ignore the outline texture and keep the solid outline color.",
+        outline._msuf2ContentX or 16, hintY, 560)
     AttachBarsColorShortcut(outline,
         "Frame Outline Color",
         "Outline color for the selected Bars scope.",
@@ -1665,6 +1689,11 @@ local function BuildOutlineSection(ctx, b)
         Meta("outline.color"))
     M.BindGateGroup(ctx, nil, {
         { controls = { outlineSlider, outlineLayer }, on = ScopedControls },
+        -- Rounded frames replace the square edges with the tinted rounded edge
+        -- stack, so a texture pick would be a silent no-op there; disable it.
+        { controls = { outlineTexture }, on = function()
+            return ScopedControls() and ReadB("roundedFramesEnabled", false) ~= true
+        end },
     })
 end
 
@@ -1698,6 +1727,7 @@ local function BuildRoundedSection(ctx, b)
         { "groups", "Group frames", roundLeftX, -128, "roundedGroupFrames", true, nil, "rounded group frames|rounded party frames|rounded raid frames|group frame corners|abgerundete gruppenframes|party raid abgerundet", "Enable or disable rounded textures on group frames." },
         { "power", "Power bars", roundRightX, -52, "roundedPowerBars", true, nil, "rounded power bars|rounded powerbar|power bar corners|powerbar corners|powerbars abgerundet|powerbar abrunden", "Enable or disable rounded textures on power bars." },
         { "mouseover", "Mouseover highlights", roundRightX, -90, "roundedMouseover", true, nil, "rounded mouseover|rounded hover|rounded hover border|mouseover rounded|mouseover highlight rounded|mouseover abgerundet|hover abgerundet", "Enable or disable rounded mouseover highlight edges." },
+        { "auras", "Aura borders", roundRightX, -128, "roundedAuraBorders", true, nil, "rounded aura borders|rounded aura icons|aura border corners|aura borders abgerundet|auren rahmen abgerundet", "Round normal aura icon borders and native dispel-type borders with the selected corner strength." },
     }, { ["*"] = function(s) return BindRoundedToggle(s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10]), s[1] end })
     local roundedPreview
     local roundingSlider = W.Slider(rounded, "Corner rounding", 1, 5, 1, 300)
@@ -1721,7 +1751,7 @@ local function BuildRoundedSection(ctx, b)
         roundingApplyPending = nil
         roundingReleaseScheduled = nil
         CancelRoundingApplyTimer()
-        ApplyRoundedRuntime()
+        ApplyRoundedRuntime(ReadB("roundedAuraBorders", true) == true)
         return true
     end
     local function ScheduleRoundingRelease()
@@ -1763,18 +1793,88 @@ local function BuildRoundedSection(ctx, b)
     roundingSlider:HookScript("OnShow", FlushRoundingRuntime)
     RegisterRoundedSearch(roundingSlider, "Corner rounding",
         "corner rounding|rounding strength|rounded strength|corner radius|rounding radius|abrundungsstaerke|eckenradius|staerke der abrundung",
-        "Controls how subtle or strong the rounded corners appear. Masks, outlines, highlights, mouseover edges, and power bars use the same value.",
+        "Controls how subtle or strong the rounded corners appear. Masks, outlines, highlights, mouseover edges, power bars, and aura borders use the same value.",
         "slider", Meta("rounded.roundedCornerStrength", "setting", { step = 1, min = 1, max = 5 }))
     roundedPreview = CreateRoundedTexturePreview(rounded, roundLeftX, -214, max(320, (rounded._msuf2Width or ctx.width or 720) - 60))
     RegisterRoundedSearch(roundedPreview, "Rounded Texture Preview",
         "rounded preview|rounded example|rounded image|rounded frame preview|preview rounded frames|rounded frames aussehen|vorschau abgerundete frames",
         "Shows a small preview of the rounded frame texture style.", "preview")
-    local roundedDependentControls = { roundedControls.units, roundedControls.groups, roundedControls.power, roundedControls.mouseover, roundingSlider }
+    local roundedDependentControls = { roundedControls.units, roundedControls.groups, roundedControls.power, roundedControls.mouseover, roundedControls.auras, roundingSlider }
     SyncRoundedControls(M.BindGateGroup(ctx, nil, {
         { controls = roundedDependentControls, on = function() return ReadB("roundedFramesEnabled", false) == true end },
     }, {
         also = function() if roundedPreview and roundedPreview.RefreshRoundedPreview then roundedPreview:RefreshRoundedPreview() end end,
     }))
+end
+
+-- Upgrade-tour playground for the 5.x highlight card. The rounded rework is the
+-- one 6.0 change that has to be felt rather than read, so the tour hosts the
+-- real controls; reading, writing, applying and the master gate all stay here.
+local ROUNDED_TOUR_STRENGTHS = {}
+for i = 1, 5 do ROUNDED_TOUR_STRENGTHS[i] = { value = i, text = tostring(i) } end
+
+local function RoundedTourGet(key, defaultOn)
+    return function()
+        local value = ReadB(key, defaultOn)
+        if defaultOn then return value ~= false end
+        return value == true
+    end
+end
+
+local function RoundedTourSet(key, requireReload)
+    return function(value) SetRoundedBool(key, value, requireReload) end
+end
+
+local function SetRoundedTourStrength(value)
+    value = floor((tonumber(value) or 3) + 0.5)
+    if value < 1 then value = 1 elseif value > 5 then value = 5 end
+    local bars = Bars()
+    if bars.roundedCornerStrength == value then return end
+    bars.roundedCornerStrength = value
+    -- A segment commits once per click, so the page slider's drag debounce
+    -- (ROUNDED_STRENGTH_APPLY_DELAY) has nothing to smooth out here.
+    ApplyRoundedRuntime()
+end
+
+if type(M.RegisterUpgradeTourControls) == "function" then
+    M.RegisterUpgradeTourControls("rounded_frames", {
+        -- Grid height only; the tour adds its own "try it here" label above.
+        -- Two columns: 48 (toggle + segment row) + 36 + 36, each plus the 6px
+        -- row gap W.SettingsRows uses.
+        columns = 2,
+        height = 126,
+        rows = function()
+            return {
+                { id = "master", kind = "toggle", label = "Rounded frame texture",
+                    get = RoundedTourGet("roundedFramesEnabled", false),
+                    set = RoundedTourSet("roundedFramesEnabled", true) },
+                { id = "strength", kind = "segment", label = "Corner rounding",
+                    values = ROUNDED_TOUR_STRENGTHS,
+                    get = function() return floor(tonumber(Bars().roundedCornerStrength) or 3) end,
+                    set = SetRoundedTourStrength },
+                { id = "units", kind = "toggle", label = "Unit frames",
+                    get = RoundedTourGet("roundedUnitFrames", true), set = RoundedTourSet("roundedUnitFrames") },
+                { id = "groups", kind = "toggle", label = "Group frames",
+                    get = RoundedTourGet("roundedGroupFrames", true), set = RoundedTourSet("roundedGroupFrames") },
+                { id = "power", kind = "toggle", label = "Power bars",
+                    get = RoundedTourGet("roundedPowerBars", true), set = RoundedTourSet("roundedPowerBars") },
+                { id = "mouseover", kind = "toggle", label = "Mouseover highlights",
+                    get = RoundedTourGet("roundedMouseover", true), set = RoundedTourSet("roundedMouseover") },
+            }
+        end,
+        after = function(ctx, result)
+            local controls = result and result.controls
+            if type(controls) ~= "table" then return end
+            local refresh = M.BindGateGroup(ctx, nil, {
+                {
+                    controls = { controls.strength, controls.units, controls.groups,
+                        controls.power, controls.mouseover },
+                    on = function() return ReadB("roundedFramesEnabled", false) == true end,
+                },
+            })
+            if type(refresh) == "function" then refresh() end
+        end,
+    })
 end
 
 local function BuildHighlightSection(ctx, b)
@@ -2148,14 +2248,18 @@ end
 local function BuildUnitDispelSymbolSection(ctx, b)
     local probeW = min(900, max(320, (ctx.width or 720) - 40))
     local wide = probeW >= 760
+    -- Narrow mode stacks all thirteen controls in one column down to -654, so the
+    -- card and the section both have to reserve that full run. The old 566/630
+    -- pair was sized before the strata dropdown and the preview toggle existed and
+    -- pushed "Symbol strata" straight through the next accordion header.
     local section = b:CollapsibleSection("bars_unit_dispel_symbol", "UnitFrame Dispel Symbol",
-        wide and 520 or 630, false)
+        wide and 520 or 780, false)
     local sectionW = section._msuf2Width or ctx.width or 720
     local cardW = min(900, max(320, sectionW - 40))
     wide = cardW >= 760
     local card = W.ControlCard(section, "Symbol & Placement",
         "Shows a symbol naming the dispel type of an active debuff.",
-        20, -38, cardW, wide and 456 or 566)
+        20, -38, cardW, wide and 456 or 696)
     local Sync = M.RefreshProxy()
     local fieldW = min(280, cardW - 32)
     local sliderW = min(360, cardW - 72)
@@ -2325,7 +2429,7 @@ local GLOBAL_BARS_LAZY_SECTION_SPECS = {
         build = BuildTempMaxHealthSection,
     },
     { sectionId = "bars_absorb", title = "Absorb Display", height = 414, defaultOpen = true, build = BuildAbsorbSection },
-    { sectionId = "bars_outline", title = "Frame Outline", height = 178, build = BuildOutlineSection },
+    { sectionId = "bars_outline", title = "Frame Outline", height = 252, build = BuildOutlineSection },
     { sectionId = "bars_rounded", title = "Rounded Texture", height = ROUNDED_SECTION_HEIGHT, defaultOpen = true, build = BuildRoundedSection },
     { sectionId = "bars_highlight", title = "Highlight Borders", height = 710, defaultOpen = true, build = BuildHighlightSection },
     {

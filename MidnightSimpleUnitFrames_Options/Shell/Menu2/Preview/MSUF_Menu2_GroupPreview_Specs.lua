@@ -43,8 +43,8 @@ gf_auras=buffs
 gf_indicators=indicators
 ]],
     WHITE8X8 = "Interface\\Buttons\\WHITE8X8",
-    ROUNDED_MASK = maskRoot .. "rounded_bar_4x.tga",
-    ROUNDED_EDGE = maskRoot .. "rounded_bar_edge_4x.tga",
+    ROUNDED_MASK = maskRoot .. "rounded_clean_mask_s3.png",
+    ROUNDED_EDGE = maskRoot .. "rounded_clean_edge_s3.png",
     MIN_W = 380,
     MIN_H = 130,
     ROLE = "HEALER",

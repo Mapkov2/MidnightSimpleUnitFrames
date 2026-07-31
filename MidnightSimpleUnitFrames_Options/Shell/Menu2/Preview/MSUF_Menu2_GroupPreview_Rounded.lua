@@ -15,6 +15,7 @@ function Rounded.Install(deps)
     local WHITE8X8 = deps.WHITE8X8 or "Interface\\Buttons\\WHITE8X8"
     local GF_PREVIEW_ROUNDED_MASK = deps.ROUNDED_MASK
     local GF_PREVIEW_ROUNDED_EDGE = deps.ROUNDED_EDGE
+    local GF_PREVIEW_ROUNDED_STRENGTH = 3
     local ReadBarsBool = deps.ReadBarsBool or function(_, default) return default == true end
     local Round = deps.Round or function(value) return math.floor((tonumber(value) or 0) + 0.5) end
     local HealPredAnchorMode = deps.HealPredAnchorMode or function() return 3 end
@@ -101,6 +102,34 @@ local GF_PREVIEW_ROUNDED_OPTS = {
     snapOff = SnapOff,
     baseEdgeColor = function(mock) return BaseEdgeColor(mock) end,
 }
+local GF_PREVIEW_POWER_ROUNDED_OPTS = {
+    bgKey = "_msufGFRoundedPreviewBg",
+    edgeKey = "_msufGFRoundedPreviewEdge",
+    stackKey = "_msufGFRoundedPreviewEdgeStack",
+    countKey = "_msufGFRoundedPreviewEdgeCount",
+    whiteTexture = WHITE8X8,
+    edgeTexture = GF_PREVIEW_ROUNDED_EDGE,
+    edgeLayer = "OVERLAY",
+    edgeSubLevel = 6,
+    snapOff = SnapOff,
+    baseEdgeColor = function(mock)
+        if mock and mock._msufGFPreviewPowerBorderR ~= nil then
+            return mock._msufGFPreviewPowerBorderR, mock._msufGFPreviewPowerBorderG,
+                mock._msufGFPreviewPowerBorderB, mock._msufGFPreviewPowerBorderA
+        end
+        return BaseEdgeColor(mock)
+    end,
+}
+local function UpdateRoundedMedia(mock)
+    if type(PreviewHelpers.ResolveRoundedMedia) == "function" then
+        GF_PREVIEW_ROUNDED_MASK, GF_PREVIEW_ROUNDED_EDGE, GF_PREVIEW_ROUNDED_STRENGTH = PreviewHelpers.ResolveRoundedMedia()
+    end
+    mock._msufPreviewRoundedMediaStrength = GF_PREVIEW_ROUNDED_STRENGTH
+    GF_PREVIEW_ROUNDED_OPTS.edgeTexture = GF_PREVIEW_ROUNDED_EDGE
+    GF_PREVIEW_ROUNDED_OPTS.mediaStrength = GF_PREVIEW_ROUNDED_STRENGTH
+    GF_PREVIEW_POWER_ROUNDED_OPTS.edgeTexture = GF_PREVIEW_ROUNDED_EDGE
+    GF_PREVIEW_POWER_ROUNDED_OPTS.mediaStrength = GF_PREVIEW_ROUNDED_STRENGTH
+end
 local function EnsureRoundedVisuals(mock)
     return PreviewHelpers.EnsureRoundedVisuals and PreviewHelpers.EnsureRoundedVisuals(mock, GF_PREVIEW_ROUNDED_OPTS)
 end
@@ -110,13 +139,22 @@ end
 local function ApplyRoundedEdgeStack(mock, edgeSize)
     return PreviewHelpers.ApplyRoundedEdgeStack and PreviewHelpers.ApplyRoundedEdgeStack(mock, edgeSize, GF_PREVIEW_ROUNDED_OPTS)
 end
-local function ApplyRounded(mock, conf, powerOn, edgeSize)
+local function SetPowerRoundedEdgeShown(power, shown)
+    if PreviewHelpers.SetRoundedEdgeStackShown then
+        PreviewHelpers.SetRoundedEdgeStackShown(power, shown, GF_PREVIEW_POWER_ROUNDED_OPTS)
+    end
+    if power and power._msufGFRoundedPreviewBg then power._msufGFRoundedPreviewBg:Hide() end
+end
+local function ApplyRounded(mock, conf, powerOn, edgeSize, powerEmbed, powerDetached, powerEdgeSize)
     if not mock then return false end
-    if not RoundedEnabled() or not EnsureRoundedVisuals(mock) then
+    local enabled = RoundedEnabled()
+    if enabled then UpdateRoundedMedia(mock) end
+    if not enabled or not EnsureRoundedVisuals(mock) then
         mock._msufGFRoundedPreviewActive = nil
         ClearRoundedMasks(mock)
         if mock._roundedBg then mock._roundedBg:Hide() end
         SetRoundedEdgeStackShown(mock, false)
+        SetPowerRoundedEdgeShown(mock._power, false)
         return false
     end
     mock._msufGFRoundedPreviewActive = true
@@ -126,20 +164,24 @@ local function ApplyRounded(mock, conf, powerOn, edgeSize)
     local absorbTex = StatusBarTexture(mock._absorb)
     local healAbsorbTex = StatusBarTexture(mock._healAbsorb)
     local powerTex = StatusBarTexture(mock._power)
+    local roundPower = powerOn and RoundedPowerEnabled()
+    local sharedBody = roundPower and powerEmbed ~= false and powerDetached ~= true
+    local healthAnchor = sharedBody and mock or mock._health
+    local powerAnchor = sharedBody and mock or mock._power
     local bodyMask = EnsureRoundedMask(mock, "body", mock, mock._roundedBg)
-    local healthBgMask = EnsureRoundedMask(mock, "health", mock._health, mock._healthBg)
-    local healthTexMask = EnsureRoundedMask(mock, "health", mock._health, healthTex)
-    local tempMaxHealthBgMask = EnsureRoundedMask(mock, "tempMaxHealthBg", mock._tempMaxHealth, mock._tempMaxHealthBg)
-    local tempMaxHealthMask = EnsureRoundedMask(mock, "tempMaxHealth", mock._tempMaxHealth, tempMaxHealthTex)
-    local healPredMask = EnsureRoundedMask(mock, "healPred", mock._healPred, healPredTex)
-    local absorbMask = EnsureRoundedMask(mock, "absorb", mock._absorb, absorbTex)
-    local healAbsorbMask = EnsureRoundedMask(mock, "healAbsorb", mock._healAbsorb, healAbsorbTex)
+    local healthBgMask = EnsureRoundedMask(mock, "health", healthAnchor, mock._healthBg)
+    local healthTexMask = EnsureRoundedMask(mock, "health", healthAnchor, healthTex)
+    local tempMaxHealthBgMask = EnsureRoundedMask(mock, "tempMaxHealthBg", sharedBody and mock or mock._tempMaxHealth, mock._tempMaxHealthBg)
+    local tempMaxHealthMask = EnsureRoundedMask(mock, "tempMaxHealth", sharedBody and mock or mock._tempMaxHealth, tempMaxHealthTex)
+    local healPredMask = EnsureRoundedMask(mock, "healPred", sharedBody and mock or mock._healPred, healPredTex)
+    local absorbMask = EnsureRoundedMask(mock, "absorb", sharedBody and mock or mock._absorb, absorbTex)
+    local healAbsorbMask = EnsureRoundedMask(mock, "healAbsorb", sharedBody and mock or mock._healAbsorb, healAbsorbTex)
     local healPredMode = HealPredAnchorMode(conf)
     local gen = _G.MSUF_DB and _G.MSUF_DB.general
     local absorbMode = tonumber((conf and conf.hlOverride and conf.absorbAnchorMode ~= nil and conf.absorbAnchorMode) or (gen and gen.absorbAnchorMode)) or 2
     if absorbMode < 1 or absorbMode > 5 then absorbMode = 2 end
-    local powerBgMask = (powerOn and RoundedPowerEnabled()) and EnsureRoundedMask(mock, "power", mock._power, mock._powerBg) or nil
-    local powerTexMask = (powerOn and RoundedPowerEnabled()) and EnsureRoundedMask(mock, "power", mock._power, powerTex) or nil
+    local powerBgMask = roundPower and EnsureRoundedMask(mock, "power", powerAnchor, mock._powerBg) or nil
+    local powerTexMask = roundPower and EnsureRoundedMask(mock, "power", powerAnchor, powerTex) or nil
     if not (bodyMask and healthBgMask and healthTexMask) then
         mock._msufGFRoundedPreviewActive = nil
         ClearRoundedMasks(mock)
@@ -157,6 +199,20 @@ local function ApplyRounded(mock, conf, powerOn, edgeSize)
     SetMask(mock, healAbsorbTex, healAbsorbMask)
     SetMask(mock, mock._powerBg, powerBgMask)
     SetMask(mock, powerTex, powerTexMask)
+    if roundPower and not sharedBody and PreviewHelpers.EnsureRoundedVisuals
+        and PreviewHelpers.EnsureRoundedVisuals(mock._power, GF_PREVIEW_POWER_ROUNDED_OPTS) then
+        local powerEdge = Round(powerEdgeSize)
+        if powerEdge < 0 then powerEdge = 0 elseif powerEdge > 8 then powerEdge = 8 end
+        if powerEdge > 0 and PreviewHelpers.ApplyRoundedEdgeStack then
+            PreviewHelpers.ApplyRoundedEdgeStack(mock._power, powerEdge, GF_PREVIEW_POWER_ROUNDED_OPTS)
+        else
+            SetPowerRoundedEdgeShown(mock._power, false)
+        end
+        if mock._power.SetBackdropBorderColor then mock._power:SetBackdropBorderColor(0, 0, 0, 0) end
+        if mock._power._msufGFRoundedPreviewBg then mock._power._msufGFRoundedPreviewBg:Hide() end
+    else
+        SetPowerRoundedEdgeShown(mock._power, false)
+    end
     mock._roundedBg:ClearAllPoints()
     mock._roundedBg:SetAllPoints(mock)
     mock._roundedBg:SetColorTexture(conf.bgR or 0.08, conf.bgG or 0.08, conf.bgB or 0.09, conf.bgA or 0.88)

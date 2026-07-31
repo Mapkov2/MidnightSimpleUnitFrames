@@ -461,6 +461,61 @@ local function HideBarOutline(frame)
     if host and Helpers.SetEdgeLinesShown then Helpers.SetEdgeLinesShown(host, false, CP_OUTLINE_OPTS) end
     if host then host:Hide() end
 end
+local CP_POWER_ROUNDED_OPTS = {
+    bgKey = "_msufCPRoundedBg",
+    edgeKey = "_msufCPRoundedEdge",
+    stackKey = "_msufCPRoundedEdgeStack",
+    countKey = "_msufCPRoundedEdgeCount",
+    whiteTexture = WHITE8,
+    edgeLayer = "OVERLAY",
+    edgeSubLevel = 6,
+    snapOff = Helpers.SnapOff,
+    baseEdgeColor = function()
+        local db = _G.MSUF_DB or {}
+        local player = db.units and db.units.player or {}
+        local general = db.general or {}
+        return tonumber(player.barOutlineColorR) or tonumber(general.barBorderR) or 0,
+            tonumber(player.barOutlineColorG) or tonumber(general.barBorderG) or 0,
+            tonumber(player.barOutlineColorB) or tonumber(general.barBorderB) or 0,
+            tonumber(player.barOutlineColorA) or tonumber(general.barBorderA) or 1
+    end,
+}
+local function RoundedPowerPreviewEnabled()
+    local bars = _G.MSUF_DB and _G.MSUF_DB.bars
+    return bars and bars.roundedFramesEnabled == true
+        and bars.roundedUnitFrames ~= false
+        and bars.roundedPowerBars ~= false
+end
+local function SetRoundedPowerPreview(frame, enabled, outline)
+    if not frame then return false end
+    if not enabled or not RoundedPowerPreviewEnabled()
+        or not (Helpers.ResolveRoundedMedia and Helpers.EnsureRoundedMask and Helpers.SetMask and Helpers.EnsureRoundedVisuals) then
+        if Helpers.ClearMasks then Helpers.ClearMasks(frame, "_msufCPRoundedMasked") end
+        if Helpers.SetRoundedEdgeStackShown then Helpers.SetRoundedEdgeStackShown(frame, false, CP_POWER_ROUNDED_OPTS) end
+        if frame._msufCPRoundedBg then frame._msufCPRoundedBg:Hide() end
+        return false
+    end
+    local maskPath, edgePath, strength = Helpers.ResolveRoundedMedia()
+    CP_POWER_ROUNDED_OPTS.edgeTexture = edgePath
+    CP_POWER_ROUNDED_OPTS.mediaStrength = strength
+    local bgMask = Helpers.EnsureRoundedMask(frame, "background", frame, frame.bg,
+        "_msufCPRoundedMasks", maskPath, Helpers.SnapOff)
+    local fillMask = Helpers.EnsureRoundedMask(frame, "fill", frame, frame.fill,
+        "_msufCPRoundedMasks", maskPath, Helpers.SnapOff)
+    if not (bgMask and fillMask and Helpers.EnsureRoundedVisuals(frame, CP_POWER_ROUNDED_OPTS)) then return false end
+    Helpers.SetMask(frame, frame.bg, bgMask, "_msufCPRoundedMasked")
+    Helpers.SetMask(frame, frame.fill, fillMask, "_msufCPRoundedMasked")
+    HideBarOutline(frame)
+    outline = floor((tonumber(outline) or 0) + 0.5)
+    if outline > 8 then outline = 8 end
+    if outline > 0 and Helpers.ApplyRoundedEdgeStack then
+        Helpers.ApplyRoundedEdgeStack(frame, outline, CP_POWER_ROUNDED_OPTS)
+    elseif Helpers.SetRoundedEdgeStackShown then
+        Helpers.SetRoundedEdgeStackShown(frame, false, CP_POWER_ROUNDED_OPTS)
+    end
+    if frame._msufCPRoundedBg then frame._msufCPRoundedBg:Hide() end
+    return true
+end
 local function CallApply(handle, reason)
     local kind = handle and handle._applyKind
     local moveOnly = reason == "CLASSPOWER_PREVIEW_MOVE" and kind ~= "powerText"
@@ -1383,6 +1438,7 @@ end
 local function RenderDetachedPower(preview, bars, player, classFrame)
     local frame = EnsureMeter(preview, "detachedPower")
     if not DetachedPowerShown(player) then
+        SetRoundedPowerPreview(frame, false)
         frame:Hide()
         HideBarOutline(frame)
         preview.handlePower:Hide()
@@ -1443,6 +1499,7 @@ local function RenderDetachedPower(preview, bars, player, classFrame)
         bgTexture = bgTex,
         outline = outline,
     })
+    SetRoundedPowerPreview(frame, shapeInfo == nil, outline)
     frame:Show()
     if PlayerPowerTextShown(player) and player.detachedPowerBarTextOnBar == true then
         local leftMode = tostring(player.powerTextLeft or "NONE"):upper()
