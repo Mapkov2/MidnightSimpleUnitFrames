@@ -8,10 +8,41 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-Beta42",
-    previousVersion = "6.0-beta41",
-    rangeLabel = "6.0-beta41 -> 6.0-Beta42",
+    currentVersion = "6.0-Beta43",
+    previousVersion = "6.0-beta42",
+    rangeLabel = "6.0-beta42 -> 6.0-Beta43",
     entries = {
+        {
+            version = "6.0-Beta43",
+            date = "2026-07-31",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Rounded unit and group frames now use a clean adjustable corner style with five strength levels. Health, embedded or detached Power, frame outlines, aggro/dispel/highlight borders and mouseover effects share the same geometry.",
+                        "Profiles gained a redesigned management workspace with a persistent active-profile overview, responsive management cards, safer import/export guidance and clearer specialization assignments.",
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "The MSUF Assistant gained broader exact setting coverage for unit and group auras, text, bars, fonts and profiles, plus more useful local guidance for comparisons, troubleshooting and incomplete requests.",
+                        "Unit and Group preview layer buttons now identify the currently selected draggable element, while responsive preview and profile layouts rebuild correctly after menu-scale changes.",
+                        "Rounded-corner strength updates the lightweight preview during dragging and applies the live runtime once on release or after a short bounded delay.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Fixed rounded Group frames, embedded Power bars, native Dispel overlays and modern frame borders losing or mismatching their outer mask, separator or border treatment.",
+                        "Fixed the Rounded Texture preview overlapping the following Menu2 sections after the corner-strength control was added.",
+                        "Fixed secret health colours reaching unsafe Lua comparisons in background matching, and made Group Power textures resolve once into the compiled cold-path configuration.",
+                        "Fixed hidden Party-only Portrait sections reserving space in Raid/Mythic layouts and made Aura preview scaling tolerate accessible numeric values.",
+                        "Fixed Assistant routing regressions for guided tours, natural health-text commands, contextual follow-ups and explicit negated or list-clearing commands.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-Beta42",
             date = "2026-07-30",
@@ -97,25 +128,6 @@ local data = {
                     title = "Fixes & Performance",
                     bullets = {
                         "Fixed Group Portrait size overrides being forced to at least 16 pixels. Every positive slider value is now kept exactly; 0 still means automatic sizing.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-Beta38",
-            date = "2026-07-29",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "New Dispel Symbol for unit frames and group frames: a placed icon that names which debuff type is on a unit (Magic, Curse, Disease, Poison, Bleed). Choose from three Blizzard sets or four new MSUF sets, each using its own shape per type so it stays readable at small sizes.",
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "The Dispel Symbol can be placed by dragging: switch on its preview in Global Style > Bars or Group Frames > Dispel Symbol and drag the symbols where you want them.",
-                        "The Dispel Symbol shows only the highest-priority debuff type by default, or one symbol per active type if you prefer.",
                     },
                 },
             },

@@ -1,5 +1,26 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-Beta43 - 2026-07-31
+
+### Highlights
+
+- Rounded unit and group frames now use a clean adjustable corner style with five strength levels. Health, embedded or detached Power, frame outlines, aggro/dispel/highlight borders and mouseover effects share the same geometry.
+- Profiles gained a redesigned management workspace with a persistent active-profile overview, responsive management cards, safer import/export guidance and clearer specialization assignments.
+
+### Changes
+
+- The MSUF Assistant gained broader exact setting coverage for unit and group auras, text, bars, fonts and profiles, plus more useful local guidance for comparisons, troubleshooting and incomplete requests.
+- Unit and Group preview layer buttons now identify the currently selected draggable element, while responsive preview and profile layouts rebuild correctly after menu-scale changes.
+- Rounded-corner strength updates the lightweight preview during dragging and applies the live runtime once on release or after a short bounded delay.
+
+### Fixes & Performance
+
+- Fixed rounded Group frames, embedded Power bars, native Dispel overlays and modern frame borders losing or mismatching their outer mask, separator or border treatment.
+- Fixed the Rounded Texture preview overlapping the following Menu2 sections after the corner-strength control was added.
+- Fixed secret health colours reaching unsafe Lua comparisons in background matching, and made Group Power textures resolve once into the compiled cold-path configuration.
+- Fixed hidden Party-only Portrait sections reserving space in Raid/Mythic layouts and made Aura preview scaling tolerate accessible numeric values.
+- Fixed Assistant routing regressions for guided tours, natural health-text commands, contextual follow-ups and explicit negated or list-clearing commands.
+
 ## 6.0-Beta42 - 2026-07-30
 
 ### Highlights
