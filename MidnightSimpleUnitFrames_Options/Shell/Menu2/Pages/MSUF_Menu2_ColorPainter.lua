@@ -193,7 +193,7 @@ local function MakeGroupPreview(parent, ctx, width)
 end
 
 local UNIT_FOCUS = {
-    unit = { body = true, nameText = true, hpText = true, powerText = true, portrait = true, power = true },
+    unit = { body = true, nameText = true, hpText = true, powerText = true, portrait = true, power = true, texLayer = true },
     cast = { castbar = true },
     auras = { auras = true },
     resources = { power = true, classPower = true },

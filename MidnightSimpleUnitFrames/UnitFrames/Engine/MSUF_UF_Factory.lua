@@ -773,6 +773,10 @@ function Factory.SpawnAll(applyMask)
   UF.initialized = true
   if UF.FlushDeferredRefreshes then UF.FlushDeferredRefreshes() end
   if EnsureCooldownWidthObservers then EnsureCooldownWidthObservers() end
+  -- Decorative texture layer lives outside the element system (see
+  -- UnitFrames/Effects/MSUF_UF_TextureLayer.lua); stamp it after the spawn pass.
+  local refreshTexLayer = _G.MSUF_RefreshUnitTextureLayers
+  if type(refreshTexLayer) == "function" then refreshTexLayer(nil) end
   return true
 end
 
@@ -794,6 +798,11 @@ function Factory.Apply(unit, applyMask)
 
   if UF.FlushDeferredRefreshes then UF.FlushDeferredRefreshes() end
   if EnsureCooldownWidthObservers then EnsureCooldownWidthObservers() end
+  -- Decorative texture layer lives outside the element system (see
+  -- UnitFrames/Effects/MSUF_UF_TextureLayer.lua); re-stamp it after applies so
+  -- copy-to, profile swaps and size changes land without their own plumbing.
+  local refreshTexLayer = _G.MSUF_RefreshUnitTextureLayers
+  if type(refreshTexLayer) == "function" then refreshTexLayer(unit) end
   return true
 end
 

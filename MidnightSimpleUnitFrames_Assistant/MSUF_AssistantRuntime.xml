@@ -41,6 +41,7 @@
     <Script file="Assistant\MSUF_AssistantRegistry_Unitframes_Power_Detached.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_Unitframes_Power.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_Unitframes_Transparency.lua"/>
+    <Script file="Assistant\MSUF_AssistantRegistry_Unitframes_TextureLayer.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_Unitframes_Anchoring.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_Unitframes_CoreLoop.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_Unitframes_Core_Status.lua"/>

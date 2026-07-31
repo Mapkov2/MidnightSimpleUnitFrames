@@ -15,8 +15,8 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
 $assistantManifestName = "MSUF_AssistantRuntime.xml"
-$assistantScriptCount = 329
-$assistantOrderSha256 = "52DF9145FC82BBC86BA9117147DEA2238F7F0237156065264FC8902594891662"
+$assistantScriptCount = 330
+$assistantOrderSha256 = "3F4E361398727386DB985B15CBD973ACEB56E40A7C8BDED9A95ADDDD58D3F8E0"
 $optionsAddonName = "MidnightSimpleUnitFrames_Options"
 
 function Normalize-AssistantReference {
