@@ -982,6 +982,7 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     SetDefault(db.bars, "roundedGroupFrames", true)
     SetDefault(db.bars, "roundedPowerBars", true)
     SetDefault(db.bars, "roundedMouseover", true)
+    SetDefault(db.bars, "roundedCornerStrength", 3)
     --- Fresh-install defaults: status indicators (AFK/DND) off by default
     local g = db.general
     if type(g) == 'table' then
@@ -3234,6 +3235,9 @@ if MSUF_DB.bars == nil then
     end
     if MSUF_DB.bars.roundedMouseover == nil then
         MSUF_DB.bars.roundedMouseover = true
+    end
+    if MSUF_DB.bars.roundedCornerStrength == nil then
+        MSUF_DB.bars.roundedCornerStrength = 3
     end
     if MSUF_DB.bars.embedPowerBarIntoHealth == nil then
         --- Pixel-perfect default: keep the power bar *inside* the unitframe bounds.

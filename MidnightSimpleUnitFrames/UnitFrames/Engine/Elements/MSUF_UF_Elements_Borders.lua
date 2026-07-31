@@ -37,6 +37,11 @@ local ResolveGroupAggroThreat = V.ResolveGroupAggroThreat
 local Borders = {}
 local IsAggroBorderUnit
 local IsBossUnit
+local roundedVisualCallback
+
+function UF.SetRoundedBorderVisualCallback(callback)
+  roundedVisualCallback = type(callback) == "function" and callback or nil
+end
 
 function Borders.GetEvents(frame, spec)
   local cfg = spec and spec.border
@@ -469,6 +474,12 @@ local function SetBorder(frame, show, r, g, b, a)
   end
 end
 
+local function NotifyRoundedBorder(frame, shown, source, thickness, r, g, b, a)
+  if roundedVisualCallback then
+    roundedVisualCallback(frame, shown, source, thickness, r, g, b, a)
+  end
+end
+
 local function ThreatState(frame)
   if not (UnitThreatSituation and frame and frame.MSUFUnitKey) then
     return false
@@ -619,6 +630,7 @@ local function ApplyResolvedBorder(frame, cfg, source, level, thickness, r, g, b
   SetBorderOverlayLevel(frame, level, strata, layer)
   LayoutBorder(frame, thickness)
   SetBorder(frame, true, r, g, b, a)
+  NotifyRoundedBorder(frame, true, source, thickness, r, g, b, a)
   return true
 end
 
@@ -627,6 +639,7 @@ local function HideResolvedBorder(frame)
   frame._msufBorderVisualCfg = frame._msufBorderRuntimeCfg
   frame._msufBorderVisualSource = "hidden"
   SetBorder(frame, false)
+  NotifyRoundedBorder(frame, false, "hidden", 0, 0, 0, 0, 0)
 end
 
 local function ApplyNormalBorder(frame, cfg)
@@ -710,14 +723,12 @@ function Borders.Apply(frame, spec)
   end
   if not cfg or not (BorderNormalEnabled(cfg) or BorderHighlightEnabled(frame, cfg)) then
     LayoutBorder(frame, 1)
-    SetBorder(frame, false)
+    HideResolvedBorder(frame)
   elseif cfg.aggro == true or cfg.dispel == true or (cfg.bossTarget == true and frame._msufBorderRuntimeBossUnit == true) then
     LayoutBorder(frame, BorderHighlightThickness(cfg))
     Borders.Update(frame, "MSUF_BORDER_APPLY", frame.MSUFUnitKey)
   else
-    SetBorderOverlayLevel(frame, BORDER_LEVEL_NORMAL, cfg and cfg.strata, cfg and cfg.layer)
-    LayoutBorder(frame, BorderNormalThickness(cfg))
-    SetBorder(frame, true, NormalBorderColor(cfg))
+    ApplyNormalBorder(frame, cfg)
   end
 end
 
@@ -790,6 +801,7 @@ function Borders.Disable(frame)
     frame._msufBorderVisualSource = nil
   end
   SetBorder(frame, false)
+  NotifyRoundedBorder(frame, false, "hidden", 0, 0, 0, 0, 0)
 end
 
 local function UpdateResolved(frame, threatKnown, threat)

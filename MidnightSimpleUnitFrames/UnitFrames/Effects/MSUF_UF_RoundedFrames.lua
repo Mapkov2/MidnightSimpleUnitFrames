@@ -9,13 +9,34 @@ end
 -- Adds optional mask textures and edge overlays to MSUF bars while respecting combat lockdown:
 -- existing regions can be updated in combat, but new rounded regions are deferred.
 local MASK_ROOT = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\"
-local MASK_PATH = MASK_ROOT .. "rounded_bar_4x.tga"
+local CLEAN_MASK_PATHS = {
+  MASK_ROOT .. "rounded_clean_mask_s1.png",
+  MASK_ROOT .. "rounded_clean_mask_s2.png",
+  MASK_ROOT .. "rounded_clean_mask_s3.png",
+  MASK_ROOT .. "rounded_clean_mask_s4.png",
+  MASK_ROOT .. "rounded_clean_mask_s5.png",
+}
+local CLEAN_EDGE_PATHS = {
+  MASK_ROOT .. "rounded_clean_edge_s1.png",
+  MASK_ROOT .. "rounded_clean_edge_s2.png",
+  MASK_ROOT .. "rounded_clean_edge_s3.png",
+  MASK_ROOT .. "rounded_clean_edge_s4.png",
+  MASK_ROOT .. "rounded_clean_edge_s5.png",
+}
+local CLEAN_MEDIA_PATHS = {}
+for i = 1, #CLEAN_MASK_PATHS do
+  CLEAN_MEDIA_PATHS[CLEAN_MASK_PATHS[i]] = true
+  CLEAN_MEDIA_PATHS[CLEAN_EDGE_PATHS[i]] = true
+end
 local MASK_PATH_1X = MASK_ROOT .. "rounded_bar_1x.tga"
-local EDGE_PATH_4X = MASK_ROOT .. "rounded_bar_edge_4x.tga"
 local WHITE8 = "Interface\\Buttons\\WHITE8x8"
+local ROUNDED_MEDIA_SLICE_MARGIN = 9.5
+local DEFAULT_ROUNDED_STRENGTH = 3
 
 local CreateFrame = _G.CreateFrame
 local InCombatLockdown = _G.InCombatLockdown
+local STRETCHED_SLICE_MODE = _G.Enum and _G.Enum.UITextureSliceMode
+  and _G.Enum.UITextureSliceMode.Stretched
 
 local BASE_BORDER_R, BASE_BORDER_G, BASE_BORDER_B, BASE_BORDER_A = 0, 0, 0, 1
 local ACTIVE_BORDER_A = 1.00
@@ -23,6 +44,9 @@ local ACTIVE_BORDER_A = 1.00
 local forceDisabled = false
 local unitMouseoverHotEnabled = false
 local groupMouseoverHotEnabled = false
+local roundedMediaStrength = DEFAULT_ROUNDED_STRENGTH
+local roundedMaskPath = CLEAN_MASK_PATHS[DEFAULT_ROUNDED_STRENGTH]
+local roundedEdgePath = CLEAN_EDGE_PATHS[DEFAULT_ROUNDED_STRENGTH]
 
 local SUPPRESS_NATIVE_OUTLINE = true
 
@@ -90,6 +114,15 @@ local function ReadRoundedBool(key, default)
   return value and true or false
 end
 
+local function UpdateRoundedMediaState()
+  local bars = BarsDB()
+  local strength = math.floor((tonumber(bars and bars.roundedCornerStrength) or DEFAULT_ROUNDED_STRENGTH) + 0.5)
+  if strength < 1 then strength = 1 elseif strength > 5 then strength = 5 end
+  roundedMediaStrength = strength
+  roundedMaskPath = CLEAN_MASK_PATHS[strength]
+  roundedEdgePath = CLEAN_EDGE_PATHS[strength]
+end
+
 local function IsConfiguredEnabled()
   return ReadRoundedBool("roundedFramesEnabled", false)
 end
@@ -108,6 +141,21 @@ end
 
 local function RoundedPowerBarsEnabled()
   return IsEnabled() and ReadRoundedBool("roundedPowerBars", true)
+end
+
+local function FrameIsGroup(f)
+  if not f then return false end
+  if f._msufIsGroupFrame == true or f._msufCoreScope == "group" then return true end
+  local spec = f.MSUFSpec
+  if spec and spec.scope == "group" then return true end
+  return f.barGroup ~= nil and f.health ~= nil
+end
+
+local function RoundedFrameEnabled(f)
+  if FrameIsGroup(f) then
+    return RoundedGroupFramesEnabled()
+  end
+  return RoundedUnitFramesEnabled()
 end
 
 local function MouseoverHighlightEnabled()
@@ -228,7 +276,22 @@ local function SE_ApplyGroupFrameShellVisuals(f)
 end
 
 local function ResolveMaskPath(maskPath)
-  return maskPath or MASK_PATH
+  return maskPath or roundedMaskPath
+end
+
+local function ApplyRoundedMediaSlice(region, path)
+  if not region then return end
+  local clean = CLEAN_MEDIA_PATHS[path] == true
+  local sliceKey = clean and roundedMediaStrength or 0
+  if region._msufRoundedMediaSliceKey == sliceKey then return end
+  region._msufRoundedMediaSliceKey = sliceKey
+  if type(region.SetTextureSliceMargins) == "function" then
+    local margin = clean and ROUNDED_MEDIA_SLICE_MARGIN or 0
+    region:SetTextureSliceMargins(margin, margin, margin, margin)
+  end
+  if clean and STRETCHED_SLICE_MODE ~= nil and type(region.SetTextureSliceMode) == "function" then
+    region:SetTextureSliceMode(STRETCHED_SLICE_MODE)
+  end
 end
 
 local function ResolveMaskOwner(f, tex, anchor)
@@ -284,7 +347,9 @@ local function EnsureMaskForAnchor(f, maskKey, anchor, tex, maskPath)
     if m.ClearAllPoints then m:ClearAllPoints() end
     m:SetTexture(path, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
     m:SetAllPoints(anchor)
+    m._msufRoundedNeedsRebind = true
   end
+  ApplyRoundedMediaSlice(m, path)
   return m
 end
 
@@ -365,7 +430,9 @@ local function MaskTextureWith(f, tex, maskKey, maskedKey, anchor, maskPath)
   if seen then seen[tex] = true end
 
   local old = f[maskedKey][tex]
-  if old == m then return end
+  local needsRebind = m._msufRoundedNeedsRebind == true
+  m._msufRoundedNeedsRebind = nil
+  if old == m and not needsRebind then return end
   if old and tex.RemoveMaskTexture then
     if old ~= true then
       tex:RemoveMaskTexture(old)
@@ -383,7 +450,7 @@ local function ClearAllMasks(f)
 end
 
 local function MaskTexture(f, tex, anchor, maskPath)
-  MaskTextureWith(f, tex, "_msufRUF_Mask", "_msufRUF_MaskedTextures", anchor or (f and (f.bg or f) or nil), maskPath or MASK_PATH)
+  MaskTextureWith(f, tex, "_msufRUF_Mask", "_msufRUF_MaskedTextures", anchor or (f and (f.bg or f) or nil), maskPath)
 end
 
 local function ClearGroupMasks(f)
@@ -391,7 +458,7 @@ local function ClearGroupMasks(f)
 end
 
 local function MaskGroupTexture(f, tex, anchor, maskPath)
-  MaskTextureWith(f, tex, "_msufRGF_Mask", "_msufRGF_MaskedTextures", anchor or (f and (f.barGroup or f) or nil), maskPath or MASK_PATH)
+  MaskTextureWith(f, tex, "_msufRGF_Mask", "_msufRGF_MaskedTextures", anchor or (f and (f.barGroup or f) or nil), maskPath)
 end
 
 local function ClearMaskForTexture(f, maskedKey, tex)
@@ -403,11 +470,12 @@ local function ClearMaskForTexture(f, maskedKey, tex)
   end
 end
 
-local function SetRoundedEdgeTexture(edge)
-  if edge and edge._msufRUF_EdgeTexture ~= EDGE_PATH_4X then
-    edge._msufRUF_EdgeTexture = EDGE_PATH_4X
-    edge:SetTexture(EDGE_PATH_4X, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+local function SetRoundedEdgeTexture(edge, path)
+  if edge and edge._msufRUF_EdgeTexture ~= path then
+    edge._msufRUF_EdgeTexture = path
+    edge:SetTexture(path, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
   end
+  ApplyRoundedMediaSlice(edge, path)
 end
 
 local function HideRoundedEdgeStack(owner, baseEdge, poolKey)
@@ -485,6 +553,7 @@ local function ApplyRoundedEdgeStack(owner, parent, baseEdge, anchor, thickness,
   end
   stack[1] = baseEdge
   stack._msufCount = count
+  local edgePath = roundedEdgePath
 
   -- Edge thickness is rendered as a tiny texture stack. Reuse existing textures
   -- whenever possible; only missing stack entries are gated by combat lockdown.
@@ -497,7 +566,7 @@ local function ApplyRoundedEdgeStack(owner, parent, baseEdge, anchor, thickness,
       stack[i] = edge
     end
     ClearMaskForTexture(owner, maskedKey, edge)
-    SetRoundedEdgeTexture(edge)
+    SetRoundedEdgeTexture(edge, edgePath)
     if not LayoutRoundedEdge(edge, anchor, i, i) then return false end
     edge:Show()
   end
@@ -614,7 +683,6 @@ local function ApplyUnitRoundedHoverEdge(f, enabled)
   end
 
   ClearMaskForTexture(f, "_msufRUF_MaskedTextures", edge)
-  SetRoundedEdgeTexture(edge)
   local thickness = _mouseoverSize
   ApplyRoundedEdgeStack(f, container, edge, anchor, thickness, "_msufRUF_HoverEdgeStack", "_msufRUF_MaskedTextures", "OVERLAY", 7)
   local r, g, b, a = ResolveMouseoverEdgeColor()
@@ -636,42 +704,143 @@ local function HandleUnitMouseover(f, active)
   return true
 end
 
--- Mirror the flat power border contract: the detached rectangular bar follows the
--- unit's own power border toggle/thickness, not the Class-Resources shape outline.
+local function ResolvePowerBar(f)
+  return f and (f.targetPowerBar or f.powerBar or f.power) or nil
+end
+
+local function PowerIsEmbedded(f)
+  local power = f and f.MSUFSpec and f.MSUFSpec.power
+  return power and power.enabled == true and power.detached ~= true and power.embed ~= false
+end
+
+local function SetModernPowerBorderSuppressed(f, suppressed)
+  local bar = ResolvePowerBar(f)
+  if not bar then return end
+  local edges = bar.MSUFPowerBorderEdges
+  local host = bar.MSUFPowerBorderHost
+  if suppressed then
+    bar._msufRUFPowerBorderSuppressed = true
+    if host and host.Hide then host:Hide() end
+    if type(edges) == "table" then
+      for i = 1, 4 do
+        local edge = edges[i]
+        if edge and edge.Hide then edge:Hide() end
+      end
+    end
+    return
+  end
+  bar._msufRUFPowerBorderSuppressed = nil
+  local power = f and f.MSUFSpec and f.MSUFSpec.power
+  local thickness = tonumber(power and power.borderThickness) or tonumber(bar._msufPowerBorderThickness) or 0
+  local shown = bar._msufPowerShapeActive ~= true
+    and bar._msufShown ~= false
+    and thickness > 0
+    and (not power or (power.enabled == true and power.borderEnabled == true))
+  if host then
+    if shown and host.Show then host:Show() elseif host.Hide then host:Hide() end
+  end
+  if type(edges) == "table" then
+    for i = 1, 4 do
+      local edge = edges[i]
+      if edge then
+        if shown and edge.Show then edge:Show() elseif edge.Hide then edge:Hide() end
+      end
+    end
+  end
+end
+
+local function HideEmbeddedPowerSeparator(f)
+  local separator = f and f._msufRUF_EmbeddedPowerSeparator
+  if separator and separator.Hide then separator:Hide() end
+end
+
+local function ApplyEmbeddedPowerSeparator(f, bar, thickness)
+  if not (f and bar and thickness > 0) then
+    HideEmbeddedPowerSeparator(f)
+    return false
+  end
+  local separator = f._msufRUF_EmbeddedPowerSeparator
+  if not separator then
+    if not CanCreateRoundedRegion(separator) then return false end
+    separator = bar:CreateTexture(nil, "OVERLAY", nil, 6)
+    SE_SnapOff(separator)
+    f._msufRUF_EmbeddedPowerSeparator = separator
+  end
+  local maskedKey = FrameIsGroup(f) and "_msufRGF_MaskedTextures" or "_msufRUF_MaskedTextures"
+  ClearMaskForTexture(f, maskedKey, separator)
+  if separator._msufRUFThickness ~= thickness then
+    separator._msufRUFThickness = thickness
+    separator:ClearAllPoints()
+    separator:SetPoint("BOTTOMLEFT", bar, "TOPLEFT", 0, 0)
+    separator:SetPoint("BOTTOMRIGHT", bar, "TOPRIGHT", 0, 0)
+    separator:SetHeight(thickness)
+  end
+  local power = f.MSUFSpec and f.MSUFSpec.power
+  local r = power and power.borderR or bar._msufPowerBorderR or BASE_BORDER_R
+  local g = power and power.borderG or bar._msufPowerBorderG or BASE_BORDER_G
+  local b = power and power.borderB or bar._msufPowerBorderB or BASE_BORDER_B
+  local a = power and power.borderA or bar._msufPowerBorderA or BASE_BORDER_A
+  separator:SetColorTexture(r, g, b, a)
+  separator:Show()
+  return true
+end
+
+-- Mirror the modern power border contract for every rectangular power bar.
+-- Player shape media (orb/crystal/round) keeps its own matching outline.
 local function ResolveDetachedPowerEdgeThickness(f)
-  if not (f and f._msufPowerBarDetached and f.targetPowerBar) then return 0 end
-  if f.targetPowerBar._msufPowerShapeActive == true then return 0 end
+  local bar = ResolvePowerBar(f)
+  if not (f and bar) then return 0 end
+  if bar._msufPowerShapeActive == true then return 0 end
   local power = f.MSUFSpec and f.MSUFSpec.power
   if power then
+    if power.enabled ~= true then return 0 end
     if power.borderEnabled ~= true then return 0 end
     return ClampEdgeSize(power.borderThickness, 0, 8)
   end
-  return ResolveUnitOutlineThickness(f)
+  return ClampEdgeSize(bar._msufPowerBorderThickness, 0, 8)
 end
 
-local function ApplyDetachedPowerRoundedEdge(f, enabled)
+local function ApplyPowerRoundedEdge(f, enabled)
   if not f then return nil end
   local edge = f._msufRUF_DetachedPowerEdge
-  if not enabled then
+  local bar = ResolvePowerBar(f)
+  local frameRounded = RoundedFrameEnabled(f)
+  local thickness = enabled and frameRounded and ResolveDetachedPowerEdgeThickness(f) or 0
+  if not (bar and thickness > 0) then
+    SetModernPowerBorderSuppressed(f, false)
+    HideEmbeddedPowerSeparator(f)
     HideRoundedEdgeStack(f, edge, "_msufRUF_DetachedPowerEdgeStack")
     return edge
   end
 
-  local pb = f.targetPowerBar
-  local thickness = ResolveDetachedPowerEdgeThickness(f)
-  if not (pb and thickness > 0) then
+  if PowerIsEmbedded(f) then
     HideRoundedEdgeStack(f, edge, "_msufRUF_DetachedPowerEdgeStack")
-    return edge
+    if ApplyEmbeddedPowerSeparator(f, bar, thickness) then
+      SetModernPowerBorderSuppressed(f, true)
+    else
+      SetModernPowerBorderSuppressed(f, false)
+    end
+    return f._msufRUF_EmbeddedPowerSeparator
   end
+
+  HideEmbeddedPowerSeparator(f)
   if not edge then
     if not CanCreateRoundedRegion(edge) then return nil end
-    edge = pb:CreateTexture(nil, "OVERLAY", nil, 6)
+    edge = bar:CreateTexture(nil, "OVERLAY", nil, 6)
     SE_SnapOff(edge)
     f._msufRUF_DetachedPowerEdge = edge
   end
-  if not ApplyRoundedEdgeStack(f, pb, edge, pb, thickness, "_msufRUF_DetachedPowerEdgeStack", "_msufRUF_MaskedTextures", "OVERLAY", 6) then return edge end
-  local r, g, b, a = ResolveBaseEdgeColor(f)
+  if not ApplyRoundedEdgeStack(f, bar, edge, bar, thickness, "_msufRUF_DetachedPowerEdgeStack", "_msufRUF_MaskedTextures", "OVERLAY", 6) then
+    HideRoundedEdgeStack(f, edge, "_msufRUF_DetachedPowerEdgeStack")
+    return edge
+  end
+  local power = f.MSUFSpec and f.MSUFSpec.power
+  local r = power and power.borderR or bar._msufPowerBorderR or BASE_BORDER_R
+  local g = power and power.borderG or bar._msufPowerBorderG or BASE_BORDER_G
+  local b = power and power.borderB or bar._msufPowerBorderB or BASE_BORDER_B
+  local a = power and power.borderA or bar._msufPowerBorderA or BASE_BORDER_A
   SetRoundedEdgeStackColor(f, edge, "_msufRUF_DetachedPowerEdgeStack", r, g, b, a)
+  SetModernPowerBorderSuppressed(f, true)
   return edge
 end
 
@@ -749,6 +918,99 @@ ApplyGroupRoundedEdge = function(f, enabled)
   return edge
 end
 
+local MODERN_BORDER_EDGE_KEYS = { "top", "bottom", "left", "right" }
+
+local function SetModernBorderEdgesSuppressed(f, suppressed)
+  local edges = f and f.MSUFBorderEdges
+  if type(edges) ~= "table" then return end
+  if suppressed then
+    f._msufRUFModernBorderSuppressed = true
+  elseif f._msufRUFModernBorderSuppressed ~= true then
+    return
+  else
+    f._msufRUFModernBorderSuppressed = nil
+  end
+  local shown = not suppressed and f._msufBorderShown == true
+  for i = 1, #MODERN_BORDER_EDGE_KEYS do
+    local edge = edges[MODERN_BORDER_EDGE_KEYS[i]]
+    if edge then
+      if shown and edge.Show then edge:Show() elseif edge.Hide then edge:Hide() end
+    end
+  end
+end
+
+local function ApplyModernRoundedBorderVisual(f, shown, thickness, r, g, b, a)
+  if not f then return false end
+  local group = FrameIsGroup(f)
+  local rounded = RoundedFrameEnabled(f)
+  if not rounded then
+    SetModernBorderEdgesSuppressed(f, false)
+    return false
+  end
+
+  local edgeKey = group and "_msufRGF_Edge" or "_msufRUF_Edge"
+  local stackKey = group and "_msufRGF_EdgeStack" or "_msufRUF_EdgeStack"
+  local maskedKey = group and "_msufRGF_MaskedTextures" or "_msufRUF_MaskedTextures"
+  local edge = f[edgeKey]
+  if shown ~= true then
+    SetModernBorderEdgesSuppressed(f, true)
+    HideRoundedEdgeStack(f, edge, stackKey)
+    return true
+  end
+
+  thickness = ClampEdgeSize(thickness, 0, 16)
+  if thickness <= 0 then
+    SetModernBorderEdgesSuppressed(f, true)
+    HideRoundedEdgeStack(f, edge, stackKey)
+    return true
+  end
+
+  local parent = group and (f.barGroup or f) or f
+  local anchor = group and (f.barGroup or f) or (f.bg or f)
+  local layer = "BACKGROUND"
+  local subLevel = group and -8 or -7
+  if not edge then
+    if not CanCreateRoundedRegion(edge) then return false end
+    edge = parent:CreateTexture(nil, layer, nil, subLevel)
+    SE_SnapOff(edge)
+    f[edgeKey] = edge
+  end
+  if not ApplyRoundedEdgeStack(f, parent, edge, anchor, thickness, stackKey, maskedKey, layer, subLevel) then
+    HideRoundedEdgeStack(f, edge, stackKey)
+    SetModernBorderEdgesSuppressed(f, false)
+    return false
+  end
+  if r == nil then
+    r, g, b, a = ResolveBaseEdgeColor(f)
+  end
+  SetRoundedEdgeStackColor(f, edge, stackKey, r, g, b, a)
+  SetModernBorderEdgesSuppressed(f, true)
+  return true
+end
+
+local function ApplyCurrentModernBorderVisual(f)
+  if not (f and type(f.MSUFBorderEdges) == "table" and f._msufBorderShown ~= nil) then
+    return false
+  end
+  local thickness = f._msufBorderVisualThickness or f._msufBorderThickness or 1
+  return ApplyModernRoundedBorderVisual(f, f._msufBorderShown, thickness,
+    f._msufBorderR, f._msufBorderG, f._msufBorderB, f._msufBorderA)
+end
+
+local function PrewarmAndApplyModernBorderVisual(f)
+  if not (f and type(f.MSUFBorderEdges) == "table" and f._msufBorderShown ~= nil) then return false end
+  if not IsCombatLocked() then
+    local normal = tonumber(f._msufBorderRuntimeNormalThickness) or 0
+    local highlight = tonumber(f._msufBorderRuntimeHighlightThickness) or 0
+    local maximum = normal > highlight and normal or highlight
+    if maximum > 0 then
+      ApplyModernRoundedBorderVisual(f, true, maximum,
+        f._msufBorderR, f._msufBorderG, f._msufBorderB, f._msufBorderA)
+    end
+  end
+  return ApplyCurrentModernBorderVisual(f)
+end
+
 local function ApplyGroupRoundedHoverEdge(f, enabled)
   if not f then return nil end
   local container = f._msufRGF_HoverContainer
@@ -814,7 +1076,7 @@ local function ResolveGF()
 end
 
 local function IsGroupFrame(f)
-  return f and f.barGroup and f.health
+  return FrameIsGroup(f)
 end
 
 local function ResolveGroupKind(f, kind)
@@ -905,11 +1167,11 @@ local function RefreshGroupBackdropAlpha(f, kind)
   end
 end
 
-local function MaskStatusBarFill(f, bar, group)
+local function MaskStatusBarFill(f, bar, group, anchor)
   if not (bar and type(bar.GetStatusBarTexture) == "function") then return end
   local tex = bar:GetStatusBarTexture()
   if tex then
-    if group then MaskGroupTexture(f, tex, bar) else MaskTexture(f, tex, bar) end
+    if group then MaskGroupTexture(f, tex, anchor or bar) else MaskTexture(f, tex, anchor or bar) end
   end
 end
 
@@ -925,24 +1187,24 @@ local function MaskGradientTable(f, grads, anchor, group)
   end
 end
 
-local function MaskStatusBars(f, group, ...)
+local function MaskStatusBarsAt(f, group, anchor, ...)
   for i = 1, select("#", ...) do
-    MaskStatusBarFill(f, select(i, ...), group)
+    MaskStatusBarFill(f, select(i, ...), group, anchor)
   end
 end
 
-local function MaskOverlayList(f, overlays, group)
+local function MaskOverlayList(f, overlays, group, anchor)
   if type(overlays) == "table" then
     for _, overlay in pairs(overlays) do
-      MaskStatusBarFill(f, overlay, group)
+      MaskStatusBarFill(f, overlay, group, anchor)
     end
   else
-    MaskStatusBarFill(f, overlays, group)
+    MaskStatusBarFill(f, overlays, group, anchor)
   end
 end
 
-local function MaskGFGradientTable(f, bar)
-  MaskGradientTable(f, bar and bar._msufGFGrads, bar, true)
+local function MaskGFGradientTable(f, bar, anchor)
+  MaskGradientTable(f, bar and bar._msufGFGrads, anchor or bar, true)
 end
 
 local function SuppressGroupSquareBorders(f)
@@ -1036,7 +1298,8 @@ local function ApplyToUnitFrame(f)
     ClearAllMasks(f)
     ApplyUnitRoundedEdge(f, false)
     ApplyUnitRoundedHoverEdge(f, false)
-    ApplyDetachedPowerRoundedEdge(f, false)
+    ApplyPowerRoundedEdge(f, false)
+    SetModernBorderEdgesSuppressed(f, false)
     if SUPPRESS_NATIVE_OUTLINE then
       if f and f.ForceUpdate then f:ForceUpdate("ROUNDED_OFF") end
     end
@@ -1048,8 +1311,12 @@ local function ApplyToUnitFrame(f)
 
   BeginMaskRefresh(f, "_msufRUF_MaskedTextures")
   ApplyUnitRoundedEdge(f, true)
+  PrewarmAndApplyModernBorderVisual(f)
   ApplyUnitRoundedHoverEdge(f, RoundedMouseoverEnabled())
-  ApplyDetachedPowerRoundedEdge(f, roundPower)
+  ApplyPowerRoundedEdge(f, roundPower)
+  local embeddedPower = roundPower and PowerIsEmbedded(f)
+  local sharedFrameMaskAnchor = embeddedPower and (f.bg or f) or nil
+  local healthMaskAnchor = sharedFrameMaskAnchor or f.hpBar
 
   if f.bg then
     MaskTexture(f, f.bg, f.bg)
@@ -1057,34 +1324,35 @@ local function ApplyToUnitFrame(f)
 
   if f.hpBar and type(f.hpBar.GetStatusBarTexture) == "function" then
     local hbFill = f.hpBar:GetStatusBarTexture()
-    if hbFill then MaskTexture(f, hbFill, f.hpBar) end
+    if hbFill then MaskTexture(f, hbFill, healthMaskAnchor) end
   end
   if f.hpBarBG then
-    MaskTexture(f, f.hpBarBG, f.hpBar or f.hpBarBG)
+    MaskTexture(f, f.hpBarBG, sharedFrameMaskAnchor or f.hpBar or f.hpBarBG)
   end
 
-  MaskGradientTable(f, f.hpGradients, f.hpBar)
+  MaskGradientTable(f, f.hpGradients, healthMaskAnchor)
 
   if f.tempMaxHealthBackground then
-    MaskTexture(f, f.tempMaxHealthBackground, f.tempMaxHealthBar or f.hpBar)
+    MaskTexture(f, f.tempMaxHealthBackground, sharedFrameMaskAnchor or f.tempMaxHealthBar or f.hpBar)
   end
-  MaskStatusBars(f, false, f.tempMaxHealthBar, f.absorbBar, f.healAbsorbBar)
-  MaskOverlayList(f, f._msufUFDispelOverlays or f._msufUFDispelOverlay)
-  MaskStatusBarFill(f, f.incomingHealBar or f.selfHealPredBar)
+  MaskStatusBarsAt(f, false, sharedFrameMaskAnchor, f.tempMaxHealthBar, f.absorbBar, f.healAbsorbBar)
+  MaskOverlayList(f, f._msufUFDispelOverlays or f._msufUFDispelOverlay, false, sharedFrameMaskAnchor)
+  MaskStatusBarFill(f, f.incomingHealBar or f.selfHealPredBar, false, sharedFrameMaskAnchor)
   if f.selfHealPredBar ~= f.incomingHealBar then
-    MaskStatusBarFill(f, f.selfHealPredBar)
+    MaskStatusBarFill(f, f.selfHealPredBar, false, sharedFrameMaskAnchor)
   end
 
   if roundPower then
     local powerBar = f.targetPowerBar or f.powerBar
+    local powerMaskAnchor = sharedFrameMaskAnchor or powerBar
     if powerBar and type(powerBar.GetStatusBarTexture) == "function" then
       local pbFill = powerBar:GetStatusBarTexture()
-      if pbFill then MaskTexture(f, pbFill, powerBar) end
+      if pbFill then MaskTexture(f, pbFill, powerMaskAnchor) end
     end
     if f.powerBarBG then
-      MaskTexture(f, f.powerBarBG, powerBar or f.powerBarBG)
+      MaskTexture(f, f.powerBarBG, powerMaskAnchor or f.powerBarBG)
     end
-    if powerBar then MaskGradientTable(f, f.powerGradients, powerBar) end
+    if powerBar then MaskGradientTable(f, f.powerGradients, powerMaskAnchor) end
   end
 
   if f.portrait then
@@ -1111,6 +1379,8 @@ ApplyToGroupFrame = function(f, kind)
     ClearGroupMasks(f)
     ApplyGroupRoundedEdge(f, false)
     ApplyGroupRoundedHoverEdge(f, false)
+    ApplyPowerRoundedEdge(f, false)
+    SetModernBorderEdgesSuppressed(f, false)
     if f._msufRGF_Background then f._msufRGF_Background:Hide() end
     SE_ApplyGroupFrameShellVisuals(f, false)
     ApplyGroupBackdrop(f, kind, false)
@@ -1150,23 +1420,28 @@ ApplyToGroupFrame = function(f, kind)
 
   BeginMaskRefresh(f, "_msufRGF_MaskedTextures")
   ApplyGroupRoundedEdge(f, true)
+  PrewarmAndApplyModernBorderVisual(f)
   ApplyGroupRoundedHoverEdge(f, mouseoverEnabled)
+  ApplyPowerRoundedEdge(f, roundPower)
+  local embeddedPower = roundPower and PowerIsEmbedded(f)
+  local sharedFrameMaskAnchor = embeddedPower and (f.barGroup or f) or nil
   if f._msufRGF_Background then MaskGroupTexture(f, f._msufRGF_Background, f.barGroup) end
-  if f.healthBg then MaskGroupTexture(f, f.healthBg, f.health or f.healthBg) end
-  if roundPower and f.powerBg then MaskGroupTexture(f, f.powerBg, f.power or f.powerBg) end
+  if f.healthBg then MaskGroupTexture(f, f.healthBg, sharedFrameMaskAnchor or f.health or f.healthBg) end
+  if roundPower and f.powerBg then MaskGroupTexture(f, f.powerBg, sharedFrameMaskAnchor or f.power or f.powerBg) end
   if f._msufBehindBarBg then MaskGroupTexture(f, f._msufBehindBarBg, f.barGroup) end
 
-  MaskStatusBarFill(f, f.health, true)
-  if roundPower then MaskStatusBarFill(f, f.power, true) end
+  MaskStatusBarFill(f, f.health, true, sharedFrameMaskAnchor)
+  if roundPower then MaskStatusBarFill(f, f.power, true, sharedFrameMaskAnchor) end
   if f.tempMaxHealthBackground then
-    MaskGroupTexture(f, f.tempMaxHealthBackground, f.tempMaxHealthBar or f.health)
+    MaskGroupTexture(f, f.tempMaxHealthBackground, sharedFrameMaskAnchor or f.tempMaxHealthBar or f.health)
   end
-  MaskStatusBars(f, true, f.tempMaxHealthBar, f.incomingHealBar, f.absorbBar, f.healAbsorbBar)
-  MaskOverlayList(f, f._msufGFDispelOverlays or f._msufGFDispelOverlay, true)
-  MaskStatusBarFill(f, f._msufGFDebuffStripe, true)
+  MaskStatusBarsAt(f, true, sharedFrameMaskAnchor,
+    f.tempMaxHealthBar, f.incomingHealBar, f.absorbBar, f.healAbsorbBar)
+  MaskOverlayList(f, f._msufGFDispelOverlays or f._msufGFDispelOverlay, true, sharedFrameMaskAnchor)
+  MaskStatusBarFill(f, f._msufGFDebuffStripe, true, sharedFrameMaskAnchor)
 
-  MaskGFGradientTable(f, f.health)
-  if roundPower then MaskGFGradientTable(f, f.power) end
+  MaskGFGradientTable(f, f.health, sharedFrameMaskAnchor)
+  if roundPower then MaskGFGradientTable(f, f.power, sharedFrameMaskAnchor) end
   EndMaskRefresh(f, "_msufRGF_Mask", "_msufRGF_MaskedTextures")
 end
 
@@ -1188,10 +1463,12 @@ local function ForEachGroupFrame(fn)
   local GF = ResolveGF()
   if not GF then return end
   if type(GF.ForEachFrame) == "function" then
-    GF.ForEachFrame(fn, true)
-  elseif type(GF.frames) == "table" then
-    for f, kind in pairs(GF.frames) do
+    GF.ForEachFrame(function(f, _, kind)
       fn(f, kind)
+    end, true)
+  elseif type(GF.frames) == "table" then
+    for f, stored in pairs(GF.frames) do
+      fn(f, type(stored) == "string" and stored or nil)
     end
   end
   if type(GF._previewFrames) == "table" then
@@ -1222,6 +1499,7 @@ end
 
 local function ApplyAll()
   EnsureDB()
+  UpdateRoundedMediaState()
   MSUF.__msufRoundedPending = nil
   local enabled = IsEnabled()
   if not enabled and not MSUF.__msufRoundedUF_Hooked then
@@ -1284,7 +1562,9 @@ local function ApplyVisualRefreshUnit(unit)
     if UF and type(UF.GetFrame) == "function" then frame = UF.GetFrame(unit) end
     if not frame and UF and type(UF.frames) == "table" then frame = UF.frames[unit] end
     if not frame then frame = _G["MSUF_" .. tostring(unit)] end
-    if frame then ApplyToUnitFrame(frame) end
+    if frame then
+      if IsGroupFrame(frame) then ApplyToGroupFrame(frame) else ApplyToUnitFrame(frame) end
+    end
     return
   end
 
@@ -1318,6 +1598,12 @@ local function HookOnce()
   ExportPublic("MSUF_RoundedUF_OnUnitHighlightChanged", function(frame, hlKey, r, g, b, cfg)
     return HandleUnitHighlightChanged(frame, hlKey, r, g, b, cfg)
   end)
+  ExportPublic("MSUF_RoundedUF_OnBorderVisualChanged", function(frame, shown, source, thickness, r, g, b, a)
+    return ApplyModernRoundedBorderVisual(frame, shown, thickness, r, g, b, a)
+  end)
+  ExportPublic("MSUF_RoundedUF_OnPowerBorderChanged", function(frame, enabled)
+    return ApplyPowerRoundedEdge(frame, enabled and RoundedPowerBarsEnabled())
+  end)
   ExportPublic("MSUF_RoundedUF_OnUnitDispelOverlayChanged", function(frame)
     if not frame then return end
     if IsCombatLocked() then DeferApply(); return end
@@ -1348,6 +1634,7 @@ local function HookOnce()
         end
         HandleUnitHighlightChanged(frame, frame._msufHighlightActiveKey or frame._msufHighlightColorKey or 0,
           frame._msufHighlightOutlineR, frame._msufHighlightOutlineG, frame._msufHighlightOutlineB)
+        ApplyCurrentModernBorderVisual(frame)
       end
     end)
   end
@@ -1358,6 +1645,8 @@ local ROUNDED_CALLBACK_NAMES = {
   "MSUF_RoundedUF_OnGroupMouseover",
   "MSUF_RoundedUF_OnUnitMouseover",
   "MSUF_RoundedUF_OnUnitHighlightChanged",
+  "MSUF_RoundedUF_OnBorderVisualChanged",
+  "MSUF_RoundedUF_OnPowerBorderChanged",
   "MSUF_RoundedUF_OnUnitDispelOverlayChanged",
   "MSUF_RoundedUF_OnGroupFrameApplied",
   "MSUF_RoundedUF_OnGroupBackdropAlphaChanged",
@@ -1379,7 +1668,19 @@ local function SetRoundedCallbacksActive(enabled)
         ExportPublic(name, fn)
       end
     end
+    if UF and type(UF.SetRoundedBorderVisualCallback) == "function" then
+      UF.SetRoundedBorderVisualCallback(_G.MSUF_RoundedUF_OnBorderVisualChanged)
+    end
+    if UF and type(UF.SetRoundedPowerBorderCallback) == "function" then
+      UF.SetRoundedPowerBorderCallback(_G.MSUF_RoundedUF_OnPowerBorderChanged)
+    end
     return
+  end
+  if UF and type(UF.SetRoundedBorderVisualCallback) == "function" then
+    UF.SetRoundedBorderVisualCallback(nil)
+  end
+  if UF and type(UF.SetRoundedPowerBorderCallback) == "function" then
+    UF.SetRoundedPowerBorderCallback(nil)
   end
   if UF and type(UF.UnregisterVisualRefreshCallback) == "function" then
     UF.UnregisterVisualRefreshCallback("RoundedFrames")

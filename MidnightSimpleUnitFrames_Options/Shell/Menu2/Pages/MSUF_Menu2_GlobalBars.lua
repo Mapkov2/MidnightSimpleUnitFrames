@@ -12,6 +12,7 @@ local W = M.Widgets
 local T = M.Theme
 local GP = M.GlobalPage or {}
 local VT = M.ValueTextList
+local C_Timer = M.MenuTimer or _G.C_Timer
 local floor = math.floor
 local max = math.max
 local min = math.min
@@ -24,8 +25,25 @@ local UNITFRAME_DISPEL_AURA_WARNING_COLOR = { 0.90, 0.84, 0.76, 1 }
 local UNITFRAME_DISPEL_AURA_UNITS = { "player", "target", "focus", "boss" }
 local UNITFRAME_AURA_APPLY_OPTS = { preview = true, auras = true, notify = false }
 local ROUNDED_PREVIEW_MASK_ROOT = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\"
-local ROUNDED_PREVIEW_MASK = ROUNDED_PREVIEW_MASK_ROOT .. "rounded_bar_4x.tga"
-local ROUNDED_PREVIEW_EDGE = ROUNDED_PREVIEW_MASK_ROOT .. "rounded_bar_edge_4x.tga"
+local ROUNDED_PREVIEW_MASKS = {
+    ROUNDED_PREVIEW_MASK_ROOT .. "rounded_clean_mask_s1.png",
+    ROUNDED_PREVIEW_MASK_ROOT .. "rounded_clean_mask_s2.png",
+    ROUNDED_PREVIEW_MASK_ROOT .. "rounded_clean_mask_s3.png",
+    ROUNDED_PREVIEW_MASK_ROOT .. "rounded_clean_mask_s4.png",
+    ROUNDED_PREVIEW_MASK_ROOT .. "rounded_clean_mask_s5.png",
+}
+local ROUNDED_PREVIEW_EDGES = {
+    ROUNDED_PREVIEW_MASK_ROOT .. "rounded_clean_edge_s1.png",
+    ROUNDED_PREVIEW_MASK_ROOT .. "rounded_clean_edge_s2.png",
+    ROUNDED_PREVIEW_MASK_ROOT .. "rounded_clean_edge_s3.png",
+    ROUNDED_PREVIEW_MASK_ROOT .. "rounded_clean_edge_s4.png",
+    ROUNDED_PREVIEW_MASK_ROOT .. "rounded_clean_edge_s5.png",
+}
+local ROUNDED_PREVIEW_SLICE_MARGIN = 9.5
+local ROUNDED_PREVIEW_STRETCHED = _G.Enum and _G.Enum.UITextureSliceMode
+    and _G.Enum.UITextureSliceMode.Stretched
+local ROUNDED_STRENGTH_APPLY_DELAY = 0.12
+local ROUNDED_SECTION_HEIGHT = 306
 local GRADIENT_DIR_KEYS, PRIORITY_LABELS = M.PickDefaults(GP, [[GRADIENT_DIR_KEYS PRIORITY_LABELS]])
 local DISPEL_TRIGGERS = VT("BY_ME", "Dispellable by me", "BY_RAID", "Dispellable by group",
     "DISPEL_TYPE", "Any dispel type")
@@ -57,6 +75,7 @@ local BAR_SETTING_BY_PATH = {
     ["rounded.roundedGroupFrames"] = "bars.roundedGroupFrames",
     ["rounded.roundedPowerBars"] = "bars.roundedPowerBars",
     ["rounded.roundedMouseover"] = "bars.roundedMouseover",
+    ["rounded.roundedCornerStrength"] = "bars.roundedCornerStrength",
     ["power.realtime_text"] = "bars.realtimePowerText",
     ["textures.power_foreground"] = "bars.powerBarTexture",
     ["textures.power_background"] = "bars.powerBarBgTexture",
@@ -486,14 +505,40 @@ local function CreateRoundedTexturePreview(parent, x, y, width)
         end },
     }
     local helpers = M.PreviewHelpers or {}
+    local roundedMedia = {}
+    local function ApplyPreviewStrength(entry)
+        local region = entry and entry.region
+        if not region then return end
+        local strength = floor((tonumber(Bars().roundedCornerStrength) or 3) + 0.5)
+        if strength < 1 then strength = 1 elseif strength > 5 then strength = 5 end
+        local path = (entry.edge and ROUNDED_PREVIEW_EDGES or ROUNDED_PREVIEW_MASKS)[strength]
+        if region._msuf2RoundedPreviewStrength == strength and region._msuf2RoundedPreviewPath == path then return end
+        region._msuf2RoundedPreviewStrength = strength
+        region._msuf2RoundedPreviewPath = path
+        region:SetTexture(path, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+        if region.SetTextureSliceMargins then
+            region:SetTextureSliceMargins(
+                ROUNDED_PREVIEW_SLICE_MARGIN, ROUNDED_PREVIEW_SLICE_MARGIN,
+                ROUNDED_PREVIEW_SLICE_MARGIN, ROUNDED_PREVIEW_SLICE_MARGIN)
+        end
+        if ROUNDED_PREVIEW_STRETCHED ~= nil and region.SetTextureSliceMode then
+            region:SetTextureSliceMode(ROUNDED_PREVIEW_STRETCHED)
+        end
+    end
     for i = 1, #regions do
         local spec = regions[i]
         local tex = sample:CreateTexture(nil, spec[2], nil, spec[3])
         spec[5](tex)
         tex:SetColorTexture(unpack(spec[4]))
         if helpers.SnapOff then helpers.SnapOff(tex) end
-        local mask = helpers.EnsureRoundedMask and helpers.EnsureRoundedMask(sample, spec[1], sample, tex, "_msuf2RoundedPreviewMasks", ROUNDED_PREVIEW_MASK)
+        local mask = helpers.EnsureRoundedMask and helpers.EnsureRoundedMask(
+            sample, spec[1], sample, tex, "_msuf2RoundedPreviewMasks", ROUNDED_PREVIEW_MASKS[3])
         if helpers.SetMask then helpers.SetMask(sample, tex, mask, "_msuf2RoundedPreviewMasked") end
+        if mask then
+            local entry = { region = mask }
+            roundedMedia[#roundedMedia + 1] = entry
+            ApplyPreviewStrength(entry)
+        end
     end
     for _, textSpec in ipairs({ { "Mapkotwo", "LEFT", 10, 0.42 }, { "404K - 100.0%", "RIGHT", -10, 0.50 } }) do
         local label = T.Font(sample, "GameFontHighlightSmall", textSpec[1], T.colors.text)
@@ -504,13 +549,18 @@ local function CreateRoundedTexturePreview(parent, x, y, width)
     end
     for i = 1, 2 do
         local edge = sample:CreateTexture(nil, "OVERLAY", nil, 6)
-        edge:SetTexture(ROUNDED_PREVIEW_EDGE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
         edge:SetPoint("TOPLEFT", sample, "TOPLEFT", -i, i)
         edge:SetPoint("BOTTOMRIGHT", sample, "BOTTOMRIGHT", i, -i)
         edge:SetVertexColor(0, 0, 0, 1)
         if helpers.SnapOff then helpers.SnapOff(edge) end
+        local entry = { region = edge, edge = true }
+        roundedMedia[#roundedMedia + 1] = entry
+        ApplyPreviewStrength(entry)
     end
-    function card:RefreshRoundedPreview() sample:SetAlpha(ReadB("roundedFramesEnabled", false) == true and 1 or 0.62) end
+    function card:RefreshRoundedPreview()
+        sample:SetAlpha(ReadB("roundedFramesEnabled", false) == true and 1 or 0.62)
+        for i = 1, #roundedMedia do ApplyPreviewStrength(roundedMedia[i]) end
+    end
     card:RefreshRoundedPreview()
     return card
 end
@@ -1619,7 +1669,7 @@ local function BuildOutlineSection(ctx, b)
 end
 
 local function BuildRoundedSection(ctx, b)
-    local rounded = b:CollapsibleSection("bars_rounded", "Rounded Texture", 246, true)
+    local rounded = b:CollapsibleSection("bars_rounded", "Rounded Texture", ROUNDED_SECTION_HEIGHT, true)
     local roundLeftX = 30
     local roundRightX = 330
     local roundW = 250
@@ -1649,11 +1699,77 @@ local function BuildRoundedSection(ctx, b)
         { "power", "Power bars", roundRightX, -52, "roundedPowerBars", true, nil, "rounded power bars|rounded powerbar|power bar corners|powerbar corners|powerbars abgerundet|powerbar abrunden", "Enable or disable rounded textures on power bars." },
         { "mouseover", "Mouseover highlights", roundRightX, -90, "roundedMouseover", true, nil, "rounded mouseover|rounded hover|rounded hover border|mouseover rounded|mouseover highlight rounded|mouseover abgerundet|hover abgerundet", "Enable or disable rounded mouseover highlight edges." },
     }, { ["*"] = function(s) return BindRoundedToggle(s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10]), s[1] end })
-    local roundedPreview = CreateRoundedTexturePreview(rounded, roundLeftX, -154, max(320, (rounded._msuf2Width or ctx.width or 720) - 60))
+    local roundedPreview
+    local roundingSlider = W.Slider(rounded, "Corner rounding", 1, 5, 1, 300)
+    W.MoveWidget(roundingSlider, rounded, roundLeftX, -166, 300, "LEFT")
+    local roundingApplyPending, roundingApplyTimer, roundingReleaseScheduled
+    local function CancelRoundingApplyTimer()
+        if roundingApplyTimer and type(roundingApplyTimer.Cancel) == "function" then roundingApplyTimer:Cancel() end
+        roundingApplyTimer = nil
+    end
+    local function FlushRoundingRuntime()
+        if not roundingApplyPending then
+            roundingReleaseScheduled = nil
+            CancelRoundingApplyTimer()
+            return
+        end
+        if M.IsConfigCombatLocked and M.IsConfigCombatLocked(true) then
+            roundingReleaseScheduled = nil
+            CancelRoundingApplyTimer()
+            return false
+        end
+        roundingApplyPending = nil
+        roundingReleaseScheduled = nil
+        CancelRoundingApplyTimer()
+        ApplyRoundedRuntime()
+        return true
+    end
+    local function ScheduleRoundingRelease()
+        if not roundingApplyPending or roundingReleaseScheduled then return end
+        roundingReleaseScheduled = true
+        CancelRoundingApplyTimer()
+        if C_Timer and type(C_Timer.After) == "function" then C_Timer.After(0, FlushRoundingRuntime)
+        else FlushRoundingRuntime() end
+    end
+    local function QueueRoundingRuntime()
+        roundingApplyPending = true
+        if roundedPreview and roundedPreview.RefreshRoundedPreview then roundedPreview:RefreshRoundedPreview() end
+        if roundingSlider._msuf2SliderActive == true then
+            roundingReleaseScheduled = nil
+            CancelRoundingApplyTimer()
+            return
+        end
+        if roundingReleaseScheduled then return end
+        CancelRoundingApplyTimer()
+        if C_Timer and type(C_Timer.NewTimer) == "function" then
+            roundingApplyTimer = C_Timer.NewTimer(ROUNDED_STRENGTH_APPLY_DELAY, FlushRoundingRuntime)
+        else
+            FlushRoundingRuntime()
+        end
+    end
+    M.BindNumberWidget(ctx, roundingSlider,
+        function() return tonumber(Bars().roundedCornerStrength) or 3 end,
+        function(value)
+            value = floor((tonumber(value) or 3) + 0.5)
+            if value < 1 then value = 1 elseif value > 5 then value = 5 end
+            local bars = Bars()
+            if bars.roundedCornerStrength == value then return end
+            bars.roundedCornerStrength = value
+            QueueRoundingRuntime()
+        end,
+        3, Meta("rounded.roundedCornerStrength", "setting", { step = 1, roundStep = true }))
+    roundingSlider:HookScript("OnMouseUp", ScheduleRoundingRelease)
+    roundingSlider:HookScript("OnHide", FlushRoundingRuntime)
+    roundingSlider:HookScript("OnShow", FlushRoundingRuntime)
+    RegisterRoundedSearch(roundingSlider, "Corner rounding",
+        "corner rounding|rounding strength|rounded strength|corner radius|rounding radius|abrundungsstaerke|eckenradius|staerke der abrundung",
+        "Controls how subtle or strong the rounded corners appear. Masks, outlines, highlights, mouseover edges, and power bars use the same value.",
+        "slider", Meta("rounded.roundedCornerStrength", "setting", { step = 1, min = 1, max = 5 }))
+    roundedPreview = CreateRoundedTexturePreview(rounded, roundLeftX, -214, max(320, (rounded._msuf2Width or ctx.width or 720) - 60))
     RegisterRoundedSearch(roundedPreview, "Rounded Texture Preview",
         "rounded preview|rounded example|rounded image|rounded frame preview|preview rounded frames|rounded frames aussehen|vorschau abgerundete frames",
         "Shows a small preview of the rounded frame texture style.", "preview")
-    local roundedDependentControls = { roundedControls.units, roundedControls.groups, roundedControls.power, roundedControls.mouseover }
+    local roundedDependentControls = { roundedControls.units, roundedControls.groups, roundedControls.power, roundedControls.mouseover, roundingSlider }
     SyncRoundedControls(M.BindGateGroup(ctx, nil, {
         { controls = roundedDependentControls, on = function() return ReadB("roundedFramesEnabled", false) == true end },
     }, {
@@ -2210,7 +2326,7 @@ local GLOBAL_BARS_LAZY_SECTION_SPECS = {
     },
     { sectionId = "bars_absorb", title = "Absorb Display", height = 414, defaultOpen = true, build = BuildAbsorbSection },
     { sectionId = "bars_outline", title = "Frame Outline", height = 178, build = BuildOutlineSection },
-    { sectionId = "bars_rounded", title = "Rounded Texture", height = 246, defaultOpen = true, build = BuildRoundedSection },
+    { sectionId = "bars_rounded", title = "Rounded Texture", height = ROUNDED_SECTION_HEIGHT, defaultOpen = true, build = BuildRoundedSection },
     { sectionId = "bars_highlight", title = "Highlight Borders", height = 710, defaultOpen = true, build = BuildHighlightSection },
     {
         sectionId = "bars_unit_dispel_overlay",

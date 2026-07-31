@@ -32,6 +32,12 @@ local math_min = math.min
 local issecretvalue = _G.issecretvalue or function(_) return false end
 
 local Power = {}
+local roundedBorderCallback
+
+function UF.SetRoundedPowerBorderCallback(callback)
+  roundedBorderCallback = type(callback) == "function" and callback or nil
+end
+
 local POWER_EVENTS = C and C.POWER_EVENTS
   or { "UNIT_POWER_UPDATE", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE" }
 local POWER_EVENTS_FAST = {
@@ -163,6 +169,12 @@ local function HidePowerBorder(bar)
   HidePowerBorderEdges(bar)
   if bar and bar._msufDetachedShapeEdge then
     SetRegionShown(bar._msufDetachedShapeEdge, false)
+  end
+end
+
+local function NotifyRoundedPowerBorder(frame, enabled)
+  if roundedBorderCallback then
+    roundedBorderCallback(frame, enabled == true)
   end
 end
 
@@ -615,6 +627,7 @@ function Power.Disable(frame)
     frame._msufPowerBarDetached = nil
     if Health and Health.Layout then Health.Layout(frame, frame.MSUFSpec, false) end
   end
+  NotifyRoundedPowerBorder(frame, false)
 end
 
 function Power.Create(frame, spec)
@@ -733,6 +746,7 @@ function Power.Apply(frame, spec)
   if type(_G.MSUF_ApplyBossPhysicalBarGeometry) == "function" then
     _G.MSUF_ApplyBossPhysicalBarGeometry(frame)
   end
+  NotifyRoundedPowerBorder(frame, enabled)
 end
 
 local function UpdatePercent(frame, event, unit, animate)
