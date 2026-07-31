@@ -506,8 +506,13 @@ jobs:
           prerelease: ${{ steps.channel.outputs.release_is_prerelease }}
           make_latest: ${{ steps.channel.outputs.github_make_latest }}
 
+      # Wago is stable-only. The publish-target resolution above falls back to
+      # "all" whenever the tag annotation is missing, malformed, or simply could
+      # not be fetched, so relying on the tag body alone fails OPEN and pushes a
+      # beta to Wago. Requiring a non-prerelease channel here closes that hole
+      # for every path into this step.
       - name: Upload to Wago
-        if: steps.publish.outputs.publish_to_wago == 'true'
+        if: steps.publish.outputs.publish_to_wago == 'true' && steps.channel.outputs.release_is_prerelease != 'true'
         shell: pwsh
         env:
           WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
@@ -550,6 +555,12 @@ jobs:
 
           if ($env:WAGO_STABILITY -notin @("stable", "beta", "alpha")) {
             throw "Invalid Wago stability '$env:WAGO_STABILITY'."
+          }
+
+          # Second lock, in case the step condition above is ever loosened:
+          # betas and alphas are CurseForge-only and must never reach Wago.
+          if ($env:RELEASE_IS_PRERELEASE -eq "true" -or $env:WAGO_STABILITY -ne "stable") {
+            throw "Refusing to upload '$env:WAGO_STABILITY' build to Wago. Wago receives stable releases only."
           }
 
           $tocContent = Get-Content -LiteralPath "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames.toc" -Raw
