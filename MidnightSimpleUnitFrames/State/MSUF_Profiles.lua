@@ -3125,6 +3125,13 @@ MSUF_ProfileIO_TranslateProfileToCurrent = function(profile, context)
             profile._msufDispelPriorityMigration = nil
             changed = true
         end
+        --- Navigation icons are the supported Menu2 baseline for imports.
+        --- Normalize the payload itself so full and Unit Frame imports cannot
+        --- restore an older explicit false value before the final EnsureDB.
+        if type(profile.general) == "table" and profile.general.showNavigationIcons ~= true then
+            profile.general.showNavigationIcons = true
+            changed = true
+        end
     end
     local schema = MSUF_ProfileIO_DetectProfileSchema(profile, context)
     local legacyProfile = schema < MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA

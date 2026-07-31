@@ -183,8 +183,8 @@ if type(Data.RegisterFAQProvider) == "function" then
                 a = "Open Profiles for active profile, spec auto-switching, import/export strings, legacy imports," ..
                     " and reset options.",
                 p = "profiles",
-                t = "Opens: Profiles > Export / Import",
-                x = "Export / Import Profile Management Spec Profiles import export wago string",
+                t = "Opens: Profiles > Backup & Transfer",
+                x = "Backup Transfer Export Import Profile Management Specialization Profiles Spec Profiles import export wago string",
                 k = SearchKeywordList(
                     "profile|profiles|import|export|wago|copy profile|reset profile|profil|spec profile",
                     "profile string|import string|export string|share profile"

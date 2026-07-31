@@ -2300,9 +2300,20 @@ end
 ApplyMenuFrameScale = function(frame)
     if not (frame and frame.SetScale) then return end
     local g = M.GetGeneralDB()
+    local previousW = frame.GetWidth and frame:GetWidth() or WINDOW_W
+    local previousH = frame.GetHeight and frame:GetHeight() or WINDOW_H
     frame:SetScale(EffectiveMenuScale(g.slashMenuScale))
     ApplyWindowResizeBounds(frame)
     ClampWindowSize(frame)
+    local currentW = frame.GetWidth and frame:GetWidth() or WINDOW_W
+    local currentH = frame.GetHeight and frame:GetHeight() or WINDOW_H
+    if (math.abs(currentW - previousW) >= 1 or math.abs(currentH - previousH) >= 1)
+        and RebuildActivePageForResize
+    then
+        -- Scaling can reduce the screen-safe local window bounds. Rebuild once
+        -- so cached responsive pages use the new content width immediately.
+        RebuildActivePageForResize(frame)
+    end
     if type(frame.RefreshMenuScaleControl) == "function" then frame:RefreshMenuScaleControl() end
 end
 M.AssignNamedValues(M, [[

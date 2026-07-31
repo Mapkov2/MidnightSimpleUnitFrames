@@ -1189,7 +1189,8 @@ local MSUF_DEFAULTS_CURRENT_PROFILE_SCHEMA = 600
 --- Persisted completion marker for the broad default-fill/repair pass below.
 --- Bump this whenever MSUF_EnsureDB_Heavy gains a new mandatory default or
 --- one-shot repair; current profiles can then be repaired exactly once again.
-local MSUF_DEFAULTS_CURRENT_REVISION = 6
+local MSUF_DEFAULTS_CURRENT_REVISION = 7
+local MSUF_DEFAULTS_NAVIGATION_ICONS_REVISION = 7
 
 --- Root tables are the contract every other module assumes after EnsureDB.
 --- Add new top-level SavedVariables buckets here before modules start reading
@@ -1672,8 +1673,13 @@ end
 if g.hideAdvancedMenu == nil then
     g.hideAdvancedMenu = true
 end
-if g.showNavigationIcons == nil then
-    g.showNavigationIcons = false
+--- Navigation icons became the standard Menu2 presentation in Defaults
+--- revision 7. Upgrade older stored profiles once, but preserve an explicit
+--- user choice made after that migration.
+if (tonumber(MSUF_DB._msufDefaultsRevision) or 0) < MSUF_DEFAULTS_NAVIGATION_ICONS_REVISION then
+    g.showNavigationIcons = true
+elseif g.showNavigationIcons == nil then
+    g.showNavigationIcons = true
 end
 if g.showGameMenuButton == nil then
     g.showGameMenuButton = true
