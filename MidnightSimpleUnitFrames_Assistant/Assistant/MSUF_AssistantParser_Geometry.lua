@@ -297,6 +297,8 @@ local function ParsePortraitDetailShortcut(text)
             value = "CIRCLE"
         elseif ContainsAny(text, GeometryPhrases[21]) then
             value = "DIAMOND"
+        elseif ContainsAny(text, GeometryPhrases[286]) then
+            value = "BLIZZARD"
         end
     elseif ContainsAny(text, GeometryPhrases[22]) then
         attr = "portraitFillBorder"

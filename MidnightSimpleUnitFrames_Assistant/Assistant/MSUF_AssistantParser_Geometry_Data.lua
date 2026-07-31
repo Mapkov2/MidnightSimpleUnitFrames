@@ -40,7 +40,7 @@ Data.GEOMETRY_PARSER = {
         [14] = { "class portrait style", "portrait class style", "border" },
         [15] = { "2d", "2d portrait", "normal portrait", "normal render" },
         [16] = { "class portrait", "class render", "class icon", "class icons", "to class" },
-        [17] = { "shape", "square", "circle", "rounded", "round", "diamond" },
+        [17] = { "shape", "square", "circle", "rounded", "round", "diamond", "blizzard ring", "gold ring", "goldring" },
         [18] = { "square" },
         [19] = { "rounded" },
         [20] = { "circle", "round" },
@@ -612,5 +612,9 @@ Data.GEOMETRY_PARSER = {
         "outline strata", "outline layer", "outline draw layer", "outline draw order",
         "border strata", "border layer", "border draw layer", "border draw order",
     },
+        -- Portrait shape value: the stock Blizzard ring dressing. Bare
+        -- "blizzard" is safe here because it is only probed inside the shape
+        -- branch opened by [17].
+        [286] = { "blizzard", "blizzard ring", "gold ring", "goldring", "blizzard-ring" },
     },
 }

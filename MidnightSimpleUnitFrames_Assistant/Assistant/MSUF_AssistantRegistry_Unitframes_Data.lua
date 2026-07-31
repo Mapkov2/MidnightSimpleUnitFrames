@@ -17,6 +17,9 @@ A.UnitframeRegistryData = Data
 Data.PORTRAIT_MODE_VALUES = { "OFF", "LEFT", "RIGHT" }
 Data.PORTRAIT_RENDER_VALUES = { "2D", "CLASS" }
 Data.PORTRAIT_SHAPE_VALUES = { "SQUARE", "CIRCLE", "ROUNDED", "DIAMOND" }
+-- Unit frames additionally offer the stock Blizzard ring dressing; group
+-- frames keep the four-value list above, so the two surfaces stay honest.
+Data.PORTRAIT_SHAPE_VALUES_UNIT = { "SQUARE", "CIRCLE", "ROUNDED", "DIAMOND", "BLIZZARD" }
 Data.PORTRAIT_BORDER_VALUES = { "NONE", "SOLID", "CLASS_COLOR", "REACTION", "CUSTOM" }
 Data.PORTRAIT_PLACEMENT_VALUES = { "ATTACHED", "DETACHED", "OVERLAY" }
 Data.PORTRAIT_ANCHOR_POINT_VALUES = {

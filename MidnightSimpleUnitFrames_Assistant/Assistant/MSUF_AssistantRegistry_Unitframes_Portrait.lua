@@ -15,7 +15,7 @@ A.UnitframesRegistry = A.UnitframesRegistry or {}
 local UnitframeData = A.UnitframeRegistryData or {}
 local PORTRAIT_MODE_VALUES = UnitframeData.PORTRAIT_MODE_VALUES or {}
 local PORTRAIT_RENDER_VALUES = UnitframeData.PORTRAIT_RENDER_VALUES or {}
-local PORTRAIT_SHAPE_VALUES = UnitframeData.PORTRAIT_SHAPE_VALUES or {}
+local PORTRAIT_SHAPE_VALUES = UnitframeData.PORTRAIT_SHAPE_VALUES_UNIT or UnitframeData.PORTRAIT_SHAPE_VALUES or {}
 local PORTRAIT_BORDER_VALUES = UnitframeData.PORTRAIT_BORDER_VALUES or {}
 local PORTRAIT_PLACEMENT_VALUES = UnitframeData.PORTRAIT_PLACEMENT_VALUES or {}
 local PORTRAIT_ANCHOR_POINT_VALUES = UnitframeData.PORTRAIT_ANCHOR_POINT_VALUES or {}
@@ -113,6 +113,11 @@ function A.UnitframesRegistry.RegisterPortraitSettings(ctx, unit)
             round = "CIRCLE",
             rounded = "ROUNDED",
             diamond = "DIAMOND",
+            blizzard = "BLIZZARD",
+            ["blizzard ring"] = "BLIZZARD",
+            ["blizzard-ring"] = "BLIZZARD",
+            ["gold ring"] = "BLIZZARD",
+            goldring = "BLIZZARD",
         },
     })
     RegisterUnitNumberSetting(unit, "portraitSizeOverride", "portraitSizeOverride", "Portrait Size Override",

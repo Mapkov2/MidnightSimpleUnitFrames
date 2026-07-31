@@ -93,6 +93,50 @@ local PORTRAIT_RING_ROTATION = {
   DOWN  = { 1, 1, 1, 0, 0, 1, 0, 0 },
   LEFT  = { 1, 0, 0, 0, 1, 1, 0, 1 },
 }
+--- Stock Blizzard player-frame portrait dressing, used by the BLIZZARD shape.
+--- Every texture is the client's own asset, untinted: Blizzard's circular
+--- portrait mask atlas, the gold ring cropped out of the stock frame atlas,
+--- and the corner embellishment that fills the square notch the ring art
+--- leaves at its lower right.
+---
+--- The crop geometry was measured from the shipped art itself (uiunitframe,
+--- fileDataID 4631591, identical bytes on 12.0.7 live and 12.1.0 ptr): the
+--- 198x71 atlas element draws centered on the 232x100 player frame, which
+--- puts Blizzard's 60x60 portrait rect at 7,4.5 inside the element. The gold
+--- ring's outer contour is a circle around element point 37,35 whose art
+--- (plus soft shadow) ends by radius 34.5; everything further out is fused
+--- bar-housing chrome, so a circle clip at that radius yields exactly the
+--- stock ring. All values below are stored as fractions of the element and
+--- of the portrait rect, which keeps the mapping valid if the art sheet is
+--- ever resized uniformly. The embellishment quad comes from
+--- PlayerFrame.xml: TOPLEFT 58.5,-53.5 at atlas size 23 -- portrait-relative
+--- 34.5,34.5, and it covers the ring notch (52..64 x 50..62) exactly.
+local BLIZZARD_PORTRAIT_MASK_ATLAS = "UI-HUD-UnitFrame-Player-Portrait-Mask"
+local BLIZZARD_PORTRAIT_FRAME_ATLAS = "UI-HUD-UnitFrame-Player-PortraitOn"
+local BLIZZARD_PORTRAIT_CORNER_ATLAS = "UI-HUD-UnitFrame-Player-PortraitOn-CornerEmbellishment"
+--- In the shipped art the gold ring is not a closed circle: past one o'clock
+--- it opens into the bar housing, whose chrome continues the line. A least
+--- squares fit of the ring's clean left/top outer contour gives a circle
+--- around element point 36,34.25 (R 31.25; every left-half pixel including
+--- soft shadow sits inside R 33.4). Freestanding portraits therefore render
+--- the clean LEFT half of the ring twice -- once as-is, once mirrored across
+--- the fitted axis -- which closes the ring seamlessly with nothing but
+--- Blizzard's own pixels. Crop: left half of the clip circle (radius 34).
+local BLIZZARD_RING_U0 = 2 / 198
+local BLIZZARD_RING_U1 = 36 / 198
+local BLIZZARD_RING_V0 = 0.25 / 71
+local BLIZZARD_RING_V1 = 68.25 / 71
+--- Quad offsets as fractions of the portrait extent (rect 7,4.5 size 60):
+--- negative = outside the portrait rim on that edge. AXIS is the mirror
+--- seam's distance from the portrait's left edge.
+local BLIZZARD_RING_LEFT = (2 - 7) / 60
+local BLIZZARD_RING_AXIS = (36 - 7) / 60
+local BLIZZARD_RING_RIGHT = (70 - 67) / 60
+local BLIZZARD_RING_TOP = (0.25 - 4.5) / 60
+local BLIZZARD_RING_BOTTOM = (68.25 - 64.5) / 60
+--- Corner embellishment quad, in fractions of the portrait extent.
+local BLIZZARD_CORNER_OFFSET = 34.5 / 60
+local BLIZZARD_CORNER_SIZE = 23 / 60
 local QUEUED_2D_PORTRAIT_EVENTS = V.QUEUED_2D_PORTRAIT_EVENTS or {
   UNIT_PORTRAIT_UPDATE = true,
   UNIT_MODEL_CHANGED = true,
@@ -142,6 +186,37 @@ local portraitUnitGeneration = {
   focustarget = 0,
 }
 local portraitGenerationEventStamp = {}
+local PORTRAIT_TEXTURE_CACHE_LIMIT = 32
+local portraitTextureByKey = {}
+local portraitTextureKeys = {}
+local portraitTextureKeyCount = 0
+local portraitTextureKeyNext = 1
+
+local function GetCachedPortraitTexture(key)
+  return key ~= nil and portraitTextureByKey[key] or nil
+end
+
+local function CachePortraitTexture(key, textureValue)
+  local valueType = type(textureValue)
+  if key == nil or (valueType ~= "number" and valueType ~= "string") then return end
+  if portraitTextureByKey[key] ~= nil then
+    portraitTextureByKey[key] = textureValue
+    return
+  end
+  if portraitTextureKeyCount < PORTRAIT_TEXTURE_CACHE_LIMIT then
+    portraitTextureKeyCount = portraitTextureKeyCount + 1
+    portraitTextureKeys[portraitTextureKeyCount] = key
+  else
+    local oldKey = portraitTextureKeys[portraitTextureKeyNext]
+    if oldKey ~= nil then portraitTextureByKey[oldKey] = nil end
+    portraitTextureKeys[portraitTextureKeyNext] = key
+    portraitTextureKeyNext = portraitTextureKeyNext + 1
+    if portraitTextureKeyNext > PORTRAIT_TEXTURE_CACHE_LIMIT then
+      portraitTextureKeyNext = 1
+    end
+  end
+  portraitTextureByKey[key] = textureValue
+end
 
 local function ClearClassPortraitCache(texture)
   if not texture or texture._msufPortraitClassReady ~= true then return end
@@ -332,6 +407,9 @@ local function BuildUnitPortraitKey(unit, frame, p, guid)
     if generation == nil then
       return nil, exists, available
     end
+    -- The trailing flag separates the two native render modes: the BLIZZARD
+    -- shape resolves an unmasked bust, so its cached assets must never be
+    -- replayed onto a legacy-masked portrait or vice versa.
     return "2D_PENDING|"
       .. PortraitKeyPart(unit) .. "|"
       .. PortraitKeyPart(frame and frame.MSUFUnitKey) .. "|"
@@ -341,7 +419,8 @@ local function BuildUnitPortraitKey(unit, frame, p, guid)
       .. PortraitKeyPart(p and p.texL) .. "|"
       .. PortraitKeyPart(p and p.texR) .. "|"
       .. PortraitKeyPart(p and p.texT) .. "|"
-      .. PortraitKeyPart(p and p.texB), exists, available
+      .. PortraitKeyPart(p and p.texB)
+      .. ((p and p.shape == "BLIZZARD") and "|B" or "|-"), exists, available
   end
   return "2D|"
     .. PortraitKeyPart(unit) .. "|"
@@ -353,7 +432,8 @@ local function BuildUnitPortraitKey(unit, frame, p, guid)
     .. PortraitKeyPart(p and p.texL) .. "|"
     .. PortraitKeyPart(p and p.texR) .. "|"
     .. PortraitKeyPart(p and p.texT) .. "|"
-    .. PortraitKeyPart(p and p.texB), exists, available
+    .. PortraitKeyPart(p and p.texB)
+    .. ((p and p.shape == "BLIZZARD") and "|B" or "|-"), exists, available
 end
 
 local function UnitPortraitKeyChanged(texture, unit, frame, p)
@@ -462,9 +542,14 @@ local function EnsureCastPortraitIcon(frame)
   return texture
 end
 
+local ApplyBlizzardPortraitMask
+
 local function ApplyPortraitMask(holder, p)
   local mask = holder and holder.mask
   if not mask then
+    return
+  end
+  if p and p.shape == "BLIZZARD" and ApplyBlizzardPortraitMask(mask) then
     return
   end
   SetTextureCached(mask, PORTRAIT_MASKS[p and p.shape or "SQUARE"] or WHITE)
@@ -509,7 +594,8 @@ end
 --- lets identity-driven border colour updates reuse them without GetWidth calls.
 --- Before the anchor has a usable size, fall back to the compiled portrait extent.
 local function CachePortraitLayoutExtents(holder, anchor, frame, point, p, width, height, x, y)
-  if point ~= "FULL" or not (p and p.border and p.border.art == "RELIEF") then
+  local scaledDressing = p and ((p.border and p.border.art == "RELIEF") or p.shape == "BLIZZARD")
+  if point ~= "FULL" or not scaledDressing then
     if holder._msufLayoutWidth ~= nil then holder._msufLayoutWidth = nil end
     if holder._msufLayoutHeight ~= nil then holder._msufLayoutHeight = nil end
     return
@@ -730,9 +816,29 @@ ApplyUnitPortrait = function(texture, unit, frame, p, force,
   end
 
   SetTexCoordCached(texture, l, r, t, b)
+  if force ~= true then
+    local cachedTexture = GetCachedPortraitTexture(key)
+    if cachedTexture ~= nil then
+      -- Revisiting a GUID/style combination can reuse the asset resolved by an
+      -- earlier authoritative SetPortraitTexture call. Bust events still force
+      -- Blizzard's native resolver and replace this bounded session cache.
+      SetTextureCached(texture, cachedTexture)
+      texture._msufPortraitGUID = guid or (exists and nil or false)
+      texture._msufPortraitKey = key
+      return
+    end
+  end
+
   texture._msufTexture = nil
   texture._msufAtlas = nil
-  SetPortraitTexture(texture, unit)
+  -- Blizzard's stock frames pass disablePortraitMask (UnitFrame.lua) so the
+  -- client renders the modern bust: transparent background, no baked-in
+  -- circular vignette, hair free to overflow the ring. The BLIZZARD shape
+  -- needs that exact render; every other shape keeps the legacy call.
+  SetPortraitTexture(texture, unit, (p and p.shape == "BLIZZARD") or nil)
+  local resolvedTexture = texture.GetTexture and texture:GetTexture() or nil
+  CachePortraitTexture(key, resolvedTexture)
+  if resolvedTexture ~= nil then texture._msufTexture = resolvedTexture end
   texture._msufPortraitGUID = guid or (exists and nil or false)
   texture._msufPortraitKey = key
 end
@@ -788,7 +894,7 @@ local function ApplyCastPortraitIcon(frame, icon)
   return true
 end
 
-local function RestoreCastPortraitIcon(frame)
+local function RestoreCastPortraitIcon(frame, forceHideIcon)
   if not frame then
     return
   end
@@ -799,12 +905,19 @@ local function RestoreCastPortraitIcon(frame)
   if active then
     SetShown(texture, false)
     SetShown(frame.portrait, frame._msufPortraitPositionAnchorOnly ~= true)
+  elseif forceHideIcon == true and texture then
+    -- The active flag and the cached shown state can both go stale when the
+    -- option is switched off while a cast overlay is up (deferred applies,
+    -- combat lockdown). SetShown is a cached noop when already hidden, so
+    -- hiding unconditionally here costs nothing and guarantees a disabled
+    -- option can never leave a cast icon stuck next to the portrait.
+    SetShown(texture, false)
   end
 end
 
 UpdateCastPortrait = function(frame, p, event)
   if not (frame and p and p.castSpellIcon == true) then
-    RestoreCastPortraitIcon(frame)
+    RestoreCastPortraitIcon(frame, true)
     return false
   end
   local icon = ActiveCastIcon(frame.MSUFUnitKey, event)
@@ -844,6 +957,11 @@ end
 PortraitBorderNeedsUpdate = function(event, p)
   if event == "MSUF_APPLY" or event == "MSUF_FORCE_UPDATE" then
     return true
+  end
+  -- The stock Blizzard dressing never tints, so no gameplay event can change
+  -- it; class/reaction border colours are inert for this shape by design.
+  if p and p.shape == "BLIZZARD" then
+    return false
   end
   local style = p and p.border and p.border.style
   return DYNAMIC_PORTRAIT_BORDER[style] == true
@@ -990,11 +1108,199 @@ local function LayoutPortraitArtBorder(holder, p, shape, thick, direction, r, g,
   return true
 end
 
+--- Blizzard has no standalone "just the ring" atlas: the gold ring is baked
+--- into the full player-frame atlas fused with the bar-housing chrome. The
+--- measured crop rect above cuts the ring circle out of it; the circle clip
+--- mask on the quad then removes the fused chrome that survives the rect.
+--- Resolved once per session from C_Texture.GetAtlasInfo, so a client-side
+--- art relocation inside the sheet is picked up without code changes.
+local blizzardRingInfo
+local function BlizzardRingInfo()
+  if blizzardRingInfo ~= nil then
+    return blizzardRingInfo or nil
+  end
+  local GetAtlasInfo = _G.C_Texture and _G.C_Texture.GetAtlasInfo
+  local info = GetAtlasInfo and GetAtlasInfo(BLIZZARD_PORTRAIT_FRAME_ATLAS) or nil
+  local file = info and (info.file or info.filename) or nil
+  if file == nil then
+    blizzardRingInfo = false
+    return nil
+  end
+  local l0 = tonumber(info.leftTexCoord) or 0
+  local t0 = tonumber(info.topTexCoord) or 0
+  local du = (tonumber(info.rightTexCoord) or 1) - l0
+  local dv = (tonumber(info.bottomTexCoord) or 1) - t0
+  blizzardRingInfo = {
+    file = file,
+    l = l0 + BLIZZARD_RING_U0 * du,
+    r = l0 + BLIZZARD_RING_U1 * du,
+    t = t0 + BLIZZARD_RING_V0 * dv,
+    b = t0 + BLIZZARD_RING_V1 * dv,
+    corner = (GetAtlasInfo(BLIZZARD_PORTRAIT_CORNER_ATLAS)) ~= nil,
+  }
+  return blizzardRingInfo
+end
+
+local blizzardMaskAtlasKnown
+local function BlizzardMaskAtlasAvailable()
+  if blizzardMaskAtlasKnown == nil then
+    local GetAtlasInfo = _G.C_Texture and _G.C_Texture.GetAtlasInfo
+    blizzardMaskAtlasKnown = (GetAtlasInfo and GetAtlasInfo(BLIZZARD_PORTRAIT_MASK_ATLAS)) ~= nil
+  end
+  return blizzardMaskAtlasKnown == true
+end
+
+--- Blizzard's own soft-edged circular mask; our circle mask file only steps in
+--- if the client no longer knows the atlas at all.
+ApplyBlizzardPortraitMask = function(mask)
+  if BlizzardMaskAtlasAvailable() then
+    SetAtlasCached(mask, BLIZZARD_PORTRAIT_MASK_ATLAS)
+  else
+    SetTextureCached(mask, PORTRAIT_MASKS.CIRCLE or WHITE)
+  end
+  return true
+end
+
+local function EnsureBlizzardPortraitRing(holder)
+  local ring = holder.blizzRing
+  if ring then
+    return ring
+  end
+  local border = holder.border
+  if not (border and border.CreateTexture) then
+    return nil
+  end
+  ring = border:CreateTexture(nil, "OVERLAY", nil, 2)
+  local mirror = border:CreateTexture(nil, "OVERLAY", nil, 2)
+  if border.CreateMaskTexture and ring.AddMaskTexture then
+    local mask = border:CreateMaskTexture()
+    SetTextureCached(mask, PORTRAIT_MASKS.CIRCLE)
+    ring:AddMaskTexture(mask)
+    mirror:AddMaskTexture(mask)
+    holder.blizzRingMask = mask
+  end
+  holder.blizzRing = ring
+  holder.blizzRingMirror = mirror
+  return ring
+end
+
+local function EnsureBlizzardPortraitCorner(holder)
+  local corner = holder.blizzCorner
+  if corner then
+    return corner
+  end
+  local border = holder.border
+  if not (border and border.CreateTexture) then
+    return nil
+  end
+  corner = border:CreateTexture(nil, "OVERLAY", nil, 3)
+  holder.blizzCorner = corner
+  return corner
+end
+
+--- Every quad is anchored through the portrait rect the same way Blizzard's
+--- XML anchors the stock frame around its portrait, so the ring's opening,
+--- its off-center outer contour and the corner embellishment all land where
+--- the stock frame puts them, at any portrait size. Drawn untinted: the gold
+--- stays Blizzard's gold, and the circle clip mask spans the crop quad, whose
+--- bounding box is exactly the measured clip circle.
+local function LayoutBlizzardPortraitRing(holder, p)
+  local info = BlizzardRingInfo()
+  if not info then
+    return false
+  end
+  local ring = EnsureBlizzardPortraitRing(holder)
+  if not ring then
+    return false
+  end
+  local mirror = holder.blizzRingMirror
+  local width = tonumber(holder._msufLayoutWidth) or tonumber(p and p.width) or tonumber(holder._msufWidth) or 0
+  local height = tonumber(holder._msufLayoutHeight) or tonumber(p and p.height) or tonumber(holder._msufHeight) or 0
+  if width <= 0 then width = tonumber(p and p.size) or 36 end
+  if height <= 0 then height = tonumber(p and p.size) or 36 end
+  local key = width .. "|" .. height
+  if holder._msufBlizzRingKey ~= key then
+    local mask = holder.blizzRingMask
+    local left = BLIZZARD_RING_LEFT * width
+    local axis = BLIZZARD_RING_AXIS * width
+    local right = BLIZZARD_RING_RIGHT * width
+    local top = -BLIZZARD_RING_TOP * height
+    local bottom = -BLIZZARD_RING_BOTTOM * height
+    ring:ClearAllPoints()
+    ring:SetPoint("TOPLEFT", holder, "TOPLEFT", left, top)
+    ring:SetPoint("BOTTOMRIGHT", holder, "BOTTOMLEFT", axis, bottom)
+    if mirror then
+      mirror:ClearAllPoints()
+      mirror:SetPoint("TOPLEFT", holder, "TOPLEFT", axis, top)
+      mirror:SetPoint("BOTTOMRIGHT", holder, "BOTTOMRIGHT", right, bottom)
+    end
+    if mask then
+      mask:ClearAllPoints()
+      mask:SetPoint("TOPLEFT", holder, "TOPLEFT", left, top)
+      mask:SetPoint("BOTTOMRIGHT", holder, "BOTTOMRIGHT", right, bottom)
+    end
+    holder._msufBlizzRingKey = key
+  end
+  SetTextureCached(ring, info.file)
+  SetTexCoordCached(ring, info.l, info.r, info.t, info.b)
+  SetVertexColorCached(ring, 1, 1, 1, 1)
+  SetShown(ring, true)
+  if mirror then
+    SetTextureCached(mirror, info.file)
+    -- Horizontally flipped coords: the clean left half drawn as the right
+    -- half, seam exactly on the fitted axis.
+    SetTexCoordCached(mirror, info.r, info.l, info.t, info.b)
+    SetVertexColorCached(mirror, 1, 1, 1, 1)
+    SetShown(mirror, true)
+  end
+
+  local corner = info.corner and EnsureBlizzardPortraitCorner(holder) or nil
+  if corner then
+    if holder._msufBlizzCornerKey ~= key then
+      corner:ClearAllPoints()
+      corner:SetPoint("TOPLEFT", holder, "TOPLEFT", BLIZZARD_CORNER_OFFSET * width, -BLIZZARD_CORNER_OFFSET * height)
+      corner:SetSize(BLIZZARD_CORNER_SIZE * width, BLIZZARD_CORNER_SIZE * height)
+      holder._msufBlizzCornerKey = key
+    end
+    SetAtlasCached(corner, BLIZZARD_PORTRAIT_CORNER_ATLAS)
+    SetVertexColorCached(corner, 1, 1, 1, 1)
+    SetShown(corner, true)
+  elseif holder.blizzCorner then
+    SetShown(holder.blizzCorner, false)
+  end
+  return true
+end
+
 LayoutPortraitBorder = function(holder, p, r, g, b, a)
   local border = holder and holder.border
   local edges = holder and holder.edges
   if not (border and edges) then
     return
+  end
+  -- The BLIZZARD shape carries its own stock dressing: the gold ring always
+  -- shows and replaces every MSUF border renderer, so the border style and
+  -- colour settings are deliberately inert here.
+  if p and p.shape == "BLIZZARD" then
+    for i = 1, 4 do
+      SetShown(edges[i], false)
+    end
+    if holder.ring then
+      SetShown(holder.ring, false)
+    end
+    if holder.artBorder then
+      SetShown(holder.artBorder, false)
+    end
+    LayoutBlizzardPortraitRing(holder, p)
+    return
+  end
+  if holder.blizzRing then
+    SetShown(holder.blizzRing, false)
+  end
+  if holder.blizzRingMirror then
+    SetShown(holder.blizzRingMirror, false)
+  end
+  if holder.blizzCorner then
+    SetShown(holder.blizzCorner, false)
   end
   if not r then
     for i = 1, 4 do
@@ -1165,6 +1471,9 @@ function Portrait.AcquirePositionAnchor(frame, p)
   if holder.bg then SetShown(holder.bg, false) end
   if holder.ring then SetShown(holder.ring, false) end
   if holder.artBorder then SetShown(holder.artBorder, false) end
+  if holder.blizzRing then SetShown(holder.blizzRing, false) end
+  if holder.blizzRingMirror then SetShown(holder.blizzRingMirror, false) end
+  if holder.blizzCorner then SetShown(holder.blizzCorner, false) end
   if holder.edges then
     for i = 1, 4 do SetShown(holder.edges[i], false) end
   end
@@ -1254,6 +1563,9 @@ function Portrait.Disable(frame)
     if holder.bg then SetShown(holder.bg, false) end
     if holder.ring then SetShown(holder.ring, false) end
     if holder.artBorder then SetShown(holder.artBorder, false) end
+    if holder.blizzRing then SetShown(holder.blizzRing, false) end
+    if holder.blizzRingMirror then SetShown(holder.blizzRingMirror, false) end
+    if holder.blizzCorner then SetShown(holder.blizzCorner, false) end
     if holder.edges then
       for i = 1, 4 do
         SetShown(holder.edges[i], false)
