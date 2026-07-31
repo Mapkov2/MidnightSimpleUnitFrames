@@ -251,50 +251,6 @@ function A.GlobalRegistry.RegisterBaseSettings(ctx)
         "zielauswahl sound", "ziel verloren sound", "ziel verloren sounds", "sound bei ziel", "sound bei zielwechsel", "spiele sound bei ziel",
     }, { category = "Global / Misc", frameType = "misc", reason = "MSUF_ASSISTANT_TARGET_SOUNDS" })
     Registry:RegisterSetting({
-        key = "general.disableBlizzardUnitFrames",
-        label = "Blizzard Unit Frames",
-        category = "Global / Misc",
-        unit = "global",
-        frameType = "misc",
-        attribute = "blizzardFramesVisible",
-        type = "boolean",
-        aliases = { "blizzard unitframes", "blizzard unit frames", "disable blizzard unitframes", "disable blizzard unit frames", "enable blizzard unitframes", "enable blizzard unit frames", "blizzard frames", "standard frames", "default frames", "blizzard unitframe", "blizzard rahmen", "blizzard unitframes deaktivieren", "blizzard unitframes aktivieren", "blizzard unitframes ausblenden", "blizzard unitframes einblenden", "standardrahmen", "standard rahmen", "wow unitframes", "wow rahmen", "original frames" },
-        get = function() return GeneralDB().disableBlizzardUnitFrames == false end,
-        set = function(value) GeneralDB().disableBlizzardUnitFrames = not (value and true or false) end,
-        apply = function() ApplyGeneral("MSUF_ASSISTANT_BLIZZARD_FRAMES", { preview = false, applyAll = false }) end,
-        combatSafe = false,
-        requiresReload = true,
-    })
-
-    Registry:RegisterSetting({
-        key = "general.hardKillBlizzardPlayerFrame",
-        label = "Fully Hide Blizzard PlayerFrame",
-        category = "Global / Misc",
-        unit = "global",
-        frameType = "misc",
-        attribute = "hardKillBlizzardPlayerFrame",
-        type = "boolean",
-        aliases = {
-            "fully hide blizzard playerframe", "hard hide blizzard playerframe",
-            "hard kill blizzard playerframe", "resource bar compatibility",
-            "blizzard player frame compatibility", "hide blizzard player frame completely",
-            "fully hide blizzard player frame", "hard hide blizzard player frame",
-            "hard kill blizzard player frame", "fully hide blizzard playerframe resource bar compatibility",
-            "fully hide blizzard playerframe - resource bar compatibility",
-            "blizzard spieler rahmen komplett verstecken", "blizzard spieler frame komplett verstecken",
-            "playerframe hart verstecken", "spieler frame hart verstecken", "ressourcenleisten kompatibilitaet",
-        },
-        get = function() return GeneralDB().hardKillBlizzardPlayerFrame == true end,
-        set = function(value) GeneralDB().hardKillBlizzardPlayerFrame = value and true or false end,
-        apply = function()
-            ApplyGeneral("MSUF_ASSISTANT_HARDKILL_PLAYERFRAME", { preview = false, applyAll = false })
-            if type(_G.MSUF_ShowReloadRecommendedPopup) == "function" then _G.MSUF_ShowReloadRecommendedPopup("Blizzard PlayerFrame hide mode") end
-        end,
-        combatSafe = false,
-        requiresReload = true,
-    })
-
-    Registry:RegisterSetting({
         key = "general.menuLocale",
         label = "Menu Language",
         category = "Global / Misc",

@@ -103,12 +103,6 @@ end
 local function BuildMisc(ctx)
     local b = W.PageBuilder(ctx)
     b:GlobalStyleHeader("Miscellaneous", "Language, menu behavior, frame highlights, tooltips and Blizzard frames.", 72)
-    M.InstallStaticPopup("MSUF_RELOAD_PLAYERFRAME_HIDE_MODE", {
-        text = M.Tr("This changes how MSUF hides the Blizzard PlayerFrame.\n\nA UI reload is required."),
-        button1 = RELOADUI or M.Tr("Reload"),
-        button2 = CANCEL or M.Tr("Cancel"),
-        OnAccept = function() M.CallIf(ReloadUI) end,
-    })
     local function BindMiscToggle(parent, label, key, default, reason, x, y, width, opts, afterSet)
         local control = W.Toggle(parent, label)
         M.BindBoolWidget(ctx, control,
@@ -464,17 +458,10 @@ local function BuildMisc(ctx)
     M.TrackRefresh(ctx, RefreshTooltipControls)
     local tooltipHelp = W.Text(tooltips, "Applies to unit and group frames. Choose the WoW tooltip or the MSUF panel.", tooltipLeftX, -174, tooltipW - 68, T.colors.muted)
     if tooltipHelp.SetWordWrap then tooltipHelp:SetWordWrap(true) end
-    local blizzard = b:CollapsibleSection("misc_blizzard_frames", "Blizzard Frames", 190, false)
-    BindMiscToggle(blizzard, "Disable Blizzard unitframes", "disableBlizzardUnitFrames", true, "MSUF2_DISABLE_BLIZZARD_UF", nil, nil, nil, nil,
-        function()
-            Call("MSUF_GF_DisableBlizzard")
-            M.CallIf(print, "|cffffd700MSUF:|r Changing Blizzard unitframes visibility requires a /reload.")
-        end)
-    --- Default true mirrors MSUF_Defaults and MSUF_BlizzardFrames, which both
-    --- treat an unset value as the hard hide. A false default here showed the
-    --- switch off while the runtime was hard-hiding.
-    BindMiscToggle(blizzard, "Fully Hide Blizzard PlayerFrame - resource bar compatibility", "hardKillBlizzardPlayerFrame", true, "MSUF2_HARDKILL_PLAYERFRAME", nil, nil, nil, nil,
-        function() M.CallIf(StaticPopup_Show, "MSUF_RELOAD_PLAYERFRAME_HIDE_MODE") end)
+    --- Blizzard frame ownership is per unit ("Force Blizzard frame on" in each
+    --- unit's Frame Basics), so this section only carries the remaining
+    --- Blizzard-adjacent chrome toggles.
+    local blizzard = b:CollapsibleSection("misc_blizzard_frames", "Blizzard Frames", 124, false)
     BindMiscToggle(blizzard, "Show MSUF minimap icon", "showMinimapIcon", true, "MSUF2_MINIMAP_ICON", nil, nil, nil, nil,
         function(v)
             if type(_G.MSUF_SetMinimapIconEnabled) == "function" then

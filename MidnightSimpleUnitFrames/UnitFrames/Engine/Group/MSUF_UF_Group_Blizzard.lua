@@ -46,7 +46,6 @@ local partyReconcileHideSolo
 local rosterEventRegistered = false
 local BlizzardRosterEventWanted
 local blizzardEventsActive = false
-local disabledStateClean = false
 
 local function InCombat()
   return InCombatLockdown and InCombatLockdown()
@@ -485,16 +484,6 @@ local function RestoreRaidFrames(showAfter)
   RefreshBlizzardRaid()
 end
 
-local function General()
-  local db = _G.MSUF_DB
-  return type(db) == "table" and type(db.general) == "table" and db.general or nil
-end
-
-local function ShouldManageBlizzardGroups()
-  local g = General()
-  return not (g and g.disableBlizzardUnitFrames == false)
-end
-
 local BASE_EVENTS = {
   "ADDON_LOADED",
   "PLAYER_LOGIN",
@@ -503,16 +492,11 @@ local BASE_EVENTS = {
   "PLAYER_REGEN_ENABLED",
 }
 
-local function SetBlizzardEventsEnabled(enabled, regenOnly)
+local function SetBlizzardEventsEnabled()
   local frame = EnsureEventFrame()
   frame:UnregisterAllEvents()
   rosterEventRegistered = false
-  blizzardEventsActive = enabled == true
-  if regenOnly then
-    frame:RegisterEvent("PLAYER_REGEN_ENABLED")
-    return
-  end
-  if not enabled then return end
+  blizzardEventsActive = true
   for i = 1, #BASE_EVENTS do frame:RegisterEvent(BASE_EVENTS[i]) end
   RefreshRosterEventRegistration()
 end
@@ -612,9 +596,6 @@ local function ApplyDisabledRaidFallback(mode, msufOwnsGroupFrames)
 end
 
 BlizzardRosterEventWanted = function()
-  if not ShouldManageBlizzardGroups() then
-    return false
-  end
   if MSUFOwnsLiveGroupFrames() then
     return true
   end
@@ -641,22 +622,7 @@ end
 --- Main ownership reconciliation. It compares MSUF group-frame state and the
 --- configured Blizzard fallback mode, then hides/restores party and raid frames.
 function GF.ApplyBlizzardGroupFrameOwnership(reason)
-  if not ShouldManageBlizzardGroups() then
-    if disabledStateClean then return true end
-    if InCombat() then
-      GF._pendingBlizzardGroupOwnership = reason or "disabled"
-      SetBlizzardEventsEnabled(false, true)
-      return false
-    end
-    GF._pendingBlizzardGroupOwnership = nil
-    GF.RestoreBlizzardGroupFrames(false)
-    disabledStateClean = true
-    SetBlizzardEventsEnabled(false)
-    return true
-  end
-
-  disabledStateClean = false
-  if not blizzardEventsActive then SetBlizzardEventsEnabled(true) end
+  if not blizzardEventsActive then SetBlizzardEventsEnabled() end
   if InCombat() then
     GF._pendingBlizzardGroupOwnership = reason or true
     EnsureEventFrame():RegisterEvent("PLAYER_REGEN_ENABLED")
@@ -717,7 +683,6 @@ function GF.ApplyBlizzardGroupFrameOwnership(reason)
 end
 
 local function ScheduleApply(reason)
-  if disabledStateClean and not ShouldManageBlizzardGroups() then return end
   if applyScheduled then
     return
   end
@@ -772,7 +737,7 @@ end
 
 eventFrame = EnsureEventFrame()
 eventFrame:SetScript("OnEvent", OnEvent)
-SetBlizzardEventsEnabled(ShouldManageBlizzardGroups())
+SetBlizzardEventsEnabled()
 
 ExportPublic("MSUF_GF_DisableBlizzard", function()
   return GF.ApplyBlizzardGroupFrameOwnership("legacy-global")
