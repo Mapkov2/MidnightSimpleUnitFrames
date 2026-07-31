@@ -72,6 +72,12 @@ local DATA = {
                     id = "group_frames",
                     icon = "gf_layout",
                     pageKey = "gf_layout",
+                    -- Frame Basics is not open by default, so without this the
+                    -- card landed on a page showing only the scope bar and the
+                    -- group preview.
+                    route = {
+                        accordion = "gf_layout:general",
+                    },
                     title = "Adaptive Party and Raid layouts",
                     summary = "Party, Raid and Mythic Raid gained adaptive layouts and scaling, per-lane aura filters and blacklists, a focused Dispel Overlay page, and per-group control over whether MSUF or Blizzard draws the frames.",
                     impact = "One group setup can follow you from a five-man into a raid, and you decide per lane which auras are allowed to show at all.",
@@ -148,6 +154,14 @@ local DATA = {
                     id = "cast_target_text",
                     icon = "opt_castbar",
                     pageKey = "uf_target",
+                    -- Cast Target Text is a card on the Castbar section's Spell
+                    -- tab, so the route has to open the section and pick the
+                    -- tab; landing on the bare Target page showed no castbar.
+                    route = {
+                        unit = "target",
+                        unitCastbarTab = "spell",
+                        accordion = "uf_target:castbar",
+                    },
                     title = "Cast target text",
                     summary = "Target, Focus and Boss cast bars can now show who the current spell is targeting, with dedicated text styling.",
                     impact = "You can identify the destination of an important cast without shifting attention away from the cast bar.",
@@ -280,6 +294,37 @@ state.releases = type(state.releases) == "table" and state.releases or {}
 local Controller = MSUF.UpgradeHighlights or {}
 MSUF.UpgradeHighlights = Controller
 
+-- This module loads early enough that `MSUF_GlobalDB` can still be missing, and
+-- profile repair or a full reset can replace the root afterwards. Without
+-- re-resolving it, the completed/skipped status is written into an orphaned
+-- table while ShouldShow keeps deriving "pending" from that same orphan - the
+-- release tour then reopens on every single menu visit. Mirrors the
+-- SyncLiveState in MSUF_FirstLoad.lua, which fixed the identical defect there.
+local function SyncLiveState()
+    local liveDB = rawget(_G, "MSUF_GlobalDB")
+    if type(liveDB) ~= "table" then
+        _G.MSUF_GlobalDB = globalDB
+        return state
+    end
+    if type(liveDB.global) ~= "table" then
+        liveDB.global = {}
+    end
+    globalDB = liveDB
+    local liveState = globalDB.global.upgradeHighlights
+    if liveState ~= state then
+        if type(liveState) == "table" and liveState.revision == REVISION
+            and type(liveState.releases) == "table" then
+            state = liveState
+        else
+            globalDB.global.upgradeHighlights = state
+        end
+    end
+    state.schema = 1
+    state.revision = REVISION
+    state.releases = type(state.releases) == "table" and state.releases or {}
+    return state
+end
+
 local function NewRecord(status)
     return {
         status = status or "pending",
@@ -298,6 +343,9 @@ local function FirstLoadKind()
 end
 
 local function InitializeKnownReleases()
+    -- Every read and write path reaches this through PendingRelease, so one
+    -- sync here keeps the whole controller on the live SavedVariables root.
+    SyncLiveState()
     if state.initialized == true then return end
     -- A genuine 6.0 fresh install has nothing to upgrade from. Existing
     -- profiles instead leave the release unseen so it becomes pending below.
@@ -352,6 +400,10 @@ end
 function Controller:GetState()
     InitializeKnownReleases()
     return state
+end
+
+function Controller:SyncSavedVariables()
+    return SyncLiveState()
 end
 
 function Controller:GetCurrent()
@@ -443,6 +495,7 @@ function Controller:ConfirmSkip()
 end
 
 function Controller:ResetCurrent()
+    SyncLiveState()
     local releaseKey = DATA.currentRelease
     state.initialized = true
     state.releases[releaseKey] = NewRecord("pending")
@@ -451,6 +504,7 @@ function Controller:ResetCurrent()
 end
 
 function Controller:BaselineKnownReleases()
+    SyncLiveState()
     state.initialized = true
     for i = 1, #DATA.releaseOrder do
         local releaseKey = DATA.releaseOrder[i]

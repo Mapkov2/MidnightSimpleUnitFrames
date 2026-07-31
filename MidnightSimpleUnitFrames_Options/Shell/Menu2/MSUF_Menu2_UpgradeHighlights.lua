@@ -15,9 +15,36 @@ local tostring = tostring
 local type = type
 
 local PREVIEW_MAX_WIDTH = 320
+local TOUR_BAND_GAP = 16
+local TOUR_CONTROLS_LABEL_HEIGHT = 20
 
 local function Tr(text)
     return type(M.Tr) == "function" and M.Tr(text) or text
+end
+
+-- Highlights can host a small group of live settings so the tour is something
+-- you touch, not only read. The rows are registered by the page that owns the
+-- settings, so reading, writing and applying a value stays in exactly one
+-- place; only the row list crosses into the tour.
+--
+-- spec = { columns?, height, rows = function() return <W.SettingsRows rows> end,
+--          after? = function(ctx, result) }  -- `height` is the grid alone.
+local TOUR_CONTROLS = {}
+
+function M.RegisterUpgradeTourControls(highlightId, spec)
+    highlightId = tostring(highlightId or "")
+    if highlightId == "" or type(spec) ~= "table" or type(spec.rows) ~= "function" then return false end
+    TOUR_CONTROLS[highlightId] = spec
+    return true
+end
+
+local function TourControls(item)
+    local id = type(item) == "table" and item.id or nil
+    local spec = type(id) == "string" and TOUR_CONTROLS[id] or nil
+    if type(spec) ~= "table" then return nil end
+    local W = M.Widgets
+    if not (type(W) == "table" and type(W.SettingsRows) == "function") then return nil end
+    return spec
 end
 
 -- A highlight's `preview` is a media key, not a path: the release registry in
@@ -54,6 +81,10 @@ local function ApplyTargetRoute(item)
         M.unitTextTabSelection = type(M.unitTextTabSelection) == "table" and M.unitTextTabSelection or {}
         M.unitTextTabSelection[unit] = route.unitTextTab
     end
+    if unit ~= "" and type(route.unitCastbarTab) == "string" then
+        M.unitCastbarTabSelection = type(M.unitCastbarTabSelection) == "table" and M.unitCastbarTabSelection or {}
+        M.unitCastbarTabSelection[unit] = route.unitCastbarTab
+    end
     if unit ~= "" and type(route.unitAuraTab) == "string" then
         M.unitAuraTabSelection = type(M.unitAuraTabSelection) == "table" and M.unitAuraTabSelection or {}
         M.unitAuraTabSelection[unit] = route.unitAuraTab
@@ -64,15 +95,22 @@ local function ApplyTargetRoute(item)
             tools[route.unitAuraTab] = route.unitAuraTool
         end
     end
+    -- Sections open through the shared menu focus request, not by writing
+    -- accordion state directly. The direct write was persistent, so every
+    -- section an earlier highlight had opened stayed open: the HP Text card
+    -- landed on the Auras section the first card opened, and the Portrait card
+    -- landed on Text. A focus-opened section also scrolls into view, flashes
+    -- its header, and closes again on the next navigation.
     if type(route.accordion) == "string" and route.accordion ~= "" then
-        local accordion
-        if type(M.GetPersistentMenuStateTable) == "function" then
-            accordion = M.GetPersistentMenuStateTable("accordionState")
-        else
-            M.accordionState = type(M.accordionState) == "table" and M.accordionState or {}
-            accordion = M.accordionState
+        local pageKey, sectionId = route.accordion:match("^([^:]+):(.+)$")
+        if pageKey and sectionId then
+            _G.MSUF_EM2_MenuFocusRequest = {
+                pageKey = pageKey,
+                sectionId = sectionId,
+                explicit = true,
+                consumed = false,
+            }
         end
-        accordion[route.accordion] = true
     end
 end
 M.ApplyUpgradeHighlightTargetRoute = ApplyTargetRoute
@@ -84,7 +122,11 @@ local function OpenPage(item)
     if type(item) == "table" and type(item.route) == "table" and type(M.InvalidatePage) == "function" then
         M.InvalidatePage(pageKey)
     end
-    if type(M.SelectPage) == "function" then M.SelectPage(pageKey or "home") end
+    -- A refused page change (combat) must not leave the focus request armed, or
+    -- it fires at the next unrelated navigation.
+    if type(M.SelectPage) == "function" and M.SelectPage(pageKey or "home") == false then
+        _G.MSUF_EM2_MenuFocusRequest = nil
+    end
 end
 
 local function SetTextLayout(fontString, width, justify)
@@ -236,8 +278,11 @@ local function BuildLanding(ctx, scene, T, releaseKey, spec, record, contentWidt
         contentWidth)
 
     local profile = tostring(_G.MSUF_ActiveProfile or "Default")
+    -- Highlight cards now host live controls, so the old absolute promise
+    -- ("no settings will be changed") would be a lie the moment someone uses
+    -- one. The tour still never writes a value on its own.
     local safety = T.Font(scene, "GameFontDisableSmall",
-        format(Tr("CURRENT PROFILE: %s - NO SETTINGS WILL BE CHANGED"), profile), T.colors.ok or T.colors.coreHot)
+        format(Tr("CURRENT PROFILE: %s - NOTHING CHANGES UNTIL YOU CHANGE IT"), profile), T.colors.ok or T.colors.coreHot)
     safety:SetPoint("TOP", scene, "TOP", 0, -154)
     SetTextLayout(safety, contentWidth, "CENTER")
 
@@ -343,6 +388,29 @@ local function BuildLayerDummyPreview(card, T, x, width)
     return panel
 end
 
+-- Live settings inside the highlight card. W.SettingsRows uses the same widget
+-- constructors and binders the real pages use, so these controls inherit the
+-- page behavior wholesale: combat gating, Undo/Redo, and the owning page's
+-- apply path. The tour never writes a value on its own.
+local function BuildTourControls(ctx, card, T, spec, x, y, width)
+    local rows = spec.rows()
+    if type(rows) ~= "table" or #rows == 0 then return false end
+    local hint = T.Font(card, "GameFontDisableSmall", Tr("TRY IT RIGHT HERE"), T.colors.coreHot or T.colors.accent)
+    hint:SetPoint("TOPLEFT", card, "TOPLEFT", x, y)
+    SetTextLayout(hint, width, "LEFT")
+    local result = M.Widgets.SettingsRows(ctx, card, {
+        x = x,
+        y = y - TOUR_CONTROLS_LABEL_HEIGHT,
+        width = width,
+        columns = max(1, tonumber(spec.columns) or 1),
+        rows = rows,
+    })
+    -- Gating is page knowledge (which control depends on which master), so the
+    -- registering page wires it here rather than the tour guessing at it.
+    if type(spec.after) == "function" then spec.after(ctx, result) end
+    return true
+end
+
 local function BuildActive(ctx, scene, T, releaseKey, spec, record, contentWidth, compact, sceneTop)
     local count = #spec.highlights
     local index = max(1, min(count, tonumber(record.index) or 1))
@@ -352,19 +420,27 @@ local function BuildActive(ctx, scene, T, releaseKey, spec, record, contentWidth
 
     local cardTop = -184
     local hasLayerPreview = item.id == "frame_layers"
+    local textX = compact and 20 or 88
+    local textWidth = compact and (contentWidth - 40) or (contentWidth - 112)
     local previewSpec = PreviewSpec(item)
-    local previewWidth = previewSpec and min(PREVIEW_MAX_WIDTH, max(160, contentWidth - (compact and 40 or 112))) or 0
+    local previewWidth = previewSpec and min(PREVIEW_MAX_WIDTH, max(160, textWidth)) or 0
     local previewHeight = previewSpec and floor(previewWidth / (previewSpec.aspect or 2) + 0.5) or 0
+    local controlsSpec = TourControls(item)
+    -- The rows always get the full text column: a side-by-side split next to the
+    -- screenshot leaves roughly 130px per column, which is not enough for a
+    -- toggle label like "Mouseover highlights".
+    local controlsHeight = controlsSpec
+        and (TOUR_CONTROLS_LABEL_HEIGHT + max(40, tonumber(controlsSpec.height) or 120)) or 0
+    local bandHeight = previewHeight + controlsHeight
+        + ((previewSpec and controlsSpec) and TOUR_BAND_GAP or 0)
     local cardHeight = (compact and 280 or 240) + (hasLayerPreview and 96 or 0)
-        + (previewSpec and (previewHeight + 16) or 0)
+        + (bandHeight > 0 and (bandHeight + 16) or 0)
     local card = T.Panel(scene, nil, T.colors.coreShadow or T.colors.bg, T.colors.cardBorder or T.colors.borderSoft)
     card:SetPoint("TOPLEFT", scene, "TOPLEFT", floor((scene:GetWidth() - contentWidth) / 2), cardTop)
     card:SetSize(contentWidth, cardHeight)
     if type(T.ApplySurface) == "function" then T.ApplySurface(card, "card") end
     CreateIconWell(card, T, item.icon, compact and 44 or 52, 20, -20)
 
-    local textX = compact and 20 or 88
-    local textWidth = compact and (contentWidth - 40) or (contentWidth - 112)
     local titleTop = compact and -80 or -24
     local title = T.Font(card, "GameFontNormalLarge", Tr(item.title), T.colors.title or T.colors.text)
     title:SetPoint("TOPLEFT", card, "TOPLEFT", textX, titleTop)
@@ -382,8 +458,13 @@ local function BuildActive(ctx, scene, T, releaseKey, spec, record, contentWidth
     if hasLayerPreview then
         BuildLayerDummyPreview(card, T, textX, textWidth)
     end
+    local bandTop = -(cardHeight - bandHeight - 16)
     if previewSpec and type(M.Widgets) == "table" and type(M.Widgets.PreviewImage) == "function" then
-        M.Widgets.PreviewImage(card, previewSpec, textX, -(cardHeight - previewHeight - 16), previewWidth)
+        M.Widgets.PreviewImage(card, previewSpec, textX, bandTop, previewWidth)
+    end
+    if controlsSpec then
+        local controlsTop = previewSpec and (bandTop - previewHeight - TOUR_BAND_GAP) or bandTop
+        BuildTourControls(ctx, card, T, controlsSpec, textX, controlsTop, textWidth)
     end
 
     local buttonsTop = cardTop - cardHeight - 20

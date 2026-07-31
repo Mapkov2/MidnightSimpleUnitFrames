@@ -58,29 +58,65 @@ local function NewState()
     }
 end
 
+local function Normalize(target)
+    target.schema = 1
+    if not VALID_STATUS[target.status] then target.status = "inactive" end
+    if type(target.currentStageId) ~= "string" or target.currentStageId == "" then
+        target.currentStageId = DEFAULT_STAGE
+    end
+    target.currentStageIndex = math.max(1, tonumber(target.currentStageIndex) or 1)
+    target.cursors = type(target.cursors) == "table" and target.cursors or {}
+    target.stageResults = type(target.stageResults) == "table" and target.stageResults or {}
+    target.sectionResults = type(target.sectionResults) == "table" and target.sectionResults or {}
+    target.sectionMetadata = type(target.sectionMetadata) == "table" and target.sectionMetadata or {}
+    target.controlResults = type(target.controlResults) == "table" and target.controlResults or {}
+    target.skippedControls = type(target.skippedControls) == "table" and target.skippedControls or {}
+    target.preferences = type(target.preferences) == "table" and target.preferences or {}
+    return target
+end
+
 local state = globalDB.global.guidedTour6
 if type(state) ~= "table" or state.revision ~= REVISION then
     state = NewState()
     globalDB.global.guidedTour6 = state
 else
-    state.schema = 1
-    if not VALID_STATUS[state.status] then state.status = "inactive" end
-    if type(state.currentStageId) ~= "string" or state.currentStageId == "" then
-        state.currentStageId = DEFAULT_STAGE
-    end
-    state.currentStageIndex = math.max(1, tonumber(state.currentStageIndex) or 1)
-    state.cursors = type(state.cursors) == "table" and state.cursors or {}
-    state.stageResults = type(state.stageResults) == "table" and state.stageResults or {}
-    state.sectionResults = type(state.sectionResults) == "table" and state.sectionResults or {}
-    state.sectionMetadata = type(state.sectionMetadata) == "table" and state.sectionMetadata or {}
-    state.controlResults = type(state.controlResults) == "table" and state.controlResults or {}
-    state.skippedControls = type(state.skippedControls) == "table" and state.skippedControls or {}
-    state.preferences = type(state.preferences) == "table" and state.preferences or {}
+    Normalize(state)
 end
 
 local Tour = MSUF.GuidedTour6 or {}
 MSUF.GuidedTour6 = Tour
 _G.MSUF_GuidedTour6 = Tour
+
+-- This module loads before `MSUF_GlobalDB` is guaranteed to exist, and profile
+-- repair or a full reset can replace the root afterwards. Without re-resolving
+-- it, a completed or dismissed tour is recorded in an orphaned table while the
+-- menu keeps reading "inactive" from that same orphan, so the tour offers
+-- itself again on every visit. Mirrors MSUF_FirstLoad.lua's SyncLiveState.
+local function SyncLiveState()
+    local liveDB = rawget(_G, "MSUF_GlobalDB")
+    if type(liveDB) ~= "table" then
+        _G.MSUF_GlobalDB = globalDB
+        return state
+    end
+    if type(liveDB.global) ~= "table" then
+        liveDB.global = {}
+    end
+    globalDB = liveDB
+    local liveState = globalDB.global.guidedTour6
+    if liveState ~= state then
+        if type(liveState) == "table" and liveState.revision == REVISION then
+            state = Normalize(liveState)
+        else
+            globalDB.global.guidedTour6 = state
+        end
+    end
+    return state
+end
+
+-- Every public entry point below reads or writes `state`, so each one calls
+-- SyncLiveState first. Wrapping them in a loop would be shorter, but an
+-- explicit call is what MSUF_FirstLoad does and it stays obvious to the next
+-- reader adding a method.
 
 local function Touch()
     state.updatedAt = Now()
@@ -103,14 +139,20 @@ local function ResultCode(result)
 end
 
 function Tour:GetState()
-    return state
+    return SyncLiveState()
+end
+
+function Tour:SyncSavedVariables()
+    return SyncLiveState()
 end
 
 function Tour:IsActive()
+    SyncLiveState()
     return state.status == "active"
 end
 
 function Tour:Start(profileName, firstStageId, restorePoint)
+    SyncLiveState()
     local fresh = NewState()
     fresh.status = "active"
     fresh.currentStageId = type(firstStageId) == "string" and firstStageId ~= "" and firstStageId or DEFAULT_STAGE
@@ -126,10 +168,12 @@ function Tour:Start(profileName, firstStageId, restorePoint)
 end
 
 function Tour:GetRestorePoint()
+    SyncLiveState()
     return type(state.restorePoint) == "table" and state.restorePoint or nil
 end
 
 function Tour:MarkRestorePointUsed(used)
+    SyncLiveState()
     if state.status ~= "active" or type(state.restorePoint) ~= "table" then return false end
     if used == false then
         state.restorePointUsedAt = nil
@@ -141,6 +185,7 @@ function Tour:MarkRestorePointUsed(used)
 end
 
 function Tour:Resume()
+    SyncLiveState()
     if state.status ~= "active" then return false end
     state.resumedAt = Now()
     Touch()
@@ -148,6 +193,7 @@ function Tour:Resume()
 end
 
 function Tour:SetStage(stageId, stageIndex)
+    SyncLiveState()
     if state.status ~= "active" or type(stageId) ~= "string" or stageId == "" then return false end
     state.currentStageId = stageId
     state.currentStageIndex = math.max(1, tonumber(stageIndex) or state.currentStageIndex or 1)
@@ -156,12 +202,14 @@ function Tour:SetStage(stageId, stageIndex)
 end
 
 function Tour:GetPreference(key)
+    SyncLiveState()
     key = type(key) == "string" and key or ""
     if key == "" then return nil end
     return state.preferences[key]
 end
 
 function Tour:SetPreference(key, value)
+    SyncLiveState()
     if state.status ~= "active" or type(key) ~= "string" or key == "" then return false end
     local valueType = type(value)
     if value ~= nil and valueType ~= "string" and valueType ~= "number" and valueType ~= "boolean" then return false end
@@ -171,16 +219,19 @@ function Tour:SetPreference(key, value)
 end
 
 function Tour:IsEditModePlacementComplete()
+    SyncLiveState()
     return state.preferences[EDIT_MODE_MOVED_PREFERENCE] == true
         and state.preferences.editModePopupOpened == true
 end
 
 function Tour:IsGroupEditModePlacementComplete()
+    SyncLiveState()
     return state.preferences.groupEditModeMoved == true
         and state.preferences.groupEditModePopupOpened == true
 end
 
 function Tour:MarkEditModePopupOpened(moverKey)
+    SyncLiveState()
     if state.status ~= "active" then return false end
     moverKey = tostring(moverKey or "")
     if state.currentStageId == GROUP_EDIT_MODE_STAGE then
@@ -200,6 +251,7 @@ function Tour:MarkEditModePopupOpened(moverKey)
 end
 
 function Tour:MarkEditModePlacementComplete(moverKey)
+    SyncLiveState()
     if state.status ~= "active" then return false end
     moverKey = tostring(moverKey or "")
     if state.currentStageId == GROUP_EDIT_MODE_STAGE then
@@ -222,12 +274,14 @@ function Tour:MarkEditModePlacementComplete(moverKey)
 end
 
 function Tour:GetCursor(stageId)
+    SyncLiveState()
     stageId = tostring(stageId or state.currentStageId or DEFAULT_STAGE)
     local cursor = state.cursors[stageId]
     return type(cursor) == "table" and cursor or nil
 end
 
 function Tour:SetCursor(stageId, cursor)
+    SyncLiveState()
     if state.status ~= "active" then return false end
     stageId = tostring(stageId or state.currentStageId or DEFAULT_STAGE)
     if stageId == "" then return false end
@@ -237,6 +291,7 @@ function Tour:SetCursor(stageId, cursor)
 end
 
 function Tour:RecordControl(stageId, controlId, result, metadata)
+    SyncLiveState()
     if state.status ~= "active" then return false end
     stageId, controlId = tostring(stageId or ""), tostring(controlId or "")
     local code = ResultCode(result)
@@ -264,6 +319,7 @@ function Tour:RecordControl(stageId, controlId, result, metadata)
 end
 
 function Tour:RecordSection(stageId, sectionId, result, metadata)
+    SyncLiveState()
     if state.status ~= "active" then return false end
     stageId, sectionId = tostring(stageId or ""), tostring(sectionId or "")
     local code = ResultCode(result)
@@ -282,6 +338,7 @@ function Tour:RecordSection(stageId, sectionId, result, metadata)
 end
 
 function Tour:RecordStage(stageId, result)
+    SyncLiveState()
     if state.status ~= "active" then return false end
     stageId = tostring(stageId or "")
     local code = ResultCode(result)
@@ -292,6 +349,7 @@ function Tour:RecordStage(stageId, result)
 end
 
 function Tour:GetSummary()
+    SyncLiveState()
     local summary = {
         reviewedStages = 0,
         keptStages = 0,
@@ -319,6 +377,7 @@ function Tour:GetSummary()
 end
 
 function Tour:Complete()
+    SyncLiveState()
     state.status = "completed"
     state.completedAt = Now()
     state.restorePoint = nil
@@ -329,6 +388,7 @@ function Tour:Complete()
 end
 
 function Tour:Dismiss()
+    SyncLiveState()
     state.status = "dismissed"
     state.dismissedAt = Now()
     Touch()
@@ -336,6 +396,7 @@ function Tour:Dismiss()
 end
 
 function Tour:Reset()
+    SyncLiveState()
     state = NewState()
     globalDB.global.guidedTour6 = state
     return true
