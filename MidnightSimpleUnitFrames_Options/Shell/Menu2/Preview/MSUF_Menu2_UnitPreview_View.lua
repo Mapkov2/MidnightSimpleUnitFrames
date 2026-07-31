@@ -268,6 +268,9 @@ local function RefreshHandleSelectionVisuals(box)
     local guidesOn = PreviewGuidesVisible(box)
     local selected = box._selectedHandle
     if selected and selected.IsShown and not selected:IsShown() then selected = nil; box._selectedHandle = nil end
+    if PreviewHelpers.RefreshSelectedLayerButtons then
+        PreviewHelpers.RefreshSelectedLayerButtons(box, selected, "layerButtons")
+    end
     for i = 1, #(box.handles or {}) do
         local h = box.handles[i]
         local isSel = h and h == selected
@@ -912,6 +915,18 @@ local HANDLE_BORDER_SPECS = {
     left = { "TOPLEFT", "BOTTOMLEFT", "SetWidth" },
     right = { "TOPRIGHT", "BOTTOMRIGHT", "SetWidth" },
 }
+local function UnitPreviewLayerForHandle(key, fields)
+    fields = fields or {}
+    if fields.auraPreviewKind then return "auras" end
+    if fields.portrait then return "portrait" end
+    if fields.detachedPower then return "power" end
+    if fields.classPower then return "classPower" end
+    if fields.castbar or fields.section == "castbar" then return "castbar" end
+    if fields.statusRefresh or fields.section == "status" then return "status" end
+    if key == "name" then return "nameText" end
+    if tostring(key or ""):match("^hp") then return "hpText" end
+    if tostring(key or ""):match("^power") then return "powerText" end
+end
 local function MakeHandle(preview, key, fields, label, color)
     local h = CreateFrame("Button", nil, preview.canvas)
     h:SetFrameLevel((preview.canvas:GetFrameLevel() or 0) + 30)
@@ -931,6 +946,7 @@ local function MakeHandle(preview, key, fields, label, color)
     h._label = label
     h._fields = fields
     h._key = key
+    h._previewLayerKey = UnitPreviewLayerForHandle(key, fields)
     h._preview = preview
     h._color = color
     h._selBorder = CreateFrame("Frame", nil, h)
@@ -1568,6 +1584,7 @@ local function BuildPreview(parent, panel, width, height)
     local canvas = CreateFrame("Frame", nil, box, "BackdropTemplate")
     canvas:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -30)
     canvas:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, 12)
+    canvas._msuf2PreviewCanvasUnderlay = box
     if PreviewHelpers.ApplyPreviewChrome then
         PreviewHelpers.ApplyPreviewChrome(canvas, "canvas", T, ApplyPreviewBackdrop)
     else
@@ -1642,6 +1659,7 @@ local function BuildPreview(parent, panel, width, height)
         textDisabled = { disabledLayerText[1], disabledLayerText[2], disabledLayerText[3], 0.64 },
         IsAvailable = UnitLayerAvailable,
         IsOn = function(owner, key) return UnitLayerAvailable(owner, key) and owner.layerVisibility[key] ~= false end,
+        IsSelected = function(owner, key) return owner and owner._msuf2SelectedPreviewLayerKey == key end,
         OnClick = function(self, owner)
             if owner.layerAvailable and owner.layerAvailable[self.key] == false then
                 owner.hint:SetText(TR("This layer is off in settings and cannot be shown in preview."))

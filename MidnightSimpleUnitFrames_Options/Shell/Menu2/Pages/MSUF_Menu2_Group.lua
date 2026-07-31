@@ -962,14 +962,22 @@ function GroupPage.BuildPortrait(ctx, builder)
     local function SetSectionHeight(height)
         height = max(120, floor((tonumber(height) or tabH.general) + 0.5))
         local entry = sec and sec._msuf2CollapsibleEntry
-        if sec and sec.SetHeight then sec:SetHeight(height) end
         if entry then
-            entry.contentHeight = height
-            if entry.body and entry.body.SetHeight then entry.body:SetHeight(height) end
+            -- The Portrait content builds lazily after its Party-only shell has
+            -- already been hidden for Raid/Mythic.  Preserve the desired Party
+            -- tab height, but never let that deferred build reactivate space in
+            -- a scope where the section is unavailable.
+            entry._msufPartyPortraitContentHeight = height
+            local appliedHeight = entry._msufPartyPortraitVisible == false and 0 or height
+            entry.contentHeight = appliedHeight
+            if sec and sec.SetHeight then sec:SetHeight(appliedHeight) end
+            if entry.body and entry.body.SetHeight then entry.body:SetHeight(appliedHeight) end
             if entry.outer and entry.outer.SetHeight then
-                entry.outer:SetHeight((entry.headerHeight or 28) + (entry.open and height or 0))
+                entry.outer:SetHeight((entry.headerHeight or 28) + (entry.open and appliedHeight or 0))
             end
             if entry.builder and entry.builder.RequestRelayoutCollapsibles then entry.builder:RequestRelayoutCollapsibles() end
+        elseif sec and sec.SetHeight then
+            sec:SetHeight(height)
         end
     end
     local tabFrames = {}
@@ -1120,6 +1128,7 @@ function GroupPage.PreparePortraitShell(ctx, section)
     entry._msufPartyPortraitContentHeight = entry._msufPartyPortraitContentHeight or entry.contentHeight
     local function Refresh()
         local shown = CurrentScope() == "party"
+        entry._msufPartyPortraitVisible = shown
         if shown then
             entry.headerHeight = entry._msufPartyPortraitHeaderHeight or 28
             entry.contentHeight = entry._msufPartyPortraitContentHeight or entry.contentHeight or 340

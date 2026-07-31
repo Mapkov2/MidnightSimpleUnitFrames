@@ -1956,6 +1956,7 @@ function H.ApplyPreviewChrome(frame, role, theme, fallback)
     return palette
 end
 local LAYER_BUTTON_FALLBACK_COLOR = { 1, 1, 1 }
+local LAYER_BUTTON_SELECTED_BG = { 0.08, 0.34, 0.72, 0.88 }
 local function LayerButtonAvailable(owner, key)
     return not (owner and owner.layerAvailable and owner.layerAvailable[key] == false)
 end
@@ -1975,6 +1976,7 @@ function H.RefreshLayerButton(btn, owner, opts)
     opts = opts or {}
     local available = LayerButtonAvailableFor(owner, btn.key, opts)
     local on = LayerButtonOnFor(owner, btn.key, opts)
+    local selected = opts.IsSelected and opts.IsSelected(owner, btn.key) == true
     local c = btn.color or LAYER_BUTTON_FALLBACK_COLOR
     local textOn = opts.textOn or { 0.82, 0.88, 1.00, 0.98 }
     local textOff = opts.textOff or { 0.54, 0.61, 0.72, 0.78 }
@@ -1990,6 +1992,12 @@ function H.RefreshLayerButton(btn, owner, opts)
         btn.bar:SetColorTexture(c[1], c[2], c[3], 0.20)
         btn.fs:SetTextColor(textDisabled[1], textDisabled[2], textDisabled[3], textDisabled[4] or 0.62)
         if btn.off then btn.off:SetTextColor(textDisabled[1], textDisabled[2], textDisabled[3], 0.62) end
+    elseif selected and quiet then
+        local selectedBg = opts.selectedBg or LAYER_BUTTON_SELECTED_BG
+        btn.bg:SetColorTexture(selectedBg[1], selectedBg[2], selectedBg[3], selectedBg[4] or 0.88)
+        btn.bar:SetColorTexture(c[1], c[2], c[3], on and 1.00 or 0.38)
+        btn.fs:SetTextColor(0.96, 0.98, 1.00, 1.00)
+        if btn.off then btn.off:SetTextColor(textOff[1], textOff[2], textOff[3], on and 0 or 0.78) end
     elseif on and quiet then
         btn.bg:SetColorTexture(quietBase[1], quietBase[2], quietBase[3], 0.34)
         btn.bar:SetColorTexture(c[1], c[2], c[3], 0.76)
@@ -2005,6 +2013,11 @@ function H.RefreshLayerButton(btn, owner, opts)
         btn.bar:SetColorTexture(c[1], c[2], c[3], 0.30)
         btn.fs:SetTextColor(textDisabled[1], textDisabled[2], textDisabled[3], textDisabled[4] or 0.62)
         if btn.off then btn.off:SetTextColor(textDisabled[1], textDisabled[2], textDisabled[3], 0.72) end
+    elseif selected then
+        btn.bg:SetColorTexture(0.08, 0.34, 0.72, 0.88)
+        btn.bar:SetColorTexture(c[1], c[2], c[3], on and 1.00 or 0.42)
+        btn.fs:SetTextColor(0.96, 0.98, 1.00, 1.00)
+        if btn.off then btn.off:SetTextColor(textOff[1], textOff[2], textOff[3], on and 0 or 0.78) end
     elseif on then
         btn.bg:SetColorTexture(c[1] * 0.12, c[2] * 0.12, c[3] * 0.12, 0.54)
         btn.bar:SetColorTexture(c[1], c[2], c[3], 0.94)
@@ -2015,6 +2028,18 @@ function H.RefreshLayerButton(btn, owner, opts)
         btn.bar:SetColorTexture(c[1], c[2], c[3], 0.42)
         btn.fs:SetTextColor(textOff[1], textOff[2], textOff[3], textOff[4] or 0.78)
         if btn.off then btn.off:SetTextColor(textOff[1], textOff[2], textOff[3], 0.78) end
+    end
+end
+function H.RefreshSelectedLayerButtons(owner, selectedHandle, buttonsField)
+    if not owner then return end
+    local selectedKey = selectedHandle and selectedHandle._previewLayerKey or nil
+    if owner._msuf2SelectedPreviewLayerKey == selectedKey then return end
+    owner._msuf2SelectedPreviewLayerKey = selectedKey
+    local buttons = owner[buttonsField or "layerButtons"] or {}
+    for i = 1, #buttons do
+        local button = buttons[i]
+        if button and button.Refresh then button:Refresh()
+        elseif button and button.refresh then button:refresh() end
     end
 end
 --- Chip rows measure themselves so a caller can flow them horizontally; the

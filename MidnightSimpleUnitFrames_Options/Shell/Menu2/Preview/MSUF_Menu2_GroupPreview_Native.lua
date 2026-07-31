@@ -1166,6 +1166,9 @@ local function RefreshHandleSelection(box)
         selected = nil
         box._selectedHandle = nil
     end
+    if PreviewHelpers.RefreshSelectedLayerButtons then
+        PreviewHelpers.RefreshSelectedLayerButtons(box, selected, "_layerButtons")
+    end
     local handles = box._handleList or {}
     for i = 1, #handles do
         local handle = handles[i]
@@ -1365,6 +1368,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     local stage = CreateFrame("Frame", nil, box, T.Template())
     stage:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -30)
     stage:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, 12)
+    stage._msuf2PreviewCanvasUnderlay = box
     if PreviewHelpers.ApplyPreviewChrome then
         PreviewHelpers.ApplyPreviewChrome(stage, "canvas", T, function(frame, bg, border)
             ApplyGroupPreviewFlatBackdrop(frame, R.WHITE8X8, bg, border)
@@ -1511,6 +1515,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             if M.gfPreviewSoloLayer ~= nil then return M.gfPreviewSoloLayer == key end
             return layerVisibility[key] ~= false
         end,
+        IsSelected = function(owner, key) return owner and owner._msuf2SelectedPreviewLayerKey == key end,
         OnClick = function(self, owner)
             if owner and owner._layerAvailable and owner._layerAvailable[self.key] == false then
                 if owner._hint then owner._hint:SetText(R.Tr("This layer is off in settings and cannot be shown in preview.")) end

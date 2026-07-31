@@ -1126,7 +1126,7 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
         local group = GFReadGroup(scope, lane or "debuff")
         local root = GFReadRoot(scope)
         cfg.iconZoom = tonumber(group.iconZoom) or tonumber(root and root.iconZoom) or 100
-        local iconScale = ClampNumber(group.iconScale, 100, 20, 300) / 100
+        local iconScale = min(300, max(20, AccessibleNumber(group.iconScale, 100))) / 100
         cfg.size = (tonumber(group.size) or GroupAuraPreviewDefaultSize(scope, lane)) * iconScale
         cfg.allowTinyIconScale = true
         cfg.spacing = tonumber(group.spacing) or 1

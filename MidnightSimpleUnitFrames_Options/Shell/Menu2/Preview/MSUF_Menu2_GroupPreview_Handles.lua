@@ -26,6 +26,27 @@ local SPELL_DROP_ANCHOR_FRAC = {
     LEFT = { 0, 0.5 }, CENTER = { 0.5, 0.5 }, RIGHT = { 1, 0.5 },
     BOTTOMLEFT = { 0, 0 }, BOTTOM = { 0.5, 0 }, BOTTOMRIGHT = { 1, 0 },
 }
+local GROUP_HANDLE_LAYER_BY_KEY = {
+    buff = "buff",
+    trackedBuff = "trackedBuff",
+    debuff = "debuff",
+    external = "external",
+    powerBar = "power",
+    portrait = "portrait",
+    dispelSymbol = "dispelSymbol",
+    si = "si",
+}
+local GROUP_SECTION_LAYER = {
+    text = "text",
+    power = "power",
+    portrait = "portrait",
+    buffs = "buff",
+    debuffs = "debuff",
+    externals = "external",
+    sicons = "status",
+    si = "si",
+    dispel = "dispelSymbol",
+}
 function Handles.Install(box, deps)
     if not box then return nil end
     deps = deps or {}
@@ -809,6 +830,7 @@ function Handles.Install(box, deps)
         handle:SetBackdropBorderColor(color[1], color[2], color[3], locked and 0.55 or 0.95)
         handle._key = key
         handle._sectionKey = sectionKey
+        handle._previewLayerKey = GROUP_HANDLE_LAYER_BY_KEY[key] or GROUP_SECTION_LAYER[sectionKey]
         handle._locked = locked and true or false
         handle._color = color
         local selectFill = handle:CreateTexture(nil, "OVERLAY", nil, 6)

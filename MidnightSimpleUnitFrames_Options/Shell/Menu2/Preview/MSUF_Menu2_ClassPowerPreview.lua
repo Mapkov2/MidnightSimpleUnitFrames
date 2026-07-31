@@ -2232,6 +2232,7 @@ function Preview.Create(ctx, builder)
     hint:SetJustifyH("LEFT")
     box.hint = hint
     box.canvas = T.Panel(box, nil, { 0, 0, 0, 1 }, T.colors.borderSoft)
+    box.canvas._msuf2PreviewCanvasUnderlay = box
     if Helpers.ApplyPreviewChrome then Helpers.ApplyPreviewChrome(box.canvas, "canvas", T) end
     box.canvas:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -30)
     box.canvas:SetSize(box.canvasW, box.canvasH)
