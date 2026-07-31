@@ -22,7 +22,9 @@ A.DashboardRegistry.CopyCategoryFallbacks = {
         { key = "status", label = "Status Icons", default = true, aliases = { "status", "status icon", "status icons", "status indicator", "status indicators", "indicator", "indicators", "level indicator", "raid marker", "pvp flag", "pvp indicator" } },
         { key = "load", label = "Load Conditions", default = true, aliases = { "load", "load condition", "load conditions", "hide mounted", "hide out of combat" } },
         { key = "transparency", label = "Transparency", default = true, aliases = { "transparency", "opacity", "alpha", "range fade" } },
-        { key = "layout", label = "Size & Anchoring", default = false, aliases = { "layout", "position", "size", "anchoring", "anchor", "width", "height" } },
+        -- Placement deliberately has no alias here: Copy To only ever moves width and
+        -- height, so "position"/"anchor" must not route a user into this category.
+        { key = "layout", label = "Frame Size", default = false, aliases = { "layout", "frame size", "size", "width", "height" } },
     },
     group = {
         { key = "general", label = "Basics", aliases = { "general", "basics", "basic", "layout", "size", "spacing", "growth", "sort", "sorting" } },

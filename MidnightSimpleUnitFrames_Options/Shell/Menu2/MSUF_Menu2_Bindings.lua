@@ -1051,8 +1051,8 @@ function M.SetGeneralValue(key, value, reason, opts)
     return true
 end
 local UNIT_PAGE_RESETS = { uf_player = { unit = "player", label = "Player" }, uf_target = { unit = "target", label = "Target" }, uf_targettarget = { unit = "targettarget", label = "Target of Target" }, uf_focustarget = { unit = "focustarget", label = "Focus Target" }, uf_focus = { unit = "focus", label = "Focus" }, uf_boss = { unit = "boss", label = "Boss Frames" }, uf_pet = { unit = "pet", label = "Pet" } }
-local CASTBAR_SUFFIX_KEYS = WL "TimeFormat FrameLevelOffset IconPosition IconSize IconOffsetX IconOffsetY IconSpacing IconBorderThickness IconBorderStyle IconFrameLevelOffset SpellNamePosition SpellNameFontSize TextOffsetX TextOffsetY SpellNameAlign SpellNameMaxWidth SpellNameTruncate TimePosition TimeFontSize TimeOffsetX TimeOffsetY"
-local CASTBAR_TARGET_NAME_SUFFIX_KEYS = WL "TargetNamePosition TargetNameFontSize TargetNameAlign TargetNameOffsetX TargetNameOffsetY"
+local CASTBAR_SUFFIX_KEYS = WL "TimeFormat FrameLevelOffset IconPosition IconSize IconOffsetX IconOffsetY IconSpacing IconBorderThickness IconBorderStyle IconFrameLevelOffset SpellNamePosition SpellNameFontSize TextOffsetX TextOffsetY SpellNameAlign SpellNameMaxWidth SpellNameTruncate TimePosition TimeFontSize TimeOffsetX TimeOffsetY SpellNameColorR SpellNameColorG SpellNameColorB TimeColorR TimeColorG TimeColorB"
+local CASTBAR_TARGET_NAME_SUFFIX_KEYS = WL "TargetNamePosition TargetNameFontSize TargetNameAlign TargetNameOffsetX TargetNameOffsetY TargetNameColorR TargetNameColorG TargetNameColorB"
 local function BuildUnitCastbarResetKeys(spec)
     local keys = { spec.enable, spec.backend .. "Backend", spec.backend .. "BackendBeforeHide", spec.time, spec.icon, spec.name }
     if spec.targetName then
@@ -1120,7 +1120,7 @@ local BARS_SCOPE_KEYS = KSW [[
     hlOverride hpPowerTextOverride barTexture barBackgroundTexture barBgTexture enableAbsorbBar absorbTextMode absorbAnchorMode
     absorbBarHeight absorbBarOffsetY healAbsorbEnabled healAbsorbAnchorMode healAbsorbBarHeight healAbsorbBarOffsetY
     healPredEnabled healPredAnchorMode healPredictionBarHeight healPredictionBarOffsetY healPredictionBarOpacity healPredictionBarTexture
-    overAbsorbOverlay fullHealthAbsorbStripe absorbBarOpacity healAbsorbBarOpacity barOutlineThickness barOutlineLayer barOutlineStrata highlightBorderThickness hlAggroSize
+    overAbsorbOverlay fullHealthAbsorbStripe absorbBarOpacity healAbsorbBarOpacity barOutlineThickness barOutlineLayer barOutlineStrata barOutlineTexture highlightBorderThickness hlAggroSize
     aggroOutlineMode dispelOutlineMode dispelBorderTrigger unitDispelOverlayEnabled unitDispelOverlayStyle
     unitDispelOverlayOnHealth unitDispelOverlayAlpha unitDispelOverlayTrigger
     purgeOutlineMode hlPrioEnabled hlPrioOrder enableGradient enablePowerGradient gradientStrength
@@ -1128,13 +1128,13 @@ local BARS_SCOPE_KEYS = KSW [[
     barOutlineColorR barOutlineColorG barOutlineColorB barOutlineColorA
 ]]
 local BARS_TABLE_KEYS = KSW [[
-    barOutlineThickness barOutlineLayer barOutlineStrata smoothPowerBar realtimePowerText roundedFramesEnabled roundedUnitFrames
+    barOutlineThickness barOutlineLayer barOutlineStrata barOutlineTexture smoothPowerBar realtimePowerText roundedFramesEnabled roundedUnitFrames
     roundedGroupFrames roundedPowerBars roundedMouseover
 ]]
-local FONT_GENERAL_KEYS = KSW "fontKey boldText noOutline textBackdrop fontMonochrome fontShadowStrength fontShadowOpacity fontShadowDistance fontTextAlpha fontBaselineOffset nameClassColor npcNameRed nameNpcClassColor colorPowerTextByType colorHealthTextByHealth"
+local FONT_GENERAL_KEYS = KSW "fontKey boldText noOutline textBackdrop fontMonochrome fontShadowStrength fontShadowOpacity fontShadowDistance fontTextAlpha fontBaselineOffset nameClassColor npcNameRed nameNpcClassColor colorPowerTextByType colorHealthTextByHealth nameColorMode nameColorR nameColorG nameColorB"
 local FONT_SCOPE_KEYS = KSW [[
     fontOverride fontKey boldText noOutline textBackdrop fontMonochrome fontShadowStrength fontShadowOpacity fontShadowDistance fontTextAlpha fontBaselineOffset nameClassColor npcNameRed nameNpcClassColor colorPowerTextByType colorHealthTextByHealth
-    fontOutline useGlobalFontColor fontR fontG fontB nameColorMode nameShortenEnabled nameClipSide
+    fontOutline useGlobalFontColor fontR fontG fontB nameColorMode nameColorR nameColorG nameColorB nameShortenEnabled nameClipSide
     nameMaxChars nameNoEllipsis shortenNames shortenNameClipSide shortenNameMaxChars shortenNameShowDots
 ]]
 local FONT_ROOT_KEYS = KS("shortenNames", "shortenNameClipSide", "shortenNameMaxChars", "shortenNameShowDots")
@@ -1142,7 +1142,6 @@ local UNIT_AND_GROUP_RESET_KEYS = WL [[player target targettarget focustarget fo
 local MISC_GENERAL_KEYS = KSW [[
     menuLocale slashMenuSnapEnabled hideAdvancedMenu showWelcomeMessage versionCheckEnabled disableUnitInfoTooltips
     unitInfoTooltipStyle unitTooltipProvider unitTooltipAnchor unitTooltipMode unitTooltipModifier
-    disableBlizzardUnitFrames hardKillBlizzardPlayerFrame
     showMinimapIcon showNavigationIcons playTargetSelectLostSounds
     highlightEnabled highlightStyle highlightThickness
 ]]

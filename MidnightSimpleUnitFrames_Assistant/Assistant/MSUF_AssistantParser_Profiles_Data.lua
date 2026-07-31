@@ -27,7 +27,9 @@ Data.PROFILE_PARSER = {
     },
 
     UNIT_COPY_SCOPE_SPECS = {
-        { key = "layout", aliases = { "layout", "position", "positioning", "placement", "location", "size", "anchoring", "anchor", "width", "height" } },
+        -- Placement words are deliberately absent: this scope copies width and height
+        -- only, so "position"/"placement"/"anchor" must not resolve to it.
+        { key = "layout", aliases = { "layout", "frame size", "size", "width", "height" } },
         { key = "text", aliases = { "text", "name", "hp", "health text", "hp text", "power text", "mana text", "energy text", "resource text", "font", "fonts" } },
         { key = "portrait", aliases = { "portrait", "portrait settings" } },
         { key = "power", aliases = { "power", "mana", "energy", "resource", "power settings", "mana settings", "energy settings", "resource settings", "power bar", "powerbar", "detached power", "detached power bar", "resource bar" } },

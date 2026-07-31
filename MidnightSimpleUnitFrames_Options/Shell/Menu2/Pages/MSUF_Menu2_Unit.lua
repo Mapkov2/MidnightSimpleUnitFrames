@@ -56,12 +56,12 @@ local CASTBAR_FIELDS = {
         offsetX = "bossCastbarOffsetX", offsetY = "bossCastbarOffsetY",
     },
 }
-local CASTBAR_COPY_SUFFIXES = WL [[IconPosition IconSize IconZoom IconOffsetX IconOffsetY IconSpacing IconBorderThickness IconBorderStyle IconFrameLevelOffset SpellNamePosition SpellNameFontSize TextOffsetX TextOffsetY SpellNameAlign SpellNameMaxWidth SpellNameTruncate TimePosition TimeFontSize TimeOffsetX TimeOffsetY FrameLevelOffset]]
+local CASTBAR_COPY_SUFFIXES = WL [[IconPosition IconSize IconZoom IconOffsetX IconOffsetY IconSpacing IconBorderThickness IconBorderStyle IconFrameLevelOffset SpellNamePosition SpellNameFontSize TextOffsetX TextOffsetY SpellNameAlign SpellNameMaxWidth SpellNameTruncate TimePosition TimeFontSize TimeOffsetX TimeOffsetY FrameLevelOffset SpellNameColorR SpellNameColorG SpellNameColorB TimeColorR TimeColorG TimeColorB]]
 --- OffsetX/OffsetY mean two different things depending on the detach state: anchored
 --- to the unit frame they are a relative gap and safe to copy, detached they are an
 --- absolute UIParent position (see MSUF_CastbarAnchors) and copying them would stack
 --- both castbars on the same screen spot. Only the relative case travels.
-local CASTBAR_TARGET_NAME_COPY_SUFFIXES = WL [[TargetNamePosition TargetNameFontSize TargetNameAlign TargetNameOffsetX TargetNameOffsetY]]
+local CASTBAR_TARGET_NAME_COPY_SUFFIXES = WL [[TargetNamePosition TargetNameFontSize TargetNameAlign TargetNameOffsetX TargetNameOffsetY TargetNameColorR TargetNameColorG TargetNameColorB]]
 local LOAD_CONDITIONS = KLR [[
 loadCondHideMounted=Mounted
 loadCondHideOutOfCombat=Out of combat
@@ -106,15 +106,15 @@ local STATUS_CONTROLS = {
     StatusControl("leader", "Leader Icon", "showLeaderIcon", true, "leaderIconSize", 14, "leaderIconAnchor", "TOPLEFT", STATUS_CORNER_ANCHORS, "leaderIconOffsetX", 0, "leaderIconOffsetY", 3, "leaderIconLayer", 7, "MSUF_RefreshLeaderIconFrames", { allowed = function(unit) return unit == "player" or unit == "target" end, iconStyle = "leaderIconStyle", defaultIconStyle = "BLIZZARD", customIcon = "leaderIconCustomIcon" }),
     StatusControl("assist", "Assist Icon", "showLeaderIcon", true, "leaderIconSize", 14, "leaderIconAnchor", "TOPLEFT", STATUS_CORNER_ANCHORS, "leaderIconOffsetX", 0, "leaderIconOffsetY", 3, "leaderIconLayer", 7, "MSUF_RefreshLeaderIconFrames", { allowed = function(unit) return unit == "player" or unit == "target" end, iconStyle = "assistIconStyle", defaultIconStyle = "BLIZZARD", customIcon = "assistIconCustomIcon" }),
     StatusControl("raidmarker", "Raid Marker", "showRaidMarker", true, "raidMarkerSize", 18, "raidMarkerAnchor", "TOPLEFT", STATUS_CORNER_ANCHORS, "raidMarkerOffsetX", 16, "raidMarkerOffsetY", 3, "raidMarkerLayer", 7, "MSUF_RefreshRaidMarkerFrames", { iconStyle = "raidMarkerIconStyle", defaultIconStyle = "BLIZZARD", customIcon = "raidMarkerCustomIcon" }),
-    StatusControl("level", "Level Text", "showLevelIndicator", true, "levelIndicatorSize", 14, "levelIndicatorAnchor", "NAMERIGHT", STATUS_LEVEL_ANCHORS, "levelIndicatorOffsetX", 0, "levelIndicatorOffsetY", 0, "levelIndicatorLayer", 7, "MSUF_RefreshIdentityTextFrames", { textIndicator = true }),
-    StatusControl("raceText", "Race Text", "showRaceIndicator", false, "raceIndicatorSize", 14, "raceIndicatorAnchor", "NAMERIGHT", STATUS_LEVEL_ANCHORS, "raceIndicatorOffsetX", 0, "raceIndicatorOffsetY", 0, "raceIndicatorLayer", 7, "MSUF_RefreshIdentityTextFrames", { textIndicator = true }),
-    StatusControl("classText", "Class Text", "showClassTextIndicator", false, "classTextIndicatorSize", 14, "classTextIndicatorAnchor", "NAMERIGHT", STATUS_LEVEL_ANCHORS, "classTextIndicatorOffsetX", 0, "classTextIndicatorOffsetY", 0, "classTextIndicatorLayer", 7, "MSUF_RefreshIdentityTextFrames", { textIndicator = true }),
-    StatusControl("raidgroupname", "Raid Group", "showRaidGroupInName", false, "nameFontSize", 14, "raidGroupNameAnchor", "NAMERIGHT", RAID_GROUP_NAME_ANCHORS, "raidGroupNameOffsetX", 3, "raidGroupNameOffsetY", 0, "raidGroupNameLayer", 5, "MSUF_RefreshRaidGroupNameFrames", { allowed = function(unit) return unit == "player" or unit == "target" or unit == "targettarget" or unit == "focustarget" or unit == "focus" end, inlineName = true, legacyLayer = "nameTextLayer", copyProps = "show anchor x y layer", copyExtra = WL("raidGroupNameStyle") }),
+    StatusControl("level", "Level Text", "showLevelIndicator", true, "levelIndicatorSize", 14, "levelIndicatorAnchor", "NAMERIGHT", STATUS_LEVEL_ANCHORS, "levelIndicatorOffsetX", 0, "levelIndicatorOffsetY", 0, "levelIndicatorLayer", 7, "MSUF_RefreshIdentityTextFrames", { textIndicator = true, colorPrefix = "levelIndicator" }),
+    StatusControl("raceText", "Race Text", "showRaceIndicator", false, "raceIndicatorSize", 14, "raceIndicatorAnchor", "NAMERIGHT", STATUS_LEVEL_ANCHORS, "raceIndicatorOffsetX", 0, "raceIndicatorOffsetY", 0, "raceIndicatorLayer", 7, "MSUF_RefreshIdentityTextFrames", { textIndicator = true, colorPrefix = "raceIndicator" }),
+    StatusControl("classText", "Class Text", "showClassTextIndicator", false, "classTextIndicatorSize", 14, "classTextIndicatorAnchor", "NAMERIGHT", STATUS_LEVEL_ANCHORS, "classTextIndicatorOffsetX", 0, "classTextIndicatorOffsetY", 0, "classTextIndicatorLayer", 7, "MSUF_RefreshIdentityTextFrames", { textIndicator = true, colorPrefix = "classTextIndicator" }),
+    StatusControl("raidgroupname", "Raid Group", "showRaidGroupInName", false, "nameFontSize", 14, "raidGroupNameAnchor", "NAMERIGHT", RAID_GROUP_NAME_ANCHORS, "raidGroupNameOffsetX", 3, "raidGroupNameOffsetY", 0, "raidGroupNameLayer", 5, "MSUF_RefreshRaidGroupNameFrames", { allowed = function(unit) return unit == "player" or unit == "target" or unit == "targettarget" or unit == "focustarget" or unit == "focus" end, inlineName = true, legacyLayer = "nameTextLayer", colorPrefix = "raidGroupName", copyProps = "show anchor x y layer", copyExtra = WL("raidGroupNameStyle") }),
     StatusControl("eliteicon", "Elite / Rare", "showEliteIcon", true, "eliteIconSize", 20, "eliteIconAnchor", "TOPRIGHT", STATUS_CORNER_ANCHORS, "eliteIconOffsetX", 2, "eliteIconOffsetY", 2, "eliteIconLayer", 7, "MSUF_RefreshEliteIconFrames", { allowed = function(unit) return unit == "target" or unit == "focus" or unit == "targettarget" or unit == "focustarget" or unit == "boss" end, iconStyle = "eliteIconStyle", defaultIconStyle = "BLIZZARD", customIcon = "eliteIconCustomIcon" }),
-    StatusControl("statusText", "Dead / Offline Text", "statusDeadTextEnabled", true, "statusTextSize", 16, "statusTextAnchor", "CENTER", STATUS_CORNER_ANCHORS, "statusTextOffsetX", 0, "statusTextOffsetY", 0, "statusTextLayer", 7, "MSUF_RequestStatusTextRefresh", { statusRuntime = true, statusTextState = "DEAD", legacyShow = "statusTextEnabled", legacyState = "showDead" }),
-    StatusControl("statusGhostText", "Ghost Text", "statusGhostTextEnabled", true, "statusGhostTextSize", 16, "statusGhostTextAnchor", "CENTER", STATUS_CORNER_ANCHORS, "statusGhostTextOffsetX", 0, "statusGhostTextOffsetY", 0, "statusGhostTextLayer", 7, "MSUF_RequestStatusTextRefresh", { statusRuntime = true, statusTextState = "GHOST", legacyShow = "statusTextEnabled", legacyState = "showGhost", legacySize = "statusTextSize", legacyAnchor = "statusTextAnchor", legacyX = "statusTextOffsetX", legacyY = "statusTextOffsetY", legacyLayer = "statusTextLayer" }),
-    StatusControl("statusAFKText", "AFK Text", "statusAFKTextEnabled", false, "statusAFKTextSize", 16, "statusAFKTextAnchor", "CENTER", STATUS_CORNER_ANCHORS, "statusAFKTextOffsetX", 0, "statusAFKTextOffsetY", 0, "statusAFKTextLayer", 7, "MSUF_RequestStatusTextRefresh", { statusRuntime = true, statusTextState = "AFK", legacyShow = "statusTextEnabled", legacyState = "showAFK", legacySize = "statusTextSize", legacyAnchor = "statusTextAnchor", legacyX = "statusTextOffsetX", legacyY = "statusTextOffsetY", legacyLayer = "statusTextLayer" }),
-    StatusControl("statusDNDText", "DND Text", "statusDNDTextEnabled", false, "statusDNDTextSize", 16, "statusDNDTextAnchor", "CENTER", STATUS_CORNER_ANCHORS, "statusDNDTextOffsetX", 0, "statusDNDTextOffsetY", 0, "statusDNDTextLayer", 7, "MSUF_RequestStatusTextRefresh", { statusRuntime = true, statusTextState = "DND", legacyShow = "statusTextEnabled", legacyState = "showDND", legacySize = "statusTextSize", legacyAnchor = "statusTextAnchor", legacyX = "statusTextOffsetX", legacyY = "statusTextOffsetY", legacyLayer = "statusTextLayer" }),
+    StatusControl("statusText", "Dead / Offline Text", "statusDeadTextEnabled", true, "statusTextSize", 16, "statusTextAnchor", "CENTER", STATUS_CORNER_ANCHORS, "statusTextOffsetX", 0, "statusTextOffsetY", 0, "statusTextLayer", 7, "MSUF_RequestStatusTextRefresh", { statusRuntime = true, statusTextState = "DEAD", colorPrefix = "statusText", legacyShow = "statusTextEnabled", legacyState = "showDead" }),
+    StatusControl("statusGhostText", "Ghost Text", "statusGhostTextEnabled", true, "statusGhostTextSize", 16, "statusGhostTextAnchor", "CENTER", STATUS_CORNER_ANCHORS, "statusGhostTextOffsetX", 0, "statusGhostTextOffsetY", 0, "statusGhostTextLayer", 7, "MSUF_RequestStatusTextRefresh", { statusRuntime = true, statusTextState = "GHOST", colorPrefix = "statusGhostText", legacyShow = "statusTextEnabled", legacyState = "showGhost", legacySize = "statusTextSize", legacyAnchor = "statusTextAnchor", legacyX = "statusTextOffsetX", legacyY = "statusTextOffsetY", legacyLayer = "statusTextLayer" }),
+    StatusControl("statusAFKText", "AFK Text", "statusAFKTextEnabled", false, "statusAFKTextSize", 16, "statusAFKTextAnchor", "CENTER", STATUS_CORNER_ANCHORS, "statusAFKTextOffsetX", 0, "statusAFKTextOffsetY", 0, "statusAFKTextLayer", 7, "MSUF_RequestStatusTextRefresh", { statusRuntime = true, statusTextState = "AFK", colorPrefix = "statusAFKText", legacyShow = "statusTextEnabled", legacyState = "showAFK", legacySize = "statusTextSize", legacyAnchor = "statusTextAnchor", legacyX = "statusTextOffsetX", legacyY = "statusTextOffsetY", legacyLayer = "statusTextLayer" }),
+    StatusControl("statusDNDText", "DND Text", "statusDNDTextEnabled", false, "statusDNDTextSize", 16, "statusDNDTextAnchor", "CENTER", STATUS_CORNER_ANCHORS, "statusDNDTextOffsetX", 0, "statusDNDTextOffsetY", 0, "statusDNDTextLayer", 7, "MSUF_RequestStatusTextRefresh", { statusRuntime = true, statusTextState = "DND", colorPrefix = "statusDNDText", legacyShow = "statusTextEnabled", legacyState = "showDND", legacySize = "statusTextSize", legacyAnchor = "statusTextAnchor", legacyX = "statusTextOffsetX", legacyY = "statusTextOffsetY", legacyLayer = "statusTextLayer" }),
     StatusControl("statusCombat", "Combat", "showCombatStateIndicator", true, "combatStateIndicatorSize", 18, "combatStateIndicatorAnchor", "TOPLEFT", STATUS_CORNER_ANCHORS, "combatStateIndicatorOffsetX", 0, "combatStateIndicatorOffsetY", 0, "combatStateIndicatorLayer", 7, "MSUF_RequestStatusCombatIndicatorRefresh", { allowed = function(unit) return unit == "player" or unit == "target" end, symbol = "combatStateIndicatorSymbol", symbols = COMBAT_SYMBOLS, statusRuntime = true, iconStyle = "combatStateIndicatorIconStyle", defaultIconStyle = "BLIZZARD", customIcon = "combatStateIndicatorCustomIcon" }),
     StatusControl("statusResting", "Rested (player only)", "showRestingIndicator", false, "restedStateIndicatorSize", 18, "restedStateIndicatorAnchor", "TOPLEFT", STATUS_CORNER_ANCHORS, "restedStateIndicatorOffsetX", 0, "restedStateIndicatorOffsetY", 0, "restedStateIndicatorLayer", 7, "MSUF_RequestStatusRestingIndicatorRefresh", { allowed = function(unit) return unit == "player" end, symbol = "restedStateIndicatorSymbol", symbols = RESTED_SYMBOLS, statusRuntime = true, iconStyle = "restedStateIndicatorIconStyle", defaultIconStyle = "BLIZZARD", customIcon = "restedStateIndicatorCustomIcon" }),
     StatusControl("statusIncomingRes", "Incoming Rez", "showIncomingResIndicator", true, "incomingResIndicatorSize", 18, "incomingResIndicatorAnchor", "TOPRIGHT", STATUS_CORNER_ANCHORS, "incomingResIndicatorOffsetX", 0, "incomingResIndicatorOffsetY", 0, "incomingResIndicatorLayer", 7, "MSUF_RequestStatusIncomingResIndicatorRefresh", { allowed = function(unit) return unit == "player" or unit == "target" end, symbol = "incomingResIndicatorSymbol", symbols = RESS_SYMBOLS, statusRuntime = true, iconStyle = "incomingResIndicatorIconStyle", defaultIconStyle = "BLIZZARD", customIcon = "incomingResIndicatorCustomIcon" }),
@@ -178,7 +178,7 @@ local SEPARATORS = VTR [[
 :=:
 ]]
 local PORTRAIT_RENDER = VTP "2D=2D portrait|CLASS=Class portrait"
-local PORTRAIT_SHAPES = VTP "SQUARE=Square|CIRCLE=Circle|ROUNDED=Rounded|DIAMOND=Diamond"
+local PORTRAIT_SHAPES = VTP "SQUARE=Square|CIRCLE=Circle|ROUNDED=Rounded|DIAMOND=Diamond|BLIZZARD=Blizzard ring"
 local PORTRAIT_BORDERS = VTP "NONE=No border|SOLID=Solid|CLASS_COLOR=Class color|REACTION=Reaction color|CUSTOM=Custom color"
 local function GetConf(unit)
     return M.GetUnitDB(unit)
@@ -225,11 +225,32 @@ local COPY_TEXT_FIELDS = WL [[
     hpPowerTextOverride
     fontOverride fontKey boldText noOutline textBackdrop fontMonochrome fontOutline
     fontShadowStrength fontShadowOpacity fontShadowDistance fontTextAlpha fontBaselineOffset
-    useGlobalFontColor fontR fontG fontB nameColorMode nameClassColor npcNameRed nameNpcClassColor
+    useGlobalFontColor fontR fontG fontB nameColorMode nameColorR nameColorG nameColorB nameClassColor npcNameRed nameNpcClassColor
     colorPowerTextByType colorHealthTextByHealth
     nameShortenEnabled nameClipSide nameMaxChars nameNoEllipsis
     shortenNames shortenNameClipSide shortenNameMaxChars shortenNameShowDots
+    hpTextLeftFontSize hpTextCenterFontSize hpTextRightFontSize
+    powerTextLeftFontSize powerTextCenterFontSize powerTextRightFontSize
+    directTextLayout
+    --- Legacy twins of the modern keys above. MSUF_UF_Config reads them as fallbacks
+    --- ("conf.hpOffsetX or conf.hpTextOffsetX", and healthTextDecimals is even OR-ed
+    --- with hpTextDecimals), and MSUF_Defaults/MSUF_Profiles refill a missing modern
+    --- key from its twin on every load. Copying only the modern half therefore leaves
+    --- the destination's stale twin to win the fallback chain, or to resurrect the old
+    --- value after a reload -- the copy looks like it silently reverted.
+    nameAnchor nameTextOffsetX nameTextOffsetY hpTextOffsetX hpTextOffsetY
+    powerTextOffsetX powerTextOffsetY hpTextDecimals textLayer fontSize
 ]]
+--- With directTextLayout on, these keys ARE the text layout: MSUF_UF_Config resolves
+--- every name/health/power slot from direct<Slot>Point/RelativePoint/OffsetX/OffsetY
+--- and takes the name color from directNameColor. Skipping them left the destination
+--- on its own placement, so a Text copy appeared to do nothing at all.
+--- Mirrors DIRECT_TEXT_LAYOUTS in UnitFrames/Engine/MSUF_UF_Config.lua.
+for _, slot in ipairs(WL [[Name HealthLeft HealthCenter HealthRight PowerLeft PowerCenter PowerRight]]) do
+    for _, suffix in ipairs(WL [[Point RelativePoint OffsetX OffsetY Color]]) do
+        COPY_TEXT_FIELDS[#COPY_TEXT_FIELDS + 1] = "direct" .. slot .. suffix
+    end
+end
 local COPY_INDICATOR_FIELDS = M.CopyFieldsFromSpecs(STATUS_CONTROLS, "leader assist raidmarker raidgroupname eliteicon", nil, "show iconStyle customIcon x y anchor size layer symbol")
 local COPY_STATUSICON_FIELDS = M.CopyFieldsFromSpecs(STATUS_CONTROLS, "level raceText classText statusText statusGhostText statusAFKText statusDNDText statusCombat statusResting statusIncomingRes statusPvp", "statusIconsTestMode statusIconsMidnightStyle statusIconsAlpha statusTextEnabled", "show iconStyle customIcon x y anchor size layer symbol")
 --- Everything below "healthColorMode" is the per-unit Bars override scope (gated by
@@ -239,7 +260,7 @@ local COPY_STATUSICON_FIELDS = M.CopyFieldsFromSpecs(STATUS_CONTROLS, "level rac
 local COPY_FRAME_BASIC_FIELDS = WL [[
     enabled showName showHP showPower reverseFillBars verticalFillBars smoothFill healthColorMode
     hlOverride barTexture barBackgroundTexture barBgTexture
-    barOutlineThickness barOutlineLayer barOutlineStrata barOutlineColorR barOutlineColorG barOutlineColorB barOutlineColorA
+    barOutlineThickness barOutlineLayer barOutlineStrata barOutlineTexture barOutlineColorR barOutlineColorG barOutlineColorB barOutlineColorA
     highlightBorderThickness hlAggroSize aggroOutlineMode dispelOutlineMode purgeOutlineMode dispelBorderTrigger
     unitDispelOverlayEnabled unitDispelOverlayStyle unitDispelOverlayOnHealth unitDispelOverlayAlpha unitDispelOverlayTrigger
     hlPrioEnabled hlPrioOrder
@@ -253,12 +274,22 @@ local COPY_FRAME_BASIC_FIELDS = WL [[
     healthBarGradientColorR healthBarGradientColorG healthBarGradientColorB
     powerBarGradientColorR powerBarGradientColorG powerBarGradientColorB
 ]]
-local COPY_TRANSPARENCY_FIELDS = WL [[hpBarAlpha powerBarAlpha hpBgAlpha powerBarBgAlpha alphaExcludeTextPortrait rangeFadeEnabled rangeFadeAlpha rangeFadeLayerMode]]
+local COPY_TRANSPARENCY_FIELDS = WL [[hpBarAlpha powerBarAlpha hpBgAlpha powerBarBgAlpha alphaExcludeTextPortrait oocFadeEnabled oocFadeAlpha rangeFadeEnabled rangeFadeAlpha rangeFadeLayerMode]]
+local COPY_TEXLAYER_FIELDS = {}
+for _, texP in ipairs({ "texLayer", "texLayer2", "texLayer3" }) do
+    for _, texBase in ipairs(WL [[Enabled Texture CustomTexturePath Alpha FollowFrameAlpha Strata Level AnchorTarget Anchor OffsetX OffsetY Width Height ColorMode ColorR ColorG ColorB GradientEnabled Gradient2R Gradient2G Gradient2B GradientDirRight GradientDirLeft GradientDirUp GradientDirDown BlendMode MirrorH MirrorV Visibility RoundedClip]]) do
+        COPY_TEXLAYER_FIELDS[#COPY_TEXLAYER_FIELDS + 1] = texP .. texBase
+    end
+end
 local COPY_LOAD_CONDITION_FIELDS = WL [[loadCondHideMounted loadCondHideInVehicle loadCondHideResting loadCondHideInCombat loadCondHideOutOfCombat loadCondHideStealthed loadCondHideSolo loadCondHideInGroup loadCondHideInInstance loadCondHideInHousing loadCondActive]]
---- Boss layout fields describe the boss1-boss5 container rather than one unit frame.
---- They have no semantic equivalent on Player/Target/Focus/etc. and must never be
---- cleared when a normal unit's frame geometry is copied to Boss.
-local COPY_LAYOUT_FIELDS = WL [[width height offsetX offsetY point relativePoint anchorFrameName anchorToUnitframe]]
+--- Size only. Placement (offsetX/offsetY, point/relativePoint, anchorFrameName and
+--- anchorToUnitframe) must never travel through Copy To: two unit frames sharing a
+--- placement land exactly on top of each other, and the covered one is then
+--- unreachable for dragging. Frames are positioned in MSUF Edit Mode, not by copying.
+--- Boss layout also describes the boss1-boss5 container rather than one unit frame,
+--- so it has no semantic equivalent on Player/Target/Focus and must never be cleared
+--- when a normal unit's frame size is copied to Boss.
+local COPY_LAYOUT_FIELDS = WL [[width height]]
 local AURA_COPY_UNITS = KSW("player target focus boss")
 local AURA_COPY_FLAGS = { player = "showPlayer", target = "showTarget", focus = "showFocus", boss = "showBoss" }
 local AURA_BOSS_RUNTIME_UNITS = WL("boss1 boss2 boss3 boss4 boss5")
@@ -272,7 +303,8 @@ local UF_COPY_CATEGORIES = {
     { key = "status",       label = "Status Icons",     default = true },
     { key = "load",         label = "Load Conditions",  default = true },
     { key = "transparency", label = "Transparency",     default = true },
-    { key = "layout",       label = "Size & Anchoring", default = false },
+    { key = "texlayer",     label = "Texture Layer",    default = true },
+    { key = "layout",       label = "Frame Size",       default = false, description = "Copies the frame width and height only. Position and anchoring never travel with a copy; place frames in MSUF Edit Mode." },
 }
 local function NewCopyScopeDefaults()
     local t = {}
@@ -608,6 +640,7 @@ local function CopyUnitSettings(unit, target, scopes)
         end
         if scopes.load then CopyFields(dst, src, COPY_LOAD_CONDITION_FIELDS) end
         if scopes.transparency then CopyFields(dst, src, COPY_TRANSPARENCY_FIELDS) end
+        if scopes.texlayer then CopyFields(dst, src, COPY_TEXLAYER_FIELDS) end
         if scopes.layout then CopyFields(dst, src, COPY_LAYOUT_FIELDS) end
         M.RequestUnitApply(dstKey, "MSUF2_COPY_UNIT", {
             preview = true,

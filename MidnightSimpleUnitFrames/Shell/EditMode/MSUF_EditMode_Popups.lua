@@ -383,8 +383,9 @@ end
 
 --- Copies the source frame's size only. Position is deliberately excluded: two unit
 --- frames sharing offsetX/offsetY always end up stacked on top of each other, which
---- also makes the lower one unreachable for dragging. Use the unit page copy dialog
---- ("Size & Anchoring") when position really should travel with the copy.
+--- also makes the lower one unreachable for dragging. The unit page copy dialog
+--- ("Frame Size") holds the same line -- placement is set by dragging here, never by
+--- a copy.
 local function CopySizeTo(targetKey)
     if BlockConfigCombatLocked() then return end
     if not pf or not pf.unit or not targetKey then return end

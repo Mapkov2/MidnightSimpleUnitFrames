@@ -40,7 +40,7 @@ function A.UnitframesRegistry.BuildUnitframeActionHelpers(ctx)
         { key = "status", label = "Status Icons" },
         { key = "load", label = "Load Conditions" },
         { key = "transparency", label = "Transparency" },
-        { key = "layout", label = "Size & Anchoring" },
+        { key = "layout", label = "Frame Size" },
     }
 
     local function UnitCopyScopeSummary(scopes)
