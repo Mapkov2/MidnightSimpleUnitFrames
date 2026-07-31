@@ -139,6 +139,7 @@ function A.UnitframesRegistry.BuildCoreContext(ctx)
         UnitTextSettings = CoreSettings.UnitTextSettings,
         UnitPowerSettings = CoreSettings.UnitPowerSettings,
         UnitTransparencySettings = CoreSettings.UnitTransparencySettings,
+        UnitTextureLayerSettings = CoreSettings.UnitTextureLayerSettings,
         UnitAnchoringSettings = CoreSettings.UnitAnchoringSettings,
         UnitPortraitSettings = CoreSettings.UnitPortraitSettings,
         SpecialSettings = CoreSettings.SpecialSettings,

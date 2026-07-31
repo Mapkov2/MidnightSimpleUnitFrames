@@ -5277,8 +5277,6 @@ local function ParseGlobalUIShellPriorityShortcut(normalized, raw)
         { key = "general.versionCheckEnabled", label = "Version Check", terms = { "version check", "version checker" } },
         { key = "general.showMinimapIcon", label = "Minimap Icon", terms = { "minimap icon", "minimap button" } },
         { key = "general.playTargetSelectLostSounds", label = "Target Sounds", terms = { "target sounds", "target select sound", "target lost sound" } },
-        { key = "general.disableBlizzardUnitFrames", label = "Blizzard Unitframes", terms = { "blizzard unitframes", "blizzard unit frames" } },
-        { key = "general.hardKillBlizzardPlayerFrame", label = "Fully Hide Blizzard Playerframe", terms = { "fully hide blizzard playerframe", "hard hide blizzard playerframe", "hard kill blizzard playerframe" } },
         { key = "general.menuLocale", label = "Menu Language", terms = { "menu language", "menu locale" } },
         { key = "general.unitTooltipProvider", label = "Tooltip Source", terms = { "tooltip source", "tooltip provider" } },
         { key = "general.unitTooltipAnchor", label = "Tooltip Anchor", terms = { "tooltip anchor" } },

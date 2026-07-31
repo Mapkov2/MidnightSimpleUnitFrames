@@ -4529,10 +4529,6 @@ P.ParseMiscRegistryShortcut = function(text, raw)
         key = "general.showMinimapIcon"
     elseif ContainsAny(text, RegistryPhrases[325]) then
         key = "general.playTargetSelectLostSounds"
-    elseif ContainsAny(text, RegistryPhrases[326]) then
-        key = "general.hardKillBlizzardPlayerFrame"
-    elseif ContainsAny(text, RegistryPhrases[327]) then
-        key = "general.disableBlizzardUnitFrames"
     elseif ContainsAny(text, RegistryPhrases[328]) then
         key = "general.menuLocale"
     elseif ContainsAny(text, RegistryPhrases[329]) then

@@ -26,6 +26,7 @@ function A.UnitframesRegistry.RegisterCoreLoopSettings(ctx)
     local RegisterUnitPowerSettings = ctx.RegisterUnitPowerSettings
     local RegisterUnitTextSettings = ctx.RegisterUnitTextSettings
     local RegisterUnitTransparencyAndRangeSettings = ctx.RegisterUnitTransparencyAndRangeSettings
+    local RegisterUnitTextureLayerSettings = ctx.RegisterUnitTextureLayerSettings
     local RegisterUnitStatusIconSettings = ctx.RegisterUnitStatusIconSettings
     local RegisterStatusTextStateSettings = ctx.RegisterStatusTextStateSettings
     local UnitDB = ctx.UnitDB
@@ -114,6 +115,10 @@ function A.UnitframesRegistry.RegisterCoreLoopSettings(ctx)
 
         if type(RegisterUnitTransparencyAndRangeSettings) == "function" then
             RegisterUnitTransparencyAndRangeSettings(ctx.UnitTransparencySettings, unit)
+        end
+
+        if type(RegisterUnitTextureLayerSettings) == "function" then
+            RegisterUnitTextureLayerSettings(ctx.UnitTextureLayerSettings, unit)
         end
 
         if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" then

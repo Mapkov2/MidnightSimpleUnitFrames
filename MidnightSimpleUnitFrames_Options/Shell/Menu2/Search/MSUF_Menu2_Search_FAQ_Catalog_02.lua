@@ -253,16 +253,16 @@ if type(Data.RegisterFAQProvider) == "function" then
                 y = 20,
             },
             {
-                l = "How do I disable Blizzard unit frames?",
-                a = "Open Global Style > Miscellaneous and use the Blizzard frame toggles.",
-                p = "opt_misc",
-                t = "Opens: Global Style > Miscellaneous > Blizzard Frames",
-                x = "Blizzard Frames disable blizzard hide blizzard default frames playerframe",
+                l = "How do I show Blizzard unit frames again?",
+                a = "Open the unit page > Frame Basics and use Force Blizzard frame on.",
+                p = "uf_player",
+                t = "Opens: Player > Frame Basics",
+                x = "Blizzard Frames force blizzard frame on default frames playerframe",
                 k = SearchKeywordList(
                     "blizzard frames|disable blizzard|hide blizzard|playerframe|default frames|standard frames",
-                    "hide default frames|disable default unit frames|blizzard player frame"
+                    "hide default frames|disable default unit frames|blizzard player frame|force blizzard frame"
                 ),
-                y = 35,
+                y = 76,
             },
             {
                 l = "Where is the minimap icon setting?",

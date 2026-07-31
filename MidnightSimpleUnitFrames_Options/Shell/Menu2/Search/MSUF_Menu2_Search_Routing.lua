@@ -681,7 +681,7 @@ profiles_io=export|import|wago|legacy import|profile string|backup|share profile
     opt_bars = [[
 bars_textures=textures|texture|gradient|bar texture|background texture
 bars_absorb=absorb|heal prediction|incoming heals|shield
-bars_outline=frame outline|outline|bar outline|border thickness
+bars_outline=frame outline|outline|bar outline|border thickness|outline texture|border texture
 bars_rounded=rounded|round corners|rounded texture|rounded frames
 bars_highlight=highlight borders|highlight border|dispel border|dispel overlay|aggro border|purge border|boss target border|priority order
 bars_unit_dispel_overlay=unitframe dispel overlay|unit frame dispel overlay|overlay detects|overlay priority|unit dispel overlay
@@ -707,7 +707,7 @@ misc_menu_behavior=menu behavior|menu snap|edge snap|window snap|menu resize|nav
 misc_startup=startup|welcome|welcome message|version check|versioncheck|notices
 misc_mouseover_highlight=mouseover highlight|hover highlight|hover gradient|hover border|highlight style|highlight size
 misc_tooltips=tooltips|tooltip|unitframe tooltips|group frame tooltips|mouseover tooltip|modifier tooltip
-misc_blizzard_frames=blizzard frames|default frames|hide blizzard|disable blizzard
+misc_blizzard_frames=blizzard frames|default frames
 misc_range_fade=range fade|range check|distance check|out of range
 ]],
     classpower = [[

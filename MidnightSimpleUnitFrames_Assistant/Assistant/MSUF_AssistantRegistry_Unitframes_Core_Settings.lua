@@ -116,6 +116,14 @@ function A.UnitframesRegistry.BuildCoreSettingsContext(ctx)
         RANGE_LAYER_VALUES = RANGE_LAYER_VALUES,
     }
 
+    local unitTextureLayerSettings = {
+        MakeAliases = MakeAliases,
+        RegisterUnitBooleanSetting = RegisterUnitBooleanSetting,
+        RegisterUnitNumberSetting = RegisterUnitNumberSetting,
+        RegisterUnitEnum = RegisterUnitEnum,
+        RegisterUnitString = RegisterUnitString,
+    }
+
     local unitAnchoringSettings = {
         AddAliasesForUnit = AddAliasesForUnit,
         MakeAliases = MakeAliases,
@@ -135,6 +143,7 @@ function A.UnitframesRegistry.BuildCoreSettingsContext(ctx)
         UnitTextSettings = unitTextSettings,
         UnitPowerSettings = unitPowerSettings,
         UnitTransparencySettings = unitTransparencySettings,
+        UnitTextureLayerSettings = unitTextureLayerSettings,
         UnitAnchoringSettings = unitAnchoringSettings,
         UnitPortraitSettings = {
             UnitDB = UnitDB,
