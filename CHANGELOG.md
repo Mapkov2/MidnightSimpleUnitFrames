@@ -1,5 +1,46 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-Beta44 - 2026-08-01
+
+### Highlights
+
+- New Texture Layer for unit frames: three decorative texture slots per frame, each with its own SharedMedia or custom texture, size, anchor target (frame, health, power, portrait), strata and level, custom or class color with a multi-direction gradient, blend mode, mirroring, combat-only visibility and rounded clipping.
+- Unit frames and group frames can now fade out of combat. The whole-frame opacity is set per scope on a new "Out of Combat" tab in Transparency, and composes with Range Fade so the strongest fade wins.
+- New "Blizzard ring" portrait shape: the client's own circular portrait mask, the gold ring cut from Blizzard's player-frame art and its corner embellishment, drawn untinted at any portrait size.
+- Text colors are now controllable per element. Each castbar can color its spell name, cast time and target name separately, and Level, Race, Class, Raid Group, Dead, Ghost, AFK and DND text each take their own color. Anything left unset keeps following the font color it inherits today.
+
+### Changes
+
+- The square frame outline can use a texture instead of a solid color, globally or per unit and group scope. Rounded frames ignore it and keep the tinted rounded edge.
+- Blizzard frame ownership is now decided per unit only. The global "Disable Blizzard unitframes" and "Fully Hide Blizzard PlayerFrame" toggles are gone; use "Force Blizzard frame on" in a unit's Frame Basics to keep a native frame.
+- Copy To no longer offers to copy placement. "Size & Anchoring" is now "Frame Size" and copies width and height only, on both unit and group pages, because two frames sharing a position land on top of each other.
+- Copy To gained a Texture Layer category and now copies settings it previously skipped: direct text layout and legacy text keys on units, and frame scaling, detached power, out-of-combat fade, per-slot text sizes and offsets, all status icons, aggro and dispel-symbol keys on groups.
+- Rounded frames now also cover group target and focus indicators, group block borders, spell indicator edges, group aura visuals, the debuff stripe and the over-absorb glow.
+- Menu2 sliders and the menu scale slider now follow the cursor for as long as the mouse button is held instead of jumping once per click.
+- The options window only starts a drag from its chrome, so a click that misses a control no longer moves the whole window.
+- The release tour can host live settings: the rounded frames card lets you switch the style and corner strength directly from the card.
+- Unit frames gained the custom name color that group frames already had, as a third choice next to Default and Class color in the Fonts scope.
+- The Colors page groups the new swatches into Castbar Text Colors, Status Text Colors and Texture Layer Colors, and each one is also reachable from the unit page card that owns it. Right-clicking a castbar text swatch drops the override and follows the shared castbar color again.
+- Copy To now carries castbar text colors and status indicator colors along with their placement, instead of copying half the setting.
+- Aura icons placed in the portrait stay square. Shaping them to the portrait was tried and reverted because 12.1 native aura buttons ignore icon masks; the Auras page now says so instead of leaving you looking for the option.
+- Translation pass across all twelve locales: every new setting is translated, several German terms that were machine-translated nonsense are corrected, and text-slot strings that were still English in Russian, Korean and Chinese are now localized.
+
+### Fixes & Performance
+
+- Fixed the guided tour and the release tour offering themselves again on every menu visit. Both wrote their completed state into an orphaned table when the SavedVariables root was replaced by profile repair or a reset.
+- Fixed a configured Dead, Ghost, AFK or DND text color being dropped again by the next font change.
+- Fixed boss frames drawing their outline, mouseover highlight and rounded mask against the wrong rectangle when the power bar is embedded, and fixed their square border reappearing after a rebuild.
+- Fixed the absorb value in health text ignoring "Short numbers" and the thousands separator. The 12.x client hands out absorbs as secret values, which the zero-hiding path could not format.
+- Fixed the portrait cast spell icon staying visible after the option was switched off.
+- Fixed the unit preview disagreeing with the live frame while Direct Text Layout is active: it placed name, health and power text with the legacy offsets instead of the direct anchors. Slot colors, reversed health sides and the drag handles now line up with the runtime too.
+- Fixed several menu sections clipping into the next accordion header: Frame Outline, UnitFrame Dispel Symbol, and the unit Text section, whose height now follows the selected tab instead of one fixed value.
+- Fixed Copy To popups stacking the last category over an earlier one once a page had more than ten categories.
+- Fixed Copy To panels and other menu popups being drawn underneath a pinned preview.
+- Fixed the colored bullet of a color shortcut being painted back on top of its dots after the surrounding controls were re-shown.
+- Boss castbars now share one lifecycle handler, collapse same-frame encounter events into a single pool pass, and skip anchor and layout work when no cast is active.
+- Aura and range-fade lifecycle work is coalesced when several boss frames appear at once, and the on-show identity refresh no longer runs twice for the same unit.
+- Health gradient curves are cached instead of rebuilt per frame, and portrait textures reuse a bounded session cache.
+
 ## 6.0-Beta43 - 2026-07-31
 
 ### Highlights
