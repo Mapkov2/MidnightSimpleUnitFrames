@@ -22,6 +22,7 @@ UF.Range = Range
 
 local CreateFrame = _G.CreateFrame
 local NewTimer = _G.C_Timer.NewTimer
+local After = _G.C_Timer.After
 local UnitCanAssist = _G.UnitCanAssist
 local UnitCanAttack = _G.UnitCanAttack
 local UnitIsDeadOrGhost = _G.UnitIsDeadOrGhost
@@ -749,6 +750,24 @@ end
 local driver
 local secondaryUnitDriver
 local SyncRuntime
+local visibilitySyncQueued = false
+local function FlushVisibilityRuntime()
+  visibilitySyncQueued = false
+  if SyncRuntime then SyncRuntime() end
+end
+
+local function QueueVisibilityRuntime()
+  if visibilitySyncQueued then return end
+  visibilitySyncQueued = true
+  local scheduleOnce = _G.MSUF_ScheduleOnce
+  if type(scheduleOnce) == "function" then
+    scheduleOnce("MSUF_RANGE_VISIBILITY_SYNC", FlushVisibilityRuntime)
+  elseif type(After) == "function" then
+    After(0, FlushVisibilityRuntime)
+  else
+    FlushVisibilityRuntime()
+  end
+end
 
 local function SetFrameDriverActive(frame, active)
   local unit = frame and (frame._msufRangeUnit or frame.MSUFUnitKey)
@@ -820,12 +839,16 @@ local function RangeFrameOnShow(self)
     RebuildSpells()
   end
   EvaluateIfActive(self._msufRangeUnit or self.MSUFUnitKey, true)
-  if SyncRuntime then SyncRuntime() end
+  -- RegisterUnitWatch can reveal all boss frames in one event. Evaluate each
+  -- frame immediately, but coalesce their shared-driver mask rebuild so five
+  -- OnShow hooks produce one authoritative subscription pass before rendering
+  -- the next frame.
+  QueueVisibilityRuntime()
 end
 
 local function RangeFrameOnHide(self)
-  if SetFrameDriverActive(self, false) and SyncRuntime then
-    SyncRuntime()
+  if SetFrameDriverActive(self, false) then
+    QueueVisibilityRuntime()
   end
 end
 

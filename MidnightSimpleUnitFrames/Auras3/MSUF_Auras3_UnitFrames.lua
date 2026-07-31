@@ -52,6 +52,75 @@ local AURA_BORDER_OPTIONS = {
     showWhenHarmful = true,
     showWhenHelpful = false,
 }
+-- Rounded aura borders are compiled into the native button layout. This stays
+-- entirely on the structural/cold path: no aura update, event, or OnUpdate
+-- reads SavedVariables, and changing the option recreates only aura visuals.
+local AB = {
+    root = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\",
+    sliceMargin = 9.5,
+    sliceMode = _G.Enum and _G.Enum.UITextureSliceMode and _G.Enum.UITextureSliceMode.Stretched,
+}
+AB.edges = {
+    AB.root .. "rounded_clean_edge_s1.png",
+    AB.root .. "rounded_clean_edge_s2.png",
+    AB.root .. "rounded_clean_edge_s3.png",
+    AB.root .. "rounded_clean_edge_s4.png",
+    AB.root .. "rounded_clean_edge_s5.png",
+}
+function AB.Path()
+    local bars = _G.MSUF_DB and _G.MSUF_DB.bars
+    if not (bars and bars.roundedFramesEnabled == true and bars.roundedAuraBorders ~= false) then return nil end
+    local strength = math_floor((tonumber(bars.roundedCornerStrength) or 3) + 0.5)
+    if strength < 1 then strength = 1 elseif strength > 5 then strength = 5 end
+    return AB.edges[strength]
+end
+function AB.Media(texture, path)
+    if not (texture and path) then return false end
+    -- A native dispel border can replace this asset with an atlas while the
+    -- option is off. Restamp on the cold prepare/preview path so re-enabling
+    -- the same strength cannot be fooled by a stale Lua-side path cache.
+    texture._msufA3RoundedAuraPath = path
+    texture:SetTexture(path, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+    if texture.SetTexCoord then texture:SetTexCoord(0, 1, 0, 1) end
+    if texture.SetTextureSliceMargins then
+        texture:SetTextureSliceMargins(AB.sliceMargin, AB.sliceMargin, AB.sliceMargin, AB.sliceMargin)
+        if AB.sliceMode and texture.SetTextureSliceMode then texture:SetTextureSliceMode(AB.sliceMode) end
+    end
+    if texture.SetSnapToPixelGrid then texture:SetSnapToPixelGrid(false) end
+    if texture.SetTexelSnappingBias then texture:SetTexelSnappingBias(0) end
+    return true
+end
+function AB.HideStyle(button)
+    local stack = button and button._msufA3RoundedStyleBorder
+    if type(stack) ~= "table" then return end
+    for i = 1, #stack do if stack[i] then stack[i]:Hide() end end
+end
+function AB.ApplyStyle(button, style)
+    local path = style and style.roundedBorderPath
+    if not (button and path and style.borderEnabled == true) then
+        AB.HideStyle(button)
+        return false
+    end
+    local count = math_floor((tonumber(style.borderThickness) or 1) + 0.5)
+    if count < 1 then count = 1 elseif count > 8 then count = 8 end
+    local stack = button._msufA3RoundedStyleBorder
+    if not stack then stack = {}; button._msufA3RoundedStyleBorder = stack end
+    for i = 1, count do
+        local edge = stack[i]
+        if not edge then
+            edge = button:CreateTexture(nil, "BORDER", nil, -1)
+            stack[i] = edge
+        end
+        AB.Media(edge, path)
+        edge:ClearAllPoints()
+        edge:SetPoint("TOPLEFT", button, "TOPLEFT", -i, i)
+        edge:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", i, -i)
+        edge:SetVertexColor(style.borderR, style.borderG, style.borderB, style.borderA)
+        edge:Show()
+    end
+    for i = count + 1, #stack do if stack[i] then stack[i]:Hide() end end
+    return true
+end
 -- Sensors highlight slot presence, so they must also fire for debuffs without
 -- a dispel type (e.g. PLAYER_CAST trigger). PTR 7's option processor hides
 -- untyped auras unless showWithoutDispelType is set; older clients ignore it.
@@ -745,11 +814,12 @@ local function ReadGroupDebuffTypeBorderMode(source)
     return NormalizeDebuffTypeBorderMode(mode, "OFF")
 end
 
-local function GetAuraBorderOptions(showIcon)
+local function GetAuraBorderOptions(showIcon, preserveAsset)
     -- Border/BorderWithIcon let Blizzard supply its dispel border atlas, which
     -- is the intended art for the lane debuff-type border feature.
     local styles = _G.Enum and _G.Enum.CustomAuraButtonDispelTypeTextureStyle
-    AURA_BORDER_OPTIONS.style = styles and (showIcon == true and styles.BorderWithIcon or styles.Border) or nil
+    AURA_BORDER_OPTIONS.style = styles and (preserveAsset == true and styles.PreserveAsset
+        or (showIcon == true and styles.BorderWithIcon or styles.Border)) or nil
     return AURA_BORDER_OPTIONS
 end
 
@@ -1089,7 +1159,7 @@ local function GridShape(maxCount, perRow, verticalGrowth)
 end
 
 local LaneTrackingSignature, LaneStructuralSignature, LaneLayoutSignature
-local SensorTrackingSignature, SensorStructuralSignature, SensorLayoutSignature
+local SensorStructuralSignature, SensorLayoutSignature
 
 -- Shared icon style (static border + soft shadow) is one global
 -- block applied to every lane kind: buffs, debuffs, group lanes, and all
@@ -1124,6 +1194,7 @@ local function SharedIconStyle()
         shadowG = Clamp01(sc[2] or sc.g, 0),
         shadowB = Clamp01(sc[3] or sc.b, 0),
         shadowA = Clamp01(sc[4] or sc.a, 0.8),
+        roundedBorderPath = AB.Path(),
     }
     style.borderEdge = style.borderTexture and BorderStyles.EdgeSize(borderStyle, style.borderThickness) or nil
     -- "inner" styles shade the icon from on top; "outer" ones frame it from
@@ -1135,6 +1206,7 @@ local function SharedIconStyle()
         style.borderR, style.borderG, style.borderB, style.borderA,
         style.shadowEnabled and "S" or "s", style.shadowSize,
         style.shadowR, style.shadowG, style.shadowB, style.shadowA,
+        tostring(style.roundedBorderPath),
     }, ":")
     _iconStyleCompiled, _iconStyleCompiledGen = style, gen
     return style
@@ -1177,6 +1249,7 @@ end
 local function FinalizeLane(lane, scope)
     if lane then
         lane.iconStyle = IconStyleForScope(scope or IconStyleScope(lane.unit))
+        lane.roundedAuraBorderPath = AB.Path()
         lane._msufA3TrackingSignature = LaneTrackingSignature(lane)
         lane._msufA3StructuralSignature = LaneStructuralSignature(lane)
         lane._msufA3LayoutSignature = LaneLayoutSignature(lane)
@@ -1915,7 +1988,6 @@ A3._CompilePlayerDefensivePortraitLane = function(lane, frameSpec, entry)
     local portrait = frameSpec and frameSpec.portrait
     local usePortraitPosition = entry and entry.portraitPositionWhenDisabled == true
     if not (lane and portrait and (portrait.enabled == true or usePortraitPosition)) then return nil end
-    local placed = type(entry and entry.placed) == "table" and entry.placed or {}
     -- Preserve the proven portrait geometry while retaining the custom lane's
     -- complete Aura Style contract. Portrait mode changes placement only; it
     -- must not silently discard opacity, text, swipe, stacks or duration bars.
@@ -1955,8 +2027,12 @@ A3._CompilePlayerDefensivePortraitLane = function(lane, frameSpec, entry)
     out.padding = 0
     out.width = math_max(1, cols * size + math_max(cols - 1, 0) * spacing)
     out.height = math_max(1, rows * size + math_max(rows - 1, 0) * spacing)
-    out.x = anchorX + Round(ClampNumber(placed.x, 0, -4096, 4096))
-    out.y = anchorY + Round(ClampNumber(placed.y, 0, -4096, 4096))
+    -- The standalone bar's saved Edit Mode offsets must NOT leak in here: a
+    -- previously dragged bar would push the "portrait" icon out of the
+    -- portrait entirely. Icon 1 sits exactly inside the portrait; moving the
+    -- portrait itself is the one way to move it.
+    out.x = anchorX
+    out.y = anchorY
     out.anchor = initialAnchor
     out.layer = 0
     out.strata = "AUTO"
@@ -3078,17 +3154,13 @@ LaneLayoutSignature = function(lane)
         .. "\030" .. tostring(lane.stackSize) .. "\030" .. tostring(lane.stackX)
         .. "\030" .. tostring(lane.stackY) .. "\030" .. tostring(lane.showTooltip)
         .. "\030" .. tostring(lane.showAuraBorder) .. "\030" .. tostring(lane.showAuraSymbol)
+        .. "\030" .. tostring(lane.roundedAuraBorderPath)
         .. "\030" .. tostring(lane.alpha)
         .. "\030" .. tostring(lane.padding)
         .. "\030" .. tostring(lane.portraitPositionWhenDisabled)
         .. "\030" .. tostring(lane.portraitLevelOffset)
         .. "\030" .. tostring(lane.iconStyle and lane.iconStyle.signature)
         .. "\030" .. tostring(A3._nativeVisualGen or 0)
-end
-
-SensorTrackingSignature = function(sensor)
-    return tostring(sensor.unit) .. "\030" .. tostring(sensor.kind) .. "\030" .. tostring(sensor.nativeFilter)
-        .. "\030" .. tostring(sensor.max) .. "\030" .. tostring(sensor.filterCount) .. "\030" .. tostring(sensor.filterMax)
 end
 
 SensorStructuralSignature = function(sensor)
@@ -3239,6 +3311,11 @@ local ICON_INNER_BAND_MAX = 0.3
 local function ApplyIconStyleBorder(button, style, size)
     local flat = button._msufA3StyleBorder
     local pieces = button._msufA3StyleBorderPieces
+    if AB.ApplyStyle(button, style) then
+        if flat then flat:Hide() end
+        if pieces then MSUF.BorderStyles.Hide(pieces) end
+        return
+    end
     if not (style and style.borderEnabled) then
         if flat then flat:Hide() end
         if pieces then MSUF.BorderStyles.Hide(pieces) end
@@ -3293,6 +3370,21 @@ function A3.ApplyIconStylePreview(button, style, size)
     if not button then return end
     ApplyIconStyleShadow(button, style, size)
     ApplyIconStyleBorder(button, style, size)
+end
+
+--- Preview counterpart for the native PreserveAsset dispel border. Menu2 and
+--- Edit Mode call this only while repainting their mock icons.
+function A3.ApplyRoundedAuraDispelPreview(border, icon, size, mode)
+    local path = AB.Path()
+    if not (border and icon and path and mode ~= nil and mode ~= "OFF") then return false end
+    local pad = math_max(1, math_floor(((tonumber(size) or 24) / 24) + 0.5))
+    AB.Media(border, path)
+    border:ClearAllPoints()
+    border:SetPoint("TOPLEFT", icon, "TOPLEFT", -pad, pad)
+    border:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", pad, -pad)
+    border:SetVertexColor(0.20, 0.60, 1.00, 1)
+    border:Show()
+    return true
 end
 
 local function LayoutDurationBar(button, bar, lane)
@@ -3543,6 +3635,14 @@ local function SyncContainerGeometry(container, lane, parentFrame, forceGeometry
     container.createdButtons = lane.max
     container:SetSize(lane.size or 1, lane.size or 1)
     if parentFrame and layoutHost then
+        -- A portrait lane can be born before the Portrait element created its
+        -- holder (parent then fell back to the unit frame). Snap the host over
+        -- when the resolved parent changes; the geom-parent guard above
+        -- re-runs this block exactly then.
+        if lane.portraitOverlay == true and layoutHost.GetParent
+            and layoutHost:GetParent() ~= parentFrame and layoutHost.SetParent then
+            layoutHost:SetParent(parentFrame)
+        end
         layoutHost:ClearAllPoints()
         layoutHost:SetPoint(lane.anchor, parentFrame, lane.anchor, lane.x, lane.y)
         layoutHost:SetSize(lane.width, lane.height)
@@ -3771,9 +3871,11 @@ local function PrepareAuraButton(button, lane, index)
             border = button:CreateTexture(nil, "OVERLAY")
         end
         LayoutAuraBorder(button, border, lane)
+        local roundedDispel = lane.roundedAuraBorderPath
+        if roundedDispel then AB.Media(border, roundedDispel) end
         button._msufA3AuraBorder = border
         button:ClearDispelTypeTextures()
-        button:AddDispelTypeTexture(border, GetAuraBorderOptions(lane.showAuraSymbol))
+        button:AddDispelTypeTexture(border, GetAuraBorderOptions(lane.showAuraSymbol, roundedDispel ~= nil))
         auraBorderBound = true
     else
         button:ClearDispelTypeTextures()
@@ -5348,6 +5450,11 @@ end
 local directIdentityRefreshEventFrame
 local directIdentityRefreshRegisteredEvents = {}
 
+local function DirectIdentityBossUnit(unit)
+    return unit == "boss1" or unit == "boss2" or unit == "boss3"
+        or unit == "boss4" or unit == "boss5"
+end
+
 local function SetDirectIdentityRefreshEvent(frame, event, enabled)
     if enabled == true then
         if directIdentityRefreshRegisteredEvents[event] ~= true then
@@ -5372,7 +5479,7 @@ local function SyncDirectIdentityRefreshEvents(frame)
                         hasTarget = true
                     elseif unit == "focus" then
                         hasFocus = true
-                    elseif type(unit) == "string" and unit:match("^boss%d+$") then
+                    elseif DirectIdentityBossUnit(unit) then
                         hasBoss = true
                     end
                 end
@@ -5388,6 +5495,23 @@ local function SyncDirectIdentityRefreshEvents(frame)
     SetDirectIdentityRefreshEvent(frame, "PLAYER_TARGET_CHANGED", hasTarget)
     SetDirectIdentityRefreshEvent(frame, "PLAYER_FOCUS_CHANGED", hasFocus)
     SetDirectIdentityRefreshEvent(frame, "INSTANCE_ENCOUNTER_ENGAGE_UNIT", hasBoss)
+    return true
+end
+
+local function DirectIdentityRefreshEventsAlreadyCover(unit)
+    if directIdentityRefreshRegisteredEvents.PLAYER_ENTERING_WORLD ~= true
+        or directIdentityRefreshRegisteredEvents.ZONE_CHANGED_NEW_AREA ~= true then
+        return false
+    end
+    if unit == "target" then
+        return directIdentityRefreshRegisteredEvents.PLAYER_TARGET_CHANGED == true
+    end
+    if unit == "focus" then
+        return directIdentityRefreshRegisteredEvents.PLAYER_FOCUS_CHANGED == true
+    end
+    if DirectIdentityBossUnit(unit) then
+        return directIdentityRefreshRegisteredEvents.INSTANCE_ENCOUNTER_ENGAGE_UNIT == true
+    end
     return true
 end
 
@@ -5421,9 +5545,17 @@ A3._RegisterDirectIdentityRefreshContainer = function(container)
         return false
     end
     A3._directIdentityAuraContainers = A3._directIdentityAuraContainers or {}
-    if container._msufA3DirectIdentityUnit and container._msufA3DirectIdentityUnit ~= unit then
-        local oldSet = A3._directIdentityAuraContainers[container._msufA3DirectIdentityUnit]
-        if oldSet then oldSet[container] = nil end
+    local oldUnit = container._msufA3DirectIdentityUnit
+    local topologyChanged = false
+    if oldUnit and oldUnit ~= unit then
+        local oldSet = A3._directIdentityAuraContainers[oldUnit]
+        if oldSet then
+            oldSet[container] = nil
+            if not next(oldSet) then
+                A3._directIdentityAuraContainers[oldUnit] = nil
+                topologyChanged = true
+            end
+        end
     end
     local set = A3._directIdentityAuraContainers[unit]
     if not set then
@@ -5433,7 +5565,16 @@ A3._RegisterDirectIdentityRefreshContainer = function(container)
     set[container] = true
     container._msufA3DirectIdentityUnit = unit
     local frame = A3._EnsureDirectIdentityRefreshFrame()
-    SyncDirectIdentityRefreshEvents(frame)
+    -- A visible boss frame commonly registers three native lanes, and five
+    -- bosses can appear in the same callback. The first lane establishes the
+    -- shared boss event; rescanning every per-unit container and repeating all
+    -- five RegisterEvent state checks for the other fourteen lanes is pure
+    -- lifecycle overhead. Additions can take this O(1) coverage gate. Rebinds
+    -- that removed a unit family still use the authoritative topology scan so
+    -- no obsolete target/focus/boss subscription can survive.
+    if topologyChanged or not DirectIdentityRefreshEventsAlreadyCover(unit) then
+        SyncDirectIdentityRefreshEvents(frame)
+    end
     return true
 end
 

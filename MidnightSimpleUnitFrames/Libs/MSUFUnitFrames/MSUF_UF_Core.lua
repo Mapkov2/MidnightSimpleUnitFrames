@@ -25,6 +25,8 @@ local UnitClass = UnitClass
 local UnitIsConnected = UnitIsConnected
 local UnitIsDead = UnitIsDead
 local UnitIsDeadOrGhost = UnitIsDeadOrGhost
+local UnitGUID = UnitGUID
+local GetTime = GetTime or function() return 0 end
 local issecretvalue = _G.issecretvalue or function(_) return false end
 
 UF.version = "8.4-demand-runtime-plans"
@@ -888,6 +890,47 @@ local function HeaderLayoutRebindActive(frame)
   return type(isActive) == "function" and isActive(frame) == true
 end
 
+local function OnShowIdentityFollowupEvent(unit)
+  if unit == "target" then return "PLAYER_TARGET_CHANGED" end
+  if unit == "focus" then return "PLAYER_FOCUS_CHANGED" end
+  if unit == "pet" then return "UNIT_PET" end
+  if unit == "boss1" or unit == "boss2" or unit == "boss3"
+    or unit == "boss4" or unit == "boss5" then
+    return "INSTANCE_ENCOUNTER_ENGAGE_UNIT"
+  end
+  return nil
+end
+
+local function MarkOnShowIdentityFollowup(frame)
+  local unit = frame and frame.MSUFUnitKey
+  local event = OnShowIdentityFollowupEvent(unit)
+  if not (event and UnitGUID) then return end
+  local guid = UnitGUID(unit)
+  if guid == nil or issecretvalue(guid) == true then return end
+  -- RegisterUnitWatch exposes target/focus/pet/boss frames before their matching
+  -- lifecycle event reaches Lua. OnShow has already performed the complete
+  -- identity reseed, so remember that exact same-frame GUID and let the event
+  -- route skip only its redundant identity follower. Other event followers are
+  -- untouched, and the timestamp/GUID guards make later changes authoritative.
+  frame._msufCoreOnShowFollowupEvent = event
+  frame._msufCoreOnShowFollowupGUID = guid
+  frame._msufCoreOnShowFollowupTime = GetTime()
+end
+
+local function ConsumeOnShowIdentityFollowup(frame, event, unit)
+  local expected = frame and frame._msufCoreOnShowFollowupEvent
+  if not expected then return false end
+  local expectedGUID = frame._msufCoreOnShowFollowupGUID
+  local expectedTime = frame._msufCoreOnShowFollowupTime
+  frame._msufCoreOnShowFollowupEvent = nil
+  frame._msufCoreOnShowFollowupGUID = nil
+  frame._msufCoreOnShowFollowupTime = nil
+  if event ~= expected or GetTime() ~= expectedTime or not UnitGUID then return false end
+  unit = unit or frame.MSUFUnitKey
+  local guid = UnitGUID(unit)
+  return guid ~= nil and issecretvalue(guid) ~= true and guid == expectedGUID
+end
+
 local function FrameOnShow(frame)
   frame._msufCoreVisible = true
   frame._msufCoreOnShowIdentityRefreshed = nil
@@ -926,11 +969,17 @@ local function FrameOnShow(frame)
     -- visible so no status from the previous unit can bleed through.
     frame._msufCoreOnShowIdentityRefreshed =
       UF.RunLeanIdentity(frame, "MSUF_UF_ONSHOW") == true or nil
+    if frame._msufCoreOnShowIdentityRefreshed == true then
+      MarkOnShowIdentityFollowup(frame)
+    end
   end
 end
 
 local function FrameOnHide(frame)
   frame._msufCoreVisible = false
+  frame._msufCoreOnShowFollowupEvent = nil
+  frame._msufCoreOnShowFollowupGUID = nil
+  frame._msufCoreOnShowFollowupTime = nil
   if RefreshHealthLifecycleSinkRoutes and frame._msufHealthLifecycleSink then
     RefreshHealthLifecycleSinkRoutes(frame)
   end
@@ -1858,6 +1907,7 @@ local function IdentityEventUpdate(frame, event)
   if not frame then return end
   event = event or "MSUF_UNIT_IDENTITY"
   local unit = frame.MSUFUnitKey
+  if ConsumeOnShowIdentityFollowup(frame, event, unit) then return end
   if not IdentityUnitExists(frame, unit) then
     RefreshIdentityHealthBackground(frame)
     return

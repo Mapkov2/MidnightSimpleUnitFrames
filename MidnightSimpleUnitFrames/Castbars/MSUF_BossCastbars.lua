@@ -178,7 +178,10 @@ local function UpdateBossCastbarAnchorBase(frame)
     end
 
     local changed = false
-    changed = SetHeightIfChanged(frame, desiredHeight or frame:GetHeight() or 18) or changed
+    local sizeChanged = false
+    local heightChanged = SetHeightIfChanged(frame, desiredHeight or frame:GetHeight() or 18)
+    changed = heightChanged or changed
+    sizeChanged = heightChanged or sizeChanged
 
     local offsetX = Snap(frame, tonumber(general.bossCastbarOffsetX) or 0)
     local offsetY = Snap(frame, tonumber(general.bossCastbarOffsetY) or 0)
@@ -196,7 +199,9 @@ local function UpdateBossCastbarAnchorBase(frame)
 
         changed = SetPointIfChanged(frame, "CENTER", UIParent, "CENTER", offsetX + layoutX, offsetY + (tonumber(layoutY) or 0))
             or changed
-        changed = SetWidthIfChanged(frame, desiredWidth or frame:GetWidth() or 240) or changed
+        local widthChanged = SetWidthIfChanged(frame, desiredWidth or frame:GetWidth() or 240)
+        changed = widthChanged or changed
+        sizeChanged = widthChanged or sizeChanged
     else
         local unitFrame = _G["MSUF_" .. unit]
         if unitFrame and unitFrame.GetWidth then
@@ -229,7 +234,9 @@ local function UpdateBossCastbarAnchorBase(frame)
                     width = width * sourceScale / frameScale
                 end
             end
-            changed = SetWidthIfChanged(frame, width or unitFrame:GetWidth() or 240) or changed
+            local widthChanged = SetWidthIfChanged(frame, width or unitFrame:GetWidth() or 240)
+            changed = widthChanged or changed
+            sizeChanged = widthChanged or sizeChanged
         else
             changed = SetPointIfChanged(
                 frame,
@@ -239,16 +246,21 @@ local function UpdateBossCastbarAnchorBase(frame)
                 -420 + offsetX,
                 (-220 + offsetY) - ((bossIndex - 1) * 34)
             ) or changed
-            changed = SetWidthIfChanged(frame, desiredWidth or frame:GetWidth() or 240) or changed
+            local widthChanged = SetWidthIfChanged(frame, desiredWidth or frame:GetWidth() or 240)
+            changed = widthChanged or changed
+            sizeChanged = widthChanged or sizeChanged
         end
     end
 
-    return changed
+    return changed, sizeChanged
 end
 
 local function UpdateBossCastbarAnchor(frame, forceLayout)
-    local changed = UpdateBossCastbarAnchorBase(frame)
-    if changed or forceLayout then ApplyBossCastbarLayout(frame) end
+    local changed, sizeChanged = UpdateBossCastbarAnchorBase(frame)
+    -- Moving between fallback UIParent and the live boss unitframe changes only
+    -- the external anchor. Internal icon/text/spark geometry depends on size,
+    -- not position, so do not rebuild every region on a pure reanchor.
+    if sizeChanged or forceLayout then ApplyBossCastbarLayout(frame) end
     return changed
 end
 
@@ -285,12 +297,17 @@ local function StopBossCastbar(frame)
     end
 end
 
-local function InvalidateBossCastState(unit)
+local function BuildBossCastState(frame)
+    local unit = frame and frame.unit
     local getEngine = _G.MSUF_GetCastbarEngine
     local engine = type(getEngine) == "function" and getEngine() or nil
     if engine and type(engine.Invalidate) == "function" then
         engine:Invalidate(unit)
     end
+    if engine and type(engine.BuildState) == "function" then
+        return engine:BuildState(unit, frame), true
+    end
+    return nil, false
 end
 
 local function RefreshBossCastbarFromUnit(frame, refreshLayout)
@@ -304,9 +321,21 @@ local function RefreshBossCastbarFromUnit(frame, refreshLayout)
     -- stale interrupt hold before Cast() rebuilds (or clears) that unit state.
     if frame.interrupted then StopBossCastbar(frame) end
 
-    if refreshLayout then frame:UpdateAnchor(true) end
-    InvalidateBossCastState(frame.unit)
-    if frame.Cast then frame:Cast() end
+    -- Probe the shared same-frame cast-state cache before touching geometry.
+    -- Boss units can exist while no gameplay cast/channel is active; in that
+    -- dominant lifecycle case, terminal cleanup is sufficient and avoids a
+    -- complete anchor/layout/driver pass for an invisible bar.
+    local state, stateKnown = BuildBossCastState(frame)
+    if stateKnown and not (state and state.active == true) then
+        StopBossCastbar(frame)
+        return false
+    end
+
+    -- Encounter/lifecycle events need current geometry for a real active cast,
+    -- but a full visual refresh is only necessary when that geometry changed.
+    -- Visual settings already own their explicit force-layout path.
+    if refreshLayout then frame:UpdateAnchor(false) end
+    if frame.Cast then frame:Cast(state) end
     return true
 end
 
@@ -330,11 +359,6 @@ local function SetBossEventsRegistered(frame, enabled)
         -- UNIT_FLAGS stays sparse/persistent so delayed death and interrupted
         -- feedback states still terminate without a ticker or combat-log hook.
         frame:RegisterUnitEvent("UNIT_FLAGS", frame.unit)
-        frame:RegisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT")
-        frame:RegisterEvent("UNIT_TARGETABLE_CHANGED")
-        frame:RegisterEvent("ENCOUNTER_START")
-        frame:RegisterEvent("ENCOUNTER_END")
-        frame:RegisterEvent("PLAYER_ENTERING_WORLD")
         frame._msufDriverEventsRegistered = true
         frame._msufBossEventsRegistered = true
         frame._msufCastLifecycleOwned = true
@@ -350,7 +374,7 @@ end
 
 --- Create or reuse one boss castbar frame. The generic driver handles most cast
 --- behavior; this hook only adds boss lifecycle reactions.
-local function EnsureBossCastbar(index)
+local function EnsureBossCastbar(index, enabled)
     local unit = "boss" .. index
     local name = "MSUF_BossCastbar" .. index
 
@@ -384,25 +408,7 @@ local function EnsureBossCastbar(index)
             -- path out of the boss lifecycle branch chain below.
             if event == "UNIT_HEALTH" then return end
 
-            if event == "ENCOUNTER_END" then
-                StopBossCastbar(eventFrame)
-                return
-            end
-
-            if event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT"
-                or event == "ENCOUNTER_START"
-                or event == "PLAYER_ENTERING_WORLD"
-            then
-                if BossCastbarsEnabled() then
-                    RefreshBossCastbarFromUnit(eventFrame, true)
-                end
-            elseif event == "UNIT_TARGETABLE_CHANGED"
-                and eventUnit == eventFrame.unit
-            then
-                if BossCastbarsEnabled() then
-                    RefreshBossCastbarFromUnit(eventFrame, false)
-                end
-            elseif event == "UNIT_FLAGS"
+            if event == "UNIT_FLAGS"
                 and eventFrame:IsShown()
                 and BossUnitUnavailable(eventFrame.unit)
             then
@@ -411,7 +417,7 @@ local function EnsureBossCastbar(index)
         end)
     end
 
-    SetBossEventsRegistered(frame, BossCastbarsEnabled())
+    SetBossEventsRegistered(frame, enabled == true)
     frame:UpdateAnchor(true)
     frame:Hide()
 
@@ -420,18 +426,18 @@ end
 
 local function EnsureBossCastbars()
     if _G.MSUF_BossCastbars then
-        return _G.MSUF_BossCastbars
+        return _G.MSUF_BossCastbars, false
     end
 
     if not BossCastbarsEnabled() then
-        return nil
+        return nil, false
     end
 
     local bossCastbars = {}
     ExportPublic("MSUF_BossCastbars", bossCastbars)
 
     for index = 1, MAX_BOSS_FRAMES do
-        local frame = EnsureBossCastbar(index)
+        local frame = EnsureBossCastbar(index, true)
         bossCastbars[index] = frame
 
         if frame and UnitExists(frame.unit) and frame.Cast then
@@ -439,7 +445,86 @@ local function EnsureBossCastbars()
         end
     end
 
-    return bossCastbars
+    return bossCastbars, true
+end
+
+local bossPoolRefreshQueued = false
+local bossPoolRefreshGeneration = 0
+local bossPoolRefreshPendingGeneration
+
+local function FlushBossPoolLifecycle()
+    bossPoolRefreshQueued = false
+    if bossPoolRefreshPendingGeneration ~= bossPoolRefreshGeneration then return end
+    bossPoolRefreshPendingGeneration = nil
+    if not BossCastbarsEnabled() then return end
+
+    local bossCastbars = _G.MSUF_BossCastbars
+    if not bossCastbars then return end
+    for index = 1, #bossCastbars do
+        RefreshBossCastbarFromUnit(bossCastbars[index], true)
+    end
+end
+
+local function QueueBossPoolLifecycle()
+    bossPoolRefreshPendingGeneration = bossPoolRefreshGeneration
+    if bossPoolRefreshQueued then return end
+    bossPoolRefreshQueued = true
+
+    local scheduleOnce = _G.MSUF_ScheduleOnce
+    if type(scheduleOnce) == "function" then
+        scheduleOnce("MSUF_BOSS_POOL_LIFECYCLE", FlushBossPoolLifecycle)
+    elseif C_Timer and C_Timer.After then
+        C_Timer.After(0, FlushBossPoolLifecycle)
+    else
+        FlushBossPoolLifecycle()
+    end
+end
+
+local function CancelBossPoolLifecycle()
+    bossPoolRefreshGeneration = bossPoolRefreshGeneration + 1
+    bossPoolRefreshPendingGeneration = nil
+end
+
+local function HandleBossPoolLifecycle(event, eventUnit)
+    local bossCastbars = _G.MSUF_BossCastbars
+    local created
+    if event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" then
+        bossCastbars, created = EnsureBossCastbars()
+        if not bossCastbars or created == true then return end
+    elseif not bossCastbars then
+        return
+    end
+
+    if event == "ENCOUNTER_END" then
+        -- A queued engage/world refresh must never resurrect a cast after the
+        -- terminal encounter event. The stable callback remains harmless in
+        -- the scheduler and rejects this older generation when it runs.
+        CancelBossPoolLifecycle()
+        for index = 1, #bossCastbars do
+            StopBossCastbar(bossCastbars[index])
+        end
+        return
+    end
+
+    if event == "UNIT_TARGETABLE_CHANGED" then
+        if type(eventUnit) ~= "string" then return end
+        local index = tonumber(eventUnit:match("^boss(%d+)$"))
+        local frame = index and bossCastbars[index]
+        if frame and frame.unit == eventUnit then
+            RefreshBossCastbarFromUnit(frame, false)
+        end
+        return
+    end
+
+    if event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD"
+        or event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" or event == "ENCOUNTER_START" then
+        -- These lifecycle notifications commonly arrive as one same-frame
+        -- burst. Collapse the whole burst into one next-frame pool pass so five
+        -- boss bars are refreshed once, not once per overlapping notification.
+        -- Targetability stays immediate and unit-specific; ENCOUNTER_END stays
+        -- immediate and invalidates this queued work.
+        QueueBossPoolLifecycle()
+    end
 end
 
 local function RefreshBossPreviewIfAllowed()
@@ -524,13 +609,6 @@ local function ApplyBossCastbarsEnabled()
     if _G.MSUF_BossCastbars_SyncLifecycle then _G.MSUF_BossCastbars_SyncLifecycle(enabled) end
 end
 
-local function OnLogin()
-    if not BossCastbarsEnabled() then return end
-    EnsureBossCastbars()
-
-    ApplyBossCastbarPositionSetting(true)
-end
-
 ExportPublic("MSUF_ApplyBossCastbarPositionSetting", ApplyBossCastbarPositionSetting)
 ExportPublic("MSUF_ApplyBossCastbarsEnabled", ApplyBossCastbarsEnabled)
 ExportPublic("MSUF_BossCastbar_Stop", StopBossCastbar)
@@ -539,19 +617,36 @@ local bossLifecycleFrame
 local function SyncBossLifecycle(enabled)
     enabled = enabled == true
     if type(_G.MSUF_EventBus_Unregister) == "function" then
-        _G.MSUF_EventBus_Unregister("PLAYER_LOGIN", "MSUF_BOSS_CASTBARS")
+        _G.MSUF_EventBus_Unregister("PLAYER_LOGIN", "MSUF_BOSS_CASTBARS_LOGIN")
         _G.MSUF_EventBus_Unregister("PLAYER_ENTERING_WORLD", "MSUF_BOSS_CASTBARS_WORLD")
+        _G.MSUF_EventBus_Unregister("INSTANCE_ENCOUNTER_ENGAGE_UNIT", "MSUF_BOSS_CASTBARS_ENGAGE")
+        _G.MSUF_EventBus_Unregister("ENCOUNTER_START", "MSUF_BOSS_CASTBARS_START")
+        _G.MSUF_EventBus_Unregister("ENCOUNTER_END", "MSUF_BOSS_CASTBARS_END")
+        _G.MSUF_EventBus_Unregister("UNIT_TARGETABLE_CHANGED", "MSUF_BOSS_CASTBARS_TARGETABLE")
     end
     if bossLifecycleFrame then bossLifecycleFrame:UnregisterAllEvents() end
-    if not enabled then return false end
+    if not enabled then
+        CancelBossPoolLifecycle()
+        return false
+    end
     if type(_G.MSUF_EventBus_Register) == "function" then
-        _G.MSUF_EventBus_Register("PLAYER_LOGIN", "MSUF_BOSS_CASTBARS", OnLogin, nil, true)
-        _G.MSUF_EventBus_Register("PLAYER_ENTERING_WORLD", "MSUF_BOSS_CASTBARS_WORLD", OnLogin)
+        _G.MSUF_EventBus_Register("PLAYER_LOGIN", "MSUF_BOSS_CASTBARS_LOGIN", HandleBossPoolLifecycle, nil, true)
+        _G.MSUF_EventBus_Register("PLAYER_ENTERING_WORLD", "MSUF_BOSS_CASTBARS_WORLD", HandleBossPoolLifecycle)
+        _G.MSUF_EventBus_Register("INSTANCE_ENCOUNTER_ENGAGE_UNIT", "MSUF_BOSS_CASTBARS_ENGAGE", HandleBossPoolLifecycle)
+        _G.MSUF_EventBus_Register("ENCOUNTER_START", "MSUF_BOSS_CASTBARS_START", HandleBossPoolLifecycle)
+        _G.MSUF_EventBus_Register("ENCOUNTER_END", "MSUF_BOSS_CASTBARS_END", HandleBossPoolLifecycle)
+        _G.MSUF_EventBus_Register("UNIT_TARGETABLE_CHANGED", "MSUF_BOSS_CASTBARS_TARGETABLE", HandleBossPoolLifecycle)
     else
         bossLifecycleFrame = bossLifecycleFrame or CreateFrame("Frame")
-        bossLifecycleFrame:SetScript("OnEvent", OnLogin)
+        bossLifecycleFrame:SetScript("OnEvent", function(_, event, ...)
+            HandleBossPoolLifecycle(event, ...)
+        end)
         bossLifecycleFrame:RegisterEvent("PLAYER_LOGIN")
         bossLifecycleFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+        bossLifecycleFrame:RegisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT")
+        bossLifecycleFrame:RegisterEvent("ENCOUNTER_START")
+        bossLifecycleFrame:RegisterEvent("ENCOUNTER_END")
+        bossLifecycleFrame:RegisterEvent("UNIT_TARGETABLE_CHANGED")
     end
     return true
 end

@@ -262,6 +262,19 @@ local function UnitPreviewActive(unit)
     return (BOSS_UNITS[unit] == true or IsBossScope(unit)) and BossPageAuraPreviewActive() or false
 end
 
+--- Preview lanes must never cover Menu2. The slash menu sits at DIALOG while it
+--- drives the boss page preview and only rises to FULLSCREEN_DIALOG once MSUF
+--- Edit Mode is active, so the movers follow that split instead of pinning
+--- FULLSCREEN in both cases. HIGH still keeps the dummy icons above the unit
+--- frames, which never raise themselves past the UIParent default.
+local function SyncPreviewGroupStrata(group)
+    if not (group and group.SetFrameStrata) then return end
+    local strata = IsEditModeActive() and "FULLSCREEN" or "HIGH"
+    if group._msufA3PreviewStrata == strata then return end
+    group._msufA3PreviewStrata = strata
+    group:SetFrameStrata(strata)
+end
+
 local function IsConfigBlocked()
     if InCombatLockdown and InCombatLockdown() then return true end
     if _G.UnitAffectingCombat and _G.UnitAffectingCombat("player") then return true end
@@ -1556,11 +1569,15 @@ local function LayoutPreviewDispelBorder(icon, cfg)
     local border = icon and icon.DispelBorder
     local atlas = cfg and DEBUFF_TYPE_BORDER_PREVIEW_ATLAS[cfg.debuffBorderMode]
     local barOnly = cfg and cfg.showDurationBar == true and cfg.durationBarDisplay == "BAR_ONLY"
+    local size = math_max(1, (icon and icon.GetWidth and icon:GetWidth()) or 24)
+    if not barOnly and type(A3.ApplyRoundedAuraDispelPreview) == "function"
+        and A3.ApplyRoundedAuraDispelPreview(border, icon, size, cfg and cfg.debuffBorderMode) then
+        return
+    end
     if not (border and atlas and border.SetAtlas and not barOnly) then
         if border then border:Hide() end
         return
     end
-    local size = math_max(1, (icon.GetWidth and icon:GetWidth()) or 24)
     local pad = math_max(1, math_floor(size / 24 + 0.5))
     border:ClearAllPoints()
     border:SetPoint("TOPLEFT", icon, "TOPLEFT", -pad, pad)
@@ -1690,7 +1707,7 @@ local function CreateGroup(unit, kind)
     local spec = GROUPS[kind]
     local snapName = "AuraPreview:" .. tostring(unit) .. ":" .. tostring(kind)
     local group = CreateFrame("Button", nil, UIParent, "BackdropTemplate")
-    group:SetFrameStrata("FULLSCREEN")
+    SyncPreviewGroupStrata(group)
     group:SetFrameLevel(900)
     group:SetClampedToScreen(false)
     group:SetMovable(true)
@@ -1984,6 +2001,7 @@ function EM.RefreshUnit(unit)
         local cfg = ReadGroupConfig(unit, kind)
         local metrics = type(A3.BuildAuraLaneMetrics) == "function" and A3.BuildAuraLaneMetrics(unit, kind) or nil
         local group = CreateGroup(unit, kind)
+        SyncPreviewGroupStrata(group)
         local entries = spec.customIndex and CustomPreviewEntries(unit, kind) or nil
         -- Curated player defensives and target DoTs reveal their real entries
         -- exactly like the in-menu preview, even while disabled.
