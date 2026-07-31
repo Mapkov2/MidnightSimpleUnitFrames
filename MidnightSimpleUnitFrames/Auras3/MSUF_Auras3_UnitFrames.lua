@@ -3994,6 +3994,25 @@ function DS.Options(style)
     return DS.options
 end
 
+-- Rounded frames are optional and loaded outside Auras3. Keep weak references
+-- to the native overlay textures on their owning unit frame so a later rounded
+-- enable/apply can discover them without walking AuraButtons. Registration is
+-- initialize/preview-only; aura events never cross this bridge.
+local function RegisterRoundedDispelOverlayRegion(parentFrame, region)
+    if not (parentFrame and region) then return end
+    local key = IsGroupFrame(parentFrame) and "_msufGFDispelOverlays" or "_msufUFDispelOverlays"
+    local regions = parentFrame[key]
+    if type(regions) ~= "table" then
+        regions = setmetatable({}, { __mode = "k" })
+        parentFrame[key] = regions
+    end
+    regions[region] = true
+    local callback = _G.MSUF_RoundedUF_OnDispelOverlayChanged
+    if type(callback) == "function" then
+        callback(parentFrame, region)
+    end
+end
+
 local function PrepareDispelSensorButton(button, sensor, parentFrame, index)
     if not (button and sensor and parentFrame) then return false end
     ValidateNativeAuraButtonContract(button)
@@ -4079,6 +4098,7 @@ local function PrepareDispelSensorButton(button, sensor, parentFrame, index)
         region:SetTexture("Interface\\Buttons\\WHITE8X8")
         region:SetAlpha(Clamp01(sensor.alpha, 0.35))
         button:AddDispelTypeTexture(region, GetSensorOverlayOptions())
+        RegisterRoundedDispelOverlayRegion(parentFrame, region)
     else
         region:SetTexture(MSUF_AURA_SENSOR_EDGE_TEXTURE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
         region:SetAlpha(0.82)
@@ -4164,6 +4184,7 @@ A3._ApplyDispelOverlayPreview = function(frame)
     if not LayoutDispelSensorOverlay(region, host, sensor, DispelSensorTarget(frame, sensor)) then
         return A3._HideDispelOverlayPreview(frame)
     end
+    RegisterRoundedDispelOverlayRegion(frame, region)
     local dispel = frame.MSUFSpec.dispel
     region:SetColorTexture(tonumber(dispel and dispel.r) or 0.25,
         tonumber(dispel and dispel.g) or 0.75,

@@ -1195,12 +1195,42 @@ end
 
 local function MaskOverlayList(f, overlays, group, anchor)
   if type(overlays) == "table" then
-    for _, overlay in pairs(overlays) do
-      MaskStatusBarFill(f, overlay, group, anchor)
+    for key, value in pairs(overlays) do
+      local overlay = value == true and key or value
+      if overlay and type(overlay.GetStatusBarTexture) == "function" then
+        MaskStatusBarFill(f, overlay, group, anchor)
+      elseif overlay then
+        if group then MaskGroupTexture(f, overlay, anchor) else MaskTexture(f, overlay, anchor) end
+      end
     end
+  elseif overlays and type(overlays.GetStatusBarTexture) ~= "function" then
+    if group then MaskGroupTexture(f, overlays, anchor) else MaskTexture(f, overlays, anchor) end
   else
     MaskStatusBarFill(f, overlays, group, anchor)
   end
+end
+
+-- Native Auras3 dispel overlays are plain textures, not StatusBars. Bind a
+-- newly initialized texture immediately to the same outer mask used by health
+-- (and by embedded power), while the stored weak set lets ApplyAll rebind it
+-- after settings/media changes. This callback is cold-path only.
+local function ApplyDispelOverlayMask(f, region)
+  if not (f and region) then return false end
+  if IsCombatLocked() then
+    DeferApply()
+    return false
+  end
+  local group = FrameIsGroup(f)
+  if group then
+    if not RoundedGroupFramesEnabled() then return false end
+    local shared = RoundedPowerBarsEnabled() and PowerIsEmbedded(f) and (f.barGroup or f) or nil
+    MaskGroupTexture(f, region, shared or f.health or f.barGroup or f)
+  else
+    if not RoundedUnitFramesEnabled() then return false end
+    local shared = RoundedPowerBarsEnabled() and PowerIsEmbedded(f) and (f.bg or f) or nil
+    MaskTexture(f, region, shared or f.hpBar or f.bg or f)
+  end
+  return true
 end
 
 local function MaskGFGradientTable(f, bar, anchor)
@@ -1611,6 +1641,9 @@ local function HookOnce()
       ApplyToUnitFrame(frame)
     end
   end)
+  ExportPublic("MSUF_RoundedUF_OnDispelOverlayChanged", function(frame, region)
+    return ApplyDispelOverlayMask(frame, region)
+  end)
   ExportPublic("MSUF_RoundedUF_OnGroupFrameApplied", function(frame, kind)
     if IsCombatLocked() then DeferApply(); return end
     if frame then ApplyToGroupFrame(frame, kind) end
@@ -1648,6 +1681,7 @@ local ROUNDED_CALLBACK_NAMES = {
   "MSUF_RoundedUF_OnBorderVisualChanged",
   "MSUF_RoundedUF_OnPowerBorderChanged",
   "MSUF_RoundedUF_OnUnitDispelOverlayChanged",
+  "MSUF_RoundedUF_OnDispelOverlayChanged",
   "MSUF_RoundedUF_OnGroupFrameApplied",
   "MSUF_RoundedUF_OnGroupBackdropAlphaChanged",
   "MSUF_RoundedUF_OnGroupHighlightChanged",
