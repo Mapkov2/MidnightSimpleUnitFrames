@@ -144,7 +144,11 @@ local function MarkHealthTextDirty(frame)
   MarkDirtyText(frame, TEXT_DIRTY_HEALTH)
   -- The bar route may have published a restricted percent for a synchronous
   -- text writer. A deferred marker must never retain that event payload.
-  ClearDirtyTextDispatch(frame, TEXT_DIRTY_HEALTH)
+  local rt = frame and frame._msufTextRuntime
+  if rt and (rt._dispatchHealthPercentReady == true
+      or rt._dispatchHealthMissingReady == true) then
+    ClearDirtyTextDispatch(frame, TEXT_DIRTY_HEALTH)
+  end
 end
 
 local function MarkGroupHealthTextDirty(frame)
@@ -1743,7 +1747,9 @@ function HealthText.GetUnitlessEvents(frame, spec)
 end
 
 UpdateHealthTextValues = function(frame, event, unit, hp, hpMax)
-  CancelDirtyTextFrame(frame, TEXT_DIRTY_HEALTH, true)
+  if frame and frame._msufTextDirtyMask ~= nil then
+    CancelDirtyTextFrame(frame, TEXT_DIRTY_HEALTH, true)
+  end
   local rt = frame and frame._msufTextRuntime
   if rt and rt.healthColorByClass == true and event ~= "UNIT_HEALTH" then
     UpdateHealthTextColor(frame, rt, unit or frame.MSUFUnitKey)
@@ -1834,7 +1840,9 @@ function PowerText.GetEvents(frame, spec)
 end
 
 UpdatePowerTextValues = function(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
-  CancelDirtyTextFrame(frame, TEXT_DIRTY_POWER, true)
+  if frame and frame._msufTextDirtyMask ~= nil then
+    CancelDirtyTextFrame(frame, TEXT_DIRTY_POWER, true)
+  end
   local rt = frame and frame._msufTextRuntime
   local percentFn = rt and rt.powerHotFromPercent
   if percentFn then

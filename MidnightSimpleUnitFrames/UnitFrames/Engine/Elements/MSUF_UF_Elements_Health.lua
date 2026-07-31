@@ -187,7 +187,12 @@ function Health.Apply(frame, spec)
   local h = spec and spec.health or nil
   local mode = h and h.mode
   if mode == "gradient" and PrepareHealthGradientCurve then
-    PrepareHealthGradientCurve(h)
+    frame._msufHealthGradientCurve = PrepareHealthGradientCurve(h)
+  else
+    -- A text-only health gradient lazily seeds this on its next update. Clear
+    -- the frame cache on every spec apply so changed colour stops are visible
+    -- immediately without rechecking all nine values in the event hot path.
+    frame._msufHealthGradientCurve = nil
   end
   frame._msufHealthRuntimeColorEnabled = mode ~= "dark" and mode ~= "unified"
   frame._msufHealthRuntimeGradient = mode == "gradient"
@@ -280,7 +285,8 @@ local function UpdatePercent(frame, unit, animate)
     end
   end
   local rt = frame._msufTextRuntime
-  if rt and (rt.healthNeedsPercent == true or rt.healthColorByHealth == true) then
+  if rt and (animate ~= true or rt.healthDefersUnitHealthText ~= true)
+    and (rt.healthNeedsPercent == true or rt.healthColorByHealth == true) then
     rt._dispatchHealthPercent = pct
     rt._dispatchHealthPercentReady = true
   end

@@ -602,6 +602,25 @@ local function WriteDeficit(slot, cur, maxValue, pct, pctKnown, rt)
   SlotText(slot, "")
 end
 
+--- Absorbs come back secret on every 12.x client, and a secret number can be
+--- neither compared to zero nor formatted in Lua. TruncateWhenZero is the only
+--- tainted-callable API that collapses a zero to an empty string, but it always
+--- writes the raw integer - which is why the absorb value ignored "Short
+--- numbers" while every other health slot honored it.
+---
+--- Parking that raw integer in the data section of a hyperlink keeps the zero
+--- test (WrapString still drops prefix and suffix for an empty infix) while the
+--- client renders the link body only, and the body carries the value formatted
+--- exactly like the health slots next to it. The inner WrapString is a plain
+--- secret-safe join: a formatted number is never the empty string.
+local ABSORB_SECRET_LINK = "|Hmsufabsorb:"
+
+local function SecretAbsorbText(slot, absorb, prefix)
+  local body = WrapString(FormatValue(absorb, slot.short, slot.canSecret),
+    prefix and ("|h" .. prefix) or "|h", "|h")
+  return WrapString(TruncateWhenZero(absorb), ABSORB_SECRET_LINK, body)
+end
+
 local function AbsorbDisplayText(slot, absorb, combined, plain)
   local secret = issecretvalue(absorb) == true
   if not secret and absorb == nil then return "" end
@@ -612,6 +631,13 @@ local function AbsorbDisplayText(slot, absorb, combined, plain)
     prefix = ABSORB_ICON_MARKUP .. " "
   end
   if secret then
+    -- Mirrors FormatValue's own secret branch: without the matching C formatter
+    -- it hands back the raw secret number, which cannot ride in the link body.
+    local secretFormatter = AbbreviateSecretNumber
+    if not slot.short then secretFormatter = BreakUpLargeNumbers end
+    if secretFormatter and TruncateWhenZero and WrapString then
+      return SecretAbsorbText(slot, absorb, prefix)
+    end
     if TruncateWhenZero then
       local text = TruncateWhenZero(absorb)
       if prefix and WrapString then return WrapString(text, prefix, "") end
@@ -1268,10 +1294,13 @@ local function CompileTextRuntime(frame, spec, text)
       rt.healthHot = fromValues or hot.healthHot
       rt.healthHotFromPercent = hot.healthFromPercent and hot.healthFromPercent(frame, rt) or nil
       rt.healthDirty = groupScope and hot.groupHealthDirty or hot.healthDirty
+      rt.healthDefersUnitHealthText = not (groupScope and rt.healthHotFromPercent
+        and rt.healthUsesAbsorb ~= true) and true or nil
     else
       rt.healthHot = nil
       rt.healthHotFromPercent = nil
       rt.healthDirty = nil
+      rt.healthDefersUnitHealthText = nil
     end
     if rt.powerSlotCount > 0 then
       local fromValues
@@ -1290,6 +1319,7 @@ local function CompileTextRuntime(frame, spec, text)
     rt.healthHot = nil
     rt.healthHotFromPercent = nil
     rt.healthDirty = nil
+    rt.healthDefersUnitHealthText = nil
     rt.powerHot = nil
     rt.powerHotFromPercent = nil
     rt.powerDirty = nil

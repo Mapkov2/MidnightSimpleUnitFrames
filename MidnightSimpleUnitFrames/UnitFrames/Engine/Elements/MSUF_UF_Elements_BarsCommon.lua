@@ -978,6 +978,10 @@ local function NPCColor(kind)
 end
 
 local healthGradientCurve
+local HEALTH_GRADIENT_CURVE_CACHE_LIMIT = 8
+local healthGradientCurveCache = {}
+local healthGradientCurveCacheCount = 0
+local healthGradientCurveCacheNext = 1
 local function GradientStops(health)
   if type(health) == "table" then
     return tonumber(health.gradientLowR) or 1, tonumber(health.gradientLowG) or 0, tonumber(health.gradientLowB) or 0,
@@ -989,10 +993,35 @@ end
 
 local function CreateHealthGradientCurve(lr, lg, lb, mr, mg, mb, hr, hg, hb)
   if C_CurveUtil and C_CurveUtil.CreateColorCurve and CreateColor then
+    -- Unit/group specs normally share the same global gradient stops. Reuse
+    -- their immutable native curve instead of creating three ColorMixins and
+    -- one curve per frame/spec. Keep the cache bounded so live colour-slider
+    -- previews cannot retain an unbounded number of intermediate curves.
+    for i = 1, healthGradientCurveCacheCount do
+      local cached = healthGradientCurveCache[i]
+      if cached[1] == lr and cached[2] == lg and cached[3] == lb
+        and cached[4] == mr and cached[5] == mg and cached[6] == mb
+        and cached[7] == hr and cached[8] == hg and cached[9] == hb then
+        return cached[10]
+      end
+    end
+
     local curve = C_CurveUtil.CreateColorCurve()
     curve:AddPoint(0, CreateColor(lr, lg, lb, 1))
     curve:AddPoint(0.5, CreateColor(mr, mg, mb, 1))
     curve:AddPoint(1, CreateColor(hr, hg, hb, 1))
+
+    local entry = { lr, lg, lb, mr, mg, mb, hr, hg, hb, curve }
+    if healthGradientCurveCacheCount < HEALTH_GRADIENT_CURVE_CACHE_LIMIT then
+      healthGradientCurveCacheCount = healthGradientCurveCacheCount + 1
+      healthGradientCurveCache[healthGradientCurveCacheCount] = entry
+    else
+      healthGradientCurveCache[healthGradientCurveCacheNext] = entry
+      healthGradientCurveCacheNext = healthGradientCurveCacheNext + 1
+      if healthGradientCurveCacheNext > HEALTH_GRADIENT_CURVE_CACHE_LIMIT then
+        healthGradientCurveCacheNext = 1
+      end
+    end
     return curve
   end
   return false
@@ -1048,8 +1077,18 @@ end
 local function GradientColor(unit, calc, frame)
   local spec = frame and frame.MSUFSpec
   local health = spec and spec.health or nil
-  local curve = HealthGradientCurve(health)
+  -- Health.Apply seeds this for health-gradient frames. Text-only gradient
+  -- consumers seed it on their first update. The spec apply path clears or
+  -- replaces it, so the hot event path does not need nine stop comparisons.
+  local curve = frame and frame._msufHealthGradientCurve
+  if curve == nil then
+    curve = HealthGradientCurve(health)
+    if frame then frame._msufHealthGradientCurve = curve end
+  end
   if calc and curve and calc.EvaluateCurrentHealthPercent then
+    -- EvaluateCurrentHealthPercent owns the secret percentage evaluation.
+    -- Passing GetCurrentHealthPercent() into curve:EvaluateUnpacked() is only
+    -- allowed during untainted execution and breaks addon text updates.
     local color = calc:EvaluateCurrentHealthPercent(curve)
     if color and color.GetRGB then
       local r, g, b = color:GetRGB()
@@ -1057,6 +1096,8 @@ local function GradientColor(unit, calc, frame)
     end
   end
   if IsUnitToken(unit) and UnitHealthPercent and curve then
+    -- Keep the curve inside UnitHealthPercent so Blizzard evaluates secret
+    -- health in the permitted native context before exposing RGB components.
     local color = UnitHealthPercent(unit, true, curve)
     if color and color.GetRGB then
       local r, g, b = color:GetRGB()
