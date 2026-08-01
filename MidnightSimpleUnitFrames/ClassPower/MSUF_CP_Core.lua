@@ -716,10 +716,10 @@ builders.PRESENTATION = function(E)
             local ok, _, source = applyResolved(region, fontPath, size, fontFlags)
             return ok == true and source ~= "fallback"
         end
-        local applied = region:SetFont(fontPath, size, fontFlags)
-        if applied ~= false and ClassPowerFontApplied(region, fontPath, size, fontFlags) then return true end
+        local ok, applied = pcall(region.SetFont, region, fontPath, size, fontFlags)
+        if ok and applied ~= false and ClassPowerFontApplied(region, fontPath, size, fontFlags) then return true end
         local fallback = _G.MSUF_ResolveSafeFontPath and _G.MSUF_ResolveSafeFontPath("Fonts\\FRIZQT__.TTF", size, fontFlags, "FRIZQT") or "Fonts\\FRIZQT__.TTF"
-        region:SetFont(fallback, size, fontFlags)
+        pcall(region.SetFont, region, fallback, size, fontFlags)
         if type(_G.MSUF_MarkFontApplyFailed) == "function" then _G.MSUF_MarkFontApplyFailed() end
         return false
     end

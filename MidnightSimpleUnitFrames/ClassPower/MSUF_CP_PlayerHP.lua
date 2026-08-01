@@ -63,7 +63,6 @@ builders.PLAYER_HP = function(E)
     local type = E.type or type
     local tostring = E.tostring or tostring
     local pairs = E.pairs or pairs
-    local pcall = E.pcall or pcall
     local math_floor = E.math_floor or math.floor
     local string_format = E.string_format or string.format
     local issecretvalue = _G.issecretvalue or function(_) return false end
@@ -517,9 +516,9 @@ builders.PLAYER_HP = function(E)
                 if type(applyResolved) == "function" then
                     applyResolved(fs, fontPath, size, fontFlags, general and general.fontKey)
                 else
-                    local applied = fs:SetFont(fontPath, size, fontFlags)
-                    if applied == false or not FontApplied(fs, fontPath, size, fontFlags) then
-                        fs:SetFont("Fonts\\FRIZQT__.TTF", size, fontFlags)
+                    local ok, applied = pcall(fs.SetFont, fs, fontPath, size, fontFlags)
+                    if not ok or applied == false or not FontApplied(fs, fontPath, size, fontFlags) then
+                        pcall(fs.SetFont, fs, "Fonts\\FRIZQT__.TTF", size, fontFlags)
                         if type(_G.MSUF_MarkFontApplyFailed) == "function" then _G.MSUF_MarkFontApplyFailed() end
                     end
                 end

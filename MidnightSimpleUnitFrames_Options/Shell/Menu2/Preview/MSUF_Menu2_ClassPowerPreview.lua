@@ -413,9 +413,9 @@ local function ApplyFont(region, size)
         local g = _G.MSUF_DB and _G.MSUF_DB.general
         fontPath = resolveSafe(fontPath, size, fontFlags, g and g.fontKey)
     end
-    local applied = region:SetFont(fontPath, size, fontFlags)
-    if applied == false then
-        region:SetFont("Fonts\\FRIZQT__.TTF", size, fontFlags)
+    local ok = pcall(region.SetFont, region, fontPath, size, fontFlags)
+    if not ok then
+        pcall(region.SetFont, region, "Fonts\\FRIZQT__.TTF", size, fontFlags)
     end
     if region.SetShadowColor then region:SetShadowColor(0, 0, 0, 1) end
     if region.SetShadowOffset then region:SetShadowOffset(1, -1) end
@@ -586,18 +586,22 @@ local function WriteHandle(handle, x, y, skipApply)
     RequestClassPowerPreviewRefresh(handle._preview, "CLASSPOWER_PREVIEW_DRAG")
     if not skipApply then CallApply(handle, "CLASSPOWER_PREVIEW_MOVE") end
 end
-local function ClassPowerSectionForHandle(handle)
-    if not handle then return "classpower_display" end
-    local kind = handle._applyKind or handle._layerKey or handle._key
-    if kind == "power" or kind == "powerText" or kind == "detachedPower" or kind == "detachedPowerText" then return "classpower_detached_power" end
-    if kind == "hp" or kind == "hpText" or kind == "playerHP" or kind == "playerHPText" then return "classpower_player_hp" end
-    return "classpower_display"
+local function ClassPowerRouteForHandle(handle)
+    local kind = handle and (handle._applyKind or handle._layerKey or handle._key) or "class"
+    local section, state, tab = "classpower_display"
+    if kind == "classText" then section, state, tab = "classpower_visuals", "classPowerStyleTab", "text"
+    elseif kind == "power" or kind == "powerText" then section, state, tab = "classpower_detached_power", "classPowerDetachedPowerTab", kind == "power" and "layout" or "text"
+    elseif kind == "hp" or kind == "hpText" then section, state, tab = "classpower_player_hp", "classPowerPlayerHPTab", kind == "hp" and "layout" or "text" end
+    if state then
+        if type(M.SetMenuStateValue) == "function" then M.SetMenuStateValue(state, tab) else M[state] = tab end
+    end
+    return section
 end
 local function OpenClassPowerHandleSettings(handle)
     if not (M and type(M.SelectPage) == "function") then return false end
     _G.MSUF_EM2_MenuFocusRequest = {
         pageKey = "classpower",
-        sectionId = ClassPowerSectionForHandle(handle),
+        sectionId = ClassPowerRouteForHandle(handle),
         component = handle and handle._key,
         source = "classpower-preview",
         explicit = true,
@@ -1023,7 +1027,7 @@ local function EnsureClassPower(preview)
     frame:SetBackdrop({ bgFile = WHITE8, edgeFile = WHITE8, edgeSize = 1 })
     frame:SetBackdropColor(0, 0, 0, 0)
     frame:SetBackdropBorderColor(0, 0, 0, 0)
-    frame.segments, frame.bgs, frame.edges, frame.runeTexts = {}, {}, {}, {}
+    frame.segments, frame.bgs, frame.edges, frame.runeTexts, frame.hashes = {}, {}, {}, {}, {}
     for i = 1, 10 do
         frame.bgs[i] = MakeTexture(frame, "BACKGROUND", nil, nil, true)
         frame.segments[i] = MakeTexture(frame, "ARTWORK", nil, nil, true)
@@ -1031,6 +1035,7 @@ local function EnsureClassPower(preview)
         local runeText = MakeText(frame, "OVERLAY", "CENTER")
         runeText:Hide()
         frame.runeTexts[i] = runeText
+        frame.hashes[i] = MakeTexture(frame, "OVERLAY", 7, nil, true)
     end
     frame.text = MakeText(frame, "OVERLAY", "CENTER")
     frame.text:Hide()
@@ -1322,6 +1327,24 @@ local function RenderClassPower(preview, bars, spec)
             edge:Hide()
             if runeText then runeText:Hide() end
         end
+    end
+    if spec.mode == "ironfur" and bars.guardianIronfurShowHashLines ~= false then
+        local fractions = { 0.82, 0.51, 0.24 }
+        for i = 1, #frame.hashes do
+            local hash = frame.hashes[i]
+            local fraction = fractions[i]
+            if fraction then
+                hash:ClearAllPoints()
+                hash:SetColorTexture(1, 1, 1, 0.9)
+                hash:SetSize(2, h)
+                hash:SetPoint("TOPLEFT", frame, "TOPLEFT", max(0, floor((w - 2) * fraction)), 0)
+                hash:Show()
+            else
+                hash:Hide()
+            end
+        end
+    else
+        HideTableRegions(frame.hashes)
     end
     frame._msufCPPreviewAnim = {
         bars = bars,

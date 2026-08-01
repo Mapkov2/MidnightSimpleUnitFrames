@@ -231,6 +231,7 @@ local CLASS_POWER_PREVIEW_SPECS = {
     { key = "demonhunter_devourer", label = "Demon Hunter - Soul Fragments", token = "SOUL_FRAGMENTS", mode = "aura_segmented", segments = 5, value = 3, previewText = "3" },
     { key = "demonhunter_vengeance", label = "Demon Hunter - Vengeance Fragments", token = "SOUL_FRAGMENTS_VENG", mode = "aura_segmented", segments = 6, value = 4, previewText = "4 / 6" },
     { key = "druid_feral", label = "Druid - Feral Combo Points", token = "COMBO_POINTS", mode = "segmented", segments = 5, value = 3, previewText = "3" },
+    { key = "druid_guardian", label = "Druid - Guardian Ironfur", token = "IRONFUR", mode = "ironfur", segments = 1, value = 0.72, previewText = "3" },
     { key = "druid_balance", label = "Druid - Balance (no class bar)", mode = "none", enabled = false },
     { key = "evoker_essence", label = "Evoker - Essence", token = "ESSENCE", mode = "segmented", segments = 6, value = 4, previewText = "4" },
     { key = "evoker_augmentation_ebon", label = "Evoker - Augmentation Ebon Might", token = "EBON_MIGHT", mode = "timer_bar", segments = 1, value = 0.58, previewText = "12.0s" },
@@ -857,7 +858,7 @@ function Page:BuildClassLayout()
 end
 
 function Page:BuildClassBehavior()
-    local section = self.b:CollapsibleSection("classpower_behavior", "Behavior", 206, false)
+    local section = self.b:CollapsibleSection("classpower_behavior", "Behavior", 282, false)
     local fields = self:Controls(section, Bars, ApplyClassPower, "behavior", {
         { "anchor", "toggle", "Anchor to Essential Cooldown", "classPowerAnchorToCooldown", false, group = "cp" },
         { "charged", "toggle", "Show empowered combo points", "showChargedComboPoints", true, group = "cp" },
@@ -867,15 +868,21 @@ function Page:BuildClassBehavior()
         { "ele", "toggle", "Show Maelstrom bar (Ele)", "showEleMaelstrom", false, group = "cp" },
         { "ebon", "toggle", "Show Ebon Might timer (Aug)", "showEbonMight", true, group = "cp" },
         { "shadow", "toggle", "Show Insanity bar (Shadow)", "showShadowMana", false, group = "cp" },
+        { "ironfur", "toggle", "Show Ironfur tracker (Guardian)", "showGuardianIronfur", false, group = "cp",
+            helpTitle = "Guardian Ironfur Tracker", help = "In Bear Form, replaces the empty Guardian class-resource slot with an estimated Ironfur lifetime bar. Each successful cast adds one moving marker; Ursoc's Endurance and Guardian of Elune are included." },
+        { "ironfurHashes", "toggle", "Show Ironfur cast markers", "guardianIronfurShowHashLines", true, group = "cp",
+            helpTitle = "Ironfur Cast Markers", help = "Shows one moving marker per tracked Ironfur cast. The 30 Hz motion ticker exists only while the optional tracker has active casts." },
         { "prediction", "toggle", "Show resource prediction", "classPowerShowPrediction", true, group = "cp" },
         { "smooth", "toggle", "Smooth fill", "classPowerSmoothFill", false, ApplyClassPowerSmoothing, group = "cp",
             helpTitle = "Class Resource Smooth Fill", help = "Smooths resource changes. Runes, Essence recharge, and timers keep their own animation." },
     })
     local rightX = min(max(380, floor(self.width * .45)), max(320, self.width - 420))
-    W.ControlCardBackdrop(section, 14, -38, max(280, rightX - 42), 154)
-    W.ControlCardBackdrop(section, rightX - 14, -38, max(280, (section._msuf2Width or self.width) - rightX - 28) + 14, 154)
+    W.ControlCardBackdrop(section, 14, -38, max(280, rightX - 42), 230)
+    W.ControlCardBackdrop(section, rightX - 14, -38, max(280, (section._msuf2Width or self.width) - rightX - 28) + 14, 230)
     PlaceColumn(section, 14, -38, 32, nil, nil, fields.anchor, fields.charged, fields.text, fields.rune, fields.reverse)
-    PlaceColumn(section, rightX, -38, 32, nil, nil, fields.ele, fields.ebon, fields.shadow, fields.prediction, fields.smooth)
+    PlaceColumn(section, rightX, -38, 32, nil, nil, fields.ele, fields.ebon, fields.shadow,
+        fields.ironfur, fields.ironfurHashes, fields.prediction, fields.smooth)
+    self.ironfurHashes = fields.ironfurHashes
 end
 
 function Page:BuildClassStyle()
@@ -1271,6 +1278,7 @@ function Page:RefreshControlState()
     local bars, db = Bars(), M.EnsureDB()
     local cpOn = BoolValue(bars, "showClassPower", true)
     SetControlsEnabled(self.groups.cp, cpOn)
+    if self.ironfurHashes then SetControlEnabled(self.ironfurHashes, cpOn and BoolValue(bars, "showGuardianIronfur", false)) end
     SetControlEnabled(self.cp.width, cpOn and (bars.classPowerWidthMode or "player") == "custom")
     local classBar = NormalizeClassPowerShape(bars.classPowerShape) == "BAR"
     if self.cp.height and self.cp.height._msuf2Title then self.cp.height._msuf2Title:SetText(M.Tr(classBar and "Height" or "Pip size")) end
@@ -1360,7 +1368,7 @@ function Page:Build()
     self:BuildHeader()
     BuildInlineClassPowerPreview(self.ctx, self.b)
     self:BuildClassLayout()
-    self:LazySection("classpower_behavior", "Behavior", 206, Page.BuildClassBehavior)
+    self:LazySection("classpower_behavior", "Behavior", 282, Page.BuildClassBehavior)
     self:LazySection("classpower_visuals", "Appearance", 430, Page.BuildClassStyle)
     self:LazySection("classpower_visibility", "Auto-Hide", 216, Page.BuildClassVisibility)
     self:LazySection("classpower_detached_power", "Player Power", function() return self.width < 680 and 920 or 640 end, Page.BuildDetachedPower)

@@ -23,6 +23,7 @@ K.CPK = {
         CONTINUOUS     = 6,
         TIMER_BAR      = 8,
         STAGGER        = 9,
+        IRONFUR        = 10,
     },
     SPEC = {
         DH_DEVOURER          = _G.SPEC_DEMONHUNTER_DEVOURER or 3,
@@ -38,6 +39,7 @@ K.CPK = {
         HUNTER_SURVIVAL      = 3,
         EVOKER_AUG           = 3,
         PRIEST_SHADOW        = 3,
+        DRUID_GUARDIAN       = 3,
     },
     SPELL = {
         DARK_HEART             = (Constants and Constants.UnitPowerSpellIDs and Constants.UnitPowerSpellIDs.DARK_HEART_SPELL_ID) or 1225789,
@@ -146,6 +148,7 @@ K.PT = {
     Energy        = (E and E.Energy) or 3,
     Insanity      = (E and E.Insanity) or 13,
     Maelstrom     = (E and E.Maelstrom) or 11,
+    Rage          = (E and E.Rage) or 1,
 }
 K.PT_STAGGER = -1
 
@@ -169,6 +172,7 @@ K.POWER_TYPE_TOKENS = {
     ["TIP_OF_THE_SPEAR"]    = "TIP_OF_THE_SPEAR",
     ["ICICLES"]             = "ICICLES",
     ["EBON_MIGHT"]          = "EBON_MIGHT",
+    ["IRONFUR"]             = "IRONFUR",
 }
 
 K.MAX_CLASS_POWER = 10
@@ -227,4 +231,5 @@ ExportPublic("MSUF_CP_MODE_EVENT_PROFILE", {
     [MODE.CONTINUOUS]     = { power = true,  maxPower = false, aura = false, rune = false, health = false, pointCharge = false, warlockPred = false },
     [MODE.TIMER_BAR]      = { power = false, maxPower = false, aura = true,  rune = false, health = false, pointCharge = false, warlockPred = false },
     [MODE.STAGGER]        = { power = false, maxPower = false, aura = true,  rune = false, health = true,  pointCharge = false, warlockPred = false },
+    [MODE.IRONFUR]        = { power = false, maxPower = false, aura = false, rune = false, health = false, pointCharge = false, warlockPred = false },
 })

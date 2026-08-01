@@ -106,6 +106,10 @@ end
 --- owning bar. The legacy Lua ticks remain available only as a degraded path
 --- for incomplete API environments (notably standalone smoke harnesses).
 local nativeTimerSupportCache = setmetatable({}, { __mode = "k" })
+--- Direct calls per the 12.1 C_DurationUtil contract (args
+--- AllowedWhenUntainted, no documented rejection). Secret aura state comes
+--- back as secret RETURNS, handled by NotSecret/PlainNumber value checks; API
+--- absence on the 120007 client is covered by the type guards.
 local function CreateNativeTimerSupport(E)
     local durationUtil = E.C_DurationUtil or _G.C_DurationUtil
     local stringUtil = E.C_StringUtil or _G.C_StringUtil

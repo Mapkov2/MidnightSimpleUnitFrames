@@ -167,7 +167,7 @@ local _, PLAYER_CLASS = UnitClass("player")
 --- Phase 1 CP split: shared constants / profiles now live in ClassPower/*.lua
 --- Keeps the core chunk smaller and reduces WoW's top-level local pressure.
 local CPConst = _G.MSUF_CP_CONST or {}
-local CPK = CPConst.CPK or { MODE = { NONE = 0, SEGMENTED = 1, FRACTIONAL = 2, RUNE_CD = 3, AURA_SEGMENTED = 4, AURA_SINGLE = 5, CONTINUOUS = 6, TIMER_BAR = 8, STAGGER = 9 }, SPEC = {}, SPELL = {}, BAL = {}, THRESH = {} }
+local CPK = CPConst.CPK or { MODE = { NONE = 0, SEGMENTED = 1, FRACTIONAL = 2, RUNE_CD = 3, AURA_SEGMENTED = 4, AURA_SINGLE = 5, CONTINUOUS = 6, TIMER_BAR = 8, STAGGER = 9, IRONFUR = 10 }, SPEC = {}, SPELL = {}, BAL = {}, THRESH = {} }
 local TIP = CPConst.TIP or {}
 local EBON = CPConst.EBON or {}
 local PT = CPConst.PT or {}
@@ -458,6 +458,9 @@ local function EnsureDefaults()
     if b.showEbonMight        == nil then b.showEbonMight        = true  end
     --- Shadow Priest: show Mana as main bar, Insanity as class resource (off by default)
     if b.showShadowMana       == nil then b.showShadowMana       = false end
+    --- Guardian Druid: estimated per-cast Ironfur lifetime bar (opt-in).
+    if b.showGuardianIronfur   == nil then b.showGuardianIronfur   = false end
+    if b.guardianIronfurShowHashLines == nil then b.guardianIronfurShowHashLines = true end
 
     --- Auto-hide: visibility conditions
     if b.classPowerHideOOC       == nil then b.classPowerHideOOC       = false end
@@ -545,6 +548,12 @@ local function GetClassPowerType()
             --- Compatibility fallback when the primary power itself is secret.
             local form = GetShapeshiftFormID and GetShapeshiftFormID()
             if form == 1 then return PT.ComboPoints, CPK.MODE.SEGMENTED, false end
+        end
+        local spec = GetSpec and GetSpec()
+        local bb = _cpDB.bars
+        if spec == CPK.SPEC.DRUID_GUARDIAN and bb and bb.showGuardianIronfur == true
+            and NotSecret(primaryPower) and primaryPower == PT.Rage then
+            return "IRONFUR", CPK.MODE.IRONFUR, false
         end
         --- Balance/Boomkin: Astral Power is already the main power bar -> no class power.
         --- Other forms (Bear etc.): main bar shows Rage/Mana -> no secondary resource overlay.
@@ -719,6 +728,10 @@ local function ResolveClassPowerColor(powerType)
     end
 
     --- Hard fallback
+    if token == "IRONFUR" then
+        _cachedColorR, _cachedColorG, _cachedColorB = 1.00, 0.49, 0.04
+        return _cachedColorR, _cachedColorG, _cachedColorB
+    end
     _cachedColorR, _cachedColorG, _cachedColorB = 1, 1, 1
     return 1, 1, 1
 end
@@ -1545,6 +1558,22 @@ do
     local stagger = CP_CallBuilder(CPModeBuilders.STAGGER, commonEnv)
     if stagger and type(stagger.Update) == "function" then CP_UpdateValues_Stagger = stagger.Update end
     if stagger and type(stagger.RuntimeTick) == "function" then _staggerRuntimeTick = stagger.RuntimeTick end
+    --- Ironfur is built lazily on the first enabled Guardian/Bear refresh so
+    --- the default-off feature creates no frames and binds no events.
+    CP.ironfur = nil
+    CP.BuildIronfur = PLAYER_CLASS == "DRUID" and function()
+        return CP_CallBuilder(CPModeBuilders.IRONFUR, {
+            PLAYER_CLASS = PLAYER_CLASS,
+            CP = CP,
+            CPK = CPK,
+            _cpDB = _cpDB,
+            GetTime = GetTime,
+            CP_CheckAutoHide = CP_CheckAutoHide,
+            EnsureMainText = CP_EnsureMainText,
+            ApplyFont = function() if CP_ApplyFont then CP_ApplyFont() end end,
+            GetVisual = function() return CP.visual end,
+        })
+    end or nil
 end
 
 --- Phase 7A CP split: pure presentation helpers now live in
@@ -1791,6 +1820,7 @@ local MODE_UPDATE_FN = {
     [CPK.MODE.CONTINUOUS]     = CP_UpdateValues_Continuous,
     [CPK.MODE.TIMER_BAR]      = CP_UpdateValues_TimerBar,
     [CPK.MODE.STAGGER]        = CP_UpdateValues_Stagger,
+    [CPK.MODE.IRONFUR]        = CP.ironfur and CP.ironfur.Update or nil,
 }
 
 local function CP_GetModeEventProfile(renderMode, powerType, isAuraPower)
@@ -1946,7 +1976,6 @@ do
             type = type,
             tostring = tostring,
             pairs = pairs,
-            pcall = pcall,
             math_floor = math_floor,
             string_format = string_format,
         })
@@ -2017,6 +2046,14 @@ local function FullRefresh()
     else
         renderMode = CPK.MODE.NONE
         isAuraPower = false
+    end
+    if powerType == "IRONFUR" and not CP.ironfur then
+        CP.ironfur = CP.BuildIronfur and CP.BuildIronfur() or nil
+        if CP.ironfur then CP.BuildIronfur = nil end
+        MODE_UPDATE_FN[CPK.MODE.IRONFUR] = CP.ironfur and CP.ironfur.Update or nil
+    end
+    if CP.ironfur and CP.ironfur.SetActive and powerType ~= "IRONFUR" then
+        CP.ironfur.SetActive(false)
     end
     local cpHeight = tonumber(b.classPowerHeight) or 4
     if cpHeight < 2 then cpHeight = 2 elseif cpHeight > 30 then cpHeight = 30 end
@@ -2104,6 +2141,8 @@ local function FullRefresh()
             maxP = 1  --- Brewmaster Monk: single stagger bar (max = UnitHealthMax inside update fn)
         elseif renderMode == CPK.MODE.TIMER_BAR then
             maxP = 1  --- Ebon Might: single countdown bar
+        elseif renderMode == CPK.MODE.IRONFUR then
+            maxP = 1  --- Guardian Ironfur: normalized longest remaining lifetime
         elseif renderMode == CPK.MODE.AURA_SEGMENTED then
             if powerType == "MAELSTROM_WEAPON" then
                 --- Maelstrom Weapon: max stacks from spell data
@@ -2194,6 +2233,10 @@ local function FullRefresh()
         --- Reset container alpha before update (auto-hide in updateFn may override)
         CP.container:SetAlpha(1)
 
+        if CP.ironfur and CP.ironfur.SetActive then
+            CP.ironfur.SetActive(powerType == "IRONFUR")
+        end
+
         --- Dispatch to correct update function
         CP_RunActiveUpdate(powerType, maxP)
 
@@ -2212,6 +2255,7 @@ local function FullRefresh()
     else
         --- Clean up rune/timer/essence OnUpdate scripts when hiding
         CP_SetIciclesSensorActive(false)
+        if CP.ironfur and CP.ironfur.SetActive then CP.ironfur.SetActive(false) end
         CP.visual = nil
         if (CP.renderMode == CPK.MODE.RUNE_CD or CP.runeOUAAny or CP.runeNativeAny) and CP_StopRuneOnUpdates then
             CP_StopRuneOnUpdates(true)
@@ -2530,6 +2574,9 @@ function CP.CDMWidthSyncLayouts(force)
     if cpChanged and CP.visible and CP._pf and CP.currentMax and CP.currentMax > 0 and CP_Layout then
         local b = _cpDB.bars or {}
         CP_Layout(CP._pf, CP.currentMax, CP._layoutH or (b.classPowerHeight or 4), CP.powerType)
+        if CP.ironfur and CP.ironfur.InvalidateLayout then
+            CP.ironfur.InvalidateLayout()
+        end
     end
     if pbChanged and type(_G.MSUF_ApplyPowerBarEmbedLayout_All) == "function" then
         _G.MSUF_ApplyPowerBarEmbedLayout_All()
@@ -2996,6 +3043,9 @@ CP.RefreshLayoutCurrent = function()
         return false
     end
     CP_Layout(playerFrame, maxP, cpHeight, CP.powerType)
+    if CP.ironfur and CP.ironfur.InvalidateLayout then
+        CP.ironfur.InvalidateLayout()
+    end
     CP._pf = playerFrame
     CP._layoutH = cpHeight
     return true
@@ -3044,6 +3094,9 @@ CP.RefreshVisualsPublic = function()
         if CP_RefreshTexture then CP_RefreshTexture() end
         if CP_ApplyFont then CP_ApplyFont() end
         if CP_ApplyColors then CP_ApplyColors(CP.powerType) end
+        if CP.powerType == "IRONFUR" and CP.ironfur and CP.ironfur.RefreshVisual then
+            CP.ironfur.RefreshVisual()
+        end
     end
     if AM.visible and AM_RefreshTexture then AM_RefreshTexture() end
     if PHP.visible then

@@ -328,6 +328,7 @@ function H.EnsurePreviewBackgroundButton(box, zoomBar, opts)
     end
     local button = CreateFrame("Button", nil, zoomBar, "BackdropTemplate")
     button:SetSize(46, 20)
+    zoomBar._msuf2PreviewBackgroundButton = button
     button._msuf2DropdownPreferredWidth = 260
     button._msuf2DropdownClampFrame = M.frame or _G.UIParent
     -- Keep the selector on its own row: Unit, Group, and Class Resources all
@@ -485,6 +486,7 @@ CP.FALLBACK_COLORS = CP.FALLBACK_COLORS or {
     EBON_MIGHT = { 0.40, 0.80, 0.60 },
     ESSENCE = { 0.32, 0.74, 1.00 },
     HOLY_POWER = { 0.95, 0.86, 0.20 },
+    IRONFUR = { 1.00, 0.49, 0.04 },
     INSANITY = { 0.55, 0.32, 0.95 },
     MAELSTROM = { 0.00, 0.55, 1.00 },
     MAELSTROM_ABOVE_5 = { 1.00, 0.50, 0.00 },
@@ -588,7 +590,7 @@ function CP.IsCharged(spec, bars, slot)
         and spec.chargedSlots and spec.chargedSlots[slot] == true
 end
 function CP.IsSingleBarMode(mode)
-    return mode == "continuous" or mode == "timer_bar" or mode == "stagger" or mode == "aura_single"
+    return mode == "continuous" or mode == "timer_bar" or mode == "stagger" or mode == "aura_single" or mode == "ironfur"
 end
 function CP.IsEssence(spec)
     return spec and spec.token == "ESSENCE"
@@ -2543,6 +2545,7 @@ function H.ApplyRoundedEdgeStack(mock, edgeSize, opts)
     mock[stackKey][1] = mock[edgeKey]
     local snap = opts.snapOff or H.SnapOff
     local edgeTexture = opts.edgeTexture
+    local anchor = type(opts.anchor) == "function" and opts.anchor(mock) or opts.anchor or mock
     local r, g, b, a
     if type(opts.baseEdgeColor) == "function" then
         r, g, b, a = opts.baseEdgeColor(mock)
@@ -2561,12 +2564,12 @@ function H.ApplyRoundedEdgeStack(mock, edgeSize, opts)
             edge:SetTexture(edgeTexture, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
         end
         H.ApplyRoundedMediaSlice(edge, opts.mediaStrength)
-        if edge._msufPreviewRoundedAnchor ~= mock or edge._msufPreviewRoundedPad ~= i then
-            edge._msufPreviewRoundedAnchor = mock
+        if edge._msufPreviewRoundedAnchor ~= anchor or edge._msufPreviewRoundedPad ~= i then
+            edge._msufPreviewRoundedAnchor = anchor
             edge._msufPreviewRoundedPad = i
             edge:ClearAllPoints()
-            edge:SetPoint("TOPLEFT", mock, "TOPLEFT", -i, i)
-            edge:SetPoint("BOTTOMRIGHT", mock, "BOTTOMRIGHT", i, -i)
+            edge:SetPoint("TOPLEFT", anchor, "TOPLEFT", -i, i)
+            edge:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", i, -i)
         end
         if edge._msufPreviewRoundedR ~= r or edge._msufPreviewRoundedG ~= g
             or edge._msufPreviewRoundedB ~= b or edge._msufPreviewRoundedA ~= a then
