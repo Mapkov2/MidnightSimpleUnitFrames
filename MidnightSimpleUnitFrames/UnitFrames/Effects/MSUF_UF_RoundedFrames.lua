@@ -297,6 +297,21 @@ local function ApplyRoundedMediaSlice(region, path)
   end
 end
 
+-- Narrow shared surface contract for optional cold-path renderers. Callers own
+-- their state keys and regions; these helpers only share media/combat behavior
+-- and the mask lifecycle.
+local RoundedSurface = MSUF.RoundedSurface or {}
+MSUF.RoundedSurface = RoundedSurface
+RoundedSurface.ResolveMedia = function()
+  UpdateRoundedMediaState()
+  return roundedMaskPath, roundedEdgePath, roundedMediaStrength
+end
+RoundedSurface.ApplyMediaSlice = ApplyRoundedMediaSlice
+RoundedSurface.CanCreateRegion = CanCreateRoundedRegion
+RoundedSurface.IsCombatLocked = IsCombatLocked
+RoundedSurface.DeferApply = DeferApply
+RoundedSurface.SnapOff = SE_SnapOff
+
 local function ResolveMaskOwner(f, tex, anchor)
   local owner = tex and tex.GetParent and tex:GetParent() or nil
   if owner and type(owner.CreateMaskTexture) == "function" then return owner end
@@ -447,6 +462,11 @@ local function MaskTextureWith(f, tex, maskKey, maskedKey, anchor, maskPath)
   tex:AddMaskTexture(m)
   f[maskedKey][tex] = m
 end
+
+RoundedSurface.ClearMasks = ClearMasks
+RoundedSurface.BeginMaskRefresh = BeginMaskRefresh
+RoundedSurface.EndMaskRefresh = EndMaskRefresh
+RoundedSurface.MaskTextureWith = MaskTextureWith
 
 local function ClearAllMasks(f)
   ClearMasks(f, "_msufRUF_Mask", "_msufRUF_MaskedTextures")
@@ -1799,6 +1819,10 @@ local function ApplyAll()
   end
   ExportPublic("MSUF_RoundedUF_Active", enabled and true or nil)
   UpdateMouseoverHotState(enabled)
+  local applyRoundedCastbars = MSUF.RoundedCastbarsApplyAll
+  if type(applyRoundedCastbars) == "function" then
+    applyRoundedCastbars(enabled)
+  end
   local bulkGF = ResolveGF()
   if bulkGF and type(bulkGF.ApplyGroupBorder) == "function" then
     -- Re-enter the existing cold Group-border painter so anchors created while

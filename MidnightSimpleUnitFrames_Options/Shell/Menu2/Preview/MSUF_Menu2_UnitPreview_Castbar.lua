@@ -87,16 +87,18 @@ local function RuntimeCastbarFrame(key)
     key = CanonKey(key)
     if key == "boss" then
         local bars = _G.MSUF_BossCastbars
-        return _G.MSUF_BossCastbarPreview or _G.MSUF_BossCastbarPreview1
-            or (bars and bars[1])
+        return (bars and bars[1])
+            or _G.MSUF_BossCastbar1
             or _G.MSUF_boss1CastBar
             or _G.MSUF_BossCastbar
+            or _G.MSUF_BossCastbarPreview
+            or _G.MSUF_BossCastbarPreview1
     elseif key == "player" then
-        return _G.MSUF_PlayerCastbarPreview or _G.MSUF_PlayerCastbar
+        return _G.MSUF_PlayerCastbar or _G.MSUF_PlayerCastBar or _G.MSUF_PlayerCastbarPreview
     elseif key == "target" then
-        return _G.MSUF_TargetCastbarPreview or _G.MSUF_TargetCastbar
+        return _G.MSUF_TargetCastbar or _G.MSUF_TargetCastBar or _G.MSUF_TargetCastbarPreview
     elseif key == "focus" then
-        return _G.MSUF_FocusCastbarPreview or _G.MSUF_FocusCastbar
+        return _G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar or _G.MSUF_FocusCastbarPreview
     end
 end
 local function RuntimeUnitFrame(key)
@@ -132,9 +134,7 @@ function Castbar.ReadSize(key, g, fallbackW, fallbackH)
     local widthSource = WidthSource(g, key)
     local targetFrame = RuntimeCastbarFrame(key) or EffectiveScaleProxy(RuntimeUnitFrame(key))
     local w, h
-    if widthSource == "unitframe" then
-        w = fallbackW
-    elseif widthSource == "essential" or widthSource == "utility" then
+    if widthSource == "essential" or widthSource == "utility" then
         w = ReadExternalWidth(widthSource, targetFrame) or nil
     end
     if type(_G.MSUF_GetCastbarDesiredSize) == "function" then

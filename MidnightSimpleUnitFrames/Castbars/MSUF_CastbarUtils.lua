@@ -503,6 +503,38 @@ local function GetInterruptUnavailableCastColor()
 end
 ExportPublic("MSUF_GetInterruptUnavailableCastColor", GetInterruptUnavailableCastColor)
 
+local function ResolveInterruptFeedbackCastColor()
+    EnsureDBLazy()
+
+    local getter = _G.MSUF_GetInterruptFeedbackCastColor
+    if type(getter) == "function" then
+        local red, green, blue = getter()
+        if red and green and blue then return red, green, blue, 1 end
+    end
+
+    local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
+    local red = tonumber(general.castbarInterruptFeedbackR)
+    local green = tonumber(general.castbarInterruptFeedbackG)
+    local blue = tonumber(general.castbarInterruptFeedbackB)
+    if red and green and blue then return red, green, blue, 1 end
+
+    local key = general.castbarInterruptFeedbackColor or "yellow"
+    local getRGB = _G.MSUF_GetColorRGBFromKey
+    if type(getRGB) == "function" then
+        red, green, blue = getRGB(key)
+        if red and green and blue then return red, green, blue, 1 end
+    end
+
+    local color = type(_G.MSUF_GetColorFromKey) == "function" and _G.MSUF_GetColorFromKey(key) or nil
+    if color and color.GetRGB then
+        red, green, blue = color:GetRGB()
+        if red and green and blue then return red, green, blue, 1 end
+    end
+
+    return 1.0, 0.82, 0.0, 1
+end
+ExportPublic("MSUF_ResolveInterruptFeedbackCastColor", ResolveInterruptFeedbackCastColor)
+
 local function UnitSupportsInterruptUnavailableTint(frame, general)
     local unit = frame and frame.unit
     if type(unit) ~= "string" then return false end

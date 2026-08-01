@@ -264,6 +264,45 @@ local function UpdateBossCastbarAnchor(frame, forceLayout)
     return changed
 end
 
+local function ClearBossCastbarFontAttempt(frame)
+    local clear = _G.MSUF_ClearFontStringApplyCaches
+    local regions = { frame and frame.castText, frame and frame.timeText, frame and frame.castTargetText }
+    for index = 1, #regions do
+        local fontString = regions[index]
+        if fontString then
+            if type(clear) == "function" then clear(fontString) end
+            fontString._msufCastbarFontKey = nil
+            fontString._msufCastbarFontEpoch = nil
+            fontString._msufCastbarFontReady = nil
+        end
+    end
+end
+
+--- The generic driver can receive the first spellcast event long after the
+--- encounter lifecycle pass. Validate the boss-only geometry and detail-font
+--- generation immediately before that cast becomes visible. The common case
+--- remains comparison-only; a full layout is performed only for stale state.
+local function PrepareBossCastbarForCast(frame)
+    if not frame then return false end
+    local _, sizeChanged = UpdateBossCastbarAnchorBase(frame)
+    local fontEpoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
+    local visualRevision = tonumber(_G.MSUF__castbarStyleGlobalRev) or 1
+    local layoutStale = frame._msufCastbarDetailLayoutUnit ~= "boss"
+        or frame._msufCastbarDetailLayoutFontEpoch ~= fontEpoch
+        or frame._msufCastbarDetailLayoutVisualRev ~= visualRevision
+    local retryFont = frame._msufCastbarDetailFontsReady == false
+        and frame._msufBossCastbarFontRetryEpoch ~= fontEpoch
+    if retryFont then
+        frame._msufBossCastbarFontRetryEpoch = fontEpoch
+        ClearBossCastbarFontAttempt(frame)
+    end
+    if sizeChanged or layoutStale or retryFont then
+        ApplyBossCastbarLayout(frame)
+        return true
+    end
+    return false
+end
+
 local function BossUnitUnavailable(unit)
     if not unit or unit == "" then
         return true
@@ -398,6 +437,7 @@ local function EnsureBossCastbar(index, enabled)
     frame:SetFrameStrata("HIGH")
     frame:SetFrameLevel(50 + index)
     frame.ApplyLayout = ApplyBossCastbarLayout
+    frame.PrepareForCast = PrepareBossCastbarForCast
     frame.UpdateAnchor = UpdateBossCastbarAnchor
     frame.UpdateAnchorBase = UpdateBossCastbarAnchorBase
 

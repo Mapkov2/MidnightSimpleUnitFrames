@@ -266,6 +266,7 @@ local function EnsureEmpowerStageSegments(frame, count)
     if not frame or not frame.statusBar then return end
 
     frame.empowerSegments = frame.empowerSegments or {}
+    local created
     for index = 1, count do
         local segment = frame.empowerSegments[index]
         if not segment then
@@ -273,12 +274,16 @@ local function EnsureEmpowerStageSegments(frame, count)
             segment:SetColorTexture(1, 1, 1, 0.18)
             segment:SetBlendMode("ADD")
             frame.empowerSegments[index] = segment
+            created = true
         end
         segment:Show()
     end
 
     for index = count + 1, #frame.empowerSegments do
         frame.empowerSegments[index]:Hide()
+    end
+    if created and type(_G.MSUF_RoundedCastbar_RefreshFrame) == "function" then
+        _G.MSUF_RoundedCastbar_RefreshFrame(frame)
     end
 end
 

@@ -324,22 +324,9 @@ local function UpdateColorForInterruptible(frame)
 end
 
 local function GetInterruptFeedbackColor()
-    EnsureDBLazy()
-    local general = _G.MSUF_DB and _G.MSUF_DB.general or {}
-    local red = tonumber(general.castbarInterruptR)
-    local green = tonumber(general.castbarInterruptG)
-    local blue = tonumber(general.castbarInterruptB)
-    if red and green and blue then
-        return red, green, blue, 1
-    end
-
-    local key = general.castbarInterruptColor or "red"
-    if _G.MSUF_GetColorFromKey then
-        local color = _G.MSUF_GetColorFromKey(key)
-        if color then return color:GetRGBA() end
-    end
-
-    return 0.8, 0.1, 0.1, 1
+    local resolveColor = _G.MSUF_ResolveInterruptFeedbackCastColor
+    if type(resolveColor) == "function" then return resolveColor() end
+    return 1.0, 0.82, 0.0, 1
 end
 
 local function InvalidateCastState(unit)
@@ -865,9 +852,6 @@ local function ShowInterruptFeedback(frame, label)
     local reverseFill = _G.MSUF_GetReverseFillSafe and _G.MSUF_GetReverseFillSafe(frame, false) or false
     _G.MSUF_ApplyInterruptBarVisuals(frame, {
         barValue = 1,
-        colorR = 0.8,
-        colorG = 0.1,
-        colorB = 0.1,
         reverseFill = reverseFill,
         label = label or _G.INTERRUPTED,
     })

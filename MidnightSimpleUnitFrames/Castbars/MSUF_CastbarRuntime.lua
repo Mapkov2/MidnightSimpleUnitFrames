@@ -234,10 +234,6 @@ local function BuildNativeTextFormats(allowRetry)
             format = "%.1f",
         },
     })
-    if not ok then
-        if allowRetry ~= true then nativeTextFormatsUnavailable = true end
-        return nil
-    end
 
     local remaining = { property = durationProperties.RemainingDuration, formatter = formatter }
     local elapsed = { property = durationProperties.ElapsedDuration, formatter = formatter }
@@ -1071,9 +1067,16 @@ function Runtime:ApplyInterrupt(frame, options)
         statusBar:SetReverseFill(options.reverseFill and true or false)
     end
 
-    local red = options.colorR or 0.8
-    local green = options.colorG or 0.1
-    local blue = options.colorB or 0.1
+    local red, green, blue = options.colorR, options.colorG, options.colorB
+    if not (red and green and blue) then
+        local resolveColor = _G.MSUF_ResolveInterruptFeedbackCastColor
+        if type(resolveColor) == "function" then
+            red, green, blue = resolveColor()
+        end
+    end
+    if not (red and green and blue) then
+        red, green, blue = 1.0, 0.82, 0.0
+    end
 
     if type(_G.MSUF_SetStatusBarColorIfChanged) == "function" then
         _G.MSUF_SetStatusBarColorIfChanged(statusBar, red, green, blue, 1)
@@ -1139,7 +1142,6 @@ function Runtime:Stop(frame, reasonOrOptions)
         -- unregister implementation did not release native ownership, finish
         -- the cleanup here. The normal manager path clears these flags first.
         if frame._msufNativeTimeBound == true
-            or frame._msufNativeTextCleanupPending == true
             or frame._msufNativeCompletionTimer ~= nil
             or frame._msufNativeCompletionDeadline ~= nil
         then

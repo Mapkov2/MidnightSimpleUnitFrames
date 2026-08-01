@@ -444,6 +444,7 @@ local function GetNonInterruptibleCastColor() return _getRGBTonumber("castbarNon
 ExportPublic("MSUF_GetNonInterruptibleCastColor", GetNonInterruptibleCastColor)
 local function SetNonInterruptibleCastColor(r, g, b) _setRGB("castbarNonInterruptibleR", "castbarNonInterruptibleG", "castbarNonInterruptibleB", r, g, b, 0.4, 0.01, 0.01, PushCastbarVisualUpdates) end
 local function GetInterruptFeedbackCastColor() return _getRGBTonumber("castbarInterruptFeedbackR", "castbarInterruptFeedbackG", "castbarInterruptFeedbackB", "castbarInterruptFeedbackColor", "yellow", 1.0, 0.82, 0.0) end
+ExportPublic("MSUF_GetInterruptFeedbackCastColor", GetInterruptFeedbackCastColor)
 local function SetInterruptFeedbackCastColor(r, g, b) _setRGB("castbarInterruptFeedbackR", "castbarInterruptFeedbackG", "castbarInterruptFeedbackB", r, g, b, 1.0, 0.82, 0.0, PushCastbarVisualUpdates) end
 local function GetInterruptUnavailableCastColor() return _getRGBTonumber("castbarInterruptUnavailableR", "castbarInterruptUnavailableG", "castbarInterruptUnavailableB", "castbarInterruptUnavailableColor", nil, 1.0, 0.494117647, 0.137254902) end
 ExportPublic("MSUF_GetInterruptUnavailableCastColor", GetInterruptUnavailableCastColor)
@@ -539,7 +540,15 @@ local function GetNPCTypeColorText() local g = _general(); return not g or g.npc
 local function SetNPCTypeColorText(v) local g = _general(); if g then g.npcTypeColorText = v and true or false; PushVisualUpdates() end end
 local function GetNPCClassColorBar() local g = _general(); return g and g.npcClassColorBar == true or false end
 local function SetNPCClassColorBar(v) local g = _general(); if g then g.npcClassColorBar = v and true or false; PushVisualUpdates() end end
-local function ResetNPCTypeColors() if _G.MSUF_DB then _G.MSUF_DB.npcColors = nil end; PushVisualUpdates() end
+local function ResetNPCTypeColors()
+    local db = _G.MSUF_DB
+    local colors = db and db.npcColors
+    if type(colors) == "table" then
+        for i = 1, #NPC_TYPE_KEYS do colors[NPC_TYPE_KEYS[i]] = nil end
+        if next(colors) == nil then db.npcColors = nil end
+    end
+    PushVisualUpdates()
+end
 local function GetNPCTypePerUnit(key) local g = _general(); return not g or g[key] ~= false end
 local function SetNPCTypePerUnit(key, v) local g = _general(); if g then g[key] = v and true or false; PushVisualUpdates() end end
 

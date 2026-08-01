@@ -1383,6 +1383,7 @@ local function CreateCastBar(frameName, unit)
         end
 
         if spellName and (durationObj or ApplyFallbackActiveDuration(self, state, isChannel)) then
+            if self.PrepareForCast then self:PrepareForCast() end
             SetCastLifecycleActive(self, true)
             if durationObj then
                 state.durationObj = durationObj
@@ -1481,9 +1482,6 @@ local function CreateCastBar(frameName, unit)
         local reverseFill = _G.MSUF_GetReverseFillSafe(self, false)
         _G.MSUF_ApplyInterruptBarVisuals(self, {
             barValue = 1,
-            colorR = 1,
-            colorG = 0,
-            colorB = 0,
             reverseFill = reverseFill,
             label = "Interrupted",
         })

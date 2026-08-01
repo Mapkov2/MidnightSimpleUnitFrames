@@ -212,6 +212,15 @@ function Style:ApplyCastbarOutline(frame, force)
 
     local general = GeneralDB()
     local edge, thickness = OutlineEdge(frame, general)
+    local red = tonumber(general.castbarBorderR) or 0
+    local green = tonumber(general.castbarBorderG) or 0
+    local blue = tonumber(general.castbarBorderB) or 0
+    local alpha = tonumber(general.castbarBorderA) or 1
+    local applyRounded = _G.MSUF_RoundedCastbar_ApplyOutline
+    if type(applyRounded) == "function"
+        and applyRounded(frame, edge, thickness, red, green, blue, alpha) then
+        return
+    end
 
     if thickness <= 0 then
         local host = frame._msufOutlineHost
@@ -231,11 +240,6 @@ function Style:ApplyCastbarOutline(frame, force)
     EnsureOutline(frame)
     local host = frame._msufOutlineHost
     if not host then return end
-
-    local red = tonumber(general.castbarBorderR) or 0
-    local green = tonumber(general.castbarBorderG) or 0
-    local blue = tonumber(general.castbarBorderB) or 0
-    local alpha = tonumber(general.castbarBorderA) or 1
 
     local backdropChanged = force or frame._msufOutlineT ~= thickness or frame._msufOutlineEdge ~= edge
     if backdropChanged then

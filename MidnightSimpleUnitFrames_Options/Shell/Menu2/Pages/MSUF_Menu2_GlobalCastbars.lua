@@ -648,12 +648,23 @@ local function BuildCastbars(ctx)
             local kickKey = KickReadyKey(unit)
             local kickEnabled = kickKey and ReadGBool(kickKey, false)
             local kickStyle = ReadG("kickReadyStyle", "border")
-            if now < (self.interruptUntil or 0) then
-                baseR, baseG, baseB = 0.90, 0.14, 0.20
+            local interruptActive = now < (self.interruptUntil or 0)
+            if interruptActive then
+                local resolveColor = _G.MSUF_ResolveInterruptFeedbackCastColor
+                if type(resolveColor) == "function" then
+                    baseR, baseG, baseB = resolveColor()
+                else
+                    baseR, baseG, baseB = 1.0, 0.82, 0.0
+                end
             elseif kickEnabled and kickStyle == "fill" then
                 baseR, baseG, baseB = ResolveUnavailablePreviewColor(g)
             end
-            local ir, ig, ib = GlowBlend(baseR, baseG, baseB, progress)
+            local ir, ig, ib
+            if interruptActive then
+                ir, ig, ib = baseR, baseG, baseB
+            else
+                ir, ig, ib = GlowBlend(baseR, baseG, baseB, progress)
+            end
             self.barBg:SetTexture(bgTexture)
             self.barBg:ClearAllPoints()
             self.barBg:SetPoint("TOPLEFT", self.bar, "TOPLEFT", statusX, -outlineInset)
@@ -682,7 +693,7 @@ local function BuildCastbars(ctx)
                 local targetSize = ReadCastbarNum(g, unit, "TargetNameFontSize", "bossCastTargetNameFontSize", 10)
                 if not targetSize or targetSize <= 0 then targetSize = 10 end
                 if fontPath and self.castTargetText.SetFont then
-                    self.castTargetText:SetFont(fontPath, max(7, S(targetSize)), fontFlags)
+                    pcall(self.castTargetText.SetFont, self.castTargetText, fontPath, max(7, S(targetSize)), fontFlags)
                 end
                 local targetR, targetG, targetB = 1, 0.82, 0.20
                 local getTargetColor = _G.MSUF_GetCastbarTargetNameColor
@@ -708,7 +719,7 @@ local function BuildCastbars(ctx)
                 local timeSize = ReadCastbarNum(g, unit, "TimeFontSize", "bossCastTimeFontSize", ReadG("castbarTimeFontSize", ReadG("fontSize", 14)))
                 if not timeSize or timeSize <= 0 then timeSize = ReadG("fontSize", 14) end
                 local timeSizePx = max(7, S(timeSize))
-                if fontPath and self.time.SetFont then self.time:SetFont(fontPath, timeSizePx, fontFlags) end
+                if fontPath and self.time.SetFont then pcall(self.time.SetFont, self.time, fontPath, timeSizePx, fontFlags) end
                 self.time:SetText(previewTimeText)
                 self.time:SetTextColor(tr or 1, tg or 1, tb or 1, 1)
                 local measured = self.time.GetStringWidth and self.time:GetStringWidth() or nil
@@ -735,7 +746,7 @@ local function BuildCastbars(ctx)
                 local textSize = ReadCastbarNum(g, unit, "SpellNameFontSize", "bossCastSpellNameFontSize", ReadG("castbarSpellNameFontSize", ReadG("fontSize", 14)))
                 if not textSize or textSize <= 0 then textSize = ReadG("fontSize", 14) end
                 local textSizePx = max(7, S(textSize))
-                if fontPath and self.spell.SetFont then self.spell:SetFont(fontPath, textSizePx, fontFlags) end
+                if fontPath and self.spell.SetFont then pcall(self.spell.SetFont, self.spell, fontPath, textSizePx, fontFlags) end
                 self.spell:SetTextColor(tr or 1, tg or 1, tb or 1, 1)
                 self.spell:SetText(PreviewSpellText(unit, kind))
                 self.spell:ClearAllPoints()

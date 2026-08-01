@@ -653,6 +653,18 @@ local function ApplyCastbarBaseGeometry(frame, general, forcedUnit)
             if unitWidth and unitWidth > 0 and not widthSourceLocked then width = unitWidth end
             if unitHeight and unitHeight > 0 then height = unitHeight end
         end
+
+        -- Boss intentionally has no generic castbar prefix. Without this shared
+        -- resolver, the visual pass falls through to castbarGlobalWidth/Height
+        -- and overwrites the boss-specific geometry from the preceding anchor
+        -- pass. Auto Width only masks the width half of that bug. Resolve both
+        -- dimensions from the real boss settings in every width-source mode.
+        if unit == "boss" and type(_G.MSUF_GetCastbarDesiredSize) == "function" then
+            local desiredWidth, desiredHeight = _G.MSUF_GetCastbarDesiredSize(
+                unit, general, frame, width, height)
+            if desiredWidth and desiredWidth > 0 then width = desiredWidth end
+            if desiredHeight and desiredHeight > 0 then height = desiredHeight end
+        end
     end
 
     if frame:GetWidth() ~= width then frame:SetWidth(width) end
@@ -757,6 +769,7 @@ local function ApplyCastbarFrameLayer(frame, general, forcedUnit)
     SetCastbarFrameLevel(frame._msufDetailIconBorder, iconLevel and (iconLevel + 2) or (statusLevel + 8))
     SetCastbarFrameLevel(frame._msufTextOverlay, statusLevel + 10)
     SetCastbarFrameLevel(frame._msufOutlineHost, statusLevel + 20)
+    SetCastbarFrameLevel(frame._msufRoundedCastbarOutlineHost, statusLevel + 20)
 end
 ExportPublic("MSUF_ApplyCastbarFrameLayer", ApplyCastbarFrameLayer)
 

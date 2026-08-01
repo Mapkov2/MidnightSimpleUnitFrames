@@ -240,11 +240,32 @@ local function FontPathForSelection(value, globalPath)
     return value, value
 end
 
+--- The Fonts page writes its text shadow into the shared general table, but the
+--- same controls also write a per-unit scope (MSUF_DB.player/target/focus/boss
+--- with fontOverride). MSUF_FontRuntime refreshes exactly this unit's castbar
+--- when that scope changes, so the castbar has to resolve the override too --
+--- otherwise the refresh runs and the text keeps the shared value. Precedence
+--- matches ResolveFontShadow in UnitFrames/Engine/MSUF_UF_Config.lua.
+local function ResolveFontShadow(g, unit)
+    local enabled = g.textBackdrop ~= false
+    local alpha, x, y = _G.MSUF_ResolveFontShadowMetrics(
+        g.fontShadowOpacity, g.fontShadowDistance, g.fontShadowStrength)
+    local conf = unit and _G.MSUF_DB and _G.MSUF_DB[unit]
+    if type(conf) == "table" and conf.fontOverride == true then
+        if conf.textBackdrop ~= nil then enabled = conf.textBackdrop == true end
+        if conf.fontShadowOpacity ~= nil or conf.fontShadowDistance ~= nil or conf.fontShadowStrength ~= nil then
+            alpha, x, y = _G.MSUF_ResolveFontShadowMetrics(conf.fontShadowOpacity,
+                conf.fontShadowDistance, conf.fontShadowStrength, alpha, x)
+        end
+    end
+    return enabled, alpha, x, y
+end
+
 --- Castbar details can use global font settings or per-unit overrides. The
 --- helper keeps all font-path, outline, color, alpha, and shadow rules in one
 --- place so text layout functions only choose geometry.
-local function ApplyFont(fontString, g, prefix, suffix, size, colorSuffix)
-    if not fontString then return end
+local function ApplyFont(fontString, g, unit, prefix, suffix, size, colorSuffix)
+    if not fontString then return true end
     local globalPath = type(_G.MSUF_GetFontPath) == "function" and _G.MSUF_GetFontPath() or (STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF")
     local globalFlags = type(_G.MSUF_GetFontFlags) == "function" and _G.MSUF_GetFontFlags() or "OUTLINE"
     local selected = DetailString(g, prefix, suffix .. "Font", nil, "GLOBAL")
@@ -258,9 +279,7 @@ local function ApplyFont(fontString, g, prefix, suffix, size, colorSuffix)
     -- the native three-argument SetTextColor path. Keep opacity on the region
     -- for this one FontString so those safe recolors cannot reset it to 100%.
     local targetTextAlpha = colorSuffix == "TargetName"
-    local shadowEnabled = g.textBackdrop ~= false
-    local shadowAlpha, shadowX, shadowY = _G.MSUF_ResolveFontShadowMetrics(
-        g.fontShadowOpacity, g.fontShadowDistance, g.fontShadowStrength)
+    local shadowEnabled, shadowAlpha, shadowX, shadowY = ResolveFontShadow(g, unit)
     local shadow = shadowEnabled and (KeyPart(shadowAlpha) .. ":" .. KeyPart(shadowX)) or "NONE"
     local fontCacheKey = fontPath .. "|"
         .. KeyPart(size) .. "|"
@@ -274,7 +293,7 @@ local function ApplyFont(fontString, g, prefix, suffix, size, colorSuffix)
     if fontString._msufCastbarFontKey == fontCacheKey
         and fontString._msufCastbarFontEpoch == fontEpoch
     then
-        return
+        return fontString._msufCastbarFontReady == true
     end
 
     local requestedReady = false
@@ -284,8 +303,8 @@ local function ApplyFont(fontString, g, prefix, suffix, size, colorSuffix)
             local ok, _, source = applyResolved(fontString, fontPath, size, flags, fontKey)
             requestedReady = ok == true and source ~= "fallback"
         else
-            local applied = fontString:SetFont(fontPath, size, flags)
-            requestedReady = applied ~= false
+            local ok, applied = pcall(fontString.SetFont, fontString, fontPath, size, flags)
+            requestedReady = ok and applied ~= false
             local matches = _G.MSUF_FontApplicationMatches
             if requestedReady and type(matches) == "function" then
                 requestedReady = matches(fontString, fontPath, size) == true
@@ -299,6 +318,7 @@ local function ApplyFont(fontString, g, prefix, suffix, size, colorSuffix)
     -- The coordinator owns retries by advancing the epoch.
     fontString._msufCastbarFontKey = fontCacheKey
     fontString._msufCastbarFontEpoch = fontEpoch
+    fontString._msufCastbarFontReady = requestedReady
 
     if fontString.SetTextColor then fontString:SetTextColor(r, green, b, targetTextAlpha and 1 or alpha) end
     if targetTextAlpha and fontString.SetAlpha then fontString:SetAlpha(alpha) end
@@ -309,6 +329,7 @@ local function ApplyFont(fontString, g, prefix, suffix, size, colorSuffix)
     elseif fontString.SetShadowOffset then
         fontString:SetShadowOffset(0, 0)
     end
+    return requestedReady
 end
 
 local function IconTexture(frame)
@@ -591,20 +612,20 @@ end
 local function ApplySpellTextLayout(frame, g, unit, prefix)
     local fs = frame and frame.castText
     local statusBar = frame and frame.statusBar
-    if not (fs and statusBar) then return end
+    if not (fs and statusBar) then return true end
     local show = ShowSpellForUnit(g, unit, prefix)
     fs:Show()
     fs:SetAlpha(show and 1 or 0)
     if not show then
         SetTextIfChanged(fs, "")
-        return
+        return true
     end
 
     local baseSize = Num(g.castbarSpellNameFontSize, 0)
     if baseSize <= 0 then baseSize = Num(g.fontSize, 14) end
     local size = DetailNum(g, prefix, "SpellNameFontSize", nil, baseSize)
     if not size or size <= 0 then size = baseSize end
-    ApplyFont(fs, g, prefix, "SpellName", size, "SpellName")
+    local fontReady = ApplyFont(fs, g, unit, prefix, "SpellName", size, "SpellName")
 
     if fs.SetMaxLines then fs:SetMaxLines(1) end
     if fs.SetWordWrap then fs:SetWordWrap(false) end
@@ -642,22 +663,23 @@ local function ApplySpellTextLayout(frame, g, unit, prefix)
     elseif frame._msufRawCastText ~= nil then
         SetTextIfChanged(fs, frame._msufRawCastText)
     end
+    return fontReady
 end
 
 local function ApplyTimeTextLayout(frame, g, unit, prefix)
     local fs = frame and frame.timeText
     local statusBar = frame and frame.statusBar
-    if not (fs and statusBar) then return end
+    if not (fs and statusBar) then return true end
     local show = ShowTimeForUnit(g, unit)
     fs:Show()
     fs:SetAlpha(show and 1 or 0)
     if not show then
         SetTextIfChanged(fs, "")
-        return
+        return true
     end
 
     local size = ResolveTimeTextFontSize(g, prefix)
-    ApplyFont(fs, g, prefix, "Time", size, "Time")
+    local fontReady = ApplyFont(fs, g, unit, prefix, "Time", size, "Time")
 
     if fs.SetMaxLines then fs:SetMaxLines(1) end
     if fs.SetWordWrap then fs:SetWordWrap(false) end
@@ -667,16 +689,17 @@ local function ApplyTimeTextLayout(frame, g, unit, prefix)
     if unit == "boss" then x = -2 + (tonumber(x) or 0) end
     local position = NormalizeTextPosition(DetailString(g, prefix, "TimePosition", nil, "RIGHT"), "RIGHT")
     AnchorFontString(fs, statusBar, position, x, y, position == "LEFT" and "LEFT" or position == "CENTER" and "CENTER" or "RIGHT")
+    return fontReady
 end
 
 local function ApplyCastTargetTextLayout(frame, g, unit, prefix)
     local fs = frame and frame.castTargetText
     local statusBar = frame and frame.statusBar
-    if not (fs and statusBar) then return end
+    if not (fs and statusBar) then return true end
 
     local size = DetailNum(g, prefix, "TargetNameFontSize", nil, 10)
     if not size or size <= 0 then size = 10 end
-    ApplyFont(fs, g, prefix, "TargetName", size, "TargetName")
+    local fontReady = ApplyFont(fs, g, unit, prefix, "TargetName", size, "TargetName")
 
     if fs.SetMaxLines then fs:SetMaxLines(1) end
     if fs.SetWordWrap then fs:SetWordWrap(false) end
@@ -689,6 +712,7 @@ local function ApplyCastTargetTextLayout(frame, g, unit, prefix)
     local statusW = RegionNumber(statusBar, "GetWidth", 250)
     if fs.SetWidth then fs:SetWidth(math.max(20, statusW - 4)) end
     AnchorFontString(fs, statusBar, position, x, y, justify)
+    return fontReady
 end
 
 --- Public visual entry for one frame. Call this after frame creation, anchoring,
@@ -700,9 +724,15 @@ local function ApplyCastbarDetailLayout(frame, forcedUnit, general)
     if not prefix then return end
     local g = general or GeneralDB()
     ApplyIconLayout(frame, g, unit, prefix)
-    ApplyTimeTextLayout(frame, g, unit, prefix)
-    ApplySpellTextLayout(frame, g, unit, prefix)
-    ApplyCastTargetTextLayout(frame, g, unit, prefix)
+    local timeFontReady = ApplyTimeTextLayout(frame, g, unit, prefix)
+    local spellFontReady = ApplySpellTextLayout(frame, g, unit, prefix)
+    local targetFontReady = ApplyCastTargetTextLayout(frame, g, unit, prefix)
+    frame._msufCastbarDetailLayoutUnit = unit
+    frame._msufCastbarDetailLayoutFontEpoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
+    frame._msufCastbarDetailLayoutVisualRev = tonumber(_G.MSUF__castbarStyleGlobalRev) or 1
+    frame._msufCastbarDetailFontsReady = timeFontReady ~= false
+        and spellFontReady ~= false
+        and targetFontReady ~= false
     if frame._msufIsPreview ~= true and type(_G.MSUF_RefreshCastTargetText) == "function" then
         _G.MSUF_RefreshCastTargetText(frame)
     end
@@ -746,6 +776,10 @@ local function RefreshCastbarFrame(frame, forcedUnit, general)
         if frame.backgroundBar and frame.MSUF_cachedCastbarBackgroundTexture then
             frame.backgroundBar:SetTexture(frame.MSUF_cachedCastbarBackgroundTexture)
         end
+    end
+
+    if type(_G.MSUF_RoundedCastbar_RefreshFrame) == "function" then
+        _G.MSUF_RoundedCastbar_RefreshFrame(frame)
     end
 
     ApplyCastbarDetailLayout(frame, forcedUnit, general)

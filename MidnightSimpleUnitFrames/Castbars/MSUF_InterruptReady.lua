@@ -435,6 +435,12 @@ local function OutlineTextures(frame)
 end
 
 local function TintOutline(frame, red, green, blue, alpha)
+    local tintRounded = _G.MSUF_RoundedCastbar_TintOutline
+    if type(tintRounded) == "function" and tintRounded(frame, red, green, blue, alpha) then
+        frame._kickReadyBorderTinted = true
+        return
+    end
+
     local host = frame and (frame._msufOutlineHost or (frame._msufOutline and frame._msufOutline._host))
     if host and host.SetBackdropBorderColor and host.IsShown and host:IsShown() then
         host:SetBackdropBorderColor(red, green, blue, alpha)
