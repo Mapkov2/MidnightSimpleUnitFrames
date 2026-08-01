@@ -1289,25 +1289,6 @@ local function UnitFrameRelativePoint(conf, point)
     return relativePoint
 end
 
-local function ResolveAnchorPointForDrag(anchor, relativePoint, bar, point, conf)
-    local ax, ay = PointXY(anchor, relativePoint)
-    if ax and ay then return ax, ay end
-
-    if bar then
-        local bx, by = PointXY(bar, point)
-        if bx and by then
-            local as = (anchor and anchor.GetEffectiveScale and anchor:GetEffectiveScale()) or 1
-            local fs = (bar.GetEffectiveScale and bar:GetEffectiveScale()) or 1
-            if as == 0 then as = 1 end
-            if fs == 0 then fs = 1 end
-            return ((bx * fs) - ((tonumber(conf and conf.offsetX) or 0) * as)) / as,
-                   ((by * fs) - ((tonumber(conf and conf.offsetY) or 0) * as)) / as
-        end
-    end
-
-    return PointXY(UIParent, relativePoint or "CENTER")
-end
-
 local EDIT_COOLDOWN_ANCHORS = {
     EssentialCooldownViewer = true,
     UtilityCooldownViewer = true,
@@ -1369,7 +1350,17 @@ local function ResolveAnchor(key, conf)
     return anchor
 end
 
-local function SetBossPreviewPosition(point, anchor, relativePoint, x, y, conf)
+local function ApplyFramePoint(frame, point, anchor, relativePoint, x, y)
+    frame:ClearAllPoints()
+    frame:SetPoint(point, anchor, relativePoint, x, y)
+end
+
+local function TryApplyFramePoint(frame, point, anchor, relativePoint, x, y)
+    if not (frame and anchor) then return false end
+    return pcall(ApplyFramePoint, frame, point, anchor, relativePoint, x, y)
+end
+
+local function SetBossPreviewPosition(point, anchor, relativePoint, x, y, conf, rollbackX, rollbackY)
     local layoutDelta = _G.MSUF_GetBossLayoutDelta
     if type(layoutDelta) ~= "function" then return false end
     local uf = MSUF and MSUF.UF
@@ -1381,8 +1372,23 @@ local function SetBossPreviewPosition(point, anchor, relativePoint, x, y, conf)
         if frame then
             local dx, dy = layoutDelta(i, conf)
             frame._msufDragActive = true
-            frame:ClearAllPoints()
-            frame:SetPoint(point, anchor, relativePoint, x + (dx or 0), y + (dy or 0))
+            if not TryApplyFramePoint(frame, point, anchor, relativePoint, x + (dx or 0), y + (dy or 0)) then
+                if rollbackX ~= nil and rollbackY ~= nil then
+                    for restoreIndex = 1, 5 do
+                        local restoreUnit = "boss" .. restoreIndex
+                        local restoreFrame = (frames and frames[restoreUnit]) or _G["MSUF_" .. restoreUnit]
+                        if restoreFrame then
+                            local restoreDX, restoreDY = layoutDelta(restoreIndex, conf)
+                            TryApplyFramePoint(restoreFrame, point, anchor, relativePoint,
+                                rollbackX + (restoreDX or 0), rollbackY + (restoreDY or 0))
+                            if type(_G.MSUF_ApplyBossPhysicalBarGeometry) == "function" then
+                                _G.MSUF_ApplyBossPhysicalBarGeometry(restoreFrame)
+                            end
+                        end
+                    end
+                end
+                return false
+            end
             if type(_G.MSUF_ApplyBossPhysicalBarGeometry) == "function" then
                 _G.MSUF_ApplyBossPhysicalBarGeometry(frame)
             end
@@ -1390,6 +1396,55 @@ local function SetBossPreviewPosition(point, anchor, relativePoint, x, y, conf)
         end
     end
     return moved
+end
+
+local function ApplyUnitDragPosition(d, centerX, centerY, uiScale)
+    if not (d and d.bar and d.conf and d.anchor) then return false end
+    local frameScale = d.bar.GetEffectiveScale and (d.bar:GetEffectiveScale() or 1) or 1
+    if frameScale <= 0 then frameScale = 1 end
+    uiScale = tonumber(uiScale) or 1
+    if uiScale <= 0 then uiScale = 1 end
+
+    local centerPX = (tonumber(centerX) or d.startCX or 0) * uiScale
+    local centerPY = (tonumber(centerY) or d.startCY or 0) * uiScale
+    local nextX = (d.unitStartX or 0) + round((centerPX - (d.startCenterPX or centerPX)) / frameScale)
+    local nextY = (d.unitStartY or 0) + round((centerPY - (d.startCenterPY or centerPY)) / frameScale)
+    if d.lastUnitX == nextX and d.lastUnitY == nextY then return true end
+
+    local previousX = d.lastUnitX
+    local previousY = d.lastUnitY
+    if previousX == nil then previousX = d.unitStartX or 0 end
+    if previousY == nil then previousY = d.unitStartY or 0 end
+
+    local positioned
+    if d.usesECV and d.ecvFrame and d.ecvRule then
+        local point, relativePoint = d.ecvRule[1], d.ecvRule[2]
+        local baseX, extraY = d.ecvRule[3] or 0, d.ecvRule[4] or 0
+        positioned = TryApplyFramePoint(d.bar, point, d.ecvFrame, relativePoint,
+            baseX + nextX, nextY + extraY)
+    elseif d.isBossLayout then
+        positioned = SetBossPreviewPosition(d.point, d.anchor, d.relativePoint,
+            nextX, nextY, d.conf, previousX, previousY)
+    else
+        positioned = TryApplyFramePoint(d.bar, d.point, d.anchor, d.relativePoint, nextX, nextY)
+    end
+    if not positioned then
+        if d.usesECV and d.ecvFrame and d.ecvRule then
+            local point, relativePoint = d.ecvRule[1], d.ecvRule[2]
+            local baseX, extraY = d.ecvRule[3] or 0, d.ecvRule[4] or 0
+            TryApplyFramePoint(d.bar, point, d.ecvFrame, relativePoint,
+                baseX + previousX, previousY + extraY)
+        elseif not d.isBossLayout then
+            TryApplyFramePoint(d.bar, d.point, d.anchor, d.relativePoint, previousX, previousY)
+        end
+        return false
+    end
+
+    d.conf.offsetX = nextX
+    d.conf.offsetY = nextY
+    d.lastUnitX = nextX
+    d.lastUnitY = nextY
+    return true
 end
 
 local GROUP_VALID_POINTS = { CENTER = true, TOP = true, BOTTOM = true, LEFT = true, RIGHT = true, TOPLEFT = true, TOPRIGHT = true, BOTTOMLEFT = true, BOTTOMRIGHT = true }
@@ -1489,7 +1544,7 @@ local function ApplyCastbarDragPosition(d, centerX, centerY)
     end
 
     if g[d.castbarXKey] == nextX and g[d.castbarYKey] == nextY then
-        return false
+        return true
     end
 
     g[d.castbarXKey] = nextX
@@ -1558,7 +1613,7 @@ local function ApplyGroupDragPosition(d, centerX, centerY)
             anchor:SetPoint("CENTER", UIParent, "BOTTOMLEFT", anchorCX, anchorCY)
         end
     end
-    return changed
+    return true
 end
 
 local function SyncCastbarPopupDuringDrag(d, elapsed)
@@ -1609,6 +1664,25 @@ local function ScheduleDirtyFlush(delay)
     end)
 end
 
+local function SetActiveDragFlags(d, active)
+    if not d then return end
+    active = active == true
+    if d.bar then d.bar._msufDragActive = active end
+    if d.isBossLayout then
+        local frames = MSUF and MSUF.UF and MSUF.UF.frames
+        for i = 1, 5 do
+            local frame = (frames and frames["boss" .. i]) or _G["MSUF_boss" .. i]
+            if frame then frame._msufDragActive = active end
+        end
+    end
+    if d.bar and d.bar._msufGFLiveAnchor then d.bar._msufGFLiveAnchor._msufDragActive = active end
+    if d.bar and d.bar._msufGFLogicalAnchor then d.bar._msufGFLogicalAnchor._msufDragActive = active end
+    if not active and d.mover and d.mover._msufGFEM2DragSourceFrame then
+        d.mover._msufGFEM2DragSourceFrame._msufGFEM2Dragging = nil
+        d.mover._msufGFEM2DragSourceFrame = nil
+    end
+end
+
 local function OnUpdate(self, elapsed)
     if activeDrag then
         local d = activeDrag
@@ -1616,33 +1690,58 @@ local function OnUpdate(self, elapsed)
         if IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then
             local mover = d.mover
             local sourceFrame = mover and mover._msufGFEM2DragSourceFrame
-            local moved = Ticker.EndDrag()
-            if mover then
-                if moved then mover._suppressNextClick = true end
-                if mover._dragging ~= nil then mover._dragging = false end
-                if mover._coordFS then mover._coordFS:Hide() end
+            local moved
+            if mover and type(mover._msufEM2EndDrag) == "function" then
+                moved = mover:_msufEM2EndDrag("LeftButton") == true
+            else
+                moved = Ticker.EndDrag()
+                if mover then
+                    if moved then mover._suppressNextClick = true end
+                    if mover._dragging ~= nil then mover._dragging = false end
+                    if mover._coordFS then mover._coordFS:Hide() end
+                    if mover.UpdateLabelVisibility then mover:UpdateLabelVisibility() end
+                end
             end
             if moved and sourceFrame then sourceFrame._msufGFEM2LastDragEnd = GetTime and GetTime() or 0 end
             return
         end
 
-        local sc = d.uiScale or UIParent:GetEffectiveScale()
-        local mx, my = GetCursorPosition()
-        mx = mx / sc; my = my / sc
+        if IsConfigCombatLocked and IsConfigCombatLocked() then return end
 
-        local rawCX = mx + d.offX
-        local rawCY = my + d.offY
+        local sc = UIParent:GetEffectiveScale() or d.uiScale or 1
+        if sc <= 0 then sc = 1 end
+        local mx, my = GetCursorPosition()
+        if type(mx) ~= "number" or type(my) ~= "number" then return end
+
+        local rawCX = (mx + (d.offPX or 0)) / sc
+        local rawCY = (my + (d.offPY or 0)) / sc
 
         local snapCX, snapCY = rawCX, rawCY
         if d.snapEnabled and EM2.Snap then
-            snapCX, snapCY = EM2.Snap.Apply(rawCX, rawCY, d.halfW, d.halfH, d.key)
+            local nextCX, nextCY = EM2.Snap.Apply(rawCX, rawCY, d.halfW, d.halfH, d.key)
+            if type(nextCX) == "number" then snapCX = nextCX end
+            if type(nextCY) == "number" then snapCY = nextCY end
         end
 
-        snapCX = ClampCenterAxis(snapCX, d.halfW, d.screenW)
-        snapCY = ClampCenterAxis(snapCY, d.halfH, d.screenH)
+        local screenW = UIParent:GetWidth() or d.screenW or 0
+        local screenH = UIParent:GetHeight() or d.screenH or 0
+        snapCX = ClampCenterAxis(snapCX, d.halfW, screenW)
+        snapCY = ClampCenterAxis(snapCY, d.halfH, screenH)
+
+        local positioned
+        if d.isCastbar then
+            positioned = ApplyCastbarDragPosition(d, snapCX, snapCY)
+        elseif d.isGroupFrame then
+            positioned = ApplyGroupDragPosition(d, snapCX, snapCY)
+        else
+            positioned = ApplyUnitDragPosition(d, snapCX, snapCY, sc)
+        end
+        --- The mover is only feedback. Never let it outrun the real preview or
+        --- leave a detached overlay behind when a protected/runtime move fails.
+        if not positioned then return end
 
         local moverX = snapCX - d.halfW
-        local moverY = snapCY + d.halfH - d.screenH
+        local moverY = snapCY + d.halfH - screenH
         local moverMoved = (d.lastMoverX == nil)
             or abs(moverX - d.lastMoverX) > 0.001
             or abs(moverY - d.lastMoverY) > 0.001
@@ -1655,103 +1754,19 @@ local function OnUpdate(self, elapsed)
 
             if d.mover._coordFS then
                 d.mover._coordFS:SetText(format("%.0f, %.0f",
-                    round(snapCX - d.screenW * 0.5),
-                    round(snapCY - d.screenH * 0.5)))
+                    round(snapCX - screenW * 0.5),
+                    round(snapCY - screenH * 0.5)))
             end
         end
 
         if d.isCastbar then
-            ApplyCastbarDragPosition(d, snapCX, snapCY)
             SyncCastbarPopupDuringDrag(d, elapsed)
             NotifyFocusDuringDrag(d, elapsed)
             return
         end
 
-        local bar = d.bar
-        if bar and not IsConfigCombatLocked() then
-            bar._msufDragActive = true
-            local conf = d.conf
-
-            if d.isGroupFrame then
-                ApplyGroupDragPosition(d, snapCX, snapCY)
-                if d.mover._coordFS then
-                    d.mover._coordFS:SetText(format("%.0f, %.0f", conf.offsetX or 0, conf.offsetY or 0))
-                end
-            else
-                local anchor = d.anchor
-                local point = d.point or "CENTER"
-                local relativePoint = d.relativePoint or point
-                local ax, ay = d.anchorPX, d.anchorPY
-                if not (ax and ay) then
-                    ax, ay = ResolveAnchorPointForDrag(anchor, relativePoint, bar, point, conf)
-                    d.anchorPX, d.anchorPY = ax, ay
-                end
-                if ax and ay then
-                    local as = d.anchorScale or anchor:GetEffectiveScale() or 1
-                    local fs = d.frameScale or bar:GetEffectiveScale() or 1
-                    if as == 0 then as = 1 end; if fs == 0 then fs = 1 end
-
-                    local desiredBarCX = snapCX + (d.barCenterDX or 0)
-                    local desiredBarCY = snapCY + (d.barCenterDY or 0)
-
-                    local barScreenCX = desiredBarCX * sc  --- sc = UIParent:GetEffectiveScale()
-                    local barScreenCY = desiredBarCY * sc
-                    local pointDX, pointDY = PointOffsetFromCenter(point, d.barW, d.barH)
-                    local framePointScreenX = barScreenCX + pointDX * fs
-                    local framePointScreenY = barScreenCY + pointDY * fs
-                    local anchorPointScreenX = ax * as
-                    local anchorPointScreenY = ay * as
-                    local offX = (framePointScreenX - anchorPointScreenX) / as
-                    local offY = (framePointScreenY - anchorPointScreenY) / as
-
-                    if d.bossAdjX then offX = offX - d.bossAdjX end
-                    if d.bossAdjY then offY = offY - d.bossAdjY end
-
-                    local nextX = round(offX)
-                    local nextY = round(offY)
-
-                    local ecvRule = d.ecvRule
-
-                    if d.usesECV and d.ecvFrame and ecvRule then
-                        local ecv = d.ecvFrame
-                        local point, relPoint, baseX, extraY = ecvRule[1], ecvRule[2], ecvRule[3] or 0, ecvRule[4] or 0
-                        local ax2, ay2 = d.ecvAnchorX, d.ecvAnchorY
-                        if not (ax2 and ay2) then
-                            ax2, ay2 = PointXY(ecv, relPoint)
-                            d.ecvAnchorX, d.ecvAnchorY = ax2, ay2
-                        end
-                        if ax2 and ay2 then
-                            local pointDX, pointDY = PointOffsetFromCenter(point, d.barW, d.barH)
-                            local fx2 = barScreenCX + pointDX * fs
-                            local fy2 = barScreenCY + pointDY * fs
-                            nextX = round((fx2 - ax2 * as) / as - baseX)
-                            nextY = round((fy2 - ay2 * as) / as - extraY)
-                        end
-                        if conf.offsetX ~= nextX or conf.offsetY ~= nextY then
-                            conf.offsetX = nextX
-                            conf.offsetY = nextY
-                            if not d.isBossLayout or not SetBossPreviewPosition(point, ecv, relPoint,
-                                baseX + conf.offsetX, conf.offsetY + extraY, conf) then
-                                bar:ClearAllPoints()
-                                bar:SetPoint(point, ecv, relPoint, baseX + conf.offsetX, conf.offsetY + extraY)
-                            end
-                        end
-                    else
-                        --- Normal path mirrors Factory.ApplyPosition so anchored frames drag
-                        --- against the same point/relativePoint that popup edits apply.
-                        if conf.offsetX ~= nextX or conf.offsetY ~= nextY then
-                            conf.offsetX = nextX
-                            conf.offsetY = nextY
-                            if not d.isBossLayout or not SetBossPreviewPosition(point, anchor, relativePoint,
-                                conf.offsetX, conf.offsetY, conf) then
-                                bar:ClearAllPoints()
-                                bar:SetPoint(point, anchor, relativePoint, conf.offsetX, conf.offsetY)
-                            end
-                        end
-                    end
-                    bar._msufDragActive = true
-                end
-            end
+        if d.isGroupFrame and d.mover._coordFS then
+            d.mover._coordFS:SetText(format("%.0f, %.0f", d.conf.offsetX or 0, d.conf.offsetY or 0))
         end
         if d.isGroupFrame then
             SyncGFPopupDuringDrag(d, elapsed)
@@ -1767,32 +1782,32 @@ local function OnUpdate(self, elapsed)
 end
 
 function Ticker.BeginDrag(mover, key, cfg)
-    if tickerFrame then
-        tickerFrame:SetScript("OnUpdate", OnUpdate)
-        tickerFrame:Show()
-    end
+    if not tickerActive or activeDrag or not mover or type(cfg) ~= "table" or not tickerFrame then return false end
     local bar = cfg.getFrame and cfg.getFrame()
-    if bar then bar._msufDragActive = true end
-
+    if not bar then return false end
     local conf = cfg.getConf and cfg.getConf()
-
-    local sc = UIParent:GetEffectiveScale()
-    local curX, curY = GetCursorPosition()
-    curX = curX / sc; curY = curY / sc
-
-    local mL, mCX, mR, mB, mCY, mT = GetFrameEdgesUI(mover)
-    if not mL then
-        mL = mover:GetLeft() or 0; mR = mover:GetRight() or 0
-        mT = mover:GetTop() or 0; mB = mover:GetBottom() or 0
-        mCX = (mL + mR) * 0.5
-        mCY = (mT + mB) * 0.5
-    end
-
     local isCastbar = (cfg.popupType == "castbar") or (type(key) == "string" and key:sub(1, 8) == "castbar_")
     local castbarUnit = cfg.castbarUnit
     if isCastbar and (not castbarUnit or castbarUnit == "") then
         castbarUnit = key:sub(9)
     end
+    if isCastbar then conf = conf or ((_G.MSUF_DB and _G.MSUF_DB.general) or nil) end
+    if type(conf) ~= "table" then return false end
+
+    local uiScale = UIParent:GetEffectiveScale() or 1
+    if uiScale <= 0 then uiScale = 1 end
+    local cursorPX, cursorPY = GetCursorPosition()
+    if type(cursorPX) ~= "number" or type(cursorPY) ~= "number" then return false end
+
+    local mL, mCX, mR, mB, mCY, mT = GetFrameEdgesUI(mover)
+    if not mL and mover.GetLeft and mover.GetRight and mover.GetTop and mover.GetBottom then
+        mL, mR, mT, mB = mover:GetLeft(), mover:GetRight(), mover:GetTop(), mover:GetBottom()
+        if mL and mR and mT and mB then
+            mCX = (mL + mR) * 0.5
+            mCY = (mT + mB) * 0.5
+        end
+    end
+    if not (mL and mCX and mR and mB and mCY and mT) then return false end
 
     local isGroupFrame = (key == "gf_party" or key == "gf_raid" or key == "gf_mythicraid" or key == "gf_priority") or (bar and bar._msufIsGroupFrame == true) or false
     local groupKind = (key == "gf_party" and "party")
@@ -1802,49 +1817,25 @@ function Ticker.BeginDrag(mover, key, cfg)
         or (bar and bar._msufGFKind)
     local groupOwner = isGroupFrame and bar and (bar._msufGFLiveAnchor or bar._msufGFLogicalAnchor or bar) or nil
     local anchor = isCastbar and UIParent or (isGroupFrame and ResolveGroupAnchor(conf, groupOwner)) or ResolveAnchor(key, conf)
-
-    local bossAdjX, bossAdjY
-    if bar and conf and key and key:sub(1,4) == "boss" and bar.unit then
-        local gbi = _G.MSUF_GetBossIndexFromToken
-        local idx = (type(gbi) == "function" and gbi(bar.unit)) or 1
-        if type(_G.MSUF_GetBossLayoutDelta) == "function" then
-            bossAdjX, bossAdjY = _G.MSUF_GetBossLayoutDelta(idx, conf)
-        else
-            local step = idx - 1
-            local spacing = conf.spacing or -36
-            local mode = conf.bossLayoutMode
-            if mode == "HORIZONTAL_RIGHT" then
-                bossAdjX = step * -spacing
-            elseif mode == "HORIZONTAL_LEFT" then
-                bossAdjX = step * spacing
-            elseif mode == "VERTICAL_UP" then
-                bossAdjY = step * -spacing
-            else
-                bossAdjY = step * spacing
-            end
-        end
-    end
-
-    local snapEnabled = EM2.Snap and EM2.Snap.IsEnabled and EM2.Snap.IsEnabled() or false
-    --- Native StartMoving regressed live profiles because the overlay/db sync
-    --- cost more than the manual drag path. Keep one predictable path.
-    local uiScale = UIParent:GetEffectiveScale() or 1
     local point = UnitFramePoint(conf)
     local relativePoint = UnitFrameRelativePoint(conf, point)
-    local anchorPX, anchorPY = ResolveAnchorPointForDrag(anchor, relativePoint, bar, point, conf)
-    local anchorScale = (anchor and anchor.GetEffectiveScale and anchor:GetEffectiveScale()) or 1
-    local frameScale = (bar and bar.GetEffectiveScale and bar:GetEffectiveScale()) or 1
-    local barW = (bar and bar.GetWidth and bar:GetWidth()) or (mR - mL)
-    local barH = (bar and bar.GetHeight and bar:GetHeight()) or (mT - mB)
+    local factory = MSUF and MSUF.UF and MSUF.UF.Factory
+    if not isCastbar and not isGroupFrame and (anchor == bar
+        or (factory and type(factory.AnchorWouldCreateCycle) == "function"
+            and factory.AnchorWouldCreateCycle(bar, anchor))) then
+        anchor = UIParent
+        relativePoint = point
+    end
+
     local barCenterDX, barCenterDY = 0, 0
-    if bar then
+    if isGroupFrame then
         local _, bCX, _, _, bCY = GetFrameEdgesUI(bar)
         if bCX and bCY then
             barCenterDX = bCX - mCX
             barCenterDY = bCY - mCY
         end
     end
-    local ecvAnchorX, ecvAnchorY
+
     local ecvRule = ECV_ANCHORS[key]
     local usesECV = false
     local ecvFrame
@@ -1854,7 +1845,6 @@ function Ticker.BeginDrag(mover, key, cfg)
         if ecv and anchor == ecv then
             usesECV = true
             ecvFrame = ecv
-            ecvAnchorX, ecvAnchorY = PointXY(ecv, ecvRule[2])
         end
     end
 
@@ -1863,14 +1853,10 @@ function Ticker.BeginDrag(mover, key, cfg)
     local castbarReanchorFunc
     if isCastbar then
         castbarXKey, castbarYKey = GetCastbarOffsetKeys(castbarUnit)
+        if not (castbarXKey and castbarYKey) then return false end
         local defX, defY = CastbarDefaultOffsets(castbarUnit)
-        conf = conf or ((_G.MSUF_DB and _G.MSUF_DB.general) or nil)
-        if conf then
-            castbarStartX = tonumber(conf[castbarXKey]) or defX
-            castbarStartY = tonumber(conf[castbarYKey]) or defY
-        else
-            castbarStartX, castbarStartY = defX, defY
-        end
+        castbarStartX = tonumber(conf[castbarXKey]) or defX
+        castbarStartY = tonumber(conf[castbarYKey]) or defY
         if castbarUnit == "player" then
             castbarReanchorFunc = "MSUF_ReanchorPlayerCastBar"
         elseif castbarUnit == "target" then
@@ -1884,7 +1870,7 @@ function Ticker.BeginDrag(mover, key, cfg)
 
     local isBossLayout = not isCastbar and key == "boss"
 
-    activeDrag = {
+    local drag = {
         mover        = mover,
         key          = key,
         cfg          = cfg,
@@ -1892,16 +1878,16 @@ function Ticker.BeginDrag(mover, key, cfg)
         conf         = conf,
         anchor       = anchor,
         ecvRule      = ecvRule,
-        offX         = mCX - curX,
-        offY         = mCY - curY,
+        offPX        = mCX * uiScale - cursorPX,
+        offPY        = mCY * uiScale - cursorPY,
         startCX      = mCX,
         startCY      = mCY,
+        startCenterPX = mCX * uiScale,
+        startCenterPY = mCY * uiScale,
         halfW        = (mR - mL) * 0.5,
         halfH        = (mT - mB) * 0.5,
         screenW      = UIParent:GetWidth(),
         screenH      = UIParent:GetHeight(),
-        bossAdjX     = bossAdjX,
-        bossAdjY     = bossAdjY,
         popupSyncAcc = 0.05,
         focusNotifyAcc = 0.05,
         isGroupFrame = isGroupFrame,
@@ -1914,44 +1900,29 @@ function Ticker.BeginDrag(mover, key, cfg)
         castbarStartX = castbarStartX,
         castbarStartY = castbarStartY,
         castbarReanchorFunc = castbarReanchorFunc,
-        snapEnabled  = snapEnabled,
+        snapEnabled  = EM2.Snap and EM2.Snap.IsEnabled and EM2.Snap.IsEnabled() or false,
         uiScale      = uiScale,
         point        = point,
         relativePoint = relativePoint,
-        anchorPX     = anchorPX,
-        anchorPY     = anchorPY,
-        anchorScale  = anchorScale,
-        frameScale   = frameScale,
-        barW         = barW,
-        barH         = barH,
+        unitStartX   = tonumber(conf and conf.offsetX) or 0,
+        unitStartY   = tonumber(conf and conf.offsetY) or 0,
         barCenterDX  = barCenterDX,
         barCenterDY  = barCenterDY,
         usesECV      = usesECV,
         ecvFrame     = ecvFrame,
-        ecvAnchorX   = ecvAnchorX,
-        ecvAnchorY   = ecvAnchorY,
     }
+    activeDrag = drag
+    SetActiveDragFlags(drag, true)
+    tickerFrame:SetScript("OnUpdate", OnUpdate)
+    tickerFrame:Show()
+    return true
 end
 
 function Ticker.EndDrag()
     if not activeDrag then return false end
     local d = activeDrag
     activeDrag = nil
-
-    if d.bar then d.bar._msufDragActive = false end
-    if d.isBossLayout then
-        local frames = MSUF and MSUF.UF and MSUF.UF.frames
-        for i = 1, 5 do
-            local frame = (frames and frames["boss" .. i]) or _G["MSUF_boss" .. i]
-            if frame then frame._msufDragActive = false end
-        end
-    end
-    if d.bar and d.bar._msufGFLiveAnchor then d.bar._msufGFLiveAnchor._msufDragActive = false end
-    if d.bar and d.bar._msufGFLogicalAnchor then d.bar._msufGFLogicalAnchor._msufDragActive = false end
-    if d.mover and d.mover._msufGFEM2DragSourceFrame then
-        d.mover._msufGFEM2DragSourceFrame._msufGFEM2Dragging = nil
-        d.mover._msufGFEM2DragSourceFrame = nil
-    end
+    SetActiveDragFlags(d, false)
     if EM2.Snap and EM2.Snap.HideGuides then EM2.Snap.HideGuides() end
 
     local mover = d.mover
@@ -1961,7 +1932,10 @@ function Ticker.EndDrag()
         mT = mover:GetTop() or 0; mB = mover:GetBottom() or 0
         cx = (mL + mR) * 0.5; cy = (mT + mB) * 0.5
     end
-    local moved = abs(cx - d.startCX) > 0.5 or abs(cy - d.startCY) > 0.5
+    local uiScale = UIParent:GetEffectiveScale() or d.uiScale or 1
+    if uiScale <= 0 then uiScale = 1 end
+    local moved = abs(cx * uiScale - (d.startCenterPX or cx * uiScale)) > 0.5
+        or abs(cy * uiScale - (d.startCenterPY or cy * uiScale)) > 0.5
 
     if moved then
         if d.isGroupFrame and d.conf then
@@ -2039,6 +2013,7 @@ function Ticker.RequestIdleSync(kind)
 end
 
 function Ticker.Start()
+    if activeDrag then SetActiveDragFlags(activeDrag, false) end
     if not tickerFrame then
         tickerFrame = CreateFrame("Frame", "MSUF_EM2_TickerFrame", UIParent)
         tickerFrame:Hide()
@@ -2054,6 +2029,7 @@ end
 
 function Ticker.Stop()
     tickerActive = false
+    if activeDrag then SetActiveDragFlags(activeDrag, false) end
     activeDrag = nil
     idleMoverDirty = false; idleHUDDirty = false
     dirtyFlushScheduled = false

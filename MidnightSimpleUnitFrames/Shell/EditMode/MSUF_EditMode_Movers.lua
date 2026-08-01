@@ -154,8 +154,7 @@ local function FrameRectToUI(frame)
     return l * ratio, r * ratio, t * ratio, b * ratio
 end
 
-local function ExpandRect(bounds, region)
-    local l, r, t, b = FrameRectToUI(region)
+local function ExpandBounds(bounds, l, r, t, b)
     if not l then return bounds end
     if not bounds then
         return { l = l, r = r, t = t, b = b }
@@ -165,6 +164,10 @@ local function ExpandRect(bounds, region)
     if t > bounds.t then bounds.t = t end
     if b < bounds.b then bounds.b = b end
     return bounds
+end
+
+local function ExpandRect(bounds, region)
+    return ExpandBounds(bounds, FrameRectToUI(region))
 end
 
 local function UnitVisualBounds(frame)
@@ -201,7 +204,9 @@ local function SyncMoverToFrame(mover, frame, cfg)
     if not frame then return end
     if mover.SetClampedToScreen then mover:SetClampedToScreen(not IsGroupMoverConfig(cfg)) end
     local l, r, t, b
-    if cfg and cfg.popupType == "unit" then
+    if cfg and type(cfg.getMoverBounds) == "function" then
+        l, r, t, b = cfg.getMoverBounds()
+    elseif cfg and cfg.popupType == "unit" then
         l, r, t, b = UnitVisualBounds(frame)
     else
         l, r, t, b = FrameRectToUI(frame)
@@ -326,9 +331,10 @@ local function CreateMover(key, cfg)
     mover:SetScript("OnLeave", function(self)
         if self._dragging then return end
         local t = T()
-        self._bg:SetColorTexture(t.bgR, t.bgG, t.bgB, 0.55)
-        self._brd:SetBackdropBorderColor(t.edgeR, t.edgeG, t.edgeB, 0.60)
         if self._label:IsShown() then self._label:SetTextColor(t.textR, t.textG, t.textB, 0.85) end
+        --- Hover may temporarily expose the mover chrome. Restore the current
+        --- preview/non-preview presentation instead of leaving that chrome behind.
+        self:UpdateLabelVisibility()
         if EM2.Focus and EM2.Focus.ClearHover then
             EM2.Focus.ClearHover("mover")
         end
@@ -338,14 +344,16 @@ local function CreateMover(key, cfg)
     --- active so hidden/offset name text can still be inspected.
     function mover:UpdateLabelVisibility()
         if self._label then self._label:SetText(MoverLabelText(key, cfg)) end
-        if _G.MSUF_PreviewTestMode and not (_G.MSUF_InCombat or (_G.InCombatLockdown and _G.InCombatLockdown())) and not self._dragging then
-            if cfg.popupType == "unit" and key ~= "boss" then
+        if _G.MSUF_PreviewTestMode and not (_G.MSUF_InCombat or (_G.InCombatLockdown and _G.InCombatLockdown())) then
+            if cfg.popupType == "unit" and key ~= "boss" and not self._dragging then
                 self._label:Show()
             else
                 self._label:Hide()
             end
             self._bg:SetColorTexture(0, 0, 0, 0)
-            self._brd:SetBackdropBorderColor(th.edgeR, th.edgeG, th.edgeB, 0.25)
+            --- The mover remains the full mouse hit surface; the live preview is
+            --- the only drag visual, so no detached rectangle can leak through.
+            self._brd:SetBackdropBorderColor(th.edgeR, th.edgeG, th.edgeB, 0)
         else
             self._label:Show()
             self._bg:SetColorTexture(th.bgR, th.bgG, th.bgB, 0.55)
@@ -360,7 +368,9 @@ local function CreateMover(key, cfg)
         if self._dragging then return true end
         if BlockConfigCombatLocked() then return end
         if _G.MSUF_EM2_SetPreviewNudgeTarget then _G.MSUF_EM2_SetPreviewNudgeTarget(nil) end
+        if not (EM2.Ticker and EM2.Ticker.BeginDrag and EM2.Ticker.BeginDrag(self, key, cfg)) then return false end
         self._dragging = true
+        self:UpdateLabelVisibility()
         if self._msufGuidedPlacementCue then self._msufGuidedPlacementCue:Hide() end
         self._coordFS:Show()
         if EM2.Focus and EM2.Focus.ClearHover then EM2.Focus.ClearHover("drag") end
@@ -373,7 +383,6 @@ local function CreateMover(key, cfg)
             _G.MSUF_EM_UndoBeforeChange(historyCategory, historyKey)
         end
 
-        if EM2.Ticker then EM2.Ticker.BeginDrag(self, key, cfg) end
         if EM2.Focus and EM2.Focus.SetSelection then EM2.Focus.SetSelection(key, nil, nil, { source = "drag" }) end
         return true
     end
@@ -381,7 +390,7 @@ local function CreateMover(key, cfg)
     local function EndMoverDrag(self, button)
         if button and button ~= "LeftButton" then return end
         StopPendingDrag(self)
-        if not self._dragging then return end
+        if not self._dragging then return false end
         self._dragging = false
         self._coordFS:Hide()
 
@@ -399,14 +408,17 @@ local function CreateMover(key, cfg)
         self._bg:SetColorTexture(t.bgR, t.bgG, t.bgB, 0.55)
         self._brd:SetBackdropBorderColor(t.edgeR, t.edgeG, t.edgeB, 0.60)
         self._label:SetTextColor(t.textR, t.textG, t.textB, 0.85)
+        self:UpdateLabelVisibility()
         if moved then self._suppressNextClick = true end
         if EM2.Focus and EM2.Focus.SetHover and self:IsMouseOver() then
             EM2.Focus.SetHover(key, nil, nil, { source = "mover", force = true })
         end
         Movers.RefreshGuidedPlacementCue()
+        return moved
     end
 
     mover._msufEM2BeginDrag = BeginMoverDrag
+    mover._msufEM2EndDrag = EndMoverDrag
     mover:SetScript("OnMouseDown", BeginMoverDrag)
     mover:SetScript("OnMouseUp", EndMoverDrag)
     mover:SetScript("OnDragStart", BeginMoverDrag)
@@ -511,7 +523,17 @@ local function GetUF(key)
 end
 
 local function GetBossUF(i)
-    return _G["MSUF_boss" .. i]
+    return GetUF("boss" .. i)
+end
+
+local function GetBossMoverBounds()
+    local bounds
+    for i = 1, 5 do
+        local l, r, t, b = UnitVisualBounds(GetBossUF(i))
+        bounds = ExpandBounds(bounds, l, r, t, b)
+    end
+    if not bounds then return nil end
+    return bounds.l, bounds.r, bounds.t, bounds.b
 end
 
 local function GetConf(key)
@@ -626,9 +648,8 @@ local function RegisterAll()
         })
     end
 
-    --- Boss: only boss1 gets a mover. All boss frames share one config ("boss").
-    --- Moving boss1 writes offsetX/Y ? ApplySettingsForKey("boss") repositions all.
-    --- Boss2-5 auto-position via (index-1)*spacing in PositionUnitFrame.
+    --- Boss 1-5 share one mover/config. The mover spans their complete visible
+    --- union, so every preview frame starts the same atomic group drag.
     Reg.Register({
         key       = "boss",
         label     = "Boss",
@@ -637,6 +658,7 @@ local function RegisterAll()
         canResize = true,
         canNudge  = true,
         getFrame  = function() return GetBossUF(1) end,
+        getMoverBounds = GetBossMoverBounds,
         getConf   = function() return GetConf("boss") end,
         isEnabled = BossEnabled(1),
     })
@@ -818,6 +840,10 @@ ExportPublic("MSUF_SyncCastbarPositionPopup", MSUF_SyncCastbarPositionPopup)
 --- --- MSUF_SyncAuras3PositionPopup ---
 local function MSUF_SyncAuras3PositionPopup(unit)
     if EM2.AuraPopup and EM2.AuraPopup.Sync then EM2.AuraPopup.Sync() end
+    local menu = MSUF and MSUF.MSUF2
+    if menu and type(menu.SyncAuras3PositionSettings) == "function" then
+        menu.SyncAuras3PositionSettings(unit, rawget(_G, "MSUF_EM2_ActiveAuraGroup"))
+    end
 end
 ExportPublic("MSUF_SyncAuras3PositionPopup", MSUF_SyncAuras3PositionPopup)
 

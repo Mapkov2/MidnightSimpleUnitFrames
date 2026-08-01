@@ -50,11 +50,10 @@ local function PlainBool(v)
     return nil
 end
 
--- Forbidden/tainted frames can throw even when IsForbidden() just returned
--- false. Every method reached through the mouse-focus chain therefore needs
--- its own protected boundary. Bind the native ScriptRegion methods from the
--- known-safe root once, so a tainted candidate cannot trap us in member lookup
--- and Perfy never wraps a throwing AnchorPicker Lua helper in pcall.
+-- The mouse-focus chain walks EVERY addon's frames. Native ScriptRegion
+-- methods are bound once from the known-safe root so a candidate's own
+-- metatable cannot trap member lookup; the IsForbidden gate runs before any
+-- other accessor on each candidate.
 local scriptRegion = UIParent or WorldFrame
 local FrameIsForbidden = scriptRegion and scriptRegion.IsForbidden
 local FrameGetName = scriptRegion and scriptRegion.GetName
