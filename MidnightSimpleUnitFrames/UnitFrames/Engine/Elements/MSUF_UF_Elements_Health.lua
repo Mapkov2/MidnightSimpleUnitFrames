@@ -226,7 +226,10 @@ function Health.Apply(frame, spec)
   if SetBarSmoothing then SetBarSmoothing(frame.hpBar, h and h.smooth == true) end
   if ApplyBarGradient then ApplyBarGradient(frame, frame.hpBar, h and h.barGradient, "hpGradients") end
   SetColor(frame, true)
-  if ApplyBackgrounds then ApplyBackgrounds(frame, true, false) end
+  -- Apply is the authoritative cold path. A secure show/startup transition can
+  -- reset the live texture while leaving our last-value cache intact, so never
+  -- let that cache suppress the saved background opacity here.
+  if ApplyBackgrounds then ApplyBackgrounds(frame, true, false, true) end
   ApplyRuntimeColor(frame, "MSUF_COLOR_CHANGE", frame.MSUFUnitKey)
   if type(_G.MSUF_ApplyBossPhysicalBarGeometry) == "function" then
     _G.MSUF_ApplyBossPhysicalBarGeometry(frame)

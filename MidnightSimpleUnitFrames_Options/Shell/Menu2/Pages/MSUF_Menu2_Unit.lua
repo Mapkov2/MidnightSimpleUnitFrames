@@ -120,7 +120,10 @@ local STATUS_CONTROLS = {
     StatusControl("statusIncomingRes", "Incoming Rez", "showIncomingResIndicator", true, "incomingResIndicatorSize", 18, "incomingResIndicatorAnchor", "TOPRIGHT", STATUS_CORNER_ANCHORS, "incomingResIndicatorOffsetX", 0, "incomingResIndicatorOffsetY", 0, "incomingResIndicatorLayer", 7, "MSUF_RequestStatusIncomingResIndicatorRefresh", { allowed = function(unit) return unit == "player" or unit == "target" end, symbol = "incomingResIndicatorSymbol", symbols = RESS_SYMBOLS, statusRuntime = true, iconStyle = "incomingResIndicatorIconStyle", defaultIconStyle = "BLIZZARD", customIcon = "incomingResIndicatorCustomIcon" }),
     StatusControl("statusPvp", "PvP Flag (War Mode/PvP)", "showPvpIndicator", true, "pvpIndicatorSize", 18, "pvpIndicatorAnchor", "TOPRIGHT", STATUS_CORNER_ANCHORS, "pvpIndicatorOffsetX", 0, "pvpIndicatorOffsetY", 0, "pvpIndicatorLayer", 7, "MSUF_RequestStatusPvpIndicatorRefresh", { allowed = function(unit) return unit == "player" or unit == "target" or unit == "focus" or unit == "targettarget" or unit == "focustarget" end, statusRuntime = true, iconStyle = "pvpIndicatorIconStyle", defaultIconStyle = "BLIZZARD", customIcon = "pvpIndicatorCustomIcon" }),
 }
-local TEXT_ANCHORS = VTP "LEFT=Left|CENTER=Center|RIGHT=Right"
+-- LEFT/CENTER/RIGHT were legacy 5.77 tokens for the top row. Profiles migrate
+-- those values to TOPLEFT/TOP/TOPRIGHT; FRAME* keeps the new middle row
+-- unambiguous even when an old profile is imported later.
+local TEXT_ANCHORS = VTP "TOPLEFT=Top Left|TOP=Top Center|TOPRIGHT=Top Right|FRAMELEFT=Left|FRAMECENTER=Center|FRAMERIGHT=Right"
 local HP_MODES = VTP "ABSORB=Absorb|CURRENTABSORB=Current + Absorb|FULLVALUEABSORB=Full Value + Absorb|MAXABSORB=Max + Absorb|DEFICITABSORB=Deficit + Absorb|CURMAXABSORB=Current / Max + Absorb|PERCENTABSORB=Percent + Absorb|CURPERCENTABSORB=Current / Percent + Absorb|CURMAXPERCENTABSORB=Current / Max / Percent + Absorb|MAXPERCENTABSORB=Max / Percent + Absorb|PERCENTCURABSORB=Percent / Current + Absorb|PERCENTMAXABSORB=Percent / Max + Absorb|PERCENTCURMAXABSORB=Percent / Current / Max + Absorb|PERCENT=Percent|CURRENT=Current|FULLVALUE=Full Value|MAX=Max|DEFICIT=Deficit|CURMAX=Current / Max|CURPERCENT=Current / Percent|CURMAXPERCENT=Current / Max / Percent|MAXPERCENT=Max / Percent|PERCENTCUR=Percent / Current|PERCENTMAX=Percent / Max|PERCENTCURMAX=Percent / Current / Max|NONE=None"
 local POWER_MODES = VTP "CURRENT=Current|MAX=Max|CURMAX=Current / Max|PERCENT=Percent|CURPERCENT=Current / Percent|CURMAXPERCENT=Current / Max / Percent|NONE=None"
 local BOSS_LAYOUT_OPTIONS = VTP "VERTICAL_DOWN=Vertical (top -> bottom)|VERTICAL_UP=Vertical (bottom -> top)|HORIZONTAL_RIGHT=Horizontal (left -> right)|HORIZONTAL_LEFT=Horizontal (right -> left)"
@@ -693,6 +696,10 @@ local function BossPagePreviewInCombat()
     return (_G.InCombatLockdown and _G.InCombatLockdown())
         or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
 end
+local function ClearBossPagePreviewForCombat()
+    local clear = _G.MSUF_ClearBossUnitframePreviewForCombat
+    return type(clear) == "function" and clear() == true
+end
 local function CoreFrame(unit)
     local uf = MSUF and MSUF.UF
     if uf and type(uf.GetFrame) == "function" then
@@ -717,10 +724,9 @@ end
 local function SyncBossPagePreview()
     local active = (_G.MSUF2_BossUnitframePreviewActive == true)
     if BossPagePreviewInCombat() then
-        if active then
-            _G.MSUF2_BossUnitframePreviewActive = nil
-            bossPagePreviewPendingCleanup = true
-        end
+        local cleared = ClearBossPagePreviewForCombat()
+        _G.MSUF2_BossUnitframePreviewActive = nil
+        if active or cleared then bossPagePreviewPendingCleanup = true end
         return
     end
     if not BossPagePreviewInCombat() and type(_G.MSUF_ApplyBossUnitframePreviewState) == "function" then
@@ -733,6 +739,14 @@ local function EnsureBossPagePreviewEvents()
     if bossPagePreviewEvents then return bossPagePreviewEvents end
     bossPagePreviewEvents = CreateFrame("Frame")
     bossPagePreviewEvents:SetScript("OnEvent", function(self, event)
+        if event == "PLAYER_REGEN_DISABLED" then
+            -- Another Menu2 coordinator may already have cleared the global
+            -- flag. Always run the frame handoff and remember the OOC rebuild.
+            ClearBossPagePreviewForCombat()
+            _G.MSUF2_BossUnitframePreviewActive = nil
+            bossPagePreviewPendingCleanup = true
+            return
+        end
         if event == "PLAYER_REGEN_ENABLED" and bossPagePreviewPendingCleanup then
             bossPagePreviewPendingCleanup = nil
             SyncBossPagePreview()
@@ -746,6 +760,7 @@ end
 local function SetBossPagePreviewActive(active)
     active = active and true or false
     if active and BossPagePreviewInCombat() then
+        ClearBossPagePreviewForCombat()
         _G.MSUF2_BossUnitframePreviewActive = nil
         bossPagePreviewPendingCleanup = nil
         if bossPagePreviewEvents then bossPagePreviewEvents:UnregisterAllEvents() end

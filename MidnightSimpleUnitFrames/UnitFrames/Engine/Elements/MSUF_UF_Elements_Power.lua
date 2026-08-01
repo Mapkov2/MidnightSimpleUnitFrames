@@ -696,7 +696,9 @@ function Power.Apply(frame, spec)
     if HideBarGradient then HideBarGradient(frame.powerGradients) end
   else
     if ApplyBackgrounds then
-      ApplyBackgrounds(frame, false, true)
+      -- As with Health.Apply, a cold spec apply must restore the live texture
+      -- even when a secure lifecycle transition left the cache unchanged.
+      ApplyBackgrounds(frame, false, true, true)
     else
       ApplyBackgroundMedia(frame, power)
     end

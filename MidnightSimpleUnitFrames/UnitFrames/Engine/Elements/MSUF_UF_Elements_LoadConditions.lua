@@ -54,6 +54,8 @@ local BOSS_PREVIEW_UNITS = {
   boss5 = true,
 }
 local BOSS_PREVIEW_REFRESH_ELEMENTS = {
+  "Alpha",
+  "Health",
   "Power",
   "Text",
   "NameText",
@@ -65,6 +67,7 @@ local BOSS_PREVIEW_REFRESH_ELEMENTS = {
 
 local LoadConditions = {}
 local bossPreviewAppliedActive
+local bossPreviewCombatCleanupPending
 local BOSS_PREVIEW_LIGHT_REASONS = {
   MSUF_BOSS_PREVIEW = true,
   MSUF_BOSS_PREVIEW_SYNC = true,
@@ -369,7 +372,43 @@ local function SetShown(frame, shown)
   end
 end
 
-local function SetBarPreview(bar, value, maxValue, r, g, b)
+local function ResolveBossPreviewHealthColor(frame, pct)
+  local spec = frame and frame.MSUFSpec
+  local health = spec and spec.health or {}
+  local mode = health.mode
+  local alpha = tonumber(health.alpha or health.a) or 1
+  if mode == "dark" or mode == "unified" then
+    return health.r or 1, health.g or 1, health.b or 1, alpha
+  elseif mode == "gradient" then
+    local common = MSUF and MSUF.UFBarTextCommon
+    local resolveGradient = common and common.PreviewHealthGradientColor
+    if type(resolveGradient) == "function" then
+      local r, g, b = resolveGradient(health, pct)
+      if r ~= nil then return r, g, b, 1 end
+    end
+  end
+
+  -- A synthetic boss has no live UnitReaction/UnitClassification result. Use
+  -- the same deterministic hostile identity that runtime resolves for a live
+  -- boss, while honoring the optional NPC-type coloring mode.
+  local kind = "enemy"
+  if health.npcColorMode == "type"
+    and health.npcTypeColorBar ~= false
+    and health.npcTypeBoss ~= false then
+    kind = "npcBoss"
+  end
+  local common = MSUF and MSUF.UFBarTextCommon
+  local resolveNPC = common and common.NPCColor
+  if type(resolveNPC) == "function" then
+    local r, g, b = resolveNPC(kind)
+    if r ~= nil then return r, g, b, 1 end
+  end
+  if kind == "npcBoss" then return 0.74, 0.11, 0, 1 end
+  return 0.85, 0.10, 0.10, 1
+end
+UF.ResolveBossPreviewHealthColor = ResolveBossPreviewHealthColor
+
+local function SetBarPreview(bar, value, maxValue, r, g, b, a)
   if not bar then
     return
   end
@@ -380,7 +419,24 @@ local function SetBarPreview(bar, value, maxValue, r, g, b)
     bar:SetValue(value)
   end
   if bar.SetStatusBarColor then
-    bar:SetStatusBarColor(r, g, b, 1)
+    bar:SetStatusBarColor(r, g, b, a or 1)
+    -- Runtime color writers cache both the configured and resolved colors.
+    -- Preview writes are temporary, so invalidate both caches to guarantee the
+    -- live unit color is restored when the preview is switched off.
+    bar._msufR, bar._msufG, bar._msufB, bar._msufA = nil, nil, nil, nil
+    bar._msufStatusR, bar._msufStatusG, bar._msufStatusB, bar._msufStatusA = nil, nil, nil, nil
+  end
+  if bar.SetAlpha then
+    bar:SetAlpha(1)
+  end
+  local fill = bar.GetStatusBarTexture and bar:GetStatusBarTexture()
+  if fill and fill.SetAlpha then
+    -- A missing boss can leave the health-only range/alpha lane at zero. The
+    -- synthetic preview must explicitly make that fill visible, otherwise its
+    -- correct red RGB is present but the frame still appears black.
+    fill:SetAlpha(1)
+    fill._msufAlphaHealth = nil
+    fill._msufAlphaStatusTexture = nil
   end
   SetShown(bar, true)
 end
@@ -446,10 +502,72 @@ local function ApplyBossPreviewFrameData(frame, index)
     state.npcKindKnown = true
   end
 
-  SetBarPreview(frame.hpBar or frame.Health, hp, hpMax, 0.74, 0.11, 0)
+  local r, g, b, a = ResolveBossPreviewHealthColor(frame, hp / hpMax)
+  SetBarPreview(frame.hpBar or frame.Health, hp, hpMax, r, g, b, a)
+  frame._msufAlphaLastHP = nil
   SetBarPreview(frame.targetPowerBar or frame.powerBar or frame.Power, power, powerMax, 0.05, 0.64, 0.92)
   ApplyBossPreviewText(frame, hp, hpMax, power, powerMax)
 end
+
+local function InvalidateBossPreviewBar(bar, restoreFill)
+  if not bar then return end
+  bar._msufR, bar._msufG, bar._msufB, bar._msufA = nil, nil, nil, nil
+  bar._msufStatusR, bar._msufStatusG, bar._msufStatusB, bar._msufStatusA = nil, nil, nil, nil
+  local fill = bar.GetStatusBarTexture and bar:GetStatusBarTexture()
+  if fill then
+    fill._msufAlphaHealth = nil
+    fill._msufAlphaStatusTexture = nil
+    if restoreFill and fill.SetAlpha then fill:SetAlpha(1) end
+  end
+  if restoreFill and bar.SetAlpha then bar:SetAlpha(1) end
+end
+
+-- Preview data is written into the real boss unit buttons. Combat lockdown
+-- prevents the normal full visibility/runtime rebuild, so strip only the
+-- synthetic Lua state and restore visual lanes here; protected Show/Hide and
+-- state-driver work remains deferred until combat ends.
+local function ClearBossPreviewFrameForRuntime(frame, restoreVisuals)
+  if not frame or frame._msufBossPreviewForced ~= true then return false end
+  frame._msufBossPreviewForced = nil
+  frame._msufUnitState = nil
+  frame._msufAlphaLastFrame = nil
+  frame._msufAlphaLastHP = nil
+  frame._msufAlphaLastFG = nil
+
+  local healthBar = frame.hpBar or frame.Health
+  InvalidateBossPreviewBar(healthBar, restoreVisuals)
+  InvalidateBossPreviewBar(frame.targetPowerBar or frame.powerBar or frame.Power, restoreVisuals)
+
+  if restoreVisuals then
+    -- The range driver has its own last-result cache. Invalidate it before the
+    -- temporary in-range handoff so its next real boss result is never skipped.
+    frame._msufRangeInRange = nil
+    frame._msufRangeMulApplied = nil
+    local applyRange = UF.ApplyRangeModifier or _G.MSUF_UF_ApplyRangeModifier
+    if type(applyRange) == "function" then
+      applyRange(frame, 1, true)
+    end
+    local unit = frame.MSUFUnitKey
+    local refreshColor = _G.MSUF_UFCore_RefreshHealthBarColor
+    if BossLiveUnitExists(unit) and type(refreshColor) == "function" then
+      refreshColor(frame, "MSUF_BOSS_PREVIEW_HANDOFF")
+    end
+  end
+  return true
+end
+
+local function ClearBossPreviewFramesForCombat()
+  _G.MSUF2_BossUnitframePreviewActive = nil
+  local cleared = false
+  for i = 1, 5 do
+    local frame = UF.frames and UF.frames["boss" .. i]
+    if ClearBossPreviewFrameForRuntime(frame, true) then cleared = true end
+  end
+  if cleared then bossPreviewCombatCleanupPending = true end
+  return cleared
+end
+UF.ClearBossPreviewFramesForCombat = ClearBossPreviewFramesForCombat
+ExportPublic("MSUF_ClearBossUnitframePreviewForCombat", ClearBossPreviewFramesForCombat)
 
 local function ApplyBossPreviewFrames(active)
   for i = 1, 5 do
@@ -461,7 +579,7 @@ local function ApplyBossPreviewFrames(active)
       if frame.EnableMouse then frame:EnableMouse(true) end
       ApplyBossPreviewFrameData(frame, i)
     elseif frame then
-      frame._msufBossPreviewForced = nil
+      ClearBossPreviewFrameForRuntime(frame, true)
     end
   end
 end
@@ -488,6 +606,9 @@ local function BossPreviewFramesReady(active)
 end
 
 local function CanUseLightBossPreviewApply(active, reason)
+  if bossPreviewCombatCleanupPending == true then
+    return false
+  end
   if bossPreviewAppliedActive ~= active then
     return false
   end
@@ -524,6 +645,7 @@ end
 function UF.ApplyBossPreviewState(active, reason)
   active = active == true
   if BossPreviewCombatLocked() then
+    ClearBossPreviewFramesForCombat()
     return false
   end
 
@@ -556,12 +678,13 @@ function UF.ApplyBossPreviewState(active, reason)
     em2.Movers.SyncAll()
   end
   bossPreviewAppliedActive = active
+  bossPreviewCombatCleanupPending = nil
   return true
 end
 
 local function MSUF_ApplyBossUnitframePreviewState(active, reason)
   if BossPreviewCombatLocked() then
-    _G.MSUF2_BossUnitframePreviewActive = nil
+    ClearBossPreviewFramesForCombat()
     return false
   end
   _G.MSUF2_BossUnitframePreviewActive = active == true and true or nil
@@ -571,6 +694,7 @@ ExportPublic("MSUF_ApplyBossUnitframePreviewState", MSUF_ApplyBossUnitframePrevi
 
 local function MSUF_SyncBossUnitframePreviewWithUnitEdit()
   if BossPreviewCombatLocked() then
+    ClearBossPreviewFramesForCombat()
     return false
   end
   local editActive = _G.MSUF_UnitEditModeActive == true

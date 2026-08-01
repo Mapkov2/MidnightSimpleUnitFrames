@@ -169,12 +169,15 @@ local function BuildPortrait(ctx, builder, unit)
             PortraitControlMeta("portrait." .. tostring(key), tostring(unit) .. "." .. tostring(key)))
         return control
     end
-    local function BindPortraitSlider(parent, label, x, y, width, minValue, maxValue, step, key, defaultValue, reason)
+    local function BindPortraitSlider(parent, label, x, y, width, minValue, maxValue, step, key, defaultValue, reason, after)
         local control = W.Slider(parent, label, minValue, maxValue, step, 280)
         W.MoveWidget(control, parent, x, y, width, "CENTER")
         M.BindNumberWidget(ctx, control,
             function() return ReadNumber(unit, key, defaultValue) end,
-            function(v) SetNumber(unit, key, v, reason, { preview = true }) end,
+            function(v)
+                SetNumber(unit, key, v, reason, { preview = true })
+                if after then after() end
+            end,
             defaultValue, (function()
                 local meta = PortraitControlMeta("portrait." .. tostring(key), tostring(unit) .. "." .. tostring(key))
                 meta.step, meta.roundStep = step, true
@@ -285,7 +288,7 @@ local function BuildPortrait(ctx, builder, unit)
         PortraitControlMeta("portrait.position", tostring(unit) .. ".portraitMode"))
     local render = BindPortraitDropdown(mainCard, "Render", PORTRAIT_RENDER, 16, -116, min(220, leftW - 32), "portraitRender", "2D", "MSUF2_PORTRAIT_RENDER", nil, RefreshPortraitControls)
     local shape = BindPortraitDropdown(borderCard, "Shape", PORTRAIT_SHAPES, 16, -58, min(220, leftW - 32), "portraitShape", "SQUARE", "MSUF2_PORTRAIT_SHAPE", nil, RefreshPortraitControls)
-    local size = BindPortraitSlider(geometryCard, "Size override", 16, -62, rightW - 58, 0, 128, 1, "portraitSizeOverride", 0, "MSUF2_PORTRAIT_SIZE")
+    local size = BindPortraitSlider(geometryCard, "Size override", 16, -62, rightW - 58, 0, 128, 1, "portraitSizeOverride", 0, "MSUF2_PORTRAIT_SIZE", RefreshPortraitControls)
     local widthOverride = BindPortraitSlider(geometryCard, "Width override", 16, -116, rightW - 58, 0, 256, 1, "portraitWidth", 0, "MSUF2_PORTRAIT_WIDTH")
     local heightOverride = BindPortraitSlider(geometryCard, "Height override", 16, -170, rightW - 58, 0, 256, 1, "portraitHeight", 0, "MSUF2_PORTRAIT_HEIGHT")
     local x = BindPortraitSlider(geometryCard, "Portrait X", 16, -224, rightW - 58, -400, 400, 1, "portraitOffsetX", 0, "MSUF2_PORTRAIT_X")
@@ -333,6 +336,10 @@ local function BuildPortrait(ctx, builder, unit)
     local function PortraitShapeIsBlizzard(conf)
         return (conf.portraitShape or "SQUARE") == "BLIZZARD"
     end
+    local function PortraitFillsBar(conf)
+        return (conf.portraitPlacement or "ATTACHED") == "OVERLAY"
+            and (conf.portraitOverlayAlign or "LEFT") == "FULL"
+    end
     RefreshPortraitControls = RefreshPortraitControls(M.BindGateGroup(ctx, function() return GetConf(unit) end, {
         { enable = portraitEnable },
         { controls = portraitActiveControls, on = PortraitActive },
@@ -341,6 +348,15 @@ local function BuildPortrait(ctx, builder, unit)
         { controls = portrait, on = function(conf) return PortraitPlacementIs(conf, "ATTACHED") end },
         { controls = { detachedPoint, detachedTo }, on = function(conf) return PortraitPlacementIs(conf, "DETACHED") end },
         { controls = overlayAlign, on = function(conf) return PortraitPlacementIs(conf, "OVERLAY") end },
+        -- Fill-bar geometry comes from the two bar anchors. In every other
+        -- placement a positive uniform size wins; per-axis overrides are the
+        -- non-square Auto-size mode and must not pretend to affect that square.
+        { controls = size, on = function(conf) return PortraitActive() and not PortraitFillsBar(conf) end },
+        { controls = { widthOverride, heightOverride }, on = function(conf)
+            return PortraitActive()
+                and not PortraitFillsBar(conf)
+                and (tonumber(conf.portraitSizeOverride) or 0) <= 0
+        end },
         { controls = { zoom, panX, panY }, on = PortraitIs2D },
         { controls = border, on = function(conf) return PortraitActive() and not PortraitShapeIsBlizzard(conf) end },
         { controls = { borderSize, borderArt }, on = function(conf)

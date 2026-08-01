@@ -159,8 +159,11 @@ local function OpenGFSection(sectionKey)
     M.gfPreviewFocus = sectionKey
     local pageKey = PageForGFSection(sectionKey)
     if pageKey and M.SelectPage then
+        local auraLane = sectionKey == "buffs" or sectionKey == "debuffs" or sectionKey == "externals"
+        local focusSectionId = auraLane and "auras" or sectionKey
         local scope = CurrentScope()
         local previousAuraLane
+        local previousAuraTool
         local requestedAuraLane
         if M.SetMenuStateValue then
             M.SetMenuStateValue("gfScope", scope)
@@ -179,9 +182,21 @@ local function OpenGFSection(sectionKey)
                     previousAuraLane = M.gfAuraLaneSelection[scope] or "buff"
                     requestedAuraLane = lane
                     M.gfAuraLaneSelection[scope] = lane
+                    M.gfAuraToolSelection = M.gfAuraToolSelection or {}
+                    local tools = M.gfAuraToolSelection[scope]
+                    if type(tools) ~= "table" then tools = {}; M.gfAuraToolSelection[scope] = tools end
+                    previousAuraTool = tools[lane]
+                    tools[lane] = "layout"
                     if lane ~= "externals" then M.SetMenuStateValue("auraStyleGFLane", lane) end
                 end
             end
+        end
+        if sectionKey == "portrait" then
+            M.unitPortraitTabSelection = M.unitPortraitTabSelection or {}
+            M.unitPortraitTabSelection.gf_party = "placement"
+        elseif sectionKey == "sicons" then
+            M.gfStatusIconTabSelection = M.gfStatusIconTabSelection or {}
+            M.gfStatusIconTabSelection[scope] = "basic"
         end
         ExportPublic("MSUF_EM2_MenuFocusRequest", {
             key = (scope == "raid" and "gf_raid") or (scope == "mythicraid" and "gf_mythicraid") or "gf_party",
@@ -190,7 +205,7 @@ local function OpenGFSection(sectionKey)
                 or (sectionKey == "debuffs" and "debuff"
                 or (sectionKey == "externals" and "externals" or nil)),
             pageKey = pageKey,
-            sectionId = sectionKey,
+            sectionId = focusSectionId,
             source = "group-preview",
             explicit = true,
             changedAt = GetTime and GetTime() or 0,
@@ -198,7 +213,7 @@ local function OpenGFSection(sectionKey)
         -- Group Auras builds its lane-specific controls from gfAuraLaneSelection.
         -- Selecting another preview lane must rebuild any cached Group Auras
         -- page, whether it is active or hidden; refreshers still target the old lane.
-        if requestedAuraLane and requestedAuraLane ~= previousAuraLane
+        if requestedAuraLane and (requestedAuraLane ~= previousAuraLane or previousAuraTool ~= "layout")
             and type(M.InvalidatePage) == "function" then
             M.InvalidatePage(pageKey)
         end

@@ -444,13 +444,13 @@ local function ApplyGameplayFont(fs, path, size, flags)
     if size <= 0 then size = 12 end
     if size < 6 then size = 6 elseif size > 128 then size = 128 end
     flags = flags or "OUTLINE"
-    local applied = fs:SetFont(path, size, flags)
-    if applied ~= false and GameplayFontApplied(fs, path, size, flags) then
+    local ok = pcall(fs.SetFont, fs, path, size, flags)
+    if ok and GameplayFontApplied(fs, path, size, flags) then
         return true
     end
     if path ~= GAMEPLAY_FALLBACK_FONT then
-        applied = fs:SetFont(GAMEPLAY_FALLBACK_FONT, size, flags)
-        return applied ~= false
+        ok = pcall(fs.SetFont, fs, GAMEPLAY_FALLBACK_FONT, size, flags)
+        return ok == true
     end
     return false
 end

@@ -28,6 +28,8 @@ local UnitName = UnitName
 local UnitIsPlayer = UnitIsPlayer
 local UnitIsDeadOrGhost = UnitIsDeadOrGhost
 local UnitIsConnected = UnitIsConnected
+local UnitCanAttack = UnitCanAttack
+local UnitCanAssist = UnitCanAssist
 local UnitReaction = UnitReaction
 local UnitSelectionType = UnitSelectionType
 local UnitSelectionColor = UnitSelectionColor
@@ -348,22 +350,22 @@ local function SetBarSmoothing(bar, enabled)
   end
 end
 
-local function ApplyTextureColor(region, texture, r, g, b, a)
+local function ApplyTextureColor(region, texture, r, g, b, a, force)
   if not region then
     return
   end
   r, g, b, a = r or 0, g or 0, b or 0, a or 1
   if texture then
-    if region._msufBgTexture ~= texture or region._msufBgColorTexture == true then
+    if force == true or region._msufBgTexture ~= texture or region._msufBgColorTexture == true then
       region:SetTexture(texture)
       region._msufBgTexture = texture
       region._msufBgColorTexture = nil
     end
-    if region._msufBgR ~= r or region._msufBgG ~= g or region._msufBgB ~= b or region._msufBgA ~= a then
+    if force == true or region._msufBgR ~= r or region._msufBgG ~= g or region._msufBgB ~= b or region._msufBgA ~= a then
       region:SetVertexColor(r, g, b, a)
       region._msufBgR, region._msufBgG, region._msufBgB, region._msufBgA = r, g, b, a
     end
-  elseif region._msufBgColorTexture ~= true or region._msufBgR ~= r or region._msufBgG ~= g or region._msufBgB ~= b or region._msufBgA ~= a then
+  elseif force == true or region._msufBgColorTexture ~= true or region._msufBgR ~= r or region._msufBgG ~= g or region._msufBgB ~= b or region._msufBgA ~= a then
     region:SetColorTexture(r, g, b, a)
     region._msufBgColorTexture = true
     region._msufBgTexture = nil
@@ -745,6 +747,32 @@ local function UnitNPCClassificationKind(unit)
   return nil
 end
 
+local function BossDisposition(unitState, unit)
+  if unitState and unitState._bossDispositionReady == true then
+    return unitState._bossDisposition
+  end
+
+  local disposition = "unknown"
+  if UnitCanAttack then
+    local attackable = UnitCanAttack("player", unit)
+    if issecretvalue(attackable) ~= true and (attackable == true or attackable == 1) then
+      disposition = "hostile"
+    end
+  end
+  if disposition == "unknown" and UnitCanAssist then
+    local assistable = UnitCanAssist("player", unit)
+    if issecretvalue(assistable) ~= true and (assistable == true or assistable == 1) then
+      disposition = "friendly"
+    end
+  end
+
+  if unitState then
+    unitState._bossDisposition = disposition
+    unitState._bossDispositionReady = true
+  end
+  return disposition
+end
+
 local function UnitNPCKind(frame, unit, spec, forText, keyOverride)
   if not IsUnitToken(unit) then
     return nil
@@ -759,9 +787,9 @@ local function UnitNPCKind(frame, unit, spec, forText, keyOverride)
     typeColorEnabled = health.npcTypeColorBar
     colorMode = health.npcColorMode
   end
+  local key = keyOverride or spec and spec.key or frame.configKey
   local useType = false
   if colorMode == "type" and typeColorEnabled ~= false then
-    local key = keyOverride or spec and spec.key or frame.configKey
     local allowed = true
     if key == "target" then
       if forText then allowed = text.npcTypeTarget ~= false else allowed = health.npcTypeTarget ~= false end
@@ -783,13 +811,18 @@ local function UnitNPCKind(frame, unit, spec, forText, keyOverride)
   end
 
   local kind
-  if useType and not UnitIsNeutralForNPCType(unit) then
+  local bossDisposition = key == "boss" and BossDisposition(unitState, unit) or nil
+  if useType and bossDisposition ~= "friendly" and not UnitIsNeutralForNPCType(unit) then
     kind = UnitNPCClassificationKind(unit)
   end
   if not kind then
     local dead = UnitIsDeadOrGhost and UnitIsDeadOrGhost(unit)
     if issecretvalue(dead) ~= true and dead then
       kind = "dead"
+    elseif bossDisposition == "friendly" then
+      kind = "friendly"
+    elseif bossDisposition == "hostile" then
+      kind = "enemy"
     elseif UnitReaction then
       local reaction = SafeNumber(UnitReaction(unit, "player"))
       if reaction and reaction >= 5 then
@@ -935,6 +968,8 @@ local function RefreshUnitState(frame, unit, spec, event)
     state._npcKindType = nil
     state._npcKindReactionReady = nil
     state._npcKindReaction = nil
+    state._bossDispositionReady = nil
+    state._bossDisposition = nil
     state.identityReady = nil
   end
   if needsIdentity and not preserveIdentity then
@@ -1206,7 +1241,7 @@ local function ApplyHealthStatusColor(bar, frame, unit, hp, maxHP, calc, event)
   return false
 end
 
-local function ApplyBackgrounds(frame, health, power)
+local function ApplyBackgrounds(frame, health, power, force)
   local spec = frame and frame.MSUFSpec
   if not spec then
     return
@@ -1228,7 +1263,7 @@ local function ApplyBackgrounds(frame, health, power)
         r, g, b = cr, cg, cb
       end
     end
-    ApplyTextureColor(frame.bg, spec.health.backgroundTexture, r, g, b, hb.a or spec.backgroundAlpha or 0.9)
+    ApplyTextureColor(frame.bg, spec.health.backgroundTexture, r, g, b, hb.a or spec.backgroundAlpha or 0.9, force)
     frame._msufHPBgTex = spec.health.backgroundTexture
   end
   local pb = spec.power and spec.power.background
@@ -1240,7 +1275,7 @@ local function ApplyBackgrounds(frame, health, power)
         r, g, b = cr, cg, cb
       end
     end
-    ApplyTextureColor(frame.powerBarBG, spec.power.backgroundTexture, r, g, b, pb.a or spec.backgroundAlpha or 0.9)
+    ApplyTextureColor(frame.powerBarBG, spec.power.backgroundTexture, r, g, b, pb.a or spec.backgroundAlpha or 0.9, force)
     frame._msufPowerBgTex = spec.power.backgroundTexture
   end
 end

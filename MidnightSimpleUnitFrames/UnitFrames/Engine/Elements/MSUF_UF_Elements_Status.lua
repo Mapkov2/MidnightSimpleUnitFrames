@@ -321,8 +321,8 @@ local function ApplyStatusFont(region, font, size, flags)
   size = tonumber(size) or 14
   if size <= 0 then size = 14 end
   if size < 6 then size = 6 elseif size > 128 then size = 128 end
-  local applied = region:SetFont(font, size, flags)
-  if applied == false then return false end
+  local ok, applied = pcall(region.SetFont, region, font, size, flags)
+  if not ok or applied == false then return false end
   local matches = _G.MSUF_FontApplicationMatches
   if type(matches) == "function" then
     return matches(region, font, size) == true
