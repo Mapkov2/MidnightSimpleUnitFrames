@@ -109,6 +109,15 @@ function A.GlobalBarRegistry.RegisterBaseBarSettings(ctx)
     RegisterBarsBoolean("roundedPowerBars", "roundedPowerBars", "Rounded Power Bars", true, {
         "rounded power bars", "rounded powerbar", "power bar corners", "powerbar corners",
     }, { category = "Global / Bars / Rounded", frameType = "globalBars", apply = ApplyRoundedBars, reason = "MSUF_ASSISTANT_ROUNDED_POWER_BARS" })
+    RegisterBarsBoolean("roundedCastbars", "roundedCastbars", "Rounded Castbars", false, {
+        "rounded castbars", "castbar corners", "cast bars rounded", "rounded cast bars",
+    }, {
+        category = "Global / Bars / Rounded",
+        frameType = "globalBars",
+        apply = ApplyRoundedBars,
+        reason = "MSUF_ASSISTANT_ROUNDED_CASTBARS",
+        description = "Rounds MSUF castbar surfaces and outlines without changing Blizzard castbars, spell icons, or the GCD bar.",
+    })
     RegisterBarsBoolean("roundedMouseover", "roundedMouseover", "Rounded Mouseover Highlights", true, {
         "rounded mouseover", "rounded hover", "rounded hover border", "mouseover rounded", "rounded mouseover highlights",
     }, { category = "Global / Bars / Rounded", frameType = "globalBars", apply = ApplyRoundedBars, reason = "MSUF_ASSISTANT_ROUNDED_MOUSEOVER" })

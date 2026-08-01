@@ -466,7 +466,15 @@ function A._ParseNameTextAnchorShortcut(text)
     end
 
     local value
-    if ContainsAny(text, GeometryTextPhrases[47]) then
+    if HasPhrase(text, "top left") or HasPhrase(text, "upper left") then
+        value = "TOPLEFT"
+    elseif HasPhrase(text, "top center") or HasPhrase(text, "top centre")
+        or HasPhrase(text, "upper center") or HasPhrase(text, "upper centre")
+    then
+        value = "TOP"
+    elseif HasPhrase(text, "top right") or HasPhrase(text, "upper right") then
+        value = "TOPRIGHT"
+    elseif ContainsAny(text, GeometryTextPhrases[47]) then
         value = "CENTER"
     elseif ContainsAny(text, GeometryTextPhrases[48]) or (HasPhrase(text, "left") and ContainsAny(text, GeometryTextPhrases[49])) then
         value = "LEFT"
@@ -560,11 +568,15 @@ function A._ParseNameTextAnchorShortcut(text)
         -- anchor is not valid, do not add a bare Show Name toggle (that would
         -- turn "anchor name left" into "show name").
         local setting = Registry and Registry:GetSetting(settingKey)
-        if not (setting and A._EnumAllowsValue(setting, value)) then return end
+        local targetValue = value
+        if tostring(settingKey):find(".nameTextAnchor", 1, true) then
+            targetValue = ({ LEFT = "FRAMELEFT", CENTER = "FRAMECENTER", RIGHT = "FRAMERIGHT" })[value] or value
+        end
+        if not (setting and A._EnumAllowsValue(setting, targetValue)) then return end
         changes[#changes + 1] = {
             setting = setting,
-            value = value,
-            valueLabel = DisplayValue(setting, value),
+            value = targetValue,
+            valueLabel = DisplayValue(setting, targetValue),
         }
         local showSetting = Registry and Registry:GetSetting(showKey)
         if showSetting and ReadSettingValue(showSetting) == false then
@@ -643,7 +655,11 @@ function A._ParseNameDirectionAmbiguityShortcut(text)
     local anchorSetting = Registry and Registry:GetSetting(anchorKey)
     local offsetSetting = Registry and Registry:GetSetting(offsetKey)
     if not (anchorSetting and offsetSetting) then return nil end
-    if not A._EnumAllowsValue(anchorSetting, value) then return nil end
+    local anchorValue = value
+    if #units == 1 then
+        anchorValue = ({ LEFT = "FRAMELEFT", RIGHT = "FRAMERIGHT" })[value] or value
+    end
+    if not A._EnumAllowsValue(anchorSetting, anchorValue) then return nil end
 
     local moveStep = tonumber(offsetSetting.moveStep or offsetSetting.step) or 10
     local delta = value == "LEFT" and -math.abs(moveStep) or math.abs(moveStep)
@@ -653,8 +669,8 @@ function A._ParseNameDirectionAmbiguityShortcut(text)
         choices = {
             {
                 setting = anchorSetting,
-                value = value,
-                valueLabel = DisplayValue(anchorSetting, value),
+                value = anchorValue,
+                valueLabel = DisplayValue(anchorSetting, anchorValue),
                 label = "Align the name " .. lower .. " (" .. tostring(anchorSetting.label or "Name Text Anchor") .. ")",
             },
             {

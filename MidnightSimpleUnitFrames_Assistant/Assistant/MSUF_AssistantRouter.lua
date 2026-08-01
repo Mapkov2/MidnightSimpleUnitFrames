@@ -583,6 +583,687 @@ function R.UnsupportedCapabilityReply(command, nearest, topic)
     return result
 end
 
+-- Feature-existence questions ("does MSUF have a GCD bar?") are their own
+-- family: they ask whether a capability exists at all, not to change it. They
+-- used to fall through every specialist to the generic "here is what I can
+-- point you at" list, which answers a different question than the one asked.
+-- The lane is strictly read-only; it never writes a setting.
+R.FEATURE_EXISTENCE_PATTERNS = {
+    "^does%s+msuf%s+have%s+(.+)$", "^does%s+msuf%s+support%s+(.+)$",
+    "^does%s+msuf%s+offer%s+(.+)$", "^does%s+msuf%s+include%s+(.+)$",
+    "^does%s+msuf%s+come%s+with%s+(.+)$", "^does%s+msuf%s+do%s+(.+)$",
+    "^does%s+msuf%s+provide%s+(.+)$", "^does%s+msuf%s+handle%s+(.+)$",
+    "^does%s+this%s+addon%s+have%s+(.+)$", "^does%s+the%s+addon%s+have%s+(.+)$",
+    "^does%s+it%s+have%s+(.+)$", "^does%s+it%s+support%s+(.+)$",
+    "^do%s+you%s+have%s+(.+)$", "^do%s+you%s+support%s+(.+)$",
+    "^has%s+msuf%s+got%s+(.+)$", "^has%s+msuf%s+(.+)$",
+    "^is%s+there%s+(.+)$", "^are%s+there%s+(.+)$",
+    "^msuf%s+have%s+(.+)$", "^any%s+(.+)$",
+    "^can%s+msuf%s+(.+)$", "^is%s+msuf%s+able%s+to%s+(.+)$",
+}
+
+-- Things users genuinely ask for that MSUF is not: answering these with a
+-- fuzzy setting list would be a false "yes". Keep this list to capabilities
+-- that are unambiguously another addon's job — anything not listed falls
+-- through to an honest "I could not find it" rather than a confident "no".
+-- R.ContainsAny matches whole normalized phrases, so singular and plural have
+-- to be listed separately ("nameplate" does not match "nameplates").
+R.FEATURE_NOT_IN_MSUF = {
+    { terms = { "damage meter", "damage meters", "dps meter", "dps meters", "damage metre",
+                "recount", "details addon", "skada", "my dps", "dps number", "hps meter", "healing meter" },
+      what = "a damage or healing meter", instead = "Details!, Recount, or Skada" },
+    { terms = { "nameplate", "nameplates", "name plate", "name plates" },
+      what = "nameplates", instead = "Plater or Blizzard's own nameplate options" },
+    { terms = { "boss mod", "boss mods", "boss timer", "boss timers", "dbm", "bigwigs",
+                "big wigs", "boss warning", "boss warnings", "encounter timer" },
+      what = "boss timers or encounter warnings", instead = "DBM or BigWigs" },
+    { terms = { "action bar", "action bars", "actionbar", "actionbars", "hotbar", "hotbars",
+                "keybind", "keybinds", "keybinding", "keybindings" },
+      what = "action bars or keybinds", instead = "Bartender, Dominos, or Blizzard's Edit Mode" },
+    { terms = { "bag", "bags", "inventory", "bank addon", "bag addon" },
+      what = "a bag or inventory replacement", instead = "Baganator or AdiBags" },
+    { terms = { "quest tracker", "questie", "quest log", "objective tracker", "quest tracking" },
+      what = "quest tracking", instead = "Questie or the Blizzard objective tracker" },
+    { terms = { "auction", "auction house", "tsm", "trade skill master", "auctionator" },
+      what = "auction house tooling", instead = "TradeSkillMaster or Auctionator" },
+    { terms = { "transmog", "wardrobe" }, what = "transmog tools", instead = "a wardrobe addon" },
+    { terms = { "chat frame", "chat frames", "chat window", "chat windows", "chat bubble", "chat bubbles" },
+      what = "chat frame customisation", instead = "Prat or Chatter" },
+    { terms = { "map addon", "world map", "minimap button bar", "coordinates", "gathering nodes" },
+      what = "map replacement", instead = "a map addon such as Carbonite" },
+    { terms = { "loot frame", "loot window", "roll frame", "loot addon" },
+      what = "loot frame customisation", instead = "a dedicated loot addon" },
+    { terms = { "combat log", "combat logging", "warcraftlogs", "warcraft logs", "log upload" },
+      what = "combat logging or log upload", instead = "the WarcraftLogs uploader" },
+    { terms = { "gear score", "gearscore", "inspect addon", "item level of others" },
+      what = "gear inspection", instead = "an inspect addon" },
+    { terms = { "voice chat", "discord" }, what = "voice chat", instead = "Discord itself" },
+    { terms = { "auto sell", "auto repair", "vendor addon", "junk seller" },
+      what = "vendoring or auto-repair automation", instead = "an inventory addon" },
+    { terms = { "dungeon finder", "group finder", "lfg addon", "premade group" },
+      what = "group finding", instead = "the Blizzard group finder or Premade Groups Filter" },
+}
+
+function R.FeatureExistenceQuestionSubject(text)
+    local norm = R.Normalize(text)
+    if norm == "" then return nil end
+    norm = R.Trim((norm:gsub("%s*%?+%s*$", "")))
+    if norm == "" then return nil end
+
+    local subject
+    for i = 1, #R.FEATURE_EXISTENCE_PATTERNS do
+        subject = norm:match(R.FEATURE_EXISTENCE_PATTERNS[i])
+        if subject then break end
+    end
+    if not subject then return nil end
+
+    -- "any ..." is the one opener that is not inherently interrogative, so it
+    -- only counts as an existence question when the addon is actually named.
+    if norm:match("^any%s+") and not norm:find("msuf", 1, true) and not norm:find("addon", 1, true) then
+        return nil
+    end
+
+    -- "can msuf ..." also fronts ordinary commands ("can msuf set player width
+    -- to 300"); a request carrying an explicit value is a mutation, not an
+    -- existence question, so leave it to the setting routes.
+    if norm:match("^can%s+msuf%s+") and norm:match("%s+to%s+[%+%-]?%d") then return nil end
+
+    subject = R.Trim(subject)
+    -- Run the article/lead-in strip twice around the verb strip: "a way to hide
+    -- the power bar" has to lose "a ", then "way to ", then "hide ", then "the "
+    -- before "power bar" is left.
+    local function stripLeadIns(value)
+        return R.Trim((value:gsub("^an%s+", ""):gsub("^a%s+", "")
+            :gsub("^the%s+", ""):gsub("^any%s+", ""):gsub("^some%s+", "")
+            :gsub("^way%s+to%s+", ""):gsub("^option%s+to%s+", "")
+            :gsub("^ability%s+to%s+", ""):gsub("^feature%s+to%s+", "")
+            :gsub("^setting%s+for%s+", ""):gsub("^settings%s+for%s+", "")
+            :gsub("^support%s+for%s+", ""):gsub("^options%s+for%s+", "")))
+    end
+    local VERB_LEAD_INS = {
+        "show ", "hide ", "display ", "change ", "set ", "make ", "track ",
+        "see ", "get ", "use ", "adjust ", "configure ", "customize ",
+        "customise ", "control ", "move ", "resize ", "enable ", "disable ",
+        "turn on ", "turn off ", "color ", "colour ", "do ",
+    }
+    -- Strip the "... in MSUF" tail before the verb, or "any move in msuf"
+    -- loses "move" and is left asking about the literal words "in msuf".
+    local function stripTails(value)
+        return R.Trim((value:gsub("%s+in%s+msuf$", ""):gsub("%s+in%s+the%s+addon$", "")
+            :gsub("%s+for%s+msuf$", ""):gsub("%s+in%s+this%s+addon$", "")
+            :gsub("%s+at%s+all$", "")))
+    end
+
+    subject = stripTails(stripLeadIns(subject))
+    -- Some real controls are named after the verb ("Show Spark", "Hide Right %
+    -- Sign"), so the verb-stripped form cannot be the only candidate. Keep the
+    -- unstripped subject as well and let the caller try both.
+    local kept = subject
+    for i = 1, #VERB_LEAD_INS do
+        local verb = VERB_LEAD_INS[i]
+        if subject:sub(1, #verb) == verb then
+            subject = R.Trim(subject:sub(#verb + 1))
+            break
+        end
+    end
+    subject = stripTails(stripLeadIns(subject))
+    if subject == "" then
+        if kept == "" then return nil end
+        return kept, nil
+    end
+    if kept == subject then return subject, nil end
+    return subject, kept
+end
+
+-- Exported so the low-latency submit lanes can stand down: they run before
+-- A.RouteInput and would otherwise read the digits inside a setting label
+-- ("Texture Layer 3 Offset X") as a value to write.
+function A.RouterIsFeatureExistenceQuestion(text)
+    if type(A.RouterHasBlockingPendingAssistantState) == "function"
+        and A.RouterHasBlockingPendingAssistantState() == true
+    then
+        return false
+    end
+    return R.FeatureExistenceQuestionSubject(text) ~= nil
+end
+
+-- Exact label -> setting, built once. Three lanes ask "does this name a
+-- control?" on every input; answering that with a linear scan over 6000+
+-- settings each time made a routed question measurably slower, which is the
+-- opposite of what a lookup guard should cost. The map is built lazily, only
+-- once a question actually uses one of the lead-ins below, and is rebuilt if
+-- the registry grows.
+function R.EnsureSettingLabelIndex()
+    local settings = R.EnsureCompleteSettingRegistry and R.EnsureCompleteSettingRegistry() or nil
+    if type(settings) ~= "table" then return nil end
+    local cached = R._settingLabelIndex
+    if type(cached) == "table" and cached.settings == settings and cached.count == #settings then
+        return cached.map
+    end
+    local map = {}
+    for i = 1, #settings do
+        local setting = settings[i]
+        local label = setting and R.Normalize(setting.label or "") or ""
+        -- First registration wins, matching the scan order it replaces.
+        if label ~= "" and map[label] == nil then map[label] = setting end
+    end
+    R._settingLabelIndex = { settings = settings, count = #settings, map = map }
+    return map
+end
+
+-- Last-resort answer for a control the explain/location shortcuts cannot
+-- format (a handful of settings carry a category but no page). Naming the
+-- control and where it lives always beats a generic "here is what I can point
+-- you at". Deliberately does not read the current value: some getters need a
+-- live frame, and this exists precisely for the cases that fall through.
+function R.NamedSettingDirectAnswer(label)
+    local map = R.EnsureSettingLabelIndex()
+    local setting = map and map[R.Normalize(label or "")] or nil
+    if not setting then return nil end
+
+    local name = tostring(setting.label or label)
+    local lines = { name .. " explanation" }
+    local category = tostring(setting.category or "")
+    if category ~= "" then
+        lines[#lines + 1] = name .. " is an MSUF setting under " .. category .. "."
+    else
+        lines[#lines + 1] = name .. " is an MSUF setting."
+    end
+
+    local kind = tostring(setting.kind or setting.valueType or "")
+    if kind == "boolean" then
+        lines[#lines + 1] = "It is an on/off switch. Examples: turn on " .. name .. "; turn off " .. name .. "."
+    elseif kind == "number" then
+        lines[#lines + 1] = "It takes a number. Example: set " .. name .. " to a value."
+    else
+        lines[#lines + 1] = "Examples: where is " .. name .. "; change " .. name .. "."
+    end
+    lines[#lines + 1] = "Ask me to open or change it and I will do that from here."
+
+    return {
+        text = table.concat(lines, "\n"),
+        status = "info", result = "info",
+        summary = "Explains a named MSUF control from the registry record.",
+    }
+end
+
+-- Lead-ins a user puts in front of a control name when asking about it.
+R.SETTING_QUESTION_LEAD_INS = {
+    "what is the default for ", "what are the options for ",
+    "i need help with ", "how do i change ", "why would i change ",
+    "what page is ", "tell me about ", "can i change ", "help with ",
+    "what does ", "what are ", "where is ", "show me ", "what is ",
+    "explain ", "find ",
+}
+
+-- The exact control a question is about, if it names one. Exported so the
+-- pending-search-result follow-up can tell "what is it" (a follow-up) from
+-- "what is Mythic Raid Bottom Right Corner Custom Color" (a new request that
+-- merely starts with the same two words).
+function A.RouterNamedSettingLabel(text)
+    local norm = R.Normalize(text)
+    if norm == "" then return nil end
+    norm = R.Trim((norm:gsub("%s*%?+%s*$", "")))
+
+    -- Several lanes ask this about the same input, and the exact-label lookup
+    -- scans the whole registry for each distinct subject. Memoize per input so
+    -- one request costs one scan rather than one per lane.
+    local cached = R._namedSettingLabelCache
+    if type(cached) == "table" and cached.text == norm then
+        return cached.label ~= false and cached.label or nil
+    end
+
+    local matched = false
+    for i = 1, #R.SETTING_QUESTION_LEAD_INS do
+        local lead = R.SETTING_QUESTION_LEAD_INS[i]
+        if norm:sub(1, #lead) == lead then
+            norm = R.Trim(norm:sub(#lead + 1))
+            matched = true
+            break
+        end
+    end
+    -- Only phrasing that actually asks about a control is worth the scan. An
+    -- ordinary command ("set player width to 300") never names a bare label,
+    -- and paying a full registry scan for it on every input is wasteful.
+    if not matched then
+        R._namedSettingLabelCache = { text = R.Trim((R.Normalize(text):gsub("%s*%?+%s*$", ""))), label = false }
+        return nil
+    end
+
+    local subject = R.Trim((norm:gsub("%s+set%s+to$", ""):gsub("%s+do$", "")
+        :gsub("^the%s+", ""):gsub("^my%s+", "")))
+    local key = R.Trim((R.Normalize(text):gsub("%s*%?+%s*$", "")))
+    if subject == "" then
+        R._namedSettingLabelCache = { text = key, label = false }
+        return nil
+    end
+
+    local map = R.EnsureSettingLabelIndex()
+    local setting = map and map[subject] or nil
+    -- "What page is X on" wraps the label in a trailing preposition. Try the
+    -- literal subject first so labels that genuinely end in "on" ("Dispel
+    -- Overlay on Current Health") still resolve, then retry without the tail.
+    if not setting and map then
+        local trimmed = subject:match("^(.-)%s+on$") or subject:match("^(.-)%s+at$")
+        if trimmed and trimmed ~= "" then setting = map[trimmed] end
+    end
+    local label = setting and tostring(setting.label or "") or ""
+    if label == "" then
+        R._namedSettingLabelCache = { text = key, label = false }
+        return nil
+    end
+    R._namedSettingLabelCache = { text = key, label = label }
+    return label
+end
+
+-- True when the input is question-shaped *and* names an exact control, e.g.
+-- "show me Mythic Raid Masque Enabled". Only the question lead-ins in
+-- R.SETTING_QUESTION_LEAD_INS can produce a label here, so an ordinary command
+-- ("set player width to 300") never matches. The immediate mutation lanes use
+-- this to stand down: a label ending in "Enabled" otherwise read as the
+-- instruction to enable it, and that write only surfaced after enough
+-- conversation state had built up to push the request past the usual guards.
+function A.RouterIsNamedSettingLookup(text)
+    if type(A.RouterHasBlockingPendingAssistantState) == "function"
+        and A.RouterHasBlockingPendingAssistantState() == true
+    then
+        return false
+    end
+    local label = A.RouterNamedSettingLabel(text)
+    return label ~= nil and label ~= ""
+end
+
+function R.FeatureNotInMsufMatch(subject)
+    local norm = R.Normalize(subject)
+    if norm == "" then return nil end
+    for i = 1, #R.FEATURE_NOT_IN_MSUF do
+        local row = R.FEATURE_NOT_IN_MSUF[i]
+        if R.ContainsAny(norm, row.terms) then return row end
+    end
+    return nil
+end
+
+function R.TryFeatureExistenceQuestion(text, Core)
+    local subject, verbatimSubject = R.FeatureExistenceQuestionSubject(text)
+    if not subject then return nil end
+
+    -- A real control always outranks the out-of-scope list. MSUF does not do
+    -- nameplates, but it does have "Boss Custom Aura 1 Include Nameplate Only";
+    -- checking the registry first keeps that from being answered "no".
+    local confirmed = R.VerifiedCapabilitySettingEntries(subject)
+    if not confirmed and verbatimSubject then
+        confirmed = R.VerifiedCapabilitySettingEntries(verbatimSubject)
+        if confirmed then subject = verbatimSubject end
+    end
+
+    if not confirmed then
+        local absent = R.FeatureNotInMsufMatch(subject)
+        if absent then
+            return {
+                text = table.concat({
+                    "No - MSUF does not do " .. absent.what .. ", so there is no setting for it.",
+                    "MSUF covers unit frames, auras, cast bars, class resources, group frames, and profiles. For " .. absent.what .. " use " .. absent.instead .. ".",
+                    "You can ask: what can you do | open Player | find auras",
+                }, "\n"),
+                status = "info", result = "info",
+                summary = "Answers a feature-existence question with a verified no.",
+            }
+        end
+
+        local topic = R.ObviousUnsupportedCapabilityTopic(subject)
+        if topic then return R.UnsupportedCapabilityReply(subject, nil, topic) end
+    end
+
+    -- Yes path: prove it with the real control before claiming MSUF has it.
+    if confirmed and A.RouterTryRegistrySettingLocationShortcut then
+        local location = A.RouterTryRegistrySettingLocationShortcut("where is " .. subject, Core, confirmed)
+        if location then
+            location.text = "Yes - MSUF has that.\n" .. tostring(location.text or "")
+                .. "\nI only looked it up; nothing changed. Tell me the value you want and I will set it."
+            location.summary = "Answers a feature-existence question with a verified yes."
+            return location
+        end
+    end
+
+    -- Whole subsystems (cast bars, class resources, profiles) have no single
+    -- "the" control, so a confident setting match is the wrong test for them.
+    -- Reviewed topic guidance is the authoritative yes in that case.
+    local K = A.Knowledge
+    local guidance = K and type(K.TopicGuidance) == "function" and K.TopicGuidance(subject) or nil
+    if guidance and (guidance.body or guidance.title) then
+        local lines = { "Yes - MSUF covers that. " .. tostring(guidance.title or "") }
+        if guidance.body then lines[#lines + 1] = tostring(guidance.body) end
+        if guidance.examples then lines[#lines + 1] = "You can ask: " .. tostring(guidance.examples) end
+        return {
+            text = R.Trim(table.concat(lines, "\n")),
+            status = "info", result = "info",
+            summary = "Answers a feature-existence question from topic guidance.",
+        }
+    end
+
+    -- Reviewed concept help covers real features that are explained rather
+    -- than owned by one control (absorbs, ready check, raid markers). Pass the
+    -- original wording: its "does msuf"/"can msuf" lead-in is what satisfies
+    -- the concept-help intent gate.
+    if K and type(K.DirectConceptHelp) == "function" then
+        local concept = K.DirectConceptHelp(text)
+        if concept and concept.text then
+            concept.text = "Yes - MSUF covers that.\n" .. tostring(concept.text)
+            concept.summary = "Answers a feature-existence question from concept help."
+            return concept
+        end
+    end
+
+    local _, nearest = R.VerifiedCapabilitySettingEntries(subject)
+    local lines = { "I could not find an MSUF control for '" .. subject .. "', so I will not claim it exists." }
+    local visible = math.min(3, type(nearest) == "table" and #nearest or 0)
+    if visible > 0 then
+        lines[#lines + 1] = "The closest real MSUF controls are:"
+        for i = 1, visible do lines[#lines + 1] = R.RegistryLocationLine(i, nearest[i].item) end
+        lines[#lines + 1] = "If none of those is it, name the frame and the result you want."
+    else
+        lines[#lines + 1] = "MSUF covers unit frames, auras, cast bars, class resources, group frames, and profiles."
+        lines[#lines + 1] = "You can ask: what can you do | open Player | find auras"
+    end
+    local result = {
+        text = table.concat(lines, "\n"),
+        status = "info", result = "info",
+        summary = "Answers a feature-existence question without inventing a capability.",
+    }
+    if visible > 0 and R.RegistryLocationResultFollowups then
+        result.searchResults = R.RegistryLocationResultFollowups(nearest, visible)
+    end
+    return result
+end
+
+-- "Reset everything" and "hide everything" name a scope, not a control. MSUF
+-- has several different wholesale resets with very different blast radii, so
+-- guessing one is worse than explaining them: "start over" used to land on the
+-- Dispel Overlay control, and "hide everything" produced a broken reply. The
+-- lane is read-only and always names the exact command that does the job.
+R.GLOBAL_SCOPE_TERMS = {
+    "everything", "all my settings", "all settings", "all of msuf",
+    "all of my settings", "the whole addon", "whole addon", "entire addon",
+    "whole ui", "entire ui", "the whole thing", "all my options",
+}
+R.GLOBAL_RESET_VERBS = {
+    "reset", "wipe", "clear", "restore", "default", "defaults",
+    "start over", "start fresh", "factory", "nuke", "erase",
+}
+-- Wording that already resolves to one exact action must not be intercepted.
+R.EXACT_RESET_PHRASES = {
+    "factory reset all", "reset active profile", "reset current page",
+    "reset current menu page", "reset all unit positions", "reset unit options",
+    "reset all aura overrides", "reset all aura style overrides",
+    "reset aura scope overrides", "reset menu session changes",
+    "reset frame positions", "reset my profile", "reset profile",
+}
+
+function R.TryGlobalScopeGuidance(text)
+    local norm = R.Normalize(text)
+    if norm == "" then return nil end
+    norm = R.Trim((norm:gsub("%s*%?+%s*$", "")))
+
+    for i = 1, #R.EXACT_RESET_PHRASES do
+        if R.HasNormalizedPhrase(norm, R.EXACT_RESET_PHRASES[i]) then return nil end
+    end
+
+    local globalScope = R.ContainsAny(norm, R.GLOBAL_SCOPE_TERMS)
+    local resetVerb = R.ContainsAny(norm, R.GLOBAL_RESET_VERBS)
+    -- "reset msuf" and "start over" carry the scope in the verb phrase itself.
+    local impliedGlobalReset = norm:match("^reset%s+msuf$") ~= nil
+        or norm:match("^start%s+over$") ~= nil
+        or norm:match("^start%s+fresh$") ~= nil
+        or norm:match("^restore%s+defaults?$") ~= nil
+        or norm:match("^wipe%s+my%s+settings$") ~= nil
+
+    if (resetVerb and globalScope) or impliedGlobalReset then
+        return {
+            text = table.concat({
+                "'Everything' can mean two very different resets in MSUF, so I did not run either one yet.",
+                "1. Reset Active Profile - clears the profile you are using now and leaves your other profiles alone. Say: reset active profile",
+                "2. Factory Reset All - clears every profile and every global option, back to a fresh install. Say: factory reset all",
+                "Both ask for confirmation before anything changes, and neither can be undone with 'undo'. If you might want the current setup back, save it first: say open profiles and use Export there.",
+                "If you only meant one area, name it instead - for example: reset all unit positions, reset all aura overrides, or reset cast bar colors.",
+            }, "\n"),
+            status = "info", result = "info",
+            summary = "Explains the wholesale reset options instead of guessing one.",
+        }
+    end
+
+    local hideVerb = R.ContainsAny(norm, { "hide", "turn off", "disable", "remove" })
+    if hideVerb and globalScope then
+        return {
+            text = table.concat({
+                "'Everything' covers several separate MSUF switches, so I did not turn anything off yet. Tell me which one you meant:",
+                "1. Every unit frame (Player, Target, Focus, Pet, and so on). Say: hide all frames",
+                "2. Every group frame (Party, Raid, Mythic Raid). Say: turn off party frames and turn off raid frames",
+                "3. Only the auras. Say: hide all player buffs, or hide all target debuffs",
+                "4. Only the text on the frames. Say: hide player name text, or hide player hp text",
+                "If you want MSUF out of the way completely, disabling the addon in the AddOns list is cleaner than switching off every option.",
+            }, "\n"),
+            status = "info", result = "info",
+            summary = "Explains what a wholesale hide would cover instead of guessing.",
+        }
+    end
+
+    return nil
+end
+
+-- "The bar color for NPCs should be class color" names a qualifier (NPCs) that
+-- the generic bar-colour controls do not cover. The colour lanes matched
+-- "bar color ... class color", dropped the qualifier, and wrote Party Bar Color
+-- Mode instead -- a silent wrong write. MSUF owns this as one global switch,
+-- General Npc Class Color Bar, so route the request there and say plainly that
+-- it is not per-frame.
+R.NPC_BAR_CLASS_COLOR_OFF_TERMS = {
+    "should not", "shouldnt", "should nt", "no longer", "stop", "disable",
+    "turn off", "dont", "do not", "never", "remove", "off",
+}
+
+-- Exported so the low-latency mutation lane stands down: it runs before
+-- A.RouteInput and is the lane that wrote Party Bar Color Mode.
+function A.RouterIsNpcQualifiedBarColorRequest(text)
+    if type(A.RouterHasBlockingPendingAssistantState) == "function"
+        and A.RouterHasBlockingPendingAssistantState() == true
+    then
+        return false
+    end
+    return R.NpcQualifiedBarColorSubject(text) == true
+end
+
+function R.NpcQualifiedBarColorSubject(text)
+    local norm = R.Normalize(text)
+    if norm == "" then return false end
+    if not R.ContainsAny(norm, { "npc", "npcs" }) then return false end
+    -- Wording that already names the control resolves correctly on its own.
+    if R.HasNormalizedPhrase(norm, "npc class color bar") then return false end
+
+    local barIntent = R.ContainsAny(norm, {
+        "bar color", "bar colors", "bars color", "health bar", "health bars",
+        "hp bar", "hp bars", "healthbar", "bar colour", "bar colours",
+    })
+    local classIntent = R.ContainsAny(norm, {
+        "class color", "class colors", "class colour", "class colours",
+        "class colored", "class coloured", "classcolor", "class colouring",
+        "class coloring",
+    })
+    return (barIntent and classIntent) == true
+end
+
+function R.TryNpcQualifiedBarColorRequest(text)
+    if not R.NpcQualifiedBarColorSubject(text) then return nil end
+    local norm = R.Normalize(text)
+
+    local setting = A.Registry and type(A.Registry.GetSetting) == "function"
+        and A.Registry:GetSetting("general.npcClassColorBar") or nil
+    if not setting then return nil end
+
+    local enable = not R.ContainsAny(norm, R.NPC_BAR_CLASS_COLOR_OFF_TERMS)
+    local result = A.ExecutePlan({
+        kind = "changes",
+        changes = { { setting = setting, value = enable } },
+        label = "NPC class-coloured bars",
+        summary = "Routes an NPC-qualified bar colour request to the NPC control.",
+    })
+    if type(result) == "table" then
+        local note = "NPC bar colouring is one global MSUF switch, so it covers every frame that can show an NPC rather than a single frame."
+        result.text = tostring(result.text or "") .. "\n" .. note
+    end
+    return result
+end
+
+-- "No, I meant target" corrects the scope of the change that just happened. It
+-- is not a new standalone request and not an undo: the user still wants the
+-- same thing done, just somewhere else. Without this the correction fell
+-- through to a generic "I did not catch which MSUF option you meant", leaving
+-- the wrong change applied.
+R.CORRECTION_RETARGET_PATTERNS = {
+    "^no%s*,?%s*i%s+meant%s+(.+)$", "^no%s*,?%s*i%s+mean%s+(.+)$",
+    "^sorry%s*,?%s*i%s+meant%s+(.+)$", "^sorry%s*,?%s*i%s+mean%s+(.+)$",
+    "^i%s+meant%s+(.+)$", "^i%s+mean%s+(.+)$",
+    "^no%s*,?%s*for%s+(.+)$", "^not%s+that%s*,?%s*i%s+meant%s+(.+)$",
+    "^no%s+not%s+that%s*,?%s*(.+)$",
+}
+
+-- Scope words that a correction can replace inside the previous request.
+R.CORRECTION_SCOPE_TOKENS = {
+    "target of target", "focus target", "mythic raid", "npcs", "npc",
+    "player", "target", "focus", "pet", "boss", "party", "raid",
+}
+
+function R.CorrectionRetargetSubject(text)
+    local norm = R.Normalize(text)
+    if norm == "" then return nil end
+    norm = R.Trim((norm:gsub("%s*%?+%s*$", "")))
+    for i = 1, #R.CORRECTION_RETARGET_PATTERNS do
+        local subject = norm:match(R.CORRECTION_RETARGET_PATTERNS[i])
+        if subject then
+            subject = R.Trim((subject:gsub("^for%s+", ""):gsub("^the%s+", "")))
+            if subject ~= "" then return subject end
+        end
+    end
+    return nil
+end
+
+function R.LastSubmittedUserRequest(exclude)
+    local adb = type(A.EnsureDB) == "function" and A.EnsureDB() or nil
+    local history = type(adb) == "table" and adb.history or nil
+    if type(history) ~= "table" then return nil end
+    exclude = R.Normalize(exclude or "")
+    for i = #history, 1, -1 do
+        local item = history[i]
+        if type(item) == "table" and tostring(item.role or "") == "user" then
+            local candidate = R.Trim(tostring(item.text or ""))
+            if candidate ~= "" and R.Normalize(candidate) ~= exclude then return candidate end
+        end
+    end
+    return nil
+end
+
+function R.TryRetargetCorrection(text, coreHandler)
+    if R._correctionRetargetActive then return nil end
+    local subject = R.CorrectionRetargetSubject(text)
+    if not subject then return nil end
+
+    local previous = R.LastSubmittedUserRequest(text)
+    if not previous then return nil end
+
+    -- A correction that carries its own verb is a complete replacement
+    -- request; otherwise it only names the scope, so graft it onto what was
+    -- asked before.
+    local corrected
+    if R.ContainsAny(subject, R.COMMAND_TERMS) then
+        corrected = subject
+    else
+        local previousNorm = R.Normalize(previous)
+        for i = 1, #R.CORRECTION_SCOPE_TOKENS do
+            local token = R.CORRECTION_SCOPE_TOKENS[i]
+            if R.HasNormalizedPhrase(previousNorm, token) then
+                corrected = (previousNorm:gsub("%f[%w]" .. token .. "%f[%W]", subject, 1))
+                break
+            end
+        end
+        if not corrected then corrected = previousNorm .. " for " .. subject end
+    end
+    corrected = R.Trim(corrected or "")
+    if corrected == "" or R.Normalize(corrected) == R.Normalize(previous) then return nil end
+
+    local undone = type(A.UndoLast) == "function" and A.UndoLast() == true
+
+    R._correctionRetargetActive = true
+    local result = A.HandleInput(corrected, { skipTurnSerialAdvance = true })
+    R._correctionRetargetActive = nil
+
+    if type(result) == "table" then
+        local prefix = undone
+            and "Got it - I reverted the previous change and used what you meant instead."
+            or "Got it - I used what you meant instead."
+        result.text = prefix .. "\n" .. tostring(result.text or "")
+        result.summary = "Re-applies the previous request against the corrected subject."
+    end
+    return result
+end
+
+-- "Turn off all full frame effects of auras on player" describes MSUF's
+-- frame-wide, aura-driven effect by what it looks like rather than by its name.
+-- The control is the UnitFrame Dispel Overlay family: an overlay tinted by the
+-- dispel type of an aura on the unit, drawn across the whole frame. Nothing in
+-- the registry is called "full frame effect", so the request used to reach the
+-- aura clarification instead of the control that owns it.
+R.FULL_FRAME_EFFECT_SHAPE_TERMS = {
+    "full frame", "fullframe", "whole frame", "entire frame",
+    "frame wide", "framewide", "full bar", "across the frame",
+}
+R.FULL_FRAME_EFFECT_KIND_TERMS = {
+    "effect", "effects", "overlay", "overlays", "glow", "glows",
+    "tint", "tints", "flash", "flashes",
+}
+R.FULL_FRAME_EFFECT_SOURCE_TERMS = {
+    "aura", "auras", "buff", "buffs", "debuff", "debuffs", "dispel", "dispels",
+}
+
+function R.FullFrameAuraEffectRequest(text)
+    local norm = R.Normalize(text)
+    if norm == "" then return nil end
+    if not R.ContainsAny(norm, R.FULL_FRAME_EFFECT_SHAPE_TERMS) then return nil end
+    if not R.ContainsAny(norm, R.FULL_FRAME_EFFECT_KIND_TERMS) then return nil end
+    -- Without an aura/dispel word this is some other frame-wide request.
+    if not R.ContainsAny(norm, R.FULL_FRAME_EFFECT_SOURCE_TERMS) then return nil end
+    return norm
+end
+
+function R.TryFullFrameAuraEffectRequest(text)
+    local norm = R.FullFrameAuraEffectRequest(text)
+    if not norm then return nil end
+
+    local unit = R.UnitScopeFromText and select(1, R.UnitScopeFromText(norm)) or nil
+    local key = unit and ("barScope." .. unit .. ".unitDispelOverlayEnabled")
+        or "general.unitDispelOverlayEnabled"
+    local setting = A.Registry and type(A.Registry.GetSetting) == "function"
+        and A.Registry:GetSetting(key) or nil
+    if not setting then return nil end
+
+    local enable = not R.ContainsAny(norm, {
+        "turn off", "off", "disable", "remove", "hide", "no", "without",
+        "stop", "get rid of", "kill", "dont", "do not",
+    })
+
+    local result = A.ExecutePlan({
+        kind = "changes",
+        changes = { { setting = setting, value = enable } },
+        label = tostring(setting.label or "Dispel Overlay"),
+        summary = "Routes a frame-wide aura effect request to the dispel overlay control.",
+    })
+    if type(result) == "table" then
+        result.text = tostring(result.text or "")
+            .. "\nMSUF calls that effect the UnitFrame Dispel Overlay: it tints the whole frame by the dispel type of an aura on the unit."
+            .. "\nIts detection, style, opacity and health-only variants are separate controls, for example: set "
+            .. tostring(setting.label or "dispel overlay"):gsub(" Dispel Overlay$", " Dispel Overlay Opacity") .. " to 0.5."
+    end
+    return result
+end
+
 function R.IsSemanticAuraFilterNegation(text)
     local norm = R.Normalize(text)
     if not R.ContainsAny(norm, { "aura", "auras", "buff", "buffs", "debuff", "debuffs" }) then return false end
@@ -2081,6 +2762,13 @@ function R.TryReadabilityShortcut(text)    local norm = R.Normalize(text)
     }
     for i = 1, #copyTerms do
         if R.HasNormalizedPhrase(norm, copyTerms[i]) then return nil end
+    end
+    -- READABILITY_FRAME_TERMS contains "unitframe", which is also the prefix of
+    -- real control names. A question naming one exactly ("what is UnitFrame
+    -- Dispel Overlay") is about that control, not about how to make the UI
+    -- easier to read.
+    if type(A.RouterNamedSettingLabel) == "function" and A.RouterNamedSettingLabel(text) then
+        return nil
     end
     if norm == "" or not R.ContainsAny(norm, R.READABILITY_PROBLEM_TERMS) then return nil end
     if R.ContainsAny(norm, {
@@ -4371,10 +5059,10 @@ A.RouterTryGroupLayoutProblemShortcut = function(text, coreHandler)
         and R.ContainsAny(norm, { "show", "showing", "visible", "instead", "fallback", "wrong" })
     then
         return A.RouterGroupLayoutReply(
-            "Blizzard group-frame fallback help",
-            "Blizzard fallback controls what happens to Blizzard party or raid frames when the MSUF group frame is disabled. If Blizzard frames are showing instead of MSUF, check whether MSUF Party/Raid is enabled and set the fallback mode intentionally instead of guessing.",
-            "show party group frames; set party blizzard fallback to none; set raid blizzard fallback to auto; open group layout.",
-            "Open Group Layout | Check Party Frames | Check Raid Frames"
+            "Group-frame provider help",
+            "MSUF uses one provider switch for Party, Raid, and Mythic Raid. Off hands all group frames back to WoW; on enables MSUF and disables Blizzard group frames. The change takes effect after /reload.",
+            "enable MSUF group frames; disable MSUF group frames; open group layout.",
+            "Open Group Layout | Check Group Frame Provider"
         )
     end
 
@@ -5140,6 +5828,14 @@ A.RouterTryAuraFilterStatusShortcut = function(norm)
     norm = R.Normalize(norm)
     if not R.AuraFilterStatusWantsAnswer(norm) then return nil end
 
+    -- A question that names one exact control is about that control. Filter
+    -- vocabulary appears inside plenty of unrelated labels ("Gameplay Enable
+    -- Nameplate Counter"), and answering those with the generic aura-filter
+    -- overview explains something the user did not ask about.
+    if type(A.RouterNamedSettingLabel) == "function" and A.RouterNamedSettingLabel(norm) then
+        return nil
+    end
+
     if R.AuraFilterRecommendationWantsAnswer(norm) then
         return R.AuraRaidFilterRecommendationReply(norm)
     end
@@ -5773,11 +6469,19 @@ function R.TextMovementIntent(text, subject)
         elseif R.ContainsAny(actionable, { "top right", "upper right" }) then fixedAnchorValue = "TOPRIGHT"
         elseif R.ContainsAny(actionable, { "bottom left", "lower left" }) then fixedAnchorValue = "BOTTOMLEFT"
         elseif R.ContainsAny(actionable, { "bottom right", "lower right" }) then fixedAnchorValue = "BOTTOMRIGHT"
+        elseif R.ContainsAny(actionable, { "top center", "top centre", "upper center", "upper centre" }) then fixedAnchorValue = "TOP"
         elseif R.ContainsAny(actionable, { "center", "centre", "middle" }) then fixedAnchorValue = "CENTER"
         elseif R.ContainsAny(actionable, { "left" }) then fixedAnchorValue = "LEFT"
         elseif R.ContainsAny(actionable, { "right" }) then fixedAnchorValue = "RIGHT"
         elseif R.ContainsAny(actionable, { "top", "upper" }) then fixedAnchorValue = "TOP"
         elseif R.ContainsAny(actionable, { "bottom", "lower" }) then fixedAnchorValue = "BOTTOM" end
+    end
+    if fixedAnchorValue and not isGroup then
+        fixedAnchorValue = ({
+            LEFT = "FRAMELEFT",
+            CENTER = "FRAMECENTER",
+            RIGHT = "FRAMERIGHT",
+        })[fixedAnchorValue] or fixedAnchorValue
     end
 
     local hasLeft = R.ContainsAny(actionable, { "left", "to the left" })
@@ -12180,11 +12884,25 @@ function R.OpenEndedSettingEntries(subject, norm)
     if not entries then entries, searchCold = R.RegistrySettingSearchEntries(canonical, norm, 12) end
     if not entries then return nil, canonical, nil, searchCold end
 
+    -- A generated colour component (…ColorR/G/B/A) is never what an open-ended
+    -- request means unless it actually says "channel": "set player alpha to 50"
+    -- is frame opacity, not the alpha of some portrait border colour. The
+    -- registry search path already drops these; this path has to as well or the
+    -- channels crowd out the real control and force a pointless clarification.
+    local requestsChannel = R.ContainsAny(norm, {
+        "red channel", "green channel", "blue channel", "alpha channel",
+        "color channel", "colour channel", "channel value",
+    })
+
     local filtered, seen, explicitValue, namesAnySetting = {}, {}, false, false
     for i = 1, #entries do
         local entry = entries[i]
         local item = entry and entry.item
         local setting = item and item.setting
+        if setting and setting.assistantColorChannel == true and not requestsChannel then
+            setting = nil
+            item = nil
+        end
         local key = setting and tostring(setting.key or "") or ""
         local namesSetting, hasExplicitTail = R.OpenEndedSubjectSettingRelation(canonical, setting)
         local semanticMatch = entry.manual == true or namesSetting or R.OpenEndedSubjectMatchesSetting(canonical, setting)
@@ -15157,6 +15875,47 @@ function A.RouteInput(text, coreHandler)
         local pendingResult = A.HandlePendingFlow(text)
         if pendingResult then return pendingResult end
     end
+    -- "Does MSUF have X?" asks whether a capability exists; it is never a
+    -- request to change one. This has to run ahead of the mutation
+    -- specialists: setting labels routinely contain digits ("Texture Layer 3
+    -- Offset X"), and a value-hungry lane downstream would read that digit as
+    -- the value to write and silently move the frame. Pending confirmations
+    -- still win, so an in-flight choice is not hijacked.
+    local hasBlockingPending = type(A.RouterHasBlockingPendingAssistantState) == "function"
+        and A.RouterHasBlockingPendingAssistantState() == true
+    if not hasBlockingPending and R.TryFeatureExistenceQuestion then
+        local existence = R.TryFeatureExistenceQuestion(text, coreHandler)
+        if existence then return existence end
+    end
+
+    -- "Reset everything" / "hide everything" name a scope rather than a
+    -- control. Explain the real options instead of letting a fuzzy lane pick
+    -- one wholesale action on the user's behalf.
+    if not hasBlockingPending and R.TryGlobalScopeGuidance then
+        local scoped = R.TryGlobalScopeGuidance(text)
+        if scoped then return scoped end
+    end
+
+    -- An NPC-qualified bar colour request must reach the NPC control instead of
+    -- the nearest generic bar colour mode.
+    if not hasBlockingPending and R.TryNpcQualifiedBarColorRequest then
+        local npcBar = R.TryNpcQualifiedBarColorRequest(text)
+        if npcBar then return npcBar end
+    end
+
+    -- A frame-wide aura effect is described by its look, not its name.
+    if not hasBlockingPending and R.TryFullFrameAuraEffectRequest then
+        local fullFrame = R.TryFullFrameAuraEffectRequest(text)
+        if fullFrame then return fullFrame end
+    end
+
+    -- "No, I meant target" re-aims the change that just happened rather than
+    -- starting a new request.
+    if not hasBlockingPending and R.TryRetargetCorrection then
+        local retarget = R.TryRetargetCorrection(text, coreHandler)
+        if retarget then return retarget end
+    end
+
     if R.IsExplicitMutationRefusal(text) then
         local action = R.ExplicitMutationRefusalAction(text)
         if type(A.CancelPendingMutationState) == "function" then
@@ -15446,6 +16205,19 @@ function A.RouteInput(text, coreHandler)
             end
         end
         if navigation then return R.AsNavigationResult(navigation) end
+        -- "Show me <exact control>" names a real destination even when the
+        -- navigation resolvers cannot reach it (no live menu, or a control the
+        -- bridge does not expose). Say where it lives instead of claiming the
+        -- wording was unclear -- the wording was exact.
+        local navNamed = type(A.RouterNamedSettingLabel) == "function"
+            and A.RouterNamedSettingLabel(text) or nil
+        if navNamed and navNamed ~= "" then
+            local navLocated = A.RouterTryRegistrySettingLocationShortcut
+                and A.RouterTryRegistrySettingLocationShortcut("where is " .. navNamed, Core)
+            if navLocated then return navLocated end
+            local navDirect = R.NamedSettingDirectAnswer and R.NamedSettingDirectAnswer(navNamed)
+            if navDirect then return navDirect end
+        end
         return {
             text = "I could not identify one exact MSUF destination from that wording, so I kept every setting unchanged. Name the page or exact control you want me to open.",
             status = "info",
@@ -16027,6 +16799,12 @@ function A.RouteInput(text, coreHandler)
 
     if not hasBlockingPendingState and not pendingResultReply
         and R.LooksLikeDirectDefinitionQuestion(text)
+        -- "What is <exact control name>" is a definition question about that
+        -- control. Knowledge answers the topic its words belong to, which sent
+        -- "what is Castbar Texture" to general cast-bar guidance instead of the
+        -- texture control the player named. Everything that is not an exact
+        -- label still goes to Knowledge.
+        and not (type(A.RouterNamedSettingLabel) == "function" and A.RouterNamedSettingLabel(text))
         and A.Knowledge and type(A.Knowledge.Answer) == "function"
     then
         local answer = A.Knowledge.Answer(text, { currentPage = M and M.activeKey })
@@ -16116,6 +16894,25 @@ function A.RouteInput(text, coreHandler)
                 -- a real answer ("why would I use a focus frame") with a
                 -- generic control list. Failing closed is the fallback, not the
                 -- first move.
+                -- A lookup that names one exact control is about that control.
+                -- Knowledge answers the *topic* a phrase belongs to, which is
+                -- the wrong answer here: "what is Castbar Texture" came back
+                -- with general cast-bar guidance, and "what is UnitFrame
+                -- Dispel Overlay" with scaling-readability help. Knowledge
+                -- still owns every lookup that does not name a control, and it
+                -- has no article for most of the 6000+ leaf settings anyway.
+                local namedLookup = type(A.RouterNamedSettingLabel) == "function"
+                    and A.RouterNamedSettingLabel(text) or nil
+                if namedLookup and namedLookup ~= "" then
+                    local explained = A.RouterTryRegistrySettingExplainShortcut
+                        and A.RouterTryRegistrySettingExplainShortcut("explain " .. namedLookup, Core)
+                    if explained then return explained end
+                    local located = A.RouterTryRegistrySettingLocationShortcut
+                        and A.RouterTryRegistrySettingLocationShortcut("where is " .. namedLookup, Core)
+                    if located then return located end
+                    local direct = R.NamedSettingDirectAnswer and R.NamedSettingDirectAnswer(namedLookup)
+                    if direct then return direct end
+                end
                 if A.Knowledge and type(A.Knowledge.Answer) == "function" then
                     local knowledgeAnswer = A.Knowledge.Answer(text, { currentPage = M and M.activeKey })
                     if knowledgeAnswer then return knowledgeAnswer end

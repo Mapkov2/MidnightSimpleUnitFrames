@@ -1636,8 +1636,13 @@ local READ_ONLY_QUESTION_PREFIXES = {
 
 local READ_ONLY_LOOKUP_PREFIXES = {
     "explain", "describe", "list", "current", "status", "tell me",
-    -- "help with X" asks about X; it is not permission to switch X on.
+    -- "help with X" asks about X; it is not permission to switch X on. The
+    -- "i need help with" phrasing has to be listed in full: ActionableText does
+    -- not strip "i need", so it never reached the "help with" prefix and
+    -- "i need help with Boss Show Leader Icon" was executed as "show leader
+    -- icon" -- a question that switched the icon on.
     "help with", "help me with", "help on", "help for", "info about",
+    "i need help with", "i need help on", "need help with", "i need help",
     "information about", "i want to know about", "what page is",
     "erklaere", "beschreibe", "liste", "aktuell", "aktueller", "aktuelle", "aktuelles", "status",
     "hilfe zu", "hilfe bei", "info ueber", "infos ueber",

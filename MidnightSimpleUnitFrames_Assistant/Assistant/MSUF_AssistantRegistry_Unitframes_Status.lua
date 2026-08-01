@@ -288,4 +288,94 @@ function A.UnitframesRegistry.RegisterStatusIconSettings(ctx, unit)
         applyOpts = { preview = true, text = true },
         applyWhenUnchanged = true,
     })
+
+    A.UnitframesRegistry.RegisterStatusTextColorSettings(ctx, unit)
+end
+
+-- Beta 44 gave each status indicator its own text colour. They are stored on
+-- the unit as <colorPrefix>Color{R,G,B} (the colorPrefix values come straight
+-- from the menu's status specs), and the override is opt-in: an incomplete
+-- triple means "keep following the frame's font colour", which is why the
+-- getter falls back to white rather than inventing a stored value.
+local STATUS_TEXT_COLOR_SPECS = {
+    { prefix = "levelIndicator",     label = "Level Text Color",      nouns = { "level text color", "level color", "level indicator color" } },
+    { prefix = "raceIndicator",      label = "Race Text Color",       nouns = { "race text color", "race color", "race indicator color" } },
+    { prefix = "classTextIndicator", label = "Class Text Color",      nouns = { "class text color", "class indicator color" } },
+    { prefix = "raidGroupName",      label = "Raid Group Text Color", nouns = { "raid group text color", "raid group name color", "group number color" } },
+    { prefix = "statusText",         label = "Dead Text Color",       nouns = { "dead text color", "dead color", "death text color" } },
+    { prefix = "statusGhostText",    label = "Ghost Text Color",      nouns = { "ghost text color", "ghost color" } },
+    { prefix = "statusAFKText",      label = "AFK Text Color",        nouns = { "afk text color", "afk color", "away text color" } },
+    { prefix = "statusDNDText",      label = "DND Text Color",        nouns = { "dnd text color", "dnd color", "do not disturb text color" } },
+}
+
+function A.UnitframesRegistry.RegisterStatusTextColorSettings(ctx, unit)
+    if type(ctx) ~= "table" or type(unit) ~= "string" then return end
+
+    -- The status loop's ctx carries the unit helpers but not the Registry or
+    -- the apply hook, so take those from the module namespace rather than
+    -- refusing to register.
+    local Registry = ctx.Registry or A.Registry
+    local UnitDB = ctx.UnitDB
+    local ApplyUnit = ctx.ApplyUnit
+    local AddAliasesForUnit = ctx.AddAliasesForUnit
+
+    if not (Registry and type(Registry.RegisterSetting) == "function") then return end
+    if type(UnitDB) ~= "function" or type(AddAliasesForUnit) ~= "function" then return end
+
+    local UNIT_LABELS = ctx.UNIT_LABELS or {}
+    local unitLabel = UNIT_LABELS[unit] or unit
+
+    local function Clamp01(value)
+        value = tonumber(value)
+        if value == nil then return nil end
+        if value < 0 then return 0 end
+        if value > 1 then return 1 end
+        return value
+    end
+
+    for _, spec in ipairs(STATUS_TEXT_COLOR_SPECS) do
+        local prefix = spec.prefix
+        local aliases = {}
+        for _, noun in ipairs(spec.nouns) do
+            aliases[#aliases + 1] = unit .. " " .. noun
+            AddAliasesForUnit(aliases, unit, noun)
+        end
+
+        Registry:RegisterSetting({
+            key = unit .. "." .. prefix .. "Color",
+            label = tostring(unitLabel) .. " " .. spec.label,
+            category = tostring(unitLabel) .. " / Status Text Colors",
+            page = "uf_" .. unit,
+            unit = unit,
+            frameType = "unitframe",
+            attribute = "statusTextColor",
+            type = "color",
+            aliases = aliases,
+            exactAliases = aliases,
+            get = function()
+                local conf = UnitDB(unit)
+                local r = Clamp01(conf and conf[prefix .. "ColorR"])
+                local g = Clamp01(conf and conf[prefix .. "ColorG"])
+                local b = Clamp01(conf and conf[prefix .. "ColorB"])
+                if r and g and b then return { r = r, g = g, b = b } end
+                return { r = 1, g = 1, b = 1 }
+            end,
+            set = function(value)
+                local conf = UnitDB(unit)
+                if type(conf) ~= "table" or type(value) ~= "table" then return end
+                conf[prefix .. "ColorR"] = Clamp01(value.r) or 1
+                conf[prefix .. "ColorG"] = Clamp01(value.g) or 1
+                conf[prefix .. "ColorB"] = Clamp01(value.b) or 1
+            end,
+            apply = function()
+                if type(ApplyUnit) == "function" then
+                    ApplyUnit(unit, "MSUF_ASSISTANT_STATUS_TEXT_COLOR", { preview = true, text = true })
+                    return
+                end
+                local refresh = _G.MSUF_RequestStatusIconsRefreshForCurrent
+                if type(refresh) == "function" then refresh() end
+            end,
+            combatSafe = false,
+        })
+    end
 end

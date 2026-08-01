@@ -4198,59 +4198,6 @@ P.ParseGroupPlayerFirstInRoleShortcut = function(text)
     return P.GroupShortcutResponse(text, changes, concrete, "Group frame player first in role", "Changes the Player First in Role sorting toggle.")
 end
 
-local GROUP_BLIZZARD_FALLBACK_TERMS = {
-    "blizzard fallback", "blizzard fallback mode", "fallback mode", "fallback modus",
-    "if this switch is off", "when disabled", "when group frames are disabled",
-    "disabled group frame behavior", "disabled group frame blizzard behavior",
-    "wenn dieser schalter aus ist", "wenn der schalter aus ist", "wenn gruppenframes aus sind",
-    "wenn gruppenframes deaktiviert sind", "wenn party aus ist", "wenn raid aus ist",
-    "wenn party frames aus sind", "wenn raid frames aus sind",
-}
-
-local GROUP_BLIZZARD_FRAME_TERMS = {
-    "blizzard group frames", "blizzard group frame", "blizzard party frames", "blizzard raid frames",
-    "blizzard frames", "default group frames", "default party frames", "default raid frames",
-    "standard group frames", "standard party frames", "standard raid frames",
-    "blizzard gruppenframes", "blizzard gruppen frames",
-    "standard gruppenframes", "standard gruppen frames", "standardrahmen", "standard rahmen",
-}
-
-local function HasGroupBlizzardFallbackIntent(text)
-    if ContainsAny(text, RegistryPhrases[262]) then return false end
-    local groups = DetectGroups(text)
-    if ContainsAny(text, GROUP_BLIZZARD_FALLBACK_TERMS) then return true end
-    if #groups == 0 then return false end
-    if not ContainsAny(text, GROUP_BLIZZARD_FRAME_TERMS) then return false end
-    return ContainsAny(text, RegistryPhrases[263])
-end
-
-local function GroupBlizzardFallbackValueForText(text)
-    if ContainsAny(text, RegistryPhrases[264]) then
-        return "AUTO"
-    end
-    if ContainsAny(text, RegistryPhrases[265]) then
-        return "NONE"
-    end
-    if ContainsAny(text, RegistryPhrases[266]) then
-        return "SHOW"
-    end
-    if ContainsAny(text, RegistryPhrases[267]) and ContainsAny(text, GROUP_BLIZZARD_FRAME_TERMS) then return "SHOW" end
-    if ContainsAny(text, RegistryPhrases[268]) and ContainsAny(text, GROUP_BLIZZARD_FRAME_TERMS) then return "NONE" end
-    return nil
-end
-
-P.ParseGroupBlizzardFallbackShortcut = function(text)
-    if not HasGroupBlizzardFallbackIntent(text) then return nil end
-    local value = GroupBlizzardFallbackValueForText(text)
-    if value == nil then return nil end
-    local scopes, concrete = P.GroupShortcutScopes(text)
-    local changes = {}
-    for i = 1, #scopes do
-        AddRegisteredChange(changes, "gf_" .. tostring(scopes[i]) .. ".blizzardFallbackMode", value)
-    end
-    return P.GroupShortcutResponse(text, changes, concrete, "Group frame Blizzard fallback", "Changes the Group Frame Blizzard Fallback Mode dropdown.")
-end
-
 local GROUP_AGGRO_ROLE_INTENT_TERMS = {
     "aggro shows for", "threat shows for", "aggro role filter", "threat role filter",
     "aggro non tank", "aggro non tanks", "aggro not tank", "aggro not tanks",
@@ -4471,8 +4418,6 @@ P.ParseMiscRegistryShortcut = function(text, raw)
     if groupPreserveRaidGroups then return groupPreserveRaidGroups end
     local groupPlayerFirst = P.ParseGroupPlayerFirstInRoleShortcut and P.ParseGroupPlayerFirstInRoleShortcut(text)
     if groupPlayerFirst then return groupPlayerFirst end
-    local groupBlizzardFallback = P.ParseGroupBlizzardFallbackShortcut and P.ParseGroupBlizzardFallbackShortcut(text)
-    if groupBlizzardFallback then return groupBlizzardFallback end
     local groupAggroRole = P.ParseGroupAggroRoleFilterShortcut and P.ParseGroupAggroRoleFilterShortcut(text)
     if groupAggroRole then return groupAggroRole end
     local groupBoolean = P.ParseGroupBooleanRegistryShortcut and P.ParseGroupBooleanRegistryShortcut(text)

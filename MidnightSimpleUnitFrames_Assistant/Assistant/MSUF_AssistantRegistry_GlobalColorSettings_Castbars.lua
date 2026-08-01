@@ -102,4 +102,59 @@ function A.GlobalRegistry.RegisterCastbarColorSettings(ctx)
     end, function(r, g, b)
         SetTableRGB(GeneralDB(), "kickNotReadyColor", r, g, b)
     end, { category = "Colors / Cast Bar", attribute = "kickNotReadyColor", defaultR = 1, defaultG = 0, defaultB = 0, apply = ApplyCastbarColors })
+
+    -- Beta 44 lets each castbar colour its spell name, cast time and target
+    -- name separately (Runtime/MSUF_Colors.lua: <prefix><Detail>Color{R,G,B}).
+    -- The override is opt-in: unset keeps following the shared castbar text
+    -- colour, so reads fall back to that rather than inventing a value, and
+    -- writes go through the product's own setter so the refresh it schedules
+    -- still happens.
+    local CASTBAR_TEXT_UNITS = {
+        { unit = "player", prefix = "castbarPlayer", label = "Player" },
+        { unit = "target", prefix = "castbarTarget", label = "Target" },
+        { unit = "focus",  prefix = "castbarFocus",  label = "Focus" },
+        { unit = "boss",   prefix = "bossCast",      label = "Boss" },
+    }
+    local CASTBAR_TEXT_DETAILS = {
+        { detail = "SpellName",  label = "Spell Name",  nouns = { "spell name text color", "spell text color", "spell name color" } },
+        { detail = "Time",       label = "Cast Time",   nouns = { "cast time text color", "cast time color", "timer text color" } },
+        { detail = "TargetName", label = "Target Name", nouns = { "target name text color", "cast target name color", "castbar target text color" } },
+    }
+
+    for _, unitSpec in ipairs(CASTBAR_TEXT_UNITS) do
+        for _, detailSpec in ipairs(CASTBAR_TEXT_DETAILS) do
+            local unitKey, detailKey = unitSpec.unit, detailSpec.detail
+            local storeKey = unitSpec.prefix .. detailKey .. "Color"
+            local aliases = {}
+            for _, noun in ipairs(detailSpec.nouns) do
+                aliases[#aliases + 1] = unitSpec.label:lower() .. " castbar " .. noun
+                aliases[#aliases + 1] = unitSpec.label:lower() .. " cast bar " .. noun
+            end
+
+            ColorSetting("general." .. storeKey,
+                unitSpec.label .. " Castbar " .. detailSpec.label .. " Color", aliases,
+                function()
+                    local getter = _G.MSUF_GetCastbarDetailTextColor
+                    if type(getter) == "function" then
+                        local r, g, b, explicit = getter(unitKey, detailKey)
+                        if explicit then return r, g, b end
+                    end
+                    return TableRGB(GeneralDB(), storeKey, 1, 1, 1)
+                end,
+                function(r, g, b)
+                    local setter = _G.MSUF_SetCastbarDetailTextColor
+                    if type(setter) == "function" then
+                        setter(unitKey, detailKey, r, g, b)
+                        return
+                    end
+                    SetTableRGB(GeneralDB(), storeKey, r, g, b)
+                end,
+                {
+                    category = "Colors / Castbar Text Colors",
+                    attribute = "castbarDetailTextColor",
+                    defaultR = 1, defaultG = 1, defaultB = 1,
+                    apply = ApplyCastbarColors,
+                })
+        end
+    end
 end

@@ -132,6 +132,7 @@ function A.UnitframesRegistry.BuildSettingBaseUnitContext(ctx)
             aliases = aliases,
             exactAliases = opts.exactAliases,
             values = values,
+            valueLabels = opts.valueLabels,
             valueAliases = opts.valueAliases,
             get = function()
                 if opts.get then return opts.get(unit) end

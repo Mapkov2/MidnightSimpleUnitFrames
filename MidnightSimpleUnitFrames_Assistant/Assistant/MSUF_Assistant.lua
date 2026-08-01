@@ -1707,6 +1707,64 @@ end
 -- deliberately accepts only native values; natural-language coercion belongs
 -- to the parser and must have completed before a plan reaches ExecuteChanges.
 -- The boolean result keeps false itself usable as a normalized setting value.
+-- Out-of-range corrections collected while planning the current request, so the
+-- reply can tell the player what MSUF actually allows instead of quietly
+-- substituting a different number. Cleared at the start of every input.
+function A.RecordAssistantValueClamp(setting, requested, applied, minValue, maxValue)
+    if type(setting) ~= "table" then return end
+    A._assistantValueClamps = A._assistantValueClamps or {}
+    local list = A._assistantValueClamps
+    if #list >= 6 then return end
+    local key = tostring(setting.key or setting.label or "")
+    for i = 1, #list do
+        if list[i].key == key then return end
+    end
+    list[#list + 1] = {
+        key = key,
+        label = tostring(setting.label or setting.key or "that option"),
+        requested = requested,
+        applied = applied,
+        min = minValue,
+        max = maxValue,
+    }
+end
+
+local function FormatClampNumber(value)
+    if type(value) ~= "number" then return tostring(value) end
+    if math.abs(value - math.floor(value + 0.5)) < 0.001 then return tostring(math.floor(value + 0.5)) end
+    return string.format("%.2f", value)
+end
+
+function AP.AppendValueClampNotes(text)
+    local list = A._assistantValueClamps
+    if type(list) ~= "table" or #list == 0 then return text end
+    -- The correction explains the change, so it belongs with the change rather
+    -- than after the "Next: ..." sign-off.
+    local body, tail = tostring(text or ""), nil
+    local hintAt = body:find("\nNext: ", 1, true)
+    if hintAt then
+        tail = body:sub(hintAt + 1)
+        body = body:sub(1, hintAt - 1)
+    end
+    local lines = { body }
+    for i = 1, #list do
+        local clamp = list[i]
+        local range
+        if clamp.min ~= nil and clamp.max ~= nil then
+            range = FormatClampNumber(clamp.min) .. " to " .. FormatClampNumber(clamp.max)
+        elseif clamp.min ~= nil then
+            range = FormatClampNumber(clamp.min) .. " or higher"
+        elseif clamp.max ~= nil then
+            range = FormatClampNumber(clamp.max) .. " or lower"
+        end
+        lines[#lines + 1] = "You asked for " .. FormatClampNumber(clamp.requested) .. ", but "
+            .. clamp.label .. " only accepts " .. tostring(range or "a narrower range")
+            .. ", so I used " .. FormatClampNumber(clamp.applied) .. "."
+    end
+    if tail then lines[#lines + 1] = tail end
+    return table.concat(lines, "\n")
+end
+
 function A.NormalizeRegistrySettingValue(setting, value, opts)
     if type(setting) ~= "table" then return false, "missing setting" end
     opts = type(opts) == "table" and opts or nil
@@ -1741,6 +1799,14 @@ function A.NormalizeRegistrySettingValue(setting, value, opts)
         if not A.IsFiniteAssistantNumber(normalized) then return false, "normalized number is not finite" end
         if math.abs(normalized - math.floor(normalized + 0.5)) < 0.001 then
             normalized = math.floor(normalized + 0.5)
+        end
+        -- Silently clamping is the one place the Assistant could look like it
+        -- obeyed while doing something else: "set player width to 4000" applied
+        -- 900 and said so, but never mentioned that 4000 was out of range, so
+        -- the player is left guessing whether MSUF or the Assistant decided.
+        -- Record the correction; the reply surfaces it.
+        if (minValue ~= nil and value < minValue) or (maxValue ~= nil and value > maxValue) then
+            A.RecordAssistantValueClamp(setting, value, normalized, minValue, maxValue)
         end
         return true, normalized
     end
@@ -2251,18 +2317,59 @@ local function AnySettingFlag(plan, flag)
     return false
 end
 
+-- Switching a lot of things off at once is the one bulk edit a user cannot
+-- check afterwards: the frames they would look at to notice are the frames
+-- that disappeared. bulkSafe only records that a multi-change plan was
+-- deliberate ("apply this to every unit"), so it must not waive this one.
+local DESTRUCTIVE_SWEEP_MINIMUM = 5
+
+function AP.PlanIsDestructiveSweep(plan)
+    if type(plan) ~= "table" or plan.kind ~= "changes" then return false end
+    local changes = plan.changes
+    if type(changes) ~= "table" or #changes < DESTRUCTIVE_SWEEP_MINIMUM then return false end
+    local disabling = 0
+    for i = 1, #changes do
+        local change = changes[i]
+        -- A planned change carries .value; only an executed one carries
+        -- .newValue, and this runs before execution.
+        local target = change and change.value
+        if target == nil and change then target = change.newValue end
+        if target == false or target == "disabled" or target == "hidden" then
+            disabling = disabling + 1
+        end
+    end
+    return disabling >= DESTRUCTIVE_SWEEP_MINIMUM
+end
+
 local function PlanNeedsConfirmation(plan)
     if type(plan) ~= "table" then return false end
     if plan.confirmRequired == true then return true end
     if plan.kind == "action" and plan.action and plan.action.confirmRequired == true then return true end
     if AnySettingFlag(plan, "confirmRequired") then return true end
     if type(plan.changes) == "table" and #plan.changes >= 6 and plan.bulkSafe ~= true then return true end
+    if AP.PlanIsDestructiveSweep(plan) then return true end
     return false
 end
 
 local function ConfirmationText(plan)
     if type(plan) == "table" and type(plan.confirmText) == "string" and plan.confirmText ~= "" then
         return plan.confirmText
+    end
+    -- Name what disappears. "I can apply this action" is not enough warning
+    -- when the answer is "seven of your frames stop being drawn".
+    if AP.PlanIsDestructiveSweep(plan) then
+        local lines = { "That switches off " .. tostring(#plan.changes) .. " MSUF options at once:" }
+        local shown = math.min(6, #plan.changes)
+        for i = 1, shown do
+            local setting = plan.changes[i] and plan.changes[i].setting
+            lines[#lines + 1] = "  " .. i .. ". " .. tostring((setting and setting.label) or "an MSUF option")
+        end
+        if #plan.changes > shown then
+            lines[#lines + 1] = "  ... and " .. (#plan.changes - shown) .. " more."
+        end
+        lines[#lines + 1] = "You will not be able to see those frames afterwards, so I did not apply it yet."
+        lines[#lines + 1] = "Answer with 'yes', 'do it', or 'apply' to go ahead, or 'cancel' to keep everything. You can also say 'undo' after applying."
+        return table.concat(lines, "\n")
     end
     local label = AssistantPlanLabel(plan, "this action")
     return "I can apply " .. label .. ". Answer with 'yes', 'do it', 'apply', or 'cancel'."
@@ -5791,8 +5898,25 @@ local function PendingResultRunResult(item, index)
     }
 end
 
+-- "What is it" is a follow-up; "what is <some other control>" is a new
+-- request that merely starts with the same two words. The explain-intent test
+-- only looks for the phrase, so leftover results from an earlier search used to
+-- swallow a question about a completely different setting and explain result 1.
+local function NamesSettingOutsidePendingResults(text, results)
+    if type(A.RouterNamedSettingLabel) ~= "function" then return false end
+    local label = A.RouterNamedSettingLabel(text)
+    if not label or label == "" then return false end
+    for i = 1, #(results or {}) do
+        local item = results[i]
+        local candidate = item and tostring((item.setting and item.setting.label) or item.label or "")
+        if candidate ~= "" and candidate:lower() == label:lower() then return false end
+    end
+    return true
+end
+
 local function PendingResultFollowupResult(text, results)
     if not IsPendingResultReference(text) then return nil end
+    if NamesSettingOutsidePendingResults(text, results) then return nil end
     local compareIndexes = PendingResultIndexes(text, results)
     local adjacentOutOfRange = AP.PendingResultAdjacentOutOfRange and AP.PendingResultAdjacentOutOfRange(text, results)
     if adjacentOutOfRange then return adjacentOutOfRange end
@@ -7225,6 +7349,34 @@ local function NormalizePlanResult(result)
 end
 
 function AP.ReadOnlyGuardResult(text)
+    -- Refusing to write is right; refusing to answer is not. "Can I change
+    -- Boss Buff Player Filter" names the control, so say yes and point at it
+    -- instead of describing the guard that stopped the write.
+    local label = type(A.RouterNamedSettingLabel) == "function"
+        and A.RouterNamedSettingLabel(text) or nil
+    if label and label ~= "" then
+        local noop = function() return nil end
+        local located = type(A.RouterTryRegistrySettingLocationShortcut) == "function"
+            and A.RouterTryRegistrySettingLocationShortcut("where is " .. label, noop) or nil
+        local body = located and tostring(located.text or "") or nil
+        if not body or body == "" then
+            local router = A.RouterPrivate
+            local direct = router and type(router.NamedSettingDirectAnswer) == "function"
+                and router.NamedSettingDirectAnswer(label) or nil
+            body = direct and tostring(direct.text or "") or nil
+        end
+        if body and body ~= "" then
+            return {
+                text = "Yes - " .. label .. " can be changed. I kept it unchanged because you asked about it rather than for a value.\n"
+                    .. body .. "\nTell me the value you want and I will set it.",
+                result = "info",
+                status = "info",
+                summary = "Assistant read-only safety guard",
+                _readOnlyGuard = true,
+                sourceText = text,
+            }
+        end
+    end
     return {
         text = "I treated that as a read-only question and kept MSUF unchanged. Ask for the option's location, current value, or explanation; to change it, use a direct command with an explicit value.",
         result = "info",
@@ -7783,6 +7935,7 @@ function A.HandleInput(text, handleOpts)
     local hadPendingResults = CurrentPendingResults() ~= nil
     A._pendingResultFollowupHandled = nil
     A._droppedPendingConfirmation = nil
+    A._assistantValueClamps = nil
     local result
     local routed, routeResult
     local semanticBarOutlineColor = AP.BarOutlineColorSemanticPlan(text)
@@ -7813,6 +7966,14 @@ function A.HandleInput(text, handleOpts)
     local pendingResultReply = A._pendingResultFollowupHandled == true
     A._pendingResultFollowupHandled = nil
     if ShouldClearPendingResultsAfterHandledInput(result, hadPendingResults, pendingResultReply) then ClearPendingResults() end
+    -- Say when MSUF's own range overrode the number that was asked for.
+    if type(result) == "table" and type(A._assistantValueClamps) == "table" and #A._assistantValueClamps > 0 then
+        local status = tostring(result.status or result.result or "")
+        if status == "applied" or status == "changed" or status == "unchanged" then
+            result.text = AP.AppendValueClampNotes(result.text)
+        end
+    end
+    A._assistantValueClamps = nil
     -- Never drop a confirmation silently: the player asked for it and is
     -- entitled to know it was not applied.
     if A._droppedPendingConfirmation and type(result) == "table" then
@@ -8379,6 +8540,14 @@ function AP.TryImmediateSubmitResult(text, opts)
     end
     if AP.RequiresExactMovementRouting and AP.RequiresExactMovementRouting(text) then return nil end
     if AP.RequiresCrossFrameTextRouting and AP.RequiresCrossFrameTextRouting(text) then return nil end
+    -- "Is there Player Bar Outline Color in MSUF?" is a question about whether
+    -- the control exists. The conversational lane answers a different question
+    -- (it explains frame layers), so let the router's existence lane own it.
+    if type(A.RouterIsFeatureExistenceQuestion) == "function"
+        and A.RouterIsFeatureExistenceQuestion(text) == true
+    then
+        return nil
+    end
     local context = type(A.GetContext) == "function" and A.GetContext() or {}
     -- A retained object owns pronoun follow-ups before the generic
     -- conversational lane. Otherwise "move it down" can be reinterpreted as
@@ -9000,6 +9169,11 @@ function AP.SubmitNow(text, opts)    opts = opts or {}
     if InCombat() then return NormalizePlanResult(CombatSubmitResult()) end
     if not MenuRuntimeActive() then return NormalizePlanResult(InactiveSubmitResult()) end
     AP.AdvanceTurnSerial()
+    -- Range corrections are reported from here rather than from HandleInput,
+    -- because the low-latency mutation lanes below return without ever
+    -- reaching it -- which is why "set player health text size to 200" applied
+    -- 48 with no explanation while "set player width to 4000" explained itself.
+    A._assistantValueClamps = nil
     local immediate = AP.TryImmediateSubmitResult(text, opts)
     if immediate then return immediate end
     -- A complete multi-command sentence must be split before the low-latency
@@ -9009,7 +9183,21 @@ function AP.SubmitNow(text, opts)    opts = opts or {}
     local failClosedReadOnly = type(A.RouterIsFailClosedReadOnlyRequest) == "function" and A.RouterIsFailClosedReadOnlyRequest(text)
     local exactMovement = AP.RequiresExactMovementRouting(text)
     local batchParts = not failClosedReadOnly and not exactMovement and AP.SplitBatchCommands(text) or nil
-    if not batchParts then
+    -- "Is there Boss Texture Layer 3 Offset X in MSUF?" asks whether a control
+    -- exists. The immediate mutation lane would treat the "3" inside the label
+    -- as the value to apply and move the frame, so existence questions have to
+    -- reach the router instead of being answered by a write.
+    local existenceQuestion = type(A.RouterIsFeatureExistenceQuestion) == "function"
+        and A.RouterIsFeatureExistenceQuestion(text) == true
+    -- Same reason: "the bar color for NPCs should be class color" reached this
+    -- lane and wrote Party Bar Color Mode, dropping the NPC qualifier.
+    local npcBarColor = type(A.RouterIsNpcQualifiedBarColorRequest) == "function"
+        and A.RouterIsNpcQualifiedBarColorRequest(text) == true
+    -- A question that names a control ("show me Mythic Raid Masque Enabled")
+    -- is a lookup, not the instruction its label happens to spell out.
+    local namedLookup = type(A.RouterIsNamedSettingLookup) == "function"
+        and A.RouterIsNamedSettingLookup(text) == true
+    if not batchParts and not existenceQuestion and not npcBarColor and not namedLookup then
         local immediateMutation = AP.TryImmediateMutationResult(text, opts)
         if immediateMutation then return immediateMutation end
     end
@@ -9030,7 +9218,22 @@ end
 
 function A.Submit(text)
     local ok, result = xpcall(function() return AP.SubmitNow(text) end, AP.AssistantJobErrorHandler)
-    if ok then return result end
+    if ok then
+        -- Every submit path funnels through here, so this is the one place that
+        -- can guarantee a clamped value is explained regardless of which lane
+        -- applied it.
+        if type(result) == "table" and type(A._assistantValueClamps) == "table"
+            and #A._assistantValueClamps > 0
+        then
+            local status = tostring(result.status or result.result or "")
+            if status == "applied" or status == "changed" or status == "unchanged" then
+                result.text = AP.AppendValueClampNotes(result.text)
+            end
+        end
+        A._assistantValueClamps = nil
+        return result
+    end
+    A._assistantValueClamps = nil
     return A.RecoverAssistantFailure(result, { label = "assistant.submit", text = text })
 end
 
@@ -9142,16 +9345,27 @@ function AP.SubmitDeferredNow(text, callback)
     -- commits exactly one atomic transaction (or no writes at all).
     local batchParts = AP.SplitBatchCommands(text)
     if batchParts and AP.RequiresExactMovementRouting(text) then batchParts = nil end
+    -- Same standdown as AP.SubmitNow. This is the path the live menu uses, so
+    -- without it the immediate mutation lane still answered questions with a
+    -- write in game even though the synchronous path was fixed.
+    local deferredExistenceQuestion = type(A.RouterIsFeatureExistenceQuestion) == "function"
+        and A.RouterIsFeatureExistenceQuestion(text) == true
+    local deferredNpcBarColor = type(A.RouterIsNpcQualifiedBarColorRequest) == "function"
+        and A.RouterIsNpcQualifiedBarColorRequest(text) == true
+    local deferredNamedLookup = type(A.RouterIsNamedSettingLookup) == "function"
+        and A.RouterIsNamedSettingLookup(text) == true
     if not batchParts then
         local immediate = AP.TryImmediateSubmitResult(text)
         if immediate then
             AP.RunSubmitCallback(callback, immediate, "assistant.immediate.callback", text)
             return immediate
         end
-        local immediateMutation = AP.TryImmediateMutationResult(text)
-        if immediateMutation then
-            AP.RunSubmitCallback(callback, immediateMutation, "assistant.immediate-mutation.callback", text)
-            return immediateMutation
+        if not deferredExistenceQuestion and not deferredNpcBarColor and not deferredNamedLookup then
+            local immediateMutation = AP.TryImmediateMutationResult(text)
+            if immediateMutation then
+                AP.RunSubmitCallback(callback, immediateMutation, "assistant.immediate-mutation.callback", text)
+                return immediateMutation
+            end
         end
     end
 

@@ -172,7 +172,18 @@ Registry:RegisterAction({
         end
         local open = _G.MSUF_OpenExactSettingControl or (M and M.OpenExactSettingControl)
         if type(open) ~= "function" then
-            return false, "The exact-control navigation bridge is not available yet. Reopen the MSUF menu and try again."
+            -- Not being able to scroll the menu there is no reason to withhold
+            -- the answer: name the control and its page so the player can
+            -- reach it themselves.
+            local label = args and args.label
+            local page = args and args.page
+            local detail = ""
+            if type(label) == "string" and label ~= "" then
+                detail = " " .. label .. (type(page) == "string" and page ~= ""
+                    and (" lives on " .. page .. ".") or " is a registered MSUF control.")
+            end
+            return false, "The exact-control navigation bridge is not available yet, so I could not scroll the menu there."
+                .. detail .. " Reopen the MSUF menu and try again, or ask me to change it directly."
         end
         return open(settingKey, args and args.label, args and args.page)
     end,

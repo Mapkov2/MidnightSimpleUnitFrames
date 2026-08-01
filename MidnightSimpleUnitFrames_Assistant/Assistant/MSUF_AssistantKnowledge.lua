@@ -2326,6 +2326,15 @@ local function DirectHelpAnswer(query, opts)
     local norm = Normalize(query)
     local addonCompanions = ComplementaryAddonAnswer(query)
     if addonCompanions then return addonCompanions end
+    -- A question that names one exact control is about that control, not about
+    -- the topic its words happen to belong to. Concept vocabulary turns up
+    -- inside plenty of real labels ("UnitFrame Dispel Overlay Opacity" was
+    -- being answered with scaling-readability help), and the setting lanes
+    -- below the knowledge layer answer those far better. Concept help still
+    -- owns everything that is not an exact label.
+    if type(A.RouterNamedSettingLabel) == "function" and A.RouterNamedSettingLabel(query) then
+        return nil
+    end
     if norm == "help" or norm == "show commands" or norm == "commands" or norm == "what can you do"
         or norm == "what can i ask" or norm == "what can i ask you" or norm == "what can the assistant do"
         or norm == "what can msuf assistant do" or norm == "what can msuf do" or norm == "assistant help"
@@ -2981,6 +2990,15 @@ local function AsReadOnlyKnowledgeResult(result)
     if result.status == "applied" then result.status = "info" end
     if result.result == "applied" then result.result = "info" end
     return result
+end
+
+-- Reviewed concept help on its own, without K.Answer's generic search
+-- fallback. The feature-existence lane needs "is this a real MSUF concept?"
+-- answered yes/no; a list of loosely related pages is not an answer to that.
+function K.DirectConceptHelp(query, opts)
+    local direct = DirectHelpAnswer(query, opts or {})
+    if not direct then return nil end
+    return AsReadOnlyKnowledgeResult(RememberKnowledgeHelpContext(direct))
 end
 
 function K.Answer(query, opts)

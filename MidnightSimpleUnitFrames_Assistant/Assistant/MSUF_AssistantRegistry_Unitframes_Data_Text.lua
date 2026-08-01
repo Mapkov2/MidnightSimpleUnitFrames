@@ -13,7 +13,10 @@ M.Assistant = A
 local Data = A.UnitframeRegistryData or {}
 A.UnitframeRegistryData = Data
 
-Data.TEXT_ANCHOR_VALUES = { "LEFT", "CENTER", "RIGHT" }
+Data.TEXT_ANCHOR_VALUES = {
+    "TOPLEFT", "TOP", "TOPRIGHT",
+    "FRAMELEFT", "FRAMECENTER", "FRAMERIGHT",
+}
 Data.HP_MODE_VALUES = {
     "PERCENT", "CURRENT", "MAX", "DEFICIT",
     "CURMAX", "CURPERCENT", "CURMAXPERCENT", "MAXPERCENT",

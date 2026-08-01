@@ -24,6 +24,14 @@ local function AppendAliases(aliases, ...)
     return aliases
 end
 
+local function CanonicalUnitNameAnchor(value)
+    value = tostring(value or "TOPLEFT"):upper()
+    if value == "LEFT" then return "TOPLEFT" end
+    if value == "CENTER" then return "TOP" end
+    if value == "RIGHT" then return "TOPRIGHT" end
+    return value
+end
+
 function A.UnitframesRegistry.RegisterTextSettings(ctx, unit)
     if type(ctx) ~= "table" or type(unit) ~= "string" then return end
 
@@ -47,11 +55,22 @@ function A.UnitframesRegistry.RegisterTextSettings(ctx, unit)
     local SEPARATOR_VALUES = ctx.SEPARATOR_VALUES or {}
     local SEPARATOR_ALIASES = ctx.SEPARATOR_ALIASES
 
-    RegisterUnitEnum(unit, "nameTextAnchor", "nameTextAnchor", "Name Text Anchor", "LEFT", TEXT_ANCHOR_VALUES, MakeAliases(unit, "name anchor", "name text anchor"), {
+    RegisterUnitEnum(unit, "nameTextAnchor", "nameTextAnchor", "Name Text Anchor", "TOPLEFT", TEXT_ANCHOR_VALUES, MakeAliases(unit, "name anchor", "name text anchor"), {
         category = "Text",
         text = true,
-        valueAliases = { left = "LEFT", center = "CENTER", middle = "CENTER", right = "RIGHT" },
-        get = function(unitKey) return TextValue(unitKey, "nameTextAnchor", "LEFT") end,
+        valueLabels = {
+            TOPLEFT = "Top Left", TOP = "Top Center", TOPRIGHT = "Top Right",
+            FRAMELEFT = "Left", FRAMECENTER = "Center", FRAMERIGHT = "Right",
+        },
+        valueAliases = {
+            ["top left"] = "TOPLEFT", ["upper left"] = "TOPLEFT",
+            top = "TOP", ["top center"] = "TOP", ["upper center"] = "TOP",
+            ["top right"] = "TOPRIGHT", ["upper right"] = "TOPRIGHT",
+            left = "FRAMELEFT",
+            center = "FRAMECENTER", centre = "FRAMECENTER", middle = "FRAMECENTER",
+            right = "FRAMERIGHT",
+        },
+        get = function(unitKey) return CanonicalUnitNameAnchor(TextValue(unitKey, "nameTextAnchor", "TOPLEFT")) end,
     })
     RegisterUnitTextNumber(unit, "nameOffsetX", "nameOffsetX", "Name X Offset", 4,
         MakeAliases(unit, "name x", "name x offset"), { min = -300, max = 300 })

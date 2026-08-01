@@ -2725,6 +2725,13 @@ end
 
 local function ParseAmbiguousGroupOutlineBorderShortcut(text)
     if not IsAmbiguousGroupOutlineBorderIntent(text) then return nil end
+    -- This lane exists to separate the per-member bar outline from the whole
+    -- group border. Beta 44's "Frame Outline Texture" names one exact control,
+    -- and neither reading of "outline/border" is a texture, so asking here just
+    -- blocked a request the exact-alias lane already resolves.
+    if ContainsAny(text, { "outline texture", "border texture", "frame outline texture" }) then
+        return nil
+    end
     return {
         kind = "answer",
         status = "ambiguous",

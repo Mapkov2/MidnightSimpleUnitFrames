@@ -14,6 +14,30 @@ A.GlobalRegistry = A.GlobalRegistry or {}
 
 local Unpack = unpack or (table and table.unpack)
 
+-- MSUF_ResolveFontShadowMetrics is exported by State/MSUF_Defaults.lua. These
+-- getters run whenever the user asks about a shadow setting, which is long
+-- after load and outside this file's control, so resolve it per call and fall
+-- back rather than letting a nil global turn a question into an error reply.
+-- GroupFrames/MSUF_GroupFrames_DB.lua guards the same global the same way.
+local function ShadowMetrics(opacity, distance, legacyStrength, fallbackOpacity, fallbackDistance)
+    local resolve = _G.MSUF_ResolveFontShadowMetrics
+    if type(resolve) == "function" then
+        return resolve(opacity, distance, legacyStrength, fallbackOpacity, fallbackDistance)
+    end
+    if legacyStrength ~= nil then
+        legacyStrength = tostring(legacyStrength):upper()
+        opacity = legacyStrength == "SOFT" and 0.55 or 1
+        distance = legacyStrength == "DEEP" and 2 or 1
+    else
+        opacity = tonumber(opacity) or tonumber(fallbackOpacity) or 1
+        distance = tonumber(distance) or tonumber(fallbackDistance) or 1
+    end
+    if opacity < 0.20 then opacity = 0.20 elseif opacity > 1 then opacity = 1 end
+    distance = math.floor(distance + 0.5)
+    if distance <= 1 then distance = 1 else distance = 2 end
+    return opacity, distance, -distance
+end
+
 function A.GlobalRegistry.RegisterScopedFontDetailSettings(ctx)
     if type(ctx) ~= "table" then return false end
 
@@ -227,14 +251,14 @@ function A.GlobalRegistry.RegisterScopedFontDetailSettings(ctx)
             step = 0.05,
             percent = true,
             get = function(scopeKey)
-                local alpha = _G.MSUF_ResolveFontShadowMetrics(
+                local alpha = ShadowMetrics(
                     GlobalScopeRead(scopeKey, "fontOverride", GeneralDB(), "fontShadowOpacity", nil),
                     GlobalScopeRead(scopeKey, "fontOverride", GeneralDB(), "fontShadowDistance", nil),
                     GlobalScopeRead(scopeKey, "fontOverride", GeneralDB(), "fontShadowStrength", nil))
                 return alpha
             end,
             set = function(scopeKey, value)
-                local alpha = _G.MSUF_ResolveFontShadowMetrics(value, 1)
+                local alpha = ShadowMetrics(value, 1)
                 alpha = math.floor(alpha * 20 + 0.5) / 20
                 GlobalScopeWrite(scopeKey, "fontOverride", GeneralDB(), "fontShadowStrength", nil)
                 GlobalScopeWrite(scopeKey, "fontOverride", GeneralDB(), "fontShadowOpacity", alpha)
@@ -259,14 +283,14 @@ function A.GlobalRegistry.RegisterScopedFontDetailSettings(ctx)
             max = 2,
             step = 1,
             get = function(scopeKey)
-                local _, distance = _G.MSUF_ResolveFontShadowMetrics(
+                local _, distance = ShadowMetrics(
                     GlobalScopeRead(scopeKey, "fontOverride", GeneralDB(), "fontShadowOpacity", nil),
                     GlobalScopeRead(scopeKey, "fontOverride", GeneralDB(), "fontShadowDistance", nil),
                     GlobalScopeRead(scopeKey, "fontOverride", GeneralDB(), "fontShadowStrength", nil))
                 return distance
             end,
             set = function(scopeKey, value)
-                local _, distance = _G.MSUF_ResolveFontShadowMetrics(1, value)
+                local _, distance = ShadowMetrics(1, value)
                 GlobalScopeWrite(scopeKey, "fontOverride", GeneralDB(), "fontShadowStrength", nil)
                 GlobalScopeWrite(scopeKey, "fontOverride", GeneralDB(), "fontShadowDistance", distance)
             end,
