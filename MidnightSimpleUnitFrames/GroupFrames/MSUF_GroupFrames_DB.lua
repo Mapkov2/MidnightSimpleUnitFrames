@@ -1538,7 +1538,7 @@ end
 
 local LEGACY_BUFF_DEFAULTS = {
     enabled = true, anchor = "BOTTOMRIGHT", growth = "LEFTUP",
-    x = 0, y = 0, size = 22, iconScale = 100, iconZoom = 100, perRow = 4, max = 6, spacing = 1,
+    x = 0, y = 0, size = 22, iconScale = 100, iconZoom = 100, iconShape = "RECTANGLE", perRow = 4, max = 6, spacing = 1,
     layer = 5, filterMode = "RAID_PLAYER",
     showCooldownSwipe = true, showCooldown = true, cooldownAnchor = "CENTER",
     cooldownOffsetX = 0, cooldownOffsetY = 0, cooldownSize = 8, cooldownOutline = "OUTLINE",
@@ -1548,7 +1548,7 @@ local LEGACY_BUFF_DEFAULTS = {
 
 local LEGACY_DEBUFF_DEFAULTS = {
     enabled = true, anchor = "TOPLEFT", growth = "RIGHTDOWN",
-    x = 0, y = 0, size = 20, iconScale = 100, iconZoom = 100, perRow = 3, max = 6, spacing = 1,
+    x = 0, y = 0, size = 20, iconScale = 100, iconZoom = 100, iconShape = "RECTANGLE", perRow = 3, max = 6, spacing = 1,
     layer = 6, showDispelBorder = true,
     showCooldownSwipe = true, showCooldown = true, cooldownAnchor = "CENTER",
     cooldownOffsetX = 0, cooldownOffsetY = 0, cooldownSize = 8, cooldownOutline = "OUTLINE",
@@ -1558,7 +1558,7 @@ local LEGACY_DEBUFF_DEFAULTS = {
 
 local LEGACY_EXTERNAL_DEFAULTS = {
     enabled = true, anchor = "CENTER", growth = "RIGHTDOWN",
-    x = 0, y = 0, size = 28, iconScale = 100, perRow = 3, max = 2, spacing = 1,
+    x = 0, y = 0, size = 28, iconScale = 100, iconZoom = 100, iconShape = "RECTANGLE", perRow = 3, max = 2, spacing = 1,
     layer = 7, autoBlacklistBuffs = true,
     showCooldownSwipe = true, showCooldown = true, cooldownAnchor = "CENTER",
     cooldownOffsetX = 0, cooldownOffsetY = 0, cooldownSize = 10, cooldownOutline = "OUTLINE",

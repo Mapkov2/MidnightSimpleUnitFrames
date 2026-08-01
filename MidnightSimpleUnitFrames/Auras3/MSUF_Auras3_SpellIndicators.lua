@@ -185,7 +185,7 @@ end
 local function CandidateFiltersFromSpellIDs(spellIDs, fieldName)
     fieldName = fieldName or "includeSpellIDs"
     if type(spellIDs) ~= "table" then return nil, nil end
-    local out, parts, count = nil, nil, 0
+    local out
     for key, enabled in pairs(spellIDs) do
         local spellID
         if enabled == true or enabled == nil then
@@ -199,13 +199,19 @@ local function CandidateFiltersFromSpellIDs(spellIDs, fieldName)
             end
         end
         if spellID then
-            if not out then out, parts = {}, {} end
-            if out[spellID] ~= true then
+            if not out then out = {} end
+            if type(A3.AddAuraSpellIDAndAliases) == "function" then
+                A3.AddAuraSpellIDAndAliases(out, spellID)
+            else
                 out[spellID] = true
-                count = count + 1
-                parts[count] = tostring(spellID)
             end
         end
+    end
+    if not out then return nil, nil end
+    local parts, count = {}, 0
+    for spellID in pairs(out) do
+        count = count + 1
+        parts[count] = tostring(spellID)
     end
     if count == 0 then return nil, nil end
     table_sort(parts)
@@ -763,8 +769,8 @@ local function SyncNameOverlayFont(overlay, source)
         if type(applyResolved) == "function" then
             applyResolved(overlay, path, size, flags, general and general.fontKey)
         else
-            local applied = overlay:SetFont(path, size, flags)
-            if applied == false and type(_G.MSUF_MarkFontApplyFailed) == "function" then
+            local ok, applied = pcall(overlay.SetFont, overlay, path, size, flags)
+            if (not ok or applied == false) and type(_G.MSUF_MarkFontApplyFailed) == "function" then
                 _G.MSUF_MarkFontApplyFailed()
             end
         end

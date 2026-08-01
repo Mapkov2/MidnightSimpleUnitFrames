@@ -150,6 +150,8 @@ local LAYOUT_KEYS = {
     iconSize = true,
     buffIconZoom = true,
     debuffIconZoom = true,
+    buffIconShape = true,
+    debuffIconShape = true,
     spacing = true,
     offsetX = true,
     offsetY = true,
@@ -194,6 +196,8 @@ local LAYOUT_KEYS = {
 local STYLE_LAYOUT_KEYS = {
     buffIconZoom = true,
     debuffIconZoom = true,
+    buffIconShape = true,
+    debuffIconShape = true,
     stackTextSize = true,
     stackTextOffsetX = true,
     stackTextOffsetY = true,
@@ -381,6 +385,7 @@ local GROUPS = {
 local LANE_STYLE_KEYS = {
     buff = {
         iconZoom = "buffIconZoom",
+        iconShape = "buffIconShape",
         showCooldownSwipe = "buffShowCooldownSwipe",
         cooldownSwipeReverse = "buffCooldownSwipeReverse",
         sortMethod = "buffSortMethod",
@@ -405,6 +410,7 @@ local LANE_STYLE_KEYS = {
     },
     debuff = {
         iconZoom = "debuffIconZoom",
+        iconShape = "debuffIconShape",
         showCooldownSwipe = "debuffShowCooldownSwipe",
         cooldownSwipeReverse = "debuffCooldownSwipeReverse",
         sortMethod = "debuffSortMethod",
@@ -492,6 +498,9 @@ local DEFAULT_SHARED = {
     iconZoom = 100,
     buffIconZoom = 100,
     debuffIconZoom = 100,
+    iconShape = "RECTANGLE",
+    buffIconShape = "RECTANGLE",
+    debuffIconShape = "RECTANGLE",
     spacing = 2,
     perRow = 12,
     maxBuffs = 12,
@@ -571,12 +580,8 @@ local DEFAULT_SHARED = {
 
 local DEFAULT_GENERAL = {
     aurasCooldownTextUseBuckets = false,
-    aurasCooldownTextSafeColor = { 1.00, 1.00, 1.00 },
     aurasCooldownTextWarningColor = { 1.00, 0.85, 0.20 },
     aurasCooldownTextUrgentColor = { 1.00, 0.55, 0.10 },
-    aurasStackCountColor = { 1.00, 1.00, 1.00 },
-    aurasOwnBuffHighlightColor = { 1.00, 0.85, 0.20 },
-    aurasOwnDebuffHighlightColor = { 1.00, 0.30, 0.30 },
     aurasCooldownTextSafeSeconds = 60,
     aurasCooldownTextWarningSeconds = 15,
     aurasCooldownTextUrgentSeconds = 5,
@@ -1544,6 +1549,61 @@ function Model.SetIconStyleScopeEnabled(scope, enabled)
     return changed
 end
 
+local ICON_SHAPE_LANE_KEYS = {
+    buff = true, debuff = true,
+    custom1 = true, custom2 = true, custom3 = true, custom4 = true,
+}
+
+--- Icon shape inheritance is intentionally independent from the broad Aura
+--- Style override. A scope can therefore keep local text/swipe/timer settings
+--- while its selected lane continues to use the corresponding Shared shape.
+--- Local choices remain stored and become effective again when inheritance is
+--- disabled. The sparse table records only explicit Shared opt-ins, preserving
+--- the existing scope-aware shape behavior by default.
+function Model.IconShapeFollowsShared(scope, lane)
+    local key = IconStyleScopeKeys(scope)
+    lane = tostring(lane or "")
+    if not (key and ICON_SHAPE_LANE_KEYS[lane] == true) then return false end
+    local _, shared = Model.EnsureDB()
+    local followScopes = type(shared) == "table" and shared.iconShapeFollowSharedScopes or nil
+    local followLanes = type(followScopes) == "table" and followScopes[key] or nil
+    return type(followLanes) == "table" and followLanes[lane] == true
+end
+
+--- Returns true when the stored value changed (callers apply on change only).
+function Model.SetIconShapeFollowsShared(scope, lane, followsShared)
+    local key, alias = IconStyleScopeKeys(scope)
+    lane = tostring(lane or "")
+    if not (key and ICON_SHAPE_LANE_KEYS[lane] == true) then return false end
+    local _, shared = Model.EnsureDB()
+    if type(shared) ~= "table" then return false end
+
+    local value = followsShared == true and true or nil
+    local followScopes = shared.iconShapeFollowSharedScopes
+    if type(followScopes) ~= "table" then
+        if value == nil then return false end
+        followScopes = {}
+        shared.iconShapeFollowSharedScopes = followScopes
+    end
+
+    local changed
+    local function Store(scopeKey)
+        local followLanes = followScopes[scopeKey]
+        if type(followLanes) ~= "table" then
+            if value == nil then return end
+            followLanes = {}
+            followScopes[scopeKey] = followLanes
+        end
+        if followLanes[lane] ~= value then changed = true end
+        followLanes[lane] = value
+        if next(followLanes) == nil then followScopes[scopeKey] = nil end
+    end
+    Store(key)
+    if alias then Store(alias) end
+    if next(followScopes) == nil then shared.iconShapeFollowSharedScopes = nil end
+    return changed == true
+end
+
 function Model.DurationBarDisplayValues()
     return DURATION_BAR_DISPLAY_VALUES
 end
@@ -1835,7 +1895,7 @@ function Model.AddCustomDisplay(scope)
         strata = "AUTO",
         placed = {
             type = "icon", anchor = "TOPRIGHT", x = 0, y = 0,
-            size = 24, barWidth = 54, showCooldown = true,
+            size = 24, barWidth = 54, iconShape = "RECTANGLE", showCooldown = true,
             showCooldownSwipe = true, showStacks = true,
         },
         frame = { type = "none", color = { 0.69, 0.50, 0.88, 0.80 }, priority = 5, thickness = 2, layer = 0, strata = "AUTO" },
@@ -1892,6 +1952,9 @@ local function EnforcePlayerDefensiveContainer(item)
     item.autoBlacklistPlayerBuffs = item.autoBlacklistPlayerBuffs ~= false
     item.disabledPredefinedSpellIDs = type(item.disabledPredefinedSpellIDs) == "table"
         and item.disabledPredefinedSpellIDs or {}
+    item.placed = type(item.placed) == "table" and item.placed or {}
+    item.placed.iconShape = type(A3.NormalizeAuraIconShape) == "function"
+        and A3.NormalizeAuraIconShape(item.placed.iconShape) or (item.placed.iconShape or "RECTANGLE")
     item.filters = type(item.filters) == "table" and item.filters or {}
     item.filters.enabled = true
     item.filters.onlyMine = false
@@ -1923,6 +1986,9 @@ local function EnforceTargetDotContainer(item)
     item.portraitPositionWhenDisabled = nil
     item.autoBlacklistPlayerBuffs = nil
     item.disabledPredefinedSpellIDs = nil
+    item.placed = type(item.placed) == "table" and item.placed or {}
+    item.placed.iconShape = type(A3.NormalizeAuraIconShape) == "function"
+        and A3.NormalizeAuraIconShape(item.placed.iconShape) or (item.placed.iconShape or "RECTANGLE")
     item.filters = type(item.filters) == "table" and item.filters or {}
     item.filters.enabled = true
     item.filters.onlyMine = true
@@ -1968,6 +2034,7 @@ local function NewCustomContainer(index, unit)
             type = "icon", anchor = "TOPRIGHT", growth = "LEFTDOWN",
             x = 0, y = 0, size = 24, barWidth = 54,
             max = 8, perRow = 4, spacing = 2,
+            iconShape = "RECTANGLE",
             showCooldown = true, showCooldownSwipe = true, showStacks = true,
         },
         layer = 9,
@@ -3396,6 +3463,10 @@ function Model.ReadPreviewConfig(unit)
         debuffSize = debuffMetrics and debuffMetrics.size or Model.ReadNumber(unit, "debuffGroupIconSize", Model.ReadNumber(unit, "iconSize", 26, 1, 128), 1, 128),
         buffIconZoom = buffMetrics and buffMetrics.iconZoom or Model.ReadLaneStyleNumber(unit, "buff", "iconZoom", 100, 100, 200),
         debuffIconZoom = debuffMetrics and debuffMetrics.iconZoom or Model.ReadLaneStyleNumber(unit, "debuff", "iconZoom", 100, 100, 200),
+        buffIconShape = buffMetrics and buffMetrics.iconShape or Model.ReadLaneStyleString(unit, "buff", "iconShape", "RECTANGLE"),
+        debuffIconShape = debuffMetrics and debuffMetrics.iconShape or Model.ReadLaneStyleString(unit, "debuff", "iconShape", "RECTANGLE"),
+        buffRequestedIconShape = buffMetrics and buffMetrics.requestedIconShape,
+        debuffRequestedIconShape = debuffMetrics and debuffMetrics.requestedIconShape,
         spacing = (buffMetrics and buffMetrics.spacing) or (debuffMetrics and debuffMetrics.spacing) or Model.ReadNumber(unit, "spacing", 2, 0, 64),
         stylePadding = (buffMetrics and buffMetrics.padding) or (debuffMetrics and debuffMetrics.padding) or Model.ReadNumber(unit, "stylePadding", 0, 0, 16),
         perRow = (buffMetrics and buffMetrics.perRow) or (debuffMetrics and debuffMetrics.perRow) or Model.ReadNumber(unit, "perRow", 12, 1, 40),

@@ -20,6 +20,7 @@
   <Script file="..\..\..\Auras3\MSUF_Auras3_Core.lua"/>
   <Script file="..\..\..\Auras3\MSUF_Auras3_DotData.lua"/>
   <Script file="..\..\..\Auras3\MSUF_Auras3_DefensiveData.lua"/>
+  <Script file="..\..\..\Auras3\MSUF_Auras3_AuraNameResolver.lua"/>
   <Script file="..\..\..\Auras3\MSUF_Auras3_SpellIndicators.lua"/>
   <Script file="..\..\..\Auras3\MSUF_Auras3_UnitFrames.lua"/>
   <Script file="..\..\..\Auras3\MSUF_Auras3_EditMode.lua"/>

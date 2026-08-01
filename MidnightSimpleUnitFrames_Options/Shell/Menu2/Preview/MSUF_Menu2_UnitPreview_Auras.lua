@@ -456,7 +456,16 @@ local function IconRect(anchor, laneW, laneH, size, x, y)
     local bottom = laneAnchorY + y - iconAnchorY
     return left, bottom, left + size, bottom + size
 end
-local function LaneBounds(cfg, kind, frameW, frameH, unit)
+local function ResolvePreviewIconShape(requested, effective, runtimeSpec)
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    local portraitShape = runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.shape
+    if a3 and type(a3.ResolveAuraIconShape) == "function" then
+        return a3.ResolveAuraIconShape(requested or effective, portraitShape)
+    end
+    return effective or "RECTANGLE"
+end
+
+local function LaneBounds(cfg, kind, frameW, frameH, unit, runtimeSpec)
     if not cfg then return nil end
     local isBuff = kind == "buff"
     if isBuff and cfg.showBuffs ~= true then return nil end
@@ -527,6 +536,9 @@ local function LaneBounds(cfg, kind, frameW, frameH, unit)
         shown = shown,
         size = size,
         iconZoom = ClampNumber(metrics and metrics.iconZoom or (isBuff and cfg.buffIconZoom or cfg.debuffIconZoom), 100, 100, 200),
+        iconShape = ResolvePreviewIconShape(
+            metrics and metrics.requestedIconShape or (isBuff and cfg.buffRequestedIconShape or cfg.debuffRequestedIconShape),
+            metrics and metrics.iconShape or (isBuff and cfg.buffIconShape or cfg.debuffIconShape), runtimeSpec),
         spacing = spacing,
         perRow = perRow,
         x = x,
@@ -566,7 +578,7 @@ local function CustomGrowth(growth)
     return -1, -1, false
 end
 
-local function CustomLaneBounds(item, kind, frameW, frameH, metrics, previewEntries, unit, fallbackPadding)
+local function CustomLaneBounds(item, kind, frameW, frameH, metrics, previewEntries, unit, fallbackPadding, runtimeSpec)
     if type(item) ~= "table" then return nil end
     -- Any custom lane with configured spells previews them 1:1 with the real
     -- spell icons; curated index-4 lanes may show while disabled.
@@ -644,6 +656,8 @@ local function CustomLaneBounds(item, kind, frameW, frameH, metrics, previewEntr
         iconStyle = LaneIconStyle(metrics, unit),
         alpha = ClampNumber(placed.alpha, 1, 0, 1),
         iconZoom = ClampNumber(placed.iconZoom, 100, 100, 200),
+        iconShape = ResolvePreviewIconShape(metrics and metrics.requestedIconShape or placed.iconShape,
+            metrics and metrics.iconShape or placed.iconShape, runtimeSpec),
     }
 end
 
@@ -690,6 +704,8 @@ local function DefensivePortraitBounds(item, runtimeSpec, previewEntries, unit, 
         iconStyle = LaneIconStyle(metrics, unit),
         alpha = ClampNumber(placed.alpha, 1, 0, 1),
         iconZoom = ClampNumber(placed.iconZoom, 100, 100, 200),
+        iconShape = ResolvePreviewIconShape(metrics and metrics.requestedIconShape or placed.iconShape,
+            metrics and metrics.iconShape or placed.iconShape, runtimeSpec),
         showCooldownText = placed.showCooldown ~= false and item.portraitCooldownText ~= false,
         showCooldownSwipe = placed.showCooldownSwipe ~= false,
         showStacks = placed.showStacks ~= false,
@@ -709,8 +725,8 @@ function Auras.BuildState(key, frameW, frameH, runtimeSpec)
     if not (key and model and type(model.ReadPreviewConfig) == "function") then return nil end
     local cfg = model.ReadPreviewConfig(key)
     if not cfg then return nil end
-    local buff = LaneBounds(cfg, "buff", frameW, frameH, key)
-    local debuff = LaneBounds(cfg, "debuff", frameW, frameH, key)
+    local buff = LaneBounds(cfg, "buff", frameW, frameH, key, runtimeSpec)
+    local debuff = LaneBounds(cfg, "debuff", frameW, frameH, key, runtimeSpec)
     local state = { unit = key, cfg = cfg, runtime = runtimeAuras, buff = buff, debuff = debuff }
     for index = 1, 4 do
         local kind = "custom" .. tostring(index)
@@ -722,7 +738,7 @@ function Auras.BuildState(key, frameW, frameH, runtimeSpec)
         elseif type(model.CustomContainerSpellEntries) == "function" then
             previewEntries = model.CustomContainerSpellEntries(key, index)
         end
-        state[kind] = CustomLaneBounds(item, kind, frameW, frameH, metrics, previewEntries, key, cfg.stylePadding)
+        state[kind] = CustomLaneBounds(item, kind, frameW, frameH, metrics, previewEntries, key, cfg.stylePadding, runtimeSpec)
         if index == 4 then
             state.defensivePortrait = DefensivePortraitBounds(
                 item, runtimeSpec, previewEntries, key, metrics)
@@ -779,8 +795,8 @@ local function ApplyAuraFont(fs, font)
     if not (fs and font) then return end
     if fs.SetFont and (fs._msufAuraFontPath ~= font.path or fs._msufAuraFontSize ~= font.size
         or fs._msufAuraFontFlags ~= font.flags or fs._msufAuraFontEpoch ~= font.epoch) then
-        if fs:SetFont(font.path, font.size, font.flags) == false then
-            fs:SetFont(FONT, font.size, font.flags)
+        if not pcall(fs.SetFont, fs, font.path, font.size, font.flags) then
+            pcall(fs.SetFont, fs, FONT, font.size, font.flags)
         end
         fs._msufAuraFontPath, fs._msufAuraFontSize = font.path, font.size
         fs._msufAuraFontFlags, fs._msufAuraFontEpoch = font.flags, font.epoch
@@ -1073,12 +1089,12 @@ local function PreviewDebuffBorderMode(cfg)
     if cfg and cfg.useDebuffTypeBorders == true then return "SYMBOL" end
     return "OFF"
 end
-local function LayoutPreviewDispelBorder(icon, size, mode)
+local function LayoutPreviewDispelBorder(icon, size, mode, shape)
     local atlas = DEBUFF_TYPE_BORDER_PREVIEW_ATLAS[mode]
     local border = icon and icon.dispelBorder
     local a3 = MSUF and MSUF.MSUF_Auras3
-    if a3 and type(a3.ApplyRoundedAuraDispelPreview) == "function"
-        and a3.ApplyRoundedAuraDispelPreview(border, icon, size, mode) then
+    if a3 and type(a3.ApplyAuraDispelPreview) == "function"
+        and a3.ApplyAuraDispelPreview(border, icon, size, mode, shape) then
         return
     end
     if not (atlas and border and border.SetAtlas) then
@@ -1164,10 +1180,13 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
         local previewTexture = bounds.previewTextures and bounds.previewTextures[i]
         icon.tex:SetTexture(previewTexture or textures[((i - 1) % #textures) + 1])
         ApplyIconZoom(icon.tex, bounds.iconZoom)
+        if a3 and type(a3.ApplyAuraIconShape) == "function" then
+            a3.ApplyAuraIconShape(icon, bounds.iconShape, nil, icon.bg, icon.tex, icon.swipe)
+        end
         if icon.bg then icon.bg:SetShown(not barOnly) end
         icon.tex:SetShown(not barOnly)
         icon.edge:SetVertexColor(0, 0, 0, 0)
-        if type(applyIconStyle) == "function" then applyIconStyle(icon, iconStyle, size) end
+        if type(applyIconStyle) == "function" then applyIconStyle(icon, iconStyle, size, bounds.iconShape) end
         if icon.swipe then
             if showSwipe and not barOnly then
                 LayoutPreviewAuraSwipe(icon.swipe, icon, size, auraState and auraState.remainingFrac, swipeReverse)
@@ -1177,7 +1196,7 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
             end
         end
         LayoutPreviewDurationBar(icon.durationBar, icon, textCfg, size, auraState)
-        LayoutPreviewDispelBorder(icon, size, barOnly and "OFF" or debuffBorderMode)
+        LayoutPreviewDispelBorder(icon, size, barOnly and "OFF" or debuffBorderMode, bounds.iconShape)
         ApplyAuraFont(icon.stack, stackFont)
         PlaceAuraText(icon.stack, icon, stackAnchor, stackX, stackY)
         icon.stack:SetText(showStacks and (auraState and auraState.stacks or (i % 3 == 1 and "2" or "")) or "")
@@ -1260,11 +1279,14 @@ local function LayoutDefensivePortrait(box, mock, state, S)
         if icon.SetFrameLevel then icon:SetFrameLevel((visual:GetFrameLevel() or 1) + 1) end
         icon.tex:SetTexture(bounds.previewTextures and bounds.previewTextures[i] or AURA_TEXTURES.buff[1])
         ApplyIconZoom(icon.tex, bounds.iconZoom)
+        if a3 and type(a3.ApplyAuraIconShape) == "function" then
+            a3.ApplyAuraIconShape(icon, bounds.iconShape, nil, icon.bg, icon.tex, icon.swipe)
+        end
         icon.bg:SetShown(not barOnly)
         icon.tex:SetShown(not barOnly)
         icon.edge:SetVertexColor(0, 0, 0, 0)
         if type(applyIconStyle) == "function" then
-            applyIconStyle(icon, iconStyle, size)
+            applyIconStyle(icon, iconStyle, size, bounds.iconShape)
         end
         if icon.dispelBorder then icon.dispelBorder:Hide() end
         local auraState = PreviewAuraState("custom4", i, icon, textCfg)

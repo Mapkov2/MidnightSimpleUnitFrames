@@ -1077,6 +1077,11 @@ local function ApplyAuraLane(out, prefix, groupKey, group, defaults, maxCount, i
     iconZoom = out.buffIconZoom
   end
   out[prefix .. "IconZoom"] = Num(iconZoom, Num(out.iconZoom, 100))
+  local iconShape = group.iconShape
+  if iconShape == nil and (prefix == "trackedBuff" or prefix == "external") then
+    iconShape = out.buffIconShape
+  end
+  out[prefix .. "IconShape"] = type(iconShape) == "string" and iconShape or "RECTANGLE"
   out[prefix .. "IconSize"] = scale(Num(group.size, iconSize) * iconScale, iconSize, 1)
   out[prefix .. "Spacing"] = scale(group.spacing, 1, 0)
   out[prefix .. "PerRow"] = Num(group.perRow, defaults[2])

@@ -564,17 +564,26 @@ local function ApplyFrameAuraPreview(frame, kind, visual, lane, descriptor, slot
   end
 
   local A3 = MSUF and MSUF.MSUF_Auras3
+  if A3 and type(A3.ApplyAuraIconShape) == "function" then
+    A3.ApplyAuraIconShape(visual, lane.iconShape, nil, texture, swipe)
+  end
   if A3 and type(A3.ApplyIconStylePreview) == "function" then
-    A3.ApplyIconStylePreview(visual, barOnly and nil or lane.iconStyle, size)
+    A3.ApplyIconStylePreview(visual, barOnly and nil or lane.iconStyle, size, lane.iconShape)
   end
   if lane.showAuraBorder == true and not barOnly then
     dispelBorder = EnsurePreviewTexture(visual, "_dispelBorder", "OVERLAY", 5)
-    dispelBorder:ClearAllPoints()
-    dispelBorder:SetAllPoints(visual)
-    if dispelBorder.SetAtlas then
+    if A3 and type(A3.ApplyAuraDispelPreview) == "function"
+      and A3.ApplyAuraDispelPreview(dispelBorder, visual, size,
+        lane.showAuraSymbol == true and "SYMBOL" or "BORDER", lane.iconShape) then
+      -- Shared renderer stamped the matching shaped/rounded border.
+    elseif dispelBorder.SetAtlas then
+      dispelBorder:ClearAllPoints()
+      dispelBorder:SetAllPoints(visual)
       dispelBorder:SetAtlas(lane.showAuraSymbol == true
         and "ui-debuff-border-magic-icon" or "ui-debuff-border-magic-noicon", false)
     else
+      dispelBorder:ClearAllPoints()
+      dispelBorder:SetAllPoints(visual)
       dispelBorder:SetTexture(PREVIEW_WHITE)
       dispelBorder:SetVertexColor(0.2, 0.6, 1, 0.85)
     end

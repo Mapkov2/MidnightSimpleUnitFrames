@@ -1261,11 +1261,11 @@ local function RenderAuras(scene)
             end
         end
     end
-    local function LayoutAuraPreviewBorder(border, icon, size, mode)
+    local function LayoutAuraPreviewBorder(border, icon, size, mode, shape)
         local atlas = DEBUFF_TYPE_BORDER_PREVIEW_ATLAS[mode]
         local a3 = MSUF and MSUF.MSUF_Auras3
-        if a3 and type(a3.ApplyRoundedAuraDispelPreview) == "function"
-            and a3.ApplyRoundedAuraDispelPreview(border, icon, size, mode) then
+        if a3 and type(a3.ApplyAuraDispelPreview) == "function"
+            and a3.ApplyAuraDispelPreview(border, icon, size, mode, shape) then
             return
         end
         if not (border and icon and atlas and border.SetAtlas) then
@@ -1517,8 +1517,11 @@ local function RenderAuras(scene)
                         SetPreviewFrameLevel(styleOwner, handle:GetFrameLevel() or 0)
                     end
                     local a3 = MSUF and MSUF.MSUF_Auras3
+                    if a3 and type(a3.ApplyAuraIconShape) == "function" then
+                        a3.ApplyAuraIconShape(styleOwner, cfg.iconShape, nil, tex, swipe)
+                    end
                     if a3 and type(a3.ApplyIconStylePreview) == "function" then
-                        a3.ApplyIconStylePreview(styleOwner, barOnly and nil or cfg.iconStyle, size)
+                        a3.ApplyIconStylePreview(styleOwner, barOnly and nil or cfg.iconStyle, size, cfg.iconShape)
                     end
                     styleOwner:Show()
                 end
@@ -1530,7 +1533,7 @@ local function RenderAuras(scene)
                         swipe:Hide()
                     end
                 end
-                LayoutAuraPreviewBorder(border, tex, size, barOnly and "OFF" or dispelMode)
+                LayoutAuraPreviewBorder(border, tex, size, barOnly and "OFF" or dispelMode, cfg.iconShape)
                 LayoutAuraDurationBar(durationBar, tex, cfg, size, auraState)
                 if stack then
                     SetPreviewFont(stack, stackSize)
@@ -2362,9 +2365,9 @@ function Render.Install(box, ctx, deps)
                 local g = _G.MSUF_DB and _G.MSUF_DB.general
                 path = resolveSafe(path, size, fontFlags, g and g.fontKey)
             end
-            local applied = fs:SetFont(path, size, fontFlags)
-            if applied == false then
-                fs:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", size, fontFlags)
+            local ok = pcall(fs.SetFont, fs, path, size, fontFlags)
+            if not ok then
+                pcall(fs.SetFont, fs, STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", size, fontFlags)
             end
             if fs.SetShadowOffset then
                 if fontShadow then

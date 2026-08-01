@@ -439,7 +439,7 @@ local function BuildGFAuras(ctx)
     if tool == "layout" then
         local title = lane == "debuff" and "Debuff Layout"
             or (lane == "externals" and "External Defensive Layout" or "Buff Layout")
-        local section = auraBuilder:Section(title, 190)
+        local section = auraBuilder:Section(title, 288)
         local w = section._msuf2Width or auraBuilder.width or 720
         local inner, gap = w - 48, 10
         local controls = {}
@@ -448,11 +448,12 @@ local function BuildGFAuras(ctx)
         local dropdownW = max(180, floor((inner - 126 - gap * 2) / 2))
         local anchorX = 24 + 126 + gap
         local growthX = anchorX + dropdownW + gap
-        local function Dropdown(label, x, values, key, fallback)
-            local widget = BindLiveAuraDropdown(W.Dropdown(section, label, values, dropdownW),
+        local function Dropdown(label, x, values, key, fallback, y, width)
+            width = width or dropdownW
+            local widget = BindLiveAuraDropdown(W.Dropdown(section, label, values, width),
                 scope, lane, key, fallback,
                 AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".layout." .. AuraCatalogToken(key)))
-            W.MoveWidget(widget, section, x, -34, dropdownW, "LEFT")
+            W.MoveWidget(widget, section, x, y or -34, width, "LEFT")
             controls[#controls + 1] = widget
             return widget
         end
@@ -493,10 +494,57 @@ local function BuildGFAuras(ctx)
                 }))
         W.MoveWidget(iconScale, section, 24 + 3 * (col4 + gap), -146, col4)
         controls[#controls + 1] = iconScale
+        local shapeLane = lane == "debuff" and "debuff" or "buff"
+        local auraModel = MSUF.MSUF_Auras3 and MSUF.MSUF_Auras3.MenuModel
+        local iconShape = W.Dropdown(section, "Icon Shape", M.AURA_ICON_SHAPE_VALUES or {}, inner)
+        M.BindDropdownWidget(ctx, iconShape,
+            function()
+                local activeScope = CurrentScope()
+                if auraModel and auraModel.IconShapeFollowsShared(activeScope, shapeLane) then
+                    return auraModel.ReadLaneStyleString("shared", shapeLane, "iconShape", "RECTANGLE")
+                end
+                return AuraGroup(activeScope, lane).iconShape or "RECTANGLE"
+            end,
+            function(value)
+                if CombatLocked() then return end
+                local activeScope = CurrentScope()
+                local group = AuraGroup(activeScope, lane)
+                value = value or "RECTANGLE"
+                if group.iconShape == value then return end
+                group.iconShape = value
+                RefreshAuraPreviews(activeScope)
+                QueueGF(activeScope, "auras")
+            end,
+            AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".layout.icon-shape"))
+        W.MoveWidget(iconShape, section, 24, -202, inner, "LEFT")
+        controls[#controls + 1] = iconShape
+        local followShared
+        if auraModel and type(auraModel.IconShapeFollowsShared) == "function" then
+            followShared = W.SwitchAt(section, "Follow shared settings", 24, -250, inner)
+            M.BindBoolWidget(ctx, followShared,
+                function() return auraModel.IconShapeFollowsShared(CurrentScope(), shapeLane) end,
+                function(value)
+                    local activeScope = CurrentScope()
+                    if auraModel.SetIconShapeFollowsShared(activeScope, shapeLane, value == true) then
+                        RefreshAuraPreviews(activeScope)
+                        QueueGF(activeScope, "auras")
+                    end
+                    if M.Refresh then M.Refresh(ctx) end
+                end,
+                AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".layout.icon-shape.follow-shared"))
+            if type(M.AddTooltip) == "function" then
+                M.AddTooltip(followShared, "Shared icon shape",
+                    "Keeps Icon Shape synchronized with Aura Style > Shared while the remaining Group Aura settings stay local.",
+                    { hook = true, titleAsLine = true })
+            end
+        end
         M.TrackRefresh(ctx, function()
             local shown = LaneBackendEnabled(CurrentScope(), lane)
             SetOptionEnabled(enable, true)
             SetOptionsEnabled(controls, shown)
+            if followShared then
+                SetOptionEnabled(iconShape, shown and not auraModel.IconShapeFollowsShared(CurrentScope(), shapeLane))
+            end
             local growth = tostring(AuraGroup(CurrentScope(), lane).growth or defaults.growth):upper()
             SetOptionEnabled(perRowControl, shown and growth ~= "UP" and growth ~= "DOWN")
         end)

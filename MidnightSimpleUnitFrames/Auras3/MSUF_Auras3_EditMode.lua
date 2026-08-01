@@ -72,6 +72,7 @@ local GROUPS = {
         yKey = "buffGroupOffsetY",
         sizeKey = "buffGroupIconSize",
         iconZoomKey = "buffIconZoom",
+        iconShapeKey = "buffIconShape",
         anchorKey = "buffAnchor",
         layerKey = "buffLayer",
         maxKey = "maxBuffs",
@@ -90,6 +91,7 @@ local GROUPS = {
         yKey = "debuffGroupOffsetY",
         sizeKey = "debuffGroupIconSize",
         iconZoomKey = "debuffIconZoom",
+        iconShapeKey = "debuffIconShape",
         anchorKey = "debuffAnchor",
         layerKey = "debuffLayer",
         maxKey = "maxDebuffs",
@@ -603,6 +605,7 @@ local function ReadGroupConfig(unit, kind)
             layer = Clamp(item and item.layer, spec.defaultLayer, 0, 30),
             alpha = Clamp(placed.alpha, 1, 0, 1),
             iconZoom = Clamp(placed.iconZoom, 100, 100, 200),
+            iconShape = type(placed.iconShape) == "string" and placed.iconShape or "RECTANGLE",
             size = Clamp(placed.size, 24, 1, 128),
             spacing = Clamp(placed.spacing, 2, 0, 64),
             perRow = Clamp(placed.perRow, 4, 1, 40),
@@ -646,6 +649,10 @@ local function ReadGroupConfig(unit, kind)
         or (shared and type(shared[spec.iconZoomKey]) == "number" and shared[spec.iconZoomKey])
         or (shared and type(shared.iconZoom) == "number" and shared.iconZoom)
         or 100
+    local iconShape = (layout and type(layout[spec.iconShapeKey]) == "string" and layout[spec.iconShapeKey])
+        or (shared and type(shared[spec.iconShapeKey]) == "string" and shared[spec.iconShapeKey])
+        or (shared and type(shared.iconShape) == "string" and shared.iconShape)
+        or "RECTANGLE"
 
     local spacing = ReadNumber(shared, layout, "spacing", 2, 0, 64)
     local perRow = (ls and type(ls[spec.perRowKey]) == "number" and ls[spec.perRowKey])
@@ -688,6 +695,7 @@ local function ReadGroupConfig(unit, kind)
         layer = Clamp(layer, spec.defaultLayer or 5, 0, 30),
         size = Clamp(size, 26, 1, 128),
         iconZoom = Clamp(iconZoom, 100, 100, 200),
+        iconShape = iconShape,
         spacing = spacing,
         perRow = Clamp(perRow, 12, 1, 40),
         max = Clamp(maxN, 12, 0, 80),
@@ -812,6 +820,7 @@ local function FallbackMetrics(cfg)
         num = cfg and Round(cfg.max) or 0,
         size = cfg and cfg.size or 26,
         iconZoom = cfg and cfg.iconZoom or 100,
+        iconShape = cfg and cfg.iconShape or "RECTANGLE",
         spacing = cfg and cfg.spacing or 2,
         step = ((cfg and cfg.size) or 26) + ((cfg and cfg.spacing) or 2),
         perRow = cfg and cfg.perRow or 12,
@@ -1248,7 +1257,7 @@ local function ApplyGlobalFont(fs, size)
         size = tonumber(size) or 14
         if size <= 0 then size = 14 end
         if size < 6 then size = 6 elseif size > 40 then size = 40 end
-        fs:SetFont(fontPath, size, fontFlags)
+        pcall(fs.SetFont, fs, fontPath, size, fontFlags)
     end
     if fs.SetTextColor then fs:SetTextColor(r or 1, g or 1, b or 1, 1) end
     if fs.SetShadowOffset then
@@ -1569,8 +1578,8 @@ local function LayoutPreviewDispelBorder(icon, cfg)
     local atlas = cfg and DEBUFF_TYPE_BORDER_PREVIEW_ATLAS[cfg.debuffBorderMode]
     local barOnly = cfg and cfg.showDurationBar == true and cfg.durationBarDisplay == "BAR_ONLY"
     local size = math_max(1, (icon and icon.GetWidth and icon:GetWidth()) or 24)
-    if not barOnly and type(A3.ApplyRoundedAuraDispelPreview) == "function"
-        and A3.ApplyRoundedAuraDispelPreview(border, icon, size, cfg and cfg.debuffBorderMode) then
+    if not barOnly and type(A3.ApplyAuraDispelPreview) == "function"
+        and A3.ApplyAuraDispelPreview(border, icon, size, cfg and cfg.debuffBorderMode, cfg and cfg.iconShape) then
         return
     end
     if not (border and atlas and border.SetAtlas and not barOnly) then
@@ -1907,6 +1916,7 @@ local function RefreshSignature(unit, kind, cfg, metrics, textCfg, shownIcons, s
         .. "\030" .. tostring(x) .. "\030" .. tostring(y) .. "\030" .. tostring(anchor)
         .. "\030" .. tostring(metrics and metrics.enabled)
         .. "\030" .. tostring(metrics and metrics.iconZoom or cfg and cfg.iconZoom)
+        .. "\030" .. tostring(metrics and metrics.iconShape or cfg and cfg.iconShape)
         .. "\030" .. tostring(textCfg and textCfg.stackSize) .. "\030" .. tostring(textCfg and textCfg.stackX)
         .. "\030" .. tostring(textCfg and textCfg.stackY) .. "\030" .. tostring(textCfg and textCfg.cooldownSize)
         .. "\030" .. tostring(textCfg and textCfg.cooldownX) .. "\030" .. tostring(textCfg and textCfg.cooldownY)
@@ -2042,6 +2052,13 @@ function EM.RefreshUnit(unit)
             local padding = Clamp(metrics and metrics.padding, 0, 0, 16)
             local barOnly = textCfg.showDurationBar == true and textCfg.durationBarDisplay == "BAR_ONLY"
             local iconStyle = (not barOnly) and LaneIconStyle(metrics, unit) or nil
+            local requestedIconShape = (metrics and metrics.requestedIconShape) or cfg.iconShape
+            local iconShape = (metrics and metrics.iconShape) or cfg.iconShape or "RECTANGLE"
+            if type(A3.ResolveAuraIconShape) == "function" then
+                iconShape = A3.ResolveAuraIconShape(requestedIconShape,
+                    frame and frame.MSUFSpec and frame.MSUFSpec.portrait and frame.MSUFSpec.portrait.shape)
+            end
+            textCfg.iconShape = iconShape
             local signature = RefreshSignature(unit, kind, cfg, metrics, textCfg, shownIcons, size, step, perRow, laneW, laneH, growthX, growthY, vertical, initialAnchor, x, y, anchor, frameSig)
                 .. "\030" .. CustomPreviewEntriesSignature(entries) .. "\030" .. tostring(chrome)
                 .. "\030" .. tostring(padding) .. "\030" .. tostring(iconStyle and iconStyle.signature)
@@ -2077,11 +2094,14 @@ function EM.RefreshUnit(unit)
                         icon.Icon:SetTexture((entry and entry.icon) or cfg.texture or spec.texture)
                         ApplyIconZoom(icon.Icon, metrics and metrics.iconZoom or cfg.iconZoom)
                     end
+                    if type(A3.ApplyAuraIconShape) == "function" then
+                        A3.ApplyAuraIconShape(icon, iconShape, nil, icon.Icon, icon.Shade, icon.Swipe)
+                    end
                     if icon.Count then icon.Count:SetText(i == 1 and "3" or "") end
                     if icon.CooldownText then icon.CooldownText:SetText(i == 1 and "1m" or "32") end
                     ApplyPreviewIconText(icon, unit, textCfg)
                     if type(A3.ApplyIconStylePreview) == "function" then
-                        A3.ApplyIconStylePreview(icon, iconStyle, size)
+                        A3.ApplyIconStylePreview(icon, iconStyle, size, iconShape)
                     end
                     icon:Show()
                 end

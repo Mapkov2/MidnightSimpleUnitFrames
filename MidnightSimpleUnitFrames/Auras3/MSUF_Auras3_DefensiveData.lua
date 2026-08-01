@@ -18,6 +18,27 @@ if type(A3) ~= "table" then
 end
 
 A3.PlayerDefensiveDataVersion = "12.0.7.68453+12.1.0.68745"
+
+--- Spellbook/talent IDs that differ from the spell ID carried by the visible
+--- buff. Blizzard's native includeSpellIDs filter compares only against
+--- auraData.spellId, so compile these aliases once when building a lane.
+A3.AuraSpellIDAliases = {
+    [185313] = { 185422 }, -- Shadow Dance action -> Shadow Dance buff
+    [382514] = { 386237 }, -- Fade to Nothing talent -> Fade to Nothing buff
+}
+
+function A3.AddAuraSpellIDAndAliases(out, spellID)
+    spellID = tonumber(spellID)
+    if not (out and spellID and spellID > 0) then return end
+    spellID = math.floor(spellID + 0.5)
+    out[spellID] = true
+    local aliases = A3.AuraSpellIDAliases[spellID]
+    for i = 1, type(aliases) == "table" and #aliases or 0 do
+        local auraSpellID = tonumber(aliases[i])
+        if auraSpellID and auraSpellID > 0 then out[math.floor(auraSpellID + 0.5)] = true end
+    end
+end
+
 A3.PlayerDefensiveData = {
     DEATHKNIGHT = {
         { 48707, "Anti-Magic Shell" }, { 48792, "Icebound Fortitude" },
@@ -115,7 +136,7 @@ A3.PlayerDefensiveData = {
         { 1966, "Feint" }, { 5277, "Evasion" },
         { 31224, "Cloak of Shadows" }, { 45182, "Cheating Death" },
         { 185311, "Crimson Vial" }, { 386165, "Cloaked in Shadows" },
-        { 393971, "Soothing Darkness" },
+        { 386237, "Fade to Nothing" }, { 393971, "Soothing Darkness" },
     },
     SHAMAN = {
         { 974, "Earth Shield" }, { 108271, "Astral Shift" },

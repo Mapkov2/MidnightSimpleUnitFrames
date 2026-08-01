@@ -48,79 +48,156 @@ local MAX_CONFIGURABLE_DEBUFF_DURATION = 180
 -- "exclude permanent" rule without dropping normal long-duration auras.
 local MAX_FINITE_AURA_DURATION = 2147483647
 local MSUF_AURA_SENSOR_EDGE_TEXTURE = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\msuf_frame_edge_thin_256x64.tga"
+-- Aura icon shape module. The unit-frame chunk sits close to the Lua
+-- 200-local ceiling, so every shape constant and helper lives on one
+-- table instead of costing a main-chunk local each.
+local Shape = {}
+A3.IconShape = Shape
+Shape.MEDIA_ROOT = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames")
+Shape.RECTANGLE = "RECTANGLE"
+Shape.FOLLOW_PORTRAIT = "FOLLOW_PORTRAIT"
+Shape.MEDIA = {
+    CIRCLE = {
+        mask = Shape.MEDIA_ROOT .. "\\Media\\Masks\\circle_mask.tga",
+        border = Shape.MEDIA_ROOT .. "\\Media\\Borders\\circle_ring_thin.tga",
+    },
+    ROUNDED = {
+        mask = Shape.MEDIA_ROOT .. "\\Media\\Masks\\rounded_mask.tga",
+        border = Shape.MEDIA_ROOT .. "\\Media\\Borders\\msuf_portrait_ring_rounded.tga",
+    },
+    DIAMOND = {
+        mask = Shape.MEDIA_ROOT .. "\\Media\\Masks\\diamond_mask.tga",
+        border = Shape.MEDIA_ROOT .. "\\Media\\Borders\\diamond_ring_thin.tga",
+    },
+    HEXAGON = {
+        mask = "Interface\\AddOns\\Blizzard_SharedTalentUI\\talents-hexagon-mask.png",
+        border = Shape.MEDIA_ROOT .. "\\Media\\ClassPower\\pip_hex_edge.tga",
+    },
+    STAR = {
+        mask = Shape.MEDIA_ROOT .. "\\Media\\Icons\\Shapes\\raid_star.tga",
+        -- The filled silhouette sits behind the masked icon and therefore
+        -- becomes a clean outline at the configured outward pixel offsets.
+        border = Shape.MEDIA_ROOT .. "\\Media\\Icons\\Shapes\\raid_star.tga",
+        borderOuterOnly = true,
+        desaturate = true,
+    },
+    BLIZZARD = {
+        maskAtlas = "UI-HUD-UnitFrame-Player-Portrait-Mask",
+        swipe = Shape.MEDIA_ROOT .. "\\Media\\Masks\\circle_mask.tga",
+        border = Shape.MEDIA_ROOT .. "\\Media\\Borders\\circle_ring_thin.tga",
+    },
+}
+Shape.VALID = {
+    RECTANGLE = true, FOLLOW_PORTRAIT = true,
+    CIRCLE = true, ROUNDED = true, DIAMOND = true, HEXAGON = true, STAR = true, BLIZZARD = true,
+}
+
+function Shape.Normalize(value, fallback)
+    value = type(value) == "string" and value:upper() or nil
+    if value == "SQUARE" or value == "DEFAULT" or value == "NONE" then value = Shape.RECTANGLE end
+    if value == "ROUND" then value = "CIRCLE" end
+    if value == "HEX" then value = "HEXAGON" end
+    if value == "FOLLOW" or value == "PORTRAIT" or value == "FOLLOWPORTRAIT" then value = Shape.FOLLOW_PORTRAIT end
+    if Shape.VALID[value] then return value end
+    fallback = type(fallback) == "string" and fallback:upper() or Shape.RECTANGLE
+    if fallback == "SQUARE" or fallback == "DEFAULT" or fallback == "NONE" then fallback = Shape.RECTANGLE end
+    return Shape.VALID[fallback] and fallback or Shape.RECTANGLE
+end
+
+function Shape.Resolve(value, portraitShape)
+    local requested = Shape.Normalize(value)
+    if requested ~= Shape.FOLLOW_PORTRAIT then return requested, requested end
+    portraitShape = type(portraitShape) == "string" and portraitShape:upper() or Shape.RECTANGLE
+    if portraitShape == "SQUARE" then portraitShape = Shape.RECTANGLE end
+    if not Shape.MEDIA[portraitShape] then portraitShape = Shape.RECTANGLE end
+    return portraitShape, requested
+end
+
+A3.NormalizeAuraIconShape = Shape.Normalize
+A3.ResolveAuraIconShape = Shape.Resolve
+A3.AURA_ICON_SHAPE_RECTANGLE = Shape.RECTANGLE
+A3.AURA_ICON_SHAPE_FOLLOW_PORTRAIT = Shape.FOLLOW_PORTRAIT
+
+function Shape.ClearMask(region)
+    if not region then return end
+    local mask = region._msufA3AuraShapeMask
+    if mask and region.RemoveMaskTexture then region:RemoveMaskTexture(mask) end
+    region._msufA3AuraShapeMask = nil
+end
+
+function Shape.ApplyMask(region, mask)
+    if not (region and region.AddMaskTexture) then return end
+    if region._msufA3AuraShapeMask == mask then return end
+    Shape.ClearMask(region)
+    if mask then
+        region:AddMaskTexture(mask)
+        region._msufA3AuraShapeMask = mask
+    end
+end
+
+function Shape.EnsureMask(owner, shape)
+    local media = Shape.MEDIA[shape]
+    if not (owner and media and owner.CreateMaskTexture) then return nil end
+    local mask = owner._msufA3AuraShapeMask
+    if not mask then
+        mask = owner:CreateMaskTexture(nil, "BACKGROUND")
+        owner._msufA3AuraShapeMask = mask
+    end
+    if media.maskAtlas and mask.SetAtlas then
+        mask:SetAtlas(media.maskAtlas)
+    else
+        mask:SetTexture(media.mask)
+    end
+    mask:ClearAllPoints()
+    mask:SetAllPoints(owner)
+    mask:Show()
+    return mask
+end
+
+function Shape.ApplyCooldownShape(cooldown, shape, mask)
+    if not cooldown then return end
+    local media = Shape.MEDIA[shape]
+    if cooldown.SetSwipeTexture then
+        cooldown:SetSwipeTexture(media and (media.swipe or media.mask) or "Interface\\Buttons\\WHITE8X8")
+    end
+    if not (cooldown.GetNumRegions and cooldown.GetRegions) then return end
+    for index = 1, cooldown:GetNumRegions() do
+        local region = select(index, cooldown:GetRegions())
+        if mask then Shape.ApplyMask(region, mask) else Shape.ClearMask(region) end
+    end
+end
+
+--- Cold-path-only shape stamp for runtime AuraButtons and reusable previews.
+--- RECTANGLE deliberately creates no mask and leaves the normal renderer alone.
+function A3.ApplyAuraIconShape(owner, shape, cooldown, ...)
+    if not owner then return Shape.RECTANGLE end
+    shape = Shape.Normalize(shape)
+    local previousShape = owner._msufA3IconShape
+    if shape == Shape.RECTANGLE
+        and (previousShape == nil or previousShape == Shape.RECTANGLE)
+    then
+        owner._msufA3IconShape = Shape.RECTANGLE
+        return Shape.RECTANGLE
+    end
+    local mask = shape ~= Shape.RECTANGLE and Shape.EnsureMask(owner, shape) or nil
+    if not mask and owner._msufA3AuraShapeMask then owner._msufA3AuraShapeMask:Hide() end
+    for index = 1, select("#", ...) do
+        local texture = select(index, ...)
+        if mask then Shape.ApplyMask(texture, mask) else Shape.ClearMask(texture) end
+    end
+    Shape.ApplyCooldownShape(cooldown, shape, mask)
+    owner._msufA3IconShape = shape
+    return shape
+end
+
+function A3.AuraShapeBorderPath(shape)
+    local media = Shape.MEDIA[Shape.Normalize(shape)]
+    return media and media.border or nil
+end
 local AURA_BORDER_OPTIONS = {
     showWhenHarmful = true,
     showWhenHelpful = false,
 }
--- Rounded aura borders are compiled into the native button layout. This stays
--- entirely on the structural/cold path: no aura update, event, or OnUpdate
--- reads SavedVariables, and changing the option recreates only aura visuals.
-local AB = {
-    root = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\",
-    sliceMargin = 9.5,
-    sliceMode = _G.Enum and _G.Enum.UITextureSliceMode and _G.Enum.UITextureSliceMode.Stretched,
-}
-AB.edges = {
-    AB.root .. "rounded_clean_edge_s1.png",
-    AB.root .. "rounded_clean_edge_s2.png",
-    AB.root .. "rounded_clean_edge_s3.png",
-    AB.root .. "rounded_clean_edge_s4.png",
-    AB.root .. "rounded_clean_edge_s5.png",
-}
-function AB.Path()
-    local bars = _G.MSUF_DB and _G.MSUF_DB.bars
-    if not (bars and bars.roundedFramesEnabled == true and bars.roundedAuraBorders ~= false) then return nil end
-    local strength = math_floor((tonumber(bars.roundedCornerStrength) or 3) + 0.5)
-    if strength < 1 then strength = 1 elseif strength > 5 then strength = 5 end
-    return AB.edges[strength]
-end
-function AB.Media(texture, path)
-    if not (texture and path) then return false end
-    -- A native dispel border can replace this asset with an atlas while the
-    -- option is off. Restamp on the cold prepare/preview path so re-enabling
-    -- the same strength cannot be fooled by a stale Lua-side path cache.
-    texture._msufA3RoundedAuraPath = path
-    texture:SetTexture(path, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-    if texture.SetTexCoord then texture:SetTexCoord(0, 1, 0, 1) end
-    if texture.SetTextureSliceMargins then
-        texture:SetTextureSliceMargins(AB.sliceMargin, AB.sliceMargin, AB.sliceMargin, AB.sliceMargin)
-        if AB.sliceMode and texture.SetTextureSliceMode then texture:SetTextureSliceMode(AB.sliceMode) end
-    end
-    if texture.SetSnapToPixelGrid then texture:SetSnapToPixelGrid(false) end
-    if texture.SetTexelSnappingBias then texture:SetTexelSnappingBias(0) end
-    return true
-end
-function AB.HideStyle(button)
-    local stack = button and button._msufA3RoundedStyleBorder
-    if type(stack) ~= "table" then return end
-    for i = 1, #stack do if stack[i] then stack[i]:Hide() end end
-end
-function AB.ApplyStyle(button, style)
-    local path = style and style.roundedBorderPath
-    if not (button and path and style.borderEnabled == true) then
-        AB.HideStyle(button)
-        return false
-    end
-    local count = math_floor((tonumber(style.borderThickness) or 1) + 0.5)
-    if count < 1 then count = 1 elseif count > 8 then count = 8 end
-    local stack = button._msufA3RoundedStyleBorder
-    if not stack then stack = {}; button._msufA3RoundedStyleBorder = stack end
-    for i = 1, count do
-        local edge = stack[i]
-        if not edge then
-            edge = button:CreateTexture(nil, "BORDER", nil, -1)
-            stack[i] = edge
-        end
-        AB.Media(edge, path)
-        edge:ClearAllPoints()
-        edge:SetPoint("TOPLEFT", button, "TOPLEFT", -i, i)
-        edge:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", i, -i)
-        edge:SetVertexColor(style.borderR, style.borderG, style.borderB, style.borderA)
-        edge:Show()
-    end
-    for i = count + 1, #stack do if stack[i] then stack[i]:Hide() end end
-    return true
-end
 -- Sensors highlight slot presence, so they must also fire for debuffs without
 -- a dispel type (e.g. PLAYER_CAST trigger). PTR 7's option processor hides
 -- untyped auras unless showWithoutDispelType is set; older clients ignore it.
@@ -328,6 +405,7 @@ local LANE_SPECS = {
         yKey = "buffGroupOffsetY",
         sizeKey = "buffGroupIconSize",
         iconZoomKey = "buffIconZoom",
+        iconShapeKey = "buffIconShape",
         anchorKey = "buffAnchor",
         layerKey = "buffLayer",
         strataKey = "buffStrata",
@@ -368,6 +446,7 @@ local LANE_SPECS = {
         yKey = "debuffGroupOffsetY",
         sizeKey = "debuffGroupIconSize",
         iconZoomKey = "debuffIconZoom",
+        iconShapeKey = "debuffIconShape",
         anchorKey = "debuffAnchor",
         layerKey = "debuffLayer",
         strataKey = "debuffStrata",
@@ -403,6 +482,8 @@ local LANE_SPECS = {
 local STYLE_LAYOUT_KEYS = {
     buffIconZoom = true,
     debuffIconZoom = true,
+    buffIconShape = true,
+    debuffIconShape = true,
     stackTextSize = true,
     stackTextOffsetX = true,
     stackTextOffsetY = true,
@@ -494,6 +575,7 @@ local GROUP_LANE_SPECS = {
         rootKey = "Buffs", filter = "HELPFUL",
         showKey = "showBuffs", maxKey = "maxBuffs", sizeKey = "buffIconSize",
         iconZoomKey = "buffIconZoom",
+        iconShapeKey = "buffIconShape",
         spacingKey = "buffSpacing", perRowKey = "buffPerRow", growthXKey = "buffGrowthX",
         growthYKey = "buffGrowthY", anchorKey = "buffAnchor", xKey = "buffOffsetX",
         yKey = "buffOffsetY", layerKey = "buffLayer", filterKey = "buffFilter",
@@ -518,6 +600,7 @@ local GROUP_LANE_SPECS = {
         rootKey = "TrackedBuffs", filter = "HELPFUL",
         showKey = "showTrackedBuffs", maxKey = "maxTrackedBuffs", sizeKey = "trackedBuffIconSize",
         iconZoomKey = "trackedBuffIconZoom",
+        iconShapeKey = "trackedBuffIconShape",
         spacingKey = "trackedBuffSpacing", perRowKey = "trackedBuffPerRow", growthXKey = "trackedBuffGrowthX",
         growthYKey = "trackedBuffGrowthY", anchorKey = "trackedBuffAnchor", xKey = "trackedBuffOffsetX",
         yKey = "trackedBuffOffsetY", layerKey = "trackedBuffLayer", filterKey = "trackedBuffFilter",
@@ -542,6 +625,7 @@ local GROUP_LANE_SPECS = {
         rootKey = "Debuffs", filter = "HARMFUL",
         showKey = "showDebuffs", maxKey = "maxDebuffs", sizeKey = "debuffIconSize",
         iconZoomKey = "debuffIconZoom",
+        iconShapeKey = "debuffIconShape",
         spacingKey = "debuffSpacing", perRowKey = "debuffPerRow", growthXKey = "debuffGrowthX",
         growthYKey = "debuffGrowthY", anchorKey = "debuffAnchor", xKey = "debuffOffsetX",
         yKey = "debuffOffsetY", layerKey = "debuffLayer", filterKey = "debuffFilter",
@@ -571,6 +655,7 @@ local GROUP_LANE_SPECS = {
         rootKey = "Externals", filter = "HELPFUL|EXTERNAL_DEFENSIVE",
         showKey = "showExternals", maxKey = "maxExternals", sizeKey = "externalIconSize",
         iconZoomKey = "externalIconZoom",
+        iconShapeKey = "externalIconShape",
         spacingKey = "externalSpacing", perRowKey = "externalPerRow", growthXKey = "externalGrowthX",
         growthYKey = "externalGrowthY", anchorKey = "externalAnchor", xKey = "externalOffsetX",
         yKey = "externalOffsetY", layerKey = "externalLayer", filterKey = "externalFilter",
@@ -882,6 +967,30 @@ local function EnsureDB()
     return db.auras3, db.auras3.shared
 end
 
+function Shape.ScopeKey(scope)
+    scope = tostring(scope or "")
+    if scope:match("^boss%d+$") then return "boss" end
+    if scope == "party" or scope == "raid" or scope == "mythicraid"
+        or scope == "player" or scope == "target" or scope == "focus" or scope == "boss"
+    then
+        return scope
+    end
+    return nil
+end
+
+function Shape.FollowsShared(shared, scope, lane)
+    local key = Shape.ScopeKey(scope)
+    if not key then return false end
+    local followScopes = type(shared) == "table" and shared.iconShapeFollowSharedScopes or nil
+    local followLanes = type(followScopes) == "table" and followScopes[key] or nil
+    return type(followLanes) == "table" and followLanes[lane] == true
+end
+
+function Shape.SharedValue(shared, kind)
+    local key = kind == "debuff" and "debuffIconShape" or "buffIconShape"
+    return ReadRaw(shared, nil, key) or ReadRaw(shared, nil, "iconShape")
+end
+
 local function NormalizeRuntimeUnit(unit)
     unit = tostring(unit or "")
     if unit == "boss" then return "boss1" end
@@ -960,7 +1069,7 @@ end
 local function CandidateFiltersFromSpellIDs(spellIDs, fieldName)
     fieldName = fieldName or "excludeSpellIDs"
     if type(spellIDs) ~= "table" then return nil, nil end
-    local out, parts, count = nil, nil, 0
+    local out
     for key, enabled in pairs(spellIDs) do
         local spellID
         if enabled == true or enabled == nil then
@@ -974,13 +1083,19 @@ local function CandidateFiltersFromSpellIDs(spellIDs, fieldName)
             end
         end
         if spellID then
-            if not out then out, parts = {}, {} end
-            if out[spellID] ~= true then
+            if not out then out = {} end
+            if type(A3.AddAuraSpellIDAndAliases) == "function" then
+                A3.AddAuraSpellIDAndAliases(out, spellID)
+            else
                 out[spellID] = true
-                count = count + 1
-                parts[count] = tostring(spellID)
             end
         end
+    end
+    if not out then return nil, nil end
+    local parts, count = {}, 0
+    for spellID in pairs(out) do
+        count = count + 1
+        parts[count] = tostring(spellID)
     end
     if count == 0 then return nil, nil end
     table_sort(parts)
@@ -1194,7 +1309,6 @@ local function SharedIconStyle()
         shadowG = Clamp01(sc[2] or sc.g, 0),
         shadowB = Clamp01(sc[3] or sc.b, 0),
         shadowA = Clamp01(sc[4] or sc.a, 0.8),
-        roundedBorderPath = AB.Path(),
     }
     style.borderEdge = style.borderTexture and BorderStyles.EdgeSize(borderStyle, style.borderThickness) or nil
     -- "inner" styles shade the icon from on top; "outer" ones frame it from
@@ -1206,7 +1320,6 @@ local function SharedIconStyle()
         style.borderR, style.borderG, style.borderB, style.borderA,
         style.shadowEnabled and "S" or "s", style.shadowSize,
         style.shadowR, style.shadowG, style.shadowB, style.shadowA,
-        tostring(style.roundedBorderPath),
     }, ":")
     _iconStyleCompiled, _iconStyleCompiledGen = style, gen
     return style
@@ -1249,7 +1362,13 @@ end
 local function FinalizeLane(lane, scope)
     if lane then
         lane.iconStyle = IconStyleForScope(scope or IconStyleScope(lane.unit))
-        lane.roundedAuraBorderPath = AB.Path()
+        -- Aura visibility is lane-local. The global Unitframe tooltip mode
+        -- (Always/OOC/Modifier/Never) owns unit/group-frame mouseover only;
+        -- native AuraButtons reuse just the compatible cursor placement and
+        -- the shared Blizzard/MSUF look applied by ApplyAuraTooltipStyle().
+        local general = _G.MSUF_DB and _G.MSUF_DB.general
+        lane.auraTooltipAnchor = (general and general.unitTooltipAnchor == "CURSOR")
+            and "ANCHOR_CURSOR" or "ANCHOR_BOTTOMRIGHT"
         lane._msufA3TrackingSignature = LaneTrackingSignature(lane)
         lane._msufA3StructuralSignature = LaneStructuralSignature(lane)
         lane._msufA3LayoutSignature = LaneLayoutSignature(lane)
@@ -1566,7 +1685,7 @@ local function CompileDispelSensor(unit, frameSpec, groupMode, visual)
     }
 end
 
-local function CompileUnitLane(unit, shared, layout, filtersRoot, kind, candidateFilters, candidateFilterSignature)
+local function CompileUnitLane(unit, shared, layout, filtersRoot, kind, candidateFilters, candidateFilterSignature, portraitShape, rootShared)
     local spec = LANE_SPECS[kind]
     local filters = type(filtersRoot) == "table" and type(filtersRoot[spec.filterKey]) == "table" and filtersRoot[spec.filterKey] or nil
     candidateFilters, candidateFilterSignature = AddHidePermanentCandidateFilter(
@@ -1576,6 +1695,11 @@ local function CompileUnitLane(unit, shared, layout, filtersRoot, kind, candidat
     local sizeDefault = ReadRaw(layout, shared, spec.sizeKey) or ReadRaw(layout, shared, "iconSize") or DEFAULT_SHARED.iconSize
     local size = ClampNumber(sizeDefault, DEFAULT_SHARED.iconSize, 1, 128)
     local zoomDefault = ReadRaw(layout, shared, spec.iconZoomKey) or ReadRaw(layout, shared, "iconZoom") or DEFAULT_SHARED.iconZoom
+    local iconShapeSource = ReadRaw(layout, shared, spec.iconShapeKey) or ReadRaw(layout, shared, "iconShape")
+    if Shape.FollowsShared(rootShared, unit, kind) then
+        iconShapeSource = Shape.SharedValue(rootShared, kind)
+    end
+    local iconShape, requestedIconShape = Shape.Resolve(iconShapeSource, portraitShape)
     local spacing = ReadNumber(layout, shared, "spacing", DEFAULT_SHARED.spacing, 0, 64)
     local perRow = ReadNumber(shared, nil, spec.perRowKey, ReadRaw(shared, nil, "perRow") or DEFAULT_SHARED.perRow, 1, 40)
     local maxCount = ReadNumber(shared, nil, spec.maxKey, DEFAULT_SHARED[spec.maxKey] or 12, 0, 80)
@@ -1600,6 +1724,8 @@ local function CompileUnitLane(unit, shared, layout, filtersRoot, kind, candidat
         max = Round(maxCount),
         size = size,
         iconZoom = ClampNumber(zoomDefault, DEFAULT_SHARED.iconZoom, 100, 200),
+        iconShape = iconShape,
+        requestedIconShape = requestedIconShape,
         spacing = spacing,
         step = size + spacing,
         perRow = Round(perRow),
@@ -1627,13 +1753,17 @@ local function CompileUnitLane(unit, shared, layout, filtersRoot, kind, candidat
         cooldownSwipeReverse = ReadBool(layout, shared, spec.swipeReverseKey, ReadBool(layout, shared, "cooldownSwipeReverse", false)),
         sortMethod = NormalizeAuraSortMethod(ReadRaw(layout, shared, spec.sortMethodKey) or ReadRaw(layout, shared, "sortMethod")),
         sortReverse = ReadBool(layout, shared, spec.sortReverseKey, ReadBool(layout, shared, "sortReverse", false)),
-        showDurationBar = ReadBool(layout, shared, spec.showDurationBarKey, ReadBool(layout, shared, "showDurationBar", false)),
+        -- Duration-bar visibility is a layoutShared/style key. Prefer that
+        -- authoritative table exactly like cooldown text/swipe/tooltip above;
+        -- old profiles can still carry a stale pre-split copy in layout, which
+        -- must never mask the current per-scope override written by Menu2.
+        showDurationBar = ReadBool(shared, layout, spec.showDurationBarKey, ReadBool(shared, layout, "showDurationBar", false)),
         durationBarHeight = ReadNumber(layout, shared, spec.durationBarHeightKey, ReadRaw(layout, shared, "durationBarHeight") or DEFAULT_SHARED.durationBarHeight, 1, 16),
         durationBarDisplay = ReadDurationBarDisplay(shared, nil, spec.durationBarDisplayKey, ReadRaw(shared, nil, "durationBarDisplay") or DEFAULT_SHARED.durationBarDisplay),
         durationBarPosition = ReadDurationBarPosition(shared, nil, spec.durationBarPositionKey, ReadRaw(shared, nil, "durationBarPosition") or DEFAULT_SHARED.durationBarPosition),
         durationBarDirection = ReadDurationBarDirection(shared, nil, spec.durationBarDirectionKey, ReadRaw(shared, nil, "durationBarDirection") or DEFAULT_SHARED.durationBarDirection),
         showStacks = ReadBool(layout, shared, spec.showStackKey, ReadBool(layout, shared, "showStackCount", true)),
-        showTooltip = ReadBool(layout, shared, spec.tooltipKey, ReadBool(layout, shared, "showTooltip", DEFAULT_SHARED.showTooltip)),
+        showTooltip = ReadBool(shared, layout, spec.tooltipKey, ReadBool(shared, layout, "showTooltip", DEFAULT_SHARED.showTooltip)),
         showAuraBorder = debuffTypeBorderMode ~= "OFF",
         showAuraSymbol = debuffTypeBorderMode == "SYMBOL",
         cooldownSize = ReadNumber(layout, shared, spec.cooldownSizeKey, ReadRaw(shared, nil, "cooldownTextSize") or DEFAULT_SHARED.cooldownTextSize, 6, 40),
@@ -1648,7 +1778,7 @@ local function CompileUnitLane(unit, shared, layout, filtersRoot, kind, candidat
     })
 end
 
-local function CompileGroupLane(unit, source, kind, groupKind)
+local function CompileGroupLane(unit, source, kind, groupKind, portraitShape, shared)
     local spec = GROUP_LANE_SPECS[kind]
     if not (spec and type(source) == "table") then return nil end
     local candidateFilters, candidateFilterSignature
@@ -1661,6 +1791,12 @@ local function CompileGroupLane(unit, source, kind, groupKind)
         candidateFilters, candidateFilterSignature,
         spec.maxDurationKey and source[spec.maxDurationKey], source[spec.hidePermanentKey] == true)
     local size = ClampNumber(source[spec.sizeKey] or source.iconSize, spec.defaultSize, 1, 256)
+    local sharedLane = kind == "debuff" and "debuff" or "buff"
+    local iconShapeSource = source[spec.iconShapeKey] or source.iconShape
+    if Shape.FollowsShared(shared, groupKind, sharedLane) then
+        iconShapeSource = Shape.SharedValue(shared, sharedLane)
+    end
+    local iconShape, requestedIconShape = Shape.Resolve(iconShapeSource, portraitShape)
     local spacing = ClampNumber(source[spec.spacingKey] or source.spacing, 1, 0, 64)
     local perRow = ClampNumber(source[spec.perRowKey] or source.perRow, spec.defaultPerRow, 1, 40)
     local maxCount = ClampNumber(source[spec.maxKey], spec.defaultMax, 0, 80)
@@ -1699,6 +1835,8 @@ local function CompileGroupLane(unit, source, kind, groupKind)
         max = Round(maxCount),
         size = size,
         iconZoom = ClampNumber(source[spec.iconZoomKey] or source.iconZoom, 100, 100, 200),
+        iconShape = iconShape,
+        requestedIconShape = requestedIconShape,
         spacing = spacing,
         step = size + spacing,
         perRow = Round(perRow),
@@ -1862,8 +2000,16 @@ A3._AddPlayerDefensiveAutoBlacklist = function(candidateFilters, candidateFilter
         excluded = {}
         candidateFilters.excludeSpellIDs = excluded
     end
-    local parts, count = {}, 0
+    local expanded = {}
     for spellID in pairs(tracked) do
+        if type(A3.AddAuraSpellIDAndAliases) == "function" then
+            A3.AddAuraSpellIDAndAliases(expanded, spellID)
+        else
+            expanded[spellID] = true
+        end
+    end
+    local parts, count = {}, 0
+    for spellID in pairs(expanded) do
         excluded[spellID] = true
         count = count + 1
         parts[count] = tostring(spellID)
@@ -2054,14 +2200,15 @@ A3._CompilePlayerDefensivePortraitLane = function(lane, frameSpec, entry)
     return FinalizeLane(out, "player")
 end
 
-local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec)
+local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec, shared)
     if type(entry) ~= "table" then return nil, nil end
     local playerDefensives = unit == "player" and (index == 4 or entry.playerDefensives == true)
     -- `enabled` is the Core feature's master switch. Portrait mode is only a
     -- presentation choice and cannot keep a disabled feature alive.
     if entry.enabled ~= true then return nil, nil end
     local portraitRequested = playerDefensives and entry.portraitIcon == true
-    local includeSpellIDs = CustomSpellIDHash(entry.spellIDs or entry.includeSpellIDs)
+    local nameAliasSpellIDs = CustomSpellIDHash(entry.spellIDs or entry.includeSpellIDs)
+    local includeSpellIDs = nameAliasSpellIDs
     local targetDots = not playerDefensives and (index == 4 or entry.targetDots == true)
     if playerDefensives then
         includeSpellIDs = A3._PlayerDefensiveTrackedSpellIDHash(entry)
@@ -2092,6 +2239,12 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec)
     local maxCount = ClampNumber(placed.max, 8, 0, 40)
     local growthX, growthY, xSign, ySign, verticalGrowth = GrowthParts(placed.growth or "LEFTDOWN", "DOWN")
     local cols, rows = GridShape(maxCount, perRow, verticalGrowth)
+    local iconShapeSource = placed.iconShape
+    if Shape.FollowsShared(shared, unit, "custom" .. tostring(index)) then
+        iconShapeSource = Shape.SharedValue(shared, helpful and "buff" or "debuff")
+    end
+    local iconShape, requestedIconShape = Shape.Resolve(
+        iconShapeSource, frameSpec and frameSpec.portrait and frameSpec.portrait.shape)
     lanePadding = Round(ClampNumber(lanePadding, 0, 0, 16))
     local lane = FinalizeLane({
         kind = "custom" .. tostring(index),
@@ -2102,9 +2255,16 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec)
             or (playerDefensives and "HELPFUL" or NativeFilter(helpful and "HELPFUL" or "HARMFUL", filters)),
         candidateFilters = candidateFilters,
         candidateFilterSignature = candidateFilterSignature,
+        -- WeakAuras' traditional non-exact Aura trigger resolves numeric input
+        -- to a spell name. Keep the original user IDs so the opt-in UNIT_AURA
+        -- resolver can learn the visible auraData.spellId without scanning
+        -- disabled or ordinary Aura lanes.
+        nameAliasSpellIDs = nameAliasSpellIDs,
         max = Round(maxCount),
         size = size,
         iconZoom = ClampNumber(placed.iconZoom, 100, 100, 200),
+        iconShape = iconShape,
+        requestedIconShape = requestedIconShape,
         spacing = spacing,
         step = size + spacing,
         perRow = Round(perRow),
@@ -2184,7 +2344,7 @@ local function CompileUnitCustomContainers(auras, unit, frameSpec)
     local lanePadding = ReadRaw(layout, sharedLayout, "stylePadding")
     local lanes, effectItems, targetDotEffectItems = {}, {}, {}
     for i = 1, 4 do
-        local lane, effect, portraitLane = CompileUnitCustomLane(unit, source[i], i, lanePadding, frameSpec)
+        local lane, effect, portraitLane = CompileUnitCustomLane(unit, source[i], i, lanePadding, frameSpec, auras.shared)
         if lane then lanes["custom" .. tostring(i)] = lane end
         if portraitLane then lanes.defensivePortrait = portraitLane end
         if effect then
@@ -2268,8 +2428,9 @@ local function BuildUnitFrameConfig(unit, frameSpec)
                 buffCandidates, buffCandidateSignature,
                 type(customContainers) == "table" and customContainers[4] or nil, tracked)
         end
-        buff = CompileUnitLane(unit, sharedLayout, layout, filtersRoot, "buff", buffCandidates, buffCandidateSignature)
-        debuff = CompileUnitLane(unit, sharedLayout, layout, filtersRoot, "debuff", debuffCandidates, debuffCandidateSignature)
+        local portraitShape = frameSpec and frameSpec.portrait and frameSpec.portrait.shape
+        buff = CompileUnitLane(unit, sharedLayout, layout, filtersRoot, "buff", buffCandidates, buffCandidateSignature, portraitShape, auras.shared)
+        debuff = CompileUnitLane(unit, sharedLayout, layout, filtersRoot, "debuff", debuffCandidates, debuffCandidateSignature, portraitShape, auras.shared)
         laneEffects = CompileUnitLaneEffects(unit, sharedLayout, buff, debuff)
     end
     if not iconsEnabled and not hasCustomContainers and not customEffects and not targetDotEffects and not legacyCustomDisplays then
@@ -2438,16 +2599,18 @@ local function ResolveGroupFrameConfig(frame, unit)
         _msufA3VisualGen = visualGen,
         _msufA3Source = source,
     }
-    local buff = type(source) == "table" and CompileGroupLane(unit, source, "buff", groupKind) or nil
+    local portraitShape = spec and spec.portrait and spec.portrait.shape
+    local _, sharedAuraStyle = EnsureDB()
+    local buff = type(source) == "table" and CompileGroupLane(unit, source, "buff", groupKind, portraitShape, sharedAuraStyle) or nil
     local combinedSpellSource = BuildGroupSpellIndicatorSource(spellSource, cornerSource)
     local spellIndicatorRoot = type(unit) == "string" and unit ~= ""
         and SpellIndicatorsRuntime.CompileSlots(unit, combinedSpellSource, buff) or nil
     cfg.spellIndicators = spellIndicatorRoot
     cfg.enabled = spellIndicatorRoot and spellIndicatorRoot.enabled == true or false
     if type(source) == "table" and type(unit) == "string" and unit ~= "" and source.enabled ~= false then
-        local trackedBuff = CompileGroupLane(unit, source, "trackedBuff", groupKind)
-        local debuff = CompileGroupLane(unit, source, "debuff", groupKind)
-        local external = CompileGroupLane(unit, source, "external", groupKind)
+        local trackedBuff = CompileGroupLane(unit, source, "trackedBuff", groupKind, portraitShape, sharedAuraStyle)
+        local debuff = CompileGroupLane(unit, source, "debuff", groupKind, portraitShape, sharedAuraStyle)
+        local external = CompileGroupLane(unit, source, "external", groupKind, portraitShape, sharedAuraStyle)
         cfg.lanes.buff = buff
         cfg.lanes.trackedBuff = trackedBuff
         cfg.lanes.debuff = debuff
@@ -2605,6 +2768,8 @@ function A3.BuildAuraLaneMetrics(configOrUnit, kind)
         height = lane.height,
         alpha = lane.alpha,
         iconZoom = lane.iconZoom,
+        iconShape = lane.iconShape,
+        requestedIconShape = lane.requestedIconShape,
         growth = lane.growthX,
         rowWrap = lane.growthY,
         growthX = lane.xSign,
@@ -2655,50 +2820,23 @@ local function ApplyFont(fs, size)
     if type(applyResolved) == "function" then
         applyResolved(fs, fontPath, size, fontFlags, general and general.fontKey)
     else
-        -- SetFont returns success on 10.x+ (invalid paths return false, they
-        -- do not error) -- validate via the return value, never via pcall.
-        local ready = fs:SetFont(fontPath, size, fontFlags) ~= false
+        -- Current clients require a valid FontAsset and may raise before a
+        -- boolean result is returned. Keep the load-order fallback just as
+        -- defensive as the central font service so stale SharedMedia paths can
+        -- never escape through profile/runtime apply.
+        local called, applied = pcall(fs.SetFont, fs, fontPath, size, fontFlags)
+        local ready = called and applied ~= false
         local matches = _G.MSUF_FontApplicationMatches
         if ready and type(matches) == "function" then ready = matches(fs, fontPath, size) == true end
         if not ready then
             if fontPath ~= STANDARD_TEXT_FONT and STANDARD_TEXT_FONT then
-                fs:SetFont(STANDARD_TEXT_FONT, size, fontFlags)
+                pcall(fs.SetFont, fs, STANDARD_TEXT_FONT, size, fontFlags)
             end
             if type(_G.MSUF_MarkFontApplyFailed) == "function" then _G.MSUF_MarkFontApplyFailed() end
         end
     end
     fs:SetTextColor(r or 1, g or 1, b or 1, 1)
     if useShadow then fs:SetShadowOffset(1, -1) else fs:SetShadowOffset(0, 0) end
-end
-
--- Stack-count text color. ApplyFont paints every aura fontstring with the
--- global font color; the stack count carries its own optional override. Cached
--- on the same visual generation as the font cache, so the menu's aura-color
--- apply (which bumps _nativeVisualGen) invalidates it and no per-button DB read
--- happens in between. Shape-tolerant: legacy Auras 2.0 profiles stored these
--- colors with string keys.
---- On A3 rather than a main-chunk local: this file sits under a deliberate
---- local budget that keeps structural reserve below WoW Lua's 200-local cliff.
-function A3._StackCountColor()
-    local gen = A3._nativeVisualGen or 0
-    if A3._auraStackColorGen == gen then
-        return A3._auraStackColorR, A3._auraStackColorG, A3._auraStackColorB
-    end
-    A3._auraStackColorGen = gen
-    A3._auraStackColorR, A3._auraStackColorG, A3._auraStackColorB = nil, nil, nil
-    local general = _G.MSUF_DB and _G.MSUF_DB.general
-    local color = general and general.aurasStackCountColor
-    if type(color) == "table" then
-        local cr = color[1] or color.r or color["1"]
-        local cg = color[2] or color.g or color["2"]
-        local cb = color[3] or color.b or color["3"]
-        if cr ~= nil or cg ~= nil or cb ~= nil then
-            A3._auraStackColorR = Clamp01(cr, 1)
-            A3._auraStackColorG = Clamp01(cg, 1)
-            A3._auraStackColorB = Clamp01(cb, 1)
-        end
-    end
-    return A3._auraStackColorR, A3._auraStackColorG, A3._auraStackColorB
 end
 
 -- Aura timer text format/color: a C-side NumericRuleFormatter plus a
@@ -3135,6 +3273,7 @@ end
 
 LaneLayoutSignature = function(lane)
     return tostring(lane.size) .. "\030" .. tostring(lane.iconZoom) .. "\030" .. tostring(lane.spacing)
+        .. "\030" .. tostring(lane.iconShape) .. "\030" .. tostring(lane.requestedIconShape)
         .. "\030" .. tostring(lane.step) .. "\030" .. tostring(lane.perRow)
         .. "\030" .. tostring(lane.cols) .. "\030" .. tostring(lane.rows)
         .. "\030" .. tostring(lane.width) .. "\030" .. tostring(lane.height)
@@ -3153,8 +3292,8 @@ LaneLayoutSignature = function(lane)
         .. "\030" .. tostring(lane.showStacks) .. "\030" .. tostring(lane.stackAnchor)
         .. "\030" .. tostring(lane.stackSize) .. "\030" .. tostring(lane.stackX)
         .. "\030" .. tostring(lane.stackY) .. "\030" .. tostring(lane.showTooltip)
+        .. "\030" .. tostring(lane.auraTooltipAnchor)
         .. "\030" .. tostring(lane.showAuraBorder) .. "\030" .. tostring(lane.showAuraSymbol)
-        .. "\030" .. tostring(lane.roundedAuraBorderPath)
         .. "\030" .. tostring(lane.alpha)
         .. "\030" .. tostring(lane.padding)
         .. "\030" .. tostring(lane.portraitPositionWhenDisabled)
@@ -3275,8 +3414,45 @@ local ICON_SHADOW_TEXTURE = "Interface\\AddOns\\" .. tostring(addonName or "Midn
 --- Soft drop shadow behind the icon. `shadowSize` is the visible extent in
 --- pixels, so the band is twice that: its inner half hides behind the icon and
 --- the whole falloff lands outside.
-local function ApplyIconStyleShadow(button, style, size)
+local function SetAuraShapeTexture(texture, shape, useBorder)
+    local media = Shape.MEDIA[shape]
+    if not (texture and media) then return false end
+    if useBorder == true then
+        texture:SetTexture(media.border)
+    elseif media.maskAtlas and texture.SetAtlas then
+        texture:SetAtlas(media.maskAtlas)
+    else
+        texture:SetTexture(media.swipe or media.mask)
+    end
+    if texture.SetDesaturated then texture:SetDesaturated(media.desaturate == true) end
+    if texture.SetTexCoord then texture:SetTexCoord(0, 1, 0, 1) end
+    return true
+end
+
+local function ApplyIconStyleShadow(button, style, size, shape)
     local pieces = button._msufA3StyleShadow
+    local shaped = shape and shape ~= Shape.RECTANGLE
+    local shapedShadow = button._msufA3ShapedStyleShadow
+    if shaped then
+        if pieces then MSUF.BorderStyles.Hide(pieces) end
+        if not (style and style.shadowEnabled) then
+            if shapedShadow then shapedShadow:Hide() end
+            return
+        end
+        if not shapedShadow then
+            shapedShadow = button:CreateTexture(nil, "BACKGROUND", nil, -7)
+            button._msufA3ShapedStyleShadow = shapedShadow
+        end
+        if not SetAuraShapeTexture(shapedShadow, shape, false) then shapedShadow:Hide(); return end
+        local extent = (style.shadowSize or 0) + (style.borderEnabled and style.borderThickness or 0)
+        shapedShadow:ClearAllPoints()
+        shapedShadow:SetPoint("TOPLEFT", button, "TOPLEFT", -extent, extent)
+        shapedShadow:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", extent, -extent)
+        shapedShadow:SetVertexColor(style.shadowR, style.shadowG, style.shadowB, style.shadowA)
+        shapedShadow:Show()
+        return
+    end
+    if shapedShadow then shapedShadow:Hide() end
     if not (style and style.shadowEnabled) then
         if pieces then MSUF.BorderStyles.Hide(pieces) end
         return
@@ -3308,14 +3484,43 @@ local ICON_INNER_BAND_MAX = 0.3
 --- it at BORDER(-1). Inner styles (Shadow) shade the icon instead: the band
 --- sits wholly inside and draws on top at ARTWORK(7), above the icon but still
 --- below the OVERLAY dispel border.
-local function ApplyIconStyleBorder(button, style, size)
+local function ApplyIconStyleBorder(button, style, size, shape)
     local flat = button._msufA3StyleBorder
     local pieces = button._msufA3StyleBorderPieces
-    if AB.ApplyStyle(button, style) then
+    local shaped = shape and shape ~= Shape.RECTANGLE
+    local shapedBorders = button._msufA3ShapedStyleBorders
+    if shaped then
         if flat then flat:Hide() end
         if pieces then MSUF.BorderStyles.Hide(pieces) end
+        if not (style and style.borderEnabled) then
+            for i = 1, #(shapedBorders or {}) do shapedBorders[i]:Hide() end
+            return
+        end
+        shapedBorders = shapedBorders or {}
+        button._msufA3ShapedStyleBorders = shapedBorders
+        local media = Shape.MEDIA[shape]
+        local inner = style.borderPlacement == "inner" and not (media and media.borderOuterOnly)
+        local count = math_max(1, math_min(8, math_floor((style.borderThickness or 1) + 0.5)))
+        for i = 1, count do
+            local border = shapedBorders[i]
+            if not border then
+                border = button:CreateTexture(nil, inner and "ARTWORK" or "BORDER", nil, inner and 7 or -1)
+                shapedBorders[i] = border
+            elseif border.SetDrawLayer then
+                border:SetDrawLayer(inner and "ARTWORK" or "BORDER", inner and 7 or -1)
+            end
+            if not SetAuraShapeTexture(border, shape, true) then border:Hide(); return end
+            local inset = inner and (i - 1) or -i
+            border:ClearAllPoints()
+            border:SetPoint("TOPLEFT", button, "TOPLEFT", inset, -inset)
+            border:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -inset, inset)
+            border:SetVertexColor(style.borderR, style.borderG, style.borderB, style.borderA)
+            border:Show()
+        end
+        for i = count + 1, #shapedBorders do shapedBorders[i]:Hide() end
         return
     end
+    for i = 1, #(shapedBorders or {}) do shapedBorders[i]:Hide() end
     if not (style and style.borderEnabled) then
         if flat then flat:Hide() end
         if pieces then MSUF.BorderStyles.Hide(pieces) end
@@ -3366,19 +3571,21 @@ end
 --- real buttons use in initializeFrame, so edit-mode lanes and menu mocks stay
 --- pixel-identical to the runtime. Cold path only; passing nil (opted-out
 --- scope, bar-only lane) hides any pieces a previous stamp created.
-function A3.ApplyIconStylePreview(button, style, size)
+function A3.ApplyIconStylePreview(button, style, size, shape)
     if not button then return end
-    ApplyIconStyleShadow(button, style, size)
-    ApplyIconStyleBorder(button, style, size)
+    shape = Shape.Normalize(shape)
+    ApplyIconStyleShadow(button, style, size, shape)
+    ApplyIconStyleBorder(button, style, size, shape)
 end
 
---- Preview counterpart for the native PreserveAsset dispel border. Menu2 and
---- Edit Mode call this only while repainting their mock icons.
-function A3.ApplyRoundedAuraDispelPreview(border, icon, size, mode)
-    local path = AB.Path()
+function A3.ApplyAuraDispelPreview(border, icon, size, mode, shape)
+    shape = Shape.Normalize(shape)
+    if shape == Shape.RECTANGLE then return false end
+    local path = A3.AuraShapeBorderPath(shape)
     if not (border and icon and path and mode ~= nil and mode ~= "OFF") then return false end
     local pad = math_max(1, math_floor(((tonumber(size) or 24) / 24) + 0.5))
-    AB.Media(border, path)
+    border:SetTexture(path)
+    if border.SetTexCoord then border:SetTexCoord(0, 1, 0, 1) end
     border:ClearAllPoints()
     border:SetPoint("TOPLEFT", icon, "TOPLEFT", -pad, pad)
     border:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", pad, -pad)
@@ -3764,6 +3971,12 @@ local function PrepareAuraButton(button, lane, index)
         if button._msufA3Cooldown then button._msufA3Cooldown:Hide() end
     end
 
+    -- Masking is stamped once in AuraContainer's initializeFrame callback.
+    -- Rectangular/default auras take the no-allocation branch and keep the
+    -- exact pre-shape icon, swipe, and border renderer.
+    local iconShape = not barOnly and (lane.iconShape or Shape.RECTANGLE) or Shape.RECTANGLE
+    A3.ApplyAuraIconShape(button, iconShape, button._msufA3Cooldown, icon)
+
     if lane.showDurationBar == true then
         local bar = button._msufA3DurationBar
         if not bar then
@@ -3852,8 +4065,6 @@ local function PrepareAuraButton(button, lane, index)
         button.Count = count
         count:Hide()
         ApplyFont(count, lane.stackSize)
-        local scr, scg, scb = A3._StackCountColor()
-        if scr then count:SetTextColor(scr, scg, scb, 1) end
         if type(count.SetDrawLayer) == "function" then count:SetDrawLayer("OVERLAY", 6) end
         PlaceStackText(count, textOverlay, lane)
         count:Show()
@@ -3871,11 +4082,14 @@ local function PrepareAuraButton(button, lane, index)
             border = button:CreateTexture(nil, "OVERLAY")
         end
         LayoutAuraBorder(button, border, lane)
-        local roundedDispel = lane.roundedAuraBorderPath
-        if roundedDispel then AB.Media(border, roundedDispel) end
+        local shapedDispel = iconShape ~= Shape.RECTANGLE and A3.AuraShapeBorderPath(iconShape) or nil
+        if shapedDispel then
+            border:SetTexture(shapedDispel)
+            if border.SetTexCoord then border:SetTexCoord(0, 1, 0, 1) end
+        end
         button._msufA3AuraBorder = border
         button:ClearDispelTypeTextures()
-        button:AddDispelTypeTexture(border, GetAuraBorderOptions(lane.showAuraSymbol, roundedDispel ~= nil))
+        button:AddDispelTypeTexture(border, GetAuraBorderOptions(lane.showAuraSymbol, shapedDispel ~= nil))
         auraBorderBound = true
     else
         button:ClearDispelTypeTextures()
@@ -3909,30 +4123,18 @@ local function PrepareAuraButton(button, lane, index)
     local style
     if not barOnly then style = lane.iconStyle end
     local size = lane.size or 0
-    ApplyIconStyleShadow(button, style, size)
-    ApplyIconStyleBorder(button, style, size)
+    ApplyIconStyleShadow(button, style, size, iconShape)
+    ApplyIconStyleBorder(button, style, size, iconShape)
 
-    -- PTR 7 aura tooltips are wired natively: the AuraButton intrinsic ships a
-    -- default tooltipAnchorPoint ("ANCHOR_BOTTOMLEFT" KeyValue) and shows the
-    -- shared AuraButtonTooltip from its own OnEnter whenever mouse motion is
-    -- enabled and the container has a unit. Enabling motion is therefore the
-    -- ONLY thing that makes a tooltip appear/disappear; the anchor + combat-hide
-    -- calls below merely restyle it to match MSUF's unit-info tooltip. This is
-    -- the button cold path (initializeFrame, once per created button) and the
-    -- native OnEnter carries zero addon cost per hover.
+    -- PTR 7 aura tooltips are native. Their lane switch is the complete
+    -- visibility authority; global Unitframe visibility modes never override
+    -- it. Only the compatible cursor placement and tooltip look are shared.
     local wantTooltip = lane.showTooltip ~= false
     button:SetMouseMotionEnabled(wantTooltip)
     if wantTooltip and type(button.SetTooltipAnchorPoint) == "function" then
-        local general = _G.MSUF_DB and _G.MSUF_DB.general
-        -- CURSOR follows the cursor like MSUF's modern unit tooltip; FIXED and
-        -- EXTERNAL are unit-info-frame placements with no per-button meaning, so
-        -- aura icons keep the classic bottom-right growth anchor.
-        local anchor = (general and general.unitTooltipAnchor == "CURSOR")
-            and "ANCHOR_CURSOR" or "ANCHOR_BOTTOMRIGHT"
-        button:SetTooltipAnchorPoint(anchor)
+        button:SetTooltipAnchorPoint(lane.auraTooltipAnchor or "ANCHOR_BOTTOMRIGHT")
         if type(button.SetHideTooltipInCombat) == "function" then
-            -- OOC ("only out of combat") maps to the native combat-hide flag.
-            button:SetHideTooltipInCombat((general and general.unitTooltipMode == "OOC") == true)
+            button:SetHideTooltipInCombat(false)
         end
     end
     button._msufA3LaneLayoutSignature = lane._msufA3LayoutSignature
@@ -5603,7 +5805,10 @@ end
 
 RegisterNativeContainer = function(container, forceRefresh)
     if not container then return false end
-    if forceRefresh ~= true and container._msufA3NativeRegistered == true then return true end
+    if forceRefresh ~= true and container._msufA3NativeRegistered == true then
+        if A3.AuraNameResolver then A3.AuraNameResolver.SyncContainer(container) end
+        return true
+    end
     if not A3._NativeContainerVisible(container) then
         container._msufA3NativeRegistrationPending = true
         return true
@@ -5621,11 +5826,13 @@ RegisterNativeContainer = function(container, forceRefresh)
     A3._RegisterDirectIdentityRefreshContainer(container)
     container._msufA3NativeRegistered = true
     container._msufA3NativeRegistrationPending = nil
+    if A3.AuraNameResolver then A3.AuraNameResolver.SyncContainer(container) end
     return true
 end
 
 A3._UnregisterNativeContainer = function(container)
     if not container then return true end
+    if A3.AuraNameResolver then A3.AuraNameResolver.UnregisterContainer(container) end
     A3._UnregisterDirectIdentityRefreshContainer(container)
     container:SetEnabled(false)
     container._msufA3NativeRegistered = nil

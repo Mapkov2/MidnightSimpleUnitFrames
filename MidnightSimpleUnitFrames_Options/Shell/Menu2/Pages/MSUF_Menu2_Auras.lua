@@ -62,6 +62,7 @@ local DEBUFF_AURA_SORT_METHOD_VALUES = VTP "DEFAULT=Player & Priority First|UNIT
 local DURATION_BAR_DISPLAY_VALUES = VTP "BAR_ONLY=Bar Only|OVERLAY=Icon + Bar"
 local DURATION_BAR_POSITION_VALUES = VTP "BOTTOM=Bottom|TOP=Top"
 local DURATION_BAR_DIRECTION_VALUES = VTP "REMAINING=Remaining|ELAPSED=Elapsed"
+M.AURA_ICON_SHAPE_VALUES = VTP "RECTANGLE=Rectangular (current)|FOLLOW_PORTRAIT=Follow frame portrait|CIRCLE=Circle|ROUNDED=Rounded|DIAMOND=Diamond|HEXAGON=Hexagon|STAR=Star|BLIZZARD=Blizzard portrait"
 local function AURA_COOLDOWN_COLOR_REFERENCES()
     local general = _G.MSUF_DB and _G.MSUF_DB.general or nil
     if general and general.aurasCooldownTextUseBuckets == true then
@@ -309,6 +310,10 @@ local function NormalizeDebuffTypeBorderMode(value, fallback)
 end
 local function AddTooltip(widget, title, body)
     return M.AddTooltip(widget, title, body, { hook = true, titleAsLine = true })
+end
+local function AddAuraTooltipHelp(widget)
+    return AddTooltip(widget, "Aura tooltip",
+        "Controls this aura lane independently. Always / Out of Combat / Modifier / Never under Global Style > Miscellaneous affect only unit and group frames. Auras only reuse the selected Blizzard/MSUF look and cursor placement.")
 end
 local function ActionButton(parent, label, width, role)
     if W.RoleButton then return W.RoleButton(parent, label, role or "normal", width or 90, 24) end
@@ -1030,9 +1035,9 @@ local function ApplyAuraPreviewFont(fs, size)
             local gdb = _G.MSUF_DB and _G.MSUF_DB.general
             path = resolveSafe(path, px, flags, gdb and gdb.fontKey)
         end
-        local applied = fs:SetFont(path, px, flags)
-        if applied == false then
-            fs:SetFont(FONT, px, flags)
+        local ok = pcall(fs.SetFont, fs, path, px, flags)
+        if not ok then
+            pcall(fs.SetFont, fs, FONT, px, flags)
         end
     end
     if fs.SetTextColor then fs:SetTextColor(r or 1, g or 1, b or 1, 1) end
@@ -1076,6 +1081,23 @@ local function GroupAuraPreviewDefaultSize(scope, lane)
     if scope == "raid" or scope == "mythicraid" then return 16 end
     return lane == "buff" and 22 or 20
 end
+function M.ResolveAuraStylePreviewIconShape(scope, requested, effective)
+    local portraitShape
+    if scope ~= "shared" then
+        if IsGroupScope(scope) then
+            local kind = GroupScopeKinds(scope)
+            local conf = GroupConf(kind)
+            portraitShape = conf and conf.portraitShape or "SQUARE"
+        else
+            local conf = type(M.GetUnitDB) == "function" and M.GetUnitDB(scope) or nil
+            portraitShape = conf and conf.portraitShape or "SQUARE"
+        end
+    end
+    if type(A3.ResolveAuraIconShape) == "function" then
+        return A3.ResolveAuraIconShape(requested or effective, portraitShape)
+    end
+    return effective or requested or "RECTANGLE"
+end
 local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
     local isGroup = IsGroupScope(scope)
     local cfg = {
@@ -1102,6 +1124,7 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
         durationBarPosition = "BOTTOM",
         durationBarDirection = "REMAINING",
         iconZoom = 100,
+        iconShape = "RECTANGLE",
     }
     -- Shared icon style (border/shadow) is one global block; the preview
     -- mirrors it for every scope and lane, matching the live runtime stamp.
@@ -1126,6 +1149,11 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
         local group = GFReadGroup(scope, lane or "debuff")
         local root = GFReadRoot(scope)
         cfg.iconZoom = tonumber(group.iconZoom) or tonumber(root and root.iconZoom) or 100
+        local requestedIconShape = type(group.iconShape) == "string" and group.iconShape or "RECTANGLE"
+        if type(Model.IconShapeFollowsShared) == "function" and Model.IconShapeFollowsShared(scope, lane) then
+            requestedIconShape = Model.ReadLaneStyleString("shared", lane, "iconShape", "RECTANGLE")
+        end
+        cfg.iconShape = M.ResolveAuraStylePreviewIconShape(scope, requestedIconShape, requestedIconShape)
         local iconScale = min(300, max(20, AccessibleNumber(group.iconScale, 100))) / 100
         cfg.size = (tonumber(group.size) or GroupAuraPreviewDefaultSize(scope, lane)) * iconScale
         cfg.allowTinyIconScale = true
@@ -1172,6 +1200,19 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
         cfg.spacing = tonumber(runtimePreview and runtimePreview.spacing) or Model.ReadNumber(readScope, "spacing", 2, 0, 12)
         cfg.iconZoom = lane and Model.ReadLaneStyleNumber(readScope, lane, "iconZoom", 100, 100, 200)
             or Model.ReadNumber(readScope, "iconZoom", 100, 100, 200)
+        local configuredIconShape = lane and Model.ReadLaneStyleString(readScope, lane, "iconShape", "RECTANGLE") or "RECTANGLE"
+        if lane and readScope ~= "shared" and type(Model.IconShapeFollowsShared) == "function"
+            and Model.IconShapeFollowsShared(readScope, lane)
+        then
+            configuredIconShape = Model.ReadLaneStyleString("shared", lane, "iconShape", "RECTANGLE")
+        end
+        local requestedIconShape = lane and runtimePreview
+            and (lane == "buff" and runtimePreview.buffRequestedIconShape or runtimePreview.debuffRequestedIconShape)
+            or configuredIconShape
+        local effectiveIconShape = lane and runtimePreview
+            and (lane == "buff" and runtimePreview.buffIconShape or runtimePreview.debuffIconShape)
+            or configuredIconShape
+        cfg.iconShape = M.ResolveAuraStylePreviewIconShape(readScope, requestedIconShape, effectiveIconShape)
         cfg.growth = lane and type(Model.ReadLaneGrowthPair) == "function" and Model.ReadLaneGrowthPair(readScope, lane) or "RIGHTDOWN"
         if type(Model.ReadLaneStyleBool) == "function" and lane then
             cfg.showStacks = Model.ReadLaneStyleBool(readScope, lane, "showStackCount", true)
@@ -1242,7 +1283,7 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
     cfg.stackSize = max(7, tonumber(cfg.stackSize) or 10)
     cfg.cooldownSize = max(7, tonumber(cfg.cooldownSize) or 9)
     cfg.cooldownDecimalSeconds = min(30, max(0, tonumber(cfg.cooldownDecimalSeconds) or 3))
-    cfg.durationBarHeight = min(max(1, tonumber(cfg.durationBarHeight) or 2), max(1, floor((cfg.size or 24) / 2)))
+    cfg.durationBarHeight = min(max(1, tonumber(cfg.durationBarHeight) or 2), max(1, cfg.size or 24))
     cfg.durationBarDisplay = cfg.durationBarDisplay == "OVERLAY" and "OVERLAY" or "BAR_ONLY"
     cfg.durationBarPosition = cfg.durationBarPosition == "TOP" and "TOP" or "BOTTOM"
     cfg.durationBarDirection = cfg.durationBarDirection == "ELAPSED" and "ELAPSED" or "REMAINING"
@@ -1252,6 +1293,12 @@ local function ReadCustomAuraPreviewConfig(scope, index, width, height)
     local item = Model.CustomContainer(scope, index, true)
     local placed = item and type(item.placed) == "table" and item.placed or {}
     local entries = type(Model.CustomContainerSpellEntries) == "function" and Model.CustomContainerSpellEntries(scope, index) or {}
+    local harmful = (index == 4 and scope ~= "player") or tostring(item and item.auraType or "BUFF"):upper() == "DEBUFF"
+    local iconShape = type(placed.iconShape) == "string" and placed.iconShape or "RECTANGLE"
+    if type(Model.IconShapeFollowsShared) == "function" and Model.IconShapeFollowsShared(scope, "custom" .. tostring(index)) then
+        iconShape = Model.ReadLaneStyleString("shared", harmful and "debuff" or "buff", "iconShape", "RECTANGLE")
+    end
+    iconShape = M.ResolveAuraStylePreviewIconShape(scope, iconShape, iconShape)
     local cfg = {
         size = tonumber(placed.size) or 24,
         spacing = tonumber(placed.spacing) or 2,
@@ -1259,6 +1306,7 @@ local function ReadCustomAuraPreviewConfig(scope, index, width, height)
         maxIcons = tonumber(placed.max) or 8,
         alpha = min(1, max(0, tonumber(placed.alpha) or 1)),
         iconZoom = min(200, max(100, tonumber(placed.iconZoom) or 100)),
+        iconShape = iconShape,
         showStacks = placed.showStacks ~= false,
         showTimers = placed.showCooldown ~= false,
         showSwipe = placed.showCooldownSwipe ~= false,
@@ -1317,7 +1365,7 @@ local function ReadCustomAuraPreviewConfig(scope, index, width, height)
     cfg.stackSize = max(7, cfg.stackSize)
     cfg.cooldownSize = max(7, cfg.cooldownSize)
     cfg.cooldownDecimalSeconds = min(30, max(0, cfg.cooldownDecimalSeconds))
-    cfg.durationBarHeight = min(max(1, cfg.durationBarHeight), max(1, floor(cfg.size / 2)))
+    cfg.durationBarHeight = min(max(1, cfg.durationBarHeight), max(1, cfg.size))
     return cfg
 end
 local function FormatAuraPreviewTimer(seconds, cfg)
@@ -1369,6 +1417,24 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
     -- drawn by the shared 8-piece renderer.
     local function ApplyPreviewIconStyle(icon, cfg, barOnly)
         local B = MSUF.BorderStyles
+        if type(A3.ApplyIconStylePreview) == "function" then
+            local texture = B and cfg.styleBorderStyle and B.Resolve(cfg.styleBorderStyle) or nil
+            local c, sc = cfg.styleBorderColor, cfg.styleShadowColor
+            A3.ApplyIconStylePreview(icon, not barOnly and {
+                borderEnabled = cfg.styleBorderEnabled == true,
+                borderTexture = texture,
+                borderEdge = B and B.EdgeSize(cfg.styleBorderStyle, cfg.styleBorderThickness or 1) or 1,
+                borderPlacement = B and B.Placement(cfg.styleBorderStyle) or "outer",
+                borderThickness = cfg.styleBorderThickness or 1,
+                borderR = c and c[1] or 0, borderG = c and c[2] or 0,
+                borderB = c and c[3] or 0, borderA = c and c[4] or 1,
+                shadowEnabled = cfg.styleShadowEnabled == true,
+                shadowSize = cfg.styleShadowSize or 4,
+                shadowR = sc and sc[1] or 0, shadowG = sc and sc[2] or 0,
+                shadowB = sc and sc[3] or 0, shadowA = sc and sc[4] or 0.8,
+            } or nil, cfg.size, cfg.iconShape)
+            return
+        end
         local border = icon.msufStyleBorder
         local borderPieces = icon.msufStyleBorderPieces
         local texture = B and cfg.styleBorderStyle and B.Resolve(cfg.styleBorderStyle) or nil
@@ -1440,12 +1506,15 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
         local previewTexture = previewTextures and previewTextures[((index - 1) % max(1, #previewTextures)) + 1]
         icon.icon:SetTexture(previewTexture or tex[((index - 1) % #tex) + 1])
         ApplyAuraPreviewIconZoom(icon.icon, cfg.iconZoom)
+        if type(A3.ApplyAuraIconShape) == "function" then
+            cfg.iconShape = A3.ApplyAuraIconShape(icon, cfg.iconShape, nil, icon.bg, icon.icon, icon.swipe)
+        end
         icon.bg:SetShown(not barOnly)
         icon.icon:SetShown(not barOnly)
         ApplyPreviewIconStyle(icon, cfg, barOnly)
         local r, g, b = isBuffIcon and 0.20 or 0.78, isBuffIcon and 0.72 or 0.20, isBuffIcon and 0.42 or 0.24
         local borderAtlas = (not barOnly and not isBuffIcon) and DEBUFF_TYPE_BORDER_PREVIEW_ATLAS[cfg.debuffBorderMode] or nil
-        local showPreviewEdges = isBuffIcon == true and not barOnly
+        local showPreviewEdges = isBuffIcon == true and not barOnly and cfg.iconShape == "RECTANGLE"
         for _, edge in pairs(icon.edge) do edge:SetShown(showPreviewEdges); edge:SetVertexColor(r, g, b, 0.95) end
         icon.swipe:SetShown(cfg.showSwipe ~= false and not barOnly)
         icon.swipe:ClearAllPoints()
@@ -1456,7 +1525,9 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
             icon.swipe:SetPoint("TOPLEFT", icon, "TOP", 0, -1)
             icon.swipe:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -1, 1)
         end
-        if borderAtlas and icon.dispelBorder.SetAtlas then
+        if borderAtlas and cfg.iconShape ~= "RECTANGLE" and type(A3.ApplyAuraDispelPreview) == "function" then
+            A3.ApplyAuraDispelPreview(icon.dispelBorder, icon, cfg.size, cfg.debuffBorderMode, cfg.iconShape)
+        elseif borderAtlas and icon.dispelBorder.SetAtlas then
             local pad = max(1, floor((cfg.size / 24) + 0.5))
             icon.dispelBorder:ClearAllPoints()
             icon.dispelBorder:SetPoint("TOPLEFT", icon, "TOPLEFT", -pad, pad)
@@ -1468,14 +1539,20 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
         end
         if cfg.showDurationBar == true then
             local inset = max(1, floor((cfg.size / 32) + 0.5))
+            local availableWidth = max(1, cfg.size - (inset * 2))
+            -- This workbench is intentionally event-driven rather than animated.
+            -- Give each sample aura a deterministic remaining fraction so the
+            -- Remaining/Elapsed setting is still visible without an OnUpdate.
+            local remainingFraction = max(0.18, 0.88 - (((index - 1) % 6) * 0.13))
+            local fillFraction = cfg.durationBarDirection == "ELAPSED"
+                and (1 - remainingFraction) or remainingFraction
             icon.durationBar:ClearAllPoints()
             icon.durationBar:SetHeight(cfg.durationBarHeight or 2)
+            icon.durationBar:SetWidth(max(1, floor((availableWidth * fillFraction) + 0.5)))
             if cfg.durationBarPosition == "TOP" then
                 icon.durationBar:SetPoint("TOPLEFT", icon, "TOPLEFT", inset, -inset)
-                icon.durationBar:SetPoint("TOPRIGHT", icon, "TOPRIGHT", -inset, -inset)
             else
                 icon.durationBar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
-                icon.durationBar:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -inset, inset)
             end
             local r, g, b = AuraDurationBarColor()
             icon.durationBar:SetVertexColor(r, g, b, 0.92)
@@ -1781,6 +1858,7 @@ local function BuildUnitStyle(ctx, b, scope)
     local extraDebuffControls = lane == "debuff" and 64 or 0
     local styleControls = {}
     local refreshMiniPreview
+    local refreshDurationBarSummary
     local function RefreshStylePreview()
         RefreshMiniAuraPreviewNow(refreshMiniPreview)
     end
@@ -1819,6 +1897,23 @@ local function BuildUnitStyle(ctx, b, scope)
             Model.WriteLaneStyleNumber(unit, lane, key, value, minValue, maxValue)
         else
             Model.WriteNumber(unit, key, value, minValue, maxValue)
+        end
+    end
+    local function ReadScopeIconShape()
+        if unit ~= "shared" and type(Model.IconShapeFollowsShared) == "function"
+            and Model.IconShapeFollowsShared(scope, lane)
+        then
+            local sharedValue = type(Model.ReadLaneStyleString) == "function"
+                and Model.ReadLaneStyleString("shared", lane, "iconShape", "RECTANGLE") or "RECTANGLE"
+            return type(A3.NormalizeAuraIconShape) == "function" and A3.NormalizeAuraIconShape(sharedValue) or sharedValue
+        end
+        local value = type(Model.ReadLaneStyleString) == "function"
+            and Model.ReadLaneStyleString(unit, lane, "iconShape", "RECTANGLE") or "RECTANGLE"
+        return type(A3.NormalizeAuraIconShape) == "function" and A3.NormalizeAuraIconShape(value) or value
+    end
+    local function WriteScopeIconShape(value)
+        if type(Model.WriteLaneStyleString) == "function" then
+            Model.WriteLaneStyleString(unit, lane, "iconShape", value or "RECTANGLE")
         end
     end
     local function ReadScopeCooldownAnchor()
@@ -1896,27 +1991,29 @@ local function BuildUnitStyle(ctx, b, scope)
         end
     end
     local function AddStyleControl(control) M.AppendValues(styleControls, control); return control end
-    local function BindStyleSwitch(parent, label, x, y, width, key, defaultValue, reason)
+    local function BindStyleSwitch(parent, label, x, y, width, key, defaultValue, reason, afterSet)
         return AddStyleControl(BindSwitch(ctx, parent, label, x, y, width,
             function() return ReadScopeBool(key, defaultValue) end,
             function(v)
                 WriteScopeBool(key, v)
                 ApplyUnit(ctx, unit, reason)
                 RefreshStylePreview()
+                if type(afterSet) == "function" then afterSet() end
             end,
             AuraControlMeta(ctx, "style.lane." .. AuraCatalogToken(lane) .. "." .. AuraCatalogToken(key))))
     end
-    local function BindStyleDropdown(parent, label, x, y, values, width, getValue, setValue, reason)
+    local function BindStyleDropdown(parent, label, x, y, values, width, getValue, setValue, reason, afterSet)
         return AddStyleControl(BindDropdown(ctx, parent, label, x, y, values, width,
             getValue,
             function(v)
                 setValue(v)
                 ApplyUnit(ctx, unit, reason)
                 RefreshStylePreview()
+                if type(afterSet) == "function" then afterSet() end
             end,
             AuraControlMeta(ctx, "style.lane." .. AuraCatalogToken(lane) .. "." .. AuraCatalogToken(reason))))
     end
-    local function BindStyleSlider(parent, label, x, y, minVal, maxVal, step, width, key, defaultValue, readMin, readMax, writeMin, writeMax, reason)
+    local function BindStyleSlider(parent, label, x, y, minVal, maxVal, step, width, key, defaultValue, readMin, readMax, writeMin, writeMax, reason, afterSet)
         readMin, readMax = readMin or minVal, readMax or maxVal
         writeMin, writeMax = writeMin or readMin, writeMax or readMax
         return AddStyleControl(BindSlider(ctx, parent, label, x, y, minVal, maxVal, step, width,
@@ -1925,6 +2022,7 @@ local function BuildUnitStyle(ctx, b, scope)
                 WriteScopeNumber(key, v, writeMin, writeMax)
                 ApplyUnit(ctx, unit, reason)
                 RefreshStylePreview()
+                if type(afterSet) == "function" then afterSet() end
             end,
             AuraControlMeta(ctx, "style.lane." .. AuraCatalogToken(lane) .. "." .. AuraCatalogToken(key))))
     end
@@ -1935,10 +2033,27 @@ local function BuildUnitStyle(ctx, b, scope)
 
     refreshMiniPreview = BuildAuraStylePreviewWorkbench(ctx, b, unit, lane)
 
-    local scaling = b:CollapsibleSection(baseId .. "_scaling", "Scaling", 112, true)
+    local shapeFollowsShared = unit ~= "shared" and type(Model.IconShapeFollowsShared) == "function"
+    local scaling = b:CollapsibleSection(baseId .. "_scaling", "Scaling & Shape", 174 + (shapeFollowsShared and 38 or 0), true)
     local scalingWidth = BodyWidth(scaling)
     BindStyleSlider(scaling, "Icon Zoom (%)", 24, -48, 100, 200, 1, scalingWidth - 48,
         "iconZoom", 100, 100, 200, 100, 200, "AURAS3_ICON_ZOOM")
+    local iconShapeControl = BindStyleDropdown(scaling, "Icon Shape", 24, -106, M.AURA_ICON_SHAPE_VALUES, scalingWidth - 48,
+        ReadScopeIconShape, WriteScopeIconShape, "AURAS3_ICON_SHAPE")
+    if shapeFollowsShared then
+        local followShared = AddStyleControl(BindSwitch(ctx, scaling, "Follow shared settings", 24, -158, scalingWidth - 48,
+            function() return Model.IconShapeFollowsShared(scope, lane) end,
+            function(value)
+                if Model.SetIconShapeFollowsShared(scope, lane, value == true) then
+                    RequestAuraRuntime("shared", "AURAS3_ICON_SHAPE_FOLLOW_SHARED")
+                end
+                if M.Refresh then M.Refresh(ctx) end
+                RefreshStylePreview()
+            end,
+            AuraControlMeta(ctx, "style.lane." .. AuraCatalogToken(lane) .. ".icon-shape.follow-shared")))
+        AddTooltip(followShared, "Shared icon shape",
+            "Keeps this lane's Icon Shape synchronized with Shared while the rest of this scope can still use its custom Aura Style override.")
+    end
 
     local featuresH = 188 + extraDebuffControls + (lane == "buff" and 32 or 0)
     local features = b:CollapsibleSection(baseId .. "_features", "Basics", featuresH, true)
@@ -1946,7 +2061,7 @@ local function BuildUnitStyle(ctx, b, scope)
     local featuresY = -44
     BindStyleSwitch(features, "Show Cooldown Text", 24, featuresY, fw - 48, "showCooldownText", true, "AURAS3_SHOW_COOLDOWN_TEXT")
     BindStyleSwitch(features, "Show Cooldown Swipe", 24, featuresY - 32, fw - 48, "showCooldownSwipe", true, "AURAS3_SHOW_COOLDOWN_SWIPE")
-    BindStyleSwitch(features, "Show Tooltip", 24, featuresY - 64, fw - 48, "showTooltip", true, "AURAS3_TOOLTIP")
+    AddAuraTooltipHelp(BindStyleSwitch(features, "Show Tooltip", 24, featuresY - 64, fw - 48, "showTooltip", true, "AURAS3_TOOLTIP"))
     if lane == "buff" then
         -- PTR 7 item enchantments: temporary weapon enchants as native
         -- buttons inside the player buff flow (player scope only at runtime).
@@ -2275,24 +2390,37 @@ local function BuildUnitStyle(ctx, b, scope)
     local decimal = BindStyleSlider(cooldown, "Decimals below sec", 24, -328, 0, 30, 1, cw - 48, "cooldownDecimalSeconds", 3, 0, 30, nil, nil, "AURAS3_COOLDOWN_FORMAT")
     AddTooltip(decimal, "Cooldown text format", "Remaining time below this value uses one decimal place. Timers show unitless seconds below 1 minute and localized minutes above it. Set 0 for whole seconds only.")
 
-    local durationBar = b:CollapsibleSection(baseId .. "_duration_bar", "Duration Bar", 322, false)
+    local durationInline = (b.width or 720) >= 520
+    local durationBar = b:CollapsibleSection(baseId .. "_duration_bar", "Duration Bar", durationInline and 210 or 322, false)
     W.AttachContextColorReferences(durationBar, AURA_DURATION_BAR_COLOR_REFERENCES, {
         title = LaneTitle(lane) .. " Duration Bar Color",
         scopeTag = "Shared",
         note = AURA_SHARED_COLOR_NOTE,
     })
     local dbw = BodyWidth(durationBar)
-    BindStyleSwitch(durationBar, "Show Duration Bar", 24, -48, dbw - 48, "showDurationBar", false, "AURAS3_DURATION_BAR")
-    BindStyleSlider(durationBar, "Height", 24, -104, 1, 16, 1, dbw - 48, "durationBarHeight", 2, 1, 16, nil, nil, "AURAS3_DURATION_BAR_HEIGHT")
-    BindStyleDropdown(durationBar, "Display", 24, -162,
+    local durationChoiceWidth = durationInline and floor(((dbw - 48) - 20) / 3) or (dbw - 48)
+    refreshDurationBarSummary = function()
+        if not W.SetCollapsibleBadges then return end
+        local enabled = ReadScopeBool("showDurationBar", false)
+        W.SetCollapsibleBadges(durationBar, {{
+            text = enabled and (tostring(Round(ReadScopeNumber("durationBarHeight", 2, 1, 16))) .. "px / " .. ChoiceLabel(DURATION_BAR_DISPLAY_VALUES, ReadScopeDurationBarDisplay(), "Bar Only") .. " / " .. ChoiceLabel(DURATION_BAR_POSITION_VALUES, ReadScopeDurationBarPosition(), "Bottom")) or "Off",
+            kind = enabled and "accent" or "muted", showWhenClosed = true,
+        }})
+    end
+    BindStyleSwitch(durationBar, "Show Duration Bar", 24, -48, dbw - 48, "showDurationBar", false, "AURAS3_DURATION_BAR", refreshDurationBarSummary)
+    BindStyleSlider(durationBar, "Height", 24, -104, 1, 16, 1, dbw - 48, "durationBarHeight", 2, 1, 16, nil, nil, "AURAS3_DURATION_BAR_HEIGHT", refreshDurationBarSummary)
+    AddTooltip(BindStyleDropdown(durationBar, "Display", 24, -162,
         type(Model.DurationBarDisplayValues) == "function" and Model.DurationBarDisplayValues() or DURATION_BAR_DISPLAY_VALUES,
-        dbw - 48, ReadScopeDurationBarDisplay, WriteScopeDurationBarDisplay, "AURAS3_DURATION_BAR_DISPLAY")
-    BindStyleDropdown(durationBar, "Position", 24, -220,
+        durationChoiceWidth, ReadScopeDurationBarDisplay, WriteScopeDurationBarDisplay, "AURAS3_DURATION_BAR_DISPLAY", refreshDurationBarSummary),
+        "Duration bar display", "Bar Only hides the aura icon. Icon + Bar keeps the icon and draws the duration bar on it.")
+    AddTooltip(BindStyleDropdown(durationBar, "Position", durationInline and (34 + durationChoiceWidth) or 24, durationInline and -162 or -220,
         type(Model.DurationBarPositionValues) == "function" and Model.DurationBarPositionValues() or DURATION_BAR_POSITION_VALUES,
-        dbw - 48, ReadScopeDurationBarPosition, WriteScopeDurationBarPosition, "AURAS3_DURATION_BAR_POSITION")
-    BindStyleDropdown(durationBar, "Fill Mode", 24, -278,
+        durationChoiceWidth, ReadScopeDurationBarPosition, WriteScopeDurationBarPosition, "AURAS3_DURATION_BAR_POSITION", refreshDurationBarSummary),
+        "Duration bar position", "Places the duration bar at the top or bottom edge of the aura slot.")
+    AddTooltip(BindStyleDropdown(durationBar, "Fill Mode", durationInline and (44 + (durationChoiceWidth * 2)) or 24, durationInline and -162 or -278,
         type(Model.DurationBarDirectionValues) == "function" and Model.DurationBarDirectionValues() or DURATION_BAR_DIRECTION_VALUES,
-        dbw - 48, ReadScopeDurationBarDirection, WriteScopeDurationBarDirection, "AURAS3_DURATION_BAR_DIRECTION")
+        durationChoiceWidth, ReadScopeDurationBarDirection, WriteScopeDurationBarDirection, "AURAS3_DURATION_BAR_DIRECTION", refreshDurationBarSummary),
+        "Duration bar fill mode", "Remaining shrinks as the aura expires. Elapsed grows until the aura expires.")
 
     local effectPrefix = lane == "buff" and "buff" or "debuff"
     local function EffectKey(suffix) return effectPrefix .. "FrameEffect" .. suffix end
@@ -2366,6 +2494,9 @@ local function BuildUnitStyle(ctx, b, scope)
     M.TrackRefresh(ctx, function()
         local editable = unit == "shared" or not Model.UseSharedVisuals(unit)
         W.SetControlsEnabled(styleControls, editable)
+        if shapeFollowsShared then
+            W.SetControlEnabled(iconShapeControl, editable and not Model.IconShapeFollowsShared(scope, lane))
+        end
         -- Must come after the blanket pass above, which would otherwise
         -- re-enable detail controls whose master toggle is off.
         iconStyleGates.Apply(editable)
@@ -2406,11 +2537,7 @@ local function BuildUnitStyle(ctx, b, scope)
                 { text = decimal > 0 and ("Decimals below " .. tostring(decimal) .. "s") or "Whole seconds", kind = "info", showWhenClosed = true },
             })
 
-            local durationEnabled = ReadScopeBool("showDurationBar", false)
-            W.SetCollapsibleBadges(durationBar, {{
-                text = durationEnabled and (tostring(Round(ReadScopeNumber("durationBarHeight", 2, 1, 16))) .. "px / " .. ChoiceLabel(DURATION_BAR_DISPLAY_VALUES, ReadScopeDurationBarDisplay(), "Bar Only") .. " / " .. ChoiceLabel(DURATION_BAR_POSITION_VALUES, ReadScopeDurationBarPosition(), "Bottom")) or "Off",
-                kind = durationEnabled and "accent" or "muted", showWhenClosed = true,
-            }})
+            refreshDurationBarSummary()
 
             local effectType = tostring(ReadEffectValue("Type", "none"))
             W.SetCollapsibleBadges(frameEffect, {{
@@ -2430,6 +2557,7 @@ local function BuildGroupStyle(ctx, b, scope)
     local lane = CurrentLane("auraStyleGFLane", "debuff")
     local extraDebuffControls = lane == "debuff" and 64 or 0
     local refreshMiniPreview
+    local refreshDurationBarSummary
     local function RefreshStylePreview()
         RefreshMiniAuraPreviewNow(refreshMiniPreview)
     end
@@ -2440,7 +2568,7 @@ local function BuildGroupStyle(ctx, b, scope)
 
     refreshMiniPreview = BuildAuraStylePreviewWorkbench(ctx, b, scope, lane)
 
-    local scaling = b:CollapsibleSection(baseId .. "_scaling", "Scaling", 112, true)
+    local scaling = b:CollapsibleSection(baseId .. "_scaling", "Scaling & Shape", 212, true)
     local scalingWidth = BodyWidth(scaling)
     BindGroupSlider(ctx, scaling, "Icon Zoom (%)", 24, -48, 100, 200, 1, scalingWidth - 48,
         scope, lane, "iconZoom", 100, "visual", RefreshStylePreview, {
@@ -2448,12 +2576,42 @@ local function BuildGroupStyle(ctx, b, scope)
             assistantDispositionReason = "Icon Zoom targets the selected Group scope's selected Aura Style lane.",
             assistantSettingKeys = GroupAssistantSettingKeys(scope, ".auras." .. lane .. ".iconZoom"),
         })
+    local function ReadGroupIconShape()
+        if type(Model.IconShapeFollowsShared) == "function" and Model.IconShapeFollowsShared(scope, lane) then
+            return type(Model.ReadLaneStyleString) == "function"
+                and Model.ReadLaneStyleString("shared", lane, "iconShape", "RECTANGLE") or "RECTANGLE"
+        end
+        local group = GFReadGroup(scope, lane)
+        return group.iconShape or "RECTANGLE"
+    end
+    local iconShapeControl = BindDropdown(ctx, scaling, "Icon Shape", 24, -106, M.AURA_ICON_SHAPE_VALUES, scalingWidth - 48,
+        ReadGroupIconShape,
+        function(value)
+            GFWriteGroupValue(scope, lane, "iconShape", value or "RECTANGLE", "visual")
+            RefreshStylePreview()
+        end,
+        AuraControlMeta(ctx, "group-style.lane." .. AuraCatalogToken(lane) .. ".icon-shape"))
+    local followShared = BindSwitch(ctx, scaling, "Follow shared settings", 24, -158, scalingWidth - 48,
+        function() return Model.IconShapeFollowsShared(scope, lane) end,
+        function(value)
+            if Model.SetIconShapeFollowsShared(scope, lane, value == true) then
+                RequestAuraRuntime("shared", "AURAS3_ICON_SHAPE_FOLLOW_SHARED")
+            end
+            if M.Refresh then M.Refresh(ctx) end
+            RefreshStylePreview()
+        end,
+        AuraControlMeta(ctx, "group-style.lane." .. AuraCatalogToken(lane) .. ".icon-shape.follow-shared"))
+    AddTooltip(followShared, "Shared icon shape",
+        "Keeps this lane's Icon Shape synchronized with Shared while the other Party or Raid Aura Style settings remain local.")
+    M.TrackRefresh(ctx, function()
+        W.SetControlEnabled(iconShapeControl, not Model.IconShapeFollowsShared(scope, lane))
+    end)
 
     local features = b:CollapsibleSection(baseId .. "_features", "Basics", 186 + extraDebuffControls, true)
     local fw = BodyWidth(features)
     BindGroupSwitch(ctx, features, "Show Cooldown Text", 24, -44, fw - 48, scope, lane, "showCooldown", true, "visual", RefreshStylePreview)
     BindGroupSwitch(ctx, features, "Show Cooldown Swipe", 24, -74, fw - 48, scope, lane, "showCooldownSwipe", true, "visual", RefreshStylePreview)
-    BindGroupSwitch(ctx, features, "Show Tooltip", 24, -106, fw - 48, scope, lane, "showTooltip", true, "visual", RefreshStylePreview)
+    AddAuraTooltipHelp(BindGroupSwitch(ctx, features, "Show Tooltip", 24, -106, fw - 48, scope, lane, "showTooltip", true, "visual", RefreshStylePreview))
     if lane == "debuff" then
         BindDropdown(ctx, features, "Dispel-type Border", 24, -158,
             type(Model.DebuffTypeBorderModeValues) == "function" and Model.DebuffTypeBorderModeValues() or DEBUFF_TYPE_BORDER_MODE_VALUES,
@@ -2527,18 +2685,38 @@ local function BuildGroupStyle(ctx, b, scope)
     local groupDecimal = BindGroupSlider(ctx, cooldown, "Decimals below sec", 24, -288, 0, 30, 1, cw - 48, scope, lane, "cooldownDecimalSeconds", 3, "visual", RefreshStylePreview)
     AddTooltip(groupDecimal, "Cooldown text format", "Remaining time below this value uses one decimal place. Timers show unitless seconds below 1 minute and localized minutes above it. Set 0 for whole seconds only.")
 
-    local durationBar = b:CollapsibleSection(baseId .. "_duration_bar", "Duration Bar", 322, false)
+    local durationInline = (b.width or 720) >= 520
+    local durationBar = b:CollapsibleSection(baseId .. "_duration_bar", "Duration Bar", durationInline and 210 or 322, false)
     W.AttachContextColorReferences(durationBar, AURA_DURATION_BAR_COLOR_REFERENCES, {
         title = LaneTitle(lane) .. " Duration Bar Color",
         scopeTag = "Shared",
         note = AURA_SHARED_COLOR_NOTE,
     })
     local dbw = BodyWidth(durationBar)
-    BindGroupSwitch(ctx, durationBar, "Show Duration Bar", 24, -48, dbw - 48, scope, lane, "showDurationBar", false, "visual", RefreshStylePreview)
-    BindGroupSlider(ctx, durationBar, "Height", 24, -104, 1, 16, 1, dbw - 48, scope, lane, "durationBarHeight", 2, "visual", RefreshStylePreview)
-    BindGroupDropdown(ctx, durationBar, "Display", 24, -162, DURATION_BAR_DISPLAY_VALUES, dbw - 48, scope, lane, "durationBarDisplay", "BAR_ONLY", "visual", RefreshStylePreview)
-    BindGroupDropdown(ctx, durationBar, "Position", 24, -220, DURATION_BAR_POSITION_VALUES, dbw - 48, scope, lane, "durationBarPosition", "BOTTOM", "visual", RefreshStylePreview)
-    BindGroupDropdown(ctx, durationBar, "Fill Mode", 24, -278, DURATION_BAR_DIRECTION_VALUES, dbw - 48, scope, lane, "durationBarDirection", "REMAINING", "visual", RefreshStylePreview)
+    local durationChoiceWidth = durationInline and floor(((dbw - 48) - 20) / 3) or (dbw - 48)
+    refreshDurationBarSummary = function()
+        if not W.SetCollapsibleBadges then return end
+        local group = GFReadGroup(scope, lane)
+        local enabled = group.showDurationBar == true
+        local display = group.durationBarDisplay == "OVERLAY" and "OVERLAY" or "BAR_ONLY"
+        local position = group.durationBarPosition == "TOP" and "TOP" or "BOTTOM"
+        W.SetCollapsibleBadges(durationBar, {{
+            text = enabled and (tostring(Round(tonumber(group.durationBarHeight) or 2)) .. "px / " .. ChoiceLabel(DURATION_BAR_DISPLAY_VALUES, display, "Bar Only") .. " / " .. ChoiceLabel(DURATION_BAR_POSITION_VALUES, position, "Bottom")) or "Off",
+            kind = enabled and "accent" or "muted", showWhenClosed = true,
+        }})
+    end
+    local function RefreshDurationBarPreviewAndSummary()
+        RefreshStylePreview()
+        refreshDurationBarSummary()
+    end
+    BindGroupSwitch(ctx, durationBar, "Show Duration Bar", 24, -48, dbw - 48, scope, lane, "showDurationBar", false, "visual", RefreshDurationBarPreviewAndSummary)
+    BindGroupSlider(ctx, durationBar, "Height", 24, -104, 1, 16, 1, dbw - 48, scope, lane, "durationBarHeight", 2, "visual", RefreshDurationBarPreviewAndSummary)
+    AddTooltip(BindGroupDropdown(ctx, durationBar, "Display", 24, -162, DURATION_BAR_DISPLAY_VALUES, durationChoiceWidth, scope, lane, "durationBarDisplay", "BAR_ONLY", "visual", RefreshDurationBarPreviewAndSummary),
+        "Duration bar display", "Bar Only hides the aura icon. Icon + Bar keeps the icon and draws the duration bar on it.")
+    AddTooltip(BindGroupDropdown(ctx, durationBar, "Position", durationInline and (34 + durationChoiceWidth) or 24, durationInline and -162 or -220, DURATION_BAR_POSITION_VALUES, durationChoiceWidth, scope, lane, "durationBarPosition", "BOTTOM", "visual", RefreshDurationBarPreviewAndSummary),
+        "Duration bar position", "Places the duration bar at the top or bottom edge of the aura slot.")
+    AddTooltip(BindGroupDropdown(ctx, durationBar, "Fill Mode", durationInline and (44 + (durationChoiceWidth * 2)) or 24, durationInline and -162 or -278, DURATION_BAR_DIRECTION_VALUES, durationChoiceWidth, scope, lane, "durationBarDirection", "REMAINING", "visual", RefreshDurationBarPreviewAndSummary),
+        "Duration bar fill mode", "Remaining shrinks as the aura expires. Elapsed grows until the aura expires.")
 
     local stack = b:CollapsibleSection(baseId .. "_stack", "Stack Count", 270, false)
     if W.AttachContextColorShortcut then
@@ -2622,13 +2800,7 @@ local function BuildGroupStyle(ctx, b, scope)
             { text = decimal > 0 and ("Decimals below " .. tostring(decimal) .. "s") or "Whole seconds", kind = "info", showWhenClosed = true },
         })
 
-        local durationEnabled = group.showDurationBar == true
-        local durationDisplay = group.durationBarDisplay == "OVERLAY" and "OVERLAY" or "BAR_ONLY"
-        local durationPosition = group.durationBarPosition == "TOP" and "TOP" or "BOTTOM"
-        W.SetCollapsibleBadges(durationBar, {{
-            text = durationEnabled and (tostring(Round(tonumber(group.durationBarHeight) or 2)) .. "px / " .. ChoiceLabel(DURATION_BAR_DISPLAY_VALUES, durationDisplay, "Bar Only") .. " / " .. ChoiceLabel(DURATION_BAR_POSITION_VALUES, durationPosition, "Bottom")) or "Off",
-            kind = durationEnabled and "accent" or "muted", showWhenClosed = true,
-        }})
+        refreshDurationBarSummary()
 
         local stackEnabled = group.showStacks ~= false
         W.SetCollapsibleBadges(stack, {{
@@ -3187,6 +3359,11 @@ local function BuildCompactUnitAuraLayout(ctx, b, unit, kind)
     end
     CollectRows(anchorRows)
     CollectRows(numberRows)
+    M.auraPositionSettingsControls = M.auraPositionSettingsControls or {}
+    M.auraPositionSettingsControls[tostring(unit) .. ":" .. tostring(kind)] = {
+        x = numberRows and numberRows.controls and numberRows.controls.x,
+        y = numberRows and numberRows.controls and numberRows.controls.y,
+    }
     local perRowControl = numberRows and numberRows.controls and numberRows.controls.perRow
     M.TrackRefresh(ctx, function()
         local shown = UnitLaneShown(unit, kind)
@@ -3201,6 +3378,25 @@ local function BuildCompactUnitAuraLayout(ctx, b, unit, kind)
     end)
 end
 
+function M.SyncAuras3PositionSettings(unit, kind)
+    unit = tostring(unit or "player"):lower()
+    if unit:match("^boss%d+$") then unit = "boss" end
+    kind = tostring(kind or "buff"):lower()
+    if kind == "buffs" then kind = "buff" elseif kind == "debuffs" then kind = "debuff" end
+    if kind ~= "buff" and kind ~= "debuff" then return false end
+
+    local controls = M.auraPositionSettingsControls
+        and M.auraPositionSettingsControls[unit .. ":" .. kind]
+    if not controls then return false end
+
+    local refreshed = false
+    local xRefresh = controls.x and controls.x._msuf2RefreshFromModel
+    if type(xRefresh) == "function" then xRefresh(); refreshed = true end
+    local yRefresh = controls.y and controls.y._msuf2RefreshFromModel
+    if type(yRefresh) == "function" then yRefresh(); refreshed = true end
+    return refreshed
+end
+
 local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
     local section = b:Section((lane == "debuff" and "Debuff" or "Buff") .. " Filters", lane == "debuff" and 224 or 182)
     local w = section._msuf2Width or b.width or 720
@@ -3208,24 +3404,16 @@ local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
     local gap = 12
     local colW = floor((inner - gap * 3) / 4)
     local filterControls = {}
-    local own = BindSwitch(ctx, section, "Own filters", 24, -42, colW,
-        function() return not Model.UseSharedRules(unit) end,
-        function(enabled)
-            Model.SetUseSharedRules(unit, not enabled)
-            ApplyUnit(ctx, unit, "AURAS3_UNIT_FILTER_OWNERSHIP", true)
-            Rebuild(ctx)
-        end,
-        AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.ownership", nil, {
-            assistantDisposition = "compound",
-            assistantDispositionReason = "Own filters is the inverse projection of Use Shared Rules and rebuilds the lane editor.",
-        }))
-    AddTooltip(own, "Filter ownership", "Off follows Shared Blizzard filter tokens. Blacklists and Custom whitelists are always frame-specific.")
-    local enabled = BindSwitch(ctx, section, "Enable filters", 24 + colW + gap, -42, colW,
+    -- Filter ownership is an internal compatibility detail. Migrated Auras2
+    -- profiles keep overrideFilters exactly as saved; the first edit in this
+    -- unit workspace materializes a private copy through the model setters.
+    local enabled = BindSwitch(ctx, section, "Enable filters", 24, -42, colW,
         function() return Model.ScopeFiltersEnabled(unit) end,
         function(value) Model.SetScopeFiltersEnabled(unit, value); ApplyUnit(ctx, unit, "AURAS3_FILTER_ENABLE", true) end,
         AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.enabled", nil,
             "auras3." .. unit .. ".filtersEnabled"))
-    local hidePermanent = BindSwitch(ctx, section, "Hide permanent", 24 + 2 * (colW + gap), -42, colW,
+    AddTooltip(enabled, "Enable filters", "Turns Blizzard token filters on or off for this frame. The first change automatically creates frame-specific rules; migrated Shared rules remain Shared until edited.")
+    local hidePermanent = BindSwitch(ctx, section, "Hide permanent", 24 + colW + gap, -42, colW,
         function()
             return type(Model.ReadBlacklistHidePermanent) == "function"
                 and Model.ReadBlacklistHidePermanent(unit, lane) == true
@@ -3317,12 +3505,10 @@ local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
         filterControls[#filterControls + 1] = control
     end
     M.TrackRefresh(ctx, function()
-        local editable = not Model.UseSharedRules(unit)
-        W.SetControlEnabled(own, true)
-        W.SetControlEnabled(enabled, editable)
+        W.SetControlEnabled(enabled, true)
         W.SetControlEnabled(hidePermanent, true)
         W.SetControlEnabled(maxDuration, true)
-        W.SetControlsEnabled(filterControls, editable and Model.ScopeFiltersEnabled(unit))
+        W.SetControlsEnabled(filterControls, Model.ScopeFiltersEnabled(unit))
     end)
 end
 
@@ -4020,11 +4206,11 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
         end
         M.TrackRefresh(ctx, RefreshPredefined)
         local customInputValue = ""
-        local customInput = BindTextInput(ctx, section, "Custom Buff Spell ID", 24, -322, max(140, inner - 132),
+        local customInput = BindTextInput(ctx, section, "Track a buff - Spell ID, link, or name", 24, -322, max(140, inner - 132),
             function() return customInputValue end,
             function(value) customInputValue = value or "" end,
             false, AuraControlMeta(ctx, "custom-container.player-defensives.custom-id", "ephemeral"))
-        local addCustom = ActionButton(section, "Add Custom ID", 108)
+        local addCustom = ActionButton(section, "Add buff", 108)
         addCustom:SetPoint("TOPRIGHT", section, "TOPRIGHT", -24, -344)
         addCustom:SetScript("OnClick", function()
             local value = customInput and customInput.GetText and customInput:GetText() or customInputValue
@@ -4037,14 +4223,14 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             end
             return changed and true or false
         end)
-        RegisterAuraTextAction(ctx, addCustom, customInput, "Add Custom ID",
+        RegisterAuraTextAction(ctx, addCustom, customInput, "Add buff",
             customActionPath .. ".defensives.custom-id.add", {
                 actionKey = "aura_custom_whitelist_add_spell",
                 actionFixedArgs = { scope = unit, index = index },
                 actionInputArg = "value",
             })
-        AddTooltip(customInput, "Custom Buff Spell ID",
-            "Adds an exact helpful player aura ID in addition to the complete predefined list for your current class.")
+        AddTooltip(customInput, "Exact aura tracking",
+            "Enter a Spell ID, paste a spell link, or type a spell name. The visible helpful aura is matched even when its buff ID differs from the cast Spell ID.")
         local status = W.Text(section, "", 24, -392, inner, T.colors.accent)
         local empty = W.Text(section, "No custom buffs added.", 24, -442, inner, T.colors.muted)
         local listScroll = CreateFrame("ScrollFrame", nil, section, "UIPanelScrollFrameTemplate")
@@ -4499,10 +4685,14 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             local w = section._msuf2Width or b.width or 720
             local col4, gap = Grid(w, 4)
             local function X(col) return 24 + (col - 1) * (col4 + gap) end
-            local function Number(label, col, y, minValue, maxValue, key, fallback)
+            local function Number(label, col, y, minValue, maxValue, key, fallback, afterSet)
                 return BindSlider(ctx, section, label, X(col), y, minValue, maxValue, 1, col4,
                     function() return tonumber(item.placed[key]) or fallback end,
-                    function(value) item.placed[key] = tonumber(value) or fallback; Apply("AURAS3_CUSTOM_APPEARANCE_" .. key:upper()) end,
+                    function(value)
+                        item.placed[key] = tonumber(value) or fallback
+                        Apply("AURAS3_CUSTOM_APPEARANCE_" .. key:upper())
+                        if type(afterSet) == "function" then afterSet() end
+                    end,
                     AuraControlMeta(ctx, "custom-container.appearance." .. AuraCatalogToken(key)))
             end
             return col4, X, Number
@@ -4512,15 +4702,41 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
         end
 
         local harmfulContainer = isTargetDots or tostring(item.auraType or "BUFF"):upper() == "DEBUFF"
-        local scaling = b:CollapsibleSection(CustomStyleSectionId(index, "scaling"), "Scaling", 112, true)
-        local _, _, ScalingNumber = StyleGrid(scaling)
+        local customLaneKey = "custom" .. tostring(index)
+        local scaling = b:CollapsibleSection(CustomStyleSectionId(index, "scaling"), "Scaling & Shape", 212, true)
+        local scalingCol, scalingX, ScalingNumber = StyleGrid(scaling)
         ScalingNumber("Icon Zoom (%)", 1, -48, 100, 200, "iconZoom", 100)
+        local customShape = BindDropdown(ctx, scaling, "Icon Shape", scalingX(2), -48, M.AURA_ICON_SHAPE_VALUES, scalingCol,
+            function()
+                if Model.IconShapeFollowsShared(scope, customLaneKey) then
+                    return Model.ReadLaneStyleString("shared", harmfulContainer and "debuff" or "buff", "iconShape", "RECTANGLE")
+                end
+                return item.placed.iconShape or "RECTANGLE"
+            end,
+            function(value) item.placed.iconShape = value or "RECTANGLE"; Apply("AURAS3_CUSTOM_ICON_SHAPE") end,
+            AuraControlMeta(ctx, "custom-container.appearance.icon-shape"))
+        local followShared = BindSwitch(ctx, scaling, "Follow shared settings", 24, -106, scalingCol * 2,
+            function() return Model.IconShapeFollowsShared(scope, customLaneKey) end,
+            function(value)
+                if Model.SetIconShapeFollowsShared(scope, customLaneKey, value == true) then
+                    Apply("AURAS3_CUSTOM_ICON_SHAPE_FOLLOW_SHARED")
+                end
+                if M.Refresh then M.Refresh(ctx) end
+            end,
+            AuraControlMeta(ctx, "custom-container.appearance.icon-shape.follow-shared"))
+        AddTooltip(followShared, "Shared icon shape",
+            harmfulContainer
+                and "Keeps this container's Icon Shape synchronized with Shared Debuffs."
+                or "Keeps this container's Icon Shape synchronized with Shared Buffs.")
+        M.TrackRefresh(ctx, function()
+            W.SetControlEnabled(customShape, not Model.IconShapeFollowsShared(scope, customLaneKey))
+        end)
 
         local basics = b:CollapsibleSection(CustomStyleSectionId(index, "basics"), "Basics", 130, true)
         local basicsCol, basicsX = StyleGrid(basics)
-        BindSwitch(ctx, basics, "Tooltip", basicsX(1), -42, basicsCol, function() return item.placed.showTooltip ~= false end,
+        AddAuraTooltipHelp(BindSwitch(ctx, basics, "Tooltip", basicsX(1), -42, basicsCol, function() return item.placed.showTooltip ~= false end,
             function(value) item.placed.showTooltip = value == true; Apply("AURAS3_CUSTOM_TOOLTIP") end,
-            AuraControlMeta(ctx, "custom-container.appearance.tooltip"))
+            AuraControlMeta(ctx, "custom-container.appearance.tooltip")))
         BindSlider(ctx, basics, "Opacity", basicsX(1), -76, 10, 100, 5, basicsCol,
             function() return floor(((tonumber(item.placed.alpha) or 1) * 100) + 0.5) end,
             function(value) item.placed.alpha = (tonumber(value) or 100) / 100; Apply("AURAS3_CUSTOM_ALPHA") end,
@@ -4598,24 +4814,52 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
 
         local durationBar = b:CollapsibleSection(CustomStyleSectionId(index, "duration_bar"), "Duration Bar", 130, false)
         local barCol, barX, BarNumber = StyleGrid(durationBar)
+        local durationBarControls
+        local function RefreshCustomDurationBarState()
+            local placed = item.placed
+            local enabled = placed.showDurationBar == true
+            if durationBarControls then W.SetControlsEnabled(durationBarControls, enabled) end
+            if W.SetCollapsibleBadges then
+                W.SetCollapsibleBadges(durationBar, {{
+                    text = enabled and (tostring(Round(tonumber(placed.durationBarHeight) or 2)) .. "px / " .. ChoiceLabel(DURATION_BAR_DISPLAY_VALUES, placed.durationBarDisplay or "BAR_ONLY", "Bar Only") .. " / " .. ChoiceLabel(DURATION_BAR_POSITION_VALUES, placed.durationBarPosition or "BOTTOM", "Bottom")) or "Off",
+                    kind = enabled and "accent" or "muted", showWhenClosed = true,
+                }})
+            end
+        end
         BindSwitch(ctx, durationBar, "Duration bar", barX(1), -42, barCol, function() return item.placed.showDurationBar == true end,
-            function(value) item.placed.showDurationBar = value == true; Apply("AURAS3_CUSTOM_DURATION_BAR") end,
+            function(value)
+                item.placed.showDurationBar = value == true
+                Apply("AURAS3_CUSTOM_DURATION_BAR")
+                RefreshCustomDurationBarState()
+            end,
             AuraControlMeta(ctx, "custom-container.appearance.duration-bar"))
-        GateControls(function() return item.placed.showDurationBar == true end, {
-            BarNumber("Bar height", 1, -76, 1, 16, "durationBarHeight", 2),
+        durationBarControls = {
+            BarNumber("Bar height", 1, -76, 1, 16, "durationBarHeight", 2, RefreshCustomDurationBarState),
             BindDropdown(ctx, durationBar, "Bar display", barX(2), -76, DURATION_BAR_DISPLAY_VALUES, barCol,
                 function() return item.placed.durationBarDisplay or "BAR_ONLY" end,
-                function(value) item.placed.durationBarDisplay = value or "BAR_ONLY"; Apply("AURAS3_CUSTOM_DURATION_DISPLAY") end,
+                function(value)
+                    item.placed.durationBarDisplay = value or "BAR_ONLY"
+                    Apply("AURAS3_CUSTOM_DURATION_DISPLAY")
+                    RefreshCustomDurationBarState()
+                end,
                 AuraControlMeta(ctx, "custom-container.appearance.duration-display")),
             BindDropdown(ctx, durationBar, "Bar position", barX(3), -76, DURATION_BAR_POSITION_VALUES, barCol,
                 function() return item.placed.durationBarPosition or "BOTTOM" end,
-                function(value) item.placed.durationBarPosition = value or "BOTTOM"; Apply("AURAS3_CUSTOM_DURATION_POSITION") end,
+                function(value)
+                    item.placed.durationBarPosition = value or "BOTTOM"
+                    Apply("AURAS3_CUSTOM_DURATION_POSITION")
+                    RefreshCustomDurationBarState()
+                end,
                 AuraControlMeta(ctx, "custom-container.appearance.duration-position")),
             BindDropdown(ctx, durationBar, "Bar fill", barX(4), -76, DURATION_BAR_DIRECTION_VALUES, barCol,
                 function() return item.placed.durationBarDirection or "REMAINING" end,
-                function(value) item.placed.durationBarDirection = value or "REMAINING"; Apply("AURAS3_CUSTOM_DURATION_DIRECTION") end,
+                function(value)
+                    item.placed.durationBarDirection = value or "REMAINING"
+                    Apply("AURAS3_CUSTOM_DURATION_DIRECTION")
+                    RefreshCustomDurationBarState()
+                end,
                 AuraControlMeta(ctx, "custom-container.appearance.duration-direction")),
-        })
+        }
 
         if W.SetCollapsibleBadges then
             local function ToggleBadge(label, enabled)
@@ -4654,11 +4898,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                     { text = decimal > 0 and ("Decimals below " .. tostring(decimal) .. "s") or "Whole seconds", kind = "info", showWhenClosed = true },
                 })
 
-                local durationEnabled = placed.showDurationBar == true
-                W.SetCollapsibleBadges(durationBar, {{
-                    text = durationEnabled and (tostring(Round(tonumber(placed.durationBarHeight) or 2)) .. "px / " .. ChoiceLabel(DURATION_BAR_DISPLAY_VALUES, placed.durationBarDisplay or "BAR_ONLY", "Bar Only") .. " / " .. ChoiceLabel(DURATION_BAR_POSITION_VALUES, placed.durationBarPosition or "BOTTOM", "Bottom")) or "Off",
-                    kind = durationEnabled and "accent" or "muted", showWhenClosed = true,
-                }})
+                RefreshCustomDurationBarState()
             end)
         end
         return
@@ -4814,7 +5054,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
         -- The 12.1 native aura buttons render their icon unmaskable; shaping
         -- was attempted exhaustively and reverted (2026-07-31). Keep users
         -- informed instead of letting them hunt for a shape option.
-        W.Text(section, "Portrait icons are always square and cannot take the portrait's shape.", 24, -312, inner, T.colors.muted)
+        W.Text(section, "Aura Style > Defensive Buffs can follow the frame portrait shape.", 24, -312, inner, T.colors.muted)
         W.Text(section, "Source: player buffs · " .. tostring(predefined) .. " / "
             .. tostring(predefinedTotal) .. " predefined enabled · " .. tostring(custom)
             .. " custom · passive talent procs included", 24, -344, inner, T.colors.muted)
@@ -4840,32 +5080,43 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
         return
     end
 
-    local section = b:Section(containerLabel .. " Setup", 132)
-    local w = section._msuf2Width or b.width or 720
+    local setupW = b.width or 720
+    local compactSetup = setupW < 680
+    local section = b:Section(containerLabel .. " Setup", compactSetup and 184 or 132)
+    local w = section._msuf2Width or setupW
     local inner = w - 48
-    local enabled = BindSwitch(ctx, section, "Enabled", 24, -62, 106,
+    local enabled = BindSwitch(ctx, section, "Enabled", 24, compactSetup and -52 or -62, 106,
         function() return item.enabled == true end,
         function(value) item.enabled = value == true; Apply("AURAS3_CUSTOM_CONTAINER_ENABLE") end,
         AuraControlMeta(ctx, "custom-container.setup.enabled"))
-    local nameW = max(260, floor(inner * 0.42))
-    BindTextInput(ctx, section, "Container name", 140, -34, nameW,
-        function() return item.name or ("Custom " .. tostring(index)) end,
-        function(value) item.name = value ~= "" and value or ("Custom " .. tostring(index)); Apply("AURAS3_CUSTOM_CONTAINER_NAME") end,
-        false, AuraControlMeta(ctx, "custom-container.setup.name"))
-    local typeW = max(170, floor(inner * 0.18))
-    BindDropdown(ctx, section, "Aura type", 150 + nameW, -34, CUSTOM_AURA_TYPES, typeW,
-        function() return item.auraType == "DEBUFF" and "DEBUFF" or "BUFF" end,
-        function(value) item.auraType = value == "DEBUFF" and "DEBUFF" or "BUFF"; Apply("AURAS3_CUSTOM_CONTAINER_TYPE", true); Rebuild(ctx) end,
-        AuraControlMeta(ctx, "custom-container.setup.aura-type"))
-    local reset = ActionButton(section, "Reset", 88)
-    reset:SetPoint("TOPRIGHT", section, "TOPRIGHT", -24, -56)
+    local resetW = 88
+    local reset = ActionButton(section, "Reset", resetW)
+    reset:SetPoint("TOPRIGHT", section, "TOPRIGHT", -24, compactSetup and -46 or -56)
     reset:SetScript("OnClick", function() Model.ResetCustomContainer(unit, index); Apply("AURAS3_CUSTOM_CONTAINER_RESET", true); Rebuild(ctx) end)
     RegisterAuraControl(ctx, reset, "Reset", "button", customActionPath .. ".setup.reset", "action", {
         actionKey = "reset_aura_custom_container",
         actionFixedArgs = { scope = unit, index = index },
     })
+
+    local fieldX = compactSetup and 24 or 140
+    local fieldY = compactSetup and -82 or -34
+    local fieldRight = compactSetup and (w - 24) or (w - 24 - resetW - 12)
+    local fieldGap = 12
+    local fieldSpace = max(0, fieldRight - fieldX - fieldGap)
+    local typeW = compactSetup and max(140, floor(fieldSpace * 0.34))
+        or max(150, min(max(170, floor(inner * 0.18)), fieldSpace - 200))
+    local nameW = compactSetup and max(120, fieldSpace - typeW)
+        or max(120, min(max(260, floor(inner * 0.42)), fieldSpace - typeW))
+    BindTextInput(ctx, section, "Container name", fieldX, fieldY, nameW,
+        function() return item.name or ("Custom " .. tostring(index)) end,
+        function(value) item.name = value ~= "" and value or ("Custom " .. tostring(index)); Apply("AURAS3_CUSTOM_CONTAINER_NAME") end,
+        false, AuraControlMeta(ctx, "custom-container.setup.name"))
+    BindDropdown(ctx, section, "Aura type", fieldX + nameW + fieldGap, fieldY, CUSTOM_AURA_TYPES, typeW,
+        function() return item.auraType == "DEBUFF" and "DEBUFF" or "BUFF" end,
+        function(value) item.auraType = value == "DEBUFF" and "DEBUFF" or "BUFF"; Apply("AURAS3_CUSTOM_CONTAINER_TYPE", true); Rebuild(ctx) end,
+        AuraControlMeta(ctx, "custom-container.setup.aura-type"))
     local count = #Model.CustomContainerSpellEntries(unit, index)
-    W.Text(section, tostring(count) .. " whitelisted " .. (count == 1 and "spell" or "spells") .. " · style remains live in Menu Preview and Edit Mode.", 24, -104, inner, T.colors.muted)
+    W.Text(section, tostring(count) .. " whitelisted " .. (count == 1 and "spell" or "spells") .. " · style remains live in Menu Preview and Edit Mode.", 24, compactSetup and -156 or -104, inner, T.colors.muted)
     M.TrackRefresh(ctx, function() W.SetControlEnabled(enabled, true) end)
 end
 
