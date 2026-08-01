@@ -25,15 +25,18 @@
 
 ## What is MSUF?
 
-Midnight Simple Unit Frames (MSUF) is a complete, customizable replacement for Blizzard's unit and group frames. It brings player, target, boss, party and raid frames together with castbars, auras and class resources in one consistent interface.
+Midnight Simple Unit Frames (MSUF) is a complete, customizable replacement for Blizzard's unit and group frames. It brings player, target, focus, focus-target, boss, party and raid frames together with castbars, auras and class resources in one consistent interface.
 
 MSUF is made for players who want clear combat information, extensive visual control and a lightweight event-driven runtime. The full configuration UI and the optional Assistant load only when requested.
 
+> **Signature per-frame Fill Direction:** MSUF lets each Unit Frame fill its Health and Power bars horizontally from left to right or right to left, or vertically from bottom to top or top to bottom. This per-frame combination of vertical and mirrored bar layouts is a level of control not currently offered by other unit-frame addons.
+
 ## Basic features
 
-- Custom Player, Target, Focus, Pet, Target-of-Target and Boss frames
+- Custom Player, Target, Focus, Focus Target, Pet, Target-of-Target and Boss frames
 - Party, Raid and Mythic Raid group frames
 - Configurable health, power, absorb and heal-absorb displays
+- Per-frame horizontal and vertical Health/Power fill directions in all four directions
 - Player, Target, Focus and Boss castbars
 - Buffs, debuffs, defensive auras, private auras and spell indicators
 - 2D and class-icon portraits with multiple shapes and placements
@@ -50,7 +53,7 @@ MSUF is made for players who want clear combat information, extensive visual con
 
 | Area | Highlights |
 | --- | --- |
-| **Unit Frames** | Player, Target, Focus, Pet, Target-of-Target and Boss frames with configurable health, power, text, portraits, colors, textures, layers and status indicators. |
+| **Unit Frames** | Player, Target, Focus, Focus Target, Pet, Target-of-Target and Boss frames with configurable health, power, text, portraits, colors, textures, layers and status indicators. Every frame can fill its Health and Power bars horizontally or vertically in either direction. |
 | **Group Frames** | Party, Raid and Mythic Raid layouts with role/status indicators, range fading, spell indicators, healer tools and native private-aura support. |
 | **Auras 3** | Blizzard-native 12.1 aura containers, custom spell matching, per-lane filters, icon shapes, cooldown text, growth/layout controls and portrait tracking. |
 | **Castbars** | Player, Target, Focus and Boss castbars with interrupt feedback, channel support, configurable text/icons, rounded styling and secret-safe timing paths. |
