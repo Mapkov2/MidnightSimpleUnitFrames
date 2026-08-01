@@ -1,5 +1,5 @@
 name: MSUF
-run-name: Publish ${{ github.event.release.tag_name || inputs.tag_name || github.ref_name }}
+run-name: Publish ${{ inputs.tag_name || github.ref_name }}
 
 on:
   push:
@@ -7,9 +7,6 @@ on:
       - "[0-9]*"
       - "v[0-9]*"
       - "MSUF_[0-9]*"
-  release:
-    types:
-      - published
   workflow_dispatch:
     inputs:
       tag_name:
@@ -28,7 +25,7 @@ on:
       publish_target:
         description: Publish destination
         required: true
-        default: all
+        default: github
         type: choice
         options:
           - all
@@ -44,14 +41,14 @@ jobs:
     if: github.repository == 'Mapkov2/MidnightSimpleUnitFrames'
     runs-on: ubuntu-latest
     env:
-      RELEASE_VERSION: ${{ github.event.release.tag_name || inputs.tag_name || github.ref_name }}
-      RELEASE_IS_PRERELEASE: ${{ github.event.release.prerelease || inputs.prerelease }}
-      RELEASE_NAME_INPUT: ${{ github.event.release.name || inputs.release_name }}
+      RELEASE_VERSION: ${{ inputs.tag_name || github.ref_name }}
+      RELEASE_IS_PRERELEASE: ${{ inputs.prerelease }}
+      RELEASE_NAME_INPUT: ${{ inputs.release_name }}
       RELEASE_PUBLISH_TARGET_INPUT: ${{ inputs.publish_target }}
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: ${{ github.event.release.tag_name || inputs.tag_name || github.ref_name }}
+          ref: ${{ inputs.tag_name || github.ref_name }}
           fetch-depth: 0
 
       # Verification (static checks, core smokes, search-index check) is
@@ -86,8 +83,10 @@ jobs:
             }
           }
 
+          # Fail closed: an unannotated tag may create a GitHub release, but it
+          # must never upload to Wago or CurseForge implicitly.
           if ([string]::IsNullOrWhiteSpace($target)) {
-            $target = "all"
+            $target = "github"
           }
           $target = $target.Trim().ToLowerInvariant()
           if ($target -notin @("all", "github", "wago", "curseforge")) {
@@ -506,13 +505,11 @@ jobs:
           prerelease: ${{ steps.channel.outputs.release_is_prerelease }}
           make_latest: ${{ steps.channel.outputs.github_make_latest }}
 
-      # Wago is stable-only. The publish-target resolution above falls back to
-      # "all" whenever the tag annotation is missing, malformed, or simply could
-      # not be fetched, so relying on the tag body alone fails OPEN and pushes a
-      # beta to Wago. Requiring a non-prerelease channel here closes that hole
-      # for every path into this step.
+      # Wago runs only for an explicit `publish-target: wago|all` tag annotation
+      # or an explicit workflow_dispatch target. Ordinary commits, unannotated
+      # tags and GitHub Release creation never reach this step.
       - name: Upload to Wago
-        if: steps.publish.outputs.publish_to_wago == 'true' && steps.channel.outputs.release_is_prerelease != 'true'
+        if: steps.publish.outputs.publish_to_wago == 'true'
         shell: pwsh
         env:
           WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
@@ -557,10 +554,9 @@ jobs:
             throw "Invalid Wago stability '$env:WAGO_STABILITY'."
           }
 
-          # Second lock, in case the step condition above is ever loosened:
-          # betas and alphas are CurseForge-only and must never reach Wago.
-          if ($env:RELEASE_IS_PRERELEASE -eq "true" -or $env:WAGO_STABILITY -ne "stable") {
-            throw "Refusing to upload '$env:WAGO_STABILITY' build to Wago. Wago receives stable releases only."
+          # Second lock: Wago must always be an explicit publish destination.
+          if ($env:PUBLISH_TARGET -notin @("all", "wago")) {
+            throw "Refusing Wago upload for publish target '$env:PUBLISH_TARGET'."
           }
 
           $tocContent = Get-Content -LiteralPath "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames.toc" -Raw
