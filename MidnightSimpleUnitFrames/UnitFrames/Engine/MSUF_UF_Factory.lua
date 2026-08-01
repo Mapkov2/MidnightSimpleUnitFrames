@@ -16,6 +16,11 @@ local EnsureCooldownWidthObservers
 local ScheduleCooldownWidthRefresh
 local ApplyBossPhysicalBarGeometry
 
+-- Saved transparency is visual-only. Reassert these three owners once after
+-- PLAYER_ENTERING_WORLD settles without paying for a second geometry/full-spec
+-- pass or adding any recurring runtime work.
+local STARTUP_TRANSPARENCY_ELEMENTS = { "Health", "Power", "Alpha" }
+
 local type = type
 local tonumber = tonumber
 local CreateFrame = CreateFrame
@@ -1318,6 +1323,17 @@ local function FlushLateAnchorReanchor(forcePosition)
   end
   if forcePosition then
     Factory.ForceReanchor()
+    local applyElements = UF.ApplyElementsToFrame
+    local config = UF.Config
+    if type(applyElements) == "function" and type(UF.ForEachFrame) == "function"
+      and config and type(config.GetSpec) == "function" then
+      UF.ForEachFrame(function(frame)
+        local spec = frame and config.GetSpec(frame.MSUFUnitKey)
+        if spec then
+          applyElements(frame, STARTUP_TRANSPARENCY_ELEMENTS, spec, "MSUF_STARTUP_TRANSPARENCY")
+        end
+      end)
+    end
   else
     Factory.Apply()
   end

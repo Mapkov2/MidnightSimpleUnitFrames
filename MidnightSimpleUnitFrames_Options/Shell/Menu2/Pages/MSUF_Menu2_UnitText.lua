@@ -345,7 +345,7 @@ local function BuildText(ctx, builder, unit)
                 { text = "Power " .. BadgeNumber(ReadNumber(unit, "powerTextLayer", 2)), kind = powerOn and "info" or "muted" },
             })
         else
-            local anchor = BadgeValue(OptionText(TEXT_ANCHORS, ReadText(unit, "nameTextAnchor", "LEFT")))
+            local anchor = BadgeValue(OptionText(TEXT_ANCHORS, ReadText(unit, "nameTextAnchor", "TOPLEFT")))
             if RaidGroupNameAllowed(unit) and ReadStatusBool(unit, "showRaidGroupInName", false) then anchor = anchor .. " + Group" end
             W.SetCollapsibleBadges(sec, {
                 { text = nameOn and "Shown" or "Hidden", kind = nameOn and "ok" or "muted" },
@@ -410,9 +410,9 @@ local function BuildText(ctx, builder, unit)
     local nameAnchor = W.Dropdown(namePosition, "Anchor", TEXT_ANCHORS, 210)
     PlaceDropdown(namePosition, nameAnchor, 16, -48, cardW - 32)
     M.BindDropdownWidget(ctx, nameAnchor,
-        function() return ReadText(unit, "nameTextAnchor", "LEFT") end,
+        function() return ReadText(unit, "nameTextAnchor", "TOPLEFT") end,
         function(v)
-            SetText(unit, "nameTextAnchor", v or "LEFT", "MSUF2_NAME_ANCHOR")
+            SetText(unit, "nameTextAnchor", v or "TOPLEFT", "MSUF2_NAME_ANCHOR")
             FocusPreviewText("name", nil, true)
             RefreshTextHeader()
         end,

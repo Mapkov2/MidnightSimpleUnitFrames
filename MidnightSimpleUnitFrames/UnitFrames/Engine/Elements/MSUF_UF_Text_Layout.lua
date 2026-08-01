@@ -131,20 +131,39 @@ local function LayoutTextSpan(fs, relativeTo, leftX, rightX, y, justify)
   end
 end
 
+local function ResolveUnitNameAnchor(anchor, x)
+  anchor = tostring(anchor or "TOPLEFT"):upper()
+  x = tonumber(x) or 0
+  -- 5.77 and the early 6.0 betas stored LEFT/CENTER/RIGHT while rendering
+  -- them on the top edge. Keep those aliases as a defensive runtime fallback;
+  -- normalized profiles use TOP* for that legacy geometry and FRAME* for the
+  -- newly selectable vertical-center row.
+  if anchor == "LEFT" then anchor = "TOPLEFT"
+  elseif anchor == "CENTER" then anchor = "TOP"
+  elseif anchor == "RIGHT" then anchor = "TOPRIGHT" end
+
+  if anchor == "TOPRIGHT" then
+    return "TOPRIGHT", "TOPRIGHT", -x, "RIGHT", anchor
+  elseif anchor == "TOP" then
+    return "TOP", "TOP", x, "CENTER", anchor
+  elseif anchor == "FRAMELEFT" then
+    return "LEFT", "LEFT", x, "LEFT", anchor
+  elseif anchor == "FRAMECENTER" then
+    return "CENTER", "CENTER", x, "CENTER", anchor
+  elseif anchor == "FRAMERIGHT" then
+    return "RIGHT", "RIGHT", -x, "RIGHT", anchor
+  end
+  return "TOPLEFT", "TOPLEFT", x, "LEFT", "TOPLEFT"
+end
+
 local function LayoutName(fs, spec, text)
   if not fs then
     return
   end
-  local anchor = text and text.nameAnchor or "LEFT"
   local x = tonumber(text and text.nameX) or 4
   local y = tonumber(text and text.nameY) or -4
-  if anchor == "RIGHT" then
-    LayoutText(fs, "TOPRIGHT", "TOPRIGHT", -x, y, "RIGHT")
-  elseif anchor == "CENTER" then
-    LayoutText(fs, "TOP", "TOP", x, y, "CENTER")
-  else
-    LayoutText(fs, "TOPLEFT", "TOPLEFT", x, y, "LEFT")
-  end
+  local point, relPoint, resolvedX, justify = ResolveUnitNameAnchor(text and text.nameAnchor, x)
+  LayoutText(fs, point, relPoint, resolvedX, y, justify)
   if fs.SetDrawLayer then
     local layer = tonumber(text and text.nameLayer) or 5
     local sub = DrawSubLayer(layer, 5)
@@ -398,18 +417,11 @@ local function LayoutNameClip(clip, spec, text, width)
     clip:SetSize(width, height)
     clip._msufW, clip._msufH = width, height
   end
-  local anchor = text and text.nameAnchor or "LEFT"
   local x = tonumber(text and text.nameX) or 4
   local y = tonumber(text and text.nameY) or -4
   local parent = clip:GetParent()
-  local point, relPoint
-  if anchor == "RIGHT" then
-    point, relPoint, x = "TOPRIGHT", "TOPRIGHT", -x
-  elseif anchor == "CENTER" then
-    point, relPoint = "TOP", "TOP"
-  else
-    point, relPoint = "TOPLEFT", "TOPLEFT"
-  end
+  local point, relPoint, resolvedX = ResolveUnitNameAnchor(text and text.nameAnchor, x)
+  x = resolvedX
   if clip._msufPoint ~= point or clip._msufRelPoint ~= relPoint or clip._msufX ~= x or clip._msufY ~= y then
     clip:ClearAllPoints()
     clip:SetPoint(point, parent, relPoint, x, y)
@@ -440,8 +452,18 @@ local function ApplyNoEllipsisClip(frame, fs, spec, text, width, side)
     fs:SetWidth(renderWidth)
     fs._msufNameClipTextWidth = renderWidth
   end
-  local point = side == "LEFT" and "TOPRIGHT" or "TOPLEFT"
-  local justify = side == "LEFT" and "RIGHT" or "LEFT"
+  local _, _, _, anchorJustify = ResolveUnitNameAnchor(text and text.nameAnchor, 0)
+  local point, justify
+  if anchorJustify == "CENTER" then
+    -- Keep TOP/FRAMECENTER names optically centered even when the actual unit
+    -- name is restricted and cannot be measured. The oversized FontString is
+    -- centered behind the clip window, so short and long names share one
+    -- secret-safe center without GetStringWidth or string slicing.
+    point, justify = "TOP", "CENTER"
+  else
+    point = side == "LEFT" and "TOPRIGHT" or "TOPLEFT"
+    justify = side == "LEFT" and "RIGHT" or "LEFT"
+  end
   if fs._msufPoint ~= point or fs._msufRelPoint ~= point or fs._msufRelativeTo ~= clip then
     fs:ClearAllPoints()
     fs:SetPoint(point, clip, point, 0, 0)
@@ -499,8 +521,7 @@ local function ApplyNameClip(frame, spec, text)
   local maxChars = not legacyTruncation and text and text.nameShorten == true and tonumber(text.nameShortenMax) or 0
   local shorten = maxChars and maxChars > 0
   local clipSide = text and text.nameShortenSide == "RIGHT" and "RIGHT" or "LEFT"
-  local anchor = text and text.nameAnchor or "LEFT"
-  local justify = (anchor == "RIGHT" and "RIGHT") or (anchor == "CENTER" and "CENTER") or "LEFT"
+  local _, _, _, justify = ResolveUnitNameAnchor(text and text.nameAnchor, 0)
   if not shorten then
     if fs._msufJustifyH ~= justify then
       fs:SetJustifyH(justify)
@@ -529,7 +550,7 @@ local function ApplyNameClip(frame, spec, text)
     end
   end
 
-  if shorten and anchor == "LEFT" then
+  if shorten and justify == "LEFT" then
     justify = clipSide == "LEFT" and "RIGHT" or "LEFT"
   end
 

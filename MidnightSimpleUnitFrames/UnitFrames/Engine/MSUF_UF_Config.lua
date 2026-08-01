@@ -61,6 +61,15 @@ local COOLDOWN_VIEWER_FRAMES = {
   UtilityCooldownViewer = true,
   BuffIconCooldownViewer = true,
 }
+local LEGACY_UNIT_NAME_ANCHORS = {
+  LEFT = "TOPLEFT",
+  CENTER = "TOP",
+  RIGHT = "TOPRIGHT",
+}
+local function NormalizeUnitNameAnchor(value)
+  value = tostring(value or "TOPLEFT"):upper()
+  return LEGACY_UNIT_NAME_ANCHORS[value] or value
+end
 local ECV_ANCHORS = {
   player = { "RIGHT", "LEFT", -20, 0 },
   target = { "LEFT", "RIGHT", 20, 0 },
@@ -1550,7 +1559,7 @@ local function CompileUnitPortrait(out, conf, general)
   local portraitMode = NormalizePortraitMode(conf)
   local portraitOverride = Number(conf.portraitSizeOverride, Number(conf.portraitSize, 0))
   local portraitAutoSize = max(16, Number(out.height, 30) - 4)
-  local portraitSize = portraitOverride > 0 and max(16, portraitOverride) or portraitAutoSize
+  local portraitSize = portraitOverride > 0 and max(1, portraitOverride) or portraitAutoSize
   out.portrait.enabled = portraitMode ~= "OFF"
   out.portrait.side = portraitMode == "RIGHT" and "RIGHT" or "LEFT"
   out.portrait.render = NormalizePortraitRender(conf.portraitRender)
@@ -1560,12 +1569,18 @@ local function CompileUnitPortrait(out, conf, general)
   out.portrait.size = portraitSize
   out.portrait.x = Number(conf.portraitOffsetX, 0)
   out.portrait.y = Number(conf.portraitOffsetY, 0)
-  --- Explicit width/height win over the square size; 0 keeps the classic
-  --- "square, derived from the frame height" behaviour.
+  --- A positive size override is the explicit square contract. Width/height
+  --- are the advanced non-square mode and only take over while size is Auto
+  --- (0); otherwise stale per-axis values made the visible Size slider inert.
   local portraitWidth = Number(conf.portraitWidth, 0)
   local portraitHeight = Number(conf.portraitHeight, 0)
-  out.portrait.width = portraitWidth > 0 and max(8, portraitWidth) or portraitSize
-  out.portrait.height = portraitHeight > 0 and max(8, portraitHeight) or portraitSize
+  if portraitOverride > 0 then
+    out.portrait.width = portraitSize
+    out.portrait.height = portraitSize
+  else
+    out.portrait.width = portraitWidth > 0 and max(8, portraitWidth) or portraitSize
+    out.portrait.height = portraitHeight > 0 and max(8, portraitHeight) or portraitSize
+  end
   out.portrait.placement = NormalizePortraitPlacement(conf.portraitPlacement)
   out.portrait.point = NormalizePortraitAnchorPoint(conf.portraitDetachedPoint, "RIGHT")
   out.portrait.relPoint = NormalizePortraitAnchorPoint(conf.portraitDetachedTo, "LEFT")
@@ -1760,7 +1775,7 @@ local function CompileUnitText(out, db, unit, key, conf, general, bars)
   else
     text.healthShortNumbers = general.useShortNumbers ~= false
   end
-  text.nameAnchor = conf.nameTextAnchor or conf.nameAnchor or general.nameTextAnchor or general.nameAnchor or "LEFT"
+  text.nameAnchor = NormalizeUnitNameAnchor(conf.nameTextAnchor or conf.nameAnchor or general.nameTextAnchor or general.nameAnchor)
   text.nameX = Number(conf.nameOffsetX or conf.nameTextOffsetX or general.nameOffsetX or general.nameTextOffsetX, 4)
   local fontBaselineOffset = ResolveFontBaselineOffset(general, conf)
   text.nameY = Number(conf.nameOffsetY or conf.nameTextOffsetY or general.nameOffsetY or general.nameTextOffsetY, -4) + fontBaselineOffset
