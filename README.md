@@ -36,7 +36,7 @@ MSUF is made for players who want clear combat information, extensive visual con
 - Configurable health, power, absorb and heal-absorb displays
 - Player, Target, Focus and Boss castbars
 - Buffs, debuffs, defensive auras, private auras and spell indicators
-- 2D, 3D and class-icon portraits with multiple shapes and placements
+- 2D and class-icon portraits with multiple shapes and placements
 - Custom name, health, power, status and castbar text
 - Class colors, reaction colors, custom colors, gradients, fonts and textures
 - Aggro, dispel, purge, range, role, leader, raid-marker and status indicators
