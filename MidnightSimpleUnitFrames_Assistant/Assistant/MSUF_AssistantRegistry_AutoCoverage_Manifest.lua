@@ -23,7 +23,7 @@ A.AutoCoverageManifest = Manifest
 -- through the same decode and normalization path used by MSUF in game.
 -- Regenerate and verify with tools/assistant_autocoverage_manifest_regression.py.
 -- 4531 top-level scalar fallbacks across every required AutoCoverage scope.
-Manifest.scalarCount = 4531
+Manifest.scalarCount = 4533
 Manifest.requiredScopes = {
     "bars", "boss", "focus", "focustarget", "gameplay", "general",
     "gf_mythicraid", "gf_party", "gf_raid", "pet", "player", "target", "targettarget",
@@ -145,6 +145,7 @@ Manifest.defaults = {
         embedPowerBarIntoHealth = true,
         fractionalPartialVis = "fill",
         fractionalTextFormat = "auto",
+        guardianIronfurShowHashLines = true,
         highlightBorderThickness = 2,
         playerHPBarAnchor = "CLASS_TOP",
         playerHPBarBgAlpha = 0.34999999999999998,
@@ -205,6 +206,7 @@ Manifest.defaults = {
         showEbonMight = true,
         showEleMaelstrom = true,
         showFocusPowerBar = false,
+        showGuardianIronfur = false,
         showPlayerPowerBar = true,
         showShadowMana = false,
         showStagger = true,

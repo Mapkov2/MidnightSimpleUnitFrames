@@ -112,6 +112,18 @@ function A.ClassPowerRegistry.RegisterDisplaySettings(ctx)
     RegisterBarsBoolean("showShadowMana", "shadowMana", "Shadow Insanity Bar", false, ClassPowerAliases("shadow insanity", "insanity bar", "shadow mana", "shadow resource bar"), {
         reason = "MSUF_ASSISTANT_CLASSPOWER_SHADOW_MANA",
     })
+    RegisterBarsBoolean("showGuardianIronfur", "guardianIronfur", "Guardian Ironfur Tracker", false, ClassPowerAliases("ironfur", "ironfur tracker", "ironfur bar", "guardian ironfur"), {
+        reason = "MSUF_ASSISTANT_CLASSPOWER_GUARDIAN_IRONFUR",
+    })
+    -- The markers only exist while the tracker itself is on, so the Assistant
+    -- turns the tracker on with them instead of writing a dead setting.
+    RegisterBarsBoolean("guardianIronfurShowHashLines", "ironfurMarkers", "Ironfur Cast Markers", true, ClassPowerAliases("ironfur markers", "ironfur cast markers", "ironfur hash lines"), {
+        reason = "MSUF_ASSISTANT_CLASSPOWER_IRONFUR_MARKERS",
+        companionChanges = {
+            { key = "bars.showGuardianIronfur", value = true, whenValue = true,
+              whenTextHas = { "show", "turn on", "enable" }, prepend = true },
+        },
+    })
     RegisterBarsBoolean("classPowerShowPrediction", "prediction", "Class Resource Prediction", true, ClassPowerAliases("prediction", "resource prediction", "incoming resource"), {
         reason = "MSUF_ASSISTANT_CLASSPOWER_PREDICTION",
         exactAliases = {

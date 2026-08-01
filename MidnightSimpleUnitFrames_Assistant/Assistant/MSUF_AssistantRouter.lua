@@ -718,12 +718,9 @@ end
 -- Exported so the low-latency submit lanes can stand down: they run before
 -- A.RouteInput and would otherwise read the digits inside a setting label
 -- ("Texture Layer 3 Offset X") as a value to write.
+-- Pending state is deliberately not consulted here; see
+-- A.RouterIsNamedSettingLookup for why.
 function A.RouterIsFeatureExistenceQuestion(text)
-    if type(A.RouterHasBlockingPendingAssistantState) == "function"
-        and A.RouterHasBlockingPendingAssistantState() == true
-    then
-        return false
-    end
     return R.FeatureExistenceQuestionSubject(text) ~= nil
 end
 
@@ -863,12 +860,13 @@ end
 -- this to stand down: a label ending in "Enabled" otherwise read as the
 -- instruction to enable it, and that write only surfaced after enough
 -- conversation state had built up to push the request past the usual guards.
+-- Deliberately does not consult pending state. A. RouteInput gates its own
+-- lanes on that separately, and these predicates only ever make a *mutation*
+-- lane stand down -- so exempting them while a confirmation was open reopened
+-- the hole they exist to close: after enough conversation a pending state is
+-- usually live, and "show me Mythic Raid Masque Enabled" went back to enabling
+-- it. A pending confirmation is never permission to execute a question.
 function A.RouterIsNamedSettingLookup(text)
-    if type(A.RouterHasBlockingPendingAssistantState) == "function"
-        and A.RouterHasBlockingPendingAssistantState() == true
-    then
-        return false
-    end
     local label = A.RouterNamedSettingLabel(text)
     return label ~= nil and label ~= ""
 end
@@ -1063,12 +1061,9 @@ R.NPC_BAR_CLASS_COLOR_OFF_TERMS = {
 
 -- Exported so the low-latency mutation lane stands down: it runs before
 -- A.RouteInput and is the lane that wrote Party Bar Color Mode.
+-- Pending state is deliberately not consulted here; see
+-- A.RouterIsNamedSettingLookup for why.
 function A.RouterIsNpcQualifiedBarColorRequest(text)
-    if type(A.RouterHasBlockingPendingAssistantState) == "function"
-        and A.RouterHasBlockingPendingAssistantState() == true
-    then
-        return false
-    end
     return R.NpcQualifiedBarColorSubject(text) == true
 end
 
