@@ -420,7 +420,8 @@ local function ShortenPreviewName(name, key, layoutConf)
         showDots = true
     end
     local anchorConf = layoutConf or u
-    if (anchorConf.nameTextAnchor or "LEFT") ~= "LEFT" then showDots = false end
+    local nameAnchor = tostring(anchorConf.nameTextAnchor or "TOPLEFT"):upper()
+    if nameAnchor ~= "LEFT" and nameAnchor ~= "TOPLEFT" and nameAnchor ~= "FRAMELEFT" then showDots = false end
     if mode == "RIGHT" then
         local text = name:sub(1, maxChars)
         return showDots and (text .. "...") or text
@@ -954,17 +955,25 @@ local function ReadPowerBarHeight(conf)
     return h
 end
 local function ResolveNameAnchor(anchor, x)
+    anchor = tostring(anchor or "TOPLEFT"):upper()
     x = tonumber(x) or 0
-    if anchor == "RIGHT" then return "TOPRIGHT", "TOPRIGHT", -x, "RIGHT" end
-    if anchor == "CENTER" then return "TOP", "TOP", x, "CENTER" end
+    if anchor == "LEFT" then anchor = "TOPLEFT"
+    elseif anchor == "CENTER" then anchor = "TOP"
+    elseif anchor == "RIGHT" then anchor = "TOPRIGHT" end
+    if anchor == "TOPRIGHT" then return "TOPRIGHT", "TOPRIGHT", -x, "RIGHT" end
+    if anchor == "TOP" then return "TOP", "TOP", x, "CENTER" end
+    if anchor == "FRAMELEFT" then return "LEFT", "LEFT", x, "LEFT" end
+    if anchor == "FRAMECENTER" then return "CENTER", "CENTER", x, "CENTER" end
+    if anchor == "FRAMERIGHT" then return "RIGHT", "RIGHT", -x, "RIGHT" end
     return "TOPLEFT", "TOPLEFT", x, "LEFT"
 end
 local function ResolveNameOffsetDelta(anchor, dx, dy)
     dx, dy = tonumber(dx) or 0, tonumber(dy) or 0
-    -- RIGHT stores an inward-positive X offset and ResolveNameAnchor negates
-    -- it. Direct manipulation must therefore invert only the stored X delta
-    -- so the text continues to follow the cursor/arrow direction on screen.
-    if tostring(anchor or "LEFT"):upper() == "RIGHT" then dx = -dx end
+    -- Right-edge anchors store an inward-positive X offset and
+    -- ResolveNameAnchor negates it. Direct manipulation therefore mirrors the
+    -- stored X delta so the text continues to follow the cursor on screen.
+    anchor = tostring(anchor or "TOPLEFT"):upper()
+    if anchor == "RIGHT" or anchor == "TOPRIGHT" or anchor == "FRAMERIGHT" then dx = -dx end
     return dx, dy
 end
 local function NumText(v, shortNumbers)

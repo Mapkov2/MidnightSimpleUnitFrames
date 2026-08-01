@@ -12,8 +12,13 @@ local function BossPagePreviewInCombat()
     return (_G.InCombatLockdown and _G.InCombatLockdown())
         or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
 end
+local function ClearBossPagePreviewForCombat()
+    local clear = _G.MSUF_ClearBossUnitframePreviewForCombat
+    return type(clear) == "function" and clear() == true
+end
 local function ApplyBossPagePreviewFallback(active, reason)
     if BossPagePreviewInCombat() then
+        ClearBossPagePreviewForCombat()
         _G.MSUF2_BossUnitframePreviewActive = nil
         return
     end
@@ -85,6 +90,7 @@ local function SyncBossPagePreviewForKey(key, force)
     local frameShown = M.frame and M.frame.IsShown and M.frame:IsShown()
     local active = (key == "uf_boss") and frameShown
     if BossPagePreviewInCombat() then
+        ClearBossPagePreviewForCombat()
         _G.MSUF2_BossUnitframePreviewActive = nil
         _G.MSUF2_BossPageAuraPreviewActive = nil
         lastBossPreviewActive = nil

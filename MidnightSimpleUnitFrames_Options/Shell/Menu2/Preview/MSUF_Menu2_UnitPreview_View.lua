@@ -476,14 +476,34 @@ local UNIT_SECTION_IDS = {
     auras3 = "auras",
     texture_layer = "texture_layer",
 }
+function Preview.PrepareUnitHandleSubmenu(menu, unit, handle)
+    if not (menu and handle) then return end
+    local key, section = handle._key, handle._fields and handle._fields.section
+    local state, tab
+    if section == "text" then state, tab = "unitTextTabSelection", key == "name" and "name" or (key:sub(1, 2) == "hp" and "hp" or "power")
+    elseif section == "portrait" then state, tab = "unitPortraitTabSelection", "placement"
+    elseif section == "castbar" then
+        state = "unitCastbarTabSelection"
+        tab = key == "castbarIcon" and "icon" or (key == "castbarTime" and "time" or ((key == "castbarText" or key == "castbarTarget") and "spell" or "general"))
+    end
+    if state then menu[state] = menu[state] or {}; menu[state][unit] = tab end
+    local textureSlot = section == "texture_layer" and (tonumber(key:match("^texLayer(%d)$")) or 1)
+    if textureSlot then
+        menu.unitTexLayerSlot = menu.unitTexLayerSlot or {}
+        menu.unitTexLayerTab = menu.unitTexLayerTab or {}
+        menu.unitTexLayerSlot[unit] = textureSlot
+        menu.unitTexLayerTab[unit] = "placement"
+    end
+end
 OpenPreviewHandleSettings = function(handle, source)
     if not handle then return false end
     local box = handle._preview or Preview.active
     local fields = handle._fields or {}
     local section = fields.section
     local menu = _G.MSUF2 or M2
+    local unit = box and box.key or "player"
+    Preview.PrepareUnitHandleSubmenu(menu, unit, handle)
     if fields.statusRefresh then
-        local unit = box and box.key or "player"
         local selected = NormalizeStatusPreviewId(handle._key)
         Preview.selectedStatusId = selected
         if menu then
@@ -494,14 +514,19 @@ OpenPreviewHandleSettings = function(handle, source)
         end
     end
     if section == "auras3" then
-        local unit = box and box.key or "player"
         local lane = fields.auraPreviewKind
         if lane ~= "debuff" and lane ~= "custom1" and lane ~= "custom2" and lane ~= "custom3" and lane ~= "custom4" then lane = "buff" end
         local previousAuraLane
+        local previousAuraTool
         if menu then
             menu.unitAuraTabSelection = menu.unitAuraTabSelection or {}
             previousAuraLane = menu.unitAuraTabSelection[unit] or "buff"
             menu.unitAuraTabSelection[unit] = lane
+            menu.unitAuraToolSelection = menu.unitAuraToolSelection or {}
+            local tools = menu.unitAuraToolSelection[unit]
+            if type(tools) ~= "table" then tools = {}; menu.unitAuraToolSelection[unit] = tools end
+            previousAuraTool = tools[lane]
+            tools[lane] = "layout"
         end
         local pageKey = "uf_" .. tostring(unit)
         if menu and type(menu.SelectPage) == "function" then
@@ -518,7 +543,7 @@ OpenPreviewHandleSettings = function(handle, source)
             -- The Aura workspace captures its selected container while the
             -- Unit page is built. Refreshers cannot replace that cached
             -- container, so rebuild only when this preview opens another one.
-            if lane ~= previousAuraLane and type(menu.InvalidatePage) == "function" then
+            if (lane ~= previousAuraLane or previousAuraTool ~= "layout") and type(menu.InvalidatePage) == "function" then
                 menu.InvalidatePage(pageKey)
             end
             return menu.SelectPage(pageKey) ~= false
@@ -527,9 +552,17 @@ OpenPreviewHandleSettings = function(handle, source)
     end
     if section == "classPower" then
         if menu and type(menu.SelectPage) == "function" then
+            local sectionId = "classpower_display"
+            if handle._key == "classPowerText" then
+                sectionId = "classpower_visuals"
+                if menu.SetMenuStateValue then menu.SetMenuStateValue("classPowerStyleTab", "text") else menu.classPowerStyleTab = "text" end
+            elseif handle._key == "detachedPower" then
+                sectionId = "classpower_detached_power"
+                if menu.SetMenuStateValue then menu.SetMenuStateValue("classPowerDetachedPowerTab", "layout") else menu.classPowerDetachedPowerTab = "layout" end
+            end
             ExportPublic("MSUF_EM2_MenuFocusRequest", {
                 pageKey = "classpower",
-                sectionId = handle._key == "detachedPower" and "classpower_detached_power" or "classpower_display",
+                sectionId = sectionId,
                 source = "unit-preview-" .. tostring(source or "settings"),
                 explicit = true,
                 changedAt = GetTime and GetTime() or 0,
@@ -2015,7 +2048,7 @@ local function BuildPreview(parent, panel, width, height)
     box.handlePowerCenter = MakeHandle(box, "powerCenter", { x = "powerTextCenterOffsetX", y = "powerTextCenterOffsetY", defaultX = 0, defaultY = 0, text = true, section = "text" }, "Power center text", { 0.95, 0.72, 0.18 })
     box.handlePowerRight = MakeHandle(box, "powerRight", { x = "powerTextRightOffsetX", y = "powerTextRightOffsetY", defaultX = 0, defaultY = 0, text = true, section = "text" }, "Power right text", { 0.95, 0.72, 0.18 })
     box.handlePortrait = MakeHandle(box, "portrait", { x = "portraitOffsetX", y = "portraitOffsetY", defaultX = 0, defaultY = 0, portrait = true, section = "portrait" }, "Portrait", { 0.90, 0.42, 1.0 })
-    box.handleDetachedPower = MakeHandle(box, "detachedPower", { x = "detachedPowerBarOffsetX", y = "detachedPowerBarOffsetY", defaultX = 0, defaultY = -4, detachedPower = true, section = "power" }, "Detached power bar", { 0.95, 0.72, 0.18 })
+    box.handleDetachedPower = MakeHandle(box, "detachedPower", { x = "detachedPowerBarOffsetX", y = "detachedPowerBarOffsetY", defaultX = 0, defaultY = -4, detachedPower = true, section = "classPower" }, "Detached power bar", { 0.95, 0.72, 0.18 })
     box.texLayerHandles = {
         MakeHandle(box, "texLayer", { x = "texLayerOffsetX", y = "texLayerOffsetY", defaultX = 0, defaultY = 0, texLayer = true, section = "texture_layer" }, "Texture layer 1", { 0.80, 0.55, 0.25 }),
         MakeHandle(box, "texLayer2", { x = "texLayer2OffsetX", y = "texLayer2OffsetY", defaultX = 0, defaultY = 0, texLayer = true, section = "texture_layer" }, "Texture layer 2", { 0.80, 0.55, 0.25 }),
@@ -2119,10 +2152,10 @@ do
     local deps = Preview.RefreshDeps or {}
     Preview.RefreshDeps = deps
     AssignNamedValues(deps, [[
-        PreviewInCombat TR PortraitStyleGet RuntimeSpecForPreviewKey RuntimeVisualScaleForPreviewKey ClampPreviewZoom UpdatePreviewZoomControls ZOOM_MIN
+        PreviewInCombat TR PortraitStyleGet RuntimeSpecForPreviewKey RuntimeVisualScaleForPreviewKey RuntimeCastbarVisualScaleForPreviewKey ClampPreviewZoom UpdatePreviewZoomControls ZOOM_MIN
         max min abs floor format TEX_W8 FONT STATUS_PREVIEW CurrentPanelKey UnitDB UNIT_DATA UNIT_LABELS ReadPowerBarEnabled ReadPowerBarHeight LiveUnitData SyncLiveStateDriver
     ]],
-        PreviewInCombat, TR, PortraitStyleGet, RuntimeSpecForPreviewKey, RuntimeVisualScaleForPreviewKey, ClampPreviewZoom, UpdatePreviewZoomControls, ZOOM_MIN,
+        PreviewInCombat, TR, PortraitStyleGet, RuntimeSpecForPreviewKey, RuntimeVisualScaleForPreviewKey, PreviewRuntime.CastbarVisualScaleForPreviewKey or RuntimeVisualScaleForPreviewKey, ClampPreviewZoom, UpdatePreviewZoomControls, ZOOM_MIN,
         max, min, abs, floor, format, TEX_W8, FONT, STATUS_PREVIEW, CurrentPanelKey, UnitDB, UNIT_DATA, UNIT_LABELS, ReadPowerBarEnabled, ReadPowerBarHeight, PreviewModel.LiveUnitData, SyncUnitPreviewLiveState)
     AssignNamedValues(deps, [[
         PreviewRaidGroupNameAllowed PreviewRaidGroupNameText NormalizeRaidGroupNameAnchor CastbarEnabled CastbarShowIcon CastbarShowText ReadCastbarSize ReadCastbarNum FormatCastbarPreviewTime

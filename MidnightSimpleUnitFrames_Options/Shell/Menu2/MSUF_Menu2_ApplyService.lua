@@ -125,30 +125,7 @@ local function IsGlobalApplyScope(scope)
     return scope == nil or scope == "*" or scope == "shared" or scope == "global" or scope == "all"
 end
 
-local function ReportBoundaryError(err)
-    local handler = _G.geterrorhandler and _G.geterrorhandler()
-    if type(handler) == "function" then
-        local reported = pcall(handler, err)
-        if reported then return end
-    end
-    if type(print) == "function" then
-        print("|cffffd700MSUF apply callback:|r", tostring(err))
-    end
-end
-
---- Optional apply/refresh targets are independent feature boundaries. Failures
---- are reported to BugSack/the configured error handler and returned to the
---- caller, allowing transactions and queue cleanup to finish deterministically.
---- Returns false plus the error for a failed call, otherwise true plus results.
-function Apply.Invoke(fn, ...)
-    if type(fn) ~= "function" then return false end
-    local ok, r1, r2, r3, r4 = pcall(fn, ...)
-    if not ok then
-        ReportBoundaryError(r1)
-        return false, r1
-    end
-    return true, r1, r2, r3, r4
-end
+Apply.Invoke = assert(M.InvokeBoundary, "Menu2 callback boundary missing")
 
 function Apply.CallGlobal(name, ...)
     local fn = _G[name]

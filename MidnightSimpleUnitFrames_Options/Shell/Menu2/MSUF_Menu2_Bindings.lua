@@ -71,10 +71,10 @@ function M.EnsureDB()
         return db
     end
     if ProfileSystemNeedsInit() and type(_G.MSUF_InitProfiles) == "function" then
-        SafeInvoke(_G.MSUF_InitProfiles)
+        Invoke(_G.MSUF_InitProfiles)
     end
     local ensure = _G.MSUF_EnsureDB
-    if type(ensure) == "function" then SafeInvoke(ensure) end
+    if type(ensure) == "function" then Invoke(ensure) end
     ExportPublic("MSUF_DB", _G.MSUF_DB or {})
     _G.MSUF_DB.general = _G.MSUF_DB.general or {}
     lastEnsuredDB = _G.MSUF_DB
@@ -338,10 +338,10 @@ local function CancelQueuedMenuRefresh()
     refreshTimer = nil
 end
 local function NotifyHistoryChanged(refreshMenu)
-    if M.RefreshHistoryControls then SafeInvoke(M.RefreshHistoryControls) end
-    if M.frame and M.frame.RefreshStatus then SafeInvoke(M.frame.RefreshStatus, M.frame) end
+    if M.RefreshHistoryControls then Invoke(M.RefreshHistoryControls) end
+    if M.frame and M.frame.RefreshStatus then Invoke(M.frame.RefreshStatus, M.frame) end
     if type(_G.MSUF_EM_RefreshHistoryControls) == "function" then
-        SafeInvoke(_G.MSUF_EM_RefreshHistoryControls)
+        Invoke(_G.MSUF_EM_RefreshHistoryControls)
     end
     if refreshMenu == true then QueueMenuRefresh() end
 end
@@ -495,15 +495,15 @@ local function ApplyScopedFeatureRuntime(kind, reason, scope)
     end
     if kind == "gameplay" then
         if M.ApplyGameplay then
-            local ok, result = SafeInvoke(M.ApplyGameplay)
+            local ok, result = Invoke(M.ApplyGameplay)
             return ok == true and result ~= false
         end
         if MSUF and type(MSUF.MSUF_RequestGameplayApply) == "function" then
-            local ok, result = SafeInvoke(MSUF.MSUF_RequestGameplayApply, reason)
+            local ok, result = Invoke(MSUF.MSUF_RequestGameplayApply, reason)
             return ok == true and result ~= false
         end
         if MSUF and type(MSUF.MSUF_ApplyGameplayVisuals) == "function" then
-            local ok, result = SafeInvoke(MSUF.MSUF_ApplyGameplayVisuals)
+            local ok, result = Invoke(MSUF.MSUF_ApplyGameplayVisuals)
             return ok == true and result ~= false
         end
         return false
@@ -542,7 +542,7 @@ RequestHistoryAurasRuntime = function(reason, scope, visuals)
     end
     local auras = MSUF and MSUF.MSUF_Auras3
     if auras and type(auras.RequestApply) == "function" then
-        SafeInvoke(auras.RequestApply)
+        Invoke(auras.RequestApply)
         return true
     end
     return false
@@ -569,11 +569,11 @@ RequestHistoryGroupRuntime = function(reason, kind)
     end
     if MSUF and MSUF.GF then
         if type(MSUF.GF.RefreshAll) == "function" then
-            SafeInvoke(MSUF.GF.RefreshAll)
+            Invoke(MSUF.GF.RefreshAll)
         else
-            if type(MSUF.GF.RefreshVisuals) == "function" then SafeInvoke(MSUF.GF.RefreshVisuals) end
+            if type(MSUF.GF.RefreshVisuals) == "function" then Invoke(MSUF.GF.RefreshVisuals) end
         end
-        if type(MSUF.GF.RefreshPreviewLayout) == "function" then SafeInvoke(MSUF.GF.RefreshPreviewLayout) end
+        if type(MSUF.GF.RefreshPreviewLayout) == "function" then Invoke(MSUF.GF.RefreshPreviewLayout) end
         return true
     end
     return false
@@ -601,7 +601,7 @@ local function ApplyHistorySnapshot(snapshot, reason, source)
         M.CallIf(M.MarkMenuDataDirty, reason or "history")
         RebuildActivePage()
         if type(_G.MSUF_EM_RefreshAfterHistoryRestore) == "function" then
-            SafeInvoke(_G.MSUF_EM_RefreshAfterHistoryRestore, reason or "MSUF2_HISTORY", source)
+            Invoke(_G.MSUF_EM_RefreshAfterHistoryRestore, reason or "MSUF2_HISTORY", source)
         end
         return true
     end
@@ -609,23 +609,23 @@ local function ApplyHistorySnapshot(snapshot, reason, source)
     -- Menu2 state, so restore fanout is centralized and explicit.
     M.RequestGeneralApply(reason or "MSUF2_HISTORY", { preview = true, alpha = true, castbar = true })
     if MSUF and type(MSUF.MSUF_RequestGameplayApply) == "function" then
-        SafeInvoke(MSUF.MSUF_RequestGameplayApply)
+        Invoke(MSUF.MSUF_RequestGameplayApply)
     elseif MSUF and type(MSUF.MSUF_ApplyGameplayVisuals) == "function" then
-        SafeInvoke(MSUF.MSUF_ApplyGameplayVisuals)
+        Invoke(MSUF.MSUF_ApplyGameplayVisuals)
     end
     do
         local db = M.EnsureDB()
         local g = db and db.general
         local ui = type(g) == "table" and type(g.UIScale) == "table" and g.UIScale or nil
         if ui and ui.Enabled == true and type(_G.MSUF_SetGlobalUiScale) == "function" then
-            SafeInvoke(_G.MSUF_SetGlobalUiScale, tonumber(ui.Scale) or 1, true)
+            Invoke(_G.MSUF_SetGlobalUiScale, tonumber(ui.Scale) or 1, true)
         elseif ui and type(_G.MSUF_ResetGlobalUiScale) == "function" then
-            SafeInvoke(_G.MSUF_ResetGlobalUiScale, true)
+            Invoke(_G.MSUF_ResetGlobalUiScale, true)
         end
         if M.ApplyMenuFrameScale and M.frame then
-            SafeInvoke(M.ApplyMenuFrameScale, M.frame)
+            Invoke(M.ApplyMenuFrameScale, M.frame)
         elseif M.GetEffectiveMenuScale and M.frame and M.frame.SetScale and type(g) == "table" then
-            local ok, scale = SafeInvoke(M.GetEffectiveMenuScale, g.slashMenuScale)
+            local ok, scale = Invoke(M.GetEffectiveMenuScale, g.slashMenuScale)
             if ok and type(scale) == "number" then M.frame:SetScale(scale) end
         end
     end
@@ -640,13 +640,13 @@ local function ApplyHistorySnapshot(snapshot, reason, source)
     RequestHistoryGroupRuntime(reason or "MSUF2_HISTORY_GROUP")
     FlushApplyServiceNow()
     if type(_G.MSUF_ApplySpecProfileIfEnabled) == "function" then
-        SafeInvoke(_G.MSUF_ApplySpecProfileIfEnabled, "MSUF2_HISTORY_PROFILE_ROUTING")
+        Invoke(_G.MSUF_ApplySpecProfileIfEnabled, "MSUF2_HISTORY_PROFILE_ROUTING")
     end
     M.CallIf(M.ApplyLocaleSelection, M.GetLocaleSelection and M.GetLocaleSelection() or "auto")
     M.CallIf(M.MarkMenuDataDirty, reason or "history")
     RebuildActivePage()
     if type(_G.MSUF_EM_RefreshAfterHistoryRestore) == "function" then
-        SafeInvoke(_G.MSUF_EM_RefreshAfterHistoryRestore, reason or "MSUF2_HISTORY", source)
+        Invoke(_G.MSUF_EM_RefreshAfterHistoryRestore, reason or "MSUF2_HISTORY", source)
     end
     return true
 end
@@ -676,7 +676,7 @@ function M.CaptureHistory(label, source, fn)
     if type(fn) ~= "function" then return nil end
     if M.BlockCombatAction() then return false end
     if historyDepth > 0 or historyRestoring then
-        local ok, result = SafeInvoke(fn)
+        local ok, result = Invoke(fn)
         if not ok then return nil end
         if result ~= false then
             if historyTransaction then
@@ -693,7 +693,7 @@ function M.CaptureHistory(label, source, fn)
     end
     local before = CurrentHistorySnapshot()
     historyDepth = historyDepth + 1
-    local ok, result = SafeInvoke(fn)
+    local ok, result = Invoke(fn)
     historyDepth = historyDepth - 1
     if not ok then
         CommandFeedback("Action failed", "danger", 1.8)
@@ -972,11 +972,11 @@ end
 local function WidgetHistoryLabel(ctx, widget, fallback)
     local fs = widget and (widget._msuf2Title or widget._msuf2Label)
     if fs and fs.GetText then
-        local ok, text = SafeInvoke(fs.GetText, fs)
+        local ok, text = Invoke(fs.GetText, fs)
         if ok and text and text ~= "" then return text end
     end
     if widget and widget.GetText then
-        local ok, text = SafeInvoke(widget.GetText, widget)
+        local ok, text = Invoke(widget.GetText, widget)
         if ok and text and text ~= "" then return text end
     end
     return fallback or tostring((ctx and ctx.key) or "MSUF2 option")
@@ -1044,7 +1044,7 @@ function M.SetGeneralValue(key, value, reason, opts)
     if g[key] == value then return false end
     g[key] = value
     if key == "menuLocale" then
-        if M.ApplyLocaleSelection then SafeInvoke(M.ApplyLocaleSelection, value) end
+        if M.ApplyLocaleSelection then Invoke(M.ApplyLocaleSelection, value) end
         if opts and opts.noRuntime == true then return true end
     end
     M.RequestGeneralApply(reason or ("MSUF2_" .. tostring(key)), opts)
@@ -1113,7 +1113,7 @@ local BARS_GENERAL_KEYS = KSW [[
     overAbsorbOverlay fullHealthAbsorbStripe absorbBarTexture healAbsorbBarTexture dispelBorderTrigger unitDispelOverlayEnabled unitDispelOverlayStyle
     unitDispelOverlayOnHealth unitDispelOverlayAlpha unitDispelOverlayTrigger bossTargetOutlineMode
     bossTargetHighlightEnabled hlPrioEnabled hlPrioOrder highlightPrioEnabled highlightPrioOrder roundedFramesEnabled roundedUnitFrames
-    roundedGroupFrames roundedPowerBars roundedMouseover barOutlineColorR barOutlineColorG
+    roundedGroupFrames roundedPowerBars roundedCastbars roundedMouseover barOutlineColorR barOutlineColorG
     barOutlineColorB barOutlineColorA
 ]]
 local BARS_SCOPE_KEYS = KSW [[
@@ -1129,7 +1129,7 @@ local BARS_SCOPE_KEYS = KSW [[
 ]]
 local BARS_TABLE_KEYS = KSW [[
     barOutlineThickness barOutlineLayer barOutlineStrata barOutlineTexture smoothPowerBar realtimePowerText roundedFramesEnabled roundedUnitFrames
-    roundedGroupFrames roundedPowerBars roundedMouseover
+    roundedGroupFrames roundedPowerBars roundedCastbars roundedMouseover
 ]]
 local FONT_GENERAL_KEYS = KSW "fontKey boldText noOutline textBackdrop fontMonochrome fontShadowStrength fontShadowOpacity fontShadowDistance fontTextAlpha fontBaselineOffset nameClassColor npcNameRed nameNpcClassColor colorPowerTextByType colorHealthTextByHealth nameColorMode nameColorR nameColorG nameColorB"
 local FONT_SCOPE_KEYS = KSW [[
@@ -1166,7 +1166,7 @@ local GROUP_COLOR_KEYS = KSW [[
     ciAggroColorR ciAggroColorG ciAggroColorB
 ]]
 local AURAS_GENERAL_PREFIXES = WL "auras"
-local AURAS_SHARED_COLOR_KEYS = KS("pandemicR", "pandemicG", "pandemicB")
+local AURAS_SHARED_COLOR_KEYS = KS("styleBorderColor", "styleShadowColor")
 local function StartsWith(value, prefix)
     return type(value) == "string" and type(prefix) == "string" and value:sub(1, #prefix) == prefix
 end
@@ -1278,7 +1278,7 @@ end
 local function FactoryDefaults()
     local create = (type(MSUF) == "table" and MSUF.MSUF_CreateFactoryDefaultProfile) or _G.MSUF_CreateFactoryDefaultProfile
     if type(create) ~= "function" then return nil end
-    local ok, defaults = SafeInvoke(create)
+    local ok, defaults = Invoke(create)
     if ok and type(defaults) == "table" then return defaults end
     return nil
 end
@@ -1298,7 +1298,7 @@ end
 local function ResetGroupFrames(db, defaults)
     local gf = MSUF and MSUF.GF
     if gf and type(gf.ResetAllToDefaults) == "function" then
-        local ok, result = SafeInvoke(gf.ResetAllToDefaults)
+        local ok, result = Invoke(gf.ResetAllToDefaults)
         return ok and result
     end
     ReplaceRootTable(db, defaults, "gf_party")
@@ -1373,7 +1373,7 @@ local PAGE_RESET_HANDLERS = {
 }
 local function FinishPageResetApply(pageKey)
     M.CallIf(M.ApplyLocaleSelection, M.GetLocaleSelection and M.GetLocaleSelection() or "auto")
-    if M.ApplyMenuFrameScale and M.frame then SafeInvoke(M.ApplyMenuFrameScale, M.frame) end
+    if M.ApplyMenuFrameScale and M.frame then Invoke(M.ApplyMenuFrameScale, M.frame) end
     if pageKey and M.InvalidatePage and M.SelectPage and M.frame and M.frame.IsShown and M.frame:IsShown() then
         M.InvalidatePage(pageKey)
         M.activeKey = nil
@@ -1389,16 +1389,16 @@ local function ApplyGroupPageResetRuntime(reason)
     end
     local gf = MSUF and MSUF.GF
     if not gf then return false end
-    if type(gf.InvalidateConfCache) == "function" then SafeInvoke(gf.InvalidateConfCache) end
+    if type(gf.InvalidateConfCache) == "function" then Invoke(gf.InvalidateConfCache) end
     if type(gf.RefreshAll) == "function" then
-        SafeInvoke(gf.RefreshAll)
+        Invoke(gf.RefreshAll)
     elseif type(gf.RebuildAll) == "function" then
-        SafeInvoke(gf.RebuildAll)
+        Invoke(gf.RebuildAll)
     elseif type(gf.RefreshVisuals) == "function" then
-        SafeInvoke(gf.RefreshVisuals, nil, gf.DIRTY_ALL or gf.DIRTY_CONFIG or gf.DIRTY_VISUAL)
+        Invoke(gf.RefreshVisuals, nil, gf.DIRTY_ALL or gf.DIRTY_CONFIG or gf.DIRTY_VISUAL)
     end
-    if type(gf.RequestAuraRefresh) == "function" then SafeInvoke(gf.RequestAuraRefresh) end
-    if type(gf.RefreshPreviewLayout) == "function" then SafeInvoke(gf.RefreshPreviewLayout) end
+    if type(gf.RequestAuraRefresh) == "function" then Invoke(gf.RequestAuraRefresh) end
+    if type(gf.RefreshPreviewLayout) == "function" then Invoke(gf.RefreshPreviewLayout) end
     return true
 end
 
@@ -1411,11 +1411,11 @@ local function ApplyAurasPageResetRuntime(reason, visuals)
     end
     local auras = MSUF and MSUF.MSUF_Auras3
     if auras and type(auras.RequestApply) == "function" then
-        SafeInvoke(auras.RequestApply, "shared", reason or "MSUF2_RESET_AURAS")
+        Invoke(auras.RequestApply, "shared", reason or "MSUF2_RESET_AURAS")
         return true
     end
     if auras and type(auras.RefreshAll) == "function" then
-        SafeInvoke(auras.RefreshAll)
+        Invoke(auras.RefreshAll)
         return true
     end
     return false
@@ -1504,17 +1504,17 @@ local function ApplyAfterPageReset(pageKey, info)
         else
             local gf = MSUF and MSUF.GF
             if gf then
-                if type(gf.InvalidateConfCache) == "function" then SafeInvoke(gf.InvalidateConfCache) end
+                if type(gf.InvalidateConfCache) == "function" then Invoke(gf.InvalidateConfCache) end
                 if info.kind == "fonts" and type(gf.RefreshFonts) == "function" then
-                    SafeInvoke(gf.RefreshFonts)
+                    Invoke(gf.RefreshFonts)
                 elseif info.kind == "colors" and type(gf.RefreshColors) == "function" then
-                    SafeInvoke(gf.RefreshColors)
+                    Invoke(gf.RefreshColors)
                 elseif type(gf.RefreshVisuals) == "function" then
-                    SafeInvoke(gf.RefreshVisuals, nil, gf.DIRTY_VISUAL or 2)
+                    Invoke(gf.RefreshVisuals, nil, gf.DIRTY_VISUAL or 2)
                 elseif type(gf.RebuildAll) == "function" then
-                    SafeInvoke(gf.RebuildAll)
+                    Invoke(gf.RebuildAll)
                 end
-                if type(gf.RequestAuraRefresh) == "function" then SafeInvoke(gf.RequestAuraRefresh) end
+                if type(gf.RequestAuraRefresh) == "function" then Invoke(gf.RequestAuraRefresh) end
             end
         end
     end
@@ -1532,7 +1532,7 @@ end
 local function ResetProfilePage()
     local name = _G.MSUF_ActiveProfile or "Default"
     if type(_G.MSUF_ResetProfile) ~= "function" then return false end
-    SafeInvoke(_G.MSUF_ResetProfile, name)
+    Invoke(_G.MSUF_ResetProfile, name)
     M.CallIf(M.ClearHistory)
     ApplyAfterPageReset("profiles", PAGE_RESET_INFO.profiles)
     if type(_G.MSUF_ShowReloadRecommendedPopup) == "function" then _G.MSUF_ShowReloadRecommendedPopup("Profile reset") end
@@ -1555,29 +1555,29 @@ local function PurgeRuntimeCachesForReset(info)
     if a3 then
         -- A global bump is intended here (unlike a single-control edit): a page
         -- reset means every scope's cached aura lane layout should recompute.
-        SafeInvoke(a3.BumpRuntimeConfig)
+        Invoke(a3.BumpRuntimeConfig)
         local siRuntime = a3.SpellIndicators
-        SafeInvoke(siRuntime and siRuntime.RequestGeometryRepair)
+        Invoke(siRuntime and siRuntime.RequestGeometryRepair)
     end
     local gf = MSUF and MSUF.GF
     if gf then
-        SafeInvoke(gf.InvalidateConfCache)
+        Invoke(gf.InvalidateConfCache)
         local si = gf.SpellIndicators
-        SafeInvoke(si and si.InvalidateRuntimeCaches)
+        Invoke(si and si.InvalidateRuntimeCaches)
     end
     -- Castbars and bars keep their own resolver caches: the resolved statusbar
     -- texture table (shared by every bar and castbar) and the revision-keyed
     -- castbar style cache (texture, fill direction, reverse fill). Without
     -- dropping both, a reset frame keeps its old texture/style even though the
     -- saved values are already back to factory.
-    SafeInvoke(_G.MSUF_ClearResolvedStatusbarTextureCache)
-    SafeInvoke(_G.MSUF_BumpCastbarStyleRevision)
+    Invoke(_G.MSUF_ClearResolvedStatusbarTextureCache)
+    Invoke(_G.MSUF_BumpCastbarStyleRevision)
     -- Unit-frame screen positions sit in a per-frame anchor cache the hot apply
     -- path short-circuits against, so a reset frame would otherwise stay put.
     -- Only unit resets move a unit frame; drop the cache and force a re-anchor
     -- from the fresh defaults. (Group headers reposition through the GF reset.)
     if info and info.kind == "unit" then
-        SafeInvoke(_G.MSUF_ForceReanchorAllUnitFrames_Once)
+        Invoke(_G.MSUF_ForceReanchorAllUnitFrames_Once)
     end
 end
 local function ResetPageImpl(pageKey)
@@ -1694,7 +1694,7 @@ local function RunRefreshList(refreshers)
     if type(refreshers) ~= "table" then return end
     for i = 1, #refreshers do
         local fn = refreshers[i]
-        if type(fn) == "function" then SafeInvoke(fn) end
+        if type(fn) == "function" then Invoke(fn) end
     end
 end
 function M.RequestRefresh(ctx, reason)
@@ -1709,7 +1709,7 @@ function M.RequestRefresh(ctx, reason)
             entry._msuf2RefreshQueued = nil
             if entry._msuf2Invalidated then return end
             if M.RunEntryRefreshers then
-                SafeInvoke(M.RunEntryRefreshers, entry)
+                Invoke(M.RunEntryRefreshers, entry)
             else
                 RunRefreshList(entry.refreshers)
             end
@@ -1728,7 +1728,7 @@ function M.RequestRefresh(ctx, reason)
         M._msuf2RefreshQueued = nil
         local active = ResolveRefreshEntry()
         if active then
-            if M.RunEntryRefreshers then SafeInvoke(M.RunEntryRefreshers, active) else RunRefreshList(active.refreshers) end
+            if M.RunEntryRefreshers then Invoke(M.RunEntryRefreshers, active) else RunRefreshList(active.refreshers) end
         end
     end
     if C_Timer and C_Timer.After then
@@ -1742,7 +1742,7 @@ function M.Refresh(ctx)
     M.CallIf(M.MarkMenuDataDirty, "refresh")
     local entry = ResolveRefreshEntry(ctx)
     if entry and M.RunEntryRefreshers then
-        SafeInvoke(M.RunEntryRefreshers, entry, { force = true })
+        Invoke(M.RunEntryRefreshers, entry, { force = true })
         return
     end
     local refreshers = ctx and ctx.refreshers
@@ -1751,9 +1751,9 @@ function M.Refresh(ctx)
 end
 local function MarkCommandSearchDirty()
     if M.SearchBridge and type(M.SearchBridge.MarkSearchIndexDirty) == "function" then
-        SafeInvoke(M.SearchBridge.MarkSearchIndexDirty)
+        Invoke(M.SearchBridge.MarkSearchIndexDirty)
     elseif M.Search and type(M.Search.MarkIndexDirty) == "function" then
-        SafeInvoke(M.Search.MarkIndexDirty)
+        Invoke(M.Search.MarkIndexDirty)
     end
 end
 local function NotifyGuidedControlInteraction(widget)
@@ -1942,7 +1942,9 @@ function M.BindSlider(ctx, slider, getValue, setValue, metadata)
         end)
         NotifyGuidedControlInteraction(self)
     end)
-    AddRefreshCall(ctx, RefreshSlider, slider, getValue)
+    -- Keep the bound model refresh reachable for narrow external sync paths
+    -- (for example Edit Mode position drags) without refreshing the whole page.
+    slider._msuf2RefreshFromModel = AddRefreshCall(ctx, RefreshSlider, slider, getValue)
 end
 function M.BindSegment(ctx, segment, getValue, setValue, metadata)
     if not segment then return end

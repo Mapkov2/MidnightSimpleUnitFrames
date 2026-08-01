@@ -447,10 +447,14 @@ end
 --- Compact previews are a reference strip, not an editing surface; the
 --- selection chrome only belongs to the full canvas and the floating window.
 function SB.SetShown(box, shown)
+    -- Color Painter embeds the normal UF/GF preview renderers, but it is not
+    -- an editing surface. Renderer refreshes may request their usual chrome;
+    -- honor the per-preview owner flag so those refreshes cannot resurrect it.
+    shown = shown == true and not (box and box._msuf2ColorPainterHideSelectionChrome == true)
     local bar = box and box._msuf2SelectionBar
-    if bar then bar:SetShown(shown and true or false) end
+    if bar then bar:SetShown(shown) end
     local picker = box and box._msuf2ElementPicker
-    if picker then picker:SetShown(shown and true or false) end
+    if picker then picker:SetShown(shown) end
     if not shown then
         local popup = box and box._msuf2ElementPickerPopup
         if popup and popup.Hide then popup:Hide() end

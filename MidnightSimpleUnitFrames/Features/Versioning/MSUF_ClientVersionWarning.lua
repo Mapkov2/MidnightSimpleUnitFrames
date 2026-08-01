@@ -30,7 +30,7 @@ local POPUP_KEY = "MSUF_CLIENT_VERSION_WARNING"
 --- 12.0 client that cannot run the 12.1-only feature set.
 local MIN_INTERFACE = 120100
 
-local type, tonumber, rawget, pcall, select = type, tonumber, rawget, pcall, select
+local type, tonumber, rawget, select = type, tonumber, rawget, select
 
 local function Tr(text)
     if type(text) ~= "string" then return text end

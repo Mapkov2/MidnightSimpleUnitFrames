@@ -83,6 +83,12 @@ local function RefreshTooltipPreview()
     if not editActive and type(_G.MSUF_IsMSUFEditModeActive) == "function" then editActive = _G.MSUF_IsMSUFEditModeActive() and true or false end
     if editActive and type(_G.MSUF_Tooltip_ShowEditPreview) == "function" then _G.MSUF_Tooltip_ShowEditPreview() end
 end
+local function RefreshAuraTooltipSettings(reason)
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    if a3 and type(a3.RequestApply) == "function" then
+        a3.RequestApply("shared", reason or "MSUF2_AURA_TOOLTIP_SETTINGS")
+    end
+end
 local function WriteTooltipSettings(provider, anchor)
     provider = (provider == "MSUF") and "MSUF" or "GAME"
     if anchor ~= "FIXED" and anchor ~= "CURSOR" and anchor ~= "EXTERNAL" then anchor = "EXTERNAL" end
@@ -92,6 +98,7 @@ local function WriteTooltipSettings(provider, anchor)
     SetGBool("disableUnitInfoTooltips", provider ~= "MSUF", "MSUF2_TOOLTIPS", { preview = false })
     SetG("unitInfoTooltipStyle", (anchor == "CURSOR") and "modern" or "classic", "MSUF2_TOOLTIP_STYLE", { preview = false })
     RefreshTooltipPreview()
+    RefreshAuraTooltipSettings("MSUF2_AURA_TOOLTIP_APPEARANCE")
 end
 local function WriteTooltipBehavior(mode, modifier)
     mode = NormalizeTooltipMode(mode)
@@ -456,7 +463,7 @@ local function BuildMisc(ctx)
         function(v) WriteTooltipBehavior(ReadTooltipMode(), v) end,
         "tooltips.modifier")
     M.TrackRefresh(ctx, RefreshTooltipControls)
-    local tooltipHelp = W.Text(tooltips, "Applies to unit and group frames. Choose the WoW tooltip or the MSUF panel.", tooltipLeftX, -174, tooltipW - 68, T.colors.muted)
+    local tooltipHelp = W.Text(tooltips, "Visibility modes apply only to unit and group frames. Aura tooltips use their own Show Tooltip switches; even Never does not override them. Auras only reuse the selected Blizzard/MSUF look and cursor placement.", tooltipLeftX, -174, tooltipW - 68, T.colors.muted)
     if tooltipHelp.SetWordWrap then tooltipHelp:SetWordWrap(true) end
     --- Blizzard frame ownership is per unit ("Force Blizzard frame on" in each
     --- unit's Frame Basics), so this section only carries the remaining

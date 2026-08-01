@@ -11,18 +11,7 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local C_Timer = M.MenuTimer or _G.C_Timer
 
-local function InvokeOptional(fn, ...)
-    if type(fn) ~= "function" then return false end
-    local apply = M.ApplyService
-    if apply and type(apply.Invoke) == "function" then return apply.Invoke(fn, ...) end
-    local ok, r1, r2, r3, r4 = pcall(fn, ...)
-    if not ok then
-        local handler = _G.geterrorhandler and _G.geterrorhandler()
-        if type(handler) == "function" then pcall(handler, r1) end
-        return false, r1
-    end
-    return true, r1, r2, r3, r4
-end
+local InvokeOptional = M.InvokeBoundary or pcall
 
 local T = M.Theme
 local W = M.Widgets

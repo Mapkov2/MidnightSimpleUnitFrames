@@ -319,8 +319,8 @@ do
         then
             return true
         end
-        local applied = fs:SetFont(path, size, flags)
-        if applied ~= false and MSUF_FontApplicationMatches(fs, path, size) then
+        local ok, applied = pcall(fs.SetFont, fs, path, size, flags)
+        if ok and applied ~= false and MSUF_FontApplicationMatches(fs, path, size) then
             fs._msufFontAppliedPath = path
             fs._msufFontAppliedSize = size
             fs._msufFontAppliedFlags = flags

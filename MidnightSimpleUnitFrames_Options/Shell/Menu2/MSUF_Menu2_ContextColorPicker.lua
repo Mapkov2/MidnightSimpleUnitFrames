@@ -7,17 +7,7 @@ local T = M.Theme
 local abs, floor, max, min = math.abs, math.floor, math.max, math.min
 local Tr = M.TranslateText or M.Tr or function(text) return text end
 
-local function InvokePickerCallback(fn, ...)
-    if type(fn) ~= "function" then return false end
-    local apply = M.ApplyService
-    if apply and type(apply.Invoke) == "function" then return apply.Invoke(fn, ...) end
-    local ok, result = pcall(fn, ...)
-    if not ok then
-        local handler = _G.geterrorhandler and _G.geterrorhandler()
-        if type(handler) == "function" then pcall(handler, result) end
-    end
-    return ok, result
-end
+local InvokePickerCallback = M.InvokeBoundary or pcall
 
 -- Menu-only, progressive color editor. The compact view exposes the common
 -- path; contextual targets and the large palettes stay one deliberate click

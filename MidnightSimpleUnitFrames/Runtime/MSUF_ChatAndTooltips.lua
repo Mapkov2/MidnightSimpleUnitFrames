@@ -1585,7 +1585,7 @@ do
         size = tonumber(size) or 12
         if size <= 0 then size = 12 end
         if size < 6 then size = 6 elseif size > 128 then size = 128 end
-        fs:SetFont(STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF", size, "")
+        pcall(fs.SetFont, fs, STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF", size, "")
         fs:SetShadowOffset(1, -1)
         fs:SetShadowColor(0, 0, 0, 0.9)
         fs:SetText(Tr(text))

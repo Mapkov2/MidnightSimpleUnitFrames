@@ -19,7 +19,6 @@ local type = type
 local tostring = tostring
 local tonumber = tonumber
 local pairs = pairs
-local pcall = pcall
 local math_floor = math.floor
 local string_lower = string.lower
 local string_gsub = string.gsub

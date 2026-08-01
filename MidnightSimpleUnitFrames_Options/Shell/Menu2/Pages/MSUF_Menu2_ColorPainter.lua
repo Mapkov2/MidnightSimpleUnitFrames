@@ -31,6 +31,12 @@ local function RequestPreview(box, reason)
 end
 
 local function HidePreviewEditorChrome(box, surface, sidebar, zoomBar, animationButton)
+    if box then
+        box._msuf2ColorPainterHideSelectionChrome = true
+        if M.PreviewSelectionBar and M.PreviewSelectionBar.SetShown then
+            M.PreviewSelectionBar.SetShown(box, false)
+        end
+    end
     if sidebar then sidebar:Hide() end
     -- Color previews use the normal UF/GF renderer, so keep its existing zoom
     -- controls available here as well. Only editing chrome (layers, handles,
@@ -50,6 +56,10 @@ end
 -- priority here previously placed invisible hit targets over the color picker.
 local COLOR_SHIELD_LEVEL = 40
 local COLOR_TARGET_LEVEL = 50
+-- The zoom bar starts 8 px below the canvas top, is 24 px high, and its
+-- background selector hangs another 4 + 20 px below it. Keep the shield below
+-- that complete 56 px cluster after the canvas' 30 px Color Painter inset.
+local COLOR_SHIELD_TOP_INSET = 90
 
 local function ForwardMenuScrollWheel(frame)
     if not (frame and frame.EnableMouseWheel and frame.SetScript) then return end
@@ -67,7 +77,7 @@ local function InstallColorOnlyShield(parent)
     -- Leave the top strip of every preview panel uncovered: that is where the
     -- zoom clusters live, and the shield must never eat their clicks. All
     -- other interactive preview surfaces up there are explicitly disabled.
-    shield:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -64)
+    shield:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -COLOR_SHIELD_TOP_INSET)
     shield:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", 0, 0)
     shield:EnableMouse(true)
     shield:RegisterForClicks("LeftButtonDown", "LeftButtonUp", "RightButtonDown", "RightButtonUp")
@@ -291,8 +301,8 @@ local function ResolveCategoryAnchors(unitBoxes, groupBox, categoryKey)
             elseif categoryKey == "cast" then
                 Add(mock.cast, "colors_castbar", LabelFor("Castbar Colors"), 30, "Interruptible cast color")
             elseif categoryKey == "auras" then
-                Add(unitBox.handleAuraBuffs, "colors_auras", LabelFor("Aura Colors"), 30, "Own Buff")
-                Add(unitBox.handleAuraDebuffs, "colors_auras", LabelFor("Aura Colors"), 30, "Own Debuff")
+                Add(unitBox.handleAuraBuffs, "colors_auras", LabelFor("Aura Colors"), 30, "Icon Border Color")
+                Add(unitBox.handleAuraDebuffs, "colors_auras", LabelFor("Aura Colors"), 30, "Icon Border Color")
             elseif categoryKey == "resources" then
                 Add(mock.powerBG or mock.power, "colors_power", LabelFor("Power Bar Colors"), 20, "Color")
                 Add(mock.detachedPower, "colors_power", LabelFor("Detached Power Bar Colors"), 25, "Color")
@@ -460,7 +470,15 @@ function P.Build(ctx, builder, categories)
     -- internals may re-level their chrome during refreshes.
     local function RaiseZoomBar(bar)
         if bar and bar.SetFrameLevel and shield and shield.GetFrameLevel then
-            bar:SetFrameLevel((shield:GetFrameLevel() or 0) + 30)
+            local level = (shield:GetFrameLevel() or 0) + 30
+            bar:SetFrameLevel(level)
+            -- The preview background selector hangs below the zoom bar. The
+            -- bar is re-leveled after construction on this paint surface, so
+            -- explicitly carry its child above the mouse-catching shield too.
+            local backgroundButton = bar._msuf2PreviewBackgroundButton
+            if backgroundButton and backgroundButton.SetFrameLevel then
+                backgroundButton:SetFrameLevel(level + 1)
+            end
         end
     end
     local function RaiseZoomBars()
@@ -470,6 +488,13 @@ function P.Build(ctx, builder, categories)
         if not bar then return end
         zoomBars[#zoomBars + 1] = bar
         RaiseZoomBar(bar)
+        local backgroundButton = bar._msuf2PreviewBackgroundButton
+        if backgroundButton and backgroundButton.HookScript and not backgroundButton._msuf2ColorPainterRevealHooked then
+            backgroundButton._msuf2ColorPainterRevealHooked = true
+            backgroundButton:HookScript("OnEnter", function()
+                if bar.SetAlpha then bar:SetAlpha(1) end
+            end)
+        end
     end
     local function SetZoomChromeShown(shown)
         for i = 1, #zoomBars do

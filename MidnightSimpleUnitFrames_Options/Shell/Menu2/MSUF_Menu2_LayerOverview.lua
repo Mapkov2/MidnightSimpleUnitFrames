@@ -22,17 +22,7 @@ M.LayerOverview = Overview
 Overview.providers = Overview.providers or {}
 local providers = Overview.providers
 
-local function InvokeProvider(fn, ...)
-    if type(fn) ~= "function" then return false end
-    local apply = M.ApplyService
-    if apply and type(apply.Invoke) == "function" then return apply.Invoke(fn, ...) end
-    local ok, result = pcall(fn, ...)
-    if not ok then
-        local handler = _G.geterrorhandler and _G.geterrorhandler()
-        if type(handler) == "function" then pcall(handler, result) end
-    end
-    return ok, result
-end
+local InvokeProvider = M.InvokeBoundary or pcall
 
 local UNIT_SCOPES = {
     { key = "player", label = "Player" },

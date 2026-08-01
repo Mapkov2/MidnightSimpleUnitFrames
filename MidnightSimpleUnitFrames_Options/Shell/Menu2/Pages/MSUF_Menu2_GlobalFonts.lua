@@ -286,9 +286,9 @@ local function ApplyPreviewFont(fs)
     if type(resolve) == "function" then path = resolve(path, size, flags, key) end
     local resolveSafe = _G.MSUF_ResolveSafeFontPath
     if type(resolveSafe) == "function" then path = resolveSafe(path, size, flags, key) end
-    local applied = fs:SetFont(path, size, flags)
-    if applied == false then
-        fs:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", size, flags)
+    local ok = pcall(fs.SetFont, fs, path, size, flags)
+    if not ok then
+        pcall(fs.SetFont, fs, STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", size, flags)
     end
     local c = ConfiguredFontColorPreview()
     c[4] = NormalizeTextAlpha(FontScopeGet("fontTextAlpha", 1))

@@ -19,18 +19,7 @@ local format = string.format
 local pairs, ipairs, type, tostring = pairs, ipairs, type, tostring
 local sort = table.sort
 
-local function InvokeGuidedBoundary(fn, ...)
-    if type(fn) ~= "function" then return false end
-    local apply = M.ApplyService
-    if apply and type(apply.Invoke) == "function" then return apply.Invoke(fn, ...) end
-    local ok, r1, r2, r3 = pcall(fn, ...)
-    if not ok then
-        local handler = _G.geterrorhandler and _G.geterrorhandler()
-        if type(handler) == "function" then pcall(handler, r1) end
-        return false, r1
-    end
-    return true, r1, r2, r3
-end
+local InvokeGuidedBoundary = M.InvokeBoundary or pcall
 
 local function Tr(text)
     return type(M.Tr) == "function" and M.Tr(tostring(text or "")) or tostring(text or "")

@@ -38,7 +38,7 @@ if type(Data.RegisterFAQProvider) == "function" then
                 a = "Open Profiles. Check active profile, spec profiles, import/export, and legacy imports. Large" ..
                     " imports may need a reload.",
                 p = "profiles",
-                t = "Opens: Profiles > Profile Management / Backup & Transfer",
+                t = "Opens: Profiles > Profile Management / Import & Export",
                 x = "Profile Management Specialization Profiles Spec Profiles Backup Transfer Export Import legacy imports active profile reload",
                 k = SearchKeywordList(
                     "profile wrong|profile missing|profile gone|import failed|import looks wrong|wago import wrong",

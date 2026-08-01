@@ -37,16 +37,12 @@ local COLOR_SETTING_KEY_BY_PATH = {
     ["auras.color.aurasCooldownTextSafeColor"] = "general.aurasCooldownTextSafeColor",
     ["auras.color.aurasCooldownTextUrgentColor"] = "general.aurasCooldownTextUrgentColor",
     ["auras.color.aurasCooldownTextWarningColor"] = "general.aurasCooldownTextWarningColor",
-    ["auras.color.aurasOwnBuffHighlightColor"] = "general.aurasOwnBuffHighlightColor",
-    ["auras.color.aurasOwnDebuffHighlightColor"] = "general.aurasOwnDebuffHighlightColor",
-    ["auras.color.aurasStackCountColor"] = "general.aurasStackCountColor",
     ["auras.color.styleBorderColor"] = "auras3.shared.styleBorderColor",
     ["auras.color.styleShadowColor"] = "auras3.shared.styleShadowColor",
     ["auras.cooldown.color_by_time"] = "general.aurasCooldownTextUseBuckets",
     ["auras.cooldown.safe_seconds"] = "general.aurasCooldownTextSafeSeconds",
     ["auras.cooldown.urgent_seconds"] = "general.aurasCooldownTextUrgentSeconds",
     ["auras.cooldown.warning_seconds"] = "general.aurasCooldownTextWarningSeconds",
-    ["auras.pandemic_window.color"] = "auras3.shared.pandemicColor",
     ["background.dark_mode_custom_color"] = "general.darkBgCustomColor",
     ["background.follow_class_color"] = "general.barBgClassColor",
     ["background.follow_health_color"] = "general.barBgMatchHPColor",
@@ -826,6 +822,15 @@ local function ResetNPCColors(apiName)
     DB().npcColors = nil
     ApplyUnitframeColorWithReload()
 end
+local function ResetUnitframeColors()
+    local db = DB()
+    local g = G()
+    db.npcColors = nil
+    ClearRGB(g, "petFrameColor")
+    g.petFrameUsePlayerClassColor = nil
+    g.npcClassColorBar = nil
+    ApplyUnitframeColorWithReload()
+end
 local COLOR_HELPERS = {
     ApiColorAt = ApiColorAt,
     ApiColorSpecs = BuildApiColorSpecs,
@@ -989,20 +994,6 @@ local function GetClassPowerFullRGB(resourceToken)
     end
     return GetClassPowerRGB(resourceToken)
 end
-local function GetPandemicRGB()
-    local db = DB()
-    db.auras3 = db.auras3 or {}
-    db.auras3.shared = db.auras3.shared or {}
-    local sh = db.auras3.shared
-    return tonumber(sh.pandemicR) or 0.0, tonumber(sh.pandemicG) or 0.4, tonumber(sh.pandemicB) or 1.0
-end
-local function SetPandemicRGB(r, g, b)
-    local db = DB()
-    db.auras3 = db.auras3 or {}
-    db.auras3.shared = db.auras3.shared or {}
-    db.auras3.shared.pandemicR, db.auras3.shared.pandemicG, db.auras3.shared.pandemicB = r, g, b
-    ApplyAuraColors()
-end
 function M._ContextGetAuraSafeRGB()
     local color = G().aurasCooldownTextSafeColor
     if type(color) == "table" then
@@ -1030,9 +1021,6 @@ local function WriteAuraNumber(key, value, minValue, maxValue)
 end
 local function ResetAuraColorSettings()
     local g = G()
-    g.aurasOwnBuffHighlightColor = { 1.00, 0.85, 0.20 }
-    g.aurasOwnDebuffHighlightColor = { 1.00, 0.30, 0.30 }
-    g.aurasStackCountColor = { 1.00, 1.00, 1.00 }
     g.aurasCooldownTextUseBuckets = false
     g.aurasCooldownTextSafeColor = nil
     g.aurasCooldownTextWarningColor = { 1.00, 0.85, 0.20 }
@@ -1043,7 +1031,8 @@ local function ResetAuraColorSettings()
     local db = DB()
     db.auras3 = db.auras3 or {}
     db.auras3.shared = db.auras3.shared or {}
-    db.auras3.shared.pandemicR, db.auras3.shared.pandemicG, db.auras3.shared.pandemicB = 0.0, 0.4, 1.0
+    db.auras3.shared.styleBorderColor = { 0, 0, 0, 1 }
+    db.auras3.shared.styleShadowColor = { 0, 0, 0, 0.8 }
     ApplyAuraColors()
 end
 local function SetAllPortraitRGB(prefix, r, g, b)
@@ -2445,10 +2434,6 @@ FixedContextFactory("aura.cooldown.safe", function()
 end)
 AuraTableFactory("aura.cooldown.warning", "Cooldown warning", "aurasCooldownTextWarningColor", 1, 0.85, 0.20)
 AuraTableFactory("aura.cooldown.urgent", "Cooldown urgent", "aurasCooldownTextUrgentColor", 1, 0.55, 0.10)
-AuraTableFactory("aura.stack", "Stack count", "aurasStackCountColor", 1, 1, 1)
-AuraTableFactory("aura.own_buff", "Own buff highlight", "aurasOwnBuffHighlightColor", 1, 0.85, 0.20)
-AuraTableFactory("aura.own_debuff", "Own debuff highlight", "aurasOwnDebuffHighlightColor", 1, 0.30, 0.30)
-FixedContextFactory("aura.pandemic", function() return ContextTarget("aura.pandemic", "Pandemic window", GetPandemicRGB, SetPandemicRGB) end)
 
 FixedContextFactory("group.health", function()
     local target = ContextTarget("group.health", "Group health bar", GroupHealthBarRGB, SetGroupHealthBarRGB)
@@ -2864,7 +2849,7 @@ local function BuildUnitAndNPCColors(ctx, b, CH)
         end,
         Meta("npc.class_color_bar"))
     CH.ButtonAt(unit, "Reset Unitframe Colors", 12, -190, 190,
-        function() ResetNPCColors("ResetAllNPCColors") end, "unitframe.reset")
+        ResetUnitframeColors, "unitframe.reset")
     local npcType = b:CollapsibleSection("colors_npc_type", "NPC Type Colors", 330, false)
     local npcControls = {}
     local npcMaster
@@ -3219,8 +3204,8 @@ local COLOR_PAINTER_CATEGORIES = {
         subtitle = "Interrupt states, text, border and kick feedback.",
         pickerNote = "Cast states, feedback, text, border and background." },
     { key = "auras", title = "Auras & Icons", shortTitle = "Auras",
-        subtitle = "Timer urgency, ownership, stacks and pandemic state.",
-        pickerNote = "Timers, ownership, stacks, pandemic and purge." },
+        subtitle = "Cooldown timer urgency plus shared icon border and shadow colors.",
+        pickerNote = "Safe, Warning, Urgent, icon border and icon shadow." },
     { key = "resources", title = "Power & Class Resources", shortTitle = "Resources",
         subtitle = "Power bar colors and Class Resource colors (combo points, holy power, ...).",
         pickerNote = "Power and Class Resource colors." },
@@ -3268,9 +3253,9 @@ local COLOR_CATEGORY_ORDER = { "unit", "group", "cast", "auras", "resources" }
 local COLOR_CATEGORY_SECTIONS = {
     unit = { "colors_appearance", "colors_bar_colors", "colors_bar_gradients", "colors_background",
         "colors_font", "colors_classes", "colors_unit", "colors_npc_type", "colors_highlight",
-        "colors_texture_layer", "colors_gameplay", "colors_portrait" },
+        "colors_texture_layer", "colors_gameplay", "colors_portrait", "colors_status_text" },
     group = { "colors_group_frames", "colors_group_frames_background", "colors_group_frames_state", "colors_group_frames_highlights" },
-    cast = { "colors_castbar" },
+    cast = { "colors_castbar", "colors_castbar_text" },
     auras = { "colors_auras" },
     resources = { "colors_power", "colors_class_power" },
 }

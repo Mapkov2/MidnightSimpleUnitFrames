@@ -14,18 +14,7 @@ local max = math.max
 local min = math.min
 local MSUF_SetIconTexture = _G.MSUF_SetIconTexture
 local Tr = M.TranslateText or function(text) return text end
-local function InvokeDropdownProvider(fn, ...)
-    if type(fn) ~= "function" then return false end
-    local apply = M.ApplyService
-    if apply and type(apply.Invoke) == "function" then return apply.Invoke(fn, ...) end
-    local ok, r1, r2 = pcall(fn, ...)
-    if not ok then
-        local handler = _G.geterrorhandler and _G.geterrorhandler()
-        if type(handler) == "function" then pcall(handler, r1) end
-        return false, r1
-    end
-    return true, r1, r2
-end
+local InvokeDropdownProvider = M.InvokeBoundary or pcall
 local function SetSearchText(object, text)
     if object and text ~= nil then object._msuf2SearchText = text end
     return object
@@ -582,10 +571,16 @@ local function DropdownItemDisabled(item)
     if type(item) ~= "table" then return false end
     if DropdownItemHeader(item) then return true end
     local disabled = item.disabled
-    if type(disabled) == "function" then disabled = disabled(item) end
+    if type(disabled) == "function" then
+        local ok, resolved = InvokeDropdownProvider(disabled, item)
+        disabled = ok and resolved or true
+    end
     if disabled ~= nil then return disabled and true or false end
     local enabled = item.enabled
-    if type(enabled) == "function" then enabled = enabled(item) end
+    if type(enabled) == "function" then
+        local ok, resolved = InvokeDropdownProvider(enabled, item)
+        enabled = ok and resolved or false
+    end
     return enabled == false
 end
 local function StoreDropdownDefaultFont(fs)
@@ -596,7 +591,7 @@ end
 local function RestoreDropdownDefaultFont(fs)
     local d = fs and fs._msuf2DropdownDefaultFont
     if d and fs.SetFont then
-        fs:SetFont(d[1], d[2], d[3] or "")
+        pcall(fs.SetFont, fs, d[1], d[2], d[3] or "")
     elseif fs and fs.SetFontObject then
         fs:SetFontObject(GameFontHighlight)
     end
@@ -625,8 +620,8 @@ local function ApplyDropdownItemFont(fs, item)
     if type(fontPath) == "string" and fontPath ~= "" and fs.SetFont then
         local resolveSafe = _G.MSUF_ResolveSafeFontPath
         if type(resolveSafe) == "function" then fontPath = resolveSafe(fontPath, size, "", fontKey) end
-        local applied = fs:SetFont(fontPath, size, "")
-        if applied ~= false then return end
+        local ok = pcall(fs.SetFont, fs, fontPath, size, "")
+        if ok then return end
         RestoreDropdownDefaultFont(fs)
         return
     end
@@ -1058,7 +1053,7 @@ function W.OpenDropdown(owner, values, currentValue, onSelect)
     CloseDropdown()
     owner._msuf2DropdownListValue = currentValue
     owner._msuf2DropdownListSelect = function(value, item)
-        if type(onSelect) == "function" then onSelect(value, item) end
+        if type(onSelect) == "function" then InvokeDropdownProvider(onSelect, value, item) end
     end
     OpenDropdown(owner, values)
     return true
@@ -1088,7 +1083,10 @@ function W.Dropdown(section, label, values, width)
     AddDropdownChoiceAssets(btn, 9, 0.90)
     local function ResolveValues(self)
         local valuesTable = self.values
-        if type(valuesTable) == "function" then valuesTable = valuesTable() end
+        if type(valuesTable) == "function" then
+            local ok, resolved = InvokeDropdownProvider(valuesTable)
+            valuesTable = ok and resolved or nil
+        end
         if type(valuesTable) ~= "table" then valuesTable = {} end
         return valuesTable
     end

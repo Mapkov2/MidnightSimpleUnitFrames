@@ -332,27 +332,11 @@ local function ForEachLocaleSearchPattern(key, callback)
     end
 end
 
---- Translator-supplied format strings may only use %s (and literal %%), and no
---- more %s than the caller supplies. Validating up front keeps one bad
---- translation from raising inside string.format and taking out search
---- indexing for the whole locale, without probing the call.
 local function IsSafeLabelPattern(pattern, maxArgs)
-    local count, i, n = 0, 1, #pattern
-    while i <= n do
-        if pattern:sub(i, i) == "%" then
-            if i == n then return false end
-            local spec = pattern:sub(i + 1, i + 1)
-            if spec == "s" then
-                count = count + 1
-            elseif spec ~= "%" then
-                return false
-            end
-            i = i + 2
-        else
-            i = i + 1
-        end
-    end
-    return count <= maxArgs
+    local probe = pattern:gsub("%%%%", "")
+    local count
+    probe, count = probe:gsub("%%s", "")
+    return count <= maxArgs and not probe:find("%%")
 end
 
 local function AddSearchPatternText(parts, key, label)

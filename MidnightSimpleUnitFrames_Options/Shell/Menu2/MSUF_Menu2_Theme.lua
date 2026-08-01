@@ -7,17 +7,7 @@ M.Theme = T
 local WL = M.WordList
 local SharedUI = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
 
-local function InvokeThemeBoundary(fn, ...)
-    if type(fn) ~= "function" then return false end
-    local apply = M.ApplyService
-    if apply and type(apply.Invoke) == "function" then return apply.Invoke(fn, ...) end
-    local ok, result = pcall(fn, ...)
-    if not ok then
-        local handler = _G.geterrorhandler and _G.geterrorhandler()
-        if type(handler) == "function" then pcall(handler, result) end
-    end
-    return ok, result
-end
+local InvokeThemeBoundary = M.InvokeBoundary or pcall
 
 T.fontSizes = (SharedUI and SharedUI.fontSizes) or T.fontSizes or {
     micro = 9, caption = 11, supporting = 11, body = 13, control = 13,
@@ -412,10 +402,8 @@ local function FontApplicationMatches(fs, expectedFont, expectedSize, expectedFl
 end
 local function TryApplyStyledFont(fs, font, size, flags)
     if type(font) ~= "string" or font == "" then return false end
-    -- SetFont reports failure by returning false (documented `success` bool);
-    -- it does not raise, so the return value is the whole failure signal.
-    local applied = fs:SetFont(font, size, flags)
-    return applied ~= false and FontApplicationMatches(fs, font, size, flags)
+    local ok, applied = pcall(fs.SetFont, fs, font, size, flags)
+    return ok and applied ~= false and FontApplicationMatches(fs, font, size, flags)
 end
 local function ApplyStyledFont(fs, force)
     if not (fs and fs.GetFont and fs.SetFont) then return false end

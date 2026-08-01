@@ -153,6 +153,9 @@ local MAX_WINDOW_W, MAX_WINDOW_H = 1760, 1200
 local MENU_SCALE_MIN, MENU_SCALE_MAX, MENU_SCALE_STEP = 0.25, 1.50, 0.05
 local WINDOW_W, WINDOW_H = DEFAULT_WINDOW_W, DEFAULT_WINDOW_H
 local NAV_W = 200
+-- Gap the content frame leaves at the window bottom; the menu-scale control and
+-- the support-link strip both live in it and share its center line.
+local WINDOW_FOOTER_H = 30
 local CONTENT_W = WINDOW_W - NAV_W - 32
 local CONTENT_H = WINDOW_H - 76
 local MENU_BASE_SCALE = 1.08
@@ -1698,6 +1701,62 @@ local function InstallMenuScaleControl(f)
     Refresh()
 end
 
+-- Same links as the dashboard support card, parked in the free bottom-left
+-- corner of the footer band: faint until hovered so the chrome stays quiet.
+-- The marks keep their colors at rest -- at 14px the brand color is the only
+-- thing that tells them apart, so desaturating them on top of the low alpha
+-- left five identical gray blobs. Anchored to the nav rail so the row lines up
+-- with the nav buttons above it, and centered in the 30px band so it shares a
+-- baseline with the menu-scale control on the right.
+local SUPPORT_STRIP_NAV_INSET = 8 -- mirrors NAV_ITEM_X in MSUF_Menu2_NavRail
+local function InstallSupportLinkStrip(f)
+    if not (f and type(CreateFrame) == "function") then return end
+    if f.supportLinkStrip then return end
+    local iconDir = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\"
+    local links = {
+        { texture = "Discord.png", title = "Discord", tooltip = "Copy Discord Link", url = "https://discord.gg/2Gf9b2Wprz" },
+        { texture = "Patreon.png", title = "Patreon", tooltip = "Click to copy the Patreon support link.", url = "https://www.patreon.com/cw/MidnightSimpleUnitframes" },
+        { texture = "PayPal.png", title = "PayPal", tooltip = "Click to copy the PayPal support link.", url = "https://www.paypal.com/ncp/payment/H3N2P87S53KBQ" },
+        { texture = "Ko-Fi.png", title = "Ko-fi", tooltip = "Click to copy the Ko-fi link.", url = "https://ko-fi.com/midnightsimpleunitframes#linkModal" },
+        { texture = "GitHub.png", title = "GitHub", tooltip = "Click to copy the GitHub repository link.", url = "https://github.com/Mapkov2/MidnightSimpleUnitFrames" },
+    }
+    local size, gap, idleAlpha = 14, 7, 0.45
+    local strip = CreateFrame("Frame", nil, f)
+    strip:SetSize((#links * size) + ((#links - 1) * gap), size)
+    local rail = f.nav
+    if rail then
+        strip:SetPoint("TOPLEFT", rail, "BOTTOMLEFT", SUPPORT_STRIP_NAV_INSET, -floor((WINDOW_FOOTER_H - size) * 0.5))
+    else
+        strip:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 16 + SUPPORT_STRIP_NAV_INSET, floor((WINDOW_FOOTER_H - size) * 0.5))
+    end
+    strip:SetFrameLevel(f:GetFrameLevel() + 20)
+    local previous
+    for i = 1, #links do
+        local data = links[i]
+        local btn = CreateFrame("Button", nil, strip)
+        btn:SetSize(size, size)
+        if previous then
+            btn:SetPoint("LEFT", previous, "RIGHT", gap, 0)
+        else
+            btn:SetPoint("LEFT", strip, "LEFT", 0, 0)
+        end
+        local icon = btn:CreateTexture(nil, "ARTWORK")
+        icon:SetAllPoints()
+        icon:SetTexture(iconDir .. data.texture)
+        icon:SetAlpha(idleAlpha)
+        btn:SetScript("OnEnter", function() icon:SetAlpha(1) end)
+        btn:SetScript("OnLeave", function() icon:SetAlpha(idleAlpha) end)
+        btn:SetScript("OnClick", function()
+            if type(_G.MSUF_ShowCopyLink) == "function" then _G.MSUF_ShowCopyLink(data.title, data.url) end
+        end)
+        if type(M.AddTooltip) == "function" then
+            M.AddTooltip(btn, data.title, data.tooltip, { hook = true, owner = "ANCHOR_TOP" })
+        end
+        previous = btn
+    end
+    f.supportLinkStrip = strip
+end
+
 -- Drag, snap and resize share transient proxy state but no page/chrome state.
 local function InstallWindowInteractions(state)
     local f = state.frame
@@ -1920,7 +1979,7 @@ local function BuildWindowChrome(state)
     local f = state.frame
     local content = CreateFrame("Frame", nil, f)
     content:SetPoint("TOPLEFT", f, "TOPLEFT", 16, -40)
-    content:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -16, 30)
+    content:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -16, WINDOW_FOOTER_H)
     f.content = content
     local nav = T.Panel(content, nil, T.colors.glassRail or T.colors.panelNav or T.colors.panel, T.colors.borderSoft)
     T.ApplySurface(nav, "rail")
@@ -1932,6 +1991,7 @@ local function BuildWindowChrome(state)
     f._msufNavStack = nav
     M.nav = nav
     BuildNav(nav)
+    InstallSupportLinkStrip(f)
     local host = T.Panel(content, nil, T.colors.glassHost or T.colors.panel, T.colors.borderSoft)
     T.ApplySurface(host, "host")
     host:SetPoint("TOPLEFT", nav, "TOPRIGHT", 4, 0)

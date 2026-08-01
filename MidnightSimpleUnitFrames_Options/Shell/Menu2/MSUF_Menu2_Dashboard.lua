@@ -16,18 +16,7 @@ local max = math.max
 local min = math.min
 local CreateFrame = _G.CreateFrame
 local CreateColor = _G.CreateColor
-local function InvokeDashboardBoundary(fn, ...)
-    if type(fn) ~= "function" then return false end
-    local apply = M.ApplyService
-    if apply and type(apply.Invoke) == "function" then return apply.Invoke(fn, ...) end
-    local ok, r1, r2 = pcall(fn, ...)
-    if not ok then
-        local handler = _G.geterrorhandler and _G.geterrorhandler()
-        if type(handler) == "function" then pcall(handler, r1) end
-        return false, r1
-    end
-    return true, r1, r2
-end
+local InvokeDashboardBoundary = M.InvokeBoundary or pcall
 local function NormalizeControlPath(value)
     local path = tostring(value or "")
     path = path:gsub("([%l%d])([%u])", "%1_%2"):lower()

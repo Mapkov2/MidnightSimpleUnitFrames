@@ -36,12 +36,7 @@ local function Normalize(text)
     return normalize(text)
 end
 
-local function InvokeStaticProvider(fn, ...)
-    if type(fn) ~= "function" then return false end
-    local apply = M.ApplyService
-    if apply and type(apply.Invoke) == "function" then return apply.Invoke(fn, ...) end
-    return pcall(fn, ...)
-end
+local InvokeStaticProvider = M.InvokeBoundary or pcall
 
 local function Translate(text)
     if type(M.Tr) ~= "function" then return text end

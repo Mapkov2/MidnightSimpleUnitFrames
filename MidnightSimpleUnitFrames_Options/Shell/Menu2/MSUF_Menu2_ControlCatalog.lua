@@ -40,16 +40,18 @@ Catalog.SCHEMA_VERSION = 2
 -- leaving an Assistant transaction half-finished.
 local function InvokeBoundary(fn, ...)
     if type(fn) ~= "function" then return false end
-    local apply = M.ApplyService
-    if apply and type(apply.Invoke) == "function" then return apply.Invoke(fn, ...) end
     local ok, r1, r2, r3, r4 = pcall(fn, ...)
     if not ok then
         local handler = _G.geterrorhandler and _G.geterrorhandler()
-        if type(handler) == "function" then pcall(handler, r1) end
+        if type(handler) == "function" and pcall(handler, r1) then return false, r1 end
+        if type(print) == "function" then
+            print("|cffffd700MSUF callback:|r", tostring(r1))
+        end
         return false, r1
     end
     return true, r1, r2, r3, r4
 end
+M.InvokeBoundary = InvokeBoundary
 
 -- Shell controls are not built by the page/widget factories, so an omitted raw
 -- Button would otherwise be invisible to a percentage calculated only from
@@ -243,65 +245,8 @@ local function ActionValueFingerprint(value)
     return table.concat(parts, "\030")
 end
 
---- Structural Lua-pattern validation without probing string.match: rejects the
---- forms the matcher raises on (trailing %, unfinished set, %b without its two
---- chars, %f without a set, capture references beyond the captures seen).
 local function IsValidLuaPattern(text)
-    local i, n = 1, #text
-    local captureCount, openCaptures, closedCaptures = 0, {}, {}
-    while i <= n do
-        local c = text:sub(i, i)
-        if c == "%" then
-            if i == n then return false end
-            local nx = text:sub(i + 1, i + 1)
-            if nx == "b" then
-                if i + 3 > n then return false end
-                i = i + 4
-            elseif nx == "f" then
-                if text:sub(i + 2, i + 2) ~= "[" then return false end
-                i = i + 2
-            elseif nx:match("%d") then
-                local capture = tonumber(nx)
-                if capture == 0 or not closedCaptures[capture] then return false end
-                i = i + 2
-            else
-                i = i + 2
-            end
-        elseif c == "[" then
-            local j = i + 1
-            if text:sub(j, j) == "^" then j = j + 1 end
-            if text:sub(j, j) == "]" then j = j + 1 end
-            local closed = false
-            while j <= n do
-                local cj = text:sub(j, j)
-                if cj == "%" then
-                    if j == n then return false end
-                    j = j + 2
-                elseif cj == "]" then
-                    closed = true
-                    break
-                else
-                    j = j + 1
-                end
-            end
-            if not closed then return false end
-            i = j + 1
-        elseif c == "(" then
-            captureCount = captureCount + 1
-            if captureCount > 32 then return false end
-            openCaptures[#openCaptures + 1] = captureCount
-            i = i + 1
-        elseif c == ")" then
-            local depth = #openCaptures
-            if depth == 0 then return false end
-            closedCaptures[openCaptures[depth]] = true
-            openCaptures[depth] = nil
-            i = i + 1
-        else
-            i = i + 1
-        end
-    end
-    return #openCaptures == 0
+    return pcall(string.match, "", text)
 end
 
 local function NormalizeAssistantRouteList(value, fieldName, requireAnchors)
@@ -497,7 +442,7 @@ local function SemanticIdentity(meta, command, widget, label)
     if value ~= "" then return value, "source_label" end
     value = CleanText(widget and widget._msuf2SearchText)
     if value ~= "" then return value, "source_label" end
-    -- CommandSource may pcall a page-provided sourceFn; it only runs for
+    -- CommandSource may call a page-provided sourceFn; it only runs for
     -- controls that lack every stronger identity key above, which keeps the
     -- identity result identical while sparing its CleanText fan-out on the
     -- overwhelmingly common keyed paths.
