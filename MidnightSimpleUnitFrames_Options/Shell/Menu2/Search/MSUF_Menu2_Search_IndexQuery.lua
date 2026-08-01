@@ -11,6 +11,19 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local C_Timer = M.MenuTimer or _G.C_Timer
 
+local function InvokeOptional(fn, ...)
+    if type(fn) ~= "function" then return false end
+    local apply = M.ApplyService
+    if apply and type(apply.Invoke) == "function" then return apply.Invoke(fn, ...) end
+    local ok, r1, r2, r3, r4 = pcall(fn, ...)
+    if not ok then
+        local handler = _G.geterrorhandler and _G.geterrorhandler()
+        if type(handler) == "function" then pcall(handler, r1) end
+        return false, r1
+    end
+    return true, r1, r2, r3, r4
+end
+
 local T = M.Theme
 local W = M.Widgets
 local Search = M.Search or {}
@@ -681,7 +694,7 @@ end
 
 local function AddValuesSearchText(parts, values)
     if type(values) == "function" then
-        local ok, resolved = pcall(values)
+        local ok, resolved = InvokeOptional(values)
         if not ok then return end
         values = resolved
     end
@@ -800,7 +813,9 @@ end
 
 local function ClearSearchRegistryPage(pageKey)
     if not pageKey then return end
-    if type(M.ClearRuntimeControlsForPage) == "function" then pcall(M.ClearRuntimeControlsForPage, pageKey) end
+    if type(M.ClearRuntimeControlsForPage) == "function" then
+        InvokeOptional(M.ClearRuntimeControlsForPage, pageKey)
+    end
     local ids = SEARCH_STATE.registryByPage[pageKey]
     if ids then
         for i = 1, #ids do
@@ -814,7 +829,7 @@ end
 
 local function CopyStaticSearchValues(values)
     if type(values) == "function" then
-        local ok, resolved = pcall(values)
+        local ok, resolved = InvokeOptional(values)
         if not ok then return nil end
         values = resolved
     end
@@ -876,10 +891,9 @@ local function RegisterSearchRuntimeControl(widget, meta, pageKey, kind, label, 
     payload.command = command
     local wasBusy = runtimeControlMetaScratchBusy
     runtimeControlMetaScratchBusy = true
-    local ok, result = pcall(M.RegisterRuntimeControl, widget, payload, "search")
+    local ok, result = InvokeOptional(M.RegisterRuntimeControl, widget, payload, "search")
     runtimeControlMetaScratchBusy = wasBusy
-    if ok then return result end
-    return nil
+    return ok and result or nil
 end
 
 function M.UnregisterSearchWidget(widget)
@@ -1133,7 +1147,7 @@ local function BuildButtonCommandAction(widget, entry)
     if not (widget and type(entry) == "table" and entry.kind == "button") then return nil end
     local function ReadClickHandler()
         if type(widget.GetScript) ~= "function" then return nil end
-        local ok, handler = pcall(widget.GetScript, widget, "OnClick")
+        local ok, handler = InvokeOptional(widget.GetScript, widget, "OnClick")
         if ok and type(handler) == "function" then return handler end
         return nil
     end
@@ -1145,8 +1159,8 @@ local function BuildButtonCommandAction(widget, entry)
             local handler = ReadClickHandler()
             if not handler then return false end
             if type(widget.IsEnabled) == "function" then
-                local ok, enabled = pcall(widget.IsEnabled, widget)
-                if ok and enabled == false then return false end
+                local ok, enabled = InvokeOptional(widget.IsEnabled, widget)
+                if not ok or enabled == false then return false end
             end
             if type(widget.Click) == "function" then
                 widget:Click("LeftButton", true)
@@ -1157,7 +1171,7 @@ local function BuildButtonCommandAction(widget, entry)
         end,
         labelFn = function()
             if widget.GetText then
-                local ok, text = pcall(widget.GetText, widget)
+                local ok, text = InvokeOptional(widget.GetText, widget)
                 if ok and text and text ~= "" then return text end
             end
             return entry.label or "Button"
@@ -1234,7 +1248,7 @@ BuildRegistrySearchRecord = function(entry)
             rec.command = command
             rec.widget = widget
             if widget and type(M.RegisterRuntimeControl) == "function" then
-                local ok, controlId = pcall(M.RegisterRuntimeControl, widget, {
+                local ok, controlId = InvokeOptional(M.RegisterRuntimeControl, widget, {
                     pageKey = entry.pageKey,
                     kind = entry.kind,
                     label = entry.label,
@@ -1266,7 +1280,7 @@ end
 local function AddStaticIndexSearchRecords(records, covered)
     local staticIndex = Search.StaticIndex
     if not (staticIndex and type(staticIndex.GetRecords) == "function") then return end
-    local ok, staticRecords = pcall(staticIndex.GetRecords)
+    local ok, staticRecords = InvokeOptional(staticIndex.GetRecords)
     if not ok or type(staticRecords) ~= "table" then return end
     for i = 1, #staticRecords do
         local rec = staticRecords[i]

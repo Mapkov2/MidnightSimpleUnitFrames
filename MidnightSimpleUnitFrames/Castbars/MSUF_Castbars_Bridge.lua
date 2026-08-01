@@ -14,6 +14,17 @@ local ExportPublic = ns.ExportPublic or function(name, value)
     return value
 end
 
+local function InvokeNativeFrame(method, frame, ...)
+    if type(method) ~= "function" then return false end
+    local ok, err = pcall(method, frame, ...)
+    if not ok then
+        local handler = _G.geterrorhandler and _G.geterrorhandler()
+        if type(handler) == "function" then pcall(handler, err) end
+        return false, err
+    end
+    return true
+end
+
 ns.UF = ns.UF or {}
 
 local function GeneralDB()
@@ -159,7 +170,7 @@ local function SetNativeFrameSuppressed(frame, suppressed)
 
         EnsureNativeHideGuard(frame, record)
         if type(frame.UnregisterAllEvents) == "function" then
-            record.detached = pcall(frame.UnregisterAllEvents, frame) == true
+            record.detached = InvokeNativeFrame(frame.UnregisterAllEvents, frame) == true
         end
         if frame.Hide then frame:Hide() end
         return true
@@ -174,12 +185,9 @@ local function SetNativeFrameSuppressed(frame, suppressed)
     -- Blizzard never observes a nil unit from a subsequent event dispatch.
     record.suppressed = nil
     if record.detached and type(frame.SetUnit) == "function" then
-        pcall(frame.SetUnit, frame, nil)
-        local restoredUnit = record.unit or unit
-        local restored = pcall(frame.SetUnit, frame, restoredUnit, record.showTradeSkills, record.showShield)
-        if not restored and frame.unit == nil then
-            frame.unit = restoredUnit
-        end
+        InvokeNativeFrame(frame.SetUnit, frame, nil)
+        local restored = InvokeNativeFrame(frame.SetUnit, frame, record.unit or unit, record.showTradeSkills, record.showShield)
+        if not restored and frame.unit == nil then frame.unit = record.unit or unit end
     end
     record.detached = nil
     return true

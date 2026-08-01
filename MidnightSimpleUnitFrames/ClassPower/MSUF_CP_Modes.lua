@@ -130,9 +130,8 @@ local function CreateNativeTimerSupport(E)
         if not (owner and type(createDuration) == "function") then return nil end
         local duration = owner[key]
         if duration then return duration end
-        local ok
-        ok, duration = pcall(createDuration)
-        if not ok or not duration then return nil end
+        duration = createDuration()
+        if not duration then return nil end
         owner[key] = duration
         return duration
     end
@@ -140,25 +139,26 @@ local function CreateNativeTimerSupport(E)
     local function ApplyTimer(bar, duration, direction)
         if not (bar and duration and immediate ~= nil and direction ~= nil
             and type(bar.SetTimerDuration) == "function") then return false end
-        local ok = pcall(bar.SetTimerDuration, bar, duration, immediate, direction)
-        if not ok then return false end
+        bar:SetTimerDuration(duration, immediate, direction)
         bar._msufCPMin, bar._msufCPMax = nil, nil
         bar._msufCPValue = nil
         return true
     end
 
     local function ResetDuration(duration)
-        if duration and type(duration.Reset) == "function" then pcall(duration.Reset, duration) end
+        if duration and type(duration.Reset) == "function" then duration:Reset() end
     end
 
     local function SetTimeFromStart(duration, startTime, total)
-        return duration and type(duration.SetTimeFromStart) == "function"
-            and pcall(duration.SetTimeFromStart, duration, startTime, total) or false
+        if not (duration and type(duration.SetTimeFromStart) == "function") then return false end
+        duration:SetTimeFromStart(startTime, total)
+        return true
     end
 
     local function SetTimeFromEnd(duration, endTime, total)
-        return duration and type(duration.SetTimeFromEnd) == "function"
-            and pcall(duration.SetTimeFromEnd, duration, endTime, total) or false
+        if not (duration and type(duration.SetTimeFromEnd) == "function") then return false end
+        duration:SetTimeFromEnd(endTime, total)
+        return true
     end
 
     local function DisableBinding(owner, key, fontString)
@@ -166,8 +166,8 @@ local function CreateNativeTimerSupport(E)
         local activeKey = key .. "Active"
         if binding then
             if owner[activeKey] == true then
-                if type(binding.Disable) == "function" then pcall(binding.Disable, binding)
-                elseif type(binding.SetEnabled) == "function" then pcall(binding.SetEnabled, binding, false) end
+                if type(binding.Disable) == "function" then binding:Disable()
+                elseif type(binding.SetEnabled) == "function" then binding:SetEnabled(false) end
             end
             if owner[activeKey] ~= false then owner[activeKey] = false end
         end
@@ -181,12 +181,11 @@ local function CreateNativeTimerSupport(E)
     local function EnsureFormatter()
         if remainingComponents then return remainingComponents end
         if type(createFormatter) ~= "function" or not properties or not rounding then return nil end
-        local ok, candidate = pcall(createFormatter)
-        if not ok or not (candidate and type(candidate.SetBreakpoints) == "function") then return nil end
-        ok = pcall(candidate.SetBreakpoints, candidate, {
+        local candidate = createFormatter()
+        if not (candidate and type(candidate.SetBreakpoints) == "function") then return nil end
+        candidate:SetBreakpoints({
             { threshold = 0, step = 0.1, rounding = rounding.Nearest, format = "%.1f" },
         })
-        if not ok then return nil end
         remainingComponents = {
             { property = properties.RemainingDuration, formatter = candidate },
         }
@@ -205,25 +204,31 @@ local function CreateNativeTimerSupport(E)
         end
         local binding = owner[key]
         if not binding then
-            local ok
-            ok, binding = pcall(createBinding)
-            if not ok or not binding then return false end
-            if not pcall(binding.SetFontString, binding, fontString)
-                or not pcall(binding.SetUpdateInterval, binding, 0.10) then return false end
-            if type(binding.SetExpiredText) == "function" then pcall(binding.SetExpiredText, binding, "") end
-            if type(binding.SetZeroDurationText) == "function" then pcall(binding.SetZeroDurationText, binding, "") end
+            binding = createBinding()
+            if not binding
+                or type(binding.SetFontString) ~= "function"
+                or type(binding.SetUpdateInterval) ~= "function"
+                or type(binding.SetTextFormat) ~= "function"
+                or type(binding.SetDuration) ~= "function"
+            then return false end
+            binding:SetFontString(fontString)
+            binding:SetUpdateInterval(0.10)
+            if type(binding.SetExpiredText) == "function" then binding:SetExpiredText("") end
+            if type(binding.SetZeroDurationText) == "function" then binding:SetZeroDurationText("") end
             owner[key] = binding
         end
         if owner[formatKey] ~= format then
-            if not pcall(binding.SetTextFormat, binding, format, components) then return false end
+            binding:SetTextFormat(format, components)
             owner[formatKey] = format
         end
-        if not pcall(binding.SetDuration, binding, duration) then return false end
-        local enabled = type(binding.Enable) == "function" and pcall(binding.Enable, binding)
-        if not enabled and type(binding.SetEnabled) == "function" then
-            enabled = pcall(binding.SetEnabled, binding, true)
+        binding:SetDuration(duration)
+        if type(binding.Enable) == "function" then
+            binding:Enable()
+        elseif type(binding.SetEnabled) == "function" then
+            binding:SetEnabled(true)
+        else
+            return false
         end
-        if not enabled then return false end
         fontString:Show()
         fontString._msufCPShown = true
         owner[durationKey] = duration
@@ -1330,14 +1335,13 @@ modeBuilders.TIMER = function(E)
         local auraInstanceID = aura and aura.auraInstanceID
         local getAuraDuration = C_UnitAuras and C_UnitAuras.GetAuraDuration
         if not (auraInstanceID and type(getAuraDuration) == "function") then return false end
-        local ok, sourceDuration = pcall(getAuraDuration, "player", auraInstanceID)
-        if not ok then return false end
+        local sourceDuration = getAuraDuration("player", auraInstanceID)
         if not (sourceDuration and type(sourceDuration.GetEndTime) == "function") then return false end
 
         local displayDuration = nativeTimer.EnsureDuration(bar, "_msufCPTimerDisplayDuration")
         if not displayDuration then return false end
-        local endOK, endTime = pcall(sourceDuration.GetEndTime, sourceDuration)
-        if not endOK then return false end
+        -- GetEndTime may return a secret; NotSecret gates every comparison on it.
+        local endTime = sourceDuration:GetEndTime()
         local comparableEndTime = NotSecret(endTime)
         local needsDurationSync = forceBarSync == true
             or bar._timerNativeActive ~= true

@@ -77,9 +77,8 @@ local function Abbreviator()
     return type(fn) == "function" and fn or nil
 end
 
---- A client that ignores or rejects the options table must never leave MSUF
---- with half-formatted text, so a candidate only wins after it survived one
---- real call and produced a space-free string.
+--- One real call decides: a candidate only wins after it produced a space-free
+--- string for the probe value. Runs once per style change and is cached.
 local function Accepts(fn, options)
     local ok, text = pcall(fn, PROBE_VALUE, options)
     if not ok then return false end
@@ -88,26 +87,20 @@ local function Accepts(fn, options)
     return true
 end
 
---- Builds the COMPACT options once. CreateAbbreviateConfig is preferred because
---- the API documents it as the cached form for repeated calls with the same
---- options; it can hard-error behind a restricted-breakpoints precondition, so
---- the raw breakpointData form stays as the fallback.
+--- Builds the COMPACT options once. Only the raw breakpointData form is used:
+--- it is validated purely by the value the formatter returns, unlike
+--- CreateAbbreviateConfig, which hard-errors behind a restricted-breakpoints
+--- precondition and was dropped for that reason. The options table is built
+--- once and cached, so the config object's caching advantage is moot.
 local function CompactOptions()
     if compactChecked then return compactOptions end
     compactChecked = true
     local fn = Abbreviator()
     if not fn then return nil end
-    local candidates = {}
-    local CreateAbbreviateConfig = _G.CreateAbbreviateConfig
-    if type(CreateAbbreviateConfig) == "function" then
-        local ok, config = pcall(CreateAbbreviateConfig, COMPACT_BREAKPOINTS)
-        if ok and config ~= nil then
-            candidates[#candidates + 1] = { config = config, locale = COMPACT_LOCALE }
-            candidates[#candidates + 1] = { config = config }
-        end
-    end
-    candidates[#candidates + 1] = { breakpointData = COMPACT_BREAKPOINTS, locale = COMPACT_LOCALE }
-    candidates[#candidates + 1] = { breakpointData = COMPACT_BREAKPOINTS }
+    local candidates = {
+        { breakpointData = COMPACT_BREAKPOINTS, locale = COMPACT_LOCALE },
+        { breakpointData = COMPACT_BREAKPOINTS },
+    }
     for i = 1, #candidates do
         if Accepts(fn, candidates[i]) then
             compactOptions = candidates[i]
@@ -179,8 +172,10 @@ function NF.FormatWith(value, style)
     if NF.NormalizeStyle(style) == STYLE_COMPACT then
         options = CompactOptions()
     end
-    local ok, text = pcall(fn, value, options)
-    if ok and type(text) == "string" and text ~= "" then return text end
+    -- Options here either passed the Accepts() probe or are nil (GAME style),
+    -- so the C call cannot reject them.
+    local text = fn(value, options)
+    if type(text) == "string" and text ~= "" then return text end
     return tostring(value)
 end
 

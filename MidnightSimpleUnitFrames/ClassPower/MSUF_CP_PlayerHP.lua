@@ -501,8 +501,8 @@ builders.PLAYER_HP = function(E)
         if PHP._fontStamp == stamp then return end
         local function FontApplied(fs, path, px, fontFlags)
             if type(fs.GetFont) ~= "function" then return true end
-            local ok, actual, actualSize, actualFlags = pcall(fs.GetFont, fs)
-            if not ok or not actual then return false end
+            local actual, actualSize, actualFlags = fs:GetFont()
+            if not actual then return false end
             if actualSize and math.abs((tonumber(actualSize) or 0) - px) > 0.01 then return false end
             if (actualFlags or "") ~= (fontFlags or "") then return false end
             if actual == path then return true end
@@ -517,9 +517,9 @@ builders.PLAYER_HP = function(E)
                 if type(applyResolved) == "function" then
                     applyResolved(fs, fontPath, size, fontFlags, general and general.fontKey)
                 else
-                    local ok, applied = pcall(fs.SetFont, fs, fontPath, size, fontFlags)
-                    if not ok or applied == false or not FontApplied(fs, fontPath, size, fontFlags) then
-                        pcall(fs.SetFont, fs, "Fonts\\FRIZQT__.TTF", size, fontFlags)
+                    local applied = fs:SetFont(fontPath, size, fontFlags)
+                    if applied == false or not FontApplied(fs, fontPath, size, fontFlags) then
+                        fs:SetFont("Fonts\\FRIZQT__.TTF", size, fontFlags)
                         if type(_G.MSUF_MarkFontApplyFailed) == "function" then _G.MSUF_MarkFontApplyFailed() end
                     end
                 end

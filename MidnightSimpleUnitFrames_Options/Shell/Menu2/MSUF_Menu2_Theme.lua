@@ -7,6 +7,18 @@ M.Theme = T
 local WL = M.WordList
 local SharedUI = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
 
+local function InvokeThemeBoundary(fn, ...)
+    if type(fn) ~= "function" then return false end
+    local apply = M.ApplyService
+    if apply and type(apply.Invoke) == "function" then return apply.Invoke(fn, ...) end
+    local ok, result = pcall(fn, ...)
+    if not ok then
+        local handler = _G.geterrorhandler and _G.geterrorhandler()
+        if type(handler) == "function" then pcall(handler, result) end
+    end
+    return ok, result
+end
+
 T.fontSizes = (SharedUI and SharedUI.fontSizes) or T.fontSizes or {
     micro = 9, caption = 11, supporting = 11, body = 13, control = 13,
     card = 13, accordion = 15, section = 15, heading = 17, hero = 21,
@@ -378,7 +390,7 @@ local function FontPathMatches(expected, actual)
     if expected == actual then return true end
     local matches = _G.MSUF_FontPathMatches or _G.MSUF_FontPathEquals
     if type(matches) == "function" then
-        local ok, same = pcall(matches, expected, actual)
+        local ok, same = InvokeThemeBoundary(matches, expected, actual)
         if ok and same == true then return true end
     end
     expected, actual = NormalizeAppliedFontPath(expected), NormalizeAppliedFontPath(actual)
@@ -386,22 +398,24 @@ local function FontPathMatches(expected, actual)
 end
 local function FontHasRenderableText(fs)
     if not (fs and fs.GetText and fs.GetStringWidth) then return true end
-    local okText, text = pcall(fs.GetText, fs)
-    if not okText or type(text) ~= "string" or not text:find("%S") then return true end
-    local okWidth, width = pcall(fs.GetStringWidth, fs)
-    return not okWidth or type(width) ~= "number" or width > 0
+    local text = fs:GetText()
+    if type(text) ~= "string" or not text:find("%S") then return true end
+    local width = fs:GetStringWidth()
+    return type(width) ~= "number" or width > 0
 end
 local function FontApplicationMatches(fs, expectedFont, expectedSize, expectedFlags)
-    local ok, actualFont, actualSize, actualFlags = pcall(fs.GetFont, fs)
-    if not ok or not FontPathMatches(expectedFont, actualFont) then return false end
+    local actualFont, actualSize, actualFlags = fs:GetFont()
+    if not FontPathMatches(expectedFont, actualFont) then return false end
     if type(actualSize) == "number" and math.abs(actualSize - expectedSize) > 0.01 then return false end
     if tostring(actualFlags or "") ~= tostring(expectedFlags or "") then return false end
     return FontHasRenderableText(fs)
 end
 local function TryApplyStyledFont(fs, font, size, flags)
     if type(font) ~= "string" or font == "" then return false end
-    local ok, applied = pcall(fs.SetFont, fs, font, size, flags)
-    return ok and applied ~= false and FontApplicationMatches(fs, font, size, flags)
+    -- SetFont reports failure by returning false (documented `success` bool);
+    -- it does not raise, so the return value is the whole failure signal.
+    local applied = fs:SetFont(font, size, flags)
+    return applied ~= false and FontApplicationMatches(fs, font, size, flags)
 end
 local function ApplyStyledFont(fs, force)
     if not (fs and fs.GetFont and fs.SetFont) then return false end
@@ -706,7 +720,7 @@ function T.StopAllMenuAnimations()
     local stopped = 0
     for group in pairs(menuAnimationGroups) do
         if group and type(group.Stop) == "function" then
-            pcall(group.Stop, group)
+            group:Stop()
             stopped = stopped + 1
         end
     end
@@ -2643,8 +2657,8 @@ function T.MeasureButtonWidth(btn, minWidth, maxWidth)
     local label = btn._msuf2Label
     local width
     if label and label.GetStringWidth then
-        local ok, measured = pcall(label.GetStringWidth, label)
-        if ok and type(measured) == "number" and measured > 0 then
+        local measured = label:GetStringWidth()
+        if type(measured) == "number" and measured > 0 then
             width = measured + BUTTON_LABEL_INSET + 1
         end
     end

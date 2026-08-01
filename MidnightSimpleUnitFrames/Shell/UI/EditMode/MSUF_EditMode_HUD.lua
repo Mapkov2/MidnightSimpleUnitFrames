@@ -33,6 +33,17 @@ local DockUI = {}
 local ApplyDockLayout, RefreshPositionPopup, SetDockExpanded, ScheduleDockAutoHide, StopDockDrag
 local previewBtn, previewAnimBtn, auraBtn, snapToggle, resetBtn, settingsBtn, cdmBtn, anchorBtn
 local previewAddonSlot
+
+local function InvokeHUDOptional(fn, ...)
+    if type(fn) ~= "function" then return false end
+    local ok, r1 = pcall(fn, ...)
+    if not ok then
+        local handler = _G.geterrorhandler and _G.geterrorhandler()
+        if type(handler) == "function" then pcall(handler, r1) end
+        return false, r1
+    end
+    return true, r1
+end
 local previewAnimRefreshRegistered
 local undoBtn, redoBtn, cancelAllBtn, exitBtn
 local alphaFS, stepFS
@@ -678,8 +689,8 @@ end
 local function DockCharKey()
     local fn = rawget(_G, "MSUF_GetCharKey")
     if type(fn) == "function" then
-        local ok, key = pcall(fn)
-        if ok and type(key) == "string" and key ~= "" then return key end
+        local key = fn()
+        if type(key) == "string" and key ~= "" then return key end
     end
     local name = (_G.UnitName and _G.UnitName("player")) or "Unknown"
     local realm = (_G.GetRealmName and _G.GetRealmName()) or "Realm"
@@ -1126,10 +1137,10 @@ local function OpenMenuGuidedTourAtEditMode()
     local menu = ResolveMenu2()
     local menuOpened = false
     if menu and type(menu.Open) == "function" then
-        local ok, result = pcall(menu.Open)
+        local ok, result = InvokeHUDOptional(menu.Open)
         menuOpened = ok and result ~= false
     elseif type(_G.MSUF2_Open) == "function" then
-        local ok, result = pcall(_G.MSUF2_Open)
+        local ok, result = InvokeHUDOptional(_G.MSUF2_Open)
         menuOpened = ok and result ~= false
     end
 
@@ -1138,7 +1149,7 @@ local function OpenMenuGuidedTourAtEditMode()
     menu = ResolveMenu2()
     local openStage = menu and menu.OpenGuidedTourAtStage
     if type(openStage) == "function" then
-        local ok, result = pcall(openStage, "edit_mode")
+        local ok, result = InvokeHUDOptional(openStage, "edit_mode")
         if ok and result ~= false then
             guidedTourBridgeRequested = true
             return true

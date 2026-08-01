@@ -82,8 +82,8 @@ end
 
 local function PlayerKnowsSpell(spellID)
     if type(IsPlayerSpell) ~= "function" then return false end
-    local ok, known = pcall(IsPlayerSpell, spellID)
-    return ok and issecretvalue(known) ~= true and known == true
+    local known = IsPlayerSpell(spellID)
+    return issecretvalue(known) ~= true and known == true
 end
 
 local function AutomaticMarkerLayout(frame)

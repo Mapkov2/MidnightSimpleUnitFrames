@@ -152,21 +152,26 @@ local function ScheduleUnitframeReanchorAfterScale()
 end
 local EnsureScaleApplyAfterCombat
 local ResetGlobalUiScale
+local function CancelScaleTimer(timer)
+    if not (timer and type(timer.Cancel) == "function") then return end
+    local ok, err = pcall(timer.Cancel, timer)
+    if not ok then
+        local handler = _G.geterrorhandler and _G.geterrorhandler()
+        if type(handler) == "function" then pcall(handler, err) end
+    end
+end
 local function CancelPendingScaleTimers()
     local reanchorPending = _G.MSUF_ScaleReanchorPending == true
-    if scaleReanchorTimer and type(scaleReanchorTimer.Cancel) == "function" then
-        pcall(scaleReanchorTimer.Cancel, scaleReanchorTimer)
-    end
+    local reanchorTimer = scaleReanchorTimer
     scaleReanchorTimer = nil
+    CancelScaleTimer(reanchorTimer)
     ExportPublic("MSUF_ScaleReanchorPending", false)
     local restoreCount = 0
     while true do
         local record = next(restoreBlizzardScaleTimers)
         if record == nil then break end
         restoreBlizzardScaleTimers[record] = nil
-        if record.timer and type(record.timer.Cancel) == "function" then
-            pcall(record.timer.Cancel, record.timer)
-        end
+        CancelScaleTimer(record.timer)
         restoreCount = restoreCount + 1
     end
     return reanchorPending, restoreCount

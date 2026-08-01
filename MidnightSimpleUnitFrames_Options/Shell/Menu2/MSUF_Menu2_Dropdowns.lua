@@ -14,6 +14,18 @@ local max = math.max
 local min = math.min
 local MSUF_SetIconTexture = _G.MSUF_SetIconTexture
 local Tr = M.TranslateText or function(text) return text end
+local function InvokeDropdownProvider(fn, ...)
+    if type(fn) ~= "function" then return false end
+    local apply = M.ApplyService
+    if apply and type(apply.Invoke) == "function" then return apply.Invoke(fn, ...) end
+    local ok, r1, r2 = pcall(fn, ...)
+    if not ok then
+        local handler = _G.geterrorhandler and _G.geterrorhandler()
+        if type(handler) == "function" then pcall(handler, r1) end
+        return false, r1
+    end
+    return true, r1, r2
+end
 local function SetSearchText(object, text)
     if object and text ~= nil then object._msuf2SearchText = text end
     return object
@@ -498,7 +510,7 @@ local function DropdownItemTooltipField(item, key, fallbackKey)
     local value = item[key]
     if value == nil and fallbackKey then value = item[fallbackKey] end
     if type(value) == "function" then
-        local ok, resolved = pcall(value, item)
+        local ok, resolved = InvokeDropdownProvider(value, item)
         value = ok and resolved or nil
     end
     if value == nil or value == "" then return nil end
@@ -541,13 +553,16 @@ local function DropdownItemBarPreview(item)
     if type(item) ~= "table" or item.previewKind ~= "barOverlay" then return nil end
     local preview = item.barPreview or item.overlayPreview or item.preview
     if type(preview) == "function" then
-        local ok, resolved = pcall(preview, item)
+        local ok, resolved = InvokeDropdownProvider(preview, item)
         preview = ok and resolved or nil
     end
     return type(preview) == "table" and preview or nil
 end
 local function DropdownColorTuple(color)
-    if type(color) == "function" then color = color() end
+    if type(color) == "function" then
+        local ok, resolved = InvokeDropdownProvider(color)
+        color = ok and resolved or nil
+    end
     if type(color) ~= "table" then return nil end
     local r = color.r or color[1]
     local g = color.g or color[2]
@@ -581,7 +596,7 @@ end
 local function RestoreDropdownDefaultFont(fs)
     local d = fs and fs._msuf2DropdownDefaultFont
     if d and fs.SetFont then
-        pcall(fs.SetFont, fs, d[1], d[2], d[3] or "")
+        fs:SetFont(d[1], d[2], d[3] or "")
     elseif fs and fs.SetFontObject then
         fs:SetFontObject(GameFontHighlight)
     end
@@ -610,8 +625,8 @@ local function ApplyDropdownItemFont(fs, item)
     if type(fontPath) == "string" and fontPath ~= "" and fs.SetFont then
         local resolveSafe = _G.MSUF_ResolveSafeFontPath
         if type(resolveSafe) == "function" then fontPath = resolveSafe(fontPath, size, "", fontKey) end
-        local ok = pcall(fs.SetFont, fs, fontPath, size, "")
-        if ok then return end
+        local applied = fs:SetFont(fontPath, size, "")
+        if applied ~= false then return end
         RestoreDropdownDefaultFont(fs)
         return
     end

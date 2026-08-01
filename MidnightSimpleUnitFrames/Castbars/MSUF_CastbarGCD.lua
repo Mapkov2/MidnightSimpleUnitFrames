@@ -191,8 +191,9 @@ local function ArmFinish(frame, durationObj)
     local getRemaining = durationObj.GetRemainingDuration or durationObj.GetRemaining
     local remaining
     if type(getRemaining) == "function" then
-        local ok, value = pcall(getRemaining, durationObj)
-        if ok then remaining = PlainNumber(value) end
+        -- Secret GCD durations return secret values; PlainNumber rejects them
+        -- into the bounded NeverSecret poll ticker below.
+        remaining = PlainNumber(getRemaining(durationObj))
     end
 
     if remaining and remaining > 0 then

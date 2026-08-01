@@ -65,6 +65,9 @@ local function EnsureOptionsLoaded(reason)
     loading = true
     MSUF.OptionsLODLastReason = tostring(reason or "options-demand")
     local loader = _G.MSUF_EnsureAddonLoaded
+    --- The normal API reports loaded=false plus a reason. The wrapper can still
+    --- be supplied by another module, so protect this optional load boundary
+    --- and always clear the re-entry flag.
     local ok, loaded
     if type(loader) == "function" then
         ok, loaded = pcall(loader, OPTIONS_ADDON)

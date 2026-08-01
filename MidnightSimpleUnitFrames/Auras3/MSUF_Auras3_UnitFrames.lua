@@ -2743,8 +2743,8 @@ local function BuildAuraDurationBinding(formatter, updateInterval)
     local durationUtil = _G.C_DurationUtil
     local createBinding = durationUtil and durationUtil.CreateDurationTextBinding
     if type(createBinding) ~= "function" then return nil end
-    local ok, binding = pcall(createBinding)
-    if not ok or not binding then return nil end
+    local binding = createBinding()
+    if not binding then return nil end
     if not (type(binding.SetFormatter) == "function"
         and type(binding.SetZeroDurationText) == "function"
         and type(binding.SetExpiredText) == "function"

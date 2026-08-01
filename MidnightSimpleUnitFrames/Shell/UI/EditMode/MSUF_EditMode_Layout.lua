@@ -36,6 +36,18 @@ local IsConfigCombatLocked   = U.IsConfigCombatLocked
 local BlockConfigCombatLocked = U.BlockConfigCombatLocked
 local ThemeColor             = U.ThemeColor
 
+local function ReportEditModeBoundaryError(err)
+    local handler = _G.geterrorhandler and _G.geterrorhandler()
+    if type(handler) == "function" then pcall(handler, err) end
+end
+
+local function InvokeEditModeBoundary(fn, ...)
+    if type(fn) ~= "function" then return false end
+    local ok, r1, r2 = pcall(fn, ...)
+    if not ok then ReportEditModeBoundaryError(r1); return false, r1 end
+    return true, r1, r2
+end
+
 local function NotifyGuidedEditModeMoved(key)
     local menu = (MSUF and MSUF.MSUF2) or _G.MSUF2
     if menu and type(menu.NotifyGuidedEditModeMoved) == "function" then
@@ -906,13 +918,13 @@ end
 
 local function CallCastbarNudgeSync(fn, ...)
     if type(fn) ~= "function" then return true end
-    return pcall(fn, ...)
+    return InvokeEditModeBoundary(fn, ...)
 end
 
 local function SyncCastbarNudge(unit)
     local ok = CallCastbarNudgeSync(_G.MSUF_SyncCastbarPositionPopup, unit)
     if type(_G.MSUF_SyncCastbarPositionPopup) ~= "function" and EM2.CastPopup and EM2.CastPopup.IsOpen then
-        local checked, popupOpen = pcall(EM2.CastPopup.IsOpen)
+        local checked, popupOpen = InvokeEditModeBoundary(EM2.CastPopup.IsOpen)
         ok = checked and ok
         if checked and popupOpen then ok = CallCastbarNudgeSync(EM2.CastPopup.Sync) and ok end
     end
@@ -924,7 +936,7 @@ end
 
 local function ApplyCastbarNudge(unit)
     if type(ApplySettingsForKeySafe) ~= "function" then return false end
-    local called, applied = pcall(ApplySettingsForKeySafe, "castbar_" .. unit)
+    local called, applied = InvokeEditModeBoundary(ApplySettingsForKeySafe, "castbar_" .. unit)
     return called and applied == true
 end
 
@@ -938,22 +950,18 @@ local function NudgeCastbar(unit, ndx, ndy)
     if not CASTBAR_NUDGE_DEFAULTS[unit] then return false end
     local isActive = EM2.State and EM2.State.IsActive
     if type(isActive) ~= "function" then return false end
-    local activeOK, active = pcall(isActive)
-    if not activeOK or not active then return false end
+    if not isActive() then return false end
     if type(BlockConfigCombatLocked) ~= "function" then return false end
-    local combatOK, combatLocked = pcall(BlockConfigCombatLocked)
-    if not combatOK or combatLocked then return false end
+    if BlockConfigCombatLocked() then return false end
     if not IsFiniteNudgeNumber(ndx) or not IsFiniteNudgeNumber(ndy) then return false end
 
     local db = _G.MSUF_DB
     local general = db and db.general
     if type(general) ~= "table" then return false end
 
-    local keysOK, xKey, yKey = pcall(GetCastbarOffsetKeys, unit)
-    if not keysOK then return false end
+    local xKey, yKey = GetCastbarOffsetKeys(unit)
     if type(xKey) ~= "string" or xKey == "" or type(yKey) ~= "string" or yKey == "" then return false end
-    local defaultsOK, defaultX, defaultY = pcall(NudgeCastbarDefaultOffsets, unit)
-    if not defaultsOK then return false end
+    local defaultX, defaultY = NudgeCastbarDefaultOffsets(unit)
     if not IsFiniteNudgeNumber(defaultX) or not IsFiniteNudgeNumber(defaultY) then return false end
 
     local fallbackX = unit == "focus" and "castbarTargetOffsetX" or nil
@@ -975,7 +983,7 @@ local function NudgeCastbar(unit, ndx, ndy)
     if type(ApplySettingsForKeySafe) ~= "function" then return false end
     if not (undo and type(undo.PrepareChange) == "function" and type(undo.CommitPrepared) == "function") then return false end
 
-    local snapshotOK, snapshot = pcall(undo.PrepareChange, "castbar", unit)
+    local snapshotOK, snapshot = InvokeEditModeBoundary(undo.PrepareChange, "castbar", unit)
     if not snapshotOK or type(snapshot) ~= "table" then return false end
 
     local previousX, previousY = general[xKey], general[yKey]
@@ -989,7 +997,7 @@ local function NudgeCastbar(unit, ndx, ndy)
         RestoreCastbarNudge(general, xKey, yKey, previousX, previousY, unit)
         return false
     end
-    local committedOK, committed = pcall(undo.CommitPrepared, snapshot)
+    local committedOK, committed = InvokeEditModeBoundary(undo.CommitPrepared, snapshot)
     if not committedOK or committed ~= true then
         RestoreCastbarNudge(general, xKey, yKey, previousX, previousY, unit)
         return false
@@ -1130,24 +1138,20 @@ function Nudge.Move(dx, dy, targetKey)
     if castbarUnit then
         local isActive = EM2.State and EM2.State.IsActive
         if type(isActive) ~= "function" then return false end
-        local activeOK, active = pcall(isActive)
-        if not activeOK or not active then return false end
+        if not isActive() then return false end
         if type(IsConfigCombatLocked) ~= "function" then return false end
-        local combatOK, combatLocked = pcall(IsConfigCombatLocked)
-        if not combatOK or combatLocked then return false end
+        if IsConfigCombatLocked() then return false end
     end
     if type(targetKey) == "string" and targetKey ~= "" then
         local clearPreview = _G.MSUF_EM2_SetPreviewNudgeTarget
-        if type(clearPreview) == "function" and not pcall(clearPreview, nil) then return false end
+        if type(clearPreview) == "function" then clearPreview(nil) end
         local setUnitKey = EM2.State and EM2.State.SetUnitKey
         if type(setUnitKey) ~= "function" then return false end
-        local setOK, selected = pcall(setUnitKey, targetKey)
-        if not setOK or selected == false then return false end
+        if setUnitKey(targetKey) == false then return false end
         if castbarUnit then
             local getUnitKey = EM2.State and EM2.State.GetUnitKey
             if type(getUnitKey) ~= "function" then return false end
-            local readOK, currentKey = pcall(getUnitKey)
-            if not readOK or currentKey ~= targetKey then return false end
+            if getUnitKey() ~= targetKey then return false end
         end
     end
     if castbarUnit then return NudgeCastbar(castbarUnit, dx, dy) end

@@ -779,8 +779,8 @@ local function ApplyAuraFont(fs, font)
     if not (fs and font) then return end
     if fs.SetFont and (fs._msufAuraFontPath ~= font.path or fs._msufAuraFontSize ~= font.size
         or fs._msufAuraFontFlags ~= font.flags or fs._msufAuraFontEpoch ~= font.epoch) then
-        if not pcall(fs.SetFont, fs, font.path, font.size, font.flags) then
-            pcall(fs.SetFont, fs, FONT, font.size, font.flags)
+        if fs:SetFont(font.path, font.size, font.flags) == false then
+            fs:SetFont(FONT, font.size, font.flags)
         end
         fs._msufAuraFontPath, fs._msufAuraFontSize = font.path, font.size
         fs._msufAuraFontFlags, fs._msufAuraFontEpoch = font.flags, font.epoch

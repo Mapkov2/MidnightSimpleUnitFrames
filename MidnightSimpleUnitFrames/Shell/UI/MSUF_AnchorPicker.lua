@@ -62,18 +62,15 @@ local FrameGetParent = scriptRegion and scriptRegion.GetParent
 local FrameGetRect = scriptRegion and scriptRegion.GetRect
 
 local function SafeFrameCall(method, frame, ...)
-    if not frame then return false, false end
-    if type(method) ~= "function" then return true, false end
-    local callOK, a, b, c, d = pcall(method, frame, ...)
-    return callOK, true, a, b, c, d
+    if type(method) ~= "function" then return false end
+    return pcall(method, frame, ...)
 end
 
 local function IsForbiddenFrame(frame)
     if not frame then return true end
-    local ok, hasMethod, forbidden = SafeFrameCall(FrameIsForbidden, frame)
-    if not ok then return true end
-    if not hasMethod then return false end
-    return PlainBool(forbidden) ~= false
+    if type(FrameIsForbidden) ~= "function" then return false end
+    local ok, forbidden = SafeFrameCall(FrameIsForbidden, frame)
+    return not ok or PlainBool(forbidden) ~= false
 end
 
 local function IsBlocked(frame)
@@ -97,6 +94,10 @@ end
 local function PickAllowed(ov, frame, name)
     if not (ov and type(ov._isCandidateAllowed) == "function") then return true end
     local ok, allowed = pcall(ov._isCandidateAllowed, frame, name)
+    if not ok then
+        local handler = _G.geterrorhandler and _G.geterrorhandler()
+        if type(handler) == "function" then pcall(handler, allowed) end
+    end
     return ok and allowed == true
 end
 
@@ -109,8 +110,9 @@ end
 
 local function SafeGetRect(frame)
     if IsForbiddenFrame(frame) then return nil end
-    local ok, hasMethod, l, b, w, h = SafeFrameCall(FrameGetRect, frame)
-    if not ok or not hasMethod then return nil end
+    if type(FrameGetRect) ~= "function" then return nil end
+    local ok, l, b, w, h = SafeFrameCall(FrameGetRect, frame)
+    if not ok then return nil end
     if isSecretValue and (isSecretValue(l) or isSecretValue(b) or isSecretValue(w) or isSecretValue(h)) then return nil end
     l = tonumber(l); b = tonumber(b); w = tonumber(w); h = tonumber(h)
     if not (l and b and w and h) then return nil end
@@ -119,17 +121,19 @@ local function SafeGetRect(frame)
 end
 
 local function NamedFromFocus(frame)
-    -- Mouse focus often lands on anonymous child regions, so climb to a named parent.
+    -- Mouse focus often lands on anonymous child regions, so climb to a named
+    -- parent. A forbidden candidate ends the climb before any other accessor.
     local seen = 0
     while frame and seen < 40 do
-        local nameOK, hasName, n = SafeFrameCall(FrameGetName, frame)
-        if nameOK and hasName and not (isSecretValue and isSecretValue(n)) then
+        if IsForbiddenFrame(frame) then return nil, nil end
+        local nameOK, n = SafeFrameCall(FrameGetName, frame)
+        if nameOK and n and not (isSecretValue and isSecretValue(n)) then
             if not IsBlocked(frame, n) then
                 if not IsBlockedName(n) then return frame, n end
             end
         end
-        local parentOK, hasParent, parent = SafeFrameCall(FrameGetParent, frame)
-        if not parentOK or not hasParent or (isSecretValue and isSecretValue(parent)) then break end
+        local parentOK, parent = SafeFrameCall(FrameGetParent, frame)
+        if not parentOK or not parent or (isSecretValue and isSecretValue(parent)) then break end
         frame = parent
         seen = seen + 1
     end

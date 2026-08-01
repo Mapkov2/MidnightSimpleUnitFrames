@@ -9,7 +9,7 @@ MSUF.MSUF2 = M
 local KS, KSW, WL = M.KeySet, M.KeySetFromWords, M.WordList
 local ApplyService = M.ApplyService or _G.MSUF_Menu2_ApplyService
 if type(ApplyService) ~= "table" then error("MSUF Menu2 ApplyService missing") end
-local SafeInvoke = ApplyService.SafeInvoke
+local Invoke = ApplyService.Invoke
 local CallGlobal = ApplyService.CallGlobal
 
 -- Menu2 binding/apply layer.
@@ -252,13 +252,13 @@ local function DeepReplace(dst, src, seen)
 end
 local function HistoryCharacterKey()
     if type(_G.MSUF_GetCharKey) == "function" then
-        local ok, value = pcall(_G.MSUF_GetCharKey)
-        if ok and type(value) == "string" and value ~= "" then return value end
+        local value = _G.MSUF_GetCharKey()
+        if type(value) == "string" and value ~= "" then return value end
     end
     if type(_G.UnitName) == "function" and type(_G.GetRealmName) == "function" then
-        local okName, name = pcall(_G.UnitName, "player")
-        local okRealm, realm = pcall(_G.GetRealmName)
-        if okName and okRealm and type(name) == "string" and name ~= "" and type(realm) == "string" then
+        local name = _G.UnitName("player")
+        local realm = _G.GetRealmName()
+        if type(name) == "string" and name ~= "" and type(realm) == "string" then
             return name .. "-" .. realm
         end
     end
@@ -1826,7 +1826,7 @@ local function AttachCommandAction(ctx, widget, kind, getValue, setValue, opts)
     }
     widget._msuf2CommandAction = command
     if type(M.RegisterRuntimeControl) == "function" then
-        pcall(M.RegisterRuntimeControl, widget, {
+        Invoke(M.RegisterRuntimeControl, widget, {
             controlId = command.controlId,
             pageKey = ctx and ctx.key,
             kind = kind,

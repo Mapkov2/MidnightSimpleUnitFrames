@@ -100,9 +100,10 @@ end
 -- the bucket undercounts from that point on.
 local wrappedDrivers = {}
 local function WrapDriver(driver, label)
+  -- Known MSUF-owned frames only; their GetScript cannot reject.
   if not (driver and driver.GetScript and driver.SetScript) then return end
-  local ok, script = pcall(driver.GetScript, driver, "OnUpdate")
-  if not ok or type(script) ~= "function" or wrappedRoutes[script] ~= nil then return end
+  local script = driver:GetScript("OnUpdate")
+  if type(script) ~= "function" or wrappedRoutes[script] ~= nil then return end
   driver:SetScript("OnUpdate", MakeWrapper(script, label))
   wrappedDrivers[driver] = script
 end
@@ -114,8 +115,8 @@ end
 
 local function RestoreKnownDrivers()
   for driver, original in pairs(wrappedDrivers) do
-    local ok, script = pcall(driver.GetScript, driver, "OnUpdate")
-    if ok and script and wrappedRoutes[script] then
+    local script = driver:GetScript("OnUpdate")
+    if script and wrappedRoutes[script] then
       driver:SetScript("OnUpdate", original)
     end
   end
@@ -125,6 +126,16 @@ end
 -- /msufgp drivers — every frame in the UI with an armed OnUpdate script.
 -- OnUpdate only runs while a frame is visible, so the visible rows ARE the
 -- steady per-frame consumers (across ALL addons).
+local function ReadFrameMember(frame, key)
+  return frame[key]
+end
+
+local function CallFrameMethod(frame, key, ...)
+  local readOK, method = pcall(ReadFrameMember, frame, key)
+  if not readOK or type(method) ~= "function" then return false end
+  return pcall(method, frame, ...)
+end
+
 local function DumpDrivers()
   local EnumerateFrames = _G.EnumerateFrames
   if not EnumerateFrames then
@@ -134,15 +145,20 @@ local function DumpDrivers()
   local f = EnumerateFrames()
   local armed, visible = 0, 0
   while f do
-    local ok, script = pcall(f.GetScript, f, "OnUpdate")
-    if ok and type(script) == "function" then
-      armed = armed + 1
-      local okVis, shown = pcall(f.IsVisible, f)
-      if okVis and shown then
-        visible = visible + 1
-        if visible <= 40 then
-          local okName, name = pcall(f.GetDebugName, f)
-          print(("  ONUPDATE %s"):format(okName and tostring(name) or "?"))
+    -- EnumerateFrames crosses every addon's objects. Treat each accessor as a
+    -- foreign boundary so one forbidden/broken frame cannot abort diagnostics.
+    local forbiddenOK, forbidden = CallFrameMethod(f, "IsForbidden")
+    if forbiddenOK and forbidden ~= true then
+      local scriptOK, script = CallFrameMethod(f, "GetScript", "OnUpdate")
+      if scriptOK and type(script) == "function" then
+        armed = armed + 1
+        local visibleOK, isVisible = CallFrameMethod(f, "IsVisible")
+        if visibleOK and isVisible == true then
+          visible = visible + 1
+          if visible <= 40 then
+            local nameOK, debugName = CallFrameMethod(f, "GetDebugName")
+            print(("  ONUPDATE %s"):format(tostring(nameOK and debugName or "<unreadable>")))
+          end
         end
       end
     end
@@ -207,9 +223,9 @@ local function AddonRowMsPerSecond()
   if not (profiler and type(profiler.GetAddOnMetric) == "function" and metricEnum) then return nil end
   local metric = metricEnum.RecentAverageTime or metricEnum.SessionAverageTime
   if metric == nil then return nil end
-  local ok, msPerFrame = pcall(profiler.GetAddOnMetric, "MidnightSimpleUnitFrames", metric)
+  local msPerFrame = profiler.GetAddOnMetric("MidnightSimpleUnitFrames", metric)
   local fps = type(_G.GetFramerate) == "function" and _G.GetFramerate() or nil
-  if ok and type(msPerFrame) == "number" and type(fps) == "number" and fps > 0 then
+  if type(msPerFrame) == "number" and type(fps) == "number" and fps > 0 then
     return msPerFrame * fps
   end
   return nil

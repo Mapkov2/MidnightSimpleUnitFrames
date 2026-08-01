@@ -85,7 +85,8 @@ local function EnsureGuidedPlacementCue(mover)
 
     local function CreateArrow(point, relativePoint, x)
         local arrow = cue:CreateTexture(nil, "OVERLAY", nil, 7)
-        local usedAtlas = arrow.SetAtlas and pcall(arrow.SetAtlas, arrow, "NPE_ArrowRight", false)
+        local usedAtlas = false
+        if arrow.SetAtlas then arrow:SetAtlas("NPE_ArrowRight", false); usedAtlas = true end
         if not usedAtlas then arrow:SetTexture("Interface\\ChatFrame\\ChatFrameExpandArrow") end
         arrow:SetSize(28, 28)
         arrow:SetPoint(point, mover, relativePoint, x, 0)

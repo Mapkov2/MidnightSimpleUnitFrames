@@ -284,8 +284,8 @@ local function ApplyFont(fontString, g, prefix, suffix, size, colorSuffix)
             local ok, _, source = applyResolved(fontString, fontPath, size, flags, fontKey)
             requestedReady = ok == true and source ~= "fallback"
         else
-            local ok, applied = pcall(fontString.SetFont, fontString, fontPath, size, flags)
-            requestedReady = ok and applied ~= false
+            local applied = fontString:SetFont(fontPath, size, flags)
+            requestedReady = applied ~= false
             local matches = _G.MSUF_FontApplicationMatches
             if requestedReady and type(matches) == "function" then
                 requestedReady = matches(fontString, fontPath, size) == true

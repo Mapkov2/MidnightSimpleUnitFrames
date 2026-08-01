@@ -7,15 +7,22 @@ MSUF = MSUF or (_G.MSUF_NS or {})
 
 local C_Timer = _G.C_Timer
 local type = type
-local SafeCall = _G.MSUF_SafeCall or function(fn, ...)
-    if type(fn) ~= "function" then return false end
-    local ok, err = pcall(fn, ...)
-    if not ok then
-        local handler = _G.geterrorhandler and _G.geterrorhandler()
-        if type(handler) == "function" then pcall(handler, err) end
-        return false, err
+local pcall = pcall
+
+local function ReportCallbackError(err)
+    local handler = _G.geterrorhandler and _G.geterrorhandler()
+    if type(handler) == "function" then
+        local reported = pcall(handler, err)
+        if reported then return end
     end
-    return true
+    if type(_G.print) == "function" then
+        _G.print("|cffffd700MSUF Scheduler:|r", tostring(err))
+    end
+end
+
+local function InvokeCallback(fn)
+    local ok, err = pcall(fn)
+    if not ok then ReportCallbackError(err) end
 end
 
 local Scheduler = MSUF.Scheduler or {}
@@ -70,15 +77,19 @@ function FlushNextFrame()
     local head = Scheduler.head or 1
     local snapshotTail = Scheduler.tail or 0
 
+    --- Each queued callback is a fault boundary. Report failures through the
+    --- normal error handler, but always finish the drain/compaction bookkeeping
+    --- so one feature cannot strand unrelated next-frame work.
     while head <= snapshotTail do
         local key = queue[head]
         queue[head] = nil
         head = head + 1
+        Scheduler.head = head
 
         if key ~= nil then
             local cb = pending[key]
             pending[key] = nil
-            if type(cb) == "function" then SafeCall(cb) end
+            if type(cb) == "function" then InvokeCallback(cb) end
         end
     end
 

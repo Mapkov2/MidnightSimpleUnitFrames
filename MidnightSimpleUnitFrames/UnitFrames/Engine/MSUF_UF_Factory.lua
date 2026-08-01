@@ -124,36 +124,63 @@ local function ResolveAnchor(spec, frame)
 end
 
 local MAX_ANCHOR_DEPTH = 16
+
 local function ReadAnchorMember(region, key)
   return region[key]
+end
+
+local function GetAnchorMember(region, key)
+  local ok, value = pcall(ReadAnchorMember, region, key)
+  if not ok then return false, nil end
+  return true, value
+end
+
+local function CallAnchorMethod(method, region, ...)
+  if type(method) ~= "function" then return false end
+  return pcall(method, region, ...)
 end
 
 local function AnchorDependsOn(region, target, seen, depth)
   if not (region and target) then return false end
   if region == target then return true end
   depth = (tonumber(depth) or 0) + 1
-  if depth > MAX_ANCHOR_DEPTH then return false end
+  -- An unreadable or excessively deep foreign chain is rejected fail-closed;
+  -- allowing an unknown chain risks handing SetPoint a cycle.
+  if depth > MAX_ANCHOR_DEPTH then return true end
   seen = seen or {}
-  if seen[region] then return false end
+  if seen[region] then return true end
   seen[region] = true
-  local numOK, getNumPoints = pcall(ReadAnchorMember, region, "GetNumPoints")
-  local pointOK, getPoint = pcall(ReadAnchorMember, region, "GetPoint")
-  if numOK and pointOK and type(getNumPoints) == "function" and type(getPoint) == "function" then
-    local okCount, count = pcall(getNumPoints, region)
-    if okCount and type(count) == "number" and not (issecretvalue and issecretvalue(count)) then
-      for i = 1, count do
-        local okPoint, _, relativeTo = pcall(getPoint, region, i)
-        if okPoint and not (issecretvalue and issecretvalue(relativeTo))
-          and (relativeTo == target or AnchorDependsOn(relativeTo, target, seen, depth)) then
-          return true
-        end
+  -- Anchor candidates resolve from user-supplied global names, so this can walk
+  -- FOREIGN frames. Forbidden frames raise on any accessor; IsForbidden is the
+  -- sanctioned no-throw probe (and a forbidden frame is not anchorable anyway).
+  local forbiddenRead, isForbidden = GetAnchorMember(region, "IsForbidden")
+  if not forbiddenRead then return true end
+  if type(isForbidden) == "function" then
+    local ok, forbidden = CallAnchorMethod(isForbidden, region)
+    if not ok or (issecretvalue and issecretvalue(forbidden)) or forbidden == true then return true end
+  end
+  local numRead, getNumPoints = GetAnchorMember(region, "GetNumPoints")
+  local pointRead, getPoint = GetAnchorMember(region, "GetPoint")
+  if not numRead or not pointRead then return true end
+  if type(getNumPoints) == "function" and type(getPoint) == "function" then
+    local countOK, count = CallAnchorMethod(getNumPoints, region)
+    if not countOK or (issecretvalue and issecretvalue(count)) or type(count) ~= "number" then return true end
+    for i = 1, count do
+      local pointOK, _, relativeTo = CallAnchorMethod(getPoint, region, i)
+      if not pointOK or (issecretvalue and issecretvalue(relativeTo)) then return true end
+      if relativeTo == target or AnchorDependsOn(relativeTo, target, seen, depth) then
+        return true
       end
     end
   end
-  local okParent, parent = false, nil
-  local parentReadOK, getParent = pcall(ReadAnchorMember, region, "GetParent")
-  if parentReadOK and type(getParent) == "function" then okParent, parent = pcall(getParent, region) end
-  if not okParent or (issecretvalue and issecretvalue(parent)) then parent = nil end
+  local parentRead, getParent = GetAnchorMember(region, "GetParent")
+  if not parentRead then return true end
+  local parent
+  if type(getParent) == "function" then
+    local parentOK
+    parentOK, parent = CallAnchorMethod(getParent, region)
+    if not parentOK or (issecretvalue and issecretvalue(parent)) then return true end
+  end
   if parent == target or AnchorDependsOn(parent, target, seen, depth) then return true end
   return false
 end

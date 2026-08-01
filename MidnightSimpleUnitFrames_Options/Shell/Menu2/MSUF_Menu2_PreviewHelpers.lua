@@ -1414,7 +1414,9 @@ function H.InstallZoomPan(ZoomPan, opts)
         box._zoomPanX, box._zoomPanY = beforeX, beforeY
         local rollbackOk, rolledBack = pcall(ZoomPan.ApplyPan, box)
         local restoredX, restoredY = ZoomPan.GetPan(box)
-        if not rollbackOk or rolledBack ~= true or restoredX ~= beforeX or restoredY ~= beforeY then return false, "rollback-failed" end
+        if not rollbackOk or rolledBack ~= true or restoredX ~= beforeX or restoredY ~= beforeY then
+            return false, "rollback-failed"
+        end
         return false, appliedOk and "pan-readback-mismatch" or "pan-write-failed"
     end
     function ZoomPan.NudgePan(box, dx, dy)

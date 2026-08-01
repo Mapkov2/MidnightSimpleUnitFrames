@@ -64,10 +64,12 @@ local function MSUF_Defaults_TryDecodeCompactString(str)
     if not E then  return nil end
     if type(E.DeserializeCBOR) ~= "function" then  return nil end
     if type(E.DecodeBase64) ~= "function" then  return nil end
-    local ok, prefix, b64 = pcall(string.match, str, "^%s*(MSUF%d+):%s*(.-)%s*$")
-    if not ok or (prefix ~= "MSUF2" and prefix ~= "MSUF3" and prefix ~= "MSUF4") or type(b64) ~= "string" or b64 == "" then  return nil end
-    local ok2, cleaned = pcall(string.gsub, b64, "%s+", "")
-    if not ok2 or type(cleaned) ~= "string" or cleaned == "" then  return nil end
+    -- Fixed, valid patterns: string.match/gsub cannot raise here regardless of
+    -- what the user pasted. The decode/decompress steps below CAN.
+    local prefix, b64 = string.match(str, "^%s*(MSUF%d+):%s*(.-)%s*$")
+    if (prefix ~= "MSUF2" and prefix ~= "MSUF3" and prefix ~= "MSUF4") or type(b64) ~= "string" or b64 == "" then  return nil end
+    local cleaned = string.gsub(b64, "%s+", "")
+    if type(cleaned) ~= "string" or cleaned == "" then  return nil end
     local rem = #cleaned % 4
     if rem == 1 then
         return nil
@@ -76,27 +78,28 @@ local function MSUF_Defaults_TryDecodeCompactString(str)
     elseif rem == 3 then
         cleaned = cleaned .. "="
     end
-    local ok3, blob = pcall(E.DecodeBase64, cleaned)
-    if not ok3 or type(blob) ~= "string" then  return nil end
+    -- Codec calls consume an encoded blob and are allowed to reject malformed
+    -- data by raising. Factory-default bootstrap must turn that into a clean
+    -- nil result rather than aborting addon initialization.
+    local decoded, blob = pcall(E.DecodeBase64, cleaned)
+    if not decoded or type(blob) ~= "string" then return nil end
     local function TryDeserialize(payload)
-        if type(payload) ~= "string" then  return nil end
-        local okD, tbl = pcall(E.DeserializeCBOR, payload)
-        if okD and type(tbl) == "table" then  return tbl end
-        return nil
+        if type(payload) ~= "string" then return nil end
+        local ok, tbl = pcall(E.DeserializeCBOR, payload)
+        return ok and type(tbl) == "table" and tbl or nil
     end
     local tbl = TryDeserialize(blob)
-    if tbl then  return tbl end
-    if type(E.DecompressString) ~= "function" then  return nil end
+    if tbl then return tbl end
+    if type(E.DecompressString) ~= "function" then return nil end
     local method = (_G.Enum and _G.Enum.CompressionMethod and _G.Enum.CompressionMethod.Deflate) or nil
-    local ok4, plain
+    local ok, payload
     if method ~= nil then
-        ok4, plain = pcall(E.DecompressString, blob, method)
-        tbl = ok4 and TryDeserialize(plain) or nil
-        if tbl then  return tbl end
+        ok, payload = pcall(E.DecompressString, blob, method)
+        if ok then tbl = TryDeserialize(payload); if tbl then return tbl end end
     end
-    ok4, plain = pcall(E.DecompressString, blob)
-    tbl = ok4 and TryDeserialize(plain) or nil
-    return tbl
+    ok, payload = pcall(E.DecompressString, blob)
+    if ok then return TryDeserialize(payload) end
+    return nil
 end
 local function MSUF_Defaults_WipeInPlace(t)
     if not t then  return end
@@ -761,14 +764,14 @@ local MSUF_DEFAULT_EXPRESSWAY_FONT =
 
 local function MSUF_Defaults_GetEffectiveLocale()
     if type(MSUF) == "table" and type(MSUF.GetEffectiveLocale) == "function" then
-        local ok, locale = pcall(MSUF.GetEffectiveLocale)
-        if ok and type(locale) == "string" and locale ~= "" then
+        local locale = MSUF.GetEffectiveLocale()
+        if type(locale) == "string" and locale ~= "" then
             return locale
         end
     end
     if type(_G.GetLocale) == "function" then
-        local ok, locale = pcall(_G.GetLocale)
-        if ok and type(locale) == "string" and locale ~= "" then
+        local locale = _G.GetLocale()
+        if type(locale) == "string" and locale ~= "" then
             return locale
         end
     end
@@ -782,8 +785,8 @@ end
 local function MSUF_Defaults_GetBlizzardFontPath()
     local fontObject = _G.GameFontNormal
     if fontObject and type(fontObject.GetFont) == "function" then
-        local ok, path = pcall(fontObject.GetFont, fontObject)
-        if ok and type(path) == "string" and path ~= "" then
+        local path = fontObject:GetFont()
+        if type(path) == "string" and path ~= "" then
             return path
         end
     end

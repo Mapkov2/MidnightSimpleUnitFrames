@@ -16,6 +16,18 @@ local max = math.max
 local min = math.min
 local CreateFrame = _G.CreateFrame
 local CreateColor = _G.CreateColor
+local function InvokeDashboardBoundary(fn, ...)
+    if type(fn) ~= "function" then return false end
+    local apply = M.ApplyService
+    if apply and type(apply.Invoke) == "function" then return apply.Invoke(fn, ...) end
+    local ok, r1, r2 = pcall(fn, ...)
+    if not ok then
+        local handler = _G.geterrorhandler and _G.geterrorhandler()
+        if type(handler) == "function" then pcall(handler, r1) end
+        return false, r1
+    end
+    return true, r1, r2
+end
 local function NormalizeControlPath(value)
     local path = tostring(value or "")
     path = path:gsub("([%l%d])([%u])", "%1_%2"):lower()
@@ -87,8 +99,8 @@ local function DirectSnapPercent(value, minPercent, maxPercent, stepPercent)
 end
 local function DirectGeneralDB()
     if type(M.GetGeneralDB) ~= "function" then return nil end
-    local ok, db = pcall(M.GetGeneralDB)
-    return ok and type(db) == "table" and db or nil
+    local db = M.GetGeneralDB()
+    return type(db) == "table" and db or nil
 end
 local function DirectGlobalState()
     local db = DirectGeneralDB()
@@ -285,10 +297,12 @@ function M.RunDashboardDirectAction(actionKey)
     if not (command and type(command.set) == "function") then
         return false, "That Dashboard action is not available in this menu build."
     end
-    if type(command.blockCombat) == "function" and command.blockCombat() == true then
-        return false, "That Dashboard action is unavailable during combat."
+    if type(command.blockCombat) == "function" then
+        local ok, blocked = InvokeDashboardBoundary(command.blockCombat)
+        if not ok then return false, "The Dashboard action failed safely: " .. tostring(blocked) end
+        if blocked == true then return false, "That Dashboard action is unavailable during combat." end
     end
-    local ok, result, detail = pcall(command.set)
+    local ok, result, detail = InvokeDashboardBoundary(command.set)
     if not ok then return false, "The Dashboard action failed safely: " .. tostring(result) end
     if result == false then return false, detail or "The Dashboard action could not be completed." end
     return true, detail or (spec and spec.label) or "Dashboard action complete."

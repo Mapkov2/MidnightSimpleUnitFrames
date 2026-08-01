@@ -125,21 +125,27 @@ local function IsGlobalApplyScope(scope)
     return scope == nil or scope == "*" or scope == "shared" or scope == "global" or scope == "all"
 end
 
-local function ReportError(err)
+local function ReportBoundaryError(err)
     local handler = _G.geterrorhandler and _G.geterrorhandler()
     if type(handler) == "function" then
-        pcall(handler, err)
-    elseif print then
-        print(err)
+        local reported = pcall(handler, err)
+        if reported then return end
+    end
+    if type(print) == "function" then
+        print("|cffffd700MSUF apply callback:|r", tostring(err))
     end
 end
 
-function Apply.SafeInvoke(fn, ...)
+--- Optional apply/refresh targets are independent feature boundaries. Failures
+--- are reported to BugSack/the configured error handler and returned to the
+--- caller, allowing transactions and queue cleanup to finish deterministically.
+--- Returns false plus the error for a failed call, otherwise true plus results.
+function Apply.Invoke(fn, ...)
     if type(fn) ~= "function" then return false end
     local ok, r1, r2, r3, r4 = pcall(fn, ...)
     if not ok then
-        ReportError(r1)
-        return false
+        ReportBoundaryError(r1)
+        return false, r1
     end
     return true, r1, r2, r3, r4
 end
@@ -147,7 +153,7 @@ end
 function Apply.CallGlobal(name, ...)
     local fn = _G[name]
     if type(fn) == "function" then
-        return Apply.SafeInvoke(fn, ...)
+        return Apply.Invoke(fn, ...)
     end
     return false
 end
@@ -155,7 +161,7 @@ end
 function Apply.CallGlobalResult(name, ...)
     local fn = _G[name]
     if type(fn) == "function" then
-        return Apply.SafeInvoke(fn, ...)
+        return Apply.Invoke(fn, ...)
     end
     return false, nil
 end
@@ -176,7 +182,7 @@ end
 local function ApplyUnitFrame(unit, applyMask)
     local UF = MSUF and MSUF.UF
     if UF and type(UF.Apply) == "function" then
-        local ok, result = Apply.SafeInvoke(UF.Apply, unit, applyMask)
+        local ok, result = Apply.Invoke(UF.Apply, unit, applyMask)
         return ok and result == true
     end
     return false
@@ -187,23 +193,23 @@ local function ApplyAuraScope(scope, reason)
     if not a3 then return false end
     local model = a3.MenuModel
     if model and type(model.Apply) == "function" then
-        local ok, result = Apply.SafeInvoke(model.Apply, scope, reason or "MSUF2_AURAS")
+        local ok, result = Apply.Invoke(model.Apply, scope, reason or "MSUF2_AURAS")
         return ok == true and result ~= false
     end
     if type(a3.RequestScope) == "function" then
-        local ok, result = Apply.SafeInvoke(a3.RequestScope, scope, reason or "MSUF2_AURAS")
+        local ok, result = Apply.Invoke(a3.RequestScope, scope, reason or "MSUF2_AURAS")
         return ok == true and result ~= false
     end
     if IsGlobalApplyScope(scope) and type(a3.RequestApply) == "function" then
-        local ok, result = Apply.SafeInvoke(a3.RequestApply, scope or "shared", reason or "MSUF2_AURAS")
+        local ok, result = Apply.Invoke(a3.RequestApply, scope or "shared", reason or "MSUF2_AURAS")
         return ok == true and result ~= false
     end
     if type(a3.RefreshUnit) == "function" then
-        local ok, result = Apply.SafeInvoke(a3.RefreshUnit, scope)
+        local ok, result = Apply.Invoke(a3.RefreshUnit, scope)
         return ok == true and result ~= false
     end
     if type(a3.RequestUnit) == "function" then
-        local ok, result = Apply.SafeInvoke(a3.RequestUnit, scope)
+        local ok, result = Apply.Invoke(a3.RequestUnit, scope)
         return ok == true and result ~= false
     end
     return false
@@ -219,7 +225,7 @@ local function ApplyUnitAuras(unit, reason, configAlreadyApplied)
     -- the menu preview reads post-write metrics instead of the stale cache.
     local a3 = MSUF and MSUF.MSUF_Auras3
     if a3 and type(a3.InvalidateUnitRuntimeConfig) == "function" then
-        Apply.SafeInvoke(a3.InvalidateUnitRuntimeConfig, unit)
+        Apply.Invoke(a3.InvalidateUnitRuntimeConfig, unit)
     end
     if configAlreadyApplied == true then
         return ApplyAuraScope(unit, reason)
@@ -231,7 +237,7 @@ local function ApplyUnitAuras(unit, reason, configAlreadyApplied)
     -- the successful call still owns the refresh and must not gain a follower.
     local UF = MSUF and MSUF.UF
     if UF and type(UF.RefreshElements) == "function" then
-        local called = Apply.SafeInvoke(UF.RefreshElements, unit, UNIT_AURA_ELEMENTS, reason)
+        local called = Apply.Invoke(UF.RefreshElements, unit, UNIT_AURA_ELEMENTS, reason)
         if called then return true end
     end
     return ApplyAuraScope(unit, reason)
@@ -500,7 +506,7 @@ local function RefreshActiveBossPreview(reason)
     Apply.CallGlobal("MSUF_SyncBossUnitframePreviewWithUnitEdit")
 end
 
-local GroupInvoke = Apply.SafeInvoke
+local GroupInvoke = Apply.Invoke
 
 local function MaskHas(mask, flag)
     mask = tonumber(mask) or 0
@@ -592,7 +598,7 @@ local function RefreshGroupPreview(kind, reason, dirtyMask)
         Apply.CallGlobal("MSUF_GF_RefreshPreviewLayout", kind, opts)
     end
     if type(M.RefreshGFNativePreviews) == "function" then
-        Apply.SafeInvoke(M.RefreshGFNativePreviews, reason or "MSUF2_GROUP")
+        Apply.Invoke(M.RefreshGFNativePreviews, reason or "MSUF2_GROUP")
     end
 end
 
@@ -601,19 +607,19 @@ local function ApplyPriorityRecord(gf, reason)
     if type(gf.RequestPriorityApply) == "function" then
         -- RequestPriorityApply is a method-shaped public contract so Menu2,
         -- EditMode, and the SettingGraph all share one combat-safe cold path.
-        local ok = Apply.SafeInvoke(gf.RequestPriorityApply, gf, reason or "MSUF2_PRIORITY")
+        local ok = Apply.Invoke(gf.RequestPriorityApply, gf, reason or "MSUF2_PRIORITY")
         return ok == true
     end
     if InCombatLockdown and InCombatLockdown() and type(gf.DeferGroupRuntime) == "function" then
-        Apply.SafeInvoke(gf.DeferGroupRuntime, "layout", "priority")
+        Apply.Invoke(gf.DeferGroupRuntime, "layout", "priority")
         return true
     end
     if type(gf.RefreshPriorityFrames) == "function" then
-        local ok = Apply.SafeInvoke(gf.RefreshPriorityFrames, reason or "MSUF2_PRIORITY")
+        local ok = Apply.Invoke(gf.RefreshPriorityFrames, reason or "MSUF2_PRIORITY")
         return ok == true
     end
     if type(gf.RefreshGeometry) == "function" then
-        local ok = Apply.SafeInvoke(gf.RefreshGeometry, "priority")
+        local ok = Apply.Invoke(gf.RefreshGeometry, "priority")
         return ok == true
     end
     return false
@@ -839,7 +845,7 @@ end
 local function PushVisualUpdates()
     local api = MSUF and MSUF._colorsAPI
     if api and type(api.PushVisualUpdates) == "function" then
-        local ok = Apply.SafeInvoke(api.PushVisualUpdates)
+        local ok = Apply.Invoke(api.PushVisualUpdates)
         return ok == true
     end
     return false
@@ -902,7 +908,7 @@ local function ApplyBarRuntime(opt, unitFramesApplied, castbarRefreshPending)
         if not groupOnly and unitFramesApplied ~= true then
             local UF = MSUF and MSUF.UF
             if UF and type(UF.RefreshBorders) == "function" then
-                Apply.SafeInvoke(UF.RefreshBorders, unitScope)
+                Apply.Invoke(UF.RefreshBorders, unitScope)
             else
                 Apply.CallGlobal("MSUF_ApplyBarOutlineThickness_All", unitScope)
             end
@@ -942,7 +948,7 @@ local function ApplyBarRuntime(opt, unitFramesApplied, castbarRefreshPending)
         if unitFramesApplied ~= true then
             local UF = MSUF and MSUF.UF
             if UF and type(UF.RefreshBorders) == "function" then
-                Apply.SafeInvoke(UF.RefreshBorders, "boss")
+                Apply.Invoke(UF.RefreshBorders, "boss")
             else
                 Apply.CallGlobal("MSUF_ApplyBarOutlineThickness_All", "boss")
             end
@@ -1002,7 +1008,7 @@ local function ApplyColorRuntime(opt, unitFramesApplied)
     end
     if globalScope then
         Apply.CallGlobal("MSUF_PrioRows_Reinit")
-        if type(M.ApplyGameplay) == "function" then Apply.SafeInvoke(M.ApplyGameplay) end
+        if type(M.ApplyGameplay) == "function" then Apply.Invoke(M.ApplyGameplay) end
     end
     RefreshGroupColors(scope)
     return true
@@ -1018,7 +1024,9 @@ local function ApplyMouseoverHighlightRuntime()
 end
 
 FlushApply = function()
-    if flushTimer and type(flushTimer.Cancel) == "function" then pcall(flushTimer.Cancel, flushTimer) end
+    if flushTimer and type(flushTimer.Cancel) == "function" then
+        Apply.Invoke(flushTimer.Cancel, flushTimer)
+    end
     flushTimer = nil
     if InCombat() then
         return DeferApplyFlushUntilCombatEnds()
@@ -1168,8 +1176,8 @@ function Apply.QueueFlush()
             flushTimer = nil
             FlushApply()
         end
-        local ok, timer = pcall(C_Timer.NewTimer, APPLY_FLUSH_DELAY, Run)
-        if ok and (timer or fired) then
+        local scheduled, timer = Apply.Invoke(C_Timer.NewTimer, APPLY_FLUSH_DELAY, Run)
+        if scheduled and (timer or fired) then
             if not fired then flushTimer = timer end
             return true
         end
@@ -1183,7 +1191,9 @@ function Apply.QueueFlush()
 end
 
 function Apply.Quiesce(combat)
-    if flushTimer and type(flushTimer.Cancel) == "function" then pcall(flushTimer.Cancel, flushTimer) end
+    if flushTimer and type(flushTimer.Cancel) == "function" then
+        Apply.Invoke(flushTimer.Cancel, flushTimer)
+    end
     flushTimer = nil
     if not flushQueued then return true end
     if combat == true or InCombat() then return DeferApplyFlushUntilCombatEnds() end

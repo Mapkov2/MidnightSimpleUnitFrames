@@ -23,6 +23,8 @@ local function CancelBridgeNextFrames(owner)
     end
     owner._msufAssistantBridgeTimers = nil
 end
+--- LoD handoff callbacks are protected so a runtime error can restore the cold
+--- card instead of leaving its controls permanently disabled.
 local function ScheduleBridgeNextFrame(owner, key, callback, onError)
     if type(owner) ~= "table" or type(callback) ~= "function" or InCombat() or not MenuShown() then return false end
     key = tostring(key or "assistant.bridge")
@@ -45,10 +47,6 @@ local function ScheduleBridgeNextFrame(owner, key, callback, onError)
             Run()
         end
         local scheduled, timer = pcall(_G.C_Timer.NewTimer, 0, ProtectedRun)
-        -- Blizzard's NewTimer contract returns a cancellable timer. The
-        -- `ran` allowance keeps deterministic synchronous harnesses valid;
-        -- an unexpected nil result must fall through instead of stranding a
-        -- disabled loading card forever.
         local cancellable = timer and type(timer.Cancel) == "function"
         if scheduled and (cancellable or ran) then
             if cancellable and not ran then owner._msufAssistantBridgeTimers[key] = timer end
@@ -93,12 +91,10 @@ end
 local function CurrentHour()
     local hour
     if type(_G.date) == "function" then
-        local ok, value = pcall(_G.date, "%H")
-        if ok then hour = tonumber(value) end
+        hour = tonumber(_G.date("%H"))
     end
     if hour == nil and os and type(os.date) == "function" then
-        local ok, value = pcall(os.date, "%H")
-        if ok then hour = tonumber(value) end
+        hour = tonumber(os.date("%H"))
     end
     return (hour or 12) % 24
 end
@@ -110,8 +106,7 @@ local function GreetingText()
         or "Good night"
     local playerName = "Player"
     if type(_G.UnitName) == "function" then
-        local ok, name = pcall(_G.UnitName, "player")
-        name = ok and Trim(name) or ""
+        local name = Trim(_G.UnitName("player"))
         if name ~= "" then playerName = name end
     end
     return greeting .. ", " .. playerName .. ". I am ready to help with MSUF."
@@ -395,8 +390,6 @@ BridgeBuildDashboardCard = function(parent, cardW, cardH)
             return
         end
         A._assistantEngaged = true
-        -- Greeting/history hydration is cosmetic. A SavedVariables edge case
-        -- here must never strand the cold shell in its disabled loading state.
         if type(A.AddLoginGreeting) == "function" then pcall(A.AddLoginGreeting) end
         local promoted, visible, promoteReason = pcall(A.ShowRuntimeDashboardCard)
         if not promoted or not visible then

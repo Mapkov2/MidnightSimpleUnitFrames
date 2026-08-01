@@ -3409,11 +3409,12 @@ local function BuildColors(ctx)
             if ctx then ctx._msuf2Building = true end
             local previousBuildKey = M._msuf2SearchBuildKey
             if ctx and ctx.key then M._msuf2SearchBuildKey = ctx.key end
-            local ok, nextStage = pcall(stage, ctx, inner, CH)
+            local stageOK, nextStage = pcall(stage, ctx, inner, CH)
             M._msuf2SearchBuildKey = previousBuildKey
             if ctx then ctx._msuf2Building = wasBuilding end
-            if not ok then
+            if not stageOK then
                 category.building = nil
+                category.resumeStage = nil
                 error(nextStage, 0)
             end
             inner:RelayoutCollapsibles()

@@ -865,50 +865,12 @@ end
 --- Phase 2: Global helpers relocated from MSUF_UpdateManager.lua
 --- (These must load before any consumer; MSUF_Util.lua is in TOC slot 2.)
 
---- Fast-path replacement for protected calls.
---- Intentionally does NOT catch errors (for maximum performance).
---- Preserves (ok, ...) return convention and returns false if fn is not callable.
-local FastCall = _G.MSUF_FastCall
-if type(FastCall) ~= "function" then
-    FastCall = function(fn, ...)
-        if type(fn) ~= "function" then
-             return false
-        end
-        return true, fn(...)
-    end
-end
-ExportPublic("MSUF_FastCall", FastCall)
-
---- Protected callback helper for shared dispatch/scheduler surfaces.
---- Keep hot UnitFrame render paths on MSUF_FastCall/direct calls; use this where
---- one module's error must not corrupt shared queue/dispatch state.
-local SafeCall = _G.MSUF_SafeCall
-if type(SafeCall) ~= "function" then
-    local pcall = pcall
-    local geterrorhandler = _G.geterrorhandler
-
-    local function ReportSafeCallError(err)
-        local handler = geterrorhandler and geterrorhandler()
-        if type(handler) == "function" then
-            local ok = pcall(handler, err)
-            if ok then return end
-        end
-        if print then print("|cffffd700MSUF:|r callback error:", tostring(err)) end
-    end
-
-    SafeCall = function(fn, ...)
-        if type(fn) ~= "function" then
-            return false
-        end
-        local ok, err = pcall(fn, ...)
-        if not ok then
-            ReportSafeCallError(err)
-            return false, err
-        end
-        return true
-    end
-end
-ExportPublic("MSUF_SafeCall", SafeCall)
+--- NOTE: MSUF_FastCall and MSUF_SafeCall were removed. SafeCall was pcall behind
+--- a name, which made the protected-call surface invisible to a plain `grep
+--- pcall` audit; FastCall was an unreferenced export. The two shared surfaces
+--- that used SafeCall (EventBus dispatch, Scheduler flush) now call handlers
+--- directly and keep their bookkeeping unwind-safe instead, so a handler error
+--- reaches BugSack without stranding shared state.
 
 --- Global helper: "any edit mode" (MSUF Edit Mode OR Blizzard Edit Mode)
 local IsInAnyEditMode = _G.MSUF_IsInAnyEditMode

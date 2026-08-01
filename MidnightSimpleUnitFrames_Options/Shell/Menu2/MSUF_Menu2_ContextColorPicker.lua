@@ -7,6 +7,18 @@ local T = M.Theme
 local abs, floor, max, min = math.abs, math.floor, math.max, math.min
 local Tr = M.TranslateText or M.Tr or function(text) return text end
 
+local function InvokePickerCallback(fn, ...)
+    if type(fn) ~= "function" then return false end
+    local apply = M.ApplyService
+    if apply and type(apply.Invoke) == "function" then return apply.Invoke(fn, ...) end
+    local ok, result = pcall(fn, ...)
+    if not ok then
+        local handler = _G.geterrorhandler and _G.geterrorhandler()
+        if type(handler) == "function" then pcall(handler, result) end
+    end
+    return ok, result
+end
+
 -- Menu-only, progressive color editor. The compact view exposes the common
 -- path; contextual targets and the large palettes stay one deliberate click
 -- away. No runtime unit-frame hooks are installed.
@@ -953,7 +965,7 @@ local function EnsurePicker()
     function panel:SetOwner(owner) if owner then self.owner = owner; self:Refresh() end end
     function panel:NotifyLiveChange(owner)
         local callback = self._msuf2OnLiveChange
-        if type(callback) == "function" then pcall(callback, owner or self.owner) end
+        if type(callback) == "function" then InvokePickerCallback(callback, owner or self.owner) end
     end
     function panel:Apply(r, g, b, fromColorSelect)
         if not self.owner then return end
@@ -1012,7 +1024,7 @@ local function EnsurePicker()
         self._msuf2OnLiveChange = nil
         self.owner, self.owners, self.originals, self.touched, self.historyOwner = nil, nil, nil, nil, nil
         self:Hide(); self.finishing = nil
-        if type(onFinish) == "function" then pcall(onFinish, cancelled == true) end
+        if type(onFinish) == "function" then InvokePickerCallback(onFinish, cancelled == true) end
     end
     function panel:Open(contextTitle, owners, contextNote, initialOwner, onFinish, scopeTag, onLiveChange)
         if self:IsShown() then

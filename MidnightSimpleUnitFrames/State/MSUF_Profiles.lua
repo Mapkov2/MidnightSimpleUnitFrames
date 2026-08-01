@@ -241,16 +241,26 @@ local function MSUF_ProfileIO_RunEnsureDB(force, allowPersistedFastPath, tempora
     end
     return false
 end
+local function MSUF_ProfileIO_ReportBoundaryError(label, err)
+    local message = "MSUF ProfileIO " .. tostring(label or "callback") .. ": " .. tostring(err)
+    ExportPublic("MSUF_ProfileIO_LastRuntimeApplyError", message)
+    local handler = _G.geterrorhandler and _G.geterrorhandler()
+    if type(handler) == "function" then
+        local reported = pcall(handler, message)
+        if reported then return end
+    end
+    if type(_G.print) == "function" then
+        _G.print("|cffffd700MSUF ProfileIO:|r", message)
+    end
+end
 local function MSUF_ProfileIO_RunProtected(label, fn, ...)
-    if type(fn) ~= "function" then
-        return false
-    end
-    local ok, result = pcall(fn, ...)
+    if type(fn) ~= "function" then return false end
+    local ok, r1, r2, r3, r4 = pcall(fn, ...)
     if not ok then
-        ExportPublic("MSUF_ProfileIO_LastRuntimeApplyError", tostring(label or "runtime") .. ": " .. tostring(result))
-        return false
+        MSUF_ProfileIO_ReportBoundaryError(label, r1)
+        return false, r1
     end
-    return true, result
+    return true, r1, r2, r3, r4
 end
 
 -- Profile imports can enter through Menu2, legacy globals, or the external
@@ -261,8 +271,13 @@ function MSUF.ProfileIOCompleteFirstLoadImport()
     if type(firstLoad) ~= "table" or type(firstLoad.CompleteProfileImport) ~= "function" then
         return false
     end
-    local ok, completed = pcall(firstLoad.CompleteProfileImport, firstLoad, "import")
-    if not ok then return false end
+    local called, completed = MSUF_ProfileIO_RunProtected(
+        "FirstLoad.CompleteProfileImport",
+        firstLoad.CompleteProfileImport,
+        firstLoad,
+        "import"
+    )
+    if not called then return false end
     if completed == true then
         local menu = MSUF and MSUF.MSUF2
         if type(menu) == "table" and type(menu.InvalidatePage) == "function" then
@@ -604,6 +619,13 @@ do
         return decode_lsb(), decode_msb()
     end
     local TryDeserialize
+    -- Import codecs and optional serializer libraries consume user-provided
+    -- bytes. Rejection may raise, so these boundaries intentionally convert an
+    -- exception into a normal decode miss; callers show the user-facing error.
+    local function TryCodecCall(fn, ...)
+        if type(fn) ~= "function" then return false end
+        return pcall(fn, ...)
+    end
     local function TryBlizzardDecompress(E, compressed)
         if not E or type(compressed) ~= "string" then  return nil end
         if #compressed > MSUF_PROFILE_IMPORT_LIMITS.encodedBytes then return nil end
@@ -611,10 +633,10 @@ do
         local method = GetDeflateEnum()
         local ok, res
         if method ~= nil then
-            ok, res = pcall(E.DecompressString, compressed, method)
+            ok, res = TryCodecCall(E.DecompressString, compressed, method)
             if ok and type(res) == "string" and #res <= MSUF_PROFILE_IMPORT_LIMITS.decodedBytes then return res end
         end
-        ok, res = pcall(E.DecompressString, compressed)
+        ok, res = TryCodecCall(E.DecompressString, compressed)
         if ok and type(res) == "string" and #res <= MSUF_PROFILE_IMPORT_LIMITS.decodedBytes then return res end
          return nil
     end
@@ -624,8 +646,9 @@ do
         end
         local libStub = _G.LibStub
         if libStub and type(libStub.GetLibrary) == "function" then
-            local ok, lib = pcall(libStub.GetLibrary, libStub, "LibDeflate", true)
-            if ok and lib and type(lib.DecompressDeflate) == "function" then
+            -- silent=true: GetLibrary returns nil for missing libs, no throw.
+            local lib = libStub:GetLibrary("LibDeflate", true)
+            if lib and type(lib.DecompressDeflate) == "function" then
                 return lib
             end
         end
@@ -635,24 +658,25 @@ do
         local lib = GetLibDeflate()
         if not lib or type(compressed) ~= "string" then return nil end
         if #compressed > MSUF_PROFILE_IMPORT_LIMITS.encodedBytes then return nil end
-        local ok, plain = pcall(lib.DecompressDeflate, lib, compressed)
+        local ok, plain = TryCodecCall(lib.DecompressDeflate, lib, compressed)
         if ok and type(plain) == "string" and #plain <= MSUF_PROFILE_IMPORT_LIMITS.decodedBytes then return plain end
         return nil
     end
+    --- Prefer the matching decompressor, while retaining the raw legacy path.
+    --- Every codec attempt is protected because malformed user input is an
+    --- expected decode miss, not an addon runtime error.
     local function TryDeserializeMaybeCompressed(E, payload)
         if type(payload) ~= "string" then return nil end
         if #payload > MSUF_PROFILE_IMPORT_LIMITS.encodedBytes then return nil end
         local plain = TryBlizzardDecompress(E, payload)
-        local t = TryDeserialize(E, plain or payload)
-        if t then return t end
+        local result = TryDeserialize(E, plain or payload)
+        if result then return result end
         local libPlain = TryLibDeflateDecompress(payload)
         if libPlain and libPlain ~= plain then
-            t = TryDeserialize(E, libPlain)
-            if t then return t end
+            result = TryDeserialize(E, libPlain)
+            if result then return result end
         end
-        if plain then
-            return TryDeserialize(E, payload)
-        end
+        if plain then return TryDeserialize(E, payload) end
         return nil
     end
     local function TryBlizzardCompress(E, plain)
@@ -660,57 +684,56 @@ do
         if type(E.CompressString) ~= "function" then
              return nil
         end
+        -- Deterministic form selection: the Deflate enum's presence is the
+        -- capability signal for the method-taking arity.
         local method = GetDeflateEnum()
         local ok, res
         if method ~= nil then
-            ok, res = pcall(E.CompressString, plain, method, 9)
-            if ok and type(res) == "string" then  return res end
-            ok, res = pcall(E.CompressString, plain, method)
-            if ok and type(res) == "string" then  return res end
+            ok, res = TryCodecCall(E.CompressString, plain, method, 9)
+            if ok and type(res) == "string" then return res end
+            ok, res = TryCodecCall(E.CompressString, plain, method)
+            if ok and type(res) == "string" then return res end
         end
-        ok, res = pcall(E.CompressString, plain)
-        if ok and type(res) == "string" then  return res end
+        ok, res = TryCodecCall(E.CompressString, plain)
+        if ok and type(res) == "string" then return res end
          return nil
     end
+    --- Container routing avoids a blind try/catch chain: the three
+    --- supported wire formats are self-identifying. AceSerializer strings start
+    --- with "^1", very old MSUF exports are a Lua table literal "{...}", and
+    --- everything else is MSUF's own CBOR envelope. Each chosen decoder still
+    --- fails closed on malformed bytes.
     TryDeserialize = function(E, payload)
         if not E or type(payload) ~= "string" then  return nil end
         if #payload > MSUF_PROFILE_IMPORT_LIMITS.decodedBytes then return nil end
-        --- 1) CBOR via Blizzard
-        local ok, tbl = pcall(E.DeserializeCBOR, payload)
-        if ok and type(tbl) == "table" then
-             return tbl
+        if payload:sub(1, 2) == "^1" then
+            local libStub = _G.LibStub
+            local Ace = libStub and type(libStub.GetLibrary) == "function"
+                and libStub:GetLibrary("AceSerializer-3.0", true) or nil
+            if not (Ace and type(Ace.Deserialize) == "function") then return nil end
+            local ok, success, t = TryCodecCall(Ace.Deserialize, Ace, payload)
+            if ok and success and type(t) == "table" then return t end
+            return nil
         end
-        --- 2) AceSerializer (optional, if present)
-        if _G.LibStub and type(_G.LibStub.GetLibrary) == "function" then
-            local Ace = _G.LibStub:GetLibrary("AceSerializer-3.0", true)
-            if Ace and type(Ace.Deserialize) == "function" then
-                local ok2, success, t = pcall(Ace.Deserialize, payload)
-                if ok2 and success and type(t) == "table" then
-                     return t
-                end
-            end
-        end
-        --- 3) Very old MSUF legacy may have stored a Lua table literal.
-        --- Only attempt if it looks like a table (avoid executing arbitrary code).
         local trimmed = payload:match("^%s*(.-)%s*$")
-        if trimmed and trimmed:sub(1,1) == "{" and trimmed:sub(-1) == "}" then
+        if trimmed and trimmed:sub(1, 1) == "{" and trimmed:sub(-1) == "}" then
             local fn = MSUF_ProfileIO_LoadLegacyChunk(trimmed)
-            if fn then
-                local ok3, t = pcall(fn)
-                if ok3 and type(t) == "table" then
-                     return t
-                end
-            end
+            if not fn then return nil end
+            local t = fn()
+            if type(t) == "table" then return t end
+            return nil
         end
-         return nil
+        if type(E.DeserializeCBOR) ~= "function" then return nil end
+        local ok, tbl = TryCodecCall(E.DeserializeCBOR, payload)
+        if ok and type(tbl) == "table" then return tbl end
+        return nil
     end
     local function IsSecretRuntimeValue(value)
         local isSecret = _G.issecretvalue
         if type(isSecret) ~= "function" then
             return false
         end
-        local ok, secret = pcall(isSecret, value)
-        return ok and secret == true
+        return isSecret(value) == true
     end
     local function CompactSerializableCopy(value, seen)
         if IsSecretRuntimeValue(value) then
@@ -742,12 +765,12 @@ do
         return out
     end
     local function TryEncodeCompactPayload(E, tbl, prefix)
-        local ok1, bin = pcall(E.SerializeCBOR, tbl)
-        if not ok1 or type(bin) ~= "string" then  return nil end
+        local encoded, bin = TryCodecCall(E.SerializeCBOR, tbl)
+        if not encoded or type(bin) ~= "string" then return nil end
         --- Prefer smaller strings when compression exists.
         local payload = TryBlizzardCompress(E, bin) or bin
-        local ok2, b64 = pcall(E.EncodeBase64, payload)
-        if not ok2 or type(b64) ~= "string" then  return nil end
+        local base64OK, b64 = TryCodecCall(E.EncodeBase64, payload)
+        if not base64OK or type(b64) ~= "string" then return nil end
         return tostring(prefix or "MSUF4") .. ":" .. b64
     end
     local function EncodeCompactTable(tbl, prefix)
@@ -779,8 +802,8 @@ do
             if b64 then
                 b64 = CleanBase64(b64)
                 if not b64 then  return nil end
-                local ok1, blob = pcall(E.DecodeBase64, b64)
-                if ok1 and type(blob) == "string" then
+                local decoded, blob = TryCodecCall(E.DecodeBase64, b64)
+                if decoded and type(blob) == "string" then
                     local t = TryDeserializeMaybeCompressed(E, blob)
                     if t then  return t end
                 end
@@ -795,8 +818,8 @@ do
             --- 1) Try Blizzard base64 first (older internal MSUF2 variant)
             local b64 = CleanBase64(payload)
             if b64 then
-                local ok1, blob = pcall(E.DecodeBase64, b64)
-                if ok1 and type(blob) == "string" then
+                local decoded, blob = TryCodecCall(E.DecodeBase64, b64)
+                if decoded and type(blob) == "string" then
                     local t = TryDeserializeMaybeCompressed(E, blob)
                     if t then  return t end
                 end
@@ -811,17 +834,15 @@ do
                 local t = TryDeserializeMaybeCompressed(E, raw_msb)
                 if t then  return t end
             end
-            --- 3) Hard fallback: if LibDeflate is available (from another addon), try it.
+            --- 3) LibDeflate (from another addon): print-decode then deflate;
+            --- Wago-style payloads are always compressed on this route.
             local ld = _G.LibDeflate
             if ld and type(ld.DecodeForPrint) == "function" and type(ld.DecompressDeflate) == "function" then
-                local okDec, raw = pcall(ld.DecodeForPrint, ld, payload)
-                if okDec and type(raw) == "string" and #raw <= MSUF_PROFILE_IMPORT_LIMITS.encodedBytes then
-                    local okDecomp, plain = pcall(ld.DecompressDeflate, ld, raw)
-                    if okDecomp and type(plain) == "string" and #plain <= MSUF_PROFILE_IMPORT_LIMITS.decodedBytes then
+                local decodeOK, raw = TryCodecCall(ld.DecodeForPrint, ld, payload)
+                if decodeOK and type(raw) == "string" and #raw <= MSUF_PROFILE_IMPORT_LIMITS.encodedBytes then
+                    local decompressOK, plain = TryCodecCall(ld.DecompressDeflate, ld, raw)
+                    if decompressOK and type(plain) == "string" and #plain <= MSUF_PROFILE_IMPORT_LIMITS.decodedBytes then
                         local t = TryDeserialize(E, plain)
-                        if t then  return t end
-                    else
-                        local t = TryDeserialize(E, raw)
                         if t then  return t end
                     end
                 end
@@ -1557,8 +1578,9 @@ local function MSUF_ProfileIO_TextureProbeRaw(path)
     local probe = MSUF_ProfileIO_TextureProbe
     if not (probe and type(probe.SetTexture) == "function") then return nil end
     probe:SetTexture(nil)
-    local ok, applied = pcall(probe.SetTexture, probe, path)
-    if not ok or applied == false then
+    -- SetTexture reports an unloadable path via its documented success return.
+    local applied = probe:SetTexture(path)
+    if applied == false then
         probe:SetTexture(nil)
         return false
     end
@@ -4059,8 +4081,10 @@ local function MSUF_ApplySnapshotToActiveProfile(snapshot)
     if not snapshot then  return false, "not a table" end
     local valid, validationError = MSUF.ProfileIOValidateImportValue(snapshot)
     if not valid then return false, validationError end
-    local copied, stagedSnapshot = pcall(MSUF_DeepCopy, snapshot)
-    if not copied then return false, "profile staging failed: " .. tostring(stagedSnapshot) end
+    local copied, stagedSnapshot = MSUF_ProfileIO_RunProtected("snapshot staging", MSUF_DeepCopy, snapshot)
+    if not copied or type(stagedSnapshot) ~= "table" then
+        return false, "profile staging failed: " .. tostring(stagedSnapshot)
+    end
     snapshot = stagedSnapshot
     snapshot = MSUF_ProfileIO_SelectWagoFullSnapshot(snapshot)
     local kind = snapshot.kind
@@ -4259,7 +4283,7 @@ local function MSUF_ApplyLegacyTableToActiveProfile(tbl)
         print("|cffff0000MSUF:|r Legacy import failed: " .. tostring(validationError))
         return false
     end
-    local prepared, staged = pcall(function()
+    local prepared, staged = MSUF_ProfileIO_RunProtected("legacy import staging", function()
         local copy = MSUF_DeepCopy(tbl)
         MSUF_ProfileIO_TranslateProfileToCurrent(copy, {
             source = "legacy_import",
@@ -4337,11 +4361,9 @@ function MSUF_ImportFromString(str)
         print("|cffff0000MSUF:|r Import failed: " .. tostring(err))
          return false
     end
-    local ok, tbl = pcall(func)
-    if not ok then
-        print("|cffff0000MSUF:|r Import failed: " .. tostring(tbl))
-         return false
-    end
+    -- LoadLegacyChunk wraps a sandboxed literal parser that reports failure by
+    -- returning nil plus a reason; it does not raise.
+    local tbl = func()
     if type(tbl) ~= "table" then
         print("|cffff0000MSUF:|r Import failed: not a table.")
          return false
@@ -4404,12 +4426,7 @@ function MSUF_ImportLegacyFromString(str)
         print("|cffff0000MSUF:|r Legacy import failed: " .. tostring(err))
          return false
     end
-    local ok, tbl = pcall(func)
-    if not ok then
-        print("|cffff0000MSUF:|r Legacy import failed: " .. tostring(tbl))
-         return false
-    end
-    return ImportDecodedLegacyTable(tbl)
+    return ImportDecodedLegacyTable(func())
  end
 ---
 --- External Wago UI Packs API (stateless by profileKey)
@@ -4461,24 +4478,33 @@ local function MSUF_ProfileIO_WithTemporaryProfileDB(profile, fn)
     local oldSuppressRuntimeSideEffects = _G.MSUF_ProfileIO_SuppressRuntimeSideEffects
     ExportPublic("MSUF_ProfileIO_SuppressRuntimeSideEffects", true)
     MSUF_DB = profile
-    local ok, result = pcall(fn)
+
+    -- This is a real transaction boundary: every exit path must restore the
+    -- active DB pointer and subsystem references before an error is reported.
+    local runOK, result = pcall(fn)
+
     MSUF_DB = oldDB
     ExportPublic("MSUF_ProfileIO_SuppressRuntimeSideEffects", oldSuppressRuntimeSideEffects)
     if type(auras3) == "table" then
         auras3.DBRef = oldAuras3DBRef
     end
+
+    local cacheOK, cacheError = true, nil
     local invalidateGF = _G.MSUF_GF_InvalidateConfCache
     if type(invalidateGF) == "function" then
-        pcall(invalidateGF)
+        cacheOK, cacheError = MSUF_ProfileIO_RunProtected("GF.InvalidateConfCache", invalidateGF)
     else
         local gf = MSUF and MSUF.GF
         if gf and type(gf.InvalidateConfCache) == "function" then
-            pcall(gf.InvalidateConfCache)
+            cacheOK, cacheError = MSUF_ProfileIO_RunProtected("GF.InvalidateConfCache", gf.InvalidateConfCache)
         end
     end
-    if not ok then
+
+    if not runOK then
+        MSUF_ProfileIO_ReportBoundaryError("temporary profile materialization", result)
         return false, result
     end
+    if not cacheOK then return false, cacheError end
     return true, result
 end
 local function MSUF_ProfileIO_MaterializeProfileCopyForExport(profile, profileKey)
@@ -4493,7 +4519,7 @@ local function MSUF_ProfileIO_MaterializeProfileCopyForExport(profile, profileKe
     if type(_G.MSUF_NormalizePortraitRenderDB) == "function" then
         _G.MSUF_NormalizePortraitRenderDB(profile)
     end
-    local ok, why = MSUF_ProfileIO_WithTemporaryProfileDB(profile, function()
+    local materialized, why = MSUF_ProfileIO_WithTemporaryProfileDB(profile, function()
         --- The exported table is a private copy. Let Defaults use its persisted
         --- revision fast path; missing/stale revisions still run the full pass.
         MSUF_ProfileIO_RunEnsureDB(false, true, true)
@@ -4525,7 +4551,7 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, newTable)
     end
     local valid, validationError = MSUF.ProfileIOValidateImportValue(newTable)
     if not valid then return false, validationError end
-    local prepared, staged = pcall(function()
+    local prepared, staged = MSUF_ProfileIO_RunProtected("external import staging", function()
         local copy = MSUF_DeepCopy(newTable)
         MSUF_ProfileIO_TranslateProfileToCurrent(copy, {
             source = "external_import",
@@ -4663,8 +4689,8 @@ function MSUF_ImportExternal(profileString, profileKey)
     if not func then
          return false, "invalid lua table string"
     end
-    local ok, tbl = pcall(func)
-    if not ok or type(tbl) ~= "table" then
+    local tbl = func()
+    if type(tbl) ~= "table" then
          return false, "lua decode failed"
     end
     if tbl.addon == "MSUF" and tonumber(tbl.fmt) == 2 and type(tbl.payload) == "table" and type(tbl.kind) == "string" then

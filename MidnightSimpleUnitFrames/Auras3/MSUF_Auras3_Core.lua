@@ -227,7 +227,7 @@ function A3.EnsureDB()
     if type(db.auras2) == "table" then
         local translate = _G.MSUF_ProfileIO_TranslateProfileToCurrent
         if type(translate) == "function" then
-            pcall(translate, db, { source = "auras3_core", markProfile = true })
+            translate(db, { source = "auras3_core", markProfile = true })
             current = db.auras3
         end
     end

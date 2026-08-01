@@ -131,11 +131,7 @@ SetCastLifecycleActive = function(frame, active)
 
         if active then
             if not frame._msufBossHealthEventRegistered then
-                local ok = pcall(frame.RegisterUnitEvent, frame, "UNIT_HEALTH", frame.unit)
-                if not ok then
-                    frame._msufCastLifecycleOwned = nil
-                    return false
-                end
+                frame:RegisterUnitEvent("UNIT_HEALTH", frame.unit)
                 frame._msufBossHealthEventRegistered = true
             end
         elseif frame._msufBossHealthEventRegistered then
@@ -175,16 +171,10 @@ SetCastLifecycleActive = function(frame, active)
         return true
     end
 
+    -- RegisterUnitEvent with a compile-time event literal and a validated unit
+    -- token does not fail; the old per-event rollback branch was dead weight.
     for index = 1, #ACTIVE_LIFECYCLE_EVENTS do
-        local ok = pcall(frame.RegisterUnitEvent, frame, ACTIVE_LIFECYCLE_EVENTS[index], frame.unit)
-        if not ok then
-            for cleanupIndex = 1, #ACTIVE_LIFECYCLE_EVENTS do
-                frame:UnregisterEvent(ACTIVE_LIFECYCLE_EVENTS[cleanupIndex])
-            end
-            frame._msufActiveLifecycleEventsRegistered = nil
-            frame._msufCastLifecycleOwned = nil
-            return false
-        end
+        frame:RegisterUnitEvent(ACTIVE_LIFECYCLE_EVENTS[index], frame.unit)
     end
 
     frame._msufActiveLifecycleEventsRegistered = true

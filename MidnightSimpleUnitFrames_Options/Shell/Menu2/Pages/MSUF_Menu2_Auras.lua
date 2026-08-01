@@ -1030,9 +1030,9 @@ local function ApplyAuraPreviewFont(fs, size)
             local gdb = _G.MSUF_DB and _G.MSUF_DB.general
             path = resolveSafe(path, px, flags, gdb and gdb.fontKey)
         end
-        local ok = pcall(fs.SetFont, fs, path, px, flags)
-        if not ok then
-            pcall(fs.SetFont, fs, FONT, px, flags)
+        local applied = fs:SetFont(path, px, flags)
+        if applied == false then
+            fs:SetFont(FONT, px, flags)
         end
     end
     if fs.SetTextColor then fs:SetTextColor(r or 1, g or 1, b or 1, 1) end

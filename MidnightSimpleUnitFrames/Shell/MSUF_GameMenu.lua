@@ -187,9 +187,13 @@ local function EnsureButton()
         return button
     end
 
-    local ok, created = pcall(CreateFrame, "Button", BUTTON_NAME, gameMenu, "GameMenuButtonTemplate")
-    if ok then
-        button = created
+    -- CreateFrame raises on an unknown template; probe template existence with
+    -- the sanctioned no-throw API instead of protecting the call.
+    local xmlUtil = _G.C_XMLUtil
+    local hasTemplate = xmlUtil and type(xmlUtil.GetTemplateInfo) == "function"
+        and xmlUtil.GetTemplateInfo("GameMenuButtonTemplate") ~= nil
+    if hasTemplate then
+        button = CreateFrame("Button", BUTTON_NAME, gameMenu, "GameMenuButtonTemplate")
     else
         button = CreateFrame("Button", BUTTON_NAME, gameMenu, "UIPanelButtonTemplate")
     end

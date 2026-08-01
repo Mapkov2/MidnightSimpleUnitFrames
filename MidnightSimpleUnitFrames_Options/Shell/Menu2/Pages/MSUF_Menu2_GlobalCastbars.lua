@@ -431,15 +431,14 @@ local function BuildCastbars(ctx)
         end
         local function EmpowerBlinkEnabled()
             if type(_G.MSUF_IsEmpowerStageBlinkEnabled) == "function" then
-                local ok, enabled = pcall(_G.MSUF_IsEmpowerStageBlinkEnabled)
-                if ok then return enabled and true or false end
+                return _G.MSUF_IsEmpowerStageBlinkEnabled() and true or false
             end
             return ReadGBool("empowerStageBlink", true)
         end
         local function EmpowerBlinkTime()
             if type(_G.MSUF_GetEmpowerStageBlinkTime) == "function" then
-                local ok, value = pcall(_G.MSUF_GetEmpowerStageBlinkTime)
-                if ok and tonumber(value) then return max(0.05, min(1.00, tonumber(value))) end
+                local value = tonumber(_G.MSUF_GetEmpowerStageBlinkTime())
+                if value then return max(0.05, min(1.00, value)) end
             end
             local value = tonumber(ReadG("empowerStageBlinkTime", 0.25)) or 0.25
             return max(0.05, min(1.00, value))
@@ -643,8 +642,8 @@ local function BuildCastbars(ctx)
             local fillW = max(1, floor(barWLocal * visual + 0.5))
             local baseR, baseG, baseB = 0.20, 0.78, 0.94
             if type(_G.MSUF_ResolveCastbarColors) == "function" then
-                local ok, r, g, b = pcall(_G.MSUF_ResolveCastbarColors)
-                if ok and r then baseR, baseG, baseB = r, g or baseG, b or baseB end
+                local r, g, b = _G.MSUF_ResolveCastbarColors()
+                if r then baseR, baseG, baseB = r, g or baseG, b or baseB end
             end
             local kickKey = KickReadyKey(unit)
             local kickEnabled = kickKey and ReadGBool(kickKey, false)
@@ -683,7 +682,7 @@ local function BuildCastbars(ctx)
                 local targetSize = ReadCastbarNum(g, unit, "TargetNameFontSize", "bossCastTargetNameFontSize", 10)
                 if not targetSize or targetSize <= 0 then targetSize = 10 end
                 if fontPath and self.castTargetText.SetFont then
-                    pcall(self.castTargetText.SetFont, self.castTargetText, fontPath, max(7, S(targetSize)), fontFlags)
+                    self.castTargetText:SetFont(fontPath, max(7, S(targetSize)), fontFlags)
                 end
                 local targetR, targetG, targetB = 1, 0.82, 0.20
                 local getTargetColor = _G.MSUF_GetCastbarTargetNameColor
@@ -709,7 +708,7 @@ local function BuildCastbars(ctx)
                 local timeSize = ReadCastbarNum(g, unit, "TimeFontSize", "bossCastTimeFontSize", ReadG("castbarTimeFontSize", ReadG("fontSize", 14)))
                 if not timeSize or timeSize <= 0 then timeSize = ReadG("fontSize", 14) end
                 local timeSizePx = max(7, S(timeSize))
-                if fontPath and self.time.SetFont then pcall(self.time.SetFont, self.time, fontPath, timeSizePx, fontFlags) end
+                if fontPath and self.time.SetFont then self.time:SetFont(fontPath, timeSizePx, fontFlags) end
                 self.time:SetText(previewTimeText)
                 self.time:SetTextColor(tr or 1, tg or 1, tb or 1, 1)
                 local measured = self.time.GetStringWidth and self.time:GetStringWidth() or nil
@@ -736,7 +735,7 @@ local function BuildCastbars(ctx)
                 local textSize = ReadCastbarNum(g, unit, "SpellNameFontSize", "bossCastSpellNameFontSize", ReadG("castbarSpellNameFontSize", ReadG("fontSize", 14)))
                 if not textSize or textSize <= 0 then textSize = ReadG("fontSize", 14) end
                 local textSizePx = max(7, S(textSize))
-                if fontPath and self.spell.SetFont then pcall(self.spell.SetFont, self.spell, fontPath, textSizePx, fontFlags) end
+                if fontPath and self.spell.SetFont then self.spell:SetFont(fontPath, textSizePx, fontFlags) end
                 self.spell:SetTextColor(tr or 1, tg or 1, tb or 1, 1)
                 self.spell:SetText(PreviewSpellText(unit, kind))
                 self.spell:ClearAllPoints()

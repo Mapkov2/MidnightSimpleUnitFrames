@@ -763,8 +763,8 @@ local function SyncNameOverlayFont(overlay, source)
         if type(applyResolved) == "function" then
             applyResolved(overlay, path, size, flags, general and general.fontKey)
         else
-            local ok, applied = pcall(overlay.SetFont, overlay, path, size, flags)
-            if (not ok or applied == false) and type(_G.MSUF_MarkFontApplyFailed) == "function" then
+            local applied = overlay:SetFont(path, size, flags)
+            if applied == false and type(_G.MSUF_MarkFontApplyFailed) == "function" then
                 _G.MSUF_MarkFontApplyFailed()
             end
         end

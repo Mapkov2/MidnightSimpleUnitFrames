@@ -104,8 +104,8 @@ local function FontApplied(fs, requested, requestedSize)
     return matches(fs, requested, requestedSize) == true
   end
   if type(fs.GetFont) ~= "function" then return true end
-  local ok, actual, actualSize = pcall(fs.GetFont, fs)
-  if not ok or not actual then return false end
+  local actual, actualSize = fs:GetFont()
+  if not actual then return false end
   local pathMatches = tostring(actual):gsub("/", "\\"):lower() == tostring(requested or ""):gsub("/", "\\"):lower()
   actualSize, requestedSize = tonumber(actualSize), tonumber(requestedSize)
   return pathMatches and actualSize ~= nil and requestedSize ~= nil and math.abs(actualSize - requestedSize) <= 0.01
@@ -116,8 +116,9 @@ local function ApplyFontChecked(fs, requested, size, flags)
   size = tonumber(size) or 12
   if size <= 0 then size = 12 end
   if size < 6 then size = 6 elseif size > 128 then size = 128 end
-  local ok, applied = pcall(fs.SetFont, fs, requested, size, flags)
-  return ok and applied ~= false and FontApplied(fs, requested, size)
+  -- SetFont reports failure by returning false (documented success bool).
+  local applied = fs:SetFont(requested, size, flags)
+  return applied ~= false and FontApplied(fs, requested, size)
 end
 
 local function SetFont(fs, spec, size, role)

@@ -35,6 +35,22 @@ M.RuntimeControlCatalog = Catalog
 
 Catalog.SCHEMA_VERSION = 2
 
+-- Page-provided commands and metadata providers are plugin-style boundaries:
+-- they must report authoring bugs without taking down the complete catalog or
+-- leaving an Assistant transaction half-finished.
+local function InvokeBoundary(fn, ...)
+    if type(fn) ~= "function" then return false end
+    local apply = M.ApplyService
+    if apply and type(apply.Invoke) == "function" then return apply.Invoke(fn, ...) end
+    local ok, r1, r2, r3, r4 = pcall(fn, ...)
+    if not ok then
+        local handler = _G.geterrorhandler and _G.geterrorhandler()
+        if type(handler) == "function" then pcall(handler, r1) end
+        return false, r1
+    end
+    return true, r1, r2, r3, r4
+end
+
 -- Shell controls are not built by the page/widget factories, so an omitted raw
 -- Button would otherwise be invisible to a percentage calculated only from
 -- already-registered records.  Keep the executable shell surface and the
@@ -227,6 +243,67 @@ local function ActionValueFingerprint(value)
     return table.concat(parts, "\030")
 end
 
+--- Structural Lua-pattern validation without probing string.match: rejects the
+--- forms the matcher raises on (trailing %, unfinished set, %b without its two
+--- chars, %f without a set, capture references beyond the captures seen).
+local function IsValidLuaPattern(text)
+    local i, n = 1, #text
+    local captureCount, openCaptures, closedCaptures = 0, {}, {}
+    while i <= n do
+        local c = text:sub(i, i)
+        if c == "%" then
+            if i == n then return false end
+            local nx = text:sub(i + 1, i + 1)
+            if nx == "b" then
+                if i + 3 > n then return false end
+                i = i + 4
+            elseif nx == "f" then
+                if text:sub(i + 2, i + 2) ~= "[" then return false end
+                i = i + 2
+            elseif nx:match("%d") then
+                local capture = tonumber(nx)
+                if capture == 0 or not closedCaptures[capture] then return false end
+                i = i + 2
+            else
+                i = i + 2
+            end
+        elseif c == "[" then
+            local j = i + 1
+            if text:sub(j, j) == "^" then j = j + 1 end
+            if text:sub(j, j) == "]" then j = j + 1 end
+            local closed = false
+            while j <= n do
+                local cj = text:sub(j, j)
+                if cj == "%" then
+                    if j == n then return false end
+                    j = j + 2
+                elseif cj == "]" then
+                    closed = true
+                    break
+                else
+                    j = j + 1
+                end
+            end
+            if not closed then return false end
+            i = j + 1
+        elseif c == "(" then
+            captureCount = captureCount + 1
+            if captureCount > 32 then return false end
+            openCaptures[#openCaptures + 1] = captureCount
+            i = i + 1
+        elseif c == ")" then
+            local depth = #openCaptures
+            if depth == 0 then return false end
+            closedCaptures[openCaptures[depth]] = true
+            openCaptures[depth] = nil
+            i = i + 1
+        else
+            i = i + 1
+        end
+    end
+    return #openCaptures == 0
+end
+
 local function NormalizeAssistantRouteList(value, fieldName, requireAnchors)
     local out, errors, seen = {}, {}, {}
     if value == nil then return out, errors end
@@ -255,7 +332,7 @@ local function NormalizeAssistantRouteList(value, fieldName, requireAnchors)
             errors[#errors + 1] = fieldName .. " entries must be fully anchored with ^ and $"
         else
             local valid = true
-            if requireAnchors then valid = pcall(string.match, "", text) end
+            if requireAnchors then valid = IsValidLuaPattern(text) end
             if not valid then
                 errors[#errors + 1] = fieldName .. " contains an invalid Lua pattern: " .. text
             elseif not seen[text] then
@@ -326,21 +403,23 @@ local function IsValidRuntimeId(value)
     return value:match("^[%w_%.:/%-%~]+$") ~= nil
 end
 
-local function SafeCall(method, object, ...)
+--- Optional widget accessor: templates vary in which of GetName/GetObjectType/
+--- GetParent they expose, so the nil-guard is the useful part. Formerly named
+--- SafeCall and wrapped in pcall, which hid a protected call from a `grep pcall`
+--- audit and swallowed real widget bugs. None of these accessors throw.
+local function ReadWidget(method, object, ...)
     if type(method) ~= "function" then return nil end
-    local ok, value = pcall(method, object, ...)
-    if ok then return value end
-    return nil
+    return method(object, ...)
 end
 
 local function WidgetName(widget)
     if not widget then return "" end
-    return CleanText(SafeCall(widget.GetName, widget))
+    return CleanText(ReadWidget(widget.GetName, widget))
 end
 
 local function WidgetKind(widget)
     if not widget then return "" end
-    return CleanText(widget._msuf2ControlKind or SafeCall(widget.GetObjectType, widget))
+    return CleanText(widget._msuf2ControlKind or ReadWidget(widget.GetObjectType, widget))
 end
 
 local function WidgetStructureHint(widget)
@@ -352,7 +431,7 @@ local function WidgetStructureHint(widget)
         local name = WidgetName(current)
         local kind = WidgetKind(current)
         parts[#parts + 1] = (name ~= "" and name or "anonymous") .. ":" .. (kind ~= "" and kind or "object")
-        current = SafeCall(current.GetParent, current)
+        current = ReadWidget(current.GetParent, current)
     end
     return table.concat(parts, "/")
 end
@@ -394,7 +473,7 @@ local function CommandSource(command, label)
     local direct = CleanText(command.source or command.sourceKey or command.settingKey or command.actionKey or command.navigationKey)
     if direct ~= "" then return direct end
     if type(command.sourceFn) == "function" then
-        local ok, value = pcall(command.sourceFn, label)
+        local ok, value = InvokeBoundary(command.sourceFn, label)
         if ok then return CleanText(value) end
     end
     return ""
@@ -442,7 +521,7 @@ local function CommandMetadata(command, label)
     if type(command) ~= "table" then return nil end
     local values = command.values
     if type(values) ~= "table" and type(command.getValues) == "function" then
-        local ok, resolved = pcall(command.getValues)
+        local ok, resolved = InvokeBoundary(command.getValues)
         if ok and type(resolved) == "table" then values = resolved end
     end
     local count = 0
@@ -541,14 +620,14 @@ local function RuntimeCapabilityIssue(record)
     local command, meta = record and record.command, EnsureCommandMeta(record)
     if type(command) ~= "table" or type(meta) ~= "table" then return nil end
     if meta.hasGet then
-        local ok = pcall(command.get)
+        local ok = InvokeBoundary(command.get)
         if not ok then return "read command raised an error" end
     end
     local kind = CleanText(meta.kind ~= "" and meta.kind or record.kind):lower()
     if kind == "dropdown" or kind == "segment" or kind == "dragrow" then
         local values = command.values
         if type(values) ~= "table" and type(command.getValues) == "function" then
-            local ok, resolved = pcall(command.getValues)
+            local ok, resolved = InvokeBoundary(command.getValues)
             if not ok then return "values provider raised an error" end
             values = resolved
         end
@@ -568,7 +647,7 @@ end
 local function RuntimeWidgetValues(widget)
     local values = widget and widget.values
     if type(values) == "function" then
-        local ok, resolved = pcall(values)
+        local ok, resolved = InvokeBoundary(values)
         values = ok and resolved or nil
     end
     return type(values) == "table" and values or nil
@@ -1407,7 +1486,7 @@ local function SelectableValues(record)
     if type(command) ~= "table" then return nil end
     local values = command.values
     if type(values) ~= "table" and type(command.getValues) == "function" then
-        local ok, resolved = pcall(command.getValues)
+        local ok, resolved = InvokeBoundary(command.getValues)
         if ok and type(resolved) == "table" then values = resolved end
     end
     if type(values) ~= "table" then return nil end
@@ -1510,10 +1589,9 @@ function Catalog.Read(controlId)
     local record = STATE.byId[CleanText(controlId)]
     local command = record and record.command
     if not (command and type(command.get) == "function") then return nil, "read_unavailable" end
-    local result = { pcall(command.get) }
-    if not result[1] then return nil, "read_failed", result[2] end
-    table.remove(result, 1)
-    return true, (unpack or table.unpack)(result)
+    local ok, r1, r2, r3, r4 = InvokeBoundary(command.get)
+    if not ok then return nil, "read_failed", r1 end
+    return true, r1, r2, r3, r4
 end
 
 local function ValueAllowed(record, value)
@@ -1566,21 +1644,27 @@ function Catalog.Execute(controlId, value, options)
     local command = record.command
     if not (command and type(command.set) == "function") then return false, "write_unavailable" end
     if type(command.blockCombat) == "function" then
-        local ok, blocked = pcall(command.blockCombat)
+        local ok, blocked = InvokeBoundary(command.blockCombat)
         if not ok or blocked == true then return false, "blocked" end
     end
     if type(command.canExecute) == "function" then
-        local ok, executable = pcall(command.canExecute)
+        local ok, executable = InvokeBoundary(command.canExecute)
         if not ok or executable ~= true then return false, "stale_control" end
     end
     local valid, normalized = ValueAllowed(record, value)
     if not valid then return false, "invalid_value" end
     local ok, result
-    if record.kind == "color" then ok, result = pcall(command.set, normalized[1], normalized[2], normalized[3], normalized[4])
-    else ok, result = pcall(command.set, normalized) end
+    if record.kind == "color" then
+        ok, result = InvokeBoundary(command.set, normalized[1], normalized[2], normalized[3], normalized[4])
+    else
+        ok, result = InvokeBoundary(command.set, normalized)
+    end
     if not ok then return false, "write_failed", result end
     if result == false then return false, "write_rejected" end
-    if type(command.refresh) == "function" then pcall(command.refresh) end
+    if type(command.refresh) == "function" then
+        local refreshed, refreshError = InvokeBoundary(command.refresh)
+        if not refreshed then return false, "refresh_failed", refreshError end
+    end
     return true, result
 end
 
@@ -1995,9 +2079,9 @@ function Catalog.FindBySettingKey(settingKey, pageKey, descriptor)
             end
         end
         if not matchedSource then
+            -- Patterns were validated by IsValidLuaPattern at registration.
             for i = 1, #(record.assistantSettingKeyPatterns or {}) do
-                local ok, matched = pcall(string.match, settingKey, record.assistantSettingKeyPatterns[i])
-                if ok and matched ~= nil then
+                if string.match(settingKey, record.assistantSettingKeyPatterns[i]) ~= nil then
                     matchedSource = "reviewed_dynamic_pattern"
                     break
                 end

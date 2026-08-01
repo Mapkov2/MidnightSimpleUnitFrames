@@ -18,11 +18,9 @@ Search.Text = Text
 local function ContentMetrics()
     local w, h = 720, 520
     if type(M.GetContentMetrics) == "function" then
-        local ok, cw, ch = pcall(M.GetContentMetrics)
-        if ok then
-            w = tonumber(cw) or w
-            h = tonumber(ch) or h
-        end
+        local cw, ch = M.GetContentMetrics()
+        w = tonumber(cw) or w
+        h = tonumber(ch) or h
     end
     return w, h
 end
@@ -169,12 +167,12 @@ local function SearchEffectiveLocale()
     -- for isolated load/test environments.
     if type(MSUF.LOCALE) == "string" and MSUF.LOCALE ~= "" then return MSUF.LOCALE end
     if type(MSUF.GetEffectiveLocale) == "function" then
-        local ok, locale = pcall(MSUF.GetEffectiveLocale)
-        if ok and type(locale) == "string" and locale ~= "" then return locale end
+        local locale = MSUF.GetEffectiveLocale()
+        if type(locale) == "string" and locale ~= "" then return locale end
     end
     if type(_G.GetLocale) == "function" then
-        local ok, locale = pcall(_G.GetLocale)
-        if ok and type(locale) == "string" and locale ~= "" then return locale end
+        local locale = _G.GetLocale()
+        if type(locale) == "string" and locale ~= "" then return locale end
     end
     return SEARCH_DEFAULT_LOCALE
 end
@@ -334,14 +332,37 @@ local function ForEachLocaleSearchPattern(key, callback)
     end
 end
 
+--- Translator-supplied format strings may only use %s (and literal %%), and no
+--- more %s than the caller supplies. Validating up front keeps one bad
+--- translation from raising inside string.format and taking out search
+--- indexing for the whole locale, without probing the call.
+local function IsSafeLabelPattern(pattern, maxArgs)
+    local count, i, n = 0, 1, #pattern
+    while i <= n do
+        if pattern:sub(i, i) == "%" then
+            if i == n then return false end
+            local spec = pattern:sub(i + 1, i + 1)
+            if spec == "s" then
+                count = count + 1
+            elseif spec ~= "%" then
+                return false
+            end
+            i = i + 2
+        else
+            i = i + 1
+        end
+    end
+    return count <= maxArgs
+end
+
 local function AddSearchPatternText(parts, key, label)
     label = DisplaySearchText(label)
     if label == "" then return end
     local labels = SearchTextVariants(label)
     ForEachLocaleSearchPattern(key, function(pattern)
+        if not IsSafeLabelPattern(pattern, 1) then return end
         for i = 1, #labels do
-            local ok, formatted = pcall(string.format, pattern, labels[i])
-            if ok then AddRawSearchText(parts, formatted) end
+            AddRawSearchText(parts, pattern:format(labels[i]))
         end
     end)
 end
@@ -361,13 +382,12 @@ local function AddSearchValuePatternText(parts, label, value)
         AddRawSearchText(parts, values[i] .. " " .. label)
     end
     ForEachLocaleSearchPattern(SEARCH_VALUE_PATTERNS, function(pattern)
+        if not IsSafeLabelPattern(pattern, 2) then return end
         for i = 1, #labels do
-            local ok, formatted = pcall(string.format, pattern, labels[i], value)
-            if ok then AddRawSearchText(parts, formatted) end
+            AddRawSearchText(parts, pattern:format(labels[i], value))
         end
         for i = 1, #values do
-            local ok, formatted = pcall(string.format, pattern, label, values[i])
-            if ok then AddRawSearchText(parts, formatted) end
+            AddRawSearchText(parts, pattern:format(label, values[i]))
         end
     end)
 end

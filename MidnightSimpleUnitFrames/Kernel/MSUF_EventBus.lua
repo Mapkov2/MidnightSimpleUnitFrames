@@ -10,16 +10,6 @@ local _, MSUF = ...
 MSUF = MSUF or {}
 local type, pairs = type, pairs
 local unpack = unpack or table.unpack
-local SafeCall = _G.MSUF_SafeCall or function(fn, ...)
-    if type(fn) ~= "function" then return false end
-    local ok, err = pcall(fn, ...)
-    if not ok then
-        local handler = _G.geterrorhandler and _G.geterrorhandler()
-        if type(handler) == "function" then pcall(handler, err) end
-        return false, err
-    end
-    return true
-end
 
 local bus = { handlers = {} }
 local driver = CreateFrame("Frame")
@@ -202,8 +192,32 @@ function bus:UnregisterAll(prefix)
     end
 end
 
---- Dispatch can unregister handlers while iterating. `dd` and dirty compaction
---- let removals mark handlers dead and compact after the current fanout.
+--- Dispatch can unregister handlers while iterating: a handler may call
+--- bus:Unregister, which reaches MaybeUnregister and would otherwise Compact the
+--- list this loop is walking. `dd` marks "fanout in progress" so removals only
+--- mark handlers dead, and compaction happens once the fanout finishes.
+---
+--- Each subscriber is an independent fault boundary. A broken handler is
+--- reported through the normal error handler, while later subscribers and the
+--- dispatch-depth/compaction bookkeeping still complete. `dd` remains a real
+--- counter because tests and addon code can legitimately fire the same driver
+--- recursively even though Blizzard event delivery itself is not recursive.
+local function ReportHandlerError(err)
+    local handler = _G.geterrorhandler and _G.geterrorhandler()
+    if type(handler) == "function" then
+        local reported = pcall(handler, err)
+        if reported then return end
+    end
+    if type(_G.print) == "function" then
+        _G.print("|cffffd700MSUF EventBus:|r", tostring(err))
+    end
+end
+
+local function InvokeHandler(fn, event, ...)
+    local ok, err = pcall(fn, event, ...)
+    if not ok then ReportHandlerError(err) end
+end
+
 driver:SetScript("OnEvent", function(_, event, ...)
     local ev = bus.handlers[event]; if not ev then return end
     ev.dd = ev.dd + 1
@@ -216,7 +230,7 @@ driver:SetScript("OnEvent", function(_, event, ...)
             local fn = h and h.fn
             local units = h and h.units
             if fn and (not units or (unit and units[unit] == true)) then
-                SafeCall(fn, event, ...)
+                InvokeHandler(fn, event, ...)
                 if h.once then ev.index[h.key] = nil; h.fn = nil; h.dead = true; ev.dirty = true end
             end
         end
@@ -225,7 +239,7 @@ driver:SetScript("OnEvent", function(_, event, ...)
             local h = list[i]
             local fn = h and h.fn
             if fn then
-                SafeCall(fn, event, ...)
+                InvokeHandler(fn, event, ...)
                 if h.once then ev.index[h.key] = nil; h.fn = nil; h.dead = true; ev.dirty = true end
             end
         end

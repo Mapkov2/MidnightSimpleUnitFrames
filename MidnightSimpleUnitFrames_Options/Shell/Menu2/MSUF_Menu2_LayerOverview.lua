@@ -22,6 +22,18 @@ M.LayerOverview = Overview
 Overview.providers = Overview.providers or {}
 local providers = Overview.providers
 
+local function InvokeProvider(fn, ...)
+    if type(fn) ~= "function" then return false end
+    local apply = M.ApplyService
+    if apply and type(apply.Invoke) == "function" then return apply.Invoke(fn, ...) end
+    local ok, result = pcall(fn, ...)
+    if not ok then
+        local handler = _G.geterrorhandler and _G.geterrorhandler()
+        if type(handler) == "function" then pcall(handler, result) end
+    end
+    return ok, result
+end
+
 local UNIT_SCOPES = {
     { key = "player", label = "Player" },
     { key = "target", label = "Target" },
@@ -175,7 +187,7 @@ end
 local function UnitStatusAllowed(spec, unit)
     if type(spec) ~= "table" then return false end
     if type(spec.allowed) == "function" then
-        local ok, allowed = pcall(spec.allowed, unit)
+        local ok, allowed = InvokeProvider(spec.allowed, unit)
         return ok and allowed == true
     end
     if spec.units then return WordContains(spec.units, unit) end
@@ -249,7 +261,7 @@ local function CollectRows(includeLegacyStrata)
     local ids = SortedKeys(providers)
     for i = 1, #ids do
         local provider = providers[ids[i]]
-        if type(provider) == "function" then pcall(provider, sink) end
+        if type(provider) == "function" then InvokeProvider(provider, sink) end
     end
     local layers, strataRows = {}, {}
     for _, row in pairs(layerByID) do layers[#layers + 1] = row end

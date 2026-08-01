@@ -1343,9 +1343,9 @@ function Page:LazySection(id, title, height, method)
             build = function(_, proxyBuilder)
                 local outerBuilder = page.b
                 page.b = proxyBuilder
-                local invoked, err = pcall(method, page)
+                local buildOK, buildError = pcall(method, page)
                 page.b = outerBuilder
-                if not invoked then error(err, 0) end
+                if not buildOK then error(buildError, 0) end
                 -- Newly built controls need their enabled/disabled state; the
                 -- proxy is a safe no-op while the page itself is still building.
                 page.refresh()

@@ -15,6 +15,19 @@ local max = math.max
 local min = math.min
 local format = string.format
 
+local function InvokeLifecycleBoundary(fn, ...)
+    if type(fn) ~= "function" then return false end
+    local apply = M.ApplyService
+    if apply and type(apply.Invoke) == "function" then return apply.Invoke(fn, ...) end
+    local ok, r1, r2 = pcall(fn, ...)
+    if not ok then
+        local handler = _G.geterrorhandler and _G.geterrorhandler()
+        if type(handler) == "function" then pcall(handler, r1) end
+        return false, r1
+    end
+    return true, r1, r2
+end
+
 local function Tr(text)
     return type(M.Tr) == "function" and M.Tr(text) or text
 end
@@ -27,9 +40,8 @@ end
 local function CallLifecycle(firstLoad, method, ...)
     local fn = firstLoad and firstLoad[method]
     if type(fn) ~= "function" then return false end
-    local ok, result = pcall(fn, firstLoad, ...)
-    if not ok then return false end
-    return result ~= false, result
+    local called, result = InvokeLifecycleBoundary(fn, firstLoad, ...)
+    return called and result ~= false, result
 end
 
 local function ShouldShow(firstLoad)
@@ -59,7 +71,7 @@ local function FirstLoadActionAvailability(firstLoad)
     -- warning and close onboarding behind the user's back.
     local highlights = MSUF and MSUF.UpgradeHighlights
     if type(highlights) == "table" and type(highlights.ShouldShow) == "function" then
-        local ok, shown = pcall(highlights.ShouldShow, highlights)
+        local ok, shown = InvokeLifecycleBoundary(highlights.ShouldShow, highlights)
         if ok and shown == true then
             return false, Tr("Review or skip the release highlights on the Dashboard before using first-load actions.")
         end
@@ -104,8 +116,7 @@ end
 local function PlayerDisplayName()
     local name
     if type(_G.UnitName) == "function" then
-        local ok, value = pcall(_G.UnitName, "player")
-        if ok then name = value end
+        name = _G.UnitName("player")
     end
     if type(_G.issecretvalue) == "function" and _G.issecretvalue(name) then name = nil end
     if type(name) == "string" then name = name:match("^[^-]+") else name = nil end

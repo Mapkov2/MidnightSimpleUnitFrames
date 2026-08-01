@@ -699,8 +699,8 @@ builders.PRESENTATION = function(E)
 
     local function ClassPowerFontApplied(region, fontPath, size, fontFlags)
         if type(region.GetFont) ~= "function" then return true end
-        local ok, actual, actualSize, actualFlags = pcall(region.GetFont, region)
-        if not ok or not actual then return false end
+        local actual, actualSize, actualFlags = region:GetFont()
+        if not actual then return false end
         if actualSize and math.abs((tonumber(actualSize) or 0) - size) > 0.01 then return false end
         if (actualFlags or "") ~= (fontFlags or "") then return false end
         if actual == fontPath then return true end
@@ -716,10 +716,10 @@ builders.PRESENTATION = function(E)
             local ok, _, source = applyResolved(region, fontPath, size, fontFlags)
             return ok == true and source ~= "fallback"
         end
-        local ok, applied = pcall(region.SetFont, region, fontPath, size, fontFlags)
-        if ok and applied ~= false and ClassPowerFontApplied(region, fontPath, size, fontFlags) then return true end
+        local applied = region:SetFont(fontPath, size, fontFlags)
+        if applied ~= false and ClassPowerFontApplied(region, fontPath, size, fontFlags) then return true end
         local fallback = _G.MSUF_ResolveSafeFontPath and _G.MSUF_ResolveSafeFontPath("Fonts\\FRIZQT__.TTF", size, fontFlags, "FRIZQT") or "Fonts\\FRIZQT__.TTF"
-        pcall(region.SetFont, region, fallback, size, fontFlags)
+        region:SetFont(fallback, size, fontFlags)
         if type(_G.MSUF_MarkFontApplyFailed) == "function" then _G.MSUF_MarkFontApplyFailed() end
         return false
     end

@@ -164,10 +164,10 @@ local function BuildRegisteredSectionLazy(ctx, builder, unit, spec)
         -- whichever page happens to be active by the time the timer fires.
         local previousBuildKey = M._msuf2SearchBuildKey
         if ctx and ctx.key then M._msuf2SearchBuildKey = ctx.key end
-        local ok, err = pcall(spec.build, ctx, proxy, unit, spec)
+        local buildOK, buildError = pcall(spec.build, ctx, proxy, unit, spec)
         M._msuf2SearchBuildKey = previousBuildKey
         building = false
-        if not ok then error(err, 0) end
+        if not buildOK then error(buildError, 0) end
         built = true
         if shellEntry then
             RefreshNewControls(refreshStart)

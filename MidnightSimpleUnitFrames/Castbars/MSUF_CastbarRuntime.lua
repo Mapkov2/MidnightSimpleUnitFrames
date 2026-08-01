@@ -143,8 +143,9 @@ local function DurationHasSecretValues(durationObj)
         return false
     end
 
-    local ok, result = pcall(hasSecretValues, durationObj)
-    return ok == true and result == true
+    -- HasSecretValues is ReturnsNeverSecret in the API contract (verified on
+    -- 12.0.7 and 12.1 PTR docs); it is the sanctioned no-throw probe.
+    return hasSecretValues(durationObj) == true
 end
 
 --- Dragonflight+ APIs may return value wrappers. Convert only to plain scalars
@@ -216,13 +217,16 @@ local function BuildNativeTextFormats(allowRetry)
         return nil
     end
 
-    local ok, formatter = pcall(createFormatter)
-    if not ok or not formatter or type(formatter.SetBreakpoints) ~= "function" then
+    -- Fixed, ascending, docs-valid breakpoints: the 12.1 contract has no
+    -- rejection path for this input, so the calls are direct. API absence on
+    -- older clients is handled by the type guards above.
+    local formatter = createFormatter()
+    if not formatter or type(formatter.SetBreakpoints) ~= "function" then
         if allowRetry ~= true then nativeTextFormatsUnavailable = true end
         return nil
     end
 
-    ok = pcall(formatter.SetBreakpoints, formatter, {
+    formatter:SetBreakpoints({
         {
             threshold = 0,
             step = 0.1,
@@ -254,39 +258,27 @@ local function DisableNativeTimeText(frame)
     if not frame then return end
 
     -- The common stop/prepare paths can converge on this helper several times.
-    -- Once the binding is known disabled, avoid repeated protected C-method
-    -- calls and repeated Lua text-cache invalidation. The pending flag covers a
-    -- binding that failed after a partial configuration mutation but before it
-    -- could be marked fully bound.
-    if frame._msufNativeTimeBound ~= true
-        and frame._msufNativeTextCleanupPending ~= true
-    then
+    -- Once the binding is known disabled, avoid repeated C-method calls and
+    -- repeated Lua text-cache invalidation.
+    if frame._msufNativeTimeBound ~= true then
         return
     end
 
+    -- Per the 12.1 contract Disable/SetEnabled cannot reject; the old
+    -- rejection-retry bookkeeping is gone.
     local binding = frame._msufDurationTextBinding
-    local cleaned = binding == nil
     if binding then
-        local disabled = type(binding.Disable) == "function"
-            and pcall(binding.Disable, binding)
-        if not disabled and type(binding.SetEnabled) == "function" then
-            disabled = pcall(binding.SetEnabled, binding, false)
+        if type(binding.Disable) == "function" then
+            binding:Disable()
+        elseif type(binding.SetEnabled) == "function" then
+            binding:SetEnabled(false)
         end
-        cleaned = disabled == true
     end
     -- DurationTextBinding mutates the FontString behind MSUF's Lua-side diff
     -- cache. Invalidate that cache so the next Lua clear/update cannot be skipped
     -- against a stale pre-binding value.
     if frame.timeText then frame.timeText._msufLastText = nil end
-    if cleaned then
-        frame._msufNativeTimeBound = nil
-        frame._msufNativeTextCleanupPending = nil
-    else
-        -- Keep retry ownership when the client rejected both disable forms.
-        -- Treat the binding as potentially live until a later cleanup succeeds.
-        frame._msufNativeTimeBound = true
-        frame._msufNativeTextCleanupPending = true
-    end
+    frame._msufNativeTimeBound = nil
 end
 
 -- Build the immutable formatter graph and the frame-local binding while the
@@ -310,50 +302,39 @@ local function PrepareNativeTimeText(frame, format, allowRetry)
         local createBinding = _G.C_DurationUtil and _G.C_DurationUtil.CreateDurationTextBinding
         if type(createBinding) ~= "function" then return false end
 
-        local ok
-        ok, binding = pcall(createBinding)
-        if not ok or not binding then
+        binding = createBinding()
+        if not binding then
             frame._msufNativeTextUnsafe = true
             return false
         end
         frame._msufDurationTextBinding = binding
     end
 
-    -- Any failed native method may leave a partially configured object. Give
-    -- the existing cleanup helper ownership until this preparation succeeds.
-    frame._msufNativeTextCleanupPending = true
-
+    -- Direct configuration per the 12.1 contract (all args
+    -- AllowedWhenUntainted, no documented rejection). _msufNativeTextUnsafe now
+    -- means exactly one thing: this client's binding lacks a required method,
+    -- so the frame stays on the legacy Lua time text (the 120007 surface).
     if frame._msufDurationTextConfigured ~= true then
-        local ok = type(binding.SetFontString) == "function"
-            and pcall(binding.SetFontString, binding, frame.timeText)
-        if not ok then
+        if type(binding.SetFontString) ~= "function"
+            or type(binding.SetUpdateInterval) ~= "function"
+        then
             frame._msufNativeTextUnsafe = true
-            DisableNativeTimeText(frame)
             return false
         end
-
-        ok = type(binding.SetUpdateInterval) == "function"
-            and pcall(binding.SetUpdateInterval, binding, 0.10)
-        if not ok then
-            frame._msufNativeTextUnsafe = true
-            DisableNativeTimeText(frame)
-            return false
-        end
+        binding:SetFontString(frame.timeText)
+        binding:SetUpdateInterval(0.10)
         frame._msufDurationTextConfigured = true
     end
 
     if frame._msufDurationTextFormat ~= format then
-        local ok = type(binding.SetTextFormat) == "function"
-            and pcall(binding.SetTextFormat, binding, formatSpec[1], formatSpec[2])
-        if not ok then
+        if type(binding.SetTextFormat) ~= "function" then
             frame._msufNativeTextUnsafe = true
-            DisableNativeTimeText(frame)
             return false
         end
+        binding:SetTextFormat(formatSpec[1], formatSpec[2])
         frame._msufDurationTextFormat = format
     end
 
-    frame._msufNativeTextCleanupPending = nil
     frame._msufNativeTextUnsafe = nil
     return true, binding
 end
@@ -364,8 +345,8 @@ local function PrepareStableDuration(frame)
     local createDuration = _G.C_DurationUtil and _G.C_DurationUtil.CreateDuration
     if type(createDuration) ~= "function" then return false end
 
-    local ok, durationObj = pcall(createDuration)
-    if not ok or not durationObj or type(durationObj.Assign) ~= "function" then
+    local durationObj = createDuration()
+    if not durationObj or type(durationObj.Assign) ~= "function" then
         return false
     end
 
@@ -387,18 +368,15 @@ local function StableDuration(frame, incoming)
 
     if stable then
         if type(stable.Assign) == "function" then
-            local ok = pcall(stable.Assign, stable, incoming)
-            if ok then
-                frame._msufLastIncomingDuration = incoming
-                return stable
-            end
+            stable:Assign(incoming)
+            frame._msufLastIncomingDuration = incoming
+            return stable
         end
         stable = nil
     end
 
     if not stable and type(incoming.Copy) == "function" then
-        local ok, copy = pcall(incoming.Copy, incoming)
-        if ok and copy then stable = copy end
+        stable = incoming:Copy()
     end
 
     stable = stable or incoming
@@ -419,40 +397,31 @@ local function ApplyNativeTimeText(frame, durationObj, format)
     if not prepared then return false end
     local formatChanged = previousFormat ~= format
 
-    -- From this point onward duration/enabled methods can leave live native
-    -- state behind, so failed calls must use the normal cleanup path.
-    frame._msufNativeTextCleanupPending = true
-
     local durationChanged = frame._msufDurationTextDuration ~= durationObj
     if durationChanged then
-        local ok = type(binding.SetDuration) == "function"
-            and pcall(binding.SetDuration, binding, durationObj)
-        if not ok then
+        if type(binding.SetDuration) ~= "function" then
             frame._msufNativeTextUnsafe = true
-            DisableNativeTimeText(frame)
             return false
         end
+        binding:SetDuration(durationObj)
         frame._msufDurationTextDuration = durationObj
     end
 
     local wasBound = frame._msufNativeTimeBound == true
     if not wasBound then
-        local ok = type(binding.SetEnabled) == "function"
-            and pcall(binding.SetEnabled, binding, true)
-        if not ok then
+        if type(binding.SetEnabled) ~= "function" then
             frame._msufNativeTextUnsafe = true
-            DisableNativeTimeText(frame)
             return false
         end
+        binding:SetEnabled(true)
     end
 
     if (durationChanged or formatChanged or not wasBound)
         and type(binding.UpdateFontString) == "function" then
-        pcall(binding.UpdateFontString, binding)
+        binding:UpdateFontString()
     end
     frame.timeText._msufLastText = nil
     frame._msufNativeTimeBound = true
-    frame._msufNativeTextCleanupPending = nil
     frame._msufNativeTextUnsafe = nil
     return true
 end
@@ -647,8 +616,9 @@ local function NativeCompletionCallback(frame)
     local getter = durationObj and (durationObj.GetRemainingDuration or durationObj.GetRemaining)
     local remaining
     if type(getter) == "function" then
-        local ok, rawRemaining = pcall(getter, durationObj)
-        if ok then remaining = PlainNumber(rawRemaining) end
+        -- 12.1 contract: no-arg getters cannot violate SecretArguments; a
+        -- secret return is rejected by PlainNumber and keeps the manager path.
+        remaining = PlainNumber(getter(durationObj))
     end
 
     if remaining and remaining > 0.001 then
@@ -702,8 +672,8 @@ function Runtime:ArmNativeCompletion(frame)
 
     local delay = deadline - Now()
     if delay < 0.05 then delay = 0.05 end
-    local ok, timer = pcall(timerAPI.NewTimer, delay, frame._msufNativeCompletionCallback)
-    if not ok or not timer then
+    local timer = timerAPI.NewTimer(delay, frame._msufNativeCompletionCallback)
+    if not timer then
         frame._msufNativeCompletionUnsafe = true
         self:PrepareWork(frame)
         return false
@@ -869,19 +839,15 @@ function Runtime:ApplyTimer(statusBar, durationObj, reverseFill, isChanneled, fo
         return true
     end
 
-    local ok
     if INTERPOLATION_IMMEDIATE ~= nil and timerDirection ~= nil then
-        ok = pcall(statusBar.SetTimerDuration, statusBar, durationObj, INTERPOLATION_IMMEDIATE, timerDirection)
+        statusBar:SetTimerDuration(durationObj, INTERPOLATION_IMMEDIATE, timerDirection)
     else
-        ok = pcall(statusBar.SetTimerDuration, statusBar, durationObj)
+        statusBar:SetTimerDuration(durationObj)
     end
 
-    if ok == true then
-        statusBar._msufTimerDuration = durationObj
-        statusBar._msufTimerDirection = timerDirection
-        return true
-    end
-    return false
+    statusBar._msufTimerDuration = durationObj
+    statusBar._msufTimerDirection = timerDirection
+    return true
 end
 
 function Runtime:ClearTimer(statusBar)
@@ -918,19 +884,18 @@ function Runtime:SnapshotDuration(frame, durationObj, nativeTimerOwned)
         return nil, nil
     end
 
+    -- 12.1 contract: secret state comes back as secret RETURNS, which
+    -- PlainNumber below rejects into _msufDurationSnapshotUnsafe.
     local remaining
     if durationObj.GetRemainingDuration then
-        local ok, value = pcall(durationObj.GetRemainingDuration, durationObj)
-        if ok then remaining = value end
+        remaining = durationObj:GetRemainingDuration()
     elseif durationObj.GetRemaining then
-        local ok, value = pcall(durationObj.GetRemaining, durationObj)
-        if ok then remaining = value end
+        remaining = durationObj:GetRemaining()
     end
 
     local total
     if durationObj.GetTotalDuration then
-        local ok, value = pcall(durationObj.GetTotalDuration, durationObj)
-        if ok then total = value end
+        total = durationObj:GetTotalDuration()
     end
 
     remaining = PlainNumber(remaining)

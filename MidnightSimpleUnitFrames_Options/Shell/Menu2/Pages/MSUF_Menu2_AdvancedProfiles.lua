@@ -89,7 +89,17 @@ end
 local function ActiveProfileName() return _G.MSUF_ActiveProfile or "Default" end
 local function CallMSUF(name, ...)
     local fn = _G[name]
-    return type(fn) == "function" and pcall(fn, ...) or false
+    if type(fn) ~= "function" then return false end
+    if type(CallGlobal) == "function" then return CallGlobal(name, ...) end
+    local apply = M.ApplyService
+    if apply and type(apply.Invoke) == "function" then return apply.Invoke(fn, ...) end
+    local ok, r1, r2 = pcall(fn, ...)
+    if not ok then
+        local handler = _G.geterrorhandler and _G.geterrorhandler()
+        if type(handler) == "function" then pcall(handler, r1) end
+        return false, r1
+    end
+    return true, r1, r2
 end
 local function ClearProfileHistory() if M.ClearHistory then M.ClearHistory() end end
 local function PrintProfileMessage(color, message)
@@ -257,13 +267,12 @@ local function BuildProfiles(ctx)
             or false
     end
     local function ExportProfileString(kind)
-        local fn = _G.MSUF_ExportSelectionToString
-        if type(fn) ~= "function" then
+        if type(_G.MSUF_ExportSelectionToString) ~= "function" then
             if M.ShowStatusFeedback then M.ShowStatusFeedback(M.Tr("Export unavailable"), "danger", 1.8) end
             return false
         end
-        local ok, value = pcall(fn, kind or M.profileExportKind or "all")
-        if not ok or type(value) ~= "string" then
+        local called, value = CallMSUF("MSUF_ExportSelectionToString", kind or M.profileExportKind or "all")
+        if not called or type(value) ~= "string" then
             if M.ShowStatusFeedback then M.ShowStatusFeedback(M.Tr("Export failed"), "danger", 1.8) end
             return false
         end
@@ -536,8 +545,14 @@ local function BuildProfiles(ctx)
             -- confirmation. Execute the same reset/apply/reload path used by
             -- the menu popup instead of bypassing its post-reset work.
             if type(M.ResetPageToDefaults) == "function" then
-                local ok, result = pcall(M.ResetPageToDefaults, "profiles")
-                if not ok or result ~= true then return false end
+                local apply = M.ApplyService
+                local called, result
+                if apply and type(apply.Invoke) == "function" then
+                    called, result = apply.Invoke(M.ResetPageToDefaults, "profiles")
+                else
+                    called, result = pcall(M.ResetPageToDefaults, "profiles")
+                end
+                if not called or result ~= true then return false end
                 RefreshAfterProfileChange(ctx)
                 return true
             end
@@ -823,12 +838,9 @@ local function BuildProfiles(ctx)
             PrintProfileMessage("|cffff0000", "Import failed: profile import API is not available.")
             return false
         end
-        local ok, imported = pcall(_G.MSUF_ImportFromString, text)
-        if not ok then
-            PrintProfileMessage("|cffff0000", M.Format("Import failed: %s", tostring(imported)))
-            return false
-        end
-        if imported ~= true then return false end
+        -- `text` is a string the user pasted
+        local called, imported = CallMSUF("MSUF_ImportFromString", text)
+        if not called or imported ~= true then return false end
         ClearProfileHistory()
         M.RequestGeneralApply("MSUF2_PROFILE_IMPORT", { preview = true, applyAll = false, notify = false })
         RefreshAfterProfileChange(ctx)
@@ -871,11 +883,11 @@ local function BuildProfiles(ctx)
             PrintProfileMessage("|cffff0000", M.Format("Import failed: could not switch to profile '%s'.", name))
             return false
         end
-        local ok, imported = pcall(_G.MSUF_ImportFromString, text)
-        if not ok or imported ~= true then
+        local called, imported = CallMSUF("MSUF_ImportFromString", text)
+        if not called or imported ~= true then
             if previousExists then CallMSUF("MSUF_SwitchProfile", previous) end
             DeleteCreatedProfile(name)
-            PrintProfileMessage("|cffff0000", ok and M.Tr("Import failed.") or M.Format("Import failed: %s", tostring(imported)))
+            PrintProfileMessage("|cffff0000", M.Tr("Import failed."))
             RefreshAfterProfileChange(ctx)
             return false
         end

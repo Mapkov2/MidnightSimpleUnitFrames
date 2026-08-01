@@ -13,6 +13,17 @@ local _MSUF_LSMFontAssetPaths = {}
 local _MSUF_FontApplyFailureSerial = tonumber(_G.MSUF_FontApplyFailureSerial) or 0
 _G.MSUF_FontApplyEpoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
 
+local function MSUF_InvokeLibraryBoundary(fn, ...)
+    if type(fn) ~= "function" then return false end
+    local ok, r1, r2 = pcall(fn, ...)
+    if not ok then
+        local handler = _G.geterrorhandler and _G.geterrorhandler()
+        if type(handler) == "function" then pcall(handler, r1) end
+        return false, r1
+    end
+    return true, r1, r2
+end
+
 local function MSUF_NormalizeFileAssetPath(asset)
     if type(asset) ~= "string" or asset == "" then return nil end
     return asset:gsub("/", "\\")
@@ -56,8 +67,8 @@ end
 
 local function MSUF_SeedLSMFontAssets(lsm)
     if not (lsm and type(lsm.HashTable) == "function") then return end
-    local ok, fonts = pcall(lsm.HashTable, lsm, "font")
-    if not ok or type(fonts) ~= "table" then return end
+    local fonts = lsm:HashTable("font")
+    if type(fonts) ~= "table" then return end
     for _, path in pairs(fonts) do
         MSUF_RememberLSMFontAsset(path)
     end
@@ -67,20 +78,19 @@ local function MSUF_GetLSMFontAsset(lsm, key)
     if not lsm or type(key) ~= "string" or key == "" then return nil end
     local path
     if type(lsm.HashTable) == "function" then
-        local ok, fonts = pcall(lsm.HashTable, lsm, "font")
-        if ok and type(fonts) == "table" then path = fonts[key] end
+        local fonts = lsm:HashTable("font")
+        if type(fonts) == "table" then path = fonts[key] end
     end
     if not path and type(lsm.Fetch) == "function" then
-        local ok, fetched = pcall(lsm.Fetch, lsm, "font", key, true)
-        if ok then path = fetched end
+        path = lsm:Fetch("font", key, true)
     end
     return MSUF_RememberLSMFontAsset(path)
 end
 
 local function MSUF_FontApplicationMatches(fs, expectedPath, expectedSize)
     if not fs or type(fs.GetFont) ~= "function" then return true end
-    local ok, actualPath, actualSize = pcall(fs.GetFont, fs)
-    if not ok or not MSUF_FileAssetPathsEqual(expectedPath, actualPath) then return false end
+    local actualPath, actualSize = fs:GetFont()
+    if not MSUF_FileAssetPathsEqual(expectedPath, actualPath) then return false end
     actualSize, expectedSize = tonumber(actualSize), tonumber(expectedSize)
     return actualSize ~= nil and expectedSize ~= nil and math.abs(actualSize - expectedSize) <= 0.01
 end
@@ -116,7 +126,7 @@ local function MSUF_MarkFontApplyFailed()
     _MSUF_FontApplyFailureSerial = _MSUF_FontApplyFailureSerial + 1
     _G.MSUF_FontApplyFailureSerial = _MSUF_FontApplyFailureSerial
     local notify = _G.MSUF_OnFontApplyFailed
-    if type(notify) == "function" then pcall(notify, _MSUF_FontApplyFailureSerial) end
+    if type(notify) == "function" then MSUF_InvokeLibraryBoundary(notify, _MSUF_FontApplyFailureSerial) end
     return _MSUF_FontApplyFailureSerial
 end
 
@@ -309,8 +319,8 @@ do
         then
             return true
         end
-        local ok, applied = pcall(fs.SetFont, fs, path, size, flags)
-        if ok and applied ~= false and MSUF_FontApplicationMatches(fs, path, size) then
+        local applied = fs:SetFont(path, size, flags)
+        if applied ~= false and MSUF_FontApplicationMatches(fs, path, size) then
             fs._msufFontAppliedPath = path
             fs._msufFontAppliedSize = size
             fs._msufFontAppliedFlags = flags
@@ -859,8 +869,8 @@ RegisterLSMCallback = function()
     if IsCombatLocked() then return false end
     if _MSUF_LSMCallbackActive then return true end
 
-    local ok = pcall(LSM.RegisterCallback, LSM_CALLBACK_OWNER, LSM_REGISTERED_EVENT, OnLSMRegistered)
-    if not ok then return false end
+    local registered = MSUF_InvokeLibraryBoundary(LSM.RegisterCallback, LSM_CALLBACK_OWNER, LSM_REGISTERED_EVENT, OnLSMRegistered)
+    if not registered then return false end
     _MSUF_LSMCallbackActive = true
     ExportPublic("MSUF_LSM_CallbackActive", true)
     return true

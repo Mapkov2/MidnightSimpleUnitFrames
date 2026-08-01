@@ -19,6 +19,19 @@ local format = string.format
 local pairs, ipairs, type, tostring = pairs, ipairs, type, tostring
 local sort = table.sort
 
+local function InvokeGuidedBoundary(fn, ...)
+    if type(fn) ~= "function" then return false end
+    local apply = M.ApplyService
+    if apply and type(apply.Invoke) == "function" then return apply.Invoke(fn, ...) end
+    local ok, r1, r2, r3 = pcall(fn, ...)
+    if not ok then
+        local handler = _G.geterrorhandler and _G.geterrorhandler()
+        if type(handler) == "function" then pcall(handler, r1) end
+        return false, r1
+    end
+    return true, r1, r2, r3
+end
+
 local function Tr(text)
     return type(M.Tr) == "function" and M.Tr(tostring(text or "")) or tostring(text or "")
 end
@@ -426,12 +439,13 @@ local function FirstLoad()
     return type(MSUF.FirstLoad6) == "table" and MSUF.FirstLoad6 or nil
 end
 
+--- Optional Tour methods are independent lifecycle boundaries. Failures report
+--- through ApplyService and read as unavailable instead of breaking Menu2.
 Invoke = function(object, method, ...)
     local fn = object and object[method]
     if type(fn) ~= "function" then return false end
-    local ok, a, b, c = pcall(fn, object, ...)
-    if not ok then return false end
-    return a ~= false, a, b, c
+    local called, a, b, c = InvokeGuidedBoundary(fn, object, ...)
+    return called and a ~= false, a, b, c
 end
 
 local function TourIsActive()
@@ -476,8 +490,7 @@ end
 local function PlayerDisplayName()
     local name
     if type(_G.UnitName) == "function" then
-        local ok, value = pcall(_G.UnitName, "player")
-        if ok then name = value end
+        name = _G.UnitName("player")
     end
     if type(_G.issecretvalue) == "function" and _G.issecretvalue(name) then name = nil end
     if type(name) == "string" then name = name:match("^[^-]+") else name = nil end
@@ -767,7 +780,8 @@ local function RefreshEditModeOpenCue(show)
         local color = T.colors.ok or { 0.24, 0.82, 0.46, 1 }
         local function Arrow(point, rotation)
             local texture = cue:CreateTexture(nil, "OVERLAY", nil, 7)
-            local usedAtlas = texture.SetAtlas and pcall(texture.SetAtlas, texture, "NPE_ArrowRight", false)
+            local usedAtlas = false
+            if texture.SetAtlas then texture:SetAtlas("NPE_ArrowRight", false); usedAtlas = true end
             if not usedAtlas and T.media then texture:SetTexture(T.media.collapseArrow) end
             texture:SetSize(20, 20)
             texture:SetPoint(point, cue, point, point == "LEFT" and 3 or -3, 0)
@@ -867,21 +881,18 @@ end
 local function SafeText(fontString)
     if type(fontString) == "string" then return fontString end
     if not (fontString and type(fontString.GetText) == "function") then return "" end
-    local ok, value = pcall(fontString.GetText, fontString)
-    value = ok and tostring(value or "") or ""
+    local value = tostring(fontString:GetText() or "")
     return value:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
 end
 
 local function FrameTop(frame)
     if not (frame and type(frame.GetTop) == "function") then return nil end
-    local ok, value = pcall(frame.GetTop, frame)
-    return ok and tonumber(value) or nil
+    return tonumber(frame:GetTop()) or nil
 end
 
 local function FrameLeft(frame)
     if not (frame and type(frame.GetLeft) == "function") then return nil end
-    local ok, value = pcall(frame.GetLeft, frame)
-    return ok and tonumber(value) or nil
+    return tonumber(frame:GetLeft()) or nil
 end
 
 local IsWidgetInside
@@ -1011,7 +1022,7 @@ local function EnsureStageSurface(stage)
         local selectScope = scopeRegion and scopeRegion.body and scopeRegion.body._msuf2GuidedSelectScope
         local prepared
         if type(selectScope) == "function" then
-            local ok, value = pcall(selectScope, "party")
+            local ok, value = InvokeGuidedBoundary(selectScope, "party")
             prepared = ok and value ~= false
         end
         if not prepared then
@@ -1024,7 +1035,7 @@ local function EnsureStageSurface(stage)
         local selectTab = section and section._msuf2GuidedSelectTab
         local prepared
         if type(selectTab) == "function" then
-            local ok, value = pcall(selectTab, stage.prepareTab)
+            local ok, value = InvokeGuidedBoundary(selectTab, stage.prepareTab)
             prepared = ok and value ~= false
         end
         if not prepared then
@@ -1042,7 +1053,7 @@ local function EnsureStageSurface(stage)
         local selectSlot = section and section._msuf2GuidedSelectSlot
         local prepared
         if type(selectSlot) == "function" then
-            local ok, value = pcall(selectSlot, stage.prepareTab, stage.prepareSlot)
+            local ok, value = InvokeGuidedBoundary(selectSlot, stage.prepareTab, stage.prepareSlot)
             prepared = ok and value ~= false
         end
         if not prepared then
@@ -1059,7 +1070,7 @@ local function EnsureStageSurface(stage)
     local byKind = Runtime.copyPopupOpeners and Runtime.copyPopupOpeners[kind]
     local ensureVisible = byKind and byKind[stage.pageKey]
     if type(ensureVisible) ~= "function" then return false end
-    local ok, visible = pcall(ensureVisible)
+    local ok, visible = InvokeGuidedBoundary(ensureVisible)
     return ok and visible ~= false
 end
 
@@ -1172,8 +1183,8 @@ local function EmphasizeSection(pageKey, current, currentControl)
             marker = outer:CreateTexture(nil, "OVERLAY", nil, 7)
             local usedAtlas = false
             if marker.SetAtlas then
-                local ok = pcall(marker.SetAtlas, marker, "NPE_ArrowRight", false)
-                usedAtlas = ok
+                marker:SetAtlas("NPE_ArrowRight", false)
+                usedAtlas = true
             end
             if not usedAtlas then marker:SetTexture(T.media.collapseArrow) end
             marker:SetSize(20, 20)
@@ -1198,8 +1209,8 @@ IsWidgetInside = function(widget, ancestor)
         if not current then return false end
         if current == ancestor then return true end
         if type(current.GetParent) ~= "function" then return false end
-        local ok, parent = pcall(current.GetParent, current)
-        if not ok or parent == current then return false end
+        local parent = current:GetParent()
+        if parent == current then return false end
         current = parent
     end
     return false
@@ -1208,7 +1219,7 @@ end
 local function RuntimeControlRecords()
     local catalog = M.RuntimeControlCatalog
     if not (catalog and type(catalog.GetRecords) == "function") then return {} end
-    local ok, records = pcall(catalog.GetRecords)
+    local ok, records = InvokeGuidedBoundary(catalog.GetRecords)
     return ok and type(records) == "table" and records or {}
 end
 
@@ -1216,8 +1227,8 @@ local function GuidedWidgetIsActionable(widget)
     if not widget or widget._msuf2AppliedEnabled == false or widget._msuf2DesiredEnabled == false then return false end
     local function ObjectEnabled(object)
         if not object or type(object.IsEnabled) ~= "function" then return true end
-        local ok, enabled = pcall(object.IsEnabled, object)
-        return not ok or (enabled ~= false and enabled ~= 0)
+        local enabled = object:IsEnabled()
+        return enabled ~= false and enabled ~= 0
     end
     if not ObjectEnabled(widget) then return false end
     if type(widget.buttons) == "table" and #widget.buttons > 0 then
@@ -1291,11 +1302,9 @@ local function SectionControls(pageKey, section, sections, records, includeEphem
             local widget = internal and internal.widget
             local shown = true
             if widget and type(widget.IsVisible) == "function" then
-                local ok, value = pcall(widget.IsVisible, widget)
-                shown = not ok or value == true
+                shown = widget:IsVisible() == true
             elseif widget and type(widget.IsShown) == "function" then
-                local ok, value = pcall(widget.IsShown, widget)
-                shown = not ok or value == true
+                shown = widget:IsShown() == true
             end
             local actionable = GuidedWidgetIsActionable(widget)
             local owner = widget and shown and (actionable or includeLocked == true) and IsWidgetInside(widget, section.body) and section or nil
@@ -1453,7 +1462,8 @@ local function EmphasizeControl(stage, section, controls, current)
                 local texture = marker:CreateTexture(nil, "OVERLAY", nil, 7)
                 local usedAtlas = false
                 if type(texture.SetAtlas) == "function" then
-                    usedAtlas = pcall(texture.SetAtlas, texture, "NPE_ArrowRight", false)
+                    texture:SetAtlas("NPE_ArrowRight", false)
+                    usedAtlas = true
                 end
                 if not usedAtlas and T.media then texture:SetTexture(T.media.collapseArrow) end
                 texture:SetSize(20, 20)
@@ -1664,8 +1674,8 @@ local function FocusGuidedWidget(widget, fallback, flash)
             if not current then return false end
             if current._msuf2GuidedNoScroll then return true end
             if type(current.GetParent) ~= "function" then return false end
-            local ok, parent = pcall(current.GetParent, current)
-            if not ok or parent == current then return false end
+            local parent = current:GetParent()
+            if parent == current then return false end
             current = parent
         end
         return false
@@ -2208,8 +2218,8 @@ local function LayoutChrome(chrome, warning, helpText)
         local fontString = buttons[i]._msuf2Label
             or (type(buttons[i].GetFontString) == "function" and buttons[i]:GetFontString() or nil)
         if fontString and type(fontString.GetStringWidth) == "function" then
-            local ok, textWidth = pcall(fontString.GetStringWidth, fontString)
-            if ok and tonumber(textWidth) then
+            local textWidth = fontString:GetStringWidth()
+            if tonumber(textWidth) then
                 minimums[i] = max(minimums[i], ceil(textWidth + 8))
                 preferred = ceil(textWidth + 22)
                 maximums[i] = max(maximums[i], minimums[i])
@@ -2715,7 +2725,8 @@ function M.InstallGuidedTourChrome(frame, status, host, scroll)
     chrome.section = T.Font(chrome, "GameFontDisableSmall", "", T.colors.muted)
     chrome.section:SetJustifyH("LEFT")
     local cueArrow = chrome:CreateTexture(nil, "OVERLAY", nil, 4)
-    local cueAtlas = cueArrow.SetAtlas and pcall(cueArrow.SetAtlas, cueArrow, "NPE_ArrowRight", false)
+    local cueAtlas = false
+    if cueArrow.SetAtlas then cueArrow:SetAtlas("NPE_ArrowRight", false); cueAtlas = true end
     if not cueAtlas then cueArrow:SetTexture(T.media.collapseArrow) end
     cueArrow:SetSize(16, 16)
     cueArrow:SetVertexColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 1)
@@ -2810,7 +2821,7 @@ function M.StartGuidedTour(opts)
     local stage = STAGE_BY_ID[tostring(opts.stageId or "")] or STAGES[1]
     local restorePoint
     if type(M.CaptureGuidedTourRestorePoint) == "function" then
-        local captured, value = pcall(M.CaptureGuidedTourRestorePoint)
+        local captured, value = InvokeGuidedBoundary(M.CaptureGuidedTourRestorePoint)
         if captured and type(value) == "table" then restorePoint = value end
     end
     local ok = Invoke(Tour(), "Start", ActiveProfileName(), stage.id, restorePoint)
@@ -3347,7 +3358,7 @@ local function BuildFinalReviewPage(ctx, T, W)
             local point = select(2, Invoke(Tour(), "GetRestorePoint"))
             if type(point) ~= "table" then return end
             Invoke(Tour(), "MarkRestorePointUsed", true)
-            local ok, restored = pcall(M.RestoreGuidedTourRestorePoint, point)
+            local ok, restored = InvokeGuidedBoundary(M.RestoreGuidedTourRestorePoint, point)
             if not ok or restored ~= true then
                 Invoke(Tour(), "MarkRestorePointUsed", false)
                 armed = false

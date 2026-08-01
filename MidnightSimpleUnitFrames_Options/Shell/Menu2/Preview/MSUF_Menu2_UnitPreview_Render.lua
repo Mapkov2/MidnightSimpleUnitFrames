@@ -673,9 +673,9 @@ function Render.Install(Preview, deps)
             if type(fontPath) ~= "string" or fontPath == "" then fontPath = fallbackFont end
             local resolveSafe = _G.MSUF_ResolveSafeFontPath
             if type(resolveSafe) == "function" then fontPath = resolveSafe(fontPath, size, fontFlags, fontKey) end
-            local ok = pcall(fs.SetFont, fs, fontPath, size, fontFlags)
-            if not ok then
-                pcall(fs.SetFont, fs, fallbackFont, size, fontFlags)
+            local applied = fs:SetFont(fontPath, size, fontFlags)
+            if applied == false then
+                fs:SetFont(fallbackFont, size, fontFlags)
             end
             if fs.SetShadowOffset then
                 if useShadow == nil then useShadow = not (general and general.textBackdrop == false) end

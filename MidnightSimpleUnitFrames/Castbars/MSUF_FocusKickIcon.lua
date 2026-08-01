@@ -191,8 +191,8 @@ local function ApplyTimeTextFont()
             applyResolved(fs, fontPath, fontSize, fontFlags, g and g.fontKey)
             return
         end
-        local ok, applied = pcall(fs.SetFont, fs, fontPath, fontSize, fontFlags)
-        local ready = ok and applied ~= false
+        local applied = fs:SetFont(fontPath, fontSize, fontFlags)
+        local ready = applied ~= false
         local matches = _G.MSUF_FontApplicationMatches
         if ready and type(matches) == "function" then ready = matches(fs, fontPath, fontSize) == true end
         if not ready and type(_G.MSUF_MarkFontApplyFailed) == "function" then

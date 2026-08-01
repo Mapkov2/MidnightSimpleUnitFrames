@@ -101,7 +101,7 @@ function Runtime:CancelPendingTasks(reason)
         menuRuntimeTasks[task] = nil
         task.active = false
         if task.timer and type(task.timer.Cancel) == "function" then
-            pcall(task.timer.Cancel, task.timer)
+            task.timer:Cancel()
         end
         cancelled = cancelled + 1
     end
@@ -122,7 +122,7 @@ function Runtime:Schedule(delay, callback, label)
         self.active = false
         menuRuntimeTasks[self] = nil
         if self.timer and type(self.timer.Cancel) == "function" then
-            pcall(self.timer.Cancel, self.timer)
+            self.timer:Cancel()
         end
     end
     menuRuntimeTasks[task] = true
@@ -134,8 +134,8 @@ function Runtime:Schedule(delay, callback, label)
         return callback(...)
     end
     if rawTimerAPI and type(rawTimerAPI.NewTimer) == "function" then
-        local ok, timer = pcall(rawTimerAPI.NewTimer, delay, Run)
-        if ok and (timer or not task.active) then
+        local timer = rawTimerAPI.NewTimer(delay, Run)
+        if timer or not task.active then
             task.timer = timer
             return task
         end

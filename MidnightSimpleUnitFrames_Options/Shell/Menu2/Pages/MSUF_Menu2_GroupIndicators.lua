@@ -127,7 +127,8 @@ local function ResolveCustomBuffSpellIDs(value)
     local resolver = cs and cs.GetSpellIDForSpellIdentifier
     if type(resolver) ~= "function" then return nil end
     local ok, spellID = pcall(resolver, identifier)
-    if not ok or issecretvalue(spellID) == true then return nil end
+    if not ok then return nil end
+    if issecretvalue(spellID) == true then return nil end
     local out, seen = {}, {}
     AddCustomBuffSpellID(out, seen, spellID)
     return #out > 0 and out or nil
@@ -136,7 +137,7 @@ end
 local function RequestCustomBuffSpellData(spellIDs)
     local request = _G.C_Spell and _G.C_Spell.RequestLoadSpellData
     if type(request) ~= "function" or type(spellIDs) ~= "table" then return end
-    for i = 1, #spellIDs do pcall(request, spellIDs[i]) end
+    for i = 1, #spellIDs do request(spellIDs[i]) end
 end
 
 local function CustomBuffSpellIDListText(ids)
@@ -186,7 +187,8 @@ local function SuggestedActivePlayerAuraID(spellIDs)
     local getByName = _G.C_UnitAuras and _G.C_UnitAuras.GetAuraDataBySpellName
     if type(getByName) ~= "function" then return nil end
     local ok, aura = pcall(getByName, "player", spellName, "HELPFUL")
-    if not ok or issecretvalue(aura) == true then return nil end
+    if not ok then return nil end
+    if issecretvalue(aura) == true then return nil end
     if aura == nil or type(aura) ~= "table" then return nil end
     local auraSpellID = aura.spellId
     if issecretvalue(auraSpellID) == true then return nil end

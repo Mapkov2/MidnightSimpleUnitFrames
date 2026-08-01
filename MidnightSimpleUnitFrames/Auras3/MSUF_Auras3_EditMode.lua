@@ -1248,7 +1248,7 @@ local function ApplyGlobalFont(fs, size)
         size = tonumber(size) or 14
         if size <= 0 then size = 14 end
         if size < 6 then size = 6 elseif size > 40 then size = 40 end
-        pcall(fs.SetFont, fs, fontPath, size, fontFlags)
+        fs:SetFont(fontPath, size, fontFlags)
     end
     if fs.SetTextColor then fs:SetTextColor(r or 1, g or 1, b or 1, 1) end
     if fs.SetShadowOffset then
@@ -1308,10 +1308,9 @@ local function SafeFrameCall(frame, methodName, ...)
 end
 
 local function IsSecretValue(value)
+    -- issecretvalue is the sanctioned never-throwing probe.
     if type(issecretvalue) ~= "function" then return true end
-    local ok, secret = pcall(issecretvalue, value)
-    if not ok then return true end
-    return secret == true
+    return issecretvalue(value) == true
 end
 
 local function SafeFrameBool(frame, methodName)

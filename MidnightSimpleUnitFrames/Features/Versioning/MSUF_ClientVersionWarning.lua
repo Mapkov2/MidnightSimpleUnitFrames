@@ -47,8 +47,7 @@ local interfaceNumber
 do
     local getBuildInfo = _G.GetBuildInfo
     if type(getBuildInfo) == "function" then
-        local ok, tocVersion = pcall(function() return select(4, getBuildInfo()) end)
-        if ok then interfaceNumber = tonumber(tocVersion) end
+        interfaceNumber = tonumber((select(4, getBuildInfo())))
     end
 end
 

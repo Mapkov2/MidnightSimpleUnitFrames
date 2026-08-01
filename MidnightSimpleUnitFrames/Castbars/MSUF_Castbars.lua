@@ -1154,8 +1154,7 @@ end
 local function ResolveDurationTotal(frame, durationObj, inferredTotal)
     local total = frame._msufPlainTotal
     if not total and durationObj.GetTotalDuration then
-        local ok, value = pcall(durationObj.GetTotalDuration, durationObj)
-        if ok then total = ToPlainNumber(value) end
+        total = ToPlainNumber(durationObj:GetTotalDuration())
     end
     if not total and inferredTotal then total = inferredTotal end
     if not total and frame.statusBar and frame.statusBar.GetMinMaxValues then
@@ -1187,13 +1186,14 @@ local function UpdateDurationObjectFrame(frame, now)
     local inferredTotal
 
     if shouldPollDuration then
+        -- Hottest duration read in the addon (up to 20 Hz per bar in a cast's
+        -- final second). 12.1 contract: no-arg getters cannot violate
+        -- SecretArguments; secret returns are rejected by ToPlainNumber.
         local rawRemaining
         if durationObj.GetRemainingDuration then
-            local ok, value = pcall(durationObj.GetRemainingDuration, durationObj)
-            if ok then rawRemaining = value end
+            rawRemaining = durationObj:GetRemainingDuration()
         else
-            local ok, value = pcall(durationObj.GetRemaining, durationObj)
-            if ok then rawRemaining = value end
+            rawRemaining = durationObj:GetRemaining()
         end
         remaining = ToPlainNumber(rawRemaining)
 
