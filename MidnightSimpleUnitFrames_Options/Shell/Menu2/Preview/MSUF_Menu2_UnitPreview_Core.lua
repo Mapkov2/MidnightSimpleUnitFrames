@@ -144,9 +144,9 @@ local function EnsureFrameBorderOverlay(mock, border)
     if overlay.SetFrameLevel and mock.GetFrameLevel then
         local layer = floor((tonumber(border and border.layer) or 0) + 0.5)
         if layer < 0 then layer = 0 elseif layer > 30 then layer = 30 end
-        -- Group mocks mirror the live group band, where the outline shares the
-        -- foreground scale with text and icons (Layers.BorderOffset).
-        if mock._msufPreviewGroupScope == true and Layers.GroupBorderLevel then
+        if Layers.ElementLevel then
+            overlay:SetFrameLevel(Layers.ElementLevel(layer, 0, 8))
+        elseif mock._msufPreviewGroupScope == true and Layers.GroupBorderLevel then
             overlay:SetFrameLevel(Layers.GroupBorderLevel(mock:GetFrameLevel() or 0, layer))
         else
             overlay:SetFrameLevel((mock:GetFrameLevel() or 0) + (Layers.FRAME_BORDER_NORMAL_OFFSET or Layers.PREVIEW_FRAME_BORDER_OFFSET or 35) + layer)

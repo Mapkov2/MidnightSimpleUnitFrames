@@ -743,14 +743,14 @@ local function ResolveCastbarIconFrameLevel(unit, general)
     if not value then return nil end
     value = math_floor(value + 0.5)
     if value <= 0 then return nil end
-    if value > 30 then return 30 end
-    return value
+    if value > 30 then value = 30 end
+    local layers = MSUF.UF and MSUF.UF.Layers
+    return layers and layers.ElementLevel and layers.ElementLevel(value, 0, 4) or value
 end
 ExportPublic("MSUF_ResolveCastbarIconFrameLevel", ResolveCastbarIconFrameLevel)
 
--- The user-facing 0-30 value is the castbar root's actual frame level. Keep
--- every child frame at its established relative offset so the icon, texts,
--- effects, and outline all move together with that root.
+-- The castbar occupies one universal user-layer slot. Its children retain
+-- their established detail ordering inside that slot.
 local function ApplyCastbarFrameLayer(frame, general, forcedUnit)
     if not frame then return end
     local unit = NormalizeCastbarUnit(forcedUnit) or NormalizeCastbarUnit(frame.unit)
@@ -759,7 +759,8 @@ local function ApplyCastbarFrameLayer(frame, general, forcedUnit)
 
     local anchor = CastbarAnchorFrame(frame, unit)
     SyncCastbarFrameStrata(frame, anchor, unit)
-    local rootLevel = layer
+    local layers = MSUF.UF and MSUF.UF.Layers
+    local rootLevel = layers and layers.ElementLevel and layers.ElementLevel(layer, 0, 0) or layer
     local statusLevel = rootLevel + 1
     local iconLevel = ResolveCastbarIconFrameLevel(unit, general)
     SetCastbarFrameLevel(frame, rootLevel)

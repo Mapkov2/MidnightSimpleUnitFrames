@@ -91,20 +91,8 @@ local function ReadParentFrameStrata(parentFrame)
 end
 
 local function ResolveFrameStrata(parentFrame, value)
-    -- Group text/icons and full-frame effects share the parent strata so their
-    -- deterministic frame-level bands cannot be bypassed by legacy saved
-    -- FrameStrata values. Unit-frame aura compatibility remains unchanged.
-    if parentFrame and parentFrame.MSUFSpec and parentFrame.MSUFSpec.scope == "group" then
-        return ReadParentFrameStrata(parentFrame)
-    end
-    if issecretvalue(value) == true then value = nil end
-    if value == nil or value == "" or value == "AUTO" then
-        return ReadParentFrameStrata(parentFrame)
-    end
-    local rank = _G.MSUF_FRAME_STRATA_RANK
-    if type(value) == "string" and rank and rank[value] then return value end
-    value = NormalizeFrameStrata(value, "AUTO")
-    if value ~= "AUTO" then return value end
+    -- Retained legacy strata values are migration data only. All layer-aware
+    -- visuals share their owning unit frame's strata.
     return ReadParentFrameStrata(parentFrame)
 end
 
@@ -997,7 +985,8 @@ local function ApplyButtonFrameEffect(button, slot, parentFrame)
         -- Layer is a cold-compiled 0..30 local offset. Zero preserves the
         -- established priority band exactly; no SavedVariables reads occur here.
         local layer = effect.layer or 0
-        root:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + SPELL_FRAME_EFFECT_BASE_OFFSET + (11 - priority) + layer)
+        root:SetFrameLevel(FrameLayers.ElementLevel and FrameLayers.ElementLevel(layer, 0, 11 - priority)
+            or ((parentFrame:GetFrameLevel() or 0) + SPELL_FRAME_EFFECT_BASE_OFFSET + (11 - priority) + layer))
     end
     StopPulse(root)
     HideEffectRegions(button)
@@ -1365,7 +1354,8 @@ local function SyncMissingFrame(parentFrame, slot, button)
     frame:SetSize(slot.width or slot.size or 1, slot.height or slot.size or 1)
     frame:SetPoint(slot.anchor or "TOPLEFT", parentFrame, slot.anchor or "TOPLEFT", slot.x or 0, slot.y or 0)
     SyncFrameStrata(frame, ResolveFrameStrata(parentFrame, slot.strata))
-    frame:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + SpellIconBaseOffset(parentFrame) + (slot.layer or 9) - 1)
+    frame:SetFrameLevel(FrameLayers.ElementLevel and FrameLayers.ElementLevel(slot.layer, 9, 0)
+        or ((parentFrame:GetFrameLevel() or 0) + SpellIconBaseOffset(parentFrame) + (slot.layer or 9) - 1))
     local tex = frame._tex
     local label = frame._label
     if slot.visual == "square" or slot.visual == "bar" then
@@ -1408,7 +1398,8 @@ local function SyncButtonGeometry(button, slot, parentFrame, forceGeometry)
         button:SetPoint(anchor, parentFrame, anchor, x, y)
     end
     SyncFrameStrata(button, ResolveFrameStrata(parentFrame, slot.strata))
-    local level = (parentFrame:GetFrameLevel() or 0) + SpellIconBaseOffset(parentFrame) + (slot.layer or 9)
+    local level = FrameLayers.ElementLevel and FrameLayers.ElementLevel(slot.layer, 9, 1)
+        or ((parentFrame:GetFrameLevel() or 0) + SpellIconBaseOffset(parentFrame) + (slot.layer or 9))
     if button.SetFrameLevel and button._msufA3GeomLevel ~= level then
         button._msufA3GeomLevel = level
         button:SetFrameLevel(level)
@@ -1479,6 +1470,11 @@ local function PrepareButton(button, slot, parentFrame, forceGeometry)
     local prepareSignature = slot._msufA3LayoutSignature or SlotLayoutSignature(slot)
     local needsFullPrepare = button._msufA3SpellIndicatorPrepareSignature ~= prepareSignature
     if needsFullPrepare then
+        -- The shared preparer creates MSUF-owned duration/text child surfaces
+        -- from the button's current frame level. Put the AuraSlot on its final
+        -- universal Layer first so those children stay inside the same 0..30
+        -- slot instead of retaining the assignment container's birth level.
+        SyncButtonGeometry(button, slot, parentFrame, true)
         -- The shared aura preparer finishes with the normal aura-grid layout,
         -- which temporarily anchors this manually placed slot to its container.
         -- Re-running it for an unchanged slot used to leave the button there:

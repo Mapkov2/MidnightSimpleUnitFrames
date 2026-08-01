@@ -1039,7 +1039,7 @@ function Text.Apply(frame, spec)
   local barAnchoredText = text.anchorToBars == true
   local directText = text.directLayout == true
   if detachedPowerText then
-    local detachedTextLayer = ClampFrameLayer(max(tonumber(text.powerLayer) or 2, (tonumber(power.detachedLevel) or 6) + 1), 2)
+    local detachedTextLayer = ClampFrameLayer(tonumber(text.powerLayer) or 2, 2)
     local overlay = EnsureTextOverlay(frame, "MSUFPowerTextLayer", detachedTextLayer, 2)
     local baseLevel = frame.GetFrameLevel and (frame:GetFrameLevel() or 0) or GetLayerBaseLevel(frame)
     SetFrameLevelCached(overlay, (Layers.TextLevel and Layers.TextLevel(baseLevel, detachedTextLayer, 2)) or (baseLevel + 10 + detachedTextLayer))

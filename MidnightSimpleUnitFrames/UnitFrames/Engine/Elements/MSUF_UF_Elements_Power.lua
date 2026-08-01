@@ -517,7 +517,10 @@ local function LayoutDetached(frame, bar, power, defaultHeight)
     bar:SetPoint(point, frame, relativePoint, x, y)
   end
   if bar.SetFrameLevel and frame.GetFrameLevel then
-    local level = (frame:GetFrameLevel() or 1) + math_min(30, RoundNonNegative(power.detachedLevel, 6))
+    local layer = math_min(30, RoundNonNegative(power.detachedLevel, 6))
+    local layers = UF and UF.Layers
+    local level = layers and layers.ElementLevel and layers.ElementLevel(layer, 6, 0)
+      or ((frame:GetFrameLevel() or 1) + layer)
     SetPowerFrameLevel(bar, level)
   end
   bar._msufDetached = true

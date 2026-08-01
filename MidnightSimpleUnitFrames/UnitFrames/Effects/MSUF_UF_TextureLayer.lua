@@ -30,6 +30,7 @@ local WHITE8 = "Interface\\Buttons\\WHITE8x8"
 
 local TextureLayer = {}
 MSUF.TextureLayer = TextureLayer
+local Layers = MSUF.UF and MSUF.UF.Layers or {}
 
 local SLOT_PREFIXES = { "texLayer", "texLayer2", "texLayer3" }
 TextureLayer.SLOT_PREFIXES = SLOT_PREFIXES
@@ -234,10 +235,9 @@ TextureLayer.ResolveClassRGB = ResolveClassRGB
 
 local function ApplyLayerStrata(frame, holder, strata)
   if not (holder and holder.SetFrameStrata) then return end
-  if type(strata) ~= "string" or not VALID_STRATA[strata] then
-    strata = frame.GetFrameStrata and frame:GetFrameStrata() or nil
-    if issecretvalue(strata) == true or strata == nil or strata == "" then return end
-  end
+  -- Legacy per-texture strata must not bypass the addon-wide 0..30 order.
+  strata = frame.GetFrameStrata and frame:GetFrameStrata() or nil
+  if issecretvalue(strata) == true or strata == nil or strata == "" then return end
   if holder._msufTexLayerStrata ~= strata then
     holder:SetFrameStrata(strata)
     holder._msufTexLayerStrata = strata
@@ -270,7 +270,8 @@ local function ApplySlot(frame, conf, unitKey, slot)
   if holder.SetFrameLevel and frame.GetFrameLevel then
     local offset = tonumber(conf[prefix .. "Level"]) or 1
     if offset < 0 then offset = 0 elseif offset > 30 then offset = 30 end
-    local level = (frame:GetFrameLevel() or 0) + offset
+    local level = Layers.ElementLevel and Layers.ElementLevel(offset, 1, 0)
+      or ((frame:GetFrameLevel() or 0) + offset)
     if holder._msufTexLayerLevel ~= level then
       holder:SetFrameLevel(level)
       holder._msufTexLayerLevel = level

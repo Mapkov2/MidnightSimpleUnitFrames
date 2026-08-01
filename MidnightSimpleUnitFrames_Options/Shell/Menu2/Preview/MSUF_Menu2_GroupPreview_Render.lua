@@ -487,7 +487,9 @@ local function PaintGroupPreviewPortrait(scene)
     end
     local level = math.max(0, math.min(30, tonumber(portrait.levelOffset) or 7))
     if holder.SetFrameLevel and scene.mock.GetFrameLevel then
-        local handleLevel = (scene.mock:GetFrameLevel() or 1) + level
+        local layers = scene.S.Layers or {}
+        local handleLevel = layers.ElementLevel and layers.ElementLevel(level, 7, 0)
+            or ((scene.mock:GetFrameLevel() or 1) + level)
         if handle then SetPreviewFrameLevel(handle, handleLevel) end
         if holder ~= handle then SetPreviewFrameLevel(holder, handleLevel) end
         SetPreviewFrameLevel(holder.border, (holder:GetFrameLevel() or 1) + 1)
@@ -1021,20 +1023,18 @@ local function ApplyHandleStrata(scene, handle, value, live, host)
         local current = handle.GetFrameStrata and handle:GetFrameStrata()
         if S.issecretvalue(current) == true or current ~= host then handle:SetFrameStrata(host) end
     end
-    local strata = S.NormalizeFrameStrata(value, "AUTO")
-    if strata == "AUTO" then strata = live end
-    local rank, baseRank = S.FrameStrataRank(strata), S.FrameStrataRank(live)
-    if rank == 0 or baseRank == 0 then return 0 end
-    return (rank - baseRank) * PREVIEW_STRATA_LEVEL_STEP
+    -- Legacy strata is deliberately ignored: the live runtime now keeps every
+    -- layer-aware element on the owning frame's strata as well.
+    return 0
 end
 
 local function FinalizeScene(scene)
     local S, box, mock = scene.S, scene.box, scene.mock
     local conf, runtimeText, runtimeStatus = scene.conf, scene.runtimeText, scene.runtimeStatus
     local baseLevel = mock.GetFrameLevel and mock:GetFrameLevel() or 1
-    local healthBaseLevel = S.Layers.HealthLevel and S.Layers.HealthLevel(baseLevel)
-        or (baseLevel + (S.Layers.HEALTH_OFFSET or 1))
-    local foregroundBase = S.Layers.GROUP_FOREGROUND_BASE_OFFSET or 64
+    local ElementLevel = S.Layers.ElementLevel or function(layer, fallback, detail)
+        return baseLevel + S.ClampLayer(layer, fallback) + (detail or 0)
+    end
     PlaceTextHandles(scene)
     local liveStrata, hostStrata = PreviewHostStrata(scene)
     local auraHandles = {
@@ -1046,9 +1046,8 @@ local function FinalizeScene(scene)
     for i = 1, #auraHandles do
         local item, handle = auraHandles[i], auraHandles[i][1]
         if handle then
-            local level = SetPreviewFrameLevel(handle, baseLevel + foregroundBase
-                + ApplyHandleStrata(scene, handle, "AUTO", liveStrata, hostStrata)
-                + S.ClampLayer(item[2].layer, item[3]))
+            ApplyHandleStrata(scene, handle, "AUTO", liveStrata, hostStrata)
+            local level = SetPreviewFrameLevel(handle, ElementLevel(item[2].layer, item[3], 0))
             for j = 1, #(handle._auraStyleOwners or {}) do
                 local owner = handle._auraStyleOwners[j]
                 if owner and owner.SetFrameLevel then SetPreviewFrameLevel(owner, level) end
@@ -1060,8 +1059,7 @@ local function FinalizeScene(scene)
         local spec = handle and handle._statusSpec
         if handle then
             local cfg = S.RuntimeStatusConfig(runtimeStatus, spec)
-            SetPreviewFrameLevel(handle, healthBaseLevel + foregroundBase
-                + S.ClampLayer(cfg and cfg.layer or spec and conf[spec.layer], spec and spec.defaultLayer or 7))
+            SetPreviewFrameLevel(handle, ElementLevel(cfg and cfg.layer or spec and conf[spec.layer], spec and spec.defaultLayer or 7, 8))
         end
     end
     -- Dispel symbol row. Same foreground band as the aura handles so its Effect
@@ -1071,19 +1069,16 @@ local function FinalizeScene(scene)
     -- dead in the preview while it worked on the real frame.
     local dispelSymbolCfg = scene.runtimeSpec and scene.runtimeSpec.dispelSymbol
     if S.dispelSymbolHandle then
-        SetPreviewFrameLevel(S.dispelSymbolHandle, baseLevel + foregroundBase
-            + ApplyHandleStrata(scene, S.dispelSymbolHandle,
-                dispelSymbolCfg and dispelSymbolCfg.strata or "AUTO", liveStrata, hostStrata)
-            + S.ClampLayer(dispelSymbolCfg and dispelSymbolCfg.layer, 8))
+        ApplyHandleStrata(scene, S.dispelSymbolHandle, dispelSymbolCfg and dispelSymbolCfg.strata or "AUTO", liveStrata, hostStrata)
+        SetPreviewFrameLevel(S.dispelSymbolHandle, ElementLevel(dispelSymbolCfg and dispelSymbolCfg.layer, 8, 8))
     end
     local rawIndicators = conf.spellIndicators or {}
     local runtimeIndicators = scene.runtimeSpellIndicators or {}
     local spellLayer = runtimeIndicators.layer ~= nil and runtimeIndicators.layer or rawIndicators.layer
     local spellStrata = runtimeIndicators.strata ~= nil and runtimeIndicators.strata or rawIndicators.strata
     local selected = scene.selectedSpellCfg
-    SetPreviewFrameLevel(S.spellHandle, baseLevel + foregroundBase
-        + ApplyHandleStrata(scene, S.spellHandle, "AUTO", liveStrata, hostStrata)
-        + S.ClampLayer(selected and selected.layer or spellLayer, 9))
+    ApplyHandleStrata(scene, S.spellHandle, "AUTO", liveStrata, hostStrata)
+    SetPreviewFrameLevel(S.spellHandle, ElementLevel(selected and selected.layer or spellLayer, 9, 1))
     local selectedEffectOwner = box._msufGFSelectedSpellEffectOwner
     local selectedEffectRoot = selectedEffectOwner and selectedEffectOwner._msufSpellPreviewEffectRoot
     if selectedEffectRoot and selectedEffectRoot.IsShown and selectedEffectRoot:IsShown() then
@@ -1095,8 +1090,7 @@ local function FinalizeScene(scene)
         -- produce a negative local offset below the menu mock. Keep the preview
         -- root on the host strata and express priority in a bounded local band.
         ApplyHandleStrata(scene, selectedEffectRoot, "AUTO", liveStrata, hostStrata)
-        SetPreviewFrameLevel(selectedEffectRoot, baseLevel
-            + (S.Layers.SPELL_FRAME_EFFECT_BASE_OFFSET or 1) + (11 - priority) + effectLayer)
+        SetPreviewFrameLevel(selectedEffectRoot, ElementLevel(effectLayer, 0, 11 - priority))
     end
     if selectedEffectOwner then
         SetPreviewFrameLevel(selectedEffectOwner, baseLevel + 1)
@@ -1108,16 +1102,14 @@ local function FinalizeScene(scene)
         SetPreviewFrameLevel(selectedIconEffectRoot, S.spellHandle:GetFrameLevel() + 4)
     end
     for _, handle in pairs(scene.dynamicSpellHandlesActive or {}) do
-        SetPreviewFrameLevel(handle, baseLevel + foregroundBase
-            + ApplyHandleStrata(scene, handle, "AUTO", liveStrata, hostStrata)
-            + S.ClampLayer(handle._msufSpellIndicatorLayer or spellLayer, 9))
+        ApplyHandleStrata(scene, handle, "AUTO", liveStrata, hostStrata)
+        SetPreviewFrameLevel(handle, ElementLevel(handle._msufSpellIndicatorLayer or spellLayer, 9, 1))
         local effectRoot = handle._msufSpellPreviewEffectRoot
         if effectRoot and effectRoot.IsShown and effectRoot:IsShown() then
             local priority = max(1, min(10, floor((tonumber(effectRoot._msufSpellPreviewPriority) or 5) + 0.5)))
             local effectLayer = S.ClampLayer(effectRoot._msufSpellPreviewLayer, 0)
-            SetPreviewFrameLevel(effectRoot, baseLevel
-                + ApplyHandleStrata(scene, effectRoot, "AUTO", liveStrata, hostStrata)
-                + (S.Layers.SPELL_FRAME_EFFECT_BASE_OFFSET or 1) + (11 - priority) + effectLayer)
+            ApplyHandleStrata(scene, effectRoot, "AUTO", liveStrata, hostStrata)
+            SetPreviewFrameLevel(effectRoot, ElementLevel(effectLayer, 0, 11 - priority))
         end
         local iconEffectRoot = handle._msufSpellPreviewIconEffectRoot
         if iconEffectRoot and iconEffectRoot.IsShown and iconEffectRoot:IsShown() then
@@ -1128,8 +1120,7 @@ local function FinalizeScene(scene)
     end
     for i = 1, #TEXT_LEVEL_SPECS do
         local item = TEXT_LEVEL_SPECS[i]
-        SetPreviewFrameLevel(scene.textHandles[item[1]], scene.textBaseLevel
-            + S.ClampLayer(runtimeText[item[2]] or conf[item[3]], item[4]))
+        SetPreviewFrameLevel(scene.textHandles[item[1]], ElementLevel(runtimeText[item[2]] or conf[item[3]], item[4], 8))
     end
     local auraKeys = { "buff", "trackedBuff", "debuff", "external" }
     for i = 1, #auraHandles do
@@ -2325,25 +2316,26 @@ function Render.Install(box, ctx, deps)
         scene.previewScale = previewScale
         PaintGroupPreviewPortrait(scene)
         PaintGroupPreviewDispelSymbol(scene)
-        local textBaseLevel = (Layers.HealthLevel and Layers.HealthLevel((mock.GetFrameLevel and mock:GetFrameLevel()) or 1)
-            or (((mock.GetFrameLevel and mock:GetFrameLevel()) or 1) + (Layers.HEALTH_OFFSET or 1)))
-            + (Layers.GROUP_FOREGROUND_BASE_OFFSET or 64)
+        local textBaseLevel = 0
         if mock._nameTextLayer then
             if mock._nameTextLayer.GetParent and mock._nameTextLayer:GetParent() ~= mock and mock._nameTextLayer.SetParent then mock._nameTextLayer:SetParent(mock) end
             mock._nameTextLayer:ClearAllPoints()
             mock._nameTextLayer:SetAllPoints(mock)
-            SetPreviewFrameLevel(mock._nameTextLayer, textBaseLevel + ClampLayer(runtimeText.nameLayer or conf.nameTextLayer, 5))
+            SetPreviewFrameLevel(mock._nameTextLayer, Layers.ElementLevel and Layers.ElementLevel(runtimeText.nameLayer or conf.nameTextLayer, 5, 8)
+                or (((mock.GetFrameLevel and mock:GetFrameLevel()) or 1) + ClampLayer(runtimeText.nameLayer or conf.nameTextLayer, 5) + 8))
         end
         if mock._healthTextLayer then
             if mock._healthTextLayer.GetParent and mock._healthTextLayer:GetParent() ~= mock and mock._healthTextLayer.SetParent then mock._healthTextLayer:SetParent(mock) end
             mock._healthTextLayer:ClearAllPoints()
             mock._healthTextLayer:SetAllPoints(mock)
-            SetPreviewFrameLevel(mock._healthTextLayer, textBaseLevel + ClampLayer(runtimeText.healthLayer or conf.textLayer, 5))
+            SetPreviewFrameLevel(mock._healthTextLayer, Layers.ElementLevel and Layers.ElementLevel(runtimeText.healthLayer or conf.textLayer, 5, 8)
+                or (((mock.GetFrameLevel and mock:GetFrameLevel()) or 1) + ClampLayer(runtimeText.healthLayer or conf.textLayer, 5) + 8))
         end
         if mock._powerTextLayer then
             mock._powerTextLayer:ClearAllPoints()
             mock._powerTextLayer:SetAllPoints(mock)
-            SetPreviewFrameLevel(mock._powerTextLayer, textBaseLevel + ClampLayer(runtimeText.powerLayer or conf.powerTextLayer, 2))
+            SetPreviewFrameLevel(mock._powerTextLayer, Layers.ElementLevel and Layers.ElementLevel(runtimeText.powerLayer or conf.powerTextLayer, 2, 8)
+                or (((mock.GetFrameLevel and mock:GetFrameLevel()) or 1) + ClampLayer(runtimeText.powerLayer or conf.powerTextLayer, 2) + 8))
         end
         local showText = LayerOn("text")
         local fontPath = (runtimeSpec and runtimeSpec.font) or (gf and gf.ResolveFontPath and gf.ResolveFontPath(kind)) or (STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF")
@@ -2600,7 +2592,10 @@ function Render.Install(box, ctx, deps)
         PaintGroupBlockBorder(mock, conf, previewScale, ScaleValue)
         local boundsEdge = max(1, outlineEdge)
         ApplyBoundsGuide(self, boundsEdge)
-        if self._bounds.SetFrameLevel and mock.GetFrameLevel then SetPreviewFrameLevel(self._bounds, (mock:GetFrameLevel() or 1) + (Layers.PREVIEW_BOUNDS_OFFSET or 48)) end
+        if self._bounds.SetFrameLevel and mock.GetFrameLevel then
+            SetPreviewFrameLevel(self._bounds, Layers.ElementLevel and (Layers.ElementLevel(30, 30, 31) + 16)
+                or ((mock:GetFrameLevel() or 1) + (Layers.PREVIEW_BOUNDS_OFFSET or 48)))
+        end
         self._bounds:SetShown(LayerOn("bounds"))
         scene.previewScale = previewScale
         scene.SetPreviewFont = SetPreviewFont

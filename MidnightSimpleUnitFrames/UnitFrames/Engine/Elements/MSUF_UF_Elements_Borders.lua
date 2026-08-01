@@ -95,10 +95,9 @@ end
 
 local function SetBorderOverlayStrata(frame, overlay, strata)
   if not (frame and overlay and overlay.SetFrameStrata) then return end
-  if IsSecretValue(strata) then strata = nil end
-  if strata == nil or strata == "" or strata == "AUTO" then
-    strata = frame.GetFrameStrata and frame:GetFrameStrata() or nil
-  end
+  -- Outlines participate in the same 0..30 order as every other element;
+  -- retained legacy strata values are no longer allowed to jump that order.
+  strata = frame.GetFrameStrata and frame:GetFrameStrata() or nil
   if IsSecretValue(strata) or strata == nil or strata == "" then return end
   local cachedStrata = overlay._msufBorderStrata
   local currentStrata

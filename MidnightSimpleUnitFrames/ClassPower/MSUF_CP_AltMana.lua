@@ -70,7 +70,10 @@ builders.ALT_MANA = function(E)
         if AM.container then return end
 
         local c = CreateFrame("Frame", "MSUF_AltManaContainer", playerFrame)
-        c:SetFrameLevel(playerFrame:GetFrameLevel() + 2)
+        local layers = MSUF.UF and MSUF.UF.Layers
+        local layer = _cpDB.bars and _cpDB.bars.classPowerFrameLevelOffset
+        c:SetFrameLevel(layers and layers.ElementLevel and layers.ElementLevel(layer, 5, 0)
+            or (playerFrame:GetFrameLevel() + 2))
         c:Hide()
         AM.container = c
 
@@ -106,6 +109,14 @@ builders.ALT_MANA = function(E)
         local h = tonumber(b.altManaHeight) or 4
         if h < 2 then h = 2 elseif h > 30 then h = 30 end
         local oY = tonumber(b.altManaOffsetY) or -2
+        local layers = MSUF.UF and MSUF.UF.Layers
+        if AM.container.SetFrameLevel then
+            local level = layers and layers.ElementLevel and layers.ElementLevel(b.classPowerFrameLevelOffset, 5, 0)
+                or ((playerFrame:GetFrameLevel() or 0) + 2)
+            AM.container:SetFrameLevel(level)
+            if AM.bar then AM.bar:SetFrameLevel(level + 1) end
+            if AM._border then AM._border:SetFrameLevel(level + 2) end
+        end
 
         AM.container:ClearAllPoints()
         AM.container:SetPoint("TOPLEFT",  playerFrame, "BOTTOMLEFT",   2, oY)

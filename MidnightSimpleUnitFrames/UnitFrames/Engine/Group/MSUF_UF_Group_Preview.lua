@@ -638,7 +638,9 @@ function GF.PreviewFrameAuras(frame, kind, previewIndex, compiledAuras, compiled
       host:SetSize(max(1, tonumber(lane.width) or lane.size or 1),
         max(1, tonumber(lane.height) or lane.size or 1))
       if host.SetFrameLevel and frame.GetFrameLevel then
-        host:SetFrameLevel((frame:GetFrameLevel() or 0) + 64 + (tonumber(lane.layer) or 1))
+        local layers = MSUF and MSUF.UF and MSUF.UF.Layers or {}
+        host:SetFrameLevel(layers.ElementLevel and layers.ElementLevel(lane.layer, 1, 0)
+          or ((frame:GetFrameLevel() or 0) + (tonumber(lane.layer) or 1)))
       end
       if host.SetAlpha then host:SetAlpha(tonumber(lane.alpha) or 1) end
       host:Show()
@@ -763,10 +765,12 @@ local function ApplySpellFrameEffectPreview(visual, frame, slot)
   root:SetAllPoints(health or frame)
   local layers = MSUF and MSUF.UF and MSUF.UF.Layers or {}
   if root.SetFrameLevel and frame.GetFrameLevel then
-    root:SetFrameLevel((frame:GetFrameLevel() or 0)
-      + (tonumber(layers.SPELL_FRAME_EFFECT_BASE_OFFSET) or 1)
-      + (11 - max(1, min(10, tonumber(effect.priority) or 5)))
-      + max(0, min(30, tonumber(effect.layer) or 0)))
+    root:SetFrameLevel(layers.ElementLevel and layers.ElementLevel(effect.layer, 0,
+      11 - max(1, min(10, tonumber(effect.priority) or 5)))
+      or ((frame:GetFrameLevel() or 0)
+        + (tonumber(layers.SPELL_FRAME_EFFECT_BASE_OFFSET) or 1)
+        + (11 - max(1, min(10, tonumber(effect.priority) or 5)))
+        + max(0, min(30, tonumber(effect.layer) or 0))))
   end
   root._tint:Hide()
   root._name:Hide()
@@ -840,7 +844,9 @@ local function ApplySpellIndicatorPreview(frame, kind, visual, slot)
   visual:SetSize(width, height)
   visual:SetPoint(anchor, frame, anchor, tonumber(slot.x) or 0, tonumber(slot.y) or 0)
   if visual.SetFrameLevel and frame.GetFrameLevel then
-    visual:SetFrameLevel((frame:GetFrameLevel() or 0) + 64 + (tonumber(slot.layer) or 9))
+    local layers = MSUF and MSUF.UF and MSUF.UF.Layers or {}
+    visual:SetFrameLevel(layers.ElementLevel and layers.ElementLevel(slot.layer, 9, 1)
+      or ((frame:GetFrameLevel() or 0) + (tonumber(slot.layer) or 9)))
   end
 
   local color = type(slot.color) == "table" and slot.color or nil

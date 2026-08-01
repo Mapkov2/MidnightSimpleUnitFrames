@@ -808,7 +808,9 @@ builders.PLAYER_HP = function(E)
                 PHP.frame:SetPoint("BOTTOM", anchor, "TOP", x, y + gap)
             end
             PHP.frame:SetSize(width, h)
-            PHP.frame:SetFrameLevel(baseLevel + levelOffset)
+            local layers = MSUF.UF and MSUF.UF.Layers
+            PHP.frame:SetFrameLevel(layers and layers.ElementLevel and layers.ElementLevel(levelOffset, 7, 0)
+                or (baseLevel + levelOffset))
             if PHP.textFrame then PHP.textFrame:SetFrameLevel(PHP.frame:GetFrameLevel() + 5) end
         end
 

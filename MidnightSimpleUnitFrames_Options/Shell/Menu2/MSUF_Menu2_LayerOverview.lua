@@ -322,6 +322,36 @@ Overview.RegisterProvider("unit-frames", function(sink)
             inherited = inherited, settingKey = scope.key .. ".detachedPowerBarFrameLevelOffset",
             edit = { kind = "unit", scope = scope.key, key = "detachedPowerBarFrameLevelOffset", mode = "detached-power" },
         })
+        local portrait, portraitInherited = ReadUnitValue(db, scope.key, "portraitLevelOffset", 7)
+        local portraitMode = tostring((type(db[scope.key]) == "table" and db[scope.key].portraitMode) or "OFF"):upper()
+        sink:Layer({
+            id = "unit." .. scope.key .. ".portraitLevelOffset",
+            area = "Unit Frames", scope = scope.label, label = "Portrait",
+            value = portrait, default = 7, enabled = portraitMode ~= "OFF",
+            inherited = portraitInherited, settingKey = scope.key .. ".portraitLevelOffset",
+            edit = { kind = "unit", scope = scope.key, key = "portraitLevelOffset", mode = "portrait" },
+        })
+        for slot = 1, 3 do
+            local prefix = slot == 1 and "texLayer" or ("texLayer" .. slot)
+            local value, layerInherited = ReadUnitValue(db, scope.key, prefix .. "Level", 1)
+            sink:Layer({
+                id = "unit." .. scope.key .. "." .. prefix .. "Level",
+                area = "Unit Texture Layers", scope = scope.label, label = "Texture Layer " .. slot,
+                value = value, default = 1,
+                enabled = ReadUnitBool(db, scope.key, prefix .. "Enabled", false),
+                inherited = layerInherited, settingKey = scope.key .. "." .. prefix .. "Level",
+                edit = { kind = "unit", scope = scope.key, key = prefix .. "Level", mode = "texture-layer" },
+            })
+        end
+        local dispelLayer, dispelInherited = ReadUnitValue(db, scope.key, "unitDispelSymbolLayer", 8)
+        sink:Layer({
+            id = "unit." .. scope.key .. ".unitDispelSymbolLayer",
+            area = "Unit Status", scope = scope.label, label = "Dispel Symbol",
+            value = dispelLayer, default = 8,
+            enabled = ReadUnitBool(db, scope.key, "unitDispelSymbolEnabled", false),
+            inherited = dispelInherited, settingKey = scope.key .. ".unitDispelSymbolLayer",
+            edit = { kind = "unit", scope = scope.key, key = "unitDispelSymbolLayer", mode = "dispel-symbol" },
+        })
     end
 
     local specs = UnitStatusSpecs()
@@ -503,6 +533,22 @@ Overview.RegisterProvider("group-frames", function(sink)
             edit = { kind = "group", scope = scope.key, dbKey = scope.dbKey, path = { "groupNumberLayer" } },
         })
         sink:Layer({
+            id = "group." .. scope.key .. ".detachedPowerBarFrameLevelOffset",
+            area = "Group Frames", scope = scope.label, label = "Detached Power Bar",
+            value = conf.detachedPowerBarFrameLevelOffset, default = 6,
+            enabled = frameEnabled and conf.powerBarEnabled == true and conf.powerBarDetached == true,
+            settingKey = scope.dbKey .. ".detachedPowerBarFrameLevelOffset",
+            edit = { kind = "group", scope = scope.key, dbKey = scope.dbKey, path = { "detachedPowerBarFrameLevelOffset" } },
+        })
+        sink:Layer({
+            id = "group." .. scope.key .. ".dispelSymbolLayer",
+            area = "Group Status", scope = scope.label, label = "Dispel Symbol",
+            value = conf.dispelSymbolLayer, default = 8,
+            enabled = frameEnabled and conf.dispelSymbolEnabled == true,
+            settingKey = scope.dbKey .. ".dispelSymbolLayer",
+            edit = { kind = "group", scope = scope.key, dbKey = scope.dbKey, path = { "dispelSymbolLayer" } },
+        })
+        sink:Layer({
             id = "group." .. scope.key .. ".ciLayer",
             area = "Group Status", scope = scope.label, label = "Corner Indicators",
             value = conf.ciLayer, default = 7,
@@ -627,6 +673,37 @@ Overview.RegisterProvider("group-frames", function(sink)
         end
     end
 
+end)
+
+Overview.RegisterProvider("castbars", function(sink)
+    local db = DB()
+    local general = type(db.general) == "table" and db.general or {}
+    local rows = {
+        { scope = "player", label = "Player", prefix = "castbarPlayer" },
+        { scope = "target", label = "Target", prefix = "castbarTarget" },
+        { scope = "focus", label = "Focus", prefix = "castbarFocus" },
+        { scope = "boss", label = "Boss", prefix = "bossCast" },
+    }
+    for i = 1, #rows do
+        local row = rows[i]
+        local rootKey = row.prefix .. "FrameLevelOffset"
+        local iconKey = row.prefix .. "IconFrameLevelOffset"
+        local rootLayer = Layer(general[rootKey], 6)
+        sink:Layer({
+            id = "castbar." .. row.scope .. ".root",
+            area = "Castbars", scope = row.label, label = "Whole Castbar",
+            value = rootLayer, default = 6, settingKey = "general." .. rootKey,
+            edit = { kind = "general", key = rootKey, mode = "castbar" },
+        })
+        local iconValue = Number(general[iconKey], 0)
+        sink:Layer({
+            id = "castbar." .. row.scope .. ".icon",
+            area = "Castbars", scope = row.label, label = "Icon" .. (iconValue <= 0 and " (follows castbar)" or ""),
+            value = iconValue <= 0 and rootLayer or iconValue, default = rootLayer,
+            inherited = iconValue <= 0, settingKey = "general." .. iconKey,
+            edit = { kind = "general", key = iconKey, mode = "castbar-icon" },
+        })
+    end
 end)
 
 Overview.RegisterProvider("class-resources", function(sink)
@@ -769,15 +846,38 @@ function Overview.SetLayerValue(row, value)
 
     if edit.kind == "unit" then
         if type(M.SetUnitValue) == "function" then
-            local opts = edit.mode == "detached-power"
-                and { power = true, detachedPowerBar = true, preview = true }
-                or { text = true, preview = true }
+            local opts
+            if edit.mode == "detached-power" then
+                opts = { power = true, detachedPowerBar = true, preview = true }
+            elseif edit.mode == "portrait" then
+                opts = { portrait = true, preview = true }
+            elseif edit.mode == "texture-layer" then
+                opts = { preview = true, applyAll = false }
+            elseif edit.mode == "dispel-symbol" then
+                opts = { auras = true, preview = true }
+            else
+                opts = { text = true, preview = true }
+            end
             return M.SetUnitValue(edit.scope, edit.key, value, reason, opts) ~= false
         end
         local db = DB()
         local conf = EnsureChild(db, edit.scope)
         if not conf or conf[edit.key] == value then return false end
         conf[edit.key] = value
+        return true
+    end
+
+    if edit.kind == "general" then
+        if type(M.SetGeneralValue) == "function" then
+            return M.SetGeneralValue(edit.key, value, reason, {
+                castbar = edit.mode == "castbar" or edit.mode == "castbar-icon",
+                preview = true, applyAll = false,
+            }) ~= false
+        end
+        local db = DB()
+        local general = EnsureChild(db, "general")
+        if not general or general[edit.key] == value then return false end
+        general[edit.key] = value
         return true
     end
 

@@ -204,7 +204,9 @@ builders.BUILD = function(E)
         local levelOffset = tonumber(b.classPowerFrameLevelOffset) or 5
         if levelOffset < 0 then levelOffset = 0 elseif levelOffset > 30 then levelOffset = 30 end
         levelOffset = math_floor(levelOffset + 0.5)
-        c:SetFrameLevel(playerFrame:GetFrameLevel() + levelOffset)  --- above hpBar (Unhalted overlay approach)
+        local layers = MSUF.UF and MSUF.UF.Layers
+        c:SetFrameLevel(layers and layers.ElementLevel and layers.ElementLevel(levelOffset, 5, 0)
+            or (playerFrame:GetFrameLevel() + levelOffset))
         c:Hide()
         CP.container = c
 
@@ -278,7 +280,9 @@ builders.LAYOUT = function(E)
         if levelOffset < 0 then levelOffset = 0 elseif levelOffset > 30 then levelOffset = 30 end
         levelOffset = math_floor(levelOffset + 0.5)
         if playerFrame.GetFrameLevel and CP.container.SetFrameLevel then
-            local targetLevel = (playerFrame:GetFrameLevel() or 0) + levelOffset
+            local layers = MSUF.UF and MSUF.UF.Layers
+            local targetLevel = layers and layers.ElementLevel and layers.ElementLevel(levelOffset, 5, 0)
+                or ((playerFrame:GetFrameLevel() or 0) + levelOffset)
             if CP.container._msufFrameLevelStamp ~= targetLevel then
                 CP.container:SetFrameLevel(targetLevel)
                 CP.container._msufFrameLevelStamp = targetLevel

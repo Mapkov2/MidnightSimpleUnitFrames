@@ -9,35 +9,46 @@ MSUF.UF = UF
 local Layers = UF.Layers or {}
 UF.Layers = Layers
 
--- Full-frame Spell effects occupy at most base + 41 and the full-frame Dispel
--- overlay at most base + 42 (their own 0..30 Layer controls included). Keep
--- every readable Group Frame foreground surface in one higher, fixed band so
--- text and icons can never be painted underneath those effects. This changes
--- only cold layout levels; it adds no runtime update work.
-Layers.GROUP_FOREGROUND_BASE_OFFSET = 64
-Layers.TEXT_BASE_OFFSET = 10
-Layers.STATUS_BASE_OFFSET = 10
+-- One addon-wide relational 0..30 scale. Each user layer owns a complete
+-- 32-level slot; element-local children (text, cooldown swipe, glow, border)
+-- may use detail levels inside that slot but can never reach the next one.
+-- Levels are absolute rather than parent-relative so castbars and unit-frame
+-- elements remain comparable even when their frame trees have different roots.
+Layers.ELEMENT_LEVEL_BASE = 100
+Layers.ELEMENT_LEVEL_STRIDE = 32
+Layers.ELEMENT_DETAIL_MAX = Layers.ELEMENT_LEVEL_STRIDE - 1
+-- Native aura buttons live at the start of their user-selected 0..30 slot.
+-- Reserve deterministic child offsets inside that same slot so icon art,
+-- duration surfaces, and text never compete by creation order. These are not
+-- additional user layers: the complete aura still sorts by its lane/slot Layer.
+Layers.AURA_DURATION_BAR_LEVEL_OFFSET = 2
+Layers.AURA_COOLDOWN_LEVEL_OFFSET = 4
+Layers.AURA_TEXT_LEVEL_OFFSET = 8
+Layers.AURA_STACK_DRAW_SUBLEVEL = 6
+Layers.AURA_COOLDOWN_TEXT_DRAW_SUBLEVEL = 7
+Layers.GROUP_FOREGROUND_BASE_OFFSET = 0 -- compatibility alias
+Layers.TEXT_BASE_OFFSET = 0
+Layers.STATUS_BASE_OFFSET = 0
 --- PTR 7 hard rules for the native aura chain: (1) never touch AuraButton
 --- level/strata/points after initializeFrame without probing
 --- CanBeAccessedInContext() and re-applying on PLAYER_ENTERING_WORLD /
 --- PLAYER_REGEN_ENABLED; MSUF owns zero such touches by design. (2) any frame
 --- anchored to an aura container that needs layout scripts must inherit
 --- DisableUntrustedLayoutScriptsTemplate at creation.
---- One relational 0..30 scale per frame kind: on unit frames every element
---- family (texts, status icons, aura lanes, spell icons) computes
---- frame + 10 + layer; on group frames they all compute frame + 64 + layer
---- (the foreground band, see TextLevel/StatusLevel). An aura lane at layer 7
---- therefore renders above a text at layer 5 and below one at layer 9 on any
---- frame kind. Aura/spell runtimes read this shared unit base.
-Layers.UNIT_AURA_BASE_OFFSET = 10
+--- One relational 0..30 scale per frame kind: on unit frames text, aura, and
+--- spell families use the shared frame + 10 band. Status icons use their
+--- direct 0..30 frame level so they compare correctly with the whole-castbar
+--- control. Group frames keep all readable foreground surfaces in the fixed
+--- frame + 64 band. Aura/spell runtimes read this shared unit base.
+Layers.UNIT_AURA_BASE_OFFSET = 0
 Layers.HEALTH_OFFSET = 1
 Layers.PORTRAIT_OFFSET = 6
 Layers.PORTRAIT_BORDER_OFFSET = 7
 Layers.POWER_INLINE_OFFSET = 1
 Layers.POWER_DETACHED_DEFAULT = 6
-Layers.AURA_ICON_BASE_OFFSET = Layers.GROUP_FOREGROUND_BASE_OFFSET
-Layers.SPELL_ICON_BASE_OFFSET = Layers.GROUP_FOREGROUND_BASE_OFFSET
-Layers.CORNER_ICON_BASE_OFFSET = Layers.GROUP_FOREGROUND_BASE_OFFSET
+Layers.AURA_ICON_BASE_OFFSET = 0
+Layers.SPELL_ICON_BASE_OFFSET = 0
+Layers.CORNER_ICON_BASE_OFFSET = 0
 -- At user Layer 0, health-bar effects stay in the bar-local band below the
 -- default text/status overlays: Spell priority adds 1..10 and Dispel sits one
 -- level above the strongest Spell effect. Their independent 0..30 controls are
@@ -74,6 +85,26 @@ function Layers.ClampLayer(layer, fallback)
   return layer
 end
 
+function Layers.ClampDetail(detail)
+  detail = floor((tonumber(detail) or 0) + 0.5)
+  if detail < 0 then return 0 end
+  if detail > Layers.ELEMENT_DETAIL_MAX then return Layers.ELEMENT_DETAIL_MAX end
+  return detail
+end
+
+function Layers.ElementLevel(layer, fallback, detail)
+  return Layers.ELEMENT_LEVEL_BASE
+    + Layers.ClampLayer(layer, fallback) * Layers.ELEMENT_LEVEL_STRIDE
+    + Layers.ClampDetail(detail)
+end
+
+function Layers.ParentStrata(frame)
+  local issecretvalue = _G.issecretvalue
+  local strata = frame and frame.GetFrameStrata and frame:GetFrameStrata() or nil
+  if issecretvalue and issecretvalue(strata) == true then return nil end
+  return strata
+end
+
 function Layers.BaseFrameLevel(frame)
   local base = frame and (frame.Health or frame.hpBar or frame)
   return base and base.GetFrameLevel and (base:GetFrameLevel() or 0) or 0
@@ -86,19 +117,11 @@ function Layers.HealthLevel(frameOrLevel)
 end
 
 function Layers.TextLevel(frameOrLevel, layer, fallback)
-  local base = type(frameOrLevel) == "number" and frameOrLevel or Layers.BaseFrameLevel(frameOrLevel)
-  local offset = type(frameOrLevel) ~= "number" and frameOrLevel and frameOrLevel.MSUFSpec
-    and frameOrLevel.MSUFSpec.scope == "group" and Layers.GROUP_FOREGROUND_BASE_OFFSET
-    or Layers.TEXT_BASE_OFFSET
-  return base + offset + Layers.ClampLayer(layer, fallback)
+  return Layers.ElementLevel(layer, fallback, 8)
 end
 
 function Layers.StatusLevel(frameOrLevel, layer, fallback)
-  local base = type(frameOrLevel) == "number" and frameOrLevel or Layers.BaseFrameLevel(frameOrLevel)
-  local offset = type(frameOrLevel) ~= "number" and frameOrLevel and frameOrLevel.MSUFSpec
-    and frameOrLevel.MSUFSpec.scope == "group" and Layers.GROUP_FOREGROUND_BASE_OFFSET
-    or Layers.STATUS_BASE_OFFSET
-  return base + offset + Layers.ClampLayer(layer, fallback or 7)
+  return Layers.ElementLevel(layer, fallback or 7, 8)
 end
 
 --- Offset added to a frame's own level for its Frame Outline overlay.
@@ -106,25 +129,16 @@ end
 --- caller's already-compiled 0..30 `layer` rides on top. Unit frames keep the
 --- legacy band; group frames move to the foreground band (see above).
 function Layers.BorderOffset(frame, offset, layer)
-  offset = tonumber(offset) or Layers.FRAME_BORDER_DEFAULT_OFFSET
-  layer = Layers.ClampLayer(layer, 0)
-  local spec = type(frame) == "table" and frame.MSUFSpec
-  if not (spec and spec.scope == "group") then
-    return offset + layer
-  end
   local frameLevel = frame.GetFrameLevel and (frame:GetFrameLevel() or 0) or 0
-  return (Layers.BaseFrameLevel(frame) - frameLevel)
-    + Layers.GROUP_BORDER_BASE_OFFSET
-    + (offset - Layers.FRAME_BORDER_NORMAL_OFFSET)
-    + layer
+  offset = tonumber(offset) or Layers.FRAME_BORDER_DEFAULT_OFFSET
+  local detail = 8 + (offset - Layers.FRAME_BORDER_NORMAL_OFFSET)
+  return Layers.ElementLevel(layer, 0, detail) - frameLevel
 end
 
 --- Preview mirror of Layers.BorderOffset for group mocks, which carry no
 --- MSUFSpec and reach their health bar through a preview-private field.
 function Layers.GroupBorderLevel(frameLevel, layer)
-  return Layers.HealthLevel(tonumber(frameLevel) or 0)
-    + Layers.GROUP_BORDER_BASE_OFFSET
-    + Layers.ClampLayer(layer, 0)
+  return Layers.ElementLevel(layer, 0, 8)
 end
 
 function Layers.PreviewBoundsLevel(frameOrLevel)

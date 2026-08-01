@@ -1537,12 +1537,18 @@ local function EnsureIcon(group, index)
     icon.DispelBorder = dispelBorder
 
     local cd = icon:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    if cd.SetDrawLayer then
+        cd:SetDrawLayer("OVERLAY", FrameLayers.AURA_COOLDOWN_TEXT_DRAW_SUBLEVEL or 7)
+    end
     cd:SetPoint("CENTER", icon, "CENTER", 0, 0)
     ApplyGlobalFont(cd, 14)
     cd:SetText("1m")
     icon.CooldownText = cd
 
     local count = icon:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    if count.SetDrawLayer then
+        count:SetDrawLayer("OVERLAY", FrameLayers.AURA_STACK_DRAW_SUBLEVEL or 6)
+    end
     ApplyGlobalFont(count, 14)
     count:SetText(index == 1 and "3" or "")
     icon.Count = count
@@ -2071,7 +2077,9 @@ function EM.RefreshUnit(unit)
                 group:SetSize(laneW, laneH + HEADER_H)
                 if group.Body then group.Body:SetSize(laneW, laneH) end
                 if group.Body then group.Body:SetAlpha(Clamp(metrics and metrics.alpha or cfg.alpha, 1, 0, 1)) end
-                group:SetFrameLevel(900 + Clamp(cfg.layer, 5, 0, 30))
+                local layers = MSUF.UF and MSUF.UF.Layers
+                group:SetFrameLevel(layers and layers.ElementLevel and layers.ElementLevel(cfg.layer, 5, 0)
+                    or (900 + Clamp(cfg.layer, 5, 0, 30)))
                 if group.Hitbox and group.Hitbox.SetFrameLevel then
                     group.Hitbox:SetFrameLevel((group:GetFrameLevel() or 0) + 20)
                 end

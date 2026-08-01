@@ -97,10 +97,8 @@ function MSUF.Icons._layout.ApplyLayer(region, layer, owner)
 
     local layerFrame = region._msufLayerFrame
     if layerFrame and layerFrame.SetFrameLevel then
-        local base = 0
-        local o = owner or region._msufLayerOwner
-        if o and o.GetFrameLevel then base = o:GetFrameLevel() or 0 end
-        local want = base + 10 + l
+        local layers = MSUF.UF and MSUF.UF.Layers
+        local want = layers and layers.ElementLevel and layers.ElementLevel(l, 7, 8) or (10 + l)
         if layerFrame._msufLayerLevel ~= want then
             layerFrame._msufLayerLevel = want
             layerFrame:SetFrameLevel(want)
