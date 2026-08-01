@@ -4,6 +4,7 @@
 
 ### Highlights
 
+- Dots on target now support portrait tracking. The lane can move onto the frame portrait with up to eight portrait-sized icons that follow its exact width, height and shape, including cooldown text, on Target, Focus and Boss frames.
 - Aura icons can now take a shape: Rectangular, Circle, Rounded, Diamond, Hexagon, Star, Blizzard portrait, or Follow frame portrait. The choice exists per lane for unit buffs and debuffs, group lanes and custom containers, and each lane can optionally follow the Shared shape while keeping the rest of its style local.
 - MSUF castbars can use the rounded frame style. A new "Castbars" toggle in Rounded rounds the castbar surface, its fill and its outline with the shared corner strength; Blizzard castbars, spell icons and the GCD bar stay untouched.
 - New opt-in Ironfur tracker for Guardian Druids. In Bear Form the empty class-resource slot shows an estimated Ironfur lifetime bar with one moving marker per cast, including Ursoc's Endurance (7s to 9s base) and Guardian of Elune (+3s).
@@ -38,6 +39,10 @@
 - Fixed saved bar background transparency not being restored after login or a reload. A secure show transition could reset the live texture while the cached value still matched, so the cold apply skipped it; the three owning elements are now reasserted once after the world finishes loading.
 - Fixed portraits occasionally showing another unit's art. The bounded session texture cache added in Beta44 could answer with a stale asset because native portrait resolution can finish asynchronously; the cache is gone.
 - Fixed the portrait "Size override" slider doing nothing whenever a width or height override was still stored. Size now wins, the per-axis overrides only apply while Size is Auto, and both are disabled for a portrait that fills the bar.
+- Fixed unit-frame portrait previews disagreeing with the live frame and Edit Mode. Auto-sized portraits now use the geometry applied by runtime, while Attached and Overlay portraits account for the health-bar space reserved by an embedded power bar; manual sizes and Detached placement keep their existing behavior.
+- Fixed Range Fade controls staying disabled after "Enable Range Fade" was switched on. The opacity slider and Affects selector now activate immediately without leaving and reopening the MSUF menu.
+- Unified every layer-controlled MSUF visual under one real 0-30 draw order. Castbars, text, status icons, portraits, auras, spell and dispel indicators, outlines, texture layers, detached bars and class resources now compare directly across unit and group frames; an element's text, border, cooldown or glow can no longer jump above the next user layer, and the live frames, Edit Mode and menu previews follow the same order.
+- Fixed the Unit Frame Castbar Advanced panel clipping its Whole Castbar Layer card into the following Status Icons section.
 - Fixed castbar text ignoring a per-unit font scope's shadow settings while the scope refresh itself did run.
 - Fixed the "Interrupted" flash always painting the bar red instead of using the configured Interrupt Feedback color. Player, target, focus and boss castbars now read the same setting.
 - Fixed the rounded castbar surface not picking up empower stage segments created after the first refresh.
