@@ -23,9 +23,30 @@
 > [!IMPORTANT]
 > **6.0 RC1 is a prerelease build.** Release candidates continue to use the **Beta** channel on addon platforms until the final 6.0 release.
 
-## Why MSUF?
+## What is MSUF?
 
-MSUF replaces Blizzard's default unit frames with a readable, performance-focused interface that stays deeply configurable. Runtime updates are event-driven, while the full options UI and the optional Assistant load only when requested.
+Midnight Simple Unit Frames (MSUF) is a complete, customizable replacement for Blizzard's unit and group frames. It brings player, target, boss, party and raid frames together with castbars, auras and class resources in one consistent interface.
+
+MSUF is made for players who want clear combat information, extensive visual control and a lightweight event-driven runtime. The full configuration UI and the optional Assistant load only when requested.
+
+## Basic features
+
+- Custom Player, Target, Focus, Pet, Target-of-Target and Boss frames
+- Party, Raid and Mythic Raid group frames
+- Configurable health, power, absorb and heal-absorb displays
+- Player, Target, Focus and Boss castbars
+- Buffs, debuffs, defensive auras, private auras and spell indicators
+- 2D, 3D and class-icon portraits with multiple shapes and placements
+- Custom name, health, power, status and castbar text
+- Class colors, reaction colors, custom colors, gradients, fonts and textures
+- Aggro, dispel, purge, range, role, leader, raid-marker and status indicators
+- Class Power displays for class resources
+- Full Edit Mode positioning, previews, snapping and layer controls
+- Profiles, specialization switching and profile import/export
+- Searchable options, guided setup and recovery tools
+- Optional Masque, LibSharedMedia and Clique integration
+
+## Feature highlights
 
 | Area | Highlights |
 | --- | --- |
