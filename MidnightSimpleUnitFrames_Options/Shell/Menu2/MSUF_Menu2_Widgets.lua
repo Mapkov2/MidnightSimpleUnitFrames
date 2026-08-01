@@ -282,6 +282,13 @@ local function NotifyCollapsibleSectionState(entry, open)
     local fn = M.OnCollapsibleSectionStateChanged
     if type(fn) == "function" then fn(entry.pageKey, entry.sectionId, open, entry) end
 end
+local PINNED_PREVIEW_FOCUS_GAP = 12
+local PINNED_PREVIEW_MIN_SETTINGS_REVEAL = 40
+local function EffectiveFrameScale(frame, fallback)
+    local scale = frame and frame.GetEffectiveScale and tonumber(frame:GetEffectiveScale())
+    if not scale or scale <= 0 then return fallback or 1 end
+    return scale
+end
 local function ScrollToCollapsibleEntry(entry)
     local outer = entry and entry.outer
     local scroll = M.scrollFrame
@@ -290,7 +297,25 @@ local function ScrollToCollapsibleEntry(entry)
     local childTop = child:GetTop()
     local outerTop = outer:GetTop()
     if not (childTop and outerTop) then return false end
-    scroll:SetVerticalScroll(max(0, floor((childTop - outerTop) + 0.5) - 12))
+    local scrollScale = EffectiveFrameScale(scroll, 1)
+    local childScale = EffectiveFrameScale(child, scrollScale)
+    local outerScale = EffectiveFrameScale(outer, scrollScale)
+    local contentOffset = ((childTop * childScale) - (outerTop * outerScale)) / scrollScale
+    local topInset = PINNED_PREVIEW_FOCUS_GAP
+    local active = scroll._msuf2PinnedPreviewActiveRecord
+    local pinnedBox = active and active.box
+    if pinnedBox and (not pinnedBox.IsShown or pinnedBox:IsShown()) then
+        local scrollTop = scroll.GetTop and scroll:GetTop()
+        local pinnedBottom = pinnedBox.GetBottom and pinnedBox:GetBottom()
+        if scrollTop and pinnedBottom then
+            local pinnedScale = EffectiveFrameScale(pinnedBox, scrollScale)
+            local coveredHeight = ((scrollTop * scrollScale) - (pinnedBottom * pinnedScale)) / scrollScale
+            if coveredHeight > 0 then
+                topInset = max(topInset, floor(coveredHeight + PINNED_PREVIEW_FOCUS_GAP + 0.5))
+            end
+        end
+    end
+    scroll:SetVerticalScroll(max(0, floor(contentOffset + 0.5) - topInset))
     if scroll._msuf2RefreshScrollBar then scroll:_msuf2RefreshScrollBar() end
     return true
 end
@@ -3414,13 +3439,45 @@ function W.AttachPinnedPreview(body, box, opts)
         scrim._msuf2PinnedPreviewOwnerRecord = record
         scrim:Show()
     end
+    local heightLimitViewport, cachedHeightLimit
+    local pinnedHeightApplied, appliedPinnedViewport, appliedPinnedPreference
+    local function PinnedHeightLimit()
+        local viewportHeight = scroll and scroll.GetHeight and tonumber(scroll:GetHeight())
+        if not viewportHeight or viewportHeight <= 0 then return nil end
+        if viewportHeight == heightLimitViewport then return cachedHeightLimit end
+        local topGap = max(0, -(tonumber(opts.top) or -8))
+        heightLimitViewport = viewportHeight
+        cachedHeightLimit = max(0, viewportHeight - topGap - PINNED_PREVIEW_FOCUS_GAP - PINNED_PREVIEW_MIN_SETTINGS_REVEAL)
+        return cachedHeightLimit
+    end
+    local function ApplyResponsivePinnedHeight()
+        local viewportHeight = scroll and scroll.GetHeight and tonumber(scroll:GetHeight())
+        local preferredHeight = tonumber(box._msuf2PreferredRestoreHeight) or 0
+        if pinnedHeightApplied and viewportHeight == appliedPinnedViewport and preferredHeight == appliedPinnedPreference then return end
+        local activeHeight = max(pinnedHeight or 0, preferredHeight)
+        local limit = PinnedHeightLimit()
+        if limit then activeHeight = min(activeHeight, limit) end
+        if activeHeight <= 0 or not box.SetHeight then return end
+        pinnedHeightApplied = true
+        appliedPinnedViewport = viewportHeight
+        appliedPinnedPreference = preferredHeight
+        local currentHeight = box.GetHeight and tonumber(box:GetHeight())
+        if not currentHeight or math.abs(currentHeight - activeHeight) > 0.5 then
+            box:SetHeight(activeHeight)
+        end
+    end
     local function ApplyPinnedPresentation(active, level)
         if active then
             EnsurePinnedScrim()
-            if pinnedHeight and box.SetHeight then box:SetHeight(pinnedHeight) end
+            -- Keep the full inline height whenever the viewport has room, but
+            -- reserve enough space for the settings target below the overlay.
+            ApplyResponsivePinnedHeight()
             if type(box.ApplyPinnedPreviewPresentation) == "function" then box:ApplyPinnedPreviewPresentation(true, opts) end
             LayoutPinnedScrim(level)
         else
+            pinnedHeightApplied = nil
+            appliedPinnedViewport = nil
+            appliedPinnedPreference = nil
             if record and record.scrim then record.scrim:Hide() end
             if originalWidth and EffectiveRestoreHeight() and box.SetSize then box:SetSize(originalWidth, EffectiveRestoreHeight()) end
             if type(box.ApplyPinnedPreviewPresentation) == "function" then box:ApplyPinnedPreviewPresentation(false, opts) end
@@ -3544,7 +3601,10 @@ function W.AttachPinnedPreview(body, box, opts)
                     placeholder:Show()
                 end
             end
-            if pinned then LayoutPinnedScrim((box.GetFrameLevel and box:GetFrameLevel()) or originalFrameLevel) end
+            if pinned then
+                ApplyResponsivePinnedHeight()
+                LayoutPinnedScrim((box.GetFrameLevel and box:GetFrameLevel()) or originalFrameLevel)
+            end
         else
             Restore()
         end

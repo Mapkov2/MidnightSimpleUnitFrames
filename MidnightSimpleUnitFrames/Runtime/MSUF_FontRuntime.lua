@@ -301,10 +301,8 @@ local function _ConfiguredFontReady(path)
         _measureFS = _G.UIParent:CreateFontString(nil, "BACKGROUND")
         _measureFS:Hide()
     end
-    -- SetFont reports failure via its documented `success` return; it does not
-    -- raise on an unloadable path, so the return value is the whole signal.
-    local applied = _measureFS:SetFont(path, 14, "")
-    if applied == false then return false end
+    local ok, applied = pcall(_measureFS.SetFont, _measureFS, path, 14, "")
+    if not ok or applied == false then return false end
     -- If path or size do not match yet, the client is still publishing
     -- provisional/fallback font metrics.
     local matches = _G.MSUF_FontApplicationMatches
@@ -382,7 +380,13 @@ local function _MSUF_SetFontChecked(fs, path, size, flags, fontKey)
     end
     size = _MSUF_NormalizeFontSize(size, 14)
     flags = flags or ""
-    local applied = fs:SetFont(path, size, flags)
+    local applied
+    local ok, result = pcall(fs.SetFont, fs, path, size, flags)
+    if not ok then
+        _MSUF_ClearFontApplyCaches(fs)
+        return false, false
+    end
+    applied = result
     if applied ~= false and _MSUF_FontApplied(fs, path, size) then
         return true, false
     end

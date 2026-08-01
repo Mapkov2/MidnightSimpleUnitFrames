@@ -1926,7 +1926,12 @@ local MSUF_PROFILEIO_LEGACY_PROFILE_SCHEMA_56 = 560
 --- MSUF_ProfileIO_TranslateProfileToCurrent, independently from the broad
 --- default-fill revision owned by MSUF_Defaults.lua. Bump it whenever that
 --- translation pipeline gains a new mandatory repair.
-local MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION = 12
+local MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION = 14
+local MSUF_PROFILEIO_LEGACY_UNIT_NAME_ANCHORS = {
+    LEFT = "TOPLEFT",
+    CENTER = "TOP",
+    RIGHT = "TOPRIGHT",
+}
 local MSUF_PROFILEIO_TEXT_SCOPE_KEYS = {
     "general",
     "player", "target", "targettarget", "tot", "targetoftarget",
@@ -2549,6 +2554,13 @@ local function MSUF_ProfileIO_NormalizeTextScope(scope, isGroupScope, allowFontO
     end
     changed = MSUF_ProfileIO_UpperStringField(scope, "nameTextAnchor") or changed
     changed = MSUF_ProfileIO_UpperStringField(scope, "nameAnchor") or changed
+    if not isGroupScope then
+        local legacyAnchor = MSUF_PROFILEIO_LEGACY_UNIT_NAME_ANCHORS[scope.nameTextAnchor]
+        if legacyAnchor then
+            scope.nameTextAnchor = legacyAnchor
+            changed = true
+        end
+    end
     changed = MSUF_ProfileIO_NormalizeNameShorteningScope(scope, allowFontOverride == true, isGroupScope == true) or changed
     return changed
 end
@@ -3252,6 +3264,11 @@ local function MSUF_SerializeLuaTable(root)
     local function keyToStr(k)
         if type(k) == "string" and k:match("^[%a_][%w_]*$") then
              return k
+        elseif type(k) == "number" or type(k) == "boolean" then
+            -- Preserve typed map keys in the no-codec Lua fallback. Quoting a
+            -- numeric Spec/Spell ID here silently turned [71] into ["71"] on
+            -- import and detached all geometry stored below that key.
+            return "[" .. tostring(k) .. "]"
         else
             return "[" .. string.format("%q", k) .. "]"
         end
@@ -4536,9 +4553,9 @@ local function MSUF_ProfileIO_MaterializeProfileCopyForExport(profile, profileKe
             end
         end
     end)
-    if not ok then
+    if not materialized then
         ExportPublic("MSUF_ProfileIO_LastExportMaterializeError", tostring(profileKey or "profile") .. ": " .. tostring(why))
-        return nil, "profile materialization failed"
+        return nil, "profile materialization failed: " .. tostring(why)
     end
     return profile
 end
@@ -4565,7 +4582,9 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, newTable)
         end
         return copy
     end)
-    if not prepared or type(staged) ~= "table" then return false, "profile staging failed: " .. tostring(staged) end
+    if not prepared or type(staged) ~= "table" then
+        return false, "profile staging failed: " .. tostring(staged)
+    end
     newTable = staged
     MSUF_ProfileIO_CollectProfileMediaWarnings(newTable)
     MSUF_ProfileIO_EnsureProfileSystemInitialized()

@@ -144,6 +144,60 @@ local function StyleProfileInput(editBox, width, height, multiline)
     if editBox._msuf2PaintEditBox then editBox:_msuf2PaintEditBox(false) end
     return editBox
 end
+-- A multiline EditBox never clips its own text: once the export string outgrows the box,
+-- the overflow paints across the whole menu. Host the box in a ScrollFrame (which clips)
+-- and hang the skin on a static host frame so the visuals do not scroll with the text.
+-- The host is a flat panel: the superellipse pill skin degenerates into a giant ellipse
+-- at input heights this large.
+local function WrapMultilineProfileInput(editBox, card, x, y, width, height)
+    local shadow = T.colors.coreShadow or { 0.006, 0.016, 0.032 }
+    local host = T.Panel(card, nil, { shadow[1], shadow[2], shadow[3], 0.96 }, T.colors.borderSoft)
+    host:SetPoint("TOPLEFT", card, "TOPLEFT", x, y)
+    host:SetSize(width, height)
+    local scroll = CreateFrame("ScrollFrame", nil, host)
+    scroll:SetPoint("TOPLEFT", host, "TOPLEFT", 8, -8)
+    scroll:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", -26, 8)
+    StyleProfileInput(editBox, max(160, width - 34), height - 16, true)
+    editBox:SetParent(scroll)
+    editBox:ClearAllPoints()
+    editBox:SetPoint("TOPLEFT", scroll, "TOPLEFT", 0, 0)
+    scroll:SetScrollChild(editBox)
+    -- The box's own skin textures would scroll with the text; the host draws the box now.
+    if editBox._msuf2EditBg then editBox._msuf2EditBg:Hide() end
+    if editBox._msuf2EditEdges then
+        for i = 1, #editBox._msuf2EditEdges do editBox._msuf2EditEdges[i]:Hide() end
+    end
+    if editBox._msuf2Bg then editBox._msuf2Bg:Hide() end
+    editBox:HookScript("OnEditFocusGained", function()
+        if host.SetBackdropBorderColor then
+            host:SetBackdropBorderColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.95)
+        end
+    end)
+    editBox:HookScript("OnEditFocusLost", function()
+        if host.SetBackdropBorderColor then
+            host:SetBackdropBorderColor(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], T.colors.borderSoft[4] or 1)
+        end
+    end)
+    if T.StyleScrollFrame then T.StyleScrollFrame(scroll, host) end
+    scroll:EnableMouse(true)
+    scroll:SetScript("OnMouseDown", function()
+        editBox:SetFocus()
+        if editBox.GetNumLetters then editBox:SetCursorPosition(editBox:GetNumLetters()) end
+    end)
+    editBox:SetScript("OnCursorChanged", function(_, _, cursorY, _, cursorH)
+        local viewH = scroll:GetHeight() or 0
+        if viewH <= 0 then return end
+        local top = -(tonumber(cursorY) or 0)
+        local bottom = top + (tonumber(cursorH) or 0)
+        local offset = scroll:GetVerticalScroll() or 0
+        if top < offset then
+            scroll:SetVerticalScroll(top)
+        elseif bottom > offset + viewH then
+            scroll:SetVerticalScroll(bottom - viewH)
+        end
+    end)
+    return editBox
+end
 local function InstallProfilePopup(key, spec)
     return M.InstallStaticPopup and M.InstallStaticPopup(key, spec)
 end
@@ -398,7 +452,7 @@ local function BuildProfiles(ctx)
     heroSwitch:SetScript("OnClick", function()
         if current and W.FocusCollapsibleSection then W.FocusCollapsibleSection(current, { flash = true }) end
     end)
-    AddProfileTooltip(heroExport, "Export backup", "Creates a full-profile export string and opens Backup & Transfer.")
+    AddProfileTooltip(heroExport, "Export backup", "Creates a full-profile export string and opens Import & Export.")
     AddProfileTooltip(heroSwitch, "Switch profile", "Opens Profile Management. Profile switching is blocked during combat.")
 
     -- Profile switches rebuild live frames and can taint secure state in combat, so every
@@ -737,10 +791,11 @@ local function BuildProfiles(ctx)
 
     local ioWide = contentW >= 980
     local ioH = ioWide and 462 or 824
-    io = b:CollapsibleSection("profiles_io", "Backup & Transfer", ioH, false)
+    io = b:CollapsibleSection("profiles_io", "Import & Export", ioH, false)
 
     -- Import/export shares one text box intentionally: exporting fills the field, importing
-    -- consumes it, and tests can exercise both paths without clipboard APIs.
+    -- reads it, and tests can exercise both paths without clipboard APIs. The field keeps its
+    -- contents after an import so the same string can be re-imported into a new profile.
     local ioInset, ioGap = 20, 18
     local ioInnerW = max(320, contentW - (ioInset * 2))
     local stringCardX, stringCardY, stringCardW, stringCardH
@@ -754,7 +809,7 @@ local function BuildProfiles(ctx)
         actionsCardX, actionsCardY, actionsCardW, actionsCardH = ioInset, -402, ioInnerW, 398
     end
     local stringCard = W.ControlCard(io, "Profile string",
-        "Export fills this shared field; import consumes its current contents.",
+        "Export fills this shared field; the string stays after an import so you can reuse it.",
         stringCardX, stringCardY, stringCardW, stringCardH)
     local actionsCard = W.ControlCard(io, "Export & import",
         "Create a backup first or import into a new profile for the safest workflow.",
@@ -777,6 +832,16 @@ local function BuildProfiles(ctx)
         function(value) M.profileImportString = tostring(value or "") end,
         false,
         ProfilesMeta("import_export.buffer", "ephemeral"))
+    -- The box is multiline, so Enter inserts a newline instead of committing, and blur commits
+    -- are off (a profile string in the undo history would be pure noise). Mirror user edits into
+    -- the menu state directly: every refresh writes the state back into the box, so without this
+    -- a pasted string is lost the moment anything refreshes the page - importing, or just
+    -- flipping the new-profile toggle. Focus loss re-syncs in case a paste path skips userInput.
+    local function MirrorImportBuffer(self) M.profileImportString = self:GetText() or "" end
+    blob:HookScript("OnTextChanged", function(self, userInput)
+        if userInput then MirrorImportBuffer(self) end
+    end)
+    blob:HookScript("OnEditFocusLost", MirrorImportBuffer)
     local export = ProfileButton(actionsCard, "Export", function()
         return ExportProfileString(M.profileExportKind or "all")
     end, nil, "export.generate", false, nil, nil, nil, ioButtonW)
@@ -828,7 +893,12 @@ local function BuildProfiles(ctx)
     local function ImportTextOrFail()
         if BlockCombatAction() then return nil end
         local text = blob:GetText()
-        if text and text ~= "" then return text end
+        if text and text ~= "" then
+            -- Importing refreshes the page, which repaints the box from the menu state; keep the
+            -- payload there so the string survives for a second import into a new profile.
+            M.profileImportString = text
+            return text
+        end
         PrintProfileMessage("|cffff0000", "Import failed (empty string).")
     end
     local function ImportIntoCurrent()
@@ -924,6 +994,7 @@ local function BuildProfiles(ctx)
         if BlockCombatAction() then return end
         local text = blob:GetText()
         if text and text ~= "" and type(_G.MSUF_ImportLegacyFromString) == "function" then
+            M.profileImportString = text
             CallMSUF("MSUF_ImportLegacyFromString", text)
             ClearProfileHistory()
             M.RequestGeneralApply("MSUF2_PROFILE_LEGACY_IMPORT", { preview = true, applyAll = false, notify = false })
@@ -935,6 +1006,9 @@ local function BuildProfiles(ctx)
     end, nil, "import.legacy", true, nil, nil, nil, ioButtonW)
     local wago = ProfileButton(actionsCard, "Browse Wago Profiles", function()
         if not CallMSUF("MSUF_ShowCopyLink", "Wago MSUF Profiles", WAGO_PROFILES_URL) then
+            -- The box mirrors the menu state, so the fallback has to move the state as well or
+            -- the next refresh paints the previous string back over the link.
+            M.profileImportString = WAGO_PROFILES_URL
             blob:SetText(WAGO_PROFILES_URL)
             blob:HighlightText()
         end
@@ -942,7 +1016,7 @@ local function BuildProfiles(ctx)
     MoveWidget(exportKind, stringCard, 20, -76, exportKindW)
     local blobW = max(220, stringCardW - 40)
     MoveWidget(blob, stringCard, 20, -142, blobW)
-    StyleProfileInput(blob, blobW, ioWide and 220 or 162, true)
+    WrapMultilineProfileInput(blob, stringCard, 20, -166, blobW, ioWide and 220 or 162)
     PlaceActionRow(actionsCard, 20, export, import, -82)
     PlaceActionRow(actionsCard, 20, legacy, wago, -126)
     MoveWidget(importProfileName, actionsCard, 20, -230, importNameW)

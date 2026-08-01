@@ -177,16 +177,20 @@ local function MSUF_FontPathIsLoadable(rawPath, size, flags)
         return true
     end
     if not MSUF_FontPathProbe then
-        MSUF_FontPathProbe = G.CreateFont("MSUF_FontPathProbe")
+        local ok, probe = pcall(G.CreateFont, "MSUF_FontPathProbe")
+        if ok then
+            MSUF_FontPathProbe = probe
+        end
     end
     if not (MSUF_FontPathProbe and type(MSUF_FontPathProbe.SetFont) == "function") then
         return true
     end
 
-    -- SetFont returns its documented `success` bool for unloadable paths; that
-    -- return IS the probe result, no protection needed.
-    local applied = MSUF_FontPathProbe:SetFont(path, size, flags)
-    local loadable = applied ~= false
+    -- Font APIs require a valid FontAsset. A stale Wago/SharedMedia path can
+    -- therefore raise before a `success` return exists; keep that rejection at
+    -- the probe boundary so profile import can warn and continue with fallback.
+    local ok, applied = pcall(MSUF_FontPathProbe.SetFont, MSUF_FontPathProbe, path, size, flags)
+    local loadable = ok and applied ~= false
     MSUF_FontPathLoadableCache[cacheKey] = loadable
     if type(rawPath) == "string" and rawPath ~= "" then
         local byPath = MSUF_FontPathLoadableFast[rawPath]
@@ -510,10 +514,11 @@ local function MSUF_GetFontPreviewObject(key)
     path = path or internalPath or MSUF_FetchFontPathFromLSM(key) or FONT_LIST[1].path
     path = MSUF_ResolveSafeFontPath(path, 14, "", key)
     if path then
-        local applied = obj:SetFont(path, 14, "")
-        if applied == false and FONT_LIST[1] and FONT_LIST[1].path then
+        local okCall, applied = pcall(obj.SetFont, obj, path, 14, "")
+        local ok = okCall and applied ~= false
+        if (not ok) and FONT_LIST[1] and FONT_LIST[1].path then
             local fallback = MSUF_ResolveSafeFontPath(FONT_LIST[1].path, 14, "", "FRIZQT")
-            obj:SetFont(fallback, 14, "")
+            pcall(obj.SetFont, obj, fallback, 14, "")
         end
     end
     return obj

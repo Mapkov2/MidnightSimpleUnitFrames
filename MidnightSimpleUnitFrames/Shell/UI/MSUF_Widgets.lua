@@ -126,9 +126,9 @@ function UI.ApplyFontRole(fs, role, fallback, flags)
     local currentFont, _, currentFlags = fs.GetFont and fs:GetFont()
     local size = UI.FontSize(role)
     local fontPath = UI.ResolveConfiguredFontPath(role, fallback or currentFont or FONT, size, flags or currentFlags or "")
-    local applied = fs:SetFont(fontPath or fallback or currentFont or FONT, size, flags or currentFlags or "")
-    if applied == false and fontPath ~= fallback and fallback then
-        fs:SetFont(fallback, size, flags or currentFlags or "")
+    local ok, applied = pcall(fs.SetFont, fs, fontPath or fallback or currentFont or FONT, size, flags or currentFlags or "")
+    if (not ok or applied == false) and fontPath ~= fallback and fallback then
+        pcall(fs.SetFont, fs, fallback, size, flags or currentFlags or "")
     end
     return fs
 end
