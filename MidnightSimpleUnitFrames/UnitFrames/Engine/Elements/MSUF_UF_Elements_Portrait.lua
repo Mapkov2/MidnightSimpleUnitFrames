@@ -647,7 +647,6 @@ local function LayoutPortrait(frame, p)
   -- from the health bar: the health bar itself sits at frame + HEALTH_OFFSET, so
   -- layer 0 renders an overlay portrait behind the bars while the default 7
   -- reproduces the pre-6.0 "health bar + PORTRAIT_OFFSET" stacking.
-  local baseLevel = frame:GetFrameLevel() or 1
   local defaultLevel = (Layers.HEALTH_OFFSET or 1) + (Layers.PORTRAIT_OFFSET or 6)
   local levelOffset = tonumber(p and p.levelOffset) or defaultLevel
   if levelOffset < 0 then
@@ -655,7 +654,8 @@ local function LayoutPortrait(frame, p)
   elseif levelOffset > 30 then
     levelOffset = 30
   end
-  local portraitLevel = baseLevel + levelOffset
+  local portraitLevel = Layers.ElementLevel and Layers.ElementLevel(levelOffset, defaultLevel, 0)
+    or ((frame:GetFrameLevel() or 1) + levelOffset)
   if portraitLevel < 0 then
     portraitLevel = 0
   end

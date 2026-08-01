@@ -2152,10 +2152,10 @@ do
     local deps = Preview.RefreshDeps or {}
     Preview.RefreshDeps = deps
     AssignNamedValues(deps, [[
-        PreviewInCombat TR PortraitStyleGet RuntimeSpecForPreviewKey RuntimeVisualScaleForPreviewKey RuntimeCastbarVisualScaleForPreviewKey ClampPreviewZoom UpdatePreviewZoomControls ZOOM_MIN
+        PreviewInCombat TR PortraitStyleGet RuntimeSpecForPreviewKey RuntimeAppliedPortraitSizeForPreviewKey RuntimeVisualScaleForPreviewKey RuntimeCastbarVisualScaleForPreviewKey ClampPreviewZoom UpdatePreviewZoomControls ZOOM_MIN
         max min abs floor format TEX_W8 FONT STATUS_PREVIEW CurrentPanelKey UnitDB UNIT_DATA UNIT_LABELS ReadPowerBarEnabled ReadPowerBarHeight LiveUnitData SyncLiveStateDriver
     ]],
-        PreviewInCombat, TR, PortraitStyleGet, RuntimeSpecForPreviewKey, RuntimeVisualScaleForPreviewKey, PreviewRuntime.CastbarVisualScaleForPreviewKey or RuntimeVisualScaleForPreviewKey, ClampPreviewZoom, UpdatePreviewZoomControls, ZOOM_MIN,
+        PreviewInCombat, TR, PortraitStyleGet, RuntimeSpecForPreviewKey, PreviewRuntime.AppliedPortraitSizeForPreviewKey or F.Nil, RuntimeVisualScaleForPreviewKey, PreviewRuntime.CastbarVisualScaleForPreviewKey or RuntimeVisualScaleForPreviewKey, ClampPreviewZoom, UpdatePreviewZoomControls, ZOOM_MIN,
         max, min, abs, floor, format, TEX_W8, FONT, STATUS_PREVIEW, CurrentPanelKey, UnitDB, UNIT_DATA, UNIT_LABELS, ReadPowerBarEnabled, ReadPowerBarHeight, PreviewModel.LiveUnitData, SyncUnitPreviewLiveState)
     AssignNamedValues(deps, [[
         PreviewRaidGroupNameAllowed PreviewRaidGroupNameText NormalizeRaidGroupNameAnchor CastbarEnabled CastbarShowIcon CastbarShowText ReadCastbarSize ReadCastbarNum FormatCastbarPreviewTime

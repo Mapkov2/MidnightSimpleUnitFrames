@@ -30,11 +30,13 @@ local function PreviewPortraitRingInflation(portrait, thickness)
 end
 Render.PreviewPortraitRingInflation = PreviewPortraitRingInflation
 
-local function CachePreviewFullPortraitExtents(portrait, anchor, fallbackWidth, fallbackHeight, x, y)
+local function CachePreviewFullPortraitExtents(portrait, anchor, fallbackWidth, fallbackHeight, x, y, healthBottom)
     local width = anchor and anchor.GetWidth and tonumber(anchor:GetWidth()) or 0
     local height = anchor and anchor.GetHeight and tonumber(anchor:GetHeight()) or 0
     if width <= 0 then width = tonumber(fallbackWidth) or 1 end
     if height <= 0 then height = tonumber(fallbackHeight) or 1 end
+    healthBottom = tonumber(healthBottom) or 0
+    if healthBottom > 0 then height = math.max(0, height - healthBottom) end
     width = math.max(1, width - (2 * x))
     height = math.max(1, height - (2 * y))
     if portrait._msufPreviewLayoutWidth ~= width then portrait._msufPreviewLayoutWidth = width end
@@ -490,7 +492,7 @@ local function ApplyCastbarPreviewRounded(cast, g, edgeSize, bgR, bgG, bgB, bgA)
     return true
 end
 local UNIT_RENDER_FALLBACKS = {
-    RuntimeSpecForPreviewKey = F.Nil, RuntimeVisualScaleForPreviewKey = F.One, RuntimeCastbarVisualScaleForPreviewKey = F.One, ClampPreviewZoom = NumberOrOne, UpdatePreviewZoomControls = F.Noop,
+    RuntimeSpecForPreviewKey = F.Nil, RuntimeAppliedPortraitSizeForPreviewKey = F.Nil, RuntimeVisualScaleForPreviewKey = F.One, RuntimeCastbarVisualScaleForPreviewKey = F.One, ClampPreviewZoom = NumberOrOne, UpdatePreviewZoomControls = F.Noop,
     ApplyPreviewRounded = F.Noop, ApplyPreviewFrameBorder = F.Noop, PreviewRoundedOutlineThickness = F.One, ApplyPreviewBoundsGuide = F.Noop,
     CastbarShowIcon = F.True, CastbarShowText = F.TruePair, ReadCastbarNum = CastbarNumFallback, FormatCastbarPreviewTime = CastbarTimeFallback,
     ClassColor = F.WhiteRGB, HealthColor = F.HealthRGB, HealthBackgroundColor = F.DarkRGBA, PowerBackgroundColor = F.DarkRGBA, PowerColor = F.PowerRGB, FontColor = F.WhiteRGB,
@@ -653,7 +655,7 @@ function Render.Install(Preview, deps)
     deps = deps or Preview.RefreshDeps or {}
     Preview.RefreshDeps = deps
     local renderState = PickFallbackTable(deps, UNIT_RENDER_FALLBACKS, [[
-        RuntimeSpecForPreviewKey RuntimeVisualScaleForPreviewKey RuntimeCastbarVisualScaleForPreviewKey ClampPreviewZoom UpdatePreviewZoomControls
+        RuntimeSpecForPreviewKey RuntimeAppliedPortraitSizeForPreviewKey RuntimeVisualScaleForPreviewKey RuntimeCastbarVisualScaleForPreviewKey ClampPreviewZoom UpdatePreviewZoomControls
         ApplyPreviewRounded ApplyPreviewFrameBorder PreviewRoundedOutlineThickness ApplyPreviewBoundsGuide CastbarShowIcon CastbarShowText ReadCastbarNum FormatCastbarPreviewTime
         ClassColor HealthColor HealthBackgroundColor PowerBackgroundColor PowerColor FontColor PreviewResolveHealPredAnchorMode PreviewResolveAbsorbAnchorMode PreviewHealPredictionEnabled PreviewAbsorbBarEnabled
         PreviewNameColor PreviewToTInlineColor NormalizeHpMode NormalizePowerMode TextScopeGet TextScopeHasSlots TextScopeSlotGet FormatMode ShortenPreviewName ToTInlineSeparator ResolveNameAnchor
@@ -769,10 +771,17 @@ function Render.Install(Preview, deps)
     -- box and the mock frame agree with what the unit frame actually renders.
     local PREVIEW_PORTRAIT_X = { TOPLEFT = 0, LEFT = 0, BOTTOMLEFT = 0, TOPRIGHT = 1, RIGHT = 1, BOTTOMRIGHT = 1 }
     local PREVIEW_PORTRAIT_Y = { TOPLEFT = 1, TOP = 1, TOPRIGHT = 1, BOTTOMLEFT = 0, BOTTOM = 0, BOTTOMRIGHT = 0 }
-    local function PreviewPortraitRect(placement, point, relPoint, overlayAlign, frameW, frameH, pw, ph, ox, oy)
+    local function PreviewPortraitRect(placement, point, relPoint, overlayAlign, frameW, frameH, pw, ph, ox, oy, healthBottom)
+        -- Live ATTACHED/OVERLAY portraits anchor to frame.Health, whose bottom
+        -- is raised by an embedded power bar. DETACHED intentionally anchors
+        -- to the unit frame and therefore ignores this inset.
+        healthBottom = tonumber(healthBottom) or 0
+        if healthBottom < 0 then healthBottom = 0 end
+        if healthBottom > frameH then healthBottom = frameH end
+        local healthH = frameH - healthBottom
         if placement == "OVERLAY" then
             if overlayAlign == "FULL" then
-                return ox, oy, frameW - ox * 2, frameH - oy * 2
+                return ox, healthBottom + oy, frameW - ox * 2, healthH - oy * 2
             end
             local left = ox
             if overlayAlign == "CENTER" then
@@ -780,7 +789,7 @@ function Render.Install(Preview, deps)
             elseif overlayAlign == "RIGHT" then
                 left = frameW - pw + ox
             end
-            return left, (frameH - ph) * 0.5 + oy, pw, ph
+            return left, healthBottom + (healthH - ph) * 0.5 + oy, pw, ph
         end
         if placement == "DETACHED" then
             local relX = (PREVIEW_PORTRAIT_X[relPoint] or 0.5) * frameW
@@ -791,7 +800,7 @@ function Render.Install(Preview, deps)
         end
         -- ATTACHED: hug the outer edge of the bar area.
         local left = point == "LEFT" and (frameW + ox) or (ox - pw)
-        return left, (frameH - ph) * 0.5 + oy, pw, ph
+        return left, healthBottom + (healthH - ph) * 0.5 + oy, pw, ph
     end
     renderState.PreviewPortraitRect = PreviewPortraitRect
     -- Mirrors the live element's relief renderer: the same greyscale ring art,
@@ -1368,6 +1377,20 @@ function Preview.Refresh(box, reason)
         or (tonumber(PortraitStyleGet(key, "portraitHeight", 0)) or 0)
     if box._runtimePortraitW <= 0 then box._runtimePortraitW = pSize end
     if box._runtimePortraitH <= 0 then box._runtimePortraitH = pSize end
+    -- Auto size (Size override = 0) is resolved by the live Portrait element.
+    -- Edit Mode displays that applied holder, so consume the same final geometry
+    -- instead of letting Menu2 maintain a second approximation of the auto path.
+    if (tonumber(PortraitStyleGet(key, "portraitSizeOverride", 0)) or 0) <= 0 then
+        box._runtimeAppliedPortraitW, box._runtimeAppliedPortraitH = R.RuntimeAppliedPortraitSizeForPreviewKey(key)
+        if tonumber(box._runtimeAppliedPortraitW) and box._runtimeAppliedPortraitW > 0 then
+            box._runtimePortraitW = box._runtimeAppliedPortraitW
+        end
+        if tonumber(box._runtimeAppliedPortraitH) and box._runtimeAppliedPortraitH > 0 then
+            box._runtimePortraitH = box._runtimeAppliedPortraitH
+        end
+    else
+        box._runtimeAppliedPortraitW, box._runtimeAppliedPortraitH = nil, nil
+    end
     box._runtimePortraitBorderStyle = (runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.border and runtimeSpec.portrait.border.style) or PortraitStyleGet(key, "portraitBorderStyle", "NONE") or "NONE"
     box._runtimePortraitBorderThickness = 0
     box._runtimePortraitBorderFill = false
@@ -1424,6 +1447,9 @@ function Preview.Refresh(box, reason)
         or (runtimePower == nil and conf.embedPowerBarIntoHealth == nil and bars.embedPowerBarIntoHealth ~= false)
     ) or false
     box._runtimePowerAttached = powerAllowed and not detachedPower and box._runtimePowerEmbedded ~= true
+    box._runtimeHealthPowerInset = box._runtimePowerEmbedded == true
+        and max(0, tonumber(runtimePower and runtimePower.height) or tonumber(ReadPowerBarHeight(conf)) or 0)
+        or 0
     local classPowerOn = runtimeClassPower and runtimeClassPower.enabled == true
     if runtimeClassPower == nil then classPowerOn = key == "player" and bars.showClassPower ~= false end
     if classPowerPreviewSpec then classPowerOn = bars.showClassPower ~= false and classPowerPreviewSpec.enabled ~= false and classPowerPreviewSpec.mode ~= "none" end
@@ -1618,7 +1644,8 @@ function Preview.Refresh(box, reason)
             box._runtimePortraitPlacement,
             box._runtimePortraitPlacement == "ATTACHED" and (mode == "RIGHT" and "LEFT" or "RIGHT") or box._runtimePortraitPoint,
             box._runtimePortraitRelPoint, box._runtimePortraitOverlayAlign,
-            w, h, box._runtimePortraitW, box._runtimePortraitH, poX, poY)
+            w, h, box._runtimePortraitW, box._runtimePortraitH, poX, poY,
+            box._runtimeHealthPowerInset)
         local grow = hasPortrait and (box._runtimePortraitBorderFill and 0 or box._runtimePortraitBorderThickness) or 0
         minX, maxX = min(minX, left - grow), max(maxX, left + pw + grow)
         minY, maxY = min(minY, bottom - grow), max(maxY, bottom + ph + grow)
@@ -1741,26 +1768,27 @@ function Preview.Refresh(box, reason)
     -- Mirror the live hierarchy: the unit frame owns a health StatusBar one
     -- level above it; text/status and portrait levels are based on that bar.
     baseLevel = (mock.GetFrameLevel and mock:GetFrameLevel()) or (baseLevel + 4)
-    if mock.classPower and mock.classPower.SetFrameLevel then mock.classPower:SetFrameLevel(baseLevel + ClampPreviewLayer(bars.classPowerFrameLevelOffset, 5)) end
-    if mock.detachedPower and mock.detachedPower.SetFrameLevel then mock.detachedPower:SetFrameLevel(baseLevel + ClampPreviewLayer(runtimePower and runtimePower.detachedLevel or conf.detachedPowerBarFrameLevelOffset, Layers.POWER_DETACHED_DEFAULT or 6)) end
-    local textBase = (Layers.HealthLevel and Layers.HealthLevel(baseLevel) or (baseLevel + (Layers.HEALTH_OFFSET or 1))) + (Layers.TEXT_BASE_OFFSET or 10)
+    local ElementLevel = Layers.ElementLevel or function(layer, fallback, detail) return baseLevel + ClampPreviewLayer(layer, fallback) + (detail or 0) end
+    if mock.classPower and mock.classPower.SetFrameLevel then mock.classPower:SetFrameLevel(ElementLevel(bars.classPowerFrameLevelOffset, 5, 0)) end
+    if mock.detachedPower and mock.detachedPower.SetFrameLevel then mock.detachedPower:SetFrameLevel(ElementLevel(runtimePower and runtimePower.detachedLevel or conf.detachedPowerBarFrameLevelOffset, Layers.POWER_DETACHED_DEFAULT or 6, 0)) end
+    local textBase = 0
     -- Portrait rides the shared 0..30 layer scale from the frame, so layer 0
     -- previews behind the bars exactly like the live element does.
-    if mock.portrait and mock.portrait.SetFrameLevel then mock.portrait:SetFrameLevel(baseLevel + ClampPreviewLayer(runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.levelOffset or conf.portraitLevelOffset, (Layers.HEALTH_OFFSET or 1) + (Layers.PORTRAIT_OFFSET or 6))) end
+    if mock.portrait and mock.portrait.SetFrameLevel then mock.portrait:SetFrameLevel(ElementLevel(runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.levelOffset or conf.portraitLevelOffset, (Layers.HEALTH_OFFSET or 1) + (Layers.PORTRAIT_OFFSET or 6), 0)) end
     if type(_G.MSUF_GetCastbarFrameLevelOffset) == "function" then
         box._runtimeCastbarLayer = _G.MSUF_GetCastbarFrameLevelOffset(key, g)
     else
         box._runtimeCastbarLayer = R.ReadCastbarNum(g, key, "FrameLevelOffset", "bossCastFrameLevelOffset", 6)
     end
     box._runtimeCastbarLayer = ClampPreviewLayer(box._runtimeCastbarLayer, 6)
-    if mock.cast and mock.cast.SetFrameLevel then mock.cast:SetFrameLevel((canvas.GetFrameLevel and canvas:GetFrameLevel() or 0) + box._runtimeCastbarLayer) end
-    if mock.cast and mock.cast.icon and mock.cast.icon.SetFrameLevel then mock.cast.icon:SetFrameLevel((canvas.GetFrameLevel and canvas:GetFrameLevel() or 0) + box._runtimeCastbarLayer + 7) end
+    if mock.cast and mock.cast.SetFrameLevel then mock.cast:SetFrameLevel(ElementLevel(box._runtimeCastbarLayer, 6, 0)) end
+    if mock.cast and mock.cast.icon and mock.cast.icon.SetFrameLevel then mock.cast.icon:SetFrameLevel(ElementLevel(box._runtimeCastbarLayer, 6, 7)) end
     if mock.textFrame and mock.textFrame.SetFrameLevel then mock.textFrame:SetFrameLevel(textBase) end
-    if mock.nameLayer and mock.nameLayer.SetFrameLevel then mock.nameLayer:SetFrameLevel(textBase + ClampPreviewLayer(runtimeText and runtimeText.nameLayer or conf.nameTextLayer or g.nameTextLayer, 5)) end
-    if mock.raidGroupLayer and mock.raidGroupLayer.SetFrameLevel then mock.raidGroupLayer:SetFrameLevel(textBase + ClampPreviewLayer(runtimeStatus and runtimeStatus.raidGroup and runtimeStatus.raidGroup.layer or conf.raidGroupNameLayer or conf.nameTextLayer or g.raidGroupNameLayer or g.nameTextLayer, 5)) end
-    if mock.hpLayer and mock.hpLayer.SetFrameLevel then mock.hpLayer:SetFrameLevel(textBase + ClampPreviewLayer(runtimeText and runtimeText.healthLayer or conf.hpTextLayer or conf.textLayer or g.hpTextLayer or g.textLayer, 5)) end
-    if mock.powerLayer and mock.powerLayer.SetFrameLevel then mock.powerLayer:SetFrameLevel(textBase + ClampPreviewLayer(runtimeText and runtimeText.powerLayer or conf.powerTextLayer or g.powerTextLayer, 2)) end
-    if mock.bounds and mock.bounds.SetFrameLevel then mock.bounds:SetFrameLevel(baseLevel + (Layers.PREVIEW_BOUNDS_OFFSET or 48)) end
+    if mock.nameLayer and mock.nameLayer.SetFrameLevel then mock.nameLayer:SetFrameLevel(ElementLevel(runtimeText and runtimeText.nameLayer or conf.nameTextLayer or g.nameTextLayer, 5, 8)) end
+    if mock.raidGroupLayer and mock.raidGroupLayer.SetFrameLevel then mock.raidGroupLayer:SetFrameLevel(ElementLevel(runtimeStatus and runtimeStatus.raidGroup and runtimeStatus.raidGroup.layer or conf.raidGroupNameLayer or conf.nameTextLayer or g.raidGroupNameLayer or g.nameTextLayer, 5, 8)) end
+    if mock.hpLayer and mock.hpLayer.SetFrameLevel then mock.hpLayer:SetFrameLevel(ElementLevel(runtimeText and runtimeText.healthLayer or conf.hpTextLayer or conf.textLayer or g.hpTextLayer or g.textLayer, 5, 8)) end
+    if mock.powerLayer and mock.powerLayer.SetFrameLevel then mock.powerLayer:SetFrameLevel(ElementLevel(runtimeText and runtimeText.powerLayer or conf.powerTextLayer or g.powerTextLayer, 2, 8)) end
+    if mock.bounds and mock.bounds.SetFrameLevel then mock.bounds:SetFrameLevel(ElementLevel(30, 30, 31) + 16) end
     SetTex(mock.hp, (runtimeSpec and runtimeSpec.health and runtimeSpec.health.texture) or (runtimeSpec and runtimeSpec.texture) or (type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture()) or TEX_W8)
     SetTex(mock.power, (runtimePower and runtimePower.texture) or (runtimeSpec and runtimeSpec.texture) or (type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture()) or TEX_W8)
     SetTex(mock.hpBG, (runtimeSpec and runtimeSpec.health and runtimeSpec.health.backgroundTexture) or (runtimeSpec and runtimeSpec.backgroundTexture) or (type(_G.MSUF_GetBarBackgroundTexture) == "function" and _G.MSUF_GetBarBackgroundTexture()) or TEX_W8)
@@ -2534,14 +2562,18 @@ function Preview.Refresh(box, reason)
         elseif box._runtimePortraitPlacement == "OVERLAY" then
             if box._runtimePortraitOverlayAlign == "FULL" then
                 mock.portrait:SetPoint("TOPLEFT", mock, "TOPLEFT", ox, -oy)
-                mock.portrait:SetPoint("BOTTOMRIGHT", mock, "BOTTOMRIGHT", -ox, oy)
+                mock.portrait:SetPoint("BOTTOMRIGHT", mock, "BOTTOMRIGHT", -ox,
+                    S(box._runtimeHealthPowerInset) + oy)
             else
-                mock.portrait:SetPoint(box._runtimePortraitOverlayAlign, mock, box._runtimePortraitOverlayAlign, ox, oy)
+                mock.portrait:SetPoint(box._runtimePortraitOverlayAlign, mock, box._runtimePortraitOverlayAlign,
+                    ox, oy + S(box._runtimeHealthPowerInset) * 0.5)
             end
         elseif mode == "RIGHT" then
-            mock.portrait:SetPoint("LEFT", mock, "RIGHT", ox, oy)
+            mock.portrait:SetPoint("LEFT", mock, "RIGHT", ox,
+                oy + S(box._runtimeHealthPowerInset) * 0.5)
         else
-            mock.portrait:SetPoint("RIGHT", mock, "LEFT", ox, oy)
+            mock.portrait:SetPoint("RIGHT", mock, "LEFT", ox,
+                oy + S(box._runtimeHealthPowerInset) * 0.5)
         end
         if hasPortrait then
         mock.portrait.tex:Show()
@@ -2618,7 +2650,8 @@ function Preview.Refresh(box, reason)
             and box._runtimePortraitPlacement == "OVERLAY"
             and box._runtimePortraitOverlayAlign == "FULL"
         then
-            CachePreviewFullPortraitExtents(mock.portrait, mock, S(w), S(h), ox, oy)
+            CachePreviewFullPortraitExtents(mock.portrait, mock, S(w), S(h), ox, oy,
+                S(box._runtimeHealthPowerInset))
         else
             if mock.portrait._msufPreviewLayoutWidth ~= nil then mock.portrait._msufPreviewLayoutWidth = nil end
             if mock.portrait._msufPreviewLayoutHeight ~= nil then mock.portrait._msufPreviewLayoutHeight = nil end
@@ -2782,7 +2815,8 @@ function Preview.Refresh(box, reason)
             end
             if icon.SetFrameLevel then
                 local rawLayer = tonumber(statusCfg and statusCfg.layer) or (spec.layer and (tonumber(conf[spec.layer]) or tonumber(g[spec.layer]))) or spec.defaultLayer
-                icon:SetFrameLevel(textBase + ClampPreviewLayer(rawLayer, spec.defaultLayer or 7))
+                icon:SetFrameLevel((Layers.ElementLevel and Layers.ElementLevel(rawLayer, spec.defaultLayer or 7, 8))
+                    or ((canvas.GetFrameLevel and canvas:GetFrameLevel() or 0) + ClampPreviewLayer(rawLayer, spec.defaultLayer or 7)))
             end
             R.SetPreviewIconTexture(icon, spec, conf, g, key, data, statusCfg, box._previewStatusText)
             if spec.id == "statusCombat" and icon.SetAlpha then

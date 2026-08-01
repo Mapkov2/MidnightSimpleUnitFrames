@@ -75,6 +75,25 @@ function Runtime.SpecForPreviewKey(key)
     if config and type(config.GetSpec) == "function" then return config.GetSpec(runtimeUnit) end
     return spec
 end
+function Runtime.AppliedPortraitSizeForPreviewKey(key)
+    local runtimeUnit = key == "boss" and "boss1" or key
+    local frame = CoreFrame(runtimeUnit) or (runtimeUnit and _G["MSUF_" .. runtimeUnit])
+    local portrait = frame and frame.MSUFSpec and frame.MSUFSpec.portrait
+    local holder = frame and frame.MSUFPortraitHolder
+    -- Edit Mode displays this applied holder. Only trust it after Portrait.Apply
+    -- has consumed the same spec; otherwise a just-switched profile could expose
+    -- the previous profile's cached holder size for one preview refresh.
+    if not (portrait and portrait.enabled == true and holder
+        and frame._msufPortraitRuntimeCfg == portrait) then
+        return nil
+    end
+    local width = tonumber(holder._msufLayoutWidth) or tonumber(holder._msufWidth)
+    local height = tonumber(holder._msufLayoutHeight) or tonumber(holder._msufHeight)
+    if (not width or width <= 0) and holder.GetWidth then width = tonumber(holder:GetWidth()) end
+    if (not height or height <= 0) and holder.GetHeight then height = tonumber(holder:GetHeight()) end
+    if not (width and width > 0 and height and height > 0) then return nil end
+    return width, height
+end
 function Runtime.VisualScaleForPreviewKey(key, targetFrame)
     local runtimeUnit = key == "boss" and "boss1" or key
     local frame = CoreFrame(runtimeUnit) or (runtimeUnit and _G["MSUF_" .. runtimeUnit])
