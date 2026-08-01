@@ -173,6 +173,7 @@ UnitFrames\Embeds\MSUF_UFCore\MSUF_UFCore_Group.xml
 # that already apply before the menu opens stay in the main addon.
 Runtime\MSUF_UIScaleRuntime.lua
 Runtime\MSUF_WelcomeMessage.lua
+Runtime\MSUF_PreviewBuildWarning.lua
 Kernel\MSUF_OptionsLoader.lua
 
 # ---------------------------------------------------------------
