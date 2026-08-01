@@ -3515,16 +3515,21 @@ end
 local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
     local laneTitle = lane == "debuff" and "Debuff" or "Buff"
     local isDebuff = lane == "debuff"
+    local enemyDebuff = isDebuff and unit ~= "player"
+    local showPresets = not enemyDebuff
     local section = b:Section(laneTitle .. " Blacklist", isDebuff and 446 or 528)
     local w = section._msuf2Width or b.width or 720
     local inner = w - 48
-    if not isDebuff then
+    if not isDebuff or enemyDebuff then
         local inputValue = ""
         local inputW = max(140, min(floor(inner * 0.62), inner - 130))
-        local input = BindTextInput(ctx, section, "Enter buff Spell ID, link, or name", 24, -36, inputW,
+        local inputLabel = enemyDebuff and "Enemy debuff Spell ID, link, or name"
+            or "Enter buff Spell ID, link, or name"
+        local addLabel = enemyDebuff and "Add enemy debuff" or "Add custom buff"
+        local input = BindTextInput(ctx, section, inputLabel, 24, -36, inputW,
             function() return inputValue end, function(value) inputValue = value or "" end,
-            false, AuraControlMeta(ctx, "unit-workspace.lane.buff.blacklist.manual-input", "ephemeral"))
-        local add = ActionButton(section, "Add custom buff", 118, "primary")
+            false, AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.manual-input", "ephemeral"))
+        local add = ActionButton(section, addLabel, enemyDebuff and 132 or 118, "primary")
         add:SetPoint("TOPLEFT", section, "TOPLEFT", 36 + inputW, -60)
         add:SetScript("OnClick", function()
             local value = input and input.GetText and input:GetText() or inputValue
@@ -3534,62 +3539,90 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
             inputValue = ""
             return changed and true or false
         end)
-        RegisterAuraTextAction(ctx, add, input, "Add custom buff", "unit-workspace.lane.buff.blacklist.add", {
+        RegisterAuraTextAction(ctx, add, input, addLabel,
+            "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.add-manual", {
             actionKey = "aura_blacklist_add_spell", actionFixedArgs = { scope = unit, lane = lane }, actionInputArg = "value",
         })
-        AddTooltip(add, "Add custom buff", "Adds one exact buff to this frame's blacklist.")
+        if enemyDebuff then
+            AddTooltip(add, "Add enemy debuff",
+                "Adds one exact harmful aura to this Target, Focus, or Boss blacklist. Blizzard applies arbitrary SpellID filters only while the unit is not assistable.")
+        else
+            AddTooltip(add, "Add custom buff", "Adds one exact buff to this frame's blacklist.")
+        end
     end
     local curatedOffset = isDebuff and 0 or -82
     local presetW = max(130, min(floor(inner * 0.62), inner - 138))
     local spellW = max(160, min(floor(inner * 0.68), inner - 108))
+    local function PresetValues()
+        return type(Model.UnitBlacklistPresetValues) == "function"
+            and Model.UnitBlacklistPresetValues(unit, lane) or Model.BlacklistPresetValues()
+    end
     local function CurrentPreset()
-        local key = M.auraBlacklistPreset or "RAID_BUFFS"
-        local values = Model.BlacklistPresetValues()
+        local fallback = type(Model.UnitBlacklistDefaultPreset) == "function"
+            and Model.UnitBlacklistDefaultPreset(unit, lane) or "RAID_BUFFS"
+        local key = M.auraBlacklistPreset or fallback
+        local values = PresetValues()
         for i = 1, #values do if values[i].value == key then return key end end
-        return values[1] and values[1].value or "RAID_BUFFS"
+        for i = 1, #values do if values[i].value then return values[i].value end end
+        return fallback
     end
     local function CurrentSpell()
-        local values, selected = Model.BlacklistSpellValues(CurrentPreset()), M.auraBlacklistSpell
+        local values = type(Model.UnitBlacklistSpellValues) == "function"
+            and Model.UnitBlacklistSpellValues(unit, lane, CurrentPreset())
+            or Model.BlacklistSpellValues(CurrentPreset())
+        local selected = M.auraBlacklistSpell
         for i = 1, #values do if values[i].value == selected then return selected end end
         return values[1] and values[1].value or nil
     end
-    local preset = W.Dropdown(section, "Preset", function() return Model.BlacklistPresetValues() end, presetW)
-    W.MoveWidget(preset, section, 24, -36 + curatedOffset, presetW)
-    M.BindDropdownWidget(ctx, preset, CurrentPreset, function(value) M.auraBlacklistPreset = value; M.auraBlacklistSpell = nil; QueueAurasPageRefresh(ctx, "aura-blacklist-preset") end,
-        AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.preset-selection", "ephemeral"))
-    local addSet = ActionButton(section, "Add entire set", 126, "primary")
-    addSet:SetPoint("TOPLEFT", section, "TOPLEFT", 36 + presetW, -60 + curatedOffset)
-    addSet:SetScript("OnClick", function()
-        local count = Model.AddBlacklistPresetGroup(unit, CurrentPreset(), lane)
-        if count > 0 then ApplyUnit(ctx, unit, "AURAS3_BLACKLIST_PRESET_GROUP_ADD", true) end
-        return count > 0
-    end)
-    RegisterAuraControl(ctx, addSet, "Add entire set", "button", "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.add-preset-set", "action", {
-        actionKey = "aura_blacklist_add_preset", actionFixedArgs = { scope = unit, lane = lane }, actionInputArg = "preset",
-    })
-    AddTooltip(addSet, "Add entire set", "Blocks every aura in the selected curated MSUF set.")
-    local selectedSummary = W.Text(section, "", 24, -92 + curatedOffset, inner, T.colors.muted)
-    local spell = W.Dropdown(section, "Spell", function() return Model.BlacklistSpellValues(CurrentPreset()) end, spellW)
-    W.MoveWidget(spell, section, 24, -120 + curatedOffset, spellW)
-    M.BindDropdownWidget(ctx, spell,
-        CurrentSpell,
-        function(value) M.auraBlacklistSpell = value end,
-        AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.spell-selection", "ephemeral"))
-    local addSpell = ActionButton(section, "Add spell", 96)
-    addSpell:SetPoint("TOPLEFT", section, "TOPLEFT", 36 + spellW, -144 + curatedOffset)
-    addSpell:SetScript("OnClick", function()
-        local changed = Model.AddBlacklistPresetSpell(unit, CurrentSpell(), lane)
-        if changed then ApplyUnit(ctx, unit, "AURAS3_BLACKLIST_PRESET_ADD", true) end
-        return changed and true or false
-    end)
-    RegisterAuraControl(ctx, addSpell, "Add spell", "button", "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.add-preset-spell", "action", {
-        actionKey = "aura_blacklist_add_spell", actionFixedArgs = { scope = unit, lane = lane }, actionInputArg = "value",
-    })
-    AddTooltip(addSpell, "Add spell", "Blocks only the selected aura from the curated set.")
-    local prepared = W.Text(section, "", 24, -186 + curatedOffset, inner, T.colors.accent)
+    local selectedSummary, addSet, addSpell
+    if showPresets then
+        local preset = W.Dropdown(section, "Preset", PresetValues, presetW)
+        W.MoveWidget(preset, section, 24, -36 + curatedOffset, presetW)
+        M.BindDropdownWidget(ctx, preset, CurrentPreset, function(value) M.auraBlacklistPreset = value; M.auraBlacklistSpell = nil; QueueAurasPageRefresh(ctx, "aura-blacklist-preset") end,
+            AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.preset-selection", "ephemeral"))
+        addSet = ActionButton(section, "Add entire set", 126, "primary")
+        addSet:SetPoint("TOPLEFT", section, "TOPLEFT", 36 + presetW, -60 + curatedOffset)
+        addSet:SetScript("OnClick", function()
+            local count = Model.AddBlacklistPresetGroup(unit, CurrentPreset(), lane)
+            if count > 0 then ApplyUnit(ctx, unit, "AURAS3_BLACKLIST_PRESET_GROUP_ADD", true) end
+            return count > 0
+        end)
+        RegisterAuraControl(ctx, addSet, "Add entire set", "button", "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.add-preset-set", "action", {
+            actionKey = "aura_blacklist_add_preset", actionFixedArgs = { scope = unit, lane = lane }, actionInputArg = "preset",
+        })
+        AddTooltip(addSet, "Add entire set", "Blocks every aura in the selected curated MSUF set.")
+        selectedSummary = W.Text(section, "", 24, -92 + curatedOffset, inner, T.colors.muted)
+        local spell = W.Dropdown(section, "Spell", function()
+            return type(Model.UnitBlacklistSpellValues) == "function"
+                and Model.UnitBlacklistSpellValues(unit, lane, CurrentPreset())
+                or Model.BlacklistSpellValues(CurrentPreset())
+        end, spellW)
+        W.MoveWidget(spell, section, 24, -120 + curatedOffset, spellW)
+        M.BindDropdownWidget(ctx, spell,
+            CurrentSpell,
+            function(value) M.auraBlacklistSpell = value end,
+            AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.spell-selection", "ephemeral"))
+        addSpell = ActionButton(section, "Add spell", 96)
+        addSpell:SetPoint("TOPLEFT", section, "TOPLEFT", 36 + spellW, -144 + curatedOffset)
+        addSpell:SetScript("OnClick", function()
+            local changed = Model.AddBlacklistPresetSpell(unit, CurrentSpell(), lane)
+            if changed then ApplyUnit(ctx, unit, "AURAS3_BLACKLIST_PRESET_ADD", true) end
+            return changed and true or false
+        end)
+        RegisterAuraControl(ctx, addSpell, "Add spell", "button", "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.add-preset-spell", "action", {
+            actionKey = "aura_blacklist_add_spell", actionFixedArgs = { scope = unit, lane = lane }, actionInputArg = "value",
+        })
+        AddTooltip(addSpell, "Add spell", "Blocks only the selected aura from the curated set.")
+    else
+        W.Text(section,
+            "Enemy debuffs: hide only exact noisy SpellIDs. Selected Dots on target are handled automatically by that scope's Auto-blacklist toggle.",
+            24, -104, inner, T.colors.muted)
+    end
+    local listOffset = enemyDebuff and 44 or curatedOffset
+    local prepared = W.Text(section, "", 24, -186 + listOffset, inner, T.colors.accent)
     local searchValue = ""
     local refreshList
-    local searchInput = BindTextInput(ctx, section, "Search", 24, -210 + curatedOffset, inner,
+    local searchInput = BindTextInput(ctx, section, "Search", 24, -210 + listOffset, inner,
         function() return searchValue end,
         function(value)
             searchValue = tostring(value or "")
@@ -3603,11 +3636,12 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
             if refreshList then refreshList() end
         end)
     end
-    local emptyText = isDebuff and "No blocked spells. Add one from the presets above."
-        or "No blocked spells. Add one above or use a preset."
-    local empty = W.Text(section, emptyText, 24, -284 + curatedOffset, inner, T.colors.muted)
+    local emptyText = enemyDebuff and "No blocked enemy debuffs. Add an exact SpellID above."
+        or (isDebuff and "No blocked spells. Add one from the allowed presets above."
+        or "No blocked spells. Add one above or use a preset.")
+    local empty = W.Text(section, emptyText, 24, -284 + listOffset, inner, T.colors.muted)
     local listScroll = CreateFrame("ScrollFrame", nil, section, "UIPanelScrollFrameTemplate")
-    listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -260 + curatedOffset)
+    listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -260 + listOffset)
     listScroll:SetSize(inner - 20, 150)
     if listScroll.EnableMouseWheel then listScroll:EnableMouseWheel(true) end
     local listChild = CreateFrame("Frame", nil, listScroll)
@@ -3646,14 +3680,18 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
         local entries = Model.BlacklistEntries(unit, lane)
         local blocked = {}
         for i = 1, #entries do blocked[tostring(entries[i].value)] = true end
-        local setSpells = Model.BlacklistSpellValues(CurrentPreset())
-        local missing = 0
-        for i = 1, #setSpells do if not blocked[tostring(setSpells[i].value)] then missing = missing + 1 end end
-        selectedSummary:SetText(tostring(#setSpells) .. " spells in this set - "
-            .. (missing == 0 and "all already blocked" or (tostring(missing) .. " can still be added")))
-        W.SetControlEnabled(addSet, missing > 0)
-        local selectedSpell = CurrentSpell()
-        W.SetControlEnabled(addSpell, selectedSpell ~= nil and not blocked[tostring(selectedSpell)])
+        if showPresets then
+            local setSpells = type(Model.UnitBlacklistSpellValues) == "function"
+                and Model.UnitBlacklistSpellValues(unit, lane, CurrentPreset())
+                or Model.BlacklistSpellValues(CurrentPreset())
+            local missing = 0
+            for i = 1, #setSpells do if not blocked[tostring(setSpells[i].value)] then missing = missing + 1 end end
+            selectedSummary:SetText(tostring(#setSpells) .. " spells in this set - "
+                .. (missing == 0 and "all already blocked" or (tostring(missing) .. " can still be added")))
+            W.SetControlEnabled(addSet, missing > 0)
+            local selectedSpell = CurrentSpell()
+            W.SetControlEnabled(addSpell, selectedSpell ~= nil and not blocked[tostring(selectedSpell)])
+        end
         local query = tostring(searchValue or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
         local visible = {}
         for i = 1, #entries do
@@ -4327,7 +4365,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             actionFixedArgs = { scope = unit, index = index },
             actionInputArg = "value",
         })
-        AddTooltip(dropdown, "Target DoT", "Curated Retail 12.0+ and 12.1 DoT auras. Tracking is always restricted to your current target and your own aura source.")
+        AddTooltip(dropdown, "Target DoT", "Curated Retail 12.0+ and 12.1 DoT auras. Tracking is restricted to this UnitFrame's unit and your own aura source; Boss settings bind separately to boss1 through boss5.")
         local customInputValue = ""
         local customInput = BindTextInput(ctx, section, "Custom Spell ID", 24, -94, max(140, inner - 132),
             function() return customInputValue end,
@@ -5062,13 +5100,60 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
     end
 
     if isTargetDots then
-        local section = b:Section("Dots on target Setup", 132)
+        local section = b:Section("Dots on target Setup", 410)
         local w = section._msuf2Width or b.width or 720
         local inner = w - 48
-        BindSwitch(ctx, section, "Enabled", 24, -48, 112,
+        local enabled = BindSwitch(ctx, section, "Enabled", 24, -48, 112,
             function() return item.enabled == true end,
-            function(value) item.enabled = value == true; Apply("AURAS3_TARGET_DOTS_ENABLE") end,
+            function(value) item.enabled = value == true; Apply("AURAS3_TARGET_DOTS_ENABLE", true) end,
             AuraControlMeta(ctx, "custom-container.target-dots.enabled"))
+        AddTooltip(enabled, "Enable tracked DoTs",
+            "Tracks your selected harmful auras on this UnitFrame's unit. Boss frames use their own boss1 through boss5 unit token.")
+        local portrait = BindSwitch(ctx, section, "Show DoTs at portrait position", 24, -86, 280,
+            function() return item.portraitIcon == true end,
+            function(value)
+                item.portraitIcon = value == true
+                Apply("AURAS3_TARGET_DOTS_PORTRAIT", true)
+            end,
+            AuraControlMeta(ctx, "custom-container.target-dots.portrait-icon"))
+        AddTooltip(portrait, "Show DoTs at portrait position",
+            "Replaces the normal DoT lane with portrait-sized icons. The first icon exactly follows this frame's portrait width, height, and shape.")
+        local portraitMax = BindSlider(ctx, section, "Max portrait icons", 24, -128, 1, 8, 1, inner,
+            function() return tonumber(item.portraitMaxIcons) or 1 end,
+            function(value)
+                item.portraitMaxIcons = max(1, min(8, floor((tonumber(value) or 1) + 0.5)))
+                Apply("AURAS3_TARGET_DOTS_PORTRAIT_MAX", true)
+            end,
+            AuraControlMeta(ctx, "custom-container.target-dots.portrait-max-icons"))
+        AddTooltip(portraitMax, "Max portrait icons",
+            "Limits simultaneous DoT icons at the portrait from 1 to 8. Additional icons grow outward using this DoT lane's configured Growth direction.")
+        local cooldownText = BindSwitch(ctx, section, "Show cooldown text on portrait", 24, -198, 280,
+            function() return item.portraitCooldownText ~= false end,
+            function(value)
+                item.portraitCooldownText = value == true
+                Apply("AURAS3_TARGET_DOTS_PORTRAIT_COOLDOWN", true)
+            end,
+            AuraControlMeta(ctx, "custom-container.target-dots.portrait-cooldown-text"))
+        AddTooltip(cooldownText, "Show cooldown text on portrait",
+            "Shows the tracked DoT's remaining duration over its portrait icon. Blizzard updates the duration natively.")
+        local positionOnly = BindSwitch(ctx, section, "Use portrait position while portrait is off", 24, -236, 326,
+            function() return item.portraitPositionWhenDisabled == true end,
+            function(value)
+                item.portraitPositionWhenDisabled = value == true
+                Apply("AURAS3_TARGET_DOTS_PORTRAIT_POSITION", true)
+            end,
+            AuraControlMeta(ctx, "custom-container.target-dots.portrait-position-when-disabled"))
+        AddTooltip(positionOnly, "Use portrait position while portrait is off",
+            "Keeps the configured portrait size, position, and shape as an invisible anchor for tracked DoTs while the portrait itself is disabled.")
+        local autoBlacklist = BindSwitch(ctx, section, "Auto-blacklist from Debuffs", 24, -274, 280,
+            function() return item.autoBlacklistDebuffs ~= false end,
+            function(value)
+                item.autoBlacklistDebuffs = value == true
+                Apply("AURAS3_TARGET_DOTS_AUTO_BLACKLIST", true)
+            end,
+            AuraControlMeta(ctx, "custom-container.target-dots.auto-blacklist-debuffs"))
+        AddTooltip(autoBlacklist, "Auto-blacklist from Debuffs",
+            "Hides this scope's selected DoT Spell IDs from the same UnitFrame's normal Debuff container while Dots on target is enabled. Blizzard's blacklist is SpellID-based, so the same spell cast by another player is hidden there too.")
         local reset = ActionButton(section, "Reset", 88)
         reset:SetPoint("TOPRIGHT", section, "TOPRIGHT", -24, -42)
         reset:SetScript("OnClick", function() Model.ResetCustomContainer(unit, index); Apply("AURAS3_TARGET_DOTS_RESET", true); Rebuild(ctx) end)
@@ -5076,7 +5161,8 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             actionKey = "reset_aura_custom_container", actionFixedArgs = { scope = unit, index = index },
         })
         local count = #Model.CustomContainerSpellEntries(unit, index)
-        W.Text(section, "Source: current target · Ownership: only mine · Harmful DoTs only · " .. tostring(count) .. " selected", 24, -94, inner, T.colors.muted)
+        W.Text(section, "Source: this UnitFrame · Ownership: only mine · Harmful DoTs only · " .. tostring(count) .. " selected", 24, -324, inner, T.colors.muted)
+        W.Text(section, "Display: " .. (item.portraitIcon == true and "portrait position" or "normal DoT lane"), 24, -356, inner, T.colors.muted)
         return
     end
 

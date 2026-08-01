@@ -804,19 +804,7 @@ local function ReadParentFrameStrata(parentFrame)
 end
 
 local function ResolveFrameStrata(parentFrame, value)
-    -- Group foreground and full-frame effects must stay on one strata; their
-    -- shared layer contract then guarantees that text/icons remain readable.
-    if parentFrame and parentFrame.MSUFSpec and parentFrame.MSUFSpec.scope == "group" then
-        return ReadParentFrameStrata(parentFrame)
-    end
-    if issecretvalue(value) == true then value = nil end
-    if value == nil or value == "" or value == "AUTO" then
-        return ReadParentFrameStrata(parentFrame)
-    end
-    local rank = _G.MSUF_FRAME_STRATA_RANK
-    if type(value) == "string" and rank and rank[value] then return value end
-    value = NormalizeFrameStrata(value, "AUTO")
-    if value ~= "AUTO" then return value end
+    -- Legacy per-element strata cannot bypass the universal 0..30 order.
     return ReadParentFrameStrata(parentFrame)
 end
 
@@ -2021,6 +2009,34 @@ A3._AddPlayerDefensiveAutoBlacklist = function(candidateFilters, candidateFilter
     return candidateFilters, candidateFilterSignature
 end
 
+A3._AddTargetDotAutoBlacklist = function(candidateFilters, candidateFilterSignature, entry, tracked)
+    if type(entry) ~= "table" or entry.autoBlacklistDebuffs == false
+        or entry.enabled ~= true or type(tracked) ~= "table"
+    then
+        return candidateFilters, candidateFilterSignature
+    end
+    local parts, count = {}, 0
+    for spellID in pairs(tracked) do
+        count = count + 1
+        parts[count] = tostring(spellID)
+    end
+    if count == 0 then return candidateFilters, candidateFilterSignature end
+    candidateFilters = candidateFilters or {}
+    local excluded = candidateFilters.excludeSpellIDs
+    if type(excluded) ~= "table" then
+        excluded = {}
+        candidateFilters.excludeSpellIDs = excluded
+    end
+    for spellID in pairs(tracked) do
+        excluded[spellID] = true
+    end
+    table_sort(parts)
+    local autoSignature = "autoTargetDots:" .. table_concat(parts, ",")
+    candidateFilterSignature = candidateFilterSignature
+        and (candidateFilterSignature .. ";" .. autoSignature) or autoSignature
+    return candidateFilters, candidateFilterSignature
+end
+
 local function TargetDotSpellIDHash()
     local cached = A3._targetDotRuntimeLookup
     if cached then return cached end
@@ -2038,12 +2054,17 @@ end
 local function ManagedLaneFrameLevel(parentFrame, lane)
     local parentLevel = parentFrame and parentFrame.GetFrameLevel and (parentFrame:GetFrameLevel() or 0) or 0
     if lane and lane.portraitOverlay == true then
-        -- Native AuraButton is born one level above the container. Keep the
-        -- container on the portrait-holder level so Blizzard's secret-driven
-        -- button visibility alone places icon, swipe, and text above the base
-        -- portrait, cast texture, and border. Never observe that visibility
-        -- with scripts: CustomAuraButtonTemplate blocks OnShow/OnHide hooks.
+        -- Portrait auras are a replacement surface owned by the portrait
+        -- holder, not an independent unit-frame overlay. Keep the proven
+        -- parent-relative birth order: container/host on the holder plane,
+        -- native AuraButton one level above it, then cooldown text above the
+        -- button. Encoding the lane's universal layer here can put the sealed
+        -- native icon below the portrait while the separately levelled text
+        -- remains visible.
         return parentLevel
+    end
+    if FrameLayers.ElementLevel then
+        return FrameLayers.ElementLevel(lane and lane.layer, 1, 0)
     end
     return parentLevel + AuraIconBaseOffset(parentFrame) + (lane and lane.layer or 1)
 end
@@ -2130,7 +2151,9 @@ local function CompileUnitCustomDisplays(auras, unit)
     })
 end
 
-A3._CompilePlayerDefensivePortraitLane = function(lane, frameSpec, entry)
+-- Kept on A3 rather than as a main-chunk local: this chunk runs against the
+-- Lua 200-local ceiling (see the local budget in msuf_static_checks).
+function A3._CompilePortraitAuraLane(lane, frameSpec, entry, kind, rootKey, scope, exactPortraitRect)
     local portrait = frameSpec and frameSpec.portrait
     local usePortraitPosition = entry and entry.portraitPositionWhenDisabled == true
     if not (lane and portrait and (portrait.enabled == true or usePortraitPosition)) then return nil end
@@ -2140,6 +2163,8 @@ A3._CompilePlayerDefensivePortraitLane = function(lane, frameSpec, entry)
     local portraitWidth = ClampNumber(portrait.width, portrait.size or 24, 8, 128)
     local portraitHeight = ClampNumber(portrait.height, portrait.size or 24, 8, 128)
     local size = math_min(portraitWidth, portraitHeight)
+    local buttonWidth = exactPortraitRect == true and portraitWidth or size
+    local buttonHeight = exactPortraitRect == true and portraitHeight or size
     local spacing = 0
     local maxCount = Round(ClampNumber(entry and entry.portraitMaxIcons, 1, 1, 8))
     local verticalGrowth = lane.verticalGrowth == true
@@ -2148,16 +2173,16 @@ A3._CompilePlayerDefensivePortraitLane = function(lane, frameSpec, entry)
     local xSign = tonumber(lane.xSign) or 1
     local ySign = tonumber(lane.ySign) or -1
     local initialAnchor = ButtonAnchor(xSign, ySign)
-    local insetX = (portraitWidth - size) * 0.5
-    local insetY = (portraitHeight - size) * 0.5
+    local insetX = (portraitWidth - buttonWidth) * 0.5
+    local insetY = (portraitHeight - buttonHeight) * 0.5
     local anchorX = initialAnchor:find("RIGHT", 1, true) and -insetX or insetX
     local anchorY = initialAnchor:find("BOTTOM", 1, true) and insetY or -insetY
     local out = {}
     for key, value in pairs(lane) do
         if tostring(key):find("^_msufA3") == nil then out[key] = value end
     end
-    out.kind = "defensivePortrait"
-    out.rootKey = "DefensivePortrait"
+    out.kind = kind
+    out.rootKey = rootKey
     out.anchorTarget = "portrait"
     out.portraitOverlay = true
     out.portraitLevelOffset = portrait.levelOffset
@@ -2165,14 +2190,18 @@ A3._CompilePlayerDefensivePortraitLane = function(lane, frameSpec, entry)
     out.enabled = maxCount > 0
     out.max = maxCount
     out.size = size
+    out.buttonWidth = buttonWidth
+    out.buttonHeight = buttonHeight
     out.spacing = spacing
     out.step = size + spacing
+    out.stepX = buttonWidth + spacing
+    out.stepY = buttonHeight + spacing
     out.perRow = perRow
     out.cols = cols
     out.rows = rows
     out.padding = 0
-    out.width = math_max(1, cols * size + math_max(cols - 1, 0) * spacing)
-    out.height = math_max(1, rows * size + math_max(rows - 1, 0) * spacing)
+    out.width = math_max(1, cols * buttonWidth + math_max(cols - 1, 0) * spacing)
+    out.height = math_max(1, rows * buttonHeight + math_max(rows - 1, 0) * spacing)
     -- The standalone bar's saved Edit Mode offsets must NOT leak in here: a
     -- previously dragged bar would push the "portrait" icon out of the
     -- portrait entirely. Icon 1 sits exactly inside the portrait; moving the
@@ -2197,7 +2226,24 @@ A3._CompilePlayerDefensivePortraitLane = function(lane, frameSpec, entry)
     out.showCooldownSwipe = lane.showCooldownSwipe == true
     out.showDurationBar = lane.showDurationBar == true
     out.showStacks = lane.showStacks == true
-    return FinalizeLane(out, "player")
+    if exactPortraitRect == true then
+        -- Portrait presentation is an exact replacement surface: dimensions
+        -- and mask always follow this UnitFrame's compiled portrait, regardless
+        -- of the normal DoT lane's standalone icon-shape choice.
+        out.iconShape, out.requestedIconShape = Shape.Resolve(Shape.FOLLOW_PORTRAIT, portrait.shape)
+    end
+    return FinalizeLane(out, scope)
+end
+
+A3._CompilePlayerDefensivePortraitLane = function(lane, frameSpec, entry)
+    return A3._CompilePortraitAuraLane(
+        lane, frameSpec, entry, "defensivePortrait", "DefensivePortrait", "player", false)
+end
+
+A3._CompileTargetDotPortraitLane = function(lane, frameSpec, entry, unit)
+    if unit ~= "target" and unit ~= "focus" and not tostring(unit or ""):match("^boss%d+$") then return nil end
+    return A3._CompilePortraitAuraLane(
+        lane, frameSpec, entry, "targetDotPortrait", "TargetDotPortrait", unit, true)
 end
 
 local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec, shared)
@@ -2206,10 +2252,14 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec,
     -- `enabled` is the Core feature's master switch. Portrait mode is only a
     -- presentation choice and cannot keep a disabled feature alive.
     if entry.enabled ~= true then return nil, nil end
-    local portraitRequested = playerDefensives and entry.portraitIcon == true
     local nameAliasSpellIDs = CustomSpellIDHash(entry.spellIDs or entry.includeSpellIDs)
     local includeSpellIDs = nameAliasSpellIDs
     local targetDots = not playerDefensives and (index == 4 or entry.targetDots == true)
+    -- Target DoT portrait presentation belongs exclusively to the reserved
+    -- index-4 lane. Custom 1-3 must remain normal custom containers even if a
+    -- stale/imported record happens to carry the targetDots marker.
+    local portraitRequested = (playerDefensives or (targetDots and index == 4))
+        and entry.portraitIcon == true
     if playerDefensives then
         includeSpellIDs = A3._PlayerDefensiveTrackedSpellIDHash(entry)
     end
@@ -2228,7 +2278,7 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec,
     local candidateFilters, candidateFilterSignature = CandidateFiltersFromSpellIDs(includeSpellIDs, "includeSpellIDs")
     local placed = type(entry.placed) == "table" and entry.placed or {}
     local filters = type(entry.filters) == "table" and entry.filters or { enabled = true, onlyMine = entry.onlyOwn == true }
-    local sourceUnit = targetDots and "target" or unit
+    local sourceUnit = unit
     local helpful = not targetDots and tostring(entry.auraType or "BUFF"):upper() ~= "DEBUFF"
     candidateFilters, candidateFilterSignature = AddMaxDurationCandidateFilter(
         candidateFilters, candidateFilterSignature,
@@ -2309,10 +2359,16 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec,
         stackX = ClampNumber(placed.stackX, 0, -2000, 2000),
         stackY = ClampNumber(placed.stackY, 0, -2000, 2000),
     })
-    local portraitLane = portraitRequested
-        and A3._CompilePlayerDefensivePortraitLane(lane, frameSpec, entry) or nil
+    local portraitLane
+    if portraitRequested then
+        if playerDefensives then
+            portraitLane = A3._CompilePlayerDefensivePortraitLane(lane, frameSpec, entry)
+        elseif targetDots then
+            portraitLane = A3._CompileTargetDotPortraitLane(lane, frameSpec, entry, unit)
+        end
+    end
     -- If the visible portrait is disabled and its position-only option is also
-    -- off, fall back to the normal bar instead of silently losing defensives.
+    -- off, fall back to the normal bar instead of silently losing tracked auras.
     local barEnabled = portraitLane == nil
     local effect
     -- Full-frame effects are independent aura sensors. Portrait mode replaces
@@ -2330,6 +2386,7 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec,
             layer = entry.layer or 9,
             strata = entry.strata or "AUTO",
             color = entry.frame.color,
+            unit = sourceUnit,
         }
     end
     return barEnabled and lane or nil, effect, portraitLane
@@ -2346,7 +2403,7 @@ local function CompileUnitCustomContainers(auras, unit, frameSpec)
     for i = 1, 4 do
         local lane, effect, portraitLane = CompileUnitCustomLane(unit, source[i], i, lanePadding, frameSpec, auras.shared)
         if lane then lanes["custom" .. tostring(i)] = lane end
-        if portraitLane then lanes.defensivePortrait = portraitLane end
+        if portraitLane then lanes[portraitLane.kind] = portraitLane end
         if effect then
             local bucket = i == 4 and unit ~= "player" and targetDotEffectItems or effectItems
             bucket[#bucket + 1] = effect
@@ -2357,7 +2414,9 @@ local function CompileUnitCustomContainers(auras, unit, frameSpec)
         effects = SpellIndicatorsRuntime.CompileSlots(unit, { enabled = true, items = effectItems, layer = 9, strata = "AUTO", rootKey = "SpellIndicators" })
     end
     if #targetDotEffectItems > 0 then
-        targetDotEffects = SpellIndicatorsRuntime.CompileSlots("target", { enabled = true, items = targetDotEffectItems, layer = 9, strata = "AUTO", rootKey = "TargetDotEffects" })
+        targetDotEffects = SpellIndicatorsRuntime.CompileSlots(
+            targetDotEffectItems[1].unit or unit,
+            { enabled = true, items = targetDotEffectItems, layer = 9, strata = "AUTO", rootKey = "TargetDotEffects" })
     end
     return lanes, effects, targetDotEffects
 end
@@ -2426,6 +2485,17 @@ local function BuildUnitFrameConfig(unit, frameSpec)
                 and defensiveLane.candidateFilters.includeSpellIDs
             buffCandidates, buffCandidateSignature = A3._AddPlayerDefensiveAutoBlacklist(
                 buffCandidates, buffCandidateSignature,
+                type(customContainers) == "table" and customContainers[4] or nil, tracked)
+        elseif unit == "target" or unit == "focus" or tostring(unit):match("^boss%d+$") then
+            -- Each UnitFrame resolves its own saved Target/Focus/Boss scope.
+            -- Reuse the already compiled player-owned DoT IDs; no extra aura
+            -- query or runtime filtering is introduced by this convenience.
+            local customContainers = EffectiveUnitCustomContainers(auras, unit)
+            local targetDotLane = customLanes and (customLanes.custom4 or customLanes.targetDotPortrait)
+            local tracked = targetDotLane and targetDotLane.candidateFilters
+                and targetDotLane.candidateFilters.includeSpellIDs
+            debuffCandidates, debuffCandidateSignature = A3._AddTargetDotAutoBlacklist(
+                debuffCandidates, debuffCandidateSignature,
                 type(customContainers) == "table" and customContainers[4] or nil, tracked)
         end
         local portraitShape = frameSpec and frameSpec.portrait and frameSpec.portrait.shape
@@ -3274,7 +3344,9 @@ end
 LaneLayoutSignature = function(lane)
     return tostring(lane.size) .. "\030" .. tostring(lane.iconZoom) .. "\030" .. tostring(lane.spacing)
         .. "\030" .. tostring(lane.iconShape) .. "\030" .. tostring(lane.requestedIconShape)
-        .. "\030" .. tostring(lane.step) .. "\030" .. tostring(lane.perRow)
+        .. "\030" .. tostring(lane.buttonWidth) .. "\030" .. tostring(lane.buttonHeight)
+        .. "\030" .. tostring(lane.step) .. "\030" .. tostring(lane.stepX) .. "\030" .. tostring(lane.stepY)
+        .. "\030" .. tostring(lane.perRow)
         .. "\030" .. tostring(lane.cols) .. "\030" .. tostring(lane.rows)
         .. "\030" .. tostring(lane.width) .. "\030" .. tostring(lane.height)
         .. "\030" .. tostring(lane.anchor) .. "\030" .. tostring(lane.x)
@@ -3322,11 +3394,11 @@ end
 local DISPEL_SENSOR_ORDER = { "dispelBorder", "dispelOverlay", "dispelCorner", "dispelSymbol" }
 A3._normalAuraLaneOrder = {
     "buff", "trackedBuff", "debuff", "external",
-    "custom1", "custom2", "custom3", "custom4", "defensivePortrait",
+    "custom1", "custom2", "custom3", "custom4", "defensivePortrait", "targetDotPortrait",
 }
 local NORMAL_LANE_ROOT_KEYS = {
     "Buffs", "TrackedBuffs", "Debuffs", "Externals",
-    "CustomAuras1", "CustomAuras2", "CustomAuras3", "CustomAuras4", "DefensivePortrait",
+    "CustomAuras1", "CustomAuras2", "CustomAuras3", "CustomAuras4", "DefensivePortrait", "TargetDotPortrait",
 }
 local EFFECT_ROOT_FIELDS = { "spellIndicators", "laneEffects", "targetDotEffects" }
 local EFFECT_ROOT_KEYS = { "SpellIndicators", "LaneEffects", "TargetDotEffects" }
@@ -3388,12 +3460,12 @@ local function LayoutButton(button, lane, index)
     else
         col, row = major, minor
     end
-    local x = col * (lane.step or lane.size or 1) * (lane.xSign or 1)
-    local y = row * (lane.step or lane.size or 1) * (lane.ySign or -1)
+    local x = col * (lane.stepX or lane.step or lane.buttonWidth or lane.size or 1) * (lane.xSign or 1)
+    local y = row * (lane.stepY or lane.step or lane.buttonHeight or lane.size or 1) * (lane.ySign or -1)
     button:ClearAllPoints()
     local parent = button:GetParent()
     button:SetPoint(lane.initialAnchor or "TOPLEFT", parent, lane.initialAnchor or "TOPLEFT", x, y)
-    button:SetSize(lane.size, lane.size)
+    button:SetSize(lane.buttonWidth or lane.size, lane.buttonHeight or lane.size)
 end
 
 local function LayoutAuraBorder(button, border, lane)
@@ -3759,9 +3831,24 @@ local function EnsureAuraTextOverlay(button, lane)
     end
     overlay:ClearAllPoints()
     overlay:SetAllPoints(anchor)
-    if overlay.SetFrameLevel then overlay:SetFrameLevel(level + 4) end
+    if overlay.SetFrameLevel then
+        overlay:SetFrameLevel(level + (FrameLayers.AURA_TEXT_LEVEL_OFFSET or 8))
+    end
     overlay:Show()
     return overlay
+end
+
+function A3._AuraCooldownAnchorAndLevel(button, lane)
+    local anchor = button
+    local level = button and button.GetFrameLevel and (button:GetFrameLevel() or 0) or 0
+    if lane and lane.portraitOverlay == true then
+        local holder = button and button._msufA3ParentFrame
+        if holder and holder.GetFrameLevel then
+            level = math_max(level, holder:GetFrameLevel() or 0)
+        end
+        if button and button._msufA3LaneIndex == 1 then anchor = holder or button end
+    end
+    return anchor, level + (FrameLayers.AURA_COOLDOWN_LEVEL_OFFSET or 4)
 end
 
 -- Container-level layout application on the PTR 7 (12.1) flow layout API
@@ -3836,11 +3923,11 @@ local function SyncContainerGeometry(container, lane, parentFrame, forceGeometry
     -- already includes 2*padding, so strip it back out for the line limit.
     ApplyContainerFlowLayout(container, initialAnchor,
         lane.xSign or 1, lane.ySign or -1,
-        lane.verticalGrowth == true and (lane.size or 1)
+        lane.verticalGrowth == true and (lane.buttonWidth or lane.size or 1)
             or ((lane.width or lane.size or 1) - 2 * (lane.padding or 0)),
         lane.padding)
     container.createdButtons = lane.max
-    container:SetSize(lane.size or 1, lane.size or 1)
+    container:SetSize(lane.buttonWidth or lane.size or 1, lane.buttonHeight or lane.size or 1)
     if parentFrame and layoutHost then
         -- A portrait lane can be born before the Portrait element created its
         -- holder (parent then fell back to the unit frame). Snap the host over
@@ -3942,12 +4029,10 @@ local function PrepareAuraButton(button, lane, index)
     -- out of countdown numbers, bling, and edge drawing. Created once per button
     -- and reused.
     if lane.showCooldownSwipe == true and not barOnly then
-        local cooldownOwner = lane.portraitOverlay == true
-            and (EnsureAuraTextOverlay(button, lane) or button) or button
+        local cooldownAnchor, cooldownLevel = A3._AuraCooldownAnchorAndLevel(button, lane)
         local cooldown = button._msufA3Cooldown
         if not cooldown then
-            local cd = CreateFrame("Cooldown", nil, cooldownOwner, "CooldownFrameTemplate")
-            cd:SetAllPoints(cooldownOwner)
+            local cd = CreateFrame("Cooldown", nil, button, "CooldownFrameTemplate")
             if type(cd.SetDrawSwipe) == "function" then cd:SetDrawSwipe(true) end
             if type(cd.SetSwipeColor) == "function" then cd:SetSwipeColor(0, 0, 0, 0.58) end
             if type(cd.SetHideCountdownNumbers) == "function" then cd:SetHideCountdownNumbers(true) end
@@ -3957,11 +4042,13 @@ local function PrepareAuraButton(button, lane, index)
             cooldown = cd
         end
         if cooldown then
+            cooldown:ClearAllPoints()
+            cooldown:SetAllPoints(cooldownAnchor or button)
             if type(cooldown.SetDrawSwipe) == "function" then cooldown:SetDrawSwipe(true) end
             if type(cooldown.SetSwipeColor) == "function" then cooldown:SetSwipeColor(0, 0, 0, 0.58) end
             if type(cooldown.SetReverse) == "function" then cooldown:SetReverse(lane.cooldownSwipeReverse == true) end
             if type(cooldown.SetFrameLevel) == "function" then
-                cooldown:SetFrameLevel((cooldownOwner:GetFrameLevel() or button:GetFrameLevel() or 0) + 1)
+                cooldown:SetFrameLevel(cooldownLevel)
             end
             cooldown:Show()
             button:SetDurationCooldown(cooldown)
@@ -3986,7 +4073,10 @@ local function PrepareAuraButton(button, lane, index)
             bar:SetValue(0)
             button._msufA3DurationBar = bar
         end
-        if type(bar.SetFrameLevel) == "function" then bar:SetFrameLevel((button:GetFrameLevel() or 0) + 2) end
+        if type(bar.SetFrameLevel) == "function" then
+            bar:SetFrameLevel((button:GetFrameLevel() or 0)
+                + (FrameLayers.AURA_DURATION_BAR_LEVEL_OFFSET or 2))
+        end
         LayoutDurationBar(button, bar, lane)
         ApplyDurationBarColor(bar)
         button:SetDurationBar(bar, ResolveDurationBarOptions(lane))
@@ -4017,7 +4107,9 @@ local function PrepareAuraButton(button, lane, index)
         end
         duration:Hide()
         ApplyFont(duration, lane.cooldownSize)
-        if type(duration.SetDrawLayer) == "function" then duration:SetDrawLayer("OVERLAY", 7) end
+        if type(duration.SetDrawLayer) == "function" then
+            duration:SetDrawLayer("OVERLAY", FrameLayers.AURA_COOLDOWN_TEXT_DRAW_SUBLEVEL or 7)
+        end
         PlaceCooldownText(duration, textOverlay, lane)
         duration:Show()
         -- Hand Blizzard a C-side formatter plus a duration-text binding
@@ -4065,7 +4157,9 @@ local function PrepareAuraButton(button, lane, index)
         button.Count = count
         count:Hide()
         ApplyFont(count, lane.stackSize)
-        if type(count.SetDrawLayer) == "function" then count:SetDrawLayer("OVERLAY", 6) end
+        if type(count.SetDrawLayer) == "function" then
+            count:SetDrawLayer("OVERLAY", FrameLayers.AURA_STACK_DRAW_SUBLEVEL or 6)
+        end
         PlaceStackText(count, textOverlay, lane)
         count:Show()
         button:SetApplicationCount(count, _applicationCountOptions)
@@ -4169,11 +4263,14 @@ local function DispelSensorFrameLevel(parentFrame, sensor, target)
         -- Geometry follows the health target, but AUTO/equal-strata ordering is
         -- based on the unit frame so Dispel deterministically wins the shared
         -- health-effect band above every Spell Indicator priority.
+        if FrameLayers.ElementLevel then return FrameLayers.ElementLevel(sensor.layer, 0, 12) end
         return math_max(targetLevel + 1, parentLevel + DISPEL_OVERLAY_EFFECT_OFFSET + (sensor.layer or 0))
     end
     if sensor and (sensor.visual == "corner" or sensor.visual == "symbol") then
+        if FrameLayers.ElementLevel then return FrameLayers.ElementLevel(sensor.layer, 14, 8) end
         return parentLevel + AuraIconBaseOffset(parentFrame) + (sensor.layer or 14)
     end
+    if FrameLayers.ElementLevel then return FrameLayers.ElementLevel(sensor and sensor.layer, 14, 8) end
     return parentLevel + (sensor and sensor.layer or 14)
 end
 
@@ -4788,8 +4885,8 @@ local function ManagedAuraGroupLayoutOptions(lane)
         -- Blizzard_CustomAuraContainer.lua. frameWidth/frameHeight (old) and
         -- elementSpacingX/elementSpacingY (pre-PTR7) are ignored; PTR 7 reads
         -- elementWidth/elementHeight plus elementSpacing (X) and lineSpacing (Y).
-        elementWidth = size,
-        elementHeight = size,
+        elementWidth = lane.buttonWidth or size,
+        elementHeight = lane.buttonHeight or size,
         elementSpacing = spacing,
         lineSpacing = spacing,
     }
@@ -6343,6 +6440,7 @@ local function HideState(frame)
     A3._HideLane(root.CustomAuras3)
     A3._HideLane(root.CustomAuras4)
     A3._HideLane(root.DefensivePortrait)
+    A3._HideLane(root.TargetDotPortrait)
     A3._HideLane(root.GroupSlots)
     A3._HideLane(root.GroupAuraFlow)
     A3._HideLane(root.DispelSensor)
@@ -6376,6 +6474,7 @@ local function HideState(frame)
     root.CustomAuras3 = nil
     root.CustomAuras4 = nil
     root.DefensivePortrait = nil
+    root.TargetDotPortrait = nil
     root.GroupSlots = nil
     root.GroupAuraFlow = nil
     root.DispelSensor = nil

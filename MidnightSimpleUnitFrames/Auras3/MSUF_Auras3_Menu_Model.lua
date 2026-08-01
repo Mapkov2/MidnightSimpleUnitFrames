@@ -749,6 +749,32 @@ local PRESET_CATEGORIES = {
     SKYRIDING = "Utility",
 }
 
+-- UnitFrame preset menus are lane-specific. Friendly harmful auras are exact
+-- SpellID-filterable only when Blizzard marks them NeverSecret; enemy Debuffs
+-- have no honest universal preset, so Target/Focus/Boss use manual IDs instead.
+local UNIT_BUFF_PRESET_KEYS = {
+    RAID_BUFFS = true,
+    PRESERVATION_EVOKER = true,
+    AUGMENTATION_EVOKER = true,
+    RESTO_DRUID = true,
+    DISC_PRIEST = true,
+    HOLY_PRIEST = true,
+    MISTWEAVER_MONK = true,
+    RESTO_SHAMAN = true,
+    HOLY_PALADIN = true,
+    BLESSING_BRONZE = true,
+    SELF_BUFFS = true,
+    ROGUE_POISONS = true,
+    SHAMAN_IMBUE = true,
+    RESOURCE_AURAS = true,
+    COOLDOWNS = true,
+}
+local UNIT_FRIENDLY_DEBUFF_PRESET_KEYS = {
+    SATED = true,
+    DESERTER = true,
+    CHALLENGE_DEBUFFS = true,
+}
+
 local function DeepCopy(value)
     if type(value) ~= "table" then return value end
     local out = {}
@@ -1977,13 +2003,16 @@ local function EnforceTargetDotContainer(item)
     if type(item) ~= "table" then return item end
     item.name = "Dots on target"
     item.auraType = "DEBUFF"
-    item.sourceUnit = "target"
+    -- The saved scope is shared by the five Boss frames, but the runtime binds
+    -- this lane to the concrete frame unit (target/focus/boss1..boss5).
+    item.sourceUnit = nil
     item.targetDots = true
     item.playerDefensives = nil
-    item.portraitIcon = nil
-    item.portraitMaxIcons = nil
-    item.portraitCooldownText = nil
-    item.portraitPositionWhenDisabled = nil
+    item.portraitIcon = item.portraitIcon == true
+    item.portraitMaxIcons = math_floor(ClampNumber(item.portraitMaxIcons, 1, 1, 8))
+    item.portraitCooldownText = item.portraitCooldownText ~= false
+    item.portraitPositionWhenDisabled = item.portraitPositionWhenDisabled == true
+    item.autoBlacklistDebuffs = item.autoBlacklistDebuffs ~= false
     item.autoBlacklistPlayerBuffs = nil
     item.disabledPredefinedSpellIDs = nil
     item.placed = type(item.placed) == "table" and item.placed or {}
@@ -2995,13 +3024,13 @@ local function CleanPresetLabel(key, fallback)
     return fallback ~= "" and fallback or tostring(key or "")
 end
 
-function Model.BlacklistPresetValues()
+local function BuildBlacklistPresetValues(allowedKeys)
     local meta = PublicAuraPresetMeta()
     local buckets = {}
     local values = {}
     for i = 1, #meta do
         local item = meta[i]
-        if item and item.key then
+        if item and item.key and (allowedKeys == nil or allowedKeys[item.key] == true) then
             local category = PRESET_CATEGORIES[item.key] or item.category or "Other"
             if not PRESET_CATEGORY_RANK[category] then category = "Other" end
             local bucket = buckets[category]
@@ -3033,6 +3062,36 @@ function Model.BlacklistPresetValues()
     return values
 end
 
+function Model.BlacklistPresetValues()
+    return BuildBlacklistPresetValues(nil)
+end
+
+function Model.UnitBlacklistPresetAllowed(scope, kind, presetKey)
+    kind = NormalizeKind(kind)
+    presetKey = tostring(presetKey or "")
+    if kind == "buff" then return UNIT_BUFF_PRESET_KEYS[presetKey] == true end
+    if NormalizeScope(scope) == "player" then
+        return UNIT_FRIENDLY_DEBUFF_PRESET_KEYS[presetKey] == true
+    end
+    return false
+end
+
+function Model.UnitBlacklistPresetValues(scope, kind)
+    kind = NormalizeKind(kind)
+    if kind == "buff" then return BuildBlacklistPresetValues(UNIT_BUFF_PRESET_KEYS) end
+    if NormalizeScope(scope) == "player" then
+        return BuildBlacklistPresetValues(UNIT_FRIENDLY_DEBUFF_PRESET_KEYS)
+    end
+    return {}
+end
+
+function Model.UnitBlacklistDefaultPreset(scope, kind)
+    kind = NormalizeKind(kind)
+    if kind == "buff" then return "RAID_BUFFS" end
+    if NormalizeScope(scope) == "player" then return "SATED" end
+    return nil
+end
+
 function Model.BlacklistSpellValues(presetKey)
     local spells = PublicAuraPresetSpells()
     local set = spells and spells[presetKey or "RAID_BUFFS"] or nil
@@ -3052,12 +3111,17 @@ function Model.BlacklistSpellValues(presetKey)
     return values
 end
 
+function Model.UnitBlacklistSpellValues(scope, kind, presetKey)
+    if not Model.UnitBlacklistPresetAllowed(scope, kind, presetKey) then return {} end
+    return Model.BlacklistSpellValues(presetKey)
+end
+
 function Model.AddBlacklistPresetSpell(scope, spellID, kind)
     return Model.AddBlacklistSpell(scope, spellID, kind)
 end
 
 function Model.AddBlacklistPresetGroup(scope, presetKey, kind)
-    local values = Model.BlacklistSpellValues(presetKey)
+    local values = Model.UnitBlacklistSpellValues(scope, kind, presetKey)
     local count = 0
     for i = 1, #values do
         local item = values[i]

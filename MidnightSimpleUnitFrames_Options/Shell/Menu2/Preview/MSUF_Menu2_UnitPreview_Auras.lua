@@ -10,6 +10,7 @@ local TEX_W8 = "Interface\\Buttons\\WHITE8X8"
 local FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local PREVIEW_ICONS = 4
 local Preview = MSUF.UFPreview or {}
+local Layers = MSUF.UF and MSUF.UF.Layers or {}
 local PreviewModel = Preview.Model or {}
 local CanonKey = PreviewModel.CanonKey
 local CurrentPanelKey = PreviewModel.CurrentPanelKey
@@ -96,7 +97,7 @@ local function CustomItem(model, unit, index, create)
 end
 function Auras.WantsDefensivePortraitAnchor(key, runtimeSpec)
     key = Auras.PreviewUnitKey(key)
-    if key ~= "player" then return false end
+    if key ~= "player" and key ~= "target" and key ~= "focus" and key ~= "boss" then return false end
     local model = MenuModel()
     local item = CustomItem(model, key, 4, false)
     local portrait = runtimeSpec and runtimeSpec.portrait
@@ -583,12 +584,17 @@ local function CustomLaneBounds(item, kind, frameW, frameH, metrics, previewEntr
     -- Any custom lane with configured spells previews them 1:1 with the real
     -- spell icons; curated index-4 lanes may show while disabled.
     local trackedPreview = type(previewEntries) == "table" and #previewEntries > 0
+    local portrait = runtimeSpec and runtimeSpec.portrait
+    local portraitContainer = kind == "custom4"
+        and (unit == "player" or unit == "target" or unit == "focus" or unit == "boss")
+        and item.portraitIcon == true
+        and portrait and (portrait.enabled == true or item.portraitPositionWhenDisabled == true)
     local playerDefensives = unit == "player" and kind == "custom4"
     if item.enabled ~= true
         and not (kind == "custom4" and not playerDefensives and trackedPreview) then
         return nil
     end
-    if playerDefensives and item.portraitIcon == true then return nil end
+    if portraitContainer then return nil end
     local placed = type(item.placed) == "table" and item.placed or {}
     local count = metrics and metrics.num or RuntimeRound(ClampNumber(placed.max, 8, 0, 40))
     if trackedPreview then count = min(count, #previewEntries) end
@@ -661,8 +667,8 @@ local function CustomLaneBounds(item, kind, frameW, frameH, metrics, previewEntr
     }
 end
 
-local function DefensivePortraitBounds(item, runtimeSpec, previewEntries, unit, metrics)
-    if not (unit == "player" and item and item.enabled == true and item.portraitIcon == true) then return nil end
+local function PortraitAuraBounds(item, runtimeSpec, previewEntries, unit, metrics, exactPortraitRect, fallbackKind)
+    if not (item and item.enabled == true and item.portraitIcon == true) then return nil end
     local portrait = runtimeSpec and runtimeSpec.portrait
     if not (portrait and (portrait.enabled == true or item.portraitPositionWhenDisabled == true)) then return nil end
     local placed = type(item.placed) == "table" and item.placed or {}
@@ -671,28 +677,33 @@ local function DefensivePortraitBounds(item, runtimeSpec, previewEntries, unit, 
     local trackedCount = type(previewEntries) == "table" and #previewEntries or 0
     local shown = min(maxCount, trackedCount > 0 and trackedCount or PREVIEW_ICONS, PREVIEW_ICONS)
     local previewTextures = {}
+    local fallback = AURA_TEXTURES[fallbackKind] or AURA_TEXTURES.buff
     for i = 1, shown do
         previewTextures[i] = previewEntries and previewEntries[i] and previewEntries[i].icon
-            or AURA_TEXTURES.buff[((i - 1) % #AURA_TEXTURES.buff) + 1]
+            or fallback[((i - 1) % #fallback) + 1]
     end
-    local portraitWidth = ClampNumber(portrait.width or portrait.size, 24, 1, 128)
-    local portraitHeight = ClampNumber(portrait.height or portrait.size, 24, 1, 128)
+    local portraitWidth = ClampNumber(portrait.width or portrait.size, 24, 8, 128)
+    local portraitHeight = ClampNumber(portrait.height or portrait.size, 24, 8, 128)
     local size = min(portraitWidth, portraitHeight)
+    local iconWidth = exactPortraitRect == true and portraitWidth or size
+    local iconHeight = exactPortraitRect == true and portraitHeight or size
     local growthX, growthY, verticalGrowth = CustomGrowth(placed.growth)
     local initialAnchor = ButtonAnchor(growthX, growthY)
     local perRow = verticalGrowth and 1 or RuntimeRound(ClampNumber(placed.perRow, 4, 1, 40))
     local cols, rows = GridShape(shown, perRow, verticalGrowth)
-    local insetX = (portraitWidth - size) * 0.5
-    local insetY = (portraitHeight - size) * 0.5
+    local insetX = (portraitWidth - iconWidth) * 0.5
+    local insetY = (portraitHeight - iconHeight) * 0.5
     return {
         size = size,
+        iconWidth = iconWidth,
+        iconHeight = iconHeight,
         spacing = 0,
         shown = shown,
         perRow = perRow,
         cols = cols,
         rows = rows,
-        width = max(1, cols * size),
-        height = max(1, rows * size),
+        width = max(1, cols * iconWidth),
+        height = max(1, rows * iconHeight),
         growthX = growthX,
         growthY = growthY,
         verticalGrowth = verticalGrowth == true,
@@ -704,8 +715,10 @@ local function DefensivePortraitBounds(item, runtimeSpec, previewEntries, unit, 
         iconStyle = LaneIconStyle(metrics, unit),
         alpha = ClampNumber(placed.alpha, 1, 0, 1),
         iconZoom = ClampNumber(placed.iconZoom, 100, 100, 200),
-        iconShape = ResolvePreviewIconShape(metrics and metrics.requestedIconShape or placed.iconShape,
-            metrics and metrics.iconShape or placed.iconShape, runtimeSpec),
+        iconShape = exactPortraitRect == true
+            and ResolvePreviewIconShape("FOLLOW_PORTRAIT", nil, runtimeSpec)
+            or ResolvePreviewIconShape(metrics and metrics.requestedIconShape or placed.iconShape,
+                metrics and metrics.iconShape or placed.iconShape, runtimeSpec),
         showCooldownText = placed.showCooldown ~= false and item.portraitCooldownText ~= false,
         showCooldownSwipe = placed.showCooldownSwipe ~= false,
         showStacks = placed.showStacks ~= false,
@@ -716,6 +729,16 @@ local function DefensivePortraitBounds(item, runtimeSpec, previewEntries, unit, 
         x = 0,
         y = 0,
     }
+end
+
+local function DefensivePortraitBounds(item, runtimeSpec, previewEntries, unit, metrics)
+    if unit ~= "player" then return nil end
+    return PortraitAuraBounds(item, runtimeSpec, previewEntries, unit, metrics, false, "buff")
+end
+
+local function TargetDotPortraitBounds(item, runtimeSpec, previewEntries, unit, metrics)
+    if unit ~= "target" and unit ~= "focus" and unit ~= "boss" then return nil end
+    return PortraitAuraBounds(item, runtimeSpec, previewEntries, unit, metrics, true, "debuff")
 end
 
 function Auras.BuildState(key, frameW, frameH, runtimeSpec)
@@ -740,12 +763,18 @@ function Auras.BuildState(key, frameW, frameH, runtimeSpec)
         end
         state[kind] = CustomLaneBounds(item, kind, frameW, frameH, metrics, previewEntries, key, cfg.stylePadding, runtimeSpec)
         if index == 4 then
-            state.defensivePortrait = DefensivePortraitBounds(
-                item, runtimeSpec, previewEntries, key, metrics)
+            if key == "player" then
+                state.defensivePortrait = DefensivePortraitBounds(
+                    item, runtimeSpec, previewEntries, key, metrics)
+            else
+                state.targetDotPortrait = TargetDotPortraitBounds(
+                    item, runtimeSpec, previewEntries, key, metrics)
+            end
         end
     end
     if not state.buff and not state.debuff and not state.custom1 and not state.custom2
-        and not state.custom3 and not state.custom4 and not state.defensivePortrait then
+        and not state.custom3 and not state.custom4
+        and not state.defensivePortrait and not state.targetDotPortrait then
         return nil
     end
     return state
@@ -821,7 +850,9 @@ local function EnsureVisual(box, kind, baseLevel)
         box.auraPreviewVisuals[kind] = visual
     end
     local level = kind == "buff" and 29 or (kind == "debuff" and 30 or 32 + (tonumber(kind:match("(%d)$")) or 1))
-    if visual.SetFrameLevel then visual:SetFrameLevel((baseLevel or 0) + level) end
+    if visual.SetFrameLevel then
+        visual:SetFrameLevel(Layers.ElementLevel and Layers.ElementLevel(level, 1, 0) or ((baseLevel or 0) + level))
+    end
     return visual
 end
 local function CreateIcon(parent)
@@ -854,8 +885,8 @@ local function CreateIcon(parent)
     f.edge:SetVertexColor(0, 0, 0, 0)
     f.dispelBorder = f:CreateTexture(nil, "OVERLAY")
     f.dispelBorder:Hide()
-    f.stack = MakeFS(f, "OVERLAY", 8)
-    f.timer = MakeFS(f, "OVERLAY", 7)
+    f.stack = MakeFS(f, "OVERLAY", Layers.AURA_STACK_DRAW_SUBLEVEL or 6)
+    f.timer = MakeFS(f, "OVERLAY", Layers.AURA_COOLDOWN_TEXT_DRAW_SUBLEVEL or 7)
     f:Hide()
     return f
 end
@@ -1012,10 +1043,12 @@ end
 local function LayoutPreviewAuraSwipe(swipe, icon, size, remainingFrac, reverse)
     if not (swipe and icon) then return end
     remainingFrac = max(0.02, min(1, tonumber(remainingFrac) or 0.48))
-    local w = max(1, floor((tonumber(size) or icon:GetWidth() or 1) * remainingFrac + 0.5))
+    local iconWidth = icon.GetWidth and icon:GetWidth() or tonumber(size) or 1
+    local iconHeight = icon.GetHeight and icon:GetHeight() or tonumber(size) or 1
+    local w = max(1, floor(iconWidth * remainingFrac + 0.5))
     swipe:ClearAllPoints()
     swipe:SetWidth(w)
-    swipe:SetHeight(max(1, tonumber(size) or 1))
+    swipe:SetHeight(max(1, iconHeight))
     if reverse == true then
         swipe:SetPoint("TOPLEFT", icon, "TOPLEFT", 0, 0)
         swipe:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", 0, 0)
@@ -1030,10 +1063,12 @@ local function LayoutPreviewDurationBar(bar, icon, cfg, size, auraState)
         if bar then bar:Hide() end
         return
     end
-    size = max(1, tonumber(size) or 1)
-    local height = max(1, min(size, floor((tonumber(cfg.durationBarHeight) or 2) + 0.5)))
-    local inset = max(1, floor(size / 32 + 0.5))
-    local avail = max(1, size - (inset * 2))
+    local iconWidth = icon.GetWidth and icon:GetWidth() or tonumber(size) or 1
+    local iconHeight = icon.GetHeight and icon:GetHeight() or tonumber(size) or 1
+    local scaleSize = max(1, min(iconWidth, iconHeight))
+    local height = max(1, min(iconHeight, floor((tonumber(cfg.durationBarHeight) or 2) + 0.5)))
+    local inset = max(1, floor(scaleSize / 32 + 0.5))
+    local avail = max(1, iconWidth - (inset * 2))
     local frac
     if cfg.durationBarDirection == "ELAPSED" then
         frac = auraState and auraState.elapsedFrac or 0.38
@@ -1161,9 +1196,9 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
     visual:ClearAllPoints()
     visual:SetPoint("BOTTOMLEFT", box.mock, "BOTTOMLEFT", laneX, laneY)
     if visual.SetAlpha then visual:SetAlpha(ClampNumber(bounds.alpha, 1, 0, 1)) end
-    if visual.SetFrameLevel then visual:SetFrameLevel((baseLevel or 0) + layer) end
+    if visual.SetFrameLevel then visual:SetFrameLevel(Layers.ElementLevel and Layers.ElementLevel(layer, 5, 0) or ((baseLevel or 0) + layer)) end
     visual:Show()
-    if handle.SetFrameLevel then handle:SetFrameLevel((baseLevel or 0) + max(50, layer + 45)) end
+    if handle.SetFrameLevel then handle:SetFrameLevel(Layers.ElementLevel and (Layers.ElementLevel(30, 30, 31) + 32) or ((baseLevel or 0) + max(50, layer + 45))) end
     if handle._selBorder and handle._selBorder.SetFrameLevel then handle._selBorder:SetFrameLevel((handle:GetFrameLevel() or 0) + 5) end
     handle:SetSize(max(18, handleW + 8), max(18, handleH + 8))
     handle:ClearAllPoints()
@@ -1220,7 +1255,7 @@ local function LayoutDefensivePortrait(box, mock, state, S)
     if handle then
         handle._msufAuraPortraitVisual = nil
     end
-    local bounds = state and state.defensivePortrait
+    local bounds = state and (state.defensivePortrait or state.targetDotPortrait)
     if not (bounds and mock and mock.portrait and mock.portrait.IsShown and mock.portrait:IsShown()) then
         if box then HideVisual(box.defensivePortraitPreview) end
         return
@@ -1239,9 +1274,12 @@ local function LayoutDefensivePortrait(box, mock, state, S)
     textCfg.cooldownSwipeReverse = bounds.cooldownSwipeReverse == true
     textCfg.showDurationBar = bounds.showDurationBar == true
     local size = max(8, S(bounds.size))
+    local iconWidth = max(8, S(bounds.iconWidth or bounds.size))
+    local iconHeight = max(8, S(bounds.iconHeight or bounds.size))
     local spacing = max(0, S(bounds.spacing or 0))
     local shown = max(1, tonumber(bounds.shown) or 1)
-    local step = size + spacing
+    local stepX = iconWidth + spacing
+    local stepY = iconHeight + spacing
     local visualWidth = max(1, S(bounds.width or size))
     local visualHeight = max(1, S(bounds.height or size))
     visual:SetSize(visualWidth, visualHeight)
@@ -1252,7 +1290,8 @@ local function LayoutDefensivePortrait(box, mock, state, S)
     visual:SetPoint(initialAnchor, mock.portrait, initialAnchor, offsetX, offsetY)
     if visual.SetAlpha then visual:SetAlpha(ClampNumber(bounds.alpha, 1, 0, 1)) end
     if visual.SetFrameLevel and mock.portrait.GetFrameLevel then
-        visual:SetFrameLevel((mock.portrait:GetFrameLevel() or 1) + 1)
+        visual:SetFrameLevel(Layers.ElementLevel and Layers.ElementLevel(bounds.layer, 5, 0)
+            or ((mock.portrait:GetFrameLevel() or 1) + 1))
     end
     local stackSize = max(7, S(textCfg.stackSize or 14))
     local cooldownSize = max(7, S(textCfg.cooldownSize or 14))
@@ -1271,11 +1310,11 @@ local function LayoutDefensivePortrait(box, mock, state, S)
     local iconStyle = (not barOnly) and bounds.iconStyle or nil
     for i = 1, shown do
         local icon = EnsureIcon(visual, i)
-        icon:SetSize(size, size)
+        icon:SetSize(iconWidth, iconHeight)
         icon:ClearAllPoints()
         local col, row = IconGridCoord(i, bounds.perRow, bounds.verticalGrowth == true)
         icon:SetPoint(initialAnchor, visual, initialAnchor,
-            col * step * bounds.growthX, row * step * bounds.growthY)
+            col * stepX * bounds.growthX, row * stepY * bounds.growthY)
         if icon.SetFrameLevel then icon:SetFrameLevel((visual:GetFrameLevel() or 1) + 1) end
         icon.tex:SetTexture(bounds.previewTextures and bounds.previewTextures[i] or AURA_TEXTURES.buff[1])
         ApplyIconZoom(icon.tex, bounds.iconZoom)
@@ -1345,7 +1384,7 @@ function Auras.Layout(box, mock, state, S, baseLevel)
     LayoutHandle(box, box.handleAuraDebuffs, state, "debuff", S, baseLevel)
     for index = 1, 4 do
         local kind = "custom" .. tostring(index)
-        if kind == "custom4" and state.defensivePortrait then
+        if kind == "custom4" and (state.defensivePortrait or state.targetDotPortrait) then
             -- The portrait presentation reuses the custom4 mover. Hiding that
             -- shared handle here fires its OnHide path, which drops the active
             -- selection immediately before LayoutDefensivePortrait shows it
