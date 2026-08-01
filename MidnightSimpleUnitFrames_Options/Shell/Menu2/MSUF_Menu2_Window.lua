@@ -62,7 +62,7 @@ local max = math.max
 local min = math.min
 local IsEditModeActive
 local PREVIEW_WARNING_LINES = {
-    "|cffffd700MSUF 6.0 Beta|r · Built for WoW 12.1 PTR.",
+    "|cffffd700MSUF 6.0 RC1|r · Built for WoW 12.1 PTR.",
     "|cffffd700Auras|r use Blizzard's native 12.1 system.",
     "|cff40ff40Thanks for testing!|r Report bugs on Discord or GitHub.",
 }
@@ -94,6 +94,7 @@ local function IsMSUF60PreviewBuild()
     previewBuild = (lower:find("alpha", 1, true)
         or lower:find("preview", 1, true)
         or lower:find("pre", 1, true)
+        or lower:find("rc", 1, true)
         or lower:find("beta", 1, true)) and true or false
     return previewBuild
 end
