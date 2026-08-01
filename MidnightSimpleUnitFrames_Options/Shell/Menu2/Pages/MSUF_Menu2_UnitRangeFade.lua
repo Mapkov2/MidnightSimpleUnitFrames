@@ -29,10 +29,14 @@ local function BuildRangeFade(ctx, builder, unit)
     local rightW = innerW - leftW - gap
     local mainCard = W.ControlCard(sec, "Behavior", nil, leftX, -38, leftW, 166)
     local alphaCard = W.ControlCard(sec, "Out of range", nil, rightX, -38, rightW, 166)
+    local RefreshRangeControls = M.RefreshProxy()
     local enabled = W.ToggleAt(mainCard, "Enable Range Fade", 16, -54, leftW - 32)
     M.BindBoolWidget(ctx, enabled,
         function() return ReadBool(unit, "rangeFadeEnabled", true) end,
-        function(v) SetBool(unit, "rangeFadeEnabled", v, "MSUF2_RANGE_FADE", { preview = true }) end,
+        function(v)
+            SetBool(unit, "rangeFadeEnabled", v, "MSUF2_RANGE_FADE", { preview = true })
+            RefreshRangeControls()
+        end,
         SettingMeta(ctx, "range_fade.enabled", unit, "rangeFadeEnabled"))
     local slider = W.Slider(alphaCard, "", 0, 1, 0.05, rightW - 58)
     if slider.SetValueFormatter then slider:SetValueFormatter(PercentValue) end
@@ -48,11 +52,11 @@ local function BuildRangeFade(ctx, builder, unit)
         function(v) SetString(unit, "rangeFadeLayerMode", v == "health" and "health" or "frame", "MSUF2_RANGE_FADE_LAYER", { preview = true }) end,
         SettingMeta(ctx, "range_fade.layer_mode", unit, "rangeFadeLayerMode"))
     W.MoveWidget(mode, alphaCard, 16, -104, rightW - 32, "LEFT")
-    local function RefreshRangeControls()
+    RefreshRangeControls = RefreshRangeControls(function()
         local on = ReadBool(unit, "rangeFadeEnabled", true)
         SetControlEnabled(slider, on)
         SetControlEnabled(mode, on)
-    end
+    end)
     M.TrackRefresh(ctx, RefreshRangeControls)
 end
 if type(UP.RegisterSection) == "function" then
