@@ -18,6 +18,7 @@
 - Fixed long-lived buffs rendering a 0.1 second duration after login or a reload. Lanes that carry helpful auras get fresh duration objects once the world has loaded, on player, target, focus, boss and group units; the pass stays off UNIT_AURA and the identity hot paths.
 - Fixed the unit preview labelling custom container 4 "Dots on target" on the player frame, where that lane is Defensive Buffs. Tooltip, selection bar and quick actions now follow the bound unit.
 - Fixed the Assistant switching a setting on when a follow-up only spelled out its name, for example "show me Mythic Raid Masque Enabled". A follow-up that names the control is answered, not applied.
+- Fixed name shortening cutting centered names on both ends. With a Top Center or Center name anchor, a name longer than the shortening window now keeps its configured clip side, so only one end is cut; restricted names keep the centered fallback.
 
 ## 6.0-RC2 - 2026-08-02
 

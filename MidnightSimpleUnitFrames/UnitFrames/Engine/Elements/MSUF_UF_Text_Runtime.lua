@@ -49,6 +49,7 @@ local UpdateTextSlotsPlain = Text.UpdateTextSlotsPlain or UpdateTextSlots
 local UpdateTextSlotsSecret = Text.UpdateTextSlotsSecret or UpdateTextSlots
 local ResolveHealthTextModes = Text.ResolveHealthTextModes
 local AnchorInlineToName = Text.AnchorInlineToName
+local RefreshNameCenterClipFit = Text.RefreshNameCenterClipFit
 local EMPTY_EVENTS = Text.EMPTY_EVENTS
 local POWER_EVENTS = Text.POWER_EVENTS
 local POWER_EVENTS_FREQUENT = Text.POWER_EVENTS_FREQUENT
@@ -745,6 +746,9 @@ local function SetNameTextCached(frame, value)
   SetTextCached(frame.nameText, value)
   local proxy = frame._msufNameAnchorTextActive == true and frame._msufNameAnchorText
   if proxy then SetTextCached(proxy, value) end
+  if frame._msufNameCenterClip == true and RefreshNameCenterClipFit then
+    RefreshNameCenterClipFit(frame)
+  end
 end
 
 -- Native 5.73 Group Frames shortened the actual UTF-8 name and only added

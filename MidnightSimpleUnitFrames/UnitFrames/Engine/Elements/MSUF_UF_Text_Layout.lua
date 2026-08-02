@@ -32,6 +32,7 @@ local CompileTextRuntime = Text.CompileTextRuntime
 local SetHealthTextColor = Text.SetHealthTextColor
 local UpdateHealthTextColor = Text.UpdateHealthTextColor
 local RefreshNameRelativeStatusAnchors = MSUF.UFStatusRuntime and MSUF.UFStatusRuntime.RefreshNameRelativeAnchors
+local issecretvalue = _G.issecretvalue or function(_) return false end
 local function LayoutText(fs, point, relPoint, x, y, justify, relativeTo)
   if not fs then
     return
@@ -312,6 +313,16 @@ local function AnchorInlineToNameClip(frame)
   if not (clip and name and sep) then
     return false
   end
+  if frame._msufNameCenterClip == true then
+    -- Centered mode re-anchors the name FontString per name (fit vs overflow),
+    -- so hang the inline text off the stable clip window edge instead.
+    if sep._msufPoint ~= "LEFT" or sep._msufRelPoint ~= "RIGHT" or sep._msufRelativeTo ~= clip or sep._msufX ~= 4 or sep._msufY ~= 0 then
+      sep:ClearAllPoints()
+      sep:SetPoint("LEFT", clip, "RIGHT", 4, 0)
+      sep._msufPoint, sep._msufRelPoint, sep._msufRelativeTo, sep._msufX, sep._msufY = "LEFT", "RIGHT", clip, 4, 0
+    end
+    return true
+  end
   local side = frame._msufNameInlineClipSide
   local width = frame._msufNameInlineClipWidth or clip._msufW or 0
   local relPoint = side == "RIGHT" and "LEFT" or "RIGHT"
@@ -398,6 +409,8 @@ local function ClearNameClip(frame)
   frame._msufNameInlineClip = nil
   frame._msufNameInlineClipSide = nil
   frame._msufNameInlineClipWidth = nil
+  frame._msufNameCenterClip = nil
+  frame._msufNameCenterClipOverflow = nil
   if frame.nameText then
     frame.nameText._msufShown = nil
   end
@@ -430,6 +443,28 @@ local function LayoutNameClip(clip, spec, text, width)
   clip:Show()
 end
 
+local function AnchorNameToClip(fs, clip, point, justify)
+  if fs._msufPoint ~= point or fs._msufRelPoint ~= point or fs._msufRelativeTo ~= clip then
+    fs:ClearAllPoints()
+    fs:SetPoint(point, clip, point, 0, 0)
+    fs._msufPoint, fs._msufRelPoint, fs._msufRelativeTo, fs._msufX, fs._msufY = point, point, clip, 0, 0
+  end
+  if fs._msufJustifyH ~= justify then
+    fs:SetJustifyH(justify)
+    fs._msufJustifyH = justify
+  end
+end
+
+local function NameCenterClipAnchor(frame, side)
+  if frame._msufNameCenterClipOverflow == true then
+    if side == "LEFT" then
+      return "TOPRIGHT", "RIGHT"
+    end
+    return "TOPLEFT", "LEFT"
+  end
+  return "TOP", "CENTER"
+end
+
 local function ApplyNoEllipsisClip(frame, fs, spec, text, width, side)
   local clip = EnsureClipFrame(frame, "_msufNameClipFrame", text and text.nameLayer)
   if not clip then
@@ -458,21 +493,19 @@ local function ApplyNoEllipsisClip(frame, fs, spec, text, width, side)
     -- Keep TOP/FRAMECENTER names optically centered even when the actual unit
     -- name is restricted and cannot be measured. The oversized FontString is
     -- centered behind the clip window, so short and long names share one
-    -- secret-safe center without GetStringWidth or string slicing.
-    point, justify = "TOP", "CENTER"
+    -- secret-safe center without GetStringWidth or string slicing. The warm
+    -- name path (Text.RefreshNameCenterClipFit) re-anchors measurable names
+    -- that overflow the window so only the configured clip side is cut instead
+    -- of both ends; this cold pass replays its last verdict without measuring.
+    frame._msufNameCenterClip = true
+    point, justify = NameCenterClipAnchor(frame, side)
   else
+    frame._msufNameCenterClip = nil
+    frame._msufNameCenterClipOverflow = nil
     point = side == "LEFT" and "TOPRIGHT" or "TOPLEFT"
     justify = side == "LEFT" and "RIGHT" or "LEFT"
   end
-  if fs._msufPoint ~= point or fs._msufRelPoint ~= point or fs._msufRelativeTo ~= clip then
-    fs:ClearAllPoints()
-    fs:SetPoint(point, clip, point, 0, 0)
-    fs._msufPoint, fs._msufRelPoint, fs._msufRelativeTo, fs._msufX, fs._msufY = point, point, clip, 0, 0
-  end
-  if fs._msufJustifyH ~= justify then
-    fs:SetJustifyH(justify)
-    fs._msufJustifyH = justify
-  end
+  AnchorNameToClip(fs, clip, point, justify)
   frame._msufNameInlineAnchor = clip
   frame._msufNameInlineClip = clip
   frame._msufNameInlineClipSide = side
@@ -501,6 +534,7 @@ local function ApplyNameClip(frame, spec, text)
   frame._msufNameInlineClip = nil
   frame._msufNameInlineClipSide = nil
   frame._msufNameInlineClipWidth = nil
+  frame._msufNameCenterClip = nil
 
   fs:SetWordWrap(false)
   if fs.SetNonSpaceWrap then
@@ -584,6 +618,32 @@ local function ApplyNameClip(frame, spec, text)
     LayoutDots(dots, fs, clipSide)
   else
     HideDots(frame._msufNameDotsFS)
+  end
+end
+
+-- Warm companion to ApplyNoEllipsisClip's centered branch, called after each
+-- name write. Names that are plain strings and measurably overflow the clip
+-- window switch to the configured clip side so only one end is cut; secret
+-- names keep the measurement-free centered slice.
+function Text.RefreshNameCenterClipFit(frame)
+  local fs = frame and frame.nameText
+  local clip = frame and frame._msufNameInlineClip
+  if not (fs and clip and frame._msufNameCenterClip == true) then
+    return
+  end
+  local overflow = false
+  local raw = fs.GetText and fs:GetText()
+  if not (raw == nil or issecretvalue(raw) == true) and raw ~= "" and fs.GetStringWidth then
+    local window = tonumber(frame._msufNameInlineClipWidth) or 0
+    local width = fs:GetStringWidth()
+    if window > 0 and type(width) == "number" and width > window + 0.5 then
+      overflow = true
+    end
+  end
+  if frame._msufNameCenterClipOverflow ~= overflow then
+    frame._msufNameCenterClipOverflow = overflow
+    local point, justify = NameCenterClipAnchor(frame, frame._msufNameInlineClipSide)
+    AnchorNameToClip(fs, clip, point, justify)
   end
 end
 
