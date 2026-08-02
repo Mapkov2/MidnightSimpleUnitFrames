@@ -8,10 +8,37 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-RC2",
-    previousVersion = "6.0-RC1",
-    rangeLabel = "6.0-RC1 -> 6.0-RC2",
+    currentVersion = "6.0-RC3",
+    previousVersion = "6.0-RC2",
+    rangeLabel = "6.0-RC2 -> 6.0-RC3",
     entries = {
+        {
+            version = "6.0-RC3",
+            date = "2026-08-02",
+            sections = {
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Menu previews never scroll away any more. The Unit, Group, Aura Style, Colors and Class Resources preview card stays at the top of the viewport while the settings slide underneath it. Use the existing Expand/Compact and \"Hide Preview\" controls to reclaim height.",
+                        "The \"Pin Preview\" toggle is gone; previews are always pinned. A preview too tall for the current window scrolls with the page instead, so the settings below it stay reachable.",
+                        "The Class Resources spec selector strip is now docked above the scroll area like the unit pages' Editing strip, so the preview pins directly beneath it instead of the strip scrolling away.",
+                        "Removed the duplicate \"Spell text color\" and \"Cast time color\" swatches from the unit castbar Spell and Time tabs. Both colors live on the Colors page and in the per-control color shortcuts; the inline copies wrote the same key a second time.",
+                        "Double-clicking the castbar in a unit preview now opens its settings, like every other preview element.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Fixed 2D portraits randomly turning empty or stale since Beta 43 when re-targeting a unit seen earlier: re-visits now always re-run Blizzard's native portrait resolver instead of replaying a cached texture value that cannot represent a live portrait render.",
+                        "Fixed portraits on hostile units breaking mid-update on 12.1: the portrait cast-icon and reaction-border readers compared secret cast names and reaction values, which throws on 12.1 and left the portrait dressing without an image. Secret casts now still show their spell icon.",
+                        "Fixed shaped portraits smearing their mask edge outward. Portrait masks now clamp to black outside their own quad, the way Blizzard declares every portrait mask.",
+                        "Fixed long-lived buffs rendering a 0.1 second duration after login or a reload. Lanes that carry helpful auras get fresh duration objects once the world has loaded, on player, target, focus, boss and group units; the pass stays off UNIT_AURA and the identity hot paths.",
+                        "Fixed the unit preview labelling custom container 4 \"Dots on target\" on the player frame, where that lane is Defensive Buffs. Tooltip, selection bar and quick actions now follow the bound unit.",
+                        "Fixed the Assistant switching a setting on when a follow-up only spelled out its name, for example \"show me Mythic Raid Masque Enabled\". A follow-up that names the control is answered, not applied.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-RC2",
             date = "2026-08-02",
@@ -143,37 +170,6 @@ local data = {
                         "Boss castbars now share one lifecycle handler, collapse same-frame encounter events into a single pool pass, and skip anchor and layout work when no cast is active.",
                         "Aura and range-fade lifecycle work is coalesced when several boss frames appear at once, and the on-show identity refresh no longer runs twice for the same unit.",
                         "Health gradient curves are cached instead of rebuilt per frame, and portrait textures reuse a bounded session cache.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-Beta43",
-            date = "2026-07-31",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "Rounded unit and group frames now use a clean adjustable corner style with five strength levels. Health, embedded or detached Power, frame outlines, aggro/dispel/highlight borders and mouseover effects share the same geometry.",
-                        "Profiles gained a redesigned management workspace with a persistent active-profile overview, responsive management cards, safer import/export guidance and clearer specialization assignments.",
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "The MSUF Assistant gained broader exact setting coverage for unit and group auras, text, bars, fonts and profiles, plus more useful local guidance for comparisons, troubleshooting and incomplete requests.",
-                        "Unit and Group preview layer buttons now identify the currently selected draggable element, while responsive preview and profile layouts rebuild correctly after menu-scale changes.",
-                        "Rounded-corner strength updates the lightweight preview during dragging and applies the live runtime once on release or after a short bounded delay.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed rounded Group frames, embedded Power bars, native Dispel overlays and modern frame borders losing or mismatching their outer mask, separator or border treatment.",
-                        "Fixed the Rounded Texture preview overlapping the following Menu2 sections after the corner-strength control was added.",
-                        "Fixed secret health colours reaching unsafe Lua comparisons in background matching, and made Group Power textures resolve once into the compiled cold-path configuration.",
-                        "Fixed hidden Party-only Portrait sections reserving space in Raid/Mythic layouts and made Aura preview scaling tolerate accessible numeric values.",
-                        "Fixed Assistant routing regressions for guided tours, natural health-text commands, contextual follow-ups and explicit negated or list-clearing commands.",
                     },
                 },
             },

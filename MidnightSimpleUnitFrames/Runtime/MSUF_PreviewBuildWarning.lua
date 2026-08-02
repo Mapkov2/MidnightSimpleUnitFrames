@@ -11,7 +11,7 @@
 
 local addonName = ...
 local PREVIEW_WARNING_LINES = {
-    "|cffffd700MSUF 6.0 RC1|r · Built for WoW 12.1 PTR.",
+    "|cffffd700MSUF 6.0 RC3|r · Built for WoW 12.1 PTR.",
     "|cffffd700Auras|r use Blizzard's native 12.1 system.",
     "|cff40ff40Thanks for testing!|r Report bugs on Discord or GitHub.",
 }
