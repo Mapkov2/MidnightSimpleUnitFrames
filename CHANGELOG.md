@@ -1,5 +1,11 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-RC2 - 2026-08-02
+
+### Fixes
+
+- Restored unit-frame anchoring to CooldownManager, Skiron, Arc UI, and Coolinator.
+
 ## 6.0-RC1 - 2026-08-02
 
 ### Highlights

@@ -8,10 +8,22 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-RC1",
-    previousVersion = "6.0-Beta44",
-    rangeLabel = "6.0-Beta44 -> 6.0-RC1",
+    currentVersion = "6.0-RC2",
+    previousVersion = "6.0-RC1",
+    rangeLabel = "6.0-RC1 -> 6.0-RC2",
     entries = {
+        {
+            version = "6.0-RC2",
+            date = "2026-08-02",
+            sections = {
+                {
+                    title = "Fixes",
+                    bullets = {
+                        "Restored unit-frame anchoring to CooldownManager, Skiron, Arc UI, and Coolinator.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-RC1",
             date = "2026-08-02",
@@ -162,33 +174,6 @@ local data = {
                         "Fixed secret health colours reaching unsafe Lua comparisons in background matching, and made Group Power textures resolve once into the compiled cold-path configuration.",
                         "Fixed hidden Party-only Portrait sections reserving space in Raid/Mythic layouts and made Aura preview scaling tolerate accessible numeric values.",
                         "Fixed Assistant routing regressions for guided tours, natural health-text commands, contextual follow-ups and explicit negated or list-clearing commands.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-Beta42",
-            date = "2026-07-30",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "Group External Defensives now use Blizzard's native 12.1 classification and can automatically stay out of the normal Buff lane while their dedicated lane is visible.",
-                        "Unit and Group preview canvases can now use bright stone, a city scene, dark stone, Studio, or a custom color to check readability before applying settings.",
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Preview canvases start expanded after reload, keep configured frame outlines visible, and handle overlapping Aura controls more reliably.",
-                        "Menu2 dropdowns stay inside their owning window; non-Midnight accents use a calmer shared highlight ramp across navigation and window controls.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed Edit Mode dock dragging so it follows the cursor reliably, remains within the screen, and only snaps to an edge when released near one.",
-                        "The explicit realtime Player Power Text option now follows the direct power-event update path; normal Power Text keeps its existing coalesced update behavior.",
                     },
                 },
             },
