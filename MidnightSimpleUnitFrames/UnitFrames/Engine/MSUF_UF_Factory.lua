@@ -145,49 +145,71 @@ local function CallAnchorMethod(method, region, ...)
   return pcall(method, region, ...)
 end
 
-local function AnchorDependsOn(region, target, seen, depth)
+local ANCHOR_CHECK_VISITING = 1
+local ANCHOR_CHECK_SAFE = 2
+
+local function FinishAnchorDependencyCheck(state, region, result)
+  state[region] = result and nil or ANCHOR_CHECK_SAFE
+  return result
+end
+
+local function AnchorDependsOn(region, target, state, depth)
   if not (region and target) then return false end
   if region == target then return true end
   depth = (tonumber(depth) or 0) + 1
   -- An unreadable or excessively deep foreign chain is rejected fail-closed;
   -- allowing an unknown chain risks handing SetPoint a cycle.
   if depth > MAX_ANCHOR_DEPTH then return true end
-  seen = seen or {}
-  if seen[region] then return true end
-  seen[region] = true
+  state = state or {}
+  -- Frame graphs are DAGs in normal use: SetPoint relatives and GetParent often
+  -- converge on UIParent. Only an active-path revisit is a cycle; a fully
+  -- checked shared ancestor is safe and must not reject third-party providers.
+  if state[region] == ANCHOR_CHECK_VISITING then return true end
+  if state[region] == ANCHOR_CHECK_SAFE then return false end
+  state[region] = ANCHOR_CHECK_VISITING
   -- Anchor candidates resolve from user-supplied global names, so this can walk
   -- FOREIGN frames. Forbidden frames raise on any accessor; IsForbidden is the
   -- sanctioned no-throw probe (and a forbidden frame is not anchorable anyway).
   local forbiddenRead, isForbidden = GetAnchorMember(region, "IsForbidden")
-  if not forbiddenRead then return true end
+  if not forbiddenRead then return FinishAnchorDependencyCheck(state, region, true) end
   if type(isForbidden) == "function" then
     local ok, forbidden = CallAnchorMethod(isForbidden, region)
-    if not ok or (issecretvalue and issecretvalue(forbidden)) or forbidden == true then return true end
+    if not ok or (issecretvalue and issecretvalue(forbidden)) or forbidden == true then
+      return FinishAnchorDependencyCheck(state, region, true)
+    end
   end
   local numRead, getNumPoints = GetAnchorMember(region, "GetNumPoints")
   local pointRead, getPoint = GetAnchorMember(region, "GetPoint")
-  if not numRead or not pointRead then return true end
+  if not numRead or not pointRead then return FinishAnchorDependencyCheck(state, region, true) end
   if type(getNumPoints) == "function" and type(getPoint) == "function" then
     local countOK, count = CallAnchorMethod(getNumPoints, region)
-    if not countOK or (issecretvalue and issecretvalue(count)) or type(count) ~= "number" then return true end
+    if not countOK or (issecretvalue and issecretvalue(count)) or type(count) ~= "number" then
+      return FinishAnchorDependencyCheck(state, region, true)
+    end
     for i = 1, count do
       local pointOK, _, relativeTo = CallAnchorMethod(getPoint, region, i)
-      if not pointOK or (issecretvalue and issecretvalue(relativeTo)) then return true end
-      if relativeTo == target or AnchorDependsOn(relativeTo, target, seen, depth) then
-        return true
+      if not pointOK or (issecretvalue and issecretvalue(relativeTo)) then
+        return FinishAnchorDependencyCheck(state, region, true)
+      end
+      if relativeTo == target or AnchorDependsOn(relativeTo, target, state, depth) then
+        return FinishAnchorDependencyCheck(state, region, true)
       end
     end
   end
   local parentRead, getParent = GetAnchorMember(region, "GetParent")
-  if not parentRead then return true end
+  if not parentRead then return FinishAnchorDependencyCheck(state, region, true) end
   local parent
   if type(getParent) == "function" then
     local parentOK
     parentOK, parent = CallAnchorMethod(getParent, region)
-    if not parentOK or (issecretvalue and issecretvalue(parent)) then return true end
+    if not parentOK or (issecretvalue and issecretvalue(parent)) then
+      return FinishAnchorDependencyCheck(state, region, true)
+    end
   end
-  if parent == target or AnchorDependsOn(parent, target, seen, depth) then return true end
-  return false
+  if parent == target or AnchorDependsOn(parent, target, state, depth) then
+    return FinishAnchorDependencyCheck(state, region, true)
+  end
+  return FinishAnchorDependencyCheck(state, region, false)
 end
 
 local function AnchorWouldCreateCycle(frame, anchor)
