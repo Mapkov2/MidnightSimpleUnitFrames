@@ -1642,7 +1642,6 @@ local MSUF_LOCALE_COVERAGE_ruRU = {
     ["Global absorb styling is in Global Style > Bars > Absorb Display. Group incoming heals are in Group Frames > Health & Text > Heal Prediction."] = "Глобальный стиль поглощения находится в разделе Глобальный стиль > Бары > Отображение поглощения. Групповые входящие исцеления находятся в разделе «Групповые рамки» > «Здоровье и текст» > «Прогнозирование исцеления».",
     ["Group frames"] = "Группировать кадры",
     ["How do I make missing health white in Dark Mode?"] = "Как сделать недостающее здоровье белым в темном режиме?",
-    ["Keeps this preview visible while you edit lower options."] = "Сохраняет этот предварительный просмотр видимым, пока вы редактируете нижние параметры.",
     ["Limits"] = "Пределы",
     ["MSUF Dispel Border / Glow"] = "MSUF Рассеять рамку/свечение",
     ["MSUF Edit Mode moves frames and supported castbars. Aura icon placement is controlled from Unit Auras or Group Frames > Buffs & Debuffs."] = "MSUF Режим редактирования перемещает кадры и поддерживаемые панели приведения. Размещение значков аур контролируется в меню «Ауры отрядов» или «Групповые рамки» > «Усиления и ослабления».",
@@ -1778,8 +1777,6 @@ local MSUF_LOCALE_COVERAGE_ruRU = {
     ["Opens: Unit Auras > Text Coloring"] = "Открывается: Ауры отряда > Раскраска текста.",
     ["Padding"] = "Заполнение",
     ["Party, Raid, and Mythic Raid Group Frame layout, bars, auras, indicators, scope overrides and positions"] = "Расположение рамок групповых, рейдовых и мифических рейдов, полосы, ауры, индикаторы, переопределение области действия и расположение",
-    ["Pin Preview"] = "Предварительный просмотр пина",
-    ["Pinned"] = "Закреплено",
     ["Position"] = "Позиция",
     ["Positions class bar ABOVE Essential Cooldowns"] = "Позиции классовой панели НАД основными кулдаунами",
     ["Preserve HP color on all unit frames"] = "Сохраните цвет HP на всех кадрах устройства.",
@@ -1836,7 +1833,6 @@ local MSUF_LOCALE_COVERAGE_ruRU = {
     ["the entire active profile"] = "весь активный профиль",
     ["uf_target"] = "uf_target",
     ["–"] = "–",
-    ["↑ Preview pinned at top"] = "↑ Превью закреплено вверху",
 }
 for k, v in pairs(MSUF_LOCALE_COVERAGE_ruRU) do
     if L[k] == nil or L[k] == k then L[k] = v end

@@ -2274,7 +2274,6 @@ local MSUF_LOCALE_COVERAGE_zhCN = {
     ["Global absorb styling is in Global Style > Bars > Absorb Display. Group incoming heals are in Group Frames > Health & Text > Heal Prediction."] = "全局吸收样式位于“全局样式”>“条形”>“吸收显示”中。组传入治疗位于组框架 > 生命值和文本 > 治疗预测中。",
     ["Group frames"] = "组帧",
     ["How do I make missing health white in Dark Mode?"] = "如何在深色模式下将缺失的生命值变成白色？",
-    ["Keeps this preview visible while you edit lower options."] = "当您编辑较低选项时，保持此预览可见。",
     ["Limits"] = "限制",
     ["Link"] = "链接",
     ["MSUF Dispel Border / Glow"] = "MSUF 消除边框/发光",
@@ -2408,8 +2407,6 @@ local MSUF_LOCALE_COVERAGE_zhCN = {
     ["Opens: Unit Auras > Text Coloring"] = "打开：单位光环 > 文本着色",
     ["Padding"] = "填充",
     ["Party, Raid, and Mythic Raid Group Frame layout, bars, auras, indicators, scope overrides and positions"] = "队伍、Raid 和 Mythic Raid 组框架布局、条形图、光环、指示器、范围覆盖和位置",
-    ["Pin Preview"] = "引脚预览",
-    ["Pinned"] = "已固定",
     ["Preserve HP color on all unit frames"] = "在所有单元框架上保留 HP 颜色",
     ["Press Ctrl+C to copy:"] = "按Ctrl+C复制：",
     ["Preview follows the current castbar visibility, icon, text, and global color settings."] = "预览遵循当前 Castbar 可见性、图标、文本和全局颜色设置。",
@@ -2460,7 +2457,6 @@ local MSUF_LOCALE_COVERAGE_zhCN = {
     ["the entire active profile"] = "整个活动配置文件",
     ["uf_target"] = "uf_target",
     ["–"] = "–",
-    ["↑ Preview pinned at top"] = "↑ 预览固定在顶部",
 }
 for k, v in pairs(MSUF_LOCALE_COVERAGE_zhCN) do
     if L[k] == nil or L[k] == k then L[k] = v end

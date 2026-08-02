@@ -1865,7 +1865,6 @@ local MSUF_LOCALE_COVERAGE_deDE = {
     ["Global Style > Fonts has Shared settings plus per-scope font overrides. If Party or Raid uses custom font settings, its Name Shortening can stay enabled even when Shared is off. Select Party/Raid in Fonts or reset the font override."] = "„Globaler Stil“ > „Schriftarten“ verfügt über gemeinsame Einstellungen sowie Überschreibungen von Schriftarten pro Bereich. Wenn Party oder Raid benutzerdefinierte Schriftarteneinstellungen verwenden, kann die Namensverkürzung auch dann aktiviert bleiben, wenn „Geteilt“ deaktiviert ist. Wählen Sie Party/Raid unter Schriftarten aus oder setzen Sie die Schriftartüberschreibung zurück.",
     ["Global absorb styling is in Global Style > Bars > Absorb Display. Group incoming heals are in Group Frames > Health & Text > Heal Prediction."] = "Der globale Absorptionsstil befindet sich unter „Globaler Stil“ > „Balken“ > „Absorptionsanzeige“. Eingehende Gruppenheilungen finden Sie unter Gruppenrahmen > Gesundheit & Text > Heilungsvorhersage.",
     ["How do I make missing health white in Dark Mode?"] = "Wie mache ich fehlende Gesundheit im Dunkelmodus weiß?",
-    ["Keeps this preview visible while you edit lower options."] = "Hält diese Vorschau sichtbar, während Sie niedrigere Optionen bearbeiten.",
     ["Limits"] = "Grenzen",
     ["MSUF Dispel Border / Glow"] = "MSUF Rand vertreiben/leuchten",
     ["MSUF Edit Mode moves frames and supported castbars. Aura icon placement is controlled from Unit Auras or Group Frames > Buffs & Debuffs."] = "Der MSUF-Bearbeitungsmodus verschiebt Frames und unterstützte Zauberleisten. Die Platzierung der Aura-Symbole steuerst du über Einheitenauren oder Gruppenframes > Buffs & Debuffs.",
@@ -1999,8 +1998,6 @@ local MSUF_LOCALE_COVERAGE_deDE = {
     ["Opens: Unit Auras > Text Coloring"] = "Öffnet: Einheitenauren > Textfärbung",
     ["Padding"] = "Polsterung",
     ["Party, Raid, and Mythic Raid Group Frame layout, bars, auras, indicators, scope overrides and positions"] = "Gruppen-, Raid- und mythische Raid-Gruppenrahmenlayout, Balken, Auren, Indikatoren, Zielfernrohrüberschreibungen und Positionen",
-    ["Pin Preview"] = "Pin-Vorschau",
-    ["Pinned"] = "Angepinnt",
     ["Position"] = "Position",
     ["Positions class bar ABOVE Essential Cooldowns"] = "Positioniert die Klassenleiste ÜBER den wesentlichen Abklingzeiten",
     ["Preview follows the current castbar visibility, icon, text, and global color settings."] = "Die Vorschau richtet sich nach den aktuellen Sichtbarkeits-, Symbol-, Text- und globalen Farbeinstellungen der Castbar.",
@@ -2053,7 +2050,6 @@ local MSUF_LOCALE_COVERAGE_deDE = {
     ["the entire active profile"] = "das gesamte aktive Profil",
     ["uf_target"] = "uf_target",
     ["–"] = "–",
-    ["↑ Preview pinned at top"] = "↑ Vorschau oben angepinnt",
 }
 for k, v in pairs(MSUF_LOCALE_COVERAGE_deDE) do
     if L[k] == nil or L[k] == k then L[k] = v end

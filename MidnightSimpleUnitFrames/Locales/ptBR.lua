@@ -1563,7 +1563,6 @@ local MSUF_LOCALE_COVERAGE_ptBR = {
     ["Global absorb styling is in Global Style > Bars > Absorb Display. Group incoming heals are in Group Frames > Health & Text > Heal Prediction."] = "O estilo de absorção global está em Estilo Global > Barras > Exibição de Absorção. As curas recebidas do grupo estão em Group Frames > Health & Text > Heal Prediction.",
     ["Group frames"] = "Quadros de grupo",
     ["How do I make missing health white in Dark Mode?"] = "Como faço para que a falta de saúde fique branca no Modo Escuro?",
-    ["Keeps this preview visible while you edit lower options."] = "Mantém esta visualização visível enquanto você edita as opções inferiores.",
     ["Limits"] = "Limites",
     ["MSUF Dispel Border / Glow"] = "MSUF Dissipar Borda / Brilho",
     ["MSUF Edit Mode moves frames and supported castbars. Aura icon placement is controlled from Unit Auras or Group Frames > Buffs & Debuffs."] = "O modo de edição MSUF move frames e castbars suportados. O posicionamento do ícone da aura é controlado em Unit Auras ou Group Frames > Buffs & Debuffs.",
@@ -1699,8 +1698,6 @@ local MSUF_LOCALE_COVERAGE_ptBR = {
     ["Opens: Unit Auras > Text Coloring"] = "Abre: Unit Auras > Coloração de Texto",
     ["Padding"] = "Preenchimento",
     ["Party, Raid, and Mythic Raid Group Frame layout, bars, auras, indicators, scope overrides and positions"] = "Layout do quadro, barras, auras, indicadores, substituições de escopo e posições do grupo de grupo, Raid e Mythic Raid",
-    ["Pin Preview"] = "Pré-visualização do fixador",
-    ["Pinned"] = "Fixado",
     ["Position"] = "Posição",
     ["Positions class bar ABOVE Essential Cooldowns"] = "Barra de classe de posições ACIMA dos cooldowns essenciais",
     ["Preserve HP color on all unit frames"] = "Preservar a cor HP em todas as estruturas da unidade",
@@ -1757,7 +1754,6 @@ local MSUF_LOCALE_COVERAGE_ptBR = {
     ["the entire active profile"] = "todo o perfil ativo",
     ["uf_target"] = "uf_target",
     ["–"] = "–",
-    ["↑ Preview pinned at top"] = "↑ Visualização fixada no topo",
 }
 for k, v in pairs(MSUF_LOCALE_COVERAGE_ptBR) do
     if L[k] == nil or L[k] == k then L[k] = v end

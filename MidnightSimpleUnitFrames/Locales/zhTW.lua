@@ -1648,7 +1648,6 @@ local MSUF_LOCALE_COVERAGE_zhTW = {
     ["Global absorb styling is in Global Style > Bars > Absorb Display. Group incoming heals are in Group Frames > Health & Text > Heal Prediction."] = "全域吸收樣式位於「全域樣式」>「條形」>「吸收顯示」中。組別傳入治療位於組別框架 > 生命值和文字 > 治療預測中。",
     ["Group frames"] = "組格",
     ["How do I make missing health white in Dark Mode?"] = "如何在深色模式下將缺少的生命值變成白色？",
-    ["Keeps this preview visible while you edit lower options."] = "當您編輯較低選項時，請保持此預覽可見。",
     ["Limits"] = "限制",
     ["MSUF Dispel Border / Glow"] = "MSUF 消除邊框/發光",
     ["MSUF Edit Mode moves frames and supported castbars. Aura icon placement is controlled from Unit Auras or Group Frames > Buffs & Debuffs."] = "MSUF 編輯模式移動框架和支援的castbar。光環圖示的位置由單位光環或群組框架 > 增益和減益控制。",
@@ -1784,8 +1783,6 @@ local MSUF_LOCALE_COVERAGE_zhTW = {
     ["Opens: Unit Auras > Text Coloring"] = "開啟：單位光環 > 文字著色",
     ["Padding"] = "填充",
     ["Party, Raid, and Mythic Raid Group Frame layout, bars, auras, indicators, scope overrides and positions"] = "隊伍、Raid 和 Mythic Raid 組框架佈局、長條圖、光環、指示器、範圍覆蓋和位置",
-    ["Pin Preview"] = "引腳預覽",
-    ["Pinned"] = "已固定",
     ["Position"] = "職位",
     ["Positions class bar ABOVE Essential Cooldowns"] = "將等級欄置於基本冷卻之上",
     ["Preserve HP color on all unit frames"] = "在所有單元框架上保留 HP 顏色",
@@ -1842,7 +1839,6 @@ local MSUF_LOCALE_COVERAGE_zhTW = {
     ["the entire active profile"] = "整個活動設定檔",
     ["uf_target"] = "uf_target",
     ["–"] = "–",
-    ["↑ Preview pinned at top"] = "↑ 預覽固定在頂部",
 }
 for k, v in pairs(MSUF_LOCALE_COVERAGE_zhTW) do
     if L[k] == nil or L[k] == k then L[k] = v end

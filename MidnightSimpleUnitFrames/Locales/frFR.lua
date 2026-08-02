@@ -1978,7 +1978,6 @@ local MSUF_LOCALE_COVERAGE_frFR = {
     ["Global absorb styling is in Global Style > Bars > Absorb Display. Group incoming heals are in Group Frames > Health & Text > Heal Prediction."] = "Le style d’absorption globale se trouve dans Style global > Barres > Affichage d’absorption. Les soins entrants du groupe se trouvent dans Cadres de groupe > Santé et texte > Prédiction des soins.",
     ["Group frames"] = "Cadres de groupe",
     ["How do I make missing health white in Dark Mode?"] = "Comment puis-je rendre la santé manquante blanche en mode sombre ?",
-    ["Keeps this preview visible while you edit lower options."] = "Garde cet aperçu visible pendant que vous modifiez les options inférieures.",
     ["Limits"] = "Limites",
     ["MSUF Dispel Border / Glow"] = "MSUF Dissiper la bordure/lueur",
     ["MSUF Edit Mode moves frames and supported castbars. Aura icon placement is controlled from Unit Auras or Group Frames > Buffs & Debuffs."] = "Le mode d'édition MSUF déplace les images et les barres de diffusion prises en charge. Le placement des icônes d'aura est contrôlé depuis les auras d'unité ou les cadres de groupe > Buffs et debuffs.",
@@ -2114,8 +2113,6 @@ local MSUF_LOCALE_COVERAGE_frFR = {
     ["Opens: Unit Auras > Text Coloring"] = "Ouvre : Auras d'unité > Coloration du texte",
     ["Padding"] = "Rembourrage",
     ["Party, Raid, and Mythic Raid Group Frame layout, bars, auras, indicators, scope overrides and positions"] = "Disposition des cadres de groupe de groupe de groupe, de raid et de raid mythique, barres, auras, indicateurs, remplacements de portée et positions",
-    ["Pin Preview"] = "Aperçu des épingles",
-    ["Pinned"] = "Épinglé",
     ["Position"] = "Poste",
     ["Positions class bar ABOVE Essential Cooldowns"] = "Barre de classe de positions AU-DESSUS Temps de recharge essentiels",
     ["Preserve HP color on all unit frames"] = "Préserver la couleur HP sur tous les cadres de l'unité",
@@ -2171,7 +2168,6 @@ local MSUF_LOCALE_COVERAGE_frFR = {
     ["the entire active profile"] = "tout le profil actif",
     ["uf_target"] = "uf_target",
     ["–"] = "–",
-    ["↑ Preview pinned at top"] = "↑ Aperçu épinglé en haut",
 }
 for k, v in pairs(MSUF_LOCALE_COVERAGE_frFR) do
     if L[k] == nil or L[k] == k then L[k] = v end

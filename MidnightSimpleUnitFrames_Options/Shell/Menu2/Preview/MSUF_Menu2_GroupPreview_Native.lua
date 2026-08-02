@@ -490,7 +490,6 @@ local function LayoutGroupPreviewHeaderControls(box, compact)
     local header = box._msuf2CompactHeader
     local expandBtn = box._msuf2CompactExpandButton
     local layersBtn = box._msuf2LayersButton
-    local pinBtn = box._msuf2PinButton
     if compact and header then
         if layersBtn then
             layersBtn:SetText(((M.Tr and M.Tr("Layers")) or "Layers") .. " v")
@@ -500,14 +499,6 @@ local function LayoutGroupPreviewHeaderControls(box, compact)
             else layersBtn:SetPoint("RIGHT", header, "RIGHT", -108, 0) end
             if layersBtn.SetFrameLevel and header.GetFrameLevel then layersBtn:SetFrameLevel((header:GetFrameLevel() or 1) + 3) end
         end
-        if pinBtn then
-            pinBtn:SetParent(header)
-            pinBtn:ClearAllPoints()
-            local liveBadge = box._msuf2CompactLiveBadge
-            if liveBadge then pinBtn:SetPoint("LEFT", liveBadge, "RIGHT", 8, 0)
-            else pinBtn:SetPoint("LEFT", header, "LEFT", 176, 0) end
-            if pinBtn.SetFrameLevel and header.GetFrameLevel then pinBtn:SetFrameLevel((header:GetFrameLevel() or 1) + 3) end
-        end
         return
     end
     if layersBtn then
@@ -515,11 +506,6 @@ local function LayoutGroupPreviewHeaderControls(box, compact)
         layersBtn:SetParent(box)
         layersBtn:ClearAllPoints()
         layersBtn:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -5)
-    end
-    if pinBtn then
-        pinBtn:SetParent(box)
-        pinBtn:ClearAllPoints()
-        pinBtn:SetPoint("TOPRIGHT", box, "TOPRIGHT", -12, -8)
     end
 end
 local function ApplyGroupCompactPresentation(box, compact, sideW)

@@ -2172,7 +2172,6 @@ local function LayoutClassPowerHeaderControls(box, compact)
     local header = box._msuf2CompactHeader
     local expandBtn = box._msuf2CompactExpandButton
     local layersBtn = box._msuf2LayersButton
-    local pinBtn = box._msuf2PinButton
     if compact and header then
         if layersBtn then
             layersBtn:SetText(TR("Layers") .. " v")
@@ -2182,14 +2181,6 @@ local function LayoutClassPowerHeaderControls(box, compact)
             else layersBtn:SetPoint("RIGHT", header, "RIGHT", -108, 0) end
             if layersBtn.SetFrameLevel and header.GetFrameLevel then layersBtn:SetFrameLevel((header:GetFrameLevel() or 1) + 3) end
         end
-        if pinBtn then
-            pinBtn:SetParent(header)
-            pinBtn:ClearAllPoints()
-            local liveBadge = box._msuf2CompactLiveBadge
-            if liveBadge then pinBtn:SetPoint("LEFT", liveBadge, "RIGHT", 8, 0)
-            else pinBtn:SetPoint("LEFT", header, "LEFT", 214, 0) end
-            if pinBtn.SetFrameLevel and header.GetFrameLevel then pinBtn:SetFrameLevel((header:GetFrameLevel() or 1) + 3) end
-        end
         return
     end
     if layersBtn then
@@ -2197,11 +2188,6 @@ local function LayoutClassPowerHeaderControls(box, compact)
         layersBtn:SetParent(box)
         layersBtn:ClearAllPoints()
         layersBtn:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -5)
-    end
-    if pinBtn then
-        pinBtn:SetParent(box)
-        pinBtn:ClearAllPoints()
-        pinBtn:SetPoint("TOPRIGHT", box, "TOPRIGHT", -12, -8)
     end
 end
 local function ApplyClassPowerCompactPresentation(box, compact, sideW)
@@ -2559,22 +2545,17 @@ function Preview.Create(ctx, builder)
             stateKey = "classPowerPreview",
             title = title,
             hint = hint,
-            left = 14,
-            right = 14,
-            top = -8,
             pageKey = ctx and ctx.key,
             wrapper = ctx and ctx.wrapper,
-            restoreParent = section,
-            restorePoint = { "TOPLEFT", section, "TOPLEFT", 14, -8 },
-            restoreWidth = innerW,
-            restoreHeight = box._msuf2PreferredRestoreHeight,
-        })
-        RegisterPreviewControl(ctx, box._msuf2PinButton, "pin.toggle", "Pin Class Resources Preview", "toggle", "ephemeral", {
-            help = "Keeps this preview visible while editing lower Class Resources options.",
         })
     end
     ApplyPreviewMode()
     ActivateVisiblePreview()
     M.TrackMethodRefresh(ctx, section, "Refresh")
+    -- The preview never scrolls away: counter-scrolled in place, page-native
+    -- lifecycle untouched.
+    if sectionEntry and W.PinSectionInScroll then
+        W.PinSectionInScroll(sectionEntry, { wrapper = ctx and ctx.wrapper })
+    end
     return section
 end

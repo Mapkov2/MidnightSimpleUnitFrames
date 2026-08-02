@@ -810,6 +810,20 @@ function Page:BuildHeader()
     quick:SetScript("OnEnter", ShowQuickSetupTooltip)
     quick:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
     RegisterControl(quick, Meta("quick_setup.class_bar", "action", { confirmRequired = true }), "Quick Setup: Class Bar", "button")
+    -- Dock the selector strip like the unit pages' Editing strip and the
+    -- Colors category bar: with it out of the scroll flow, the preview is the
+    -- first flow element and pins directly beneath it while scrolling -
+    -- instead of the strip scrolling away and the preview floating alone.
+    if W.AttachStickyPageHeader then
+        W.AttachStickyPageHeader(head, {
+            pageKey = ctx and ctx.key,
+            wrapper = ctx and ctx.wrapper,
+            gap = 4,
+            builder = b,
+            ctx = ctx,
+            flowGap = 8,
+        })
+    end
 end
 
 function Page:BuildClassLayout()

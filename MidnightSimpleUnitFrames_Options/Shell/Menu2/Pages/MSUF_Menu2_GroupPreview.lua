@@ -196,26 +196,9 @@ local function AddGFPreview(ctx, builder)
             stateKey = "groupFramePreview",
             title = box._title,
             hint = box._hint,
-            left = 14,
-            right = 14,
-            top = -8,
-            pinnedHeight = 232,
-            buttonWidth = 78,
-            buttonHeight = 20,
-            centerButton = true,
-            quietButton = true,
             pageKey = pageKey,
             wrapper = wrapper,
-            restoreParent = body,
-            restorePoint = { "TOPLEFT", body, "TOPLEFT", 14, boxY },
-            restoreWidth = box.GetWidth and box:GetWidth(),
-            restoreHeight = box.GetHeight and box:GetHeight(),
         })
-        local page = M.GroupPage
-        if page and type(page.RegisterControl) == "function" then
-            page.RegisterControl(box._msuf2PinButton, { key = pageKey }, "preview.pin.toggle",
-                "Pin Group Preview", "toggle", "ephemeral")
-        end
     end
     local function PreviewHostShown()
         if ctx and ctx.key and M.activeKey and M.activeKey ~= ctx.key then return false end
@@ -340,5 +323,11 @@ local function AddGFPreview(ctx, builder)
         end)
     end
     M.TrackCollapsibleRefresh(ctx, body, RefreshThisPreview)
+    -- The preview never scrolls away: counter-scrolled in place, page-native
+    -- lifecycle untouched.
+    local previewEntry = body._msuf2CollapsibleEntry
+    if previewEntry and W.PinSectionInScroll then
+        W.PinSectionInScroll(previewEntry, { wrapper = ctx and ctx.wrapper })
+    end
 end
 GroupPreview.Add = AddGFPreview

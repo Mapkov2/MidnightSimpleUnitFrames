@@ -1597,7 +1597,6 @@ local MSUF_LOCALE_COVERAGE_koKR = {
     ["Global absorb styling is in Global Style > Bars > Absorb Display. Group incoming heals are in Group Frames > Health & Text > Heal Prediction."] = "전역 흡수 스타일은 전역 스타일 > 막대 > 흡수 표시에 있습니다. 그룹 수신 치유는 그룹 프레임 > 건강 및 텍스트 > 치유 예측에 있습니다.",
     ["Group frames"] = "그룹 프레임",
     ["How do I make missing health white in Dark Mode?"] = "다크 모드에서 누락된 체력을 흰색으로 만들려면 어떻게 해야 합니까?",
-    ["Keeps this preview visible while you edit lower options."] = "하위 옵션을 편집하는 동안 이 미리보기를 계속 표시합니다.",
     ["Limits"] = "한도",
     ["Link"] = "링크",
     ["MSUF Dispel Border / Glow"] = "MSUF 디스펠 보더/글로우",
@@ -1734,8 +1733,6 @@ local MSUF_LOCALE_COVERAGE_koKR = {
     ["Opens: Unit Auras > Text Coloring"] = "열림: 유닛 오라 > 텍스트 색상",
     ["Padding"] = "패딩",
     ["Party, Raid, and Mythic Raid Group Frame layout, bars, auras, indicators, scope overrides and positions"] = "파티, 레이드, 신화 레이드 그룹 프레임 레이아웃, 바, 아우라, 표시기, 범위 재정의 및 위치",
-    ["Pin Preview"] = "핀 미리보기",
-    ["Pinned"] = "고정됨",
     ["Position"] = "위치",
     ["Positions class bar ABOVE Essential Cooldowns"] = "필수 쿨다운 위의 위치 클래스 표시줄",
     ["Preserve HP color on all unit frames"] = "모든 유닛 프레임에서 HP 색상 유지",
@@ -1792,7 +1789,6 @@ local MSUF_LOCALE_COVERAGE_koKR = {
     ["the entire active profile"] = "전체 활성 프로필",
     ["uf_target"] = "uf_target",
     ["–"] = "–",
-    ["↑ Preview pinned at top"] = "↑ 미리보기는 상단에 고정되어 있습니다",
 }
 for k, v in pairs(MSUF_LOCALE_COVERAGE_koKR) do
     if L[k] == nil or L[k] == k then L[k] = v end

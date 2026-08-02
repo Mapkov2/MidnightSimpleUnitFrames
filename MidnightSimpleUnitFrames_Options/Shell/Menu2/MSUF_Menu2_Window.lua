@@ -1289,6 +1289,7 @@ function M.SelectPage(key)
         QueueVisiblePageLayoutSettle(key, cached)
         M.CallIf(M.ResumeClassPowerPreview, "SELECT_CACHED", key)
         M.CallIf(M.ResumeGFNativePreviews, "SELECT_CACHED", key)
+        M.CallIf(M.RunStickyHeaderActivation)
         RequestBossPagePreviewForKey(key)
         RequestGroupPagePreviewForKey(key)
         if hasPendingFocus and type(M.FocusRequestedSection) == "function" then M.FocusRequestedSection(key, { flash = true }) end
@@ -1336,6 +1337,10 @@ function M.SelectPage(key)
         end
     end
     entry.wrapper:Show()
+    -- The wrapper is visible and activeKey committed: this is the earliest
+    -- moment the docked panels' page-ownership gates pass, so wake their
+    -- content now. Anything earlier sees a hidden wrapper and builds nothing.
+    M.CallIf(M.RunStickyHeaderActivation)
     RememberPrimaryNavPage(key)
     RunRefreshers(entry)
     QueueVisiblePageLayoutSettle(key, entry)
@@ -2248,6 +2253,9 @@ local function InstallWindowLifecycle(state)
         M.CallIf(M.ResumePinnedPreviews, "WINDOW_SHOW")
         M.CallIf(M.ResumeClassPowerPreview, "WINDOW_SHOW", M.activeKey)
         M.CallIf(M.ResumeGFNativePreviews, "WINDOW_SHOW", M.activeKey)
+        -- Reopening the window is a page-show for the docked previews too: the
+        -- window frame is visible here, so their ownership gates pass again.
+        M.CallIf(M.RunStickyHeaderActivation)
         RequestBossPagePreviewForKey(M.activeKey)
         RequestGroupPagePreviewForKey(M.activeKey)
         M.CallIf(M.UpdateMenuCombatListener)
@@ -2302,9 +2310,10 @@ local function BuildWindowScrollHost(state)
     local pageHeaderHost = CreateFrame("Frame", nil, host)
     pageHeaderHost:SetHeight(0)
     pageHeaderHost:Hide()
-    -- Structural only: the page panel already owns its rounded glass surface.
-    -- A second opaque rectangle and ClipsChildren cut through the panel's
-    -- overscanned nine-slice corners and caused the asymmetric dark edge.
+    -- Structural only: the page panel already owns its rounded glass surface,
+    -- so the host paints no background of its own. Clipping is normally off
+    -- (it cuts the panels' overscanned nine-slice corners) and turns on only
+    -- while the stack overflows a too-short window - see LayoutPageHeaderHost.
     f.pageHeaderHost = pageHeaderHost
     M.pageHeaderHost = pageHeaderHost
     local scroll = CreateFrame("ScrollFrame", nil, host)
@@ -2312,11 +2321,29 @@ local function BuildWindowScrollHost(state)
     M.scrollFrame = scroll
     local activeTopOwner, activeLayoutHost = status, host
     local function RefreshPinnedHeaderGeometry()
-        scroll._msuf2PinnedPreviewLastOffset = nil
-        scroll._msuf2PinnedPreviewLastHeight = nil
-        scroll._msuf2PinnedPreviewLastChildHeight = nil
         if scroll._msuf2RefreshScrollBar then scroll:_msuf2RefreshScrollBar() end
         M.CallIf(M.RefreshPinnedPreviews, scroll)
+    end
+    --- The docked slot never eats the whole viewport: the ScrollFrame keeps a
+    --- usable height even when a page docks a tall expanded preview on a small
+    --- window.  The slot is not clipped - clipping cuts the panels' overscanned
+    --- rounded corners - so an oversized preview simply reaches past the slot,
+    --- and the page's own compact/collapse controls are the real remedy.
+    local STICKY_HEADER_MIN_BODY_REVEAL = 120
+    local function StickyHeaderStackHeight(topOwner, layoutHost)
+        local list = scroll._msuf2StickyPageHeaders
+        if type(list) ~= "table" or #list == 0 then return 0 end
+        local total = 0
+        for i = 1, #list do
+            local record = list[i]
+            if record and record.active then total = total + max(0, tonumber(record.hostHeight) or 0) end
+        end
+        if total <= 0 then return 0 end
+        local available = (tonumber(layoutHost and layoutHost.GetHeight and layoutHost:GetHeight()) or 0)
+            - (tonumber(topOwner and topOwner.GetHeight and topOwner:GetHeight()) or 0)
+        local limit = available - STICKY_HEADER_MIN_BODY_REVEAL
+        if limit > 0 and total > limit then return limit, true end
+        return total, false
     end
     local function LayoutPageHeaderHost(topOwner, layoutHost)
         if topOwner then activeTopOwner = topOwner end
@@ -2330,9 +2357,14 @@ local function BuildWindowScrollHost(state)
         -- on the right to reserve its scrollbar gutter.
         pageHeaderHost:SetPoint("TOPRIGHT", topOwner, "BOTTOMRIGHT", -8, 0)
         scroll:ClearAllPoints()
-        local activeHeader = scroll._msuf2StickyPageHeader
-        if activeHeader and activeHeader.active and (tonumber(activeHeader.hostHeight) or 0) > 0 then
-            pageHeaderHost:SetHeight(activeHeader.hostHeight)
+        local stackHeight, clipped = StickyHeaderStackHeight(topOwner, layoutHost)
+        if stackHeight > 0 then
+            pageHeaderHost:SetHeight(stackHeight)
+            -- On a window too short for the full stack the slot is clipped: an
+            -- oversized preview loses its bottom edge instead of painting over
+            -- the page body (or past the window onto the world). Clipping stays
+            -- off at normal sizes so rounded panel corners keep their overscan.
+            if pageHeaderHost.SetClipsChildren then pageHeaderHost:SetClipsChildren(clipped and true or false) end
             pageHeaderHost:Show()
             scroll:SetPoint("TOPLEFT", pageHeaderHost, "BOTTOMLEFT", 0, 0)
         else
@@ -2350,34 +2382,93 @@ local function BuildWindowScrollHost(state)
         scroll._msuf2SmoothScrollTarget = nil
     end
     M.LayoutPageHeaderHost = LayoutPageHeaderHost
-    function M.SetActivePageHeader(entry)
-        local nextHeader = type(entry) == "table" and entry.pageHeader or nil
-        if nextHeader and (nextHeader.disposed or nextHeader.entry ~= entry) then nextHeader = nil end
-        local previous = scroll._msuf2StickyPageHeader
-        if previous ~= nextHeader then
-            if previous and previous.Deactivate then previous:Deactivate() end
-            scroll._msuf2StickyPageHeader = nil
-            if nextHeader and nextHeader.Activate and nextHeader:Activate(pageHeaderHost) then
-                scroll._msuf2StickyPageHeader = nextHeader
+    --- Geometry only. Content wake-up runs separately (RunStickyHeaderActivation)
+    --- once the page wrapper is shown, because a docked panel's page-visibility
+    --- gates would reject any work started while the wrapper is still hidden.
+    local function ActivateStickyHeaderStack(entry)
+        local records = type(entry) == "table" and entry.pageHeaders or nil
+        local active = {}
+        if type(records) ~= "table" then return active end
+        local stackOffset = 0
+        for i = 1, #records do
+            local record = records[i]
+            if record and not record.disposed and record.entry == entry and record.Activate then
+                if record:Activate(pageHeaderHost, stackOffset) then
+                    stackOffset = stackOffset + max(0, tonumber(record.hostHeight) or 0)
+                    active[#active + 1] = record
+                end
             end
-        elseif nextHeader and nextHeader.Activate
-            and (not nextHeader.active
-                or (nextHeader.section and nextHeader.section.GetParent
-                    and nextHeader.section:GetParent() ~= pageHeaderHost))
-        then
-            nextHeader:Activate(pageHeaderHost)
         end
+        return active
+    end
+    --- The post-show half of page selection for docked panels. They live outside
+    --- the page wrapper, so wrapper:Show() cannot reach them; SelectPage calls
+    --- this after the wrapper is visible so every page-ownership gate inside the
+    --- callbacks (activeKey, wrapper shown) evaluates against the final state.
+    function M.RunStickyHeaderActivation()
+        local list = scroll._msuf2StickyPageHeaders
+        if type(list) ~= "table" then return 0 end
+        local ran = 0
+        for i = 1, #list do
+            local record = list[i]
+            if record and record.active and not record.disposed and type(record.onActivate) == "function" then
+                record.onActivate(record)
+                ran = ran + 1
+            end
+        end
+        return ran
+    end
+    function M.SetActivePageHeader(entry)
+        local previous = scroll._msuf2StickyPageHeaders
+        if type(previous) == "table" then
+            for i = 1, #previous do
+                local record = previous[i]
+                if record and record.Deactivate and (type(entry) ~= "table" or record.entry ~= entry) then
+                    record:Deactivate()
+                end
+            end
+        end
+        scroll._msuf2StickyPageHeaders = ActivateStickyHeaderStack(entry)
+        -- Retained for the single-panel readers that predate the stack.
+        scroll._msuf2StickyPageHeader = scroll._msuf2StickyPageHeaders[1]
         if not M._msuf2DeferPageHeaderLayout then
             LayoutPageHeaderHost()
             RefreshPinnedHeaderGeometry()
         end
         return scroll._msuf2StickyPageHeader ~= nil
     end
+    --- Re-drive the slot after a docked panel changed its own height, without
+    --- re-parenting anything: only the stack offsets and the host height move.
+    function M.RelayoutPageHeaderHost()
+        local list = scroll._msuf2StickyPageHeaders
+        if type(list) ~= "table" or #list == 0 then return false end
+        local stackOffset = 0
+        for i = 1, #list do
+            local record = list[i]
+            if record and not record.disposed and record.Activate then
+                record:Activate(pageHeaderHost, stackOffset)
+                stackOffset = stackOffset + max(0, tonumber(record.hostHeight) or 0)
+            end
+        end
+        LayoutPageHeaderHost()
+        return true
+    end
     function M.DisposePageHeader(entry)
-        local record = type(entry) == "table" and entry.pageHeader or nil
-        if not record then return end
-        if scroll._msuf2StickyPageHeader == record then M.SetActivePageHeader(nil) end
-        if record.Dispose then record:Dispose() end
+        local records = type(entry) == "table" and entry.pageHeaders or nil
+        if type(records) ~= "table" or #records == 0 then return end
+        local active = scroll._msuf2StickyPageHeaders
+        if type(active) == "table" then
+            for i = 1, #active do
+                if active[i] and active[i].entry == entry then
+                    M.SetActivePageHeader(nil)
+                    break
+                end
+            end
+        end
+        for i = #records, 1, -1 do
+            local record = records[i]
+            if record and record.Dispose then record:Dispose() end
+        end
     end
     LayoutPageHeaderHost(status, host)
     local child = CreateFrame("Frame", nil, scroll)

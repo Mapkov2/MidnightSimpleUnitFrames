@@ -1078,34 +1078,9 @@ function P.Build(ctx, builder, categories)
         if not record or record.pageKey ~= pageKey or record.pageWrapper ~= wrapper then
             W.AttachPinnedPreview(section, host, {
                 stateKey = "colorPreview",
-                left = 14,
-                right = 14,
-                top = -8,
-                buttonWidth = 78,
-                buttonHeight = 20,
-                centerButton = true,
-                quietButton = true,
-                pinnedHeight = 350,
                 pageKey = pageKey,
                 wrapper = wrapper,
-                restoreParent = section,
-                restorePoint = { "TOPLEFT", section, "TOPLEFT", 16, -36 },
-                restoreWidth = previewW,
-                restoreHeight = 350,
             })
-        end
-        if host._msuf2PinButton and host._msuf2PinButton.SetFrameLevel then
-            -- Shield-relative like the click targets and zoom bars, so the
-            -- pin toggle stays clickable after pin-mode reparenting.
-            local base = (shield and shield.GetFrameLevel and shield:GetFrameLevel())
-                or ((host:GetFrameLevel() or 1) + COLOR_SHIELD_LEVEL)
-            host._msuf2PinButton:SetFrameLevel(base + 22)
-        end
-        if host._msuf2PinButton and not host._msuf2ColorPainterPinRegistered then
-            host._msuf2ColorPainterPinRegistered = true
-            RegisterControl(host._msuf2PinButton,
-                ControlMeta("opt_colors", "advanced", "preview.pin.toggle", "ephemeral"),
-                "Pin Color Preview", "toggle")
         end
     end
     local initialRefreshSerial = 0
@@ -1170,5 +1145,11 @@ function P.Build(ctx, builder, categories)
     end)
     EnsurePreviewAttachment()
     QueueVisiblePreviewRefresh("MSUF2_COLOR_PAINTER_INITIAL")
+    -- The color preview never scrolls away: counter-scrolled in place,
+    -- page-native lifecycle (including the shield/click-target levels) untouched.
+    local previewEntry = section._msuf2CollapsibleEntry
+    if previewEntry and W.PinSectionInScroll then
+        W.PinSectionInScroll(previewEntry, { wrapper = ctx and ctx.wrapper })
+    end
     return section
 end

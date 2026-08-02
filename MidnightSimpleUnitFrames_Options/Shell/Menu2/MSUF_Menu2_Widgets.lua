@@ -138,13 +138,10 @@ local function RegisterSearchObject(object, label, kind, opts)
     end
     return object
 end
-local function QueuePinnedPreviewGeometryRefresh(scroll)
+local function QueueDockedPreviewOwnershipRefresh(scroll)
     scroll = scroll or M.scrollFrame
-    local list = M._pinnedPreviews
+    local list = M._dockedPreviews
     if not scroll or type(list) ~= "table" or #list == 0 then return end
-    scroll._msuf2PinnedPreviewLastOffset = nil
-    scroll._msuf2PinnedPreviewLastHeight = nil
-    scroll._msuf2PinnedPreviewLastChildHeight = nil
     if M.RefreshPinnedPreviews then M.RefreshPinnedPreviews(scroll) end
     if C_Timer and C_Timer.After then
         C_Timer.After(0, function()
@@ -282,8 +279,7 @@ local function NotifyCollapsibleSectionState(entry, open)
     local fn = M.OnCollapsibleSectionStateChanged
     if type(fn) == "function" then fn(entry.pageKey, entry.sectionId, open, entry) end
 end
-local PINNED_PREVIEW_FOCUS_GAP = 12
-local PINNED_PREVIEW_MIN_SETTINGS_REVEAL = 40
+local SECTION_FOCUS_GAP = 12
 local function EffectiveFrameScale(frame, fallback)
     local scale = frame and frame.GetEffectiveScale and tonumber(frame:GetEffectiveScale())
     if not scale or scale <= 0 then return fallback or 1 end
@@ -301,17 +297,31 @@ local function ScrollToCollapsibleEntry(entry)
     local childScale = EffectiveFrameScale(child, scrollScale)
     local outerScale = EffectiveFrameScale(outer, scrollScale)
     local contentOffset = ((childTop * childScale) - (outerTop * outerScale)) / scrollScale
-    local topInset = PINNED_PREVIEW_FOCUS_GAP
-    local active = scroll._msuf2PinnedPreviewActiveRecord
-    local pinnedBox = active and active.box
-    if pinnedBox and (not pinnedBox.IsShown or pinnedBox:IsShown()) then
+    -- Focus targets must land below the counter-scrolled (sticky) preview
+    -- card, which covers the top of the viewport while the page is scrolled.
+    local topInset = SECTION_FOCUS_GAP
+    local stickyList = M._stickyScrollSections
+    if type(stickyList) == "table" then
         local scrollTop = scroll.GetTop and scroll:GetTop()
-        local pinnedBottom = pinnedBox.GetBottom and pinnedBox:GetBottom()
-        if scrollTop and pinnedBottom then
-            local pinnedScale = EffectiveFrameScale(pinnedBox, scrollScale)
-            local coveredHeight = ((scrollTop * scrollScale) - (pinnedBottom * pinnedScale)) / scrollScale
-            if coveredHeight > 0 then
-                topInset = max(topInset, floor(coveredHeight + PINNED_PREVIEW_FOCUS_GAP + 0.5))
+        if scrollTop then
+            for i = 1, #stickyList do
+                local item = stickyList[i]
+                local stickyEntry = item and item.entry
+                local stickyOuter = stickyEntry and stickyEntry.outer
+                if stickyOuter and stickyOuter ~= outer
+                    and (not stickyOuter.IsShown or stickyOuter:IsShown())
+                    and (not item.wrapper or not item.wrapper.IsShown or item.wrapper:IsShown())
+                then
+                    local stickyBottom = stickyOuter.GetBottom and stickyOuter:GetBottom()
+                    if stickyBottom then
+                        local stickyScale = EffectiveFrameScale(stickyOuter, scrollScale)
+                        local coveredHeight = ((scrollTop * scrollScale) - (stickyBottom * stickyScale)) / scrollScale
+                        -- While unscrolled the card ends above later sections, so
+                        -- covered height is only positive once it actually overlaps.
+                        local stickyHeight = (stickyOuter.GetHeight and stickyOuter:GetHeight()) or 0
+                        topInset = max(topInset, floor(min(coveredHeight, stickyHeight) + SECTION_FOCUS_GAP + 0.5))
+                    end
+                end
             end
         end
     end
@@ -589,10 +599,14 @@ function W.PageBuilder(ctx, opts)
                 local openChanged = entry._msuf2RelayoutOpen ~= open
                 entry._msuf2RelayoutOpen = open
                 local outerH = entry.headerHeight + (open and entry.contentHeight or 0)
+                -- Sticky (counter-scrolled) sections re-apply their offset from
+                -- this flow position, so record it before anchoring.
+                entry._msuf2FlowX, entry._msuf2FlowY = self.x, y
                 local key = tostring(self.parent) .. "\030" .. tostring(self.x) .. "\030" .. tostring(y)
                     .. "\030" .. tostring(outerH) .. "\030" .. tostring(open)
                 if entry._msuf2RelayoutKey ~= key then
                     entry._msuf2RelayoutKey = key
+                    entry._msuf2StickyAppliedY = nil
                     entry.outer:ClearAllPoints()
                     entry.outer:SetPoint("TOPLEFT", self.parent, "TOPLEFT", self.x, y)
                     entry.outer:SetHeight(outerH)
@@ -633,7 +647,10 @@ function W.PageBuilder(ctx, opts)
             UpdateContentHeight(contentHeight)
             layoutChanged = true
         end
-        if layoutChanged then QueuePinnedPreviewGeometryRefresh(M.scrollFrame) end
+        if layoutChanged then QueueDockedPreviewOwnershipRefresh(M.scrollFrame) end
+        -- The flow anchor above just overwrote any counter-scroll offset on a
+        -- sticky section; re-apply it against the current scroll position.
+        if M.RefreshStickyScrollSections then M.RefreshStickyScrollSections(M.scrollFrame) end
         return layoutChanged
     end
     function b:Section(title, height)
@@ -735,6 +752,9 @@ function W.PageBuilder(ctx, opts)
             header = header,
             headerBg = headerBg,
             headerOpenHighlight = headerOpenHighlight,
+            -- Build-time flow position; RelayoutCollapsibles keeps it current.
+            _msuf2FlowX = self.x,
+            _msuf2FlowY = self.y,
             body = body,
             bodySurface = bodySurface,
             arrow = arrow,
@@ -3006,13 +3026,19 @@ end
 --- activation synchronously.  Inactive panels stay with their page wrapper,
 --- so cache invalidation cannot strand the panel (and its surface textures)
 --- under the shared window header host.
+---
+--- A page may register more than one panel.  They stack in registration order,
+--- so a page that builds its navigation strip before its preview gets the strip
+--- on top and the preview directly beneath it, both above the scrolling body.
 function W.AttachStickyPageHeader(section, opts)
     if not section then return nil end
     opts = opts or {}
     local ctx = opts.ctx
     local entry = ctx and ctx.entry
     if type(entry) ~= "table" then return nil end
-    if entry.pageHeader then return entry.pageHeader end
+    local existing = section._msuf2StickyPageHeaderRecord
+    if existing and not existing.disposed and existing.entry == entry then return existing end
+    entry.pageHeaders = entry.pageHeaders or {}
 
     local originalParent = (section.GetParent and section:GetParent()) or opts.wrapper
     local point, relativeTo, relativePoint, originalX, originalY
@@ -3063,20 +3089,48 @@ function W.AttachStickyPageHeader(section, opts)
         headerX = headerX,
         headerY = headerY,
         hostHeight = max(0, headerTopInset + originalHeight + stickyGap),
+        -- The page's own "make my docked content real and visible" entry point.
+        -- Run by M.RunStickyHeaderActivation after the page wrapper is shown -
+        -- never during Activate, whose geometry pass can precede wrapper:Show().
+        onActivate = opts.onActivate,
     }
 
-    function record:Activate(headerHost)
-        if self.disposed or not headerHost or self.entry.pageHeader ~= self then return false end
+    function record:Registered()
+        local list = self.entry and self.entry.pageHeaders
+        if type(list) ~= "table" then return false end
+        for i = 1, #list do
+            if list[i] == self then return true end
+        end
+        return false
+    end
+
+    --- `stackOffset` is the height already consumed by the panels registered
+    --- above this one, so a page's panels tile downwards from the host's top.
+    ---
+    --- Activate is pure geometry: parent, anchor, size, level. Waking the
+    --- content inside the panel is NOT done here - a docked panel no longer
+    --- lives under the page wrapper, so page selection runs the registered
+    --- `onActivate` callback through M.RunStickyHeaderActivation strictly
+    --- AFTER the wrapper is shown, when the page's visibility gates pass.
+    function record:Activate(headerHost, stackOffset)
+        if self.disposed or not headerHost or not self:Registered() then return false end
+        stackOffset = tonumber(stackOffset) or 0
         local activeHeight = tonumber(section.GetHeight and section:GetHeight()) or self.originalHeight
         if activeHeight <= 0 then activeHeight = self.originalHeight end
         self.hostHeight = max(0, headerTopInset + activeHeight + stickyGap)
-        if section.Hide then section:Hide() end
-        section:SetParent(headerHost)
+        self.stackOffset = stackOffset
+        -- Re-anchoring a panel that already lives in the slot (a height change
+        -- underneath it) must not flicker it through a hide/show cycle.
+        local alreadyHosted = section.GetParent and section:GetParent() == headerHost
+        if not alreadyHosted then
+            if section.Hide then section:Hide() end
+            section:SetParent(headerHost)
+        end
         section:ClearAllPoints()
         -- Preserve the PageBuilder geometry exactly.  Deriving a new width
         -- from the host's right edge made the right margin differ from the
         -- original page and let child rows protrude past rounded corners.
-        section:SetPoint(point, headerHost, relativePoint, headerX, headerY)
+        section:SetPoint(point, headerHost, relativePoint, headerX, headerY - stackOffset)
         if section.SetSize and self.originalWidth > 0 and activeHeight > 0 then
             section:SetSize(self.originalWidth, activeHeight)
         end
@@ -3084,7 +3138,7 @@ function W.AttachStickyPageHeader(section, opts)
             local baseLevel = (headerHost.GetFrameLevel and headerHost:GetFrameLevel()) or originalFrameLevel
             section:SetFrameLevel(baseLevel + (opts.frameLevelOffset or 2))
         end
-        if section.Show then section:Show() end
+        if section.Show and not (section.IsShown and section:IsShown()) then section:Show() end
         self.active = true
         return true
     end
@@ -3109,11 +3163,28 @@ function W.AttachStickyPageHeader(section, opts)
         if section._msuf2StickyPageHeaderRecord == self then
             section._msuf2StickyPageHeaderRecord = nil
         end
-        if entry.pageHeader == self then entry.pageHeader = nil end
+        local list = entry.pageHeaders
+        if type(list) == "table" then
+            for i = #list, 1, -1 do
+                if list[i] == self then table.remove(list, i) end
+            end
+        end
+        if entry.pageHeader == self then entry.pageHeader = list and list[1] or nil end
     end
 
-    entry.pageHeader = record
+    entry.pageHeaders[#entry.pageHeaders + 1] = record
+    entry.pageHeader = entry.pageHeaders[1]
     section._msuf2StickyPageHeaderRecord = record
+    -- Panels whose own height changes while docked (a collapsible preview, a
+    -- compact/expanded canvas) have to re-drive the host: the slot reserves
+    -- exactly as much room as the panel currently needs.
+    if opts.dynamicHeight and section.HookScript and not section._msuf2StickyHeaderSizeHooked then
+        section._msuf2StickyHeaderSizeHooked = true
+        section:HookScript("OnSizeChanged", function()
+            local active = record.active and not record.disposed
+            if active and type(M.RelayoutPageHeaderHost) == "function" then M.RelayoutPageHeaderHost() end
+        end)
+    end
     -- A freshly built page wrapper is hidden until SelectPage commits it.
     -- Keep the registered panel hidden as well; the central activation path
     -- shows it only after the page becomes active.
@@ -3121,46 +3192,128 @@ function W.AttachStickyPageHeader(section, opts)
     return record
 end
 
-local function InstallPinnedPreviewUpdater(scroll)
-    if not scroll or scroll._msuf2PinnedPreviewUpdater then return end
-    scroll._msuf2PinnedPreviewUpdater = true
-    local function RefreshIfPinned(self)
-        local list = M._pinnedPreviews
-        if type(list) ~= "table" or #list == 0 then
-            self._msuf2PinnedPreviewLastOffset = nil
-            self._msuf2PinnedPreviewLastHeight = nil
-            self._msuf2PinnedPreviewLastChildHeight = nil
-            return
+--- Always-visible previews, without re-parenting.
+---
+--- The preview section stays a normal child of its page (same parent, same
+--- frame levels, same OnShow flow, so building, accordion collapse/expand,
+--- search ancestry and every combat gate behave exactly like any other
+--- section). It is pinned by counter-scrolling: whatever the ScrollFrame
+--- scrolls, the section's flow anchor is offset by the same amount, so its
+--- card never leaves the viewport top and the page body slides underneath it
+--- behind an opaque scrim.
+--- Just enough to cover the plain sibling cards that scroll underneath.
+--- Anything larger shifts the preview's INTERNAL level bands (Colors caps its
+--- click shield against the popup level, Class Resources parks popovers under
+--- it), which put zoom clusters and click targets above color pickers and
+--- dropdowns in-game. The previews were calibrated against their page-native
+--- band - keep them in it.
+local STICKY_SCROLL_LEVEL_BOOST = 8
+local function ActiveStickyEntry(item)
+    local entry = item and item.entry
+    local outer = entry and entry.outer
+    if not (outer and outer.IsShown and outer:IsShown()) then return nil end
+    local wrapper = item.wrapper
+    if wrapper and wrapper.IsShown and not wrapper:IsShown() then return nil end
+    return entry
+end
+--- Visual inset the pinned card keeps below the viewport top - the same 12 px
+--- the page flow gives its first section, so pinning is seamless there.
+local STICKY_SCROLL_TOP_PAD = 12
+--- Minimum viewport height that must remain for the page body below a pinned
+--- card; a card that would leave less never pins (see the oversize gate).
+local STICKY_SCROLL_MIN_BODY_REVEAL = 120
+function M.RefreshStickyScrollSections(scroll)
+    scroll = scroll or M.scrollFrame
+    local list = M._stickyScrollSections
+    if not scroll or type(list) ~= "table" or #list == 0 then return end
+    local offset = tonumber(scroll.GetVerticalScroll and scroll:GetVerticalScroll()) or 0
+    if offset < 0 then offset = 0 end
+    for i = 1, #list do
+        local entry = ActiveStickyEntry(list[i])
+        if entry and entry._msuf2FlowY ~= nil then
+            -- Classic sticky: scroll with the flow until the card's top reaches
+            -- the viewport top, then hold it there. Pages whose preview sits
+            -- below other content (Class Resources' spec selector) scroll
+            -- naturally first; pages where it is the first section pin at once.
+            -- The pinned inset never exceeds the card's own at-rest distance
+            -- from the content top: a section whose flow starts at 0 must rest
+            -- at exactly 0, or it sags below its slot and overlaps the next
+            -- section's header.
+            local pad = min(STICKY_SCROLL_TOP_PAD, max(0, -entry._msuf2FlowY))
+            local pinnedLine = -offset - pad
+            local y = min(entry._msuf2FlowY, pinnedLine)
+            -- A card taller than the viewport budget must never pin: pinned, it
+            -- would cover the whole page with the settings scrolling invisibly
+            -- underneath - there is no way out of that view (small windows,
+            -- expanded previews after a resize). Oversized cards scroll with
+            -- the flow instead, so the page below is always reachable.
+            local viewportH = tonumber(scroll.GetHeight and scroll:GetHeight()) or 0
+            local cardH = tonumber(entry.outer.GetHeight and entry.outer:GetHeight()) or 0
+            if viewportH > 0 and cardH > viewportH - STICKY_SCROLL_MIN_BODY_REVEAL then
+                y = entry._msuf2FlowY
+            end
+            local pinnedNow = y ~= entry._msuf2FlowY
+            if entry._msuf2StickyAppliedY ~= y then
+                entry._msuf2StickyAppliedY = y
+                local flowParent = (entry.outer.GetParent and entry.outer:GetParent()) or M.scrollChild or scroll
+                entry.outer:ClearAllPoints()
+                entry.outer:SetPoint("TOPLEFT", flowParent, "TOPLEFT", entry._msuf2FlowX or 12, y)
+            end
+            local scrim = entry._msuf2StickyScrim
+            if scrim then scrim:SetShown(pinnedNow) end
         end
-        local offset = (self.GetVerticalScroll and self:GetVerticalScroll()) or 0
-        local h = (self.GetHeight and self:GetHeight()) or 0
-        local child = M.scrollChild
-        local childH = (child and child.GetHeight and child:GetHeight()) or 0
-        if offset == self._msuf2PinnedPreviewLastOffset
-            and h == self._msuf2PinnedPreviewLastHeight
-            and childH == self._msuf2PinnedPreviewLastChildHeight
-        then
-            return
+    end
+end
+local function InstallStickyScrollUpdater()
+    local scroll = M.scrollFrame
+    if not scroll or scroll._msuf2StickyScrollHooked then return end
+    scroll._msuf2StickyScrollHooked = true
+    local function Refresh(self) M.RefreshStickyScrollSections(self) end
+    scroll:HookScript("OnVerticalScroll", Refresh)
+    scroll:HookScript("OnShow", Refresh)
+    scroll:HookScript("OnSizeChanged", Refresh)
+end
+--- Pin a page's collapsible section so it never scrolls out of the viewport.
+--- The entry keeps its page-native lifecycle; only its anchor is managed.
+function W.PinSectionInScroll(entry, opts)
+    if not (entry and entry.outer) then return nil end
+    opts = opts or {}
+    M._stickyScrollSections = M._stickyScrollSections or {}
+    local list = M._stickyScrollSections
+    for i = 1, #list do
+        if list[i].entry == entry then
+            list[i].wrapper = opts.wrapper or list[i].wrapper
+            M.RefreshStickyScrollSections()
+            return entry
         end
-        self._msuf2PinnedPreviewLastOffset = offset
-        self._msuf2PinnedPreviewLastHeight = h
-        self._msuf2PinnedPreviewLastChildHeight = childH
-        if M.RefreshPinnedPreviews then M.RefreshPinnedPreviews(self) end
     end
-    scroll:HookScript("OnVerticalScroll", RefreshIfPinned)
-    scroll:HookScript("OnShow", RefreshIfPinned)
-    scroll:HookScript("OnSizeChanged", RefreshIfPinned)
-    local child = M.scrollChild
-    if child and child.HookScript and not child._msuf2PinnedPreviewChildUpdater then
-        child._msuf2PinnedPreviewChildUpdater = true
-        child:HookScript("OnSizeChanged", function()
-            QueuePinnedPreviewGeometryRefresh(scroll)
-        end)
+    list[#list + 1] = { entry = entry, wrapper = opts.wrapper }
+    local outer = entry.outer
+    -- Above the sibling cards that scroll underneath it - same parent, so this
+    -- is pure sibling z-order and cannot disturb the section's own internals.
+    if outer.SetFrameLevel and outer.GetParent then
+        local parent = outer:GetParent()
+        local base = (parent and parent.GetFrameLevel and parent:GetFrameLevel()) or 1
+        outer:SetFrameLevel(base + STICKY_SCROLL_LEVEL_BOOST)
     end
+    if not entry._msuf2StickyScrim and outer.CreateTexture then
+        -- Owned by the section's own render tree, like the old pinned scrim.
+        local scrim = outer:CreateTexture(nil, "BACKGROUND", nil, -8)
+        scrim:SetPoint("TOPLEFT", outer, "TOPLEFT", -2, 2)
+        scrim:SetPoint("BOTTOMRIGHT", outer, "BOTTOMRIGHT", 2, -2)
+        local bg = ThemeColor("coreShadow", { 0.006, 0.016, 0.032, 1 })
+        scrim:SetColorTexture(bg[1], bg[2], bg[3], 0.96)
+        scrim:Hide()
+        entry._msuf2StickyScrim = scrim
+    end
+    InstallStickyScrollUpdater()
+    M.RefreshStickyScrollSections()
+    return entry
 end
 
 function M.RefreshPinnedPreviews(scroll)
-    local list = M._pinnedPreviews
+    if M.RefreshStickyScrollSections then M.RefreshStickyScrollSections(scroll) end
+    local list = M._dockedPreviews
     if type(list) ~= "table" or #list == 0 then return end
     for i = 1, #list do
         local r = list[i]
@@ -3168,44 +3321,27 @@ function M.RefreshPinnedPreviews(scroll)
     end
 end
 --- Window hiding is a suspension, not an ownership change: Menu2 keeps its
---- page cache and can reopen the same page instance. Restore floating previews
---- to their page slot and stop rendering them, but retain the live record and
---- hooks so reopen does not attach another generation of callbacks.
+--- page cache and can reopen the same page instance. Stop rendering the docked
+--- previews but retain the live record and hooks, so reopen does not attach
+--- another generation of callbacks.
 function M.SuspendPinnedPreviews(reason)
-    M._msuf2PinnedPreviewResumeSerial = (M._msuf2PinnedPreviewResumeSerial or 0) + 1
-    local list = M._pinnedPreviews
+    M._msuf2DockedPreviewResumeSerial = (M._msuf2DockedPreviewResumeSerial or 0) + 1
+    local list = M._dockedPreviews
     if type(list) ~= "table" then return end
     for i = 1, #list do
         local record = list[i]
         local box = record and record.box
-        -- Window hide is an ownership boundary.  Force the floating branch back
-        -- into its page even if a queued layout pass already changed the local
-        -- `pinned` flag; visual state (not that flag) is the final authority here.
         if record and type(record.restore) == "function" then record.restore(true) end
-        if record and record.scroll and record.scroll._msuf2PinnedPreviewActiveRecord == record then
-            record.scroll._msuf2PinnedPreviewActiveRecord = nil
-        end
-        if box then
-            box._msuf2PinnedFloating = nil
-            if box.Hide then box:Hide() end
-        end
+        if box and box.Hide then box:Hide() end
     end
 end
 function M.ResumePinnedPreviews(reason)
-    local list = M._pinnedPreviews
+    local list = M._dockedPreviews
     if type(list) ~= "table" or #list == 0 then return end
-    M._msuf2PinnedPreviewResumeSerial = (M._msuf2PinnedPreviewResumeSerial or 0) + 1
-    local serial = M._msuf2PinnedPreviewResumeSerial
-    for i = 1, #list do
-        local scroll = list[i] and list[i].scroll
-        if scroll then
-            scroll._msuf2PinnedPreviewLastOffset = nil
-            scroll._msuf2PinnedPreviewLastHeight = nil
-            scroll._msuf2PinnedPreviewLastChildHeight = nil
-        end
-    end
+    M._msuf2DockedPreviewResumeSerial = (M._msuf2DockedPreviewResumeSerial or 0) + 1
+    local serial = M._msuf2DockedPreviewResumeSerial
     local function RefreshAfterShow()
-        if M._msuf2PinnedPreviewResumeSerial ~= serial then return end
+        if M._msuf2DockedPreviewResumeSerial ~= serial then return end
         if M.frame and M.frame.IsShown and not M.frame:IsShown() then return end
         M.RefreshPinnedPreviews()
     end
@@ -3216,7 +3352,7 @@ function M.ResumePinnedPreviews(reason)
     end
 end
 function M.ReleasePinnedPreviews(reason, keepKey, releaseKey)
-    local list = M._pinnedPreviews
+    local list = M._dockedPreviews
     if type(list) ~= "table" then return end
     local writeIndex = 1
     for readIndex = 1, #list do
@@ -3233,7 +3369,6 @@ function M.ReleasePinnedPreviews(reason, keepKey, releaseKey)
         if release then
             local box = record and record.box
             if record and type(record.restore) == "function" then record.restore(true) end
-            if record and record.scroll and record.scroll._msuf2PinnedPreviewActiveRecord == record then record.scroll._msuf2PinnedPreviewActiveRecord = nil end
             if box then
                 if box._msuf2PinnedPreviewRecord == record then box._msuf2PinnedPreviewRecord = nil end
                 if box._msuf2PinnedPreviewPageKey == pageKey then box._msuf2PinnedPreviewPageKey = nil end
@@ -3249,429 +3384,88 @@ function M.ReleasePinnedPreviews(reason, keepKey, releaseKey)
     for i = writeIndex, #list do list[i] = nil end
 end
 
---- Pinned previews are owned by their page body but coordinated globally so a
---- page rebuild can release stale preview frames and keep only the active one.
+--- Bind a preview panel to the page that currently owns it.
+---
+--- The panel itself no longer moves: its section is docked above the
+--- ScrollFrame by W.AttachStickyPageHeader, so the preview is always visible
+--- and the page body scrolls underneath it. What remains here is ownership
+--- bookkeeping for the preview boxes that are shared across cached pages -
+--- which page may show the box, and when it has to let go of it.
 function W.AttachPinnedPreview(body, box, opts)
     if not (body and box) then return nil end
     opts = opts or {}
     local scroll = M.scrollFrame
     if not scroll then return nil end
-    local buildKey = M._msuf2SearchBuildKey
-    local buildEntry = buildKey and M.cache and M.cache[buildKey]
-    if buildEntry and buildEntry.hiddenBuild and buildEntry.wrapper and buildEntry.wrapper.HookScript then
-        local wrapper = buildEntry.wrapper
-        wrapper._msuf2DeferredPinnedPreviews = wrapper._msuf2DeferredPinnedPreviews or {}
-        wrapper._msuf2DeferredPinnedPreviews[#wrapper._msuf2DeferredPinnedPreviews + 1] = { body = body, box = box, opts = opts }
-        if not wrapper._msuf2DeferredPinnedPreviewHook then
-            wrapper._msuf2DeferredPinnedPreviewHook = true
-            wrapper:HookScript("OnShow", function(self)
-                local pending = self._msuf2DeferredPinnedPreviews
-                if type(pending) ~= "table" or #pending == 0 then return end
-                self._msuf2DeferredPinnedPreviews = nil
-                for i = 1, #pending do
-                    local item = pending[i]
-                    if item and item.body and item.box then W.AttachPinnedPreview(item.body, item.box, item.opts) end
-                end
-            end)
-        end
-        return nil
-    end
-    M.previewPinState = MenuStateTable("previewPinState")
-    local stateKey = tostring(opts.stateKey or box._msuf2PinStateKey or "preview")
     local pageKey = opts.pageKey or box._msufGFNativePreviewPageKey
     local pageWrapper = opts.wrapper or box._msufGFNativePreviewWrapper
-    local scrollParent = scroll:GetParent()
-    local originalParent = opts.restoreParent or body or box:GetParent()
-    local point, relTo, relPoint, xOfs, yOfs = box:GetPoint(1)
-    if type(opts.restorePoint) == "table" then
-        point = opts.restorePoint[1] or point
-        relTo = opts.restorePoint[2] or originalParent
-        relPoint = opts.restorePoint[3] or relPoint
-        xOfs = opts.restorePoint[4] or xOfs
-        yOfs = opts.restorePoint[5] or yOfs
-    end
-    if relTo == scroll or relTo == scrollParent then relTo = originalParent end
-    local originalAnchor = relTo or originalParent or body
-    local originalFrameLevel = (box.GetFrameLevel and box:GetFrameLevel()) or 1
-    local originalWidth = tonumber(opts.restoreWidth) or (box.GetWidth and box:GetWidth())
-    local originalHeight = tonumber(opts.restoreHeight) or (box.GetHeight and box:GetHeight())
-    -- Pages may change the preview's inline height after attach (compact vs
-    -- expanded preview); the box-level preference wins over the attach-time
-    -- restore height so unpinning restores the CURRENT mode, not a stale one.
-    local function EffectiveRestoreHeight()
-        return tonumber(box._msuf2PreferredRestoreHeight) or originalHeight
-    end
-    local function EffectiveRestoreYOffset()
-        local preferred = tonumber(box._msuf2PreferredRestoreYOffset)
-        if preferred ~= nil then return preferred end
-        return yOfs
-    end
-    local pinnedHeight = tonumber(opts.pinnedHeight)
-    local pinned = false
-    local restoring = false
-    local applyingPinnedState = false
-    local pinnedStateRefreshQueued = false
     local record
-    local ApplyPinnedState
-    local function QueuePinnedStateRefresh()
-        if pinnedStateRefreshQueued then return end
-        pinnedStateRefreshQueued = true
-        local function RunQueuedRefresh()
-            pinnedStateRefreshQueued = false
-            if box._msuf2PinnedPreviewRecord == record and type(ApplyPinnedState) == "function" then
-                ApplyPinnedState()
-            end
-        end
-        if C_Timer and C_Timer.After then
-            C_Timer.After(0, RunQueuedRefresh)
-        elseif not applyingPinnedState then
-            RunQueuedRefresh()
-        end
-    end
-    local function EnsureRestoreSlot()
-        if not originalParent then return nil end
-        local slot = box._msuf2PinnedPreviewRestoreSlot
-        if not slot then
-            slot = CreateFrame("Frame", nil, originalParent)
-            if slot.EnableMouse then slot:EnableMouse(false) end
-            box._msuf2PinnedPreviewRestoreSlot = slot
-        elseif slot.SetParent then
-            slot:SetParent(originalParent)
-        end
-        if slot.SetFrameLevel then slot:SetFrameLevel(max(0, originalFrameLevel - 1)) end
-        slot:ClearAllPoints()
-        slot:SetPoint(point or "TOPLEFT", relTo or originalParent, relPoint or "TOPLEFT", xOfs or 0, EffectiveRestoreYOffset() or 0)
-        slot:SetSize(max(1, originalWidth or (box.GetWidth and box:GetWidth()) or 1), max(1, EffectiveRestoreHeight() or (box.GetHeight and box:GetHeight()) or 1))
-        if slot.SetAlpha then slot:SetAlpha(0) end
-        slot:Show()
-        return slot
-    end
-    local function AnchorBoxToRestoreSlot()
-        local slot = EnsureRestoreSlot()
-        if not slot then return false end
-        box:SetParent(originalParent)
-        box:ClearAllPoints()
-        box:SetPoint("TOPLEFT", slot, "TOPLEFT", 0, 0)
-        box:SetPoint("BOTTOMRIGHT", slot, "BOTTOMRIGHT", 0, 0)
-        if box.SetFrameLevel then box:SetFrameLevel(originalFrameLevel) end
-        return true
-    end
-    EnsureRestoreSlot()
-    local pinBtn = box._msuf2PinButton
-    if not pinBtn then
-        pinBtn = T.Button(box, Tr("Pinned"), opts.buttonWidth or 86, opts.buttonHeight or 22)
-        if opts.centerButton and T.CenterButtonLabel then T.CenterButtonLabel(pinBtn) end
-        pinBtn._msuf2SearchText = "Pin Preview"
-        pinBtn._msuf2ControlKind = "button"
-        RegisterSearchObject(pinBtn, "Pin Preview", "button")
-        box._msuf2PinButton = pinBtn
-    else
-        pinBtn:SetParent(box)
-        pinBtn:ClearAllPoints()
-        pinBtn:SetSize(opts.buttonWidth or 86, opts.buttonHeight or 22)
-        if opts.centerButton and T.CenterButtonLabel then T.CenterButtonLabel(pinBtn) end
-    end
-    pinBtn:SetPoint("TOPRIGHT", box, "TOPRIGHT", -12, -8)
+
+    -- The title line keeps the full panel width now that no pin button sits in
+    -- the top-right corner of the preview card.
     local hint = opts.hint or box.hint or box._hint
+    local title = opts.title or box.title or box._title
     if hint and hint.SetPoint then
         hint:ClearAllPoints()
-        hint:SetPoint("LEFT", opts.title or box.title or box._title, "RIGHT", 12, 0)
-        hint:SetPoint("RIGHT", pinBtn, "LEFT", -12, 0)
+        if title then
+            hint:SetPoint("LEFT", title, "RIGHT", 12, 0)
+        else
+            hint:SetPoint("LEFT", box, "LEFT", 14, 0)
+        end
+        hint:SetPoint("RIGHT", box, "RIGHT", -12, 0)
         hint:SetJustifyH("LEFT")
     end
-    local placeholder = body.CreateFontString and body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall") or nil
-    if placeholder then
-        placeholder:SetPoint("CENTER", body, "CENTER", 0, 0)
-        placeholder:SetText(Tr("\226\134\145 Preview pinned at top"))
-        local placeholderColor = ThemeColor("dim", { 0.043, 0.096, 0.150, 0.86 })
-        placeholder:SetTextColor(placeholderColor[1], placeholderColor[2], placeholderColor[3], 0.55)
-        if T.StyleFontString then T.StyleFontString(placeholder, { placeholderColor[1], placeholderColor[2], placeholderColor[3], 0.55 }, 0) end
-        placeholder:Hide()
-    end
-    local function PinEnabled()
-        return M.previewPinState[stateKey] ~= false
-    end
-    local function RefreshButton()
-        local guidedLayout = type(M.GuidedTourOwnsPreviewLayout) == "function"
-            and M.GuidedTourOwnsPreviewLayout() == true
-        if guidedLayout then
-            if pinBtn.Hide then pinBtn:Hide() end
-            return
-        end
-        if pinBtn.Show then pinBtn:Show() end
-        local enabled = PinEnabled()
-        local text = enabled and "Pinned" or "Pin Preview"
-        if pinBtn._msuf2PinButtonText ~= text then
-            pinBtn._msuf2PinButtonText = text
-            pinBtn:SetText(text)
-        end
-        if pinBtn._msuf2PinButtonActive ~= enabled then
-            pinBtn._msuf2PinButtonActive = enabled
-            -- The label already communicates the pin state.  Inline previews
-            -- can opt out of the strong active-blue treatment so the actual
-            -- preview remains the visual focus of the card.
-            if pinBtn.SetActive then pinBtn:SetActive(opts.quietButton == true and false or enabled) end
-        end
-        if pinBtn.SetEnabled and pinBtn._msuf2Enabled ~= true then pinBtn:SetEnabled(true) end
-    end
-    local function EnsurePinnedScrim()
-        if record and record.scrim then return record.scrim end
-        local scrim = box._msuf2PinnedPreviewScrim
-        if not scrim then
-            -- The pinned background belongs to the preview's render tree.  A
-            -- separately levelled sibling can sit above children that use fixed
-            -- frame levels after the box is floated to its overlay parent.
-            scrim = box:CreateTexture(nil, "BACKGROUND", nil, -8)
-            box._msuf2PinnedPreviewScrim = scrim
-        end
-        scrim:Hide()
-        if record then record.scrim = scrim end
-        return scrim
-    end
-    local function LayoutPinnedScrim(level)
-        if not (record and record.scrim) then return end
-        local scrim = record.scrim
-        local bg = ThemeColor("coreShadow", { 0.006, 0.016, 0.032, 1 })
-        scrim:ClearAllPoints()
-        scrim:SetPoint("TOPLEFT", box, "TOPLEFT", -2, 2)
-        scrim:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", 2, -2)
-        if scrim.SetColorTexture then scrim:SetColorTexture(bg[1], bg[2], bg[3], opts.scrimAlpha or 0.94) end
-        scrim._msuf2PinnedPreviewOwnerRecord = record
-        scrim:Show()
-    end
-    local heightLimitViewport, cachedHeightLimit
-    local pinnedHeightApplied, appliedPinnedViewport, appliedPinnedPreference
-    local function PinnedHeightLimit()
-        local viewportHeight = scroll and scroll.GetHeight and tonumber(scroll:GetHeight())
-        if not viewportHeight or viewportHeight <= 0 then return nil end
-        if viewportHeight == heightLimitViewport then return cachedHeightLimit end
-        local topGap = max(0, -(tonumber(opts.top) or -8))
-        heightLimitViewport = viewportHeight
-        cachedHeightLimit = max(0, viewportHeight - topGap - PINNED_PREVIEW_FOCUS_GAP - PINNED_PREVIEW_MIN_SETTINGS_REVEAL)
-        return cachedHeightLimit
-    end
-    local function ApplyResponsivePinnedHeight()
-        local viewportHeight = scroll and scroll.GetHeight and tonumber(scroll:GetHeight())
-        local preferredHeight = tonumber(box._msuf2PreferredRestoreHeight) or 0
-        if pinnedHeightApplied and viewportHeight == appliedPinnedViewport and preferredHeight == appliedPinnedPreference then return end
-        local activeHeight = max(pinnedHeight or 0, preferredHeight)
-        local limit = PinnedHeightLimit()
-        if limit then activeHeight = min(activeHeight, limit) end
-        if activeHeight <= 0 or not box.SetHeight then return end
-        pinnedHeightApplied = true
-        appliedPinnedViewport = viewportHeight
-        appliedPinnedPreference = preferredHeight
-        local currentHeight = box.GetHeight and tonumber(box:GetHeight())
-        if not currentHeight or math.abs(currentHeight - activeHeight) > 0.5 then
-            box:SetHeight(activeHeight)
-        end
-    end
-    local function ApplyPinnedPresentation(active, level)
-        if active then
-            EnsurePinnedScrim()
-            -- Keep the full inline height whenever the viewport has room, but
-            -- reserve enough space for the settings target below the overlay.
-            ApplyResponsivePinnedHeight()
-            if type(box.ApplyPinnedPreviewPresentation) == "function" then box:ApplyPinnedPreviewPresentation(true, opts) end
-            LayoutPinnedScrim(level)
-        else
-            pinnedHeightApplied = nil
-            appliedPinnedViewport = nil
-            appliedPinnedPreference = nil
-            if record and record.scrim then record.scrim:Hide() end
-            if originalWidth and EffectiveRestoreHeight() and box.SetSize then box:SetSize(originalWidth, EffectiveRestoreHeight()) end
-            if type(box.ApplyPinnedPreviewPresentation) == "function" then box:ApplyPinnedPreviewPresentation(false, opts) end
-        end
-    end
-    local function ClearActivePinnedRecord()
-        local active = scroll and scroll._msuf2PinnedPreviewActiveRecord
-        if active and (active == record or active.box == box) then
-            if active.scrim and active.scrim.Hide then active.scrim:Hide() end
-            scroll._msuf2PinnedPreviewActiveRecord = nil
-        end
-    end
-    local function Restore(force)
-        if box._msuf2PinnedPreviewRecord ~= record then return end
-        local wasFloating = pinned or box._msuf2PinnedFloating == true
-        restoring = true
-        pinned = false
-        box._msuf2PinnedFloating = nil
-        if placeholder then placeholder:Hide() end
-        ClearActivePinnedRecord()
-        -- The background region is shared by successive records for this box.
-        -- Always reconcile it before considering an early return so logical and
-        -- visual ownership cannot diverge across a queued pin pass.
-        local scrim = (record and record.scrim) or box._msuf2PinnedPreviewScrim
-        if scrim then
-            scrim:Hide()
-            scrim._msuf2PinnedPreviewOwnerRecord = nil
-        end
-        if not force and not wasFloating then
-            restoring = false
-            return
-        end
-        ApplyPinnedPresentation(false)
-        if not AnchorBoxToRestoreSlot() then
-            box:SetParent(originalParent)
-            box:ClearAllPoints()
-            box:SetPoint(point or "TOPLEFT", relTo or body, relPoint or "TOPLEFT", xOfs or 0, EffectiveRestoreYOffset() or 0)
-            if box.SetFrameLevel then box:SetFrameLevel(originalFrameLevel) end
-        end
-        if box.RequestRefresh then box:RequestRefresh("PINNED_PREVIEW_RESTORE") end
-        restoring = false
-    end
-    local function BodyOwned()
+
+    local function Owned()
         if pageKey and M.activeKey and M.activeKey ~= pageKey then return false end
         if M.frame and M.frame.IsShown and not M.frame:IsShown() then return false end
         if pageWrapper and pageWrapper.IsShown and not pageWrapper:IsShown() then return false end
         if body.IsShown and not body:IsShown() then return false end
-        if scroll.IsShown and not scroll:IsShown() then return false end
         return true
     end
-    local function BodyVisible()
-        if not BodyOwned() then return false end
-        --- Effective visibility is only needed once final scroll geometry is used.
-        if pageWrapper and pageWrapper.IsVisible and not pageWrapper:IsVisible() then return false end
-        return not body.IsVisible or body:IsVisible()
-    end
-    local function OriginalSlotTop()
-        local slot = EnsureRestoreSlot()
-        if slot and slot.GetTop then return slot:GetTop() end
-        local anchor = originalAnchor or body
-        local anchorTop = anchor and anchor.GetTop and anchor:GetTop()
-        if not anchorTop then return nil end
-        return anchorTop + (tonumber(EffectiveRestoreYOffset()) or 0)
-    end
-    local function ShouldPin()
-        local guidedLayout = type(M.GuidedTourOwnsPreviewLayout) == "function"
-            and M.GuidedTourOwnsPreviewLayout() == true
-        if guidedLayout or not PinEnabled() or not BodyVisible() then return false end
-        local offset = (scroll.GetVerticalScroll and scroll:GetVerticalScroll()) or 0
-        local activateAt = opts.activateAfter or 64
-        if offset <= (pinned and math.floor(activateAt * 0.45) or activateAt) then return false end
-        local scrollTop = scroll.GetTop and scroll:GetTop()
-        local slotTop = OriginalSlotTop()
-        if not (scrollTop and slotTop) then return false end
-        if slotTop <= (scrollTop + (opts.threshold or 6)) then return false end
-        return true
-    end
-    ApplyPinnedState = function()
-        if applyingPinnedState then
-            QueuePinnedStateRefresh()
-            return
-        end
-        if restoring then return end
+    local function Sync()
         if box._msuf2PinnedPreviewRecord ~= record then return end
-        applyingPinnedState = true
-        if not BodyOwned() then
-            Restore()
+        if not Owned() then
             if pageKey and box.Hide then box:Hide() end
-            RefreshButton()
-            applyingPinnedState = false
-            return
-        end
-        -- IsVisible updates one frame after Show/ancestor changes. While the
-        -- page still owns the preview, keep its render lifecycle intact and
-        -- wait for settled geometry before deciding whether it should float.
-        if not BodyVisible() then
-            RefreshButton()
-            applyingPinnedState = false
             return
         end
         if box.Show then box:Show() end
-        if ShouldPin() then
-            local active = scroll._msuf2PinnedPreviewActiveRecord
-            if active and active ~= record and active.restore then active.restore() end
-            if not pinned then
-                pinned = true
-                box._msuf2PinnedFloating = true
-                scroll._msuf2PinnedPreviewActiveRecord = record
-                --- Float as a pure overlay - scroll frame is never moved
-                local level = ((scrollParent and scrollParent.GetFrameLevel and scrollParent:GetFrameLevel()) or 1)
-                    + (opts.frameLevelOffset or 80)
-                box:SetParent(scrollParent or scroll)
-                box:ClearAllPoints()
-                box:SetPoint("TOPLEFT", scroll, "TOPLEFT", opts.left or 16, opts.top or -8)
-                box:SetPoint("TOPRIGHT", scroll, "TOPRIGHT", -(opts.right or 16), opts.top or -8)
-                if box.SetFrameLevel then box:SetFrameLevel(level) end
-                ApplyPinnedPresentation(true, level)
-                if box.RequestRefresh then box:RequestRefresh("PINNED_PREVIEW_LAYOUT") end
-                if placeholder then
-                    placeholder:SetText(Tr("\226\134\145 Preview pinned at top"))
-                    placeholder:Show()
-                end
-            end
-            if pinned then
-                ApplyResponsivePinnedHeight()
-                LayoutPinnedScrim((box.GetFrameLevel and box:GetFrameLevel()) or originalFrameLevel)
-            end
-        else
-            Restore()
-        end
-        RefreshButton()
-        applyingPinnedState = false
     end
-    local function SetPinEnabled(enabled)
-        enabled = enabled == true
-        if PinEnabled() == enabled then
-            RefreshButton()
-            return true
-        end
-        M.previewPinState[stateKey] = enabled
-        if not enabled then Restore(true) end
-        ApplyPinnedState()
-        RefreshButton()
-        return PinEnabled() == enabled
+    --- Ownership hand-off. The box stays parented to its docked section, so
+    --- releasing is a bookkeeping step; callers decide whether to hide it.
+    local function Release(force)
+        if not force and box._msuf2PinnedPreviewRecord ~= record then return end
+        box._msuf2PinnedFloating = nil
     end
-    pinBtn._msuf2CommandAction = {
-        kind = "toggle",
-        historyMode = "none",
-        get = function() return PinEnabled() end,
-        set = SetPinEnabled,
-    }
-    pinBtn:SetScript("OnClick", function()
-        return SetPinEnabled(not PinEnabled())
-    end)
-    pinBtn:SetScript("OnEnter", function(self)
-        self._msuf2Hover = true
-        if self.RefreshVisual then self:RefreshVisual() end
-    end)
-    pinBtn:SetScript("OnLeave", function(self)
-        self._msuf2Hover = nil
-        if self.RefreshVisual then self:RefreshVisual() end
-    end)
-    M.AddTooltip(pinBtn, "Pin Preview", "Keeps this preview visible while you edit lower options.", { hook = true })
+
     box._msuf2PinnedPreviewPageKey = pageKey
     box._msuf2PinnedPreviewWrapper = pageWrapper
-    record = { scroll = scroll, update = ApplyPinnedState, restore = Restore, box = box, stateKey = stateKey, pageKey = pageKey, pageWrapper = pageWrapper }
-    M._pinnedPreviews = M._pinnedPreviews or {}
-    for i = #M._pinnedPreviews, 1, -1 do
-        local r = M._pinnedPreviews[i]
+    box._msuf2PinnedFloating = nil
+    record = { scroll = scroll, update = Sync, restore = Release, box = box, stateKey = opts.stateKey, pageKey = pageKey, pageWrapper = pageWrapper }
+    M._dockedPreviews = M._dockedPreviews or {}
+    for i = #M._dockedPreviews, 1, -1 do
+        local r = M._dockedPreviews[i]
         if r and r.box == box then  --- same box = this exact page was rebuilt, replace its record
             if r.restore then r.restore(true) end
-            table.remove(M._pinnedPreviews, i)
+            table.remove(M._dockedPreviews, i)
         end
     end
     box._msuf2PinnedPreviewRecord = record
-    M._pinnedPreviews[#M._pinnedPreviews + 1] = record
-    scroll._msuf2PinnedPreviewLastOffset = nil
-    scroll._msuf2PinnedPreviewLastHeight = nil
-    InstallPinnedPreviewUpdater(scroll)
+    M._dockedPreviews[#M._dockedPreviews + 1] = record
     if body.HookScript then
-        body:HookScript("OnShow", ApplyPinnedState)
-        body:HookScript("OnHide", Restore)
+        body:HookScript("OnShow", Sync)
     end
-    if box.HookScript then
-        box:HookScript("OnHide", Restore)
-        box:HookScript("OnSizeChanged", QueuePinnedStateRefresh)
+    -- The docked panel is outside the page wrapper, so the wrapper's own show is
+    -- the only event left that marks "this page is the visible one now".
+    if pageWrapper and pageWrapper.HookScript then
+        pageWrapper:HookScript("OnShow", Sync)
     end
-    C_Timer.After(0, ApplyPinnedState)
-    -- Restored scroll positions can be applied one frame after the page body.
-    -- Re-evaluate once geometry is final even when no wheel event fires.
+    C_Timer.After(0, Sync)
+    -- Page selection sets the active key after the build, and restored scroll
+    -- positions settle a frame later; re-check once geometry and ownership are
+    -- final rather than trusting the first pass.
     C_Timer.After(0.05, function()
-        if box._msuf2PinnedPreviewRecord == record then ApplyPinnedState() end
+        if box._msuf2PinnedPreviewRecord == record then Sync() end
     end)
-    RefreshButton()
     return record
 end
 

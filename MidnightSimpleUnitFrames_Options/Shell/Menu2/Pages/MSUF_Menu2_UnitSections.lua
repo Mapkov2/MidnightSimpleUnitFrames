@@ -341,18 +341,6 @@ local function BuildPreview(ctx, builder, unit)
                 stateKey = "unitFramePreview",
                 title = box.title,
                 hint = box.hint,
-                left = 14,
-                right = 14,
-                top = -8,
-                pinnedHeight = 232,
-                buttonWidth = 78,
-                buttonHeight = 20,
-                centerButton = true,
-                quietButton = true,
-                restoreParent = sec,
-                restorePoint = { "TOPLEFT", sec, "TOPLEFT", 14, UnitPreviewTopOffset() },
-                restoreWidth = ctx.width - 28,
-                restoreHeight = UnitPreviewBoxHeight(),
                 pageKey = pageKey,
                 wrapper = wrapper,
             })
@@ -566,6 +554,13 @@ local function BuildPreview(ctx, builder, unit)
         end)
     end
     M.TrackCollapsibleRefresh(ctx, sec, RefreshPreviewState)
+    -- The preview never scrolls away: it stays a normal child of this page
+    -- (so building, collapse/expand and refresh flows are stock) and is
+    -- counter-scrolled so the settings below slide underneath its card.
+    local previewEntry = sec._msuf2CollapsibleEntry
+    if previewEntry and W.PinSectionInScroll then
+        W.PinSectionInScroll(previewEntry, { wrapper = ctx and ctx.wrapper })
+    end
 end
 local function BuildTopActions(ctx, builder, unit, label)
     local pageW = tonumber(builder.width) or 720

@@ -1803,23 +1803,9 @@ local function BuildAuraStylePreviewWorkbench(ctx, b, scope, lane)
     if box and W.AttachPinnedPreview then
         W.AttachPinnedPreview(section, box, {
             stateKey = "auraStylePreview",
-            left = 14,
-            right = 14,
-            top = -8,
-            buttonWidth = 78,
-            buttonHeight = 20,
-            centerButton = true,
-            quietButton = true,
-            pinnedHeight = panelH,
             pageKey = ctx and ctx.key,
             wrapper = ctx and ctx.wrapper,
-            restoreParent = section,
-            restorePoint = { "TOPLEFT", section, "TOPLEFT", pad, panelY },
-            restoreWidth = panelW,
-            restoreHeight = panelH,
         })
-        RegisterAuraControl(ctx, box._msuf2PinButton, "Pin Aura Preview", "toggle",
-            "style.preview.pin.toggle", "ephemeral")
     end
     local previewShowSerial = 0
     local function RefreshVisibleAuraPreview()
@@ -1850,6 +1836,12 @@ local function BuildAuraStylePreviewWorkbench(ctx, b, scope, lane)
         ctx.wrapper:HookScript("OnShow", QueueVisibleAuraPreview)
     end
     QueueVisibleAuraPreview()
+    -- The style preview never scrolls away: counter-scrolled in place,
+    -- page-native lifecycle untouched.
+    local previewEntry = section._msuf2CollapsibleEntry
+    if previewEntry and W.PinSectionInScroll then
+        W.PinSectionInScroll(previewEntry, { wrapper = ctx and ctx.wrapper })
+    end
     return refreshPreview
 end
 local function BuildUnitStyle(ctx, b, scope)

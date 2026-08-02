@@ -163,7 +163,6 @@ local MSUF_LOCALE_COVERAGE_enGB = {
     ["Global Style > Fonts has Shared settings plus per-scope font overrides. If Party or Raid uses custom font settings, its Name Shortening can stay enabled even when Shared is off. Select Party/Raid in Fonts or reset the font override."] = "Global Style > Fonts has Shared settings plus per-scope font overrides. If Party or Raid uses custom font settings, its Name Shortening can stay enabled even when Shared is off. Select Party/Raid in Fonts or reset the font override.",
     ["Global absorb styling is in Global Style > Bars > Absorb Display. Group incoming heals are in Group Frames > Health & Text > Heal Prediction."] = "Global absorb styling is in Global Style > Bars > Absorb Display. Group incoming heals are in Group Frames > Health & Text > Heal Prediction.",
     ["How do I make missing health white in Dark Mode?"] = "How do I make missing health white in Dark Mode?",
-    ["Keeps this preview visible while you edit lower options."] = "Keeps this preview visible while you edit lower options.",
     ["Ko-fi"] = "Ko-fi",
     ["Layout"] = "Layout",
     ["Limits"] = "Limits",
@@ -315,8 +314,6 @@ local MSUF_LOCALE_COVERAGE_enGB = {
     ["PayPal"] = "PayPal",
     ["Performance"] = "Performance",
     ["Phase"] = "Phase",
-    ["Pin Preview"] = "Pin Preview",
-    ["Pinned"] = "Pinned",
     ["Poison"] = "Poison",
     ["Portrait"] = "Portrait",
     ["Portrait Y"] = "Portrait Y",
@@ -410,7 +407,6 @@ local MSUF_LOCALE_COVERAGE_enGB = {
     ["|cff6EB5FFDebuffs|r"] = "|cff6EB5FFDebuffs|r",
     ["|cff6EB5FFIcons|r"] = "|cff6EB5FFIcons|r",
     ["–"] = "–",
-    ["↑ Preview pinned at top"] = "↑ Preview pinned at top",
 }
 for k, v in pairs(MSUF_LOCALE_COVERAGE_enGB) do
     if L[k] == nil or L[k] == k then L[k] = v end
