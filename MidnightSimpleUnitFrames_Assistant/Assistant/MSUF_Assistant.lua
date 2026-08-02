@@ -5973,7 +5973,16 @@ local function PendingResultFollowupResult(text, results)
         item = results[1]
     end
     if AP.PendingResultValueIntent and AP.PendingResultValueIntent(text, results) then return PendingResultCurrentValueText(item, index, results) end
-    local settingChange = PendingResultSettingChangeResult(text, item, index)
+    -- A follow-up that spells out the control's own name is asking about it.
+    -- The value words inside that name are part of the name: "show me Mythic
+    -- Raid Masque Enabled" was read as "set it to enabled" and switched it on,
+    -- but only once the control was already an active result -- which is why it
+    -- passed every isolated test and only appeared deep into a long run.
+    -- Explaining, locating and opening the result stay available below.
+    local namedLookupFollowup = type(A.RouterIsNamedSettingLookup) == "function"
+        and A.RouterIsNamedSettingLookup(text) == true
+    local settingChange = not namedLookupFollowup
+        and PendingResultSettingChangeResult(text, item, index) or nil
     if settingChange then return settingChange end
     if IsPendingResultRunIntent(text) then return PendingResultRunResult(item, index) end
     if A._PendingResultRelatedIntent(text) then return A._PendingResultRelatedText(item, index, results) end
