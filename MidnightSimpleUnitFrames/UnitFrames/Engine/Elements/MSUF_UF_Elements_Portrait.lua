@@ -186,37 +186,6 @@ local portraitUnitGeneration = {
   focustarget = 0,
 }
 local portraitGenerationEventStamp = {}
-local PORTRAIT_TEXTURE_CACHE_LIMIT = 32
-local portraitTextureByKey = {}
-local portraitTextureKeys = {}
-local portraitTextureKeyCount = 0
-local portraitTextureKeyNext = 1
-
-local function GetCachedPortraitTexture(key)
-  return key ~= nil and portraitTextureByKey[key] or nil
-end
-
-local function CachePortraitTexture(key, textureValue)
-  local valueType = type(textureValue)
-  if key == nil or (valueType ~= "number" and valueType ~= "string") then return end
-  if portraitTextureByKey[key] ~= nil then
-    portraitTextureByKey[key] = textureValue
-    return
-  end
-  if portraitTextureKeyCount < PORTRAIT_TEXTURE_CACHE_LIMIT then
-    portraitTextureKeyCount = portraitTextureKeyCount + 1
-    portraitTextureKeys[portraitTextureKeyCount] = key
-  else
-    local oldKey = portraitTextureKeys[portraitTextureKeyNext]
-    if oldKey ~= nil then portraitTextureByKey[oldKey] = nil end
-    portraitTextureKeys[portraitTextureKeyNext] = key
-    portraitTextureKeyNext = portraitTextureKeyNext + 1
-    if portraitTextureKeyNext > PORTRAIT_TEXTURE_CACHE_LIMIT then
-      portraitTextureKeyNext = 1
-    end
-  end
-  portraitTextureByKey[key] = textureValue
-end
 
 local function ClearClassPortraitCache(texture)
   if not texture or texture._msufPortraitClassReady ~= true then return end
@@ -286,6 +255,17 @@ local function SetAtlasCached(texture, atlas)
     texture._msufPortraitKey = nil
     ClearClassPortraitCache(texture)
     texture._msufL, texture._msufR, texture._msufT, texture._msufB = nil, nil, nil, nil
+  end
+end
+
+--- Masks clamp-to-black outside their own quad, matching how Blizzard's own
+--- unit-frame XML declares every portrait mask. The engine default CLAMP
+--- would smear the mask's edge pixels outward instead.
+local function SetMaskTextureCached(mask, value)
+  if mask and mask._msufTexture ~= value then
+    mask:SetTexture(value, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+    mask._msufTexture = value
+    mask._msufAtlas = nil
   end
 end
 
@@ -552,7 +532,7 @@ local function ApplyPortraitMask(holder, p)
   if p and p.shape == "BLIZZARD" and ApplyBlizzardPortraitMask(mask) then
     return
   end
-  SetTextureCached(mask, PORTRAIT_MASKS[p and p.shape or "SQUARE"] or WHITE)
+  SetMaskTextureCached(mask, PORTRAIT_MASKS[p and p.shape or "SQUARE"] or WHITE)
 end
 
 --- Placement resolves to (ownPoint, relativePoint) pairs. ATTACHED keeps the
@@ -816,37 +796,31 @@ ApplyUnitPortrait = function(texture, unit, frame, p, force,
   end
 
   SetTexCoordCached(texture, l, r, t, b)
-  if force ~= true then
-    local cachedTexture = GetCachedPortraitTexture(key)
-    if cachedTexture ~= nil then
-      -- Revisiting a GUID/style combination can reuse the asset resolved by an
-      -- earlier authoritative SetPortraitTexture call. Bust events still force
-      -- Blizzard's native resolver and replace this bounded session cache.
-      SetTextureCached(texture, cachedTexture)
-      texture._msufPortraitGUID = guid or (exists and nil or false)
-      texture._msufPortraitKey = key
-      return
-    end
-  end
-
   texture._msufTexture = nil
   texture._msufAtlas = nil
   -- Blizzard's stock frames pass disablePortraitMask (UnitFrame.lua) so the
   -- client renders the modern bust: transparent background, no baked-in
   -- circular vignette, hair free to overflow the ring. The BLIZZARD shape
   -- needs that exact render; every other shape keeps the legacy call.
+  --
+  -- A changed key always re-runs the native resolver. There is deliberately
+  -- no "remember GetTexture() and replay it" cache here: a live portrait
+  -- resolves to a render-target token ("RTPortrait1") that SetTexture cannot
+  -- re-bind, and a streaming unit can resolve to a transient placeholder
+  -- file -- replaying either paints an empty or stale portrait on revisit.
+  -- GetTexture() is not read back at all; on 12.1 it can also be secret.
   SetPortraitTexture(texture, unit, (p and p.shape == "BLIZZARD") or nil)
-  local resolvedTexture = texture.GetTexture and texture:GetTexture() or nil
-  CachePortraitTexture(key, resolvedTexture)
-  if resolvedTexture ~= nil then texture._msufTexture = resolvedTexture end
   texture._msufPortraitGUID = guid or (exists and nil or false)
   texture._msufPortraitKey = key
 end
 
+--- 12.1 turns hostile cast names into secrets, and comparing a secret throws.
+--- A secret name still proves a cast exists, so check secrecy first and hand
+--- the icon through; ApplyCastPortraitIcon already renders secret icons.
 local function CastingIcon(unit)
   if UnitCastingInfo then
     local name, _, icon = UnitCastingInfo(unit)
-    if name ~= nil then return icon end
+    if issecretvalue(name) == true or name ~= nil then return icon end
   end
   return nil
 end
@@ -854,7 +828,7 @@ end
 local function ChannelIcon(unit)
   if UnitChannelInfo then
     local name, _, icon = UnitChannelInfo(unit)
-    if name ~= nil then return icon end
+    if issecretvalue(name) == true or name ~= nil then return icon end
   end
   return nil
 end
@@ -867,7 +841,12 @@ local function ActiveCastIcon(unit, event)
   if event == "UNIT_SPELLCAST_CHANNEL_START" or event == "UNIT_SPELLCAST_EMPOWER_START" then
     return ChannelIcon(unit)
   end
-  return CastingIcon(unit) or ChannelIcon(unit)
+  -- No `or` chain: branching on a secret icon value throws on 12.1.
+  local icon = CastingIcon(unit)
+  if issecretvalue(icon) == true or icon ~= nil then
+    return icon
+  end
+  return ChannelIcon(unit)
 end
 
 local function ApplyCastPortraitIcon(frame, icon)
@@ -921,7 +900,7 @@ UpdateCastPortrait = function(frame, p, event)
     return false
   end
   local icon = ActiveCastIcon(frame.MSUFUnitKey, event)
-  if icon ~= nil then
+  if issecretvalue(icon) == true or icon ~= nil then
     return ApplyCastPortraitIcon(frame, icon)
   end
   RestoreCastPortraitIcon(frame)
@@ -943,7 +922,13 @@ ResolvePortraitBorderColor = function(frame, p, class)
     return 1, 1, 1, 1
   elseif style == "REACTION" then
     local reaction = UnitReaction and UnitReaction(frame.MSUFUnitKey, "player")
-    reaction = tonumber(reaction)
+    -- 12.1 can hand back a secret reaction for hostile units; any compare or
+    -- coercion on it throws, so fall back to the neutral white tint instead.
+    if issecretvalue(reaction) == true then
+      reaction = nil
+    else
+      reaction = tonumber(reaction)
+    end
     if reaction then
       if reaction <= 2 then return 1, 0, 0, 1 end
       if reaction <= 4 then return 1, 0.6, 0, 1 end
@@ -1156,7 +1141,7 @@ ApplyBlizzardPortraitMask = function(mask)
   if BlizzardMaskAtlasAvailable() then
     SetAtlasCached(mask, BLIZZARD_PORTRAIT_MASK_ATLAS)
   else
-    SetTextureCached(mask, PORTRAIT_MASKS.CIRCLE or WHITE)
+    SetMaskTextureCached(mask, PORTRAIT_MASKS.CIRCLE or WHITE)
   end
   return true
 end
