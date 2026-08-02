@@ -57,7 +57,7 @@ end
 local function RegisterUnitPreviewRuntimeControls(box, pageKey)
     if not box then return 0 end
     pageKey = pageKey or M2.activeKey
-    local registrationSentinel = box.zoomBar or box.canvas or box._msuf2PinButton
+    local registrationSentinel = box.zoomBar or box.canvas
     if pageKey
         and box._msuf2RuntimeControlsPageKey == pageKey
         and registrationSentinel
@@ -129,7 +129,6 @@ local function RegisterUnitPreviewRuntimeControls(box, pageKey)
                 "button", "navigation", { navigationKey = UnitPreviewHandleNavigationKey(handle, pageKey) })
         end
     end
-    Register(box._msuf2PinButton, "pin.toggle", "Pin Unit Preview", "toggle", "ephemeral")
     -- Selection chrome. The X/Y inputs deliberately stay unregistered: they
     -- write the same offsets the bound sliders already expose, exactly like the
     -- drag handles above.
@@ -1004,7 +1003,10 @@ local function MakeHandle(preview, key, fields, label, color)
         RefreshHandleSelectionVisuals(preview)
         if GameTooltip then
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText(TR(label), 1, 1, 1)
+            -- `_label` can be rebound per unit on the shared box (custom
+            -- container 4 is Defensive Buffs on player, Dots on target
+            -- elsewhere); the creation-time closure label is only the fallback.
+            GameTooltip:SetText(TR(self._label or label), 1, 1, 1)
             GameTooltip:AddLine(TR("Drag this preview element to adjust the same X/Y offsets used by Edit Mode."), 0.82, 0.82, 0.82, true)
             GameTooltip:AddLine(TR("Double-click or use the settings button to open this element's settings."), 0.50, 0.78, 0.92, true)
             GameTooltip:AddLine(TR("Right-click opens quick actions."), 0.50, 0.78, 0.92, true)
@@ -1462,7 +1464,6 @@ local function LayoutUnitHeaderControls(box, compact)
     local header = box._msuf2CompactHeader
     local expandBtn = box._msuf2CompactExpandButton
     local layersBtn = box._msuf2LayersButton
-    local pinBtn = box._msuf2PinButton
     if compact and header then
         if layersBtn then
             if layersBtn.SetText then layersBtn:SetText(TR("Layers") .. " v") end
@@ -1474,16 +1475,6 @@ local function LayoutUnitHeaderControls(box, compact)
                 layersBtn:SetFrameLevel((header:GetFrameLevel() or 1) + 3)
             end
         end
-        if pinBtn then
-            pinBtn:SetParent(header)
-            pinBtn:ClearAllPoints()
-            local liveBadge = box._msuf2CompactLiveBadge
-            if liveBadge then pinBtn:SetPoint("LEFT", liveBadge, "RIGHT", 8, 0)
-            else pinBtn:SetPoint("LEFT", header, "LEFT", 176, 0) end
-            if pinBtn.SetFrameLevel and header.GetFrameLevel then
-                pinBtn:SetFrameLevel((header:GetFrameLevel() or 1) + 3)
-            end
-        end
         return
     end
     if layersBtn then
@@ -1491,11 +1482,6 @@ local function LayoutUnitHeaderControls(box, compact)
         layersBtn:SetParent(box)
         layersBtn:ClearAllPoints()
         layersBtn:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -5)
-    end
-    if pinBtn then
-        pinBtn:SetParent(box)
-        pinBtn:ClearAllPoints()
-        pinBtn:SetPoint("TOPRIGHT", box, "TOPRIGHT", -12, -8)
     end
 end
 local function ApplyUnitCompactPresentation(box, compact, sideW)
@@ -1964,18 +1950,31 @@ local function BuildPreview(parent, panel, width, height)
     mock.cast:SetScript("OnMouseDown", function(_, button)
         StartPreviewPan(canvas, box, button)
     end)
-    mock.cast:SetScript("OnMouseUp", function(_, button)
+    mock.cast:SetScript("OnMouseUp", function(self, button)
         if canvas._msufPreviewPanning then
             StopPreviewPan(canvas)
             return
         end
         if button and button ~= "LeftButton" then return end
+        -- The whole-bar castbar is globally positioned, so it has no drag
+        -- handle - but double-click must still open its settings like every
+        -- other preview element. The castbar handle carries the section
+        -- routing; reuse it. mock.cast is a plain Frame, and OnDoubleClick is
+        -- a Button-only script, so the double-click is detected by hand.
+        local now = (GetTime and GetTime()) or 0
+        if (now - (self._msufLastClickTime or -10)) < 0.35 then
+            self._msufLastClickTime = -10
+            OpenPreviewHandleSettings(box.handleCastbar, "doubleclick")
+        else
+            self._msufLastClickTime = now
+        end
     end)
     mock.cast:SetScript("OnEnter", function(self)
         if GameTooltip then
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:SetText(TR("Castbar"), 1, 1, 1)
             GameTooltip:AddLine(TR("Preview follows the current castbar visibility, whole-bar layer, icon, text, and global color settings."), 0.82, 0.82, 0.82, true)
+            GameTooltip:AddLine(TR("Double-click/settings: open options."), 0.55, 0.68, 0.86, true)
             GameTooltip:AddLine(TR("Ctrl + left-drag pans the preview canvas."), 0.55, 0.68, 0.86, true)
             GameTooltip:Show()
         end

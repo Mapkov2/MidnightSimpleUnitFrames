@@ -1376,6 +1376,17 @@ end
 
 function Auras.Layout(box, mock, state, S, baseLevel)
     if not (box and mock and type(S) == "function") then return end
+    -- The shared preview box builds its handles once and is then rebound
+    -- across unit pages. Custom container 4 is the Defensive Buffs lane on the
+    -- player frame but the Dots-on-target lane on target/focus/boss, so its
+    -- label has to follow the currently bound unit, not the unit that first
+    -- created the handles. Tooltip, selection bar and quick actions all read
+    -- `_label` live.
+    local custom4 = box.handleAuraCustom4
+    if custom4 then
+        local custom4Label = PreviewUnit(box) == "player" and "Defensive Buffs" or AURA_HANDLE_FIELDS.custom4.label
+        if custom4._label ~= custom4Label then custom4._label = custom4Label end
+    end
     if not state then
         Auras.Hide(box)
         return

@@ -1178,7 +1178,9 @@ local function BuildCastbar(ctx, builder, unit)
         { "dropdown", "Alignment", 16, -196, min(260, controlWLeft), CASTBAR_TEXT_ALIGN, DetailKey("SpellNameAlign"), "LEFT", "MSUF2_CASTBAR_SPELL_ALIGN" },
         { "slider", "X offset", 16, -250, controlWLeft, -300, 300, 1, DetailKey("TextOffsetX"), 0, "MSUF2_CASTBAR_SPELL_X" },
         { "slider", "Y offset", 16, -304, controlWLeft, -300, 300, 1, DetailKey("TextOffsetY"), 0, "MSUF2_CASTBAR_SPELL_Y" },
-        { "color", "Spell text color", 16, -358, min(200, controlWLeft - 60), "SpellName", "MSUF2_CASTBAR_SPELL_COLOR" },
+        -- Spell text color deliberately lives on the Colors page (castbar
+        -- detail colors) and in the per-control color shortcuts only; a second
+        -- inline swatch here double-writes the same key.
     })
     local targetNameToggle
     if fields.targetName and targetNameCard then
@@ -1276,7 +1278,9 @@ local function BuildCastbar(ctx, builder, unit)
         { "slider", "Size", 16, -196, controlWLeft, 0, 48, 1, DetailKey("TimeFontSize"), 0, "MSUF2_CASTBAR_TIME_SIZE" },
         { "slider", "X offset", 16, -250, controlWLeft, -300, 300, 1, DetailKey("TimeOffsetX"), unit == "boss" and 0 or -2, "MSUF2_CASTBAR_TIME_X" },
         { "slider", "Y offset", 16, -304, controlWLeft, -300, 300, 1, DetailKey("TimeOffsetY"), 0, "MSUF2_CASTBAR_TIME_Y" },
-        { "color", "Cast time color", 16, -358, min(200, controlWLeft - 60), "Time", "MSUF2_CASTBAR_TIME_COLOR" },
+        -- Cast time color deliberately lives on the Colors page (castbar
+        -- detail colors) and in the per-control color shortcuts only; a second
+        -- inline swatch here double-writes the same key.
     })
     local castbarFeatureToggles = { time, interrupt, icon, text, targetNameToggle }
     local function MsufOn() return ReadCastbarBackend() == "MSUF" end
