@@ -229,18 +229,12 @@ local function BuildGameplay(ctx)
     local classCardW = SectionCardWidth(classSec, 700)
     local classControlW = SectionControlWidth(classSec, 300, 120)
     local classLeftX, classRightX, classColW = SectionColumns(classSec, 300)
-    local classToken
-    if UnitClass then
-        local _, token = UnitClass("player")
-        classToken = token
-    end
-    local hasTotemFrame = classToken == "SHAMAN" or classToken == "MONK"
     local totemEnable
     local previewBtn
     local resetTotemBtn
     if classStacked then
         AddBackdrops(classSec, { { -38, classCardW, 520 } })
-        LabelAt(classSec, hasTotemFrame and "Totem / Statue frame" or "(Totem/Statue frame is Shaman/Monk-only)", 30, -38, min(360, classW - 60), "GameFontNormalSmall", T.colors.text)
+        LabelAt(classSec, "Totem / Statue frame", 30, -38, min(360, classW - 60), "GameFontNormalSmall", T.colors.text)
         LabelAt(classSec, "Uses Blizzard TotemFrame; MSUF only re-anchors it out of combat.", 30, -60, min(520, classW - 60), "GameFontDisableSmall", T.colors.muted)
         totemEnable = SwitchAt(ctx, classSec, "Blizzard TotemFrame", 30, -92, min(300, classControlW), Gameplay, "enablePlayerTotems", false, ApplyGameplayUI, Meta("totem_frame.enabled"))
         previewBtn = T.Button(classSec, "Preview", min(120, classControlW), 22)
@@ -259,7 +253,7 @@ local function BuildGameplay(ctx)
         })
     else
         AddBackdrops(classSec, { { -38, classCardW, 276 } })
-        LabelAt(classSec, hasTotemFrame and "Totem / Statue frame" or "(Totem/Statue frame is Shaman/Monk-only)", classLeftX, -38, min(360, classColW), "GameFontNormalSmall", T.colors.text)
+        LabelAt(classSec, "Totem / Statue frame", classLeftX, -38, min(360, classColW), "GameFontNormalSmall", T.colors.text)
         LabelAt(classSec, "Uses Blizzard TotemFrame; MSUF only re-anchors it out of combat.", classLeftX, -60, min(520, classCardW - 32), "GameFontDisableSmall", T.colors.muted)
         totemEnable = SwitchAt(ctx, classSec, "Blizzard TotemFrame", classLeftX, -92, classColW, Gameplay, "enablePlayerTotems", false, ApplyGameplayUI, Meta("totem_frame.enabled"))
         previewBtn = T.Button(classSec, "Preview", 120, 22)
@@ -451,14 +445,14 @@ local function BuildGameplay(ctx)
         bars[4]:SetSize(thick, size * 0.42)
         for i = 1, 4 do bars[i]:SetVertexColor(r or 1, gr or 0, b or 0, g.enableCombatCrosshair and 1 or 0.35) end
     end
-    -- Each row gates a dependent control group by its master toggle. totemActionControls and
-    -- the totem enable also depend on class availability (hasTotemFrame).
+    -- Each row gates a dependent control group by its master toggle. Blizzard's TotemFrame is
+    -- class-agnostic, so the totem rows carry no class gate: Preview and Reset stay live for
+    -- everyone, the offset controls follow the master toggle.
     disabledRefresh = M.BindGateGroup(ctx, Gameplay, {
         { enable = timerEnable, controls = timerControls, on = function(g) return g.enableCombatTimer == true end },
         { enable = stateEnable, controls = stateControls, on = function(g) return g.enableCombatStateText == true end },
-        { enable = totemEnable, enableOn = function() return hasTotemFrame end,
-          controls = totemActionControls, on = function() return hasTotemFrame end },
-        { controls = totemControls, on = function(g) return hasTotemFrame and g.enablePlayerTotems == true end },
+        { enable = totemEnable, controls = totemActionControls, on = function() return true end },
+        { controls = totemControls, on = function(g) return g.enablePlayerTotems == true end },
         { enable = crossEnable, controls = crossControls, on = function(g) return g.enableCombatCrosshair == true end },
         { controls = meleeControls, on = function(g)
             return g.enableCombatCrosshair == true and g.enableCombatCrosshairMeleeRangeColor == true

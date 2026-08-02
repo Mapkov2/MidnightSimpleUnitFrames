@@ -2901,11 +2901,14 @@ local function DirectHelpAnswer(query, opts)
             summary = "Assistant combat timer help",
         }
     end
-    if ContainsAny(norm, { "totem icon", "totem icons", "totem frame", "totems", "statue frame", "totem rahmen", "totemrahmen", "statuen rahmen", "statuenrahmen" })
-        and ContainsAny(norm, { "where", "where can", "where do", "make", "bigger", "smaller", "size", "move", "offset", "position", "help", "explain", "wo", "hilfe", "erklaeren", "erklaer", "groesse", "groesser", "kleiner", "verschieben", "verschiebe", "versatz" })
+    -- Blizzard's Totem Frame carries no class gate, so the class vocabulary below has to reach
+    -- this answer: "is the totem frame shaman only" and "how do I dismiss raise dead" are the
+    -- same question about the same frame.
+    if ContainsAny(norm, { "totem icon", "totem icons", "totem frame", "totems", "statue frame", "totem rahmen", "totemrahmen", "statuen rahmen", "statuenrahmen", "raise dead", "consecration", "konsekration" })
+        and ContainsAny(norm, { "where", "where can", "where do", "make", "bigger", "smaller", "size", "move", "offset", "position", "help", "explain", "wo", "hilfe", "erklaeren", "erklaer", "groesse", "groesser", "kleiner", "verschieben", "verschiebe", "versatz", "class", "classes", "klasse", "klassen", "only", "nur", "work", "works", "working", "funktioniert", "dismiss", "cancel", "entlassen", "abbrechen", "death knight", "deathknight", "todesritter", "paladin", "ghoul", "ghul", "shaman", "schamane", "monk", "moench" })
     then
         return {
-            text = "Totem Frame help\nIn Gameplay, I can help with Totem/Statue frame options. I can enable the frame, resize the icons, move the frame by X/Y offset, change its anchor points, preview it, or reset its layout.\nExamples: show totem frame; make totem icons bigger; move totem icons right 6; set totem frame to anchor to bottom left; preview totem frame; reset totem frame.\nYou can ask: Open Gameplay",
+            text = "Totem Frame help\nIn Gameplay, I can help with Totem/Statue frame options. I can enable the frame, resize the icons, move the frame by X/Y offset, change its anchor points, preview it, or reset its layout.\nIt is not Shaman and Monk only. Every class that fills a totem slot uses the same frame, for example a Death Knight Raise Dead ghoul or a Paladin Consecration, and right-clicking an icon dismisses that totem. It stays hidden while no slot is filled.\nExamples: show totem frame; make totem icons bigger; move totem icons right 6; set totem frame to anchor to bottom left; preview totem frame; reset totem frame.\nYou can ask: Open Gameplay",
             status = "applied",
             summary = "Assistant totem frame help",
         }
