@@ -57,7 +57,7 @@ function H.ApplyRoundedMediaSlice(region, strength)
         region:SetTextureSliceMode(STRETCHED_SLICE_MODE)
     end
 end
-local PREVIEW_BACKGROUND_DEFAULT = "bright_stone"
+local PREVIEW_BACKGROUND_DEFAULT = "silvermoon"
 local PREVIEW_BACKGROUND_ASPECT = 2
 local PREVIEW_BACKGROUND_CLEAR = { 0, 0, 0, 0 }
 local PREVIEW_BACKGROUND_CUSTOM_DEFAULT = { 0.08, 0.12, 0.18, 1 }
@@ -79,6 +79,12 @@ local PREVIEW_BACKGROUND_SPECS = {
         label = "Dark stone",
         tooltip = "A dark surface for checking bright borders and text.",
         texture = PREVIEW_BACKGROUND_MEDIA .. "dark_stone.png",
+    },
+    {
+        key = "silvermoon",
+        label = "Silvermoon",
+        tooltip = "A colored Silvermoon interior for checking frames on tinted surfaces.",
+        texture = PREVIEW_BACKGROUND_MEDIA .. "silvermoon.png",
     },
     {
         key = "custom",
