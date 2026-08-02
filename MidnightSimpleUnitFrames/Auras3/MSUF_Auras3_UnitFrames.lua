@@ -3122,6 +3122,7 @@ local NativeRuntime = (function()
 local RefreshAppliedNativeRoot
 local EnsureNativeAuraRefreshDriver
 local ApplyLane
+local RecreateGroupSlots
 
 -- Blizzard securecopies native AuraButton options on every setter call, so
 -- these cold-path tables are safe to reuse and avoid per-button Lua garbage.
@@ -5622,7 +5623,35 @@ A3._DirectIdentityRefreshUnitEligible = function(unit)
     return A3._IsGroupUnitToken(unit)
 end
 
-A3._DirectIdentityRefreshUnit = function(unit, forceSpellIndicatorGeometry)
+local function NativeFilterOwnsHelpfulAuras(nativeFilter)
+    return type(nativeFilter) == "string"
+        and nativeFilter:find("HELPFUL", 1, true) ~= nil
+end
+
+local function GroupSlotsOwnHelpfulAuras(groupSlots)
+    if not groupSlots then return false end
+    local flowLane = groupSlots.flowLane
+    if flowLane and NativeFilterOwnsHelpfulAuras(flowLane.nativeFilter) then
+        return true
+    end
+    local slotLanes = groupSlots.slotLanes
+    for i = 1, #(slotLanes or {}) do
+        local lane = slotLanes[i]
+        if lane and NativeFilterOwnsHelpfulAuras(lane.nativeFilter) then
+            return true
+        end
+    end
+    return false
+end
+
+local function ContainerOwnsHelpfulAuras(container, lane)
+    if container and container._msufA3GroupSlotsRoot == true then
+        return GroupSlotsOwnHelpfulAuras(lane)
+    end
+    return lane and NativeFilterOwnsHelpfulAuras(lane.nativeFilter)
+end
+
+A3._DirectIdentityRefreshUnit = function(unit, forceSpellIndicatorGeometry, recreateHelpfulAuras)
     local byUnit = A3._directIdentityAuraContainers
     local containers = byUnit and byUnit[unit]
     if not containers then return false end
@@ -5654,15 +5683,23 @@ A3._DirectIdentityRefreshUnit = function(unit, forceSpellIndicatorGeometry)
         return any
     end
 
-    local any, spellRecreates, partyParents = false, nil, nil
+    local any, spellRecreates, helpfulRecreates, partyParents = false, nil, nil, nil
     for container in pairs(containers) do
         if seedPartyParents then
             partyParents = CollectPartyAuraParent(partyParents, container)
         end
+        local lane = container and container._msufA3NativeLaneConfig
         local deferSpellRecreate = container and container._msufA3SpellIndicatorRoot == true
+        local recreateHelpfulContainer = recreateHelpfulAuras == true
+            and not deferSpellRecreate
+            and ContainerOwnsHelpfulAuras(container, lane)
         if deferSpellRecreate then
             spellRecreates = spellRecreates or {}
             spellRecreates[#spellRecreates + 1] = container
+            any = true
+        elseif recreateHelpfulContainer then
+            helpfulRecreates = helpfulRecreates or {}
+            helpfulRecreates[#helpfulRecreates + 1] = container
             any = true
         else
             if container and A3._ManagedAuraContainerSupportsGeometryRepair(container) then
@@ -5689,6 +5726,28 @@ A3._DirectIdentityRefreshUnit = function(unit, forceSpellIndicatorGeometry)
             end
         end
     end
+    -- A full UpdateAllAuras parse can retain the existing frame for the same
+    -- aura instance without reassigning its stable duration object. If that
+    -- object captured the early-login near-zero state, long-lived buffs keep
+    -- rendering 0.1 even though their tooltip already has the correct expiry.
+    -- Recreate every registered owner that contains a HELPFUL lane on
+    -- PLAYER_ENTERING_WORLD so pre-existing buffs on player, target, focus,
+    -- boss and group units all receive fresh duration assignments. Mixed
+    -- group owners are recreated as one native container; harmful-only owners
+    -- are left alone. This stays entirely off UNIT_AURA and identity hotpaths.
+    if helpfulRecreates then
+        for i = 1, #helpfulRecreates do
+            local container = helpfulRecreates[i]
+            local root = container and container._msufA3Root
+            local lane = container and container._msufA3NativeLaneConfig
+            local parentFrame = container and container._msufA3ParentFrame
+            if container and container._msufA3GroupSlotsRoot == true then
+                any = RecreateGroupSlots(container) ~= nil or any
+            elseif root and lane then
+                any = ApplyLane(root, lane, parentFrame, true) ~= nil or any
+            end
+        end
+    end
     -- Recreating unregisters the old container and registers a replacement in
     -- the same per-unit set. Do it after iteration so the set is never mutated
     -- under pairs(). This is the safe PTR path for forbidden native buttons.
@@ -5701,14 +5760,22 @@ A3._DirectIdentityRefreshUnit = function(unit, forceSpellIndicatorGeometry)
     return any
 end
 
-A3._DirectIdentityRefreshAll = function(groupOnly, forceSpellIndicatorGeometry)
+A3._DirectIdentityRefreshAll = function(groupOnly, forceSpellIndicatorGeometry, recreateHelpfulAuras)
     local byUnit = A3._directIdentityAuraContainers
     if not byUnit then return false end
-    local any = false
+    -- A recreation can temporarily remove and then re-add a unit key while
+    -- swapping its final registered owner. Snapshot the unit tokens first so
+    -- mutating the registry cannot make pairs() skip another unit family.
+    local units = {}
     for unit in pairs(byUnit) do
         if groupOnly ~= true or A3._IsGroupUnitToken(unit) then
-            any = A3._DirectIdentityRefreshUnit(unit, forceSpellIndicatorGeometry) or any
+            units[#units + 1] = unit
         end
+    end
+    local any = false
+    for i = 1, #units do
+        any = A3._DirectIdentityRefreshUnit(
+            units[i], forceSpellIndicatorGeometry, recreateHelpfulAuras) or any
     end
     return any
 end
@@ -5716,11 +5783,13 @@ end
 A3._FlushScheduledDirectIdentityRefreshAll = function()
     local groupOnly = A3._directIdentityRefreshGroupOnly == true
     local forceSpellIndicatorGeometry = A3._directIdentityRefreshForceSpellIndicatorGeometry == true
+    local recreateHelpfulAuras = A3._directIdentityRefreshRecreateHelpfulAuras == true
     A3._directIdentityRefreshPending = nil
     A3._directIdentityRefreshGroupOnly = nil
     A3._directIdentityRefreshForceSpellIndicatorGeometry = nil
+    A3._directIdentityRefreshRecreateHelpfulAuras = nil
     if not A3._HasDirectIdentityRefreshContainers() then return false end
-    A3._DirectIdentityRefreshAll(groupOnly, forceSpellIndicatorGeometry)
+    A3._DirectIdentityRefreshAll(groupOnly, forceSpellIndicatorGeometry, recreateHelpfulAuras)
 end
 
 A3._ScheduleDirectIdentityRefreshAll = function(groupOnly, forceSpellIndicatorGeometry)
@@ -5821,6 +5890,9 @@ A3._EnsureDirectIdentityRefreshFrame = function()
         frame = CreateFrame("Frame")
         frame:SetScript("OnEvent", function(_, event)
         if A3._directIdentityRefreshAllEvents[event] == true then
+            if event == "PLAYER_ENTERING_WORLD" then
+                A3._directIdentityRefreshRecreateHelpfulAuras = true
+            end
             A3._ScheduleDirectIdentityRefreshAll(false, true)
             return
         end
@@ -6325,7 +6397,7 @@ local function ApplyGroupSlots(root, groupSlots, parentFrame, forceRecreate)
     return current
 end
 
-local function RecreateGroupSlots(container)
+RecreateGroupSlots = function(container)
     if not (container and container._msufA3GroupSlotsRoot == true) then return nil end
     local groupSlots = container._msufA3NativeLaneConfig
     local parentFrame = container._msufA3ParentFrame
