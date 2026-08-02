@@ -45,6 +45,7 @@ local partyReconcileScheduled
 local partyReconcileHideSolo
 local rosterEventRegistered = false
 local BlizzardRosterEventWanted
+local MSUFOwnsLiveGroupFrames
 local blizzardEventsActive = false
 
 local function InCombat()
@@ -434,10 +435,14 @@ local function SchedulePartyReconcile(hideSolo)
   C_Timer.After(0, Run)
 end
 
+--- CompactRaidFrameManager is deliberately absent here. The tab is a tool panel
+--- (ready check, raid markers, role filters, difficulty), not a unit frame, and it is
+--- owned end-to-end by raidManagerMode below. Hard-hiding it here used to win over that
+--- setting -- HardHideFrame unregisters its events and reparents it, which no later
+--- alpha write can undo -- so the dropdown did nothing whenever MSUF owned any group
+--- frames. Its AUTO mode reproduces the old "gone while MSUF owns the frames" behavior.
 local function HideRaidFrames(hard)
   local hide = hard and HardHideFrame or SoftHideFrame
-  hide(_G.CompactRaidFrameManager)
-  hide(_G.CompactRaidFrameManagerToggleButton)
   hide(_G.CompactRaidFrameReservationManager)
   hide(_G.CompactRaidFrameContainer)
   if _G.CompactRaidFrameContainer then
@@ -459,9 +464,8 @@ local function HideRaidFrames(hard)
   end
 end
 
+--- Mirrors HideRaidFrames: the manager tab is not part of the ownership handover.
 local function RestoreRaidFrames(showAfter)
-  RestoreFrame(_G.CompactRaidFrameManager, showAfter)
-  RestoreFrame(_G.CompactRaidFrameManagerToggleButton, showAfter)
   RestoreFrame(_G.CompactRaidFrameReservationManager, showAfter)
   RestoreFrame(_G.CompactRaidFrameContainer, showAfter)
   if _G.CompactRaidFrameContainer then
@@ -482,6 +486,175 @@ local function RestoreRaidFrames(showAfter)
     RestoreFrame(_G["CompactRaidFrame" .. i], showAfter)
   end
   RefreshBlizzardRaid()
+end
+
+--- Blizzard Raid Manager visibility.
+---
+--- The Raid Manager tab is its own top-level frame (Blizzard_CompactRaidFrames/
+--- Mainline/Blizzard_CompactRaidFrameManager.xml, upstream/ptr): CompactRaidFrameContainer
+--- is parented to UIParent, not to the manager, so the tab can be steered without
+--- touching the raid frames. The ownership pass above already hides the manager while
+--- MSUF owns the raid frames; this layer covers the scopes where it does not, which is
+--- party and every Blizzard-provider scope.
+---
+--- Both non-default modes work through SetAlpha/EnableMouse instead of Hide(). Neither
+--- is protected, so the visible part never has to wait for regen, and Blizzard writes
+--- the manager's own alpha nowhere (only a child button's, in
+--- CompactRaidFrameManager_UpdateOptionsFlowContainer) -- a value set once survives the
+--- SetShown() in CompactRaidFrameManager_UpdateShown without a single re-apply. Hide()
+--- would be undone by that same SetShown on every GROUP_ROSTER_UPDATE.
+local RAID_MANAGER_KINDS = { "party", "raid", "mythicraid" }
+local raidManagerMode = "AUTO"
+local raidManagerHooked = false
+local raidManagerMouseDefault
+local raidManagerPendingMouse
+
+--- "DEFAULT" is the pre-release spelling of AUTO and is mapped rather than dropped, so a
+--- profile written by an in-between build keeps working instead of silently resetting.
+local function NormalizeRaidManagerMode(value)
+  if value == "MOUSEOVER" then return "MOUSEOVER" end
+  if value == "HIDDEN" then return "HIDDEN" end
+  if value == "SHOW" then return "SHOW" end
+  return "AUTO"
+end
+
+--- One shared piece of Blizzard chrome, so the three group scopes hold one synchronized
+--- value. Reading the first scope that carries the key keeps a partially migrated or
+--- imported profile on the user's choice instead of silently falling back to DEFAULT.
+local function ResolveRaidManagerMode()
+  local getConf = GF.GetConf
+  if type(getConf) ~= "function" then return "AUTO" end
+  for i = 1, #RAID_MANAGER_KINDS do
+    local conf = getConf(RAID_MANAGER_KINDS[i])
+    local value = conf and conf.raidManagerMode
+    if value ~= nil then return NormalizeRaidManagerMode(value) end
+  end
+  return "AUTO"
+end
+
+local function MouseIsOverRaidManager(manager)
+  local getFoci = _G.GetMouseFoci
+  if type(getFoci) ~= "function" then return false end
+  local foci = getFoci()
+  if type(foci) ~= "table" then return false end
+  for i = 1, #foci do
+    local region = foci[i]
+    while type(region) == "table" and type(region.GetParent) == "function" do
+      if region == manager then return true end
+      region = region:GetParent()
+    end
+  end
+  return false
+end
+
+local function RaidManagerOnEnter(self)
+  if raidManagerMode == "MOUSEOVER" then
+    self:SetAlpha(1)
+  end
+end
+
+--- Mirrors Blizzard's own collapse model: an expanded panel is one the user is working
+--- in, so it stays lit until they collapse it again. GetMouseFoci keeps it lit while the
+--- pointer sits on a child region (dropdown, marker button) that fires the parent OnLeave.
+local function RaidManagerOnLeave(self)
+  if raidManagerMode ~= "MOUSEOVER" then return end
+  if self.collapsed == false then return end
+  if MouseIsOverRaidManager(self) then return end
+  self:SetAlpha(0)
+end
+
+local function RaidManagerOnToggleClick()
+  local manager = _G.CompactRaidFrameManager
+  if raidManagerMode == "MOUSEOVER" and manager and manager.collapsed and manager.SetAlpha then
+    manager:SetAlpha(0)
+  end
+end
+
+local function EnsureRaidManagerHooks(manager)
+  if raidManagerHooked or type(manager.HookScript) ~= "function" then return end
+  raidManagerHooked = true
+  manager:HookScript("OnEnter", RaidManagerOnEnter)
+  manager:HookScript("OnLeave", RaidManagerOnLeave)
+  --- 12.1 split the single toggleButton into a forward/back pair.
+  local buttons = {
+    manager.toggleButtonBack or _G.CompactRaidFrameManagerToggleButtonBack,
+    manager.toggleButtonForward or _G.CompactRaidFrameManagerToggleButtonForward,
+  }
+  for i = 1, #buttons do
+    local button = buttons[i]
+    if button and type(button.HookScript) == "function" and not IsForbidden(button) then
+      button:HookScript("OnClick", RaidManagerOnToggleClick)
+    end
+  end
+end
+
+--- HIDDEN also drops mouse input, so the invisible tab stops eating clicks at the left
+--- screen edge. EnableMouse is protected once the frame is, so a combat request parks the
+--- wanted state for regen -- the alpha write above already did the visible half.
+local function ApplyRaidManagerMouse(manager, enabled)
+  if not (manager and type(manager.EnableMouse) == "function" and type(manager.IsMouseEnabled) == "function") then
+    return
+  end
+  if raidManagerMouseDefault == nil then
+    raidManagerMouseDefault = manager:IsMouseEnabled() and true or false
+  end
+  local wanted = enabled and raidManagerMouseDefault or false
+  if (manager:IsMouseEnabled() and true or false) == wanted then
+    raidManagerPendingMouse = nil
+    return
+  end
+  if InCombat() and manager.IsProtected and manager:IsProtected() then
+    raidManagerPendingMouse = enabled and true or false
+    EnsureEventFrame():RegisterEvent("PLAYER_REGEN_ENABLED")
+    return
+  end
+  raidManagerPendingMouse = nil
+  manager:EnableMouse(wanted)
+end
+
+--- The single owner of the tab's visibility. Every mode resolves to a plain
+--- alpha + mouse pair, so switching between them is always fully reversible and never
+--- needs a protected call for the part the user actually sees.
+---   AUTO      gone while MSUF owns the live group frames, untouched otherwise
+---   SHOW      always visible, even with MSUF group frames on
+---   MOUSEOVER invisible until hovered
+---   HIDDEN    invisible and click-through
+local function ApplyRaidManagerMode()
+  local manager = _G.CompactRaidFrameManager
+  if not manager or IsForbidden(manager) or type(manager.SetAlpha) ~= "function" then
+    return
+  end
+  raidManagerMode = ResolveRaidManagerMode()
+
+  local mode = raidManagerMode
+  if mode == "AUTO" then
+    mode = (type(MSUFOwnsLiveGroupFrames) == "function" and MSUFOwnsLiveGroupFrames())
+      and "HIDDEN" or "SHOW"
+  end
+
+  if mode == "HIDDEN" then
+    manager:SetAlpha(0)
+    ApplyRaidManagerMouse(manager, false)
+    return
+  end
+  ApplyRaidManagerMouse(manager, true)
+  if mode == "MOUSEOVER" then
+    EnsureRaidManagerHooks(manager)
+    manager:SetAlpha(MouseIsOverRaidManager(manager) and 1 or 0)
+    return
+  end
+  manager:SetAlpha(1)
+end
+
+--- Menu entry point. The alpha half lands immediately even in combat, so the dropdown
+--- always looks like it did something.
+function GF.ApplyBlizzardRaidManagerMode()
+  ApplyRaidManagerMode()
+  return raidManagerMode
+end
+
+function GF.GetBlizzardRaidManagerMode()
+  return ResolveRaidManagerMode()
 end
 
 local BASE_EVENTS = {
@@ -542,7 +715,7 @@ local function RaidScopeActive()
   return raid and raid.enabled == true
 end
 
-local function MSUFOwnsLiveGroupFrames()
+function MSUFOwnsLiveGroupFrames()
   return PartyScopeActive() or RaidScopeActive()
 end
 
@@ -653,6 +826,7 @@ function GF.ApplyBlizzardGroupFrameOwnership(reason)
     .. "|" .. tostring(partyMode)
     .. "|" .. tostring(raidMode)
     .. "|" .. tostring(wantsShown)
+    .. "|" .. tostring(ResolveRaidManagerMode())
 
   if not force and lastOwnershipSig == sig and not next(pendingHide) and not next(pendingRestore) then
     return true
@@ -677,6 +851,10 @@ function GF.ApplyBlizzardGroupFrameOwnership(reason)
   then
     HidePartyFrames(true)
   end
+
+  --- Runs last: RestoreRaidFrames above may have re-shown the manager, and the tab's
+  --- own visibility mode outranks whatever the ownership pass left behind.
+  ApplyRaidManagerMode()
 
   RefreshRosterEventRegistration()
   return true
@@ -707,6 +885,11 @@ local function FlushPending()
   for frame, showAfter in pairs(pendingRestore) do
     pendingRestore[frame] = nil
     RestoreFrame(frame, showAfter)
+  end
+  if raidManagerPendingMouse ~= nil then
+    local wanted = raidManagerPendingMouse
+    raidManagerPendingMouse = nil
+    ApplyRaidManagerMouse(_G.CompactRaidFrameManager, wanted)
   end
 end
 

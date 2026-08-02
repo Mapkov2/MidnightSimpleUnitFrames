@@ -24,6 +24,12 @@ local GROUP_FRAME_PROVIDER_VALUES = Specs.GROUP_FRAME_PROVIDER_VALUES or {
     { value = "SHOW", text = "Force Blizzard frames" },
     { value = "NONE", text = "Hide all group frames" },
 }
+local GROUP_RAID_MANAGER_VALUES = Specs.GROUP_RAID_MANAGER_VALUES or {
+    { value = "AUTO", text = "Automatic" },
+    { value = "SHOW", text = "Always visible" },
+    { value = "MOUSEOVER", text = "Show on mouseover" },
+    { value = "HIDDEN", text = "Always hidden" },
+}
 local HEALTH_TEXT_MODES = Specs.HEALTH_TEXT_MODES or TEXT_MODES
 local SIMPLE_TEXTURES = Specs.SimpleTextures or function() return {} end
 local pendingGF = {}
@@ -412,6 +418,55 @@ local function FrameProviderTooltip(kind)
     local info = FrameProviderInfo(FrameProvider(kind))
     return info and (info.tooltip or info.description) or ""
 end
+--- Scope-synchronized settings. A few options do not describe a scope's own frames but a
+--- single shared piece of Blizzard chrome, so there is exactly one of them for Party,
+--- Raid and Mythic Raid together. They still live in the three gf_* rows -- profiles,
+--- import/export and reset all walk those -- but every write hits all three at once, the
+--- same shape the shared group colors on the Colors page use.
+local GF_SYNC_KINDS = { "party", "raid", "mythicraid" }
+local function SyncedVal(key, default)
+    for i = 1, #GF_SYNC_KINDS do
+        local conf = Conf(GF_SYNC_KINDS[i])
+        if conf and conf[key] ~= nil then return conf[key] end
+    end
+    return default
+end
+local function SetSyncedValue(key, value, apply)
+    local function Write()
+        local changed = false
+        for i = 1, #GF_SYNC_KINDS do
+            local conf = Conf(GF_SYNC_KINDS[i])
+            if conf and conf[key] ~= value then
+                conf[key] = value
+                changed = true
+            end
+        end
+        if changed and type(apply) == "function" then apply() end
+        return changed
+    end
+    return M.RunWithHistory("Group " .. tostring(key), "group:synced:" .. tostring(key), Write)
+end
+--- "DEFAULT" is the pre-release spelling of AUTO; map it so a profile from an in-between
+--- build keeps its choice instead of resetting. Mirrors the engine normalizer.
+local function NormalizeRaidManagerMode(value)
+    if value == "MOUSEOVER" then return "MOUSEOVER" end
+    if value == "HIDDEN" then return "HIDDEN" end
+    if value == "SHOW" then return "SHOW" end
+    return "AUTO"
+end
+local function RaidManagerMode()
+    return NormalizeRaidManagerMode(SyncedVal("raidManagerMode", "AUTO"))
+end
+--- No QueueGF: nothing about MSUF's own frames changes, only Blizzard's tab.
+local function SetRaidManagerMode(value)
+    value = NormalizeRaidManagerMode(value)
+    return SetSyncedValue("raidManagerMode", value, function()
+        local gf = GF()
+        if gf and type(gf.ApplyBlizzardRaidManagerMode) == "function" then
+            gf.ApplyBlizzardRaidManagerMode()
+        end
+    end)
+end
 local function SetFrameProvider(kind, provider)
     kind = kind or CurrentScope()
     provider = NormalizeFrameProvider(provider)
@@ -435,9 +490,13 @@ end
 --- land on top of each other and the covered one can no longer be dragged. Frames are
 --- positioned in MSUF Edit Mode. The anchor family belongs here for the same reason --
 --- it decides WHERE the header sits, not what it looks like.
+--- raidManagerMode joins them for a different reason: it is already identical in all
+--- three scopes by construction (see SetSyncedValue), so copying it would only ever be
+--- a no-op that pretends the value is per scope.
 local GF_COPY_EXCLUDE = M.KeySetFromWords [[
     offsetX offsetY point positionMode _hlMigrated
     anchorMode anchorPoint anchorToFrame customAnchorFrame attachGap attachOffset
+    raidManagerMode
 ]]
 local GF_SHARED_COLOR_KEYS = M.KeySetFromWords [[
     gfBarMode healthColorMode healthCustomR healthCustomG healthCustomB gfDarkR gfDarkG gfDarkB
@@ -779,8 +838,11 @@ M.GroupPage = GroupPage
 M.Assign(GroupPage, {
     Conf = Conf, Val = Val, Set = Set, Bool = Bool, Num = Num, CurrentScope = CurrentScope,
     GROUP_FRAME_PROVIDER_VALUES = GROUP_FRAME_PROVIDER_VALUES,
+    GROUP_RAID_MANAGER_VALUES = GROUP_RAID_MANAGER_VALUES,
     FrameProvider = FrameProvider, FrameProviderLabel = FrameProviderLabel, FrameProviderShortLabel = FrameProviderShortLabel,
     FrameProviderTooltip = FrameProviderTooltip, SetFrameProvider = SetFrameProvider,
+    SyncedVal = SyncedVal, SetSyncedValue = SetSyncedValue,
+    RaidManagerMode = RaidManagerMode, SetRaidManagerMode = SetRaidManagerMode,
     GF_COPY_CATEGORIES = GF_COPY_CATEGORIES, NewGFCopyScopes = NewGFCopyScopes, CopyGroupSettings = CopyGroupSettings,
 })
 local function BindScopeToggle(ctx, widget, key, default, mode, semanticPath)
