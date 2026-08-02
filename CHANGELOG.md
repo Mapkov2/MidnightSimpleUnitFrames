@@ -1,5 +1,24 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-RC3 - 2026-08-02
+
+### Changes
+
+- Menu previews never scroll away any more. The Unit, Group, Aura Style, Colors and Class Resources preview card stays at the top of the viewport while the settings slide underneath it. Use the existing Expand/Compact and "Hide Preview" controls to reclaim height.
+- The "Pin Preview" toggle is gone; previews are always pinned. A preview too tall for the current window scrolls with the page instead, so the settings below it stay reachable.
+- The Class Resources spec selector strip is now docked above the scroll area like the unit pages' Editing strip, so the preview pins directly beneath it instead of the strip scrolling away.
+- Removed the duplicate "Spell text color" and "Cast time color" swatches from the unit castbar Spell and Time tabs. Both colors live on the Colors page and in the per-control color shortcuts; the inline copies wrote the same key a second time.
+- Double-clicking the castbar in a unit preview now opens its settings, like every other preview element.
+
+### Fixes & Performance
+
+- Fixed 2D portraits randomly turning empty or stale since Beta 43 when re-targeting a unit seen earlier: re-visits now always re-run Blizzard's native portrait resolver instead of replaying a cached texture value that cannot represent a live portrait render.
+- Fixed portraits on hostile units breaking mid-update on 12.1: the portrait cast-icon and reaction-border readers compared secret cast names and reaction values, which throws on 12.1 and left the portrait dressing without an image. Secret casts now still show their spell icon.
+- Fixed shaped portraits smearing their mask edge outward. Portrait masks now clamp to black outside their own quad, the way Blizzard declares every portrait mask.
+- Fixed long-lived buffs rendering a 0.1 second duration after login or a reload. Lanes that carry helpful auras get fresh duration objects once the world has loaded, on player, target, focus, boss and group units; the pass stays off UNIT_AURA and the identity hot paths.
+- Fixed the unit preview labelling custom container 4 "Dots on target" on the player frame, where that lane is Defensive Buffs. Tooltip, selection bar and quick actions now follow the bound unit.
+- Fixed the Assistant switching a setting on when a follow-up only spelled out its name, for example "show me Mythic Raid Masque Enabled". A follow-up that names the control is answered, not applied.
+
 ## 6.0-RC2 - 2026-08-02
 
 ### Fixes
