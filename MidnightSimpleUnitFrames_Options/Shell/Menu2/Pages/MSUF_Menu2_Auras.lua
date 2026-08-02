@@ -691,6 +691,20 @@ local function BuildAuraStyleNav(ctx, b, scope)
         or (tostring(current):match("^custom[123]$") and ("Custom " .. tostring(current):match("(%d)$") .. " Aura Style"))
         or (LaneTitle(current) .. " Aura Style")
     M.AttachAuraFontsAndColors(section, title, scope)
+    -- Dock the container strip beneath the already-docked scope strip, like
+    -- the unit pages' Editing strip: with it out of the scroll flow, the style
+    -- preview pins directly under it instead of floating alone once the strip
+    -- scrolls away.
+    if W.AttachStickyPageHeader then
+        W.AttachStickyPageHeader(section, {
+            pageKey = ctx and ctx.key,
+            wrapper = ctx and ctx.wrapper,
+            gap = 4,
+            builder = b,
+            ctx = ctx,
+            flowGap = 12,
+        })
+    end
     return current
 end
 local function OtherLane(kind)

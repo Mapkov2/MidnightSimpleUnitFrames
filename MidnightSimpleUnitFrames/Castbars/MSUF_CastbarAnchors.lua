@@ -273,7 +273,15 @@ local function UnitframeNormalBorderInsetForTarget(frame, sourceFrame, targetFra
     if frame and frame._msufBossPhysicalGeometryApplied == true
         and type(_G.MSUF_GetPhysicalPixelSize) == "function"
     then
-        local pixels = math.floor(inset + 0.5)
+        -- Mirror the boss border's own conversion: the setting is a unitframe-unit
+        -- value, so it becomes a physical-pixel count through the unitframe's
+        -- scale, not one pixel per configured unit.
+        local framePixel = _G.MSUF_GetPhysicalPixelSize(frame, 1)
+        local pixels = inset
+        if type(framePixel) == "number" and framePixel > 0 then
+            pixels = inset / framePixel
+        end
+        pixels = math.floor(pixels + 0.5)
         if pixels < 1 then pixels = 1 end
         return _G.MSUF_GetPhysicalPixelSize(targetFrame, pixels)
     end
