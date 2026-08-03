@@ -8,7 +8,8 @@
 --- This file is an immediate no-op unless the active locale is ruRU.
 --- ============================================================================
 local MSUF = _G.MSUF_NS or _G.MSUF
-if not MSUF or MSUF.LOCALE ~= "ruRU" then return end
+if not MSUF then return end
+local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("ruRU")) or (MSUF.L or {})
 
 -- Настройки подсветки при наведении.
@@ -4548,3 +4549,6 @@ L["Always visible"] = "Всегда виден"
 L["Hides the Raid Manager while MSUF provides the live group frames, and leaves it to WoW otherwise. This is how MSUF has always behaved."] = "Скрывает диспетчер рейда, пока MSUF предоставляет активные групповые рамки, и в остальных случаях оставляет его WoW. MSUF всегда вёл себя именно так."
 L["Keeps the Raid Manager reachable even with MSUF group frames on. Use this when you still want its ready check, raid markers, and role filters."] = "Оставляет диспетчер рейда доступным даже при включённых групповых рамках MSUF. Выберите это, если вам всё ещё нужны его проверка готовности, метки рейда и фильтры ролей."
 L["Shared by Party, Raid, and Mythic Raid. Automatic keeps the tab hidden while MSUF provides the group frames."] = "Общая настройка для группы, рейда и мифического рейда. «Автоматически» держит вкладку скрытой, пока MSUF предоставляет групповые рамки."
+end
+if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ruRU", LoadLocale)
+elseif MSUF.LOCALE == "ruRU" then LoadLocale() end

@@ -8,7 +8,8 @@
 --- This file is an immediate no-op unless the active locale is itIT.
 --- ============================================================================
 local MSUF = _G.MSUF_NS or _G.MSUF
-if not MSUF or MSUF.LOCALE ~= "itIT" then return end
+if not MSUF then return end
+local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("itIT")) or (MSUF.L or {})
 
 -- Controlli di evidenziazione al passaggio del mouse.
@@ -4531,3 +4532,6 @@ L["Always visible"] = "Sempre visibile"
 L["Hides the Raid Manager while MSUF provides the live group frames, and leaves it to WoW otherwise. This is how MSUF has always behaved."] = "Nasconde il gestore incursioni finché MSUF fornisce i riquadri di gruppo attivi, altrimenti lo lascia a WoW. MSUF si è sempre comportato così."
 L["Keeps the Raid Manager reachable even with MSUF group frames on. Use this when you still want its ready check, raid markers, and role filters."] = "Mantiene raggiungibile il gestore incursioni anche con i riquadri di gruppo di MSUF attivi. Usalo se vuoi ancora il suo controllo prontezza, i simboli d'incursione e i filtri dei ruoli."
 L["Shared by Party, Raid, and Mythic Raid. Automatic keeps the tab hidden while MSUF provides the group frames."] = "Condiviso da Gruppo, Incursione e Incursione mitica. Automatico tiene nascosta la linguetta finché MSUF fornisce i riquadri di gruppo."
+end
+if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("itIT", LoadLocale)
+elseif MSUF.LOCALE == "itIT" then LoadLocale() end

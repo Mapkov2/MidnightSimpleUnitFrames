@@ -1,8 +1,9 @@
 --- Localized Search/FAQ copy for the Priority Frames workspace.
---- Only the active locale's value table is allocated during addon startup.
+--- Only the active locale's value table is allocated after SavedVariables load.
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF
 if not MSUF then return end
+local function LoadLocaleFAQ()
 local L = MSUF.L or _G.MSUF_L
 if type(L) ~= "table" then return end
 
@@ -324,3 +325,6 @@ end
 
 if type(V) ~= "table" or #V ~= #K then return end
 for i = 1, #K do L[K[i]] = V[i] end
+end
+if type(MSUF.RegisterLocaleFinalizer) == "function" then MSUF.RegisterLocaleFinalizer(LoadLocaleFAQ)
+else LoadLocaleFAQ() end
