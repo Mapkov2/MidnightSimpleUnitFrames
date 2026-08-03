@@ -2194,7 +2194,12 @@ function Preview.Refresh(box, reason)
         box.handleClassPowerText:Hide()
     end
     box._runtimePowerOutline = 0
-    if runtimePower ~= nil then
+    local detachedPlayerOutline = detachedPower and key == "player"
+        and ((runtimePower and runtimePower.detachedOutline) or bars.detachedPowerBarOutline)
+        or nil
+    if detachedPlayerOutline ~= nil then
+        box._runtimePowerOutline = tonumber(detachedPlayerOutline) or 1
+    elseif runtimePower ~= nil then
         if runtimePower.borderEnabled == true then box._runtimePowerOutline = tonumber(runtimePower.borderThickness) or 1 end
     elseif conf.powerBarBorderEnabled ~= nil then
         if conf.powerBarBorderEnabled == true then box._runtimePowerOutline = tonumber(conf.powerBarBorderThickness) or 1 end

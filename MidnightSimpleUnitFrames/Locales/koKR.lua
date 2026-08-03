@@ -2621,6 +2621,7 @@ L["Ctrl+V to paste (Legacy Import)"] = "붙여넣으려면 Ctrl+V(레거시 가�
 L["Dispel border off"] = "테두리 해제"
 L["Dispel border on"] = "테두리 없애기 켜기"
 L["Power text mode"] = "파워 텍스트 모드"
+L["Player text outline"] = "플레이어 텍스트 외곽선"
 L["Reset all overrides"] = "모든 재정의 재설정"
 L["Status icon"] = "상태 아이콘"
 L["Status icons test mode"] = "상태 아이콘 테스트 모드"

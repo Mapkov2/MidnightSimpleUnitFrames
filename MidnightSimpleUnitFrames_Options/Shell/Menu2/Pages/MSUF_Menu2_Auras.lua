@@ -219,6 +219,15 @@ local function LaneFrameEffectAssistantContract()
         assistantDispositionReason = "This scope-aware Buff/Debuff Full-Frame effect writes the active shared or per-unit Aura style and has no Assistant setting contract yet.",
     }
 end
+M._customContainerAssistantSuffixes = {
+    "enabled", "filters.enabled", "filters.hidePermanent", "filters.onlyMine",
+    "filters.onlyImportant", "filters.raid", "filters.raidInCombat",
+    "filters.includeNameplateOnly", "filters.includeDispellable", "filters.dispellableAny",
+    "filters.cancelable", "filters.notCancelable", "filters.externalDefensive",
+    "filters.bigDefensive", "filters.crowdControl", "placed.anchor", "placed.growth",
+    "placed.x", "placed.y", "placed.max", "placed.size", "placed.perRow", "placed.spacing",
+    "placed.showStacks", "placed.showCooldown", "placed.showCooldownSwipe",
+}
 local function AuraControlMeta(ctx, path, classification, assistantContract)
     path = tostring(path or "control"):lower():gsub("[^%w%._/-]+", "-")
     path = path:gsub("/", "."):gsub("^%.+", ""):gsub("%.+$", "")
@@ -286,9 +295,10 @@ local function RegisterAuraTextAction(ctx, widget, input, label, path, assistant
     end
     return RegisterAuraControl(ctx, widget, label, "button", path, "action", assistantContract)
 end
-local function RegisterAuraChoiceBar(ctx, bar, values, path)
+local function RegisterAuraChoiceBar(ctx, bar, values, path, assistantContract)
     if not bar then return bar end
-    RegisterAuraControl(ctx, bar, bar._msuf2SearchTitle or "Editing", "segment", path, "ephemeral")
+    RegisterAuraControl(ctx, bar, bar._msuf2SearchTitle or "Editing", "segment", path,
+        assistantContract and "setting" or "ephemeral", assistantContract)
     return bar
 end
 local function Round(value)
@@ -4078,6 +4088,17 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
     local currentTab = CurrentTab()
     local normalLane = currentTab == "buff" or currentTab == "debuff"
     local currentTool = CurrentUnitAuraTool(unit, currentTab)
+    local customContainerPatterns = {}
+    for i = 1, #M._customContainerAssistantSuffixes do
+        local suffix = M._customContainerAssistantSuffixes[i]
+        customContainerPatterns[i] = "^auras3%." .. tostring(unit):gsub("([^%w])", "%%%1") .. "%.custom%d+%."
+            .. tostring(suffix):gsub("([^%w])", "%%%1") .. "$"
+    end
+    local customContainerContract = {
+        assistantDisposition = "dynamic",
+        assistantDispositionReason = "This selector opens the dynamic editor for any persisted setting on the selected Custom Aura container.",
+        assistantSettingKeyPatterns = customContainerPatterns,
+    }
     local outer = builder:CollapsibleSection("auras", "Auras", 120, false)
     local auraBuilder = CreateNestedAuraBuilder(ctx, builder, outer)
     local sectionW = auraBuilder.width or 720
@@ -4114,7 +4135,7 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
             M.unitAuraTabSelection[unit] = value
             Rebuild(ctx)
         end,
-    }), workspaceTabs, "unit-workspace.container-selector")
+    }), workspaceTabs, "unit-workspace.container-selector", customContainerContract)
     local toolBar = RegisterAuraChoiceBar(ctx, W.ScopeOverrideBar(ctx, top, {
         values = tools,
         width = sectionW,

@@ -263,6 +263,7 @@ L["drag handles - double-click/settings opens options - right-click actions - Ct
 L["Click a handle to select - double-click/settings opens options - right-click actions - Ctrl+wheel zoom"] = "Griff anklicken zum Auswaehlen - Doppelklick/Einstellungen oeffnet Optionen - Rechtsklick Aktionen - Strg+Rad zoomt"
 L["Preview tip: drag handles to move, double-click or use settings to open options, right-click for actions."] = "Vorschau-Tipp: Griffe ziehen zum Bewegen, Doppelklick/Einstellungen fuer Optionen, Rechtsklick fuer Aktionen."
 L["Power text mode"] = "Power-Textmodus"
+L["Player text outline"] = "Umrandung des Spielertexts"
 L["Press Ctrl+C to copy:"] = "Strg+C zum Kopieren drücken:"
 L["Profile export / import"] = "Profil exportieren / importieren"
 L["Profile import"] = "Profil-Import"

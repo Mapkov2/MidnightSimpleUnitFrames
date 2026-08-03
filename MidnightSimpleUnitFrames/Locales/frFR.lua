@@ -722,6 +722,7 @@ local T = {
     ["ON: Fully hides PlayerFrame (may break some resource bar addons)."] = "ACTIF : Masque complètement le PlayerFrame (peut casser certains addons de barres de ressources).",
     ["Open Auras 2.0"] = "Ouvrir Auras 2.0",
     ["Power text mode"] = "Mode texte puissance",
+    ["Player text outline"] = "Contour du texte du joueur",
     ["Press Ctrl+C to copy:"] = "Appuyez sur Ctrl+C pour copier :",
     ["Quick access"] = "Accès rapide",
     ["R"] = "R",

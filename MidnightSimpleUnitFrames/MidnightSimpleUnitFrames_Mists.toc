@@ -3,7 +3,7 @@
 ## Notes: Classic prototype for Mists of Pandaria Classic.
 ## Author: Mapko
 ## Category: Combat
-## Version: 6.0-rc5-classic-prototype
+## Version: 6.0-rc6-classic-prototype
 ## SavedVariables: MSUF_DB, MSUF_GlobalDB
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## OptionalDeps: Masque, LibSharedMedia-3.0, Clique, WagoAnalytics

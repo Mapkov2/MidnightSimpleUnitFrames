@@ -136,6 +136,18 @@ local function BuildStatus(ctx, builder, unit)
         assistantDisposition = "dynamic",
         assistantDispositionReason = "This editor targets whichever status indicator is selected in the adjacent selector.",
     }
+    local selectedStatusColorContract = {
+        assistantDisposition = "dynamic",
+        assistantDispositionReason = "This color swatch targets whichever text status indicator is selected in the adjacent selector.",
+        assistantSettingKeys = {},
+    }
+    for _, prefix in ipairs({
+        "levelIndicator", "raceIndicator", "classTextIndicator", "raidGroupName",
+        "statusText", "statusGhostText", "statusAFKText", "statusDNDText",
+    }) do
+        selectedStatusColorContract.assistantSettingKeys[#selectedStatusColorContract.assistantSettingKeys + 1] =
+            tostring(unit) .. "." .. prefix .. "Color"
+    end
     local function RegisterStatusSearch(control, label, extraKeywords, values, help, semanticPath, classification, assistantContract)
         if not (control and type(M.RegisterSearchWidget) == "function") then return end
         local meta = ControlMeta(ctx, semanticPath, classification)
@@ -387,6 +399,13 @@ local function BuildStatus(ctx, builder, unit)
         end
         local customPath = spec and spec.customIcon and ReadStatusString(unit, spec.customIcon, "") or ""
         if type(customPath) == "string" and customPath ~= "" then return customPath, 0, 1, 0, 1 end
+        -- Runtime and the main unit preview use the nameplate classification atlases for the
+        -- built-in Elite / Rare indicator.  Returning the atlas alongside the skull fallback
+        -- keeps this compact strip visually identical without changing custom-icon behavior.
+        if entry[1] == "elite" then
+            local atlas = entry[2] == "BOSS" and "nameplates-icon-elite-gold" or "nameplates-icon-elite-silver"
+            return "Interface\\TargetingFrame\\UI-TargetingFrame-Skull", 0, 1, 0, 1, atlas
+        end
         local resolver = _G.MSUF_GetStatusIconTexture
         local style = "BLIZZARD"
         if type(resolver) == "function" then
@@ -532,7 +551,9 @@ local function BuildStatus(ctx, builder, unit)
         RefreshStatusRuntime(unit, spec)
     end
     local textColor = W.Color(placementCard, "Text color")
-    M.BindColor(ctx, textColor, SelectedStatusColorRGB, WriteSelectedStatusColor)
+    local metadata = ControlMeta(ctx, "status.selected.text_color")
+    for key, value in pairs(selectedStatusColorContract) do metadata[key] = value end
+    M.BindColor(ctx, textColor, SelectedStatusColorRGB, WriteSelectedStatusColor, metadata)
     if textColor.RegisterForClicks then textColor:RegisterForClicks("LeftButtonUp", "RightButtonUp") end
     local textColorBaseClick = textColor.GetScript and textColor:GetScript("OnClick")
     textColor:SetScript("OnClick", function(self, mouseButton, ...)
@@ -560,7 +581,7 @@ local function BuildStatus(ctx, builder, unit)
         "level color", "level text color", "race text color", "class text color",
         "raid group color", "dead text color", "ghost text color", "afk text color", "dnd text color",
         "status text color", "indicator color",
-    }, nil, nil, "status.selected.text_color", nil, selectedStatusContract)
+    }, nil, nil, "status.selected.text_color", nil, selectedStatusColorContract)
     local reset = W.Button(placementCard, "Reset selected", 150)
     PlaceButton(reset, placementCard, placeRightX, -178, 150)
     reset._msuf2SkipHistoryCheckpoint = true
@@ -624,8 +645,12 @@ local function BuildStatus(ctx, builder, unit)
         iconPreviewStrip:SetAlpha(enabled and 1 or 0.46)
         for i = 1, #iconPreviewTextures do
             local holder = iconPreviewTextures[i]
-            local path, l, r, t, b = ResolvePreviewStatusIcon(spec, entries[i])
-            if type(path) == "string" and path ~= "" then
+            local path, l, r, t, b, atlas = ResolvePreviewStatusIcon(spec, entries[i])
+            if type(atlas) == "string" and atlas ~= "" and holder.tex.SetAtlas then
+                holder.tex:SetAtlas(atlas)
+                holder.tex:SetVertexColor(1, 1, 1, 1)
+                holder:Show()
+            elseif type(path) == "string" and path ~= "" then
                 holder.tex:SetTexture(path)
                 holder.tex:SetTexCoord(l or 0, r or 1, t or 0, b or 1)
                 holder.tex:SetVertexColor(1, 1, 1, 1)

@@ -2660,6 +2660,7 @@ L["Ctrl+V to paste (Legacy Import)"] = "Ctrl+V для вставки (стары
 L["Dispel border off"] = "Рассеять границу"
 L["Dispel border on"] = "Рассеять границу на"
 L["Power text mode"] = "Режим Power Text"
+L["Player text outline"] = "Контур текста игрока"
 L["Reset all overrides"] = "Сбросить все переопределения"
 L["Status icon"] = "Значок статуса"
 L["Status icons test mode"] = "Режим тестирования значков состояния"

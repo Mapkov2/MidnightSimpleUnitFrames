@@ -811,7 +811,7 @@ local function BuildCastbar(ctx, builder, unit)
                 SetGeneralValue(colorKey .. "G", g, reason)
                 SetGeneralValue(colorKey .. "B", b, reason)
             end,
-            SettingMeta(ctx, "castbar.detail." .. tostring(reason), "general", colorKey .. "R"))
+            SettingMeta(ctx, "castbar.detail." .. tostring(reason), "general", colorKey))
         if control._msuf2Title then
             local width = tonumber(labelWidth) or 150
             control._msuf2Title:ClearAllPoints()

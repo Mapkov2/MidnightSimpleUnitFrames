@@ -757,11 +757,15 @@ local function SetModernPowerBorderSuppressed(f, suppressed)
   end
   bar._msufRUFPowerBorderSuppressed = nil
   local power = f and f.MSUFSpec and f.MSUFSpec.power
-  local thickness = tonumber(power and power.borderThickness) or tonumber(bar._msufPowerBorderThickness) or 0
+  local detachedOutline = power and power.detached == true and power.detachedOutline or nil
+  local thickness = tonumber(detachedOutline)
+    or tonumber(power and power.borderThickness)
+    or tonumber(bar._msufPowerBorderThickness)
+    or 0
   local shown = bar._msufPowerShapeActive ~= true
     and bar._msufShown ~= false
     and thickness > 0
-    and (not power or (power.enabled == true and power.borderEnabled == true))
+    and (not power or (power.enabled == true and (detachedOutline ~= nil or power.borderEnabled == true)))
   if host then
     if shown and host.Show then host:Show() elseif host.Hide then host:Hide() end
   end
@@ -811,8 +815,8 @@ local function ApplyEmbeddedPowerSeparator(f, bar, thickness)
   return true
 end
 
--- Mirror the modern power border contract for every rectangular power bar.
--- Player shape media (orb/crystal/round) keeps its own matching outline.
+-- Detached Player power uses the Class Resources outline for every shape.
+-- Other rectangular power bars keep their unit-frame border contract.
 local function ResolveDetachedPowerEdgeThickness(f)
   local bar = ResolvePowerBar(f)
   if not (f and bar) then return 0 end
@@ -820,6 +824,9 @@ local function ResolveDetachedPowerEdgeThickness(f)
   local power = f.MSUFSpec and f.MSUFSpec.power
   if power then
     if power.enabled ~= true then return 0 end
+    if power.detached == true and power.detachedOutline ~= nil then
+      return ClampEdgeSize(power.detachedOutline, 0, 8)
+    end
     if power.borderEnabled ~= true then return 0 end
     return ClampEdgeSize(power.borderThickness, 0, 8)
   end

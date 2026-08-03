@@ -966,6 +966,12 @@ local function BuildSpec(scope, key, value, fromManifest)
     local fullLabel = scopeLabel .. " " .. label
     local aliasBase = label:lower()
     local aliases, seen = {}, {}
+    local function AddPriorityAlias(alias)
+        if alias ~= "" and not seen[alias] then
+            seen[alias] = true
+            table.insert(aliases, 1, alias)
+        end
+    end
     if FLAT_SCOPES[scope] then
         -- Flat scopes have no unit word in the sentence to disambiguate them;
         -- lead with the scope-prefixed phrase so "gameplay font size" and
@@ -975,6 +981,13 @@ local function BuildSpec(scope, key, value, fromManifest)
     else
         AddAliasVariants(aliases, seen, aliasBase)
         AddAliasVariants(aliases, seen, fullLabel:lower())
+    end
+    if scope == "general" and key == "disableBlizzardUnitFrames" then
+        AddPriorityAlias("blizzard unitframes")
+    elseif scope == "general" and key == "hardKillBlizzardPlayerFrame" then
+        AddPriorityAlias("hard hide blizzard player frame")
+        AddPriorityAlias("fully hide blizzard player frame")
+        AddPriorityAlias("blizzard player frame")
     end
     local unit = UNIT_SCOPES[scope] and scope or GROUP_SCOPES[scope] or nil
     local spec = {

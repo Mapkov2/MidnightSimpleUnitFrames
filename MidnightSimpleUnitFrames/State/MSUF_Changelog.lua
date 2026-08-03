@@ -8,10 +8,31 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-RC5",
-    previousVersion = "6.0-rc4",
-    rangeLabel = "6.0-rc4 -> 6.0-RC5",
+    currentVersion = "6.0-RC6",
+    previousVersion = "6.0-RC5",
+    rangeLabel = "6.0-RC5 -> 6.0-RC6",
     entries = {
+        {
+            version = "6.0-RC6",
+            date = "2026-08-03",
+            sections = {
+                {
+                    title = "Fixes",
+                    bullets = {
+                        "Fixed non-Midnight menu accents falling back to Midnight blue while hovering navigation entries. Hover and active states now follow the selected class, preset or custom accent with a restrained contrast between them, while the authored Midnight theme remains unchanged.",
+                        "Fixed custom surface tints being applied inconsistently across the Dashboard, collapsible unit and group sections, and Aura preview tabs. These controls now resolve the live accent tokens after SavedVariables load instead of retaining stale blue values.",
+                        "Fixed newly created profiles cloning the currently active profile. A new profile now starts from MSUF's factory defaults and fails safely with a clear message if those defaults are unavailable.",
+                        "Fixed the compact Elite / Rare icon preview showing two identical skulls. It now matches the live frame and main unit preview with distinct silver and gold classification art, while a selected custom icon remains authoritative.",
+                        "Fixed Assistant menu routing for dynamic status colors, castbar text colors, Custom Aura containers, External Defensive layout, Ironfur options and compound color controls. Assistant results now open the correct owning editor without exposing the retired External Defensive Auto List setting.",
+                        "Fixed Assistant treating numbers or polarity words embedded in an exact control name as the requested value. Bare requests such as changing Party Scale 1-10 Players or Focus Target Hide in Group now ask for a value instead of silently clamping or toggling the setting.",
+                        "Fixed Assistant command precedence for Blizzard frame visibility, slot-aware HP / Power text modes and scoped Blizzard Raid Manager controls, preventing broader visibility or frame settings from consuming those requests.",
+                        "Added a Player text outline selector to the detached Player Power section, with the expanded layout and Assistant metadata needed to keep the shared Player font outline route accessible.",
+                        "Fixed detached Player Power outline ownership: Class Resources now controls the outline consistently for Bar, Round, Crystal and Orb shapes in live frames and both previews.",
+                        "Fixed legacy Target of Target and Focus Target profile aliases surviving beside their canonical settings. Imports, resets, menu edits and Assistant writes now migrate the old keys once and retain a single canonical owner.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-RC5",
             date = "2026-08-03",
@@ -109,18 +130,6 @@ local data = {
                         "Fixed long-lived buffs rendering a 0.1 second duration after login or a reload. Lanes that carry helpful auras get fresh duration objects once the world has loaded, on player, target, focus, boss and group units; the pass stays off UNIT_AURA and the identity hot paths.",
                         "Fixed the unit preview labelling custom container 4 \"Dots on target\" on the player frame, where that lane is Defensive Buffs. Tooltip, selection bar and quick actions now follow the bound unit.",
                         "Fixed the Assistant switching a setting on when a follow-up only spelled out its name, for example \"show me Mythic Raid Masque Enabled\". A follow-up that names the control is answered, not applied.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-RC2",
-            date = "2026-08-02",
-            sections = {
-                {
-                    title = "Fixes",
-                    bullets = {
-                        "Restored unit-frame anchoring to CooldownManager, Skiron, Arc UI, and Coolinator.",
                     },
                 },
             },

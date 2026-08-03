@@ -2,7 +2,7 @@
 ## Title: |cff38c7f0Midnight|r |cffcce0ffSimple Unit Frames|r - Assistant |cffd9b9b9b(Mists)|r
 ## Notes: Load-on-demand Assistant for the Mists Classic prototype.
 ## Author: Mapko
-## Version: 6.0-rc5-classic-prototype
+## Version: 6.0-rc6-classic-prototype
 ## X-MSUF-Client: Mists
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## Dependencies: MidnightSimpleUnitFrames, MidnightSimpleUnitFrames_Options

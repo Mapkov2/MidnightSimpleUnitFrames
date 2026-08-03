@@ -345,7 +345,7 @@ function A.UnitframesRegistry.RegisterStatusTextColorSettings(ctx, unit)
             key = unit .. "." .. prefix .. "Color",
             label = tostring(unitLabel) .. " " .. spec.label,
             category = tostring(unitLabel) .. " / Status Text Colors",
-            page = "uf_" .. unit,
+            page = "opt_colors",
             unit = unit,
             frameType = "unitframe",
             attribute = "statusTextColor",

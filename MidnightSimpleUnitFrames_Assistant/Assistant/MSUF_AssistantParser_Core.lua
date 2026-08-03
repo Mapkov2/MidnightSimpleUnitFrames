@@ -1316,7 +1316,20 @@ function A._NumberValueForText(setting, text)
     local explicit = A._ExplicitNumberValue(text)
     if explicit ~= nil then return explicit end
     local hay = setting and (tostring(setting.key or "") .. " " .. tostring(setting.label or "") .. " " .. tostring(setting.attribute or "")) or ""
-    if hay:find("%d") then return A._LastNumberValue(text) end
+    if hay:find("%d") then
+        -- Digits embedded in the exact control label describe the control, not
+        -- the requested value (for example "Party Scale 1-10 Players").
+        -- Explicit "to/by/value" forms were already handled above; remove one
+        -- literal label occurrence before accepting a connector-less number.
+        local valueText = Normalize(text)
+        local label = Normalize(setting and setting.label or "")
+        local startAt, endAt = label ~= "" and valueText:find(label, 1, true) or nil, nil
+        if startAt then
+            endAt = startAt + #label - 1
+            valueText = valueText:sub(1, startAt - 1) .. " " .. valueText:sub(endAt + 1)
+        end
+        return A._LastNumberValue(valueText)
+    end
     return FirstNumber(text)
 end
 

@@ -2157,9 +2157,32 @@ ValueForRegistrySetting = function(setting, text, raw)
     if setting.type == "boolean" then
         local attr = tostring(setting.attribute or ""):lower()
         local key = tostring(setting.key or ""):lower()
+        local label = Normalize(setting.label or "")
+        local requestText = tostring(text or "")
+        local labelStart = label ~= "" and requestText:find(label, 1, true) or nil
+        if labelStart then
+            requestText = requestText:sub(1, labelStart - 1) .. " "
+                .. requestText:sub(labelStart + #label)
+        end
+        local bareEdit = requestText:find("^%s*change%f[%W]")
+            or requestText:find("^%s*adjust%f[%W]")
+            or requestText:find("^%s*modify%f[%W]")
+            or requestText:find("^%s*aender%f[%W]")
+            or requestText:find("^%s*aendere%f[%W]")
+            or requestText:find("^%s*aendern%f[%W]")
+        if bareEdit and DetectBoolean(requestText) == nil
+            and not ContainsAny(requestText, RegistryPhrases[44])
+        then
+            return nil
+        end
         if attr == "powerbardetached" or key:find("%.powerbardetached", 1, true) then
             if ContainsAny(text, RegistryPhrases[45]) then return false end
             if ContainsAny(text, RegistryPhrases[46]) then return true end
+        end
+        if key == "general.disableblizzardunitframes" then
+            if ContainsAny(text, RegistryPhrases[47]) then return true end
+            if ContainsAny(text, RegistryPhrases[48]) then return false end
+            return nil
         end
         if key == "general.hardkillblizzardplayerframe" then
             if ContainsAny(text, RegistryPhrases[47]) then return false end
@@ -5821,6 +5844,25 @@ P.NON_NAME_DOT_EXACT_TERMS = P.NON_NAME_DOT_EXACT_TERMS or {
 P.RegistrySettingMayMatchExactAlias = function(setting, text)
     if RootFrameEnabledBlockedByDetail(setting, text) then return false end
     if AuraLaneVisibilityBlockedByDetail(setting, text) then return false end
+    local exactKey = tostring(setting and setting.key or "")
+    if (exactKey:match("%.showHP$") or exactKey:match("%.showHPText$")
+            or exactKey:match("%.showPower$") or exactKey:match("%.showPowerText$"))
+        and (tostring(text or ""):find("%", 1, true)
+            or ContainsAny(text, { "percent", "percentage", "current", "actual", "max", "maximum", "deficit", "missing", "only", "color", "colour", "font" }))
+    then
+        -- Visibility toggles do not own the displayed value mode. Keep exact
+        -- "HP Text" aliases from consuming slot-content requests.
+        return false
+    end
+    if setting and setting.generated == true
+        and (exactKey:match("%.hpTextMode$") or exactKey:match("%.powerTextMode$"))
+        and ContainsAny(text, { "hp text", "health text", "power text" })
+    then
+        -- These legacy projection keys have no slot identity. The dedicated
+        -- text parser owns the active left/center/right slot and understands
+        -- symbolic values such as "%" without redirecting the write.
+        return false
+    end
     -- An exact alias may match only a trailing scope phrase ("party frame" or
     -- "party name") while ignoring the user's meaningful noun, "dots". Keep
     -- unrelated geometry/name-visibility settings out of that candidate set;

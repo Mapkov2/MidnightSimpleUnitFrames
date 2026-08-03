@@ -212,12 +212,11 @@ local function ApplyPowerBorder(bar, power)
     return
   end
   if bar._msufDetachedShapeEdge then SetRegionShown(bar._msufDetachedShapeEdge, false) end
-  -- The rectangular border is owned by the per-unit toggle/thickness whether the
-  -- bar is inline or detached. `detachedOutline` only feeds the Player shape edge
-  -- in ApplyShapeMedia; reading it here made the unit-page border controls inert
-  -- as soon as the power bar was detached.
-  local thickness = math_floor((tonumber(power and power.borderThickness) or 0) + 0.5)
-  if thickness <= 0 or not (power and power.borderEnabled == true) then
+  local detachedOutline = power and power.detached == true and power.detachedOutline or nil
+  local classManaged = detachedOutline ~= nil
+  local rawThickness = classManaged and detachedOutline or power and power.borderThickness
+  local thickness = math_floor((tonumber(rawThickness) or 0) + 0.5)
+  if thickness <= 0 or (not classManaged and not (power and power.borderEnabled == true)) then
     HidePowerBorderEdges(bar)
     return
   end

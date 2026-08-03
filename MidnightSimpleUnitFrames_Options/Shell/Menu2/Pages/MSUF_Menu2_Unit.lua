@@ -348,9 +348,26 @@ local function EnsureUnitDB(key)
     key = CanonUnitKey(key)
     if not UNIT_KEY_SET[key] then return nil, nil end
     if key == "targettarget" then
-        db.targettarget = db.targettarget or db.tot or {}
-        db.tot = db.targettarget
+        if type(db.targettarget) ~= "table" then
+            db.targettarget = type(db.tot) == "table" and db.tot
+                or type(db.targetoftarget) == "table" and db.targetoftarget
+                or type(db.target_of_target) == "table" and db.target_of_target
+                or {}
+        end
+        db.tot = nil
+        db.targetoftarget = nil
+        db.target_of_target = nil
         return db.targettarget, key
+    end
+    if key == "focustarget" then
+        if type(db.focustarget) ~= "table" then
+            db.focustarget = type(db.focus_target) == "table" and db.focus_target
+                or type(db.focustargettarget) == "table" and db.focustargettarget
+                or {}
+        end
+        db.focus_target = nil
+        db.focustargettarget = nil
+        return db.focustarget, key
     end
     db[key] = db[key] or {}
     return db[key], key
