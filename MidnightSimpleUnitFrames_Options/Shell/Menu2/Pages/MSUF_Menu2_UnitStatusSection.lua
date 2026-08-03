@@ -551,7 +551,9 @@ local function BuildStatus(ctx, builder, unit)
         RefreshStatusRuntime(unit, spec)
     end
     local textColor = W.Color(placementCard, "Text color")
-    M.BindColor(ctx, textColor, SelectedStatusColorRGB, WriteSelectedStatusColor)
+    local metadata = ControlMeta(ctx, "status.selected.text_color")
+    for key, value in pairs(selectedStatusColorContract) do metadata[key] = value end
+    M.BindColor(ctx, textColor, SelectedStatusColorRGB, WriteSelectedStatusColor, metadata)
     if textColor.RegisterForClicks then textColor:RegisterForClicks("LeftButtonUp", "RightButtonUp") end
     local textColorBaseClick = textColor.GetScript and textColor:GetScript("OnClick")
     textColor:SetScript("OnClick", function(self, mouseButton, ...)
