@@ -433,6 +433,7 @@ local T = {
     ["Auras are handled by the dedicated |cffffd200Auras 2.0|r menu.\\n\\nThis tab is now only a shortcut."] = "Las auras se gestionan en |cffffd200Auras 2.0|r.\\n\\nEsta pestaña es solo un acceso directo.",
     ["Could not open the Auras 2.0 menu.\\nPlease make sure MSUF options are registered and try again."] = "No se pudo abrir Auras 2.0.\\nAsegúrate de que las opciones estén registradas.",
     ["Power text mode"] = "Modo texto de poder",
+    ["Player text outline"] = "Contorno del texto del jugador",
     ["Profiles are global. Each character selects one active profile. Create a new profile on the left or select an existing one on the right."] = "Los perfiles son globales. Cada personaje elige uno. Crea uno a la izquierda o selecciona uno existente.",
     ["Purge border: Target, Focus, Target of Target"] = "Borde purga: Objetivo, Foco, OdO",
     ["Real-time power text"] = "Texto de poder tiempo real",
