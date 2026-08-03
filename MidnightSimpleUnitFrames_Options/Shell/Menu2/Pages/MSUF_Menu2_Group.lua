@@ -50,6 +50,19 @@ local FRAME_STRATA_VALUES = {
 }
 local FRAME_STRATA_COUNT = #FRAME_STRATA_VALUES
 local GROUP_SECTION_HEADER_BG = { 0.060, 0.070, 0.130, 0.48 }
+local GROUP_SECTION_HEADER_TINTED_BG = { 0, 0, 0, 0.48 }
+local function GroupSectionHeaderColor()
+    if T.MenuAccentSurfacesTinted and T.MenuAccentSurfacesTinted() then
+        local color = T.colors and T.colors.coreSurface
+        if color then
+            GROUP_SECTION_HEADER_TINTED_BG[1] = color[1]
+            GROUP_SECTION_HEADER_TINTED_BG[2] = color[2]
+            GROUP_SECTION_HEADER_TINTED_BG[3] = color[3]
+            return GROUP_SECTION_HEADER_TINTED_BG
+        end
+    end
+    return GROUP_SECTION_HEADER_BG
+end
 local function PortableControlToken(value, fallback)
     local token = tostring(value or ""):lower():gsub("[^%w_]+", "."):gsub("^%.*", ""):gsub("%.*$", ""):gsub("%.+", ".")
     return token ~= "" and token or (fallback or "control")
@@ -601,7 +614,7 @@ local function RefreshContext(ctx)
 end
 local function SetSectionHeaderStatus(sec, opts)
     if not Shared.SetSectionHeaderStatus then return end
-    if not (opts and opts.bg) then opts = M.Assign({ bg = GROUP_SECTION_HEADER_BG }, opts) end
+    if not (opts and opts.bg) then opts = M.Assign({ bg = GroupSectionHeaderColor() }, opts) end
     Shared.SetSectionHeaderStatus(sec, opts)
 end
 local function SetSectionBadges(sec, specs)

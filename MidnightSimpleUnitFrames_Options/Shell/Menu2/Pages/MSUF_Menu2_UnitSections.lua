@@ -80,6 +80,20 @@ local WARNING_HINT = { 0.90, 0.84, 0.76, 1 }
 local WARNING_BADGE_FILL = { 0.205, 0.148, 0.080, 0.96 }
 local WARNING_BADGE_EDGE = { 0.52, 0.39, 0.18, 0.78 }
 local WARNING_HEADER_BG = { 0.096, 0.078, 0.050, 0.56 }
+local ENABLED_HEADER_BG = { 0.060, 0.070, 0.130, 0.48 }
+local TINTED_ENABLED_HEADER_BG = { 0, 0, 0, 0.48 }
+local function EnabledHeaderColor()
+    if T.MenuAccentSurfacesTinted and T.MenuAccentSurfacesTinted() then
+        local color = T.colors and T.colors.coreSurface
+        if color then
+            TINTED_ENABLED_HEADER_BG[1] = color[1]
+            TINTED_ENABLED_HEADER_BG[2] = color[2]
+            TINTED_ENABLED_HEADER_BG[3] = color[3]
+            return TINTED_ENABLED_HEADER_BG
+        end
+    end
+    return ENABLED_HEADER_BG
+end
 local TOP_BUTTON_STYLE = {
     bg = { 0.022, 0.032, 0.064, 0.94 },
     border = { 0.090, 0.135, 0.250, 0.58 },
@@ -673,12 +687,11 @@ local function AttachBasicsHeaderStatus(sec, unit)
         local ownOn = ReadBool(unit, "enabled", true)
         local parentOff = unit == "focustarget" and not ReadBool("focus", "enabled", true)
         local on = ownOn and not parentOff
-        if sectionEntry.headerBg then
-            if on then
-                sectionEntry.headerBg:SetColorTexture(0.060, 0.070, 0.130, 0.48)
-            else
-                sectionEntry.headerBg:SetColorTexture(WARNING_HEADER_BG[1], WARNING_HEADER_BG[2], WARNING_HEADER_BG[3], WARNING_HEADER_BG[4])
-            end
+        local headerColor = on and EnabledHeaderColor() or WARNING_HEADER_BG
+        if W.SetCollapsibleHeaderBaseTone then
+            W.SetCollapsibleHeaderBaseTone(sectionEntry, headerColor, headerColor[4])
+        elseif sectionEntry.headerBg then
+            sectionEntry.headerBg:SetColorTexture(headerColor[1], headerColor[2], headerColor[3], headerColor[4])
         end
         if sectionEntry.label and sectionEntry.label.SetTextColor then
             if on then

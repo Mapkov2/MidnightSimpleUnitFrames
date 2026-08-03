@@ -97,20 +97,39 @@ local function SetAccordionHighlightSide(regions, side, color)
     side:SetVertexColor(color[1], color[2], color[3], color[4] or 1)
     for i = 1, #regions do regions[i]:SetVertexColor(color[1], color[2], color[3], color[4] or 1) end
 end
+local function AccordionOpenHighlightSetColors(self, fromColor, toColor)
+    local fr, fg, fb, fa = fromColor[1], fromColor[2], fromColor[3], fromColor[4] or 1
+    local tr, tg, tb, ta = toColor[1], toColor[2], toColor[3], toColor[4] or 1
+    if self._msuf2FromR == fr and self._msuf2FromG == fg and self._msuf2FromB == fb and self._msuf2FromA == fa
+        and self._msuf2ToR == tr and self._msuf2ToG == tg and self._msuf2ToB == tb and self._msuf2ToA == ta then
+        return
+    end
+    self._msuf2FromR, self._msuf2FromG, self._msuf2FromB, self._msuf2FromA = fr, fg, fb, fa
+    self._msuf2ToR, self._msuf2ToG, self._msuf2ToB, self._msuf2ToA = tr, tg, tb, ta
+    if T.ApplyTextureGradient then
+        T.ApplyTextureGradient(self.middle, "HORIZONTAL", fromColor, toColor, false)
+    else
+        self.middle:SetColorTexture(tr, tg, tb, ta)
+    end
+    SetAccordionHighlightSide(self.leftCorners, self.left, fromColor)
+    SetAccordionHighlightSide(self.rightCorners, self.right, toColor)
+end
 local function CreateAccordionOpenHighlight(header, fromColor, toColor)
     local regions = CreateAccordionRoundedRegions(header, "BACKGROUND", 1)
-    if T.ApplyTextureGradient then
-        T.ApplyTextureGradient(regions.middle, "HORIZONTAL", fromColor, toColor, false)
-    else
-        regions.middle:SetColorTexture(toColor[1], toColor[2], toColor[3], toColor[4] or 1)
-    end
-    SetAccordionHighlightSide(regions.leftCorners, regions.left, fromColor)
-    SetAccordionHighlightSide(regions.rightCorners, regions.right, toColor)
+    regions.SetColors = AccordionOpenHighlightSetColors
+    regions:SetColors(fromColor, toColor)
     regions:SetShown(false)
     return regions
 end
 W.CreateAccordionRoundedRegions = CreateAccordionRoundedRegions
 W.CreateAccordionOpenHighlight = CreateAccordionOpenHighlight
+function W.SetCollapsibleHeaderBaseTone(target, color, alpha)
+    local entry = target and (target._msuf2CollapsibleEntry or target)
+    if not entry then return end
+    entry._msuf2HeaderBaseColor = type(color) == "table" and color or nil
+    entry._msuf2HeaderBaseAlpha = color and tonumber(alpha) or nil
+    if entry._msuf2RefreshHeaderTone then entry._msuf2RefreshHeaderTone(false) end
+end
 local function WithAlpha(color, alpha)
     return { color[1], color[2], color[3], alpha }
 end
@@ -681,14 +700,14 @@ function W.PageBuilder(ctx, opts)
         header:SetHeight(headerH)
         local headerBg = CreateAccordionRoundedRegions(header, "BACKGROUND", 0)
         local headerSurface = ThemeColor("coreSurface", { 0.014, 0.038, 0.072, 1.00 })
-        local headerRaised = ThemeColor("coreRaised", { 0.026, 0.070, 0.110, 1.00 })
         headerBg:SetColorTexture(headerSurface[1], headerSurface[2], headerSurface[3], 0.34)
         local headerOpenHighlight
+        local headerActiveFrom, headerActiveTo
         if openHighlightEnabled then
             local headerActiveBlue = ThemeColor("coreGlow", { 0.231, 0.510, 0.965, 1.00 })
             local headerActiveDeep = ThemeColor("coreBlue", { 0.141, 0.365, 0.741, 1.00 })
-            local headerActiveFrom = { headerActiveBlue[1], headerActiveBlue[2], headerActiveBlue[3], 0.62 }
-            local headerActiveTo = { headerActiveDeep[1], headerActiveDeep[2], headerActiveDeep[3], 0.56 }
+            headerActiveFrom = { headerActiveBlue[1], headerActiveBlue[2], headerActiveBlue[3], 0.62 }
+            headerActiveTo = { headerActiveDeep[1], headerActiveDeep[2], headerActiveDeep[3], 0.56 }
             headerOpenHighlight = CreateAccordionOpenHighlight(header, headerActiveFrom, headerActiveTo)
         end
         local arrow = header:CreateTexture(nil, "OVERLAY")
@@ -810,7 +829,20 @@ function W.PageBuilder(ctx, opts)
             headerBg._msuf2TextureMode = "solid"
             headerBg:SetColorTexture(color[1], color[2], color[3], alpha)
         end
+        local headerHoverColor = { 0, 0, 0, 1 }
         local function RefreshHeaderTone(hover)
+            -- SavedVariables may apply the selected accent after Options code
+            -- has loaded. Resolve live tokens on every interaction transition
+            -- instead of repainting a header from a stale Midnight snapshot.
+            local liveSurface = ThemeColor("coreSurface", { 0.014, 0.038, 0.072, 1.00 })
+            local liveRaised = ThemeColor("coreRaised", { 0.026, 0.070, 0.110, 1.00 })
+            if headerOpenHighlight and headerOpenHighlight.SetColors then
+                local activeBlue = ThemeColor("coreGlow", { 0.231, 0.510, 0.965, 1.00 })
+                local activeDeep = ThemeColor("coreBlue", { 0.141, 0.365, 0.741, 1.00 })
+                headerActiveFrom[1], headerActiveFrom[2], headerActiveFrom[3] = activeBlue[1], activeBlue[2], activeBlue[3]
+                headerActiveTo[1], headerActiveTo[2], headerActiveTo[3] = activeDeep[1], activeDeep[2], activeDeep[3]
+                headerOpenHighlight:SetColors(headerActiveFrom, headerActiveTo)
+            end
             local active = entry.open == true and entry.openHighlightEnabled == true
             if entry._msuf2OpenHighlightShown ~= active then
                 entry._msuf2OpenHighlightShown = active
@@ -822,12 +854,19 @@ function W.PageBuilder(ctx, opts)
             elseif T.ApplyCollapseVisual then
                 T.ApplyCollapseVisual(arrow, nil, entry.open)
             end
-            if entry.open then
-                SetHeaderSolid(headerSurface, hover and 0.48 or 0.40)
+            local base = entry._msuf2HeaderBaseColor or liveSurface
+            local baseAlpha = entry._msuf2HeaderBaseAlpha or (entry.open and 0.40 or 0.34)
+            if hover and entry._msuf2HeaderBaseColor then
+                headerHoverColor[1] = min((base[1] or 0) * 1.16, 1)
+                headerHoverColor[2] = min((base[2] or 0) * 1.16, 1)
+                headerHoverColor[3] = min((base[3] or 0) * 1.16, 1)
+                SetHeaderSolid(headerHoverColor, max(baseAlpha, 0.42))
+            elseif entry.open then
+                SetHeaderSolid(base, hover and 0.48 or baseAlpha)
             elseif hover then
-                SetHeaderSolid(headerRaised, 0.42)
+                SetHeaderSolid(liveRaised, 0.42)
             else
-                SetHeaderSolid(headerSurface, 0.34)
+                SetHeaderSolid(base, baseAlpha)
             end
         end
         entry._msuf2RefreshHeaderTone = RefreshHeaderTone

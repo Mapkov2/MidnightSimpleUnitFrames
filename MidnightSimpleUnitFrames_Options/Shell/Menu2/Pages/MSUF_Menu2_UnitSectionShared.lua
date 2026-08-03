@@ -92,18 +92,21 @@ function Shared.SetSectionHeaderStatus(sec, opts)
     local entry = sec and sec._msuf2CollapsibleEntry
     if not entry then return end
     M.CallIf(T.ApplyCollapseVisual, entry.arrow, entry.hint, entry.open)
-    if entry.headerBg and entry.headerBg.SetColorTexture then
+    opts = opts or {}
+    if W.SetCollapsibleHeaderBaseTone then
+        local bg = opts.bg
+        W.SetCollapsibleHeaderBaseTone(entry, bg, bg and (bg[4] or 0.48) or nil)
+    elseif entry.headerBg and entry.headerBg.SetColorTexture then
         local c = (T.colors and T.colors.coreSurface) or { 0.014, 0.038, 0.072 }
         entry.headerBg:SetColorTexture(c[1], c[2], c[3], entry.open and 0.40 or 0.34)
+        if opts.bg then
+            local bg = opts.bg
+            entry.headerBg:SetColorTexture(bg[1] or 0.035, bg[2] or 0.075, bg[3] or 0.157, bg[4] or 0.48)
+        end
     end
     if entry.label and entry.label.SetTextColor and T and T.colors and T.colors.text then
         local c = T.colors.text
         entry.label:SetTextColor(c[1], c[2], c[3], c[4] or 1)
-    end
-    opts = opts or {}
-    if opts.bg and entry.headerBg and entry.headerBg.SetColorTexture then
-        local bg = opts.bg
-        entry.headerBg:SetColorTexture(bg[1] or 0.035, bg[2] or 0.075, bg[3] or 0.157, bg[4] or 0.48)
     end
     if opts.labelColor and entry.label and entry.label.SetTextColor then
         local c = opts.labelColor

@@ -441,6 +441,24 @@ local UNIT_AURA_WORKSPACE_TAB_STYLE = {
     activeTextColor = { 0.94, 0.98, 1.00, 1.00 },
 }
 local function UnitAuraWorkspaceTabButton(parent, item, width)
+    -- Midnight is the authored reference and must keep its exact tuned values.
+    -- Other menu accents resolve from the live token family so Preview-as and
+    -- Sample/Live do not retain the blue literals baked when this file loaded.
+    if T.MenuAccentActive and T.MenuAccentActive() then
+        local colors = T.colors or {}
+        local style = UNIT_AURA_WORKSPACE_TAB_STYLE
+        local function SetColor(target, source)
+            target[1], target[2], target[3] = source[1], source[2], source[3]
+        end
+        SetColor(style.bg, colors.coreShadow or style.bg)
+        SetColor(style.border, colors.coreRim or style.border)
+        SetColor(style.textColor, colors.pillText or style.textColor)
+        SetColor(style.hoverBg, colors.coreSurface or style.hoverBg)
+        SetColor(style.hoverBorder, colors.coreGlow or style.hoverBorder)
+        SetColor(style.activeBg, colors.pillActive or colors.coreBlue or style.activeBg)
+        SetColor(style.activeBorder, colors.pillEdgeActive or colors.coreHot or style.activeBorder)
+        SetColor(style.activeTextColor, colors.pillTextActive or style.activeTextColor)
+    end
     return W.TopButton(parent, item.text, width, 24, UNIT_AURA_WORKSPACE_TAB_STYLE)
 end
 local function BuildActionTabs(ctx, parent, values, x, y, width, getValue, setValue, gap, buttonFactory, catalogPath)
