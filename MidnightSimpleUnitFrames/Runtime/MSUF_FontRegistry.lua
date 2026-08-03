@@ -332,8 +332,36 @@ G.MSUF_GetClassBarColor = function(classToken)
     return defaultR, defaultG, defaultB
 end
 
+-- Some NPC unit tokens expose only the numeric UnitPowerType metadata. Keep
+-- their configured resource color on the same token-keyed override path used
+-- by players and previews instead of falling back to Blizzard's default RGB.
+local POWER_TOKEN_BY_TYPE = {}
+do
+    local powerTypeEnum = G.Enum and G.Enum.PowerType
+    local function RegisterPowerToken(enumKey, fallbackType, token)
+        local numericType = powerTypeEnum and powerTypeEnum[enumKey]
+        if type(numericType) ~= "number" then numericType = fallbackType end
+        POWER_TOKEN_BY_TYPE[numericType] = token
+    end
+
+    RegisterPowerToken("Mana", 0, "MANA")
+    RegisterPowerToken("Rage", 1, "RAGE")
+    RegisterPowerToken("Focus", 2, "FOCUS")
+    RegisterPowerToken("Energy", 3, "ENERGY")
+    RegisterPowerToken("RunicPower", 6, "RUNIC_POWER")
+    RegisterPowerToken("LunarPower", 8, "LUNAR_POWER")
+    RegisterPowerToken("Maelstrom", 11, "MAELSTROM")
+    RegisterPowerToken("Insanity", 13, "INSANITY")
+    RegisterPowerToken("Fury", 17, "FURY")
+    RegisterPowerToken("Pain", 18, "PAIN")
+    RegisterPowerToken("Essence", 19, "ESSENCE")
+end
+
 local function MSUF_GetPowerBarColor(powerType, powerToken)
-    if not powerToken or powerToken == "" then
+    if type(powerToken) ~= "string" or powerToken == "" then
+        powerToken = type(powerType) == "number" and POWER_TOKEN_BY_TYPE[powerType] or nil
+    end
+    if not powerToken then
         return nil
     end
     if not G.MSUF_EnsureDB then
