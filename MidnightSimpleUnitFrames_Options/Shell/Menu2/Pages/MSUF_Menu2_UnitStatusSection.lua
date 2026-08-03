@@ -387,6 +387,13 @@ local function BuildStatus(ctx, builder, unit)
         end
         local customPath = spec and spec.customIcon and ReadStatusString(unit, spec.customIcon, "") or ""
         if type(customPath) == "string" and customPath ~= "" then return customPath, 0, 1, 0, 1 end
+        -- Runtime and the main unit preview use the nameplate classification atlases for the
+        -- built-in Elite / Rare indicator.  Returning the atlas alongside the skull fallback
+        -- keeps this compact strip visually identical without changing custom-icon behavior.
+        if entry[1] == "elite" then
+            local atlas = entry[2] == "BOSS" and "nameplates-icon-elite-gold" or "nameplates-icon-elite-silver"
+            return "Interface\\TargetingFrame\\UI-TargetingFrame-Skull", 0, 1, 0, 1, atlas
+        end
         local resolver = _G.MSUF_GetStatusIconTexture
         local style = "BLIZZARD"
         if type(resolver) == "function" then
@@ -624,8 +631,12 @@ local function BuildStatus(ctx, builder, unit)
         iconPreviewStrip:SetAlpha(enabled and 1 or 0.46)
         for i = 1, #iconPreviewTextures do
             local holder = iconPreviewTextures[i]
-            local path, l, r, t, b = ResolvePreviewStatusIcon(spec, entries[i])
-            if type(path) == "string" and path ~= "" then
+            local path, l, r, t, b, atlas = ResolvePreviewStatusIcon(spec, entries[i])
+            if type(atlas) == "string" and atlas ~= "" and holder.tex.SetAtlas then
+                holder.tex:SetAtlas(atlas)
+                holder.tex:SetVertexColor(1, 1, 1, 1)
+                holder:Show()
+            elseif type(path) == "string" and path ~= "" then
                 holder.tex:SetTexture(path)
                 holder.tex:SetTexCoord(l or 0, r or 1, t or 0, b or 1)
                 holder.tex:SetVertexColor(1, 1, 1, 1)
