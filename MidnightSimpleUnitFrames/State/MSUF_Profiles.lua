@@ -1012,7 +1012,14 @@ function MSUF_CreateProfile(name)
         print("|cffff0000MSUF:|r Profile '"..name.."' already exists.")
         return false, "profile already exists"
     end
-    profiles[name] = CopyTable(type(MSUF_DB) == "table" and MSUF_DB or {})
+    local createFactoryProfile = (type(MSUF) == "table" and MSUF.MSUF_CreateFactoryDefaultProfile)
+        or _G.MSUF_CreateFactoryDefaultProfile
+    local called, profile = MSUF_ProfileIO_RunProtected("create factory profile", createFactoryProfile)
+    if not called or type(profile) ~= "table" then
+        print("|cffff0000MSUF:|r Factory defaults are not available; profile was not created.")
+        return false, "factory defaults unavailable"
+    end
+    profiles[name] = profile
     if MSUF_ProfileIO_TranslateProfileToCurrent then
         MSUF_ProfileIO_TranslateProfileToCurrent(profiles[name], {
             source = "profile_create",
