@@ -65,6 +65,10 @@ local COPY_LIKE_TERMS = {
     "copy", "use", "kopiere", "kopieren", "uebernehme", "uebernehmen",
     "look like", "looks like", "same as", "the same as", "match", "mirror", "clone",
 }
+local UNIT_COPY_PLACEMENT_TERMS = {
+    "position", "positioning", "placement", "location", "anchor", "anchoring",
+    "same position", "same placement", "same anchor",
+}
 
 local function HasCopyIntent(text)
     for i = 1, #COPY_LIKE_TERMS do
@@ -290,6 +294,19 @@ local function ParseCopy(text)
         source = units[1]
         targets = {}
         for i = 2, #units do targets[#targets + 1] = units[i] end
+    end
+    -- Unit Copy To deliberately excludes placement and anchoring: copying
+    -- those values can stack two secure frames exactly on top of each other.
+    -- Never silently run the remaining/default categories when a request asks
+    -- for an unsupported placement copy; that would turn a position-only
+    -- sentence into a broad visual copy while still not moving the frame.
+    if ContainsAny(text, UNIT_COPY_PLACEMENT_TERMS) then
+        return {
+            kind = "answer",
+            status = "info",
+            text = "Unit Frame Copy To does not copy position or anchoring, so I did not run a partial copy. Copy the visual categories you want separately, then place the target frame in MSUF Edit Mode.",
+            summary = "Keeps unsupported unit-frame placement out of Copy To.",
+        }
     end
     local action = Registry and Registry:GetAction("copy_unit")
     if not action then return nil end
