@@ -84,6 +84,7 @@ do
         { key = "EXPRESSWAY_SEMIBOLD",        name = "Expressway SemiBold (MSUF)",        file = "Expressway SemiBold.ttf" },
         { key = "EXPRESSWAY_EXTRABOLD",       name = "Expressway ExtraBold (MSUF)",       file = "Expressway ExtraBold.ttf" },
         { key = "EXPRESSWAY_CONDENSED_LIGHT", name = "Expressway Condensed Light (MSUF)", file = "Expressway Condensed Light.otf" },
+        { key = "SOUNDSCAPE",                 name = "Fritz Soundscape",                  file = "Fritz Soundscape.ttf" },
     }
 
     local function HasFontKey(list, key)
@@ -220,6 +221,7 @@ local MSUF_INTERNAL_LSM_FONT_KEYS = {
     ["Expressway SemiBold (MSUF)"] = "EXPRESSWAY_SEMIBOLD",
     ["Expressway ExtraBold (MSUF)"] = "EXPRESSWAY_EXTRABOLD",
     ["Expressway Condensed Light (MSUF)"] = "EXPRESSWAY_CONDENSED_LIGHT",
+    ["Fritz Soundscape"] = "SOUNDSCAPE",
 }
 
 local function MSUF_NormalizeFontKey(key)

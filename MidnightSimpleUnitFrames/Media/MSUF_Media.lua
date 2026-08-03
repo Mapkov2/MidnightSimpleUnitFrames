@@ -21,6 +21,8 @@ LSM:Register("font", "Expressway Bold (MSUF)",     base .. "Fonts\\Expressway Bo
 LSM:Register("font", "EXPRESSWAY_SEMIBOLD",        base .. "Fonts\\Expressway SemiBold.ttf")
 LSM:Register("font", "EXPRESSWAY_EXTRABOLD",       base .. "Fonts\\Expressway ExtraBold.ttf")
 LSM:Register("font", "EXPRESSWAY_CONDENSED_LIGHT", base .. "Fonts\\Expressway Condensed Light.otf")
+LSM:Register("font", "SOUNDSCAPE",                 base .. "Fonts\\Fritz Soundscape.ttf")
+LSM:Register("font", "Fritz Soundscape",           base .. "Fonts\\Fritz Soundscape.ttf")
 
 --- Bar / Castbar textures (Media/Bars)
 --- IMPORTANT: We intentionally do NOT register the old "MSUF Flat"/"MSUF Smooth" entries anymore,

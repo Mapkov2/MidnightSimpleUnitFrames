@@ -202,6 +202,7 @@ do
         EXPRESSWAY_SEMIBOLD = ADDON_FONT_BASE .. "Expressway SemiBold.ttf",
         EXPRESSWAY_EXTRABOLD = ADDON_FONT_BASE .. "Expressway ExtraBold.ttf",
         EXPRESSWAY_CONDENSED_LIGHT = ADDON_FONT_BASE .. "Expressway Condensed Light.otf",
+        SOUNDSCAPE = ADDON_FONT_BASE .. "Fritz Soundscape.ttf",
 
         ["Friz Quadrata TT"] = "Fonts\\FRIZQT___CYR.TTF",
         ["Friz Quadrata (default)"] = "Fonts\\FRIZQT___CYR.TTF",
@@ -217,6 +218,7 @@ do
         ["Expressway SemiBold (MSUF)"] = ADDON_FONT_BASE .. "Expressway SemiBold.ttf",
         ["Expressway ExtraBold (MSUF)"] = ADDON_FONT_BASE .. "Expressway ExtraBold.ttf",
         ["Expressway Condensed Light (MSUF)"] = ADDON_FONT_BASE .. "Expressway Condensed Light.otf",
+        ["Fritz Soundscape"] = ADDON_FONT_BASE .. "Fritz Soundscape.ttf",
     }
 
     local function NormalizeFontPath(path)
@@ -1048,6 +1050,7 @@ RegisterBundledFonts = function()
         { key = "EXPRESSWAY_SEMIBOLD", name = "Expressway SemiBold (MSUF)", file = "Expressway SemiBold.ttf" },
         { key = "EXPRESSWAY_EXTRABOLD", name = "Expressway ExtraBold (MSUF)", file = "Expressway ExtraBold.ttf" },
         { key = "EXPRESSWAY_CONDENSED_LIGHT", name = "Expressway Condensed Light (MSUF)", file = "Expressway Condensed Light.otf" },
+        { key = "SOUNDSCAPE", name = "Fritz Soundscape", file = "Fritz Soundscape.ttf" },
     }
 
     for _, info in ipairs(fonts) do
