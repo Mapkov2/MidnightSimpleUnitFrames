@@ -336,12 +336,14 @@ end
 -- their configured resource color on the same token-keyed override path used
 -- by players and previews instead of falling back to Blizzard's default RGB.
 local POWER_TOKEN_BY_TYPE = {}
+local CONFIGURABLE_POWER_TOKENS = {}
 do
     local powerTypeEnum = G.Enum and G.Enum.PowerType
     local function RegisterPowerToken(enumKey, fallbackType, token)
         local numericType = powerTypeEnum and powerTypeEnum[enumKey]
         if type(numericType) ~= "number" then numericType = fallbackType end
         POWER_TOKEN_BY_TYPE[numericType] = token
+        CONFIGURABLE_POWER_TOKENS[token] = true
     end
 
     RegisterPowerToken("Mana", 0, "MANA")
@@ -357,10 +359,13 @@ do
     RegisterPowerToken("Essence", 19, "ESSENCE")
 end
 
+local function NormalizePowerToken(powerType, powerToken)
+    if type(powerToken) == "string" and powerToken ~= "" then return powerToken end
+    return type(powerType) == "number" and POWER_TOKEN_BY_TYPE[powerType] or nil
+end
+
 local function MSUF_GetPowerBarColor(powerType, powerToken)
-    if type(powerToken) ~= "string" or powerToken == "" then
-        powerToken = type(powerType) == "number" and POWER_TOKEN_BY_TYPE[powerType] or nil
-    end
+    powerToken = NormalizePowerToken(powerType, powerToken)
     if not powerToken then
         return nil
     end
@@ -392,6 +397,7 @@ end
 G.MSUF_GetPowerBarColor = MSUF_GetPowerBarColor
 
 local function MSUF_GetResolvedPowerColor(powerType, powerToken)
+    powerToken = NormalizePowerToken(powerType, powerToken)
     if type(MSUF_GetPowerBarColor) == "function" then
         local r, g, b = MSUF_GetPowerBarColor(powerType, powerToken)
         if type(r) == "number" and type(g) == "number" and type(b) == "number" then
@@ -429,6 +435,12 @@ local function MSUF_GetResolvedPowerColor(powerType, powerToken)
         if type(r) == "number" and type(g) == "number" and type(b) == "number" then
             return r, g, b
         end
+    end
+    if CONFIGURABLE_POWER_TOKENS[powerToken] == true then
+        -- Matches the Colors menu's PowerDefaultRGB fallback. Essence has no
+        -- Blizzard PowerBarColor entry on current PTR/live data, so without
+        -- this final branch Reset would preview gray but render as Mana blue.
+        return 0.8, 0.8, 0.8
     end
     return nil
 end
