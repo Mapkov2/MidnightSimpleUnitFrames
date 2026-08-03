@@ -498,7 +498,7 @@ local function ApplyCastbarPreviewRounded(cast, g, edgeSize, bgR, bgG, bgB, bgA)
     return true
 end
 local UNIT_RENDER_FALLBACKS = {
-    RuntimeSpecForPreviewKey = F.Nil, RuntimeAppliedPortraitSizeForPreviewKey = F.Nil, RuntimeVisualScaleForPreviewKey = F.One, RuntimeCastbarVisualScaleForPreviewKey = F.One, ClampPreviewZoom = NumberOrOne, UpdatePreviewZoomControls = F.Noop,
+    RuntimeSpecForPreviewKey = F.Nil, RuntimeAppliedPortraitSizeForPreviewKey = F.Nil, RuntimeVisualScaleForPreviewKey = F.One, RuntimeCastbarVisualScaleForPreviewKey = F.One, ClampPreviewZoom = NumberOrOne, ResolveDefaultPreviewZoomLock = F.Noop, UpdatePreviewZoomControls = F.Noop,
     ApplyPreviewRounded = F.Noop, ApplyPreviewFrameBorder = F.Noop, PreviewRoundedOutlineThickness = F.One, ApplyPreviewBoundsGuide = F.Noop,
     CastbarShowIcon = F.True, CastbarShowText = F.TruePair, ReadCastbarNum = CastbarNumFallback, FormatCastbarPreviewTime = CastbarTimeFallback,
     ClassColor = F.WhiteRGB, HealthColor = F.HealthRGB, DarkMatchHPColor = F.HealthRGB, HealthBackgroundColor = F.DarkRGBA, PowerBackgroundColor = F.DarkRGBA, PowerColor = F.PowerRGB, FontColor = F.WhiteRGB,
@@ -661,7 +661,7 @@ function Render.Install(Preview, deps)
     deps = deps or Preview.RefreshDeps or {}
     Preview.RefreshDeps = deps
     local renderState = PickFallbackTable(deps, UNIT_RENDER_FALLBACKS, [[
-        RuntimeSpecForPreviewKey RuntimeAppliedPortraitSizeForPreviewKey RuntimeVisualScaleForPreviewKey RuntimeCastbarVisualScaleForPreviewKey ClampPreviewZoom UpdatePreviewZoomControls
+        RuntimeSpecForPreviewKey RuntimeAppliedPortraitSizeForPreviewKey RuntimeVisualScaleForPreviewKey RuntimeCastbarVisualScaleForPreviewKey ClampPreviewZoom ResolveDefaultPreviewZoomLock UpdatePreviewZoomControls
         ApplyPreviewRounded ApplyPreviewFrameBorder PreviewRoundedOutlineThickness ApplyPreviewBoundsGuide CastbarShowIcon CastbarShowText ReadCastbarNum FormatCastbarPreviewTime
         ClassColor HealthColor DarkMatchHPColor HealthBackgroundColor PowerBackgroundColor PowerColor FontColor PreviewResolveHealPredAnchorMode PreviewResolveAbsorbAnchorMode PreviewHealPredictionEnabled PreviewAbsorbBarEnabled
         PreviewNameColor PreviewToTInlineColor NormalizeHpMode NormalizePowerMode TextScopeGet TextScopeHasSlots TextScopeSlotGet FormatMode ShortenPreviewName ToTInlineSeparator ResolveNameAnchor
@@ -1745,6 +1745,7 @@ function Preview.Refresh(box, reason)
     -- its usability floor, but forcing that same floor here clips status icons
     -- with large offsets instead of showing the true layout.
     if autoScale < 0.05 then autoScale = 0.05 end
+    R.ResolveDefaultPreviewZoomLock(box, autoScale)
     local manualZoom = tonumber(box._manualZoom)
     local frozenScale = tonumber(box._dragFrozenScale)
     local previewScale = manualZoom and R.ClampPreviewZoom(manualZoom) or (frozenScale and R.ClampPreviewZoom(frozenScale) or autoScale)

@@ -149,7 +149,10 @@ local ALIASES = M.ALIASES or {}
 -- keeps navigation, scope tabs, previews, and paired controls readable at the
 -- same time while retaining resize support for smaller displays.
 local DEFAULT_WINDOW_W, DEFAULT_WINDOW_H = 1360, 860
-local MIN_WINDOW_W, MIN_WINDOW_H = 700, 480
+-- The minimum remains useful through the compact preview. Full previews keep
+-- their exact preferred geometry; an explicit resize-grip shrink may switch
+-- them to Compact rather than squeezing the renderer into a third size.
+local MIN_WINDOW_W, MIN_WINDOW_H = 900, 660
 local MAX_WINDOW_W, MAX_WINDOW_H = 1760, 1200
 local MENU_SCALE_MIN, MENU_SCALE_MAX, MENU_SCALE_STEP = 0.25, 1.50, 0.05
 local WINDOW_W, WINDOW_H = DEFAULT_WINDOW_W, DEFAULT_WINDOW_H
@@ -335,6 +338,7 @@ local function AnimateWindowLayout(frame, target, opts)
         ApplyRawFrameLayout(frame, target)
         if opts.toAlpha and frame.SetAlpha then frame:SetAlpha(opts.toAlpha) end
         if type(opts.onFinished) == "function" then opts.onFinished(frame) end
+        M.CallIf(M.ResolvePendingFixedPreviewExpansion, frame)
         return true
     end
     local driver = frame._msuf2WindowLayoutDriver
@@ -382,6 +386,10 @@ local function AnimateWindowLayout(frame, target, opts)
             ApplyRawFrameLayout(frame, target)
             if state.toAlpha and frame.SetAlpha then frame:SetAlpha(state.toAlpha) end
             if type(state.onFinished) == "function" then state.onFinished(frame) end
+            -- Explicit Full Preview is a page-keyed intent, not geometry owned
+            -- by this transient animation. Drain it only after the target layout
+            -- and its normal resize/snap/maximize rebuild have both committed.
+            M.CallIf(M.ResolvePendingFixedPreviewExpansion, frame)
         end
     end)
     driver:Show()
@@ -398,7 +406,7 @@ local function MinimizedBarTargetLayout(frame, bar)
     layout.h = max(1, (layout.h or MINIMIZED_WINDOW_H) / scale)
     return layout
 end
-local function ApplyWindowLayout(frame, layout, rebuild)
+local function ApplyWindowLayout(frame, layout, rebuild, rebuildOptions)
     if not (frame and layout and _G.UIParent) then return false end
     local maxW, maxH = WindowMaxBounds()
     local w = ClampNumber(layout.w, MIN_WINDOW_W, maxW, DEFAULT_WINDOW_W)
@@ -408,7 +416,7 @@ local function ApplyWindowLayout(frame, layout, rebuild)
     frame:SetPoint("TOPLEFT", _G.UIParent, "BOTTOMLEFT", layout.x or SNAP_SCREEN_MARGIN, layout.yTop or DEFAULT_WINDOW_H)
     ApplyWindowResizeBounds(frame)
     if rebuild and RebuildActivePageForResize then
-        RebuildActivePageForResize(frame)
+        RebuildActivePageForResize(frame, rebuildOptions)
     else
         SaveWindowSize(frame)
     end
@@ -710,13 +718,133 @@ local function QueueVisiblePageLayoutSettle(key, entry)
         Settle()
     end
 end
-function RebuildActivePageForResize(frame)
+local fixedPreviewRestoreSerial = 0
+local fixedPreviewExpandIntentSerial = 0
+local function FixedPreviewExpanderForEntry(entry)
+    local records = type(entry) == "table" and entry.pageHeaders or nil
+    if type(records) ~= "table" then return nil end
+    for i = 1, #records do
+        local expander = records[i] and records[i].previewExpander
+        if expander and not expander.disposed and type(expander.Open) == "function" then return expander end
+    end
+    return nil
+end
+local function RestoreExpandedFixedPreview(key, entry, serial, options)
+    options = type(options) == "table" and options or {}
+    local pendingIntent = options.pendingIntent
+    local resolved = false
+    local function TryRestore()
+        if resolved or serial ~= fixedPreviewRestoreSerial or M.activeKey ~= key
+            or not (M.cache and M.cache[key] == entry)
+        then
+            resolved = true
+            return
+        end
+        local frame = M.frame
+        if pendingIntent and not (frame and frame._msuf2PendingFixedPreviewExpand == pendingIntent) then
+            resolved = true
+            return
+        end
+        local expander = FixedPreviewExpanderForEntry(entry)
+        if not expander then return end
+        -- Responsive headers can wrap differently after the new page variant
+        -- is built. A resize-grip shrink therefore decides against the NEW
+        -- stack, never against stale pre-rebuild geometry.
+        if options.autoCompactIfNoFit == true
+            and type(expander.CanFitPreferredExpansion) == "function"
+            and expander:CanFitPreferredExpansion() == false
+        then
+            resolved = true
+            return
+        end
+        if pendingIntent then
+            -- Consume only when the current page actually has an expander to
+            -- satisfy the request. Until here, deferred Unit construction keeps
+            -- the exact same intent alive across the bounded retry window.
+            frame._msuf2PendingFixedPreviewExpand = nil
+        end
+        if expander.expanded == true then
+            resolved = true
+            if options.ensureRoom == true and type(M.EnsureFixedPreviewExpansionRoom) == "function" then
+                M.EnsureFixedPreviewExpansionRoom(expander)
+            end
+        elseif expander:Open(options.reason or "WINDOW_LAYOUT_RESTORE") then
+            resolved = true
+        elseif pendingIntent and not frame._msuf2PendingFixedPreviewExpand
+            and pendingIntent.serial == fixedPreviewExpandIntentSerial
+            and M.activeKey == key and M.cache and M.cache[key] == entry
+        then
+            -- A temporarily hidden/not-yet-owned renderer can reject Open even
+            -- after it exists. Restore the same intent for the remaining retry;
+            -- never overwrite a newer user action.
+            frame._msuf2PendingFixedPreviewExpand = pendingIntent
+        end
+    end
+    TryRestore()
+    if resolved or not (C_Timer and C_Timer.After) then return end
+    -- Unit previews create their shared renderer on the first visible frame;
+    -- Group and Class previews normally restore synchronously. These bounded
+    -- retries cover that one deferred construction without adding a ticker.
+    C_Timer.After(0, TryRestore)
+    C_Timer.After(0.05, TryRestore)
+end
+function M.ClearPendingFixedPreviewExpansion(pageKey)
+    local frame = M.frame
+    local pending = frame and frame._msuf2PendingFixedPreviewExpand
+    if pending and pageKey and pending.pageKey ~= pageKey then return false end
+    -- Also invalidate already-scheduled Unit construction retries. This closes
+    -- the A -> B -> A and hide -> show windows where activeKey/cache identity can
+    -- otherwise become true again before a 0.05-second retry fires.
+    fixedPreviewRestoreSerial = fixedPreviewRestoreSerial + 1
+    fixedPreviewExpandIntentSerial = fixedPreviewExpandIntentSerial + 1
+    if frame then frame._msuf2PendingFixedPreviewExpand = nil end
+    return pending ~= nil
+end
+function M.ResolvePendingFixedPreviewExpansion(frame)
+    frame = frame or M.frame
+    local pending = frame and frame._msuf2PendingFixedPreviewExpand
+    if not pending then return false end
+    -- Replacement animations inherit the intent. Only the newest settled
+    -- layout may decide whether the full canvas needs more window height.
+    if frame._msuf2WindowLayoutAnim then return false end
+    local key = pending.pageKey
+    local entry = key and M.cache and M.cache[key]
+    if pending.serial ~= fixedPreviewExpandIntentSerial or M.activeKey ~= key
+        or not entry or (frame.IsShown and not frame:IsShown())
+    then
+        frame._msuf2PendingFixedPreviewExpand = nil
+        return false
+    end
+    fixedPreviewRestoreSerial = fixedPreviewRestoreSerial + 1
+    RestoreExpandedFixedPreview(key, entry, fixedPreviewRestoreSerial, {
+        reason = "DEFERRED_EXPLICIT_EXPAND",
+        ensureRoom = true,
+        pendingIntent = pending,
+    })
+    return true
+end
+function RebuildActivePageForResize(frame, options)
+    options = type(options) == "table" and options or {}
     local key = M.activeKey or "home"
+    local activeExpander = M._msuf2ActiveFixedPreviewExpander
+    local restoreExpanded = activeExpander and activeExpander.expanded == true
+        and not activeExpander.disposed
+        and (not activeExpander.pageKey or activeExpander.pageKey == key)
+    local autoCompactIfNoFit = restoreExpanded
+        and options.allowAutoCompact == true and options.shrinking == true
+    fixedPreviewRestoreSerial = fixedPreviewRestoreSerial + 1
+    local restoreSerial = fixedPreviewRestoreSerial
     SaveWindowSize(frame)
     M._msuf2LayoutVersion = (M._msuf2LayoutVersion or 0) + 1
     M.CallIf(M.SetActivePageHeader, nil)
     M.activeKey = nil
-    if M.SelectPage and frame and frame:IsShown() then M.SelectPage(key) end
+    local selected = M.SelectPage and frame and frame:IsShown() and M.SelectPage(key)
+    if selected and restoreExpanded then
+        RestoreExpandedFixedPreview(key, M.cache and M.cache[key], restoreSerial, {
+            autoCompactIfNoFit = autoCompactIfNoFit,
+            reason = options.source == "resize-grip" and "WINDOW_RESIZE_RESTORE" or "WINDOW_LAYOUT_RESTORE",
+        })
+    end
     ApplyScrollMetrics()
     M.CallIf(M.RefreshGuidedTourChrome, "WINDOW_RESIZE")
 end
@@ -1257,6 +1385,7 @@ function M.SelectPage(key)
     -- leave an empty content area. Removed legacy pages and typos safely land
     -- on the Dashboard instead.
     if not (M.pages and M.pages[key]) then key = "home" end
+    if M.activeKey and key ~= M.activeKey then M.CallIf(M.ClearPendingFixedPreviewExpansion) end
     local hasPendingFocus = false
     do
         local req = _G.MSUF_EM2_MenuFocusRequest
@@ -1937,17 +2066,22 @@ local function InstallWindowInteractions(state)
                 w = ResizeSettleStartValue(current.w, layout.w),
                 h = ResizeSettleStartValue(current.h, layout.h),
             }
+            local rebuildOptions = {
+                source = "resize-grip",
+                allowAutoCompact = true,
+                shrinking = (w < state.startW - 0.5) or (h < state.startH - 0.5),
+            }
             if settleStart and AnimateWindowLayout(f, layout, {
                 start = settleStart,
                 applyStart = true,
                 duration = WINDOW_RESIZE_ANIM_SECONDS,
                 onFinished = function()
-                    ApplyWindowLayout(f, layout, true)
+                    ApplyWindowLayout(f, layout, true, rebuildOptions)
                 end,
             }) then
                 return
             end
-            ApplyWindowLayout(f, layout, true)
+            ApplyWindowLayout(f, layout, true, rebuildOptions)
         end
     end
     function f:_msuf2CancelWindowInteractions()
@@ -2261,6 +2395,7 @@ local function InstallWindowLifecycle(state)
         M.CallIf(M.UpdateMenuCombatListener)
     end)
     f:SetScript("OnHide", function()
+        M.CallIf(M.ClearPendingFixedPreviewExpansion)
         M.CallIf(M.SetActivePageHeader, nil)
         M.CallIf(M.HideLayerOverview)
         if M.StopWindowLayoutAnimation then M.StopWindowLayoutAnimation(f) end
@@ -2304,6 +2439,22 @@ local function InstallWindowLifecycle(state)
     end)
 end
 
+local function ForwardMenuScrollWheel(delta)
+    if not delta or delta == 0 then return false end
+    local scroll = M.scrollFrame
+    if not scroll then return false end
+    local scrollBy = scroll._msuf2ScrollByWheel
+    if type(scrollBy) == "function" then
+        scrollBy(delta)
+        return true
+    end
+    local handler = scroll.GetScript and scroll:GetScript("OnMouseWheel")
+    if type(handler) ~= "function" then return false end
+    handler(scroll, delta)
+    return true
+end
+M.ForwardMenuScrollWheel = ForwardMenuScrollWheel
+
 local function BuildWindowScrollHost(state)
     local f = state.frame
     local host, status = f.host, f.status
@@ -2324,12 +2475,39 @@ local function BuildWindowScrollHost(state)
         if scroll._msuf2RefreshScrollBar then scroll:_msuf2RefreshScrollBar() end
         M.CallIf(M.RefreshPinnedPreviews, scroll)
     end
-    --- The docked slot never eats the whole viewport: the ScrollFrame keeps a
-    --- usable height even when a page docks a tall expanded preview on a small
-    --- window.  The slot is not clipped - clipping cuts the panels' overscanned
-    --- rounded corners - so an oversized preview simply reaches past the slot,
-    --- and the page's own compact/collapse controls are the real remedy.
+    --- Compact fixed chrome keeps a useful settings viewport. An explicitly
+    --- expanded preview behaves like an accordion and may consume nearly all
+    --- of it: the ScrollFrame still begins below the complete preview instead
+    --- of letting the preview overlay or clip against the settings body.
     local STICKY_HEADER_MIN_BODY_REVEAL = 120
+    local STICKY_HEADER_EXPANDED_BODY_REVEAL = 16
+    local function ReadFrameCoordinate(frame, getter)
+        if not (frame and type(frame[getter]) == "function") then return nil end
+        local value = frame[getter](frame)
+        local canaccessvalue = _G.canaccessvalue
+        if type(canaccessvalue) == "function" and canaccessvalue(value) ~= true then return nil end
+        local issecretvalue = _G.issecretvalue
+        if type(issecretvalue) == "function" and issecretvalue(value) == true then return nil end
+        return tonumber(value)
+    end
+    local function HeaderAvailableHeight(topOwner, layoutHost)
+        topOwner = topOwner or activeTopOwner or status
+        layoutHost = layoutHost or activeLayoutHost or host
+        local ownerBottom = ReadFrameCoordinate(topOwner, "GetBottom")
+        local hostBottom = ReadFrameCoordinate(layoutHost, "GetBottom")
+        if ownerBottom and hostBottom and ownerBottom > hostBottom then return ownerBottom - hostBottom end
+        -- Construction-test and first-layout fallback. Guided chrome is
+        -- anchored below status, while the normal top owner is status itself.
+        local available = (tonumber(layoutHost and layoutHost.GetHeight and layoutHost:GetHeight()) or 0)
+            - (tonumber(topOwner and topOwner.GetHeight and topOwner:GetHeight()) or 0)
+        if topOwner ~= status then
+            available = available - (tonumber(status and status.GetHeight and status:GetHeight()) or 0)
+        end
+        return max(0, available)
+    end
+    function M.GetPageHeaderAvailableHeight()
+        return HeaderAvailableHeight(activeTopOwner, activeLayoutHost)
+    end
     local function StickyHeaderStackHeight(topOwner, layoutHost)
         local list = scroll._msuf2StickyPageHeaders
         if type(list) ~= "table" or #list == 0 then return 0 end
@@ -2339,9 +2517,18 @@ local function BuildWindowScrollHost(state)
             if record and record.active then total = total + max(0, tonumber(record.hostHeight) or 0) end
         end
         if total <= 0 then return 0 end
-        local available = (tonumber(layoutHost and layoutHost.GetHeight and layoutHost:GetHeight()) or 0)
-            - (tonumber(topOwner and topOwner.GetHeight and topOwner:GetHeight()) or 0)
-        local limit = available - STICKY_HEADER_MIN_BODY_REVEAL
+        local available = HeaderAvailableHeight(topOwner, layoutHost)
+        local minimumReveal = STICKY_HEADER_MIN_BODY_REVEAL
+        for i = 1, #list do
+            local record = list[i]
+            if record and record.active and record.previewExpander
+                and record.previewExpander.expanded == true
+            then
+                minimumReveal = STICKY_HEADER_EXPANDED_BODY_REVEAL
+                break
+            end
+        end
+        local limit = available - minimumReveal
         if limit > 0 and total > limit then return limit, true end
         return total, false
     end
@@ -2360,10 +2547,8 @@ local function BuildWindowScrollHost(state)
         local stackHeight, clipped = StickyHeaderStackHeight(topOwner, layoutHost)
         if stackHeight > 0 then
             pageHeaderHost:SetHeight(stackHeight)
-            -- On a window too short for the full stack the slot is clipped: an
-            -- oversized preview loses its bottom edge instead of painting over
-            -- the page body (or past the window onto the world). Clipping stays
-            -- off at normal sizes so rounded panel corners keep their overscan.
+            -- On a window too short for the full stack, clip its overflow rather
+            -- than painting over the settings body or outside the window.
             if pageHeaderHost.SetClipsChildren then pageHeaderHost:SetClipsChildren(clipped and true or false) end
             pageHeaderHost:Show()
             scroll:SetPoint("TOPLEFT", pageHeaderHost, "BOTTOMLEFT", 0, 0)
@@ -2416,6 +2601,7 @@ local function BuildWindowScrollHost(state)
                 ran = ran + 1
             end
         end
+        M.CallIf(M.ResolvePendingFixedPreviewExpansion, M.frame)
         return ran
     end
     function M.SetActivePageHeader(entry)
@@ -2445,12 +2631,13 @@ local function BuildWindowScrollHost(state)
         local stackOffset = 0
         for i = 1, #list do
             local record = list[i]
-            if record and not record.disposed and record.Activate then
+            if record and record.active and not record.disposed and record.Activate then
                 record:Activate(pageHeaderHost, stackOffset)
                 stackOffset = stackOffset + max(0, tonumber(record.hostHeight) or 0)
             end
         end
         LayoutPageHeaderHost()
+        RefreshPinnedHeaderGeometry()
         return true
     end
     function M.DisposePageHeader(entry)
@@ -2476,7 +2663,51 @@ local function BuildWindowScrollHost(state)
     scroll:SetScrollChild(child)
     M.scrollChild = child
     M.CallIf(T.StyleScrollFrame, scroll, host)
+    pageHeaderHost:EnableMouseWheel(true)
+    if pageHeaderHost.SetPropagateMouseWheel then pageHeaderHost:SetPropagateMouseWheel(false) end
+    pageHeaderHost:SetScript("OnMouseWheel", function(_, delta)
+        ForwardMenuScrollWheel(delta)
+    end)
     M.CallIf(M.InstallGuidedTourChrome, f, status, host, scroll)
+end
+
+-- An explicit Expand must produce a real full canvas even when the user is at
+-- the compact minimum window height. Grow only by the measured shortfall; the
+-- ensuing normal layout rebuild captures/restores the expanded state.
+function M.EnsureFixedPreviewExpansionRoom(expander)
+    local frame = M.frame
+    if not (frame and expander and type(expander.GetPreferredExpansionShortfall) == "function")
+        or frame._msuf2GrowingForFixedPreview
+    then
+        return false
+    end
+    local animation = frame._msuf2WindowLayoutAnim
+    if animation then
+        -- The animation owns raw geometry until its normal completion rebuild.
+        -- Keep only a page-keyed intent so replacement animations inherit it;
+        -- the settled resolver always obtains the current renderer from cache.
+        local key = expander.pageKey or M.activeKey
+        if not key then return false end
+        fixedPreviewExpandIntentSerial = fixedPreviewExpandIntentSerial + 1
+        frame._msuf2PendingFixedPreviewExpand = {
+            serial = fixedPreviewExpandIntentSerial,
+            pageKey = key,
+        }
+        return true
+    end
+    local shortfall = tonumber(expander:GetPreferredExpansionShortfall()) or 0
+    if shortfall <= 0.5 then return false end
+    local layout = CaptureFrameLayout(frame)
+    if not layout then return false end
+    local _, maxH = WindowMaxBounds()
+    local currentH = tonumber(layout.h) or tonumber(frame.GetHeight and frame:GetHeight()) or WINDOW_H
+    local targetH = min(maxH, math.ceil(currentH + shortfall))
+    if targetH <= currentH + 0.5 then return false end
+    layout.h = targetH
+    frame._msuf2GrowingForFixedPreview = true
+    local applied = ApplyWindowLayout(frame, layout, true, { source = "preview-expand" })
+    frame._msuf2GrowingForFixedPreview = nil
+    return applied == true
 end
 
 local function BuildWindow()
@@ -2508,7 +2739,7 @@ ApplyMenuFrameScale = function(frame)
     then
         -- Scaling can reduce the screen-safe local window bounds. Rebuild once
         -- so cached responsive pages use the new content width immediately.
-        RebuildActivePageForResize(frame)
+        RebuildActivePageForResize(frame, { source = "menu-scale" })
     end
     if type(frame.RefreshMenuScaleControl) == "function" then frame:RefreshMenuScaleControl() end
 end

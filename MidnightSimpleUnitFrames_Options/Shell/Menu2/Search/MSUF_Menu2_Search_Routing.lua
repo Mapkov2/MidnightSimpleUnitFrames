@@ -123,24 +123,42 @@ local function CollectSearchAnchorCandidates(frame, out, depth)
     end
 end
 
-local function SearchAnchorBelongsToWrapper(wrapper, anchor)
-    if not (wrapper and anchor and anchor.GetTop) then return false end
+local function SearchAnchorOwnership(wrapper, anchor)
+    if not (wrapper and anchor and anchor.GetTop) then return false, nil end
     local node = anchor
     while node do
-        if node == wrapper then return true end
+        if node == wrapper then return true, nil end
+        if node._msuf2PageOwnerWrapper == wrapper then
+            local record = node._msuf2StickyPageHeaderRecord
+            local fixedRoot = record and record.active and not record.disposed
+                and record.section == node and node or nil
+            return true, fixedRoot
+        end
         node = node.GetParent and node:GetParent() or nil
     end
-    return false
+    return false, nil
 end
 
 local function FindSearchAnchor(pageKey, query, fallback, preferredAnchor)
     local entry = M.cache and M.cache[pageKey]
     local wrapper = entry and entry.wrapper
     if not wrapper then return nil end
-    if SearchAnchorBelongsToWrapper(wrapper, preferredAnchor) then return preferredAnchor end
+    if SearchAnchorOwnership(wrapper, preferredAnchor) then return preferredAnchor end
 
     local candidates = {}
     CollectSearchAnchorCandidates(wrapper, candidates, 1)
+    -- Fixed Editing/Preview panels live in the shared header host, outside the
+    -- wrapper's physical child tree. Include the active page-owned stack in the
+    -- same search pass so plain-text and exact-control routing stay equivalent.
+    local headers = entry and entry.pageHeaders
+    if type(headers) == "table" then
+        for i = 1, #headers do
+            local record = headers[i]
+            if record and record.active and record.section then
+                CollectSearchAnchorCandidates(record.section, candidates, 1)
+            end
+        end
+    end
 
     local best, bestScore
     for i = 1, #candidates do
@@ -167,7 +185,7 @@ local function FindCurrentSearchAnchor(pageKey, query, fallback, preferredAnchor
     local exactAnchor, exactMatched = ResolveExactSearchAnchor(pageKey, exactTarget)
     if exactMatched then
         local wrapper = M.cache and M.cache[pageKey] and M.cache[pageKey].wrapper
-        if SearchAnchorBelongsToWrapper(wrapper, exactAnchor) then return exactAnchor, true end
+        if SearchAnchorOwnership(wrapper, exactAnchor) then return exactAnchor, true end
         exactMatched = false
     end
     return FindSearchAnchor(pageKey, query, fallback, preferredAnchor), exactMatched
@@ -196,6 +214,59 @@ local function OpenAnchorCollapsibles(region)
     return opened
 end
 
+local function RegionDescendsFrom(region, ancestor)
+    local node = region
+    while node do
+        if node == ancestor then return true end
+        node = node.GetParent and node:GetParent() or nil
+    end
+    return false
+end
+
+local function FixedPreviewExpanderForAnchor(region)
+    local node = region
+    while node do
+        local expander = node._msuf2FixedPreviewExpanderRecord
+        if not expander then
+            local header = node._msuf2FixedPagePreviewRecord or node._msuf2StickyPageHeaderRecord
+            expander = header and header.previewExpander
+        end
+        if expander and not expander.disposed then return expander end
+        node = node.GetParent and node:GetParent() or nil
+    end
+    return nil
+end
+
+local function OpenHiddenFixedPreviewAnchor(region)
+    local expander = FixedPreviewExpanderForAnchor(region)
+    if not expander or expander.expanded or type(expander.Open) ~= "function" then return false end
+    if expander.button and RegionDescendsFrom(region, expander.button) then return false end
+
+    -- Compact presentation deliberately hides secondary preview controls. Only
+    -- expand for one of those hidden/clipped targets; visible title/chrome
+    -- results keep the user's compact state intact.
+    local hidden = false
+    local node = region
+    while node do
+        if node.IsShown and not node:IsShown() then
+            hidden = true
+            break
+        end
+        if node == expander.section then break end
+        node = node.GetParent and node:GetParent() or nil
+    end
+    local box = expander.box
+    if not hidden and box and RegionDescendsFrom(region, box)
+        and region.GetTop and region.GetBottom and box.GetTop and box.GetBottom
+    then
+        local top, bottom = region:GetTop(), region:GetBottom()
+        local boxTop, boxBottom = box:GetTop(), box:GetBottom()
+        if top and bottom and boxTop and boxBottom and (bottom > boxTop or top < boxBottom) then hidden = true end
+    end
+    if not hidden then return false end
+    return expander:Open("SEARCH_FIXED_PREVIEW_TARGET") == true
+end
+
 local function ClampScrollOffset(offset)
     offset = math.max(0, tonumber(offset) or 0)
     local childH = (M.scrollChild and M.scrollChild.GetHeight and M.scrollChild:GetHeight()) or ContentHeight()
@@ -206,22 +277,6 @@ local function ClampScrollOffset(offset)
 end
 
 local SEARCH_ANCHOR_TOP_INSET = 44
-local SEARCH_ANCHOR_PIN_MARGIN = 12
-local function ActivePinnedPreviewInset()
-    local scroll = M.scrollFrame
-    local active = scroll and scroll._msuf2PinnedPreviewActiveRecord
-    local box = active and active.box
-    if not box then return nil end
-    if box.IsShown and not box:IsShown() then return nil end
-    local scrollTop = scroll.GetTop and scroll:GetTop()
-    local boxBottom = box.GetBottom and box:GetBottom()
-    if scrollTop and boxBottom and boxBottom < scrollTop then
-        return math.max(SEARCH_ANCHOR_TOP_INSET, math.floor((scrollTop - boxBottom) + SEARCH_ANCHOR_PIN_MARGIN + 0.5))
-    end
-    local boxHeight = box.GetHeight and box:GetHeight()
-    if boxHeight then return math.max(SEARCH_ANCHOR_TOP_INSET, math.floor(boxHeight + 20.5)) end
-    return nil
-end
 
 local function SearchAnchorOffset(wrapper, region, topInset)
     if not (wrapper and region and wrapper.GetTop and region.GetTop) then return nil end
@@ -231,17 +286,18 @@ local function SearchAnchorOffset(wrapper, region, topInset)
     return ClampScrollOffset((wrapperTop - regionTop) - (tonumber(topInset) or SEARCH_ANCHOR_TOP_INSET))
 end
 
-local function HighlightSearchAnchor(wrapper, region)
-    if not (wrapper and region and wrapper.GetTop and region.GetTop) then return end
-    local wrapperTop = wrapper:GetTop()
+local function HighlightSearchAnchor(wrapper, region, fixedRoot)
+    local owner = fixedRoot or wrapper
+    if not (owner and region and owner.GetTop and region.GetTop) then return end
+    local ownerTop = owner:GetTop()
     local regionTop = region:GetTop()
-    if not (wrapperTop and regionTop) then return end
+    if not (ownerTop and regionTop) then return end
 
-    local offset = math.max(0, wrapperTop - regionTop)
-    local highlight = wrapper._msuf2SearchHighlight
+    local offset = math.max(0, ownerTop - regionTop)
+    local highlight = owner._msuf2SearchHighlight
     if not highlight then
-        highlight = CreateFrame("Frame", nil, wrapper)
-        highlight:SetFrameLevel((wrapper.GetFrameLevel and wrapper:GetFrameLevel() or 1) + 40)
+        highlight = CreateFrame("Frame", nil, owner)
+        highlight:SetFrameLevel((owner.GetFrameLevel and owner:GetFrameLevel() or 1) + 40)
         local fill = highlight:CreateTexture(nil, "BACKGROUND")
         fill:SetAllPoints()
         fill:SetColorTexture(0.20, 0.58, 1.00, 0.16)
@@ -265,12 +321,12 @@ local function HighlightSearchAnchor(wrapper, region)
         highlight._msuf2Anim:SetScript("OnFinished", function()
             if highlight then highlight:Hide() end
         end)
-        wrapper._msuf2SearchHighlight = highlight
+        owner._msuf2SearchHighlight = highlight
     end
     if highlight._msuf2Anim and highlight._msuf2Anim.Stop then highlight._msuf2Anim:Stop() end
     highlight:ClearAllPoints()
-    highlight:SetPoint("TOPLEFT", wrapper, "TOPLEFT", 8, -math.max(0, offset - 8))
-    highlight:SetSize(math.max(220, (wrapper.GetWidth and wrapper:GetWidth() or ContentWidth()) - 28), 32)
+    highlight:SetPoint("TOPLEFT", owner, "TOPLEFT", 8, -math.max(0, offset - 8))
+    highlight:SetSize(math.max(220, (owner.GetWidth and owner:GetWidth() or ContentWidth()) - 28), 32)
     highlight:SetAlpha(1)
     highlight:Show()
     if highlight._msuf2Anim and highlight._msuf2Anim.Play then highlight._msuf2Anim:Play() end
@@ -1053,6 +1109,7 @@ local function ScrollToSearchAnchor(pageKey, query, fallback, preferredAnchor, e
     local region = FindCurrentSearchAnchor(pageKey, query, fallback, preferredAnchor, exactTarget)
     if not region then return end
     local opened = OpenAnchorCollapsibles(region)
+    if OpenHiddenFixedPreviewAnchor(region) then opened = true end
     local reservedInset = SEARCH_ANCHOR_TOP_INSET
     local function finish()
         -- Zero-delay/0.05 callbacks can cross a combat transition or outlive
@@ -1066,17 +1123,23 @@ local function ScrollToSearchAnchor(pageKey, query, fallback, preferredAnchor, e
         if not wrapper then return end
         region = FindCurrentSearchAnchor(pageKey, query, fallback, preferredAnchor, exactTarget)
         if not region then return end
-        reservedInset = math.max(reservedInset, ActivePinnedPreviewInset() or SEARCH_ANCHOR_TOP_INSET)
-        local offset = SearchAnchorOffset(wrapper, region, reservedInset)
-        if offset and M.scrollFrame and M.scrollFrame.SetVerticalScroll then
-            M.scrollFrame:SetVerticalScroll(offset)
+        if OpenHiddenFixedPreviewAnchor(region) then
+            RunSoon(finish)
+            return
         end
-        HighlightSearchAnchor(wrapper, region)
+        local _, fixedRoot = SearchAnchorOwnership(wrapper, region)
+        if not fixedRoot then
+            local offset = SearchAnchorOffset(wrapper, region, reservedInset)
+            if offset and M.scrollFrame and M.scrollFrame.SetVerticalScroll then
+                M.scrollFrame:SetVerticalScroll(offset)
+            end
+        end
+        HighlightSearchAnchor(wrapper, region, fixedRoot)
     end
     if opened then RunSoon(finish) else finish() end
-    -- The pinned unit preview settles on the same bounded 0/0.05-second cycle.
-    -- Rechecking twice keeps a compact-window target below that overlay without
-    -- installing an OnUpdate, event listener, or any idle/combat work.
+    -- Recheck on the existing bounded 0/0.05-second cycle so accordion growth
+    -- and the structural fixed-header stack have both settled. The ScrollFrame
+    -- already begins below that stack, so no preview-height inset is needed.
     RunSoon(finish)
     if not SearchCombatLocked() and C_Timer and C_Timer.After then C_Timer.After(0.05, finish) end
     return true

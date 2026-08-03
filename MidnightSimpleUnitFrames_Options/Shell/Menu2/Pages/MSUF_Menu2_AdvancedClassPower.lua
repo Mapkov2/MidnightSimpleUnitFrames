@@ -660,13 +660,13 @@ local function BuildInlineClassPowerPreview(ctx, b)
     -- ClassPower preview was split into Preview/MSUF_Menu2_ClassPowerPreview.lua.
     -- Keeping only this loader guard prevents a second renderer from drifting out of sync.
     if ctx and ctx.hiddenBuild then
-        local section = b:Section("Preview", 64)
+        local section = W.FixedPreviewSection(ctx, b, { title = "Preview", height = 64 })
         W.Text(section, "Class resource preview is built when this page is opened.", 14, -38, ctx.width - 28, T.colors.muted)
         return section
     end
     local preview = M.ClassPowerStackPreview and M.ClassPowerStackPreview.Create
     if type(preview) == "function" then return preview(ctx, b) end
-    return b:Section("Preview unavailable", 64)
+    return W.FixedPreviewSection(ctx, b, { title = "Preview", height = 64 })
 end
 local Page = {}
 Page.__index = Page
@@ -811,9 +811,8 @@ function Page:BuildHeader()
     quick:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
     RegisterControl(quick, Meta("quick_setup.class_bar", "action", { confirmRequired = true }), "Quick Setup: Class Bar", "button")
     -- Dock the selector strip like the unit pages' Editing strip and the
-    -- Colors category bar: with it out of the scroll flow, the preview is the
-    -- first flow element and pins directly beneath it while scrolling -
-    -- instead of the strip scrolling away and the preview floating alone.
+    -- Colors category bar: both selector and preview occupy the fixed stack,
+    -- in that order, before the settings ScrollFrame begins.
     if W.AttachStickyPageHeader then
         W.AttachStickyPageHeader(head, {
             pageKey = ctx and ctx.key,
@@ -1397,4 +1396,4 @@ function Page:Build()
 end
 
 local function BuildClassPower(ctx) Page.New(ctx):Build() end
-M.RegisterPage("classpower", { title = "MSUF Class Resources", build = BuildClassPower, version = 18 })
+M.RegisterPage("classpower", { title = "MSUF Class Resources", build = BuildClassPower, version = 19 })

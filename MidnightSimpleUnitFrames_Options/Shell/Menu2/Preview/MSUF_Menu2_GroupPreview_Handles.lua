@@ -84,6 +84,9 @@ function Handles.Install(box, deps)
     box._dragFrame = CreateFrame("Frame", nil, dragParent)
     box._dragFrame:SetAllPoints(dragParent)
     box._dragFrame:EnableMouse(true)
+    box._dragFrame:EnableMouseWheel(true)
+    if box._dragFrame.SetPropagateMouseWheel then box._dragFrame:SetPropagateMouseWheel(false) end
+    box._dragFrame:SetScript("OnMouseWheel", ZoomWheel)
     if box._dragFrame.SetFrameLevel and dragParent.GetFrameLevel then
         box._dragFrame:SetFrameLevel((dragParent:GetFrameLevel() or 0) + 140)
     end
@@ -822,7 +825,7 @@ function Handles.Install(box, deps)
         handle:SetMovable(true)
         handle:EnableMouse(true)
         handle:EnableMouseWheel(true)
-        if handle.SetPropagateMouseWheel then handle:SetPropagateMouseWheel(true) end
+        if handle.SetPropagateMouseWheel then handle:SetPropagateMouseWheel(false) end
         if handle.RegisterForClicks then handle:RegisterForClicks("LeftButtonDown", "LeftButtonUp", "RightButtonUp") end
         if handle.RegisterForDrag then handle:RegisterForDrag("LeftButton") end
         handle:SetBackdrop({ bgFile = WHITE8X8, edgeFile = WHITE8X8, edgeSize = 1 })

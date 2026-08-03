@@ -607,7 +607,7 @@ local GROUP_RENDER_FALLBACKS = {
     CurrentStatusSpec = F.Nil, StatusSpecEnabled = F.False, StatusSpecInMode = F.False, StatusSpecIsText = F.False,
     StatusText = F.Empty, StatusLabel = F.Status, CurrentSpellInfo = F.Nil, PreviewAllSpecSpellIcons = F.False, CurrentSpellConfig = F.Nil, CurrentSpellPlaced = F.Nil,
     CurrentSpellTexture = F.QuestionIcon, CurrentSpellColor = F.WhiteRGB, MockSpellTexture = F.QuestionIcon,
-    Int = DefaultInt, Round = F.Round, ClampZoom = NumberOrOne, UpdateZoomControls = F.Noop,
+    Int = DefaultInt, Round = F.Round, ClampZoom = NumberOrOne, ResolveDefaultZoomLock = F.Noop, UpdateZoomControls = F.Noop,
     AuraGrowth = DefaultAuraGrowth, ApplyRounded = F.False, ClampLayer = DefaultClampLayer,
     ClassColor = DefaultClassColor, HealthColor = F.HealthRGB,
     SelectHandle = F.Noop, NudgeHandlePosition = F.Noop, AddIconPool = F.Noop, RefreshHandleSelection = F.Noop,
@@ -1628,8 +1628,8 @@ function Render.Install(box, ctx, deps)
     local CompiledSpec, CompiledAuraLane, RuntimeStatusConfig, CurrentStatusSpec, StatusSpecEnabled, StatusSpecInMode, StatusSpecIsText, StatusText, StatusLabel, CurrentSpellInfo, PreviewAllSpecSpellIcons, CurrentSpellConfig, CurrentSpellPlaced, CurrentSpellTexture, CurrentSpellColor, MockSpellTexture = M.PickFallbacks(deps, GROUP_RENDER_FALLBACKS, [[
         CompiledSpec CompiledAuraLane RuntimeStatusConfig CurrentStatusSpec StatusSpecEnabled StatusSpecInMode StatusSpecIsText StatusText StatusLabel CurrentSpellInfo PreviewAllSpecSpellIcons CurrentSpellConfig CurrentSpellPlaced CurrentSpellTexture CurrentSpellColor MockSpellTexture
     ]])
-    local Int, Round, ClampZoom, UpdateZoomControls, AuraGrowth, ApplyRounded, ClampLayer, ClassColor, HealthColor, SelectHandle, NudgeHandlePosition, AddIconPool, RefreshHandleSelection = M.PickFallbacks(deps, GROUP_RENDER_FALLBACKS, [[
-        Int Round ClampZoom UpdateZoomControls AuraGrowth ApplyRounded ClampLayer ClassColor HealthColor SelectHandle NudgeHandlePosition AddIconPool RefreshHandleSelection
+    local Int, Round, ClampZoom, ResolveDefaultZoomLock, UpdateZoomControls, AuraGrowth, ApplyRounded, ClampLayer, ClassColor, HealthColor, SelectHandle, NudgeHandlePosition, AddIconPool, RefreshHandleSelection = M.PickFallbacks(deps, GROUP_RENDER_FALLBACKS, [[
+        Int Round ClampZoom ResolveDefaultZoomLock UpdateZoomControls AuraGrowth ApplyRounded ClampLayer ClassColor HealthColor SelectHandle NudgeHandlePosition AddIconPool RefreshHandleSelection
     ]])
     local ScaleValue = deps.ScaleValue or function(value, scale, minValue)
         local v = Round((tonumber(value) or 0) * (tonumber(scale) or 1))
@@ -1689,6 +1689,7 @@ function Render.Install(box, ctx, deps)
         Int = Int,
         Round = Round,
         ClampZoom = ClampZoom,
+        ResolveDefaultZoomLock = ResolveDefaultZoomLock,
         UpdateZoomControls = UpdateZoomControls,
         AuraGrowth = AuraGrowth,
         ApplyRounded = ApplyRounded,
@@ -2005,6 +2006,7 @@ function Render.Install(box, ctx, deps)
         liveW, liveH = max(1, liveW), max(1, liveH)
         local autoZoom = min(self._msufGFRenderState.GF_PREVIEW_MIN_W / liveW, self._msufGFRenderState.GF_PREVIEW_MIN_H / liveH)
         autoZoom = max(1.4, min(2.8, autoZoom))
+        ResolveDefaultZoomLock(self, autoZoom)
         local manualZoom = tonumber(self._manualZoom)
         local frozenZoom = tonumber(self._dragFrozenScale)
         local previewScale = manualZoom and ClampZoom(manualZoom) or (frozenZoom and ClampZoom(frozenZoom) or autoZoom)

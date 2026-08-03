@@ -3028,6 +3028,10 @@ function T.StyleScrollFrame(scroll, anchor)
         local current = AccessibleNumber(scroll:GetVerticalScroll() or 0, 0)
         SmoothScrollTo((scroll._msuf2SmoothScrollTarget or current) - delta * step)
     end
+    -- Fixed page headers are siblings of this ScrollFrame. Expose the exact
+    -- styled wheel path so their chrome and interactive preview shells can
+    -- forward ordinary wheel input without depending on frame propagation.
+    scroll._msuf2ScrollByWheel = ScrollBy
     local function CursorYInBarSpace()
         if type(GetCursorPosition) ~= "function" then return nil end
         local _, y = GetCursorPosition()

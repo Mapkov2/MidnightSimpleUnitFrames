@@ -13,6 +13,16 @@ MSUF.MSUF2 = M
 local C_Timer = M.MenuTimer or _G.C_Timer
 local Preview = M.ClassPowerStackPreview or {}
 M.ClassPowerStackPreview = Preview
+local function ClassPowerSurfaceShown(box)
+    if not (box and box.IsShown and box:IsShown()) then return false end
+    local hostShown = box._msufCPPreviewHostShown
+    return type(hostShown) ~= "function" or hostShown(box) == true
+end
+local function ActivateClassPowerSurface(box)
+    if box and not ClassPowerSurfaceShown(box) then box = nil end
+    Preview.active = box
+    return Preview.active
+end
 local W = M.Widgets
 local T = M.Theme
 local CPPreview = M.ClassPowerPreview or {}
@@ -858,6 +868,7 @@ local function MakeHandle(preview, key, store, xKey, yKey, defaultX, defaultY, l
     h:SetBackdrop({ bgFile = WHITE8, edgeFile = WHITE8, edgeSize = 1 })
     h:SetFrameLevel((preview.canvas:GetFrameLevel() or 0) + 40)
     h:EnableMouse(true)
+    if Helpers.BindPreviewWheel then Helpers.BindPreviewWheel(h, preview) end
     h:EnableKeyboard(true)
     if h.SetPropagateKeyboardInput then h:SetPropagateKeyboardInput(true) end
     if h.RegisterForClicks then h:RegisterForClicks("LeftButtonDown", "LeftButtonUp", "RightButtonUp") end
@@ -1877,6 +1888,7 @@ end
 local function ApplyPreviewZoom(preview, classFrame, powerFrame, hpFrame)
     if not (preview and preview.stage) then return end
     local autoScale, centerX, centerY = ResolvePreviewFit(preview, classFrame, powerFrame, hpFrame)
+    if ZoomPan.ResolveDefaultLock then ZoomPan.ResolveDefaultLock(preview, autoScale) end
     local manualScale = tonumber(preview._manualZoom)
     local frozenScale = tonumber(preview._dragFrozenScale)
     local scale = manualScale or frozenScale or autoScale
@@ -2195,6 +2207,8 @@ local function ApplyClassPowerCompactPresentation(box, compact, sideW)
     compact = compact == true
     box._msuf2CompactPreview = compact
     if box._msuf2PinnedFloating == true then compact = false end
+    local boxWidth = max(1, tonumber(box.GetWidth and box:GetWidth()) or 1)
+    local resolvedSideW = min(104, max(72, boxWidth - 252))
     if Helpers.SwitchCompactZoomMode then Helpers.SwitchCompactZoomMode(box, compact, 1.50) end
     local canvas, sidebar = box.canvas, box.sidebar
     if compact then
@@ -2215,7 +2229,7 @@ local function ApplyClassPowerCompactPresentation(box, compact, sideW)
             sidebar:ClearAllPoints()
             if box._msuf2CompactHeader then sidebar:SetPoint("TOPRIGHT", layersBtn, "BOTTOMRIGHT", 0, -6)
             else sidebar:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -28) end
-            sidebar:SetSize((sideW or 104) + 8, 32 + rows * 18 + 10)
+            sidebar:SetSize(resolvedSideW + 8, 32 + rows * 18 + 10)
             if sidebar.SetFrameLevel and canvas.GetFrameLevel then sidebar:SetFrameLevel((canvas:GetFrameLevel() or 1) + 90) end
             sidebar:Hide()
         end
@@ -2228,8 +2242,10 @@ local function ApplyClassPowerCompactPresentation(box, compact, sideW)
     SetClassPowerPreviewToolsShown(box, true)
     LayoutClassPowerHeaderControls(box, false)
     if canvas then
-        box.canvasW = box._msuf2ExpandedCanvasW or box.canvasW
-        box.canvasH = box._msuf2ExpandedCanvasH or box.canvasH
+        box.canvasW = max(1, boxWidth - resolvedSideW - 32)
+        box.canvasH = max(1, (tonumber(box.GetHeight and box:GetHeight()) or 330) - 42)
+        box._msuf2ExpandedCanvasW, box._msuf2ExpandedCanvasH = box.canvasW, box.canvasH
+        box.playerW = min(275, max(190, box.canvasW - 160))
         canvas:ClearAllPoints()
         canvas:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -30)
         canvas:SetSize(box.canvasW, box.canvasH)
@@ -2245,40 +2261,33 @@ local function ApplyClassPowerCompactPresentation(box, compact, sideW)
     if box._msuf2LayersButton then box._msuf2LayersButton:Hide() end
 end
 
---- Build the inline/pinnable ClassPower preview section and install its refresh
---- function. All live apply calls are opt-in through handle actions.
-local CP_PREVIEW_EXPANDED_BOX_HEIGHT = 330
+--- Build the fixed ClassPower preview section and install its refresh function.
+--- The same surface switches between compact and expanded geometry in place.
+local CP_PREVIEW_FIXED_HEIGHT = 180
 local CP_PREVIEW_COMPACT_BOX_HEIGHT = 132
+local CP_PREVIEW_EXPANDED_BOX_HEIGHT = 330
+local CP_PREVIEW_BOX_Y = -40
 function Preview.Create(ctx, builder)
-    if not (W and T and builder and builder.CollapsibleSection) then return nil end
-    local expanded = M.classPowerPreviewExpanded == true
-    local section = builder:CollapsibleSection("classpower_preview", "Preview", (expanded and CP_PREVIEW_EXPANDED_BOX_HEIGHT or CP_PREVIEW_COMPACT_BOX_HEIGHT) + 16, true)
-    local sectionEntry = section and section._msuf2CollapsibleEntry
-    local previewHeader = sectionEntry and sectionEntry.header
-    if sectionEntry then
-        sectionEntry._msuf2ManualHintLayout = true
-        if sectionEntry.hint then sectionEntry.hint:Hide() end
-        if sectionEntry.label then
-            sectionEntry.label:SetText(TR("Preview") .. " - " .. TR("Class Resources"))
-            sectionEntry.label:ClearAllPoints()
-            sectionEntry.label:SetPoint("LEFT", sectionEntry.arrow, "RIGHT", 8, 0)
-            sectionEntry.label:SetJustifyH("LEFT")
-        end
-    end
-    -- Collapsible bodies may be capped to the normal form-content width.  The
-    -- preview canvas is page chrome, like Unit and Group previews, and should
-    -- use the full page width instead of leaving an empty column on the right.
+    if not (W and W.FixedPreviewSection and T and builder) then return nil end
+    local section, toolbar, fixedRecord = W.FixedPreviewSection(ctx, builder, {
+        title = TR("Preview") .. " - " .. TR("Class Resources"),
+        height = CP_PREVIEW_FIXED_HEIGHT,
+        gap = 8,
+    })
+    if not section then return nil end
+    -- The preview is fixed page chrome and uses the full page width instead of
+    -- the narrower settings-form content width.
     local pageW = ctx.width or builder.width or section._msuf2Width or 720
     local innerW = max(1, pageW - 28)
     local sideW = min(104, max(72, innerW - 252))
-    local expandBtn = T.Button(previewHeader or section, "Expand", 88, 20)
-    if T.CenterButtonLabel then T.CenterButtonLabel(expandBtn) end
-    local box = T.Panel(section, nil, { 0.018, 0.022, 0.044, 0.88 }, T.colors.borderSoft)
+    local function CreateClassPowerPreviewBox(parent, initialHeight)
+    local box = T.Panel(parent, nil, { 0.018, 0.022, 0.044, 0.88 }, T.colors.borderSoft)
+    box._msuf2PreviewSurfaceFamily = "classpower"
     local chrome = Helpers.ApplyPreviewChrome and Helpers.ApplyPreviewChrome(box, "outer", T)
         or { title = T.colors.title or T.colors.text, canvasBorder = T.colors.borderSoft }
     box._catalogCtx = ctx
-    box:SetPoint("TOPLEFT", section, "TOPLEFT", 14, -8)
-    box:SetSize(innerW, expanded and CP_PREVIEW_EXPANDED_BOX_HEIGHT or CP_PREVIEW_COMPACT_BOX_HEIGHT)
+    box:SetPoint("TOPLEFT", parent, "TOPLEFT", 14, CP_PREVIEW_BOX_Y)
+    box:SetSize(innerW, initialHeight or CP_PREVIEW_COMPACT_BOX_HEIGHT)
     box.canvasW, box.canvasH = max(1, innerW - sideW - 32), 288
     box._msuf2ExpandedCanvasW, box._msuf2ExpandedCanvasH = box.canvasW, box.canvasH
     box.playerW, box.playerH = min(275, max(190, box.canvasW - 160)), 38
@@ -2306,7 +2315,7 @@ function Preview.Create(ctx, builder)
     if box.canvas.SetClipsChildren then box.canvas:SetClipsChildren(true) end
     box.canvas:EnableMouse(true)
     box.canvas:EnableMouseWheel(true)
-    if box.canvas.SetPropagateMouseWheel then box.canvas:SetPropagateMouseWheel(true) end
+    if box.canvas.SetPropagateMouseWheel then box.canvas:SetPropagateMouseWheel(false) end
     box.stage = CreateFrame("Frame", nil, box.canvas)
     box.stage:SetSize(box.canvasW, box.canvasH)
     box.stage:SetPoint("CENTER", box.canvas, "CENTER", 0, 0)
@@ -2325,6 +2334,10 @@ function Preview.Create(ctx, builder)
             StopPan = ZoomPan.Stop,
             fitReason = "CLASSPOWER_PREVIEW_ZOOM_FIT",
             oneReason = "CLASSPOWER_PREVIEW_ZOOM_1TO1",
+            lockButton = true,
+            defaultLocked = true,
+            lockReason = "CLASSPOWER_PREVIEW_ZOOM_LOCK",
+            unlockReason = "CLASSPOWER_PREVIEW_ZOOM_UNLOCK",
         })
         box._msuf2ZoomCommand = box._msuf2ZoomCommand
             or (Helpers.BuildZoomCommand and Helpers.BuildZoomCommand(box, ZoomPan, "CLASSPOWER_PREVIEW_ASSISTANT_ZOOM"))
@@ -2338,6 +2351,7 @@ function Preview.Create(ctx, builder)
             { "zoomOneButton", "zoom.one_to_one", "Pixel preview" },
             { "zoomInButton", "zoom.in", "Zoom in" },
             { "zoomHelpButton", "zoom.help", "Preview controls help" },
+            { "zoomLockButton", "zoom.lock", "Lock preview zoom" },
         }
         for i = 1, #zoomControls do
             local info = zoomControls[i]
@@ -2378,6 +2392,7 @@ function Preview.Create(ctx, builder)
     box.dragFrame:SetAllPoints(UIParent or box.canvas)
     if box.dragFrame.SetFrameStrata then box.dragFrame:SetFrameStrata("TOOLTIP") end
     box.dragFrame:EnableMouse(true)
+    if Helpers.BindPreviewWheel then Helpers.BindPreviewWheel(box.dragFrame, box) end
     box.dragFrame:SetScript("OnMouseUp", function(self, button)
         StopHandleDrag(self._handle, button, false)
     end)
@@ -2389,7 +2404,7 @@ function Preview.Create(ctx, builder)
     box.handlePowerText = MakeHandle(box, "detachedPowerText", "player", "powerOffsetX", "powerOffsetY", -4, 4, "Player power text", { 0.95, 0.72, 0.18 }, "powerText", "powerText")
     box.handleHP = MakeHandle(box, "playerHP", "bars", "playerHPBarOffsetX", "playerHPBarOffsetY", 0, 0, "Second player HP bar", { 0.25, 0.90, 0.42 }, "hp", "hp")
     box.handleHPText = MakeHandle(box, "playerHPText", "bars", "playerHPBarTextOffsetX", "playerHPBarTextOffsetY", 0, 0, "Second player HP text", { 0.25, 0.90, 0.42 }, "hpText", "hpText")
-    function section:Refresh()
+    function box:Refresh()
         local bars = Bars()
         local player = Player()
         local spec = M.GetClassPowerPreviewSpec and M.GetClassPowerPreviewSpec() or nil
@@ -2434,26 +2449,48 @@ function Preview.Create(ctx, builder)
         RefreshAnimateButton(box)
         if box._animationEnabled == true then StartAnimationDriver(box) end
     end
-    function box:Refresh()
-        section:Refresh()
-    end
     function box:RefreshAnimation()
         return RefreshClassPowerAnimation(box)
     end
     function box:_msufCPPreviewHostShown()
-        if tostring(M.activeKey or "") ~= tostring((ctx and ctx.key) or "classpower") then return false end
+        if tostring(M.activeKey or "") ~= tostring(self._msufCPPreviewPageKey or "classpower") then return false end
         if M.frame and M.frame.IsShown and not M.frame:IsShown() then return false end
-        if ctx and ctx.wrapper and ctx.wrapper.IsShown and not ctx.wrapper:IsShown() then return false end
-        return not section.IsShown or section:IsShown()
+        local wrapper = self._msufCPPreviewWrapper
+        if wrapper and wrapper.IsShown and not wrapper:IsShown() then return false end
+        local ownerShown = self._msufCPPreviewOwnerShown
+        return type(ownerShown) ~= "function" or ownerShown() == true
+    end
+    function box:ReleasePreviewInteraction()
+        self.selectedHandle = nil
+        SetArrowBindings(self, false)
+        FocusPreviewKeyboardTarget(self, nil, false)
+        RefreshHandleVisuals(self)
+        if self._msufCPPreviewNudgeTarget
+            and rawget(_G, "MSUF_EM2_ActivePreviewNudgeTarget") == self._msufCPPreviewNudgeTarget
+            and type(_G.MSUF_EM2_SetPreviewNudgeTarget) == "function"
+        then
+            _G.MSUF_EM2_SetPreviewNudgeTarget(nil)
+        end
+        if Helpers.ReleaseKeyboardCapture then
+            Helpers.ReleaseKeyboardCapture(self)
+        elseif self.SetPropagateKeyboardInput then
+            self:SetPropagateKeyboardInput(true)
+        end
+        if self.dragFrame then
+            self.dragFrame:SetScript("OnUpdate", nil)
+            self.dragFrame._handle = nil
+            self.dragFrame:Hide()
+        end
     end
     local function ActivateVisiblePreview()
-        if box.IsShown and box:IsShown() and box:_msufCPPreviewHostShown() then Preview.active = box end
+        if box.IsShown and box:IsShown() and box:_msufCPPreviewHostShown() then ActivateClassPowerSurface(box) end
     end
-    box:HookScript("OnShow", ActivateVisiblePreview)
-    box:HookScript("OnHide", function()
-        if Preview.active == box then Preview.active = nil end
+    box:HookScript("OnShow", function()
+        ActivateVisiblePreview()
+        RequestClassPowerPreviewRefresh(box, "CLASSPOWER_PREVIEW_SHOW")
+        if box._animationEnabled == true then StartAnimationDriver(box) end
     end)
-    section:SetScript("OnHide", function()
+    box:HookScript("OnHide", function()
         box._msufCPRefreshSerial = (tonumber(box._msufCPRefreshSerial) or 0) + 1
         box._msufCPRefreshQueued = nil
         box._msufCPRefreshReason = nil
@@ -2471,74 +2508,27 @@ function Preview.Create(ctx, builder)
             box.dragFrame:Hide()
         end
         if Preview.active == box then Preview.active = nil end
+        ActivateClassPowerSurface(nil)
     end)
-    section:SetScript("OnShow", function()
-        ActivateVisiblePreview()
-        RequestClassPowerPreviewRefresh(box, "CLASSPOWER_PREVIEW_SHOW")
-        if box._animationEnabled == true then StartAnimationDriver(box) end
-    end)
-    function M.ResumeClassPowerPreview(reason, pageKey)
-        if pageKey and tostring(pageKey) ~= tostring((ctx and ctx.key) or "classpower") then return end
-        if not box:_msufCPPreviewHostShown() then return end
-        if box.IsShown and not box:IsShown() then box:Show() end
-        Preview.active = box
-        RequestClassPowerPreviewRefresh(box, reason or "CLASSPOWER_PREVIEW_RESUME")
-    end
-    box._msuf2PreferredRestoreHeight = expanded and CP_PREVIEW_EXPANDED_BOX_HEIGHT or CP_PREVIEW_COMPACT_BOX_HEIGHT
-    box._msuf2PreferredRestoreYOffset = -8
-    box._msuf2CompactHeader = previewHeader
-    box._msuf2CompactExpandButton = expandBtn
+    box._msuf2PreferredRestoreHeight = CP_PREVIEW_COMPACT_BOX_HEIGHT
+    box._msuf2PreferredRestoreYOffset = CP_PREVIEW_BOX_Y
+    box._msuf2CompactHeader = toolbar
     box.ApplyPinnedPreviewPresentation = function(self)
         ApplyClassPowerCompactPresentation(self, self._msuf2CompactPreview == true, sideW)
     end
     box.ApplyCompactPreviewPresentation = function(self, compact)
         ApplyClassPowerCompactPresentation(self, compact, sideW)
     end
-    local function RefreshExpandButton()
-        local isExpanded = M.classPowerPreviewExpanded == true
-        expandBtn:SetParent(previewHeader or section)
-        expandBtn:ClearAllPoints()
-        expandBtn:SetSize(isExpanded and 130 or 88, 20)
-        if previewHeader then
-            expandBtn:SetPoint("RIGHT", previewHeader, "RIGHT", -12, 0)
-            if expandBtn.SetFrameLevel and previewHeader.GetFrameLevel then expandBtn:SetFrameLevel((previewHeader:GetFrameLevel() or 1) + 3) end
-        else
-            expandBtn:SetPoint("TOPRIGHT", section, "TOPRIGHT", -14, -8)
-        end
-        expandBtn:SetText(isExpanded and "Compact Preview" or "Expand")
+    return box
     end
-    local function ApplyPreviewMode()
-        local isExpanded = M.classPowerPreviewExpanded == true
-        local boxH = isExpanded and CP_PREVIEW_EXPANDED_BOX_HEIGHT or CP_PREVIEW_COMPACT_BOX_HEIGHT
-        local contentH = boxH + 16
-        RefreshExpandButton()
-        if box._msuf2PinnedFloating ~= true then
-            local previousH = box.GetHeight and box:GetHeight() or 0
-            box._msuf2PreferredRestoreHeight = boxH
-            box._msuf2PreferredRestoreYOffset = -8
-            box:ClearAllPoints()
-            box:SetPoint("TOPLEFT", section, "TOPLEFT", 14, -8)
-            box:SetHeight(boxH)
-            box:ApplyCompactPreviewPresentation(not isExpanded)
-            if math.abs(previousH - boxH) > 0.5 then RequestClassPowerPreviewRefresh(box, "CLASSPOWER_PREVIEW_HEIGHT") end
-        end
-        if sectionEntry and sectionEntry.contentHeight ~= contentH then
-            sectionEntry.contentHeight = contentH
-            if sectionEntry.body and sectionEntry.body.SetHeight then sectionEntry.body:SetHeight(contentH) end
-            if sectionEntry.outer and sectionEntry.outer.SetHeight then
-                sectionEntry.outer:SetHeight(sectionEntry.headerHeight + (sectionEntry.open and contentH or 0))
-            end
-            if sectionEntry.builder and sectionEntry.builder.RequestRelayoutCollapsibles then sectionEntry.builder:RequestRelayoutCollapsibles() end
-        end
+
+    local box = CreateClassPowerPreviewBox(section, CP_PREVIEW_COMPACT_BOX_HEIGHT)
+    local title, hint = box.title, box.hint
+    box._msufCPPreviewPageKey = ctx and ctx.key
+    box._msufCPPreviewWrapper = ctx and ctx.wrapper
+    box._msufCPPreviewOwnerShown = function()
+        return not section.IsShown or section:IsShown()
     end
-    expandBtn:SetScript("OnClick", function()
-        local isExpanded = not (M.classPowerPreviewExpanded == true)
-        if M.SetMenuStateValue then M.SetMenuStateValue("classPowerPreviewExpanded", isExpanded)
-        else M.classPowerPreviewExpanded = isExpanded end
-        ApplyPreviewMode()
-    end)
-    M.AddTooltip(expandBtn, "Preview size", "Toggle between the compact reference preview and the full-height canvas.", { hook = true })
-    RegisterPreviewControl(ctx, expandBtn, "height.toggle", "Expand Class Resources Preview", "button", "ephemeral")
     M._msuf2ClassPowerInlinePreview = section
     if W.AttachPinnedPreview then
         W.AttachPinnedPreview(section, box, {
@@ -2549,13 +2539,64 @@ function Preview.Create(ctx, builder)
             wrapper = ctx and ctx.wrapper,
         })
     end
-    ApplyPreviewMode()
-    ActivateVisiblePreview()
-    M.TrackMethodRefresh(ctx, section, "Refresh")
-    -- The preview never scrolls away: counter-scrolled in place, page-native
-    -- lifecycle untouched.
-    if sectionEntry and W.PinSectionInScroll then
-        W.PinSectionInScroll(sectionEntry, { wrapper = ctx and ctx.wrapper })
+    local expander
+    if W.AttachFixedPreviewExpander then
+        expander = W.AttachFixedPreviewExpander(section, toolbar, box, {
+            pageKey = ctx and ctx.key,
+            wrapper = ctx and ctx.wrapper,
+            compactHeight = CP_PREVIEW_COMPACT_BOX_HEIGHT,
+            compactTop = CP_PREVIEW_BOX_Y,
+            expandedHeight = CP_PREVIEW_EXPANDED_BOX_HEIGHT,
+            refreshPreview = function(target, reason)
+                RequestClassPowerPreviewRefresh(target, reason or "CLASSPOWER_PREVIEW_SIZE")
+            end,
+            onStateChanged = function(expanded, target)
+                if target.ReleasePreviewInteraction then target:ReleasePreviewInteraction() end
+                StopAnimationDriver(target)
+                target._animationEnabled = General().classPowerPreviewAnimate == true
+                ActivateClassPowerSurface(target)
+                if target._animationEnabled == true
+                    and target.IsShown and target:IsShown()
+                    and target._msufCPPreviewHostShown and target:_msufCPPreviewHostShown()
+                then
+                    StartAnimationDriver(target)
+                end
+            end,
+        })
+    end
+    box._msuf2CompactExpandButton = expander and expander.button or nil
+    box._msuf2FixedPreviewExpanderRecord = expander
+    if expander and expander.button then
+        RegisterPreviewControl(ctx, expander.button, "height.toggle",
+            "Expand Class Resources Preview", "button", "ephemeral")
+    end
+    box:ApplyCompactPreviewPresentation(true)
+    ActivateClassPowerSurface(box)
+    local function RefreshVisibleSurfaces(reason)
+        RequestClassPowerPreviewRefresh(box, reason or (expander and expander.expanded
+            and "CLASSPOWER_PREVIEW_EXPANDED" or "CLASSPOWER_PREVIEW_COMPACT"))
+    end
+    function section:Refresh(reason)
+        RefreshVisibleSurfaces(reason or "CLASSPOWER_PREVIEW_SECTION_REFRESH")
+    end
+    function M.ResumeClassPowerPreview(reason, pageKey)
+        pageKey = tostring(pageKey or M.activeKey or "classpower")
+        if tostring(box._msufCPPreviewPageKey or "") ~= pageKey or not box:_msufCPPreviewHostShown() then return false end
+        if box.IsShown and not box:IsShown() then box:Show() end
+        RequestClassPowerPreviewRefresh(box, reason or "CLASSPOWER_PREVIEW_RESUME")
+        ActivateClassPowerSurface(box)
+        return true
+    end
+    M.TrackRefresh(ctx, function() RefreshVisibleSurfaces("CLASSPOWER_PREVIEW_PAGE_REFRESH") end)
+    if fixedRecord then
+        fixedRecord.onActivate = function()
+            if expander and expander.expanded then expander:Relayout("CLASSPOWER_FIXED_HEADER")
+            else box:ApplyCompactPreviewPresentation(true) end
+            M.ResumeClassPowerPreview("CLASSPOWER_FIXED_HEADER", ctx and ctx.key)
+            if box._animationEnabled == true then
+                StartAnimationDriver(box)
+            end
+        end
     end
     return section
 end

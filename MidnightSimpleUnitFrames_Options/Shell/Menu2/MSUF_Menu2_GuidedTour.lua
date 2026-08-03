@@ -404,22 +404,6 @@ local Runtime = M._guidedTourRuntime or {}
 M._guidedTourRuntime = Runtime
 local EnsureGuidedTourChrome
 
-local function SetTourPreviewInlineMode(active)
-    active = active == true
-    if not active and Runtime.previewInlineMode == false and Runtime.previewDockRecord == nil then
-        return false
-    end
-    Runtime.previewInlineMode = active
-    if Runtime.previewDockRecord and type(Runtime.previewDockRecord.restore) == "function" then
-        Runtime.previewDockRecord.restore(true)
-    end
-    Runtime.previewDockRecord = nil
-    local staleDock = Runtime.chrome and Runtime.chrome.previewDock
-    if staleDock and staleDock.Hide then staleDock:Hide() end
-    if type(M.RefreshPinnedPreviews) == "function" then M.RefreshPinnedPreviews() end
-    return true
-end
-
 Tour = function()
     return type(MSUF.GuidedTour6) == "table" and MSUF.GuidedTour6 or nil
 end
@@ -440,10 +424,6 @@ end
 local function TourIsActive()
     local ok, active = Invoke(Tour(), "IsActive")
     return ok and active == true
-end
-
-function M.GuidedTourOwnsPreviewLayout()
-    return TourIsActive()
 end
 
 local function TourState()
@@ -1679,8 +1659,9 @@ local function FocusGuidedWidget(widget, fallback, flash)
             local scrollTop, scrollBottom = scroll:GetTop(), scroll:GetBottom()
             if outerTop and scrollTop and scrollBottom then
                 local visibleTop = scrollTop
-                -- Guided setup never reparents or floats the live preview. The
-                -- target therefore uses the normal settings viewport geometry.
+                -- Fixed header targets are rejected by OwnsFloatingGuidedSurface
+                -- above. Every target that reaches this branch belongs to the
+                -- normal settings viewport and uses its regular geometry.
                 local topInset = widget and 52 or 16
                 local desiredTop = max(scrollBottom + 32, visibleTop - topInset)
                 local current = tonumber(scroll:GetVerticalScroll()) or 0
@@ -1770,7 +1751,6 @@ end
 
 local function SelectExpectedPage(stage)
     local pageKey = ExpectedPage(stage)
-    SetTourPreviewInlineMode(true)
     if EnsureGuidedTourChrome then EnsureGuidedTourChrome() end
     Runtime.manualAway = nil
     Runtime.warning = nil
@@ -1806,7 +1786,6 @@ end
 local function CompleteTour()
     local completedMode = SelectedSetupMode()
     ClearSectionEmphasis()
-    SetTourPreviewInlineMode(false)
     Invoke(Tour(), "Complete")
     Invoke(FirstLoad(), "Complete", "guided_tour")
     Runtime.warning = nil
@@ -2101,7 +2080,6 @@ local function PauseTour()
     Runtime.warning = nil
     Runtime.manualAway = nil
     ClearSectionEmphasis()
-    SetTourPreviewInlineMode(false)
     local frame = M.frame
     if type(M.HideSlashMenuAndMinibar) == "function" then
         M.HideSlashMenuAndMinibar(frame)
@@ -2404,7 +2382,6 @@ function M.RefreshGuidedTourChrome(reason)
     local chrome = Runtime.chrome
     if not chrome then return false end
     if not TourIsActive() then
-        SetTourPreviewInlineMode(false)
         if Runtime.tourVisualsDirty ~= true then return false end
         Runtime.warning = nil
         Runtime.manualAway = nil
@@ -2441,7 +2418,6 @@ function M.RefreshGuidedTourChrome(reason)
     if currentPage and currentPage ~= expected then Runtime.manualAway = true end
     local manualAway = Runtime.manualAway == true and currentPage ~= expected
     local warning = Runtime.warning
-    SetTourPreviewInlineMode(not profileMismatch and not manualAway)
     if position.cursorNormalized and not profileMismatch and not manualAway then
         FocusCurrentSection(stage)
     end
@@ -2779,7 +2755,6 @@ end
 
 function M.GuidedTourOnPageSelected(pageKey)
     if not TourIsActive() then
-        SetTourPreviewInlineMode(false)
         if Runtime.tourVisualsDirty == true then M.RefreshGuidedTourChrome("PAGE_INACTIVE") end
         return false
     end
@@ -2787,14 +2762,12 @@ function M.GuidedTourOnPageSelected(pageKey)
     local stage = CurrentStage()
     local expected = ExpectedPage(stage)
     if tostring(pageKey or "") ~= expected then
-        SetTourPreviewInlineMode(false)
         Runtime.manualAway = true
         Runtime.warning = nil
         ClearSectionEmphasis()
         M.RefreshGuidedTourChrome("MANUAL_PAGE")
         return false
     end
-    SetTourPreviewInlineMode(true)
     Runtime.manualAway = nil
     if not stage.special then
         CurrentPosition(stage) -- migrate old overview/section cursors to a real control first

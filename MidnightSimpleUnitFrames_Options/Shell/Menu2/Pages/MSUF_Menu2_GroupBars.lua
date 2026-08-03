@@ -1100,4 +1100,4 @@ local function BuildGFBars(ctx)
     BuildGFDebuffStripeSection(ctx, b)
     FinalizeScopePage(ctx, b)
 end
-M.RegisterPage("gf_bars", { title = "MSUF Group Dispel Overlay", build = BuildGFBars, version = 18 })
+M.RegisterPage("gf_bars", { title = "MSUF Group Dispel Overlay", build = BuildGFBars, version = 19 })

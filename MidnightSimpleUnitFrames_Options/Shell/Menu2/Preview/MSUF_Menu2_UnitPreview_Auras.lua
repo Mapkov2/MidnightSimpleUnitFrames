@@ -908,6 +908,9 @@ end
 local function BindDragProxy(frame, handle)
     if not (frame and handle) then return end
     if frame.EnableMouse then frame:EnableMouse(true) end
+    if frame.EnableMouseWheel then frame:EnableMouseWheel(true) end
+    if frame.SetPropagateMouseWheel then frame:SetPropagateMouseWheel(false) end
+    frame:SetScript("OnMouseWheel", function(_, delta) ForwardHandleScript(handle, "OnMouseWheel", delta) end)
     if frame.RegisterForClicks then
         frame:RegisterForClicks("LeftButtonDown", "LeftButtonUp", "RightButtonUp")
         frame:SetScript("OnClick", function(_, button) ForwardHandleScript(handle, "OnClick", button) end)

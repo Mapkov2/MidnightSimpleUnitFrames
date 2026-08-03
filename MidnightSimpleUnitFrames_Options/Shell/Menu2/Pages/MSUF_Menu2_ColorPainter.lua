@@ -38,6 +38,7 @@ local function HidePreviewEditorChrome(box, surface, sidebar, zoomBar, animation
         end
     end
     if sidebar then sidebar:Hide() end
+    if box and box._msuf2LayersButton then box._msuf2LayersButton:Hide() end
     -- Color previews use the normal UF/GF renderer, so keep its existing zoom
     -- controls available here as well. Only editing chrome (layers, handles,
     -- animation and help hints) is suppressed on this color-only surface.
@@ -66,9 +67,7 @@ local function ForwardMenuScrollWheel(frame)
     frame:EnableMouseWheel(true)
     if frame.SetPropagateMouseWheel then frame:SetPropagateMouseWheel(false) end
     frame:SetScript("OnMouseWheel", function(_, delta)
-        local scroll = M.scrollFrame
-        local handler = scroll and scroll.GetScript and scroll:GetScript("OnMouseWheel")
-        if type(handler) == "function" then handler(scroll, delta) end
+        if type(M.ForwardMenuScrollWheel) == "function" then M.ForwardMenuScrollWheel(delta) end
     end)
 end
 
@@ -144,7 +143,7 @@ local function MakeUnitPreview(parent, ctx, width, unitKey, displayName)
             if service and type(service.RequestUnit) == "function" then service.RequestUnit(unitKey, "visual", "MSUF2_COLOR_PAINTER") end
         end,
     }
-    local box = create(parent, panel, width, 292)
+    local box = create(parent, panel, width, 132)
     if not box then return nil end
     box:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
     box._msufPanel = panel
@@ -156,6 +155,8 @@ local function MakeUnitPreview(parent, ctx, width, unitKey, displayName)
         return (not M.activeKey or not ctx or not ctx.key or M.activeKey == ctx.key)
             and parent:IsShown()
     end
+    if type(box.ApplyCompactPreviewPresentation) == "function" then box:ApplyCompactPreviewPresentation(true) end
+    box:SetHeight(132)
     if box.title then box.title:Hide() end
     if box.hint then box.hint:Hide() end
     box._msuf2ColorPainterTitle = Label(box, displayName, 12, -8, width - 24, T.colors.title or T.colors.text, "GameFontNormal")
@@ -182,6 +183,8 @@ local function MakeGroupPreview(parent, ctx, width)
         return (not M.activeKey or not ctx or not ctx.key or M.activeKey == ctx.key)
             and parent:IsShown()
     end
+    if type(box.ApplyCompactPreviewPresentation) == "function" then box:ApplyCompactPreviewPresentation(true) end
+    box:SetHeight(132)
     if box._title then box._title:Hide() end
     if box._hint then box._hint:Hide() end
     box._msuf2ColorPainterTitle = Label(box, "Group", 12, -8, width - 24, T.colors.title or T.colors.text, "GameFontNormal")
@@ -356,8 +359,16 @@ local function AddClickTarget(host, anchor, onClick, onRightClick, label, priori
         local hover = button:CreateTexture(nil, "HIGHLIGHT")
         hover:SetAllPoints()
         hover:SetColorTexture(0.18, 0.66, 1, 0.18)
-        ForwardMenuScrollWheel(button)
     end
+    button:EnableMouseWheel(true)
+    if button.SetPropagateMouseWheel then button:SetPropagateMouseWheel(false) end
+    button:SetScript("OnMouseWheel", function(_, delta)
+        -- Paint hit targets cover the native preview canvas. Delegate first so
+        -- Ctrl+wheel retains preview zoom; the canvas routes a plain tick to the
+        -- page scroller itself. A non-preview target falls back centrally.
+        if type(panDelegate) == "function" and panDelegate("OnMouseWheel", delta) then return end
+        if type(M.ForwardMenuScrollWheel) == "function" then M.ForwardMenuScrollWheel(delta) end
+    end)
     if M.AddTooltip then
         M.AddTooltip(button, label,
             tooltipText or Tr("Click to edit these colors. Right-click opens the matching section below."),
@@ -447,18 +458,20 @@ function P.Build(ctx, builder, categories)
         })
     end
 
-    local section = builder:CollapsibleSection("colors_preview", "Color Preview", 452, true)
-    section._msuf2CollapsibleBadgesShowWhenClosed = true
-    if W.SetCollapsibleBadges then
-        W.SetCollapsibleBadges(section, {{ text = "Live", kind = "accent", showWhenClosed = true }})
-    end
+    local section, _, fixedPreview = W.FixedPreviewSection(ctx, builder, {
+        title = "Color Preview",
+        height = 180,
+    })
+    -- Palette and usage guidance belong to the settings flow. Keeping them out
+    -- of the fixed shell leaves that slot exclusively to the compact preview.
+    local paletteSection = builder:Section("Quick Palette", 82)
     local width = section._msuf2Width or ctx.width or 720
     local innerW = width - 32
 
     local previewW = innerW
     local host = CreateFrame("Frame", nil, section)
-    host:SetPoint("TOPLEFT", section, "TOPLEFT", 16, -36)
-    host:SetSize(previewW, 350)
+    host:SetPoint("TOPLEFT", section, "TOPLEFT", 16, -38)
+    host:SetSize(previewW, 132)
     local shield = InstallColorOnlyShield(host)
 
     -- Zoom chrome is noise for a color task: keep the controls functional but
@@ -516,7 +529,7 @@ function P.Build(ctx, builder, categories)
     local unitGap = 8
     local unitPreviewW = max(1, floor((previewW - unitGap) * 0.5))
     -- The Player/Target boxes are the default tab's content, but their host is
-    -- a fixed 350px frame, so creating them one deferred refresh later (see
+    -- a fixed 132px frame, so creating them one deferred refresh later (see
     -- EnsureUnitBoxes below) never moves layout. Only when no deferred refresh
     -- can follow do they build synchronously.
     local unitBoxes = {}
@@ -665,9 +678,7 @@ function P.Build(ctx, builder, categories)
             -- The canvas wheel handler zooms on Ctrl and forwards plain wheel
             -- input to the menu scroll on its own.
             if DelegateSurfaceScript("OnMouseWheel", delta) then return end
-            local scroll = M.scrollFrame
-            local handler = scroll and scroll.GetScript and scroll:GetScript("OnMouseWheel")
-            if type(handler) == "function" then handler(scroll, delta) end
+            if type(M.ForwardMenuScrollWheel) == "function" then M.ForwardMenuScrollWheel(delta) end
         end)
         shield:SetScript("OnMouseDown", function(_, mouseButton)
             if (mouseButton == "LeftButton" and IsControlKeyDown and IsControlKeyDown())
@@ -689,7 +700,7 @@ function P.Build(ctx, builder, categories)
     -- Hint line: makes the clickable preview discoverable and doubles as the
     -- status line for the palette brush.
     local HINT_BASE = "Click an element in the preview to edit its colors. Right-click a color swatch to reset it to default."
-    local hintLine = Label(section, HINT_BASE, 16, -392, innerW, T.colors.muted)
+    local hintLine = Label(paletteSection, HINT_BASE, 16, -36, innerW, T.colors.muted)
     local hintResetSerial = 0
     local function SetHintStatus(text, holdSeconds)
         hintResetSerial = hintResetSerial + 1
@@ -738,13 +749,13 @@ function P.Build(ctx, builder, categories)
             SetHintStatus(nil)
         end
     end
-    local paletteLabel = Label(section, "My colors", 16, -416, 96, T.colors.dim, "GameFontNormalSmall")
+    local paletteLabel = Label(paletteSection, "My colors", 16, -62, 96, T.colors.dim, "GameFontNormalSmall")
     paletteLabel:SetJustifyH("LEFT")
     local paletteX = 96
     for i = 1, PALETTE_SLOTS do
-        local slot = CreateFrame("Button", nil, section)
+        local slot = CreateFrame("Button", nil, paletteSection)
         slot:SetSize(26, 16)
-        slot:SetPoint("TOPLEFT", section, "TOPLEFT", paletteX + 16 + (i - 1) * 32, -414)
+        slot:SetPoint("TOPLEFT", paletteSection, "TOPLEFT", paletteX + 16 + (i - 1) * 32, -60)
         slot:RegisterForClicks("LeftButtonUp", "RightButtonUp")
         slot._msuf2Fill, slot._msuf2Edge = T.CreateSuperellipseLayers(slot, "_msuf2PaletteSwatch", 1, "ARTWORK", "OVERLAY")
         local hover = slot:CreateTexture(nil, "HIGHLIGHT")
@@ -795,8 +806,8 @@ function P.Build(ctx, builder, categories)
         end
         if M.colorsBrushHex and not seen[M.colorsBrushHex] then M.colorsBrushHex = nil end
         if not paletteEmptyHint then
-            paletteEmptyHint = Label(section, "Save or pick colors in the color picker to reuse them here.",
-                paletteX + 16, -416, innerW - paletteX - 16, T.colors.dim, "GameFontNormalSmall")
+            paletteEmptyHint = Label(paletteSection, "Save or pick colors in the color picker to reuse them here.",
+                paletteX + 16, -62, innerW - paletteX - 16, T.colors.dim, "GameFontNormalSmall")
         end
         paletteEmptyHint:SetShown(shown == 0)
         RefreshPaletteBrushVisuals()
@@ -866,7 +877,7 @@ function P.Build(ctx, builder, categories)
     -- The external Editing navigator filters preview AND section list.  Keep a
     -- concise description in the preview card so its current content remains
     -- clear without duplicating the selector.
-    local tabDescription = Label(section, "", 16, -14, innerW, T.colors.muted)
+    local tabDescription = Label(section, "", 144, -14, innerW - 144, T.colors.muted)
 
     local clickTargets = {}
     local function FocusColorSection(sectionId)
@@ -912,9 +923,9 @@ function P.Build(ctx, builder, categories)
             return nil
         end
         local strip = CreateFrame("Frame", nil, host)
-        strip:SetPoint("TOPLEFT", host, "TOPLEFT", 24, -52)
-        strip:SetPoint("TOPRIGHT", host, "TOPRIGHT", -24, -52)
-        strip:SetHeight(210)
+        strip:SetPoint("TOPLEFT", host, "TOPLEFT", 24, 0)
+        strip:SetPoint("TOPRIGHT", host, "TOPRIGHT", -24, 0)
+        strip:SetHeight(132)
         if strip.SetFrameLevel and host.GetFrameLevel then
             local base = (shield and shield.GetFrameLevel and shield:GetFrameLevel())
                 or ((host:GetFrameLevel() or 0) + COLOR_SHIELD_LEVEL)
@@ -947,7 +958,7 @@ function P.Build(ctx, builder, categories)
             return button
         end
 
-        local powerRow = StripButton(-6, 50, "Power Bar Colors", "colors_power", "Color")
+        local powerRow = StripButton(-2, 50, "Power Bar Colors", "colors_power", "Color")
         local powerLabel = Label(powerRow, "", 12, -4, barW, T.colors.text)
         local powerBg = powerRow:CreateTexture(nil, "BORDER")
         powerBg:SetPoint("TOPLEFT", powerRow, "TOPLEFT", 12, -24)
@@ -956,7 +967,7 @@ function P.Build(ctx, builder, categories)
         powerFill:SetPoint("TOPLEFT", powerBg, "TOPLEFT", 1, -1)
         powerFill:SetSize(floor(barW * 0.62), 16)
 
-        local resourceRow = StripButton(-72, 56, "Class Power Colors", "colors_class_power", "Color")
+        local resourceRow = StripButton(-66, 56, "Class Power Colors", "colors_class_power", "Color")
         local resourceLabel = Label(resourceRow, "", 12, -4, barW, T.colors.text)
         local slots = {}
         for i = 1, 11 do
@@ -972,9 +983,6 @@ function P.Build(ctx, builder, categories)
         local resourceBarFill = resourceRow:CreateTexture(nil, "ARTWORK")
         resourceBarFill:SetPoint("TOPLEFT", resourceBarBg, "TOPLEFT", 1, -1)
         resourceBarFill:SetSize(floor(barW * 0.62), 16)
-
-        Label(strip, "The preview follows the Power type and Resource type selection below.",
-            12, -146, previewW - 96, T.colors.dim, "GameFontNormalSmall")
 
         function strip.Update()
             local pr, pg, pb = preview.power()
@@ -1145,11 +1153,10 @@ function P.Build(ctx, builder, categories)
     end)
     EnsurePreviewAttachment()
     QueueVisiblePreviewRefresh("MSUF2_COLOR_PAINTER_INITIAL")
-    -- The color preview never scrolls away: counter-scrolled in place,
-    -- page-native lifecycle (including the shield/click-target levels) untouched.
-    local previewEntry = section._msuf2CollapsibleEntry
-    if previewEntry and W.PinSectionInScroll then
-        W.PinSectionInScroll(previewEntry, { wrapper = ctx and ctx.wrapper })
+    -- Fixed below the color category selector. Internal shield/click-target
+    -- levels remain page-native while all settings scroll below the shell.
+    if fixedPreview then
+        fixedPreview.onActivate = function() QueueVisiblePreviewRefresh("MSUF2_COLOR_PAINTER_FIXED_SHOW") end
     end
     return section
 end

@@ -112,14 +112,17 @@ local function BuildCastbars(ctx)
         ApplyCastbars(reason or "MSUF2_CASTBAR_TEXTURES")
     end
     local function BuildPreview()
-        if ctx and ctx.hiddenBuild then
-            local section = b:Section("Preview", 72)
-            W.Text(section, "Castbar preview is built when this page is opened.", 14, -42, ctx.width - 28, T.colors.muted)
-            return nil
-        end
         local availableW = b.width or ctx.width or 720
         local compactControls = availableW < 694
-        local section = b:Section("Preview", compactControls and 178 or 148)
+        local previewHeight = ctx and ctx.hiddenBuild and 72 or (compactControls and 178 or 148)
+        local section, _, fixedPreview = W.FixedPreviewSection(ctx, b, {
+            title = "Preview",
+            height = previewHeight,
+        })
+        if ctx and ctx.hiddenBuild then
+            W.Text(section, "Castbar preview is built when this page is opened.", 14, -42, ctx.width - 28, T.colors.muted)
+            return nil, section, fixedPreview
+        end
         local sectionW = section._msuf2Width or b.width or ctx.width or 720
         local innerW = max(360, sectionW - 28)
         local preview = {
@@ -455,11 +458,6 @@ local function BuildCastbars(ctx)
             if direction == "RIGHT" then direction = "LTR" end
             local reverse = direction ~= "LTR"
             if unit == "target" and ((g and g.castbarOpositeDirectionTarget == true) or ReadGBool("castbarOpositeDirectionTarget", false)) then reverse = not reverse end
-            local unified = (g and g.castbarUnifiedDirection == true) or ReadGBool("castbarUnifiedDirection", false)
-            if kind == "empowered" then
-                -- The empower preview fills, so the legacy flip applies.
-                if not unified then reverse = not reverse end
-            end
             -- Channels keep the cast's anchor; unified direction instead makes
             -- them fill like a cast (see the visual progress computation).
             return reverse
@@ -980,9 +978,9 @@ local function BuildCastbars(ctx)
         if M._msuf2CastbarPreviewType then M.SetCastbarPreviewType(M._msuf2CastbarPreviewType) end
         if M._msuf2CastbarPreviewInterruptPending then M.PlayCastbarPreviewInterrupt() end
         M.TrackMethodRefresh(ctx, preview, "Refresh")
-        return preview
+        return preview, section, fixedPreview
     end
-    local castPreview = BuildPreview()
+    local castPreview, castPreviewSection, fixedPreview = BuildPreview()
     local function RefreshCastPreview() if castPreview and castPreview.Refresh then castPreview:Refresh() end end
     local castPreviewRefreshQueued = false
     local function RequestCastPreviewRefresh()
@@ -993,6 +991,9 @@ local function BuildCastbars(ctx)
             RefreshCastPreview()
         end)
     end
+    -- Castbar uses the same bounded Preview slot as every other page-level
+    -- preview; only the settings sections below it participate in scrolling.
+    if castPreviewSection and fixedPreview then fixedPreview.onActivate = RequestCastPreviewRefresh end
     local function ShakeCastPreview(strength) if castPreview and castPreview.PlayShake then castPreview:PlayShake(strength, false) end end
     local function ShowEmpoweredPreview() M.SetCastbarPreviewType("empowered", 0.62) end
     local function MoveToggle(toggle, parent, x, y, labelWidth)
@@ -1393,4 +1394,4 @@ local function BuildCastbars(ctx)
     LazyCastbarSection({ sectionId = "castbar_interrupt_ready", title = "Interrupt Ready Indicator", height = 328, build = BuildInterruptReadySection })
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
-M.RegisterPage("opt_castbar", { title = "MSUF Castbar", build = BuildCastbars, version = 5 })
+M.RegisterPage("opt_castbar", { title = "MSUF Castbar", build = BuildCastbars, version = 6 })

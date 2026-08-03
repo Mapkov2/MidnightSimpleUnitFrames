@@ -972,6 +972,7 @@ local function MakeHandle(preview, key, fields, label, color)
     h:RegisterForClicks("LeftButtonDown", "LeftButtonUp", "RightButtonUp")
     if h.RegisterForDrag then h:RegisterForDrag("LeftButton") end
     h:EnableMouse(true)
+    if PreviewHelpers.BindPreviewWheel then PreviewHelpers.BindPreviewWheel(h, preview) end
     h:EnableKeyboard(true)
     if h.SetPropagateKeyboardInput then h:SetPropagateKeyboardInput(true) end
     h.tex = h:CreateTexture(nil, "OVERLAY")
@@ -1617,7 +1618,7 @@ local function BuildPreview(parent, panel, width, height)
     if canvas.SetClipsChildren then canvas:SetClipsChildren(true) end
     canvas:EnableMouse(true)
     canvas:EnableMouseWheel(true)
-    if canvas.SetPropagateMouseWheel then canvas:SetPropagateMouseWheel(true) end
+    if canvas.SetPropagateMouseWheel then canvas:SetPropagateMouseWheel(false) end
     box.canvas = canvas
     PreviewHelpers.BuildZoomBar(box, canvas, {
         texture = TEX_W8,
@@ -1632,6 +1633,7 @@ local function BuildPreview(parent, panel, width, height)
         fitReason = "UNIT_PREVIEW_ZOOM_FIT",
         oneReason = "UNIT_PREVIEW_ZOOM_1TO1",
         lockButton = true,
+        defaultLocked = true,
         lockReason = "UNIT_PREVIEW_ZOOM_LOCK",
         unlockReason = "UNIT_PREVIEW_ZOOM_UNLOCK",
     })
@@ -2023,6 +2025,7 @@ local function BuildPreview(parent, panel, width, height)
     box.handles = {}
     box.dragFrame = CreateFrame("Frame", nil, canvas)
     box.dragFrame:EnableMouse(true)
+    if PreviewHelpers.BindPreviewWheel then PreviewHelpers.BindPreviewWheel(box.dragFrame, box) end
     if box.dragFrame.SetFrameLevel then
         box.dragFrame:SetFrameLevel((PreviewCore.InteractionFrameLevel and PreviewCore.InteractionFrameLevel(canvas, 1))
             or ((canvas:GetFrameLevel() or 0) + 31))
@@ -2085,6 +2088,28 @@ local function BuildPreview(parent, panel, width, height)
     box:EnableKeyboard(true)
     if box.SetPropagateKeyboardInput then box:SetPropagateKeyboardInput(true) end
     box:SetScript("OnKeyDown", PreviewArrowKeyDown)
+    function box:ReleasePreviewInteraction()
+        self._selectedHandle = nil
+        Preview.SetArrowBindings(self, false)
+        RefreshHandleSelectionVisuals(self)
+        if self.dragFrame then
+            self.dragFrame:SetScript("OnUpdate", nil)
+            self.dragFrame:SetScript("OnMouseUp", nil)
+            self.dragFrame._handle = nil
+            self.dragFrame:Hide()
+        end
+        if self._msufPreviewNudgeTarget
+            and rawget(_G, "MSUF_EM2_ActivePreviewNudgeTarget") == self._msufPreviewNudgeTarget
+            and type(_G.MSUF_EM2_SetPreviewNudgeTarget) == "function"
+        then
+            _G.MSUF_EM2_SetPreviewNudgeTarget(nil)
+        end
+        if PreviewHelpers.ReleaseKeyboardCapture then
+            PreviewHelpers.ReleaseKeyboardCapture(self)
+        elseif self.SetPropagateKeyboardInput then
+            self:SetPropagateKeyboardInput(true)
+        end
+    end
     box:SetScript("OnShow", function(self)
         Preview.active = self
         if PreviewAnimationActive(self) then StartPreviewAnimationDriver(self) end
@@ -2100,20 +2125,9 @@ local function BuildPreview(parent, panel, width, height)
         if self.UnregisterEvent then
             self:UnregisterEvent("PLAYER_REGEN_DISABLED")
         end
-        self._selectedHandle = nil
-        Preview.SetArrowBindings(self, false)
-        RefreshHandleSelectionVisuals(self)
+        self:ReleasePreviewInteraction()
         if Preview.active == self then Preview.active = nil end
         if type(Preview.UninstallRefreshHooks) == "function" then Preview.UninstallRefreshHooks() end
-        self.dragFrame:SetScript("OnUpdate", nil)
-        self.dragFrame:SetScript("OnMouseUp", nil)
-        self.dragFrame._handle = nil
-        if self._msufPreviewNudgeTarget and rawget(_G, "MSUF_EM2_ActivePreviewNudgeTarget") == self._msufPreviewNudgeTarget and type(_G.MSUF_EM2_SetPreviewNudgeTarget) == "function" then _G.MSUF_EM2_SetPreviewNudgeTarget(nil) end
-        if PreviewHelpers.ReleaseKeyboardCapture then
-            PreviewHelpers.ReleaseKeyboardCapture(self)
-        elseif self.SetPropagateKeyboardInput then
-            self:SetPropagateKeyboardInput(true)
-        end
     end)
     box:SetScript("OnEvent", function(self, event)
         if event == "PLAYER_REGEN_DISABLED" then
@@ -2167,10 +2181,10 @@ do
     local deps = Preview.RefreshDeps or {}
     Preview.RefreshDeps = deps
     AssignNamedValues(deps, [[
-        PreviewInCombat TR PortraitStyleGet RuntimeSpecForPreviewKey RuntimeAppliedPortraitSizeForPreviewKey RuntimeVisualScaleForPreviewKey RuntimeCastbarVisualScaleForPreviewKey ClampPreviewZoom UpdatePreviewZoomControls ZOOM_MIN
+        PreviewInCombat TR PortraitStyleGet RuntimeSpecForPreviewKey RuntimeAppliedPortraitSizeForPreviewKey RuntimeVisualScaleForPreviewKey RuntimeCastbarVisualScaleForPreviewKey ClampPreviewZoom ResolveDefaultPreviewZoomLock UpdatePreviewZoomControls ZOOM_MIN
         max min abs floor format TEX_W8 FONT STATUS_PREVIEW CurrentPanelKey UnitDB UNIT_DATA UNIT_LABELS ReadPowerBarEnabled ReadPowerBarHeight LiveUnitData SyncLiveStateDriver
     ]],
-        PreviewInCombat, TR, PortraitStyleGet, RuntimeSpecForPreviewKey, PreviewRuntime.AppliedPortraitSizeForPreviewKey or F.Nil, RuntimeVisualScaleForPreviewKey, PreviewRuntime.CastbarVisualScaleForPreviewKey or RuntimeVisualScaleForPreviewKey, ClampPreviewZoom, UpdatePreviewZoomControls, ZOOM_MIN,
+        PreviewInCombat, TR, PortraitStyleGet, RuntimeSpecForPreviewKey, PreviewRuntime.AppliedPortraitSizeForPreviewKey or F.Nil, RuntimeVisualScaleForPreviewKey, PreviewRuntime.CastbarVisualScaleForPreviewKey or RuntimeVisualScaleForPreviewKey, ClampPreviewZoom, PreviewZoomPan.ResolveDefaultLock or F.Noop, UpdatePreviewZoomControls, ZOOM_MIN,
         max, min, abs, floor, format, TEX_W8, FONT, STATUS_PREVIEW, CurrentPanelKey, UnitDB, UNIT_DATA, UNIT_LABELS, ReadPowerBarEnabled, ReadPowerBarHeight, PreviewModel.LiveUnitData, SyncUnitPreviewLiveState)
     AssignNamedValues(deps, [[
         PreviewRaidGroupNameAllowed PreviewRaidGroupNameText NormalizeRaidGroupNameAnchor CastbarEnabled CastbarShowIcon CastbarShowText ReadCastbarSize ReadCastbarNum FormatCastbarPreviewTime
