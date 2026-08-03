@@ -320,15 +320,20 @@ local function ThemeColor(name, fallback)
     return color or fallback
 end
 local function CreateDashboardAccordionTone(header, arrow)
-    local headerSurface = ThemeColor("coreSurface", { 0.014, 0.038, 0.072, 1.00 })
-    local headerRaised = ThemeColor("coreRaised", { 0.026, 0.070, 0.110, 1.00 })
     local headerActiveBlue = ThemeColor("coreGlow", { 0.231, 0.510, 0.965, 1.00 })
     local headerActiveDeep = ThemeColor("coreBlue", { 0.141, 0.365, 0.741, 1.00 })
     local headerBg = W.CreateAccordionRoundedRegions(header, "BACKGROUND", 0)
-    local headerOpenHighlight = W.CreateAccordionOpenHighlight(header,
-        { headerActiveBlue[1], headerActiveBlue[2], headerActiveBlue[3], 0.62 },
-        { headerActiveDeep[1], headerActiveDeep[2], headerActiveDeep[3], 0.56 })
+    local headerActiveFrom = { headerActiveBlue[1], headerActiveBlue[2], headerActiveBlue[3], 0.62 }
+    local headerActiveTo = { headerActiveDeep[1], headerActiveDeep[2], headerActiveDeep[3], 0.56 }
+    local headerOpenHighlight = W.CreateAccordionOpenHighlight(header, headerActiveFrom, headerActiveTo)
     local function Refresh(open, hover)
+        local headerSurface = ThemeColor("coreSurface", { 0.014, 0.038, 0.072, 1.00 })
+        local headerRaised = ThemeColor("coreRaised", { 0.026, 0.070, 0.110, 1.00 })
+        headerActiveBlue = ThemeColor("coreGlow", { 0.231, 0.510, 0.965, 1.00 })
+        headerActiveDeep = ThemeColor("coreBlue", { 0.141, 0.365, 0.741, 1.00 })
+        headerActiveFrom[1], headerActiveFrom[2], headerActiveFrom[3] = headerActiveBlue[1], headerActiveBlue[2], headerActiveBlue[3]
+        headerActiveTo[1], headerActiveTo[2], headerActiveTo[3] = headerActiveDeep[1], headerActiveDeep[2], headerActiveDeep[3]
+        if headerOpenHighlight.SetColors then headerOpenHighlight:SetColors(headerActiveFrom, headerActiveTo) end
         headerOpenHighlight:SetShown(open)
         headerBg:SetAlpha(open and 0 or 1)
         M.CallIf(T.ApplyCollapseVisual, arrow, nil, open)
