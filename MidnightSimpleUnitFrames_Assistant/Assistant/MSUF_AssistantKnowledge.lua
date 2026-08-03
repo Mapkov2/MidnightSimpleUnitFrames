@@ -2376,6 +2376,24 @@ local function DirectHelpAnswer(query, opts)
             summary = "Assistant nameplates help",
         }
     end
+    -- Copy To had an action lane but no help topic, so every question form
+    -- ("how do I copy player to target", "where do I copy settings") fell
+    -- through to the generic "name the frame and the option" fallback even
+    -- though the feature is a button on every unit and group page. Kept ahead of
+    -- the group-frames topic so "how do I copy party to raid" answers about
+    -- copying rather than about group frames.
+    -- The guard needs an explicit question intent: the bare imperative
+    -- "copy player settings to target" must still reach the copy action.
+    if ContainsAny(norm, { "copy", "kopieren", "kopiere" })
+        and (HasConceptHelpIntent(norm) or norm:match("^can i%f[%W]") ~= nil
+            or norm:match("^kann ich%f[%W]") ~= nil)
+    then
+        return {
+            text = "Copy To help\nCopy To duplicates one frame's configuration onto another. Every unit-frame page and the group-frames page has a Copy To button: open it, tick the categories you want (or All), then pick the destination frame to apply them.\nUnit frames copy the selected categories onto the destination; group frames copy the source group's setup onto the destination group. A few values are deliberately never copied, because they identify the frame itself rather than its look -- position and anchor being the obvious ones.\nI can also do it for you while a unit frame page is open, for example: copy player settings to target.\nExamples: copy player settings to target; copy party settings to raid.\nYou can ask: Open Player | Open Group Layout",
+            status = "applied",
+            summary = "Assistant copy to help",
+        }
+    end
     if ContainsAny(norm, { "group frame", "group frames", "party frame", "party frames", "raid frame", "raid frames", "mythic raid frame", "mythic raid frames" })
         and not ContainsAny(norm, GROUP_LAYOUT_HELP_TERMS)
         and not ContainsAny(norm, GROUP_HEALTH_TEXT_HELP_TERMS)
