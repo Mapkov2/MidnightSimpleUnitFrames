@@ -316,14 +316,14 @@ local function RefreshBlizzardParty()
 end
 
 local function RefreshBlizzardRaid()
-  if type(_G.CompactRaidFrameManager_UpdateShown) == "function" then
-    _G.CompactRaidFrameManager_UpdateShown()
+  local manager = _G.CompactRaidFrameManager
+  if manager and type(_G.CompactRaidFrameManager_UpdateShown) == "function" then
+    _G.CompactRaidFrameManager_UpdateShown(manager)
+  elseif manager and type(_G.CompactRaidFrameManager_UpdateOptionsFlowContainer) == "function" then
+    _G.CompactRaidFrameManager_UpdateOptionsFlowContainer(manager)
   end
-  if type(_G.CompactRaidFrameContainer_TryUpdate) == "function" then
+  if _G.CompactRaidFrameContainer and type(_G.CompactRaidFrameContainer_TryUpdate) == "function" then
     _G.CompactRaidFrameContainer_TryUpdate(_G.CompactRaidFrameContainer)
-  end
-  if type(_G.CompactRaidFrameManager_UpdateOptionsFlowContainer) == "function" then
-    _G.CompactRaidFrameManager_UpdateOptionsFlowContainer()
   end
 end
 
@@ -491,7 +491,8 @@ end
 --- Blizzard Raid Manager visibility.
 ---
 --- The Raid Manager tab is its own top-level frame (Blizzard_CompactRaidFrames/
---- Mainline/Blizzard_CompactRaidFrameManager.xml, upstream/ptr): CompactRaidFrameContainer
+--- Classic/Blizzard_CompactRaidFrameManager.xml, upstream/classic and
+--- upstream/classic_anniversary): CompactRaidFrameContainer
 --- is parented to UIParent, not to the manager, so the tab can be steered without
 --- touching the raid frames. The ownership pass above already hides the manager while
 --- MSUF owns the raid frames; this layer covers the scopes where it does not, which is
@@ -575,16 +576,10 @@ local function EnsureRaidManagerHooks(manager)
   raidManagerHooked = true
   manager:HookScript("OnEnter", RaidManagerOnEnter)
   manager:HookScript("OnLeave", RaidManagerOnLeave)
-  --- 12.1 split the single toggleButton into a forward/back pair.
-  local buttons = {
-    manager.toggleButtonBack or _G.CompactRaidFrameManagerToggleButtonBack,
-    manager.toggleButtonForward or _G.CompactRaidFrameManagerToggleButtonForward,
-  }
-  for i = 1, #buttons do
-    local button = buttons[i]
-    if button and type(button.HookScript) == "function" and not IsForbidden(button) then
-      button:HookScript("OnClick", RaidManagerOnToggleClick)
-    end
+  --- Both supported Classic branches retain the single legacy toggleButton.
+  local button = manager.toggleButton or _G.CompactRaidFrameManagerToggleButton
+  if button and type(button.HookScript) == "function" and not IsForbidden(button) then
+    button:HookScript("OnClick", RaidManagerOnToggleClick)
   end
 end
 

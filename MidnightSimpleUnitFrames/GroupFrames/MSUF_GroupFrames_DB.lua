@@ -208,6 +208,10 @@ GF.DELIMITER_OPTIONS = {
 local PARTY_DEFAULTS = {
     enabled           = false,
     blizzardFallbackMode = "AUTO", --- AUTO / SHOW / NONE when this MSUF scope is disabled
+    --- AUTO / SHOW / MOUSEOVER / HIDDEN for Blizzard's Raid Manager tab. One shared
+    --- frame, so Party, Raid and Mythic Raid always hold the same value (Menu2 writes all
+    --- three). AUTO keeps the historical behavior: gone while MSUF owns the group frames.
+    raidManagerMode   = "AUTO",
     width             = 120,
     height            = 40,
     spacing           = 1,

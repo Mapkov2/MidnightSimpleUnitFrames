@@ -97,14 +97,10 @@ local function EnsureGameplayDefaults()
     Default(g, "meleeSpellPerSpec", false)
     if type(g.nameplateMeleeSpellIDByClass) ~= "table" then g.nameplateMeleeSpellIDByClass = {} end
     if type(g.nameplateMeleeSpellIDBySpec) ~= "table" then g.nameplateMeleeSpellIDBySpec = {} end
-    if g.enablePlayerTotems == nil then
-        local hasTotemFrame = false
-        if UnitClass then
-            local _, cls = UnitClass("player")
-            hasTotemFrame = (cls == "SHAMAN" or cls == "MONK")
-        end
-        g.enablePlayerTotems = hasTotemFrame and true or false
-    end
+    -- Blizzard's TotemFrame is class-agnostic and parented to PlayerFrame, which MSUF hides, so
+    -- this helper is what makes an occupied totem slot visible at all. Seeded on for every class
+    -- instead of just Shaman/Monk; profiles that already stored a value keep it.
+    Default(g, "enablePlayerTotems", true)
     if g.playerTotemsIconSize == nil or g.playerTotemsIconSize <= 0 then g.playerTotemsIconSize = 24 end
     Default(g, "playerTotemsOffsetX", 0)
     Default(g, "playerTotemsOffsetY", -6)

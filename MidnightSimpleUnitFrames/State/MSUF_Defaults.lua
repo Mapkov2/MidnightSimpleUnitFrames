@@ -1262,6 +1262,7 @@ local MSUF_DEFAULTS_FONT_KEY_ALIASES = {
     ["Expressway SemiBold (MSUF)"] = "EXPRESSWAY_SEMIBOLD",
     ["Expressway ExtraBold (MSUF)"] = "EXPRESSWAY_EXTRABOLD",
     ["Expressway Condensed Light (MSUF)"] = "EXPRESSWAY_CONDENSED_LIGHT",
+    ["Fritz Soundscape"] = "SOUNDSCAPE",
 }
 
 local function MSUF_Defaults_NormalizeFontKey(key)

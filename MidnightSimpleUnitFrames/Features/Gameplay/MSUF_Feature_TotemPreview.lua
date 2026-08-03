@@ -73,10 +73,6 @@ do
     local BLIZZ_TOTEM_BASE_SIZE = 37
     local MONK_BLACK_OX_STATUE_SPELL_ID = 115315
     local MONK_JADE_SERPENT_STATUE_SPELL_ID = 115313
-    local TOTEM_FRAME_CLASSES = {
-        SHAMAN = true,
-        MONK = true,
-    }
     local VALID_ANCHORS = {
         TOPLEFT = true, TOP = true, TOPRIGHT = true,
         LEFT = true, CENTER = true, RIGHT = true,
@@ -86,22 +82,27 @@ do
     local _RefreshBlizzardTotems
 
     -- The player's class cannot change within a session, but UnitClass can still answer nil
-    -- during very early load, so only a resolved token is cached.
+    -- during very early load, so only a resolved token is cached. The token no longer decides
+    -- availability, it only picks the statue icon the preview shows for Monks.
     local playerClassCache
-    local function _GetPlayerTotemFrameClass()
+    local function _GetPlayerClass()
         local class = playerClassCache
         if class == nil then
             if not UnitClass then return nil end
             local _, token = UnitClass("player")
             if token == nil then return nil end
-            class = TOTEM_FRAME_CLASSES[token] and token or false
+            class = token
             playerClassCache = class
         end
-        return class or nil
+        return class
     end
 
+    -- TotemFrameMixin:Update walks STANDARD_TOTEM_PRIORITIES for every class and only reorders
+    -- the four slots for Shamans, so any class that puts something into a totem slot (Death
+    -- Knight ghoul, Paladin Consecration, Monk statues) gets a frame. Availability is therefore
+    -- only about Blizzard's frame existing.
     local function _PlayerHasBlizzardTotemFrame()
-        return _GetPlayerTotemFrameClass() ~= nil
+        return _G.TotemFrame ~= nil
     end
 
     local function _CanMoveBlizzardTotemFrame()
@@ -120,7 +121,7 @@ do
     end
 
     local function _GetPreviewSpellID()
-        local class = _GetPlayerTotemFrameClass()
+        local class = _GetPlayerClass()
         if class == "MONK" then
             return (_GetPlayerSpecID() == 270) and MONK_JADE_SERPENT_STATUE_SPELL_ID or MONK_BLACK_OX_STATUE_SPELL_ID
         end
@@ -667,10 +668,10 @@ do
         -- PLAYER_TOTEM_UPDATE is a cheap safety net for the window before the Update post-hook is
         -- installed. Totem changes afterwards arrive through that hook, so no cast-driven
         -- refresh is registered: it fired on every successful cast and only ever re-did work the
-        -- hook already covers.
-        if _PlayerHasBlizzardTotemFrame() then
-            eventFrame:RegisterEvent("PLAYER_TOTEM_UPDATE")
-        end
+        -- hook already covers. Registered unconditionally: the event never fires for a character
+        -- that never fills a totem slot, and gating it on TotemFrame existing would drop the net
+        -- exactly in the case it covers.
+        eventFrame:RegisterEvent("PLAYER_TOTEM_UPDATE")
 
         totemWasActive = true
         _RefreshBlizzardTotems()

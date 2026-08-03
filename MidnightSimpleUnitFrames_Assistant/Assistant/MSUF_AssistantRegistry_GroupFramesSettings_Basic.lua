@@ -120,6 +120,99 @@ function A.GroupFramesRegistry.RegisterBasicSettings(ctx, scope)
         ["blizzard ausblenden"] = "NONE",
     }, "rebuild", aliases)
 
+    --- One shared Blizzard frame, so the three scopes always carry the same value. It is
+    --- still registered per scope because the Assistant addresses settings by
+    --- gf_<scope>.<key>, but get/set are overridden to read and write all three rows at
+    --- once -- a single-scope write would leave the value shadowed by whichever scope the
+    --- engine reads first. The set also drives the tab directly: the generic group apply
+    --- only refreshes MSUF's own frames, which this setting does not touch.
+    local GroupDB = ctx.GroupDB
+    local RAID_MANAGER_KINDS = { "party", "raid", "mythicraid" }
+    local RAID_MANAGER_ALLOWED = { AUTO = true, SHOW = true, MOUSEOVER = true, HIDDEN = true }
+    local function RaidManagerConf(kind)
+        return type(GroupDB) == "function" and GroupDB(kind) or nil
+    end
+    local function ReadRaidManagerMode()
+        for i = 1, #RAID_MANAGER_KINDS do
+            local conf = RaidManagerConf(RAID_MANAGER_KINDS[i])
+            local value = conf and conf.raidManagerMode
+            if value ~= nil then
+                --- "DEFAULT" is the pre-release spelling of AUTO and lands here as an
+                --- unknown value, which is exactly the fallback we want.
+                return RAID_MANAGER_ALLOWED[value] and value or "AUTO"
+            end
+        end
+        return "AUTO"
+    end
+    local function WriteRaidManagerMode(value)
+        if not RAID_MANAGER_ALLOWED[value] then value = "AUTO" end
+        for i = 1, #RAID_MANAGER_KINDS do
+            local conf = RaidManagerConf(RAID_MANAGER_KINDS[i])
+            if conf then conf.raidManagerMode = value end
+        end
+        local gf = MSUF and MSUF.GF
+        if gf and type(gf.ApplyBlizzardRaidManagerMode) == "function" then
+            gf.ApplyBlizzardRaidManagerMode()
+        end
+    end
+
+    aliases = {}
+    AddAliasesForUnit(aliases, scope, "raid manager", "raid manager")
+    AddAliasesForUnit(aliases, scope, "raid manager tab", "raid manager reiter")
+    AddAliasesForUnit(aliases, scope, "blizzard raid manager", "blizzard raid manager")
+    AddAliasesForUnit(aliases, scope, "raid tool", "raid werkzeug")
+    AddAliasesForUnit(aliases, scope, "raid arrow", "raid pfeil")
+    AddAliasesForUnit(aliases, scope, "raid manager arrow")
+    AddAliasesForUnit(aliases, scope, "hide raid manager", "raid manager ausblenden")
+    AddAliasesForUnit(aliases, scope, "raid manager visibility", "raid manager sichtbarkeit")
+    RegisterGroupEnum(scope, "raidManagerMode", "raidManagerMode", "Blizzard Raid Manager", "AUTO", { "AUTO", "SHOW", "MOUSEOVER", "HIDDEN" }, {
+        auto = "AUTO",
+        automatic = "AUTO",
+        automatisch = "AUTO",
+        default = "AUTO",
+        standard = "AUTO",
+        normal = "AUTO",
+        blizzard = "AUTO",
+        blizzarddefault = "AUTO",
+        ["blizzard default"] = "AUTO",
+        ["blizzard standard"] = "AUTO",
+        show = "SHOW",
+        anzeigen = "SHOW",
+        einblenden = "SHOW",
+        sichtbar = "SHOW",
+        on = "SHOW",
+        an = "SHOW",
+        visible = "SHOW",
+        alwaysvisible = "SHOW",
+        ["always visible"] = "SHOW",
+        ["immer sichtbar"] = "SHOW",
+        ["immer anzeigen"] = "SHOW",
+        mouseover = "MOUSEOVER",
+        ["mouse over"] = "MOUSEOVER",
+        hover = "MOUSEOVER",
+        maus = "MOUSEOVER",
+        mausueber = "MOUSEOVER",
+        ["bei mouseover"] = "MOUSEOVER",
+        ["show on mouseover"] = "MOUSEOVER",
+        ["only on mouseover"] = "MOUSEOVER",
+        ["nur bei mouseover"] = "MOUSEOVER",
+        hidden = "HIDDEN",
+        hide = "HIDDEN",
+        off = "HIDDEN",
+        aus = "HIDDEN",
+        ausblenden = "HIDDEN",
+        verstecken = "HIDDEN",
+        versteckt = "HIDDEN",
+        unsichtbar = "HIDDEN",
+        alwayshidden = "HIDDEN",
+        ["always hidden"] = "HIDDEN",
+        ["immer ausblenden"] = "HIDDEN",
+        ["immer versteckt"] = "HIDDEN",
+    }, "visual", aliases, {
+        get = function() return ReadRaidManagerMode() end,
+        set = function(_, value) WriteRaidManagerMode(value) end,
+    })
+
     aliases = {}
     AddAliasesForUnit(aliases, scope, "hide during client scene", "client szene ausblenden")
     AddAliasesForUnit(aliases, scope, "hide in client scene")
