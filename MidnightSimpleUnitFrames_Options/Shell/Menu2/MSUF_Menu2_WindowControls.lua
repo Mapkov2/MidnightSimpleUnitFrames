@@ -37,6 +37,21 @@ local function MenuAccentActive()
     return T and type(T.MenuAccentActive) == "function" and T.MenuAccentActive()
 end
 
+local function TintAtlasTexture(texture, color, enabled)
+    if not texture then return end
+    if texture.SetDesaturated then texture:SetDesaturated(enabled and true or false) end
+    if not texture.SetVertexColor then return end
+    if not enabled then
+        texture:SetVertexColor(1, 1, 1, 1)
+        return
+    end
+    color = color or { 1, 1, 1, 1 }
+    local peak = max(color[1] or 0, color[2] or 0, color[3] or 0)
+    if peak <= 0.001 then peak = 1 end
+    texture:SetVertexColor((color[1] or 0) / peak, (color[2] or 0) / peak,
+        (color[3] or 0) / peak, 1)
+end
+
 local function PrepareAtlasTexture(texture, path)
     texture:SetTexture(path)
     if texture.SetSnapToPixelGrid then texture:SetSnapToPixelGrid(false) end
@@ -50,27 +65,6 @@ end
 
 local function PaintGroupHover(btn, hover, down)
     local group = btn and btn._msuf2ControlGroup
-    if group and group._msuf2AccentControlChrome then
-        local highlight = btn._msuf2AccentControlHover
-        local edge = group._msuf2AccentControlEdge
-        if not (hover or down) then
-            if highlight then highlight:Hide() end
-            if edge then
-                local glow = ColorOr("coreGlow", { 0.231, 0.510, 0.965, 1 })
-                edge:SetVertexColor(glow[1], glow[2], glow[3], 0.66)
-            end
-            return
-        end
-        local accent = down
-            and ColorOr("coreHot", ColorOr("coreGlow", { 0.357, 0.608, 1.000, 1 }))
-            or ColorOr("coreGlow", { 0.231, 0.510, 0.965, 1 })
-        if highlight then
-            highlight:SetColorTexture(accent[1], accent[2], accent[3], down and 0.26 or 0.18)
-            highlight:Show()
-        end
-        if edge then edge:SetVertexColor(accent[1], accent[2], accent[3], down and 0.88 or 0.78) end
-        return
-    end
     local overlay = group and group._msuf2ControlGroupHover
     if not overlay then return end
     if not (hover or down) then
@@ -83,6 +77,11 @@ local function PaintGroupHover(btn, hover, down)
     local row = GROUP_ATLAS_ROWS[btn._msuf2ControlSegmentIndex or 1]
     group._msuf2ControlHoverOwner = btn
     overlay:SetTexCoord(0, GROUP_ATLAS_RIGHT, row[1], row[2])
+    local useAccent = MenuAccentActive() and btn._msuf2ControlKind ~= "close"
+    local accent = down
+        and ColorOr("coreHot", ColorOr("coreGlow", { 0.357, 0.608, 1.000, 1 }))
+        or ColorOr("coreGlow", { 0.231, 0.510, 0.965, 1 })
+    TintAtlasTexture(overlay, accent, useAccent)
     overlay:SetAlpha(down and 0.78 or 1)
     overlay:Show()
 end
@@ -139,10 +138,9 @@ local function PaintWindowControlButton(btn, hover, down)
 
     local active = hover or down
     local r, g, b
-    if MenuAccentActive() then
-        -- The glyph atlas is monochrome, so one vertex-color path can keep all
-        -- three window controls on the selected accent ramp. The stock Midnight
-        -- blue/pink treatment remains unchanged in the fallback branches below.
+    if MenuAccentActive() and not close then
+        -- The monochrome glyph atlas lets minimize/maximize follow the accent.
+        -- Close remains on the danger semantic, just like the Midnight path.
         local accent = active
             and ColorOr("coreHot", ColorOr("coreGlow", { 0.357, 0.608, 1.000, 1 }))
             or ColorOr("coreGlow", { 0.231, 0.510, 0.965, 1 })
@@ -157,33 +155,6 @@ local function PaintWindowControlButton(btn, hover, down)
     end
     if btn._msuf2ControlIcon then btn._msuf2ControlIcon:SetVertexColor(r, g, b, active and alpha or 0.92 * alpha) end
     if btn._msuf2ControlIconShadow then btn._msuf2ControlIconShadow:SetVertexColor(0.002, 0.008, 0.018, 0.82 * alpha) end
-end
-
-local function CreateAccentControlChrome(group, segmentCount)
-    if not (MenuAccentActive() and T and T.CreateSuperellipseLayers) then return false end
-    local chrome = CreateFrame("Frame", nil, group)
-    chrome:SetSize(SEGMENT_WIDTH * segmentCount + 6, CONTROL_HEIGHT + 2)
-    chrome:SetPoint("CENTER", group, "CENTER", 0, 0)
-    if chrome.EnableMouse then chrome:EnableMouse(false) end
-    local fill, edge = T.CreateSuperellipseLayers(chrome, "_msuf2AccentControl", 2, "BACKGROUND", "BORDER")
-    if not (fill and edge) then return false end
-    local shadow = ColorOr("coreShadow", { 0.006, 0.016, 0.032, 1 })
-    local glow = ColorOr("coreGlow", { 0.231, 0.510, 0.965, 1 })
-    if T.SetFillGradient then
-        T.SetFillGradient(fill, { shadow[1], shadow[2], shadow[3], 0.96 }, 0.10, -0.16)
-    else
-        fill:SetVertexColor(shadow[1], shadow[2], shadow[3], 0.96)
-    end
-    edge:SetVertexColor(glow[1], glow[2], glow[3], 0.66)
-    for i = 1, segmentCount - 1 do
-        local separator = chrome:CreateTexture(nil, "ARTWORK", nil, 0)
-        separator:SetSize(1, CONTROL_HEIGHT - 8)
-        separator:SetPoint("LEFT", chrome, "LEFT", 3 + i * SEGMENT_WIDTH, 0)
-        separator:SetColorTexture(glow[1], glow[2], glow[3], 0.24)
-    end
-    group._msuf2AccentControlChrome = chrome
-    group._msuf2AccentControlEdge = edge
-    return true
 end
 
 local function SetWindowControlIcon(btn, kind)
@@ -218,6 +189,9 @@ local function CreateWindowControlGroup(parent, segmentCount)
     base:SetPoint("BOTTOMRIGHT", group, "BOTTOMRIGHT", 3, 1)
     PrepareAtlasTexture(base, T.media.windowControls)
     base:SetTexCoord(0, GROUP_ATLAS_RIGHT, 0, 0.25)
+    local tintSurfaces = T and type(T.MenuAccentSurfacesTinted) == "function"
+        and T.MenuAccentSurfacesTinted()
+    TintAtlasTexture(base, ColorOr("coreSurface", { 0.035, 0.067, 0.114, 1 }), tintSurfaces)
     group._msuf2ControlGroupBase = base
     local hover = group:CreateTexture(nil, "BORDER", nil, 1)
     hover:SetPoint("TOPLEFT", group, "TOPLEFT", -3, -1)
@@ -225,10 +199,6 @@ local function CreateWindowControlGroup(parent, segmentCount)
     PrepareAtlasTexture(hover, T.media.windowControls)
     hover:Hide()
     group._msuf2ControlGroupHover = hover
-    if CreateAccentControlChrome(group, segmentCount) then
-        base:Hide()
-        hover:Hide()
-    end
     return group
 end
 
@@ -241,13 +211,6 @@ local function CreateWindowControlButton(parent, kind, tooltipTitle, tooltipText
         local count = parent._msuf2ControlSegmentCount or 3
         btn._msuf2ControlGroup = parent
         btn._msuf2ControlSegmentIndex = min(count, max(1, tonumber(segmentIndex) or 1))
-        if parent._msuf2AccentControlChrome then
-            local highlight = btn:CreateTexture(nil, "BACKGROUND", nil, 1)
-            highlight:SetPoint("TOPLEFT", btn, "TOPLEFT", 2, -3)
-            highlight:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -2, 3)
-            highlight:Hide()
-            btn._msuf2AccentControlHover = highlight
-        end
     else
         local fill, edge = T.CreateSuperellipseLayers(btn, "_msuf2Control", 2, "BACKGROUND", "BORDER")
         btn._msuf2ControlFill = fill

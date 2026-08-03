@@ -130,6 +130,22 @@ guide=0.231,0.510,0.965,0.58
 focus=0.055,0.098,0.161,0.78
 warning=0.851,0.643,0.255,1.00
 ]]
+-- Hover is a stable interaction state, not a theme accent. The user-selected
+-- accent owns persistent selection; pointer feedback stays MSUF blue in every
+-- mode, including when structural surfaces are tinted.
+local FIXED_NAV_HOVER_COLORS = {
+    navPillHover = { 0.063, 0.145, 0.255, 0.96 },
+    navPillEdgeHover = { 0.231, 0.510, 0.965, 0.60 },
+    navHeaderHover = { 0.357, 0.608, 1.000, 1.00 },
+}
+local function RestoreFixedNavHoverColors()
+    for key, fixed in pairs(FIXED_NAV_HOVER_COLORS) do
+        local color = T.colors[key]
+        if type(color) == "table" then
+            color[1], color[2], color[3], color[4] = fixed[1], fixed[2], fixed[3], fixed[4]
+        end
+    end
+end
 T.fontBump = T.fontBump or 1
 local function NavIconGrid(rows)
     local out = {}
@@ -602,12 +618,20 @@ function T.MenuAccentSignature(g)
     end
     return "midnight"
 end
---- True when a non-midnight accent is active this session. Art-based chrome
---- (panel/nav-pill PNGs with the midnight blue baked into the bitmap) checks
---- this and falls back to the procedural token-driven rendering instead.
+--- True when a non-midnight accent is active this session. Token-aware controls
+--- use this for color selection; nav may use its neutral fill textures, but the
+--- shared visual-width/cap contract keeps geometry identical to Midnight.
 function T.MenuAccentActive()
     local applied = T._menuAccentApplied
     return applied ~= nil and applied ~= "midnight"
+end
+--- True only when the applied non-midnight accent also owns structural
+--- surfaces. Kept as an applied-session query so every art owner follows the
+--- same reload boundary as the token mutation itself.
+function T.MenuAccentSurfacesTinted()
+    local applied = T._menuAccentApplied
+    return type(applied) == "string" and applied ~= "midnight"
+        and applied:sub(-5) == "+tint"
 end
 --- Idempotent: applies the saved accent once per session and records what was
 --- applied. Returns nil (and retries on the next call) while the DB is not
@@ -676,6 +700,7 @@ function T.ApplyMenuAccent()
         RehueDeep(T.gradients, 1)
         RehueDeep(T.focusVeils, 1)
     end
+    RestoreFixedNavHoverColors()
     -- Runs for every accent, tinted or not: the tone swap alone already repaints
     -- pill/nav backgrounds in the accent color, so a bright pick (amber class
     -- colors, jade) can leave near-white labels sitting on a light surface.

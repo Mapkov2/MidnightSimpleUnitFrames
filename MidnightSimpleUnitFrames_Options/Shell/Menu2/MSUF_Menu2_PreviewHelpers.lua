@@ -2106,6 +2106,7 @@ function H.CreateLayerButton(parent, owner, def, index, sideW, opts)
     if not (parent and def) then return nil end
     opts = opts or {}
     local tr = opts.Tr or F.Identity
+    local theme = opts.T or (M and M.Theme)
     local chip = opts.layout == "chip"
     local btn = CreateFrame("Button", nil, parent)
     local h = opts.height or 20
@@ -2127,13 +2128,13 @@ function H.CreateLayerButton(parent, owner, def, index, sideW, opts)
         btn.fs:SetJustifyH("LEFT")
     end
     btn.fs:SetText(tr(def.label))
+    if theme and theme.ApplyMenuFont then theme.ApplyMenuFont(btn.fs, 0) end
     if chip then LayoutLayerChip(btn, h) end
-    if T and T.StyleFontString then T.StyleFontString(btn.fs, { 0.78, 0.84, 0.96, 1 }, 0) end
     btn.off = btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     btn.off:SetPoint("RIGHT", btn, "RIGHT", -2, 0)
     btn.off:SetText(opts.offText or "OFF")
     btn.off:SetJustifyH("RIGHT")
-    if T and T.StyleFontString then T.StyleFontString(btn.off, { 0.55, 0.60, 0.70, 1 }, 0) end
+    if theme and theme.ApplyMenuFont then theme.ApplyMenuFont(btn.off, 0) end
     function btn:Refresh() H.RefreshLayerButton(self, owner, opts) end
     btn.refresh = btn.Refresh
     btn:SetScript("OnClick", function(self)

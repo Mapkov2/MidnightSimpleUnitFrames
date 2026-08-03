@@ -1295,14 +1295,31 @@ local function TopButtonStyle(bg, border, textColor, hoverBg, hoverBorder)
         activeBg = bg, activeBorder = border, activeTextColor = textColor,
     }
 end
-local TOP_CORE_SHADOW = ThemeColor("coreShadow", { 0.006, 0.016, 0.032, 1.00 })
-local TOP_CORE_SURFACE = ThemeColor("coreSurface", { 0.014, 0.038, 0.072, 1.00 })
-local TOP_CORE_RIM = ThemeColor("coreRim", { 0.043, 0.096, 0.150, 1.00 })
-local TOP_CORE_BLUE = ThemeColor("coreBlue", { 0.060, 0.250, 0.390, 1.00 })
-local TOP_ACTION_BUTTON_STYLE = TopButtonStyle(WithAlpha(TOP_CORE_SHADOW, 0.82), WithAlpha(TOP_CORE_RIM, 0.46), { 0.82, 0.90, 1.00, 0.96 }, WithAlpha(TOP_CORE_SURFACE, 0.86), WithAlpha(TOP_CORE_BLUE, 0.42))
+local TOP_ACTION_BUTTON_STYLE = TopButtonStyle(
+    { 0.006, 0.016, 0.032, 0.82 },
+    { 0.043, 0.096, 0.150, 0.46 },
+    { 0.82, 0.90, 1.00, 0.96 },
+    { 0.014, 0.038, 0.072, 0.86 },
+    { 0.060, 0.250, 0.390, 0.42 })
 local TOP_DANGER_BUTTON_STYLE = TopButtonStyle({ 0.070, 0.026, 0.034, 0.94 }, { 0.340, 0.090, 0.110, 0.82 }, { 1.00, 0.82, 0.82, 1 }, { 0.090, 0.035, 0.045, 0.96 }, { 0.420, 0.120, 0.140, 0.90 })
 local TOP_SUCCESS_BUTTON_STYLE = TopButtonStyle({ 0.018, 0.145, 0.090, 0.94 }, { 0.055, 0.440, 0.270, 0.82 }, { 0.780, 1.000, 0.875, 1 }, { 0.026, 0.185, 0.115, 0.96 }, { 0.075, 0.560, 0.345, 0.90 })
 local TOP_ROLE_STYLES = { primary = TOP_ACTION_BUTTON_STYLE, destructive = TOP_DANGER_BUTTON_STYLE, danger = TOP_DANGER_BUTTON_STYLE, reset = TOP_DANGER_BUTTON_STYLE, delete = TOP_DANGER_BUTTON_STYLE, success = TOP_SUCCESS_BUTTON_STYLE, confirm = TOP_SUCCESS_BUTTON_STYLE }
+-- Options may load before PLAYER_LOGIN, while the saved Menu2 accent is applied
+-- at PLAYER_LOGIN. Do not retain the Midnight copies created during file load:
+-- resolve the live token tables whenever a top button is constructed. Mutating
+-- this shared style also keeps custom styles' missing-field fallbacks current.
+local function RefreshTopActionButtonStyle()
+    local style = TOP_ACTION_BUTTON_STYLE
+    style.bg = WithAlpha(ThemeColor("coreShadow", { 0.006, 0.016, 0.032, 1.00 }), 0.82)
+    style.border = WithAlpha(ThemeColor("coreRim", { 0.043, 0.096, 0.150, 1.00 }), 0.46)
+    style.textColor = WithAlpha(ThemeColor("pillText", { 0.82, 0.90, 1.00, 1.00 }), 0.96)
+    style.hoverBg = WithAlpha(ThemeColor("coreSurface", { 0.014, 0.038, 0.072, 1.00 }), 0.86)
+    style.hoverBorder = WithAlpha(ThemeColor("coreBlue", { 0.060, 0.250, 0.390, 1.00 }), 0.42)
+    style.activeBg = style.bg
+    style.activeBorder = style.border
+    style.activeTextColor = style.textColor
+    return style
+end
 local function ApplyTopActionButtonVisual(btn, hover)
     local bg = btn._msuf2TopActive and btn._msuf2TopActiveBg or (hover and btn._msuf2TopHoverBg or btn._msuf2TopBg)
     local br = btn._msuf2TopActive and btn._msuf2TopActiveBorder or (hover and btn._msuf2TopHoverBorder or btn._msuf2TopBorder)
@@ -1318,8 +1335,8 @@ local function ApplyTopActionButtonVisual(btn, hover)
 end
 local TOP_BUTTON_HOOKS = { OnEnter = function(self) ApplyTopActionButtonVisual(self, true) end, OnLeave = function(self) ApplyTopActionButtonVisual(self) end, OnEnable = function(self) ApplyTopActionButtonVisual(self) end, OnDisable = function(self) ApplyTopActionButtonVisual(self) end }
 local function StyleTopButton(btn, style)
-    local s = style or TOP_ACTION_BUTTON_STYLE
-    local defaults = TOP_ACTION_BUTTON_STYLE
+    local defaults = RefreshTopActionButtonStyle()
+    local s = style or defaults
     btn._msuf2TopActive = false
     btn._msuf2TopBg = s.bg or defaults.bg
     btn._msuf2TopBorder = s.border or defaults.border

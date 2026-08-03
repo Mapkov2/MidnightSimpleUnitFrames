@@ -447,6 +447,19 @@ local function RegisterPageFontString(fs)
     fontStrings[#fontStrings + 1] = fs
     fs._msuf2FontCollectionEntry = entry
 end
+--- Apply only the font selected under Misc > MSUF menu font. This deliberately
+--- leaves text color and shadow ownership with the caller so stateful surfaces
+--- such as preview-layer chips keep their existing active/off/disabled paint.
+function T.ApplyMenuFont(fs, bump, role)
+    if not fs then return fs end
+    RegisterPageFontString(fs)
+    if role ~= nil then fs._msuf2FontRole = role end
+    if fs.GetFont and fs.SetFont then
+        fs._msuf2FontBump = tonumber(bump) or T.fontBump or 0
+        ApplyStyledFont(fs)
+    end
+    return fs
+end
 function T.StyleFontString(fs, color, bump, role)
     if not fs then return fs end
     RegisterPageFontString(fs)
@@ -535,7 +548,8 @@ local function CreateSuperellipseParts(frame, layer, subLevel)
     SmoothTexture(right)
     return { L = left, M = middle, R = right, SetVertexColor = SetSuperellipseVertexColor }
 end
-local function LayoutSuperellipseParts(parts, frame, inset, capW)
+local function LayoutSuperellipseParts(parts, frame, inset, capW, rightPad)
+    rightPad = tonumber(rightPad) or 0
     parts.L:ClearAllPoints()
     parts.M:ClearAllPoints()
     parts.R:ClearAllPoints()
@@ -543,8 +557,8 @@ local function LayoutSuperellipseParts(parts, frame, inset, capW)
     parts.L:SetPoint("TOPLEFT", frame, "TOPLEFT", inset, -inset)
     parts.L:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", inset, inset)
     parts.L:SetWidth(capW)
-    parts.R:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -inset, -inset)
-    parts.R:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -inset, inset)
+    parts.R:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -inset - rightPad, -inset)
+    parts.R:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -inset - rightPad, inset)
     parts.R:SetWidth(capW)
     parts.M:SetPoint("TOPLEFT", parts.L, "TOPRIGHT", 0, 0)
     parts.M:SetPoint("BOTTOMRIGHT", parts.R, "BOTTOMLEFT", 0, 0)
@@ -560,18 +574,26 @@ function T.CreateSuperellipseLayers(frame, key, inset, fillLayer, borderLayer)
     local fill = CreateSuperellipseParts(frame, fillLayer, 0)
     local border = CreateSuperellipseParts(frame, borderLayer, -1)
     local function Layout()
-        local w = (frame.GetWidth and frame:GetWidth()) or 120
+        local frameW = (frame.GetWidth and frame:GetWidth()) or 120
+        local w = frameW
+        local visualW = tonumber(frame._msuf2NavPillVisualWidth)
+        if visualW and visualW > 0 and visualW < w then w = visualW end
+        local rightPad = math.max(0, frameW - w)
         local h2 = (frame.GetHeight and frame:GetHeight()) or h
         local p = tonumber(inset) or 1
         local innerW = math.max(1, w - p * 2)
         local innerH = math.max(1, h2 - p * 2)
         local nextCapW = math.min(math.floor(innerH * 0.5 + 0.5), math.floor(innerW * 0.5))
-        LayoutSuperellipseParts(fill, frame, p, nextCapW)
+        -- Authored Midnight nav art uses compact corners rather than stadium
+        -- caps. Accent-colored procedural nav states must keep that silhouette.
+        if frame._msuf2NavItem then nextCapW = math.min(nextCapW, 6) end
+        LayoutSuperellipseParts(fill, frame, p, nextCapW, rightPad)
         local bInset = math.max(0, p - 1)
         local borderInnerW = math.max(1, w - bInset * 2)
         local borderInnerH = math.max(1, h2 - bInset * 2)
         local borderCapW = math.min(math.floor(borderInnerH * 0.5 + 0.5), math.floor(borderInnerW * 0.5))
-        LayoutSuperellipseParts(border, frame, bInset, borderCapW)
+        if frame._msuf2NavItem then borderCapW = math.min(borderCapW, 6) end
+        LayoutSuperellipseParts(border, frame, bInset, borderCapW, rightPad)
     end
     Layout()
     if frame.HookScript and not frame[key .. "LayoutHooked"] then
@@ -580,6 +602,8 @@ function T.CreateSuperellipseLayers(frame, key, inset, fillLayer, borderLayer)
     end
     frame[key .. "Fill"] = fill
     frame[key .. "Border"] = border
+    fill.Layout = Layout
+    border.Layout = Layout
     return fill, border
 end
 local BACKDROP_INFO = {
@@ -1075,6 +1099,22 @@ local function EnsurePanelAsset(frame)
     frame._msuf2PanelAsset = art
     return art
 end
+local function ConfigurePanelAssetColor(tex, tinted)
+    if not tex then return end
+    if tex.SetDesaturated then tex:SetDesaturated(tinted and true or false) end
+    if not tex.SetVertexColor then return end
+    if not tinted then
+        tex:SetVertexColor(1, 1, 1, 1)
+        return
+    end
+    -- The panel bitmaps carry the authored luminance/depth. Desaturating them
+    -- preserves that material while this normalized token supplies only hue.
+    local color = T.colors.coreSurface or T.colors.panel or { 1, 1, 1, 1 }
+    local peak = math.max(color[1] or 0, color[2] or 0, color[3] or 0)
+    if peak <= 0.001 then peak = 1 end
+    tex:SetVertexColor((color[1] or 0) / peak, (color[2] or 0) / peak,
+        (color[3] or 0) / peak, 1)
+end
 local function ApplyPanelAsset(frame, variant)
     local mediaKey = PANEL_ASSET_KEY[variant or "card"]
     local path = mediaKey and T.media and T.media[mediaKey]
@@ -1089,9 +1129,13 @@ local function ApplyPanelAsset(frame, variant)
         end
     end
     if art.Layout then art.Layout() end
+    local tinted = T.MenuAccentSurfacesTinted and T.MenuAccentSurfacesTinted()
     for i = 1, #PANEL_SLICES do
         local tex = art[PANEL_SLICES[i][1]]
-        if tex then tex:Show() end
+        if tex then
+            ConfigurePanelAssetColor(tex, tinted)
+            tex:Show()
+        end
     end
     if frame.SetBackdropColor then frame:SetBackdropColor(0, 0, 0, 0.001) end
     if frame.SetBackdropBorderColor then frame:SetBackdropBorderColor(0, 0, 0, 0.001) end
@@ -1335,10 +1379,10 @@ function T.ApplyGlass(frame, variant)
     if not (frame and frame.CreateTexture) then return frame end
     if T.ApplyGradient and T.gradients and T.gradients[variant or "card"] then T.ApplyGradient(frame, variant or "card", { key = "_msuf2MaterialGradient" }) end
     local spec = GLASS_VARIANTS[variant or "card"] or GLASS_VARIANTS.card
-    -- Panel PNGs carry the midnight blue in the bitmap; with a custom accent
-    -- the procedural glass path below renders from the swapped tokens instead.
-    local panelAssetApplied = not (T.MenuAccentActive and T.MenuAccentActive())
-        and ApplyPanelAsset(frame, variant or "card")
+    -- Accent selection may change hue, never renderer ownership or geometry.
+    -- ApplyPanelAsset desaturates/re-hues the same authored material only when
+    -- the user explicitly enables surface tinting.
+    local panelAssetApplied = ApplyPanelAsset(frame, variant or "card")
     if panelAssetApplied then
         frame._msuf2GlassVariant = variant
         frame._msuf2GlassApplied = true
@@ -2114,6 +2158,21 @@ local NAV_PILL_TEX = {
     hover = "navPillHover",
     active = "navPillActive",
 }
+-- Nav media is authored at its live 24 px height with 12 px circular caps.
+-- Preserve those caps and stretch only the flat center so localized visual
+-- widths cannot turn the active/hover silhouette into an ellipse.
+local NAV_PILL_SLICE_MARGIN = 12
+local NAV_PILL_SLICE_MODE = _G.Enum and _G.Enum.UITextureSliceMode
+    and _G.Enum.UITextureSliceMode.Stretched
+local function ConfigureNavPillSlice(tex)
+    if not tex then return end
+    if tex.SetTextureSliceMargins then
+        tex:SetTextureSliceMargins(NAV_PILL_SLICE_MARGIN, 0, NAV_PILL_SLICE_MARGIN, 0)
+    end
+    if NAV_PILL_SLICE_MODE ~= nil and tex.SetTextureSliceMode then
+        tex:SetTextureSliceMode(NAV_PILL_SLICE_MODE)
+    end
+end
 local function LayoutNavPillTexture(btn, tex)
     if not (btn and tex) then return end
     local h = (btn.GetHeight and btn:GetHeight()) or 20
@@ -2138,18 +2197,22 @@ local function EnsureNavPillArt(btn)
     local tex = btn:CreateTexture(nil, "BORDER", nil, 7)
     if tex.SetTexCoord then tex:SetTexCoord(0, 1, 0, 1) end
     if tex.SetBlendMode then tex:SetBlendMode("BLEND") end
+    ConfigureNavPillSlice(tex)
     tex:Hide()
     local glow = btn:CreateTexture(nil, "ARTWORK", nil, 1)
     if glow.SetTexCoord then glow:SetTexCoord(0, 1, 0, 1) end
     if glow.SetBlendMode then glow:SetBlendMode("ADD") end
+    ConfigureNavPillSlice(glow)
     glow:Hide()
     local hoverWash = btn:CreateTexture(nil, "ARTWORK", nil, 0)
     if hoverWash.SetTexCoord then hoverWash:SetTexCoord(0, 1, 0, 1) end
     if hoverWash.SetBlendMode then hoverWash:SetBlendMode("ADD") end
+    ConfigureNavPillSlice(hoverWash)
     hoverWash:Hide()
     local sheen = btn:CreateTexture(nil, "ARTWORK", nil, 2)
     if sheen.SetTexCoord then sheen:SetTexCoord(0, 1, 0, 1) end
     if sheen.SetBlendMode then sheen:SetBlendMode("ADD") end
+    ConfigureNavPillSlice(sheen)
     sheen:Hide()
     local art = { texture = tex, hoverWash = hoverWash, glow = glow, sheen = sheen }
     LayoutNavPillArt(btn, art)
@@ -2214,7 +2277,8 @@ local function PaintNavPillGlowArt(art, path, state)
         return
     end
     local c = T.colors or {}
-    local blue = c.coreBlue or c.accent or { 0.060, 0.250, 0.390, 1 }
+    local blue = hover and (c.navPillEdgeHover or c.coreGlow)
+        or c.coreBlue or c.accent or { 0.060, 0.250, 0.390, 1 }
     if art.hoverWash then
         if hover then
             if art.hoverWashPath ~= path then
@@ -2265,9 +2329,10 @@ local function PaintNavPillGlowArt(art, path, state)
     end
 end
 local function SetNavPillArt(btn, state, baseColor, topAmount, bottomAmount, alphaMul)
-    -- Pill PNGs are midnight-tinted art; with a custom accent the callers'
-    -- superellipse fallback paints from the swapped tokens instead.
-    if T.MenuAccentActive and T.MenuAccentActive() then return false end
+    -- Non-midnight accents need the neutral superellipse so their token color
+    -- remains vivid for persistent selection. Hover is deliberately shared by
+    -- every theme: the authored Midnight silhouette is the navigation spec.
+    if state ~= "hover" and T.MenuAccentActive and T.MenuAccentActive() then return false end
     local media = T.media or {}
     local path = media[NAV_PILL_TEX[state or "idle"] or ""]
     if not path then return false end
@@ -2288,8 +2353,16 @@ local function SetNavPillArt(btn, state, baseColor, topAmount, bottomAmount, alp
         local bottom = art._bottomColor or {}
         art._topColor = top
         art._bottomColor = bottom
-        ShadeColorInto(top, base, topAmount or 0.22, alphaMul)
-        ShadeColorInto(bottom, base, bottomAmount or -0.18, alphaMul)
+        if state == "hover" then
+            -- Preserve the bitmap's authored dark-blue paint. Multiplying it by
+            -- the already-dark hover token made the fill disappear; a near-
+            -- neutral tint keeps it visible without the bright stadium result.
+            top[1], top[2], top[3], top[4] = 1.00, 1.00, 1.00, 0.98
+            bottom[1], bottom[2], bottom[3], bottom[4] = 0.76, 0.84, 1.00, 0.92
+        else
+            ShadeColorInto(top, base, topAmount or 0.22, alphaMul)
+            ShadeColorInto(bottom, base, bottomAmount or -0.18, alphaMul)
+        end
         ApplyTextureGradient(art.texture, "VERTICAL", top, bottom, true)
         art.texture:Show()
         PaintNavPillGlowArt(art, path, state)
@@ -2444,21 +2517,23 @@ local function ButtonVisual(btn, active, hover)
         SetSuperellipsePartsShown(fill, false)
         SetSuperellipsePartsShown(edge, false)
         if active then
-            local bg = hover and { c.coreBlue[1], c.coreBlue[2], c.coreBlue[3], 0.72 } or c.navPillActive
-            local br = hover and { c.coreGlow[1], c.coreGlow[2], c.coreGlow[3], 0.55 } or c.navPillEdgeActive
+            local bg = hover and c.navPillHover or c.navPillActive
+            local br = hover and c.navPillEdgeHover or c.navPillEdgeActive
+            local tx = hover and (c.navHeaderHover or c.navTextActive) or c.navTextActive
             if btn._msuf2NavStripe then btn._msuf2NavStripe:Hide() end
             if SetNavPillArt(btn, "active", bg, hover and 0.20 or 0.17, -0.20) then
                 SetNavActiveFX(btn, false)
-                SetLabelColor(btn._msuf2Label, c.navTextActive)
+                SetLabelColor(btn._msuf2Label, tx)
             else
                 SetSuperellipsePartsShown(fill, true)
                 SetSuperellipsePartsShown(edge, true)
-                PaintButtonParts(fill, edge, btn._msuf2Label, bg, br, c.navTextActive, 0.24, -0.18)
-                SetNavActiveFX(btn, true, hover)
+                if fill and fill.Layout then fill.Layout() end
+                PaintButtonParts(fill, edge, btn._msuf2Label, bg, br, tx, 0.24, -0.18)
+                SetNavActiveFX(btn, not hover, false)
             end
             PaintNavIcon(btn, 0.82, 0.92, 1.00, 0.96)
         elseif hover then
-            local bg, br, tx = c.navPillHover, c.navPillEdgeHover, c.navText
+            local bg, br, tx = c.navPillHover, c.navPillEdgeHover, c.navHeaderHover or c.navText
             SetNavActiveFX(btn, false)
             if btn._msuf2NavStripe then btn._msuf2NavStripe:Hide() end
             if SetNavPillArt(btn, "hover", bg, 0.14, -0.22) then
@@ -2466,6 +2541,7 @@ local function ButtonVisual(btn, active, hover)
             else
                 SetSuperellipsePartsShown(fill, true)
                 SetSuperellipsePartsShown(edge, true)
+                if fill and fill.Layout then fill.Layout() end
                 PaintButtonParts(fill, edge, btn._msuf2Label, bg, br, tx, 0.14, -0.18, 1)
             end
             PaintStoredNavIcon(btn, 0.88)
