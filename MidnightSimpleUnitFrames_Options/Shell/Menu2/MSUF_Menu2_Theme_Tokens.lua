@@ -130,22 +130,6 @@ guide=0.231,0.510,0.965,0.58
 focus=0.055,0.098,0.161,0.78
 warning=0.851,0.643,0.255,1.00
 ]]
--- Hover is a stable interaction state, not a theme accent. The user-selected
--- accent owns persistent selection; pointer feedback stays MSUF blue in every
--- mode, including when structural surfaces are tinted.
-local FIXED_NAV_HOVER_COLORS = {
-    navPillHover = { 0.063, 0.145, 0.255, 0.96 },
-    navPillEdgeHover = { 0.231, 0.510, 0.965, 0.60 },
-    navHeaderHover = { 0.357, 0.608, 1.000, 1.00 },
-}
-local function RestoreFixedNavHoverColors()
-    for key, fixed in pairs(FIXED_NAV_HOVER_COLORS) do
-        local color = T.colors[key]
-        if type(color) == "table" then
-            color[1], color[2], color[3], color[4] = fixed[1], fixed[2], fixed[3], fixed[4]
-        end
-    end
-end
 T.fontBump = T.fontBump or 1
 local function NavIconGrid(rows)
     local out = {}
@@ -371,6 +355,24 @@ local function SwapAccentDeep(tbl, tones, depth)
             elseif depth < 3 then
                 SwapAccentDeep(value, tones, depth + 1)
             end
+        end
+    end
+end
+-- Midnight keeps its authored blue hover. Non-midnight themes derive hover
+-- from the same accent ramp as selection, at a lower alpha so pointer feedback
+-- remains subordinate to the persistent active state.
+local function ApplyAccentNavHoverColors(tones)
+    local mappings = {
+        { "navPillHover", tones[1], 0.92 },
+        { "navPillEdgeHover", tones[2], 0.60 },
+        { "navHeaderHover", tones[3], 1.00 },
+    }
+    for i = 1, #mappings do
+        local mapping = mappings[i]
+        local color, tone = T.colors[mapping[1]], mapping[2]
+        if type(color) == "table" and type(tone) == "table" then
+            color[1], color[2], color[3], color[4] = tone[1], tone[2], tone[3], mapping[3]
+            color._msuf2AccentTone = true
         end
     end
 end
@@ -684,6 +686,7 @@ function T.ApplyMenuAccent()
     SwapAccentDeep(T.navIconColors, tones, 1)
     SwapAccentDeep(T.glassVariants, tones, 1)
     SwapAccentDeep(T.gradients, tones, 1)
+    ApplyAccentNavHoverColors(tones)
     -- Optional second pass: rotate the structural midnight body onto the accent
     -- hue so the whole menu follows the accent, not just interactive highlights.
     -- The saturation scale keeps a muted accent from over-tinting the surfaces
@@ -700,7 +703,6 @@ function T.ApplyMenuAccent()
         RehueDeep(T.gradients, 1)
         RehueDeep(T.focusVeils, 1)
     end
-    RestoreFixedNavHoverColors()
     -- Runs for every accent, tinted or not: the tone swap alone already repaints
     -- pill/nav backgrounds in the accent color, so a bright pick (amber class
     -- colors, jade) can leave near-white labels sitting on a light surface.

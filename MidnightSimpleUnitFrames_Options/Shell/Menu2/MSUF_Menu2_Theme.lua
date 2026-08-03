@@ -2329,10 +2329,10 @@ local function PaintNavPillGlowArt(art, path, state)
     end
 end
 local function SetNavPillArt(btn, state, baseColor, topAmount, bottomAmount, alphaMul)
-    -- Non-midnight accents need the neutral superellipse so their token color
-    -- remains vivid for persistent selection. Hover is deliberately shared by
-    -- every theme: the authored Midnight silhouette is the navigation spec.
-    if state ~= "hover" and T.MenuAccentActive and T.MenuAccentActive() then return false end
+    -- Midnight owns the authored blue paint. Non-midnight themes use the
+    -- compact procedural renderer for active and hover so both states can carry
+    -- their class/preset accent without multiplying against baked blue pixels.
+    if T.MenuAccentActive and T.MenuAccentActive() then return false end
     local media = T.media or {}
     local path = media[NAV_PILL_TEX[state or "idle"] or ""]
     if not path then return false end
