@@ -66,6 +66,20 @@ function Core.PlaceHandle(handle, target, pad)
     handle:SetPoint("CENTER", target, "CENTER", pad or 0, 0)
     handle:SetShown(target:IsShown())
 end
+function Core.InteractionFrameLevel(parent, extra)
+    local parentLevel = parent and parent.GetFrameLevel and tonumber(parent:GetFrameLevel()) or 0
+    local level = parentLevel + 30
+    if Layers.ElementLevel then
+        local absoluteTop = tonumber(Layers.ElementLevel(30, 30, Layers.ELEMENT_DETAIL_MAX or 31))
+        if absoluteTop then
+            -- Share the interaction plane already used by Aura handles: one
+            -- complete level slot above every configurable visual layer.
+            absoluteTop = absoluteTop + (tonumber(Layers.ELEMENT_LEVEL_STRIDE) or 32)
+            if absoluteTop > level then level = absoluteTop end
+        end
+    end
+    return floor(level + (tonumber(extra) or 0) + 0.5)
+end
 function Core.SetShownSafe(region, shown)
     if region and region.SetShown then region:SetShown(shown and true or false) end
 end
@@ -222,7 +236,10 @@ function Core.ApplyBoundsGuide(box, edgeSize)
     if PreviewHelpers.LayoutEdgeLines then PreviewHelpers.LayoutEdgeLines(bounds, edgeSize, BOUNDS_GUIDE_OPTS) end
 end
 local PREVIEW_ROUNDED_OPTS = {
-    bgKey = "roundedBg",
+    -- Reuse the legitimate health background as the helper's existing
+    -- background region. This prevents EnsureRoundedVisuals from allocating a
+    -- second full-frame "body" texture just to draw the rounded edge.
+    bgKey = "hpBG",
     edgeKey = "roundedEdge",
     stackKey = "_msufPreviewRoundedEdgeStack",
     countKey = "_msufPreviewRoundedEdgeCount",
@@ -319,7 +336,6 @@ function Core.ApplyRounded(box, key, powerOn, outlineThickness, powerEmbedded, p
         mock._msufPreviewRoundedActive = nil
         mock._msufPreviewRoundedEdgeEnabled = nil
         ClearPreviewRoundedMasks(mock)
-        Core.SetShownSafe(mock.roundedBg, false)
         PreviewSetRoundedEdgeStackShown(mock, false)
         SetInlinePowerRoundedShown(mock._msufPreviewInlinePowerRoundedHost, false)
         SetDetachedRoundedShown(mock.detachedPower, false)
@@ -328,9 +344,9 @@ function Core.ApplyRounded(box, key, powerOn, outlineThickness, powerEmbedded, p
     mock._msufPreviewRoundedActive = true
     local roundedPower = powerOn and PreviewRoundedPowerBarsEnabled()
     local sharedPowerBody = roundedPower and powerEmbedded ~= false
-    local healthAnchor = sharedPowerBody and mock or mock.hpBG
-    local bodyMask = EnsurePreviewRoundedMask(mock, "body", mock, mock.roundedBg)
-    local hpBgMask = EnsurePreviewRoundedMask(mock, "health", healthAnchor, mock.hpBG)
+    local healthBgAnchor = mock
+    local healthAnchor = sharedPowerBody and mock or (mock.healthBar or mock.hpBG)
+    local hpBgMask = EnsurePreviewRoundedMask(mock, "healthBg", healthBgAnchor, mock.hpBG)
     local hpMask = EnsurePreviewRoundedMask(mock, "health", healthAnchor, mock.hp)
     local tempMaxBgMask = EnsurePreviewRoundedMask(mock, "tempMaxHealthBg", healthAnchor, mock.tempMaxHealthBg)
     local tempMaxMask = EnsurePreviewRoundedMask(mock, "tempMaxHealth", healthAnchor, mock.tempMaxHealth)
@@ -340,7 +356,6 @@ function Core.ApplyRounded(box, key, powerOn, outlineThickness, powerEmbedded, p
     local conf, g = UnitDB(key)
     local healPredMode = PreviewResolveHealPredAnchorMode(conf, g)
     local absorbMode = PreviewResolveAbsorbAnchorMode(conf, g)
-    PreviewSetMask(mock, mock.roundedBg, bodyMask)
     PreviewSetMask(mock, mock.hpBG, hpBgMask)
     PreviewSetMask(mock, mock.hp, hpMask)
     PreviewSetMask(mock, mock.tempMaxHealthBg, tempMaxBgMask)
@@ -401,10 +416,6 @@ function Core.ApplyRounded(box, key, powerOn, outlineThickness, powerEmbedded, p
         end
         SetDetachedRoundedShown(detached, false)
     end
-    mock.roundedBg:ClearAllPoints()
-    mock.roundedBg:SetAllPoints(mock)
-    mock.roundedBg:SetColorTexture(0, 0, 0, 0.92)
-    mock.roundedBg:Show()
     local edgeSize = ClampPreviewEdgeSize(outlineThickness, 1, 30)
     mock._msufPreviewRoundedEdgeEnabled = edgeSize > 0
     if edgeSize > 0 then
@@ -423,7 +434,6 @@ function Core.ApplyLayerVisibility(box)
         return available[key] ~= false and v[key] ~= false
     end
     local mock = box.mock
-    local bodyOn = LayerOn("body")
     local powerOn = LayerOn("power")
     local nameOn = LayerOn("nameText")
     local hpTextOn = LayerOn("hpText")
@@ -435,47 +445,28 @@ function Core.ApplyLayerVisibility(box)
     local guidesOn = LayerOn("guides")
     local boundsOn = LayerOn("bounds")
     local roundedActive = mock._msufPreviewRoundedActive == true
-    if bodyOn then
-        if roundedActive then
-            mock:SetBackdropColor(0, 0, 0, 0)
-            mock:SetBackdropBorderColor(0, 0, 0, 0)
-            Core.SetShownSafe(mock.roundedBg, true)
-            PreviewSetRoundedEdgeStackShown(mock, mock._msufPreviewRoundedEdgeEnabled ~= false)
-            SetFrameBorderShown(mock, false)
-        elseif mock._msufPreviewFrameBorderEnabled == true then
-            mock:SetBackdropColor(0, 0, 0, 0.92)
-            mock:SetBackdropBorderColor(0, 0, 0, 0)
-            Core.SetShownSafe(mock.roundedBg, false)
-            PreviewSetRoundedEdgeStackShown(mock, false)
-            SetFrameBorderShown(mock, true)
-        elseif mock._msufPreviewFrameBorderConfigured == true then
-            mock:SetBackdropColor(0, 0, 0, 0.92)
-            mock:SetBackdropBorderColor(0, 0, 0, 0)
-            Core.SetShownSafe(mock.roundedBg, false)
-            PreviewSetRoundedEdgeStackShown(mock, false)
-            SetFrameBorderShown(mock, false)
-        else
-            local r, g, b = Core.BaseEdgeColor()
-            mock:SetBackdropColor(0, 0, 0, 0.92)
-            mock:SetBackdropBorderColor(r, g, b, 1)
-            Core.SetShownSafe(mock.roundedBg, false)
-            PreviewSetRoundedEdgeStackShown(mock, false)
-            SetFrameBorderShown(mock, false)
-        end
+    if roundedActive then
+        if mock.SetBackdropBorderColor then mock:SetBackdropBorderColor(0, 0, 0, 0) end
+        PreviewSetRoundedEdgeStackShown(mock, mock._msufPreviewRoundedEdgeEnabled ~= false)
+        SetFrameBorderShown(mock, false)
+    elseif mock._msufPreviewFrameBorderEnabled == true then
+        if mock.SetBackdropBorderColor then mock:SetBackdropBorderColor(0, 0, 0, 0) end
+        PreviewSetRoundedEdgeStackShown(mock, false)
+        SetFrameBorderShown(mock, true)
+    elseif mock._msufPreviewFrameBorderConfigured == true then
+        if mock.SetBackdropBorderColor then mock:SetBackdropBorderColor(0, 0, 0, 0) end
+        PreviewSetRoundedEdgeStackShown(mock, false)
+        SetFrameBorderShown(mock, false)
     else
-        mock:SetBackdropColor(0, 0, 0, 0)
-        mock:SetBackdropBorderColor(0, 0, 0, 0)
-        Core.SetShownSafe(mock.roundedBg, false)
+        if mock.SetBackdropBorderColor then
+            local r, g, b = Core.BaseEdgeColor()
+            mock:SetBackdropBorderColor(r, g, b, 1)
+        end
         PreviewSetRoundedEdgeStackShown(mock, false)
         SetFrameBorderShown(mock, false)
     end
-    Core.SetShownSafe(mock.hpBG, bodyOn)
-    Core.SetShownSafe(mock.hp, bodyOn)
-    if not bodyOn then
-        Core.SetShownSafe(mock.healPred, false)
-        Core.SetShownSafe(mock.absorb, false)
-        Core.SetShownSafe(mock.healAbsorb, false)
-    end
+    Core.SetShownSafe(mock.hpBG, true)
+    Core.SetShownSafe(mock.hp, true)
     if not powerOn then
         Core.SetShownSafe(mock.powerBG, false)
         Core.SetShownSafe(mock.power, false)
@@ -556,28 +547,28 @@ function Core.InCombat()
     return _G.MSUF_InCombat == true
 end
 
--- Unified preview alpha: hp/resource each have foreground and background opacity.
--- Foreground text, portrait, cast, and icons follow the HP value unless the
--- "keep text + portrait visible" toggle is on.
+-- The background textures already carry their final compiled alpha from the
+-- render pass. Foreground text, portrait, cast, and icons follow the HP value
+-- unless the "keep text + portrait visible" toggle is on.
 local function PreviewAlphaState(conf, runtimeSpec)
     local runtimeAlpha = runtimeSpec and runtimeSpec.alpha
     local runtimePower = runtimeSpec and runtimeSpec.power
-    local runtimeHealthBg = runtimeSpec and runtimeSpec.health and runtimeSpec.health.background
-    local runtimePowerBg = runtimePower and runtimePower.background
-    local hp = Clamp01(runtimeAlpha and runtimeAlpha.hpAlpha or (conf and conf.hpBarAlpha), 1)
-    local power = Clamp01(runtimePower and runtimePower.alpha or (conf and conf.powerBarAlpha), 1)
-    local bg = Clamp01(runtimeHealthBg and runtimeHealthBg.a or (conf and conf.hpBgAlpha), 0.85)
-    local powerBg = Clamp01(runtimePowerBg and runtimePowerBg.a or (conf and conf.powerBarBgAlpha), bg)
-    if _G.MSUF_UnitEditModeActive == true and hp < 0.35 then hp = 0.35 end
-    local excludeTextPortrait = runtimeAlpha and runtimeAlpha.excludeTextPortrait == true
-        or (not runtimeAlpha and conf and conf.alphaExcludeTextPortrait == true)
+    -- The menu DB is the just-edited source of truth. Runtime specs are a
+    -- fallback only: their apply is deliberately debounced and can still be
+    -- one transaction behind the preview refresh.
+    local hp = Clamp01(conf and conf.hpBarAlpha, runtimeAlpha and runtimeAlpha.hpAlpha or 1)
+    local power = Clamp01(conf and conf.powerBarAlpha, runtimePower and runtimePower.alpha or 1)
+    local excludeTextPortrait
+    if conf and conf.alphaExcludeTextPortrait ~= nil then
+        excludeTextPortrait = conf.alphaExcludeTextPortrait == true
+    else
+        excludeTextPortrait = runtimeAlpha and runtimeAlpha.excludeTextPortrait == true
+    end
     local fg = excludeTextPortrait and 1 or hp
     return {
         flat = false,
         frame = 1,
         fg = fg,
-        bg = bg,
-        powerBg = powerBg,
         hp = hp,
         power = power,
         text = fg,
@@ -597,27 +588,25 @@ function Core.ApplyPreviewTransparency(box, conf, runtimeSpec)
     if not box or not box.mock then return end
     local mock = box.mock
     local alpha = PreviewAlphaState(conf, runtimeSpec)
-    local v = box.layerVisibility or {}
-    local available = box.layerAvailable or {}
-    local bodyOn = available.body ~= false and v.body ~= false
     if mock.SetAlpha then mock:SetAlpha(1) end
-    if bodyOn then
-        if mock._msufPreviewRoundedActive == true then
-            Core.SetFrameBackdropAlpha(mock, 0, 0)
-            Core.SetRegionAlpha(mock.roundedBg, 0.92 * (alpha.flat and alpha.frame or alpha.bg))
-            PreviewSetRoundedEdgeStackAlpha(mock, (mock._msufPreviewRoundedEdgeEnabled ~= false) and (alpha.flat and alpha.frame or alpha.fg) or 0)
-        else
-            Core.SetFrameBackdropAlpha(mock, 0.92 * (alpha.flat and alpha.frame or alpha.bg), alpha.flat and alpha.frame or alpha.fg)
-        end
-    else
-        Core.SetFrameBackdropAlpha(mock, 0, 0)
-        Core.SetRegionAlpha(mock.roundedBg, 0)
-        PreviewSetRoundedEdgeStackAlpha(mock, 0)
+    -- hpBG is the only full-frame surface, exactly like the live frame. The
+    -- plain preview root cannot stack a black alpha plate underneath it.
+    if mock.SetBackdropColor then mock:SetBackdropColor(0, 0, 0, 0) end
+    if mock._msufPreviewRoundedActive == true then
+        PreviewSetRoundedEdgeStackAlpha(mock, (mock._msufPreviewRoundedEdgeEnabled ~= false) and 1 or 0)
     end
-    -- Background opacity is already baked into the compiled tint. Keep the
-    -- region itself opaque so the preview does not square the slider value.
-    Core.SetRegionAlpha(mock.hpBG, alpha.flat and alpha.frame or 1)
-    Core.SetRegionAlpha(mock.hp, alpha.flat and alpha.frame or alpha.hp)
+    -- Layer visibility runs before this pass and deliberately shows available
+    -- regions. Re-assert the rendered health-surface state last so an exact
+    -- zero is a real Hide(), not merely a colour/alpha convention that a later
+    -- Show() can make ambiguous in the client.
+    local healthBgAlpha = Clamp01(mock._msufPreviewHealthBgAlpha, 0)
+    local healthFillAlpha = Clamp01(mock._msufPreviewHealthFillAlpha, alpha.hp)
+    Core.SetRegionAlpha(mock.hpBG, healthBgAlpha)
+    Core.SetRegionAlpha(mock.hp, healthFillAlpha)
+    Core.SetShownSafe(mock.hpBG, healthBgAlpha > 0)
+    Core.SetShownSafe(mock.hp, healthFillAlpha > 0)
+    -- Dependent overlays/text/portrait and power remain independently
+    -- composited, matching the live alpha element.
     Core.SetRegionAlpha(mock.healPred, alpha.flat and alpha.frame or alpha.hp)
     Core.SetRegionAlpha(mock.absorb, alpha.flat and alpha.frame or alpha.hp)
     Core.SetRegionAlpha(mock.healAbsorb, alpha.flat and alpha.frame or alpha.hp)

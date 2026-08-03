@@ -30,6 +30,35 @@ local function Shown(region)
   return nil
 end
 
+local function Alpha(region)
+  return region and region.GetAlpha and region:GetAlpha() or nil
+end
+
+local function VertexAlpha(region)
+  if not (region and region.GetVertexColor) then return nil end
+  local _, _, _, a = region:GetVertexColor()
+  return a
+end
+
+local function Texture(region)
+  if not region then return nil end
+  if region.GetAtlas then
+    local atlas = region:GetAtlas()
+    if atlas then return "atlas:" .. tostring(atlas) end
+  end
+  return region.GetTexture and region:GetTexture() or nil
+end
+
+local function Size(region)
+  if not region then return nil, nil end
+  return region.GetWidth and region:GetWidth() or nil,
+    region.GetHeight and region:GetHeight() or nil
+end
+
+local function StatusTexture(bar)
+  return bar and bar.GetStatusBarTexture and bar:GetStatusBarTexture() or nil
+end
+
 local function UnitFrameForKey(key)
   local unit = key == "boss" and "boss1" or key
   if unit and UF and type(UF.GetFrame) == "function" then
@@ -41,12 +70,24 @@ local function UnitFrameForKey(key)
 end
 
 local function Add(out, name, live, preview)
+  local liveWidth, liveHeight = Size(live)
+  local previewWidth, previewHeight = Size(preview)
   out[#out + 1] = {
     name = name,
     liveLevel = Level(live),
     previewLevel = Level(preview),
     liveShown = Shown(live),
     previewShown = Shown(preview),
+    liveAlpha = Alpha(live),
+    previewAlpha = Alpha(preview),
+    liveVertexAlpha = VertexAlpha(live),
+    previewVertexAlpha = VertexAlpha(preview),
+    liveTexture = Texture(live),
+    previewTexture = Texture(preview),
+    liveWidth = liveWidth,
+    liveHeight = liveHeight,
+    previewWidth = previewWidth,
+    previewHeight = previewHeight,
   }
 end
 
@@ -57,7 +98,14 @@ function Diag.UnitSnapshot(key, box)
   local mock = box and box.mock
   local out = { kind = "unit", key = key, entries = {} }
   Add(out.entries, "frame", frame, mock)
-  Add(out.entries, "health", frame and (frame.Health or frame.hpBar), mock and mock.hp)
+  Add(out.entries, "health", frame and (frame.Health or frame.hpBar),
+    mock and (mock.healthBar or mock.hpBar or mock.Health or mock.hp))
+  Add(out.entries, "healthFill", StatusTexture(frame and (frame.Health or frame.hpBar)),
+    StatusTexture(mock and (mock.healthBar or mock.hpBar or mock.Health)) or (mock and mock.hp))
+  Add(out.entries, "healthBackground", frame and (frame.healthBg or frame.hpBarBG or frame.bg),
+    mock and mock.hpBG)
+  Add(out.entries, "legacyCenter", frame and (frame.Center or (frame.NineSlice and frame.NineSlice.Center)),
+    mock and (mock.Center or (mock.NineSlice and mock.NineSlice.Center) or mock.roundedBg))
   Add(out.entries, "power", frame and (frame.Power or frame.powerBar or frame.targetPowerBar), mock and mock.power)
   Add(out.entries, "portrait", frame and frame.MSUFPortraitHolder, mock and mock.portrait)
   Add(out.entries, "nameText", frame and frame.MSUFNameTextLayer, mock and mock.nameLayer)
@@ -95,8 +143,12 @@ local function PrintSnapshot(snapshot)
   print("MSUF preview layer snapshot: " .. tostring(snapshot.kind) .. " " .. tostring(snapshot.key))
   for i = 1, #snapshot.entries do
     local e = snapshot.entries[i]
-    print(string.format("  %s live=%s preview=%s liveShown=%s previewShown=%s",
-      tostring(e.name), tostring(e.liveLevel), tostring(e.previewLevel), tostring(e.liveShown), tostring(e.previewShown)))
+    print(string.format("  %s live=%s preview=%s shown=%s/%s alpha=%s/%s vertexA=%s/%s size=%sx%s/%sx%s tex=%s/%s",
+      tostring(e.name), tostring(e.liveLevel), tostring(e.previewLevel),
+      tostring(e.liveShown), tostring(e.previewShown), tostring(e.liveAlpha), tostring(e.previewAlpha),
+      tostring(e.liveVertexAlpha), tostring(e.previewVertexAlpha),
+      tostring(e.liveWidth), tostring(e.liveHeight), tostring(e.previewWidth), tostring(e.previewHeight),
+      tostring(e.liveTexture), tostring(e.previewTexture)))
   end
   return true
 end

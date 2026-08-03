@@ -746,7 +746,18 @@ local function DarkMatchHPColor(r, g, b, cache)
     end
     return Clamp01(r, 0), Clamp01(g, 0), Clamp01(b, 0)
 end
-local function HealthBackgroundColor(hr, hg, hb, data)
+local function PerUnitBackgroundAlpha(conf, key, fallbackKey, resolvedAlpha, resolver)
+    local alpha = conf and conf[key]
+    if alpha == nil and fallbackKey then alpha = conf and conf[fallbackKey] end
+    if type(alpha) ~= "number" then return Clamp01(resolvedAlpha, 0.9) end
+    local tintAlpha = 1
+    if type(resolver) == "function" then
+        local _, _, _, value = resolver()
+        tintAlpha = Clamp01(value, 1)
+    end
+    return Clamp01(alpha, 1) * tintAlpha
+end
+local function HealthBackgroundColor(hr, hg, hb, data, conf)
     local cache = SettingsCache()
     local gen = (cache and cache.generalRef) or (_G.MSUF_DB and _G.MSUF_DB.general)
     local r, g, b, a
@@ -756,6 +767,7 @@ local function HealthBackgroundColor(hr, hg, hb, data)
         r, g, b, a = _G.MSUF_GetBarBackgroundTintRGBA()
     end
     r, g, b, a = Clamp01(r, 0), Clamp01(g, 0), Clamp01(b, 0), Clamp01(a, 0.9)
+    a = PerUnitBackgroundAlpha(conf, "hpBgAlpha", nil, a, _G.MSUF_GetBarBackgroundTintRGBA)
     if (cache and cache.barBgClassColor) or ((not cache) and gen and gen.barBgClassColor) then
         local classToken = data and data.isPlayer and data.class or UNIT_DATA.player.class
         r, g, b = ClassColor(classToken)
@@ -764,7 +776,7 @@ local function HealthBackgroundColor(hr, hg, hb, data)
     end
     return r, g, b, a
 end
-local function PowerBackgroundColor(pr, pg, pb, hr, hg, hb)
+local function PowerBackgroundColor(pr, pg, pb, hr, hg, hb, conf)
     local cache = SettingsCache()
     local r, g, b, a
     if cache then
@@ -773,6 +785,7 @@ local function PowerBackgroundColor(pr, pg, pb, hr, hg, hb)
         r, g, b, a = _G.MSUF_GetPowerBarBackgroundTintRGBA()
     end
     r, g, b, a = Clamp01(r, pr * 0.16), Clamp01(g, pg * 0.16), Clamp01(b, pb * 0.16), Clamp01(a, 0.9)
+    a = PerUnitBackgroundAlpha(conf, "powerBarBgAlpha", "hpBgAlpha", a, _G.MSUF_GetPowerBarBackgroundTintRGBA)
     if cache and cache.powerBarBgMatchHPColor then r, g, b = DarkMatchHPColor(hr, hg, hb, cache) end
     return r, g, b, a
 end
