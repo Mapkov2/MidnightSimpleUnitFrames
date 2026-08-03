@@ -358,7 +358,10 @@ local function GetCastbarUnitKey(frame)
     return nil
 end
 
-local function GetCastbarReverseFillForFrame(frame, isChanneled)
+--- The fill anchor comes only from the configured castbar direction (plus the
+--- target override). Casts and empower bars both count up; channels keep this
+--- same anchor and reverse their value direction when unified fill is off.
+local function GetCastbarReverseFillForFrame(frame, _)
     EnsureDBLazy()
     local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
     local reverseFill = general.castbarFillDirection == "RTL"
@@ -370,16 +373,6 @@ local function GetCastbarReverseFillForFrame(frame, isChanneled)
         end
     end
 
-    if isChanneled == true and frame and frame.isEmpower == true then
-        -- Empower bars fill on ElapsedTime timers: the legacy flip applies.
-        if general.castbarUnifiedDirection ~= true then
-            return not reverseFill
-        end
-    end
-
-    -- Channels keep the cast's anchor. Unified direction is realized by
-    -- switching the native timer to ElapsedTime (fill like a cast) instead of
-    -- RemainingTime (classic drain); see TimerDirection in the runtime.
     return reverseFill
 end
 ExportPublic("MSUF_GetCastbarReverseFillForFrame", GetCastbarReverseFillForFrame)

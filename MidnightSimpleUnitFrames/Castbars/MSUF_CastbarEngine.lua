@@ -189,9 +189,9 @@ local function HideTradeSkillCasts()
     return general.castbarHideTradeSkills == true
 end
 
---- Fill direction is part of cast-state because channels/empower casts can run
---- opposite to normal casts unless the profile requests unified direction.
-local function ReverseFillForCastType(castType, unit)
+--- The fill anchor is independent of cast type. Casts and empower bars count
+--- up from this edge; non-unified channels keep the edge and count down.
+local function ReverseFillForCastType(_, unit)
     EnsureDBLazy()
 
     local general = (MSUF_DB and MSUF_DB.general) or {}
@@ -199,23 +199,6 @@ local function ReverseFillForCastType(castType, unit)
 
     if unit == "target" and general.castbarOpositeDirectionTarget == true then
         reverseFill = not reverseFill
-    end
-
-    local unifiedDirection = general.castbarUnifiedDirection == true
-    if castType == "CHANNEL" then
-        -- Channels keep the cast's anchor. Unified direction is realized by
-        -- switching the native timer to ElapsedTime (fill like a cast) instead
-        -- of RemainingTime (classic drain); see TimerDirection in the runtime.
-        return reverseFill
-    end
-
-    if castType == "EMPOWER" then
-        -- Empower bars fill on ElapsedTime timers, so the legacy flip applies.
-        if unifiedDirection then
-            return reverseFill
-        end
-
-        return not reverseFill
     end
 
     return reverseFill
