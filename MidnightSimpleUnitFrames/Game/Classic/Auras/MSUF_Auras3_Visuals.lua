@@ -397,8 +397,13 @@ function V.ApplyButtonLayout(lane, button)
     local barOnly = cfg.showDurationBar == true and cfg.durationBarDisplay == "BAR_ONLY"
     if button.Icon and button.Icon.SetShown then button.Icon:SetShown(not barOnly)
     elseif button.Icon then if barOnly then button.Icon:Hide() else button.Icon:Show() end end
-    if button.Cooldown and button.Cooldown.SetShown then button.Cooldown:SetShown(not barOnly and cfg.showCooldown == true)
-    elseif button.Cooldown then if barOnly or cfg.showCooldown ~= true then button.Cooldown:Hide() else button.Cooldown:Show() end end
+    -- UpdateCooldown owns whether this particular aura has a live timer. Do
+    -- not resurrect the Cooldown merely because the lane allows cooldowns:
+    -- permanent auras intentionally leave _msufA3CooldownShown unset.
+    local showCooldown = not barOnly and cfg.showCooldown == true
+        and button._msufA3CooldownShown == true
+    if button.Cooldown and button.Cooldown.SetShown then button.Cooldown:SetShown(showCooldown)
+    elseif button.Cooldown then if showCooldown then button.Cooldown:Show() else button.Cooldown:Hide() end end
     if button.Count and button.Count.SetShown then button.Count:SetShown(not barOnly and cfg.showStacks ~= false)
     elseif button.Count then if barOnly or cfg.showStacks == false then button.Count:Hide() else button.Count:Show() end end
 end
@@ -584,7 +589,15 @@ local function ApplyFrameEffect(lane, button, data)
 end
 
 local function ApplyIndicatorVisual(button, cfg)
-    local visual = tostring(cfg.visual or "icon"):lower()
+    -- Unit/group debuff lanes store their compiled dispel-frame visual in
+    -- cfg.visual, while custom spell-indicator lanes store a normalized string
+    -- in the same field.  Only the string form is an icon-mode instruction;
+    -- treating the dispel table as a mode hides every normal debuff icon.
+    local visual = type(cfg.visual) == "string" and cfg.visual or "icon"
+    if visual ~= "icon" and visual ~= "square" and visual ~= "bar"
+        and visual ~= "number" and visual ~= "none" then
+        visual = "icon"
+    end
     local color = type(cfg.color) == "table" and cfg.color or {}
     local r, g, b, a = Color(color, 0.69, 0.50, 0.88, 1)
     local swatch = button._msufA3ClassicIndicatorSwatch

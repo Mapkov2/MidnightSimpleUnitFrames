@@ -2532,6 +2532,7 @@ end
 local function HideCooldown(button, cooldown)
     if button._msufA3CooldownShown ~= nil then
         button._msufA3CooldownShown = nil
+        if cooldown.Clear then cooldown:Clear() end
         cooldown:Hide()
     end
 end
@@ -2943,7 +2944,13 @@ end
 
 local function UpdateCooldown(button, cooldown, unit, data)
     local setFromDurationObject = button._msufA3SetCooldownFromDurationObject
-    if setFromDurationObject then
+    -- Both Classic clients return a LuaDurationObject for every valid aura
+    -- instance, including permanent auras whose raw duration/expiration are
+    -- zero. Binding that zero-duration object and then showing the Cooldown
+    -- frame paints a full/stale swipe over the icon. Blizzard's Classic target
+    -- frame only enables its cooldown for positive raw duration data, so keep
+    -- the duration-object path behind the same timed-aura contract.
+    if setFromDurationObject and TimedAura(data) then
         local durationObject = GetAuraDuration(unit, data.auraInstanceID)
         if durationObject then
             if button._msufA3CooldownPlain ~= nil then
