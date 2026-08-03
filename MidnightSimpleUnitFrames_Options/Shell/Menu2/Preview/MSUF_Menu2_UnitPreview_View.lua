@@ -592,6 +592,7 @@ local function WriteHandleOffsets(handle, x, y, reason)
     local fields = handle._fields or {}
     if type(fields.writeOffsets) == "function" then
         if not fields.writeOffsets(handle, x, y, reason) then return false end
+        if type(M2.RefreshVisibleSliders) == "function" then M2.RefreshVisibleSliders(reason or "UNIT_PREVIEW_MOVE") end
         local fastDrag = reason == "UNIT_PREVIEW_DRAG"
             and fields.visualOnly == true
             and type(fields.dragOffsets) == "function"
@@ -610,6 +611,7 @@ local function WriteHandleOffsets(handle, x, y, reason)
         M2.SyncDirectTextOffsets(store, xKey)
         M2.SyncDirectTextOffsets(store, yKey)
     end
+    if type(M2.RefreshVisibleSliders) == "function" then M2.RefreshVisibleSliders(reason or "UNIT_PREVIEW_MOVE") end
     CommitHandleMove(handle, reason)
     if not handle._msuf2PreviewHistoryTx then CheckpointMenuHistory(handle, reason == "UNIT_PREVIEW_NUDGE" and "Nudge" or "Move") end
     return true

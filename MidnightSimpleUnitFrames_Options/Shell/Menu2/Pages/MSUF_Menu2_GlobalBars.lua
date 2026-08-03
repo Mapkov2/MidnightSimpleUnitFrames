@@ -2341,6 +2341,7 @@ local function BuildUnitDispelSymbolSection(ctx, b)
         setMoveHandler(function(_scope, x, y)
             BarScopeSet("unitDispelSymbolX", tonumber(x) or 0, "MSUF2_UF_DISPEL_SYMBOL_X", true)
             BarScopeSet("unitDispelSymbolY", tonumber(y) or 0, "MSUF2_UF_DISPEL_SYMBOL_Y", true)
+            if type(M.RefreshVisibleSliders) == "function" then M.RefreshVisibleSliders("UNIT_DISPEL_SYMBOL_PREVIEW_DRAG") end
             RequestUnitDispelOverlayRuntime("MSUF2_UF_DISPEL_SYMBOL_DRAG")
             Sync()
         end)

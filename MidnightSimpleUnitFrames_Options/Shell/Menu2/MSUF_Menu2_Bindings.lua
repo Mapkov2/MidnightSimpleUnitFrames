@@ -1870,6 +1870,30 @@ local function RefreshSlider(slider, getValue)
     if slider._msuf2UpdateFill then slider:_msuf2UpdateFill() end
     slider._msuf2Refreshing = nil
 end
+local function RegisterVisibleSliderRefresh(ctx, slider, refresh)
+    local owner = ctx and (ctx.entry or ctx)
+    if not (owner and slider and type(refresh) == "function") then return refresh end
+    local refreshers = owner._msuf2VisibleSliderRefreshers
+    if type(refreshers) ~= "table" then
+        refreshers = {}
+        owner._msuf2VisibleSliderRefreshers = refreshers
+    end
+    refreshers[slider] = refresh
+    return refresh
+end
+function M.RefreshVisibleSliders(reason)
+    local entry = ResolveRefreshEntry()
+    local refreshers = entry and entry._msuf2VisibleSliderRefreshers
+    if type(refreshers) ~= "table" or entry._msuf2Invalidated then return false end
+    local refreshed = false
+    for slider, refresh in pairs(refreshers) do
+        if slider and type(refresh) == "function" then
+            Invoke(refresh)
+            refreshed = true
+        end
+    end
+    return refreshed
+end
 local function RefreshValueControl(control, getValue) control:SetValue(getValue()) end
 local function RefreshTextInput(editBox, getValue) if not editBox:HasFocus() then editBox:SetText(tostring(getValue() or "")) end end
 function M.BindToggle(ctx, widget, getValue, setValue, metadata)
@@ -1949,7 +1973,8 @@ function M.BindSlider(ctx, slider, getValue, setValue, metadata)
     end)
     -- Keep the bound model refresh reachable for narrow external sync paths
     -- (for example Edit Mode position drags) without refreshing the whole page.
-    slider._msuf2RefreshFromModel = AddRefreshCall(ctx, RefreshSlider, slider, getValue)
+    slider._msuf2RefreshFromModel = RegisterVisibleSliderRefresh(ctx, slider,
+        AddRefreshCall(ctx, RefreshSlider, slider, getValue))
 end
 function M.BindSegment(ctx, segment, getValue, setValue, metadata)
     if not segment then return end
