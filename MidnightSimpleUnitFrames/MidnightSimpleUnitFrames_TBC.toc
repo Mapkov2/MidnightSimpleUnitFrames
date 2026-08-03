@@ -1,12 +1,13 @@
-## Interface: 120007, 120100
-## Title: |cff38c7f0Midnight|r |cffcce0ffSimple Unit Frames|r
-## Notes: Lightweight unitframes with MSUF Edit Mode.
+## Interface: 20506
+## Title: |cff38c7f0Midnight|r |cffcce0ffSimple Unit Frames|r |cffd9b9b9b- TBC Classic|r
+## Notes: Classic prototype for The Burning Crusade Classic.
 ## Author: Mapko
 ## Category: Combat
-## Version: 6.0-rc3
+## Version: 6.0-rc5-classic-prototype
 ## SavedVariables: MSUF_DB, MSUF_GlobalDB
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
-## OptionalDeps: Masque, LibSharedMedia-3.0, Clique, WagoAnalytics, Blizzard_AuraContainer, Blizzard_PingUI
+## OptionalDeps: Masque, LibSharedMedia-3.0, Clique, WagoAnalytics
+## X-MSUF-Client: TBC
 ## X-Curse-Project-ID: 1384660
 ## X-Wago-ID: XKq9aoKy
 ## X-Website: https://discord.gg/2Gf9b2Wprz
@@ -31,6 +32,9 @@ Libs\LibStub\LibStub.lua
 Libs\WagoAnalyticsShim\Shim.lua
 Libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
 Libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua
+Game\Shared\Initialize.lua
+Game\Classic\Initialize.lua
+Game\Classic\BlizzardFrames.lua
 Kernel\MSUF_Bootstrap.lua
 State\MSUF_FirstLoad.lua
 State\MSUF_UpgradeHighlights.lua
@@ -92,7 +96,7 @@ Runtime\MSUF_PortraitMedia.lua
 State\MSUF_ProfileIO.lua
 Runtime\MSUF_ChatAndTooltips.lua
 Libs\MSUFUnitFrames\MSUFUnitFrames.xml
-UnitFrames\Engine\MSUF_UF_Config.lua
+Game\Classic\UnitFrames\MSUF_UF_Config.lua
 UnitFrames\Engine\MSUF_UF_PreviewAnimation.lua
 Runtime\MSUF_Colors.lua
 Kernel\MSUF_BlizzardFrames.lua
@@ -113,7 +117,7 @@ Features\Telemetry\MSUF_Analytics.lua
 Features\Diagnostics\MSUF_Feature_GroupPulse.lua
 Features\Diagnostics\MSUF_Feature_AuraLayerProbe.lua
 Features\Versioning\MSUF_VersionCheck.lua
-Features\Versioning\MSUF_ClientVersionWarning.lua
+Game\Classic\Features\MSUF_ClientVersionWarning.lua
 
 # ---------------------------------------------------------------
 # UNITFRAME BACKBONE
@@ -121,7 +125,7 @@ Features\Versioning\MSUF_ClientVersionWarning.lua
 Runtime\MSUF_BarBackgroundRuntime.lua
 Runtime\MSUF_IconLayoutRuntime.lua
 Runtime\MSUF_FontRegistry.lua
-UnitFrames\Embeds\MSUF_UFCore\MSUF_UFCore_Elements.xml
+Game\TBC\UnitFrames.xml
 Integrations\MSUF_Integration_NSRTNicknames.lua
 Integrations\MSUF_Integration_ThirdPartyAnchors.lua
 UnitFrames\Embeds\MSUF_UFCore\MSUF_UFCore_Factory.xml
@@ -136,7 +140,6 @@ Castbars\MSUF_Castbars_Core.lua
 Castbars\MSUF_CastbarStyle.lua
 Castbars\MSUF_CastbarUtils.lua
 Castbars\MSUF_CastbarRuntime.lua
-Castbars\MSUF_CastbarEmpower.lua
 Castbars\MSUF_CastbarChannelTicks.lua
 Castbars\MSUF_CastbarFrames.lua
 Castbars\MSUF_CastbarAnchors.lua
@@ -151,19 +154,18 @@ Castbars\MSUF_BossCastbars.lua
 Castbars\MSUF_BossCastbars_Preview.lua
 Castbars\MSUF_Castbars.lua
 Castbars\MSUF_CastbarGCD.lua
-ClassPower\MSUF_CP_Constants.lua
-ClassPower\MSUF_CP_Modes.lua
-ClassPower\MSUF_CP_Core.lua
+Game\Classic\ClassPower\MSUF_CP_Constants.lua
+Game\TBC\ClassPower.lua
+Game\Classic\ClassPower\MSUF_CP_Modes.lua
+Game\Classic\ClassPower\MSUF_CP_Core.lua
 ClassPower\MSUF_CP_AltMana.lua
 ClassPower\MSUF_CP_PlayerHP.lua
-ClassPower\MSUF_CP_BalanceDruid.lua
-ClassPower\MSUF_CP_Ironfur.lua
-ClassPower\MSUF_CP_Controller.lua
+Game\Classic\ClassPower\MSUF_CP_Controller.lua
 
 # ---------------------------------------------------------------
 # GROUP FRAMES
 # ---------------------------------------------------------------
-UnitFrames\Embeds\MSUF_UFCore\MSUF_UFCore_Group.xml
+Game\TBC\UnitFrames\GroupFrames.xml
 
 # ---------------------------------------------------------------
 # OPTIONS

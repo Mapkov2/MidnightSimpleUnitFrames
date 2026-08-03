@@ -1,9 +1,10 @@
-## Interface: 120007, 120100
-## Title: |cff38c7f0Midnight|r |cffcce0ffSimple Unit Frames|r - Options
-## Notes: Load-on-demand configuration UI for Midnight Simple Unit Frames.
+## Interface: 20506
+## Title: |cff38c7f0Midnight|r |cffcce0ffSimple Unit Frames|r - Options |cffd9b9b9b(TBC)|r
+## Notes: Load-on-demand configuration UI for the TBC Classic prototype.
 ## Author: Mapko
 ## Category: Combat
-## Version: 6.0-rc3
+## Version: 6.0-rc5-classic-prototype
+## X-MSUF-Client: TBC
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## Dependencies: MidnightSimpleUnitFrames
 ## LoadOnDemand: 1

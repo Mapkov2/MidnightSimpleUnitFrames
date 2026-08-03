@@ -1,0 +1,20 @@
+## Interface: 120007, 120100
+## Title: |cff38c7f0Midnight|r |cffcce0ffSimple Unit Frames|r - Options
+## Notes: Load-on-demand configuration UI for Midnight Simple Unit Frames.
+## Author: Mapko
+## Category: Combat
+## Version: 6.0-rc5-classic-prototype
+## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
+## Dependencies: MidnightSimpleUnitFrames
+## LoadOnDemand: 1
+## X-MSUF-Options: 1
+
+MSUF_OptionsLOD_Bootstrap.lua
+Shell\Menu2\MSUF_Menu2.xml
+Shell\Menu2\Search\MSUF_Menu2_Search.xml
+Shell\Menu2\MSUF_Menu2_AfterSearch.xml
+Shell\Menu2\Preview\MSUF_Menu2_UnitPreview.xml
+Shell\Menu2\MSUF_Menu2_AfterUnitPreview.xml
+Shell\Menu2\Preview\MSUF_Menu2_GroupPreview.xml
+Shell\Menu2\MSUF_Menu2_AfterGroupPreview.xml
+MSUF_OptionsLOD_Finalize.lua

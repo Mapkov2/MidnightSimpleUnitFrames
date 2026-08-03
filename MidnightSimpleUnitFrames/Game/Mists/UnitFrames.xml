@@ -1,0 +1,11 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/">
+  <Include file="..\..\UnitFrames\Embeds\MSUF_UFCore\MSUF_UFCore_Elements.xml"/>
+  <Script file="..\Classic\Auras\MSUF_Auras3_DataShared.lua"/>
+  <Script file="Auras\MSUF_Auras3_DotData.lua"/>
+  <Script file="Auras\MSUF_Auras3_DefensiveData.lua"/>
+  <Script file="..\Classic\Auras\MSUF_Auras3_Visuals.lua"/>
+  <Script file="..\Classic\Auras\MSUF_Auras3_Features.lua"/>
+  <Script file="..\Classic\Auras\MSUF_Auras3_UnitFrames.lua"/>
+  <Script file="..\..\Auras3\MSUF_Auras3_EditMode.lua"/>
+  <Script file="..\..\Auras3\MSUF_Auras3_Menu_Model.lua"/>
+</Ui>

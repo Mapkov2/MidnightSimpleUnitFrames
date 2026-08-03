@@ -14,7 +14,7 @@ on:
         required: true
         type: string
       prerelease:
-        description: Publish as alpha/beta on Wago and CurseForge based on tag channel
+        description: Publish as alpha/beta on GitHub or CurseForge; Wago rejects prerelease tags
         required: true
         default: false
         type: boolean
@@ -50,6 +50,47 @@ jobs:
         with:
           ref: ${{ inputs.tag_name || github.ref_name }}
           fetch-depth: 0
+
+      # A bulk `git push --tags` can surface forgotten local beta tags months
+      # later. Prerelease tags are publishable only when they point at the
+      # current main commit; stale alpha/beta/RC refs fail before any package or
+      # external upload is created.
+      - name: Reject stale prerelease tags
+        shell: pwsh
+        run: |
+          function Test-PrereleaseSignal([AllowNull()][string]$value) {
+            if ([string]::IsNullOrWhiteSpace($value)) { return $false }
+            $v = $value.Trim()
+            return (
+              ($v -match '(?i)(alpha|beta|rc|pre|preview)') -or
+              ($v -match '(?i)\d+(?:\.\d+)*[AB]\d+(?:$|[^A-Za-z0-9])') -or
+              ($v -match '(?i)(^|[^A-Za-z0-9])[AB]\d+(?:$|[^A-Za-z0-9])')
+            )
+          }
+
+          $tag = $env:RELEASE_VERSION
+          if (Test-PrereleaseSignal $tag) {
+            git fetch --no-tags origin "+refs/heads/main:refs/remotes/origin/main"
+            if ($LASTEXITCODE -ne 0) {
+              throw "Could not resolve origin/main for prerelease freshness validation."
+            }
+
+            $tagCommit = (git rev-list -n 1 "refs/tags/$tag" 2>$null)
+            if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($tagCommit)) {
+              throw "Could not resolve prerelease tag '$tag' to a commit."
+            }
+            $mainCommit = (git rev-parse "refs/remotes/origin/main" 2>$null)
+            if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($mainCommit)) {
+              throw "Could not resolve origin/main to a commit."
+            }
+
+            $tagCommit = $tagCommit.Trim()
+            $mainCommit = $mainCommit.Trim()
+            if ($tagCommit -ne $mainCommit) {
+              throw "Refusing stale prerelease tag '$tag' at $tagCommit; current origin/main is $mainCommit. Push only the intended current release tag, never 'git push --tags'."
+            }
+            Write-Host "Prerelease tag '$tag' is current at origin/main $mainCommit."
+          }
 
       # Verification (static checks, core smokes, search-index check) is
       # local-only and deliberately absent from the repo, so this workflow
@@ -91,6 +132,15 @@ jobs:
           $target = $target.Trim().ToLowerInvariant()
           if ($target -notin @("all", "github", "wago", "curseforge")) {
             throw "Invalid publish target '$target'. Use all, github, wago, or curseforge."
+          }
+
+          $isPrereleaseTag = (
+            ($tag -match '(?i)(alpha|beta|rc|pre|preview)') -or
+            ($tag -match '(?i)\d+(?:\.\d+)*[AB]\d+(?:$|[^A-Za-z0-9])') -or
+            ($tag -match '(?i)(^|[^A-Za-z0-9])[AB]\d+(?:$|[^A-Za-z0-9])')
+          )
+          if ($isPrereleaseTag -and $target -in @("all", "wago")) {
+            throw "Wago prerelease publishing is disabled. Tag '$tag' must use publish-target: curseforge or publish-target: github."
           }
 
           $publishToGitHub = $target -eq "all" -or $target -eq "github"
@@ -328,6 +378,9 @@ jobs:
             if ($env:WAGO_STABILITY -eq "stable" -or $env:CF_RELEASE_TYPE -eq "release") {
               throw "Prerelease signal '$($prereleaseSignals[0])' must not publish as stable/release. Got Wago '$env:WAGO_STABILITY' and CurseForge '$env:CF_RELEASE_TYPE'."
             }
+            if ($env:PUBLISH_TO_WAGO -eq "true") {
+              throw "Wago prerelease publishing is disabled. Refusing '$($prereleaseSignals[0])'."
+            }
           }
 
       # The authoritative Assistant release gate is part of the local-only
@@ -505,9 +558,9 @@ jobs:
           prerelease: ${{ steps.channel.outputs.release_is_prerelease }}
           make_latest: ${{ steps.channel.outputs.github_make_latest }}
 
-      # Wago runs only for an explicit `publish-target: wago|all` tag annotation
-      # or an explicit workflow_dispatch target. Ordinary commits, unannotated
-      # tags and GitHub Release creation never reach this step.
+      # Wago runs only for an explicit stable `publish-target: wago|all` tag
+      # annotation or workflow_dispatch target. Alpha, beta, RC, pre and preview
+      # builds are rejected before packaging and again inside this upload step.
       - name: Upload to Wago
         if: steps.publish.outputs.publish_to_wago == 'true'
         shell: pwsh
@@ -601,6 +654,14 @@ jobs:
           if ($prereleaseSignals -and $env:WAGO_STABILITY -eq "stable") {
             throw "Prerelease signal '$($prereleaseSignals[0])' must not upload to Wago as stable."
           }
+          if ($prereleaseSignals) {
+            throw "Wago prerelease publishing is disabled. Refusing '$($prereleaseSignals[0])'."
+          }
+
+          $releaseNotesPath = "dist/RELEASE_NOTES.md"
+          if (-not (Test-Path -LiteralPath $releaseNotesPath)) {
+            throw "Current release notes are missing: $releaseNotesPath"
+          }
 
           $interfaceField = Get-TocField -Content $tocContent -Name "Interface"
           $interfaces = $interfaceField -split ',' |
@@ -615,7 +676,7 @@ jobs:
           $metadata = [ordered]@{
             label = $env:RELEASE_NAME
             stability = $env:WAGO_STABILITY
-            changelog = Get-Content -LiteralPath "CHANGELOG.md" -Raw
+            changelog = Get-Content -LiteralPath $releaseNotesPath -Raw
             supported_retail_patch = $retailPatch
           } | ConvertTo-Json -Depth 5 -Compress
 
