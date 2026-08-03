@@ -2332,7 +2332,16 @@ local function DirectHelpAnswer(query, opts)
     -- being answered with scaling-readability help), and the setting lanes
     -- below the knowledge layer answer those far better. Concept help still
     -- owns everything that is not an exact label.
-    if type(A.RouterNamedSettingLabel) == "function" and A.RouterNamedSettingLabel(query) then
+    local scopedHelpWrapper = norm:match("^help%s+me%s+find%s+")
+        or norm:match("^help%s+me%s+locate%s+")
+        or norm:match("^i%s+am%s+trying%s+")
+        or norm:match("^i'm%s+trying%s+")
+        or norm:match("^im%s+trying%s+")
+        or norm:match("^i%s+need%s+help%s+with%s+")
+    if not scopedHelpWrapper
+        and type(A.RouterNamedSettingLabel) == "function"
+        and A.RouterNamedSettingLabel(query)
+    then
         return nil
     end
     if norm == "help" or norm == "show commands" or norm == "commands" or norm == "what can you do"
