@@ -8,10 +8,36 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-RC4",
-    previousVersion = "6.0-RC3",
-    rangeLabel = "6.0-RC3 -> 6.0-RC4",
+    currentVersion = "6.0-RC5",
+    previousVersion = "6.0-rc4",
+    rangeLabel = "6.0-rc4 -> 6.0-RC5",
     entries = {
+        {
+            version = "6.0-RC5",
+            date = "2026-08-03",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Menu previews can now expand in place while remaining fixed above the settings. Unit, Group, Aura Style, Colors and Class Resources previews open into a larger canvas without covering or clipping the page below, and return to the compact layout with the same preview state intact.",
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Preview zoom, pan, wheel forwarding and search navigation now follow the fixed preview owner across compact and expanded layouts. Search results can open a hidden expanded target before highlighting it, while the settings viewport still receives ordinary wheel scrolling outside active preview gestures.",
+                        "Boss unit frames and boss castbars now use a separate Edit Mode hit region for every visible frame instead of one large union box. Gaps stay click-through, every boss remains directly draggable, and all five still move as one shared group.",
+                        "Edit Mode controls, the frame picker and position dialogs now stay above stationary preview movers; Undo and Redo use the shared history service directly when available.",
+                    },
+                },
+                {
+                    title = "Fixes",
+                    bullets = {
+                        "Fixed Empower casts changing their fill anchor when unified direction was disabled. Casts and Empower bars now always use the configured edge, channels reverse only their value direction, and Empower stage separators remain aligned with the fill.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-RC4",
             date = "2026-08-03",
@@ -95,78 +121,6 @@ local data = {
                     title = "Fixes",
                     bullets = {
                         "Restored unit-frame anchoring to CooldownManager, Skiron, Arc UI, and Coolinator.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-RC1",
-            date = "2026-08-02",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "Dots on target now support portrait tracking. The lane can move onto the frame portrait with up to eight portrait-sized icons that follow its exact width, height and shape, including cooldown text, on Target, Focus and Boss frames.",
-                        "Aura icons can now take a shape: Rectangular, Circle, Rounded, Diamond, Hexagon, Star, Blizzard portrait, or Follow frame portrait. The choice exists per lane for unit buffs and debuffs, group lanes and custom containers, and each lane can optionally follow the Shared shape while keeping the rest of its style local.",
-                        "MSUF castbars can use the rounded frame style. A new \"Castbars\" toggle in Rounded rounds the castbar surface, its fill and its outline with the shared corner strength; Blizzard castbars, spell icons and the GCD bar stay untouched.",
-                        "New opt-in Ironfur tracker for Guardian Druids. In Bear Form the empty class-resource slot shows an estimated Ironfur lifetime bar with one moving marker per cast, including Ursoc's Endurance (7s to 9s base) and Guardian of Elune (+3s).",
-                        "Unit name text gained a full anchor set: Top Left, Top Center, Top Right plus a new vertically centered Left, Center and Right row. Existing profiles migrate their old values to the matching top anchors.",
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Unit-frame Aura filters no longer expose the legacy \"Own filters\" prerequisite. Migrated 5.77 profiles keep their saved Shared/Own behavior, while the first filter change on a frame automatically creates an isolated copy so Enable filters and every detailed filter work immediately without changing other frames.",
-                        "Custom aura containers now resolve spells by name the way WeakAuras does. A talent or spellbook ID whose visible buff carries a different spell ID (Shadow Dance, Fade to Nothing) is matched once the aura appears.",
-                        "Fade to Nothing was added to the Rogue defensive list.",
-                        "The rounded \"Aura borders\" toggle is gone; aura icon edges now follow the new Icon Shape instead.",
-                        "Profiles: \"Backup & Transfer\" is now called \"Import & Export\" everywhere, including the hero card and the guided tooltips.",
-                        "The Assistant answers feature-existence questions (\"does MSUF have a GCD bar?\") in a dedicated read-only lane instead of falling through to a generic list of pages.",
-                        "A question that names one exact control is now answered about that control instead of the topic its words belong to, and the label lookup runs off an index instead of scanning every registered setting.",
-                        "The Assistant reports a corrected value instead of silently clamping it, so \"set player width to 4000\" says that MSUF applied 900.",
-                        "A plan that switches many frames off at once is flagged as a destructive sweep and names what disappears before it runs.",
-                        "The Assistant learned the new name anchors: \"top left\" and \"upper right\" pick the top row, while a plain \"left\", \"center\" or \"right\" now aligns the name on the frame's vertical middle.",
-                        "\"Set player alpha to 50\" is read as frame opacity again instead of matching the alpha channel of some colour swatch, and an NPC-qualified bar colour request reaches the NPC control instead of the nearest generic colour mode.",
-                        "\"Reset everything\" and \"hide everything\" name a scope, not a control, so the Assistant explains the actual options instead of picking one wholesale action.",
-                        "\"No, I meant target\" re-aims the change that just ran instead of starting a new request, and \"what is Castbar Texture\" defines that control instead of the topic its words belong to.",
-                        "Opening a setting from a preview now lands on the exact tab: the matching text slot, portrait placement, the castbar's icon, time or spell tab, the selected texture-layer slot, an aura lane's Layout tool, and the Class Power text, detached power and player health tabs.",
-                        "Refreshed the factory default profile and raised the profile normalization revision.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Clarified and corrected tooltip ownership: Always, Out of Combat, Modifier and Never now control unit and group frame tooltips only, while every aura lane keeps its own Show Tooltip switch. Aura tooltips still follow the selected Blizzard/MSUF appearance and cursor position, and stale per-unit aura values can no longer override the Shared tooltip setting.",
-                        "Hardened the 5.x-to-6.0 profile conversion and import/export round trip so every element keeps its placement, including unit frames, texts, portraits, bars, castbars, status and private-aura icons, Class Power, Party/Raid/Mythic frames, spell indicators, group auras, and Aura2 lanes migrated to Aura3.",
-                        "Failed profile exports and imports now say what actually went wrong instead of reporting a bare \"materialization failed\".",
-                        "The Assistant no longer offers to set the group frame Blizzard fallback mode, which Beta44 removed.",
-                        "Spell indicator filters now deduplicate their compiled spell IDs including the new aliases.",
-                        "Optional callbacks across the options UI, search index and Assistant catalog share one error boundary, so a failing page provider reports itself and lets the rest of the menu finish instead of being handled four different ways.",
-                        "Fixed saved bar background transparency not being restored after login or a reload. A secure show transition could reset the live texture while the cached value still matched, so the cold apply skipped it; the three owning elements are now reasserted once after the world finishes loading.",
-                        "Fixed portraits occasionally showing another unit's art. The bounded session texture cache added in Beta44 could answer with a stale asset because native portrait resolution can finish asynchronously; the cache is gone.",
-                        "Fixed the portrait \"Size override\" slider doing nothing whenever a width or height override was still stored. Size now wins, the per-axis overrides only apply while Size is Auto, and both are disabled for a portrait that fills the bar.",
-                        "Fixed unit-frame portrait previews disagreeing with the live frame and Edit Mode. Auto-sized portraits now use the geometry applied by runtime, while Attached and Overlay portraits account for the health-bar space reserved by an embedded power bar; manual sizes and Detached placement keep their existing behavior.",
-                        "Fixed Range Fade controls staying disabled after \"Enable Range Fade\" was switched on. The opacity slider and Affects selector now activate immediately without leaving and reopening the MSUF menu.",
-                        "Unified every layer-controlled MSUF visual under one real 0-30 draw order. Castbars, text, status icons, portraits, auras, spell and dispel indicators, outlines, texture layers, detached bars and class resources now compare directly across unit and group frames; an element's text, border, cooldown or glow can no longer jump above the next user layer, and the live frames, Edit Mode and menu previews follow the same order.",
-                        "Fixed the Unit Frame Castbar Advanced panel clipping its Whole Castbar Layer card into the following Status Icons section.",
-                        "Fixed castbar text ignoring a per-unit font scope's shadow settings while the scope refresh itself did run.",
-                        "Fixed the \"Interrupted\" flash always painting the bar red instead of using the configured Interrupt Feedback color. Player, target, focus and boss castbars now read the same setting.",
-                        "Fixed the rounded castbar surface not picking up empower stage segments created after the first refresh.",
-                        "Fixed boss frames coloring friendly boss-slot units as hostile. Boss NPC coloring now resolves the unit's actual disposition first.",
-                        "Fixed boss placeholder data drawing a fixed red health bar, or a black one when the range fade had already dimmed the fill. The placeholder now follows the configured health color mode.",
-                        "Fixed profile imports losing everything stored under a numeric key. The fallback serializer quoted table keys, so a spec or spell ID like [71] came back as [\"71\"] and the geometry saved below it was orphaned.",
-                        "Fixed 5.x and Wago profile imports aborting before settings were committed when a profile referenced an unavailable SharedMedia font. Missing fonts now produce a warning and fall back safely instead of stopping the import.",
-                        "Fixed the profile export box painting its text across the menu once the string outgrew it. The box now scrolls inside its own clipped host frame.",
-                        "Fixed the profile string box emptying itself after an import, and when the \"Import and create new profile\" toggle was flipped. The pasted string stays put, so sending it into a new profile no longer needs a second paste.",
-                        "Fixed the Aura Duration Bar dropdowns stretching across the entire settings panel and covering the controls below. Display, Position, and Fill Mode now share one compact responsive row on wide layouts and stack cleanly when the menu is narrow.",
-                        "Fixed the Color Painter preview swallowing clicks on the background selector and the zoom bar, and fixed selection chrome reappearing there after a renderer refresh.",
-                        "Fixed pinned previews hiding the settings they belong to. A full inline preview is no longer compressed to the pinned minimum height, it is capped so the target control still fits underneath, and jumping to a section now scrolls clear of the overlay at any menu scale.",
-                        "Fixed previews rendering at the wrong size when the menu and the game use different scales. Unit and castbar previews now measure against the live frame's effective scale, and a castbar following its unit frame's width no longer falls back to the preview width.",
-                        "Fixed the group preview's jump-to-settings landing on the wrong section for buff, debuff and external lanes, and fixed the detached power bar handle opening the Power section instead of its own Class Power section.",
-                        "Fixed Edit Mode aura dragging leaving the Buff and Debuff X/Y values stale in Settings. The coordinate controls now stay synchronized with the moved lane.",
-                        "Fixed a rejected anchor during an Edit Mode drag leaving frames scattered. The move is rolled back to its last valid position, boss frames included.",
-                        "Fixed the Assistant answering \"frame outline texture\" with an outline-versus-border clarification instead of the control that Beta44 added.",
-                        "Fixed Assistant questions about a font shadow failing when the shared shadow resolver was not reachable.",
                     },
                 },
             },
