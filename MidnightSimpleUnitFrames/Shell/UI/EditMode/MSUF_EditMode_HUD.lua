@@ -73,6 +73,9 @@ local DOCK_VERTICAL_W   = 82
 local DOCK_EDGE_DEFAULT = 12
 local DOCK_SNAP_EDGE_PX = 24
 local DOCK_ALLOWED = { TOP = true, BOTTOM = true, LEFT = true, RIGHT = true, FREE = true }
+-- Edit controls must stay above every stationary mover/hitbox, including Aura3
+-- preview groups on TOOLTIP level 900-930.  The active full-screen aura drag
+-- capture intentionally remains above the dock at level 1500.
 
 local TH = {
     r1Bg   = { 0.026, 0.032, 0.052, 0.94 },
@@ -837,7 +840,7 @@ local function EnsureFramePicker()
     if DockUI.framePicker then return DockUI.framePicker end
     local picker = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
     picker:SetFrameStrata("TOOLTIP")
-    picker:SetFrameLevel(960)
+    picker:SetFrameLevel(1300)
     picker:SetClampedToScreen(true)
     picker:EnableMouse(true)
     picker:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1,
@@ -1272,8 +1275,8 @@ local function EnsurePositionPopup()
     if DockUI.positionPopup then return DockUI.positionPopup end
     local popup = CreateFrame("Frame", "MSUF_EM2_HUD_PositionPopup", UIParent, "BackdropTemplate")
     popup:SetSize(356, 326)
-    popup:SetFrameStrata("FULLSCREEN_DIALOG")
-    popup:SetFrameLevel(180)
+    popup:SetFrameStrata("TOOLTIP")
+    popup:SetFrameLevel(1300)
     popup:SetClampedToScreen(true)
     popup:SetBackdrop({ bgFile=W8, edgeFile=W8, edgeSize=1, insets={left=1,right=1,top=1,bottom=1} })
     popup:SetBackdropColor(TH.r1Bg[1], TH.r1Bg[2], TH.r1Bg[3], 0.985)
@@ -1679,7 +1682,7 @@ local function EnsureHUD()
     --- Compact MSUF command dock.  The existing actions remain unchanged;
     --- only their chrome and cold-path layout are owned here.
     hudFrame = CreateFrame("Frame", "MSUF_EM2_HUD", UIParent, "BackdropTemplate")
-    hudFrame:SetFrameStrata("FULLSCREEN"); hudFrame:SetFrameLevel(100)
+    hudFrame:SetFrameStrata("TOOLTIP"); hudFrame:SetFrameLevel(1200)
     hudFrame:SetSize(DockUI.horizontalWidth, DOCK_HORIZONTAL_H)
     hudFrame:SetBackdrop({ bgFile=W8, edgeFile=W8, edgeSize=1, insets={left=2,right=2,top=2,bottom=2} })
     hudFrame:SetBackdropColor(unpack(TH.r1Bg))
@@ -1795,7 +1798,7 @@ local function EnsureHUD()
         cf = CreateFrame("Frame", "MSUF_EM2_CancelConfirm", UIParent, "BackdropTemplate")
         cf:SetSize(320, 120)
         cf:SetPoint("CENTER", UIParent, "CENTER", 0, 80)
-        cf:SetFrameStrata("TOOLTIP"); cf:SetFrameLevel(999)
+        cf:SetFrameStrata("TOOLTIP"); cf:SetFrameLevel(1400)
         cf:SetBackdrop({ bgFile=W8, edgeFile=W8, edgeSize=1, insets={left=1,right=1,top=1,bottom=1} })
         cf:SetBackdropColor(TH.r1Bg[1], TH.r1Bg[2], TH.r1Bg[3], TH.r1Bg[4] or 0.97)
         cf:SetBackdropBorderColor(TH.edge[1], TH.edge[2], TH.edge[3], 0.90)
@@ -2046,14 +2049,22 @@ local function EnsureHUD()
     local historyItems
     DockUI.historyCluster, historyItems = AddCluster(DockUI.row2, DockUI.historyContainer, nil, BTN_H2 + 4, false)
     undoBtn = AddRowButton(historyItems, DockUI.historyCluster, "", BTN_H, BTN_H2, "caption", function()
-        if _G.MSUF_EM_UndoUndo then _G.MSUF_EM_UndoUndo() end
+        if EM2.Undo and EM2.Undo.DoUndo then
+            EM2.Undo.DoUndo()
+        elseif _G.MSUF_EM_UndoUndo then
+            _G.MSUF_EM_UndoUndo()
+        end
         HUD.RefreshControls()
     end, "Undo the last MSUF change from Edit Mode or the in-game menu.")
     ExportPublic("MSUF_EditModeUndoBtn", undoBtn)
     AttachHistoryIcon(undoBtn, MEDIA .. "msuf_history_undo_red.png")
 
     redoBtn = AddRowButton(historyItems, DockUI.historyCluster, "", BTN_H, BTN_H2, "caption", function()
-        if _G.MSUF_EM_UndoRedo then _G.MSUF_EM_UndoRedo() end
+        if EM2.Undo and EM2.Undo.DoRedo then
+            EM2.Undo.DoRedo()
+        elseif _G.MSUF_EM_UndoRedo then
+            _G.MSUF_EM_UndoRedo()
+        end
         HUD.RefreshControls()
     end, "Redo the last MSUF change from Edit Mode or the in-game menu.")
     ExportPublic("MSUF_EditModeRedoBtn", redoBtn)

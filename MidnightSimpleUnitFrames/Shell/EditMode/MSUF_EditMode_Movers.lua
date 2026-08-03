@@ -200,6 +200,62 @@ local function IsGroupMoverConfig(cfg)
         or popupType == "gf_priority"
 end
 
+local function PositionMoverRegion(region, l, r, t, b)
+    if not (region and l and r and t and b) then return false end
+    region:ClearAllPoints()
+    region:SetSize(max(2, round(r - l)), max(2, round(t - b)))
+    region:SetPoint("TOPLEFT", UIParent, "TOPLEFT", round(l), round(t - UIParent:GetHeight()))
+    return true
+end
+
+local function SyncSupplementalMoverRegions(mover, cfg)
+    local getBounds = cfg and cfg.getSupplementalMoverBounds
+    if type(getBounds) ~= "function" then return end
+
+    local bounds = getBounds()
+    local regions = mover._msufSupplementalRegions or {}
+    mover._msufSupplementalRegions = regions
+
+    local count = type(bounds) == "table" and #bounds or 0
+    for index = 1, count do
+        local region = regions[index]
+        if not region then
+            region = CreateFrame("Button", nil, moverParent)
+            region:SetFrameStrata(mover:GetFrameStrata())
+            region:SetFrameLevel(mover:GetFrameLevel())
+            region:RegisterForDrag("LeftButton")
+            if region.RegisterForClicks then region:RegisterForClicks("LeftButtonUp", "RightButtonUp") end
+            region:EnableMouse(true)
+            region._msufPrimaryMover = mover
+
+            local function Forward(scriptName, ...)
+                local handler = mover:GetScript(scriptName)
+                if handler then return handler(mover, ...) end
+            end
+
+            region:SetScript("OnEnter", function() Forward("OnEnter") end)
+            region:SetScript("OnLeave", function() Forward("OnLeave") end)
+            region:SetScript("OnMouseDown", function(_, button) Forward("OnMouseDown", button) end)
+            region:SetScript("OnMouseUp", function(_, button) Forward("OnMouseUp", button) end)
+            region:SetScript("OnDragStart", function() Forward("OnDragStart", "LeftButton") end)
+            region:SetScript("OnDragStop", function() Forward("OnDragStop", "LeftButton") end)
+            region:SetScript("OnClick", function(_, button) Forward("OnClick", button) end)
+            regions[index] = region
+        end
+
+        local rect = bounds[index]
+        local l = rect and (rect.l or rect[1])
+        local r = rect and (rect.r or rect[2])
+        local t = rect and (rect.t or rect[3])
+        local b = rect and (rect.b or rect[4])
+        if PositionMoverRegion(region, l, r, t, b) then region:Show() else region:Hide() end
+    end
+
+    for index = count + 1, #regions do
+        regions[index]:Hide()
+    end
+end
+
 local function SyncMoverToFrame(mover, frame, cfg)
     if not frame then return end
     if mover.SetClampedToScreen then mover:SetClampedToScreen(not IsGroupMoverConfig(cfg)) end
@@ -212,13 +268,8 @@ local function SyncMoverToFrame(mover, frame, cfg)
         l, r, t, b = FrameRectToUI(frame)
     end
     if not (l and r and t and b) then return end
-    local w = max(2, round(r - l))
-    local h = max(2, round(t - b))
-    local x = round(l)
-    local y = round(t - UIParent:GetHeight())
-    mover:ClearAllPoints()
-    mover:SetSize(w, h)
-    mover:SetPoint("TOPLEFT", UIParent, "TOPLEFT", x, y)
+    PositionMoverRegion(mover, l, r, t, b)
+    SyncSupplementalMoverRegions(mover, cfg)
 end
 
 local function StopPendingDrag(mover)
@@ -426,6 +477,7 @@ local function CreateMover(key, cfg)
     mover:SetScript("OnHide", function(self)
         StopPendingDrag(self)
         if self._dragging then EndMoverDrag(self, "LeftButton") end
+        for _, region in ipairs(self._msufSupplementalRegions or {}) do region:Hide() end
     end)
 
     --- Click keeps the legacy edit-mode behavior: select the item and open
@@ -526,14 +578,22 @@ local function GetBossUF(i)
     return GetUF("boss" .. i)
 end
 
-local function GetBossMoverBounds()
-    local bounds
-    for i = 1, 5 do
-        local l, r, t, b = UnitVisualBounds(GetBossUF(i))
-        bounds = ExpandBounds(bounds, l, r, t, b)
+local function GetBossCastbarFrame(index)
+    if index == 1 then
+        return _G.MSUF_BossCastbarPreview or _G.MSUF_BossCastbarPreview1 or _G.MSUF_BossCastbar1
     end
-    if not bounds then return nil end
-    return bounds.l, bounds.r, bounds.t, bounds.b
+    return _G["MSUF_BossCastbarPreview" .. index] or _G["MSUF_BossCastbar" .. index]
+end
+
+local function GetBossSupplementalMoverBounds()
+    local bounds = {}
+    for i = 2, 5 do
+        local l, r, t, b = UnitVisualBounds(GetBossUF(i))
+        if l then
+            bounds[#bounds + 1] = { l = l, r = r, t = t, b = b }
+        end
+    end
+    return bounds
 end
 
 local function GetConf(key)
@@ -573,10 +633,22 @@ local function GetCastbarFrame(unit)
     elseif unit == "focus" then
         frame = _G.MSUF_FocusCastbarPreview or _G.MSUF_FocusCastbar
     elseif unit == "boss" then
-        frame = _G.MSUF_BossCastbarPreview or _G.MSUF_BossCastbarPreview1 or _G.MSUF_BossCastbar1
+        frame = GetBossCastbarFrame(1)
     end
     if frame and frame.IsShown and not frame:IsShown() then return nil end
     return frame
+end
+
+
+local function GetBossCastbarSupplementalMoverBounds()
+    local bounds = {}
+    for i = 2, 5 do
+        local l, r, t, b = FrameRectToUI(GetBossCastbarFrame(i))
+        if l then
+            bounds[#bounds + 1] = { l = l, r = r, t = t, b = b }
+        end
+    end
+    return bounds
 end
 
 local function GetCastbarConf()
@@ -617,6 +689,7 @@ local function RegisterCastbarMover(unit, label, order)
         canNudge    = true,
         castbarUnit = unit,
         getFrame    = function() return GetCastbarFrame(unit) end,
+        getSupplementalMoverBounds = unit == "boss" and GetBossCastbarSupplementalMoverBounds or nil,
         getConf     = GetCastbarConf,
         isEnabled   = CastbarEnabled(unit),
     })
@@ -648,8 +721,9 @@ local function RegisterAll()
         })
     end
 
-    --- Boss 1-5 share one mover/config. The mover spans their complete visible
-    --- union, so every preview frame starts the same atomic group drag.
+    --- Boss 1-5 share one mover/config, but use one mouse region per frame.
+    --- This keeps the gaps and independently editable boss castbars clickable
+    --- while dragging any boss unitframe still moves the complete boss group.
     Reg.Register({
         key       = "boss",
         label     = "Boss",
@@ -658,7 +732,7 @@ local function RegisterAll()
         canResize = true,
         canNudge  = true,
         getFrame  = function() return GetBossUF(1) end,
-        getMoverBounds = GetBossMoverBounds,
+        getSupplementalMoverBounds = GetBossSupplementalMoverBounds,
         getConf   = function() return GetConf("boss") end,
         isEnabled = BossEnabled(1),
     })
