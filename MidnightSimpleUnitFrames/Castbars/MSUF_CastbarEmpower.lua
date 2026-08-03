@@ -355,8 +355,6 @@ local function LayoutEmpowerStageSegments(frame)
     local stageEnds = frame.empowerStageEnds
     local barHeight = frame.statusBar:GetHeight() or 18
     local reverseFill = (frame.statusBar.GetReverseFill and frame.statusBar:GetReverseFill()) or false
-    local unifiedDirection = GetUnifiedFillEnabled(frame)
-    local invertForNonUnified = not unifiedDirection
 
     local segmentCount = #stageEnds
     local lastStageEnd = stageEnds[#stageEnds] or 0
@@ -381,13 +379,6 @@ local function LayoutEmpowerStageSegments(frame)
 
         local leftRatio = startRatio
         local rightRatio = endRatio
-        if invertForNonUnified then
-            leftRatio = 1 - endRatio
-            rightRatio = 1 - startRatio
-            if leftRatio < 0 then leftRatio = 0 elseif leftRatio > 1 then leftRatio = 1 end
-            if rightRatio < 0 then rightRatio = 0 elseif rightRatio > 1 then rightRatio = 1 end
-            if rightRatio < leftRatio then rightRatio = leftRatio end
-        end
 
         local left = barWidth * leftRatio
         local right = barWidth * rightRatio
