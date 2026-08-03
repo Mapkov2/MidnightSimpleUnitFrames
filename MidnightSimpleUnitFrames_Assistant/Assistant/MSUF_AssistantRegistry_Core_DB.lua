@@ -29,9 +29,30 @@ function A.RegistryCoreBuilders.BuildDBHelpers(ctx)
 
     local function UnitDB(unit)
         local db = EnsureDB()
-        if unit == "tot" then unit = "targettarget" end
+        if unit == "tot" or unit == "targetoftarget" or unit == "target_of_target" then
+            unit = "targettarget"
+        elseif unit == "focus_target" or unit == "focustargettarget" then
+            unit = "focustarget"
+        end
+        if unit == "targettarget" and type(db.targettarget) ~= "table" then
+            db.targettarget = type(db.tot) == "table" and db.tot
+                or type(db.targetoftarget) == "table" and db.targetoftarget
+                or type(db.target_of_target) == "table" and db.target_of_target
+                or {}
+        elseif unit == "focustarget" and type(db.focustarget) ~= "table" then
+            db.focustarget = type(db.focus_target) == "table" and db.focus_target
+                or type(db.focustargettarget) == "table" and db.focustargettarget
+                or {}
+        end
         db[unit] = type(db[unit]) == "table" and db[unit] or {}
-        if unit == "targettarget" then db.tot = db[unit] end
+        if unit == "targettarget" then
+            db.tot = nil
+            db.targetoftarget = nil
+            db.target_of_target = nil
+        elseif unit == "focustarget" then
+            db.focus_target = nil
+            db.focustargettarget = nil
+        end
         return db[unit]
     end
 

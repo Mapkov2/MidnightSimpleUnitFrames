@@ -1215,8 +1215,13 @@ local function ResetUnitFiltered(db, defaults, unit, filter)
     db[unit] = db[unit] or {}
     ResetFilteredKeys(db[unit], type(defaults) == "table" and defaults[unit] or nil, filter)
 end
-local function EnsureTargetTargetAlias(db)
-    if type(db) == "table" and type(db.targettarget) == "table" then db.tot = db.targettarget end
+local function RetireLegacyUnitAliases(db)
+    if type(db) ~= "table" then return end
+    db.tot = nil
+    db.targetoftarget = nil
+    db.target_of_target = nil
+    db.focus_target = nil
+    db.focustargettarget = nil
 end
 local function IsColorKey(key)
     if type(key) ~= "string" then return false end
@@ -1284,7 +1289,7 @@ local function FactoryDefaults()
 end
 local function ResetUnitPage(db, defaults, unit)
     ReplaceRootTable(db, defaults, unit)
-    if unit == "targettarget" then EnsureTargetTargetAlias(db) end
+    RetireLegacyUnitAliases(db)
     local castbarKeys = UNIT_CASTBAR_GENERAL_KEYS[unit]
     if castbarKeys then
         db.general = db.general or {}
@@ -1313,7 +1318,7 @@ local function ResetBarsPage(db, defaults)
     for _, key in ipairs(UNIT_AND_GROUP_RESET_KEYS) do
         ResetUnitFiltered(db, defaults, key, function(scopeKey) return BARS_SCOPE_KEYS[scopeKey] == true end)
     end
-    EnsureTargetTargetAlias(db)
+    RetireLegacyUnitAliases(db)
 end
 local function ResetFontsPage(db, defaults)
     ResetRootFiltered(db, defaults, "general", function(key) return FONT_GENERAL_KEYS[key] == true end)
@@ -1321,7 +1326,7 @@ local function ResetFontsPage(db, defaults)
     for _, key in ipairs(UNIT_AND_GROUP_RESET_KEYS) do
         ResetUnitFiltered(db, defaults, key, function(scopeKey) return FONT_SCOPE_KEYS[scopeKey] == true end)
     end
-    EnsureTargetTargetAlias(db)
+    RetireLegacyUnitAliases(db)
 end
 local function ResetAurasPage(db, defaults)
     ReplaceRootTable(db, defaults, "auras3")
@@ -1597,7 +1602,7 @@ local function ResetPageImpl(pageKey)
     local handler = PAGE_RESET_HANDLERS[info.kind]
     if not handler then return false end
     handler(db, defaults, info)
-    EnsureTargetTargetAlias(db)
+    RetireLegacyUnitAliases(db)
     PurgeRuntimeCachesForReset(info)
     ApplyAfterPageReset(pageKey, info)
     if M.ShowStatusFeedback then

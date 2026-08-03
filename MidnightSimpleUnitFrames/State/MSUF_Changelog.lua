@@ -9,8 +9,8 @@ end
 
 local data = {
     currentVersion = "6.0-RC6",
-    previousVersion = "6.0-rc5",
-    rangeLabel = "6.0-rc5 -> 6.0-RC6",
+    previousVersion = "6.0-RC5",
+    rangeLabel = "6.0-RC5 -> 6.0-RC6",
     entries = {
         {
             version = "6.0-RC6",
@@ -25,6 +25,7 @@ local data = {
                         "Fixed the compact Elite / Rare icon preview showing two identical skulls. It now matches the live frame and main unit preview with distinct silver and gold classification art, while a selected custom icon remains authoritative.",
                         "Fixed Assistant menu routing for dynamic status colors, castbar text colors, Custom Aura containers, External Defensive layout, Ironfur options and compound color controls. Assistant results now open the correct owning editor without exposing the retired External Defensive Auto List setting.",
                         "Added a Player text outline selector to the detached Player Power section, with the expanded layout and Assistant metadata needed to keep the shared Player font outline route accessible.",
+                        "Fixed legacy Target of Target and Focus Target profile aliases surviving beside their canonical settings. Imports, resets, menu edits and Assistant writes now migrate the old keys once and retain a single canonical owner.",
                     },
                 },
             },

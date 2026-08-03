@@ -1803,8 +1803,35 @@ local function MSUF_ProfileIO_NormalizeImportedFontSizes(profile)
 end
 
 local MSUF_PROFILEIO_UNIT_KEYS = { "player", "target", "targettarget", "focustarget", "focus", "pet", "boss" }
-local function MSUF_ProfileIO_NormalizeUnitFramePositionDB(profile, legacyProfile)
+local MSUF_PROFILEIO_DEPRECATED_UNIT_ALIASES = {
+    { canonical = "targettarget", aliases = { "tot", "targetoftarget", "target_of_target" } },
+    { canonical = "focustarget", aliases = { "focus_target", "focustargettarget" } },
+}
+local function MSUF_ProfileIO_NormalizeUnitFramePositionDB(profile, preferLegacyAliases)
     if type(profile) ~= "table" then return profile end
+    local changed = false
+
+    local function SelectAlias(container, aliases)
+        local best
+        for i = 1, #aliases do
+            local alias = container[aliases[i]]
+            if type(alias) == "table" and (best == nil or (alias.enabled == true and best.enabled ~= true)) then
+                best = alias
+            end
+        end
+        return best
+    end
+
+    local function SelectUnitSource(container, def)
+        local current = container[def.canonical]
+        local alias = SelectAlias(container, def.aliases)
+        if type(current) ~= "table"
+            or (preferLegacyAliases == true and type(alias) == "table"
+                and alias.enabled == true and current.enabled ~= true) then
+            return alias
+        end
+        return current
+    end
 
     local nested = (type(profile.unitframes) == "table" and profile.unitframes)
         or (type(profile.unitFrames) == "table" and profile.unitFrames)
@@ -1812,48 +1839,48 @@ local function MSUF_ProfileIO_NormalizeUnitFramePositionDB(profile, legacyProfil
     if nested and (type(nested.player) == "table" or type(nested.target) == "table") then
         for i = 1, #MSUF_PROFILEIO_UNIT_KEYS do
             local key = MSUF_PROFILEIO_UNIT_KEYS[i]
-            if type(profile[key]) ~= "table" and type(nested[key]) == "table" then
+            if key ~= "targettarget" and key ~= "focustarget"
+                and type(profile[key]) ~= "table" and type(nested[key]) == "table" then
                 profile[key] = MSUF_DeepCopy(nested[key])
+                changed = true
             end
         end
-        if type(profile.targettarget) ~= "table" then
-            local tot = nested.targettarget or nested.tot or nested.targetoftarget
-            if type(tot) == "table" then profile.targettarget = MSUF_DeepCopy(tot) end
-        end
-    end
-
-    local function CopyAlias(fromKey, toKey)
-        if type(profile[toKey]) ~= "table" and type(profile[fromKey]) == "table" then
-            profile[toKey] = MSUF_DeepCopy(profile[fromKey])
-        end
-    end
-
-    local function PromoteLegacyAlias(toKey, ...)
-        if legacyProfile ~= true then return end
-        local current = profile[toKey]
-        local best
-        for i = 1, select("#", ...) do
-            local alias = profile[select(i, ...)]
-            if type(alias) == "table" and (best == nil or (alias.enabled == true and best.enabled ~= true)) then
-                best = alias
+        for i = 1, #MSUF_PROFILEIO_DEPRECATED_UNIT_ALIASES do
+            local def = MSUF_PROFILEIO_DEPRECATED_UNIT_ALIASES[i]
+            if type(profile[def.canonical]) ~= "table" then
+                local source = SelectUnitSource(nested, def)
+                if type(source) == "table" then
+                    profile[def.canonical] = MSUF_DeepCopy(source)
+                    changed = true
+                end
             end
         end
-        if type(best) == "table" and (type(current) ~= "table" or (best.enabled == true and current.enabled ~= true)) then
-            profile[toKey] = MSUF_DeepCopy(best)
-        end
     end
 
-    PromoteLegacyAlias("targettarget", "tot", "targetoftarget")
-    PromoteLegacyAlias("focustarget", "focus_target", "focustargettarget")
-    CopyAlias("tot", "targettarget")
-    CopyAlias("targetoftarget", "targettarget")
-    CopyAlias("focus_target", "focustarget")
-    CopyAlias("focustargettarget", "focustarget")
+    --- Aliases are accepted only as migration input. Once a canonical scope has
+    --- been selected, retire every alias so future edits and reloads cannot
+    --- create two independently serialized owners for the same unit frame.
+    for i = 1, #MSUF_PROFILEIO_DEPRECATED_UNIT_ALIASES do
+        local def = MSUF_PROFILEIO_DEPRECATED_UNIT_ALIASES[i]
+        local source = SelectUnitSource(profile, def)
+        if type(source) == "table" and source ~= profile[def.canonical] then
+            profile[def.canonical] = MSUF_DeepCopy(source)
+            changed = true
+        end
+        for j = 1, #def.aliases do
+            local aliasKey = def.aliases[j]
+            if profile[aliasKey] ~= nil then
+                profile[aliasKey] = nil
+                changed = true
+            end
+        end
+    end
     if type(profile.boss) ~= "table" then
         for i = 1, 5 do
             local boss = profile["boss" .. i]
             if type(boss) == "table" then
                 profile.boss = MSUF_DeepCopy(boss)
+                changed = true
                 break
             end
         end
@@ -1914,17 +1941,13 @@ local function MSUF_ProfileIO_NormalizeUnitFramePositionDB(profile, legacyProfil
     for i = 1, #MSUF_PROFILEIO_UNIT_KEYS do
         NormalizeUnit(profile[MSUF_PROFILEIO_UNIT_KEYS[i]])
     end
-    NormalizeUnit(profile.tot)
-    NormalizeUnit(profile.targetoftarget)
-    NormalizeUnit(profile.focus_target)
-    NormalizeUnit(profile.focustargettarget)
     for i = 1, 5 do
         NormalizeUnit(profile["boss" .. i])
     end
     if type(profile.general) == "table" and profile.general.anchorName == "UI_Parent" then
         profile.general.anchorName = "UIParent"
     end
-    return profile
+    return profile, changed
 end
 
 local MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA = 600
@@ -1933,7 +1956,7 @@ local MSUF_PROFILEIO_LEGACY_PROFILE_SCHEMA_56 = 560
 --- MSUF_ProfileIO_TranslateProfileToCurrent, independently from the broad
 --- default-fill revision owned by MSUF_Defaults.lua. Bump it whenever that
 --- translation pipeline gains a new mandatory repair.
-local MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION = 14
+local MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION = 15
 local MSUF_PROFILEIO_LEGACY_UNIT_NAME_ANCHORS = {
     LEFT = "TOPLEFT",
     CENTER = "TOP",
@@ -1941,8 +1964,8 @@ local MSUF_PROFILEIO_LEGACY_UNIT_NAME_ANCHORS = {
 }
 local MSUF_PROFILEIO_TEXT_SCOPE_KEYS = {
     "general",
-    "player", "target", "targettarget", "tot", "targetoftarget",
-    "focus", "focustarget", "focus_target", "focustargettarget",
+    "player", "target", "targettarget",
+    "focus", "focustarget",
     "pet", "boss", "boss1", "boss2", "boss3", "boss4", "boss5",
     "gf_party", "gf_raid", "gf_mythicraid",
 }
@@ -2661,8 +2684,6 @@ end
 local function MSUF_ProfileIO_ProfileHasLegacySignals(profile)
     if type(profile) ~= "table" then return false end
     if type(profile.auras2) == "table" then return true end
-    if type(profile.tot) == "table" or type(profile.targetoftarget) == "table" then return true end
-    if type(profile.focus_target) == "table" or type(profile.focustargettarget) == "table" then return true end
     for i = 1, #MSUF_PROFILEIO_LEGACY_SIGNAL_UNIT_KEYS do
         local scope = profile[MSUF_PROFILEIO_LEGACY_SIGNAL_UNIT_KEYS[i]]
         if type(scope) == "table" and (scope.anchorMyPoint ~= nil or scope.anchorRelPoint ~= nil) then
@@ -2685,12 +2706,14 @@ local function MSUF_ProfileIO_AuraOverridesNeedRepair(profile)
     return false
 end
 
-local function MSUF_ProfileIO_LegacyAliasBeatsCanonical(profile, toKey, ...)
-    local current = profile and profile[toKey]
-    for i = 1, select("#", ...) do
-        local alias = profile and profile[select(i, ...)]
-        if type(alias) == "table" and alias.enabled == true and (type(current) ~= "table" or current.enabled ~= true) then
-            return true
+local function MSUF_ProfileIO_ProfileHasDeprecatedUnitAliases(profile)
+    if type(profile) ~= "table" then return false end
+    for i = 1, #MSUF_PROFILEIO_DEPRECATED_UNIT_ALIASES do
+        local aliases = MSUF_PROFILEIO_DEPRECATED_UNIT_ALIASES[i].aliases
+        for j = 1, #aliases do
+            if profile[aliases[j]] ~= nil then
+                return true
+            end
         end
     end
     return false
@@ -2711,8 +2734,7 @@ local function MSUF_ProfileIO_ProfileNeedsLegacyRepair(profile)
     if legacyVisualProfile and profile._msufLegacy55GroupTextGeometry_v1 ~= true then return true end
     if legacyVisualProfile and profile._msufLegacy55GroupNameAnchorRoot_v1 ~= true then return true end
     if MSUF_ProfileIO_AuraOverridesNeedRepair(profile) then return true end
-    if MSUF_ProfileIO_LegacyAliasBeatsCanonical(profile, "targettarget", "tot", "targetoftarget") then return true end
-    if MSUF_ProfileIO_LegacyAliasBeatsCanonical(profile, "focustarget", "focus_target", "focustargettarget") then return true end
+    if MSUF_ProfileIO_ProfileHasDeprecatedUnitAliases(profile) then return true end
     for i = 1, #MSUF_PROFILEIO_LEGACY_SIGNAL_UNIT_KEYS do
         local scope = profile[MSUF_PROFILEIO_LEGACY_SIGNAL_UNIT_KEYS[i]]
         if type(scope) == "table"
@@ -2903,6 +2925,11 @@ end
 
 local function MSUF_ProfileIO_DetectProfileSchema(profile, context)
     local schema = tonumber(profile and profile._msufProfileSchema)
+    if schema and schema < MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA then return schema end
+    --- A stored 6.x profile may need a newer normalization revision without
+    --- becoming a 5.x profile again. Keep schema identity separate from the
+    --- repair fast path so stale aliases cannot trigger broad legacy rewrites.
+    if schema and type(context) == "table" and context.trustNormalizationMarker == true then return schema end
     if schema and not MSUF_ProfileIO_ProfileNeedsLegacyRepair(profile) then return schema end
     if MSUF_ProfileIO_ProfileHasLegacySignals(profile) then
         return MSUF_PROFILEIO_LEGACY_PROFILE_SCHEMA_56
@@ -3176,9 +3203,13 @@ MSUF_ProfileIO_TranslateProfileToCurrent = function(profile, context)
     end
     local schema = MSUF_ProfileIO_DetectProfileSchema(profile, context)
     local legacyProfile = schema < MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA
+    local declaredSchema = tonumber(profile._msufProfileSchema)
+    local preferLegacyAliases = legacyProfile
+        and (declaredSchema == nil or declaredSchema < MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA)
     MSUF_ProfileIO_NormalizeImportedFontSizes(profile)
     if context.normalizePositions ~= false then
-        MSUF_ProfileIO_NormalizeUnitFramePositionDB(profile, legacyProfile)
+        local _, aliasesChanged = MSUF_ProfileIO_NormalizeUnitFramePositionDB(profile, preferLegacyAliases)
+        changed = aliasesChanged or changed
     end
     changed = MSUF_ProfileIO_NormalizeLegacyRootNameShortening(profile, context.createGeneral ~= false) or changed
     if type(profile.general) == "table" and profile.general.fontBaselineOffset == nil then
@@ -3454,10 +3485,6 @@ local function MSUF_ProfileIO_EnsureUnitframeAlphaDB()
             MSUF_DB[unitKey] = {}
         end
         ensureAlpha(MSUF_DB[unitKey])
-    end
-    --- Legacy alias used by older exports; only preserve/materialize it when it exists.
-    if type(MSUF_DB.tot) == "table" then
-        ensureAlpha(MSUF_DB.tot)
     end
  end
 local function MSUF_ProfileIO_EnsureGroupFramesDB()
