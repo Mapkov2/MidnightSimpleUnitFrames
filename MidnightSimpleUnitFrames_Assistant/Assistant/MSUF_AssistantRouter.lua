@@ -1018,6 +1018,7 @@ function R.TryGlobalScopeGuidance(text)
     if (resetVerb and globalScope) or impliedGlobalReset then
         return {
             text = table.concat({
+                "Factory reset and recovery help",
                 "'Everything' can mean two very different resets in MSUF, so I did not run either one yet.",
                 "1. Reset Active Profile - clears the profile you are using now and leaves your other profiles alone. Say: reset active profile",
                 "2. Factory Reset All - clears every profile and every global option, back to a fresh install. Say: factory reset all",
@@ -3231,7 +3232,10 @@ A.RouterTryMiscProblemShortcut = function(text, coreHandler)
         if R.ContainsAny(norm, A.RouterMiscProblemTerms.blizzardPlayer) then
             return A.RouterRunMiscCore(coreHandler, "turn on fully hide blizzard player frame")
         end
-        return A.RouterRunMiscCore(coreHandler, "hide blizzard unit frames")
+        -- Use the exact menu label.  The broad natural phrase also overlaps
+        -- Player Force Blizzard Frame On and would otherwise ask the player to
+        -- disambiguate a troubleshooting report that has one intended owner.
+        return A.RouterRunMiscCore(coreHandler, "turn on Disable Blizzard Unit Frames")
             or {
                 text = "Blizzard frame visibility help\nBlizzard unit-frame handling lives in Miscellaneous. Disable Blizzard Unit Frames to hide the default unit frames, and use Fully Hide Blizzard PlayerFrame if the Blizzard PlayerFrame still appears because of resource-bar compatibility.\nExamples: hide blizzard unit frames; turn on fully hide blizzard player frame; open miscellaneous.\nYou can ask: Open Miscellaneous",
                 status = "info",
@@ -5054,7 +5058,7 @@ A.RouterTryGroupLayoutProblemShortcut = function(text, coreHandler)
         and R.ContainsAny(norm, { "show", "showing", "visible", "instead", "fallback", "wrong" })
     then
         return A.RouterGroupLayoutReply(
-            "Group-frame provider help",
+            "Blizzard group-frame fallback help",
             "MSUF uses one provider switch for Party, Raid, and Mythic Raid. Off hands all group frames back to WoW; on enables MSUF and disables Blizzard group frames. The change takes effect after /reload.",
             "enable MSUF group frames; disable MSUF group frames; open group layout.",
             "Open Group Layout | Check Group Frame Provider"
@@ -10765,6 +10769,37 @@ function R.TryPageLocationShortcut(text, coreHandler)    if type(coreHandler) ~=
     return nil
 end
 
+function R.TryPageOptionLocationShortcut(text, coreHandler)
+    if type(coreHandler) ~= "function" then return nil end
+    local norm = R.Normalize(text)
+    if not R.ContainsAny(norm, { "option", "options" })
+        or not R.ContainsAny(norm, {
+            "looking for", "where is", "where are", "where do i find", "where can i find", "where to find",
+        })
+    then
+        return nil
+    end
+
+    local label = R.PageLocationLabelForText(norm)
+    if not label then return nil end
+    local command = "open " .. label
+    if label == "Aura Buffs" or label == "Aura Debuffs" then
+        local unit = R.ContainsAny(norm, { "target" }) and "target"
+            or (R.ContainsAny(norm, { "focus" }) and "focus")
+            or (R.ContainsAny(norm, { "player" }) and "player")
+        if unit then
+            command = "open " .. unit .. " " .. (label == "Aura Buffs" and "buffs" or "debuffs")
+        end
+    end
+    local result = coreHandler(command)
+    if not result or A.RouterIsUnknownResult(result) then return nil end
+    result = R.AsNavigationResult(result)
+    local heading = R.ContainsAny(norm, { "looking for" })
+        and (tostring(label) .. " help") or ("Opened " .. tostring(label))
+    result.text = heading .. "\n" .. tostring(result.text or "")
+    return result
+end
+
 R.BROAD_PAGE_LOCATION_SUBJECTS = {
     ["profiles"] = true,
     ["profile"] = true,
@@ -11535,6 +11570,12 @@ function R.LooksLikeRegistrySettingDecisionQuestion(text)
     local norm = R.Normalize(text)
     if norm == "" then return false end
     if A.RouterLooksLikeExplicitSearchRequest and A.RouterLooksLikeExplicitSearchRequest(norm) then return false end
+    -- "Where should I go ..." asks for a menu location.  The word "should"
+    -- must not promote that navigation request into the advice lane before
+    -- scoped page help gets a chance to answer it.
+    if R.ContainsAny(norm, { "where should i go", "where should i go to", "where should i go for" }) then
+        return false
+    end
     local naturalSubject = R.NaturalRegistryDecisionSubject(norm)
     if naturalSubject then
         -- Bare pronouns need conversational/result context; they are not an
@@ -12561,6 +12602,10 @@ R.OPEN_ENDED_SETTING_MUTATION_VERBS = {
     set = true, change = true, make = true, adjust = true, modify = true,
     edit = true, switch = true, choose = true, alter = true, update = true,
     tweak = true, configure = true,
+    -- "put Target Power Gradient Strength to 75" is the same statement as
+    -- "set ... to 75"; without it the subject kept the verb, matched no label,
+    -- and a topic lane answered instead.
+    put = true,
 }
 
 R.OPEN_ENDED_SETTING_IGNORED_WORDS = {
@@ -13103,10 +13148,30 @@ local function ExactMutationBody(text)
             :gsub("^i%s+want%s+to%s+", "")
             :gsub("^id%s+like%s+to%s+", "")
             :gsub("^help%s+me%s+", "")
+            -- Without the "to" these are still plain commands naming a control:
+            -- "i want Target Power Gradient Strength to be 75". Stripped after
+            -- the "... to " forms above so the longer match always wins.
+            :gsub("^i%s+would%s+like%s+", "")
+            :gsub("^i%s+want%s+", "")
+            :gsub("^i%s+need%s+", "")
+            :gsub("^id%s+like%s+", "")
+            :gsub("^just%s+", "")
+            :gsub("^now%s+", "")
+            :gsub("^hey%s+", "")
+            :gsub("^assistant%s+", "")
         if norm == previous then break end
     end
     local verb, body = norm:match("^(%S+)%s+(.+)$")
-    if not (verb and R.OPEN_ENDED_SETTING_MUTATION_VERBS[verb]) then return nil end
+    -- Players also state the change without any verb at all ("Target Width to
+    -- 300") or with one outside the curated set ("put X to 75"). The subject
+    -- still has to match ONE control's complete visible label further down, so
+    -- accepting the bare text here cannot capture anything that was not named
+    -- exactly -- and without it those shapes lost the exemption and a topic lane
+    -- answered instead (it enabled the power gradient rather than setting its
+    -- strength).
+    if not (verb and R.OPEN_ENDED_SETTING_MUTATION_VERBS[verb]) then
+        body = norm
+    end
     body = R.Trim(body:gsub("%s+please$", ""))
     -- A determiner or possessive between the verb and the control name is not
     -- part of the label ("set MY player width to 300", "set THE target width").
@@ -13143,7 +13208,127 @@ local function UniqueExactMutationEntry(subject)
     return entries[1].item
 end
 
+-- Boolean commands never state their value with "to", so ExactMutationBody --
+-- which only accepts the value-assignment verbs -- never matched them, and a
+-- request that named one control EXACTLY still lost to a topic lane:
+-- "turn on Boss Texture Layer Gradient Down" wrote the bar-gradient pair
+-- (enableGradient + gradientDirection=DOWN) instead of the control the player
+-- named, while "set Boss Texture Layer Gradient Down to on" worked.
+-- These shapes now earn the same exact-label precedence.
+--
+-- "show"/"hide" are deliberately absent: for a hide-named control they mean the
+-- OPPOSITE polarity (RegistryPhrases[51] lists "show" as false for hide* keys),
+-- and "show me X" is navigation, not a mutation.
+local BOOLEAN_EXACT_COMMAND_PREFIXES = {
+    { "^turn%s+on%s+", "on" }, { "^turn%s+off%s+", "off" },
+    { "^switch%s+on%s+", "on" }, { "^switch%s+off%s+", "off" },
+    { "^toggle%s+on%s+", "on" }, { "^toggle%s+off%s+", "off" },
+    { "^enable%s+", "on" }, { "^disable%s+", "off" },
+    { "^activate%s+", "on" }, { "^deactivate%s+", "off" },
+}
+-- Trailing polarity: "turn X on", "toggle X off".
+local BOOLEAN_EXACT_COMMAND_SUFFIXES = { { "%s+on$", "on" }, { "%s+off$", "off" } }
+
+-- show/hide are only unambiguous when the named control's OWN name says nothing
+-- about hiding or showing. "show Boss Texture Layer Gradient Down" can only mean
+-- switch it on; "show Party Hide Name on Dead or Offline" means the opposite of
+-- switching it on, so that one stays with the inference that understands it.
+local BOOLEAN_EXACT_COMMAND_POLARITY_PREFIXES = {
+    { "^show%s+", "on" }, { "^hide%s+", "off" },
+}
+local function SettingNameStatesPolarity(setting)
+    local hay = (tostring(setting and setting.label or "") .. " "
+        .. tostring(setting and setting.attribute or "") .. " "
+        .. tostring(setting and setting.key or "")):lower()
+    return hay:find("hide", 1, true) ~= nil or hay:find("hidden", 1, true) ~= nil
+        or hay:find("show", 1, true) ~= nil or hay:find("shown", 1, true) ~= nil
+end
+
+local function ExactBooleanMutationMatch(text)
+    local norm = R.Normalize(text)
+    if norm == "" then return nil end
+    for _ = 1, 3 do
+        local previous = norm
+        norm = norm:gsub("^please%s+", "")
+            :gsub("^can%s+you%s+", ""):gsub("^could%s+you%s+", "")
+            :gsub("^would%s+you%s+", ""):gsub("^just%s+", ""):gsub("^now%s+", "")
+            :gsub("^hey%s+", ""):gsub("^assistant%s+", "")
+        if norm == previous then break end
+    end
+    norm = R.Trim((norm:gsub("%s+please$", "")))
+
+    local body, value, polarityVerb
+    for i = 1, #BOOLEAN_EXACT_COMMAND_PREFIXES do
+        local entry = BOOLEAN_EXACT_COMMAND_PREFIXES[i]
+        if norm:find(entry[1]) then
+            body, value = (norm:gsub(entry[1], "")), entry[2]
+            break
+        end
+    end
+    -- "show me X" asks to be taken to the control, so it is never a mutation.
+    if not body and not norm:find("^show%s+me%f[%W]") then
+        for i = 1, #BOOLEAN_EXACT_COMMAND_POLARITY_PREFIXES do
+            local entry = BOOLEAN_EXACT_COMMAND_POLARITY_PREFIXES[i]
+            if norm:find(entry[1]) then
+                body, value, polarityVerb = (norm:gsub(entry[1], "")), entry[2], true
+                break
+            end
+        end
+    end
+    if not body then
+        local tail = norm:match("^turn%s+(.+)$") or norm:match("^toggle%s+(.+)$")
+            or norm:match("^make%s+(.+)$") or norm:match("^switch%s+(.+)$")
+            or norm:match("^set%s+(.+)$")
+        for i = 1, (tail and #BOOLEAN_EXACT_COMMAND_SUFFIXES or 0) do
+            local entry = BOOLEAN_EXACT_COMMAND_SUFFIXES[i]
+            if tail:find(entry[1]) then
+                body, value = (tail:gsub(entry[1], "")), entry[2]
+                break
+            end
+        end
+    end
+    if not body then return nil end
+
+    for _ = 1, 2 do
+        local previous = body
+        body = body:gsub("^the%s+", ""):gsub("^my%s+", ""):gsub("^our%s+", "")
+            :gsub("^its%s+", ""):gsub("^msuf%s+", "")
+        if body == previous then break end
+    end
+    body = R.Trim(body)
+    if body == "" then return nil end
+
+    local item = UniqueExactMutationEntry(body)
+    local setting = item and item.setting
+    -- Only booleans: a polarity verb aimed at anything else is not an exact
+    -- value statement and belongs to the existing inference.
+    if not (setting and setting.type == "boolean") then return nil end
+    -- Controls whose own name says Hide/Show already have reviewed inverted
+    -- semantics in the established parser (for example Fully Hide Blizzard
+    -- PlayerFrame).  Let that lane own every verb form, not only bare
+    -- show/hide, so "turn on <hide control>" cannot flip the backing key the
+    -- wrong way around.
+    if SettingNameStatesPolarity(setting)
+        or R.ContainsAny(body, { "hide", "hidden", "show", "shown" })
+    then
+        return nil
+    end
+    return item, true, value
+end
+
 local function ExactMutationMatch(text)
+    -- Problem reports such as "Menu Language is wrong" name a real control and
+    -- use the grammatical connector "is", but they do not provide a value.
+    -- Keep them on the diagnostic/help lanes instead of presenting "wrong" as
+    -- an invalid enum choice.
+    local normalized = R.Normalize(text)
+    if (type(R.HasNaturalProblemTerm) == "function" and R.HasNaturalProblemTerm(normalized))
+        or R.ContainsAny(normalized, { "wrong", "not right", "unreadable", "confusing", "bad language" })
+    then
+        return nil
+    end
+    local booleanItem, booleanHasValue, booleanValue = ExactBooleanMutationMatch(text)
+    if booleanItem then return booleanItem, booleanHasValue, booleanValue end
     local body = ExactMutationBody(text)
     if not body then return nil end
 
@@ -16337,6 +16522,25 @@ function A.RouteInput(text, coreHandler)
         end
     end
 
+    local pageOptionLocation = R.TryPageOptionLocationShortcut(text, Core)
+    if pageOptionLocation then return pageOptionLocation end
+
+    local broadPageLocationSubject = R.RegistryLocationSubject(text)
+    local broadPageLocationLabel = R.PageLocationLabelForText(R.Normalize(text))
+    local utilityPageLocation = broadPageLocationLabel and ({
+        ["Support Links"] = true,
+        ["Changelog"] = true,
+        ["Dashboard Scaling"] = true,
+        ["Display Recovery"] = true,
+        ["Modules"] = true,
+    })[broadPageLocationLabel]
+    if utilityPageLocation
+        or (broadPageLocationSubject ~= "" and R.BROAD_PAGE_LOCATION_SUBJECTS[broadPageLocationSubject])
+    then
+        local broadPageLocation = R.TryPageLocationShortcut(text, Core)
+        if broadPageLocation then return broadPageLocation end
+    end
+
     -- A complete registry label or registered natural alias is more specific
     -- than broad help families such as "name text" or "power text". Resolve
     -- exact location questions first so every registered control remains
@@ -16855,7 +17059,9 @@ function A.RouteInput(text, coreHandler)
         -- question that got this far has to be answered read-only rather than
         -- being executed as if it were an instruction.
         local amountlessComparative = R.IsAmountlessComparativeRequest(text)
-        if amountlessComparative or R.IsAdviceQuestion(text) then
+        if not R.LooksLikeScopedHelpKnowledgeRequest(text)
+            and (amountlessComparative or R.IsAdviceQuestion(text))
+        then
             return R.AdvisoryNoMutationReply(text, amountlessComparative)
         end
 

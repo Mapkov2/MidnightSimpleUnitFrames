@@ -959,11 +959,21 @@ local function WriteMirrors(spec, tbl, v)
     end
 end
 
+-- A few flat manifest keys have deliberately player-facing menu labels that do
+-- not resemble their storage names.  Keep generated Assistant output aligned
+-- with the actual control instead of exposing implementation labels such as
+-- "General Hard Kill Blizzard Player Frame".
+local GENERATED_LABEL_OVERRIDES = {
+    ["general.disableBlizzardUnitFrames"] = "Disable Blizzard Unit Frames",
+    ["general.hardKillBlizzardPlayerFrame"] = "Fully Hide Blizzard PlayerFrame - resource bar compatibility",
+}
+
 local function BuildSpec(scope, key, value, fromManifest)
     local valueType = type(value)
-    local label = LabelFromPath(key)
+    local overrideLabel = GENERATED_LABEL_OVERRIDES[scope .. "." .. key]
+    local label = overrideLabel or LabelFromPath(key)
     local scopeLabel = ScopeLabel(scope)
-    local fullLabel = scopeLabel .. " " .. label
+    local fullLabel = overrideLabel or (scopeLabel .. " " .. label)
     local aliasBase = label:lower()
     local aliases, seen = {}, {}
     local function AddPriorityAlias(alias)
