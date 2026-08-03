@@ -115,6 +115,10 @@ local CLASSPOWER_ACTION_KEY_BY_PATH = {
     ["quick_setup.class_bar"] = "class_power_quick_setup",
 }
 local CLASSPOWER_REVIEWED_BY_PATH = {
+    ["detached_power.text.outline"] = {
+        "dynamic",
+        "Player text outline routes the Player font override plus the mutually exclusive bold/no-outline flags through one coordinated control.",
+    },
     ["detached_power.text.preset"] = {
         "compound",
         "A detached-power text preset writes the Player power-text slot modes as one coordinated layout.",
@@ -129,6 +133,9 @@ local CLASSPOWER_REVIEWED_BY_PATH = {
     },
 }
 local CLASSPOWER_DYNAMIC_SETTING_KEYS_BY_PATH = {
+    ["detached_power.text.outline"] = {
+        "player.fontOverride", "player.boldText", "player.noOutline",
+    },
     ["detached_power.text.slot_offset.x"] = {
         "player.powerTextLeftOffsetX", "player.powerTextCenterOffsetX", "player.powerTextRightOffsetX",
     },
@@ -218,6 +225,7 @@ local function ResolvePlayerHPShape(bars, db)
     return CPPreview.ResolvePowerShape(player.detachedPowerBarShape or "BAR", bars and bars.classPowerShape)
 end
 local DETACHED_POWER_TEXT_PRESET_VALUES = VTP "OFF=Off|CURRENT=Current|CURMAX=Current / Max|PERCENT=Percent|CURPERCENT=Current + Percent|CURMAXPERCENT=Current / Max + Percent|CUSTOM=Custom Slots"
+local DETACHED_POWER_TEXT_OUTLINE_VALUES = VTP "OUTLINE=Outline|THICKOUTLINE=Thick Outline|NONE=None"
 local PLAYER_HP_ANCHOR_VALUES = VTP "CLASS_TOP=Above Class Resource|CLASS_BOTTOM=Below Class Resource|POWER_TOP=Above Player Power|POWER_BOTTOM=Below Player Power"
 local PLAYER_HP_WIDTH_VALUES = VTP "class=Class Resource|power=Player Power|player=Player Frame|custom=Custom"
 local PLAYER_HP_SHAPE_VALUES = VTP "BAR=Bar|FOLLOW_POWER=Follow Player Power|ROUND=Round|CRYSTAL=Crystal|ORB=Orb"
@@ -998,9 +1006,13 @@ function Page:BuildClassVisibility()
     end
 end
 
+local function DetachedPowerSectionHeight(width)
+    return width < 680 and 1000 or 780
+end
+
 function Page:BuildDetachedPower()
     local compact = self.width < 680
-    local section = self.b:CollapsibleSection("classpower_detached_power", "Player Power", compact and 920 or 640, false)
+    local section = self.b:CollapsibleSection("classpower_detached_power", "Player Power", DetachedPowerSectionHeight(self.width), false)
     local width = section._msuf2Width or self.width
     local cardW, controlW = min(650, width - 28), min(300, max(240, min(650, width - 28) - 64))
     local twoColumns, frames = not compact and cardW >= 620, {}
@@ -1043,7 +1055,7 @@ function Page:BuildDetachedPower()
     AddTooltip(self.dpbUse, "Detached Player Power", "Moves the Player power bar out of the unit frame. Anchor connects it to the Class Resources stack; Sync only follows the stack width.")
     AddTooltip(self.dpb.anchor, "Anchor To Class Resource", "Keeps detached Player power attached to the Class Resource bar. Player power controls are disabled while this connection is active.")
     AddTooltip(self.dpb.sync, "Sync Width", "Uses the Class Resource width for detached Player power without making Class Resources own the Player power controls.")
-    local powerTextCard = W.ControlCard(text, "Power Text", nil, 14, -38, cardW, twoColumns and 560 or 790)
+    local powerTextCard = W.ControlCard(text, "Power Text", nil, 14, -38, cardW, twoColumns and 620 or 850)
     if W.AttachContextColorShortcut then
         W.AttachContextColorShortcut(powerTextCard, {
             title = "Player Power Text Settings",
@@ -1073,6 +1085,21 @@ function Page:BuildDetachedPower()
         self:SourceToggle(text, "Hide left % sign", Player, "powerTextLeftHidePercentSymbol", ApplyDetachedPowerText, "detached_power.text"),
         self:SourceToggle(text, "Hide center % sign", Player, "powerTextCenterHidePercentSymbol", ApplyDetachedPowerText, "detached_power.text"),
     }
+    local fontOutline = W.Segment(text, "Player text outline", DETACHED_POWER_TEXT_OUTLINE_VALUES, controlW)
+    M.BindSegment(self.ctx, fontOutline, function()
+        local globalPage = M.GlobalPage
+        if globalPage and type(globalPage.FontOutlineGetFor) == "function" then
+            return globalPage.FontOutlineGetFor("player")
+        end
+        return "OUTLINE"
+    end, function(value)
+        local globalPage = M.GlobalPage
+        if globalPage and type(globalPage.FontOutlineSetFor) == "function" then
+            globalPage.FontOutlineSetFor("player", value, "MSUF2_DETACHED_POWER_TEXT_OUTLINE")
+        end
+        self.refresh()
+    end, Meta("detached_power.text.outline", "setting"))
+    RegisterSegment(fontOutline, "detached_power.text.outline", DETACHED_POWER_TEXT_OUTLINE_VALUES, "setting")
     M.classPowerDetachedPowerTextSlot = M.classPowerDetachedPowerTextSlot or "center"
     local slot = W.Segment(text, "Slot", TEXT_SLOT_VALUES, controlW)
     M.BindSegment(self.ctx, slot, CurrentDetachedTextSlot, function(value)
@@ -1095,6 +1122,7 @@ function Page:BuildDetachedPower()
     AddTooltip(self.dpbText.preset, "Power Text", "Simple presets for Player power text while detached power is managed by Class Resources. Custom Slots means the existing slot layout is kept until you choose a preset.")
     AddTooltip(self.dpbText.onBar, "Power Text On Bar", "Places Player power text on the detached power bar. When off, the same Player power text remains positioned by the normal text layout.")
     AddTooltip(self.dpbText.x, "Text X", "Moves all detached Player power text slots together. Slot X/Y controls below add per-slot offsets.")
+    AddTooltip(fontOutline, "Player Text Outline", "Sets the Player font scope used by detached Power text. Player Name and HP text share this outline setting.")
     -- Power art is owned by the Bars page and the Player unit page (detached or
     -- not); this tab keeps only the shape edge that Class Resources still owns.
     local powerTexturesCard = W.ControlCard(textures, "Shape Outline", "Power textures live on the Bars page.", 14, -38, cardW, 160)
@@ -1127,9 +1155,9 @@ function Page:BuildDetachedPower()
     for i, control in ipairs({ self.dpbHide[1], self.dpbText.left, self.dpbHide[2], self.dpbText.center, self.dpbHide[3], self.dpbText.sep }) do
         MoveWidget(control, text, 32, ({ -264, -298, -350, -384, -436, -470 })[i], controlW, "LEFT")
     end
-    PlaceColumn(text, rightX, twoColumns and -154 or -446, 54, controlW, "LEFT", self.dpbText.size, self.dpbText.x, self.dpbText.y, self.dpbText.layer, slot, offsets[1], offsets[2])
+    PlaceColumn(text, rightX, twoColumns and -154 or -446, 54, controlW, "LEFT", self.dpbText.size, fontOutline, self.dpbText.x, self.dpbText.y, self.dpbText.layer, slot, offsets[1], offsets[2])
     self:Add("detachedPlayer", smooth)
-    self:Add("detachedText", unpack(self.dpbHide))
+    self:Add("detachedText", fontOutline, unpack(self.dpbHide))
     self:Add("detachedSlot", slot, offsets[1], offsets[2])
 end
 
@@ -1386,7 +1414,7 @@ function Page:Build()
     self:LazySection("classpower_behavior", "Behavior", 282, Page.BuildClassBehavior)
     self:LazySection("classpower_visuals", "Appearance", 430, Page.BuildClassStyle)
     self:LazySection("classpower_visibility", "Auto-Hide", 216, Page.BuildClassVisibility)
-    self:LazySection("classpower_detached_power", "Player Power", function() return self.width < 680 and 920 or 640 end, Page.BuildDetachedPower)
+    self:LazySection("classpower_detached_power", "Player Power", function() return DetachedPowerSectionHeight(self.width) end, Page.BuildDetachedPower)
     self:LazySection("classpower_player_hp", "Extra Health Bar", function() return self.width < 680 and 980 or 700 end, Page.BuildPlayerHP)
     self:LazySection("classpower_alt_mana", "Alternative Mana", 306, Page.BuildAlternativeMana)
     -- All callbacks share one late-bound state refresh instead of capturing every control.
@@ -1398,4 +1426,4 @@ function Page:Build()
 end
 
 local function BuildClassPower(ctx) Page.New(ctx):Build() end
-M.RegisterPage("classpower", { title = "MSUF Class Resources", build = BuildClassPower, version = 19 })
+M.RegisterPage("classpower", { title = "MSUF Class Resources", build = BuildClassPower, version = 20 })

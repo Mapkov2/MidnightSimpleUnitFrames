@@ -626,7 +626,12 @@ local function ButtonAt(parent, label, x, y, width, onClick, semanticPath)
             if M.RequestRefresh then M.RequestRefresh(nil, "advanced-colors-button") elseif M.Refresh then M.Refresh() end
         end)
     end
-    RegisterControl(btn, Meta(semanticPath, "action"), label, "button")
+    -- These two resets depend on the adjacent ephemeral selectors and have no
+    -- stable Assistant action contract. Keep them menu-executable but exclude
+    -- them from automatic Assistant mutation.
+    local classification = (semanticPath == "castbar.text_color.reset" or semanticPath == "status_text.color.reset")
+        and "ephemeral" or "action"
+    RegisterControl(btn, Meta(semanticPath, classification), label, "button")
     return btn
 end
 local function Card(parent, title, subtitle, x, y, width, height)
