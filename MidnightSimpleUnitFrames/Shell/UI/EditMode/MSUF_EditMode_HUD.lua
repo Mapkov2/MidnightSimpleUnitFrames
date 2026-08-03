@@ -150,6 +150,18 @@ local function SetActive(btn, on)
     end
 end
 
+function HUD.AutomaticCooldownProvider()
+    local getter = _G.MSUF_GetAutomaticCooldownAnchorProvider
+    if type(getter) ~= "function" then return nil, nil end
+    return getter()
+end
+
+function HUD.CooldownAnchorEnabled(general)
+    local getter = _G.MSUF_IsCooldownAnchorEnabled
+    if type(getter) == "function" then return getter(general) == true end
+    return general and general.anchorToCooldown == true or false
+end
+
 local function SetControlEnabled(btn, enabled)
     if not btn or not btn._label then return end
     enabled = enabled == true
@@ -1949,8 +1961,14 @@ local function EnsureHUD()
     cdmBtn = AddRowButton(linksItems, linksCluster, "Cooldown", 72, CLUSTER_BTN_H, "caption", function()
         local db = _G.MSUF_DB; if not db then return end
         db.general = db.general or {}
+        local _, providerLabel = HUD.AutomaticCooldownProvider()
+        if providerLabel then
+            SetActive(cdmBtn, true)
+            HUD.SetStatus(providerLabel .. " detected: Cooldown Manager anchoring is automatic.", "ok")
+            return
+        end
         db.general.anchorToCooldown = not (db.general.anchorToCooldown and true or false)
-        SetActive(cdmBtn, db.general.anchorToCooldown)
+        SetActive(cdmBtn, HUD.CooldownAnchorEnabled(db.general))
         ApplyAllSettingsSafe()
         HUD.SetStatus(HelpText(db.general.anchorToCooldown and "EM_CDM_ON" or "EM_CDM_OFF"), "info")
         C_Timer.After(0.1, function()
@@ -1960,6 +1978,11 @@ local function EnsureHUD()
     end, "Anchor all unitframes to the\nEssential Cooldown Manager.")
 
     anchorBtn = AddRowButton(linksItems, linksCluster, "Anchor", 60, CLUSTER_BTN_H, "caption", function()
+        local _, providerLabel = HUD.AutomaticCooldownProvider()
+        if providerLabel then
+            HUD.SetStatus(providerLabel .. " detected: the global Cooldown Manager anchor is automatic.", "warn")
+            return
+        end
         local ov = type(_G.MSUF_EnsureAnchorPicker) == "function" and _G.MSUF_EnsureAnchorPicker()
         if not ov then return end
         ov._isCandidateAllowed = function(frame)
@@ -2186,7 +2209,20 @@ function HUD.RefreshControls(force)
     end
     if cdmBtn then
         local db = _G.MSUF_DB
-        SetActive(cdmBtn, db and db.general and db.general.anchorToCooldown and true or false)
+        local general = db and db.general
+        local providerId, providerLabel = HUD.AutomaticCooldownProvider()
+        local automatic = providerId ~= nil
+        if force or cdmBtn._msufAutomaticProviderId ~= providerId then
+            cdmBtn._msufAutomaticProviderId = providerId
+            if cdmBtn._label and cdmBtn._label.SetText then
+                cdmBtn._label:SetText(automatic and "CDM AUTO" or HelpText("Cooldown"))
+            end
+            cdmBtn._msufTipText = automatic
+                and (providerLabel .. " detected. MSUF automatically anchors global Unitframes to the Essential Cooldown Manager.")
+                or "Anchor all unitframes to the\nEssential Cooldown Manager."
+        end
+        SetActive(cdmBtn, HUD.CooldownAnchorEnabled(general))
+        SetControlEnabled(anchorBtn, not automatic)
     end
     if auraBtn then
         local db = _G.MSUF_DB; local a2 = db and db.auras3; local sh = a2 and a2.shared

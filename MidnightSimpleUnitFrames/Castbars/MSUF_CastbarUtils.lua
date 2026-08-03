@@ -97,9 +97,15 @@ ExportPublic("MSUF_EnsureDBLazy", EnsureDBLazy)
 local function GetAnchorFrame()
     EnsureDBLazy()
     local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
+    local isCooldownAnchorEnabled = _G.MSUF_IsCooldownAnchorEnabled
+    local cooldownAnchorEnabled = type(isCooldownAnchorEnabled) == "function"
+        and isCooldownAnchorEnabled(general) == true
+        or general.anchorToCooldown == true
 
-    if general.anchorToCooldown then
-        local cooldown = _G.EssentialCooldownViewer
+    if cooldownAnchorEnabled then
+        local getCooldown = _G.MSUF_GetEffectiveCooldownFrame
+        local cooldown = (type(getCooldown) == "function" and getCooldown("EssentialCooldownViewer"))
+            or _G.EssentialCooldownViewer
         if cooldown and cooldown.IsShown and cooldown:IsShown() then
             return cooldown
         end

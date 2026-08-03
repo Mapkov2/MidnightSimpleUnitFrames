@@ -1515,6 +1515,12 @@ local function CastbarEnabled(unit, key, general)
   return not (general and general[castbarKey] == false)
 end
 
+local function IsGlobalCooldownAnchorEnabled(general)
+  local isEnabled = _G.MSUF_IsCooldownAnchorEnabled
+  if type(isEnabled) == "function" then return isEnabled(general) == true end
+  return general and general.anchorToCooldown == true or false
+end
+
 local function ResolveAnchorSettings(conf, general)
   local anchorFrameName = conf and conf.anchorFrameName
   if anchorFrameName == "UI_Parent" then anchorFrameName = "UIParent" end
@@ -1534,7 +1540,7 @@ local function ResolveAnchorSettings(conf, general)
     return nil, anchorToUnitframe, false
   end
 
-  if general and general.anchorToCooldown == true then
+  if IsGlobalCooldownAnchorEnabled(general) then
     return "EssentialCooldownViewer", "GLOBAL", true
   end
 

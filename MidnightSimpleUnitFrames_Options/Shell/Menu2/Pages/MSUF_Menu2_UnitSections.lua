@@ -78,6 +78,12 @@ local function FillDirectionValue(reverse, vertical)
 end
 local WARNING_HINT = { 0.90, 0.84, 0.76, 1 }
 local WARNING_BADGE_FILL = { 0.205, 0.148, 0.080, 0.96 }
+
+local function AutomaticCooldownProvider()
+    local getter = _G.MSUF_GetAutomaticCooldownAnchorProvider
+    if type(getter) ~= "function" then return nil, nil end
+    return getter()
+end
 local WARNING_BADGE_EDGE = { 0.52, 0.39, 0.18, 0.78 }
 local WARNING_HEADER_BG = { 0.096, 0.078, 0.050, 0.56 }
 local ENABLED_HEADER_BG = { 0.060, 0.070, 0.130, 0.48 }
@@ -931,7 +937,7 @@ local function BuildBasics(ctx, builder, unit, label)
     M.TrackRefresh(ctx, RefreshBasicsEnabled)
 end
 local function BuildLayout(ctx, builder, unit)
-    local sec = builder:CollapsibleSection("anchoring", "Anchoring", 220, false)
+    local sec = builder:CollapsibleSection("anchoring", "Anchoring", 252, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local anchorLeftX = 20
     local anchorGap = 24
@@ -954,6 +960,7 @@ local function BuildLayout(ctx, builder, unit)
         local values = {}
         local conf = GetConf(unit)
         local custom = CustomAnchorName(conf)
+        local _, automaticProviderLabel = AutomaticCooldownProvider()
         if custom ~= "" then
             local text = custom
             if #text > 24 then text = text:sub(1, 21) .. "..." end
@@ -961,7 +968,16 @@ local function BuildLayout(ctx, builder, unit)
         end
         for i = 1, #anchorChoices do
             local item = anchorChoices[i]
-            if item.value == "GLOBAL" or item.value ~= unit then values[#values + 1] = item end
+            if item.value == "GLOBAL" or item.value ~= unit then
+                if item.value == "GLOBAL" and automaticProviderLabel then
+                    values[#values + 1] = {
+                        value = "GLOBAL",
+                        text = "Global anchor (AUTO: " .. automaticProviderLabel .. ")",
+                    }
+                else
+                    values[#values + 1] = item
+                end
+            end
         end
         return values
     end
@@ -1056,11 +1072,27 @@ local function BuildLayout(ctx, builder, unit)
     RegisterControl(customAnchor.pick, ctx, "anchoring.custom.pick", "Pick", "button", "action", {
         actionKey = "start_unit_custom_anchor_picker", actionFixedArgs = { unit = unit },
     })
+    local automaticNotice = UnitSectionShared.CreateSectionNotice(sec, -184)
     local function RefreshLayoutState()
+        local _, automaticProviderLabel = AutomaticCooldownProvider()
         customAnchor.Refresh()
         if anchorTo.SetValue then anchorTo:SetValue(AnchorValue()) end
         if anchorPoint.SetValue then anchorPoint:SetValue(AnchorPointValue()) end
-        SetSectionHeaderStatus(sec, nil)
+        if automaticProviderLabel then
+            automaticNotice:SetMessage(M.Format(
+                "%s detected: Global anchor automatically follows Essential Cooldown Manager. No manual anchoring is required.",
+                automaticProviderLabel
+            ), "info")
+            automaticNotice:Show()
+            local accent = (T.colors and (T.colors.ok or T.colors.accent)) or { 0.52, 0.76, 0.58, 1 }
+            SetSectionHeaderStatus(sec, {
+                hint = "AUTO: " .. automaticProviderLabel,
+                hintColor = accent,
+            })
+        else
+            automaticNotice:Hide()
+            SetSectionHeaderStatus(sec, nil)
+        end
     end
     M.TrackCollapsibleRefresh(ctx, sec, RefreshLayoutState)
 end
