@@ -1287,6 +1287,17 @@ function H.SwitchCompactZoomMode(box, compact, defaultCompactZoom)
     local active = box._msuf2CompactZoomMode
     if active == compact then return false end
 
+    -- Expanding the same preview in place must not replace the scale the user
+    -- was just looking at with an older Full/Fit state.  Capture the rendered
+    -- Compact scale before the larger canvas changes its auto-fit geometry.
+    -- Pan remains mode-local because the two canvases have different bounds.
+    local compactZoomToCarry
+    if active == true and compact == false then
+        compactZoomToCarry = tonumber(box._manualZoom)
+            or tonumber(box._mockScale)
+            or tonumber(box._mockAutoScale)
+    end
+
     local function Store(prefix)
         box[prefix .. "ManualZoom"] = tonumber(box._manualZoom)
         box[prefix .. "PanX"] = tonumber(box._zoomPanX) or 0
@@ -1320,6 +1331,10 @@ function H.SwitchCompactZoomMode(box, compact, defaultCompactZoom)
         Store(active and "_msuf2CompactZoom" or "_msuf2ExpandedZoom")
     end
     Restore(compact and "_msuf2CompactZoom" or "_msuf2ExpandedZoom", compact and defaultCompactZoom or nil)
+    if compactZoomToCarry then
+        box._manualZoom = compactZoomToCarry
+        box._msuf2ZoomLockDefaultPending = nil
+    end
     box._msuf2CompactZoomMode = compact
     return true
 end
