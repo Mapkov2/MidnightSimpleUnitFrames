@@ -326,6 +326,17 @@ local function StopWindowLayoutAnimation(frame)
     if state.driver and state.driver.Hide then state.driver:Hide() end
 end
 M.StopWindowLayoutAnimation = StopWindowLayoutAnimation
+local function SettleWindowLayoutAnimation(frame)
+    local state = frame and frame._msuf2WindowLayoutAnim
+    if not state then return false end
+    local target, toAlpha, onFinished = state.target, state.toAlpha, state.onFinished
+    StopWindowLayoutAnimation(frame)
+    if target then ApplyRawFrameLayout(frame, target) end
+    if toAlpha and frame.SetAlpha then frame:SetAlpha(toAlpha) end
+    if type(onFinished) == "function" then onFinished(frame) end
+    M.CallIf(M.ResolvePendingFixedPreviewExpansion, frame)
+    return true
+end
 local function AnimateWindowLayout(frame, target, opts)
     if not (frame and target) then return false end
     opts = opts or {}
@@ -1948,6 +1959,10 @@ local function InstallWindowInteractions(state)
     local FinishWindowDrag
     local function UpdateSnapPreview()
         if not f._msuf2DraggingWindow then return end
+        if _G.IsMouseButtonDown and not _G.IsMouseButtonDown("LeftButton") then
+            if FinishWindowDrag then FinishWindowDrag(true) end
+            return
+        end
         local layout = GetSlashMenuSnapLayout(f)
         if not layout then
             f._msuf2LastSnapLayout = nil
@@ -1964,6 +1979,10 @@ local function InstallWindowInteractions(state)
         ShowWindowLayoutProxy(layout)
     end
     local function BeginWindowDrag()
+        -- Native moving and the animation driver both own the frame's anchors.
+        -- Settle the pending target first so an immediate re-drag cannot fight
+        -- the snap animation or retain an in-between window size.
+        SettleWindowLayoutAnimation(f)
         if f._msuf2WindowState == "maximized" then
             f._msuf2WindowState = "normal"
             f._msuf2RestoreLayout = nil
@@ -1979,11 +1998,15 @@ local function InstallWindowInteractions(state)
         end
     end
     FinishWindowDrag = function(applySnap)
+        local wasDragging = f._msuf2DraggingWindow == true
         f._msuf2DraggingWindow = nil
         f:SetScript("OnUpdate", nil)
         HideWindowLayoutProxy()
         if f.StopMovingOrSizing then f:StopMovingOrSizing() end
-        if applySnap then ApplySlashMenuSnap(f) end
+        -- OnDragStop also fires when the shell rejected OnDragStart because the
+        -- press began over page content. Never turn that rejected gesture into
+        -- an invisible edge snap, and never re-apply snap after fallback cleanup.
+        if applySnap and wasDragging then ApplySlashMenuSnap(f) end
         f._msuf2LastSnapLayout = nil
     end
     f._msuf2BeginWindowDrag = BeginWindowDrag
@@ -2009,6 +2032,7 @@ local function InstallWindowInteractions(state)
     end
     local function BeginResizeProxy(button)
         if button ~= "LeftButton" then return false end
+        SettleWindowLayoutAnimation(f)
         local cursorX, cursorY = CursorPositionInUIParent()
         local layout = CaptureFrameLayout(f)
         if not (cursorX and layout) then return false end
