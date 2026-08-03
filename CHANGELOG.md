@@ -1,5 +1,57 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-RC5 - 2026-08-03
+
+### Highlights
+
+- Menu previews can now expand in place while remaining fixed above the settings. Unit, Group, Aura Style, Colors and Class Resources previews open into a larger canvas without covering or clipping the page below, and return to the compact layout with the same preview state intact.
+
+### Changes
+
+- Preview zoom, pan, wheel forwarding and search navigation now follow the fixed preview owner across compact and expanded layouts. Search results can open a hidden expanded target before highlighting it, while the settings viewport still receives ordinary wheel scrolling outside active preview gestures.
+- Boss unit frames and boss castbars now use a separate Edit Mode hit region for every visible frame instead of one large union box. Gaps stay click-through, every boss remains directly draggable, and all five still move as one shared group.
+- Edit Mode controls, the frame picker and position dialogs now stay above stationary preview movers; Undo and Redo use the shared history service directly when available.
+
+### Fixes
+
+- Fixed Empower casts changing their fill anchor when unified direction was disabled. Casts and Empower bars now always use the configured edge, channels reverse only their value direction, and Empower stage separators remain aligned with the fill.
+
+## 6.0-RC4 - 2026-08-03
+
+### Highlights
+
+- Added a Blizzard Raid Manager visibility mode for MSUF group frames. Party, Raid and Mythic Raid now share Auto, Always Show, Mouseover and Hidden choices, restoring access to ready checks, raid markers and role filters without giving Blizzard's compact raid frames back ownership.
+- Blizzard's Totem Frame is now available to every class. Death Knight Raise Dead, Paladin Consecration and any other ability that fills a Blizzard totem slot can be seen and dismissed even while MSUF hides the PlayerFrame; the existing preview, offsets and Assistant guidance are no longer Shaman/Monk-only.
+- Added the bundled Fritz Soundscape font to MSUF and LibSharedMedia.
+
+### Changes
+
+- Reworked the Unit Frame preview to use the same native StatusBar ownership as live frames. Health and Power textures, backgrounds, opacity, rounded styling and square outlines now render from the real owning regions instead of a second synthetic frame surface.
+- Refined Menu2's visual theme: navigation pills keep clean authored end caps at every width, hover feedback stays clearly visible, alternate accents tint only the surfaces they own, and minimize/maximize follow the accent while Close keeps its danger color.
+- Refreshed the compact navigation and switch media while reducing their file size.
+- The Dashboard Changelog is now the first utility card and uses readable shared typography, brighter bullets, real line spacing and separators between releases.
+- Added Silvermoon as the default menu preview background for checking frames against a colored in-game surface.
+- The Aura Style container selector now stays docked with the scope selector, so its pinned preview does not lose the lane it belongs to while scrolling.
+- Updated the Purge Border notice: the feature returns with WoW 12.1.5 when Blizzard exposes the required API support.
+
+### Fixes & Performance
+
+- Fixed the Unit Frame preview sometimes turning into a black plate or hiding the selected health-bar texture. Background and fill opacity now remain independent, including a real zero-alpha state, per-unit background values update immediately while editing, and Group Preview shows the configured alpha without the live Edit Mode visibility floor.
+- Fixed preview rounded edges, square outlines and selection handles competing for the same draw level. Only the configured border owner is visible, drag handles remain above every configurable visual layer, and the castbar preview surface no longer intercepts their mouse input.
+- Fixed Unit and Group previews omitting configured Power Bar outlines. Square bars now show all four edges, rounded embedded bars use their separator, and separately rounded bars keep their own outline.
+- Fixed Power Text disappearing from the Unit Frame preview when the Power Bar itself was hidden. Preview availability and footprint now follow the compiled Power Text setting, while Power Bar visibility follows the same per-unit, shared and default fallback chain as live frames.
+- Fixed the Texture Layer preview chip staying interactive when none of its three texture slots was enabled.
+- Fixed boss-frame outlines appearing thinner than the same setting on player, target, focus and group frames. Boss borders now convert the configured unit-frame thickness through the frame scale before snapping to physical pixels; attached castbar width follows the corrected visible outline.
+- Fixed name shortening cutting centered names on both ends. With a Top Center or Center name anchor, an overflowing name keeps its configured clip side so only one end is cut; restricted names retain the safe centered fallback.
+- Expanded Unit Frame preview diagnostics with live-versus-preview size, alpha, vertex alpha, texture and StatusBar-fill reporting for faster visual-parity checks.
+- Fixed the Assistant treating an unsupported request to copy a unit frame's position or anchor as a broad partial Copy To operation. Positioning requests now make no changes and direct the user to MSUF Edit Mode; mixed requests no longer copy only the other categories silently.
+
+### Release Workflow
+
+- Alpha, Beta, RC, Pre and Preview tags can no longer publish to Wago, even when a tag is accidentally annotated with `publish-target: all` or `publish-target: wago`. Prereleases remain available through their explicitly selected GitHub or CurseForge channel.
+- Stale prerelease tags are rejected unless they point at the current `origin/main` commit, preventing a bulk `git push --tags` from publishing forgotten older beta builds.
+- Stable Wago uploads now receive only the current release section instead of the complete historical changelog, so old beta notes are not presented again as part of a new release.
+
 ## 6.0-RC3 - 2026-08-02
 
 ### Changes
@@ -18,7 +70,6 @@
 - Fixed long-lived buffs rendering a 0.1 second duration after login or a reload. Lanes that carry helpful auras get fresh duration objects once the world has loaded, on player, target, focus, boss and group units; the pass stays off UNIT_AURA and the identity hot paths.
 - Fixed the unit preview labelling custom container 4 "Dots on target" on the player frame, where that lane is Defensive Buffs. Tooltip, selection bar and quick actions now follow the bound unit.
 - Fixed the Assistant switching a setting on when a follow-up only spelled out its name, for example "show me Mythic Raid Masque Enabled". A follow-up that names the control is answered, not applied.
-- Fixed name shortening cutting centered names on both ends. With a Top Center or Center name anchor, a name longer than the shortening window now keeps its configured clip side, so only one end is cut; restricted names keep the centered fallback.
 
 ## 6.0-RC2 - 2026-08-02
 
