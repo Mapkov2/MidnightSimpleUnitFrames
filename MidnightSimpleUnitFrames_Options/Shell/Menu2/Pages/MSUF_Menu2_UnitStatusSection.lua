@@ -136,6 +136,18 @@ local function BuildStatus(ctx, builder, unit)
         assistantDisposition = "dynamic",
         assistantDispositionReason = "This editor targets whichever status indicator is selected in the adjacent selector.",
     }
+    local selectedStatusColorContract = {
+        assistantDisposition = "dynamic",
+        assistantDispositionReason = "This color swatch targets whichever text status indicator is selected in the adjacent selector.",
+        assistantSettingKeys = {},
+    }
+    for _, prefix in ipairs({
+        "levelIndicator", "raceIndicator", "classTextIndicator", "raidGroupName",
+        "statusText", "statusGhostText", "statusAFKText", "statusDNDText",
+    }) do
+        selectedStatusColorContract.assistantSettingKeys[#selectedStatusColorContract.assistantSettingKeys + 1] =
+            tostring(unit) .. "." .. prefix .. "Color"
+    end
     local function RegisterStatusSearch(control, label, extraKeywords, values, help, semanticPath, classification, assistantContract)
         if not (control and type(M.RegisterSearchWidget) == "function") then return end
         local meta = ControlMeta(ctx, semanticPath, classification)
@@ -567,7 +579,7 @@ local function BuildStatus(ctx, builder, unit)
         "level color", "level text color", "race text color", "class text color",
         "raid group color", "dead text color", "ghost text color", "afk text color", "dnd text color",
         "status text color", "indicator color",
-    }, nil, nil, "status.selected.text_color", nil, selectedStatusContract)
+    }, nil, nil, "status.selected.text_color", nil, selectedStatusColorContract)
     local reset = W.Button(placementCard, "Reset selected", 150)
     PlaceButton(reset, placementCard, placeRightX, -178, 150)
     reset._msuf2SkipHistoryCheckpoint = true

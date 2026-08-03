@@ -75,7 +75,7 @@ function A.AurasRegistry.RegisterGroupExternalLayerSettings(ctx)
         -- Layer was the only reachable external-defensive control, so the lane
         -- could be drawn but not turned on, capped or aimed. These are the rest
         -- of the record the group config reads
-        -- (MSUF_UF_Group_Config.lua: externals.enabled/max/growth/auto/
+        -- (MSUF_UF_Group_Config.lua: externals.enabled/max/growth/
         -- autoBlacklistBuffs).
         local EXTERNAL_FIELDS = {
             -- Deliberately "Lane": a bare "external defensives" is the Buff
@@ -83,8 +83,6 @@ function A.AurasRegistry.RegisterGroupExternalLayerSettings(ctx)
             -- indistinguishable. The lane toggle keeps the explicit noun.
             { field = "enabled", label = "External Defensive Lane", type = "boolean", default = true,
               nouns = { "external defensive lane", "externals lane", "external defensive strip" } },
-            { field = "auto", label = "External Defensive Auto List", type = "boolean", default = true,
-              nouns = { "external defensive auto list", "externals auto list", "automatic externals" } },
             { field = "autoBlacklistBuffs", label = "External Defensive Auto-blacklist from Buffs",
               type = "boolean", default = false,
               nouns = { "external defensive auto blacklist", "externals auto blacklist from buffs" } },

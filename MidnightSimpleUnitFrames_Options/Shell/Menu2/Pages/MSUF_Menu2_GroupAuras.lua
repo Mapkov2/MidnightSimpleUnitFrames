@@ -450,9 +450,18 @@ local function BuildGFAuras(ctx)
         local growthX = anchorX + dropdownW + gap
         local function Dropdown(label, x, values, key, fallback, y, width)
             width = width or dropdownW
+            local assistantContract
+            if lane == "externals" and key == "growth" then
+                assistantContract = {
+                    assistantDisposition = "dynamic",
+                    assistantDispositionReason = "Growth targets the selected Group scope's External Defensive container.",
+                    assistantSettingKeys = GroupAuraSettingKeys(scope, ".auras.externals.growth"),
+                }
+            end
             local widget = BindLiveAuraDropdown(W.Dropdown(section, label, values, width),
                 scope, lane, key, fallback,
-                AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".layout." .. AuraCatalogToken(key)))
+                AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".layout." .. AuraCatalogToken(key), nil,
+                    assistantContract))
             W.MoveWidget(widget, section, x, y or -34, width, "LEFT")
             controls[#controls + 1] = widget
             return widget
@@ -462,11 +471,11 @@ local function BuildGFAuras(ctx)
         local col4 = floor((inner - gap * 3) / 4)
         local function Slider(label, col, y, minValue, maxValue, key, fallback)
             local assistantContract
-            if lane == "externals" and key == "layer" then
+            if lane == "externals" and (key == "layer" or key == "max") then
                 assistantContract = {
                     assistantDisposition = "dynamic",
-                    assistantDispositionReason = "Layer targets the selected Group scope's External Defensive container.",
-                    assistantSettingKeys = GroupAuraSettingKeys(scope, ".auras.externals.layer"),
+                    assistantDispositionReason = (key == "layer" and "Layer" or "Max") .. " targets the selected Group scope's External Defensive container.",
+                    assistantSettingKeys = GroupAuraSettingKeys(scope, ".auras.externals." .. key),
                 }
             end
             local widget = BindLiveAuraSlider(W.Slider(section, label, minValue, maxValue, 1, col4),

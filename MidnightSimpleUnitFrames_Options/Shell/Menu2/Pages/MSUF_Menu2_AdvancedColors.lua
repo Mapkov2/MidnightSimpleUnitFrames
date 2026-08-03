@@ -83,12 +83,6 @@ local COLOR_SETTING_KEY_BY_PATH = {
     ["portrait.background_color"] = "general.portraitBgColor",
     ["portrait.border_color"] = "general.portraitBorderColor",
     ["table.bossTargetHighlightColor"] = "general.bossTargetHighlightColor",
-    ["texture_layer.color"] = "general.texLayerColor",
-    ["texture_layer.gradient_color"] = "general.texLayerGradient2",
-    ["texture_layer2.color"] = "general.texLayer2Color",
-    ["texture_layer2.gradient_color"] = "general.texLayer2Gradient2",
-    ["texture_layer3.color"] = "general.texLayer3Color",
-    ["texture_layer3.gradient_color"] = "general.texLayer3Gradient2",
     ["table.combatStateLeaveColor"] = "gameplay.combatStateLeaveColor",
     ["table.combatTimerColor"] = "gameplay.combatTimerColor",
     ["table.crosshairInRangeColor"] = "gameplay.crosshairInRangeColor",
@@ -132,6 +126,18 @@ local function PrefixedSettingKeys(prefix, tokens)
     return keys
 end
 local COLOR_DYNAMIC_SETTING_KEYS_BY_PATH = {
+    ["castbar.text_color.spell_name"] = {
+        "general.castbarPlayerSpellNameColor", "general.castbarTargetSpellNameColor",
+        "general.castbarFocusSpellNameColor", "general.bossCastSpellNameColor",
+    },
+    ["castbar.text_color.time"] = {
+        "general.castbarPlayerTimeColor", "general.castbarTargetTimeColor",
+        "general.castbarFocusTimeColor", "general.bossCastTimeColor",
+    },
+    ["castbar.text_color.target_name"] = {
+        "general.castbarPlayerTargetNameColor", "general.castbarTargetTargetNameColor",
+        "general.castbarFocusTargetNameColor", "general.bossCastTargetNameColor",
+    },
     ["bar_gradient.health.color"] = {
         "general.healthBarGradientColorR", "general.healthBarGradientColorG", "general.healthBarGradientColorB",
     },
@@ -174,8 +180,26 @@ local COLOR_DYNAMIC_SETTING_PATTERNS_BY_PATH = {
     ["class_power.full_resource.color"] = { "^general%.classPowerColorOverrides%.[A-Z_]+_FULL$" },
     ["class_power.full_resource.enabled"] = { "^bars%.classPowerFullColorEnabled%.[A-Z_]+$" },
     ["class_power.resource_slots.mode"] = { "^bars%.classPowerSlotColorModes%.[A-Z_]+$" },
+    ["status_text.color.value"] = {
+        "^[%a]+%.levelIndicatorColor$", "^[%a]+%.raceIndicatorColor$",
+        "^[%a]+%.classTextIndicatorColor$", "^[%a]+%.raidGroupNameColor$",
+        "^[%a]+%.statusTextColor$", "^[%a]+%.statusGhostTextColor$",
+        "^[%a]+%.statusAFKTextColor$", "^[%a]+%.statusDNDTextColor$",
+    },
 }
 local function ColorReviewedDisposition(path)
+    if path:match("^texture_layer%d*%.") then
+        return "compound", "This swatch writes the persisted RGB channels for one texture layer color as a single visible color."
+    end
+    if path:match("^castbar%.text_color%.") then
+        return "dynamic", "This control targets the castbar unit currently selected in the adjacent unit selector."
+    end
+    if path == "font.name_custom.color" then
+        return "compound", "This swatch writes the persisted custom name-color channels as a single visible color."
+    end
+    if path:match("^status_text%.color%.") then
+        return "dynamic", "This control targets the unit and status indicator currently selected in the adjacent selectors."
+    end
     if path:match("^bar_gradient%.") then
         return "dynamic", "This color targets the explicit Bars scope shared with the Health and Power gradient controls."
     end
