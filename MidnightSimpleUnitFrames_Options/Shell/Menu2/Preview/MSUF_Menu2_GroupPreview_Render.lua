@@ -2079,7 +2079,6 @@ function Render.Install(box, ctx, deps)
         -- Live parity: the engine dims the fill texture (Elements_Alpha), never
         -- the status-bar color's alpha channel, which the client drops on refill.
         local hpFillAlpha = tonumber(groupVisual.hpBarAlpha) or tonumber(conf.hpBarAlpha) or 1
-        if _G.MSUF_UnitEditModeActive == true and hpFillAlpha < 0.35 then hpFillAlpha = 0.35 end
         mock._health:SetStatusBarColor(hr, hg, hb)
         if mock._health.SetMinMaxValues then mock._health:SetMinMaxValues(0, 1) end
         mock._health:SetValue(hpPct)

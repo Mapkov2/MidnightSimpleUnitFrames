@@ -327,6 +327,61 @@ local function EnsureInlinePowerHost(mock)
     mock._msufPreviewInlinePowerRoundedHost = host
     return host
 end
+local function ApplyPowerBorder(mock, powerOn, thickness, embedded, roundedPower)
+    if not mock then return end
+    local host = mock._msufPreviewPowerBorder
+    local edge = ClampPreviewEdgeSize(thickness, 0, 8)
+    if not powerOn or edge <= 0 then
+        if host then host:Hide() end
+        return
+    end
+    if not host then
+        if type(_G.CreateFrame) ~= "function" then return end
+        host = CreateFrame("Frame", nil, mock)
+        if host.EnableMouse then host:EnableMouse(false) end
+        host.edges = {}
+        for i = 1, 4 do
+            local line = host:CreateTexture(nil, "OVERLAY", nil, 6)
+            line:SetTexture(TEX_W8)
+            host.edges[i] = line
+        end
+        mock._msufPreviewPowerBorder = host
+    end
+    if host.SetFrameLevel and mock.GetFrameLevel then host:SetFrameLevel(mock:GetFrameLevel() + 4) end
+    local top, bottom, left, right = host.edges[1], host.edges[2], host.edges[3], host.edges[4]
+    for i = 1, 4 do host.edges[i]:Hide() end
+    if roundedPower and not embedded then
+        host:Hide()
+        return
+    end
+    host:ClearAllPoints()
+    host:SetAllPoints(mock.powerBG)
+    local r, g, b, a = PreviewPowerEdgeColor(mock)
+    for i = 1, 4 do host.edges[i]:SetVertexColor(r, g, b, a) end
+    top:ClearAllPoints()
+    top:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
+    top:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, 0)
+    top:SetHeight(edge)
+    top:Show()
+    if not roundedPower then
+        bottom:ClearAllPoints()
+        bottom:SetPoint("BOTTOMLEFT", host, "BOTTOMLEFT", 0, 0)
+        bottom:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", 0, 0)
+        bottom:SetHeight(edge)
+        left:ClearAllPoints()
+        left:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
+        left:SetPoint("BOTTOMLEFT", host, "BOTTOMLEFT", 0, 0)
+        left:SetWidth(edge)
+        right:ClearAllPoints()
+        right:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, 0)
+        right:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", 0, 0)
+        right:SetWidth(edge)
+        bottom:Show()
+        left:Show()
+        right:Show()
+    end
+    host:Show()
+end
 function Core.ApplyRounded(box, key, powerOn, outlineThickness, powerEmbedded, powerEdgeSize, detachedRounded, detachedEdgeSize)
     if not (box and box.mock) then return end
     local mock = box.mock
@@ -339,11 +394,13 @@ function Core.ApplyRounded(box, key, powerOn, outlineThickness, powerEmbedded, p
         PreviewSetRoundedEdgeStackShown(mock, false)
         SetInlinePowerRoundedShown(mock._msufPreviewInlinePowerRoundedHost, false)
         SetDetachedRoundedShown(mock.detachedPower, false)
+        ApplyPowerBorder(mock, powerOn, powerEdgeSize, powerEmbedded ~= false, false)
         return
     end
     mock._msufPreviewRoundedActive = true
     local roundedPower = powerOn and PreviewRoundedPowerBarsEnabled()
     local sharedPowerBody = roundedPower and powerEmbedded ~= false
+    ApplyPowerBorder(mock, powerOn, powerEdgeSize, sharedPowerBody, roundedPower)
     local healthBgAnchor = mock
     local healthAnchor = sharedPowerBody and mock or (mock.healthBar or mock.hpBG)
     local hpBgMask = EnsurePreviewRoundedMask(mock, "healthBg", healthBgAnchor, mock.hpBG)
@@ -595,18 +652,8 @@ function Core.ApplyPreviewTransparency(box, conf, runtimeSpec)
     if mock._msufPreviewRoundedActive == true then
         PreviewSetRoundedEdgeStackAlpha(mock, (mock._msufPreviewRoundedEdgeEnabled ~= false) and 1 or 0)
     end
-    -- Layer visibility runs before this pass and deliberately shows available
-    -- regions. Re-assert the rendered health-surface state last so an exact
-    -- zero is a real Hide(), not merely a colour/alpha convention that a later
-    -- Show() can make ambiguous in the client.
-    local healthBgAlpha = Clamp01(mock._msufPreviewHealthBgAlpha, 0)
-    local healthFillAlpha = Clamp01(mock._msufPreviewHealthFillAlpha, alpha.hp)
-    Core.SetRegionAlpha(mock.hpBG, healthBgAlpha)
-    Core.SetRegionAlpha(mock.hp, healthFillAlpha)
-    Core.SetShownSafe(mock.hpBG, healthBgAlpha > 0)
-    Core.SetShownSafe(mock.hp, healthFillAlpha > 0)
-    -- Dependent overlays/text/portrait and power remain independently
-    -- composited, matching the live alpha element.
+    -- Render owns health media and opacity. Dependent overlays/text/portrait
+    -- and power remain independently composited, matching the live element.
     Core.SetRegionAlpha(mock.healPred, alpha.flat and alpha.frame or alpha.hp)
     Core.SetRegionAlpha(mock.absorb, alpha.flat and alpha.frame or alpha.hp)
     Core.SetRegionAlpha(mock.healAbsorb, alpha.flat and alpha.frame or alpha.hp)

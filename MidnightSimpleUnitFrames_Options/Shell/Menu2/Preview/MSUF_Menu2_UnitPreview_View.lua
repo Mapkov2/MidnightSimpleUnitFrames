@@ -1815,6 +1815,7 @@ local function BuildPreview(parent, panel, width, height)
     -- background media below may cover the unit-frame rectangle; outlines are
     -- drawn by the dedicated four-edge overlay in PreviewCore.
     local mock = CreateFrame("Frame", nil, canvas)
+    if mock.SetBackdropColor then mock:SetBackdropColor(0, 0, 0, 0) end
     box.mock = mock
     local function MockTexture(field, layer, texture, color, mode, owner)
         local tex = (owner or mock):CreateTexture(nil, layer)
@@ -1962,10 +1963,7 @@ local function BuildPreview(parent, panel, width, height)
     mock.cast:SetBackdrop({ bgFile = TEX_W8 })
     mock.cast:SetBackdropColor(0, 0, 0, 0.92)
     mock.cast:SetBackdropBorderColor(0, 0, 0, 0)
-    mock.cast:EnableMouse(true)
-    mock.cast:SetScript("OnMouseDown", function(_, button)
-        StartPreviewPan(canvas, box, button)
-    end)
+    mock.cast:EnableMouse(false)
     mock.cast:SetScript("OnMouseUp", function(self, button)
         if canvas._msufPreviewPanning then
             StopPreviewPan(canvas)

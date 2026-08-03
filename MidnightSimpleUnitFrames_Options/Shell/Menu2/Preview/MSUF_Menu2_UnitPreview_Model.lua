@@ -59,6 +59,21 @@ local UNIT_DATA = {
     boss = { name = "Boss Preview", class = "DEATHKNIGHT", className = "Death Knight", race = "Undead", hp = 0.55, power = 0.35, powerToken = "MANA", level = "??", elite = true, reactionKind = "enemy", npcKind = "npcBoss", portraitTexture = "Interface\\ICONS\\Achievement_Boss_LichKing" },
     pet = { name = "Companion", class = "HUNTER", className = "Hunter", race = "Beast", hp = 0.79, power = 0.44, powerToken = "FOCUS", level = "80", elite = false, isPet = true, reactionKind = "friendly", portraitTexture = "Interface\\ICONS\\Ability_Hunter_BeastCall" },
 }
+local POWER_BAR_MASTER_KEYS = {
+    player = "showPlayerPowerBar",
+    target = "showTargetPowerBar",
+    focus = "showFocusPowerBar",
+    boss = "showBossPowerBar",
+}
+local POWER_BAR_DEFAULT_ON = {
+    player = true,
+    target = true,
+    focus = false,
+    targettarget = false,
+    focustarget = false,
+    pet = true,
+    boss = false,
+}
 local function PreviewRaidGroupNameAllowed(key)
     return key == "player" or key == "target" or key == "targettarget" or key == "focustarget" or key == "focus"
 end
@@ -953,10 +968,13 @@ local function MakeFS(parent, layer, size)
     return fs
 end
 local function ReadPowerBarEnabled(conf, key)
-    if key == "pet" or key == "targettarget" or key == "focustarget" then return false end
+    conf = conf or {}
+    local bars = _G.MSUF_DB and _G.MSUF_DB.bars
     if conf.showPowerBar ~= nil then return conf.showPowerBar ~= false end
-    if key == "boss" then return true end
-    return true
+    local masterKey = POWER_BAR_MASTER_KEYS[key]
+    if masterKey and bars and bars[masterKey] ~= nil then return bars[masterKey] ~= false end
+    if conf.showPowerText == nil and conf.showPower ~= nil then return conf.showPower ~= false end
+    return POWER_BAR_DEFAULT_ON[key] == true
 end
 local function CanDetachPowerBarKey(key)
     key = CanonKey(key)

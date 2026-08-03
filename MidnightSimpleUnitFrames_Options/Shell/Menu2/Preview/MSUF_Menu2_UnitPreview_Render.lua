@@ -411,6 +411,12 @@ local function PreviewLayerWanted(box, layerKey)
     local visibility = box and box.layerVisibility
     return not (visibility and visibility[layerKey] == false)
 end
+local function PreviewPowerTextShown(runtimeSpec, conf)
+    if runtimeSpec then return runtimeSpec.showPowerText ~= false end
+    if conf and conf.showPowerText ~= nil then return conf.showPowerText ~= false end
+    if conf and conf.showPower ~= nil then return conf.showPower ~= false end
+    return true
+end
 local function NumberOrOne(value) return tonumber(value) or 1 end
 local function CastbarNumFallback(_, _, fallback) return tonumber(fallback) or 0 end
 local function CastbarTimeFallback(value) return tostring(value or "") end
@@ -1147,6 +1153,13 @@ local TEXLAYER_PREVIEW_GRADIENT_DIRS = {
     down = "GradientDirDown",
 }
 local TEXLAYER_PREVIEW_PREFIXES = { "texLayer", "texLayer2", "texLayer3" }
+local function PreviewTextureLayerConfigured(conf)
+    if type(conf) ~= "table" then return false end
+    for slot = 1, #TEXLAYER_PREVIEW_PREFIXES do
+        if conf[TEXLAYER_PREVIEW_PREFIXES[slot] .. "Enabled"] == true then return true end
+    end
+    return false
+end
 --- Decorative texture layers as their own preview layer (3 slots). Geometry is
 --- scaled for the viewport, while visibility, strata, parent-alpha behavior and
 --- texture resolution are delegated to the same runtime helpers used by live
@@ -1575,7 +1588,7 @@ function Preview.Refresh(box, reason)
                 minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "RIGHT", "RIGHT", -4 + o.rightX, o.rightY, ApproxTextWidth("410K - 41%", ResolvePreviewTextSlotSize(runtimeText, conf, rightSizeRuntimeKey, rightSizeDbKey, rawHPSize), 10), ResolvePreviewTextSlotSize(runtimeText, conf, rightSizeRuntimeKey, rightSizeDbKey, rawHPSize) + 6, w, h)
             end
         end
-        local powerTextVisible = PreviewLayerWanted(box, "powerText") and ((key ~= "focustarget" and conf.showPower ~= false) or conf.showPower == true) and (not runtimeSpec or runtimeSpec.showPowerText ~= false)
+        local powerTextVisible = PreviewLayerWanted(box, "powerText") and PreviewPowerTextShown(runtimeSpec, conf)
         if powerTextVisible then
             local o = TextOffsets("power", 4)
             if runtimeText and runtimeText.directLayout == true and not (detachedPowerInUnitPreview and box._runtimeDetachedPowerTextOnBar) then
@@ -1925,16 +1938,14 @@ function Preview.Refresh(box, reason)
     -- still owns the live texture/RGB mode, but may lag one debounced apply
     -- while a slider is being edited.
     hba = select(4, R.HealthBackgroundColor(hr, hg, hb, data, conf))
-    -- Keep RGB tint and opacity in separate region state. This is visually
-    -- equivalent to the live frame's vertex alpha, but makes zero opacity
-    -- absolute even after a texture swap or a previous preview refresh.
-    mock._msufPreviewHealthBgAlpha = max(0, min(1, tonumber(hba) or 0))
-    mock.hpBG:SetVertexColor(hbr, hbg, hbb, 1)
-    mock.hpBG:SetAlpha(mock._msufPreviewHealthBgAlpha)
+    -- Match the live background owner: color and configured opacity are one
+    -- vertex-color operation, while the region alpha remains neutral.
+    mock.hpBG:SetVertexColor(hbr, hbg, hbb, hba)
+    mock.hpBG:SetAlpha(1)
     mock.healthBar:SetStatusBarColor(hr, hg, hb, 1)
-    mock._msufPreviewHealthFillAlpha = max(0, min(1, tonumber(conf and conf.hpBarAlpha)
+    local healthFillAlpha = max(0, min(1, tonumber(conf and conf.hpBarAlpha)
         or tonumber(runtimeSpec and runtimeSpec.alpha and runtimeSpec.alpha.hpAlpha) or 1))
-    mock.hp:SetAlpha(mock._msufPreviewHealthFillAlpha)
+    mock.hp:SetAlpha(healthFillAlpha)
     RenderTextureLayerPreview(box, mock, conf, PreviewLayerWanted(box, "texLayer"), S, sw, baseLevel, SetTex, PlaceHandle, R.ClassColor(data.class))
     if powerOn then
         mock.powerBG:Show(); mock.power:Show()
@@ -2455,8 +2466,7 @@ function Preview.Refresh(box, reason)
     if runtimeSpec then showNamePreview = runtimeSpec.showName ~= false end
     local hpTextOn = conf.showHP ~= false
     if runtimeSpec then hpTextOn = runtimeSpec.showHealthText ~= false end
-    local powerTextOn = (key ~= "focustarget" and conf.showPower ~= false) or conf.showPower == true
-    if runtimeSpec then powerTextOn = runtimeSpec.showPowerText ~= false and powerEnabled == true end
+    local powerTextOn = PreviewPowerTextShown(runtimeSpec, conf)
     if detachedPowerManagedByClassPreview and box._runtimeDetachedPowerTextOnBar then powerTextOn = false end
     mock.nameText:SetShown(showNamePreview)
     local raidGroupCfg = runtimeStatus and runtimeStatus.raidGroup
@@ -2906,6 +2916,7 @@ function Preview.Refresh(box, reason)
         castbar = castEnabled,
         auras = auraPreviewState ~= nil,
         status = statusLayerAvailable,
+        texLayer = PreviewTextureLayerConfigured(conf),
         bounds = true,
     }
     for i = 1, #(box.layerButtons or {}) do

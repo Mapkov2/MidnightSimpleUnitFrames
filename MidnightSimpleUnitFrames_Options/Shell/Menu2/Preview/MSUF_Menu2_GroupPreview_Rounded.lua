@@ -145,6 +145,65 @@ local function SetPowerRoundedEdgeShown(power, shown)
     end
     if power and power._msufGFRoundedPreviewBg then power._msufGFRoundedPreviewBg:Hide() end
 end
+local function ApplyPowerBorder(mock, powerOn, thickness, embedded, roundedPower)
+    if not mock then return end
+    local host = mock._msufGFPreviewPowerBorder
+    local edge = Round(thickness)
+    if edge < 0 then edge = 0 elseif edge > 8 then edge = 8 end
+    if not powerOn or edge <= 0 then
+        if host then host:Hide() end
+        return
+    end
+    if not host then
+        if type(_G.CreateFrame) ~= "function" then return end
+        host = CreateFrame("Frame", nil, mock)
+        if host.EnableMouse then host:EnableMouse(false) end
+        host.edges = {}
+        for i = 1, 4 do
+            local line = host:CreateTexture(nil, "OVERLAY", nil, 6)
+            line:SetTexture(WHITE8X8)
+            host.edges[i] = line
+        end
+        mock._msufGFPreviewPowerBorder = host
+    end
+    if roundedPower and not embedded then
+        host:Hide()
+        return
+    end
+    local top, bottom, left, right = host.edges[1], host.edges[2], host.edges[3], host.edges[4]
+    for i = 1, 4 do host.edges[i]:Hide() end
+    host:ClearAllPoints()
+    host:SetAllPoints(mock._power)
+    local r = mock._msufGFPreviewPowerBorderR
+    local g = mock._msufGFPreviewPowerBorderG
+    local b = mock._msufGFPreviewPowerBorderB
+    local a = mock._msufGFPreviewPowerBorderA
+    if r == nil then r, g, b, a = BaseEdgeColor(mock) end
+    for i = 1, 4 do host.edges[i]:SetVertexColor(r or 0, g or 0, b or 0, a == nil and 1 or a) end
+    top:ClearAllPoints()
+    top:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
+    top:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, 0)
+    top:SetHeight(edge)
+    top:Show()
+    if not roundedPower then
+        bottom:ClearAllPoints()
+        bottom:SetPoint("BOTTOMLEFT", host, "BOTTOMLEFT", 0, 0)
+        bottom:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", 0, 0)
+        bottom:SetHeight(edge)
+        left:ClearAllPoints()
+        left:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
+        left:SetPoint("BOTTOMLEFT", host, "BOTTOMLEFT", 0, 0)
+        left:SetWidth(edge)
+        right:ClearAllPoints()
+        right:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, 0)
+        right:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", 0, 0)
+        right:SetWidth(edge)
+        bottom:Show()
+        left:Show()
+        right:Show()
+    end
+    host:Show()
+end
 local function ApplyRounded(mock, conf, powerOn, edgeSize, powerEmbed, powerDetached, powerEdgeSize)
     if not mock then return false end
     local enabled = RoundedEnabled()
@@ -155,6 +214,7 @@ local function ApplyRounded(mock, conf, powerOn, edgeSize, powerEmbed, powerDeta
         if mock._roundedBg then mock._roundedBg:Hide() end
         SetRoundedEdgeStackShown(mock, false)
         SetPowerRoundedEdgeShown(mock._power, false)
+        ApplyPowerBorder(mock, powerOn, powerEdgeSize, powerEmbed ~= false and powerDetached ~= true, false)
         return false
     end
     mock._msufGFRoundedPreviewActive = true
@@ -166,6 +226,7 @@ local function ApplyRounded(mock, conf, powerOn, edgeSize, powerEmbed, powerDeta
     local powerTex = StatusBarTexture(mock._power)
     local roundPower = powerOn and RoundedPowerEnabled()
     local sharedBody = roundPower and powerEmbed ~= false and powerDetached ~= true
+    ApplyPowerBorder(mock, powerOn, powerEdgeSize, sharedBody, roundPower)
     local healthAnchor = sharedBody and mock or mock._health
     local powerAnchor = sharedBody and mock or mock._power
     local bodyMask = EnsureRoundedMask(mock, "body", mock, mock._roundedBg)
@@ -187,6 +248,7 @@ local function ApplyRounded(mock, conf, powerOn, edgeSize, powerEmbed, powerDeta
         ClearRoundedMasks(mock)
         if mock._roundedBg then mock._roundedBg:Hide() end
         SetRoundedEdgeStackShown(mock, false)
+        ApplyPowerBorder(mock, powerOn, powerEdgeSize, powerEmbed ~= false and powerDetached ~= true, false)
         return false
     end
     SetMask(mock, mock._roundedBg, bodyMask)
