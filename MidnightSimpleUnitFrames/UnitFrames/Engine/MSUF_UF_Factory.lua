@@ -93,6 +93,12 @@ local function IsCooldownViewerAnchorUsable(name)
   return IsCooldownViewerAnchorFrameUsable(ResolveCooldownViewerAnchor(name))
 end
 
+local function IsGlobalCooldownAnchorEnabled(general)
+  local isEnabled = _G.MSUF_IsCooldownAnchorEnabled
+  if type(isEnabled) == "function" then return isEnabled(general) == true end
+  return general and general.anchorToCooldown == true or false
+end
+
 local function CanonicalAnchorFrameName(name)
   if name == "UI_Parent" then return "UIParent" end
   return name
@@ -1289,7 +1295,7 @@ local function HasLateAnchorConfig()
   local db = _G.MSUF_DB
   if type(db) ~= "table" then return false end
   local general = type(db.general) == "table" and db.general or nil
-  if general and general.anchorToCooldown == true then
+  if IsGlobalCooldownAnchorEnabled(general) then
     if IsCooldownViewerAnchorUsable("EssentialCooldownViewer") then return true end
   end
   local globalAnchor = CanonicalAnchorFrameName(general and general.anchorName)

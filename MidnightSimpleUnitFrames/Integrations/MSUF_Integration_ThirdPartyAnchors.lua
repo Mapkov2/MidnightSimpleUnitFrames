@@ -16,6 +16,14 @@ local type = type
 local ARCUI_ANCHOR_EVENT = "ArcUI.AnchorProxy.SizeChanged"
 local SKIRON_ANCHOR_EVENT = "SkironCooldownManager.AnchorProxy.SizeChanged"
 local SKIRON_RETRY_DELAYS = { 0, 0.05, 0.20, 0.60, 1.20, 2.00 }
+local AUTOMATIC_COOLDOWN_ADDONS = {
+    { id = "ArcUI", label = "Arc UI" },
+    { id = "SkironCooldownManager", label = "Skiron" },
+    { id = "Coolinator", label = "Coolinator" },
+    -- Cooldown Manager Centered keeps Blizzard's EssentialCooldownViewer as
+    -- its public layout frame, so it needs policy detection but no proxy.
+    { id = "CooldownManagerCentered", label = "CDMC" },
+}
 
 local registeredArcUI
 local arcUIAnchor
@@ -34,6 +42,76 @@ local coolinatorRefreshAfterCombat = false
 local coolinatorResolveGeneration = 0
 local coolinatorActiveSource
 local observedCoolinatorSources = setmetatable({}, { __mode = "k" })
+local automaticCooldownProviderId
+local automaticCooldownProviderLabel
+local automaticCooldownProviderResolved = false
+
+local function IsAddOnFullyLoaded(addonName)
+    local isLoaded = C_AddOns and C_AddOns.IsAddOnLoaded
+    if type(isLoaded) == "function" then
+        local loadedOrLoading, loaded = isLoaded(addonName)
+        if loaded ~= nil then return loaded == true end
+        -- Test/legacy shims may expose the historical single return value.
+        return loadedOrLoading == true
+    end
+    local legacy = _G.IsAddOnLoaded
+    return type(legacy) == "function" and legacy(addonName) == true or false
+end
+
+local function DetectAutomaticCooldownProvider()
+    for i = 1, #AUTOMATIC_COOLDOWN_ADDONS do
+        local provider = AUTOMATIC_COOLDOWN_ADDONS[i]
+        if IsAddOnFullyLoaded(provider.id) then
+            return provider.id, provider.label
+        end
+    end
+end
+
+local function RefreshAutomaticCooldownAnchorConsumers()
+    local UF = MSUF.UF
+    local factory = UF and UF.Factory
+    if UF and UF.spawned == true and factory and type(factory.ForceReanchor) == "function" then
+        factory.ForceReanchor()
+    end
+
+    local editMode = _G.MSUF_EM2
+    local hud = editMode and editMode.HUD
+    if hud and type(hud.RefreshControls) == "function" then hud.RefreshControls(true) end
+
+    local menu = (MSUF and MSUF.MSUF2) or _G.MSUF2
+    if menu and type(menu.RequestRefresh) == "function" then
+        menu.RequestRefresh(nil, "automatic-cooldown-anchor-provider")
+    end
+end
+
+local function RefreshAutomaticCooldownProvider(notify)
+    local providerId, providerLabel = DetectAutomaticCooldownProvider()
+    local changed = automaticCooldownProviderResolved
+        and (providerId ~= automaticCooldownProviderId or providerLabel ~= automaticCooldownProviderLabel)
+    automaticCooldownProviderResolved = true
+    automaticCooldownProviderId = providerId
+    automaticCooldownProviderLabel = providerLabel
+    if changed and notify ~= false then RefreshAutomaticCooldownAnchorConsumers() end
+    return providerId, providerLabel, changed
+end
+
+function MSUF.GetAutomaticCooldownAnchorProvider()
+    if not automaticCooldownProviderResolved then RefreshAutomaticCooldownProvider(false) end
+    return automaticCooldownProviderId, automaticCooldownProviderLabel
+end
+
+function MSUF.IsCooldownAnchorEnabled(general)
+    if MSUF.GetAutomaticCooldownAnchorProvider() ~= nil then return true end
+    return type(general) == "table" and general.anchorToCooldown == true or false
+end
+
+_G.MSUF_GetAutomaticCooldownAnchorProvider = function()
+    return MSUF.GetAutomaticCooldownAnchorProvider()
+end
+
+_G.MSUF_IsCooldownAnchorEnabled = function(general)
+    return MSUF.IsCooldownAnchorEnabled(general)
+end
 
 local function InCombat()
     return InCombatLockdown and InCombatLockdown() or false
@@ -412,6 +490,7 @@ watcher:SetScript("OnEvent", function(self, event, addon)
         return
     end
     if event == "ADDON_LOADED" then
+        RefreshAutomaticCooldownProvider(true)
         if addon == "ArcUI" then
             RegisterArcUIAnchor()
         elseif addon == "SkironCooldownManager" then
@@ -421,7 +500,9 @@ watcher:SetScript("OnEvent", function(self, event, addon)
         end
         return
     end
+    RefreshAutomaticCooldownProvider(true)
     RegisterThirdPartyAnchors()
 end)
 
+RefreshAutomaticCooldownProvider(false)
 RegisterThirdPartyAnchors()

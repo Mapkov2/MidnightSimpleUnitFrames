@@ -72,8 +72,18 @@ local function UpdateOverlay()
     l[1]:SetText("|cFFFFFF00MSUF Position Debug|r  Combat: "
         .. (_G.MSUF_InCombat and "|cFFFF4444IN|r" or "|cFF44FF44OUT|r"))
 
-    local ancLabel = (g and g.anchorToCooldown)
-        and "|cFFFFAA00CooldownManager|r"
+    local providerGetter = _G.MSUF_GetAutomaticCooldownAnchorProvider
+    local automaticProvider
+    if type(providerGetter) == "function" then
+        local _, providerLabel = providerGetter()
+        automaticProvider = providerLabel
+    end
+    local enabledGetter = _G.MSUF_IsCooldownAnchorEnabled
+    local cooldownEnabled = type(enabledGetter) == "function"
+        and enabledGetter(g) == true
+        or g and g.anchorToCooldown == true
+    local ancLabel = cooldownEnabled
+        and ("|cFFFFAA00CooldownManager%s|r"):format(automaticProvider and (" (AUTO: " .. automaticProvider .. ")") or "")
         or  "|cFFAAAAFF" .. tostring(g and g.anchorName or "UIParent") .. "|r"
     l[2]:SetText("Global anchor: " .. ancLabel)
 

@@ -481,7 +481,13 @@ local COOLDOWN_ANCHOR_PREFERENCE = "unitframeCooldownAnchor"
 local EDIT_MODE_MOVED_PREFERENCE = "editModeMoved"
 local EDIT_MODE_MOVED_KEY_PREFERENCE = "editModeMovedKey"
 local VALID_COOLDOWN_ANCHOR_DECISION = { cooldown = true, independent = true }
+local function AutomaticCooldownProvider()
+    local getter = _G.MSUF_GetAutomaticCooldownAnchorProvider
+    if type(getter) ~= "function" then return nil, nil end
+    return getter()
+end
 local function CooldownAnchorDecision()
+    if AutomaticCooldownProvider() ~= nil then return "cooldown" end
     local value = Preference(COOLDOWN_ANCHOR_PREFERENCE)
     return VALID_COOLDOWN_ANCHOR_DECISION[value] and value or nil
 end
@@ -684,6 +690,7 @@ end
 
 local function SetGuidedCooldownAnchorDecision(value)
     if not VALID_COOLDOWN_ANCHOR_DECISION[value] or BlockedByCombat() then return false end
+    if AutomaticCooldownProvider() ~= nil then return value == "cooldown" end
     local previousDecision = CooldownAnchorDecision()
     local enabled = value == "cooldown"
     local general = type(M.GetGeneralDB) == "function" and M.GetGeneralDB() or nil
@@ -3134,11 +3141,22 @@ local function BuildEditModePage(ctx, T, W)
     local function Refresh()
         local status = type(M.EditModeLifecycleStatus) == "function" and M.EditModeLifecycleStatus() or {}
         local active = status.active == true
+        local _, automaticProviderLabel = AutomaticCooldownProvider()
         local anchorDecision = CooldownAnchorDecision()
         local placementComplete = EditModePlacementComplete()
         local movementComplete = EditModeMovementComplete()
         decision:SetValue(anchorDecision)
-        if anchorDecision == "cooldown" then
+        for i = 1, #(decision.buttons or {}) do
+            SetButtonEnabled(decision.buttons[i], automaticProviderLabel == nil)
+        end
+        if decision._msuf2Title and decision._msuf2Title.SetText then
+            decision._msuf2Title:SetText(automaticProviderLabel
+                and Tr("Cooldown Manager anchoring (automatic)")
+                or Tr("Should all Unitframes follow the Cooldown Manager?"))
+        end
+        if automaticProviderLabel then
+            decisionCopy:SetText(M.Format("%s detected: MSUF automatically anchors Unitframes to Essential Cooldown Manager. No choice is required.", automaticProviderLabel))
+        elseif anchorDecision == "cooldown" then
             decisionCopy:SetText(Tr("Selected: Unitframes follow Essential Cooldown Manager. If Main Cooldowns move, the anchored Unitframe layout follows."))
         elseif anchorDecision == "independent" then
             decisionCopy:SetText(Tr("Selected: Unitframes use the current global/custom anchor. Moving Main Cooldowns will not move them."))

@@ -780,7 +780,11 @@ ExportPublic("MSUF_IsInEditMode", MSUF_IsInEditMode)
 local function MSUF_GetAnchorFrame()
     local db = _G.MSUF_DB
     local g = db and db.general or {}
-    if g.anchorToCooldown then
+    local isCooldownAnchorEnabled = _G.MSUF_IsCooldownAnchorEnabled
+    local cooldownAnchorEnabled = type(isCooldownAnchorEnabled) == "function"
+        and isCooldownAnchorEnabled(g) == true
+        or g.anchorToCooldown == true
+    if cooldownAnchorEnabled then
         local ecv = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer")) or _G["EssentialCooldownViewer"]
         if ecv then return ecv end
         return UIParent
