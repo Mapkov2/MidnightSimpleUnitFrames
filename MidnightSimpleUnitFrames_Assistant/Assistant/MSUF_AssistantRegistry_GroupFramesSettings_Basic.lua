@@ -165,6 +165,11 @@ function A.GroupFramesRegistry.RegisterBasicSettings(ctx, scope)
     AddAliasesForUnit(aliases, scope, "raid manager arrow")
     AddAliasesForUnit(aliases, scope, "hide raid manager", "raid manager ausblenden")
     AddAliasesForUnit(aliases, scope, "raid manager visibility", "raid manager sichtbarkeit")
+    if scope == "party" then
+        aliases[#aliases + 1] = "party blizzard manager"
+    elseif scope == "mythicraid" then
+        aliases[#aliases + 1] = "mythic blizzard manager"
+    end
     RegisterGroupEnum(scope, "raidManagerMode", "raidManagerMode", "Blizzard Raid Manager", "AUTO", { "AUTO", "SHOW", "MOUSEOVER", "HIDDEN" }, {
         auto = "AUTO",
         automatic = "AUTO",

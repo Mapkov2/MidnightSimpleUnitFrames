@@ -357,7 +357,7 @@ local NEGATIVE_VERBS = { disable = true, hide = true }
 -- those commands. It stays in the post-verb determiner list below, where a
 -- value can never appear.
 local COMMAND_FILLER_TOKENS = {
-    please = true, pls = true, kindly = true, just = true, now = true,
+    please = true, pls = true, kindly = true, just = true, now = true, fully = true,
     hey = true, hi = true, hello = true, assistant = true,
     ok = true, okay = true, also = true,
     bitte = true, mal = true, jetzt = true,
@@ -658,6 +658,7 @@ function P.ParseRegistryExactAliasShortcut(text, raw, opts)
     -- indexed alias; anything looser defers to the topical fast paths.
     local minTokens = type(opts) == "table" and tonumber(opts.minTokens) or nil
     local fullPhrase = type(opts) == "table" and opts.fullPhrase == true
+    local fullPhraseMatchedSetting
 
     local tokens = Tokens(text)
     if not HasTriggerToken(index, tokens) then return nil end
@@ -685,6 +686,7 @@ function P.ParseRegistryExactAliasShortcut(text, raw, opts)
             if not fixedString and (setting.type ~= "enum" or text:find("|", 1, true)) then return nil end
         end
         matches[1] = { setting = setting, score = #Compact(subject) }
+        fullPhraseMatchedSetting = setting
         seen[setting] = true
         if setting.type == "boolean" and boolFromVerb ~= nil then
             -- When the stored flag is inverted relative to the spoken feature
@@ -693,7 +695,7 @@ function P.ParseRegistryExactAliasShortcut(text, raw, opts)
             -- applies when the negation word is absent from the alias itself.
             local hay = (tostring(setting.attribute or "") .. " " .. tostring(setting.label or "")):lower()
             local subjectText = " " .. subject .. " "
-            for word in ("hide hidden disable disabled suppress"):gmatch("%S+") do
+            for word in ("hide hidden disable disabled suppress kill"):gmatch("%S+") do
                 if hay:find(word, 1, true) and not subjectText:find(" " .. word .. " ", 1, true) then
                     boolFromVerb = not boolFromVerb
                     break
@@ -747,7 +749,20 @@ function P.ParseRegistryExactAliasShortcut(text, raw, opts)
     if #changes == 0 then
         -- Pre-pass mode must stay silent so the sentence keeps flowing through
         -- the regular pipeline instead of dead-ending in a value question.
-        if fullPhrase then return nil end
+        -- A bare change/adjust request for one exact boolean label is the safe
+        -- exception: the subject is fully resolved, but no polarity was given.
+        if fullPhrase then
+            if fullPhraseMatchedSetting and fullPhraseMatchedSetting.type == "boolean"
+                and (tokens[1] == "change" or tokens[1] == "adjust")
+                and (type(P.RegistrySettingMayMatchExactAlias) ~= "function"
+                    or P.RegistrySettingMayMatchExactAlias(fullPhraseMatchedSetting, text) == true)
+            then
+                return MissingValueResponse and MissingValueResponse({
+                    { setting = fullPhraseMatchedSetting, score = 30000 },
+                }, raw) or nil
+            end
+            return nil
+        end
         return MissingValueResponse and MissingValueResponse(missingValue, raw) or nil
     end
     local primaryChangeCount = 0

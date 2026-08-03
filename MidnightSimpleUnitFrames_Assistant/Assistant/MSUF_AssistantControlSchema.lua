@@ -993,6 +993,15 @@ local function LastNumber(text)
     return value
 end
 
+local function DescriptorInputText(top, text)
+    local normalized = Normalize(text)
+    local label = Normalize(top and top.label or "")
+    local startAt = label ~= "" and normalized:find(label, 1, true) or nil
+    if not startAt then return normalized end
+    local endAt = startAt + #label - 1
+    return normalized:sub(1, startAt - 1) .. " " .. normalized:sub(endAt + 1)
+end
+
 local function ParseDescriptorValue(top, text)
     local setting = DescriptorValueSetting(top)
     if not setting then return nil, false end
@@ -1006,12 +1015,17 @@ local function ParseDescriptorValue(top, text)
     end
     local value
     if setting.type == "boolean" then
-        value = BooleanIntent(" " .. normalized .. " ")
+        value = BooleanIntent(" " .. DescriptorInputText(top, text) .. " ")
     elseif setting.type == "number" then
-        value = LastNumber(text)
+        value = LastNumber(DescriptorInputText(top, text))
         if value and setting.percent and tostring(text or ""):find("%%") and value > 1 then value = value / 100 end
     elseif setting.type == "enum" and Parser and type(Parser.EnumValueForText) == "function" then
         value = Parser.EnumValueForText(setting, normalized)
+        if value == nil and tostring(text or ""):find("%", 1, true) then
+            for i = 1, #(setting.values or {}) do
+                if setting.values[i] == "PERCENT" then value = "PERCENT" break end
+            end
+        end
     elseif setting.type == "string" then
         if Parser and type(Parser.StringValueForText) == "function" then
             value = Parser.StringValueForText(setting, normalized, text)
