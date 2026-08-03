@@ -1037,6 +1037,12 @@ local function BuildGFRangeFadeSection(ctx, b)
             end,
             default,
             ControlMeta(ctx, "field." .. tostring(key)))
+        if key == "rangeFadeAlpha" and M.BindSliderDragPreview and M.SetRangeFadePreviewState then
+            M.BindSliderDragPreview(control, function(active, value)
+                M.SetRangeFadePreviewState("group", active, value,
+                    Val(CurrentScope(), "rangeFadeLayerMode", "frame"))
+            end)
+        end
         W.MoveWidget(control, rangeAlphaCard, 16, y, rangeRightWidth - 58, "CENTER")
         return M.BindSliderLiveLabel(ctx, control, function() return Num(CurrentScope(), key, default) end,
             function(value) return AlphaLabel(label, tonumber(value) or default or 0) end, true)

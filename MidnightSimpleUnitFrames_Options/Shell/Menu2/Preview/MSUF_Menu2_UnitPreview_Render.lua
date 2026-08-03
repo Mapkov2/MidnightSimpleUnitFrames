@@ -1946,6 +1946,10 @@ function Preview.Refresh(box, reason)
     mock.healthBar:SetStatusBarColor(hr, hg, hb, 1)
     local healthFillAlpha = max(0, min(1, tonumber(conf and conf.hpBarAlpha)
         or tonumber(runtimeSpec and runtimeSpec.alpha and runtimeSpec.alpha.hpAlpha) or 1))
+    if box._msuf2RangeFadePreviewLayerMode == "health" then
+        healthFillAlpha = healthFillAlpha * max(0, min(1,
+            tonumber(box._msuf2RangeFadePreviewAlpha) or 1))
+    end
     mock.hp:SetAlpha(healthFillAlpha)
     RenderTextureLayerPreview(box, mock, conf, PreviewLayerWanted(box, "texLayer"), S, sw, baseLevel, SetTex, PlaceHandle, R.ClassColor(data.class))
     if powerOn then

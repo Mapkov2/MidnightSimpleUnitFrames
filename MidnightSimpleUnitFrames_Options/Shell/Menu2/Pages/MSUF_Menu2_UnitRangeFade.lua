@@ -45,6 +45,12 @@ local function BuildRangeFade(ctx, builder, unit)
         function(v) SetNumber(unit, "rangeFadeAlpha", v, "MSUF2_RANGE_FADE_ALPHA", { preview = true }) end,
         0.4,
         SettingMeta(ctx, "range_fade.alpha", unit, "rangeFadeAlpha"))
+    if M.BindSliderDragPreview and M.SetRangeFadePreviewState then
+        M.BindSliderDragPreview(slider, function(active, value)
+            local layerMode = GetConf(unit).rangeFadeLayerMode == "health" and "health" or "frame"
+            M.SetRangeFadePreviewState("unit", active, value, layerMode)
+        end)
+    end
     W.MoveWidget(slider, alphaCard, 16, -54, rightW - 58, "LEFT")
     local mode = W.Segment(alphaCard, "Affects", VT("frame", "Whole", "health", "HP"), rightW - 32)
     M.BindSegment(ctx, mode,
