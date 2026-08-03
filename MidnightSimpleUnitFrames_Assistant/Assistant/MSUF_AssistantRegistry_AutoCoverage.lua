@@ -1346,6 +1346,45 @@ local REVIEWED_MENU_DOMAINS = {
     -- group dispel overlay layer by literal key on the group bars page.
     dispelOverlayLayer = { min = 0, max = 30, step = 1, source = "visual.dispel.layer",
         sharedSlider = { file = "Pages/MSUF_Menu2_GroupBars.lua", label = "Effect Layer (0-30)" } },
+
+    -- The Dispel Symbol card (BuildGFDispelSymbolSection) binds every number it
+    -- owns through ScopeNumberSlider with a literal range, so the whole card
+    -- transcribes without inference. Its layer slider reuses the same
+    -- "Effect Layer (0-30)" label and the same 0..30 range as the dispel overlay
+    -- above, so the shared-label lookup still resolves to one domain.
+    dispelSymbolSize = { min = 4, max = 48, step = 1, source = "visual.dispel.symbol.size",
+        sharedSlider = { file = "Pages/MSUF_Menu2_GroupBars.lua", label = "Symbol size" } },
+    dispelSymbolX = { min = -128, max = 128, step = 1, source = "visual.dispel.symbol.x",
+        sharedSlider = { file = "Pages/MSUF_Menu2_GroupBars.lua", label = "Offset X" } },
+    dispelSymbolY = { min = -128, max = 128, step = 1, source = "visual.dispel.symbol.y",
+        sharedSlider = { file = "Pages/MSUF_Menu2_GroupBars.lua", label = "Offset Y" } },
+    dispelSymbolSpacing = { min = 0, max = 32, step = 1, source = "visual.dispel.symbol.spacing",
+        sharedSlider = { file = "Pages/MSUF_Menu2_GroupBars.lua", label = "Symbol spacing" } },
+    dispelSymbolAlpha = { min = 0.05, max = 1, step = 0.05, source = "visual.dispel.symbol.opacity",
+        sharedSlider = { file = "Pages/MSUF_Menu2_GroupBars.lua", label = "Symbol opacity" } },
+    dispelSymbolLayer = { min = 0, max = 30, step = 1, source = "visual.dispel.symbol.layer",
+        sharedSlider = { file = "Pages/MSUF_Menu2_GroupBars.lua", label = "Effect Layer (0-30)" } },
+
+    -- Status text placement offsets. The status section binds X/Y twice against
+    -- the SAME descriptor field: the standard card at -500..500 and an extended
+    -- card at -1000..1000. Both write spec.x / spec.y, so the extended pair is
+    -- the widest range the shipped menu can actually produce, and transcribing
+    -- it means the Assistant never refuses a placement a player can set by hand.
+    -- BindStatusPlacementSlider states no step literal (it builds
+    -- W.Slider(parent, label, minValue, maxValue, 1, 300) and rounds to whole
+    -- numbers), so step 1 is the ledger's part, exactly as for the Layer entry.
+    statusAFKTextOffsetX = { min = -1000, max = 1000, step = 1, source = "status.placement.x",
+        sharedSlider = { file = "Pages/MSUF_Menu2_UnitStatusSection.lua", label = "X Offset (extended)" } },
+    statusAFKTextOffsetY = { min = -1000, max = 1000, step = 1, source = "status.placement.y",
+        sharedSlider = { file = "Pages/MSUF_Menu2_UnitStatusSection.lua", label = "Y Offset (extended)" } },
+    statusDNDTextOffsetX = { min = -1000, max = 1000, step = 1, source = "status.placement.x",
+        sharedSlider = { file = "Pages/MSUF_Menu2_UnitStatusSection.lua", label = "X Offset (extended)" } },
+    statusDNDTextOffsetY = { min = -1000, max = 1000, step = 1, source = "status.placement.y",
+        sharedSlider = { file = "Pages/MSUF_Menu2_UnitStatusSection.lua", label = "Y Offset (extended)" } },
+    statusGhostTextOffsetX = { min = -1000, max = 1000, step = 1, source = "status.placement.x",
+        sharedSlider = { file = "Pages/MSUF_Menu2_UnitStatusSection.lua", label = "X Offset (extended)" } },
+    statusGhostTextOffsetY = { min = -1000, max = 1000, step = 1, source = "status.placement.y",
+        sharedSlider = { file = "Pages/MSUF_Menu2_UnitStatusSection.lua", label = "Y Offset (extended)" } },
 }
 Auto.ReviewedMenuDomains = REVIEWED_MENU_DOMAINS
 
