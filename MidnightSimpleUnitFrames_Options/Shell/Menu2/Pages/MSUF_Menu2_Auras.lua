@@ -691,6 +691,19 @@ local function BuildAuraStyleNav(ctx, b, scope)
         or (tostring(current):match("^custom[123]$") and ("Custom " .. tostring(current):match("(%d)$") .. " Aura Style"))
         or (LaneTitle(current) .. " Aura Style")
     M.AttachAuraFontsAndColors(section, title, scope)
+    -- Dock the container strip beneath the already-docked scope strip, like
+    -- the unit pages' Editing strip: scope, container and preview form one fixed
+    -- stack before the settings ScrollFrame begins.
+    if W.AttachStickyPageHeader then
+        W.AttachStickyPageHeader(section, {
+            pageKey = ctx and ctx.key,
+            wrapper = ctx and ctx.wrapper,
+            gap = 4,
+            builder = b,
+            ctx = ctx,
+            flowGap = 12,
+        })
+    end
     return current
 end
 local function OtherLane(kind)
@@ -1731,12 +1744,14 @@ local EnsureCustomPreviewEffect
 local RefreshCustomPreviewEffect
 local RefreshAuraFrameEffectPreview
 local function BuildAuraStylePreviewWorkbench(ctx, b, scope, lane)
-    local rowY = -(T.Space("xxl", 32) + T.Space("md", 12))
-    local panelY = rowY - T.Space("xxl", 32) - T.Space("optical", 2)
-    local panelH = T.Space("xxl", 32) * 4 + T.Space("lg", 16) + T.Space("xs", 4)
-    local sectionH = abs(panelY) + panelH + T.Space("lg", 16)
-    local sectionId = "aura_style_" .. tostring(lane or "auras") .. "_preview"
-    local section = b:CollapsibleSection(sectionId, "Preview", sectionH, true)
+    local rowY = -40
+    local panelY = -68
+    local panelH = 100
+    local sectionH = 180
+    local section, _, fixedPreview = W.FixedPreviewSection(ctx, b, {
+        title = "Preview",
+        height = sectionH,
+    })
     local width = section._msuf2Width or b.width or 720
     local pad = T.Space("xl", 24)
     local labelW = T.Space("xl", 24) * 3 + T.Space("md", 12)
@@ -1836,12 +1851,8 @@ local function BuildAuraStylePreviewWorkbench(ctx, b, scope, lane)
         ctx.wrapper:HookScript("OnShow", QueueVisibleAuraPreview)
     end
     QueueVisibleAuraPreview()
-    -- The style preview never scrolls away: counter-scrolled in place,
-    -- page-native lifecycle untouched.
-    local previewEntry = section._msuf2CollapsibleEntry
-    if previewEntry and W.PinSectionInScroll then
-        W.PinSectionInScroll(previewEntry, { wrapper = ctx and ctx.wrapper })
-    end
+    -- Fixed under the Aura scope/navigation stack; styling controls scroll below.
+    if fixedPreview then fixedPreview.onActivate = QueueVisibleAuraPreview end
     return refreshPreview
 end
 local function BuildUnitStyle(ctx, b, scope)
@@ -2866,16 +2877,26 @@ local function CustomStyleSectionId(index, suffix)
     return "aura_style_custom_" .. tostring(index or 1) .. "_" .. tostring(suffix or "section")
 end
 local function BuildCustomAuraStylePreview(ctx, b, scope, index)
-    local section = b:CollapsibleSection(CustomStyleSectionId(index, "preview"), "Preview", 452, true)
+    local section, _, fixedPreview = W.FixedPreviewSection(ctx, b, {
+        title = "Preview",
+        height = 180,
+    })
     local w = section._msuf2Width or b.width or 720
-    local liveRefresh = select(2, BuildLiveAuraPreview(ctx, section, scope, "custom" .. tostring(index), 24, -34, w - 48, 176))
-    local dummyBox, dummyRefresh = BuildMiniAuraPreview(ctx, section, scope, 24, -220, w - 48, 176, nil, {
+    local pad, gap = 16, 12
+    local previewW = max(160, floor((w - (pad * 2) - gap) * 0.5))
+    local liveRefresh = select(2, BuildLiveAuraPreview(ctx, section, scope, "custom" .. tostring(index),
+        pad, -38, previewW, 132))
+    local dummyBox, dummyRefresh = BuildMiniAuraPreview(ctx, section, scope,
+        pad + previewW + gap, -38, previewW, 132, nil, {
         customIndex = index,
         title = index == 4
             and (scope == "player" and "Defensive Buff Style Preview" or "Tracked DoT Style Preview")
             or "Dummy + Whitelist Style Preview",
     })
-    local meta = W.Text(section, "", 24, -414, w - 48, T.colors.muted)
+    local meta = W.Text(section, "", 104, -14, w - 120, T.colors.muted)
+    if meta.SetJustifyH then meta:SetJustifyH("RIGHT") end
+    if meta.SetMaxLines then meta:SetMaxLines(1) end
+    if meta.SetWordWrap then meta:SetWordWrap(false) end
     local function RefreshCustomPreview()
         RefreshMiniAuraPreviewNow(liveRefresh)
         RefreshMiniAuraPreviewNow(dummyRefresh)
@@ -2896,6 +2917,7 @@ local function BuildCustomAuraStylePreview(ctx, b, scope, index)
     end
     ctx._auraAppearancePreviewRefresh = RefreshCustomPreview
     M.TrackRefresh(ctx, RefreshCustomPreview)
+    if fixedPreview then fixedPreview.onActivate = RefreshCustomPreview end
     return section
 end
 local function BuildAuraStylePage(ctx)
@@ -5222,8 +5244,8 @@ end
 
 -- Appearance keeps the scope-aware style editor. Old content/filter routes remain
 -- as compatibility landings and direct users to the matching frame Aura menu.
-M.RegisterPage("auras3_buffs", { title = "Aura Style: Buffs", build = function(ctx) BuildAuraStyleLanePage(ctx, "buff") end, version = 23 })
-M.RegisterPage("auras3_debuffs", { title = "Aura Style: Debuffs", build = function(ctx) BuildAuraStyleLanePage(ctx, "debuff") end, version = 23 })
+M.RegisterPage("auras3_buffs", { title = "Aura Style: Buffs", build = function(ctx) BuildAuraStyleLanePage(ctx, "buff") end, version = 24 })
+M.RegisterPage("auras3_debuffs", { title = "Aura Style: Debuffs", build = function(ctx) BuildAuraStyleLanePage(ctx, "debuff") end, version = 24 })
 M.RegisterPage("auras3_custom", { title = "MSUF Auras", build = BuildMovedAuraPage, version = 2 })
-M.RegisterPage("auras3_styling", { title = "Aura Style", build = BuildAuraStylePage, version = 47 })
+M.RegisterPage("auras3_styling", { title = "Aura Style", build = BuildAuraStylePage, version = 48 })
 M.RegisterPage("auras3_filters", { title = "MSUF Auras", build = BuildMovedAuraPage, version = 31 })

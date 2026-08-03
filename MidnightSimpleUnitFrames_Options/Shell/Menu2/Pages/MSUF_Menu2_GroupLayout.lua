@@ -13,7 +13,8 @@ local min = math.min
 local VT = M.ValueTextList
 local SCOPE_VALUES, GROWTH_VALUES, SORT_MODES, GF_ANCHOR_TO, GF_ANCHOR_POINTS = M.PickDefaults(GP, [[SCOPE_VALUES GROWTH_VALUES SORT_MODES GF_ANCHOR_TO GF_ANCHOR_POINTS]])
 local GROUP_FRAME_PROVIDER_VALUES = GP.GROUP_FRAME_PROVIDER_VALUES or {}
-local GF, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection, CurrentScope, BindScopeToggle, ScopeDropdown, ScopeSlider, BuildGrowthDirectionTiles, BuildRoleOrderRows, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, TrackSectionRefresh, OnOffBadge, BadgeNumber, OptionText, CreateSectionNotice, ControlMeta, RegisterControl, RefreshContext, FrameProvider, FrameProviderLabel, FrameProviderTooltip, SetFrameProvider = M.Pick(GP, [[GF Conf Val QueueGF Set Bool Num ScopeSection CurrentScope BindScopeToggle ScopeDropdown ScopeSlider BuildGrowthDirectionTiles BuildRoleOrderRows SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus TrackSectionRefresh OnOffBadge BadgeNumber OptionText CreateSectionNotice ControlMeta RegisterControl RefreshContext FrameProvider FrameProviderLabel FrameProviderTooltip SetFrameProvider]])
+local GROUP_RAID_MANAGER_VALUES = GP.GROUP_RAID_MANAGER_VALUES or {}
+local GF, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection, CurrentScope, BindScopeToggle, ScopeDropdown, ScopeSlider, BuildGrowthDirectionTiles, BuildRoleOrderRows, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, TrackSectionRefresh, OnOffBadge, BadgeNumber, OptionText, CreateSectionNotice, ControlMeta, RegisterControl, RefreshContext, FrameProvider, FrameProviderLabel, FrameProviderTooltip, SetFrameProvider, RaidManagerMode, SetRaidManagerMode = M.Pick(GP, [[GF Conf Val QueueGF Set Bool Num ScopeSection CurrentScope BindScopeToggle ScopeDropdown ScopeSlider BuildGrowthDirectionTiles BuildRoleOrderRows SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus TrackSectionRefresh OnOffBadge BadgeNumber OptionText CreateSectionNotice ControlMeta RegisterControl RefreshContext FrameProvider FrameProviderLabel FrameProviderTooltip SetFrameProvider RaidManagerMode SetRaidManagerMode]])
 SetSectionBadgesAndStatus = SetSectionBadgesAndStatus or M.Noop
 OnOffBadge = OnOffBadge or M.OnOffBadge
 BadgeNumber = BadgeNumber or M.BadgeNumber
@@ -120,7 +121,7 @@ local function RefreshFrameBasicsProviderHeader(section)
     return provider, usesMSUF, offlineHidden
 end
 local function BuildGFGeneralSection(ctx, b)
-    local general = b:CollapsibleSection("general", "Frame Basics", 430, false)
+    local general = b:CollapsibleSection("general", "Frame Basics", 480, false)
     local generalW = general._msuf2Width or b.width or 720
     local generalLeftX = 32
     local generalRightX = min(max(430, floor(generalW * 0.52)), max(360, generalW - 360))
@@ -176,16 +177,39 @@ local function BuildGFGeneralSection(ctx, b)
         { "Hide during client scene", generalRightX, -184, generalRightToggleW, "layout", "hideInClientScene", true, "visual" },
         { "Click casting / Clique", generalRightX, -214, generalRightToggleW, "layout", "clickCastEnabled", true, "rebuild" },
     }, { ["*"] = function(s) return BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(general, s[1], s[2], s[3], s[4]), s[5]), s[6], s[7], s[8]) end }, nil, msufControls)
-    W.DividerAt(general, -256, generalLeftX, 32)
-    W.LabelAt(general, "Offline Members", generalLeftX, -274, generalLeftW, "GameFontNormalSmall", T.colors.accent)
-    local hideOfflineEnabled = BindScopeToggle(ctx, AttachGroupFocus(W.SwitchAt(general, "Offline Members", generalLeftX, -300, generalLeftW), "layout"), "hideOfflineEnabled", false, "visual")
-    local hideOfflineCombat = BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(general, "Hide offline in combat", generalRightX, -300, generalRightToggleW), "layout"), "hideOfflineInCombat", false, "visual")
-    local hideOffline = AttachGroupFocus(ScopeSlider(ctx, general, "Hide offline after", 0, 120, 1, offlineSliderW, "hideOfflineDelay", 0, "visual", generalLeftX, -334, offlineSliderW, "LEFT"), "layout")
+    --- Blizzard's Raid Manager tab is one shared frame, so this control is deliberately
+    --- not scope-bound: it reads and writes Party, Raid and Mythic Raid together. It also
+    --- stays live on the Blizzard providers, where MSUF's ownership pass never hides the
+    --- tab -- so it must not join msufControls, which grey out when the provider is not MSUF.
+    local raidManager = AttachGroupFocus(W.Dropdown(general, "Blizzard Raid Manager", GROUP_RAID_MANAGER_VALUES, min(300, generalLeftW)), "layout")
+    W.MoveWidget(raidManager, general, generalLeftX, -220, min(300, generalLeftW), "LEFT")
+    raidManager._msuf2GroupFrameGateAlwaysEnabled = true
+    M.BindDropdownWidget(ctx, raidManager,
+        function() return RaidManagerMode() end,
+        function(value) SetRaidManagerMode(value) end,
+        ControlMeta(ctx, "basics.raid_manager"))
+    if M.AddTooltip then
+        M.AddTooltip(raidManager,
+            function() return M.Tr("Blizzard Raid Manager") end,
+            function()
+                return M.Tr("Blizzard's tab at the left screen edge with ready check, raid markers, and role filters. One shared frame, so this setting is the same for Party, Raid, and Mythic Raid.")
+            end,
+            { hook = true, owner = "ANCHOR_RIGHT" })
+    end
+    local raidManagerHelp = W.Text(general,
+        "Shared by Party, Raid, and Mythic Raid. Automatic keeps the tab hidden while MSUF provides the group frames.",
+        generalRightX, -250, generalRightW, T.colors.muted)
+    if raidManagerHelp and raidManagerHelp.SetWordWrap then raidManagerHelp:SetWordWrap(true) end
+    W.DividerAt(general, -306, generalLeftX, 32)
+    W.LabelAt(general, "Offline Members", generalLeftX, -324, generalLeftW, "GameFontNormalSmall", T.colors.accent)
+    local hideOfflineEnabled = BindScopeToggle(ctx, AttachGroupFocus(W.SwitchAt(general, "Offline Members", generalLeftX, -350, generalLeftW), "layout"), "hideOfflineEnabled", false, "visual")
+    local hideOfflineCombat = BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(general, "Hide offline in combat", generalRightX, -350, generalRightToggleW), "layout"), "hideOfflineInCombat", false, "visual")
+    local hideOffline = AttachGroupFocus(ScopeSlider(ctx, general, "Hide offline after", 0, 120, 1, offlineSliderW, "hideOfflineDelay", 0, "visual", generalLeftX, -384, offlineSliderW, "LEFT"), "layout")
     local hideOfflineControls = { hideOfflineCombat, hideOffline }
     local generalNotice, generalNoticeButton
     if type(CreateSectionNotice) == "function" then
         local _
-        generalNotice, _, generalNoticeButton = CreateSectionNotice(general, -374, "Use MSUF", 104)
+        generalNotice, _, generalNoticeButton = CreateSectionNotice(general, -424, "Use MSUF", 104)
     end
     if generalNoticeButton then
         RegisterControl(generalNoticeButton, ctx, "scope.use_msuf_now", "Use MSUF", "button", "setting", {
@@ -673,7 +697,7 @@ end
 
 local GROUP_LAYOUT_SECTION_SPECS = {
     {
-        sectionId = "general", title = "Frame Basics", height = 430, build = BuildGFGeneralSection,
+        sectionId = "general", title = "Frame Basics", height = 480, build = BuildGFGeneralSection,
         prepareShell = function(ctx, section)
             local function RefreshProviderHeader() RefreshFrameBasicsProviderHeader(section) end
             if M.AddRefresherOnce then
@@ -724,4 +748,4 @@ local function BuildGFLayout(ctx)
     end
     FinalizeScopePage(ctx, b)
 end
-M.RegisterPage("gf_layout", { title = "MSUF Group Layout", build = BuildGFLayout, version = 25 })
+M.RegisterPage("gf_layout", { title = "MSUF Group Layout", build = BuildGFLayout, version = 26 })

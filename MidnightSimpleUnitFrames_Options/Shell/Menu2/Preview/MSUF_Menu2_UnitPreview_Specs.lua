@@ -54,7 +54,6 @@ statusPvp|showPvpIndicator|pvpIndicatorSize|pvpIndicatorAnchor|pvpIndicatorOffse
 ]]
 specs.PreviewLayers = LayerRows [[
 guides|Guides|0.42,0.72,1.00|Mover highlights and selected borders.
-body|Body|0.36,0.62,0.95
 nameText|Name|0.30,0.66,1.00
 hpText|HP Text|0.25,0.90,0.42
 powerText|Pwr Text|0.95,0.72,0.18

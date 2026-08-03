@@ -182,7 +182,14 @@ local function LayoutPhysicalBossBorder(frame, thickness)
     return false
   end
 
-  local pixelCount = math.floor((tonumber(thickness) or 1) + 0.5)
+  -- Every other frame draws the configured thickness in unitframe units, so it
+  -- grows with the frame's effective scale. Convert the setting into that same
+  -- on-screen size first and only then snap it to whole physical pixels;
+  -- treating it as a raw pixel count made the boss outline visibly thinner than
+  -- target/focus/group at any UI scale other than the pixel-perfect one.
+  local scale = (frame.GetEffectiveScale and frame:GetEffectiveScale()) or 1
+  if type(scale) ~= "number" or scale <= 0 then scale = 1 end
+  local pixelCount = math.floor(((tonumber(thickness) or 1) * scale) / pixel + 0.5)
   if pixelCount < 1 then pixelCount = 1 end
   local edgeSize = pixel * pixelCount
   local edges = frame.MSUFBorderEdges

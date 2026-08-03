@@ -868,6 +868,7 @@ local ClampZoom = GFZoomPan.Clamp or function(value)
     return floor(value * 100 + 0.5) / 100
 end
 local UpdateZoomControls = GFZoomPan.UpdateControls or F.Noop
+local ResolveDefaultZoomLock = GFZoomPan.ResolveDefaultLock or F.Noop
 local SetZoom = GFZoomPan.SetZoom or F.Noop
 local StepZoom = GFZoomPan.Step or F.Noop
 local StartPan = GFZoomPan.Start or F.False
@@ -1234,6 +1235,7 @@ local NativeDeps = {
     Tr = Tr,
     StepZoom = StepZoom,
     SetZoom = SetZoom,
+    ResolveDefaultZoomLock = ResolveDefaultZoomLock,
     StartPan = StartPan,
     StopPan = StopPan,
     ZoomWheel = F.Noop,
@@ -1380,7 +1382,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     if stage.SetClipsChildren then stage:SetClipsChildren(true) end
     stage:EnableMouse(true)
     stage:EnableMouseWheel(true)
-    if stage.SetPropagateMouseWheel then stage:SetPropagateMouseWheel(true) end
+    if stage.SetPropagateMouseWheel then stage:SetPropagateMouseWheel(false) end
     box._stage = stage
     PreviewHelpers.BuildZoomBar(box, stage, {
         template = T.Template(),
@@ -1398,6 +1400,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         fitReason = "GROUP_PREVIEW_ZOOM_FIT",
         oneReason = "GROUP_PREVIEW_ZOOM_1TO1",
         lockButton = true,
+        defaultLocked = true,
         lockReason = "GROUP_PREVIEW_ZOOM_LOCK",
         unlockReason = "GROUP_PREVIEW_ZOOM_UNLOCK",
     })
@@ -1628,7 +1631,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     mock:SetBackdropBorderColor(0.0, 0.0, 0.0, 0)
     mock:EnableMouse(true)
     mock:EnableMouseWheel(true)
-    if mock.SetPropagateMouseWheel then mock:SetPropagateMouseWheel(true) end
+    if mock.SetPropagateMouseWheel then mock:SetPropagateMouseWheel(false) end
     mock:SetScript("OnMouseWheel", R.ZoomWheel)
     mock:SetScript("OnMouseDown", function(_, button) R.StartPan(stage, box, button) end)
     mock:SetScript("OnMouseUp", function()

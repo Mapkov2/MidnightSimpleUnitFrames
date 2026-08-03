@@ -3478,4 +3478,4 @@ local function BuildColors(ctx)
     b:RelayoutCollapsibles()
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
-M.RegisterPage("opt_colors", { title = "MSUF Colors", build = BuildColors, version = 19 })
+M.RegisterPage("opt_colors", { title = "MSUF Colors", build = BuildColors, version = 20 })

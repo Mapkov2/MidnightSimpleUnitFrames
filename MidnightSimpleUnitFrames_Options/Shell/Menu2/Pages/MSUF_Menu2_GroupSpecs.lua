@@ -49,6 +49,34 @@ local Specs = {
             tooltip = "Hides both MSUF and Blizzard group frames for this scope. Your saved MSUF layout remains unchanged.",
         },
     },
+    --- Blizzard's Raid Manager is a single shared frame, so this value is not per scope
+    --- even though it is stored in all three gf_* rows. Menu2 writes them together.
+    GROUP_RAID_MANAGER_VALUES = {
+        {
+            value = "AUTO",
+            text = "Automatic",
+            tooltipTitle = "Automatic",
+            tooltip = "Hides the Raid Manager while MSUF provides the live group frames, and leaves it to WoW otherwise. This is how MSUF has always behaved.",
+        },
+        {
+            value = "SHOW",
+            text = "Always visible",
+            tooltipTitle = "Always visible",
+            tooltip = "Keeps the Raid Manager reachable even with MSUF group frames on. Use this when you still want its ready check, raid markers, and role filters.",
+        },
+        {
+            value = "MOUSEOVER",
+            text = "Show on mouseover",
+            tooltipTitle = "Show on mouseover",
+            tooltip = "Fades the Raid Manager out until the mouse touches it. Ready check, raid markers, and role filters stay reachable, and an expanded panel stays visible until you collapse it again.",
+        },
+        {
+            value = "HIDDEN",
+            text = "Always hidden",
+            tooltipTitle = "Always hidden",
+            tooltip = "Keeps the Raid Manager invisible and click-through at all times. Switch back to reach its buttons again.",
+        },
+    },
     HEALTH_MODES = VTP "CLASS=Class|GRADIENT=Gradient|CUSTOM=Custom",
     TEXT_MODES = VTP "NONE=None|PERCENT=Percent|CURRENT=Current|FULLVALUE=Full Value|MAX=Max|DEFICIT=Deficit|CURMAX=Current / Max|CURPERCENT=Current / Percent|CURMAXPERCENT=Current / Max / Percent|MAXPERCENT=Max / Percent|PERCENTCUR=Percent / Current|PERCENTMAX=Percent / Max|PERCENTCURMAX=Percent / Current / Max",
     HEALTH_TEXT_MODES = VTP "NONE=None|ABSORB=Absorb|CURRENTABSORB=Current + Absorb|FULLVALUEABSORB=Full Value + Absorb|MAXABSORB=Max + Absorb|DEFICITABSORB=Deficit + Absorb|CURMAXABSORB=Current / Max + Absorb|PERCENTABSORB=Percent + Absorb|CURPERCENTABSORB=Current / Percent + Absorb|CURMAXPERCENTABSORB=Current / Max / Percent + Absorb|MAXPERCENTABSORB=Max / Percent + Absorb|PERCENTCURABSORB=Percent / Current + Absorb|PERCENTMAXABSORB=Percent / Max + Absorb|PERCENTCURMAXABSORB=Percent / Current / Max + Absorb|PERCENT=Percent|CURRENT=Current|FULLVALUE=Full Value|MAX=Max|DEFICIT=Deficit|CURMAX=Current / Max|CURPERCENT=Current / Percent|CURMAXPERCENT=Current / Max / Percent|MAXPERCENT=Max / Percent|PERCENTCUR=Percent / Current|PERCENTMAX=Percent / Max|PERCENTCURMAX=Percent / Current / Max",

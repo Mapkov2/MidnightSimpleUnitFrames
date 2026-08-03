@@ -150,7 +150,7 @@ local Pick = M2.Pick
 local AssignNamedValues = M2.AssignNamedValues
 local F = M2.Fallbacks or {}
 local PreviewModel = Preview.Model or {}
-local UNIT_LABELS, UNIT_DATA, PreviewRaidGroupNameAllowed, PreviewRaidGroupNameText, NormalizePreviewRaidGroupNameAnchor, CanonKey, CurrentPanelKey, UnitDB, NormalizeHpMode, NormalizePowerMode, TextScopeGet, TextScopeHasSlots, TextScopeSlotGet, ToTInlineSeparator, ShortenPreviewName, ForceTextUnit, ApplyPanelUnit, EnsureUnitPortraitStyle, PortraitStyleGet, ApplyPortrait, NormalizeStatusPreviewId, ClassColor, HealthColor, HealthBackgroundColor, PowerBackgroundColor, PowerColor, ClassPortraitVisual, UnitPreviewPortraitTexture, FontColor, PreviewNameColor, PreviewToTInlineColor, SetTex, PreviewHealPredictionEnabled, PreviewResolveHealPredAnchorMode, PreviewResolveAbsorbAnchorMode, PreviewAbsorbBarEnabled, LayoutUnitPreviewOverlay, MakeFS, ReadPowerBarEnabled, CanDetachPowerBarKey, ReadPowerBarHeight, ResolveNameAnchor, ResolveNameOffsetDelta, FormatMode, UnitPreviewText = Pick(PreviewModel, [[UNIT_LABELS UNIT_DATA PreviewRaidGroupNameAllowed PreviewRaidGroupNameText NormalizePreviewRaidGroupNameAnchor CanonKey CurrentPanelKey UnitDB NormalizeHpMode NormalizePowerMode TextScopeGet TextScopeHasSlots TextScopeSlotGet ToTInlineSeparator ShortenPreviewName ForceTextUnit ApplyPanelUnit EnsureUnitPortraitStyle PortraitStyleGet ApplyPortrait NormalizeStatusPreviewId ClassColor HealthColor HealthBackgroundColor PowerBackgroundColor PowerColor ClassPortraitVisual UnitPreviewPortraitTexture FontColor PreviewNameColor PreviewToTInlineColor SetTex PreviewHealPredictionEnabled PreviewResolveHealPredAnchorMode PreviewResolveAbsorbAnchorMode PreviewAbsorbBarEnabled LayoutUnitPreviewOverlay MakeFS ReadPowerBarEnabled CanDetachPowerBarKey ReadPowerBarHeight ResolveNameAnchor ResolveNameOffsetDelta FormatMode UnitPreviewText]])
+local UNIT_LABELS, UNIT_DATA, PreviewRaidGroupNameAllowed, PreviewRaidGroupNameText, NormalizePreviewRaidGroupNameAnchor, CanonKey, CurrentPanelKey, UnitDB, NormalizeHpMode, NormalizePowerMode, TextScopeGet, TextScopeHasSlots, TextScopeSlotGet, ToTInlineSeparator, ShortenPreviewName, ForceTextUnit, ApplyPanelUnit, EnsureUnitPortraitStyle, PortraitStyleGet, ApplyPortrait, NormalizeStatusPreviewId, ClassColor, HealthColor, DarkMatchHPColor, HealthBackgroundColor, PowerBackgroundColor, PowerColor, ClassPortraitVisual, UnitPreviewPortraitTexture, FontColor, PreviewNameColor, PreviewToTInlineColor, SetTex, PreviewHealPredictionEnabled, PreviewResolveHealPredAnchorMode, PreviewResolveAbsorbAnchorMode, PreviewAbsorbBarEnabled, LayoutUnitPreviewOverlay, MakeFS, ReadPowerBarEnabled, CanDetachPowerBarKey, ReadPowerBarHeight, ResolveNameAnchor, ResolveNameOffsetDelta, FormatMode, UnitPreviewText = Pick(PreviewModel, [[UNIT_LABELS UNIT_DATA PreviewRaidGroupNameAllowed PreviewRaidGroupNameText NormalizePreviewRaidGroupNameAnchor CanonKey CurrentPanelKey UnitDB NormalizeHpMode NormalizePowerMode TextScopeGet TextScopeHasSlots TextScopeSlotGet ToTInlineSeparator ShortenPreviewName ForceTextUnit ApplyPanelUnit EnsureUnitPortraitStyle PortraitStyleGet ApplyPortrait NormalizeStatusPreviewId ClassColor HealthColor DarkMatchHPColor HealthBackgroundColor PowerBackgroundColor PowerColor ClassPortraitVisual UnitPreviewPortraitTexture FontColor PreviewNameColor PreviewToTInlineColor SetTex PreviewHealPredictionEnabled PreviewResolveHealPredAnchorMode PreviewResolveAbsorbAnchorMode PreviewAbsorbBarEnabled LayoutUnitPreviewOverlay MakeFS ReadPowerBarEnabled CanDetachPowerBarKey ReadPowerBarHeight ResolveNameAnchor ResolveNameOffsetDelta FormatMode UnitPreviewText]])
 Preview.statusPreviewMode = "current"
 Preview.selectedStatusId = nil
 local SelectPreviewHandle
@@ -966,11 +966,13 @@ local function UnitPreviewLayerForHandle(key, fields)
 end
 local function MakeHandle(preview, key, fields, label, color)
     local h = CreateFrame("Button", nil, preview.canvas)
-    h:SetFrameLevel((preview.canvas:GetFrameLevel() or 0) + 30)
+    h:SetFrameLevel((PreviewCore.InteractionFrameLevel and PreviewCore.InteractionFrameLevel(preview.canvas, 0))
+        or ((preview.canvas:GetFrameLevel() or 0) + 30))
     h:SetSize(20, 20)
     h:RegisterForClicks("LeftButtonDown", "LeftButtonUp", "RightButtonUp")
     if h.RegisterForDrag then h:RegisterForDrag("LeftButton") end
     h:EnableMouse(true)
+    if PreviewHelpers.BindPreviewWheel then PreviewHelpers.BindPreviewWheel(h, preview) end
     h:EnableKeyboard(true)
     if h.SetPropagateKeyboardInput then h:SetPropagateKeyboardInput(true) end
     h.tex = h:CreateTexture(nil, "OVERLAY")
@@ -1154,7 +1156,6 @@ local SetPreviewIconTexture = PreviewStatus.SetIconTexture
 local ResolveStatusPreviewAnchor = PreviewStatus.ResolveAnchor
 MenuTheme = PreviewCore.MenuTheme
 local ApplyPreviewBackdrop = PreviewCore.ApplyBackdrop
-local PreviewBaseEdgeColor = PreviewCore.BaseEdgeColor
 local STATUS_PREVIEW = (MSUF.UFPreviewSpecs and MSUF.UFPreviewSpecs.StatusPreview) or {}
 local PREVIEW_LAYERS = (MSUF.UFPreviewSpecs and MSUF.UFPreviewSpecs.PreviewLayers) or {}
 local ZOOM_MIN = tonumber(PreviewZoomPan.MIN) or 0.35
@@ -1617,7 +1618,7 @@ local function BuildPreview(parent, panel, width, height)
     if canvas.SetClipsChildren then canvas:SetClipsChildren(true) end
     canvas:EnableMouse(true)
     canvas:EnableMouseWheel(true)
-    if canvas.SetPropagateMouseWheel then canvas:SetPropagateMouseWheel(true) end
+    if canvas.SetPropagateMouseWheel then canvas:SetPropagateMouseWheel(false) end
     box.canvas = canvas
     PreviewHelpers.BuildZoomBar(box, canvas, {
         texture = TEX_W8,
@@ -1632,6 +1633,7 @@ local function BuildPreview(parent, panel, width, height)
         fitReason = "UNIT_PREVIEW_ZOOM_FIT",
         oneReason = "UNIT_PREVIEW_ZOOM_1TO1",
         lockButton = true,
+        defaultLocked = true,
         lockReason = "UNIT_PREVIEW_ZOOM_LOCK",
         unlockReason = "UNIT_PREVIEW_ZOOM_UNLOCK",
     })
@@ -1811,16 +1813,14 @@ local function BuildPreview(parent, panel, width, height)
         end
         if self._msuf2ElementPicker then self._msuf2ElementPicker:Show() end
     end
-    local mock = CreateFrame("Frame", nil, canvas, "BackdropTemplate")
-    mock:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
-    mock:SetBackdropColor(0, 0, 0, 0.92)
-    do
-        local r, g, b = PreviewBaseEdgeColor()
-        mock:SetBackdropBorderColor(r, g, b, 1)
-    end
+    -- A plain root owns no synthetic Center texture. Only the real health
+    -- background media below may cover the unit-frame rectangle; outlines are
+    -- drawn by the dedicated four-edge overlay in PreviewCore.
+    local mock = CreateFrame("Frame", nil, canvas)
+    if mock.SetBackdropColor then mock:SetBackdropColor(0, 0, 0, 0) end
     box.mock = mock
-    local function MockTexture(field, layer, texture, color, mode)
-        local tex = mock:CreateTexture(nil, layer)
+    local function MockTexture(field, layer, texture, color, mode, owner)
+        local tex = (owner or mock):CreateTexture(nil, layer)
         if mode == "settex" then SetTex(tex, texture or TEX_W8) else tex:SetTexture(texture or TEX_W8) end
         if color then
             if mode == "color" then tex:SetColorTexture(color[1], color[2], color[3], color[4] or 1)
@@ -1839,25 +1839,44 @@ local function BuildPreview(parent, panel, width, height)
             mock[select(i, ...)] = MakeFS(layer, "OVERLAY", 12)
         end
     end
-    mock.bounds = CreateFrame("Frame", nil, mock, "BackdropTemplate")
-    mock.bounds:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
-    mock.bounds:SetBackdropColor(0, 0, 0, 0)
-    mock.bounds:SetBackdropBorderColor(0.25, 0.75, 0.88, 0.92)
+    -- Bounds is guide-line ownership only; it must not create another full-frame
+    -- backdrop Center behind the real bar media.
+    mock.bounds = CreateFrame("Frame", nil, mock)
     mock.bounds:SetFrameLevel((mock:GetFrameLevel() or 0) + 28)
     mock.bounds:SetAllPoints(mock)
     mock.sizeTag = mock.bounds:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     mock.sizeTag:SetPoint("BOTTOM", mock.bounds, "TOP", 0, 2)
     mock.sizeTag:SetTextColor(0.62, 0.84, 0.94, 0.95)
     if T and T.StyleFontString then T.StyleFontString(mock.sizeTag, { 0.62, 0.84, 0.94, 0.95 }, 0) end
-    MockTexture("hpBG", "BACKGROUND", TEX_W8, { 0, 0, 0, 0.82 }, "color")
-    MockTexture("hp", "ARTWORK", type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture() or TEX_W8, nil, "settex")
-    MockTexture("tempMaxHealthBg", "ARTWORK", TEX_W8, { 0, 0, 0, 0.65 }, "color")
-    MockTexture("tempMaxHealth", "ARTWORK", TEX_W8, { 0.70, 0.10, 0.10, 1 })
-    MockTexture("healPred", "ARTWORK", TEX_W8, { 0, 1, 0.4, 0.55 })
-    MockTexture("absorb", "ARTWORK", TEX_W8, { 0.55, 0.70, 1, 0.58 })
-    MockTexture("healAbsorb", "ARTWORK", TEX_W8, { 0.70, 0, 0, 1 })
-    MockTexture("powerBG", "BACKGROUND", TEX_W8, { 0, 0, 0, 0.9 }, "color")
-    MockTexture("power", "ARTWORK", type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture() or TEX_W8, nil, "settex")
+    -- Use the same native StatusBar ownership as the live frame and Group
+    -- Preview. The old unit preview stretched a free-standing Texture as its
+    -- fill; that left a separate full-frame surface which could render black
+    -- instead of showing the selected statusbar/background media.
+    mock.healthBar = CreateFrame("StatusBar", nil, mock)
+    mock.healthBar:SetAllPoints(mock)
+    mock.healthBar:SetMinMaxValues(0, 1)
+    mock.healthBar:SetValue(0.72)
+    mock.healthBar:SetStatusBarTexture(type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture() or TEX_W8)
+    mock.hp = mock.healthBar:GetStatusBarTexture()
+    mock.hpBar, mock.Health, mock.health = mock.healthBar, mock.healthBar, mock.healthBar
+    mock.healthFill = mock.hp
+    if mock.hp and mock.hp.SetDrawLayer then mock.hp:SetDrawLayer("ARTWORK", 0) end
+    if mock.hp then mock.hp:SetAlpha(0) end
+    -- Live Health.Create owns the background on the root frame and insets only
+    -- the StatusBar fill for embedded power. Keep that exact separation here.
+    mock.hpBG = mock:CreateTexture(nil, "BACKGROUND", nil, -7)
+    mock.hpBG:SetAllPoints(mock)
+    mock.hpBG:SetTexture(TEX_W8)
+    mock.hpBG:SetVertexColor(0, 0, 0, 0)
+    mock.bg, mock.hpBarBG, mock.healthBg = mock.hpBG, mock.hpBG, mock.hpBG
+    MockTexture("tempMaxHealthBg", "ARTWORK", TEX_W8, { 0, 0, 0, 0.65 }, "color", mock.healthBar)
+    MockTexture("tempMaxHealth", "ARTWORK", TEX_W8, { 0.70, 0.10, 0.10, 1 }, nil, mock.healthBar)
+    MockTexture("healPred", "ARTWORK", TEX_W8, { 0, 1, 0.4, 0.55 }, nil, mock.healthBar)
+    MockTexture("absorb", "ARTWORK", TEX_W8, { 0.55, 0.70, 1, 0.58 }, nil, mock.healthBar)
+    MockTexture("healAbsorb", "ARTWORK", TEX_W8, { 0.70, 0, 0, 1 }, nil, mock.healthBar)
+    MockTexture("powerBG", "BACKGROUND", TEX_W8, { 0, 0, 0, 0 }, "color")
+    local initialPower = MockTexture("power", "ARTWORK", type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture() or TEX_W8, nil, "settex")
+    initialPower:SetAlpha(0)
     -- Decorative texture layer preview regions (3 slots): child frames so the
     -- render pass can mirror the runtime's per-slot frame-level offsets (see
     -- RenderTextureLayerPreview).
@@ -1946,21 +1965,16 @@ local function BuildPreview(parent, panel, width, height)
     mock.cast:SetBackdrop({ bgFile = TEX_W8 })
     mock.cast:SetBackdropColor(0, 0, 0, 0.92)
     mock.cast:SetBackdropBorderColor(0, 0, 0, 0)
-    mock.cast:EnableMouse(true)
-    mock.cast:SetScript("OnMouseDown", function(_, button)
-        StartPreviewPan(canvas, box, button)
-    end)
+    mock.cast:EnableMouse(false)
     mock.cast:SetScript("OnMouseUp", function(self, button)
         if canvas._msufPreviewPanning then
             StopPreviewPan(canvas)
             return
         end
         if button and button ~= "LeftButton" then return end
-        -- The whole-bar castbar is globally positioned, so it has no drag
-        -- handle - but double-click must still open its settings like every
-        -- other preview element. The castbar handle carries the section
-        -- routing; reuse it. mock.cast is a plain Frame, and OnDoubleClick is
-        -- a Button-only script, so the double-click is detected by hand.
+        -- Whole-bar movement is owned by handleCastbar on the interaction
+        -- layer. This plain Frame keeps the fallback double-click route for
+        -- settings; OnDoubleClick itself is a Button-only script.
         local now = (GetTime and GetTime()) or 0
         if (now - (self._msufLastClickTime or -10)) < 0.35 then
             self._msufLastClickTime = -10
@@ -2011,6 +2025,11 @@ local function BuildPreview(parent, panel, width, height)
     box.handles = {}
     box.dragFrame = CreateFrame("Frame", nil, canvas)
     box.dragFrame:EnableMouse(true)
+    if PreviewHelpers.BindPreviewWheel then PreviewHelpers.BindPreviewWheel(box.dragFrame, box) end
+    if box.dragFrame.SetFrameLevel then
+        box.dragFrame:SetFrameLevel((PreviewCore.InteractionFrameLevel and PreviewCore.InteractionFrameLevel(canvas, 1))
+            or ((canvas:GetFrameLevel() or 0) + 31))
+    end
     box.dragFrame:Hide()
     box._onDragUpdate = function(df)
         local h = df._handle
@@ -2069,6 +2088,28 @@ local function BuildPreview(parent, panel, width, height)
     box:EnableKeyboard(true)
     if box.SetPropagateKeyboardInput then box:SetPropagateKeyboardInput(true) end
     box:SetScript("OnKeyDown", PreviewArrowKeyDown)
+    function box:ReleasePreviewInteraction()
+        self._selectedHandle = nil
+        Preview.SetArrowBindings(self, false)
+        RefreshHandleSelectionVisuals(self)
+        if self.dragFrame then
+            self.dragFrame:SetScript("OnUpdate", nil)
+            self.dragFrame:SetScript("OnMouseUp", nil)
+            self.dragFrame._handle = nil
+            self.dragFrame:Hide()
+        end
+        if self._msufPreviewNudgeTarget
+            and rawget(_G, "MSUF_EM2_ActivePreviewNudgeTarget") == self._msufPreviewNudgeTarget
+            and type(_G.MSUF_EM2_SetPreviewNudgeTarget) == "function"
+        then
+            _G.MSUF_EM2_SetPreviewNudgeTarget(nil)
+        end
+        if PreviewHelpers.ReleaseKeyboardCapture then
+            PreviewHelpers.ReleaseKeyboardCapture(self)
+        elseif self.SetPropagateKeyboardInput then
+            self:SetPropagateKeyboardInput(true)
+        end
+    end
     box:SetScript("OnShow", function(self)
         Preview.active = self
         if PreviewAnimationActive(self) then StartPreviewAnimationDriver(self) end
@@ -2084,20 +2125,9 @@ local function BuildPreview(parent, panel, width, height)
         if self.UnregisterEvent then
             self:UnregisterEvent("PLAYER_REGEN_DISABLED")
         end
-        self._selectedHandle = nil
-        Preview.SetArrowBindings(self, false)
-        RefreshHandleSelectionVisuals(self)
+        self:ReleasePreviewInteraction()
         if Preview.active == self then Preview.active = nil end
         if type(Preview.UninstallRefreshHooks) == "function" then Preview.UninstallRefreshHooks() end
-        self.dragFrame:SetScript("OnUpdate", nil)
-        self.dragFrame:SetScript("OnMouseUp", nil)
-        self.dragFrame._handle = nil
-        if self._msufPreviewNudgeTarget and rawget(_G, "MSUF_EM2_ActivePreviewNudgeTarget") == self._msufPreviewNudgeTarget and type(_G.MSUF_EM2_SetPreviewNudgeTarget) == "function" then _G.MSUF_EM2_SetPreviewNudgeTarget(nil) end
-        if PreviewHelpers.ReleaseKeyboardCapture then
-            PreviewHelpers.ReleaseKeyboardCapture(self)
-        elseif self.SetPropagateKeyboardInput then
-            self:SetPropagateKeyboardInput(true)
-        end
     end)
     box:SetScript("OnEvent", function(self, event)
         if event == "PLAYER_REGEN_DISABLED" then
@@ -2151,10 +2181,10 @@ do
     local deps = Preview.RefreshDeps or {}
     Preview.RefreshDeps = deps
     AssignNamedValues(deps, [[
-        PreviewInCombat TR PortraitStyleGet RuntimeSpecForPreviewKey RuntimeAppliedPortraitSizeForPreviewKey RuntimeVisualScaleForPreviewKey RuntimeCastbarVisualScaleForPreviewKey ClampPreviewZoom UpdatePreviewZoomControls ZOOM_MIN
+        PreviewInCombat TR PortraitStyleGet RuntimeSpecForPreviewKey RuntimeAppliedPortraitSizeForPreviewKey RuntimeVisualScaleForPreviewKey RuntimeCastbarVisualScaleForPreviewKey ClampPreviewZoom ResolveDefaultPreviewZoomLock UpdatePreviewZoomControls ZOOM_MIN
         max min abs floor format TEX_W8 FONT STATUS_PREVIEW CurrentPanelKey UnitDB UNIT_DATA UNIT_LABELS ReadPowerBarEnabled ReadPowerBarHeight LiveUnitData SyncLiveStateDriver
     ]],
-        PreviewInCombat, TR, PortraitStyleGet, RuntimeSpecForPreviewKey, PreviewRuntime.AppliedPortraitSizeForPreviewKey or F.Nil, RuntimeVisualScaleForPreviewKey, PreviewRuntime.CastbarVisualScaleForPreviewKey or RuntimeVisualScaleForPreviewKey, ClampPreviewZoom, UpdatePreviewZoomControls, ZOOM_MIN,
+        PreviewInCombat, TR, PortraitStyleGet, RuntimeSpecForPreviewKey, PreviewRuntime.AppliedPortraitSizeForPreviewKey or F.Nil, RuntimeVisualScaleForPreviewKey, PreviewRuntime.CastbarVisualScaleForPreviewKey or RuntimeVisualScaleForPreviewKey, ClampPreviewZoom, PreviewZoomPan.ResolveDefaultLock or F.Noop, UpdatePreviewZoomControls, ZOOM_MIN,
         max, min, abs, floor, format, TEX_W8, FONT, STATUS_PREVIEW, CurrentPanelKey, UnitDB, UNIT_DATA, UNIT_LABELS, ReadPowerBarEnabled, ReadPowerBarHeight, PreviewModel.LiveUnitData, SyncUnitPreviewLiveState)
     AssignNamedValues(deps, [[
         PreviewRaidGroupNameAllowed PreviewRaidGroupNameText NormalizeRaidGroupNameAnchor CastbarEnabled CastbarShowIcon CastbarShowText ReadCastbarSize ReadCastbarNum FormatCastbarPreviewTime
@@ -2165,13 +2195,13 @@ do
         CastbarOffsetFields, CastbarDetached, CanDetachPowerBarKey, ClampPreviewLayer, SetTex, PlaceHandle, UnitPreviewText.PlaceHandleAroundRegions, UnitPreviewText, UnitPreviewTextMovesTogether,
         NormalizeHpMode, NormalizePowerMode, TextScopeGet, TextScopeHasSlots, TextScopeSlotGet, FormatMode, ShortenPreviewName, ToTInlineSeparator, ResolveNameAnchor, ClassColor, HealthColor)
     AssignNamedValues(deps, [[
-        HealthBackgroundColor PowerBackgroundColor PowerColor FontColor PreviewResolveHealPredAnchorMode PreviewResolveAbsorbAnchorMode PreviewHealPredictionEnabled PreviewAbsorbBarEnabled
+        DarkMatchHPColor HealthBackgroundColor PowerBackgroundColor PowerColor FontColor PreviewResolveHealPredAnchorMode PreviewResolveAbsorbAnchorMode PreviewHealPredictionEnabled PreviewAbsorbBarEnabled
         UnitPreviewPortraitTexture ClassPortraitVisual PreviewNameColor PreviewToTInlineColor LayoutUnitPreviewOverlay PositionFromAnchor PositionRuntimeLayoutIconPreview
         PositionStatusCornerPreview PositionSameAnchorPreview PositionLevelPreview ResolveStatusPreviewAnchor SetPreviewIconTexture NormalizeStatusPreviewId
         ApplyPreviewTextFocus ApplyPreviewRounded ApplyPreviewFrameBorder PreviewRoundedOutlineThickness ApplyPreviewBoundsGuide SetShownSafe ApplyPreviewLayerVisibility
         ApplyPreviewTransparency RefreshHandleSelectionVisuals Auras
     ]],
-        HealthBackgroundColor, PowerBackgroundColor, PowerColor, FontColor, PreviewResolveHealPredAnchorMode, PreviewResolveAbsorbAnchorMode, PreviewHealPredictionEnabled, PreviewAbsorbBarEnabled,
+        DarkMatchHPColor, HealthBackgroundColor, PowerBackgroundColor, PowerColor, FontColor, PreviewResolveHealPredAnchorMode, PreviewResolveAbsorbAnchorMode, PreviewHealPredictionEnabled, PreviewAbsorbBarEnabled,
         UnitPreviewPortraitTexture, ClassPortraitVisual, PreviewNameColor, PreviewToTInlineColor, LayoutUnitPreviewOverlay, PositionFromAnchor, PositionRuntimeLayoutIconPreview,
         PositionStatusCornerPreview, PositionSameAnchorPreview, PositionLevelPreview, ResolveStatusPreviewAnchor, SetPreviewIconTexture, NormalizeStatusPreviewId,
         ApplyPreviewTextFocus, ApplyPreviewRounded, ApplyPreviewFrameBorder, PreviewRoundedOutlineThickness, ApplyPreviewBoundsGuide, SetShownSafe, ApplyPreviewLayerVisibility,

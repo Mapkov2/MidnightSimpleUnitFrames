@@ -350,10 +350,10 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
     local headerH = 44
     local contentW = max(120, cardWidth or 420)
     local scrollW = max(80, contentW - 60)
-    local function RawFont(parentFrame, template, text, color, bump)
+    local function RawFont(parentFrame, template, text, color, bump, role)
         local fs = parentFrame:CreateFontString(nil, "OVERLAY", template or "GameFontHighlightSmall")
         if T.StyleFontString then
-            T.StyleFontString(fs, color or T.colors.muted, bump or 0)
+            T.StyleFontString(fs, color or T.colors.muted, bump or 0, role)
         elseif color and fs.SetTextColor then
             fs:SetTextColor(color[1], color[2], color[3], color[4] or 1)
         end
@@ -379,13 +379,13 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
     title:SetPoint("LEFT", arrow, "RIGHT", 8, 0)
     title:SetPoint("RIGHT", header, "RIGHT", -94, 0)
     title:SetJustifyH("LEFT")
-    local hint = T.Font(header, "GameFontDisableSmall", "", T.colors.dim)
+    local hint = T.Font(header, "GameFontDisableSmall", "", T.colors.muted, "caption")
     hint:SetPoint("RIGHT", header, "RIGHT", -16, 0)
     hint:SetJustifyH("RIGHT")
     if not data then
         header:EnableMouse(false)
         hint:SetText("")
-        RawFont(parent, "GameFontHighlightSmall", M.Tr("No release notes bundled with this build."), T.colors.muted, 0)
+        RawFont(parent, "GameFontHighlightSmall", M.Tr("No release notes bundled with this build."), T.colors.muted, 0, "body")
             :SetPoint("TOPLEFT", parent, "TOPLEFT", 16, top - headerH - 8)
         if arrow.SetVertexColor then arrow:SetVertexColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], 0.55) end
         return
@@ -397,30 +397,45 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
     child:SetSize(scrollW, 1)
     scroll:SetScrollChild(child)
     local y = 0
-    local function AddText(text, fontObject, color, indent, gap, translate)
+    -- Release notes are long-form prose, so they run on the shared type roles (body/card/
+    -- section) with real line spacing instead of the smallest Blizzard template. Roles keep
+    -- the sizes identical at every UI and menu scale.
+    local bodyColor = { T.colors.text[1], T.colors.text[2], T.colors.text[3], 0.94 }
+    local function AddText(text, fontObject, color, indent, gap, translate, role)
         local rawText = tostring(text or "")
         if translate and type(M.Tr) == "function" then rawText = M.Tr(rawText) end
-        local fs = RawFont(child, fontObject or "GameFontHighlightSmall", rawText, color or T.colors.muted, 0)
+        local fs = RawFont(child, fontObject or "GameFontHighlightSmall", rawText, color or T.colors.muted, 0, role or "body")
         indent = indent or 0
         fs:SetPoint("TOPLEFT", child, "TOPLEFT", indent, y)
         fs:SetWidth(max(40, scrollW - indent - 4))
         fs:SetJustifyH("LEFT")
         if fs.SetWordWrap then fs:SetWordWrap(true) end
         if fs.SetNonSpaceWrap then fs:SetNonSpaceWrap(true) end
+        if fs.SetSpacing then fs:SetSpacing(3) end
         fs:SetText(rawText)
-        local h = (fs.GetStringHeight and fs:GetStringHeight()) or 0
-        if h < 10 then h = 12 end
+        -- GetStringHeight is the wrapped height; keep GetHeight in the mix so the added line
+        -- spacing can never be measured away and let a long bullet collide with the next one.
+        local h = max((fs.GetStringHeight and fs:GetStringHeight()) or 0, (fs.GetHeight and fs:GetHeight()) or 0)
+        if h < 12 then h = 14 end
         y = y - h - (gap or 4)
         return fs
     end
     local function AddBullet(text, dotColor, textColor)
         dotColor = dotColor or T.colors.accent
-        textColor = textColor or T.colors.muted
+        textColor = textColor or bodyColor
         local dot = child:CreateTexture(nil, "ARTWORK")
-        dot:SetSize(4, 4)
-        dot:SetPoint("TOPLEFT", child, "TOPLEFT", 8, y - 8)
-        dot:SetColorTexture(dotColor[1], dotColor[2], dotColor[3], 0.88)
-        return AddText(text, "GameFontHighlightSmall", textColor, 18, 5, true)
+        dot:SetSize(5, 5)
+        dot:SetPoint("TOPLEFT", child, "TOPLEFT", 9, y - 6)
+        dot:SetColorTexture(dotColor[1], dotColor[2], dotColor[3], 0.95)
+        return AddText(text, "GameFontHighlightSmall", textColor, 22, 9, true, "body")
+    end
+    local function AddRule()
+        local rule = child:CreateTexture(nil, "ARTWORK")
+        rule:SetPoint("TOPLEFT", child, "TOPLEFT", 0, y)
+        rule:SetPoint("TOPRIGHT", child, "TOPRIGHT", -4, y)
+        rule:SetHeight(1)
+        rule:SetColorTexture(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], 0.55)
+        y = y - 1
     end
     local entries = data.entries
     local maxEntries = min(#entries, 4)
@@ -430,16 +445,21 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
             local version = tostring(entry.version or "")
             local date = tostring(entry.date or "")
             local heading = (date ~= "" and (version .. " - " .. date)) or version
-            AddText(heading, "GameFontNormalSmall", T.colors.accent, 0, 8)
+            if entryIndex > 1 then
+                y = y - 10
+                AddRule()
+                y = y - 12
+            end
+            AddText(heading, "GameFontNormal", T.colors.accent, 0, 10, false, "section")
             local sections = entry.sections
             if type(sections) == "table" then
                 for sectionIndex = 1, #sections do
                     local section = sections[sectionIndex]
                     if type(section) == "table" and type(section.bullets) == "table" and #section.bullets > 0 then
-                        if sectionIndex > 1 then y = y - 3 end
+                        if sectionIndex > 1 then y = y - 8 end
                         local sectionTitle = tostring(section.title or "")
                         local isHighlights = sectionTitle == "Highlights"
-                        AddText(sectionTitle, "GameFontNormalSmall", isHighlights and T.colors.accent or T.colors.accent2, 0, 4, true)
+                        AddText(sectionTitle, "GameFontNormalSmall", isHighlights and T.colors.accent or T.colors.accent2, 0, 7, true, "card")
                         for bulletIndex = 1, #section.bullets do
                             AddBullet(
                                 tostring(section.bullets[bulletIndex] or ""),
@@ -850,12 +870,23 @@ local function BuildDashboardUX(ctx)
         }), title, "button")
         return head
     end
-    local recoveryTop = featureBlockBottom - 16
     local recoveryW = layoutW
     local recoveryOpen = M.dashboardRecoveryOpen == true
     local recoveryWrap = recoveryW < 620
     local recoveryNarrow = recoveryW < 520
     local recoveryH = recoveryOpen and (recoveryNarrow and 184 or (recoveryWrap and 154 or 122)) or 42
+    local changelogOpen = M.dashboardChangelogOpen == true
+    local changelogH = changelogOpen and 420 or 42
+    local scalingOpen = M.dashboardScalingOpen == true
+    local scalingColumns = (recoveryW >= 960) and 3 or ((recoveryW >= 680) and 2 or 1)
+    local scalingH = scalingOpen and ((scalingColumns == 3) and 250 or ((scalingColumns == 2) and 382 or 548)) or 42
+    --- Card order top to bottom: Changelog, Scaling, Display & recovery, Support. The
+    --- cards are still built in their old order below, so the whole top chain has to be
+    --- resolved here where every height is known.
+    local changelogTop = featureBlockBottom - 16
+    local scalingTop = changelogTop - changelogH - 10
+    local recoveryTop = scalingTop - scalingH - 10
+    local supportTop = recoveryTop - recoveryH - 10
     local recovery = Card(root, "", x0, recoveryTop, recoveryW, recoveryH, T.colors.panel2, T.colors.borderSoft)
     local g = M.GetGeneralDB and M.GetGeneralDB() or {}
     DashboardDisclosure(recovery, "Display & recovery", recoveryOpen, "dashboardRecoveryOpen", recoveryW, function(head)
@@ -891,10 +922,6 @@ local function BuildDashboardUX(ctx)
             W.Text(recovery, "Factory reset affects every MSUF setting.", textX, textY, recoveryW - textX - 16, T.colors.muted)
         end
     end
-    local scalingTop = recoveryTop - recoveryH - 10
-    local scalingOpen = M.dashboardScalingOpen == true
-    local scalingColumns = (recoveryW >= 960) and 3 or ((recoveryW >= 680) and 2 or 1)
-    local scalingH = scalingOpen and ((scalingColumns == 3) and 250 or ((scalingColumns == 2) and 382 or 548)) or 42
     local scaling = Card(root, "", x0, scalingTop, recoveryW, scalingH, T.colors.panel2, T.colors.borderSoft)
     DashboardDisclosure(scaling, "Scaling", scalingOpen, "dashboardScalingOpen", recoveryW, function(scaleHead)
         if recoveryW < 520 then return end
@@ -1125,9 +1152,6 @@ local function BuildDashboardUX(ctx)
         M.TrackRefresh(ctx, RefreshMsufScale)
         M.TrackRefresh(ctx, RefreshMenuScale)
     end
-    local changelogTop = scalingTop - scalingH - 10
-    local changelogOpen = M.dashboardChangelogOpen == true
-    local changelogH = changelogOpen and 360 or 42
     local changelog = Card(root, "", x0, changelogTop, recoveryW, changelogH, T.colors.panel2, T.colors.borderSoft)
     BuildDashboardChangelog(changelog, recoveryW, {
         title = "Changelog",
@@ -1139,7 +1163,6 @@ local function BuildDashboardUX(ctx)
             RebuildDashboardPage()
         end,
     })
-    local supportTop = changelogTop - changelogH - 10
     local supportCompact = recoveryW < 560
     local supportH = supportCompact and 116 or 78
     local support = Card(root, "", x0, supportTop, recoveryW, supportH, T.colors.panel2, T.colors.borderSoft)

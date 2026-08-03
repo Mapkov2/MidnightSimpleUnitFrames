@@ -6,44 +6,15 @@ local T = M.Theme
 local W = M.Widgets
 local GroupPreview = M.GroupPreview or {}
 M.GroupPreview = GroupPreview
--- Expanded is the deliberate hardcoded startup presentation. Compact remains
--- available as a session toggle, but never becomes the next login's default.
-M.groupPreviewExpanded = true
 
 -- Menu2 Group preview page section.
--- Hosts the group preview box, explanatory note, and preview refresh hooks. The actual mock
+-- Hosts the fixed group preview box and preview refresh hooks. The actual mock
 -- renderer lives in Preview/MSUF_Menu2_GroupPreview_Native.lua.
-local floor = math.floor
-local max = math.max
-local min = math.min
-local GF_PREVIEW_NOTE = "Preview updates live here. Enter MSUF Edit Mode to drag the group container. Buff and Debuff handles can be adjusted in Group Frames > Auras."
--- The expanded stage grew by the height of the layer rail and the selection
--- bar, which moved out of the stage's right-hand column and underneath it. The
--- preview surface itself keeps its size and gains the freed column width.
-local GF_PREVIEW_EXPANDED_BOX_HEIGHT = 358
-local GF_PREVIEW_COMPACT_BOX_HEIGHT = 132
+local GF_PREVIEW_FIXED_HEIGHT = 180
+local GF_PREVIEW_BOX_HEIGHT = 132
+local GF_PREVIEW_EXPANDED_HEIGHT = 358
+local GF_PREVIEW_BOX_Y = -40
 local Tr = M.TranslateText or M.Tr or function(text) return text end
-local function SetPreviewHeaderStatus(body)
-    local gp = M.GroupPage or {}
-    local fn = gp.SetSectionHeaderStatus
-    if type(fn) == "function" then fn(body, nil) end
-end
-local function GFPreviewIntroMetrics(width)
-    if M.groupPreviewExpanded ~= true then return GF_PREVIEW_COMPACT_BOX_HEIGHT + 16, -8 end
-    local maxContentW = tonumber(M.formContentMaxWidth) or 980
-    local contentW = min(maxContentW, max(320, tonumber(width) or 720))
-    local translated = Tr(GF_PREVIEW_NOTE)
-    local noteW = max(220, contentW - 28)
-    local charsPerLine = max(42, floor(noteW / 5.6))
-    local lines = max(1, floor(((#tostring(translated or "") + charsPerLine - 1) / charsPerLine)))
-    lines = min(lines, 4)
-    local noteTop = 40
-    local noteLineH = 14
-    local noteGap = 18
-    local boxY = -(noteTop + (lines * noteLineH) + noteGap)
-    local contentH = max(378, -boxY + GF_PREVIEW_EXPANDED_BOX_HEIGHT + 14)
-    return contentH, boxY
-end
 local function GroupPreviewScopeLabel()
     local scope = tostring(M.gfScope or "party")
     if scope == "raid" then return Tr("Raid") end
@@ -88,6 +59,8 @@ function M.ReleaseGFNativePreviews(reason, keepKey)
     for i = 1, #previews do
         local box = previews[i]
         if box and (not keepKey or box._msufGFNativePreviewPageKey ~= keepKey) then
+            local expander = box._msuf2FixedPreviewExpanderRecord
+            if expander and expander.expanded then expander:Close("GROUP_PREVIEW_RELEASE") end
             local record = box._msuf2PinnedPreviewRecord
             if record and type(record.restore) == "function" then record.restore(true) end
             if box.ReleaseRuntimePreview then box:ReleaseRuntimePreview() end
@@ -156,29 +129,18 @@ local function RebindNativeGFPreview(box, parent, ctx)
     return box
 end
 local function AddGFPreview(ctx, builder)
-    if not (builder and builder.CollapsibleSection and W and T) then return end
-    local sectionH, boxY = GFPreviewIntroMetrics(builder and builder.width or ctx and ctx.width)
-    local body = builder:CollapsibleSection("gf_preview_native", "Hide Preview", sectionH, true)
-    local sectionEntry = body and body._msuf2CollapsibleEntry
-    local previewHeader = sectionEntry and sectionEntry.header
-    if sectionEntry then
-        sectionEntry._msuf2ManualHintLayout = true
-        if sectionEntry.hint then sectionEntry.hint:Hide() end
-        if sectionEntry.label then
-            sectionEntry.label:SetText(Tr("Preview - ") .. GroupPreviewScopeLabel())
-            sectionEntry.label:ClearAllPoints()
-            sectionEntry.label:SetPoint("LEFT", sectionEntry.arrow, "RIGHT", 8, 0)
-            sectionEntry.label:SetJustifyH("LEFT")
-        end
-    end
-    local noteText = W.Text(body, GF_PREVIEW_NOTE, 14, -38, (body._msuf2Width or 720) - 28, T.colors.muted)
-    noteText:SetShown(M.groupPreviewExpanded == true)
-    local box
+    if not (builder and W and W.FixedPreviewSection and T) then return end
+    local body, toolbar, fixedRecord = W.FixedPreviewSection(ctx, builder, {
+        title = Tr("Preview - ") .. GroupPreviewScopeLabel(),
+        height = GF_PREVIEW_FIXED_HEIGHT,
+        gap = 8,
+    })
+    if not body then return end
+    local box, expander
+    local EnsurePreviewExpander
+    local RefreshThisPreview
     local rendererMissing
     local missingText
-    local expandBtn = T.Button(previewHeader or body, "Expand", 88, 20)
-    if T.CenterButtonLabel then T.CenterButtonLabel(expandBtn) end
-    local ApplyPreviewMode
     local function OwnsPreview()
         if not box then return false end
         local pageKey = ctx and ctx.key
@@ -212,9 +174,23 @@ local function AddGFPreview(ctx, builder)
         if box then
             box._msufGFPreviewHostShown = PreviewHostShown
             if not PreviewHostShown() then return nil end
-            if box.Show then box:Show() end
             EnsurePreviewAttachment()
-            if ApplyPreviewMode then ApplyPreviewMode() end
+            if EnsurePreviewExpander then EnsurePreviewExpander() end
+            if expander and expander.expanded then
+                if box.Show then box:Show() end
+                expander:Relayout("GROUP_PREVIEW_EXPAND_OWNERSHIP")
+            elseif box._msuf2PinnedFloating ~= true then
+                if box.Show then box:Show() end
+                box._msuf2PreferredRestoreHeight = GF_PREVIEW_BOX_HEIGHT
+                box._msuf2PreferredRestoreYOffset = GF_PREVIEW_BOX_Y
+                box._msuf2CompactHeader = toolbar
+                box._msuf2CompactExpandButton = expander and expander.button or nil
+                box:ClearAllPoints()
+                box:SetPoint("TOPLEFT", body, "TOPLEFT", 14, GF_PREVIEW_BOX_Y)
+                box:SetPoint("TOPRIGHT", body, "TOPRIGHT", -14, GF_PREVIEW_BOX_Y)
+                box:SetHeight(GF_PREVIEW_BOX_HEIGHT)
+                if box.ApplyCompactPreviewPresentation then box:ApplyCompactPreviewPresentation(true) end
+            end
             return box
         end
         if not PreviewHostShown() then return nil end
@@ -227,87 +203,72 @@ local function AddGFPreview(ctx, builder)
         end
         if not box then
             if not rendererMissing then
-                missingText = W.Text(body, "Group preview renderer is unavailable.", 14, boxY, (body._msuf2Width or 720) - 28, T.colors.muted)
+                missingText = W.Text(body, "Group preview renderer is unavailable.", 14, GF_PREVIEW_BOX_Y, (body._msuf2Width or 720) - 28, T.colors.muted)
                 rendererMissing = true
             end
             return nil
         end
         if missingText and missingText.Hide then missingText:Hide() end
         box._msufGFPreviewHostShown = PreviewHostShown
-        box._msuf2PreferredRestoreHeight = M.groupPreviewExpanded == true and GF_PREVIEW_EXPANDED_BOX_HEIGHT or GF_PREVIEW_COMPACT_BOX_HEIGHT
-        box._msuf2PreferredRestoreYOffset = boxY
-        box._msuf2CompactHeader = previewHeader
-        box._msuf2CompactExpandButton = expandBtn
-        box:SetPoint("TOPLEFT", body, "TOPLEFT", 16, boxY)
+        box._msuf2PreferredRestoreHeight = GF_PREVIEW_BOX_HEIGHT
+        box._msuf2PreferredRestoreYOffset = GF_PREVIEW_BOX_Y
+        box._msuf2CompactHeader = toolbar
+        box._msuf2CompactExpandButton = expander and expander.button or nil
+        box:SetPoint("TOPLEFT", body, "TOPLEFT", 14, GF_PREVIEW_BOX_Y)
+        box:SetPoint("TOPRIGHT", body, "TOPRIGHT", -14, GF_PREVIEW_BOX_Y)
+        box:SetHeight(GF_PREVIEW_BOX_HEIGHT)
         RegisterNativePreview(box, ctx)
         box:Show()
         EnsurePreviewAttachment()
-        if ApplyPreviewMode then ApplyPreviewMode() end
+        if EnsurePreviewExpander then EnsurePreviewExpander() end
+        if box._msuf2PinnedFloating ~= true and box.ApplyCompactPreviewPresentation then
+            box:ApplyCompactPreviewPresentation(true)
+        end
         return box
     end
-    local function RefreshExpandButton()
-        local expanded = M.groupPreviewExpanded == true
-        expandBtn:SetParent(previewHeader or body)
-        expandBtn:ClearAllPoints()
-        expandBtn:SetSize(expanded and 130 or 88, 20)
-        if previewHeader then
-            expandBtn:SetPoint("RIGHT", previewHeader, "RIGHT", -12, 0)
-            if expandBtn.SetFrameLevel and previewHeader.GetFrameLevel then expandBtn:SetFrameLevel((previewHeader:GetFrameLevel() or 1) + 3) end
-        else
-            expandBtn:SetPoint("TOPRIGHT", body, "TOPRIGHT", -14, -8)
-        end
-        expandBtn:SetText(Tr(expanded and "Compact Preview" or "Expand"))
-    end
-    ApplyPreviewMode = function()
-        local expanded = M.groupPreviewExpanded == true
-        local contentH, currentBoxY = GFPreviewIntroMetrics(builder and builder.width or ctx and ctx.width)
-        local boxH = expanded and GF_PREVIEW_EXPANDED_BOX_HEIGHT or GF_PREVIEW_COMPACT_BOX_HEIGHT
-        if sectionEntry and sectionEntry.label then sectionEntry.label:SetText(Tr("Preview - ") .. GroupPreviewScopeLabel()) end
-        if noteText then noteText:SetShown(expanded) end
-        RefreshExpandButton()
-        if OwnsPreview() and box._msuf2PinnedFloating ~= true then
-            local previousH = box.GetHeight and box:GetHeight() or 0
-            box._msuf2PreferredRestoreHeight = boxH
-            box._msuf2PreferredRestoreYOffset = currentBoxY
-            box._msuf2CompactHeader = previewHeader
-            box._msuf2CompactExpandButton = expandBtn
-            box:ClearAllPoints()
-            box:SetPoint("TOPLEFT", body, "TOPLEFT", 14, currentBoxY)
-            if box.ApplyCompactPreviewPresentation then box:ApplyCompactPreviewPresentation(not expanded) end
-            box:SetHeight(boxH)
-            if math.abs(previousH - boxH) > 0.5 then RequestPreviewRefresh(box, "GROUP_PREVIEW_HEIGHT") end
-        end
-        if sectionEntry and sectionEntry.contentHeight ~= contentH then
-            sectionEntry.contentHeight = contentH
-            if sectionEntry.body and sectionEntry.body.SetHeight then sectionEntry.body:SetHeight(contentH) end
-            if sectionEntry.outer and sectionEntry.outer.SetHeight then
-                sectionEntry.outer:SetHeight(sectionEntry.headerHeight + (sectionEntry.open and contentH or 0))
-            end
-            if sectionEntry.builder and sectionEntry.builder.RequestRelayoutCollapsibles then sectionEntry.builder:RequestRelayoutCollapsibles() end
-        end
-    end
-    expandBtn:SetScript("OnClick", function()
-        local expanded = not (M.groupPreviewExpanded == true)
-        if M.SetMenuStateValue then M.SetMenuStateValue("groupPreviewExpanded", expanded)
-        else M.groupPreviewExpanded = expanded end
-        ApplyPreviewMode()
-    end)
-    if M.AddTooltip then M.AddTooltip(expandBtn, "Preview size", "Toggle between the compact reference preview and the full-height canvas.", { hook = true }) end
-    local groupPage = M.GroupPage
-    if groupPage and type(groupPage.RegisterControl) == "function" then
-        groupPage.RegisterControl(expandBtn, { key = ctx and ctx.key }, "preview.height.toggle", "Expand Group Preview", "button", "ephemeral")
-    end
-    RefreshExpandButton()
-    local function RefreshThisPreview()
-        SetPreviewHeaderStatus(body)
-        ApplyPreviewMode()
+    RefreshThisPreview = function(reason)
+        if body.title then body.title:SetText(Tr("Preview - ") .. GroupPreviewScopeLabel()) end
         local preview = EnsurePreview()
-        if preview and preview.IsShown and preview:IsShown() then RequestPreviewRefresh(preview, "GROUP_PREVIEW_PAGE_REFRESH") end
+        if preview and preview.IsShown and preview:IsShown() then
+            RequestPreviewRefresh(preview, reason or (expander and expander.expanded
+                and "GROUP_PREVIEW_PAGE_EXPANDED" or "GROUP_PREVIEW_PAGE_COMPACT"))
+        end
+    end
+    EnsurePreviewExpander = function()
+        if not (box and W.AttachFixedPreviewExpander) then return nil end
+        if expander and expander.box == box and not expander.disposed then
+            box._msuf2CompactExpandButton = expander.button
+            box._msuf2FixedPreviewExpanderRecord = expander
+            return expander
+        end
+        expander = W.AttachFixedPreviewExpander(body, toolbar, box, {
+            pageKey = ctx and ctx.key,
+            wrapper = ctx and ctx.wrapper,
+            compactHeight = GF_PREVIEW_BOX_HEIGHT,
+            compactTop = GF_PREVIEW_BOX_Y,
+            expandedHeight = GF_PREVIEW_EXPANDED_HEIGHT,
+            refreshPreview = function(target, reason)
+                RequestPreviewRefresh(target, reason or "GROUP_PREVIEW_SIZE")
+            end,
+            onStateChanged = function(expanded, target)
+                if target.ReleaseRuntimePreview then target:ReleaseRuntimePreview() end
+                RequestPreviewRefresh(target, expanded and "GROUP_PREVIEW_EXPAND" or "GROUP_PREVIEW_COMPACT")
+            end,
+        })
+        local groupPage = M.GroupPage
+        if expander and expander.button and not expander.button._msuf2GroupExpandRegistered
+            and groupPage and type(groupPage.RegisterControl) == "function"
+        then
+            expander.button._msuf2GroupExpandRegistered = true
+            groupPage.RegisterControl(expander.button, { key = ctx and ctx.key },
+                "preview.height.toggle", "Expand Group Preview", "button", "ephemeral")
+        end
+        box._msuf2CompactExpandButton = expander and expander.button or nil
+        box._msuf2FixedPreviewExpanderRecord = expander
+        return expander
     end
     M._assistantGroupPreviewEnsurers = M._assistantGroupPreviewEnsurers or {}
     M._assistantGroupPreviewEnsurers[ctx.key] = function()
-        local entry = body and body._msuf2CollapsibleEntry
-        if entry and type(entry.SetOpenImmediate) == "function" and not entry.SetOpenImmediate(true) then return false end
         RefreshThisPreview()
         return box ~= nil and PreviewHostShown()
     end
@@ -322,12 +283,7 @@ local function AddGFPreview(ctx, builder)
             if OwnsPreview() and box.Hide then box:Hide() end
         end)
     end
-    M.TrackCollapsibleRefresh(ctx, body, RefreshThisPreview)
-    -- The preview never scrolls away: counter-scrolled in place, page-native
-    -- lifecycle untouched.
-    local previewEntry = body._msuf2CollapsibleEntry
-    if previewEntry and W.PinSectionInScroll then
-        W.PinSectionInScroll(previewEntry, { wrapper = ctx and ctx.wrapper })
-    end
+    M.TrackRefresh(ctx, RefreshThisPreview)
+    if fixedRecord then fixedRecord.onActivate = RefreshThisPreview end
 end
 GroupPreview.Add = AddGFPreview

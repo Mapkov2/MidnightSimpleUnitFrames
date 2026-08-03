@@ -57,7 +57,7 @@ function H.ApplyRoundedMediaSlice(region, strength)
         region:SetTextureSliceMode(STRETCHED_SLICE_MODE)
     end
 end
-local PREVIEW_BACKGROUND_DEFAULT = "bright_stone"
+local PREVIEW_BACKGROUND_DEFAULT = "silvermoon"
 local PREVIEW_BACKGROUND_ASPECT = 2
 local PREVIEW_BACKGROUND_CLEAR = { 0, 0, 0, 0 }
 local PREVIEW_BACKGROUND_CUSTOM_DEFAULT = { 0.08, 0.12, 0.18, 1 }
@@ -79,6 +79,12 @@ local PREVIEW_BACKGROUND_SPECS = {
         label = "Dark stone",
         tooltip = "A dark surface for checking bright borders and text.",
         texture = PREVIEW_BACKGROUND_MEDIA .. "dark_stone.png",
+    },
+    {
+        key = "silvermoon",
+        label = "Silvermoon",
+        tooltip = "A colored Silvermoon interior for checking frames on tinted surfaces.",
+        texture = PREVIEW_BACKGROUND_MEDIA .. "silvermoon.png",
     },
     {
         key = "custom",
@@ -1027,8 +1033,8 @@ local function PaintZoomLockIcon(button, locked, hover)
 end
 
 --- Opt-in zoom lock: pins the current scale so layer toggles stop refitting the
---- canvas. Only previews that pass `lockButton` get it; the shared zoom bar is
---- otherwise unchanged.
+--- canvas. A default lock is resolved only after the renderer has produced its
+--- first real Fit scale; it is preview-local and never reads or writes a profile.
 function H.EnsureZoomLockButton(box, zoomBar, opts)
     if not (box and zoomBar) then return nil end
     opts = opts or {}
@@ -1042,7 +1048,14 @@ function H.EnsureZoomLockButton(box, zoomBar, opts)
         if H.StylePreviewPillButton then H.StylePreviewPillButton(btn, T, {}) end
         box.zoomLockButton = btn
     end
-    local function Locked() return box._manualZoom ~= nil end
+    if box._msuf2ZoomLockDefaultInitialized ~= true then
+        box._msuf2ZoomLockDefaultInitialized = true
+        box._msuf2ZoomLockDefaultEnabled = opts.defaultLocked == true or nil
+        box._msuf2ZoomLockDefaultPending = box._msuf2ZoomLockDefaultEnabled
+    end
+    local function Locked()
+        return box._manualZoom ~= nil or box._msuf2ZoomLockDefaultPending == true
+    end
     local function Refresh()
         local locked = Locked()
         PaintZoomLockIcon(btn, locked, btn._msuf2PreviewPillHover == true)
@@ -1052,6 +1065,9 @@ function H.EnsureZoomLockButton(box, zoomBar, opts)
     local function SetLocked(locked)
         local setZoom = opts.SetZoom
         if type(setZoom) ~= "function" then return false end
+        -- An explicit click owns the state from here on. In particular, an
+        -- early Unlock must cancel a not-yet-resolved default lock.
+        box._msuf2ZoomLockDefaultPending = nil
         if locked then
             local scale = tonumber(box._manualZoom) or tonumber(box._mockScale) or tonumber(box._mockAutoScale) or 1
             setZoom(box, scale, opts.lockReason or "PREVIEW_ZOOM_LOCK")
@@ -1275,6 +1291,7 @@ function H.SwitchCompactZoomMode(box, compact, defaultCompactZoom)
         box[prefix .. "ManualZoom"] = tonumber(box._manualZoom)
         box[prefix .. "PanX"] = tonumber(box._zoomPanX) or 0
         box[prefix .. "PanY"] = tonumber(box._zoomPanY) or 0
+        box[prefix .. "DefaultLockPending"] = box._msuf2ZoomLockDefaultPending == true or nil
         box[prefix .. "Initialized"] = true
     end
     local function Restore(prefix, fallbackZoom)
@@ -1282,13 +1299,17 @@ function H.SwitchCompactZoomMode(box, compact, defaultCompactZoom)
             box._manualZoom = box[prefix .. "ManualZoom"]
             box._zoomPanX = tonumber(box[prefix .. "PanX"]) or 0
             box._zoomPanY = tonumber(box[prefix .. "PanY"]) or 0
+            box._msuf2ZoomLockDefaultPending = box[prefix .. "DefaultLockPending"] == true or nil
             return
         end
         box._manualZoom = tonumber(fallbackZoom)
         box._zoomPanX, box._zoomPanY = 0, 0
+        box._msuf2ZoomLockDefaultPending = box._manualZoom == nil
+            and box._msuf2ZoomLockDefaultEnabled == true or nil
         box[prefix .. "Initialized"] = true
         box[prefix .. "ManualZoom"] = box._manualZoom
         box[prefix .. "PanX"], box[prefix .. "PanY"] = 0, 0
+        box[prefix .. "DefaultLockPending"] = box._msuf2ZoomLockDefaultPending
     end
 
     if active == nil then
@@ -1357,6 +1378,15 @@ function H.InstallZoomPan(ZoomPan, opts)
         if value < minZoom then return minZoom end
         if value > maxZoom then return maxZoom end
         return floor(value * 100 + 0.5) / 100
+    end
+    function ZoomPan.ResolveDefaultLock(box, fallbackScale)
+        if not box or box._msuf2ZoomLockDefaultPending ~= true then return false end
+        local initialScale = tonumber(box._manualZoom) or tonumber(fallbackScale)
+            or tonumber(box._mockScale) or tonumber(box._mockAutoScale)
+        if not initialScale then return false end
+        box._manualZoom = ZoomPan.Clamp(initialScale)
+        box._msuf2ZoomLockDefaultPending = nil
+        return true
     end
     function ZoomPan.UpdateControls(box)
         if not box then return end
@@ -1430,6 +1460,8 @@ function H.InstallZoomPan(ZoomPan, opts)
     end
     function ZoomPan.SetZoom(box, zoom, reason)
         if not box then return end
+        -- Any explicit Fit/1:1/step/lock action supersedes the one-shot default.
+        box._msuf2ZoomLockDefaultPending = nil
         if zoom == nil or zoom == "fit" then
             box._manualZoom = nil
             box._zoomPanX, box._zoomPanY = 0, 0
@@ -1613,6 +1645,21 @@ function H.InstallZoomPan(ZoomPan, opts)
         return btn
     end
 end
+
+-- Interactive preview children (handles, zoom buttons, drag catchers) sit
+-- above the canvas and can become the wheel target themselves. Bind them to
+-- the same semantic route so Ctrl+wheel still zooms while an ordinary wheel
+-- tick always reaches the page ScrollFrame exactly once.
+function H.BindPreviewWheel(frame, box, wheelHandler)
+    if not (frame and frame.EnableMouseWheel and frame.SetScript) then return false end
+    wheelHandler = wheelHandler or (box and box._msuf2PreviewZoomWheel)
+    if type(wheelHandler) ~= "function" then return false end
+    frame:EnableMouseWheel(true)
+    if frame.SetPropagateMouseWheel then frame:SetPropagateMouseWheel(false) end
+    frame:SetScript("OnMouseWheel", wheelHandler)
+    return true
+end
+
 function H.BuildZoomBar(box, surface, opts)
     if not (box and surface) then return nil end
     opts = opts or {}
@@ -1647,7 +1694,8 @@ function H.BuildZoomBar(box, surface, opts)
     if zoomBar.SetFrameLevel then zoomBar:SetFrameLevel((surface.GetFrameLevel and surface:GetFrameLevel() or 0) + 80) end
     zoomBar:EnableMouse(true)
     zoomBar:EnableMouseWheel(true)
-    if zoomBar.SetPropagateMouseWheel then zoomBar:SetPropagateMouseWheel(true) end
+    if surface.SetPropagateMouseWheel then surface:SetPropagateMouseWheel(false) end
+    if zoomBar.SetPropagateMouseWheel then zoomBar:SetPropagateMouseWheel(false) end
     box[prefix .. "zoomBar"] = zoomBar
     local function AddZoomButton(field, text, width, tooltip, onClick, relativeTo, offset)
         local btn = createButton(zoomBar, text, width, tooltip, onClick)
@@ -1696,6 +1744,7 @@ function H.BuildZoomBar(box, surface, opts)
         local lock = H.EnsureZoomLockButton(box, zoomBar, {
             T = opts.T, Tr = tr, SetZoom = setZoom, buttonHeight = buttonH,
             lockReason = opts.lockReason, unlockReason = opts.unlockReason,
+            defaultLocked = opts.defaultLocked,
         })
         if lock then lock:SetPoint("LEFT", helpButton, "RIGHT", 3, 0) end
     end
@@ -1709,15 +1758,28 @@ function H.BuildZoomBar(box, surface, opts)
             stepZoom(box, dir)
         else
             local menu = opts.M or M
-            local main = menu and menu.scrollFrame
-            local handler = main and main.GetScript and main:GetScript("OnMouseWheel")
-            if type(handler) == "function" then handler(main, delta) end
+            local forward = menu and menu.ForwardMenuScrollWheel
+            if type(forward) == "function" then
+                forward(delta)
+            else
+                local main = menu and menu.scrollFrame
+                local handler = main and main.GetScript and main:GetScript("OnMouseWheel")
+                if type(handler) == "function" then handler(main, delta) end
+            end
         end
     end
+    box._msuf2PreviewZoomWheel = ZoomWheel
     if opts.wheelField then box[opts.wheelField] = ZoomWheel end
-    surface:SetScript("OnMouseWheel", ZoomWheel)
-    zoomBar:SetScript("OnMouseWheel", ZoomWheel)
-    H.EnsurePreviewBackgroundButton(box, zoomBar, opts)
+    H.BindPreviewWheel(surface, box, ZoomWheel)
+    H.BindPreviewWheel(zoomBar, box, ZoomWheel)
+    H.BindPreviewWheel(zoomOut, box, ZoomWheel)
+    H.BindPreviewWheel(fitButton, box, ZoomWheel)
+    H.BindPreviewWheel(oneButton, box, ZoomWheel)
+    H.BindPreviewWheel(zoomIn, box, ZoomWheel)
+    H.BindPreviewWheel(helpButton, box, ZoomWheel)
+    H.BindPreviewWheel(box[prefix .. "zoomLockButton"], box, ZoomWheel)
+    local backgroundButton = H.EnsurePreviewBackgroundButton(box, zoomBar, opts)
+    H.BindPreviewWheel(backgroundButton, box, ZoomWheel)
     if surface.RegisterForDrag then surface:RegisterForDrag("LeftButton") end
     surface:SetScript("OnMouseDown", function(self, button) startPan(self, box, button) end)
     surface:SetScript("OnMouseUp", stopPan)
@@ -2100,6 +2162,7 @@ function H.CreateLayerButton(parent, owner, def, index, sideW, opts)
     if not (parent and def) then return nil end
     opts = opts or {}
     local tr = opts.Tr or F.Identity
+    local theme = opts.T or (M and M.Theme)
     local chip = opts.layout == "chip"
     local btn = CreateFrame("Button", nil, parent)
     local h = opts.height or 20
@@ -2121,13 +2184,13 @@ function H.CreateLayerButton(parent, owner, def, index, sideW, opts)
         btn.fs:SetJustifyH("LEFT")
     end
     btn.fs:SetText(tr(def.label))
+    if theme and theme.ApplyMenuFont then theme.ApplyMenuFont(btn.fs, 0) end
     if chip then LayoutLayerChip(btn, h) end
-    if T and T.StyleFontString then T.StyleFontString(btn.fs, { 0.78, 0.84, 0.96, 1 }, 0) end
     btn.off = btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     btn.off:SetPoint("RIGHT", btn, "RIGHT", -2, 0)
     btn.off:SetText(opts.offText or "OFF")
     btn.off:SetJustifyH("RIGHT")
-    if T and T.StyleFontString then T.StyleFontString(btn.off, { 0.55, 0.60, 0.70, 1 }, 0) end
+    if theme and theme.ApplyMenuFont then theme.ApplyMenuFont(btn.off, 0) end
     function btn:Refresh() H.RefreshLayerButton(self, owner, opts) end
     btn.refresh = btn.Refresh
     btn:SetScript("OnClick", function(self)
