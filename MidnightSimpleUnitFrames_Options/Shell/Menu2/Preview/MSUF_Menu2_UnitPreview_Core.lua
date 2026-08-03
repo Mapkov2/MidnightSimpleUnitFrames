@@ -645,7 +645,12 @@ function Core.ApplyPreviewTransparency(box, conf, runtimeSpec)
     if not box or not box.mock then return end
     local mock = box.mock
     local alpha = PreviewAlphaState(conf, runtimeSpec)
-    if mock.SetAlpha then mock:SetAlpha(1) end
+    local rangeAlpha = tonumber(box._msuf2RangeFadePreviewAlpha)
+    if rangeAlpha ~= nil then rangeAlpha = Clamp01(rangeAlpha, 1) end
+    local rangeHealthOnly = rangeAlpha ~= nil and box._msuf2RangeFadePreviewLayerMode == "health"
+    local wholeFrameMul = rangeAlpha ~= nil and not rangeHealthOnly and rangeAlpha or 1
+    local healthMul = rangeHealthOnly and rangeAlpha or 1
+    if mock.SetAlpha then mock:SetAlpha(wholeFrameMul) end
     -- hpBG is the only full-frame surface, exactly like the live frame. The
     -- plain preview root cannot stack a black alpha plate underneath it.
     if mock.SetBackdropColor then mock:SetBackdropColor(0, 0, 0, 0) end
@@ -654,9 +659,9 @@ function Core.ApplyPreviewTransparency(box, conf, runtimeSpec)
     end
     -- Render owns health media and opacity. Dependent overlays/text/portrait
     -- and power remain independently composited, matching the live element.
-    Core.SetRegionAlpha(mock.healPred, alpha.flat and alpha.frame or alpha.hp)
-    Core.SetRegionAlpha(mock.absorb, alpha.flat and alpha.frame or alpha.hp)
-    Core.SetRegionAlpha(mock.healAbsorb, alpha.flat and alpha.frame or alpha.hp)
+    Core.SetRegionAlpha(mock.healPred, (alpha.flat and alpha.frame or alpha.hp) * healthMul)
+    Core.SetRegionAlpha(mock.absorb, (alpha.flat and alpha.frame or alpha.hp) * healthMul)
+    Core.SetRegionAlpha(mock.healAbsorb, (alpha.flat and alpha.frame or alpha.hp) * healthMul)
     Core.SetRegionAlpha(mock.powerBG, alpha.flat and alpha.frame or 1)
     Core.SetRegionAlpha(mock.power, alpha.flat and alpha.frame or alpha.power)
     Core.SetRegionAlpha(mock.classPower, alpha.flat and alpha.frame or alpha.power)
@@ -666,7 +671,10 @@ function Core.ApplyPreviewTransparency(box, conf, runtimeSpec)
     Core.SetRegionAlpha(mock.textFrame, alpha.flat and alpha.frame or alpha.text)
     Core.SetRegionAlpha(mock.cast, alpha.flat and alpha.frame or alpha.fg)
     for _, icon in pairs(mock.icons or {}) do
-        Core.SetRegionAlpha(icon, alpha.flat and alpha.frame or alpha.fg)
+        Core.SetRegionAlpha(icon, (alpha.flat and alpha.frame or alpha.fg) * wholeFrameMul)
+    end
+    for i = 1, #(box.handles or {}) do
+        Core.SetRegionAlpha(box.handles[i], wholeFrameMul)
     end
 end
 Preview.SetRegionAlpha = Core.SetRegionAlpha

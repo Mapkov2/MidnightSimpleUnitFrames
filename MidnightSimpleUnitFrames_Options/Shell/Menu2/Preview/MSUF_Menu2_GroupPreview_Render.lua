@@ -1151,6 +1151,21 @@ local function FinalizeScene(scene)
         handle:SetAlpha(SceneLayerAlpha(scene, "si"))
     end
     for i = 1, #TEXT_HANDLE_KEYS do scene.textHandles[TEXT_HANDLE_KEYS[i]]:SetAlpha(SceneLayerAlpha(scene, "text")) end
+    local rangeAlpha = tonumber(box._msuf2RangeFadePreviewAlpha)
+    if rangeAlpha ~= nil then rangeAlpha = max(0, min(1, rangeAlpha)) end
+    local rangeHealthOnly = rangeAlpha ~= nil and box._msuf2RangeFadePreviewLayerMode == "health"
+    local wholeFrameMul = rangeAlpha ~= nil and not rangeHealthOnly and rangeAlpha or 1
+    local healthMul = rangeHealthOnly and rangeAlpha or 1
+    if mock.SetAlpha then mock:SetAlpha(wholeFrameMul) end
+    if mock._health and mock._health.SetAlpha then mock._health:SetAlpha(healthMul) end
+    if mock._healPred and mock._healPred.SetAlpha then mock._healPred:SetAlpha(healthMul) end
+    if mock._absorb and mock._absorb.SetAlpha then mock._absorb:SetAlpha(healthMul) end
+    for i = 1, #(box._handleList or {}) do
+        local handle = box._handleList[i]
+        if handle and handle.SetAlpha and handle.GetParent and handle:GetParent() ~= mock then
+            handle:SetAlpha((handle.GetAlpha and handle:GetAlpha() or 1) * wholeFrameMul)
+        end
+    end
     local visibleLayerButtonCount = 0
     for i = 1, #box._layerButtons do
         local button = box._layerButtons[i]

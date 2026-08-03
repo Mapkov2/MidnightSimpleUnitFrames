@@ -4009,6 +4009,10 @@ function W.Slider(section, label, minVal, maxVal, step, width)
     function slider:SetValueParser(fn)
         self._msuf2ValueParser = (type(fn) == "function") and fn or nil
     end
+    function slider:SetInteractionCallbacks(onStart, onStop)
+        self._msuf2InteractionStart = type(onStart) == "function" and onStart or nil
+        self._msuf2InteractionStop = type(onStop) == "function" and onStop or nil
+    end
     slider:HookScript("OnValueChanged", function(self, value)
         UpdateFill()
         if not self._msuf2Editing then edit:SetText(FormatValue(value)) end
@@ -4083,9 +4087,13 @@ function W.Slider(section, label, minVal, maxVal, step, width)
         end
     end
     local function StopSliderInteraction()
+        local wasActive = slider._msuf2SliderActive == true
         slider:SetScript("OnUpdate", nil)
         slider._msuf2SliderActive = nil
         if type(slider._msuf2CommitSliderHistory) == "function" then slider:_msuf2CommitSliderHistory() end
+        if wasActive and type(slider._msuf2InteractionStop) == "function" then
+            slider:_msuf2InteractionStop(slider:GetValue())
+        end
         if T.StyleSlider then T.StyleSlider(slider) end
     end
     -- The styled thumb is only a texture, so the engine never runs its own
@@ -4107,6 +4115,9 @@ function W.Slider(section, label, minVal, maxVal, step, width)
         if slider.IsEnabled and not slider:IsEnabled() then return end
         if type(slider._msuf2BeginSliderHistory) == "function" then slider:_msuf2BeginSliderHistory() end
         slider._msuf2SliderActive = true
+        if type(slider._msuf2InteractionStart) == "function" then
+            slider:_msuf2InteractionStart(slider:GetValue())
+        end
         SetValueFromCursor()
         slider:SetScript("OnUpdate", FollowCursorWhileHeld)
     end)

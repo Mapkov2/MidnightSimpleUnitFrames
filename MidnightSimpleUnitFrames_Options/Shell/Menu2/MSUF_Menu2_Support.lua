@@ -913,6 +913,80 @@ function M.BindSliderLiveLabel(ctx, widget, readValue, labelFn, percentInput)
     M.TrackRefresh(ctx, RefreshLabel)
     return widget
 end
+function M.BindSliderDragPreview(widget, callback)
+    if not (widget and type(callback) == "function") then return widget end
+    local active = false
+    local function Begin(_, value)
+        active = true
+        callback(true, tonumber(value) or (widget.GetValue and widget:GetValue()) or 0)
+    end
+    local function Finish()
+        if not active then return end
+        active = false
+        callback(false)
+    end
+    if type(widget.SetInteractionCallbacks) == "function" then
+        widget:SetInteractionCallbacks(Begin, Finish)
+    elseif widget.HookScript then
+        widget:HookScript("OnMouseDown", function(self, button)
+            if button and button ~= "LeftButton" then return end
+            if self.IsEnabled and not self:IsEnabled() then return end
+            Begin(self, self.GetValue and self:GetValue())
+        end)
+        widget:HookScript("OnMouseUp", Finish)
+    end
+    if widget.HookScript then
+        widget:HookScript("OnValueChanged", function(_, value)
+            if active then callback(true, tonumber(value) or 0) end
+        end)
+        widget:HookScript("OnHide", Finish)
+    end
+    return widget
+end
+
+local rangeFadePreviewOwners = { unit = {}, group = {} }
+local function RefreshRangeFadePreviewBox(surface, box)
+    if not box then return end
+    local shown = not box.IsShown or box:IsShown()
+    if shown and type(box.RequestRefresh) == "function" then
+        box:RequestRefresh(surface == "group" and "GROUP_PREVIEW_RANGE_FADE_SLIDER"
+            or "MSUF2_RANGE_FADE_SLIDER_PREVIEW")
+        return
+    end
+    if shown and surface == "unit" then
+        local preview = MSUF and MSUF.UFPreview
+        if preview and type(preview.RequestRefreshForBox) == "function" then
+            preview.RequestRefreshForBox(box, "MSUF2_RANGE_FADE_SLIDER_PREVIEW")
+        end
+    end
+end
+function M.SetRangeFadePreviewState(surface, active, alpha, layerMode)
+    surface = surface == "group" and "group" or "unit"
+    local owners = rangeFadePreviewOwners[surface]
+    local candidates = {}
+    local function Add(box)
+        if not box or candidates[box] then return end
+        candidates[box] = true
+        if active then owners[box] = true end
+    end
+    if surface == "unit" then
+        local preview = MSUF and MSUF.UFPreview
+        Add(preview and preview.active)
+        Add(M.UnitPage and M.UnitPage._sharedUnitPreviewBox)
+    else
+        for i = 1, #(M._gfNativePreviews or {}) do Add(M._gfNativePreviews[i]) end
+        Add(M.GroupPreview and M.GroupPreview._sharedNativeBox)
+    end
+    for box in pairs(owners) do candidates[box] = true end
+    local previewAlpha = active and Clamp(alpha, 0, 1) or nil
+    local previewLayer = active and (layerMode == "health" and "health" or "frame") or nil
+    for box in pairs(candidates) do
+        box._msuf2RangeFadePreviewAlpha = previewAlpha
+        box._msuf2RangeFadePreviewLayerMode = previewLayer
+        RefreshRangeFadePreviewBox(surface, box)
+        if not active then owners[box] = nil end
+    end
+end
 function M.TruncateUtf8Chars(value, maxChars)
     value = tostring(value or "")
     maxChars = tonumber(maxChars) or 0
