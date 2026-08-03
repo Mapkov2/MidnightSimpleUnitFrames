@@ -5,7 +5,8 @@
 --- Only override spelling differences here if desired.
 --- ============================================================================
 local MSUF = _G.MSUF_NS or _G.MSUF
-if not MSUF or MSUF.LOCALE ~= "enGB" then return end
+if not MSUF then return end
+local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("enGB")) or (MSUF.L or {})
 
 -- Mouseover highlight controls.
@@ -3240,3 +3241,6 @@ L["Always visible"] = "Always visible"
 L["Hides the Raid Manager while MSUF provides the live group frames, and leaves it to WoW otherwise. This is how MSUF has always behaved."] = "Hides the Raid Manager while MSUF provides the live group frames, and leaves it to WoW otherwise. This is how MSUF has always behaved."
 L["Keeps the Raid Manager reachable even with MSUF group frames on. Use this when you still want its ready check, raid markers, and role filters."] = "Keeps the Raid Manager reachable even with MSUF group frames on. Use this when you still want its ready check, raid markers, and role filters."
 L["Shared by Party, Raid, and Mythic Raid. Automatic keeps the tab hidden while MSUF provides the group frames."] = "Shared by Party, Raid, and Mythic Raid. Automatic keeps the tab hidden while MSUF provides the group frames."
+end
+if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enGB", LoadLocale)
+elseif MSUF.LOCALE == "enGB" then LoadLocale() end

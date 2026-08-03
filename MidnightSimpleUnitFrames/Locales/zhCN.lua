@@ -11,7 +11,8 @@
 -- Keep syntax checking, but silence duplicate-index noise from intentional translation repetition.
 ---@diagnostic disable: duplicate-index
 local MSUF = _G.MSUF_NS or _G.MSUF
-if not MSUF or MSUF.LOCALE ~= "zhCN" then return end
+if not MSUF then return end
+local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("zhCN")) or (MSUF.L or {})
 
 -- 鼠标悬停高亮设置。
@@ -5152,3 +5153,6 @@ L["Always visible"] = "始终显示"
 L["Hides the Raid Manager while MSUF provides the live group frames, and leaves it to WoW otherwise. This is how MSUF has always behaved."] = "当 MSUF 提供当前的队伍框体时隐藏突袭管理器，其余情况交给魔兽世界处理。MSUF 一直都是这样运作的。"
 L["Keeps the Raid Manager reachable even with MSUF group frames on. Use this when you still want its ready check, raid markers, and role filters."] = "即使启用了 MSUF 队伍框体，也保持突袭管理器可用。如果你仍需要它的准备确认、突袭标记和职责筛选，就选这个。"
 L["Shared by Party, Raid, and Mythic Raid. Automatic keeps the tab hidden while MSUF provides the group frames."] = "由小队、突袭和神话突袭共用。「自动」会在 MSUF 提供队伍框体时隐藏该标签页。"
+end
+if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhCN", LoadLocale)
+elseif MSUF.LOCALE == "zhCN" then LoadLocale() end

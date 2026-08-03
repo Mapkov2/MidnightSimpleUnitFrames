@@ -8,7 +8,8 @@
 --- This file is an immediate no-op unless the active locale is koKR.
 --- ============================================================================
 local MSUF = _G.MSUF_NS or _G.MSUF
-if not MSUF or MSUF.LOCALE ~= "koKR" then return end
+if not MSUF then return end
+local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("koKR")) or (MSUF.L or {})
 
 -- 마우스오버 강조 설정.
@@ -4508,3 +4509,6 @@ L["Always visible"] = "항상 표시"
 L["Hides the Raid Manager while MSUF provides the live group frames, and leaves it to WoW otherwise. This is how MSUF has always behaved."] = "MSUF가 활성 그룹 프레임을 제공하는 동안에는 공격대 관리자를 숨기고, 그 외에는 WoW에 맡깁니다. MSUF는 지금까지 항상 이렇게 동작했습니다."
 L["Keeps the Raid Manager reachable even with MSUF group frames on. Use this when you still want its ready check, raid markers, and role filters."] = "MSUF 그룹 프레임을 사용하는 중에도 공격대 관리자를 계속 사용할 수 있게 합니다. 준비 확인, 공격대 표식, 역할 필터가 여전히 필요할 때 선택하십시오."
 L["Shared by Party, Raid, and Mythic Raid. Automatic keeps the tab hidden while MSUF provides the group frames."] = "파티, 공격대, 신화 공격대가 함께 사용합니다. 자동은 MSUF가 그룹 프레임을 제공하는 동안 탭을 숨겨 둡니다."
+end
+if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
+elseif MSUF.LOCALE == "koKR" then LoadLocale() end

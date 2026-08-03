@@ -8,7 +8,8 @@
 --- This file is an immediate no-op unless the active locale is zhTW.
 --- ============================================================================
 local MSUF = _G.MSUF_NS or _G.MSUF
-if not MSUF or MSUF.LOCALE ~= "zhTW" then return end
+if not MSUF then return end
+local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("zhTW")) or (MSUF.L or {})
 
 -- 滑鼠游標高亮設定。
@@ -4552,3 +4553,6 @@ L["Always visible"] = "永遠顯示"
 L["Hides the Raid Manager while MSUF provides the live group frames, and leaves it to WoW otherwise. This is how MSUF has always behaved."] = "當 MSUF 提供目前的隊伍框架時隱藏突襲管理器，其餘情況交給魔獸世界處理。MSUF 一直都是這樣運作的。"
 L["Keeps the Raid Manager reachable even with MSUF group frames on. Use this when you still want its ready check, raid markers, and role filters."] = "即使啟用了 MSUF 隊伍框架，也保持突襲管理器可用。如果你仍需要它的準備確認、突襲標記與職責篩選，就選這個。"
 L["Shared by Party, Raid, and Mythic Raid. Automatic keeps the tab hidden while MSUF provides the group frames."] = "由隊伍、突襲與神話突襲共用。「自動」會在 MSUF 提供隊伍框架時隱藏該頁籤。"
+end
+if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhTW", LoadLocale)
+elseif MSUF.LOCALE == "zhTW" then LoadLocale() end

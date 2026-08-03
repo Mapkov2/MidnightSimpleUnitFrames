@@ -1,7 +1,8 @@
 --- Midnight Simple Unit Frames - German (deDE)
 --- Contributor note: Translate UI strings by adding entries to this file.
 local MSUF = _G.MSUF_NS or _G.MSUF
-if not MSUF or MSUF.LOCALE ~= "deDE" then return end
+if not MSUF then return end
+local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("deDE")) or (MSUF.L or {})
 
 L["Force Blizzard frame on"] = "Blizzard-Frame erzwingen"
@@ -4896,3 +4897,6 @@ L["Always visible"] = "Immer sichtbar"
 L["Hides the Raid Manager while MSUF provides the live group frames, and leaves it to WoW otherwise. This is how MSUF has always behaved."] = "Blendet den Schlachtzugsmanager aus, solange MSUF die aktiven Gruppenrahmen stellt, und überlässt ihn sonst WoW. So hat sich MSUF schon immer verhalten."
 L["Keeps the Raid Manager reachable even with MSUF group frames on. Use this when you still want its ready check, raid markers, and role filters."] = "Hält den Schlachtzugsmanager auch bei aktiven MSUF-Gruppenrahmen erreichbar. Nimm das, wenn du seine Bereitschaftsabfrage, Schlachtzugssymbole und Rollenfilter weiter nutzen willst."
 L["Shared by Party, Raid, and Mythic Raid. Automatic keeps the tab hidden while MSUF provides the group frames."] = "Gemeinsam für Party, Raid und Mythischen Raid. Automatisch hält den Reiter ausgeblendet, solange MSUF die Gruppenrahmen stellt."
+end
+if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("deDE", LoadLocale)
+elseif MSUF.LOCALE == "deDE" then LoadLocale() end

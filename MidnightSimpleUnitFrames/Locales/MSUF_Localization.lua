@@ -3,9 +3,9 @@
 ---
 --- Single-locale localization scaffold:
 --- - MSUF.L: active translation table with fallback to the key itself.
---- - MSUF.LOCALE: locale selected from SavedVariables/client locale at load time.
---- - English data ships in the main addon. Non-English data ships in one
----   LoadOnDemand companion; active-pack guards retain only the selected table.
+--- - MSUF.LOCALE: locale selected from SavedVariables at ADDON_LOADED.
+--- - Locale files register cold loader functions while the addon files execute;
+---   after SavedVariables are available, only the selected loader is run.
 --- - Changing locale requires ReloadUI.
 --- - MSUF.SetLocale(locale): records whether a reload is required. It never rebuilds
 ---   translation tables during play.
@@ -87,7 +87,10 @@ local function SavedLocale()
 end
 
 MSUF.CLIENT_LOCALE = CLIENT_LOCALE
-MSUF.LOCALE = MSUF.SUPPORTED_LOCALES[MSUF.LOCALE or ""] and MSUF.LOCALE or SavedLocale()
+--- SavedVariables are not reliable while addon Lua files are still executing.
+--- Keep the client locale as a harmless provisional value until ADDON_LOADED,
+--- when the active profile and its menuLocale can be resolved deterministically.
+MSUF.LOCALE = CLIENT_LOCALE
 if not MSUF.SUPPORTED_LOCALES[MSUF.LOCALE] then MSUF.LOCALE = "enUS" end
 
 MSUF.L = MSUF.L or {}
@@ -101,8 +104,12 @@ end
 
 EnsureFallback(L)
 
---- Keep the legacy registry shape for diagnostics without retaining every locale.
-MSUF.LocaleRegistry = { [MSUF.LOCALE] = L }
+MSUF.LocaleRegistry = {}
+
+local LocaleLoaders = {}
+local LocaleFinalizers = {}
+local LocaleCallbacks = {}
+local localeFinalized = false
 
 --- Defensive sink for third-party callers that try to register an inactive pack.
 --- Built-in packs return before registration, so this table never receives data.
@@ -117,6 +124,18 @@ end
 function MSUF.RegisterLocale(locale)
     if locale == MSUF.LOCALE then return L end
     return INACTIVE_LOCALE
+end
+
+function MSUF.RegisterLocaleLoader(locale, loader)
+    if localeFinalized or not MSUF.SUPPORTED_LOCALES[locale or ""] or type(loader) ~= "function" then return false end
+    LocaleLoaders[locale] = loader
+    return true
+end
+
+function MSUF.RegisterLocaleFinalizer(loader)
+    if localeFinalized or type(loader) ~= "function" then return false end
+    LocaleFinalizers[#LocaleFinalizers + 1] = loader
+    return true
 end
 
 function MSUF.GetEffectiveLocale()
@@ -135,10 +154,10 @@ function MSUF.SetLocale(locale)
     return MSUF.LOCALE, reloadRequired
 end
 
-function MSUF.RegisterLocaleCallback()
-    --- Locale tables are immutable for the session, so callbacks are intentionally
-    --- not retained. The compatibility function remains for existing modules.
-    return false
+function MSUF.RegisterLocaleCallback(key, callback)
+    if localeFinalized or type(key) ~= "string" or type(callback) ~= "function" then return false end
+    LocaleCallbacks[key] = callback
+    return true
 end
 
 function MSUF.Translate(text)
@@ -160,10 +179,45 @@ function MSUF.AddLocale(locale, dict)
     end
 end
 
---- All language packs follow this file directly in the main TOC (English
---- first, then the non-English dictionaries). Every source file has an
---- active-locale guard, so only the selected dictionary executes and remains
---- resident; the others return immediately.
+local function Wipe(tableRef)
+    for key in pairs(tableRef) do tableRef[key] = nil end
+end
+
+function MSUF.FinalizeLocale()
+    if localeFinalized then return MSUF.LOCALE end
+    localeFinalized = true
+
+    MSUF.LOCALE = NormalizeLocale(SavedLocale())
+    Wipe(L)
+    local loader = LocaleLoaders[MSUF.LOCALE]
+    Wipe(LocaleLoaders)
+    if type(loader) == "function" then loader() end
+
+    for i = 1, #LocaleFinalizers do
+        LocaleFinalizers[i]()
+    end
+    Wipe(LocaleFinalizers)
+
+    MSUF.LocaleRegistry = { [MSUF.LOCALE] = L }
+    for _, callback in pairs(LocaleCallbacks) do callback(MSUF.LOCALE) end
+    Wipe(LocaleCallbacks)
+    return MSUF.LOCALE
+end
+
+if type(_G.CreateFrame) == "function" then
+    local localeFrame = _G.CreateFrame("Frame")
+    localeFrame:RegisterEvent("ADDON_LOADED")
+    localeFrame:SetScript("OnEvent", function(self, _, loadedAddon)
+        if loadedAddon ~= addonName then return end
+        self:UnregisterEvent("ADDON_LOADED")
+        self:SetScript("OnEvent", nil)
+        MSUF.FinalizeLocale()
+    end)
+end
+
+--- All language packs follow this file directly in the main TOC. They retain
+--- only loader bytecode during startup; FinalizeLocale executes the selected
+--- pack and releases every inactive loader immediately afterward.
 MSUF.LocaleAddonName = nil
 MSUF.LocaleAddonLoaded = nil
 MSUF.LocaleAddonLoadError = nil

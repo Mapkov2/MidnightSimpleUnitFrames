@@ -8,7 +8,8 @@
 --- This file is an immediate no-op unless the active locale is ptBR.
 --- ============================================================================
 local MSUF = _G.MSUF_NS or _G.MSUF
-if not MSUF or MSUF.LOCALE ~= "ptBR" then return end
+if not MSUF then return end
+local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("ptBR")) or (MSUF.L or {})
 
 -- Controles de realce ao passar o mouse.
@@ -4457,3 +4458,6 @@ L["Always visible"] = "Sempre visível"
 L["Hides the Raid Manager while MSUF provides the live group frames, and leaves it to WoW otherwise. This is how MSUF has always behaved."] = "Oculta o Gerenciador de Raide enquanto o MSUF fornece os quadros de grupo ativos e, caso contrário, deixa por conta do WoW. O MSUF sempre se comportou assim."
 L["Keeps the Raid Manager reachable even with MSUF group frames on. Use this when you still want its ready check, raid markers, and role filters."] = "Mantém o Gerenciador de Raide acessível mesmo com os quadros de grupo do MSUF ativos. Use isto se ainda quiser a verificação de prontidão, os marcadores de raide e os filtros de função."
 L["Shared by Party, Raid, and Mythic Raid. Automatic keeps the tab hidden while MSUF provides the group frames."] = "Compartilhado por Grupo, Raide e Raide Mítica. Automático mantém a aba oculta enquanto o MSUF fornece os quadros de grupo."
+end
+if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ptBR", LoadLocale)
+elseif MSUF.LOCALE == "ptBR" then LoadLocale() end

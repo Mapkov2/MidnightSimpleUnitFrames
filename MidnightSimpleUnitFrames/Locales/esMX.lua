@@ -4,7 +4,8 @@
 --- Perf note:
 --- This file is an immediate no-op unless the active locale is esMX.
 local MSUF = _G.MSUF_NS or _G.MSUF
-if not MSUF or MSUF.LOCALE ~= "esMX" then return end
+if not MSUF then return end
+local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("esMX")) or (MSUF.L or {})
 
 -- Controles de resaltado al pasar el cursor.
@@ -4691,3 +4692,6 @@ L["Always visible"] = "Siempre visible"
 L["Hides the Raid Manager while MSUF provides the live group frames, and leaves it to WoW otherwise. This is how MSUF has always behaved."] = "Oculta el gestor de bandas mientras MSUF proporciona los marcos de grupo activos, y en caso contrario lo deja en manos de WoW. Así se ha comportado MSUF siempre."
 L["Keeps the Raid Manager reachable even with MSUF group frames on. Use this when you still want its ready check, raid markers, and role filters."] = "Mantiene accesible el gestor de bandas incluso con los marcos de grupo de MSUF activos. Úsalo si sigues queriendo su comprobación de estado, marcadores de banda y filtros de rol."
 L["Shared by Party, Raid, and Mythic Raid. Automatic keeps the tab hidden while MSUF provides the group frames."] = "Compartido por Grupo, Banda y Banda mítica. Automático mantiene la pestaña oculta mientras MSUF proporciona los marcos de grupo."
+end
+if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("esMX", LoadLocale)
+elseif MSUF.LOCALE == "esMX" then LoadLocale() end
