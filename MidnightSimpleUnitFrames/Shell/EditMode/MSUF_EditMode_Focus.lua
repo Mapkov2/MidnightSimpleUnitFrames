@@ -462,6 +462,10 @@ function Focus.RefreshPopupFocus()
 end
 
 function Focus.NotifyPositionChanged(_, immediate)
+    local menu = Menu2()
+    if menu and type(menu.RefreshVisibleSliders) == "function" then
+        menu.RefreshVisibleSliders("EDIT_MODE_POSITION_CHANGED")
+    end
     local now = GetTime and GetTime() or 0
     if EM2.HUD and EM2.HUD.RefreshControls and (immediate == true or now >= (state.nextHUDRefresh or 0)) then
         state.nextHUDRefresh = now + 0.05

@@ -74,6 +74,9 @@ function Handles.Install(box, deps)
     local Tr, Round, ResolveAnchor, PointOffset, HandleOffset, OffsetToConfig, CurrentStatusSpec, CurrentSpellConfig, CurrentSpellPlaced, HandleText, HandleOffsets, UpdateHint, RefreshHandleSelection, StatusLabel, StartPan, StopPan, ZoomWheel = M.PickFallbacks(deps, HANDLE_FALLBACKS, [[
         TR Round ResolveAnchor PointOffset HandleOffset OffsetToConfig CurrentStatusSpec CurrentSpellConfig CurrentSpellPlaced HandleText HandleOffsets UpdateHint RefreshHandleSelection StatusLabel StartPan StopPan ZoomWheel
     ]])
+    local function RefreshVisibleSliders(reason)
+        if type(M.RefreshVisibleSliders) == "function" then M.RefreshVisibleSliders(reason or "GROUP_PREVIEW_MOVE") end
+    end
     if not deps.OffsetToConfig then OffsetToConfig = Round end
     box._handles = {}
     box._handleList = {}
@@ -377,6 +380,7 @@ function Handles.Install(box, deps)
         local xKey, yKey = H.TextOffsetKeys(kind, handle._cfgTextSlot)
         conf[xKey] = Round(x or 0)
         conf[yKey] = Round(y or 0)
+        RefreshVisibleSliders(previewOnly and "GROUP_PREVIEW_TEXT_DRAG" or "GROUP_PREVIEW_TEXT_MOVE")
         if previewOnly then
             RefreshTextDragPreview(handle)
         else
@@ -402,9 +406,9 @@ function Handles.Install(box, deps)
             if not conf then return end
             conf.dispelSymbolX = OffsetToConfig(offX or 0, scale)
             conf.dispelSymbolY = OffsetToConfig(offY or 0, scale)
-            RefreshGroupPreviewAfterMove(handle)
-            CheckpointHandleHistory(handle, action)
-            return
+            RefreshVisibleSliders(previewOnly and "GROUP_PREVIEW_DISPEL_DRAG" or "GROUP_PREVIEW_DISPEL_MOVE")
+            if not previewOnly then RefreshGroupPreviewAfterMove(handle); CheckpointHandleHistory(handle, action) end
+            return true
         end
         if handle._cfgPortrait then
             -- Portrait placement keeps its configured anchor/side. Dragging only
@@ -415,9 +419,9 @@ function Handles.Install(box, deps)
             if not conf then return end
             conf.portraitOffsetX = OffsetToConfig(offX or 0, scale)
             conf.portraitOffsetY = OffsetToConfig(offY or 0, scale)
-            RefreshGroupPreviewAfterMove(handle)
-            CheckpointHandleHistory(handle, action)
-            return
+            RefreshVisibleSliders(previewOnly and "GROUP_PREVIEW_PORTRAIT_DRAG" or "GROUP_PREVIEW_PORTRAIT_MOVE")
+            if not previewOnly then RefreshGroupPreviewAfterMove(handle); CheckpointHandleHistory(handle, action) end
+            return true
         end
         if handle._cfgPower then
             -- The drag preserved the runtime's TOP -> frame BOTTOM anchor, so
@@ -428,9 +432,9 @@ function Handles.Install(box, deps)
             if not conf then return end
             conf.detachedPowerBarOffsetX = OffsetToConfig(offX or 0, scale)
             conf.detachedPowerBarOffsetY = OffsetToConfig(offY or 0, scale)
-            RefreshGroupPreviewAfterMove(handle)
-            CheckpointHandleHistory(handle, action)
-            return
+            RefreshVisibleSliders(previewOnly and "GROUP_PREVIEW_POWER_DRAG" or "GROUP_PREVIEW_POWER_MOVE")
+            if not previewOnly then RefreshGroupPreviewAfterMove(handle); CheckpointHandleHistory(handle, action) end
+            return true
         end
         local m = box._mock
         local anchorFrame = (handle._cfgGroup and handle._previewAnchorFrame) or m
@@ -482,11 +486,13 @@ function Handles.Install(box, deps)
                 placed.y = cfgY
             end
         end
-        if previewOnly and (handle._cfgGroup or handle._cfgSpell) then
-            -- Pointer-drag hot path: write raw Aura/Spell geometry and repaint
-            -- only pooled Edit Mode dummy indicators. Runtime group frames,
+        RefreshVisibleSliders(previewOnly and "GROUP_PREVIEW_DRAG" or "GROUP_PREVIEW_MOVE")
+        if previewOnly then
+            -- Pointer-drag hot path: all handle families publish their stored
+            -- offsets to the visible sliders. Aura/Spell handles additionally
+            -- repaint their pooled dummy indicators. Runtime group frames,
             -- history, and the full preview refresh remain release-only.
-            RefreshGroupIndicatorDragPreview(handle)
+            if handle._cfgGroup or handle._cfgSpell then RefreshGroupIndicatorDragPreview(handle) end
         else
             RefreshGroupPreviewAfterMove(handle)
             CheckpointHandleHistory(handle, action)
@@ -540,6 +546,7 @@ function Handles.Install(box, deps)
         else
             return false
         end
+        RefreshVisibleSliders("GROUP_PREVIEW_NUDGE")
         RefreshGroupPreviewAfterMove(handle)
         CheckpointHandleHistory(handle, "Nudge")
         return true
@@ -608,6 +615,7 @@ function Handles.Install(box, deps)
         else
             return false
         end
+        RefreshVisibleSliders(reason or "GROUP_PREVIEW_EXACT_MOVE")
         RefreshGroupPreviewAfterMove(handle)
         return true
     end
@@ -772,7 +780,7 @@ function Handles.Install(box, deps)
         handle:ClearAllPoints()
         handle:SetPoint(handle._dragPoint or "CENTER", handle._dragRelTo or box._mock, handle._dragRelPoint or "CENTER", nextX, nextY)
         UpdateHint(box, handle)
-        if handle._cfgGroup or handle._cfgSpell then SaveHandlePosition(handle, "Move", true) end
+        SaveHandlePosition(handle, "Move", true)
     end
     local function StartHandleDrag(handle, button)
         if ConfigCombatLocked() then return end

@@ -3425,13 +3425,14 @@ function M.SyncAuras3PositionSettings(unit, kind)
     if unit:match("^boss%d+$") then unit = "boss" end
     kind = tostring(kind or "buff"):lower()
     if kind == "buffs" then kind = "buff" elseif kind == "debuffs" then kind = "debuff" end
-    if kind ~= "buff" and kind ~= "debuff" then return false end
+    local refreshed = type(M.RefreshVisibleSliders) == "function"
+        and M.RefreshVisibleSliders("AURAS3_EDIT_MODE_POSITION_CHANGED") or false
+    if kind ~= "buff" and kind ~= "debuff" then return refreshed end
 
     local controls = M.auraPositionSettingsControls
         and M.auraPositionSettingsControls[unit .. ":" .. kind]
-    if not controls then return false end
+    if not controls then return refreshed end
 
-    local refreshed = false
     local xRefresh = controls.x and controls.x._msuf2RefreshFromModel
     if type(xRefresh) == "function" then xRefresh(); refreshed = true end
     local yRefresh = controls.y and controls.y._msuf2RefreshFromModel

@@ -593,6 +593,7 @@ local function WriteHandle(handle, x, y, skipApply)
         M.SyncDirectTextOffsets(store, handle._xKey)
         M.SyncDirectTextOffsets(store, handle._yKey)
     end
+    if type(M.RefreshVisibleSliders) == "function" then M.RefreshVisibleSliders("CLASSPOWER_PREVIEW_MOVE") end
     RequestClassPowerPreviewRefresh(handle._preview, "CLASSPOWER_PREVIEW_DRAG")
     if not skipApply then CallApply(handle, "CLASSPOWER_PREVIEW_MOVE") end
 end
