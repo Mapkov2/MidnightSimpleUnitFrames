@@ -1970,15 +1970,17 @@ local function CompileUnitPower(out, unit, key, conf, general, bars, health)
   elseif power.borderThickness > 10 then
     power.borderThickness = 10
   end
-  -- Class-Resources-owned edge strength for the Player detached *shapes*
-  -- (ROUND/CRYSTAL/ORB). The rectangular bar keeps the per-unit border toggle
-  -- and thickness above in both attached and detached mode, so the unit page
-  -- controls stay authoritative once the bar is detached.
-  power.detachedOutline = Number(bars.detachedPowerBarOutline, power.borderThickness)
-  if power.detachedOutline < 0 then
-    power.detachedOutline = 0
-  elseif power.detachedOutline > 8 then
-    power.detachedOutline = 8
+  -- Class Resources owns the outline of every detached Player power shape,
+  -- including BAR. Other units keep their per-unit power border controls.
+  power.detachedOutline = key == "player"
+    and Number(bars.detachedPowerBarOutline, power.borderThickness)
+    or nil
+  if power.detachedOutline ~= nil then
+    if power.detachedOutline < 0 then
+      power.detachedOutline = 0
+    elseif power.detachedOutline > 8 then
+      power.detachedOutline = 8
+    end
   end
   power.borderR = Number(ScopedValue(conf, general, "barOutlineColorR", general.barBorderR), 0)
   power.borderG = Number(ScopedValue(conf, general, "barOutlineColorG", general.barBorderG), 0)

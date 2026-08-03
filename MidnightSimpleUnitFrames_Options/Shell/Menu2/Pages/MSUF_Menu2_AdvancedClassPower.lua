@@ -1147,7 +1147,7 @@ function Page:BuildDetachedPower()
         { "outline", "slider", "Power bar outline", 0, 8, 1, 300, "detachedPowerBarOutline", 1, ApplyDetachedPowerBarOutline, group = "detached" },
     })
     self.dpbTextures = texture
-    AddTooltip(texture.outline, "Power Bar Outline", "Edge strength of the Round, Crystal and Orb detached Player power shapes. 0 disables only that edge. A detached Bar keeps the power border from its own unit frame page.")
+    AddTooltip(texture.outline, "Power Bar Outline", "Edge strength of every detached Player power shape, including Bar, Round, Crystal and Orb. 0 disables only that edge.")
     PlaceColumn(layout, 32, twoColumns and -154 or -188, 54, controlW, "LEFT", self.dpb.anchor, self.dpb.sync, mode.mode, self.dpb.orbSize, self.dpb.height)
     PlaceColumn(layout, rightX, twoColumns and -154 or -520, 54, controlW, "LEFT", self.dpb.x, self.dpb.y, self.dpb.layer)
     PlaceColumn(textures, 32, -104, 54, controlW, "LEFT", texture.outline)
@@ -1342,8 +1342,7 @@ function Page:RefreshControlState()
         SetControlEnabled(self.dpb.height, playerDetached and playerShape ~= "ORB")
     end
     if self.dpbTextures then
-        -- A detached Bar draws the power border owned by its unit frame page.
-        SetControlEnabled(self.dpbTextures.outline, playerDetached and playerShape ~= "BAR")
+        SetControlEnabled(self.dpbTextures.outline, playerDetached)
     end
     local playerTextOn = db.player and PlayerPowerTextShown(db.player)
     if self.dpbText then

@@ -12,6 +12,7 @@
 - Fixed Assistant treating numbers or polarity words embedded in an exact control name as the requested value. Bare requests such as changing `Party Scale 1-10 Players` or `Focus Target Hide in Group` now ask for a value instead of silently clamping or toggling the setting.
 - Fixed Assistant command precedence for Blizzard frame visibility, slot-aware HP / Power text modes and scoped Blizzard Raid Manager controls, preventing broader visibility or frame settings from consuming those requests.
 - Added a Player text outline selector to the detached Player Power section, with the expanded layout and Assistant metadata needed to keep the shared Player font outline route accessible.
+- Fixed detached Player Power outline ownership: Class Resources now controls the outline consistently for Bar, Round, Crystal and Orb shapes in live frames and both previews.
 - Fixed legacy Target of Target and Focus Target profile aliases surviving beside their canonical settings. Imports, resets, menu edits and Assistant writes now migrate the old keys once and retain a single canonical owner.
 
 ## 6.0-RC5 - 2026-08-03
