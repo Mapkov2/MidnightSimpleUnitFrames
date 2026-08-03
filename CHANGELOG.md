@@ -20,8 +20,11 @@
 
 ### Fixes & Performance
 
-- Fixed the Unit Frame preview sometimes turning into a black plate or hiding the selected health-bar texture. Background and fill opacity now remain independent, including a real zero-alpha state, and per-unit background values update immediately while editing.
-- Fixed preview rounded edges, square outlines and selection handles competing for the same draw level. Only the configured border owner is visible, and drag handles remain above every configurable visual layer.
+- Fixed the Unit Frame preview sometimes turning into a black plate or hiding the selected health-bar texture. Background and fill opacity now remain independent, including a real zero-alpha state, per-unit background values update immediately while editing, and Group Preview shows the configured alpha without the live Edit Mode visibility floor.
+- Fixed preview rounded edges, square outlines and selection handles competing for the same draw level. Only the configured border owner is visible, drag handles remain above every configurable visual layer, and the castbar preview surface no longer intercepts their mouse input.
+- Fixed Unit and Group previews omitting configured Power Bar outlines. Square bars now show all four edges, rounded embedded bars use their separator, and separately rounded bars keep their own outline.
+- Fixed Power Text disappearing from the Unit Frame preview when the Power Bar itself was hidden. Preview availability and footprint now follow the compiled Power Text setting, while Power Bar visibility follows the same per-unit, shared and default fallback chain as live frames.
+- Fixed the Texture Layer preview chip staying interactive when none of its three texture slots was enabled.
 - Fixed boss-frame outlines appearing thinner than the same setting on player, target, focus and group frames. Boss borders now convert the configured unit-frame thickness through the frame scale before snapping to physical pixels; attached castbar width follows the corrected visible outline.
 - Fixed name shortening cutting centered names on both ends. With a Top Center or Center name anchor, an overflowing name keeps its configured clip side so only one end is cut; restricted names retain the safe centered fallback.
 - Expanded Unit Frame preview diagnostics with live-versus-preview size, alpha, vertex alpha, texture and StatusBar-fill reporting for faster visual-parity checks.
