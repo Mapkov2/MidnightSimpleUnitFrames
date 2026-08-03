@@ -94,6 +94,7 @@ function SI.GetPlayerSpec()
   elseif C_SpecializationInfo and type(C_SpecializationInfo.GetSpecialization) == "function" then
     specIndex = C_SpecializationInfo.GetSpecialization()
   end
+  if not specIndex and ns.Client and ns.Client.IsVanilla == true then specIndex = 0 end
   if not specIndex then return nil end
   if classToken == cachedClass and specIndex == cachedIndex then return cachedKey end
   cachedClass, cachedIndex = classToken, specIndex

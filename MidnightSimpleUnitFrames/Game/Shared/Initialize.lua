@@ -1,4 +1,4 @@
---- Client flavor detection shared by Retail, Mists Classic, and TBC Classic.
+--- Client flavor detection shared by Retail and the supported Classic clients.
 ---
 --- This file intentionally loads before Kernel/MSUF_Bootstrap.lua.  Keep it
 --- dependency-free: its job is to establish stable client flags that later
@@ -16,6 +16,7 @@ _G.MSUF_NS = MSUF
 
 local projectID = _G.WOW_PROJECT_ID
 local mainlineID = _G.WOW_PROJECT_MAINLINE
+local vanillaID = _G.WOW_PROJECT_CLASSIC
 local mistsID = _G.WOW_PROJECT_MISTS_CLASSIC
 local tbcID = _G.WOW_PROJECT_BURNING_CRUSADE_CLASSIC
 
@@ -27,6 +28,7 @@ end
 
 local tocFlavor = ReadTOCFlavor()
 local isRetail = mainlineID ~= nil and projectID == mainlineID
+local isVanilla = (vanillaID ~= nil and projectID == vanillaID) or tocFlavor == "Vanilla"
 local isMists = (mistsID ~= nil and projectID == mistsID) or tocFlavor == "Mists"
 local isTBC = (tbcID ~= nil and projectID == tbcID) or tocFlavor == "TBC"
 
@@ -39,12 +41,15 @@ local Client = MSUF.Client or {}
 MSUF.Client = Client
 Client.ProjectID = projectID
 Client.Interface = interfaceNumber
-Client.Flavor = isMists and "Mists" or isTBC and "TBC" or isRetail and "Mainline" or "Unknown"
+Client.Flavor = isVanilla and "Vanilla" or isMists and "Mists" or isTBC and "TBC"
+    or isRetail and "Mainline" or "Unknown"
 Client.IsRetail = isRetail
+Client.IsVanilla = isVanilla
+Client.IsEra = isVanilla
 Client.IsMists = isMists
 Client.IsTBC = isTBC
-Client.IsClassic = isMists or isTBC
-Client.IsSupported = isRetail or isMists or isTBC
+Client.IsClassic = isVanilla or isMists or isTBC
+Client.IsSupported = isRetail or isVanilla or isMists or isTBC
 
 local unsupportedEvents = Client.UnsupportedEvents or {}
 Client.UnsupportedEvents = unsupportedEvents
@@ -62,6 +67,8 @@ end
 -- Short aliases match the style used by ElvUI's shared client initializer and
 -- make future client splits cheap without introducing per-frame checks.
 MSUF.Retail = Client.IsRetail
+MSUF.Vanilla = Client.IsVanilla
+MSUF.Era = Client.IsEra
 MSUF.Mists = Client.IsMists
 MSUF.TBC = Client.IsTBC
 MSUF.Classic = Client.IsClassic

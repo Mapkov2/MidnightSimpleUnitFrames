@@ -1,5 +1,5 @@
 --- Classic-only visual parity for the scan-based Auras3 backend.
---- Loaded exclusively by the Mists/TBC manifests; Mainline keeps the native
+--- Loaded exclusively by Classic-family manifests; Mainline keeps the native
 --- AuraContainer visual implementation and pays no load/runtime cost here.
 if not (select(2, ...) and select(2, ...).Client and select(2, ...).Client.IsClassic) then return end
 
@@ -647,7 +647,10 @@ function V.UpdateButtonVisual(lane, button, unit, data)
     ApplyFrameEffect(lane, button, data)
     if cfg.showDurationBar == true then
         local bar = DurationBar(button, cfg)
-        local duration = C_UnitAuras and C_UnitAuras.GetAuraDuration
+        local rawDuration = tonumber(data and data.duration)
+        local expiration = tonumber(data and data.expirationTime)
+        local timed = rawDuration and expiration and rawDuration > 0 and expiration > 0
+        local duration = timed and C_UnitAuras and C_UnitAuras.GetAuraDuration
             and C_UnitAuras.GetAuraDuration(unit, data.auraInstanceID)
         if duration and bar.SetTimerDuration then
             local enum = _G.Enum
@@ -659,14 +662,17 @@ function V.UpdateButtonVisual(lane, button, unit, data)
                     and direction.ElapsedTime or direction.RemainingTime))
             bar:Show()
         else
-            local rawDuration, expiration = tonumber(data.duration), tonumber(data.expirationTime)
-            if rawDuration and expiration and rawDuration > 0 and expiration > 0 then
+            if timed then
                 bar:SetMinMaxValues(0, rawDuration)
                 bar:SetValue(cfg.durationBarDirection == "ELAPSED"
                     and math_max(0, rawDuration - (expiration - (_G.GetTime and _G.GetTime() or 0)))
                     or math_max(0, expiration - (_G.GetTime and _G.GetTime() or 0)))
                 bar:Show()
             else
+                -- Reusing a status bar after a timed aura must not retain its
+                -- native duration object/value for the next permanent aura.
+                bar:SetMinMaxValues(0, 1)
+                bar:SetValue(0)
                 bar:Hide()
             end
         end

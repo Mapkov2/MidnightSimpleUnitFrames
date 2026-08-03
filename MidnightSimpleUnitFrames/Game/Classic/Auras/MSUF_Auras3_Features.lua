@@ -138,7 +138,7 @@ end
 
 
 function Features.CompileSettingsFilter(filters, helpful, extra)
-    filters = type(filters) == "table" and filters or {}
+    filters = type(filters) == "table" and filters.enabled ~= false and filters or {}
     extra = type(extra) == "table" and extra or {}
     local req = NewFilterRequirements()
     local exclusive = tostring(filters.exclusive or "none"):lower()
@@ -322,9 +322,11 @@ local function SortMode(value)
     return 0
 end
 
-local function BaseLane(unit, kind, entry, index, spellIDs, helpful, rootKey)
+local function BaseLane(unit, kind, entry, index, spellIDs, helpful, rootKey, forcePlayer)
     local placed = type(entry.placed) == "table" and entry.placed or {}
-    local filters = type(entry.filters) == "table" and entry.filters or {}
+    local filters = type(entry.filters) == "table" and entry.filters
+        or { enabled = true, onlyMine = entry.onlyOwn == true }
+    local activeFilters = filters.enabled ~= false and filters or nil
     local size = Number(placed.size, 24, 1, 128)
     local buttonWidth = tostring(placed.type or "icon"):lower() == "bar"
         and Number(placed.barWidth, 54, 1, 512) or size
@@ -335,14 +337,15 @@ local function BaseLane(unit, kind, entry, index, spellIDs, helpful, rootKey)
     local xSign, ySign, vertical = Growth(placed.growth)
     local cols, rows = Grid(maxCount, perRow, vertical)
     local sortOrder = SortMode(placed.sortMethod)
-    if entry.onlyOwn == true and filters.onlyMine ~= true then
-        filters = {}
-        for key, value in pairs(type(entry.filters) == "table" and entry.filters or {}) do filters[key] = value end
-        filters.onlyMine = true
+    if forcePlayer == true and (not activeFilters or activeFilters.onlyMine ~= true) then
+        local source = activeFilters or {}
+        activeFilters = {}
+        for key, value in pairs(source) do activeFilters[key] = value end
+        activeFilters.onlyMine = true
     end
-    local filterPlan = Features.CompileSettingsFilter(filters, helpful)
+    local filterPlan = Features.CompileSettingsFilter(activeFilters, helpful)
     local filter = filterPlan.scanFilter
-    local onlyMine = filters.onlyMine == true
+    local onlyMine = activeFilters and activeFilters.onlyMine == true or false
     local hasInclusive = filterPlan.hasRequirements == true
     local cfg = {
         kind = kind,
@@ -413,16 +416,16 @@ local function BaseLane(unit, kind, entry, index, spellIDs, helpful, rootKey)
         hasFilterWork = true,
         classicFeatureMatch = true,
         hidePermanent = filters.hidePermanent == true,
-        maxDuration = Number(filters.maxDuration, 0, 0, 86400),
+        maxDuration = Number(filters.maxDuration, 0, 0, 180),
         onlyMine = onlyMine,
-        onlyImportant = filters.onlyImportant == true,
-        raid = filters.raid == true,
-        raidInCombat = filters.raidInCombat == true,
-        includeDispellable = filters.includeDispellable == true,
-        dispellableAny = filters.dispellableAny == true,
-        crowdControl = filters.crowdControl == true,
-        externalDefensive = filters.externalDefensive == true,
-        bigDefensive = filters.bigDefensive == true,
+        onlyImportant = activeFilters and activeFilters.onlyImportant == true or false,
+        raid = activeFilters and activeFilters.raid == true or false,
+        raidInCombat = activeFilters and activeFilters.raidInCombat == true or false,
+        includeDispellable = activeFilters and activeFilters.includeDispellable == true or false,
+        dispellableAny = activeFilters and activeFilters.dispellableAny == true or false,
+        crowdControl = activeFilters and activeFilters.crowdControl == true or false,
+        externalDefensive = activeFilters and activeFilters.externalDefensive == true or false,
+        bigDefensive = activeFilters and activeFilters.bigDefensive == true or false,
         hasInclusive = hasInclusive,
         needsPlayerFlag = filterPlan.needsPlayerFlag == true,
         needsCombatRefresh = filterPlan.needsCombatRefresh == true,
@@ -498,7 +501,8 @@ function Features.CompileUnitLanes(auras, unit, frameSpec)
                 if spellIDs then
                     local helpful = playerDefensive or tostring(entry.auraType or "BUFF"):upper() ~= "DEBUFF"
                     local kind = "custom" .. tostring(index)
-                    local lane = BaseLane(unit, kind, entry, index, spellIDs, helpful, "CustomAuras" .. tostring(index))
+                    local lane = BaseLane(unit, kind, entry, index, spellIDs, helpful,
+                        "CustomAuras" .. tostring(index), targetDot)
                     if entry.portraitIcon == true and playerDefensive then
                         lane = PortraitLane(lane, frameSpec, entry, "defensivePortrait", "DefensivePortrait") or lane
                     elseif entry.portraitIcon == true and targetDot then

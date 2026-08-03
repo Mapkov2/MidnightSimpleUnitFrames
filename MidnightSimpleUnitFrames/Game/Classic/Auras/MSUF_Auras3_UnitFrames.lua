@@ -238,6 +238,7 @@ local GROUP_LANE_SPECS = {
         alphaKey = "buffAlpha",
         filterKey = "buffFilter",
         blacklistKey = "buffBlacklistHash",
+        hidePermanentKey = "buffHidePermanent",
         showSwipeKey = "buffShowCooldownSwipe",
         showCooldownKey = "buffShowCooldown",
         showStackKey = "buffShowStacks",
@@ -298,6 +299,8 @@ local GROUP_LANE_SPECS = {
         alphaKey = "debuffAlpha",
         filterKey = "debuffFilter",
         blacklistKey = "debuffBlacklistHash",
+        hidePermanentKey = "debuffHidePermanent",
+        maxDurationKey = "debuffMaxDuration",
         showSwipeKey = "debuffShowCooldownSwipe",
         showCooldownKey = "debuffShowCooldown",
         showStackKey = "debuffShowStacks",
@@ -884,14 +887,24 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
     local stackAnchor = ReadAnchor(sharedLayout, shared, spec.stackAnchorKey, ReadShared(shared, "stackCountAnchor") or "TOPRIGHT")
     local filters = FilterTable(filtersRoot, spec.dbKey)
     local rootFilters = type(filtersRoot) == "table" and filtersRoot or nil
+    local activeRootFilters = rootFilters and rootFilters.enabled ~= false and rootFilters or nil
+    local laneBlacklist = type(blacklist) == "table"
+        and type(blacklist[spec.dbKey]) == "table"
+        and blacklist[spec.dbKey] or blacklist
     local exclusive = filters and filters.exclusive
     local onlyImportant = filters and (filters.onlyImportant == true or exclusive == "important")
     local onlyMine = filters and filters.onlyMine == true
     local raid = filters and (filters.raid == true or exclusive == "raid")
     local includeStealable = kind == "buff" and filters and filters.includeStealable == true
     local boss = filters and (filters.boss == true or filters.includeBoss == true)
-    local onlyBoss = rootFilters and rootFilters.onlyBossAuras == true
-    local hidePermanent = kind == "buff" and rootFilters and rootFilters.hidePermanent == true
+    local onlyBoss = activeRootFilters and activeRootFilters.onlyBossAuras == true
+    local hidePermanent = type(laneBlacklist) == "table" and laneBlacklist.hidePermanent == true
+    if hidePermanent ~= true and kind == "buff" and activeRootFilters then
+        -- Legacy profiles stored this one level above the per-lane filter.
+        hidePermanent = activeRootFilters.hidePermanent == true
+    end
+    local maxDuration = kind == "debuff" and type(laneBlacklist) == "table"
+        and ClampNumber(laneBlacklist.maxDuration, 0, 0, 180) or 0
     local showSated = kind ~= "buff" or ReadBool(nil, shared, "showSated", true)
     local satedThreshold = kind == "buff" and ReadNumber(nil, shared, "satedShowAtSeconds", 0, 0, 3600) or 0
     local satedFilter = kind == "buff" and (showSated ~= true or satedThreshold > 0)
@@ -912,8 +925,9 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
     local visualNeedsPlayer = kind == "debuff" and visual and visual.needsPlayerFlag == true
     local hasInclusive = filterPlan and filterPlan.hasRequirements == true
         or onlyMine or raid or includeStealable or boss or onlyBoss or raidInCombat
-    local black = CompileBlacklist(blacklist)
-    local hasFilterWork = black ~= nil or onlyImportant or hasInclusive or hidePermanent or satedFilter
+    local black = CompileBlacklist(laneBlacklist)
+    local hasFilterWork = black ~= nil or onlyImportant or hasInclusive or hidePermanent
+        or maxDuration > 0 or satedFilter
     local renderEnabled = renderAllowed ~= false and show and maxCount > 0
     local visualDirect = kind == "debuff"
         and visual
@@ -1060,6 +1074,7 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
         includeStealable = includeStealable == true,
         boss = boss == true,
         hidePermanent = hidePermanent == true,
+        maxDuration = maxDuration,
         showSated = showSated == true,
         satedThreshold = satedThreshold,
         satedFilter = satedFilter == true,
@@ -1106,7 +1121,7 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
     local black = CompileBlacklistHash(source[spec.blacklistKey])
     local includeSpellIDs = spec.includeHashKey and source[spec.includeHashKey] or nil
     local hidePermanent = spec.hidePermanentKey and source[spec.hidePermanentKey] == true or false
-    local maxDuration = spec.maxDurationKey and ClampNumber(source[spec.maxDurationKey], 0, 0, 86400) or 0
+    local maxDuration = spec.maxDurationKey and ClampNumber(source[spec.maxDurationKey], 0, 0, 180) or 0
     local hasFilterWork = black ~= nil or type(includeSpellIDs) == "table" or hidePermanent or maxDuration > 0
         or (filterPlan and filterPlan.hasRequirements == true)
     local visualDirect = kind == "debuff"
@@ -1114,7 +1129,9 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
         and visual.directVisualEligible == true
         and hasFilterWork ~= true
     local enabled = renderEnabled or (forceScan == true and kind == "debuff" and visualDirect ~= true)
-    local cappedFilterScan = black ~= nil and not (filterPlan and filterPlan.hasRequirements == true)
+    local cappedFilterScan = (black ~= nil or hidePermanent or maxDuration > 0)
+        and type(includeSpellIDs) ~= "table"
+        and not (filterPlan and filterPlan.hasRequirements == true)
     local showCooldown = source[spec.showCooldownKey] ~= false
     local showCooldownSwipe = showCooldown and source[spec.showSwipeKey] ~= false
     local stackR, stackG, stackB = ReadGeneralColor("aurasStackCountColor", 1, 1, 1)
