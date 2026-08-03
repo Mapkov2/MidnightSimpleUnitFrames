@@ -8,10 +8,54 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-RC3",
-    previousVersion = "6.0-RC2",
-    rangeLabel = "6.0-RC2 -> 6.0-RC3",
+    currentVersion = "6.0-RC4",
+    previousVersion = "6.0-rc3",
+    rangeLabel = "6.0-rc3 -> 6.0-RC4",
     entries = {
+        {
+            version = "6.0-RC4",
+            date = "2026-08-03",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Added a Blizzard Raid Manager visibility mode for MSUF group frames. Party, Raid and Mythic Raid now share Auto, Always Show, Mouseover and Hidden choices, restoring access to ready checks, raid markers and role filters without giving Blizzard's compact raid frames back ownership.",
+                        "Blizzard's Totem Frame is now available to every class. Death Knight Raise Dead, Paladin Consecration and any other ability that fills a Blizzard totem slot can be seen and dismissed even while MSUF hides the PlayerFrame; the existing preview, offsets and Assistant guidance are no longer Shaman/Monk-only.",
+                        "Added the bundled Fritz Soundscape font to MSUF and LibSharedMedia.",
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Reworked the Unit Frame preview to use the same native StatusBar ownership as live frames. Health and Power textures, backgrounds, opacity, rounded styling and square outlines now render from the real owning regions instead of a second synthetic frame surface.",
+                        "Refined Menu2's visual theme: navigation pills keep clean authored end caps at every width, hover feedback stays clearly visible, alternate accents tint only the surfaces they own, and minimize/maximize follow the accent while Close keeps its danger color.",
+                        "Refreshed the compact navigation and switch media while reducing their file size.",
+                        "The Dashboard Changelog is now the first utility card and uses readable shared typography, brighter bullets, real line spacing and separators between releases.",
+                        "Added Silvermoon as the default menu preview background for checking frames against a colored in-game surface.",
+                        "The Aura Style container selector now stays docked with the scope selector, so its pinned preview does not lose the lane it belongs to while scrolling.",
+                        "Updated the Purge Border notice: the feature returns with WoW 12.1.5 when Blizzard exposes the required API support.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Fixed the Unit Frame preview sometimes turning into a black plate or hiding the selected health-bar texture. Background and fill opacity now remain independent, including a real zero-alpha state, and per-unit background values update immediately while editing.",
+                        "Fixed preview rounded edges, square outlines and selection handles competing for the same draw level. Only the configured border owner is visible, and drag handles remain above every configurable visual layer.",
+                        "Fixed boss-frame outlines appearing thinner than the same setting on player, target, focus and group frames. Boss borders now convert the configured unit-frame thickness through the frame scale before snapping to physical pixels; attached castbar width follows the corrected visible outline.",
+                        "Fixed name shortening cutting centered names on both ends. With a Top Center or Center name anchor, an overflowing name keeps its configured clip side so only one end is cut; restricted names retain the safe centered fallback.",
+                        "Expanded Unit Frame preview diagnostics with live-versus-preview size, alpha, vertex alpha, texture and StatusBar-fill reporting for faster visual-parity checks.",
+                    },
+                },
+                {
+                    title = "Release Workflow",
+                    bullets = {
+                        "Alpha, Beta, RC, Pre and Preview tags can no longer publish to Wago, even when a tag is accidentally annotated with publish-target: all or publish-target: wago. Prereleases remain available through their explicitly selected GitHub or CurseForge channel.",
+                        "Stale prerelease tags are rejected unless they point at the current origin/main commit, preventing a bulk git push --tags from publishing forgotten older beta builds.",
+                        "Stable Wago uploads now receive only the current release section instead of the complete historical changelog, so old beta notes are not presented again as part of a new release.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-RC3",
             date = "2026-08-02",
@@ -119,57 +163,6 @@ local data = {
                         "Fixed a rejected anchor during an Edit Mode drag leaving frames scattered. The move is rolled back to its last valid position, boss frames included.",
                         "Fixed the Assistant answering \"frame outline texture\" with an outline-versus-border clarification instead of the control that Beta44 added.",
                         "Fixed Assistant questions about a font shadow failing when the shared shadow resolver was not reachable.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-Beta44",
-            date = "2026-08-01",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "New Texture Layer for unit frames: three decorative texture slots per frame, each with its own SharedMedia or custom texture, size, anchor target (frame, health, power, portrait), strata and level, custom or class color with a multi-direction gradient, blend mode, mirroring, combat-only visibility and rounded clipping.",
-                        "Unit frames and group frames can now fade out of combat. The whole-frame opacity is set per scope on a new \"Out of Combat\" tab in Transparency, and composes with Range Fade so the strongest fade wins.",
-                        "New \"Blizzard ring\" portrait shape: the client's own circular portrait mask, the gold ring cut from Blizzard's player-frame art and its corner embellishment, drawn untinted at any portrait size.",
-                        "Text colors are now controllable per element. Each castbar can color its spell name, cast time and target name separately, and Level, Race, Class, Raid Group, Dead, Ghost, AFK and DND text each take their own color. Anything left unset keeps following the font color it inherits today.",
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "The square frame outline can use a texture instead of a solid color, globally or per unit and group scope. Rounded frames ignore it and keep the tinted rounded edge.",
-                        "Blizzard frame ownership is now decided per unit only. The global \"Disable Blizzard unitframes\" and \"Fully Hide Blizzard PlayerFrame\" toggles are gone; use \"Force Blizzard frame on\" in a unit's Frame Basics to keep a native frame.",
-                        "Copy To no longer offers to copy placement. \"Size & Anchoring\" is now \"Frame Size\" and copies width and height only, on both unit and group pages, because two frames sharing a position land on top of each other.",
-                        "Copy To gained a Texture Layer category and now copies settings it previously skipped: direct text layout and legacy text keys on units, and frame scaling, detached power, out-of-combat fade, per-slot text sizes and offsets, all status icons, aggro and dispel-symbol keys on groups.",
-                        "Rounded frames now also cover group target and focus indicators, group block borders, spell indicator edges, group aura visuals, the debuff stripe and the over-absorb glow.",
-                        "Menu2 sliders and the menu scale slider now follow the cursor for as long as the mouse button is held instead of jumping once per click.",
-                        "The options window only starts a drag from its chrome, so a click that misses a control no longer moves the whole window.",
-                        "The release tour can host live settings: the rounded frames card lets you switch the style and corner strength directly from the card.",
-                        "Unit frames gained the custom name color that group frames already had, as a third choice next to Default and Class color in the Fonts scope.",
-                        "The Colors page groups the new swatches into Castbar Text Colors, Status Text Colors and Texture Layer Colors, and each one is also reachable from the unit page card that owns it. Right-clicking a castbar text swatch drops the override and follows the shared castbar color again.",
-                        "Copy To now carries castbar text colors and status indicator colors along with their placement, instead of copying half the setting.",
-                        "Aura icons placed in the portrait stay square. Shaping them to the portrait was tried and reverted because 12.1 native aura buttons ignore icon masks; the Auras page now says so instead of leaving you looking for the option.",
-                        "Translation pass across all twelve locales: every new setting is translated, several German terms that were machine-translated nonsense are corrected, and text-slot strings that were still English in Russian, Korean and Chinese are now localized.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed the guided tour and the release tour offering themselves again on every menu visit. Both wrote their completed state into an orphaned table when the SavedVariables root was replaced by profile repair or a reset.",
-                        "Fixed a configured Dead, Ghost, AFK or DND text color being dropped again by the next font change.",
-                        "Fixed boss frames drawing their outline, mouseover highlight and rounded mask against the wrong rectangle when the power bar is embedded, and fixed their square border reappearing after a rebuild.",
-                        "Fixed the absorb value in health text ignoring \"Short numbers\" and the thousands separator. The 12.x client hands out absorbs as secret values, which the zero-hiding path could not format.",
-                        "Fixed the portrait cast spell icon staying visible after the option was switched off.",
-                        "Fixed the unit preview disagreeing with the live frame while Direct Text Layout is active: it placed name, health and power text with the legacy offsets instead of the direct anchors. Slot colors, reversed health sides and the drag handles now line up with the runtime too.",
-                        "Fixed several menu sections clipping into the next accordion header: Frame Outline, UnitFrame Dispel Symbol, and the unit Text section, whose height now follows the selected tab instead of one fixed value.",
-                        "Fixed Copy To popups stacking the last category over an earlier one once a page had more than ten categories.",
-                        "Fixed Copy To panels and other menu popups being drawn underneath a pinned preview.",
-                        "Fixed the colored bullet of a color shortcut being painted back on top of its dots after the surrounding controls were re-shown.",
-                        "Boss castbars now share one lifecycle handler, collapse same-frame encounter events into a single pool pass, and skip anchor and layout work when no cast is active.",
-                        "Aura and range-fade lifecycle work is coalesced when several boss frames appear at once, and the on-show identity refresh no longer runs twice for the same unit.",
-                        "Health gradient curves are cached instead of rebuilt per frame, and portrait textures reuse a bounded session cache.",
                     },
                 },
             },
