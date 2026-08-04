@@ -13,6 +13,7 @@
 - Fixed Assistant explain requests failing when players used a published control alias instead of the visible label. Ambiguous aliases still fail closed, and advice questions such as whether a setting is worth changing remain strictly read-only.
 - Fixed the remaining Power Bar color fallback path when a unit exposes a numeric power type whose token must be normalized before resolving configured colors.
 - Fixed disabled themed Menu2 segments retaining their active blue paint even though native mouse interaction had already been disabled.
+- Fixed existing profiles missing the Class Resources preview guides. The RC8 default repair enables them once, while a later explicit user choice to hide them remains authoritative.
 
 ## 6.0-RC7 - 2026-08-04
 

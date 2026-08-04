@@ -1215,8 +1215,9 @@ local MSUF_DEFAULTS_CURRENT_PROFILE_SCHEMA = 600
 --- Persisted completion marker for the broad default-fill/repair pass below.
 --- Bump this whenever MSUF_EnsureDB_Heavy gains a new mandatory default or
 --- one-shot repair; current profiles can then be repaired exactly once again.
-local MSUF_DEFAULTS_CURRENT_REVISION = 8
+local MSUF_DEFAULTS_CURRENT_REVISION = 9
 local MSUF_DEFAULTS_NAVIGATION_ICONS_REVISION = 7
+local MSUF_DEFAULTS_CLASS_POWER_PREVIEW_GUIDES_REVISION = 9
 
 --- Root tables are the contract every other module assumes after EnsureDB.
 --- Add new top-level SavedVariables buckets here before modules start reading
@@ -1707,6 +1708,14 @@ if (tonumber(MSUF_DB._msufDefaultsRevision) or 0) < MSUF_DEFAULTS_NAVIGATION_ICO
     g.showNavigationIcons = true
 elseif g.showNavigationIcons == nil then
     g.showNavigationIcons = true
+end
+--- Guides are the default teaching state for the Class Resources preview.
+--- Revision 9 turns them on once for existing profiles; after that, an
+--- explicit user toggle to false remains authoritative.
+if (tonumber(MSUF_DB._msufDefaultsRevision) or 0) < MSUF_DEFAULTS_CLASS_POWER_PREVIEW_GUIDES_REVISION then
+    g.classPowerPreviewGuidesEnabled = true
+elseif g.classPowerPreviewGuidesEnabled == nil then
+    g.classPowerPreviewGuidesEnabled = true
 end
 if g.showGameMenuButton == nil then
     g.showGameMenuButton = true
