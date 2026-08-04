@@ -748,14 +748,66 @@ function R.EnsureSettingLabelIndex()
     return map
 end
 
+-- Alias -> setting, for the explain fallback only. The location lane
+-- ("where is rounding strength") and the mutation lane ("set rounding strength
+-- to 4") both resolve aliases, but the explain lane knew labels only, so
+-- "what is rounding strength" / "explain corner rounding" dead-ended on wording
+-- the rest of the Assistant understands -- every "what is"/"explain"/"describe"
+-- form asked by alias did.
+--
+-- Deliberately a SEPARATE index from EnsureSettingLabelIndex: that one also
+-- backs the guards deciding whether an input names a control exactly, and
+-- widening those to aliases would change which requests topic lanes may claim.
+-- Built once, same lazy contract, so the per-input cost stays O(1).
+-- An alias claimed by more than one setting is dropped rather than guessed at.
+local EMPTY_ALIAS_LIST = {}
+function R.EnsureSettingAliasIndex()
+    local settings = R.EnsureCompleteSettingRegistry and R.EnsureCompleteSettingRegistry() or nil
+    if type(settings) ~= "table" then return nil end
+    local cached = R._settingAliasIndex
+    if type(cached) == "table" and cached.settings == settings and cached.count == #settings then
+        return cached.map
+    end
+    local owner, conflict = {}, {}
+    for i = 1, #settings do
+        local setting = settings[i]
+        local lists = { setting.exactAliases or EMPTY_ALIAS_LIST, setting.aliases or EMPTY_ALIAS_LIST }
+        for l = 1, #lists do
+            local list = lists[l]
+            for j = 1, #list do
+                local alias = R.Normalize(list[j] or "")
+                if alias ~= "" then
+                    if owner[alias] == nil then
+                        owner[alias] = setting
+                    elseif owner[alias] ~= setting then
+                        conflict[alias] = true
+                    end
+                end
+            end
+        end
+    end
+    local map = {}
+    for alias, setting in pairs(owner) do
+        if not conflict[alias] then map[alias] = setting end
+    end
+    R._settingAliasIndex = { settings = settings, count = #settings, map = map }
+    return map
+end
+
 -- Last-resort answer for a control the explain/location shortcuts cannot
 -- format (a handful of settings carry a category but no page). Naming the
 -- control and where it lives always beats a generic "here is what I can point
 -- you at". Deliberately does not read the current value: some getters need a
 -- live frame, and this exists precisely for the cases that fall through.
 function R.NamedSettingDirectAnswer(label)
+    local normalized = R.Normalize(label or "")
     local map = R.EnsureSettingLabelIndex()
-    local setting = map and map[R.Normalize(label or "")] or nil
+    local setting = map and map[normalized] or nil
+    if not setting then
+        -- A real label always wins; only fall back to an unambiguous alias.
+        local aliasMap = R.EnsureSettingAliasIndex()
+        setting = aliasMap and aliasMap[normalized] or nil
+    end
     if not setting then return nil end
 
     local name = tostring(setting.label or label)
@@ -843,6 +895,17 @@ function A.RouterNamedSettingLabel(text)
     if not setting and map then
         local trimmed = subject:match("^(.-)%s+on$") or subject:match("^(.-)%s+at$")
         if trimmed and trimmed ~= "" then setting = map[trimmed] end
+    end
+    -- Players name a control by the alias the registry already publishes, not
+    -- only by its visible label. "where is rounding strength" and "set rounding
+    -- strength to 4" both resolve, so "what is rounding strength" dead-ending
+    -- was an inconsistency, not a missing control -- every explain/describe form
+    -- asked by alias hit the generic catch-all. Labels still win outright, and
+    -- EnsureSettingAliasIndex drops any alias claimed by two settings, so this
+    -- can only resolve names that were already unambiguous. Still O(1).
+    if not setting then
+        local aliasMap = R.EnsureSettingAliasIndex()
+        setting = aliasMap and aliasMap[subject] or nil
     end
     local label = setting and tostring(setting.label or "") or ""
     if label == "" then
@@ -1543,6 +1606,21 @@ function A.RouterIsFailClosedReadOnlyRequest(text)
         or (R.ContainsAny(norm, { "will it affect", "would it affect", "does it affect", "what does it affect", "what will it affect", "impact on", "effect on" })
             and R.ContainsAny(norm, { "what", "which", "how", "will", "would", "does", "tell", "explain" }))
     then
+        return true
+    end
+    -- Advice questions ask whether a change is a good idea; they never authorize
+    -- it. "is General Power Bar Gradient Color Green Channel worth changing"
+    -- named a colour channel and enabled Power Bar Gradient across all ten bar
+    -- scopes, because no classifier recognised the shape as a question and a
+    -- topic lane claimed it. Asking about a control must always be free.
+    if R.ContainsAny(norm, {
+        "worth changing", "worth setting", "worth enabling", "worth disabling",
+        "worth turning on", "worth turning off", "worth using", "worth it",
+        "should i change", "should i set", "should i enable", "should i disable",
+        "should i turn on", "should i turn off", "should i use", "should i adjust",
+        "do i need", "do i have to", "is it a good idea", "would you recommend",
+        "lohnt es sich", "sollte ich",
+    }) then
         return true
     end
     -- A direction-less movement phrase is a clarification request. It must
