@@ -486,10 +486,29 @@ local function AutomaticCooldownProvider()
     if type(getter) ~= "function" then return nil, nil end
     return getter()
 end
+local function CooldownAnchorEnabled()
+    local general = type(M.GetGeneralDB) == "function" and M.GetGeneralDB() or nil
+    if type(general) ~= "table" then
+        local db = _G.MSUF_DB
+        general = type(db) == "table" and db.general or nil
+    end
+    local getter = _G.MSUF_IsCooldownAnchorEnabled
+    if type(getter) == "function" then return getter(general) == true end
+    return type(general) == "table" and general.anchorToCooldown == true or false
+end
+local function CooldownConsentDecision()
+    local providerId = AutomaticCooldownProvider()
+    local getter = _G.MSUF_GetCooldownAnchorConsentDecision
+    if not providerId or type(getter) ~= "function" then return nil end
+    return getter(providerId)
+end
 local function CooldownAnchorDecision()
-    if AutomaticCooldownProvider() ~= nil then return "cooldown" end
     local value = Preference(COOLDOWN_ANCHOR_PREFERENCE)
-    return VALID_COOLDOWN_ANCHOR_DECISION[value] and value or nil
+    if VALID_COOLDOWN_ANCHOR_DECISION[value] then return value end
+    if CooldownConsentDecision() ~= nil then
+        return CooldownAnchorEnabled() and "cooldown" or "independent"
+    end
+    return nil
 end
 local function CooldownAnchorDecisionComplete()
     return CooldownAnchorDecision() ~= nil
@@ -690,7 +709,6 @@ end
 
 local function SetGuidedCooldownAnchorDecision(value)
     if not VALID_COOLDOWN_ANCHOR_DECISION[value] or BlockedByCombat() then return false end
-    if AutomaticCooldownProvider() ~= nil then return value == "cooldown" end
     local previousDecision = CooldownAnchorDecision()
     local enabled = value == "cooldown"
     local general = type(M.GetGeneralDB) == "function" and M.GetGeneralDB() or nil
@@ -700,7 +718,10 @@ local function SetGuidedCooldownAnchorDecision(value)
         db.general = type(db.general) == "table" and db.general or {}
         general = db.general
     end
-    if general.anchorToCooldown ~= enabled then
+    local setter = _G.MSUF_SetCooldownAnchorEnabled
+    if type(setter) == "function" then
+        if setter(enabled, true) == false then return false end
+    elseif general.anchorToCooldown ~= enabled then
         if type(M.SetGeneralValue) == "function" then
             if M.SetGeneralValue("anchorToCooldown", enabled, "MSUF2_GUIDED_COOLDOWN_ANCHOR") == false then return false end
         else
@@ -3147,16 +3168,14 @@ local function BuildEditModePage(ctx, T, W)
         local movementComplete = EditModeMovementComplete()
         decision:SetValue(anchorDecision)
         for i = 1, #(decision.buttons or {}) do
-            SetButtonEnabled(decision.buttons[i], automaticProviderLabel == nil)
+            SetButtonEnabled(decision.buttons[i], true)
         end
         if decision._msuf2Title and decision._msuf2Title.SetText then
             decision._msuf2Title:SetText(automaticProviderLabel
-                and Tr("Cooldown Manager anchoring (automatic)")
+                and M.Format("Cooldown Manager anchoring (%s)", automaticProviderLabel)
                 or Tr("Should all Unitframes follow the Cooldown Manager?"))
         end
-        if automaticProviderLabel then
-            decisionCopy:SetText(M.Format("%s detected: MSUF automatically anchors Unitframes to Essential Cooldown Manager. No choice is required.", automaticProviderLabel))
-        elseif anchorDecision == "cooldown" then
+        if anchorDecision == "cooldown" then
             decisionCopy:SetText(Tr("Selected: Unitframes follow Essential Cooldown Manager. If Main Cooldowns move, the anchored Unitframe layout follows."))
         elseif anchorDecision == "independent" then
             decisionCopy:SetText(Tr("Selected: Unitframes use the current global/custom anchor. Moving Main Cooldowns will not move them."))

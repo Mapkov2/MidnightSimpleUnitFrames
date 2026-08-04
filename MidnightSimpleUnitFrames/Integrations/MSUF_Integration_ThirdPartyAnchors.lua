@@ -12,6 +12,7 @@ local EventRegistry = EventRegistry
 local InCombatLockdown = InCombatLockdown
 local UIParent = UIParent
 local type = type
+local format = string.format
 
 local ARCUI_ANCHOR_EVENT = "ArcUI.AnchorProxy.SizeChanged"
 local SKIRON_ANCHOR_EVENT = "SkironCooldownManager.AnchorProxy.SizeChanged"
@@ -45,6 +46,18 @@ local observedCoolinatorSources = setmetatable({}, { __mode = "k" })
 local automaticCooldownProviderId
 local automaticCooldownProviderLabel
 local automaticCooldownProviderResolved = false
+local InCombat
+local cooldownConsentPromptProviderId
+local cooldownConsentPromptAfterCombat = false
+local COOLDOWN_CONSENT_POPUP = "MSUF_COOLDOWN_ANCHOR_CONSENT"
+local COOLDOWN_CONFIRM_POPUP = "MSUF_COOLDOWN_ANCHOR_CONFIRM"
+
+local function Tr(text)
+    local translate = MSUF and MSUF.Translate
+    if type(translate) == "function" then return translate(text) end
+    local L = (MSUF and MSUF.L) or _G.MSUF_L
+    return type(L) == "table" and L[text] or text
+end
 
 local function IsAddOnFullyLoaded(addonName)
     local isLoaded = C_AddOns and C_AddOns.IsAddOnLoaded
@@ -67,10 +80,10 @@ local function DetectAutomaticCooldownProvider()
     end
 end
 
-local function RefreshAutomaticCooldownAnchorConsumers()
+local function RefreshAutomaticCooldownAnchorConsumers(reanchor)
     local UF = MSUF.UF
     local factory = UF and UF.Factory
-    if UF and UF.spawned == true and factory and type(factory.ForceReanchor) == "function" then
+    if reanchor == true and UF and UF.spawned == true and factory and type(factory.ForceReanchor) == "function" then
         factory.ForceReanchor()
     end
 
@@ -91,7 +104,17 @@ local function RefreshAutomaticCooldownProvider(notify)
     automaticCooldownProviderResolved = true
     automaticCooldownProviderId = providerId
     automaticCooldownProviderLabel = providerLabel
-    if changed and notify ~= false then RefreshAutomaticCooldownAnchorConsumers() end
+    if changed then
+        cooldownConsentPromptProviderId = nil
+        if type(_G.StaticPopup_Hide) == "function" then
+            _G.StaticPopup_Hide(COOLDOWN_CONSENT_POPUP)
+            _G.StaticPopup_Hide(COOLDOWN_CONFIRM_POPUP)
+        end
+    end
+    if changed and notify ~= false then
+        local general = type(_G.MSUF_DB) == "table" and _G.MSUF_DB.general or nil
+        RefreshAutomaticCooldownAnchorConsumers(type(general) == "table" and general.anchorToCooldown == true)
+    end
     return providerId, providerLabel, changed
 end
 
@@ -101,8 +124,149 @@ function MSUF.GetAutomaticCooldownAnchorProvider()
 end
 
 function MSUF.IsCooldownAnchorEnabled(general)
-    if MSUF.GetAutomaticCooldownAnchorProvider() ~= nil then return true end
     return type(general) == "table" and general.anchorToCooldown == true or false
+end
+
+local function CooldownConsentDecisions(create)
+    local globalDB = _G.MSUF_GlobalDB
+    if type(globalDB) ~= "table" then
+        if not create then return nil end
+        globalDB = {}
+        _G.MSUF_GlobalDB = globalDB
+    end
+    if type(globalDB.global) ~= "table" then
+        if not create then return nil end
+        globalDB.global = {}
+    end
+    local decisions = globalDB.global.cooldownAnchorProviderDecisions
+    if type(decisions) ~= "table" then
+        if not create then return nil end
+        decisions = {}
+        globalDB.global.cooldownAnchorProviderDecisions = decisions
+    end
+    return decisions
+end
+
+local function CooldownConsentDecision(providerId)
+    providerId = providerId or MSUF.GetAutomaticCooldownAnchorProvider()
+    local decisions = providerId and CooldownConsentDecisions(false) or nil
+    local decision = decisions and decisions[providerId]
+    if decision == "accepted" or decision == "declined" then return decision end
+    return nil
+end
+
+local function RememberCooldownConsent(providerId, enabled)
+    if not providerId then return end
+    CooldownConsentDecisions(true)[providerId] = enabled == true and "accepted" or "declined"
+end
+
+function MSUF.GetCooldownAnchorConsentDecision(providerId)
+    return CooldownConsentDecision(providerId)
+end
+
+function MSUF.SetCooldownAnchorEnabled(enabled, rememberDecision)
+    local db = _G.MSUF_DB
+    if type(db) ~= "table" then return false end
+    if type(db.general) ~= "table" then db.general = {} end
+    enabled = enabled == true
+    local changed = db.general.anchorToCooldown ~= enabled
+    db.general.anchorToCooldown = enabled
+
+    local providerId = MSUF.GetAutomaticCooldownAnchorProvider()
+    if rememberDecision ~= false and providerId then RememberCooldownConsent(providerId, enabled) end
+    cooldownConsentPromptProviderId = nil
+    cooldownConsentPromptAfterCombat = false
+    if type(_G.StaticPopup_Hide) == "function" then
+        _G.StaticPopup_Hide(COOLDOWN_CONSENT_POPUP)
+        _G.StaticPopup_Hide(COOLDOWN_CONFIRM_POPUP)
+    end
+    RefreshAutomaticCooldownAnchorConsumers(changed)
+    return true, changed
+end
+
+local function FirstConsentText(providerLabel)
+    return format(Tr("MSUF detected %s."), providerLabel)
+        .. "\n\n"
+        .. Tr("Would you like MSUF to anchor the global Unit Frame layout to Essential Cooldown Manager?")
+        .. "\n\n"
+        .. Tr("Nothing will move unless you confirm again in the next step. If you choose Keep independent, you can enable CDM anchoring at any time in MSUF Edit Mode or under Unit > Anchoring in the MSUF menu.")
+end
+
+local function FinalConsentText(providerLabel)
+    return format(Tr("Second confirmation for %s."), providerLabel)
+        .. "\n\n"
+        .. Tr("MSUF will now anchor the global Unit Frame layout to Essential Cooldown Manager.")
+        .. "\n\n"
+        .. Tr("Confirm only if you want the whole Unit Frame layout to move with your cooldowns.")
+end
+
+local function ResolveCooldownConsent(data, enabled)
+    if type(data) ~= "table" or data.providerId ~= automaticCooldownProviderId then return end
+    RememberCooldownConsent(data.providerId, enabled)
+    MSUF.SetCooldownAnchorEnabled(enabled, false)
+end
+
+local function InstallCooldownConsentPopups()
+    local dialogs = _G.StaticPopupDialogs
+    if type(dialogs) ~= "table" then return false end
+    if not dialogs[COOLDOWN_CONFIRM_POPUP] then
+        dialogs[COOLDOWN_CONFIRM_POPUP] = {
+            text = "%s",
+            button1 = Tr("Confirm anchoring"),
+            button2 = _G.CANCEL or Tr("Cancel"),
+            OnAccept = function(_, data) ResolveCooldownConsent(data, true) end,
+            OnButton2 = function(_, data) ResolveCooldownConsent(data, false) end,
+            timeout = 0,
+            whileDead = true,
+            hideOnEscape = true,
+            preferredIndex = 3,
+        }
+    end
+    if not dialogs[COOLDOWN_CONSENT_POPUP] then
+        dialogs[COOLDOWN_CONSENT_POPUP] = {
+            text = "%s",
+            button1 = Tr("Continue"),
+            button2 = Tr("Keep independent"),
+            OnAccept = function(_, data)
+                if type(data) ~= "table" or data.providerId ~= automaticCooldownProviderId then return end
+                if type(_G.StaticPopup_Show) == "function" then
+                    _G.StaticPopup_Show(COOLDOWN_CONFIRM_POPUP, FinalConsentText(data.providerLabel), nil, data)
+                end
+            end,
+            OnButton2 = function(_, data) ResolveCooldownConsent(data, false) end,
+            timeout = 0,
+            whileDead = true,
+            hideOnEscape = true,
+            preferredIndex = 3,
+        }
+    end
+    return true
+end
+
+local function MaybeShowCooldownConsent()
+    local providerId, providerLabel = MSUF.GetAutomaticCooldownAnchorProvider()
+    if not providerId or cooldownConsentPromptProviderId == providerId then return false end
+    local db = _G.MSUF_DB
+    local general = type(db) == "table" and db.general or nil
+    if type(general) ~= "table" then return false end
+
+    if general.anchorToCooldown == true then
+        RememberCooldownConsent(providerId, true)
+        return false
+    end
+    if CooldownConsentDecision(providerId) ~= nil then return false end
+    if InCombat() then
+        cooldownConsentPromptAfterCombat = true
+        watcher:RegisterEvent("PLAYER_REGEN_ENABLED")
+        return false
+    end
+    if not InstallCooldownConsentPopups() or type(_G.StaticPopup_Show) ~= "function" then return false end
+
+    local data = { providerId = providerId, providerLabel = providerLabel }
+    local popup = _G.StaticPopup_Show(COOLDOWN_CONSENT_POPUP, FirstConsentText(providerLabel), nil, data)
+    if not popup then return false end
+    cooldownConsentPromptProviderId = providerId
+    return true
 end
 
 _G.MSUF_GetAutomaticCooldownAnchorProvider = function()
@@ -113,7 +277,15 @@ _G.MSUF_IsCooldownAnchorEnabled = function(general)
     return MSUF.IsCooldownAnchorEnabled(general)
 end
 
-local function InCombat()
+_G.MSUF_GetCooldownAnchorConsentDecision = function(providerId)
+    return MSUF.GetCooldownAnchorConsentDecision(providerId)
+end
+
+_G.MSUF_SetCooldownAnchorEnabled = function(enabled, rememberDecision)
+    return MSUF.SetCooldownAnchorEnabled(enabled, rememberDecision)
+end
+
+InCombat = function()
     return InCombatLockdown and InCombatLockdown() or false
 end
 
@@ -475,10 +647,12 @@ watcher:SetScript("OnEvent", function(self, event, addon)
     if event == "PLAYER_REGEN_ENABLED" then
         if InCombat() then return end
         self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+        local showCooldownConsent = cooldownConsentPromptAfterCombat
         local refreshArcUI = arcUIRefreshAfterCombat
         local refreshSkiron = skironSourceHookPending or skironProxyRefreshAfterCombat
         local refreshCoolinator = coolinatorSourceHookPending or coolinatorRefreshAfterCombat
-        if not refreshArcUI and not refreshSkiron and not refreshCoolinator then return end
+        cooldownConsentPromptAfterCombat = false
+        if not showCooldownConsent and not refreshArcUI and not refreshSkiron and not refreshCoolinator then return end
         arcUIRefreshAfterCombat = false
         skironSourceHookPending = false
         skironProxyRefreshAfterCombat = false
@@ -487,10 +661,12 @@ watcher:SetScript("OnEvent", function(self, event, addon)
         if refreshArcUI then refreshArcUIAnchor(true) end
         if refreshSkiron then refreshSkironAnchorProxy(nil, false, true) end
         if refreshCoolinator then refreshCoolinatorAnchor() end
+        if showCooldownConsent then MaybeShowCooldownConsent() end
         return
     end
     if event == "ADDON_LOADED" then
         RefreshAutomaticCooldownProvider(true)
+        MaybeShowCooldownConsent()
         if addon == "ArcUI" then
             RegisterArcUIAnchor()
         elseif addon == "SkironCooldownManager" then
@@ -501,6 +677,7 @@ watcher:SetScript("OnEvent", function(self, event, addon)
         return
     end
     RefreshAutomaticCooldownProvider(true)
+    MaybeShowCooldownConsent()
     RegisterThirdPartyAnchors()
 end)
 

@@ -1845,7 +1845,10 @@ function Ticker.BeginDrag(mover, key, cfg)
     local ecvFrame
     if (not isCastbar) and ecvRule and conf then
         local cooldownAnchorName = UnitCooldownAnchorName(conf)
-        local ecv = cooldownAnchorName and (ResolveNamedEditAnchor(cooldownAnchorName) or anchor) or nil
+        -- Utility/Buff viewer offsets from 5.77 are CENTER-to-CENTER. Mirror
+        -- the runtime compiler and reserve these edge rules for Essential.
+        local ecv = cooldownAnchorName == "EssentialCooldownViewer"
+            and (ResolveNamedEditAnchor(cooldownAnchorName) or anchor) or nil
         if ecv and anchor == ecv then
             usesECV = true
             ecvFrame = ecv
