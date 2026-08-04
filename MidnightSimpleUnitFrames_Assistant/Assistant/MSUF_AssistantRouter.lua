@@ -1565,6 +1565,61 @@ function R.IsSubjectiveSafePlanningRequest(text)
             and R.ContainsAny(norm, planningTerms.aura or {}))
 end
 
+-- One exact, whole-phrase alias match carrying a value is not a fuzzy idea:
+-- the player typed the control's visible name. Two lanes have to agree on that
+-- or a request falls between them -- TryOpenEndedSettingIdea stands down here
+-- expecting the exact-alias writer to take over, while the fail-closed guard
+-- refuses the write because the FUZZY search still sees eight similarly named
+-- controls. That gap answered "set the frame outline thickness to 2" (one
+-- match: Global Bar Outline Thickness) with "I treated that as a read-only
+-- question ... to change it, use a direct command with an explicit value".
+function R.ExactAliasSingleChange(text)
+    local parser = A.Parser or {}
+    if type(parser.ParseRegistryExactAliasShortcut) ~= "function" then return nil end
+    local ok, exact = pcall(parser.ParseRegistryExactAliasShortcut, R.Normalize(text), text,
+        { minTokens = 3, fullPhrase = true })
+    if ok and type(exact) == "table" and exact.kind == "changes"
+        and type(exact.changes) == "table" and #exact.changes == 1
+    then
+        return exact
+    end
+    return nil
+end
+
+-- People put the state last: "put Focus Target Power Bar Gradient off", "player
+-- name off". The exact-alias parser only accepts the state in front ("turn off
+-- X", "disable X") or joined by "to" ("set X to off"), so those trailing forms
+-- fell through to a generic "I understand the area but not one control" reply
+-- even though the label in the middle was exact.
+--
+-- This rewrites the sentence into the form the parser already understands and
+-- returns it only when the rewrite really does name one control -- so the
+-- caller can hand the canonical text to the ordinary command path and keep
+-- every existing guard, rather than executing anything from here.
+local TRAILING_STATE_WORDS = {
+    ["on"] = "on", ["off"] = "off",
+    ["enabled"] = "on", ["disabled"] = "off",
+}
+
+function R.CanonicalTrailingStateCommand(text)
+    local norm = R.Normalize(text)
+    local body, tail = norm:match("^(.-)%s+(%a+)$")
+    local state = tail and TRAILING_STATE_WORDS[tail] or nil
+    if not state or not body or body == "" then return nil end
+    -- "turn off X" / "set X to off" already work; only rewrite the trailing
+    -- form, and never re-wrap a sentence that already carries a connector.
+    if body:find("%s+to$") or body:find("^turn%s") or body:find("^set%s")
+        or body:find("^enable%s") or body:find("^disable%s")
+    then return nil end
+    body = body:gsub("^please%s+", ""):gsub("^can%s+you%s+", ""):gsub("^could%s+you%s+", "")
+        :gsub("^now%s+", ""):gsub("^put%s+", ""):gsub("^make%s+", ""):gsub("^switch%s+", "")
+        :gsub("^the%s+", ""):gsub("^my%s+", "")
+    if body == "" then return nil end
+    local canonical = "set " .. body .. " to " .. state
+    if R.ExactAliasSingleChange(canonical) then return canonical end
+    return nil
+end
+
 function A.RouterIsFailClosedReadOnlyRequest(text)
     local norm = R.StripResponseLanguageDirective(text)
     if norm == "" then return true end
@@ -1646,6 +1701,17 @@ function A.RouterIsFailClosedReadOnlyRequest(text)
             or type(R.OpenEndedEntriesAreConfident) ~= "function"
             or not R.OpenEndedEntriesAreConfident(openEnded.entries))
         then
+            -- About to fail-close a request that DID carry a value. Only now is
+            -- the exact-alias index worth building: it is the one thing that
+            -- can prove the request names a single control after the fuzzy
+            -- search saw several. Asking earlier would build that index on
+            -- every input and break the cold-path budget; asking for a
+            -- value-less request is pointless, because a single change needs a
+            -- value. Everything above this point is still a question guard, so
+            -- "is it worth changing X to 2" never reaches here.
+            if openEnded.explicitValue == true and R.ExactAliasSingleChange(text) then
+                return false
+            end
             return true
         end
     end
@@ -2727,6 +2793,18 @@ function A.TryImmediateConversationReply(text)
     return nil
 end
 
+R.AURA_FALLBACK_SUMMARY = "Aura option fallback."
+
+-- The aura fallback is a "no control matches that wording" notice, not an
+-- answer. The parser publishes it as an ordinary command result, so it used to
+-- win the router race against the generated control schema -- which is exactly
+-- where the aura icon border, thickness and shadow controls live. Recognising
+-- it lets the router hold it back until the schema has had its turn.
+function R.IsAuraFallbackResult(result)
+    return type(result) == "table" and result.kind == "unsupported"
+        and tostring(result.summary or "") == R.AURA_FALLBACK_SUMMARY
+end
+
 function R.UnsupportedAuraReply(text)    local norm = R.Normalize(text)
     local parser = A.Parser or {}
     if type(parser.CopyCommandExcludesAuras) == "function" and parser.CopyCommandExcludesAuras(norm) then return nil end
@@ -2837,14 +2915,24 @@ function R.TryReadabilityShortcut(text)    local norm = R.Normalize(text)
     for i = 1, #copyTerms do
         if R.HasNormalizedPhrase(norm, copyTerms[i]) then return nil end
     end
+    if norm == "" or not R.ContainsAny(norm, R.READABILITY_PROBLEM_TERMS) then return nil end
     -- READABILITY_FRAME_TERMS contains "unitframe", which is also the prefix of
-    -- real control names. A question naming one exactly ("what is UnitFrame
+    -- real control names. A request naming one exactly ("what is UnitFrame
     -- Dispel Overlay") is about that control, not about how to make the UI
     -- easier to read.
+    --
+    -- Deliberately below the readability-term gate: both lookups are only worth
+    -- paying for once this lane is actually about to answer with generic help,
+    -- and only a fraction of inputs get that far. The named-label index sees
+    -- question forms only, by design, so a COMMAND naming a control exactly
+    -- ("turn on Party Heal Prediction Overlay") slipped past it and was
+    -- answered with a readability article instead of being applied.
     if type(A.RouterNamedSettingLabel) == "function" and A.RouterNamedSettingLabel(text) then
         return nil
     end
-    if norm == "" or not R.ContainsAny(norm, R.READABILITY_PROBLEM_TERMS) then return nil end
+    if type(R.ExactAliasSingleChange) == "function" and R.ExactAliasSingleChange(text) then
+        return nil
+    end
     if R.ContainsAny(norm, {
         "make my ui cleaner", "make my interface cleaner",
         "clean up my ui", "clean up my interface",
@@ -13768,16 +13856,10 @@ function R.TryOpenEndedSettingIdea(text, coreHandler)
     -- resolves to exactly one setting, yet the fuzzy list still contained
     -- near-misses and the request was answered with a chooser. An exact
     -- whole-phrase match is not an idea -- it is the answer.
-    if type(parser.ParseRegistryExactAliasShortcut) == "function" then
-        local normalized = R.Normalize(text)
-        local ok, exact = pcall(parser.ParseRegistryExactAliasShortcut, normalized, text,
-            { minTokens = 3, fullPhrase = true })
-        if ok and type(exact) == "table" and exact.kind == "changes"
-            and type(exact.changes) == "table" and #exact.changes == 1
-        then
-            return nil
-        end
-    end
+    -- Shared with the fail-closed read-only guard on purpose: if the two lanes
+    -- disagree about what counts as an exact match, a request stands down here
+    -- and is refused there, so nothing applies it.
+    if R.ExactAliasSingleChange(text) then return nil end
     local actionable = type(parser.ActionableText) == "function" and parser.ActionableText(text) or nil
     if actionable and R.Normalize(actionable) ~= "" and R.Normalize(actionable) ~= R.Normalize(text)
         and R.OpenEndedMutationSubject(actionable) ~= nil
@@ -13850,6 +13932,14 @@ function R.TryOpenEndedSettingIdea(text, coreHandler)
         end
         local page = analysis.page
         if page then
+            -- The player supplied a real value and the curated registry could
+            -- not place it. Before settling for "here is the page to look at",
+            -- give the generated schema its turn: it covers Menu2 controls the
+            -- registry never modelled, which is exactly why this lane ran out
+            -- of options. Aura icon border thickness lives only there.
+            local schemaResult = A.ControlSchema and A.ControlSchema.TryConversation
+                and A.ControlSchema.TryConversation(text)
+            if schemaResult then return schemaResult end
             local followups = page.unit
                 and R.UnitPageFollowupResults(page.unit, page.label, page.detail)
                 or R.PageFollowupResults(page.page, page.label, page.detail)
@@ -13863,6 +13953,17 @@ function R.TryOpenEndedSettingIdea(text, coreHandler)
         return nil
     end
     if type(entries) ~= "table" or #entries == 0 then
+        -- Last chance before "here is the page to start on": the player may have
+        -- named the control exactly but put the state at the end. Hand the
+        -- canonical rewrite to the ordinary command path so it goes through the
+        -- same value parsing, confirmation and undo as any other command.
+        if type(coreHandler) == "function" then
+            local canonical = R.CanonicalTrailingStateCommand(text)
+            if canonical then
+                local rewritten = coreHandler(canonical)
+                if rewritten and not A.RouterIsUnknownResult(rewritten) then return rewritten end
+            end
+        end
         local page = analysis.page
         if not page then return nil end
         local followups
@@ -17556,9 +17657,14 @@ function A.RouteInput(text, coreHandler)
     if contextResult and not A.RouterIsUnknownResult(contextResult) then return contextResult end
 
     local coreResult
+    local deferredAuraFallback
     if (R.LooksLikeMutation(text) or R.StartsWithMutationCommand(text)) and hasCore then
         coreResult = Core(text)
-        if not A.RouterIsUnknownResult(coreResult) then return coreResult end
+        if R.IsAuraFallbackResult(coreResult) then
+            deferredAuraFallback, coreResult = coreResult, nil
+        elseif not A.RouterIsUnknownResult(coreResult) then
+            return coreResult
+        end
     end
 
     -- Release-note questions must not be mistaken for "what did you just change?" follow-ups.
@@ -17578,7 +17684,11 @@ function A.RouteInput(text, coreHandler)
 
     if hasCore then
         coreResult = coreResult or Core(text)
-        if not A.RouterIsUnknownResult(coreResult) then return coreResult end
+        if R.IsAuraFallbackResult(coreResult) then
+            deferredAuraFallback, coreResult = deferredAuraFallback or coreResult, nil
+        elseif not A.RouterIsUnknownResult(coreResult) then
+            return coreResult
+        end
     end
 
     -- Curated registry owners, relationship guards, and the main parser have
@@ -17589,6 +17699,10 @@ function A.RouteInput(text, coreHandler)
             and A.ControlSchema.TryConversation(text)
         if schemaResult then return schemaResult end
     end
+
+    -- Nothing better existed, so the aura "I have no control for that wording"
+    -- message stands after all.
+    if deferredAuraFallback then return deferredAuraFallback end
 
     if R.LooksLikeBareLookup(text) and A.Knowledge and type(A.Knowledge.Answer) == "function" then
         local answer = A.Knowledge.Answer(text, { currentPage = M and M.activeKey })

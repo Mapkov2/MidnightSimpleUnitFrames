@@ -166,63 +166,80 @@ function A.GlobalBarRegistry.RegisterBaseBarSettings(ctx)
         reason = "MSUF_ASSISTANT_HIGHLIGHT_PRIORITY",
     })
 
-    RegisterGeneralBoolean("unitDispelOverlayEnabled", "unitDispelOverlay", "UnitFrame Dispel Overlay", false, {
+    local function UnitDispelOptions(opts)
+        opts = opts or {}
+        opts.page = "uf_player"
+        opts.category = tostring(opts.category or "Unitframes / Dispel")
+            :gsub("^Global / Bars / UnitFrame ", "Frames / Unitframes / ")
+        return opts
+    end
+    local function RegisterUnitDispelBoolean(dbKey, attr, label, defaultValue, aliases, opts)
+        return RegisterGeneralBoolean(dbKey, attr, label, defaultValue, aliases, UnitDispelOptions(opts))
+    end
+    local function RegisterUnitDispelNumber(dbKey, attr, label, defaultValue, minValue, maxValue, aliases, opts)
+        return RegisterGeneralNumberSetting(dbKey, attr, label, defaultValue, minValue, maxValue, aliases, UnitDispelOptions(opts))
+    end
+    local function RegisterUnitDispelEnum(dbKey, attr, label, defaultValue, values, aliases, opts)
+        return RegisterGeneralEnum(dbKey, attr, label, defaultValue, values, aliases, UnitDispelOptions(opts))
+    end
+
+    RegisterUnitDispelBoolean("unitDispelOverlayEnabled", "unitDispelOverlay", "UnitFrame Dispel Overlay", false, {
         "unitframe dispel overlay", "unit frame dispel overlay", "dispel overlay", "health bar dispel overlay",
     }, { category = "Global / Bars / UnitFrame Dispel Overlay", frameType = "globalBars", apply = ApplyDispelPurgeBorder, reason = "MSUF_ASSISTANT_UNIT_DISPEL_OVERLAY" })
-    RegisterGeneralEnum("unitDispelOverlayTrigger", "unitDispelOverlayTrigger", "UnitFrame Dispel Overlay Detects", "BORDER", UNIT_DISPEL_TRIGGER_VALUES, {
+    RegisterUnitDispelEnum("unitDispelOverlayTrigger", "unitDispelOverlayTrigger", "UnitFrame Dispel Overlay Detects", "BORDER", UNIT_DISPEL_TRIGGER_VALUES, {
         "unitframe dispel overlay detects", "unitframe dispel overlay trigger", "dispel overlay detects",
     }, { category = "Global / Bars / UnitFrame Dispel Overlay", frameType = "globalBars", apply = ApplyDispelPurgeBorder, reason = "MSUF_ASSISTANT_UNIT_DISPEL_OVERLAY_TRIGGER", valueAliases = UNIT_DISPEL_TRIGGER_ALIASES })
-    RegisterGeneralEnum("unitDispelOverlayStyle", "unitDispelOverlayStyle", "UnitFrame Dispel Overlay Style", "FULL", UNIT_DISPEL_STYLE_VALUES, {
+    RegisterUnitDispelEnum("unitDispelOverlayStyle", "unitDispelOverlayStyle", "UnitFrame Dispel Overlay Style", "FULL", UNIT_DISPEL_STYLE_VALUES, {
         "unitframe dispel overlay style", "dispel overlay style", "unit frame dispel overlay style",
     }, { category = "Global / Bars / UnitFrame Dispel Overlay", frameType = "globalBars", apply = ApplyDispelPurgeBorder, reason = "MSUF_ASSISTANT_UNIT_DISPEL_OVERLAY_STYLE", valueAliases = UNIT_DISPEL_STYLE_ALIASES })
-    RegisterGeneralBoolean("unitDispelOverlayOnHealth", "unitDispelOverlayHealthOnly", "UnitFrame Dispel Overlay Current Health Only", true, {
+    RegisterUnitDispelBoolean("unitDispelOverlayOnHealth", "unitDispelOverlayHealthOnly", "UnitFrame Dispel Overlay Current Health Only", true, {
         "dispel overlay current health only", "unitframe dispel overlay current health", "dispel overlay on health only",
     }, { category = "Global / Bars / UnitFrame Dispel Overlay", frameType = "globalBars", apply = ApplyDispelPurgeBorder, reason = "MSUF_ASSISTANT_UNIT_DISPEL_OVERLAY_HEALTH" })
-    RegisterGeneralNumberSetting("unitDispelOverlayAlpha", "unitDispelOverlayOpacity", "UnitFrame Dispel Overlay Opacity", 0.35, 0.05, 1, {
+    RegisterUnitDispelNumber("unitDispelOverlayAlpha", "unitDispelOverlayOpacity", "UnitFrame Dispel Overlay Opacity", 0.35, 0.05, 1, {
         "dispel overlay opacity", "unitframe dispel overlay opacity", "dispel overlay alpha",
     }, { category = "Global / Bars / UnitFrame Dispel Overlay", frameType = "globalBars", apply = ApplyDispelPurgeBorder, reason = "MSUF_ASSISTANT_UNIT_DISPEL_OVERLAY_ALPHA", step = 0.05, percent = true })
 
     -- UnitFrame dispel SYMBOL. Same shape as the overlay block above: the
     -- generated AutoCoverage entries alone carry no category or frameType, so
     -- without these the settings exist but route to no Menu2 page.
-    RegisterGeneralBoolean("unitDispelSymbolEnabled", "unitDispelSymbol", "UnitFrame Dispel Symbol", false, {
+    RegisterUnitDispelBoolean("unitDispelSymbolEnabled", "unitDispelSymbol", "UnitFrame Dispel Symbol", false, {
         "unitframe dispel symbol", "unit frame dispel symbol", "dispel symbol", "debuff type symbol",
         "show debuff type", "which debuff type",
     }, { category = "Global / Bars / UnitFrame Dispel Symbol", frameType = "globalBars", apply = ApplyDispelPurgeBorder, reason = "MSUF_ASSISTANT_UNIT_DISPEL_SYMBOL" })
-    RegisterGeneralEnum("unitDispelSymbolStyle", "unitDispelSymbolStyle", "UnitFrame Dispel Symbol Set", "BLIZZARD", UNIT_DISPEL_SYMBOL_STYLE_VALUES, {
+    RegisterUnitDispelEnum("unitDispelSymbolStyle", "unitDispelSymbolStyle", "UnitFrame Dispel Symbol Set", "BLIZZARD", UNIT_DISPEL_SYMBOL_STYLE_VALUES, {
         "dispel symbol set", "unitframe dispel symbol set", "debuff type symbol set", "dispel symbol style",
     }, { category = "Global / Bars / UnitFrame Dispel Symbol", frameType = "globalBars", apply = ApplyDispelPurgeBorder, reason = "MSUF_ASSISTANT_UNIT_DISPEL_SYMBOL_STYLE" })
-    RegisterGeneralEnum("unitDispelSymbolMode", "unitDispelSymbolMode", "UnitFrame Dispel Symbol Shows", "ALL", UNIT_DISPEL_SYMBOL_MODE_VALUES, {
+    RegisterUnitDispelEnum("unitDispelSymbolMode", "unitDispelSymbolMode", "UnitFrame Dispel Symbol Shows", "ALL", UNIT_DISPEL_SYMBOL_MODE_VALUES, {
         "dispel symbol shows", "dispel symbol mode", "one symbol per dispel type",
     }, { category = "Global / Bars / UnitFrame Dispel Symbol", frameType = "globalBars", apply = ApplyDispelPurgeBorder, reason = "MSUF_ASSISTANT_UNIT_DISPEL_SYMBOL_MODE" })
-    RegisterGeneralEnum("unitDispelSymbolTrigger", "unitDispelSymbolTrigger", "UnitFrame Dispel Symbol Detects", "BORDER", UNIT_DISPEL_TRIGGER_VALUES, {
+    RegisterUnitDispelEnum("unitDispelSymbolTrigger", "unitDispelSymbolTrigger", "UnitFrame Dispel Symbol Detects", "BORDER", UNIT_DISPEL_TRIGGER_VALUES, {
         "dispel symbol detects", "unitframe dispel symbol trigger", "dispel symbol trigger",
     }, { category = "Global / Bars / UnitFrame Dispel Symbol", frameType = "globalBars", apply = ApplyDispelPurgeBorder, reason = "MSUF_ASSISTANT_UNIT_DISPEL_SYMBOL_TRIGGER", valueAliases = UNIT_DISPEL_TRIGGER_ALIASES })
-    RegisterGeneralEnum("unitDispelSymbolAnchor", "unitDispelSymbolAnchor", "UnitFrame Dispel Symbol Anchor", "TOPRIGHT", UNIT_DISPEL_SYMBOL_ANCHOR_VALUES, {
+    RegisterUnitDispelEnum("unitDispelSymbolAnchor", "unitDispelSymbolAnchor", "UnitFrame Dispel Symbol Anchor", "TOPRIGHT", UNIT_DISPEL_SYMBOL_ANCHOR_VALUES, {
         "dispel symbol anchor", "dispel symbol position", "where is the dispel symbol",
     }, { category = "Global / Bars / UnitFrame Dispel Symbol", frameType = "globalBars", apply = ApplyDispelPurgeBorder, reason = "MSUF_ASSISTANT_UNIT_DISPEL_SYMBOL_ANCHOR" })
-    RegisterGeneralEnum("unitDispelSymbolGrowth", "unitDispelSymbolGrowth", "UnitFrame Dispel Symbol Grow", "RIGHT", UNIT_DISPEL_SYMBOL_GROWTH_VALUES, {
+    RegisterUnitDispelEnum("unitDispelSymbolGrowth", "unitDispelSymbolGrowth", "UnitFrame Dispel Symbol Grow", "RIGHT", UNIT_DISPEL_SYMBOL_GROWTH_VALUES, {
         "dispel symbol grow", "dispel symbol growth", "dispel symbol direction",
     }, { category = "Global / Bars / UnitFrame Dispel Symbol", frameType = "globalBars", apply = ApplyDispelPurgeBorder, reason = "MSUF_ASSISTANT_UNIT_DISPEL_SYMBOL_GROWTH" })
-    RegisterGeneralNumberSetting("unitDispelSymbolSize", "unitDispelSymbolSize", "UnitFrame Dispel Symbol Size", 14, 4, 48, {
+    RegisterUnitDispelNumber("unitDispelSymbolSize", "unitDispelSymbolSize", "UnitFrame Dispel Symbol Size", 14, 4, 48, {
         "dispel symbol size", "unitframe dispel symbol size", "how big is the dispel symbol",
     }, { category = "Global / Bars / UnitFrame Dispel Symbol", frameType = "globalBars", apply = ApplyDispelPurgeBorder, reason = "MSUF_ASSISTANT_UNIT_DISPEL_SYMBOL_SIZE", step = 1 })
-    RegisterGeneralNumberSetting("unitDispelSymbolSpacing", "unitDispelSymbolSpacing", "UnitFrame Dispel Symbol Spacing", 2, 0, 32, {
+    RegisterUnitDispelNumber("unitDispelSymbolSpacing", "unitDispelSymbolSpacing", "UnitFrame Dispel Symbol Spacing", 2, 0, 32, {
         "dispel symbol spacing", "gap between dispel symbols",
     }, { category = "Global / Bars / UnitFrame Dispel Symbol", frameType = "globalBars", apply = ApplyDispelPurgeBorder, reason = "MSUF_ASSISTANT_UNIT_DISPEL_SYMBOL_SPACING", step = 1 })
-    RegisterGeneralNumberSetting("unitDispelSymbolX", "unitDispelSymbolOffsetX", "UnitFrame Dispel Symbol Offset X", 0, -128, 128, {
+    RegisterUnitDispelNumber("unitDispelSymbolX", "unitDispelSymbolOffsetX", "UnitFrame Dispel Symbol Offset X", 0, -128, 128, {
         "dispel symbol offset x", "move dispel symbol horizontally",
     }, { category = "Global / Bars / UnitFrame Dispel Symbol", frameType = "globalBars", apply = ApplyDispelPurgeBorder, reason = "MSUF_ASSISTANT_UNIT_DISPEL_SYMBOL_X", step = 1 })
-    RegisterGeneralNumberSetting("unitDispelSymbolY", "unitDispelSymbolOffsetY", "UnitFrame Dispel Symbol Offset Y", 0, -128, 128, {
+    RegisterUnitDispelNumber("unitDispelSymbolY", "unitDispelSymbolOffsetY", "UnitFrame Dispel Symbol Offset Y", 0, -128, 128, {
         "dispel symbol offset y", "move dispel symbol vertically",
     }, { category = "Global / Bars / UnitFrame Dispel Symbol", frameType = "globalBars", apply = ApplyDispelPurgeBorder, reason = "MSUF_ASSISTANT_UNIT_DISPEL_SYMBOL_Y", step = 1 })
-    RegisterGeneralNumberSetting("unitDispelSymbolAlpha", "unitDispelSymbolOpacity", "UnitFrame Dispel Symbol Opacity", 1, 0.05, 1, {
+    RegisterUnitDispelNumber("unitDispelSymbolAlpha", "unitDispelSymbolOpacity", "UnitFrame Dispel Symbol Opacity", 1, 0.05, 1, {
         "dispel symbol opacity", "dispel symbol alpha",
     }, { category = "Global / Bars / UnitFrame Dispel Symbol", frameType = "globalBars", apply = ApplyDispelPurgeBorder, reason = "MSUF_ASSISTANT_UNIT_DISPEL_SYMBOL_ALPHA", step = 0.05, percent = true })
-    RegisterGeneralNumberSetting("unitDispelSymbolLayer", "unitDispelSymbolLayer", "UnitFrame Dispel Symbol Effect Layer", 8, 0, 30, {
+    RegisterUnitDispelNumber("unitDispelSymbolLayer", "unitDispelSymbolLayer", "UnitFrame Dispel Symbol Effect Layer", 8, 0, 30, {
         "dispel symbol layer", "dispel symbol effect layer",
     }, { category = "Global / Bars / UnitFrame Dispel Symbol", frameType = "globalBars", apply = ApplyDispelPurgeBorder, reason = "MSUF_ASSISTANT_UNIT_DISPEL_SYMBOL_LAYER", step = 1 })
-    RegisterGeneralEnum("unitDispelSymbolStrata", "unitDispelSymbolStrata", "UnitFrame Dispel Symbol Strata", "AUTO", UNIT_DISPEL_SYMBOL_STRATA_VALUES, {
+    RegisterUnitDispelEnum("unitDispelSymbolStrata", "unitDispelSymbolStrata", "UnitFrame Dispel Symbol Strata", "AUTO", UNIT_DISPEL_SYMBOL_STRATA_VALUES, {
         "dispel symbol strata", "dispel symbol frame strata",
     }, { category = "Global / Bars / UnitFrame Dispel Symbol", frameType = "globalBars", apply = ApplyDispelPurgeBorder, reason = "MSUF_ASSISTANT_UNIT_DISPEL_SYMBOL_STRATA" })
 

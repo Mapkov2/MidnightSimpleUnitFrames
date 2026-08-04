@@ -1581,6 +1581,6 @@ for key, info in pairs(UNIT_PAGES) do
     M.RegisterPage(key, {
         title = info.title,
         build = BuildUnitPage(info),
-        version = 26,
+        version = 27,
     })
 end

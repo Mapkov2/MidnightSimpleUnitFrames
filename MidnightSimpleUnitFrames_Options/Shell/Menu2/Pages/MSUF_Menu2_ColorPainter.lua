@@ -472,6 +472,11 @@ function P.Build(ctx, builder, categories)
     local host = CreateFrame("Frame", nil, section)
     host:SetPoint("TOPLEFT", section, "TOPLEFT", 16, -38)
     host:SetSize(previewW, 132)
+    -- Native preview elements can extend beyond their canvas while zoomed or
+    -- panned. The paint buttons mirror those element bounds at a high frame
+    -- level, so without a hard owner boundary an invisible target can reach
+    -- into the navigation rail and intercept its hover/clicks.
+    if host.SetClipsChildren then host:SetClipsChildren(true) end
     local shield = InstallColorOnlyShield(host)
 
     -- Zoom chrome is noise for a color task: keep the controls functional but

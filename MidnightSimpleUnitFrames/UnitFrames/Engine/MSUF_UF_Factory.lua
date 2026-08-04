@@ -16,6 +16,13 @@ local EnsureCooldownWidthObservers
 local ScheduleCooldownWidthRefresh
 local ApplyBossPhysicalBarGeometry
 
+-- A frame that was fully detached for its disabled state must not be rebuilt
+-- live in the same session. Keep the detached zero-overhead state intact and
+-- require one clean UI reload before the newly enabled config is instantiated.
+-- The table deduplicates Boss' five physical frames and repeated apply fanout.
+local pendingReenableReload = {}
+local reenableReloadPromptShown = false
+
 -- Saved transparency is visual-only. Reassert these three owners once after
 -- PLAYER_ENTERING_WORLD settles without paying for a second geometry/full-spec
 -- pass or adding any recurring runtime work.
@@ -42,6 +49,38 @@ local clickCastRegistered = setmetatable({}, { __mode = "k" })
 
 local function InCombat()
   return InCombatLockdown and InCombatLockdown()
+end
+
+local function ReenableReloadKey(frame, spec)
+  return spec and spec.key
+    or (UF.ConfigKeyForUnit and UF.ConfigKeyForUnit(frame and frame.MSUFUnitKey))
+    or frame and frame.MSUFUnitKey
+    or "unit"
+end
+
+local function ClearPendingReenableReload(frame, spec)
+  pendingReenableReload[ReenableReloadKey(frame, spec)] = nil
+  if next(pendingReenableReload) == nil then
+    reenableReloadPromptShown = false
+  end
+end
+
+local function RequireReloadForReenable(frame, spec)
+  if not (frame and frame._msufDisabledByConfig == true and spec and spec.enabled ~= false) then
+    return false
+  end
+
+  pendingReenableReload[ReenableReloadKey(frame, spec)] = true
+  if not reenableReloadPromptShown then
+    reenableReloadPromptShown = true
+    local showReload = _G.MSUF_ShowReloadRecommendedPopup
+    if type(showReload) == "function" then
+      showReload("Unit frame enable - reload required")
+    elseif _G.print then
+      _G.print("|cffffd700MSUF:|r A unit frame was enabled. Reload the UI with /reload to apply it.")
+    end
+  end
+  return true
 end
 
 local function EnsurePetBattleFrameHider()
@@ -768,6 +807,12 @@ end
 local function ApplyFrame(frame, spec, applyMask)
   if not (frame and spec) then return false end
   if InCombat() then return DeferApply(frame.MSUFUnitKey) end
+
+  if spec.enabled == false then
+    ClearPendingReenableReload(frame, spec)
+  elseif RequireReloadForReenable(frame, spec) then
+    return true
+  end
 
   EnsureRuntimeOnShow(frame)
   EnsureMouseoverHooks(frame)

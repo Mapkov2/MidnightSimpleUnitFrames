@@ -1135,7 +1135,9 @@ local function CompileTextRuntime(frame, spec, text)
     end
   end
   rt.nameShortenSide = text.nameShortenSide == "RIGHT" and "RIGHT" or "LEFT"
-  rt.nameShortenDots = text.nameShortenDots ~= false and (text.nameAnchor or "LEFT") == "LEFT"
+  local nameAnchor = text.nameAnchor or "LEFT"
+  rt.nameShortenDots = text.nameShortenDots ~= false
+    and (nameAnchor == "LEFT" or nameAnchor == "TOPLEFT" or nameAnchor == "FRAMELEFT")
   rt.nameLegacyTruncation = text.nameLegacyTruncation == true
   rt.nameLegacyShortenMax = rt.nameLegacyTruncation and configuredNameShortenMax or 0
   rt.nameLegacyShortenDots = text.nameShortenDots ~= false
@@ -1164,7 +1166,8 @@ local function CompileTextRuntime(frame, spec, text)
       end
     end
     inlineRt.nameShortenSide = inline.nameShortenSide == "RIGHT" and "RIGHT" or "LEFT"
-    inlineRt.nameShortenDots = inline.nameShortenDots ~= false and (text.nameAnchor or "LEFT") == "LEFT"
+    inlineRt.nameShortenDots = inline.nameShortenDots ~= false
+      and (nameAnchor == "LEFT" or nameAnchor == "TOPLEFT" or nameAnchor == "FRAMELEFT")
     inlineRt.stamp = inlineRt.unit .. ":" .. inlineRt.separator .. ":" .. inlineRt.colorMode .. ":" .. (inlineRt.nameShortenMax or 0) .. ":" .. inlineRt.nameShortenSide .. ":" .. (inlineRt.nameShortenDots and "1" or "0")
   else
     rt.inlineToT = nil

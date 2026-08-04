@@ -18,7 +18,7 @@ A.GroupFramesRegistryData.GROUP_TEXT_MODE_VALUES = {
     "NONE", "PERCENT", "CURRENT", "MAX", "DEFICIT", "CURMAX", "CURPERCENT",
     "CURMAXPERCENT", "MAXPERCENT", "PERCENTCUR", "PERCENTMAX", "PERCENTCURMAX",
 }
-A.GroupFramesRegistryData.GROUP_ANCHOR_VALUES = { "LEFT", "CENTER", "RIGHT" }
+A.GroupFramesRegistryData.GROUP_ANCHOR_VALUES = { "TOPLEFT", "TOP", "TOPRIGHT", "LEFT", "CENTER", "RIGHT" }
 A.GroupFramesRegistryData.GROUP_CORNER_ANCHOR_VALUES = { "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT" }
 A.GroupFramesRegistryData.GROUP_DISPEL_TRIGGER_VALUES = { "BORDER", "BY_ME", "BY_RAID", "DISPEL_TYPE" }
 A.GroupFramesRegistryData.GROUP_DISPEL_STYLE_VALUES = { "FULL", "BOTTOM", "TOP", "LEFT", "RIGHT" }
@@ -109,6 +109,14 @@ A.GroupFramesRegistryData.GROUP_DELIMITER_ALIASES = {
 }
 
 A.GroupFramesRegistryData.GROUP_ANCHOR_ALIASES = {
+    topleft = "TOPLEFT",
+    ["top left"] = "TOPLEFT",
+    top = "TOP",
+    topcenter = "TOP",
+    ["top center"] = "TOP",
+    ["top centre"] = "TOP",
+    topright = "TOPRIGHT",
+    ["top right"] = "TOPRIGHT",
     left = "LEFT",
     center = "CENTER",
     centre = "CENTER",

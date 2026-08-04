@@ -215,7 +215,9 @@ local function InstallCooldownConsentPopups()
             button1 = Tr("Confirm anchoring"),
             button2 = _G.CANCEL or Tr("Cancel"),
             OnAccept = function(_, data) ResolveCooldownConsent(data, true) end,
-            OnButton2 = function(_, data) ResolveCooldownConsent(data, false) end,
+            OnCancel = function(_, data, reason)
+                if reason == "clicked" then ResolveCooldownConsent(data, false) end
+            end,
             timeout = 0,
             whileDead = true,
             hideOnEscape = true,
@@ -233,7 +235,9 @@ local function InstallCooldownConsentPopups()
                     _G.StaticPopup_Show(COOLDOWN_CONFIRM_POPUP, FinalConsentText(data.providerLabel), nil, data)
                 end
             end,
-            OnButton2 = function(_, data) ResolveCooldownConsent(data, false) end,
+            OnCancel = function(_, data, reason)
+                if reason == "clicked" then ResolveCooldownConsent(data, false) end
+            end,
             timeout = 0,
             whileDead = true,
             hideOnEscape = true,

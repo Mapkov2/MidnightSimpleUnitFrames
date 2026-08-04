@@ -3338,8 +3338,10 @@ LaneStructuralSignature = function(lane)
     -- Any option that changes a button must therefore create a fresh native
     -- container so all setup remains inside that callback.
     -- The public 12.1 group-filter setter reparses native assignments in place.
-    -- Button visuals still belong to initializeFrame and remain structural.
+    -- Button visuals and item-enchantment slots still belong to container
+    -- creation and remain structural.
     return tostring(lane.kind) .. "\030" .. tostring(LaneLayoutSignature(lane))
+        .. "\030" .. tostring(lane.weaponEnchants)
 end
 
 LaneLayoutSignature = function(lane)
@@ -4930,7 +4932,7 @@ local function CreateManagedNativeLane(container, lane, parentFrame)
     -- PTR 7 item enchantments: temporary weapon enchants render as native
     -- buttons inside the player buff flow. The frames are CustomAuraButtons,
     -- so the normal initializeFrame styling pipeline applies unchanged.
-    -- weaponEnchants is part of the tracking signature -> toggling recreates.
+    -- weaponEnchants is part of the structural signature -> toggling recreates.
     if lane.weaponEnchants == true and type(container.AddItemEnchantment) == "function" then
         local slots = _G.AuraContainerItemEnchantmentSlot
         local enchantOptions = {

@@ -329,11 +329,24 @@ local function ResizeSettleStartValue(fromValue, toValue)
     local offset = min(math.abs(delta) * WINDOW_RESIZE_SETTLE_RATIO, WINDOW_RESIZE_SETTLE_MAX_PX)
     return (toValue or 0) - (delta > 0 and offset or -offset)
 end
+local function SetWindowAnimationClipping(frame, state, active)
+    if not (frame and state and frame.SetClipsChildren) then return end
+    if active then
+        if state.clippingApplied then return end
+        state.restoreClipsChildren = frame.DoesClipChildren and frame:DoesClipChildren() or false
+        state.clippingApplied = true
+        frame:SetClipsChildren(true)
+    elseif state.clippingApplied then
+        state.clippingApplied = nil
+        frame:SetClipsChildren(state.restoreClipsChildren == true)
+    end
+end
 local function StopWindowLayoutAnimation(frame)
     local state = frame and frame._msuf2WindowLayoutAnim
     if not state then return end
     state.cancelled = true
     frame._msuf2WindowLayoutAnim = nil
+    SetWindowAnimationClipping(frame, state, false)
     if state.driver and state.driver.SetScript then state.driver:SetScript("OnUpdate", nil) end
     if state.driver and state.driver.Hide then state.driver:Hide() end
 end
@@ -380,6 +393,19 @@ local function AnimateWindowLayout(frame, target, opts)
         driver = driver,
     }
     frame._msuf2WindowLayoutAnim = state
+    -- Menu pages contain fixed-width preview renderers. Clip them to the shell
+    -- while its bounds morph so they cannot paint outside the shrinking window
+    -- and appear to trail behind it. The prior clip contract is restored when
+    -- this short cold-path animation settles or is cancelled.
+    SetWindowAnimationClipping(frame, state, true)
+    if opts.suspendPagePreviews == true then
+        -- Boss/GF page previews are UIParent-owned runtime frames rather than
+        -- menu children, so clipping cannot contain them. Quiesce them for the
+        -- transition; the final page rebuild resumes the active page exactly
+        -- once after its destination geometry has committed.
+        RequestBossPagePreviewForKey(nil, true)
+        RequestGroupPagePreviewForKey(nil, true)
+    end
     if state.fromAlpha and frame.SetAlpha then frame:SetAlpha(state.fromAlpha) end
     if frame.Show then frame:Show() end
     driver:SetScript("OnUpdate", function(self, elapsed)
@@ -408,6 +434,7 @@ local function AnimateWindowLayout(frame, target, opts)
             if state.cancelled or frame._msuf2Closing or (frame.IsShown and not frame:IsShown()) then return end
             ApplyRawFrameLayout(frame, target)
             if state.toAlpha and frame.SetAlpha then frame:SetAlpha(state.toAlpha) end
+            SetWindowAnimationClipping(frame, state, false)
             if type(state.onFinished) == "function" then state.onFinished(frame) end
             -- Explicit Full Preview is a page-keyed intent, not geometry owned
             -- by this transient animation. Drain it only after the target layout
@@ -455,6 +482,7 @@ local function RestoreSlashMenuWindow(frame)
         M.CallIf(RefreshWindowControls, frame)
         restored = AnimateWindowLayout(frame, layout, {
             duration = WINDOW_RESTORE_ANIM_SECONDS,
+            suspendPagePreviews = true,
             onFinished = function()
                 ApplyWindowLayout(frame, layout, true)
                 M.CallIf(RefreshWindowControls, frame)
@@ -491,6 +519,7 @@ local function MaximizeSlashMenuWindow(frame)
     M.CallIf(RefreshWindowControls, frame)
     AnimateWindowLayout(frame, target, {
         duration = WINDOW_MAXIMIZE_ANIM_SECONDS,
+        suspendPagePreviews = true,
         onFinished = function()
             ApplyWindowLayout(frame, target, true)
             M.CallIf(RefreshWindowControls, frame)
@@ -516,6 +545,7 @@ local function RestoreMinimizedSlashMenu(frame)
             fromAlpha = 0.08,
             toAlpha = 1,
             duration = WINDOW_RESTORE_ANIM_SECONDS,
+            suspendPagePreviews = true,
             onFinished = function()
                 frame._msuf2PreMinimizeLayout = nil
                 if frame.SetAlpha then frame:SetAlpha(1) end
@@ -565,6 +595,7 @@ local function MinimizeSlashMenuWindow(frame)
             fromAlpha = 1,
             toAlpha = 0.08,
             duration = WINDOW_MINIMIZE_ANIM_SECONDS,
+            suspendPagePreviews = true,
             onFinished = function()
                 if frame.SetAlpha then frame:SetAlpha(1) end
                 frame:Hide()
@@ -1664,6 +1695,12 @@ local function BuildWindowShell()
     f:SetScript("OnSizeChanged", function(self)
         if self._msuf2LiveResizing then
             self._msuf2ResizeMetricsDirty = true
+            return
+        end
+        if self._msuf2WindowLayoutAnim then
+            -- Raw animation geometry changes every render frame. Responsive
+            -- metrics and preview layout commit once in the onFinished rebuild;
+            -- recalculating them here makes the preview visibly chase the shell.
             return
         end
         RefreshWindowMetrics(self)

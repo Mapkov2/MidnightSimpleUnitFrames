@@ -34,6 +34,7 @@ function C.BuildGeneralValueSettingHelpers(ctx)
             category = opts.category or "Global",
             unit = opts.unit or "global",
             frameType = opts.frameType or "global",
+            page = opts.page,
             attribute = attr,
             type = "number",
             aliases = aliases,

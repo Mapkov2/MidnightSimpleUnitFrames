@@ -2397,11 +2397,14 @@ function Render.Install(box, ctx, deps)
         -- Live parity with LayoutTextSpan in the engine's text element: a
         -- LEFT+RIGHT pair spans the bar and defines the width, so the explicit
         -- SetWidth has to be cleared for the anchors to win.
-        local function LayoutPreviewSpan(fs, relativeTo, leftX, rightX, y, justify)
+        local function LayoutPreviewSpan(fs, relativeTo, leftX, rightX, y, justify, verticalPoint)
             if not (fs and relativeTo) then return end
+            verticalPoint = verticalPoint == "TOP" and "TOP" or "CENTER"
+            local leftPoint = verticalPoint == "TOP" and "TOPLEFT" or "LEFT"
+            local rightPoint = verticalPoint == "TOP" and "TOPRIGHT" or "RIGHT"
             fs:ClearAllPoints()
-            fs:SetPoint("LEFT", relativeTo, "LEFT", leftX or 0, y or 0)
-            fs:SetPoint("RIGHT", relativeTo, "RIGHT", rightX or 0, y or 0)
+            fs:SetPoint(leftPoint, relativeTo, leftPoint, leftX or 0, y or 0)
+            fs:SetPoint(rightPoint, relativeTo, rightPoint, rightX or 0, y or 0)
             fs:SetJustifyH(justify or "LEFT")
             fs._msufPreviewJustifyH = justify or "LEFT"
             -- Read by the handle drag: a span moves with +x on every anchor,
@@ -2453,20 +2456,25 @@ function Render.Install(box, ctx, deps)
             local nameRef = (runtimeText.nameAnchorToFrame ~= true and mock._health) or mock
             local pad3 = ScaleValue(3, previewScale, 1)
             mock._nameFS:SetWidth(0)
-            if nameAnchor == "CENTER" then
-                LayoutPreviewSpan(mock._nameFS, nameRef, pad3 + nox, -pad3 + nox, noy, "CENTER")
-            elseif nameAnchor == "RIGHT" then
-                LayoutPreviewSpan(mock._nameFS, nameRef, pad3 + nox, -pad3 + nox, noy, "RIGHT")
-            else
-                LayoutPreviewSpan(mock._nameFS, nameRef, pad3 + nox, -pad3, noy, "LEFT")
-            end
+            local justify = (nameAnchor == "TOP" or nameAnchor == "CENTER") and "CENTER"
+                or (nameAnchor == "TOPRIGHT" or nameAnchor == "RIGHT") and "RIGHT"
+                or "LEFT"
+            local rightX = justify == "LEFT" and -pad3 or (-pad3 + nox)
+            local verticalPoint = (nameAnchor == "TOPLEFT" or nameAnchor == "TOP" or nameAnchor == "TOPRIGHT") and "TOP" or "CENTER"
+            LayoutPreviewSpan(mock._nameFS, nameRef, pad3 + nox, rightX, noy, justify, verticalPoint)
         else
             local nameWidth = max(80, (tonumber(runtimeSpec and runtimeSpec.width) or liveW or 120) * 0.80)
             mock._nameFS:SetWidth(max(40, ScaleValue(nameWidth, previewScale, 40)))
-            if nameAnchor == "CENTER" then
+            if nameAnchor == "TOP" then
                 LayoutPreviewText(mock._nameFS, "TOP", "TOP", nox, noy, "CENTER", mock)
-            elseif nameAnchor == "RIGHT" then
+            elseif nameAnchor == "TOPRIGHT" then
                 LayoutPreviewText(mock._nameFS, "TOPRIGHT", "TOPRIGHT", -nox, noy, "RIGHT", mock)
+            elseif nameAnchor == "LEFT" then
+                LayoutPreviewText(mock._nameFS, "LEFT", "LEFT", nox, noy, "LEFT", mock)
+            elseif nameAnchor == "CENTER" then
+                LayoutPreviewText(mock._nameFS, "CENTER", "CENTER", nox, noy, "CENTER", mock)
+            elseif nameAnchor == "RIGHT" then
+                LayoutPreviewText(mock._nameFS, "RIGHT", "RIGHT", nox, noy, "RIGHT", mock)
             else
                 LayoutPreviewText(mock._nameFS, "TOPLEFT", "TOPLEFT", nox, noy, "LEFT", mock)
             end
