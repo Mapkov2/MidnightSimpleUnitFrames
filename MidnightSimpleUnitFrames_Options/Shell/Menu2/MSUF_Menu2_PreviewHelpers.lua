@@ -1292,7 +1292,7 @@ function H.SwitchCompactZoomMode(box, compact, defaultCompactZoom)
     -- Compact scale before the larger canvas changes its auto-fit geometry.
     -- Pan remains mode-local because the two canvases have different bounds.
     local compactZoomToCarry
-    if active == true and compact == false then
+    if active == true and compact == false and box._msuf2PreserveExpandedZoomOnNextExpand ~= true then
         compactZoomToCarry = tonumber(box._manualZoom)
             or tonumber(box._mockScale)
             or tonumber(box._mockAutoScale)

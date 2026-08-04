@@ -731,6 +731,23 @@ local function QueueVisiblePageLayoutSettle(key, entry)
 end
 local fixedPreviewRestoreSerial = 0
 local fixedPreviewExpandIntentSerial = 0
+local fixedPreviewRebuildExpandPageKey
+local function ActiveFixedPreviewIsExpanded(pageKey)
+    local expander = M._msuf2ActiveFixedPreviewExpander
+    return expander and expander.expanded == true and not expander.disposed
+        and (not pageKey or not expander.pageKey or expander.pageKey == pageKey)
+end
+function M.RememberFixedPreviewExpansionForRebuild(pageKey)
+    if not ActiveFixedPreviewIsExpanded(pageKey) then return false end
+    fixedPreviewRebuildExpandPageKey = pageKey or M.activeKey
+    return fixedPreviewRebuildExpandPageKey ~= nil
+end
+function M.ConsumeFixedPreviewExpansionForSelection(pageKey)
+    local restore = ActiveFixedPreviewIsExpanded()
+        or fixedPreviewRebuildExpandPageKey == pageKey
+    fixedPreviewRebuildExpandPageKey = nil
+    return restore == true
+end
 local function FixedPreviewExpanderForEntry(entry)
     local records = type(entry) == "table" and entry.pageHeaders or nil
     if type(records) ~= "table" then return nil end
@@ -779,7 +796,7 @@ local function RestoreExpandedFixedPreview(key, entry, serial, options)
             if options.ensureRoom == true and type(M.EnsureFixedPreviewExpansionRoom) == "function" then
                 M.EnsureFixedPreviewExpansionRoom(expander)
             end
-        elseif expander:Open(options.reason or "WINDOW_LAYOUT_RESTORE") then
+        elseif expander:Open(options.reason or "WINDOW_LAYOUT_RESTORE", { preserveExpandedZoom = true }) then
             resolved = true
         elseif pendingIntent and not frame._msuf2PendingFixedPreviewExpand
             and pendingIntent.serial == fixedPreviewExpandIntentSerial
@@ -1396,6 +1413,7 @@ function M.SelectPage(key)
     -- leave an empty content area. Removed legacy pages and typos safely land
     -- on the Dashboard instead.
     if not (M.pages and M.pages[key]) then key = "home" end
+    local restoreExpandedFixedPreview = M.ConsumeFixedPreviewExpansionForSelection(key)
     if M.activeKey and key ~= M.activeKey then M.CallIf(M.ClearPendingFixedPreviewExpansion) end
     local hasPendingFocus = false
     do
@@ -1455,6 +1473,7 @@ function M.SelectPage(key)
     end
     local entry = BuildPageEntry(key, false)
     if not entry then
+        fixedPreviewRebuildExpandPageKey = nil
         M.CallIf(M.SetActivePageHeader, nil)
         return false
     end
@@ -1493,6 +1512,16 @@ function M.SelectPage(key)
     RequestGroupPagePreviewForKey(key)
     if hasPendingFocus and type(M.FocusRequestedSection) == "function" then M.FocusRequestedSection(key, { flash = true }) end
     M.CallIf(M.GuidedTourOnPageSelected, key)
+    -- A spec-version invalidation may have occurred inside this SelectPage.
+    -- The local restore decision already owns that transition, so do not leave
+    -- a second one-shot intent behind for an unrelated later navigation.
+    fixedPreviewRebuildExpandPageKey = nil
+    if restoreExpandedFixedPreview then
+        fixedPreviewRestoreSerial = fixedPreviewRestoreSerial + 1
+        RestoreExpandedFixedPreview(key, entry, fixedPreviewRestoreSerial, {
+            reason = "PAGE_STATE_RESTORE",
+        })
+    end
     return true
 end
 local pageScrollRestoreSerial = 0
@@ -2830,6 +2859,7 @@ function M.Toggle(pageKey)
 end
 function M.InvalidatePage(key)
     if key then
+        M.RememberFixedPreviewExpansionForRebuild(key)
         if key ~= "search" then MarkSearchIndexDirty() end
         M.CallIf(M.ReleasePinnedPreviews, "INVALIDATE_PAGE", nil, key)
         M.CallIf(M.ReleaseGFNativePreviews, "INVALIDATE_PAGE", nil)
