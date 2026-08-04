@@ -1,5 +1,19 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-RC8 - 2026-08-04
+
+### Highlights
+
+- Added Edge Softness to each of the three existing Unit Frame texture layers. The 0-30% slider uses fifteen compact standalone feather masks and renders through the same cold apply path in live frames and the Menu2 preview; Copy To carries the value for every layer.
+- Cooldown-manager anchoring now asks for consent instead of silently taking ownership. Detected Arc UI, Skiron, Coolinator, Cooldown Manager Centered and Essential Cooldown Viewer providers can be followed or released from Edit Mode, Guided Setup and the unit-page anchoring controls.
+
+### Fixes
+
+- Fixed expanded fixed previews collapsing or restoring an older zoom when a profile/settings rebuild invalidated the active page. Expansion state and the expanded zoom now survive the rebuild as one controlled transition.
+- Fixed Assistant explain requests failing when players used a published control alias instead of the visible label. Ambiguous aliases still fail closed, and advice questions such as whether a setting is worth changing remain strictly read-only.
+- Fixed the remaining Power Bar color fallback path when a unit exposes a numeric power type whose token must be normalized before resolving configured colors.
+- Fixed disabled themed Menu2 segments retaining their active blue paint even though native mouse interaction had already been disabled.
+
 ## 6.0-RC7 - 2026-08-04
 
 ### Highlights
