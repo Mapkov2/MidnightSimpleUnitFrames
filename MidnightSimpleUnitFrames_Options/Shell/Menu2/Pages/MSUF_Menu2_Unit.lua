@@ -278,11 +278,9 @@ local COPY_FRAME_BASIC_FIELDS = WL [[
     powerBarGradientColorR powerBarGradientColorG powerBarGradientColorB
 ]]
 local COPY_TRANSPARENCY_FIELDS = WL [[hpBarAlpha powerBarAlpha hpBgAlpha powerBarBgAlpha alphaExcludeTextPortrait oocFadeEnabled oocFadeAlpha rangeFadeEnabled rangeFadeAlpha rangeFadeLayerMode]]
--- Keep this as a WL literal (even though the shared prefix list is empty) so
--- unit_copy_coverage_smoke.lua can audit the dynamically-prefixed suffix set.
-local COPY_TEXLAYER_FIELDS = WL [[]]
+local COPY_TEXLAYER_FIELDS = WL [[texLayerLinkGeometry texLayerLinkSize]]
 for _, texP in ipairs({ "texLayer", "texLayer2", "texLayer3" }) do
-    for _, texBase in ipairs(WL [[Enabled Texture CustomTexturePath Alpha FollowFrameAlpha Strata Level AnchorTarget Anchor OffsetX OffsetY Width Height ColorMode ColorR ColorG ColorB GradientEnabled Gradient2R Gradient2G Gradient2B GradientDirRight GradientDirLeft GradientDirUp GradientDirDown BlendMode MirrorH MirrorV EdgeSoftness Visibility RoundedClip]]) do
+    for _, texBase in ipairs(WL [[Enabled SourceMode Texture CustomTexturePath Alpha FollowFrameAlpha Strata Level AnchorTarget Anchor OffsetX OffsetY ResponsiveSize SizeMode EdgeAttach Width Height ColorMode ColorR ColorG ColorB GradientEnabled Gradient2R Gradient2G Gradient2B GradientDirRight GradientDirLeft GradientDirUp GradientDirDown BlendMode MirrorH MirrorV EdgeSoftness Visibility RoundedClip]]) do
         COPY_TEXLAYER_FIELDS[#COPY_TEXLAYER_FIELDS + 1] = texP .. texBase
     end
 end

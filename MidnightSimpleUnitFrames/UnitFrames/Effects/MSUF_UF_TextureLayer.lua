@@ -24,6 +24,7 @@ local tonumber = tonumber
 local tostring = tostring
 local pairs = pairs
 local ipairs = ipairs
+local max = math.max
 local floor = math.floor
 local issecretvalue = _G.issecretvalue or function(_) return false end
 
@@ -77,7 +78,9 @@ end
 
 local function ResolveLayerTexture(conf, prefix)
   local custom = conf[prefix .. "CustomTexturePath"]
-  if type(custom) == "string" and custom ~= "" then return custom end
+  local sourceMode = conf[prefix .. "SourceMode"]
+  if sourceMode ~= "SHAREDMEDIA" and type(custom) == "string" and custom ~= "" then return custom end
+  if sourceMode == "PACK" or sourceMode == "CUSTOM" then return WHITE8 end
   local key = conf[prefix .. "Texture"]
   if type(key) == "string" and key ~= "" then
     local resolve = _G.MSUF_ResolveStatusbarTextureKey
@@ -98,18 +101,101 @@ end
 
 local function ResolveAnchorTarget(frame, mode)
   if mode == "HEALTH" then
-    return frame.hpBar or frame.Health or frame
+    return frame.hpBar or frame.Health or frame.healthBar or frame.hpBG or frame
   elseif mode == "POWER" then
-    return frame.powerBar or frame.power or frame
+    return frame.powerBar or frame.powerBG or frame.power or frame
   elseif mode == "PORTRAIT" then
     return frame.MSUFPortraitHolder or frame.portrait or frame
   end
   return frame
 end
+TextureLayer.ResolveAnchorTarget = ResolveAnchorTarget
+
+local function RegionDimension(region, method, fallback)
+  local fn = region and region[method]
+  local value = type(fn) == "function" and fn(region) or nil
+  if issecretvalue(value) == true or type(value) ~= "number" or value < 1 then return fallback end
+  return value
+end
+
+local function ResolveSizeMode(conf, prefix)
+  local mode = conf[prefix .. "SizeMode"]
+  if mode == "FRAME" or mode == "HEIGHT" or mode == "MANUAL" then return mode end
+  return conf[prefix .. "ResponsiveSize"] == true and "FRAME" or "MANUAL"
+end
+TextureLayer.ResolveSizeMode = ResolveSizeMode
+
+--- Resolves live and preview geometry through one contract. FRAME follows both
+--- dimensions, HEIGHT stays square while following frame height (medallions),
+--- and MANUAL retains legacy Width/Height semantics. `scale` is 1 live and the
+--- mock viewport scale in Menu2 preview.
+local function ResolveLayerSize(target, frame, conf, prefix, fallbackW, fallbackH, scale)
+  scale = tonumber(scale) or 1
+  if scale <= 0 then scale = 1 end
+  fallbackW = tonumber(fallbackW) or (100 * scale)
+  fallbackH = tonumber(fallbackH) or (16 * scale)
+  local frameW = RegionDimension(frame, "GetWidth", fallbackW)
+  local frameH = RegionDimension(frame, "GetHeight", fallbackH)
+  local targetW = RegionDimension(target, "GetWidth", frameW)
+  local targetH = RegionDimension(target, "GetHeight", frameH)
+  local mode = ResolveSizeMode(conf, prefix)
+  if mode == "FRAME" then
+    local width = (targetW + 20 * scale) / 0.82
+    local height = (targetH + 10 * scale) / 0.30
+    return max(72 * scale, width), max(48 * scale, height)
+  elseif mode == "HEIGHT" then
+    local size = max(48 * scale, (targetH + 10 * scale) / 0.30)
+    return size, size
+  end
+  local width = tonumber(conf[prefix .. "Width"]) or 0
+  if width > 0 then width = width * scale else width = targetW end
+  local height = (tonumber(conf[prefix .. "Height"]) or 16) * scale
+  return max(1, width), max(1, height)
+end
+TextureLayer.ResolveLayerSize = ResolveLayerSize
+
+--- FREE uses the selected anchor normally. LEFT/RIGHT add the current target
+--- edge to the user's own offset, allowing a square ornament to remain attached
+--- while the unit frame changes width. This runs only when layers are stamped.
+local function ResolveLayerOffsets(target, frame, conf, prefix, fallbackW, fallbackH, scale)
+  scale = tonumber(scale) or 1
+  if scale <= 0 then scale = 1 end
+  fallbackW = tonumber(fallbackW) or (100 * scale)
+  fallbackH = tonumber(fallbackH) or (16 * scale)
+  local frameW = RegionDimension(frame, "GetWidth", fallbackW)
+  local targetW = RegionDimension(target, "GetWidth", frameW)
+  local x = (tonumber(conf[prefix .. "OffsetX"]) or 0) * scale
+  local y = (tonumber(conf[prefix .. "OffsetY"]) or 0) * scale
+  local edge = conf[prefix .. "EdgeAttach"]
+  if edge == "LEFT" then
+    x = x - targetW * 0.5
+  elseif edge == "RIGHT" then
+    x = x + targetW * 0.5
+  end
+  return x, y
+end
+TextureLayer.ResolveLayerOffsets = ResolveLayerOffsets
+
+--- Applies the exact anchor, scaled offsets and size contract used by live
+--- frames. Menu2 preview calls this same helper after its health, power and
+--- portrait regions have their final geometry, avoiding a second layout model.
+local function ApplyLayerLayout(holder, frame, conf, prefix, fallbackW, fallbackH, scale)
+  local target = ResolveAnchorTarget(frame, conf[prefix .. "AnchorTarget"])
+  local point = conf[prefix .. "Anchor"]
+  if not VALID_POINTS[point] then point = "TOP" end
+  local width, height = ResolveLayerSize(target, frame, conf, prefix, fallbackW, fallbackH, scale)
+  local offsetX, offsetY = ResolveLayerOffsets(target, frame, conf, prefix, fallbackW, fallbackH, scale)
+  holder:SetSize(width, height)
+  holder:ClearAllPoints()
+  holder:SetPoint(point, target, point, offsetX, offsetY)
+  return target, width, height, point, offsetX, offsetY
+end
+TextureLayer.ApplyLayerLayout = ApplyLayerLayout
 
 --- Class color for the unit a frame currently shows. 12.x can hand back
 --- secret class tokens for hostile units; those fall back to the custom color.
 local function ResolveClassRGB(unitKey)
+  if type(unitKey) ~= "string" or unitKey == "" then return nil end
   local UnitClass = _G.UnitClass
   if type(UnitClass) ~= "function" then return nil end
   local unit = unitKey == "boss" and "boss1" or unitKey
@@ -283,7 +369,6 @@ local function EnsureBaseTexture(holder, clipWanted)
   if not tex then
     tex = NewLayerTexture(holder, 0)
     holder.tex = tex
-    holder.clipApplied = nil
   end
   return tex
 end
@@ -338,73 +423,44 @@ local function ApplyLayerStrata(frame, holder, strata)
 end
 TextureLayer.ApplyLayerStrata = ApplyLayerStrata
 
-local function ApplySlot(frame, conf, unitKey, slot)
-  local prefix = SLOT_PREFIXES[slot]
-  local holders = frame._msufTexLayers
-  local holder = holders and holders[slot]
-  if conf[prefix .. "Enabled"] ~= true or not LayerVisible(conf, prefix) then
-    if holder then
-      ClearSoftEdgeMask(holder)
-      holder:Hide()
-    end
-    if conf[prefix .. "Enabled"] == true then NoteDynamicNeeds(unitKey, conf, prefix) end
-    return
-  end
-  NoteDynamicNeeds(unitKey, conf, prefix)
+local function ResolveLayerFrameLevel(frame, rawLevel)
+  local offset = tonumber(rawLevel) or 1
+  if offset < 0 then offset = 0 elseif offset > 30 then offset = 30 end
+  if Layers.ElementLevel then return Layers.ElementLevel(offset, 1, 0) end
+  local base = frame and frame.GetFrameLevel and (frame:GetFrameLevel() or 0) or 0
+  return base + offset
+end
+TextureLayer.ResolveLayerFrameLevel = ResolveLayerFrameLevel
 
-  if not holder then
-    if not holders then
-      holders = {}
-      frame._msufTexLayers = holders
-    end
-    holder = CreateFrame("Frame", nil, frame)
-    holder:EnableMouse(false)
-    holders[slot] = holder
-  end
-
+--- Strata, layer band, parent-alpha behavior and slot alpha are identical in
+--- live frames and Menu2. Keeping them here also prevents preview-only layer
+--- arithmetic from drifting away from the shared 0..30 element scale.
+local function ApplyLayerFrameState(frame, holder, conf, prefix)
   ApplyLayerStrata(frame, holder, conf[prefix .. "Strata"])
-  if holder.SetFrameLevel and frame.GetFrameLevel then
-    local offset = tonumber(conf[prefix .. "Level"]) or 1
-    if offset < 0 then offset = 0 elseif offset > 30 then offset = 30 end
-    local level = Layers.ElementLevel and Layers.ElementLevel(offset, 1, 0)
-      or ((frame:GetFrameLevel() or 0) + offset)
+  if holder.SetFrameLevel then
+    local level = ResolveLayerFrameLevel(frame, conf[prefix .. "Level"])
     if holder._msufTexLayerLevel ~= level then
       holder:SetFrameLevel(level)
       holder._msufTexLayerLevel = level
     end
   end
-
-  -- Alpha: the frame lane (range fade, ooc fade) is inherited from the parent
-  -- unless the user detaches the layer from it; the layer's own alpha always
-  -- applies on top.
   if holder.SetIgnoreParentAlpha then
     holder:SetIgnoreParentAlpha(conf[prefix .. "FollowFrameAlpha"] == false)
   end
   holder:SetAlpha(Clamp01(conf[prefix .. "Alpha"], 1))
+end
+TextureLayer.ApplyLayerFrameState = ApplyLayerFrameState
 
-  -- Placement: anchor to the frame or one of its elements.
-  local anchorMode = conf[prefix .. "AnchorTarget"]
-  local target = ResolveAnchorTarget(frame, anchorMode)
-  local point = conf[prefix .. "Anchor"]
-  if not VALID_POINTS[point] then point = "TOP" end
-  local width = tonumber(conf[prefix .. "Width"]) or 0
-  if width <= 0 then
-    width = (target.GetWidth and target:GetWidth()) or (frame.GetWidth and frame:GetWidth()) or 100
-    if issecretvalue(width) == true or not width or width < 1 then width = 100 end
-  end
-  local height = tonumber(conf[prefix .. "Height"]) or 16
-  if height < 1 then height = 1 end
-  holder:SetSize(width, height)
-  holder:ClearAllPoints()
-  holder:SetPoint(point, target, point, tonumber(conf[prefix .. "OffsetX"]) or 0, tonumber(conf[prefix .. "OffsetY"]) or 0)
-
+--- Texture resolution, mirroring, tint, gradients and optional rounded masks
+--- are one visual contract for live and preview. Preview may pass a class-color
+--- override from its live snapshot; runtime resolves the displayed unit.
+local function ApplyLayerVisual(frame, holder, conf, prefix, unitKey, classR, classG, classB)
   local clipWanted = WantsRoundedClip(conf, prefix)
   local tex = EnsureBaseTexture(holder, clipWanted)
   tex:SetTexture(ResolveLayerTexture(conf, prefix))
   if tex.SetBlendMode then
     tex:SetBlendMode(conf[prefix .. "BlendMode"] == "ADD" and "ADD" or "BLEND")
   end
-  -- Mirroring flips the texture coordinates; cheap and purely cold path.
   local mirrorH = conf[prefix .. "MirrorH"] == true
   local mirrorV = conf[prefix .. "MirrorV"] == true
   if tex.SetTexCoord then
@@ -415,12 +471,11 @@ local function ApplySlot(frame, conf, unitKey, slot)
   local g = Clamp01(conf[prefix .. "ColorG"], 1)
   local b = Clamp01(conf[prefix .. "ColorB"], 1)
   if conf[prefix .. "ColorMode"] == "CLASS" then
-    local cr, cg, cb = ResolveClassRGB(unitKey)
-    if cr then r, g, b = cr, cg, cb end
+    local cr, cg, cb = classR, classG, classB
+    if cr == nil then cr, cg, cb = ResolveClassRGB(unitKey) end
+    if cr ~= nil then r, g, b = Clamp01(cr, r), Clamp01(cg, g), Clamp01(cb, b) end
   end
   if tex.SetGradient and CreateColor then
-    -- One SetGradient call with equal ends keeps the base texture solid and
-    -- doubles as the "clear gradient" path after profile/copy changes.
     local solid = CreateColor(r, g, b, 1)
     tex:SetGradient("HORIZONTAL", solid, solid)
   elseif tex.SetVertexColor then
@@ -429,8 +484,6 @@ local function ApplySlot(frame, conf, unitKey, slot)
   ApplyClip(frame, holder, tex, clipWanted)
   local featherTextures = { tex }
 
-  -- Bars-style multi-direction gradient: one WHITE8 overlay per active edge,
-  -- fading from transparent to the gradient end color toward that edge.
   local gradientOn = conf[prefix .. "GradientEnabled"] == true
   local r2 = Clamp01(conf[prefix .. "Gradient2R"], 0)
   local g2 = Clamp01(conf[prefix .. "Gradient2G"], 0)
@@ -458,6 +511,37 @@ local function ApplySlot(frame, conf, unitKey, slot)
   end
   ApplySoftEdgeMask(holder, featherTextures, conf[prefix .. "EdgeSoftness"])
   holder.clipApplied = clipWanted or nil
+  return tex
+end
+TextureLayer.ApplyLayerVisual = ApplyLayerVisual
+
+local function ApplySlot(frame, conf, unitKey, slot)
+  local prefix = SLOT_PREFIXES[slot]
+  local holders = frame._msufTexLayers
+  local holder = holders and holders[slot]
+  if conf[prefix .. "Enabled"] ~= true or not LayerVisible(conf, prefix) then
+    if holder then holder:Hide() end
+    if conf[prefix .. "Enabled"] == true then NoteDynamicNeeds(unitKey, conf, prefix) end
+    return
+  end
+  NoteDynamicNeeds(unitKey, conf, prefix)
+
+  if not holder then
+    if not holders then
+      holders = {}
+      frame._msufTexLayers = holders
+    end
+    holder = CreateFrame("Frame", nil, frame)
+    holder:EnableMouse(false)
+    holders[slot] = holder
+  end
+
+  ApplyLayerFrameState(frame, holder, conf, prefix)
+
+  -- Placement: anchor to the frame or one of its elements.
+  ApplyLayerLayout(holder, frame, conf, prefix, 100, 16, 1)
+
+  ApplyLayerVisual(frame, holder, conf, prefix, unitKey)
   holder:Show()
 end
 
@@ -496,15 +580,25 @@ RefreshUnitTextureLayers = function(unit)
   local UF = MSUF and MSUF.UF
   local frames = UF and UF.frames
   if type(frames) ~= "table" then return false end
-  if unit == nil then
-    wantRegenEvents, wantTargetEvents, wantFocusEvents, wantBossEvents = false, false, false, false
-  end
+  -- Recompute event needs on every cold-path refresh. This immediately drops
+  -- stale combat/retarget registrations when a dynamic layer is replaced by a
+  -- static preset, even when the options apply was scoped to one unit.
+  wantRegenEvents, wantTargetEvents, wantFocusEvents, wantBossEvents = false, false, false, false
   for _, frame in pairs(frames) do
     if frame and FrameMatchesUnitScope(frame, unit) then
       ApplyToUnitFrame(frame)
+    elseif frame and frame.MSUFUnitKey then
+      local unitKey = frame.MSUFUnitKey
+      local conf = ConfForUnitKey(unitKey)
+      if conf then
+        for slot = 1, #SLOT_PREFIXES do
+          local prefix = SLOT_PREFIXES[slot]
+          if conf[prefix .. "Enabled"] == true then NoteDynamicNeeds(unitKey, conf, prefix) end
+        end
+      end
     end
   end
-  if unit == nil then SyncDriverEvents() end
+  SyncDriverEvents()
   return true
 end
 TextureLayer.Refresh = RefreshUnitTextureLayers

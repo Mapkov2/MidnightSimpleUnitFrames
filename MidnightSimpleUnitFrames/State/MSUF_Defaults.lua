@@ -4059,12 +4059,24 @@ local function fill(key, defaults)
         if u.oocFadeAlpha == nil then u.oocFadeAlpha = 0.5 end
         --- Decorative texture layers (3 slots, Blizzard name-bar style):
         --- SharedMedia texture per slot with own alpha, strata/level, anchor
-        --- target, color/gradient modes, blend, mirroring, combat visibility
-        --- and rounded clipping. Applied purely cold path.
+        --- target, color/gradient modes, blend, mirroring, edge softness,
+        --- combat visibility and rounded clipping. Applied purely cold path.
+        if u.texLayerLinkGeometry == nil then u.texLayerLinkGeometry = false end
+        if u.texLayerLinkSize == nil then u.texLayerLinkSize = false end
         for _, texP in ipairs({ "texLayer", "texLayer2", "texLayer3" }) do
             if u[texP .. "Enabled"] == nil then u[texP .. "Enabled"] = false end
             if u[texP .. "Texture"] == nil then u[texP .. "Texture"] = "" end
             if u[texP .. "CustomTexturePath"] == nil then u[texP .. "CustomTexturePath"] = "" end
+            if u[texP .. "SourceMode"] == nil then
+                local sourcePath = tostring(u[texP .. "CustomTexturePath"] or "")
+                if sourcePath:find("^Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\TextureLayers\\") then
+                    u[texP .. "SourceMode"] = "PACK"
+                elseif sourcePath ~= "" then
+                    u[texP .. "SourceMode"] = "CUSTOM"
+                else
+                    u[texP .. "SourceMode"] = "SHAREDMEDIA"
+                end
+            end
             if u[texP .. "Alpha"] == nil then u[texP .. "Alpha"] = 1 end
             if u[texP .. "FollowFrameAlpha"] == nil then u[texP .. "FollowFrameAlpha"] = true end
             if u[texP .. "Strata"] == nil then u[texP .. "Strata"] = "AUTO" end
@@ -4073,6 +4085,11 @@ local function fill(key, defaults)
             if u[texP .. "Anchor"] == nil then u[texP .. "Anchor"] = "TOP" end
             if u[texP .. "OffsetX"] == nil then u[texP .. "OffsetX"] = 0 end
             if u[texP .. "OffsetY"] == nil then u[texP .. "OffsetY"] = 0 end
+            if u[texP .. "ResponsiveSize"] == nil then u[texP .. "ResponsiveSize"] = false end
+            if u[texP .. "SizeMode"] == nil then
+                u[texP .. "SizeMode"] = u[texP .. "ResponsiveSize"] == true and "FRAME" or "MANUAL"
+            end
+            if u[texP .. "EdgeAttach"] == nil then u[texP .. "EdgeAttach"] = "FREE" end
             if u[texP .. "Width"] == nil then u[texP .. "Width"] = 0 end
             if u[texP .. "Height"] == nil then u[texP .. "Height"] = 16 end
             if u[texP .. "ColorMode"] == nil then u[texP .. "ColorMode"] = "CUSTOM" end

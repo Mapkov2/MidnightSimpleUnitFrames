@@ -1173,13 +1173,30 @@ local function RenderTextureLayerSlotPreview(box, mock, conf, slot, wanted, scal
     local runtimeVisible = conf and (not (textureRuntime and type(textureRuntime.LayerVisible) == "function")
         or textureRuntime.LayerVisible(conf, prefix) == true)
     if not (wanted and conf and conf[prefix .. "Enabled"] == true and runtimeVisible) then
-        if textureRuntime and type(textureRuntime.ApplySoftEdgeMask) == "function" then
-            textureRuntime.ApplySoftEdgeMask(holder, {}, 0)
-        end
         holder:Hide()
         if handle then handle:Hide() end
         return
     end
+    -- Core loads before the Options addon. Use its complete cold-path contract
+    -- for frame state, anchor/size/offset geometry and visual styling so the
+    -- preview cannot drift from live behavior when a new field is added.
+    if textureRuntime
+        and type(textureRuntime.ApplyLayerFrameState) == "function"
+        and type(textureRuntime.ApplyLayerLayout) == "function"
+        and type(textureRuntime.ApplyLayerVisual) == "function"
+    then
+        textureRuntime.ApplyLayerFrameState(mock, holder, conf, prefix)
+        local _, width, height = textureRuntime.ApplyLayerLayout(
+            holder, mock, conf, prefix, sw, scaleFn(16), scaleFn(1))
+        textureRuntime.ApplyLayerVisual(mock, holder, conf, prefix, nil, classR, classG, classB)
+        holder:Show()
+        if handle then
+            handle:SetSize(math.max(18, width + 8), math.max(18, height + 8))
+            if placeHandle then placeHandle(handle, holder) end
+        end
+        return
+    end
+    -- Compatibility fallback for an unexpectedly partial core load.
     if textureRuntime and type(textureRuntime.ApplyLayerStrata) == "function" then
         textureRuntime.ApplyLayerStrata(mock, holder, conf[prefix .. "Strata"])
     end
@@ -1203,16 +1220,28 @@ local function RenderTextureLayerSlotPreview(box, mock, conf, slot, wanted, scal
     end
     local point = conf[prefix .. "Anchor"]
     if not TEXLAYER_PREVIEW_POINTS[point] then point = "TOP" end
-    holder:ClearAllPoints()
-    holder:SetPoint(point, target, point, scaleFn(tonumber(conf[prefix .. "OffsetX"]) or 0), scaleFn(tonumber(conf[prefix .. "OffsetY"]) or 0))
-    local width = tonumber(conf[prefix .. "Width"]) or 0
-    if width > 0 then
-        width = scaleFn(width)
+    local offsetX, offsetY
+    if textureRuntime and type(textureRuntime.ResolveLayerOffsets) == "function" then
+        offsetX, offsetY = textureRuntime.ResolveLayerOffsets(target, mock, conf, prefix, sw, scaleFn(16), scaleFn(1))
     else
-        width = (target.GetWidth and target:GetWidth()) or sw
-        if not width or width < 1 then width = sw end
+        offsetX = scaleFn(tonumber(conf[prefix .. "OffsetX"]) or 0)
+        offsetY = scaleFn(tonumber(conf[prefix .. "OffsetY"]) or 0)
     end
-    local height = scaleFn(tonumber(conf[prefix .. "Height"]) or 16)
+    holder:ClearAllPoints()
+    holder:SetPoint(point, target, point, offsetX, offsetY)
+    local width, height
+    if textureRuntime and type(textureRuntime.ResolveLayerSize) == "function" then
+        width, height = textureRuntime.ResolveLayerSize(target, mock, conf, prefix, sw, scaleFn(16), scaleFn(1))
+    else
+        width = tonumber(conf[prefix .. "Width"]) or 0
+        if width > 0 then
+            width = scaleFn(width)
+        else
+            width = (target.GetWidth and target:GetWidth()) or sw
+            if not width or width < 1 then width = sw end
+        end
+        height = scaleFn(tonumber(conf[prefix .. "Height"]) or 16)
+    end
     holder:SetSize(math.max(1, width), math.max(1, height))
     local tex = holder.tex
     local path = textureRuntime and type(textureRuntime.ResolveLayerTexture) == "function"
@@ -1249,7 +1278,6 @@ local function RenderTextureLayerSlotPreview(box, mock, conf, slot, wanted, scal
     elseif tex.SetVertexColor then
         tex:SetVertexColor(r, g, b, 1)
     end
-    local featherTextures = { tex }
     -- Bars-style multi-direction gradient: one overlay per active edge, exactly
     -- mirroring UnitFrames/Effects/MSUF_UF_TextureLayer.lua.
     local gradientOn = conf[prefix .. "GradientEnabled"] == true
@@ -1286,12 +1314,8 @@ local function RenderTextureLayerSlotPreview(box, mock, conf, slot, wanted, scal
             elseif overlay.SetVertexColor then
                 overlay:SetVertexColor(r2, g2, b2, 0.5)
             end
-            featherTextures[#featherTextures + 1] = overlay
             overlay:Show()
         end
-    end
-    if textureRuntime and type(textureRuntime.ApplySoftEdgeMask) == "function" then
-        textureRuntime.ApplySoftEdgeMask(holder, featherTextures, conf[prefix .. "EdgeSoftness"])
     end
     local alpha = tonumber(conf[prefix .. "Alpha"]) or 1
     if alpha < 0 then alpha = 0 elseif alpha > 1 then alpha = 1 end
@@ -1959,7 +1983,6 @@ function Preview.Refresh(box, reason)
             tonumber(box._msuf2RangeFadePreviewAlpha) or 1))
     end
     mock.hp:SetAlpha(healthFillAlpha)
-    RenderTextureLayerPreview(box, mock, conf, PreviewLayerWanted(box, "texLayer"), S, sw, baseLevel, SetTex, PlaceHandle, R.ClassColor(data.class))
     if powerOn then
         mock.powerBG:Show(); mock.power:Show()
         mock.powerBG:ClearAllPoints()
@@ -2750,6 +2773,9 @@ function Preview.Refresh(box, reason)
         R.LayoutPreviewBlizzardPortrait(mock.portrait, false)
         box.handlePortrait:Hide()
     end
+    -- Health, power and portrait targets now have their final preview geometry.
+    -- Texture layers stamp after them just like Factory.Apply does live.
+    RenderTextureLayerPreview(box, mock, conf, PreviewLayerWanted(box, "texLayer"), S, sw, baseLevel, SetTex, PlaceHandle, R.ClassColor(data.class))
     if castPreviewVisible then
         mock.cast:Show()
         -- The live castbar is not a child of the scaled unit frame. Preserve
