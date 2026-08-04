@@ -115,7 +115,7 @@ local function CollectMsufScaleFrames()
 end
 local function GetSavedMsufScale()
     local g = EnsureGeneral()
-    return Clamp(tonumber(g.msufUiScale) or tonumber(g.uiScale) or 1, 0.25, 1.5)
+    return Clamp(tonumber(g.msufUiScale) or tonumber(g.uiScale) or 1, 0.25, 2.0)
 end
 local function RefreshGroupFrameGeometryAfterScale()
     local gf = MSUF and MSUF.GF
@@ -179,7 +179,7 @@ end
 local function ApplyMsufScale(scale)
     scale = tonumber(scale)
     if not scale then return end
-    scale = Clamp(scale, 0.25, 1.5)
+    scale = Clamp(scale, 0.25, 2.0)
     if _G.InCombatLockdown and _G.InCombatLockdown() then
         pendingMsufScale = scale
         if EnsureScaleApplyAfterCombat then EnsureScaleApplyAfterCombat() end
@@ -477,11 +477,12 @@ local function ResetStandaloneWindowGeometry(frame, silent)
     g.flashFullYpx = 10 * uiScale
     g.msuf2WindowW = 900
     g.msuf2WindowH = 700
-    g.slashMenuScale = 1.0
+    -- Menu2's calibrated 100% reference preserves the historical 80% size.
+    g.slashMenuScale = 0.8
     local win = frame or _G.MSUF_StandaloneOptionsWindow or (_G.MSUF2 and _G.MSUF2.frame)
     if win then
         local scale = 1.0
-        if _G.MSUF2 and type(_G.MSUF2.GetEffectiveMenuScale) == "function" then scale = _G.MSUF2.GetEffectiveMenuScale(1.0) end
+        if _G.MSUF2 and type(_G.MSUF2.GetEffectiveMenuScale) == "function" then scale = _G.MSUF2.GetEffectiveMenuScale(0.8) end
         if win.SetScale then win:SetScale(scale) end
         if win.SetSize then win:SetSize(900, 700) end
         if win.ClearAllPoints then win:ClearAllPoints() end

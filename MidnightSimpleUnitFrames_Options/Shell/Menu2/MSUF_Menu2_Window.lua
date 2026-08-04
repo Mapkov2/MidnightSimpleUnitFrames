@@ -154,7 +154,13 @@ local DEFAULT_WINDOW_W, DEFAULT_WINDOW_H = 1360, 860
 -- them to Compact rather than squeezing the renderer into a third size.
 local MIN_WINDOW_W, MIN_WINDOW_H = 900, 660
 local MAX_WINDOW_W, MAX_WINDOW_H = 1760, 1200
-local MENU_SCALE_MIN, MENU_SCALE_MAX, MENU_SCALE_STEP = 0.25, 1.50, 0.05
+-- Preserve the physical size users previously selected at 80%, but present it
+-- as the new 100% reference. The stored value remains the legacy scale factor
+-- so existing profiles retain their exact window size without a migration.
+local MENU_SCALE_REFERENCE = 0.80
+local MENU_SCALE_MIN_PERCENT, MENU_SCALE_MAX_PERCENT, MENU_SCALE_STEP_PERCENT = 25, 200, 5
+local MENU_SCALE_MIN = MENU_SCALE_REFERENCE * (MENU_SCALE_MIN_PERCENT / 100)
+local MENU_SCALE_MAX = MENU_SCALE_REFERENCE * (MENU_SCALE_MAX_PERCENT / 100)
 local WINDOW_W, WINDOW_H = DEFAULT_WINDOW_W, DEFAULT_WINDOW_H
 local NAV_W = 200
 -- Gap the content frame leaves at the window bottom; the menu-scale control and
@@ -169,12 +175,18 @@ local function ClampNumber(value, minValue, maxValue, fallback)
     return floor(value + 0.5)
 end
 local function ClampScale(value)
-    value = tonumber(value) or 1
+    value = tonumber(value) or MENU_SCALE_REFERENCE
     if value < MENU_SCALE_MIN then value = MENU_SCALE_MIN elseif value > MENU_SCALE_MAX then value = MENU_SCALE_MAX end
     return value
 end
+local function MenuScalePercent(value)
+    return (ClampScale(value) / MENU_SCALE_REFERENCE) * 100
+end
+local function MenuScaleValue(percent)
+    return ClampScale(((tonumber(percent) or 100) / 100) * MENU_SCALE_REFERENCE)
+end
 local function EffectiveMenuScale(value)
-    return ClampScale(ClampScale(value) * MENU_BASE_SCALE)
+    return ClampScale(value) * MENU_BASE_SCALE
 end
 local function WindowMaxBounds()
     local maxW, maxH = MAX_WINDOW_W, MAX_WINDOW_H
@@ -745,6 +757,7 @@ end
 function M.ConsumeFixedPreviewExpansionForSelection(pageKey)
     local restore = ActiveFixedPreviewIsExpanded()
         or fixedPreviewRebuildExpandPageKey == pageKey
+        or (type(M.ShouldExpandFixedPreview) == "function" and M.ShouldExpandFixedPreview())
     fixedPreviewRebuildExpandPageKey = nil
     return restore == true
 end
@@ -1741,8 +1754,8 @@ local function InstallMenuScaleControl(f)
     slider:SetPoint("RIGHT", control, "RIGHT", -8, 0)
     slider:SetHeight(20)
     slider:SetOrientation("HORIZONTAL")
-    slider:SetMinMaxValues(MENU_SCALE_MIN * 100, MENU_SCALE_MAX * 100)
-    slider:SetValueStep(MENU_SCALE_STEP * 100)
+    slider:SetMinMaxValues(MENU_SCALE_MIN_PERCENT, MENU_SCALE_MAX_PERCENT)
+    slider:SetValueStep(MENU_SCALE_STEP_PERCENT)
     if slider.SetObeyStepOnDrag then slider:SetObeyStepOnDrag(true) end
     if slider.SetStepsPerPage then slider:SetStepsPerPage(0) end
     if slider.EnableMouseWheel then slider:EnableMouseWheel(true) end
@@ -1752,17 +1765,17 @@ local function InstallMenuScaleControl(f)
 
     local function Percent(value)
         local pct = tonumber(value) or 100
-        if pct < MENU_SCALE_MIN * 100 then pct = MENU_SCALE_MIN * 100
-        elseif pct > MENU_SCALE_MAX * 100 then pct = MENU_SCALE_MAX * 100 end
-        return floor((pct / (MENU_SCALE_STEP * 100)) + 0.5) * (MENU_SCALE_STEP * 100)
+        if pct < MENU_SCALE_MIN_PERCENT then pct = MENU_SCALE_MIN_PERCENT
+        elseif pct > MENU_SCALE_MAX_PERCENT then pct = MENU_SCALE_MAX_PERCENT end
+        return floor((pct / MENU_SCALE_STEP_PERCENT) + 0.5) * MENU_SCALE_STEP_PERCENT
     end
     local function UpdateVisual(value)
         local pct = Percent(value or slider:GetValue())
         label:SetText(string.format("%s %d%%", M.Tr("Menu"), pct))
         local fill = slider._msufFill
         if fill then
-            local span = (MENU_SCALE_MAX - MENU_SCALE_MIN) * 100
-            local fraction = span > 0 and ((pct - (MENU_SCALE_MIN * 100)) / span) or 0
+            local span = MENU_SCALE_MAX_PERCENT - MENU_SCALE_MIN_PERCENT
+            local fraction = span > 0 and ((pct - MENU_SCALE_MIN_PERCENT) / span) or 0
             fill:SetWidth(max(1, max(1, slider:GetWidth() - 2) * fraction))
         end
         if slider._msuf2UpdateThumb then slider:_msuf2UpdateThumb() end
@@ -1771,7 +1784,7 @@ local function InstallMenuScaleControl(f)
 
     local function Refresh()
         local g = M.GetGeneralDB and M.GetGeneralDB()
-        local pct = Percent(ClampScale(type(g) == "table" and g.slashMenuScale or 1) * 100)
+        local pct = Percent(MenuScalePercent(type(g) == "table" and g.slashMenuScale or MENU_SCALE_REFERENCE))
         slider._msuf2Refreshing = true
         slider:SetValue(pct)
         slider._msuf2Refreshing = nil
@@ -1781,7 +1794,7 @@ local function InstallMenuScaleControl(f)
         local g = M.GetGeneralDB and M.GetGeneralDB()
         if type(g) ~= "table" then return false end
         local pct = Percent(value or slider:GetValue())
-        g.slashMenuScale = ClampScale(pct / 100)
+        g.slashMenuScale = MenuScaleValue(pct)
         if ApplyMenuFrameScale then
             ApplyMenuFrameScale(f)
         elseif f.SetScale then
@@ -1800,7 +1813,7 @@ local function InstallMenuScaleControl(f)
         if not effectiveScale or effectiveScale == 0 then effectiveScale = 1 end
         local fraction = ((cursorX / effectiveScale) - left) / width
         if fraction < 0 then fraction = 0 elseif fraction > 1 then fraction = 1 end
-        local target = Percent((MENU_SCALE_MIN * 100) + (((MENU_SCALE_MAX - MENU_SCALE_MIN) * 100) * fraction))
+        local target = Percent(MENU_SCALE_MIN_PERCENT + ((MENU_SCALE_MAX_PERCENT - MENU_SCALE_MIN_PERCENT) * fraction))
         if target ~= tonumber(slider:GetValue()) then slider:SetValue(target) end
     end
     -- Same cursor-follow contract as W.Slider: the press keeps driving the
@@ -1857,10 +1870,11 @@ local function InstallMenuScaleControl(f)
             historyMode = "none",
             help = "Reads and applies the MSUF configuration-menu scale percentage directly.",
             command = {
-                kind = "slider", min = 25, max = 150, step = 5, percentIsValue = true, historyMode = "none",
+                kind = "slider", min = MENU_SCALE_MIN_PERCENT, max = MENU_SCALE_MAX_PERCENT,
+                step = MENU_SCALE_STEP_PERCENT, percentIsValue = true, historyMode = "none",
                 get = function()
                     local g = M.GetGeneralDB and M.GetGeneralDB()
-                    return Percent(ClampScale(type(g) == "table" and g.slashMenuScale or 1) * 100)
+                    return Percent(MenuScalePercent(type(g) == "table" and g.slashMenuScale or MENU_SCALE_REFERENCE))
                 end,
                 set = function(value)
                     slider:SetValue(Percent(value))
@@ -2443,6 +2457,12 @@ local function InstallWindowLifecycle(state)
         -- Reopening the window is a page-show for the docked previews too: the
         -- window frame is visible here, so their ownership gates pass again.
         M.CallIf(M.RunStickyHeaderActivation)
+        if activeEntry and type(M.ShouldExpandFixedPreview) == "function" and M.ShouldExpandFixedPreview() then
+            fixedPreviewRestoreSerial = fixedPreviewRestoreSerial + 1
+            RestoreExpandedFixedPreview(M.activeKey, activeEntry, fixedPreviewRestoreSerial, {
+                reason = "WINDOW_SHOW_DEFAULT_EXPANDED",
+            })
+        end
         RequestBossPagePreviewForKey(M.activeKey)
         RequestGroupPagePreviewForKey(M.activeKey)
         M.CallIf(M.UpdateMenuCombatListener)

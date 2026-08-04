@@ -96,7 +96,7 @@ local function GetPreviewScale()
     local general = EnsureGeneralDB()
     local scale = tonumber(general.msufUiScale or general.uiScale) or 1
     if scale < 0.25 then return 0.25 end
-    if scale > 1.5 then return 1.5 end
+    if scale > 2.0 then return 2.0 end
     return scale
 end
 

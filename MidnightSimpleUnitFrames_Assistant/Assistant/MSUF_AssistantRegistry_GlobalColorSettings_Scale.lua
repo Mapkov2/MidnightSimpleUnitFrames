@@ -116,8 +116,8 @@ function A.GlobalRegistry.RegisterVisualScaleSettings(ctx)
         step = 0.01,
         percent = true,
         aliases = { "msuf frame scale", "msuf ui scale", "unit frame scale", "frame scale" },
-        get = function() return Workflow.ClampScale(GeneralDB().msufUiScale or 1, 0.25, 1.5) or 1 end,
-        set = function(value) GeneralDB().msufUiScale = Workflow.ClampScale(value, 0.25, 1.5) or 1 end,
+        get = function() return Workflow.ClampScale(GeneralDB().msufUiScale or 1, 0.25, 2.0) or 1 end,
+        set = function(value) GeneralDB().msufUiScale = Workflow.ClampScale(value, 0.25, 2.0) or 1 end,
         apply = function() Workflow.ApplyMsufScale(GeneralDB().msufUiScale or 1) end,
         combatSafe = false,
     })
@@ -131,13 +131,19 @@ function A.GlobalRegistry.RegisterVisualScaleSettings(ctx)
         attribute = "menuScale",
         type = "number",
         min = 0.25,
-        max = 1.5,
+        max = 2.0,
         step = 0.01,
         percent = true,
         aliases = { "msuf menu scale", "menu scale", "configuration menu scale", "dashboard scale" },
-        get = function() return Workflow.ClampScale(GeneralDB().slashMenuScale or 1, 0.25, 1.5) or 1 end,
-        set = function(value) GeneralDB().slashMenuScale = Workflow.ClampScale(value, 0.25, 1.5) or 1 end,
-        apply = function() Workflow.ApplyMenuScale(GeneralDB().slashMenuScale or 1) end,
+        get = function()
+            local stored = Workflow.ClampScale(GeneralDB().slashMenuScale or 0.8, 0.2, 1.6) or 0.8
+            return stored / 0.8
+        end,
+        set = function(value)
+            local percentScale = Workflow.ClampScale(value, 0.25, 2.0) or 1
+            GeneralDB().slashMenuScale = percentScale * 0.8
+        end,
+        apply = function() Workflow.ApplyMenuScale(GeneralDB().slashMenuScale or 0.8) end,
         combatSafe = false,
     })
 

@@ -3253,6 +3253,17 @@ end
 -- accordion without moving the preview into scrolling content.
 local FIXED_PREVIEW_MAX_HEIGHT = 180
 W.FIXED_PREVIEW_MAX_HEIGHT = FIXED_PREVIEW_MAX_HEIGHT
+
+-- Full/Max is the presentation default for a fresh session and after resets.
+-- This remains deliberately profile-independent: only an explicit Compact
+-- action overrides it for the current UI session.
+function M.SetFixedPreviewExpandedPreference(expanded)
+    M._msuf2FixedPreviewExpandedPreference = expanded ~= false
+end
+function M.ShouldExpandFixedPreview()
+    return M._msuf2FixedPreviewExpandedPreference ~= false
+end
+
 function W.FixedPreviewSection(ctx, builder, spec)
     if type(ctx) ~= "table" or type(builder) ~= "table" or type(builder.Section) ~= "function" then return nil end
     spec = type(spec) == "table" and spec or {}
@@ -3337,6 +3348,7 @@ function W.AttachFixedPreviewExpander(section, toolbar, previewBox, opts)
     local pageWrapper = opts.wrapper
     local button = T.Button(toolbar, Tr("Expand"), tonumber(opts.buttonWidth) or 88, 20)
     if T.CenterButtonLabel then T.CenterButtonLabel(button) end
+    if T.SkinPrimaryButton then T.SkinPrimaryButton(button) end
     button:SetPoint("RIGHT", toolbar, "RIGHT", -12, 0)
     button._msuf2ControlKind = "button"
     RegisterSearchObject(button, "Expand Preview", "button")
@@ -3499,6 +3511,9 @@ function W.AttachFixedPreviewExpander(section, toolbar, previewBox, opts)
             self:Close("FIXED_PREVIEW_EXPAND_FAILED")
             return false
         end
+        if reason == "FIXED_PREVIEW_BUTTON" or reason == "FIXED_PREVIEW_COMMAND" then
+            M.SetFixedPreviewExpandedPreference(true)
+        end
         if type(opts.onStateChanged) == "function" then opts.onStateChanged(true, previewBox) end
         if type(M.EnsureFixedPreviewExpansionRoom) == "function" then
             M.EnsureFixedPreviewExpansionRoom(self)
@@ -3512,6 +3527,7 @@ function W.AttachFixedPreviewExpander(section, toolbar, previewBox, opts)
             if type(M.ClearPendingFixedPreviewExpansion) == "function" then
                 M.ClearPendingFixedPreviewExpansion(pageKey)
             end
+            M.SetFixedPreviewExpandedPreference(false)
         end
         self.expanded = nil
         self.activeHeight = nil

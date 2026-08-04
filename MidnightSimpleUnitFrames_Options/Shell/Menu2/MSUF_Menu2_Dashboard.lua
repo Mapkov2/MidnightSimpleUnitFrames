@@ -86,6 +86,18 @@ local function DirectSnapPercent(value, minPercent, maxPercent, stepPercent)
     local percent = math.floor((tonumber(value) or 100) / stepPercent + 0.5) * stepPercent
     return DirectClamp(percent, minPercent, maxPercent)
 end
+local MENU_SCALE_REFERENCE = 0.80
+local MENU_SCALE_MIN_PERCENT, MENU_SCALE_MAX_PERCENT, MENU_SCALE_STEP_PERCENT = 25, 200, 5
+local MSUF_SCALE_MIN_PERCENT, MSUF_SCALE_MAX_PERCENT, MSUF_SCALE_STEP_PERCENT = 25, 200, 5
+local function MenuScalePercentFromStored(value)
+    local minStored = MENU_SCALE_REFERENCE * (MENU_SCALE_MIN_PERCENT / 100)
+    local maxStored = MENU_SCALE_REFERENCE * (MENU_SCALE_MAX_PERCENT / 100)
+    return DirectPercent(DirectClamp(tonumber(value) or MENU_SCALE_REFERENCE, minStored, maxStored) / MENU_SCALE_REFERENCE, 1)
+end
+local function MenuScaleStoredFromPercent(value)
+    return (DirectSnapPercent(value, MENU_SCALE_MIN_PERCENT, MENU_SCALE_MAX_PERCENT, MENU_SCALE_STEP_PERCENT) / 100)
+        * MENU_SCALE_REFERENCE
+end
 local function DirectGeneralDB()
     if type(M.GetGeneralDB) ~= "function" then return nil end
     local db = M.GetGeneralDB()
@@ -135,12 +147,12 @@ local function DirectSetGlobalScalePercent(value)
 end
 local function DirectMSUFScalePercent()
     local db = DirectGeneralDB()
-    return db and DirectPercent(DirectClamp(tonumber(db.msufUiScale) or 1, 0.25, 1.5), 1) or nil
+    return db and DirectPercent(DirectClamp(tonumber(db.msufUiScale) or 1, 0.25, 2.0), 1) or nil
 end
 local function DirectSetMSUFScalePercent(value)
     local db = DirectGeneralDB()
     if not db then return false end
-    local scale = DirectSnapPercent(value, 25, 150, 5) / 100
+    local scale = DirectSnapPercent(value, MSUF_SCALE_MIN_PERCENT, MSUF_SCALE_MAX_PERCENT, MSUF_SCALE_STEP_PERCENT) / 100
     db.msufUiScale = scale
     if type(_G.MSUF_ApplyMsufScale) == "function" then _G.MSUF_ApplyMsufScale(scale) end
     DirectRequestScaleApply("MSUF2_DASH_MSUF_SCALE")
@@ -148,12 +160,12 @@ local function DirectSetMSUFScalePercent(value)
 end
 local function DirectMenuScalePercent()
     local db = DirectGeneralDB()
-    return db and DirectPercent(DirectClamp(tonumber(db.slashMenuScale) or 1, 0.25, 1.5), 1) or nil
+    return db and MenuScalePercentFromStored(db.slashMenuScale) or nil
 end
 local function DirectSetMenuScalePercent(value)
     local db = DirectGeneralDB()
     if not db then return false end
-    local scale = DirectSnapPercent(value, 25, 150, 5) / 100
+    local scale = MenuScaleStoredFromPercent(value)
     db.slashMenuScale = scale
     if M.frame and type(M.ApplyMenuFrameScale) == "function" then
         M.ApplyMenuFrameScale(M.frame)
@@ -209,7 +221,8 @@ local DASHBOARD_DIRECT_SPECS = {
         path = "scaling.menu.percent", label = "MSUF Menu Scale", kind = "slider", classification = "setting",
         settingKey = "general.slashMenuScale",
         help = "Reads and applies the MSUF configuration-menu scale percentage directly.",
-        command = { kind = "slider", min = 25, max = 150, step = 5, percentIsValue = true,
+        command = { kind = "slider", min = MSUF_SCALE_MIN_PERCENT, max = MSUF_SCALE_MAX_PERCENT,
+            step = MSUF_SCALE_STEP_PERCENT, percentIsValue = true,
             get = DirectMenuScalePercent, set = DirectSetMenuScalePercent, blockCombat = DirectCombatLocked },
     },
     { path = "display_recovery.reset_positions", label = "Reset Positions", classification = "action", actionKey = "reset_all_unit_positions",
@@ -933,7 +946,7 @@ local function BuildDashboardUX(ctx)
         local _, ui = GlobalState()
         local uiValue = ui.Enabled and M.Format("%d%%", Percent(ui.Scale, 1)) or M.Tr("Off")
         Pill(scaleHead, M.Format("UI %s", uiValue), recoveryW - 250, -11, 64)
-        Pill(scaleHead, M.Format("Menu %d%%", Percent(g.slashMenuScale, 1)), recoveryW - 180, -11, 76)
+        Pill(scaleHead, M.Format("Menu %d%%", MenuScalePercentFromStored(g.slashMenuScale)), recoveryW - 180, -11, 76)
         Pill(scaleHead, M.Format("Frames %d%%", Percent(g.msufUiScale, 1)), recoveryW - 98, -11, 84)
     end, "scaling.disclosure")
     if scalingOpen then
@@ -959,17 +972,17 @@ local function BuildDashboardUX(ctx)
         end
         local function AppliedMsufScale()
             local dbScale = M.GetGeneralDB()
-            return Clamp(tonumber(dbScale.msufUiScale) or 1, 0.25, 1.5)
+            return Clamp(tonumber(dbScale.msufUiScale) or 1, 0.25, 2.0)
         end
         local function PendingMsufScale()
-            return Clamp(pendingMsufScale or AppliedMsufScale(), 0.25, 1.5)
+            return Clamp(pendingMsufScale or AppliedMsufScale(), 0.25, 2.0)
         end
         local function AppliedMenuScale()
             local dbScale = M.GetGeneralDB()
-            return Clamp(tonumber(dbScale.slashMenuScale) or 1, 0.25, 1.5)
+            return MenuScalePercentFromStored(dbScale.slashMenuScale) / 100
         end
         local function PendingMenuScale()
-            return Clamp(pendingMenuScale or AppliedMenuScale(), 0.25, 1.5)
+            return Clamp(pendingMenuScale or AppliedMenuScale(), MENU_SCALE_MIN_PERCENT / 100, MENU_SCALE_MAX_PERCENT / 100)
         end
         local function BuildScaleSlider(parent, label, x, top, width, minPct, maxPct, stepPct, semanticPath, command)
             local slider = W.Slider(parent, label, minPct, maxPct, stepPct, width)
@@ -1140,17 +1153,20 @@ local function BuildDashboardUX(ctx)
         local RefreshMenuScale = BuildSimpleScaleColumn({
             x = menuX, top = menuTop, label = "MSUF Menu Scale", help = "Changes only this configuration menu window.",
             semanticPath = "scaling.menu",
-            minPct = 25, maxPct = 150, stepPct = 5,
+            minPct = MSUF_SCALE_MIN_PERCENT, maxPct = MSUF_SCALE_MAX_PERCENT, stepPct = MSUF_SCALE_STEP_PERCENT,
             applied = AppliedMenuScale,
             pending = PendingMenuScale,
             set = function(value) pendingMenuScale = value end,
             clear = function() pendingMenuScale = nil end,
             apply = function(scaleValue)
                 local dbScale = M.GetGeneralDB()
-                dbScale.slashMenuScale = scaleValue
+                dbScale.slashMenuScale = MenuScaleStoredFromPercent(scaleValue * 100)
                 pendingMenuScale = nil
                 if M.frame and M.ApplyMenuFrameScale then M.ApplyMenuFrameScale(M.frame)
-                elseif M.frame and M.frame.SetScale then M.frame:SetScale((M.GetEffectiveMenuScale and M.GetEffectiveMenuScale(scaleValue)) or scaleValue) end
+                elseif M.frame and M.frame.SetScale then
+                    local storedScale = dbScale.slashMenuScale
+                    M.frame:SetScale((M.GetEffectiveMenuScale and M.GetEffectiveMenuScale(storedScale)) or storedScale)
+                end
             end,
         })
         M.TrackRefresh(ctx, RefreshGlobalScale)

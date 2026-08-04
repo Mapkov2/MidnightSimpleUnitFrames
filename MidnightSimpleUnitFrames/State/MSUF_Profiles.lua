@@ -305,8 +305,8 @@ local function MSUF_ProfileIO_SafeMSUFScale()
     local scale = tonumber(g and g.msufUiScale) or 1
     if scale < 0.25 then
         scale = 1
-    elseif scale > 1.5 then
-        scale = 1.5
+    elseif scale > 2.0 then
+        scale = 2.0
     end
     return scale
 end
