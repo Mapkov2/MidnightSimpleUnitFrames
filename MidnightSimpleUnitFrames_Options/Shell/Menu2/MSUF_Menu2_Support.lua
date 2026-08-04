@@ -1218,11 +1218,6 @@ function M.TrackMethodRefresh(ctx, object, method)
         local fn = object and object[method]; if type(fn) == "function" then return fn(object) end
     end)
 end
-local GROUP_KEYS_A = "SCOPE_VALUES GROWTH_VALUES "
-local GROUP_KEYS_B = "HEALTH_MODES TEXT_MODES "
-local GROUP_KEYS_C = "ANCHORS AURA_ANCHORS SORT_MODES GF_BAR_MODES "
-local GROUP_KEYS_D = "GF_ANCHOR_TO GF_ANCHOR_POINTS STATUS_ICON_ANCHORS GF_STATUS_ICON_SPECS GF_STATUS_ICON_VALUES PLACED_INDICATOR_TYPES FRAME_EFFECT_TYPES FRAME_EFFECT_TIMINGS ICON_EFFECT_TYPES SPELL_GROWTH_VALUES CI_SLOT_VALUES CI_SLOT_DEFAULTS DISPEL_OVERLAY_STYLES DEBUFF_STRIPE_EDGES"
-M.GROUP_SPEC_TABLE_KEYS = GROUP_KEYS_A .. GROUP_KEYS_B .. "DELIMITER_VALUES " .. GROUP_KEYS_C .. GROUP_KEYS_D
 local tips = {}
 for tip in ([[
 Bigger steps: Hold SHIFT while adjusting sliders to change values faster.|Fine tuning: Hold CTRL while adjusting sliders for smaller steps.|Quick reset: If something feels off, try /msuf reset for frame positions.|Factory reset: Use Menu > Advanced > Factory Reset or /msuf fullreset confirm + /reload.|Edit Mode: Use Toggle Edit Mode to move frames quickly, then fine-tune with the position popup.

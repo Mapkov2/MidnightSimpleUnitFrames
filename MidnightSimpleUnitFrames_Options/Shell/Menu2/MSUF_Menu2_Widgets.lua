@@ -3609,6 +3609,10 @@ function W.AttachFixedPreviewExpander(section, toolbar, previewBox, opts)
     if window and window.HookScript and not window._msuf2FixedPreviewExpanderSizeHooked then
         window._msuf2FixedPreviewExpanderSizeHooked = true
         window:HookScript("OnSizeChanged", function()
+            -- The shell's maximize/minimize driver changes size every render
+            -- frame. Its final rebuild owns the one responsive preview commit;
+            -- avoid repainting the full renderer against transient geometry.
+            if window._msuf2WindowLayoutAnim then return end
             local active = M._msuf2ActiveFixedPreviewExpander
             if active and active.expanded and not active.disposed and type(active.Relayout) == "function" then
                 active:Relayout("FIXED_PREVIEW_WINDOW_SIZE")

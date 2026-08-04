@@ -328,7 +328,7 @@ function Handles.Install(box, deps)
         local fs = box._mock and box._mock._nameFS
         if fs and fs._msufPreviewSpan == true then return false end
         local conf = H.Conf(H.CurrentScope()) or {}
-        return (conf.nameAnchor or "LEFT") == "RIGHT"
+        return (conf.nameAnchor or "LEFT") == "TOPRIGHT"
     end
     local function TextDragConfigDeltaX(handle, delta)
         if TextDragNameRight(handle) then return -delta end

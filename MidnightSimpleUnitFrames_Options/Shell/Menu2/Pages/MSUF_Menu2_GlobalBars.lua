@@ -23,7 +23,6 @@ local DISPEL_PURGE_BORDER_121_PTR_MESSAGE = "Dispel uses native 12.1 AuraContain
 local UNITFRAME_DISPEL_AURA_WARNING = "No UnitFrame auras: Dispel Border/Overlay need Player/Target/Focus/Boss auras."
 local UNITFRAME_DISPEL_AURA_WARNING_COLOR = { 0.90, 0.84, 0.76, 1 }
 local UNITFRAME_DISPEL_AURA_UNITS = { "player", "target", "focus", "boss" }
-local UNITFRAME_AURA_APPLY_OPTS = { preview = true, auras = true, notify = false }
 local ROUNDED_PREVIEW_MASK_ROOT = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\"
 local ROUNDED_PREVIEW_MASKS = {
     ROUNDED_PREVIEW_MASK_ROOT .. "rounded_clean_mask_s1.png",
@@ -47,25 +46,6 @@ local ROUNDED_SECTION_HEIGHT = 306
 local GRADIENT_DIR_KEYS, PRIORITY_LABELS = M.PickDefaults(GP, [[GRADIENT_DIR_KEYS PRIORITY_LABELS]])
 local DISPEL_TRIGGERS = VT("BY_ME", "Dispellable by me", "BY_RAID", "Dispellable by group",
     "DISPEL_TYPE", "Any dispel type")
-local UNIT_DISPEL_TRIGGERS = VT("BORDER", "Use Dispel border detects", "BY_ME", "Dispellable by me",
-    "BY_RAID", "Dispellable by group", "DISPEL_TYPE", "Any dispel type")
-local UNIT_DISPEL_STYLES = VT("FULL", "Full Frame", "TOP", "Top Fade", "BOTTOM", "Bottom Fade",
-    "LEFT", "Left Fade", "RIGHT", "Right Fade")
-local UNIT_DISPEL_SYMBOL_STYLES = VT(
-    "BLIZZARD", "Blizzard symbol",
-    "BLIZZARD_RING", "Blizzard ring + symbol",
-    "BLIZZARD_BORDER", "Blizzard ring",
-    "MSUF_LETTERS", "MSUF Letters",
-    "MSUF_SHAPES", "MSUF Shapes",
-    "MSUF_GLYPHS", "MSUF Glyphs",
-    "MSUF_MINIMAL", "MSUF Minimal")
-local UNIT_DISPEL_SYMBOL_MODES = VT("TOP", "Highest priority only", "ALL", "One per dispel type")
-local UNIT_DISPEL_SYMBOL_GROWTH = VT("RIGHT", "Right", "LEFT", "Left", "UP", "Up", "DOWN", "Down")
-local UNIT_DISPEL_SYMBOL_STRATA = VT("AUTO", "Automatic", "BACKGROUND", "Background", "LOW", "Low",
-    "MEDIUM", "Medium", "HIGH", "High", "DIALOG", "Dialog")
-local UNIT_DISPEL_SYMBOL_ANCHORS = VT("TOPLEFT", "Top Left", "TOP", "Top", "TOPRIGHT", "Top Right",
-    "LEFT", "Left", "CENTER", "Center", "RIGHT", "Right",
-    "BOTTOMLEFT", "Bottom Left", "BOTTOM", "Bottom", "BOTTOMRIGHT", "Bottom Right")
 local Call, DB, G, Bars, ReadG, ReadGBool, ReadB, NormalizeScopeKey, ScopeDBKeys, ScopeHasOverride, ScopeSetOverride, CurrentBarsScope, IsGFScope, BarScopeGet, BarScopeSet, BarScopeGetBars, BarScopeSetBars, GradientScopeGet, GradientScopeSet, GradientScopeHasExplicit, TextureValues, CurrentPowerBarScopeUnit, SmoothPowerGet, SmoothPowerSet, PriorityOrder, PriorityColor, RefreshBorderTestModes, SetAbsorbTextureTest, SetControlEnabled, SetControlsEnabled, ApplyBars, ControlMeta, RegisterControl = M.Pick(GP, [[Call DB G Bars ReadG ReadGBool ReadB NormalizeScopeKey ScopeDBKeys ScopeHasOverride ScopeSetOverride CurrentBarsScope IsGFScope BarScopeGet BarScopeSet BarScopeGetBars BarScopeSetBars GradientScopeGet GradientScopeSet GradientScopeHasExplicit TextureValues CurrentPowerBarScopeUnit SmoothPowerGet SmoothPowerSet PriorityOrder PriorityColor RefreshBorderTestModes SetAbsorbTextureTest SetControlEnabled SetControlsEnabled ApplyBars ControlMeta RegisterControl]])
 local IsAbsorbTextureTestEnabled = GP.IsAbsorbTextureTestEnabled or function() return _G.MSUF_AbsorbTextureTestMode == true end
 local BAR_SETTING_BY_PATH = {
@@ -139,24 +119,6 @@ local BAR_DYNAMIC_SETTING_KEYS_BY_PATH = {
     ["highlight.dispel.trigger"] = { "general.dispelBorderTrigger" },
     ["highlight.border_mode.purgeOutlineMode"] = { "general.purgeOutlineMode" },
     ["highlight.priority.enabled"] = { "general.hlPrioEnabled" },
-    ["unit_dispel_overlay.enabled"] = { "general.unitDispelOverlayEnabled" },
-    ["unit_dispel_overlay.unitDispelOverlayTrigger"] = { "general.unitDispelOverlayTrigger" },
-    ["unit_dispel_overlay.unitDispelOverlayStyle"] = { "general.unitDispelOverlayStyle" },
-    ["unit_dispel_overlay.unitDispelOverlayOnHealth"] = { "general.unitDispelOverlayOnHealth" },
-    ["unit_dispel_overlay.unitDispelOverlayAlpha"] = { "general.unitDispelOverlayAlpha" },
-    ["unit_dispel_symbol.enabled"] = { "general.unitDispelSymbolEnabled" },
-    ["unit_dispel_symbol.unitDispelSymbolStyle"] = { "general.unitDispelSymbolStyle" },
-    ["unit_dispel_symbol.unitDispelSymbolMode"] = { "general.unitDispelSymbolMode" },
-    ["unit_dispel_symbol.unitDispelSymbolTrigger"] = { "general.unitDispelSymbolTrigger" },
-    ["unit_dispel_symbol.unitDispelSymbolAnchor"] = { "general.unitDispelSymbolAnchor" },
-    ["unit_dispel_symbol.unitDispelSymbolSize"] = { "general.unitDispelSymbolSize" },
-    ["unit_dispel_symbol.unitDispelSymbolX"] = { "general.unitDispelSymbolX" },
-    ["unit_dispel_symbol.unitDispelSymbolY"] = { "general.unitDispelSymbolY" },
-    ["unit_dispel_symbol.unitDispelSymbolGrowth"] = { "general.unitDispelSymbolGrowth" },
-    ["unit_dispel_symbol.unitDispelSymbolSpacing"] = { "general.unitDispelSymbolSpacing" },
-    ["unit_dispel_symbol.unitDispelSymbolAlpha"] = { "general.unitDispelSymbolAlpha" },
-    ["unit_dispel_symbol.unitDispelSymbolLayer"] = { "general.unitDispelSymbolLayer" },
-    ["unit_dispel_symbol.unitDispelSymbolStrata"] = { "general.unitDispelSymbolStrata" },
     ["power.smooth_fill"] = { "bars.smoothPowerBar" },
 }
 local BAR_DYNAMIC_SETTING_SUFFIX_BY_PATH = {
@@ -213,24 +175,6 @@ local BAR_DYNAMIC_SETTING_SUFFIX_BY_PATH = {
     ["highlight.dispel.trigger"] = "dispelBorderTrigger",
     ["highlight.border_mode.purgeOutlineMode"] = "purgeOutlineMode",
     ["highlight.priority.enabled"] = "hlPrioEnabled",
-    ["unit_dispel_overlay.enabled"] = "unitDispelOverlayEnabled",
-    ["unit_dispel_overlay.unitDispelOverlayTrigger"] = "unitDispelOverlayTrigger",
-    ["unit_dispel_overlay.unitDispelOverlayStyle"] = "unitDispelOverlayStyle",
-    ["unit_dispel_overlay.unitDispelOverlayOnHealth"] = "unitDispelOverlayOnHealth",
-    ["unit_dispel_overlay.unitDispelOverlayAlpha"] = "unitDispelOverlayAlpha",
-    ["unit_dispel_symbol.enabled"] = "unitDispelSymbolEnabled",
-    ["unit_dispel_symbol.unitDispelSymbolStyle"] = "unitDispelSymbolStyle",
-    ["unit_dispel_symbol.unitDispelSymbolMode"] = "unitDispelSymbolMode",
-    ["unit_dispel_symbol.unitDispelSymbolTrigger"] = "unitDispelSymbolTrigger",
-    ["unit_dispel_symbol.unitDispelSymbolAnchor"] = "unitDispelSymbolAnchor",
-    ["unit_dispel_symbol.unitDispelSymbolSize"] = "unitDispelSymbolSize",
-    ["unit_dispel_symbol.unitDispelSymbolX"] = "unitDispelSymbolX",
-    ["unit_dispel_symbol.unitDispelSymbolY"] = "unitDispelSymbolY",
-    ["unit_dispel_symbol.unitDispelSymbolGrowth"] = "unitDispelSymbolGrowth",
-    ["unit_dispel_symbol.unitDispelSymbolSpacing"] = "unitDispelSymbolSpacing",
-    ["unit_dispel_symbol.unitDispelSymbolAlpha"] = "unitDispelSymbolAlpha",
-    ["unit_dispel_symbol.unitDispelSymbolLayer"] = "unitDispelSymbolLayer",
-    ["unit_dispel_symbol.unitDispelSymbolStrata"] = "unitDispelSymbolStrata",
 }
 local BAR_DYNAMIC_SETTING_PATTERNS_BY_PATH = {
     ["absorb.positive.enabled"] = {
@@ -248,8 +192,6 @@ local function IsDynamicBarPath(path)
         or path:find("^absorb%.") ~= nil
         or path:find("^outline%.") ~= nil
         or (path:find("^highlight%.") ~= nil and path ~= "highlight.boss_target.mode")
-        or path:find("^unit_dispel_overlay%.") ~= nil
-        or path:find("^unit_dispel_symbol%.") ~= nil
 end
 local function Meta(path, classification, exact)
     local resolved = {}
@@ -362,7 +304,6 @@ local function AnyUnitFrameAuraEnabled()
     end
     return false
 end
-
 -- Scope rules are shared by all page sections. Keeping them outside the page builder
 -- prevents every widget callback from being routed through one giant closure.
 local function SharedScope() return CurrentBarsScope() == "shared" end
@@ -403,21 +344,6 @@ local function RequestDispelPurgeBorderRuntime()
     }) do
         local setter = _G[test[2]]
         if _G[test[1]] and type(setter) == "function" then setter(true, BorderTestScope()) end
-    end
-    return result
-end
-local function RequestUnitDispelOverlayRuntime(reason)
-    reason = reason or "MSUF2_UF_DISPEL_OVERLAY"
-    local service = M.ApplyService or _G.MSUF_Menu2_ApplyService
-    local request = service and service.RequestUnit
-    if type(request) ~= "function" then return ApplyBars(reason) end
-    local scope = CurrentBarsScope()
-    if scope == "player" or scope == "target" or scope == "focus" or scope == "boss" then
-        return request(scope, reason, UNITFRAME_AURA_APPLY_OPTS)
-    end
-    local result = false
-    for i = 1, #UNITFRAME_DISPEL_AURA_UNITS do
-        result = request(UNITFRAME_DISPEL_AURA_UNITS[i], reason, UNITFRAME_AURA_APPLY_OPTS) ~= false or result
     end
     return result
 end
@@ -575,12 +501,6 @@ local function NormalizeDispelTrigger(value)
     if value == "DISPEL_TYPE" or value == "TYPE" or value == "ANY_DISPEL_TYPE" then return "DISPEL_TYPE" end
     if value == "ANY_DEBUFF" or value == "ANY" or value == "ALL_DEBUFFS" then return "DISPEL_TYPE" end
     return "BY_ME"
-end
-local function NormalizeUnitDispelOverlayTrigger(value)
-    local normalize = _G.MSUF_NormalizeUnitDispelOverlayTrigger
-    if type(normalize) == "function" then return normalize(value) end
-    if value == "BORDER" or value == "INHERIT" or value == "SAME" then return "BORDER" end
-    return NormalizeDispelTrigger(value)
 end
 local function NormalizeAggroMode(value)
     value = tostring(value or "ALL"):upper()
@@ -2113,265 +2033,6 @@ local function BuildHighlightSection(ctx, b)
     M.TrackRefresh(ctx, RefreshPriorityRows)
 end
 
--- Unit-frame dispel tinting is a separate section and has no dependency on the
--- highlight-tab frames. Keeping its bindings isolated also leaves headroom for new controls.
-local function BuildUnitDispelOverlaySection(ctx, b)
-    local overlayCardWProbe = min(900, max(320, (ctx.width or 720) - 40))
-    local overlayWide = overlayCardWProbe >= 760
-    local ufOverlay = b:CollapsibleSection("bars_unit_dispel_overlay", "UnitFrame Dispel Overlay",
-        overlayWide and 402 or 512, false)
-    local ufOverlayW = ufOverlay._msuf2Width or ctx.width or 720
-    local ufOverlayCardW = min(900, max(320, ufOverlayW - 40))
-    overlayWide = ufOverlayCardW >= 760
-    local ufOverlayCard = W.ControlCard(ufOverlay, "Behavior & Style",
-        "Tints unit-frame health bars when a configured debuff condition is active.",
-        20, -38, ufOverlayCardW, overlayWide and 338 or 448)
-    local SyncUFOverlayControls = M.RefreshProxy()
-    local function BindDropdown(label, values, key, defaultValue, normalizer, reason, y)
-        local dropdown = W.Dropdown(ufOverlayCard, label, values, 280)
-        M.BindDropdownWidget(ctx, dropdown,
-            function()
-                local value = BarScopeGet(key, defaultValue)
-                return normalizer and normalizer(value) or value
-            end,
-            function(value)
-                BarScopeSet(key, normalizer and normalizer(value) or (value or defaultValue), reason, true)
-                RequestUnitDispelOverlayRuntime(reason)
-            end,
-            Meta("unit_dispel_overlay." .. key))
-        W.MoveWidget(dropdown, ufOverlayCard, 16, y, min(280, ufOverlayCardW - 32), "LEFT")
-        return dropdown
-    end
-    local function BindToggle(label, key, defaultOn, reason, y)
-        local toggle = W.ToggleAt(ufOverlayCard, label, 16, y, ufOverlayCardW - 32)
-        M.BindBoolWidget(ctx, toggle,
-            function() return BarScopeGet(key, defaultOn) ~= false end,
-            function(value)
-                BarScopeSet(key, value and true or false, reason, true)
-                RequestUnitDispelOverlayRuntime(reason)
-                SyncUFOverlayControls()
-            end,
-            Meta("unit_dispel_overlay." .. key))
-        return toggle
-    end
-    local function BindSlider(label, key, defaultValue, reason, y)
-        local slider = W.Slider(ufOverlayCard, label, 0.05, 1, 0.05, 340)
-        M.BindNumberWidget(ctx, slider,
-            function() return tonumber(BarScopeGet(key, defaultValue)) or defaultValue end,
-            function(value)
-                BarScopeSet(key, tonumber(value) or defaultValue, reason, true)
-                RequestUnitDispelOverlayRuntime(reason)
-            end,
-            defaultValue, Meta("unit_dispel_overlay." .. key))
-        W.MoveWidget(slider, ufOverlayCard, 16, y, min(360, ufOverlayCardW - 72), "CENTER")
-        return slider
-    end
-    local master = W.SwitchAt(ufOverlayCard, "UnitFrame Dispel Overlay", ufOverlayCardW - 62, -24, 0, "HIDDEN")
-    M.BindBoolWidget(ctx, master,
-        function() return BarScopeGet("unitDispelOverlayEnabled", false) == true end,
-        function(value)
-            BarScopeSet("unitDispelOverlayEnabled", value and true or false, "MSUF2_UF_DISPEL_OVERLAY", true)
-            RequestUnitDispelOverlayRuntime("MSUF2_UF_DISPEL_OVERLAY")
-            SyncUFOverlayControls()
-        end,
-        Meta("unit_dispel_overlay.enabled"))
-    local controls = {
-        BindDropdown("Overlay detects", UNIT_DISPEL_TRIGGERS, "unitDispelOverlayTrigger", "BORDER",
-            NormalizeUnitDispelOverlayTrigger, "MSUF2_UF_DISPEL_OVERLAY_TRIGGER", -74),
-        BindDropdown("Overlay style", UNIT_DISPEL_STYLES, "unitDispelOverlayStyle", "FULL", nil,
-            "MSUF2_UF_DISPEL_OVERLAY_STYLE", -126),
-        BindToggle("Show on current health only", "unitDispelOverlayOnHealth", true,
-            "MSUF2_UF_DISPEL_OVERLAY_HEALTH", -174),
-        BindSlider("Overlay opacity", "unitDispelOverlayAlpha", 0.35, "MSUF2_UF_DISPEL_OVERLAY_ALPHA", -218),
-    }
-    -- The live tint is drawn by Blizzard and only appears while a real
-    -- dispellable debuff is up, so style and opacity are impossible to judge
-    -- while configuring. The preview paints an MSUF-owned stand-in with the
-    -- exact same geometry. Ephemeral: never written to the DB.
-    local ufOverlayPreview = W.ToggleAt(ufOverlayCard, "Preview overlay", 16, -266, ufOverlayCardW - 32)
-    M.BindBoolWidget(ctx, ufOverlayPreview,
-        function() return _G.MSUF_DispelOverlayPreviewMode == true end,
-        function(value)
-            local fn = _G.MSUF_SetDispelOverlayPreview
-            if type(fn) == "function" then fn(value and true or false, BorderTestScope()) end
-        end,
-        Meta("unit_dispel_overlay.preview", "ephemeral"))
-    ufOverlayPreview:HookScript("OnHide", function(self)
-        local fn = _G.MSUF_SetDispelOverlayPreview
-        if _G.MSUF_DispelOverlayPreviewMode == true and type(fn) == "function" then
-            fn(false)
-            if self.SetChecked then self:SetChecked(false) end
-        end
-    end)
-    if M.AddTooltip then
-        M.AddTooltip(ufOverlayPreview, "Preview overlay",
-            "Paints a stand-in tint so the overlay can be judged without a real dispellable debuff. Turns itself off when this page closes.",
-            { hook = true })
-    end
-    controls[#controls + 1] = ufOverlayPreview
-    local hintY = overlayWide and -328 or -428
-    local groupHint = W.Text(ufOverlayCard,
-        "Group frame scopes use Group Frames > Dispel Overlay.",
-        16, hintY, ufOverlayCardW - 32, T.colors.muted)
-    local auraHint = W.Text(ufOverlayCard, UNITFRAME_DISPEL_AURA_WARNING,
-        16, hintY, ufOverlayCardW - 32, UNITFRAME_DISPEL_AURA_WARNING_COLOR)
-    if groupHint.SetWordWrap then groupHint:SetWordWrap(true) end
-    if auraHint.SetWordWrap then auraHint:SetWordWrap(true) end
-    M.TrackRefresh(ctx, SyncUFOverlayControls(function()
-        local groupScope = GroupScope()
-        local activeScope = not groupScope and ScopedControls()
-        local overlayOn = activeScope and BarScopeGet("unitDispelOverlayEnabled", false) == true
-        -- A preview of a disabled overlay would be a lie; drop it with the master.
-        if not overlayOn and _G.MSUF_DispelOverlayPreviewMode == true then
-            local clear = _G.MSUF_SetDispelOverlayPreview
-            if type(clear) == "function" then clear(false) end
-        end
-        SetControlEnabled(master, activeScope)
-        SetControlsEnabled(controls, overlayOn)
-        groupHint:SetShown(groupScope)
-        auraHint:SetShown(not groupScope and not AnyUnitFrameAuraEnabled())
-    end))
-end
-
---- UnitFrame dispel-type symbol: the indicator that says WHICH debuff type is
---- up. Blizzard owns the live symbol's artwork and visibility (it is a native
---- AuraButton texture), so the placement controls ship with a draggable preview
---- -- the only way to position it without a real debuff on the unit.
-local function BuildUnitDispelSymbolSection(ctx, b)
-    local probeW = min(900, max(320, (ctx.width or 720) - 40))
-    local wide = probeW >= 760
-    -- Narrow mode stacks all thirteen controls in one column down to -654, so the
-    -- card and the section both have to reserve that full run. The old 566/630
-    -- pair was sized before the strata dropdown and the preview toggle existed and
-    -- pushed "Symbol strata" straight through the next accordion header.
-    local section = b:CollapsibleSection("bars_unit_dispel_symbol", "UnitFrame Dispel Symbol",
-        wide and 520 or 780, false)
-    local sectionW = section._msuf2Width or ctx.width or 720
-    local cardW = min(900, max(320, sectionW - 40))
-    wide = cardW >= 760
-    local card = W.ControlCard(section, "Symbol & Placement",
-        "Shows a symbol naming the dispel type of an active debuff.",
-        20, -38, cardW, wide and 456 or 696)
-    local Sync = M.RefreshProxy()
-    local fieldW = min(280, cardW - 32)
-    local sliderW = min(360, cardW - 72)
-    local rightX = wide and (cardW - sliderW - 16) or 16
-    local function BindDropdown(label, values, key, defaultValue, reason, x, y)
-        local dropdown = W.Dropdown(card, label, values, 280)
-        M.BindDropdownWidget(ctx, dropdown,
-            function() return BarScopeGet(key, defaultValue) end,
-            function(value)
-                BarScopeSet(key, value or defaultValue, reason, true)
-                RequestUnitDispelOverlayRuntime(reason)
-                Sync()
-            end,
-            Meta("unit_dispel_symbol." .. key))
-        W.MoveWidget(dropdown, card, x, y, fieldW, "LEFT")
-        return dropdown
-    end
-    local function BindSlider(label, key, defaultValue, minValue, maxValue, step, reason, x, y)
-        local slider = W.Slider(card, label, minValue, maxValue, step, 340)
-        M.BindNumberWidget(ctx, slider,
-            function() return tonumber(BarScopeGet(key, defaultValue)) or defaultValue end,
-            function(value)
-                BarScopeSet(key, tonumber(value) or defaultValue, reason, true)
-                RequestUnitDispelOverlayRuntime(reason)
-            end,
-            defaultValue, Meta("unit_dispel_symbol." .. key))
-        W.MoveWidget(slider, card, x, y, sliderW, "CENTER")
-        return slider
-    end
-    local master = W.SwitchAt(card, "UnitFrame Dispel Symbol", cardW - 62, -24, 0, "HIDDEN")
-    M.BindBoolWidget(ctx, master,
-        function() return BarScopeGet("unitDispelSymbolEnabled", false) == true end,
-        function(value)
-            BarScopeSet("unitDispelSymbolEnabled", value and true or false, "MSUF2_UF_DISPEL_SYMBOL", true)
-            RequestUnitDispelOverlayRuntime("MSUF2_UF_DISPEL_SYMBOL")
-            Sync()
-        end,
-        Meta("unit_dispel_symbol.enabled"))
-    local styleDrop = BindDropdown("Symbol set", UNIT_DISPEL_SYMBOL_STYLES, "unitDispelSymbolStyle",
-        "BLIZZARD", "MSUF2_UF_DISPEL_SYMBOL_STYLE", 16, -62)
-    local modeDrop = BindDropdown("Show", UNIT_DISPEL_SYMBOL_MODES, "unitDispelSymbolMode",
-        "ALL", "MSUF2_UF_DISPEL_SYMBOL_MODE", 16, -114)
-    local triggerDrop = BindDropdown("Symbol detects", UNIT_DISPEL_TRIGGERS, "unitDispelSymbolTrigger",
-        "BORDER", "MSUF2_UF_DISPEL_SYMBOL_TRIGGER", 16, -166)
-    local anchorDrop = BindDropdown("Symbol anchor", UNIT_DISPEL_SYMBOL_ANCHORS, "unitDispelSymbolAnchor",
-        "TOPRIGHT", "MSUF2_UF_DISPEL_SYMBOL_ANCHOR", 16, -218)
-    local sizeSlider = BindSlider("Symbol size", "unitDispelSymbolSize", 14, 4, 48, 1,
-        "MSUF2_UF_DISPEL_SYMBOL_SIZE", 16, -270)
-    local offsetXSlider = BindSlider("Offset X", "unitDispelSymbolX", 0, -128, 128, 1,
-        "MSUF2_UF_DISPEL_SYMBOL_X", 16, -318)
-    local offsetYSlider = BindSlider("Offset Y", "unitDispelSymbolY", 0, -128, 128, 1,
-        "MSUF2_UF_DISPEL_SYMBOL_Y", 16, -366)
-    local growthDrop = BindDropdown("Grow", UNIT_DISPEL_SYMBOL_GROWTH, "unitDispelSymbolGrowth",
-        "RIGHT", "MSUF2_UF_DISPEL_SYMBOL_GROWTH", rightX, wide and -218 or -414)
-    local spacingSlider = BindSlider("Symbol spacing", "unitDispelSymbolSpacing", 2, 0, 32, 1,
-        "MSUF2_UF_DISPEL_SYMBOL_SPACING", rightX, wide and -270 or -462)
-    local alphaSlider = BindSlider("Symbol opacity", "unitDispelSymbolAlpha", 1, 0.05, 1, 0.05,
-        "MSUF2_UF_DISPEL_SYMBOL_ALPHA", rightX, wide and -318 or -510)
-    local layerSlider = BindSlider("Effect Layer (0-30)", "unitDispelSymbolLayer", 8, 0, 30, 1,
-        "MSUF2_UF_DISPEL_SYMBOL_LAYER", rightX, wide and -366 or -558)
-    local strataDrop = BindDropdown("Symbol strata", UNIT_DISPEL_SYMBOL_STRATA, "unitDispelSymbolStrata",
-        "AUTO", "MSUF2_UF_DISPEL_SYMBOL_STRATA", rightX, wide and -414 or -606)
-    -- Ephemeral, exactly like the overlay preview: never written to the DB, and
-    -- it doubles as the drag surface for Offset X/Y.
-    local preview = W.ToggleAt(card, "Preview symbol (drag to place)", rightX, wide and -62 or -654, sliderW)
-    M.BindBoolWidget(ctx, preview,
-        function() return _G.MSUF_DispelSymbolPreviewMode == true end,
-        function(value)
-            local fn = _G.MSUF_SetDispelSymbolPreview
-            if type(fn) == "function" then fn(value and true or false, BorderTestScope()) end
-        end,
-        Meta("unit_dispel_symbol.preview", "ephemeral"))
-    preview:HookScript("OnHide", function(self)
-        local fn = _G.MSUF_SetDispelSymbolPreview
-        if _G.MSUF_DispelSymbolPreviewMode == true and type(fn) == "function" then
-            fn(false)
-            if self.SetChecked then self:SetChecked(false) end
-        end
-    end)
-    if M.AddTooltip then
-        M.AddTooltip(preview, "Preview symbol",
-            "Shows stand-in symbols so placement can be judged without a real debuff, and lets you drag them into position. Turns itself off when this page closes.",
-            { hook = true })
-    end
-    local setMoveHandler = _G.MSUF_SetDispelSymbolPreviewMoveHandler
-    if type(setMoveHandler) == "function" then
-        setMoveHandler(function(_scope, x, y)
-            BarScopeSet("unitDispelSymbolX", tonumber(x) or 0, "MSUF2_UF_DISPEL_SYMBOL_X", true)
-            BarScopeSet("unitDispelSymbolY", tonumber(y) or 0, "MSUF2_UF_DISPEL_SYMBOL_Y", true)
-            if type(M.RefreshVisibleSliders) == "function" then M.RefreshVisibleSliders("UNIT_DISPEL_SYMBOL_PREVIEW_DRAG") end
-            RequestUnitDispelOverlayRuntime("MSUF2_UF_DISPEL_SYMBOL_DRAG")
-            Sync()
-        end)
-    end
-    local controls = { styleDrop, modeDrop, triggerDrop, anchorDrop, sizeSlider, offsetXSlider,
-        offsetYSlider, alphaSlider, layerSlider, strataDrop, preview }
-    local allModeControls = { growthDrop, spacingSlider }
-    local groupHint = W.Text(card, "Group frame scopes use Group Frames > Dispel Symbol.",
-        16, wide and -462 or -702, cardW - 32, T.colors.muted)
-    local auraHint = W.Text(card, UNITFRAME_DISPEL_AURA_WARNING,
-        16, wide and -462 or -702, cardW - 32, UNITFRAME_DISPEL_AURA_WARNING_COLOR)
-    if groupHint.SetWordWrap then groupHint:SetWordWrap(true) end
-    if auraHint.SetWordWrap then auraHint:SetWordWrap(true) end
-    M.TrackRefresh(ctx, Sync(function()
-        local groupScope = GroupScope()
-        local activeScope = not groupScope and ScopedControls()
-        local symbolOn = activeScope and BarScopeGet("unitDispelSymbolEnabled", false) == true
-        -- A preview of a disabled symbol would be a lie; drop it with the master.
-        if not symbolOn and _G.MSUF_DispelSymbolPreviewMode == true then
-            local clear = _G.MSUF_SetDispelSymbolPreview
-            if type(clear) == "function" then clear(false) end
-        end
-        SetControlEnabled(master, activeScope)
-        SetControlsEnabled(controls, symbolOn)
-        SetControlsEnabled(allModeControls, symbolOn and BarScopeGet("unitDispelSymbolMode", "ALL") == "ALL")
-        groupHint:SetShown(groupScope)
-        auraHint:SetShown(not groupScope and not AnyUnitFrameAuraEnabled())
-    end))
-end
-
 local function BuildPowerSection(ctx, b)
     local power = b:CollapsibleSection("bars_power", "Bar Animation + Text Accuracy", 152, false)
     local smoothPower = W.Toggle(power, "Smooth power bar")
@@ -2425,24 +2086,6 @@ local GLOBAL_BARS_LAZY_SECTION_SPECS = {
     { sectionId = "bars_outline", title = "Frame Outline", height = 252, build = BuildOutlineSection },
     { sectionId = "bars_rounded", title = "Rounded Texture", height = ROUNDED_SECTION_HEIGHT, defaultOpen = true, build = BuildRoundedSection },
     { sectionId = "bars_highlight", title = "Highlight Borders", height = 710, defaultOpen = true, build = BuildHighlightSection },
-    {
-        sectionId = "bars_unit_dispel_overlay",
-        title = "UnitFrame Dispel Overlay",
-        height = function(lazyCtx)
-            local width = min(900, max(320, ((lazyCtx and lazyCtx.width) or 720) - 40))
-            return width >= 760 and 402 or 512
-        end,
-        build = BuildUnitDispelOverlaySection,
-    },
-    {
-        sectionId = "bars_unit_dispel_symbol",
-        title = "UnitFrame Dispel Symbol",
-        height = function(lazyCtx)
-            local width = min(900, max(320, ((lazyCtx and lazyCtx.width) or 720) - 40))
-            return width >= 760 and 520 or 630
-        end,
-        build = BuildUnitDispelSymbolSection,
-    },
     { sectionId = "bars_power", title = "Bar Animation + Text Accuracy", height = 152, build = BuildPowerSection },
 }
 local function BuildGlobalBarsSectionLazy(ctx, b, spec)
@@ -2460,4 +2103,4 @@ local function BuildBars(ctx)
     end
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
-M.RegisterPage("opt_bars", { title = "MSUF Bars", build = BuildBars, version = 17 })
+M.RegisterPage("opt_bars", { title = "MSUF Bars", build = BuildBars, version = 18 })

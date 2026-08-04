@@ -138,6 +138,14 @@ local function BuildRegisteredSectionLazy(ctx, builder, unit, spec)
     if not sectionId then return spec.build(ctx, builder, unit, spec) end
     local shellBody = builder:CollapsibleSection(sectionId, title, height, defaultOpen)
     local shellEntry = shellBody and shellBody._msuf2CollapsibleEntry
+    local searchRouteOpen = false
+    local pendingSearchSections = M._msuf2SearchRouteOpenSections
+    if shellEntry and type(pendingSearchSections) == "table"
+        and pendingSearchSections[shellEntry.stateKey] == true
+    then
+        searchRouteOpen = true
+        pendingSearchSections[shellEntry.stateKey] = nil
+    end
     local shellRefresh
     local built = false
     local building = false
@@ -201,11 +209,15 @@ local function BuildRegisteredSectionLazy(ctx, builder, unit, spec)
         -- slice. A page entry that was replaced or invalidated in the meantime
         -- drops its pending job. prepareShell stays visible-only, matching the
         -- previous hidden-build behavior.
-        local queuedEntry = ctx.entry
-        QueueHiddenSectionBuild(function()
-            if M.cache and M.cache[ctx.key] ~= queuedEntry then return end
+        if searchRouteOpen then
             BuildContent()
-        end)
+        else
+            local queuedEntry = ctx.entry
+            QueueHiddenSectionBuild(function()
+                if M.cache and M.cache[ctx.key] ~= queuedEntry then return end
+                BuildContent()
+            end)
+        end
         return true
     end
     if shellEntry and type(spec.prepareShell) == "function" then
@@ -223,7 +235,9 @@ local function BuildRegisteredSectionLazy(ctx, builder, unit, spec)
         -- still builds the content immediately, and environments without a
         -- timer keep building inline.
         shellEntry._msuf2RefreshState = LazyRefresh
-        if C_Timer and C_Timer.After then
+        if searchRouteOpen then
+            BuildContent()
+        elseif C_Timer and C_Timer.After then
             C_Timer.After(0, function()
                 if built or building then return end
                 if shellBody and shellBody.IsShown and not shellBody:IsShown() then return end

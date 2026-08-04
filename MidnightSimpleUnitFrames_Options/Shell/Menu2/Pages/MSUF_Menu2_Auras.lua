@@ -1424,6 +1424,20 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
     box:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     box:SetSize(width or 300, height or 104)
     local innerPad = T.Space("md", 12)
+    local headerH = T.Space("xxl", 32) + T.Space("optical", 2)
+    local footerH = T.Space("xxl", 32) - T.Space("optical", 2)
+    local contentHost = box
+    local zoomPan = type(opts.zoomPan) == "table" and opts.zoomPan or nil
+    if opts.focused == true then
+        box._msuf2PreviewSurfaceFamily = "aura"
+        if PreviewHelpers.ApplyPreviewChrome then PreviewHelpers.ApplyPreviewChrome(box, "canvas", T) end
+        if box.SetClipsChildren then box:SetClipsChildren(true) end
+        contentHost = CreateFrame("Frame", nil, box)
+        contentHost:SetPoint("TOPLEFT", box, "TOPLEFT", innerPad, -headerH)
+        contentHost:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -innerPad, footerH)
+        if contentHost.SetClipsChildren then contentHost:SetClipsChildren(true) end
+        box._msufAuraPreviewViewport = contentHost
+    end
     local titleLabel = W.LabelAt(box, opts.title or "Sample Preview", innerPad, -innerPad, 240, "GameFontNormalSmall", T.colors.text)
     local meta
     if opts.focused == true then
@@ -1433,13 +1447,14 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
         meta:SetJustifyH("LEFT")
         if meta.SetMaxLines then meta:SetMaxLines(1) end
         if meta.SetWordWrap then meta:SetWordWrap(false) end
+        box._msufAuraPreviewMeta = meta
     end
     local icons = {}
     local iconCapacity = opts.focused == true and 0 or min(14, max(1, tonumber(opts.iconCapacity) or 14))
-    for i = 1, iconCapacity do icons[i] = CreateAuraPreviewIcon(box) end
+    for i = 1, iconCapacity do icons[i] = CreateAuraPreviewIcon(contentHost) end
     local function EnsureIconCapacity(count)
         count = min(opts.focused == true and 80 or iconCapacity, max(0, Round(count)))
-        for i = #icons + 1, count do icons[i] = CreateAuraPreviewIcon(box) end
+        for i = #icons + 1, count do icons[i] = CreateAuraPreviewIcon(contentHost) end
         return count
     end
     local buffTex = { 135987, 136116, 135932, 136085, 132333, 135981, 136048 }
@@ -1620,16 +1635,38 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
             for i = 1, #icons do HidePreviewIcon(icons[i]) end
         end
         local function HideLive()
-            local live = box._msufA3MenuPreviewContainer
+            local live = contentHost._msufA3MenuPreviewContainer
             if not live then return end
             if A3 and type(A3._HideLane) == "function" then A3._HideLane(live)
             elseif live.Hide then live:Hide() end
         end
         if opts.focused == true and mode == "live" then
             HideSamples()
-            local liveHeight = max(80, (tonumber(height) or 104) - T.Space("xxl", 32))
+            local availableW = max(1, (tonumber(width) or 300) - innerPad * 2)
+            local availableH = max(1, (tonumber(height) or 104) - headerH - footerH)
             local ok, reason = type(A3.UpdateMenuAuraPreview) == "function"
-                and A3.UpdateMenuAuraPreview(box, previewScope, lane, width, liveHeight)
+                and A3.UpdateMenuAuraPreview(contentHost, previewScope, lane, availableW + 20, availableH + 42)
+            local live = contentHost._msufA3MenuPreviewContainer
+            local fitScale = 1
+            if ok and live then
+                if live.SetScale then live:SetScale(1) end
+                local naturalW = max(1, tonumber(live.GetWidth and live:GetWidth()) or 1)
+                local naturalH = max(1, tonumber(live.GetHeight and live:GetHeight()) or 1)
+                fitScale = min(1, availableW / naturalW, availableH / naturalH)
+            end
+            if zoomPan and zoomPan.Clamp then fitScale = zoomPan.Clamp(fitScale) end
+            local renderScale = tonumber(box._manualZoom) or fitScale
+            if zoomPan and zoomPan.Clamp then renderScale = zoomPan.Clamp(renderScale) end
+            box._mockAutoScale, box._mockScale = fitScale, renderScale
+            if ok and live then
+                if live.SetScale then live:SetScale(renderScale) end
+                if live.ClearAllPoints and live.SetPoint then
+                    live:ClearAllPoints()
+                    live:SetPoint("CENTER", contentHost, "CENTER", 0, 0)
+                end
+                box._msufA3MenuPreviewContainer = live
+            end
+            if zoomPan and zoomPan.UpdateControls then zoomPan.UpdateControls(box) end
             local label = ScopeLabel(previewScope)
             titleLabel:SetText(M.Format("%s Live Preview", label))
             if ok then
@@ -1651,8 +1688,6 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
             local naturalSize = max(1, tonumber(cfg.actualSize) or tonumber(cfg.size) or 24)
             local naturalGap = max(0, tonumber(cfg.spacing) or 0)
             local boxW, boxH = width or 300, height or 104
-            local headerH = T.Space("xxl", 32) + T.Space("optical", 2)
-            local footerH = T.Space("xxl", 32) - T.Space("optical", 2)
             local availableW = max(1, boxW - innerPad * 2)
             local availableH = max(1, boxH - headerH - footerH)
             local growth = tostring(cfg.growth or "RIGHTDOWN"):upper()
@@ -1670,16 +1705,22 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
             end
             local naturalW = columns * naturalSize + max(0, columns - 1) * naturalGap
             local naturalH = rows * naturalSize + max(0, rows - 1) * naturalGap
-            local scale = min(1, availableW / max(1, naturalW), availableH / max(1, naturalH))
+            local fitScale = min(1, availableW / max(1, naturalW), availableH / max(1, naturalH))
+            if zoomPan and zoomPan.Clamp then fitScale = zoomPan.Clamp(fitScale) end
+            local scale = tonumber(box._manualZoom) or fitScale
+            if zoomPan and zoomPan.Clamp then scale = zoomPan.Clamp(scale) end
+            box._mockAutoScale, box._mockScale = fitScale, scale
             cfg.size = max(2, naturalSize * scale)
             cfg.spacing = naturalGap * scale
             cfg.stackSize = max(5, (tonumber(cfg.stackSize) or 10) * scale)
             cfg.cooldownSize = max(5, (tonumber(cfg.cooldownSize) or 9) * scale)
             cfg.durationBarHeight = max(1, (tonumber(cfg.durationBarHeight) or 2) * scale)
+            cfg.styleBorderThickness = max(0.5, (tonumber(cfg.styleBorderThickness) or 1) * scale)
+            cfg.styleShadowSize = max(0.5, (tonumber(cfg.styleShadowSize) or 4) * scale)
             local totalW = columns * cfg.size + max(0, columns - 1) * cfg.spacing
             local totalH = rows * cfg.size + max(0, rows - 1) * cfg.spacing
-            local startX = innerPad + max(0, (availableW - totalW) * 0.5)
-            local startY = -(headerH + max(0, (availableH - totalH) * 0.5))
+            local startX = (availableW - totalW) * 0.5
+            local startY = -((availableH - totalH) * 0.5)
             local left = growth:find("LEFT", 1, true) ~= nil
             local up = growth:find("UP", 1, true) ~= nil
             for i = 1, #icons do
@@ -1696,7 +1737,7 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
                     if left then col = columns - 1 - col end
                     if up then row = rows - 1 - row end
                     icon:ClearAllPoints()
-                    icon:SetPoint("TOPLEFT", box, "TOPLEFT",
+                    icon:SetPoint("TOPLEFT", contentHost, "TOPLEFT",
                         startX + col * (cfg.size + cfg.spacing),
                         startY - row * (cfg.size + cfg.spacing))
                     RenderPreviewIcon(icon, i, cfg, opts.customIndex and cfg.isBuff or lane == "buff", false)
@@ -1711,6 +1752,7 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
             else
                 meta:SetText(label .. " / " .. tostring(Round(cfg.actualSize or cfg.size or 0)) .. "px")
             end
+            if zoomPan and zoomPan.UpdateControls then zoomPan.UpdateControls(box) end
             return
         end
         if meta then meta:SetText("") end
@@ -1737,6 +1779,7 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
             end
         end
     end
+    box.Refresh = RefreshPreview
     M.TrackRefresh(ctx, RefreshPreview)
     return box, RefreshPreview
 end
@@ -1786,6 +1829,24 @@ local function BuildAuraStylePreviewWorkbench(ctx, b, scope, lane)
     W.LabelAt(section, "Preview as:", pad, rowY, labelW, "GameFontNormalSmall", T.colors.muted)
 
     local refreshPreview
+    local zoomPan = M.AuraStylePreviewZoomPan
+    if type(zoomPan) ~= "table" then
+        zoomPan = {}
+        M.AuraStylePreviewZoomPan = zoomPan
+    end
+    if type(zoomPan.SetZoom) ~= "function" and PreviewHelpers.InstallZoomPan then
+        PreviewHelpers.InstallZoomPan(zoomPan, {
+            configureTableOnly = true,
+            readoutField = "zoomReadout",
+            fitButtonTextPath = { "zoomFitButton", "fs" },
+            defaultReason = "AURA_STYLE_PREVIEW_ZOOM",
+            stepReason = "AURA_STYLE_PREVIEW_ZOOM_STEP",
+            themeButton = true,
+            buttonTextureKey = "TEX_W8",
+            buttonFontField = "fs",
+        })
+    end
+    if zoomPan.Configure then zoomPan.Configure({ T = T, TR = Tr, TEX_W8 = TEX_W8 }) end
     local function PreviewScope()
         return scope == "shared" and CurrentAuraPreviewScope() or scope
     end
@@ -1806,6 +1867,7 @@ local function BuildAuraStylePreviewWorkbench(ctx, b, scope, lane)
     local box
     box, refreshPreview = BuildMiniAuraPreview(ctx, section, scope, pad, panelY, panelW, panelH, lane, {
         focused = true,
+        zoomPan = zoomPan,
         getPreviewScope = PreviewScope,
         getMode = CurrentAuraPreviewMode,
         getSampleMeta = function(cfg, previewScope)
@@ -1831,6 +1893,7 @@ local function BuildAuraStylePreviewWorkbench(ctx, b, scope, lane)
         if type(refreshLanePreview) == "function" then refreshLanePreview() end
         RefreshLaneFrameEffect()
     end
+    if box then box.Refresh = refreshPreview end
     M.TrackRefresh(ctx, RefreshLaneFrameEffect)
     if box then
         local modeW = T.Space("xxl", 32) * 4 + T.Space("md", 12)
@@ -1842,6 +1905,48 @@ local function BuildAuraStylePreviewWorkbench(ctx, b, scope, lane)
                 if refreshPreview then refreshPreview() end
             end,
             T.Space("xs", 4), nil, "style.preview.mode")
+        if PreviewHelpers.BuildZoomBar and type(zoomPan.SetZoom) == "function" then
+            local zoomBar = PreviewHelpers.BuildZoomBar(box, box, {
+                width = 200,
+                texture = TEX_W8,
+                T = T,
+                M = M,
+                W = W,
+                themeReadout = true,
+                CreateZoomButton = zoomPan.CreateButton,
+                Tr = Tr,
+                StepZoom = zoomPan.Step,
+                SetZoom = zoomPan.SetZoom,
+                fitReason = "AURA_STYLE_PREVIEW_ZOOM_FIT",
+                oneReason = "AURA_STYLE_PREVIEW_ZOOM_1TO1",
+                helpTitle = "Aura Preview Zoom",
+                helpLines = {
+                    Tr("Use - / + or Ctrl + mouse wheel to zoom."),
+                    Tr("Fit shows the complete aura layout."),
+                    Tr("1:1 shows the configured aura pixel size."),
+                    Tr("Zoom changes only this preview, not your Aura settings."),
+                },
+            })
+            if zoomBar then
+                zoomBar:ClearAllPoints()
+                zoomBar:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -T.Space("md", 12), T.Space("xs", 4) + 2)
+                local backgroundButton = box.previewBackgroundButton
+                if backgroundButton then
+                    backgroundButton:ClearAllPoints()
+                    backgroundButton:SetPoint("RIGHT", zoomBar, "LEFT", -T.Space("xs", 4), 0)
+                    local meta = box._msufAuraPreviewMeta
+                    if meta then
+                        meta:ClearAllPoints()
+                        meta:SetPoint("BOTTOMLEFT", box, "BOTTOMLEFT", T.Space("md", 12), T.Space("sm", 8))
+                        meta:SetPoint("BOTTOMRIGHT", backgroundButton, "BOTTOMLEFT", -T.Space("sm", 8), 0)
+                    end
+                end
+                if PreviewHelpers.BindPreviewWheel then
+                    PreviewHelpers.BindPreviewWheel(box._msufAuraPreviewViewport, box, box._msuf2PreviewZoomWheel)
+                end
+            end
+            if zoomPan.UpdateControls then zoomPan.UpdateControls(box) end
+        end
     end
     if box and W.AttachPinnedPreview then
         W.AttachPinnedPreview(section, box, {
@@ -2422,7 +2527,10 @@ local function BuildUnitStyle(ctx, b, scope)
     AddTooltip(decimal, "Cooldown text format", "Remaining time below this value uses one decimal place. Timers show unitless seconds below 1 minute and localized minutes above it. Set 0 for whole seconds only.")
 
     local durationInline = (b.width or 720) >= 520
-    local durationBar = b:CollapsibleSection(baseId .. "_duration_bar", "Duration Bar", durationInline and 210 or 322, false)
+    -- Dropdown buttons sit 24 px below their labels and carry a soft edge/glow.
+    -- Keep a real footer inside the body so that art cannot bleed into the next
+    -- accordion header in either the inline or narrow stacked layout.
+    local durationBar = b:CollapsibleSection(baseId .. "_duration_bar", "Duration Bar", durationInline and 220 or 332, false)
     W.AttachContextColorReferences(durationBar, AURA_DURATION_BAR_COLOR_REFERENCES, {
         title = LaneTitle(lane) .. " Duration Bar Color",
         scopeTag = "Shared",
@@ -2717,7 +2825,7 @@ local function BuildGroupStyle(ctx, b, scope)
     AddTooltip(groupDecimal, "Cooldown text format", "Remaining time below this value uses one decimal place. Timers show unitless seconds below 1 minute and localized minutes above it. Set 0 for whole seconds only.")
 
     local durationInline = (b.width or 720) >= 520
-    local durationBar = b:CollapsibleSection(baseId .. "_duration_bar", "Duration Bar", durationInline and 210 or 322, false)
+    local durationBar = b:CollapsibleSection(baseId .. "_duration_bar", "Duration Bar", durationInline and 220 or 332, false)
     W.AttachContextColorReferences(durationBar, AURA_DURATION_BAR_COLOR_REFERENCES, {
         title = LaneTitle(lane) .. " Duration Bar Color",
         scopeTag = "Shared",

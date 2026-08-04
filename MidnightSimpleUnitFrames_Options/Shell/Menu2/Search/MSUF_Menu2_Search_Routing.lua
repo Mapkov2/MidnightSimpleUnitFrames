@@ -686,6 +686,8 @@ local SEARCH_ROUTE_SECTION_ROWS = {
     unit = [[
 preview=preview|hide preview
 auras=auras|aura|buff|buffs|debuff|debuffs|blacklist|whitelist|aura filter|custom aura
+unit_dispel_overlay=unitframe dispel overlay|unit frame dispel overlay|dispel overlay
+unit_dispel_symbol=unitframe dispel symbol|unit frame dispel symbol|dispel symbol
 frame_basics=frame basics|enable|disable|width|height|scale|frame size|smooth fill|health animation
 anchoring=anchoring|anchor|position|x offset|y offset|custom anchor|global anchor
 text=text|name text|hp text|health text|power text|font size|text anchor|text position|draw order|text layer
@@ -740,7 +742,6 @@ bars_absorb=absorb|heal prediction|incoming heals|shield
 bars_outline=frame outline|outline|bar outline|border thickness|outline texture|border texture
 bars_rounded=rounded|round corners|rounded texture|rounded frames
 bars_highlight=highlight borders|highlight border|dispel border|dispel overlay|aggro border|purge border|boss target border|priority order
-bars_unit_dispel_overlay=unitframe dispel overlay|unit frame dispel overlay|overlay detects|overlay priority|unit dispel overlay
 bars_power=bar animation|text accuracy|smooth fill|power animation
 ]],
     opt_fonts = [[
@@ -1020,6 +1021,14 @@ local function ApplySearchRoute(pageKey, route)
     end
     local accordion = route.accordion
     if type(accordion) == "table" then
+        -- Exact Search/Assistant navigation resolves its control immediately
+        -- after opening the page. Remember only the explicitly opened lazy
+        -- sections so their page build can materialize those controls in the
+        -- same call; ordinary cold page builds remain shell-only.
+        M._msuf2SearchRouteOpenSections = M._msuf2SearchRouteOpenSections or {}
+        for key, value in pairs(accordion) do
+            if value == true then M._msuf2SearchRouteOpenSections[key] = true end
+        end
         local target
         if type(M.GetPersistentMenuStateTable) == "function" then
             target = M.GetPersistentMenuStateTable("accordionState")

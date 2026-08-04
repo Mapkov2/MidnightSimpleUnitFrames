@@ -7,6 +7,7 @@
     <Script file="Pages\MSUF_Menu2_UnitAlpha.lua"/>
     <Script file="Pages\MSUF_Menu2_UnitTextureLayer.lua"/>
     <Script file="Pages\MSUF_Menu2_UnitFrameVisuals.lua"/>
+    <Script file="Pages\MSUF_Menu2_UnitDispel.lua"/>
     <Script file="Pages\MSUF_Menu2_UnitSections.lua"/>
     <Script file="Pages\MSUF_Menu2_Global.lua"/>
     <Script file="Pages\MSUF_Menu2_GlobalFonts.lua"/>

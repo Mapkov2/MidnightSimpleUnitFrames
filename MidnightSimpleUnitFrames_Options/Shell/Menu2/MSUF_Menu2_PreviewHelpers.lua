@@ -1683,6 +1683,7 @@ function H.BuildZoomBar(box, surface, opts)
     local template = opts.template or "BackdropTemplate"
     local stepZoom = opts.StepZoom or F.Noop
     local setZoom = opts.SetZoom or F.Noop
+    local panEnabled = type(opts.StartPan) == "function"
     local startPan = opts.StartPan or F.False
     local stopPan = opts.StopPan or F.Noop
     local buttonH = tonumber(opts.buttonHeight) or 20
@@ -1727,7 +1728,11 @@ function H.BuildZoomBar(box, surface, opts)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:SetText(tr("Preview zoom"), 1, 1, 1)
             GameTooltip:AddLine(tr("Use the buttons or Ctrl + mouse wheel to zoom."), 0.82, 0.82, 0.82, true)
-            GameTooltip:AddLine(tr("Ctrl + left-drag moves the preview canvas. Fit recenters it."), 0.55, 0.68, 0.86, true)
+            if panEnabled then
+                GameTooltip:AddLine(tr("Ctrl + left-drag moves the preview canvas. Fit recenters it."), 0.55, 0.68, 0.86, true)
+            else
+                GameTooltip:AddLine(tr("Fit shows the complete preview; 1:1 shows its configured pixel size."), 0.55, 0.68, 0.86, true)
+            end
             GameTooltip:AddLine(tr("Use ? for all preview controls."), 0.50, 0.78, 0.92, true)
             GameTooltip:Show()
         end
@@ -1753,7 +1758,10 @@ function H.BuildZoomBar(box, surface, opts)
     local fitButton = AddZoomButton("zoomFitButton", "Fit", 30, "Fit preview", function() setZoom(box, nil, opts.fitReason) end, zoomIn)
     local oneButton = AddZoomButton("zoomOneButton", "1:1", 32, "Pixel preview", function() setZoom(box, 1, opts.oneReason) end, fitButton)
     local helpButton = AddZoomButton("zoomHelpButton", "?", 20, "Preview controls", function(self)
-        H.ShowPreviewControlsHelp(self, { M = opts.M or M, T = opts.T, W = opts.W, Tr = tr })
+        H.ShowPreviewControlsHelp(self, {
+            M = opts.M or M, T = opts.T, W = opts.W, Tr = tr,
+            title = opts.helpTitle, lines = opts.helpLines,
+        })
     end, oneButton)
     if opts.lockButton then
         local lock = H.EnsureZoomLockButton(box, zoomBar, {
@@ -1795,12 +1803,14 @@ function H.BuildZoomBar(box, surface, opts)
     H.BindPreviewWheel(box[prefix .. "zoomLockButton"], box, ZoomWheel)
     local backgroundButton = H.EnsurePreviewBackgroundButton(box, zoomBar, opts)
     H.BindPreviewWheel(backgroundButton, box, ZoomWheel)
-    if surface.RegisterForDrag then surface:RegisterForDrag("LeftButton") end
-    surface:SetScript("OnMouseDown", function(self, button) startPan(self, box, button) end)
-    surface:SetScript("OnMouseUp", stopPan)
-    surface:SetScript("OnDragStart", function(self, button) startPan(self, box, button) end)
-    surface:SetScript("OnDragStop", stopPan)
-    surface:SetScript("OnHide", stopPan)
+    if panEnabled then
+        if surface.RegisterForDrag then surface:RegisterForDrag("LeftButton") end
+        surface:SetScript("OnMouseDown", function(self, button) startPan(self, box, button) end)
+        surface:SetScript("OnMouseUp", stopPan)
+        surface:SetScript("OnDragStart", function(self, button) startPan(self, box, button) end)
+        surface:SetScript("OnDragStop", stopPan)
+        surface:SetScript("OnHide", stopPan)
+    end
     return zoomBar, ZoomWheel
 end
 

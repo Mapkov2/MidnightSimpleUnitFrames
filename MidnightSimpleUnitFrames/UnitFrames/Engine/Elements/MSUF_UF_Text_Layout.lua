@@ -110,21 +110,26 @@ local function ApplyTextColor(fs, color)
   end
 end
 
-local function LayoutTextSpan(fs, relativeTo, leftX, rightX, y, justify)
+local function LayoutTextSpan(fs, relativeTo, leftX, rightX, y, justify, verticalPoint)
   if not (fs and relativeTo) then
     return
   end
   leftX, rightX, y = tonumber(leftX) or 0, tonumber(rightX) or 0, tonumber(y) or 0
+  verticalPoint = verticalPoint == "TOP" and "TOP" or "CENTER"
+  local leftPoint = verticalPoint == "TOP" and "TOPLEFT" or "LEFT"
+  local rightPoint = verticalPoint == "TOP" and "TOPRIGHT" or "RIGHT"
   if fs._msufPoint ~= "SPAN"
     or fs._msufRelativeTo ~= relativeTo
     or fs._msufLeftX ~= leftX
     or fs._msufRightX ~= rightX
-    or fs._msufY ~= y then
+    or fs._msufY ~= y
+    or fs._msufSpanVerticalPoint ~= verticalPoint then
     fs:ClearAllPoints()
-    fs:SetPoint("LEFT", relativeTo, "LEFT", leftX, y)
-    fs:SetPoint("RIGHT", relativeTo, "RIGHT", rightX, y)
+    fs:SetPoint(leftPoint, relativeTo, leftPoint, leftX, y)
+    fs:SetPoint(rightPoint, relativeTo, rightPoint, rightX, y)
     fs._msufPoint, fs._msufRelPoint, fs._msufRelativeTo = "SPAN", nil, relativeTo
     fs._msufLeftX, fs._msufRightX, fs._msufX, fs._msufY = leftX, rightX, nil, y
+    fs._msufSpanVerticalPoint = verticalPoint
   end
   if fs._msufJustifyH ~= justify then
     fs:SetJustifyH(justify)
@@ -195,13 +200,12 @@ local function LayoutBarAnchoredName(frame, text)
   local anchor = text and text.nameAnchor or "LEFT"
   local x = tonumber(text and text.nameX) or 0
   local y = tonumber(text and text.nameY) or 0
-  if anchor == "CENTER" then
-    LayoutTextSpan(fs, health, 3 + x, -3 + x, y, "CENTER")
-  elseif anchor == "RIGHT" then
-    LayoutTextSpan(fs, health, 3 + x, -3 + x, y, "RIGHT")
-  else
-    LayoutTextSpan(fs, health, 3 + x, -3, y, "LEFT")
-  end
+  local justify = (anchor == "TOP" or anchor == "CENTER") and "CENTER"
+    or (anchor == "TOPRIGHT" or anchor == "RIGHT") and "RIGHT"
+    or "LEFT"
+  local rightX = justify == "LEFT" and -3 or (-3 + x)
+  local verticalPoint = (anchor == "TOPLEFT" or anchor == "TOP" or anchor == "TOPRIGHT") and "TOP" or "CENTER"
+  LayoutTextSpan(fs, health, 3 + x, rightX, y, justify, verticalPoint)
   if fs.SetDrawLayer then
     local layer = tonumber(text and text.nameLayer) or 5
     local sub = DrawSubLayer(layer, 5)
@@ -808,7 +812,13 @@ local function EnsureNameAnchorProxy(frame, spec)
   local anchor = text.nameAnchor or "LEFT"
   local x = tonumber(text.nameX) or 0
   local y = tonumber(text.nameY) or 0
-  if anchor == "CENTER" then
+  if anchor == "TOP" then
+    LayoutText(proxy, "TOP", "TOP", x, y, "CENTER", health)
+  elseif anchor == "TOPRIGHT" then
+    LayoutText(proxy, "TOPRIGHT", "TOPRIGHT", -3 + x, y, "RIGHT", health)
+  elseif anchor == "TOPLEFT" then
+    LayoutText(proxy, "TOPLEFT", "TOPLEFT", 3 + x, y, "LEFT", health)
+  elseif anchor == "CENTER" then
     LayoutText(proxy, "CENTER", "CENTER", x, y, "CENTER", health)
   elseif anchor == "RIGHT" then
     LayoutText(proxy, "RIGHT", "RIGHT", -3 + x, y, "RIGHT", health)

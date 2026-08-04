@@ -266,6 +266,9 @@ local COPY_FRAME_BASIC_FIELDS = WL [[
     barOutlineThickness barOutlineLayer barOutlineStrata barOutlineTexture barOutlineColorR barOutlineColorG barOutlineColorB barOutlineColorA
     highlightBorderThickness hlAggroSize aggroOutlineMode dispelOutlineMode purgeOutlineMode dispelBorderTrigger
     unitDispelOverlayEnabled unitDispelOverlayStyle unitDispelOverlayOnHealth unitDispelOverlayAlpha unitDispelOverlayTrigger
+    unitDispelSymbolEnabled unitDispelSymbolStyle unitDispelSymbolMode unitDispelSymbolTrigger
+    unitDispelSymbolSize unitDispelSymbolSpacing unitDispelSymbolGrowth unitDispelSymbolAnchor
+    unitDispelSymbolX unitDispelSymbolY unitDispelSymbolAlpha unitDispelSymbolLayer unitDispelSymbolStrata
     hlPrioEnabled hlPrioOrder
     enableAbsorbBar absorbTextMode absorbAnchorMode absorbBarHeight absorbBarOffsetY absorbBarOpacity
     healAbsorbEnabled healAbsorbAnchorMode healAbsorbBarHeight healAbsorbBarOffsetY healAbsorbBarOpacity

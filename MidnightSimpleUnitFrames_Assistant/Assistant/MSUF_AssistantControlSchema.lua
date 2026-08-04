@@ -78,28 +78,46 @@ end
 local function Singular(token)
     local length = #token
     if length < 4 or token:sub(-1) ~= "s" then return token end
-    local tail2 = token:sub(-2)
-    if tail2 == "ss" or tail2 == "us" or tail2 == "is" or tail2 == "as" then return token end
     if length >= 5 and token:sub(-3) == "ies" then return token:sub(1, length - 3) .. "y" end
-    local tail3 = token:sub(-3)
-    if length >= 5 and (tail3 == "xes" or tail3 == "zes" or token:sub(-4) == "ches" or token:sub(-4) == "shes") then
+    local tail4 = token:sub(-4)
+    if length >= 6 and (tail4 == "sses" or tail4 == "shes" or tail4 == "ches") then
         return token:sub(1, length - 2)
     end
+    local tail3 = token:sub(-3)
+    if length >= 5 and (tail3 == "xes" or tail3 == "zes") then return token:sub(1, length - 2) end
+    local tail2 = token:sub(-2)
+    if tail2 == "ss" or tail2 == "us" or tail2 == "is" or tail2 == "as" then return token end
     return token:sub(1, length - 1)
 end
 
-local function SearchTokens(value)
-    local tokens = {}
+-- Returns the singular stems used for matching AND the words as written.
+-- Folding is what lets "borders" find "Border thickness", but it must never be
+-- allowed to erase a distinction: two settings whose names differ only by a
+-- trailing "s" fold to the same stem, and treating them as one would let a
+-- request for either silently land on the other. The exact forms keep them
+-- apart -- they decide identity, while the stems only decide reach.
+local function SearchTokenPairs(value)
+    local stems, exacts = {}, {}
     for token in Normalize(value):gmatch("%S+") do
         local alias = TOKEN_ALIASES[token] or token
         for normalizedToken in tostring(alias):gmatch("%S+") do
             local stem = Singular(normalizedToken)
             if not STOP[normalizedToken] and not STOP[stem] and not normalizedToken:match("^%-?%d") then
-                tokens[#tokens + 1] = stem
+                stems[#stems + 1] = stem
+                exacts[#exacts + 1] = normalizedToken
             end
         end
     end
-    return tokens
+    return stems, exacts
+end
+
+local function SearchTokens(value)
+    return (SearchTokenPairs(value))
+end
+
+local function ExactTokenKey(value)
+    local _, exacts = SearchTokenPairs(value)
+    return table.concat(exacts, "\031")
 end
 
 -- Pages whose identity IS the scope. Two rows that share a control path on two
@@ -110,6 +128,38 @@ local SCOPE_PAGES = {
     uf_player = true, uf_target = true, uf_focus = true, uf_pet = true,
     uf_targettarget = true, uf_focustarget = true, uf_boss = true,
 }
+
+-- Longest first: "target of target" has to be claimed before the bare "target"
+-- inside it can be. The index is searched with plain find, where "target" also
+-- sits inside "targettarget" and "focustarget", so without this a request about
+-- the Target frame ranks Target of Target's controls first.
+local UNIT_PAGE_ALIASES = {
+    { alias = " target of target ", page = "uf_targettarget" },
+    { alias = " targettarget ", page = "uf_targettarget" },
+    { alias = " focus target ", page = "uf_focustarget" },
+    { alias = " focustarget ", page = "uf_focustarget" },
+    { alias = " player ", page = "uf_player" },
+    { alias = " target ", page = "uf_target" },
+    { alias = " focus ", page = "uf_focus" },
+    { alias = " pet ", page = "uf_pet" },
+    { alias = " boss ", page = "uf_boss" },
+}
+
+-- Which unit frames did the request actually name? Nil means "no unit named",
+-- which leaves every page eligible.
+local function NamedUnitPages(paddedQuery)
+    local scan, named = paddedQuery, nil
+    for i = 1, #UNIT_PAGE_ALIASES do
+        local row = UNIT_PAGE_ALIASES[i]
+        if scan:find(row.alias, 1, true) then
+            named = named or {}
+            named[row.page] = true
+            -- Consume it so "target of target" cannot also register "target".
+            scan = scan:gsub(row.alias, " ")
+        end
+    end
+    return named
+end
 
 -- Words that name a family of frames rather than a control. They steer ranking
 -- but must not be required search tokens: "unitframe border" has to find the
@@ -285,6 +335,16 @@ local function CopyRecord(row)
     return out
 end
 
+-- Lowercase once, on the first row that actually needs it.
+local function LazyLower(cache, index, value)
+    local cached = cache[index]
+    if cached == nil then
+        cached = tostring(value or ""):lower()
+        cache[index] = cached
+    end
+    return cached
+end
+
 local function EnsureIndex()
     if index then return index end
     local columns = Data.columns or {}
@@ -306,9 +366,10 @@ local function EnsureIndex()
         setmetatable(row, rowMeta)
         built.search[i] = table.concat({ row.label or "", row.help or "", row.semanticId or "",
             row.settingKey or "", row.actionKey or "", row.pageKey or "", row.controlPath or "", row.values or "" }, " "):lower()
-        built.labelSearch[i] = tostring(row.label or ""):lower()
-        built.pageSearch[i] = tostring(row.pageKey or ""):lower()
-        built.valueSearch[i] = tostring(row.values or ""):lower()
+        -- label/page/value strings are only ever consulted for a row whose
+        -- combined text already matched a token, which is a small fraction of
+        -- the catalog. Building all three for every row tripled the cold index
+        -- cost for nothing; they are filled in on demand below instead.
         -- Label-token and canonical-identity keys are needed only for rows
         -- that match a query.  Computing them for the entire 2k+ catalog made
         -- the first ordinary search pay for thousands of unused normalizations.
@@ -389,11 +450,14 @@ end
 
 function Schema.Find(query, opts)
     opts = type(opts) == "table" and opts or {}
-    local normalized, tokens = Normalize(query), SearchTokens(query)
+    local normalized = Normalize(query)
+    local tokens, exactTokens = SearchTokenPairs(query)
     if #tokens == 0 then return {} end
     local contextId, stateId = opts.contextId or CurrentContextId(), tostring(opts.stateId or "")
     local limit = math.max(1, math.min(tonumber(opts.limit) or 6, 20))
-    local queryTokenKey = table.concat(tokens, "\031")
+    -- Identity compares the words as written, never the folded stems, so a
+    -- request for "combo points" can never claim to BE "combo point".
+    local queryTokenKey = table.concat(exactTokens, "\031")
     local queryIdentityKey = normalized
     local queryIdentityAlternate = CanonicalIdentityQuery(query)
     local cacheKey = contextId .. "\031" .. stateId .. "\031" .. tostring(limit) .. "\031" .. normalized
@@ -424,10 +488,16 @@ function Schema.Find(query, opts)
         or normalized:find("collapse", 1, true) or normalized:find("accordion", 1, true)
     local queryTokenSet = {}
     for t = 1, #tokens do queryTokenSet[tokens[t]] = true end
+    -- Naming a frame rules the other frames out. Offering Target of Target's
+    -- control to someone who wrote "target" is not a near miss; it is a
+    -- different frame. Pages that are not unit frames stay eligible either way.
+    local allowedUnitPages = NamedUnitPages(" " .. normalized .. " ")
 
     local candidates, built = {}, EnsureIndex()
     for i, row in ipairs(built.rows) do
-        if Available(row, contextId) and StateAvailable(row, stateId) then
+        local wrongUnitPage = allowedUnitPages and SCOPE_PAGES[tostring(row.pageKey or "")]
+            and not allowedUnitPages[tostring(row.pageKey or "")]
+        if not wrongUnitPage and Available(row, contextId) and StateAvailable(row, stateId) then
             local score, matched, labelHits = 0, 0, 0
             for t = 1, #tokens do
                 local token = tokens[t]
@@ -436,12 +506,18 @@ function Schema.Find(query, opts)
                 if start then
                     if not isScope then matched = matched + 1 end
                     score = score + (start == 1 and 9 or 4)
-                    if built.labelSearch[i]:find(token, 1, true) then
+                    -- The stem got us here; spelling it exactly as the player
+                    -- did is stronger evidence. Without this, "borders" scores
+                    -- the same on "Border" and "Borders" and the tie is settled
+                    -- alphabetically rather than by what was asked for.
+                    local exact = exactTokens[t]
+                    if exact ~= token and built.search[i]:find(exact, 1, true) then score = score + 5 end
+                    if LazyLower(built.labelSearch, i, row.label):find(token, 1, true) then
                         score = score + 6
                         if not isScope then labelHits = labelHits + 1 end
                     end
-                    if built.pageSearch[i]:find(token, 1, true) then score = score + 6 end
-                    if built.valueSearch[i]:find(token, 1, true) then score = score + 8 end
+                    if LazyLower(built.pageSearch, i, row.pageKey):find(token, 1, true) then score = score + 6 end
+                    if LazyLower(built.valueSearch, i, row.values):find(token, 1, true) then score = score + 8 end
                 end
             end
             if matched == requiredCount then
@@ -504,7 +580,7 @@ function Schema.Find(query, opts)
                 -- however, receives a deterministic exact-match bonus.
                 local labelTokenKey = built.labelTokenKey[i]
                 if labelTokenKey == nil then
-                    labelTokenKey = SearchTokenKey(row.label)
+                    labelTokenKey = ExactTokenKey(row.label)
                     built.labelTokenKey[i] = labelTokenKey
                 end
                 if queryTokenKey == labelTokenKey then score = 200 end
@@ -962,14 +1038,57 @@ function Schema.Execute(semanticId, value, opts)
     return catalog.Execute(live.controlId, value, opts)
 end
 
-local function HumanPath(descriptor)
-    local pageKey = tostring(descriptor.pageKey or "")
+-- A few catalogued dropdowns carry their CURRENT VALUE as their name, because
+-- that is the text the closed widget shows. The Focus Target portrait border
+-- style is catalogued as "No border", which turns an answer into "No border is
+-- at Frames > Unitframes > Focus Target > No border".
+--
+-- Search is unaffected -- the indexed text includes the setting key, so
+-- "portrait border style" still finds it -- so this repairs the name only where
+-- it is shown, and only when the name really is one of the control's own
+-- choices. The camelCase setting key is the reliable source for the real name.
+local function DisplayLabel(descriptor)
+    local label = tostring(descriptor and descriptor.label or "")
+    local settingKey = tostring(descriptor and descriptor.settingKey or "")
+    if label == "" or settingKey == "" then return label end
+    local values = descriptor.values
+    if type(values) ~= "table" or #values == 0 then return label end
+    local normalizedLabel, looksLikeValue = Normalize(label), false
+    for i = 1, #values do
+        if Normalize(values[i].text) == normalizedLabel then looksLikeValue = true; break end
+    end
+    if not looksLikeValue then return label end
+    local attribute = settingKey:match("[%./]([%w_]+)$") or settingKey
+    attribute = attribute:gsub("(%l)(%u)", "%1 %2"):gsub("_", " ")
+    if attribute == "" then return label end
+    return attribute:sub(1, 1):upper() .. attribute:sub(2):lower()
+end
+
+-- The first control-path segment that differs between two look-alike rows, as
+-- a short human hint ("overlay" vs "symbol").
+local function DistinguishingSegment(row, other)
+    local mine, theirs = {}, {}
+    for segment in tostring(row and row.controlPath or ""):gmatch("[^/]+") do mine[#mine + 1] = segment end
+    for segment in tostring(other and other.controlPath or ""):gmatch("[^/]+") do theirs[#theirs + 1] = segment end
+    for i = 1, #mine do
+        if mine[i] ~= theirs[i] then return (mine[i]:gsub("[-_]", " ")) end
+    end
+    return ""
+end
+
+local function PageBreadcrumb(descriptor)
+    local pageKey = tostring(descriptor and descriptor.pageKey or "")
     local page = type(M.GetMenuBreadcrumb) == "function" and M.GetMenuBreadcrumb(pageKey)
         or pageKey:gsub("_", " ")
     if page == "" then page = "MSUF options" end
-    local label = tostring(descriptor.label or "")
-    if label == "" or tostring(page):find(label, 1, true) then return page end
-    return tostring(page) .. " > " .. label
+    return tostring(page)
+end
+
+local function HumanPath(descriptor)
+    local page = PageBreadcrumb(descriptor)
+    local label = DisplayLabel(descriptor)
+    if label == "" or page:find(label, 1, true) then return page end
+    return page .. " > " .. label
 end
 
 local function BooleanIntent(normalized)
@@ -988,8 +1107,9 @@ local MUTATION_TERMS = {
     -- Players describe the outcome, not the widget: "style the aura border",
     -- "thicken the outline", "shrink the pet frame". Without these the request
     -- never reaches control resolution at all and falls out as unsupported.
+    -- Colour verbs are deliberately absent: the router owns dedicated colour
+    -- lanes that answer far better than a generic control match would.
     "style", "restyle", "customize", "customise", "custom", "tweak", "modify",
-    "recolor", "recolour", "color", "colour", "tint",
     "increase", "decrease", "raise", "lower", "grow", "shrink", "resize", "rescale",
     "thicken", "thin", "widen", "narrow", "expand", "collapse",
     "put", "give", "keep", "replace", "swap", "assign", "bump", "reduce", "boost",
@@ -997,26 +1117,25 @@ local MUTATION_TERMS = {
     "verschiebe", "sortiere", "loesche", "erstelle", "kopiere", "importiere", "exportiere", "starte", "stoppe",
 }
 
-local function HasMutationIntent(normalized)
-    if normalized:find(" show me ", 1, true) or normalized:find(" show me where ", 1, true) then return false end
-    local actionable = Trim(normalized)
-    local wrappers = {
-        "please ", "can you ", "could you ", "would you ", "will you ", "can you please ",
-        "could you please ", "would you please ", "i want to ", "i want you to ", "help me ",
-        -- Question-shaped requests are still requests. Each of these only strips
-        -- a prefix; the remainder must still begin with a real mutation verb, so
-        -- "how do i find the aura page" stays a lookup rather than a change.
-        "how do i ", "how do you ", "how can i ", "how would i ", "how to ",
-        "is it possible to ", "would it be possible to ", "is there a way to ",
-        "i would like to ", "id like to ", "i need to ", "i need you to ",
-        "i want ", "can i ", "could i ", "let me ", "lets ", "let us ",
-        "bitte ", "kannst du ", "koenntest du ", "ich moechte ",
-    }
-    local changed = true
+local MUTATION_WRAPPERS = {
+    "please ", "can you ", "could you ", "would you ", "will you ", "can you please ",
+    "could you please ", "would you please ", "i want to ", "i want you to ", "help me ",
+    -- Question-shaped requests are still requests. Each of these only strips a
+    -- prefix; the remainder must still begin with a real mutation verb, so
+    -- "how do i find the aura page" stays a lookup rather than a change.
+    "how do i ", "how do you ", "how can i ", "how would i ", "how to ",
+    "is it possible to ", "would it be possible to ", "is there a way to ",
+    "i would like to ", "id like to ", "i need to ", "i need you to ",
+    "i want ", "can i ", "could i ", "let me ", "lets ", "let us ",
+    "bitte ", "kannst du ", "koenntest du ", "ich moechte ",
+}
+
+local function StripMutationWrappers(normalized)
+    local actionable, changed = Trim(normalized), true
     while changed do
         changed = false
-        for i = 1, #wrappers do
-            local wrapper = wrappers[i]
+        for i = 1, #MUTATION_WRAPPERS do
+            local wrapper = MUTATION_WRAPPERS[i]
             if actionable:sub(1, #wrapper) == wrapper then
                 actionable = Trim(actionable:sub(#wrapper + 1))
                 changed = true
@@ -1024,11 +1143,19 @@ local function HasMutationIntent(normalized)
             end
         end
     end
+    return actionable
+end
+
+local function LeadingMutationTerm(actionable)
     for i = 1, #MUTATION_TERMS do
         local term = MUTATION_TERMS[i]
-        if actionable == term or actionable:sub(1, #term + 1) == term .. " " then return true end
+        if actionable == term or actionable:sub(1, #term + 1) == term .. " " then return term end
     end
-    return false
+end
+
+local function HasMutationIntent(normalized)
+    if normalized:find(" show me ", 1, true) or normalized:find(" show me where ", 1, true) then return false end
+    return LeadingMutationTerm(StripMutationWrappers(normalized)) ~= nil
 end
 
 local function MutationTargetText(text)
@@ -1048,13 +1175,65 @@ local function MutationTargetText(text)
         local equals = raw:match("^(.-)%s*=%s*.+$")
         if equals and Trim(equals) ~= "" then target = equals end
     end
-    if target and Trim(target) ~= "" then return target end
-    if rawWithoutQuoted ~= raw and Trim(rawWithoutQuoted) ~= "" then return rawWithoutQuoted end
-    -- A quoted/free-form value or literal color is not part of the control
-    -- identity. Remove only a trailing value-shaped segment; enum values stay
-    -- in the full query so they can improve choice matching.
-    local withoutLiteral = normalized:gsub("%s+#[0-9a-f]+$", ""):gsub("%s+rgba?%s*%b()$", "")
-    return Trim(withoutLiteral) ~= "" and withoutLiteral or text
+    if not target then
+        if rawWithoutQuoted ~= raw and Trim(rawWithoutQuoted) ~= "" then
+            target = rawWithoutQuoted
+        else
+            -- A quoted/free-form value or literal color is not part of the
+            -- control identity. Remove only a trailing value-shaped segment;
+            -- enum values stay in the full query so they can improve choice
+            -- matching.
+            target = normalized:gsub("%s+#[0-9a-f]+$", ""):gsub("%s+rgba?%s*%b()$", "")
+        end
+    end
+    if Trim(target) == "" then return text, nil end
+    -- Politeness in front of the verb is never control identity.
+    local actionable = StripMutationWrappers(Normalize(target))
+    -- The verb itself is ambiguous evidence. "style" is grammar in "style the
+    -- aura border" but part of the name in "icon border style", so the caller
+    -- gets both readings: the full phrase first, and this verb-less retry only
+    -- if the full phrase matches nothing. Without the retry, "customize the
+    -- aura border thickness" needs a control literally named "customize" and
+    -- finds none.
+    local leading = LeadingMutationTerm(actionable)
+    local withoutVerb
+    if leading then
+        withoutVerb = Trim(actionable:sub(#leading + 1))
+        if withoutVerb == "" then withoutVerb = nil end
+    end
+    if actionable == "" then return target, withoutVerb end
+    return actionable, withoutVerb
+end
+
+-- Only grammar words. Search drops verbs like "show" and "hide" because they
+-- are how requests are phrased, but inside a control's NAME they carry the
+-- meaning -- "Show on Target castbar" is not "the target castbar". This check
+-- therefore keeps every word search throws away except pure connectives.
+local NAME_GRAMMAR = {
+    a = true, an = true, the = true, of = true, on = true, ["in"] = true, ["for"] = true,
+    to = true, ["and"] = true, ["or"] = true, at = true, by = true, with = true,
+    per = true, its = true,
+}
+
+-- Did the player actually name this control, or did search merely land on it?
+-- Every meaningful word of the control's own name has to appear in the request.
+-- It is the difference between "tweak the player frame width" (Player Width --
+-- worth asking which number) and "restyle the target castbar" (Show on Target
+-- castbar -- clearly not what was meant).
+local function RequestNamesControl(normalized, top)
+    local label = Normalize(top and top.label or "")
+    if label == "" then return false end
+    local sawWord = false
+    for word in label:gmatch("%S+") do
+        if not NAME_GRAMMAR[word] then
+            sawWord = true
+            local stem = Singular(word)
+            if not normalized:find(word, 1, true) and not normalized:find(stem, 1, true) then
+                return false
+            end
+        end
+    end
+    return sawWord
 end
 
 local function MissingSettingValue(setting, top, text)
@@ -1167,6 +1346,15 @@ local function ParseDescriptorValue(top, text)
     local valid, canonical = Schema.NormalizeSettingValue(setting, value)
     return canonical, valid == true
 end
+
+-- Schema.Execute's refusals for a catalog-backed control. None of them is a
+-- fault: each means the control has to be touched in the menu instead.
+local CATALOG_GUIDED_RESULTS = {
+    guided = true, not_catalog_backed = true, reviewed_owner_required = true,
+    catalog_unavailable = true, unreviewed_catalog_setting = true,
+    catalog_setting_unavailable = true, catalog_setting_key_collision = true,
+    catalog_snapshot_unavailable = true, stale_control = true,
+}
 
 local function MissingDescriptorValue(top)
     local choices = {}
@@ -1469,8 +1657,10 @@ function Schema.TryConversation(text)
         and (HasAny(normalized, MODE_START_TERMS) or HasAny(normalized, MODE_OFF_TERMS) or HasAny(normalized, MODE_TOGGLE_TERMS))
     if not location and not wantsOpen and not mutation and not modeIntent and not wantsExplain and not wantsChoices and not wantsCurrent then return nil end
 
-    local searchText = mutation and MutationTargetText(text) or text
+    local searchText, verblessText
+    if mutation then searchText, verblessText = MutationTargetText(text) else searchText = text end
     local results = Schema.Find(searchText, { limit = 4 })
+    if #results == 0 and verblessText then results = Schema.Find(verblessText, { limit = 4 }) end
     -- Parameterized actions and free-form values are sometimes written without
     -- an explicit "to" connector. Search never treats their arbitrary tail as
     -- control identity: trim one trailing token at a time only after the full
@@ -1520,13 +1710,32 @@ function Schema.TryConversation(text)
         end
         local setting = top.settingKey ~= "" and Registry and Registry.GetSetting and Registry:GetSetting(top.settingKey) or nil
         if not setting then
-            if top.classification == "ephemeral" and top.safety == "nonStateful" then
+            -- A Menu2 control with no hand-written Registry owner is not
+            -- automatically menu-only. Schema.Execute owns the review gate for
+            -- those (it demands a live catalog control with a vouched-for
+            -- disposition, and wires snapshot/undo through ExecutePlan), so ask
+            -- it instead of assuming. The shared aura icon border style and
+            -- thickness are reachable no other way.
+            local catalogBacked = top.classification == "setting" and top.settingKey == ""
+                and (top.valueKind == "boolean" or top.valueKind == "number" or top.valueKind == "enum"
+                    or top.valueKind == "string" or top.valueKind == "color")
+            if (top.classification == "ephemeral" and top.safety == "nonStateful") or catalogBacked then
                 local value, parsed = ParseDescriptorValue(top, text)
-                if not parsed then return MissingDescriptorValue(top) end
+                if not parsed then
+                    if not RequestNamesControl(normalized, top) then return nil end
+                    return MissingDescriptorValue(top)
+                end
                 local ok, result = Schema.Execute(top.semanticId, value, { sourceText = text })
                 if type(result) == "table" then return result end
                 if ok then
                     return { text = "Applied " .. tostring(top.label) .. ".", status = "applied", result = "applied", summary = top.label }
+                end
+                -- Every refusal Schema.Execute raises for a catalog control
+                -- means "not writable from here", not "broken". Say the same
+                -- thing the guided lane says rather than reporting a fault.
+                if CATALOG_GUIDED_RESULTS[tostring(result or "")] then
+                    return { text = Schema.Render("guided", { label = top.label }), status = "info",
+                        result = "guided", summary = top.label }
                 end
                 return { text = "I found " .. tostring(top.label) .. ", but it is not available right now.",
                     status = "failed", result = tostring(result or "failed"), summary = top.label }
@@ -1537,7 +1746,14 @@ function Schema.TryConversation(text)
         if Parser and type(Parser.ValueForRegistrySetting) == "function" then
             value = Parser.ValueForRegistrySetting(setting, Normalize(text), text)
         end
-        if value == nil then return MissingSettingValue(setting, top, text) end
+        if value == nil then
+            -- No value AND no proof the player meant this control: "restyle the
+            -- target castbar" is not a request to fill in Show Interrupt Ready
+            -- on Target Castbar. Standing down lets the router's topic help --
+            -- which knows the whole Cast Bars page -- answer instead.
+            if not RequestNamesControl(normalized, top) then return nil end
+            return MissingSettingValue(setting, top, text)
+        end
         local ok, result = Schema.Execute(top.semanticId, value, { sourceText = text })
         if ok and type(result) == "table" then return result end
         if not ok and type(result) == "table" then return result end
@@ -1580,7 +1796,8 @@ function Schema.TryConversation(text)
         -- answerable than no list at all, so every entry carries the page that
         -- tells them apart.
         local function ChoiceLabel(row)
-            local label = tostring(row.label or row.matchedValue or row.semanticId or "")
+            local label = tostring(DisplayLabel(row) ~= "" and DisplayLabel(row)
+                or row.matchedValue or row.semanticId or "")
             local pageKey = tostring(row.pageKey or "")
             local page = type(M.GetMenuBreadcrumb) == "function" and M.GetMenuBreadcrumb(pageKey)
                 or pageKey:gsub("_", " ")
@@ -1628,18 +1845,38 @@ function Schema.TryConversation(text)
         end
     end
 
-    local lines = {}
+    local lines, rendered = {}, {}
     for i = 1, count do
         local row = results[i]
-        local displayLabel = row.matchedValue or row.label or row.semanticId
-        lines[#lines + 1] = (count == 1 and "" or (tostring(i) .. ". ")) .. tostring(displayLabel)
-            .. " is at " .. HumanPath(row) .. "."
+        -- Name the control, then say where it lives. Leading with the matched
+        -- value produced "No border is at Frames > Unitframes > Boss > Border",
+        -- which reads as though the option were called "No border" -- it is one
+        -- of its choices. The page breadcrumb alone avoids repeating the name.
+        local displayLabel = DisplayLabel(row)
+        if displayLabel == "" then displayLabel = row.matchedValue or row.semanticId end
+        local body = tostring(displayLabel) .. " is at " .. PageBreadcrumb(row) .. "."
+        -- Two controls can share a name on one page (Bars lists a Dispel
+        -- trigger for the overlay and another for the symbol). A numbered list
+        -- of identical lines answers nothing, so repeats earn the path segment
+        -- that actually tells them apart.
+        local clash = rendered[body]
+        if clash then
+            local hint = DistinguishingSegment(row, results[clash])
+            if hint ~= "" then body = body:sub(1, -2) .. " (" .. hint .. ")." end
+            local clashHint = DistinguishingSegment(results[clash], row)
+            if clashHint ~= "" then
+                lines[clash] = lines[clash]:sub(1, -2) .. " (" .. clashHint .. ")."
+            end
+        else
+            rendered[body] = i
+        end
+        lines[#lines + 1] = (count == 1 and "" or (tostring(i) .. ". ")) .. body
     end
     if count > 1 then table.insert(lines, 1, "I found a few close controls:") end
     if mutation and not confident then
         -- No selectable owner, so the reply must not imply a number works.
         lines[#lines + 1] = "I kept MSUF unchanged because the request does not identify one control uniquely."
-        lines[#lines + 1] = "Name the frame or page with the control, for example 'set target health bar height to 20'."
+        lines[#lines + 1] = "Name the frame or page with the control, for example 'set player frame width to 250'."
         return { text = table.concat(lines, "\n"), status = "needs_choice", result = "needs_choice",
             summary = "Ambiguous MSUF control" }
     end

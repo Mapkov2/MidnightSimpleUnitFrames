@@ -1284,6 +1284,143 @@ local function MigrateSplitDNDStatusText(conf)
     conf.statusDNDOffsetY = conf.statusAFKOffsetY
 end
 
+-- RC1-RC8 briefly exported the Group page's option tables through one
+-- positional key list. One missing key shifted every following dropdown onto
+-- the next domain. Keep repair here, at the existing cold DB boundary, so bad
+-- selections from those builds cannot leak into runtime specs or reappear
+-- after a profile import. Stable EnsureDB calls still return before any scan.
+local GROUP_MENU_DOMAIN_REPAIR = {
+    revision = 1,
+    nameAnchors = {
+        TOPLEFT = true, TOP = true, TOPRIGHT = true,
+        LEFT = true, CENTER = true, RIGHT = true,
+    },
+    framePoints = {
+        TOPLEFT = true, TOP = true, TOPRIGHT = true,
+        LEFT = true, CENTER = true, RIGHT = true,
+        BOTTOMLEFT = true, BOTTOM = true, BOTTOMRIGHT = true,
+    },
+    sortModes = { INDEX = true, NAME = true, ROLE = true, GROUP = true, GROUP_ROLE = true },
+    powerTextModes = {
+        NONE = true, PERCENT = true, CURRENT = true, FULLVALUE = true, MAX = true, DEFICIT = true,
+        CURMAX = true, CURPERCENT = true, CURMAXPERCENT = true, MAXPERCENT = true,
+        PERCENTCUR = true, PERCENTMAX = true, PERCENTCURMAX = true,
+    },
+    dispelOverlayStyles = { FULL = true, BOTTOM = true, TOP = true, LEFT = true, RIGHT = true },
+    debuffStripeEdges = { BOTTOM = true, TOP = true },
+    placedIndicatorTypes = { icon = true, square = true, bar = true, number = true },
+    frameEffectTypes = { healthtint = true, border = true, glow = true, pulse = true, namecolor = true },
+    frameEffectTimings = { always = true, expiring = true },
+    iconEffectTypes = { none = true, glow = true },
+    spellGrowth = { RIGHTDOWN = true, LEFTDOWN = true, RIGHTUP = true, LEFTUP = true },
+    shiftedNameAnchors = { TOPLEFT = true, TOPRIGHT = true, BOTTOMLEFT = true, BOTTOMRIGHT = true },
+    shiftedAnchorTargets = {
+        TOPLEFT = true, TOP = true, TOPRIGHT = true,
+        LEFT = true, CENTER = true, RIGHT = true,
+        BOTTOMLEFT = true, BOTTOM = true, BOTTOMRIGHT = true,
+    },
+    shiftedDelimiters = { LEFT = true, CENTER = true, RIGHT = true },
+    statusAnchorFields = {
+        "roleIconAnchor", "leaderIconAnchor", "assistIconAnchor", "raidMarkerAnchor",
+        "readyCheckAnchor", "summonAnchor", "resurrectAnchor", "pvpIconAnchor", "phaseAnchor",
+        "statusTextAnchor", "statusGhostTextAnchor", "statusAFKTextAnchor", "statusDNDTextAnchor",
+        "groupNumberAnchor", "dispelSymbolAnchor",
+    },
+    auraDefaults = {
+        buff = { anchor = "BOTTOMRIGHT", cooldownAnchor = "CENTER", stackAnchor = "BOTTOMRIGHT" },
+        debuff = { anchor = "TOPLEFT", cooldownAnchor = "CENTER", stackAnchor = "BOTTOMRIGHT" },
+        externals = { anchor = "CENTER", cooldownAnchor = "CENTER", stackAnchor = "BOTTOMRIGHT" },
+    },
+}
+
+function GROUP_MENU_DOMAIN_REPAIR.EnumField(owner, key, allowed, fallback)
+    local value = owner and owner[key]
+    if value ~= nil and not allowed[value] then owner[key] = fallback end
+end
+
+function GROUP_MENU_DOMAIN_REPAIR.SpellIndicators(conf)
+    local si = conf and conf.spellIndicators
+    local specs = type(si) == "table" and si.specs or nil
+    if type(specs) ~= "table" then return end
+    for _, spec in pairs(specs) do
+        if type(spec) == "table" then
+            for _, entry in pairs(spec) do
+                if type(entry) == "table" then
+                    local placed = entry.placed
+                    if type(placed) == "table" then
+                        if not GROUP_MENU_DOMAIN_REPAIR.placedIndicatorTypes[placed.type] then
+                            entry.placed = false
+                        else
+                            GROUP_MENU_DOMAIN_REPAIR.EnumField(placed, "anchor", GROUP_MENU_DOMAIN_REPAIR.framePoints, "TOPLEFT")
+                            GROUP_MENU_DOMAIN_REPAIR.EnumField(placed, "growth", GROUP_MENU_DOMAIN_REPAIR.spellGrowth, "RIGHTDOWN")
+                            GROUP_MENU_DOMAIN_REPAIR.EnumField(placed, "iconEffect", GROUP_MENU_DOMAIN_REPAIR.iconEffectTypes, "none")
+                        end
+                    end
+                    local frame = entry.frame
+                    if type(frame) == "table" then
+                        if not GROUP_MENU_DOMAIN_REPAIR.frameEffectTypes[frame.type] then
+                            entry.frame = false
+                        else
+                            GROUP_MENU_DOMAIN_REPAIR.EnumField(frame, "timing", GROUP_MENU_DOMAIN_REPAIR.frameEffectTimings, "always")
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+function GROUP_MENU_DOMAIN_REPAIR.Conf(conf, defaults, isRaid)
+    if type(conf) ~= "table" then return end
+    defaults = defaults or PARTY_DEFAULTS
+
+    -- TOP*/BOTTOM* were the four aura-corner choices accidentally shown for
+    -- Name. Before the fix every one rendered through the LEFT fallback, so a
+    -- one-time reset to LEFT preserves the user's actual on-screen geometry.
+    if conf._menuSpecDomainRepair ~= GROUP_MENU_DOMAIN_REPAIR.revision then
+        if GROUP_MENU_DOMAIN_REPAIR.shiftedNameAnchors[conf.nameAnchor] then conf.nameAnchor = defaults.nameAnchor or "LEFT" end
+        if GROUP_MENU_DOMAIN_REPAIR.shiftedAnchorTargets[conf.anchorToFrame] then conf.anchorToFrame = nil end
+        conf._menuSpecDomainRepair = GROUP_MENU_DOMAIN_REPAIR.revision
+    end
+
+    GROUP_MENU_DOMAIN_REPAIR.EnumField(conf, "nameAnchor", GROUP_MENU_DOMAIN_REPAIR.nameAnchors, defaults.nameAnchor or "LEFT")
+    if not GROUP_MENU_DOMAIN_REPAIR.sortModes[conf.sortMode] then
+        if isRaid == true and conf.preserveRaidGroups == true then
+            conf.sortMode = "GROUP"
+        elseif conf.sortByRole == true then
+            conf.sortMode = "ROLE"
+        elseif conf.sortByName == true then
+            conf.sortMode = "NAME"
+        else
+            conf.sortMode = "INDEX"
+        end
+    end
+    GROUP_MENU_DOMAIN_REPAIR.EnumField(conf, "powerTextLeft", GROUP_MENU_DOMAIN_REPAIR.powerTextModes, defaults.powerTextLeft or "NONE")
+    GROUP_MENU_DOMAIN_REPAIR.EnumField(conf, "powerTextCenter", GROUP_MENU_DOMAIN_REPAIR.powerTextModes, defaults.powerTextCenter or "PERCENT")
+    GROUP_MENU_DOMAIN_REPAIR.EnumField(conf, "powerTextRight", GROUP_MENU_DOMAIN_REPAIR.powerTextModes, defaults.powerTextRight or "NONE")
+    if GROUP_MENU_DOMAIN_REPAIR.shiftedDelimiters[conf.textDelimiter] then conf.textDelimiter = defaults.textDelimiter or " / " end
+    if GROUP_MENU_DOMAIN_REPAIR.shiftedDelimiters[conf.powerTextDelimiter] then conf.powerTextDelimiter = defaults.powerTextDelimiter or " / " end
+    GROUP_MENU_DOMAIN_REPAIR.EnumField(conf, "dispelOverlayStyle", GROUP_MENU_DOMAIN_REPAIR.dispelOverlayStyles, defaults.dispelOverlayStyle or "FULL")
+    GROUP_MENU_DOMAIN_REPAIR.EnumField(conf, "debuffStripeEdge", GROUP_MENU_DOMAIN_REPAIR.debuffStripeEdges, defaults.debuffStripeEdge or "BOTTOM")
+
+    for i = 1, #GROUP_MENU_DOMAIN_REPAIR.statusAnchorFields do
+        local key = GROUP_MENU_DOMAIN_REPAIR.statusAnchorFields[i]
+        GROUP_MENU_DOMAIN_REPAIR.EnumField(conf, key, GROUP_MENU_DOMAIN_REPAIR.framePoints, defaults[key] or "CENTER")
+    end
+    local auras = conf.auras
+    if type(auras) == "table" then
+        for lane, laneDefaults in pairs(GROUP_MENU_DOMAIN_REPAIR.auraDefaults) do
+            local group = auras[lane]
+            if type(group) == "table" then
+                GROUP_MENU_DOMAIN_REPAIR.EnumField(group, "anchor", GROUP_MENU_DOMAIN_REPAIR.framePoints, laneDefaults.anchor)
+                GROUP_MENU_DOMAIN_REPAIR.EnumField(group, "cooldownAnchor", GROUP_MENU_DOMAIN_REPAIR.framePoints, laneDefaults.cooldownAnchor)
+                GROUP_MENU_DOMAIN_REPAIR.EnumField(group, "stackAnchor", GROUP_MENU_DOMAIN_REPAIR.framePoints, laneDefaults.stackAnchor)
+            end
+        end
+    end
+    GROUP_MENU_DOMAIN_REPAIR.SpellIndicators(conf)
+end
+
 function GF.EnsureDB()
     local db = _G.MSUF_DB
     if not db then return end
@@ -1351,6 +1488,9 @@ function GF.EnsureDB()
         GF.MigrateAuraConfig(db.gf_raid, true)
         GF.MigrateAuraConfig(db.gf_mythicraid, true)
     end
+    GROUP_MENU_DOMAIN_REPAIR.Conf(db.gf_party, PARTY_DEFAULTS, false)
+    GROUP_MENU_DOMAIN_REPAIR.Conf(db.gf_raid, RAID_DEFAULTS, true)
+    GROUP_MENU_DOMAIN_REPAIR.Conf(db.gf_mythicraid, MYTHIC_RAID_DEFAULTS, true)
     NormalizeAuraRenderer(db.gf_party)
     NormalizeAuraRenderer(db.gf_raid)
     NormalizeAuraRenderer(db.gf_mythicraid)

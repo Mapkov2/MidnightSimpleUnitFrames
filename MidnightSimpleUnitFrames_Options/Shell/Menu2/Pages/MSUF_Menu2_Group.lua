@@ -17,7 +17,33 @@ local floor = math.floor
 local max = math.max
 local min = math.min
 local Specs = M.GroupSpecs or {}
-local SCOPE_VALUES, GROWTH_VALUES, BLIZZARD_FALLBACK_VALUES, HEALTH_MODES, TEXT_MODES, DELIMITER_VALUES, ANCHORS, AURA_ANCHORS, SORT_MODES, GF_BAR_MODES, GF_ANCHOR_TO, GF_ANCHOR_POINTS, STATUS_ICON_ANCHORS, GF_STATUS_ICON_SPECS, GF_STATUS_ICON_VALUES, PLACED_INDICATOR_TYPES, FRAME_EFFECT_TYPES, FRAME_EFFECT_TIMINGS, ICON_EFFECT_TYPES, SPELL_GROWTH_VALUES, CI_SLOT_VALUES, CI_SLOT_DEFAULTS, DISPEL_OVERLAY_STYLES, DEBUFF_STRIPE_EDGES = M.PickDefaults(Specs, M.GROUP_SPEC_TABLE_KEYS)
+-- Keep every option domain bound by name. A positional multi-return here made
+-- one omitted key shift every following Group dropdown onto the next domain.
+-- Explicit reads make additions/removals local and impossible to cascade.
+local SCOPE_VALUES = Specs.SCOPE_VALUES or {}
+local GROWTH_VALUES = Specs.GROWTH_VALUES or {}
+local BLIZZARD_FALLBACK_VALUES = Specs.BLIZZARD_FALLBACK_VALUES or {}
+local HEALTH_MODES = Specs.HEALTH_MODES or {}
+local TEXT_MODES = Specs.TEXT_MODES or {}
+local DELIMITER_VALUES = Specs.DELIMITER_VALUES or {}
+local ANCHORS = Specs.ANCHORS or {}
+local AURA_ANCHORS = Specs.AURA_ANCHORS or {}
+local SORT_MODES = Specs.SORT_MODES or {}
+local GF_BAR_MODES = Specs.GF_BAR_MODES or {}
+local GF_ANCHOR_TO = Specs.GF_ANCHOR_TO or {}
+local GF_ANCHOR_POINTS = Specs.GF_ANCHOR_POINTS or {}
+local STATUS_ICON_ANCHORS = Specs.STATUS_ICON_ANCHORS or {}
+local GF_STATUS_ICON_SPECS = Specs.GF_STATUS_ICON_SPECS or {}
+local GF_STATUS_ICON_VALUES = Specs.GF_STATUS_ICON_VALUES or {}
+local PLACED_INDICATOR_TYPES = Specs.PLACED_INDICATOR_TYPES or {}
+local FRAME_EFFECT_TYPES = Specs.FRAME_EFFECT_TYPES or {}
+local FRAME_EFFECT_TIMINGS = Specs.FRAME_EFFECT_TIMINGS or {}
+local ICON_EFFECT_TYPES = Specs.ICON_EFFECT_TYPES or {}
+local SPELL_GROWTH_VALUES = Specs.SPELL_GROWTH_VALUES or {}
+local CI_SLOT_VALUES = Specs.CI_SLOT_VALUES or {}
+local CI_SLOT_DEFAULTS = Specs.CI_SLOT_DEFAULTS or {}
+local DISPEL_OVERLAY_STYLES = Specs.DISPEL_OVERLAY_STYLES or {}
+local DEBUFF_STRIPE_EDGES = Specs.DEBUFF_STRIPE_EDGES or {}
 local GROUP_FRAME_PROVIDER_VALUES = Specs.GROUP_FRAME_PROVIDER_VALUES or {
     { value = "MSUF", text = "MSUF frames" },
     { value = "AUTO", text = "Blizzard frames (WoW settings)" },
