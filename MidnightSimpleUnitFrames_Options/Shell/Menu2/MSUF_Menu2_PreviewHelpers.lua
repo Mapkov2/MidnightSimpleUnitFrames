@@ -1749,12 +1749,12 @@ function H.BuildZoomBar(box, surface, opts)
     readout:SetSize(54, buttonH)
     readout:SetJustifyH("CENTER")
     box[prefix .. "zoomReadout"] = readout
-    local fitButton = AddZoomButton("zoomFitButton", "Fit", 30, "Fit preview", function() setZoom(box, nil, opts.fitReason) end, readout)
+    local zoomIn = AddZoomButton("zoomInButton", "+", 20, "Zoom in", function() stepZoom(box, 1) end, readout)
+    local fitButton = AddZoomButton("zoomFitButton", "Fit", 30, "Fit preview", function() setZoom(box, nil, opts.fitReason) end, zoomIn)
     local oneButton = AddZoomButton("zoomOneButton", "1:1", 32, "Pixel preview", function() setZoom(box, 1, opts.oneReason) end, fitButton)
-    local zoomIn = AddZoomButton("zoomInButton", "+", 20, "Zoom in", function() stepZoom(box, 1) end, oneButton)
     local helpButton = AddZoomButton("zoomHelpButton", "?", 20, "Preview controls", function(self)
         H.ShowPreviewControlsHelp(self, { M = opts.M or M, T = opts.T, W = opts.W, Tr = tr })
-    end, zoomIn)
+    end, oneButton)
     if opts.lockButton then
         local lock = H.EnsureZoomLockButton(box, zoomBar, {
             T = opts.T, Tr = tr, SetZoom = setZoom, buttonHeight = buttonH,

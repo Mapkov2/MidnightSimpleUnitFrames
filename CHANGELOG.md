@@ -14,6 +14,7 @@
 - Fixed the remaining Power Bar color fallback path when a unit exposes a numeric power type whose token must be normalized before resolving configured colors.
 - Fixed disabled themed Menu2 segments retaining their active blue paint even though native mouse interaction had already been disabled.
 - Fixed existing profiles missing the Class Resources preview guides. The RC8 default repair enables them once, while a later explicit user choice to hide them remains authoritative.
+- Fixed the preview zoom controls using an unintuitive button order. Zoom out, the live zoom readout and Zoom in now stay together before Fit, 1:1 and Help.
 
 ## 6.0-RC7 - 2026-08-04
 
