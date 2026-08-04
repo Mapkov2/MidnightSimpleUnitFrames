@@ -1,5 +1,40 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-RC8 - 2026-08-04
+
+### Highlights
+
+- Added Edge Softness to each of the three existing Unit Frame texture layers. The 0-30% slider uses fifteen compact standalone feather masks and renders through the same cold apply path in live frames and the Menu2 preview; Copy To carries the value for every layer.
+- Cooldown-manager anchoring now asks for consent instead of silently taking ownership. Detected Arc UI, Skiron, Coolinator, Cooldown Manager Centered and Essential Cooldown Viewer providers can be followed or released from Edit Mode, Guided Setup and the unit-page anchoring controls.
+
+### Fixes
+
+- Fixed expanded fixed previews collapsing or restoring an older zoom when a profile/settings rebuild invalidated the active page. Expansion state and the expanded zoom now survive the rebuild as one controlled transition.
+- Fixed Assistant explain requests failing when players used a published control alias instead of the visible label. Ambiguous aliases still fail closed, and advice questions such as whether a setting is worth changing remain strictly read-only.
+- Fixed the remaining Power Bar color fallback path when a unit exposes a numeric power type whose token must be normalized before resolving configured colors.
+- Fixed disabled themed Menu2 segments retaining their active blue paint even though native mouse interaction had already been disabled.
+
+## 6.0-RC7 - 2026-08-04
+
+### Highlights
+
+- MSUF now detects Arc UI, Skiron, Coolinator and Cooldown Manager Centered automatically and anchors the global Unit Frame layout to Essential Cooldown Manager while one of those providers is loaded. Edit Mode, Guided Setup, diagnostics and unit-page anchoring all show the active `AUTO` provider and suppress the conflicting manual choice.
+- Menu previews now keep their visible position sliders synchronized while Unit, Group, Aura, text, portrait, Power, Class Resource and Dispel Symbol handles are dragged, nudged or positioned exactly.
+
+### Changes
+
+- Range Fade opacity can now be previewed live while dragging the slider for Unit and Group frames. The preview respects whether fading applies to the whole frame or only the Health layer and returns to its normal state when the gesture ends.
+- Expanding a fixed preview now carries over the zoom level from Compact mode instead of jumping to an older Full/Fit scale; pan remains mode-specific for the differently sized canvases.
+- The Assistant's reviewed numeric domains now cover Group Dispel Symbol size, offsets, spacing, opacity and layer plus the extended AFK, DND and Ghost status-text offsets, allowing it to use the full ranges exposed by the menu.
+- Added dedicated Assistant help for Copy To, including unit/group category selection, excluded identity/anchor data and examples that remain distinct from executable copy commands.
+
+### Fixes
+
+- Fixed a saved profile language being ignored during initial addon file loading. Locale packs now register cold loaders and apply the selected profile language only after SavedVariables are available at `ADDON_LOADED`.
+- Fixed Menu2 edge snapping after interrupted or immediately repeated drags and resizes. Pending layout animation now settles first, mouse-release fallback finishes the real drag, and rejected content gestures cannot trigger an invisible snap.
+- Fixed configured Power Bar colors falling back to Blizzard defaults for NPC/unit tokens that expose only a numeric PowerType. MSUF now resolves the matching Mana, Rage, Focus, Energy, Runic Power, Lunar Power, Maelstrom, Insanity, Fury, Pain or Essence token first.
+- Fixed Assistant exact boolean commands, inverted Hide/Show controls, Blizzard-frame troubleshooting, profile and Aura page guidance, utility-page navigation, recovery help and problem-report precedence. Generated Blizzard-frame settings now use their actual player-facing menu labels.
+
 ## 6.0-RC6 - 2026-08-03
 
 ### Fixes

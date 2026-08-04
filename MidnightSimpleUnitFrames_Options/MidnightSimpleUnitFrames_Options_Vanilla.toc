@@ -3,7 +3,7 @@
 ## Notes: Load-on-demand configuration UI for Classic Era.
 ## Author: Mapko
 ## Category: Combat
-## Version: 6.0-rc6-classic-prototype
+## Version: 6.5-alpha1
 ## X-MSUF-Client: Vanilla
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## Dependencies: MidnightSimpleUnitFrames
