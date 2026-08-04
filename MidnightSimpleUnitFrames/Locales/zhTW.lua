@@ -4553,6 +4553,18 @@ L["Always visible"] = "永遠顯示"
 L["Hides the Raid Manager while MSUF provides the live group frames, and leaves it to WoW otherwise. This is how MSUF has always behaved."] = "當 MSUF 提供目前的隊伍框架時隱藏突襲管理器，其餘情況交給魔獸世界處理。MSUF 一直都是這樣運作的。"
 L["Keeps the Raid Manager reachable even with MSUF group frames on. Use this when you still want its ready check, raid markers, and role filters."] = "即使啟用了 MSUF 隊伍框架，也保持突襲管理器可用。如果你仍需要它的準備確認、突襲標記與職責篩選，就選這個。"
 L["Shared by Party, Raid, and Mythic Raid. Automatic keeps the tab hidden while MSUF provides the group frames."] = "由隊伍、突襲與神話突襲共用。「自動」會在 MSUF 提供隊伍框架時隱藏該頁籤。"
+L["MSUF detected %s."] = "MSUF detected %s."
+L["Would you like MSUF to anchor the global Unit Frame layout to Essential Cooldown Manager?"] = "Would you like MSUF to anchor the global Unit Frame layout to Essential Cooldown Manager?"
+L["Nothing will move unless you confirm again in the next step. You can change this later in MSUF Edit Mode."] = "Nothing will move unless you confirm again in the next step. You can change this later in MSUF Edit Mode."
+L["Nothing will move unless you confirm again in the next step. If you choose Keep independent, you can enable CDM anchoring at any time in MSUF Edit Mode or under Unit > Anchoring in the MSUF menu."] = "Nothing will move unless you confirm again in the next step. If you choose Keep independent, you can enable CDM anchoring at any time in MSUF Edit Mode or under Unit > Anchoring in the MSUF menu."
+L["Second confirmation for %s."] = "Second confirmation for %s."
+L["MSUF will now anchor the global Unit Frame layout to Essential Cooldown Manager."] = "MSUF will now anchor the global Unit Frame layout to Essential Cooldown Manager."
+L["Confirm only if you want the whole Unit Frame layout to move with your cooldowns."] = "Confirm only if you want the whole Unit Frame layout to move with your cooldowns."
+L["Confirm anchoring"] = "Confirm anchoring"
+L["Continue"] = "Continue"
+L["Keep independent"] = "Keep independent"
+L["%s detected: Global anchor follows Essential Cooldown Manager. Toggle Cooldown in MSUF Edit Mode to turn it off."] = "偵測到 %s：全域錨點會跟隨重要冷卻管理器。可在 MSUF 編輯模式中用 Cooldown 將其關閉。"
+L["%s detected: Cooldown Manager anchoring is off. Toggle Cooldown in MSUF Edit Mode to turn it on."] = "偵測到 %s：冷卻管理器錨定已關閉。可在 MSUF 編輯模式中用 Cooldown 將其開啟。"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhTW", LoadLocale)
 elseif MSUF.LOCALE == "zhTW" then LoadLocale() end

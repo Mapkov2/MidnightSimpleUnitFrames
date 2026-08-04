@@ -84,6 +84,12 @@ local function AutomaticCooldownProvider()
     if type(getter) ~= "function" then return nil, nil end
     return getter()
 end
+local function CooldownAnchorEnabled()
+    local general = GetGeneral and GetGeneral() or nil
+    local getter = _G.MSUF_IsCooldownAnchorEnabled
+    if type(getter) == "function" then return getter(general) == true end
+    return type(general) == "table" and general.anchorToCooldown == true or false
+end
 local WARNING_BADGE_EDGE = { 0.52, 0.39, 0.18, 0.78 }
 local WARNING_HEADER_BG = { 0.096, 0.078, 0.050, 0.56 }
 local ENABLED_HEADER_BG = { 0.060, 0.070, 0.130, 0.48 }
@@ -937,7 +943,7 @@ local function BuildBasics(ctx, builder, unit, label)
     M.TrackRefresh(ctx, RefreshBasicsEnabled)
 end
 local function BuildLayout(ctx, builder, unit)
-    local sec = builder:CollapsibleSection("anchoring", "Anchoring", 252, false)
+    local sec = builder:CollapsibleSection("anchoring", "Anchoring", 306, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local anchorLeftX = 20
     local anchorGap = 24
@@ -961,6 +967,7 @@ local function BuildLayout(ctx, builder, unit)
         local conf = GetConf(unit)
         local custom = CustomAnchorName(conf)
         local _, automaticProviderLabel = AutomaticCooldownProvider()
+        local cooldownAnchorEnabled = CooldownAnchorEnabled()
         if custom ~= "" then
             local text = custom
             if #text > 24 then text = text:sub(1, 21) .. "..." end
@@ -969,10 +976,10 @@ local function BuildLayout(ctx, builder, unit)
         for i = 1, #anchorChoices do
             local item = anchorChoices[i]
             if item.value == "GLOBAL" or item.value ~= unit then
-                if item.value == "GLOBAL" and automaticProviderLabel then
+                if item.value == "GLOBAL" and automaticProviderLabel and cooldownAnchorEnabled then
                     values[#values + 1] = {
                         value = "GLOBAL",
-                        text = "Global anchor (AUTO: " .. automaticProviderLabel .. ")",
+                        text = "Global anchor (" .. automaticProviderLabel .. " Anchor)",
                     }
                 else
                     values[#values + 1] = item
@@ -1072,21 +1079,48 @@ local function BuildLayout(ctx, builder, unit)
     RegisterControl(customAnchor.pick, ctx, "anchoring.custom.pick", "Pick", "button", "action", {
         actionKey = "start_unit_custom_anchor_picker", actionFixedArgs = { unit = unit },
     })
-    local automaticNotice = UnitSectionShared.CreateSectionNotice(sec, -184)
+    local cooldownAnchor = W.SwitchAt(sec, "Follow Main Cooldowns", anchorLeftX, -184, anchorInnerW)
+    M.BindBoolWidget(ctx, cooldownAnchor,
+        CooldownAnchorEnabled,
+        function(enabled)
+            local setter = _G.MSUF_SetCooldownAnchorEnabled
+            if type(setter) == "function" then
+                setter(enabled, true)
+            else
+                local general = GetGeneral()
+                general.anchorToCooldown = enabled == true
+            end
+            M.RequestOrRefresh(ctx, "unit-anchoring-cooldown-manager")
+        end,
+        SettingMeta(ctx, "anchoring.cooldown_manager", "general", "anchorToCooldown"))
+    local automaticNotice = UnitSectionShared.CreateSectionNotice(sec, -238)
     local function RefreshLayoutState()
         local _, automaticProviderLabel = AutomaticCooldownProvider()
+        local cooldownAnchorEnabled = CooldownAnchorEnabled()
+        local cooldownAnchorLabel = automaticProviderLabel and (automaticProviderLabel .. " Anchor") or M.Tr("Follow Main Cooldowns")
+        if cooldownAnchor._msuf2Label and cooldownAnchor._msuf2Label.SetText then
+            cooldownAnchor._msuf2Label:SetText(cooldownAnchorLabel)
+        end
         customAnchor.Refresh()
         if anchorTo.SetValue then anchorTo:SetValue(AnchorValue()) end
         if anchorPoint.SetValue then anchorPoint:SetValue(AnchorPointValue()) end
         if automaticProviderLabel then
-            automaticNotice:SetMessage(M.Format(
-                "%s detected: Global anchor automatically follows Essential Cooldown Manager. No manual anchoring is required.",
-                automaticProviderLabel
-            ), "info")
+            if cooldownAnchorEnabled then
+                automaticNotice:SetMessage(M.Format(
+                    "%s detected: Global anchor follows Essential Cooldown Manager. Toggle Cooldown in MSUF Edit Mode to turn it off.",
+                    automaticProviderLabel
+                ), "info")
+            else
+                automaticNotice:SetMessage(M.Format(
+                    "%s detected: Cooldown Manager anchoring is off. Toggle Cooldown in MSUF Edit Mode to turn it on.",
+                    automaticProviderLabel
+                ), "info")
+            end
             automaticNotice:Show()
-            local accent = (T.colors and (T.colors.ok or T.colors.accent)) or { 0.52, 0.76, 0.58, 1 }
+            local accent = (T.colors and (cooldownAnchorEnabled and (T.colors.ok or T.colors.accent) or T.colors.muted))
+                or (cooldownAnchorEnabled and { 0.52, 0.76, 0.58, 1 } or { 0.55, 0.58, 0.66, 1 })
             SetSectionHeaderStatus(sec, {
-                hint = "AUTO: " .. automaticProviderLabel,
+                hint = automaticProviderLabel .. " Anchor " .. (cooldownAnchorEnabled and "ON" or "OFF"),
                 hintColor = accent,
             })
         else

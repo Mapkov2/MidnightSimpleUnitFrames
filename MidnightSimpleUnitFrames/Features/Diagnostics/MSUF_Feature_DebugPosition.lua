@@ -83,7 +83,7 @@ local function UpdateOverlay()
         and enabledGetter(g) == true
         or g and g.anchorToCooldown == true
     local ancLabel = cooldownEnabled
-        and ("|cFFFFAA00CooldownManager%s|r"):format(automaticProvider and (" (AUTO: " .. automaticProvider .. ")") or "")
+        and ("|cFFFFAA00CooldownManager%s|r"):format(automaticProvider and (" (" .. automaticProvider .. ")") or "")
         or  "|cFFAAAAFF" .. tostring(g and g.anchorName or "UIParent") .. "|r"
     l[2]:SetText("Global anchor: " .. ancLabel)
 

@@ -4458,6 +4458,18 @@ L["Always visible"] = "Sempre visível"
 L["Hides the Raid Manager while MSUF provides the live group frames, and leaves it to WoW otherwise. This is how MSUF has always behaved."] = "Oculta o Gerenciador de Raide enquanto o MSUF fornece os quadros de grupo ativos e, caso contrário, deixa por conta do WoW. O MSUF sempre se comportou assim."
 L["Keeps the Raid Manager reachable even with MSUF group frames on. Use this when you still want its ready check, raid markers, and role filters."] = "Mantém o Gerenciador de Raide acessível mesmo com os quadros de grupo do MSUF ativos. Use isto se ainda quiser a verificação de prontidão, os marcadores de raide e os filtros de função."
 L["Shared by Party, Raid, and Mythic Raid. Automatic keeps the tab hidden while MSUF provides the group frames."] = "Compartilhado por Grupo, Raide e Raide Mítica. Automático mantém a aba oculta enquanto o MSUF fornece os quadros de grupo."
+L["MSUF detected %s."] = "MSUF detected %s."
+L["Would you like MSUF to anchor the global Unit Frame layout to Essential Cooldown Manager?"] = "Would you like MSUF to anchor the global Unit Frame layout to Essential Cooldown Manager?"
+L["Nothing will move unless you confirm again in the next step. You can change this later in MSUF Edit Mode."] = "Nothing will move unless you confirm again in the next step. You can change this later in MSUF Edit Mode."
+L["Nothing will move unless you confirm again in the next step. If you choose Keep independent, you can enable CDM anchoring at any time in MSUF Edit Mode or under Unit > Anchoring in the MSUF menu."] = "Nothing will move unless you confirm again in the next step. If you choose Keep independent, you can enable CDM anchoring at any time in MSUF Edit Mode or under Unit > Anchoring in the MSUF menu."
+L["Second confirmation for %s."] = "Second confirmation for %s."
+L["MSUF will now anchor the global Unit Frame layout to Essential Cooldown Manager."] = "MSUF will now anchor the global Unit Frame layout to Essential Cooldown Manager."
+L["Confirm only if you want the whole Unit Frame layout to move with your cooldowns."] = "Confirm only if you want the whole Unit Frame layout to move with your cooldowns."
+L["Confirm anchoring"] = "Confirm anchoring"
+L["Continue"] = "Continue"
+L["Keep independent"] = "Keep independent"
+L["%s detected: Global anchor follows Essential Cooldown Manager. Toggle Cooldown in MSUF Edit Mode to turn it off."] = "%s detectado: a âncora global segue o Gerenciador de Recargas Essenciais. Desative com Cooldown no modo de edição do MSUF."
+L["%s detected: Cooldown Manager anchoring is off. Toggle Cooldown in MSUF Edit Mode to turn it on."] = "%s detectado: a ancoragem ao Gerenciador de Recargas está desativada. Ative com Cooldown no modo de edição do MSUF."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ptBR", LoadLocale)
 elseif MSUF.LOCALE == "ptBR" then LoadLocale() end

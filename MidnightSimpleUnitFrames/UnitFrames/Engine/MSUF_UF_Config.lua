@@ -1696,9 +1696,15 @@ local function CompileUnitBase(out, unit, key, def, conf, general, bars, bossInd
   out.enabled = conf.enabled ~= false
   out.width = Number(conf.width or conf.frameWidth, def.width)
   out.height = Number(conf.height or conf.frameHeight, def.height)
-  local globalCooldownAnchor
-  out.anchorFrameName, out.anchorToUnitframe, globalCooldownAnchor = ResolveAnchorSettings(conf, general)
-  local ecvRule = globalCooldownAnchor and ECV_ANCHORS[key] or nil
+  local cooldownViewerAnchor
+  out.anchorFrameName, out.anchorToUnitframe, cooldownViewerAnchor = ResolveAnchorSettings(conf, general)
+  -- 5.77 stored Utility/Buff viewer positions as CENTER-to-CENTER offsets.
+  -- Only EssentialCooldownViewer owns the specialized edge-anchor rules.
+  -- Keep this distinction in the cold config compile so legacy coordinates
+  -- retain their exact screen geometry without adding runtime event work.
+  local essentialCooldownAnchor = cooldownViewerAnchor
+    and out.anchorFrameName == "EssentialCooldownViewer"
+  local ecvRule = essentialCooldownAnchor and ECV_ANCHORS[key] or nil
   if ecvRule then
     out.point = ecvRule[1]
     out.relativePoint = ecvRule[2]

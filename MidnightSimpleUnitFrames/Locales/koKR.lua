@@ -4509,6 +4509,18 @@ L["Always visible"] = "항상 표시"
 L["Hides the Raid Manager while MSUF provides the live group frames, and leaves it to WoW otherwise. This is how MSUF has always behaved."] = "MSUF가 활성 그룹 프레임을 제공하는 동안에는 공격대 관리자를 숨기고, 그 외에는 WoW에 맡깁니다. MSUF는 지금까지 항상 이렇게 동작했습니다."
 L["Keeps the Raid Manager reachable even with MSUF group frames on. Use this when you still want its ready check, raid markers, and role filters."] = "MSUF 그룹 프레임을 사용하는 중에도 공격대 관리자를 계속 사용할 수 있게 합니다. 준비 확인, 공격대 표식, 역할 필터가 여전히 필요할 때 선택하십시오."
 L["Shared by Party, Raid, and Mythic Raid. Automatic keeps the tab hidden while MSUF provides the group frames."] = "파티, 공격대, 신화 공격대가 함께 사용합니다. 자동은 MSUF가 그룹 프레임을 제공하는 동안 탭을 숨겨 둡니다."
+L["MSUF detected %s."] = "MSUF detected %s."
+L["Would you like MSUF to anchor the global Unit Frame layout to Essential Cooldown Manager?"] = "Would you like MSUF to anchor the global Unit Frame layout to Essential Cooldown Manager?"
+L["Nothing will move unless you confirm again in the next step. You can change this later in MSUF Edit Mode."] = "Nothing will move unless you confirm again in the next step. You can change this later in MSUF Edit Mode."
+L["Nothing will move unless you confirm again in the next step. If you choose Keep independent, you can enable CDM anchoring at any time in MSUF Edit Mode or under Unit > Anchoring in the MSUF menu."] = "Nothing will move unless you confirm again in the next step. If you choose Keep independent, you can enable CDM anchoring at any time in MSUF Edit Mode or under Unit > Anchoring in the MSUF menu."
+L["Second confirmation for %s."] = "Second confirmation for %s."
+L["MSUF will now anchor the global Unit Frame layout to Essential Cooldown Manager."] = "MSUF will now anchor the global Unit Frame layout to Essential Cooldown Manager."
+L["Confirm only if you want the whole Unit Frame layout to move with your cooldowns."] = "Confirm only if you want the whole Unit Frame layout to move with your cooldowns."
+L["Confirm anchoring"] = "Confirm anchoring"
+L["Continue"] = "Continue"
+L["Keep independent"] = "Keep independent"
+L["%s detected: Global anchor follows Essential Cooldown Manager. Toggle Cooldown in MSUF Edit Mode to turn it off."] = "%s 감지됨: 전역 앵커가 중요 재사용 대기시간 관리자를 따릅니다. MSUF 편집 모드의 Cooldown으로 끌 수 있습니다."
+L["%s detected: Cooldown Manager anchoring is off. Toggle Cooldown in MSUF Edit Mode to turn it on."] = "%s 감지됨: 재사용 대기시간 관리자 앵커가 꺼져 있습니다. MSUF 편집 모드의 Cooldown으로 켤 수 있습니다."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end
