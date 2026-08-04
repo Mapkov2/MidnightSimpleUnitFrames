@@ -35,6 +35,7 @@ local data = {
                         "Recalibrated Menu Scale so the former physical 80% size is now the clear 100% reference, with a 25-200% range across the window slider, Dashboard and Assistant while existing saved sizes remain visually unchanged.",
                         "Extended MSUF Frame Scale to 200% across persistence, live frames, castbar and Unit Frame previews, Dashboard controls and Assistant commands.",
                         "Fixed previews now open expanded by default in a fresh UI session and after page or factory resets; choosing Compact remains authoritative for the rest of that session.",
+                        "Styled Copy To consistently as a green success action on Unit and Group pages so the primary replication workflow is easier to find.",
                     },
                 },
             },

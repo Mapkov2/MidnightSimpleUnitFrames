@@ -760,7 +760,7 @@ local function ScopeSection(ctx, builder, opts)
         return sec
     end
 
-    local copy = (W.RoleButton and W.RoleButton(sec, M.Tr("Copy To"), "normal", 86, 24)) or W.TopButton(sec, M.Tr("Copy To"), 86, 24, {})
+    local copy = (W.RoleButton and W.RoleButton(sec, M.Tr("Copy To"), "success", 86, 24)) or W.TopButton(sec, M.Tr("Copy To"), 86, 24, {})
     copy:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -16, -16)
     local scopeBtns = {}
     local scopeBar = W.ScopeOverrideBar(ctx, command, {
