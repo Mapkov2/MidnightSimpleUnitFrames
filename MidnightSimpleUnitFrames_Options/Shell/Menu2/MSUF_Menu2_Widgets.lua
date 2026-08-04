@@ -2821,10 +2821,13 @@ local function SetEnabledState(frame, enabled)
     end
     frame._msuf2EnabledStateApplied = enabled
     frame._msuf2MouseEnabledStateApplied = mouseEnabled
-    if frame.Enable and frame.Disable then
-        if enabled then frame:Enable() else frame:Disable() end
-    elseif frame.SetEnabled then
+    -- Theme buttons repaint their custom fill, edge, and label in SetEnabled.
+    -- Calling only the native Enable/Disable methods changes interaction state
+    -- but leaves an active segment painted blue while its parent is disabled.
+    if frame.SetEnabled then
         frame:SetEnabled(enabled)
+    elseif frame.Enable and frame.Disable then
+        if enabled then frame:Enable() else frame:Disable() end
     end
     if frame.EnableMouse then frame:EnableMouse(mouseEnabled) end
 end
