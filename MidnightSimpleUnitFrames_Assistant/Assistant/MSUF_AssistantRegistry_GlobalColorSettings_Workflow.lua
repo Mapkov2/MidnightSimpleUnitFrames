@@ -106,14 +106,14 @@ function A.GlobalRegistry.RegisterVisualWorkflowSettings(ctx)
     end
 
     function A.Workflow.ApplyMsufScale(value)
-        local scale = A.Workflow.ClampScale(value, 0.25, 1.5) or 1
+        local scale = A.Workflow.ClampScale(value, 0.25, 2.0) or 1
         GeneralDB().msufUiScale = scale
         if type(_G.MSUF_ApplyMsufScale) == "function" then _G.MSUF_ApplyMsufScale(scale) end
         ApplyGeneral("MSUF_ASSISTANT_MSUF_SCALE", { preview = true, applyAll = false, notify = false })
     end
 
     function A.Workflow.ApplyMenuScale(value)
-        local scale = A.Workflow.ClampScale(value, 0.25, 1.5) or 1
+        local scale = A.Workflow.ClampScale(value, 0.2, 1.6) or 0.8
         GeneralDB().slashMenuScale = scale
         if M and M.frame and type(M.frame.SetScale) == "function" then
             M.frame:SetScale((M.GetEffectiveMenuScale and M.GetEffectiveMenuScale(scale)) or scale)

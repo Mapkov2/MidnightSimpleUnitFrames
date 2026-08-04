@@ -22,7 +22,7 @@ local function ClampRuntimeVisualScale(scale)
     scale = tonumber(scale)
     if not scale or scale <= 0 then return 1 end
     if scale < 0.25 then return 0.25 end
-    if scale > 1.5 then return 1.5 end
+    if scale > 2.0 then return 2.0 end
     return scale
 end
 local function ClampEffectiveScaleRatio(scale)

@@ -207,6 +207,7 @@ function M.StageFactoryReset()
     local fn = _G.MSUF_DoFullReset
     if type(fn) ~= "function" then return false end
     fn({ skipReload = true })
+    M.CallIf(M.SetFixedPreviewExpandedPreference, true)
     return true
 end
 local function BlockCombatAndRefresh(ctx)
@@ -1377,6 +1378,7 @@ local PAGE_RESET_HANDLERS = {
     modules = ResetModulesPage,
 }
 local function FinishPageResetApply(pageKey)
+    M.CallIf(M.SetFixedPreviewExpandedPreference, true)
     M.CallIf(M.ApplyLocaleSelection, M.GetLocaleSelection and M.GetLocaleSelection() or "auto")
     if M.ApplyMenuFrameScale and M.frame then Invoke(M.ApplyMenuFrameScale, M.frame) end
     if pageKey and M.InvalidatePage and M.SelectPage and M.frame and M.frame.IsShown and M.frame:IsShown() then
