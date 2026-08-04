@@ -3476,8 +3476,9 @@ function W.AttachFixedPreviewExpander(section, toolbar, previewBox, opts)
         end
         return true
     end
-    function record:Open(reason)
+    function record:Open(reason, openOptions)
         if self.disposed or self.expanded or not OwnsPreviewBox() or not PageOwned() then return false end
+        openOptions = type(openOptions) == "table" and openOptions or nil
         local active = M._msuf2ActiveFixedPreviewExpander
         if active and active ~= self and type(active.Close) == "function" then
             active:Close("OTHER_FIXED_PREVIEW")
@@ -3486,7 +3487,12 @@ function W.AttachFixedPreviewExpander(section, toolbar, previewBox, opts)
         M._msuf2ActiveFixedPreviewExpander = self
         SetCompactToolbarVisible(false)
         RefreshButton()
-        if not self:Relayout(reason or "FIXED_PREVIEW_EXPAND") then
+        if openOptions and openOptions.preserveExpandedZoom == true then
+            previewBox._msuf2PreserveExpandedZoomOnNextExpand = true
+        end
+        local laidOut = self:Relayout(reason or "FIXED_PREVIEW_EXPAND")
+        previewBox._msuf2PreserveExpandedZoomOnNextExpand = nil
+        if not laidOut then
             self:Close("FIXED_PREVIEW_EXPAND_FAILED")
             return false
         end
