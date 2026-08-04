@@ -4091,6 +4091,7 @@ local function fill(key, defaults)
             if u[texP .. "BlendMode"] == nil then u[texP .. "BlendMode"] = "BLEND" end
             if u[texP .. "MirrorH"] == nil then u[texP .. "MirrorH"] = false end
             if u[texP .. "MirrorV"] == nil then u[texP .. "MirrorV"] = false end
+            if u[texP .. "EdgeSoftness"] == nil then u[texP .. "EdgeSoftness"] = 0 end
             if u[texP .. "Visibility"] == nil then u[texP .. "Visibility"] = "ALWAYS" end
             if u[texP .. "RoundedClip"] == nil then u[texP .. "RoundedClip"] = false end
         end

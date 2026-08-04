@@ -1173,6 +1173,9 @@ local function RenderTextureLayerSlotPreview(box, mock, conf, slot, wanted, scal
     local runtimeVisible = conf and (not (textureRuntime and type(textureRuntime.LayerVisible) == "function")
         or textureRuntime.LayerVisible(conf, prefix) == true)
     if not (wanted and conf and conf[prefix .. "Enabled"] == true and runtimeVisible) then
+        if textureRuntime and type(textureRuntime.ApplySoftEdgeMask) == "function" then
+            textureRuntime.ApplySoftEdgeMask(holder, {}, 0)
+        end
         holder:Hide()
         if handle then handle:Hide() end
         return
@@ -1246,6 +1249,7 @@ local function RenderTextureLayerSlotPreview(box, mock, conf, slot, wanted, scal
     elseif tex.SetVertexColor then
         tex:SetVertexColor(r, g, b, 1)
     end
+    local featherTextures = { tex }
     -- Bars-style multi-direction gradient: one overlay per active edge, exactly
     -- mirroring UnitFrames/Effects/MSUF_UF_TextureLayer.lua.
     local gradientOn = conf[prefix .. "GradientEnabled"] == true
@@ -1282,8 +1286,12 @@ local function RenderTextureLayerSlotPreview(box, mock, conf, slot, wanted, scal
             elseif overlay.SetVertexColor then
                 overlay:SetVertexColor(r2, g2, b2, 0.5)
             end
+            featherTextures[#featherTextures + 1] = overlay
             overlay:Show()
         end
+    end
+    if textureRuntime and type(textureRuntime.ApplySoftEdgeMask) == "function" then
+        textureRuntime.ApplySoftEdgeMask(holder, featherTextures, conf[prefix .. "EdgeSoftness"])
     end
     local alpha = tonumber(conf[prefix .. "Alpha"]) or 1
     if alpha < 0 then alpha = 0 elseif alpha > 1 then alpha = 1 end

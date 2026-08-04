@@ -24,9 +24,17 @@ local tonumber = tonumber
 local tostring = tostring
 local pairs = pairs
 local ipairs = ipairs
+local floor = math.floor
 local issecretvalue = _G.issecretvalue or function(_) return false end
 
 local WHITE8 = "Interface\\Buttons\\WHITE8x8"
+local EDGE_SOFTNESS_MASK_ROOT = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\texture_layer_edge_softness_"
+local EDGE_SOFTNESS_STEP = 0.02
+local EDGE_SOFTNESS_MAX = 0.30
+local EDGE_SOFTNESS_MASKS = {}
+for level = 1, 15 do
+  EDGE_SOFTNESS_MASKS[level] = EDGE_SOFTNESS_MASK_ROOT .. (level < 10 and "0" or "") .. tostring(level) .. ".png"
+end
 
 local TextureLayer = {}
 MSUF.TextureLayer = TextureLayer
@@ -181,6 +189,91 @@ local function NewLayerTexture(holder, sublevel)
   return tex
 end
 
+--- Edge softness is stored as a normalized fraction (0..0.30). Fifteen tiny
+--- standalone masks contain the exact 2%, 4%, ... 30% feather profiles. Mask
+--- textures deliberately cannot share an atlas: WoW ignores SetTexCoord on a
+--- MaskTexture and would otherwise sample the complete atlas.
+local function ResolveEdgeSoftness(value)
+  value = tonumber(value) or 0
+  if value <= 0 then return 0, 0 end
+  if value > EDGE_SOFTNESS_MAX then value = EDGE_SOFTNESS_MAX end
+  local level = floor((value / EDGE_SOFTNESS_STEP) + 0.5)
+  if level < 1 then return 0, 0 end
+  if level > 15 then level = 15 end
+  return level * EDGE_SOFTNESS_STEP, level
+end
+TextureLayer.ResolveEdgeSoftness = ResolveEdgeSoftness
+TextureLayer.EDGE_SOFTNESS_MAX = EDGE_SOFTNESS_MAX
+
+local function EnsureSoftEdgeMask(holder, level)
+  if level <= 0 or type(holder.CreateMaskTexture) ~= "function" then return nil end
+  local mask = holder.softEdgeMask
+  if not mask then
+    mask = holder:CreateMaskTexture(nil, "ARTWORK")
+    if not mask then return nil end
+    mask:SetAllPoints(holder)
+    holder.softEdgeMask = mask
+  end
+  if holder.softEdgeMaskLevel ~= level then
+    mask:SetTexture(EDGE_SOFTNESS_MASKS[level], "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+    holder.softEdgeMaskLevel = level
+  end
+  if mask.Show then mask:Show() end
+  return mask
+end
+
+local function ClearSoftEdgeMask(holder)
+  local tracked = holder.softEdgeMaskedTextures
+  if tracked then
+    for tex, mask in pairs(tracked) do
+      if tex and mask and type(tex.RemoveMaskTexture) == "function" then
+        tex:RemoveMaskTexture(mask)
+      end
+      tracked[tex] = nil
+    end
+  end
+  if holder.softEdgeMask and holder.softEdgeMask.Hide then holder.softEdgeMask:Hide() end
+end
+
+local function ApplySoftEdgeMask(holder, textures, rawSoftness)
+  local _, level = ResolveEdgeSoftness(rawSoftness)
+  if level <= 0 then
+    ClearSoftEdgeMask(holder)
+    return false
+  end
+  local mask = EnsureSoftEdgeMask(holder, level)
+  if not mask then
+    ClearSoftEdgeMask(holder)
+    return false
+  end
+  local active = {}
+  for i = 1, #textures do
+    local tex = textures[i]
+    if tex then active[tex] = true end
+  end
+  local tracked = holder.softEdgeMaskedTextures
+  if not tracked then
+    tracked = {}
+    holder.softEdgeMaskedTextures = tracked
+  end
+  for tex, oldMask in pairs(tracked) do
+    if not active[tex] or oldMask ~= mask then
+      if tex and oldMask and type(tex.RemoveMaskTexture) == "function" then
+        tex:RemoveMaskTexture(oldMask)
+      end
+      tracked[tex] = nil
+    end
+  end
+  for tex in pairs(active) do
+    if tracked[tex] ~= mask and type(tex.AddMaskTexture) == "function" then
+      tex:AddMaskTexture(mask)
+      tracked[tex] = mask
+    end
+  end
+  return true
+end
+TextureLayer.ApplySoftEdgeMask = ApplySoftEdgeMask
+
 local function EnsureBaseTexture(holder, clipWanted)
   local tex = holder.tex
   if tex and holder.clipApplied and not clipWanted then
@@ -250,7 +343,10 @@ local function ApplySlot(frame, conf, unitKey, slot)
   local holders = frame._msufTexLayers
   local holder = holders and holders[slot]
   if conf[prefix .. "Enabled"] ~= true or not LayerVisible(conf, prefix) then
-    if holder then holder:Hide() end
+    if holder then
+      ClearSoftEdgeMask(holder)
+      holder:Hide()
+    end
     if conf[prefix .. "Enabled"] == true then NoteDynamicNeeds(unitKey, conf, prefix) end
     return
   end
@@ -331,6 +427,7 @@ local function ApplySlot(frame, conf, unitKey, slot)
     tex:SetVertexColor(r, g, b, 1)
   end
   ApplyClip(frame, holder, tex, clipWanted)
+  local featherTextures = { tex }
 
   -- Bars-style multi-direction gradient: one WHITE8 overlay per active edge,
   -- fading from transparent to the gradient end color toward that edge.
@@ -352,12 +449,14 @@ local function ApplySlot(frame, conf, unitKey, slot)
         overlay:SetVertexColor(r2, g2, b2, 0.5)
       end
       ApplyClip(frame, holder, overlay, clipWanted)
+      featherTextures[#featherTextures + 1] = overlay
       overlay:Show()
     else
       local overlay = holder.grads and holder.grads[direction]
       if overlay then overlay:Hide() end
     end
   end
+  ApplySoftEdgeMask(holder, featherTextures, conf[prefix .. "EdgeSoftness"])
   holder.clipApplied = clipWanted or nil
   holder:Show()
 end
