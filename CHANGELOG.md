@@ -13,12 +13,13 @@
 - Fixed Assistant explain requests failing when players used a published control alias instead of the visible label. Ambiguous aliases still fail closed, and advice questions such as whether a setting is worth changing remain strictly read-only.
 - Fixed the remaining Power Bar color fallback path when a unit exposes a numeric power type whose token must be normalized before resolving configured colors.
 - Fixed disabled themed Menu2 segments retaining their active blue paint even though native mouse interaction had already been disabled.
-- Fixed existing profiles missing the Class Resources preview guides. The RC8 default repair enables them once, while a later explicit user choice to hide them remains authoritative.
+- Fixed Unit Frame and Class Resources Guide layers becoming stale after profile switches or resets. Factory profiles start with both Guide layers visible, the RC8 repair enables Class Resources Guides once for existing profiles, and a later explicit user choice to hide either layer remains authoritative.
 - Fixed the preview zoom controls using an unintuitive button order. Zoom out, the live zoom readout and Zoom in now stay together before Fit, 1:1 and Help.
 - Recalibrated Menu Scale so the former physical 80% size is now the clear 100% reference, with a 25-200% range across the window slider, Dashboard and Assistant while existing saved sizes remain visually unchanged.
 - Extended MSUF Frame Scale to 200% across persistence, live frames, castbar and Unit Frame previews, Dashboard controls and Assistant commands.
 - Fixed previews now open expanded by default in a fresh UI session and after page or factory resets; choosing Compact remains authoritative for the rest of that session.
 - Styled Copy To consistently as a green success action on Unit and Group pages so the primary replication workflow is easier to find.
+- Kept the toolbar Edit Mode action visually neutral instead of painting it like the menu's primary confirmation action.
 
 ## 6.0-RC7 - 2026-08-04
 

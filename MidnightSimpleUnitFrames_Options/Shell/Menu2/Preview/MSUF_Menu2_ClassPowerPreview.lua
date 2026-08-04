@@ -2396,6 +2396,12 @@ function Preview.Create(ctx, builder)
     box.handleHP = MakeHandle(box, "playerHP", "bars", "playerHPBarOffsetX", "playerHPBarOffsetY", 0, 0, "Second player HP bar", { 0.25, 0.90, 0.42 }, "hp", "hp")
     box.handleHPText = MakeHandle(box, "playerHPText", "bars", "playerHPBarTextOffsetX", "playerHPBarTextOffsetY", 0, 0, "Second player HP text", { 0.25, 0.90, 0.42 }, "hpText", "hpText")
     function box:Refresh()
+        --- Keep the persisted Guides choice authoritative across factory reset,
+        --- profile switch and Assistant mutation even when this preview frame
+        --- was already constructed under the previous profile table.
+        if type(box.layerVisibility) == "table" then
+            box.layerVisibility.guides = PreviewGuidesEnabled()
+        end
         local bars = Bars()
         local player = Player()
         local spec = M.GetClassPowerPreviewSpec and M.GetClassPowerPreviewSpec() or nil

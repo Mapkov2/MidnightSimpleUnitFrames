@@ -1043,6 +1043,11 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
         SetDefault(g, "unitInfoTooltipStyle", "classic")
         SetDefault(g, "showGameMenuButton", true)
         SetDefault(g, "navHoverScale", 1.05)
+        --- Factory profiles always teach preview interaction with the Guides
+        --- layer visible. Both toggles remain ordinary persisted user choices
+        --- after the factory profile has been created.
+        g.unitPreviewGuidesEnabled = true
+        g.classPowerPreviewGuidesEnabled = true
         g.menuFontKey = MSUF_Defaults_GetMenuFontDefault()
         g._msufFactoryNameShorteningFixed_v1 = true
         g._msufFactoryScopedNameShorteningFixed_v1 = true
