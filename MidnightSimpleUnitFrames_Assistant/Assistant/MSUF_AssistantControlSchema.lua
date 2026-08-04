@@ -35,6 +35,20 @@ local STOP = {
     available=true, choice=true, choices=true, values=true, configured=true, currently=true,
     starte=true, starten=true, startest=true, stoppe=true, stoppen=true, beende=true, beenden=true,
     gehe=true, navigiere=true, springe=true, fuehre=true, bringe=true, direkt=true, regler=true,
+    -- Conversational filler. A player writes "can you make the border thicker",
+    -- not "border thickness"; every one of these words would otherwise become a
+    -- required search token that no control can ever contain, which drops the
+    -- whole query to zero hits.
+    you=true, your=true, we=true, us=true, our=true, would=true, could=true, should=true,
+    want=true, wants=true, need=true, needs=true, like=true, just=true, now=true,
+    ["then"]=true, this=true, that=true, these=true, those=true, there=true, here=true,
+    be=true, been=true, being=true, get=true, got=true, have=true, has=true, had=true,
+    into=true, from=true, at=true, as=true, by=true, ["or"]=true, ["but"]=true, ["if"]=true,
+    so=true, its=true, im=true, ive=true, id=true, ill=true, lets=true, let=true, ok=true, okay=true,
+    thanks=true, thank=true, hey=true, hi=true, hello=true, msuf=true,
+    -- Measurement units. "2 pixels" and "2" name the same value; the unit word
+    -- is never part of a control's identity.
+    pixel=true, pixels=true, px=true, percent=true, percentage=true, pct=true,
 }
 
 local TOKEN_ALIASES = {
@@ -55,18 +69,55 @@ local function Normalize(value)
     return (value:gsub("[^%w]+", " "):gsub("%s+", " "):gsub("^ ", ""):gsub(" $", ""))
 end
 
+-- Control labels are written in the singular ("Border thickness"), players ask
+-- in the plural ("set the borders to 2"). Index text is searched with plain
+-- find, so folding the query token down to its singular stem also still matches
+-- a plural label ("border" is inside "Highlight Borders"); folding the other way
+-- would not. Deliberately conservative: -ss/-us/-is/-as never lose their s, so
+-- "class", "status" and "bias" survive intact.
+local function Singular(token)
+    local length = #token
+    if length < 4 or token:sub(-1) ~= "s" then return token end
+    local tail2 = token:sub(-2)
+    if tail2 == "ss" or tail2 == "us" or tail2 == "is" or tail2 == "as" then return token end
+    if length >= 5 and token:sub(-3) == "ies" then return token:sub(1, length - 3) .. "y" end
+    local tail3 = token:sub(-3)
+    if length >= 5 and (tail3 == "xes" or tail3 == "zes" or token:sub(-4) == "ches" or token:sub(-4) == "shes") then
+        return token:sub(1, length - 2)
+    end
+    return token:sub(1, length - 1)
+end
+
 local function SearchTokens(value)
     local tokens = {}
     for token in Normalize(value):gmatch("%S+") do
         local alias = TOKEN_ALIASES[token] or token
         for normalizedToken in tostring(alias):gmatch("%S+") do
-            if not STOP[normalizedToken] and not normalizedToken:match("^%-?%d") then
-                tokens[#tokens + 1] = normalizedToken
+            local stem = Singular(normalizedToken)
+            if not STOP[normalizedToken] and not STOP[stem] and not normalizedToken:match("^%-?%d") then
+                tokens[#tokens + 1] = stem
             end
         end
     end
     return tokens
 end
+
+-- Pages whose identity IS the scope. Two rows that share a control path on two
+-- of these pages are two different frames' controls and must never be merged.
+-- Every other page is a menu location for a surface whose scope lives inside
+-- the control path, so the same path there really is the same stored value.
+local SCOPE_PAGES = {
+    uf_player = true, uf_target = true, uf_focus = true, uf_pet = true,
+    uf_targettarget = true, uf_focustarget = true, uf_boss = true,
+}
+
+-- Words that name a family of frames rather than a control. They steer ranking
+-- but must not be required search tokens: "unitframe border" has to find the
+-- unit pages' Border controls, whose indexed text never spells "unitframe".
+local SCOPE_TOKENS = {
+    unitframe = "uf_", unitframes = "uf_", groupframe = "gf_", groupframes = "gf_",
+    partyframe = "gf_", partyframes = "gf_", raidframe = "gf_", raidframes = "gf_",
+}
 
 local function SearchTokenKey(value)
     return table.concat(SearchTokens(value), "\031")
@@ -247,7 +298,7 @@ local function EnsureIndex()
         bySemanticId = {}, bySettingKey = {}, byControlId = {},
         rows = Data.records or {}, columns = columns,
         search = {}, labelSearch = {}, pageSearch = {}, valueSearch = {},
-        labelTokenKey = {}, canonicalIdentityKey = {},
+        labelTokenKey = {}, labelTokens = {}, canonicalIdentityKey = {},
         rowMeta = rowMeta,
     }
     for i = 1, #(Data.records or {}) do
@@ -356,29 +407,88 @@ function Schema.Find(query, opts)
         end
         return copy
     end
+    -- Family words are scored but not demanded, so "unitframe border" keeps the
+    -- unit pages' Border controls instead of collapsing to zero hits.
+    local requiredCount, scopePrefixes = 0, nil
+    for t = 1, #tokens do
+        local prefix = SCOPE_TOKENS[tokens[t]]
+        if prefix then
+            scopePrefixes = scopePrefixes or {}
+            scopePrefixes[prefix] = true
+        else
+            requiredCount = requiredCount + 1
+        end
+    end
+    if requiredCount == 0 then requiredCount = #tokens; scopePrefixes = nil end
+    local wantsSection = normalized:find("section", 1, true) or normalized:find("expand", 1, true)
+        or normalized:find("collapse", 1, true) or normalized:find("accordion", 1, true)
+    local queryTokenSet = {}
+    for t = 1, #tokens do queryTokenSet[tokens[t]] = true end
+
     local candidates, built = {}, EnsureIndex()
     for i, row in ipairs(built.rows) do
         if Available(row, contextId) and StateAvailable(row, stateId) then
-            local score, matched = 0, 0
+            local score, matched, labelHits = 0, 0, 0
             for t = 1, #tokens do
                 local token = tokens[t]
+                local isScope = SCOPE_TOKENS[token] ~= nil
                 local start = built.search[i]:find(token, 1, true)
                 if start then
-                    matched = matched + 1
+                    if not isScope then matched = matched + 1 end
                     score = score + (start == 1 and 9 or 4)
-                    if built.labelSearch[i]:find(token, 1, true) then score = score + 6 end
+                    if built.labelSearch[i]:find(token, 1, true) then
+                        score = score + 6
+                        if not isScope then labelHits = labelHits + 1 end
+                    end
                     if built.pageSearch[i]:find(token, 1, true) then score = score + 6 end
                     if built.valueSearch[i]:find(token, 1, true) then score = score + 8 end
                 end
             end
-            if matched == #tokens then
+            if matched == requiredCount then
+                -- A control whose own name carries the whole request beats one
+                -- that merely mentions the words in its help text or path:
+                -- "icon border style" is Border Style, not the Icon Border
+                -- section header that happens to sit on an icon-style path.
+                if labelHits > 0 and labelHits == requiredCount then score = score + 14 end
+                -- The other direction of the same idea: every word of the
+                -- control's own name was written by the player. "aura border
+                -- thickness" names Border Thickness completely, while Border /
+                -- Glow Thickness keeps a word ("glow") nobody asked for.
+                local labelTokens = built.labelTokens[i]
+                if labelTokens == nil then
+                    labelTokens = SearchTokens(row.label)
+                    built.labelTokens[i] = labelTokens
+                end
+                if #labelTokens > 0 then
+                    local covered = true
+                    for lt = 1, #labelTokens do
+                        if not queryTokenSet[labelTokens[lt]] then covered = false; break end
+                    end
+                    if covered then score = score + (#labelTokens >= 2 and 16 or 8) end
+                end
+                if scopePrefixes then
+                    local pageKey = tostring(row.pageKey or "")
+                    for prefix in pairs(scopePrefixes) do
+                        if pageKey:sub(1, #prefix) == prefix then score = score + 12; break end
+                    end
+                end
+                -- Accordion open/close toggles share every word with the
+                -- controls they contain. Nobody setting a value means the
+                -- section header, so it only competes when asked for by name.
+                if not wantsSection and tostring(row.controlPath or ""):find("/section/", 1, true)
+                    and tostring(row.controlPath or ""):sub(-9) == "/expanded"
+                then score = score - 20 end
                 local bestValue, bestValueMatches = nil, 0
                 for _, valueRow in ipairs(DecodeValues(row.values)) do
                     local valueSearch, valueMatches = Normalize(tostring(valueRow.value) .. " " .. tostring(valueRow.text)), 0
-                    for t = 1, #tokens do if valueSearch:find(tokens[t], 1, true) then valueMatches = valueMatches + 1 end end
+                    for t = 1, #tokens do
+                        if not SCOPE_TOKENS[tokens[t]] and valueSearch:find(tokens[t], 1, true) then
+                            valueMatches = valueMatches + 1
+                        end
+                    end
                     if valueMatches > bestValueMatches then bestValueMatches, bestValue = valueMatches, valueRow.text end
                 end
-                if bestValueMatches == #tokens then score = score + 12 end
+                if bestValueMatches == requiredCount then score = score + 12 end
                 local asksAuraLane = normalized:find("buff", 1, true) or normalized:find("debuff", 1, true)
                 if asksAuraLane then
                     local controlPath = Normalize(row.controlPath)
@@ -875,6 +985,14 @@ local MUTATION_TERMS = {
     "set", "change", "make", "turn", "enable", "disable", "toggle", "switch", "use", "apply", "adjust",
     "choose", "select", "pick", "hide", "edit", "configure", "update", "move", "reorder", "reset", "clear",
     "delete", "add", "remove", "create", "rename", "copy", "import", "export", "run", "start", "stop",
+    -- Players describe the outcome, not the widget: "style the aura border",
+    -- "thicken the outline", "shrink the pet frame". Without these the request
+    -- never reaches control resolution at all and falls out as unsupported.
+    "style", "restyle", "customize", "customise", "custom", "tweak", "modify",
+    "recolor", "recolour", "color", "colour", "tint",
+    "increase", "decrease", "raise", "lower", "grow", "shrink", "resize", "rescale",
+    "thicken", "thin", "widen", "narrow", "expand", "collapse",
+    "put", "give", "keep", "replace", "swap", "assign", "bump", "reduce", "boost",
     "setze", "stelle", "aendere", "aktiviere", "deaktiviere", "waehle", "nutze", "verwende", "umschalten",
     "verschiebe", "sortiere", "loesche", "erstelle", "kopiere", "importiere", "exportiere", "starte", "stoppe",
 }
@@ -885,6 +1003,13 @@ local function HasMutationIntent(normalized)
     local wrappers = {
         "please ", "can you ", "could you ", "would you ", "will you ", "can you please ",
         "could you please ", "would you please ", "i want to ", "i want you to ", "help me ",
+        -- Question-shaped requests are still requests. Each of these only strips
+        -- a prefix; the remainder must still begin with a real mutation verb, so
+        -- "how do i find the aura page" stays a lookup rather than a change.
+        "how do i ", "how do you ", "how can i ", "how would i ", "how to ",
+        "is it possible to ", "would it be possible to ", "is there a way to ",
+        "i would like to ", "id like to ", "i need to ", "i need you to ",
+        "i want ", "can i ", "could i ", "let me ", "lets ", "let us ",
         "bitte ", "kannst du ", "koenntest du ", "ich moechte ",
     }
     local changed = true
@@ -1278,6 +1403,42 @@ local function CurrentValueResult(top)
         status = "info", result = "info", summary = top.label, value = value }
 end
 
+-- Menu2 renders one surface on several pages: the shared aura icon style shows
+-- up on Auras > Buffs, > Debuffs and > Styling, and all three write the single
+-- MSUF_DB.auras3.shared field. Offering them as rival choices -- or refusing
+-- because "more than one control matched" -- is noise about a value that has
+-- exactly one home.
+--
+-- Identity has to be exact before two rows may merge: same path, name, widget,
+-- value domain and setting key. The page must additionally be a plain menu
+-- location. Unit pages ARE the scope (uf_pet and uf_targettarget share the path
+-- unit/portrait/portraitborderstyle while owning different frames), so a
+-- candidate on any of them blocks the merge outright.
+local function CollapsePageMirrors(results)
+    if #results < 2 then return results end
+    local out, seen = {}, {}
+    for i = 1, #results do
+        local row = results[i]
+        local pageKey = tostring(row.pageKey or "")
+        if SCOPE_PAGES[pageKey] then
+            out[#out + 1] = row
+        else
+            local identity = table.concat({
+                tostring(row.controlPath or ""), tostring(row.label or ""),
+                tostring(row.kind or ""), tostring(row.valueKind or ""),
+                tostring(row.settingKey or ""), tostring(row.actionKey or ""),
+                tostring(row.classification or ""), tostring(row.safety or ""),
+                tostring(row.min or ""), tostring(row.max or ""),
+            }, "\031")
+            if not seen[identity] then
+                seen[identity] = true
+                out[#out + 1] = row
+            end
+        end
+    end
+    return out
+end
+
 function Schema.TryConversation(text)
     local normalized = " " .. Normalize(text) .. " "
     local explicitNavigation = normalized:find(" open ", 1, true) or normalized:find(" oeffne ", 1, true)
@@ -1314,17 +1475,26 @@ function Schema.TryConversation(text)
     -- an explicit "to" connector. Search never treats their arbitrary tail as
     -- control identity: trim one trailing token at a time only after the full
     -- query found nothing, then still require the normal confidence margin.
+    local trimmed = false
     if mutation and #results == 0 then
         local tokens = {}
         for token in Normalize(searchText):gmatch("%S+") do tokens[#tokens + 1] = token end
         while #tokens > 2 and #results == 0 do
             table.remove(tokens)
+            trimmed = true
             results = Schema.Find(table.concat(tokens, " "), { limit = 4 })
         end
     end
     if #results == 0 then return nil end
+    results = CollapsePageMirrors(results)
     local top, second = results[1], results[2]
     local confident = (top._score or 0) >= 14 and (not second or (top._score or 0) - (second._score or 0) >= 6)
+
+    -- Dropping words the player actually wrote is a guess, not a match. It may
+    -- still identify one control outright, but it must never be dressed up as a
+    -- shortlist: "change all unitframe borders" once answered with three
+    -- unrelated Unitframes buttons because the noun had been trimmed away.
+    if trimmed and not confident then return nil end
 
     -- "Take/show/direct me to" is always navigation, even when the control's
     -- own name contains Test or Preview. Starting transient UI still requires
