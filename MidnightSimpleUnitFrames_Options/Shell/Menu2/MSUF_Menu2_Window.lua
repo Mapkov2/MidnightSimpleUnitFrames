@@ -2280,7 +2280,6 @@ local function BuildWindowToolbar(state)
     local toolbarEdit = T.Button(status, L_EDIT_MODE_OFF, 152, 24)
     toolbarEdit:SetPoint("BOTTOMRIGHT", status, "BOTTOMRIGHT", -24, 12)
     T.CenterButtonLabel(toolbarEdit)
-    if T.SkinPrimaryButton then T.SkinPrimaryButton(toolbarEdit) end
     toolbarEdit:SetScript("OnClick", RunToolbarEditMode)
     if M.RegisterMenuChromeControl then
         M.RegisterMenuChromeControl(toolbarEdit, "toolbar.edit-mode", "Edit Mode", "action", {

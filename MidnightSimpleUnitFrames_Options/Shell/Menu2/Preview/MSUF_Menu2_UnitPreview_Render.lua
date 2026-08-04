@@ -1348,6 +1348,12 @@ function Preview.Refresh(box, reason)
     local UNIT_LABELS = D.UNIT_LABELS or {}
     local key = D.CurrentPanelKey(panel)
     local conf, g = D.UnitDB(key)
+    --- Guides are setting-backed, unlike the other ephemeral preview layers.
+    --- Re-read them on every visible preview refresh so a factory reset or
+    --- profile switch cannot leave the already-built layer rail stale.
+    if type(box.layerVisibility) == "table" then
+        box.layerVisibility.guides = g.unitPreviewGuidesEnabled ~= false
+    end
     -- Live snapshot first so the preview mirrors the real frame's current
     -- state (exact name/class/HP/power); stylized mock only as fallback.
     local data = (D.LiveUnitData and D.LiveUnitData(key)) or UNIT_DATA[key] or UNIT_DATA.player or {}
