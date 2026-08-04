@@ -4521,6 +4521,9 @@ L["Continue"] = "Continue"
 L["Keep independent"] = "Keep independent"
 L["%s detected: Global anchor follows Essential Cooldown Manager. Toggle Cooldown in MSUF Edit Mode to turn it off."] = "%s 감지됨: 전역 앵커가 중요 재사용 대기시간 관리자를 따릅니다. MSUF 편집 모드의 Cooldown으로 끌 수 있습니다."
 L["%s detected: Cooldown Manager anchoring is off. Toggle Cooldown in MSUF Edit Mode to turn it on."] = "%s 감지됨: 재사용 대기시간 관리자 앵커가 꺼져 있습니다. MSUF 편집 모드의 Cooldown으로 켤 수 있습니다."
+L["Cooldown Manager anchoring (%s)"] = "재사용 대기시간 관리자 고정 (%s)"
+L["Global anchor (%s Anchor)"] = "전역 앵커 (%s 앵커)"
+L["Fades all four outer edges; 0% keeps the original texture."] = "바깥쪽 네 가장자리를 모두 흐리게 합니다. 0%는 원본 텍스처를 유지합니다."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end

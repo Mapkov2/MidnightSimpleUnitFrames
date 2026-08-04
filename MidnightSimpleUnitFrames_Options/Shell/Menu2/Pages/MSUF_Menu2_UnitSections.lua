@@ -979,7 +979,7 @@ local function BuildLayout(ctx, builder, unit)
                 if item.value == "GLOBAL" and automaticProviderLabel and cooldownAnchorEnabled then
                     values[#values + 1] = {
                         value = "GLOBAL",
-                        text = "Global anchor (" .. automaticProviderLabel .. " Anchor)",
+                        text = M.Format("Global anchor (%s Anchor)", automaticProviderLabel),
                     }
                 else
                     values[#values + 1] = item

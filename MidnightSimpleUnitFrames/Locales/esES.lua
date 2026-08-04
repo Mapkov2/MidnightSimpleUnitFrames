@@ -4704,6 +4704,9 @@ L["Continue"] = "Continue"
 L["Keep independent"] = "Keep independent"
 L["%s detected: Global anchor follows Essential Cooldown Manager. Toggle Cooldown in MSUF Edit Mode to turn it off."] = "%s detectado: el anclaje global sigue al gestor de reutilización esencial. Desactívalo con Cooldown en el modo edición de MSUF."
 L["%s detected: Cooldown Manager anchoring is off. Toggle Cooldown in MSUF Edit Mode to turn it on."] = "%s detectado: el anclaje al gestor de reutilización está desactivado. Actívalo con Cooldown en el modo edición de MSUF."
+L["Cooldown Manager anchoring (%s)"] = "Anclaje al gestor de reutilización (%s)"
+L["Global anchor (%s Anchor)"] = "Anclaje global (anclaje de %s)"
+L["Fades all four outer edges; 0% keeps the original texture."] = "Suaviza los cuatro bordes exteriores; 0% conserva la textura original."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("esES", LoadLocale)
 elseif MSUF.LOCALE == "esES" then LoadLocale() end

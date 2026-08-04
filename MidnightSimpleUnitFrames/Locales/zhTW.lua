@@ -4565,6 +4565,9 @@ L["Continue"] = "Continue"
 L["Keep independent"] = "Keep independent"
 L["%s detected: Global anchor follows Essential Cooldown Manager. Toggle Cooldown in MSUF Edit Mode to turn it off."] = "偵測到 %s：全域錨點會跟隨重要冷卻管理器。可在 MSUF 編輯模式中用 Cooldown 將其關閉。"
 L["%s detected: Cooldown Manager anchoring is off. Toggle Cooldown in MSUF Edit Mode to turn it on."] = "偵測到 %s：冷卻管理器錨定已關閉。可在 MSUF 編輯模式中用 Cooldown 將其開啟。"
+L["Cooldown Manager anchoring (%s)"] = "冷卻管理器錨定（%s）"
+L["Global anchor (%s Anchor)"] = "全域錨點（%s 錨點）"
+L["Fades all four outer edges; 0% keeps the original texture."] = "淡化四個外緣；0% 保留原始材質。"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhTW", LoadLocale)
 elseif MSUF.LOCALE == "zhTW" then LoadLocale() end

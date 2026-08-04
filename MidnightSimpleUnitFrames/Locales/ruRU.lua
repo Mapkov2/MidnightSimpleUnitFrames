@@ -4561,6 +4561,9 @@ L["Continue"] = "Continue"
 L["Keep independent"] = "Keep independent"
 L["%s detected: Global anchor follows Essential Cooldown Manager. Toggle Cooldown in MSUF Edit Mode to turn it off."] = "Обнаружен %s: глобальная привязка следует за менеджером основных восстановлений. Отключите её кнопкой Cooldown в режиме редактирования MSUF."
 L["%s detected: Cooldown Manager anchoring is off. Toggle Cooldown in MSUF Edit Mode to turn it on."] = "Обнаружен %s: привязка к менеджеру восстановлений отключена. Включите её кнопкой Cooldown в режиме редактирования MSUF."
+L["Cooldown Manager anchoring (%s)"] = "Привязка к менеджеру восстановления (%s)"
+L["Global anchor (%s Anchor)"] = "Глобальная привязка (привязка %s)"
+L["Fades all four outer edges; 0% keeps the original texture."] = "Смягчает все четыре внешних края; 0% сохраняет исходную текстуру."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ruRU", LoadLocale)
 elseif MSUF.LOCALE == "ruRU" then LoadLocale() end
