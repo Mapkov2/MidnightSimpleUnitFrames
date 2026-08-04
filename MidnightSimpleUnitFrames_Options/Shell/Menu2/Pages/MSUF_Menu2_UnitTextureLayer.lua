@@ -24,9 +24,9 @@ local TEXLAYER_COLOR_MODES = VTP "CUSTOM=Custom color|CLASS=Class color"
 local PAD_DIRECTION_SUFFIXES = { UP = "GradientDirUp", LEFT = "GradientDirLeft", RIGHT = "GradientDirRight", DOWN = "GradientDirDown" }
 local TEXLAYER_TABS = M.WordList "general placement style visibility"
 local TEXLAYER_TAB_TEXTS = { general = "General", placement = "Placement", style = "Style", visibility = "Visibility" }
-local TEXLAYER_SECTION_H = 442
+local TEXLAYER_SECTION_H = 512
 local TEXLAYER_CARD_Y = -108
-local TEXLAYER_CARD_H = 300
+local TEXLAYER_CARD_H = 370
 
 local function BuildTextureLayer(ctx, builder, unit)
     local ReadBool = UP.ReadBool
@@ -175,7 +175,7 @@ local function BuildTextureLayer(ctx, builder, unit)
     Track(BindLayerSlider(placementCard, "Height", colX, -178, colW, 1, 120, 1, "Height", 16))
 
     -- Style: color mode, gradient with a Bars-style direction D-pad, blend,
-    -- mirroring, opacity. Colors themselves live on the Colors page and behind
+    -- mirroring, opacity and a four-edge feather mask. Colors themselves live on the Colors page and behind
     -- this card's three-dot context shortcut.
     local padButtons = {}
     local pad
@@ -255,6 +255,9 @@ local function BuildTextureLayer(ctx, builder, unit)
     Track(blend)
     Track(BindLayerToggle(styleCard, "Mirror horizontally", colX, -168, colW - 16, "MirrorH", false))
     Track(BindLayerToggle(styleCard, "Mirror vertically", colX, -214, colW - 16, "MirrorV", false))
+    Track(BindLayerSlider(styleCard, "Edge softness", colX, -272, colW, 0, 0.30, 0.02, "EdgeSoftness", 0, true))
+    W.LabelAt(styleCard, "Fades all four outer edges; 0% keeps the original texture.", colX, -322,
+        colW - 16, "GameFontNormalSmall", T.colors and T.colors.muted)
 
     -- Visibility: alpha inheritance, combat gating, rounded clipping.
     Track(BindLayerToggle(visibilityCard, "Follow frame transparency", 16, -54, colW - 16, "FollowFrameAlpha", true))
