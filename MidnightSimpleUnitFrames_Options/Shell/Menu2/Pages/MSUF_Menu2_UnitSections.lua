@@ -581,7 +581,8 @@ local function BuildTopActions(ctx, builder, unit, label)
     local rowY = -15
     local scopeBar = W.ScopeOverrideBar and W.ScopeOverrideBar(ctx, sec, scopeOpts)
     RegisterControl(scopeBar, ctx, "navigation.unit_page.selector", "Editing", "segment", "ephemeral")
-    local copy = W.TopButton(sec, M.Tr("Copy To"), 82, 24, nil, false)
+    local copy = (W.RoleButton and W.RoleButton(sec, M.Tr("Copy To"), "success", 82, 24))
+        or W.TopButton(sec, M.Tr("Copy To"), 82, 24, nil, false)
     copy:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -16, rowY)
     local function DefaultScopes()
         if type(NewCopyScopeDefaults) == "function" then return NewCopyScopeDefaults() end
