@@ -4470,6 +4470,9 @@ L["Continue"] = "Continue"
 L["Keep independent"] = "Keep independent"
 L["%s detected: Global anchor follows Essential Cooldown Manager. Toggle Cooldown in MSUF Edit Mode to turn it off."] = "%s detectado: a âncora global segue o Gerenciador de Recargas Essenciais. Desative com Cooldown no modo de edição do MSUF."
 L["%s detected: Cooldown Manager anchoring is off. Toggle Cooldown in MSUF Edit Mode to turn it on."] = "%s detectado: a ancoragem ao Gerenciador de Recargas está desativada. Ative com Cooldown no modo de edição do MSUF."
+L["Cooldown Manager anchoring (%s)"] = "Ancoragem do Gerenciador de Recargas (%s)"
+L["Global anchor (%s Anchor)"] = "Âncora global (âncora de %s)"
+L["Fades all four outer edges; 0% keeps the original texture."] = "Suaviza as quatro bordas externas; 0% mantém a textura original."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ptBR", LoadLocale)
 elseif MSUF.LOCALE == "ptBR" then LoadLocale() end

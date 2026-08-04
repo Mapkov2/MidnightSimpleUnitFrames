@@ -3313,6 +3313,9 @@ L["Continue"] = "Continue"
 L["Keep independent"] = "Keep independent"
 L["%s detected: Global anchor follows Essential Cooldown Manager. Toggle Cooldown in MSUF Edit Mode to turn it off."] = "%s detected: Global anchor follows Essential Cooldown Manager. Toggle Cooldown in MSUF Edit Mode to turn it off."
 L["%s detected: Cooldown Manager anchoring is off. Toggle Cooldown in MSUF Edit Mode to turn it on."] = "%s detected: Cooldown Manager anchoring is off. Toggle Cooldown in MSUF Edit Mode to turn it on."
+L["Cooldown Manager anchoring (%s)"] = "Cooldown Manager anchoring (%s)"
+L["Global anchor (%s Anchor)"] = "Global anchor (%s Anchor)"
+L["Fades all four outer edges; 0% keeps the original texture."] = "Fades all four outer edges; 0% keeps the original texture."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enUS", LoadLocale)
 elseif MSUF.LOCALE == "enUS" then LoadLocale() end
