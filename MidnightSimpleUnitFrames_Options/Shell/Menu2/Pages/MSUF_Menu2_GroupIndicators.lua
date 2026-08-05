@@ -1424,7 +1424,7 @@ function SpellTileGrid:Refresh()
 end
 
 GP.BuildSpellIndicatorStyleSection = function(ctx, b)
-    local section = b:CollapsibleSection("si_style", Tr("Spell Icon Style"), 744, false)
+    local section = b:CollapsibleSection("si_style", Tr("Spell Icon Style"), 844, false)
     local sectionW = section._msuf2Width or ctx.width or 720
     local gap, leftX = 28, 30
     local innerW = max(320, sectionW - 60)
@@ -1460,6 +1460,7 @@ GP.BuildSpellIndicatorStyleSection = function(ctx, b)
         return meta
     end
     local controls = {}
+    local RefreshStyleState = M.RefreshProxy()
     local function Track(control)
         controls[#controls + 1] = control
         return control
@@ -1489,6 +1490,7 @@ GP.BuildSpellIndicatorStyleSection = function(ctx, b)
             function(value)
                 Style()[key] = value == true
                 ApplyStyle()
+                RefreshStyleState()
             end,
             meta)
         return control
@@ -1595,12 +1597,12 @@ GP.BuildSpellIndicatorStyleSection = function(ctx, b)
     W.MoveWidget(swipeDirection, section, rightX, -316, rightW, "LEFT")
     local decimals = BindNumber("Decimals below sec", rightX, -372, rightW, 0, 30, 1, "cooldownDecimalSeconds", 3)
 
-    local showStacks = BindBool("Show Stack Count", leftX, -296, leftW, "showStacks", true)
-    local stackSize = BindNumber("Stack Font", leftX, -338, leftW, 6, 24, 1, "stackSize", 10)
-    local stackAnchor = BindChoice("Stack Anchor", leftX, -394, leftW, STATUS_ICON_ANCHORS, "stackAnchor", "BOTTOMRIGHT")
+    local showStacks = BindBool("Show Stack Count", leftX, -410, leftW, "showStacks", true)
+    local stackSize = BindNumber("Stack Font", leftX, -452, leftW, 6, 24, 1, "stackSize", 10)
+    local stackAnchor = BindChoice("Stack Anchor", leftX, -508, leftW, STATUS_ICON_ANCHORS, "stackAnchor", "BOTTOMRIGHT")
     local halfLeft = max(100, floor((leftW - 12) / 2))
-    local stackX = BindNumber("Stack X", leftX, -450, halfLeft, -40, 40, 1, "stackX", 0)
-    local stackY = BindNumber("Stack Y", leftX + halfLeft + 12, -450, halfLeft, -40, 40, 1, "stackY", 0)
+    local stackX = BindNumber("Stack X", leftX, -564, halfLeft, -40, 40, 1, "stackX", 0)
+    local stackY = BindNumber("Stack Y", leftX + halfLeft + 12, -564, halfLeft, -40, 40, 1, "stackY", 0)
 
     local showDurationBar = BindBool("Show Duration Bar", rightX, -520, rightW, "showDurationBar", false)
     local durationHeight = BindNumber("Height", rightX, -562, rightW, 1, 16, 1, "durationBarHeight", 2)
@@ -1611,14 +1613,13 @@ GP.BuildSpellIndicatorStyleSection = function(ctx, b)
     local durationDirection = BindChoice("Fill Mode", rightX + halfRight + 12, -674, halfRight,
         VT("REMAINING", "Remaining", "ELAPSED", "Elapsed"), "durationBarDirection", "REMAINING")
     W.Text(section, Tr("Shape, border and shadow: Appearance > Aura Style > Buffs. All controls here remain Group-scope aware."),
-        leftX, -706, innerW, T.colors.muted)
+        leftX, -814, innerW, T.colors.muted)
 
     if M.AddTooltip then
         M.AddTooltip(tooltip, "Spell Icon tooltip", "Controls native Aura tooltips for Spell Icons only.", { hook = true })
         M.AddTooltip(decimals, "Cooldown text format", "Below this value, remaining whole seconds may show one decimal place. Set 0 for whole seconds only.", { hook = true })
     end
 
-    local RefreshStyleState = M.RefreshProxy()
     RefreshStyleState = RefreshStyleState(function()
         local si = SpellIndicators(CurrentScope())
         local style = Style()
