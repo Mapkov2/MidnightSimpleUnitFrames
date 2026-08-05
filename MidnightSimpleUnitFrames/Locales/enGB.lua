@@ -1937,7 +1937,7 @@ L["trackedBuff"] = "trackedBuff"
 -- MSUF FULL CORE MENU SOURCE INVENTORY 2
 -- Generated missing non-Assistant core keys for enGB.
 L["%s\nUndo: %d   Redo: %d"] = "%s\nUndo: %d   Redo: %d"
-L["%s  -  by Mapko with the help from R41z0r, defaults made by Aur0r4"] = "%s  -  by Mapko with the help from R41z0r, defaults made by Aur0r4"
+L["%s  -  by Mapko with the help from R41z0r, Lead QA: Aur0r4"] = "%s  -  by Mapko with the help from R41z0r, Lead QA: Aur0r4"
 L["%s is set to %s. Set Selected Slot Indicator to Custom Spell to activate this editor."] = "%s is set to %s. Set Selected Slot Indicator to Custom Spell to activate this editor."
 L["%s is using Custom Spell. These settings are active."] = "%s is using Custom Spell. These settings are active."
 L["(Global Default)"] = "(Global Default)"
@@ -2268,7 +2268,7 @@ L["Yes. Priority Frames inherit the active Party, Raid, or Mythic Raid frame app
 L["Yes. Priority Frames work in parties, raids, and Mythic raids. In a party or dungeon they inherit Party Frames; in a raid they inherit the active Raid or Mythic Raid setup. They do not create a solo strip, and the matching base Party or Raid frames must be enabled."] = "Yes. Priority Frames work in parties, raids, and Mythic raids. In a party or dungeon they inherit Party Frames; in a raid they inherit the active Raid or Mythic Raid setup. They do not create a solo strip, and the matching base Party or Raid frames must be enabled."
 L["auras"] = "auras"
 L["boss2"] = "boss2"
-L["by Mapko with the help from R41z0r, defaults made by Aur0r4"] = "by Mapko with the help from R41z0r, defaults made by Aur0r4"
+L["by Mapko with the help from R41z0r, Lead QA: Aur0r4"] = "by Mapko with the help from R41z0r, Lead QA: Aur0r4"
 L["click to expand"] = "click to expand"
 L["dispel"] = "dispel"
 L["focus"] = "focus"
