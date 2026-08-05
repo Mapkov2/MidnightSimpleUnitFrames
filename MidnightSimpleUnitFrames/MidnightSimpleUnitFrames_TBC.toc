@@ -6,7 +6,7 @@
 ## Version: 6.5-alpha1
 ## SavedVariables: MSUF_DB, MSUF_GlobalDB
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
-## OptionalDeps: Masque, LibSharedMedia-3.0, Clique, WagoAnalytics
+## OptionalDeps: LibSharedMedia-3.0, Clique, WagoAnalytics
 ## X-MSUF-Client: TBC
 ## X-Curse-Project-ID: 1384660
 ## X-Wago-ID: XKq9aoKy
@@ -175,7 +175,6 @@ Game\TBC\UnitFrames\GroupFrames.xml
 # that already apply before the menu opens stay in the main addon.
 Runtime\MSUF_UIScaleRuntime.lua
 Runtime\MSUF_WelcomeMessage.lua
-Runtime\MSUF_PreviewBuildWarning.lua
 Kernel\MSUF_OptionsLoader.lua
 
 # ---------------------------------------------------------------
