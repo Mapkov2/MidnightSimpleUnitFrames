@@ -10,7 +10,7 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local Search = M.Search or {}
 M.Search = Search
-Search.StaticIndexRecordCount = 2652
+Search.StaticIndexRecordCount = 2653
 Search.StaticIndexBlob = [==[
 auras3_buffs	Border Alpha (%)	slider			Shared > Icon Style	border alpha	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eshared%2Eicon-style%2Estylebordercolor-alpha	border alpha shared icon style auras style shared icon style stylebordercolor alpha auras3 buffs slider
 auras3_buffs	Border Style	dropdown			Shared > Icon Style	border style	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eshared%2Eicon-style%2Eborder-style	border style shared icon style auras style shared icon style border style auras3 buffs dropdown
@@ -895,6 +895,7 @@ opt_misc	Reduce menu motion	toggle	general.reduceMotion		Setting > Reduce	reduce
 opt_misc	Show MSUF button in game menu	toggle	general.showGameMenuButton		Game > Menu	show msuf button in game menu	idopt_miscmenu2%2Eopt%2Emisc%2Eglobal%2Esetting%2Eshow%2Egame%2Emenu%2Ebutton	show msuf button in game menu game menu opt misc global setting show game menu button opt misc toggle general showgamemenubutton
 opt_misc	Show MSUF minimap icon	toggle	general.showMinimapIcon		Show > Minimap	show msuf minimap icon	idopt_miscmenu2%2Eopt%2Emisc%2Eglobal%2Esetting%2Eshow%2Eminimap%2Eicon	show msuf minimap icon show minimap opt misc global setting show minimap icon opt misc toggle general showminimapicon
 opt_misc	Show navigation icons	toggle	general.showNavigationIcons		Show > Navigation	show navigation icons	idopt_miscmenu2%2Eopt%2Emisc%2Eglobal%2Esetting%2Eshow%2Enavigation%2Eicons	show navigation icons show navigation opt misc global setting show navigation icons opt misc toggle general shownavigationicons
+opt_misc	Show preview drag hint animation	toggle	general.previewDragHintAnimationEnabled		Hint > Animation	show preview drag hint animation	idopt_miscmenu2%2Eopt%2Emisc%2Eglobal%2Esetting%2Epreview%2Edrag%2Ehint%2Eanimation%2Eenabled	show preview drag hint animation hint animation opt misc global setting preview drag hint animation enabled opt misc toggle general previewdraghintanimationenabled
 opt_misc	Show unitframe tooltips	dropdown	general.unitTooltipMode		Tooltips > Visibility	show unitframe tooltips	idopt_miscmenu2%2Eopt%2Emisc%2Eglobal%2Etooltips%2Evisibility%2Emode	show unitframe tooltips tooltips visibility opt misc global tooltips visibility mode opt misc dropdown general unittooltipmode
 opt_misc	Show welcome message	toggle	general.showWelcomeMessage		Show > Welcome	show welcome message	idopt_miscmenu2%2Eopt%2Emisc%2Eglobal%2Esetting%2Eshow%2Ewelcome%2Emessage	show welcome message show welcome opt misc global setting show welcome message opt misc toggle general showwelcomemessage
 opt_misc	Style	dropdown	general.highlightStyle		Global > Mouseover	style	idopt_miscmenu2%2Eopt%2Emisc%2Eglobal%2Emouseover%2Estyle	style global mouseover opt misc global mouseover style opt misc dropdown general highlightstyle

@@ -922,6 +922,7 @@ local function MakeHandle(preview, key, store, xKey, yKey, defaultX, defaultY, l
         if button ~= "LeftButton" then return end
         if self._dragging then return end
         SelectHandle(self)
+        if Helpers.ShowPreviewMoveCue then Helpers.ShowPreviewMoveCue(preview, self) end
         self._didDragMove = nil
         self._dragging = true
         self._startX, self._startY = ReadHandle(self)

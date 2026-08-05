@@ -961,6 +961,9 @@ local function MSUF_ProfileIO_EnsureProfileMenuDefaults(profile)
     if profile.general.showGameMenuButton == nil then
         profile.general.showGameMenuButton = true
     end
+    if profile.general.previewDragHintAnimationEnabled == nil then
+        profile.general.previewDragHintAnimationEnabled = true
+    end
 end
 local MSUF_ProfileIO_TranslateProfileToCurrent
 local MSUF_ProfileIO_TranslateProfilesToCurrent

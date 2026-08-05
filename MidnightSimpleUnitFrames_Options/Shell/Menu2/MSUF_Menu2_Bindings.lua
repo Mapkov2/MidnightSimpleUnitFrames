@@ -1143,7 +1143,7 @@ local UNIT_AND_GROUP_RESET_KEYS = WL [[player target targettarget focustarget fo
 local MISC_GENERAL_KEYS = KSW [[
     menuLocale slashMenuSnapEnabled hideAdvancedMenu showWelcomeMessage versionCheckEnabled disableUnitInfoTooltips
     unitInfoTooltipStyle unitTooltipProvider unitTooltipAnchor unitTooltipMode unitTooltipModifier
-    showMinimapIcon showNavigationIcons playTargetSelectLostSounds ellesmereEditModeIntegration
+    showMinimapIcon showNavigationIcons previewDragHintAnimationEnabled playTargetSelectLostSounds ellesmereEditModeIntegration
     highlightEnabled highlightStyle highlightThickness
 ]]
 local MISC_UNIT_KEYS = {}

@@ -5270,6 +5270,7 @@ local function ParseGlobalUIShellPriorityShortcut(normalized, raw)
         { key = "general.slashMenuSnapEnabled", label = "Menu Edge Snap", terms = { "menu edge snap", "edge snap", "snap menu", "menu snapping" } },
         { key = "general.hideAdvancedMenu", label = "Advanced Menu", terms = { "advanced menu", "hide advanced menu", "show advanced menu" } },
         { key = "general.reduceMotion", label = "Reduce Motion", terms = { "reduce motion", "reduced motion", "less motion" } },
+        { key = "general.previewDragHintAnimationEnabled", label = "Preview Drag Hint Animation", terms = { "preview drag hint", "preview drag animation", "drag hint animation", "preview move tutorial" } },
         { key = "general.showNavigationIcons", label = "Navigation Icons", terms = { "navigation icons", "nav icons" } },
         { key = "general.showGameMenuButton", label = "MSUF Game Menu Button", terms = { "msuf button in game menu", "game menu button", "msuf game menu button", "escape menu button" } },
         { key = "general.navHoverScale", label = "Navigation Hover Size", terms = { "navigation hover size", "nav hover size", "navigation hover scale", "nav hover scale" } },
