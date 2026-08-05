@@ -919,12 +919,27 @@ local function GroupBorderPreviewOwned(anchorKind)
   return active.raid == true or active.mythicraid == true
 end
 
+local function GroupBorderScopeActive(anchorKind, conf)
+  if type(conf) ~= "table" or conf.enabled ~= true then return false end
+  if anchorKind == "party" then
+    if IsInRaid and IsInRaid() then return false end
+    if IsInGroup and IsInGroup() then return true end
+    return conf.showSolo == true
+  end
+  if anchorKind == "raid" or anchorKind == "mythicraid" then
+    return IsInRaid and IsInRaid() and true or false
+  end
+  return false
+end
+
 local function ApplyGroupBorderForKey(key)
   local anchor = GF.anchors and GF.anchors[key]
   if not anchor then return end
   local anchorKind = anchor._msufGFKind or (key == "party" and "party" or "raid")
   local conf = GF.GetConf and GF.GetConf(anchorKind) or {}
-  local enabled = conf.groupBorderEnabled == true and not GroupBorderPreviewOwned(anchorKind)
+  local enabled = conf.groupBorderEnabled == true
+    and GroupBorderScopeActive(anchorKind, conf)
+    and not GroupBorderPreviewOwned(anchorKind)
   ApplyGroupBorder(anchor, conf, enabled)
 end
 

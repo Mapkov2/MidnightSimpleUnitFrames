@@ -314,6 +314,11 @@ local function SetupWantedHeaders(kind)
   -- Raid scoped layout changes must update the one switching secure header.
   SetupWantedPriority()
 
+  -- Group borders live on persistent, unprotected anchors rather than on the
+  -- secure headers retired above. Reconcile both anchors after every scope
+  -- transition so the inactive Party/Raid border cannot survive the switch.
+  if type(GF.ApplyGroupBorder) == "function" then GF.ApplyGroupBorder() end
+
   if GF.ApplyBlizzardGroupFrameOwnership then
     GF.ApplyBlizzardGroupFrameOwnership("lean-runtime")
   end
@@ -838,6 +843,11 @@ local function RuntimeOnEvent(self, event, unit)
     end
     return
   elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ROLES_ASSIGNED" or event == "ROLE_CHANGED_INFORM" then
+    if event == "GROUP_ROSTER_UPDATE" and type(GF.ApplyGroupBorder) == "function" then
+      -- The border textures are unprotected and can follow Party/Raid state
+      -- immediately even when secure header retirement must wait for combat.
+      GF.ApplyGroupBorder()
+    end
     if InCombat() then
       GF.DeferGroupRuntime("roster")
     elseif event == "GROUP_ROSTER_UPDATE" then
