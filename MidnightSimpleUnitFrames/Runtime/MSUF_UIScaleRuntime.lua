@@ -14,7 +14,6 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
     _G[name] = value
     return value
 end
-local floor = math.floor
 local abs = math.abs
 local function Clamp(value, minValue, maxValue)
     value = tonumber(value) or minValue
@@ -254,13 +253,16 @@ end
 local function GetBlizzardCVarScale()
     local useUiScale
     if type(_G.GetCVarBool) == "function" then
-        useUiScale = _G.GetCVarBool("useUiScale")
+        local ok, value = pcall(_G.GetCVarBool, "useUiScale")
+        if ok then useUiScale = value end
     end
     if useUiScale == nil and type(_G.GetCVar) == "function" then
-        useUiScale = tostring(_G.GetCVar("useUiScale")) == "1"
+        local ok, value = pcall(_G.GetCVar, "useUiScale")
+        if ok then useUiScale = tostring(value) == "1" end
     end
     if useUiScale and type(_G.GetCVar) == "function" then
-        local value = tonumber(_G.GetCVar("uiScale"))
+        local ok, value = pcall(_G.GetCVar, "uiScale")
+        value = ok and tonumber(value) or nil
         if value and value > 0 then return Clamp(value, 0.3, 2.0) end
     end
     if type(_G.GetPhysicalScreenSize) == "function" then
@@ -273,13 +275,13 @@ local function GetBlizzardCVarScale()
 end
 local function RestoreBlizzardUiScaleOnce()
     if type(_G.UIParent_UpdateScale) == "function" then
-        _G.UIParent_UpdateScale()
-        return true
+        local ok = pcall(_G.UIParent_UpdateScale)
+        if ok then return true end
     end
     local scale = GetBlizzardCVarScale()
     if scale and _G.UIParent and _G.UIParent.SetScale then
-        _G.UIParent:SetScale(scale)
-        return true
+        local ok = pcall(_G.UIParent.SetScale, _G.UIParent, scale)
+        if ok then return true end
     end
     return false
 end
@@ -320,44 +322,6 @@ Runtime._quiesceScale = function(inCombat)
     if restoreCount > 0 then RestoreBlizzardUiScaleOnce() end
     return true
 end
-local function WriteBlizzardUiScaleCVar(scale)
-    scale = tonumber(scale)
-    if not scale or scale <= 0 then return false end
-    scale = Clamp(scale, 0.3, 1.5)
-    local value = string.format("%.6f", scale)
-    local ok = false
-    if _G.C_CVar and type(_G.C_CVar.SetCVar) == "function" then
-        _G.C_CVar.SetCVar("useUiScale", "1")
-        _G.C_CVar.SetCVar("uiScale", value)
-        ok = true
-    end
-    if type(_G.SetCVar) == "function" then
-        _G.SetCVar("useUiScale", "1")
-        _G.SetCVar("uiScale", value)
-        ok = true
-    end
-    return ok
-end
-local function GetGlobalUiScaleHandoffValue(g, ui)
-    local current = tonumber(GetCurrentGlobalUiScale())
-    if current and current > 0 then return Clamp(current, 0.3, 1.5) end
-    if not ui and g then ui = EnsureGlobalUiScaleTable(g) end
-    local saved = ui and tonumber(ui.Scale)
-    if saved and saved > 0 then return Clamp(saved, 0.3, 1.5) end
-    if lastGlobalUiParentScale and lastGlobalUiParentScale > 0 then return Clamp(lastGlobalUiParentScale, 0.3, 1.5) end
-    return 1.0
-end
-local function HandOffGlobalUiScaleToBlizzard(scale)
-    scale = tonumber(scale)
-    if not scale or scale <= 0 then return false end
-    scale = Clamp(scale, 0.3, 1.5)
-    WriteBlizzardUiScaleCVar(scale)
-    if type(_G.UIParent_UpdateScale) == "function" then _G.UIParent_UpdateScale() end
-    if _G.UIParent and _G.UIParent.SetScale then _G.UIParent:SetScale(scale) end
-    blizzardUiParentScale = scale
-    lastGlobalUiParentScale = nil
-    return true
-end
 local function EnforceUIParentScale(scale)
     scale = tonumber(scale)
     if not scale or scale <= 0 then return end
@@ -391,13 +355,13 @@ ResetGlobalUiScale = function(silent)
         if not silent then ShowConfigCombatLockMessage() end
         return false
     end
-    local g = EnsureGeneral()
-    local ui = EnsureGlobalUiScaleTable(g)
-    local handoff = GetGlobalUiScaleHandoffValue(g, ui)
-    HandOffGlobalUiScaleToBlizzard(handoff)
+    -- MSUF global scaling only overlays UIParent:SetScale. Off must never copy
+    -- that overlay into Blizzard's useUiScale/uiScale CVars; restoring from
+    -- those untouched CVars recreates the UI state that existed without MSUF.
+    RestoreBlizzardUiScale(true)
     SetGlobalUiScaleState(false, nil, "auto")
     pendingGlobalScale = nil
-    if not silent then Print(string.format("Global UI scale disabled. Blizzard UI scale kept at %d%%.", floor(handoff * 100 + 0.5))) end
+    if not silent then Print("Global UI scale disabled. Restored Blizzard UI scale settings.") end
     ScheduleUnitframeReanchorAfterScale()
     return true
 end
