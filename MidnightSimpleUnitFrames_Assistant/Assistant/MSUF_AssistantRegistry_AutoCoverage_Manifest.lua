@@ -23,7 +23,7 @@ A.AutoCoverageManifest = Manifest
 -- through the same decode and normalization path used by MSUF in game.
 -- Regenerate and verify with tools/assistant_autocoverage_manifest_regression.py.
 -- 4731 top-level scalar fallbacks across every required AutoCoverage scope.
-Manifest.scalarCount = 4731
+Manifest.scalarCount = 4728
 Manifest.requiredScopes = {
     "bars", "boss", "focus", "focustarget", "gameplay", "general",
     "gf_mythicraid", "gf_party", "gf_raid", "pet", "player", "target", "targettarget",
@@ -2020,7 +2020,6 @@ Manifest.defaults = {
         leaderIconStyle = "DEFAULT",
         leaderIconX = 18,
         leaderIconY = -2,
-        masqueEnabled = false,
         maxColumns = 4,
         nameAnchor = "RIGHT",
         nameClipSide = "RIGHT",
@@ -2460,7 +2459,6 @@ Manifest.defaults = {
         leaderIconStyle = "DEFAULT",
         leaderIconX = 18,
         leaderIconY = -2,
-        masqueEnabled = false,
         maxColumns = 1,
         nameAnchor = "LEFT",
         nameClassColor = true,
@@ -2918,7 +2916,6 @@ Manifest.defaults = {
         leaderIconStyle = "DEFAULT",
         leaderIconX = 18,
         leaderIconY = -2,
-        masqueEnabled = false,
         maxColumns = 8,
         nameAnchor = "RIGHT",
         nameClipSide = "RIGHT",

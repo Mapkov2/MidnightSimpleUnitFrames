@@ -219,8 +219,6 @@ local PARTY_DEFAULTS = {
     showPlayer        = true,
     showSolo          = false,
     clickCastEnabled  = true,
-    --- Masque skin for aura icons (requires Masque addon)
-    masqueEnabled     = false,
     powerBarEnabled   = true,
     powerHeight       = 6,
     --- Position (CENTER-native, same as EM2 movers)
@@ -1443,6 +1441,12 @@ function GF.EnsureDB()
     if _raidFresh  then db.gf_raid  = {} end
     if _mythicFresh then db.gf_mythicraid = {} end
     if _priorityFresh then db.gf_priority = {} end
+    --- MSUF 6.0 no longer registers aura buttons with Masque. Clear only our
+    --- retired profile flag; Masque itself and its other addon groups remain
+    --- completely untouched.
+    db.gf_party.masqueEnabled = nil
+    db.gf_raid.masqueEnabled = nil
+    db.gf_mythicraid.masqueEnabled = nil
     NormalizeFontField(db.gf_party)
     NormalizeFontField(db.gf_raid)
     NormalizeFontField(db.gf_mythicraid)

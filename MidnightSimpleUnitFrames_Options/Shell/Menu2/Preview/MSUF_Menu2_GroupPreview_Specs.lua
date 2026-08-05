@@ -29,7 +29,6 @@ buffs=gf_auras
 debuffs=gf_auras
 externals=gf_auras
 textcolor=gf_auras
-masque=gf_auras
 autil=gf_auras
 indicators=gf_indicators
 sicons=gf_indicators
