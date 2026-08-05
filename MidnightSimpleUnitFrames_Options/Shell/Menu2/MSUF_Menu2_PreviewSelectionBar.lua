@@ -112,6 +112,23 @@ local function ReadOffsets(box, handle)
     return tonumber(x) or 0, tonumber(y) or 0
 end
 
+--- Resolve the center of a rendered preview handle in one shared coordinate
+--- space. Every preview surface uses the center of its mock frame as 0,0;
+--- render scaling is divided back out so the readout remains stable at Fit,
+--- 1:1, any manual zoom, and unit-specific runtime visual scales. This is
+--- deliberately derived from rendered geometry instead
+--- of SavedVariables: imported legacy and direct-layout profiles can store the
+--- same visual placement in very different anchor/offset key families.
+function SB.ReadRenderedCoordinates(handle, reference, renderScale)
+    if not (handle and reference and handle.GetCenter and reference.GetCenter) then return nil end
+    local hx, hy = handle:GetCenter()
+    local rx, ry = reference:GetCenter()
+    if hx == nil or hy == nil or rx == nil or ry == nil then return nil end
+    renderScale = tonumber(renderScale) or 1
+    if renderScale <= 0 then renderScale = 1 end
+    return (hx - rx) / renderScale, (hy - ry) / renderScale
+end
+
 local function HandleByKey(box, handleKey)
     local deps = Deps(box)
     local list = deps and type(deps.HandleList) == "function" and deps.HandleList(box) or nil
@@ -323,9 +340,12 @@ function SB.Create(box, deps)
     resetBtn:SetScript("OnClick", function()
         local handle = SelectedHandle(box)
         if not handle or ConfigLocked() then return end
-        local dx, dy = Call(box, "DefaultOffsets", box, handle)
-        if dx == nil then return end
-        Call(box, "WriteOffsets", box, handle, dx, dy or 0, "PREVIEW_RESET_OFFSET")
+        local reset = Call(box, "ResetOffsets", box, handle, "PREVIEW_RESET_OFFSET")
+        if reset == nil then
+            local dx, dy = Call(box, "DefaultOffsets", box, handle)
+            if dx == nil then return end
+            Call(box, "WriteOffsets", box, handle, dx, dy or 0, "PREVIEW_RESET_OFFSET")
+        end
         Call(box, "UpdateHint", box, handle)
         SB.Refresh(box)
     end)
@@ -334,8 +354,8 @@ function SB.Create(box, deps)
     if M.AddTooltip then
         M.AddTooltip(openBtn, "Open settings", "Jumps to the options section that owns the selected preview element.", { hook = true })
         M.AddTooltip(resetBtn, "Reset offset", "Puts the selected element back to its default X/Y offset.", { hook = true })
-        M.AddTooltip(editX, "Exact offset", "Type an exact offset and press Enter. Arrow keys and dragging write the same setting.", { hook = true })
-        M.AddTooltip(editY, "Exact offset", "Type an exact offset and press Enter. Arrow keys and dragging write the same setting.", { hook = true })
+        M.AddTooltip(editX, "Exact X coordinate", "Measured from the center of the previewed frame. Positive values move right. Arrow keys and dragging update the same position.", { hook = true })
+        M.AddTooltip(editY, "Exact Y coordinate", "Measured from the center of the previewed frame. Positive values move up. Arrow keys and dragging update the same position.", { hook = true })
     end
 
     function bar:MSUF2SetEnabled(enabled)
