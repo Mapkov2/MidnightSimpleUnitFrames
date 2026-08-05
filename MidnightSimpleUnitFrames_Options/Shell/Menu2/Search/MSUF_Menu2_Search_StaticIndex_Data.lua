@@ -10,7 +10,7 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local Search = M.Search or {}
 M.Search = Search
-Search.StaticIndexRecordCount = 2648
+Search.StaticIndexRecordCount = 2652
 Search.StaticIndexBlob = [==[
 auras3_buffs	Border Alpha (%)	slider			Shared > Icon Style	border alpha	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eshared%2Eicon-style%2Estylebordercolor-alpha	border alpha shared icon style auras style shared icon style stylebordercolor alpha auras3 buffs slider
 auras3_buffs	Border Style	dropdown			Shared > Icon Style	border style	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eshared%2Eicon-style%2Eborder-style	border style shared icon style auras style shared icon style border style auras3 buffs dropdown
@@ -472,6 +472,8 @@ gf_layout	No border	dropdown			Layout > Portrait	no border	idgf_layoutmenu2%2E
 gf_layout	Offline Members	toggle			Layout > Field	offline members	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Ehideofflineenabled	offline members layout field group layout field hideofflineenabled gf layout toggle
 gf_layout	Offline Opacity	slider			Layout > Field	offline opacity	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Eofflinealpha	offline opacity layout field group layout field offlinealpha gf layout slider
 gf_layout	Out of Combat Opacity	slider			Layout > Field	out of combat opacity	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Eoocfadealpha	out of combat opacity layout field group layout field oocfadealpha gf layout slider
+gf_layout	Party Portrait X Offset	textinput			Preview > Selection	party portrait x offset	idgf_layoutmenu2%2Egf_layout%2Egroup%2Epreview%2Eselection%2Eportrait_offset_x	party portrait x offset preview selection group layout preview selection portrait offset x gf layout textinput
+gf_layout	Party Portrait Y Offset	textinput			Preview > Selection	party portrait y offset	idgf_layoutmenu2%2Egf_layout%2Egroup%2Epreview%2Eselection%2Eportrait_offset_y	party portrait y offset preview selection group layout preview selection portrait offset y gf layout textinput
 gf_layout	Percent	dropdown			Hp > Slot	percent	idgf_layoutmenu2%2Egf_layout%2Egroup%2Etext%2Ehp%2Eslot%2Emode	percent hp slot group layout text hp slot mode gf layout dropdown
 gf_layout	Percent	dropdown			Power > Slot	percent	idgf_layoutmenu2%2Egf_layout%2Egroup%2Etext%2Epower%2Eslot%2Emode	percent power slot group layout text power slot mode gf layout dropdown
 gf_layout	Pick	button		start_group_custom_anchor_picker	Anchor > Custom	pick	idgf_layoutmenu2%2Egf_layout%2Egroup%2Eanchor%2Ecustom%2Epick	pick anchor custom group layout anchor custom pick gf layout button start group custom anchor picker
@@ -2164,6 +2166,8 @@ uf_player	Top	dropdown			Unit > Texture Layer	top	iduf_playermenu2%2Euf_player
 uf_player	Top Left	dropdown			Status > Selected	top left	iduf_playermenu2%2Euf_player%2Eunit%2Estatus%2Eselected%2Eanchor	top left status selected unit status selected anchor uf player dropdown
 uf_player	Top Left	dropdown	player.nameTextAnchor		Text > Name	top left	iduf_playermenu2%2Euf_player%2Eunit%2Etext%2Ename%2Eanchor	top left text name unit text name anchor uf player dropdown player nametextanchor
 uf_player	Top Right	dropdown			Dispel > Symbol	top right	iduf_playermenu2%2Euf_player%2Eunit%2Edispel%2Esymbol%2Eunitdispelsymbolanchor	top right dispel symbol unit dispel symbol unitdispelsymbolanchor uf player dropdown
+uf_player	UnitFrame Dispel Symbol Offset X	textinput			Preview > Selection	unitframe dispel symbol offset x	iduf_playermenu2%2Euf_player%2Eunit%2Epreview%2Eselection%2Edispel_symbol_offset_x	unitframe dispel symbol offset x preview selection unit preview selection dispel symbol offset x uf player textinput
+uf_player	UnitFrame Dispel Symbol Offset Y	textinput			Preview > Selection	unitframe dispel symbol offset y	iduf_playermenu2%2Euf_player%2Eunit%2Epreview%2Eselection%2Edispel_symbol_offset_y	unitframe dispel symbol offset y preview selection unit preview selection dispel symbol offset y uf player textinput
 uf_player	Up	dropdown	player.portraitBorderDirection		Unit > Portrait	up	iduf_playermenu2%2Euf_player%2Eunit%2Eportrait%2Eportraitborderdirection	up unit portrait unit portrait portraitborderdirection uf player dropdown player portraitborderdirection
 uf_player	Use Dispel border detects	dropdown			Dispel > Overlay	use dispel border detects	iduf_playermenu2%2Euf_player%2Eunit%2Edispel%2Eoverlay%2Eunitdispeloverlaytrigger	use dispel border detects dispel overlay unit dispel overlay unitdispeloverlaytrigger uf player dropdown
 uf_player	Use Dispel border detects	dropdown			Dispel > Symbol	use dispel border detects	iduf_playermenu2%2Euf_player%2Eunit%2Edispel%2Esymbol%2Eunitdispelsymboltrigger	use dispel border detects dispel symbol unit dispel symbol unitdispelsymboltrigger uf player dropdown
