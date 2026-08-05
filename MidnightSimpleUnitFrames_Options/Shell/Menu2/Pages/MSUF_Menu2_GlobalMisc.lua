@@ -16,7 +16,6 @@ local Call, G, ReadG, SetG, ReadGBool, SetGBool, MenuFontValues, MenuFontKeyGet,
 local SETTING_KEY_BY_PATH = {
     ["language.selection"] = "general.menuLocale",
     ["menu.font"] = "general.menuFontKey",
-    ["menu.navigation_hover_scale"] = "general.navHoverScale",
     ["tooltips.provider"] = "general.unitTooltipProvider",
     ["tooltips.anchor"] = "general.unitTooltipAnchor",
     ["tooltips.visibility_mode"] = "general.unitTooltipMode",
@@ -217,7 +216,7 @@ local function BuildMisc(ctx)
             RefreshAbbrevSample()
         end)
     end
-    local menuBehavior = b:CollapsibleSection("misc_menu_behavior", "Menu behavior", 440, true)
+    local menuBehavior = b:CollapsibleSection("misc_menu_behavior", "Menu behavior", 380, true)
     local menuBehaviorW = menuBehavior._msuf2Width or ctx.width or 720
     BindMiscToggle(menuBehavior, "Enable Windows-style edge snap for this menu", "slashMenuSnapEnabled", true, "MSUF2_MENU_SNAP", nil, nil, nil, MENU_WRITE_OPTS)
     local menuSnapHelp = W.Text(menuBehavior, "Drag the MSUF menu to a screen side for a half-screen layout, to a corner for a quarter layout, or to the top edge for a maximized layout.", 30, -72, menuBehaviorW - 70, T.colors.muted)
@@ -268,19 +267,6 @@ local function BuildMisc(ctx)
     menuFontPreview = W.Text(menuBehavior, "AaBbCc 12345 - MSUF Menu", menuFontRightX, -178, menuBehaviorW - menuFontRightX - 30, T.colors.text)
     if menuFontPreview.SetHeight then menuFontPreview:SetHeight(24) end
     if menuFontPreview.SetJustifyV then menuFontPreview:SetJustifyV("MIDDLE") end
-    local navHoverScale = W.Slider(menuBehavior, "Navigation hover size", 100, 150, 1, 260)
-    if navHoverScale.SetValueFormatter then navHoverScale:SetValueFormatter(function(value) return M.Format("%d%%", floor((tonumber(value) or 100) + 0.5)) end) end
-    M.BindNumberWidget(ctx, navHoverScale,
-        function() return floor(((tonumber(ReadG("navHoverScale", 1.05)) or 1.05) * 100) + 0.5) end,
-        function(value)
-            SetG("navHoverScale", (tonumber(value) or 100) / 100, "MSUF2_NAV_HOVER_SCALE", MENU_WRITE_OPTS)
-            M.CallIf(M.RefreshNavHoverScale)
-        end,
-        105,
-        Meta("menu.navigation_hover_scale", "setting", { min = 100, max = 150, step = 1, format = "%d%%" }))
-    W.MoveWidget(navHoverScale, menuBehavior, 14, -244, 300, "LEFT")
-    local navHoverHelp = W.Text(menuBehavior, "100% keeps every navigation row the same size. Higher values magnify the row under the cursor.", 30, -292, menuBehaviorW - 70, T.colors.muted)
-    if navHoverHelp.SetWordWrap then navHoverHelp:SetWordWrap(true) end
     M.InstallStaticPopup("MSUF2_ACCENT_RELOAD_REQUIRED", {
         text = M.Tr("The menu accent color is baked in while the menu is built, so a UI reload is required to apply it.\n\nReload now?"),
         button1 = RELOADUI or M.Tr("Reload"),
@@ -331,7 +317,7 @@ local function BuildMisc(ctx)
         VT("midnight", "Midnight (default)", "class", "Class color",
             "ember", "Ember", "jade", "Jade", "violet", "Violet",
             "custom", "Custom"),
-        250, 14, -304,
+        250, 14, -244,
         ReadAccentMode,
         function(value)
             if not IsAccentMode(value) then value = "midnight" end
@@ -354,20 +340,20 @@ local function BuildMisc(ctx)
         Meta("setting.menuAccentColor"))
     if accentSwatch._msuf2Title then
         accentSwatch._msuf2Title:ClearAllPoints()
-        accentSwatch._msuf2Title:SetPoint("TOPLEFT", menuBehavior, "TOPLEFT", menuFontRightX, -316)
+        accentSwatch._msuf2Title:SetPoint("TOPLEFT", menuBehavior, "TOPLEFT", menuFontRightX, -256)
         accentSwatch._msuf2Title:SetWidth(170)
     end
     accentSwatch:ClearAllPoints()
-    accentSwatch:SetPoint("TOPLEFT", menuBehavior, "TOPLEFT", menuFontRightX + 182, -314)
+    accentSwatch:SetPoint("TOPLEFT", menuBehavior, "TOPLEFT", menuFontRightX + 182, -254)
     accentTint = BindMiscToggle(menuBehavior, "Tint menu surfaces", "menuAccentTintSurfaces", false,
-        "MSUF2_MENU_ACCENT_TINT", 14, -352, 320, MENU_WRITE_OPTS, AccentReloadCheck)
+        "MSUF2_MENU_ACCENT_TINT", 14, -292, 320, MENU_WRITE_OPTS, AccentReloadCheck)
     -- One string literal, not a concatenation: the locale coverage gate reads
     -- literals, so a split body would demand a key per fragment.
     M.AddTooltip(accentTint, "Tint menu surfaces",
         "Off (default): the accent colors buttons, tabs and highlights while panels stay midnight. On: panels, borders and the navigation rail are rotated onto the accent hue too. Success, warning and danger colors never change.",
         { hook = true })
     M.TrackRefresh(ctx, RefreshAccentSwatchEnabled)
-    local accentHelp = W.Text(menuBehavior, "Midnight keeps the stock blue accent. Class color follows this character; the accent applies after a UI reload.", 30, -390, menuBehaviorW - 70, T.colors.muted)
+    local accentHelp = W.Text(menuBehavior, "Midnight keeps the stock blue accent. Class color follows this character; the accent applies after a UI reload.", 30, -330, menuBehaviorW - 70, T.colors.muted)
     if accentHelp.SetWordWrap then accentHelp:SetWordWrap(true) end
     local startup = b:CollapsibleSection("misc_startup", "Startup", 124, true)
     BindMiscToggle(startup, "Show welcome message", "showWelcomeMessage", true, "MSUF2_WELCOME", 14, -42, 320)
@@ -512,4 +498,4 @@ local function BuildMisc(ctx)
         end)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
-M.RegisterPage("opt_misc", { title = "MSUF Miscellaneous", build = BuildMisc, version = 14 })
+M.RegisterPage("opt_misc", { title = "MSUF Miscellaneous", build = BuildMisc, version = 15 })

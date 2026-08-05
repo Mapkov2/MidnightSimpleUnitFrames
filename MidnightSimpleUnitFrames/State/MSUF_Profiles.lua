@@ -955,9 +955,6 @@ local function MSUF_ProfileIO_EnsureProfileMenuDefaults(profile)
     if type(profile.general) ~= "table" then
         profile.general = {}
     end
-    if profile.general.navHoverScale == nil then
-        profile.general.navHoverScale = 1.05
-    end
     if profile.general.showGameMenuButton == nil then
         profile.general.showGameMenuButton = true
     end
