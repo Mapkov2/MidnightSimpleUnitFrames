@@ -30,7 +30,7 @@ local function BuildAlpha(ctx, builder, unit)
     local resourceX = healthX + cardW + gap
     local optionsX = resourceX + cardW + gap
     local optionsW = innerW - (cardW * 2) - (gap * 2)
-    -- State tab row: the base cards edit the always-on opacities ("In Combat"),
+    -- State tab row: the base cards edit the general, always-on opacities,
     -- the second tab holds the whole-frame out-of-combat fade. Menu-session
     -- state only, never persisted.
     local _, barY = W.NextRow(sec, 34)
@@ -148,7 +148,7 @@ local function BuildAlpha(ctx, builder, unit)
     end
     local stateBar = W.ScopeOverrideBar(ctx, sec, {
         values = {
-            { value = "combat", text = "In Combat" },
+            { value = "combat", text = "General" },
             { value = "ooc", text = "Out of Combat" },
         },
         width = sectionW,

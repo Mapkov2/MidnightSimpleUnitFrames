@@ -26,6 +26,16 @@ local CASTBAR_WIDTH_SOURCE_VALUES = VT("manual", "Manual width", "unitframe", "A
 local CASTBAR_TEXT_ALIGN = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right")
 local CASTBAR_TRUNCATE_VALUES = VT("AUTO", "Auto fit", "CLIP", "Manual width", "NONE", "No width limit")
 local CASTBAR_ICON_BORDER_VALUES = VT("NONE", "None", "DARK", "Dark Border", "CASTBAR", "Castbar Border")
+
+--- A visible style selected from the style control must produce a visible
+--- result even when the independent thickness slider is still at its disabled
+--- value. This runs only for the user's dropdown change; live cast updates keep
+--- using the cached detail-layout path.
+local function ResolveIconBorderThicknessAfterStyleChange(style, thickness)
+    style = tostring(style or "NONE"):upper()
+    thickness = tonumber(thickness) or 0
+    return (style ~= "NONE" and thickness <= 0) and 1 or thickness
+end
 local DETACHED_POWER_SHAPE_VALUES = VT("BAR", "Bar", "ROUND", "Round", "CRYSTAL", "Crystal", "ORB", "Orb")
 -- Portrait placement value lists. Kept in one table so the page stays well clear
 -- of the Lua 200-upvalue ceiling that already bites the Auras page.
@@ -1236,7 +1246,13 @@ local function BuildCastbar(ctx, builder, unit)
             return meta
         end)())
     BuildDetailControls(iconAdvancedCard, iconControls, {
-        { "dropdown", "Border style", 16, -52, min(260, controlWRight), CASTBAR_ICON_BORDER_VALUES, DetailKey("IconBorderStyle"), "DARK", "MSUF2_CASTBAR_ICON_BORDER", function()
+        { "dropdown", "Border style", 16, -52, min(260, controlWRight), CASTBAR_ICON_BORDER_VALUES, DetailKey("IconBorderStyle"), "DARK", "MSUF2_CASTBAR_ICON_BORDER", function(v)
+            local thicknessKey = DetailKey("IconBorderThickness")
+            local thickness = ReadGeneralNumber(thicknessKey, 0)
+            local resolved = ResolveIconBorderThicknessAfterStyleChange(v, thickness)
+            if resolved ~= thickness then
+                SetGeneralNumber(thicknessKey, resolved, "MSUF2_CASTBAR_ICON_BORDER_THICKNESS")
+            end
             if M.Refresh then M.Refresh(ctx) end
         end },
         { "slider", "Layer (0-30)", 16, -106, controlWRight, 0, 30, 1, DetailKey("IconFrameLevelOffset"), 0, "MSUF2_CASTBAR_ICON_LAYER" },

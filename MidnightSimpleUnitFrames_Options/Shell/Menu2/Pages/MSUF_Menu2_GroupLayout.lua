@@ -277,7 +277,7 @@ local function BuildGFTransparencySection(ctx, b)
     local transparencyRightX = transparencyLeftX + transparencyCardW + transparencyGap
     local transparencyRightW = transparencyInnerW - transparencyCardW - transparencyGap
     local transparencyCardH = 180
-    -- State tab row: base cards edit the always-on opacities ("In Combat"),
+    -- State tab row: base cards edit the general, always-on opacities,
     -- the second tab holds the whole-member-frame out-of-combat fade.
     local _, transparencyBarY = W.NextRow(transparency, 34)
     local _, transparencyCardY = W.NextRow(transparency, transparencyCardH)
@@ -335,7 +335,7 @@ local function BuildGFTransparencySection(ctx, b)
     end
     local stateBar = W.ScopeOverrideBar(ctx, transparency, {
         values = {
-            { value = "combat", text = "In Combat" },
+            { value = "combat", text = "General" },
             { value = "ooc", text = "Out of Combat" },
         },
         width = transparencyW,
