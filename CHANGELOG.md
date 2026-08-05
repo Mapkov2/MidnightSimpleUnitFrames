@@ -15,6 +15,8 @@
 
 ### Fixes & Performance
 
+- Fixed Group Border leaking between Party and Raid layouts. Persistent border anchors now follow the active live scope immediately, including roster transitions during combat, so Party borders cannot remain visible in a raid and Raid/Mythic Raid borders cannot remain visible in a party or while solo.
+- Fixed clipping and overlapping controls in the Group Spell Icon Style editor. The Stack Count controls now stay inside their card, the shared appearance hint clears both columns, and enabling Duration Bar immediately activates Height, Display, Position and Fill Mode without reopening the menu.
 - Fixed Group target/focus borders under restricted combat data, reconnects and target changes. Rounded and square indicators now share the same secret-safe visibility contract, retain readable frame identity through restrictions and update only the affected GUID bucket or hinted frame.
 - Fixed Unit and Group preview text, text handles and composite element handles drifting at non-default frame scale, Fit zoom or after panning. Text now uses the same font-size-then-frame-scale order as live frames, scaled rectangles are converted into canvas space once, and pan-following handles move without a full repaint.
 - Fixed additional preview interaction issues: minimum-size and remaining handles are centered, Dispel Symbol bounds use the rendered art, castbar child handles win over their container, direct Aura navigation stays expanded, and non-Player previews no longer expose Class Resource controls.
@@ -22,6 +24,7 @@
 - Fixed the Color Painter hiding disabled castbars or empty Aura lanes and reusing an unrelated camera state. Castbar and Aura color views now start fitted, remain inspectable and remember their own zoom and pan.
 - Removed temporary table allocations from live castbar interrupt feedback while preserving the public options-table compatibility path.
 - Fixed Assistant routing added around RC9 controls: Group scope words and conversational lead-ins no longer block exact settings, Pandemic details no longer mutate unrelated borders, contracted questions remain read-only, and explicit activate/deactivate commands keep the requested polarity.
+- Fixed more Assistant exact-setting commands phrased with polite lead-ins or everyday verbs such as Configure, Update, Modify, Customize and Tweak. Numeric requests containing text-mode words such as `max` now continue to their actual numeric control instead of being intercepted as an incomplete HP-text command. These routes reuse already-warm label and alias indexes, keeping the cold synchronous preflight fast and leaving conjunctions to compound-command parsing.
 - Fixed Assistant Copy To handling for independent Aura Options, Aura Style and Texture Layer categories so style-only requests no longer fall back to broader content or default copies.
 - Fixed Assistant catalog-only controls, percentage-bearing labels and ambiguous commands with supplied values. Exact catalog controls now get their turn before generic guidance, `%` survives rendered labels, and a numeric follow-up can complete the selected mutation without retyping the request.
 
