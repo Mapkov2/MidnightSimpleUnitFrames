@@ -1749,6 +1749,68 @@ local function FillMissingAuraFields(group, defaults)
     end
 end
 
+local function SpellIndicatorStyleDefaults(conf)
+    local auras = type(conf) == "table" and conf.auras or nil
+    local buff = type(auras) == "table" and type(auras.buff) == "table" and auras.buff or LEGACY_BUFF_DEFAULTS
+    local rootTooltip = type(auras) == "table" and auras.showTooltip
+    local showTooltip
+    if buff.showTooltip ~= nil then
+        showTooltip = buff.showTooltip ~= false
+    else
+        showTooltip = rootTooltip ~= false
+    end
+    return {
+        alpha = tonumber(buff.alpha) or 1,
+        showTooltip = showTooltip,
+        showCooldownText = buff.showCooldown ~= false,
+        showCooldownSwipe = buff.showCooldownSwipe ~= false,
+        cooldownSwipeReverse = buff.cooldownSwipeReverse == true,
+        cooldownSize = tonumber(buff.cooldownSize) or 8,
+        cooldownAnchor = buff.cooldownAnchor or "CENTER",
+        cooldownX = tonumber(buff.cooldownX or buff.cooldownOffsetX) or 0,
+        cooldownY = tonumber(buff.cooldownY or buff.cooldownOffsetY) or 0,
+        cooldownDecimalSeconds = tonumber(buff.cooldownDecimalSeconds) or 3,
+        showDurationBar = buff.showDurationBar == true,
+        durationBarHeight = tonumber(buff.durationBarHeight) or 2,
+        durationBarDisplay = buff.durationBarDisplay or "BAR_ONLY",
+        durationBarPosition = buff.durationBarPosition or "BOTTOM",
+        durationBarDirection = buff.durationBarDirection or "REMAINING",
+        showStacks = buff.showStacks ~= false,
+        stackSize = tonumber(buff.stackSize) or 10,
+        stackAnchor = buff.stackAnchor or "BOTTOMRIGHT",
+        stackX = tonumber(buff.stackX or buff.stackOffsetX) or 0,
+        stackY = tonumber(buff.stackY or buff.stackOffsetY) or 0,
+    }
+end
+
+--- Ensures the per-scope Spell Icon deep-Style block exists. Shape, border and
+--- shadow always come from shared Buff Appearance and are intentionally absent.
+function GF.EnsureSpellIndicatorStyle(conf)
+    if type(conf) ~= "table" then return nil, false end
+    if type(conf.spellIndicators) ~= "table" then
+        conf.spellIndicators = { enabled = false, spec = "auto", specs = {}, layer = 9, iconZoom = 100, iconScale = 100 }
+    end
+    local si = conf.spellIndicators
+    local defaults = SpellIndicatorStyleDefaults(conf)
+    local changed = false
+    if type(si.style) ~= "table" then
+        si.style = defaults
+        changed = true
+    else
+        if si.style.iconShape ~= nil then
+            si.style.iconShape = nil
+            changed = true
+        end
+        for key, value in pairs(defaults) do
+            if si.style[key] == nil then
+                si.style[key] = value
+                changed = true
+            end
+        end
+    end
+    return si.style, changed
+end
+
 function GF.MigrateAuraConfig(conf, isRaid)
     if type(conf) ~= "table" then return false end
     local changed = false
@@ -1833,6 +1895,8 @@ function GF.MigrateAuraConfig(conf, isRaid)
     end
     if conf.spellIndicators.iconZoom == nil then conf.spellIndicators.iconZoom = 100; changed = true end
     if conf.spellIndicators.iconScale == nil then conf.spellIndicators.iconScale = 100; changed = true end
+    local _, spellStyleChanged = GF.EnsureSpellIndicatorStyle(conf)
+    changed = spellStyleChanged or changed
     return changed
 end
 

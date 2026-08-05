@@ -260,7 +260,8 @@ SlotLayoutSignature = function(slot)
     return tostring(slot.visual) .. "\030" .. tostring(slot.hiddenVisual)
         .. "\030" .. tostring(slot.anchor) .. "\030" .. tostring(slot.x) .. "\030" .. tostring(slot.y)
         .. "\030" .. tostring(slot.size) .. "\030" .. tostring(slot.width) .. "\030" .. tostring(slot.height)
-        .. "\030" .. tostring(slot.iconZoom)
+        .. "\030" .. tostring(slot.iconZoom) .. "\030" .. tostring(slot.iconShape)
+        .. "\030" .. tostring(slot.requestedIconShape) .. "\030" .. tostring(slot.alpha)
         .. "\030" .. tostring(slot.layer) .. "\030" .. tostring(slot.strata) .. "\030" .. tostring(slot.showCooldownText)
         .. "\030" .. tostring(slot.showCooldownSwipe) .. "\030" .. tostring(slot.cooldownSwipeReverse)
         .. "\030" .. tostring(slot.cooldownSize) .. "\030" .. tostring(slot.cooldownAnchor)
@@ -291,7 +292,7 @@ local function FinalizeSlot(slot)
     return slot
 end
 
-local function CompileSlot(unit, item, index, fallbackLayer, fallbackStrata, fallbackIconZoom, sharedBuffStyle)
+local function CompileSlot(unit, item, index, fallbackLayer, fallbackStrata, fallbackIconZoom, spellIconStyle)
     if not (type(unit) == "string" and unit ~= "" and type(item) == "table" and item.enabled == true) then return nil end
     local placed = type(item.placed) == "table" and item.placed or nil
     local frameEffect = type(item.frame) == "table" and item.frame or nil
@@ -329,11 +330,10 @@ local function CompileSlot(unit, item, index, fallbackLayer, fallbackStrata, fal
     local iconEffect = tostring(placed and placed.iconEffect or "none"):lower()
     if visual ~= "icon" or iconEffect ~= "glow" then iconEffect = "none" end
     local hiddenVisual = visual == "none" and frameEffect ~= nil
-    -- Spell selection and placement stay per indicator. Reusable icon
-    -- appearance belongs to the scope's Aura Style > Buffs lane so Party and
-    -- Raid never expose a second, drifting cooldown/stack style surface.
-    -- Corner custom slots deliberately retain their explicit no-text contract.
-    local appearance = item.cornerSlotKey == nil and type(sharedBuffStyle) == "table" and sharedBuffStyle or nil
+    -- Spell selection and placement stay per indicator. Reusable appearance
+    -- comes from the owning Group scope's dedicated Spell Icon Style. Corner
+    -- custom slots deliberately retain their explicit no-text contract.
+    local appearance = item.cornerSlotKey == nil and type(spellIconStyle) == "table" and spellIconStyle or nil
     local size = ClampNumber(placed and placed.size, hiddenVisual and 1 or 18, 1, 256)
     local width = visual == "bar" and ClampNumber(placed and placed.barWidth, size * 3, size, 384) or size
     local color = type(item.color) == "table" and item.color or nil
@@ -364,10 +364,12 @@ local function CompileSlot(unit, item, index, fallbackLayer, fallbackStrata, fal
             Clamp01(color and color[3], 0.88),
             Clamp01(color and color[4], 1),
         },
-        -- Spell icons inherit the Buff lane's complete shared appearance.
-        -- PrepareAuraButton consumes this exact compiled style; previews read
-        -- the same slot, so the border/shadow opt-out cannot drift by surface.
+        -- Only the static border/shadow object inside this dedicated compiled
+        -- appearance is shared with normal Auras. Preview and runtime consume
+        -- the same slot, so no surface can silently fall back to Buff Style.
         iconStyle = appearance and appearance.iconStyle or nil,
+        iconShape = appearance and appearance.iconShape or "RECTANGLE",
+        requestedIconShape = appearance and appearance.requestedIconShape or "RECTANGLE",
         iconEffect = iconEffect,
         frameEffect = frameEffect,
         size = size,
@@ -379,7 +381,7 @@ local function CompileSlot(unit, item, index, fallbackLayer, fallbackStrata, fal
         y = Round(ClampNumber(placed and placed.y, 0, -4096, 4096)),
         layer = Round(ClampNumber(item.layer or fallbackLayer, fallbackLayer or 9, 0, 30)),
         strata = NormalizeFrameStrata(rawStrata, "AUTO"),
-        alpha = 1,
+        alpha = Clamp01(appearance and appearance.alpha, 1),
         max = 1,
         spacing = 0,
         step = size,
@@ -410,7 +412,7 @@ local function CompileSlot(unit, item, index, fallbackLayer, fallbackStrata, fal
     })
 end
 
-function Runtime.CompileSlots(unit, spellIndicators, sharedBuffStyle)
+function Runtime.CompileSlots(unit, spellIndicators, spellIconStyle)
     if not (type(spellIndicators) == "table" and spellIndicators.enabled == true and type(spellIndicators.items) == "table") then
         return nil
     end
@@ -446,7 +448,7 @@ function Runtime.CompileSlots(unit, spellIndicators, sharedBuffStyle)
         return FinalizeSlot(sensor)
     end
     for i = 1, #spellIndicators.items do
-        local slot = CompileSlot(unit, spellIndicators.items[i], i, spellIndicators.layer, spellIndicators.strata, spellIndicators.iconZoom, sharedBuffStyle)
+        local slot = CompileSlot(unit, spellIndicators.items[i], i, spellIndicators.layer, spellIndicators.strata, spellIndicators.iconZoom, spellIconStyle)
         if slot then
             local frameEffect = slot.frameEffect
             local timedFrameEffect = frameEffect and frameEffect.timing == "expiring"
@@ -1026,6 +1028,30 @@ local function ApplyButtonFrameEffect(button, slot, parentFrame)
     return true
 end
 
+--- Cold-path adapter for the options preview.  It deliberately reuses the
+--- live renderer so Border, Glow, Pulse, Health Tint, Name Overlay, layer and
+--- priority cannot drift into a second Menu2-only implementation.
+function Runtime.ApplyPreviewFrameEffect(owner, effect, parentFrame)
+    if not (owner and type(effect) == "table" and parentFrame) then
+        if owner then HideButtonFrameEffect(owner) end
+        return false
+    end
+    if owner.Show then owner:Show() end
+    local applied = ApplyButtonFrameEffect(owner, {
+        frameEffect = effect,
+        strata = effect.strata,
+    }, parentFrame)
+    if not applied and owner.Hide then owner:Hide() end
+    return applied
+end
+
+function Runtime.HidePreviewFrameEffect(owner)
+    if not owner then return false end
+    HideButtonFrameEffect(owner)
+    if owner.Hide then owner:Hide() end
+    return true
+end
+
 local function ExpiringEffectCurve(threshold)
     threshold = Round(ClampNumber(threshold, 5, 1, 30))
     local curve = expiringEffectCurves[threshold]
@@ -1430,7 +1456,7 @@ local function ApplyVisual(button, slot)
         if button._msufA3SpellIndicatorSwatch then button._msufA3SpellIndicatorSwatch:Hide() end
         return
     end
-    button:SetAlpha(1)
+    button:SetAlpha(slot.alpha or 1)
     if slot.visual == "square" or slot.visual == "bar" then
         icon:SetAlpha(0)
         local swatch = button._msufA3SpellIndicatorSwatch
@@ -1493,8 +1519,16 @@ local function PrepareButton(button, slot, parentFrame, forceGeometry)
         ApplyButtonFrameEffect(button, slot, parentFrame)
     end
     SyncMissingFrame(parentFrame, slot, button)
-    if button.EnableMouse then button:EnableMouse(false) end
-    button:SetMouseMotionEnabled(false)
+    -- Spell Icons must never steal click-cast input from their GroupFrame, but
+    -- motion stays enabled when this style requests the native Aura tooltip.
+    -- PTR exposes separate click and motion gates (the same split Blizzard's
+    -- CooldownViewer uses), so tooltip hover no longer implies clickable icons.
+    if type(button.SetMouseClickEnabled) == "function" then
+        button:SetMouseClickEnabled(false)
+    elseif button.EnableMouse then
+        button:EnableMouse(slot.showTooltip ~= false)
+    end
+    button:SetMouseMotionEnabled(slot.showTooltip ~= false)
     return true
 end
 

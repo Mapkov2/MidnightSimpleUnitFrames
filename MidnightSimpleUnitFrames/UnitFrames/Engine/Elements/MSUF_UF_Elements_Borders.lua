@@ -609,11 +609,13 @@ local function HighlightBorderLevel(cfg, key)
   if key == "dispel" then
     return BORDER_LEVEL_OVER_NATIVE_DISPEL
   end
-  if cfg and cfg.dispel == true and key then
-    local dispelIndex = PriorityIndex(cfg, "dispel")
+  if cfg and key then
     local keyIndex = PriorityIndex(cfg, key)
-    if dispelIndex and keyIndex and dispelIndex < keyIndex then
-      return BORDER_LEVEL_NORMAL
+    if keyIndex then
+      local dispelIndex = cfg.dispel == true and PriorityIndex(cfg, "dispel") or nil
+      if dispelIndex and dispelIndex < keyIndex then return BORDER_LEVEL_NORMAL end
+      local purgeIndex = cfg.purge == true and PriorityIndex(cfg, "purge") or nil
+      if purgeIndex and purgeIndex < keyIndex then return BORDER_LEVEL_NORMAL end
     end
   end
   return BORDER_LEVEL_OVER_NATIVE_DISPEL

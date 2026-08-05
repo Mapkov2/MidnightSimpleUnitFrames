@@ -39,6 +39,7 @@ local C_AddOns = _G.C_AddOns
 local C_Timer = _G.C_Timer
 local issecretvalue = _G.issecretvalue or function(_) return false end
 local STANDARD_TEXT_FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
+local ClampNumber, Clamp01
 
 local EMPTY_EVENTS = {}
 local AURA_CONTAINER_ADDON = "Blizzard_AuraContainer"
@@ -194,6 +195,156 @@ function A3.AuraShapeBorderPath(shape)
     local media = Shape.MEDIA[Shape.Normalize(shape)]
     return media and media.border or nil
 end
+
+-- PTR 8 pandemic presentation. Blizzard owns the secret shown state and the
+-- only recurring update; MSUF creates and styles a static child once inside
+-- AuraContainer.initializeFrame. No addon ticker or Lua OnUpdate is added.
+function A3.NormalizePandemicStyle(value)
+    value = tostring(value or "BORDER"):upper()
+    if value == "BORDER" or value == "TINT" or value == "BORDER_TINT" then return value end
+    if value == "GLOW" or value == "BORDER_GLOW" then return "BORDER" end
+    if value == "GLOW_TINT" then return "TINT" end
+    if value == "ALL" then return "BORDER_TINT" end
+    return "BORDER"
+end
+
+function A3.ApplyPandemicVisual(owner, config, visible)
+    if not (owner and type(config) == "table") then return nil end
+    local host = owner._msufA3PandemicRegion
+    if not host then
+        host = CreateFrame("Frame", nil, owner)
+        host:EnableMouse(false)
+        host.tint = host:CreateTexture(nil, "ARTWORK", nil, 3)
+        host.shapeBorder = host:CreateTexture(nil, "OVERLAY", nil, 3)
+        host.edges = {}
+        for index = 1, 4 do
+            host.edges[index] = host:CreateTexture(nil, "OVERLAY", nil, 3)
+            host.edges[index]:SetTexture("Interface\\Buttons\\WHITE8X8")
+        end
+        owner._msufA3PandemicRegion = host
+    end
+
+    host:ClearAllPoints()
+    host:SetAllPoints(owner)
+    if host.SetFrameLevel and owner.GetFrameLevel then
+        host:SetFrameLevel((owner:GetFrameLevel() or 0) + 6)
+    end
+
+    local style = A3.NormalizePandemicStyle(config.pandemicStyle)
+    local hasBorder = style == "BORDER" or style == "BORDER_TINT"
+    local hasTint = style == "TINT" or style == "BORDER_TINT"
+    local color = type(config.pandemicColor) == "table" and config.pandemicColor or nil
+    local r = Clamp01(color and (color[1] or color.r), 1)
+    local g = Clamp01(color and (color[2] or color.g), 0.24)
+    local b = Clamp01(color and (color[3] or color.b), 0.08)
+    local borderAlpha = Clamp01(config.pandemicBorderAlpha, 1)
+    local tintAlpha = Clamp01(config.pandemicTintAlpha, 0.22)
+    local thickness = ClampNumber(config.pandemicThickness, 2, 1, 12)
+    local padding = ClampNumber(config.pandemicPadding, 1, -8, 16)
+    local blend = tostring(config.pandemicBlend or "ADD"):upper() == "BLEND" and "BLEND" or "ADD"
+    local shape = Shape.Normalize(config.iconShape)
+    local shapedBorder = shape ~= Shape.RECTANGLE and A3.AuraShapeBorderPath(shape) or nil
+
+    host.tint:ClearAllPoints()
+    host.tint:SetAllPoints(owner)
+    host.tint:SetTexture("Interface\\Buttons\\WHITE8X8")
+    host.tint:SetVertexColor(r, g, b, tintAlpha)
+    host.tint:SetBlendMode(blend)
+    local mask = shape ~= Shape.RECTANGLE and Shape.EnsureMask(owner, shape) or nil
+    if mask then Shape.ApplyMask(host.tint, mask) else Shape.ClearMask(host.tint) end
+    host.tint:SetShown(hasTint)
+
+    host.shapeBorder:ClearAllPoints()
+    host.shapeBorder:SetPoint("TOPLEFT", owner, "TOPLEFT", -padding, padding)
+    host.shapeBorder:SetPoint("BOTTOMRIGHT", owner, "BOTTOMRIGHT", padding, -padding)
+    if shapedBorder then
+        host.shapeBorder:SetTexture(shapedBorder)
+        if host.shapeBorder.SetTexCoord then host.shapeBorder:SetTexCoord(0, 1, 0, 1) end
+    end
+    host.shapeBorder:SetVertexColor(r, g, b, borderAlpha)
+    host.shapeBorder:SetBlendMode(blend)
+    host.shapeBorder:SetShown(hasBorder and shapedBorder ~= nil)
+
+    local edges = host.edges
+    edges[1]:ClearAllPoints(); edges[1]:SetPoint("TOPLEFT", owner, "TOPLEFT", -padding, padding); edges[1]:SetPoint("TOPRIGHT", owner, "TOPRIGHT", padding, padding); edges[1]:SetHeight(thickness)
+    edges[2]:ClearAllPoints(); edges[2]:SetPoint("BOTTOMLEFT", owner, "BOTTOMLEFT", -padding, -padding); edges[2]:SetPoint("BOTTOMRIGHT", owner, "BOTTOMRIGHT", padding, -padding); edges[2]:SetHeight(thickness)
+    edges[3]:ClearAllPoints(); edges[3]:SetPoint("TOPLEFT", owner, "TOPLEFT", -padding, padding); edges[3]:SetPoint("BOTTOMLEFT", owner, "BOTTOMLEFT", -padding, -padding); edges[3]:SetWidth(thickness)
+    edges[4]:ClearAllPoints(); edges[4]:SetPoint("TOPRIGHT", owner, "TOPRIGHT", padding, padding); edges[4]:SetPoint("BOTTOMRIGHT", owner, "BOTTOMRIGHT", padding, -padding); edges[4]:SetWidth(thickness)
+    for index = 1, 4 do
+        edges[index]:SetVertexColor(r, g, b, borderAlpha)
+        edges[index]:SetBlendMode(blend)
+        edges[index]:SetShown(hasBorder and shapedBorder == nil)
+    end
+    host:SetShown(visible == true)
+    return host
+end
+
+function A3.BindPandemicRegion(button, lane)
+    if not (button and lane and lane.pandemicEnabled == true
+        and type(button.AddPandemicRegion) == "function")
+    then
+        return false
+    end
+    local region = A3.ApplyPandemicVisual(button, lane, false)
+    if not region then return false end
+    button:AddPandemicRegion(region)
+    return true
+end
+
+function A3.NormalizeStealableStyle(value)
+    value = tostring(value or "BORDER_ICON"):upper()
+    if value == "BORDER" or value == "BORDER_ICON" or value == "ICON" then return value end
+    return "BORDER_ICON"
+end
+
+function A3.GetStealableTextureOptions(style)
+    local options = A3._stealableTextureOptions or {
+        showAlways = false,
+        showWhenHarmful = false,
+        showWhenHelpful = true,
+        showWithoutDispelType = true,
+    }
+    A3._stealableTextureOptions = options
+    local enums = _G.Enum
+    local styles = enums and enums.CustomAuraButtonDispelTypeTextureStyle
+    local filters = enums and enums.CustomAuraButtonDispelTypeStealableFilter
+    style = A3.NormalizeStealableStyle(style)
+    options.stealableFilter = filters and filters.Stealable or nil
+    options.style = styles and (style == "BORDER" and styles.Border
+        or style == "ICON" and styles.Icon or styles.BorderWithIcon) or nil
+    return options
+end
+
+function A3.GetPurgeSensorTextureOptions(sensor)
+    if sensor and sensor._textureOptions then return sensor._textureOptions end
+    local enums = _G.Enum
+    local styles = enums and enums.CustomAuraButtonDispelTypeTextureStyle
+    local r = Clamp01(sensor and sensor.r, 1)
+    local g = Clamp01(sensor and sensor.g, 0.85)
+    local b = Clamp01(sensor and sensor.b, 0)
+    local color = _G.CreateColor and _G.CreateColor(r, g, b, 1) or nil
+    local map = color and {
+        None = color, Magic = color, Curse = color,
+        Disease = color, Poison = color, Bleed = color,
+    } or nil
+    local options = {
+        -- The AuraSlot itself is already restricted to isStealable=true. PTR 8
+        -- showAlways therefore avoids redundant dispel-type eligibility work
+        -- while retaining the user-selected Purge color below.
+        showAlways = true,
+        showWhenHarmful = false,
+        showWhenHelpful = true,
+        showWithoutDispelType = true,
+        style = styles and styles.PreserveAsset or nil,
+        customDispelColorMap = map,
+    }
+    if sensor then sensor._textureOptions = options end
+    return options
+end
+A3.DEFAULT_NATIVE_HIGHLIGHT_PRIORITY = A3.DEFAULT_NATIVE_HIGHLIGHT_PRIORITY
+    or { "dispel", "aggro", "purge", "bossTarget" }
+A3.DEFAULT_PANDEMIC_COLOR = A3.DEFAULT_PANDEMIC_COLOR or { 1, 0.24, 0.08 }
+
 local AURA_BORDER_OPTIONS = {
     showWhenHarmful = true,
     showWhenHelpful = false,
@@ -773,7 +924,7 @@ local function Round(value)
     return math_floor(value + 0.5)
 end
 
-local function ClampNumber(value, fallback, minValue, maxValue)
+ClampNumber = function(value, fallback, minValue, maxValue)
     value = tonumber(value)
     if value == nil then value = tonumber(fallback) or 0 end
     if minValue and value < minValue then value = minValue end
@@ -781,7 +932,7 @@ local function ClampNumber(value, fallback, minValue, maxValue)
     return value
 end
 
-local function Clamp01(value, fallback)
+Clamp01 = function(value, fallback)
     return ClampNumber(value, fallback or 1, 0, 1)
 end
 
@@ -955,27 +1106,13 @@ local function EnsureDB()
     return db.auras3, db.auras3.shared
 end
 
-function Shape.ScopeKey(scope)
-    scope = tostring(scope or "")
-    if scope:match("^boss%d+$") then return "boss" end
-    if scope == "party" or scope == "raid" or scope == "mythicraid"
-        or scope == "player" or scope == "target" or scope == "focus" or scope == "boss"
-    then
-        return scope
-    end
-    return nil
-end
-
-function Shape.FollowsShared(shared, scope, lane)
-    local key = Shape.ScopeKey(scope)
-    if not key then return false end
-    local followScopes = type(shared) == "table" and shared.iconShapeFollowSharedScopes or nil
-    local followLanes = type(followScopes) == "table" and followScopes[key] or nil
-    return type(followLanes) == "table" and followLanes[lane] == true
-end
-
 function Shape.SharedValue(shared, kind)
-    local key = kind == "debuff" and "debuffIconShape" or "buffIconShape"
+    local appearanceShapes = type(shared) == "table" and shared.appearanceIconShapes or nil
+    if type(appearanceShapes) == "table" and appearanceShapes[kind] ~= nil then
+        return appearanceShapes[kind]
+    end
+    local harmful = kind == "debuff" or kind == "targetDots"
+    local key = harmful and "debuffIconShape" or "buffIconShape"
     return ReadRaw(shared, nil, key) or ReadRaw(shared, nil, "iconShape")
 end
 
@@ -1264,35 +1401,53 @@ end
 local LaneTrackingSignature, LaneStructuralSignature, LaneLayoutSignature
 local SensorStructuralSignature, SensorLayoutSignature
 
--- Shared icon style (static border + soft shadow) is one global
--- block applied to every lane kind: buffs, debuffs, group lanes, and all
--- custom containers including the target-dot tracker. Compiled once per
--- runtime-config generation and stamped by reference onto each finalized
--- lane, so per-lane compile cost is a single table read. Buttons render it
--- inside initializeFrame only; the style signature joins the lane layout
--- signature so any change recreates containers (never touches live buttons).
-local _iconStyleCompiled, _iconStyleCompiledGen
-local function SharedIconStyle()
+-- Appearance icon style (static border + soft shadow) is global per Aura
+-- product: Buff, Debuff, Player Defensives, or Dots on Target. Compiled once
+-- per product/runtime generation and stamped by reference onto each lane.
+local APPEARANCE_KIND = {
+    buff = true, debuff = true, playerDefensives = true, targetDots = true,
+}
+local function NormalizeAppearanceKind(kind)
+    return APPEARANCE_KIND[kind] and kind or "buff"
+end
+
+local _iconStyleCompiled, _iconStyleCompiledGen = {}, nil
+local function SharedIconStyle(kind)
+    kind = NormalizeAppearanceKind(kind)
     local gen = A3._runtimeConfigGen or 1
-    if _iconStyleCompiled and _iconStyleCompiledGen == gen then return _iconStyleCompiled end
+    if _iconStyleCompiledGen ~= gen then
+        _iconStyleCompiled, _iconStyleCompiledGen = {}, gen
+    elseif _iconStyleCompiled[kind] then
+        return _iconStyleCompiled[kind]
+    end
     local _, shared = EnsureDB()
-    local bc = type(shared.styleBorderColor) == "table" and shared.styleBorderColor or DEFAULT_SHARED.styleBorderColor
-    local sc = type(shared.styleShadowColor) == "table" and shared.styleShadowColor or DEFAULT_SHARED.styleShadowColor
+    local styles = type(shared.appearanceIconStyles) == "table" and shared.appearanceIconStyles or nil
+    local source = type(styles) == "table" and styles[kind] or nil
+    source = type(source) == "table" and source or nil
+    local function Read(key, fallback)
+        if source and source[key] ~= nil then return source[key] end
+        if shared[key] ~= nil then return shared[key] end
+        return fallback
+    end
+    local bc = Read("styleBorderColor", DEFAULT_SHARED.styleBorderColor)
+    local sc = Read("styleShadowColor", DEFAULT_SHARED.styleShadowColor)
+    bc = type(bc) == "table" and bc or DEFAULT_SHARED.styleBorderColor
+    sc = type(sc) == "table" and sc or DEFAULT_SHARED.styleShadowColor
     local BorderStyles = MSUF.BorderStyles
-    local borderStyle = BorderStyles and BorderStyles.Normalize(shared.styleBorderStyle) or "SOLID"
+    local borderStyle = BorderStyles and BorderStyles.Normalize(Read("styleBorderStyle", "SOLID")) or "SOLID"
     local style = {
-        borderEnabled = shared.styleBorderEnabled == true,
+        borderEnabled = Read("styleBorderEnabled", false) == true,
         borderStyle = borderStyle,
         -- nil for SOLID (and for a style whose media went missing), which keeps
         -- the flat single-quad ring as the fallback everywhere downstream.
         borderTexture = BorderStyles and BorderStyles.Resolve(borderStyle) or nil,
-        borderThickness = Round(ClampNumber(shared.styleBorderThickness, DEFAULT_SHARED.styleBorderThickness, 1, 8)),
+        borderThickness = Round(ClampNumber(Read("styleBorderThickness", DEFAULT_SHARED.styleBorderThickness), DEFAULT_SHARED.styleBorderThickness, 1, 8)),
         borderR = Clamp01(bc[1] or bc.r, 0),
         borderG = Clamp01(bc[2] or bc.g, 0),
         borderB = Clamp01(bc[3] or bc.b, 0),
         borderA = Clamp01(bc[4] or bc.a, 1),
-        shadowEnabled = shared.styleShadowEnabled == true,
-        shadowSize = Round(ClampNumber(shared.styleShadowSize, DEFAULT_SHARED.styleShadowSize, 1, 16)),
+        shadowEnabled = Read("styleShadowEnabled", false) == true,
+        shadowSize = Round(ClampNumber(Read("styleShadowSize", DEFAULT_SHARED.styleShadowSize), DEFAULT_SHARED.styleShadowSize, 1, 16)),
         shadowR = Clamp01(sc[1] or sc.r, 0),
         shadowG = Clamp01(sc[2] or sc.g, 0),
         shadowB = Clamp01(sc[3] or sc.b, 0),
@@ -1309,47 +1464,14 @@ local function SharedIconStyle()
         style.shadowEnabled and "S" or "s", style.shadowSize,
         style.shadowR, style.shadowG, style.shadowB, style.shadowA,
     }, ":")
-    _iconStyleCompiled, _iconStyleCompiledGen = style, gen
+    _iconStyleCompiled[kind] = style
     return style
 end
 
--- Scopes that opted out of the shared icon style get this instead, so their
--- lanes carry a real (cacheable) style object whose signature differs from the
--- live one -- containers still rebuild correctly when the opt-out is toggled.
-local ICON_STYLE_OFF = {
-    borderEnabled = false,
-    shadowEnabled = false,
-    borderStyle = "SOLID",
-    borderThickness = 1,
-    shadowSize = 0,
-    signature = "off",
-}
-
---- Aura scope key for a runtime unit: the four unit-frame scopes the Auras page
---- exposes, with every boss token folded onto "boss". Group lanes pass their
---- group kind ("party"/"raid"/"mythicraid") in explicitly instead.
-local function IconStyleScope(unit)
-    if type(unit) ~= "string" then return nil end
-    if unit:match("^boss%d+$") then return "boss" end
-    return unit
-end
-
-local _iconStyleOffScopes, _iconStyleOffScopesGen
-local function IconStyleForScope(scope)
-    local gen = A3._runtimeConfigGen or 1
-    if _iconStyleOffScopesGen ~= gen then
-        local _, shared = EnsureDB()
-        local disabled = type(shared) == "table" and shared.styleScopeDisabled or nil
-        _iconStyleOffScopes = type(disabled) == "table" and disabled or nil
-        _iconStyleOffScopesGen = gen
-    end
-    if scope and _iconStyleOffScopes and _iconStyleOffScopes[scope] == true then return ICON_STYLE_OFF end
-    return SharedIconStyle()
-end
-
-local function FinalizeLane(lane, scope)
+local function FinalizeLane(lane, appearanceKind)
     if lane then
-        lane.iconStyle = IconStyleForScope(scope or IconStyleScope(lane.unit))
+        lane.appearanceKind = NormalizeAppearanceKind(appearanceKind or lane.appearanceKind or lane.kind)
+        lane.iconStyle = SharedIconStyle(lane.appearanceKind)
         -- Aura visibility is lane-local. The global Unitframe tooltip mode
         -- (Always/OOC/Modifier/Never) owns unit/group-frame mouseover only;
         -- native AuraButtons reuse just the compatible cursor placement and
@@ -1559,9 +1681,12 @@ local function CompileDispelSensor(unit, frameSpec, groupMode, visual)
         cornerSlots, cornerSignature = CompileCornerDispelSlots(corner)
     end
     local borderOn = border and border.dispel == true
+    local purgeOn = not groupMode and border and border.purge == true
+        and (unit == "target" or unit == "focus")
     local overlayOn = overlay and ((groupMode and overlay.dispelOverlayEnabled == true) or (not groupMode and overlay.enabled == true))
     local symbolOn = type(symbol) == "table" and symbol.enabled == true
     if visual == "border" and not borderOn then return nil end
+    if visual == "purge" and not purgeOn then return nil end
     if visual == "overlay" and not overlayOn then return nil end
     if visual == "corner" and not cornerSlots then return nil end
     if visual == "symbol" and not symbolOn then return nil end
@@ -1596,6 +1721,7 @@ local function CompileDispelSensor(unit, frameSpec, groupMode, visual)
     end
 
     local nativeFilter, maxCount = DispelSensorNativeFilter(trigger)
+    if visual == "purge" then nativeFilter, maxCount = "HELPFUL", 1 end
     if visual == "symbol" then
         -- TOP mode is one slot showing the top-priority matching debuff. ALL
         -- mode is one slot PER dispel type, each carrying its own
@@ -1624,12 +1750,23 @@ local function CompileDispelSensor(unit, frameSpec, groupMode, visual)
     end
     local kind = "dispelBorder"
     local rootKey = "DispelBorderSensor"
-    if visual == "corner" then
+    if visual == "purge" then
+        kind, rootKey = "purgeBorder", "PurgeBorderSensor"
+    elseif visual == "corner" then
         kind, rootKey = "dispelCorner", "DispelCornerSensor"
     elseif visual == "overlay" then
         kind, rootKey = "dispelOverlay", "DispelOverlaySensor"
     elseif visual == "symbol" then
         kind, rootKey = "dispelSymbol", "DispelSymbolSensor"
+    end
+    local priorityDetail = 14
+    local priorityOrder = border and border.prioEnabled == true and border.prioOrder
+        or A3.DEFAULT_NATIVE_HIGHLIGHT_PRIORITY
+    local priorityKey = visual == "purge" and "purge" or (visual == "border" and "dispel" or nil)
+    if priorityKey and type(priorityOrder) == "table" then
+        for index = 1, #priorityOrder do
+            if priorityOrder[index] == priorityKey then priorityDetail = 17 - index; break end
+        end
     end
     return {
         sensor = true,
@@ -1638,6 +1775,8 @@ local function CompileDispelSensor(unit, frameSpec, groupMode, visual)
         unit = unit,
         enabled = true,
         nativeFilter = nativeFilter,
+        candidateFilters = visual == "purge" and { isStealable = true } or nil,
+        candidateFilterSignature = visual == "purge" and "isStealable:true" or nil,
         -- Corner sensors consolidate onto ONE AuraSlot whose button carries a
         -- texture per corner (PTR 7 multiple dispel textures). Identical
         -- filters always select the same top aura, so N corner slots were N
@@ -1656,6 +1795,9 @@ local function CompileDispelSensor(unit, frameSpec, groupMode, visual)
             or (visual == "symbol" and Clamp01(symbol.alpha, 1))
             or 1,
         thickness = ClampNumber(border and border.highlightThickness, 3, 1, 32),
+        r = visual == "purge" and Clamp01(border and border.purgeR, 1) or nil,
+        g = visual == "purge" and Clamp01(border and border.purgeG, 0.85) or nil,
+        b = visual == "purge" and Clamp01(border and border.purgeB, 0) or nil,
         size = cornerSlots and ClampNumber(corner and corner.size, 8, 1, 64) or symbolSize or nil,
         slots = cornerSlots or symbolSlots,
         slotSignature = cornerSignature or symbolSignature,
@@ -1668,6 +1810,7 @@ local function CompileDispelSensor(unit, frameSpec, groupMode, visual)
         layer = visual == "corner" and (30 + ClampNumber(corner and corner.layer, 7, 0, 30))
             or (visual == "symbol" and (30 + ClampNumber(symbol.layer, 8, 0, 30)))
             or (visual == "overlay" and ClampNumber(groupMode and overlay.dispelOverlayLayer or overlay.layer, 0, 0, 30) or 45),
+        detail = priorityDetail,
         strata = NormalizeFrameStrata(strata, "AUTO"),
         trigger = trigger,
     }
@@ -1683,10 +1826,7 @@ local function CompileUnitLane(unit, shared, layout, filtersRoot, kind, candidat
     local sizeDefault = ReadRaw(layout, shared, spec.sizeKey) or ReadRaw(layout, shared, "iconSize") or DEFAULT_SHARED.iconSize
     local size = ClampNumber(sizeDefault, DEFAULT_SHARED.iconSize, 1, 128)
     local zoomDefault = ReadRaw(layout, shared, spec.iconZoomKey) or ReadRaw(layout, shared, "iconZoom") or DEFAULT_SHARED.iconZoom
-    local iconShapeSource = ReadRaw(layout, shared, spec.iconShapeKey) or ReadRaw(layout, shared, "iconShape")
-    if Shape.FollowsShared(rootShared, unit, kind) then
-        iconShapeSource = Shape.SharedValue(rootShared, kind)
-    end
+    local iconShapeSource = Shape.SharedValue(rootShared, kind)
     local iconShape, requestedIconShape = Shape.Resolve(iconShapeSource, portraitShape)
     local spacing = ReadNumber(layout, shared, "spacing", DEFAULT_SHARED.spacing, 0, 64)
     local perRow = ReadNumber(shared, nil, spec.perRowKey, ReadRaw(shared, nil, "perRow") or DEFAULT_SHARED.perRow, 1, 40)
@@ -1703,6 +1843,7 @@ local function CompileUnitLane(unit, shared, layout, filtersRoot, kind, candidat
     if issecretvalue(rawStrata) == true then rawStrata = nil end
     return FinalizeLane({
         kind = kind,
+        appearanceKind = kind,
         rootKey = spec.rootKey,
         unit = unit,
         enabled = enabled == true,
@@ -1754,6 +1895,9 @@ local function CompileUnitLane(unit, shared, layout, filtersRoot, kind, candidat
         showTooltip = ReadBool(shared, layout, spec.tooltipKey, ReadBool(shared, layout, "showTooltip", DEFAULT_SHARED.showTooltip)),
         showAuraBorder = debuffTypeBorderMode ~= "OFF",
         showAuraSymbol = debuffTypeBorderMode == "SYMBOL",
+        showStealableMarker = kind == "buff" and ReadBool(shared, layout, "buffShowStealable", false),
+        stealableStyle = kind == "buff" and A3.NormalizeStealableStyle(
+            ReadRaw(shared, layout, "buffStealableStyle")) or nil,
         cooldownSize = ReadNumber(layout, shared, spec.cooldownSizeKey, ReadRaw(shared, nil, "cooldownTextSize") or DEFAULT_SHARED.cooldownTextSize, 6, 40),
         cooldownAnchor = ReadAnchor(shared, nil, spec.cooldownAnchorKey, cooldownAnchor),
         cooldownX = ReadNumber(layout, shared, spec.cooldownXKey, ReadRaw(shared, nil, "cooldownTextOffsetX") or DEFAULT_SHARED.cooldownTextOffsetX, -2000, 2000),
@@ -1780,10 +1924,7 @@ local function CompileGroupLane(unit, source, kind, groupKind, portraitShape, sh
         spec.maxDurationKey and source[spec.maxDurationKey], source[spec.hidePermanentKey] == true)
     local size = ClampNumber(source[spec.sizeKey] or source.iconSize, spec.defaultSize, 1, 256)
     local sharedLane = kind == "debuff" and "debuff" or "buff"
-    local iconShapeSource = source[spec.iconShapeKey] or source.iconShape
-    if Shape.FollowsShared(shared, groupKind, sharedLane) then
-        iconShapeSource = Shape.SharedValue(shared, sharedLane)
-    end
+    local iconShapeSource = Shape.SharedValue(shared, sharedLane)
     local iconShape, requestedIconShape = Shape.Resolve(iconShapeSource, portraitShape)
     local spacing = ClampNumber(source[spec.spacingKey] or source.spacing, 1, 0, 64)
     local perRow = ClampNumber(source[spec.perRowKey] or source.perRow, spec.defaultPerRow, 1, 40)
@@ -1813,6 +1954,7 @@ local function CompileGroupLane(unit, source, kind, groupKind, portraitShape, sh
     end
     return FinalizeLane({
         kind = kind,
+        appearanceKind = sharedLane,
         rootKey = spec.rootKey,
         unit = unit,
         enabled = enabled == true,
@@ -1867,7 +2009,7 @@ local function CompileGroupLane(unit, source, kind, groupKind, portraitShape, sh
         stackSize = ClampNumber(source[spec.stackSizeKey] or source.stackSize, DEFAULT_SHARED.stackTextSize, 6, 40),
         stackX = ClampNumber(source[spec.stackXKey] or source.stackX, 0, -2000, 2000),
         stackY = ClampNumber(source[spec.stackYKey] or source.stackY, 0, -2000, 2000),
-    }, groupKind)
+    }, sharedLane)
 end
 
 local function InvalidateUnitRuntimeConfig(unit)
@@ -2232,7 +2374,7 @@ function A3._CompilePortraitAuraLane(lane, frameSpec, entry, kind, rootKey, scop
         -- of the normal DoT lane's standalone icon-shape choice.
         out.iconShape, out.requestedIconShape = Shape.Resolve(Shape.FOLLOW_PORTRAIT, portrait.shape)
     end
-    return FinalizeLane(out, scope)
+    return FinalizeLane(out, lane.appearanceKind)
 end
 
 A3._CompilePlayerDefensivePortraitLane = function(lane, frameSpec, entry)
@@ -2246,7 +2388,55 @@ A3._CompileTargetDotPortraitLane = function(lane, frameSpec, entry, unit)
         lane, frameSpec, entry, "targetDotPortrait", "TargetDotPortrait", unit, true)
 end
 
-local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec, shared)
+--- Upgrade the former shared Custom-4 presentation into the owning frame once.
+--- Afterwards Player Defensives and Target DoTs use the same frame-local Style
+--- contract as every other Aura container. This is cached config work only.
+A3._specialCustomStylePlacedKeys = A3._specialCustomStylePlacedKeys or {
+    iconZoom = true, iconShape = true, showTooltip = true, alpha = true,
+    debuffTypeBorderMode = true,
+    showStacks = true, stackSize = true, stackAnchor = true, stackX = true, stackY = true,
+    showCooldown = true, showCooldownSwipe = true, cooldownSwipeReverse = true,
+    cooldownSize = true, cooldownAnchor = true, cooldownX = true, cooldownY = true,
+    cooldownDecimalSeconds = true,
+    showDurationBar = true, durationBarHeight = true, durationBarDisplay = true,
+    durationBarPosition = true, durationBarDirection = true,
+    pandemicEnabled = true, pandemicStyle = true, pandemicColor = true,
+    pandemicThickness = true, pandemicPadding = true,
+    pandemicBorderAlpha = true, pandemicTintAlpha = true,
+    pandemicBlend = true,
+}
+local function CopySpecialStyleValue(value)
+    if type(value) ~= "table" then return value end
+    local out = {}
+    for key, child in pairs(value) do out[key] = CopySpecialStyleValue(child) end
+    return out
+end
+A3._ResolveSpecialCustomStyle = function(auras, unit, index, entry)
+    local placed = type(entry) == "table" and type(entry.placed) == "table" and entry.placed or {}
+    local frame = type(entry) == "table" and type(entry.frame) == "table" and entry.frame or nil
+    if index ~= 4 or type(entry) ~= "table" or entry._msufA3LocalStyleFromShared_v1 == true then
+        return placed, frame
+    end
+    local shared = type(auras) == "table" and type(auras.shared) == "table" and auras.shared or nil
+    local styles = shared and type(shared.specialStyles) == "table" and shared.specialStyles or nil
+    local key = unit == "player" and "playerDefensives" or "targetDots"
+    local record = styles and type(styles[key]) == "table" and styles[key] or nil
+    local stylePlaced = record and type(record.placed) == "table" and record.placed or nil
+    if stylePlaced then
+        entry.placed = placed
+        for name in pairs(A3._specialCustomStylePlacedKeys) do
+            if stylePlaced[name] ~= nil then placed[name] = CopySpecialStyleValue(stylePlaced[name]) end
+        end
+    end
+    if record and type(record.frame) == "table" then
+        entry.frame = CopySpecialStyleValue(record.frame)
+        frame = entry.frame
+    end
+    entry._msufA3LocalStyleFromShared_v1 = true
+    return placed, frame
+end
+
+local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec, shared, auras)
     if type(entry) ~= "table" then return nil, nil end
     local playerDefensives = unit == "player" and (index == 4 or entry.playerDefensives == true)
     -- `enabled` is the Core feature's master switch. Portrait mode is only a
@@ -2276,28 +2466,29 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec,
     end
     if not includeSpellIDs then return nil, nil end
     local candidateFilters, candidateFilterSignature = CandidateFiltersFromSpellIDs(includeSpellIDs, "includeSpellIDs")
-    local placed = type(entry.placed) == "table" and entry.placed or {}
+    local layoutPlaced = type(entry.placed) == "table" and entry.placed or {}
+    local placed, styleFrame = A3._ResolveSpecialCustomStyle(auras, unit, index, entry)
     local filters = type(entry.filters) == "table" and entry.filters or { enabled = true, onlyMine = entry.onlyOwn == true }
     local sourceUnit = unit
     local helpful = not targetDots and tostring(entry.auraType or "BUFF"):upper() ~= "DEBUFF"
     candidateFilters, candidateFilterSignature = AddMaxDurationCandidateFilter(
         candidateFilters, candidateFilterSignature,
         not helpful and filters.maxDuration or nil, filters.hidePermanent == true)
-    local size = ClampNumber(placed.size, 24, 1, 128)
-    local spacing = ClampNumber(placed.spacing, 2, 0, 64)
-    local perRow = ClampNumber(placed.perRow, 4, 1, 40)
-    local maxCount = ClampNumber(placed.max, 8, 0, 40)
-    local growthX, growthY, xSign, ySign, verticalGrowth = GrowthParts(placed.growth or "LEFTDOWN", "DOWN")
+    local size = ClampNumber(layoutPlaced.size, 24, 1, 128)
+    local spacing = ClampNumber(layoutPlaced.spacing, 2, 0, 64)
+    local perRow = ClampNumber(layoutPlaced.perRow, 4, 1, 40)
+    local maxCount = ClampNumber(layoutPlaced.max, 8, 0, 40)
+    local growthX, growthY, xSign, ySign, verticalGrowth = GrowthParts(layoutPlaced.growth or "LEFTDOWN", "DOWN")
     local cols, rows = GridShape(maxCount, perRow, verticalGrowth)
-    local iconShapeSource = placed.iconShape
-    if Shape.FollowsShared(shared, unit, "custom" .. tostring(index)) then
-        iconShapeSource = Shape.SharedValue(shared, helpful and "buff" or "debuff")
-    end
+    local appearanceKind = playerDefensives and "playerDefensives"
+        or targetDots and "targetDots" or (helpful and "buff" or "debuff")
+    local iconShapeSource = Shape.SharedValue(shared, appearanceKind)
     local iconShape, requestedIconShape = Shape.Resolve(
         iconShapeSource, frameSpec and frameSpec.portrait and frameSpec.portrait.shape)
     lanePadding = Round(ClampNumber(lanePadding, 0, 0, 16))
     local lane = FinalizeLane({
         kind = "custom" .. tostring(index),
+        appearanceKind = appearanceKind,
         rootKey = "CustomAuras" .. tostring(index),
         unit = sourceUnit,
         enabled = maxCount > 0,
@@ -2323,9 +2514,9 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec,
         padding = lanePadding,
         width = math_max(1, cols * size + math_max(cols - 1, 0) * spacing + 2 * lanePadding),
         height = math_max(1, rows * size + math_max(rows - 1, 0) * spacing + 2 * lanePadding),
-        x = Round(ClampNumber(placed.x, 0, -4096, 4096)),
-        y = Round(ClampNumber(placed.y, 0, -4096, 4096)),
-        anchor = ReadAnchor(placed, nil, "anchor", "TOPRIGHT"),
+        x = Round(ClampNumber(layoutPlaced.x, 0, -4096, 4096)),
+        y = Round(ClampNumber(layoutPlaced.y, 0, -4096, 4096)),
+        anchor = ReadAnchor(layoutPlaced, nil, "anchor", "TOPRIGHT"),
         layer = Round(ClampNumber(entry.layer, 9, 0, 30)),
         strata = NormalizeFrameStrata(entry.strata, "AUTO"),
         alpha = Clamp01(placed.alpha, 1),
@@ -2358,6 +2549,15 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec,
         stackSize = ClampNumber(placed.stackSize, DEFAULT_SHARED.stackTextSize, 6, 40),
         stackX = ClampNumber(placed.stackX, 0, -2000, 2000),
         stackY = ClampNumber(placed.stackY, 0, -2000, 2000),
+        targetDots = targetDots == true,
+        pandemicEnabled = targetDots == true and placed.pandemicEnabled == true,
+        pandemicStyle = A3.NormalizePandemicStyle(placed.pandemicStyle),
+        pandemicColor = type(placed.pandemicColor) == "table" and placed.pandemicColor or A3.DEFAULT_PANDEMIC_COLOR,
+        pandemicThickness = ClampNumber(placed.pandemicThickness, 2, 1, 12),
+        pandemicPadding = ClampNumber(placed.pandemicPadding, 1, -8, 16),
+        pandemicBorderAlpha = Clamp01(placed.pandemicBorderAlpha, 1),
+        pandemicTintAlpha = Clamp01(placed.pandemicTintAlpha, 0.22),
+        pandemicBlend = tostring(placed.pandemicBlend or "ADD"):upper() == "BLEND" and "BLEND" or "ADD",
     })
     local portraitLane
     if portraitRequested then
@@ -2373,7 +2573,7 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec,
     local effect
     -- Full-frame effects are independent aura sensors. Portrait mode replaces
     -- only the icon lane and must not suppress the selected frame effect.
-    if type(entry.frame) == "table" and entry.frame.type and entry.frame.type ~= "none" then
+    if type(styleFrame) == "table" and styleFrame.type and styleFrame.type ~= "none" then
         effect = {
             key = "ufcustom_effect:" .. tostring(index),
             display = entry.name or ("Custom " .. tostring(index)),
@@ -2381,11 +2581,11 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec,
             includeSpellIDs = includeSpellIDs,
             hidePermanent = filters.hidePermanent == true,
             nativeFilter = lane.nativeFilter,
-            placed = { type = "none", anchor = placed.anchor or "TOPRIGHT", x = 0, y = 0, size = 1 },
-            frame = entry.frame,
+            placed = { type = "none", anchor = layoutPlaced.anchor or "TOPRIGHT", x = 0, y = 0, size = 1 },
+            frame = styleFrame,
             layer = entry.layer or 9,
             strata = entry.strata or "AUTO",
-            color = entry.frame.color,
+            color = styleFrame.color,
             unit = sourceUnit,
         }
     end
@@ -2401,7 +2601,7 @@ local function CompileUnitCustomContainers(auras, unit, frameSpec)
     local lanePadding = ReadRaw(layout, sharedLayout, "stylePadding")
     local lanes, effectItems, targetDotEffectItems = {}, {}, {}
     for i = 1, 4 do
-        local lane, effect, portraitLane = CompileUnitCustomLane(unit, source[i], i, lanePadding, frameSpec, auras.shared)
+        local lane, effect, portraitLane = CompileUnitCustomLane(unit, source[i], i, lanePadding, frameSpec, auras.shared, auras)
         if lane then lanes["custom" .. tostring(i)] = lane end
         if portraitLane then lanes[portraitLane.kind] = portraitLane end
         if effect then
@@ -2468,6 +2668,9 @@ local function BuildUnitFrameConfig(unit, frameSpec)
     local hasCustomContainers = customLanes and next(customLanes) ~= nil
     local legacyCustomDisplays = not EffectiveUnitCustomContainers(auras, unit) and CompileUnitCustomDisplays(auras, unit) or nil
     local dispelBorder = iconsEnabled and CompileDispelSensor(unit, frameSpec, false, "border") or nil
+    -- Purge is a standalone one-slot native sensor. It must keep working when
+    -- the ordinary visible aura lanes are disabled.
+    local purgeBorder = CompileDispelSensor(unit, frameSpec, false, "purge")
     local dispelOverlay = iconsEnabled and CompileDispelSensor(unit, frameSpec, false, "overlay") or nil
     local dispelSymbol = iconsEnabled and CompileDispelSensor(unit, frameSpec, false, "symbol") or nil
     local buff, debuff, laneEffects
@@ -2503,7 +2706,8 @@ local function BuildUnitFrameConfig(unit, frameSpec)
         debuff = CompileUnitLane(unit, sharedLayout, layout, filtersRoot, "debuff", debuffCandidates, debuffCandidateSignature, portraitShape, auras.shared)
         laneEffects = CompileUnitLaneEffects(unit, sharedLayout, buff, debuff)
     end
-    if not iconsEnabled and not hasCustomContainers and not customEffects and not targetDotEffects and not legacyCustomDisplays then
+    if not iconsEnabled and not purgeBorder and not hasCustomContainers
+        and not customEffects and not targetDotEffects and not legacyCustomDisplays then
         return EmptyUnitFrameConfig(unit)
     end
     local lanes = { buff = buff, debuff = debuff }
@@ -2514,12 +2718,14 @@ local function BuildUnitFrameConfig(unit, frameSpec)
         unit = unit,
         enabled = (buff and buff.enabled == true) or (debuff and debuff.enabled == true)
             or (dispelBorder and dispelBorder.enabled == true) or (dispelOverlay and dispelOverlay.enabled == true)
+            or (purgeBorder and purgeBorder.enabled == true)
             or (dispelSymbol and dispelSymbol.enabled == true)
             or hasCustomContainers or (customEffects and customEffects.enabled == true)
             or (targetDotEffects and targetDotEffects.enabled == true) or (laneEffects and laneEffects.enabled == true)
             or (legacyCustomDisplays and legacyCustomDisplays.enabled == true),
         lanes = lanes,
-        sensors = { dispelBorder = dispelBorder, dispelOverlay = dispelOverlay, dispelSymbol = dispelSymbol },
+        sensors = { dispelBorder = dispelBorder, purgeBorder = purgeBorder,
+            dispelOverlay = dispelOverlay, dispelSymbol = dispelSymbol },
         spellIndicators = customEffects or legacyCustomDisplays,
         laneEffects = laneEffects,
         targetDotEffects = targetDotEffects,
@@ -2607,6 +2813,40 @@ local function BuildGroupSpellIndicatorSource(spellSource, cornerSource)
     }
 end
 
+local function CompileGroupSpellIndicatorStyle(spellSource, groupKind, portraitShape)
+    local raw = type(spellSource) == "table" and type(spellSource.style) == "table" and spellSource.style or nil
+    raw = raw or {}
+    local _, shared = EnsureDB()
+    local iconShape, requestedIconShape = Shape.Resolve(Shape.SharedValue(shared, "buff"), portraitShape)
+    return {
+        -- Spell Icons use the shared Buff Appearance theme. Every other field
+        -- below belongs only to this Group scope's Spell Icon Style.
+        iconStyle = SharedIconStyle("buff"),
+        iconShape = iconShape,
+        requestedIconShape = requestedIconShape,
+        alpha = Clamp01(raw.alpha, 1),
+        showTooltip = raw.showTooltip ~= false,
+        showCooldownText = raw.showCooldownText ~= false,
+        showCooldownSwipe = raw.showCooldownSwipe ~= false,
+        cooldownSwipeReverse = raw.cooldownSwipeReverse == true,
+        cooldownSize = ClampNumber(raw.cooldownSize, 8, 6, 40),
+        cooldownAnchor = raw.cooldownAnchor or "CENTER",
+        cooldownX = ClampNumber(raw.cooldownX, 0, -2000, 2000),
+        cooldownY = ClampNumber(raw.cooldownY, 0, -2000, 2000),
+        cooldownDecimalSeconds = ClampNumber(raw.cooldownDecimalSeconds, 3, 0, 30),
+        showDurationBar = raw.showDurationBar == true,
+        durationBarHeight = ClampNumber(raw.durationBarHeight, 2, 1, 16),
+        durationBarDisplay = NormalizeDurationBarDisplay(raw.durationBarDisplay, "BAR_ONLY"),
+        durationBarPosition = NormalizeDurationBarPosition(raw.durationBarPosition, "BOTTOM"),
+        durationBarDirection = NormalizeDurationBarDirection(raw.durationBarDirection, "REMAINING"),
+        showStacks = raw.showStacks ~= false,
+        stackSize = ClampNumber(raw.stackSize, 10, 6, 40),
+        stackAnchor = raw.stackAnchor or "BOTTOMRIGHT",
+        stackX = ClampNumber(raw.stackX, 0, -2000, 2000),
+        stackY = ClampNumber(raw.stackY, 0, -2000, 2000),
+    }
+end
+
 local function ResolveGroupFrameConfig(frame, unit)
     if not frame then return nil end
     unit = unit or frame.MSUFUnitKey
@@ -2673,8 +2913,9 @@ local function ResolveGroupFrameConfig(frame, unit)
     local _, sharedAuraStyle = EnsureDB()
     local buff = type(source) == "table" and CompileGroupLane(unit, source, "buff", groupKind, portraitShape, sharedAuraStyle) or nil
     local combinedSpellSource = BuildGroupSpellIndicatorSource(spellSource, cornerSource)
+    local spellIndicatorStyle = CompileGroupSpellIndicatorStyle(spellSource, groupKind, portraitShape)
     local spellIndicatorRoot = type(unit) == "string" and unit ~= ""
-        and SpellIndicatorsRuntime.CompileSlots(unit, combinedSpellSource, buff) or nil
+        and SpellIndicatorsRuntime.CompileSlots(unit, combinedSpellSource, spellIndicatorStyle) or nil
     cfg.spellIndicators = spellIndicatorRoot
     cfg.enabled = spellIndicatorRoot and spellIndicatorRoot.enabled == true or false
     if type(source) == "table" and type(unit) == "string" and unit ~= "" and source.enabled ~= false then
@@ -2856,11 +3097,9 @@ function A3.BuildAuraLaneMetrics(configOrUnit, kind)
     }
 end
 
---- Compiled shared icon style for preview surfaces (edit mode, menu mocks).
---- Resolves the per-scope opt-out exactly like a compiled lane, so a preview
---- can style icons even where no runtime lane exists yet.
-function A3.IconStylePreviewForScope(scope)
-    return IconStyleForScope(IconStyleScope(scope) or scope)
+--- Compiled shared Appearance style for preview surfaces.
+function A3.IconStylePreviewForKind(kind)
+    return SharedIconStyle(kind)
 end
 
 function A3.UnitFrameAuraEnabled(unit)
@@ -3369,6 +3608,14 @@ LaneLayoutSignature = function(lane)
         .. "\030" .. tostring(lane.stackY) .. "\030" .. tostring(lane.showTooltip)
         .. "\030" .. tostring(lane.auraTooltipAnchor)
         .. "\030" .. tostring(lane.showAuraBorder) .. "\030" .. tostring(lane.showAuraSymbol)
+        .. "\030" .. tostring(lane.showStealableMarker) .. "\030" .. tostring(lane.stealableStyle)
+        .. "\030" .. tostring(lane.pandemicEnabled) .. "\030" .. tostring(lane.pandemicStyle)
+        .. "\030" .. tostring(lane.pandemicColor and (lane.pandemicColor[1] or lane.pandemicColor.r))
+        .. "\030" .. tostring(lane.pandemicColor and (lane.pandemicColor[2] or lane.pandemicColor.g))
+        .. "\030" .. tostring(lane.pandemicColor and (lane.pandemicColor[3] or lane.pandemicColor.b))
+        .. "\030" .. tostring(lane.pandemicThickness) .. "\030" .. tostring(lane.pandemicPadding)
+        .. "\030" .. tostring(lane.pandemicBorderAlpha) .. "\030" .. tostring(lane.pandemicTintAlpha)
+        .. "\030" .. tostring(lane.pandemicBlend)
         .. "\030" .. tostring(lane.alpha)
         .. "\030" .. tostring(lane.padding)
         .. "\030" .. tostring(lane.portraitPositionWhenDisabled)
@@ -3387,6 +3634,8 @@ SensorLayoutSignature = function(sensor)
     return tostring(sensor.visual) .. "\030" .. tostring(sensor.target)
         .. "\030" .. tostring(sensor.style) .. "\030" .. tostring(sensor.alpha)
         .. "\030" .. tostring(sensor.thickness) .. "\030" .. tostring(sensor.layer) .. "\030" .. tostring(sensor.strata)
+        .. "\030" .. tostring(sensor.detail) .. "\030" .. tostring(sensor.candidateFilterSignature)
+        .. "\030" .. tostring(sensor.r) .. "\030" .. tostring(sensor.g) .. "\030" .. tostring(sensor.b)
         .. "\030" .. tostring(sensor.size) .. "\030" .. tostring(sensor.slotSignature)
         .. "\030" .. tostring(sensor.mode) .. "\030" .. tostring(sensor.growth)
         .. "\030" .. tostring(sensor.spacing) .. "\030" .. tostring(sensor.anchor)
@@ -3394,7 +3643,7 @@ SensorLayoutSignature = function(sensor)
         .. "\030" .. tostring(sensor.trigger) .. "\030" .. tostring(A3._nativeVisualGen or 0)
 end
 
-local DISPEL_SENSOR_ORDER = { "dispelBorder", "dispelOverlay", "dispelCorner", "dispelSymbol" }
+local DISPEL_SENSOR_ORDER = { "dispelBorder", "purgeBorder", "dispelOverlay", "dispelCorner", "dispelSymbol" }
 A3._normalAuraLaneOrder = {
     "buff", "trackedBuff", "debuff", "external",
     "custom1", "custom2", "custom3", "custom4", "defensivePortrait", "targetDotPortrait",
@@ -4193,6 +4442,28 @@ local function PrepareAuraButton(button, lane, index)
         if button._msufA3AuraBorder and button._msufA3AuraBorder.Hide then button._msufA3AuraBorder:Hide() end
     end
 
+    -- PTR 8 stealable filtering stays entirely inside Blizzard's native
+    -- AuraButton. The helpful button receives one display texture and no MSUF
+    -- aura-data reads, events, polling, or per-frame work.
+    if lane.showStealableMarker == true and not barOnly then
+        local marker = button._msufA3StealableMarker
+        if not marker then
+            marker = button:CreateTexture(nil, "OVERLAY", nil, 5)
+            button._msufA3StealableMarker = marker
+        end
+        marker:ClearAllPoints()
+        if lane.stealableStyle == "ICON" then
+            local markerSize = math_max(7, math_floor((lane.size or 24) * 0.42 + 0.5))
+            marker:SetSize(markerSize, markerSize)
+            marker:SetPoint("TOPLEFT", button, "TOPLEFT", 1, -1)
+        else
+            LayoutAuraBorder(button, marker, lane)
+        end
+        button:AddDispelTypeTexture(marker, A3.GetStealableTextureOptions(lane.stealableStyle))
+    elseif button._msufA3StealableMarker then
+        button._msufA3StealableMarker:Hide()
+    end
+
     if lane.showAuraSymbol == true and auraBorderBound == true and not barOnly then
         local symbol = button._msufA3AuraSymbol or button.AuraSymbol or button.Symbol
         if not symbol then
@@ -4222,6 +4493,10 @@ local function PrepareAuraButton(button, lane, index)
     local size = lane.size or 0
     ApplyIconStyleShadow(button, style, size, iconShape)
     ApplyIconStyleBorder(button, style, size, iconShape)
+
+    -- AddPandemicRegion controls only the host's secret Shown aspect. Every
+    -- child texture is static and was configured above/below once at creation.
+    A3.BindPandemicRegion(button, lane)
 
     -- PTR 7 aura tooltips are native. Their lane switch is the complete
     -- visibility authority; global Unitframe visibility modes never override
@@ -4273,7 +4548,9 @@ local function DispelSensorFrameLevel(parentFrame, sensor, target)
         if FrameLayers.ElementLevel then return FrameLayers.ElementLevel(sensor.layer, 14, 8) end
         return parentLevel + AuraIconBaseOffset(parentFrame) + (sensor.layer or 14)
     end
-    if FrameLayers.ElementLevel then return FrameLayers.ElementLevel(sensor and sensor.layer, 14, 8) end
+    if FrameLayers.ElementLevel then
+        return FrameLayers.ElementLevel(sensor and sensor.layer, 14, sensor and sensor.detail or 8)
+    end
     return parentLevel + (sensor and sensor.layer or 14)
 end
 
@@ -4503,6 +4780,10 @@ local function PrepareDispelSensorButton(button, sensor, parentFrame, index)
         region:SetAlpha(Clamp01(sensor.alpha, 0.35))
         button:AddDispelTypeTexture(region, GetSensorOverlayOptions())
         RegisterRoundedDispelOverlayRegion(parentFrame, region)
+    elseif sensor.visual == "purge" then
+        region:SetTexture(MSUF_AURA_SENSOR_EDGE_TEXTURE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+        region:SetAlpha(1)
+        button:AddDispelTypeTexture(region, A3.GetPurgeSensorTextureOptions(sensor))
     else
         region:SetTexture(MSUF_AURA_SENSOR_EDGE_TEXTURE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
         region:SetAlpha(0.82)
@@ -5082,12 +5363,14 @@ local function CreateManagedDispelSensor(container, sensor, parentFrame)
     return container
 end
 
---- Symbol sensors in ALL mode narrow each slot to one dispel type; every other
---- sensor slot runs unfiltered. Returns the signature so the update path can
---- skip a redundant native call.
+--- Symbol sensors in ALL mode narrow each slot to one dispel type; the PTR 8
+--- Purge sensor narrows its single helpful slot to isStealable=true. Returns
+--- the signature so the update path can skip a redundant native call.
 function DS.SlotCandidateFilters(sensor, sensorIndex)
     local slot = sensor and sensor.visual == "symbol" and sensor.slots and sensor.slots[sensorIndex]
-    if not slot then return nil, nil end
+    if not slot then
+        return sensor and sensor.candidateFilters, sensor and sensor.candidateFilterSignature
+    end
     return slot.candidateFilters, slot.candidateFilterSignature
 end
 
@@ -6178,96 +6461,6 @@ ApplyLane = function(root, lane, parentFrame, forceRecreate)
         root[key] = current
     end
     return current
-end
-
---- Cold-path Menu2 preview surface. The preview deliberately uses Blizzard's
---- real AuraContainer instead of reading aura payloads in Lua. This keeps
---- secret/forbidden aura values inside Blizzard's native assignment path while
---- still showing the exact MSUF filter, whitelist, icon size, spacing, text,
---- swipe, border, and duration-bar configuration.
-local function MenuPreviewGroupFrame(scope)
-    local gf = (MSUF and MSUF.GF) or nil
-    local frames = gf and gf.frameList
-    if type(frames) ~= "table" then return nil end
-    for i = 1, #frames do
-        local frame = frames[i]
-        local kind = frame and frame._msufGFKind
-        local matches = scope == "party" and kind == "party"
-            or scope == "raid" and (kind == "raid" or kind == "mythicraid")
-        local tracked = frame and gf.frames and gf.frames[frame] == true
-        local shown = frame and (not frame.IsShown or frame:IsShown() == true)
-        if matches and tracked and shown and issecretvalue(frame.MSUFUnitKey) ~= true
-            and type(frame.MSUFUnitKey) == "string" and frame.MSUFUnitKey ~= "" then
-            return frame
-        end
-    end
-end
-
-local function MenuPreviewSourceLane(scope, laneKind)
-    local cfg, unit
-    if scope == "party" or scope == "raid" then
-        local frame = MenuPreviewGroupFrame(scope)
-        if frame then
-            unit = frame.MSUFUnitKey
-            cfg = ResolveGroupFrameConfig(frame, unit)
-        end
-    else
-        unit = scope == "boss" and "boss1" or (scope == "shared" and "player" or scope)
-        cfg = A3.ResolveUnitFrameConfig(unit, nil)
-    end
-    local lane = cfg and cfg.lanes and cfg.lanes[laneKind]
-    return lane, unit
-end
-
-function A3.UpdateMenuAuraPreview(host, scope, laneKind, width, height)
-    if not host or InCombat() then return false, "combat" end
-    local source, unit = MenuPreviewSourceLane(scope, laneKind)
-    if not (source and source.enabled == true and unit) then
-        local old = host._msufA3MenuPreviewContainer
-        if old then A3._HideLane(old) end
-        return false, (scope == "party" or scope == "raid") and "no-group-frame" or "not-configured"
-    end
-
-    local lane = {}
-    for key, value in pairs(source) do lane[key] = value end
-    lane.unit = unit
-    lane.rootKey = "_MSUFMenuAuraPreview"
-    lane.anchor = "TOPLEFT"
-    lane.x = 10
-    lane.y = -34
-    lane.layer = 2
-    lane.strata = "AUTO"
-    lane.alpha = 1
-
-    local size = math_max(1, tonumber(lane.size) or 24)
-    local spacing = math_max(0, tonumber(lane.spacing) or 0)
-    local contentW = math_max(1, (tonumber(width) or 300) - 20)
-    local contentH = math_max(1, (tonumber(height) or 120) - 42)
-    local maxCols = math_max(1, math_floor((contentW + spacing) / math_max(1, size + spacing)))
-    local maxRows = math_max(1, math_floor((contentH + spacing) / math_max(1, size + spacing)))
-    local requestedPerRow = math_max(1, Round(lane.perRow or 1))
-    lane.perRow = math_min(requestedPerRow, lane.verticalGrowth == true and maxRows or maxCols)
-    local capacity = lane.perRow * (lane.verticalGrowth == true and maxCols or maxRows)
-    lane.max = math_min(math_max(0, Round(lane.max or 0)), capacity, 20)
-    if lane.max <= 0 then return false, "empty" end
-    local cols, rows = GridShape(lane.max, lane.perRow, lane.verticalGrowth == true)
-    lane.cols = cols
-    lane.rows = rows
-    lane.width = math_max(1, cols * size + math_max(cols - 1, 0) * spacing)
-    lane.height = math_max(1, rows * size + math_max(rows - 1, 0) * spacing)
-    lane._msufA3TrackingSignature = nil
-    lane._msufA3StructuralSignature = nil
-    lane._msufA3LayoutSignature = nil
-
-    local container = ApplyLane(host, lane, host, false)
-    host._msufA3MenuPreviewContainer = container
-    if host._msufA3MenuPreviewHooks ~= true then
-        host._msufA3MenuPreviewHooks = true
-        host:HookScript("OnHide", function(self)
-            if self._msufA3MenuPreviewContainer then A3._HideLane(self._msufA3MenuPreviewContainer) end
-        end)
-    end
-    return container ~= nil, container and "live" or "unavailable"
 end
 
 local function ApplyDispelSensor(root, sensor, parentFrame, forceRecreate)

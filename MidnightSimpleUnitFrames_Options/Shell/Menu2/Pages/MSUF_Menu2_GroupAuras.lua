@@ -86,6 +86,7 @@ local GF_AURA_WORKSPACE_TOOLS = {
     { value = "layout", text = "Layout" },
     { value = "filters", text = "Filters" },
     { value = "blacklist", text = "Blacklist" },
+    { value = "style", text = "Style" },
 }
 local GF_AURA_WORKSPACE_LANES = {
     { value = "buff", text = "Buffs" },
@@ -96,13 +97,12 @@ local GF_AURA_WORKSPACE_LANES = {
 -- Helpful auras on friendly group units were already eligible; NeverSecret
 -- harmful auras such as Sated/Exhaustion are now eligible there as well.
 local GF_AURA_BLACKLIST_AVAILABLE = true
-local GF_AURA_WORKSPACE_TOOL_OK = { layout = true, filters = true, blacklist = GF_AURA_BLACKLIST_AVAILABLE }
+local GF_AURA_WORKSPACE_TOOL_OK = { layout = true, filters = true, blacklist = GF_AURA_BLACKLIST_AVAILABLE, style = true }
 local function CurrentAuraWorkspaceTool(scope, lane)
     M.gfAuraToolSelection = M.gfAuraToolSelection or {}
     local scopeState = M.gfAuraToolSelection[scope]
     if type(scopeState) ~= "table" then scopeState = {}; M.gfAuraToolSelection[scope] = scopeState end
     local tool = scopeState[lane]
-    if lane == "externals" then tool = "layout" end
     if not GF_AURA_WORKSPACE_TOOL_OK[tool] then
         tool = tool == "blacklist" and "filters" or "layout"
         scopeState[lane] = tool
@@ -145,7 +145,9 @@ local function BuildAuraWorkspaceTabs(ctx, section, scope, lane, width)
     })
     RegisterAuraControl(ctx, laneBar, "Container", "segment", "group-workspace.container-selector", "ephemeral")
     local toolBar = W.ScopeOverrideBar(ctx, section, {
-        values = lane == "externals" and { GF_AURA_WORKSPACE_TOOLS[1] } or GF_AURA_WORKSPACE_TOOLS,
+        values = lane == "externals"
+            and { GF_AURA_WORKSPACE_TOOLS[1], GF_AURA_WORKSPACE_TOOLS[4] }
+            or GF_AURA_WORKSPACE_TOOLS,
         width = sectionW,
         label = "Edit:",
         labelWidth = 72,
@@ -168,28 +170,22 @@ local function BuildAuraWorkspaceTabs(ctx, section, scope, lane, width)
             end
         end
     end
-    if lane ~= "externals" then
-        local openStyle = T.Button(section, "More Aura Options", 150, 22)
-        openStyle:SetPoint("TOPRIGHT", section, "TOPRIGHT", -16, -76)
-        if T.CenterButtonLabel then T.CenterButtonLabel(openStyle) end
-        openStyle:SetScript("OnClick", function()
-            local styleScope = scope == "mythicraid" and "raid" or scope
-            M.SetMenuStateValue("auraScope", styleScope)
-            M.SetMenuStateValue("auraStyleGFScope", styleScope)
-            M.SetMenuStateValue("auraStyleContainer", lane)
-            M.SetMenuStateValue("auraStyleGFLane", lane)
-            if M.SelectPage then M.SelectPage("auras3_styling") end
-        end)
-        RegisterAuraControl(ctx, openStyle, "More Aura Options", "button", "group-workspace.open-aura-style", "navigation", "auras3_styling")
-        if type(M.AddTooltip) == "function" then
-            M.AddTooltip(openStyle, "More Aura Options",
-                "Opens the complete Aura Style page for icon appearance, cooldown and stack text, duration bars, and colors.",
-                { hook = true, titleAsLine = true })
-        end
-        W.Text(section, "All icon styling: Appearance > Auras.", 16, -84, sectionW - 198, MUTED)
-    else
-        W.Text(section, "External defensives use their dedicated layout below.", 16, -84, sectionW - 32, MUTED)
+    local sharedLane = lane == "debuff" and "debuff" or "buff"
+    local openStyle = T.Button(section, "Shared Aura Style", 150, 22)
+    openStyle:SetPoint("TOPRIGHT", section, "TOPRIGHT", -16, -76)
+    if T.CenterButtonLabel then T.CenterButtonLabel(openStyle) end
+    openStyle:SetScript("OnClick", function()
+        M.SetMenuStateValue("auraSharedStyleContainer", sharedLane)
+        M.SetMenuStateValue("auraStyleGFLane", sharedLane)
+        if M.SelectPage then M.SelectPage("auras3_styling") end
+    end)
+    RegisterAuraControl(ctx, openStyle, "Shared Aura Style", "button", "group-workspace.open-aura-style", "navigation", "auras3_styling")
+    if type(M.AddTooltip) == "function" then
+        M.AddTooltip(openStyle, "Shared Aura Style",
+            "Opens the global Aura icon theme: border, shadow, colors, lane padding and native Player weapon enchants. This GroupFrame's individual Style stays here.",
+            { hook = true, titleAsLine = true })
     end
+    W.Text(section, "Individual Style is edited here. Shared icon theme: Appearance > Aura Style.", 16, -84, sectionW - 198, MUTED)
 end
 local function NativeAuraKey(groupKey)
     if groupKey == "buff" then return "buffs" end
@@ -439,7 +435,7 @@ local function BuildGFAuras(ctx)
     if tool == "layout" then
         local title = lane == "debuff" and "Debuff Layout"
             or (lane == "externals" and "External Defensive Layout" or "Buff Layout")
-        local section = auraBuilder:Section(title, 288)
+        local section = auraBuilder:Section(title, 202)
         local w = section._msuf2Width or auraBuilder.width or 720
         local inner, gap = w - 48, 10
         local controls = {}
@@ -486,13 +482,11 @@ local function BuildGFAuras(ctx)
             controls[#controls + 1] = widget
             return widget
         end
-        Slider("X", 1, -92, -300, 300, "x", 0)
-        Slider("Y", 2, -92, -300, 300, "y", 0)
-        Slider("Max", 3, -92, 0, 20, "max", defaults.max)
-        Slider("Size", 4, -92, 8, 80, "size", defaults.size)
+        Slider("Max", 1, -92, 0, 20, "max", defaults.max)
+        Slider("Size", 2, -92, 8, 80, "size", defaults.size)
+        Slider("Layer (0-30)", 3, -92, 0, 30, "layer", defaults.layer)
         local perRowControl = Slider("Per row", 1, -146, 1, 20, "perRow", defaults.perRow)
         Slider("Gap", 2, -146, 0, 12, "spacing", defaults.spacing)
-        Slider("Layer (0-30)", 3, -146, 0, 30, "layer", defaults.layer)
         local iconScale = BindLiveAuraSlider(W.Slider(section, "Icon Scale (%)", 20, 300, 1, col4),
             scope, lane, "iconScale", 100,
             AuraControlMeta(ctx,
@@ -501,59 +495,12 @@ local function BuildGFAuras(ctx)
                     assistantDispositionReason = "Icon Scale targets the selected Group scope's Aura container.",
                     assistantSettingKeys = GroupAuraSettingKeys(scope, ".auras." .. tostring(lane) .. ".iconScale"),
                 }))
-        W.MoveWidget(iconScale, section, 24 + 3 * (col4 + gap), -146, col4)
+        W.MoveWidget(iconScale, section, 24 + 2 * (col4 + gap), -146, col4)
         controls[#controls + 1] = iconScale
-        local shapeLane = lane == "debuff" and "debuff" or "buff"
-        local auraModel = MSUF.MSUF_Auras3 and MSUF.MSUF_Auras3.MenuModel
-        local iconShape = W.Dropdown(section, "Icon Shape", M.AURA_ICON_SHAPE_VALUES or {}, inner)
-        M.BindDropdownWidget(ctx, iconShape,
-            function()
-                local activeScope = CurrentScope()
-                if auraModel and auraModel.IconShapeFollowsShared(activeScope, shapeLane) then
-                    return auraModel.ReadLaneStyleString("shared", shapeLane, "iconShape", "RECTANGLE")
-                end
-                return AuraGroup(activeScope, lane).iconShape or "RECTANGLE"
-            end,
-            function(value)
-                if CombatLocked() then return end
-                local activeScope = CurrentScope()
-                local group = AuraGroup(activeScope, lane)
-                value = value or "RECTANGLE"
-                if group.iconShape == value then return end
-                group.iconShape = value
-                RefreshAuraPreviews(activeScope)
-                QueueGF(activeScope, "auras")
-            end,
-            AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".layout.icon-shape"))
-        W.MoveWidget(iconShape, section, 24, -202, inner, "LEFT")
-        controls[#controls + 1] = iconShape
-        local followShared
-        if auraModel and type(auraModel.IconShapeFollowsShared) == "function" then
-            followShared = W.SwitchAt(section, "Follow shared settings", 24, -250, inner)
-            M.BindBoolWidget(ctx, followShared,
-                function() return auraModel.IconShapeFollowsShared(CurrentScope(), shapeLane) end,
-                function(value)
-                    local activeScope = CurrentScope()
-                    if auraModel.SetIconShapeFollowsShared(activeScope, shapeLane, value == true) then
-                        RefreshAuraPreviews(activeScope)
-                        QueueGF(activeScope, "auras")
-                    end
-                    if M.Refresh then M.Refresh(ctx) end
-                end,
-                AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".layout.icon-shape.follow-shared"))
-            if type(M.AddTooltip) == "function" then
-                M.AddTooltip(followShared, "Shared icon shape",
-                    "Keeps Icon Shape synchronized with Aura Style > Shared while the remaining Group Aura settings stay local.",
-                    { hook = true, titleAsLine = true })
-            end
-        end
         M.TrackRefresh(ctx, function()
             local shown = LaneBackendEnabled(CurrentScope(), lane)
             SetOptionEnabled(enable, true)
             SetOptionsEnabled(controls, shown)
-            if followShared then
-                SetOptionEnabled(iconShape, shown and not auraModel.IconShapeFollowsShared(CurrentScope(), shapeLane))
-            end
             local growth = tostring(AuraGroup(CurrentScope(), lane).growth or defaults.growth):upper()
             SetOptionEnabled(perRowControl, shown and growth ~= "UP" and growth ~= "DOWN")
         end)
@@ -564,4 +511,4 @@ local function BuildGFAuras(ctx)
     if GP.BuildSpellIndicatorsSection then GP.BuildSpellIndicatorsSection(ctx, b, RefreshPage) end
     FinalizeScopePage(ctx, b)
 end
-M.RegisterPage("gf_auras", { title = "MSUF Group Auras", build = BuildGFAuras, version = 30 })
+M.RegisterPage("gf_auras", { title = "MSUF Group Auras", build = BuildGFAuras, version = 33 })

@@ -12,7 +12,7 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
 end
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-local MENU_STATE_VERSION = 4
+local MENU_STATE_VERSION = 6
 local MENU_STATE_TABLE_FIELDS = M.WordList [[
     accordionState navHeaderState unitTextTabSelection unitTextSlotSelection unitPortraitTabSelection
     unitStatusSelection unitStatusTabSelection gfTextTabSelection gfTextSlotSelection
@@ -26,8 +26,7 @@ local MENU_STATE_SCALAR_DEFAULTS = {
     auraStyleGFScope = "raid",
     auraStyleGFLane = "debuff",
     auraStyleContainer = "debuff",
-    auraStylePreviewScope = "target",
-    auraStylePreviewMode = "sample",
+    auraSharedStyleContainer = "debuff",
     previewBackground = "silvermoon",
     previewBackgroundCustomR = 0.08,
     previewBackgroundCustomG = 0.12,
@@ -77,6 +76,10 @@ local function MigrateMenuState(state, oldVersion)
     end
     -- The last selected menu page is intentionally session-only.
     if oldVersion < 4 then state.lastPage = nil end
+    if oldVersion < 6 then
+        state.auraStylePreviewScope = nil
+        state.auraStylePreviewMode = nil
+    end
 end
 local function EnsurePersistentMenuState()
     ExportPublic("MSUF_GlobalDB", type(_G.MSUF_GlobalDB) == "table" and _G.MSUF_GlobalDB or {})

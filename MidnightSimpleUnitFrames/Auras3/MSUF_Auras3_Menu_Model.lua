@@ -152,6 +152,7 @@ local LAYOUT_KEYS = {
     debuffIconZoom = true,
     buffIconShape = true,
     debuffIconShape = true,
+    stylePadding = true,
     spacing = true,
     offsetX = true,
     offsetY = true,
@@ -196,8 +197,7 @@ local LAYOUT_KEYS = {
 local STYLE_LAYOUT_KEYS = {
     buffIconZoom = true,
     debuffIconZoom = true,
-    buffIconShape = true,
-    debuffIconShape = true,
+    stylePadding = true,
     stackTextSize = true,
     stackTextOffsetX = true,
     stackTextOffsetY = true,
@@ -247,6 +247,8 @@ local SHARED_LAYOUT_KEYS = {
     buffShowTooltip = true,
     buffShowCooldownText = true,
     buffShowStackCount = true,
+    buffShowStealable = true,
+    buffStealableStyle = true,
     buffStackCountAnchor = true,
     buffCooldownTextAnchor = true,
     debuffShowCooldownSwipe = true,
@@ -315,6 +317,8 @@ local STYLE_SHARED_LAYOUT_KEYS = {
     buffShowTooltip = true,
     buffShowCooldownText = true,
     buffShowStackCount = true,
+    buffShowStealable = true,
+    buffStealableStyle = true,
     buffStackCountAnchor = true,
     buffCooldownTextAnchor = true,
     debuffShowCooldownSwipe = true,
@@ -398,6 +402,8 @@ local LANE_STYLE_KEYS = {
         showTooltip = "buffShowTooltip",
         showCooldownText = "buffShowCooldownText",
         showStackCount = "buffShowStackCount",
+        showStealable = "buffShowStealable",
+        stealableStyle = "buffStealableStyle",
         stackCountAnchor = "buffStackCountAnchor",
         cooldownTextAnchor = "buffCooldownTextAnchor",
         stackTextSize = "buffStackTextSize",
@@ -469,6 +475,8 @@ local DEFAULT_SHARED = {
     buffShowTooltip = true,
     buffShowCooldownText = true,
     buffShowStackCount = true,
+    buffShowStealable = false,
+    buffStealableStyle = "BORDER_ICON",
     debuffShowCooldownSwipe = true,
     debuffCooldownSwipeReverse = false,
     debuffSortMethod = "DEFAULT",
@@ -1275,6 +1283,13 @@ function Model.EnsureDB()
     if type(auras.customDisplays.serial) ~= "number" then auras.customDisplays.serial = 0 end
     if type(auras.customContainers) ~= "table" then auras.customContainers = {} end
     if type(auras.customContainers.perUnit) ~= "table" then auras.customContainers.perUnit = {} end
+    -- An existing `specialStyles` table is legacy upgrade input only.  Do not
+    -- seed it for new profiles: current Player Defensive and Target-DoT Style
+    -- lives on the owning UnitFrame like every other Custom Aura container.
+    -- Appearance is now unconditional per Aura product; remove the former
+    -- frame participation and shape-follow switches from upgraded profiles.
+    shared.styleScopeDisabled = nil
+    shared.iconShapeFollowSharedScopes = nil
     DefaultsIntoOnce(shared, DEFAULT_SHARED)
     if shared._msufA3_debuffTypeBorderModeMigrated_v1 ~= true then
         shared.debuffTypeBorderMode = shared.useDebuffTypeBorders == true and "SYMBOL" or NormalizeDebuffTypeBorderMode(shared.debuffTypeBorderMode, "OFF")
@@ -1513,121 +1528,111 @@ function Model.BorderStyleValues()
     return B.List()
 end
 
-function Model.ReadBorderStyle(unit)
+local SHARED_APPEARANCE_KINDS = {
+    buff = true,
+    debuff = true,
+    playerDefensives = true,
+    targetDots = true,
+}
+
+local function NormalizeSharedAppearanceKind(kind)
+    kind = tostring(kind or "buff")
+    if kind == "playerdefensives" then kind = "playerDefensives" end
+    if kind == "targetdots" then kind = "targetDots" end
+    return SHARED_APPEARANCE_KINDS[kind] and kind or "buff"
+end
+
+--- Shared Appearance is selected only by Aura product, never by Unit/Group
+--- frame.  Buff/Debuff retain their legacy scalar fallback so existing
+--- profiles keep the exact same shape until the user changes this theme.
+function Model.ReadSharedAppearanceIconShape(kind)
+    kind = NormalizeSharedAppearanceKind(kind)
+    local _, shared = Model.EnsureDB()
+    local shapes = type(shared) == "table" and shared.appearanceIconShapes or nil
+    local value = type(shapes) == "table" and shapes[kind] or nil
+    if value == nil then
+        local fallbackKind = kind == "targetDots" and "debuff"
+            or kind == "playerDefensives" and "buff" or kind
+        local key = fallbackKind == "debuff" and "debuffIconShape" or "buffIconShape"
+        value = type(shared) == "table" and (shared[key] or shared.iconShape) or nil
+    end
+    value = tostring(value or "RECTANGLE")
+    return type(A3.NormalizeAuraIconShape) == "function" and A3.NormalizeAuraIconShape(value) or value
+end
+
+function Model.WriteSharedAppearanceIconShape(kind, value)
+    kind = NormalizeSharedAppearanceKind(kind)
+    local _, shared = Model.EnsureDB()
+    if type(shared) ~= "table" then return false end
+    shared.appearanceIconShapes = type(shared.appearanceIconShapes) == "table"
+        and shared.appearanceIconShapes or {}
+    value = tostring(value or "RECTANGLE")
+    if type(A3.NormalizeAuraIconShape) == "function" then value = A3.NormalizeAuraIconShape(value) end
+    if shared.appearanceIconShapes[kind] == value then return false end
+    shared.appearanceIconShapes[kind] = value
+    return true
+end
+
+--- Appearance values are global by Aura product. They deliberately have no
+--- UnitFrame/GroupFrame scope and no participation switch. Legacy scalar
+--- values remain read-only fallbacks until a product is edited, preserving
+--- old profiles without keeping the former cross-scope ownership model alive.
+function Model.ReadSharedAppearanceValue(kind, key, defaultValue)
+    kind = NormalizeSharedAppearanceKind(kind)
+    local _, shared = Model.EnsureDB()
+    if type(shared) ~= "table" then return defaultValue end
+    local styles = type(shared.appearanceIconStyles) == "table" and shared.appearanceIconStyles or nil
+    local style = type(styles) == "table" and styles[kind] or nil
+    if type(style) == "table" and style[key] ~= nil then return style[key] end
+    if shared[key] ~= nil then return shared[key] end
+    return defaultValue
+end
+
+function Model.WriteSharedAppearanceValue(kind, key, value)
+    kind = NormalizeSharedAppearanceKind(kind)
+    local _, shared = Model.EnsureDB()
+    if type(shared) ~= "table" then return false end
+    shared.appearanceIconStyles = type(shared.appearanceIconStyles) == "table"
+        and shared.appearanceIconStyles or {}
+    local style = shared.appearanceIconStyles[kind]
+    if type(style) ~= "table" then
+        style = {}
+        shared.appearanceIconStyles[kind] = style
+    end
+    if style[key] == value then return false end
+    style[key] = value
+    return true
+end
+
+function Model.ReadSharedAppearanceBool(kind, key, defaultValue)
+    return Model.ReadSharedAppearanceValue(kind, key, defaultValue and true or false) == true
+end
+
+function Model.WriteSharedAppearanceBool(kind, key, value)
+    return Model.WriteSharedAppearanceValue(kind, key, value == true)
+end
+
+function Model.ReadSharedAppearanceNumber(kind, key, defaultValue, minValue, maxValue)
+    return ClampNumber(Model.ReadSharedAppearanceValue(kind, key, defaultValue), defaultValue, minValue, maxValue)
+end
+
+function Model.WriteSharedAppearanceNumber(kind, key, value, minValue, maxValue)
+    value = ClampNumber(value, 0, minValue, maxValue)
+    if math_floor(value) == value then value = Round(value) end
+    return Model.WriteSharedAppearanceValue(kind, key, value)
+end
+
+function Model.ReadSharedAppearanceBorderStyle(kind)
     local B = MSUF.BorderStyles
-    local value = Model.ReadValue(unit, "styleBorderStyle", "SOLID")
+    local value = Model.ReadSharedAppearanceValue(kind, "styleBorderStyle", "SOLID")
     if B and type(B.Normalize) == "function" then return B.Normalize(value) end
     return type(value) == "string" and value ~= "" and value or "SOLID"
 end
 
-function Model.WriteBorderStyle(unit, value)
+function Model.WriteSharedAppearanceBorderStyle(kind, value)
     local B = MSUF.BorderStyles
     if B and type(B.Normalize) == "function" then value = B.Normalize(value) end
-    Model.WriteValue(unit, "styleBorderStyle", value)
-end
-
--- The aura icon border/shadow is one shared block, but every frame scope can
--- opt out of it. Opt-outs live as a sparse hash on the shared block so the
--- runtime resolves them with one table read while compiling a lane -- there is
--- no per-frame or per-update cost either way. Group scopes key off their group
--- kind, and the Raid editor drives both raid and mythicraid.
-local ICON_STYLE_SCOPE_KEYS = {
-    player = true, target = true, focus = true, boss = true,
-    party = true, raid = true, mythicraid = true,
-}
-
-local function IconStyleScopeKeys(scope)
-    if scope == "raid" then return "raid", "mythicraid" end
-    if ICON_STYLE_SCOPE_KEYS[scope] == true then return scope end
-    return nil
-end
-
---- True when `scope` renders the shared icon border/shadow. "shared" and any
---- unknown scope answer true: there is nothing scope-specific to switch off.
-function Model.IconStyleScopeEnabled(scope)
-    local key = IconStyleScopeKeys(scope)
-    if not key then return true end
-    local _, shared = Model.EnsureDB()
-    local disabled = type(shared) == "table" and shared.styleScopeDisabled or nil
-    return not (type(disabled) == "table" and disabled[key] == true)
-end
-
---- Returns true when the stored value changed (callers apply on change only).
-function Model.SetIconStyleScopeEnabled(scope, enabled)
-    local key, alias = IconStyleScopeKeys(scope)
-    if not key then return false end
-    local _, shared = Model.EnsureDB()
-    if type(shared) ~= "table" then return false end
-    local value = enabled == false and true or nil
-    local disabled = shared.styleScopeDisabled
-    if type(disabled) ~= "table" then
-        if value == nil then return false end
-        disabled = {}
-        shared.styleScopeDisabled = disabled
-    end
-    local changed = disabled[key] ~= value
-    disabled[key] = value
-    if alias then
-        if disabled[alias] ~= value then changed = true end
-        disabled[alias] = value
-    end
-    if next(disabled) == nil then shared.styleScopeDisabled = nil end
-    return changed
-end
-
-local ICON_SHAPE_LANE_KEYS = {
-    buff = true, debuff = true,
-    custom1 = true, custom2 = true, custom3 = true, custom4 = true,
-}
-
---- Icon shape inheritance is intentionally independent from the broad Aura
---- Style override. A scope can therefore keep local text/swipe/timer settings
---- while its selected lane continues to use the corresponding Shared shape.
---- Local choices remain stored and become effective again when inheritance is
---- disabled. The sparse table records only explicit Shared opt-ins, preserving
---- the existing scope-aware shape behavior by default.
-function Model.IconShapeFollowsShared(scope, lane)
-    local key = IconStyleScopeKeys(scope)
-    lane = tostring(lane or "")
-    if not (key and ICON_SHAPE_LANE_KEYS[lane] == true) then return false end
-    local _, shared = Model.EnsureDB()
-    local followScopes = type(shared) == "table" and shared.iconShapeFollowSharedScopes or nil
-    local followLanes = type(followScopes) == "table" and followScopes[key] or nil
-    return type(followLanes) == "table" and followLanes[lane] == true
-end
-
---- Returns true when the stored value changed (callers apply on change only).
-function Model.SetIconShapeFollowsShared(scope, lane, followsShared)
-    local key, alias = IconStyleScopeKeys(scope)
-    lane = tostring(lane or "")
-    if not (key and ICON_SHAPE_LANE_KEYS[lane] == true) then return false end
-    local _, shared = Model.EnsureDB()
-    if type(shared) ~= "table" then return false end
-
-    local value = followsShared == true and true or nil
-    local followScopes = shared.iconShapeFollowSharedScopes
-    if type(followScopes) ~= "table" then
-        if value == nil then return false end
-        followScopes = {}
-        shared.iconShapeFollowSharedScopes = followScopes
-    end
-
-    local changed
-    local function Store(scopeKey)
-        local followLanes = followScopes[scopeKey]
-        if type(followLanes) ~= "table" then
-            if value == nil then return end
-            followLanes = {}
-            followScopes[scopeKey] = followLanes
-        end
-        if followLanes[lane] ~= value then changed = true end
-        followLanes[lane] = value
-        if next(followLanes) == nil then followScopes[scopeKey] = nil end
-    end
-    Store(key)
-    if alias then Store(alias) end
-    if next(followScopes) == nil then shared.iconShapeFollowSharedScopes = nil end
-    return changed == true
+    return Model.WriteSharedAppearanceValue(kind, "styleBorderStyle", value)
 end
 
 function Model.DurationBarDisplayValues()
@@ -2018,6 +2023,30 @@ local function EnforceTargetDotContainer(item)
     item.placed = type(item.placed) == "table" and item.placed or {}
     item.placed.iconShape = type(A3.NormalizeAuraIconShape) == "function"
         and A3.NormalizeAuraIconShape(item.placed.iconShape) or (item.placed.iconShape or "RECTANGLE")
+    item.placed.pandemicEnabled = item.placed.pandemicEnabled == true
+    if type(A3.NormalizePandemicStyle) == "function" then
+        item.placed.pandemicStyle = A3.NormalizePandemicStyle(item.placed.pandemicStyle)
+    else
+        local pandemicStyle = tostring(item.placed.pandemicStyle or "BORDER"):upper()
+        if pandemicStyle == "GLOW" or pandemicStyle == "BORDER_GLOW" then pandemicStyle = "BORDER"
+        elseif pandemicStyle == "GLOW_TINT" then pandemicStyle = "TINT"
+        elseif pandemicStyle == "ALL" then pandemicStyle = "BORDER_TINT"
+        elseif pandemicStyle ~= "BORDER" and pandemicStyle ~= "TINT" and pandemicStyle ~= "BORDER_TINT" then pandemicStyle = "BORDER" end
+        item.placed.pandemicStyle = pandemicStyle
+    end
+    local pandemicColor = type(item.placed.pandemicColor) == "table" and item.placed.pandemicColor or nil
+    item.placed.pandemicColor = {
+        ClampNumber(pandemicColor and (pandemicColor[1] or pandemicColor.r), 1, 0, 1),
+        ClampNumber(pandemicColor and (pandemicColor[2] or pandemicColor.g), 0.24, 0, 1),
+        ClampNumber(pandemicColor and (pandemicColor[3] or pandemicColor.b), 0.08, 0, 1),
+    }
+    item.placed.pandemicThickness = ClampNumber(item.placed.pandemicThickness, 2, 1, 12)
+    item.placed.pandemicPadding = ClampNumber(item.placed.pandemicPadding, 1, -8, 16)
+    item.placed.pandemicGlowSize = nil
+    item.placed.pandemicBorderAlpha = ClampNumber(item.placed.pandemicBorderAlpha, 1, 0.05, 1)
+    item.placed.pandemicGlowAlpha = nil
+    item.placed.pandemicTintAlpha = ClampNumber(item.placed.pandemicTintAlpha, 0.22, 0.05, 1)
+    item.placed.pandemicBlend = tostring(item.placed.pandemicBlend or "ADD"):upper() == "BLEND" and "BLEND" or "ADD"
     item.filters = type(item.filters) == "table" and item.filters or {}
     item.filters.enabled = true
     item.filters.onlyMine = true
@@ -2128,6 +2157,8 @@ function Model.CustomContainerMax()
     return CUSTOM_CONTAINER_MAX
 end
 
+local MigrateLegacySpecialStyle
+
 function Model.CustomContainer(unit, index, create)
     unit = NormalizeScope(unit)
     if unit == "shared" then unit = "player" end
@@ -2144,12 +2175,156 @@ function Model.CustomContainer(unit, index, create)
     elseif index == TARGET_DOT_CONTAINER_INDEX then
         EnforceTargetDotContainer(item)
     end
+    if MigrateLegacySpecialStyle then MigrateLegacySpecialStyle(unit, index, item) end
     return item
 end
 
 function Model.CustomContainers(unit, create)
     local record = EnsureUnitCustomContainers(unit, create == true)
     return record and record.items or {}
+end
+
+--- Copies only the controls exposed by the UnitFrame Aura Style tools.
+--- Visibility, positioning, filters, whitelists and tracked spells stay owned
+--- by the destination. This is a cold-path Copy To operation.
+Model.CustomContainerStylePlacedKeys = Model.CustomContainerStylePlacedKeys or {
+    iconZoom = true,
+    showTooltip = true,
+    alpha = true,
+    debuffTypeBorderMode = true,
+    showStacks = true,
+    stackSize = true,
+    stackAnchor = true,
+    stackX = true,
+    stackY = true,
+    showCooldown = true,
+    showCooldownSwipe = true,
+    cooldownSwipeReverse = true,
+    cooldownSize = true,
+    cooldownAnchor = true,
+    cooldownX = true,
+    cooldownY = true,
+    cooldownDecimalSeconds = true,
+    showDurationBar = true,
+    durationBarHeight = true,
+    durationBarDisplay = true,
+    durationBarPosition = true,
+    durationBarDirection = true,
+    pandemicEnabled = true,
+    pandemicStyle = true,
+    pandemicColor = true,
+    pandemicThickness = true,
+    pandemicPadding = true,
+    pandemicBorderAlpha = true,
+    pandemicTintAlpha = true,
+    pandemicBlend = true,
+}
+
+--- Older builds stored Custom-4 presentation in one global specialStyles
+--- record.  Materialize that last effective look into every owning frame once,
+--- then keep all future edits frame-local.  Content, filters, placement and
+--- tracked spells never pass through this migration.
+MigrateLegacySpecialStyle = function(unit, index, item)
+    if index ~= 4 or type(item) ~= "table" or item._msufA3LocalStyleFromShared_v1 == true then return end
+    local normalizedUnit = NormalizeUnit(unit)
+    local kind = normalizedUnit == "player" and "playerDefensives" or "targetDots"
+    local auras, shared = Model.EnsureDB()
+    local styles = type(shared) == "table" and shared.specialStyles or nil
+    local legacy = type(styles) == "table" and type(styles[kind]) == "table" and styles[kind] or nil
+    if legacy then
+        item.placed = type(item.placed) == "table" and item.placed or {}
+        local sourcePlaced = type(legacy.placed) == "table" and legacy.placed or nil
+        if sourcePlaced then
+            for key in pairs(Model.CustomContainerStylePlacedKeys) do
+                if sourcePlaced[key] ~= nil then item.placed[key] = DeepCopy(sourcePlaced[key]) end
+            end
+        end
+        if type(legacy.frame) == "table" then item.frame = DeepCopy(legacy.frame) end
+    end
+    item._msufA3LocalStyleFromShared_v1 = true
+end
+
+function Model.CustomContainerStyleItem(unit, index, create)
+    return Model.CustomContainer(unit, index, create)
+end
+
+local function SelectedCopy(source, keys)
+    local out = {}
+    if type(source) ~= "table" then return out end
+    for key in pairs(keys) do
+        if source[key] ~= nil then out[key] = DeepCopy(source[key]) end
+    end
+    return out
+end
+
+--- Captures only the values exposed by Aura Style.  Aura Options can therefore
+--- replace the rest of a frame's Aura workspace without accidentally changing
+--- its visual presentation.
+function Model.CaptureUnitStyle(unit)
+    unit = NormalizeUnit(unit)
+    local auras = Model.EnsureDB()
+    if type(auras) ~= "table" then return nil end
+    local sourceRecord = PerUnit(auras, unit, false)
+    local snapshot = {
+        ownsStyle = UnitStyleOverrideActive(sourceRecord),
+        layout = SelectedCopy(sourceRecord and sourceRecord.layout, STYLE_LAYOUT_KEYS),
+        layoutShared = SelectedCopy(sourceRecord and sourceRecord.layoutShared, STYLE_SHARED_LAYOUT_KEYS),
+        custom = {},
+    }
+    for index = 1, CUSTOM_CONTAINER_MAX do
+        local item = Model.CustomContainer(unit, index, true)
+        local placed = type(item) == "table" and type(item.placed) == "table" and item.placed or nil
+        snapshot.custom[index] = {
+            placed = SelectedCopy(placed, Model.CustomContainerStylePlacedKeys),
+            frame = type(item) == "table" and type(item.frame) == "table" and DeepCopy(item.frame) or nil,
+        }
+    end
+    return snapshot
+end
+
+function Model.ApplyUnitStyleSnapshot(destinationUnit, snapshot)
+    destinationUnit = NormalizeUnit(destinationUnit)
+    if type(snapshot) ~= "table" then return false end
+    local auras = Model.EnsureDB()
+    if type(auras) ~= "table" then return false end
+
+    EachRuntimeUnit(destinationUnit, function(runtimeUnit)
+        local destinationRecord = PerUnit(auras, runtimeUnit, true)
+        if not destinationRecord then return end
+        destinationRecord.layout = type(destinationRecord.layout) == "table" and destinationRecord.layout or {}
+        destinationRecord.layoutShared = type(destinationRecord.layoutShared) == "table" and destinationRecord.layoutShared or {}
+        ClearKeys(destinationRecord.layout, STYLE_LAYOUT_KEYS)
+        ClearKeys(destinationRecord.layoutShared, STYLE_SHARED_LAYOUT_KEYS)
+        if snapshot.ownsStyle == true then
+            for key, value in pairs(snapshot.layout or {}) do destinationRecord.layout[key] = DeepCopy(value) end
+            for key, value in pairs(snapshot.layoutShared or {}) do destinationRecord.layoutShared[key] = DeepCopy(value) end
+            destinationRecord.overrideStyle = true
+        else
+            destinationRecord.overrideStyle = false
+        end
+        RefreshLayoutOverrideFlags(destinationRecord)
+    end)
+
+    for index = 1, CUSTOM_CONTAINER_MAX do
+        local destinationItem = Model.CustomContainer(destinationUnit, index, true)
+        local sourceStyle = type(snapshot.custom) == "table" and snapshot.custom[index] or nil
+        if destinationItem and type(sourceStyle) == "table" then
+            destinationItem.placed = type(destinationItem.placed) == "table" and destinationItem.placed or {}
+            ClearKeys(destinationItem.placed, Model.CustomContainerStylePlacedKeys)
+            for key, value in pairs(sourceStyle.placed or {}) do destinationItem.placed[key] = DeepCopy(value) end
+            destinationItem.frame = type(sourceStyle.frame) == "table" and DeepCopy(sourceStyle.frame) or nil
+            destinationItem._msufA3LocalStyleFromShared_v1 = true
+            -- Re-apply the product invariants without replacing copied Style.
+            Model.CustomContainer(destinationUnit, index, true)
+        end
+    end
+    return true
+end
+
+function Model.CopyUnitStyle(sourceUnit, destinationUnit)
+    sourceUnit, destinationUnit = NormalizeUnit(sourceUnit), NormalizeUnit(destinationUnit)
+    if sourceUnit == destinationUnit then return false end
+    return Model.ApplyUnitStyleSnapshot(destinationUnit, Model.CaptureUnitStyle(sourceUnit))
 end
 
 function Model.ResetCustomContainer(unit, index)
@@ -2517,6 +2692,9 @@ function Model.WriteLaneStyleBool(unit, kind, key, value)
 end
 
 function Model.ReadLaneStyleString(unit, kind, key, defaultValue)
+    if NormalizeScope(unit) == "shared" and key == "iconShape" then
+        return Model.ReadSharedAppearanceIconShape(kind)
+    end
     local laneKey = LaneStyleKey(kind, key)
     local value = Model.ReadValue(unit, laneKey, nil)
     if value == nil and laneKey ~= key then value = Model.ReadValue(unit, key, defaultValue) end
@@ -2524,6 +2702,10 @@ function Model.ReadLaneStyleString(unit, kind, key, defaultValue)
 end
 
 function Model.WriteLaneStyleString(unit, kind, key, value)
+    if NormalizeScope(unit) == "shared" and key == "iconShape" then
+        Model.WriteSharedAppearanceIconShape(kind, value)
+        return
+    end
     Model.WriteValue(unit, LaneStyleKey(kind, key), tostring(value or ""))
 end
 
@@ -3550,6 +3732,8 @@ function Model.ReadPreviewConfig(unit)
         buffShowCooldownText = Model.ReadLaneStyleBool(unit, "buff", "showCooldownText", true),
         buffShowCooldownSwipe = Model.ReadLaneStyleBool(unit, "buff", "showCooldownSwipe", true),
         buffCooldownSwipeReverse = Model.ReadLaneStyleBool(unit, "buff", "cooldownSwipeReverse", false),
+        buffShowStealable = Model.ReadLaneStyleBool(unit, "buff", "showStealable", false),
+        buffStealableStyle = Model.ReadLaneStyleString(unit, "buff", "stealableStyle", "BORDER_ICON"),
         debuffShowStackCount = Model.ReadLaneStyleBool(unit, "debuff", "showStackCount", true),
         debuffShowCooldownText = Model.ReadLaneStyleBool(unit, "debuff", "showCooldownText", true),
         debuffShowCooldownSwipe = Model.ReadLaneStyleBool(unit, "debuff", "showCooldownSwipe", true),

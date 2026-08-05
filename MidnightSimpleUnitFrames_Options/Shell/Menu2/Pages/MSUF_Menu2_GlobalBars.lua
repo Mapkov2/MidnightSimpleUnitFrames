@@ -18,8 +18,8 @@ local max = math.max
 local min = math.min
 local unpack = unpack or table.unpack
 local DISPEL_BORDER_121_PTR_DISABLED = false
-local PURGE_BORDER_121_PTR_DISABLED = true
-local DISPEL_PURGE_BORDER_121_PTR_MESSAGE = "Dispel uses native 12.1 AuraContainer detection. Purge border returns in 12.1.5, once Blizzard supports it via API."
+local PURGE_BORDER_121_PTR_DISABLED = false
+local DISPEL_PURGE_BORDER_121_PTR_MESSAGE = "Dispel and Purge use native 12.1 AuraContainer detection."
 local UNITFRAME_DISPEL_AURA_WARNING = "No UnitFrame auras: Dispel Border/Overlay need Player/Target/Focus/Boss auras."
 local UNITFRAME_DISPEL_AURA_WARNING_COLOR = { 0.90, 0.84, 0.76, 1 }
 local UNITFRAME_DISPEL_AURA_UNITS = { "player", "target", "focus", "boss" }
@@ -311,6 +311,10 @@ local function GroupScope()
     local scope = CurrentBarsScope()
     return type(IsGFScope) == "function" and IsGFScope(scope)
         or scope == "gf_party" or scope == "gf_raid"
+end
+local function PurgeScopeSupported()
+    local scope = CurrentBarsScope()
+    return scope == "shared" or scope == "target" or scope == "focus"
 end
 local function ScopedControls() return SharedScope() or ScopeHasOverride(CurrentBarsScope(), "hlOverride") end
 local function HighlightControls() return CurrentBarsScope() ~= nil end
@@ -1899,7 +1903,9 @@ local function BuildHighlightSection(ctx, b)
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(modesCard, function()
             local references = { "bar.aggro_border" }
-            if not PURGE_BORDER_121_PTR_DISABLED then references[#references + 1] = "bar.purge_border" end
+            if not PURGE_BORDER_121_PTR_DISABLED and PurgeScopeSupported() then
+                references[#references + 1] = "bar.purge_border"
+            end
             if SharedScope() then references[#references + 1] = "highlight.boss_target" end
             return references
         end, {
@@ -1949,19 +1955,21 @@ local function BuildHighlightSection(ctx, b)
         local aggroOn = ScopeBorderModeOn("aggroOutlineMode", 1)
         local dispelOn = ScopeBorderModeOn("dispelOutlineMode", 1)
         local purgeOn = ScopeBorderModeOn("purgeOutlineMode", 0)
+        local purgeSupported = PurgeScopeSupported()
         local bossTargetOn = BossTargetBorderOn()
         ClearBorderTestIfDisabled("MSUF_AggroBorderTestMode", "MSUF_SetAggroBorderTestMode", aggroOn)
         ClearBorderTestIfDisabled("MSUF_DispelBorderTestMode", "MSUF_SetDispelBorderTestMode", dispelOn and not DISPEL_BORDER_121_PTR_DISABLED)
-        ClearBorderTestIfDisabled("MSUF_PurgeBorderTestMode", "MSUF_SetPurgeBorderTestMode", purgeOn and not PURGE_BORDER_121_PTR_DISABLED)
+        ClearBorderTestIfDisabled("MSUF_PurgeBorderTestMode", "MSUF_SetPurgeBorderTestMode",
+            purgeOn and purgeSupported and not PURGE_BORDER_121_PTR_DISABLED)
         ClearBorderTestIfDisabled("MSUF_BossTargetBorderTestMode", "MSUF_SetBossTargetBorderTestMode", sharedActive and bossTargetOn)
         SetControlsEnabled(scopedBorderControls, scopedActive)
         SetControlEnabled(dispelBorder, scopedActive and not DISPEL_BORDER_121_PTR_DISABLED)
-        SetControlEnabled(purge, scopedActive and not PURGE_BORDER_121_PTR_DISABLED)
+        SetControlEnabled(purge, scopedActive and purgeSupported and not PURGE_BORDER_121_PTR_DISABLED)
         SetControlEnabled(bossTarget, sharedActive)
         SetControlEnabled(aggroMode, scopedActive and aggroOn)
         SetControlEnabled(aggroTest, scopedActive and aggroOn)
         SetControlsEnabled(dispelBorderControls, scopedActive and dispelOn and not DISPEL_BORDER_121_PTR_DISABLED)
-        SetControlEnabled(purgeTest, scopedActive and purgeOn and not PURGE_BORDER_121_PTR_DISABLED)
+        SetControlEnabled(purgeTest, scopedActive and purgeSupported and purgeOn and not PURGE_BORDER_121_PTR_DISABLED)
         SetControlEnabled(bossTargetTest, sharedActive and bossTargetOn)
         if dispelPurgePtrHint and dispelPurgePtrHint.SetShown then dispelPurgePtrHint:SetShown(PURGE_BORDER_121_PTR_DISABLED) end
         if unitAuraDispelHint and unitAuraDispelHint.SetShown then unitAuraDispelHint:SetShown((not GroupScope()) and not AnyUnitFrameAuraEnabled()) end
