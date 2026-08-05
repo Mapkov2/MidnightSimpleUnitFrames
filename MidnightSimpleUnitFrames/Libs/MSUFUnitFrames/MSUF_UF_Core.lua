@@ -2568,6 +2568,13 @@ function UF.AttachFrameMethods(frame)
   end
   frame._msufOufCoreMethods = true
   frame._msufDispatchToken = frame._msufDispatchToken or 0
+  -- Reserve the transient dispatch field while the frame is built, outside
+  -- combat event delivery. Clear it immediately so the established contract
+  -- remains exact: inactive dispatch state is nil, never false.
+  if frame._msufDispatchActive == nil then
+    frame._msufDispatchActive = false
+    frame._msufDispatchActive = nil
+  end
   frame._msufCreatedElements = frame._msufCreatedElements or {}
   frame._msufActiveElements = frame._msufActiveElements or {}
   frame.EnableElement = FrameEnableElement
