@@ -27,7 +27,7 @@ local STATUS_ICON_TAB_VALUES = VT("basic", "Basic", "advanced", "Advanced")
 local DisabledNameAnchorValues = Shared.DisabledNameAnchorValues or function(values) return values or {} end
 local SetSectionHeaderStatus = Shared.SetSectionHeaderStatus or function() end
 local function BuildStatus(ctx, builder, unit)
-    local sec = builder:CollapsibleSection("status_icons", "Status icons", 618, false)
+    local sec = builder:CollapsibleSection("status_icons", "Status icons", 528, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local leftX = 14
     local topGap = 28
@@ -70,7 +70,7 @@ local function BuildStatus(ctx, builder, unit)
     local placementCardX = leftX - 2
     local placementCardW = max(320, sectionW - placementCardX - 28)
     local placementCardY = topCardY - topCardH - cardRowGap
-    local placementCard = W.ControlCard(basicTab, "Placement", nil, placementCardX, placementCardY, placementCardW, 316)
+    local placementCard = W.ControlCard(basicTab, "Placement", nil, placementCardX, placementCardY, placementCardW, 226)
     local placeLeftX = 16
     local placeGap = 24
     local placeAvailableW = max(280, placementCardW - 32)
@@ -120,7 +120,7 @@ local function BuildStatus(ctx, builder, unit)
         "turn on level", "turn off level", "unit level", "player level", "target level", "focus level",
         "boss level", "pet level", unitLabelLower .. " level", tostring(unit or "unit") .. " level",
         "anchor level", "level anchor", "level anchoring", "position level", "level position",
-        "level positioning", "x offset", "y offset", "size", "layer",
+        "level positioning", "preview position", "size", "layer",
     }
     local function StatusSearchKeywords(extra)
         local out = {}
@@ -156,7 +156,7 @@ local function BuildStatus(ctx, builder, unit)
         meta.anchor = control._msuf2Title or control._msuf2Label or control
         meta.values = values or control.values
         meta.keywords = StatusSearchKeywords(extraKeywords)
-        meta.help = help or "Status icon controls include the Level indicator, visibility, anchor, offsets, size, and layer."
+        meta.help = help or "Status icon controls include the Level indicator, visibility, anchor, size, and layer. Position is edited in Preview."
         if type(assistantContract) == "table" then
             for key, value in pairs(assistantContract) do meta[key] = value end
         end
@@ -511,12 +511,6 @@ local function BuildStatus(ctx, builder, unit)
         "right to target name", "left to target name", "right to boss name", "left to boss name",
         "top left", "top right", "bottom left", "bottom right",
     }, CurrentStatusAnchorValues)
-    local x = BindStatusPlacementSlider(placementCard, "X Offset", -500, 500, placeRightX, -54, placeRightW, "x", "defaultX", 0, "MSUF2_STATUS_X", "Status indicator X offset", {
-        "x", "x offset", "horizontal offset", "level x", "level x offset", "move level left", "move level right",
-    })
-    local y = BindStatusPlacementSlider(placementCard, "Y Offset", -500, 500, placeRightX, -116, placeRightW, "y", "defaultY", 0, "MSUF2_STATUS_Y", "Status indicator Y offset", {
-        "y", "y offset", "vertical offset", "level y", "level y offset", "move level up", "move level down",
-    })
     local layer = BindStatusPlacementSlider(placementCard, "Layer", 0, 30, placeLeftX, -178, placeLeftW, "layer", "defaultLayer", 7, "MSUF2_STATUS_LAYER", "Status indicator layer", {
         "level layer", "level draw order", "indicator layer", "draw order", "above text", "behind text",
     }, ClampSelectedStatusLayer)
@@ -583,7 +577,7 @@ local function BuildStatus(ctx, builder, unit)
         "status text color", "indicator color",
     }, nil, nil, "status.selected.text_color", nil, selectedStatusColorContract)
     local reset = W.Button(placementCard, "Reset selected", 150)
-    PlaceButton(reset, placementCard, placeRightX, -178, 150)
+    PlaceButton(reset, placementCard, placeRightX, -54, 150)
     reset._msuf2SkipHistoryCheckpoint = true
     reset:SetScript("OnClick", function()
         local spec = CurrentStatusSpec(unit)
@@ -661,18 +655,12 @@ local function BuildStatus(ctx, builder, unit)
         end
     end
     local advanced = {}
-    advanced.card = W.ControlCard(advancedTab, "Advanced Placement", nil, placementCardX, -38, placementCardW, 316)
-    advanced.x = BindStatusPlacementSlider(advanced.card, "X Offset (extended)", -1000, 1000, placeLeftX, -58, placeLeftW, "x", "defaultX", 0, "MSUF2_STATUS_ADV_X", "Advanced status indicator X offset", {
-        "advanced x", "extended x offset", "wide x offset", "status icon advanced",
-    })
-    advanced.y = BindStatusPlacementSlider(advanced.card, "Y Offset (extended)", -1000, 1000, placeRightX, -58, placeRightW, "y", "defaultY", 0, "MSUF2_STATUS_ADV_Y", "Advanced status indicator Y offset", {
-        "advanced y", "extended y offset", "wide y offset", "status icon advanced",
-    })
-    advanced.layer = BindStatusPlacementSlider(advanced.card, "Layer", 0, 30, placeLeftX, -128, placeLeftW, "layer", "defaultLayer", 7, "MSUF2_STATUS_ADV_LAYER", "Advanced status indicator layer", {
+    advanced.card = W.ControlCard(advancedTab, "Advanced Placement", nil, placementCardX, -38, placementCardW, 232)
+    advanced.layer = BindStatusPlacementSlider(advanced.card, "Layer", 0, 30, placeLeftX, -58, placeLeftW, "layer", "defaultLayer", 7, "MSUF2_STATUS_ADV_LAYER", "Advanced status indicator layer", {
         "advanced layer", "draw order", "status icon advanced",
     }, ClampSelectedStatusLayer)
     advanced.reset = W.Button(advanced.card, "Reset selected", 150)
-    PlaceButton(advanced.reset, advanced.card, placeRightX, -128, 150)
+    PlaceButton(advanced.reset, advanced.card, placeRightX, -58, 150)
     advanced.reset._msuf2SkipHistoryCheckpoint = true
     advanced.reset:SetScript("OnClick", function()
         if reset and reset.Click then reset:Click() end
@@ -680,16 +668,16 @@ local function BuildStatus(ctx, builder, unit)
     RegisterStatusSearch(advanced.reset, "Advanced reset selected status indicator", {
         "advanced reset", "reset status icon advanced",
     }, nil, nil, "status.advanced.reset", "action", selectedStatusContract)
-    advanced.test = BindStatusTestToggle(advanced.card, "Test mode", placeLeftX, -202, placeLeftW, "MSUF2_STATUS_ADV_TEST", "Advanced status indicator test mode", {
+    advanced.test = BindStatusTestToggle(advanced.card, "Test mode", placeLeftX, -128, placeLeftW, "MSUF2_STATUS_ADV_TEST", "Advanced status indicator test mode", {
         "advanced test mode", "status icon advanced preview",
     })
-    advanced.current = StatusPreviewButton(advanced.card, "Preview current", placeLeftX, -252, min(142, placeLeftW), "current", "Advanced preview current status indicator", {
+    advanced.current = StatusPreviewButton(advanced.card, "Preview current", placeLeftX, -178, min(142, placeLeftW), "current", "Advanced preview current status indicator", {
         "advanced preview current", "status icon advanced preview",
     }, "status.preview.advanced.current")
-    advanced.all = StatusPreviewButton(advanced.card, "Show all", placeRightX, -252, min(112, placeRightW), "all", "Advanced show all status indicators", {
+    advanced.all = StatusPreviewButton(advanced.card, "Show all", placeRightX, -178, min(112, placeRightW), "all", "Advanced show all status indicators", {
         "advanced show all", "status icon advanced preview all",
     }, "status.preview.advanced.all")
-    local statusEnabledControls = { anchor, x, y, layer, advanced.x, advanced.y, advanced.layer }
+    local statusEnabledControls = { anchor, layer, advanced.layer }
     local statusDetachedControls = { size }
     local function LayoutSelectedControls(hasSymbol, hasIconPack, hasCustomIcon)
         local y = -106
@@ -709,27 +697,23 @@ local function BuildStatus(ctx, builder, unit)
         if inlineName then
             Shared.PlaceDropdown(placementCard, raidGroupStyle, placeRightX, -54, min(180, placeRightW))
             Shared.PlaceDropdown(placementCard, anchor, placeLeftX, -54, placeLeftW)
-            Shared.PlaceSlider(placementCard, x, placeLeftX, -116, placeLeftW)
-            Shared.PlaceSlider(placementCard, y, placeRightX, -116, placeRightW)
-            Shared.PlaceSlider(placementCard, layer, placeLeftX, -178, placeLeftW)
-            PlaceButton(reset, placementCard, placeRightX, -178, min(220, placeRightW))
+            Shared.PlaceSlider(placementCard, layer, placeLeftX, -116, placeLeftW)
+            PlaceButton(reset, placementCard, placeRightX, -116, min(220, placeRightW))
             return
         end
         Shared.PlaceDropdown(placementCard, raidGroupStyle, placeRightX, -54, min(180, placeRightW))
         Shared.PlaceSlider(placementCard, size, placeLeftX, -54, placeLeftW)
         Shared.PlaceDropdown(placementCard, anchor, placeLeftX, -116, placeLeftW)
-        Shared.PlaceSlider(placementCard, x, placeRightX, -54, placeRightW)
-        Shared.PlaceSlider(placementCard, y, placeRightX, -116, placeRightW)
         Shared.PlaceSlider(placementCard, layer, placeLeftX, -178, placeLeftW)
-        PlaceButton(reset, placementCard, placeRightX, -178, 150)
+        PlaceButton(reset, placementCard, placeRightX, -54, 150)
         if textColor and textColor._msuf2Title then
             local labelW = math.max(86, math.min(160, placeLeftW - 60))
             textColor._msuf2Title:ClearAllPoints()
-            textColor._msuf2Title:SetPoint("TOPLEFT", placementCard, "TOPLEFT", placeLeftX, -240)
+            textColor._msuf2Title:SetPoint("TOPLEFT", placementCard, "TOPLEFT", placeRightX, -116)
             textColor._msuf2Title:SetWidth(labelW)
             textColor:SetSize(44, 18)
             textColor:ClearAllPoints()
-            textColor:SetPoint("TOPLEFT", placementCard, "TOPLEFT", placeLeftX + labelW + 12, -238)
+            textColor:SetPoint("TOPLEFT", placementCard, "TOPLEFT", placeRightX + labelW + 12, -114)
         end
     end
     local function ShowControl(control, shown)
@@ -767,7 +751,7 @@ local function BuildStatus(ctx, builder, unit)
         ShowControl(textColor, spec ~= nil and spec.colorPrefix ~= nil)
         ShowControl(raidGroupStyle, inlineName)
         ShowControl(test, showTestMode)
-        ShowControls(true, anchor, x, y, layer, advanced.x, advanced.y, advanced.layer)
+        ShowControls(true, anchor, layer, advanced.layer)
         ShowControls(not inlineName, size, previewLabel, current, all, previewCard, advanced.current, advanced.all)
         ShowControls(spec ~= nil, reset, advanced.reset)
         ShowControl(advanced.test, showTestMode and not inlineName)

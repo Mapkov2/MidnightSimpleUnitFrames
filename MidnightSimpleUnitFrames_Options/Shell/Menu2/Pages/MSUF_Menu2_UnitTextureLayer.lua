@@ -166,13 +166,13 @@ local function BuildTextureLayer(ctx, builder, unit)
     W.MoveWidget(customPath, generalCard, colX, -140, colW - 16, "LEFT")
     Track(customPath)
 
-    -- Placement: anchor target, anchor point, offsets and size.
+    -- Placement: Preview owns position; this card keeps anchor target and size.
     Track(BindLayerDropdown(placementCard, "Anchor to", 16, -54, colW - 16, TEXLAYER_ANCHOR_TARGETS, "AnchorTarget", "FRAME"))
     Track(BindLayerDropdown(placementCard, "Anchor", 16, -130, colW - 16, TEXLAYER_ANCHORS, "Anchor", "TOP"))
     Track(BindLayerSlider(placementCard, "Width", 16, -214, colW, 0, 600, 1, "Width", 0))
-    Track(BindLayerSlider(placementCard, "Offset X", colX, -62, colW, -200, 200, 1, "OffsetX", 0))
-    Track(BindLayerSlider(placementCard, "Offset Y", colX, -120, colW, -200, 200, 1, "OffsetY", 0))
-    Track(BindLayerSlider(placementCard, "Height", colX, -178, colW, 1, 120, 1, "Height", 16))
+    Track(BindLayerSlider(placementCard, "Height", colX, -62, colW, 1, 120, 1, "Height", 16))
+    W.LabelAt(placementCard, "Use the colored Texture handle in Preview for exact placement.", colX, -130,
+        colW - 16, "GameFontNormalSmall", T.colors and T.colors.muted)
 
     -- Style: color mode, gradient with a Bars-style direction D-pad, blend,
     -- mirroring, opacity and a four-edge feather mask. Colors themselves live on the Colors page and behind

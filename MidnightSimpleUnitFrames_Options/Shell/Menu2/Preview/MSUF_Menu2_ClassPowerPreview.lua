@@ -648,11 +648,10 @@ local function RefreshHandleVisuals(preview)
     if preview.hint then
         if selected and selected._msufPlaced == true then
             local x, y = ReadHandle(selected)
-            preview.hint:SetText(string.format("%s   x: %d   y: %d   %s",
-                TR(selected._label or selected._key or "Element"), Round(x or 0), Round(y or 0),
-                TR("double-click/settings opens options - right-click actions - arrows nudge")))
+            preview.hint:SetText(string.format("%s   x: %d   y: %d",
+                TR(selected._label or selected._key or "Element"), Round(x or 0), Round(y or 0)))
         else
-            preview.hint:SetText(TR("drag handles - double-click/settings opens options - right-click actions - Ctrl+wheel zoom"))
+            preview.hint:SetText(TR("Drag handles to move."))
         end
     end
 end
@@ -839,11 +838,16 @@ local function CommitHistory(handle)
     if handle then handle._historyTx = nil end
     return false
 end
-local function StopHandleDrag(handle, button, skipApply)
+local function StopHandleDrag(handle, button, skipApply, allowOpenSettings)
     if button and button ~= "LeftButton" then return end
     if not (handle and handle._dragging) then return end
     local preview = handle._preview
+    local didMove = handle._didDragMove == true
+    local openSettingsOnRelease = allowOpenSettings == true
+        and button == "LeftButton"
+        and not didMove
     handle._dragging = nil
+    handle._didDragMove = nil
     if preview then
         preview._dragFrozenScale = nil
         preview._dragFrozenBaseOffsetX = nil
@@ -859,6 +863,7 @@ local function StopHandleDrag(handle, button, skipApply)
     CommitHistory(handle)
     RefreshHandleVisuals(preview)
     FocusPreviewKeyboardTarget(preview, handle, true)
+    if openSettingsOnRelease then OpenClassPowerHandleSettings(handle) end
 end
 
 --- Drag handles are preview controls, not runtime frames. They carry the DB
@@ -886,7 +891,6 @@ local function MakeHandle(preview, key, store, xKey, yKey, defaultX, defaultY, l
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:SetText(TR(label), 1, 1, 1)
             GameTooltip:AddLine(TR("Drag to move this Class Resources preview element."), 0.82, 0.82, 0.82, true)
-            GameTooltip:AddLine(TR("Double-click or use the settings button to open this element's settings."), 0.50, 0.78, 0.92, true)
             GameTooltip:AddLine(TR("Right-click opens quick actions."), 0.50, 0.78, 0.92, true)
             GameTooltip:AddLine(TR("Arrow keys nudge the selected element. Shift = 5, Ctrl = 10."), 0.55, 0.68, 0.86, true)
             GameTooltip:Show()
@@ -913,16 +917,12 @@ local function MakeHandle(preview, key, store, xKey, yKey, defaultX, defaultY, l
         end
         SelectHandle(self)
     end)
-    h:SetScript("OnDoubleClick", function(self, button)
-        if button and button ~= "LeftButton" then return end
-        SelectHandle(self)
-        OpenClassPowerHandleSettings(self)
-    end)
     h:SetScript("OnKeyDown", HandleKeyDown)
     h:SetScript("OnMouseDown", function(self, button)
         if button ~= "LeftButton" then return end
         if self._dragging then return end
         SelectHandle(self)
+        self._didDragMove = nil
         self._dragging = true
         self._startX, self._startY = ReadHandle(self)
         self._lastX, self._lastY = nil, nil
@@ -935,11 +935,11 @@ local function MakeHandle(preview, key, store, xKey, yKey, defaultX, defaultY, l
         preview.dragFrame:SetScript("OnUpdate", preview.dragUpdate)
         preview.dragFrame:Show()
     end)
-    h:SetScript("OnMouseUp", function(self, button) StopHandleDrag(self, button, false) end)
+    h:SetScript("OnMouseUp", function(self, button) StopHandleDrag(self, button, false, true) end)
     h:SetScript("OnDragStart", function(self) self:GetScript("OnMouseDown")(self, "LeftButton") end)
-    h:SetScript("OnDragStop", function(self) StopHandleDrag(self, "LeftButton", false) end)
+    h:SetScript("OnDragStop", function(self) StopHandleDrag(self, "LeftButton", false, false) end)
     h:SetScript("OnHide", function(self)
-        StopHandleDrag(self, nil, true)
+        StopHandleDrag(self, nil, true, false)
     end)
     h._msuf2CommandAction = {
         kind = "button",
@@ -2126,7 +2126,7 @@ local function DragUpdate(frame)
     local handle = frame and frame._handle
     if not (handle and handle._dragging) then return end
     if IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then
-        StopHandleDrag(handle, "LeftButton", false)
+        StopHandleDrag(handle, "LeftButton", false, true)
         return
     end
     local cx, cy = GetCursorPosition()
@@ -2135,6 +2135,7 @@ local function DragUpdate(frame)
     if scale <= 0 then scale = 1 end
     local nextX = Round((handle._startX or 0) + ((cx - (handle._cursorX or cx)) / scale))
     local nextY = Round((handle._startY or 0) + ((cy - (handle._cursorY or cy)) / scale))
+    if nextX ~= handle._startX or nextY ~= handle._startY then handle._didDragMove = true end
     if handle._lastX == nextX and handle._lastY == nextY then return end
     handle._lastX, handle._lastY = nextX, nextY
     WriteHandle(handle, nextX, nextY, true)
@@ -2292,7 +2293,7 @@ function Preview.Create(ctx, builder)
     local title = T.Font(box, "GameFontNormal", TR("Class Resources Preview"), chrome.title or T.colors.accent)
     title:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -8)
     box.title = title
-    local hint = T.Font(box, "GameFontDisableSmall", TR("drag handles - double-click/settings opens options - right-click actions - Ctrl+wheel zoom"), T.colors.muted)
+    local hint = T.Font(box, "GameFontDisableSmall", TR("Drag handles to move."), T.colors.muted)
     hint:SetPoint("LEFT", title, "RIGHT", 12, 0)
     hint:SetPoint("RIGHT", box, "RIGHT", -12, 0)
     hint:SetJustifyH("LEFT")
@@ -2385,7 +2386,7 @@ function Preview.Create(ctx, builder)
     box.dragFrame:EnableMouse(true)
     if Helpers.BindPreviewWheel then Helpers.BindPreviewWheel(box.dragFrame, box) end
     box.dragFrame:SetScript("OnMouseUp", function(self, button)
-        StopHandleDrag(self._handle, button, false)
+        StopHandleDrag(self._handle, button, false, true)
     end)
     box.dragFrame:Hide()
     box.dragUpdate = DragUpdate

@@ -33,10 +33,9 @@ local function BuildText(ctx, builder, unit)
             "This control targets the HP or power text slot selected in the slot editor.")
     end
     -- The four text tabs share one section frame, so its height has to follow the
-    -- tallest card stack of the selected tab. A single fixed height either clipped
-    -- HP (its Appearance card overflowed into the next accordion header) or left
-    -- the shorter tabs with dead space.
-    local TAB_SECTION_HEIGHT = { name = 478, hp = 680, power = 620, advanced = 346 }
+    -- tallest card stack of the selected tab. A single fixed height either clips
+    -- the taller HP controls or leaves the shorter tabs with dead space.
+    local TAB_SECTION_HEIGHT = { name = 352, hp = 512, power = 500, advanced = 346 }
     M.unitTextTabSelection = M.unitTextTabSelection or {}
     local function CurrentTextTab()
         local key = M.unitTextTabSelection[unit] or "name"
@@ -134,7 +133,7 @@ local function BuildText(ctx, builder, unit)
         end
     end
     local textSlotState = UnitSectionShared.MakeTextSlotState(M, function() return unit end, "unitTextSlotSelection", "unitTextMoveTogether")
-    local CurrentSlot, SetCurrentSlot, SlotOffsetKeys, SlotFontSizeKey = textSlotState.CurrentSlot, textSlotState.SetCurrentSlot, textSlotState.SlotOffsetKeys, textSlotState.SlotFontSizeKey
+    local CurrentSlot, SetCurrentSlot, SlotFontSizeKey = textSlotState.CurrentSlot, textSlotState.SetCurrentSlot, textSlotState.SlotFontSizeKey
     local MoveTogether, SetMoveTogether = textSlotState.MoveTogether, textSlotState.SetMoveTogether
     local function FocusPreviewText(kind, slot, active)
         local fn = _G.MSUF_UFPreview_FocusTextSlot
@@ -322,7 +321,7 @@ local function BuildText(ctx, builder, unit)
             W.SetCollapsibleBadges(sec, {
                 { text = hpOn and "Shown" or "Hidden", kind = hpOn and "ok" or "muted" },
                 { text = TextSlotSummary("hp"), kind = hpOn and "info" or "muted" },
-                { text = "X " .. BadgeNumber(ReadNumber(unit, "hpOffsetX", -4)) .. "  Y " .. BadgeNumber(ReadNumber(unit, "hpOffsetY", -4)), kind = hpOn and "accent" or "muted" },
+                { text = "Preview position", kind = hpOn and "accent" or "muted" },
             })
         elseif tab == "power" then
             if IsPlayerPowerManagedByClassResources and IsPlayerPowerManagedByClassResources(unit) then
@@ -336,7 +335,7 @@ local function BuildText(ctx, builder, unit)
             W.SetCollapsibleBadges(sec, {
                 { text = powerOn and "Shown" or "Hidden", kind = powerOn and "ok" or "muted" },
                 { text = TextSlotSummary("power"), kind = powerOn and "info" or "muted" },
-                { text = "X " .. BadgeNumber(ReadNumber(unit, "powerOffsetX", -4)) .. "  Y " .. BadgeNumber(ReadNumber(unit, "powerOffsetY", 4)), kind = powerOn and "accent" or "muted" },
+                { text = "Preview position", kind = powerOn and "accent" or "muted" },
             })
         elseif tab == "advanced" then
             W.SetCollapsibleBadges(sec, {
@@ -350,7 +349,7 @@ local function BuildText(ctx, builder, unit)
             W.SetCollapsibleBadges(sec, {
                 { text = nameOn and "Shown" or "Hidden", kind = nameOn and "ok" or "muted" },
                 { text = anchor, kind = nameOn and "info" or "muted" },
-                { text = "X " .. BadgeNumber(ReadNumber(unit, "nameOffsetX", 4)) .. "  Y " .. BadgeNumber(ReadNumber(unit, "nameOffsetY", -4)), kind = nameOn and "accent" or "muted" },
+                { text = "Preview position", kind = nameOn and "accent" or "muted" },
             })
         end
     end
@@ -406,7 +405,7 @@ local function BuildText(ctx, builder, unit)
             RefreshTextControlState()
         end,
         FixedSettingMeta("text.name.show", "showName"))
-    local namePosition = TextCard(nameTab, "Position", nil, leftX, -136, cardW, 260)
+    local namePosition = TextCard(nameTab, "Position", "Move the name directly in Preview.", leftX, -136, cardW, 134)
     local nameAnchor = W.Dropdown(namePosition, "Anchor", TEXT_ANCHORS, 210)
     PlaceDropdown(namePosition, nameAnchor, 16, -48, cardW - 32)
     M.BindDropdownWidget(ctx, nameAnchor,
@@ -417,25 +416,6 @@ local function BuildText(ctx, builder, unit)
             RefreshTextHeader()
         end,
         FixedSettingMeta("text.name.anchor", "nameTextAnchor"))
-    local function BindNameOffsetSlider(label, y, key, defaultValue, reason)
-        local control = W.Slider(namePosition, label, -300, 300, 1, 260)
-        PlaceSlider(namePosition, control, 16, y, cardW - 72)
-        M.BindNumberWidget(ctx, control,
-            function() return ReadNumber(unit, key, defaultValue) end,
-            function(v)
-                SetNumber(unit, key, v, reason, { text = true, preview = true })
-                FocusPreviewText("name", nil, true)
-                RefreshTextHeader()
-            end,
-            defaultValue, (function()
-                local meta = FixedSettingMeta("text.name." .. tostring(key), key)
-                meta.step, meta.roundStep = 1, true
-                return meta
-            end)())
-        return control
-    end
-    local nameX = BindNameOffsetSlider("X Offset", -112, "nameOffsetX", 4, "MSUF2_NAME_X")
-    local nameY = BindNameOffsetSlider("Y Offset", -174, "nameOffsetY", -4, "MSUF2_NAME_Y")
     local nameAppearance = TextCard(nameTab, "Appearance", nil, rightX, -4, rightW, 150)
     local nameSize = W.Slider(nameAppearance, "Size", 6, 48, 1, 260)
     PlaceSlider(nameAppearance, nameSize, 16, -58, rightW - 58)
@@ -648,36 +628,8 @@ local function BuildText(ctx, builder, unit)
                 SetControlEnabled(controls.fullValueShort, enabled == true and hasNumericValue)
             end
         end
-        local position = TextCard(tab, cfg.positionTitle, cfg.positionSubtitle, rightX, -4, rightW, 408)
-        local function BindPositionSlider(name, label, y, key, defaultValue, reason, focusSlot, afterSet)
-            local control = W.Slider(position, label, -300, 300, 1, 260)
-            controls[name] = control
-            PlaceSlider(position, control, 16, y, rightW - 58)
-            local function CurrentKey()
-                return type(key) == "function" and key() or key
-            end
-            M.BindNumberWidget(ctx, control,
-                function() return ReadNumber(unit, CurrentKey(), defaultValue) end,
-                function(v)
-                    SetNumber(unit, CurrentKey(), v, reason, { text = true, preview = true })
-                    FocusPreviewText(kind, focusSlot and focusSlot() or nil, true)
-                    if afterSet then afterSet() end
-                end,
-                defaultValue, (function()
-                    local meta
-                    if type(key) == "function" then
-                        meta = SelectedSlotMeta("text." .. kind .. ".position." .. tostring(name))
-                    else
-                        meta = FixedSettingMeta("text." .. kind .. ".position." .. tostring(name), key)
-                    end
-                    meta.step, meta.roundStep = 1, true
-                    return meta
-                end)())
-            return control
-        end
-        BindPositionSlider("x", "X Offset", -64, cfg.xKey, cfg.xDefault, cfg.xReason, nil, RefreshTextHeader)
-        BindPositionSlider("y", "Y Offset", -122, cfg.yKey, cfg.yDefault, cfg.yReason, nil, RefreshTextHeader)
-        controls.moveTogether = SwitchOrToggle(position, "Move text as one group", 16, -176, rightW - 32)
+        local position = TextCard(tab, cfg.positionTitle, cfg.positionSubtitle, rightX, -4, rightW, 220)
+        controls.moveTogether = SwitchOrToggle(position, "Move text as one group", 16, -64, rightW - 32)
         M.BindBoolWidget(ctx, controls.moveTogether,
             function() return MoveTogether(kind) end,
             function(v)
@@ -687,10 +639,8 @@ local function BuildText(ctx, builder, unit)
                 if M.RequestRefresh then M.RequestRefresh(ctx, "unit-text-move-together") elseif M.Refresh then M.Refresh(ctx) end
             end,
             ControlMeta(ctx, "text." .. kind .. ".move_together", "ephemeral"))
-        BindPositionSlider("slotX", "Selected slot X", -232, function() return SlotOffsetKeys(kind) end, 0, cfg.slotXReason, function() return CurrentSlot(kind) end)
-        BindPositionSlider("slotY", "Selected slot Y", -290, function() local _, yKey = SlotOffsetKeys(kind); return yKey end, 0, cfg.slotYReason, function() return CurrentSlot(kind) end)
         controls.slotSize = W.Slider(position, "Selected slot size", 6, 48, 1, 260)
-        PlaceSlider(position, controls.slotSize, 16, -348, rightW - 58)
+        PlaceSlider(position, controls.slotSize, 16, -122, rightW - 58)
         M.BindNumberWidget(ctx, controls.slotSize,
             function()
                 local conf = GetConf(unit)
@@ -703,17 +653,6 @@ local function BuildText(ctx, builder, unit)
             end,
             10, (function()
                 local meta = SelectedSlotMeta("text." .. kind .. ".slot.size")
-                meta.step, meta.roundStep = 1, true
-                return meta
-            end)())
-        local appearance = TextCard(tab, "Appearance", nil, leftX, -(contentHeight + 24), cardW, 144)
-        controls.size = W.Slider(appearance, "Default size", 6, 48, 1, 260)
-        PlaceSlider(appearance, controls.size, 16, -58, cardW - 72)
-        M.BindNumberWidget(ctx, controls.size,
-            function() return EffectiveTextSize(cfg.sizeKey, cfg.generalSizeKey) end,
-            function(v) SetNumber(unit, cfg.sizeKey, v, cfg.sizeReason, { text = true, fonts = true, preview = true }) end,
-            10, (function()
-                local meta = FixedSettingMeta("text." .. kind .. ".size", cfg.sizeKey)
                 meta.step, meta.roundStep = 1, true
                 return meta
             end)())
@@ -750,20 +689,11 @@ local function BuildText(ctx, builder, unit)
         fullValueShortReason = "MSUF2_HP_FULL_VALUE_SHORT",
         decimalsReason = "MSUF2_HP_TEXT_DECIMALS",
         positionTitle = "Position",
-        positionSubtitle = "Move all HP text together or adjust a selected slot.",
-        xKey = "hpOffsetX",
-        xDefault = -4,
-        xReason = "MSUF2_HP_X",
-        yKey = "hpOffsetY",
-        yDefault = -4,
-        yReason = "MSUF2_HP_Y",
+        positionSubtitle = "Move the group or selected slot directly in Preview.",
         moveReason = "MSUF2_HP_TEXT_MOVE_MODE",
-        slotXReason = "MSUF2_HP_SLOT_X",
-        slotYReason = "MSUF2_HP_SLOT_Y",
         slotSizeReason = "MSUF2_HP_SLOT_SIZE",
         sizeKey = "hpFontSize",
         generalSizeKey = "hpFontSize",
-        sizeReason = "MSUF2_HP_SIZE",
     })
     local powerControls = BuildValueTextTab("power", powerTab, {
         preview = "100 Energy",
@@ -784,24 +714,15 @@ local function BuildText(ctx, builder, unit)
         separatorGet = function() return ReadText(unit, "powerTextSeparator", ReadText(unit, "hpTextSeparator", "")) end,
         separatorReason = "MSUF2_POWER_TEXT_SEPARATOR",
         positionTitle = "Position",
-        positionSubtitle = "Move all power text together or adjust a selected slot.",
-        xKey = "powerOffsetX",
-        xDefault = -4,
-        xReason = "MSUF2_POWER_X",
-        yKey = "powerOffsetY",
-        yDefault = 4,
-        yReason = "MSUF2_POWER_Y",
+        positionSubtitle = "Move the group or selected slot directly in Preview.",
         moveReason = "MSUF2_POWER_TEXT_MOVE_MODE",
-        slotXReason = "MSUF2_POWER_SLOT_X",
-        slotYReason = "MSUF2_POWER_SLOT_Y",
         slotSizeReason = "MSUF2_POWER_SLOT_SIZE",
         sizeKey = "powerFontSize",
         generalSizeKey = "powerFontSize",
-        sizeReason = "MSUF2_POWER_TEXT_SIZE",
     })
     local powerManagedNotice, powerManagedNoticeButton
     if UnitSectionShared.CreateSectionNotice then
-        local notice, _, button = UnitSectionShared.CreateSectionNotice(powerTab, -470, "Class Resources", 126)
+        local notice, _, button = UnitSectionShared.CreateSectionNotice(powerTab, -394, "Class Resources", 126)
         powerManagedNotice, powerManagedNoticeButton = notice, button
     end
     if powerManagedNoticeButton then
@@ -833,8 +754,8 @@ local function BuildText(ctx, builder, unit)
     local function HookTextControls(kind, controls)
         for i = 1, #controls do HookPreviewTextFocus(controls[i][1], kind, controls[i][2]) end
     end
-    HookTextControls("name", { { showNameText }, { nameAnchor }, { nameX }, { nameY }, { nameSize }, { advNameLayer } })
-    local nameTextControls = { nameAnchor, nameSize, nameX, nameY, advNameLayer }
+    HookTextControls("name", { { showNameText }, { nameAnchor }, { nameSize }, { advNameLayer } })
+    local nameTextControls = { nameAnchor, nameSize, advNameLayer }
     local hpTextControls, hpSlotControls = UnitSectionShared.ValueTextControlSets("hp", hpControls, advHpLayer, HookTextControls, CurrentSlot)
     local powerTextControls, powerSlotControls = UnitSectionShared.ValueTextControlSets("power", powerControls, advPowerLayer, HookTextControls, CurrentSlot)
     if hpControls.decimals then hpTextControls[#hpTextControls + 1] = hpControls.decimals end

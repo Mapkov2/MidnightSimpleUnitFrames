@@ -608,7 +608,7 @@ local function BuildTopActions(ctx, builder, unit, label)
         assistantDisposition = "compound",
         assistantDispositionReason = "Copy actions apply a selected category set from this Unit page to a chosen destination.",
         width = 420,
-        height = 276,
+        height = 304,
         categories = UF_COPY_CATEGORIES,
         scopes = copyScopes,
         targets = UF_COPY_TARGET_ORDER,
@@ -1581,6 +1581,6 @@ for key, info in pairs(UNIT_PAGES) do
     M.RegisterPage(key, {
         title = info.title,
         build = BuildUnitPage(info),
-        version = 27,
+        version = 28,
     })
 end

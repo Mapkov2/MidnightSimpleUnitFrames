@@ -557,7 +557,8 @@ local GF_COPY_CATEGORIES = {
     --- Assistant only registers them for party). There is no second scope to copy them
     --- to, and pushing them into raid/mythicraid would plant exactly the stale imported
     --- keys the engine guards against.
-    { key = "auras", label = "Auras - All", description = "Copies the complete Group Aura configuration, including Buff/Debuff filters, exact and category blacklists, layout, cooldown presentation, Strata, and dispel options.", tables = WL [[auras]] },
+    { key = "auras", label = "Aura Options", description = "Copies Group Aura visibility, layout, filters, exact/category blacklists, Strata and dispel options. Aura Style and the global Appearance theme remain unchanged.", tables = WL [[auras]] },
+    { key = "aurastyle", label = "Aura Style", default = true, description = "Copies Buff, Debuff, External Defensive and Spell Icon presentation, including icon zoom, text, swipe, duration bars and ordering. Aura Options, tracked Spell Icons and the global Appearance theme remain unchanged." },
     { key = "highlight", label = "Highlight & Aggro", keys = WL [[targetIndicator targetR targetG targetB aggroEnabled aggroMode dispelEnabled dispelOutlineMode dispelBorderEnabled dispelBorderMode dispelBorderTrigger dispelTrigger]], prefix = WL [[hl]] },
     { key = "dstripe", label = "Debuff Stripe", prefix = WL [[debuffStripe]] },
     { key = "features", label = "Corner/Spell", keys = WL [[ciEnabled ciAlpha]], tables = WL [[spellIndicators]], prefix = WL [[ci]] },
@@ -571,7 +572,8 @@ end
 local function NewGFCopyScopes()
     local scopes = {}
     for i = 1, #GF_COPY_CATEGORIES do
-        scopes[GF_COPY_CATEGORIES[i].key] = true
+        local category = GF_COPY_CATEGORIES[i]
+        scopes[category.key] = category.default ~= false
     end
     return scopes
 end
@@ -584,14 +586,102 @@ local function GroupCopyDirtyMask(scopes)
     end
     local dirty
     if scopes.font then dirty = AddDirty(dirty, gf.DIRTY_FONT) end
-    if scopes.auras then dirty = AddDirty(dirty, gf.DIRTY_AURAS) end
+    if scopes.auras or scopes.aurastyle then dirty = AddDirty(dirty, gf.DIRTY_AURAS) end
     return dirty or gf.DIRTY_VISUAL
+end
+local GROUP_AURA_STYLE_ROOT_KEYS = { "dynamicScale", "showTooltip", "iconZoom" }
+local GROUP_AURA_STYLE_LANE_KEYS = {
+    "iconZoom",
+    "showCooldown", "showCooldownSwipe", "showTooltip",
+    "dispelBorderMode", "showDispelBorder", "showDispelSymbol",
+    "cooldownSize", "cooldownAnchor", "cooldownX", "cooldownY",
+    "cooldownSwipeReverse", "cooldownDecimalSeconds",
+    "showDurationBar", "durationBarHeight", "durationBarDisplay", "durationBarPosition", "durationBarDirection",
+    "showStacks", "stackSize", "stackAnchor", "stackX", "stackY",
+    "sortMethod", "sortReverse",
+}
+
+local function CaptureGroupAuraStyle(kind)
+    local srcAuras = Conf(kind).auras
+    if type(srcAuras) ~= "table" then srcAuras = {} end
+    local snapshot = { root = {}, lanes = {} }
+    for i = 1, #GROUP_AURA_STYLE_ROOT_KEYS do
+        local key = GROUP_AURA_STYLE_ROOT_KEYS[i]
+        snapshot.root[key] = DeepCopy(srcAuras[key])
+    end
+    for _, lane in ipairs({ "buff", "debuff", "externals" }) do
+        local source = type(srcAuras[lane]) == "table" and srcAuras[lane] or {}
+        local values = {}
+        snapshot.lanes[lane] = values
+        for i = 1, #GROUP_AURA_STYLE_LANE_KEYS do
+            local key = GROUP_AURA_STYLE_LANE_KEYS[i]
+            values[key] = DeepCopy(source[key])
+        end
+    end
+    return snapshot
+end
+
+local function ApplyGroupAuraStyleSnapshot(dstKind, snapshot)
+    if type(snapshot) ~= "table" then return false end
+    local dstConf = Conf(dstKind)
+    dstConf.auras = type(dstConf.auras) == "table" and dstConf.auras or {}
+    local dstAuras = dstConf.auras
+    for i = 1, #GROUP_AURA_STYLE_ROOT_KEYS do
+        local key = GROUP_AURA_STYLE_ROOT_KEYS[i]
+        dstAuras[key] = DeepCopy(snapshot.root and snapshot.root[key])
+    end
+    for _, lane in ipairs({ "buff", "debuff", "externals" }) do
+        local destination = type(dstAuras[lane]) == "table" and dstAuras[lane] or {}
+        dstAuras[lane] = destination
+        local source = type(snapshot.lanes) == "table" and snapshot.lanes[lane] or nil
+        for i = 1, #GROUP_AURA_STYLE_LANE_KEYS do
+            local key = GROUP_AURA_STYLE_LANE_KEYS[i]
+            destination[key] = DeepCopy(source and source[key])
+        end
+    end
+    return true
+end
+
+local function CopyGroupAuraStyle(srcKind, dstKind)
+    return ApplyGroupAuraStyleSnapshot(dstKind, CaptureGroupAuraStyle(srcKind))
+end
+local function CopyGroupSpellIndicatorStyle(srcKind, dstKind)
+    local srcConf = Conf(srcKind)
+    local dstConf = Conf(dstKind)
+    local gf = GF()
+    if gf and type(gf.EnsureSpellIndicatorStyle) == "function" then gf.EnsureSpellIndicatorStyle(srcConf) end
+    local src = type(srcConf.spellIndicators) == "table" and srcConf.spellIndicators or nil
+    if not src then return false end
+    dstConf.spellIndicators = type(dstConf.spellIndicators) == "table" and dstConf.spellIndicators or {}
+    dstConf.spellIndicators.iconZoom = DeepCopy(src.iconZoom)
+    dstConf.spellIndicators.iconScale = DeepCopy(src.iconScale)
+    dstConf.spellIndicators.style = DeepCopy(src.style)
+    if type(dstConf.spellIndicators.style) == "table" then
+        dstConf.spellIndicators.style.iconShape = nil
+    end
+    if gf and type(gf.EnsureSpellIndicatorStyle) == "function" then gf.EnsureSpellIndicatorStyle(dstConf) end
+    return true
 end
 local function CopyGroupSettings(srcKind, dstKind, scopes)
     local srcConf = Conf(srcKind)
     local dstConf = Conf(dstKind)
     if not (srcConf and dstConf and srcKind and dstKind) or srcKind == dstKind then return false end
     scopes = (type(scopes) == "table") and scopes or NewGFCopyScopes()
+    local retainedAuraStyle = scopes.auras and CaptureGroupAuraStyle(dstKind) or nil
+    local retainedSpellStyle
+    if scopes.features and not scopes.aurastyle then
+        local gf = GF()
+        if gf and type(gf.EnsureSpellIndicatorStyle) == "function" then gf.EnsureSpellIndicatorStyle(dstConf) end
+        local current = type(dstConf.spellIndicators) == "table" and dstConf.spellIndicators or nil
+        retainedSpellStyle = current and {
+            iconZoom = DeepCopy(current.iconZoom),
+            iconScale = DeepCopy(current.iconScale),
+            style = DeepCopy(current.style),
+        } or nil
+        if retainedSpellStyle and type(retainedSpellStyle.style) == "table" then
+            retainedSpellStyle.style.iconShape = nil
+        end
+    end
     local allowKeys, allowPrefixes, allowTables = {}, {}, {}
     for i = 1, #GF_COPY_CATEGORIES do
         local cat = GF_COPY_CATEGORIES[i]
@@ -621,6 +711,16 @@ local function CopyGroupSettings(srcKind, dstKind, scopes)
             end
             if copy then dstConf[key] = DeepCopy(value) end
         end
+    end
+    if retainedSpellStyle and type(dstConf.spellIndicators) == "table" then
+        dstConf.spellIndicators.iconZoom = retainedSpellStyle.iconZoom
+        dstConf.spellIndicators.iconScale = retainedSpellStyle.iconScale
+        dstConf.spellIndicators.style = retainedSpellStyle.style
+    end
+    if retainedAuraStyle then ApplyGroupAuraStyleSnapshot(dstKind, retainedAuraStyle) end
+    if scopes.aurastyle then
+        CopyGroupAuraStyle(srcKind, dstKind)
+        CopyGroupSpellIndicatorStyle(srcKind, dstKind)
     end
     if scopes.general then
         QueueGF(dstKind, "rebuild")
@@ -944,7 +1044,7 @@ end
 --- never receive portrait settings through the dynamic Group binding path.
 function GroupPage.BuildPortrait(ctx, builder)
     local kind = "party"
-    local cardH = { main = 224, geometry = 494, placement = 382, border = 380, style = 330 }
+    local cardH = { main = 224, geometry = 386, placement = 382, border = 380, style = 330 }
     local tabH = {
         general = cardH.main + 116,
         geometry = cardH.geometry + 116,
@@ -1182,11 +1282,9 @@ function GroupPage.BuildPortrait(ctx, builder)
     local size = BindNumber(geometryCard, "Size override", 16, -62, cardW - 58, 0, 128, 1, "portraitSizeOverride", 0)
     local width = BindNumber(geometryCard, "Width override", 16, -116, cardW - 58, 0, 256, 1, "portraitWidth", 0)
     local height = BindNumber(geometryCard, "Height override", 16, -170, cardW - 58, 0, 256, 1, "portraitHeight", 0)
-    local offsetX = BindNumber(geometryCard, "Portrait X", 16, -224, cardW - 58, -400, 400, 1, "portraitOffsetX", 0)
-    local offsetY = BindNumber(geometryCard, "Portrait Y", 16, -278, cardW - 58, -400, 400, 1, "portraitOffsetY", 0)
-    local zoom = BindNumber(geometryCard, "Portrait zoom", 16, -332, cardW - 58, 100, 200, 1, "portraitZoom", 100)
-    local panX = BindNumber(geometryCard, "Zoom center X", 16, -386, cardW - 58, -100, 100, 1, "portraitPanX", 0)
-    local panY = BindNumber(geometryCard, "Zoom center Y", 16, -440, cardW - 58, -100, 100, 1, "portraitPanY", 0)
+    local zoom = BindNumber(geometryCard, "Portrait zoom", 16, -224, cardW - 58, 100, 200, 1, "portraitZoom", 100)
+    local panX = BindNumber(geometryCard, "Zoom center X", 16, -278, cardW - 58, -100, 100, 1, "portraitPanX", 0)
+    local panY = BindNumber(geometryCard, "Zoom center Y", 16, -332, cardW - 58, -100, 100, 1, "portraitPanY", 0)
     local placement = BindDropdown(placementCard, "Placement", placementValues.modes, 16, -58, min(220, cardW - 32), "portraitPlacement", "ATTACHED", nil, RefreshPortraitControls)
     placement._msuf2SearchText = "Portrait placement attached detached overlay free position anchor"
     local detachedPoint = BindDropdown(placementCard, "Portrait anchor point", placementValues.points, 16, -112, min(220, cardW - 32), "portraitDetachedPoint", "RIGHT")
@@ -1207,7 +1305,7 @@ function GroupPage.BuildPortrait(ctx, builder)
     local castIcon = BindToggle(styleCard, "Show cast spell icon in portrait", 16, -274, cardW - 32, "portraitCastSpellIcon", false)
     castIcon._msuf2SearchText = "Portrait cast spell icon casting channel empower"
     local activeControls = {
-        render, shape, size, width, height, offsetX, offsetY, placement, level, alpha,
+        render, shape, size, width, height, placement, level, alpha,
         border, background, castIcon,
     }
     local function Active(conf) return (conf.portraitMode or "OFF") ~= "OFF" end
@@ -1627,6 +1725,8 @@ local function SpellIndicators(kind)
     if conf.spellIndicators.strata == nil then conf.spellIndicators.strata = "AUTO" end
     if conf.spellIndicators.iconZoom == nil then conf.spellIndicators.iconZoom = 100 end
     if conf.spellIndicators.iconScale == nil then conf.spellIndicators.iconScale = 100 end
+    local gf = GF()
+    if gf and type(gf.EnsureSpellIndicatorStyle) == "function" then gf.EnsureSpellIndicatorStyle(conf) end
     return conf.spellIndicators
 end
 local function IconStyleValues()

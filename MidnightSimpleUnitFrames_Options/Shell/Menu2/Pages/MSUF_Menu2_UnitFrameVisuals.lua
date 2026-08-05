@@ -21,7 +21,7 @@ local CASTBAR_ICON_POSITIONS = VT("LEFT", "Left", "RIGHT", "Right", "INSIDE_LEFT
 local CASTBAR_TEXT_POSITIONS = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right", "ABOVE", "Above", "BELOW", "Below")
 local CASTBAR_TIME_FORMATS = VT("CURRENT", "Remaining", "ELAPSED", "Elapsed", "ELAPSED_MAX", "Elapsed / Total", "CURRENT_MAX", "Remaining / Total")
 local CASTBAR_TAB_VALUES = VT("general", "General", "icon", "Icon", "spell", "Spell Text", "time", "Time Text", "advanced", "Advanced")
-local CASTBAR_TAB_HEIGHTS = { general = 392, icon = 594, spell = 486, time = 486, advanced = 480 }
+local CASTBAR_TAB_HEIGHTS = { general = 392, icon = 486, spell = 426, time = 386, advanced = 480 }
 local CASTBAR_WIDTH_SOURCE_VALUES = VT("manual", "Manual width", "unitframe", "Auto: Unit Frame", "essential", "Auto: Essential Cooldowns", "utility", "Auto: Utility Cooldowns")
 local CASTBAR_TEXT_ALIGN = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right")
 local CASTBAR_TRUNCATE_VALUES = VT("AUTO", "Auto fit", "CLIP", "Manual width", "NONE", "No width limit")
@@ -48,7 +48,7 @@ local CreateSectionNotice = UnitSectionShared.CreateSectionNotice or function() 
 local POWER_DETACHED_CARD_TOP = -284
 local function PowerSectionHeight(unit)
     local isPlayer = unit == "player"
-    return math.abs(POWER_DETACHED_CARD_TOP) + (isPlayer and 406 or 304) + 52
+    return math.abs(POWER_DETACHED_CARD_TOP) + (isPlayer and 340 or 238) + 52
 end
 local function NormalizeCastbarTabKey(key)
     if key ~= "general" and key ~= "icon" and key ~= "spell" and key ~= "time" and key ~= "advanced" then key = "general" end
@@ -93,7 +93,7 @@ end
 local NormalizePortraitClassStyle = M.NormalizePortraitClassStyle
 -- Card heights. BuildPortrait and PortraitLayoutForWidth must agree on these, so
 -- both read them from here instead of repeating literals.
-local PORTRAIT_CARD_H = { main = 224, geometry = 494, placement = 382, border = 380, style = 220 }
+local PORTRAIT_CARD_H = { main = 224, geometry = 386, placement = 382, border = 380, style = 220 }
 local PORTRAIT_TAB_HEIGHTS = {
     general = PORTRAIT_CARD_H.main + 116,
     geometry = PORTRAIT_CARD_H.geometry + 116,
@@ -291,11 +291,9 @@ local function BuildPortrait(ctx, builder, unit)
     local size = BindPortraitSlider(geometryCard, "Size override", 16, -62, rightW - 58, 0, 128, 1, "portraitSizeOverride", 0, "MSUF2_PORTRAIT_SIZE", RefreshPortraitControls)
     local widthOverride = BindPortraitSlider(geometryCard, "Width override", 16, -116, rightW - 58, 0, 256, 1, "portraitWidth", 0, "MSUF2_PORTRAIT_WIDTH")
     local heightOverride = BindPortraitSlider(geometryCard, "Height override", 16, -170, rightW - 58, 0, 256, 1, "portraitHeight", 0, "MSUF2_PORTRAIT_HEIGHT")
-    local x = BindPortraitSlider(geometryCard, "Portrait X", 16, -224, rightW - 58, -400, 400, 1, "portraitOffsetX", 0, "MSUF2_PORTRAIT_X")
-    local y = BindPortraitSlider(geometryCard, "Portrait Y", 16, -278, rightW - 58, -400, 400, 1, "portraitOffsetY", 0, "MSUF2_PORTRAIT_Y")
-    local zoom = BindPortraitSlider(geometryCard, "Portrait zoom", 16, -332, rightW - 58, 100, 200, 1, "portraitZoom", 100, "MSUF2_PORTRAIT_ZOOM")
-    local panX = BindPortraitSlider(geometryCard, "Zoom center X", 16, -386, rightW - 58, -100, 100, 1, "portraitPanX", 0, "MSUF2_PORTRAIT_PAN_X")
-    local panY = BindPortraitSlider(geometryCard, "Zoom center Y", 16, -440, rightW - 58, -100, 100, 1, "portraitPanY", 0, "MSUF2_PORTRAIT_PAN_Y")
+    local zoom = BindPortraitSlider(geometryCard, "Portrait zoom", 16, -224, rightW - 58, 100, 200, 1, "portraitZoom", 100, "MSUF2_PORTRAIT_ZOOM")
+    local panX = BindPortraitSlider(geometryCard, "Zoom center X", 16, -278, rightW - 58, -100, 100, 1, "portraitPanX", 0, "MSUF2_PORTRAIT_PAN_X")
+    local panY = BindPortraitSlider(geometryCard, "Zoom center Y", 16, -332, rightW - 58, -100, 100, 1, "portraitPanY", 0, "MSUF2_PORTRAIT_PAN_Y")
     local placement = BindPortraitDropdown(placementCard, "Placement", PORTRAIT_PLACEMENT.modes, 16, -58, min(220, leftW - 32), "portraitPlacement", "ATTACHED", "MSUF2_PORTRAIT_PLACEMENT", nil, RefreshPortraitControls)
     placement._msuf2SearchText = "Portrait placement attached detached overlay free position anchor"
     local detachedPoint = BindPortraitDropdown(placementCard, "Portrait anchor point", PORTRAIT_PLACEMENT.points, 16, -112, min(220, leftW - 32), "portraitDetachedPoint", "RIGHT", "MSUF2_PORTRAIT_DETACHED_POINT")
@@ -321,7 +319,7 @@ local function BuildPortrait(ctx, builder, unit)
         CASTBAR_UNITS[unit] and function() M.RequestRefresh(ctx, "portrait-cast-icon-mirror") end or nil)
     castSpellIcon._msuf2SearchText = "Portrait cast spell icon casting channel empower"
     local portraitActiveControls = {
-        render, shape, size, widthOverride, heightOverride, x, y, portraitBg, castSpellIcon,
+        render, shape, size, widthOverride, heightOverride, portraitBg, castSpellIcon,
         placement, levelOffset, portraitAlpha,
     }
     local function PortraitActive() return NormalizePortrait(unit) ~= "OFF" end
@@ -390,7 +388,7 @@ local function BuildPower(ctx, builder, unit)
     if not POWER_UNITS[unit] then return end
     local isPlayer = unit == "player"
     local detachedCardY = POWER_DETACHED_CARD_TOP
-    local detachedCardHeight = isPlayer and 406 or 304
+    local detachedCardHeight = isPlayer and 340 or 238
     local powerSectionHeight = PowerSectionHeight(unit)
     local powerNoticeY = detachedCardY - detachedCardHeight - 12
     local sec = builder:CollapsibleSection("power_bar", "Power Bar", powerSectionHeight, false)
@@ -596,11 +594,9 @@ local function BuildPower(ctx, builder, unit)
         detachedSync = playerDetached.sync
     end
     local detachedFields = BuildPowerControls(detachedCard, AddDetachedControl, {
-        { "slider", "Detached X", 16, sliderTop, detachedSliderW, -1000, 1000, 1, "detachedPowerBarOffsetX", 0, "MSUF2_POWER_DETACHED_X", opts = DETACHED_POWER_OPTS },
-        { "slider", "Detached Y", detachedRightX, sliderTop, detachedSliderW, -1000, 1000, 1, "detachedPowerBarOffsetY", -4, "MSUF2_POWER_DETACHED_Y", opts = DETACHED_POWER_OPTS },
-        { "slider", "Detached width", 16, sliderTop - 66, detachedSliderW, 20, 800, 1, "detachedPowerBarWidth", function() return ReadNumber(unit, "width", 250) end, "MSUF2_POWER_DETACHED_W", nil, "width", opts = DETACHED_POWER_OPTS },
-        { "slider", "Detached height", detachedRightX, sliderTop - 66, detachedSliderW, 2, 80, 1, "detachedPowerBarHeight", 6, "MSUF2_POWER_DETACHED_H", nil, "height", opts = DETACHED_POWER_OPTS },
-        { "slider", "Detached layer", 16, sliderTop - 132, detachedSliderW, 0, 30, 1, "detachedPowerBarFrameLevelOffset", 6, "MSUF2_POWER_DETACHED_LAYER", opts = DETACHED_POWER_OPTS },
+        { "slider", "Detached width", 16, sliderTop, detachedSliderW, 20, 800, 1, "detachedPowerBarWidth", function() return ReadNumber(unit, "width", 250) end, "MSUF2_POWER_DETACHED_W", nil, "width", opts = DETACHED_POWER_OPTS },
+        { "slider", "Detached height", detachedRightX, sliderTop, detachedSliderW, 2, 80, 1, "detachedPowerBarHeight", 6, "MSUF2_POWER_DETACHED_H", nil, "height", opts = DETACHED_POWER_OPTS },
+        { "slider", "Detached layer", 16, sliderTop - 66, detachedSliderW, 0, 30, 1, "detachedPowerBarFrameLevelOffset", 6, "MSUF2_POWER_DETACHED_LAYER", opts = DETACHED_POWER_OPTS },
     })
     detachedWidth, detachedHeight = detachedFields.width, detachedFields.height
     if detachedWidth and M.AddTooltip then
@@ -610,7 +606,7 @@ local function BuildPower(ctx, builder, unit)
     end
     if isPlayer then
         detachedShape = AddDetachedControl(W.Dropdown(detachedCard, "Detached shape", DETACHED_POWER_SHAPE_VALUES, detachedSliderW))
-        W.MoveWidget(detachedShape, detachedCard, detachedRightX, sliderTop - 132, detachedSliderW)
+        W.MoveWidget(detachedShape, detachedCard, detachedRightX, sliderTop - 66, detachedSliderW)
         M.BindDropdownWidget(ctx, detachedShape,
             function()
                 return NormalizeDetachedPowerShape(GetConf(unit).detachedPowerBarShape)
@@ -627,7 +623,7 @@ local function BuildPower(ctx, builder, unit)
             end,
             SettingMeta(ctx, "power.detached_shape", unit, "detachedPowerBarShape"))
         if M.AddTooltip then M.AddTooltip(detachedShape, "Independent Powerbar Shape", "Changes only Player power. Class Resources keep their own shape setting. Round and Crystal fill horizontally; Orb fills bottom-to-top.", { hook = true, owner = "ANCHOR_RIGHT" }) end
-        orbSize = BindPowerSlider(detachedCard, AddDetachedControl, "Orb size", 16, sliderTop - 198, detachedSliderW, 20, 160, 1, "detachedPowerOrbSize", 54, "MSUF2_POWER_DETACHED_ORB_SIZE", nil, DETACHED_POWER_OPTS)
+        orbSize = BindPowerSlider(detachedCard, AddDetachedControl, "Orb size", 16, sliderTop - 132, detachedSliderW, 20, 160, 1, "detachedPowerOrbSize", 54, "MSUF2_POWER_DETACHED_ORB_SIZE", nil, DETACHED_POWER_OPTS)
     end
     local function PowerOn() return ReadBool(unit, "showPowerBar", true) end
     local function DetachedOn() return PowerOn() and ReadBool(unit, "powerBarDetached", false) end
@@ -638,7 +634,7 @@ local function BuildPower(ctx, builder, unit)
         { controls = detachedControls, on = DetachedOn },
         { controls = borderSize, on = function() return PowerOn() and ReadBool(unit, "powerBarBorderEnabled", GetBars().powerBarBorderEnabled == true) end },
         -- Detached width/height/sync exist only when a detached card was built; the `when`
-        -- guard reproduces the original `if detachedX then` existence checks.
+        -- guard keeps the optional Player-only detached controls safe.
         { controls = detachedSync, when = function() return detachedSync ~= nil end, on = function() return DetachedOn() and not OrbSelected() end },
         { controls = detachedWidth, when = function() return detachedWidth ~= nil end, on = function() return DetachedOn() and not OrbSelected() end },
         { controls = detachedHeight, when = function() return detachedHeight ~= nil end, on = function() return DetachedOn() and not OrbSelected() end },
@@ -936,11 +932,11 @@ local function BuildCastbar(ctx, builder, unit)
     local generalCard = W.ControlCard(generalTab, nil, nil, leftX, -4, leftW, 132)
     local providerCard = W.ControlCard(generalTab, "Provider & Surface", nil, rightX, -4, rightW, 132)
     local sizeCard = W.ControlCard(generalTab, "Size", "Width can use manual bounds or follow another frame.", leftX, -154, sectionW - 32, 166)
-    local iconCard = W.ControlCard(iconTab, nil, nil, leftX, -4, leftW, 478)
+    local iconCard = W.ControlCard(iconTab, nil, nil, leftX, -4, leftW, 370)
     local portraitIconCard = W.ControlCard(iconTab, "Portrait Cast Icon", nil, rightX, -4, rightW, 156)
-    local spellCard = W.ControlCard(spellTab, nil, nil, leftX, -4, leftW, 418)
-    local targetNameCard = fields.targetName and W.ControlCard(spellTab, "Cast Target Text", nil, rightX, -4, rightW, 418) or nil
-    local timeCard = W.ControlCard(timeTab, nil, nil, leftX, -4, leftW, 418)
+    local spellCard = W.ControlCard(spellTab, nil, nil, leftX, -4, leftW, 270)
+    local targetNameCard = fields.targetName and W.ControlCard(spellTab, "Cast Target Text", nil, rightX, -4, rightW, 310) or nil
+    local timeCard = W.ControlCard(timeTab, nil, nil, leftX, -4, leftW, 270)
     local textAdvancedCard = W.ControlCard(advancedTab, "Spell Text Behavior", nil, leftX, -4, leftW, 190)
     local iconAdvancedCard = W.ControlCard(advancedTab, "Icon Style", nil, rightX, -4, rightW, 212)
     local layerAdvancedCard = W.ControlCard(advancedTab, "Whole Castbar Layer", nil, rightX, -230, rightW, 164)
@@ -1142,10 +1138,8 @@ local function BuildCastbar(ctx, builder, unit)
         { "dropdown", "Position", 16, -88, min(260, controlWLeft), CASTBAR_ICON_POSITIONS, DetailKey("IconPosition"), "LEFT", "MSUF2_CASTBAR_ICON_POSITION" },
         { "slider", "Size", 16, -142, controlWLeft, 0, 128, 1, DetailKey("IconSize"), 0, "MSUF2_CASTBAR_ICON_SIZE" },
         { "slider", "Icon Zoom (%)", 16, -196, controlWLeft, 100, 200, 1, DetailKey("IconZoom"), 100, "MSUF2_CASTBAR_ICON_ZOOM" },
-        { "slider", "X offset", 16, -250, controlWLeft, -300, 300, 1, DetailKey("IconOffsetX"), 0, "MSUF2_CASTBAR_ICON_X" },
-        { "slider", "Y offset", 16, -304, controlWLeft, -300, 300, 1, DetailKey("IconOffsetY"), 0, "MSUF2_CASTBAR_ICON_Y" },
-        { "slider", "Spacing", 16, -358, controlWLeft, 0, 40, 1, DetailKey("IconSpacing"), 1, "MSUF2_CASTBAR_ICON_SPACING" },
-        { "slider", "Border thickness", 16, -412, controlWLeft, 0, 8, 1, DetailKey("IconBorderThickness"), 0, "MSUF2_CASTBAR_ICON_BORDER_THICKNESS", function(v)
+        { "slider", "Spacing", 16, -250, controlWLeft, 0, 40, 1, DetailKey("IconSpacing"), 1, "MSUF2_CASTBAR_ICON_SPACING" },
+        { "slider", "Border thickness", 16, -304, controlWLeft, 0, 8, 1, DetailKey("IconBorderThickness"), 0, "MSUF2_CASTBAR_ICON_BORDER_THICKNESS", function(v)
             if tonumber(v) and tonumber(v) > 0 and tostring(ReadGeneralValue(DetailKey("IconBorderStyle"), "NONE")):upper() == "NONE" then
                 GetGeneral()[DetailKey("IconBorderStyle")] = "DARK"
             end
@@ -1176,8 +1170,6 @@ local function BuildCastbar(ctx, builder, unit)
         { "dropdown", "Position preset", 16, -88, min(260, controlWLeft), CASTBAR_TEXT_POSITIONS, DetailKey("SpellNamePosition"), "LEFT", "MSUF2_CASTBAR_SPELL_POSITION" },
         { "slider", "Size", 16, -142, controlWLeft, 0, 48, 1, DetailKey("SpellNameFontSize"), 0, "MSUF2_CASTBAR_SPELL_SIZE" },
         { "dropdown", "Alignment", 16, -196, min(260, controlWLeft), CASTBAR_TEXT_ALIGN, DetailKey("SpellNameAlign"), "LEFT", "MSUF2_CASTBAR_SPELL_ALIGN" },
-        { "slider", "X offset", 16, -250, controlWLeft, -300, 300, 1, DetailKey("TextOffsetX"), 0, "MSUF2_CASTBAR_SPELL_X" },
-        { "slider", "Y offset", 16, -304, controlWLeft, -300, 300, 1, DetailKey("TextOffsetY"), 0, "MSUF2_CASTBAR_SPELL_Y" },
         -- Spell text color deliberately lives on the Colors page (castbar
         -- detail colors) and in the per-control color shortcuts only; a second
         -- inline swatch here double-writes the same key.
@@ -1198,9 +1190,7 @@ local function BuildCastbar(ctx, builder, unit)
             { "dropdown", "Position preset", 16, -88, min(260, controlWRight), CASTBAR_TEXT_POSITIONS, DetailKey("TargetNamePosition"), "BELOW", "MSUF2_CASTBAR_TARGET_NAME_POSITION" },
             { "slider", "Size", 16, -142, controlWRight, 6, 48, 1, DetailKey("TargetNameFontSize"), 10, "MSUF2_CASTBAR_TARGET_NAME_SIZE" },
             { "dropdown", "Alignment", 16, -196, min(260, controlWRight), CASTBAR_TEXT_ALIGN, DetailKey("TargetNameAlign"), "RIGHT", "MSUF2_CASTBAR_TARGET_NAME_ALIGN" },
-            { "slider", "X offset", 16, -250, controlWRight, -300, 300, 1, DetailKey("TargetNameOffsetX"), 0, "MSUF2_CASTBAR_TARGET_NAME_X" },
-            { "slider", "Y offset", 16, -304, controlWRight, -300, 300, 1, DetailKey("TargetNameOffsetY"), 1, "MSUF2_CASTBAR_TARGET_NAME_Y" },
-            { "color", "Target text color", 16, -358, min(200, controlWRight - 60), "TargetName", "MSUF2_CASTBAR_TARGET_NAME_COLOR" },
+            { "color", "Target text color", 16, -250, min(200, controlWRight - 60), "TargetName", "MSUF2_CASTBAR_TARGET_NAME_COLOR" },
         })
     end
     local function ReadSpellTextWidthMode()
@@ -1276,8 +1266,6 @@ local function BuildCastbar(ctx, builder, unit)
         { "dropdown", "Format", 16, -88, min(260, controlWLeft), CASTBAR_TIME_FORMATS, fields.timeFormat, "CURRENT", "MSUF2_CASTBAR_TIME_FORMAT" },
         { "dropdown", "Position preset", 16, -142, min(260, controlWLeft), CASTBAR_TEXT_POSITIONS, DetailKey("TimePosition"), "RIGHT", "MSUF2_CASTBAR_TIME_POSITION" },
         { "slider", "Size", 16, -196, controlWLeft, 0, 48, 1, DetailKey("TimeFontSize"), 0, "MSUF2_CASTBAR_TIME_SIZE" },
-        { "slider", "X offset", 16, -250, controlWLeft, -300, 300, 1, DetailKey("TimeOffsetX"), unit == "boss" and 0 or -2, "MSUF2_CASTBAR_TIME_X" },
-        { "slider", "Y offset", 16, -304, controlWLeft, -300, 300, 1, DetailKey("TimeOffsetY"), 0, "MSUF2_CASTBAR_TIME_Y" },
         -- Cast time color deliberately lives on the Colors page (castbar
         -- detail colors) and in the per-control color shortcuts only; a second
         -- inline swatch here double-writes the same key.

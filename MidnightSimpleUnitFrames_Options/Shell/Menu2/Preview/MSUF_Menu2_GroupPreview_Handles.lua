@@ -74,9 +74,6 @@ function Handles.Install(box, deps)
     local Tr, Round, ResolveAnchor, PointOffset, HandleOffset, OffsetToConfig, CurrentStatusSpec, CurrentSpellConfig, CurrentSpellPlaced, HandleText, HandleOffsets, UpdateHint, RefreshHandleSelection, StatusLabel, StartPan, StopPan, ZoomWheel = M.PickFallbacks(deps, HANDLE_FALLBACKS, [[
         TR Round ResolveAnchor PointOffset HandleOffset OffsetToConfig CurrentStatusSpec CurrentSpellConfig CurrentSpellPlaced HandleText HandleOffsets UpdateHint RefreshHandleSelection StatusLabel StartPan StopPan ZoomWheel
     ]])
-    local function RefreshVisibleSliders(reason)
-        if type(M.RefreshVisibleSliders) == "function" then M.RefreshVisibleSliders(reason or "GROUP_PREVIEW_MOVE") end
-    end
     if not deps.OffsetToConfig then OffsetToConfig = Round end
     box._handles = {}
     box._handleList = {}
@@ -380,7 +377,6 @@ function Handles.Install(box, deps)
         local xKey, yKey = H.TextOffsetKeys(kind, handle._cfgTextSlot)
         conf[xKey] = Round(x or 0)
         conf[yKey] = Round(y or 0)
-        RefreshVisibleSliders(previewOnly and "GROUP_PREVIEW_TEXT_DRAG" or "GROUP_PREVIEW_TEXT_MOVE")
         if previewOnly then
             RefreshTextDragPreview(handle)
         else
@@ -397,7 +393,7 @@ function Handles.Install(box, deps)
         if handle._cfgText then return end
         if handle._cfgDispelSymbol then
             -- The symbol row keeps its configured anchor; dragging edits the same
-            -- X/Y offsets the Dispel Symbol card exposes. In "one per dispel type"
+            -- X/Y offsets shown by Preview. In "one per dispel type"
             -- mode the handle spans the whole row, so the stored offset stays the
             -- row origin and the per-type steps are re-derived on render.
             local _, _, _, offX, offY = handle:GetPoint(1)
@@ -406,20 +402,18 @@ function Handles.Install(box, deps)
             if not conf then return end
             conf.dispelSymbolX = OffsetToConfig(offX or 0, scale)
             conf.dispelSymbolY = OffsetToConfig(offY or 0, scale)
-            RefreshVisibleSliders(previewOnly and "GROUP_PREVIEW_DISPEL_DRAG" or "GROUP_PREVIEW_DISPEL_MOVE")
             if not previewOnly then RefreshGroupPreviewAfterMove(handle); CheckpointHandleHistory(handle, action) end
             return true
         end
         if handle._cfgPortrait then
             -- Portrait placement keeps its configured anchor/side. Dragging only
-            -- edits the same X/Y offsets exposed by the Portrait geometry tab.
+            -- edits the X/Y offsets owned by Preview.
             local _, _, _, offX, offY = handle:GetPoint(1)
             local scale = handle._previewWriteScale or handle._previewScale or box._mock._previewScale or 1
             local conf = H.Conf(H.CurrentScope())
             if not conf then return end
             conf.portraitOffsetX = OffsetToConfig(offX or 0, scale)
             conf.portraitOffsetY = OffsetToConfig(offY or 0, scale)
-            RefreshVisibleSliders(previewOnly and "GROUP_PREVIEW_PORTRAIT_DRAG" or "GROUP_PREVIEW_PORTRAIT_MOVE")
             if not previewOnly then RefreshGroupPreviewAfterMove(handle); CheckpointHandleHistory(handle, action) end
             return true
         end
@@ -432,7 +426,6 @@ function Handles.Install(box, deps)
             if not conf then return end
             conf.detachedPowerBarOffsetX = OffsetToConfig(offX or 0, scale)
             conf.detachedPowerBarOffsetY = OffsetToConfig(offY or 0, scale)
-            RefreshVisibleSliders(previewOnly and "GROUP_PREVIEW_POWER_DRAG" or "GROUP_PREVIEW_POWER_MOVE")
             if not previewOnly then RefreshGroupPreviewAfterMove(handle); CheckpointHandleHistory(handle, action) end
             return true
         end
@@ -486,11 +479,9 @@ function Handles.Install(box, deps)
                 placed.y = cfgY
             end
         end
-        RefreshVisibleSliders(previewOnly and "GROUP_PREVIEW_DRAG" or "GROUP_PREVIEW_MOVE")
         if previewOnly then
-            -- Pointer-drag hot path: all handle families publish their stored
-            -- offsets to the visible sliders. Aura/Spell handles additionally
-            -- repaint their pooled dummy indicators. Runtime group frames,
+            -- Pointer-drag hot path: Aura/Spell handles repaint their pooled
+            -- dummy indicators. Runtime group frames,
             -- history, and the full preview refresh remain release-only.
             if handle._cfgGroup or handle._cfgSpell then RefreshGroupIndicatorDragPreview(handle) end
         else
@@ -546,7 +537,6 @@ function Handles.Install(box, deps)
         else
             return false
         end
-        RefreshVisibleSliders("GROUP_PREVIEW_NUDGE")
         RefreshGroupPreviewAfterMove(handle)
         CheckpointHandleHistory(handle, "Nudge")
         return true
@@ -615,7 +605,6 @@ function Handles.Install(box, deps)
         else
             return false
         end
-        RefreshVisibleSliders(reason or "GROUP_PREVIEW_EXACT_MOVE")
         RefreshGroupPreviewAfterMove(handle)
         return true
     end
@@ -676,22 +665,23 @@ function Handles.Install(box, deps)
         if outcome and outcome[1] then return true, outcome[2], outcome[3], outcome[4], outcome[5] end
         return false, (outcome and outcome[2]) or "write-failed"
     end
-    local function StopHandleDrag(handle, button)
+    local function StopHandleDrag(handle, button, allowOpenSettings)
         if box._stage and box._stage._msufGFPreviewPanning then StopPan(box._stage) end
         if button and button ~= "LeftButton" then return end
         handle = handle or (box._dragFrame and box._dragFrame._handle)
         local wasDragging = handle and handle._dragging == true
-        local openSettingsOnRelease = handle and handle._openSettingsOnClick == true
+        local textDrag = handle and handle._cfgText
+        local didMove = handle and handle._didDragMove == true
+        local openSettingsOnRelease = handle and allowOpenSettings == true
             and button == "LeftButton"
             and handle._suppressSettingsOnRelease ~= true
-            and handle._lastDragX == nil and handle._lastDragY == nil
+            and not didMove
         if box._dragFrame then
             box._dragFrame:SetScript("OnUpdate", nil)
             box._dragFrame._handle = nil
             box._dragFrame:Hide()
         end
         local hadFrozenScale = box._dragFrozenScale ~= nil
-        local textDrag = handle and handle._cfgText
         if not textDrag then box._dragFrozenScale = nil end
         if handle then
             if textDrag then
@@ -709,6 +699,7 @@ function Handles.Install(box, deps)
             handle._dragCursorY = nil
             handle._dragScale = nil
             handle._suppressSettingsOnRelease = nil
+            handle._didDragMove = nil
         end
         local didFinalRefresh
         if wasDragging and textDrag then
@@ -737,7 +728,7 @@ function Handles.Install(box, deps)
         if openSettingsOnRelease then OpenHandleSettings(handle) end
     end
     box._dragFrame:SetScript("OnMouseUp", function(_, button)
-        StopHandleDrag(nil, button)
+        StopHandleDrag(nil, button, true)
     end)
     local function UpdateHandleDrag(df)
         local handle = df and df._handle
@@ -747,7 +738,7 @@ function Handles.Install(box, deps)
             return
         end
         if IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then
-            StopHandleDrag(handle, "LeftButton")
+            StopHandleDrag(handle, "LeftButton", true)
             return
         end
         local cx, cy = GetCursorPosition()
@@ -761,6 +752,7 @@ function Handles.Install(box, deps)
             local dy = ((cy - (handle._dragCursorY or cy)) / uiScale) / previewScale
             local nextX = Round((handle._dragCfgStartX or 0) + TextDragConfigDeltaX(handle, dx))
             local nextY = Round((handle._dragCfgStartY or 0) + dy)
+            if nextX ~= handle._dragCfgStartX or nextY ~= handle._dragCfgStartY then handle._didDragMove = true end
             if handle._lastDragX == nextX and handle._lastDragY == nextY then return end
             handle._lastDragX = nextX
             handle._lastDragY = nextY
@@ -774,6 +766,7 @@ function Handles.Install(box, deps)
         local dy = (cy - (handle._dragCursorY or cy)) / scale
         local nextX = Round((handle._dragStartX or 0) + dx)
         local nextY = Round((handle._dragStartY or 0) + dy)
+        if nextX ~= handle._dragStartX or nextY ~= handle._dragStartY then handle._didDragMove = true end
         if handle._lastDragX == nextX and handle._lastDragY == nextY then return end
         handle._lastDragX = nextX
         handle._lastDragY = nextY
@@ -785,6 +778,7 @@ function Handles.Install(box, deps)
     local function StartHandleDrag(handle, button)
         if ConfigCombatLocked() then return end
         if button and button ~= "LeftButton" then return end
+        if handle then handle._didDragMove = nil end
         if button == "LeftButton" and IsControlKeyDown and IsControlKeyDown() and StartPan(box._stage, box, button) then
             handle._suppressNextClick = true
             handle._suppressSettingsOnRelease = true
@@ -872,7 +866,6 @@ function Handles.Install(box, deps)
                     GameTooltip:AddLine(Tr("Ctrl + left-drag pans the preview canvas."), 0.55, 0.68, 0.86, true)
                 else
                     GameTooltip:AddLine((M.Tr and M.Tr("Drag this preview element to adjust the same placement offsets used by Group Frames.")) or "Drag this preview element to adjust the same placement offsets used by Group Frames.", 0.82, 0.82, 0.82, true)
-                    GameTooltip:AddLine((M.Tr and M.Tr("Double-click or use the settings button to open this element's settings.")) or "Double-click or use the settings button to open this element's settings.", 0.50, 0.78, 0.92, true)
                     GameTooltip:AddLine(Tr("Right-click opens quick actions."), 0.50, 0.78, 0.92, true)
                     GameTooltip:AddLine((M.Tr and M.Tr("Arrow keys nudge the selected element. Shift = 5, Ctrl = 10.")) or "Arrow keys nudge the selected element. Shift = 5, Ctrl = 10.", 0.55, 0.62, 0.72, true)
                     GameTooltip:AddLine(Tr("Ctrl + left-drag pans the preview canvas."), 0.55, 0.68, 0.86, true)
@@ -892,7 +885,7 @@ function Handles.Install(box, deps)
             end
             if button == "RightButton" then
                 SelectHandle(self)
-                if self._openSettingsOnClick == true then
+                if self._openSettingsOnRightClick == true then
                     OpenHandleSettings(self)
                     return
                 end
@@ -909,18 +902,13 @@ function Handles.Install(box, deps)
             end
             SelectHandle(self)
         end)
-        handle:SetScript("OnDoubleClick", function(self, button)
-            if button and button ~= "LeftButton" then return end
-            SelectHandle(self)
-            OpenHandleSettings(self)
-        end)
         handle:SetScript("OnMouseWheel", ZoomWheel)
         handle:SetScript("OnMouseDown", StartHandleDrag)
-        handle:SetScript("OnMouseUp", StopHandleDrag)
+        handle:SetScript("OnMouseUp", function(self, button) StopHandleDrag(self, button, true) end)
         handle:SetScript("OnDragStart", StartHandleDrag)
-        handle:SetScript("OnDragStop", StopHandleDrag)
+        handle:SetScript("OnDragStop", function(self, button) StopHandleDrag(self, button, false) end)
         handle:HookScript("OnHide", function(self)
-            StopHandleDrag(self)
+            StopHandleDrag(self, nil, false)
             if box._selectedHandle == self then SelectHandle(nil) end
         end)
         handle._msuf2CommandAction = {
@@ -1016,15 +1004,15 @@ function Handles.Install(box, deps)
     AddIconPool(debuffHandle, 6)
     local externalHandle = CreatePreviewHandle("external", "externals", { 0.30, 0.72, 1.00 }, "EXTERNAL", 86, 34, false)
     externalHandle._cfgGroup = "externals"
-    externalHandle._openSettingsOnClick = true
+    externalHandle._openSettingsOnRightClick = true
     -- The blue EXTERNAL label sits just above the icon rectangle. Keep that
     -- visible affordance inside the handle's mouse hit area as well.
     if externalHandle.SetHitRectInsets then externalHandle:SetHitRectInsets(0, 0, -14, 0) end
     AddIconPool(externalHandle, 2)
     -- Resource bar handle. Live parity: only the detached bar owns free
     -- offsets (the embedded bar's texture cannot move on the live frame), so
-    -- the render locks this handle while the bar is embedded and it degrades
-    -- to select + double-click-to-open like any locked layer.
+    -- the render locks this handle while the bar is embedded; a simple click
+    -- still opens its owning settings section like any other layer.
     local powerBarHandle = CreatePreviewHandle("powerBar", "power", { 0.30, 0.62, 0.98 }, "POWER", 86, 16, false)
     powerBarHandle._cfgPower = true
     powerBarHandle._previewText = "Resource Bar"

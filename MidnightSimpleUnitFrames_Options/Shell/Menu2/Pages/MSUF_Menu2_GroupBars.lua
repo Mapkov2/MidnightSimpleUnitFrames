@@ -15,7 +15,6 @@ local max = math.max
 local min = math.min
 local VT = M.ValueTextList
 local DISPEL_OVERLAY_121_PTR_DISABLED = false
-local DISPEL_OVERLAY_121_PTR_MESSAGE = "Uses native 12.1 AuraContainer dispellable debuff detection."
 local SCOPE_VALUES, HEALTH_MODES, TEXT_MODES, DELIMITER_VALUES, ANCHORS, GF_BAR_MODES, SIMPLE_TEXTURES, DISPEL_OVERLAY_STYLES, DEBUFF_STRIPE_EDGES = M.PickDefaults(GP, [[SCOPE_VALUES HEALTH_MODES TEXT_MODES DELIMITER_VALUES ANCHORS GF_BAR_MODES SIMPLE_TEXTURES DISPEL_OVERLAY_STYLES DEBUFF_STRIPE_EDGES]])
 local HEALTH_TEXT_MODES = GP.HEALTH_TEXT_MODES or TEXT_MODES
 local GF, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection, CurrentScope, BindScopeToggle, BindScopeDropdown, ScopeDropdown, ScopeSlider, ScopeColor, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, TrackSectionRefresh, OnOffBadge, BadgeNumber, OptionText, ControlMeta, RegisterControl = M.Pick(GP, [[GF Conf Val QueueGF Set Bool Num ScopeSection CurrentScope BindScopeToggle BindScopeDropdown ScopeDropdown ScopeSlider ScopeColor SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus TrackSectionRefresh OnOffBadge BadgeNumber OptionText ControlMeta RegisterControl]])
@@ -49,18 +48,11 @@ local function NormalizeGFDispelOverlayTrigger(value)
     return "BY_ME"
 end
 local function BuildDispelOverlaySection(ctx, b)
-    local sectionW = ctx.width or b.width or 720
-    local probeW = min(900, max(320, sectionW - 40))
-    local wide = probeW >= 760
-    local dispel = b:CollapsibleSection("dispel", "Dispel Overlay", wide and 456 or 566, false)
+    local dispel = b:CollapsibleSection("dispel", "Dispel Overlay", 422, false)
     local dispelW = dispel._msuf2Width or b.width or 720
     local dispelCardW = min(900, max(320, dispelW - 40))
-    wide = dispelCardW >= 760
-    local dispelCardH = wide and 392 or 502
-    local dispelCard = W.ControlCard(dispel, "Behavior & Style", "Tints the health bar when a configured debuff condition is active.", 20, -38, dispelCardW, dispelCardH)
-    local dispelToggle = BindScopeToggle(ctx, W.SwitchAt(dispelCard, "Dispel Overlay", dispelCardW - 62, -24, 0, "HIDDEN"), "dispelOverlayEnabled", false, "visual")
-    local dispelPtrNotice = W.Text(dispelCard, DISPEL_OVERLAY_121_PTR_MESSAGE, 16, -58, min(420, dispelCardW - 32), T.colors.dim)
-    if dispelPtrNotice and dispelPtrNotice.SetWordWrap then dispelPtrNotice:SetWordWrap(false) end
+    local dispelCard = W.ControlCard(dispel, nil, nil, 20, -38, dispelCardW, 358)
+    local dispelToggle = BindScopeToggle(ctx, W.SwitchAt(dispelCard, "Dispel Overlay", 16, -16, 0, "HIDDEN"), "dispelOverlayEnabled", false, "visual")
     local dispelTrigger = W.Dropdown(dispelCard, "Overlay detects", GF_DISPEL_OVERLAY_TRIGGERS, 300)
     M.BindDropdownWidget(ctx, dispelTrigger,
         function() return NormalizeGFDispelOverlayTrigger(Val(CurrentScope(), "dispelOverlayTrigger", "BORDER")) end,
@@ -69,17 +61,17 @@ local function BuildDispelOverlaySection(ctx, b)
             RequestGroupBarsRefresh(ctx, "gf-bars-dispel-trigger")
         end,
         ControlMeta(ctx, "field.dispelOverlayTrigger"))
-    W.MoveWidget(dispelTrigger, dispelCard, 16, -88, min(300, dispelCardW - 32), "LEFT")
-    local dispelStyle = ScopeDropdown(ctx, dispelCard, "Overlay style", DISPEL_OVERLAY_STYLES, 300, "dispelOverlayStyle", "FULL", "visual", 16, -140, min(300, dispelCardW - 32))
-    local dispelCurrent = BindScopeToggle(ctx, W.ToggleAt(dispelCard, "Show on current health only", 16, -188, dispelCardW - 32), "dispelOverlayOnHealth", true, "visual")
-    local dispelAlpha = ScopeNumberSlider(ctx, dispelCard, "Overlay opacity", 0.05, 1, 0.05, 340, "dispelOverlayAlpha", 0.35, "visual", 16, -232, min(360, dispelCardW - 72))
+    W.MoveWidget(dispelTrigger, dispelCard, 16, -54, min(300, dispelCardW - 32), "LEFT")
+    local dispelStyle = ScopeDropdown(ctx, dispelCard, "Overlay style", DISPEL_OVERLAY_STYLES, 300, "dispelOverlayStyle", "FULL", "visual", 16, -106, min(300, dispelCardW - 32))
+    local dispelCurrent = BindScopeToggle(ctx, W.ToggleAt(dispelCard, "Show on current health only", 16, -154, dispelCardW - 32), "dispelOverlayOnHealth", true, "visual")
+    local dispelAlpha = ScopeNumberSlider(ctx, dispelCard, "Overlay opacity", 0.05, 1, 0.05, 340, "dispelOverlayAlpha", 0.35, "visual", 16, -198, min(360, dispelCardW - 72))
     local dispelLayer = ScopeNumberSlider(ctx, dispelCard, "Effect Layer (0-30)", 0, 30, 1, 340,
-        "dispelOverlayLayer", 0, "visual", 16, -286, min(360, dispelCardW - 72))
+        "dispelOverlayLayer", 0, "visual", 16, -252, min(360, dispelCardW - 72))
     -- The live tint is drawn by Blizzard and only appears while a real
     -- dispellable debuff is up, so style, opacity and layer are impossible to
     -- judge while configuring. The preview paints an MSUF-owned stand-in with
     -- the exact same geometry. Ephemeral: never written to the DB.
-    local dispelPreview = W.ToggleAt(dispelCard, "Preview overlay", 16, -334, dispelCardW - 32)
+    local dispelPreview = W.ToggleAt(dispelCard, "Runtime Preview: live GroupFrames", 16, -300, dispelCardW - 32)
     M.BindBoolWidget(ctx, dispelPreview,
         function() return _G.MSUF_DispelOverlayPreviewMode == true end,
         function(value)
@@ -95,8 +87,8 @@ local function BuildDispelOverlaySection(ctx, b)
         end
     end)
     if M.AddTooltip then
-        M.AddTooltip(dispelPreview, "Preview overlay",
-            "Paints a stand-in tint so the overlay can be judged without a real dispellable debuff. Turns itself off when this page closes.",
+        M.AddTooltip(dispelPreview, "Runtime Preview",
+            "Paints a stand-in tint on the live GroupFrames so the overlay can be judged without a real dispellable debuff. Turns itself off when this page closes.",
             { hook = true })
     end
     local dispelControls = { dispelTrigger, dispelStyle, dispelCurrent, dispelAlpha, dispelLayer, dispelPreview }
@@ -138,22 +130,27 @@ local GF_DISPEL_SYMBOL_ANCHORS = VT("TOPLEFT", "Top Left", "TOP", "Top", "TOPRIG
 
 --- Dispel-type symbol: the indicator that says WHICH debuff type is up. The
 --- live symbol is a native AuraButton texture -- Blizzard owns its artwork and
---- visibility -- so the position controls are paired with a draggable preview,
---- which is the only way to place it without a real debuff on the unit.
+--- visibility -- so Preview is the placement surface even without a real debuff.
+local function GFDispelSymbolSectionHeight(ctx)
+    local width = min(900, max(320, (((ctx and ctx.width) or 720) - 40)))
+    return width >= 760 and 368 or 564
+end
+
 local function BuildGFDispelSymbolSection(ctx, b)
-    local section = b:CollapsibleSection("dispelSymbol", "Dispel Symbol", 470, false)
+    local section = b:CollapsibleSection("dispelSymbol", "Dispel Symbol", GFDispelSymbolSectionHeight(ctx), false)
     local sectionW = section._msuf2Width or b.width or 720
     local cardW = min(900, max(320, sectionW - 40))
-    local card = W.ControlCard(section, "Symbol & Placement",
-        "Shows a symbol naming the dispel type of an active debuff.", 20, -38, cardW, 406)
-    local toggle = BindScopeToggle(ctx, W.SwitchAt(card, "Dispel Symbol", cardW - 62, -24, 0, "HIDDEN"),
+    local wide = cardW >= 760
+    local card = W.ControlCard(section, nil, nil, 20, -38, cardW, wide and 304 or 500)
+    local toggle = BindScopeToggle(ctx, W.SwitchAt(card, "Dispel Symbol", 16, -16, 0, "HIDDEN"),
         "dispelSymbolEnabled", false, "visual")
-    local fieldW = min(300, cardW - 32)
-    local sliderW = min(360, cardW - 72)
+    local leftX, columnGap = 16, 24
+    local controlW = wide and floor((cardW - 32 - columnGap) * 0.5) or min(360, cardW - 32)
+    local rightX = wide and (leftX + controlW + columnGap) or leftX
     local style = ScopeDropdown(ctx, card, "Symbol set", GF_DISPEL_SYMBOL_STYLES, 300,
-        "dispelSymbolStyle", "BLIZZARD", "visual", 16, -62, fieldW)
+        "dispelSymbolStyle", "BLIZZARD", "visual", leftX, -54, controlW)
     local mode = ScopeDropdown(ctx, card, "Show", GF_DISPEL_SYMBOL_MODES, 300,
-        "dispelSymbolMode", "ALL", "visual", 16, -114, fieldW)
+        "dispelSymbolMode", "ALL", "visual", leftX, -106, controlW)
     local trigger = W.Dropdown(card, "Symbol detects", GF_DISPEL_OVERLAY_TRIGGERS, 300)
     M.BindDropdownWidget(ctx, trigger,
         function() return NormalizeGFDispelOverlayTrigger(Val(CurrentScope(), "dispelSymbolTrigger", "BORDER")) end,
@@ -162,28 +159,23 @@ local function BuildGFDispelSymbolSection(ctx, b)
             RequestGroupBarsRefresh(ctx, "gf-bars-dispel-symbol-trigger")
         end,
         ControlMeta(ctx, "field.dispelSymbolTrigger"))
-    W.MoveWidget(trigger, card, 16, -166, fieldW, "LEFT")
+    W.MoveWidget(trigger, card, leftX, -158, controlW, "LEFT")
     local anchor = ScopeDropdown(ctx, card, "Symbol anchor", GF_DISPEL_SYMBOL_ANCHORS, 300,
-        "dispelSymbolAnchor", "TOPRIGHT", "visual", 16, -218, fieldW)
+        "dispelSymbolAnchor", "TOPRIGHT", "visual", rightX, wide and -54 or -306, controlW)
     local size = ScopeNumberSlider(ctx, card, "Symbol size", 4, 48, 1, 340,
-        "dispelSymbolSize", 12, "visual", 16, -270, sliderW)
-    local offsetX = ScopeNumberSlider(ctx, card, "Offset X", -128, 128, 1, 340,
-        "dispelSymbolX", 0, "visual", 16, -318, sliderW)
-    local offsetY = ScopeNumberSlider(ctx, card, "Offset Y", -128, 128, 1, 340,
-        "dispelSymbolY", 0, "visual", 16, -366, sliderW)
-    local rightX = cardW - sliderW - 16
+        "dispelSymbolSize", 12, "visual", leftX, -210, controlW)
     local growth = ScopeDropdown(ctx, card, "Grow", GF_DISPEL_SYMBOL_GROWTH, 300,
-        "dispelSymbolGrowth", "RIGHT", "visual", rightX, -218, fieldW)
+        "dispelSymbolGrowth", "RIGHT", "visual", rightX, wide and -106 or -358, controlW)
     local spacing = ScopeNumberSlider(ctx, card, "Symbol spacing", 0, 32, 1, 340,
-        "dispelSymbolSpacing", 2, "visual", rightX, -270, sliderW)
+        "dispelSymbolSpacing", 2, "visual", rightX, wide and -158 or -406, controlW)
     local alpha = ScopeNumberSlider(ctx, card, "Symbol opacity", 0.05, 1, 0.05, 340,
-        "dispelSymbolAlpha", 1, "visual", rightX, -318, sliderW)
+        "dispelSymbolAlpha", 1, "visual", leftX, -258, controlW)
     local layer = ScopeNumberSlider(ctx, card, "Effect Layer (0-30)", 0, 30, 1, 340,
-        "dispelSymbolLayer", 8, "visual", rightX, -366, sliderW)
+        "dispelSymbolLayer", 8, "visual", rightX, wide and -210 or -454, controlW)
     -- No preview toggle here. The symbols are previewed in the group preview
     -- above as their own "Dispel" layer -- like every other group element -- and
-    -- that layer's handle is also the drag surface for Offset X/Y.
-    local controls = { style, mode, trigger, anchor, size, offsetX, offsetY, alpha, layer }
+    -- that layer's handle is also the drag surface for placement.
+    local controls = { style, mode, trigger, anchor, size, alpha, layer }
     local allModeControls = { growth, spacing }
     local function RefreshDispelSymbolState()
         local on = Bool(CurrentScope(), "dispelSymbolEnabled", false)
@@ -238,7 +230,7 @@ local function BuildGFResourceBarSection(ctx, b)
     -- unit page: they are configured once globally.
     local powerCardH = 220
     local roleCardH = 178
-    local detachedCardH = 310
+    local detachedCardH = 244
     local _, powerCardY = W.NextRow(power, powerCardH + 12)
     local _, roleCardY = W.NextRow(power, roleCardH + 12)
     local _, detachedCardY = W.NextRow(power, detachedCardH)
@@ -344,21 +336,17 @@ local function BuildGFResourceBarSection(ctx, b)
     -- on the unit page, so group members do not get them either.
     local detachedText = BindScopeToggle(ctx, W.ToggleAt(detachedCard, "Text on detached bar", 16, -62, detachedColW),
         "detachedPowerBarTextOnBar", false, "geometry")
-    local detachedX = ScopeSlider(ctx, detachedCard, "Detached X", -1000, 1000, 1, detachedSliderW,
-        "detachedPowerBarOffsetX", 0, "geometry", 16, -116, detachedSliderW)
-    local detachedY = ScopeSlider(ctx, detachedCard, "Detached Y", -1000, 1000, 1, detachedSliderW,
-        "detachedPowerBarOffsetY", -4, "geometry", detachedRightX, -116, detachedSliderW)
     local detachedWidth = ScopeSlider(ctx, detachedCard, "Detached width", 20, 800, 1, detachedSliderW,
-        "detachedPowerBarWidth", 80, "geometry", 16, -182, detachedSliderW)
+        "detachedPowerBarWidth", 80, "geometry", 16, -116, detachedSliderW)
     local detachedHeight = ScopeSlider(ctx, detachedCard, "Detached height", 2, 80, 1, detachedSliderW,
-        "detachedPowerBarHeight", 6, "geometry", detachedRightX, -182, detachedSliderW)
+        "detachedPowerBarHeight", 6, "geometry", detachedRightX, -116, detachedSliderW)
     local detachedLayer = ScopeSlider(ctx, detachedCard, "Detached layer", 0, 30, 1, detachedSliderW,
-        "detachedPowerBarFrameLevelOffset", 6, "geometry", 16, -248, detachedSliderW)
+        "detachedPowerBarFrameLevelOffset", 6, "geometry", 16, -182, detachedSliderW)
     local powerControls = {
         powerHeight, smoothFill, showTank, showHealer, showDamager,
         embedPower, detachPower, powerBorder,
     }
-    local detachedControls = { detachedText, detachedX, detachedY, detachedWidth, detachedHeight, detachedLayer }
+    local detachedControls = { detachedText, detachedWidth, detachedHeight, detachedLayer }
     local function RefreshPowerState()
         local enabled = IsPowerBarEnabled(CurrentScope())
         local detached = enabled and Bool(CurrentScope(), "powerBarDetached", false)
@@ -388,8 +376,8 @@ local function BuildGFResourceBarSection(ctx, b)
 end
 
 local function BuildGFTextSection(ctx, b)
-    -- HP tab: 64px tab inset + 598px of cards + bottom breathing room.
-    local text = b:CollapsibleSection("text", "Text", 690, false)
+    -- HP tab: 64px tab inset + 430px content card + bottom breathing room.
+    local text = b:CollapsibleSection("text", "Text", 522, false)
     text._msuf2CollapsibleBadgesOnlyWhenOpen = true
     local textW = text._msuf2Width or b.width or 720
     local textLeftX = 24
@@ -490,7 +478,7 @@ local function BuildGFTextSection(ctx, b)
         return key
     end
     local textSlotState = UnitSectionShared.MakeTextSlotState(M, CurrentScope, "gfTextSlotSelection", "gfTextMoveTogether")
-    local CurrentSlot, SetCurrentSlot, SlotOffsetKeys, SlotFontSizeKey = textSlotState.CurrentSlot, textSlotState.SetCurrentSlot, textSlotState.SlotOffsetKeys, textSlotState.SlotFontSizeKey
+    local CurrentSlot, SetCurrentSlot, SlotFontSizeKey = textSlotState.CurrentSlot, textSlotState.SetCurrentSlot, textSlotState.SlotFontSizeKey
     local MoveTogether, SetMoveTogether = textSlotState.MoveTogether, textSlotState.SetMoveTogether
     local refreshTextControls
     local function CurrentScopeKey()
@@ -578,13 +566,13 @@ local function BuildGFTextSection(ctx, b)
             badges = {
                 { text = hpOn and "Shown" or "Hidden", kind = hpOn and "ok" or "muted" },
                 { text = TextSlotSummary("hp"), kind = hpOn and "info" or "muted" },
-                { text = "X " .. BadgeNumber(Val(scope, "hpOffsetX", 0)) .. "  Y " .. BadgeNumber(Val(scope, "hpOffsetY", 0)), kind = hpOn and "accent" or "muted" },
+                { text = "Preview position", kind = hpOn and "accent" or "muted" },
             }
         elseif tab == "power" then
             badges = {
                 { text = powerOn and "Shown" or "Hidden", kind = powerOn and "ok" or "muted" },
                 { text = TextSlotSummary("power"), kind = powerOn and "info" or "muted" },
-                { text = "X " .. BadgeNumber(Val(scope, "powerOffsetX", 0)) .. "  Y " .. BadgeNumber(Val(scope, "powerOffsetY", 0)), kind = powerOn and "accent" or "muted" },
+                { text = "Preview position", kind = powerOn and "accent" or "muted" },
             }
         elseif tab == "advanced" then
             badges = {
@@ -596,7 +584,7 @@ local function BuildGFTextSection(ctx, b)
             badges = {
                 { text = nameOn and "Shown" or "Hidden", kind = nameOn and "ok" or "muted" },
                 { text = BadgeValue(OptionText(ANCHORS, Val(scope, "nameAnchor", "LEFT"))), kind = nameOn and "info" or "muted" },
-                { text = "X " .. BadgeNumber(Val(scope, "nameOffsetX", 28)) .. "  Y " .. BadgeNumber(Val(scope, "nameOffsetY", 0)), kind = nameOn and "accent" or "muted" },
+                { text = "Preview position", kind = nameOn and "accent" or "muted" },
             }
         end
         SetSectionBadgesAndStatus(text, badges)
@@ -674,10 +662,8 @@ local function BuildGFTextSection(ctx, b)
     PreviewText(nameContent, "Mapko", 16, -54, textCardW - 32)
     local showName = BindScopeToggle(ctx, W.SwitchAt(nameContent, "Show Name", 16, -24, 0, "HIDDEN"), "showName", true, "font")
     local hideNameOnStatus = BindScopeToggle(ctx, W.ToggleAt(nameContent, "Hide name on dead/offline", 16, -104, textCardW - 32), "hideNameOnDeadOffline", false, "visual")
-    local namePosition = TextCard(nameTab, "Position", nil, textLeftX, -178, textCardW, 260)
+    local namePosition = TextCard(nameTab, "Position", "Move the name directly in Preview.", textLeftX, -178, textCardW, 134)
     local nameAnchor = ScopeDropdown(ctx, namePosition, "Anchor", ANCHORS, textDropW, "nameAnchor", "LEFT", "font", 16, -48, textCardW - 32)
-    local nameX = ScopeSlider(ctx, namePosition, "X Offset", -100, 100, 1, textSliderW, "nameOffsetX", 28, "font", 16, -112, textCardW - 72)
-    local nameY = ScopeSlider(ctx, namePosition, "Y Offset", -100, 100, 1, textSliderW, "nameOffsetY", 0, "font", 16, -174, textCardW - 72)
     local nameAppearance = TextCard(nameTab, "Appearance", nil, textRightX, -4, textRightW, 150)
     local nameSize = ScopeSlider(ctx, nameAppearance, "Size", 6, 48, 1, hpSliderW, "nameFontSize", 12, "font", 16, -58, textRightW - 58)
     local SLOT_VALUES = VT("left", "Left slot", "center", "Center slot", "right", "Right slot")
@@ -815,10 +801,8 @@ local function BuildGFTextSection(ctx, b)
                 SetOptionEnabled(controls.shortNumbers, enabled == true and hasNumericValue)
             end
         end
-        local position = TextCard(tab, "Position", cfg.positionSubtitle, textRightX, -4, textRightW, 408)
-        controls.x = ScopeSlider(ctx, position, "X Offset", -100, 100, 1, hpSliderW, cfg.xKey, 0, "font", 16, -64, textRightW - 58)
-        controls.y = ScopeSlider(ctx, position, "Y Offset", -100, 100, 1, hpSliderW, cfg.yKey, 0, "font", 16, -122, textRightW - 58)
-        controls.moveTogether = W.ToggleAt(position, "Move text as one group", 16, -176, textRightW - 32)
+        local position = TextCard(tab, "Position", cfg.positionSubtitle, textRightX, -4, textRightW, 220)
+        controls.moveTogether = W.ToggleAt(position, "Move text as one group", 16, -64, textRightW - 32)
         M.BindBoolWidget(ctx, controls.moveTogether,
             function() return MoveTogether(kind) end,
             function(v)
@@ -828,30 +812,8 @@ local function BuildGFTextSection(ctx, b)
                 RequestGroupBarsRefresh(ctx, "gf-bars-text-move-together")
             end,
             ControlMeta(ctx, "text." .. kind .. ".move_together", "ephemeral"))
-        local function SlotAxis(axis)
-            local slider = W.Slider(position, "Selected slot " .. axis, -100, 100, 1, hpSliderW)
-            controls["slot" .. axis] = slider
-            PlaceSlider(position, slider, 16, axis == "X" and -232 or -290, textRightW - 58)
-            M.BindNumberWidget(ctx, slider,
-                function()
-                    local xKey, yKey = SlotOffsetKeys(kind)
-                    return Val(CurrentScope(), axis == "X" and xKey or yKey, 0)
-                end,
-                function(v)
-                    local xKey, yKey = SlotOffsetKeys(kind)
-                    Set(CurrentScope(), axis == "X" and xKey or yKey, v, "font")
-                    FocusGFPreviewText(kind, CurrentSlot(kind), true)
-                end,
-                0, (function()
-                    local meta = ControlMeta(ctx, "text." .. kind .. ".slot_offset." .. axis:lower())
-                    meta.step, meta.roundStep = 1, true
-                    return meta
-                end)())
-        end
-        SlotAxis("X")
-        SlotAxis("Y")
         controls.slotSize = W.Slider(position, "Selected slot size", 6, 48, 1, hpSliderW)
-        PlaceSlider(position, controls.slotSize, 16, -348, textRightW - 58)
+        PlaceSlider(position, controls.slotSize, 16, -122, textRightW - 58)
         M.BindNumberWidget(ctx, controls.slotSize,
             function()
                 local value = tonumber(Val(CurrentScope(), SlotFontSizeKey(kind), nil))
@@ -866,8 +828,6 @@ local function BuildGFTextSection(ctx, b)
                 meta.step, meta.roundStep = 1, true
                 return meta
             end)())
-        local appearance = TextCard(tab, "Appearance", nil, textLeftX, -(contentHeight + 24), textCardW, 144)
-        controls.size = ScopeSlider(ctx, appearance, "Default size", 6, 48, 1, textSliderW, cfg.sizeKey, cfg.sizeDefault, "font", 16, -58, textCardW - 72)
         return controls
     end
     local hpControls = BuildValueTextTab("hp", hpTab, {
@@ -887,9 +847,7 @@ local function BuildGFTextSection(ctx, b)
         decimalsKey = "healthTextDecimals",
         shortNumbersKey = "hpFullValueShort",
         absorbIconKey = "hpAbsorbIcon",
-        positionSubtitle = "Move all HP text together or adjust a selected slot.",
-        xKey = "hpOffsetX",
-        yKey = "hpOffsetY",
+        positionSubtitle = "Move the group or selected slot directly in Preview.",
         sizeKey = "hpFontSize",
         sizeDefault = 10,
     })
@@ -907,9 +865,7 @@ local function BuildGFTextSection(ctx, b)
             right = { key = "powerTextRight", default = "NONE", hidePercentKey = "powerTextRightHidePercentSymbol" },
         },
         delimiterKey = "powerTextDelimiter",
-        positionSubtitle = "Move all power text together or adjust a selected slot.",
-        xKey = "powerOffsetX",
-        yKey = "powerOffsetY",
+        positionSubtitle = "Move the group or selected slot directly in Preview.",
         sizeKey = "powerFontSize",
         sizeDefault = 9,
     })
@@ -920,8 +876,8 @@ local function BuildGFTextSection(ctx, b)
     local function HookTextControls(kind, controls)
         for i = 1, #controls do HookGFPreviewTextFocus(controls[i][1], kind, controls[i][2]) end
     end
-    HookTextControls("name", { { showName }, { hideNameOnStatus }, { nameAnchor }, { nameX }, { nameY }, { nameSize }, { nameLayer } })
-    local nameTextControls = { hideNameOnStatus, nameSize, nameAnchor, nameX, nameY, nameLayer }
+    HookTextControls("name", { { showName }, { hideNameOnStatus }, { nameAnchor }, { nameSize }, { nameLayer } })
+    local nameTextControls = { hideNameOnStatus, nameSize, nameAnchor, nameLayer }
     local hpTextControls, hpSlotControls = M.UnitSectionsShared.ValueTextControlSets("hp", hpControls, hpLayer, HookTextControls, CurrentSlot)
     local powerTextControls, powerSlotControls = M.UnitSectionsShared.ValueTextControlSets("power", powerControls, powerLayer, HookTextControls, CurrentSlot)
     if hpControls.decimals then hpTextControls[#hpTextControls + 1] = hpControls.decimals end
@@ -1106,4 +1062,4 @@ local function BuildGFBars(ctx)
     BuildGFDebuffStripeSection(ctx, b)
     FinalizeScopePage(ctx, b)
 end
-M.RegisterPage("gf_bars", { title = "MSUF Group Dispel Overlay", build = BuildGFBars, version = 19 })
+M.RegisterPage("gf_bars", { title = "MSUF Group Dispel Overlay", build = BuildGFBars, version = 20 })

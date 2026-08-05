@@ -1062,8 +1062,8 @@ local function FormatMode(mode, cur, maxVal, pct, sep, isPower, hidePercentSymbo
     return absorbBase and (value .. " + " .. absorbText) or value
 end
 local UnitPreviewText = {}
-function UnitPreviewText.PlaceHandleAroundRegions(handle, parent, regions, pad)
-    return PreviewHelpers.PlaceHandleAroundRegions(handle, parent, regions, pad)
+function UnitPreviewText.PlaceHandleAroundRegions(handle, parent, regions, pad, opts)
+    return PreviewHelpers.PlaceHandleAroundRegions(handle, parent, regions, pad, opts)
 end
 M.AssignNamedValues(Model, [[
     UNIT_KEYS UNIT_SET UNIT_LABELS UNIT_DATA PreviewRaidGroupNameAllowed PreviewRaidGroupNameText NormalizePreviewRaidGroupNameAnchor

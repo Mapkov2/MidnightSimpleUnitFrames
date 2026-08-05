@@ -420,6 +420,10 @@ function Core.ApplyRounded(box, key, powerOn, outlineThickness, powerEmbedded, p
     PreviewSetMask(mock, mock.healPred, healPredMode == 4 and nil or healPredMask)
     PreviewSetMask(mock, mock.absorb, absorbMode == 4 and nil or absorbMask)
     PreviewSetMask(mock, mock.healAbsorb, healAbsorbMask)
+    local dispelOverlay = mock._msufPreviewDispelOverlayRegion
+    local dispelOverlayMask = dispelOverlay and dispelOverlay:IsShown()
+        and EnsurePreviewRoundedMask(mock, "dispelOverlay", healthAnchor, dispelOverlay) or nil
+    PreviewSetMask(mock, dispelOverlay, dispelOverlayMask)
     local powerAnchor = sharedPowerBody and mock or mock.powerBG
     local powerBgMask = roundedPower and EnsurePreviewRoundedMask(mock, "power", powerAnchor, mock.powerBG) or nil
     local powerMask = roundedPower and EnsurePreviewRoundedMask(mock, "power", powerAnchor, mock.power) or nil
@@ -580,6 +584,10 @@ function Core.ApplyLayerVisibility(box)
     if not LayerOn("auras") then
         local Auras = MSUF.UFPreviewAuras
         if Auras and type(Auras.Hide) == "function" then Auras.Hide(box) end
+    end
+    local Auras = MSUF.UFPreviewAuras
+    if Auras and type(Auras.ApplyDispelLayerVisibility) == "function" then
+        Auras.ApplyDispelLayerVisibility(box)
     end
     if not statusOn then
         for _, icon in pairs(mock.icons or {}) do Core.SetShownSafe(icon, false) end

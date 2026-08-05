@@ -489,26 +489,31 @@ function Shared.ValueTextControlSets(kind, controls, layer, hookControls, curren
     controls = controls or {}
     local delimiter = controls.delimiter or controls.separator
     local function CurrentSlotFocus() return currentSlot and currentSlot(kind) end
-    local hookSpecs = {
-        { controls.show }, { controls.left, "left" }, { controls.center, "center" }, { controls.right, "right" },
-        { controls.leftHidePercent, "left" }, { controls.centerHidePercent, "center" }, { controls.rightHidePercent, "right" },
-        { controls.mode, CurrentSlotFocus }, { controls.hidePercent, CurrentSlotFocus }, { controls.absorb, CurrentSlotFocus },
-        { delimiter }, { controls.x }, { controls.y }, { controls.moveTogether },
-        { controls.slot, CurrentSlotFocus }, { controls.slotX, CurrentSlotFocus }, { controls.slotY, CurrentSlotFocus }, { controls.slotSize, CurrentSlotFocus },
-        { controls.size }, { layer },
-    }
-    local textControls = {
-        controls.left, controls.center, controls.right,
-        controls.leftHidePercent, controls.centerHidePercent, controls.rightHidePercent,
-        controls.mode, controls.hidePercent, controls.absorb, controls.slot,
-        delimiter, controls.size, controls.slotSize, controls.x, controls.y, controls.moveTogether, layer,
-    }
+    local hookSpecs = {}
+    local function AddHook(control, focus)
+        if control then hookSpecs[#hookSpecs + 1] = { control, focus } end
+    end
+    AddHook(controls.show)
+    AddHook(controls.left, "left"); AddHook(controls.center, "center"); AddHook(controls.right, "right")
+    AddHook(controls.leftHidePercent, "left"); AddHook(controls.centerHidePercent, "center"); AddHook(controls.rightHidePercent, "right")
+    AddHook(controls.mode, CurrentSlotFocus); AddHook(controls.hidePercent, CurrentSlotFocus); AddHook(controls.absorb, CurrentSlotFocus)
+    AddHook(delimiter); AddHook(controls.moveTogether)
+    AddHook(controls.slot, CurrentSlotFocus); AddHook(controls.slotSize, CurrentSlotFocus)
+    AddHook(controls.size); AddHook(layer)
+    local textControls = {}
+    local function AddControl(control)
+        if control then textControls[#textControls + 1] = control end
+    end
+    AddControl(controls.left); AddControl(controls.center); AddControl(controls.right)
+    AddControl(controls.leftHidePercent); AddControl(controls.centerHidePercent); AddControl(controls.rightHidePercent)
+    AddControl(controls.mode); AddControl(controls.hidePercent); AddControl(controls.absorb); AddControl(controls.slot)
+    AddControl(delimiter); AddControl(controls.size); AddControl(controls.slotSize); AddControl(controls.moveTogether); AddControl(layer)
     if controls.reverse then
         hookSpecs[#hookSpecs + 1] = { controls.reverse }
         textControls[#textControls + 1] = controls.reverse
     end
     if hookControls then hookControls(kind, hookSpecs) end
-    return textControls, { controls.slotX, controls.slotY }
+    return textControls, {}
 end
 function Shared.CustomAnchorEditor(ctx, parent, opts)
     opts = opts or {}

@@ -646,7 +646,7 @@ local function StageCue(stage, position, touched)
             if stage.id == "classpower" then
                 return Tr("Preview controls = inspect layouts and states · MSUF Edit Mode = whole-frame placement")
             end
-            return Tr("Drag = inner position · gear/double-click = options · right-click = actions · Ctrl-wheel/drag = zoom/pan · Edit Mode = whole frame")
+            return Tr("Preview controls = inspect layouts and states · MSUF Edit Mode = whole-frame placement")
         end
         return format(Tr("CHECKPOINT - Press Enter section to explore every setting in %s."), Tr(section.label))
     end
@@ -3299,7 +3299,7 @@ local function BuildPowerMovesPage(ctx, T, W)
     Runtime.specialClickTargets = { stageId = "power_moves", groups = {} }
     local b = W.PageBuilder(ctx)
     Header(b, "MSUF power moves", "A focused frame workflow with direct control over the details that matter in combat.")
-    InfoCard(b, T, "Touch the preview", "Drag its handles. Double-click a handle or use its gear to open the exact setting; right-click exposes related actions.", "uf_player", 86)
+    InfoCard(b, T, "Touch the preview", "Click a handle to open its exact setting, drag it to move, or right-click for related actions.", "uf_player", 86)
     PreviewCard(b, T, W, "Rounded frames that match, corner for corner",
         "One clean corner style with five strength levels covers Health, embedded or detached Power, frame outlines, aggro, dispel and highlight borders, on Unitframes and Group Frames alike.",
         "opt_bars", TourPreview("rounded_frames"))
