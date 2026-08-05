@@ -2344,7 +2344,7 @@ function Render.Install(box, ctx, deps)
                     powerBarHandle:SetPoint("TOP", mock, "BOTTOM",
                         Round(detachedPowerX * previewScale), Round(detachedPowerY * previewScale))
                     powerBarHandle:SetSize(ScaleValue(detachedPowerW, previewScale, 1),
-                        max(12, ScaleValue(detachedPowerH, previewScale, 1)))
+                        ScaleValue(detachedPowerH, previewScale, 1))
                 elseif not powerEmbed then
                     powerBarHandle:SetPoint("TOP", mock, "BOTTOM", 0, -max(1, Round(previewScale)))
                     powerBarHandle:SetSize(max(1, mockW - inset * 2), max(12, powerH))

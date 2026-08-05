@@ -27,6 +27,23 @@ local function ClampNumber(value, defaultValue, minValue, maxValue)
     if maxValue ~= nil and value > maxValue then value = maxValue end
     return value
 end
+local function PlaceMinimumHitHandle(handle, parent, left, bottom, visualWidth, visualHeight, pad, minimum)
+    if not (handle and parent) then return false end
+    left, bottom = tonumber(left), tonumber(bottom)
+    visualWidth, visualHeight = tonumber(visualWidth), tonumber(visualHeight)
+    if not (left and bottom and visualWidth and visualHeight) then return false end
+    pad, minimum = tonumber(pad) or 0, tonumber(minimum) or 18
+    local naturalWidth = max(0, visualWidth) + pad * 2
+    local naturalHeight = max(0, visualHeight) + pad * 2
+    local handleWidth = max(minimum, naturalWidth)
+    local handleHeight = max(minimum, naturalHeight)
+    handle:ClearAllPoints()
+    handle:SetSize(handleWidth, handleHeight)
+    handle:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT",
+        left - pad - ((handleWidth - naturalWidth) * 0.5),
+        bottom - pad - ((handleHeight - naturalHeight) * 0.5))
+    return true
+end
 local function AuraDurationBarColor()
     local auras3 = MSUF.MSUF_Auras3
     local resolver = auras3 and auras3.GetDurationBarColor
@@ -38,6 +55,7 @@ local function RuntimeRound(value)
 end
 local Auras = MSUF.UFPreviewAuras or {}
 MSUF.UFPreviewAuras = Auras
+Auras.PlaceMinimumHitHandle = PlaceMinimumHitHandle
 local AURA_HANDLE_FIELDS = {
     buff = { x = "buffGroupOffsetX", y = "buffGroupOffsetY", defaultX = 0, defaultY = 36, label = "Buffs", color = { 0.20, 0.74, 0.42 } },
     debuff = { x = "debuffGroupOffsetX", y = "debuffGroupOffsetY", defaultX = 0, defaultY = 6, label = "Debuffs", color = { 0.84, 0.26, 0.28 } },
@@ -1150,9 +1168,8 @@ function Auras.LayoutDispelLayers(box, mock, runtimeSpec, S, baseLevel, overlayA
         for index = count + 1, #holders do holders[index]:Hide() end
         if symbolHandle then
             symbolHandle._msufAuraDragVisual = symbolHost
-            symbolHandle:SetSize(max(18, S(rawRight - rawLeft) + 8), max(18, S(rawTop - rawBottom) + 8))
-            symbolHandle:ClearAllPoints()
-            symbolHandle:SetPoint("BOTTOMLEFT", mock, "BOTTOMLEFT", S(rawLeft) - 4, S(rawBottom) - 4)
+            PlaceMinimumHitHandle(symbolHandle, mock, S(rawLeft), S(rawBottom),
+                S(rawRight - rawLeft), S(rawTop - rawBottom), 4, 18)
             symbolHandle._msufPlaced = true
             symbolHandle:Show()
         end
@@ -1684,9 +1701,7 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
     visual:Show()
     if handle.SetFrameLevel then handle:SetFrameLevel(Layers.ElementLevel and (Layers.ElementLevel(30, 30, 31) + 32) or ((baseLevel or 0) + max(50, layer + 45))) end
     if handle._selBorder and handle._selBorder.SetFrameLevel then handle._selBorder:SetFrameLevel((handle:GetFrameLevel() or 0) + 5) end
-    handle:SetSize(max(18, handleW + 8), max(18, handleH + 8))
-    handle:ClearAllPoints()
-    handle:SetPoint("BOTTOMLEFT", box.mock, "BOTTOMLEFT", handleLeft - 4, handleBottom - 4)
+    PlaceMinimumHitHandle(handle, box.mock, handleLeft, handleBottom, handleW, handleH, 4, 18)
     for i = 1, bounds.shown do
         local icon = EnsureIcon(visual, i)
         BindDragProxy(icon, handle)
