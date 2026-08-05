@@ -200,8 +200,15 @@ local function RuntimeAnchor(kind)
   if not (kind and UsesRuntimeAnchor(kind)) then return nil end
   local gf = GF()
   local headerKey = RuntimeHeaderKey(kind)
+  local header = gf and gf.headers and headerKey and gf.headers[headerKey]
   local anchor = gf and gf.anchors and headerKey and gf.anchors[headerKey]
-  if anchor and anchor.GetLeft and anchor:GetLeft() then
+  -- Party/Raid anchors deliberately survive secure-header retirement so saved
+  -- geometry remains stable.  The retained anchor alone therefore cannot prove
+  -- that live frames currently own the Edit Mode visual; require the matching
+  -- shown header before suppressing the logical preview.
+  if header and header.IsShown and header:IsShown()
+    and anchor and anchor.IsShown and anchor:IsShown()
+    and anchor.GetLeft and anchor:GetLeft() then
     return anchor
   end
   return nil
@@ -312,6 +319,14 @@ local function GetSelectedPreviewKind()
 end
 
 local function ShouldShowPreviewKind(kind)
+  -- Menu2 and the quick popup use _activePreviewKind as transient navigation
+  -- focus.  Native Edit Mode owns the complete in-world Group preview set, so a
+  -- delayed/cancelled menu settle must never let that focus hide Party, Raid, or
+  -- Mythic Raid.  External providers retain their explicit single-scope focus.
+  local state = EM2 and EM2.State
+  local external = state and type(state.GetProvider) == "function"
+    and state.GetProvider() == "ellesmere"
+  if _em2Active and not external and kind ~= "priority" then return true end
   local selected = GetSelectedPreviewKind()
   return selected == nil or selected == kind
 end
