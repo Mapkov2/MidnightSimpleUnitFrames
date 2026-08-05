@@ -367,6 +367,24 @@ local function BuildMisc(ctx)
         function()
             Call("MSUF_ApplyModules")
         end)
+    if type(_G.MSUF_EllesmereEditMode_IsAvailable) == "function"
+        and _G.MSUF_EllesmereEditMode_IsAvailable() then
+        local ellesmere = b:CollapsibleSection("misc_ellesmere_ui", "EllesmereUI", 138, true)
+        local integration = BindMiscToggle(ellesmere, "Use EllesmereUI Unlock Mode for MSUF",
+            "ellesmereEditModeIntegration", true, "MSUF2_ELLESMERE_EDIT_MODE", 14, -42, 430, PREVIEW_FALSE,
+            function(value)
+                if type(_G.MSUF_EllesmereEditMode_SetEnabled) == "function" then
+                    _G.MSUF_EllesmereEditMode_SetEnabled(value)
+                end
+            end)
+        M.AddTooltip(integration, "EllesmereUI Unlock Mode",
+            "On (default): MSUF frames appear in EllesmereUI Unlock Mode. Turn this off to keep using the native MSUF Edit Mode. MSUF profile positions remain the source of truth.",
+            { hook = true })
+        local ellesmereHelp = W.Text(ellesmere,
+            "This switch is shown only while EllesmereUI is loaded. Disabling it immediately returns MSUF to its own Edit Mode.",
+            30, -88, (ellesmere._msuf2Width or ctx.width or 720) - 70, T.colors.muted)
+        if ellesmereHelp.SetWordWrap then ellesmereHelp:SetWordWrap(true) end
+    end
     local mouseover = b:CollapsibleSection("misc_mouseover_highlight", "Frame Highlights", 340, true)
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(mouseover, { "highlight.mouseover" }, {
@@ -486,4 +504,4 @@ local function BuildMisc(ctx)
         end)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
-M.RegisterPage("opt_misc", { title = "MSUF Miscellaneous", build = BuildMisc, version = 13 })
+M.RegisterPage("opt_misc", { title = "MSUF Miscellaneous", build = BuildMisc, version = 14 })

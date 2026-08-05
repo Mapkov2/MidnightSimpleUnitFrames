@@ -3316,6 +3316,10 @@ L["%s detected: Cooldown Manager anchoring is off. Toggle Cooldown in MSUF Edit 
 L["Cooldown Manager anchoring (%s)"] = "Cooldown Manager anchoring (%s)"
 L["Global anchor (%s Anchor)"] = "Global anchor (%s Anchor)"
 L["Fades all four outer edges; 0% keeps the original texture."] = "Fades all four outer edges; 0% keeps the original texture."
+L["Use EllesmereUI Unlock Mode for MSUF"] = "Use EllesmereUI Unlock Mode for MSUF"
+L["EllesmereUI Unlock Mode"] = "EllesmereUI Unlock Mode"
+L["On (default): MSUF frames appear in EllesmereUI Unlock Mode. Turn this off to keep using the native MSUF Edit Mode. MSUF profile positions remain the source of truth."] = "On (default): MSUF frames appear in EllesmereUI Unlock Mode. Turn this off to keep using the native MSUF Edit Mode. MSUF profile positions remain the source of truth."
+L["This switch is shown only while EllesmereUI is loaded. Disabling it immediately returns MSUF to its own Edit Mode."] = "This switch is shown only while EllesmereUI is loaded. Disabling it immediately returns MSUF to its own Edit Mode."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enUS", LoadLocale)
 elseif MSUF.LOCALE == "enUS" then LoadLocale() end

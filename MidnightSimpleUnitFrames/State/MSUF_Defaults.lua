@@ -1680,6 +1680,12 @@ end
 if g.showWelcomeMessage == nil then
     g.showWelcomeMessage = true
 end
+--- EllesmereUI may own the visible Unlock Mode shell while MSUF keeps its own
+--- profile geometry and preview transaction. Users can opt out only when the
+--- EllesmereUI integration is actually available.
+if g.ellesmereEditModeIntegration == nil then
+    g.ellesmereEditModeIntegration = true
+end
 if g.dropdownStyleMode == nil then
     g.dropdownStyleMode = "msuf"
 elseif g.dropdownStyleMode ~= "old" and g.dropdownStyleMode ~= "msuf" and g.dropdownStyleMode ~= "blizzard" and g.dropdownStyleMode ~= "legacy" then
