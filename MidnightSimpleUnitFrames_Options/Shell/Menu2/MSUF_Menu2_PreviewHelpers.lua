@@ -2602,9 +2602,18 @@ function H.PlaceHandleAroundRegions(handle, parent, regions, pad, opts)
     end
     local pLeft, pBottom = parent:GetLeft(), parent:GetBottom()
     if not (left and right and top and bottom and pLeft and pBottom) then return false end
+    local naturalWidth = right - left + pad * 2
+    local naturalHeight = top - bottom + pad * 2
+    local handleWidth = max(18, naturalWidth)
+    local handleHeight = max(18, naturalHeight)
     handle:ClearAllPoints()
-    handle:SetSize(max(18, right - left + pad * 2), max(18, top - bottom + pad * 2))
-    handle:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT", left - pLeft - pad, bottom - pBottom - pad)
+    handle:SetSize(handleWidth, handleHeight)
+    -- A minimum hit area must grow equally around the rendered region. Growing
+    -- only towards the top/right moves handle:GetCenter() away from the visual
+    -- center, which in turn biases the shared X/Y readout at small Fit scales.
+    handle:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT",
+        left - pLeft - pad - ((handleWidth - naturalWidth) * 0.5),
+        bottom - pBottom - pad - ((handleHeight - naturalHeight) * 0.5))
     handle:Show()
     return true
 end
