@@ -1041,6 +1041,70 @@ end
 
 --- Interrupt feedback is a short-lived visual hold, not an active cast. It uses
 --- the same frame so range alpha, outlines, and kick-ready state remain aligned.
+--- Internal live callers use positional values so an interrupt does not need a
+--- disposable options table. ApplyInterrupt below preserves the public table API.
+function Runtime:ApplyInterruptValues(frame, barValue, reverseFill, label, colorR, colorG, colorB, skipShake)
+    if not frame then
+        return
+    end
+
+    self:ReleaseActive(frame)
+    self:SetPhase(frame, self.Phase.INTERRUPT_HOLD)
+
+    local statusBar = frame.statusBar
+    if not statusBar then
+        return
+    end
+
+    if statusBar.SetMinMaxValues then
+        statusBar:SetMinMaxValues(0, 1)
+    end
+
+    if statusBar.SetValue then
+        statusBar:SetValue(barValue or 1)
+    end
+
+    if reverseFill ~= nil and statusBar.SetReverseFill then
+        statusBar:SetReverseFill(reverseFill and true or false)
+    end
+
+    local red, green, blue = colorR, colorG, colorB
+    if not (red and green and blue) then
+        local resolveColor = _G.MSUF_ResolveInterruptFeedbackCastColor
+        if type(resolveColor) == "function" then
+            red, green, blue = resolveColor()
+        end
+    end
+    if not (red and green and blue) then
+        red, green, blue = 1.0, 0.82, 0.0
+    end
+
+    if type(_G.MSUF_SetStatusBarColorIfChanged) == "function" then
+        _G.MSUF_SetStatusBarColorIfChanged(statusBar, red, green, blue, 1)
+    elseif statusBar.SetStatusBarColor then
+        statusBar:SetStatusBarColor(red, green, blue, 1)
+    end
+
+    SetText(frame, "castText", label or "Interrupted")
+    SetText(frame, "timeText", "")
+
+    if frame.Show then
+        frame:Show()
+    end
+
+    if frame.SetAlpha then
+        frame:SetAlpha(1)
+    end
+
+    if type(_G.MSUF_UF_ApplyCastbarRangeAlpha) == "function" then
+        _G.MSUF_UF_ApplyCastbarRangeAlpha(frame, nil, true)
+    end
+
+    if skipShake ~= true and type(_G.MSUF_PlayCastbarShake) == "function" then
+        _G.MSUF_PlayCastbarShake(frame)
+    end
+end
+
 function Runtime:ApplyInterrupt(frame, options)
     if not frame then
         return
