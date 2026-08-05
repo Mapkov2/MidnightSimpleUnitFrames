@@ -1647,9 +1647,9 @@ function Preview.Refresh(box, reason)
                 minX, maxX, minY, maxY = ExpandDirectPreviewTextRect(minX, maxX, minY, maxY, runtimeText, "directPowerCenter", "CENTER", "CENTER", 0, 0, ApproxTextWidth("240K", ResolvePreviewTextSlotSize(runtimeText, conf, "powerCenterFontSize", "powerTextCenterFontSize", rawPowerSize), 6), ResolvePreviewTextSlotSize(runtimeText, conf, "powerCenterFontSize", "powerTextCenterFontSize", rawPowerSize) + 6, w, h)
                 minX, maxX, minY, maxY = ExpandDirectPreviewTextRect(minX, maxX, minY, maxY, runtimeText, "directPowerRight", "RIGHT", "RIGHT", -4, 0, ApproxTextWidth("240K", ResolvePreviewTextSlotSize(runtimeText, conf, "powerRightFontSize", "powerTextRightFontSize", rawPowerSize), 6), ResolvePreviewTextSlotSize(runtimeText, conf, "powerRightFontSize", "powerTextRightFontSize", rawPowerSize) + 6, w, h)
             else
-                minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "BOTTOMLEFT", "BOTTOMLEFT", 4 + o.leftX, 1 + o.leftY, ApproxTextWidth("240K", ResolvePreviewTextSlotSize(runtimeText, conf, "powerLeftFontSize", "powerTextLeftFontSize", rawPowerSize), 6), ResolvePreviewTextSlotSize(runtimeText, conf, "powerLeftFontSize", "powerTextLeftFontSize", rawPowerSize) + 6, w, h)
-                minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "BOTTOM", "BOTTOM", o.centerX, 1 + o.centerY, ApproxTextWidth("240K", ResolvePreviewTextSlotSize(runtimeText, conf, "powerCenterFontSize", "powerTextCenterFontSize", rawPowerSize), 6), ResolvePreviewTextSlotSize(runtimeText, conf, "powerCenterFontSize", "powerTextCenterFontSize", rawPowerSize) + 6, w, h)
-                minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "BOTTOMRIGHT", "BOTTOMRIGHT", -4 + o.rightX, 1 + o.rightY, ApproxTextWidth("240K", ResolvePreviewTextSlotSize(runtimeText, conf, "powerRightFontSize", "powerTextRightFontSize", rawPowerSize), 6), ResolvePreviewTextSlotSize(runtimeText, conf, "powerRightFontSize", "powerTextRightFontSize", rawPowerSize) + 6, w, h)
+                minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "BOTTOMLEFT", "BOTTOMLEFT", 4 + o.leftX, o.leftY, ApproxTextWidth("240K", ResolvePreviewTextSlotSize(runtimeText, conf, "powerLeftFontSize", "powerTextLeftFontSize", rawPowerSize), 6), ResolvePreviewTextSlotSize(runtimeText, conf, "powerLeftFontSize", "powerTextLeftFontSize", rawPowerSize) + 6, w, h)
+                minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "BOTTOM", "BOTTOM", o.centerX, o.centerY, ApproxTextWidth("240K", ResolvePreviewTextSlotSize(runtimeText, conf, "powerCenterFontSize", "powerTextCenterFontSize", rawPowerSize), 6), ResolvePreviewTextSlotSize(runtimeText, conf, "powerCenterFontSize", "powerTextCenterFontSize", rawPowerSize) + 6, w, h)
+                minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "BOTTOMRIGHT", "BOTTOMRIGHT", -4 + o.rightX, o.rightY, ApproxTextWidth("240K", ResolvePreviewTextSlotSize(runtimeText, conf, "powerRightFontSize", "powerTextRightFontSize", rawPowerSize), 6), ResolvePreviewTextSlotSize(runtimeText, conf, "powerRightFontSize", "powerTextRightFontSize", rawPowerSize) + 6, w, h)
             end
         end
         if PreviewLayerWanted(box, "status") then
@@ -2632,12 +2632,11 @@ function Preview.Refresh(box, reason)
             rightY = baseY + Slot(rightSide, "Y"),
         }
     end
-    local function PlaceTextSet(left, center, right, pct, parent, lPoint, lRel, cPoint, cRel, rPoint, rRel, offsets, yAdd)
-        yAdd = yAdd or 0
-        PlacePreviewSlot(left, parent, lPoint, lRel, S(4 + offsets.leftX), S(yAdd + offsets.leftY), "LEFT")
-        PlacePreviewSlot(center, parent, cPoint, cRel, S(offsets.centerX), S(yAdd + offsets.centerY), "CENTER")
-        PlacePreviewSlot(right, parent, rPoint, rRel, S(-4 + offsets.rightX), S(yAdd + offsets.rightY), "RIGHT")
-        PlacePreviewSlot(pct, parent, rPoint, rRel, S(-4 + offsets.rightX), S(yAdd + offsets.rightY), "RIGHT")
+    local function PlaceTextSet(left, center, right, pct, parent, lPoint, lRel, cPoint, cRel, rPoint, rRel, offsets)
+        PlacePreviewSlot(left, parent, lPoint, lRel, S(4 + offsets.leftX), S(offsets.leftY), "LEFT")
+        PlacePreviewSlot(center, parent, cPoint, cRel, S(offsets.centerX), S(offsets.centerY), "CENTER")
+        PlacePreviewSlot(right, parent, rPoint, rRel, S(-4 + offsets.rightX), S(offsets.rightY), "RIGHT")
+        PlacePreviewSlot(pct, parent, rPoint, rRel, S(-4 + offsets.rightX), S(offsets.rightY), "RIGHT")
     end
     local hpOffsets = TextOffsets("hp", -4, hpRev)
     local powerOffsets = TextOffsets("power", 4)
@@ -2655,7 +2654,7 @@ function Preview.Refresh(box, reason)
         PlaceDirectPreviewText(mock.powerTextCenter, mock.textFrame, runtimeText, "directPowerCenter", "CENTER", "CENTER", 0, 0, "CENTER", S)
         PlaceDirectPreviewText(mock.powerText, mock.textFrame, runtimeText, "directPowerRight", "RIGHT", "RIGHT", -4, 0, "RIGHT", S)
     else
-        PlaceTextSet(mock.powerTextLeft, mock.powerTextCenter, mock.powerText, mock.powerTextPct, mock.textFrame, "BOTTOMLEFT", "BOTTOMLEFT", "BOTTOM", "BOTTOM", "BOTTOMRIGHT", "BOTTOMRIGHT", powerOffsets, 1)
+        PlaceTextSet(mock.powerTextLeft, mock.powerTextCenter, mock.powerText, mock.powerTextPct, mock.textFrame, "BOTTOMLEFT", "BOTTOMLEFT", "BOTTOM", "BOTTOM", "BOTTOMRIGHT", "BOTTOMRIGHT", powerOffsets)
     end
     if hasPortrait or box._runtimeDefensivePortraitPositionOnly then
         mock.portrait:Show()

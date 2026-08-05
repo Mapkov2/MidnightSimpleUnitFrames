@@ -211,6 +211,20 @@ local function HandleStore(preview, fields)
     if fields and (fields.global or fields.castbar) then return g, key, conf, g end
     return conf, key, conf, g
 end
+function Preview.LegacyTextOffsetAlias(key)
+    key = tostring(key or "")
+    local prefix, axis = key:match("^(hp)Offset([XY])$")
+    if not prefix then prefix, axis = key:match("^(power)Offset([XY])$") end
+    if prefix then return prefix .. "TextOffset" .. axis end
+    if key == "nameOffsetX" then return "nameTextOffsetX" end
+    if key == "nameOffsetY" then return "nameTextOffsetY" end
+    local side
+    prefix, side, axis = key:match("^(hp)Text([A-Za-z]+)Offset([XY])$")
+    if not prefix then prefix, side, axis = key:match("^(power)Text([A-Za-z]+)Offset([XY])$") end
+    if prefix and (side == "Left" or side == "Center" or side == "Right") then
+        return prefix .. side .. "Offset" .. axis
+    end
+end
 local function ReadHandleOffsets(handle)
     if not handle then return 0, 0 end
     local preview = handle._preview
@@ -220,12 +234,64 @@ local function ReadHandleOffsets(handle)
         if x ~= nil and y ~= nil then return x, y, xKey, yKey end
     end
     local xKey, yKey, defX, defY = ResolveHandleFields(preview, fields)
-    local store = HandleStore(preview, fields)
-    local x = xKey and tonumber(store[xKey]) or nil
-    local y = yKey and tonumber(store[yKey]) or nil
+    local store, _, conf, general = HandleStore(preview, fields)
+    local function ReadValue(key)
+        if not key then return nil end
+        local value = store and store[key]
+        if value == nil and fields.text then
+            local alias = Preview.LegacyTextOffsetAlias(key)
+            if alias then value = conf and conf[alias] end
+            if value == nil then value = general and general[key] end
+            if value == nil and alias then value = general and general[alias] end
+        end
+        return tonumber(value)
+    end
+    local x = ReadValue(xKey)
+    local y = ReadValue(yKey)
     if x == nil then x = tonumber(defX) or 0 end
     if y == nil then y = tonumber(defY) or 0 end
     return x, y, xKey, yKey
+end
+Preview.DirectTextMovePrefixes = Preview.DirectTextMovePrefixes or {
+    name = { "directName" },
+    hp = { "directHealthLeft", "directHealthCenter", "directHealthRight" },
+    hpLeft = { "directHealthLeft" },
+    hpCenter = { "directHealthCenter" },
+    hpRight = { "directHealthRight" },
+    power = { "directPowerLeft", "directPowerCenter", "directPowerRight" },
+    powerLeft = { "directPowerLeft" },
+    powerCenter = { "directPowerCenter" },
+    powerRight = { "directPowerRight" },
+}
+function Preview.DirectTextMovePrefixesForKey(key)
+    return Preview.DirectTextMovePrefixes[tostring(key or "")]
+end
+function Preview.ActiveDirectTextMovePrefixes(handle, store)
+    if not (handle and type(store) == "table" and store.directTextLayout == true) then return nil end
+    local prefixes = Preview.DirectTextMovePrefixesForKey(handle._key)
+    if not prefixes then return nil end
+    -- Detached power text intentionally uses the legacy composite offsets on
+    -- the detached bar even while Direct Text Layout owns the other slots.
+    local box = handle._preview
+    if tostring(handle._key or ""):match("^power")
+        and box and box._runtimeDetachedPowerTextOnBar == true
+        and box.mock and box.mock.detachedPower and box.mock.detachedPower.IsShown
+        and box.mock.detachedPower:IsShown()
+    then
+        return nil
+    end
+    return prefixes
+end
+function Preview.ApplyDirectTextMoveDelta(store, prefixes, dx, dy)
+    if not (type(store) == "table" and type(prefixes) == "table") then return false end
+    dx, dy = tonumber(dx) or 0, tonumber(dy) or 0
+    for i = 1, #prefixes do
+        local prefix = prefixes[i]
+        local xKey, yKey = prefix .. "OffsetX", prefix .. "OffsetY"
+        store[xKey] = RoundOffset((tonumber(store[xKey]) or 0) + dx)
+        store[yKey] = RoundOffset((tonumber(store[yKey]) or 0) + dy)
+    end
+    return true
 end
 local function UnitPreviewTextMovesTogether(unitKey, kind)
     local m = _G.MSUF2
@@ -628,6 +694,7 @@ local function WriteHandleOffsets(handle, x, y, reason)
     local xKey, yKey = ResolveHandleFields(box, fields)
     if not xKey or not yKey then return false end
     local store = HandleStore(box, fields)
+    local beforeX, beforeY = ReadHandleOffsets(handle)
     local nextX, nextY = RoundOffset(x), RoundOffset(y)
     if fields.texLayer and store.texLayerLinkGeometry == true then
         local deltaX = nextX - (tonumber(store[xKey]) or 0)
@@ -643,7 +710,21 @@ local function WriteHandleOffsets(handle, x, y, reason)
         store[xKey] = nextX
         store[yKey] = nextY
     end
-    if fields.text and type(M2.SyncDirectTextOffsets) == "function" then
+    local directPrefixes = fields.text and Preview.ActiveDirectTextMovePrefixes(handle, store)
+    if directPrefixes then
+        if reason == "PREVIEW_RESET_OFFSET" and type(M2.SyncDirectTextOffsets) == "function" then
+            -- Reset is an explicit request to return this handle to its
+            -- canonical layout, so its active direct values may be rebuilt.
+            M2.SyncDirectTextOffsets(store, xKey)
+            M2.SyncDirectTextOffsets(store, yKey)
+        else
+            -- Imported profiles may legitimately contain direct-layout offsets
+            -- that differ from their legacy twins. Move the active direct values
+            -- by the requested delta instead of rebuilding them from stale legacy
+            -- values and snapping the text to another position.
+            Preview.ApplyDirectTextMoveDelta(store, directPrefixes, nextX - beforeX, nextY - beforeY)
+        end
+    elseif fields.text and type(M2.SyncDirectTextOffsets) == "function" then
         M2.SyncDirectTextOffsets(store, xKey)
         M2.SyncDirectTextOffsets(store, yKey)
     end
@@ -661,6 +742,14 @@ local function StoredHandleDelta(handle, dx, dy)
     end
     return dx, dy
 end
+function Preview.ActiveHandleDelta(handle, dx, dy)
+    local fields = handle and handle._fields
+    if fields and fields.text then
+        local store = HandleStore(handle._preview, fields)
+        if Preview.ActiveDirectTextMovePrefixes(handle, store) then return dx, dy end
+    end
+    return StoredHandleDelta(handle, dx, dy)
+end
 local function NameHandleOffsetDelta(handle, dx, dy)
     local box = handle and handle._preview
     local key = box and (box.key or (box._msufPanel and CurrentPanelKey(box._msufPanel))) or "player"
@@ -674,7 +763,7 @@ local function NudgeSelectedHandle(box, dx, dy)
     local step = GetNudgeStep()
     local ndx, ndy = dx * step, dy * step
     if ShouldSkipDuplicateNudge(box, ndx, ndy) then return true end
-    ndx, ndy = StoredHandleDelta(h, ndx, ndy)
+    ndx, ndy = Preview.ActiveHandleDelta(h, ndx, ndy)
     return WriteHandleOffsets(h, x + ndx, y + ndy, "UNIT_PREVIEW_NUDGE")
 end
 local function NudgeSelectedHandleDelta(box, dx, dy)
@@ -683,8 +772,30 @@ local function NudgeSelectedHandleDelta(box, dx, dy)
     local x, y = ReadHandleOffsets(h)
     local ndx, ndy = tonumber(dx) or 0, tonumber(dy) or 0
     if ShouldSkipDuplicateNudge(box, ndx, ndy) then return true end
-    ndx, ndy = StoredHandleDelta(h, ndx, ndy)
+    ndx, ndy = Preview.ActiveHandleDelta(h, ndx, ndy)
     return WriteHandleOffsets(h, x + ndx, y + ndy, "UNIT_PREVIEW_EM2_NUDGE")
+end
+function Preview.ReadSelectionCoordinates(box, handle)
+    local selection = M2.PreviewSelectionBar
+    local x, y
+    if selection and type(selection.ReadRenderedCoordinates) == "function" then
+        x, y = selection.ReadRenderedCoordinates(handle, box and box.mock,
+            box and (box._mockEffectiveScale or box._mockScale or box._mockAutoScale) or 1)
+    end
+    if x == nil or y == nil then x, y = ReadHandleOffsets(handle) end
+    return RoundOffset(x), RoundOffset(y)
+end
+function Preview.WriteSelectionCoordinates(box, handle, x, y, reason)
+    if not handle then return false end
+    local currentX, currentY = Preview.ReadSelectionCoordinates(box, handle)
+    local storedX, storedY = ReadHandleOffsets(handle)
+    local dx, dy = (tonumber(x) or currentX) - currentX, (tonumber(y) or currentY) - currentY
+    dx, dy = Preview.ActiveHandleDelta(handle, dx, dy)
+    return WriteHandleOffsets(handle, storedX + dx, storedY + dy, reason)
+end
+function Preview.ResetSelectionOffsets(_, handle, reason)
+    local fields = handle and handle._fields or {}
+    return WriteHandleOffsets(handle, tonumber(fields.defaultX) or 0, tonumber(fields.defaultY) or 0, reason)
 end
 local function FocusPreviewKeyboardTarget(box, handle, defer)
     if PreviewHelpers.FocusKeyboardTarget then return PreviewHelpers.FocusKeyboardTarget(box, handle, defer, { selectedField = "_selectedHandle" }) end
@@ -1812,8 +1923,9 @@ local function BuildPreview(parent, panel, width, height)
             Round = RoundOffset,
             HandleList = function(owner) return owner.handles end,
             HandleLabel = function(handle) return handle._label or handle._key end,
-            ReadOffsets = function(_, handle) return ReadHandleOffsets(handle) end,
-            WriteOffsets = function(_, handle, x, y, reason) return WriteHandleOffsets(handle, x, y, reason) end,
+            ReadOffsets = Preview.ReadSelectionCoordinates,
+            WriteOffsets = Preview.WriteSelectionCoordinates,
+            ResetOffsets = Preview.ResetSelectionOffsets,
             NudgeDelta = function(owner, dx, dy) return NudgeSelectedHandleDelta(owner, dx, dy) end,
             DefaultOffsets = function(_, handle)
                 local fields = handle._fields or {}
@@ -2081,7 +2193,7 @@ local function BuildPreview(parent, panel, width, height)
         if uiScale <= 0 then uiScale = 1 end
         local dx = (((cx or 0) - (h._cursorX or 0)) / uiScale) / scale
         local dy = (((cy or 0) - (h._cursorY or 0)) / uiScale) / scale
-        dx, dy = StoredHandleDelta(h, dx, dy)
+        dx, dy = Preview.ActiveHandleDelta(h, dx, dy)
         local nextX = RoundOffset((h._startX or 0) + dx)
         local nextY = RoundOffset((h._startY or 0) + dy)
         if nextX ~= h._startX or nextY ~= h._startY then h._didDragMove = true end

@@ -1741,6 +1741,39 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             box._dragFrame:Hide()
         end
     end
+    local function ReadGroupSelectionCoordinates(owner, handle)
+        local selection = M.PreviewSelectionBar
+        local x, y
+        if selection and type(selection.ReadRenderedCoordinates) == "function" then
+            x, y = selection.ReadRenderedCoordinates(handle, owner and owner._mock,
+                owner and (owner._mockScale or (owner._mock and owner._mock._previewScale)) or 1)
+        end
+        if x == nil or y == nil then
+            local _, rawX, rawY = R.HandleOffsets(handle)
+            x, y = rawX, rawY
+        end
+        return R.Round(tonumber(x) or 0), R.Round(tonumber(y) or 0)
+    end
+    local function WriteGroupStoredOffsets(owner, handle, x, y)
+        local _, curX, curY = R.HandleOffsets(handle)
+        local dx = (tonumber(x) or 0) - (tonumber(curX) or 0)
+        local dy = (tonumber(y) or 0) - (tonumber(curY) or 0)
+        if dx == 0 and dy == 0 then return true end
+        if type(owner.NudgeHandleExact) ~= "function" then return false end
+        return owner:NudgeHandleExact(handle._key, dx, dy) == true
+    end
+    local function WriteGroupSelectionCoordinates(owner, handle, x, y)
+        local curX, curY = ReadGroupSelectionCoordinates(owner, handle)
+        local dx = (tonumber(x) or curX) - curX
+        local dy = (tonumber(y) or curY) - curY
+        if dx == 0 and dy == 0 then return true end
+        if type(owner.NudgeHandleExact) ~= "function" then return false end
+        return owner:NudgeHandleExact(handle._key, dx, dy) == true
+    end
+    local function ResetGroupSelectionOffsets(owner, handle)
+        local defaultX, defaultY = 0, handle and handle._cfgPower and -4 or 0
+        return WriteGroupStoredOffsets(owner, handle, defaultX, defaultY)
+    end
     if M.PreviewSelectionBar then
         M.PreviewSelectionBar.Create(box, {
             Tr = R.Tr,
@@ -1757,21 +1790,13 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
                 if handle._locked then return false end
                 return not (handle.IsShown and not handle:IsShown())
             end,
-            ReadOffsets = function(_, handle)
-                local _, x, y = R.HandleOffsets(handle)
-                return tonumber(x) or 0, tonumber(y) or 0
-            end,
-            -- NudgeHandleExact owns the audited write path (readback plus
-            -- rollback and one history entry), so exact entry is expressed as
-            -- the delta to the current value rather than a second writer.
-            WriteOffsets = function(owner, handle, x, y)
-                local _, curX, curY = R.HandleOffsets(handle)
-                local dx = (tonumber(x) or 0) - (tonumber(curX) or 0)
-                local dy = (tonumber(y) or 0) - (tonumber(curY) or 0)
-                if dx == 0 and dy == 0 then return true end
-                if type(owner.NudgeHandleExact) ~= "function" then return false end
-                return owner:NudgeHandleExact(handle._key, dx, dy) == true
-            end,
+            ReadOffsets = ReadGroupSelectionCoordinates,
+            -- NudgeHandleExact remains the audited storage writer. Exact
+            -- entry is translated from the shared rendered coordinate space
+            -- into a visual delta, so anchor-specific SavedVariables stay
+            -- untouched until the user actually moves the element.
+            WriteOffsets = WriteGroupSelectionCoordinates,
+            ResetOffsets = ResetGroupSelectionOffsets,
             NudgeDelta = function(owner, dx, dy)
                 local handle = owner._selectedHandle
                 if not (handle and type(owner.NudgeHandleExact) == "function") then return false end

@@ -2673,15 +2673,15 @@ function Render.Install(box, ctx, deps)
         local powerRightHidePercent = SlotHidePercentSymbol("powerRightHidePercentSymbol", "powerTextRightHidePercentSymbol")
         PaintPreviewText(mock._powerLeftFS, pwrLeftSize, powerLeftMode, "BOTTOMLEFT", "BOTTOMLEFT",
             pad4 + ConfigToOffset(runtimeText.powerLeftX or ((conf.powerOffsetX or 0) + (conf.powerTextLeftOffsetX or 0)), previewScale),
-            ConfigToOffset(1 + (runtimeText.powerLeftY or ((conf.powerOffsetY or 0) + (conf.powerTextLeftOffsetY or 0) + baselineOffset)), previewScale),
+            ConfigToOffset(runtimeText.powerLeftY or ((conf.powerOffsetY or 0) + (conf.powerTextLeftOffsetY or 0) + baselineOffset), previewScale),
             "LEFT", fr or 1, fg or 1, fb or 1, textAlpha, showPowerText, PreviewPowerText(powerLeftMode, powerLeftHidePercent))
         PaintPreviewText(mock._powerCenterFS, pwrCenterSize, powerCenterMode, "BOTTOM", "BOTTOM",
             ConfigToOffset(runtimeText.powerCenterX or ((conf.powerOffsetX or 0) + (conf.powerTextCenterOffsetX or 0)), previewScale),
-            ConfigToOffset(1 + (runtimeText.powerCenterY or ((conf.powerOffsetY or 0) + (conf.powerTextCenterOffsetY or 0) + baselineOffset)), previewScale),
+            ConfigToOffset(runtimeText.powerCenterY or ((conf.powerOffsetY or 0) + (conf.powerTextCenterOffsetY or 0) + baselineOffset), previewScale),
             "CENTER", fr or 1, fg or 1, fb or 1, textAlpha, showPowerText, PreviewPowerText(powerCenterMode, powerCenterHidePercent))
         PaintPreviewText(mock._powerRightFS, pwrRightSize, powerRightMode, "BOTTOMRIGHT", "BOTTOMRIGHT",
             -pad4 + ConfigToOffset(runtimeText.powerRightX or ((conf.powerOffsetX or 0) + (conf.powerTextRightOffsetX or 0)), previewScale),
-            ConfigToOffset(1 + (runtimeText.powerRightY or ((conf.powerOffsetY or 0) + (conf.powerTextRightOffsetY or 0) + baselineOffset)), previewScale),
+            ConfigToOffset(runtimeText.powerRightY or ((conf.powerOffsetY or 0) + (conf.powerTextRightOffsetY or 0) + baselineOffset), previewScale),
             "RIGHT", fr or 1, fg or 1, fb or 1, textAlpha, showPowerText, PreviewPowerText(powerRightMode, powerRightHidePercent))
         -- Group block border. Live it wraps the whole header block; this box
         -- previews a single frame, so it wraps the mock with the configured
