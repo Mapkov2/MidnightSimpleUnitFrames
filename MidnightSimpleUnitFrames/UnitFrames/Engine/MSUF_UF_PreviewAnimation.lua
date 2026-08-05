@@ -175,13 +175,18 @@ function PA.BuildAuraState(kind, index, scratch, options, elapsed)
 
   local i = tonumber(index) or 1
   local durations = AURA_DURATIONS[kind] or AURA_DURATIONS.buff
-  local duration = durations[((i - 1) % #durations) + 1] or 30
+  local duration = tonumber(options.duration) or durations[((i - 1) % #durations) + 1] or 30
+  if duration <= 0 then duration = 30 end
   elapsed = tonumber(elapsed) or 0
-  local offsetFrac = ((i * 0.173) + (AURA_KIND_OFFSETS[kind] or 0)) % 1
-  local auraElapsed = (elapsed + duration * offsetFrac) % duration
-  local remaining = max(0.1, duration - auraElapsed)
+  local oneShot = options.oneShot == true
+  local offsetFrac = oneShot and 0 or (((i * 0.173) + (AURA_KIND_OFFSETS[kind] or 0)) % 1)
+  local auraElapsed = oneShot and min(duration, max(0, elapsed))
+    or ((elapsed + duration * offsetFrac) % duration)
+  local complete = oneShot and auraElapsed >= duration
+  local remaining = complete and 0 or max(0.1, duration - auraElapsed)
   local remainingFrac = Clamp01(remaining / duration, 1)
   local elapsedFrac = Clamp01(auraElapsed / duration, 0)
+  local pandemicThreshold = Clamp01(options.pandemicThreshold, 0.30)
   local stacks = ""
   if kind == "buff" then
     if i % 3 == 1 then stacks = tostring(2 + floor(Triangle(elapsed, 0.42, i * 0.07) * 2.99)) end
@@ -198,7 +203,9 @@ function PA.BuildAuraState(kind, index, scratch, options, elapsed)
   scratch.elapsedFrac = elapsedFrac
   scratch.progress = elapsedFrac
   scratch.swipeFrac = remainingFrac
-  scratch.text = FormatAuraTime(remaining, duration,
+  scratch.complete = complete
+  scratch.pandemicActive = not complete and remainingFrac <= pandemicThreshold + 0.000001
+  scratch.text = complete and "" or FormatAuraTime(remaining, duration,
     options.decimalThreshold ~= nil and options.decimalThreshold or options.decimalSeconds)
   scratch.stacks = stacks
   return scratch

@@ -796,10 +796,10 @@ end
 --- Shared icon style for a previewed lane: the compiled runtime style when the
 --- lane metrics carry one, otherwise the scope-resolved preview style. Bar-only
 --- lanes pass nil downstream, matching the runtime's chrome-off rendering.
-local function LaneIconStyle(metrics, unit)
+local function LaneIconStyle(metrics, _, kind)
     if metrics and metrics.iconStyle then return metrics.iconStyle end
-    if type(A3.IconStylePreviewForScope) == "function" then
-        return A3.IconStylePreviewForScope(unit)
+    if type(A3.IconStylePreviewForKind) == "function" then
+        return A3.IconStylePreviewForKind((metrics and metrics.appearanceKind) or kind)
     end
     return nil
 end
@@ -2057,7 +2057,10 @@ function EM.RefreshUnit(unit)
             -- bar-only lane renders no icon chrome, so the style stays off.
             local padding = Clamp(metrics and metrics.padding, 0, 0, 16)
             local barOnly = textCfg.showDurationBar == true and textCfg.durationBarDisplay == "BAR_ONLY"
-            local iconStyle = (not barOnly) and LaneIconStyle(metrics, unit) or nil
+            local appearanceKind = spec.customIndex == 4 and unit == "player" and "playerDefensives"
+                or spec.customIndex == 4 and "targetDots"
+                or ((kind == "debuff" or cfg.auraType == "DEBUFF") and "debuff" or "buff")
+            local iconStyle = (not barOnly) and LaneIconStyle(metrics, unit, appearanceKind) or nil
             local requestedIconShape = (metrics and metrics.requestedIconShape) or cfg.iconShape
             local iconShape = (metrics and metrics.iconShape) or cfg.iconShape or "RECTANGLE"
             if type(A3.ResolveAuraIconShape) == "function" then

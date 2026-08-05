@@ -91,9 +91,75 @@ local function NormalizeKind(kind)
     return AURA_HANDLE_FIELDS[kind] and kind or nil
 end
 
+--- The UnitFrame Aura page embeds its style editor below the live frame
+--- preview.  When Style is selected, keep the matching dummy lane visible
+--- even if that lane/container is currently disabled or has a zero icon
+--- limit. This is menu-only state; it never reaches the live aura runtime.
+local function SelectedUnitAuraStyleKind(unit)
+    local menu = (MSUF and MSUF.MSUF2) or _G.MSUF2
+    local selections = type(menu) == "table" and menu.unitAuraTabSelection or nil
+    local kind = NormalizeKind(type(selections) == "table" and selections[unit] or nil)
+    if not kind then return nil end
+    local allTools = menu.unitAuraToolSelection
+    local tools = type(allTools) == "table" and allTools[unit] or nil
+    return type(tools) == "table" and tools[kind] == "style" and kind or nil
+end
+
 local function CustomItem(model, unit, index, create)
     if not (model and type(model.CustomContainer) == "function") then return nil end
     return model.CustomContainer(unit, index, create == true)
+end
+local function CustomStyleItem(model, unit, index)
+    if model and type(model.CustomContainerStyleItem) == "function" then
+        return model.CustomContainerStyleItem(unit, index, false)
+    end
+    return CustomItem(model, unit, index, false)
+end
+
+local FRAME_EFFECT_TYPES = {
+    healthtint = true, border = true, glow = true, pulse = true, namecolor = true,
+}
+
+--- Reads the effect belonging to the Style workspace currently shown below
+--- the large UnitFrame preview.  This intentionally ignores lane enable state:
+--- Style already forces its dummy icons visible, and its frame effect must be
+--- equally inspectable before the user enables that Aura lane.
+local function SelectedUnitAuraFrameEffect(model, unit, kind)
+    if not (model and unit and kind) then return nil end
+    local raw
+    if kind == "buff" or kind == "debuff" then
+        if type(model.ReadValue) ~= "function" then return nil end
+        local prefix = kind == "buff" and "buff" or "debuff"
+        raw = {
+            type = model.ReadValue(unit, prefix .. "FrameEffectType", "none"),
+            color = model.ReadValue(unit, prefix .. "FrameEffectColor", { 0.69, 0.50, 0.88, 0.80 }),
+            priority = model.ReadValue(unit, prefix .. "FrameEffectPriority", 5),
+            thickness = model.ReadValue(unit, prefix .. "FrameEffectThickness", 2),
+            layer = model.ReadValue(unit, prefix .. "FrameEffectLayer", 0),
+            strata = model.ReadValue(unit, prefix .. "FrameEffectStrata", "AUTO"),
+        }
+    else
+        local index = tonumber(tostring(kind):match("^custom(%d)$"))
+        local styleItem = index and CustomStyleItem(model, unit, index) or nil
+        raw = styleItem and styleItem.frame or nil
+    end
+    local effectType = tostring(raw and raw.type or "none"):lower()
+    if not FRAME_EFFECT_TYPES[effectType] then return nil end
+    local color = type(raw.color) == "table" and raw.color or {}
+    return {
+        type = effectType,
+        color = {
+            ClampNumber(color[1] or color.r, 0.69, 0, 1),
+            ClampNumber(color[2] or color.g, 0.50, 0, 1),
+            ClampNumber(color[3] or color.b, 0.88, 0, 1),
+            ClampNumber(color[4] or color.a, 0.80, 0, 1),
+        },
+        priority = RuntimeRound(ClampNumber(raw.priority, 5, 1, 10)),
+        thickness = ClampNumber(raw.thickness, 2, 1, 16),
+        layer = RuntimeRound(ClampNumber(raw.layer, 0, 0, 30)),
+        strata = tostring(raw.strata or "AUTO"),
+        tintAlpha = raw.tintAlpha,
+    }
 end
 function Auras.WantsDefensivePortraitAnchor(key, runtimeSpec)
     key = Auras.PreviewUnitKey(key)
@@ -263,7 +329,8 @@ local function SetDragPoint(handle, key, frame, dx, dy)
 end
 function Auras.DragOffsets(handle, x, y)
     local fields = handle and handle._fields
-    local kind = fields and NormalizeKind(fields.auraPreviewKind)
+    local kind = fields and (NormalizeKind(fields.auraPreviewKind)
+        or (fields.dispelSymbolPreview and "dispelSymbol"))
     local box = handle and handle._preview
     if not (kind and box) then return false end
     x = RoundOffset(x)
@@ -282,7 +349,8 @@ function Auras.DragOffsets(handle, x, y)
     handle._msufAuraDragX = x
     handle._msufAuraDragY = y
     local portraitVisual = handle._msufAuraPortraitVisual
-    local visual = portraitVisual or (box.auraPreviewVisuals and box.auraPreviewVisuals[kind])
+    local visual = portraitVisual or handle._msufAuraDragVisual
+        or (box.auraPreviewVisuals and box.auraPreviewVisuals[kind])
     local moved = false
     if not portraitVisual then
         moved = SetDragPoint(handle, "Handle", handle, dx, dy)
@@ -374,6 +442,22 @@ function Auras.CreateHandles(box, makeHandle)
             }, (index == 4 and PreviewUnit(box) == "player") and "Defensive Buffs" or spec.label, spec.color)
         end
     end
+    local dispel = Auras.DispelPreview
+    if not box.handleDispelSymbol and dispel then
+        box.handleDispelSymbol = makeHandle(box, "dispelSymbol", {
+            defaultX = 0,
+            defaultY = 0,
+            visualOnly = true,
+            dispelSymbolPreview = true,
+            previewLayer = "dispelSymbol",
+            readOffsets = dispel.ReadOffsets,
+            writeOffsets = dispel.WriteOffsets,
+            dragOffsets = Auras.DragOffsets,
+            clearDragOffsets = Auras.ClearDragOffsets,
+            commitOffsets = dispel.CommitOffsets,
+            section = "dispel_symbol",
+        }, "Dispel Symbol", { 0.30, 0.80, 1.00 })
+    end
 end
 local function ButtonAnchor(xSign, ySign)
     if ySign > 0 then return xSign < 0 and "BOTTOMRIGHT" or "BOTTOMLEFT" end
@@ -424,11 +508,11 @@ local function PaddingInset(anchor, pad)
 end
 --- Shared icon style for a previewed lane: the compiled runtime style when the
 --- lane metrics carry one, otherwise the scope-resolved preview style.
-local function LaneIconStyle(metrics, unit)
+local function LaneIconStyle(metrics, _, kind)
     if metrics and metrics.iconStyle then return metrics.iconStyle end
     local a3 = MSUF and MSUF.MSUF_Auras3
-    if a3 and type(a3.IconStylePreviewForScope) == "function" then
-        return a3.IconStylePreviewForScope(unit)
+    if a3 and type(a3.IconStylePreviewForKind) == "function" then
+        return a3.IconStylePreviewForKind((metrics and metrics.appearanceKind) or kind)
     end
     return nil
 end
@@ -466,16 +550,21 @@ local function ResolvePreviewIconShape(requested, effective, runtimeSpec)
     return effective or "RECTANGLE"
 end
 
-local function LaneBounds(cfg, kind, frameW, frameH, unit, runtimeSpec)
+local function LaneBounds(cfg, kind, frameW, frameH, unit, runtimeSpec, forcePreview)
     if not cfg then return nil end
     local isBuff = kind == "buff"
-    if isBuff and cfg.showBuffs ~= true then return nil end
-    if (not isBuff) and cfg.showDebuffs ~= true then return nil end
+    if not forcePreview then
+        if isBuff and cfg.showBuffs ~= true then return nil end
+        if (not isBuff) and cfg.showDebuffs ~= true then return nil end
+    end
     local metrics = isBuff and cfg.buffMetrics or cfg.debuffMetrics
-    if metrics and metrics.enabled ~= true then return nil end
+    if metrics and metrics.enabled ~= true and not forcePreview then return nil end
     local count = metrics and metrics.num or (isBuff and cfg.maxBuffs or cfg.maxDebuffs)
     count = RuntimeRound(ClampNumber(count, isBuff and 8 or 12, 0, 80))
-    if count <= 0 then return nil end
+    if count <= 0 then
+        if not forcePreview then return nil end
+        count = PREVIEW_ICONS
+    end
     local size = ClampNumber(metrics and metrics.size or (isBuff and cfg.buffSize or cfg.debuffSize), 26, 1, 128)
     local x = metrics and metrics.x or (isBuff and cfg.buffX or cfg.debuffX)
     local y = metrics and metrics.y or (isBuff and cfg.buffY or cfg.debuffY)
@@ -565,7 +654,7 @@ local function LaneBounds(cfg, kind, frameW, frameH, unit, runtimeSpec)
         relativePoint = "BOTTOMLEFT",
         initialAnchor = initialAnchor,
         padding = padding,
-        iconStyle = LaneIconStyle(metrics, unit),
+        iconStyle = LaneIconStyle(metrics, unit, isBuff and "buff" or "debuff"),
     }
 end
 
@@ -579,7 +668,7 @@ local function CustomGrowth(growth)
     return -1, -1, false
 end
 
-local function CustomLaneBounds(item, kind, frameW, frameH, metrics, previewEntries, unit, fallbackPadding, runtimeSpec)
+local function CustomLaneBounds(item, styleItem, kind, frameW, frameH, metrics, previewEntries, unit, fallbackPadding, runtimeSpec, forcePreview)
     if type(item) ~= "table" then return nil end
     -- Any custom lane with configured spells previews them 1:1 with the real
     -- spell icons; curated index-4 lanes may show while disabled.
@@ -590,22 +679,27 @@ local function CustomLaneBounds(item, kind, frameW, frameH, metrics, previewEntr
         and item.portraitIcon == true
         and portrait and (portrait.enabled == true or item.portraitPositionWhenDisabled == true)
     local playerDefensives = unit == "player" and kind == "custom4"
-    if item.enabled ~= true
+    if not forcePreview and item.enabled ~= true
         and not (kind == "custom4" and not playerDefensives and trackedPreview) then
         return nil
     end
     if portraitContainer then return nil end
-    local placed = type(item.placed) == "table" and item.placed or {}
-    local count = metrics and metrics.num or RuntimeRound(ClampNumber(placed.max, 8, 0, 40))
+    local layoutPlaced = type(item.placed) == "table" and item.placed or {}
+    local placed = type(styleItem) == "table" and type(styleItem.placed) == "table"
+        and styleItem.placed or layoutPlaced
+    local count = metrics and metrics.num or RuntimeRound(ClampNumber(layoutPlaced.max, 8, 0, 40))
     if trackedPreview then count = min(count, #previewEntries) end
-    if count <= 0 then return nil end
-    local size = ClampNumber(metrics and metrics.size or placed.size, 24, 1, 128)
-    local spacing = ClampNumber(metrics and metrics.spacing or placed.spacing, 2, 0, 64)
-    local perRow = metrics and metrics.perRow or RuntimeRound(ClampNumber(placed.perRow, 4, 1, 40))
+    if count <= 0 then
+        if not forcePreview then return nil end
+        count = PREVIEW_ICONS
+    end
+    local size = ClampNumber(metrics and metrics.size or layoutPlaced.size, 24, 1, 128)
+    local spacing = ClampNumber(metrics and metrics.spacing or layoutPlaced.spacing, 2, 0, 64)
+    local perRow = metrics and metrics.perRow or RuntimeRound(ClampNumber(layoutPlaced.perRow, 4, 1, 40))
     local shown = min(max(1, count), trackedPreview and count or PREVIEW_ICONS)
-    local anchor = NormalizeAnchor(metrics and metrics.anchor or placed.anchor, "TOPRIGHT")
-    local x = metrics and metrics.x or RuntimeRound(ClampNumber(placed.x, 0, -4096, 4096))
-    local y = metrics and metrics.y or RuntimeRound(ClampNumber(placed.y, 0, -4096, 4096))
+    local anchor = NormalizeAnchor(metrics and metrics.anchor or layoutPlaced.anchor, "TOPRIGHT")
+    local x = metrics and metrics.x or RuntimeRound(ClampNumber(layoutPlaced.x, 0, -4096, 4096))
+    local y = metrics and metrics.y or RuntimeRound(ClampNumber(layoutPlaced.y, 0, -4096, 4096))
     local growthX, growthY, vertical, initialAnchor
     if metrics then
         growthX = tonumber(metrics.growthX) or -1
@@ -613,7 +707,7 @@ local function CustomLaneBounds(item, kind, frameW, frameH, metrics, previewEntr
         vertical = metrics.verticalGrowth == true
         initialAnchor = metrics.initialAnchor or ButtonAnchor(growthX, growthY)
     else
-        growthX, growthY, vertical = CustomGrowth(placed.growth)
+        growthX, growthY, vertical = CustomGrowth(layoutPlaced.growth)
         initialAnchor = ButtonAnchor(growthX, growthY)
     end
     local padding = RuntimeRound(ClampNumber(metrics and metrics.padding or fallbackPadding, 0, 0, 16))
@@ -656,10 +750,14 @@ local function CustomLaneBounds(item, kind, frameW, frameH, metrics, previewEntr
         layer = RuntimeRound(ClampNumber(item.layer, 9, 0, 30)),
         custom = true,
         item = item,
+        stylePlaced = placed,
         auraType = item.auraType == "DEBUFF" and "debuff" or "buff",
         previewTextures = previewTextures,
         padding = padding,
-        iconStyle = LaneIconStyle(metrics, unit),
+        iconStyle = LaneIconStyle(metrics, unit,
+            kind == "custom4" and unit == "player" and "playerDefensives"
+                or kind == "custom4" and (unit == "target" or unit == "focus" or unit == "boss") and "targetDots"
+                or (item.auraType == "DEBUFF" and "debuff" or "buff")),
         alpha = ClampNumber(placed.alpha, 1, 0, 1),
         iconZoom = ClampNumber(placed.iconZoom, 100, 100, 200),
         iconShape = ResolvePreviewIconShape(metrics and metrics.requestedIconShape or placed.iconShape,
@@ -667,11 +765,14 @@ local function CustomLaneBounds(item, kind, frameW, frameH, metrics, previewEntr
     }
 end
 
-local function PortraitAuraBounds(item, runtimeSpec, previewEntries, unit, metrics, exactPortraitRect, fallbackKind)
-    if not (item and item.enabled == true and item.portraitIcon == true) then return nil end
+local function PortraitAuraBounds(item, styleItem, runtimeSpec, previewEntries, unit, metrics, exactPortraitRect, fallbackKind, forcePreview)
+    if not (item and item.portraitIcon == true) then return nil end
+    if item.enabled ~= true and not forcePreview then return nil end
     local portrait = runtimeSpec and runtimeSpec.portrait
     if not (portrait and (portrait.enabled == true or item.portraitPositionWhenDisabled == true)) then return nil end
-    local placed = type(item.placed) == "table" and item.placed or {}
+    local layoutPlaced = type(item.placed) == "table" and item.placed or {}
+    local placed = type(styleItem) == "table" and type(styleItem.placed) == "table"
+        and styleItem.placed or layoutPlaced
     local maxCount = RuntimeRound(ClampNumber(item.portraitMaxIcons, 1, 1, 8))
     if maxCount <= 0 then return nil end
     local trackedCount = type(previewEntries) == "table" and #previewEntries or 0
@@ -687,9 +788,9 @@ local function PortraitAuraBounds(item, runtimeSpec, previewEntries, unit, metri
     local size = min(portraitWidth, portraitHeight)
     local iconWidth = exactPortraitRect == true and portraitWidth or size
     local iconHeight = exactPortraitRect == true and portraitHeight or size
-    local growthX, growthY, verticalGrowth = CustomGrowth(placed.growth)
+    local growthX, growthY, verticalGrowth = CustomGrowth(layoutPlaced.growth)
     local initialAnchor = ButtonAnchor(growthX, growthY)
-    local perRow = verticalGrowth and 1 or RuntimeRound(ClampNumber(placed.perRow, 4, 1, 40))
+    local perRow = verticalGrowth and 1 or RuntimeRound(ClampNumber(layoutPlaced.perRow, 4, 1, 40))
     local cols, rows = GridShape(shown, perRow, verticalGrowth)
     local insetX = (portraitWidth - iconWidth) * 0.5
     local insetY = (portraitHeight - iconHeight) * 0.5
@@ -711,8 +812,12 @@ local function PortraitAuraBounds(item, runtimeSpec, previewEntries, unit, metri
         portraitInsetX = initialAnchor:find("RIGHT", 1, true) and -insetX or insetX,
         portraitInsetY = initialAnchor:find("BOTTOM", 1, true) and insetY or -insetY,
         item = item,
+        stylePlaced = placed,
         previewTextures = previewTextures,
-        iconStyle = LaneIconStyle(metrics, unit),
+        iconStyle = LaneIconStyle(metrics, unit,
+            unit == "player" and "playerDefensives"
+                or (unit == "target" or unit == "focus" or unit == "boss") and "targetDots"
+                or fallbackKind),
         alpha = ClampNumber(placed.alpha, 1, 0, 1),
         iconZoom = ClampNumber(placed.iconZoom, 100, 100, 200),
         iconShape = exactPortraitRect == true
@@ -731,14 +836,14 @@ local function PortraitAuraBounds(item, runtimeSpec, previewEntries, unit, metri
     }
 end
 
-local function DefensivePortraitBounds(item, runtimeSpec, previewEntries, unit, metrics)
+local function DefensivePortraitBounds(item, styleItem, runtimeSpec, previewEntries, unit, metrics, forcePreview)
     if unit ~= "player" then return nil end
-    return PortraitAuraBounds(item, runtimeSpec, previewEntries, unit, metrics, false, "buff")
+    return PortraitAuraBounds(item, styleItem, runtimeSpec, previewEntries, unit, metrics, false, "buff", forcePreview)
 end
 
-local function TargetDotPortraitBounds(item, runtimeSpec, previewEntries, unit, metrics)
+local function TargetDotPortraitBounds(item, styleItem, runtimeSpec, previewEntries, unit, metrics, forcePreview)
     if unit ~= "target" and unit ~= "focus" and unit ~= "boss" then return nil end
-    return PortraitAuraBounds(item, runtimeSpec, previewEntries, unit, metrics, true, "debuff")
+    return PortraitAuraBounds(item, styleItem, runtimeSpec, previewEntries, unit, metrics, true, "debuff", forcePreview)
 end
 
 function Auras.BuildState(key, frameW, frameH, runtimeSpec)
@@ -748,27 +853,35 @@ function Auras.BuildState(key, frameW, frameH, runtimeSpec)
     if not (key and model and type(model.ReadPreviewConfig) == "function") then return nil end
     local cfg = model.ReadPreviewConfig(key)
     if not cfg then return nil end
-    local buff = LaneBounds(cfg, "buff", frameW, frameH, key, runtimeSpec)
-    local debuff = LaneBounds(cfg, "debuff", frameW, frameH, key, runtimeSpec)
-    local state = { unit = key, cfg = cfg, runtime = runtimeAuras, buff = buff, debuff = debuff }
+    local stylePreviewKind = SelectedUnitAuraStyleKind(key)
+    local buff = LaneBounds(cfg, "buff", frameW, frameH, key, runtimeSpec, stylePreviewKind == "buff")
+    local debuff = LaneBounds(cfg, "debuff", frameW, frameH, key, runtimeSpec, stylePreviewKind == "debuff")
+    local state = {
+        unit = key, cfg = cfg, runtime = runtimeAuras,
+        buff = buff, debuff = debuff, stylePreviewKind = stylePreviewKind,
+        previewFrameEffect = SelectedUnitAuraFrameEffect(model, key, stylePreviewKind),
+    }
     for index = 1, 4 do
         local kind = "custom" .. tostring(index)
         local metrics = type(cfg.customMetrics) == "table" and cfg.customMetrics[index] or nil
         local item = CustomItem(model, key, index, false)
+        local styleItem = CustomStyleItem(model, key, index)
         local previewEntries
         if type(model.CustomContainerPreviewEntries) == "function" then
             previewEntries = model.CustomContainerPreviewEntries(key, index)
         elseif type(model.CustomContainerSpellEntries) == "function" then
             previewEntries = model.CustomContainerSpellEntries(key, index)
         end
-        state[kind] = CustomLaneBounds(item, kind, frameW, frameH, metrics, previewEntries, key, cfg.stylePadding, runtimeSpec)
+        local forceStylePreview = stylePreviewKind == kind
+        state[kind] = CustomLaneBounds(item, styleItem, kind, frameW, frameH, metrics, previewEntries,
+            key, cfg.stylePadding, runtimeSpec, forceStylePreview)
         if index == 4 then
             if key == "player" then
                 state.defensivePortrait = DefensivePortraitBounds(
-                    item, runtimeSpec, previewEntries, key, metrics)
+                    item, styleItem, runtimeSpec, previewEntries, key, metrics, forceStylePreview)
             else
                 state.targetDotPortrait = TargetDotPortraitBounds(
-                    item, runtimeSpec, previewEntries, key, metrics)
+                    item, styleItem, runtimeSpec, previewEntries, key, metrics, forceStylePreview)
             end
         end
     end
@@ -791,6 +904,268 @@ function Auras.ExpandFootprint(state, minX, maxX, minY, maxY)
         end
     end
     return minX, maxX, minY, maxY
+end
+
+-- Unit-frame dispel preview layers. These frames exist only inside the loaded
+-- options preview and are repainted by its cold refresh path; they register no
+-- events, timers, or OnUpdate scripts and never participate in live combat.
+Auras.DispelPreview = Auras.DispelPreview or {}
+local DispelPreview = Auras.DispelPreview
+local function UnitDispelPage()
+    local menu = (MSUF and MSUF.MSUF2) or _G.MSUF2
+    return menu and menu.UnitPage
+end
+
+function DispelPreview.ReadOffsets(handle)
+    local unit = PreviewUnit(handle and handle._preview)
+    if not unit then return nil end
+    local page = UnitDispelPage()
+    if page and type(page.ReadDispelSymbolOffsets) == "function" then
+        return page.ReadDispelSymbolOffsets(unit)
+    end
+end
+
+function DispelPreview.WriteOffsets(handle, x, y, reason)
+    local unit = PreviewUnit(handle and handle._preview)
+    local page = unit and UnitDispelPage()
+    if page and type(page.WriteDispelSymbolOffsets) == "function" then
+        return page.WriteDispelSymbolOffsets(unit, x, y,
+            reason or "MSUF2_UNIT_PREVIEW_DISPEL_SYMBOL_MOVE", reason ~= "UNIT_PREVIEW_DRAG")
+    end
+    return false
+end
+
+function DispelPreview.CommitOffsets(handle, reason)
+    local box = handle and handle._preview
+    local unit = PreviewUnit(box)
+    if not unit then return false end
+    local page = UnitDispelPage()
+    if not (page and type(page.ApplyDispelSymbolOffsets) == "function") then return false end
+    Auras.ClearDragOffsets(handle)
+    page.ApplyDispelSymbolOffsets(unit, reason or "MSUF2_UNIT_PREVIEW_DISPEL_SYMBOL_DRAG_END")
+    RequestPreviewRefresh(box, reason or "MSUF2_UNIT_PREVIEW_DISPEL_SYMBOL_DRAG_END")
+    return true
+end
+
+function DispelPreview.Availability(key, runtimeSpec)
+    key = Auras.PreviewUnitKey(key)
+    local model = key and MenuModel()
+    if not (key and type(runtimeSpec) == "table")
+        or (model and type(model.UnitEnabled) == "function" and model.UnitEnabled(key) ~= true) then
+        return false, false
+    end
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    local overlay, symbol = runtimeSpec.dispelOverlay, runtimeSpec.dispelSymbol
+    return overlay and overlay.enabled == true or false,
+        symbol and symbol.enabled == true and a3 and a3.DispelSymbol ~= nil or false
+end
+
+function DispelPreview.SymbolMetrics(symbol)
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    local DS = a3 and a3.DispelSymbol
+    if not DS then return end
+    local size = ClampNumber(symbol and symbol.size, 14, 4, 64)
+    local spacing = ClampNumber(symbol and symbol.spacing, 2, 0, 32)
+    local count = DS.Mode(symbol and symbol.mode) == "TOP" and 1 or #DS.types
+    return DS, count, size, spacing, NormalizeAnchor(symbol and symbol.anchor, "TOPRIGHT"),
+        DS.ResolveGrowth(symbol and symbol.growth, symbol and symbol.anchor)
+end
+
+function DispelPreview.SlotOffset(symbol, index, size, spacing, growth)
+    local offset = ((tonumber(index) or 1) - 1) * (size + spacing)
+    local x, y = 0, 0
+    if growth == "LEFT" then x = -offset
+    elseif growth == "UP" then y = offset
+    elseif growth == "DOWN" then y = -offset
+    else x = offset end
+    return (tonumber(symbol and symbol.x) or 0) + x,
+        (tonumber(symbol and symbol.y) or 0) + y
+end
+
+function DispelPreview.SymbolBounds(symbol, frameW, frameH)
+    local DS, count, size, spacing, anchor, growth = DispelPreview.SymbolMetrics(symbol)
+    if not DS then return end
+    local baseX, baseY = AnchorBase(anchor, frameW, frameH)
+    local anchorX, anchorY = AnchorOffset(anchor, size, size)
+    local left, right, bottom, top = math.huge, -math.huge, math.huge, -math.huge
+    for index = 1, count do
+        local x, y = DispelPreview.SlotOffset(symbol, index, size, spacing, growth)
+        local slotLeft, slotBottom = baseX + x - anchorX, baseY + y - anchorY
+        left, right = min(left, slotLeft), max(right, slotLeft + size)
+        bottom, top = min(bottom, slotBottom), max(top, slotBottom + size)
+    end
+    return left, right, bottom, top, DS, count, size, spacing, anchor, growth
+end
+
+function Auras.ExpandDispelFootprint(runtimeSpec, frameW, frameH, minX, maxX, minY, maxY, symbolWanted)
+    local symbol = runtimeSpec and runtimeSpec.dispelSymbol
+    if not (symbolWanted == true and symbol and symbol.enabled == true) then
+        return minX, maxX, minY, maxY
+    end
+    local left, right, bottom, top = DispelPreview.SymbolBounds(symbol, frameW, frameH)
+    if not left then return minX, maxX, minY, maxY end
+    minX, maxX = min(minX, left), max(maxX, right)
+    minY, maxY = min(minY, bottom), max(maxY, top)
+    return minX, maxX, minY, maxY
+end
+
+function Auras.ApplyDispelLayerVisibility(box)
+    local mock = box and box.mock
+    if not mock then return end
+    local available = box.layerAvailable or {}
+    local visible = box.layerVisibility or {}
+    local overlayOn = available.dispelOverlay ~= false and visible.dispelOverlay ~= false
+    local symbolOn = available.dispelSymbol ~= false and visible.dispelSymbol ~= false
+    if mock._msufPreviewDispelOverlayHost then
+        mock._msufPreviewDispelOverlayHost:SetShown(overlayOn)
+    end
+    if mock._msufPreviewDispelSymbolHost then
+        mock._msufPreviewDispelSymbolHost:SetShown(symbolOn)
+    end
+    for i = 1, #(mock._msufPreviewDispelSymbols or {}) do
+        local holder = mock._msufPreviewDispelSymbols[i]
+        holder:SetShown(symbolOn and i <= (mock._msufPreviewDispelSymbolCount or 0))
+    end
+    local symbolHandle = box.handleDispelSymbol
+    if symbolHandle then
+        local shown = symbolOn and (mock._msufPreviewDispelSymbolCount or 0) > 0
+        symbolHandle._msufPlaced = shown
+        symbolHandle:SetShown(shown)
+    end
+end
+
+function Auras.LayoutDispelLayers(box, mock, runtimeSpec, S, baseLevel, overlayAvailable, symbolAvailable, frameW, frameH)
+    if not (box and mock and type(S) == "function") then return end
+    local visible = box.layerVisibility or {}
+    local overlay = runtimeSpec and runtimeSpec.dispelOverlay
+    local overlayOn = overlayAvailable == true and visible.dispelOverlay ~= false
+    local overlayHost = mock._msufPreviewDispelOverlayHost
+    if overlayOn then
+        if not overlayHost then
+            overlayHost = CreateFrame("Frame", nil, mock)
+            overlayHost:EnableMouse(false)
+            overlayHost.Region = overlayHost:CreateTexture(nil, "OVERLAY")
+            overlayHost.Region:SetTexture(TEX_W8)
+            mock._msufPreviewDispelOverlayHost = overlayHost
+            mock._msufPreviewDispelOverlayRegion = overlayHost.Region
+        end
+        overlayHost:ClearAllPoints()
+        overlayHost:SetAllPoints(mock.healthBar or mock)
+        if overlayHost.SetFrameLevel then
+            overlayHost:SetFrameLevel(Layers.ElementLevel and Layers.ElementLevel(0, 0, 12)
+                or ((baseLevel or 0) + 12))
+        end
+        local region = overlayHost.Region
+        local target = overlay.onHealth ~= false and mock.hp or (mock.healthBar or mock)
+        local style = tostring(overlay.style or "FULL"):upper()
+        local thickness = max(1, S(runtimeSpec and runtimeSpec.border and runtimeSpec.border.highlightThickness or 3))
+        region:ClearAllPoints()
+        if style == "TOP" then
+            region:SetPoint("TOPLEFT", target, "TOPLEFT", 0, 0)
+            region:SetPoint("TOPRIGHT", target, "TOPRIGHT", 0, 0)
+            region:SetHeight(thickness)
+        elseif style == "BOTTOM" then
+            region:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", 0, 0)
+            region:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", 0, 0)
+            region:SetHeight(thickness)
+        elseif style == "LEFT" then
+            region:SetPoint("TOPLEFT", target, "TOPLEFT", 0, 0)
+            region:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", 0, 0)
+            region:SetWidth(thickness)
+        elseif style == "RIGHT" then
+            region:SetPoint("TOPRIGHT", target, "TOPRIGHT", 0, 0)
+            region:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", 0, 0)
+            region:SetWidth(thickness)
+        else
+            region:SetAllPoints(target)
+        end
+        local color = runtimeSpec and runtimeSpec.dispel or nil
+        region:SetColorTexture(tonumber(color and color.r) or 0.25,
+            tonumber(color and color.g) or 0.75, tonumber(color and color.b) or 1, 1)
+        region:SetAlpha(ClampNumber(overlay.alpha, 0.35, 0, 1))
+        region:Show()
+        overlayHost:Show()
+    elseif overlayHost then
+        overlayHost:Hide()
+    end
+
+    local symbol = runtimeSpec and runtimeSpec.dispelSymbol
+    local symbolOn = symbolAvailable == true and visible.dispelSymbol ~= false
+    local symbolHandle = box.handleDispelSymbol
+    local symbolHost = mock._msufPreviewDispelSymbolHost
+    local holders = mock._msufPreviewDispelSymbols
+    if symbolOn then
+        local rawLeft, rawRight, rawBottom, rawTop, DS, count, rawSize, spacing, anchor, growth =
+            DispelPreview.SymbolBounds(symbol, frameW, frameH)
+        if not DS then
+            mock._msufPreviewDispelSymbolCount = 0
+            if symbolHost then symbolHost:Hide() end
+            for index = 1, #(holders or {}) do holders[index]:Hide() end
+            if symbolHandle then
+                symbolHandle._msufAuraDragVisual = nil
+                symbolHandle._msufPlaced = false
+                symbolHandle:Hide()
+            end
+            return
+        end
+        if not symbolHost then
+            symbolHost = CreateFrame("Frame", nil, mock)
+            symbolHost:EnableMouse(false)
+            mock._msufPreviewDispelSymbolHost = symbolHost
+        end
+        symbolHost:ClearAllPoints()
+        symbolHost:SetSize(mock:GetWidth(), mock:GetHeight())
+        symbolHost:SetPoint("BOTTOMLEFT", mock, "BOTTOMLEFT", 0, 0)
+        symbolHost:Show()
+        local size = max(1, S(rawSize))
+        local style = DS.Style(symbol.style)
+        local level = Layers.ElementLevel and Layers.ElementLevel(symbol.layer, 8, 8)
+            or ((baseLevel or 0) + RuntimeRound(ClampNumber(symbol.layer, 8, 0, 30)) + 8)
+        local strata = tostring(symbol.strata or "AUTO"):upper()
+        if strata == "AUTO" then strata = mock.GetFrameStrata and mock:GetFrameStrata() or nil end
+        holders = holders or {}
+        mock._msufPreviewDispelSymbols = holders
+        mock._msufPreviewDispelSymbolCount = count
+        for index = 1, count do
+            local holder = holders[index]
+            if not holder then
+                holder = CreateFrame("Frame", nil, symbolHost)
+                holder:EnableMouse(false)
+                holder.Texture = holder:CreateTexture(nil, "OVERLAY")
+                holder.Texture:SetAllPoints(holder)
+                holders[index] = holder
+            end
+            holder:SetSize(size, size)
+            holder:ClearAllPoints()
+            local x, y = DispelPreview.SlotOffset(symbol, index, rawSize, spacing, growth)
+            holder:SetPoint(anchor, symbolHost, anchor, S(x), S(y))
+            if holder.SetFrameLevel then holder:SetFrameLevel(level) end
+            if strata and holder.SetFrameStrata then holder:SetFrameStrata(strata) end
+            local texture = holder.Texture
+            texture:SetAlpha(ClampNumber(symbol.alpha, 1, 0, 1))
+            DS.PreviewArt(texture, style, DS.types[index])
+            texture:Show()
+            holder:Show()
+        end
+        for index = count + 1, #holders do holders[index]:Hide() end
+        if symbolHandle then
+            symbolHandle._msufAuraDragVisual = symbolHost
+            symbolHandle:SetSize(max(18, S(rawRight - rawLeft) + 8), max(18, S(rawTop - rawBottom) + 8))
+            symbolHandle:ClearAllPoints()
+            symbolHandle:SetPoint("BOTTOMLEFT", mock, "BOTTOMLEFT", S(rawLeft) - 4, S(rawBottom) - 4)
+            symbolHandle._msufPlaced = true
+            symbolHandle:Show()
+        end
+    else
+        mock._msufPreviewDispelSymbolCount = 0
+        if symbolHost then symbolHost:Hide() end
+        for index = 1, #(holders or {}) do holders[index]:Hide() end
+        if symbolHandle then
+            symbolHandle._msufAuraDragVisual = nil
+            symbolHandle._msufPlaced = false
+            symbolHandle:Hide()
+        end
+    end
 end
 -- Reused per-lane font state. Lanes are laid out one after another and nothing
 -- retains a reference past its own LayoutHandle call, so two scratch tables keep
@@ -885,6 +1260,8 @@ local function CreateIcon(parent)
     f.edge:SetVertexColor(0, 0, 0, 0)
     f.dispelBorder = f:CreateTexture(nil, "OVERLAY")
     f.dispelBorder:Hide()
+    f.stealableMarker = f:CreateTexture(nil, "OVERLAY")
+    f.stealableMarker:Hide()
     f.stack = MakeFS(f, "OVERLAY", Layers.AURA_STACK_DRAW_SUBLEVEL or 6)
     f.timer = MakeFS(f, "OVERLAY", Layers.AURA_COOLDOWN_TEXT_DRAW_SUBLEVEL or 7)
     f:Hide()
@@ -914,7 +1291,6 @@ local function BindDragProxy(frame, handle)
     if frame.RegisterForClicks then
         frame:RegisterForClicks("LeftButtonDown", "LeftButtonUp", "RightButtonUp")
         frame:SetScript("OnClick", function(_, button) ForwardHandleScript(handle, "OnClick", button) end)
-        frame:SetScript("OnDoubleClick", function(_, button) ForwardHandleScript(handle, "OnDoubleClick", button) end)
     end
     if frame.RegisterForDrag then frame:RegisterForDrag("LeftButton") end
     frame:SetScript("OnMouseDown", function(_, button) ForwardHandleScript(handle, "OnMouseDown", button) end)
@@ -948,6 +1324,59 @@ local function HideVisual(visual)
         visual._icons[i]:Hide()
     end
 end
+
+local function HideFrameEffectPreview(box)
+    local owner = box and box._msufAuraFrameEffectPreviewOwner
+    if not owner then return end
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    local runtime = a3 and a3.SpellIndicators
+    if runtime and type(runtime.HidePreviewFrameEffect) == "function" then
+        runtime.HidePreviewFrameEffect(owner)
+    else
+        owner:Hide()
+    end
+end
+
+local function LayoutFrameEffectPreview(box, mock, effect, S)
+    if not (box and mock and type(effect) == "table" and type(S) == "function") then
+        HideFrameEffectPreview(box)
+        return
+    end
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    local runtime = a3 and a3.SpellIndicators
+    if not (runtime and type(runtime.ApplyPreviewFrameEffect) == "function") then
+        HideFrameEffectPreview(box)
+        return
+    end
+    local owner = box._msufAuraFrameEffectPreviewOwner
+    if not owner then
+        owner = CreateFrame("Frame", nil, mock)
+        owner:EnableMouse(false)
+        box._msufAuraFrameEffectPreviewOwner = owner
+    elseif owner.GetParent and owner:GetParent() ~= mock and owner.SetParent then
+        owner:SetParent(mock)
+    end
+    owner:ClearAllPoints()
+    owner:SetAllPoints(mock)
+    owner:Show()
+
+    -- The UnitFrame preview scales geometry into its canvas instead of scaling
+    -- the frame tree.  Scale only the pixel thickness here; the live renderer
+    -- then consumes every remaining value exactly as it does in game.
+    local previewEffect = box._msufAuraFrameEffectPreviewConfig or {}
+    box._msufAuraFrameEffectPreviewConfig = previewEffect
+    previewEffect.type = effect.type
+    previewEffect.color = effect.color
+    previewEffect.priority = effect.priority
+    previewEffect.thickness = max(1, S(effect.thickness or 2))
+    previewEffect.layer = effect.layer
+    previewEffect.strata = effect.strata
+    previewEffect.tintAlpha = effect.tintAlpha
+    if not runtime.ApplyPreviewFrameEffect(owner, previewEffect, mock) then
+        HideFrameEffectPreview(box)
+    end
+end
+
 function Auras.Hide(box)
     if not box then return end
     if box.handleAuraCustom4 then
@@ -960,6 +1389,7 @@ function Auras.Hide(box)
         for _, kind in ipairs(AURA_PREVIEW_KINDS) do HideVisual(box.auraPreviewVisuals[kind]) end
     end
     HideVisual(box.defensivePortraitPreview)
+    HideFrameEffectPreview(box)
 end
 local function ValueOr(value, fallback)
     if value ~= nil then return value end
@@ -1011,7 +1441,8 @@ local function LaneTextConfig(cfg, kind)
 end
 
 local function CustomTextConfig(bounds)
-    local placed = bounds and bounds.item and bounds.item.placed or {}
+    local placed = bounds and bounds.stylePlaced
+        or (bounds and bounds.item and bounds.item.placed) or {}
     return {
         showStackCount = placed.showStacks ~= false,
         showCooldownText = placed.showCooldown ~= false,
@@ -1034,13 +1465,36 @@ local function CustomTextConfig(bounds)
     }
 end
 
-local function PreviewAuraState(kind, index, icon, cfg)
-    local fn = _G.MSUF_GetPreviewAnimationAuraState
+local function PreviewAuraState(box, kind, index, icon, cfg, targetDots)
+    local options = {
+        decimalThreshold = tonumber(cfg and cfg.cooldownDecimalSeconds) or 3,
+    }
+    local fn
+    local elapsed
+    if box and box._animationEnabled == true then
+        local previewAnimation = MSUF and MSUF.PreviewAnimation
+        fn = previewAnimation and previewAnimation.BuildAuraState
+            or _G.MSUF_BuildPreviewAnimationAuraState
+        elapsed = tonumber(box._animationElapsed) or 0
+        if targetDots == true then
+            -- A target DoT starts at full duration on every Animate press,
+            -- enters the real 30% Pandemic window, then expires once instead
+            -- of wrapping back to a fresh aura while the rest of the preview
+            -- keeps animating.
+            kind = "debuff"
+            options.duration = 18
+            options.oneShot = true
+            options.pandemicThreshold = 0.30
+        end
+    else
+        fn = _G.MSUF_GetPreviewAnimationAuraState
+    end
     if type(fn) ~= "function" then return nil end
     icon._msufPreviewAuraScratch = icon._msufPreviewAuraScratch or {}
-    return fn(kind, index, icon._msufPreviewAuraScratch, {
-        decimalThreshold = tonumber(cfg and cfg.cooldownDecimalSeconds) or 3,
-    })
+    if elapsed ~= nil then
+        return fn(kind, index, icon._msufPreviewAuraScratch, options, elapsed)
+    end
+    return fn(kind, index, icon._msufPreviewAuraScratch, options)
 end
 
 local function LayoutPreviewAuraSwipe(swipe, icon, size, remainingFrac, reverse)
@@ -1146,6 +1600,31 @@ local function LayoutPreviewDispelBorder(icon, size, mode, shape)
     border:SetAtlas(atlas, TextureKitConstants and TextureKitConstants.IgnoreAtlasSize)
     border:Show()
 end
+local function LayoutPreviewStealableMarker(icon, size, enabled, style, shape, index)
+    local marker = icon and icon.stealableMarker
+    if not (marker and enabled == true and index == 1) then
+        if marker then marker:Hide() end
+        return
+    end
+    style = tostring(style or "BORDER_ICON"):upper()
+    marker:ClearAllPoints()
+    if style == "ICON" then
+        local markerSize = max(7, floor((tonumber(size) or 24) * 0.42 + 0.5))
+        marker:SetSize(markerSize, markerSize)
+        marker:SetPoint("TOPLEFT", icon, "TOPLEFT", 1, -1)
+        if marker.SetAtlas then marker:SetAtlas("RaidFrame-Icon-DebuffMagic", TextureKitConstants and TextureKitConstants.IgnoreAtlasSize) end
+        marker:SetVertexColor(1, 1, 1, 1)
+        marker:Show()
+        return
+    end
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    local mode = style == "BORDER" and "BORDER" or "SYMBOL"
+    if a3 and type(a3.ApplyAuraDispelPreview) == "function"
+        and a3.ApplyAuraDispelPreview(marker, icon, size, mode, shape) then
+        return
+    end
+    marker:Hide()
+end
 local function LayoutHandle(box, handle, state, kind, S, baseLevel)
     local bounds = state and state[kind]
     if not (handle and bounds) then
@@ -1181,7 +1660,9 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
     local barOnly = textCfg.showDurationBar == true and textCfg.durationBarDisplay == "BAR_ONLY"
     local verticalGrowth = bounds.verticalGrowth == true
     local layer = tonumber(bounds.layer) or (kind == "buff" and 5 or 6)
-    local debuffBorderMode = textureKind == "debuff" and (bounds.custom and PreviewDebuffBorderMode(bounds.item and bounds.item.placed) or PreviewDebuffBorderMode(cfg)) or "OFF"
+    local debuffBorderMode = textureKind == "debuff" and (bounds.custom
+        and PreviewDebuffBorderMode(bounds.stylePlaced or (bounds.item and bounds.item.placed))
+        or PreviewDebuffBorderMode(cfg)) or "OFF"
     local padX, padY = PaddingInset(bounds.initialAnchor or "TOPLEFT", S(bounds.padding or 0))
     -- Bar-only lanes render no icon chrome at runtime, so the style stays off.
     local iconStyle = (not barOnly) and bounds.iconStyle or nil
@@ -1210,7 +1691,8 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
         local icon = EnsureIcon(visual, i)
         BindDragProxy(icon, handle)
         if icon.SetFrameLevel then icon:SetFrameLevel((visual:GetFrameLevel() or 0) + 1) end
-        local auraState = PreviewAuraState(kind, i, icon, textCfg)
+        local targetDots = bounds.item and bounds.item.targetDots == true
+        local auraState = PreviewAuraState(box, kind, i, icon, textCfg, targetDots)
         local col, row = IconGridCoord(i, bounds.perRow, verticalGrowth)
         icon:SetSize(size, size)
         icon:ClearAllPoints()
@@ -1235,6 +1717,16 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
         end
         LayoutPreviewDurationBar(icon.durationBar, icon, textCfg, size, auraState)
         LayoutPreviewDispelBorder(icon, size, barOnly and "OFF" or debuffBorderMode, bounds.iconShape)
+        LayoutPreviewStealableMarker(icon, size, kind == "buff" and cfg.buffShowStealable == true,
+            cfg.buffStealableStyle, bounds.iconShape, i)
+        if a3 and type(a3.ApplyPandemicVisual) == "function"
+            and ((bounds.item and bounds.item.targetDots == true) or icon._msufA3PandemicRegion) then
+            local placed = bounds.stylePlaced or (bounds.item and bounds.item.placed) or nil
+            local pandemicVisible = auraState and auraState.pandemicActive
+            if pandemicVisible == nil then pandemicVisible = true end
+            a3.ApplyPandemicVisual(icon, placed or {}, placed and bounds.item.targetDots == true
+                and placed.pandemicEnabled == true and i == 1 and not barOnly and pandemicVisible)
+        end
         ApplyAuraFont(icon.stack, stackFont)
         PlaceAuraText(icon.stack, icon, stackAnchor, stackX, stackY)
         icon.stack:SetText(showStacks and (auraState and auraState.stacks or (i % 3 == 1 and "2" or "")) or "")
@@ -1248,6 +1740,7 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
         if icon.swipe then icon.swipe:Hide() end
         if icon.durationBar then icon.durationBar:Hide() end
         if icon.dispelBorder then icon.dispelBorder:Hide() end
+        if icon.stealableMarker then icon.stealableMarker:Hide() end
         icon:Hide()
     end
     handle:Show()
@@ -1331,7 +1824,17 @@ local function LayoutDefensivePortrait(box, mock, state, S)
             applyIconStyle(icon, iconStyle, size, bounds.iconShape)
         end
         if icon.dispelBorder then icon.dispelBorder:Hide() end
-        local auraState = PreviewAuraState("custom4", i, icon, textCfg)
+        if icon.stealableMarker then icon.stealableMarker:Hide() end
+        local targetDots = bounds.item and bounds.item.targetDots == true
+        local auraState = PreviewAuraState(box, "custom4", i, icon, textCfg, targetDots)
+        if a3 and type(a3.ApplyPandemicVisual) == "function"
+            and ((bounds.item and bounds.item.targetDots == true) or icon._msufA3PandemicRegion) then
+            local placed = bounds.stylePlaced or (bounds.item and bounds.item.placed) or nil
+            local pandemicVisible = auraState and auraState.pandemicActive
+            if pandemicVisible == nil then pandemicVisible = true end
+            a3.ApplyPandemicVisual(icon, placed or {}, placed and bounds.item.targetDots == true
+                and placed.pandemicEnabled == true and i == 1 and not barOnly and pandemicVisible)
+        end
         if icon.swipe then
             if showSwipe and not barOnly then
                 LayoutPreviewAuraSwipe(icon.swipe, icon, size,
@@ -1358,6 +1861,7 @@ local function LayoutDefensivePortrait(box, mock, state, S)
         if icon.swipe then icon.swipe:Hide() end
         if icon.durationBar then icon.durationBar:Hide() end
         if icon.dispelBorder then icon.dispelBorder:Hide() end
+        if icon.stealableMarker then icon.stealableMarker:Hide() end
         icon:Hide()
     end
     visual:Show()
@@ -1409,4 +1913,5 @@ function Auras.Layout(box, mock, state, S, baseLevel)
         end
     end
     LayoutDefensivePortrait(box, mock, state, S)
+    LayoutFrameEffectPreview(box, mock, state.previewFrameEffect, S)
 end

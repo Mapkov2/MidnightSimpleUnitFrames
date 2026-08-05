@@ -2150,6 +2150,7 @@ local function CompileUnitTail(out, unit, key, conf, general, bars)
   local A3 = MSUF.MSUF_Auras3
   out.auras.enabled = (A3 and A3.UnitFrameAuraEnabled and A3.UnitFrameAuraEnabled(unit) == true)
     or (out.border and out.border.dispel == true)
+    or (out.border and out.border.purge == true and (unit == "target" or unit == "focus"))
     or (out.dispelOverlay and out.dispelOverlay.enabled == true)
     or (out.dispelSymbol and out.dispelSymbol.enabled == true)
     or false

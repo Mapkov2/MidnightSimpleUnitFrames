@@ -44,8 +44,8 @@ local function NormalizeSpellIndicatorConfig(conf)
     if type(conf) ~= "table" then return nil, false end
     local changed = false
     if type(conf.spellIndicators) ~= "table" then
-        conf.spellIndicators = { enabled = false, spec = "auto", specs = {}, layer = 9, iconScale = 100, _autoSeededSpecs = {} }
-        return conf.spellIndicators, true
+        conf.spellIndicators = { enabled = false, spec = "auto", specs = {}, layer = 9, iconZoom = 100, iconScale = 100, _autoSeededSpecs = {} }
+        changed = true
     end
 
     local si = conf.spellIndicators
@@ -61,9 +61,17 @@ local function NormalizeSpellIndicatorConfig(conf)
         si.layer = 9
         changed = true
     end
+    if si.iconZoom == nil then
+        si.iconZoom = 100
+        changed = true
+    end
     if si.iconScale == nil then
         si.iconScale = 100
         changed = true
+    end
+    if type(GF.EnsureSpellIndicatorStyle) == "function" then
+        local _, styleChanged = GF.EnsureSpellIndicatorStyle(conf)
+        changed = styleChanged or changed
     end
     if type(si._autoSeededSpecs) ~= "table" then
         si._autoSeededSpecs = {}

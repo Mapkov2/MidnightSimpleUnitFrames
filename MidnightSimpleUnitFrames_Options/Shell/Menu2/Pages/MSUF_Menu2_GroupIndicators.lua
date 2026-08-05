@@ -219,7 +219,7 @@ local function DefaultCustomBuffPlaced(index)
 end
 
 local function BuildIndicatorsSection(ctx, b)
-    local indicators = b:CollapsibleSection("indicators", "Frame Indicators", 810, true)
+    local indicators = b:CollapsibleSection("indicators", "Frame Indicators", 710, true)
     local indicatorsW = indicators._msuf2Width or ctx.width or 720
     local cardGap = 16
     local leftX = 20
@@ -265,7 +265,7 @@ local function BuildIndicatorsSection(ctx, b)
     end
     openHighlights:SetScript("OnClick", OpenFrameHighlights)
     RegisterControl(openHighlights, ctx, "navigation.frame_highlights", "Open Highlights", "button", "navigation", { navigationKey = "opt_misc" })
-    local groupNumberCard = W.ControlCard(indicators, "Group Number", nil, leftX, -148, leftW, 420)
+    local groupNumberCard = W.ControlCard(indicators, "Group Number", nil, leftX, -148, leftW, 320)
     if W.AttachContextColorShortcut then
         W.AttachContextColorShortcut(groupNumberCard, {
             title = "Group Number Text Settings",
@@ -292,10 +292,8 @@ local function BuildIndicatorsSection(ctx, b)
     -- The preview handle resolves a drag to any of the nine anchor points, so
     -- the dropdown has to be able to show all nine too.
     AddScopeDropdown(groupNumberControls, groupNumberCard, "Anchor", STATUS_ICON_ANCHORS, leftW, "groupNumberAnchor", "BOTTOMRIGHT", "geometry", -166)
-    AddScopeSlider(groupNumberControls, groupNumberCard, "X Offset", -100, 100, 1, leftW, "groupNumberX", -2, "geometry", -216)
-    AddScopeSlider(groupNumberControls, groupNumberCard, "Y Offset", -100, 100, 1, leftW, "groupNumberY", 2, "geometry", -266)
-    AddScopeSlider(groupNumberControls, groupNumberCard, "Layer", 0, 30, 1, leftW, "groupNumberLayer", 7, "visual", -316)
-    local groupNumberScopeHint = W.Text(groupNumberCard, "", 16, -368, leftW - 32, T.colors.muted)
+    AddScopeSlider(groupNumberControls, groupNumberCard, "Layer", 0, 30, 1, leftW, "groupNumberLayer", 7, "visual", -216)
+    local groupNumberScopeHint = W.Text(groupNumberCard, "", 16, -268, leftW - 32, T.colors.muted)
     if groupNumberScopeHint.SetWordWrap then groupNumberScopeHint:SetWordWrap(true) end
     local focusCard = W.ControlCard(indicators, "Focus Highlight", "Shows a colored border around your Focus target. Priority: Dispel > Aggro > Target > Focus.", rightX, -148, rightW, 190)
     if W.AttachContextColorReferences then
@@ -314,7 +312,7 @@ local function BuildIndicatorsSection(ctx, b)
     AddScopeSlider(focusControls, focusCard, "Border Thickness", 1, 6, 1, rightW, "hlFocusSize", 2, "visual", -88)
     local focusColorHint = W.Text(focusCard, "Focus color is in Global Style > Colors > Group Frame Colors.", 16, -142, rightW - 32, T.colors.muted)
     if focusColorHint.SetWordWrap then focusColorHint:SetWordWrap(true) end
-    local groupBorderCard = W.ControlCard(indicators, "Group Border", nil, leftX, -586, leftW, 202)
+    local groupBorderCard = W.ControlCard(indicators, "Group Border", nil, leftX, -486, leftW, 202)
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(groupBorderCard, { "group.border" }, {
             title = "Group Border Color",
@@ -338,8 +336,8 @@ local function BuildIndicatorsSection(ctx, b)
         -- 5-player party has no subgroups, so say so instead of letting the
         -- toggle look broken.
         groupNumberScopeHint:SetText(CurrentScope() == "party"
-            and "Shows the raid subgroup number. Party frames only display it while you are in an actual raid group."
-            or "Shows the raid subgroup number from the raid roster.")
+            and "Shows the raid subgroup number in a raid. Move it in Preview."
+            or "Shows the raid subgroup number from the raid roster. Move it in Preview.")
         local targetEnabled = Bool(CurrentScope(), "targetIndicator", true)
         local focusEnabled = Bool(CurrentScope(), "hlFocusEnabled", true)
         SetOptionsEnabled(focusControls, focusEnabled)
@@ -359,7 +357,7 @@ local function BuildIndicatorsSection(ctx, b)
 end
 
 local function BuildStatusIconsSection(ctx, b, RefreshPage)
-    local sicons = b:CollapsibleSection("sicons", "Status Icons", 634, false)
+    local sicons = b:CollapsibleSection("sicons", "Status Icons", 534, false)
     local siconW = sicons._msuf2Width or ctx.width or 720
     local siconGap = 16
     local siconLeftX = 20
@@ -423,7 +421,7 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
         selectedTextShortcut:SetShown(IsTextStatusIconSpec(CurrentGFStatusSpec()))
     end
     local previewCard = W.ControlCard(siconBasicTab, "Status Preview", nil, siconRightX, -38, siconRightW, 164)
-    local placementCard = W.ControlCard(siconBasicTab, "Placement", nil, siconRightX, -220, siconRightW, 322)
+    local placementCard = W.ControlCard(siconBasicTab, "Placement", nil, siconRightX, -220, siconRightW, 222)
     local function RefreshStatusIconMenu()
         if M.RequestRefresh then
             M.RequestRefresh(ctx, "gf-indicators-status-icon")
@@ -771,16 +769,12 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
     local statusControls = BuildStatusControls(placementCard, {
         { "slider", "Size", 6, 40, 1, siconRightW, "size", function(spec) return spec.defaultSize end, "visual", 16, -58, siconRightW - 58 },
         { "dropdown", "Anchor", STATUS_ICON_ANCHORS, siconRightW, "anchor", function(spec) return spec.defaultAnchor end, "geometry", 16, -108, siconRightW - 32 },
-        { "slider", "X Offset", -100, 100, 1, siconRightW, "x", 0, "geometry", 16, -158, siconRightW - 58 },
-        { "slider", "Y Offset", -100, 100, 1, siconRightW, "y", 0, "geometry", 16, -208, siconRightW - 58 },
-        { "slider", "Layer", 0, 30, 1, siconRightW, "layer", function(spec) return spec.defaultLayer end, "visual", 16, -258, siconRightW - 58, true },
+        { "slider", "Layer", 0, 30, 1, siconRightW, "layer", function(spec) return spec.defaultLayer end, "visual", 16, -158, siconRightW - 58, true },
     })
     local advanced = {}
-    advanced.card = W.ControlCard(siconAdvancedTab, "Advanced Placement", nil, siconLeftX, -38, siconInnerW, 316)
+    advanced.card = W.ControlCard(siconAdvancedTab, "Advanced Placement", nil, siconLeftX, -38, siconInnerW, 232)
     M.Assign(advanced, BuildStatusControls(advanced.card, {
-        { "slider", "X Offset (extended)", -500, 500, 1, siconLeftW, "x", 0, "geometry", 16, -58, siconLeftW - 58, identitySuffix = "extended" },
-        { "slider", "Y Offset (extended)", -500, 500, 1, siconRightW, "y", 0, "geometry", siconRightX - siconLeftX, -58, siconRightW - 58, identitySuffix = "extended" },
-        { "slider", "Layer", 0, 30, 1, siconLeftW, "layer", function(spec) return spec.defaultLayer end, "visual", 16, -128, siconLeftW - 58, true, identitySuffix = "extended" },
+        { "slider", "Layer", 0, 30, 1, siconLeftW, "layer", function(spec) return spec.defaultLayer end, "visual", 16, -58, siconLeftW - 58, true, identitySuffix = "extended" },
     }))
     advanced.reset = W.Button(advanced.card, "Reset selected", 160)
     advanced.reset._msuf2SkipHistoryCheckpoint = true
@@ -791,12 +785,12 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
         actionKey = "reset_selected_group_status_icon",
     })
     advanced.reset:ClearAllPoints()
-    advanced.reset:SetPoint("TOPLEFT", advanced.card, "TOPLEFT", siconRightX - siconLeftX, -150)
+    advanced.reset:SetPoint("TOPLEFT", advanced.card, "TOPLEFT", siconRightX - siconLeftX, -58)
     advanced.reset:SetSize(160, 24)
     advanced.previewCurrent = PreviewActionButton(advanced.card, "Preview current", 142, "status.advanced.preview.current", function()
         if previewCurrent and previewCurrent.Click then previewCurrent:Click() end
     end)
-    advanced.previewCurrent:SetPoint("TOPLEFT", advanced.card, "TOPLEFT", 16, -234)
+    advanced.previewCurrent:SetPoint("TOPLEFT", advanced.card, "TOPLEFT", 16, -150)
     advanced.previewAll = PreviewActionButton(advanced.card, "Show all", 112, "status.advanced.preview.all", function()
         if previewAll and previewAll.Click then previewAll:Click() end
     end)
@@ -811,7 +805,7 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
         ApplyRole(advanced.previewCurrent, currentRole)
         ApplyRole(advanced.previewAll, allRole)
     end
-    local statusPlacementControls = { statusControls.size, statusControls.anchor, statusControls.x, statusControls.y, statusControls.layer, advanced.x, advanced.y, advanced.layer }
+    local statusPlacementControls = { statusControls.size, statusControls.anchor, statusControls.layer, advanced.layer }
     local statusActionControls = { advanced.reset, advanced.previewCurrent, statusReset, previewCurrent }
     RefreshStatusIconState = function()
         local spec = CurrentGFStatusSpec()
@@ -1429,8 +1423,225 @@ function SpellTileGrid:Refresh()
     return rows
 end
 
+GP.BuildSpellIndicatorStyleSection = function(ctx, b)
+    local section = b:CollapsibleSection("si_style", Tr("Spell Icon Style"), 744, false)
+    local sectionW = section._msuf2Width or ctx.width or 720
+    local gap, leftX = 28, 30
+    local innerW = max(320, sectionW - 60)
+    local leftW = max(240, min(370, floor((innerW - gap) * 0.46)))
+    local rightX = leftX + leftW + gap
+    local rightW = max(240, min(390, innerW - leftW - gap))
+    W.ControlCard(section, Tr("Frame Basics"), nil, leftX - 14, -38, leftW + 28, 322)
+    W.ControlCard(section, Tr("Cooldown Text"), nil, rightX - 14, -38, rightW + 28, 430)
+    W.ControlCard(section, Tr("Stack Count"), nil, leftX - 14, -376, leftW + 28, 296)
+    W.ControlCard(section, Tr("Duration Bar"), nil, rightX - 14, -484, rightW + 28, 312)
+
+    local function Style()
+        local si = SpellIndicators(CurrentScope())
+        if type(si.style) ~= "table" then si.style = {} end
+        return si.style
+    end
+    local function ApplyStyle()
+        QueueSpellIndicators(CurrentScope(), "auras")
+    end
+    local function StyleMeta(path, step)
+        local meta = step and StepMeta(ctx, path, step) or ControlMeta(ctx, path)
+        local suffix = path == "spell.icon_zoom" and "iconZoom"
+            or (path == "spell.icon_scale" and "iconScale" or path:match("^spell%.style%.(.+)$"))
+        if suffix then
+            meta.assistantDisposition = "dynamic"
+            meta.assistantDispositionReason = "This setting targets the dedicated Spell Icon Style in the selected Group scope."
+            -- Scope changes refresh this page in place, so a key captured while
+            -- building would become stale. The widget command resolves
+            -- CurrentScope() at execution time, matching every other Group control.
+            meta.assistantSettingKeys = nil
+            meta.assistantSettingKeyPatterns = nil
+        end
+        return meta
+    end
+    local controls = {}
+    local function Track(control)
+        controls[#controls + 1] = control
+        return control
+    end
+    local function BindNumber(label, x, y, width, minValue, maxValue, step, key, default, path)
+        local control = Track(W.Slider(section, Tr(label), minValue, maxValue, step, width))
+        local meta = StyleMeta(path or ("spell.style." .. key), step)
+        M.BindNumberWidget(ctx, control,
+            function() return tonumber(Style()[key]) or default end,
+            function(value)
+                Style()[key] = tonumber(value) or default
+                ApplyStyle()
+            end,
+            default, meta)
+        W.MoveWidget(control, section, x, y, width, "LEFT")
+        return control
+    end
+    local function BindBool(label, x, y, width, key, default)
+        local control = Track(W.ToggleAt(section, Tr(label), x, y, width))
+        local meta = StyleMeta("spell.style." .. key)
+        M.BindBoolWidget(ctx, control,
+            function()
+                local value = Style()[key]
+                if value == nil then return default == true end
+                return value == true
+            end,
+            function(value)
+                Style()[key] = value == true
+                ApplyStyle()
+            end,
+            meta)
+        return control
+    end
+    local function BindChoice(label, x, y, width, values, key, default)
+        local control = Track(W.Dropdown(section, Tr(label), values, width))
+        local meta = StyleMeta("spell.style." .. key)
+        M.BindDropdownWidget(ctx, control,
+            function() return Style()[key] or default end,
+            function(value)
+                Style()[key] = value or default
+                ApplyStyle()
+            end,
+            meta)
+        W.MoveWidget(control, section, x, y, width, "LEFT")
+        return control
+    end
+
+    local iconZoom = Track(W.Slider(section, Tr("Icon Zoom (%)"), 100, 200, 1, leftW))
+    local metadata = StyleMeta("spell.icon_zoom", 1)
+    M.BindNumberWidget(ctx, iconZoom,
+        function() return tonumber(SpellIndicators(CurrentScope()).iconZoom) or 100 end,
+        function(value)
+            SpellIndicators(CurrentScope()).iconZoom = tonumber(value) or 100
+            ApplyStyle()
+        end,
+        100, metadata)
+    W.MoveWidget(iconZoom, section, leftX, -72, leftW, "LEFT")
+
+    local iconScale = Track(W.Slider(section, Tr("Icon Scale (%)"), 20, 300, 1, leftW))
+    do
+        local pendingApply, pendingScope, releaseScheduled
+        local meta = StyleMeta("spell.icon_scale", 1)
+        local function CombatLocked()
+            if type(M.IsConfigCombatLocked) == "function" then return M.IsConfigCombatLocked() == true end
+            return (_G.InCombatLockdown and _G.InCombatLockdown()) or _G.MSUF_InCombat == true
+        end
+        local function RefreshPreviewOnly(scope)
+            if CombatLocked() then return false end
+            if type(RefreshGFPreview) == "function" then RefreshGFPreview(scope or CurrentScope(), { spellOnly = true }) end
+            return true
+        end
+        local function FlushRuntime()
+            if not pendingApply then return end
+            if CombatLocked() then releaseScheduled = nil; return false end
+            local scope = pendingScope or CurrentScope()
+            pendingApply, pendingScope, releaseScheduled = nil, nil, nil
+            QueueSpellIndicators(scope, "auras")
+            return true
+        end
+        local function ScheduleRelease()
+            if not pendingApply or releaseScheduled or CombatLocked() then return end
+            releaseScheduled = true
+            if C_Timer and type(C_Timer.After) == "function" then C_Timer.After(0, FlushRuntime) else FlushRuntime() end
+        end
+        M.BindNumberWidget(ctx, iconScale,
+            function() return tonumber(SpellIndicators(CurrentScope()).iconScale) or 100 end,
+            function(value)
+                value = floor((tonumber(value) or 100) + 0.5)
+                local scope = CurrentScope()
+                if pendingApply and pendingScope ~= scope then FlushRuntime() end
+                local si = SpellIndicators(scope)
+                if si.iconScale == value then return end
+                si.iconScale = value
+                pendingApply = true
+                pendingScope = scope
+                if iconScale._msuf2SliderActive == true or releaseScheduled then RefreshPreviewOnly(scope) else FlushRuntime() end
+            end,
+            100, meta)
+        iconScale:HookScript("OnMouseUp", ScheduleRelease)
+        iconScale:HookScript("OnHide", FlushRuntime)
+        iconScale:HookScript("OnShow", FlushRuntime)
+    end
+    W.MoveWidget(iconScale, section, leftX, -128, leftW, "LEFT")
+
+    local opacity = Track(W.Slider(section, Tr("Opacity"), 10, 100, 5, leftW))
+    local metadata = StyleMeta("spell.style.alpha", 5)
+    M.BindNumberWidget(ctx, opacity,
+        function() return floor(((tonumber(Style().alpha) or 1) * 100) + 0.5) end,
+        function(value)
+            Style().alpha = min(1, max(0.1, (tonumber(value) or 100) / 100))
+            ApplyStyle()
+        end,
+        100, metadata)
+    W.MoveWidget(opacity, section, leftX, -184, leftW, "LEFT")
+    local tooltip = BindBool("Show Tooltip", leftX, -240, leftW, "showTooltip", true)
+
+    local showCooldownText = BindBool("Show Cooldown Text", rightX, -72, rightW, "showCooldownText", true)
+    local showCooldownSwipe = BindBool("Show Cooldown Swipe", rightX, -104, rightW, "showCooldownSwipe", true)
+    local cooldownSize = BindNumber("Cooldown Font", rightX, -148, rightW, 6, 24, 1, "cooldownSize", 8)
+    local cooldownAnchor = BindChoice("Cooldown Anchor", rightX, -204, rightW, STATUS_ICON_ANCHORS, "cooldownAnchor", "CENTER")
+    local halfRight = max(100, floor((rightW - 12) / 2))
+    local cooldownX = BindNumber("Cooldown X", rightX, -260, halfRight, -40, 40, 1, "cooldownX", 0)
+    local cooldownY = BindNumber("Cooldown Y", rightX + halfRight + 12, -260, halfRight, -40, 40, 1, "cooldownY", 0)
+    local swipeDirection = Track(W.Dropdown(section, Tr("Swipe Direction"), VT("NORMAL", "Normal", "REVERSE", "Reverse"), rightW))
+    local metadata = StyleMeta("spell.style.cooldownSwipeReverse")
+    M.BindDropdownWidget(ctx, swipeDirection,
+        function() return Style().cooldownSwipeReverse == true and "REVERSE" or "NORMAL" end,
+        function(value)
+            Style().cooldownSwipeReverse = value == "REVERSE"
+            ApplyStyle()
+        end,
+        metadata)
+    W.MoveWidget(swipeDirection, section, rightX, -316, rightW, "LEFT")
+    local decimals = BindNumber("Decimals below sec", rightX, -372, rightW, 0, 30, 1, "cooldownDecimalSeconds", 3)
+
+    local showStacks = BindBool("Show Stack Count", leftX, -296, leftW, "showStacks", true)
+    local stackSize = BindNumber("Stack Font", leftX, -338, leftW, 6, 24, 1, "stackSize", 10)
+    local stackAnchor = BindChoice("Stack Anchor", leftX, -394, leftW, STATUS_ICON_ANCHORS, "stackAnchor", "BOTTOMRIGHT")
+    local halfLeft = max(100, floor((leftW - 12) / 2))
+    local stackX = BindNumber("Stack X", leftX, -450, halfLeft, -40, 40, 1, "stackX", 0)
+    local stackY = BindNumber("Stack Y", leftX + halfLeft + 12, -450, halfLeft, -40, 40, 1, "stackY", 0)
+
+    local showDurationBar = BindBool("Show Duration Bar", rightX, -520, rightW, "showDurationBar", false)
+    local durationHeight = BindNumber("Height", rightX, -562, rightW, 1, 16, 1, "durationBarHeight", 2)
+    local durationDisplay = BindChoice("Display", rightX, -618, rightW,
+        VT("BAR_ONLY", "Bar Only", "OVERLAY", "Icon + Bar"), "durationBarDisplay", "BAR_ONLY")
+    local durationPosition = BindChoice("Position", rightX, -674, halfRight,
+        VT("BOTTOM", "Bottom", "TOP", "Top"), "durationBarPosition", "BOTTOM")
+    local durationDirection = BindChoice("Fill Mode", rightX + halfRight + 12, -674, halfRight,
+        VT("REMAINING", "Remaining", "ELAPSED", "Elapsed"), "durationBarDirection", "REMAINING")
+    W.Text(section, Tr("Shape, border and shadow: Appearance > Aura Style > Buffs. All controls here remain Group-scope aware."),
+        leftX, -706, innerW, T.colors.muted)
+
+    if M.AddTooltip then
+        M.AddTooltip(tooltip, "Spell Icon tooltip", "Controls native Aura tooltips for Spell Icons only.", { hook = true })
+        M.AddTooltip(decimals, "Cooldown text format", "Below this value, remaining whole seconds may show one decimal place. Set 0 for whole seconds only.", { hook = true })
+    end
+
+    local RefreshStyleState = M.RefreshProxy()
+    RefreshStyleState = RefreshStyleState(function()
+        local si = SpellIndicators(CurrentScope())
+        local style = Style()
+        local enabled = si.enabled == true
+        SetOptionsEnabled(controls, enabled)
+        SetManyEnabled(enabled and style.showCooldownText ~= false, cooldownSize, cooldownAnchor, cooldownX, cooldownY, decimals)
+        SetOptionEnabled(swipeDirection, enabled and style.showCooldownSwipe ~= false)
+        SetManyEnabled(enabled and style.showStacks ~= false, stackSize, stackAnchor, stackX, stackY)
+        SetManyEnabled(enabled and style.showDurationBar == true, durationHeight, durationDisplay, durationPosition, durationDirection)
+        local scope = CurrentScope()
+        local scopeLabel = scope == "party" and "Party" or (scope == "mythicraid" and "Mythic Raid" or "Raid")
+        SetSectionBadgesAndStatus(section, {
+            { text = scopeLabel, kind = "info", important = true },
+            { text = M.Format("Zoom %d%%", floor((tonumber(si.iconZoom) or 100) + 0.5)), kind = "info" },
+            { text = "Buff Appearance", kind = "accent" },
+            OnOffBadge(enabled, "Active", "Inactive"),
+        })
+    end)
+    TrackSectionRefresh(ctx, section, RefreshStyleState)
+end
+
 local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
-    local spells = b:CollapsibleSection("si", Tr("Spell Indicators"), 1208, false)
+    local spells = b:CollapsibleSection("si", Tr("Spell Indicators"), 956, false)
     local siW = spells._msuf2Width or ctx.width or 720
     local siGap = 28
     local siLeftX = 30
@@ -1442,9 +1653,8 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
     do
         spellSetCard = W.ControlCard(spells, Tr("Choose Spells"), nil, siLeftX - 14, -38, siLeftW + 28, 404)
         W.ControlCard(spells, Tr("Edit Spell"), nil, siRightX - 14, -38, siRightW + 28, 404)
-        placedIndicatorCard = W.ControlCard(spells, Tr("Show on Frame"), nil, siLeftX - 14, -456, siLeftW + 28, 570)
+        placedIndicatorCard = W.ControlCard(spells, Tr("Show on Frame"), nil, siLeftX - 14, -456, siLeftW + 28, 462)
         frameHighlightCard = W.ControlCard(spells, Tr("Highlight Health Bar"), nil, siRightX - 14, -456, siRightW + 28, 468)
-        W.ControlCard(spells, Tr("Icon Details"), nil, siRightX - 14, -936, siRightW + 28, 248)
     end
     local RefreshSpellIndicatorState = M.RefreshProxy()
     local function RequestSpellControlRefresh(reason)
@@ -1759,11 +1969,9 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         RefreshPage)
     local placedAnchor = BindPlacedDropdown("Anchor", STATUS_ICON_ANCHORS, "anchor", "TOPLEFT", -546)
     local placedSize = BindPlacedSlider("Size", 6, 48, 1, "size", 18, -600)
-    local placedX = BindPlacedSlider("X Offset", -100, 100, 1, "x", 0, -654)
-    local placedY = BindPlacedSlider("Y Offset", -100, 100, 1, "y", 0, -708)
-    local placedBarWidth = BindPlacedSlider("Bar Width", 8, 120, 1, "barWidth", 42, -762)
-    local placedGrowth = BindPlacedDropdown("Growth", SPELL_GROWTH_VALUES, "growth", "RIGHTDOWN", -816)
-    local placedIconEffect = BindPlacedDropdown("Icon Effect", ICON_EFFECT_TYPES, "iconEffect", "none", -870, RefreshSpellIndicatorState)
+    local placedBarWidth = BindPlacedSlider("Bar Width", 8, 120, 1, "barWidth", 42, -654)
+    local placedGrowth = BindPlacedDropdown("Growth", SPELL_GROWTH_VALUES, "growth", "RIGHTDOWN", -708)
+    local placedIconEffect = BindPlacedDropdown("Icon Effect", ICON_EFFECT_TYPES, "iconEffect", "none", -762, RefreshSpellIndicatorState)
     local frameType = BindSpellSubType("Effect", FRAME_EFFECT_TYPES, siRightX, -490, siRightW, "frame",
         function(frame)
             if not frame.color then
@@ -1825,94 +2033,6 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
     W.MoveWidget(frameAlpha, spells, siRightX, -760, siRightW, "LEFT")
     local frameThickness = BindFrameSlider("Border / Glow Thickness", 1, 8, 1, "thickness", 2, -814)
     local frameLayer = BindFrameSlider("Effect Layer (0-30)", 0, 30, 1, "layer", 0, -868)
-    local spellIconZoom = W.Slider(spells, Tr("Icon Zoom (%)"), 100, 200, 1, siRightW)
-    M.BindNumberWidget(ctx, spellIconZoom,
-        function() return tonumber(SpellIndicators(CurrentScope()).iconZoom) or 100 end,
-        function(value)
-            local cfg = SpellIndicators(CurrentScope())
-            cfg.iconZoom = tonumber(value) or 100
-            QueueSpellIndicators(CurrentScope())
-        end,
-        100, StepMeta(ctx, "spell.icon_zoom", 1))
-    W.MoveWidget(spellIconZoom, spells, siRightX, -974, siRightW, "LEFT")
-    local spellIconScale = W.Slider(spells, Tr("Icon Scale (%)"), 20, 300, 1, siRightW)
-    do
-        local scaleScope = CurrentScope()
-        local pendingApply, releaseScheduled
-        local function CombatLocked()
-            if type(M.IsConfigCombatLocked) == "function" then return M.IsConfigCombatLocked() == true end
-            return (_G.InCombatLockdown and _G.InCombatLockdown()) or _G.MSUF_InCombat == true
-        end
-        local function RefreshPreviewOnly()
-            if CombatLocked() then return false end
-            if type(RefreshGFPreview) == "function" then
-                RefreshGFPreview(scaleScope, { spellOnly = true })
-            end
-            return true
-        end
-        local function FlushRuntime()
-            if not pendingApply then return end
-            if CombatLocked() then
-                releaseScheduled = nil
-                return false
-            end
-            pendingApply = nil
-            releaseScheduled = nil
-            QueueSpellIndicators(scaleScope, "auras")
-            return true
-        end
-        local function ScheduleRelease()
-            if not pendingApply or releaseScheduled then return end
-            if CombatLocked() then return end
-            releaseScheduled = true
-            if C_Timer and type(C_Timer.After) == "function" then
-                C_Timer.After(0, FlushRuntime)
-            else
-                FlushRuntime()
-            end
-        end
-        M.BindNumberWidget(ctx, spellIconScale,
-            function() return tonumber(SpellIndicators(scaleScope).iconScale) or 100 end,
-            function(value)
-                value = floor((tonumber(value) or 100) + 0.5)
-                local cfg = SpellIndicators(scaleScope)
-                if cfg.iconScale == value then return end
-                cfg.iconScale = value
-                pendingApply = true
-                if spellIconScale._msuf2SliderActive == true or releaseScheduled then
-                    RefreshPreviewOnly()
-                else
-                    FlushRuntime()
-                end
-            end,
-            100, StepMeta(ctx, "spell.icon_scale", 1))
-        spellIconScale:HookScript("OnMouseUp", ScheduleRelease)
-        spellIconScale:HookScript("OnHide", FlushRuntime)
-        spellIconScale:HookScript("OnShow", FlushRuntime)
-    end
-    W.MoveWidget(spellIconScale, spells, siRightX, -1028, siRightW, "LEFT")
-    local appearanceHint = W.Text(spells,
-        Tr("Cooldowns, stacks, and tooltips use the Buff style for this frame."),
-        siRightX, -1082, siRightW, T.colors.muted)
-    if appearanceHint.SetWordWrap then appearanceHint:SetWordWrap(true) end
-    local openBuffAppearance = T.Button(spells, Tr("Edit Buff Style"), siRightW, 28)
-    openBuffAppearance._msuf2GroupFrameGateAlwaysEnabled = true
-    openBuffAppearance:SetPoint("TOPLEFT", spells, "TOPLEFT", siRightX, -1146)
-    if T.CenterButtonLabel then T.CenterButtonLabel(openBuffAppearance) end
-    openBuffAppearance:SetScript("OnClick", function()
-        local scope = CurrentScope() == "party" and "party" or "raid"
-        M.SetMenuStateValue("auraScope", scope)
-        M.SetMenuStateValue("auraStyleGFScope", scope)
-        M.SetMenuStateValue("auraStyleGFLane", "buff")
-        M.SetMenuStateValue("auraStyleContainer", "buff")
-        if M.SelectPage then M.SelectPage("auras3_styling") end
-    end)
-    RegisterControl(openBuffAppearance, ctx, "spell.buff_appearance.open", "Edit Buff Style", "button", "navigation", { navigationKey = "auras3_styling" })
-    if M.AddTooltip then
-        M.AddTooltip(openBuffAppearance, "Edit Buff Style",
-            "Opens Buff styling for this frame. Spell choice, placement, size, layer, and frame highlight stay unique to this indicator.",
-            { hook = true, titleAsLine = true })
-    end
     local spellGridLayoutRows
     local function RefreshSpellGridLayout(rows)
         rows = max(3, tonumber(rows) or 3)
@@ -1925,12 +2045,10 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         W.MoveWidget(placedType, spells, siLeftX, -492 - extra, siLeftW, "LEFT")
         W.MoveWidget(placedAnchor, spells, siLeftX, -546 - extra, siLeftW, "LEFT")
         W.MoveWidget(placedSize, spells, siLeftX, -600 - extra, siLeftW, "LEFT")
-        W.MoveWidget(placedX, spells, siLeftX, -654 - extra, siLeftW, "LEFT")
-        W.MoveWidget(placedY, spells, siLeftX, -708 - extra, siLeftW, "LEFT")
-        W.MoveWidget(placedBarWidth, spells, siLeftX, -762 - extra, siLeftW, "LEFT")
-        W.MoveWidget(placedGrowth, spells, siLeftX, -816 - extra, siLeftW, "LEFT")
-        W.MoveWidget(placedIconEffect, spells, siLeftX, -870 - extra, siLeftW, "LEFT")
-        local contentHeight = max(1208, 984 + extra)
+        W.MoveWidget(placedBarWidth, spells, siLeftX, -654 - extra, siLeftW, "LEFT")
+        W.MoveWidget(placedGrowth, spells, siLeftX, -708 - extra, siLeftW, "LEFT")
+        W.MoveWidget(placedIconEffect, spells, siLeftX, -762 - extra, siLeftW, "LEFT")
+        local contentHeight = max(956, 936 + extra)
         local entry = spells._msuf2CollapsibleEntry
         if entry and entry.contentHeight ~= contentHeight then
             entry.contentHeight = contentHeight
@@ -1978,14 +2096,12 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         SetManyEnabled(hasSpell, spellEnabled, onlyMine, placedType)
         SetOptionEnabled(autoBlacklist, hasSpell and not externalBlacklistManaged)
         SetOptionEnabled(customSpellIDs, customSpell)
-        SetManyEnabled(placedEnabled, placedAnchor, placedSize, placedX, placedY, placedGrowth)
+        SetManyEnabled(placedEnabled, placedAnchor, placedSize, placedGrowth)
         SetOptionEnabled(placedBarWidth, barRelevant)
         SetOptionEnabled(placedIconEffect, cdRelevant)
         SetOptionEnabled(frameType, hasSpell)
         SetManyEnabled(hasFrame, frameTiming, frameColor, framePriority, frameAlpha, frameThickness, frameLayer)
         SetOptionEnabled(frameExpireThreshold, expiringFrame)
-        SetOptionEnabled(spellIconZoom, indicatorsOn)
-        SetOptionEnabled(spellIconScale, indicatorsOn)
         local badges = {
             OnOffBadge(indicatorsOn, "Enabled", "Disabled"),
         }
@@ -1995,6 +2111,7 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         SetSectionBadgesAndStatus(spells, badges)
     end)
     TrackSectionRefresh(ctx, spells, RefreshSpellIndicatorState)
+    GP.BuildSpellIndicatorStyleSection(ctx, b)
 end
 
 GP.BuildSpellIndicatorsSection = BuildSpellIndicatorsSection
@@ -2193,4 +2310,4 @@ local function BuildGFIndicators(ctx)
     BuildCornerIndicatorsSection(ctx, b, RefreshPage)
     FinalizeScopePage(ctx, b)
 end
-M.RegisterPage("gf_indicators", { title = "MSUF Group Status & Indicators", build = BuildGFIndicators, version = 19 })
+M.RegisterPage("gf_indicators", { title = "MSUF Group Status & Indicators", build = BuildGFIndicators, version = 20 })

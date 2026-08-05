@@ -206,7 +206,7 @@ local MSUF_DEFAULTS_AURA_STRING_KEYS = {
     "buffRowWrap", "debuffRowWrap", "layoutMode", "buffDebuffAnchor",
     "stackCountAnchor", "cooldownTextAnchor", "buffAnchor", "debuffAnchor",
     "buffStrata", "debuffStrata",
-    "debuffTypeBorderMode", "dispelBorderMode", "pandemicMode",
+    "debuffTypeBorderMode", "dispelBorderMode", "pandemicMode", "buffStealableStyle",
 }
 local MSUF_DEFAULTS_AURA_GROWTH_PARTS = {
     RIGHTDOWN = { "RIGHT", "DOWN" }, LEFTDOWN = { "LEFT", "DOWN" },
@@ -3414,6 +3414,8 @@ end
                 showCooldownText = true,
                 showCooldownSwipe = true,
                 cooldownSwipeReverse = false,
+                buffShowStealable = false,
+                buffStealableStyle = "BORDER_ICON",
                 buffSortMethod = "DEFAULT",
                 buffSortReverse = false,
                 debuffSortMethod = "DEFAULT",
@@ -3652,6 +3654,7 @@ filters = {
         if type(a3.customDisplays.serial) ~= "number" then a3.customDisplays.serial = 0 end
         if type(a3.customContainers) ~= "table" then a3.customContainers = {} end
         if type(a3.customContainers.perUnit) ~= "table" then a3.customContainers.perUnit = {} end
+        if type(a3.shared) ~= "table" then a3.shared = {} end
         if type(a3.bossHealAuras) ~= "table" then a3.bossHealAuras = {} end
         if a3.bossHealAuras.highlightOwn == nil then a3.bossHealAuras.highlightOwn = false end
         if a3.bossHealAuras.hideOthers == nil then a3.bossHealAuras.hideOthers = false end

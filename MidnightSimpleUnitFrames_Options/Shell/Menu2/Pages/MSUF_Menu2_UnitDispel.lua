@@ -7,9 +7,8 @@ MSUF.MSUF2 = M
 -- Persistence and runtime ownership stay unchanged: a frame with a Bars
 -- override edits its unit table, while a frame following Shared edits general.
 local W = M.Widgets or {}
-local T = M.Theme or {}
 local UP = M.UnitPage or {}
-local min, max = math.min, math.max
+local min, max, floor, ceil = math.min, math.max, math.floor, math.ceil
 local VT = M.ValueTextList
 local SetControlEnabled = UP.SetControlEnabled or W.SetControlEnabled
 local SetControlsEnabled = W.SetControlsEnabled
@@ -114,6 +113,32 @@ local function SetValue(unit, key, value, reason)
     return true
 end
 
+local function SymbolOffset(value)
+    value = tonumber(value) or 0
+    value = value >= 0 and floor(value + 0.5) or ceil(value - 0.5)
+    return min(128, max(-128, value))
+end
+
+function UP.ReadDispelSymbolOffsets(unit)
+    if not SUPPORTED_UNITS[unit] then return nil end
+    return SymbolOffset(ReadValue(unit, "unitDispelSymbolX", 0)),
+        SymbolOffset(ReadValue(unit, "unitDispelSymbolY", 0)),
+        "unitDispelSymbolX", "unitDispelSymbolY"
+end
+
+function UP.WriteDispelSymbolOffsets(unit, x, y, reason, applyRuntime)
+    if not SUPPORTED_UNITS[unit] then return false end
+    local changed = StoreValue(unit, "unitDispelSymbolX", SymbolOffset(x))
+    changed = StoreValue(unit, "unitDispelSymbolY", SymbolOffset(y)) or changed
+    if changed and applyRuntime ~= false then RequestRuntime(unit, reason) end
+    return true
+end
+
+function UP.ApplyDispelSymbolOffsets(unit, reason)
+    if not SUPPORTED_UNITS[unit] then return false end
+    return RequestRuntime(unit, reason)
+end
+
 local function UnitAuraEnabled(unit)
     local a3 = MSUF and MSUF.MSUF_Auras3
     local model = a3 and a3.MenuModel
@@ -121,22 +146,9 @@ local function UnitAuraEnabled(unit)
     return model.UnitEnabled(unit) == true
 end
 
-local function SourceHint(unit)
-    local source = UsesUnitBarsOverride(unit)
-        and M.Tr("Settings source: This frame's custom Bars settings.")
-        or M.Tr("Settings source: Shared Bars. Changes here update the shared default.")
-    if not UnitAuraEnabled(unit) then source = source .. "\n" .. M.Tr(UNITFRAME_DISPEL_AURA_WARNING) end
-    return source
-end
-
-local function RefreshSourceHint(hint, unit)
-    if not hint then return end
-    local auraEnabled = UnitAuraEnabled(unit)
-    hint:SetText(SourceHint(unit))
-    if hint.SetTextColor then
-        local color = auraEnabled and (T.colors and T.colors.muted) or UNITFRAME_DISPEL_AURA_WARNING_COLOR
-        if color then hint:SetTextColor(color[1], color[2], color[3], color[4] or 1) end
-    end
+local function RefreshAuraWarning(warning, unit)
+    if not warning then return end
+    warning:SetShown(not UnitAuraEnabled(unit))
 end
 
 local function Meta(ctx, unit, path, key, classification)
@@ -149,21 +161,16 @@ local function Meta(ctx, unit, path, key, classification)
     return meta
 end
 
-local function OverlaySectionHeight(ctx)
-    local width = min(900, max(320, (((ctx and ctx.width) or 720) - 40)))
-    return width >= 760 and 436 or 546
+local function OverlaySectionHeight()
+    return 390
 end
 
 local function BuildUnitDispelOverlaySection(ctx, builder, unit)
     local sectionHeight = OverlaySectionHeight(ctx)
-    local wide = sectionHeight == 436
     local section = builder:CollapsibleSection("unit_dispel_overlay", "Dispel Overlay", sectionHeight, false)
     local sectionW = section._msuf2Width or ctx.width or 720
     local cardW = min(900, max(320, sectionW - 40))
-    wide = cardW >= 760
-    local card = W.ControlCard(section, "Behavior & Style",
-        "Tints unit-frame health bars when a configured debuff condition is active.",
-        20, -38, cardW, wide and 372 or 482)
+    local card = W.ControlCard(section, nil, nil, 20, -38, cardW, 326)
     local Sync = M.RefreshProxy()
 
     local function BindDropdown(label, values, key, defaultValue, normalizer, reason, y)
@@ -203,7 +210,7 @@ local function BuildUnitDispelOverlaySection(ctx, builder, unit)
         return slider
     end
 
-    local master = W.SwitchAt(card, "Dispel Overlay", cardW - 62, -24, 0, "HIDDEN")
+    local master = W.SwitchAt(card, "Dispel Overlay", 16, -16, 0, "HIDDEN")
     M.BindBoolWidget(ctx, master,
         function() return ReadValue(unit, "unitDispelOverlayEnabled", false) == true end,
         function(value)
@@ -213,14 +220,14 @@ local function BuildUnitDispelOverlaySection(ctx, builder, unit)
         Meta(ctx, unit, "overlay.enabled", "unitDispelOverlayEnabled"))
     local controls = {
         BindDropdown("Overlay detects", UNIT_DISPEL_TRIGGERS, "unitDispelOverlayTrigger", "BORDER",
-            NormalizeUnitDispelOverlayTrigger, "MSUF2_UF_DISPEL_OVERLAY_TRIGGER", -74),
+            NormalizeUnitDispelOverlayTrigger, "MSUF2_UF_DISPEL_OVERLAY_TRIGGER", -54),
         BindDropdown("Overlay style", UNIT_DISPEL_STYLES, "unitDispelOverlayStyle", "FULL", nil,
-            "MSUF2_UF_DISPEL_OVERLAY_STYLE", -126),
+            "MSUF2_UF_DISPEL_OVERLAY_STYLE", -106),
         BindToggle("Show on current health only", "unitDispelOverlayOnHealth", true,
-            "MSUF2_UF_DISPEL_OVERLAY_HEALTH", -174),
-        BindSlider("Overlay opacity", "unitDispelOverlayAlpha", 0.35, "MSUF2_UF_DISPEL_OVERLAY_ALPHA", -218),
+            "MSUF2_UF_DISPEL_OVERLAY_HEALTH", -154),
+        BindSlider("Overlay opacity", "unitDispelOverlayAlpha", 0.35, "MSUF2_UF_DISPEL_OVERLAY_ALPHA", -198),
     }
-    local preview = W.ToggleAt(card, "Preview overlay", 16, -266, cardW - 32)
+    local preview = W.ToggleAt(card, "Runtime Preview: live UnitFrame", 16, -246, cardW - 32)
     M.BindBoolWidget(ctx, preview,
         function() return _G.MSUF_DispelOverlayPreviewMode == true and _G.MSUF_DispelOverlayPreviewScope == unit end,
         function(value)
@@ -238,13 +245,14 @@ local function BuildUnitDispelOverlaySection(ctx, builder, unit)
         end
     end)
     if M.AddTooltip then
-        M.AddTooltip(preview, "Preview overlay",
-            "Paints a stand-in tint so the overlay can be judged without a real dispellable debuff. Turns itself off when this page closes.",
+        M.AddTooltip(preview, "Runtime Preview",
+            "Paints a stand-in tint on the live UnitFrame so the overlay can be judged without a real dispellable debuff. Turns itself off when this page closes.",
             { hook = true })
     end
     controls[#controls + 1] = preview
-    local hint = W.Text(card, SourceHint(unit), 16, wide and -328 or -428, cardW - 32, T.colors and T.colors.muted)
-    if hint.SetWordWrap then hint:SetWordWrap(true) end
+    local warning = W.Text(card, UNITFRAME_DISPEL_AURA_WARNING, 16, -286, cardW - 32,
+        UNITFRAME_DISPEL_AURA_WARNING_COLOR)
+    if warning.SetWordWrap then warning:SetWordWrap(true) end
 
     M.TrackRefresh(ctx, Sync(function()
         local enabled = ReadValue(unit, "unitDispelOverlayEnabled", false) == true
@@ -256,7 +264,7 @@ local function BuildUnitDispelOverlaySection(ctx, builder, unit)
         end
         SetControlEnabled(master, true)
         SetControlsEnabled(controls, enabled)
-        RefreshSourceHint(hint, unit)
+        RefreshAuraWarning(warning, unit)
     end))
 end
 
@@ -269,10 +277,7 @@ local function EnsureSymbolMoveHandler()
     setter(function(scope, x, y)
         scope = tostring(scope or "")
         if not SUPPORTED_UNITS[scope] then return end
-        local changed = StoreValue(scope, "unitDispelSymbolX", tonumber(x) or 0)
-        changed = StoreValue(scope, "unitDispelSymbolY", tonumber(y) or 0) or changed
-        if changed then RequestRuntime(scope, "MSUF2_UF_DISPEL_SYMBOL_DRAG") end
-        if type(M.RefreshVisibleSliders) == "function" then M.RefreshVisibleSliders("UNIT_DISPEL_SYMBOL_PREVIEW_DRAG") end
+        UP.WriteDispelSymbolOffsets(scope, x, y, "MSUF2_UF_DISPEL_SYMBOL_DRAG")
         local sync = symbolSyncByUnit[scope]
         if type(sync) == "function" then sync() end
     end)
@@ -281,25 +286,24 @@ end
 
 local function SymbolSectionHeight(ctx)
     local width = min(900, max(320, (((ctx and ctx.width) or 720) - 40)))
-    return width >= 760 and 554 or 814
+    return width >= 760 and 432 or 710
 end
 
 local function BuildUnitDispelSymbolSection(ctx, builder, unit)
     local sectionHeight = SymbolSectionHeight(ctx)
-    local wide = sectionHeight == 554
     local section = builder:CollapsibleSection("unit_dispel_symbol", "Dispel Symbol", sectionHeight, false)
     local sectionW = section._msuf2Width or ctx.width or 720
     local cardW = min(900, max(320, sectionW - 40))
-    wide = cardW >= 760
-    local card = W.ControlCard(section, "Symbol & Placement",
-        "Shows a symbol naming the dispel type of an active debuff.",
-        20, -38, cardW, wide and 490 or 730)
+    local wide = cardW >= 760
+    local card = W.ControlCard(section, nil, nil, 20, -38, cardW, wide and 368 or 646)
     local Sync = M.RefreshProxy()
     symbolSyncByUnit[unit] = Sync
     EnsureSymbolMoveHandler()
-    local fieldW = min(280, cardW - 32)
-    local sliderW = min(360, cardW - 72)
-    local rightX = wide and (cardW - sliderW - 16) or 16
+    local leftX, columnGap = 16, 24
+    local controlW = wide and floor((cardW - 32 - columnGap) * 0.5) or min(360, cardW - 32)
+    local rightX = wide and (leftX + controlW + columnGap) or leftX
+    local previewW = wide and min(380, cardW - 32) or controlW
+    local previewX = wide and floor((cardW - previewW) * 0.5) or leftX
 
     local function BindDropdown(label, values, key, defaultValue, reason, x, y)
         local dropdown = W.Dropdown(card, label, values, 280)
@@ -310,7 +314,7 @@ local function BuildUnitDispelSymbolSection(ctx, builder, unit)
                 Sync()
             end,
             Meta(ctx, unit, "symbol." .. key, key))
-        W.MoveWidget(dropdown, card, x, y, fieldW, "LEFT")
+        W.MoveWidget(dropdown, card, x, y, controlW, "LEFT")
         return dropdown
     end
 
@@ -320,11 +324,11 @@ local function BuildUnitDispelSymbolSection(ctx, builder, unit)
             function() return tonumber(ReadValue(unit, key, defaultValue)) or defaultValue end,
             function(value) SetValue(unit, key, tonumber(value) or defaultValue, reason) end,
             defaultValue, Meta(ctx, unit, "symbol." .. key, key))
-        W.MoveWidget(slider, card, x, y, sliderW, "CENTER")
+        W.MoveWidget(slider, card, x, y, controlW, "CENTER")
         return slider
     end
 
-    local master = W.SwitchAt(card, "Dispel Symbol", cardW - 62, -24, 0, "HIDDEN")
+    local master = W.SwitchAt(card, "Dispel Symbol", 16, -16, 0, "HIDDEN")
     M.BindBoolWidget(ctx, master,
         function() return ReadValue(unit, "unitDispelSymbolEnabled", false) == true end,
         function(value)
@@ -332,31 +336,8 @@ local function BuildUnitDispelSymbolSection(ctx, builder, unit)
             Sync()
         end,
         Meta(ctx, unit, "symbol.enabled", "unitDispelSymbolEnabled"))
-    local styleDrop = BindDropdown("Symbol set", UNIT_DISPEL_SYMBOL_STYLES, "unitDispelSymbolStyle",
-        "BLIZZARD", "MSUF2_UF_DISPEL_SYMBOL_STYLE", 16, -62)
-    local modeDrop = BindDropdown("Show", UNIT_DISPEL_SYMBOL_MODES, "unitDispelSymbolMode",
-        "ALL", "MSUF2_UF_DISPEL_SYMBOL_MODE", 16, -114)
-    local triggerDrop = BindDropdown("Symbol detects", UNIT_DISPEL_TRIGGERS, "unitDispelSymbolTrigger",
-        "BORDER", "MSUF2_UF_DISPEL_SYMBOL_TRIGGER", 16, -166)
-    local anchorDrop = BindDropdown("Symbol anchor", UNIT_DISPEL_SYMBOL_ANCHORS, "unitDispelSymbolAnchor",
-        "TOPRIGHT", "MSUF2_UF_DISPEL_SYMBOL_ANCHOR", 16, -218)
-    local sizeSlider = BindSlider("Symbol size", "unitDispelSymbolSize", 14, 4, 48, 1,
-        "MSUF2_UF_DISPEL_SYMBOL_SIZE", 16, -270)
-    local offsetXSlider = BindSlider("Offset X", "unitDispelSymbolX", 0, -128, 128, 1,
-        "MSUF2_UF_DISPEL_SYMBOL_X", 16, -318)
-    local offsetYSlider = BindSlider("Offset Y", "unitDispelSymbolY", 0, -128, 128, 1,
-        "MSUF2_UF_DISPEL_SYMBOL_Y", 16, -366)
-    local growthDrop = BindDropdown("Grow", UNIT_DISPEL_SYMBOL_GROWTH, "unitDispelSymbolGrowth",
-        "RIGHT", "MSUF2_UF_DISPEL_SYMBOL_GROWTH", rightX, wide and -218 or -414)
-    local spacingSlider = BindSlider("Symbol spacing", "unitDispelSymbolSpacing", 2, 0, 32, 1,
-        "MSUF2_UF_DISPEL_SYMBOL_SPACING", rightX, wide and -270 or -462)
-    local alphaSlider = BindSlider("Symbol opacity", "unitDispelSymbolAlpha", 1, 0.05, 1, 0.05,
-        "MSUF2_UF_DISPEL_SYMBOL_ALPHA", rightX, wide and -318 or -510)
-    local layerSlider = BindSlider("Effect Layer (0-30)", "unitDispelSymbolLayer", 8, 0, 30, 1,
-        "MSUF2_UF_DISPEL_SYMBOL_LAYER", rightX, wide and -366 or -558)
-    local strataDrop = BindDropdown("Symbol strata", UNIT_DISPEL_SYMBOL_STRATA, "unitDispelSymbolStrata",
-        "AUTO", "MSUF2_UF_DISPEL_SYMBOL_STRATA", rightX, wide and -414 or -606)
-    local preview = W.ToggleAt(card, "Preview symbol (drag to place)", rightX, wide and -62 or -654, sliderW)
+    local preview = W.ToggleAt(card, "Runtime Preview: live UnitFrame (drag)", previewX,
+        wide and -16 or -54, previewW)
     M.BindBoolWidget(ctx, preview,
         function() return _G.MSUF_DispelSymbolPreviewMode == true and _G.MSUF_DispelSymbolPreviewScope == unit end,
         function(value)
@@ -374,15 +355,36 @@ local function BuildUnitDispelSymbolSection(ctx, builder, unit)
         end
     end)
     if M.AddTooltip then
-        M.AddTooltip(preview, "Preview symbol",
-            "Shows stand-in symbols so placement can be judged without a real debuff, and lets you drag them into position. Turns itself off when this page closes.",
+        M.AddTooltip(preview, "Runtime Preview",
+            "Shows stand-in symbols on the live UnitFrame and lets you drag them into position without a real debuff. Turns itself off when this page closes.",
             { hook = true })
     end
-    local controls = { styleDrop, modeDrop, triggerDrop, anchorDrop, sizeSlider, offsetXSlider,
-        offsetYSlider, alphaSlider, layerSlider, strataDrop, preview }
+    local styleDrop = BindDropdown("Symbol set", UNIT_DISPEL_SYMBOL_STYLES, "unitDispelSymbolStyle",
+        "BLIZZARD", "MSUF2_UF_DISPEL_SYMBOL_STYLE", leftX, wide and -68 or -106)
+    local modeDrop = BindDropdown("Show", UNIT_DISPEL_SYMBOL_MODES, "unitDispelSymbolMode",
+        "ALL", "MSUF2_UF_DISPEL_SYMBOL_MODE", leftX, wide and -120 or -158)
+    local triggerDrop = BindDropdown("Symbol detects", UNIT_DISPEL_TRIGGERS, "unitDispelSymbolTrigger",
+        "BORDER", "MSUF2_UF_DISPEL_SYMBOL_TRIGGER", leftX, wide and -172 or -210)
+    local sizeSlider = BindSlider("Symbol size", "unitDispelSymbolSize", 14, 4, 48, 1,
+        "MSUF2_UF_DISPEL_SYMBOL_SIZE", leftX, wide and -224 or -262)
+    local alphaSlider = BindSlider("Symbol opacity", "unitDispelSymbolAlpha", 1, 0.05, 1, 0.05,
+        "MSUF2_UF_DISPEL_SYMBOL_ALPHA", leftX, wide and -272 or -310)
+    local anchorDrop = BindDropdown("Symbol anchor", UNIT_DISPEL_SYMBOL_ANCHORS, "unitDispelSymbolAnchor",
+        "TOPRIGHT", "MSUF2_UF_DISPEL_SYMBOL_ANCHOR", rightX, wide and -68 or -362)
+    local growthDrop = BindDropdown("Grow", UNIT_DISPEL_SYMBOL_GROWTH, "unitDispelSymbolGrowth",
+        "RIGHT", "MSUF2_UF_DISPEL_SYMBOL_GROWTH", rightX, wide and -120 or -414)
+    local spacingSlider = BindSlider("Symbol spacing", "unitDispelSymbolSpacing", 2, 0, 32, 1,
+        "MSUF2_UF_DISPEL_SYMBOL_SPACING", rightX, wide and -172 or -462)
+    local layerSlider = BindSlider("Effect Layer (0-30)", "unitDispelSymbolLayer", 8, 0, 30, 1,
+        "MSUF2_UF_DISPEL_SYMBOL_LAYER", rightX, wide and -224 or -510)
+    local strataDrop = BindDropdown("Symbol strata", UNIT_DISPEL_SYMBOL_STRATA, "unitDispelSymbolStrata",
+        "AUTO", "MSUF2_UF_DISPEL_SYMBOL_STRATA", rightX, wide and -272 or -558)
+    local controls = { styleDrop, modeDrop, triggerDrop, anchorDrop, sizeSlider,
+        alphaSlider, layerSlider, strataDrop, preview }
     local allModeControls = { growthDrop, spacingSlider }
-    local hint = W.Text(card, SourceHint(unit), 16, wide and -462 or -702, cardW - 32, T.colors and T.colors.muted)
-    if hint.SetWordWrap then hint:SetWordWrap(true) end
+    local warning = W.Text(card, UNITFRAME_DISPEL_AURA_WARNING, 16, wide and -328 or -606, cardW - 32,
+        UNITFRAME_DISPEL_AURA_WARNING_COLOR)
+    if warning.SetWordWrap then warning:SetWordWrap(true) end
 
     M.TrackRefresh(ctx, Sync(function()
         local enabled = ReadValue(unit, "unitDispelSymbolEnabled", false) == true
@@ -395,7 +397,7 @@ local function BuildUnitDispelSymbolSection(ctx, builder, unit)
         SetControlEnabled(master, true)
         SetControlsEnabled(controls, enabled)
         SetControlsEnabled(allModeControls, enabled and ReadValue(unit, "unitDispelSymbolMode", "ALL") == "ALL")
-        RefreshSourceHint(hint, unit)
+        RefreshAuraWarning(warning, unit)
     end))
 end
 
