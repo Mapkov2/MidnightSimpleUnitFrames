@@ -515,13 +515,13 @@ local ACTIONABLE_LEADING_PREFIXES = {
     -- "now disable Focus Show Power" names its frame and control exactly, yet
     -- the leading word alone was enough to drop it to "I'm not confident enough
     -- to guess what you meant" while the identical sentence without it applied.
+    --
+    -- Conjunctions ("and", "then", "so", "also") are deliberately NOT here:
+    -- compound parsing splits on exactly those words, and listing them as
+    -- strippable prefixes blew the cold compound preflight budget tenfold.
     "now",
     "ok",
     "okay",
-    "so",
-    "also",
-    "and",
-    "then",
     "just",
     "quickly",
     "go ahead and",
