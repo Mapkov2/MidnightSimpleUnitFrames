@@ -23,6 +23,7 @@ power=gf_layout
 portrait=gf_layout
 text=gf_layout
 dispel=gf_bars
+dispelSymbol=gf_bars
 dstripe=gf_bars
 range=gf_layout
 buffs=gf_auras
