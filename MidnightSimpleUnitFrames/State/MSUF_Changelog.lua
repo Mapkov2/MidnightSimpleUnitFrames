@@ -8,10 +8,45 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-RC9",
-    previousVersion = "6.0-RC8",
-    rangeLabel = "6.0-RC8 -> 6.0-RC9",
+    currentVersion = "6.0-RC10",
+    previousVersion = "6.0-rc9",
+    rangeLabel = "6.0-rc9 -> 6.0-RC10",
     entries = {
+        {
+            version = "6.0-RC10",
+            date = "2026-08-06",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Reworked Menu2 preview interaction around the rendered result. The preview background can now pan directly, selected position controls stand out more clearly, disabled elements route to their owning settings, and all selection handles stay centered on the pixels they actually represent.",
+                        "Made Group target and focus indicators safe for WoW 12.1 restricted combat data. Readable identities continue to use the existing O(1) GUID buckets, while secret comparison results are forwarded directly to Blizzard's restricted-safe region alpha API without scanning the group or branching on protected values.",
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Removed the Navigation Hover Size option and its row magnification behavior. Navigation entries now keep a stable width and layout while hovered, and the retired setting has been removed from defaults, profile repair, locales, search and Assistant metadata.",
+                        "Renamed the Unit and Group transparency base state from In Combat to General so the editor matches its actual always-on ownership; the separate Out of Combat state remains unchanged.",
+                        "Selecting a visible castbar icon border style now restores a minimal border thickness when the independent thickness value was still disabled.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Fixed Group target/focus borders under restricted combat data, reconnects and target changes. Rounded and square indicators now share the same secret-safe visibility contract, retain readable frame identity through restrictions and update only the affected GUID bucket or hinted frame.",
+                        "Fixed Unit and Group preview text, text handles and composite element handles drifting at non-default frame scale, Fit zoom or after panning. Text now uses the same font-size-then-frame-scale order as live frames, scaled rectangles are converted into canvas space once, and pan-following handles move without a full repaint.",
+                        "Fixed additional preview interaction issues: minimum-size and remaining handles are centered, Dispel Symbol bounds use the rendered art, castbar child handles win over their container, direct Aura navigation stays expanded, and non-Player previews no longer expose Class Resource controls.",
+                        "Fixed full Unit previews inheriting an unintended first-use Fit scale instead of opening at 1:1, while later user-selected zoom and pan remain authoritative.",
+                        "Fixed the Color Painter hiding disabled castbars or empty Aura lanes and reusing an unrelated camera state. Castbar and Aura color views now start fitted, remain inspectable and remember their own zoom and pan.",
+                        "Removed temporary table allocations from live castbar interrupt feedback while preserving the public options-table compatibility path.",
+                        "Fixed Assistant routing added around RC9 controls: Group scope words and conversational lead-ins no longer block exact settings, Pandemic details no longer mutate unrelated borders, contracted questions remain read-only, and explicit activate/deactivate commands keep the requested polarity.",
+                        "Fixed Assistant Copy To handling for independent Aura Options, Aura Style and Texture Layer categories so style-only requests no longer fall back to broader content or default copies.",
+                        "Fixed Assistant catalog-only controls, percentage-bearing labels and ambiguous commands with supplied values. Exact catalog controls now get their turn before generic guidance, % survives rendered labels, and a numeric follow-up can complete the selected mutation without retyping the request.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-RC9",
             date = "2026-08-05",
@@ -119,27 +154,6 @@ local data = {
                         "Fixed Menu2 edge snapping after interrupted or immediately repeated drags and resizes. Pending layout animation now settles first, mouse-release fallback finishes the real drag, and rejected content gestures cannot trigger an invisible snap.",
                         "Fixed configured Power Bar colors falling back to Blizzard defaults for NPC/unit tokens that expose only a numeric PowerType. MSUF now resolves the matching Mana, Rage, Focus, Energy, Runic Power, Lunar Power, Maelstrom, Insanity, Fury, Pain or Essence token first.",
                         "Fixed Assistant exact boolean commands, inverted Hide/Show controls, Blizzard-frame troubleshooting, profile and Aura page guidance, utility-page navigation, recovery help and problem-report precedence. Generated Blizzard-frame settings now use their actual player-facing menu labels.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-RC6",
-            date = "2026-08-03",
-            sections = {
-                {
-                    title = "Fixes",
-                    bullets = {
-                        "Fixed non-Midnight menu accents falling back to Midnight blue while hovering navigation entries. Hover and active states now follow the selected class, preset or custom accent with a restrained contrast between them, while the authored Midnight theme remains unchanged.",
-                        "Fixed custom surface tints being applied inconsistently across the Dashboard, collapsible unit and group sections, and Aura preview tabs. These controls now resolve the live accent tokens after SavedVariables load instead of retaining stale blue values.",
-                        "Fixed newly created profiles cloning the currently active profile. A new profile now starts from MSUF's factory defaults and fails safely with a clear message if those defaults are unavailable.",
-                        "Fixed the compact Elite / Rare icon preview showing two identical skulls. It now matches the live frame and main unit preview with distinct silver and gold classification art, while a selected custom icon remains authoritative.",
-                        "Fixed Assistant menu routing for dynamic status colors, castbar text colors, Custom Aura containers, External Defensive layout, Ironfur options and compound color controls. Assistant results now open the correct owning editor without exposing the retired External Defensive Auto List setting.",
-                        "Fixed Assistant treating numbers or polarity words embedded in an exact control name as the requested value. Bare requests such as changing Party Scale 1-10 Players or Focus Target Hide in Group now ask for a value instead of silently clamping or toggling the setting.",
-                        "Fixed Assistant command precedence for Blizzard frame visibility, slot-aware HP / Power text modes and scoped Blizzard Raid Manager controls, preventing broader visibility or frame settings from consuming those requests.",
-                        "Added a Player text outline selector to the detached Player Power section, with the expanded layout and Assistant metadata needed to keep the shared Player font outline route accessible.",
-                        "Fixed detached Player Power outline ownership: Class Resources now controls the outline consistently for Bar, Round, Crystal and Orb shapes in live frames and both previews.",
-                        "Fixed legacy Target of Target and Focus Target profile aliases surviving beside their canonical settings. Imports, resets, menu edits and Assistant writes now migrate the old keys once and retain a single canonical owner.",
                     },
                 },
             },

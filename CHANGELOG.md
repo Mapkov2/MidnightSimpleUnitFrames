@@ -1,5 +1,30 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-RC10 - 2026-08-06
+
+### Highlights
+
+- Reworked Menu2 preview interaction around the rendered result. The preview background can now pan directly, selected position controls stand out more clearly, disabled elements route to their owning settings, and all selection handles stay centered on the pixels they actually represent.
+- Made Group target and focus indicators safe for WoW 12.1 restricted combat data. Readable identities continue to use the existing O(1) GUID buckets, while secret comparison results are forwarded directly to Blizzard's restricted-safe region alpha API without scanning the group or branching on protected values.
+
+### Changes
+
+- Removed the Navigation Hover Size option and its row magnification behavior. Navigation entries now keep a stable width and layout while hovered, and the retired setting has been removed from defaults, profile repair, locales, search and Assistant metadata.
+- Renamed the Unit and Group transparency base state from `In Combat` to `General` so the editor matches its actual always-on ownership; the separate Out of Combat state remains unchanged.
+- Selecting a visible castbar icon border style now restores a minimal border thickness when the independent thickness value was still disabled.
+
+### Fixes & Performance
+
+- Fixed Group target/focus borders under restricted combat data, reconnects and target changes. Rounded and square indicators now share the same secret-safe visibility contract, retain readable frame identity through restrictions and update only the affected GUID bucket or hinted frame.
+- Fixed Unit and Group preview text, text handles and composite element handles drifting at non-default frame scale, Fit zoom or after panning. Text now uses the same font-size-then-frame-scale order as live frames, scaled rectangles are converted into canvas space once, and pan-following handles move without a full repaint.
+- Fixed additional preview interaction issues: minimum-size and remaining handles are centered, Dispel Symbol bounds use the rendered art, castbar child handles win over their container, direct Aura navigation stays expanded, and non-Player previews no longer expose Class Resource controls.
+- Fixed full Unit previews inheriting an unintended first-use Fit scale instead of opening at 1:1, while later user-selected zoom and pan remain authoritative.
+- Fixed the Color Painter hiding disabled castbars or empty Aura lanes and reusing an unrelated camera state. Castbar and Aura color views now start fitted, remain inspectable and remember their own zoom and pan.
+- Removed temporary table allocations from live castbar interrupt feedback while preserving the public options-table compatibility path.
+- Fixed Assistant routing added around RC9 controls: Group scope words and conversational lead-ins no longer block exact settings, Pandemic details no longer mutate unrelated borders, contracted questions remain read-only, and explicit activate/deactivate commands keep the requested polarity.
+- Fixed Assistant Copy To handling for independent Aura Options, Aura Style and Texture Layer categories so style-only requests no longer fall back to broader content or default copies.
+- Fixed Assistant catalog-only controls, percentage-bearing labels and ambiguous commands with supplied values. Exact catalog controls now get their turn before generic guidance, `%` survives rendered labels, and a numeric follow-up can complete the selected mutation without retyping the request.
+
 ## 6.0-RC9 - 2026-08-05
 
 ### Highlights
