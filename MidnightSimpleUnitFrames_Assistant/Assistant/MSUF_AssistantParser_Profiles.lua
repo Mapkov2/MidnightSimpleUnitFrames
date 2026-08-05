@@ -83,16 +83,36 @@ local function CopyScopeNegativeKeySet(text, specs)
     return keys
 end
 
+-- Blanks out one occurrence of a phrase so a later, broader spec cannot claim
+-- the same words. Padded on both sides to match HasPhrase's word semantics.
+local function RemovePhrase(text, phrase)
+    phrase = tostring(phrase or "")
+    if phrase == "" then return text end
+    local padded = " " .. tostring(text or "") .. " "
+    local needle = " " .. phrase .. " "
+    local at = padded:find(needle, 1, true)
+    if not at then return text end
+    padded = padded:sub(1, at) .. padded:sub(at + #needle)
+    return (padded:gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
 local function CopyScopeMatches(text, specs, negativeKeys)
     local matches = {}
     local seen = {}
+    -- Specs are ordered most specific first, and a matched alias consumes the
+    -- words it claimed. Without that, "copy target aura style to focus" matches
+    -- Aura Style AND the broader Aura Options wording inside the same three
+    -- words, so RC9's split collapses and a style copy overwrites content too.
+    local remaining = tostring(text or "")
     for i = 1, #(specs or {}) do
         local spec = specs[i]
         if spec.key and not seen[spec.key] and not (negativeKeys and negativeKeys[spec.key]) then
             for j = 1, #(spec.aliases or {}) do
-                if HasPhrase(text, spec.aliases[j]) then
+                local alias = spec.aliases[j]
+                if HasPhrase(remaining, alias) then
                     matches[#matches + 1] = spec.key
                     seen[spec.key] = true
+                    remaining = RemovePhrase(remaining, alias)
                     break
                 end
             end

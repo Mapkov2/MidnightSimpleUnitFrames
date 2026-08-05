@@ -511,6 +511,20 @@ local ACTIONABLE_LEADING_PREFIXES = {
     "hello",
     "assistant",
     "msuf assistant",
+    -- Discourse fillers that open a sentence without changing the request.
+    -- "now disable Focus Show Power" names its frame and control exactly, yet
+    -- the leading word alone was enough to drop it to "I'm not confident enough
+    -- to guess what you meant" while the identical sentence without it applied.
+    "now",
+    "ok",
+    "okay",
+    "so",
+    "also",
+    "and",
+    "then",
+    "just",
+    "quickly",
+    "go ahead and",
     "i want to",
     "i wanna",
     "i need to",

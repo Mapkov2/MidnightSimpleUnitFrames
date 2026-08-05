@@ -284,20 +284,29 @@ table.sort(CLASS_POWER_RESOURCE_TOKENS)
 local CLASS_POWER_COLOR_TOKEN = TokenEnum(CLASS_POWER_BASE_TOKENS)
 local CLASS_POWER_RESOURCE_TOKEN = TokenEnum(CLASS_POWER_RESOURCE_TOKENS)
 
+-- These mirror UF_COPY_CATEGORIES / GF_COPY_CATEGORIES in Menu2's Unit and
+-- Group pages. A key missing here is not a cosmetic omission: the contract
+-- rejects the whole action, so the category simply cannot be copied by the
+-- Assistant. auras/aurastyle/texlayer were absent for units and aurastyle for
+-- groups, which is why RC9's independent Aura Options vs Aura Style copy was
+-- unreachable.
 local UNIT_COPY_SCOPE = Map({
     basics = BOOL, text = BOOL, portrait = BOOL, power = BOOL, castbar = BOOL,
     status = BOOL, load = BOOL, transparency = BOOL, layout = BOOL,
+    auras = BOOL, aurastyle = BOOL, texlayer = BOOL,
 })
 local GROUP_COPY_SCOPE = Map({
     general = BOOL, health = BOOL, dispel = BOOL, text = BOOL, font = BOOL, range = BOOL,
-    indicators = BOOL, auras = BOOL, highlight = BOOL, dstripe = BOOL, features = BOOL,
+    indicators = BOOL, auras = BOOL, aurastyle = BOOL, highlight = BOOL, dstripe = BOOL, features = BOOL,
 })
 local COPY_CATEGORY = Enum({
     "basics", "text", "portrait", "power", "castbar", "status", "load", "transparency", "layout",
-    "general", "health", "dispel", "font", "range", "indicators", "auras", "highlight", "dstripe", "features",
+    "auras", "aurastyle", "texlayer",
+    "general", "health", "dispel", "font", "range", "indicators", "highlight", "dstripe", "features",
 })
 local UNIT_COPY_CATEGORY = Enum({
     "basics", "text", "portrait", "power", "castbar", "status", "load", "transparency", "layout",
+    "auras", "aurastyle", "texlayer",
 })
 local GROUP_COPY_CATEGORY = Enum({
     "general", "health", "dispel", "text", "font", "range", "indicators", "auras", "highlight", "dstripe", "features",
