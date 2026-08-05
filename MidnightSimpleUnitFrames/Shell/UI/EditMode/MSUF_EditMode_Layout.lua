@@ -1798,9 +1798,9 @@ local function OnUpdate(self, elapsed)
     end
 end
 
-function Ticker.BeginDrag(mover, key, cfg)
-    if not tickerActive or activeDrag or not mover or type(cfg) ~= "table" or not tickerFrame then return false end
-    local bar = cfg.getFrame and cfg.getFrame()
+local function BuildDrag(mover, key, cfg, start)
+    if not mover or type(cfg) ~= "table" then return nil end
+    local bar = type(start) == "table" and start.bar or (cfg.getFrame and cfg.getFrame())
     if not bar then return false end
     local conf = cfg.getConf and cfg.getConf()
     local isCastbar = (cfg.popupType == "castbar") or (type(key) == "string" and key:sub(1, 8) == "castbar_")
@@ -1931,11 +1931,63 @@ function Ticker.BeginDrag(mover, key, cfg)
         usesECV      = usesECV,
         ecvFrame     = ecvFrame,
     }
+    if type(start) == "table" then
+        local centerX = tonumber(start.centerX)
+        local centerY = tonumber(start.centerY)
+        if centerX then
+            drag.startCX = centerX
+            drag.startCenterPX = centerX * uiScale
+        end
+        if centerY then
+            drag.startCY = centerY
+            drag.startCenterPY = centerY * uiScale
+        end
+        drag.unitStartX = tonumber(start.offsetX) or drag.unitStartX
+        drag.unitStartY = tonumber(start.offsetY) or drag.unitStartY
+        drag.castbarStartX = tonumber(start.castbarX) or drag.castbarStartX
+        drag.castbarStartY = tonumber(start.castbarY) or drag.castbarStartY
+    end
+    return drag
+end
+
+function Ticker.BeginDrag(mover, key, cfg)
+    if not tickerActive or activeDrag or not tickerFrame then return false end
+    local drag = BuildDrag(mover, key, cfg)
+    if not drag then return false end
     activeDrag = drag
     SetActiveDragFlags(drag, true)
     tickerFrame:SetScript("OnUpdate", OnUpdate)
     tickerFrame:Show()
     return true
+end
+
+--- External Edit Mode shells own their own cursor loop. These three cold-path
+--- methods reuse the exact native MSUF anchor math without starting a second
+--- OnUpdate or exposing its private drag state.
+function Ticker.BeginExternalDrag(mover, key, cfg, start)
+    local drag = BuildDrag(mover, key, cfg, start)
+    if not drag then return nil end
+    SetActiveDragFlags(drag, true)
+    return drag
+end
+
+function Ticker.ApplyExternalDrag(drag)
+    if not drag or (IsConfigCombatLocked and IsConfigCombatLocked()) then return false end
+    local _, centerX, _, _, centerY = GetFrameEdgesUI(drag.mover)
+    if centerX == nil or centerY == nil then return false end
+    if drag.isCastbar then
+        return ApplyCastbarDragPosition(drag, centerX, centerY)
+    elseif drag.isGroupFrame then
+        return ApplyGroupDragPosition(drag, centerX, centerY)
+    end
+    return ApplyUnitDragPosition(drag, centerX, centerY, UIParent:GetEffectiveScale() or drag.uiScale or 1)
+end
+
+function Ticker.EndExternalDrag(drag, applyFinal)
+    if not drag then return false end
+    local moved = applyFinal ~= false and Ticker.ApplyExternalDrag(drag) or false
+    SetActiveDragFlags(drag, false)
+    return moved
 end
 
 function Ticker.EndDrag()

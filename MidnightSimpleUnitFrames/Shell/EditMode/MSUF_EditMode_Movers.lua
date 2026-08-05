@@ -194,6 +194,8 @@ local function UnitVisualBounds(frame)
     return bounds.l, bounds.r, bounds.t, bounds.b
 end
 
+Movers.GetUnitVisualBounds = UnitVisualBounds
+
 local function IsGroupMoverConfig(cfg)
     local popupType = cfg and cfg.popupType
     return popupType == "gf_party" or popupType == "gf_raid" or popupType == "gf_mythicraid"
@@ -937,6 +939,14 @@ local function MSUF_SetMSUFEditModeDirect(active, unitKey)
         and not _G.MSUF_EnsureOptionsLoaded("edit-mode")
     then
         return false
+    end
+    if active and type(_G.MSUF_TryOpenExternalEditMode) == "function"
+        and _G.MSUF_TryOpenExternalEditMode(unitKey) then
+        return true
+    end
+    if not active and type(_G.MSUF_TryCloseExternalEditMode) == "function"
+        and _G.MSUF_TryCloseExternalEditMode() then
+        return true
     end
     if active then EM2.State.Enter(unitKey)
     else EM2.State.Exit("direct") end

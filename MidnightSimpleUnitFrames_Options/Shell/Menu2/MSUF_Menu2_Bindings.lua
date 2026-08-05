@@ -1143,7 +1143,7 @@ local UNIT_AND_GROUP_RESET_KEYS = WL [[player target targettarget focustarget fo
 local MISC_GENERAL_KEYS = KSW [[
     menuLocale slashMenuSnapEnabled hideAdvancedMenu showWelcomeMessage versionCheckEnabled disableUnitInfoTooltips
     unitInfoTooltipStyle unitTooltipProvider unitTooltipAnchor unitTooltipMode unitTooltipModifier
-    showMinimapIcon showNavigationIcons playTargetSelectLostSounds
+    showMinimapIcon showNavigationIcons playTargetSelectLostSounds ellesmereEditModeIntegration
     highlightEnabled highlightStyle highlightThickness
 ]]
 local MISC_UNIT_KEYS = {}
@@ -1486,6 +1486,12 @@ local function ApplyAfterPageReset(pageKey, info)
     end
     if M.RequestGeneralApply then M.RequestGeneralApply(reason, { preview = true, alpha = true, castbar = true, frames = true }) end
     if info and info.kind == "gameplay" then M.CallIf(M.ApplyGameplay) end
+    if info and info.kind == "misc" then
+        local db = M.EnsureDB()
+        local general = db and db.general
+        CallGlobal("MSUF_EllesmereEditMode_SetEnabled",
+            not (type(general) == "table" and general.ellesmereEditModeIntegration == false))
+    end
     -- Page reset fanout is intentionally keyed by page kind so a unit reset does not rebuild
     -- secure group headers or Auras3 lanes unnecessarily.
     if info and (info.kind == "auras" or info.kind == "colors") then

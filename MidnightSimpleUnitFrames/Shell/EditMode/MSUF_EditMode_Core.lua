@@ -352,6 +352,15 @@ EM2.Registry = Registry
 local elements = {}
 local order    = {}
 local dirty    = true
+local registryListeners = {}
+
+local function NotifyRegistryListeners(action, key, cfg)
+    for _, listener in pairs(registryListeners) do
+        if type(listener) == "function" then
+            pcall(listener, action, key, cfg)
+        end
+    end
+end
 
 --- Register a moveable element.
 --- cfg fields:
@@ -370,12 +379,29 @@ function Registry.Register(cfg)
     if not cfg or not cfg.key then return end
     elements[cfg.key] = cfg
     dirty = true
+    NotifyRegistryListeners("register", cfg.key, cfg)
 end
 
 function Registry.Unregister(key)
     if not key then return end
+    local cfg = elements[key]
     elements[key] = nil
     dirty = true
+    NotifyRegistryListeners("unregister", key, cfg)
+end
+
+--- Cold-path listener used by optional Edit Mode shells whose elements can
+--- register after PLAYER_LOGIN (notably Group Frames). Runtime render paths do
+--- not touch this list.
+function Registry.RegisterChangeListener(owner, listener)
+    if owner == nil or type(listener) ~= "function" then return false end
+    registryListeners[owner] = listener
+    return true
+end
+
+function Registry.UnregisterChangeListener(owner)
+    if owner == nil then return end
+    registryListeners[owner] = nil
 end
 
 function Registry.Get(key)
@@ -433,21 +459,25 @@ local ENTER_DEFER_DELAY = 0.03
 --- Internal state
 local active      = false
 local unitKey     = nil
+local provider    = nil
+local externalPreviewSuspended = false
 local combatFrame = nil
 local combatEventMode = nil
 local pendingCombatExitApply = false
 local enterGeneration = 0
+local externalResumeGeneration = 0
 
 local IsConfigCombatLocked = Util.IsConfigCombatLocked
 local ShowConfigCombatLockMessage = Util.ShowConfigCombatLockMessage
 
 --- Legacy global sync (contract with 30+ external files)
 local function SyncLegacy()
-    PublishCompat("MSUF_UnitEditModeActive", active)
+    local previewActive = active and not externalPreviewSuspended
+    PublishCompat("MSUF_UnitEditModeActive", previewActive)
     PublishCompat("MSUF_CurrentEditUnitKey", unitKey)
     local st = _G.MSUF_EditState
     if st then
-        st.active  = active
+        st.active  = previewActive
         st.unitKey = unitKey
     end
 end
@@ -482,14 +512,15 @@ ExportPublic("MSUF_RegisterAnyEditModeListener", MSUF_RegisterAnyEditModeListene
 
 local lastNotified = nil
 local function NotifyListeners()
-    if lastNotified == active then return end
-    lastNotified = active
+    local previewActive = active and not externalPreviewSuspended
+    if lastNotified == previewActive then return end
+    lastNotified = previewActive
     local t = _G.MSUF_AnyEditModeListeners
     if not t then return end
     for i = 1, #t do
         local fn = t[i]
         if type(fn) == "function" then
-            fn(active)
+            fn(previewActive)
         end
     end
 end
@@ -507,6 +538,8 @@ local ApplySettingsForKeySafe = Util.ApplySettingsForKeySafe
 --- Public read-only accessors
 function State.IsActive()      return active end
 function State.GetUnitKey()    return unitKey end
+function State.GetProvider()   return provider end
+function State.IsExternalPreviewSuspended() return externalPreviewSuspended end
 
 function State.SetUnitKey(key)
     unitKey = key
@@ -664,20 +697,24 @@ local function SharedHistoryService()
 end
 
 --- ENTER Edit Mode
-function State.Enter(key)
+function State.Enter(key, opts)
     if IsConfigCombatLocked() then
         ShowConfigCombatLockMessage()
         return false
     end
 
+    local requestedProvider = type(opts) == "table" and opts.provider or "msuf"
+    if requestedProvider ~= "ellesmere" then requestedProvider = "msuf" end
+
     if active then
+        if provider ~= requestedProvider then return false end
         --- Already active: just switch unit
         if key then
             unitKey = key
             SyncLegacy()
             EM2.OnUnitChanged(key)
         end
-        return
+        return true
     end
     if not EnsureDB() then return end
 
@@ -693,14 +730,17 @@ function State.Enter(key)
 
     active  = true
     unitKey = key or "player"
+    provider = requestedProvider
+    externalPreviewSuspended = false
+    local ownsNativeShell = provider == "msuf"
     enterGeneration = enterGeneration + 1
     local enterToken = enterGeneration
     SyncLegacy()
-    PlayLogoIntro()
+    if ownsNativeShell then PlayLogoIntro() end
     if State.UpdateCombatListenerRegistration then State.UpdateCombatListenerRegistration() end
 
     --- Arrow key nudge
-    if _G.MSUF_EnableArrowKeyNudge then
+    if ownsNativeShell and _G.MSUF_EnableArrowKeyNudge then
         _G.MSUF_EnableArrowKeyNudge(true)
     end
 
@@ -708,17 +748,23 @@ function State.Enter(key)
     PublishCompat("MSUF_UnitPreviewActive", true)
 
     --- Start ticker (zero overhead when stopped)
-    if EM2.Ticker and EM2.Ticker.Start then EM2.Ticker.Start() end
+    if ownsNativeShell and EM2.Ticker and EM2.Ticker.Start then EM2.Ticker.Start() end
 
     --- Show grid + HUD + focus synchronously for instant visual feedback.
-    if EM2.Grid   and EM2.Grid.Show   then EM2.Grid.Show()   end
-    if EM2.HUD    and EM2.HUD.Show    then EM2.HUD.Show()    end
-    if EM2.Focus  and EM2.Focus.Show   then EM2.Focus.Show(unitKey) end
+    if ownsNativeShell then
+        if EM2.Grid   and EM2.Grid.Show   then EM2.Grid.Show()   end
+        if EM2.HUD    and EM2.HUD.Show    then EM2.HUD.Show()    end
+        if EM2.Focus  and EM2.Focus.Show  then EM2.Focus.Show(unitKey) end
+    end
+
+    local function EntryPreviewReady()
+        return enterGeneration == enterToken and active
+            and not externalPreviewSuspended and not IsConfigCombatLocked()
+    end
 
     --- Let the logo and shell paint before the heavier preview/listener work.
     C_Timer.After(ENTER_DEFER_DELAY, function()
-        if enterGeneration ~= enterToken or not (EM2.State and EM2.State.IsActive()) then return end
-        if IsConfigCombatLocked() then return end
+        if not EntryPreviewReady() then return end
 
         --- (Auras3 is refreshed inside MSUF_SyncAllUnitPreviews below; calling it
         --- here too just doubled the work on the entry frame and spiked the click.)
@@ -736,7 +782,7 @@ function State.Enter(key)
         end
 
         local function SyncUnitPreviewsAfterEnter()
-            if enterGeneration ~= enterToken or not (EM2.State and EM2.State.IsActive()) then return end
+            if not EntryPreviewReady() then return end
             if _G.MSUF_SyncAllUnitPreviewsAsync then
                 _G.MSUF_SyncAllUnitPreviewsAsync()
             elseif _G.MSUF_SyncAllUnitPreviews then
@@ -745,13 +791,13 @@ function State.Enter(key)
         end
 
         local function ReforceUnitPreviewsAfterEnter()
-            if enterGeneration ~= enterToken or not (EM2.State and EM2.State.IsActive()) then return end
+            if not EntryPreviewReady() then return end
             if _G.MSUF_EM2_ReforcePreviewFrames then
                 _G.MSUF_EM2_ReforcePreviewFrames()
             elseif _G.MSUF_SyncAllUnitPreviews then
                 _G.MSUF_SyncAllUnitPreviews()
             end
-            Util.SyncMovers()
+            if ownsNativeShell then Util.SyncMovers() end
         end
 
         --- Preview: defer the (heavy) preview sync to the next frame so the click
@@ -778,10 +824,11 @@ function State.Enter(key)
         --- that to the next frame so it doesn't pile onto the entry spike. Guard
         --- against an immediate exit before the timer fires.
         C_Timer.After(0, function()
-            if enterGeneration ~= enterToken or not (EM2.State and EM2.State.IsActive()) then return end
-            if EM2.Movers and EM2.Movers.Show then EM2.Movers.Show() end
+            if not EntryPreviewReady() then return end
+            if ownsNativeShell and EM2.Movers and EM2.Movers.Show then EM2.Movers.Show() end
         end)
     end)
+    return true
 end
 
 --- EXIT Edit Mode
@@ -814,6 +861,8 @@ function State.Exit(source)
     --- Flip state
     active  = false
     unitKey = nil
+    provider = nil
+    externalPreviewSuspended = false
     PublishCompat("MSUF_BossTestMode", false)
     PublishCompat("MSUF_PreviewTestMode", false)
     SyncLegacy()
@@ -885,6 +934,8 @@ function State.CancelAll()
 
     active  = false
     unitKey = nil
+    provider = nil
+    externalPreviewSuspended = false
     PublishCompat("MSUF_BossTestMode", false)
     PublishCompat("MSUF_PreviewTestMode", false)
     PublishCompat("MSUF_UnitPreviewActive", false)
@@ -927,25 +978,95 @@ function State.CancelAll()
     if State.UpdateCombatListenerRegistration then State.UpdateCombatListenerRegistration() end
 end
 
---- Combat guard: auto-exit on PLAYER_REGEN_DISABLED.
---- Events are registered only while Edit Mode is active or while a combat-exit
---- restore is pending, so normal combat has no Edit Mode shell event overhead.
+--- EllesmereUI owns the unlock shell but keeps MSUF's preview transaction open.
+--- Its combat behavior suspends instead of closing Unlock Mode, so these two
+--- cold-path hooks hide and restore only preview visuals without committing or
+--- discarding the MSUF database snapshot.
+function State.SuspendExternalPreview()
+    if not active or provider ~= "ellesmere" or externalPreviewSuspended then return false end
+    local suspendBridge = _G.MSUF_EllesmereEditMode_SuspendPreview
+    if type(suspendBridge) == "function" then
+        pcall(suspendBridge)
+    elseif type(_G.MSUF_EllesmereEditMode_ClearMoveState) == "function" then
+        pcall(_G.MSUF_EllesmereEditMode_ClearMoveState)
+    end
+    externalPreviewSuspended = true
+    SyncLegacy()
+    NotifyListeners()
+    HardHideEditModePreviews()
+    if State.UpdateCombatListenerRegistration then State.UpdateCombatListenerRegistration() end
+    return true
+end
+
+function State.ResumeExternalPreview()
+    if not active or provider ~= "ellesmere" or not externalPreviewSuspended then return false end
+    if IsConfigCombatLocked() then return false end
+    externalPreviewSuspended = false
+    SyncLegacy()
+    PublishCompat("MSUF_UnitPreviewActive", true)
+    if _G.MSUF_RefreshAllUnitVisibilityDrivers then
+        _G.MSUF_RefreshAllUnitVisibilityDrivers(true)
+    else
+        ApplyAllSettingsSafe()
+    end
+    if _G.MSUF_SyncAllUnitPreviewsAsync then
+        _G.MSUF_SyncAllUnitPreviewsAsync()
+    elseif _G.MSUF_SyncAllUnitPreviews then
+        _G.MSUF_SyncAllUnitPreviews()
+    end
+    NotifyListeners()
+    local resumeBridge = _G.MSUF_EllesmereEditMode_ResumePreview
+    if type(resumeBridge) == "function" then pcall(resumeBridge) end
+    if State.UpdateCombatListenerRegistration then State.UpdateCombatListenerRegistration() end
+    return true
+end
+
+--- Combat guard: native Edit Mode exits; EllesmereUI sessions suspend and resume.
+--- Events are registered only for the active edit session or a pending restore,
+--- so normal combat has no Edit Mode shell event overhead.
 function State.EnsureCombatListener()
     if combatFrame then return end
     combatFrame = CreateFrame("Frame")
     combatFrame:SetScript("OnEvent", function(_, event)
         if event == "PLAYER_REGEN_DISABLED" and active then
-            State.Exit("combat")
-            ShowConfigCombatLockMessage()
+            if provider == "ellesmere" then
+                State.SuspendExternalPreview()
+            else
+                State.Exit("combat")
+                ShowConfigCombatLockMessage()
+            end
         elseif event == "PLAYER_REGEN_ENABLED" and pendingCombatExitApply then
             RestoreAfterCombatExit()
+        elseif event == "PLAYER_REGEN_ENABLED" and active
+            and provider == "ellesmere" and externalPreviewSuspended then
+            local token = enterGeneration
+            externalResumeGeneration = externalResumeGeneration + 1
+            local resumeToken = externalResumeGeneration
+            local function resume()
+                if token ~= enterGeneration or resumeToken ~= externalResumeGeneration
+                    or not active or provider ~= "ellesmere" then return end
+                State.ResumeExternalPreview()
+            end
+            if C_Timer and C_Timer.After then
+                -- EllesmereUI restores its own Unlock Mode movers after 0.5s.
+                C_Timer.After(0.55, resume)
+            else
+                resume()
+            end
         end
         if State.UpdateCombatListenerRegistration then State.UpdateCombatListenerRegistration() end
     end)
 end
 
 function State.UpdateCombatListenerRegistration()
-    local wantedMode = active and "active" or (pendingCombatExitApply and "regen" or nil)
+    local wantedMode
+    if active and provider == "ellesmere" then
+        wantedMode = externalPreviewSuspended and "external-regen" or "external"
+    elseif active then
+        wantedMode = "active"
+    elseif pendingCombatExitApply then
+        wantedMode = "regen"
+    end
     if combatEventMode == wantedMode then return end
     State.EnsureCombatListener()
     if combatFrame and combatEventMode then
@@ -956,7 +1077,9 @@ function State.UpdateCombatListenerRegistration()
     if wantedMode == "active" then
         combatFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
         combatFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
-    elseif wantedMode == "regen" then
+    elseif wantedMode == "external" then
+        combatFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
+    elseif wantedMode == "regen" or wantedMode == "external-regen" then
         combatFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
     end
 end

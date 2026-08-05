@@ -6,7 +6,7 @@
 ## Version: 6.0-rc8
 ## SavedVariables: MSUF_DB, MSUF_GlobalDB
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
-## OptionalDeps: LibSharedMedia-3.0, Clique, WagoAnalytics, Blizzard_AuraContainer, Blizzard_PingUI
+## OptionalDeps: LibSharedMedia-3.0, Clique, WagoAnalytics, Blizzard_AuraContainer, Blizzard_PingUI, EllesmereUI
 ## X-Curse-Project-ID: 1384660
 ## X-Wago-ID: XKq9aoKy
 ## X-Website: https://discord.gg/2Gf9b2Wprz
@@ -164,6 +164,7 @@ ClassPower\MSUF_CP_Controller.lua
 # GROUP FRAMES
 # ---------------------------------------------------------------
 UnitFrames\Embeds\MSUF_UFCore\MSUF_UFCore_Group.xml
+Integrations\MSUF_Integration_EllesmereUnlock.lua
 
 # ---------------------------------------------------------------
 # OPTIONS

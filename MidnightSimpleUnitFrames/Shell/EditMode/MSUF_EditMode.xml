@@ -1,6 +1,8 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/">
     <Script file="MSUF_EditMode_Core.lua"/>
     <Script file="MSUF_EditMode_Layout.lua"/>
+    <Script file="MSUF_EditMode_ExternalProvider.lua"/>
+    <Script file="MSUF_EditMode_ExternalMovement.lua"/>
     <Script file="MSUF_EditMode_Movers.lua"/>
     <Script file="MSUF_EditMode_Popups.lua"/>
     <Script file="MSUF_EditMode_PopupScale.lua"/>

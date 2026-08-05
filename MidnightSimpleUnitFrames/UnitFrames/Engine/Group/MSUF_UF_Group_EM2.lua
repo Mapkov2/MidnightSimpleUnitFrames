@@ -1218,7 +1218,8 @@ local function RegisterGF()
 
   if EM2.State and EM2.State.IsActive and EM2.State.IsActive() then
     EnterEditMode()
-    if EM2.Movers and EM2.Movers.Show then EM2.Movers.Show() end
+    local provider = EM2.State.GetProvider and EM2.State.GetProvider() or "msuf"
+    if provider ~= "ellesmere" and EM2.Movers and EM2.Movers.Show then EM2.Movers.Show() end
   end
 end
 
@@ -1361,6 +1362,10 @@ SyncCombatHooks = function(enabled)
     combatHookFrame:UnregisterEvent("PLAYER_REGEN_ENABLED")
   end
   if enabled ~= true then return end
+  local state = EM2 and EM2.State
+  if state and state.GetProvider and state.GetProvider() == "ellesmere" then
+    return -- Core owns the external shell's single suspend/resume lifecycle.
+  end
   combatHookFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
   combatHookFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 end
