@@ -11,6 +11,7 @@ MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 _G.MSUF = MSUF
 
 local UF = MSUF.UF
+local GF = MSUF.GF
 
 if not (UF and UF.RegisterElement) then return end
 
@@ -28,6 +29,7 @@ local UnitHealthMax = UnitHealthMax
 local UnitHealthPercent = UnitHealthPercent
 local UnitGUID = UnitGUID
 local UnitIsConnected = _G.UnitIsConnected
+local UnitIsUnit = _G.UnitIsUnit
 local tonumber = tonumber
 local type = type
 local max = math.max
@@ -191,8 +193,8 @@ local function HideEdges(edges)
   end
 end
 
---- Compare unit tokens by GUID when possible so target/focus indicators still
---- work across party/raid token aliases.
+--- Prefer Blizzard's alias-aware comparison; its secret combat result can be
+--- forwarded directly to SetAlphaFromBoolean.
 local function SameUnit(unit, otherUnit)
   if issecretvalue(unit) == true then
     return false
@@ -200,8 +202,21 @@ local function SameUnit(unit, otherUnit)
   if type(unit) ~= "string" or unit == "" then
     return false
   end
+  local connected, connectedKnown = ReadConnectedCached(nil, otherUnit)
+  if connectedKnown == true and connected ~= true then
+    return false
+  end
   if unit == otherUnit then
     return true
+  end
+  if UnitIsUnit then
+    local same = UnitIsUnit(unit, otherUnit)
+    if issecretvalue(same) == true then
+      return same
+    end
+    if same ~= nil then
+      return same == true or same == 1
+    end
   end
   local guid = UnitGUID(unit)
   local otherGuid = UnitGUID(otherUnit)
@@ -218,6 +233,28 @@ local function SetEdgesShown(edges, shown)
   end
 end
 
+local function SetEdgesAlphaFromBoolean(edges, value)
+  if not edges then return false end
+  local first = edges[EDGE_KEYS[1]]
+  if not (first and first.SetAlphaFromBoolean) then return false end
+  for i = 1, #EDGE_KEYS do
+    local edge = edges[EDGE_KEYS[i]]
+    SetShown(edge, true)
+    edge:SetAlphaFromBoolean(value, 1, 0)
+  end
+  return true
+end
+
+local function ResetEdgesAlpha(edges)
+  if not edges then return end
+  for i = 1, #EDGE_KEYS do
+    local edge = edges[EDGE_KEYS[i]]
+    if edge and edge.SetAlpha then
+      edge:SetAlpha(1)
+    end
+  end
+end
+
 local function PrepareUnitEdges(frame, enabled, edgesKey, shownKey, layer, size, r, g, b, indicatorKind)
   local rounded = _G.MSUF_RoundedUF_OnGroupIndicatorPrepared
   if rounded and rounded(frame, indicatorKind, enabled == true, frame and frame[shownKey] == true, size, r, g, b, 1) then
@@ -227,7 +264,10 @@ local function PrepareUnitEdges(frame, enabled, edgesKey, shownKey, layer, size,
   end
   if not (frame and enabled) then
     HideEdges(frame and frame[edgesKey])
-    if frame then frame[shownKey] = false end
+    if frame then
+      frame[shownKey] = false
+      frame[shownKey .. "Secret"] = nil
+    end
     return
   end
   local edges = frame[edgesKey] or {}
@@ -243,7 +283,9 @@ local function PrepareUnitEdges(frame, enabled, edgesKey, shownKey, layer, size,
     SetColorTextureCached(edge, r, g, b, 1)
     SetShown(edge, false)
   end
+  ResetEdgesAlpha(edges)
   frame[shownKey] = false
+  frame[shownKey .. "Secret"] = nil
 end
 
 local function UpdateUnitEdges(frame, cfg, enabled, unit, edgesKey, shownKey, showOverride, indicatorKind)
@@ -253,19 +295,54 @@ local function UpdateUnitEdges(frame, cfg, enabled, unit, edgesKey, shownKey, sh
     return
   end
   local show = showOverride
-  if type(show) ~= "boolean" then
+  local secretShow = issecretvalue(show) == true
+  if not secretShow and type(show) ~= "boolean" then
     show = nil
   end
-  if show == nil then
-    show = enabled and frame.MSUFUnitKey and SameUnit(frame.MSUFUnitKey, unit) or false
+  if secretShow then
+    -- Secret comparison results can only be consumed by restricted-safe region
+    -- setters; never branch on or coerce the value in Lua.
+  elseif show == nil then
+    if enabled == true and frame.MSUFUnitKey then
+      show = SameUnit(frame.MSUFUnitKey, unit)
+    else
+      show = false
+    end
+    secretShow = issecretvalue(show) == true
   else
     show = show == true and enabled
   end
+  if enabled ~= true then
+    show = false
+    secretShow = false
+  end
+  local secretKey = shownKey .. "Secret"
   local rounded = _G.MSUF_RoundedUF_OnGroupIndicatorChanged
   if rounded and rounded(frame, indicatorKind, show) then
-    frame[shownKey] = show
+    if secretShow then
+      frame[shownKey] = nil
+      frame[secretKey] = true
+    else
+      frame[shownKey] = show
+      frame[secretKey] = nil
+    end
     HideEdges(frame[edgesKey])
     return
+  end
+  if secretShow then
+    if SetEdgesAlphaFromBoolean(frame[edgesKey], show) then
+      frame[shownKey] = nil
+      frame[secretKey] = true
+    else
+      frame[shownKey] = false
+      frame[secretKey] = nil
+      SetEdgesShown(frame[edgesKey], false)
+    end
+    return
+  end
+  if frame[secretKey] == true then
+    ResetEdgesAlpha(frame[edgesKey])
+    frame[secretKey] = nil
   end
   if frame[shownKey] == show then
     return
@@ -376,23 +453,43 @@ local targetIndicatorCount = 0
 local focusIndicatorCount = 0
 local targetDriverRegistered
 local focusDriverRegistered
+local connectionDriverRegistered
 local targetIndicatorCurrentGUID
 local focusIndicatorCurrentGUID
-local targetIndicatorFrames = {}
-local targetIndicatorIndex = {}
-local focusIndicatorFrames = {}
-local focusIndicatorIndex = {}
+local targetIndicatorGUIDKnown
+local focusIndicatorGUIDKnown
+local targetIndicatorSecretFrame
+local focusIndicatorSecretFrame
+local targetIndicatorClickHint
 local indicatorGUIDBuckets = {}
 
 local function PlainUnitGUID(unit)
   if not IsUnitToken(unit) then
-    return nil
+    return nil, true
   end
   local guid = UnitGUID(unit)
-  if issecretvalue(guid) == true or type(guid) ~= "string" or guid == "" then
-    return nil
+  if issecretvalue(guid) == true then
+    return nil, false
   end
-  return guid
+  if type(guid) ~= "string" or guid == "" then
+    return nil, true
+  end
+  return guid, true
+end
+
+local function PlainConnectedUnitGUID(unit)
+  local guid, guidKnown = PlainUnitGUID(unit)
+  if guidKnown ~= true or guid == nil then
+    return guid, guidKnown
+  end
+  local connected, connectedKnown = ReadConnectedCached(nil, unit)
+  if connectedKnown ~= true then
+    return nil, false
+  end
+  if connected ~= true then
+    return nil, true
+  end
+  return guid, true
 end
 
 local function IndicatorFrameTracked(frame)
@@ -434,40 +531,26 @@ local function AddIndicatorGUIDFrame(frame, guid)
   bucket.index[frame] = n
 end
 
+--- Keep the last readable identity while combat restrictions make UnitGUID
+--- secret. Clearing it there would destroy the O(1) bucket as well as the
+--- correct frame identity.
 local function RefreshIndicatorUnitGUID(frame)
   if not frame then
-    return nil
+    return nil, true
   end
+  local guid, guidKnown = PlainUnitGUID(frame.MSUFUnitKey)
   local oldGuid = frame._msufGFVisualUnitGUID
-  local guid = PlainUnitGUID(frame.MSUFUnitKey)
+  if guidKnown ~= true then
+    return oldGuid, false
+  end
   if oldGuid == guid then
-    if guid and IndicatorFrameTracked(frame) then
-      AddIndicatorGUIDFrame(frame, guid)
-    end
-    return guid
+    if guid then AddIndicatorGUIDFrame(frame, guid) end
+    return guid, true
   end
-  if oldGuid then
-    RemoveIndicatorGUIDFrame(frame, oldGuid)
-  end
+  if oldGuid then RemoveIndicatorGUIDFrame(frame, oldGuid) end
   frame._msufGFVisualUnitGUID = guid
-  if guid then
-    AddIndicatorGUIDFrame(frame, guid)
-  end
-  return guid
-end
-
-local function RunIndicatorList(list, update, showOverride, refresh)
-  local live = GF and GF.frames
-  local doRefresh = refresh ~= false
-  for i = 1, #list do
-    local frame = list[i]
-    if frame and (not live or live[frame] == true) then
-      if doRefresh then
-        RefreshIndicatorUnitGUID(frame)
-      end
-      update(frame, frame._msufGFVisualRuntimeGroup, showOverride)
-    end
-  end
+  if guid then AddIndicatorGUIDFrame(frame, guid) end
+  return guid, true
 end
 
 local function RunIndicatorBucket(guid, update, registrationKey, show)
@@ -476,42 +559,157 @@ local function RunIndicatorBucket(guid, update, registrationKey, show)
   local list = bucket and bucket.frames
   if not list then return end
   local live = GF and GF.frames
+  local first
   for i = 1, #list do
     local frame = list[i]
     if frame and frame[registrationKey] == true
       and frame._msufGFVisualUnitGUID == guid
       and (not live or live[frame] == true) then
-      update(frame, frame._msufGFVisualRuntimeGroup, show)
+      first = first or frame
+      if update then update(frame, frame._msufGFVisualRuntimeGroup, show) end
+    end
+  end
+  return first
+end
+
+local function UpdateIndicatorCandidate(frame, update, watchedUnit, registrationKey)
+  if not (frame and frame[registrationKey] == true) then return end
+  local live = GF and GF.frames
+  if live and live[frame] ~= true then return end
+  local show
+  if UnitIsUnit and IsUnitToken(frame.MSUFUnitKey) then
+    show = UnitIsUnit(frame.MSUFUnitKey, watchedUnit)
+    if issecretvalue(show) ~= true then
+      show = show == true or show == 1
+    end
+  else
+    show = SameUnit(frame.MSUFUnitKey, watchedUnit)
+  end
+  local secretShow = issecretvalue(show) == true
+  update(frame, frame._msufGFVisualRuntimeGroup, show)
+  return secretShow
+end
+
+local function RunIndicatorEvent(event)
+  local update, watchedUnit, oldGuid, oldKnown, registrationKey, secretFrame
+  if event == "PLAYER_TARGET_CHANGED" then
+    update, watchedUnit = UpdateTarget, "target"
+    oldGuid, oldKnown = targetIndicatorCurrentGUID, targetIndicatorGUIDKnown
+    registrationKey = "_msufGFTargetIndicatorRegistered"
+    secretFrame = targetIndicatorSecretFrame
+  else
+    update, watchedUnit = UpdateFocus, "focus"
+    oldGuid, oldKnown = focusIndicatorCurrentGUID, focusIndicatorGUIDKnown
+    registrationKey = "_msufGFFocusIndicatorRegistered"
+    secretFrame = focusIndicatorSecretFrame
+  end
+
+  local newGuid, newKnown = PlainConnectedUnitGUID(watchedUnit)
+  if event == "PLAYER_TARGET_CHANGED" then
+    targetIndicatorCurrentGUID, targetIndicatorGUIDKnown = newGuid, newKnown
+  else
+    focusIndicatorCurrentGUID, focusIndicatorGUIDKnown = newGuid, newKnown
+  end
+
+  if newKnown == true then
+    local secretIsNew
+    if oldKnown == true and oldGuid ~= newGuid then
+      RunIndicatorBucket(oldGuid, update, registrationKey, false)
+    end
+    if secretFrame then
+      local guid, guidKnown = RefreshIndicatorUnitGUID(secretFrame)
+      if guidKnown == true then
+        secretIsNew = guid ~= nil and guid == newGuid
+        update(secretFrame, secretFrame._msufGFVisualRuntimeGroup, secretIsNew)
+      else
+        UpdateIndicatorCandidate(secretFrame, update, watchedUnit, registrationKey)
+      end
+    end
+    if secretIsNew ~= true and (oldKnown ~= true or oldGuid ~= newGuid) then
+      RunIndicatorBucket(newGuid, update, registrationKey, true)
+    end
+    if event == "PLAYER_TARGET_CHANGED" then
+      targetIndicatorSecretFrame = nil
+      targetIndicatorClickHint = nil
+    else
+      focusIndicatorSecretFrame = nil
+    end
+    return
+  end
+
+  if oldKnown == true and oldGuid then
+    secretFrame = RunIndicatorBucket(oldGuid, nil, registrationKey) or secretFrame
+  end
+  if secretFrame then
+    UpdateIndicatorCandidate(secretFrame, update, watchedUnit, registrationKey)
+  end
+  if event == "PLAYER_TARGET_CHANGED" then
+    local clickFrame = targetIndicatorClickHint
+    targetIndicatorClickHint = nil
+    if clickFrame and clickFrame ~= secretFrame then
+      UpdateIndicatorCandidate(clickFrame, update, watchedUnit, registrationKey)
+    end
+    targetIndicatorSecretFrame = clickFrame or secretFrame
+  else
+    focusIndicatorSecretFrame = secretFrame
+  end
+end
+
+local function UpdateConnectionIndicatorFrame(frame, connected)
+  if not frame then return end
+  if connected ~= true then
+    if frame._msufGFTargetIndicatorRegistered == true then
+      UpdateTarget(frame, frame._msufGFVisualRuntimeGroup, false)
+    end
+    if frame._msufGFFocusIndicatorRegistered == true then
+      UpdateFocus(frame, frame._msufGFVisualRuntimeGroup, false)
+    end
+    if targetIndicatorSecretFrame == frame then targetIndicatorSecretFrame = nil end
+    if focusIndicatorSecretFrame == frame then focusIndicatorSecretFrame = nil end
+    if targetIndicatorClickHint == frame then targetIndicatorClickHint = nil end
+    return
+  end
+  if frame._msufGFTargetIndicatorRegistered == true then
+    if UpdateIndicatorCandidate(frame, UpdateTarget, "target", "_msufGFTargetIndicatorRegistered") == true then
+      if not targetIndicatorSecretFrame then targetIndicatorSecretFrame = frame end
+    end
+  end
+  if frame._msufGFFocusIndicatorRegistered == true then
+    if UpdateIndicatorCandidate(frame, UpdateFocus, "focus", "_msufGFFocusIndicatorRegistered") == true then
+      if not focusIndicatorSecretFrame then focusIndicatorSecretFrame = frame end
     end
   end
 end
 
-local function RunIndicatorEvent(event)
-  local list, update, watchedUnit, oldGuid, registrationKey
-  if event == "PLAYER_TARGET_CHANGED" then
-    list, update, watchedUnit, oldGuid, registrationKey = targetIndicatorFrames, UpdateTarget, "target", targetIndicatorCurrentGUID, "_msufGFTargetIndicatorRegistered"
-  else
-    list, update, watchedUnit, oldGuid, registrationKey = focusIndicatorFrames, UpdateFocus, "focus", focusIndicatorCurrentGUID, "_msufGFFocusIndicatorRegistered"
-  end
-  local newGuid = PlainUnitGUID(watchedUnit)
-  if event == "PLAYER_TARGET_CHANGED" then
-    targetIndicatorCurrentGUID = newGuid
-  else
-    focusIndicatorCurrentGUID = newGuid
-  end
-  if oldGuid ~= nil and oldGuid == newGuid then
-    return
-  end
-  if oldGuid ~= nil or newGuid ~= nil then
-    RunIndicatorBucket(oldGuid, update, registrationKey, false)
-    RunIndicatorBucket(newGuid, update, registrationKey, true)
-    return
-  end
-  RunIndicatorList(list, update, false, false)
+local function UpdateConnectionIndicatorForUnit(frame, _, connected)
+  UpdateConnectionIndicatorFrame(frame, connected)
+  return true
 end
 
-local function IndicatorDriverOnEvent(_, event)
-  RunIndicatorEvent(event)
+local function IndicatorDriverOnEvent(_, event, unit, isConnected)
+  if event == "PLAYER_TARGET_CHANGED" then
+    RunIndicatorEvent(event)
+  elseif event == "PLAYER_FOCUS_CHANGED" then
+    RunIndicatorEvent(event)
+  else
+    local handled
+    if issecretvalue(isConnected) ~= true and isConnected ~= nil and IsUnitToken(unit) then
+      local connected = isConnected == true or isConnected == 1
+      if GF and GF.ForEachFrameForUnit then
+        handled = GF.ForEachFrameForUnit(unit, UpdateConnectionIndicatorForUnit, connected)
+      elseif GF and GF.FrameForUnit then
+        local frame = GF.FrameForUnit(unit)
+        if frame then
+          UpdateConnectionIndicatorFrame(frame, connected)
+          handled = true
+        end
+      end
+    end
+    if handled ~= true then
+      if targetDriverRegistered == true then RunIndicatorEvent("PLAYER_TARGET_CHANGED") end
+      if focusDriverRegistered == true then RunIndicatorEvent("PLAYER_FOCUS_CHANGED") end
+    end
+  end
 end
 
 local function EnsureIndicatorDriver()
@@ -523,8 +721,8 @@ local function EnsureIndicatorDriver()
   return indicatorDriver
 end
 
---- Unitless target/focus driver keeps edge indicators current without forcing
---- every group frame to listen to PLAYER_TARGET_CHANGED/PLAYER_FOCUS_CHANGED.
+--- No target/focus event walks the group. Readable identities hit only their
+--- GUID bucket; restricted combat updates at most the prior and clicked frame.
 local function RefreshIndicatorDriver()
   if not indicatorDriver and targetIndicatorCount <= 0 and focusIndicatorCount <= 0 then
     return
@@ -536,48 +734,49 @@ local function RefreshIndicatorDriver()
   local wantTarget = targetIndicatorCount > 0
   if wantTarget ~= targetDriverRegistered then
     if wantTarget then
-      targetIndicatorCurrentGUID = PlainUnitGUID("target")
+      targetIndicatorCurrentGUID, targetIndicatorGUIDKnown = PlainConnectedUnitGUID("target")
       driver:RegisterEvent("PLAYER_TARGET_CHANGED")
     else
       driver:UnregisterEvent("PLAYER_TARGET_CHANGED")
-      targetIndicatorCurrentGUID = nil
+      targetIndicatorCurrentGUID, targetIndicatorGUIDKnown = nil, nil
+      targetIndicatorSecretFrame = nil
+      targetIndicatorClickHint = nil
     end
     targetDriverRegistered = wantTarget
   end
   local wantFocus = focusIndicatorCount > 0
   if wantFocus ~= focusDriverRegistered then
     if wantFocus then
-      focusIndicatorCurrentGUID = PlainUnitGUID("focus")
+      focusIndicatorCurrentGUID, focusIndicatorGUIDKnown = PlainConnectedUnitGUID("focus")
       driver:RegisterEvent("PLAYER_FOCUS_CHANGED")
     else
       driver:UnregisterEvent("PLAYER_FOCUS_CHANGED")
-      focusIndicatorCurrentGUID = nil
+      focusIndicatorCurrentGUID, focusIndicatorGUIDKnown = nil, nil
+      focusIndicatorSecretFrame = nil
     end
     focusDriverRegistered = wantFocus
   end
+  local wantConnection = wantTarget or wantFocus
+  if wantConnection ~= connectionDriverRegistered then
+    if wantConnection then
+      driver:RegisterEvent("UNIT_CONNECTION")
+    else
+      driver:UnregisterEvent("UNIT_CONNECTION")
+    end
+    connectionDriverRegistered = wantConnection
+  end
 end
 
-local function AddIndicatorFrame(list, index, frame)
-  if not frame or index[frame] then
-    return
+local function IndicatorFrameOnMouseDown(frame, button)
+  if button == "LeftButton" and frame._msufGFTargetIndicatorRegistered == true then
+    targetIndicatorClickHint = frame
   end
-  local n = #list + 1
-  list[n] = frame
-  index[frame] = n
 end
 
-local function RemoveIndicatorFrame(list, index, frame)
-  local i = frame and index[frame]
-  if not i then
-    return
-  end
-  local last = #list
-  local tail = list[last]
-  list[i] = tail
-  list[last] = nil
-  index[frame] = nil
-  if tail and tail ~= frame then
-    index[tail] = i
+local function EnsureIndicatorClickHint(frame)
+  if frame and frame._msufGFIndicatorClickHooked ~= true and frame.HookScript then
+    frame:HookScript("OnMouseDown", IndicatorFrameOnMouseDown)
+    frame._msufGFIndicatorClickHooked = true
   end
 end
 
@@ -594,9 +793,12 @@ local function SetIndicatorRegistration(frame, target, focus)
     frame._msufGFTargetIndicatorRegistered = target or nil
     if target then
       RefreshIndicatorUnitGUID(frame)
-      AddIndicatorFrame(targetIndicatorFrames, targetIndicatorIndex, frame)
-    else
-      RemoveIndicatorFrame(targetIndicatorFrames, targetIndicatorIndex, frame)
+      EnsureIndicatorClickHint(frame)
+    elseif targetIndicatorSecretFrame == frame then
+      targetIndicatorSecretFrame = nil
+    end
+    if targetIndicatorClickHint == frame and target ~= true then
+      targetIndicatorClickHint = nil
     end
   end
   local hadFocus = frame._msufGFFocusIndicatorRegistered == true
@@ -606,9 +808,8 @@ local function SetIndicatorRegistration(frame, target, focus)
     frame._msufGFFocusIndicatorRegistered = focus or nil
     if focus then
       RefreshIndicatorUnitGUID(frame)
-      AddIndicatorFrame(focusIndicatorFrames, focusIndicatorIndex, frame)
-    else
-      RemoveIndicatorFrame(focusIndicatorFrames, focusIndicatorIndex, frame)
+    elseif focusIndicatorSecretFrame == frame then
+      focusIndicatorSecretFrame = nil
     end
   end
   if target ~= true and focus ~= true then
@@ -1000,11 +1201,27 @@ local function UpdateVisuals(frame, event, updateInfo, seedMaxHP, percentReady)
   end
   if not cfg then return end
   if event == "MSUF_GF_UNIT_IDENTITY" or event == "MSUF_GF_UNIT_STRUCTURE" then
-    local guid = RefreshIndicatorUnitGUID(frame)
+    local guid, guidKnown = RefreshIndicatorUnitGUID(frame)
     local fn = cfg.runtimeOnTarget
-    if fn then fn(frame, cfg, guid ~= nil and guid == targetIndicatorCurrentGUID) end
+    if fn then
+      if guidKnown == true and targetIndicatorGUIDKnown == true then
+        fn(frame, cfg, guid ~= nil and guid == targetIndicatorCurrentGUID)
+      elseif frame == targetIndicatorSecretFrame then
+        fn(frame, cfg)
+      else
+        fn(frame, cfg, false)
+      end
+    end
     fn = cfg.runtimeOnFocus
-    if fn then fn(frame, cfg, guid ~= nil and guid == focusIndicatorCurrentGUID) end
+    if fn then
+      if guidKnown == true and focusIndicatorGUIDKnown == true then
+        fn(frame, cfg, guid ~= nil and guid == focusIndicatorCurrentGUID)
+      elseif frame == focusIndicatorSecretFrame then
+        fn(frame, cfg)
+      else
+        fn(frame, cfg, false)
+      end
+    end
     fn = cfg.runtimeOnHealth
     if fn then fn(frame, cfg, updateInfo, seedMaxHP, event, percentReady) end
     fn = cfg.runtimeOnDeadBg
@@ -1013,7 +1230,17 @@ local function UpdateVisuals(frame, event, updateInfo, seedMaxHP, percentReady)
     if fn then fn(frame, cfg, event) end
     return
   elseif event == "MSUF_GF_VISUALS_APPLY" then
-    RefreshIndicatorUnitGUID(frame)
+    local guid, guidKnown = RefreshIndicatorUnitGUID(frame)
+    local fn = cfg.runtimeOnTarget
+    if fn then
+      fn(frame, cfg, guidKnown == true and targetIndicatorGUIDKnown == true
+        and guid ~= nil and guid == targetIndicatorCurrentGUID)
+    end
+    fn = cfg.runtimeOnFocus
+    if fn then
+      fn(frame, cfg, guidKnown == true and focusIndicatorGUIDKnown == true
+        and guid ~= nil and guid == focusIndicatorCurrentGUID)
+    end
   end
 
   if event == "PLAYER_TARGET_CHANGED" then
@@ -1065,9 +1292,9 @@ local function UpdateVisuals(frame, event, updateInfo, seedMaxHP, percentReady)
   end
 
   local fn = cfg.runtimeOnTarget
-  if fn then fn(frame, cfg, event) end
+  if fn and event ~= "MSUF_GF_VISUALS_APPLY" then fn(frame, cfg, event) end
   fn = cfg.runtimeOnFocus
-  if fn then fn(frame, cfg, event) end
+  if fn and event ~= "MSUF_GF_VISUALS_APPLY" then fn(frame, cfg, event) end
   fn = cfg.runtimeOnHealth
   if fn then fn(frame, cfg, updateInfo, seedMaxHP, event, percentReady) end
   fn = cfg.runtimeOnDeadBg
@@ -1128,6 +1355,8 @@ function GroupVisuals.Disable(frame)
   SetShown(frame.MSUFGFDebuffStripe, false)
   frame._msufGFTargetVisualShown = false
   frame._msufGFFocusVisualShown = false
+  frame._msufGFTargetVisualShownSecret = nil
+  frame._msufGFFocusVisualShownSecret = nil
   if frame._msufGFDeadBgState == true then
     RestoreHealthBackground(frame)
   end

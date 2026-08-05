@@ -35,6 +35,7 @@ local DEFAULT_ROUNDED_STRENGTH = 3
 
 local CreateFrame = _G.CreateFrame
 local InCombatLockdown = _G.InCombatLockdown
+local issecretvalue = _G.issecretvalue or function(_) return false end
 local STRETCHED_SLICE_MODE = _G.Enum and _G.Enum.UITextureSliceMode
   and _G.Enum.UITextureSliceMode.Stretched
 
@@ -524,6 +525,31 @@ local function ShowRoundedEdgeStack(owner, baseEdge, poolKey)
   end
 end
 
+local function SetRoundedEdgeStackAlpha(owner, baseEdge, poolKey, alpha)
+  local stack = owner and owner[poolKey]
+  local count = ClampEdgeSize(stack and stack._msufCount, 1, 16)
+  for i = 1, count do
+    local edge = (i == 1) and baseEdge or stack and stack[i]
+    if edge and edge.SetAlpha then
+      edge:SetAlpha(alpha)
+    end
+  end
+end
+
+local function SetRoundedEdgeStackAlphaFromBoolean(owner, baseEdge, poolKey, value)
+  if not (baseEdge and baseEdge.SetAlphaFromBoolean) then return false end
+  local stack = owner and owner[poolKey]
+  local count = ClampEdgeSize(stack and stack._msufCount, 1, 16)
+  for i = 1, count do
+    local edge = (i == 1) and baseEdge or stack and stack[i]
+    if edge then
+      edge:Show()
+      edge:SetAlphaFromBoolean(value, 1, 0)
+    end
+  end
+  return true
+end
+
 local function SetRoundedEdgeStackColor(owner, baseEdge, poolKey, r, g, b, a)
   if baseEdge and baseEdge.SetVertexColor then baseEdge:SetVertexColor(r, g, b, a) end
   local stack = owner and owner[poolKey]
@@ -967,13 +993,23 @@ local function ApplyGroupRoundedIndicator(f, kind, enabled, shown, thickness, r,
   if not groupIndicatorHotEnabled then return false end
 
   local state = f[stateKey]
+  local secretShown = issecretvalue(shown) == true
   if enabled == nil and thickness == nil and r == nil and g == nil and b == nil and a == nil then
     if not state then return true end
-    state.shown = shown == true
-    if state.enabled == true and state.shown then
-      ShowRoundedEdgeStack(f, f[edgeKey], stackKey)
-    else
+    if secretShown then
+      if state.enabled == true
+        and SetRoundedEdgeStackAlphaFromBoolean(f, f[edgeKey], stackKey, shown) then
+        return true
+      end
       HideRoundedEdgeStack(f, f[edgeKey], stackKey)
+    else
+      state.shown = shown == true
+      SetRoundedEdgeStackAlpha(f, f[edgeKey], stackKey, 1)
+      if state.enabled == true and state.shown then
+        ShowRoundedEdgeStack(f, f[edgeKey], stackKey)
+      else
+        HideRoundedEdgeStack(f, f[edgeKey], stackKey)
+      end
     end
     return true
   end
@@ -983,7 +1019,11 @@ local function ApplyGroupRoundedIndicator(f, kind, enabled, shown, thickness, r,
     f[stateKey] = state
   end
   if enabled ~= nil then state.enabled = enabled == true end
-  if shown ~= nil then state.shown = shown == true end
+  if secretShown then
+    state.shown = nil
+  elseif shown ~= nil then
+    state.shown = shown == true
+  end
   if thickness ~= nil then state.thickness = ClampEdgeSize(thickness, 1, 16) end
   if r ~= nil then state.r = r end
   if g ~= nil then state.g = g end
@@ -1009,6 +1049,13 @@ local function ApplyGroupRoundedIndicator(f, kind, enabled, shown, thickness, r,
     return false
   end
   SetRoundedEdgeStackColor(f, edge, stackKey, state.r or 1, state.g or 1, state.b or 1, state.a or 1)
+  if secretShown then
+    if not SetRoundedEdgeStackAlphaFromBoolean(f, edge, stackKey, shown) then
+      HideRoundedEdgeStack(f, edge, stackKey)
+    end
+    return true
+  end
+  SetRoundedEdgeStackAlpha(f, edge, stackKey, 1)
   if state.shown then ShowRoundedEdgeStack(f, edge, stackKey) else HideRoundedEdgeStack(f, edge, stackKey) end
   return true
 end
