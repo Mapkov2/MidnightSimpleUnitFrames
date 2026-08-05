@@ -2028,9 +2028,7 @@ local function EnforceTargetDotContainer(item)
         item.placed.pandemicStyle = A3.NormalizePandemicStyle(item.placed.pandemicStyle)
     else
         local pandemicStyle = tostring(item.placed.pandemicStyle or "BORDER"):upper()
-        if pandemicStyle == "GLOW" or pandemicStyle == "BORDER_GLOW" then pandemicStyle = "BORDER"
-        elseif pandemicStyle == "GLOW_TINT" then pandemicStyle = "TINT"
-        elseif pandemicStyle == "ALL" then pandemicStyle = "BORDER_TINT"
+        if pandemicStyle == "ALL" then pandemicStyle = "BORDER_TINT"
         elseif pandemicStyle ~= "BORDER" and pandemicStyle ~= "TINT" and pandemicStyle ~= "BORDER_TINT" then pandemicStyle = "BORDER" end
         item.placed.pandemicStyle = pandemicStyle
     end
@@ -2042,9 +2040,7 @@ local function EnforceTargetDotContainer(item)
     }
     item.placed.pandemicThickness = ClampNumber(item.placed.pandemicThickness, 2, 1, 12)
     item.placed.pandemicPadding = ClampNumber(item.placed.pandemicPadding, 1, -8, 16)
-    item.placed.pandemicGlowSize = nil
     item.placed.pandemicBorderAlpha = ClampNumber(item.placed.pandemicBorderAlpha, 1, 0.05, 1)
-    item.placed.pandemicGlowAlpha = nil
     item.placed.pandemicTintAlpha = ClampNumber(item.placed.pandemicTintAlpha, 0.22, 0.05, 1)
     item.placed.pandemicBlend = tostring(item.placed.pandemicBlend or "ADD"):upper() == "BLEND" and "BLEND" or "ADD"
     item.filters = type(item.filters) == "table" and item.filters or {}
