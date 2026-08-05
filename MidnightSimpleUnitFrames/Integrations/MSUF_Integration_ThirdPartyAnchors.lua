@@ -3,7 +3,7 @@ local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 
 -- Third-party anchor integration.
--- Tracks ArcUI, Skiron and Coolinator stable cooldown anchors after they exist.
+-- Tracks ArcUI, Skiron, Coolinator and EllesmereUI stable cooldown anchors after they exist.
 -- Integration is deferred in combat and must not take ownership of external addon layouts.
 local CreateFrame = CreateFrame
 local C_AddOns = C_AddOns
@@ -21,10 +21,15 @@ local AUTOMATIC_COOLDOWN_ADDONS = {
     { id = "ArcUI", label = "Arc UI" },
     { id = "SkironCooldownManager", label = "Skiron" },
     { id = "Coolinator", label = "Coolinator" },
+    { id = "EllesmereUICooldownManager", label = "EllesmereUI CDM" },
     -- Cooldown Manager Centered keeps Blizzard's EssentialCooldownViewer as
     -- its public layout frame, so it needs policy detection but no proxy.
     { id = "CooldownManagerCentered", label = "CDMC" },
 }
+local AUTOMATIC_COOLDOWN_ADDON_IDS = {}
+for i = 1, #AUTOMATIC_COOLDOWN_ADDONS do
+    AUTOMATIC_COOLDOWN_ADDON_IDS[AUTOMATIC_COOLDOWN_ADDONS[i].id] = true
+end
 
 local registeredArcUI
 local arcUIAnchor
@@ -43,6 +48,10 @@ local coolinatorRefreshAfterCombat = false
 local coolinatorResolveGeneration = 0
 local coolinatorActiveSource
 local observedCoolinatorSources = setmetatable({}, { __mode = "k" })
+local ellesmereCooldownRefreshAfterCombat = false
+local ellesmereCooldownResolveGeneration = 0
+local ellesmereCooldownResolvePending = false
+local ellesmereCooldownActiveSource
 local automaticCooldownProviderId
 local automaticCooldownProviderLabel
 local automaticCooldownProviderResolved = false
@@ -340,6 +349,44 @@ local function ResolveArcUIAnchorSource()
     if IsFrameUsable(source) then return source end
 end
 
+local function GetEllesmereCooldownAnchorSource()
+    local getBarFrame = _G._ECME_GetBarFrame
+    if type(getBarFrame) ~= "function" then return nil end
+    local ok, source = pcall(getBarFrame, "cooldowns")
+    if ok then return source end
+end
+
+local function ResolveEllesmereCooldownAnchorSource()
+    local source = GetEllesmereCooldownAnchorSource()
+    if IsFrameUsable(source) then return source end
+end
+
+local function DeferEllesmereCooldownResolve()
+    ellesmereCooldownResolveGeneration = ellesmereCooldownResolveGeneration + 1
+    ellesmereCooldownResolvePending = false
+    if ellesmereCooldownRefreshAfterCombat then return end
+    ellesmereCooldownRefreshAfterCombat = true
+    if watcher then watcher:RegisterEvent("PLAYER_REGEN_ENABLED") end
+end
+
+local function EnsureEllesmereCooldownAnchorSource()
+    -- EllesmereUI exposes its movable Essential bar container through this
+    -- cross-addon accessor. Blizzard's EssentialCooldownViewer deliberately
+    -- remains an unmoved shell. Resolve once, without permanently hooking the
+    -- external frame; MSUF's feature-gated width observer owns size updates.
+    local source = ResolveEllesmereCooldownAnchorSource()
+    local previousSource = ellesmereCooldownActiveSource
+    local transition = previousSource ~= source
+        and (not previousSource and "acquired" or not source and "lost" or "switched")
+        or nil
+    if transition and InCombat() then
+        DeferEllesmereCooldownResolve()
+        return previousSource, false, nil, true
+    end
+    ellesmereCooldownActiveSource = source
+    return source, transition ~= nil, transition, false
+end
+
 local function ObserveCoolinatorSource(source)
     if not (source and source.HookScript) then return false end
     if source.IsForbidden and source:IsForbidden() then return false end
@@ -472,6 +519,11 @@ function MSUF.GetCoolinatorCooldownAnchor()
     if source and IsFrameUsable(source) then return source end
 end
 
+function MSUF.GetEllesmereCooldownAnchor()
+    local source = ellesmereCooldownActiveSource
+    if source and IsFrameUsable(source) then return source end
+end
+
 function MSUF.GetArcUICooldownAnchor()
     return arcUIAnchor
 end
@@ -480,12 +532,16 @@ _G.MSUF_GetCoolinatorCooldownAnchor = function()
     return MSUF.GetCoolinatorCooldownAnchor()
 end
 
+_G.MSUF_GetEllesmereCooldownAnchor = function()
+    return MSUF.GetEllesmereCooldownAnchor()
+end
+
 _G.MSUF_GetArcUICooldownAnchor = function()
     return MSUF.GetArcUICooldownAnchor()
 end
 
 local function RefreshEssentialCooldownAnchorConsumers(transition)
-    if transition ~= "acquired" and transition ~= "lost" then return end
+    if transition ~= "acquired" and transition ~= "lost" and transition ~= "switched" then return end
     local UF = MSUF.UF
     local factory = UF and UF.Factory
     if factory and type(factory.RefreshExternalAnchor) == "function" then
@@ -552,6 +608,21 @@ refreshCoolinatorAnchor = function()
     return source ~= nil
 end
 
+local function refreshEllesmereCooldownAnchor()
+    local source, changed, transition, deferred = EnsureEllesmereCooldownAnchorSource()
+    if deferred then return source ~= nil, true end
+    if changed then
+        if type(_G.MSUF_EnsureCooldownWidthObservers) == "function" then
+            _G.MSUF_EnsureCooldownWidthObservers(true)
+        end
+        RefreshEssentialCooldownAnchorConsumers(transition)
+        if type(_G.MSUF_ScheduleCooldownWidthRefresh) == "function" then
+            _G.MSUF_ScheduleCooldownWidthRefresh("EssentialCooldownViewer", false, true)
+        end
+    end
+    return source ~= nil, false
+end
+
 local function ScheduleSkironAnchorResolve()
     skironResolveGeneration = skironResolveGeneration + 1
     local generation = skironResolveGeneration
@@ -580,6 +651,42 @@ local function ScheduleCoolinatorAnchorResolve()
         index = index + 1
         local delay = SKIRON_RETRY_DELAYS[index]
         if delay and C_Timer and C_Timer.After then C_Timer.After(delay, run) end
+    end
+    if not (C_Timer and C_Timer.After) then
+        run()
+        return
+    end
+    C_Timer.After(SKIRON_RETRY_DELAYS[index], run)
+end
+
+local function ScheduleEllesmereCooldownAnchorResolve()
+    if ellesmereCooldownResolvePending then return end
+    if InCombat() then
+        DeferEllesmereCooldownResolve()
+        return
+    end
+    ellesmereCooldownResolveGeneration = ellesmereCooldownResolveGeneration + 1
+    local generation = ellesmereCooldownResolveGeneration
+    ellesmereCooldownResolvePending = true
+    local index = 1
+    local function run()
+        if generation ~= ellesmereCooldownResolveGeneration then return end
+        if InCombat() then
+            DeferEllesmereCooldownResolve()
+            return
+        end
+        local acquired, deferred = refreshEllesmereCooldownAnchor()
+        if acquired or deferred then
+            ellesmereCooldownResolvePending = false
+            return
+        end
+        index = index + 1
+        local delay = SKIRON_RETRY_DELAYS[index]
+        if delay and C_Timer and C_Timer.After then
+            C_Timer.After(delay, run)
+        else
+            ellesmereCooldownResolvePending = false
+        end
     end
     if not (C_Timer and C_Timer.After) then
         run()
@@ -634,11 +741,22 @@ local function RegisterCoolinatorAnchor()
     return true
 end
 
+local function RegisterEllesmereCooldownAnchor()
+    if IsFrameUsable(ellesmereCooldownActiveSource) then return true end
+    if type(_G._ECME_GetBarFrame) ~= "function"
+        and not IsAddOnFullyLoaded("EllesmereUICooldownManager") then
+        return false
+    end
+    ScheduleEllesmereCooldownAnchorResolve()
+    return true
+end
+
 local function RegisterThirdPartyAnchors()
     local arcUI = RegisterArcUIAnchor()
     local skiron = RegisterSkironAnchorProxy()
     local coolinator = RegisterCoolinatorAnchor()
-    return arcUI or skiron or coolinator
+    local ellesmere = RegisterEllesmereCooldownAnchor()
+    return arcUI or skiron or coolinator or ellesmere
 end
 
 MSUF.RegisterThirdPartyAnchors = RegisterThirdPartyAnchors
@@ -655,20 +773,25 @@ watcher:SetScript("OnEvent", function(self, event, addon)
         local refreshArcUI = arcUIRefreshAfterCombat
         local refreshSkiron = skironSourceHookPending or skironProxyRefreshAfterCombat
         local refreshCoolinator = coolinatorSourceHookPending or coolinatorRefreshAfterCombat
+        local refreshEllesmere = ellesmereCooldownRefreshAfterCombat
         cooldownConsentPromptAfterCombat = false
-        if not showCooldownConsent and not refreshArcUI and not refreshSkiron and not refreshCoolinator then return end
+        if not showCooldownConsent and not refreshArcUI and not refreshSkiron
+            and not refreshCoolinator and not refreshEllesmere then return end
         arcUIRefreshAfterCombat = false
         skironSourceHookPending = false
         skironProxyRefreshAfterCombat = false
         coolinatorSourceHookPending = false
         coolinatorRefreshAfterCombat = false
+        ellesmereCooldownRefreshAfterCombat = false
         if refreshArcUI then refreshArcUIAnchor(true) end
         if refreshSkiron then refreshSkironAnchorProxy(nil, false, true) end
         if refreshCoolinator then refreshCoolinatorAnchor() end
+        if refreshEllesmere then ScheduleEllesmereCooldownAnchorResolve() end
         if showCooldownConsent then MaybeShowCooldownConsent() end
         return
     end
     if event == "ADDON_LOADED" then
+        if not AUTOMATIC_COOLDOWN_ADDON_IDS[addon] then return end
         RefreshAutomaticCooldownProvider(true)
         MaybeShowCooldownConsent()
         if addon == "ArcUI" then
@@ -677,6 +800,8 @@ watcher:SetScript("OnEvent", function(self, event, addon)
             RegisterSkironAnchorProxy()
         elseif addon == "Coolinator" then
             RegisterCoolinatorAnchor()
+        elseif addon == "EllesmereUICooldownManager" then
+            RegisterEllesmereCooldownAnchor()
         end
         return
     end

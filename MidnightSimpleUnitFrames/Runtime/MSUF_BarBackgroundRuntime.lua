@@ -194,6 +194,11 @@ local function MSUF_GetEffectiveCooldownFrame(frameName)
         if coolinatorAnchor then
             return coolinatorAnchor
         end
+        local getEllesmereAnchor = _G.MSUF_GetEllesmereCooldownAnchor
+        local ellesmereAnchor = type(getEllesmereAnchor) == "function" and getEllesmereAnchor() or nil
+        if ellesmereAnchor then
+            return ellesmereAnchor
+        end
     end
     if MSUF_IsBlizzardCooldownViewerFrameName(frameName) then
         return nil
