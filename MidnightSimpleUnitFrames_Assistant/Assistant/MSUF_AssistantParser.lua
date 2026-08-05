@@ -5273,7 +5273,6 @@ local function ParseGlobalUIShellPriorityShortcut(normalized, raw)
         { key = "general.previewDragHintAnimationEnabled", label = "Preview Drag Hint Animation", terms = { "preview drag hint", "preview drag animation", "drag hint animation", "preview move tutorial" } },
         { key = "general.showNavigationIcons", label = "Navigation Icons", terms = { "navigation icons", "nav icons" } },
         { key = "general.showGameMenuButton", label = "MSUF Game Menu Button", terms = { "msuf button in game menu", "game menu button", "msuf game menu button", "escape menu button" } },
-        { key = "general.navHoverScale", label = "Navigation Hover Size", terms = { "navigation hover size", "nav hover size", "navigation hover scale", "nav hover scale" } },
         { key = "general.showWelcomeMessage", label = "Welcome Message", terms = { "welcome message", "startup message" } },
         { key = "general.versionCheckEnabled", label = "Version Check", terms = { "version check", "version checker" } },
         { key = "general.showMinimapIcon", label = "Minimap Icon", terms = { "minimap icon", "minimap button" } },

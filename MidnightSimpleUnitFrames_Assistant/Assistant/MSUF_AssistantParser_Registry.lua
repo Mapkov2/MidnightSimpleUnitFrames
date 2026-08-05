@@ -513,6 +513,30 @@ local function BooleanToggleMatchScore(setting, matchText, relationText)
     return best
 end
 
+-- RC9 added the Pandemic warning controls (show state, style, colour,
+-- thickness, padding, border/tint opacity, blend). They live only in the
+-- generated catalog and their names are deliberately plain -- "Border
+-- Opacity", "Thickness", "Style" -- so an unrelated registry setting whose
+-- alias happens to be "border opacity" matched "set the target pandemic border
+-- opacity to 80" and wrote Target Bar Outline Opacity instead.
+--
+-- No registry setting owns the word, so naming it means the catalog lane. Any
+-- setting that does mention pandemic anywhere in its identity is exempt, which
+-- keeps this from starving a future reviewed owner.
+local function PandemicDetailBlocksSetting(setting, text)
+    if not HasPhrase(text, "pandemic") then return false end
+    local hay = table.concat({
+        tostring(setting.key or ""), tostring(setting.label or ""),
+        tostring(setting.attribute or ""), tostring(setting.category or ""),
+    }, " "):lower()
+    if hay:find("pandemic", 1, true) then return false end
+    local aliases = setting.aliases or {}
+    for i = 1, #aliases do
+        if tostring(aliases[i]):lower():find("pandemic", 1, true) then return false end
+    end
+    return true
+end
+
 local function SettingMatchScore(setting, text)
     if type(setting) ~= "table" then return 0 end
     text = tostring(text or "")
@@ -524,6 +548,7 @@ local function SettingMatchScore(setting, text)
     end
     if RootFrameEnabledBlockedByDetail(setting, text) then return 0 end
     if AuraLaneVisibilityBlockedByDetail(setting, text) then return 0 end
+    if PandemicDetailBlocksSetting(setting, text) then return 0 end
     if not SettingAllowedByExplicitScopes(setting, text) then return 0 end
     if setting.frameType == "castbar" and setting.attribute == "enabled" and ContainsAny(text, CASTBAR_ROOT_DETAIL_TERMS) then
         return 0
@@ -1672,22 +1697,29 @@ local function GroupAvailabilityScopes(text)
     return { "party", "raid", "mythicraid" }, false
 end
 
+-- The English "deactivate"/"activate" pair must stay in step with the German
+-- "deaktivieren"/"aktivieren" that has always been here. It was missing, and
+-- these settings are named after a polarity word ("Hide Out of Combat"), so the
+-- label itself put "hide" in the request: with no OFF term matching,
+-- "deactivate Boss Hide Out of Combat" fell to HIDE_ON_TERMS and switched the
+-- setting ON. OFF is tested first at every call site, which is what keeps
+-- "deactivate" from also reading as "activate".
 local SHOW_OFF_TERMS = {
-    "turn off", "disable", "disabled", "off", "false", "no",
+    "turn off", "disable", "disabled", "deactivate", "deactivated", "off", "false", "no",
     "hide", "hidden", "not show", "dont show", "do not show", "never show",
     "aus", "deaktivieren", "deaktiviert", "ausschalten", "ausgeschaltet",
     "ausblenden", "verstecken", "nicht anzeigen", "nicht zeigen", "nicht einblenden", "nein",
 }
 
 local SHOW_ON_TERMS = {
-    "turn on", "enable", "enabled", "on", "true", "yes",
+    "turn on", "enable", "enabled", "activate", "activated", "on", "true", "yes",
     "show", "display", "visible",
     "an", "aktivieren", "aktiviert", "einschalten", "eingeschaltet",
     "anzeigen", "zeigen", "einblenden", "sichtbar", "ja",
 }
 
 local HIDE_OFF_TERMS = {
-    "turn off", "disable", "disabled", "off", "false", "no",
+    "turn off", "disable", "disabled", "deactivate", "deactivated", "off", "false", "no",
     "remove", "clear", "dont hide", "do not hide", "never hide", "always show",
     "show", "display", "visible",
     "aus", "deaktivieren", "deaktiviert", "ausschalten", "ausgeschaltet",

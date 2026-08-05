@@ -2832,6 +2832,12 @@ local function BarOutlineHighlightGlobalKey(attr)
 end
 
 local function BarOutlineHighlightSpec(text)
+    -- This lane owns broad edge wording -- "border opacity", "border alpha",
+    -- "outline thickness". RC9 added Pandemic warning controls that reuse those
+    -- plain names inside their own card, so "set the target pandemic border
+    -- opacity to 80" landed here and wrote Target Bar Outline Opacity. The bar
+    -- outline has nothing to do with Pandemic, so leave those to the catalog.
+    if ContainsAny(text, { "pandemic" }) then return nil end
     if ContainsAny(text, GeometryPhrases[157]) then
         return "hlPrioEnabled", "Custom Highlight Priority"
     end

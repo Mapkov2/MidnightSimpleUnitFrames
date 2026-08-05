@@ -14,19 +14,34 @@ local Data = A.ParserData or {}
 A.ParserData = Data
 
 Data.PROFILE_PARSER = {
+    -- Mirrors UF_COPY_CATEGORIES in Shell/Menu2/Pages/MSUF_Menu2_Unit.lua. Used
+    -- only when Menu2 has not published its own metadata yet, so drift here
+    -- silently changes what a copy carries: auras, aurastyle and texlayer were
+    -- missing, which meant "copy target aura style to focus" matched nothing,
+    -- fell back to these defaults, and copied the eight unrelated categories
+    -- while leaving out the one that was asked for.
     COPY_SCOPE_DEFAULTS = {
         basics = true,
         text = true,
         portrait = true,
         power = true,
+        auras = true,
+        aurastyle = true,
         castbar = true,
         status = true,
         load = true,
         transparency = true,
+        texlayer = true,
         layout = false,
     },
 
+    -- Most specific first: CopyScopeMatches consumes the words an alias claims,
+    -- so "aura style" must get its chance before the broader aura wording, or
+    -- RC9's split collapses back into copying both halves at once.
     UNIT_COPY_SCOPE_SPECS = {
+        { key = "aurastyle", aliases = { "aura style", "aura styling", "buff style", "debuff style", "defensive style", "dot style", "aura presentation" } },
+        { key = "auras", aliases = { "aura options", "buff options", "debuff options", "aura layout", "aura filters", "aura content", "auras" } },
+        { key = "texlayer", aliases = { "texture layer", "texture layers", "decorative texture" } },
         -- Placement words are deliberately absent: this scope copies width and height
         -- only, so "position"/"placement"/"anchor" must not resolve to it.
         { key = "layout", aliases = { "layout", "frame size", "size", "width", "height" } },
@@ -62,7 +77,11 @@ Data.PROFILE_PARSER = {
         { key = "font", aliases = { "font", "fonts", "font override", "font color", "font outline" } },
         { key = "range", aliases = { "range", "range fade", "offline alpha" } },
         { key = "indicators", aliases = { "indicators", "status icons", "status icon", "role icon", "leader icon", "assist icon", "raid marker", "ready check", "summon icon" } },
-        { key = "auras", aliases = { "auras", "aura", "buffs", "buff", "debuffs", "debuff" } },
+        -- Mirrors GF_COPY_CATEGORIES: RC9 split group Aura Options from Aura
+        -- Style, and without the style entry "copy raid aura style to party"
+        -- fell through to Aura Options and replaced the content instead.
+        { key = "aurastyle", aliases = { "aura style", "aura styling", "buff style", "debuff style", "spell icon style", "spell indicator style", "spell styling", "aura presentation" } },
+        { key = "auras", aliases = { "aura options", "buff options", "debuff options", "aura layout", "aura filters", "aura content", "auras", "aura", "buffs", "buff", "debuffs", "debuff" } },
         { key = "highlight", aliases = { "highlight", "aggro", "aggro highlight", "dispel border", "purge border" } },
         { key = "dstripe", aliases = { "debuff stripe", "stripe" } },
         { key = "features", aliases = { "corner", "corner indicator", "corner indicators", "corner dots", "spell indicator", "spell indicators", "corner spell" } },

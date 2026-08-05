@@ -43,8 +43,13 @@ Data.COMPOUND_PARSER = {
     DISTRIBUTABLE_DETAIL_TERMS = {
         "castbar", "cast bar", "portrait", "power bar", "mana bar", "hp text", "health text", "power text", "name text",
     },
-    BOOL_OFF_TERMS = { "off", "disable", "disabled", "false", "no", "hide", "hidden", "aus", "deaktivieren", "ausschalten" },
-    BOOL_ON_TERMS = { "on", "enable", "enabled", "true", "yes", "show", "visible", "keep", "an", "aktivieren", "einschalten" },
+    -- "deactivate"/"activate" were missing while their German equivalents were
+    -- present, so "deactivate Boss Hide Out of Combat" matched no polarity term
+    -- and fell through to the default ON -- turning the setting on when the
+    -- player asked to turn it off. OFF is tested before ON at the call site,
+    -- which is what keeps "deactivate" from being read as "activate".
+    BOOL_OFF_TERMS = { "off", "disable", "disabled", "deactivate", "deactivated", "false", "no", "hide", "hidden", "aus", "deaktivieren", "ausschalten" },
+    BOOL_ON_TERMS = { "on", "enable", "enabled", "activate", "activated", "true", "yes", "show", "visible", "keep", "an", "aktivieren", "einschalten" },
     CASTBAR_TERMS = { "castbar", "cast bar" },
     POWER_BAR_TERMS = { "power bar", "powerbar" },
     SHAPE_STYLE_TERMS = { "shape", "style" },

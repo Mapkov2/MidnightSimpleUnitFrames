@@ -1630,6 +1630,40 @@ local function CollapsePageMirrors(results)
     return out
 end
 
+-- Group pages hold one editor for Party, Raid and Mythic Raid; the scope is a
+-- selector inside the page, not part of any control's indexed identity. So
+-- "set the party spell icon zoom to 120" demanded a token no group row can ever
+-- contain and found nothing, while the same request without "party" resolved
+-- immediately.
+--
+-- Only runs after a normal search found nothing, and the surviving matches are
+-- restricted to gf_* pages -- naming a group scope cannot silently land on a
+-- unit-frame control.
+local GROUP_SCOPE_PHRASES = {
+    " mythic raid ", " mythicraid ", " party ", " raid ", " group ",
+}
+
+local function FindWithinGroupScope(query)
+    local padded = " " .. Normalize(query) .. " "
+    local stripped, found = padded, false
+    for i = 1, #GROUP_SCOPE_PHRASES do
+        local phrase = GROUP_SCOPE_PHRASES[i]
+        if stripped:find(phrase, 1, true) then
+            found = true
+            stripped = stripped:gsub(phrase, " ")
+        end
+    end
+    if not found then return {} end
+    stripped = Trim(stripped)
+    if stripped == "" then return {} end
+    local out = {}
+    for _, row in ipairs(Schema.Find(stripped, { limit = 8 })) do
+        if tostring(row.pageKey or ""):sub(1, 3) == "gf_" then out[#out + 1] = row end
+        if #out >= 4 then break end
+    end
+    return out
+end
+
 function Schema.TryConversation(text)
     local normalized = " " .. Normalize(text) .. " "
     local explicitNavigation = normalized:find(" open ", 1, true) or normalized:find(" oeffne ", 1, true)
@@ -1653,8 +1687,12 @@ function Schema.TryConversation(text)
         "erklaere", "beschreibe", "was macht", "wofuer" })
     local wantsChoices = HasAny(normalized, { "list choices", "list values", "available choices", "available values",
         "which choices", "which values", "what choices", "what values", "verfuegbare werte", "welche werte" })
-    local wantsCurrent = HasAny(normalized, { "current value", "what is", "what's", "how is", "is currently",
-        "configured to", "set to now", "aktueller wert", "welcher wert", "wie ist", "eingestellt auf" })
+    -- "what's" is spelled without its apostrophe here on purpose: Normalize
+    -- strips punctuation before this comparison, so the contracted form only
+    -- ever arrives as "whats".
+    local wantsCurrent = HasAny(normalized, { "current value", "what is", "whats", "how is", "hows",
+        "is currently", "configured to", "set to now",
+        "aktueller wert", "welcher wert", "wie ist", "eingestellt auf" })
     local mutation = HasMutationIntent(normalized)
     local modeIntent = HasAny(normalized, MODE_MARKERS)
         and (HasAny(normalized, MODE_START_TERMS) or HasAny(normalized, MODE_OFF_TERMS) or HasAny(normalized, MODE_TOGGLE_TERMS))
@@ -1664,6 +1702,10 @@ function Schema.TryConversation(text)
     if mutation then searchText, verblessText = MutationTargetText(text) else searchText = text end
     local results = Schema.Find(searchText, { limit = 4 })
     if #results == 0 and verblessText then results = Schema.Find(verblessText, { limit = 4 }) end
+    if #results == 0 then
+        results = FindWithinGroupScope(searchText)
+        if #results == 0 and verblessText then results = FindWithinGroupScope(verblessText) end
+    end
     -- Parameterized actions and free-form values are sometimes written without
     -- an explicit "to" connector. Search never treats their arbitrary tail as
     -- control identity: trim one trailing token at a time only after the full
@@ -1899,7 +1941,11 @@ function Schema.Render(key, values, locale)
     local packs = Data.packs or {}
     local template = (packs[locale] and packs[locale][key]) or (packs.enUS and packs.enUS[key]) or tostring(key or "")
     for name, value in pairs(type(values) == "table" and values or {}) do
-        template = template:gsub("{" .. tostring(name) .. "}", tostring(value))
+        -- "%" is a capture reference on the REPLACEMENT side of gsub, so a
+        -- label like "Icon Zoom (%)" -- RC9 added several -- came out as
+        -- "Icon Zoom ()". Escape it so the control keeps its real name.
+        local replacement = tostring(value):gsub("%%", "%%%%")
+        template = template:gsub("{" .. tostring(name) .. "}", replacement)
     end
     return template
 end

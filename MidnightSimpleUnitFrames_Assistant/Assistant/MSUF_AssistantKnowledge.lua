@@ -3345,10 +3345,37 @@ function K.TopicGuidance(query)
     for i = 1, #K.TOPIC_GUIDANCE do
         local topic = K.TOPIC_GUIDANCE[i]
         for j = 1, #topic.terms do
-            if StringContainsPhrase(norm, topic.terms[j]) then return topic end
+            if StringContainsPhrase(norm, topic.terms[j]) then
+                -- These topics key off single MSUF nouns, so a request that also
+                -- names a real control ("what is the target pandemic blend")
+                -- matched the frame catch-all and got a page tour instead of the
+                -- setting. Controls that live only in the generated catalog have
+                -- no registry label for the earlier lanes to recognise, so ask
+                -- the catalog before settling for topic guidance.
+                --
+                -- Deliberately last: only reached once a topic already matched,
+                -- which keeps the catalog lookup off the general input path.
+                if K.QueryNamesCatalogControl(norm) then return nil end
+                return topic
+            end
         end
     end
     return nil
+end
+
+-- True when the generated catalog resolves this query to one clearly-best
+-- control. Confidence is required: a vague "target auras" must still get topic
+-- guidance rather than being pinned to whichever row happened to rank first.
+function K.QueryNamesCatalogControl(norm)
+    local Schema = A and A.ControlSchema
+    if not (Schema and type(Schema.Find) == "function") then return false end
+    local ok, results = pcall(Schema.Find, norm, { limit = 2 })
+    if not ok or type(results) ~= "table" or #results == 0 then return false end
+    local top, second = results[1], results[2]
+    local topScore = tonumber(top and top._score) or 0
+    if topScore < 14 then return false end
+    if second and topScore - (tonumber(second._score) or 0) < 6 then return false end
+    return true
 end
 
 function K.Summary()

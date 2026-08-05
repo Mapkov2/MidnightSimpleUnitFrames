@@ -842,8 +842,61 @@ R.SETTING_QUESTION_LEAD_INS = {
     "i need help with ", "how do i change ", "why would i change ",
     "what page is ", "tell me about ", "can i change ", "help with ",
     "what does ", "what are ", "where is ", "show me ", "what is ",
+    -- Contractions with the apostrophe already normalised away. Spelling them
+    -- with one ("what's") can never match, because normalisation strips it
+    -- before these are compared -- so "whats the target frame width" was read
+    -- as a command and answered with "what value do you want me to use?".
+    "whats ", "wheres ", "hows ", "whats the ", "wheres the ",
     "explain ", "find ",
 }
+
+-- Command counterpart to SETTING_QUESTION_LEAD_INS. Kept separate on purpose:
+-- RouterNamedSettingLabel answers question shapes only, so a COMMAND that names
+-- a control exactly ("turn on the target dispel overlay") is invisible to it and
+-- topic lanes claimed the phrase instead.
+R.SETTING_COMMAND_LEAD_INS = {
+    "can you please turn on ", "can you please turn off ", "could you please turn on ",
+    "please turn on ", "please turn off ", "can you turn on ", "can you turn off ",
+    "could you turn on ", "could you turn off ", "i want to turn on ", "i want to turn off ",
+    "turn on the ", "turn off the ", "turn on ", "turn off ",
+    "enable the ", "disable the ", "enable ", "disable ",
+    "show the ", "hide the ", "show ", "hide ",
+    "switch on ", "switch off ", "toggle the ", "toggle ",
+    "please set ", "can you set ", "could you set ", "set the ", "set ",
+    "please change ", "change the ", "change ",
+    "activate the ", "activate ", "deactivate the ", "deactivate ",
+}
+
+-- Does a COMMAND name one exact control? Uses the same O(1) label and alias
+-- indexes as the question lane, so it costs a table lookup once the index
+-- exists. Call it only where a lane is about to answer with generic help --
+-- never on the general input path, where building the index would blow the
+-- cold-path budgets.
+function R.CommandNamedSettingLabel(text)
+    local norm = R.Trim((R.Normalize(text):gsub("%s*%?+%s*$", "")))
+    if norm == "" then return nil end
+    local subject
+    for i = 1, #R.SETTING_COMMAND_LEAD_INS do
+        local lead = R.SETTING_COMMAND_LEAD_INS[i]
+        if norm:sub(1, #lead) == lead then
+            subject = R.Trim(norm:sub(#lead + 1))
+            break
+        end
+    end
+    if not subject or subject == "" then return nil end
+    -- Drop a trailing value clause so "set X to 20" and "turn on X" both reduce
+    -- to the control's own name.
+    subject = R.Trim((subject:gsub("%s+to%s+.+$", ""):gsub("^the%s+", ""):gsub("^my%s+", "")))
+    if subject == "" then return nil end
+    local map = R.EnsureSettingLabelIndex and R.EnsureSettingLabelIndex()
+    local setting = map and map[subject] or nil
+    if not setting then
+        local aliasMap = R.EnsureSettingAliasIndex and R.EnsureSettingAliasIndex()
+        setting = aliasMap and aliasMap[subject] or nil
+    end
+    local label = setting and tostring(setting.label or "") or ""
+    return label ~= "" and label or nil
+end
 
 -- The exact control a question is about, if it names one. Exported so the
 -- pending-search-result follow-up can tell "what is it" (a follow-up) from
@@ -1641,6 +1694,13 @@ function A.RouterIsFailClosedReadOnlyRequest(text)
     -- permission to do it. Keep direct polite requests ("could you change")
     -- actionable while treating possible/could-I forms as guidance.
     if R.IsCapabilityMutationQuestion(norm) or R.IsExplicitMutationRefusal(norm) then return true end
+    -- Question-shaped AND naming an exact control: "whats the target frame
+    -- width" asks what the value is, and was being answered with "what value do
+    -- you want me to use?". Only the question lead-ins can produce a label
+    -- here, so an ordinary command can never reach this.
+    if type(A.RouterIsNamedSettingLookup) == "function" and A.RouterIsNamedSettingLookup(text) then
+        return true
+    end
     if type(R.LooksLikeComparativeSizeRelationshipRequest) == "function"
         and R.LooksLikeComparativeSizeRelationshipRequest(norm)
     then
@@ -1862,7 +1922,17 @@ function R.LooksLikeLocalWowUiKnowledgeRequest(text)    local norm = R.Normalize
     return R.ContainsAny(norm, R.LOCAL_WOW_UI_TERMS) and R.ContainsAny(norm, R.LOCAL_WOW_UI_INTENT_TERMS)
 end
 
-function R.KnowledgeNoMatch(text)    if A.Knowledge and type(A.Knowledge.NoMatch) == "function" then
+function R.KnowledgeNoMatch(text)    -- "I did not catch which option you meant" is a give-up message, and it used
+    -- to be emitted the moment Knowledge declined -- before the generated
+    -- catalog ever got a turn. Controls that exist only in the catalog (RC9's
+    -- Pandemic card, the Group Spell Icon styles) have no registry label for
+    -- Knowledge to recognise, so asking about one by name dead-ended here even
+    -- though the catalog could answer it outright.
+    if A.ControlSchema and type(A.ControlSchema.TryConversation) == "function" then
+        local schemaResult = A.ControlSchema.TryConversation(text)
+        if schemaResult then return schemaResult end
+    end
+    if A.Knowledge and type(A.Knowledge.NoMatch) == "function" then
         local result = A.Knowledge.NoMatch(text)
         if A.RecordNoMatch then A.RecordNoMatch(text, result, "knowledge") end
         return result
@@ -2931,6 +3001,13 @@ function R.TryReadabilityShortcut(text)    local norm = R.Normalize(text)
         return nil
     end
     if type(R.ExactAliasSingleChange) == "function" and R.ExactAliasSingleChange(text) then
+        return nil
+    end
+    -- RC9 moved the Dispel Overlay and Dispel Symbol controls onto the Player,
+    -- Target, Focus and Boss pages. "turn on the target dispel overlay" names
+    -- one of them exactly, but as a command, so neither check above sees it and
+    -- this lane answered with a readability article.
+    if type(R.CommandNamedSettingLabel) == "function" and R.CommandNamedSettingLabel(text) then
         return nil
     end
     if R.ContainsAny(norm, {
@@ -13924,6 +14001,45 @@ function R.TryOpenEndedSettingIdea(text, coreHandler)
         end
         if type(entries) == "table" and #entries > 1 and not R.OpenEndedEntriesAreConfident(entries) then
             local visible = math.min(tonumber(entries[1] and entries[1].visibleLimit) or 3, #entries)
+            -- The value is already known, so a number should FINISH the change,
+            -- not merely scroll the menu somewhere. Registering search results
+            -- here made the reply say "pick a number" and then answer that
+            -- number with navigation ("...could not scroll the menu there"),
+            -- leaving the player to retype the whole request. Pending choices
+            -- carry the setting AND the parsed value, so "2" applies it.
+            --
+            -- All of them or none: a partial list would silently drop a
+            -- candidate the player was choosing between.
+            local parser = A.Parser or {}
+            if type(A.SetPendingChoices) == "function"
+                and type(parser.ValueForRegistrySetting) == "function"
+            then
+                local normalized = R.Normalize(text)
+                local choices = {}
+                for i = 1, visible do
+                    local item = entries[i] and entries[i].item
+                    local setting = item and item.setting
+                    local value = setting and parser.ValueForRegistrySetting(setting, normalized, text)
+                    if value ~= nil then
+                        choices[#choices + 1] = {
+                            setting = setting,
+                            value = value,
+                            label = tostring(setting.label or setting.key),
+                        }
+                    end
+                end
+                if #choices == visible then
+                    local choiceText = A.SetPendingChoices(choices)
+                    if choiceText then
+                        return {
+                            text = "Several MSUF controls fit that name, so I did not apply it to the wrong one.\n"
+                                .. choiceText,
+                            status = "ambiguous",
+                            summary = "Clarifies the control before applying a supplied value.",
+                        }
+                    end
+                end
+            end
             local lines = {
                 "I understood that you supplied a value, but several MSUF controls fit the setting name, so I did not apply it to the wrong one. Pick the control you meant:",
             }

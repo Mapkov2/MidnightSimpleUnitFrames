@@ -127,8 +127,18 @@ Data.REGISTRY_PARSER = {
         [48] = { "fully hide", "hard hide", "hard kill", "enable", "enabled", "turn on", "on", "true", "yes" },
         [49] = { "hide", "hidden", "disable", "disabled", "turn off", "off", "false", "no" },
         [50] = { "show", "visible", "enable", "enabled", "turn on", "on", "true", "yes" },
-        [51] = { "turn off", "disable", "disabled", "off", "false", "no", "dont hide", "do not hide", "never hide", "always show", "show" },
-        [52] = { "hide", "enable", "enabled", "turn on", "on", "true", "yes" },
+        -- Polarity for settings whose own NAME contains "hide" (Hide Out of
+        -- Combat, Hide Mounted...). [52] deliberately treats "hide" as ON, but
+        -- the setting's own label puts that word in the request, so any verb
+        -- missing from [51] loses to it: "deactivate Boss Hide Out of Combat"
+        -- matched nothing here, fell through to "hide", and switched the
+        -- setting ON. [51] is tested first, so it must carry every negation
+        -- verb the parser accepts elsewhere.
+        [51] = { "turn off", "turned off", "disable", "disabled", "deactivate", "deactivated",
+            "switch off", "switched off", "shut off", "toggle off",
+            "off", "false", "no", "dont hide", "do not hide", "never hide", "always show", "show" },
+        [52] = { "hide", "enable", "enabled", "activate", "activated", "turn on", "turned on",
+            "switch on", "switched on", "toggle on", "on", "true", "yes" },
         [53] = { "font", "fonts", "schrift", "schriftart" },
         [54] = { "what", "which", "where", "why", "help", "explain", "how", "current", "active", "show me" },
         [55] = {
