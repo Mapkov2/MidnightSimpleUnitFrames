@@ -1028,16 +1028,16 @@ local function MakeHandle(preview, key, fields, label, color)
     h:SetScript("OnEnter", function(self)
         self._hovering = true
         RefreshHandleSelectionVisuals(preview)
-        if GameTooltip then
+        local showTooltip = GameTooltip and (not PreviewHelpers.ShouldShowPreviewHandleTooltip
+            or PreviewHelpers.ShouldShowPreviewHandleTooltip(preview))
+        if showTooltip then
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             -- `_label` can be rebound per unit on the shared box (custom
             -- container 4 is Defensive Buffs on player, Dots on target
             -- elsewhere); the creation-time closure label is only the fallback.
             GameTooltip:SetText(TR(self._label or label), 1, 1, 1)
-            GameTooltip:AddLine(TR("Drag this preview element to adjust the same X/Y offsets used by Edit Mode."), 0.82, 0.82, 0.82, true)
+            GameTooltip:AddLine(TR("Drag to move. Arrow keys nudge."), 0.82, 0.82, 0.82, true)
             GameTooltip:AddLine(TR("Right-click opens quick actions."), 0.50, 0.78, 0.92, true)
-            GameTooltip:AddLine(TR("Arrow keys nudge the selected element. Shift = 5, Ctrl = 10."), 0.55, 0.62, 0.72, true)
-            GameTooltip:AddLine(TR("Ctrl + left-drag pans the preview canvas without moving this element."), 0.55, 0.68, 0.86, true)
             GameTooltip:Show()
         end
     end)
@@ -1106,6 +1106,7 @@ local function MakeHandle(preview, key, fields, label, color)
         local wasDragging = self._dragging == true or preview.dragFrame._handle == self
         if not wasDragging then return end
         local didMove = self._didDragMove == true
+        if didMove and PreviewHelpers.NotePreviewElementMoved then PreviewHelpers.NotePreviewElementMoved() end
         local openSettingsOnRelease = allowOpenSettings == true
             and button == "LeftButton"
             and not didMove

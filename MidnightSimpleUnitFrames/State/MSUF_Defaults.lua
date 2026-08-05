@@ -1054,6 +1054,7 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
         SetDefault(g, "showGameMenuButton", true)
         SetDefault(g, "navHoverScale", 1.05)
         SetDefault(g, "previewDragHintAnimationEnabled", true)
+        g._msufPreviewDragHintExperienced = false
         --- Factory profiles always teach preview interaction with the Guides
         --- layer visible. Both toggles remain ordinary persisted user choices
         --- after the factory profile has been created.

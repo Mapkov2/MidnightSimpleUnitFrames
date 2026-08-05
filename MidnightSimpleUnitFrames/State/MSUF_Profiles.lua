@@ -964,6 +964,12 @@ local function MSUF_ProfileIO_EnsureProfileMenuDefaults(profile)
     if profile.general.previewDragHintAnimationEnabled == nil then
         profile.general.previewDragHintAnimationEnabled = true
     end
+    -- Factory-created profiles explicitly start at false. Profiles predating
+    -- the drag cue have already taught their owners the preview workflow, so a
+    -- missing marker is migrated to the experienced cadence.
+    if profile.general._msufPreviewDragHintExperienced == nil then
+        profile.general._msufPreviewDragHintExperienced = true
+    end
 end
 local MSUF_ProfileIO_TranslateProfileToCurrent
 local MSUF_ProfileIO_TranslateProfilesToCurrent

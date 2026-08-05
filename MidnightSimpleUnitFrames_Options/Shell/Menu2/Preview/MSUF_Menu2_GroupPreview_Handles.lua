@@ -675,6 +675,7 @@ function Handles.Install(box, deps)
         local wasDragging = handle and handle._dragging == true
         local textDrag = handle and handle._cfgText
         local didMove = handle and handle._didDragMove == true
+        if didMove and PreviewHelpers.NotePreviewElementMoved then PreviewHelpers.NotePreviewElementMoved() end
         local openSettingsOnRelease = handle and allowOpenSettings == true
             and button == "LeftButton"
             and handle._suppressSettingsOnRelease ~= true
@@ -871,18 +872,17 @@ function Handles.Install(box, deps)
         handle:SetScript("OnEnter", function(self)
             self._hovering = true
             RefreshHandleSelection(box)
-            if GameTooltip then
+            local showTooltip = GameTooltip and (not PreviewHelpers.ShouldShowPreviewHandleTooltip
+                or PreviewHelpers.ShouldShowPreviewHandleTooltip(box))
+            if showTooltip then
                 GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
                 GameTooltip:SetText(HandleText(self), 1, 1, 1)
                 if self._locked then
                     GameTooltip:AddLine((M.Tr and M.Tr("This preview layer is locked.")) or "This preview layer is locked.", 0.82, 0.82, 0.82, true)
                     GameTooltip:AddLine(Tr("Right-click opens quick actions."), 0.50, 0.78, 0.92, true)
-                    GameTooltip:AddLine(Tr("Ctrl + left-drag pans the preview canvas."), 0.55, 0.68, 0.86, true)
                 else
-                    GameTooltip:AddLine((M.Tr and M.Tr("Drag this preview element to adjust the same placement offsets used by Group Frames.")) or "Drag this preview element to adjust the same placement offsets used by Group Frames.", 0.82, 0.82, 0.82, true)
+                    GameTooltip:AddLine(Tr("Drag to move. Arrow keys nudge."), 0.82, 0.82, 0.82, true)
                     GameTooltip:AddLine(Tr("Right-click opens quick actions."), 0.50, 0.78, 0.92, true)
-                    GameTooltip:AddLine((M.Tr and M.Tr("Arrow keys nudge the selected element. Shift = 5, Ctrl = 10.")) or "Arrow keys nudge the selected element. Shift = 5, Ctrl = 10.", 0.55, 0.62, 0.72, true)
-                    GameTooltip:AddLine(Tr("Ctrl + left-drag pans the preview canvas."), 0.55, 0.68, 0.86, true)
                 end
                 GameTooltip:Show()
             end
