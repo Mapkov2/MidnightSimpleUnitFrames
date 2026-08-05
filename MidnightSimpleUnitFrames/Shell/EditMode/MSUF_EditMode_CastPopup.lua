@@ -220,8 +220,16 @@ local function ApplyDetach(checked)
     if not key then return end
 
     if type(_G.MSUF_EM_UndoBeforeChange) == "function" then _G.MSUF_EM_UndoBeforeChange("castbar", pf.unit) end
-    g[key] = checked and true or false
-    ReapplyCastbar(pf.unit)
+    local setAnchored = _G.MSUF_EM_SetCastbarAnchoredToUnit
+    if type(setAnchored) == "function" then
+        --- The canonical owner preserves the current on-screen center when a
+        --- unitframe-relative castbar becomes UIParent-relative. Writing only
+        --- the flag would reinterpret the old offsets and can move it off-screen.
+        setAnchored(pf.unit, checked ~= true)
+    else
+        g[key] = checked and true or false
+        ReapplyCastbar(pf.unit)
+    end
     if pf and pf:IsShown() then Sync() end
 end
 
