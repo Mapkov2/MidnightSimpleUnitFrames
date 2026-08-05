@@ -122,6 +122,11 @@ local function EnsureIndex(settings)
     local actionAliases = type(P.ExactActionAliasSet) == "function" and P.ExactActionAliasSet() or {}
     local labelOwners = {}
     for i = 1, #settings do
+        -- This ownership pre-pass normalizes every visible label before the
+        -- alias-building loop below. It must obey the same deferred-job budget;
+        -- otherwise the first cold callback can block for the entire registry
+        -- even though the later alias work yields correctly.
+        if i % 32 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
         local label = type(settings[i]) == "table" and settings[i].label or nil
         if type(label) == "string" and label ~= "" then
             local normalized = Normalize(label)
@@ -341,13 +346,22 @@ end
 -- the WHOLE command (minus a leading command verb and a trailing "to <value>")
 -- equals exactly one indexed alias. Floating n-gram windows are far too eager
 -- for a stage that runs before the topical fast paths.
+-- Relative verbs (raise/lower/increase/decrease) are deliberately absent: they
+-- describe a delta, and their own lanes own that. Everything here states an
+-- exact value or polarity. "configure", "update", "modify" and the English
+-- "activate"/"deactivate" were missing, so "configure range fade raid to on"
+-- fell to the fuzzy lane and asked which control while the identical sentence
+-- with "set" applied.
 local COMMAND_VERB_TOKENS = {
     set = true, change = true, make = true, turn = true, toggle = true,
     enable = true, disable = true, show = true, hide = true, use = true,
     put = true, switch = true, adjust = true,
+    configure = true, update = true, modify = true,
+    customize = true, customise = true, tweak = true,
+    activate = true, deactivate = true,
 }
-local POSITIVE_VERBS = { enable = true, show = true }
-local NEGATIVE_VERBS = { disable = true, hide = true }
+local POSITIVE_VERBS = { enable = true, show = true, activate = true }
+local NEGATIVE_VERBS = { disable = true, hide = true, deactivate = true }
 
 -- Politeness and address tokens carry no meaning for matching, but they sit in
 -- front of the verb, so the verb scan below never started and "please set

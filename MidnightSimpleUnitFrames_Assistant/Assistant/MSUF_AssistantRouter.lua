@@ -84,6 +84,12 @@ R.MUTATION_TERMS = {    "set", "change", "make", "turn", "enable", "disable", "s
     "copy", "export", "import", "create", "delete", "remove", "add", "put", "clear", "switch", "assign", "rename", "close", "toggle",
     "increase", "decrease", "raise", "lower", "bump", "grow", "shrink", "detach", "attach", "anchor", "follow", "undock", "dock", "embed",
     "start", "stop", "enter", "leave", "select", "use", "apply",
+    -- Everyday imperatives that were missing, so "configure range fade raid to
+    -- on" took the fuzzy lane and asked which control while the identical
+    -- "set range fade raid to on" applied. "activate"/"deactivate" were absent
+    -- in English while their German equivalents below were already listed.
+    "configure", "adjust", "update", "modify", "customize", "customise", "tweak",
+    "activate", "deactivate",
     "an", "aus", "aktivieren", "deaktivieren", "einschalten", "ausschalten", "anzeigen", "verstecken",
     "einblenden", "ausblenden", "verschiebe", "verschieben", "setze", "stelle", "erhoehe", "erhoehen", "senke", "reduziere",
     "abkoppeln", "ankoppeln", "einbetten",
@@ -854,18 +860,23 @@ R.SETTING_QUESTION_LEAD_INS = {
 -- RouterNamedSettingLabel answers question shapes only, so a COMMAND that names
 -- a control exactly ("turn on the target dispel overlay") is invisible to it and
 -- topic lanes claimed the phrase instead.
-R.SETTING_COMMAND_LEAD_INS = {
-    "can you please turn on ", "can you please turn off ", "could you please turn on ",
-    "please turn on ", "please turn off ", "can you turn on ", "can you turn off ",
-    "could you turn on ", "could you turn off ", "i want to turn on ", "i want to turn off ",
-    "turn on the ", "turn off the ", "turn on ", "turn off ",
-    "enable the ", "disable the ", "enable ", "disable ",
-    "show the ", "hide the ", "show ", "hide ",
-    "switch on ", "switch off ", "toggle the ", "toggle ",
-    "please set ", "can you set ", "could you set ", "set the ", "set ",
-    "please change ", "change the ", "change ",
-    "activate the ", "activate ", "deactivate the ", "deactivate ",
+-- Composed rather than enumerated: politeness, then verb, then article. The
+-- cross-product is far too big to list by hand -- "can you disable X" was
+-- missing while "can you turn off X" was present, so one phrasing of the same
+-- request reached the control and the other got a readability article.
+R.SETTING_COMMAND_POLITENESS = {
+    "can you please ", "could you please ", "would you please ", "will you please ",
+    "can you ", "could you ", "would you ", "will you ", "please ",
+    "i want to ", "i would like to ", "id like to ", "i need to ", "help me ",
+    "hey ", "ok ", "okay ", "now ", "just ", "go ahead and ",
 }
+R.SETTING_COMMAND_VERBS = {
+    "turn on ", "turn off ", "switch on ", "switch off ", "toggle ",
+    "enable ", "disable ", "activate ", "deactivate ",
+    "show ", "hide ", "set ", "change ", "adjust ", "configure ", "update ",
+    "make ", "put ", "raise ", "lower ", "increase ", "decrease ",
+}
+R.SETTING_COMMAND_ARTICLES = { "the ", "my ", "a ", "an ", "its " }
 
 -- Does a COMMAND name one exact control? Uses the same O(1) label and alias
 -- indexes as the question lane, so it costs a table lookup once the index
@@ -875,22 +886,42 @@ R.SETTING_COMMAND_LEAD_INS = {
 function R.CommandNamedSettingLabel(text)
     local norm = R.Trim((R.Normalize(text):gsub("%s*%?+%s*$", "")))
     if norm == "" then return nil end
-    local subject
-    for i = 1, #R.SETTING_COMMAND_LEAD_INS do
-        local lead = R.SETTING_COMMAND_LEAD_INS[i]
-        if norm:sub(1, #lead) == lead then
-            subject = R.Trim(norm:sub(#lead + 1))
-            break
+    local function StripOnce(text, list)
+        for i = 1, #list do
+            local lead = list[i]
+            if text:sub(1, #lead) == lead then return R.Trim(text:sub(#lead + 1)), true end
         end
+        return text, false
     end
+    -- Politeness may repeat ("please can you ..."), the verb appears once, and
+    -- an article may follow it.
+    local subject, sawVerb = norm, false
+    for _ = 1, 3 do
+        local stripped, changed = StripOnce(subject, R.SETTING_COMMAND_POLITENESS)
+        subject = stripped
+        if not changed then break end
+    end
+    subject, sawVerb = StripOnce(subject, R.SETTING_COMMAND_VERBS)
+    if not sawVerb then return nil end
+    subject = StripOnce(subject, R.SETTING_COMMAND_ARTICLES)
     if not subject or subject == "" then return nil end
     -- Drop a trailing value clause so "set X to 20" and "turn on X" both reduce
     -- to the control's own name.
     subject = R.Trim((subject:gsub("%s+to%s+.+$", ""):gsub("^the%s+", ""):gsub("^my%s+", "")))
     if subject == "" then return nil end
+    -- Consult the indexes only once something else has paid to build them.
+    -- Submit's synchronous preflight has an 8ms budget and the label index
+    -- costs ~47ms to build; the question-shaped lane above returns early for
+    -- commands, so it never pays that itself. Every later pass runs warm, which
+    -- is where this lane does its work.
+    if type(R._settingLabelIndex) ~= "table" then return nil end
     local map = R.EnsureSettingLabelIndex and R.EnsureSettingLabelIndex()
     local setting = map and map[subject] or nil
-    if not setting then
+    if not setting and type(R._settingAliasIndex) == "table" then
+        -- Alias fallback only when that index is already warm. Forcing it here
+        -- costs ~80ms, and Submit's synchronous preflight has an 8ms budget to
+        -- keep; the label index above is the cheap one and covers the common
+        -- case of a control named exactly.
         local aliasMap = R.EnsureSettingAliasIndex and R.EnsureSettingAliasIndex()
         setting = aliasMap and aliasMap[subject] or nil
     end
@@ -3000,7 +3031,14 @@ function R.TryReadabilityShortcut(text)    local norm = R.Normalize(text)
     if type(A.RouterNamedSettingLabel) == "function" and A.RouterNamedSettingLabel(text) then
         return nil
     end
-    if type(R.ExactAliasSingleChange) == "function" and R.ExactAliasSingleChange(text) then
+    -- Only when the exact-alias index is already warm. Building it costs ~80ms
+    -- and Submit's synchronous preflight has an 8ms budget it must keep, so
+    -- this may never be what forces the build; the deferred pass that follows
+    -- resolves with the index present.
+    local aliasParser = A.Parser or {}
+    if type(aliasParser._registryExactAliasIndex) == "table"
+        and type(R.ExactAliasSingleChange) == "function" and R.ExactAliasSingleChange(text)
+    then
         return nil
     end
     -- RC9 moved the Dispel Overlay and Dispel Symbol controls onto the Player,

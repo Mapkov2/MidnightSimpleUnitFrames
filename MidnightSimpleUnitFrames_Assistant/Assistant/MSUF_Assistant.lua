@@ -8219,21 +8219,52 @@ function AP.InheritableSettingTail(text)    text = AP.NormalizeForBatch(text)
     return AP.HasScopedSettingDetail(text)
 end
 
+AP.BATCH_READ_ONLY_LEADS = {
+    "what ", "why ", "how ", "where ", "which ", "when ",
+    "is ", "are ", "can ", "could ", "would ", "should ",
+    "do ", "does ", "did ", "tell ", "explain ", "describe ",
+    "show me ", "open ", "find ", "search ", "help ",
+    "diagnose ", "check ", "preview ",
+}
+
+function AP.BatchReadOnlyGuardCandidate(norm)
+    for i = 1, #AP.BATCH_READ_ONLY_LEADS do
+        if norm:sub(1, #AP.BATCH_READ_ONLY_LEADS[i]) == AP.BATCH_READ_ONLY_LEADS[i] then
+            return true
+        end
+    end
+    return norm:find("without changing", 1, true) ~= nil
+        or norm:find("without applying", 1, true) ~= nil
+        or norm:find("without setting", 1, true) ~= nil
+        or norm:find("do not change", 1, true) ~= nil
+        or norm:find("dont change", 1, true) ~= nil
+        or norm:find("no changes", 1, true) ~= nil
+        or norm:find("read only", 1, true) ~= nil
+        or norm:find("read-only", 1, true) ~= nil
+end
+
 function AP.IsReadOnlyBatchTail(text)
     local norm = AP.NormalizeForBatch(AP.StripBatchLead(text))
     if norm == "" then return false end
-    if type(A.RouterIsFailClosedReadOnlyRequest) == "function"
-        and A.RouterIsFailClosedReadOnlyRequest(norm)
-    then
-        return true
-    end
     local router = A.RouterPrivate
-    return router and (
+    if router and (
         (type(router.IsExplicitReadOnlyDiagnosticCommand) == "function"
             and router.IsExplicitReadOnlyDiagnosticCommand(norm))
         or (type(router.IsExplicitNavigationCommand) == "function"
             and router.IsExplicitNavigationCommand(norm))
-    ) or false
+    ) then
+        return true
+    end
+    -- The full fail-closed classifier may build fuzzy/alias indexes. Running it
+    -- for an ordinary inherited mutation tail ("target portrait position ...")
+    -- blocked SubmitDeferred for tens of milliseconds before the yielding job
+    -- even existed. Only question, navigation, preview, or explicit no-write
+    -- shapes can be read-only here; mutation-shaped tails proceed to the cheap
+    -- inheritance checks below.
+    return AP.BatchReadOnlyGuardCandidate(norm)
+        and type(A.RouterIsFailClosedReadOnlyRequest) == "function"
+        and A.RouterIsFailClosedReadOnlyRequest(norm)
+        or false
 end
 
 function AP.InheritedBatchCommand(before, after)    local actionTail = AP.InheritableActionTail(after)

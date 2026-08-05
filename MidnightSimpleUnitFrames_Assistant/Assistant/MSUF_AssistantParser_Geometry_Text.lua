@@ -1034,6 +1034,15 @@ function A._ParseTextSlotDropdownValueShortcut(text)
         -- "Show percentages instead of numbers" names the mode but neither the
         -- slot nor the frame. It is a real, understandable request, so say what
         -- is missing rather than falling through to a generic examples list.
+        -- A text slot mode is an enum word, so a request carrying an explicit
+        -- number is setting something else and only borrowed the mode word.
+        -- "set temp max health bg opacity to 50" contains "max", which reads as
+        -- the health-text mode, and this lane answered it with "I can show
+        -- health text as max, but I need to know where" instead of letting the
+        -- opacity control resolve.
+        -- Any digit is enough: no slot mode is numeric, with or without a "to"
+        -- connector ("change temp max health bg opacity 50").
+        if tostring(text or ""):find("%d") then return nil end
         local modeProbe = TextSlotSetting("unitframe", "player", tab, "center")
         local modeValue = modeProbe and A._TextSlotDropdownValueForText(modeProbe, text) or nil
         if modeValue == nil then return nil end
