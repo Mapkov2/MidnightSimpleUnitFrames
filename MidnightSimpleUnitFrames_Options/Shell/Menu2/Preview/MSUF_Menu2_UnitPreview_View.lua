@@ -562,6 +562,7 @@ local UNIT_SECTION_IDS = {
     castbar = "castbar",
     auras = "auras",
     auras3 = "auras",
+    dispel_overlay = "unit_dispel_overlay",
     dispel_symbol = "unit_dispel_symbol",
     texture_layer = "texture_layer",
 }
@@ -675,6 +676,29 @@ OpenPreviewHandleSettings = function(handle, source)
         return menu.SelectPage(pageKey) ~= false
     end
     return false
+end
+Preview.DisabledLayerRoutes = Preview.DisabledLayerRoutes or {
+    nameText = { key = "name", section = "text" },
+    hpText = { key = "hpText", section = "text" },
+    powerText = { key = "powerText", section = "text" },
+    portrait = { key = "portrait", section = "portrait" },
+    texLayer = { key = "texLayer1", section = "texture_layer" },
+    power = { key = "power", section = "power" },
+    classPower = { key = "classPower", section = "classPower" },
+    castbar = { key = "castbar", section = "castbar" },
+    auras = { key = "auras", section = "auras" },
+    dispelOverlay = { key = "dispelOverlay", section = "dispel_overlay" },
+    dispelSymbol = { key = "dispelSymbol", section = "dispel_symbol" },
+    status = { key = "status", section = "status" },
+}
+function Preview.OpenUnavailableLayerSettings(box, layerKey)
+    local route = Preview.DisabledLayerRoutes[layerKey]
+    if not route then return false end
+    return OpenPreviewHandleSettings({
+        _key = route.key,
+        _preview = box,
+        _fields = { section = route.section },
+    }, "disabled-layer")
 end
 local function WriteHandleOffsets(handle, x, y, reason)
     if not handle then return false end
@@ -1840,7 +1864,8 @@ local function BuildPreview(parent, panel, width, height)
         IsSelected = function(owner, key) return owner and owner._msuf2SelectedPreviewLayerKey == key end,
         OnClick = function(self, owner)
             if owner.layerAvailable and owner.layerAvailable[self.key] == false then
-                owner.hint:SetText(TR("This layer is off in settings and cannot be shown in preview."))
+                if GameTooltip then GameTooltip:Hide() end
+                Preview.OpenUnavailableLayerSettings(owner, self.key)
                 return
             end
             owner.layerVisibility[self.key] = owner.layerVisibility[self.key] == false
@@ -1863,7 +1888,7 @@ local function BuildPreview(parent, panel, width, height)
             if not available then
                 self.bg:SetColorTexture(0.014, 0.038, 0.072, 0.62)
                 self.fs:SetTextColor(disabledLayerText[1], disabledLayerText[2], disabledLayerText[3], 0.78)
-                owner.hint:SetText(TR("This layer is off in settings and cannot be shown in preview."))
+                owner.hint:SetText(TR("This layer is off in settings. Click to open its options."))
                 return
             end
             local label = tr(self.fs and self.fs:GetText() or self.key)
@@ -1893,7 +1918,7 @@ local function BuildPreview(parent, panel, width, height)
         end
         local btn = PreviewHelpers.CreateLayerButton(sidebar, box, def, i, sideW, unitLayerButtonOpts)
         if M2.AddTooltip then
-            M2.AddTooltip(btn, "Layer disabled", "Turn this feature on in settings to make the preview layer available.", {
+            M2.AddTooltip(btn, "Layer disabled", "Click to open the setting that enables this layer.", {
                 hook = true,
                 enabled = function(self) return UnitLayerAvailable(box, self.key) == false end,
             })

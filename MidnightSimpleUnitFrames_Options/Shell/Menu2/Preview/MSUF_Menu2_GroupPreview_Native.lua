@@ -1526,7 +1526,8 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         IsSelected = function(owner, key) return owner and owner._msuf2SelectedPreviewLayerKey == key end,
         OnClick = function(self, owner)
             if owner and owner._layerAvailable and owner._layerAvailable[self.key] == false then
-                if owner._hint then owner._hint:SetText(R.Tr("This layer is off in settings and cannot be shown in preview.")) end
+                if GameTooltip then GameTooltip:Hide() end
+                OpenGFSection(self._sectionKey)
                 return
             end
             if IsShiftKeyDown and IsShiftKeyDown() then
@@ -1543,7 +1544,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             if not owner._hint then return end
             local label = self.fs and self.fs:GetText() or tr("Layer")
             if not available then
-                owner._hint:SetText(string.format(tr("%s is off in settings and cannot be shown in preview."), label))
+                owner._hint:SetText(string.format(tr("%s is off in settings. Click to open its options."), label))
                 return
             end
             local solo = M.gfPreviewSoloLayer == self.key
@@ -1559,7 +1560,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         }, i, layerW, groupLayerButtonOpts)
         btn._sectionKey, btn._layerKey = def[3], def[4]
         btn._label, btn._stripe, btn._bg, btn._off = btn.fs, btn.bar, btn.bg, btn.off
-        M.AddTooltip(btn, "Layer disabled", "Turn this feature on in settings to make the preview layer available.", {
+        M.AddTooltip(btn, "Layer disabled", "Click to open the setting that enables this layer.", {
             hook = true,
             enabled = function(self) return self._layerAvailable == false end,
         })
