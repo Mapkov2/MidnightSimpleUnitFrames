@@ -30,6 +30,8 @@ local type = type
 local tonumber = tonumber
 local tostring = tostring
 local castbarEngine = MSUF.Castbars and MSUF.Castbars.Engine
+local castbarRuntime = MSUF.MSUF_CastbarRuntime or _G.MSUF_CastbarRuntime
+local ApplyInterruptValues = castbarRuntime and castbarRuntime.ApplyInterruptValues
 
 local function CastbarEngine()
     if castbarEngine then return castbarEngine end
@@ -1480,11 +1482,15 @@ local function CreateCastBar(frameName, unit)
         end
 
         local reverseFill = _G.MSUF_GetReverseFillSafe(self, false)
-        _G.MSUF_ApplyInterruptBarVisuals(self, {
-            barValue = 1,
-            reverseFill = reverseFill,
-            label = "Interrupted",
-        })
+        if ApplyInterruptValues then
+            ApplyInterruptValues(castbarRuntime, self, 1, reverseFill, "Interrupted")
+        else
+            _G.MSUF_ApplyInterruptBarVisuals(self, {
+                barValue = 1,
+                reverseFill = reverseFill,
+                label = "Interrupted",
+            })
+        end
 
         local getFeedbackDuration = _G.MSUF_GetInterruptFeedbackDuration
         local feedbackDuration = type(getFeedbackDuration) == "function" and getFeedbackDuration() or 0.5

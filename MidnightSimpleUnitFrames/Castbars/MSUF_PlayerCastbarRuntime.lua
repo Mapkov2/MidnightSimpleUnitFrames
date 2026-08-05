@@ -62,6 +62,7 @@ end
 
 local RuntimePlainNumber = _G.MSUF_CastbarRuntime_PlainNumber
 local CastbarRuntime = _G.MSUF_CastbarRuntime
+local ApplyInterruptValues = CastbarRuntime and CastbarRuntime.ApplyInterruptValues
 
 local function ReleaseRuntimeActive(frame)
     if CastbarRuntime and CastbarRuntime.ReleaseActive then
@@ -850,11 +851,16 @@ local function ShowInterruptFeedback(frame, label)
     frame.interruptFeedbackEndTime = _G.GetTime() + duration
 
     local reverseFill = _G.MSUF_GetReverseFillSafe and _G.MSUF_GetReverseFillSafe(frame, false) or false
-    _G.MSUF_ApplyInterruptBarVisuals(frame, {
-        barValue = 1,
-        reverseFill = reverseFill,
-        label = label or _G.INTERRUPTED,
-    })
+    local interruptLabel = label or _G.INTERRUPTED
+    if ApplyInterruptValues then
+        ApplyInterruptValues(CastbarRuntime, frame, 1, reverseFill, interruptLabel)
+    else
+        _G.MSUF_ApplyInterruptBarVisuals(frame, {
+            barValue = 1,
+            reverseFill = reverseFill,
+            label = interruptLabel,
+        })
+    end
 
     frame._msufHideToken = (frame._msufHideToken or 0) + 1
     frame._msufPlayerInterruptHideToken = frame._msufHideToken
