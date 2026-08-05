@@ -1146,6 +1146,10 @@ local function PreviewDragCueEnabled()
     local general = _G.MSUF_DB and _G.MSUF_DB.general
     return type(general) ~= "table" or general.previewDragHintAnimationEnabled ~= false
 end
+local function PreviewDragCueIsNewProfile()
+    local general = _G.MSUF_DB and _G.MSUF_DB.general
+    return type(general) == "table" and general._msufPreviewDragHintExperienced == false
+end
 function H.HidePreviewMoveCue()
     local cue = H._previewMoveCue
     if not cue then return end
@@ -1157,7 +1161,7 @@ local function CreatePreviewMoveCue()
     if H._previewMoveCue then return H._previewMoveCue end
     if type(CreateFrame) ~= "function" or not UIParent then return nil end
     local cue = CreateFrame("Frame", "MSUF2PreviewMoveCue", UIParent, "BackdropTemplate")
-    cue:SetSize(166, 56)
+    cue:SetSize(252, 64)
     cue:SetFrameStrata("TOOLTIP")
     if cue.SetToplevel then cue:SetToplevel(true) end
     if cue.SetClampedToScreen then cue:SetClampedToScreen(true) end
@@ -1169,7 +1173,7 @@ local function CreatePreviewMoveCue()
     end
 
     local motion = CreateFrame("Frame", nil, cue)
-    motion:SetSize(52, 42)
+    motion:SetSize(72, 46)
     motion:SetPoint("LEFT", cue, "LEFT", 10, 0)
     local mouse = CreateFrame("Frame", nil, motion, "BackdropTemplate")
     mouse:SetSize(24, 34)
@@ -1199,19 +1203,40 @@ local function CreatePreviewMoveCue()
     cursor:SetPoint("CENTER", mouse, "BOTTOMRIGHT", 5, 2)
 
     local label = cue:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    label:SetPoint("LEFT", cue, "LEFT", 78, 8)
-    label:SetPoint("RIGHT", cue, "RIGHT", -8, 8)
+    label:SetPoint("LEFT", cue, "LEFT", 90, 0)
+    label:SetPoint("RIGHT", cue, "RIGHT", -88, 0)
     label:SetJustifyH("LEFT")
     label:SetTextColor(0.82, 0.94, 1, 1)
-    local sub = cue:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    sub:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 0, -3)
-    sub:SetPoint("RIGHT", cue, "RIGHT", -8, 0)
-    sub:SetJustifyH("LEFT")
-    sub:SetTextColor(0.58, 0.72, 0.84, 1)
-    cue._label, cue._sub = label, sub
+
+    local keys = CreateFrame("Frame", nil, cue)
+    keys:SetSize(70, 50)
+    keys:SetPoint("RIGHT", cue, "RIGHT", -8, 0)
+    local function ArrowKey(atlas, x, y)
+        local key = CreateFrame("Frame", nil, keys, "BackdropTemplate")
+        key:SetSize(20, 20)
+        key:SetPoint("BOTTOMLEFT", keys, "BOTTOMLEFT", x, y)
+        if key.SetBackdrop then
+            key:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+            key:SetBackdropColor(0.06, 0.10, 0.16, 0.98)
+            key:SetBackdropBorderColor(0.46, 0.66, 0.82, 0.95)
+        end
+        local arrow = key:CreateTexture(nil, "ARTWORK")
+        arrow:SetPoint("CENTER")
+        arrow:SetSize(12, 12)
+        if arrow.SetAtlas then arrow:SetAtlas(atlas, false) end
+        arrow:SetVertexColor(0.82, 0.94, 1, 1)
+        return key
+    end
+    ArrowKey("NPE_ArrowUp", 25, 27)
+    ArrowKey("NPE_ArrowLeft", 3, 5)
+    ArrowKey("NPE_ArrowDown", 25, 5)
+    ArrowKey("NPE_ArrowRight", 47, 5)
+    cue._label, cue._keys = label, keys
 
     if motion.CreateAnimationGroup then
         local group = motion:CreateAnimationGroup()
+        local theme = M and M.Theme
+        if theme and theme.TrackMenuAnimationGroup then theme.TrackMenuAnimationGroup(group) end
         local offsets = { 20, -20, 20, -20, 20, -20 }
         for i = 1, #offsets do
             local move = group:CreateAnimation("Translation")
@@ -1227,10 +1252,49 @@ local function CreatePreviewMoveCue()
     H._previewMoveCue = cue
     return cue
 end
+local function PreparePreviewMoveCueOwner(owner)
+    if not owner then return end
+    local profile = tostring(_G.MSUF_ActiveProfile or "")
+    if owner._msuf2PreviewDragCueProfile ~= profile then
+        owner._msuf2PreviewDragCueProfile = profile
+        owner._msuf2PreviewDragCueShownForOpen = nil
+        owner._msuf2PreviewHandleTooltipShownForOpen = nil
+    end
+    if owner._msuf2PreviewDragCueLifecycleHooked or not owner.HookScript then return end
+    owner._msuf2PreviewDragCueLifecycleHooked = true
+    owner:HookScript("OnShow", function(self)
+        self._msuf2PreviewDragCueShownForOpen = nil
+        self._msuf2PreviewHandleTooltipShownForOpen = nil
+        self._msuf2PreviewDragCueProfile = tostring(_G.MSUF_ActiveProfile or "")
+    end)
+end
+function H.NotePreviewElementMoved()
+    local general = _G.MSUF_DB and _G.MSUF_DB.general
+    if type(general) == "table" then general._msufPreviewDragHintExperienced = true end
+    H._previewDragCueSessionShown = true
+end
+function H.ShouldShowPreviewHandleTooltip(owner)
+    PreparePreviewMoveCueOwner(owner)
+    if PreviewDragCueIsNewProfile() then
+        if owner and owner._msuf2PreviewHandleTooltipShownForOpen == true then return false end
+        if owner then owner._msuf2PreviewHandleTooltipShownForOpen = true end
+    elseif H._previewHandleTooltipSessionShown == true then
+        return false
+    end
+    H._previewHandleTooltipSessionShown = true
+    return true
+end
 function H.ShowPreviewMoveCue(owner, handle)
     if not PreviewDragCueEnabled() then H.HidePreviewMoveCue(); return false end
     if not handle or handle._locked == true or handle._msufPlaced == false then return false end
     if handle.IsShown and not handle:IsShown() then return false end
+    PreparePreviewMoveCueOwner(owner)
+    local newProfile = PreviewDragCueIsNewProfile()
+    if newProfile then
+        if owner and owner._msuf2PreviewDragCueShownForOpen == true then return false end
+    elseif H._previewDragCueSessionShown == true then
+        return false
+    end
     local cue = CreatePreviewMoveCue()
     if not cue then return false end
     local anim = cue._motionAnim
@@ -1240,10 +1304,14 @@ function H.ShowPreviewMoveCue(owner, handle)
     cue:SetPoint("BOTTOM", handle, "TOP", 0, 12)
     local tr = (M and M.Tr) or F.Identity
     cue._label:SetText(tr("Drag to move"))
-    cue._sub:SetText(tr("Click and hold, then move the mouse"))
     cue._previewOwner = owner
     cue:Show()
     if anim and anim.Play then anim:Play() end
+    if newProfile and owner then
+        owner._msuf2PreviewDragCueShownForOpen = true
+    else
+        H._previewDragCueSessionShown = true
+    end
     return true
 end
 local function PreviewControlsLines(tr)

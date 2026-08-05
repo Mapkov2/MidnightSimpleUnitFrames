@@ -843,6 +843,7 @@ local function StopHandleDrag(handle, button, skipApply, allowOpenSettings)
     if not (handle and handle._dragging) then return end
     local preview = handle._preview
     local didMove = handle._didDragMove == true
+    if didMove and Helpers.NotePreviewElementMoved then Helpers.NotePreviewElementMoved() end
     local openSettingsOnRelease = allowOpenSettings == true
         and button == "LeftButton"
         and not didMove
@@ -887,12 +888,13 @@ local function MakeHandle(preview, key, store, xKey, yKey, defaultX, defaultY, l
     h:SetScript("OnEnter", function(self)
         self._hovering = true
         RefreshHandleVisuals(preview)
-        if GameTooltip then
+        local showTooltip = GameTooltip and (not Helpers.ShouldShowPreviewHandleTooltip
+            or Helpers.ShouldShowPreviewHandleTooltip(preview))
+        if showTooltip then
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:SetText(TR(label), 1, 1, 1)
-            GameTooltip:AddLine(TR("Drag to move this Class Resources preview element."), 0.82, 0.82, 0.82, true)
+            GameTooltip:AddLine(TR("Drag to move. Arrow keys nudge."), 0.82, 0.82, 0.82, true)
             GameTooltip:AddLine(TR("Right-click opens quick actions."), 0.50, 0.78, 0.92, true)
-            GameTooltip:AddLine(TR("Arrow keys nudge the selected element. Shift = 5, Ctrl = 10."), 0.55, 0.68, 0.86, true)
             GameTooltip:Show()
         end
     end)
