@@ -2747,7 +2747,7 @@ function Render.Install(box, ctx, deps)
                     if statusHandle.SetHitRectInsets then
                         local padX = max(0, (24 - textW) * 0.5)
                         local padY = max(0, (20 - textH) * 0.5)
-                        statusHandle:SetHitRectInsets(-padX, -padX, -padY, -padY)
+                        statusHandle:SetHitRectInsets(-padX, -padX, -max(padY, 14), -padY)
                     end
                 end
                 if statusHandle._statusTex then statusHandle._statusTex:Hide() end

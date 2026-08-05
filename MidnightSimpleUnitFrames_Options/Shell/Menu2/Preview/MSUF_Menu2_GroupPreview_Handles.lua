@@ -13,6 +13,8 @@ MSUF.MSUF2 = M
 local Handles = M.GroupPreviewHandles or {}
 M.GroupPreviewHandles = Handles
 local F = M.Fallbacks or {}
+local HANDLE_CLICK_DRAG_THRESHOLD = 3
+local HANDLE_LABEL_HIT_HEIGHT = 14
 local function FallbackHandleText(handle)
     return handle and (handle._previewText or handle._key) or "Handle"
 end
@@ -46,6 +48,7 @@ local GROUP_SECTION_LAYER = {
     sicons = "status",
     si = "si",
     dispel = "dispelSymbol",
+    dispelSymbol = "dispelSymbol",
 }
 function Handles.Install(box, deps)
     if not box then return nil end
@@ -712,13 +715,13 @@ function Handles.Install(box, deps)
             else
                 RefreshHandleSelection(box)
             end
-        elseif wasDragging then
+        elseif wasDragging and didMove then
             SaveHandlePosition(handle, "Move")
             didFinalRefresh = true
         else
             RefreshHandleSelection(box)
         end
-        if hadFrozenScale and not box._manualZoom and not didFinalRefresh then
+        if hadFrozenScale and not box._manualZoom and not didFinalRefresh and not openSettingsOnRelease then
             if box.RequestRefresh then box:RequestRefresh("GROUP_PREVIEW_DRAG_END") elseif box.Refresh then box:Refresh() end
         end
         if textDrag then
@@ -743,6 +746,14 @@ function Handles.Install(box, deps)
         end
         local cx, cy = GetCursorPosition()
         if not (cx and cy) then return end
+        if handle._didDragMove ~= true then
+            local cursorDX = cx - (handle._dragCursorX or cx)
+            local cursorDY = cy - (handle._dragCursorY or cy)
+            if cursorDX * cursorDX + cursorDY * cursorDY < HANDLE_CLICK_DRAG_THRESHOLD * HANDLE_CLICK_DRAG_THRESHOLD then
+                return
+            end
+            handle._didDragMove = true
+        end
         if handle._cfgText then
             local uiScale = (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
             if uiScale <= 0 then uiScale = 1 end
@@ -752,7 +763,6 @@ function Handles.Install(box, deps)
             local dy = ((cy - (handle._dragCursorY or cy)) / uiScale) / previewScale
             local nextX = Round((handle._dragCfgStartX or 0) + TextDragConfigDeltaX(handle, dx))
             local nextY = Round((handle._dragCfgStartY or 0) + dy)
-            if nextX ~= handle._dragCfgStartX or nextY ~= handle._dragCfgStartY then handle._didDragMove = true end
             if handle._lastDragX == nextX and handle._lastDragY == nextY then return end
             handle._lastDragX = nextX
             handle._lastDragY = nextY
@@ -766,7 +776,6 @@ function Handles.Install(box, deps)
         local dy = (cy - (handle._dragCursorY or cy)) / scale
         local nextX = Round((handle._dragStartX or 0) + dx)
         local nextY = Round((handle._dragStartY or 0) + dy)
-        if nextX ~= handle._dragStartX or nextY ~= handle._dragStartY then handle._didDragMove = true end
         if handle._lastDragX == nextX and handle._lastDragY == nextY then return end
         handle._lastDragX = nextX
         handle._lastDragY = nextY
@@ -824,6 +833,10 @@ function Handles.Install(box, deps)
     local function CreatePreviewHandle(key, sectionKey, color, label, width, height, locked, parent)
         local handle = CreateFrame("Button", nil, parent or mock, T.Template())
         handle:SetSize(width or 32, height or 32)
+        -- The colored label is part of the visible affordance. Without this,
+        -- clicking its glyphs falls through to a different overlapping handle
+        -- or the preview canvas and appears to route randomly.
+        if handle.SetHitRectInsets then handle:SetHitRectInsets(0, 0, -HANDLE_LABEL_HIT_HEIGHT, 0) end
         handle:SetMovable(true)
         handle:EnableMouse(true)
         handle:EnableMouseWheel(true)
@@ -1005,8 +1018,8 @@ function Handles.Install(box, deps)
     local externalHandle = CreatePreviewHandle("external", "externals", { 0.30, 0.72, 1.00 }, "EXTERNAL", 86, 34, false)
     externalHandle._cfgGroup = "externals"
     externalHandle._openSettingsOnRightClick = true
-    -- The blue EXTERNAL label sits just above the icon rectangle. Keep that
-    -- visible affordance inside the handle's mouse hit area as well.
+    -- Keep the long-standing explicit contract for the blue External label;
+    -- CreatePreviewHandle now applies the same hit area to every label.
     if externalHandle.SetHitRectInsets then externalHandle:SetHitRectInsets(0, 0, -14, 0) end
     AddIconPool(externalHandle, 2)
     -- Resource bar handle. Live parity: only the detached bar owns free
@@ -1026,7 +1039,7 @@ function Handles.Install(box, deps)
     -- frame, so its mouse handle lives on the preview stage; rendering and
     -- offsets stay anchored to the mock. Five icon slots: one per dispel type in
     -- "one per dispel type" mode, of which only the first is used in TOP mode.
-    local dispelSymbolHandle = CreatePreviewHandle("dispelSymbol", "dispel", { 0.30, 0.80, 1.00 }, "DISPEL", 44, 20, false, dragParent)
+    local dispelSymbolHandle = CreatePreviewHandle("dispelSymbol", "dispelSymbol", { 0.30, 0.80, 1.00 }, "DISPEL", 44, 20, false, dragParent)
     dispelSymbolHandle._cfgDispelSymbol = true
     dispelSymbolHandle._previewText = "Dispel Symbol"
     AddIconPool(dispelSymbolHandle, 5)
