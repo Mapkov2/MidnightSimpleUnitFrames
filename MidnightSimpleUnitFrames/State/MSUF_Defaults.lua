@@ -1053,6 +1053,7 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
         SetDefault(g, "unitInfoTooltipStyle", "classic")
         SetDefault(g, "showGameMenuButton", true)
         SetDefault(g, "navHoverScale", 1.05)
+        SetDefault(g, "previewDragHintAnimationEnabled", true)
         --- Factory profiles always teach preview interaction with the Guides
         --- layer visible. Both toggles remain ordinary persisted user choices
         --- after the factory profile has been created.
@@ -1097,6 +1098,7 @@ local MSUF_DEFAULTS_FACTORY_BOOTSTRAP_GENERAL_KEYS = {
     navHoverScale = true,
     showGameMenuButton = true,
     showMinimapIcon = true,
+    previewDragHintAnimationEnabled = true,
 }
 local function MSUF_Defaults_TableHasOnlyAllowedKeys(tbl, allowed)
     if type(tbl) ~= "table" then return false end
@@ -1718,6 +1720,9 @@ if g.colorHealthTextByHealth == nil then
 end
 if g.slashMenuSnapEnabled == nil then
     g.slashMenuSnapEnabled = true
+end
+if g.previewDragHintAnimationEnabled == nil then
+    g.previewDragHintAnimationEnabled = true
 end
 if g.hideAdvancedMenu == nil then
     g.hideAdvancedMenu = true

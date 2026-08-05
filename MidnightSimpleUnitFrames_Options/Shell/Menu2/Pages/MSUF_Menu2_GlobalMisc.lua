@@ -235,6 +235,14 @@ local function BuildMisc(ctx)
     BindMiscToggle(menuBehavior, "Reduce menu motion", "reduceMotion", false, "MSUF2_REDUCE_MOTION", 14, -208, 280, MENU_WRITE_OPTS)
     local menuFontRightX = max(350, floor(menuBehaviorW * 0.52))
     local menuFontW = max(250, min(340, menuBehaviorW - menuFontRightX - 30))
+    BindMiscToggle(menuBehavior, "Show preview drag hint animation", "previewDragHintAnimationEnabled", true,
+        "MSUF2_PREVIEW_DRAG_HINT", menuFontRightX, -222, menuFontW, MENU_WRITE_OPTS,
+        function(enabled)
+            local helpers = M.PreviewHelpers
+            if enabled == false and helpers and type(helpers.HidePreviewMoveCue) == "function" then
+                helpers.HidePreviewMoveCue()
+            end
+        end)
     local menuFontPreview
     BindMiscDropdown(menuBehavior, "MSUF menu font", function()
         return (type(MenuFontValues) == "function" and MenuFontValues()) or {

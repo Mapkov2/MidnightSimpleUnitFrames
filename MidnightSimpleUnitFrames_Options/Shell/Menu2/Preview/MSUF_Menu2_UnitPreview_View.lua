@@ -1088,6 +1088,7 @@ local function MakeHandle(preview, key, fields, label, color)
             return
         end
         SelectPreviewHandle(self, true)
+        if PreviewHelpers.ShowPreviewMoveCue then PreviewHelpers.ShowPreviewMoveCue(preview, self) end
         local x, y = ReadHandleOffsets(self)
         self._startX = x
         self._startY = y

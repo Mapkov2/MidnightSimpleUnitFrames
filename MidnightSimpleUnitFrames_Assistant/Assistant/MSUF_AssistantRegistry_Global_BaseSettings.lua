@@ -153,6 +153,11 @@ function A.GlobalRegistry.RegisterBaseSettings(ctx)
         "reduce motion", "menu motion", "animations", "reduce animations", "reduce menu motion", "menu animations", "bewegung reduzieren",
         "menue bewegung reduzieren", "animationen reduzieren", "weniger bewegung", "weniger animationen", "reduzierte bewegung",
     }, { category = "Global / Misc", frameType = "misc", reason = "MSUF_ASSISTANT_REDUCE_MOTION" })
+    RegisterGeneralBoolean("previewDragHintAnimationEnabled", "previewDragHintAnimation", "Preview Drag Hint Animation", true, {
+        "preview drag hint", "preview drag animation", "drag hint animation", "move hint animation", "preview move tutorial",
+        "show preview drag hint animation", "hide preview drag hint animation", "disable preview drag animation",
+        "preview bewegungsanimation", "drag hinweis animation", "verschiebe hinweis", "preview animation abschalten",
+    }, { category = "Global / Misc", frameType = "misc", reason = "MSUF_ASSISTANT_PREVIEW_DRAG_HINT" })
     RegisterGeneralBoolean("showNavigationIcons", "navigationIcons", "Navigation Icons", false, {
         "navigation icons", "nav icons", "menu icons", "sidebar icons", "rail icons", "show navigation icons", "hide navigation icons",
         "navigation symbols", "nav symbols", "menu symbols", "sidebar symbols", "rail symbols", "navi symbole", "navigationssymbole",

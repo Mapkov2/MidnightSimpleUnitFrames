@@ -1135,6 +1135,117 @@ function H.NotePreviewCanvasMoved(button)
     if M and type(M.SavePersistentMenuState) == "function" then M.SavePersistentMenuState() end
     return H.PreviewMoveHintRemaining()
 end
+
+-- Every real preview-handle click gets the same short drag demonstration.  The
+-- artwork is Blizzard's own tutorial drag cursor; the surrounding mouse shape
+-- keeps the gesture readable even when the selected preview element is tiny.
+-- This is menu-only work driven by an AnimationGroup, never a runtime ticker or
+-- a persistent OnUpdate.
+local PREVIEW_DRAG_CUE_ATLAS = "newplayertutorial-drag-cursor"
+local function PreviewDragCueEnabled()
+    local general = _G.MSUF_DB and _G.MSUF_DB.general
+    return type(general) ~= "table" or general.previewDragHintAnimationEnabled ~= false
+end
+function H.HidePreviewMoveCue()
+    local cue = H._previewMoveCue
+    if not cue then return end
+    local anim = cue._motionAnim
+    if anim and anim.IsPlaying and anim:IsPlaying() then anim:Stop() end
+    cue:Hide()
+end
+local function CreatePreviewMoveCue()
+    if H._previewMoveCue then return H._previewMoveCue end
+    if type(CreateFrame) ~= "function" or not UIParent then return nil end
+    local cue = CreateFrame("Frame", "MSUF2PreviewMoveCue", UIParent, "BackdropTemplate")
+    cue:SetSize(166, 56)
+    cue:SetFrameStrata("TOOLTIP")
+    if cue.SetToplevel then cue:SetToplevel(true) end
+    if cue.SetClampedToScreen then cue:SetClampedToScreen(true) end
+    cue:EnableMouse(false)
+    if cue.SetBackdrop then
+        cue:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+        cue:SetBackdropColor(0.012, 0.020, 0.040, 0.96)
+        cue:SetBackdropBorderColor(0.18, 0.64, 0.88, 0.96)
+    end
+
+    local motion = CreateFrame("Frame", nil, cue)
+    motion:SetSize(52, 42)
+    motion:SetPoint("LEFT", cue, "LEFT", 10, 0)
+    local mouse = CreateFrame("Frame", nil, motion, "BackdropTemplate")
+    mouse:SetSize(24, 34)
+    mouse:SetPoint("LEFT", motion, "LEFT", 1, 0)
+    if mouse.SetBackdrop then
+        mouse:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+        mouse:SetBackdropColor(0.08, 0.12, 0.18, 0.98)
+        mouse:SetBackdropBorderColor(0.72, 0.86, 0.98, 1)
+    end
+    local split = mouse:CreateTexture(nil, "ARTWORK")
+    split:SetColorTexture(0.72, 0.86, 0.98, 0.82)
+    split:SetPoint("TOP", mouse, "TOP", 0, -10)
+    split:SetPoint("LEFT", mouse, "LEFT", 2, 0)
+    split:SetPoint("RIGHT", mouse, "RIGHT", -2, 0)
+    split:SetHeight(1)
+    local wheel = mouse:CreateTexture(nil, "ARTWORK")
+    wheel:SetColorTexture(0.18, 0.64, 0.88, 1)
+    wheel:SetSize(2, 6)
+    wheel:SetPoint("TOP", mouse, "TOP", 0, -3)
+    local cursor = motion:CreateTexture(nil, "OVERLAY", nil, 2)
+    if cursor.SetAtlas then
+        cursor:SetAtlas(PREVIEW_DRAG_CUE_ATLAS, true)
+    else
+        cursor:SetTexture("Interface\\Cursor\\UI-Cursor-Move")
+        cursor:SetSize(32, 32)
+    end
+    cursor:SetPoint("CENTER", mouse, "BOTTOMRIGHT", 5, 2)
+
+    local label = cue:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    label:SetPoint("LEFT", cue, "LEFT", 78, 8)
+    label:SetPoint("RIGHT", cue, "RIGHT", -8, 8)
+    label:SetJustifyH("LEFT")
+    label:SetTextColor(0.82, 0.94, 1, 1)
+    local sub = cue:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    sub:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 0, -3)
+    sub:SetPoint("RIGHT", cue, "RIGHT", -8, 0)
+    sub:SetJustifyH("LEFT")
+    sub:SetTextColor(0.58, 0.72, 0.84, 1)
+    cue._label, cue._sub = label, sub
+
+    if motion.CreateAnimationGroup then
+        local group = motion:CreateAnimationGroup()
+        local offsets = { 20, -20, 20, -20, 20, -20 }
+        for i = 1, #offsets do
+            local move = group:CreateAnimation("Translation")
+            move:SetOrder(i)
+            move:SetDuration(i == 1 and 0.32 or 0.26)
+            move:SetOffset(offsets[i], 0)
+            if move.SetSmoothing then move:SetSmoothing("IN_OUT") end
+        end
+        group:SetScript("OnFinished", function() cue:Hide() end)
+        cue._motionAnim = group
+    end
+    cue:Hide()
+    H._previewMoveCue = cue
+    return cue
+end
+function H.ShowPreviewMoveCue(owner, handle)
+    if not PreviewDragCueEnabled() then H.HidePreviewMoveCue(); return false end
+    if not handle or handle._locked == true or handle._msufPlaced == false then return false end
+    if handle.IsShown and not handle:IsShown() then return false end
+    local cue = CreatePreviewMoveCue()
+    if not cue then return false end
+    local anim = cue._motionAnim
+    if anim and anim.IsPlaying and anim:IsPlaying() then anim:Stop() end
+    cue:Hide()
+    cue:ClearAllPoints()
+    cue:SetPoint("BOTTOM", handle, "TOP", 0, 12)
+    local tr = (M and M.Tr) or F.Identity
+    cue._label:SetText(tr("Drag to move"))
+    cue._sub:SetText(tr("Click and hold, then move the mouse"))
+    cue._previewOwner = owner
+    cue:Show()
+    if anim and anim.Play then anim:Play() end
+    return true
+end
 local function PreviewControlsLines(tr)
     tr = tr or F.Identity
     return {
@@ -1228,6 +1339,7 @@ function H.HideTransientPopups()
     if context and context.Hide then context:Hide() end
     local help = H._previewControlsHelpPopup
     if help and help.Hide then help:Hide() end
+    H.HidePreviewMoveCue()
 end
 M.HideMenuPreviewPopups = H.HideTransientPopups
 function H.EnsurePreviewControlsHint(box, anchor, opts)

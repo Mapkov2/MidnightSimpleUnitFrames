@@ -794,6 +794,7 @@ function Handles.Install(box, deps)
             return
         end
         SelectHandle(handle)
+        if PreviewHelpers.ShowPreviewMoveCue then PreviewHelpers.ShowPreviewMoveCue(box, handle) end
         if not handle or handle._locked then return end
         local point, relativeTo, relativePoint, xOfs, yOfs = handle:GetPoint(1)
         local cx, cy = GetCursorPosition()
