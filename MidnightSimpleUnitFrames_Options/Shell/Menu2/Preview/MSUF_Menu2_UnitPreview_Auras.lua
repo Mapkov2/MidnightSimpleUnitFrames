@@ -44,6 +44,13 @@ local function PlaceMinimumHitHandle(handle, parent, left, bottom, visualWidth, 
         bottom - pad - ((handleHeight - naturalHeight) * 0.5))
     return true
 end
+local function PlaceHandleAroundShownRegions(handle, parent, regions, pad)
+    local menu = (MSUF and MSUF.MSUF2) or _G.MSUF2
+    local helpers = menu and menu.PreviewHelpers
+    local place = helpers and helpers.PlaceHandleAroundRegions
+    if type(place) ~= "function" then return false end
+    return place(handle, parent, regions, pad) == true
+end
 local function AuraDurationBarColor()
     local auras3 = MSUF.MSUF_Auras3
     local resolver = auras3 and auras3.GetDurationBarColor
@@ -56,6 +63,7 @@ end
 local Auras = MSUF.UFPreviewAuras or {}
 MSUF.UFPreviewAuras = Auras
 Auras.PlaceMinimumHitHandle = PlaceMinimumHitHandle
+Auras.PlaceHandleAroundShownRegions = PlaceHandleAroundShownRegions
 local AURA_HANDLE_FIELDS = {
     buff = { x = "buffGroupOffsetX", y = "buffGroupOffsetY", defaultX = 0, defaultY = 36, label = "Buffs", color = { 0.20, 0.74, 0.42 } },
     debuff = { x = "debuffGroupOffsetX", y = "debuffGroupOffsetY", defaultX = 0, defaultY = 6, label = "Debuffs", color = { 0.84, 0.26, 0.28 } },
@@ -1168,8 +1176,13 @@ function Auras.LayoutDispelLayers(box, mock, runtimeSpec, S, baseLevel, overlayA
         for index = count + 1, #holders do holders[index]:Hide() end
         if symbolHandle then
             symbolHandle._msufAuraDragVisual = symbolHost
-            PlaceMinimumHitHandle(symbolHandle, mock, S(rawLeft), S(rawBottom),
-                S(rawRight - rawLeft), S(rawTop - rawBottom), 4, 18)
+            -- Anchor the picker to the resolved symbol holders. Rebuilding the
+            -- union from raw offsets rounds in a different order at fractional
+            -- Fit scales and can move the reported center by a screen pixel.
+            if not PlaceHandleAroundShownRegions(symbolHandle, mock, holders, 4) then
+                PlaceMinimumHitHandle(symbolHandle, mock, S(rawLeft), S(rawBottom),
+                    S(rawRight - rawLeft), S(rawTop - rawBottom), 4, 18)
+            end
             symbolHandle._msufPlaced = true
             symbolHandle:Show()
         end
