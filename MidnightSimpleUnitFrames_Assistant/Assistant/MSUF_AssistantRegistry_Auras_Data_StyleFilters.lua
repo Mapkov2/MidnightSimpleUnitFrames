@@ -37,6 +37,30 @@ Data.AURA_COOLDOWN_SWIPE_DIRECTION_ALIASES = {
     ["reverse direction"] = "REVERSE",
 }
 
+-- Stealable/purgeable buff marking. Buff lane only: nothing on the debuff lane
+-- can be stolen or purged. Values mirror A3.NormalizeStealableStyle, which
+-- accepts BORDER, BORDER_ICON and ICON and falls back to BORDER_ICON.
+-- BORDER_ICON leads deliberately: the registration helper falls back to
+-- values[1] for an unknown value, and that has to match the runtime default
+-- that A3.NormalizeStealableStyle applies.
+Data.AURA_STEALABLE_STYLE_VALUES = { "BORDER_ICON", "BORDER", "ICON" }
+Data.AURA_STEALABLE_STYLE_ALIASES = {
+    border = "BORDER",
+    ["border only"] = "BORDER",
+    ["only border"] = "BORDER",
+    ["just the border"] = "BORDER",
+    ["border and icon"] = "BORDER_ICON",
+    ["border icon"] = "BORDER_ICON",
+    ["icon and border"] = "BORDER_ICON",
+    both = "BORDER_ICON",
+    default = "BORDER_ICON",
+    icon = "ICON",
+    ["icon only"] = "ICON",
+    ["only icon"] = "ICON",
+    ["symbol"] = "ICON",
+    ["just the icon"] = "ICON",
+}
+
 -- Native WoW 12.1 AuraContainer ordering. Buffs and debuffs expose one
 -- lane-specific value each, so keep their reviewed value domains separate.
 Data.AURA_SORT_METHOD_VALUES = {

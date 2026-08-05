@@ -28,16 +28,23 @@ function A.AurasRegistry.BuildScopeRegistrationHelpers(ctx)
     if type(AuraSharedBool) ~= "function" or type(SetAuraSharedBool) ~= "function" then return nil end
     if type(AuraReadNumber) ~= "function" or type(AuraWriteNumber) ~= "function" then return nil end
 
-    local function RegisterAuraScopeLaneBoolean(scope, lane, attr, label, defaultValue, aliases, read, write, applyText)
+    -- `opts` is optional and trailing, so every existing caller keeps working.
+    -- It mirrors the enum helper below: a lane boolean that shares wording with
+    -- an older control needs exactAliases to win the phrase outright.
+    local function RegisterAuraScopeLaneBoolean(scope, lane, attr, label, defaultValue, aliases, read, write, applyText, opts)
+        opts = opts or {}
         Registry:RegisterSetting({
             key = "auras3." .. scope .. "." .. lane .. "." .. attr,
             label = AuraScopeLabel(scope) .. " " .. (lane == "buff" and "Buff " or "Debuff ") .. label,
             category = AuraScopeLabel(scope) .. " / Aura Style",
+            page = opts.page,
+            description = opts.description,
             unit = scope,
             frameType = "aura",
             attribute = "aura" .. (lane == "buff" and "Buff" or "Debuff") .. attr,
             type = "boolean",
             aliases = aliases,
+            exactAliases = opts.exactAliases,
             get = read,
             set = write,
             apply = function() ApplyAuraScope(scope, applyText) end,

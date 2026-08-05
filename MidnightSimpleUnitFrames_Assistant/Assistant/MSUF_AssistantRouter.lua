@@ -13146,8 +13146,14 @@ function R.OpenEndedLikelyPage(subject, norm)
         local groupScope = R.GroupScopeFromText(norm)
         if groupScope then
             page, label, detail = "gf_auras", "Group Auras", "Party and Raid aura controls live in Group Auras."
+        elseif R.ContainsAny(subject, { "appearance", "shared", "theme", "icon shape", "icon border", "icon shadow" }) then
+            page, label, detail = "auras3_styling", "Shared Aura Appearance", "The global Aura icon theme is selected by Aura product in Appearance > Aura Style."
         else
-            page, label, detail = "auras3_styling", "Aura Style", "Unit-frame aura layout and styling controls live in Aura Style."
+            local unit, unitLabel = R.UnitScopeFromText(norm)
+            if unit and unitLabel then
+                return { unit = unit, label = unitLabel, detail = unitLabel .. " Aura Options and Aura Style live on the " .. unitLabel .. " UnitFrame page." }
+            end
+            page, label, detail = "uf_player", "Player UnitFrame", "Aura Options and Aura Style are frame-local. Open the intended UnitFrame; Player is the starting scope."
         end
     elseif R.ContainsAny(subject, { "raid spacing", "party spacing", "group spacing", "growth direction", "group layout" }) then
         page, label, detail = "gf_layout", "Group Layout", "Party and Raid frame geometry controls live in Group Layout."

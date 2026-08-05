@@ -618,16 +618,6 @@ true=import create new|import new profile|create new profile|import and create n
 false=import current profile|import to current|current profile import
 ]]
 
-local AURA_SCOPE_TERMS = SearchTermRows [[
-player=player
-target=target
-focus=focus
-boss=boss
-party=party=party
-raid=raid|mythic=raid
-shared=shared|global
-]]
-
 local DASHBOARD_ROUTE_TERMS = {
     { DASHBOARD_ROUTE_RECOVERY, "discord|factory reset|fullreset|print help|display recovery|recovery tools|recover menu|reset all|help reset|copy discord|support discord" },
     { DASHBOARD_ROUTE_SCALING, "scaling|ui scale|menu scale|msuf frame scale|msuf menu scale|make menu bigger|make menu smaller|options too big|options too small|resize window|groesser|kleiner|skalierung" },
@@ -647,19 +637,13 @@ end
 local function SearchPowerColorTokenForText(normalized) return SearchFirstMatch(normalized, POWER_COLOR_TERMS) end
 local function SearchClassPowerTokenForText(normalized) return SearchFirstMatch(normalized, CLASS_POWER_TERMS) end
 
-local function SearchRouteAuraScope(route, normalized)
-    for i = 1, #AURA_SCOPE_TERMS do
-        local spec = AURA_SCOPE_TERMS[i]
-        if SearchRouteHasAny(normalized, spec[2]) then
-            SearchRouteSetState(route, "auraScope", spec[1])
-            if spec[3] then SearchRouteSetState(route, "auraStyleGFScope", spec[3]) end
-            return spec[1]
-        end
-    end
-end
-
 local function SearchAuraStyleContainer(normalized)
-    if SearchRouteHasAny(normalized, "dots on target|target dots|dot tracker") then return "custom4" end
+    if SearchRouteHasAny(normalized, "dots on target|target dots|dot tracker") then return "targetDots" end
+    if SearchRouteHasAny(normalized,
+        "player defensive|player defensives|defensive buff|defensive buffs|defensive tracker")
+    then
+        return "playerDefensives"
+    end
     for index = 1, 4 do
         if SearchRouteHasAny(normalized, "custom " .. index .. "|custom" .. index) then
             return "custom" .. index
@@ -720,6 +704,7 @@ dstripe=debuff stripe|stripe edge|stripe height|stripe opacity
 buffs=buffs|buff|hots|own buffs|healer buffs|buff position|buff size|buff layer
 debuffs=debuffs|debuff|boss debuff|raid debuff|debuff position|debuff size|debuff layer
 si=spell indicators|custom spell|spell id|indicator spell|healer hots indicators|placed spell icons
+si_style=spell icon style|spell indicator style|spell icon zoom|spell icon scale|spell icon shape|spell icon opacity|spell icon tooltip|spell icon cooldown|spell icon swipe|spell icon duration bar|spell icon stack
 ]],
     gf_indicators = [[
 indicators=indicators|focus glow|frame effects
@@ -863,10 +848,15 @@ local function SearchRouteUnitPage(route, pageKey, normalized)
         "status icons|status icon|indicator|level|raid group|group number|raid marker|leader|assist|elite|rare|dead|offline|combat icon|rested|incoming rez")
     SearchRouteUnitStatusSelection(route, unit, normalized)
     local auraQuery = SearchRouteHasAny(normalized,
-        "aura|auras|buff|buffs|debuff|debuffs|dot|dots|blacklist|whitelist|filter|custom display|custom aura|spell id")
+        "aura|auras|buff|buffs|debuff|debuffs|defensive|defensives|dot|dots|blacklist|whitelist|filter|custom display|custom aura|spell id|style|appearance|pandemic|stack|cooldown|timer|duration|tooltip|opacity|icon zoom|icon shape|swipe|full frame|effect")
     if auraQuery then
         local container
         if SearchRouteHasAny(normalized, "dots on target|target dots|dot tracker") then container = "custom4" end
+        if unit == "player" and SearchRouteHasAny(normalized,
+            "defensive buff|defensive buffs|player defensive|player defensives|defensive tracker")
+        then
+            container = "custom4"
+        end
         for index = 1, 4 do
             if SearchRouteHasAny(normalized, "custom " .. index .. "|custom" .. index) then container = "custom" .. index; break end
         end
@@ -877,24 +867,36 @@ local function SearchRouteUnitPage(route, pageKey, normalized)
         local custom = tostring(container):match("^custom") ~= nil
         local tool
         if container == "custom4" then
-            if SearchRouteHasAny(normalized, "dot|dots|spell|track|list") then tool = "dots"
-            elseif SearchRouteHasAny(normalized, "layout|position|anchor|offset|size|strata|full frame|effect")
+            if SearchRouteHasAny(normalized,
+                "style|appearance|pandemic|stack|cooldown|timer|duration|tooltip|opacity|icon zoom|icon shape|swipe|full frame|effect")
+            then tool = "style"
+            elseif SearchRouteHasAny(normalized, "layout|position|anchor|offset|size|strata")
                 or SearchRouteHasWord(normalized, "layer")
             then tool = "layout"
+            elseif unit == "player" and SearchRouteHasAny(normalized,
+                "defensive|defensives|spell|track|list")
+            then tool = "defensives"
+            elseif SearchRouteHasAny(normalized, "dot|dots|spell|track|list") then tool = "dots"
             else tool = "setup" end
         elseif custom then
-            if SearchRouteHasAny(normalized, "whitelist|allow list|allowlist") then tool = "whitelist"
+            if SearchRouteHasAny(normalized,
+                "style|appearance|stack|cooldown|timer|duration|tooltip|opacity|icon zoom|icon shape|swipe|full frame|effect")
+            then tool = "style"
+            elseif SearchRouteHasAny(normalized, "whitelist|allow list|allowlist") then tool = "whitelist"
             elseif SearchRouteHasAny(normalized, "filter|only mine|hide permanent") then tool = "filters"
             -- `layer` must be a whole word: substring matching also finds it in
             -- `player`, which incorrectly routed "player custom aura setup" to
             -- the Layout workspace.
-            elseif SearchRouteHasAny(normalized, "layout|position|anchor|offset|size|strata|full frame|effect")
+            elseif SearchRouteHasAny(normalized, "layout|position|anchor|offset|size|strata")
                 or SearchRouteHasWord(normalized, "layer")
             then tool = "layout"
             else tool = "setup" end
         else
             if SearchRouteHasAny(normalized, "blacklist|ignore list|block list") then tool = "blacklist"
             elseif SearchRouteHasAny(normalized, "filter|only mine|dispellable|stealable|boss aura|hide permanent|no timer|no duration") then tool = "filters"
+            elseif SearchRouteHasAny(normalized,
+                "style|appearance|stack|cooldown|timer|duration|tooltip|opacity|icon zoom|icon shape|swipe|full frame|effect")
+            then tool = "style"
             else tool = "layout" end
         end
         SearchRouteSetTable(route, "unitAuraTabSelection", unit, container)
@@ -922,7 +924,7 @@ local function SearchRouteGroupPage(route, pageKey, normalized)
         local cornerSlot = SearchFirstMatch(normalized, CORNER_SLOT_TERMS)
         if cornerSlot then SearchRouteSetState(route, "gfCornerSlotSelection", cornerSlot) end
     elseif pageKey == "gf_auras" and SearchRouteHasAny(normalized,
-        "aura|auras|buff|buffs|debuff|debuffs|blacklist|filter|layout|position|anchor|growth|icon size|external defensive|external defensives|externals|layer")
+        "aura|auras|buff|buffs|debuff|debuffs|blacklist|filter|layout|position|anchor|growth|icon size|external defensive|external defensives|externals|layer|style|appearance|stack|cooldown|timer|duration|tooltip|opacity|icon zoom|icon shape|swipe")
     then
         local activeScope = scope or M.gfScope or "party"
         local lane = SearchRouteHasAny(normalized, "external defensives|external defensive|externals") and "externals"
@@ -931,6 +933,11 @@ local function SearchRouteGroupPage(route, pageKey, normalized)
         lane = lane or (type(M.gfAuraLaneSelection) == "table" and M.gfAuraLaneSelection[activeScope]) or "buff"
         local tool = SearchRouteHasAny(normalized, "blacklist|ignore list|block list") and "blacklist"
             or (SearchRouteHasAny(normalized, "filter|only mine|dispellable|stealable|boss aura|hide permanent|no timer|no duration") and "filters" or "layout")
+        if tool == "layout" and SearchRouteHasAny(normalized,
+            "style|appearance|stack|cooldown|timer|duration|tooltip|opacity|icon zoom|icon shape|swipe")
+        then
+            tool = "style"
+        end
         SearchRouteSetTable(route, "gfAuraLaneSelection", activeScope, lane)
         SearchRouteSetNestedTable(route, "gfAuraToolSelection", activeScope, lane, tool)
     end
@@ -954,22 +961,19 @@ local function SearchRouteGlobalPage(route, pageKey, normalized)
             SearchRouteSetGeneral(route, "_fontScopeKey", "shared")
         end
     elseif SEARCH_AURA_ROUTE_PAGES[pageKey] then
-        local scope = SearchRouteAuraScope(route, normalized)
         local container = SearchAuraStyleContainer(normalized)
         if pageKey == "auras3_buffs" then container = "buff"
         elseif pageKey == "auras3_debuffs" then container = "debuff" end
-        local activeScope = scope or M.auraScope or "shared"
-        local custom = type(container) == "string" and container:match("^custom[1234]$") ~= nil
-        -- Custom containers only exist for unit-style scopes. Do not manufacture a
-        -- group/shared custom branch when the query explicitly selected one of
-        -- those scopes; the page itself exposes only Buffs/Debuffs there.
-        if custom and (activeScope == "shared" or activeScope == "party"
-            or activeScope == "raid" or activeScope == "mythicraid")
+        -- Global Aura Style exposes four preview contexts. Reserved products
+        -- are preview-only here; their Deep Style controls still route through
+        -- the owning UnitFrame search records.
+        if container ~= "buff" and container ~= "debuff"
+            and container ~= "playerDefensives" and container ~= "targetDots"
         then
             container = nil
         end
         if container then
-            SearchRouteSetState(route, "auraStyleContainer", container)
+            SearchRouteSetState(route, "auraSharedStyleContainer", container)
             if container == "buff" or container == "debuff" then
                 SearchRouteSetState(route, "auraStyleGFLane", container)
             end
