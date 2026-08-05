@@ -2360,7 +2360,7 @@ function Preview.Create(ctx, builder)
     box._animationEnabled = General().classPowerPreviewAnimate == true
     CreateAnimateButton(box)
     box.canvas:SetScript("OnMouseDown", function(self, button)
-        if ZoomPan.Start and ZoomPan.Start(self, box, button) then return end
+        if ZoomPan.Start and ZoomPan.Start(self, box, button, true) then return end
         box.selectedHandle = nil
         SetArrowBindings(box, false)
         FocusPreviewKeyboardTarget(box, nil, false)

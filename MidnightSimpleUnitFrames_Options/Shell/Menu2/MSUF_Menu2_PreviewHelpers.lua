@@ -1107,9 +1107,9 @@ function H.EnsureZoomLockButton(box, zoomBar, opts)
     Refresh()
     return btn
 end
--- Right-click drag moves the preview canvas, which is the least discoverable
--- gesture the preview has. The hint counts real moves (not bare clicks) and
--- retires itself after three; the tally is persisted so it stays retired.
+-- Right-click drag moves the preview canvas; empty-space left drag and the
+-- middle-button gesture now share the same path. The hint counts real moves
+-- (not bare clicks) and retires itself after three; the tally is persisted.
 local PREVIEW_MOVE_HINT_TARGET = 3
 function H.PreviewMoveHintState()
     if M and type(M.GetPersistentMenuStateTable) == "function" then
@@ -1126,7 +1126,9 @@ function H.PreviewMoveHintRemaining()
     return remaining
 end
 function H.NotePreviewCanvasMoved(button)
-    if button ~= "RightButton" then return H.PreviewMoveHintRemaining() end
+    if button ~= "LeftButton" and button ~= "RightButton" and button ~= "MiddleButton" then
+        return H.PreviewMoveHintRemaining()
+    end
     local state = H.PreviewMoveHintState()
     if type(state) ~= "table" then return 0 end
     local done = tonumber(state.count) or 0
@@ -1320,7 +1322,7 @@ local function PreviewControlsLines(tr)
         tr("Drag handles to move."),
         tr("Right-click: quick actions."),
         tr("Arrows nudge. Shift=5, Ctrl=10."),
-        tr("Ctrl+wheel: zoom. Ctrl+drag: pan."),
+        tr("Drag background: pan. Ctrl+wheel: zoom."),
         tr("Fit recenters."),
     }
 end
@@ -1711,11 +1713,12 @@ function H.InstallZoomPan(ZoomPan, opts)
         local update = deps[opts.updateHintKey or "UpdateHandleHint"]
         if box and type(update) == "function" then update(box, box._selectedHandle) end
     end
-    function ZoomPan.Start(surface, box, button)
+    function ZoomPan.Start(surface, box, button, allowPlainLeft)
         if not (surface and box) then return false end
         if surface[PAN_PANNING] then return true end
         local ctrlLeft = button == "LeftButton" and IsControlKeyDown and IsControlKeyDown()
-        if not (ctrlLeft or button == "RightButton" or button == "MiddleButton") then return false end
+        local backgroundLeft = allowPlainLeft == true and button == "LeftButton"
+        if not (backgroundLeft or ctrlLeft or button == "RightButton" or button == "MiddleButton") then return false end
         if not box._manualZoom then
             box._manualZoom = ZoomPan.Clamp(box._mockScale or box._mockAutoScale or 1)
             ZoomPan.UpdateControls(box)
@@ -1908,7 +1911,7 @@ function H.BuildZoomBar(box, surface, opts)
             GameTooltip:SetText(tr("Preview zoom"), 1, 1, 1)
             GameTooltip:AddLine(tr("Use the buttons or Ctrl + mouse wheel to zoom."), 0.82, 0.82, 0.82, true)
             if panEnabled then
-                GameTooltip:AddLine(tr("Ctrl + left-drag moves the preview canvas. Fit recenters it."), 0.55, 0.68, 0.86, true)
+                GameTooltip:AddLine(tr("Drag empty preview space to move the canvas. Fit recenters it."), 0.55, 0.68, 0.86, true)
             else
                 GameTooltip:AddLine(tr("Fit shows the complete preview; 1:1 shows its configured pixel size."), 0.55, 0.68, 0.86, true)
             end
@@ -1984,9 +1987,9 @@ function H.BuildZoomBar(box, surface, opts)
     H.BindPreviewWheel(backgroundButton, box, ZoomWheel)
     if panEnabled then
         if surface.RegisterForDrag then surface:RegisterForDrag("LeftButton") end
-        surface:SetScript("OnMouseDown", function(self, button) startPan(self, box, button) end)
+        surface:SetScript("OnMouseDown", function(self, button) startPan(self, box, button, true) end)
         surface:SetScript("OnMouseUp", stopPan)
-        surface:SetScript("OnDragStart", function(self, button) startPan(self, box, button) end)
+        surface:SetScript("OnDragStart", function(self, button) startPan(self, box, button, true) end)
         surface:SetScript("OnDragStop", stopPan)
         surface:SetScript("OnHide", stopPan)
     end

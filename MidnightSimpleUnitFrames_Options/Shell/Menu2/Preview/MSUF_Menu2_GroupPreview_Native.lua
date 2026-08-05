@@ -1151,7 +1151,7 @@ local function GroupPreviewDefaultHint()
     local remaining = PreviewHelpers.PreviewMoveHintRemaining and PreviewHelpers.PreviewMoveHintRemaining() or 0
     if remaining > 0 then
         return string.format("|cffff4d3f%s|r   %s",
-            string.format(Tr("Rightclick to move (%dx)"), remaining), base)
+            string.format(Tr("Drag background (%dx)"), remaining), base)
     end
     return base
 end
@@ -1637,7 +1637,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     mock:EnableMouseWheel(true)
     if mock.SetPropagateMouseWheel then mock:SetPropagateMouseWheel(false) end
     mock:SetScript("OnMouseWheel", R.ZoomWheel)
-    mock:SetScript("OnMouseDown", function(_, button) R.StartPan(stage, box, button) end)
+    mock:SetScript("OnMouseDown", function(_, button) R.StartPan(stage, box, button, true) end)
     mock:SetScript("OnMouseUp", function()
         if stage._msufGFPreviewPanning then R.StopPan(stage) end
     end)
