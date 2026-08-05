@@ -112,6 +112,67 @@ local function ReadOffsets(box, handle)
     return tonumber(x) or 0, tonumber(y) or 0
 end
 
+local function HandleByKey(box, handleKey)
+    local deps = Deps(box)
+    local list = deps and type(deps.HandleList) == "function" and deps.HandleList(box) or nil
+    for index = 1, #(list or {}) do
+        local handle = list[index]
+        if handle and tostring(handle._key or "") == tostring(handleKey or "") then return handle end
+    end
+end
+
+--- Builds the command behind an exact X/Y field whose visible selection bar is
+--- shared by many preview handles. The command pins reads and writes to the
+--- declared handle so Assistant routing never depends on whichever element the
+--- user happened to select last.
+function SB.BuildExactOffsetCommand(box, handleKey, axis, metadata)
+    axis = axis == "y" and "y" or "x"
+    metadata = type(metadata) == "table" and metadata or {}
+    local command = {
+        kind = "textinput",
+        historyMode = "single",
+        interaction = "preview.handle.offset",
+        previewSurface = metadata.previewSurface,
+        previewHandleKey = handleKey,
+        previewUnitKey = metadata.previewUnitKey,
+        previewScope = metadata.previewScope,
+    }
+    command.get = function()
+        local handle = HandleByKey(box, handleKey)
+        if not handle then return nil end
+        local x, y = ReadOffsets(box, handle)
+        return axis == "x" and x or y
+    end
+    command.set = function(value)
+        local handle = HandleByKey(box, handleKey)
+        value = tonumber(value)
+        if not handle or value == nil or ConfigLocked() then return false end
+        local x, y = ReadOffsets(box, handle)
+        if axis == "x" then x = Round(box, value) else y = Round(box, value) end
+        Call(box, "SelectHandle", box, handle)
+        local ok = Call(box, "WriteOffsets", box, handle, x, y, "PREVIEW_ASSISTANT_EXACT_OFFSET")
+        Call(box, "UpdateHint", box, handle)
+        SB.Refresh(box)
+        return ok ~= false
+    end
+    return command
+end
+
+--- Exact search highlighting should show the same handle that owns the shared
+--- X/Y input. This hook is consumed only by the cold Search/Assistant route.
+function SB.BindExactOffsetSearchTarget(widget, box, handleKey)
+    if not widget then return widget end
+    widget._msuf2PrepareExactSearchTarget = function()
+        local handle = HandleByKey(box, handleKey)
+        if not handle then return false end
+        Call(box, "SelectHandle", box, handle)
+        Call(box, "UpdateHint", box, handle)
+        SB.Refresh(box)
+        return true
+    end
+    return widget
+end
+
 --------------------------------------------------------------------------
 -- Selection bar
 --------------------------------------------------------------------------

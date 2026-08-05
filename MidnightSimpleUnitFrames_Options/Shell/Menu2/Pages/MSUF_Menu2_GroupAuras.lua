@@ -197,6 +197,10 @@ local function GroupAuraSettingKeys(scope, suffix)
     if scope == "party" then return { "gf_party" .. suffix } end
     return { "gf_raid" .. suffix, "gf_mythicraid" .. suffix }
 end
+local function AllGroupAuraSettingKeys(suffix)
+    suffix = tostring(suffix or "")
+    return { "gf_party" .. suffix, "gf_raid" .. suffix, "gf_mythicraid" .. suffix }
+end
 local function LaneBackendEnabled(scope, groupKey)
     local root = AurasRoot and AurasRoot(scope)
     local group = AuraGroup(scope, groupKey)
@@ -423,7 +427,10 @@ local function BuildGFAuras(ctx)
             AuraControlMeta(ctx, "group-workspace.lane.externals.auto-blacklist-buffs", nil, {
                 assistantDisposition = "dynamic",
                 assistantDispositionReason = "This toggle targets duplicate handling between the selected Group scope's External Defensive and Buff containers.",
-                assistantSettingKeys = GroupAuraSettingKeys(scope, ".auras.externals.autoBlacklistBuffs"),
+                -- This workspace control is rebuilt for Party and Raid states
+                -- under one stable catalog identity. Keep its finite route set
+                -- complete regardless of which state was captured last.
+                assistantSettingKeys = AllGroupAuraSettingKeys(".auras.externals.autoBlacklistBuffs"),
             }))
         if type(M.AddTooltip) == "function" then
             M.AddTooltip(autoBlacklist, "Auto-blacklist from Buffs",

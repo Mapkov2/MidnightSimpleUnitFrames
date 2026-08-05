@@ -177,7 +177,12 @@ local function ResolveExactSearchAnchor(pageKey, exactTarget)
     local catalog = M.RuntimeControlCatalog
     if settingKey == "" or not (catalog and type(catalog.FindBySettingKey) == "function") then return nil, false end
     local _, widget = catalog.FindBySettingKey(settingKey, pageKey, exactTarget)
-    if widget then return widget, true end
+    if widget then
+        if type(widget._msuf2PrepareExactSearchTarget) == "function" then
+            widget:_msuf2PrepareExactSearchTarget(exactTarget)
+        end
+        return widget, true
+    end
     return nil, false
 end
 
@@ -931,7 +936,12 @@ local function SearchRouteGroupPage(route, pageKey, normalized)
             or (SearchRouteHasAny(normalized, "debuff|debuffs") and "debuff"
             or (SearchRouteHasAny(normalized, "buff|buffs") and "buff" or nil))
         lane = lane or (type(M.gfAuraLaneSelection) == "table" and M.gfAuraLaneSelection[activeScope]) or "buff"
-        local tool = SearchRouteHasAny(normalized, "blacklist|ignore list|block list") and "blacklist"
+        -- "Auto-blacklist from Buffs" is the External Defensive duplicate
+        -- handling toggle on Layout, not an entry in the lane's blacklist.
+        local externalAutoBlacklist = lane == "externals"
+            and SearchRouteHasAny(normalized, "auto-blacklist from buffs|autoblacklist from buffs")
+        local tool = not externalAutoBlacklist
+            and SearchRouteHasAny(normalized, "blacklist|ignore list|block list") and "blacklist"
             or (SearchRouteHasAny(normalized, "filter|only mine|dispellable|stealable|boss aura|hide permanent|no timer|no duration") and "filters" or "layout")
         if tool == "layout" and SearchRouteHasAny(normalized,
             "style|appearance|stack|cooldown|timer|duration|tooltip|opacity|icon zoom|icon shape|swipe")

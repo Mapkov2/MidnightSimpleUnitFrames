@@ -1797,6 +1797,27 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         registerControl(box._msuf2ElementPicker, "element_picker", "Group Preview Element Picker", "button", "ephemeral")
         local selectionBar = box._msuf2SelectionBar
         if selectionBar then
+            local selectionAPI = M.PreviewSelectionBar
+            selectionAPI.BindExactOffsetSearchTarget(selectionBar.editX, box, "portrait")
+            selectionAPI.BindExactOffsetSearchTarget(selectionBar.editY, box, "portrait")
+            registerControl(selectionBar.editX, "selection.portrait_offset_x", "Party Portrait X Offset",
+                "textinput", "setting", {
+                    assistantDisposition = "dynamic",
+                    assistantDispositionReason = "The shared Preview X field is pinned to the Party Portrait handle for this exact Assistant route.",
+                    assistantSettingKeys = { "gf_party.portraitOffsetX" },
+                    command = selectionAPI.BuildExactOffsetCommand(box, "portrait", "x", {
+                        previewSurface = "group", previewScope = "party",
+                    }),
+                })
+            registerControl(selectionBar.editY, "selection.portrait_offset_y", "Party Portrait Y Offset",
+                "textinput", "setting", {
+                    assistantDisposition = "dynamic",
+                    assistantDispositionReason = "The shared Preview Y field is pinned to the Party Portrait handle for this exact Assistant route.",
+                    assistantSettingKeys = { "gf_party.portraitOffsetY" },
+                    command = selectionAPI.BuildExactOffsetCommand(box, "portrait", "y", {
+                        previewSurface = "group", previewScope = "party",
+                    }),
+                })
             registerControl(selectionBar.resetButton, "selection.reset", "Reset selected preview element offset", "button", "ephemeral")
             registerControl(selectionBar.openButton, "selection.open_settings", "Open selected preview element settings", "button", "ephemeral")
         end
