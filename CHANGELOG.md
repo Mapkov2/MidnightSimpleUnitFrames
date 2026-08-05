@@ -1,5 +1,46 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-RC9 - 2026-08-05
+
+### Highlights
+
+- Added native EllesmereUI Unlock Mode integration.
+- Added EllesmereUI Cooldown Manager to the consent-based cooldown anchoring providers.
+- Rebuilt Aura styling around clear ownership. Appearance > Aura Style now contains four genuinely global icon themes — Buffs, Debuffs, Player Defensives and Dots on Target — while each UnitFrame and GroupFrame owns its layout, filters, timers, text, ordering, Pandemic presentation and Full-Frame effects.
+- Restored Purge Border for Target and Focus through WoW 12.1's native stealable-aura filtering. It uses a dedicated one-slot Aura sensor, works even when normal aura lanes are hidden, respects the configured highlight priority/color and adds no MSUF scan, ticker or `OnUpdate`.
+- Added optional native Stealable Buff markers to Buff containers with Border, Border + Icon and Icon styles. The marker uses Blizzard's AuraButton filter and does not add an MSUF aura scan, ticker or per-frame update.
+- Added an optional Pandemic warning for Dots on Target with Border, Tint and a combined Border + Tint style plus color, thickness, padding, opacity and blend controls. It is disabled by default and the menu explicitly warns that Blizzard's native Pandemic region may run an `OnUpdate` on each affected visible aura button.
+
+### Changes
+
+- Added a dedicated, Group-scope-aware Spell Icon Style editor for icon zoom/scale, opacity, native tooltip behavior, cooldown text and swipe, decimal threshold, stack count and duration bars. Spell Icons use the shared Buff theme only for shape, border and shadow, and they no longer intercept click-casting while tooltips are enabled.
+- Gave Custom 1-3, Player Defensives and Dots on Target the same frame-local deep Style workflow. Existing shared special-container presentation is migrated once into the owning UnitFrames without moving visibility, filters, placement or tracked spells.
+- Split Unit and Group Copy To into independent Aura Options and Aura Style categories. Content, filters, lists and tracked spells can now be copied without overwriting presentation, or presentation can be copied without replacing content; the global Appearance theme is never copied implicitly.
+- Moved UnitFrame Dispel Overlay and Dispel Symbol controls from the global Bars page to the owning Player, Target, Focus and Boss pages beside Auras. The editors follow Shared Bars versus per-frame override ownership and include in-page runtime previews; symbols can be dragged directly into position.
+- Added zoom out/in, Fit, 1:1 and Ctrl-wheel support to the shared Aura Style preview so global icon themes can be inspected without changing live Aura sizing.
+- Expanded preview parity for Unit and Group dispel overlays/symbols, Stealable markers, Pandemic timing, Custom Aura Full-Frame effects and Group Spell Icon styling. Rounded masks, layer visibility, configured alpha/shape and preview footprints now follow the same owners as live frames.
+- Simplified preview interaction: a single click on a handle opens its exact settings, dragging still moves it and right-click keeps related actions. Position readouts now use full-size `-` / `+` nudges, and redundant double-click instructions and duplicate X/Y controls were removed.
+- Added top-left, top-center and top-right Group name anchors, plus clearer portrait zoom/pan, detached Power Bar, castbar, status-icon, text and dispel layouts across narrow and wide Menu2 pages.
+- Added optional preview drag guidance for movable Unit, Group and Class Power handles. A compact mouse-and-arrow-key cue plus reduced handle tooltips teach dragging and keyboard nudging; new profiles see the guidance per opened preview until their first real move, while experienced profiles see it only once per session. The Global > Misc toggle controls the short menu-only AnimationGroup, with no ticker or persistent `OnUpdate`.
+- Removed the obsolete MSUF Masque dependency, saved toggle and Assistant route. MSUF 6.0 does not register its Aura buttons with Masque; Masque and its settings for other addons remain untouched.
+- Unified the RC compatibility notice with the login welcome message so opening Menu2 no longer prints a duplicate warning. On clients older than WoW 12.1, the required compatibility notice remains visible even when the optional welcome message is disabled.
+- Updated the bundled dashboard credits to list Aur0r4 as Lead QA across all shipped locales.
+
+### Fixes & Performance
+
+- Fixed the RC1-RC8 Group-page option-domain shift that could feed one dropdown's values into the next setting. Existing Party, Raid and Mythic Raid profiles are repaired once at the cold database boundary, covering name anchors, sorting, Power text, delimiters, dispel presentation, status positions, Aura anchors and Spell Indicator effects.
+- Fixed Edit Mode drag geometry at non-default UI/frame scales. Unit movement now uses consistent UI-space deltas, Group movement commits the visible and logical anchors atomically with rollback on failure, and detaching a castbar preserves its current on-screen center instead of reinterpreting old offsets off-screen.
+- Fixed disabling MSUF Global UI Scale and then returning to Blizzard scaling. MSUF now restores the untouched Blizzard `useUiScale` / `uiScale` state instead of writing its temporary overlay scale back into those CVars, with protected API fallbacks handled safely.
+- Fixed a fully disabled UnitFrame being rebuilt unsafely in the same session when re-enabled. MSUF keeps the detached zero-overhead state intact and requests one clean `/reload` before instantiating the frame again.
+- Fixed native Player weapon-enchantment Aura buttons not being recreated when the shared option changed.
+- Fixed dismissing a cooldown-provider consent popup with Escape being stored as an explicit rejection; only clicking Cancel now records a decline.
+- Fixed Menu2 previews painting outside or visibly chasing the shell during minimize, maximize and restore animations. Preview work is suspended during the transition and committed once at the final geometry.
+- Fixed Group and Unit preview interaction/parity issues including stale or missing dispel layers, Custom Aura frame effects, Spell Icon opacity/shape, castbar text hit regions, hidden cast-target handles and Target-DoT Pandemic animation restarting instead of expiring once.
+- Fixed highlight stacking so higher-priority Dispel and Purge borders remain authoritative over lower-priority frame highlights.
+- Fixed Group Copy To omitting newer fields such as maximum frames, auto tanks, scaling, detached Power Bar details, individual HP/Power text slots, status indicators, role visibility, color ownership and Aggro settings.
+- Fixed the Dashboard's pending global-enable state losing an explicit `false` value.
+- Expanded Assistant coverage for the new shared-versus-frame-local Aura ownership, Stealable marker controls, Spell Icon Style and independent Aura Copy To categories. Search and command routing now better distinguishes singular/plural control names, Target from Target of Target/Focus Target, control labels from their current dropdown value, polite/question-shaped mutations and vague style requests that should open guidance instead of changing an unrelated setting.
+
 ## 6.0-RC8 - 2026-08-04
 
 ### Highlights
