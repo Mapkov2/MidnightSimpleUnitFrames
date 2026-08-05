@@ -433,6 +433,7 @@ Data.GEOMETRY_PARSER = {
         "preserve hp",
         "text opacity", "text alpha", "font opacity", "font alpha", "absorb", "heal absorb",
         "dispel overlay", "debuff overlay", "unitframe dispel overlay", "unit frame dispel overlay",
+        "dispel symbol", "unitframe dispel symbol", "unit frame dispel symbol",
     },
         [223] = { "more transparent", "more transparency", "more see through", "transparenter" },
         [224] = { "less transparent", "less transparency", "more opaque", "opaquer" },

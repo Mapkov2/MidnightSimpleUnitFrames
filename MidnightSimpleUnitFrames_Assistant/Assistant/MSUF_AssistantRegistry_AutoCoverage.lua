@@ -178,10 +178,12 @@ local CANONICAL_PATH_OWNERS = {
         -- falls back to this field, so it is a projection of the reviewed
         -- Party Aggro Border control, never an independent switch.
         hlAggroEnabled = "gf_party.aggroEnabled",
+        hpTextMode = "gf_party.textRight",
         hpTextSeparator = "gf_party.textDelimiter",
         nameTextAnchor = "gf_party.nameAnchor",
         point = "gf_party.anchorPoint",
         powerTextSeparator = "gf_party.powerTextDelimiter",
+        powerTextMode = "gf_party.powerTextRight",
         shortenNameClipSide = "gf_party.nameClipSide",
         shortenNameMaxChars = "gf_party.nameMaxChars",
         shortenNameShowDots = "gf_party.nameNoEllipsis",
@@ -189,8 +191,10 @@ local CANONICAL_PATH_OWNERS = {
     },
     gf_raid = {
         hlAggroEnabled = "gf_raid.aggroEnabled",
+        hpTextMode = "gf_raid.textRight",
         nameTextAnchor = "gf_raid.nameAnchor",
         point = "gf_raid.anchorPoint",
+        powerTextMode = "gf_raid.powerTextRight",
         shortenNameClipSide = "gf_raid.nameClipSide",
         shortenNameMaxChars = "gf_raid.nameMaxChars",
         shortenNameShowDots = "gf_raid.nameNoEllipsis",
@@ -198,8 +202,10 @@ local CANONICAL_PATH_OWNERS = {
     },
     gf_mythicraid = {
         hlAggroEnabled = "gf_mythicraid.aggroEnabled",
+        hpTextMode = "gf_mythicraid.textRight",
         nameTextAnchor = "gf_mythicraid.nameAnchor",
         point = "gf_mythicraid.anchorPoint",
+        powerTextMode = "gf_mythicraid.powerTextRight",
         shortenNameClipSide = "gf_mythicraid.nameClipSide",
         shortenNameMaxChars = "gf_mythicraid.nameMaxChars",
         shortenNameShowDots = "gf_mythicraid.nameNoEllipsis",
@@ -254,6 +260,8 @@ local COMPATIBILITY_PROJECTIONS = {
         healPredictionColorG = "Heal-prediction color channel written by the color picker; the curated color control owns the user-facing identity.",
         healPredictionColorB = "Heal-prediction color channel written by the color picker; the curated color control owns the user-facing identity.",
         hpSpacerSelectedUnitKey = "Retired health-spacer scope selector; no runtime or Menu2 consumer reads it, only the default profile still carries the field.",
+        hpTextMode = "Legacy shared text-mode seed retained for migration/import; every live UnitFrame and GroupFrame uses its reviewed text-slot controls.",
+        powerTextMode = "Legacy shared power-text seed retained for migration/import; every live UnitFrame and GroupFrame uses its reviewed power-text-slot controls.",
     },
     bars = {
         classPowerOutlineColorR = "Retired class-resource outline color channel; the runtime exposes outline thickness only.",
