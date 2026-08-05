@@ -211,6 +211,39 @@ local UNIT_FOCUS = {
     auras = { auras = true },
     resources = { power = true, classPower = true },
 }
+local COLOR_FIT_CATEGORIES = { cast = true, auras = true }
+local function SwitchColorPreviewCamera(box, category)
+    if not box or box._msuf2ColorPainterCameraCategory == category then return end
+    local states = box._msuf2ColorPainterCameraStates
+    if type(states) ~= "table" then
+        states = {}
+        box._msuf2ColorPainterCameraStates = states
+    end
+    local previous = box._msuf2ColorPainterCameraCategory
+    if previous then
+        states[previous] = {
+            initialized = true,
+            manualZoom = tonumber(box._manualZoom),
+            panX = tonumber(box._zoomPanX) or 0,
+            panY = tonumber(box._zoomPanY) or 0,
+            defaultLockPending = box._msuf2ZoomLockDefaultPending == true,
+        }
+    end
+    local nextState = states[category]
+    if nextState and nextState.initialized then
+        box._manualZoom = nextState.manualZoom
+        box._zoomPanX, box._zoomPanY = nextState.panX or 0, nextState.panY or 0
+        box._msuf2ZoomLockDefaultPending = nextState.defaultLockPending and true or nil
+    elseif COLOR_FIT_CATEGORIES[category] then
+        -- Castbars and aura lanes can sit outside the unit-frame rectangle.
+        -- Start those color-only views in Fit so the renderer centers and
+        -- scales their complete footprint inside the clipped 132px host.
+        box._manualZoom = nil
+        box._zoomPanX, box._zoomPanY = 0, 0
+        box._msuf2ZoomLockDefaultPending = nil
+    end
+    box._msuf2ColorPainterCameraCategory = category
+end
 local CATEGORY_SECTION = {
     unit = "colors_appearance",
     group = "colors_group_frames",
@@ -231,6 +264,12 @@ local NAVIGATE_ONLY_SECTIONS = {
 
 local function FocusUnitPreview(box, category)
     if not (box and type(box.layerVisibility) == "table") then return end
+    SwitchColorPreviewCamera(box, category)
+    -- A color sample must remain inspectable even when the corresponding live
+    -- feature is disabled or has no configured lanes. These flags are read by
+    -- the menu-only renderer and never reach runtime frames or SavedVariables.
+    box._msuf2ColorPainterForceCastbar = category == "cast" or nil
+    box._msuf2ColorPainterForceAuras = category == "auras" or nil
     local wanted = UNIT_FOCUS[category] or UNIT_FOCUS.unit
     for key in pairs(box.layerVisibility) do
         box.layerVisibility[key] = wanted[key] == true

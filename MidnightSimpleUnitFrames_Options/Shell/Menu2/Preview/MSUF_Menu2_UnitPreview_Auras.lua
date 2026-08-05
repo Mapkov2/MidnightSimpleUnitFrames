@@ -872,7 +872,7 @@ local function TargetDotPortraitBounds(item, styleItem, runtimeSpec, previewEntr
     return PortraitAuraBounds(item, styleItem, runtimeSpec, previewEntries, unit, metrics, true, "debuff", forcePreview)
 end
 
-function Auras.BuildState(key, frameW, frameH, runtimeSpec)
+function Auras.BuildState(key, frameW, frameH, runtimeSpec, forceStandardLanes)
     local runtimeAuras = runtimeSpec and runtimeSpec.auras
     local model = MenuModel()
     key = Auras.PreviewUnitKey(key)
@@ -880,8 +880,11 @@ function Auras.BuildState(key, frameW, frameH, runtimeSpec)
     local cfg = model.ReadPreviewConfig(key)
     if not cfg then return nil end
     local stylePreviewKind = SelectedUnitAuraStyleKind(key)
-    local buff = LaneBounds(cfg, "buff", frameW, frameH, key, runtimeSpec, stylePreviewKind == "buff")
-    local debuff = LaneBounds(cfg, "debuff", frameW, frameH, key, runtimeSpec, stylePreviewKind == "debuff")
+    forceStandardLanes = forceStandardLanes == true
+    local buff = LaneBounds(cfg, "buff", frameW, frameH, key, runtimeSpec,
+        forceStandardLanes or stylePreviewKind == "buff")
+    local debuff = LaneBounds(cfg, "debuff", frameW, frameH, key, runtimeSpec,
+        forceStandardLanes or stylePreviewKind == "debuff")
     local state = {
         unit = key, cfg = cfg, runtime = runtimeAuras,
         buff = buff, debuff = debuff, stylePreviewKind = stylePreviewKind,

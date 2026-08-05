@@ -49,9 +49,19 @@ local UNIT_PREVIEW_ZOOM_CONTROLS = {
     { "zoomHelpButton", "zoom.help", "Preview controls help" },
     { "zoomLockButton", "zoom.lock", "Lock preview zoom" },
 }
+function Preview.ResolveUnitHandleSection(handle, unitOrPageKey)
+    local fields = handle and handle._fields or {}
+    local unitKey = tostring(unitOrPageKey or "")
+    unitKey = unitKey:match("^uf_(.+)$") or unitKey
+    if unitKey == "" then
+        local box = handle and handle._preview
+        unitKey = (box and box.key) or tostring(M2.activeKey or ""):match("^uf_(.+)$") or "player"
+    end
+    if unitKey == "player" and fields.playerSection then return fields.playerSection end
+    return fields.section
+end
 local function UnitPreviewHandleNavigationKey(handle, pageKey)
-    local fields = handle and handle._fields
-    if fields and fields.section == "classPower" then return "classpower" end
+    if Preview.ResolveUnitHandleSection(handle, pageKey) == "classPower" then return "classpower" end
     return pageKey or M2.activeKey
 end
 local function RegisterUnitPreviewRuntimeControls(box, pageKey)
@@ -102,19 +112,23 @@ local function RegisterUnitPreviewRuntimeControls(box, pageKey)
     Register(box.animateCombatButton, "combat_animation", "Unit Preview Animation", "button", "ephemeral")
     for i = 1, #(box.layerButtons or {}) do
         local button = box.layerButtons[i]
-        Register(button, "layer." .. tostring(button and button.key),
-            tostring((button and button.fs and button.fs.GetText and button.fs:GetText()) or (button and button.key) or "Preview layer") .. " preview layer",
-            "button", "ephemeral")
+        if button and (button.key ~= "classPower" or previewUnitKey == "player") then
+            Register(button, "layer." .. tostring(button.key),
+                tostring((button.fs and button.fs.GetText and button.fs:GetText()) or button.key or "Preview layer") .. " preview layer",
+                "button", "ephemeral")
+        end
     end
     for i = 1, #(box.handles or {}) do
         local handle = box.handles[i]
         local key = handle and handle._key
-        if handle and handle._msuf2CommandAction then handle._msuf2CommandAction.previewUnitKey = previewUnitKey end
+        local fields = handle and handle._fields or {}
+        local exposeHandle = handle and not (fields.classPower == true and previewUnitKey ~= "player")
+        if exposeHandle and handle._msuf2CommandAction then handle._msuf2CommandAction.previewUnitKey = previewUnitKey end
         -- Drag handles are direct-manipulation surfaces, not deterministic
         -- one-shot actions. Their underlying offsets remain Assistant-visible
         -- through the bound sliders; the adjacent gear is navigation.
-        Register(handle, "handle." .. tostring(key), (handle and handle._label) or key, "button", "ephemeral")
-        local gear = handle and handle._msuf2SettingsGear
+        if exposeHandle then Register(handle, "handle." .. tostring(key), handle._label or key, "button", "ephemeral") end
+        local gear = exposeHandle and handle._msuf2SettingsGear
         if gear and gear._msuf2UnitPreviewOpenCommand then
             Register(gear, "handle." .. tostring(key) .. ".open_settings",
                 "Open " .. tostring((handle and handle._label) or key or "preview element") .. " settings",
@@ -568,7 +582,7 @@ local UNIT_SECTION_IDS = {
 }
 function Preview.PrepareUnitHandleSubmenu(menu, unit, handle)
     if not (menu and handle) then return end
-    local key, section = handle._key, handle._fields and handle._fields.section
+    local key, section = handle._key, Preview.ResolveUnitHandleSection(handle, unit)
     local state, tab
     if section == "text" then state, tab = "unitTextTabSelection", key == "name" and "name" or (key:sub(1, 2) == "hp" and "hp" or "power")
     elseif section == "portrait" then state, tab = "unitPortraitTabSelection", "placement"
@@ -589,9 +603,9 @@ OpenPreviewHandleSettings = function(handle, source)
     if not handle then return false end
     local box = handle._preview or Preview.active
     local fields = handle._fields or {}
-    local section = fields.section
     local menu = _G.MSUF2 or M2
     local unit = box and box.key or "player"
+    local section = Preview.ResolveUnitHandleSection(handle, unit)
     Preview.PrepareUnitHandleSubmenu(menu, unit, handle)
     if fields.statusRefresh then
         local selected = NormalizeStatusPreviewId(handle._key)
@@ -628,6 +642,10 @@ OpenPreviewHandleSettings = function(handle, source)
                 sectionId = "auras",
                 source = "unit-preview-" .. tostring(source or "settings"),
                 explicit = true,
+                -- A direct Preview click is navigation, not a temporary
+                -- search/edit-mode reveal. Keep Auras open when its first
+                -- control refresh rebuilds the Unit page.
+                persistSection = true,
                 changedAt = GetTime and GetTime() or 0,
             }
             -- The Aura workspace captures its selected container while the
@@ -1058,7 +1076,14 @@ end
 local function ApplyPreviewTextFocus(box, canvas, mock)
     return PreviewHelpers.ApplyTextFocus(box, canvas, mock, {
         Regions = PreviewTextFocusRegions,
-        Place = UnitPreviewText.PlaceHandleAroundRegions,
+        Place = function(frame, parent, regions, pad)
+            local renderScale = tonumber(box and (box._mockEffectiveScale or box._mockScale or box._mockAutoScale)) or 1
+            return UnitPreviewText.PlaceHandleAroundRegions(frame, parent, regions, pad, {
+                coordinateScale = renderScale,
+                fitText = true,
+                useScaledRect = true,
+            })
+        end,
     })
 end
 function Preview.FocusTextSlot(unitKey, kind, slot, active)
@@ -1139,8 +1164,13 @@ local function UnitPreviewLayerForHandle(key, fields)
 end
 local function MakeHandle(preview, key, fields, label, color)
     local h = CreateFrame("Button", nil, preview.canvas)
-    h:SetFrameLevel((PreviewCore.InteractionFrameLevel and PreviewCore.InteractionFrameLevel(preview.canvas, 0))
-        or ((preview.canvas:GetFrameLevel() or 0) + 30))
+    -- Composite elements need a deterministic mouse-hit hierarchy. The broad
+    -- container handle stays on the base interaction plane while its smaller
+    -- icon/text/time handles sit above it; creation/show order must not decide
+    -- which element receives the click.
+    local interactionPriority = tonumber(fields and fields.interactionPriority) or 0
+    h:SetFrameLevel((PreviewCore.InteractionFrameLevel and PreviewCore.InteractionFrameLevel(preview.canvas, interactionPriority))
+        or ((preview.canvas:GetFrameLevel() or 0) + 30 + interactionPriority))
     h:SetSize(20, 20)
     h:RegisterForClicks("LeftButtonDown", "LeftButtonUp", "RightButtonUp")
     if h.RegisterForDrag then h:RegisterForDrag("LeftButton") end
@@ -1813,6 +1843,15 @@ local function BuildPreview(parent, panel, width, height)
         lockReason = "UNIT_PREVIEW_ZOOM_LOCK",
         unlockReason = "UNIT_PREVIEW_ZOOM_UNLOCK",
     })
+    -- Full Unit previews are 1:1 editors on first use. The page is constructed
+    -- in Compact mode before the fresh-session auto-expand runs; seed the Full
+    -- slot here so that technical restore cannot lock its first Fit scale
+    -- (often about 50%) as though it were a prior user zoom. The shared box is
+    -- built only once, so later manual/Fit choices remain untouched.
+    if box._msuf2CompactZoomMode == nil and box._manualZoom == nil then
+        box._manualZoom = 1.00
+        box._msuf2ZoomLockDefaultPending = nil
+    end
     if PreviewHelpers.EnsurePreviewControlsHint then
         PreviewHelpers.EnsurePreviewControlsHint(box, canvas, { M = M2, T = T, Tr = TR })
     end
@@ -2198,8 +2237,8 @@ local function BuildPreview(parent, panel, width, height)
     box.dragFrame:EnableMouse(true)
     if PreviewHelpers.BindPreviewWheel then PreviewHelpers.BindPreviewWheel(box.dragFrame, box) end
     if box.dragFrame.SetFrameLevel then
-        box.dragFrame:SetFrameLevel((PreviewCore.InteractionFrameLevel and PreviewCore.InteractionFrameLevel(canvas, 1))
-            or ((canvas:GetFrameLevel() or 0) + 31))
+        box.dragFrame:SetFrameLevel((PreviewCore.InteractionFrameLevel and PreviewCore.InteractionFrameLevel(canvas, 2))
+            or ((canvas:GetFrameLevel() or 0) + 32))
     end
     box.dragFrame:Hide()
     box._onDragUpdate = function(df)
@@ -2238,7 +2277,7 @@ local function BuildPreview(parent, panel, width, height)
     box.handlePowerCenter = MakeHandle(box, "powerCenter", { x = "powerTextCenterOffsetX", y = "powerTextCenterOffsetY", defaultX = 0, defaultY = 0, text = true, section = "text" }, "Power center text", { 0.95, 0.72, 0.18 })
     box.handlePowerRight = MakeHandle(box, "powerRight", { x = "powerTextRightOffsetX", y = "powerTextRightOffsetY", defaultX = 0, defaultY = 0, text = true, section = "text" }, "Power right text", { 0.95, 0.72, 0.18 })
     box.handlePortrait = MakeHandle(box, "portrait", { x = "portraitOffsetX", y = "portraitOffsetY", defaultX = 0, defaultY = 0, portrait = true, section = "portrait" }, "Portrait", { 0.90, 0.42, 1.0 })
-    box.handleDetachedPower = MakeHandle(box, "detachedPower", { x = "detachedPowerBarOffsetX", y = "detachedPowerBarOffsetY", defaultX = 0, defaultY = -4, detachedPower = true, section = "classPower" }, "Detached power bar", { 0.95, 0.72, 0.18 })
+    box.handleDetachedPower = MakeHandle(box, "detachedPower", { x = "detachedPowerBarOffsetX", y = "detachedPowerBarOffsetY", defaultX = 0, defaultY = -4, detachedPower = true, section = "power", playerSection = "classPower" }, "Detached power bar", { 0.95, 0.72, 0.18 })
     box.texLayerHandles = {
         MakeHandle(box, "texLayer", { x = "texLayerOffsetX", y = "texLayerOffsetY", defaultX = 0, defaultY = 0, texLayer = true, section = "texture_layer" }, "Texture layer 1", { 0.80, 0.55, 0.25 }),
         MakeHandle(box, "texLayer2", { x = "texLayer2OffsetX", y = "texLayer2OffsetY", defaultX = 0, defaultY = 0, texLayer = true, section = "texture_layer" }, "Texture layer 2", { 0.80, 0.55, 0.25 }),
@@ -2247,10 +2286,10 @@ local function BuildPreview(parent, panel, width, height)
     box.handleClassPower = MakeHandle(box, "classPower", { barsX = "classPowerOffsetX", barsY = "classPowerOffsetY", defaultX = 0, defaultY = 0, classPower = true, readOffsets = ReadBarsHandleOffsets, writeOffsets = WriteBarsHandleOffsets, section = "classPower" }, "Class power", { 0.30, 0.78, 0.55 })
     box.handleClassPowerText = MakeHandle(box, "classPowerText", { barsX = "classPowerTextOffsetX", barsY = "classPowerTextOffsetY", defaultX = 0, defaultY = 0, classPower = true, readOffsets = ReadBarsHandleOffsets, writeOffsets = WriteBarsHandleOffsets, section = "classPower" }, "Class power text", { 0.30, 0.78, 0.55 })
     box.handleCastbar = MakeHandle(box, "castbar", { castbar = true, global = true, section = "castbar" }, "Castbar", { 0.20, 0.90, 0.85 })
-    box.handleCastbarIcon = MakeHandle(box, "castbarIcon", { suffixX = "IconOffsetX", suffixY = "IconOffsetY", bossX = "bossCastIconOffsetX", bossY = "bossCastIconOffsetY", defaultX = 0, defaultY = 0, iconFallback = true, readOffsets = ReadCastbarSubOffsets, writeOffsets = WriteCastbarSubOffsets, section = "castbar" }, "Castbar icon", { 0.20, 0.90, 0.85 })
-    box.handleCastbarText = MakeHandle(box, "castbarText", { suffixX = "TextOffsetX", suffixY = "TextOffsetY", bossX = "bossCastTextOffsetX", bossY = "bossCastTextOffsetY", defaultX = 0, defaultY = 0, readOffsets = ReadCastbarSubOffsets, writeOffsets = WriteCastbarSubOffsets, section = "castbar" }, "Castbar text", { 0.20, 0.90, 0.85 })
-    box.handleCastbarTarget = MakeHandle(box, "castbarTarget", { suffixX = "TargetNameOffsetX", suffixY = "TargetNameOffsetY", bossX = "bossCastTargetNameOffsetX", bossY = "bossCastTargetNameOffsetY", defaultX = 0, defaultY = 1, readOffsets = ReadCastbarSubOffsets, writeOffsets = WriteCastbarSubOffsets, section = "castbar" }, "Cast target text", { 0.95, 0.78, 0.22 })
-    box.handleCastbarTime = MakeHandle(box, "castbarTime", { suffixX = "TimeOffsetX", suffixY = "TimeOffsetY", bossX = "bossCastTimeOffsetX", bossY = "bossCastTimeOffsetY", bossBaseX = -2, defaultX = -2, defaultY = 0, defaultXFromG = "castbarPlayerTimeOffsetX", defaultYFromG = "castbarPlayerTimeOffsetY", readOffsets = ReadCastbarSubOffsets, writeOffsets = WriteCastbarSubOffsets, section = "castbar" }, "Castbar time", { 0.20, 0.90, 0.85 })
+    box.handleCastbarIcon = MakeHandle(box, "castbarIcon", { suffixX = "IconOffsetX", suffixY = "IconOffsetY", bossX = "bossCastIconOffsetX", bossY = "bossCastIconOffsetY", defaultX = 0, defaultY = 0, iconFallback = true, readOffsets = ReadCastbarSubOffsets, writeOffsets = WriteCastbarSubOffsets, section = "castbar", interactionPriority = 1 }, "Castbar icon", { 0.20, 0.90, 0.85 })
+    box.handleCastbarText = MakeHandle(box, "castbarText", { suffixX = "TextOffsetX", suffixY = "TextOffsetY", bossX = "bossCastTextOffsetX", bossY = "bossCastTextOffsetY", defaultX = 0, defaultY = 0, readOffsets = ReadCastbarSubOffsets, writeOffsets = WriteCastbarSubOffsets, section = "castbar", interactionPriority = 1 }, "Castbar text", { 0.20, 0.90, 0.85 })
+    box.handleCastbarTarget = MakeHandle(box, "castbarTarget", { suffixX = "TargetNameOffsetX", suffixY = "TargetNameOffsetY", bossX = "bossCastTargetNameOffsetX", bossY = "bossCastTargetNameOffsetY", defaultX = 0, defaultY = 1, readOffsets = ReadCastbarSubOffsets, writeOffsets = WriteCastbarSubOffsets, section = "castbar", interactionPriority = 1 }, "Cast target text", { 0.95, 0.78, 0.22 })
+    box.handleCastbarTime = MakeHandle(box, "castbarTime", { suffixX = "TimeOffsetX", suffixY = "TimeOffsetY", bossX = "bossCastTimeOffsetX", bossY = "bossCastTimeOffsetY", bossBaseX = -2, defaultX = -2, defaultY = 0, defaultXFromG = "castbarPlayerTimeOffsetX", defaultYFromG = "castbarPlayerTimeOffsetY", readOffsets = ReadCastbarSubOffsets, writeOffsets = WriteCastbarSubOffsets, section = "castbar", interactionPriority = 1 }, "Castbar time", { 0.20, 0.90, 0.85 })
     if type(PreviewAuras.CreateHandles) == "function" then PreviewAuras.CreateHandles(box, MakeHandle) end
     box.statusHandles = { raidgroupname = box.handleRaidGroupName }
     for i = 1, #STATUS_PREVIEW do
