@@ -50,6 +50,12 @@ end
 local function ConfigLocked()
     return type(M.IsConfigCombatLocked) == "function" and M.IsConfigCombatLocked() == true
 end
+local function SelectionAttentionEnabled(box)
+    local general = _G.MSUF_DB and _G.MSUF_DB.general
+    if type(general) == "table" and general.previewDragHintAnimationEnabled == false then return false end
+    local T = Theme(box)
+    return not (T and T.ReducedMotionEnabled and T.ReducedMotionEnabled())
+end
 local function ApplyBackdrop(box, frame, bg, border)
     local deps = Deps(box)
     local fn = deps and deps.ApplyBackdrop
@@ -218,6 +224,9 @@ function SB.Refresh(box)
         end
     end
     bar:MSUF2SetEnabled(handle ~= nil and not ConfigLocked())
+    bar:MSUF2SetSelected(handle ~= nil)
+    if handle and handle ~= bar._msuf2AttentionHandle then bar:MSUF2PulseAxes() end
+    bar._msuf2AttentionHandle = handle
     if box._msuf2ElementPicker then box._msuf2ElementPicker:MSUF2Refresh() end
 end
 
@@ -252,6 +261,12 @@ local function BuildAxis(box, bar, axis, caption, anchor, gap)
     controls:SetSize(98, 18)
     controls:SetPoint("LEFT", anchor, "RIGHT", gap, 0)
 
+    local attention = controls:CreateTexture(nil, "BACKGROUND")
+    attention:SetAllPoints(controls)
+    attention:SetColorTexture(0.18, 0.70, 1.00, 0.32)
+    attention:SetAlpha(0)
+    attention:Hide()
+
     local function StepButton(delta, glyph)
         local btn = CreateFrame("Button", nil, controls, "BackdropTemplate")
         btn:SetSize(18, 18)
@@ -267,14 +282,16 @@ local function BuildAxis(box, bar, axis, caption, anchor, gap)
 
     local minus = StepButton(-1, "-")
     minus:SetPoint("LEFT", controls, "LEFT", 0, 0)
-    local title = bar:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    title:SetPoint("LEFT", minus, "RIGHT", 4, 0)
-    title:SetWidth(8)
+    local titleHolder = CreateFrame("Frame", nil, controls)
+    titleHolder:SetPoint("LEFT", minus, "RIGHT", 4, 0)
+    titleHolder:SetSize(8, 18)
+    local title = titleHolder:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    title:SetAllPoints(titleHolder)
     title:SetJustifyH("CENTER")
     title:SetText(caption)
     if T and T.StyleFontString then T.StyleFontString(title, colors.muted or { 0.62, 0.70, 0.82, 1 }, 0) end
-    local edit = CreateFrame("EditBox", nil, bar, "InputBoxTemplate")
-    edit:SetPoint("LEFT", title, "RIGHT", 3, 0)
+    local edit = CreateFrame("EditBox", nil, controls, "InputBoxTemplate")
+    edit:SetPoint("LEFT", titleHolder, "RIGHT", 3, 0)
     edit:SetSize(44, 18)
     edit:SetAutoFocus(false)
     edit:SetJustifyH("RIGHT")
@@ -298,6 +315,80 @@ local function BuildAxis(box, bar, axis, caption, anchor, gap)
     local plus = StepButton(1, "+")
     plus:SetPoint("LEFT", edit, "RIGHT", 3, 0)
     controls.minusButton, controls.plusButton = minus, plus
+    controls.titleHolder, controls.title, controls.edit, controls.attention = titleHolder, title, edit, attention
+
+    function controls:MSUF2SetSelected(selected)
+        selected = selected == true
+        self:SetSize(selected and 110 or 98, selected and 22 or 18)
+        self.minusButton:SetSize(selected and 22 or 18, selected and 22 or 18)
+        self.plusButton:SetSize(selected and 22 or 18, selected and 22 or 18)
+        self.titleHolder:SetSize(selected and 10 or 8, selected and 22 or 18)
+        self.edit:SetSize(selected and 46 or 44, selected and 22 or 18)
+        if selected then
+            self.title:SetTextColor(0.66, 0.90, 1.00, 1)
+        else
+            local muted = colors.muted or { 0.62, 0.70, 0.82, 1 }
+            self.title:SetTextColor(muted[1], muted[2], muted[3], muted[4] or 1)
+        end
+    end
+
+    if attention.CreateAnimationGroup then
+        local group = attention:CreateAnimationGroup()
+        if T and T.TrackMenuAnimationGroup then T.TrackMenuAnimationGroup(group) end
+        local fadeIn = group:CreateAnimation("Alpha")
+        fadeIn:SetOrder(1)
+        fadeIn:SetFromAlpha(0)
+        fadeIn:SetToAlpha(1)
+        fadeIn:SetDuration(0.16)
+        if fadeIn.SetSmoothing then fadeIn:SetSmoothing("OUT") end
+        local fadeOut = group:CreateAnimation("Alpha")
+        fadeOut:SetOrder(2)
+        fadeOut:SetFromAlpha(1)
+        fadeOut:SetToAlpha(0)
+        fadeOut:SetDuration(0.44)
+        if fadeOut.SetSmoothing then fadeOut:SetSmoothing("IN_OUT") end
+        group:SetScript("OnFinished", function()
+            attention:SetAlpha(0)
+            attention:Hide()
+            titleHolder:SetAlpha(1)
+        end)
+        controls._msuf2AttentionAnim = group
+    end
+    if titleHolder.CreateAnimationGroup then
+        local group = titleHolder:CreateAnimationGroup()
+        if T and T.TrackMenuAnimationGroup then T.TrackMenuAnimationGroup(group) end
+        local dim = group:CreateAnimation("Alpha")
+        dim:SetOrder(1)
+        dim:SetFromAlpha(1)
+        dim:SetToAlpha(0.28)
+        dim:SetDuration(0.16)
+        if dim.SetSmoothing then dim:SetSmoothing("IN") end
+        local brighten = group:CreateAnimation("Alpha")
+        brighten:SetOrder(2)
+        brighten:SetFromAlpha(0.28)
+        brighten:SetToAlpha(1)
+        brighten:SetDuration(0.44)
+        if brighten.SetSmoothing then brighten:SetSmoothing("OUT") end
+        group:SetScript("OnFinished", function() titleHolder:SetAlpha(1) end)
+        controls._msuf2TitleAttentionAnim = group
+    end
+
+    function controls:MSUF2Pulse()
+        local group = self._msuf2AttentionAnim
+        if group and group.Stop then group:Stop() end
+        local titleGroup = self._msuf2TitleAttentionAnim
+        if titleGroup and titleGroup.Stop then titleGroup:Stop() end
+        self.titleHolder:SetAlpha(1)
+        if group and group.Play then
+            self.attention:SetAlpha(0)
+            self.attention:Show()
+            group:Play()
+        else
+            self.attention:SetAlpha(0)
+            self.attention:Hide()
+        end
+        if titleGroup and titleGroup.Play then titleGroup:Play() end
+    end
     return edit, controls
 end
 
@@ -324,6 +415,7 @@ function SB.Create(box, deps)
     local editX, stepX = BuildAxis(box, bar, "x", "X", label, 6)
     local editY, stepY = BuildAxis(box, bar, "y", "Y", stepX, 12)
     bar.editX, bar.editY = editX, editY
+    bar.axisX, bar.axisY = stepX, stepY
 
     local openBtn = (T and T.Button and T.Button(bar, Tr(box, "Open settings"), 110, 18))
         or CreateFrame("Button", nil, bar, "BackdropTemplate")
@@ -371,6 +463,17 @@ function SB.Create(box, deps)
             controls.minusButton:SetEnabled(enabled)
             controls.plusButton:SetEnabled(enabled)
         end
+    end
+
+    function bar:MSUF2SetSelected(selected)
+        self.axisX:MSUF2SetSelected(selected)
+        self.axisY:MSUF2SetSelected(selected)
+    end
+
+    function bar:MSUF2PulseAxes()
+        if not SelectionAttentionEnabled(box) then return end
+        self.axisX:MSUF2Pulse()
+        self.axisY:MSUF2Pulse()
     end
 
     box._msuf2SelectionBar = bar
