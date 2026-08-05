@@ -339,7 +339,7 @@ local function DefaultPreviewHint(box)
     -- Red, and only until the gesture has actually been used three times.
     local remaining = PreviewHelpers.PreviewMoveHintRemaining and PreviewHelpers.PreviewMoveHintRemaining() or 0
     if remaining > 0 then
-        return format("|cffff4d3f%s|r   %s", format(TR("Rightclick to move (%dx)"), remaining), base)
+        return format("|cffff4d3f%s|r   %s", format(TR("Drag background (%dx)"), remaining), base)
     end
     return base
 end
