@@ -39,6 +39,11 @@ local normalizeCacheHotCount = 0
 local NORMALIZE_CACHE_LIMIT = 8192
 
 local NORMALIZE_WORD_REPLACEMENTS = {
+    -- Everyday abbreviation. Control names spell it out ("Temp Max Health
+    -- Background Opacity"), so "temp max health bg opacity to 50" matched no
+    -- control while the spelled-out sentence resolved normally. Safe as a whole
+    -- word: MSUF has no control literally named "bg".
+    bg = "background",
     groesse = "size",
     grosse = "size",
     wat = "what",
