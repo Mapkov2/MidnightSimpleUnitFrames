@@ -709,6 +709,16 @@ end
 local function MSUF_Defaults_NormalizeProfileTo60Defaults(db)
     if type(db) ~= "table" then return false end
     local changed = MSUF_Defaults_MigrateSplitUnitStatusText(db)
+    --- Masque support was removed from MSUF 6.0. Purge the orphaned toggle
+    --- from factory snapshots, imports, and existing profiles without touching
+    --- the Masque addon or any settings it owns for other addons.
+    for _, key in ipairs(MSUF_DEFAULTS_GROUP_SCOPE_KEYS) do
+        local scope = db[key]
+        if type(scope) == "table" and scope.masqueEnabled ~= nil then
+            scope.masqueEnabled = nil
+            changed = true
+        end
+    end
     local sharedTranslator = _G.MSUF_ProfileIO_TranslateProfileToCurrent
     if type(sharedTranslator) ~= "function" and type(MSUF) == "table" then
         sharedTranslator = MSUF.MSUF_ProfileIO_TranslateProfileToCurrent
@@ -3438,7 +3448,6 @@ end
                 hidePermanent = false,
                 onlyMyBuffs = false,
                 onlyMyDebuffs = false,
-                masqueEnabled = false,
                 pandemicMode = "OFF",
 highlightOwnBuffs = false,
                 highlightOwnDebuffs = false,

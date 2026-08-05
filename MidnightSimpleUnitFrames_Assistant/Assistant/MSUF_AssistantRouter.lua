@@ -6057,7 +6057,7 @@ A.RouterTryAuraProblemShortcut = function(text, coreHandler)
     if R.ContainsAny(norm, terms.masque) then
         local reply = A.RouterAuraProblemReply(
             "Masque aura skinning",
-            "I will not toggle Masque from the Assistant because this MSUF build does not expose a live Masque aura-skinning path in the active menu or renderer. Use the Masque addon itself for skin selection if it is installed. In MSUF, I can still change aura icon size, caps, borders, cooldown text, stack text, duration bars, and live filters.",
+            "MSUF 6.0 deliberately does not register its aura buttons with Masque. Masque remains available to other addons, but it cannot skin MSUF auras. In MSUF, I can still change aura icon size, caps, borders, cooldown text, stack text, duration bars, and live filters.",
             "open auras; set target buff icon size to 30; set aura cooldown text size to 14; open aura style.",
             "Open Auras | Open Aura Style | Open Aura Filters"
         )
