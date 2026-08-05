@@ -1409,10 +1409,10 @@ local function ApplyUnitDragPosition(d, centerX, centerY, uiScale)
     uiScale = tonumber(uiScale) or 1
     if uiScale <= 0 then uiScale = 1 end
 
-    local centerPX = (tonumber(centerX) or d.startCX or 0) * uiScale
-    local centerPY = (tonumber(centerY) or d.startCY or 0) * uiScale
-    local nextX = (d.unitStartX or 0) + round((centerPX - (d.startCenterPX or centerPX)) / frameScale)
-    local nextY = (d.unitStartY or 0) + round((centerPY - (d.startCenterPY or centerPY)) / frameScale)
+    local currentCX = tonumber(centerX) or d.startCX or 0
+    local currentCY = tonumber(centerY) or d.startCY or 0
+    local nextX = (d.unitStartX or 0) + round((currentCX - (d.startCX or currentCX)) * uiScale / frameScale)
+    local nextY = (d.unitStartY or 0) + round((currentCY - (d.startCY or currentCY)) * uiScale / frameScale)
     if d.lastUnitX == nextX and d.lastUnitY == nextY then return true end
 
     local previousX = d.lastUnitX
@@ -1595,28 +1595,41 @@ local function ApplyGroupDragPosition(d, centerX, centerY)
         or abs(targetCY - d.lastGroupTargetCY) > 0.001
         or abs(anchorCX - d.lastGroupAnchorCX) > 0.001
         or abs(anchorCY - d.lastGroupAnchorCY) > 0.001
+    if changed or positionChanged then
+        local liveAnchor = bar._msufGFLiveAnchor
+        local logicalAnchor = bar._msufGFLogicalAnchor
+        local anchor = liveAnchor or logicalAnchor
+        local _, oldBarCX, _, _, oldBarCY = GetFrameEdgesUI(bar)
+        oldBarCX = oldBarCX or d.lastGroupTargetCX or ((d.startCX or targetCX) + (d.barCenterDX or 0))
+        oldBarCY = oldBarCY or d.lastGroupTargetCY or ((d.startCY or targetCY) + (d.barCenterDY or 0))
+        local oldAnchorCX, oldAnchorCY
+        if anchor and anchor ~= bar then
+            local _, anchorCenterX, _, _, anchorCenterY = GetFrameEdgesUI(anchor)
+            oldAnchorCX = anchorCenterX or d.lastGroupAnchorCX or (oldBarCX + gridDX)
+            oldAnchorCY = anchorCenterY or d.lastGroupAnchorCY or (oldBarCY + gridDY)
+        end
+
+        if not TryApplyFramePoint(bar, "CENTER", UIParent, "BOTTOMLEFT", targetCX, targetCY) then
+            TryApplyFramePoint(bar, "CENTER", UIParent, "BOTTOMLEFT", oldBarCX, oldBarCY)
+            return false
+        end
+        if anchor and anchor ~= bar and anchor.ClearAllPoints and anchor.SetPoint then
+            if not TryApplyFramePoint(anchor, "CENTER", UIParent, "BOTTOMLEFT", anchorCX, anchorCY) then
+                TryApplyFramePoint(bar, "CENTER", UIParent, "BOTTOMLEFT", oldBarCX, oldBarCY)
+                TryApplyFramePoint(anchor, "CENTER", UIParent, "BOTTOMLEFT", oldAnchorCX, oldAnchorCY)
+                return false
+            end
+        end
+        d.lastGroupTargetCX = targetCX
+        d.lastGroupTargetCY = targetCY
+        d.lastGroupAnchorCX = anchorCX
+        d.lastGroupAnchorCY = anchorCY
+    end
     if changed then
         d.conf.offsetX = nextX
         d.conf.offsetY = nextY
     end
     d.conf.positionMode = "GRID_BOUNDS_V2"
-    bar._msufDragActive = true
-    if changed or positionChanged then
-        d.lastGroupTargetCX = targetCX
-        d.lastGroupTargetCY = targetCY
-        d.lastGroupAnchorCX = anchorCX
-        d.lastGroupAnchorCY = anchorCY
-        bar:ClearAllPoints()
-        bar:SetPoint("CENTER", UIParent, "BOTTOMLEFT", targetCX, targetCY)
-        local liveAnchor = bar._msufGFLiveAnchor
-        local logicalAnchor = bar._msufGFLogicalAnchor
-        local anchor = liveAnchor or logicalAnchor
-        if anchor and anchor ~= bar and anchor.ClearAllPoints and anchor.SetPoint then
-            anchor._msufDragActive = true
-            anchor:ClearAllPoints()
-            anchor:SetPoint("CENTER", UIParent, "BOTTOMLEFT", anchorCX, anchorCY)
-        end
-    end
     return true
 end
 
