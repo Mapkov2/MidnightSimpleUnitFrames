@@ -431,7 +431,15 @@ function M.FocusRequestedSection(pageKey, opts)
         return false
     end
     ExportPublic("MSUF_EM2_MenuFocusSection", section)
-    local focused = W.FocusCollapsibleSection(section, opts)
+    local focusOpts = opts
+    if req.persistSection == true then
+        -- Keep request-owned options isolated: callers may reuse their table
+        -- for temporary search/edit-mode focus, which must remain transient.
+        focusOpts = {}
+        for key, value in pairs(opts or {}) do focusOpts[key] = value end
+        focusOpts.persist = true
+    end
+    local focused = W.FocusCollapsibleSection(section, focusOpts)
     if focused then ConsumeMenuFocusRequest(req) end
     return focused
 end
@@ -988,7 +996,10 @@ function W.PageBuilder(ctx, opts)
         local focusReq = MenuFocusRequestMatches(ctx.key, sectionId)
         if focusReq then
             ExportPublic("MSUF_EM2_MenuFocusSection", body)
-            if W.FocusCollapsibleSection(body, { flash = true }) then ConsumeMenuFocusRequest(focusReq) end
+            if W.FocusCollapsibleSection(body, {
+                flash = true,
+                persist = focusReq.persistSection == true,
+            }) then ConsumeMenuFocusRequest(focusReq) end
         end
         return body
     end

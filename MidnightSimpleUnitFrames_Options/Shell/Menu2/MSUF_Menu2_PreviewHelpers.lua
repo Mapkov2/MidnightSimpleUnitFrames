@@ -1520,6 +1520,47 @@ function H.SwitchCompactZoomMode(box, compact, defaultCompactZoom)
     return true
 end
 
+--- Region-union handles are deliberately placed in the stationary Preview
+--- canvas so their hit size is independent of the rendered element's scale.
+--- When the mock is panned without a full render refresh, move only those
+--- absolute canvas anchors by the same delta. Handles anchored directly to the
+--- mock already follow it and must not be shifted a second time.
+function H.ShiftPreviewPanFollowers(box, dx, dy)
+    if not box then return 0 end
+    dx, dy = tonumber(dx) or 0, tonumber(dy) or 0
+    if dx == 0 and dy == 0 then return 0 end
+    local stationaryCanvas, stationaryStage = box.canvas, box._stage
+    local shifted, seen = 0, {}
+    local function Shift(frame)
+        if not (frame and frame._msufPreviewPanFollower == true and frame.GetPoint
+            and frame.ClearAllPoints and frame.SetPoint) or seen[frame]
+        then
+            return
+        end
+        seen[frame] = true
+        local count = (frame.GetNumPoints and frame:GetNumPoints()) or 1
+        local points, changed = {}, false
+        for i = 1, count do
+            local point, relativeTo, relativePoint, x, y = frame:GetPoint(i)
+            if point then
+                local followsStationarySurface = relativeTo == stationaryCanvas or relativeTo == stationaryStage
+                if followsStationarySurface then
+                    x, y = (tonumber(x) or 0) + dx, (tonumber(y) or 0) + dy
+                    changed = true
+                end
+                points[#points + 1] = { point, relativeTo, relativePoint, x or 0, y or 0 }
+            end
+        end
+        if not changed then return end
+        frame:ClearAllPoints()
+        for i = 1, #points do frame:SetPoint(unpack(points[i])) end
+        shifted = shifted + 1
+    end
+    for i = 1, #(box.handles or {}) do Shift(box.handles[i]) end
+    Shift(box._msufMenuTextFocusFrame)
+    return shifted
+end
+
 function H.InstallZoomPan(ZoomPan, opts)
     if type(ZoomPan) ~= "table" then return end
     opts = opts or {}
@@ -1603,8 +1644,12 @@ function H.InstallZoomPan(ZoomPan, opts)
             if not (box and box._stage and box._mock and box._mock.GetPoint) then return false end
             local x = (tonumber(box._mockBaseOffsetX) or 0) + (tonumber(box._zoomPanX) or 0)
             local y = (tonumber(box._mockBaseOffsetY) or 0) + (tonumber(box._zoomPanY) or 0)
+            local oldPoint, oldRelative, oldRelativePoint, oldX, oldY = box._mock:GetPoint(1)
             box._mock:ClearAllPoints()
             box._mock:SetPoint("TOPLEFT", box._stage, "TOPLEFT", x, y)
+            if oldPoint == "TOPLEFT" and oldRelative == box._stage and oldRelativePoint == "TOPLEFT" then
+                H.ShiftPreviewPanFollowers(box, x - (tonumber(oldX) or 0), y - (tonumber(oldY) or 0))
+            end
             local point, relative, relativePoint, actualX, actualY = box._mock:GetPoint(1)
             return point == "TOPLEFT" and relative == box._stage and relativePoint == "TOPLEFT"
                 and SameOffset(actualX, x) and SameOffset(actualY, y)
@@ -1613,8 +1658,12 @@ function H.InstallZoomPan(ZoomPan, opts)
         local panX, panY = tonumber(box._zoomPanX) or 0, tonumber(box._zoomPanY) or 0
         local expectedX = (tonumber(box._mockBaseOffsetX) or 0) + panX
         local expectedY = (tonumber(box._mockBaseOffsetY) or 0) + panY
+        local oldPoint, oldRelative, oldRelativePoint, oldX, oldY = box.mock:GetPoint(1)
         box.mock:ClearAllPoints()
         box.mock:SetPoint("CENTER", box.canvas, "CENTER", expectedX, expectedY)
+        if oldPoint == "CENTER" and oldRelative == box.canvas and oldRelativePoint == "CENTER" then
+            H.ShiftPreviewPanFollowers(box, expectedX - (tonumber(oldX) or 0), expectedY - (tonumber(oldY) or 0))
+        end
         if box._detachedCastPreview and box.mock.cast and box.mock.cast:IsShown() then
             box.mock.cast:ClearAllPoints()
             box.mock.cast:SetPoint("CENTER", box.canvas, "CENTER", (tonumber(box._detachedCastBaseOffsetX) or 0) + panX, (tonumber(box._detachedCastBaseOffsetY) or 0) + panY)
@@ -2562,16 +2611,52 @@ function H.PlaceHandleAroundRegions(handle, parent, regions, pad, opts)
     opts = opts or {}
     pad = tonumber(pad) or 3
     local min, max = math.min, math.max
+    local parentScale = parent.GetEffectiveScale and tonumber(parent:GetEffectiveScale()) or 1
+    if not parentScale or parentScale <= 0 then parentScale = 1 end
+    local pLeft, pBottom = parent:GetLeft(), parent:GetBottom()
+    if not (pLeft and pBottom) then return false end
+    local parentScaledLeft, parentScaledBottom
+    if opts.useScaledRect and parent.GetScaledRect then
+        parentScaledLeft, parentScaledBottom = parent:GetScaledRect()
+    end
     local left, right, top, bottom
     for i = 1, #regions do
         local region = regions[i]
         if region and region.IsShown and region:IsShown() and region.GetLeft then
-            local l, r, t, b = region:GetLeft(), region:GetRight(), region:GetTop(), region:GetBottom()
+            local l, r, t, b, scaleRatio
+            if parentScaledLeft and parentScaledBottom and region.GetScaledRect then
+                local scaledLeft, scaledBottom, scaledWidth, scaledHeight = region:GetScaledRect()
+                if scaledLeft and scaledBottom and scaledWidth and scaledHeight then
+                    -- GetScaledRect is already the final on-screen rectangle.
+                    -- Convert it directly into the unscaled handle parent's
+                    -- coordinate space instead of inferring the scaled origin.
+                    l = (scaledLeft - parentScaledLeft) / parentScale
+                    r = (scaledLeft + scaledWidth - parentScaledLeft) / parentScale
+                    b = (scaledBottom - parentScaledBottom) / parentScale
+                    t = (scaledBottom + scaledHeight - parentScaledBottom) / parentScale
+                    local regionScale = region.GetEffectiveScale and tonumber(region:GetEffectiveScale()) or parentScale
+                    if not regionScale or regionScale <= 0 then regionScale = parentScale end
+                    scaleRatio = regionScale / parentScale
+                end
+            end
+            if not (l and r and t and b) then
+                l, r, t, b = region:GetLeft(), region:GetRight(), region:GetTop(), region:GetBottom()
+                scaleRatio = tonumber(opts.coordinateScale)
+                if not scaleRatio or scaleRatio <= 0 then
+                    local regionScale = region.GetEffectiveScale and tonumber(region:GetEffectiveScale()) or parentScale
+                    if not regionScale or regionScale <= 0 then regionScale = parentScale end
+                    scaleRatio = regionScale / parentScale
+                end
+                if l and r and t and b then
+                    l, r = l * scaleRatio - pLeft, r * scaleRatio - pLeft
+                    t, b = t * scaleRatio - pBottom, b * scaleRatio - pBottom
+                end
+            end
             if l and r and t and b then
                 if opts.fitText then
                     local regionW = r - l
                     if region.GetStringWidth and regionW > 0 then
-                        local textW = tonumber(region:GetStringWidth()) or 0
+                        local textW = (tonumber(region:GetStringWidth()) or 0) * scaleRatio
                         if textW > 0 and textW < regionW then
                             local justify = (region.GetJustifyH and region:GetJustifyH()) or region._msufPreviewJustifyH or "LEFT"
                             if justify == "RIGHT" then
@@ -2586,7 +2671,7 @@ function H.PlaceHandleAroundRegions(handle, parent, regions, pad, opts)
                     end
                     local regionH = t - b
                     if region.GetStringHeight and regionH > 0 then
-                        local textH = tonumber(region:GetStringHeight()) or 0
+                        local textH = (tonumber(region:GetStringHeight()) or 0) * scaleRatio
                         if textH > 0 and textH < regionH then
                             local cy = (t + b) * 0.5
                             t, b = cy + (textH * 0.5), cy - (textH * 0.5)
@@ -2600,8 +2685,7 @@ function H.PlaceHandleAroundRegions(handle, parent, regions, pad, opts)
             end
         end
     end
-    local pLeft, pBottom = parent:GetLeft(), parent:GetBottom()
-    if not (left and right and top and bottom and pLeft and pBottom) then return false end
+    if not (left and right and top and bottom) then return false end
     local naturalWidth = right - left + pad * 2
     local naturalHeight = top - bottom + pad * 2
     local handleWidth = max(18, naturalWidth)
@@ -2612,8 +2696,9 @@ function H.PlaceHandleAroundRegions(handle, parent, regions, pad, opts)
     -- only towards the top/right moves handle:GetCenter() away from the visual
     -- center, which in turn biases the shared X/Y readout at small Fit scales.
     handle:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT",
-        left - pLeft - pad - ((handleWidth - naturalWidth) * 0.5),
-        bottom - pBottom - pad - ((handleHeight - naturalHeight) * 0.5))
+        left - pad - ((handleWidth - naturalWidth) * 0.5),
+        bottom - pad - ((handleHeight - naturalHeight) * 0.5))
+    handle._msufPreviewPanFollower = true
     handle:Show()
     return true
 end

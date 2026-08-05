@@ -62,7 +62,10 @@ local function GFPreviewSetTextMoveTogether(scope, kind, value)
     M.gfTextMoveTogether[scope][kind] = value ~= false
 end
 local function GFPreviewPlaceHandleAroundRegions(handle, parent, regions, pad)
-    return PreviewHelpers.PlaceHandleAroundRegions(handle, parent, regions, pad, { fitText = true })
+    return PreviewHelpers.PlaceHandleAroundRegions(handle, parent, regions, pad, {
+        fitText = true,
+        useScaledRect = true,
+    })
 end
 local GFPreviewNormalizeTextFocusKind = PreviewHelpers.NormalizeTextFocusKind or function(kind)
     if kind == "name" or kind == "hp" or kind == "power" then return kind end

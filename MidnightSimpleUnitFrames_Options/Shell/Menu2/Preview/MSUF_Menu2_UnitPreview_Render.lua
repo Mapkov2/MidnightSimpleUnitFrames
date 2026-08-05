@@ -56,6 +56,55 @@ local function ResolvePreviewBodyOffsets(centerX, centerY, scale, manualZoom, fr
         -math.floor(((tonumber(centerY) or 0) * scale) + 0.5)
 end
 Render.ResolvePreviewBodyOffsets = ResolvePreviewBodyOffsets
+
+--- Keep unit text in the same coordinate system as the live frame. Runtime
+--- applies the configured font size first and scales the owning unit frame;
+--- multiplying the font size in Preview is not equivalent because WoW rounds
+--- and hints fonts at the requested size. It also made the 7px readability
+--- floor change TOP/BOTTOM anchored text centers at small runtime/Fit scales.
+local function ConfigureRuntimeScaledTextFrame(frame, reference, width, height, renderScale)
+    if not (frame and reference and frame.ClearAllPoints and frame.SetPoint
+        and frame.SetSize and frame.SetScale)
+    then
+        return false
+    end
+    width, height = tonumber(width) or 1, tonumber(height) or 1
+    renderScale = tonumber(renderScale) or 1
+    if width <= 0 then width = 1 end
+    if height <= 0 then height = 1 end
+    if renderScale <= 0 then renderScale = 1 end
+    frame:ClearAllPoints()
+    frame:SetSize(width, height)
+    frame:SetScale(renderScale)
+    frame:SetPoint("CENTER", reference, "CENTER", 0, 0)
+    return true
+end
+Render.ConfigureRuntimeScaledTextFrame = ConfigureRuntimeScaledTextFrame
+
+local function RuntimeTextCoordinate(value)
+    return tonumber(value) or 0
+end
+
+local function ApplyRuntimePreviewFont(runtimeSpec, fallback, fs, size, role)
+    local setFont = MSUF.UFText and MSUF.UFText.SetFont
+    if runtimeSpec and type(setFont) == "function" then
+        setFont(fs, runtimeSpec, size, role)
+    elseif type(fallback) == "function" then
+        fallback(fs, size)
+    end
+end
+
+local function PlaceRuntimePreviewName(fs, parent, runtimeText, conf, baselineOffset, resolveNameAnchor)
+    local anchor = (runtimeText and runtimeText.nameAnchor) or conf.nameTextAnchor or "TOPLEFT"
+    local x = tonumber(runtimeText and runtimeText.nameX)
+    local y = tonumber(runtimeText and runtimeText.nameY)
+    if x == nil then x = tonumber(conf.nameOffsetX) or 4 end
+    if y == nil then y = (tonumber(conf.nameOffsetY) or -4) + (tonumber(baselineOffset) or 0) end
+    local point, relativePoint, offsetX, justify = resolveNameAnchor(anchor, x)
+    fs:SetPoint(point, parent, relativePoint, offsetX, y)
+    fs:SetJustifyH(justify)
+end
+
 local function CastbarPreviewDetailPrefix(unitKey)
     if unitKey == "player" then return "castbarPlayer" end
     if unitKey == "target" then return "castbarTarget" end
@@ -301,9 +350,6 @@ local function AnchorCastbarPreviewText(fs, relativeTo, position, x, y, justify,
         fs:SetPoint("LEFT", relativeTo, "LEFT", S(2 + x), S(y))
         fs:SetJustifyH(justify or "LEFT")
     end
-end
-local function ApplyPreviewFontSet(apply, size, ...)
-    for i = 1, select("#", ...) do apply(select(i, ...), size) end
 end
 local function ResolvePreviewTextSlotSize(runtimeText, conf, runtimeKey, dbKey, fallback)
     local value = tonumber(runtimeText and runtimeText[runtimeKey]) or tonumber(conf and conf[dbKey])
@@ -1440,6 +1486,7 @@ function Preview.Refresh(box, reason)
     end
     local castEnabled = runtimeSpec and runtimeSpec.castbar and runtimeSpec.castbar.enabled == true
     if not (runtimeSpec and runtimeSpec.castbar) then castEnabled = CastbarEnabled(key, g) end
+    if box._msuf2ColorPainterForceCastbar == true then castEnabled = true end
     local castW, castBarH = ReadCastbarSize(key, g, w, key == "boss" and 12 or 18)
     local castXKey, castYKey, castDefX, castDefY = CastbarOffsetFields(key)
     local castOffsetX = castXKey and tonumber(g[castXKey]) or nil
@@ -1490,9 +1537,9 @@ function Preview.Refresh(box, reason)
     box._runtimeHealthPowerInset = box._runtimePowerEmbedded == true
         and max(0, tonumber(runtimePower and runtimePower.height) or tonumber(ReadPowerBarHeight(conf)) or 0)
         or 0
-    local classPowerOn = runtimeClassPower and runtimeClassPower.enabled == true
-    if runtimeClassPower == nil then classPowerOn = key == "player" and bars.showClassPower ~= false end
-    if classPowerPreviewSpec then classPowerOn = bars.showClassPower ~= false and classPowerPreviewSpec.enabled ~= false and classPowerPreviewSpec.mode ~= "none" end
+    local classPowerOn = key == "player" and runtimeClassPower and runtimeClassPower.enabled == true or false
+    if key == "player" and runtimeClassPower == nil then classPowerOn = bars.showClassPower ~= false end
+    if key == "player" and classPowerPreviewSpec then classPowerOn = bars.showClassPower ~= false and classPowerPreviewSpec.enabled ~= false and classPowerPreviewSpec.mode ~= "none" end
     local powerFrac = tonumber(data.power) or 1
     if not detachedPower and key ~= "player" and data.live ~= true then powerFrac = 1 end
     if powerFrac < 0 then powerFrac = 0 elseif powerFrac > 1 then powerFrac = 1 end
@@ -1755,7 +1802,8 @@ function Preview.Refresh(box, reason)
             minY, maxY = min(minY, cBottom - detailPadY), max(maxY, cBottom + castBarH + detailPadY)
         end
     end
-    local auraPreviewState = Auras and Auras.BuildState and Auras.BuildState(key, w, h, runtimeSpec)
+    local auraPreviewState = Auras and Auras.BuildState
+        and Auras.BuildState(key, w, h, runtimeSpec, box._msuf2ColorPainterForceAuras == true)
     local auraFootprintState = PreviewLayerWanted(box, "auras") and auraPreviewState or nil
     if auraFootprintState and Auras.ExpandFootprint then minX, maxX, minY, maxY = Auras.ExpandFootprint(auraFootprintState, minX, maxX, minY, maxY) end
     if Auras and type(Auras.DispelPreview) == "table" and type(Auras.DispelPreview.Availability) == "function" then
@@ -1853,6 +1901,7 @@ function Preview.Refresh(box, reason)
     SetTex(mock.detachedPower.fill, detachedPowerTexture)
     SetTex(mock.cast.fill, type(_G.MSUF_GetCastbarTexture) == "function" and _G.MSUF_GetCastbarTexture() or TEX_W8)
     mock:SetSize(sw, sh)
+    ConfigureRuntimeScaledTextFrame(mock.textFrame, mock, w, h, scale)
     if mock.sizeTag then mock.sizeTag:SetText(format("%d x %d", w, h)) end
     mock:ClearAllPoints()
     mock:SetPoint("CENTER", canvas, "CENTER", mockOffsetX + panX, mockOffsetY + panY)
@@ -2378,7 +2427,6 @@ function Preview.Refresh(box, reason)
     local fr, fg, fb = R.FontColor()
     local baseTextSize = tonumber(g.fontSize) or 14
     local nameRawSize = tonumber(runtimeSpec and runtimeSpec.nameFontSize) or tonumber(conf.nameFontSize) or tonumber(g.nameFontSize) or baseTextSize
-    local nameSize = S(nameRawSize); if nameSize < 7 then nameSize = 7 end
     local hpSize = tonumber(runtimeSpec and runtimeSpec.healthFontSize) or tonumber(conf.hpFontSize) or tonumber(g.hpFontSize) or baseTextSize
     local pwrSize = tonumber(runtimeSpec and runtimeSpec.powerFontSize) or tonumber(conf.powerFontSize) or tonumber(g.powerFontSize) or baseTextSize
     box._fontPreviewTextAlpha = tonumber(runtimeSpec and runtimeSpec.textColor and runtimeSpec.textColor.a)
@@ -2388,17 +2436,23 @@ function Preview.Refresh(box, reason)
     if box._fontPreviewTextAlpha < 0.7 then box._fontPreviewTextAlpha = 0.7 elseif box._fontPreviewTextAlpha > 1 then box._fontPreviewTextAlpha = 1 end
     box._fontPreviewBaselineOffset = tonumber(conf.fontOverride == true and conf.fontBaselineOffset) or tonumber(g.fontBaselineOffset) or 0
     if box._fontPreviewBaselineOffset < -4 then box._fontPreviewBaselineOffset = -4 elseif box._fontPreviewBaselineOffset > 4 then box._fontPreviewBaselineOffset = 4 end
-    ApplyPreviewFontSet(ApplyPreviewFont, nameSize, mock.nameText, mock.raidGroupNameText, mock.totInlineSep, mock.totInlineText)
+    ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, mock.nameText, nameRawSize, "name")
+    ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, mock.raidGroupNameText, nameRawSize, "name")
+    ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, mock.totInlineSep, nameRawSize, "name")
+    ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, mock.totInlineText, nameRawSize, "name")
     -- Reverse order renders the configured Right slot on the physical left
     -- FontString (and vice versa); size and offsets follow the content, so
     -- swap the per-slot keys the physical sides read from.
-    local hpRev = R.TextScopeGet(key, "hpTextReverse", false) == true
-    ApplyPreviewFont(mock.hpTextLeft, max(7, S(ResolvePreviewTextSlotSize(runtimeText, conf, hpRev and "healthRightFontSize" or "healthLeftFontSize", hpRev and "hpTextRightFontSize" or "hpTextLeftFontSize", hpSize))))
-    ApplyPreviewFont(mock.hpTextCenter, max(7, S(ResolvePreviewTextSlotSize(runtimeText, conf, "healthCenterFontSize", "hpTextCenterFontSize", hpSize))))
-    ApplyPreviewFontSet(ApplyPreviewFont, max(7, S(ResolvePreviewTextSlotSize(runtimeText, conf, hpRev and "healthLeftFontSize" or "healthRightFontSize", hpRev and "hpTextLeftFontSize" or "hpTextRightFontSize", hpSize))), mock.hpText, mock.hpTextPct)
-    ApplyPreviewFont(mock.powerTextLeft, max(7, S(ResolvePreviewTextSlotSize(runtimeText, conf, "powerLeftFontSize", "powerTextLeftFontSize", pwrSize))))
-    ApplyPreviewFont(mock.powerTextCenter, max(7, S(ResolvePreviewTextSlotSize(runtimeText, conf, "powerCenterFontSize", "powerTextCenterFontSize", pwrSize))))
-    ApplyPreviewFontSet(ApplyPreviewFont, max(7, S(ResolvePreviewTextSlotSize(runtimeText, conf, "powerRightFontSize", "powerTextRightFontSize", pwrSize))), mock.powerText, mock.powerTextPct)
+    local hpRev = runtimeText and runtimeText.healthReverse == true
+        or (not runtimeText and R.TextScopeGet(key, "hpTextReverse", false) == true)
+    ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, mock.hpTextLeft, ResolvePreviewTextSlotSize(runtimeText, conf, hpRev and "healthRightFontSize" or "healthLeftFontSize", hpRev and "hpTextRightFontSize" or "hpTextLeftFontSize", hpSize), "health")
+    ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, mock.hpTextCenter, ResolvePreviewTextSlotSize(runtimeText, conf, "healthCenterFontSize", "hpTextCenterFontSize", hpSize), "health")
+    ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, mock.hpText, ResolvePreviewTextSlotSize(runtimeText, conf, hpRev and "healthLeftFontSize" or "healthRightFontSize", hpRev and "hpTextLeftFontSize" or "hpTextRightFontSize", hpSize), "health")
+    ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, mock.hpTextPct, ResolvePreviewTextSlotSize(runtimeText, conf, hpRev and "healthLeftFontSize" or "healthRightFontSize", hpRev and "hpTextLeftFontSize" or "hpTextRightFontSize", hpSize), "health")
+    ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, mock.powerTextLeft, ResolvePreviewTextSlotSize(runtimeText, conf, "powerLeftFontSize", "powerTextLeftFontSize", pwrSize), "power")
+    ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, mock.powerTextCenter, ResolvePreviewTextSlotSize(runtimeText, conf, "powerCenterFontSize", "powerTextCenterFontSize", pwrSize), "power")
+    ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, mock.powerText, ResolvePreviewTextSlotSize(runtimeText, conf, "powerRightFontSize", "powerTextRightFontSize", pwrSize), "power")
+    ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, mock.powerTextPct, ResolvePreviewTextSlotSize(runtimeText, conf, "powerRightFontSize", "powerTextRightFontSize", pwrSize), "power")
     box._previewNameR, box._previewNameG, box._previewNameB = R.PreviewNameColor(key, data, fr, fg, fb)
     SetTextColorSet(box._previewNameR, box._previewNameG, box._previewNameB, box._fontPreviewTextAlpha, mock.nameText)
     SetTextColorSet(fr, fg, fb, box._fontPreviewTextAlpha, mock.raidGroupNameText)
@@ -2541,15 +2595,13 @@ function Preview.Refresh(box, reason)
     mock.powerTextPct:SetShown(false)
     mock.nameText:ClearAllPoints()
     if runtimeText and runtimeText.directLayout == true then
-        PlaceDirectPreviewText(mock.nameText, mock.textFrame, runtimeText, "directName", "CENTER", "CENTER", 0, 0, "CENTER", S)
+        PlaceDirectPreviewText(mock.nameText, mock.textFrame, runtimeText, "directName", "CENTER", "CENTER", 0, 0, "CENTER", RuntimeTextCoordinate)
     else
-        local npt, nrel, nx, njust = R.ResolveNameAnchor(conf.nameTextAnchor or "TOPLEFT", S(tonumber(conf.nameOffsetX) or 4))
-        mock.nameText:SetPoint(npt, mock.textFrame, nrel, nx, S((tonumber(conf.nameOffsetY) or -4) + box._fontPreviewBaselineOffset))
-        mock.nameText:SetJustifyH(njust)
+        PlaceRuntimePreviewName(mock.nameText, mock.textFrame, runtimeText, conf, box._fontPreviewBaselineOffset, R.ResolveNameAnchor)
     end
     mock.raidGroupNameText:ClearAllPoints()
-    local raidGroupX = S(tonumber(raidGroupCfg and raidGroupCfg.x) or tonumber(conf.raidGroupNameOffsetX) or 3)
-    local raidGroupY = S(tonumber(raidGroupCfg and raidGroupCfg.y) or tonumber(conf.raidGroupNameOffsetY) or 0)
+    local raidGroupX = tonumber(raidGroupCfg and raidGroupCfg.x) or tonumber(conf.raidGroupNameOffsetX) or 3
+    local raidGroupY = tonumber(raidGroupCfg and raidGroupCfg.y) or tonumber(conf.raidGroupNameOffsetY) or 0
     if raidGroupAnchor == "NAMERIGHT" then
         mock.raidGroupNameText:SetPoint("LEFT", mock.nameText, "RIGHT", raidGroupX, raidGroupY)
     elseif raidGroupAnchor == "NAMELEFT" then
@@ -2571,9 +2623,9 @@ function Preview.Refresh(box, reason)
             mock.totInlineText:SetTextColor(ir, ig, ib, box._fontPreviewTextAlpha)
             local inlineAnchor = (showRaidGroupName and raidGroupAnchor == "NAMERIGHT") and mock.raidGroupNameText or mock.nameText
             mock.totInlineSep:ClearAllPoints()
-            mock.totInlineSep:SetPoint("LEFT", inlineAnchor, "RIGHT", S(4), 0)
+            mock.totInlineSep:SetPoint("LEFT", inlineAnchor, "RIGHT", 4, 0)
             mock.totInlineText:ClearAllPoints()
-            mock.totInlineText:SetPoint("LEFT", mock.totInlineSep, "RIGHT", S(4), 0)
+            mock.totInlineText:SetPoint("LEFT", mock.totInlineSep, "RIGHT", 4, 0)
             mock.totInlineSep:Show()
             mock.totInlineText:Show()
         end
@@ -2592,14 +2644,30 @@ function Preview.Refresh(box, reason)
         return tonumber(v) or fallback or 0
     end
     local function TextOffsets(prefix, fallbackY, mirrorSlots)
+        local runtimePrefix = prefix == "hp" and "health" or "power"
+        local leftSide = mirrorSlots and "Right" or "Left"
+        local rightSide = mirrorSlots and "Left" or "Right"
+        if runtimeText then
+            local leftX = tonumber(runtimeText[runtimePrefix .. leftSide .. "X"])
+            local leftY = tonumber(runtimeText[runtimePrefix .. leftSide .. "Y"])
+            local centerX = tonumber(runtimeText[runtimePrefix .. "CenterX"])
+            local centerY = tonumber(runtimeText[runtimePrefix .. "CenterY"])
+            local rightX = tonumber(runtimeText[runtimePrefix .. rightSide .. "X"])
+            local rightY = tonumber(runtimeText[runtimePrefix .. rightSide .. "Y"])
+            if leftX ~= nil and leftY ~= nil and centerX ~= nil and centerY ~= nil and rightX ~= nil and rightY ~= nil then
+                return {
+                    leftX = leftX, leftY = leftY,
+                    centerX = centerX, centerY = centerY,
+                    rightX = rightX, rightY = rightY,
+                }
+            end
+        end
         local baseX = NumField(prefix .. "OffsetX", prefix .. "TextOffsetX", prefix .. "OffsetX", prefix .. "TextOffsetX", -4)
         local baseY = NumField(prefix .. "OffsetY", prefix .. "TextOffsetY", prefix .. "OffsetY", prefix .. "TextOffsetY", fallbackY) + box._fontPreviewBaselineOffset
         local function Slot(side, axis)
             return NumField(prefix .. "Text" .. side .. "Offset" .. axis, prefix .. side .. "Offset" .. axis, prefix .. "Text" .. side .. "Offset" .. axis, prefix .. side .. "Offset" .. axis, 0)
         end
         -- Reverse order: the mirrored physical sides read the other slot's offsets.
-        local leftSide = mirrorSlots and "Right" or "Left"
-        local rightSide = mirrorSlots and "Left" or "Right"
         return {
             leftX = baseX + Slot(leftSide, "X"),
             leftY = baseY + Slot(leftSide, "Y"),
@@ -2609,27 +2677,31 @@ function Preview.Refresh(box, reason)
             rightY = baseY + Slot(rightSide, "Y"),
         }
     end
-    local function PlaceTextSet(left, center, right, pct, parent, lPoint, lRel, cPoint, cRel, rPoint, rRel, offsets)
-        PlacePreviewSlot(left, parent, lPoint, lRel, S(4 + offsets.leftX), S(offsets.leftY), "LEFT")
-        PlacePreviewSlot(center, parent, cPoint, cRel, S(offsets.centerX), S(offsets.centerY), "CENTER")
-        PlacePreviewSlot(right, parent, rPoint, rRel, S(-4 + offsets.rightX), S(offsets.rightY), "RIGHT")
-        PlacePreviewSlot(pct, parent, rPoint, rRel, S(-4 + offsets.rightX), S(offsets.rightY), "RIGHT")
+    local function PlaceTextSet(left, center, right, pct, parent, lPoint, lRel, cPoint, cRel, rPoint, rRel, offsets, coordinate)
+        coordinate = coordinate or RuntimeTextCoordinate
+        PlacePreviewSlot(left, parent, lPoint, lRel, coordinate(4 + offsets.leftX), coordinate(offsets.leftY), "LEFT")
+        PlacePreviewSlot(center, parent, cPoint, cRel, coordinate(offsets.centerX), coordinate(offsets.centerY), "CENTER")
+        PlacePreviewSlot(right, parent, rPoint, rRel, coordinate(-4 + offsets.rightX), coordinate(offsets.rightY), "RIGHT")
+        PlacePreviewSlot(pct, parent, rPoint, rRel, coordinate(-4 + offsets.rightX), coordinate(offsets.rightY), "RIGHT")
     end
     local hpOffsets = TextOffsets("hp", -4, hpRev)
     local powerOffsets = TextOffsets("power", 4)
     if runtimeText and runtimeText.directLayout == true then
-        PlaceDirectPreviewText(mock.hpTextLeft, mock.textFrame, runtimeText, hpRev and "directHealthRight" or "directHealthLeft", "LEFT", "LEFT", 4, 0, "LEFT", S)
-        PlaceDirectPreviewText(mock.hpTextCenter, mock.textFrame, runtimeText, "directHealthCenter", "CENTER", "CENTER", 0, 0, "CENTER", S)
-        PlaceDirectPreviewText(mock.hpText, mock.textFrame, runtimeText, hpRev and "directHealthLeft" or "directHealthRight", "RIGHT", "RIGHT", -4, 0, "RIGHT", S)
+        PlaceDirectPreviewText(mock.hpTextLeft, mock.textFrame, runtimeText, hpRev and "directHealthRight" or "directHealthLeft", "LEFT", "LEFT", 4, 0, "LEFT", RuntimeTextCoordinate)
+        PlaceDirectPreviewText(mock.hpTextCenter, mock.textFrame, runtimeText, "directHealthCenter", "CENTER", "CENTER", 0, 0, "CENTER", RuntimeTextCoordinate)
+        PlaceDirectPreviewText(mock.hpText, mock.textFrame, runtimeText, hpRev and "directHealthLeft" or "directHealthRight", "RIGHT", "RIGHT", -4, 0, "RIGHT", RuntimeTextCoordinate)
     else
         PlaceTextSet(mock.hpTextLeft, mock.hpTextCenter, mock.hpText, mock.hpTextPct, mock.textFrame, "TOPLEFT", "TOPLEFT", "TOP", "TOP", "TOPRIGHT", "TOPRIGHT", hpOffsets)
     end
     if detachedPowerInUnitPreview and box._runtimeDetachedPowerTextOnBar and mock.detachedPower:IsShown() then
+        -- The FontStrings inherit the runtime scale from textFrame. Keep their
+        -- offsets raw even though the detached bar geometry is canvas-scaled;
+        -- scaling the offsets here would apply the preview scale twice.
         PlaceTextSet(mock.powerTextLeft, mock.powerTextCenter, mock.powerText, mock.powerTextPct, mock.detachedPower, "LEFT", "LEFT", "CENTER", "CENTER", "RIGHT", "RIGHT", powerOffsets)
     elseif runtimeText and runtimeText.directLayout == true then
-        PlaceDirectPreviewText(mock.powerTextLeft, mock.textFrame, runtimeText, "directPowerLeft", "LEFT", "LEFT", 4, 0, "LEFT", S)
-        PlaceDirectPreviewText(mock.powerTextCenter, mock.textFrame, runtimeText, "directPowerCenter", "CENTER", "CENTER", 0, 0, "CENTER", S)
-        PlaceDirectPreviewText(mock.powerText, mock.textFrame, runtimeText, "directPowerRight", "RIGHT", "RIGHT", -4, 0, "RIGHT", S)
+        PlaceDirectPreviewText(mock.powerTextLeft, mock.textFrame, runtimeText, "directPowerLeft", "LEFT", "LEFT", 4, 0, "LEFT", RuntimeTextCoordinate)
+        PlaceDirectPreviewText(mock.powerTextCenter, mock.textFrame, runtimeText, "directPowerCenter", "CENTER", "CENTER", 0, 0, "CENTER", RuntimeTextCoordinate)
+        PlaceDirectPreviewText(mock.powerText, mock.textFrame, runtimeText, "directPowerRight", "RIGHT", "RIGHT", -4, 0, "RIGHT", RuntimeTextCoordinate)
     else
         PlaceTextSet(mock.powerTextLeft, mock.powerTextCenter, mock.powerText, mock.powerTextPct, mock.textFrame, "BOTTOMLEFT", "BOTTOMLEFT", "BOTTOM", "BOTTOM", "BOTTOMRIGHT", "BOTTOMRIGHT", powerOffsets)
     end
@@ -2976,12 +3048,15 @@ function Preview.Refresh(box, reason)
         bounds = true,
     }
     for i = 1, #(box.layerButtons or {}) do
-        if box.layerButtons[i].refresh then box.layerButtons[i]:refresh() end
+        local button = box.layerButtons[i]
+        if button.key == "classPower" and button.SetShown then button:SetShown(key == "player") end
+        if button.refresh then button:refresh() end
     end
+    if box.LayoutLayerRail then box:LayoutLayerRail((box.GetWidth and box:GetWidth() or 0) - 24) end
     local nameHandleW = mock.nameText:GetStringWidth() + 10
     if mock.totInlineSep and mock.totInlineSep:IsShown() then nameHandleW = nameHandleW + mock.totInlineSep:GetStringWidth() + mock.totInlineText:GetStringWidth() + S(8) end
     box.handleName:SetSize(max(46, nameHandleW), max(18, mock.nameText:GetStringHeight() + 6))
-    if not UnitPreviewText.PlaceHandleAroundRegions(box.handleName, canvas, { mock.nameText, mock.totInlineSep, mock.totInlineText }, 3) then PlaceHandle(box.handleName, mock.nameText) end
+    if not UnitPreviewText.PlaceHandleAroundRegions(box.handleName, canvas, { mock.nameText, mock.totInlineSep, mock.totInlineText }, 3, { coordinateScale = scale, fitText = true, useScaledRect = true }) then PlaceHandle(box.handleName, mock.nameText) end
     local function PlaceTextSlotHandle(handle, region)
         if not handle then return end
         if not (region and region.IsShown and region:IsShown()) then
@@ -2991,7 +3066,7 @@ function Preview.Refresh(box, reason)
         local w = (region.GetStringWidth and region:GetStringWidth()) or region:GetWidth() or 36
         local h = (region.GetStringHeight and region:GetStringHeight()) or region:GetHeight() or 12
         handle:SetSize(max(26, w + 10), max(18, h + 6))
-        if not UnitPreviewText.PlaceHandleAroundRegions(handle, canvas, { region }, 3) then PlaceHandle(handle, region) end
+        if not UnitPreviewText.PlaceHandleAroundRegions(handle, canvas, { region }, 3, { coordinateScale = scale, fitText = true, useScaledRect = true }) then PlaceHandle(handle, region) end
     end
     PlaceTextSlotHandle(box.handleRaidGroupName, mock.raidGroupNameText)
     local function PlaceValueTextHandles(kind, mainHandle, leftHandle, centerHandle, rightHandle, leftRegion, centerRegion, rightRegion)
@@ -2999,7 +3074,7 @@ function Preview.Refresh(box, reason)
             SetShownSafe(leftHandle, false)
             SetShownSafe(centerHandle, false)
             SetShownSafe(rightHandle, false)
-            if UnitPreviewText.PlaceHandleAroundRegions(mainHandle, canvas, { leftRegion, centerRegion, rightRegion }, 3) then return end
+            if UnitPreviewText.PlaceHandleAroundRegions(mainHandle, canvas, { leftRegion, centerRegion, rightRegion }, 3, { coordinateScale = scale, fitText = true, useScaledRect = true }) then return end
             if not ((leftRegion and leftRegion:IsShown()) or (centerRegion and centerRegion:IsShown()) or (rightRegion and rightRegion:IsShown())) then
                 mainHandle:Hide()
                 return
