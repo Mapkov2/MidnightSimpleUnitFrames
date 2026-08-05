@@ -364,6 +364,77 @@ local function DispelSymbolPreviewArt(texture, DS, style, dispelType)
     end
 end
 
+local function PaintGroupPreviewDispelOverlay(scene)
+    local overlay = scene.runtimeSpec and scene.runtimeSpec.group
+    local mock = scene.mock
+    local host = mock and mock._msufGFPreviewDispelOverlayHost
+    local layerOn = overlay and overlay.dispelOverlayEnabled == true
+        and scene.layerAvailable.dispelOverlay ~= false
+        and scene.layerVisible.dispelOverlay ~= false
+    if not layerOn then
+        if host then host:Hide() end
+        return
+    end
+    local health = mock and mock._health
+    if not health then
+        if host then host:Hide() end
+        return
+    end
+    if not host then
+        host = CreateFrame("Frame", nil, mock)
+        host:EnableMouse(false)
+        host.Region = host:CreateTexture(nil, "OVERLAY")
+        host.Region:SetTexture("Interface\\Buttons\\WHITE8X8")
+        mock._msufGFPreviewDispelOverlayHost = host
+        mock._msufGFPreviewDispelOverlayRegion = host.Region
+    end
+    host:ClearAllPoints()
+    host:SetAllPoints(health)
+    local level = scene.S.Layers and scene.S.Layers.ElementLevel
+        and scene.S.Layers.ElementLevel(overlay.dispelOverlayLayer, 0, 12)
+        or (((mock.GetFrameLevel and mock:GetFrameLevel()) or 1)
+            + (tonumber(overlay.dispelOverlayLayer) or 0) + 12)
+    SetPreviewFrameLevel(host, level)
+    local target = overlay.dispelOverlayOnHealth ~= false and health.GetStatusBarTexture
+        and health:GetStatusBarTexture() or health
+    if not target then
+        host:Hide()
+        return
+    end
+    local region = host.Region
+    local style = tostring(overlay.dispelOverlayStyle or "FULL"):upper()
+    local thickness = scene.S.ScaleValue(tonumber(scene.runtimeBorder.highlightThickness) or 3,
+        scene.previewScale, 1)
+    region:ClearAllPoints()
+    if style == "TOP" then
+        region:SetPoint("TOPLEFT", target, "TOPLEFT", 0, 0)
+        region:SetPoint("TOPRIGHT", target, "TOPRIGHT", 0, 0)
+        region:SetHeight(thickness)
+    elseif style == "BOTTOM" then
+        region:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", 0, 0)
+        region:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", 0, 0)
+        region:SetHeight(thickness)
+    elseif style == "LEFT" then
+        region:SetPoint("TOPLEFT", target, "TOPLEFT", 0, 0)
+        region:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", 0, 0)
+        region:SetWidth(thickness)
+    elseif style == "RIGHT" then
+        region:SetPoint("TOPRIGHT", target, "TOPRIGHT", 0, 0)
+        region:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", 0, 0)
+        region:SetWidth(thickness)
+    else
+        region:SetAllPoints(target)
+    end
+    local color = scene.runtimeSpec and scene.runtimeSpec.dispel
+    region:SetColorTexture(tonumber(color and color.r) or 0.25,
+        tonumber(color and color.g) or 0.75, tonumber(color and color.b) or 1, 1)
+    local alpha = math.max(0, math.min(1, tonumber(overlay.dispelOverlayAlpha) or 0.35))
+    local layerAlpha = scene.soloLayer and scene.soloLayer ~= "dispelOverlay" and 0.15 or 1
+    region:SetAlpha(alpha * layerAlpha)
+    region:Show()
+    host:Show()
+end
+
 local function PaintGroupPreviewDispelSymbol(scene)
     local symbol = scene.runtimeSpec and scene.runtimeSpec.dispelSymbol
     local handle = scene.S and scene.S.dispelSymbolHandle
@@ -914,6 +985,8 @@ local function BuildScene(box, reason)
             or selectedSpellAvailable or false,
         auraText = aurasEnabled and customAuraText,
         text = textAvailable,
+        dispelOverlay = runtimeSpec and runtimeSpec.group
+            and runtimeSpec.group.dispelOverlayEnabled == true or false,
         dispelSymbol = runtimeSpec and runtimeSpec.dispelSymbol
             and runtimeSpec.dispelSymbol.enabled == true or false,
     }
@@ -2261,7 +2334,7 @@ function Render.Install(box, ctx, deps)
         if powerBarHandle then
             -- Runtime parity for interaction too: only the detached bar owns
             -- free offsets, so the handle locks itself while the bar is
-            -- embedded/attached (select + double-click still work there).
+            -- embedded/attached (single-click settings still work there).
             powerBarHandle._locked = not powerDetached
             if powerBarHandle._dragging ~= true then
                 powerBarHandle._previewScale = previewScale
@@ -2321,6 +2394,8 @@ function Render.Install(box, ctx, deps)
             mock._powerBg:Hide()
         end
         end
+        scene.previewScale = previewScale
+        PaintGroupPreviewDispelOverlay(scene)
         if ApplyRounded(mock, conf, powerH > 0, outlineEdge,
             powerEmbed, powerDetached, powerOutlineEdge) then
             H.SetOutlineShown(mock, false)
@@ -2329,7 +2404,6 @@ function Render.Install(box, ctx, deps)
             H.SetOutlineShown(mock, false)
             ApplyFrameBorder(self, runtimeBorder, previewScale)
         end
-        scene.previewScale = previewScale
         PaintGroupPreviewPortrait(scene)
         PaintGroupPreviewDispelSymbol(scene)
         local textBaseLevel = 0
@@ -2775,6 +2849,7 @@ function Render.Install(box, ctx, deps)
             local placedScale = (exactSlot or placed._msufIconScaleApplied == true) and 1 or scene.spellIconScale
             local spellBaseSize = (tonumber(placed.size) or 20) * placedScale
             local spellSize = max(1, ScaleValue(spellBaseSize, previewScale, 1))
+            if handle.SetAlpha then handle:SetAlpha(tonumber(appearance.alpha) or 1) end
             local color = item and item.color or fallbackColor
             local spellR, spellG, spellB = (color and color[1]) or 0.69, (color and color[2]) or 0.50, (color and color[3]) or 0.88
             if handle.SetBackdropColor then handle:SetBackdropColor(spellR * 0.12, spellG * 0.12, spellB * 0.12, 0.42) end
@@ -2884,12 +2959,23 @@ function Render.Install(box, ctx, deps)
                     spellStack:Show()
                 end
                 local a3 = MSUF and MSUF.MSUF_Auras3
+                local previewShape = appearance.iconShape or "RECTANGLE"
+                if a3 and type(a3.ResolveAuraIconShape) == "function" then
+                    previewShape = a3.ResolveAuraIconShape(previewShape,
+                        conf.portraitShape or (conf.portrait and conf.portrait.shape))
+                end
+                if a3 and type(a3.ApplyAuraIconShape) == "function" then
+                    a3.ApplyAuraIconShape(handle, previewShape, nil, spellTex, spellSwipe)
+                end
                 if a3 and type(a3.ApplyIconStylePreview) == "function" then
-                    a3.ApplyIconStylePreview(handle, barOnly and nil or appearance.iconStyle, spellSize)
+                    a3.ApplyIconStylePreview(handle, barOnly and nil or appearance.iconStyle, spellSize, previewShape)
                 end
             end
             if spellType ~= "icon" then
                 local a3 = MSUF and MSUF.MSUF_Auras3
+                if a3 and type(a3.ApplyAuraIconShape) == "function" then
+                    a3.ApplyAuraIconShape(handle, "RECTANGLE", nil, spellTex, spellSwipe)
+                end
                 if a3 and type(a3.ApplyIconStylePreview) == "function" then
                     a3.ApplyIconStylePreview(handle, nil)
                 end
@@ -2957,7 +3043,19 @@ function Render.Install(box, ctx, deps)
             selectedFallbackItem.specKey = scene.selectedSpellSpecKey
             selectedFallbackItem.auraName = scene.selectedSpellAuraName
             selectedFallbackItem.display = scene.selectedSpellAuraName or "Spell"
-            local selectedAppearance = selectedSpellCfg.cornerSlotKey == nil and buffCfg or nil
+            local selectedAppearance = selectedSpellCfg.cornerSlotKey == nil
+                and type(conf.spellIndicators) == "table" and conf.spellIndicators.style or nil
+            if selectedAppearance and buffCfg and buffCfg.iconStyle and selectedAppearance.iconStyle == nil then
+                local fallbackAppearance = spellHandle._msufGFSelectedFallbackAppearance
+                if not fallbackAppearance then
+                    fallbackAppearance = {}
+                    spellHandle._msufGFSelectedFallbackAppearance = fallbackAppearance
+                end
+                wipe(fallbackAppearance)
+                for key, value in pairs(selectedAppearance) do fallbackAppearance[key] = value end
+                fallbackAppearance.iconStyle = buffCfg.iconStyle
+                selectedAppearance = fallbackAppearance
+            end
             ConfigureSpellPreviewHandle(spellHandle, selectedFallbackItem,
                 selectedPlaced or { type = "icon", size = 20, anchor = "TOPLEFT", x = 0, y = 0 },
                 selectedAppearance, selectedSpellIcon, { spellR, spellG, spellB, 1 })

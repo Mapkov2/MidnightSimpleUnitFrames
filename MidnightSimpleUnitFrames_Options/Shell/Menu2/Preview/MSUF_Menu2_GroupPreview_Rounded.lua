@@ -219,6 +219,7 @@ local function ApplyRounded(mock, conf, powerOn, edgeSize, powerEmbed, powerDeta
     end
     mock._msufGFRoundedPreviewActive = true
     local healthTex = StatusBarTexture(mock._health)
+    local dispelOverlay = mock._msufGFPreviewDispelOverlayRegion
     local tempMaxHealthTex = StatusBarTexture(mock._tempMaxHealth)
     local healPredTex = StatusBarTexture(mock._healPred)
     local absorbTex = StatusBarTexture(mock._absorb)
@@ -232,6 +233,8 @@ local function ApplyRounded(mock, conf, powerOn, edgeSize, powerEmbed, powerDeta
     local bodyMask = EnsureRoundedMask(mock, "body", mock, mock._roundedBg)
     local healthBgMask = EnsureRoundedMask(mock, "health", healthAnchor, mock._healthBg)
     local healthTexMask = EnsureRoundedMask(mock, "health", healthAnchor, healthTex)
+    local dispelOverlayMask = dispelOverlay and dispelOverlay:IsShown()
+        and EnsureRoundedMask(mock, "dispelOverlay", healthAnchor, dispelOverlay) or nil
     local tempMaxHealthBgMask = EnsureRoundedMask(mock, "tempMaxHealthBg", sharedBody and mock or mock._tempMaxHealth, mock._tempMaxHealthBg)
     local tempMaxHealthMask = EnsureRoundedMask(mock, "tempMaxHealth", sharedBody and mock or mock._tempMaxHealth, tempMaxHealthTex)
     local healPredMask = EnsureRoundedMask(mock, "healPred", sharedBody and mock or mock._healPred, healPredTex)
@@ -254,6 +257,7 @@ local function ApplyRounded(mock, conf, powerOn, edgeSize, powerEmbed, powerDeta
     SetMask(mock, mock._roundedBg, bodyMask)
     SetMask(mock, mock._healthBg, healthBgMask)
     SetMask(mock, healthTex, healthTexMask)
+    SetMask(mock, dispelOverlay, dispelOverlayMask)
     SetMask(mock, mock._tempMaxHealthBg, tempMaxHealthBgMask)
     SetMask(mock, tempMaxHealthTex, tempMaxHealthMask)
     SetMask(mock, healPredTex, healPredMode == 4 and nil or healPredMask)

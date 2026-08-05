@@ -304,7 +304,8 @@ local UF_COPY_CATEGORIES = {
     { key = "text",         label = "Text",             default = true, description = "Copies every text slot with its content, size and position, plus this unit's font overrides: font, outline, shadow, text color and name shortening." },
     { key = "portrait",     label = "Portrait",         default = true },
     { key = "power",        label = "Power Bar",        default = true },
-    { key = "auras",        label = "Auras · All",      default = true, description = "Copies the complete Aura workspace: visibility, layout, Blizzard filters, Buff/Debuff blacklists, Custom 1-3, Dots on target, Strata, and Full-Frame effects." },
+    { key = "auras",        label = "Aura Options",     default = true, description = "Copies this UnitFrame's Aura visibility, layout, filters, blacklists, Custom Aura setup and tracked spells. Aura Style and the global Appearance theme remain unchanged." },
+    { key = "aurastyle",    label = "Aura Style",       default = true, description = "Copies this UnitFrame's Buff, Debuff, Custom Aura, Player Defensive and Dots on Target presentation, including text, swipe, icon zoom, duration bars, Pandemic and Full-Frame effects. Aura Options and the global Appearance theme remain unchanged." },
     { key = "castbar",      label = "Castbar",          default = true },
     { key = "status",       label = "Status Icons",     default = true },
     { key = "load",         label = "Load Conditions",  default = true },
@@ -572,6 +573,8 @@ local function CopyAuras3UnitSettings(src, dst)
 
     local a3 = MSUF and MSUF.MSUF_Auras3
     local model = a3 and a3.MenuModel
+    local destinationStyle = model and type(model.CaptureUnitStyle) == "function"
+        and model.CaptureUnitStyle(dst) or nil
     -- Materialize the source's frame-owned lists before copying. This also
     -- completes the one-time legacy Shared whitelist migration when needed.
     if model and type(model.CustomContainers) == "function" then model.CustomContainers(src, true) end
@@ -592,18 +595,43 @@ local function CopyAuras3UnitSettings(src, dst)
         end
     end)
 
-    local function CopyScopedAuraRecord(rootKey)
+    local function CopyScopedAuraRecord(rootKey, preserveIncompatibleSpecial)
         local root = auras[rootKey]
         if type(root) ~= "table" then return end
         root.perUnit = type(root.perUnit) == "table" and root.perUnit or {}
+        local destinationSpecial
+        if preserveIncompatibleSpecial and model and type(model.CustomContainer) == "function"
+            and ((src == "player") ~= (dst == "player"))
+        then
+            destinationSpecial = DeepCopy(model.CustomContainer(dst, 4, true))
+        end
         local source = root.perUnit[src]
         root.perUnit[dst] = type(source) == "table" and DeepCopy(source) or nil
+        if destinationSpecial then
+            root.perUnit[dst] = type(root.perUnit[dst]) == "table" and root.perUnit[dst] or { items = {} }
+            root.perUnit[dst].items = type(root.perUnit[dst].items) == "table" and root.perUnit[dst].items or {}
+            root.perUnit[dst].items[4] = destinationSpecial
+        end
     end
     -- Custom containers are intentionally outside auras.perUnit. Copy both
     -- the native containers and the legacy per-frame migration record so no
     -- whitelist or Full-Frame configuration is silently left behind.
-    CopyScopedAuraRecord("customContainers")
+    CopyScopedAuraRecord("customContainers", true)
     CopyScopedAuraRecord("customDisplays")
+    if model and type(model.CustomContainer) == "function" then model.CustomContainer(dst, 4, true) end
+    if destinationStyle and type(model.ApplyUnitStyleSnapshot) == "function" then
+        model.ApplyUnitStyleSnapshot(dst, destinationStyle)
+    end
+    ApplyAuras3Unit(dst)
+    return true
+end
+local function CopyAuras3UnitStyle(src, dst)
+    src, dst = CanonUnitKey(src), CanonUnitKey(dst)
+    if not AURA_COPY_UNITS[src] or not AURA_COPY_UNITS[dst] then return false end
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    local model = a3 and a3.MenuModel
+    if not (model and type(model.CopyUnitStyle) == "function") then return false end
+    if model.CopyUnitStyle(src, dst) ~= true then return false end
     ApplyAuras3Unit(dst)
     return true
 end
@@ -650,7 +678,9 @@ local function CopyUnitSettings(unit, target, scopes)
         if scopes.text then CopyFields(dst, src, COPY_TEXT_FIELDS) end
         if scopes.portrait then CopyFields(dst, src, COPY_PORTRAIT_FIELDS) end
         if scopes.power then CopyPowerBarFields(dst, src, srcKey) end
-        local copiedAuras = scopes.auras and CopyAuras3UnitSettings(srcKey, dstKey) or false
+        local copiedAuraOptions = scopes.auras and CopyAuras3UnitSettings(srcKey, dstKey) or false
+        local copiedAuraStyle = scopes.aurastyle and CopyAuras3UnitStyle(srcKey, dstKey) or false
+        local copiedAuras = copiedAuraOptions or copiedAuraStyle
         if scopes.status then
             CopyFields(dst, src, COPY_INDICATOR_FIELDS)
             CopyFields(dst, src, COPY_STATUSICON_FIELDS)

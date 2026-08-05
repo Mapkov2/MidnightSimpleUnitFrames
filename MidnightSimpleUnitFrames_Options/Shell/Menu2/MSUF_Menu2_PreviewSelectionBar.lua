@@ -170,12 +170,33 @@ end
 local function BuildAxis(box, bar, axis, caption, anchor, gap)
     local T = Theme(box)
     local colors = (T and T.colors) or {}
+    local controls = CreateFrame("Frame", nil, bar)
+    controls:SetSize(98, 18)
+    controls:SetPoint("LEFT", anchor, "RIGHT", gap, 0)
+
+    local function StepButton(delta, glyph)
+        local btn = CreateFrame("Button", nil, controls, "BackdropTemplate")
+        btn:SetSize(18, 18)
+        btn:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
+        btn:SetBackdropColor(0.030, 0.070, 0.115, 0.94)
+        btn:SetBackdropBorderColor(0.086, 0.149, 0.227, 0.85)
+        btn.fs = btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        btn.fs:SetPoint("CENTER", btn, "CENTER", 0, 0)
+        btn.fs:SetText(glyph)
+        btn:SetScript("OnClick", function() StepAxis(box, axis, delta) end)
+        return btn
+    end
+
+    local minus = StepButton(-1, "-")
+    minus:SetPoint("LEFT", controls, "LEFT", 0, 0)
     local title = bar:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    title:SetPoint("LEFT", anchor, "RIGHT", gap, 0)
+    title:SetPoint("LEFT", minus, "RIGHT", 4, 0)
+    title:SetWidth(8)
+    title:SetJustifyH("CENTER")
     title:SetText(caption)
     if T and T.StyleFontString then T.StyleFontString(title, colors.muted or { 0.62, 0.70, 0.82, 1 }, 0) end
     local edit = CreateFrame("EditBox", nil, bar, "InputBoxTemplate")
-    edit:SetPoint("LEFT", title, "RIGHT", 5, 0)
+    edit:SetPoint("LEFT", title, "RIGHT", 3, 0)
     edit:SetSize(44, 18)
     edit:SetAutoFocus(false)
     edit:SetJustifyH("RIGHT")
@@ -196,22 +217,10 @@ local function BuildAxis(box, bar, axis, caption, anchor, gap)
         self._msuf2Focused = nil
         CommitAxis(box, axis, self:GetText())
     end)
-    local stepper = CreateFrame("Frame", nil, bar)
-    stepper:SetSize(15, 18)
-    stepper:SetPoint("LEFT", edit, "RIGHT", 3, 0)
-    for _, spec in ipairs({ { "TOP", 1, "+" }, { "BOTTOM", -1, "-" } }) do
-        local btn = CreateFrame("Button", nil, stepper, "BackdropTemplate")
-        btn:SetSize(15, 9)
-        btn:SetPoint(spec[1], stepper, spec[1], 0, 0)
-        btn:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
-        btn:SetBackdropColor(0.030, 0.070, 0.115, 0.94)
-        btn:SetBackdropBorderColor(0.086, 0.149, 0.227, 0.85)
-        btn.fs = btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-        btn.fs:SetPoint("CENTER", btn, "CENTER", 0, spec[2] > 0 and -1 or 1)
-        btn.fs:SetText(spec[3])
-        btn:SetScript("OnClick", function() StepAxis(box, axis, spec[2]) end)
-    end
-    return edit, stepper
+    local plus = StepButton(1, "+")
+    plus:SetPoint("LEFT", edit, "RIGHT", 3, 0)
+    controls.minusButton, controls.plusButton = minus, plus
+    return edit, controls
 end
 
 function SB.Create(box, deps)
@@ -276,8 +285,11 @@ function SB.Create(box, deps)
             if widget.SetEnabled then widget:SetEnabled(enabled) end
             if widget.SetAlpha then widget:SetAlpha(enabled and 1 or 0.45) end
         end
-        stepX:SetAlpha(enabled and 1 or 0.45)
-        stepY:SetAlpha(enabled and 1 or 0.45)
+        for _, controls in ipairs({ stepX, stepY }) do
+            controls:SetAlpha(enabled and 1 or 0.45)
+            controls.minusButton:SetEnabled(enabled)
+            controls.plusButton:SetEnabled(enabled)
+        end
     end
 
     box._msuf2SelectionBar = bar

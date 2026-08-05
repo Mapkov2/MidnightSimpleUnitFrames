@@ -1128,6 +1128,8 @@ local function HandleOffsets(handle)
     elseif handle._cfgSpell then
         local cfg = CurrentSpellPlaced(CurrentScope()) or {}
         return cfg.anchor, tonumber(cfg.x) or 0, tonumber(cfg.y) or 0
+    elseif handle._cfgDispelSymbol then
+        return "DISPEL", tonumber(conf.dispelSymbolX) or 0, tonumber(conf.dispelSymbolY) or 0
     elseif handle._cfgPortrait then
         return "PORTRAIT", tonumber(conf.portraitOffsetX) or 0, tonumber(conf.portraitOffsetY) or 0
     elseif handle._cfgPower then
@@ -1468,6 +1470,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         si = true,
         auraText = true,
         text = true,
+        dispelOverlay = true,
         dispelSymbol = true,
     }
     if type(M.gfPreviewLayerVisible) ~= "table" then M.gfPreviewLayerVisible = {} end
@@ -1490,7 +1493,8 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         { "Spells", { 0.86, 0.50, 1.00 }, "si", "si" },
         { "CD/Stack", { 1.00, 0.82, 0.28 }, "textcolor", "auraText" },
         { "Status", { 0.95, 0.78, 0.22 }, "sicons", "status" },
-        { "Dispel", { 0.30, 0.80, 1.00 }, "dispel", "dispelSymbol" },
+        { "Dispel Overlay", { 0.25, 0.72, 1.00 }, "dispel", "dispelOverlay" },
+        { "Dispel Symbol", { 0.34, 0.84, 1.00 }, "dispel", "dispelSymbol" },
         { "Bounds", { 0.25, 0.75, 0.88 }, "layout", "bounds" },
     }
     box._layerButtons = {}

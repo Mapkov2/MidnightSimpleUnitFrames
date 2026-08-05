@@ -129,9 +129,9 @@ local function RegisterUnitPreviewRuntimeControls(box, pageKey)
                 "button", "navigation", { navigationKey = UnitPreviewHandleNavigationKey(handle, pageKey) })
         end
     end
-    -- Selection chrome. The X/Y inputs deliberately stay unregistered: they
-    -- write the same offsets the bound sliders already expose, exactly like the
-    -- drag handles above.
+    -- Selection chrome. The X/Y inputs deliberately stay unregistered: Preview
+    -- owns element positioning, and these exact inputs share the same offset
+    -- writer as the drag handles above.
     Register(box._msuf2ElementPicker, "element_picker", "Unit Preview Element Picker", "button", "ephemeral")
     local selectionBar = box._msuf2SelectionBar
     if selectionBar then
@@ -473,6 +473,7 @@ local UNIT_SECTION_IDS = {
     castbar = "castbar",
     auras = "auras",
     auras3 = "auras",
+    dispel_symbol = "unit_dispel_symbol",
     texture_layer = "texture_layer",
 }
 function Preview.PrepareUnitHandleSubmenu(menu, unit, handle)
@@ -592,7 +593,6 @@ local function WriteHandleOffsets(handle, x, y, reason)
     local fields = handle._fields or {}
     if type(fields.writeOffsets) == "function" then
         if not fields.writeOffsets(handle, x, y, reason) then return false end
-        if type(M2.RefreshVisibleSliders) == "function" then M2.RefreshVisibleSliders(reason or "UNIT_PREVIEW_MOVE") end
         local fastDrag = reason == "UNIT_PREVIEW_DRAG"
             and fields.visualOnly == true
             and type(fields.dragOffsets) == "function"
@@ -624,7 +624,6 @@ local function WriteHandleOffsets(handle, x, y, reason)
         M2.SyncDirectTextOffsets(store, xKey)
         M2.SyncDirectTextOffsets(store, yKey)
     end
-    if type(M2.RefreshVisibleSliders) == "function" then M2.RefreshVisibleSliders(reason or "UNIT_PREVIEW_MOVE") end
     CommitHandleMove(handle, reason)
     if not handle._msuf2PreviewHistoryTx then CheckpointMenuHistory(handle, reason == "UNIT_PREVIEW_NUDGE" and "Nudge" or "Move") end
     return true
@@ -968,6 +967,7 @@ local HANDLE_BORDER_SPECS = {
 }
 local function UnitPreviewLayerForHandle(key, fields)
     fields = fields or {}
+    if fields.previewLayer then return fields.previewLayer end
     if fields.texLayer or tostring(key or ""):match("^texLayer") then return "texLayer" end
     if fields.auraPreviewKind then return "auras" end
     if fields.portrait then return "portrait" end
@@ -1025,7 +1025,6 @@ local function MakeHandle(preview, key, fields, label, color)
             -- elsewhere); the creation-time closure label is only the fallback.
             GameTooltip:SetText(TR(self._label or label), 1, 1, 1)
             GameTooltip:AddLine(TR("Drag this preview element to adjust the same X/Y offsets used by Edit Mode."), 0.82, 0.82, 0.82, true)
-            GameTooltip:AddLine(TR("Double-click or use the settings button to open this element's settings."), 0.50, 0.78, 0.92, true)
             GameTooltip:AddLine(TR("Right-click opens quick actions."), 0.50, 0.78, 0.92, true)
             GameTooltip:AddLine(TR("Arrow keys nudge the selected element. Shift = 5, Ctrl = 10."), 0.55, 0.62, 0.72, true)
             GameTooltip:AddLine(TR("Ctrl + left-drag pans the preview canvas without moving this element."), 0.55, 0.68, 0.86, true)
@@ -1057,14 +1056,10 @@ local function MakeHandle(preview, key, fields, label, color)
         end
         SelectPreviewHandle(self)
     end)
-    h:SetScript("OnDoubleClick", function(self, button)
-        if button and button ~= "LeftButton" then return end
-        SelectPreviewHandle(self, true)
-        OpenPreviewHandleSettings(self, "doubleclick")
-    end)
     local function StartHandleDrag(self, button)
         if button and button ~= "LeftButton" then return end
         if self._dragging == true or preview.dragFrame._handle == self or (preview.canvas and preview.canvas._msufPreviewPanning) then return true end
+        self._didDragMove = nil
         if button == "LeftButton" and IsControlKeyDown and IsControlKeyDown() and StartPreviewPan and StartPreviewPan(preview.canvas, preview, button) then
             self._suppressNextClick = true
             return
@@ -1094,11 +1089,15 @@ local function MakeHandle(preview, key, fields, label, color)
         preview.dragFrame:Show()
         RefreshHandleSelectionVisuals(preview)
     end
-    local function StopHandleDrag(self, button)
+    local function StopHandleDrag(self, button, allowOpenSettings)
         if StopPreviewPan and preview.canvas and preview.canvas._msufPreviewPanning then StopPreviewPan(preview.canvas) end
         if button and button ~= "LeftButton" then return end
         local wasDragging = self._dragging == true or preview.dragFrame._handle == self
         if not wasDragging then return end
+        local didMove = self._didDragMove == true
+        local openSettingsOnRelease = allowOpenSettings == true
+            and button == "LeftButton"
+            and not didMove
         if preview.dragFrame._handle == self then
             preview.dragFrame:SetScript("OnUpdate", nil)
             preview.dragFrame:SetScript("OnMouseUp", nil)
@@ -1124,14 +1123,16 @@ local function MakeHandle(preview, key, fields, label, color)
         self._dragRelPoint = nil
         self._dragOffsetX = nil
         self._dragOffsetY = nil
+        self._didDragMove = nil
         RefreshHandleSelectionVisuals(preview)
         if hadFrozenScale and not preview._manualZoom then RequestPreviewLayoutRefresh(preview, "UNIT_PREVIEW_DRAG_END") end
+        if openSettingsOnRelease then OpenPreviewHandleSettings(self, "click") end
     end
     h:SetScript("OnMouseDown", StartHandleDrag)
-    h:SetScript("OnMouseUp", StopHandleDrag)
+    h:SetScript("OnMouseUp", function(self, button) StopHandleDrag(self, button, true) end)
     h:SetScript("OnDragStart", StartHandleDrag)
-    h:SetScript("OnDragStop", StopHandleDrag)
-    h:SetScript("OnHide", StopHandleDrag)
+    h:SetScript("OnDragStop", function(self, button) StopHandleDrag(self, button, false) end)
+    h:SetScript("OnHide", function(self) StopHandleDrag(self, nil, false) end)
     h:SetScript("OnKeyDown", PreviewArrowKeyDown)
     h._msuf2CommandAction = {
         kind = "button",
@@ -1389,7 +1390,7 @@ local function CreatePreviewAnimationButton(box)
         end,
     }
     if M2.AddTooltip then
-        M2.AddTooltip(btn, "Animate Preview", "Animates health, power, absorbs, cast progress, and combat indicators in this preview only. Pauses during combat.", { hook = true })
+        M2.AddTooltip(btn, "Animate Preview", "Animates health, power, absorbs, cast progress, aura timers, and the target-DoT Pandemic window in this preview only. Pauses during combat.", { hook = true })
     end
     box.animateCombatButton = btn
     box.RefreshAnimationButton = RefreshPreviewAnimationButton
@@ -1988,22 +1989,15 @@ local function BuildPreview(parent, panel, width, height)
         end
         if button and button ~= "LeftButton" then return end
         -- Whole-bar movement is owned by handleCastbar on the interaction
-        -- layer. This plain Frame keeps the fallback double-click route for
-        -- settings; OnDoubleClick itself is a Button-only script.
-        local now = (GetTime and GetTime()) or 0
-        if (now - (self._msufLastClickTime or -10)) < 0.35 then
-            self._msufLastClickTime = -10
-            OpenPreviewHandleSettings(box.handleCastbar, "doubleclick")
-        else
-            self._msufLastClickTime = now
-        end
+        -- layer. This plain Frame keeps a one-click fallback route to the same
+        -- settings when that handle is not the active mouse target.
+        OpenPreviewHandleSettings(box.handleCastbar, "click")
     end)
     mock.cast:SetScript("OnEnter", function(self)
         if GameTooltip then
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:SetText(TR("Castbar"), 1, 1, 1)
             GameTooltip:AddLine(TR("Preview follows the current castbar visibility, whole-bar layer, icon, text, and global color settings."), 0.82, 0.82, 0.82, true)
-            GameTooltip:AddLine(TR("Double-click/settings: open options."), 0.55, 0.68, 0.86, true)
             GameTooltip:AddLine(TR("Ctrl + left-drag pans the preview canvas."), 0.55, 0.68, 0.86, true)
             GameTooltip:Show()
         end
@@ -2065,6 +2059,7 @@ local function BuildPreview(parent, panel, width, height)
         dx, dy = StoredHandleDelta(h, dx, dy)
         local nextX = RoundOffset((h._startX or 0) + dx)
         local nextY = RoundOffset((h._startY or 0) + dy)
+        if nextX ~= h._startX or nextY ~= h._startY then h._didDragMove = true end
         if h._lastDragX == nextX and h._lastDragY == nextY then return end
         h._lastDragX = nextX
         h._lastDragY = nextY

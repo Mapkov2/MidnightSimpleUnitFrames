@@ -512,6 +512,7 @@ local UNIT_RENDER_FALLBACKS = {
 
 --- Castbar preview detail layout mirrors the live CastbarVisuals rules without
 --- subscribing to spellcast events. Keep all data reads profile/local here.
+local CASTBAR_TEXT_HANDLE_OPTS = { fitText = true }
 local function ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, scw, S, max, min, floor, fr, fg, fb, TR, ApplyPreviewFont, CastbarShowIcon, CastbarShowText, ReadCastbarNum, FormatCastbarPreviewTime, UnitPreviewText, PlaceHandle, animState)
     local detailPrefix = CastbarPreviewDetailPrefix(key)
     local showIcon = CastbarShowIcon(key, g)
@@ -593,7 +594,11 @@ local function ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, s
             mock.cast.text:SetWidth(max(20, scw - timeReserve - 10))
         end
         box.handleCastbarText:SetSize(max(34, mock.cast.text:GetStringWidth() + 10), max(18, mock.cast.text:GetStringHeight() + 6))
-        if not UnitPreviewText.PlaceHandleAroundRegions(box.handleCastbarText, canvas, { mock.cast.text }, 3) then PlaceHandle(box.handleCastbarText, mock.cast.text) end
+        if not UnitPreviewText.PlaceHandleAroundRegions(box.handleCastbarText, canvas,
+            { mock.cast.text }, 3, CASTBAR_TEXT_HANDLE_OPTS)
+        then
+            PlaceHandle(box.handleCastbarText, mock.cast.text)
+        end
     else
         box.handleCastbarText:Hide()
     end
@@ -620,7 +625,11 @@ local function ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, s
         mock.cast.target:SetWidth(max(20, scw - S(4)))
         AnchorCastbarPreviewText(mock.cast.target, mock.cast, targetPosition, targetX, targetY, targetJustify, S)
         box.handleCastbarTarget:SetSize(max(48, mock.cast.target:GetStringWidth() + 10), max(18, mock.cast.target:GetStringHeight() + 6))
-        if not UnitPreviewText.PlaceHandleAroundRegions(box.handleCastbarTarget, canvas, { mock.cast.target }, 3) then PlaceHandle(box.handleCastbarTarget, mock.cast.target) end
+        if not UnitPreviewText.PlaceHandleAroundRegions(box.handleCastbarTarget, canvas,
+            { mock.cast.target }, 3, CASTBAR_TEXT_HANDLE_OPTS)
+        then
+            PlaceHandle(box.handleCastbarTarget, mock.cast.target)
+        end
     else
         mock.cast.target:SetText("")
         box.handleCastbarTarget:Hide()
@@ -648,7 +657,11 @@ local function ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, s
         local timePosition = NormalizeCastbarPreviewTextPos(ReadCastbarPreviewString(g, key, detailPrefix, "TimePosition", "bossCastTimePosition", "RIGHT"), "RIGHT")
         AnchorCastbarPreviewText(mock.cast.time, surface, timePosition, timeX, timeY, timePosition == "LEFT" and "LEFT" or timePosition == "CENTER" and "CENTER" or "RIGHT", S)
         box.handleCastbarTime:SetSize(max(28, mock.cast.time:GetStringWidth() + 10), max(18, mock.cast.time:GetStringHeight() + 6))
-        if not UnitPreviewText.PlaceHandleAroundRegions(box.handleCastbarTime, canvas, { mock.cast.time }, 3) then PlaceHandle(box.handleCastbarTime, mock.cast.time) end
+        if not UnitPreviewText.PlaceHandleAroundRegions(box.handleCastbarTime, canvas,
+            { mock.cast.time }, 3, CASTBAR_TEXT_HANDLE_OPTS)
+        then
+            PlaceHandle(box.handleCastbarTime, mock.cast.time)
+        end
     else
         box.handleCastbarTime:Hide()
     end
@@ -1769,7 +1782,20 @@ function Preview.Refresh(box, reason)
     local auraPreviewState = Auras and Auras.BuildState and Auras.BuildState(key, w, h, runtimeSpec)
     local auraFootprintState = PreviewLayerWanted(box, "auras") and auraPreviewState or nil
     if auraFootprintState and Auras.ExpandFootprint then minX, maxX, minY, maxY = Auras.ExpandFootprint(auraFootprintState, minX, maxX, minY, maxY) end
-    if (classPowerOn and PreviewLayerWanted(box, "classPower")) or (detachedPowerInUnitPreview and PreviewLayerWanted(box, "power")) or castPreviewVisible or auraFootprintState or box._statusFootprintVisible then
+    if Auras and type(Auras.DispelPreview) == "table" and type(Auras.DispelPreview.Availability) == "function" then
+        box._previewDispelOverlayAvailable, box._previewDispelSymbolAvailable =
+            Auras.DispelPreview.Availability(key, runtimeSpec)
+    else
+        box._previewDispelOverlayAvailable, box._previewDispelSymbolAvailable = false, false
+    end
+    if Auras and type(Auras.ExpandDispelFootprint) == "function" then
+        minX, maxX, minY, maxY = Auras.ExpandDispelFootprint(runtimeSpec, w, h,
+            minX, maxX, minY, maxY,
+            box._previewDispelSymbolAvailable and PreviewLayerWanted(box, "dispelSymbol"))
+    end
+    if (classPowerOn and PreviewLayerWanted(box, "classPower")) or (detachedPowerInUnitPreview and PreviewLayerWanted(box, "power"))
+        or castPreviewVisible or auraFootprintState or box._statusFootprintVisible
+        or (box._previewDispelSymbolAvailable and PreviewLayerWanted(box, "dispelSymbol")) then
         minX, maxX = minX - 18, maxX + 18
         minY, maxY = minY - 18, maxY + 18
     end
@@ -2353,6 +2379,10 @@ function Preview.Refresh(box, reason)
         mock.detachedPower:Hide()
         box.handleDetachedPower:Hide()
     end
+    if Auras and type(Auras.LayoutDispelLayers) == "function" then
+        Auras.LayoutDispelLayers(box, mock, runtimeSpec, S, baseLevel,
+            box._previewDispelOverlayAvailable, box._previewDispelSymbolAvailable, w, h)
+    end
     R.ApplyPreviewRounded(box, key, powerOn, R.PreviewRoundedOutlineThickness(key, conf, scale),
         box._runtimePowerEmbedded == true, box._runtimePowerOutline,
         box._runtimeDetachedRoundedPower == true, box._runtimePowerOutline)
@@ -2849,6 +2879,7 @@ function Preview.Refresh(box, reason)
         box.handleCastbar:Hide()
         box.handleCastbarIcon:Hide()
         box.handleCastbarText:Hide()
+        box.handleCastbarTarget:Hide()
         box.handleCastbarTime:Hide()
     end
     if Auras and Auras.Layout then Auras.Layout(box, mock, auraPreviewState, S, baseLevel) end
@@ -2965,6 +2996,8 @@ function Preview.Refresh(box, reason)
         classPower = classPowerOn,
         castbar = castEnabled,
         auras = auraPreviewState ~= nil,
+        dispelOverlay = box._previewDispelOverlayAvailable == true,
+        dispelSymbol = box._previewDispelSymbolAvailable == true,
         status = statusLayerAvailable,
         texLayer = PreviewTextureLayerConfigured(conf),
         bounds = true,

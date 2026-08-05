@@ -1139,7 +1139,6 @@ local function PreviewControlsLines(tr)
     tr = tr or F.Identity
     return {
         tr("Drag handles to move."),
-        tr("Double-click/settings: open options."),
         tr("Right-click: quick actions."),
         tr("Arrows nudge. Shift=5, Ctrl=10."),
         tr("Ctrl+wheel: zoom. Ctrl+drag: pan."),
@@ -1277,7 +1276,7 @@ function H.EnsurePreviewControlsHint(box, anchor, opts)
         hint._close = close
         box._msuf2PreviewControlsHint = hint
     end
-    if hint._text then hint._text:SetText(tr("Preview tip: drag handles to move, double-click or use settings to open options, right-click for actions.")) end
+    if hint._text then hint._text:SetText(tr("Drag handles to move.")) end
     hint:Show()
     return hint
 end
