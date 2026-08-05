@@ -967,7 +967,8 @@ local function BuildDashboardUX(ctx)
         end
         local function SelectedGlobalScale()
             local enabled, appliedScale = AppliedGlobalScale()
-            local selectedEnabled = (pendingGlobalEnabled ~= nil) and pendingGlobalEnabled or enabled
+            local selectedEnabled = pendingGlobalEnabled
+            if selectedEnabled == nil then selectedEnabled = enabled end
             local selectedScale = Clamp(pendingGlobalScale or appliedScale, 0.3, 1.5)
             return selectedEnabled, selectedScale, enabled, appliedScale
         end

@@ -61,12 +61,6 @@ local floor = math.floor
 local max = math.max
 local min = math.min
 local IsEditModeActive
-local PREVIEW_WARNING_LINES = {
-    "|cffffd700MSUF 6.0 RC3|r · Built for WoW 12.1 PTR.",
-    "|cffffd700Auras|r use Blizzard's native 12.1 system.",
-    "|cff40ff40Thanks for testing!|r Report bugs on Discord or GitHub.",
-}
-local previewWarningShown = {}
 local function GetAddonVersion()
     local getMeta = _G.C_AddOns and _G.C_AddOns.GetAddOnMetadata
     if type(getMeta) == "function" then return getMeta(addonName or "MidnightSimpleUnitFrames", "Version") end
@@ -82,38 +76,6 @@ local FEEDBACK_COLOR_KEYS = {
     ok = "ok", success = "ok", warning = "accent2", combat = "accent2",
     danger = "danger", error = "danger", info = "accent",
 }
-local previewBuild
-local function IsMSUF60PreviewBuild()
-    if previewBuild ~= nil then return previewBuild end
-    local ver = GetAddonVersion()
-    if type(ver) ~= "string" or not ver:match("^6%.0") then
-        previewBuild = false
-        return previewBuild
-    end
-    local lower = ver:lower()
-    previewBuild = (lower:find("alpha", 1, true)
-        or lower:find("preview", 1, true)
-        or lower:find("pre", 1, true)
-        or lower:find("rc", 1, true)
-        or lower:find("beta", 1, true)) and true or false
-    return previewBuild
-end
-local function AddPreviewWarningLine(line)
-    local chat = _G.DEFAULT_CHAT_FRAME
-    if chat and type(chat.AddMessage) == "function" then
-        chat:AddMessage(line)
-    elseif type(_G.print) == "function" then
-        _G.print(line)
-    end
-end
-local function ShowPreviewWarning(source)
-    source = source or "default"
-    if previewWarningShown[source] or not IsMSUF60PreviewBuild() then return end
-    previewWarningShown[source] = true
-    for i = 1, #PREVIEW_WARNING_LINES do
-        AddPreviewWarningLine(PREVIEW_WARNING_LINES[i])
-    end
-end
 local ApplyMenuFramePriority = M.ApplyMenuFramePriority
 local ApplyMenuResizeProxyPriority = M.ApplyMenuResizeProxyPriority
 local RefreshMenuFramePriority = M.RefreshMenuFramePriority
@@ -2473,7 +2435,6 @@ local function InstallWindowLifecycle(state)
         if type(MenuRuntime.Resume) == "function" then MenuRuntime:Resume("menu-show") end
         self._msuf2Closing = nil
         if self.SetAlpha then self:SetAlpha(1) end
-        ShowPreviewWarning("menu")
         ApplyMenuFramePriority(self)
         M.CallIf(M.RefreshWindowControls, self)
         self._msuf2Minimized = nil
@@ -2853,9 +2814,9 @@ ApplyMenuFrameScale = function(frame)
     if type(frame.RefreshMenuScaleControl) == "function" then frame:RefreshMenuScaleControl() end
 end
 M.AssignNamedValues(M, [[
-    ShowPreviewWarning UpdateNav RunEntryRefreshers RefreshDashboardEditModeButton BuildPageEntry
+    UpdateNav RunEntryRefreshers RefreshDashboardEditModeButton BuildPageEntry
     GetEffectiveMenuScale ApplyMenuFrameScale HideSlashMenuAndMinibar ALIASES
-]], ShowPreviewWarning, UpdateNav, RunRefreshers, RefreshDashboardEditModeButton, BuildPageEntry,
+]], UpdateNav, RunRefreshers, RefreshDashboardEditModeButton, BuildPageEntry,
     EffectiveMenuScale, ApplyMenuFrameScale, HideSlashMenuAndMinibar, ALIASES)
 function M.MinimizeSlashMenuWindow(frame)
     return MinimizeSlashMenuWindow(frame or M.frame)
