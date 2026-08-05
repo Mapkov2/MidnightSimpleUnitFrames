@@ -19,11 +19,11 @@ M.Assistant = A
 local Manifest = A.AutoCoverageManifest or {}
 A.AutoCoverageManifest = Manifest
 
--- Defaults generated offline on 2026-08-04 from the current factory profile
+-- Defaults generated offline on 2026-08-05 from the current factory profile
 -- through the same decode and normalization path used by MSUF in game.
 -- Regenerate and verify with tools/assistant_autocoverage_manifest_regression.py.
--- 4731 top-level scalar fallbacks across every required AutoCoverage scope.
-Manifest.scalarCount = 4728
+-- 4730 top-level scalar fallbacks across every required AutoCoverage scope.
+Manifest.scalarCount = 4730
 Manifest.requiredScopes = {
     "bars", "boss", "focus", "focustarget", "gameplay", "general",
     "gf_mythicraid", "gf_party", "gf_raid", "pet", "player", "target", "targettarget",
@@ -1500,6 +1500,7 @@ Manifest.defaults = {
         classBarBgG = 0.025000000000000001,
         classBarBgR = 0.025000000000000001,
         classPowerPreviewAnimate = false,
+        classPowerPreviewGuidesEnabled = true,
         colorHealthTextByHealth = false,
         colorPowerTextByType = true,
         combatStateIndicatorAnchor = "TOPLEFT",
@@ -1528,6 +1529,7 @@ Manifest.defaults = {
         editModeSnapModeFrames = false,
         editModeSnapModeGrid = true,
         editModeSnapToGrid = false,
+        ellesmereEditModeIntegration = true,
         emTutorialSeen = true,
         empowerColorStages = true,
         empowerStageBlink = true,
@@ -1818,7 +1820,7 @@ Manifest.defaults = {
         unitDispelSymbolX = -18,
         unitDispelSymbolY = -1,
         unitInfoTooltipStyle = "classic",
-        unitPreviewGuidesEnabled = false,
+        unitPreviewGuidesEnabled = true,
         unitTooltipAnchor = "EXTERNAL",
         unitTooltipMode = "OOC",
         unitTooltipModifier = "ALT",
@@ -4785,4 +4787,4 @@ Manifest.defaults = {
     },
 }
 
--- top-level scalar paths: 4731
+-- top-level scalar paths: 4730
