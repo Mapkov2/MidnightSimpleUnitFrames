@@ -38,6 +38,8 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
     local AURA_LANE_STYLE_NUMBER_SPECS = ctx.AURA_LANE_STYLE_NUMBER_SPECS or {}
     local AURA_DEBUFF_TYPE_BORDER_VALUES = ctx.AURA_DEBUFF_TYPE_BORDER_VALUES or {}
     local AURA_DEBUFF_TYPE_BORDER_ALIASES = ctx.AURA_DEBUFF_TYPE_BORDER_ALIASES or {}
+    local AURA_STEALABLE_STYLE_VALUES = ctx.AURA_STEALABLE_STYLE_VALUES or {}
+    local AURA_STEALABLE_STYLE_ALIASES = ctx.AURA_STEALABLE_STYLE_ALIASES or {}
     local AddAliasesForAuraScope = ctx.AddAliasesForAuraScope
     local AddAuraLaneAliases = ctx.AddAuraLaneAliases
     local AuraScopeLabel = ctx.AuraScopeLabel
@@ -168,6 +170,65 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
             Model.WriteLaneStyleString(scope, lane, "sortMethod", value)
         else
             AuraFallbackLaneStyle(scope, lane, "sortMethod", "DEFAULT", value)
+        end
+    end
+
+    -- Marker wording only. The includeDispellable FILTER owns "stealable buffs"
+    -- and "purgeable buffs" -- it chooses which buffs are listed at all, while
+    -- these two decide how the listed ones are marked.
+    local AURA_STEALABLE_MARKER_NOUNS = {
+        "stealable marker", "stealable markers", "stealable highlight",
+        "stealable indicator", "mark stealable buffs", "highlight stealable buffs",
+        "spellsteal marker",
+    }
+    local AURA_STEALABLE_STYLE_NOUNS = {
+        "stealable marker style", "stealable highlight style",
+        "stealable indicator style", "stealable buff style", "spellsteal marker style",
+    }
+
+    -- Exact whole-phrase aliases, so these win their wording outright instead of
+    -- competing on fuzzy score with the older dispellable/stealable filter.
+    local function AuraStealableExactAliases(scope, nouns)
+        local out, seen = {}, {}
+        local function add(value)
+            value = tostring(value or "")
+            if value ~= "" and not seen[value] then seen[value] = true; out[#out + 1] = value end
+        end
+        local scopeWords = scope == "shared" and { "shared", "all" } or { scope }
+        for i = 1, #nouns do
+            local noun = nouns[i]
+            for j = 1, #scopeWords do
+                add(scopeWords[j] .. " " .. noun)
+                add(scopeWords[j] .. " buff " .. noun)
+            end
+        end
+        return out
+    end
+
+    local function NormalizeStealableStyle(value)
+        value = tostring(value or ""):upper()
+        if value == "BORDER" or value == "BORDER_ICON" or value == "ICON" then return value end
+        return "BORDER_ICON"
+    end
+
+    local function AuraReadLaneStealableStyle(scope, lane)
+        local Model = type(AuraModel) == "function" and AuraModel() or nil
+        local value
+        if Model and type(Model.ReadLaneStyleString) == "function" then
+            value = Model.ReadLaneStyleString(scope, lane, "stealableStyle", "BORDER_ICON")
+        else
+            value = AuraFallbackLaneStyle(scope, lane, "stealableStyle", "BORDER_ICON")
+        end
+        return NormalizeStealableStyle(value)
+    end
+
+    local function AuraWriteLaneStealableStyle(scope, lane, value)
+        value = NormalizeStealableStyle(value)
+        local Model = type(AuraModel) == "function" and AuraModel() or nil
+        if Model and type(Model.WriteLaneStyleString) == "function" then
+            Model.WriteLaneStyleString(scope, lane, "stealableStyle", value)
+        else
+            AuraFallbackLaneStyle(scope, lane, "stealableStyle", "BORDER_ICON", value)
         end
     end
 
@@ -485,6 +546,35 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
                 function() return AuraReadLaneStyleBool(settingScope, settingLane, "cooldownSwipeReverse", false) and "REVERSE" or "NORMAL" end,
                 function(value) AuraWriteLaneStyleBool(settingScope, settingLane, "cooldownSwipeReverse", value == "REVERSE") end,
                 true)
+
+            -- Stealable/purgeable marking exists on the buff lane only; a
+            -- debuff cannot be stolen or purged, so registering it for both
+            -- lanes would publish a control that can never do anything.
+            -- Vocabulary deliberately avoids the bare "stealable buffs" /
+            -- "purgeable buffs" wording: the includeDispellable FILTER already
+            -- owns those, and it decides WHICH buffs are listed. This setting
+            -- only marks the ones already shown, so it answers to marker,
+            -- highlight and indicator wording instead.
+            if settingLane == "buff" then
+                aliases = {}
+                for _, noun in ipairs(AURA_STEALABLE_MARKER_NOUNS) do
+                    AddAuraLaneAliases(aliases, settingScope, settingLane, noun)
+                end
+                RegisterAuraScopeLaneBoolean(settingScope, settingLane, "showStealable", "Stealable Marker", false, aliases,
+                    function() return AuraReadLaneStyleBool(settingScope, settingLane, "showStealable", false) end,
+                    function(value) AuraWriteLaneStyleBool(settingScope, settingLane, "showStealable", value) end,
+                    true, { exactAliases = AuraStealableExactAliases(settingScope, AURA_STEALABLE_MARKER_NOUNS) })
+
+                aliases = {}
+                for _, noun in ipairs(AURA_STEALABLE_STYLE_NOUNS) do
+                    AddAuraLaneAliases(aliases, settingScope, settingLane, noun)
+                end
+                RegisterAuraScopeLaneEnum(settingScope, settingLane, "stealableStyle", "Stealable Marker Style",
+                    AURA_STEALABLE_STYLE_VALUES, AURA_STEALABLE_STYLE_ALIASES, aliases,
+                    function() return AuraReadLaneStealableStyle(settingScope, settingLane) end,
+                    function(value) AuraWriteLaneStealableStyle(settingScope, settingLane, value) end,
+                    true, { exactAliases = AuraStealableExactAliases(settingScope, AURA_STEALABLE_STYLE_NOUNS) })
+            end
 
             aliases = {}
             AddAuraLaneAliases(aliases, settingScope, settingLane, "sort")

@@ -1451,6 +1451,9 @@ local function IsLaunchableMode(row)
     -- offered as runnable test modes because the marker matches the path.
     if path:find("/preview/palette/", 1, true) then return false end
     if path:find("/preview/height/", 1, true) then return false end
+    -- Appearance's Aura-type selector chooses which shared dummy/settings are
+    -- shown; it does not launch a preview mode.
+    if path:find("auras/style/container/selector", 1, true) then return false end
     local text = " " .. ModeText(row) .. " "
     local marked = HasAny(text, MODE_MARKERS)
     if not marked then return false end

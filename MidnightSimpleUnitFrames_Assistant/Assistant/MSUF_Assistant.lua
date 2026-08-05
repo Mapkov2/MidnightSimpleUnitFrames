@@ -1093,13 +1093,14 @@ local function FailurePageHints(query)
     local aura = FailureContainsAny(normalized, { " aura ", " auras ", " buff ", " buffs ", " debuff ", " debuffs " })
 
     if aura then
-        local isBuff = FailureContainsAny(normalized, { " buff ", " buffs " })
-        local isDebuff = FailureContainsAny(normalized, { " debuff ", " debuffs " })
         local groupScope = scope == "Party" or scope == "Raid" or scope == "Mythic Raid"
-        local page = groupScope and "gf_auras" or isBuff and not isDebuff and "auras3_buffs"
-            or isDebuff and not isBuff and "auras3_debuffs" or "auras3_styling"
-        local pageLabel = groupScope and "Group Auras" or isBuff and not isDebuff and "Aura Style: Buffs"
-            or isDebuff and not isBuff and "Aura Style: Debuffs" or "Aura Style"
+        local sharedAppearance = FailureContainsAny(normalized,
+            { " appearance ", " shared ", " theme ", " icon shape ", " icon border ", " icon shadow " })
+        local unitPage = scope == "Target" and "uf_target" or scope == "Focus" and "uf_focus"
+            or scope == "Boss" and "uf_boss" or "uf_player"
+        local page = groupScope and "gf_auras" or sharedAppearance and "auras3_styling" or unitPage
+        local pageLabel = groupScope and "Group Auras" or sharedAppearance and "Shared Aura Appearance"
+            or tostring(scope or "Player") .. " UnitFrame"
         local control = FailureContainsAny(normalized, { " growth ", " grow ", " direction " }) and "Growth"
             or FailureContainsAny(normalized, { " anchor ", " attach " }) and "Anchor"
             or FailureContainsAny(normalized, { " spacing ", " gap " }) and "Spacing"

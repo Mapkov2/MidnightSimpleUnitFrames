@@ -120,9 +120,9 @@ Registry:RegisterAction({
 
 Registry:RegisterAction({
     key = "reset_all_aura_style_overrides",
-    label = "Reset All Aura Style Overrides",
-    description = "Returns Player, Target, Focus, and Boss aura visuals to the shared Aura Style without changing which buffs or debuffs are shown.",
-    page = "auras3_styling",
+    label = "Reset All Unit Aura Styles",
+    description = "Returns the frame-local Player, Target, Focus, and Boss Aura Style values to their defaults without changing Aura Options or the shared Appearance theme.",
+    page = "uf_player",
     type = "reset",
     combatSafe = false,
     confirmRequired = true,
@@ -130,13 +130,13 @@ Registry:RegisterAction({
     aliases = {
         "reset aura style overrides", "reset all aura style overrides", "reset buff aura style overrides",
         "reset debuff aura style overrides", "clear aura style overrides", "remove aura style overrides",
-        "reset custom aura style", "reset custom aura styles", "use shared aura style everywhere",
+        "reset custom aura style", "reset custom aura styles", "reset all unit aura styles",
     },
     aliasNoArgs = true,
     run = function()
         local model = AuraModel()
         if not (model and type(model.SetUseSharedVisuals) == "function") then
-            return false, "Aura Style is not available in the current context."
+            return false, "UnitFrame Aura Style is not available in the current context."
         end
         for i = 1, #AURA_STYLE_UNIT_SCOPES do
             local scope = AURA_STYLE_UNIT_SCOPES[i]
@@ -144,8 +144,10 @@ Registry:RegisterAction({
             ApplyAura(scope, "MSUF_ASSISTANT_AURA_STYLE_OVERRIDES_RESET")
         end
         if type(M.Refresh) == "function" then M.Refresh() end
-        if type(M.InvalidatePage) == "function" then M.InvalidatePage("auras3_styling") end
-        return true, "Done. Player, Target, Focus, and Boss now use the shared Aura Style."
+        if type(M.InvalidatePage) == "function" then
+            for i = 1, #AURA_STYLE_UNIT_SCOPES do M.InvalidatePage("uf_" .. AURA_STYLE_UNIT_SCOPES[i]) end
+        end
+        return true, "Done. Reset the frame-local Player, Target, Focus, and Boss Aura Styles; Aura Options and shared Appearance were preserved."
     end,
 })
 

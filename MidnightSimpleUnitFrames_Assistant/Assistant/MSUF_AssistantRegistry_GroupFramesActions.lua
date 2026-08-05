@@ -141,7 +141,8 @@ local GROUP_COPY_SCOPE_LABELS = {
     { key = "font", label = "Font Override" },
     { key = "range", label = "Range Fade" },
     { key = "indicators", label = "Status & Indicators" },
-    { key = "auras", label = "Auras - All" },
+    { key = "auras", label = "Aura Options" },
+    { key = "aurastyle", label = "Aura Style" },
     { key = "highlight", label = "Highlight & Aggro" },
     { key = "dstripe", label = "Debuff Stripe" },
     { key = "features", label = "Corner/Spell" },
@@ -196,22 +197,26 @@ hlFocusColorR hlFocusColorG hlFocusColorB groupBorderR groupBorderG groupBorderB
 ciAggroColorR ciAggroColorG ciAggroColorB
 ]])
 local GROUP_COPY_CATEGORIES = {
-    { key = "general", keys = WordList("enabled blizzardFallbackMode showPlayer showSolo clickCastEnabled width height spacing growth groupFilter sortMode sortByRole roleOrder playerFirstInRole unitsPerColumn maxColumns preserveRaidGroups reverseFill smoothFill hideInClientScene hideInHousing hideOfflineEnabled hideOfflineInCombat hideOfflineDelay frameScaleMode frameScaleManual scaleAt10 scaleAt20 scaleAt25 scaleOver25") },
-    { key = "health", keys = WordList("gfBarMode healthColorMode healthCustomR healthCustomG healthCustomB gfDarkR gfDarkG gfDarkB gfUnifiedR gfUnifiedG gfUnifiedB barTexture barBackgroundTexture barBgTexture hpBarAlpha hpBgAlpha alphaExcludeTextPortrait powerBarEnabled powerHeight showPower showPowerText powerTextLeft powerTextCenter powerTextRight powerTextLeftHidePercentSymbol powerTextCenterHidePercentSymbol powerTextRightHidePercentSymbol powerTextDelimiter powerFontSize powerOffsetX powerOffsetY powerTextLayer powerSmoothFill powerShowTank powerShowHealer powerShowDamager deadBgEnabled deadBgOffline deadBgR deadBgG deadBgB deadBgA") },
-    { key = "dispel", keys = WordList("dispelOverlayEnabled dispelOverlayStyle dispelOverlayOnHealth dispelOverlayAlpha dispelOverlayTrigger dispelOverlayLayer dispelOverlayStrata") },
-    { key = "text", keys = WordList("showName hideNameOnDeadOffline nameFontSize nameAnchor nameOffsetX nameOffsetY nameTextLayer nameColorMode nameColorR nameColorG nameColorB nameShortenEnabled nameClipSide nameMaxChars nameNoEllipsis showHPText hpFontSize textLeft textCenter textRight hpTextLeftHidePercentSymbol hpTextCenterHidePercentSymbol hpTextRightHidePercentSymbol hpTextLeftAbsorbIcon hpTextCenterAbsorbIcon hpTextRightAbsorbIcon textDelimiter hpTextReverse healthTextDecimals hpFullValueShort hpAbsorbIcon hpOffsetX hpOffsetY textLayer") },
-    { key = "font", keys = WordList("fontOverride fontOutline useGlobalFontColor fontR fontG fontB") },
+    { key = "general", keys = WordList("enabled blizzardFallbackMode showPlayer showSolo clickCastEnabled width height spacing growth groupFilter sortMode sortByRole roleOrder playerFirstInRole unitsPerColumn maxColumns maxFrames autoTanks preserveRaidGroups reverseFill smoothFill hideInClientScene hideInHousing hideOfflineEnabled hideOfflineInCombat hideOfflineDelay frameScaleEnabled frameScaleMode frameScaleManual scaleAt10 scaleAt20 scaleAt25 scaleOver25") },
+    { key = "health", keys = WordList("gfBarMode healthColorMode healthCustomR healthCustomG healthCustomB gfDarkR gfDarkG gfDarkB gfUnifiedR gfUnifiedG gfUnifiedB barTexture barBackgroundTexture barBgTexture hpBarAlpha hpBgAlpha alphaExcludeTextPortrait powerBarEnabled powerHeight showPower showPowerText powerTextLeft powerTextCenter powerTextRight powerTextLeftHidePercentSymbol powerTextCenterHidePercentSymbol powerTextRightHidePercentSymbol powerTextDelimiter powerFontSize powerOffsetX powerOffsetY powerTextLayer powerSmoothFill powerShowTank powerShowHealer powerShowDamager powerBarDetached powerBarBorderEnabled powerBarBorderThickness embedPowerBarIntoHealth barOutlineTexture oocFadeEnabled oocFadeAlpha healthFadeEnabled healthFadeThreshold healthFadeAlpha deadBgEnabled deadBgOffline deadBgR deadBgG deadBgB deadBgA powerTextLeftFontSize powerTextCenterFontSize powerTextRightFontSize powerTextLeftOffsetX powerTextLeftOffsetY powerTextCenterOffsetX powerTextCenterOffsetY powerTextRightOffsetX powerTextRightOffsetY"), prefix = WordList("detachedPower") },
+    { key = "dispel", keys = WordList("dispelOverlayEnabled dispelOverlayStyle dispelOverlayOnHealth dispelOverlayAlpha dispelOverlayTrigger dispelOverlayLayer dispelOverlayStrata"), prefix = WordList("dispelSymbol") },
+    { key = "text", keys = WordList("showName hideNameOnDeadOffline nameFontSize nameAnchor nameOffsetX nameOffsetY nameTextLayer nameColorMode nameColorR nameColorG nameColorB nameShortenEnabled nameClipSide nameMaxChars nameNoEllipsis showHPText hpFontSize textLeft textCenter textRight hpTextLeftHidePercentSymbol hpTextCenterHidePercentSymbol hpTextRightHidePercentSymbol hpTextLeftAbsorbIcon hpTextCenterAbsorbIcon hpTextRightAbsorbIcon textDelimiter hpTextReverse healthTextDecimals hpTextDecimals hpFullValueShort hpAbsorbIcon hpOffsetX hpOffsetY textLayer hpTextLeftFontSize hpTextCenterFontSize hpTextRightFontSize hpTextLeftOffsetX hpTextLeftOffsetY hpTextCenterOffsetX hpTextCenterOffsetY hpTextRightOffsetX hpTextRightOffsetY") },
+    { key = "font", keys = WordList("fontOverride fontOutline useGlobalFontColor fontR fontG fontB colorHealthTextByHealth colorPowerTextByType powerTextColorByType") },
     { key = "range", keys = WordList("rangeFadeEnabled rangeFadeAlpha rangeFadeLayerMode offlineFadeEnabled offlineAlpha") },
-    { key = "indicators", keys = WordList("pvpIcon statusText statusGhostText statusAFKText showGroupNumber groupNumberSize groupNumberAnchor groupNumberX groupNumberY groupNumberLayer groupBorderEnabled groupBorderSize groupBorderPadding groupBorderR groupBorderG groupBorderB groupBorderA iconStyle useMidnightIcons roleIconStyle leaderIconStyle assistIconStyle raidMarkerStyle readyCheckIconStyle summonIconStyle resurrectIconStyle pvpIconStyle phaseIconStyle roleIconCustomIcon leaderIconCustomIcon assistIconCustomIcon raidMarkerCustomIcon readyCheckIconCustomIcon summonIconCustomIcon resurrectIconCustomIcon pvpIconCustomIcon phaseIconCustomIcon pvpIcon pvpIconStyle pvpIconCustomIcon pvpIconSize pvpIconAnchor pvpIconX pvpIconY pvpIconLayer statusText statusTextSize statusTextAnchor statusOffsetX statusOffsetY statusTextLayer statusGhostText statusGhostTextSize statusGhostTextAnchor statusGhostOffsetX statusGhostOffsetY statusGhostTextLayer statusAFKText statusAFKTextSize statusAFKTextAnchor statusAFKOffsetX statusAFKOffsetY statusAFKTextLayer statusDNDText statusDNDTextSize statusDNDTextAnchor statusDNDOffsetX statusDNDOffsetY statusDNDTextLayer"), prefix = WordList("si_ statusIcon indicator") },
+    { key = "indicators", keys = WordList("showGroupNumber groupNumberSize groupNumberAnchor groupNumberX groupNumberY groupNumberLayer groupBorderEnabled groupBorderSize groupBorderPadding groupBorderR groupBorderG groupBorderB groupBorderA iconStyle useMidnightIcons roleIconShowTank roleIconShowHealer roleIconShowDPS roleIconStyle leaderIconStyle assistIconStyle raidMarkerStyle readyCheckIconStyle summonIconStyle resurrectIconStyle pvpIconStyle phaseIconStyle roleIconCustomIcon leaderIconCustomIcon assistIconCustomIcon raidMarkerCustomIcon readyCheckIconCustomIcon summonIconCustomIcon resurrectIconCustomIcon pvpIconCustomIcon phaseIconCustomIcon roleIcon roleIconSize roleIconAnchor roleIconX roleIconY roleIconLayer leaderIcon leaderIconSize leaderIconAnchor leaderIconX leaderIconY leaderIconLayer assistIcon assistIconSize assistIconAnchor assistIconX assistIconY assistIconLayer raidMarker raidMarkerSize raidMarkerAnchor raidMarkerX raidMarkerY raidMarkerLayer readyCheckIcon readyCheckSize readyCheckAnchor readyCheckX readyCheckY readyCheckLayer summonIcon summonIconSize summonAnchor summonX summonY summonLayer resurrectIcon resurrectIconSize resurrectAnchor resurrectX resurrectY resurrectLayer pvpIcon pvpIconSize pvpIconAnchor pvpIconX pvpIconY pvpIconLayer phaseIcon phaseIconSize phaseAnchor phaseX phaseY phaseLayer statusText statusTextSize statusTextAnchor statusOffsetX statusOffsetY statusTextLayer statusGhostText statusGhostTextSize statusGhostTextAnchor statusGhostOffsetX statusGhostOffsetY statusGhostTextLayer statusAFKText statusAFKTextSize statusAFKTextAnchor statusAFKOffsetX statusAFKOffsetY statusAFKTextLayer statusDNDText statusDNDTextSize statusDNDTextAnchor statusDNDOffsetX statusDNDOffsetY statusDNDTextLayer"), prefix = WordList("si_ statusIcon indicator") },
     { key = "auras", tables = WordList("auras") },
-    { key = "highlight", keys = WordList("targetIndicator targetR targetG targetB aggroMode dispelEnabled dispelOutlineMode dispelBorderEnabled dispelBorderMode dispelBorderTrigger dispelTrigger"), prefix = WordList("hl") },
+    { key = "aurastyle", default = true },
+    { key = "highlight", keys = WordList("targetIndicator targetR targetG targetB aggroEnabled aggroMode dispelEnabled dispelOutlineMode dispelBorderEnabled dispelBorderMode dispelBorderTrigger dispelTrigger"), prefix = WordList("hl") },
     { key = "dstripe", prefix = WordList("debuffStripe") },
     { key = "features", keys = WordList("ciEnabled ciAlpha"), tables = WordList("spellIndicators"), prefix = WordList("ci") },
 }
 
 local function NewGroupCopyScopesFallback()
     local scopes = {}
-    for i = 1, #GROUP_COPY_CATEGORIES do scopes[GROUP_COPY_CATEGORIES[i].key] = true end
+    for i = 1, #GROUP_COPY_CATEGORIES do
+        local category = GROUP_COPY_CATEGORIES[i]
+        scopes[category.key] = category.default ~= false
+    end
     return scopes
 end
 
@@ -248,7 +253,7 @@ local function GroupCopyDirtyMask(gf, scopes)
     end
     local dirty
     if scopes.font then dirty = AddDirty(dirty, gf.DIRTY_FONT) end
-    if scopes.auras then dirty = AddDirty(dirty, gf.DIRTY_AURAS) end
+    if scopes.auras or scopes.aurastyle then dirty = AddDirty(dirty, gf.DIRTY_AURAS) end
     return dirty or gf.DIRTY_VISUAL
 end
 
@@ -331,11 +336,97 @@ local function RefreshGroupCopyRuntime(dstKind, scopes)
     if type(gf.RefreshPreviewLayout) == "function" then gf.RefreshPreviewLayout(dstKind) end
 end
 
+local GROUP_AURA_STYLE_ROOT_KEYS = { "dynamicScale", "showTooltip", "iconZoom" }
+local GROUP_AURA_STYLE_LANE_KEYS = {
+    "iconZoom", "showCooldown", "showCooldownSwipe", "showTooltip",
+    "dispelBorderMode", "showDispelBorder", "showDispelSymbol",
+    "cooldownSize", "cooldownAnchor", "cooldownX", "cooldownY", "cooldownSwipeReverse", "cooldownDecimalSeconds",
+    "showDurationBar", "durationBarHeight", "durationBarDisplay", "durationBarPosition", "durationBarDirection",
+    "showStacks", "stackSize", "stackAnchor", "stackX", "stackY", "sortMethod", "sortReverse",
+}
+
+local function CaptureGroupAuraStyleFallback(kind)
+    local conf = GroupConfig(kind)
+    local srcAuras = conf and type(conf.auras) == "table" and conf.auras or {}
+    local snapshot = { root = {}, lanes = {} }
+    for i = 1, #GROUP_AURA_STYLE_ROOT_KEYS do
+        local key = GROUP_AURA_STYLE_ROOT_KEYS[i]
+        snapshot.root[key] = DeepCopyGroupValue(srcAuras[key])
+    end
+    for _, lane in ipairs({ "buff", "debuff", "externals" }) do
+        local source = type(srcAuras[lane]) == "table" and srcAuras[lane] or {}
+        local values = {}
+        snapshot.lanes[lane] = values
+        for i = 1, #GROUP_AURA_STYLE_LANE_KEYS do
+            local key = GROUP_AURA_STYLE_LANE_KEYS[i]
+            values[key] = DeepCopyGroupValue(source[key])
+        end
+    end
+    return snapshot
+end
+
+local function ApplyGroupAuraStyleFallback(dstKind, snapshot)
+    local dstConf = GroupConfig(dstKind)
+    if not (type(dstConf) == "table" and type(snapshot) == "table") then return false end
+    dstConf.auras = type(dstConf.auras) == "table" and dstConf.auras or {}
+    local dstAuras = dstConf.auras
+    for i = 1, #GROUP_AURA_STYLE_ROOT_KEYS do
+        local key = GROUP_AURA_STYLE_ROOT_KEYS[i]
+        dstAuras[key] = DeepCopyGroupValue(snapshot.root and snapshot.root[key])
+    end
+    for _, lane in ipairs({ "buff", "debuff", "externals" }) do
+        local destination = type(dstAuras[lane]) == "table" and dstAuras[lane] or {}
+        dstAuras[lane] = destination
+        local source = type(snapshot.lanes) == "table" and snapshot.lanes[lane] or nil
+        for i = 1, #GROUP_AURA_STYLE_LANE_KEYS do
+            local key = GROUP_AURA_STYLE_LANE_KEYS[i]
+            destination[key] = DeepCopyGroupValue(source and source[key])
+        end
+    end
+    return true
+end
+
+local function CopyGroupAuraStyleFallback(srcKind, dstKind)
+    return ApplyGroupAuraStyleFallback(dstKind, CaptureGroupAuraStyleFallback(srcKind))
+end
+
+local function CopyGroupSpellIndicatorStyleFallback(srcKind, dstKind)
+    local srcConf, dstConf = GroupConfig(srcKind), GroupConfig(dstKind)
+    local gf = MSUF and (MSUF.GF or MSUF.GroupFrames)
+    if gf and type(gf.EnsureSpellIndicatorStyle) == "function" then gf.EnsureSpellIndicatorStyle(srcConf) end
+    local src = srcConf and type(srcConf.spellIndicators) == "table" and srcConf.spellIndicators or nil
+    if not (src and type(dstConf) == "table") then return false end
+    dstConf.spellIndicators = type(dstConf.spellIndicators) == "table" and dstConf.spellIndicators or {}
+    dstConf.spellIndicators.iconZoom = DeepCopyGroupValue(src.iconZoom)
+    dstConf.spellIndicators.iconScale = DeepCopyGroupValue(src.iconScale)
+    dstConf.spellIndicators.style = DeepCopyGroupValue(src.style)
+    if type(dstConf.spellIndicators.style) == "table" then
+        dstConf.spellIndicators.style.iconShape = nil
+    end
+    if gf and type(gf.EnsureSpellIndicatorStyle) == "function" then gf.EnsureSpellIndicatorStyle(dstConf) end
+    return true
+end
+
 local function CopyGroupSettingsFallback(srcKind, dstKind, scopes)
     local srcConf = GroupConfig(srcKind)
     local dstConf = GroupConfig(dstKind)
     if not (srcConf and dstConf and srcKind and dstKind) or srcKind == dstKind then return false end
     scopes = (type(scopes) == "table") and scopes or NewGroupCopyScopesFallback()
+    local retainedAuraStyle = scopes.auras and CaptureGroupAuraStyleFallback(dstKind) or nil
+    local retainedSpellStyle
+    if scopes.features and not scopes.aurastyle then
+        local gf = MSUF and (MSUF.GF or MSUF.GroupFrames)
+        if gf and type(gf.EnsureSpellIndicatorStyle) == "function" then gf.EnsureSpellIndicatorStyle(dstConf) end
+        local current = type(dstConf.spellIndicators) == "table" and dstConf.spellIndicators or nil
+        retainedSpellStyle = current and {
+            iconZoom = DeepCopyGroupValue(current.iconZoom),
+            iconScale = DeepCopyGroupValue(current.iconScale),
+            style = DeepCopyGroupValue(current.style),
+        } or nil
+        if retainedSpellStyle and type(retainedSpellStyle.style) == "table" then
+            retainedSpellStyle.style.iconShape = nil
+        end
+    end
     local allowKeys, allowPrefixes, allowTables = {}, {}, {}
     for i = 1, #GROUP_COPY_CATEGORIES do
         local cat = GROUP_COPY_CATEGORIES[i]
@@ -359,6 +450,16 @@ local function CopyGroupSettingsFallback(srcKind, dstKind, scopes)
             end
             if copy then dstConf[key] = DeepCopyGroupValue(value) end
         end
+    end
+    if retainedSpellStyle and type(dstConf.spellIndicators) == "table" then
+        dstConf.spellIndicators.iconZoom = retainedSpellStyle.iconZoom
+        dstConf.spellIndicators.iconScale = retainedSpellStyle.iconScale
+        dstConf.spellIndicators.style = retainedSpellStyle.style
+    end
+    if retainedAuraStyle then ApplyGroupAuraStyleFallback(dstKind, retainedAuraStyle) end
+    if scopes.aurastyle then
+        CopyGroupAuraStyleFallback(srcKind, dstKind)
+        CopyGroupSpellIndicatorStyleFallback(srcKind, dstKind)
     end
     RefreshGroupCopyRuntime(dstKind, scopes)
     return true
