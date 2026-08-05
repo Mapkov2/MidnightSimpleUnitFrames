@@ -305,6 +305,39 @@ local function BuildUnitDispelSymbolSection(ctx, builder, unit)
     local previewW = wide and min(380, cardW - 32) or controlW
     local previewX = wide and floor((cardW - previewW) * 0.5) or leftX
 
+    local function RegisterPreviewOffsetVirtual(axis, settingKey, label)
+        if unit ~= "player" or type(M.RegisterVirtualRuntimeControl) ~= "function" then return end
+        local path = "preview.selection.dispel_symbol_offset_" .. tostring(axis)
+        local meta = UP.ControlMeta and UP.ControlMeta(ctx, path, "setting") or {}
+        meta.kind = "textinput"
+        meta.label = label
+        meta.assistantDisposition = "dynamic"
+        meta.assistantDispositionReason = "The lazy Unit Preview exact-offset field edits this shared Dispel Symbol coordinate."
+        meta.assistantSettingKeys = { settingKey }
+        meta.command = {
+            kind = "textinput",
+            historyMode = "single",
+            interaction = "preview.handle.offset",
+            previewSurface = "unit",
+            previewHandleKey = "dispelSymbol",
+            previewUnitKey = "player",
+            get = function()
+                local x, y = UP.ReadDispelSymbolOffsets("player")
+                return axis == "x" and x or y
+            end,
+            set = function(value)
+                value = tonumber(value)
+                if value == nil then return false end
+                local x, y = UP.ReadDispelSymbolOffsets("player")
+                if axis == "x" then x = value else y = value end
+                return UP.WriteDispelSymbolOffsets("player", x, y, "MSUF2_UF_DISPEL_SYMBOL_ASSISTANT_OFFSET")
+            end,
+        }
+        M.RegisterVirtualRuntimeControl(meta, "unit-preview-offset")
+    end
+    RegisterPreviewOffsetVirtual("x", "general.unitDispelSymbolX", "UnitFrame Dispel Symbol Offset X")
+    RegisterPreviewOffsetVirtual("y", "general.unitDispelSymbolY", "UnitFrame Dispel Symbol Offset Y")
+
     local function BindDropdown(label, values, key, defaultValue, reason, x, y)
         local dropdown = W.Dropdown(card, label, values, 280)
         M.BindDropdownWidget(ctx, dropdown,

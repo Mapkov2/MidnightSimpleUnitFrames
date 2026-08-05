@@ -129,12 +129,35 @@ local function RegisterUnitPreviewRuntimeControls(box, pageKey)
                 "button", "navigation", { navigationKey = UnitPreviewHandleNavigationKey(handle, pageKey) })
         end
     end
-    -- Selection chrome. The X/Y inputs deliberately stay unregistered: Preview
-    -- owns element positioning, and these exact inputs share the same offset
-    -- writer as the drag handles above.
+    -- Selection chrome. Most X/Y edits remain ephemeral because they follow the
+    -- current handle. The Player Dispel Symbol has no duplicate scalar sliders,
+    -- so its two exact fields are reviewed dynamic setting surfaces.
     Register(box._msuf2ElementPicker, "element_picker", "Unit Preview Element Picker", "button", "ephemeral")
     local selectionBar = box._msuf2SelectionBar
     if selectionBar then
+        if previewUnitKey == "player" and M2.PreviewSelectionBar then
+            local selectionAPI = M2.PreviewSelectionBar
+            selectionAPI.BindExactOffsetSearchTarget(selectionBar.editX, box, "dispelSymbol")
+            selectionAPI.BindExactOffsetSearchTarget(selectionBar.editY, box, "dispelSymbol")
+            Register(selectionBar.editX, "selection.dispel_symbol_offset_x", "UnitFrame Dispel Symbol Offset X",
+                "textinput", "setting", {
+                    assistantDisposition = "dynamic",
+                    assistantDispositionReason = "The shared Preview X field is pinned to the Player Dispel Symbol handle for this exact Assistant route.",
+                    assistantSettingKeys = { "general.unitDispelSymbolX" },
+                    command = selectionAPI.BuildExactOffsetCommand(box, "dispelSymbol", "x", {
+                        previewSurface = "unit", previewUnitKey = "player",
+                    }),
+                })
+            Register(selectionBar.editY, "selection.dispel_symbol_offset_y", "UnitFrame Dispel Symbol Offset Y",
+                "textinput", "setting", {
+                    assistantDisposition = "dynamic",
+                    assistantDispositionReason = "The shared Preview Y field is pinned to the Player Dispel Symbol handle for this exact Assistant route.",
+                    assistantSettingKeys = { "general.unitDispelSymbolY" },
+                    command = selectionAPI.BuildExactOffsetCommand(box, "dispelSymbol", "y", {
+                        previewSurface = "unit", previewUnitKey = "player",
+                    }),
+                })
+        end
         Register(selectionBar.resetButton, "selection.reset", "Reset selected preview element offset", "button", "ephemeral")
         Register(selectionBar.openButton, "selection.open_settings", "Open selected preview element settings", "button", "navigation", {
             navigationKey = UnitPreviewHandleNavigationKey(box._selectedHandle, pageKey),

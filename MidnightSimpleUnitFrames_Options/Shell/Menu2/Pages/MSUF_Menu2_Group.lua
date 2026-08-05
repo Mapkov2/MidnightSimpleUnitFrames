@@ -1120,6 +1120,34 @@ function GroupPage.BuildPortrait(ctx, builder)
         Set(kind, key, value, "config")
         RefreshContext(ctx)
     end
+    local function RegisterPreviewOffsetVirtual(axis, key, label)
+        if type(M.RegisterVirtualRuntimeControl) ~= "function" then return end
+        local path = "preview.selection.portrait_offset_" .. tostring(axis)
+        local meta = GroupControlMeta(ctx, path, "setting")
+        meta.kind = "textinput"
+        meta.label = label
+        meta.assistantDisposition = "dynamic"
+        meta.assistantDispositionReason = "The lazy Group Preview exact-offset field edits this fixed Party portrait coordinate."
+        meta.assistantSettingKeys = { "gf_party." .. tostring(key) }
+        meta.command = {
+            kind = "textinput",
+            historyMode = "single",
+            interaction = "preview.handle.offset",
+            previewSurface = "group",
+            previewHandleKey = "portrait",
+            previewScope = "party",
+            get = function() return tonumber(Val(kind, key, 0)) or 0 end,
+            set = function(value)
+                value = tonumber(value)
+                if value == nil then return false end
+                SetValue(key, value)
+                return true
+            end,
+        }
+        M.RegisterVirtualRuntimeControl(meta, "group-preview-offset")
+    end
+    RegisterPreviewOffsetVirtual("x", "portraitOffsetX", "Party Portrait X Offset")
+    RegisterPreviewOffsetVirtual("y", "portraitOffsetY", "Party Portrait Y Offset")
     local function BindDropdown(parent, label, values, x, y, width, key, defaultValue, normalize, after)
         local control = W.Dropdown(parent, label, values, 220)
         W.MoveWidget(control, parent, x, y, width)
