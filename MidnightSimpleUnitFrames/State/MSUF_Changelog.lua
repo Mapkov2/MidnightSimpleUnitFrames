@@ -14,7 +14,7 @@ local data = {
     entries = {
         {
             version = "6.0-RC11",
-            date = "2026-08-06",
+            date = "2026-08-07",
             sections = {
                 {
                     title = "Highlights",

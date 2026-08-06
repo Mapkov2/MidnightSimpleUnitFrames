@@ -1,6 +1,6 @@
 # Midnight Simple Unit Frames Changelog
 
-## 6.0-RC11 - 2026-08-06
+## 6.0-RC11 - 2026-08-07
 
 ### Highlights
 
