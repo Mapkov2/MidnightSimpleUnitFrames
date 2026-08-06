@@ -72,6 +72,8 @@ function Core.InteractionFrameLevel(parent, extra)
     if Layers.ElementLevel then
         local absoluteTop = tonumber(Layers.ElementLevel(30, 30, Layers.ELEMENT_DETAIL_MAX or 31))
         if absoluteTop then
+            absoluteTop = absoluteTop
+                + (tonumber(parent and parent._msufPreviewElementLevelBias) or 0)
             -- Share the interaction plane already used by Aura handles: one
             -- complete level slot above every configurable visual layer.
             absoluteTop = absoluteTop + (tonumber(Layers.ELEMENT_LEVEL_STRIDE) or 32)
@@ -159,7 +161,8 @@ local function EnsureFrameBorderOverlay(mock, border)
         local layer = floor((tonumber(border and border.layer) or 0) + 0.5)
         if layer < 0 then layer = 0 elseif layer > 30 then layer = 30 end
         if Layers.ElementLevel then
-            overlay:SetFrameLevel(Layers.ElementLevel(layer, 0, 8))
+            overlay:SetFrameLevel(Layers.ElementLevel(layer, 0, 8)
+                + (tonumber(mock._msufPreviewElementLevelBias) or 0))
         elseif mock._msufPreviewGroupScope == true and Layers.GroupBorderLevel then
             overlay:SetFrameLevel(Layers.GroupBorderLevel(mock:GetFrameLevel() or 0, layer))
         else

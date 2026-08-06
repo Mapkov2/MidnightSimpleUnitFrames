@@ -512,7 +512,7 @@ local function BuildStatus(ctx, builder, unit)
         "top left", "top right", "bottom left", "bottom right",
     }, CurrentStatusAnchorValues)
     local layer = BindStatusPlacementSlider(placementCard, "Layer", 0, 30, placeLeftX, -178, placeLeftW, "layer", "defaultLayer", 7, "MSUF2_STATUS_LAYER", "Status indicator layer", {
-        "level layer", "level draw order", "indicator layer", "draw order", "above text", "behind text",
+        "level layer", "indicator layer", "layer", "above text", "behind text",
     }, ClampSelectedStatusLayer)
     -- Text indicators inherit the frame's resolved font color until a complete
     -- triple is stored, so the swatch shows the effective color and a
@@ -657,7 +657,7 @@ local function BuildStatus(ctx, builder, unit)
     local advanced = {}
     advanced.card = W.ControlCard(advancedTab, "Advanced Placement", nil, placementCardX, -38, placementCardW, 232)
     advanced.layer = BindStatusPlacementSlider(advanced.card, "Layer", 0, 30, placeLeftX, -58, placeLeftW, "layer", "defaultLayer", 7, "MSUF2_STATUS_ADV_LAYER", "Advanced status indicator layer", {
-        "advanced layer", "draw order", "status icon advanced",
+        "advanced layer", "status icon advanced",
     }, ClampSelectedStatusLayer)
     advanced.reset = W.Button(advanced.card, "Reset selected", 150)
     PlaceButton(advanced.reset, advanced.card, placeRightX, -58, 150)

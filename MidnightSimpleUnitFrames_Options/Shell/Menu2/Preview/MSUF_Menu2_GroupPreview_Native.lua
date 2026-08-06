@@ -1743,6 +1743,16 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         end
     end
     local function ReadGroupSelectionCoordinates(owner, handle)
+        -- Name X/Y are anchor-local offsets. Reading the rendered handle
+        -- center here makes X=0 mean "center the glyphs in the frame", which
+        -- silently rewrites LEFT/RIGHT/TOP anchors into an apparent CENTER.
+        -- Keep every other Group handle in the shared rendered-coordinate
+        -- space; only Name mirrors the stored offset contract used by its
+        -- anchor control and renderer.
+        if handle and handle._cfgText == true and handle._cfgTextKind == "name" then
+            local _, rawX, rawY = R.HandleOffsets(handle)
+            return R.Round(tonumber(rawX) or 0), R.Round(tonumber(rawY) or 0)
+        end
         local selection = M.PreviewSelectionBar
         local x, y
         if selection and type(selection.ReadRenderedCoordinates) == "function" then
@@ -1764,6 +1774,9 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         return owner:NudgeHandleExact(handle._key, dx, dy) == true
     end
     local function WriteGroupSelectionCoordinates(owner, handle, x, y)
+        if handle and handle._cfgText == true and handle._cfgTextKind == "name" then
+            return WriteGroupStoredOffsets(owner, handle, x, y)
+        end
         local curX, curY = ReadGroupSelectionCoordinates(owner, handle)
         local dx = (tonumber(x) or curX) - curX
         local dy = (tonumber(y) or curY) - curY
@@ -1792,10 +1805,9 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
                 return not (handle.IsShown and not handle:IsShown())
             end,
             ReadOffsets = ReadGroupSelectionCoordinates,
-            -- NudgeHandleExact remains the audited storage writer. Exact
-            -- entry is translated from the shared rendered coordinate space
-            -- into a visual delta, so anchor-specific SavedVariables stay
-            -- untouched until the user actually moves the element.
+            -- NudgeHandleExact remains the audited storage writer. Name uses
+            -- its anchor-local stored offsets; every other handle translates
+            -- exact entry from the shared rendered coordinate space.
             WriteOffsets = WriteGroupSelectionCoordinates,
             ResetOffsets = ResetGroupSelectionOffsets,
             NudgeDelta = function(owner, dx, dy)

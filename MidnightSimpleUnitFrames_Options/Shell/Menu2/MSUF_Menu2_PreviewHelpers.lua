@@ -2719,7 +2719,7 @@ function H.ApplyTextFocus(box, parent, mock, opts)
     if not frame then return end
     local color = (opts.Color and opts.Color(focus.kind)) or H.TextFocusColor(focus.kind, opts.colors)
     H.PaintTextFocusFrame(frame, color, focus.active == true)
-    if not (opts.Place and opts.Place(frame, parent, regions, focus.active and 5 or 4)) then frame:Hide() end
+    if not (opts.Place and opts.Place(frame, parent, regions, focus.active and 5 or 4, focus.kind, focus.slot)) then frame:Hide() end
 end
 function H.SnapOff(region)
     if region and region.SetSnapToPixelGrid then

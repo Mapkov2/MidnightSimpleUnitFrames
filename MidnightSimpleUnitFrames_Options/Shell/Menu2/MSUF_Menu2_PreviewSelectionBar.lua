@@ -119,7 +119,9 @@ local function ReadOffsets(box, handle)
 end
 
 --- Resolve the center of a rendered preview handle in one shared coordinate
---- space. Every preview surface uses the center of its mock frame as 0,0;
+--- space. Preview surfaces can use this for elements whose controls expose an
+--- absolute visual position; anchor-local controls (such as Group Name) read
+--- their stored offsets instead. For rendered coordinates the mock center is 0,0;
 --- render scaling is divided back out so the readout remains stable at Fit,
 --- 1:1, any manual zoom, and unit-specific runtime visual scales. This is
 --- deliberately derived from rendered geometry instead
@@ -446,8 +448,8 @@ function SB.Create(box, deps)
     if M.AddTooltip then
         M.AddTooltip(openBtn, "Open settings", "Jumps to the options section that owns the selected preview element.", { hook = true })
         M.AddTooltip(resetBtn, "Reset offset", "Puts the selected element back to its default X/Y offset.", { hook = true })
-        M.AddTooltip(editX, "Exact X coordinate", "Measured from the center of the previewed frame. Positive values move right. Arrow keys and dragging update the same position.", { hook = true })
-        M.AddTooltip(editY, "Exact Y coordinate", "Measured from the center of the previewed frame. Positive values move up. Arrow keys and dragging update the same position.", { hook = true })
+        M.AddTooltip(editX, "Exact X position", "Edits the selected element's X position. Positive values move right. Arrow keys and dragging update the same position.", { hook = true })
+        M.AddTooltip(editY, "Exact Y position", "Edits the selected element's Y position. Positive values move up. Arrow keys and dragging update the same position.", { hook = true })
     end
 
     function bar:MSUF2SetEnabled(enabled)

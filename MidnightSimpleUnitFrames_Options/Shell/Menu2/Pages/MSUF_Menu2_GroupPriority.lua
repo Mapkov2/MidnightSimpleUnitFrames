@@ -105,7 +105,7 @@ local function SetPriorityOption(ctx, key, value, label)
         return changed
     end
     if type(M.RunWithHistory) == "function" then
-        M.RunWithHistory(Tr(label or ("Priority Frames " .. tostring(key))), "group:priority:" .. tostring(key), Write)
+        M.RunWithHistory(label and Tr(label) or M.Format("Priority Frames %s", tostring(key)), "group:priority:" .. tostring(key), Write)
     else
         Write()
     end

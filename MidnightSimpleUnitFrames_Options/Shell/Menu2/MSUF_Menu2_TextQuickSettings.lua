@@ -267,7 +267,7 @@ end
 local function ClassColorTarget(token, label)
     token = token or "WARRIOR"
     return {
-        label = label or (token .. " class color"),
+        label = label or M.Format("%s class color", token),
         getRGB = function()
             local api = (MSUF and MSUF._colorsAPI) or {}
             if type(api.GetClassColor) == "function" then return api.GetClassColor(token) end
@@ -291,7 +291,7 @@ end
 local function NPCColorTarget(kind)
     kind = kind or "enemy"
     return {
-        label = tostring(kind) .. " NPC color",
+        label = M.Format("%s NPC color", tostring(kind)),
         getRGB = function()
             local api = (MSUF and MSUF._colorsAPI) or {}
             if type(api.GetNPCColor) == "function" then return api.GetNPCColor(kind) end
@@ -471,7 +471,7 @@ end
 
 local function GroupClassTargets()
     local token = GROUP_PREVIEW_CLASS[CurrentScope()] or "HUNTER"
-    return { ClassColorTarget(token, token .. " group preview class") }
+    return { ClassColorTarget(token, M.Format("%s group preview class", token)) }
 end
 
 local function GroupPowerTargets()

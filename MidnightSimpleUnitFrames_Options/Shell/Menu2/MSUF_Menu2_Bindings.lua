@@ -5,6 +5,15 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
     return value
 end
 local M = MSUF.MSUF2 or {}
+
+-- The Assistant calls M.ResetPageToDefaults from the main addon, which can run
+-- before the LoadOnDemand Options addon has installed M.Format (Theme.lua).
+local function Fmt(text, ...)
+    if type(M.Format) == "function" then return M.Format(text, ...) end
+    local translated = type(M.Tr) == "function" and M.Tr(text) or text
+    if select("#", ...) == 0 then return translated end
+    return string.format(translated, ...)
+end
 MSUF.MSUF2 = M
 local KS, KSW, WL = M.KeySet, M.KeySetFromWords, M.WordList
 local ApplyService = M.ApplyService or _G.MSUF_Menu2_ApplyService
@@ -285,10 +294,15 @@ local function SnapshotDB()
     -- active profile DB. Keep its tiny per-character state in the same history
     -- transaction so Assistant/UI undo and redo remain truthful for every
     -- setting without copying the complete GlobalDB/profile collection.
+    local externalAPI = (type(MSUF) == "table" and MSUF.EditModeAPI) or _G.MSUF_EditModeAPI
+    local externalState = type(externalAPI) == "table"
+        and type(externalAPI._CaptureHistorySnapshot) == "function"
+        and externalAPI._CaptureHistorySnapshot() or nil
     return {
         _msuf2HistoryState = true,
         profileDB = DeepCopy(M.EnsureDB()),
         profileRouting = SnapshotProfileRouting(),
+        externalEditMode = externalState,
     }
 end
 local function HistoryProfileDB(snapshot)
@@ -316,6 +330,7 @@ local function CurrentHistorySnapshot()
     if historySessionActive and type(historySessionSnapshot) == "table" then return historySessionSnapshot end
     return SnapshotDB()
 end
+
 local function QueueMenuRefresh()
     if refreshQueued then return end
     refreshQueued = true
@@ -345,6 +360,18 @@ local function NotifyHistoryChanged(refreshMenu)
         Invoke(_G.MSUF_EM_RefreshHistoryControls)
     end
     if refreshMenu == true then QueueMenuRefresh() end
+end
+
+-- A third-party element may register after native Edit Mode is already open.
+-- Rebase only the current history cursor so the next transaction starts from
+-- the newly registered element's real state; session discard remains owned by
+-- the Edit Mode API's independent entry snapshot.
+function M.SyncExternalHistoryState()
+    if historyRestoring or historyDepth > 0 or historyTransaction then return false end
+    if not historySessionActive then return false end
+    historySessionSnapshot = SnapshotDB()
+    NotifyHistoryChanged(false)
+    return true
 end
 local function FeedbackLabel(text, limit)
     text = tostring(text or "")
@@ -442,6 +469,7 @@ local function HistoryFeatureFromSource(source)
     if editCategory == "castbar" then return "castbar", editKey end
     if editCategory == "aura" then return "auras", editKey end
     if editCategory == "gf" then return "group", editKey end
+    if editCategory == "external" then return "external", editKey end
     local scope = source:match("^groupPreview:([^:]+):") or source:match("^group:([^:]+):")
     if scope then return "group", scope end
     scope = source:match("^auras:([^:]+):")
@@ -459,6 +487,7 @@ end
 local function ApplyScopedFeatureRuntime(kind, reason, scope)
     kind = tostring(kind or "")
     reason = reason or "MSUF2_HISTORY_FEATURE"
+    if kind == "external" then return true end
     if kind == "castbar" then
         if ApplyService.RequestCastbars then return ApplyService.RequestCastbars(reason, "history") ~= false end
         if M.RequestGeneralApply then return M.RequestGeneralApply(reason, { history = false, preview = true, applyAll = false, castbar = true, castbarTextures = true }) ~= false end
@@ -595,6 +624,11 @@ local function ApplyHistorySnapshot(snapshot, reason, source)
     historyRestoring = true
     DeepReplace(M.EnsureDB(), profileDB)
     RestoreProfileRouting(snapshot)
+    local externalAPI = (type(MSUF) == "table" and MSUF.EditModeAPI) or _G.MSUF_EditModeAPI
+    if type(externalAPI) == "table" and type(externalAPI._RestoreHistorySnapshot) == "function"
+        and type(snapshot.externalEditMode) == "table" then
+        externalAPI._RestoreHistorySnapshot(snapshot.externalEditMode, reason or "history")
+    end
     if historySessionActive then historySessionSnapshot = snapshot end
     historyRestoring = false
     if ApplyScopedHistoryRestore(reason, source) then
@@ -1102,7 +1136,7 @@ for pageKey, info in pairs(UNIT_PAGE_RESETS) do
         label = info.label,
         kind = "unit",
         unit = info.unit,
-        summary = info.label .. " unit-frame settings, including layout, text, portrait, power, status icons, transparency, load conditions and this unit's castbar toggles",
+        summaryFormat = "%s unit-frame settings, including layout, text, portrait, power, status icons, transparency, load conditions and this unit's castbar toggles",
     }
 end
 local BARS_GENERAL_KEYS = KSW [[
@@ -1491,6 +1525,10 @@ local function ApplyAfterPageReset(pageKey, info)
         local general = db and db.general
         CallGlobal("MSUF_EllesmereEditMode_SetEnabled",
             not (type(general) == "table" and general.ellesmereEditModeIntegration == false))
+        CallGlobal("MSUF_Grid2EditMode_SetEnabled",
+            not (type(general) == "table" and general.grid2EditModeIntegration == false))
+        CallGlobal("MSUF_DetailsEditMode_SetEnabled",
+            not (type(general) == "table" and general.detailsEditModeIntegration == false))
     end
     -- Page reset fanout is intentionally keyed by page kind so a unit reset does not rebuild
     -- secure group headers or Auras3 lanes unnecessarily.
@@ -1614,9 +1652,9 @@ local function ResetPageImpl(pageKey)
     PurgeRuntimeCachesForReset(info)
     ApplyAfterPageReset(pageKey, info)
     if M.ShowStatusFeedback then
-        M.ShowStatusFeedback(M.Format("%s reset", tostring(info.label or pageKey)), "ok", 1.4)
+        M.ShowStatusFeedback(Fmt("%s reset", tostring(info.label or pageKey)), "ok", 1.4)
     elseif print then
-        print("|cffffd700MSUF:|r " .. tostring(info.label or pageKey) .. " reset to defaults.")
+        print(Fmt("|cffffd700MSUF:|r %s reset to defaults.", tostring(info.label or pageKey)))
     end
     return true
 end
@@ -1639,7 +1677,8 @@ function M.BuildPageResetWarning(pageKey)
     return string.format(
         M.Tr("Reset %s to defaults?\n\nThis resets %s for the active profile. Defaults are read from the current MSUF factory profile, so future default changes are used automatically."),
         tostring(title),
-        tostring((M.Tr and M.Tr(info.summary or title)) or info.summary or title)
+        tostring(info.summaryFormat and Fmt(info.summaryFormat, tostring(info.label or title))
+            or (M.Tr and M.Tr(info.summary or title)) or info.summary or title)
     )
 end
 function M.ResetPageToDefaults(pageKey)
