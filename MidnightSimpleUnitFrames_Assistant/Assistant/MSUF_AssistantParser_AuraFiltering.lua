@@ -1075,9 +1075,9 @@ function P.ParseAuraFilteringConversationShortcut(text, ctx, raw)
     then
         return nil
     end
-    -- Group externals also own a draw-order setting whose exact alias carries
-    -- the same filter-token wording ("party external defensive layer"). Draw
-    -- order is never a live-filter mutation, so leave layer language to the
+    -- Group externals also own a layer setting whose exact alias carries
+    -- the same filter-token wording ("party external defensive layer"). A
+    -- layer change is never a live-filter mutation, so leave that language to the
     -- exact aliases on the gf_<scope>.auras.externals.layer settings.
     -- A numbered Custom Aura container names one exact control, and each
     -- container carries its own copy of every filter token. Claiming that
@@ -1087,15 +1087,22 @@ function P.ParseAuraFilteringConversationShortcut(text, ctx, raw)
     if text:find("custom%s+aura%s+%d") or text:find("custom%s+container%s+%d") then
         return nil
     end
-    -- The externals record owns more than draw order now (lane toggle, auto
+    -- The externals record owns more than its layer now (lane toggle, auto
     -- list, max icons, growth). None of those wordings is a live-filter
     -- mutation, so they belong to the exact aliases on
     -- gf_<scope>.auras.externals.*. A bare "external defensives" stays here:
     -- that is the Buff filter token.
+    -- The hyphenated spellings matter: the controls' own labels read
+    -- "External Defensive Auto-blacklist from Buffs", and matching only the
+    -- spaced form let that exact label through to be read as a filter token --
+    -- "set party external defensive auto-blacklist from buffs to on" wrote
+    -- gf_party.auras.buff.filterToken = ExternalDefensive and never touched the
+    -- control the player named.
     if HasAny(text, {
-        "layer", "strata", "draw layer", "draw order", "frame level",
+        "layer", "strata", "draw layer", "frame level",
         "external defensive lane", "externals lane", "external defensive strip",
-        "auto list", "auto blacklist", "max icons", "growth", "grow direction",
+        "auto list", "auto-list", "auto blacklist", "auto-blacklist",
+        "autoblacklist", "max icons", "growth", "grow direction",
     }) then
         return nil
     end

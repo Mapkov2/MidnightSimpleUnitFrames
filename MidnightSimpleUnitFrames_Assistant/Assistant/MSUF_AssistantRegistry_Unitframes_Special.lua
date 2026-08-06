@@ -168,7 +168,17 @@ Registry:RegisterSetting({
     valueAliases = ctx.SEPARATOR_ALIASES,
     get = function()
         local value = UnitDB("targettarget").totInlineSeparator
-        if value == nil or value == "" then return "|" end
+        -- Only an UNSET separator falls back to "|".
+        if value == nil then return "|" end
+        -- "" is the declared "no separator" choice (first entry in
+        -- TOT_INLINE_SEPARATOR_VALUES), but the setter stores it as a single
+        -- space, matching how MSUF_UF_Config.ResolveToTInlineSeparator renders
+        -- it. Report that back as the declared value so the advertised enum
+        -- domain round-trips: reporting " " (or "|") for a requested "" made
+        -- the transaction's verify step read back a different value than it had
+        -- just written, roll the change back, and leave "no separator"
+        -- impossible to apply.
+        if value == " " or value == "" then return "" end
         return value
     end,
     set = function(value)

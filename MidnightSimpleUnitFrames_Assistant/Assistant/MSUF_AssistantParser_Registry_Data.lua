@@ -388,7 +388,7 @@ Data.REGISTRY_PARSER = {
         [146] = { "y offset", "offset y", "vertical offset", "vertical position" },
         [147] = { "size", "icon size", "text size", "font size" },
         [148] = {
-        "layer", "frame level", "framelevel", "draw layer", "draw order",
+        "layer", "frame level", "framelevel", "draw layer",
         "layer up", "layer down", "bring forward", "send back",
         "front", "behind", "backward", "backwards", "above", "below",
     },

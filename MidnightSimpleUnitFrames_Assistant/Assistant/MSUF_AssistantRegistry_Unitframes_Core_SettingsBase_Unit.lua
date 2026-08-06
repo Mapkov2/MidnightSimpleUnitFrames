@@ -134,6 +134,11 @@ function A.UnitframesRegistry.BuildSettingBaseUnitContext(ctx)
             values = values,
             valueLabels = opts.valueLabels,
             valueAliases = opts.valueAliases,
+            -- Some enum values are resolved by the setter rather than stored
+            -- verbatim, so the value read back is legitimately not the value
+            -- requested. Settings that do this must say so, or the transaction
+            -- treats the difference as a failed write and rolls it back.
+            normalizesValue = opts.normalizesValue == true,
             get = function()
                 if opts.get then return opts.get(unit) end
                 local value = UnitDB(unit)[dbKey]

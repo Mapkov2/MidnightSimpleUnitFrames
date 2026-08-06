@@ -2028,6 +2028,23 @@ local function ParseSetting(text, ctx)
         relativeDelta = amount
     elseif attr == "width" or attr == "height" then
         relativeDelta = RelativeNumberDeltaForText(nil, text, 10)
+        if relativeDelta == nil then
+            -- Proportional wording ("twice as tall", "half as wide", "20%
+            -- bigger") describes the result as a factor of the CURRENT value, so
+            -- it cannot be resolved without the control. This probe deliberately
+            -- passes no setting, so those requests came back empty and the lane
+            -- asked the player for the number they had just expressed. Resolve
+            -- the single matching control first, then ask again.
+            local probe
+            if #units > 0 then
+                probe = Registry:FindSettings({ units = units, frameType = frameType, attribute = attr })
+            else
+                probe = Registry:FindSettings({ frameType = frameType, attribute = attr })
+            end
+            if probe and #probe == 1 then
+                relativeDelta = RelativeNumberDeltaForText(probe[1], text, 10)
+            end
+        end
         if relativeDelta == nil then value = FirstNumber(text) end
     else
         value = DetectBoolean(text)

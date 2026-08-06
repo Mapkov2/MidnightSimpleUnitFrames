@@ -134,6 +134,13 @@ function A.GlobalRegistry.RegisterVisualScaleSettings(ctx)
         max = 2.0,
         step = 0.01,
         percent = true,
+        -- The stored value is this percentage times 0.8 and ClampScale rounds
+        -- it to 0.01, so the menu scale can only land on multiples of 1.25%:
+        -- asking for 101% stores 0.808 -> rounds to 0.81 -> reads back 101.25%.
+        -- That is a normalization, not a failed write, but without saying so the
+        -- transaction compared 101.25% against the requested 101%, called it a
+        -- mismatch and rolled back -- so any non-multiple simply did nothing.
+        normalizesValue = true,
         aliases = { "msuf menu scale", "menu scale", "configuration menu scale", "dashboard scale" },
         get = function()
             local stored = Workflow.ClampScale(GeneralDB().slashMenuScale or 0.8, 0.2, 1.6) or 0.8

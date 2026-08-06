@@ -20,6 +20,16 @@ function A.ClassPowerRegistry.RegisterDetachedPowerSettings(ctx)
     local ApplyDetachedPowerBar = ctx.ApplyDetachedPowerBar
     local ApplyDetachedPowerBarOutline = ctx.ApplyDetachedPowerBarOutline
     local DETACHED_POWER_WIDTH_MODE_ALIASES = ctx.DETACHED_POWER_WIDTH_MODE_ALIASES
+    local function PlayerDB()
+        _G.MSUF_DB = _G.MSUF_DB or {}
+        _G.MSUF_DB.player = _G.MSUF_DB.player or {}
+        return _G.MSUF_DB.player
+    end
+    local function BarsDB()
+        _G.MSUF_DB = _G.MSUF_DB or {}
+        _G.MSUF_DB.bars = _G.MSUF_DB.bars or {}
+        return _G.MSUF_DB.bars
+    end
 
     if type(RegisterBarsEnum) ~= "function" or type(RegisterBarsNumber) ~= "function" then return end
 
@@ -50,6 +60,18 @@ function A.ClassPowerRegistry.RegisterDetachedPowerSettings(ctx)
         frameType = "detachedPowerBar",
         apply = ApplyDetachedPowerBarOutline,
         reason = "MSUF_ASSISTANT_DETACHED_POWER_OUTLINE",
-        description = "Controls only the detached Player power outline managed by Class Resources. 0 disables the outline without changing fill or background textures.",
+        get = function()
+            local value = tonumber(BarsDB().detachedPowerBarOutline)
+            if value ~= nil then return value end
+            local player = PlayerDB()
+            return player.powerBarBorderEnabled == true and (tonumber(player.powerBarBorderThickness) or 1) or 0
+        end,
+        set = function(value)
+            local player = PlayerDB()
+            BarsDB().detachedPowerBarOutline = value
+            player.powerBarBorderEnabled = value > 0
+            if value > 0 then player.powerBarBorderThickness = value end
+        end,
+        description = "Controls the Player power border shared by the Unit Frame and Class Resources pages. 0 disables the outline without changing fill or background textures.",
     })
 end

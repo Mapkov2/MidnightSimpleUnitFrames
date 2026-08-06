@@ -1657,16 +1657,57 @@ end
 -- controls. That gap answered "set the frame outline thickness to 2" (one
 -- match: Global Bar Outline Thickness) with "I treated that as a read-only
 -- question ... to change it, use a direct command with an explicit value".
+-- Politeness that carries no control identity. "can you disable X" names X
+-- exactly as much as "disable X" does, but fullPhrase matching sees the extra
+-- words and refuses, so topic lanes kept claiming a request that named one
+-- control outright.
+local EXACT_ALIAS_WRAPPERS = {
+    "can you please ", "could you please ", "would you please ",
+    "can you ", "could you ", "would you ", "will you ", "please ",
+    "i want you to ", "i want to ", "i would like to ", "id like to ",
+    "i need you to ", "i need to ", "help me ", "lets ", "let us ",
+    -- Conversational filler people actually type: "hey turn off show power",
+    -- "just turn on portrait border use class color".
+    "hey ", "hi ", "hello ", "yo ", "just ", "ok ", "okay ", "now ",
+}
+
 function R.ExactAliasSingleChange(text)
     local parser = A.Parser or {}
     if type(parser.ParseRegistryExactAliasShortcut) ~= "function" then return nil end
-    local ok, exact = pcall(parser.ParseRegistryExactAliasShortcut, R.Normalize(text), text,
-        { minTokens = 3, fullPhrase = true })
-    if ok and type(exact) == "table" and exact.kind == "changes"
-        and type(exact.changes) == "table" and #exact.changes == 1
-    then
-        return exact
+    local function Attempt(candidate)
+        local ok, exact = pcall(parser.ParseRegistryExactAliasShortcut, R.Normalize(candidate), candidate,
+            { minTokens = 3, fullPhrase = true })
+        if ok and type(exact) == "table" and exact.kind == "changes"
+            and type(exact.changes) == "table" and #exact.changes == 1
+        then
+            return exact
+        end
+        return nil
     end
+    local direct = Attempt(text)
+    if direct then return direct end
+    -- Peel every leading wrapper, not just one: "hey can you turn off X" stacks
+    -- filler in front of a perfectly ordinary command.
+    local normalized = R.Normalize(text)
+    -- The addon's own name is not part of any control's name, but it is how
+    -- people address it: "set msuf druid bar color to red". As a stray token it
+    -- broke whole-phrase alias matching while the identical sentence without it
+    -- applied. Compare the final result against THIS original, not against the
+    -- cleaned copy, or a text that only needed the name removed never retries.
+    local cleaned = R.Trim((" " .. normalized .. " "):gsub("%smsuf%s", " "))
+    local peeled, changed = cleaned, true
+    while changed do
+        changed = false
+        for i = 1, #EXACT_ALIAS_WRAPPERS do
+            local wrapper = EXACT_ALIAS_WRAPPERS[i]
+            if peeled:sub(1, #wrapper) == wrapper then
+                peeled = R.Trim(peeled:sub(#wrapper + 1))
+                changed = true
+                break
+            end
+        end
+    end
+    if peeled ~= "" and peeled ~= normalized then return Attempt(peeled) end
     return nil
 end
 
@@ -1685,23 +1726,101 @@ local TRAILING_STATE_WORDS = {
     ["enabled"] = "on", ["disabled"] = "off",
 }
 
-function R.CanonicalTrailingStateCommand(text)
+-- `skipVerify` returns the rewrite on syntax alone. Two callers, two needs:
+-- the topic-lane GUARD must stay conservative (only suppress an article when
+-- the rewrite provably names one control), while the APPLY path can afford to
+-- be generous because it hands the sentence to coreHandler, which has every
+-- normal guard and simply declines what it cannot resolve. Verifying with
+-- ExactAliasSingleChange in both places was throwing away valid rewrites:
+-- "make focus frame on" -> "set focus frame to on" resolves through a
+-- different lane, so the exact-alias check rejected a sentence that works.
+function R.CanonicalTrailingStateCommand(text, skipVerify)
     local norm = R.Normalize(text)
     local body, tail = norm:match("^(.-)%s+(%a+)$")
     local state = tail and TRAILING_STATE_WORDS[tail] or nil
     if not state or not body or body == "" then return nil end
-    -- "turn off X" / "set X to off" already work; only rewrite the trailing
-    -- form, and never re-wrap a sentence that already carries a connector.
-    if body:find("%s+to$") or body:find("^turn%s") or body:find("^set%s")
-        or body:find("^enable%s") or body:find("^disable%s")
-    then return nil end
+    -- Never re-wrap a sentence that already carries a connector. A leading
+    -- verb is fine and gets stripped below: "turn X off" and "toggle X on" put
+    -- the verb in front and the state at the end, which is ordinary English.
+    if body:find("%s+to$") then return nil end
     body = body:gsub("^please%s+", ""):gsub("^can%s+you%s+", ""):gsub("^could%s+you%s+", "")
+        :gsub("^i%s+want%s+", ""):gsub("^i%s+would%s+like%s+", ""):gsub("^id%s+like%s+", "")
+        :gsub("^i%s+need%s+", "")
+        :gsub("^hey%s+", ""):gsub("^just%s+", ""):gsub("^ok%s+", ""):gsub("^okay%s+", "")
         :gsub("^now%s+", ""):gsub("^put%s+", ""):gsub("^make%s+", ""):gsub("^switch%s+", "")
+        :gsub("^turn%s+", ""):gsub("^toggle%s+", ""):gsub("^set%s+", "")
         :gsub("^the%s+", ""):gsub("^my%s+", "")
     if body == "" then return nil end
     local canonical = "set " .. body .. " to " .. state
+    if skipVerify then return canonical end
     if R.ExactAliasSingleChange(canonical) then return canonical end
     return nil
+end
+
+-- Does the request already name exactly one control, in any of the forms the
+-- Assistant can resolve? Topic-help lanes use this to stand down: an article
+-- about raid healing is the wrong answer to "i want raid heal prediction off".
+-- Both halves are only paid for once a topic lane is about to answer, which is
+-- a small fraction of inputs -- never hoist this to the top of a lane.
+-- "X to be 75" and "X set to 50" are how people phrase a value without the bare
+-- "to" the exact-alias parser expects. Same treatment as the trailing-state
+-- form: rewrite into the canonical sentence and only accept it if that really
+-- names one control.
+local VALUE_CONNECTOR_PATTERNS = {
+    "^(.-)%s+to%s+be%s+(.+)$",
+    "^(.-)%s+set%s+to%s+(.+)$",
+    "^(.-)%s+should%s+be%s+(.+)$",
+}
+
+function R.CanonicalValueConnectorCommand(text, skipVerify)
+    local norm = R.Normalize(text)
+    for i = 1, #VALUE_CONNECTOR_PATTERNS do
+        local body, value = norm:match(VALUE_CONNECTOR_PATTERNS[i])
+        if body and value and body ~= "" and value ~= "" then
+            body = body:gsub("^please%s+", ""):gsub("^can%s+you%s+", ""):gsub("^could%s+you%s+", "")
+                :gsub("^i%s+want%s+", ""):gsub("^i%s+would%s+like%s+", ""):gsub("^id%s+like%s+", "")
+                :gsub("^i%s+need%s+", ""):gsub("^hey%s+", ""):gsub("^just%s+", "")
+                :gsub("^now%s+", ""):gsub("^the%s+", ""):gsub("^my%s+", "")
+                :gsub("^set%s+", ""):gsub("^change%s+", ""):gsub("^make%s+", "")
+            if body ~= "" then
+                local canonical = "set " .. body .. " to " .. value
+                if skipVerify then return canonical end
+                if R.ExactAliasSingleChange(canonical) then return canonical end
+            end
+        end
+    end
+    return nil
+end
+
+function R.RequestNamesOneControl(text)
+    if R.ExactAliasSingleChange(text) then return true end
+    if R.CanonicalTrailingStateCommand(text) then return true end
+    if R.CanonicalValueConnectorCommand(text) then return true end
+    return false
+end
+
+-- Guards a topic-help answer at the moment it is about to be returned. A help
+-- article is the right reply to "how do I make my raid readable" and the wrong
+-- one to "i want raid heal prediction off", which names a control outright.
+--
+-- Deliberately evaluated only when a topic lane already produced something AND
+-- the request looks like a change: RequestNamesOneControl builds the exact-alias
+-- index, so running it per input would break the cold-path budgets.
+function R.TopicAnswerSurvivesExactControl(result, text)
+    if not result then return nil end
+    -- Cheap filter first. "i want raid heal prediction off" is a change even
+    -- though LooksLikeMutation says no, so gating on that alone let the article
+    -- through; a trailing state word or a number is the tell. A pure question
+    -- ("how do I make my raid readable") matches none of these and never pays
+    -- for the index build below.
+    local norm = R.Normalize(text)
+    local carriesValue = norm:find("%d")
+        or norm:match("%s(on)$") or norm:match("%s(off)$")
+        or norm:match("%s(enabled)$") or norm:match("%s(disabled)$")
+        or R.LooksLikeMutation(text) or R.StartsWithMutationCommand(text)
+    if not carriesValue then return result end
+    if type(R.RequestNamesOneControl) == "function" and R.RequestNamesOneControl(text) then return nil end
+    return result
 end
 
 function A.RouterIsFailClosedReadOnlyRequest(text)
@@ -2660,7 +2779,10 @@ function R.HumanConversationReply(text)    local norm = R.Normalize(text)
         }
     end
 
-    if R.ContainsAny(norm, { "hi", "hello", "hey", "good morning", "good afternoon", "good evening", "hallo", "moin", "servus" }) then
+    -- Only when the message is nothing BUT a greeting. ContainsAny matches the
+    -- word anywhere, so "hey turn off show power" used to be answered with
+    -- "Hey. Good to see you." and the command was dropped on the floor.
+    if R.IsGreetingOnly(norm) then
         local name = ConversationPlayerName()
         return {
             text = "Hey" .. (name and (", " .. name) or "") .. ". Good to see you. What are we tuning in MSUF today?",
@@ -2894,6 +3016,40 @@ function A.TryImmediateConversationReply(text)
     return nil
 end
 
+-- A greeting only counts when nothing else is being asked. Anything left over
+-- after the greeting and a little politeness is the actual request.
+local GREETING_WORDS = {
+    "good morning", "good afternoon", "good evening", "good day",
+    "hi", "hello", "hey", "heya", "yo", "hallo", "moin", "servus", "greetings",
+}
+local GREETING_FILLER = {
+    "there", "msuf", "assistant", "again", "buddy", "friend", "mate", "pal",
+    "everyone", "all", "you", "how", "are",
+}
+
+function R.IsGreetingOnly(norm)
+    local remaining = " " .. R.Trim(tostring(norm or "")) .. " "
+    if R.Trim(remaining) == "" then return false end
+    local matchedGreeting = false
+    for i = 1, #GREETING_WORDS do
+        local padded = " " .. GREETING_WORDS[i] .. " "
+        while remaining:find(padded, 1, true) do
+            matchedGreeting = true
+            local at = remaining:find(padded, 1, true)
+            remaining = remaining:sub(1, at) .. remaining:sub(at + #padded)
+        end
+    end
+    if not matchedGreeting then return false end
+    for i = 1, #GREETING_FILLER do
+        local padded = " " .. GREETING_FILLER[i] .. " "
+        while remaining:find(padded, 1, true) do
+            local at = remaining:find(padded, 1, true)
+            remaining = remaining:sub(1, at) .. remaining:sub(at + #padded)
+        end
+    end
+    return R.Trim(remaining) == ""
+end
+
 R.AURA_FALLBACK_SUMMARY = "Aura option fallback."
 
 -- The aura fallback is a "no control matches that wording" notice, not an
@@ -2980,6 +3136,11 @@ R.READABILITY_PROBLEM_TERMS = {    "too small", "too tiny", "too big", "too larg
     "overlap", "overlaps", "overlapping", "crowded", "cluttered",
     "zu klein", "zu gross", "schwer zu lesen", "nicht lesen",
     "kann den text nicht lesen", "ueberlappen", "ueberlappt",
+    -- Truncation is a readability complaint too: the player can see the text,
+    -- there just is not enough of it. Without these the chain never opened and
+    -- "names are getting cut off" reached no topic at all.
+    "cut off", "cut short", "getting cut", "chopped", "clipped", "truncated",
+    "not showing the full", "only shows part of", "abgeschnitten",
 }
 
 R.READABILITY_AURA_TERMS = {    "aura", "auras", "auren", "buff", "buffs", "debuff", "debuffs", "icon", "icons",
@@ -2994,6 +3155,17 @@ R.READABILITY_GROUP_TERMS = {    "party", "party frame", "party frames", "raid",
 
 R.READABILITY_TEXT_TERMS = {    "text", "font", "name", "names", "hp", "health", "power", "read",
     "lesen", "schrift",
+}
+
+-- Truncated names are a specific symptom with specific controls (name
+-- shortening, max characters, clip side, ellipsis) -- not a font-size problem.
+-- Matched on the SYMPTOM, because a player who sees "Thrallmar..." describes
+-- what they see and never uses the word "shortening".
+R.READABILITY_NAME_CLIP_TERMS = {
+    "cut off", "cutoff", "cut short", "getting cut", "chopped", "clipped",
+    "truncated", "truncating", "abbreviated", "shortened", "not showing the full",
+    "only shows part of", "three dots", "dot dot dot", "ellipsis",
+    "abgeschnitten", "abgekuerzt",
 }
 
 R.READABILITY_MENU_TERMS = {    "menu", "dashboard", "options", "config", "assistant", "ui", "interface",
@@ -3037,7 +3209,7 @@ function R.TryReadabilityShortcut(text)    local norm = R.Normalize(text)
     -- resolves with the index present.
     local aliasParser = A.Parser or {}
     if type(aliasParser._registryExactAliasIndex) == "table"
-        and type(R.ExactAliasSingleChange) == "function" and R.ExactAliasSingleChange(text)
+        and type(R.RequestNamesOneControl) == "function" and R.RequestNamesOneControl(text)
     then
         return nil
     end
@@ -3100,6 +3272,33 @@ function R.TryReadabilityShortcut(text)    local norm = R.Normalize(text)
             A.RouterPersistHelpContext()
         end
         return reply
+    end
+
+    -- Before the generic text branch: a clipped name is not a font-size problem,
+    -- and answering it with font advice sent players to the wrong controls.
+    if R.ContainsAny(norm, R.READABILITY_NAME_CLIP_TERMS)
+        and R.ContainsAny(norm, { "name", "names", "namen" })
+    then
+        -- The two families are genuinely different controls, so the examples
+        -- must not be swapped: group frames own <scope> Name Shortening /
+        -- Name Max Characters, while unit frames are shortened per FONT SCOPE
+        -- (Shared, or a per-frame scope) with Name Max Length. There is no
+        -- per-unit-frame shortening control -- the player frame follows Shared.
+        local group = R.ContainsAny(norm, { "party", "raid", "group" })
+        if group then
+            return R.ReadabilityReply(
+                "Name shortening help",
+                "Group-frame names are cut when they do not fit, so MSUF shortens them. Name Shortening decides whether that happens, Name Max Characters how many letters survive, Name Truncation Style which end is kept, and Name No Ellipsis whether the trailing '..' is dropped. A wider frame is the other fix, because it fits more of the name before any shortening applies.",
+                "turn off raid name shortening; set raid name max characters to 12; set party name truncation style to right; make raid frames wider.",
+                "Open Group Layout | Open Fonts"
+            )
+        end
+        return R.ReadabilityReply(
+            "Name shortening help",
+            "Unit-frame names are shortened per font scope, not per frame: Shared Name Shortening covers every frame that follows Shared (including Player), and Target, Focus, Pet, Boss and the two -of-target frames can override it. Name Max Length sets how many letters survive, Name Truncation Style which end is kept, and Name No Ellipsis whether the trailing '..' is dropped. A wider frame also fits more of the name before shortening applies.",
+            "turn off shared name shortening; set shared name max length to 12; set target name truncation style to right; make target frame wider.",
+            "Open Fonts | Open Player"
+        )
     end
 
     if R.ContainsAny(norm, R.READABILITY_TEXT_TERMS) then
@@ -4404,6 +4603,10 @@ end
 A.RouterTryMovementSettingShortcut = function(text, coreHandler)
     local norm = R.Normalize(text)
     if norm == "" then return nil end
+    -- "boss frames hide out of combat on" contains "out of combat", which this
+    -- lane reads as a combat-lockdown question and answers with an article --
+    -- but hideOutOfCombat is a real per-frame setting the player just named.
+    if R.TopicAnswerSurvivesExactControl(true, text) == nil then return nil end
     if norm:match("^search%s+") or norm:match("^find%s+") or norm:match("^look%s+for%s+")
         or norm:match("^suche%s+") or norm:match("^finde%s+")
     then
@@ -4747,6 +4950,18 @@ function R.AuraGrowthMutationAmbiguity(text)
     local hasDebuff = R.ContainsAny(norm, { "debuff", "debuffs" })
     if hasBuff and hasDebuff then return "lanes", scopes end
     if not hasBuff and not hasDebuff and R.ContainsAny(norm, { "aura", "auras" }) then
+        -- A Custom Aura container IS a lane. "set Boss Custom Aura 1 Growth to
+        -- RIGHTDOWN" names one exactly, yet this asked "Buff Growth or Debuff
+        -- Growth?" because it only looked for the words buff/debuff. The player
+        -- defensive and target-DoT containers are the same thing under their
+        -- own names.
+        if R.ContainsAny(norm, {
+            "custom aura", "custom auras", "custom container", "custom aura container",
+            "custom 1", "custom 2", "custom 3", "custom 4",
+            "defensive", "defensives", "dots on target", "target dots",
+        }) then
+            return nil
+        end
         return "missing_lane", scopes
     end
     return nil
@@ -5317,6 +5532,10 @@ A.RouterTryGroupLayoutProblemShortcut = function(text, coreHandler)
     then
         return nil
     end
+    -- This lane's own `concreteMutation` test is StartsWithMutationCommand,
+    -- which does not recognise "i want raid heal prediction off" as a change,
+    -- so a group-layout article answered a request that named one control.
+    if R.TopicAnswerSurvivesExactControl(true, text) == nil then return nil end
     local terms = A.RouterGroupLayoutProblemTerms
     local mentionsGroup = R.ContainsAny(norm, terms.group)
     local mentionsClickCasting = R.ContainsAny(norm, terms.clickCasting)
@@ -10862,6 +11081,10 @@ function R.ClassGuidanceReply(text)    local norm = R.Normalize(text)
 end
 
 function R.ContentGuidanceReply(text)    local norm = R.Normalize(text)
+    -- Content guidance is for "how should I set up my raid UI", not for a
+    -- request that already names one control. "i want raid heal prediction off"
+    -- was answered with a raid-healing article instead of turning it off.
+    if type(R.RequestNamesOneControl) == "function" and R.RequestNamesOneControl(text) then return nil end
     local context = R.DetectGuidanceContext(norm) or "raid"
 
     local detail, focus, examples, actions
@@ -13319,6 +13542,38 @@ function R.OpenEndedEntriesAreConfident(entries)
         or (raw1 >= 300 and raw1 >= raw2 + 80)
 end
 
+-- True when the request names exactly one of these candidates by its full
+-- label. The clarifier ranks candidates by score, which cannot separate "Boss
+-- Cast Bar" from "Boss Castbar Width"/"Boss Castbar Height" -- all three
+-- contain every word the player typed, so all three scored alike and the
+-- Assistant applied none of them. A label the player reproduced in full is the
+-- control they meant; only an exact match counts, so a prefix never wins.
+function R.OpenEndedEntriesNameOneControl(entries, text)
+    if type(entries) ~= "table" or #entries < 2 then return nil end
+    if type(R.CommandNamedSettingLabel) ~= "function" then return nil end
+    -- CommandNamedSettingLabel returns nil unless the label index is already
+    -- warm, to protect Submit's 8ms synchronous preflight. This lane is not that
+    -- preflight: it runs only when a clarification list is about to be built, so
+    -- it can pay for the index rather than fall back to asking the player.
+    if type(R.EnsureSettingLabelIndex) == "function" then R.EnsureSettingLabelIndex() end
+    local label = R.CommandNamedSettingLabel(text)
+    if not label then return nil end
+    local wanted = R.Normalize(label)
+    if wanted == "" then return nil end
+    local match, count = nil, 0
+    for i = 1, #entries do
+        local item = entries[i] and entries[i].item
+        local setting = item and item.setting
+        local candidate = setting and R.Normalize(tostring(setting.label or "")) or nil
+        if candidate == wanted then
+            count = count + 1
+            if count > 1 then return nil end
+            match = entries[i]
+        end
+    end
+    return count == 1 and match or nil
+end
+
 local function OpenEndedEnumContainsValue(setting, value)
     if not (setting and setting.type == "enum" and type(setting.values) == "table") then return false end
     for i = 1, #setting.values do
@@ -14037,6 +14292,27 @@ function R.TryOpenEndedSettingIdea(text, coreHandler)
                 return result
             end
         end
+        -- A control named in full is not ambiguous, however the scores fall.
+        -- Without this, "set Boss Cast Bar to off" offered Boss Cast Bar, Boss
+        -- Castbar Width and Boss Castbar Height as equals and changed nothing,
+        -- so the three castbar enable toggles could not be switched off by
+        -- their own names.
+        if type(entries) == "table" and #entries > 1 and type(coreHandler) == "function"
+            and not R.OpenEndedEntriesAreConfident(entries)
+            and R.OpenEndedEntriesNameOneControl(entries, text)
+        then
+            local savedCache = R._openEndedSettingCache
+            R._openEndedSettingCache = { text = R.Normalize(text), analysis = false }
+            local ok, result = pcall(coreHandler, text)
+            R._openEndedSettingCache = savedCache
+            if not ok then error(result, 0) end
+            if result and not A.RouterIsUnknownResult(result)
+                and not (type(A.RouterIsNoClueResult) == "function" and A.RouterIsNoClueResult(result))
+            then
+                RetainConfidentSettingValueQuestion(entries, result)
+                return result
+            end
+        end
         if type(entries) == "table" and #entries > 1 and not R.OpenEndedEntriesAreConfident(entries) then
             local visible = math.min(tonumber(entries[1] and entries[1].visibleLimit) or 3, #entries)
             -- The value is already known, so a number should FINISH the change,
@@ -14118,7 +14394,8 @@ function R.TryOpenEndedSettingIdea(text, coreHandler)
         -- canonical rewrite to the ordinary command path so it goes through the
         -- same value parsing, confirmation and undo as any other command.
         if type(coreHandler) == "function" then
-            local canonical = R.CanonicalTrailingStateCommand(text)
+            local canonical = R.CanonicalTrailingStateCommand(text, true)
+                or R.CanonicalValueConnectorCommand(text, true)
             if canonical then
                 local rewritten = coreHandler(canonical)
                 if rewritten and not A.RouterIsUnknownResult(rewritten) then return rewritten end
@@ -14158,6 +14435,24 @@ function R.TryOpenEndedSettingIdea(text, coreHandler)
     local item = entries[1].item
     local setting = item and item.setting
     if not setting then return nil end
+    -- A control whose NAME ends in a state word can swallow the request's
+    -- value. "make focus frame on" matched "Focus Force Blizzard Frame On" and
+    -- reported "you did not choose a value" -- the trailing "on" had been read
+    -- as the last word of the name. When the request ends in that same word,
+    -- the plain reading is the value, so hand the canonical sentence to the
+    -- ordinary command path first and only fall through if it declines.
+    if type(coreHandler) == "function" then
+        local normText = R.Normalize(text)
+        local tail = normText:match("%s(%a+)$")
+        local label = R.Normalize(setting.label or "")
+        if tail and TRAILING_STATE_WORDS[tail] and label:match("%s" .. tail .. "$") then
+            local canonical = R.CanonicalTrailingStateCommand(text, true)
+            if canonical then
+                local rewritten = coreHandler(canonical)
+                if rewritten and not A.RouterIsUnknownResult(rewritten) then return rewritten end
+            end
+        end
+    end
     local pickerResult = R.OpenColorSettingPickerResult(item,
         "Opens Color Painter for an open-ended color request.")
     if pickerResult then return pickerResult end
@@ -15892,6 +16187,12 @@ end
 
 function R.TryGeneralGuidanceShortcut(text, coreHandler)    local norm = R.Normalize(text)
     if norm == "" then return nil end
+    -- Every reply below is a setup article. None of them is the right answer to
+    -- a request that already names one control -- "i want raid heal prediction
+    -- off" was answered with advice about raid healing. Guarding the whole
+    -- shortcut once beats bolting the same check onto each reply, and the cost
+    -- is only paid for value-carrying requests (see TopicAnswerSurvivesExactControl).
+    if R.TopicAnswerSurvivesExactControl(true, text) == nil then return nil end
 
     local combinedGuidanceResult = R.CombinedGuidanceReply(norm)
     if combinedGuidanceResult then return combinedGuidanceResult end
@@ -16804,8 +17105,14 @@ function A.RouteInput(text, coreHandler)
         -- Typed icon placement and component X/Y movement resolve first; root
         -- movement remains the fallback, while read-only how/where wording
         -- continues to the richer help routes.
-        if startsMovement or normalized:find("castbar", 1, true)
-            or normalized:find("cast bar", 1, true)
+        -- Merely containing "castbar" is not a movement request. "set Boss
+        -- Castbar Time Position to LEFT" names an enum control whose VALUE is
+        -- LEFT; this block read the direction word and wrote Castbar X to -10 --
+        -- a wrong write, not just a miss. A request that names one control
+        -- outright belongs to that control.
+        if (startsMovement or normalized:find("castbar", 1, true)
+            or normalized:find("cast bar", 1, true))
+            and not (type(R.RequestNamesOneControl) == "function" and R.RequestNamesOneControl(text))
         then
             local directCastbarIconPosition = R.TryCastbarIconFixedPositionConversation(text)
             if directCastbarIconPosition then return directCastbarIconPosition end
@@ -17704,14 +18011,18 @@ function A.RouteInput(text, coreHandler)
     local visibilityResult = R.TryVisibilityDiagnosticShortcut(text, Core)
     if visibilityResult then return visibilityResult end
 
-    local colorContrastResult = R.TryColorContrastShortcut(text)
+    -- Each of these answers with a topic article. They stay first for genuine
+    -- "how do I make this readable" questions, but must not swallow a request
+    -- that already names one control.
+    local colorContrastResult = R.TopicAnswerSurvivesExactControl(R.TryColorContrastShortcut(text), text)
     if colorContrastResult then return colorContrastResult end
 
-    local readabilityResult = R.TryReadabilityShortcut(text)
+    local readabilityResult = R.TopicAnswerSurvivesExactControl(R.TryReadabilityShortcut(text), text)
     if readabilityResult then return readabilityResult end
 
     local pageHelpResult = not explicitSearchRequest and not R.LooksLikeRegistrySettingLocationQuestion(text)
         and R.TryPageHelpShortcut(text, Core) or nil
+    pageHelpResult = R.TopicAnswerSurvivesExactControl(pageHelpResult, text)
     if pageHelpResult then return pageHelpResult end
 
     local pageLocationResult = R.TryPageLocationShortcut(text, Core)

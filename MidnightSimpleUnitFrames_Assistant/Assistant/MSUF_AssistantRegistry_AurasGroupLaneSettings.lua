@@ -83,9 +83,15 @@ function A.AurasRegistry.RegisterGroupExternalLayerSettings(ctx)
             -- indistinguishable. The lane toggle keeps the explicit noun.
             { field = "enabled", label = "External Defensive Lane", type = "boolean", default = true,
               nouns = { "external defensive lane", "externals lane", "external defensive strip" } },
+            -- Both spellings on purpose: normalization keeps hyphens, so the
+            -- control's OWN label ("...Auto-blacklist from Buffs") matched none
+            -- of the spaced aliases and the setting could not be reached by the
+            -- name the menu shows for it.
             { field = "autoBlacklistBuffs", label = "External Defensive Auto-blacklist from Buffs",
               type = "boolean", default = false,
-              nouns = { "external defensive auto blacklist", "externals auto blacklist from buffs" } },
+              nouns = { "external defensive auto blacklist", "externals auto blacklist from buffs",
+                "external defensive auto-blacklist", "external defensive auto-blacklist from buffs",
+                "externals auto-blacklist from buffs" } },
             { field = "max", label = "External Defensive Max Icons", type = "number", default = 3,
               min = 0, max = 40, step = 1,
               nouns = { "external defensive max icons", "externals max icons", "external defensive count" } },
@@ -116,7 +122,14 @@ function A.AurasRegistry.RegisterGroupExternalLayerSettings(ctx)
                 get = function()
                     local root = GFAurasRoot(scopeKey)
                     local externals = root and root.externals
-                    local current = type(externals) == "table" and externals[externalField] or nil
+                    -- Read with an explicit branch, NOT `cond and t[k] or nil`:
+                    -- that idiom collapses a stored `false` to nil, which the
+                    -- boolean branch below then reports as the default. For
+                    -- External Defensive Lane (default true) it meant the lane
+                    -- could be written false but always read back as ON, so the
+                    -- transaction's verify step rolled every "turn it off" back.
+                    local current
+                    if type(externals) == "table" then current = externals[externalField] end
                     if fieldSpec.type == "boolean" then
                         if current == nil then return fieldSpec.default end
                         return current == true

@@ -71,7 +71,7 @@ function A.GlobalBarRegistry.RegisterBaseBarSettings(ctx)
         apply = ApplyBarOutline,
         reason = "MSUF_ASSISTANT_BAR_OUTLINE_LAYER",
         step = 1,
-        description = "Controls the shared bar and frame outline draw order on the unified Layer 0-30 scale.",
+        description = "Controls the shared bar and frame outline Layer (0-30).",
     })
     RegisterGeneralNumberSetting("barOutlineColorA", "barOutlineOpacity", "Global Bar Outline Opacity", 1, 0, 1, {
         "bar outline opacity", "bar outline alpha", "frame outline opacity", "frame outline alpha",

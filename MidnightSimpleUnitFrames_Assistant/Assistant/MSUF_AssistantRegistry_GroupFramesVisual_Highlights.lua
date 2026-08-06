@@ -100,7 +100,15 @@ function A.GroupFramesRegistry.RegisterVisualHighlightSettings(ctx, scope)
     AddAliasesForUnit(aliases, scope, "fallback threat border")
     AddAliasesForUnit(aliases, scope, "group fallback aggro border")
     AddAliasesForUnit(aliases, scope, "group fallback threat border")
-    RegisterGroupBoolean(scope, "aggroBorder", "aggroEnabled", "Aggro Border", true, "visual", aliases, {
+    -- "Fallback" belongs in the LABEL, not only in the aliases: without it this
+    -- setting and barScope.<scope>.aggroOutlineMode carried the identical label
+    -- ("Party Aggro Border"). A player naming that label got the bar-outline
+    -- setting changed instead, and this one could not be reached at all. The
+    -- aliases already said "fallback"; the visible name now agrees with them.
+    -- Safe to word independently: aggroEnabled has no Menu2 control -- it is a
+    -- group-config fallback (MSUF_UF_Group_Config.lua), so this label is the
+    -- only user-facing name it has.
+    RegisterGroupBoolean(scope, "aggroBorder", "aggroEnabled", "Fallback Aggro Border", true, "visual", aliases, {
         description = "Controls the group-frame fallback aggro border toggle for this scope. Global or scoped bar highlight overrides can still take precedence.",
     })
 
@@ -111,7 +119,9 @@ function A.GroupFramesRegistry.RegisterVisualHighlightSettings(ctx, scope)
     AddAliasesForUnit(aliases, scope, "fallback aggro non tanks")
     AddAliasesForUnit(aliases, scope, "fallback aggro not tanks")
     AddAliasesForUnit(aliases, scope, "fallback threat non tanks")
-    RegisterGroupEnum(scope, "aggroMode", "aggroMode", "Aggro Shows For", "ALL", AGGRO_MODE_VALUES, AGGRO_MODE_ALIASES, "visual", aliases, {
+    -- Same duplicate-label fix again: this shared "Party Aggro Shows For" with
+    -- barScope.<scope>.aggroMode, and its aliases already say "fallback".
+    RegisterGroupEnum(scope, "aggroMode", "aggroMode", "Fallback Aggro Shows For", "ALL", AGGRO_MODE_VALUES, AGGRO_MODE_ALIASES, "visual", aliases, {
         description = "Controls which group-member roles can show the aggro border.",
     })
 
@@ -120,7 +130,9 @@ function A.GroupFramesRegistry.RegisterVisualHighlightSettings(ctx, scope)
     AddAliasesForUnit(aliases, scope, "fallback dispellable border")
     AddAliasesForUnit(aliases, scope, "group fallback dispel border")
     AddAliasesForUnit(aliases, scope, "group fallback dispellable border")
-    RegisterGroupBoolean(scope, "dispelBorder", "dispelEnabled", "Dispel Border", true, "visual", aliases, {
+    -- Same duplicate-label fix as Fallback Aggro Border above: this shared
+    -- "Party Dispel Border" with barScope.<scope>.dispelOutlineMode.
+    RegisterGroupBoolean(scope, "dispelBorder", "dispelEnabled", "Fallback Dispel Border", true, "visual", aliases, {
         description = "Controls the group-frame fallback dispellable-debuff border toggle for this scope. Global or scoped bar highlight overrides can still take precedence.",
     })
 

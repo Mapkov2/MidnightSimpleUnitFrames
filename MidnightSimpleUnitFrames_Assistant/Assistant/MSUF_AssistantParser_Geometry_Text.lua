@@ -1043,6 +1043,28 @@ function A._ParseTextSlotDropdownValueShortcut(text)
         -- Any digit is enough: no slot mode is numeric, with or without a "to"
         -- connector ("change temp max health bg opacity 50").
         if tostring(text or ""):find("%d") then return nil end
+        -- A mode word can also be part of a real control's name. "Show Power"
+        -- is a per-frame boolean, so "i would like Focus Show Power off" names
+        -- one control exactly and must not be answered with "which slot?".
+        -- Router helpers are optional here: this file loads before the Router in
+        -- some harnesses, so every call stays type-guarded.
+        local Router = A and A.RouterPrivate
+        if Router and type(Router.RequestNamesOneControl) == "function"
+            and Router.RequestNamesOneControl(text)
+        then
+            return nil
+        end
+        -- This lane is about a TEXT SLOT, so the request has to be about text.
+        -- "turn off show power" mentions no text or slot at all; the lane only
+        -- claimed it by reading "off" as the slot mode None, and answered a
+        -- per-frame boolean with "which slot?" instead of letting the ordinary
+        -- ambiguity list offer the frames.
+        if not ContainsAny(text, {
+            "text", "slot", "left", "center", "centre", "right",
+            "percent", "percentage", "number", "numbers", "value", "values",
+        }) then
+            return nil
+        end
         local modeProbe = TextSlotSetting("unitframe", "player", tab, "center")
         local modeValue = modeProbe and A._TextSlotDropdownValueForText(modeProbe, text) or nil
         if modeValue == nil then return nil end

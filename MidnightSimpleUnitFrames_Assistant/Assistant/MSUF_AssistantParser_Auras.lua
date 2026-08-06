@@ -371,6 +371,24 @@ local function ParseAuraGeometryShortcut(text)
     -- the Buff/Debuff offsets this shortcut owns, so dropping the word and
     -- moving those lanes shifted every buff and debuff icon instead of the one
     -- group the player named.
+    -- ...but a FILTER request is not an offset request. This shortcut owns
+    -- Buff/Debuff offsets only, and its own advice below tells the player to
+    -- "turn on player big defensive filter" -- which it was then intercepting
+    -- and answering with this same explanation instead of applying.
+    if ContainsAny(text, { "filter", "filters" }) then return nil end
+    -- Same reasoning for the group external-defensive lane's OWN controls: an
+    -- auto-blacklist toggle, lane switch or icon cap is a request to change
+    -- that control, not to move a lane. Answering those with this explanation
+    -- left "set party external defensive auto-blacklist from buffs to on"
+    -- unreachable -- the very phrasing the menu label produces.
+    -- Scoped to the external-defensive wording on purpose: a bare "max icons"
+    -- is ordinary aura-lane geometry that this shortcut legitimately owns
+    -- ("set all unit aura max icons to 10"), so guarding on it broke that.
+    if ContainsAny(text, {
+        "auto blacklist", "auto-blacklist", "autoblacklist", "auto list", "auto-list",
+        "external defensive lane", "externals lane", "external defensive strip",
+        "external defensive max", "externals max", "external defensive count",
+    }) then return nil end
     if ContainsAny(text, { "defensive", "defensives", "defensive aura", "defensive auras", "defensive buff", "defensive buffs" }) then
         return {
             kind = "answer",

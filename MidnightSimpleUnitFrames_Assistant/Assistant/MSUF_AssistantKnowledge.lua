@@ -3277,6 +3277,13 @@ K.TOPIC_GUIDANCE = {
       title = "That sounds like text and fonts",
       body = "Each frame has left, center and right text slots plus its own font, size and outline. Global font choices live on the Fonts page.",
       examples = "open fonts; set player name font size to 14; set player hp right slot to percent" },
+    -- Ahead of the generic group entry on purpose: "who has aggro in my party"
+    -- names a specific feature, and matching it on "party" alone answered with
+    -- the whole group-frames overview instead of the aggro controls.
+    { terms = { "aggro", "threat", "who has aggro", "has aggro", "pulling" },
+      title = "That sounds like aggro and threat",
+      body = "MSUF shows threat with the group-frame Fallback Aggro Border and the scoped bar Aggro Outline, with Fallback Aggro Shows For to limit which roles display it. The aggro border colour is set on the Colors page.",
+      examples = "turn on party fallback aggro border; set raid fallback aggro shows for non tanks; set aggro border color red; open bars" },
     { terms = { "party", "raid", "mythic raid", "group frame", "group frames", "group" },
       title = "That sounds like group frames",
       body = "Party, Raid and Mythic Raid frames share one engine: layout and spacing, health and name text, range fade, status indicators, dispel overlays and aura filters.",
