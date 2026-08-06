@@ -1,5 +1,25 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-RC11 - 2026-08-06
+
+### Highlights
+
+- Added optional Grid2 and Details! integration to MSUF Edit Mode. Both addons keep ownership of their frames and saved positions.
+- Added native WoW 12.1 Player resource pings for health and supported mana states. Portrait pings keep the normal radial wheel.
+
+### Changes
+
+- Added a public API for registering external frames with MSUF Edit Mode.
+- Expanded translations for recent Aura, Preview, Class Resource and Layer settings.
+- Unified the detached Player Power outline across settings, Copy To, live frames and previews.
+
+### Fixes & Performance
+
+- Fixed Group Preview layer order and Name positioning for all anchors.
+- Fixed detached Player Power outline thickness at different preview zoom levels.
+- Fixed exact Assistant commands being intercepted by greetings, guides or movement shortcuts.
+- Added Assistant help for shortened and clipped Unit and Group names.
+
 ## 6.0-RC10 - 2026-08-06
 
 ### Highlights
