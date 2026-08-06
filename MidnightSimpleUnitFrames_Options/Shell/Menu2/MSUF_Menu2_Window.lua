@@ -1439,6 +1439,10 @@ function M.RefreshPageHistoryNav(suppressPulse)
     if suppressPulse or state.canBack ~= true then return end
     local pulse = back._msuf2DiscoveryPulse
     if not pulse then return end
+    -- Hard combat gate on top of the quiescence teardown: the pulse can never
+    -- start in combat, and a mid-play pulse is stopped by MenuRuntime:Quiesce
+    -- like every other tracked menu animation.
+    if _G.InCombatLockdown and _G.InCombatLockdown() then return end
     if M.frame and M.frame.IsShown and not M.frame:IsShown() then return end
     local g = type(M.GetGeneralDB) == "function" and M.GetGeneralDB() or nil
     if type(g) ~= "table" or (tonumber(g.pageHistoryBackUses) or 0) >= PAGE_HISTORY_DISCOVERY_USES then return end
@@ -2340,10 +2344,8 @@ local function BuildWindowChrome(state)
             step:SetToAlpha(to)
             step:SetDuration(duration)
         end
-        PulseStep(1, 0, 1, 0.16)
-        PulseStep(2, 1, 0, 0.30)
-        PulseStep(3, 0, 1, 0.16)
-        PulseStep(4, 1, 0, 0.36)
+        PulseStep(1, 0, 1, 0.18)
+        PulseStep(2, 1, 0, 0.42)
         histBack._msuf2DiscoveryPulse = pulse
     end
     local function HistoryTargetTitle(field)
