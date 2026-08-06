@@ -165,6 +165,13 @@ ExportPublic("MSUF_ReadUnitPowerBarEmbed", ReadUnitPowerBarEmbed)
 local ReadUnitPowerBarBorderEnabled = _G.MSUF_ReadUnitPowerBarBorderEnabled
 if type(ReadUnitPowerBarBorderEnabled) ~= "function" then
     function ReadUnitPowerBarBorderEnabled(unitKey, db)
+        db = db or _G.MSUF_DB
+        local k = CanonPowerBarUnitKey(unitKey)
+        local u = k and db and db[k]
+        if k == "player" and u and u.powerBarDetached == true then
+            local outline = tonumber(db and db.bars and db.bars.detachedPowerBarOutline)
+            if outline ~= nil then return outline > 0 end
+        end
         return MSUF_ReadUnitPowerBarBool(unitKey, "powerBarBorderEnabled", "powerBarBorderEnabled", false, db)
     end
 end
@@ -176,7 +183,11 @@ if type(ReadUnitPowerBarBorderThickness) ~= "function" then
         db = db or _G.MSUF_DB
         local k = CanonPowerBarUnitKey(unitKey)
         local u = k and db and db[k]
-        local v = u and u.powerBarBorderThickness
+        local v
+        if k == "player" and u and u.powerBarDetached == true then
+            v = tonumber(db and db.bars and db.bars.detachedPowerBarOutline)
+        end
+        if type(v) ~= "number" then v = u and u.powerBarBorderThickness end
         if type(v) ~= "number" then
             local bars = db and db.bars
             v = bars and (bars.powerBarBorderThickness or bars.powerBarBorderSize)

@@ -25,17 +25,6 @@ local CASTBAR_TAB_HEIGHTS = { general = 392, icon = 486, spell = 426, time = 386
 local CASTBAR_WIDTH_SOURCE_VALUES = VT("manual", "Manual width", "unitframe", "Auto: Unit Frame", "essential", "Auto: Essential Cooldowns", "utility", "Auto: Utility Cooldowns")
 local CASTBAR_TEXT_ALIGN = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right")
 local CASTBAR_TRUNCATE_VALUES = VT("AUTO", "Auto fit", "CLIP", "Manual width", "NONE", "No width limit")
-local CASTBAR_ICON_BORDER_VALUES = VT("NONE", "None", "DARK", "Dark Border", "CASTBAR", "Castbar Border")
-
---- A visible style selected from the style control must produce a visible
---- result even when the independent thickness slider is still at its disabled
---- value. This runs only for the user's dropdown change; live cast updates keep
---- using the cached detail-layout path.
-local function ResolveIconBorderThicknessAfterStyleChange(style, thickness)
-    style = tostring(style or "NONE"):upper()
-    thickness = tonumber(thickness) or 0
-    return (style ~= "NONE" and thickness <= 0) and 1 or thickness
-end
 local DETACHED_POWER_SHAPE_VALUES = VT("BAR", "Bar", "ROUND", "Round", "CRYSTAL", "Crystal", "ORB", "Orb")
 -- Portrait placement value lists. Kept in one table so the page stays well clear
 -- of the Lua 200-upvalue ceiling that already bites the Auras page.
@@ -436,6 +425,43 @@ local function BuildPower(ctx, builder, unit)
     local POWER_OPTS = { power = true, preview = true }
     local DETACHED_POWER_OPTS = { power = true, detachedPowerBar = true, preview = true }
     local POWER_TEXT_OPTS = M.KeySetFromWords "power text preview"
+    local function ReadSyncedPlayerPowerOutline()
+        if not isPlayer or GetConf(unit).powerBarDetached ~= true then return nil end
+        local outline = tonumber(GetBars().detachedPowerBarOutline)
+        if outline == nil then return nil end
+        return max(0, min(8, floor(outline + 0.5)))
+    end
+    local function ReadPowerBorderEnabled()
+        local outline = ReadSyncedPlayerPowerOutline()
+        if outline ~= nil then return outline > 0 end
+        local conf = GetConf(unit)
+        if conf.powerBarBorderEnabled ~= nil then return conf.powerBarBorderEnabled == true end
+        return GetBars().powerBarBorderEnabled == true
+    end
+    local function ReadPowerBorderThickness()
+        local outline = ReadSyncedPlayerPowerOutline()
+        if outline ~= nil then return outline end
+        local conf = GetConf(unit)
+        return tonumber(conf.powerBarBorderThickness) or tonumber(GetBars().powerBarBorderThickness or GetBars().powerBarBorderSize) or 1
+    end
+    local function SetSyncedPlayerPowerOutline(outline, reason)
+        outline = max(0, min(8, floor((tonumber(outline) or 0) + 0.5)))
+        local function Write()
+            local conf, bars = GetConf(unit), GetBars()
+            local enabled, changed = outline > 0, false
+            if conf.powerBarBorderEnabled ~= enabled then conf.powerBarBorderEnabled, changed = enabled, true end
+            if enabled and conf.powerBarBorderThickness ~= outline then conf.powerBarBorderThickness, changed = outline, true end
+            if bars.detachedPowerBarOutline ~= outline then bars.detachedPowerBarOutline, changed = outline, true end
+            if not changed then return false end
+            M.RequestUnitApply(unit, reason, POWER_OPTS)
+            RefreshClassPowerDetachedState()
+            return true
+        end
+        if type(M.RunWithHistory) == "function" then
+            return M.RunWithHistory("Power bar border", "unit:player:powerBarBorder", Write)
+        end
+        return Write()
+    end
     local function BindPowerSlider(parent, addFn, label, x, y, width, minValue, maxValue, step, key, defaultValue, reason, readFn, opts)
         local control = addFn(W.Slider(parent, label, minValue, maxValue, step, 300))
         W.MoveWidget(control, parent, x, y, width, "CENTER")
@@ -529,13 +555,21 @@ local function BuildPower(ctx, builder, unit)
             RefreshPowerEnabled()
         end,
         SettingMeta(ctx, "power.show", unit, "showPowerBar"))
+    local powerBorder = AddPowerControl(W.ToggleAt(borderCard, "Power bar border", 16, -62, rightW - 32))
+    M.BindBoolWidget(ctx, powerBorder, ReadPowerBorderEnabled, function(value)
+        if isPlayer then
+            local thickness = ReadPowerBorderThickness()
+            if value and thickness <= 0 then
+                thickness = tonumber(GetConf(unit).powerBarBorderThickness) or 1
+                if thickness <= 0 then thickness = 1 end
+            end
+            SetSyncedPlayerPowerOutline(value and thickness or 0, "MSUF2_POWER_BORDER")
+        else
+            SetBool(unit, "powerBarBorderEnabled", value, "MSUF2_POWER_BORDER", POWER_OPTS)
+        end
+        RefreshPowerEnabled()
+    end, SettingMeta(ctx, "power.powerBarBorderEnabled", unit, "powerBarBorderEnabled"))
     BuildPowerControls(borderCard, AddPowerControl, {
-        { "toggle", "Power bar border", 16, -62, rightW - 32, "powerBarBorderEnabled", true, "MSUF2_POWER_BORDER",
-        function()
-            local conf = GetConf(unit)
-            if conf.powerBarBorderEnabled ~= nil then return conf.powerBarBorderEnabled == true end
-            return GetBars().powerBarBorderEnabled == true
-        end, RefreshPowerEnabled },
         { "toggle", "Smooth fill", 16, -158, rightW - 32, "powerSmoothFill", false, "MSUF2_POWER_SMOOTH" },
     })
     BuildPowerControls(mainCard, AddPowerControl, {
@@ -551,11 +585,20 @@ local function BuildPower(ctx, builder, unit)
             return GetBars().embedPowerBarIntoHealth == true
         end },
     })
-    local borderSize = BindPowerSlider(borderCard, AddPowerControl, "Border thickness", 16, -108, rightW - 72, 0, 6, 1, "powerBarBorderThickness", 1, "MSUF2_POWER_BORDER_SIZE",
-        function()
-            local conf = GetConf(unit)
-            return tonumber(conf.powerBarBorderThickness) or tonumber(GetBars().powerBarBorderThickness or GetBars().powerBarBorderSize) or 1
-        end)
+    local borderSize = AddPowerControl(W.Slider(borderCard, "Border thickness", 0, isPlayer and 8 or 6, 1, 300))
+    W.MoveWidget(borderSize, borderCard, 16, -108, rightW - 72, "CENTER")
+    M.BindNumberWidget(ctx, borderSize, ReadPowerBorderThickness, function(value)
+        if isPlayer then
+            SetSyncedPlayerPowerOutline(value, "MSUF2_POWER_BORDER_SIZE")
+        else
+            SetNumber(unit, "powerBarBorderThickness", value, "MSUF2_POWER_BORDER_SIZE", POWER_OPTS)
+        end
+        RefreshPowerEnabled()
+    end, 1, (function()
+        local meta = SettingMeta(ctx, "power.powerBarBorderThickness", unit, "powerBarBorderThickness")
+        meta.step, meta.roundStep = 1, true
+        return meta
+    end)())
     local detached = AddPowerControl(W.ToggleAt(mainCard, "Detach from frame", 16, -166, cardW - 32))
     M.BindBoolWidget(ctx, detached,
         function() return ReadBool(unit, "powerBarDetached", false) end,
@@ -642,7 +685,7 @@ local function BuildPower(ctx, builder, unit)
     RefreshPowerEnabled = RefreshPowerEnabled(M.BindGateGroup(ctx, nil, {
         { enable = show, controls = powerControls, on = PowerOn },
         { controls = detachedControls, on = DetachedOn },
-        { controls = borderSize, on = function() return PowerOn() and ReadBool(unit, "powerBarBorderEnabled", GetBars().powerBarBorderEnabled == true) end },
+        { controls = borderSize, on = function() return PowerOn() and ReadPowerBorderEnabled() end },
         -- Detached width/height/sync exist only when a detached card was built; the `when`
         -- guard keeps the optional Player-only detached controls safe.
         { controls = detachedSync, when = function() return detachedSync ~= nil end, on = function() return DetachedOn() and not OrbSelected() end },
@@ -969,7 +1012,7 @@ local function BuildCastbar(ctx, builder, unit)
         end
         local castContext = function() return { unit = unit } end
         W.AttachContextColorReferences(generalCard, GeneralCastbarColorRefs, {
-            title = UnitTopLabel(unit) .. " Castbar Colors",
+            title = M.Format("%s Castbar Colors", UnitTopLabel(unit)),
             note = "Player colors follow the active override mode.",
             historySource = "menu:unit-castbar-general-colors",
             context = castContext,
@@ -1246,20 +1289,11 @@ local function BuildCastbar(ctx, builder, unit)
             return meta
         end)())
     BuildDetailControls(iconAdvancedCard, iconControls, {
-        { "dropdown", "Border style", 16, -52, min(260, controlWRight), CASTBAR_ICON_BORDER_VALUES, DetailKey("IconBorderStyle"), "DARK", "MSUF2_CASTBAR_ICON_BORDER", function(v)
-            local thicknessKey = DetailKey("IconBorderThickness")
-            local thickness = ReadGeneralNumber(thicknessKey, 0)
-            local resolved = ResolveIconBorderThicknessAfterStyleChange(v, thickness)
-            if resolved ~= thickness then
-                SetGeneralNumber(thicknessKey, resolved, "MSUF2_CASTBAR_ICON_BORDER_THICKNESS")
-            end
-            if M.Refresh then M.Refresh(ctx) end
-        end },
-        { "slider", "Layer (0-30)", 16, -106, controlWRight, 0, 30, 1, DetailKey("IconFrameLevelOffset"), 0, "MSUF2_CASTBAR_ICON_LAYER" },
+        { "slider", "Layer (0-30)", 16, -52, controlWRight, 0, 30, 1, DetailKey("IconFrameLevelOffset"), 0, "MSUF2_CASTBAR_ICON_LAYER" },
     })
     local iconLayerDescription = W.Text(iconAdvancedCard,
         "0 keeps the icon just above the bar and moves it together with the whole-castbar layer. 1-30 pins the icon to that frame level on the shared layer scale, so it can be ordered in front of or behind the bar, texts, and other frame elements.",
-        16, -160, rightW - 32)
+        16, -106, rightW - 32)
     if iconLayerDescription.SetWordWrap then iconLayerDescription:SetWordWrap(true) end
     local castbarLayer = W.Slider(layerAdvancedCard, "Layer (0-30)", 0, 30, 1, controlWRight)
     W.MoveWidget(castbarLayer, layerAdvancedCard, 16, -52, controlWRight)

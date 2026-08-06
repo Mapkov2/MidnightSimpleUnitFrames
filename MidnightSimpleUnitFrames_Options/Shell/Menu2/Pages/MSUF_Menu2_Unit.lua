@@ -439,17 +439,24 @@ local POWER_COPY_OVERRIDES = {
     end },
 }
 local function ReadPowerCopyValue(conf, unitKey, spec)
-    local ok, value = spec.read(conf and conf[spec.key])
-    if ok then return value end
     local fn = spec.fn and _G[spec.fn]
     if type(fn) == "function" then return fn(unitKey) end
+    local ok, value = spec.read(conf and conf[spec.key])
+    if ok then return value end
     return spec.fallback(unitKey)
 end
-local function CopyPowerBarFields(dst, src, srcKey)
+local function CopyPowerBarFields(dst, src, srcKey, dstKey)
     CopyFields(dst, src, COPY_POWER_BAR_FIELDS)
     for i = 1, #POWER_COPY_OVERRIDES do
         local spec = POWER_COPY_OVERRIDES[i]
         dst[spec.key] = ReadPowerCopyValue(src, srcKey, spec)
+    end
+    if dstKey == "player" then
+        local bars = BarsDB()
+        if bars then
+            local thickness = tonumber(dst.powerBarBorderThickness) or 1
+            bars.detachedPowerBarOutline = dst.powerBarBorderEnabled == true and thickness or 0
+        end
     end
 end
 local function CopyCastbarValue(g, sourceKey, destinationKey)
@@ -679,7 +686,7 @@ local function CopyUnitSettings(unit, target, scopes)
         --- the Global pages still report the shared ones for that scope.
         if scopes.text then CopyFields(dst, src, COPY_TEXT_FIELDS) end
         if scopes.portrait then CopyFields(dst, src, COPY_PORTRAIT_FIELDS) end
-        if scopes.power then CopyPowerBarFields(dst, src, srcKey) end
+        if scopes.power then CopyPowerBarFields(dst, src, srcKey, dstKey) end
         local copiedAuraOptions = scopes.auras and CopyAuras3UnitSettings(srcKey, dstKey) or false
         local copiedAuraStyle = scopes.aurastyle and CopyAuras3UnitStyle(srcKey, dstKey) or false
         local copiedAuras = copiedAuraOptions or copiedAuraStyle

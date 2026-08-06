@@ -384,6 +384,33 @@ local function Player()
     db.player = db.player or {}
     return db.player
 end
+local function PlayerPowerOutline()
+    local outline = tonumber(Bars().detachedPowerBarOutline)
+    if outline == nil then
+        local player = Player()
+        outline = player.powerBarBorderEnabled == true and (tonumber(player.powerBarBorderThickness) or 1) or 0
+    end
+    if outline < 0 then return 0 end
+    if outline > 8 then return 8 end
+    return floor(outline + 0.5)
+end
+local function SetPlayerPowerOutline(value, apply)
+    value = floor((tonumber(value) or 0) + 0.5)
+    if value < 0 then value = 0 elseif value > 8 then value = 8 end
+    local function Write()
+        local bars, player = Bars(), Player()
+        local enabled, changed = value > 0, false
+        if bars.detachedPowerBarOutline ~= value then bars.detachedPowerBarOutline, changed = value, true end
+        if player.powerBarBorderEnabled ~= enabled then player.powerBarBorderEnabled, changed = enabled, true end
+        if enabled and player.powerBarBorderThickness ~= value then player.powerBarBorderThickness, changed = value, true end
+        if changed and type(apply) == "function" then apply() end
+        return changed
+    end
+    if type(M.RunWithHistory) == "function" then
+        return M.RunWithHistory("detachedPowerBarOutline", "classpower:detachedPowerBarOutline", Write)
+    end
+    return Write()
+end
 local function SetPlayerTextValue(key, value, apply)
     local player = Player()
     if player[key] == value then return end
@@ -755,6 +782,13 @@ end
 
 function Page:CreateControlKinds()
     return {
+        playerPowerOutline = function(_, parent, _, apply, spec)
+            local control = W.Slider(parent, spec[3], spec[4], spec[5], spec[6], spec[7])
+            M.BindNumberWidget(self.ctx, control, PlayerPowerOutline,
+                function(value) SetPlayerPowerOutline(value, spec[10] or apply) end,
+                spec[9], spec.meta)
+            return control
+        end,
         alpha = function(_, parent, _, apply, spec)
             return BindBarsAlphaPercent(self.ctx, parent, spec[3], spec[4], spec[5], spec[6] or apply, spec[7], spec.meta)
         end,
@@ -849,7 +883,7 @@ function Page:BuildClassLayout()
         { "width", "slider", "Width", 30, 800, 1, 300, "classPowerWidth", 0 },
         { "x", "slider", "Offset X", -800, 800, 1, 300, "classPowerOffsetX", 0 },
         { "y", "slider", "Offset Y", -800, 800, 1, 300, "classPowerOffsetY", 0 },
-        { "level", "slider", "Frame level", 0, 30, 1, 300, "classPowerFrameLevelOffset", 5 },
+        { "level", "slider", "Layer", 0, 30, 1, 300, "classPowerFrameLevelOffset", 5 },
     })
     local alignValues = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right")
     self.cpAlign = W.Segment(section, "Shape alignment", alignValues, 300)
@@ -1144,7 +1178,7 @@ function Page:BuildDetachedPower()
         })
     end
     local texture = self:Controls(textures, Bars, ApplyDetachedPowerBar, "detached_power.textures", {
-        { "outline", "slider", "Power bar outline", 0, 8, 1, 300, "detachedPowerBarOutline", 1, ApplyDetachedPowerBarOutline, group = "detached" },
+        { "outline", "playerPowerOutline", "Power bar outline", 0, 8, 1, 300, "detachedPowerBarOutline", 1, ApplyDetachedPowerBarOutline, group = "detached" },
     })
     self.dpbTextures = texture
     AddTooltip(texture.outline, "Power Bar Outline", "Edge strength of every detached Player power shape, including Bar, Round, Crystal and Orb. 0 disables only that edge.")
