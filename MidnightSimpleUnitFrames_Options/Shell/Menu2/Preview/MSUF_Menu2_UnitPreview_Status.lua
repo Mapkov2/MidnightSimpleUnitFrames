@@ -258,6 +258,13 @@ function Status.SetIconTexture(icon, spec, conf, g, key, data, runtimeCfg, statu
             tex:SetTexture((key == "target" or key == "focus") and "Interface\\TargetingFrame\\UI-PVP-Horde" or "Interface\\TargetingFrame\\UI-PVP-Alliance")
             if tex.SetTexCoord then tex:SetTexCoord(0, 1, 0, 1) end
         end
+    elseif spec.id == "statusPetHappiness" then
+        if tex then
+            tex:SetTexture("Interface\\PetPaperDollFrame\\UI-PetHappiness")
+            -- The full preview uses the healthy target state; the compact icon
+            -- strip on the Pet page exposes Unhappy, Content, and Happy together.
+            if tex.SetTexCoord then tex:SetTexCoord(0, 0.1875, 0, 0.359375) end
+        end
     elseif Status.IsTextIndicator(spec) then
         if tex then tex:Hide() end
         if txt then

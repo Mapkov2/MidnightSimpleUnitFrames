@@ -9,11 +9,17 @@ local function Color(text)
     local r, g, b = tostring(text or ""):match("^([^,]+),([^,]+),([^,]+)$")
     return { tonumber(r) or 1, tonumber(g) or 1, tonumber(b) or 1 }
 end
-local function Allowed(words)
+local function Allowed(words, capability)
     if not words or words == "" then return nil end
     local set = {}
     for key in words:gmatch("%S+") do set[key] = true end
-    return function(key) return set[key] == true end
+    return function(key)
+        if capability == "petHappiness" then
+            local client = MSUF and MSUF.Client
+            if not (client and (client.IsVanilla == true or client.IsTBC == true)) then return false end
+        end
+        return set[key] == true
+    end
 end
 local function StatusRows(rows)
     local out = {}
@@ -22,7 +28,7 @@ local function StatusRows(rows)
             id = c[1], show = c[2], size = c[3], anchor = c[4], x = c[5], y = c[6], layer = c[7],
             defaultLayer = tonumber(c[8]), defaultSize = tonumber(c[9]), defaultAnchor = c[10],
             defaultX = tonumber(c[11]), defaultY = tonumber(c[12]), text = c[13], color = Color(c[14]),
-            label = c[15], refresh = c[16], defaultShow = c[17] == "false" and false or nil, allowed = Allowed(c[18]),
+            label = c[15], refresh = c[16], defaultShow = c[17] == "false" and false or nil, allowed = Allowed(c[18], c[20]),
             customIcon = c[19] ~= "" and c[19] or nil,
         }
     end
@@ -51,6 +57,7 @@ statusCombat|showCombatStateIndicator|combatStateIndicatorSize|combatStateIndica
 statusResting|showRestingIndicator|restedStateIndicatorSize|restedStateIndicatorAnchor|restedStateIndicatorOffsetX|restedStateIndicatorOffsetY|restedStateIndicatorLayer|7|18|TOPLEFT|0|0|Z|0.34,0.62,1.0|Rested icon|MSUF_RequestStatusRestingIndicatorRefresh|false|player|restedStateIndicatorCustomIcon
 statusIncomingRes|showIncomingResIndicator|incomingResIndicatorSize|incomingResIndicatorAnchor|incomingResIndicatorOffsetX|incomingResIndicatorOffsetY|incomingResIndicatorLayer|7|18|TOPRIGHT|0|0|+|0.22,1.0,0.56|Incoming Rez icon|MSUF_RequestStatusIncomingResIndicatorRefresh||player target|incomingResIndicatorCustomIcon
 statusPvp|showPvpIndicator|pvpIndicatorSize|pvpIndicatorAnchor|pvpIndicatorOffsetX|pvpIndicatorOffsetY|pvpIndicatorLayer|7|18|TOPRIGHT|0|0|PVP|0.32,0.62,1.0|PvP flag (War Mode/PvP)|MSUF_RequestStatusPvpIndicatorRefresh||player target focus targettarget focustarget|pvpIndicatorCustomIcon
+statusPetHappiness|showPetHappinessIndicator|petHappinessIndicatorSize|petHappinessIndicatorAnchor|petHappinessIndicatorOffsetX|petHappinessIndicatorOffsetY|petHappinessIndicatorLayer|7|24|RIGHT|-7|-4|:)|0.38,0.82,0.24|Pet Happiness (Vanilla/TBC)|MSUF_RequestPetHappinessIndicatorRefresh||pet||petHappiness
 ]]
 specs.PreviewLayers = LayerRows [[
 guides|Guides|0.42,0.72,1.00|Mover highlights and selected borders.

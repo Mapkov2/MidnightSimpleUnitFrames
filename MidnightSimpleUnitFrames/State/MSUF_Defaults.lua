@@ -181,7 +181,7 @@ local MSUF_DEFAULTS_STATUS_PREFIXES = {
     "leaderIcon", "raidMarker", "levelIndicator", "eliteIcon", "statusText",
     "statusGhostText", "statusAFKText", "statusDNDText",
     "combatStateIndicator", "restedStateIndicator", "restingStateIndicator",
-    "incomingResIndicator", "pvpIndicator", "raidGroupName",
+    "incomingResIndicator", "pvpIndicator", "petHappinessIndicator", "raidGroupName",
 }
 local MSUF_DEFAULTS_AURA_NUMERIC_KEYS = {
     offsetX = { -4096, 4096 }, offsetY = { -4096, 4096 },
@@ -476,6 +476,7 @@ local function MSUF_Defaults_NormalizeStatusScope(scope, groupScope)
         { "statusTextEnabled", "statusText" }, { "showCombatStateIndicator", "combatStateIndicator" },
         { "showRestingIndicator", "restedStateIndicator" }, { "showRestingIndicator", "restingStateIndicator" },
         { "showIncomingResIndicator", "incomingResIndicator" }, { "showPvpIndicator", "pvpIndicator" },
+        { "showPetHappinessIndicator", "petHappinessIndicator" },
         { "showRaidGroupInName", "raidGroupName" },
     }
     for i = 1, #boolAliases do
@@ -3086,6 +3087,19 @@ for _, key in ipairs({"player","target","focus","targettarget","focustarget","pe
     end
     if conf.raidMarkerSize == nil then conf.raidMarkerSize = 14 end
     if conf.raidMarkerLayer == nil then conf.raidMarkerLayer = 7 end
+end
+--- Hunter Pet Happiness exists only on Vanilla/TBC. Keep the native 24 px
+--- visual scale and familiar right-side placement without adding dead fields
+--- to later-client factory defaults.
+if MSUF.Client and (MSUF.Client.IsVanilla == true or MSUF.Client.IsTBC == true) then
+    MSUF_DB.pet = MSUF_DB.pet or {}
+    local pet = MSUF_DB.pet
+    if pet.showPetHappinessIndicator == nil then pet.showPetHappinessIndicator = true end
+    if pet.petHappinessIndicatorSize == nil then pet.petHappinessIndicatorSize = 24 end
+    if pet.petHappinessIndicatorAnchor == nil then pet.petHappinessIndicatorAnchor = "RIGHT" end
+    if pet.petHappinessIndicatorOffsetX == nil then pet.petHappinessIndicatorOffsetX = -7 end
+    if pet.petHappinessIndicatorOffsetY == nil then pet.petHappinessIndicatorOffsetY = -4 end
+    if pet.petHappinessIndicatorLayer == nil then pet.petHappinessIndicatorLayer = 7 end
 end
 --- PvP flag defaults (per-unit)
 for _, key in ipairs({"player","target","focus","targettarget","focustarget"}) do

@@ -192,3 +192,25 @@ Data.STATUS_CONTROL_SPECS = {
         },
     },
 }
+
+if MSUF.Client and (MSUF.Client.IsVanilla == true or MSUF.Client.IsTBC == true) then
+    Data.STATUS_CONTROL_SPECS[#Data.STATUS_CONTROL_SPECS + 1] = {
+        value = "statusPetHappiness", label = "Pet Happiness Indicator",
+        show = "showPetHappinessIndicator", defaultShow = true,
+        size = "petHappinessIndicatorSize", defaultSize = 24,
+        anchor = "petHappinessIndicatorAnchor", defaultAnchor = "RIGHT",
+        x = "petHappinessIndicatorOffsetX", defaultX = -7,
+        y = "petHappinessIndicatorOffsetY", defaultY = -4,
+        layer = "petHappinessIndicatorLayer", defaultLayer = 7,
+        refresh = "MSUF_RequestPetHappinessIndicatorRefresh",
+        statusRuntime = true,
+        units = { pet = true },
+        description = "Vanilla/TBC Hunter pets only. Shows Unhappy, Content, or Happy from GetPetHappiness; Cataclysm, Mists, and Mainline do not expose an active Happiness system.",
+        aliases = {
+            "pet happiness", "pet happiness indicator", "pet happiness icon",
+            "hunter pet happiness", "hunter pet mood", "pet mood",
+            "tier unhappy", "tier content", "tier happy",
+            "haustier zufriedenheit", "pet zufriedenheit",
+        },
+    }
+end

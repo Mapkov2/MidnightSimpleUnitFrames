@@ -87,6 +87,10 @@ local COMBAT_SYMBOLS = VTP "DEFAULT=Default|weapon_axes_crossed=Axes|weapon_bows
 local RESTED_SYMBOLS = VTP "DEFAULT=Default|rested_moonzzz=Moon (3 z)|rested_moonzzzz=Moon (4 z)|rested_sleep_zzzz=Sleep ZzzZ|rested_zzz_compact=Compact Zzz|rested_zzz_diag=Diagonal Zzz|rested_zzz_stack=Stacked Zzz"
 local RESS_SYMBOLS = VTP "DEFAULT=Default|resurrection_ankh=Ankh|resurrection_cross=Cross|resurrection_soul=Soul|resurrection_wings=Angelic Wings"
 local DEFAULT_SYMBOLS = VT("DEFAULT", "Default")
+local function PetHappinessSupported()
+    local client = MSUF and MSUF.Client
+    return client and (client.IsVanilla == true or client.IsTBC == true)
+end
 local function StatusIconPackValues()
     local fn = _G.MSUF_GetStatusIconPackValues
     if type(fn) == "function" then return fn(false) end
@@ -119,6 +123,7 @@ local STATUS_CONTROLS = {
     StatusControl("statusResting", "Rested (player only)", "showRestingIndicator", false, "restedStateIndicatorSize", 18, "restedStateIndicatorAnchor", "TOPLEFT", STATUS_CORNER_ANCHORS, "restedStateIndicatorOffsetX", 0, "restedStateIndicatorOffsetY", 0, "restedStateIndicatorLayer", 7, "MSUF_RequestStatusRestingIndicatorRefresh", { allowed = function(unit) return unit == "player" end, symbol = "restedStateIndicatorSymbol", symbols = RESTED_SYMBOLS, statusRuntime = true, iconStyle = "restedStateIndicatorIconStyle", defaultIconStyle = "BLIZZARD", customIcon = "restedStateIndicatorCustomIcon" }),
     StatusControl("statusIncomingRes", "Incoming Rez", "showIncomingResIndicator", true, "incomingResIndicatorSize", 18, "incomingResIndicatorAnchor", "TOPRIGHT", STATUS_CORNER_ANCHORS, "incomingResIndicatorOffsetX", 0, "incomingResIndicatorOffsetY", 0, "incomingResIndicatorLayer", 7, "MSUF_RequestStatusIncomingResIndicatorRefresh", { allowed = function(unit) return unit == "player" or unit == "target" end, symbol = "incomingResIndicatorSymbol", symbols = RESS_SYMBOLS, statusRuntime = true, iconStyle = "incomingResIndicatorIconStyle", defaultIconStyle = "BLIZZARD", customIcon = "incomingResIndicatorCustomIcon" }),
     StatusControl("statusPvp", "PvP Flag (War Mode/PvP)", "showPvpIndicator", true, "pvpIndicatorSize", 18, "pvpIndicatorAnchor", "TOPRIGHT", STATUS_CORNER_ANCHORS, "pvpIndicatorOffsetX", 0, "pvpIndicatorOffsetY", 0, "pvpIndicatorLayer", 7, "MSUF_RequestStatusPvpIndicatorRefresh", { allowed = function(unit) return unit == "player" or unit == "target" or unit == "focus" or unit == "targettarget" or unit == "focustarget" end, statusRuntime = true, iconStyle = "pvpIndicatorIconStyle", defaultIconStyle = "BLIZZARD", customIcon = "pvpIndicatorCustomIcon" }),
+    StatusControl("statusPetHappiness", "Pet Happiness (Vanilla/TBC)", "showPetHappinessIndicator", true, "petHappinessIndicatorSize", 24, "petHappinessIndicatorAnchor", "RIGHT", STATUS_CORNER_ANCHORS, "petHappinessIndicatorOffsetX", -7, "petHappinessIndicatorOffsetY", -4, "petHappinessIndicatorLayer", 7, "MSUF_RequestPetHappinessIndicatorRefresh", { allowed = function(unit) return unit == "pet" and PetHappinessSupported() end, statusRuntime = true }),
 }
 -- LEFT/CENTER/RIGHT were legacy 5.77 tokens for the top row. Profiles migrate
 -- those values to TOPLEFT/TOP/TOPRIGHT; FRAME* keeps the new middle row
@@ -255,7 +260,7 @@ for _, slot in ipairs(WL [[Name HealthLeft HealthCenter HealthRight PowerLeft Po
     end
 end
 local COPY_INDICATOR_FIELDS = M.CopyFieldsFromSpecs(STATUS_CONTROLS, "leader assist raidmarker raidgroupname eliteicon", nil, "show iconStyle customIcon x y anchor size layer symbol")
-local COPY_STATUSICON_FIELDS = M.CopyFieldsFromSpecs(STATUS_CONTROLS, "level raceText classText statusText statusGhostText statusAFKText statusDNDText statusCombat statusResting statusIncomingRes statusPvp", "statusIconsTestMode statusIconsMidnightStyle statusIconsAlpha statusTextEnabled", "show iconStyle customIcon x y anchor size layer symbol")
+local COPY_STATUSICON_FIELDS = M.CopyFieldsFromSpecs(STATUS_CONTROLS, "level raceText classText statusText statusGhostText statusAFKText statusDNDText statusCombat statusResting statusIncomingRes statusPvp statusPetHappiness", "statusIconsTestMode statusIconsMidnightStyle statusIconsAlpha statusTextEnabled", "show iconStyle customIcon x y anchor size layer symbol")
 --- Everything below "healthColorMode" is the per-unit Bars override scope (gated by
 --- hlOverride, see MSUF_Menu2_Bindings BARS_SCOPE_KEYS). Copying the gate flag along
 --- with the values keeps a destination that follows the global Bars page following it.

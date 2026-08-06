@@ -327,6 +327,13 @@ local function BuildStatus(ctx, builder, unit)
         if value == "statusResting" then return { { "resting", "resting", "restedStateIndicatorSymbol" } } end
         if value == "statusIncomingRes" then return { { "incomingRes", "resurrect", "incomingResIndicatorSymbol" } } end
         if value == "statusPvp" then return { { "pvp", "Alliance" }, { "pvp", "Horde" }, { "pvp", "FFA" } } end
+        if value == "statusPetHappiness" then
+            return {
+                { "petHappiness", 1, nil, "Unhappy - 75% damage" },
+                { "petHappiness", 2, nil, "Content - 100% damage" },
+                { "petHappiness", 3, nil, "Happy - 125% damage" },
+            }
+        end
         return nil
     end
     local function IsRoleStatusSpec(spec)
@@ -420,6 +427,15 @@ local function BuildStatus(ctx, builder, unit)
         if entry[1] == "resting" then return "Interface\\CharacterFrame\\UI-StateIcon", 0, 0.5, 0, 0.5 end
         if entry[1] == "incomingRes" then return "Interface\\RaidFrame\\Raid-Icon-Rez", 0, 1, 0, 1 end
         if entry[1] == "pvp" then return entry[2] == "Horde" and "Interface\\TargetingFrame\\UI-PVP-Horde" or "Interface\\TargetingFrame\\UI-PVP-Alliance", 0, 1, 0, 1 end
+        if entry[1] == "petHappiness" then
+            local coords = {
+                [1] = { 0.375, 0.5625, 0, 0.359375 },
+                [2] = { 0.1875, 0.375, 0, 0.359375 },
+                [3] = { 0, 0.1875, 0, 0.359375 },
+            }
+            local c = coords[tonumber(entry[2]) or 3]
+            return "Interface\\PetPaperDollFrame\\UI-PetHappiness", c[1], c[2], c[3], c[4]
+        end
         return nil
     end
     local symbol = BindStatusSpecDropdown(selectedCard, "Symbol", CurrentStatusSymbolValues, 260, 16, -106, selectedControlW,
@@ -629,6 +645,14 @@ local function BuildStatus(ctx, builder, unit)
         holder.tex = holder:CreateTexture(nil, "ARTWORK")
         holder.tex:SetPoint("CENTER", holder, "CENTER", 0, 0)
         holder.tex:SetSize(22, 22)
+        holder:EnableMouse(true)
+        holder:SetScript("OnEnter", function(self)
+            if not (self._msufStatusPreviewLabel and GameTooltip) then return end
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText(self._msufStatusPreviewLabel, 1, 1, 1)
+            GameTooltip:Show()
+        end)
+        holder:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
         iconPreviewTextures[i] = holder
     end
     local function RefreshIconPreviewStrip(spec, enabled)
@@ -639,6 +663,7 @@ local function BuildStatus(ctx, builder, unit)
         iconPreviewStrip:SetAlpha(enabled and 1 or 0.46)
         for i = 1, #iconPreviewTextures do
             local holder = iconPreviewTextures[i]
+            holder._msufStatusPreviewLabel = entries[i] and entries[i][4] or nil
             local path, l, r, t, b, atlas = ResolvePreviewStatusIcon(spec, entries[i])
             if type(atlas) == "string" and atlas ~= "" and holder.tex.SetAtlas then
                 holder.tex:SetAtlas(atlas)

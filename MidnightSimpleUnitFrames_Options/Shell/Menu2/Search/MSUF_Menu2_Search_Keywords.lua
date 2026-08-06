@@ -9,6 +9,10 @@ M.SearchData = Data
 
 local UF_CORE = "frame basics enable disable hide show width height scale size health power portrait text castbar auras buffs debuffs range fade range check distance check out of range transparency alpha preview anchoring anchor global anchor custom anchor copy to edit mode move drag position x offset y offset color name hp power hide percent sign hide percent symbol percent sign prozentzeichen"
 local UF_STATUS = "status icons status indicators indicator selected indicator level level indicator level text show level"
+local PET_HAPPINESS = ""
+if MSUF.Client and (MSUF.Client.IsVanilla == true or MSUF.Client.IsTBC == true) then
+    PET_HAPPINESS = " pet happiness pet mood hunter pet happy content unhappy happiness icon pet loyalty pet damage 125 100 75 haustier zufriedenheit tierzufriedenheit gluecklich zufrieden ungluecklich"
+end
 local function UnitKeywords(subject, statusSubject, extra)
     return "unit frame unitframe " .. subject .. " " .. UF_CORE .. " " .. UF_STATUS .. " " .. statusSubject .. " level anchor level position level layer" .. (extra or "")
 end
@@ -21,7 +25,7 @@ Data.KEYWORDS = {
     uf_focustarget = "unit frame unitframe focus target focus target frame focustarget ft frame basics enable disable hide show width height scale size health portrait text range fade range check distance check out of range transparency alpha preview anchoring anchor global anchor custom anchor copy to edit mode move drag position x offset y offset color name hp " .. UF_STATUS .. " focus target level anchor level position level layer child focus frame",
     uf_focus = UnitKeywords("focus", "focus", " focus kick interrupt"),
     uf_boss = "unit frame unitframe boss frames bossframe bossframes frame basics enable disable hide show width height scale size health power portrait text castbar boss range fade range check distance check out of range transparency alpha auras buffs debuffs preview anchoring anchor boss layout copy to edit mode move drag position x offset y offset color name hp power " .. UF_STATUS .. " boss level anchor level position level layer",
-    uf_pet = UnitKeywords("pet", "pet"),
+    uf_pet = UnitKeywords("pet", "pet", PET_HAPPINESS),
     gf_layout = "group frames groupframes party raid mythic raid layout health text resource power bar name hp text font size text slot delimiter hide percent sign hide percent symbol show power tank healer damage smooth fill range fade range check distance check out of range offline alpha growth direction sorting role order frame scaling scale transparency opacity anchoring anchor position move drag preview show hide player solo enable disable disabled turn off off hide group frames turn off group frames disable group frames hide group frames turn off raid frames disable raid frames hide raid frames raid frames off turn off party frames disable party frames hide party frames party frames off ausschalten deaktivieren ausblenden width height spacing columns rows sorting role group number visibility",
     gf_bars = "group frames groupframes party raid dispel overlay overlay style overlay priority health bar tint any debuff dispel type debuff stripe stripe edge stripe height stripe opacity effects",
     gf_auras = "group frames groupframes party raid auras buffs debuffs spell indicators tracked spells placed spell icons anchor position x offset y offset icon size max buffs max debuffs spacing layer growth per row hots healer buffs raid debuffs boss debuffs custom spells slots preview expiring expiration threshold seconds remaining frame highlight",

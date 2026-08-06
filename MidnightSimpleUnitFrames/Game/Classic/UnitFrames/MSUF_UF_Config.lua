@@ -1057,7 +1057,10 @@ local function StatusString(conf, general, key, fallback, legacyKey)
 end
 
 local function StatusAllowed(key, id)
-  if id == "leader" or id == "assist" or id == "combat" or id == "incomingRes" then
+  if id == "petHappiness" then
+    local client = MSUF.Client
+    return key == "pet" and client and (client.IsVanilla == true or client.IsTBC == true)
+  elseif id == "leader" or id == "assist" or id == "combat" or id == "incomingRes" then
     return key == "player" or key == "target"
   elseif id == "pvp" then
     return key == "player" or key == "target" or key == "focus" or key == "targettarget" or key == "focustarget"
@@ -1140,6 +1143,7 @@ local UNIT_STATUS_ENTRY_DEFS = {
   PrefixedStatusDef("resting", "showRestingIndicator", false, "restedStateIndicator", 18, "TOPLEFT", 0, 0, 7, nil, { "restedStateIndicatorSymbol", "DEFAULT", "restingStateIndicatorSymbol" }, { "restedStateIndicatorCustomIcon", "" }),
   PrefixedStatusDef("incomingRes", "showIncomingResIndicator", true, "incomingResIndicator", 18, "TOPRIGHT", 0, 0, 7, nil, { "incomingResIndicatorSymbol", "DEFAULT" }, { "incomingResIndicatorCustomIcon", "" }),
   PrefixedStatusDef("pvp", "showPvpIndicator", true, "pvpIndicator", 18, "TOPRIGHT", 0, 0, 7, nil, nil, { "pvpIndicatorCustomIcon", "" }),
+  PrefixedStatusDef("petHappiness", "showPetHappinessIndicator", true, "petHappinessIndicator", 24, "RIGHT", -7, -4, 7),
 }
 
 local UNIT_STATUS_TEXT_STATE_DEFS = {

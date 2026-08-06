@@ -752,6 +752,7 @@ function Render.Install(Preview, deps)
         statusAFKText = "statusAFKText", statusDNDText = "statusDNDText",
         statusCombat = "combat", statusResting = "resting",
         statusIncomingRes = "incomingRes", statusPvp = "pvp",
+        statusPetHappiness = "petHappiness",
     }
     renderState.ApplyPreviewTextFocus = deps.ApplyPreviewTextFocus or UNIT_RENDER_FALLBACKS.ApplyPreviewTextFocus
     local PowerColor = renderState.PowerColor
