@@ -4947,6 +4947,11 @@ L["Would you like MSUF to anchor the global Unit Frame layout to Essential Coold
 L["Enable native Player resource pings (12.1)"] = "啟用原生玩家資源信號（12.1）"
 L["Native Player resource pings"] = "原生玩家資源信號"
 L["Contextual pings over the MSUF Player frame can call out health and, when Blizzard supports it, mana. Blizzard does not expose separate Health/Power selection or Energy, Rage and Focus pings. The portrait keeps the normal Player unit ping and radial wheel."] = "在 MSUF 玩家框架上發送情境信號時，可以提示生命值，並在暴雪支援的情況下提示法力值。暴雪未開放單獨選擇生命值/資源，也未開放能量、怒氣或集中值信號。指向頭像時仍保留普通玩家單位信號和圓形選單。"
+L["Edits the selected element's X position. Positive values move right. Arrow keys and dragging update the same position."] = "編輯所選元素的 X 位置。正值向右移動。方向鍵和拖曳會更新同一位置。"
+L["Edits the selected element's Y position. Positive values move up. Arrow keys and dragging update the same position."] = "編輯所選元素的 Y 位置。正值向上移動。方向鍵和拖曳會更新同一位置。"
+L["Exact X position"] = "精確 X 位置"
+L["Exact Y position"] = "精確 Y 位置"
+L["External frame"] = "外部框架"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhTW", LoadLocale)
 elseif MSUF.LOCALE == "zhTW" then LoadLocale() end

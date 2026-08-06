@@ -4856,6 +4856,11 @@ L["Slot Y"] = "Campo Y"
 L["Enable native Player resource pings (12.1)"] = "Ativar pings nativos de recurso do jogador (12.1)"
 L["Native Player resource pings"] = "Pings nativos de recurso do jogador"
 L["Contextual pings over the MSUF Player frame can call out health and, when Blizzard supports it, mana. Blizzard does not expose separate Health/Power selection or Energy, Rage and Focus pings. The portrait keeps the normal Player unit ping and radial wheel."] = "Os pings contextuais sobre o quadro do Jogador do MSUF podem indicar vida e, quando a Blizzard oferece suporte, mana. A Blizzard não expõe uma seleção separada de Vida/Recurso nem pings de Energia, Raiva ou Foco. Sobre o retrato, o ping normal da unidade do Jogador e o menu radial permanecem disponíveis."
+L["Edits the selected element's X position. Positive values move right. Arrow keys and dragging update the same position."] = "Edita a posição X do elemento selecionado. Valores positivos movem para a direita. As setas e o arrasto atualizam a mesma posição."
+L["Edits the selected element's Y position. Positive values move up. Arrow keys and dragging update the same position."] = "Edita a posição Y do elemento selecionado. Valores positivos movem para cima. As setas e o arrasto atualizam a mesma posição."
+L["Exact X position"] = "Posição X exata"
+L["Exact Y position"] = "Posição Y exata"
+L["External frame"] = "Quadro externo"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ptBR", LoadLocale)
 elseif MSUF.LOCALE == "ptBR" then LoadLocale() end

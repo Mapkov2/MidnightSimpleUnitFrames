@@ -4908,6 +4908,11 @@ L["out of range opacity"] = "사거리 밖 불투명도"
 L["Enable native Player resource pings (12.1)"] = "기본 플레이어 자원 핑 사용 (12.1)"
 L["Native Player resource pings"] = "기본 플레이어 자원 핑"
 L["Contextual pings over the MSUF Player frame can call out health and, when Blizzard supports it, mana. Blizzard does not expose separate Health/Power selection or Energy, Rage and Focus pings. The portrait keeps the normal Player unit ping and radial wheel."] = "MSUF 플레이어 프레임의 상황별 핑은 생명력과 Blizzard가 지원하는 경우 마나를 알릴 수 있습니다. Blizzard는 생명력/자원을 따로 선택하거나 기력, 분노, 집중 핑을 보내는 기능을 공개하지 않습니다. 초상화에서는 일반 플레이어 유닛 핑과 원형 메뉴가 유지됩니다."
+L["Edits the selected element's X position. Positive values move right. Arrow keys and dragging update the same position."] = "선택한 요소의 X 위치를 편집합니다. 양수 값은 오른쪽으로 이동합니다. 화살표 키와 드래그가 같은 위치를 업데이트합니다."
+L["Edits the selected element's Y position. Positive values move up. Arrow keys and dragging update the same position."] = "선택한 요소의 Y 위치를 편집합니다. 양수 값은 위로 이동합니다. 화살표 키와 드래그가 같은 위치를 업데이트합니다."
+L["Exact X position"] = "정확한 X 위치"
+L["Exact Y position"] = "정확한 Y 위치"
+L["External frame"] = "외부 프레임"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end

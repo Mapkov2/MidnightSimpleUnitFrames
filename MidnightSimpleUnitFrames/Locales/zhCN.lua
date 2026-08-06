@@ -5549,6 +5549,11 @@ L[" Debuffs"] = " 减益效果"
 L["Enable native Player resource pings (12.1)"] = "启用原生玩家资源信号（12.1）"
 L["Native Player resource pings"] = "原生玩家资源信号"
 L["Contextual pings over the MSUF Player frame can call out health and, when Blizzard supports it, mana. Blizzard does not expose separate Health/Power selection or Energy, Rage and Focus pings. The portrait keeps the normal Player unit ping and radial wheel."] = "在 MSUF 玩家框体上发送情境信号时，可以提示生命值，并在暴雪支持的情况下提示法力值。暴雪未开放单独选择生命值/资源，也未开放能量、怒气或集中值信号。指向头像时仍保留普通玩家单位信号和径向菜单。"
+L["Edits the selected element's X position. Positive values move right. Arrow keys and dragging update the same position."] = "编辑所选元素的 X 位置。正值向右移动。方向键和拖动会更新同一位置。"
+L["Edits the selected element's Y position. Positive values move up. Arrow keys and dragging update the same position."] = "编辑所选元素的 Y 位置。正值向上移动。方向键和拖动会更新同一位置。"
+L["Exact X position"] = "精确 X 位置"
+L["Exact Y position"] = "精确 Y 位置"
+L["External frame"] = "外部框架"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhCN", LoadLocale)
 elseif MSUF.LOCALE == "zhCN" then LoadLocale() end
