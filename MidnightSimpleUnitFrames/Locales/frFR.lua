@@ -5336,6 +5336,8 @@ L["Edits the selected element's Y position. Positive values move up. Arrow keys 
 L["Exact X position"] = "Position X exacte"
 L["Exact Y position"] = "Position Y exacte"
 L["External frame"] = "Cadre externe"
+L["Next page"] = "Page suivante"
+L["Previous page"] = "Page précédente"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("frFR", LoadLocale)
 elseif MSUF.LOCALE == "frFR" then LoadLocale() end

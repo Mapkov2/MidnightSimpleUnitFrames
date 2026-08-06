@@ -4950,6 +4950,8 @@ L["Edits the selected element's Y position. Positive values move up. Arrow keys 
 L["Exact X position"] = "Точная позиция X"
 L["Exact Y position"] = "Точная позиция Y"
 L["External frame"] = "Внешняя рамка"
+L["Next page"] = "Следующая страница"
+L["Previous page"] = "Предыдущая страница"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ruRU", LoadLocale)
 elseif MSUF.LOCALE == "ruRU" then LoadLocale() end

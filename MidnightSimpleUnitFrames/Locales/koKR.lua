@@ -4913,6 +4913,8 @@ L["Edits the selected element's Y position. Positive values move up. Arrow keys 
 L["Exact X position"] = "정확한 X 위치"
 L["Exact Y position"] = "정확한 Y 위치"
 L["External frame"] = "외부 프레임"
+L["Next page"] = "다음 페이지"
+L["Previous page"] = "이전 페이지"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end

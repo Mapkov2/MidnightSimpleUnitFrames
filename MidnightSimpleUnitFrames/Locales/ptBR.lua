@@ -4861,6 +4861,8 @@ L["Edits the selected element's Y position. Positive values move up. Arrow keys 
 L["Exact X position"] = "Posição X exata"
 L["Exact Y position"] = "Posição Y exata"
 L["External frame"] = "Quadro externo"
+L["Next page"] = "Próxima página"
+L["Previous page"] = "Página anterior"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ptBR", LoadLocale)
 elseif MSUF.LOCALE == "ptBR" then LoadLocale() end

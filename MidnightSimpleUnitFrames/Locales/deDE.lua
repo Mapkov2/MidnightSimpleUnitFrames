@@ -5313,6 +5313,8 @@ L["Edits the selected element's Y position. Positive values move up. Arrow keys 
 L["Exact X position"] = "Genaue X-Position"
 L["Exact Y position"] = "Genaue Y-Position"
 L["External frame"] = "Externer Frame"
+L["Next page"] = "Nächste Seite"
+L["Previous page"] = "Vorherige Seite"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("deDE", LoadLocale)
 elseif MSUF.LOCALE == "deDE" then LoadLocale() end

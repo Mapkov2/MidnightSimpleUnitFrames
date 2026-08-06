@@ -5554,6 +5554,8 @@ L["Edits the selected element's Y position. Positive values move up. Arrow keys 
 L["Exact X position"] = "精确 X 位置"
 L["Exact Y position"] = "精确 Y 位置"
 L["External frame"] = "外部框架"
+L["Next page"] = "下一页"
+L["Previous page"] = "上一页"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhCN", LoadLocale)
 elseif MSUF.LOCALE == "zhCN" then LoadLocale() end

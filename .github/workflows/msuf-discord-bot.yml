@@ -1,0 +1,87 @@
+name: MSUF Discord Bot
+
+on:
+  pull_request:
+    paths:
+      - "msuf-discord-bot/**"
+      - ".github/workflows/msuf-discord-bot.yml"
+  push:
+    paths:
+      - "msuf-discord-bot/**"
+      - ".github/workflows/msuf-discord-bot.yml"
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: "Deploy the checked bot to Cloudflare Workers"
+        required: true
+        type: boolean
+        default: false
+      register_commands:
+        description: "Register Discord slash commands after deployment"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: msuf-discord-bot
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: msuf-discord-bot/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: npm ci --no-audit --no-fund
+      - run: npm run types:check
+      - run: npm run check
+      - run: python tests/contract_smoke.py
+
+  deploy:
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy
+    needs: verify
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: msuf-discord-bot
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --no-audit --no-fund
+      - run: npm run migrate:remote
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - run: npm run deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+  register-commands:
+    if: github.event_name == 'workflow_dispatch' && inputs.register_commands
+    needs: verify
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: msuf-discord-bot
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm run register
+        env:
+          DISCORD_APPLICATION_ID: ${{ secrets.DISCORD_APPLICATION_ID }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
