@@ -3,6 +3,10 @@
     <Script file="MSUF_EditMode_Layout.lua"/>
     <Script file="MSUF_EditMode_ExternalProvider.lua"/>
     <Script file="MSUF_EditMode_ExternalMovement.lua"/>
+    <Script file="MSUF_EditMode_PublicAPI.lua"/>
+    <Script file="MSUF_EditMode_ExternalPopup.lua"/>
+    <Script file="MSUF_EditMode_Grid2.lua"/>
+    <Script file="MSUF_EditMode_Details.lua"/>
     <Script file="MSUF_EditMode_Movers.lua"/>
     <Script file="MSUF_EditMode_Popups.lua"/>
     <Script file="MSUF_EditMode_PopupScale.lua"/>

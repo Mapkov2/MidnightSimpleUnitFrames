@@ -38,6 +38,7 @@ local UnitWatchRegistered = UnitWatchRegistered
 local RegisterStateDriver = RegisterStateDriver
 local UIParent = UIParent
 local issecretvalue = _G.issecretvalue
+local UnitGUID = UnitGUID
 
 local COOLDOWN_ANCHORS = {
   EssentialCooldownViewer = true,
@@ -615,6 +616,79 @@ function UF.ResolvePingUnit(frame)
   return type(frame.MSUFUnitKey) == "string" and frame.MSUFUnitKey or nil
 end
 
+--- Thank you R41z0r
+--- 12.1 extends unit ping target information with `isPlayerResource`. Blizzard
+--- deliberately keeps the choice of health versus the occasionally supported
+--- mana callout inside C_PingSecure; addons can only opt the player frame into
+--- that native resource decision. These callbacks run only for an actual ping
+--- gesture -- there is no event, timer, or steady-state combat work.
+local function IsPlayerPingPortraitMouseOver(frame)
+  local portrait = frame and (frame._msufPortraitRuntimeCfg or (frame.MSUFSpec and frame.MSUFSpec.portrait))
+  if not (portrait and portrait.enabled == true) then return false end
+  -- A FULL overlay is the health-bar artwork itself, not a discrete portrait
+  -- hit area. Treating it as Blizzard's portrait would disable resource pings
+  -- everywhere on the Player frame.
+  if portrait.placement == "OVERLAY" and portrait.overlayAlign == "FULL" then return false end
+  local holder = frame and frame.MSUFPortraitHolder
+  if not (holder and holder.IsMouseOver) then return false end
+  if holder.IsShown and not holder:IsShown() then return false end
+  return holder:IsMouseOver() and true or false
+end
+
+local function PlayerFramePingGetAllowRadialWheel(frame)
+  -- Match Blizzard PlayerFrame: resource pings are contextual-only, while the
+  -- portrait retains the normal unit-frame radial wheel.
+  return IsPlayerPingPortraitMouseOver(frame)
+end
+
+local function PlayerFramePingGetTargetInfo(frame)
+  return {
+    guid = UnitGUID and UnitGUID("player") or nil,
+    isPlayerResource = not IsPlayerPingPortraitMouseOver(frame),
+  }
+end
+
+local function SupportsPlayerResourcePing(frame)
+  -- 12.0's PingableType_UnitFrameMixin exposes GetTargetPingGUID instead.
+  -- GetTargetInfo is therefore a direct capability probe for the 12.1 contract.
+  return frame and type(frame.GetTargetInfo) == "function"
+end
+
+local function PlayerResourcePingSettingEnabled()
+  local db = _G.MSUF_DB
+  local general = type(db) == "table" and type(db.general) == "table" and db.general or nil
+  return general and general.playerResourcePingEnabled == true or false
+end
+
+function UF.ConfigurePlayerResourcePing(frame, unit)
+  if not frame or unit ~= "player" then return false end
+
+  if frame._msufPlayerPingOriginalsCaptured ~= true then
+    frame._msufPlayerPingOriginalsCaptured = true
+    frame._msufPlayerPingOriginalGetAllowRadialWheel = frame.GetAllowRadialWheel
+    frame._msufPlayerPingOriginalGetTargetInfo = frame.GetTargetInfo
+  end
+
+  local enabled = PlayerResourcePingSettingEnabled() and SupportsPlayerResourcePing(frame)
+  if enabled then
+    frame.GetAllowRadialWheel = PlayerFramePingGetAllowRadialWheel
+    frame.GetTargetInfo = PlayerFramePingGetTargetInfo
+  else
+    frame.GetAllowRadialWheel = frame._msufPlayerPingOriginalGetAllowRadialWheel
+    frame.GetTargetInfo = frame._msufPlayerPingOriginalGetTargetInfo
+  end
+  frame._msufPlayerResourcePingEnabled = enabled and true or nil
+  return enabled
+end
+
+function UF.RefreshPlayerResourcePing()
+  local frame = UF.frames and UF.frames.player
+  if not frame then return false end
+  return UF.ConfigurePlayerResourcePing(frame, "player")
+end
+
+ExportPublic("MSUF_RefreshPlayerResourcePing", UF.RefreshPlayerResourcePing)
+
 function UF.ForEachPingBindingAttribute()
   return false
 end
@@ -714,6 +788,7 @@ local function SetSecureUnitAttributes(frame, unit)
   EnsureClickOverlay(frame, unit)
   ConfigureClickTarget(frame, unit)
   UF.RegisterClickCastFrame(frame)
+  UF.ConfigurePlayerResourcePing(frame, unit)
 end
 
 local function FrameOnShow(frame)
