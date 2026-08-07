@@ -1697,12 +1697,14 @@ local function BuildAuraStylePreviewWorkbench(ctx, b, scope, lane, previewContai
             if zoomPan.UpdateControls then zoomPan.UpdateControls(box) end
         end
     end
+    local pinnedPreviewOpts
     if box and W.AttachPinnedPreview then
-        W.AttachPinnedPreview(section, box, {
+        pinnedPreviewOpts = {
             stateKey = "auraStylePreview",
             pageKey = ctx and ctx.key,
             wrapper = ctx and ctx.wrapper,
-        })
+        }
+        W.AttachPinnedPreview(section, box, pinnedPreviewOpts)
     end
     local previewShowSerial = 0
     local function RefreshVisibleAuraPreview()
@@ -1710,6 +1712,18 @@ local function BuildAuraStylePreviewWorkbench(ctx, b, scope, lane, previewContai
         if ctx and ctx.key and M.activeKey and M.activeKey ~= ctx.key then return end
         if ctx and ctx.wrapper and ctx.wrapper.IsShown and not ctx.wrapper:IsShown() then return end
         if section.IsShown and not section:IsShown() then return end
+        if box and pinnedPreviewOpts then
+            -- Navigating away runs ReleasePinnedPreviews: it drops the box's
+            -- ownership record and hides the box. A cached re-entry skips the
+            -- page build, so nothing re-attaches or shows it; this page has no
+            -- expander whose Open() would rescue it either. Reclaim both here,
+            -- on the page-activation refresh that only runs while the page owns
+            -- the docked section.
+            if not box._msuf2PinnedPreviewRecord then
+                W.AttachPinnedPreview(section, box, pinnedPreviewOpts)
+            end
+            if box.IsShown and not box:IsShown() then box:Show() end
+        end
         refreshPreview()
     end
     local function QueueVisibleAuraPreview()
