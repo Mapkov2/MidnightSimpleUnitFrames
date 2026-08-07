@@ -2504,7 +2504,10 @@ function CP.CDMWidthGetDetachedPowerBarName()
     if not db then return nil end
     local readEnabled = _G.MSUF_ReadUnitPowerBarEnabled
     local player = db.player
-    if not player or player.powerBarDetached ~= true or player.detachedPowerBarSyncClassPower == false then return nil end
+    -- The Detached width mode drives the bar with or without width sync, so this
+    -- watcher must not be gated on sync: doing so watched the one case where the
+    -- source is a fallback and went blind in the case where it owns the width.
+    if not player or player.powerBarDetached ~= true then return nil end
     if readEnabled and readEnabled("player", db) == false then return nil end
     return cdmName
 end

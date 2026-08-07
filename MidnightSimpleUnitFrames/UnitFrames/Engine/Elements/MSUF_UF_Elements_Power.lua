@@ -346,28 +346,30 @@ local function CachedExternalFrameWidth(name, relativeTo)
 end
 
 -- Width precedence, widest-reaching source last:
---   1. a live Class Resource bar, while this frame opted into matching it. That
+--   1. the Detached width mode, once it names a Cooldown Viewer. Picking a
+--      source in that dropdown is a deliberate act, and a later one than the
+--      Detached width below - which is seeded automatically the moment power is
+--      detached, so it can never stand for "the user chose this". "Manual", the
+--      default, resolves to no frame name at all and leaves the rest of this
+--      chain byte-identical to what an untouched profile already had.
+--   2. a live Class Resource bar, while this frame opted into matching it. That
 --      is a local checkbox on the same card as the width slider, so its effect
 --      is visible where it is configured.
---   2. a Detached width the user actually configured for this frame.
---   3. the shared Class Resources width modes (Cooldown Viewer sources and the
---      predicted class width). They live on another page and silently apply to
---      every unit, so they must not outrank a width set on the frame itself.
---   4. the frame width.
+--   3. a Detached width configured for this frame.
+--   4. the shared Class Resources width mode (Cooldown Viewer source and the
+--      predicted class width) as the sync fallback. It lives on another page and
+--      silently applies to every unit, so it must not outrank the frame itself.
+--   5. the frame width.
 local function ResolveDetachedWidth(frame, power)
   local bar = frame and frame.targetPowerBar
-  local width
-  if power.detachedSyncClass == true then
+  local width = CachedExternalFrameWidth(power.detachedWidthFrameName, bar)
+  if width == nil and power.detachedSyncClass == true then
     width = FrameWidth(_G.MSUF_ClassPowerContainer)
   end
   width = width or Number(power.detachedWidthExplicit, nil)
-  if width == nil then
-    if power.detachedSyncClass == true then
-      width = CachedExternalFrameWidth(power.detachedClassWidthFrameName, bar)
-        or Number(power.detachedClassWidth, nil)
-    else
-      width = CachedExternalFrameWidth(power.detachedWidthFrameName, bar)
-    end
+  if width == nil and power.detachedSyncClass == true then
+    width = CachedExternalFrameWidth(power.detachedClassWidthFrameName, bar)
+      or Number(power.detachedClassWidth, nil)
   end
   width = width or Number(power.detachedWidth, nil)
   width = width or FrameWidth(frame)
@@ -553,10 +555,13 @@ function Power.RefreshDetachedExternalWidth(frame, sourceName, power)
   local bar = DetachedWidthRefreshable(frame, power)
   if not bar then return false end
 
-  local configuredSource = power.detachedSyncClass == true
-    and power.detachedClassWidthFrameName
-    or power.detachedWidthFrameName
-  if configuredSource ~= sourceName then return false end
+  -- A synced bar consumes two sources: the Detached mode owns the width, and the
+  -- Class Resource mode is still its fallback once that source has none. Either
+  -- one moving is a reason to re-resolve the whole chain exactly once.
+  if power.detachedWidthFrameName ~= sourceName
+    and not (power.detachedSyncClass == true and power.detachedClassWidthFrameName == sourceName) then
+    return false
+  end
 
   return RefreshDetachedWidthOnly(frame, bar, power)
 end

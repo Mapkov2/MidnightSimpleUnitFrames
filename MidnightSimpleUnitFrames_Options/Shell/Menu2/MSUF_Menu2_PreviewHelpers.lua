@@ -461,8 +461,18 @@ function CP.ResolveDetachedPowerWidth(opts)
         -- unit exists, consume the same resolver and its per-bar combat cache.
         return liveResolver(liveFrame, livePower)
     end
-    -- Mirrors the live resolver's precedence: a matched Class Resource bar, then
-    -- a Detached width configured on this frame, then the shared width modes.
+    -- Mirrors the live resolver's precedence: the Detached width mode, then a
+    -- matched Class Resource bar, then a Detached width configured on this
+    -- frame, then the shared Class Resource width mode as the sync fallback.
+    local frameName = opts.widthFrameName
+    if type(frameName) ~= "string" or frameName == "" then
+        local cdmFrames = _G.MSUF_CP_CONST and _G.MSUF_CP_CONST.CDM_FRAMES or DETACHED_POWER_WIDTH_FRAMES
+        frameName = cdmFrames and cdmFrames[opts.widthMode]
+    end
+    if type(frameName) == "string" and frameName ~= "" then
+        local sourceWidth = PreviewExternalFrameWidth(frameName, opts.relativeTo)
+        if sourceWidth then return ClampDetachedPowerWidth(sourceWidth) end
+    end
     if opts.syncClass == true then
         local classWidth = tonumber(opts.classWidth)
         if classWidth and classWidth > 1 then return ClampDetachedPowerWidth(classWidth) end
@@ -472,15 +482,6 @@ function CP.ResolveDetachedPowerWidth(opts)
     if opts.syncClass == true then
         local classWidth = tonumber(opts.classFallbackWidth)
         if classWidth and classWidth > 1 then return ClampDetachedPowerWidth(classWidth) end
-    end
-    local frameName = opts.widthFrameName
-    if type(frameName) ~= "string" or frameName == "" then
-        local cdmFrames = _G.MSUF_CP_CONST and _G.MSUF_CP_CONST.CDM_FRAMES or DETACHED_POWER_WIDTH_FRAMES
-        frameName = cdmFrames and cdmFrames[opts.widthMode]
-    end
-    if type(frameName) == "string" and frameName ~= "" then
-        local sourceWidth = PreviewExternalFrameWidth(frameName, opts.relativeTo)
-        if sourceWidth then return ClampDetachedPowerWidth(sourceWidth) end
     end
     return ClampDetachedPowerWidth(opts.manualWidth, opts.frameWidth)
 end

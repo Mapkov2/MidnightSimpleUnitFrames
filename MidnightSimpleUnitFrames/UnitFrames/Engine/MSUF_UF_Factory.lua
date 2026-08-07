@@ -1386,10 +1386,17 @@ local function ConfiguredCooldownWidthMask()
       local key = LATE_ANCHOR_KEYS[i]
       local conf = db[key]
       if type(conf) == "table" and conf.powerBarDetached == true and conf.showPowerBar ~= false then
-        local bit = detachedBit
-        if key == "player" and conf.detachedPowerBarSyncClassPower ~= false then bit = classBit end
         local shape = key == "player" and tostring(conf.detachedPowerBarShape or "BAR"):upper() or "BAR"
-        if shape ~= "ORB" then mask = MaskAdd(mask, bit) end
+        if shape ~= "ORB" then
+          -- The Detached mode owns the width whether or not sync is on, so its
+          -- source is always observed. Sync additionally keeps watching the
+          -- Class Resource source, which is its fallback. Both are nil on
+          -- "Manual", where MaskAdd is a no-op and nothing gets observed.
+          mask = MaskAdd(mask, detachedBit)
+          if key == "player" and conf.detachedPowerBarSyncClassPower ~= false then
+            mask = MaskAdd(mask, classBit)
+          end
+        end
       end
     end
   end
@@ -1531,9 +1538,15 @@ local function FlushCooldownWidthRefresh()
       for i = 1, #UF.unitOrder do
         local frame = UF.frames and UF.frames[UF.unitOrder[i]]
         local power = frame and frame.MSUFSpec and frame.MSUFSpec.power
-        local sourceName = power and (power.detachedSyncClass == true
-          and power.detachedClassWidthFrameName or power.detachedWidthFrameName)
+        -- The Detached mode is the primary source; the Class Resource mode only
+        -- gets a look-in when sync is on and the primary did not move. One
+        -- re-resolve per frame covers both either way.
+        local sourceName = power and power.detachedWidthFrameName
         local sourceBit = COOLDOWN_WIDTH_SOURCE_BITS[sourceName]
+        if not MaskHas(visualRefreshMask, sourceBit) and power and power.detachedSyncClass == true then
+          sourceName = power.detachedClassWidthFrameName
+          sourceBit = COOLDOWN_WIDTH_SOURCE_BITS[sourceName]
+        end
         if MaskHas(visualRefreshMask, sourceBit) then refreshPowerWidth(frame, sourceName, power) end
       end
     end
