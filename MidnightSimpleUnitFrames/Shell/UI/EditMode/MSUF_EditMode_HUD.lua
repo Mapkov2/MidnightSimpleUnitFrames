@@ -55,6 +55,10 @@ local guidedTourBridgeRequested = false
 local bgWidget, gridWidget
 local HelpText
 
+--- Reached through DockUI on purpose: EnsureHUD sits at Lua's 60-upvalue
+--- ceiling, so a direct FONT reference from a function nested inside it fails
+--- to compile.
+DockUI.baseFont = FONT
 DockUI.controlH = 36
 DockUI.inspectorH = 40
 DockUI.inspectorLabelW = 176
@@ -200,6 +204,36 @@ end
 --- Replacing those handlers here silently removed the hover styling from every
 --- toolbar button that carries a tooltip. Keeping the text on the widget makes
 --- re-tipping cheap and keeps exactly one handler pair installed.
+--- The toolbar deliberately sits at TOOLTIP level 1200 to beat Edit Mode
+--- hitboxes, and GameTooltip shares that strata at a far lower level - so a tip
+--- would draw underneath the bar and its X/Y row.  Raise it while an MSUF Edit
+--- Mode tip is up and hand the level straight back on leave, so no other
+--- addon's tooltip inherits our ordering.
+DockUI.tooltipLevel = 1620
+DockUI.OwnTooltip = function(widget, anchor, x, y)
+    if not (GameTooltip and widget and GameTooltip.SetOwner) then return false end
+    GameTooltip:SetOwner(widget, anchor or "ANCHOR_BOTTOM", x or 0, y or -6)
+    if not (GameTooltip.SetFrameLevel and GameTooltip.GetFrameLevel) then return true end
+    if DockUI.tooltipRestoreLevel == nil then
+        DockUI.tooltipRestoreLevel = tonumber(GameTooltip:GetFrameLevel()) or 0
+        DockUI.tooltipRestoreStrata = GameTooltip.GetFrameStrata and GameTooltip:GetFrameStrata() or nil
+    end
+    if GameTooltip.SetFrameStrata then GameTooltip:SetFrameStrata("TOOLTIP") end
+    GameTooltip:SetFrameLevel(DockUI.tooltipLevel)
+    return true
+end
+DockUI.ReleaseTooltip = function()
+    if GameTooltip and GameTooltip.Hide then GameTooltip:Hide() end
+    if DockUI.tooltipRestoreLevel == nil then return end
+    if GameTooltip and GameTooltip.SetFrameLevel then
+        if DockUI.tooltipRestoreStrata and GameTooltip.SetFrameStrata then
+            GameTooltip:SetFrameStrata(DockUI.tooltipRestoreStrata)
+        end
+        GameTooltip:SetFrameLevel(DockUI.tooltipRestoreLevel)
+    end
+    DockUI.tooltipRestoreLevel, DockUI.tooltipRestoreStrata = nil, nil
+end
+
 local function SetTip(widget, text)
     if not widget or not text then return end
     widget._msufTipText = text
@@ -208,11 +242,11 @@ local function SetTip(widget, text)
     widget:HookScript("OnEnter", function(self)
         local tip = self._msufTipText
         if not tip then return end
-        GameTooltip:SetOwner(self, "ANCHOR_BOTTOM", 0, -6)
+        if not DockUI.OwnTooltip(self, "ANCHOR_BOTTOM", 0, -6) then return end
         GameTooltip:SetText(HelpText(tip), 1, 1, 1, 1, true)
         GameTooltip:Show()
     end)
-    widget:HookScript("OnLeave", function() GameTooltip:Hide() end)
+    widget:HookScript("OnLeave", function() DockUI.ReleaseTooltip() end)
 end
 
 local UNIT_KEYS = { player = true, target = true, focus = true, focustarget = true, targettarget = true, pet = true, boss = true }
@@ -569,6 +603,12 @@ local function MakeBtn(parent, text, w, h, fontRole, onClick)
         hl:SetAllPoints(); hl:SetColorTexture(1, 1, 1, 0.05)
         label = MakeFS(btn, fontRole or "body", TH.textR, TH.textG, TH.textB, 0.92)
         label:SetPoint("CENTER"); label:SetText(HelpText(text))
+    elseif ui and ui.ApplyFontRole then
+        --- Shared buttons build their label from a Blizzard font object, which
+        --- carries Blizzard's face and ignores the configured menu font that
+        --- every MakeFS string in this toolbar already follows.  Re-apply the
+        --- role so button text matches the labels next to it.
+        ui.ApplyFontRole(label, fontRole or "body", FONT, "")
     end
     btn._label = label
     local dot = btn:CreateTexture(nil, "OVERLAY")
@@ -1097,6 +1137,10 @@ function DockUI.ScheduleLayoutSettle()
         if generation ~= DockUI.layoutGeneration then return end
         if not (hudFrame and hudFrame:IsShown()) then return end
         if InCombatLockdown and InCombatLockdown() then return end
+        --- The entry slide owns the anchor from the moment it is armed until it
+        --- lands; FinishDockIntro re-arms this settle so the measured widths
+        --- still get applied.
+        if DockUI.introPlaying or DockUI.introArmed then return end
         ApplyDockLayout()
     end)
 end
@@ -1146,6 +1190,122 @@ local function AttachDockHover(frame)
         SetDockExpanded(true)
     end)
     frame:HookScript("OnLeave", function() ScheduleDockAutoHide() end)
+end
+
+--- Dock anchor and entry slide
+---
+--- One authority places the toolbar against its screen edge.  The entry slide
+--- reuses it with a displaced start offset, so the animation can never drift
+--- away from the layout geometry - and FREE (a dragged, undocked bar) keeps its
+--- own centre offsets.
+DockUI.introTravel = 34
+DockUI.introDuration = 0.34
+
+DockUI.AnchorDock = function(dock, edge, offsetX, offsetY)
+    if not (hudFrame and UIParent) then return end
+    offsetX = tonumber(offsetX) or 0
+    offsetY = tonumber(offsetY) or 0
+    edge = tonumber(edge) or 0
+    hudFrame:ClearAllPoints()
+    if dock == "LEFT" then
+        hudFrame:SetPoint("LEFT", UIParent, "LEFT", edge + offsetX, offsetY)
+    elseif dock == "RIGHT" then
+        hudFrame:SetPoint("RIGHT", UIParent, "RIGHT", -edge + offsetX, offsetY)
+    elseif dock == "BOTTOM" then
+        hudFrame:SetPoint("BOTTOM", UIParent, "BOTTOM", offsetX, edge + offsetY)
+    elseif dock == "FREE" then
+        local state = EnsureDockState()
+        hudFrame:SetPoint("CENTER", UIParent, "CENTER", state.freeX + offsetX, state.freeY + offsetY)
+    else
+        hudFrame:SetPoint("TOP", UIParent, "TOP", offsetX, -edge + offsetY)
+    end
+end
+
+--- Where the bar starts before sliding home: outward, past its docked edge.
+--- An undocked bar has no edge to come from and only fades.
+DockUI.IntroOffset = function(dock)
+    local travel = tonumber(DockUI.introTravel) or 0
+    if dock == "BOTTOM" then return 0, -travel end
+    if dock == "LEFT" then return -travel, 0 end
+    if dock == "RIGHT" then return travel, 0 end
+    if dock == "FREE" then return 0, 0 end
+    return 0, travel
+end
+
+--- Restores the toolbar's own anchor, clamping and alpha authority.  Kept
+--- idempotent because both OnFinished and an explicit Stop() land here.
+DockUI.FinishDockIntro = function()
+    if not DockUI.introPlaying then return end
+    DockUI.introPlaying = nil
+    if not hudFrame then return end
+    if DockUI.introUnclamped then
+        DockUI.introUnclamped = nil
+        hudFrame:SetClampedToScreen(true)
+    end
+    local state = EnsureDockState()
+    DockUI.AnchorDock(state.dock, state.edgeOffset)
+    if hudFrame:IsShown() then
+        SetDockExpanded(true)
+        ScheduleDockAutoHide()
+        --- The settle relayout skips itself while the slide owns the anchor,
+        --- so re-arm it now that the measured widths matter again.
+        DockUI.ScheduleLayoutSettle()
+    end
+end
+
+DockUI.StopDockIntro = function()
+    DockUI.introArmed = nil
+    local group = DockUI.introGroup
+    if group and DockUI.introPlaying then group:Stop() end
+    DockUI.FinishDockIntro()
+end
+
+--- The toolbar fades in from whichever screen edge it is docked to.  The whole
+--- move is one C-side animation group: no OnUpdate, no per-frame Lua, and no
+--- cost at all once it has landed.  Edit Mode exits on PLAYER_REGEN_DISABLED,
+--- so none of this can exist during combat.
+DockUI.PlayDockIntro = function()
+    local group = DockUI.introGroup
+    if not (group and hudFrame and hudFrame:IsShown()) then return false end
+    if InCombatLockdown and InCombatLockdown() then return false end
+    local db = _G.MSUF_DB
+    local general = type(db) == "table" and db.general or nil
+    if type(general) == "table" and (general.reduceMotion == true or general.reducedMotion == true) then
+        return false
+    end
+    local state = EnsureDockState()
+    local offsetX, offsetY = DockUI.IntroOffset(state.dock)
+    if DockUI.introPlaying then group:Stop() end
+    DockUI.introPlaying = true
+    --- Clamping is derived from the anchor, so a start point past the screen
+    --- edge would be pulled back before the slide could play.
+    if not DockUI.introUnclamped then
+        DockUI.introUnclamped = true
+        hudFrame:SetClampedToScreen(false)
+    end
+    DockUI.AnchorDock(state.dock, state.edgeOffset, offsetX, offsetY)
+    if DockUI.introSlide then DockUI.introSlide:SetOffset(-offsetX, -offsetY) end
+    group:Play()
+    return true
+end
+
+--- Consumers add their own controls to the toolbar *after* HUD.Show returns -
+--- the group-frame bridge wraps it, and the Dominos/Danders slots fill in the
+--- same way.  A child anchored into an already-moving parent resolves against
+--- the in-flight position and then drifts, so the slide waits one frame until
+--- the bar is fully assembled.  Cost is one zero-delay timer per Edit Mode
+--- entry, and combat cannot reach any of it.
+DockUI.ArmDockIntro = function()
+    if not (DockUI.introGroup and hudFrame and hudFrame:IsShown()) then return false end
+    if not (C_Timer and C_Timer.After) then return DockUI.PlayDockIntro() end
+    DockUI.introArmed = (DockUI.introArmed or 0) + 1
+    local token = DockUI.introArmed
+    C_Timer.After(0, function()
+        if token ~= DockUI.introArmed then return end
+        DockUI.introArmed = nil
+        DockUI.PlayDockIntro()
+    end)
+    return true
 end
 
 --- The full guided tour now lives inside the native MSUF menu.  Keep this
@@ -1521,6 +1681,9 @@ end
 
 DockUI.BeginDrag = function()
     if not (hudFrame and UIParent) or (InCombatLockdown and InCombatLockdown()) then return false end
+    --- Dragging measures the frame's live centre, so the slide has to land
+    --- before the first sample is taken.
+    DockUI.StopDockIntro()
     local cursorX, cursorY = CursorPositionInUIParent()
     local frameX, frameY = hudFrame:GetCenter()
     local parentX, parentY = UIParent:GetCenter()
@@ -1537,6 +1700,10 @@ end
 
 ApplyDockLayout = function()
     if not (hudFrame and UIParent) then return end
+    --- A relayout re-anchors the frame, and a running Translation renders
+    --- relative to that anchor - so land the entry slide first, or the toolbar
+    --- would jump by whatever travel was left.
+    if DockUI.introPlaying then DockUI.StopDockIntro() end
     local state = EnsureDockState()
     local dock = state.dock
     local vertical = IsVerticalDock(dock)
@@ -1559,8 +1726,7 @@ ApplyDockLayout = function()
         local primaryHeight = LayoutClusterColumn(DockUI.primaryContainer, DockUI.row1 or {})
         local totalHeight = min(screenH - 32, 38 + 34 + 32 + historyHeight + primaryHeight + 78)
         hudFrame:SetSize(DOCK_VERTICAL_W, max(390, totalHeight))
-        if dock == "LEFT" then hudFrame:SetPoint("LEFT", UIParent, "LEFT", edge, 0)
-        else hudFrame:SetPoint("RIGHT", UIParent, "RIGHT", -edge, 0) end
+        DockUI.AnchorDock(dock, edge)
 
         DockUI.grip:SetSize(58, 16); DockUI.grip:SetPoint("TOP", hudFrame, "TOP", 0, -8)
         DockUI.logo:SetSize(30, 30); DockUI.logo:SetPoint("TOP", DockUI.grip, "BOTTOM", 0, -4)
@@ -1586,17 +1752,13 @@ ApplyDockLayout = function()
         local targetWidth = DockUI.horizontalWidth or DOCK_HORIZONTAL_W
         local dockWidth = min(targetWidth, max(320, screenW - 32))
         hudFrame:SetSize(dockWidth, DOCK_HORIZONTAL_H)
-        if dock == "BOTTOM" then
-            hudFrame:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, edge)
-        elseif dock == "FREE" then
+        if dock == "FREE" then
             local maxFreeX = max(0, (screenW - dockWidth) * 0.5)
             local maxFreeY = max(0, (screenH - DOCK_HORIZONTAL_H) * 0.5)
             state.freeX = ClampDockNumber(state.freeX, -maxFreeX, maxFreeX, 0)
             state.freeY = ClampDockNumber(state.freeY, -maxFreeY, maxFreeY, 0)
-            hudFrame:SetPoint("CENTER", UIParent, "CENTER", state.freeX, state.freeY)
-        else
-            hudFrame:SetPoint("TOP", UIParent, "TOP", 0, -edge)
         end
+        DockUI.AnchorDock(dock, edge)
 
         DockUI.grip:SetSize(20, BTN_H); DockUI.grip:SetPoint("LEFT", hudFrame, "LEFT", 12, 0)
         DockUI.logo:SetSize(32, 32); DockUI.logo:SetPoint("LEFT", DockUI.grip, "RIGHT", 4, 0)
@@ -1724,6 +1886,21 @@ local function EnsureHUD()
     hudFrame:SetClampedToScreen(true)
     hudFrame:EnableMouse(true); hudFrame:Hide()
 
+    --- Entry slide: built once, driven entirely C-side.  Both animations share
+    --- order 1 so the fade and the move run together.
+    if hudFrame.CreateAnimationGroup then
+        local intro = hudFrame:CreateAnimationGroup()
+        local slide = intro:CreateAnimation("Translation")
+        slide:SetDuration(DockUI.introDuration); slide:SetOrder(1); slide:SetSmoothing("OUT")
+        local fade = intro:CreateAnimation("Alpha")
+        fade:SetFromAlpha(0); fade:SetToAlpha(1)
+        fade:SetDuration(DockUI.introDuration); fade:SetOrder(1); fade:SetSmoothing("OUT")
+        intro:SetScript("OnFinished", function() DockUI.FinishDockIntro() end)
+        intro:SetScript("OnStop", function() DockUI.FinishDockIntro() end)
+        DockUI.introGroup = intro
+        DockUI.introSlide = slide
+    end
+
     DockUI.grip = CreateFrame("Button", nil, hudFrame)
     DockUI.grip:RegisterForDrag("LeftButton")
     DockUI.grip:SetScript("OnDragStart", function()
@@ -1807,12 +1984,12 @@ local function EnsureHUD()
     helpBtn:SetScript("OnEnter", function(self)
         if self._pulse then self._pulse:Stop() end
         self:SetAlpha(1)
-        GameTooltip:SetOwner(self, "ANCHOR_BOTTOM", 0, -6)
+        if not DockUI.OwnTooltip(self, "ANCHOR_BOTTOM", 0, -6) then return end
         GameTooltip:SetText(HelpText("EM_HELP_BTN_TIP"), 1, 1, 1, 1, true)
         GameTooltip:Show()
     end)
     helpBtn:SetScript("OnLeave", function()
-        GameTooltip:Hide()
+        DockUI.ReleaseTooltip()
     end)
 
     --- Right-side: Cancel All | Exit
@@ -1851,6 +2028,11 @@ local function EnsureHUD()
             b:SetSize(112, 32)
             b:SetPoint("BOTTOM", cf, "BOTTOM", xOff, 16)
             if ui and ui.ApplyButtonRole then ui.ApplyButtonRole(b, role or "normal") end
+            --- Same Blizzard-font-object inheritance as the toolbar buttons.
+            local sharedLabel = b._msuf2Label or b._label
+            if sharedLabel and ui and ui.ApplyFontRole then
+                ui.ApplyFontRole(sharedLabel, "body", DockUI.baseFont, "")
+            end
             if not (ui and ui.Button) then
                 b:SetBackdrop({ bgFile=W8, edgeFile=W8, edgeSize=1 })
                 b:SetBackdropColor(TH.r2Bg[1], TH.r2Bg[2], TH.r2Bg[3], TH.r2Bg[4] or 0.90)
@@ -2268,6 +2450,10 @@ end
 function HUD.Show()
     if InCombatLockdown and InCombatLockdown() then return false end
     EnsureHUD()
+    --- Only a real entry animates.  The group-frame bridge wraps HUD.Show and
+    --- calls it again while the toolbar is already on screen, which must not
+    --- replay the slide.
+    local entering = not hudFrame:IsShown()
     hudFrame:Show(); if row2Frame then row2Frame:Show() end
     ApplyDockLayout()
     DockUI.ScheduleLayoutSettle()
@@ -2275,6 +2461,7 @@ function HUD.Show()
     SetLayoutEventsEnabled(true)
     if helpBtn and helpBtn._pulse then helpBtn._pulse:Play() end
     SetDockExpanded(true)
+    if entering then DockUI.ArmDockIntro() end
     if EnsureDockState().autoHide then ScheduleDockAutoHide() end
     return true
 end
@@ -2296,6 +2483,9 @@ function HUD.Hide()
     SetLayoutEventsEnabled(false)
     if helpBtn and helpBtn._pulse then helpBtn._pulse:Stop() end
     if row2Frame then row2Frame:Hide() end; if hudFrame then hudFrame:Hide() end
+    --- After the Hide: the slide gives back the anchor and clamping without
+    --- reviving alpha or auto-hide work for a toolbar that just left.
+    DockUI.StopDockIntro()
     if DockUI.positionPopup then DockUI.positionPopup:Hide() end
     HUD.CloseFramePicker()
     autoHideGeneration = autoHideGeneration + 1
