@@ -88,8 +88,13 @@ local RESTED_SYMBOLS = VTP "DEFAULT=Default|rested_moonzzz=Moon (3 z)|rested_moo
 local RESS_SYMBOLS = VTP "DEFAULT=Default|resurrection_ankh=Ankh|resurrection_cross=Cross|resurrection_soul=Soul|resurrection_wings=Angelic Wings"
 local DEFAULT_SYMBOLS = VT("DEFAULT", "Default")
 local function PetHappinessSupported()
+    local getMetadata = _G.C_AddOns and _G.C_AddOns.GetAddOnMetadata or _G.GetAddOnMetadata
+    if type(getMetadata) == "function" then
+        local flavor = getMetadata(addonName, "X-MSUF-Client")
+        if flavor ~= nil then return flavor == "Vanilla" or flavor == "TBC" end
+    end
     local client = MSUF and MSUF.Client
-    return client and (client.IsVanilla == true or client.IsTBC == true)
+    return client and (client.IsVanilla == true or client.IsTBC == true) or false
 end
 local function StatusIconPackValues()
     local fn = _G.MSUF_GetStatusIconPackValues

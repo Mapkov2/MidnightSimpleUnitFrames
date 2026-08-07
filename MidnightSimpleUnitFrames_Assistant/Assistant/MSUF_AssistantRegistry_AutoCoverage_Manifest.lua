@@ -19,11 +19,11 @@ M.Assistant = A
 local Manifest = A.AutoCoverageManifest or {}
 A.AutoCoverageManifest = Manifest
 
--- Defaults generated offline on 2026-08-05 from the current factory profile
+-- Defaults generated offline on 2026-08-07 from the current factory profile
 -- through the same decode and normalization path used by MSUF in game.
 -- Regenerate and verify with tools/assistant_autocoverage_manifest_regression.py.
--- 4828 top-level scalar fallbacks across every required AutoCoverage scope.
-Manifest.scalarCount = 4828
+-- 4831 top-level scalar fallbacks across every required AutoCoverage scope.
+Manifest.scalarCount = 4831
 Manifest.requiredScopes = {
     "bars", "boss", "focus", "focustarget", "gameplay", "general",
     "gf_mythicraid", "gf_party", "gf_raid", "pet", "player", "target", "targettarget",
@@ -1554,6 +1554,7 @@ Manifest.defaults = {
         darkBgCustomColor = true,
         darkMode = false,
         designerHelpSeen = true,
+        detailsEditModeIntegration = true,
         disableBlizzardUnitFrames = true,
         disableScaling = false,
         disableUnitInfoTooltips = true,
@@ -1618,6 +1619,7 @@ Manifest.defaults = {
         gradientDirUp = false,
         gradientDirection = "RIGHT",
         gradientStrength = 0.45000000000000001,
+        grid2EditModeIntegration = true,
         hardKillBlizzardPlayerFrame = true,
         hasMovedFramesInEditMode = true,
         healAbsorbAnchorMode = 3,
@@ -1725,6 +1727,7 @@ Manifest.defaults = {
         playerCastbarOverrideR = 1,
         playerCastbarSameWidthAsCDMEssential = false,
         playerCastbarTestMode = false,
+        playerResourcePingEnabled = true,
         portraitAlpha = 100,
         portraitBgColorA = 1,
         portraitBgColorB = 0.050000000000000003,
@@ -4885,4 +4888,4 @@ Manifest.defaults = {
     },
 }
 
--- top-level scalar paths: 4828
+-- top-level scalar paths: 4831

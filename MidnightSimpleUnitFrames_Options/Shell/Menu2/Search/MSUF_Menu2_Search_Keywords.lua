@@ -10,7 +10,11 @@ M.SearchData = Data
 local UF_CORE = "frame basics enable disable hide show width height scale size health power portrait text castbar auras buffs debuffs range fade range check distance check out of range transparency alpha preview anchoring anchor global anchor custom anchor copy to edit mode move drag position x offset y offset color name hp power hide percent sign hide percent symbol percent sign prozentzeichen"
 local UF_STATUS = "status icons status indicators indicator selected indicator level level indicator level text show level"
 local PET_HAPPINESS = ""
-if MSUF.Client and (MSUF.Client.IsVanilla == true or MSUF.Client.IsTBC == true) then
+local getMetadata = _G.C_AddOns and _G.C_AddOns.GetAddOnMetadata or _G.GetAddOnMetadata
+local optionsFlavor = type(getMetadata) == "function" and getMetadata(addonName, "X-MSUF-Client") or nil
+local petHappinessSupported = optionsFlavor ~= nil and (optionsFlavor == "Vanilla" or optionsFlavor == "TBC")
+    or optionsFlavor == nil and MSUF.Client and (MSUF.Client.IsVanilla == true or MSUF.Client.IsTBC == true)
+if petHappinessSupported then
     PET_HAPPINESS = " pet happiness pet mood hunter pet happy content unhappy happiness icon pet loyalty pet damage 125 100 75 haustier zufriedenheit tierzufriedenheit gluecklich zufrieden ungluecklich"
 end
 local function UnitKeywords(subject, statusSubject, extra)

@@ -9,15 +9,21 @@ local function Color(text)
     local r, g, b = tostring(text or ""):match("^([^,]+),([^,]+),([^,]+)$")
     return { tonumber(r) or 1, tonumber(g) or 1, tonumber(b) or 1 }
 end
+local function PetHappinessSupported()
+    local getMetadata = _G.C_AddOns and _G.C_AddOns.GetAddOnMetadata or _G.GetAddOnMetadata
+    if type(getMetadata) == "function" then
+        local flavor = getMetadata(addonName, "X-MSUF-Client")
+        if flavor ~= nil then return flavor == "Vanilla" or flavor == "TBC" end
+    end
+    local client = MSUF and MSUF.Client
+    return client and (client.IsVanilla == true or client.IsTBC == true) or false
+end
 local function Allowed(words, capability)
     if not words or words == "" then return nil end
     local set = {}
     for key in words:gmatch("%S+") do set[key] = true end
     return function(key)
-        if capability == "petHappiness" then
-            local client = MSUF and MSUF.Client
-            if not (client and (client.IsVanilla == true or client.IsTBC == true)) then return false end
-        end
+        if capability == "petHappiness" and not PetHappinessSupported() then return false end
         return set[key] == true
     end
 end
