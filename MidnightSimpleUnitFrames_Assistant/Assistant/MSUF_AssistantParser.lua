@@ -5276,6 +5276,8 @@ local function ParseGlobalUIShellPriorityShortcut(normalized, raw)
         { key = "general.showWelcomeMessage", label = "Welcome Message", terms = { "welcome message", "startup message" } },
         { key = "general.grid2EditModeIntegration", label = "Grid2 Edit Mode Integration", terms = { "grid2 edit mode", "grid2 mover", "move grid2", "grid2 integration" } },
         { key = "general.detailsEditModeIntegration", label = "Details! Edit Mode Integration", terms = { "details edit mode", "details mover", "move details", "details integration" } },
+        { key = "general.dominosEditModeIntegration", label = "Dominos Edit Mode Integration", terms = { "dominos edit mode", "dominos mover", "move dominos", "dominos integration" } },
+        { key = "general.dandersEditModeIntegration", label = "DandersFrames Edit Mode Integration", terms = { "dandersframes edit mode", "danders edit mode", "danders mover", "move dandersframes", "danders integration" } },
         { key = "general.versionCheckEnabled", label = "Version Check", terms = { "version check", "version checker" } },
         { key = "general.showMinimapIcon", label = "Minimap Icon", terms = { "minimap icon", "minimap button" } },
         { key = "general.playTargetSelectLostSounds", label = "Target Sounds", terms = { "target sounds", "target select sound", "target lost sound" } },

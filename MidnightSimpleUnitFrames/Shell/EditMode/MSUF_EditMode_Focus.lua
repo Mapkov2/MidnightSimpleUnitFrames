@@ -516,8 +516,11 @@ function Focus.OpenFullSettings(pageKey)
     local cfg = key and EM2.Registry and EM2.Registry.Get(key) or nil
     if cfg and cfg.externalPublicElement == true then
         local external = EM2.ExternalElements
+        --- Named source: selection-adjacent routes (HUD chip / full-settings
+        --- shortcut) funnel through here, and owners may treat them differently
+        --- from the popup's explicit Open settings button.
         return external and type(external.OpenSettings) == "function"
-            and external.OpenSettings(key) == true or false
+            and external.OpenSettings(key, "focus-full-settings") == true or false
     end
     local resolvedPage = ApplyMenuSelection(key, state.component, state.slot, { source = "open-settings", focusRequest = true })
     return OpenMenuPage(pageKey or resolvedPage or "uf_player")

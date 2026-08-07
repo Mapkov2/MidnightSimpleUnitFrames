@@ -195,6 +195,27 @@ function A.GlobalRegistry.RegisterBaseSettings(ctx)
             if type(fn) == "function" then fn(GeneralDB().detailsEditModeIntegration ~= false) end
         end,
     })
+    RegisterGeneralBoolean("dominosEditModeIntegration", "dominosEditModeIntegration", "Dominos Edit Mode Integration", true, {
+        "dominos edit mode", "dominos mover", "move dominos", "show dominos in edit mode", "dominos integration",
+        "dominos bars edit mode", "move dominos bars", "dominos im edit mode", "dominos verschieben", "dominos mover anzeigen",
+    }, {
+        category = "Global / Misc", frameType = "misc", reason = "MSUF_ASSISTANT_DOMINOS_EDIT_MODE",
+        apply = function()
+            local fn = _G.MSUF_DominosEditMode_SetEnabled
+            if type(fn) == "function" then fn(GeneralDB().dominosEditModeIntegration ~= false) end
+        end,
+    })
+    RegisterGeneralBoolean("dandersEditModeIntegration", "dandersEditModeIntegration", "DandersFrames Edit Mode Integration", true, {
+        "dandersframes edit mode", "danders edit mode", "danders mover", "move dandersframes", "move danders frames",
+        "show dandersframes in edit mode", "dandersframes integration", "danders integration",
+        "danders im edit mode", "dandersframes verschieben", "danders mover anzeigen",
+    }, {
+        category = "Global / Misc", frameType = "misc", reason = "MSUF_ASSISTANT_DANDERS_EDIT_MODE",
+        apply = function()
+            local fn = _G.MSUF_DandersEditMode_SetEnabled
+            if type(fn) == "function" then fn(GeneralDB().dandersEditModeIntegration ~= false) end
+        end,
+    })
     RegisterGeneralBoolean("ellesmereEditModeIntegration", "ellesmereEditModeIntegration", "EllesmereUI Unlock Mode Integration", true, {
         "ellesmere edit mode", "ellesmereui edit mode", "ellesmere unlock mode", "ellesmereui unlock mode",
         "ellesmere integration", "ellesmereui integration", "show msuf in ellesmere", "msuf in ellesmereui",

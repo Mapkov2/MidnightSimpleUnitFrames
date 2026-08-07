@@ -1703,6 +1703,12 @@ end
 if g.detailsEditModeIntegration == nil then
     g.detailsEditModeIntegration = true
 end
+if g.dominosEditModeIntegration == nil then
+    g.dominosEditModeIntegration = true
+end
+if g.dandersEditModeIntegration == nil then
+    g.dandersEditModeIntegration = true
+end
 if g.dropdownStyleMode == nil then
     g.dropdownStyleMode = "msuf"
 elseif g.dropdownStyleMode ~= "old" and g.dropdownStyleMode ~= "msuf" and g.dropdownStyleMode ~= "blizzard" and g.dropdownStyleMode ~= "legacy" then

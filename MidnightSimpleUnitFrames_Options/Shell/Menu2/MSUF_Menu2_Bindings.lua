@@ -1529,6 +1529,10 @@ local function ApplyAfterPageReset(pageKey, info)
             not (type(general) == "table" and general.grid2EditModeIntegration == false))
         CallGlobal("MSUF_DetailsEditMode_SetEnabled",
             not (type(general) == "table" and general.detailsEditModeIntegration == false))
+        CallGlobal("MSUF_DominosEditMode_SetEnabled",
+            not (type(general) == "table" and general.dominosEditModeIntegration == false))
+        CallGlobal("MSUF_DandersEditMode_SetEnabled",
+            not (type(general) == "table" and general.dandersEditModeIntegration == false))
     end
     -- Page reset fanout is intentionally keyed by page kind so a unit reset does not rebuild
     -- secure group headers or Auras3 lanes unnecessarily.

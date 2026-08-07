@@ -7,6 +7,8 @@
     <Script file="MSUF_EditMode_ExternalPopup.lua"/>
     <Script file="MSUF_EditMode_Grid2.lua"/>
     <Script file="MSUF_EditMode_Details.lua"/>
+    <Script file="MSUF_EditMode_Dominos.lua"/>
+    <Script file="MSUF_EditMode_Danders.lua"/>
     <Script file="MSUF_EditMode_Movers.lua"/>
     <Script file="MSUF_EditMode_Popups.lua"/>
     <Script file="MSUF_EditMode_PopupScale.lua"/>
