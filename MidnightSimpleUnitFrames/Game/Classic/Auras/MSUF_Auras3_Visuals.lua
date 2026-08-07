@@ -408,6 +408,21 @@ function V.ApplyButtonLayout(lane, button)
     elseif button.Count then if barOnly or cfg.showStacks == false then button.Count:Hide() else button.Count:Show() end end
 end
 
+-- Classic never binds aura LuaDurationObjects: C_UnitAuras.GetAuraDuration has
+-- no engine-validated consumer on any Classic branch, and on Mists/TBC the
+-- bound objects produced hour-scale timers. The bar animates from plain
+-- duration/expiration numbers instead, the way Blizzard's own Classic timer
+-- bars do. OnUpdate only runs while the bar is shown, so permanent auras
+-- (hidden bar) cost nothing.
+local function DurationBarOnUpdate(bar)
+    local duration = bar._msufA3ClassicBarDuration
+    local expiration = bar._msufA3ClassicBarExpiration
+    if not (duration and expiration) then return end
+    local remaining = expiration - (_G.GetTime and _G.GetTime() or 0)
+    if remaining < 0 then remaining = 0 end
+    bar:SetValue(bar._msufA3ClassicBarElapsed == true and (duration - remaining) or remaining)
+end
+
 local function DurationBar(button, cfg)
     local bar = button._msufA3DurationBar
     if not bar then
@@ -415,6 +430,7 @@ local function DurationBar(button, cfg)
         bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
         bar:SetMinMaxValues(0, 1)
         bar:SetValue(0)
+        bar:SetScript("OnUpdate", DurationBarOnUpdate)
         button._msufA3DurationBar = bar
     end
     local height = Clamp(cfg.durationBarHeight, 2, 1, math_max(1, cfg.buttonHeight or cfg.size))
@@ -650,31 +666,21 @@ function V.UpdateButtonVisual(lane, button, unit, data)
         local rawDuration = tonumber(data and data.duration)
         local expiration = tonumber(data and data.expirationTime)
         local timed = rawDuration and expiration and rawDuration > 0 and expiration > 0
-        local duration = timed and C_UnitAuras and C_UnitAuras.GetAuraDuration
-            and C_UnitAuras.GetAuraDuration(unit, data.auraInstanceID)
-        if duration and bar.SetTimerDuration then
-            local enum = _G.Enum
-            local interpolation = enum and enum.StatusBarInterpolation
-            local direction = enum and enum.StatusBarTimerDirection
-            bar:SetTimerDuration(duration,
-                interpolation and interpolation.Immediate,
-                direction and (cfg.durationBarDirection == "ELAPSED"
-                    and direction.ElapsedTime or direction.RemainingTime))
+        if timed then
+            bar._msufA3ClassicBarDuration = rawDuration
+            bar._msufA3ClassicBarExpiration = expiration
+            bar._msufA3ClassicBarElapsed = cfg.durationBarDirection == "ELAPSED"
+            bar:SetMinMaxValues(0, rawDuration)
+            DurationBarOnUpdate(bar)
             bar:Show()
         else
-            if timed then
-                bar:SetMinMaxValues(0, rawDuration)
-                bar:SetValue(cfg.durationBarDirection == "ELAPSED"
-                    and math_max(0, rawDuration - (expiration - (_G.GetTime and _G.GetTime() or 0)))
-                    or math_max(0, expiration - (_G.GetTime and _G.GetTime() or 0)))
-                bar:Show()
-            else
-                -- Reusing a status bar after a timed aura must not retain its
-                -- native duration object/value for the next permanent aura.
-                bar:SetMinMaxValues(0, 1)
-                bar:SetValue(0)
-                bar:Hide()
-            end
+            -- Reusing a status bar after a timed aura must not retain its
+            -- previous timer state for the next permanent aura.
+            bar._msufA3ClassicBarDuration = nil
+            bar._msufA3ClassicBarExpiration = nil
+            bar:SetMinMaxValues(0, 1)
+            bar:SetValue(0)
+            bar:Hide()
         end
     elseif button._msufA3DurationBar then
         button._msufA3DurationBar:Hide()

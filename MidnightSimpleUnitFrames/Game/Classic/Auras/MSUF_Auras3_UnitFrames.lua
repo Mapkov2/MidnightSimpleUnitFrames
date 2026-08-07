@@ -58,7 +58,6 @@ local GetAuraDataByIndex = C_UnitAuras and C_UnitAuras.GetAuraDataByIndex
 local GetAuraDataBySlot = C_UnitAuras and C_UnitAuras.GetAuraDataBySlot
 local GetAuraDataByAuraInstanceID = C_UnitAuras and C_UnitAuras.GetAuraDataByAuraInstanceID
 local IsAuraFilteredOutByInstanceID = C_UnitAuras and C_UnitAuras.IsAuraFilteredOutByInstanceID
-local GetAuraDuration = C_UnitAuras and C_UnitAuras.GetAuraDuration
 local GetAuraApplicationDisplayCount = C_UnitAuras and C_UnitAuras.GetAuraApplicationDisplayCount
 local GetAuraDispelTypeColor = C_UnitAuras and C_UnitAuras.GetAuraDispelTypeColor
 
@@ -1119,7 +1118,30 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
         and A3.ClassicFeatures.CompileRawFilter(rawFilter, kind == "buff") or nil
     local filter = filterPlan and filterPlan.scanFilter or spec.filter
     local black = CompileBlacklistHash(source[spec.blacklistKey])
-    local includeSpellIDs = spec.includeHashKey and source[spec.includeHashKey] or nil
+    -- Classic aura payloads often carry a different spellId than the
+    -- configured one (TBC spell ranks, Mists cast-vs-aura ID drift), so the
+    -- compiled include list adds alias and name tolerance; exact-ID matching
+    -- silently emptied tracked-buff whitelists.
+    local includeSpellIDs, includeSpellNames
+    if spec.includeHashKey and type(source[spec.includeHashKey]) == "table" then
+        for key, enabled in pairs(source[spec.includeHashKey]) do
+            if enabled == true then
+                local id = tonumber(key)
+                if id and id > 0 then
+                    includeSpellIDs = includeSpellIDs or {}
+                    if type(A3.AddAuraSpellIDAndAliases) == "function" then
+                        A3.AddAuraSpellIDAndAliases(includeSpellIDs, id)
+                    else
+                        includeSpellIDs[math_floor(id + 0.5)] = true
+                    end
+                end
+            end
+        end
+        if includeSpellIDs and A3.ClassicFeatures
+            and type(A3.ClassicFeatures.NameHash) == "function" then
+            includeSpellNames = A3.ClassicFeatures.NameHash(includeSpellIDs)
+        end
+    end
     local hidePermanent = spec.hidePermanentKey and source[spec.hidePermanentKey] == true or false
     local maxDuration = spec.maxDurationKey and ClampNumber(source[spec.maxDurationKey], 0, 0, 180) or 0
     local hasFilterWork = black ~= nil or type(includeSpellIDs) == "table" or hidePermanent or maxDuration > 0
@@ -1238,6 +1260,7 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
         stackB = stackB,
         blacklist = black,
         includeSpellIDs = includeSpellIDs,
+        includeSpellNames = includeSpellNames,
         filterPlan = filterPlan,
         filterRequirements = filterPlan and filterPlan.requirements or nil,
         hasFilterWork = hasFilterWork,
@@ -1689,9 +1712,6 @@ local function CreateAuraButton(lane, index)
     if cooldown.SetDrawEdge then cooldown:SetDrawEdge(false) end
     if cooldown.SetReverse then cooldown:SetReverse(true) end
     button.Cooldown = cooldown
-    if GetAuraDuration and cooldown.SetCooldownFromDurationObject then
-        button._msufA3SetCooldownFromDurationObject = cooldown.SetCooldownFromDurationObject
-    end
 
     local textLayer = CreateFrame("Frame", nil, button)
     textLayer:SetAllPoints(button)
@@ -2185,7 +2205,16 @@ local function ShouldShowAura(lane, unit, data)
     end
     if type(cfg.includeSpellIDs) == "table" then
         local spellID = data and data.spellId
-        if spellID == nil or IsSecret(spellID) or cfg.includeSpellIDs[tonumber(spellID)] ~= true then return false end
+        local matched = spellID ~= nil and not IsSecret(spellID)
+            and cfg.includeSpellIDs[tonumber(spellID)] == true
+        if not matched and type(cfg.includeSpellNames) == "table" then
+            -- Rank/alias drift: fall back to the aura name so a whitelisted
+            -- spell still matches when the live aura reports another spellId.
+            local name = data and data.name
+            matched = name ~= nil and not IsSecret(name)
+                and cfg.includeSpellNames[name] == true
+        end
+        if not matched then return false end
     end
     if cfg.hidePermanent == true and not TimedAura(data) then return false end
     if cfg.maxDuration and cfg.maxDuration > 0 then
@@ -2970,28 +2999,13 @@ else
     end
 end
 
+-- Classic never uses GetAuraDuration/SetCooldownFromDurationObject: no
+-- Blizzard UI on any Classic branch exercises that API pair, and on
+-- Mists/TBC it painted hour-scale cooldowns (millisecond-scale values read
+-- as seconds -- the "1h Renewing Mist" report). Classic aura duration and
+-- expiration are plain numbers, so the raw SetCooldown pair that Blizzard's
+-- own Classic target frame uses is the only correct path.
 local function UpdateCooldown(button, cooldown, unit, data)
-    local setFromDurationObject = button._msufA3SetCooldownFromDurationObject
-    -- Both Classic clients return a LuaDurationObject for every valid aura
-    -- instance, including permanent auras whose raw duration/expiration are
-    -- zero. Binding that zero-duration object and then showing the Cooldown
-    -- frame paints a full/stale swipe over the icon. Blizzard's Classic target
-    -- frame only enables its cooldown for positive raw duration data, so keep
-    -- the duration-object path behind the same timed-aura contract.
-    if setFromDurationObject and TimedAura(data) then
-        local durationObject = GetAuraDuration(unit, data.auraInstanceID)
-        if durationObject then
-            if button._msufA3CooldownPlain ~= nil then
-                button._msufA3CooldownStart = nil
-                button._msufA3CooldownDuration = nil
-                button._msufA3CooldownPlain = nil
-            end
-            setFromDurationObject(cooldown, durationObject)
-            ShowCooldown(button, cooldown)
-            return
-        end
-    end
-
     local duration = data.duration
     local expirationTime = data.expirationTime
     if not IsSecret(duration) and not IsSecret(expirationTime)
@@ -3685,8 +3699,18 @@ function A3.FlushIdentityAuraRebuilds()
     A3._identityAuraFlushScheduled = false
     local pending = A3._identityAuraPending
     A3._identityAuraPending = {}
+    -- Clear every pending flag and arm the full-scan fallback BEFORE running
+    -- any rebuild. HandleUnitAura drops UNIT_AURA deltas while the flag is
+    -- set, so a Lua error inside one frame's rebuild must not leave the
+    -- remaining frames flagged -- that froze their auras until reload. With
+    -- needFullUpdate armed, a rebuild that never ran is healed by the next
+    -- UNIT_AURA escalating to a full scan.
     for frame in pairs(pending) do
         frame._msufA3IdentityRebuildPending = nil
+        local state = frame._msufA3State
+        if state then state.needFullUpdate = true end
+    end
+    for frame in pairs(pending) do
         if frame._msufActiveElements and frame._msufActiveElements.Auras == true then
             UpdateAuras(frame, "ForceUpdate", A3._ClassicBindFrameUnit(frame), nil, true)
         end

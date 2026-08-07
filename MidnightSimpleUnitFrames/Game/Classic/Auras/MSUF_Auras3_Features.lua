@@ -47,13 +47,20 @@ local function Scope(unit)
 end
 
 local function SpellName(spellID)
+    spellID = tonumber(spellID)
+    if not (spellID and spellID > 0) then return nil end
+    -- Legacy GetSpellInfo resolves synchronously on Classic clients, so the
+    -- compile-time name hashes (rank/alias matching, auto-exclusions) are
+    -- deterministic at login. C_Spell.GetSpellName is lazy-load backed and
+    -- returned nil for uncached IDs, which left name hashes empty and let the
+    -- same DoT render in both the custom container and the debuff lane.
     local name
-    if C_Spell and type(C_Spell.GetSpellName) == "function" then
-        local ok
-        ok, name = pcall(C_Spell.GetSpellName, spellID)
-        if not ok then name = nil end
-    elseif type(GetSpellInfo) == "function" then
+    if type(GetSpellInfo) == "function" then
         name = GetSpellInfo(spellID)
+    end
+    if (type(name) ~= "string" or name == "")
+        and C_Spell and type(C_Spell.GetSpellName) == "function" then
+        name = C_Spell.GetSpellName(spellID)
     end
     return type(name) == "string" and name ~= "" and name or nil
 end
@@ -200,8 +207,7 @@ function Features.IsImportantAura(data)
     local spellID = not IsSecret(rawSpellID) and tonumber(rawSpellID) or nil
     local isImportant = C_Spell and C_Spell.IsSpellImportant
     if not (spellID and type(isImportant) == "function") then return false end
-    local ok, important = pcall(isImportant, spellID)
-    return ok and important == true
+    return isImportant(spellID) == true
 end
 
 function Features.MatchFilterRequirements(plan, unit, data, matchFilter)
@@ -350,6 +356,7 @@ local function BaseLane(unit, kind, entry, index, spellIDs, helpful, rootKey, fo
     local cfg = {
         kind = kind,
         rootKey = rootKey,
+        sourceIndex = index,
         unit = unit,
         enabled = maxCount > 0,
         renderEnabled = maxCount > 0,
@@ -625,12 +632,25 @@ function Features.ApplyAutoExclusions(buff, debuff, customLanes, source, unit)
     for _, lane in pairs(customLanes) do
         local entry
         if type(source) == "table" then
-            local index = tonumber(tostring(lane.kind):match("(%d+)$"))
+            -- Portrait lane kinds carry no trailing index; sourceIndex is the
+            -- authoritative link back to the container entry.
+            local index = tonumber(lane.sourceIndex)
+                or tonumber(tostring(lane.kind):match("(%d+)$"))
             entry = index and source[index] or nil
         end
         local target = lane.harmful == true and debuff or buff
-        local allow = entry and ((unit == "player" and entry.autoBlacklistPlayerBuffs ~= false)
-            or (unit ~= "player" and entry.autoBlacklistDebuffs ~= false))
+        -- entry is nil for legacy customDisplay lanes (no source table) and
+        -- for portrait lane kinds without a trailing index. Exclusion is the
+        -- opt-out default, so a missing entry must still deduplicate -- those
+        -- lanes previously rendered their auras a second time in the base
+        -- buff/debuff lane.
+        local allow
+        if entry then
+            allow = (unit == "player" and entry.autoBlacklistPlayerBuffs ~= false)
+                or (unit ~= "player" and entry.autoBlacklistDebuffs ~= false)
+        else
+            allow = true
+        end
         if allow and target then
             target.classicExcludeSpellIDs = target.classicExcludeSpellIDs or {}
             target.classicExcludeSpellNames = target.classicExcludeSpellNames or {}
