@@ -243,7 +243,7 @@ end
 --- ==========================================================================
 --- Menu-owned slash commands
 ---
---- The registry itself lives in Runtime/MSUF_ChatAndTooltips.lua, which loads
+--- The registry itself lives in Runtime/MSUF_SlashCommands.lua, which loads
 --- long before Menu2. Everything registered here needs the menu window, the
 --- search index or MSUF Edit Mode, so it cannot live in the runtime file.
 --- Registration is load-time table work only: no events, no hooks, no timers.
