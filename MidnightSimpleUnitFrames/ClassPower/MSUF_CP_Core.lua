@@ -200,6 +200,7 @@ builders.BUILD = function(E)
         --- Parent to the player frame so ClassPower follows scale, strata, and
         --- secure visibility rules from the owning unit frame.
         local c = CreateFrame("Frame", "MSUF_ClassPowerContainer", playerFrame)
+        c._msufOwnedAnchorRoot = true
         local b = _cpDB.bars or {}
         local levelOffset = tonumber(b.classPowerFrameLevelOffset) or 5
         if levelOffset < 0 then levelOffset = 0 elseif levelOffset > 30 then levelOffset = 30 end
@@ -365,54 +366,59 @@ builders.LAYOUT = function(E)
         local oX = tonumber(b.classPowerOffsetX) or 0
         local oY = tonumber(b.classPowerOffsetY) or 0
 
-        --- Direct cooldown anchoring against Blizzard's EditMode-managed
-        --- viewer stays a secure-frame edge case: in combat we can only reuse
-        --- a cached screen position. Third-party anchor proxies (Skiron
-        --- bridge) are insecure MSUF-owned frames, so anchoring to them is
-        --- legal during lockdown and preferred over the cached snapshot.
-        local lockdownProxy
-        if inLockdown and b.classPowerAnchorToCooldown == true and type(_G.MSUF_GetEffectiveCooldownFrame) == "function" then
-            local proxy = _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer")
-            if proxy
-                and proxy._msufStableAnchorProxy == true
-                and not (proxy.IsProtected and proxy:IsProtected())
-                and CP_IsUsableCooldownAnchorFrame(proxy)
-            then
-                lockdownProxy = proxy
-            end
-        end
-        local cachedCooldownAnchor = false
-        if inLockdown and not lockdownProxy and b.classPowerAnchorToCooldown == true then
-            CP.container:SetSize(userW, h)
+        --- Out of combat the container keeps a live link to the Cooldown
+        --- Manager provider so it follows ArcUI/Skiron/Blizzard movement 1:1.
+        --- The Factory combat-edge freeze severs that link on
+        --- PLAYER_REGEN_DISABLED; during lockdown the last screen point stays
+        --- frozen while internal segment/value layout continues to update.
+        local positionFrozen = inLockdown
+        local positionDeferred = false
+        CP.container:SetSize(userW, h)
+        if inLockdown and CP.container._msufPositionInitialized ~= true
+            and b.classPowerAnchorToCooldown == true then
             if type(_G.MSUF_ApplyCachedUnitFrameScreenPosition) == "function"
                 and _G.MSUF_ApplyCachedUnitFrameScreenPosition(CP.container, "classpower", "classpower")
             then
                 CP.container._msufDirectCooldownAnchor = true
                 CP.container._msufHardLockPoint = CP.container._msufHardLockPoint or "TOP"
-                cachedCooldownAnchor = true
+                CP.container._msufPositionInitialized = true
+            end
+        end
+        if inLockdown and CP.container._msufPositionInitialized ~= true then
+            positionDeferred = true
+            if CP.container._msufPositionReanchorRequested ~= true then
+                CP.container._msufPositionReanchorRequested = true
+                RequestUFReanchorAfterCombat()
             end
         end
 
-        if not cachedCooldownAnchor then
-            CP.container:ClearAllPoints()
-            CP.container:SetSize(userW, h)
-        end
-        if b.classPowerAnchorToCooldown == true and not cachedCooldownAnchor then
-            local ecv = lockdownProxy
-                or (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer"))
+        if not positionFrozen then CP.container:ClearAllPoints() end
+        if b.classPowerAnchorToCooldown == true and not positionFrozen then
+            local ecv = not inLockdown and (
+                (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer"))
                 or _G["EssentialCooldownViewer"]
+            ) or nil
             local anchorFrame = nil
             if CP_IsUsableCooldownAnchorFrame(ecv) then
-                if not inLockdown or ecv == lockdownProxy then
-                    anchorFrame = ecv
-                end
+                anchorFrame = ecv
             end
             if anchorFrame then
                 CP.container:SetPoint("TOP", anchorFrame, "BOTTOM", oX, oY)
-                CP.container._msufDirectCooldownAnchor = true
-                CP.container._msufHardLockPoint = "TOP"
-                if type(_G.MSUF_CacheUnitFrameScreenPosition) == "function" then
-                    _G.MSUF_CacheUnitFrameScreenPosition(CP.container, "classpower", "classpower", "TOP")
+                if CP.container:GetCenter() ~= nil then
+                    --- The link stays live; the provider chain resolves to a
+                    --- real rect, so the container renders and follows it.
+                    CP.container._msufDirectCooldownAnchor = true
+                    CP.container._msufHardLockPoint = "TOP"
+                    CP.container._msufStableExternalAnchor = anchorFrame
+                    if type(_G.MSUF_CacheUnitFrameScreenPosition) == "function" then
+                        _G.MSUF_CacheUnitFrameScreenPosition(CP.container, "classpower", "classpower", "TOP")
+                    end
+                else
+                    CP.container:ClearAllPoints()
+                    CP.container:SetPoint("TOPLEFT", playerFrame, "TOPLEFT", 2 + oX, -(2 - oY))
+                    CP.container._msufDirectCooldownAnchor = nil
+                    CP.container._msufHardLockPoint = nil
+                    CP.container._msufStableExternalAnchor = nil
                 end
             else
                 if type(_G.MSUF_ApplyCachedUnitFrameScreenPosition) == "function"
@@ -425,18 +431,25 @@ builders.LAYOUT = function(E)
                     CP.container._msufDirectCooldownAnchor = nil
                     CP.container._msufHardLockPoint = nil
                 end
+                CP.container._msufStableExternalAnchor = nil
             end
         else
-            if not cachedCooldownAnchor then
+            if not positionFrozen then
                 CP.container:SetPoint("TOPLEFT", playerFrame, "TOPLEFT", 2 + oX, -(2 - oY))
                 CP.container._msufDirectCooldownAnchor = nil
                 CP.container._msufHardLockPoint = nil
+                CP.container._msufStableExternalAnchor = nil
             end
+        end
+        if not inLockdown then
+            CP.container._msufPositionInitialized = true
+            CP.container._msufPositionReanchorRequested = nil
+            CP.container._msufExternalAnchorFrozen = nil
         end
         CP.container._msufLayoutInitialized = true
         CP.container._msufStableWidth = userW
-        CP._layoutDirty = nil
-        ExportPublic("MSUF_ClassPowerLayoutDirty", nil)
+        CP._layoutDirty = positionDeferred and true or nil
+        ExportPublic("MSUF_ClassPowerLayoutDirty", positionDeferred and true or nil)
         if not inLockdown and layoutCache and cdmName and userW and userW >= 30 then
             layoutCache["width:" .. cdmName] = math_floor(userW + 0.5)
         end

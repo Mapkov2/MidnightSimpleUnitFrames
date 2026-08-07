@@ -654,7 +654,7 @@ local function BuildPower(ctx, builder, unit)
     detachedWidth, detachedHeight = detachedFields.width, detachedFields.height
     if detachedWidth and M.AddTooltip then
         M.AddTooltip(detachedWidth, "Detached width",
-            "A width set here overrides the shared Class Resources width mode. A visible Class Resource bar still wins while width sync is on.",
+            "A Width mode that follows a cooldown source outranks this width, as does a visible Class Resource bar while width sync is on.",
             { hook = true, owner = "ANCHOR_RIGHT" })
     end
     if isPlayer then

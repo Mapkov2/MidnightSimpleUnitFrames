@@ -469,6 +469,10 @@ MSUF_ProfileIO_PostProfileRuntimeApply = function(reason, applyAll)
         not (type(activeGeneral) == "table" and activeGeneral.grid2EditModeIntegration == false))
     MSUF_ProfileIO_CallGlobal("MSUF_DetailsEditMode_SetEnabled",
         not (type(activeGeneral) == "table" and activeGeneral.detailsEditModeIntegration == false))
+    MSUF_ProfileIO_CallGlobal("MSUF_DominosEditMode_SetEnabled",
+        not (type(activeGeneral) == "table" and activeGeneral.dominosEditModeIntegration == false))
+    MSUF_ProfileIO_CallGlobal("MSUF_DandersEditMode_SetEnabled",
+        not (type(activeGeneral) == "table" and activeGeneral.dandersEditModeIntegration == false))
     --- Group-frame config tables are cached by identity. Drop those references
     --- before the runtime rebuild reads the newly active profile root.
     MSUF_ProfileIO_CallGlobal("MSUF_GF_InvalidateConfCache")

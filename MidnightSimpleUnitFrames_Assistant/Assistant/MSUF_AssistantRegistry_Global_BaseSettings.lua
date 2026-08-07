@@ -63,18 +63,35 @@ function A.GlobalRegistry.RegisterBaseSettings(ctx)
         type = "color",
         aliases = { "custom menu accent color", "menu custom color", "options accent color" },
         defaultR = 0.231, defaultG = 0.510, defaultB = 0.965,
+        -- Every other type = "color" setting reads and writes ONE {r,g,b} table
+        -- (see ColorSetting in MSUF_AssistantRegistry_GlobalColorSettings_Core).
+        -- This one returned three values and took three arguments, so the shared
+        -- execution path handed it the colour table as `r`, the other two
+        -- arrived nil, and "set Custom Menu Accent Color to red" stored 000000
+        -- while the reply printed a bare channel number instead of a hex.
         get = function()
             local hex = tostring(GeneralDB().menuAccentColor or "3b82f6"):gsub("#", "")
             if not hex:match("^[%da-fA-F][%da-fA-F][%da-fA-F][%da-fA-F][%da-fA-F][%da-fA-F]$") then hex = "3b82f6" end
-            return tonumber(hex:sub(1, 2), 16) / 255,
-                tonumber(hex:sub(3, 4), 16) / 255,
-                tonumber(hex:sub(5, 6), 16) / 255
+            return {
+                r = tonumber(hex:sub(1, 2), 16) / 255,
+                g = tonumber(hex:sub(3, 4), 16) / 255,
+                b = tonumber(hex:sub(5, 6), 16) / 255,
+                label = "#" .. hex:upper(),
+            }
         end,
-        set = function(r, g, b)
-            local function Byte(value)
-                value = math.max(0, math.min(1, tonumber(value) or 0))
-                return math.floor(value * 255 + 0.5)
+        set = function(value)
+            local function Byte(component)
+                component = math.max(0, math.min(1, tonumber(component) or 0))
+                return math.floor(component * 255 + 0.5)
             end
+            local r, g, b
+            if type(value) == "table" then
+                r, g, b = value.r or value[1], value.g or value[2], value.b or value[3]
+            elseif type(value) == "string" then
+                if type(A.HexToColor) == "function" then r, g, b = A.HexToColor(value) end
+                if not r and type(A.ColorFromName) == "function" then r, g, b = A.ColorFromName(value) end
+            end
+            if not r then return end
             GeneralDB().menuAccentColor = string.format("%02x%02x%02x", Byte(r), Byte(g), Byte(b))
         end,
         apply = function() return true end,
@@ -193,6 +210,27 @@ function A.GlobalRegistry.RegisterBaseSettings(ctx)
         apply = function()
             local fn = _G.MSUF_DetailsEditMode_SetEnabled
             if type(fn) == "function" then fn(GeneralDB().detailsEditModeIntegration ~= false) end
+        end,
+    })
+    RegisterGeneralBoolean("dominosEditModeIntegration", "dominosEditModeIntegration", "Dominos Edit Mode Integration", true, {
+        "dominos edit mode", "dominos mover", "move dominos", "show dominos in edit mode", "dominos integration",
+        "dominos bars edit mode", "move dominos bars", "dominos im edit mode", "dominos verschieben", "dominos mover anzeigen",
+    }, {
+        category = "Global / Misc", frameType = "misc", reason = "MSUF_ASSISTANT_DOMINOS_EDIT_MODE",
+        apply = function()
+            local fn = _G.MSUF_DominosEditMode_SetEnabled
+            if type(fn) == "function" then fn(GeneralDB().dominosEditModeIntegration ~= false) end
+        end,
+    })
+    RegisterGeneralBoolean("dandersEditModeIntegration", "dandersEditModeIntegration", "DandersFrames Edit Mode Integration", true, {
+        "dandersframes edit mode", "danders edit mode", "danders mover", "move dandersframes", "move danders frames",
+        "show dandersframes in edit mode", "dandersframes integration", "danders integration",
+        "danders im edit mode", "dandersframes verschieben", "danders mover anzeigen",
+    }, {
+        category = "Global / Misc", frameType = "misc", reason = "MSUF_ASSISTANT_DANDERS_EDIT_MODE",
+        apply = function()
+            local fn = _G.MSUF_DandersEditMode_SetEnabled
+            if type(fn) == "function" then fn(GeneralDB().dandersEditModeIntegration ~= false) end
         end,
     })
     RegisterGeneralBoolean("ellesmereEditModeIntegration", "ellesmereEditModeIntegration", "EllesmereUI Unlock Mode Integration", true, {

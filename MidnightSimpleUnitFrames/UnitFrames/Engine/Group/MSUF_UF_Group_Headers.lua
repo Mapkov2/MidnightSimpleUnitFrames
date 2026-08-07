@@ -341,6 +341,7 @@ local function EnsureAnchor(key, conf, totalW, totalH)
   elseif anchor.GetParent and anchor.SetParent and anchor:GetParent() ~= desiredParent then
     anchor:SetParent(desiredParent)
   end
+  anchor._msufOwnedAnchorRoot = true
   if anchor.SetClampedToScreen and anchor._msufScreenClampEnabled ~= true then
     anchor:SetClampedToScreen(true)
     anchor._msufScreenClampEnabled = true
@@ -355,9 +356,29 @@ local function EnsureAnchor(key, conf, totalW, totalH)
   if missingAnchorName and type(_G.MSUF_ScheduleLateAnchorReanchor) == "function" then
     _G.MSUF_ScheduleLateAnchorReanchor()
   end
-  anchor:SetPoint(point, parent, relativePoint, conf.offsetX or 0, conf.offsetY or 0)
   anchor:Show()
-  ClampAnchorOnScreen(anchor, point, relativePoint, parent, conf.offsetX or 0, conf.offsetY or 0, totalW, totalH)
+  local offsetX, offsetY = conf.offsetX or 0, conf.offsetY or 0
+  -- Resolve, apply and clamp in the logical anchor's coordinate space. An
+  -- external parent stays live so the header follows provider movement out of
+  -- combat; the Factory combat-edge freeze severs the link while a fight
+  -- lasts.
+  anchor:SetPoint(point, parent, relativePoint, offsetX, offsetY)
+  ClampAnchorOnScreen(anchor, point, relativePoint, parent, offsetX, offsetY, totalW, totalH)
+  local ownedParent = parent == UIParent or (parent and parent._msufOwnedAnchorRoot == true)
+  local resolvable = ownedParent or anchor:GetCenter() ~= nil
+  if not resolvable then
+    -- Never leave a secure group header attached to a provider whose geometry
+    -- is temporarily unreadable: it would render nowhere. Keep the legacy
+    -- offsets on UIParent and let the bounded late-anchor pass retry once the
+    -- provider has settled.
+    anchor:ClearAllPoints()
+    anchor:SetPoint(point, UIParent, relativePoint, offsetX, offsetY)
+    if parent ~= UIParent and type(_G.MSUF_ScheduleLateAnchorReanchor) == "function" then
+      _G.MSUF_ScheduleLateAnchorReanchor()
+    end
+  end
+  anchor._msufStableExternalAnchor = (not ownedParent and resolvable) and parent or nil
+  anchor._msufExternalAnchorFrozen = nil
   return anchor
 end
 

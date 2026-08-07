@@ -812,14 +812,21 @@ local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refresh
   end
 end
 
-local function SyncBarLayer(frame, hpBar, bar, levelOffset)
+-- SetParent resets a frame's strata and level to the new parent's, so this must
+-- run AFTER any re-parenting and re-apply unconditionally when the parent just
+-- changed -- otherwise the cached level below still reports the wanted layer
+-- while the widget sits one level lower, and the layout guard never repairs it.
+-- Overflow (mode 4) re-parents the overlay from the HP bar to the frame, which
+-- is exactly where that mismatch drops the bar behind neighbouring group frames.
+local function SyncBarLayer(frame, hpBar, bar, levelOffset, force)
   if not (frame and hpBar and bar) then
     return
   end
   if bar.SetFrameStrata and frame.GetFrameStrata then
     local strata = frame:GetFrameStrata()
     local cachedStrata = bar._msufFrameStrata
-    if issecretvalue(strata) ~= true and strata and (issecretvalue(cachedStrata) == true or cachedStrata ~= strata) then
+    if issecretvalue(strata) ~= true and strata
+      and (force == true or issecretvalue(cachedStrata) == true or cachedStrata ~= strata) then
       bar:SetFrameStrata(strata)
       bar._msufFrameStrata = strata
     end
@@ -831,7 +838,7 @@ local function SyncBarLayer(frame, hpBar, bar, levelOffset)
     end
     if issecretvalue(baseLevel) ~= true then
       local level = (baseLevel or 1) + levelOffset
-      if bar._msufFrameLevel ~= level then
+      if force == true or bar._msufFrameLevel ~= level then
         bar:SetFrameLevel(level)
         bar._msufFrameLevel = level
       end
@@ -940,6 +947,86 @@ local function ApplyOverlayOrientation(bar, vertical)
   end
 end
 
+-- Overflow host for anchor mode 4.
+--
+-- Mode 4 overlays keep the HP bar's full scale (value/max over one bar width) so
+-- the heal/absorb segment stays proportional, which means an amount larger than
+-- the missing health would otherwise draw arbitrarily far past the frame -- into
+-- the neighbouring group frame. Blizzard bounds the same overflow at
+-- MAX_INCOMING_HEAL_OVERFLOW (1.05) by clamping the amount, but that arithmetic
+-- needs current health, which is a secret value here. A clipping host reaches
+-- the identical result natively: the bar keeps its true scale and the client
+-- trims whatever leaves the allowance. The cross axis is left effectively
+-- unclipped so stripe heights and vertical offsets are never cut.
+local OVERFLOW_ALLOWANCE = 0.05
+local OVERFLOW_CROSS_MARGIN = 250
+
+local function EnsureOverflowClip(frame, hpBar, vertical, reverse, alongSize)
+  local clip = frame._msufPredictionOverflowClip
+  if not clip then
+    if not CreateFrame or frame._msufPredictionOverflowUnsupported == true then return nil end
+    local created = CreateFrame("Frame", nil, frame)
+    -- Without native clipping the host cannot bound anything, so keep the
+    -- previous behaviour (parent straight to the frame) instead of adding an
+    -- inert layer, and stop rebuilding a host that can never work.
+    if not (created and created.SetClipsChildren) then
+      frame._msufPredictionOverflowUnsupported = true
+      return nil
+    end
+    if created.EnableMouse then created:EnableMouse(false) end
+    created:SetClipsChildren(true)
+    clip = created
+    frame._msufPredictionOverflowClip = clip
+  end
+
+  if clip.SetFrameLevel and hpBar.GetFrameLevel then
+    local baseLevel = hpBar:GetFrameLevel()
+    if issecretvalue(baseLevel) ~= true and clip._msufOverflowLevel ~= baseLevel then
+      clip:SetFrameLevel(baseLevel or 1)
+      clip._msufOverflowLevel = baseLevel
+    end
+  end
+
+  local allowance = (tonumber(alongSize) or 0) * OVERFLOW_ALLOWANCE
+  if clip._msufOverflowAnchor == hpBar
+    and clip._msufOverflowVertical == vertical
+    and clip._msufOverflowReverse == reverse
+    and clip._msufOverflowAllowance == allowance then
+    return clip
+  end
+  clip._msufOverflowAnchor = hpBar
+  clip._msufOverflowVertical = vertical
+  clip._msufOverflowReverse = reverse
+  clip._msufOverflowAllowance = allowance
+
+  clip:ClearAllPoints()
+  local margin = OVERFLOW_CROSS_MARGIN
+  if vertical then
+    -- Fill axis is vertical: the allowance sits at the fill end (top for a
+    -- bottom->top HP bar, bottom when reversed).
+    if reverse then
+      clip:SetPoint("TOPLEFT", hpBar, "TOPLEFT", -margin, 0)
+      clip:SetPoint("BOTTOMRIGHT", hpBar, "BOTTOMRIGHT", margin, -allowance)
+    else
+      clip:SetPoint("TOPLEFT", hpBar, "TOPLEFT", -margin, allowance)
+      clip:SetPoint("BOTTOMRIGHT", hpBar, "BOTTOMRIGHT", margin, 0)
+    end
+  elseif reverse then
+    clip:SetPoint("TOPLEFT", hpBar, "TOPLEFT", -allowance, margin)
+    clip:SetPoint("BOTTOMRIGHT", hpBar, "BOTTOMRIGHT", 0, -margin)
+  else
+    clip:SetPoint("TOPLEFT", hpBar, "TOPLEFT", 0, margin)
+    clip:SetPoint("BOTTOMRIGHT", hpBar, "BOTTOMRIGHT", allowance, -margin)
+  end
+  return clip
+end
+
+-- Hot-path guards read the host without building or moving it; a still missing
+-- host simply reports a stale layout and lets LayoutBar create it.
+local function OverflowParent(frame)
+  return frame._msufPredictionOverflowClip or frame
+end
+
 local function LayoutBar(frame, bar, levelOffset, mode, reverse, followBar, height, offsetY)
   local hpBar = frame.hpBar or frame.Health
   if not (bar and hpBar) then
@@ -953,7 +1040,11 @@ local function LayoutBar(frame, bar, levelOffset, mode, reverse, followBar, heig
   -- from the size-change-invalidated cache -- no native measure per event.
   local width = HpAlongSize(hpBar, vertical, tonumber(frame._msufPredictionFrameWidth))
   local anchorTarget = follow or hpBar
-  local parent = (mode == 4) and frame or hpBar
+  local parent = hpBar
+  if mode == 4 then
+    parent = EnsureOverflowClip(frame, hpBar, vertical,
+      frame._msufPredictionHpReverse == true, width) or frame
+  end
   local parentCurrent = not bar.GetParent or bar:GetParent() == parent
   height = height or 0
   offsetY = offsetY or 0
@@ -974,8 +1065,8 @@ local function LayoutBar(frame, bar, levelOffset, mode, reverse, followBar, heig
     return
   end
 
-  SyncBarLayer(frame, hpBar, bar, levelOffset)
   local parentChanged = SetParentCached(bar, parent)
+  SyncBarLayer(frame, hpBar, bar, levelOffset, parentChanged)
   if hpBar.SetClipsChildren and mode == 3 and hpBar._msufPredictionClipsChildren ~= true then
     hpBar:SetClipsChildren(true)
     hpBar._msufPredictionClipsChildren = true
@@ -1079,7 +1170,7 @@ local function PredictionLayoutCurrent(frame, bar, levelOffset, mode, reverse, f
   -- path, so it must not measure the bar natively.
   local width = HpAlongSize(hpBar, vertical, tonumber(frame._msufPredictionFrameWidth))
   local anchorTarget = follow or hpBar
-  local parent = (mode == 4) and frame or hpBar
+  local parent = (mode == 4) and OverflowParent(frame) or hpBar
   height = height or 0
   offsetY = offsetY or 0
   return bar._msufPredictionMode == mode
@@ -1142,8 +1233,8 @@ local function LayoutHealAbsorbBar(frame, bar, levelOffset, hpReverse, mode, hei
     return
   end
 
-  SyncBarLayer(frame, hpBar, bar, levelOffset)
   local parentChanged = SetParentCached(bar, hpBar)
+  SyncBarLayer(frame, hpBar, bar, levelOffset, parentChanged)
   if hpBar.SetClipsChildren and hpBar._msufPredictionClipsChildren ~= true then
     hpBar:SetClipsChildren(true)
     hpBar._msufPredictionClipsChildren = true

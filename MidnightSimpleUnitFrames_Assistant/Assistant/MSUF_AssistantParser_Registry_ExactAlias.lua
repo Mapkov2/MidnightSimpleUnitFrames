@@ -30,6 +30,15 @@ if not (Normalize and Compact and AliasRelationText and ValueForRegistrySetting)
 -- This index catches precise multi-word aliases before slower fuzzy scoring. Common command
 -- words are ignored as triggers so broad phrases do not fan out across the whole registry.
 local MAX_EXACT_ALIAS_TOKENS = ExactAliasData.MAX_EXACT_ALIAS_TOKENS or 8
+-- The eight-token ceiling above bounds the FLOATING n-gram window in
+-- AddMatches, which costs (lengths x start positions) per input. A control's
+-- own visible label is not a window candidate -- it is only ever looked up as a
+-- whole phrase, an O(1) bucket hit -- so capping it at eight bought nothing and
+-- silently unindexed every longer name. "Raid / Mythic Raid Buff Hidden
+-- Category Shaman Imbuements" is nine tokens, so typing the label exactly as
+-- the menu prints it reached no control at all (36 of them). AddMatches still
+-- clamps its own window to MAX_EXACT_ALIAS_TOKENS, so this changes no hot path.
+local MAX_EXACT_LABEL_TOKENS = ExactAliasData.MAX_EXACT_LABEL_TOKENS or 16
 local COMMON_EXACT_ALIAS_TOKENS = ExactAliasData.COMMON_EXACT_ALIAS_TOKENS or {}
 
 local function Tokens(text)
@@ -57,18 +66,19 @@ local function PreparedSettingAlias(setting, alias, index, exact)
     return Normalize(alias)
 end
 
-local function AddIndexAlias(index, setting, alias, minTokens)
+local function AddIndexAlias(index, setting, alias, minTokens, maxTokens)
     if alias == "" then return end
+    maxTokens = tonumber(maxTokens) or MAX_EXACT_ALIAS_TOKENS
     -- The alias is already normalized by PreparedSettingAlias. Count without
     -- allocating a temporary token table for every retained registry phrase.
     local count = 0
     for _ in alias:gmatch("%S+") do
         count = count + 1
-        if count > MAX_EXACT_ALIAS_TOKENS then return end
+        if count > maxTokens then return end
     end
     minTokens = tonumber(minTokens) or 1
     if count < minTokens then return end
-    if count == 0 or count > MAX_EXACT_ALIAS_TOKENS then return end
+    if count == 0 or count > maxTokens then return end
     index.byLength[count] = index.byLength[count] or {}
     local bucket = index.byLength[count][alias]
     if not bucket then
@@ -186,7 +196,7 @@ local function EnsureIndex(settings)
                 end
             end
             if normalizedLabel ~= "" and labelOwners[normalizedLabel] == 1 and not shadowsAction then
-                AddIndexAlias(index, setting, normalizedLabel, 1)
+                AddIndexAlias(index, setting, normalizedLabel, 1, MAX_EXACT_LABEL_TOKENS)
                 MaybeYieldAliasWork()
             end
         end
@@ -220,7 +230,7 @@ local function FindRegistryExactAliasSettings(settings, subject, limit)
     subject = Normalize(subject)
     local tokenCount = 0
     for _ in subject:gmatch("%S+") do tokenCount = tokenCount + 1 end
-    if subject == "" or tokenCount < 1 or tokenCount > MAX_EXACT_ALIAS_TOKENS then return nil end
+    if subject == "" or tokenCount < 1 or tokenCount > MAX_EXACT_LABEL_TOKENS then return nil end
     limit = math.max(1, math.floor(tonumber(limit) or 16))
 
     local completeIndex = P._registryExactAliasSettings == settings
@@ -228,9 +238,15 @@ local function FindRegistryExactAliasSettings(settings, subject, limit)
         and type(P._registryExactAliasIndex) == "table"
         and P._registryExactAliasIndex or nil
     if completeIndex then
+        -- Whole-phrase bucket hit, so a long label costs the same as a short
+        -- alias and the higher ceiling above applies here.
         local byLength = completeIndex.byLength and completeIndex.byLength[tokenCount]
         return CopySettingBucket(byLength and byLength[subject], limit)
     end
+    -- The fallback below scans every setting's aliases, and only labels are
+    -- indexed beyond the alias ceiling. Scanning for a subject no alias can be
+    -- that long is pure cost, so keep the historical bound off the index.
+    if tokenCount > MAX_EXACT_ALIAS_TOKENS then return nil end
 
     local cached = P._registryExactAliasLookupCache
     if type(cached) == "table"

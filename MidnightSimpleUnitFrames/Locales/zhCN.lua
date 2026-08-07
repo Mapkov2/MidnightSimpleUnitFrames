@@ -1257,7 +1257,7 @@ local MSUF2_MENU_AUTO_zhCN = {
     ["Detached height"] = "分离高度",
     ["Detached layer"] = "分离层",
     ["Detached width"] = "分离宽度",
-    ["A width set here overrides the shared Class Resources width mode. A visible Class Resource bar still wins while width sync is on."] = "在此设置的宽度会覆盖共用的职业资源宽度模式。开启宽度同步时，可见的职业资源条仍会优先。",
+    ["A Width mode that follows a cooldown source outranks this width, as does a visible Class Resource bar while width sync is on."] = "跟随冷却来源的宽度模式会优先于此宽度；开启宽度同步时，可见的职业资源条同样优先。",
     ["Disable MSUF unitframe tooltips"] = "禁用 MSUF 单位框架工具提示",
     ["Dispel Glow"] = "消除辉光",
     ["Dispel Overlay"] = "消除叠加",
@@ -2853,7 +2853,7 @@ L["Reset Frame Positions"] = "重置框体位置"
 L["reset level position"] = "重置等级位置"
 L["Reset positions..."] = "重置位置..."
 L["Reset profile '%s' to defaults?\n\nThis resets the entire selected profile to the current MSUF factory defaults. Every menu in that profile will be affected."] = "将配置文件 '%s' 重置为默认值？\n\n这会将整个所选配置文件重置为当前 MSUF 出厂默认值。该配置文件中的所有菜单都会受影响。"
-L["Reset tools, Wago access, and recovery shortcuts live here."] = "重置工具、Wago 入口和恢复快捷方式都在这里。"
+L["Fix positions, print help, or reset MSUF."] = "修复位置、输出帮助或重置 MSUF。"
 L["Resets frame positions only. Profiles and menu settings stay intact."] = "只重置框体位置。配置和菜单设置保持不变。"
 L["Restored the Menu2 dashboard preview and scroll behavior to the 5.3 Beta 2 layout."] = "将 Menu2 仪表盘预览和滚动行为恢复到 5.3 Beta 2 布局。"
 L["Restored the Menu2 dashboard preview and scroll behavior to the stable 5.3 Beta 2 layout."] = "将 Menu2 仪表盘预览和滚动行为恢复到稳定的 5.3 Beta 2 布局。"
@@ -3055,7 +3055,6 @@ L["MSUF2_SEARCH_SLIDER_ACTION_KEYWORDS"] = "滑块 增加 减少 调整 大小 �
 L["MSUF2_SEARCH_SLIDER_PATTERNS"] = "%s滑块|调整%s|增加%s|减少%s|更改%s数值|设置%s数量"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_CHANGELOG"] = "打开：仪表板 > 更新日志"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_RECOVERY"] = "打开：仪表板 > 显示与恢复"
-L["MSUF2_SEARCH_TARGET_DASHBOARD_RECOVERY_DISCORD"] = "打开：仪表板 > 显示与恢复 > Discord"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_SCALING"] = "打开：仪表板 > 缩放"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_SUPPORT"] = "打开：仪表板 > 支持 MSUF 开发"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_WAGO"] = "打开：仪表板 > Wago 配置中心"
@@ -3573,7 +3572,7 @@ L["Only relevant sorting methods are shown for buffs and debuffs."] = "仅显示
 L["Reversed flips the complete priority order."] = "反向翻转完整的优先顺序。"
 L["Choose which auras Blizzard provides for this lane."] = "选择暴雪为此车道提供的光环。"
 L["85% above 15 members · 70% above 25"] = "85% 15 名以上会员 · 70% 25 名以上"
-L["|cffffd700MSUF 6.0 RC3|r · Built for WoW 12.1 PTR."] = "|cffffd700MSUF 6.0 RC3|r · 专为《魔兽世界》12.1 PTR 打造。"
+L["|cffffd700MSUF 6.0 RC13|r · Built for WoW 12.1 PTR."] = "|cffffd700MSUF 6.0 RC13|r · 专为《魔兽世界》12.1 PTR 打造。"
 L["|cffffd700Auras|r use Blizzard's native 12.1 system."] = "|cffffd700Auras|r使用暴雪原生12.1系统。"
 L["|cff40ff40Thanks for testing!|r Report bugs on Discord or GitHub."] = "|cff40ff40感谢您的测试！|r 在 Discord 或 GitHub 上报告错误。"
 L["Show auras"] = "展现光环"
@@ -4941,6 +4940,7 @@ L["class color"] = "职业颜色"
 L["HP text color"] = "生命值文本颜色"
 L["Power text color"] = "资源文本颜色"
 L["Status text color"] = "状态文本颜色"
+L["Status text settings"] = "状态文本设置"
 L["Inline text color"] = "内联文本颜色"
 L["Inline Text Color"] = "内联文本颜色"
 L["Extra health text color"] = "额外生命值文本颜色"
@@ -5342,6 +5342,7 @@ L["Optional interpolation for this second HP bar. Off keeps direct native SetVal
 L["Optional presentation mode; the Defensive Buffs feature itself does not require a portrait. With an enabled portrait, the first icon occupies it. When the portrait is off, enable the position option below to keep the icons there; otherwise MSUF safely falls back to the normal defensive bar."] = "可选的呈现方式；防御增益功能本身并不需要头像。启用头像时，第一个图标会占据头像。头像关闭时，请启用下方的位置选项以将图标保留在该处；否则 MSUF 会安全地回退到普通防御条。"
 L["Orb Size"] = "宝珠大小"
 L["Pandemic Warning & Style"] = "临期警告与样式"
+L["Pandemic color"] = "临期颜色"
 L["Places Player power text on the detached power bar. When off, the same Player power text remains positioned by the normal text layout."] = "将玩家资源文本放置在分离的资源条上。关闭时，同一文本仍按普通文本布局定位。"
 L["Places the duration bar at the top or bottom edge of the aura slot."] = "将持续时间条放置在光环槽位的上边缘或下边缘。"
 L["Player Text Outline"] = "玩家文本轮廓"
@@ -5530,6 +5531,32 @@ L["On (default): MSUF Edit Mode can move every active Details! window. Windows s
 L["On (default): MSUF Edit Mode can move the Grid2 layout and its active detached groups. Grid2 remains the owner of its layout and saved positions."] = "开启（默认）：MSUF 编辑模式可移动 Grid2 的布局及其活动的分离分组。Grid2 仍然拥有其布局和已保存的位置。"
 L["Turn either switch off to remove only those external movers. The third-party addon and its settings are not modified."] = "关闭其中任一开关即可仅移除这些外部移动器。第三方插件及其设置不会被修改。"
 
+-- Menu localization pass 2026-08-07: external Edit Mode integration (Dominos).
+L["Dominos"] = "Dominos"
+L["Show Dominos in MSUF Edit Mode"] = "在 MSUF 编辑模式中显示 Dominos"
+L["Dominos Edit Mode integration"] = "Dominos 编辑模式集成"
+L["On (default): MSUF Edit Mode can move every Dominos bar that is not docked to another bar. Docked bars follow their host bar, and Dominos remains the owner of all bar positions."] = "开启（默认）：MSUF 编辑模式可移动所有未吸附到其他动作条的 Dominos 动作条。已吸附的动作条会跟随其宿主动作条移动，所有动作条位置仍由 Dominos 保管。"
+L["Turn any of these switches off to remove only those external movers. The third-party addons and their settings are not modified."] = "关闭其中任意开关即可仅移除这些外部移动器。第三方插件及其设置不会被修改。"
+L["Scale"] = "缩放"
+L["Show bar"] = "显示动作条"
+
+-- Menu localization pass 2026-08-07 (part 2): external Edit Mode integration (DandersFrames).
+L["DandersFrames"] = "DandersFrames"
+L["Show DandersFrames in MSUF Edit Mode"] = "在 MSUF 编辑模式中显示 DandersFrames"
+L["DandersFrames Edit Mode integration"] = "DandersFrames 编辑模式集成"
+L["On (default): MSUF Edit Mode can move the DandersFrames party and raid containers and free pinned sets. Sets glued to the frames follow them, and DandersFrames remains the owner of all saved positions."] = "开启（默认）：MSUF 编辑模式可移动 DandersFrames 的小队和团队容器以及自由的固定组。粘附到框体上的固定组会跟随框体移动，所有已保存位置仍由 DandersFrames 保管。"
+
+-- Menu localization pass 2026-08-07 (part 3): DandersFrames popup preview toggles.
+L["Show party preview"] = "显示小队预览"
+L["Show raid preview"] = "显示团队预览"
+
+-- Menu localization pass 2026-08-07 (part 4): Dominos popup layout controls.
+L["Buttons"] = "按钮数"
+L["Columns"] = "列数"
+L["Padding"] = "内边距"
+L["Faded opacity"] = "淡出透明度"
+L["Click through"] = "点击穿透"
+
 -- Menu localization pass 2026-08-06 (part 6): pandemic badge format key.
 L["On / %s"] = "开启 / %s"
 
@@ -5556,6 +5583,9 @@ L["Exact Y position"] = "精确 Y 位置"
 L["External frame"] = "外部框架"
 L["Next page"] = "下一页"
 L["Previous page"] = "上一页"
+
+-- Guided setup restart confirmation.
+L["Run the guided setup again? The walkthrough starts over at the first step."] = "要再次运行引导设置吗？向导将从第一步重新开始。"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhCN", LoadLocale)
 elseif MSUF.LOCALE == "zhCN" then LoadLocale() end

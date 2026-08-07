@@ -436,7 +436,7 @@ local MSUF2_MENU_AUTO_ruRU = {
     ["Detached height"] = "Отдельная высота",
     ["Detached layer"] = "Отдельный слой",
     ["Detached width"] = "Отдельная ширина",
-    ["A width set here overrides the shared Class Resources width mode. A visible Class Resource bar still wins while width sync is on."] = "Заданная здесь ширина переопределяет общий режим ширины «Ресурсов класса». Видимая полоса ресурсов класса по-прежнему имеет приоритет, пока включена синхронизация ширины.",
+    ["A Width mode that follows a cooldown source outranks this width, as does a visible Class Resource bar while width sync is on."] = "Режим ширины, следующий за источником кулдаунов, имеет приоритет над этой шириной, как и видимая полоса ресурсов класса при включённой синхронизации ширины.",
     ["Disable MSUF unitframe tooltips"] = "Отключить всплывающие подсказки MSUF unitframe",
     ["Dispel Glow"] = "Рассеять свечение",
     ["Dispel Overlay"] = "Рассеивание наложения",
@@ -2219,7 +2219,7 @@ L["Reset Frame Positions"] = "Сбросить позиции рамок"
 L["reset level position"] = "сбросить позицию уровня"
 L["Reset positions..."] = "Сбросить позиции..."
 L["Reset profile '%s' to defaults?\n\nThis resets the entire selected profile to the current MSUF factory defaults. Every menu in that profile will be affected."] = "Сбросить профиль '%s' к стандартам?\n\nЭто сбросит весь выбранный профиль к текущим заводским настройкам MSUF. Будут затронуты все меню этого профиля."
-L["Reset tools, Wago access, and recovery shortcuts live here."] = "Здесь находятся инструменты сброса, доступ к Wago и ярлыки восстановления."
+L["Fix positions, print help, or reset MSUF."] = "Исправьте позиции, выведите справку или сбросьте MSUF."
 L["Resets frame positions only. Profiles and menu settings stay intact."] = "Сбрасывает только позиции рамок. Профили и настройки меню не изменяются."
 L["resize party frames"] = "изменить размер фреймов группы"
 L["Restored the Menu2 dashboard preview and scroll behavior to the 5.3 Beta 2 layout."] = "Предпросмотр панели Menu2 и прокрутка возвращены к раскладке 5.3 Beta 2."
@@ -2422,7 +2422,6 @@ L["MSUF2_SEARCH_SLIDER_ACTION_KEYWORDS"] = "ползунок увеличить 
 L["MSUF2_SEARCH_SLIDER_PATTERNS"] = "ползунок %s|настроить %s|увеличить %s|уменьшить %s|изменить значение %s|установить количество %s"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_CHANGELOG"] = "Открывает: Панель > Журнал изменений"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_RECOVERY"] = "Открывает: Панель > Отображение и восстановление"
-L["MSUF2_SEARCH_TARGET_DASHBOARD_RECOVERY_DISCORD"] = "Открывает: Панель > Отображение и восстановление > Discord"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_SCALING"] = "Открывает: Панель > Масштаб"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_SUPPORT"] = "Открывает: Панель > Поддержать разработку MSUF"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_WAGO"] = "Открывает: Панель > Центр профилей Wago"
@@ -2959,7 +2958,7 @@ L["Only relevant sorting methods are shown for buffs and debuffs."] = "Для б
 L["Reversed flips the complete priority order."] = "Обратный переворачивает полный порядок приоритетов."
 L["Choose which auras Blizzard provides for this lane."] = "Выберите, какие ауры Blizzard предоставит для этой линии."
 L["85% above 15 members · 70% above 25"] = "85% от 15 участников · 70% от 25"
-L["|cffffd700MSUF 6.0 RC3|r · Built for WoW 12.1 PTR."] = "|cffffd700MSUF 6.0 RC3|r · Создано для WoW 12.1 PTR."
+L["|cffffd700MSUF 6.0 RC13|r · Built for WoW 12.1 PTR."] = "|cffffd700MSUF 6.0 RC13|r · Создано для WoW 12.1 PTR."
 L["|cffffd700Auras|r use Blizzard's native 12.1 system."] = "|cffffd700Auras|r использует родную систему Blizzard 12.1."
 L["|cff40ff40Thanks for testing!|r Report bugs on Discord or GitHub."] = "|cff40ff40Спасибо за тестирование! |r Сообщайте об ошибках в Discord или GitHub."
 L["Show auras"] = "Показать ауры"
@@ -4338,6 +4337,7 @@ L["class color"] = "цвет класса"
 L["HP text color"] = "Цвет текста здоровья"
 L["Power text color"] = "Цвет текста ресурса"
 L["Status text color"] = "Цвет текста статуса"
+L["Status text settings"] = "Настройки текста статуса"
 L["Inline text color"] = "Цвет встроенного текста"
 L["Inline Text Color"] = "Цвет встроенного текста"
 L["Extra health text color"] = "Цвет дополнительного текста здоровья"
@@ -4738,6 +4738,7 @@ L["Optional interpolation for this second HP bar. Off keeps direct native SetVal
 L["Optional presentation mode; the Defensive Buffs feature itself does not require a portrait. With an enabled portrait, the first icon occupies it. When the portrait is off, enable the position option below to keep the icons there; otherwise MSUF safely falls back to the normal defensive bar."] = "Необязательный режим отображения; сама функция Защитные баффы не требует портрета. При включенном портрете первый значок занимает его. Если портрет выключен, включите параметр положения ниже, чтобы значки остались там; иначе MSUF безопасно вернется к обычной защитной полосе."
 L["Orb Size"] = "Размер сферы"
 L["Pandemic Warning & Style"] = "Предупреждение о пандемии и стиль"
+L["Pandemic color"] = "Цвет пандемии"
 L["Places Player power text on the detached power bar. When off, the same Player power text remains positioned by the normal text layout."] = "Размещает текст ресурса игрока на отделенной полосе ресурса. Если выключено, тот же текст остается размещенным по обычному макету текста."
 L["Places the duration bar at the top or bottom edge of the aura slot."] = "Размещает полосу длительности у верхнего или нижнего края ячейки ауры."
 L["Player Text Outline"] = "Контур текста игрока"
@@ -4926,6 +4927,32 @@ L["On (default): MSUF Edit Mode can move every active Details! window. Windows s
 L["On (default): MSUF Edit Mode can move the Grid2 layout and its active detached groups. Grid2 remains the owner of its layout and saved positions."] = "Включено (по умолчанию): Режим редактирования MSUF может перемещать макет Grid2 и его активные отделённые группы. Grid2 остаётся владельцем своего макета и сохранённых позиций."
 L["Turn either switch off to remove only those external movers. The third-party addon and its settings are not modified."] = "Отключите любой из переключателей, чтобы убрать только эти внешние манипуляторы. Сторонний аддон и его настройки не изменяются."
 
+-- Menu localization pass 2026-08-07: external Edit Mode integration (Dominos).
+L["Dominos"] = "Dominos"
+L["Show Dominos in MSUF Edit Mode"] = "Показывать Dominos в Режиме редактирования MSUF"
+L["Dominos Edit Mode integration"] = "Интеграция Dominos с Режимом редактирования"
+L["On (default): MSUF Edit Mode can move every Dominos bar that is not docked to another bar. Docked bars follow their host bar, and Dominos remains the owner of all bar positions."] = "Включено (по умолчанию): Режим редактирования MSUF может перемещать любую панель Dominos, не пристыкованную к другой панели. Пристыкованные панели следуют за своей несущей панелью, а владельцем всех позиций панелей остаётся Dominos."
+L["Turn any of these switches off to remove only those external movers. The third-party addons and their settings are not modified."] = "Отключите любой из этих переключателей, чтобы убрать только эти внешние манипуляторы. Сторонние аддоны и их настройки не изменяются."
+L["Scale"] = "Масштаб"
+L["Show bar"] = "Показывать панель"
+
+-- Menu localization pass 2026-08-07 (part 2): external Edit Mode integration (DandersFrames).
+L["DandersFrames"] = "DandersFrames"
+L["Show DandersFrames in MSUF Edit Mode"] = "Показывать DandersFrames в Режиме редактирования MSUF"
+L["DandersFrames Edit Mode integration"] = "Интеграция DandersFrames с Режимом редактирования"
+L["On (default): MSUF Edit Mode can move the DandersFrames party and raid containers and free pinned sets. Sets glued to the frames follow them, and DandersFrames remains the owner of all saved positions."] = "Включено (по умолчанию): Режим редактирования MSUF может перемещать контейнеры группы и рейда DandersFrames, а также свободные закреплённые наборы. Наборы, приклеенные к фреймам, следуют за ними, а владельцем всех сохранённых позиций остаётся DandersFrames."
+
+-- Menu localization pass 2026-08-07 (part 3): DandersFrames popup preview toggles.
+L["Show party preview"] = "Показывать предпросмотр группы"
+L["Show raid preview"] = "Показывать предпросмотр рейда"
+
+-- Menu localization pass 2026-08-07 (part 4): Dominos popup layout controls.
+L["Buttons"] = "Кнопки"
+L["Columns"] = "Столбцы"
+L["Padding"] = "Отступ"
+L["Faded opacity"] = "Прозрачность затухания"
+L["Click through"] = "Сквозные клики"
+
 -- Menu localization pass 2026-08-06 (part 6): pandemic badge format key.
 L["On / %s"] = "Вкл. / %s"
 
@@ -4952,6 +4979,9 @@ L["Exact Y position"] = "Точная позиция Y"
 L["External frame"] = "Внешняя рамка"
 L["Next page"] = "Следующая страница"
 L["Previous page"] = "Предыдущая страница"
+
+-- Guided setup restart confirmation.
+L["Run the guided setup again? The walkthrough starts over at the first step."] = "Запустить пошаговую настройку заново? Обучение начнётся с первого шага."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ruRU", LoadLocale)
 elseif MSUF.LOCALE == "ruRU" then LoadLocale() end

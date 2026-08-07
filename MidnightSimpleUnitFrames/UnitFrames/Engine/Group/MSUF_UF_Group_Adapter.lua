@@ -650,6 +650,12 @@ local function ApplyUnitFrame(frame, kind, unit, reason, applyMask, forceApply)
   attrUnit[shell] = unit
   TrackFrame(visual, unit)
   FlushDeferredHeaderOnShow(visual, true)
+  -- Rounded masks otherwise arrive only through bulk ApplyAll passes; a visual
+  -- built after the startup pass (login roster races, later joins) must adopt
+  -- them itself. The callback is nil while the module is disabled and defers
+  -- to the regen edge in combat.
+  local rounded = _G.MSUF_RoundedUF_OnGroupFrameApplied
+  if rounded then rounded(visual, kind) end
   return true
 end
 

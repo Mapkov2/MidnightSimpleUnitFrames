@@ -399,21 +399,21 @@ local function ObserveCoolinatorSource(source)
     end
     observedCoolinatorSources[source] = true
     source:HookScript("OnSizeChanged", function()
-        refreshCoolinatorAnchor()
+        refreshCoolinatorAnchor(true)
     end)
     source:HookScript("OnShow", function()
-        refreshCoolinatorAnchor()
+        refreshCoolinatorAnchor(true)
     end)
     source:HookScript("OnHide", function()
-        refreshCoolinatorAnchor()
+        refreshCoolinatorAnchor(true)
     end)
     return true
 end
 
 local function EnsureCoolinatorAnchorSource()
     -- Coolinator keeps this frame identity stable and repoints it at the first
-    -- designer/runtime group. Unit frames anchored to it therefore inherit
-    -- position and size changes without any recurring MSUF work.
+    -- designer/runtime group. Out of combat MSUF consumers follow it live; the
+    -- Factory combat-edge freeze severs those links while a fight lasts.
     ObserveCoolinatorSource(_G.CoolinatorPrimaryGroupAnchor)
     local source = ResolveCoolinatorAnchorSource()
     local previousSource = coolinatorActiveSource
@@ -541,15 +541,20 @@ _G.MSUF_GetArcUICooldownAnchor = function()
 end
 
 local function RefreshEssentialCooldownAnchorConsumers(transition)
-    if transition ~= "acquired" and transition ~= "lost" and transition ~= "switched" then return end
+    if transition ~= "acquired" and transition ~= "lost" and transition ~= "switched" and transition ~= "changed" then return end
     local UF = MSUF.UF
     local factory = UF and UF.Factory
-    if factory and type(factory.RefreshExternalAnchor) == "function" then
+    local factoryHandled = false
+    if factory and type(factory.ScheduleExternalAnchorRefresh) == "function" then
+        factory.ScheduleExternalAnchorRefresh("EssentialCooldownViewer")
+        factoryHandled = true
+    elseif factory and type(factory.RefreshExternalAnchor) == "function" then
         factory.RefreshExternalAnchor("EssentialCooldownViewer")
+        factoryHandled = true
     end
 
     local bars = _G.MSUF_DB and _G.MSUF_DB.bars
-    if bars and bars.classPowerAnchorToCooldown == true
+    if not factoryHandled and bars and bars.classPowerAnchorToCooldown == true
         and bars.classPowerWidthMode ~= "cooldown"
         and type(_G.MSUF_ClassPower_RefreshLayout) == "function" then
         _G.MSUF_ClassPower_RefreshLayout()
@@ -557,25 +562,29 @@ local function RefreshEssentialCooldownAnchorConsumers(transition)
 end
 
 refreshArcUIAnchor = function(sizeChanged)
-    local source = arcUIAnchor or ResolveArcUIAnchorSource()
-    if not source then return false end
-    local acquired = not arcUIAnchor
-    if acquired and InCombat() then
+    local source = ResolveArcUIAnchorSource()
+    local previousSource = arcUIAnchor
+    local transition = previousSource ~= source
+        and (not previousSource and "acquired" or not source and "lost" or "switched")
+        or nil
+    if transition and InCombat() then
         arcUIRefreshAfterCombat = true
         if watcher then watcher:RegisterEvent("PLAYER_REGEN_ENABLED") end
-        return true
+        return previousSource ~= nil
     end
-    if acquired then
-        arcUIAnchor = source
+    arcUIAnchor = source
+    if transition then
         if type(_G.MSUF_EnsureCooldownWidthObservers) == "function" then
             _G.MSUF_EnsureCooldownWidthObservers(true)
         end
-        RefreshEssentialCooldownAnchorConsumers("acquired")
+        RefreshEssentialCooldownAnchorConsumers(transition)
+    elseif sizeChanged == true then
+        RefreshEssentialCooldownAnchorConsumers("changed")
     end
-    if (acquired or sizeChanged == true) and type(_G.MSUF_ScheduleCooldownWidthRefresh) == "function" then
+    if (transition or sizeChanged == true) and type(_G.MSUF_ScheduleCooldownWidthRefresh) == "function" then
         _G.MSUF_ScheduleCooldownWidthRefresh("EssentialCooldownViewer", false, true)
     end
-    return true
+    return source ~= nil
 end
 
 refreshSkironAnchorProxy = function(source, isActiveProxy, sizeChanged)
@@ -586,6 +595,8 @@ refreshSkironAnchorProxy = function(source, isActiveProxy, sizeChanged)
             _G.MSUF_EnsureCooldownWidthObservers(true)
         end
         RefreshEssentialCooldownAnchorConsumers(transition)
+    elseif sizeChanged == true then
+        RefreshEssentialCooldownAnchorConsumers("changed")
     end
     if (changed or sizeChanged == true) and type(_G.MSUF_ScheduleCooldownWidthRefresh) == "function" then
         _G.MSUF_ScheduleCooldownWidthRefresh("EssentialCooldownViewer", false, true)
@@ -593,7 +604,7 @@ refreshSkironAnchorProxy = function(source, isActiveProxy, sizeChanged)
     return proxy ~= nil
 end
 
-refreshCoolinatorAnchor = function()
+refreshCoolinatorAnchor = function(sizeChanged)
     local source, changed, transition, deferred = EnsureCoolinatorAnchorSource()
     if deferred then return source ~= nil end
     if changed then
@@ -601,6 +612,11 @@ refreshCoolinatorAnchor = function()
             _G.MSUF_EnsureCooldownWidthObservers(true)
         end
         RefreshEssentialCooldownAnchorConsumers(transition)
+        if type(_G.MSUF_ScheduleCooldownWidthRefresh) == "function" then
+            _G.MSUF_ScheduleCooldownWidthRefresh("EssentialCooldownViewer", false, true)
+        end
+    elseif sizeChanged == true then
+        RefreshEssentialCooldownAnchorConsumers("changed")
         if type(_G.MSUF_ScheduleCooldownWidthRefresh) == "function" then
             _G.MSUF_ScheduleCooldownWidthRefresh("EssentialCooldownViewer", false, true)
         end

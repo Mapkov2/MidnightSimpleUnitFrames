@@ -129,6 +129,43 @@ local CALLBACKS = {
     "resetPosition", "getInspectorValues", "onSelect", "openSettings", "onSessionChanged",
 }
 
+--- Optional owner-defined quick controls rendered inside the MSUF external
+--- popup. Each spec is { id, label, kind = "number"|"toggle", get, set } with
+--- min/max required for numbers. Values flow through get/set only; MSUF never
+--- touches the owner's storage.
+local function PrepareControls(list)
+    if list == nil then return nil end
+    if type(list) ~= "table" then return nil, "invalid_extraControls" end
+    local prepared = {}
+    for i = 1, #list do
+        local spec = list[i]
+        if type(spec) ~= "table" then return nil, "invalid_extraControls" end
+        if not ValidName(spec.id) then return nil, "invalid_control_id" end
+        if type(spec.label) ~= "string" or spec.label == "" or #spec.label > 40 then
+            return nil, "invalid_control_label"
+        end
+        if spec.kind ~= "number" and spec.kind ~= "toggle" then return nil, "invalid_control_kind" end
+        if type(spec.get) ~= "function" or type(spec.set) ~= "function" then
+            return nil, "invalid_control_callbacks"
+        end
+        local minValue, maxValue
+        if spec.kind == "number" then
+            minValue, maxValue = tonumber(spec.min), tonumber(spec.max)
+            if not (Finite(minValue) and Finite(maxValue)) or minValue >= maxValue then
+                return nil, "invalid_control_range"
+            end
+        end
+        if #prepared >= 12 then return nil, "too_many_controls" end
+        prepared[#prepared + 1] = {
+            id = spec.id, label = spec.label, kind = spec.kind,
+            get = spec.get, set = spec.set, min = minValue, max = maxValue,
+            transient = spec.transient == true,
+        }
+    end
+    if #prepared == 0 then return nil end
+    return prepared
+end
+
 local function Prepare(owner, element)
     if type(element) ~= "table" then return nil, "element_not_table" end
     if not ValidName(element.id) then return nil, "invalid_element_id" end
@@ -150,10 +187,13 @@ local function Prepare(owner, element)
     if type(element.movePosition) ~= "function" and not positionPair then
         return nil, "movePosition_or_get_set_required"
     end
+    local controls, controlsReason = PrepareControls(element.extraControls)
+    if controlsReason then return nil, controlsReason end
     local key = Key(owner, element.id)
     if records[key] or (EM2.Registry.Get and EM2.Registry.Get(key)) then return nil, "element_already_registered" end
     local record = { owner = owner, key = key }
     for field, value in pairs(element) do record[field] = value end
+    record.extraControls = controls
     record.order = Finite(tonumber(record.order)) and tonumber(record.order) or 1000
     record.group = type(record.group) == "string" and record.group or owner
     return record
@@ -388,6 +428,76 @@ function External.Nudge(key, dx, dy)
     return true
 end
 
+local function ControlSpec(record, id)
+    local list = record and record.extraControls
+    for i = 1, #(list or {}) do
+        if list[i].id == id then return list[i] end
+    end
+end
+
+local function InvokeControl(record, spec, name, ...)
+    local callback = spec and spec[name]
+    if type(callback) ~= "function" then return false, "callback_missing" end
+    local ok, result = pcall(callback, ...)
+    if not ok then
+        Report(record, ("control %s %s"):format(tostring(spec.id), name), result)
+        return false, "callback_error"
+    end
+    if result == false then return false, "callback_rejected" end
+    return true, result
+end
+
+function External.GetControls(key)
+    local record = records[key]
+    return record and record.extraControls or nil
+end
+
+function External.GetControlValue(key, id)
+    local record = records[key]
+    local spec = ControlSpec(record, id)
+    if not spec then return nil end
+    local ok, value = InvokeControl(record, spec, "get")
+    if not ok then return nil end
+    return value
+end
+
+--- One undo transaction per committed control change; the element's own
+--- captureState/restoreState carry the before-state, so undo/redo and discard
+--- revert control values exactly like positions.
+function External.ApplyControl(key, id, value)
+    local record, undo = records[key], EM2.Undo
+    local spec = ControlSpec(record, id)
+    if not spec or not IsActive() or InCombat()
+        or not (undo and undo.BeginChange and undo.CommitChange and undo.CancelChange) then return false end
+    if spec.kind == "number" then
+        value = tonumber(value)
+        if not Finite(value) then return false end
+        if spec.min and value < spec.min then value = spec.min end
+        if spec.max and value > spec.max then value = spec.max end
+    else
+        value = value == true
+    end
+    --- Transient controls are session view state (previews, visibility aids):
+    --- no undo entry, no capture/rollback — the owner's set either applies or
+    --- reports failure and the popup re-syncs to the real state.
+    if spec.transient then
+        if not InvokeControl(record, spec, "set", value) then return false end
+        Refresh()
+        return true
+    end
+    local before = Capture(record)
+    if not before or undo.BeginChange("external", key, spec.label) ~= true then return false end
+    if not InvokeControl(record, spec, "set", value) then
+        undo.CancelChange()
+        Restore(record, before, "rollback")
+        return false
+    end
+    undo.CommitChange()
+    Refresh()
+    if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(key, true) end
+    return true
+end
+
 function External.Reset(key)
     local record, undo = records[key], EM2.Undo
     if not record or not record.resetPosition or not IsActive() or InCombat()
@@ -422,11 +532,12 @@ function External.GetDisplayInfo(key)
         type(record.openSettings) == "function", type(record.resetPosition) == "function"
 end
 
-function External.OpenSettings(key)
+function External.OpenSettings(key, source)
     local record = records[key]
     if not record or not IsActive() or InCombat() or type(record.openSettings) ~= "function" then return false end
     local ok = Invoke(record, "openSettings", record.id, {
-        owner = record.owner, id = record.id, key = record.key, source = "msuf-edit-mode",
+        owner = record.owner, id = record.id, key = record.key,
+        source = type(source) == "string" and source or "msuf-edit-mode",
     })
     if ok and EM2.ExternalPopup and EM2.ExternalPopup.GetKey
         and EM2.ExternalPopup.GetKey() == key and EM2.ExternalPopup.Close then

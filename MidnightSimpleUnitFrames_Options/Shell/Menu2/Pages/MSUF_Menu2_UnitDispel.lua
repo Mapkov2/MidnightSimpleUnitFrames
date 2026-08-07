@@ -369,7 +369,7 @@ local function BuildUnitDispelSymbolSection(ctx, builder, unit)
             Sync()
         end,
         Meta(ctx, unit, "symbol.enabled", "unitDispelSymbolEnabled"))
-    local preview = W.ToggleAt(card, "Runtime Preview: live UnitFrame (drag)", previewX,
+    local preview = W.ToggleAt(card, "Runtime Preview: live UnitFrame", previewX,
         wide and -16 or -54, previewW)
     M.BindBoolWidget(ctx, preview,
         function() return _G.MSUF_DispelSymbolPreviewMode == true and _G.MSUF_DispelSymbolPreviewScope == unit end,

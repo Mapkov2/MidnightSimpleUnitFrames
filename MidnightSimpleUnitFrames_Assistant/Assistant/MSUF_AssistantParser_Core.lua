@@ -787,6 +787,14 @@ local EXACT_ONLY_FUZZY_WORDS = {
     ["hp"] = true,
     ["id"] = true,
     ["stuck"] = true,
+    -- One edit from "state", "status", "stature" and "statues", and it is the
+    -- only term identifying the Blizzard Totem Frame. "enable target combat
+    -- state indicator" therefore fuzzy-matched the totem lane and enabled the
+    -- Totem Frame -- a setting the player never mentioned, on a different page.
+    -- A word this collision-prone must be spelled exactly to count. The check is
+    -- symmetric, so listing "statue" alone breaks the pair; "state" keeps its
+    -- ordinary typo tolerance, which several real control names rely on.
+    ["statue"] = true,
 }
 
 -- Short control words are too dangerous to fuzzy-match: "on", "off", "x", "y", and IDs

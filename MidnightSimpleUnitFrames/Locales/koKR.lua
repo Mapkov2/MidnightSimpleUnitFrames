@@ -356,7 +356,7 @@ local MSUF2_MENU_AUTO_koKR = {
     ["Detached height"] = "분리 높이",
     ["Detached layer"] = "분리된 레이어",
     ["Detached width"] = "분리된 폭",
-    ["A width set here overrides the shared Class Resources width mode. A visible Class Resource bar still wins while width sync is on."] = "여기서 설정한 너비는 공용 직업 자원 너비 모드를 덮어씁니다. 너비 동기화가 켜져 있으면 표시된 직업 자원 바가 계속 우선합니다.",
+    ["A Width mode that follows a cooldown source outranks this width, as does a visible Class Resource bar while width sync is on."] = "쿨다운 원본을 따르는 너비 모드가 이 너비보다 우선하며, 너비 동기화가 켜져 있으면 표시된 직업 자원 바도 우선합니다.",
     ["Disable MSUF unitframe tooltips"] = "MSUF 유닛프레임 툴팁 비활성화",
     ["Dispel Glow"] = "디스펠 글로우",
     ["Dispel Overlay"] = "오버레이 해제",
@@ -2187,7 +2187,7 @@ L["Reset Frame Positions"] = "프레임 위치 초기화"
 L["reset level position"] = "레벨 위치 초기화"
 L["Reset positions..."] = "위치 초기화..."
 L["Reset profile '%s' to defaults?\n\nThis resets the entire selected profile to the current MSUF factory defaults. Every menu in that profile will be affected."] = "'%s' 프로필을 기본값으로 초기화할까요?\n\n선택한 전체 프로필을 현재 MSUF 공장 기본값으로 초기화합니다. 해당 프로필의 모든 메뉴가 영향을 받습니다."
-L["Reset tools, Wago access, and recovery shortcuts live here."] = "초기화 도구, Wago 접근, 복구 바로가기가 여기에 있습니다."
+L["Fix positions, print help, or reset MSUF."] = "위치를 고치고, 도움말을 출력하거나 MSUF를 초기화합니다."
 L["Resets frame positions only. Profiles and menu settings stay intact."] = "프레임 위치만 초기화합니다. 프로필과 메뉴 설정은 유지됩니다."
 L["Restored the Menu2 dashboard preview and scroll behavior to the 5.3 Beta 2 layout."] = "Menu2 대시보드 미리보기와 스크롤 동작을 5.3 Beta 2 레이아웃으로 복원했습니다."
 L["Restored the Menu2 dashboard preview and scroll behavior to the stable 5.3 Beta 2 layout."] = "Menu2 대시보드 미리보기와 스크롤 동작을 안정적인 5.3 Beta 2 레이아웃으로 복원했습니다."
@@ -2387,7 +2387,6 @@ L["MSUF2_SEARCH_SLIDER_ACTION_KEYWORDS"] = "슬라이더 증가 감소 조정 �
 L["MSUF2_SEARCH_SLIDER_PATTERNS"] = "%s 슬라이더|%s 조정|%s 증가|%s 감소|%s 값 변경|%s 양 설정"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_CHANGELOG"] = "열기: 대시보드 > 변경 기록"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_RECOVERY"] = "열기: 대시보드 > 표시 및 복구"
-L["MSUF2_SEARCH_TARGET_DASHBOARD_RECOVERY_DISCORD"] = "열기: 대시보드 > 표시 및 복구 > Discord"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_SCALING"] = "열기: 대시보드 > 크기 조절"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_SUPPORT"] = "열기: 대시보드 > MSUF 개발 후원"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_WAGO"] = "열기: 대시보드 > Wago 프로필 허브"
@@ -2920,7 +2919,7 @@ L["Only relevant sorting methods are shown for buffs and debuffs."] = "버프와
 L["Reversed flips the complete priority order."] = "역방향은 전체 우선순위 순서를 뒤집습니다."
 L["Choose which auras Blizzard provides for this lane."] = "블리자드가 이 라인에 제공하는 오라를 선택하세요."
 L["85% above 15 members · 70% above 25"] = "15명 이상 85% · 25명 이상 70%"
-L["|cffffd700MSUF 6.0 RC3|r · Built for WoW 12.1 PTR."] = "|cffffd700MSUF 6.0 RC3|r · WoW 12.1 PTR용으로 제작되었습니다."
+L["|cffffd700MSUF 6.0 RC13|r · Built for WoW 12.1 PTR."] = "|cffffd700MSUF 6.0 RC13|r · WoW 12.1 PTR용으로 제작되었습니다."
 L["|cffffd700Auras|r use Blizzard's native 12.1 system."] = "|cffffd700Auras|r는 Blizzard의 기본 12.1 시스템을 사용합니다."
 L["|cff40ff40Thanks for testing!|r Report bugs on Discord or GitHub."] = "|cff40ff40테스트해 주셔서 감사합니다!|r Discord 또는 GitHub에 버그를 신고하세요."
 L["Show auras"] = "오라 표시"
@@ -4298,6 +4297,7 @@ L["class color"] = "직업 색상"
 L["HP text color"] = "생명력 텍스트 색상"
 L["Power text color"] = "자원 텍스트 색상"
 L["Status text color"] = "상태 텍스트 색상"
+L["Status text settings"] = "상태 텍스트 설정"
 L["Inline text color"] = "인라인 텍스트 색상"
 L["Inline Text Color"] = "인라인 텍스트 색상"
 L["Extra health text color"] = "추가 생명력 텍스트 색상"
@@ -4698,6 +4698,7 @@ L["Optional interpolation for this second HP bar. Off keeps direct native SetVal
 L["Optional presentation mode; the Defensive Buffs feature itself does not require a portrait. With an enabled portrait, the first icon occupies it. When the portrait is off, enable the position option below to keep the icons there; otherwise MSUF safely falls back to the normal defensive bar."] = "선택적인 표시 방식이며, 방어 버프 기능 자체는 초상화를 요구하지 않습니다. 초상화가 켜져 있으면 첫 번째 아이콘이 그 자리를 차지합니다. 초상화가 꺼져 있을 때 아이콘을 그 자리에 두려면 아래 위치 옵션을 켜십시오. 그렇지 않으면 MSUF가 안전하게 일반 방어 바로 되돌아갑니다."
 L["Orb Size"] = "구슬 크기"
 L["Pandemic Warning & Style"] = "판데믹 경고 및 스타일"
+L["Pandemic color"] = "판데믹 색상"
 L["Places Player power text on the detached power bar. When off, the same Player power text remains positioned by the normal text layout."] = "플레이어 자원 텍스트를 분리된 자원 바 위에 배치합니다. 끄면 같은 텍스트가 일반 텍스트 레이아웃에 따라 배치됩니다."
 L["Places the duration bar at the top or bottom edge of the aura slot."] = "지속시간 바를 오라 칸의 위쪽 또는 아래쪽 가장자리에 배치합니다."
 L["Player Text Outline"] = "플레이어 텍스트 외곽선"
@@ -4886,6 +4887,32 @@ L["On (default): MSUF Edit Mode can move every active Details! window. Windows s
 L["On (default): MSUF Edit Mode can move the Grid2 layout and its active detached groups. Grid2 remains the owner of its layout and saved positions."] = "켜짐(기본값): MSUF 편집 모드가 Grid2 레이아웃과 활성화된 분리 그룹을 이동할 수 있습니다. 레이아웃과 저장된 위치의 소유권은 여전히 Grid2에 있습니다."
 L["Turn either switch off to remove only those external movers. The third-party addon and its settings are not modified."] = "두 설정 중 하나를 끄면 해당 외부 이동 핸들만 제거됩니다. 서드파티 애드온과 그 설정은 변경되지 않습니다."
 
+-- Menu localization pass 2026-08-07: external Edit Mode integration (Dominos).
+L["Dominos"] = "Dominos"
+L["Show Dominos in MSUF Edit Mode"] = "MSUF 편집 모드에 Dominos 표시"
+L["Dominos Edit Mode integration"] = "Dominos 편집 모드 연동"
+L["On (default): MSUF Edit Mode can move every Dominos bar that is not docked to another bar. Docked bars follow their host bar, and Dominos remains the owner of all bar positions."] = "켜짐(기본값): MSUF 편집 모드가 다른 막대에 도킹되지 않은 모든 Dominos 막대를 이동할 수 있습니다. 도킹된 막대는 호스트 막대를 따라 움직이며, 모든 막대 위치의 소유권은 여전히 Dominos에 있습니다."
+L["Turn any of these switches off to remove only those external movers. The third-party addons and their settings are not modified."] = "이 설정들 중 하나를 끄면 해당 외부 이동 핸들만 제거됩니다. 서드파티 애드온과 그 설정은 변경되지 않습니다."
+L["Scale"] = "배율"
+L["Show bar"] = "막대 표시"
+
+-- Menu localization pass 2026-08-07 (part 2): external Edit Mode integration (DandersFrames).
+L["DandersFrames"] = "DandersFrames"
+L["Show DandersFrames in MSUF Edit Mode"] = "MSUF 편집 모드에 DandersFrames 표시"
+L["DandersFrames Edit Mode integration"] = "DandersFrames 편집 모드 연동"
+L["On (default): MSUF Edit Mode can move the DandersFrames party and raid containers and free pinned sets. Sets glued to the frames follow them, and DandersFrames remains the owner of all saved positions."] = "켜짐(기본값): MSUF 편집 모드가 DandersFrames의 파티 및 공격대 컨테이너와 자유 고정 세트를 이동할 수 있습니다. 프레임에 붙은 세트는 프레임을 따라가며, 저장된 위치의 소유권은 계속 DandersFrames에 있습니다."
+
+-- Menu localization pass 2026-08-07 (part 3): DandersFrames popup preview toggles.
+L["Show party preview"] = "파티 미리보기 표시"
+L["Show raid preview"] = "공격대 미리보기 표시"
+
+-- Menu localization pass 2026-08-07 (part 4): Dominos popup layout controls.
+L["Buttons"] = "버튼"
+L["Columns"] = "열"
+L["Padding"] = "여백"
+L["Faded opacity"] = "흐림 투명도"
+L["Click through"] = "클릭 통과"
+
 -- Menu localization pass 2026-08-06 (part 6): pandemic badge format key.
 L["On / %s"] = "켜짐 / %s"
 
@@ -4915,6 +4942,9 @@ L["Exact Y position"] = "정확한 Y 위치"
 L["External frame"] = "외부 프레임"
 L["Next page"] = "다음 페이지"
 L["Previous page"] = "이전 페이지"
+
+-- Guided setup restart confirmation.
+L["Run the guided setup again? The walkthrough starts over at the first step."] = "가이드 설정을 다시 진행할까요? 설정 안내가 첫 단계부터 다시 시작됩니다."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end

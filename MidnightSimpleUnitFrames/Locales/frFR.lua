@@ -841,7 +841,7 @@ local MSUF2_MENU_AUTO_frFR = {
     ["Detached height"] = "Hauteur détachée",
     ["Detached layer"] = "Couche détachée",
     ["Detached width"] = "Largeur détachée",
-    ["A width set here overrides the shared Class Resources width mode. A visible Class Resource bar still wins while width sync is on."] = "Une largeur définie ici remplace le mode de largeur partagé des Ressources de classe. Une barre de ressources de classe visible reste prioritaire lorsque la synchronisation de largeur est activée.",
+    ["A Width mode that follows a cooldown source outranks this width, as does a visible Class Resource bar while width sync is on."] = "Un mode de largeur qui suit une source de temps de recharge est prioritaire sur cette largeur, tout comme une barre de ressources de classe visible lorsque la synchronisation de largeur est activée.",
     ["Disable MSUF unitframe tooltips"] = "Désactiver les info-bulles du cadre unitaire MSUF",
     ["Dispel Glow"] = "Dissiper la lueur",
     ["Dispel Overlay"] = "Dissiper la superposition",
@@ -2542,7 +2542,7 @@ L["Reset all Group Frame settings to defaults?\n\nThis resets Party, Raid, and M
 L["reset level position"] = "réinitialiser la position du niveau"
 L["Reset positions..."] = "Réinitialiser positions..."
 L["Reset profile '%s' to defaults?\n\nThis resets the entire selected profile to the current MSUF factory defaults. Every menu in that profile will be affected."] = "Réinitialiser le profil '%s' ?\n\nCela remet tout le profil sélectionné aux valeurs d'usine MSUF actuelles. Tous les menus de ce profil seront affectés."
-L["Reset tools, Wago access, and recovery shortcuts live here."] = "Les outils de réinitialisation, l'accès Wago et les raccourcis de récupération sont ici."
+L["Fix positions, print help, or reset MSUF."] = "Corrigez les positions, affichez l'aide ou réinitialisez MSUF."
 L["Resets frame positions only. Profiles and menu settings stay intact."] = "Réinitialise seulement les positions des cadres. Les profils et réglages du menu restent intacts."
 L["Restored the Menu2 dashboard preview and scroll behavior to the 5.3 Beta 2 layout."] = "Aperçu du tableau de bord Menu2 et défilement restaurés sur la disposition 5.3 Beta 2."
 L["Restored the Menu2 dashboard preview and scroll behavior to the stable 5.3 Beta 2 layout."] = "Aperçu du tableau de bord Menu2 et comportement de défilement restaurés sur la disposition stable 5.3 Beta 2."
@@ -2745,7 +2745,6 @@ L["MSUF2_SEARCH_SLIDER_ACTION_KEYWORDS"] = "curseur augmenter diminuer ajuster t
 L["MSUF2_SEARCH_SLIDER_PATTERNS"] = "curseur %s|ajuster %s|augmenter %s|diminuer %s|modifier valeur de %s|definir quantite de %s"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_CHANGELOG"] = "Ouvre : Tableau de bord > Journal"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_RECOVERY"] = "Ouvre : Tableau de bord > Affichage et récupération"
-L["MSUF2_SEARCH_TARGET_DASHBOARD_RECOVERY_DISCORD"] = "Ouvre : Tableau de bord > Affichage et récupération > Discord"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_SCALING"] = "Ouvre : Tableau de bord > Mise à l'échelle"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_SUPPORT"] = "Ouvre : Tableau de bord > Soutenir le développement de MSUF"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_WAGO"] = "Ouvre : Tableau de bord > Hub de profils Wago"
@@ -3339,7 +3338,7 @@ L["Only relevant sorting methods are shown for buffs and debuffs."] = "Seules le
 L["Reversed flips the complete priority order."] = "Inversé inverse l’ordre de priorité complet."
 L["Choose which auras Blizzard provides for this lane."] = "Choisissez les auras que Blizzard fournit pour cette voie."
 L["85% above 15 members · 70% above 25"] = "85 % au-dessus de 15 membres · 70 % au-dessus de 25 membres"
-L["|cffffd700MSUF 6.0 RC3|r · Built for WoW 12.1 PTR."] = "|cffffd700MSUF 6.0 RC3|r · Conçu pour WoW 12.1 PTR."
+L["|cffffd700MSUF 6.0 RC13|r · Built for WoW 12.1 PTR."] = "|cffffd700MSUF 6.0 RC13|r · Conçu pour WoW 12.1 PTR."
 L["|cffffd700Auras|r use Blizzard's native 12.1 system."] = "|cffffd700Auras|r utilise le système 12.1 natif de Blizzard."
 L["|cff40ff40Thanks for testing!|r Report bugs on Discord or GitHub."] = "|cff40ff40Merci pour les tests !|r Signaler les bugs sur Discord ou GitHub."
 L["Show auras"] = "Afficher les auras"
@@ -4721,6 +4720,7 @@ L["class color"] = "couleur de classe"
 L["HP text color"] = "Couleur du texte de vie"
 L["Power text color"] = "Couleur du texte de ressource"
 L["Status text color"] = "Couleur du texte d'état"
+L["Status text settings"] = "Paramètres du texte d'état"
 L["Inline text color"] = "Couleur du texte en ligne"
 L["Inline Text Color"] = "Couleur du texte en ligne"
 L["Extra health text color"] = "Couleur du texte de vie supplémentaire"
@@ -5121,6 +5121,7 @@ L["Optional interpolation for this second HP bar. Off keeps direct native SetVal
 L["Optional presentation mode; the Defensive Buffs feature itself does not require a portrait. With an enabled portrait, the first icon occupies it. When the portrait is off, enable the position option below to keep the icons there; otherwise MSUF safely falls back to the normal defensive bar."] = "Mode de présentation facultatif ; la fonction Buffs défensifs ne nécessite pas de portrait. Avec un portrait activé, la première icône l'occupe. Portrait désactivé, activez l'option de position ci-dessous pour y maintenir les icônes ; sinon MSUF revient sans risque à la barre défensive normale."
 L["Orb Size"] = "Taille de l'orbe"
 L["Pandemic Warning & Style"] = "Alerte de pandémie et style"
+L["Pandemic color"] = "Couleur de pandémie"
 L["Places Player power text on the detached power bar. When off, the same Player power text remains positioned by the normal text layout."] = "Place le texte de la ressource du joueur sur la barre de ressource détachée. Désactivé, ce même texte reste positionné par la disposition de texte normale."
 L["Places the duration bar at the top or bottom edge of the aura slot."] = "Place la barre de durée sur le bord supérieur ou inférieur de l'emplacement d'aura."
 L["Player Text Outline"] = "Contour du texte du joueur"
@@ -5309,6 +5310,32 @@ L["On (default): MSUF Edit Mode can move every active Details! window. Windows s
 L["On (default): MSUF Edit Mode can move the Grid2 layout and its active detached groups. Grid2 remains the owner of its layout and saved positions."] = "Activé (par défaut) : le Mode édition MSUF peut déplacer la disposition de Grid2 et ses groupes détachés actifs. Grid2 reste propriétaire de sa disposition et de ses positions enregistrées."
 L["Turn either switch off to remove only those external movers. The third-party addon and its settings are not modified."] = "Désactivez l'un ou l'autre commutateur pour ne retirer que ces déplaceurs externes. L'addon tiers et ses réglages ne sont pas modifiés."
 
+-- Menu localization pass 2026-08-07: external Edit Mode integration (Dominos).
+L["Dominos"] = "Dominos"
+L["Show Dominos in MSUF Edit Mode"] = "Afficher Dominos dans le Mode édition MSUF"
+L["Dominos Edit Mode integration"] = "Intégration de Dominos au Mode édition"
+L["On (default): MSUF Edit Mode can move every Dominos bar that is not docked to another bar. Docked bars follow their host bar, and Dominos remains the owner of all bar positions."] = "Activé (par défaut) : le Mode édition MSUF peut déplacer chaque barre Dominos qui n'est pas ancrée à une autre barre. Les barres ancrées suivent leur barre hôte et Dominos reste propriétaire de toutes les positions de barres."
+L["Turn any of these switches off to remove only those external movers. The third-party addons and their settings are not modified."] = "Désactivez n'importe lequel de ces commutateurs pour ne retirer que ces déplaceurs externes. Les addons tiers et leurs réglages ne sont pas modifiés."
+L["Scale"] = "Échelle"
+L["Show bar"] = "Afficher la barre"
+
+-- Menu localization pass 2026-08-07 (part 2): external Edit Mode integration (DandersFrames).
+L["DandersFrames"] = "DandersFrames"
+L["Show DandersFrames in MSUF Edit Mode"] = "Afficher DandersFrames dans le Mode édition MSUF"
+L["DandersFrames Edit Mode integration"] = "Intégration de DandersFrames au Mode édition"
+L["On (default): MSUF Edit Mode can move the DandersFrames party and raid containers and free pinned sets. Sets glued to the frames follow them, and DandersFrames remains the owner of all saved positions."] = "Activé (par défaut) : le Mode édition MSUF peut déplacer les conteneurs de groupe et de raid de DandersFrames ainsi que les ensembles épinglés libres. Les ensembles collés aux cadres les suivent et DandersFrames reste propriétaire de toutes les positions enregistrées."
+
+-- Menu localization pass 2026-08-07 (part 3): DandersFrames popup preview toggles.
+L["Show party preview"] = "Afficher l'aperçu du groupe"
+L["Show raid preview"] = "Afficher l'aperçu du raid"
+
+-- Menu localization pass 2026-08-07 (part 4): Dominos popup layout controls.
+L["Buttons"] = "Boutons"
+L["Columns"] = "Colonnes"
+L["Padding"] = "Marge interne"
+L["Faded opacity"] = "Opacité estompée"
+L["Click through"] = "Clic au travers"
+
 -- Menu localization pass 2026-08-06 (part 6): pandemic badge format key.
 L["On / %s"] = "Activé / %s"
 
@@ -5338,6 +5365,9 @@ L["Exact Y position"] = "Position Y exacte"
 L["External frame"] = "Cadre externe"
 L["Next page"] = "Page suivante"
 L["Previous page"] = "Page précédente"
+
+-- Guided setup restart confirmation.
+L["Run the guided setup again? The walkthrough starts over at the first step."] = "Relancer la configuration guidée ? Le parcours reprend depuis la première étape."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("frFR", LoadLocale)
 elseif MSUF.LOCALE == "frFR" then LoadLocale() end

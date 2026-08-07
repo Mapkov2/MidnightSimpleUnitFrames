@@ -4185,10 +4185,72 @@ A._ParseHumanIndicatorMoveFastShortcut = function(text)
         return nil
     end
 
+    -- A word that several specs share ("icon", "indicator", "marker" vs
+    -- "target marker") identifies none of them, and the unit/scope nouns are in
+    -- every request anyway. Only a word owned by exactly one spec can name it.
+    local SUBJECT_WORD_STOPLIST = {
+        icon = true, text = true, indicator = true, symbol = true, status = true,
+        player = true, target = true, focus = true, pet = true, boss = true,
+        party = true, raid = true, group = true, frame = true, name = true,
+        number = true, incoming = true, check = true, state = true,
+    }
+    local function distinctiveSpecWords(specs)
+        local owners = {}
+        for i = 1, #specs do
+            for j = 1, #specs[i].terms do
+                for word in tostring(specs[i].terms[j]):gmatch("%a%a%a%a+") do
+                    if not SUBJECT_WORD_STOPLIST[word] then
+                        if owners[word] == nil then owners[word] = i
+                        elseif owners[word] ~= i then owners[word] = false end
+                    end
+                end
+            end
+        end
+        return owners
+    end
+
+    -- Players shorten the indicator once the conversation is already about it:
+    -- "enable target leader icon" then "now move target leader up". The bare
+    -- word is far too weak on its own -- "move target leader up" with no such
+    -- history must keep meaning the frame -- so require the same distinctive
+    -- word to appear both in this request and in the subject the previous turn
+    -- established. That makes the shorthand a continuation of a named subject
+    -- rather than a guess from an ambiguous noun.
+    local function matchSpecFromSubject(specs)
+        local ctx = type(A.GetContext) == "function" and A.GetContext() or nil
+        if type(ctx) ~= "table" then return nil end
+        -- A subject the player stopped talking about turns back into an
+        -- ordinary noun. Use the same three-turn window every other follow-up
+        -- honours (P.ContextSubjectRecent) so the shorthand cannot resurrect a
+        -- stale topic. Computed inline rather than borrowed, because this file
+        -- loads before Followups and a missing helper must not read as "fresh".
+        local currentTurn = tonumber(ctx.turnSerial or ctx.lastTurnSerial) or 0
+        local subjectTurn = tonumber(ctx.lastSubjectTurn or ctx.lastMentionedTurn)
+        if not subjectTurn then return nil end
+        local age = currentTurn - subjectTurn
+        if age < 0 or age > 3 then return nil end
+        local subject = Normalize(tostring(ctx.lastSetting or "") .. " " .. tostring(ctx.lastActionLabel or ""))
+        if subject == "" then return nil end
+        -- Walk the specs in their declared order, not the owners table's hash
+        -- order, so two subjects that both qualify resolve the same way twice.
+        local owners = distinctiveSpecWords(specs)
+        for i = 1, #specs do
+            for j = 1, #specs[i].terms do
+                for word in tostring(specs[i].terms[j]):gmatch("%a%a%a%a+") do
+                    if owners[word] == i and subject:find(word, 1, true)
+                        and ContainsAny(text, { word }) then
+                        return specs[i]
+                    end
+                end
+            end
+        end
+        return nil
+    end
+
     local units = DetectUnits(text)
     local groups = DetectGroups(text)
-    local unitSpec = matchSpec(unitSpecs)
-    local groupSpec = matchSpec(groupSpecs)
+    local unitSpec = matchSpec(unitSpecs) or matchSpecFromSubject(unitSpecs)
+    local groupSpec = matchSpec(groupSpecs) or matchSpecFromSubject(groupSpecs)
     local changes = {}
     local label
     if #units > 0 and unitSpec
@@ -5276,6 +5338,8 @@ local function ParseGlobalUIShellPriorityShortcut(normalized, raw)
         { key = "general.showWelcomeMessage", label = "Welcome Message", terms = { "welcome message", "startup message" } },
         { key = "general.grid2EditModeIntegration", label = "Grid2 Edit Mode Integration", terms = { "grid2 edit mode", "grid2 mover", "move grid2", "grid2 integration" } },
         { key = "general.detailsEditModeIntegration", label = "Details! Edit Mode Integration", terms = { "details edit mode", "details mover", "move details", "details integration" } },
+        { key = "general.dominosEditModeIntegration", label = "Dominos Edit Mode Integration", terms = { "dominos edit mode", "dominos mover", "move dominos", "dominos integration" } },
+        { key = "general.dandersEditModeIntegration", label = "DandersFrames Edit Mode Integration", terms = { "dandersframes edit mode", "danders edit mode", "danders mover", "move dandersframes", "danders integration" } },
         { key = "general.versionCheckEnabled", label = "Version Check", terms = { "version check", "version checker" } },
         { key = "general.showMinimapIcon", label = "Minimap Icon", terms = { "minimap icon", "minimap button" } },
         { key = "general.playTargetSelectLostSounds", label = "Target Sounds", terms = { "target sounds", "target select sound", "target lost sound" } },

@@ -2270,10 +2270,14 @@ local function BuildWindowChrome(state)
     -- Cold path by construction: state changes on page navigation only, no
     -- OnUpdate, no events. All colors come from theme tokens so every menu
     -- accent (midnight, class, presets, custom, +tint) restyles them for free.
-    local function HistoryNavButton(rotation, onClick)
+    -- The 22px art is a much smaller target than the empty strip around it, so
+    -- the hit rect grows well past the glyph: down to just above the bottom
+    -- divider, up to the text row, and outward to the side. The 2px gap between
+    -- the pair is split 1/1 so neither arrow ever steals the other's clicks.
+    local function HistoryNavButton(rotation, hitLeft, hitRight, onClick)
         local btn = CreateFrame("Button", nil, status)
         btn:SetSize(22, 22)
-        if btn.SetHitRectInsets then btn:SetHitRectInsets(-2, -2, -5, -5) end
+        if btn.SetHitRectInsets then btn:SetHitRectInsets(hitLeft, hitRight, -5, -11) end
         local fill, edge = T.CreateSuperellipseLayers(btn, "_msuf2HistNav", 1, "BACKGROUND", "BORDER")
         local icon = btn:CreateTexture(nil, "ARTWORK")
         icon:SetTexture(T.media.dropdownChevron)
@@ -2316,9 +2320,9 @@ local function BuildWindowChrome(state)
     end
     -- Bottom-left of the strip, in line with the toolbar button row on the
     -- right; the Profile/Edit/Combat text row above keeps its full width.
-    local histBack = HistoryNavButton(-math.pi * 0.5, function() M.GoBackPage() end)
+    local histBack = HistoryNavButton(-math.pi * 0.5, -12, -1, function() M.GoBackPage() end)
     histBack:SetPoint("BOTTOMLEFT", status, "BOTTOMLEFT", 18, 13)
-    local histForward = HistoryNavButton(math.pi * 0.5, function() M.GoForwardPage() end)
+    local histForward = HistoryNavButton(math.pi * 0.5, -1, -14, function() M.GoForwardPage() end)
     histForward:SetPoint("LEFT", histBack, "RIGHT", 2, 0)
     M.pageHistoryBackButton = histBack
     M.pageHistoryForwardButton = histForward

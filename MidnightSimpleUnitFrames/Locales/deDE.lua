@@ -2429,7 +2429,7 @@ L["Reset Frame Positions"] = "Framepositionen zurücksetzen"
 L["reset level position"] = "Levelposition zurücksetzen"
 L["Reset positions..."] = "Positionen zurücksetzen..."
 L["Reset profile '%s' to defaults?\n\nThis resets the entire selected profile to the current MSUF factory defaults. Every menu in that profile will be affected."] = "Profil '%s' auf Standard zurücksetzen?\n\nDies setzt das gesamte ausgewählte Profil auf die aktuellen MSUF-Werkseinstellungen zurück. Jedes Menü in diesem Profil ist betroffen."
-L["Reset tools, Wago access, and recovery shortcuts live here."] = "Reset-Tools, Wago-Zugriff und Wiederherstellungs-Shortcuts befinden sich hier."
+L["Fix positions, print help, or reset MSUF."] = "Positionen reparieren, Hilfe ausgeben oder MSUF zurücksetzen."
 L["Resets frame positions only. Profiles and menu settings stay intact."] = "Setzt nur Framepositionen zurück. Profile und Menüeinstellungen bleiben erhalten."
 L["Restored the Menu2 dashboard preview and scroll behavior to the 5.3 Beta 2 layout."] = "Menu2-Dashboard-Vorschau und Scrollverhalten auf das 5.3-Beta-2-Layout zurückgesetzt."
 L["Restored the Menu2 dashboard preview and scroll behavior to the stable 5.3 Beta 2 layout."] = "Menu2-Dashboard-Vorschau und Scrollverhalten auf das stabile 5.3-Beta-2-Layout zurückgesetzt."
@@ -2583,7 +2583,7 @@ L["Detached Y"] = "Separate Leiste Y"
 L["Detached height"] = "Separate Leistenhöhe"
 L["Detached layer"] = "Separate Leistenebene"
 L["Detached width"] = "Separate Leistenbreite"
-L["A width set here overrides the shared Class Resources width mode. A visible Class Resource bar still wins while width sync is on."] = "Eine hier gesetzte Breite überschreibt den gemeinsamen Breitenmodus der Klassenressourcen. Eine sichtbare Klassenressourcen-Leiste hat weiterhin Vorrang, solange die Breitensynchronisierung aktiv ist."
+L["A Width mode that follows a cooldown source outranks this width, as does a visible Class Resource bar while width sync is on."] = "Ein Breitenmodus, der einer Cooldown-Quelle folgt, hat Vorrang vor dieser Breite, ebenso eine sichtbare Klassenressourcen-Leiste, solange die Breitensynchronisierung aktiv ist."
 L["Detaches power bar from unit frame"] = "Trennt die Ressourcenleiste vom Unitframe"
 L["Dispel"] = "Entfernen"
 L["Dispel Glow"] = "Entfernbar-Leuchten"
@@ -2666,7 +2666,6 @@ L["MSUF2_SEARCH_SLIDER_ACTION_KEYWORDS"] = "slider regler erhöhen erhoehen verr
 L["MSUF2_SEARCH_SLIDER_PATTERNS"] = "slider %s|regler %s|%s anpassen|%s erhöhen|%s verringern|%s wert ändern"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_CHANGELOG"] = "Öffnet: Dashboard > Changelog"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_RECOVERY"] = "Öffnet: Dashboard > Anzeige & Wiederherstellung"
-L["MSUF2_SEARCH_TARGET_DASHBOARD_RECOVERY_DISCORD"] = "Öffnet: Dashboard > Anzeige & Wiederherstellung > Discord"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_SCALING"] = "Öffnet: Dashboard > Skalierung"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_SUPPORT"] = "Öffnet: Dashboard > MSUF-Entwicklung unterstützen"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_WAGO"] = "Öffnet: Dashboard > Wago-Profil-Hub"
@@ -3072,7 +3071,6 @@ L["Shows tick separators on the Player castbar while channeling.\n\nSupported sp
 L["Show spark (leading edge highlight)"] = "Funken an der Vorderkante anzeigen"
 
 L["The Assistant dashboard module is not available. Use the navigation pages and search to configure MSUF."] = "Assistant nicht verfügbar. Nutze Navigation oder Suche, um MSUF einzurichten."
-L["Reset tools, Wago access, and recovery shortcuts live here."] = "Positionen reparieren, Support-Links öffnen oder MSUF zurücksetzen."
 L["Use sliders for exact scale changes. Apply commits the selected value; Revert returns to the active value."] = "Passe einen Regler an und wähle Anwenden. Zurück verwirft den ausstehenden Wert."
 L["Changes the global WoW UI scale through MSUF presets."] = "Legt die WoW-UI-Skalierung über eine Vorlage fest."
 L["Changes the actual MSUF unit frames in-game."] = "Skaliert alle MSUF-Frames."
@@ -3143,7 +3141,7 @@ L["Only relevant sorting methods are shown for buffs and debuffs."] = "Für Buff
 L["Reversed flips the complete priority order."] = "Umgekehrt dreht die gesamte Prioritätsreihenfolge um."
 L["Choose which auras Blizzard provides for this lane."] = "Wähle, welche Auren Blizzard für diesen Bereich bereitstellt."
 L["85% above 15 members · 70% above 25"] = "85 % über 15 Mitglieder · 70 % über 25"
-L["|cffffd700MSUF 6.0 RC3|r · Built for WoW 12.1 PTR."] = "|cffffd700MSUF 6.0 RC3|r · Für WoW 12.1 PTR entwickelt."
+L["|cffffd700MSUF 6.0 RC13|r · Built for WoW 12.1 PTR."] = "|cffffd700MSUF 6.0 RC13|r · Für WoW 12.1 PTR entwickelt."
 L["|cffffd700Auras|r use Blizzard's native 12.1 system."] = "|cffffd700Auren|r verwenden Blizzards natives 12.1-System."
 L["|cff40ff40Thanks for testing!|r Report bugs on Discord or GitHub."] = "|cff40ff40Danke fürs Testen!|r Melde Fehler auf Discord oder GitHub."
 L["Free (UIParent)"] = "Bildschirm"
@@ -4687,6 +4685,7 @@ L["class color"] = "Klassenfarbe"
 L["HP text color"] = "LP-Textfarbe"
 L["Power text color"] = "Ressourcen-Textfarbe"
 L["Status text color"] = "Statustextfarbe"
+L["Status text settings"] = "Statustext-Einstellungen"
 L["Inline text color"] = "Inline-Textfarbe"
 L["Inline Text Color"] = "Inline-Textfarbe"
 L["Extra health text color"] = "Farbe des zusätzlichen LP-Texts"
@@ -5088,6 +5087,7 @@ L["Optional interpolation for this second HP bar. Off keeps direct native SetVal
 L["Optional presentation mode; the Defensive Buffs feature itself does not require a portrait. With an enabled portrait, the first icon occupies it. When the portrait is off, enable the position option below to keep the icons there; otherwise MSUF safely falls back to the normal defensive bar."] = "Optionaler Darstellungsmodus; die Funktion Defensive Buffs selbst benötigt kein Porträt. Bei aktiviertem Porträt belegt das erste Symbol dieses. Ist das Porträt aus, aktiviere die Positionsoption unten, damit die Symbole dort bleiben; andernfalls fällt MSUF sicher auf die normale Defensivleiste zurück."
 L["Orb Size"] = "Kugelgröße"
 L["Pandemic Warning & Style"] = "Pandemie-Warnung & Stil"
+L["Pandemic color"] = "Pandemie-Farbe"
 L["Places Player power text on the detached power bar. When off, the same Player power text remains positioned by the normal text layout."] = "Platziert den Text der Spielerressource auf der abgetrennten Ressourcenleiste. Ist dies aus, bleibt derselbe Text durch das normale Textlayout positioniert."
 L["Places the duration bar at the top or bottom edge of the aura slot."] = "Platziert den Dauerbalken an der oberen oder unteren Kante des Aura-Slots."
 L["Player Text Outline"] = "Spieler-Textkontur"
@@ -5276,6 +5276,32 @@ L["On (default): MSUF Edit Mode can move every active Details! window. Windows s
 L["On (default): MSUF Edit Mode can move the Grid2 layout and its active detached groups. Grid2 remains the owner of its layout and saved positions."] = "An (Standard): Der MSUF Edit Mode kann das Grid2-Layout und dessen aktive abgetrennte Gruppen verschieben. Grid2 bleibt Eigentümer seines Layouts und seiner gespeicherten Positionen."
 L["Turn either switch off to remove only those external movers. The third-party addon and its settings are not modified."] = "Schalte einen der beiden Schalter aus, um nur diese externen Mover zu entfernen. Das Drittanbieter-Addon und seine Einstellungen werden nicht verändert."
 
+-- Menu localization pass 2026-08-07: external Edit Mode integration (Dominos).
+L["Dominos"] = "Dominos"
+L["Show Dominos in MSUF Edit Mode"] = "Dominos im MSUF Edit Mode anzeigen"
+L["Dominos Edit Mode integration"] = "Dominos-Edit-Mode-Integration"
+L["On (default): MSUF Edit Mode can move every Dominos bar that is not docked to another bar. Docked bars follow their host bar, and Dominos remains the owner of all bar positions."] = "An (Standard): Der MSUF Edit Mode kann jede Dominos-Leiste verschieben, die nicht an eine andere Leiste angedockt ist. Angedockte Leisten folgen ihrer Trägerleiste, und Dominos bleibt Eigentümer aller Leistenpositionen."
+L["Turn any of these switches off to remove only those external movers. The third-party addons and their settings are not modified."] = "Schalte einen dieser Schalter aus, um nur diese externen Mover zu entfernen. Die Drittanbieter-Addons und ihre Einstellungen werden nicht verändert."
+L["Scale"] = "Skalierung"
+L["Show bar"] = "Leiste anzeigen"
+
+-- Menu localization pass 2026-08-07 (part 2): external Edit Mode integration (DandersFrames).
+L["DandersFrames"] = "DandersFrames"
+L["Show DandersFrames in MSUF Edit Mode"] = "DandersFrames im MSUF Edit Mode anzeigen"
+L["DandersFrames Edit Mode integration"] = "DandersFrames-Edit-Mode-Integration"
+L["On (default): MSUF Edit Mode can move the DandersFrames party and raid containers and free pinned sets. Sets glued to the frames follow them, and DandersFrames remains the owner of all saved positions."] = "An (Standard): Der MSUF Edit Mode kann die Party- und Raid-Container von DandersFrames sowie freie angepinnte Sets verschieben. An die Frames geheftete Sets folgen ihnen, und DandersFrames bleibt Eigentümer aller gespeicherten Positionen."
+
+-- Menu localization pass 2026-08-07 (part 3): DandersFrames popup preview toggles.
+L["Show party preview"] = "Party-Vorschau anzeigen"
+L["Show raid preview"] = "Raid-Vorschau anzeigen"
+
+-- Menu localization pass 2026-08-07 (part 4): Dominos popup layout controls.
+L["Buttons"] = "Buttons"
+L["Columns"] = "Spalten"
+L["Padding"] = "Innenabstand"
+L["Faded opacity"] = "Fade-Deckkraft"
+L["Click through"] = "Durchklickbar"
+
 -- Menu localization pass 2026-08-06 (part 6): pandemic badge format key.
 L["On / %s"] = "An / %s"
 
@@ -5315,6 +5341,9 @@ L["Exact Y position"] = "Genaue Y-Position"
 L["External frame"] = "Externer Frame"
 L["Next page"] = "Nächste Seite"
 L["Previous page"] = "Vorherige Seite"
+
+-- Guided setup restart confirmation.
+L["Run the guided setup again? The walkthrough starts over at the first step."] = "Das geführte Setup erneut ausführen? Die Tour beginnt wieder beim ersten Schritt."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("deDE", LoadLocale)
 elseif MSUF.LOCALE == "deDE" then LoadLocale() end

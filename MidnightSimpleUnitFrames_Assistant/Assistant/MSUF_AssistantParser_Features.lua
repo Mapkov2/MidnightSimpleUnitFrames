@@ -1148,6 +1148,12 @@ A._GameplayShortcutSpecs = A._GameplayShortcutSpecs or {
         id = "combatState",
         label = "Combat Enter/Leave Text",
         terms = { "combat state", "combat enter leave", "combat enter", "combat leave", "kampf text", "kampf status", "kampfstatus", "kampfanzeige" },
+        -- This feature is a TEXT that flashes on entering or leaving combat. The
+        -- per-unit "Combat Indicator" is a different control whose name starts
+        -- with the same two words, so "enable target combat state indicator"
+        -- matched here and toggled a global text instead. An indicator word is
+        -- decisive: this feature never has one.
+        notTerms = { "indicator", "icon", "symbol", "anzeige symbol" },
         pageTerms = { "enter leave", "enter text", "leave text", "combat text", "state text", "kampf text", "kampfstatus", "kampfanzeige" },
         enable = "gameplay.enableCombatStateText",
         x = "gameplay.combatStateOffsetX",
@@ -1195,12 +1201,18 @@ function A._GameplayShortcutSpec(text)
     local specs = A._GameplayShortcutSpecs or {}
     for i = 1, #specs do
         local spec = specs[i]
-        if ContainsAny(text, spec.terms) then return spec end
+        if ContainsAny(text, spec.terms)
+            and not (spec.notTerms and ContainsAny(text, spec.notTerms)) then
+            return spec
+        end
     end
     if M and M.activeKey == "gameplay" then
         for i = 1, #specs do
             local spec = specs[i]
-            if ContainsAny(text, spec.pageTerms) then return spec end
+            if ContainsAny(text, spec.pageTerms)
+                and not (spec.notTerms and ContainsAny(text, spec.notTerms)) then
+                return spec
+            end
         end
         if ContainsAny(text, FeaturesPhrases[159]) and not ContainsAny(text, FeaturesPhrases[160]) then
             return specs[1]
@@ -2952,7 +2964,10 @@ local GAMEPLAY_ROOT_TOGGLES = {
         key = "gameplay.enableCombatStateText",
         label = "Combat Enter/Leave Text",
         terms = { "combat state", "combat enter leave", "combat enter", "combat leave", "kampf text", "kampf status", "kampfstatus", "kampfanzeige" },
-        details = { "size", "groesse", "font", "duration", "dauer", "lock", "locked", "sperren", "x", "y", "offset", "move", "verschiebe", "color", "colors", "farbe", "farben", "sync", "synchron" },
+        -- "indicator"/"icon"/"symbol" belong to the per-unit Combat Indicator,
+        -- whose name begins with the same two words; see the matching notTerms
+        -- on the combatState entry in A._GameplayShortcutSpecs.
+        details = { "indicator", "icon", "symbol", "size", "groesse", "font", "duration", "dauer", "lock", "locked", "sperren", "x", "y", "offset", "move", "verschiebe", "color", "colors", "farbe", "farben", "sync", "synchron" },
     },
     {
         key = "gameplay.enablePlayerTotems",
