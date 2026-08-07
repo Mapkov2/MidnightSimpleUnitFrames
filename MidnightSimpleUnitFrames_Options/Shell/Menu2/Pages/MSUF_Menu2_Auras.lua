@@ -2565,7 +2565,12 @@ local function BuildGroupStyle(ctx, b, scope, options)
         })
     end
     local cw = BodyWidth(cooldown)
-    BindGroupSlider(ctx, cooldown, "Cooldown Font", 24, -56, 6, 24, 1, cw - 48, scope, lane, "cooldownSize", 8, "font", RefreshStylePreview)
+    -- Mode must be "auras", not "font": the DIRTY_FONT fast path refreshes the
+    -- compiled spec's text domain in place and never recompiles the aura lanes,
+    -- so the lane CooldownSize stays stale until an unrelated geometry write
+    -- drops the cache (issue #64). "auras" invalidates the compiled spec and
+    -- re-applies only the aura element.
+    BindGroupSlider(ctx, cooldown, "Cooldown Font", 24, -56, 6, 24, 1, cw - 48, scope, lane, "cooldownSize", 8, "auras", RefreshStylePreview)
     BindGroupDropdown(ctx, cooldown, "Cooldown Anchor", 24, -112, GFAnchorValues(), cw - 48, scope, lane, "cooldownAnchor", "CENTER", "geometry", RefreshStylePreview)
     local cooldownSmallW = max(120, floor((cw - 72) / 2))
     BindGroupSlider(ctx, cooldown, "Cooldown X", 24, -170, -40, 40, 1, cooldownSmallW, scope, lane, "cooldownX", 0, "geometry", RefreshStylePreview)
@@ -2640,7 +2645,9 @@ local function BuildGroupStyle(ctx, b, scope, options)
     end
     local sw = BodyWidth(stack)
     BindGroupSwitch(ctx, stack, "Show Stack Count", 24, -56, sw - 48, scope, lane, "showStacks", true, "visual", RefreshStylePreview)
-    BindGroupSlider(ctx, stack, "Stack Font", 24, -94, 6, 24, 1, sw - 48, scope, lane, "stackSize", 10, "font", RefreshStylePreview)
+    -- "auras" for the same reason as Cooldown Font above: lane StackSize lives
+    -- in the aura domain, which the "font" fast path never recompiles.
+    BindGroupSlider(ctx, stack, "Stack Font", 24, -94, 6, 24, 1, sw - 48, scope, lane, "stackSize", 10, "auras", RefreshStylePreview)
     BindGroupDropdown(ctx, stack, "Stack Anchor", 24, -152, GFAnchorValues(), sw - 48, scope, lane, "stackAnchor", "BOTTOMRIGHT", "geometry", RefreshStylePreview)
     local stackSmallW = max(120, floor((sw - 72) / 2))
     BindGroupSlider(ctx, stack, "Stack X", 24, -210, -40, 40, 1, stackSmallW, scope, lane, "stackX", 0, "geometry", RefreshStylePreview)
