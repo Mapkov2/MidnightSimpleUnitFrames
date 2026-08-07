@@ -1555,9 +1555,10 @@ local function BuildFontAndClassColors(ctx, b, CH, part)
     openFonts:SetScript("OnClick", OpenFontsTextColors)
     RegisterControl(openFonts, Meta("font.open_text_colors", "navigation", { navigationKey = "opt_fonts" }), "Fonts > Text Colors", "button")
 
-    -- Canonical surface for the per-indicator status text colors that Unit >
-    -- Status also exposes. Frame and indicator are picked one at a time so the
-    -- eight indicators across seven frames stay a single swatch. An indicator
+    -- Canonical surface for the per-indicator status text colors. Unit > Status
+    -- reaches the same three keys through its ::: text shortcut only; it no longer
+    -- carries a swatch of its own. Frame and indicator are picked one at a time so
+    -- the eight indicators across seven frames stay a single swatch. An indicator
     -- with no stored color shows the font color it currently inherits.
     local statusText = b:CollapsibleSection("colors_status_text", "Status Text Colors", 250, false)
     local statusTextW = statusText._msuf2Width or ctx.width or 720
