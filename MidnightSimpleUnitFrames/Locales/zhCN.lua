@@ -2853,7 +2853,7 @@ L["Reset Frame Positions"] = "重置框体位置"
 L["reset level position"] = "重置等级位置"
 L["Reset positions..."] = "重置位置..."
 L["Reset profile '%s' to defaults?\n\nThis resets the entire selected profile to the current MSUF factory defaults. Every menu in that profile will be affected."] = "将配置文件 '%s' 重置为默认值？\n\n这会将整个所选配置文件重置为当前 MSUF 出厂默认值。该配置文件中的所有菜单都会受影响。"
-L["Reset tools, Wago access, and recovery shortcuts live here."] = "重置工具、Wago 入口和恢复快捷方式都在这里。"
+L["Fix positions, print help, or reset MSUF."] = "修复位置、输出帮助或重置 MSUF。"
 L["Resets frame positions only. Profiles and menu settings stay intact."] = "只重置框体位置。配置和菜单设置保持不变。"
 L["Restored the Menu2 dashboard preview and scroll behavior to the 5.3 Beta 2 layout."] = "将 Menu2 仪表盘预览和滚动行为恢复到 5.3 Beta 2 布局。"
 L["Restored the Menu2 dashboard preview and scroll behavior to the stable 5.3 Beta 2 layout."] = "将 Menu2 仪表盘预览和滚动行为恢复到稳定的 5.3 Beta 2 布局。"
@@ -3055,7 +3055,6 @@ L["MSUF2_SEARCH_SLIDER_ACTION_KEYWORDS"] = "滑块 增加 减少 调整 大小 �
 L["MSUF2_SEARCH_SLIDER_PATTERNS"] = "%s滑块|调整%s|增加%s|减少%s|更改%s数值|设置%s数量"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_CHANGELOG"] = "打开：仪表板 > 更新日志"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_RECOVERY"] = "打开：仪表板 > 显示与恢复"
-L["MSUF2_SEARCH_TARGET_DASHBOARD_RECOVERY_DISCORD"] = "打开：仪表板 > 显示与恢复 > Discord"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_SCALING"] = "打开：仪表板 > 缩放"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_SUPPORT"] = "打开：仪表板 > 支持 MSUF 开发"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_WAGO"] = "打开：仪表板 > Wago 配置中心"
@@ -5532,6 +5531,32 @@ L["On (default): MSUF Edit Mode can move every active Details! window. Windows s
 L["On (default): MSUF Edit Mode can move the Grid2 layout and its active detached groups. Grid2 remains the owner of its layout and saved positions."] = "开启（默认）：MSUF 编辑模式可移动 Grid2 的布局及其活动的分离分组。Grid2 仍然拥有其布局和已保存的位置。"
 L["Turn either switch off to remove only those external movers. The third-party addon and its settings are not modified."] = "关闭其中任一开关即可仅移除这些外部移动器。第三方插件及其设置不会被修改。"
 
+-- Menu localization pass 2026-08-07: external Edit Mode integration (Dominos).
+L["Dominos"] = "Dominos"
+L["Show Dominos in MSUF Edit Mode"] = "在 MSUF 编辑模式中显示 Dominos"
+L["Dominos Edit Mode integration"] = "Dominos 编辑模式集成"
+L["On (default): MSUF Edit Mode can move every Dominos bar that is not docked to another bar. Docked bars follow their host bar, and Dominos remains the owner of all bar positions."] = "开启（默认）：MSUF 编辑模式可移动所有未吸附到其他动作条的 Dominos 动作条。已吸附的动作条会跟随其宿主动作条移动，所有动作条位置仍由 Dominos 保管。"
+L["Turn any of these switches off to remove only those external movers. The third-party addons and their settings are not modified."] = "关闭其中任意开关即可仅移除这些外部移动器。第三方插件及其设置不会被修改。"
+L["Scale"] = "缩放"
+L["Show bar"] = "显示动作条"
+
+-- Menu localization pass 2026-08-07 (part 2): external Edit Mode integration (DandersFrames).
+L["DandersFrames"] = "DandersFrames"
+L["Show DandersFrames in MSUF Edit Mode"] = "在 MSUF 编辑模式中显示 DandersFrames"
+L["DandersFrames Edit Mode integration"] = "DandersFrames 编辑模式集成"
+L["On (default): MSUF Edit Mode can move the DandersFrames party and raid containers and free pinned sets. Sets glued to the frames follow them, and DandersFrames remains the owner of all saved positions."] = "开启（默认）：MSUF 编辑模式可移动 DandersFrames 的小队和团队容器以及自由的固定组。粘附到框体上的固定组会跟随框体移动，所有已保存位置仍由 DandersFrames 保管。"
+
+-- Menu localization pass 2026-08-07 (part 3): DandersFrames popup preview toggles.
+L["Show party preview"] = "显示小队预览"
+L["Show raid preview"] = "显示团队预览"
+
+-- Menu localization pass 2026-08-07 (part 4): Dominos popup layout controls.
+L["Buttons"] = "按钮数"
+L["Columns"] = "列数"
+L["Padding"] = "内边距"
+L["Faded opacity"] = "淡出透明度"
+L["Click through"] = "点击穿透"
+
 -- Menu localization pass 2026-08-06 (part 6): pandemic badge format key.
 L["On / %s"] = "开启 / %s"
 
@@ -5558,6 +5583,9 @@ L["Exact Y position"] = "精确 Y 位置"
 L["External frame"] = "外部框架"
 L["Next page"] = "下一页"
 L["Previous page"] = "上一页"
+
+-- Guided setup restart confirmation.
+L["Run the guided setup again? The walkthrough starts over at the first step."] = "要再次运行引导设置吗？向导将从第一步重新开始。"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhCN", LoadLocale)
 elseif MSUF.LOCALE == "zhCN" then LoadLocale() end

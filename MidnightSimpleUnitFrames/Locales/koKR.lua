@@ -2187,7 +2187,7 @@ L["Reset Frame Positions"] = "프레임 위치 초기화"
 L["reset level position"] = "레벨 위치 초기화"
 L["Reset positions..."] = "위치 초기화..."
 L["Reset profile '%s' to defaults?\n\nThis resets the entire selected profile to the current MSUF factory defaults. Every menu in that profile will be affected."] = "'%s' 프로필을 기본값으로 초기화할까요?\n\n선택한 전체 프로필을 현재 MSUF 공장 기본값으로 초기화합니다. 해당 프로필의 모든 메뉴가 영향을 받습니다."
-L["Reset tools, Wago access, and recovery shortcuts live here."] = "초기화 도구, Wago 접근, 복구 바로가기가 여기에 있습니다."
+L["Fix positions, print help, or reset MSUF."] = "위치를 고치고, 도움말을 출력하거나 MSUF를 초기화합니다."
 L["Resets frame positions only. Profiles and menu settings stay intact."] = "프레임 위치만 초기화합니다. 프로필과 메뉴 설정은 유지됩니다."
 L["Restored the Menu2 dashboard preview and scroll behavior to the 5.3 Beta 2 layout."] = "Menu2 대시보드 미리보기와 스크롤 동작을 5.3 Beta 2 레이아웃으로 복원했습니다."
 L["Restored the Menu2 dashboard preview and scroll behavior to the stable 5.3 Beta 2 layout."] = "Menu2 대시보드 미리보기와 스크롤 동작을 안정적인 5.3 Beta 2 레이아웃으로 복원했습니다."
@@ -2387,7 +2387,6 @@ L["MSUF2_SEARCH_SLIDER_ACTION_KEYWORDS"] = "슬라이더 증가 감소 조정 �
 L["MSUF2_SEARCH_SLIDER_PATTERNS"] = "%s 슬라이더|%s 조정|%s 증가|%s 감소|%s 값 변경|%s 양 설정"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_CHANGELOG"] = "열기: 대시보드 > 변경 기록"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_RECOVERY"] = "열기: 대시보드 > 표시 및 복구"
-L["MSUF2_SEARCH_TARGET_DASHBOARD_RECOVERY_DISCORD"] = "열기: 대시보드 > 표시 및 복구 > Discord"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_SCALING"] = "열기: 대시보드 > 크기 조절"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_SUPPORT"] = "열기: 대시보드 > MSUF 개발 후원"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_WAGO"] = "열기: 대시보드 > Wago 프로필 허브"
@@ -4888,6 +4887,32 @@ L["On (default): MSUF Edit Mode can move every active Details! window. Windows s
 L["On (default): MSUF Edit Mode can move the Grid2 layout and its active detached groups. Grid2 remains the owner of its layout and saved positions."] = "켜짐(기본값): MSUF 편집 모드가 Grid2 레이아웃과 활성화된 분리 그룹을 이동할 수 있습니다. 레이아웃과 저장된 위치의 소유권은 여전히 Grid2에 있습니다."
 L["Turn either switch off to remove only those external movers. The third-party addon and its settings are not modified."] = "두 설정 중 하나를 끄면 해당 외부 이동 핸들만 제거됩니다. 서드파티 애드온과 그 설정은 변경되지 않습니다."
 
+-- Menu localization pass 2026-08-07: external Edit Mode integration (Dominos).
+L["Dominos"] = "Dominos"
+L["Show Dominos in MSUF Edit Mode"] = "MSUF 편집 모드에 Dominos 표시"
+L["Dominos Edit Mode integration"] = "Dominos 편집 모드 연동"
+L["On (default): MSUF Edit Mode can move every Dominos bar that is not docked to another bar. Docked bars follow their host bar, and Dominos remains the owner of all bar positions."] = "켜짐(기본값): MSUF 편집 모드가 다른 막대에 도킹되지 않은 모든 Dominos 막대를 이동할 수 있습니다. 도킹된 막대는 호스트 막대를 따라 움직이며, 모든 막대 위치의 소유권은 여전히 Dominos에 있습니다."
+L["Turn any of these switches off to remove only those external movers. The third-party addons and their settings are not modified."] = "이 설정들 중 하나를 끄면 해당 외부 이동 핸들만 제거됩니다. 서드파티 애드온과 그 설정은 변경되지 않습니다."
+L["Scale"] = "배율"
+L["Show bar"] = "막대 표시"
+
+-- Menu localization pass 2026-08-07 (part 2): external Edit Mode integration (DandersFrames).
+L["DandersFrames"] = "DandersFrames"
+L["Show DandersFrames in MSUF Edit Mode"] = "MSUF 편집 모드에 DandersFrames 표시"
+L["DandersFrames Edit Mode integration"] = "DandersFrames 편집 모드 연동"
+L["On (default): MSUF Edit Mode can move the DandersFrames party and raid containers and free pinned sets. Sets glued to the frames follow them, and DandersFrames remains the owner of all saved positions."] = "켜짐(기본값): MSUF 편집 모드가 DandersFrames의 파티 및 공격대 컨테이너와 자유 고정 세트를 이동할 수 있습니다. 프레임에 붙은 세트는 프레임을 따라가며, 저장된 위치의 소유권은 계속 DandersFrames에 있습니다."
+
+-- Menu localization pass 2026-08-07 (part 3): DandersFrames popup preview toggles.
+L["Show party preview"] = "파티 미리보기 표시"
+L["Show raid preview"] = "공격대 미리보기 표시"
+
+-- Menu localization pass 2026-08-07 (part 4): Dominos popup layout controls.
+L["Buttons"] = "버튼"
+L["Columns"] = "열"
+L["Padding"] = "여백"
+L["Faded opacity"] = "흐림 투명도"
+L["Click through"] = "클릭 통과"
+
 -- Menu localization pass 2026-08-06 (part 6): pandemic badge format key.
 L["On / %s"] = "켜짐 / %s"
 
@@ -4917,6 +4942,9 @@ L["Exact Y position"] = "정확한 Y 위치"
 L["External frame"] = "외부 프레임"
 L["Next page"] = "다음 페이지"
 L["Previous page"] = "이전 페이지"
+
+-- Guided setup restart confirmation.
+L["Run the guided setup again? The walkthrough starts over at the first step."] = "가이드 설정을 다시 진행할까요? 설정 안내가 첫 단계부터 다시 시작됩니다."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end

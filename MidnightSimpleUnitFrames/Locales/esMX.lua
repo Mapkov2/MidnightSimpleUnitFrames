@@ -2305,7 +2305,7 @@ L["reset level position"] = "restablecer posición de nivel"
 L["Reset Overrides"] = "Restablecer overrides"
 L["Reset positions..."] = "Restablecer posiciones..."
 L["Reset profile '%s' to defaults?\n\nThis resets the entire selected profile to the current MSUF factory defaults. Every menu in that profile will be affected."] = "¿Restablecer el perfil '%s' a valores predeterminados?\n\nEsto restablece todo el perfil seleccionado a los valores de fábrica actuales de MSUF. Todos los menús de ese perfil se verán afectados."
-L["Reset tools, Wago access, and recovery shortcuts live here."] = "Aquí están las herramientas de reinicio, acceso a Wago y accesos de recuperación."
+L["Fix positions, print help, or reset MSUF."] = "Corrige posiciones, muestra la ayuda o restablece MSUF."
 L["Resets frame positions only. Profiles and menu settings stay intact."] = "Restablece solo las posiciones de los marcos. Los perfiles y ajustes del menú permanecen intactos."
 L["Restored the Menu2 dashboard preview and scroll behavior to the 5.3 Beta 2 layout."] = "Restaurada la vista previa del panel Menu2 y el scroll al diseño de 5.3 Beta 2."
 L["Restored the Menu2 dashboard preview and scroll behavior to the stable 5.3 Beta 2 layout."] = "Restaurada la vista previa del panel Menu2 y el comportamiento de desplazamiento al diseño estable de 5.3 Beta 2."
@@ -2499,7 +2499,6 @@ L["MSUF2_SEARCH_SLIDER_ACTION_KEYWORDS"] = "deslizador aumentar reducir ajustar 
 L["MSUF2_SEARCH_SLIDER_PATTERNS"] = "deslizador %s|ajustar %s|aumentar %s|reducir %s|cambiar valor de %s|establecer cantidad de %s"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_CHANGELOG"] = "Abre: Panel > Registro de cambios"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_RECOVERY"] = "Abre: Panel > Pantalla y recuperación"
-L["MSUF2_SEARCH_TARGET_DASHBOARD_RECOVERY_DISCORD"] = "Abre: Panel > Pantalla y recuperación > Discord"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_SCALING"] = "Abre: Panel > Escala"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_SUPPORT"] = "Abre: Panel > Apoyar el desarrollo de MSUF"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_WAGO"] = "Abre: Panel > Centro de perfiles Wago"
@@ -5071,6 +5070,32 @@ L["On (default): MSUF Edit Mode can move every active Details! window. Windows s
 L["On (default): MSUF Edit Mode can move the Grid2 layout and its active detached groups. Grid2 remains the owner of its layout and saved positions."] = "Activado (predeterminado): el Modo de edición de MSUF puede mover el diseño de Grid2 y sus grupos desacoplados activos. Grid2 sigue siendo el propietario de su diseño y de sus posiciones guardadas."
 L["Turn either switch off to remove only those external movers. The third-party addon and its settings are not modified."] = "Desactiva cualquiera de los dos interruptores para quitar solo esos desplazadores externos. El accesorio de terceros y sus ajustes no se modifican."
 
+-- Menu localization pass 2026-08-07: external Edit Mode integration (Dominos).
+L["Dominos"] = "Dominos"
+L["Show Dominos in MSUF Edit Mode"] = "Mostrar Dominos en el Modo de edición de MSUF"
+L["Dominos Edit Mode integration"] = "Integración de Dominos con el Modo de edición"
+L["On (default): MSUF Edit Mode can move every Dominos bar that is not docked to another bar. Docked bars follow their host bar, and Dominos remains the owner of all bar positions."] = "Activado (predeterminado): el Modo de edición de MSUF puede mover cualquier barra de Dominos que no esté acoplada a otra barra. Las barras acopladas siguen a su barra anfitriona y Dominos sigue siendo el propietario de todas las posiciones de las barras."
+L["Turn any of these switches off to remove only those external movers. The third-party addons and their settings are not modified."] = "Desactiva cualquiera de estos interruptores para quitar solo esos desplazadores externos. Los accesorios de terceros y sus ajustes no se modifican."
+L["Scale"] = "Escala"
+L["Show bar"] = "Mostrar barra"
+
+-- Menu localization pass 2026-08-07 (part 2): external Edit Mode integration (DandersFrames).
+L["DandersFrames"] = "DandersFrames"
+L["Show DandersFrames in MSUF Edit Mode"] = "Mostrar DandersFrames en el Modo de edición de MSUF"
+L["DandersFrames Edit Mode integration"] = "Integración de DandersFrames con el Modo de edición"
+L["On (default): MSUF Edit Mode can move the DandersFrames party and raid containers and free pinned sets. Sets glued to the frames follow them, and DandersFrames remains the owner of all saved positions."] = "Activado (predeterminado): el Modo de edición de MSUF puede mover los contenedores de grupo y banda de DandersFrames y los conjuntos anclados libres. Los conjuntos pegados a los marcos los siguen y DandersFrames sigue siendo el propietario de todas las posiciones guardadas."
+
+-- Menu localization pass 2026-08-07 (part 3): DandersFrames popup preview toggles.
+L["Show party preview"] = "Mostrar vista previa de grupo"
+L["Show raid preview"] = "Mostrar vista previa de banda"
+
+-- Menu localization pass 2026-08-07 (part 4): Dominos popup layout controls.
+L["Buttons"] = "Botones"
+L["Columns"] = "Columnas"
+L["Padding"] = "Relleno"
+L["Faded opacity"] = "Opacidad atenuada"
+L["Click through"] = "Clic atraviesa"
+
 -- Menu localization pass 2026-08-06 (part 6): pandemic badge format key.
 L["On / %s"] = "Activado / %s"
 
@@ -5099,6 +5124,9 @@ L["Exact Y position"] = "Posición Y exacta"
 L["External frame"] = "Marco externo"
 L["Next page"] = "Página siguiente"
 L["Previous page"] = "Página anterior"
+
+-- Guided setup restart confirmation.
+L["Run the guided setup again? The walkthrough starts over at the first step."] = "¿Ejecutar de nuevo la configuración guiada? El recorrido volverá a empezar en el primer paso."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("esMX", LoadLocale)
 elseif MSUF.LOCALE == "esMX" then LoadLocale() end

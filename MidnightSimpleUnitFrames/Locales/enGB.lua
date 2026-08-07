@@ -486,7 +486,7 @@ L["Print Help"] = "Print Help"
 L["Recommended Start"] = "Recommended Start"
 L["Reset Frame Positions"] = "Reset Frame Positions"
 L["Reset positions..."] = "Reset positions..."
-L["Reset tools, Wago access, and recovery shortcuts live here."] = "Reset tools, Wago access, and recovery shortcuts live here."
+L["Fix positions, print help, or reset MSUF."] = "Fix positions, print help, or reset MSUF."
 L["Resets frame positions only. Profiles and menu settings stay intact."] = "Resets frame positions only. Profiles and menu settings stay intact."
 L["Revert"] = "Revert"
 L["Safe"] = "Safe"
@@ -673,7 +673,6 @@ L["MSUF2_SEARCH_SLIDER_ACTION_KEYWORDS"] = "slider increase decrease adjust size
 L["MSUF2_SEARCH_SLIDER_PATTERNS"] = "slider %s|adjust %s|increase %s|decrease %s|change %s value|set %s amount"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_CHANGELOG"] = "Opens: Dashboard > Changelog"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_RECOVERY"] = "Opens: Dashboard > Display & recovery"
-L["MSUF2_SEARCH_TARGET_DASHBOARD_RECOVERY_DISCORD"] = "Opens: Dashboard > Display & recovery > Discord"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_SCALING"] = "Opens: Dashboard > Scaling"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_SUPPORT"] = "Opens: Dashboard > Support MSUF Development"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_WAGO"] = "Opens: Dashboard > Wago profile hub"
@@ -3622,6 +3621,32 @@ L["On (default): MSUF Edit Mode can move every active Details! window. Windows s
 L["On (default): MSUF Edit Mode can move the Grid2 layout and its active detached groups. Grid2 remains the owner of its layout and saved positions."] = "On (default): MSUF Edit Mode can move the Grid2 layout and its active detached groups. Grid2 remains the owner of its layout and saved positions."
 L["Turn either switch off to remove only those external movers. The third-party addon and its settings are not modified."] = "Turn either switch off to remove only those external movers. The third-party addon and its settings are not modified."
 
+-- Menu localization pass 2026-08-07: external Edit Mode integration (Dominos).
+L["Dominos"] = "Dominos"
+L["Show Dominos in MSUF Edit Mode"] = "Show Dominos in MSUF Edit Mode"
+L["Dominos Edit Mode integration"] = "Dominos Edit Mode integration"
+L["On (default): MSUF Edit Mode can move every Dominos bar that is not docked to another bar. Docked bars follow their host bar, and Dominos remains the owner of all bar positions."] = "On (default): MSUF Edit Mode can move every Dominos bar that is not docked to another bar. Docked bars follow their host bar, and Dominos remains the owner of all bar positions."
+L["Turn any of these switches off to remove only those external movers. The third-party addons and their settings are not modified."] = "Turn any of these switches off to remove only those external movers. The third-party addons and their settings are not modified."
+L["Scale"] = "Scale"
+L["Show bar"] = "Show bar"
+
+-- Menu localization pass 2026-08-07 (part 2): external Edit Mode integration (DandersFrames).
+L["DandersFrames"] = "DandersFrames"
+L["Show DandersFrames in MSUF Edit Mode"] = "Show DandersFrames in MSUF Edit Mode"
+L["DandersFrames Edit Mode integration"] = "DandersFrames Edit Mode integration"
+L["On (default): MSUF Edit Mode can move the DandersFrames party and raid containers and free pinned sets. Sets glued to the frames follow them, and DandersFrames remains the owner of all saved positions."] = "On (default): MSUF Edit Mode can move the DandersFrames party and raid containers and free pinned sets. Sets glued to the frames follow them, and DandersFrames remains the owner of all saved positions."
+
+-- Menu localization pass 2026-08-07 (part 3): DandersFrames popup preview toggles.
+L["Show party preview"] = "Show party preview"
+L["Show raid preview"] = "Show raid preview"
+
+-- Menu localization pass 2026-08-07 (part 4): Dominos popup layout controls.
+L["Buttons"] = "Buttons"
+L["Columns"] = "Columns"
+L["Padding"] = "Padding"
+L["Faded opacity"] = "Faded opacity"
+L["Click through"] = "Click through"
+
 -- Menu localization pass 2026-08-06 (part 6): pandemic badge format key.
 L["On / %s"] = "On / %s"
 -- Menu localization pass 2026-08-06 (part 7): native Player resource pings.
@@ -3636,6 +3661,9 @@ L["Exact Y position"] = "Exact Y position"
 L["External frame"] = "External frame"
 L["Next page"] = "Next page"
 L["Previous page"] = "Previous page"
+
+-- Guided setup restart confirmation.
+L["Run the guided setup again? The walkthrough starts over at the first step."] = "Run the guided setup again? The walkthrough starts over at the first step."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enGB", LoadLocale)
 elseif MSUF.LOCALE == "enGB" then LoadLocale() end

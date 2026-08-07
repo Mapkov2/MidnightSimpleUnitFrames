@@ -2429,7 +2429,7 @@ L["Reset Frame Positions"] = "Framepositionen zurücksetzen"
 L["reset level position"] = "Levelposition zurücksetzen"
 L["Reset positions..."] = "Positionen zurücksetzen..."
 L["Reset profile '%s' to defaults?\n\nThis resets the entire selected profile to the current MSUF factory defaults. Every menu in that profile will be affected."] = "Profil '%s' auf Standard zurücksetzen?\n\nDies setzt das gesamte ausgewählte Profil auf die aktuellen MSUF-Werkseinstellungen zurück. Jedes Menü in diesem Profil ist betroffen."
-L["Reset tools, Wago access, and recovery shortcuts live here."] = "Reset-Tools, Wago-Zugriff und Wiederherstellungs-Shortcuts befinden sich hier."
+L["Fix positions, print help, or reset MSUF."] = "Positionen reparieren, Hilfe ausgeben oder MSUF zurücksetzen."
 L["Resets frame positions only. Profiles and menu settings stay intact."] = "Setzt nur Framepositionen zurück. Profile und Menüeinstellungen bleiben erhalten."
 L["Restored the Menu2 dashboard preview and scroll behavior to the 5.3 Beta 2 layout."] = "Menu2-Dashboard-Vorschau und Scrollverhalten auf das 5.3-Beta-2-Layout zurückgesetzt."
 L["Restored the Menu2 dashboard preview and scroll behavior to the stable 5.3 Beta 2 layout."] = "Menu2-Dashboard-Vorschau und Scrollverhalten auf das stabile 5.3-Beta-2-Layout zurückgesetzt."
@@ -2666,7 +2666,6 @@ L["MSUF2_SEARCH_SLIDER_ACTION_KEYWORDS"] = "slider regler erhöhen erhoehen verr
 L["MSUF2_SEARCH_SLIDER_PATTERNS"] = "slider %s|regler %s|%s anpassen|%s erhöhen|%s verringern|%s wert ändern"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_CHANGELOG"] = "Öffnet: Dashboard > Changelog"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_RECOVERY"] = "Öffnet: Dashboard > Anzeige & Wiederherstellung"
-L["MSUF2_SEARCH_TARGET_DASHBOARD_RECOVERY_DISCORD"] = "Öffnet: Dashboard > Anzeige & Wiederherstellung > Discord"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_SCALING"] = "Öffnet: Dashboard > Skalierung"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_SUPPORT"] = "Öffnet: Dashboard > MSUF-Entwicklung unterstützen"
 L["MSUF2_SEARCH_TARGET_DASHBOARD_WAGO"] = "Öffnet: Dashboard > Wago-Profil-Hub"
@@ -3072,7 +3071,6 @@ L["Shows tick separators on the Player castbar while channeling.\n\nSupported sp
 L["Show spark (leading edge highlight)"] = "Funken an der Vorderkante anzeigen"
 
 L["The Assistant dashboard module is not available. Use the navigation pages and search to configure MSUF."] = "Assistant nicht verfügbar. Nutze Navigation oder Suche, um MSUF einzurichten."
-L["Reset tools, Wago access, and recovery shortcuts live here."] = "Positionen reparieren, Support-Links öffnen oder MSUF zurücksetzen."
 L["Use sliders for exact scale changes. Apply commits the selected value; Revert returns to the active value."] = "Passe einen Regler an und wähle Anwenden. Zurück verwirft den ausstehenden Wert."
 L["Changes the global WoW UI scale through MSUF presets."] = "Legt die WoW-UI-Skalierung über eine Vorlage fest."
 L["Changes the actual MSUF unit frames in-game."] = "Skaliert alle MSUF-Frames."
@@ -5278,6 +5276,32 @@ L["On (default): MSUF Edit Mode can move every active Details! window. Windows s
 L["On (default): MSUF Edit Mode can move the Grid2 layout and its active detached groups. Grid2 remains the owner of its layout and saved positions."] = "An (Standard): Der MSUF Edit Mode kann das Grid2-Layout und dessen aktive abgetrennte Gruppen verschieben. Grid2 bleibt Eigentümer seines Layouts und seiner gespeicherten Positionen."
 L["Turn either switch off to remove only those external movers. The third-party addon and its settings are not modified."] = "Schalte einen der beiden Schalter aus, um nur diese externen Mover zu entfernen. Das Drittanbieter-Addon und seine Einstellungen werden nicht verändert."
 
+-- Menu localization pass 2026-08-07: external Edit Mode integration (Dominos).
+L["Dominos"] = "Dominos"
+L["Show Dominos in MSUF Edit Mode"] = "Dominos im MSUF Edit Mode anzeigen"
+L["Dominos Edit Mode integration"] = "Dominos-Edit-Mode-Integration"
+L["On (default): MSUF Edit Mode can move every Dominos bar that is not docked to another bar. Docked bars follow their host bar, and Dominos remains the owner of all bar positions."] = "An (Standard): Der MSUF Edit Mode kann jede Dominos-Leiste verschieben, die nicht an eine andere Leiste angedockt ist. Angedockte Leisten folgen ihrer Trägerleiste, und Dominos bleibt Eigentümer aller Leistenpositionen."
+L["Turn any of these switches off to remove only those external movers. The third-party addons and their settings are not modified."] = "Schalte einen dieser Schalter aus, um nur diese externen Mover zu entfernen. Die Drittanbieter-Addons und ihre Einstellungen werden nicht verändert."
+L["Scale"] = "Skalierung"
+L["Show bar"] = "Leiste anzeigen"
+
+-- Menu localization pass 2026-08-07 (part 2): external Edit Mode integration (DandersFrames).
+L["DandersFrames"] = "DandersFrames"
+L["Show DandersFrames in MSUF Edit Mode"] = "DandersFrames im MSUF Edit Mode anzeigen"
+L["DandersFrames Edit Mode integration"] = "DandersFrames-Edit-Mode-Integration"
+L["On (default): MSUF Edit Mode can move the DandersFrames party and raid containers and free pinned sets. Sets glued to the frames follow them, and DandersFrames remains the owner of all saved positions."] = "An (Standard): Der MSUF Edit Mode kann die Party- und Raid-Container von DandersFrames sowie freie angepinnte Sets verschieben. An die Frames geheftete Sets folgen ihnen, und DandersFrames bleibt Eigentümer aller gespeicherten Positionen."
+
+-- Menu localization pass 2026-08-07 (part 3): DandersFrames popup preview toggles.
+L["Show party preview"] = "Party-Vorschau anzeigen"
+L["Show raid preview"] = "Raid-Vorschau anzeigen"
+
+-- Menu localization pass 2026-08-07 (part 4): Dominos popup layout controls.
+L["Buttons"] = "Buttons"
+L["Columns"] = "Spalten"
+L["Padding"] = "Innenabstand"
+L["Faded opacity"] = "Fade-Deckkraft"
+L["Click through"] = "Durchklickbar"
+
 -- Menu localization pass 2026-08-06 (part 6): pandemic badge format key.
 L["On / %s"] = "An / %s"
 
@@ -5317,6 +5341,9 @@ L["Exact Y position"] = "Genaue Y-Position"
 L["External frame"] = "Externer Frame"
 L["Next page"] = "Nächste Seite"
 L["Previous page"] = "Vorherige Seite"
+
+-- Guided setup restart confirmation.
+L["Run the guided setup again? The walkthrough starts over at the first step."] = "Das geführte Setup erneut ausführen? Die Tour beginnt wieder beim ersten Schritt."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("deDE", LoadLocale)
 elseif MSUF.LOCALE == "deDE" then LoadLocale() end
