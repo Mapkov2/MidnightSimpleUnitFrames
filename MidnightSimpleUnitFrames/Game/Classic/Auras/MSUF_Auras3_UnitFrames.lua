@@ -1410,7 +1410,14 @@ function A3.ResolveUnitFrameConfig(unit, frameSpec)
 end
 
 function A3.BuildAuraLaneMetrics(configOrUnit, kind)
-    kind = (kind == "debuff" or kind == "debuffs") and "debuff" or "buff"
+    local rawKind = tostring(kind or "buff"):lower()
+    local customIndex = rawKind:match("^custom(%d)$")
+    if customIndex then
+        customIndex = math_min(4, math_max(1, tonumber(customIndex) or 1))
+        kind = "custom" .. tostring(customIndex)
+    else
+        kind = (rawKind == "debuff" or rawKind == "debuffs") and "debuff" or "buff"
+    end
     local cfg = type(configOrUnit) == "table" and configOrUnit or A3.ResolveUnitFrameConfig(configOrUnit)
     local lane = cfg and cfg.lanes and cfg.lanes[kind]
     if not lane then return nil end
@@ -1930,7 +1937,12 @@ end
 local function HideState(frame)
     local state = frame and frame._msufA3State
     if not state then return end
-    for _, lane in pairs(state.lanes or {}) do ClearLane(lane) end
+    for _, lane in pairs(state.lanes or {}) do
+        -- Portrait-anchored lanes are parented outside state.root, so hiding
+        -- only the root can leave their already-rendered buttons on screen.
+        if lane.frame then lane.frame:Hide() end
+        ClearLane(lane)
+    end
     if state.root then state.root:Hide() end
     ClearFrameAuraVisualState(frame)
 end
@@ -2531,12 +2543,11 @@ end
 HideButton = function(button)
     local visuals = A3.ClassicVisuals
     if visuals and type(visuals.HideButtonVisual) == "function" then visuals.HideButtonVisual(button) end
-    if button._msufA3Shown ~= nil then
-        button._msufA3Shown = nil
-        button:Hide()
-    elseif button.auraInstanceID ~= nil then
-        button:Hide()
-    end
+    -- ClearLane intentionally invalidates auraInstanceID before reaching this
+    -- helper. Always hide here so a stale/missing visibility marker cannot
+    -- leave a pooled Classic aura button visible after its container is off.
+    button._msufA3Shown = nil
+    button:Hide()
 end
 
 local function ShowCooldown(button, cooldown)
