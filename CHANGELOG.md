@@ -1,5 +1,29 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-RC12 - 2026-08-07
+
+### Highlights
+
+- Added Back and Forward page navigation to the menu status strip. Both buttons name their target page in the tooltip, skip the transient Search page, and are available to the Assistant.
+- MSUF frames now follow a supported Cooldown Manager provider live while out of combat. Unit frames, Group headers and Class Resources keep a real anchor link to Arc UI, Skiron, Coolinator and Blizzard's viewer, and that link is severed at the combat edge so provider movement can never drag a protected frame mid-fight.
+
+### Changes
+
+- The Detached Power width mode now outranks a Detached width typed on the frame; the shared Class Resources width mode remains its fallback while width sync is on. `Manual` resolves to no source, so untouched profiles keep their current width.
+- Status text colors now have one entry point per surface: the `:::` shortcut on the Status > Selected card and the canonical Colors page. The duplicate swatch on Status > Placement was removed.
+- Split the runtime chat/tooltip file into dedicated slash command, unit tooltip and Blizzard Edit Mode bridge modules. Load order, exports and behavior are unchanged.
+
+### Fixes & Performance
+
+- Fixed MSUF frames not following a Cooldown Manager provider that moved or resized without changing identity. Provider movement is now free out of combat, and combat-time changes are replayed once after regen instead of being lost.
+- Fixed frames anchored to a provider whose geometry is not readable yet rendering nowhere. They now keep the cached screen position or fall back to `UIParent` and retry on the bounded late-anchor pass.
+- Fixed Group Cooldown Font and Stack Font not applying until an unrelated setting was changed. Aura text sizes now invalidate the aura domain instead of the text-only fast path.
+- Fixed the Custom Aura Pandemic color losing its menu entry. The color is reached through the section's `:::` shortcut, and menu search and the Assistant resolve to that shortcut.
+- Fixed the detached Power width preview disagreeing with live frames when a Cooldown Viewer source was selected.
+- Edit Mode frame positioning is now blocked at the combat boundary and rolls back atomically when an external anchor target cannot resolve.
+- Class Resources no longer runs its layout twice when the same Cooldown Viewer provides both its anchor and its width.
+- Font runtime resolves its apply-cache helpers once at load instead of per FontString, and the combat regen drivers arm their event only once per fight.
+
 ## 6.0-RC11 - 2026-08-07
 
 ### Highlights
