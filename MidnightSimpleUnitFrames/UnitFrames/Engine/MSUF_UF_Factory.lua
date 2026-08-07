@@ -15,6 +15,8 @@ local Factory = UF.Factory
 local EnsureCooldownWidthObservers
 local ScheduleCooldownWidthRefresh
 local ApplyBossPhysicalBarGeometry
+local HasGroupLateAnchorConfig
+local GroupUsesExternalAnchor
 
 -- A frame that was fully detached for its disabled state must not be rebuilt
 -- live in the same session. Keep the detached zero-overhead state intact and
@@ -95,6 +97,7 @@ local function EnsurePetBattleFrameHider()
   hider = CreateFrame("Frame", "MSUF_PetBattleFrameHider", UIParent, "SecureHandlerStateTemplate")
   hider:SetAllPoints(UIParent)
   hider:SetFrameStrata("LOW")
+  hider._msufOwnedAnchorRoot = true
   if RegisterStateDriver then
     RegisterStateDriver(hider, "visibility", "[petbattle] hide; show")
   end
@@ -262,12 +265,42 @@ local function AnchorWouldCreateCycle(frame, anchor)
   return frame and anchor and anchor ~= UIParent and AnchorDependsOn(anchor, frame) == true
 end
 
+-- Materialize the current screen point on UIParent. Out of combat MSUF keeps
+-- live SetPoint links to external providers so consumers follow them 1:1; this
+-- runs at the combat edge (PLAYER_REGEN_DISABLED delivers before lockdown) to
+-- sever that link for the duration of a fight. Callers position the frame
+-- logically first, so old profile priorities, offsets, scaling and clamping
+-- remain authoritative.
+local function SnapshotFrameToUIParent(frame)
+  if not (frame and frame.GetCenter and UIParent and UIParent.GetCenter) or InCombat() then return false end
+  local frameX, frameY = frame:GetCenter()
+  local parentX, parentY = UIParent:GetCenter()
+  if not (frameX and frameY and parentX and parentY) then return false end
+  local frameScale = frame.GetEffectiveScale and frame:GetEffectiveScale() or 1
+  local parentScale = UIParent.GetEffectiveScale and UIParent:GetEffectiveScale() or 1
+  if frameScale == 0 then frameScale = 1 end
+  if parentScale == 0 then parentScale = 1 end
+  local stableX = ((frameX * frameScale) - (parentX * parentScale)) / frameScale
+  local stableY = ((frameY * frameScale) - (parentY * parentScale)) / frameScale
+  frame:ClearAllPoints()
+  frame:SetPoint("CENTER", UIParent, "CENTER", stableX, stableY)
+  return true
+end
+
+local function IsMSUFOwnedAnchor(anchor)
+  if anchor == UIParent then return true end
+  local readable, owned = GetAnchorMember(anchor, "_msufOwnedAnchorRoot")
+  return readable and owned == true or false
+end
+
 -- Shared by unit frames, group frames, Edit Mode, and the anchor picker. Keep
--- named custom anchors direct; only reject targets that would make SetPoint
+-- named custom anchors logical; only reject targets that would make SetPoint
 -- recurse through the frame being positioned.
 Factory.ResolveNamedAnchor = ResolveNamedAnchor
 Factory.AnchorDependsOn = AnchorDependsOn
 Factory.AnchorWouldCreateCycle = AnchorWouldCreateCycle
+Factory.SnapshotFrameToUIParent = SnapshotFrameToUIParent
+ExportPublic("MSUF_SnapshotFrameToUIParentCenter", SnapshotFrameToUIParent)
 function Factory.IsAnchorCandidateAllowed(candidate, unitKey)
   if not candidate then return false end
   for key, frame in pairs(UF.frames or {}) do
@@ -390,6 +423,7 @@ local function ApplyPosition(frame, spec)
     relativePoint = point
   end
 
+  local externalAnchor = not IsMSUFOwnedAnchor(anchor)
   if layout._msufPoint ~= point
     or layout._msufAnchor ~= anchor
     or layout._msufRelativePoint ~= relativePoint
@@ -397,6 +431,26 @@ local function ApplyPosition(frame, spec)
     or layout._msufY ~= y then
     layout:ClearAllPoints()
     layout:SetPoint(point, anchor, relativePoint, x, y)
+    if externalAnchor and layout:GetCenter() == nil then
+      -- A hidden/not-yet-laid-out provider cannot resolve our rect, so the
+      -- live link would render nowhere. Prefer the existing screen cache,
+      -- otherwise use the safe UIParent fallback and retry on the normal
+      -- bounded late-anchor lifecycle.
+      externalAnchor = false
+      local applyCached = _G.MSUF_ApplyCachedUnitFrameScreenPosition
+      if type(applyCached) == "function" and applyCached(layout, key, frame.MSUFUnitKey) then
+        frame._msufStableExternalAnchor = nil
+        return true
+      end
+      layout:ClearAllPoints()
+      layout:SetPoint(point, UIParent, relativePoint, x, y)
+      if type(_G.MSUF_ScheduleLateAnchorReanchor) == "function" then
+        _G.MSUF_ScheduleLateAnchorReanchor()
+      end
+      -- Record the actual fallback target so the next apply retries the
+      -- provider instead of memo-skipping into a stale fallback.
+      anchor = UIParent
+    end
     layout._msufPoint = point
     layout._msufAnchor = anchor
     layout._msufRelativePoint = relativePoint
@@ -409,6 +463,8 @@ local function ApplyPosition(frame, spec)
   end
 
   frame._msufPositionInitialized = true
+  frame._msufStableExternalAnchor = externalAnchor and anchor or nil
+  frame._msufRequestedAnchorName = requestedAnchor
   if not missingAnchorName
     and ShouldCacheScreenPosition(spec, requestedAnchor)
     and type(_G.MSUF_CacheUnitFrameScreenPosition) == "function" then
@@ -419,6 +475,7 @@ local function ApplyPosition(frame, spec)
     frame._msufHardLockPoint = nil
     frame._msufLoadedFromScreenCache = nil
   end
+  frame._msufExternalAnchorFrozen = nil
   if type(ApplyBossPhysicalBarGeometry) == "function" then
     ApplyBossPhysicalBarGeometry(frame)
   end
@@ -859,6 +916,7 @@ local function SpawnFrame(unit)
   elseif frame.SetParent and frame:GetParent() ~= parent and not InCombat() then
     frame:SetParent(parent)
   end
+  frame._msufOwnedAnchorRoot = true
   EnableScreenClamp(frame)
   UF.AttachFrame(frame, { scope = "single" })
   EnsureRuntimeOnShow(frame)
@@ -1015,18 +1073,208 @@ function Factory.ForceReanchor(unit)
   return true
 end
 
+local externalAnchorRefreshAfterCombat = {}
+local externalAnchorRefreshPending = {}
+local externalAnchorRefreshScheduled = false
+-- Post-combat reconciliation can be requested by several independent regen
+-- drivers whose firing order is not guaranteed. Names refreshed since the last
+-- combat entry are latched so replay-style requests collapse into the one
+-- reconcile that already ran; genuine provider callbacks bypass the latch.
+local externalAnchorRefreshedSinceCombat = {}
+
+local function FlushExternalAnchorRefreshAfterCombat()
+  local pending = externalAnchorRefreshAfterCombat
+  externalAnchorRefreshAfterCombat = {}
+  for name in pairs(pending) do Factory.RefreshExternalAnchor(name) end
+end
+
+local function FlushScheduledExternalAnchorRefresh()
+  externalAnchorRefreshScheduled = false
+  local pending = externalAnchorRefreshPending
+  externalAnchorRefreshPending = {}
+  for name, mode in pairs(pending) do
+    if not (mode == "replay" and externalAnchorRefreshedSinceCombat[name]) then
+      Factory.RefreshExternalAnchor(name)
+    end
+  end
+end
+
+-- Out of combat every external consumer keeps a live SetPoint link, so a
+-- provider that moves (ArcUI, Skiron, Coolinator, Blizzard Edit Mode) drags
+-- MSUF along natively with zero recurring work. PLAYER_REGEN_DISABLED
+-- delivers before lockdown: sever those links there so nothing can passively
+-- move a protected chain mid-fight, then restore them once on the existing
+-- post-combat driver. If the event ever arrived post-lockdown, freezing is
+-- skipped and the frames simply stay live (the pre-freeze behaviour).
+local frozenUnitFrames = false
+local frozenGroupAnchors = false
+local frozenClassPower = false
+
+local function FreezeExternalAnchorConsumer(frame, cacheKey, cacheUnit)
+  if not (frame and frame._msufStableExternalAnchor) then return false end
+  if SnapshotFrameToUIParent(frame) then
+    frame._msufExternalAnchorFrozen = true
+    frame._msufHardLockedToUIParent = true
+    frame._msufHardLockPoint = "CENTER"
+    InvalidateFramePositionCache(frame)
+    return true
+  end
+  -- A provider that lost its rect right at the combat edge cannot be
+  -- snapshotted; the last known screen position is still better than carrying
+  -- a live foreign link into lockdown.
+  local applyCached = _G.MSUF_ApplyCachedUnitFrameScreenPosition
+  if cacheKey and type(applyCached) == "function" and applyCached(frame, cacheKey, cacheUnit) then
+    frame._msufExternalAnchorFrozen = true
+    InvalidateFramePositionCache(frame)
+    return true
+  end
+  return false
+end
+
+local function FreezeExternalAnchorsForCombat()
+  if InCombat() then return false end
+  local froze = false
+  if UF.frames then
+    for i = 1, #UF.unitOrder do
+      local frame = UF.frames[UF.unitOrder[i]]
+      if frame and frame._msufStableExternalAnchor
+        and FreezeExternalAnchorConsumer(frame, ScreenCacheKey(frame.MSUFSpec, frame), frame.MSUFUnitKey) then
+        frozenUnitFrames = true
+        froze = true
+      end
+    end
+  end
+  local GF = MSUF.GF
+  local anchors = GF and GF.anchors
+  if anchors then
+    for _, anchor in pairs(anchors) do
+      if FreezeExternalAnchorConsumer(anchor) then
+        frozenGroupAnchors = true
+        froze = true
+      end
+    end
+  end
+  if FreezeExternalAnchorConsumer(_G.MSUF_ClassPowerContainer, "classpower", "classpower") then
+    frozenClassPower = true
+    froze = true
+  end
+  if froze then Factory.EnsureDeferredDriver() end
+  return froze
+end
+
+local function ThawFrozenExternalAnchors()
+  if InCombat() then return false end
+  local did = false
+  if frozenUnitFrames then
+    frozenUnitFrames = false
+    for i = 1, #UF.unitOrder do
+      local frame = UF.frames and UF.frames[UF.unitOrder[i]]
+      if frame and frame._msufExternalAnchorFrozen then
+        frame._msufExternalAnchorFrozen = nil
+        -- The queued post-combat provider replay re-applies this consumer
+        -- anyway; thaw only covers frames the replay would not reach.
+        local queuedName = frame._msufRequestedAnchorName
+        if not (queuedName and externalAnchorRefreshAfterCombat[queuedName]) then
+          local spec = frame.MSUFSpec
+          if spec then
+            InvalidateFramePositionCache(frame)
+            ApplyPosition(frame, spec)
+            if queuedName and IsCooldownViewerAnchor(queuedName) then
+              externalAnchorRefreshedSinceCombat[queuedName] = true
+            end
+            did = true
+          end
+        end
+      end
+    end
+  end
+  if frozenGroupAnchors then
+    frozenGroupAnchors = false
+    local GF = MSUF.GF
+    local anchors = GF and GF.anchors
+    if anchors then
+      for _, anchor in pairs(anchors) do anchor._msufExternalAnchorFrozen = nil end
+    end
+    local db = _G.MSUF_DB
+    local replayCoversGroup = false
+    if type(db) == "table" and type(GroupUsesExternalAnchor) == "function" then
+      for name in pairs(externalAnchorRefreshAfterCombat) do
+        if GroupUsesExternalAnchor(db, name) then
+          replayCoversGroup = true
+          break
+        end
+      end
+    end
+    if not replayCoversGroup and GF and type(GF.RefreshHeaderLayout) == "function" then
+      GF.RefreshHeaderLayout()
+      did = true
+    end
+  end
+  if frozenClassPower then
+    frozenClassPower = false
+    local cp = _G.MSUF_ClassPowerContainer
+    if cp then cp._msufExternalAnchorFrozen = nil end
+    if not externalAnchorRefreshAfterCombat.EssentialCooldownViewer then
+      if type(_G.MSUF_ClassPower_Apply) == "function" then
+        _G.MSUF_ClassPower_Apply({ anchor = true, cdm = true, syncNow = false })
+        externalAnchorRefreshedSinceCombat.EssentialCooldownViewer = true
+        did = true
+      elseif type(_G.MSUF_ClassPower_RefreshLayout) == "function" then
+        _G.MSUF_ClassPower_RefreshLayout()
+        externalAnchorRefreshedSinceCombat.EssentialCooldownViewer = true
+        did = true
+      end
+    end
+  end
+  return did
+end
+
+Factory.FreezeExternalAnchorsForCombat = FreezeExternalAnchorsForCombat
+Factory.ThawFrozenExternalAnchors = ThawFrozenExternalAnchors
+
+function Factory.ScheduleExternalAnchorRefresh(frameName, replayOnly)
+  if not IsCooldownViewerAnchor(frameName) then return false end
+  if InCombat() then
+    Factory.RefreshExternalAnchor(frameName)
+    return true
+  end
+  if replayOnly == true and externalAnchorRefreshedSinceCombat[frameName] then return true end
+  if externalAnchorRefreshAfterCombat[frameName] then return true end
+  if externalAnchorRefreshPending[frameName] ~= true then
+    externalAnchorRefreshPending[frameName] = replayOnly == true and "replay" or true
+  end
+  if externalAnchorRefreshScheduled then return true end
+  externalAnchorRefreshScheduled = true
+  if _G.C_Timer and type(_G.C_Timer.After) == "function" then
+    _G.C_Timer.After(0, FlushScheduledExternalAnchorRefresh)
+  else
+    FlushScheduledExternalAnchorRefresh()
+  end
+  return true
+end
+
+-- Armed flag keeps repeated in-combat defer requests (provider callbacks can
+-- fire many times per fight) at one boolean check instead of a redundant
+-- RegisterEvent C-call each time.
+local deferredDriverArmed = false
+
 local function DeferredOnEvent(self)
   if InCombat() then return end
+  deferredDriverArmed = false
   self:UnregisterEvent("PLAYER_REGEN_ENABLED")
   if UF.ApplyDirty then UF.ApplyDirty() end
+  ThawFrozenExternalAnchors()
+  FlushExternalAnchorRefreshAfterCombat()
   if UF.FlushDeferredRefreshes then UF.FlushDeferredRefreshes() end
 end
 
 function Factory.EnsureDeferredDriver()
+  if deferredDriverArmed then return true end
   if not Factory.deferredDriver then
     Factory.deferredDriver = CreateFrame("Frame")
     Factory.deferredDriver:SetScript("OnEvent", DeferredOnEvent)
   end
+  deferredDriverArmed = true
   Factory.deferredDriver:RegisterEvent("PLAYER_REGEN_ENABLED")
   return true
 end
@@ -1071,6 +1319,7 @@ local cooldownWidthScannedGeneration = -1
 local cooldownWidthConfigMask = -1
 local cooldownWidthVisualConfigMask = 0
 local cooldownWidthCastbarConfigMask = 0
+local cooldownAnchorConfigMask = 0
 local cooldownWidthRefreshPending = false
 local cooldownWidthRefreshPendingMask = 0
 local cooldownWidthVisualPendingMask = 0
@@ -1115,10 +1364,17 @@ local function NormalizeCooldownWidthMask(source)
   return COOLDOWN_WIDTH_SOURCE_BITS[source] or COOLDOWN_WIDTH_MODE_BITS[source] or 0
 end
 
+local function ClassPowerAnchorOwnsWidthRefresh(bars, sourceName)
+  return type(bars) == "table"
+    and bars.classPowerAnchorToCooldown == true
+    and COOLDOWN_WIDTH_MODES[bars.classPowerWidthMode or ""] == sourceName
+    and sourceName == "EssentialCooldownViewer"
+end
+
 local function ConfiguredCooldownWidthMask()
   local db = _G.MSUF_DB
   local bars = type(db) == "table" and type(db.bars) == "table" and db.bars or nil
-  if type(db) ~= "table" then return 0, 0, 0 end
+  if type(db) ~= "table" then return 0, 0, 0, 0 end
 
   local mask = 0
   if bars then
@@ -1151,14 +1407,51 @@ local function ConfiguredCooldownWidthMask()
       end
     end
   end
-  return mask, visualMask, castbarMask
+  -- Reuse the existing cold CDM observer for anchor snapshots as well as
+  -- widths. This adds no polling: provider Show/Hide/Size events merely queue
+  -- one OOC reapply, and combat events are replayed after regen.
+  local anchorMask = 0
+  local function AddAnchorName(name)
+    local bit = COOLDOWN_WIDTH_SOURCE_BITS[CanonicalAnchorFrameName(name)]
+    mask = MaskAdd(mask, bit)
+    anchorMask = MaskAdd(anchorMask, bit)
+  end
+  if IsGlobalCooldownAnchorEnabled(general) then AddAnchorName("EssentialCooldownViewer") end
+  AddAnchorName(general and general.anchorName)
+  for i = 1, #LATE_ANCHOR_KEYS do
+    local conf = db[LATE_ANCHOR_KEYS[i]]
+    if type(conf) == "table" then
+      AddAnchorName(conf.anchorFrameName or conf.anchorToUnitframe)
+    end
+  end
+  for i = 1, #LATE_GROUP_ANCHOR_KEYS do
+    local conf = db[LATE_GROUP_ANCHOR_KEYS[i]]
+    if type(conf) == "table" then
+      AddAnchorName(conf.anchorToFrame or conf.anchorFrame or conf.relativeTo or conf.anchorTo)
+    end
+  end
+  if bars and bars.classPowerAnchorToCooldown == true then AddAnchorName("EssentialCooldownViewer") end
+  return mask, visualMask, castbarMask, anchorMask
 end
 
+local function ScheduleCooldownAnchorMask(anchorMask, replayOnly)
+  for i = 1, #COOLDOWN_WIDTH_SOURCE_NAMES do
+    local bit = COOLDOWN_WIDTH_SOURCE_BIT_ORDER[i]
+    if MaskHas(anchorMask, bit) then
+      Factory.ScheduleExternalAnchorRefresh(COOLDOWN_WIDTH_SOURCE_NAMES[i], replayOnly)
+    end
+  end
+end
+
+local cooldownWidthRegenArmed = false
+
 local function EnsureCooldownWidthRegenDriver()
+  if cooldownWidthRegenArmed then return true end
   if not cooldownWidthRegenDriver then
     cooldownWidthRegenDriver = CreateFrame("Frame")
     cooldownWidthRegenDriver:SetScript("OnEvent", function(self)
       if InCombat() then return end
+      cooldownWidthRegenArmed = false
       self:UnregisterEvent("PLAYER_REGEN_ENABLED")
       local refreshMask = cooldownWidthRefreshAfterCombatMask
       local visualMask = cooldownWidthVisualAfterCombatMask
@@ -1170,14 +1463,17 @@ local function EnsureCooldownWidthRegenDriver()
         EnsureCooldownWidthObservers(true)
         -- The source could not fire callbacks before its protected hook was
         -- installed. Reconcile every active consumer once after regen; the
-        -- normal pending masks below merge into this same next-frame pass.
-        ScheduleCooldownWidthRefresh(nil, false, true)
+        -- replay marker collapses this into the anchor reconcile the deferred
+        -- driver already ran for frozen/queued consumers this regen cycle.
+        ScheduleCooldownAnchorMask(cooldownAnchorConfigMask, true)
+        ScheduleCooldownWidthRefresh(nil, false, true, true)
       end
-      if visualMask ~= 0 then ScheduleCooldownWidthRefresh(visualMask, false, true) end
+      if visualMask ~= 0 then ScheduleCooldownWidthRefresh(visualMask, false, true, true) end
       local castbarOnlyMask = MaskSubtract(refreshMask, visualMask)
       if castbarOnlyMask ~= 0 then ScheduleCooldownWidthRefresh(castbarOnlyMask, true, true) end
     end)
   end
+  cooldownWidthRegenArmed = true
   cooldownWidthRegenDriver:RegisterEvent("PLAYER_REGEN_ENABLED")
   return true
 end
@@ -1217,10 +1513,14 @@ local function FlushCooldownWidthRefresh()
   local classBit = bars and COOLDOWN_WIDTH_MODE_BITS[bars.classPowerWidthMode or ""] or nil
   if bars and bars.showClassPower ~= false and MaskHas(visualRefreshMask, classBit) then
     local sourceName = COOLDOWN_WIDTH_MODES[bars.classPowerWidthMode or ""]
-    if type(_G.MSUF_ClassPower_RefreshExternalWidth) == "function" then
-      _G.MSUF_ClassPower_RefreshExternalWidth(sourceName)
-    elseif type(_G.MSUF_ClassPower_RefreshLayout) == "function" then
-      _G.MSUF_ClassPower_RefreshLayout()
+    -- A dual anchor+width consumer is already fully laid out by the coalesced
+    -- external-anchor refresh. Do not run the same ClassPower layout twice.
+    if not ClassPowerAnchorOwnsWidthRefresh(bars, sourceName) then
+      if type(_G.MSUF_ClassPower_RefreshExternalWidth) == "function" then
+        _G.MSUF_ClassPower_RefreshExternalWidth(sourceName)
+      elseif type(_G.MSUF_ClassPower_RefreshLayout) == "function" then
+        _G.MSUF_ClassPower_RefreshLayout()
+      end
     end
   end
 
@@ -1250,7 +1550,7 @@ local function FlushCooldownWidthRefresh()
   return true
 end
 
-ScheduleCooldownWidthRefresh = function(source, castbarOnly, trustedConfig)
+ScheduleCooldownWidthRefresh = function(source, castbarOnly, trustedConfig, skipAnchorSchedule)
   local requestedMask = NormalizeCooldownWidthMask(source)
   if requestedMask == 0 then return false end
   local configuredMask, visualMask, castbarMask
@@ -1264,6 +1564,14 @@ ScheduleCooldownWidthRefresh = function(source, castbarOnly, trustedConfig)
   if castbarOnly == true then configuredMask = castbarMask end
   requestedMask = MaskIntersect(requestedMask, configuredMask)
   if requestedMask == 0 then return false end
+  local db = _G.MSUF_DB
+  local bars = type(db) == "table" and type(db.bars) == "table" and db.bars or nil
+  if skipAnchorSchedule ~= true
+    and castbarOnly ~= true
+    and ClassPowerAnchorOwnsWidthRefresh(bars, "EssentialCooldownViewer")
+    and MaskHas(requestedMask, COOLDOWN_WIDTH_SOURCE_BITS.EssentialCooldownViewer) then
+    Factory.ScheduleExternalAnchorRefresh("EssentialCooldownViewer")
+  end
   local requestedVisualMask = castbarOnly == true and 0 or MaskIntersect(requestedMask, visualMask)
   if InCombat() then
     for i = 1, #COOLDOWN_WIDTH_SOURCE_BIT_ORDER do
@@ -1300,7 +1608,9 @@ end
 local function OnCooldownWidthSourceChanged(frame)
   if cooldownWidthActiveGeneration[frame] ~= cooldownWidthSourceGeneration then return end
   local sourceMask = cooldownWidthActiveMask[frame] or 0
-  if sourceMask ~= 0 then ScheduleCooldownWidthRefresh(sourceMask, false, true) end
+  local anchorMask = MaskIntersect(sourceMask, cooldownAnchorConfigMask)
+  ScheduleCooldownAnchorMask(anchorMask)
+  if sourceMask ~= 0 then ScheduleCooldownWidthRefresh(sourceMask, false, true, anchorMask ~= 0) end
   local castbarOnlyMask = cooldownWidthActiveCastbarOnlyMask[frame] or 0
   if castbarOnlyMask ~= 0 then ScheduleCooldownWidthRefresh(castbarOnlyMask, true, true) end
 end
@@ -1332,13 +1642,15 @@ local function ObserveCooldownWidthFrame(frame, sourceBit, castbarOnly)
 end
 
 EnsureCooldownWidthObservers = function(force)
-  local configuredMask, visualMask, castbarMask = ConfiguredCooldownWidthMask()
+  local configuredMask, visualMask, castbarMask, anchorMask = ConfiguredCooldownWidthMask()
   if configuredMask ~= cooldownWidthConfigMask
     or visualMask ~= cooldownWidthVisualConfigMask
-    or castbarMask ~= cooldownWidthCastbarConfigMask then
+    or castbarMask ~= cooldownWidthCastbarConfigMask
+    or anchorMask ~= cooldownAnchorConfigMask then
     cooldownWidthConfigMask = configuredMask
     cooldownWidthVisualConfigMask = visualMask
     cooldownWidthCastbarConfigMask = castbarMask
+    cooldownAnchorConfigMask = anchorMask
     cooldownWidthSourceGeneration = cooldownWidthSourceGeneration + 1
   elseif force == true and cooldownWidthScannedGeneration == cooldownWidthSourceGeneration then
     cooldownWidthSourceGeneration = cooldownWidthSourceGeneration + 1
@@ -1372,20 +1684,50 @@ end
 ExportPublic("MSUF_ScheduleCooldownWidthRefresh", ScheduleCooldownWidthRefresh)
 ExportPublic("MSUF_EnsureCooldownWidthObservers", EnsureCooldownWidthObservers)
 
--- Rebind only unit frames that explicitly consume one external anchor. This is
--- used for proxy acquisition/loss; a stable proxy-to-proxy source switch needs
--- no unit-frame work because its identity never changes.
+-- Rebind consumers after a supported provider changes while out of combat.
+-- ApplyPosition leaves a live link to the provider, so plain provider movement
+-- needs no rebind at all; this handles identity/usability transitions. During
+-- combat the request is queued and replayed once after regen.
 function Factory.RefreshExternalAnchor(frameName)
-  if not (IsCooldownViewerAnchor(frameName) and UF.spawned) or InCombat() then return false end
+  if not IsCooldownViewerAnchor(frameName) then return false end
+  if InCombat() then
+    externalAnchorRefreshAfterCombat[frameName] = true
+    Factory.EnsureDeferredDriver()
+    return false
+  end
+  externalAnchorRefreshedSinceCombat[frameName] = true
   local refreshed = false
-  for i = 1, #UF.unitOrder do
-    local frame = UF.frames and UF.frames[UF.unitOrder[i]]
-    local spec = frame and frame.MSUFSpec
-    if spec and spec.anchorFrameName == frameName then
-      InvalidateFramePositionCache(frame)
-      ApplyPosition(frame, spec)
+  if UF.spawned then
+    for i = 1, #UF.unitOrder do
+      local frame = UF.frames and UF.frames[UF.unitOrder[i]]
+      local spec = frame and frame.MSUFSpec
+      if spec and (frame._msufRequestedAnchorName == frameName or spec.anchorFrameName == frameName) then
+        InvalidateFramePositionCache(frame)
+        ApplyPosition(frame, spec)
+        refreshed = true
+      end
+    end
+  end
+
+  if frameName == "EssentialCooldownViewer" then
+    local db = _G.MSUF_DB
+    local bars = type(db) == "table" and type(db.bars) == "table" and db.bars or nil
+    if bars and bars.classPowerAnchorToCooldown == true then
+      if type(_G.MSUF_ClassPower_Apply) == "function" then
+        _G.MSUF_ClassPower_Apply({ anchor = true, cdm = true, syncNow = false })
+      elseif type(_G.MSUF_ClassPower_RefreshLayout) == "function" then
+        _G.MSUF_ClassPower_RefreshLayout()
+      end
       refreshed = true
     end
+  end
+
+  local db = _G.MSUF_DB
+  local GF = MSUF.GF
+  if type(db) == "table" and type(GroupUsesExternalAnchor) == "function" and GroupUsesExternalAnchor(db, frameName)
+    and GF and type(GF.RefreshHeaderLayout) == "function" then
+    GF.RefreshHeaderLayout()
+    refreshed = true
   end
   return refreshed
 end
@@ -1394,7 +1736,7 @@ ExportPublic("MSUF_RefreshExternalUnitFrameAnchor", function(frameName)
   return Factory.RefreshExternalAnchor(frameName)
 end)
 
-local function HasGroupLateAnchorConfig(db)
+HasGroupLateAnchorConfig = function(db)
   for i = 1, #LATE_GROUP_ANCHOR_KEYS do
     local conf = db[LATE_GROUP_ANCHOR_KEYS[i]]
     local name = type(conf) == "table" and CanonicalAnchorFrameName(
@@ -1407,6 +1749,17 @@ local function HasGroupLateAnchorConfig(db)
       and name ~= "WorldFrame" then
       return true
     end
+  end
+  return false
+end
+
+GroupUsesExternalAnchor = function(db, frameName)
+  for i = 1, #LATE_GROUP_ANCHOR_KEYS do
+    local conf = db[LATE_GROUP_ANCHOR_KEYS[i]]
+    local name = type(conf) == "table" and CanonicalAnchorFrameName(
+      conf.anchorToFrame or conf.anchorFrame or conf.relativeTo or conf.anchorTo
+    ) or nil
+    if name == frameName then return true end
   end
   return false
 end
@@ -1580,13 +1933,27 @@ do
   lateAnchorEvents:RegisterEvent("PLAYER_ENTERING_WORLD")
   lateAnchorEvents:RegisterEvent("EDIT_MODE_LAYOUTS_UPDATED")
   lateAnchorEvents:RegisterEvent("ADDON_LOADED")
+  lateAnchorEvents:RegisterEvent("PLAYER_REGEN_DISABLED")
   lateAnchorEvents:SetScript("OnEvent", function(_, event, addon)
+    if event == "PLAYER_REGEN_DISABLED" then
+      -- Delivered before lockdown: the last legal moment to detach external
+      -- consumers so provider movement cannot drag MSUF frames mid-fight.
+      -- Clear the latch in place; a combat edge must not create garbage.
+      for name in pairs(externalAnchorRefreshedSinceCombat) do
+        externalAnchorRefreshedSinceCombat[name] = nil
+      end
+      FreezeExternalAnchorsForCombat()
+      return
+    end
     if event == "ADDON_LOADED"
       and addon ~= "Blizzard_EditMode"
       and addon ~= "Blizzard_CooldownViewer"
       and not HasLateAnchorConfig() then return end
     EnsureCooldownWidthObservers(true)
-    if event == "EDIT_MODE_LAYOUTS_UPDATED" then ScheduleCooldownWidthRefresh() end
+    if event == "EDIT_MODE_LAYOUTS_UPDATED" then
+      ScheduleCooldownAnchorMask(cooldownAnchorConfigMask)
+      ScheduleCooldownWidthRefresh()
+    end
     if event == "PLAYER_ENTERING_WORLD" then
       -- Blizzard finalizes UIParent and secure layout state on this event. Run
       -- one cold-path forced SetPoint on the next frame so stale geometry cannot

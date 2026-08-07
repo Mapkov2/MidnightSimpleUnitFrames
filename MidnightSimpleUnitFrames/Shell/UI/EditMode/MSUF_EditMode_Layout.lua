@@ -755,6 +755,8 @@ end
 --- Called after dragging parentKey by (dx, dy) in screen space.
 --- Moves child movers and their underlying frames.
 function Anchors.PropagateMove(parentKey, dx, dy)
+    if (IsConfigCombatLocked and IsConfigCombatLocked())
+        or (InCombatLockdown and InCombatLockdown()) then return false end
     if dx == 0 and dy == 0 then return end
     local children = Anchors.GetAllDescendants(parentKey)
     if #children == 0 then return end
@@ -1367,9 +1369,85 @@ local function ApplyFramePoint(frame, point, anchor, relativePoint, x, y)
     frame:SetPoint(point, anchor, relativePoint, x, y)
 end
 
+local function ReadEditAnchorOwnedMarker(anchor)
+    return anchor._msufOwnedAnchorRoot
+end
+
+local function IsExternalEditAnchor(anchor)
+    if anchor == nil or anchor == UIParent or anchor == WorldFrame then return false end
+    local ok, owned = pcall(ReadEditAnchorOwnedMarker, anchor)
+    return not (ok and owned == true)
+end
+
+local function CaptureFramePoints(frame)
+    if not (frame and frame.GetPoint) then return nil end
+    local count = 1
+    if frame.GetNumPoints then
+        local ok, value = pcall(frame.GetNumPoints, frame)
+        if ok then count = tonumber(value) or 0 end
+    end
+    local points = {}
+    for i = 1, count do
+        local result = { pcall(frame.GetPoint, frame, i) }
+        if result[1] and result[2] then
+            points[#points + 1] = {
+                point = result[2],
+                anchor = result[3],
+                relativePoint = result[4],
+                x = result[5],
+                y = result[6],
+            }
+        end
+    end
+    return #points > 0 and points or nil
+end
+
+local function RestoreFramePoints(frame, points)
+    if not (frame and points) then return false end
+    local cleared = pcall(frame.ClearAllPoints, frame)
+    if not cleared then return false end
+    for i = 1, #points do
+        local p = points[i]
+        if not pcall(frame.SetPoint, frame, p.point, p.anchor, p.relativePoint, p.x, p.y) then
+            pcall(frame.ClearAllPoints, frame)
+            return false
+        end
+    end
+    return true
+end
+
 local function TryApplyFramePoint(frame, point, anchor, relativePoint, x, y)
     if not (frame and anchor) then return false end
-    return pcall(ApplyFramePoint, frame, point, anchor, relativePoint, x, y)
+    -- A drag tick must never straddle combat with a protected frame mutation.
+    -- The edit-mode driver stops on PLAYER_REGEN_DISABLED as well, but this
+    -- guard closes the event/ticker boundary itself.
+    if InCombatLockdown and InCombatLockdown() then return false end
+
+    -- External anchors stay live out of combat so the frame follows provider
+    -- movement; the Factory combat-edge freeze severs the link for combat.
+    -- Positioning onto one is still transactional: keep the previous points so
+    -- an unresolvable provider chain can be rolled back atomically.
+    local externalAnchor = IsExternalEditAnchor(anchor)
+    local rollbackPoints
+    if externalAnchor then
+        rollbackPoints = CaptureFramePoints(frame)
+        if not rollbackPoints then return false end
+    end
+
+    local applied = pcall(ApplyFramePoint, frame, point, anchor, relativePoint, x, y)
+    if not applied then
+        -- ApplyFramePoint clears before it sets; a mid-apply error must not
+        -- leave the frame pointless.
+        if rollbackPoints then RestoreFramePoints(frame, rollbackPoints) end
+        return false
+    end
+    if not externalAnchor then return true end
+
+    -- Accept the live link only when the provider chain resolves to a real
+    -- screen rect; a rectless chain would render the frame nowhere.
+    if frame.GetCenter and frame:GetCenter() ~= nil then return true end
+    RestoreFramePoints(frame, rollbackPoints)
+    return false
 end
 
 local function SetBossPreviewPosition(point, anchor, relativePoint, x, y, conf, rollbackX, rollbackY)
