@@ -126,16 +126,18 @@ local ENFORCED_CONTAINER_INDEX = 4
 
 -- ONLY the fields those two functions actually re-pin. hidePermanent is absent
 -- from both, so it stays freely writable on container 4 -- guarding the whole
--- filter set took seven working settings away. onlyMine is pinned by both, but
--- only the player container refuses the write in practice, so it is listed for
--- the player alone rather than on assumption.
+-- filter set took seven working settings away. onlyMine IS re-pinned by both
+-- (player to false, target/focus/boss to true), so it belongs here for every
+-- unit; treating it as player-only left three settings advertising a write the
+-- model silently undid, which surfaced as "I could not safely apply that
+-- change" instead of an explanation.
 local ENFORCED_CONTAINER_FILTERS = {
+    onlyMine = true,
     onlyImportant = true, raid = true, raidInCombat = true,
     includeNameplateOnly = true, includeDispellable = true, dispellableAny = true,
     cancelable = true, notCancelable = true, crowdControl = true,
     externalDefensive = true, bigDefensive = true,
 }
-local ENFORCED_CONTAINER_FILTERS_PLAYER_ONLY = { onlyMine = true }
 
 -- Each container carries its own filter set, identical in meaning to the Buff
 -- lane filters. Only the toggles are registered here; the spell list stays with
@@ -320,9 +322,7 @@ function A.AurasRegistry.RegisterUnitCustomContainerLayoutSettings(ctx)
                     -- counts it as a control the player can operate.
                     local isPinned = holder == "filters"
                         and customIndex == ENFORCED_CONTAINER_INDEX
-                        and (ENFORCED_CONTAINER_FILTERS[boolField]
-                            or (unitKey == "player"
-                                and ENFORCED_CONTAINER_FILTERS_PLAYER_ONLY[boolField]))
+                        and ENFORCED_CONTAINER_FILTERS[boolField] == true
                     local aliases = {}
                     for _, noun in ipairs(boolSpec.nouns) do
                         aliases[#aliases + 1] = unit .. " custom aura " .. tostring(index) .. " " .. noun

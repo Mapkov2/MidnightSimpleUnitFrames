@@ -203,6 +203,12 @@ Registry:RegisterSetting({
     type = "string",
     aliases = { "target inline custom separator", "target of target inline custom separator", "tot inline custom separator" },
     valuePrefixes = { "target inline custom separator", "target of target inline custom separator", "tot inline custom separator" },
+    -- A separator is capped at five characters and stripped of control
+    -- characters, so anything longer is stored shortened. Without declaring the
+    -- normalization the transaction read back the trimmed text, called it a
+    -- failed write and rolled it back -- so a longer separator could not be set
+    -- at all rather than simply being trimmed.
+    normalizesValue = true,
     get = function() return CleanToTInlineCustomSeparator(UnitDB("targettarget").totInlineCustomSeparator) end,
     set = function(value)
         UnitDB("targettarget").totInlineCustomSeparator = CleanToTInlineCustomSeparator(value)
