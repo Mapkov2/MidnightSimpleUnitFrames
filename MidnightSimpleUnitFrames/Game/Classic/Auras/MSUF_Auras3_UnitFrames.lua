@@ -57,7 +57,6 @@ local GetAuraSlots = C_UnitAuras and C_UnitAuras.GetAuraSlots
 local GetAuraDataByIndex = C_UnitAuras and C_UnitAuras.GetAuraDataByIndex
 local GetAuraDataBySlot = C_UnitAuras and C_UnitAuras.GetAuraDataBySlot
 local GetAuraDataByAuraInstanceID = C_UnitAuras and C_UnitAuras.GetAuraDataByAuraInstanceID
-local IsAuraFilteredOutByInstanceID = C_UnitAuras and C_UnitAuras.IsAuraFilteredOutByInstanceID
 local GetAuraApplicationDisplayCount = C_UnitAuras and C_UnitAuras.GetAuraApplicationDisplayCount
 local GetAuraDispelTypeColor = C_UnitAuras and C_UnitAuras.GetAuraDispelTypeColor
 
@@ -1967,11 +1966,54 @@ local function HideState(frame)
     ClearFrameAuraVisualState(frame)
 end
 
+--- Token-filter membership. C_UnitAuras.IsAuraFilteredOutByInstanceID has no
+--- engine-validated consumer on any Classic branch and reported every aura as
+--- filtered on Mists, which turned each token filter into an empty lane.
+--- Blizzard's own Classic UI evaluates filter tokens through aura scans
+--- (Blizzard_RaidUI walks "HELPFUL|RAID|PLAYER"), so membership is derived
+--- from the same scan primitive: one filtered instance-ID scan per
+--- unit+filter, cached until the unit's next aura event bumps its serial.
+--- (State and helpers hang off A3: this file runs at the 200-local ceiling.)
+A3._ClassicAuraTokenSets = A3._ClassicAuraTokenSets or {}
+A3._ClassicAuraTokenSerial = A3._ClassicAuraTokenSerial or {}
+A3._ClassicAuraTokenSet = function(unit, filter)
+    local key = unit .. "|" .. filter
+    local serial = A3._ClassicAuraTokenSerial[unit] or 0
+    local entry = A3._ClassicAuraTokenSets[key]
+    if entry and entry.serial == serial then return entry.set end
+    if not entry then
+        entry = { set = {} }
+        A3._ClassicAuraTokenSets[key] = entry
+    end
+    local set = WipeTable(entry.set)
+    entry.set = set
+    entry.serial = serial
+    local getInstanceIDs = C_UnitAuras and C_UnitAuras.GetUnitAuraInstanceIDs
+    if type(getInstanceIDs) == "function" then
+        local ids = getInstanceIDs(unit, filter)
+        if type(ids) == "table" and not IsSecret(ids) then
+            for i = 1, #ids do
+                local id = ids[i]
+                if id ~= nil and not IsSecret(id) then set[id] = true end
+            end
+        end
+        return set
+    end
+    if GetAuraSlots and GetAuraDataBySlot then
+        local slots, count = FillAuraSlots(entry.scratch or {}, GetAuraSlots(unit, filter))
+        entry.scratch = slots
+        for i = 2, count do
+            local data = GetAuraDataBySlot(unit, slots[i])
+            local id = data and data.auraInstanceID
+            if id ~= nil and not IsSecret(id) then set[id] = true end
+        end
+    end
+    return set
+end
+
 local function Filtered(unit, auraInstanceID, filter)
-    if not IsAuraFilteredOutByInstanceID then return false end
-    local filtered = IsAuraFilteredOutByInstanceID(unit, auraInstanceID, filter)
-    if IsSecret(filtered) then return false end
-    return filtered == true
+    if unit == nil or auraInstanceID == nil or filter == nil then return false end
+    return A3._ClassicAuraTokenSet(unit, filter)[auraInstanceID] ~= true
 end
 
 local function ProcessData(lane, unit, data)
@@ -1980,15 +2022,20 @@ local function ProcessData(lane, unit, data)
     if auraInstanceID == nil then return nil end
     local cfg = lane.config
     if cfg.needsPlayerFlag == true then
-        -- AuraData already carries the player-source flag; the per-aura
-        -- IsAuraFilteredOutByInstanceID C call is only the fallback for
-        -- secret/absent fields. On uncapped full scans this removes one C
-        -- call per aura.
+        -- Mists/TBC do not reliably populate isFromPlayerOrPlayerPet (the
+        -- player's own party-frame HoTs carried false/nil, which blanked
+        -- "only mine" lanes). Blizzard's Classic frames identify own casts
+        -- by the caster unit, so sourceUnit is authoritative here; the
+        -- membership fallback only covers auras with no readable caster.
+        local sourceUnit = data.sourceUnit
         local fromPlayer = data.isFromPlayerOrPlayerPet
-        if fromPlayer == nil or IsSecret(fromPlayer) then
-            data.isPlayerAura = not Filtered(unit, auraInstanceID, cfg.playerFilter)
-        else
+        if sourceUnit ~= nil and not IsSecret(sourceUnit) then
+            data.isPlayerAura = sourceUnit == "player"
+                or sourceUnit == "pet" or sourceUnit == "vehicle"
+        elseif fromPlayer ~= nil and not IsSecret(fromPlayer) then
             data.isPlayerAura = fromPlayer == true
+        else
+            data.isPlayerAura = not Filtered(unit, auraInstanceID, cfg.playerFilter)
         end
     end
     return data
@@ -3592,6 +3639,10 @@ local function UpdateAuras(frame, event, unit, updateInfo, forceFull)
         and not (preState and preState.needFullUpdate == true) then
         return false
     end
+
+    -- Invalidate this unit's token-membership sets: they must reflect the
+    -- aura state this event describes before any lane queries them.
+    A3._ClassicAuraTokenSerial[unit] = (A3._ClassicAuraTokenSerial[unit] or 0) + 1
 
     local state, cfg = CurrentFrameState(frame, unit)
     if not (cfg and cfg.enabled) then
