@@ -1,5 +1,35 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-RC13 - 2026-08-07
+
+### Highlights
+
+- Added optional Dominos integration to MSUF Edit Mode. Undocked bars get movers and a native MSUF popup covering the bar's layout settings — Buttons, Columns, Spacing, Padding, Scale, Opacity, Faded Opacity, visibility and click-through — while Dominos keeps ownership of all bar settings.
+- Added optional DandersFrames integration to MSUF Edit Mode. Party, raid and free pinned sets get movers, selecting an element starts DandersFrames' own unlock preview for that scope, and DandersFrames keeps ownership of all saved positions.
+
+### Changes
+
+- External Edit Mode elements can now declare their own quick controls. MSUF renders them as native stepper and toggle rows in the external popup and routes every change through the normal undo history.
+- The Edit Mode toolbar now slides in from its docked edge when Edit Mode opens. Reduce Menu Motion skips the animation.
+- Trimmed the Dashboard's Display & recovery card to Reset Positions, Print Help and Factory Reset All. The duplicate Wago and Discord buttons were removed; both links stay in the Wago and support rows.
+- Restarting an already completed Guided Setup from the Dashboard now asks for confirmation. Resuming an active tour and the first run stay one click.
+
+### Fixes & Performance
+
+- Fixed the `Follow HP bar (overflow)` prediction anchor drawing into neighbouring group frames. The overlay is now clipped natively to Blizzard's 5% overflow allowance.
+- Fixed overflow prediction bars dropping behind neighbouring frames after re-parenting, and rounded frames clipping away the segment that anchor mode exists to show.
+- Fixed group frames built after the startup pass — login roster races and late joins — never receiving their rounded mask.
+- Fixed Edit Mode tooltips drawing underneath the toolbar, and the Cancel All / Exit buttons ignoring the toolbar font.
+- Fixed the Aura style preview staying hidden when returning to an already built Aura page.
+- Fixed `set Custom Menu Accent Color to red` storing black. The setting now uses the same single-color contract as every other color.
+- Fixed Assistant enum values with an underscore being unselectable by name, such as the Blizzard Ring portrait shape and the Dispel Symbol styles that share a stem.
+- Fixed control names longer than eight words never entering the Assistant's exact-label index; 36 controls could not be reached by the name the menu prints.
+- Fixed a command that spells exactly one control's name being answered with a candidate list instead of changing it — colors above all.
+- Fixed `enable target combat state indicator` toggling the global Combat Enter/Leave Text or the Blizzard Totem Frame instead of the unit's Combat Indicator.
+- Fixed the Assistant rejecting an Inline Custom Separator longer than five characters instead of storing the trimmed value.
+- Fixed the Big Defensive sort method being unselectable by name, and `Only Mine` on the preset custom container reporting a failed write instead of explaining that MSUF pins it.
+- Follow-ups to a readability answer (`make it wider`, `actually make it 320`) now apply to the control that answer named, and a shortened indicator name continues the subject already under discussion.
+
 ## 6.0-RC12 - 2026-08-07
 
 ### Highlights

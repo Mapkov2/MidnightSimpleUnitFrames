@@ -8,10 +8,84 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-RC11",
-    previousVersion = "6.0-rc10",
-    rangeLabel = "6.0-rc10 -> 6.0-RC11",
+    currentVersion = "6.0-RC13",
+    previousVersion = "6.0-RC12",
+    rangeLabel = "6.0-RC12 -> 6.0-RC13",
     entries = {
+        {
+            version = "6.0-RC13",
+            date = "2026-08-07",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Added optional Dominos integration to MSUF Edit Mode. Undocked bars get movers and a native MSUF popup covering the bar's layout settings - Buttons, Columns, Spacing, Padding, Scale, Opacity, Faded Opacity, visibility and click-through - while Dominos keeps ownership of all bar settings.",
+                        "Added optional DandersFrames integration to MSUF Edit Mode. Party, raid and free pinned sets get movers, selecting an element starts DandersFrames' own unlock preview for that scope, and DandersFrames keeps ownership of all saved positions.",
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "External Edit Mode elements can now declare their own quick controls. MSUF renders them as native stepper and toggle rows in the external popup and routes every change through the normal undo history.",
+                        "The Edit Mode toolbar now slides in from its docked edge when Edit Mode opens. Reduce Menu Motion skips the animation.",
+                        "Trimmed the Dashboard's Display & recovery card to Reset Positions, Print Help and Factory Reset All. The duplicate Wago and Discord buttons were removed; both links stay in the Wago and support rows.",
+                        "Restarting an already completed Guided Setup from the Dashboard now asks for confirmation. Resuming an active tour and the first run stay one click.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Fixed the Follow HP bar (overflow) prediction anchor drawing into neighbouring group frames. The overlay is now clipped natively to Blizzard's 5% overflow allowance.",
+                        "Fixed overflow prediction bars dropping behind neighbouring frames after re-parenting, and rounded frames clipping away the segment that anchor mode exists to show.",
+                        "Fixed group frames built after the startup pass - login roster races and late joins - never receiving their rounded mask.",
+                        "Fixed Edit Mode tooltips drawing underneath the toolbar, and the Cancel All / Exit buttons ignoring the toolbar font.",
+                        "Fixed the Aura style preview staying hidden when returning to an already built Aura page.",
+                        "Fixed set Custom Menu Accent Color to red storing black. The setting now uses the same single-color contract as every other color.",
+                        "Fixed Assistant enum values with an underscore being unselectable by name, such as the Blizzard Ring portrait shape and the Dispel Symbol styles that share a stem.",
+                        "Fixed control names longer than eight words never entering the Assistant's exact-label index; 36 controls could not be reached by the name the menu prints.",
+                        "Fixed a command that spells exactly one control's name being answered with a candidate list instead of changing it - colors above all.",
+                        "Fixed enable target combat state indicator toggling the global Combat Enter/Leave Text or the Blizzard Totem Frame instead of the unit's Combat Indicator.",
+                        "Fixed the Assistant rejecting an Inline Custom Separator longer than five characters instead of storing the trimmed value.",
+                        "Fixed the Big Defensive sort method being unselectable by name, and Only Mine on the preset custom container reporting a failed write instead of explaining that MSUF pins it.",
+                        "Follow-ups to a readability answer (make it wider, actually make it 320) now apply to the control that answer named, and a shortened indicator name continues the subject already under discussion.",
+                    },
+                },
+            },
+        },
+        {
+            version = "6.0-RC12",
+            date = "2026-08-07",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Added Back and Forward page navigation to the menu status strip. Both buttons name their target page in the tooltip, skip the transient Search page, and are available to the Assistant.",
+                        "MSUF frames now follow a supported Cooldown Manager provider live while out of combat. Unit frames, Group headers and Class Resources keep a real anchor link to Arc UI, Skiron, Coolinator and Blizzard's viewer, and that link is severed at the combat edge so provider movement can never drag a protected frame mid-fight.",
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "The Detached Power width mode now outranks a Detached width typed on the frame; the shared Class Resources width mode remains its fallback while width sync is on. Manual resolves to no source, so untouched profiles keep their current width.",
+                        "Status text colors now have one entry point per surface: the ::: shortcut on the Status > Selected card and the canonical Colors page. The duplicate swatch on Status > Placement was removed.",
+                        "Split the runtime chat/tooltip file into dedicated slash command, unit tooltip and Blizzard Edit Mode bridge modules. Load order, exports and behavior are unchanged.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Fixed MSUF frames not following a Cooldown Manager provider that moved or resized without changing identity. Provider movement is now free out of combat, and combat-time changes are replayed once after regen instead of being lost.",
+                        "Fixed frames anchored to a provider whose geometry is not readable yet rendering nowhere. They now keep the cached screen position or fall back to UIParent and retry on the bounded late-anchor pass.",
+                        "Fixed Group Cooldown Font and Stack Font not applying until an unrelated setting was changed. Aura text sizes now invalidate the aura domain instead of the text-only fast path.",
+                        "Fixed the Custom Aura Pandemic color losing its menu entry. The color is reached through the section's ::: shortcut, and menu search and the Assistant resolve to that shortcut.",
+                        "Fixed the detached Power width preview disagreeing with live frames when a Cooldown Viewer source was selected.",
+                        "Edit Mode frame positioning is now blocked at the combat boundary and rolls back atomically when an external anchor target cannot resolve.",
+                        "Class Resources no longer runs its layout twice when the same Cooldown Viewer provides both its anchor and its width.",
+                        "Font runtime resolves its apply-cache helpers once at load instead of per FontString, and the combat regen drivers arm their event only once per fight.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-RC11",
             date = "2026-08-07",
@@ -76,86 +150,6 @@ local data = {
                         "Fixed more Assistant exact-setting commands phrased with polite lead-ins or everyday verbs such as Configure, Update, Modify, Customize and Tweak. Numeric requests containing text-mode words such as max now continue to their actual numeric control instead of being intercepted as an incomplete HP-text command. These routes reuse already-warm label and alias indexes, keeping the cold synchronous preflight fast and leaving conjunctions to compound-command parsing.",
                         "Fixed Assistant Copy To handling for independent Aura Options, Aura Style and Texture Layer categories so style-only requests no longer fall back to broader content or default copies.",
                         "Fixed Assistant catalog-only controls, percentage-bearing labels and ambiguous commands with supplied values. Exact catalog controls now get their turn before generic guidance, % survives rendered labels, and a numeric follow-up can complete the selected mutation without retyping the request.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-RC9",
-            date = "2026-08-05",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "Added native EllesmereUI Unlock Mode integration.",
-                        "Added EllesmereUI Cooldown Manager to the consent-based cooldown anchoring providers.",
-                        "Rebuilt Aura styling around clear ownership. Appearance > Aura Style now contains four genuinely global icon themes - Buffs, Debuffs, Player Defensives and Dots on Target - while each UnitFrame and GroupFrame owns its layout, filters, timers, text, ordering, Pandemic presentation and Full-Frame effects.",
-                        "Restored Purge Border for Target and Focus through WoW 12.1's native stealable-aura filtering. It uses a dedicated one-slot Aura sensor, works even when normal aura lanes are hidden, respects the configured highlight priority/color and adds no MSUF scan, ticker or OnUpdate.",
-                        "Added optional native Stealable Buff markers to Buff containers with Border, Border + Icon and Icon styles. The marker uses Blizzard's AuraButton filter and does not add an MSUF aura scan, ticker or per-frame update.",
-                        "Added an optional Pandemic warning for Dots on Target with Border, Tint and a combined Border + Tint style plus color, thickness, padding, opacity and blend controls. It is disabled by default and the menu explicitly warns that Blizzard's native Pandemic region may run an OnUpdate on each affected visible aura button.",
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Added a dedicated, Group-scope-aware Spell Icon Style editor for icon zoom/scale, opacity, native tooltip behavior, cooldown text and swipe, decimal threshold, stack count and duration bars. Spell Icons use the shared Buff theme only for shape, border and shadow, and they no longer intercept click-casting while tooltips are enabled.",
-                        "Gave Custom 1-3, Player Defensives and Dots on Target the same frame-local deep Style workflow. Existing shared special-container presentation is migrated once into the owning UnitFrames without moving visibility, filters, placement or tracked spells.",
-                        "Split Unit and Group Copy To into independent Aura Options and Aura Style categories. Content, filters, lists and tracked spells can now be copied without overwriting presentation, or presentation can be copied without replacing content; the global Appearance theme is never copied implicitly.",
-                        "Moved UnitFrame Dispel Overlay and Dispel Symbol controls from the global Bars page to the owning Player, Target, Focus and Boss pages beside Auras. The editors follow Shared Bars versus per-frame override ownership and include in-page runtime previews; symbols can be dragged directly into position.",
-                        "Added zoom out/in, Fit, 1:1 and Ctrl-wheel support to the shared Aura Style preview so global icon themes can be inspected without changing live Aura sizing.",
-                        "Expanded preview parity for Unit and Group dispel overlays/symbols, Stealable markers, Pandemic timing, Custom Aura Full-Frame effects and Group Spell Icon styling. Rounded masks, layer visibility, configured alpha/shape and preview footprints now follow the same owners as live frames.",
-                        "Simplified preview interaction: a single click on a handle opens its exact settings, dragging still moves it and right-click keeps related actions. Position readouts now use full-size - / + nudges, and redundant double-click instructions and duplicate X/Y controls were removed.",
-                        "Added top-left, top-center and top-right Group name anchors, plus clearer portrait zoom/pan, detached Power Bar, castbar, status-icon, text and dispel layouts across narrow and wide Menu2 pages.",
-                        "Added optional preview drag guidance for movable Unit, Group and Class Power handles. A compact mouse-and-arrow-key cue plus reduced handle tooltips teach dragging and keyboard nudging; new profiles see the guidance per opened preview until their first real move, while experienced profiles see it only once per session. The Global > Misc toggle controls the short menu-only AnimationGroup, with no ticker or persistent OnUpdate.",
-                        "Removed the obsolete MSUF Masque dependency, saved toggle and Assistant route. MSUF 6.0 does not register its Aura buttons with Masque; Masque and its settings for other addons remain untouched.",
-                        "Unified the RC compatibility notice with the login welcome message so opening Menu2 no longer prints a duplicate warning. On clients older than WoW 12.1, the required compatibility notice remains visible even when the optional welcome message is disabled.",
-                        "Updated the bundled dashboard credits to list Aur0r4 as Lead QA across all shipped locales.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed the RC1-RC8 Group-page option-domain shift that could feed one dropdown's values into the next setting. Existing Party, Raid and Mythic Raid profiles are repaired once at the cold database boundary, covering name anchors, sorting, Power text, delimiters, dispel presentation, status positions, Aura anchors and Spell Indicator effects.",
-                        "Fixed Edit Mode drag geometry at non-default UI/frame scales. Unit movement now uses consistent UI-space deltas, Group movement commits the visible and logical anchors atomically with rollback on failure, and detaching a castbar preserves its current on-screen center instead of reinterpreting old offsets off-screen.",
-                        "Fixed disabling MSUF Global UI Scale and then returning to Blizzard scaling. MSUF now restores the untouched Blizzard useUiScale / uiScale state instead of writing its temporary overlay scale back into those CVars, with protected API fallbacks handled safely.",
-                        "Fixed a fully disabled UnitFrame being rebuilt unsafely in the same session when re-enabled. MSUF keeps the detached zero-overhead state intact and requests one clean /reload before instantiating the frame again.",
-                        "Fixed native Player weapon-enchantment Aura buttons not being recreated when the shared option changed.",
-                        "Fixed dismissing a cooldown-provider consent popup with Escape being stored as an explicit rejection; only clicking Cancel now records a decline.",
-                        "Fixed Menu2 previews painting outside or visibly chasing the shell during minimize, maximize and restore animations. Preview work is suspended during the transition and committed once at the final geometry.",
-                        "Fixed Group and Unit preview interaction/parity issues including stale or missing dispel layers, Custom Aura frame effects, Spell Icon opacity/shape, castbar text hit regions, hidden cast-target handles and Target-DoT Pandemic animation restarting instead of expiring once.",
-                        "Fixed highlight stacking so higher-priority Dispel and Purge borders remain authoritative over lower-priority frame highlights.",
-                        "Fixed Group Copy To omitting newer fields such as maximum frames, auto tanks, scaling, detached Power Bar details, individual HP/Power text slots, status indicators, role visibility, color ownership and Aggro settings.",
-                        "Fixed the Dashboard's pending global-enable state losing an explicit false value.",
-                        "Expanded Assistant coverage for the new shared-versus-frame-local Aura ownership, Stealable marker controls, Spell Icon Style and independent Aura Copy To categories. Search and command routing now better distinguishes singular/plural control names, Target from Target of Target/Focus Target, control labels from their current dropdown value, polite/question-shaped mutations and vague style requests that should open guidance instead of changing an unrelated setting.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-RC8",
-            date = "2026-08-04",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "Added Edge Softness to each of the three existing Unit Frame texture layers. The 0-30% slider uses fifteen compact standalone feather masks and renders through the same cold apply path in live frames and the Menu2 preview; Copy To carries the value for every layer.",
-                        "Cooldown-manager anchoring now asks for consent instead of silently taking ownership. Detected Arc UI, Skiron, Coolinator, Cooldown Manager Centered and Essential Cooldown Viewer providers can be followed or released from Edit Mode, Guided Setup and the unit-page anchoring controls.",
-                    },
-                },
-                {
-                    title = "Fixes",
-                    bullets = {
-                        "Fixed expanded fixed previews collapsing or restoring an older zoom when a profile/settings rebuild invalidated the active page. Expansion state and the expanded zoom now survive the rebuild as one controlled transition.",
-                        "Fixed Assistant explain requests failing when players used a published control alias instead of the visible label. Ambiguous aliases still fail closed, and advice questions such as whether a setting is worth changing remain strictly read-only.",
-                        "Fixed the remaining Power Bar color fallback path when a unit exposes a numeric power type whose token must be normalized before resolving configured colors.",
-                        "Fixed disabled themed Menu2 segments retaining their active blue paint even though native mouse interaction had already been disabled.",
-                        "Fixed Unit Frame and Class Resources Guide layers becoming stale after profile switches or resets. Factory profiles start with both Guide layers visible, the RC8 repair enables Class Resources Guides once for existing profiles, and a later explicit user choice to hide either layer remains authoritative.",
-                        "Fixed the preview zoom controls using an unintuitive button order. Zoom out, the live zoom readout and Zoom in now stay together before Fit, 1:1 and Help.",
-                        "Recalibrated Menu Scale so the former physical 80% size is now the clear 100% reference, with a 25-200% range across the window slider, Dashboard and Assistant while existing saved sizes remain visually unchanged.",
-                        "Extended MSUF Frame Scale to 200% across persistence, live frames, castbar and Unit Frame previews, Dashboard controls and Assistant commands.",
-                        "Fixed previews now open expanded by default in a fresh UI session and after page or factory resets; choosing Compact remains authoritative for the rest of that session.",
-                        "Styled Copy To consistently as a green success action on Unit and Group pages so the primary replication workflow is easier to find.",
-                        "Kept the toolbar Edit Mode action visually neutral instead of painting it like the menu's primary confirmation action.",
                     },
                 },
             },
