@@ -684,12 +684,22 @@ end
 
 P.RefreshRegistrySettingValues = RefreshRegistrySettingValues
 
+-- Storage tokens keep their underscores through Normalize, so Compact leaves
+-- "BLIZZARD_RING" as "blizzard_ring" while the player's "blizzard ring" compacts
+-- to "blizzardring" -- the two never met, and only the one choice with no
+-- underscore ("BLIZZARD") could be selected by name. Compare on a form where a
+-- word separator is a word separator whether it was typed as a space or stored
+-- as an underscore.
+local function CompactToken(value)
+    return (Compact(value):gsub("_", ""))
+end
+
 local function EnumValueForText(setting, text)
     local function matchSegment(segment)
         segment = Normalize(segment)
         if segment == "" then return nil end
         local aliases = setting and setting.valueAliases
-        local compactText = Compact(segment)
+        local compactText = CompactToken(segment)
         -- Exact choice keys and aliases always outrank fuzzy containment. This
         -- matters for values such as weapon_axes_crossed: the shorter alias
         -- "cross" must not redirect it to resurrection_cross.
@@ -697,7 +707,7 @@ local function EnumValueForText(setting, text)
             local bestValue, bestLen
             for alias, value in pairs(aliases) do
                 local normalizedAlias = Normalize(alias)
-                local compactAlias = Compact(alias)
+                local compactAlias = CompactToken(alias)
                 if segment == normalizedAlias or compactText == compactAlias then
                     local len = #compactAlias
                     if not bestLen or len > bestLen then bestValue, bestLen = value, len end
@@ -709,7 +719,7 @@ local function EnumValueForText(setting, text)
         if type(values) == "table" then
             for i = 1, #values do
                 local value = values[i]
-                if segment == Normalize(value) or compactText == Compact(value) then return value end
+                if segment == Normalize(value) or compactText == CompactToken(value) then return value end
             end
         end
         local valueLabels = setting and setting.valueLabels
@@ -717,19 +727,19 @@ local function EnumValueForText(setting, text)
             for i = 1, #values do
                 local value = values[i]
                 local label = valueLabels[value]
-                if label ~= nil and (segment == Normalize(label) or compactText == Compact(label)) then return value end
+                if label ~= nil and (segment == Normalize(label) or compactText == CompactToken(label)) then return value end
             end
         end
         if type(aliases) == "table" then
             local bestValue
             local bestLen = 0
             for alias, value in pairs(aliases) do
-                local compactAlias = Compact(alias)
+                local compactAlias = CompactToken(alias)
                 local normalizedAlias = Normalize(alias)
                 local joinedPhrase = normalizedAlias:find(" ", 1, true)
                     and #compactAlias >= 5 and compactText:find(compactAlias, 1, true)
                 if HasPhrase(segment, alias) or joinedPhrase then
-                    local len = #Compact(alias)
+                    local len = #CompactToken(alias)
                     if len > bestLen then
                         bestLen = len
                         bestValue = value
@@ -738,19 +748,34 @@ local function EnumValueForText(setting, text)
             end
             if bestValue ~= nil then return bestValue end
         end
+        -- Longest containment wins, exactly as the alias loop above does. A
+        -- family whose choices share a stem ("BLIZZARD", "BLIZZARD_RING",
+        -- "BLIZZARD_BORDER") otherwise resolves every one of them to whichever
+        -- is registered first: "set Player Unit Dispel Symbol Style to blizzard
+        -- ring" answered "already Blizzard" and the two longer choices could not
+        -- be selected by name at all.
         if type(values) == "table" then
+            local bestValue, bestLen = nil, 0
             for i = 1, #values do
                 local value = values[i]
-                local compactValue = Compact(value)
-                if HasPhrase(segment, tostring(value)) or (#compactValue >= 5 and compactText:find(compactValue, 1, true)) then return value end
+                local compactValue = CompactToken(value)
+                if HasPhrase(segment, tostring(value)) or (#compactValue >= 5 and compactText:find(compactValue, 1, true)) then
+                    if #compactValue > bestLen then bestValue, bestLen = value, #compactValue end
+                end
             end
+            if bestValue ~= nil then return bestValue end
         end
         if type(values) == "table" and type(valueLabels) == "table" then
+            local bestValue, bestLen = nil, 0
             for i = 1, #values do
                 local value = values[i]
                 local label = valueLabels[value]
-                if label ~= nil and HasPhrase(segment, tostring(label)) then return value end
+                if label ~= nil and HasPhrase(segment, tostring(label)) then
+                    local len = #CompactToken(label)
+                    if len > bestLen then bestValue, bestLen = value, len end
+                end
             end
+            if bestValue ~= nil then return bestValue end
         end
         return nil
     end

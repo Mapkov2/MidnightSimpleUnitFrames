@@ -743,15 +743,30 @@ function R.EnsureSettingLabelIndex()
     if type(cached) == "table" and cached.settings == settings and cached.count == #settings then
         return cached.map
     end
-    local map = {}
+    local map, unique = {}, {}
     for i = 1, #settings do
         local setting = settings[i]
         local label = setting and R.Normalize(setting.label or "") or ""
-        -- First registration wins, matching the scan order it replaces.
-        if label ~= "" and map[label] == nil then map[label] = setting end
+        if label ~= "" then
+            -- First registration wins, matching the scan order it replaces.
+            if map[label] == nil then map[label] = setting end
+            -- A second claimant makes the label ambiguous. Built in the same
+            -- pass because a writer may only act on a label exactly one setting
+            -- owns, while the readers above are content with the first match.
+            if unique[label] == nil then unique[label] = setting
+            elseif unique[label] ~= setting then unique[label] = false end
+        end
     end
-    R._settingLabelIndex = { settings = settings, count = #settings, map = map }
+    R._settingLabelIndex = { settings = settings, count = #settings, map = map, unique = unique }
     return map
+end
+
+-- Labels owned by exactly one setting. Same lazy build and cache as the map
+-- above, so asking for it never costs a second pass.
+function R.UniqueSettingLabelIndex()
+    R.EnsureSettingLabelIndex()
+    local cached = R._settingLabelIndex
+    return type(cached) == "table" and cached.unique or nil
 end
 
 -- Alias -> setting, for the explain fallback only. The location lane
@@ -927,6 +942,66 @@ function R.CommandNamedSettingLabel(text)
     end
     local label = setting and tostring(setting.label or "") or ""
     return label ~= "" and label or nil
+end
+
+-- The subject of a command, with politeness, verb, article and trailing value
+-- clause removed. Shared with R.CommandNamedSettingLabel above so the reader
+-- and the writer can never disagree about what a sentence names.
+function R.CommandSubjectPhrase(text)
+    local norm = R.Trim((R.Normalize(text):gsub("%s*%?+%s*$", "")))
+    if norm == "" then return nil end
+    local function StripOnce(value, list)
+        for i = 1, #list do
+            local lead = list[i]
+            if value:sub(1, #lead) == lead then return R.Trim(value:sub(#lead + 1)), true end
+        end
+        return value, false
+    end
+    local subject, sawVerb = norm, false
+    for _ = 1, 3 do
+        local stripped, changed = StripOnce(subject, R.SETTING_COMMAND_POLITENESS)
+        subject = stripped
+        if not changed then break end
+    end
+    subject, sawVerb = StripOnce(subject, R.SETTING_COMMAND_VERBS)
+    if not sawVerb then return nil end
+    subject = StripOnce(subject, R.SETTING_COMMAND_ARTICLES)
+    if not subject or subject == "" then return nil end
+    subject = R.Trim((subject:gsub("%s+to%s+.+$", ""):gsub("^the%s+", ""):gsub("^my%s+", "")))
+    return subject ~= "" and subject or nil
+end
+
+-- A command that spells a control's visible label in full, for a control no
+-- other setting shares a name with, names that control and nothing else. The
+-- exact-alias pre-pass deliberately declines several types here (colours most
+-- of all -- see the comment in ParseRegistryExactAliasShortcut), so a fully
+-- named "set Pet Frame Color to red" reached the fuzzy candidate list and was
+-- answered with "several MSUF controls fit that name" even though exactly one
+-- carries that name.
+--
+-- Returns an executable plan, never a result: the caller hands it to the normal
+-- execution boundary so confirmation, transactions and undo all still apply.
+-- Only call this where a lane is about to give up -- it forces the label index,
+-- which Submit's synchronous preflight has no budget for.
+function R.ExactLabelSingleChange(text)
+    local subject = R.CommandSubjectPhrase(text)
+    if not subject then return nil end
+    local unique = R.UniqueSettingLabelIndex and R.UniqueSettingLabelIndex()
+    local setting = unique and unique[subject] or nil
+    if type(setting) ~= "table" or type(setting.set) ~= "function" then return nil end
+    local parser = A.Parser or {}
+    if type(parser.ValueForRegistrySetting) ~= "function" then return nil end
+    local ok, value = pcall(parser.ValueForRegistrySetting, setting, R.Normalize(text), text)
+    if not ok or value == nil then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value } },
+        label = tostring(setting.label or setting.key),
+        summary = "Changes the control named exactly by its menu label.",
+        raw = text,
+        sourceText = text,
+        exactSettingMutation = true,
+    }
 end
 
 -- The exact control a question is about, if it names one. Exported so the
@@ -1919,7 +1994,17 @@ function A.RouterIsFailClosedReadOnlyRequest(text)
             -- value-less request is pointless, because a single change needs a
             -- value. Everything above this point is still a question guard, so
             -- "is it worth changing X to 2" never reaches here.
-            if openEnded.explicitValue == true and R.ExactAliasSingleChange(text) then
+            -- ExactAliasSingleChange goes through the exact-alias pre-pass,
+            -- which declines several types outright (colours above all). A
+            -- request that spells one control's whole visible label is just as
+            -- unambiguous, so consult that index too -- otherwise "set Pet Frame
+            -- Color to red" is fail-closed as a question and the reply tells the
+            -- player to "use a direct command with an explicit value", which is
+            -- exactly what they typed.
+            if openEnded.explicitValue == true
+                and (R.ExactAliasSingleChange(text)
+                    or (type(R.ExactLabelSingleChange) == "function" and R.ExactLabelSingleChange(text)))
+            then
                 return false
             end
             return true
@@ -14311,6 +14396,21 @@ function R.TryOpenEndedSettingIdea(text, coreHandler)
             then
                 RetainConfidentSettingValueQuestion(entries, result)
                 return result
+            end
+        end
+        -- Last check before offering a list: the request may spell one control's
+        -- visible label in full, for a label no other setting shares. That is
+        -- not a candidate among several, it is the control -- and for the types
+        -- the exact-alias pre-pass declines (colours above all) this is the only
+        -- lane that can see it. Runs here, at a give-up point, because it forces
+        -- the label index.
+        if type(R.ExactLabelSingleChange) == "function" and type(A.ExecutePlan) == "function" then
+            local plan = R.ExactLabelSingleChange(text)
+            if plan then
+                local ok, result = pcall(A.ExecutePlan, plan, { sourceText = text })
+                if ok and type(result) == "table" and not A.RouterIsUnknownResult(result) then
+                    return result
+                end
             end
         end
         if type(entries) == "table" and #entries > 1 and not R.OpenEndedEntriesAreConfident(entries) then
