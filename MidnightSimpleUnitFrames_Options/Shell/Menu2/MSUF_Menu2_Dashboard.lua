@@ -191,11 +191,6 @@ local function DirectRunSlash(message)
     slash(message or "")
     return true
 end
-local function DirectCopyLink(title, url)
-    if type(_G.MSUF_ShowCopyLink) ~= "function" then return false end
-    _G.MSUF_ShowCopyLink(title, url)
-    return true
-end
 local function DirectAction(setter, combatLocked)
     local command = { kind = "button", set = setter, historyMode = "none" }
     if combatLocked then command.blockCombat = DirectCombatLocked end
@@ -228,13 +223,11 @@ local DASHBOARD_DIRECT_SPECS = {
     },
     { path = "display_recovery.reset_positions", label = "Reset Positions", classification = "action", actionKey = "reset_all_unit_positions",
         command = DirectAction(function() return DirectRunSlash("reset") end, true) },
-    { path = "display_recovery.copy_wago_link", label = "Wago Profiles", classification = "action", actionKey = "copy_wago_profiles_link",
-        command = DirectAction(function() return DirectCopyLink("Wago MSUF Profiles", "https://wago.io/search/imports/wow/msuf") end) },
+    --- Wago and Discord are deliberately absent here: the card no longer carries those
+    --- buttons, so a direct control would advertise a menu location that does not exist.
+    --- Both links stay reachable through the guided setup Wago button and the support row.
     { path = "display_recovery.print_help", label = "Print Help", classification = "action", actionKey = "assistant_help",
         command = DirectAction(function() return DirectRunSlash("help") end) },
-    { path = "display_recovery.copy_discord_link", label = "Discord", classification = "action", actionKey = "copy_support_link",
-        actionFixedArgs = { link = "discord" },
-        command = DirectAction(function() return DirectCopyLink("Discord", "https://discord.gg/2Gf9b2Wprz") end) },
     { path = "display_recovery.factory_reset_all", label = "Factory Reset All", classification = "action", actionKey = "factory_reset_all", confirmRequired = true,
         command = DirectAction(function() return type(M.StageFactoryReset) == "function" and M.StageFactoryReset() or false end, true) },
     { path = "scaling.global_ui.preset.1080p", label = "1080p", classification = "action", actionKey = "apply_global_scale_preset",
@@ -524,6 +517,27 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
         PaintHeader(open)
     end)
     RefreshOpenState()
+end
+local function StartGuidedSetupFromDashboard(restart)
+    if type(M.StartGuidedTour) ~= "function" then return false end
+    return M.StartGuidedTour({ source = "dashboard", restart = restart == true, mode = "quick" })
+end
+-- Setup stays available after onboarding, but a stray click on the completed
+-- card should not drop the user back into the walkthrough. Only the restart
+-- path asks; resuming an active tour and the very first run stay one click.
+local function ConfirmGuidedSetupRestart()
+    if not (_G.StaticPopupDialogs and _G.StaticPopup_Show and type(M.InstallStaticPopup) == "function") then
+        return StartGuidedSetupFromDashboard(true)
+    end
+    M.InstallStaticPopup("MSUF2_GUIDED_SETUP_RESTART_CONFIRM", {
+        text = "%s",
+        button1 = _G.YES or "Yes",
+        button2 = _G.NO or "No",
+        OnAccept = function() StartGuidedSetupFromDashboard(true) end,
+    })
+    _G.StaticPopup_Show("MSUF2_GUIDED_SETUP_RESTART_CONFIRM",
+        M.Tr("Run the guided setup again? The walkthrough starts over at the first step."))
+    return true
 end
 local function BuildDashboardUX(ctx)
     if type(M.BuildUpgradeHighlightDashboardScene) == "function" and M.BuildUpgradeHighlightDashboardScene(ctx) == true then
@@ -819,8 +833,10 @@ local function BuildDashboardUX(ctx)
         if M.BlockCombatAction and M.BlockCombatAction() then return end
         if tourActive and type(M.ResumeGuidedTour) == "function" then
             M.ResumeGuidedTour()
-        elseif type(M.StartGuidedTour) == "function" then
-            M.StartGuidedTour({ source = "dashboard", restart = tourCompleted, mode = "quick" })
+        elseif tourCompleted then
+            ConfirmGuidedSetupRestart()
+        else
+            StartGuidedSetupFromDashboard(false)
         end
     end, highlightGuidedSetup and "success" or "primary", "guided_setup.start_or_resume", "action", { actionKey = "guided_setup" })
     M.CallIf(T.AttachNavIcon, action, "home", false, true)
@@ -891,9 +907,11 @@ local function BuildDashboardUX(ctx)
     end
     local recoveryW = layoutW
     local recoveryOpen = M.dashboardRecoveryOpen == true
-    local recoveryWrap = recoveryW < 620
-    local recoveryNarrow = recoveryW < 520
-    local recoveryH = recoveryOpen and (recoveryNarrow and 184 or (recoveryWrap and 154 or 122)) or 42
+    --- Three buttons fit one row down to ~392px (Reset + Print Help end at 232, the
+    --- right-aligned Factory Reset starts at width-152); below that the reset drops
+    --- to a second row with its warning text beside it.
+    local recoveryWrap = recoveryW < 420
+    local recoveryH = recoveryOpen and (recoveryWrap and 154 or 122) or 42
     local changelogOpen = M.dashboardChangelogOpen == true
     local changelogH = changelogOpen and 420 or 42
     local scalingOpen = M.dashboardScalingOpen == true
@@ -912,33 +930,25 @@ local function BuildDashboardUX(ctx)
         if recoveryW >= 520 then Pill(head, "Factory reset hidden", recoveryW - 124, -11, 110, T.colors.accent2) end
     end, "display_recovery.disclosure")
     if recoveryOpen then
-        W.Text(recovery, "Reset tools, Wago access, and recovery shortcuts live here.", 16, -60, recoveryW - 32, T.colors.muted)
+        W.Text(recovery, "Fix positions, print help, or reset MSUF.", 16, -60, recoveryW - 32, T.colors.muted)
         local resetPositions = Button(recovery, "Reset Positions", 16, -94, 118, 22, function()
             if not RunMSUFSlashCommand("reset") and M.ShowStatusFeedback then M.ShowStatusFeedback(M.Tr("Reset unavailable"), "danger", 1.4) end
         end, "primary", "display_recovery.reset_positions")
         AddTooltip(resetPositions, "Reset Positions", "Runs /msuf reset for frame positions and visibility.")
-        local wagoX, helpX, discordX = 146, 270, 368
-        local helpY, factoryY = -94, (recoveryWrap and -126 or -94)
-        if recoveryNarrow then helpX, helpY, discordX, factoryY = 16, -126, 114, -158 end
-        Button(recovery, "Wago Profiles", wagoX, -94, 112, 22, CopyWagoLink, nil, "display_recovery.copy_wago_link")
+        local factoryY = recoveryWrap and -126 or -94
         --- "all" includes the diagnostic commands: someone who opened this card
         --- is usually troubleshooting and wants the complete list, not a subset.
-        local printHelp = Button(recovery, "Print Help", helpX, helpY, 86, 22, function()
+        local printHelp = Button(recovery, "Print Help", 146, -94, 86, 22, function()
             if not RunMSUFSlashCommand("help all") and M.ShowStatusFeedback then
                 M.ShowStatusFeedback(M.Tr("Help unavailable"), "danger", 1.4)
             end
         end, nil, "display_recovery.print_help")
         AddTooltip(printHelp, "Print Help", "Lists every MSUF slash command in chat, diagnostics included.")
-        Button(recovery, "Discord", discordX, helpY, 80, 22, function()
-            if type(_G.MSUF_ShowCopyLink) == "function" then _G.MSUF_ShowCopyLink("Discord", "https://discord.gg/2Gf9b2Wprz") end
-        end, nil, "display_recovery.copy_discord_link")
         Button(recovery, "Factory Reset All", recoveryWrap and 16 or (recoveryW - 152), factoryY, 136, 22, function()
             M.CallIf(M.StageFactoryReset)
         end, "danger", "display_recovery.factory_reset_all", "action", { confirmRequired = true })
         if recoveryWrap then
-            local textX = recoveryNarrow and 160 or 160
-            local textY = recoveryNarrow and -160 or -128
-            W.Text(recovery, "Factory reset affects every MSUF setting.", textX, textY, recoveryW - textX - 16, T.colors.muted)
+            W.Text(recovery, "Factory reset affects every MSUF setting.", 160, -128, recoveryW - 176, T.colors.muted)
         end
     end
     local scaling = Card(root, "", x0, scalingTop, recoveryW, scalingH, T.colors.panel2, T.colors.borderSoft)
