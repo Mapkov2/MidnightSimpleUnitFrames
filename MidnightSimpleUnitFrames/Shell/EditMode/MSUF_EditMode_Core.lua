@@ -696,6 +696,11 @@ local function SharedHistoryService()
     return menu
 end
 
+local function ExternalEditModeAPI()
+    local api = (type(MSUF) == "table" and MSUF.EditModeAPI) or _G.MSUF_EditModeAPI
+    return type(api) == "table" and api or nil
+end
+
 --- ENTER Edit Mode
 function State.Enter(key, opts)
     if IsConfigCombatLocked() then
@@ -722,6 +727,11 @@ function State.Enter(key, opts)
     -- before exposing the active state so an immediate Assistant command cannot
     -- mutate settings ahead of the old deferred snapshot.
     SnapshotDB()
+
+    if requestedProvider == "msuf" then
+        local api = ExternalEditModeAPI()
+        if api and type(api._BeginSession) == "function" then api._BeginSession() end
+    end
 
     local history = SharedHistoryService()
     if history and type(history.StartHistorySession) == "function" then
@@ -834,6 +844,7 @@ end
 --- EXIT Edit Mode
 function State.Exit(source)
     if not active then return end
+    local exitingProvider = provider
     enterGeneration = enterGeneration + 1
     local exitToken = enterGeneration
     local combatLocked = (InCombatLockdown and InCombatLockdown()) and true or false
@@ -898,12 +909,17 @@ function State.Exit(source)
     if history and type(history.EndHistorySession) == "function" then
         history.EndHistorySession("edit_mode")
     end
+    if exitingProvider == "msuf" then
+        local api = ExternalEditModeAPI()
+        if api and type(api._EndSession) == "function" then api._EndSession("save") end
+    end
     if State.UpdateCombatListenerRegistration then State.UpdateCombatListenerRegistration() end
 end
 
 --- CANCEL ALL - restore DB to pre-edit-mode state, then exit
 function State.CancelAll()
     if not active then return end
+    local exitingProvider = provider
     enterGeneration = enterGeneration + 1
 
     --- Stop ticker FIRST so no OnUpdate can write offsets after restore.
@@ -974,6 +990,10 @@ function State.CancelAll()
     NotifyListeners()
     if history and type(history.EndHistorySession) == "function" then
         history.EndHistorySession("edit_mode")
+    end
+    if exitingProvider == "msuf" then
+        local api = ExternalEditModeAPI()
+        if api and type(api._EndSession) == "function" then api._EndSession("discard") end
     end
     if State.UpdateCombatListenerRegistration then State.UpdateCombatListenerRegistration() end
 end
@@ -1118,6 +1138,7 @@ local HISTORY_CATEGORY_LABELS = {
     general = "General layout",
     aura = "Aura layout",
     gf = "Group frame",
+    external = "External frame",
 }
 
 local function HistoryChangeLabel(category, key, action)
@@ -1259,6 +1280,11 @@ local function ApplyGFUndo(key, dbKey)
 end
 
 local function CaptureState(category, key)
+    if category == "external" then
+        local external = EM2.ExternalElements
+        return external and type(external.CaptureHistoryState) == "function"
+            and external.CaptureHistoryState(key) or nil
+    end
     local db = _G.MSUF_DB
     if not db then return nil end
     local snap = { category = category, key = key }
@@ -1285,6 +1311,17 @@ end
 local function RestoreState(snap)
     if not snap then return end
     PublishCompat("MSUF__UndoRestoring", true)
+    if snap.category == "external" then
+        local external = EM2.ExternalElements
+        if external and type(external.RestoreHistoryState) == "function" then
+            external.RestoreHistoryState(snap)
+        end
+        if EM2.Focus and EM2.Focus.NotifyPositionChanged then
+            EM2.Focus.NotifyPositionChanged(snap.key, true)
+        end
+        PublishCompat("MSUF__UndoRestoring", false)
+        return
+    end
     local db = _G.MSUF_DB
     if not db then PublishCompat("MSUF__UndoRestoring", false); return end
 

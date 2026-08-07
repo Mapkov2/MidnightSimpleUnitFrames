@@ -303,7 +303,9 @@ local UNIT_NAME_POSITION_LABELS = {
 
 local function MoverLabelText(key, cfg)
     if cfg and cfg.popupType == "unit" and key ~= "boss" then
-        return Tr(UNIT_NAME_POSITION_LABELS[key] or ((cfg.label or key) .. " Name Position"))
+        local named = UNIT_NAME_POSITION_LABELS[key]
+        if named then return Tr(named) end
+        return string.format(Tr("%s Name Position"), tostring(cfg.label or key))
     end
     return Tr(cfg and cfg.label or key)
 end
@@ -421,19 +423,34 @@ local function CreateMover(key, cfg)
         if self._dragging then return true end
         if BlockConfigCombatLocked() then return end
         if _G.MSUF_EM2_SetPreviewNudgeTarget then _G.MSUF_EM2_SetPreviewNudgeTarget(nil) end
-        if not (EM2.Ticker and EM2.Ticker.BeginDrag and EM2.Ticker.BeginDrag(self, key, cfg)) then return false end
+        local externalHistoryStarted = false
+        if cfg.externalPublicElement == true then
+            if type(_G.MSUF_EM_UndoBeginChange) ~= "function"
+                or _G.MSUF_EM_UndoBeginChange("external", key, "Move") ~= true then
+                return false
+            end
+            externalHistoryStarted = true
+        end
+        if not (EM2.Ticker and EM2.Ticker.BeginDrag and EM2.Ticker.BeginDrag(self, key, cfg)) then
+            if externalHistoryStarted and EM2.Undo and EM2.Undo.CancelChange then EM2.Undo.CancelChange() end
+            return false
+        end
         self._dragging = true
         self:UpdateLabelVisibility()
         if self._msufGuidedPlacementCue then self._msufGuidedPlacementCue:Hide() end
         self._coordFS:Show()
         if EM2.Focus and EM2.Focus.ClearHover then EM2.Focus.ClearHover("drag") end
 
-        local historyCategory = cfg.popupType == "castbar" and "castbar" or "unit"
-        local historyKey = cfg.popupType == "castbar" and (cfg.castbarUnit or key:sub(9)) or key
-        if type(_G.MSUF_EM_UndoBeginChange) == "function" then
-            self._msufHistoryDrag = _G.MSUF_EM_UndoBeginChange(historyCategory, historyKey, "Move") == true
-        elseif _G.MSUF_EM_UndoBeforeChange then
-            _G.MSUF_EM_UndoBeforeChange(historyCategory, historyKey)
+        if externalHistoryStarted then
+            self._msufHistoryDrag = true
+        else
+            local historyCategory = cfg.popupType == "castbar" and "castbar" or "unit"
+            local historyKey = cfg.popupType == "castbar" and (cfg.castbarUnit or key:sub(9)) or key
+            if type(_G.MSUF_EM_UndoBeginChange) == "function" then
+                self._msufHistoryDrag = _G.MSUF_EM_UndoBeginChange(historyCategory, historyKey, "Move") == true
+            elseif _G.MSUF_EM_UndoBeforeChange then
+                _G.MSUF_EM_UndoBeforeChange(historyCategory, historyKey)
+            end
         end
 
         if EM2.Focus and EM2.Focus.SetSelection then EM2.Focus.SetSelection(key, nil, nil, { source = "drag" }) end
@@ -532,6 +549,23 @@ end
 function Movers.IsShown() return moverParent and moverParent:IsShown() or false end
 function Movers.All() return movers end
 function Movers.Get(k) return movers[k] end
+
+function Movers.Remove(key)
+    local mover = key and movers[key]
+    if not mover then return false end
+    StopPendingDrag(mover)
+    if mover._dragging and type(mover._msufEM2EndDrag) == "function" then
+        mover:_msufEM2EndDrag("LeftButton")
+    end
+    mover:Hide()
+    mover:EnableMouse(false)
+    for _, region in ipairs(mover._msufSupplementalRegions or {}) do
+        region:Hide()
+        if region.EnableMouse then region:EnableMouse(false) end
+    end
+    movers[key] = nil
+    return true
+end
 
 function Movers.SyncAll()
     if not moverParent or not moverParent:IsShown() then return end

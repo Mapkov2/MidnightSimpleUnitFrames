@@ -166,6 +166,13 @@ local function ApplyPowerBorder(mock, powerOn, thickness, embedded, roundedPower
         end
         mock._msufGFPreviewPowerBorder = host
     end
+    -- Elements_Power parents this rectangular border surface to the power bar
+    -- and keeps it two details above that bar. The preview host is mock-owned,
+    -- so explicitly follow the bar when a detached Layer moves it far above
+    -- the frame body.
+    if host.SetFrameLevel and mock._power and mock._power.GetFrameLevel then
+        host:SetFrameLevel((mock._power:GetFrameLevel() or 0) + 2)
+    end
     if roundedPower and not embedded then
         host:Hide()
         return

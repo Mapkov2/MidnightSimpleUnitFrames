@@ -159,7 +159,7 @@ local function BuildGFGeneralSection(ctx, b)
         ControlMeta(ctx, "basics.frame_provider"))
     if M.AddTooltip then
         M.AddTooltip(frameProvider,
-            function() return ScopeLabel() .. " frame provider" end,
+            function() return M.Format("%s frame provider", ScopeLabel()) end,
             function() return FrameProviderTooltip(CurrentScope()) end,
             { hook = true, owner = "ANCHOR_RIGHT" })
     end

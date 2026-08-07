@@ -165,6 +165,13 @@ end
 
 local _MSUF_ShadowMetrics = _G.MSUF_ResolveFontShadowMetrics
 
+--- Bound once at load like _MSUF_ShadowMetrics: Kernel/MSUF_Libs.lua publishes
+--- these before any Runtime file and never rebinds them. The per-FontString
+--- fanout below runs hot enough that repeated _G lookups are worth removing.
+local _MSUF_MatchesApplication = _G.MSUF_FontApplicationMatches
+local _MSUF_PathMatchesFn = _G.MSUF_FontPathMatches or _G.MSUF_FontPathEquals
+local _MSUF_ClearFSCachesFn = _G.MSUF_ClearFontStringApplyCaches
+
 local function _MSUF_OutlineFromFlags(flags)
     flags = tostring(flags or ""):upper()
     if flags:find("THICKOUTLINE", 1, true) then return "THICKOUTLINE" end
@@ -201,6 +208,10 @@ local _fontUpdateDepth = 0
 local _fontFailureRecoveryPending = false
 
 _G.MSUF_FontApplyEpoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
+--- Local mirror of MSUF_FontApplyEpoch for the per-FontString hot compare.
+--- Only _MSUF_BumpFontApplyEpoch advances the epoch, so the mirror re-syncs on
+--- every bump; external code reads the global but never writes it.
+local _fontApplyEpoch = _G.MSUF_FontApplyEpoch
 
 local function _MSUF_FontCombatLocked()
     return type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() == true
@@ -245,6 +256,7 @@ end)
 local function _MSUF_BumpFontApplyEpoch()
     local epoch = (tonumber(_G.MSUF_FontApplyEpoch) or 0) + 1
     ExportPublic("MSUF_FontApplyEpoch", epoch)
+    _fontApplyEpoch = epoch
     return epoch
 end
 
@@ -334,14 +346,14 @@ local function _MSUF_GetFontPathSerial(path)
 end
 
 local function _MSUF_FontApplied(fs, requestedPath, requestedSize)
-    local matchesApplication = _G.MSUF_FontApplicationMatches
+    local matchesApplication = _MSUF_MatchesApplication
     if type(matchesApplication) == "function" then
         return matchesApplication(fs, requestedPath, requestedSize) == true
     end
     if type(fs.GetFont) ~= "function" then return true end
     local actual, actualSize = fs:GetFont()
     if not actual then return false end
-    local matches = _G.MSUF_FontPathMatches or _G.MSUF_FontPathEquals
+    local matches = _MSUF_PathMatchesFn
     local pathMatches
     if type(matches) == "function" then
         pathMatches = matches(requestedPath, actual) == true
@@ -353,7 +365,7 @@ local function _MSUF_FontApplied(fs, requestedPath, requestedSize)
 end
 
 local function _MSUF_ClearFontApplyCaches(fs)
-    local clear = _G.MSUF_ClearFontStringApplyCaches
+    local clear = _MSUF_ClearFSCachesFn
     if type(clear) == "function" then clear(fs) end
     if fs then
         fs._msufFontRev = nil
@@ -400,7 +412,7 @@ local function _MSUF_ApplyFontCached(fs, size, setColor, cr, cg, cb, ca)
     size = _MSUF_NormalizeFontSize(size, 14)
 
     local rev = S.pathSerial * 10 + (_MSUF_FONT_FLAGS_CODE[S.flags] or 1) + size * 10000030
-    local epoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
+    local epoch = _fontApplyEpoch
     if fs._msufFontRev ~= rev or fs._msufFontEpoch ~= epoch then
         if fs._msufFontEpoch ~= epoch then _MSUF_ClearFontApplyCaches(fs) end
         local ok, retryableMismatch = _MSUF_SetFontChecked(fs, S.path, size, S.flags, S.fontKey)
@@ -765,6 +777,9 @@ if not _G.MSUF_UpdateAllFonts_Immediate then
 end
 
 MSUF.Fonts.UpdateAllFonts = UpdateAllFonts
+--- Namespaced mirror of the _G export above; new internal callers should use
+--- this instead of the global.
+MSUF.Fonts.RequestRecovery = _G.MSUF_RequestFontRecovery
 
 -- The per-frame init layout uses a font snapshot that can pre-date the font being
 -- loadable, so kick one font apply + readiness-gated text relayout at login

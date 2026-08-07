@@ -345,6 +345,8 @@ function Focus.SetSelection(key, component, slot, opts)
         source = opts.source,
         changedAt = GetTime and GetTime() or 0,
     })
+    local cfg = state.key and EM2.Registry and EM2.Registry.Get(state.key) or nil
+    if cfg and cfg.externalPublicElement == true then opts.menu = false end
     if opts.menu ~= false then
         ApplyMenuSelection(state.key, state.component, state.slot, {
             source = opts.source,
@@ -471,6 +473,11 @@ function Focus.NotifyPositionChanged(_, immediate)
         state.nextHUDRefresh = now + 0.05
         EM2.HUD.RefreshControls()
     end
+    if EM2.ExternalPopup and EM2.ExternalPopup.IsOpen and EM2.ExternalPopup.IsOpen()
+        and (immediate == true or now >= (state.nextExternalPopupRefresh or 0)) then
+        state.nextExternalPopupRefresh = now + 0.05
+        EM2.ExternalPopup.Sync()
+    end
     if immediate == true or (state.popupKey and IsPopupOpen()) then
         return SyncVeil()
     end
@@ -506,6 +513,12 @@ end
 function Focus.OpenFullSettings(pageKey)
     local key = state.key or state.popupKey
     if not key and EM2.State and EM2.State.GetUnitKey then key = EM2.State.GetUnitKey() end
+    local cfg = key and EM2.Registry and EM2.Registry.Get(key) or nil
+    if cfg and cfg.externalPublicElement == true then
+        local external = EM2.ExternalElements
+        return external and type(external.OpenSettings) == "function"
+            and external.OpenSettings(key) == true or false
+    end
     local resolvedPage = ApplyMenuSelection(key, state.component, state.slot, { source = "open-settings", focusRequest = true })
     return OpenMenuPage(pageKey or resolvedPage or "uf_player")
 end

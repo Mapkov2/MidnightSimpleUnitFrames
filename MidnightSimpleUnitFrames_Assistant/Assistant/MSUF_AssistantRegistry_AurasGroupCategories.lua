@@ -105,6 +105,21 @@ function A.AurasRegistry.RegisterGroupAuraCategorySettings(ctx)
                     AddAliasesForUnit(aliases, scope, laneInfo.plural:lower() .. " category blacklist " .. label)
                     AddAliasesForUnit(aliases, scope, laneInfo.plural:lower() .. " public category blacklist " .. label)
                     AddAliasesForUnit(aliases, scope, "blacklist " .. label .. " " .. laneInfo.plural:lower() .. " category")
+                    -- settingScope is the bare scope ("party"/"raid"); the "gf_"
+                    -- prefix is added when the key is built. Comparing against
+                    -- "gf_party" never matched, so every scope got "raid" wording
+                    -- and Party collided with Raid on the same alias -- two hits,
+                    -- which FullPhraseMatch rejects rather than guess between.
+                    local shortScope = tostring(settingScope)
+                    local exactAliases = {}
+                    local function AddExact(candidate)
+                        candidate = tostring(candidate or ""):lower()
+                        local count = 0
+                        for _ in candidate:gsub("[^%w]+", " "):gmatch("%S+") do count = count + 1 end
+                        if count >= 3 and count <= 8 then exactAliases[#exactAliases + 1] = candidate end
+                    end
+                    AddExact(shortScope .. " " .. GFAuraCategoryLaneLabel(lane) .. " hidden category " .. label)
+                    AddExact(shortScope .. " hidden category " .. label)
                     Registry:RegisterSetting({
                         key = "gf_" .. settingScope .. ".auras." .. settingLane .. ".blacklistCats." .. tostring(settingCatKey),
                         label = GFAuraCategoryScopeLabel(settingScope) .. " " .. GFAuraCategoryLaneLabel(settingLane) .. " Hidden Category " .. label,
@@ -114,6 +129,7 @@ function A.AurasRegistry.RegisterGroupAuraCategorySettings(ctx)
                         attribute = "gfAura" .. GFAuraCategoryLaneLabel(settingLane) .. "CategoryBlacklist",
                         type = "boolean",
                         aliases = aliases,
+                        exactAliases = exactAliases,
                         get = function() return ReadGFAuraCategorySetting(settingScope, settingLane, settingCatKey) end,
                         set = function(value) WriteGFAuraCategoryState(settingScope, settingLane, settingCatKey, value) end,
                         sameValue = SameGFAuraCategoryState,

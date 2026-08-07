@@ -94,8 +94,20 @@ function A.UnitframesRegistry.RegisterPowerSettings(ctx, unit)
         power = true,
         get = function(unitKey)
             local conf = UnitDB(unitKey)
+            if unitKey == "player" and conf.powerBarDetached == true then
+                local outline = tonumber(BarsDB().detachedPowerBarOutline)
+                if outline ~= nil then return outline > 0 end
+            end
             if conf.powerBarBorderEnabled ~= nil then return conf.powerBarBorderEnabled == true end
             return BarsDB().powerBarBorderEnabled == true
+        end,
+        set = function(unitKey, value)
+            local conf = UnitDB(unitKey)
+            conf.powerBarBorderEnabled = value == true
+            if unitKey == "player" then
+                local thickness = tonumber(conf.powerBarBorderThickness) or 1
+                BarsDB().detachedPowerBarOutline = value == true and thickness or 0
+            end
         end,
     })
     RegisterUnitNumberSetting(unit, "powerBarHeight", "powerBarHeight", "Power Bar Height", 3, 1, 20, MakeAliases(unit, "power bar height", "power height"), {
@@ -104,11 +116,25 @@ function A.UnitframesRegistry.RegisterPowerSettings(ctx, unit)
         get = function(unitKey) return tonumber(UnitDB(unitKey).powerBarHeight) or tonumber(BarsDB().powerBarHeight) or 3 end,
     })
     RegisterUnitNumberSetting(unit, "powerBarBorderThickness", "powerBarBorderThickness",
-        "Power Bar Border Thickness", 1, 0, 6,
+        "Power Bar Border Thickness", 1, 0, unit == "player" and 8 or 6,
         MakeAliases(unit, "power bar border thickness", "power border size"), {
         category = "Power Bar",
         power = true,
-        get = function(unitKey) return tonumber(UnitDB(unitKey).powerBarBorderThickness) or tonumber(BarsDB().powerBarBorderThickness or BarsDB().powerBarBorderSize) or 1 end,
+        get = function(unitKey)
+            local conf = UnitDB(unitKey)
+            if unitKey == "player" and conf.powerBarDetached == true then
+                local outline = tonumber(BarsDB().detachedPowerBarOutline)
+                if outline ~= nil then return outline end
+            end
+            return tonumber(conf.powerBarBorderThickness) or tonumber(BarsDB().powerBarBorderThickness or BarsDB().powerBarBorderSize) or 1
+        end,
+        set = function(unitKey, value)
+            local conf = UnitDB(unitKey)
+            conf.powerBarBorderThickness = value
+            if unitKey == "player" then
+                BarsDB().detachedPowerBarOutline = conf.powerBarBorderEnabled == true and value or 0
+            end
+        end,
     })
     RegisterUnitBooleanSetting(unit, "embedPowerBarIntoHealth", "embedPowerBarIntoHealth",
         "Embed Power Bar into Health", false,
@@ -194,6 +220,13 @@ function A.UnitframesRegistry.RegisterPowerSettings(ctx, unit)
             power = true,
             page = "classpower",
             valueAliases = DETACHED_POWER_SHAPE_ALIASES,
+            -- FOLLOW_CLASS is an instruction, not a stored state: the setter
+            -- resolves it to the class resource's own shape (ROUND/CRYSTAL/BAR)
+            -- and that concrete shape is what gets stored, so the value read
+            -- back is never FOLLOW_CLASS. Without this the transaction called
+            -- that a failed write and rolled it back, leaving the shape
+            -- impossible to set from the class resource.
+            normalizesValue = true,
             get = function(unitKey)
                 local conf = UnitDB(unitKey)
                 local value = tostring(conf.detachedPowerBarShape or "BAR"):upper()

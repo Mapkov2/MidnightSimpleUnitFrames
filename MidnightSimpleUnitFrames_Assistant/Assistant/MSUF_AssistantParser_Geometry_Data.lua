@@ -18,6 +18,12 @@ Data.GEOMETRY_PARSER = {
         [1] = {
         "as big as", "same size as", "the same size as", "same width and height as",
         "so gross wie", "gleich gross wie", "gleiche groesse wie", "dieselbe groesse wie",
+        -- Single-dimension matching ("the same width as the target frame").
+        -- Without these the lane returned before its patterns ran, and the most
+        -- precise form of the request -- which names both the value to copy and
+        -- the frame to copy it from -- reached no lane at all.
+        "same width as", "same height as", "as wide as", "as tall as", "as high as",
+        "gleiche breite wie", "gleiche hoehe wie", "so breit wie", "so hoch wie",
     },
         [2] = { "castbar", "cast bar", "class power", "class resource", "aura", "auras" },
         [3] = { "combat timer alpha", "combat timer opacity", "combat timer transparency" },
@@ -421,10 +427,17 @@ Data.GEOMETRY_PARSER = {
         },
         [217] = { "more transparent", "more transparency", "more see through", "transparenter" },
         [218] = { "less transparent", "less transparency", "more opaque", "opaquer" },
+        -- Words that name an opacity belonging to some OTHER control, so the
+        -- unit-frame alpha lane must not claim them. Each one owns a
+        -- "background"/"opacity" wording of its own; without the guard the lane
+        -- reads "temp max health background opacity" as unit alpha and asks
+        -- "which unit frame alpha?" for a setting that is not per-unit at all.
         [219] = {
         "second hp", "duplicate hp", "second health", "duplicate health", "player hp bar",
         "bar outline", "outline opacity", "outline alpha", "border opacity", "border alpha",
         "highlight border", "group border", "dead background", "dead bg", "health fade",
+        "temp max health", "temporary max health", "temp maximum health",
+        "heal prediction", "healing prediction", "incoming heal",
     },
         [220] = { "power bar", "powerbar", "power opacity", "power alpha", "mana bar", "mana opacity", "mana alpha", "resource bar", "resource opacity", "resource alpha" },
         [221] = { "background", "backdrop", "track", "hp track", "health track", "bg", "bar background" },
@@ -603,15 +616,15 @@ Data.GEOMETRY_PARSER = {
         "full-health absorb stripe", "full health absorb stripe", "full hp absorb stripe",
         "absorb stripe at full health", "absorb stripe on full health",
     },
-        -- Outline draw order. Must be probed before the thickness phrases in
+        -- Outline layer. Must be probed before the thickness phrases in
         -- [160]: every phrase here also contains a bare "bar outline"/"outline"
         -- substring, so a thickness-first probe would swallow all of them.
         [285] = {
-        "bar outline strata", "bar outline layer", "bar outline draw layer", "bar outline draw order",
-        "frame outline strata", "frame outline layer", "frame outline draw layer", "frame outline draw order",
+        "bar outline strata", "bar outline layer", "bar outline draw layer",
+        "frame outline strata", "frame outline layer", "frame outline draw layer",
         "bar border strata", "bar border layer", "frame border strata", "frame border layer",
-        "outline strata", "outline layer", "outline draw layer", "outline draw order",
-        "border strata", "border layer", "border draw layer", "border draw order",
+        "outline strata", "outline layer", "outline draw layer",
+        "border strata", "border layer", "border draw layer",
     },
         -- Portrait shape value: the stock Blizzard ring dressing. Bare
         -- "blizzard" is safe here because it is only probed inside the shape

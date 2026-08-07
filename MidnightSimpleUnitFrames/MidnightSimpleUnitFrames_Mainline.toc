@@ -6,7 +6,7 @@
 ## Version: 6.5-alpha1
 ## SavedVariables: MSUF_DB, MSUF_GlobalDB
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
-## OptionalDeps: LibSharedMedia-3.0, Clique, WagoAnalytics, Blizzard_AuraContainer, Blizzard_PingUI, EllesmereUI
+## OptionalDeps: LibSharedMedia-3.0, Clique, WagoAnalytics, Blizzard_AuraContainer, Blizzard_PingUI, EllesmereUI, Grid2, Details
 ## X-Curse-Project-ID: 1384660
 ## X-Wago-ID: XKq9aoKy
 ## X-Website: https://discord.gg/2Gf9b2Wprz
@@ -90,7 +90,9 @@ Media\MSUF_Media.lua
 Runtime\MSUF_BorderStyles.lua
 Runtime\MSUF_PortraitMedia.lua
 State\MSUF_ProfileIO.lua
-Runtime\MSUF_ChatAndTooltips.lua
+Runtime\MSUF_SlashCommands.lua
+Runtime\MSUF_UnitTooltips.lua
+Runtime\MSUF_BlizzEditModeBridge.lua
 Libs\MSUFUnitFrames\MSUFUnitFrames.xml
 UnitFrames\Engine\MSUF_UF_Config.lua
 UnitFrames\Engine\MSUF_UF_PreviewAnimation.lua

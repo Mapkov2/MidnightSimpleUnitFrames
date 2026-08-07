@@ -8,10 +8,40 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-RC10",
-    previousVersion = "6.0-rc9",
-    rangeLabel = "6.0-rc9 -> 6.0-RC10",
+    currentVersion = "6.0-RC11",
+    previousVersion = "6.0-rc10",
+    rangeLabel = "6.0-rc10 -> 6.0-RC11",
     entries = {
+        {
+            version = "6.0-RC11",
+            date = "2026-08-07",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Added optional Grid2 and Details! integration to MSUF Edit Mode. Both addons keep ownership of their frames and saved positions.",
+                        "Added native WoW 12.1 Player resource pings for health and supported mana states. Portrait pings keep the normal radial wheel.",
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Added a public API for registering external frames with MSUF Edit Mode.",
+                        "Expanded translations for recent Aura, Preview, Class Resource and Layer settings.",
+                        "Unified the detached Player Power outline across settings, Copy To, live frames and previews.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Fixed Group Preview layer order and Name positioning for all anchors.",
+                        "Fixed detached Player Power outline thickness at different preview zoom levels.",
+                        "Fixed exact Assistant commands being intercepted by greetings, guides or movement shortcuts.",
+                        "Added Assistant help for shortened and clipped Unit and Group names.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-RC10",
             date = "2026-08-06",
@@ -126,37 +156,6 @@ local data = {
                         "Fixed previews now open expanded by default in a fresh UI session and after page or factory resets; choosing Compact remains authoritative for the rest of that session.",
                         "Styled Copy To consistently as a green success action on Unit and Group pages so the primary replication workflow is easier to find.",
                         "Kept the toolbar Edit Mode action visually neutral instead of painting it like the menu's primary confirmation action.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-RC7",
-            date = "2026-08-04",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "MSUF now detects Arc UI, Skiron, Coolinator and Cooldown Manager Centered automatically and anchors the global Unit Frame layout to Essential Cooldown Manager while one of those providers is loaded. Edit Mode, Guided Setup, diagnostics and unit-page anchoring all show the active AUTO provider and suppress the conflicting manual choice.",
-                        "Menu previews now keep their visible position sliders synchronized while Unit, Group, Aura, text, portrait, Power, Class Resource and Dispel Symbol handles are dragged, nudged or positioned exactly.",
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Range Fade opacity can now be previewed live while dragging the slider for Unit and Group frames. The preview respects whether fading applies to the whole frame or only the Health layer and returns to its normal state when the gesture ends.",
-                        "Expanding a fixed preview now carries over the zoom level from Compact mode instead of jumping to an older Full/Fit scale; pan remains mode-specific for the differently sized canvases.",
-                        "The Assistant's reviewed numeric domains now cover Group Dispel Symbol size, offsets, spacing, opacity and layer plus the extended AFK, DND and Ghost status-text offsets, allowing it to use the full ranges exposed by the menu.",
-                        "Added dedicated Assistant help for Copy To, including unit/group category selection, excluded identity/anchor data and examples that remain distinct from executable copy commands.",
-                    },
-                },
-                {
-                    title = "Fixes",
-                    bullets = {
-                        "Fixed a saved profile language being ignored during initial addon file loading. Locale packs now register cold loaders and apply the selected profile language only after SavedVariables are available at ADDON_LOADED.",
-                        "Fixed Menu2 edge snapping after interrupted or immediately repeated drags and resizes. Pending layout animation now settles first, mouse-release fallback finishes the real drag, and rejected content gestures cannot trigger an invisible snap.",
-                        "Fixed configured Power Bar colors falling back to Blizzard defaults for NPC/unit tokens that expose only a numeric PowerType. MSUF now resolves the matching Mana, Rage, Focus, Energy, Runic Power, Lunar Power, Maelstrom, Insanity, Fury, Pain or Essence token first.",
-                        "Fixed Assistant exact boolean commands, inverted Hide/Show controls, Blizzard-frame troubleshooting, profile and Aura page guidance, utility-page navigation, recovery help and problem-report precedence. Generated Blizzard-frame settings now use their actual player-facing menu labels.",
                     },
                 },
             },

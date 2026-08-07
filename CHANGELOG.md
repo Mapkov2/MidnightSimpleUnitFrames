@@ -1,5 +1,25 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-RC11 - 2026-08-07
+
+### Highlights
+
+- Added optional Grid2 and Details! integration to MSUF Edit Mode. Both addons keep ownership of their frames and saved positions.
+- Added native WoW 12.1 Player resource pings for health and supported mana states. Portrait pings keep the normal radial wheel.
+
+### Changes
+
+- Added a public API for registering external frames with MSUF Edit Mode.
+- Expanded translations for recent Aura, Preview, Class Resource and Layer settings.
+- Unified the detached Player Power outline across settings, Copy To, live frames and previews.
+
+### Fixes & Performance
+
+- Fixed Group Preview layer order and Name positioning for all anchors.
+- Fixed detached Player Power outline thickness at different preview zoom levels.
+- Fixed exact Assistant commands being intercepted by greetings, guides or movement shortcuts.
+- Added Assistant help for shortened and clipped Unit and Group names.
+
 ## 6.0-RC10 - 2026-08-06
 
 ### Highlights
@@ -1507,11 +1527,19 @@
 - All Alpha 1-8 changes are included here, plus the final Beta1 fixes and polish.
 - The addon should still feel like MSUF, but a lot underneath it has been replaced so it can work properly on the 12.1 client.
 
+### Major Highlight: Addon Integrations
+- MSUF 6.0 can bring supported third-party frames into MSUF Edit Mode without taking ownership of those addons, their frames, or their saved positions.
+- Grid2 and Details! can be moved alongside MSUF frames through optional Edit Mode integration.
+- EllesmereUI can open and control MSUF frames through its Unlock Mode integration.
+- Arc UI, Skiron, Coolinator, Cooldown Manager Centered, Essential Cooldown Viewer, and EllesmereUI Cooldown Manager can provide the global cooldown anchor. MSUF detects the active provider and asks before following it.
+- A public registration API lets other addons expose compatible frames to MSUF Edit Mode while retaining their own layout logic.
+
 ### What You Will Notice First
 - Auras are the biggest change. Buffs and debuffs now use the WoW 12.1 native aura system instead of the old 5.60 aura renderer.
 - Group frames should feel more complete and more consistent, especially in parties and raids.
 - Class resources and Player power bars have more visual styles, better previews, and more layout control.
 - The settings menu is more useful. The new Assistant can find settings, apply many changes, handle followups, run checks, and undo changes it made.
+- MSUF Edit Mode now works as a shared layout workspace for supported external addon frames, including Grid2 and Details!, while EllesmereUI can include MSUF in its own Unlock Mode.
 - Castbars are now part of the main 6.0 setup instead of feeling like a separate older layer.
 - Profile import/export is more forgiving, especially when older strings, missing fonts, missing textures, or alpha profiles are involved.
 
@@ -1526,6 +1554,8 @@
 - MSUF4 profile strings are now supported, while older MSUF2/MSUF3 strings are still handled as fallback imports.
 - Northern Sky Raid Tools nicknames can be used for unit-frame names.
 - External anchor support was added, including Skiron cooldown anchors.
+- Added optional Grid2 and Details! Edit Mode integration, native EllesmereUI Unlock Mode support, automatic cooldown-provider discovery, and a public API for external frame registration.
+- Added native WoW 12.1 Player resource pings for health and supported mana states while preserving the normal portrait radial ping wheel.
 - New class-resource and power-bar shapes were added: circle, diamond, hex, round, crystal, and orb-style options.
 - Class Resources now has shape presets such as Classic Bar, Clean Dots, Gems, Hex Pips, and Compact.
 - The detached Player Power bar can now follow class-resource styling or use its own bar, round, crystal, or orb style.

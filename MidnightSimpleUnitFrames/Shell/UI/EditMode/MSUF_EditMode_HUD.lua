@@ -333,6 +333,14 @@ end
 
 local function SelectionValues(key, component, slot)
     if not key then return HelpText("No selection") end
+    local cfg = EM2.Registry and EM2.Registry.Get and EM2.Registry.Get(key) or nil
+    if cfg and cfg.externalPublicElement == true then
+        local external = EM2.ExternalElements
+        if external and type(external.GetInspectorValues) == "function" then
+            return external.GetInspectorValues(key)
+        end
+        return HelpText(cfg.label or key)
+    end
     local db = _G.MSUF_DB
     local conf
     local groupKind = GROUP_KEY_TO_KIND[key]
@@ -435,6 +443,17 @@ function HUD.ResetCurrentPosition()
 
     local key = CurrentSelectionKey()
     if not key then HUD.SetStatus(HelpText("EM_SELECT_FIRST"), "warn"); return end
+    local cfg = EM2.Registry and EM2.Registry.Get and EM2.Registry.Get(key) or nil
+    if cfg and cfg.externalPublicElement == true then
+        local external = EM2.ExternalElements
+        if external and type(external.Reset) == "function" and external.Reset(key) then
+            HUD.SetStatus(HelpText("Reset") .. " " .. HelpText(cfg.label or key), "ok")
+        else
+            HUD.SetStatus(HelpText("Reset unavailable"), "warn")
+        end
+        HUD.RefreshControls()
+        return
+    end
     local groupKind = GROUP_KEY_TO_KIND[key]
     if groupKind then
         if type(_G.MSUF_GF_EM2_ResetPosition) == "function" then
@@ -809,7 +828,8 @@ local function SelectFrameFromPicker(key)
     if EM2.Focus and EM2.Focus.Pulse then
         EM2.Focus.Pulse(key, "frame", nil, { source = "hud-picker", duration = 0.32 })
     end
-    HUD.SetStatus(HelpText("Selected") .. " " .. HelpText(LABEL_BY_KEY[key] or key), "ok")
+    local cfg = EM2.Registry and EM2.Registry.Get and EM2.Registry.Get(key) or nil
+    HUD.SetStatus(HelpText("Selected") .. " " .. HelpText((cfg and cfg.label) or LABEL_BY_KEY[key] or key), "ok")
     HUD.RefreshControls()
 end
 
@@ -2199,8 +2219,17 @@ function HUD.RefreshControls(force)
         end
     end
     if snapToggle and EM2.Snap then SetActive(snapToggle, EM2.Snap.IsEnabled()) end
-    SetControlEnabled(resetBtn, key and (UNIT_KEYS[key] == true or GROUP_KEY_TO_KIND[key] ~= nil))
-    SetControlEnabled(settingsBtn, key ~= nil)
+    local selectedCfg = key and EM2.Registry and EM2.Registry.Get and EM2.Registry.Get(key) or nil
+    local external = selectedCfg and selectedCfg.externalPublicElement == true and EM2.ExternalElements or nil
+    SetControlEnabled(resetBtn, key and (UNIT_KEYS[key] == true or GROUP_KEY_TO_KIND[key] ~= nil
+        or (external and external.CanReset and external.CanReset(key))))
+    SetControlEnabled(settingsBtn, key ~= nil and (not external
+        or (external.CanOpenSettings and external.CanOpenSettings(key))))
+    if settingsBtn then
+        settingsBtn._msufTipText = external
+            and ((selectedCfg.label or key) .. " settings")
+            or "Choose which frame's settings page to open."
+    end
     RegisterPreviewAnimationRefreshOwner()
     if previewBtn then SetActive(previewBtn, _G.MSUF_UnitPreviewActive and true or false) end
     if previewAnimBtn then
@@ -2221,8 +2250,8 @@ function HUD.RefreshControls(force)
         if force or cdmBtn._msufAutomaticProviderId ~= providerId then
             cdmBtn._msufAutomaticProviderId = providerId
             cdmBtn._msufTipText = detected
-                and (providerLabel .. " detected. Toggle the " .. providerLabel .. " Anchor for all global Unitframes.")
-                or "Anchor all unitframes to the\nEssential Cooldown Manager."
+                and string.format(L["%s detected. Toggle the %s Anchor for all global Unitframes."], providerLabel, providerLabel)
+                or L["Anchor all unitframes to the\nEssential Cooldown Manager."]
         end
         SetActive(cdmBtn, HUD.CooldownAnchorEnabled(general))
         SetControlEnabled(anchorBtn, true)

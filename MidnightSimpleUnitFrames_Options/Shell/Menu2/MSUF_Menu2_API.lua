@@ -8,6 +8,16 @@ local M = MSUF.MSUF2 or _G.MSUF2
 if not M then return end
 local MenuRuntime = M.MenuRuntime or {}
 
+-- M.Format is installed by MSUF_Menu2_Theme.lua. This file is also loaded by
+-- audits and by Assistant entry points that run before the theme exists, so
+-- route through a fallback instead of indexing a nil.
+local function Fmt(text, ...)
+    if type(M.Format) == "function" then return M.Format(text, ...) end
+    local translated = type(M.Tr) == "function" and M.Tr(text) or text
+    if select("#", ...) == 0 then return translated end
+    return string.format(translated, ...)
+end
+
 local ExportPublic = MSUF.ExportPublic or function(name, value)
     _G[name] = value
     return value
@@ -73,19 +83,19 @@ local function OpenExactSettingControl(settingKey, fallbackLabel, fallbackPage)
         local called, opened, focused, exact = bridge.OpenSearchTarget(
             page, query, label, widget, route, exactTarget)
         if called and opened == false then
-            return false, "I could not open the MSUF options page for " .. label .. "."
+            return false, Fmt("I could not open the MSUF options page for %s.", label)
         end
         if called and focused == false then
-            return false, "I opened " .. tostring(type(M.GetMenuBreadcrumb) == "function" and M.GetMenuBreadcrumb(page) or page)
-                .. ", but its exact " .. label .. " control is not available there anymore."
+            return false, Fmt("I opened %s, but its exact %s control is not available there anymore.",
+                tostring(type(M.GetMenuBreadcrumb) == "function" and M.GetMenuBreadcrumb(page) or page), label)
         end
         if called and exact == false then
-            return true, "Opened " .. VisibleControlDirection(page, label) .. " and highlighted the closest matching control."
+            return true, Fmt("Opened %s and highlighted the closest matching control.", VisibleControlDirection(page, label))
         end
     elseif type(M.SelectPage) == "function" then
         M.SelectPage(page)
     end
-    return true, "Opened " .. VisibleControlDirection(page, label) .. " and focused its exact control."
+    return true, Fmt("Opened %s and focused its exact control.", VisibleControlDirection(page, label))
 end
 
 M.OpenExactSettingControl = OpenExactSettingControl
@@ -120,7 +130,7 @@ local function OpenExactColorSettingPicker(settingKey, fallbackLabel, fallbackPa
         and widget._msuf2ColorContextOwners or { widget }
     openPicker(widget._msuf2ColorContextTitle or label, owners,
         widget._msuf2ColorContextNote or "Opened from the MSUF Assistant.", widget)
-    return true, "Opened Color Painter for " .. label .. "."
+    return true, Fmt("Opened Color Painter for %s.", label)
 end
 
 M.OpenExactColorSettingPicker = OpenExactColorSettingPicker
@@ -155,7 +165,7 @@ local function OpenExactCatalogControl(semanticId, fallbackLabel, fallbackPage)
 
     local record, widget = catalog.Resolve(semanticId, { pageKey = fallbackPage })
     if not record then
-        return false, "I opened " .. fallbackPage .. ", but that exact control is not available in the current context."
+        return false, Fmt("I opened %s, but that exact control is not available in the current context.", fallbackPage)
     end
     local page = tostring(record.pageKey or fallbackPage)
     local label = tostring(record.label or record.identityLabel or fallbackLabel or semanticId)
@@ -164,16 +174,16 @@ local function OpenExactCatalogControl(semanticId, fallbackLabel, fallbackPage)
         local called, opened, focused = bridge.OpenSearchTarget(
             page, query, label, widget, route, exactTarget)
         if called and opened == false then
-            return false, "I could not open the MSUF options page for " .. label .. "."
+            return false, Fmt("I could not open the MSUF options page for %s.", label)
         end
         if called and focused == false then
-            return false, "I opened " .. tostring(type(M.GetMenuBreadcrumb) == "function" and M.GetMenuBreadcrumb(page) or page)
-                .. ", but its exact " .. label .. " control is not available there anymore."
+            return false, Fmt("I opened %s, but its exact %s control is not available there anymore.",
+                tostring(type(M.GetMenuBreadcrumb) == "function" and M.GetMenuBreadcrumb(page) or page), label)
         end
     elseif type(M.SelectPage) == "function" then
         M.SelectPage(page)
     end
-    return true, "Opened " .. VisibleControlDirection(page, label) .. " and focused its exact control."
+    return true, Fmt("Opened %s and focused its exact control.", VisibleControlDirection(page, label))
 end
 
 M.OpenExactCatalogControl = OpenExactCatalogControl
@@ -233,7 +243,7 @@ end
 --- ==========================================================================
 --- Menu-owned slash commands
 ---
---- The registry itself lives in Runtime/MSUF_ChatAndTooltips.lua, which loads
+--- The registry itself lives in Runtime/MSUF_SlashCommands.lua, which loads
 --- long before Menu2. Everything registered here needs the menu window, the
 --- search index or MSUF Edit Mode, so it cannot live in the runtime file.
 --- Registration is load-time table work only: no events, no hooks, no timers.
@@ -455,7 +465,7 @@ RegisterMenuCommand({
         end
         if type(M.InvalidatePage) == "function" then M.InvalidatePage("home") end
         M.Open("home")
-        print("|cff00b7ebMSUF|r: First-start preview re-armed (" .. tostring(firstLoad:GetInstallKind()) .. "). Guided-tour progress was reset.")
+        print(Fmt("|cff00b7ebMSUF|r: First-start preview re-armed (%s). Guided-tour progress was reset.", tostring(firstLoad:GetInstallKind())))
     end,
 })
 

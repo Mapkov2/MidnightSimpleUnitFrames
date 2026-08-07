@@ -166,8 +166,21 @@ function A.GlobalRegistry.RegisterScopedFontDetailSettings(ctx)
             flag = "fontOverride",
             min = 0.7,
             max = 1,
-            step = 0.05,
+            -- Three stops, not a continuous slider: NormalizeFontTextAlpha
+            -- snaps every value to 0.70, 0.85 or 1, and 0.15 is the real
+            -- spacing between them. Advertising step 0.05 told players
+            -- "min 0.7, max 1, step 0.05", so "set text opacity to 95" was
+            -- accepted and silently became 100.
+            step = 0.15,
             percent = true,
+            -- The setter snaps to those stops, so the stored value legitimately
+            -- differs from the requested one. RegisterScopedSetting derives
+            -- `normalizesValue` from the PRESENCE of this function, so it has to
+            -- be the normalizer itself -- passing normalizesValue = true is
+            -- overwritten and ignored. Without it the transaction reads the snap
+            -- back, calls it "stored value differs from requested value" and
+            -- rolls the change back: Text Opacity could not be set at all.
+            normalizeValue = NormalizeFontTextAlpha,
             get = function(scopeKey) return NormalizeFontTextAlpha(GlobalScopeRead(scopeKey, "fontOverride", GeneralDB(), "fontTextAlpha", 1)) end,
             set = function(scopeKey, value) GlobalScopeWrite(scopeKey, "fontOverride", GeneralDB(), "fontTextAlpha", NormalizeFontTextAlpha(value)) end,
             apply = ApplyFonts,

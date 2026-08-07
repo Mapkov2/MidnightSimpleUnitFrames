@@ -421,7 +421,7 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
         selectedTextShortcut:SetShown(IsTextStatusIconSpec(CurrentGFStatusSpec()))
     end
     local previewCard = W.ControlCard(siconBasicTab, "Status Preview", nil, siconRightX, -38, siconRightW, 164)
-    local placementCard = W.ControlCard(siconBasicTab, "Placement", nil, siconRightX, -220, siconRightW, 222)
+    local placementCard = W.ControlCard(siconBasicTab, "Placement", nil, siconRightX, -220, siconRightW, 172)
     local function RefreshStatusIconMenu()
         if M.RequestRefresh then
             M.RequestRefresh(ctx, "gf-indicators-status-icon")
@@ -769,7 +769,6 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
     local statusControls = BuildStatusControls(placementCard, {
         { "slider", "Size", 6, 40, 1, siconRightW, "size", function(spec) return spec.defaultSize end, "visual", 16, -58, siconRightW - 58 },
         { "dropdown", "Anchor", STATUS_ICON_ANCHORS, siconRightW, "anchor", function(spec) return spec.defaultAnchor end, "geometry", 16, -108, siconRightW - 32 },
-        { "slider", "Layer", 0, 30, 1, siconRightW, "layer", function(spec) return spec.defaultLayer end, "visual", 16, -158, siconRightW - 58, true },
     })
     local advanced = {}
     advanced.card = W.ControlCard(siconAdvancedTab, "Advanced Placement", nil, siconLeftX, -38, siconInnerW, 232)
@@ -805,7 +804,7 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
         ApplyRole(advanced.previewCurrent, currentRole)
         ApplyRole(advanced.previewAll, allRole)
     end
-    local statusPlacementControls = { statusControls.size, statusControls.anchor, statusControls.layer, advanced.layer }
+    local statusPlacementControls = { statusControls.size, statusControls.anchor, advanced.layer }
     local statusActionControls = { advanced.reset, advanced.previewCurrent, statusReset, previewCurrent }
     RefreshStatusIconState = function()
         local spec = CurrentGFStatusSpec()

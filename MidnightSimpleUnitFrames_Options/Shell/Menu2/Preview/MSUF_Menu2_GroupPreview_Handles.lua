@@ -15,6 +15,12 @@ M.GroupPreviewHandles = Handles
 local F = M.Fallbacks or {}
 local HANDLE_CLICK_DRAG_THRESHOLD = 3
 local HANDLE_LABEL_HIT_HEIGHT = 14
+local function ResolveTextDragPixelDelta(round, current, startValue, scale, endpointBias)
+    endpointBias = tonumber(endpointBias) or 0
+    return round(((tonumber(current) or 0) + endpointBias) * scale)
+        - round(((tonumber(startValue) or 0) + endpointBias) * scale)
+end
+Handles._ResolveTextDragPixelDelta = ResolveTextDragPixelDelta
 local function FallbackHandleText(handle)
     return handle and (handle._previewText or handle._key) or "Handle"
 end
@@ -84,14 +90,21 @@ function Handles.Install(box, deps)
     -- file, bind it explicitly so preview handles never fall back to UIParent.
     local mock = box._mock or box
     local dragParent = box._stage or box
+    local function InteractionLevel(extra)
+        local core = MSUF.UFPreviewCore
+        if core and type(core.InteractionFrameLevel) == "function" then
+            return core.InteractionFrameLevel(mock, extra)
+        end
+        return ((mock.GetFrameLevel and mock:GetFrameLevel()) or 0) + 140 + (tonumber(extra) or 0)
+    end
     box._dragFrame = CreateFrame("Frame", nil, dragParent)
     box._dragFrame:SetAllPoints(dragParent)
     box._dragFrame:EnableMouse(true)
     box._dragFrame:EnableMouseWheel(true)
     if box._dragFrame.SetPropagateMouseWheel then box._dragFrame:SetPropagateMouseWheel(false) end
     box._dragFrame:SetScript("OnMouseWheel", ZoomWheel)
-    if box._dragFrame.SetFrameLevel and dragParent.GetFrameLevel then
-        box._dragFrame:SetFrameLevel((dragParent:GetFrameLevel() or 0) + 140)
+    if box._dragFrame.SetFrameLevel then
+        box._dragFrame:SetFrameLevel(InteractionLevel(2))
     end
     box._dragFrame:Hide()
     local function SelectHandle(handle)
@@ -286,9 +299,8 @@ function Handles.Install(box, deps)
         end
         return nil
     end
-    -- Every anchor is captured, not just the first: the bar-anchored name is a
-    -- LEFT+RIGHT span, and re-setting only point 1 would collapse it to its
-    -- string width for the duration of the drag.
+    -- Capture every point so grouped HP/Power regions and their focus frame
+    -- retain their complete geometry during the temporary drag preview.
     local function CaptureTextDragFrame(list, frame)
         if not (list and frame and frame.GetPoint and frame.ClearAllPoints and frame.SetPoint) then return end
         if frame.IsShown and not frame:IsShown() then return end
@@ -320,31 +332,12 @@ function Handles.Install(box, deps)
         end
         handle._textDragRegions = captured
     end
-    local function TextDragNameRight(handle)
-        if not (handle and handle._cfgTextKind == "name") then return false end
-        -- The bar-anchored name follows the live span, where +x moves right on
-        -- every anchor. Only the TOPRIGHT fallback layout mirrors the offset,
-        -- so only that one needs the drag delta mirrored back.
-        local fs = box._mock and box._mock._nameFS
-        if fs and fs._msufPreviewSpan == true then return false end
-        local conf = H.Conf(H.CurrentScope()) or {}
-        return (conf.nameAnchor or "LEFT") == "TOPRIGHT"
-    end
-    local function TextDragConfigDeltaX(handle, delta)
-        if TextDragNameRight(handle) then return -delta end
-        return delta
-    end
-    local function TextDragPixelDeltaX(handle, current, startValue, scale)
-        local delta = Round((tonumber(current) or 0) * scale) - Round((tonumber(startValue) or 0) * scale)
-        if TextDragNameRight(handle) then delta = -delta end
-        return delta
-    end
     local function ApplyTextRegionDrag(handle, nextX, nextY)
         if not handle then return false end
         local previewScale = handle._previewScale or (box._mock and box._mock._previewScale) or 1
         if previewScale <= 0 then previewScale = 1 end
-        local dx = TextDragPixelDeltaX(handle, nextX, handle._dragCfgStartX or 0, previewScale)
-        local dy = Round((tonumber(nextY) or 0) * previewScale) - Round((tonumber(handle._dragCfgStartY) or 0) * previewScale)
+        local dx = ResolveTextDragPixelDelta(Round, nextX, handle._dragCfgStartX or 0, previewScale, handle._dragEndpointBiasX)
+        local dy = ResolveTextDragPixelDelta(Round, nextY, handle._dragCfgStartY or 0, previewScale, handle._dragEndpointBiasY)
         local moved = false
         local captured = handle._textDragRegions
         if captured then
@@ -357,6 +350,13 @@ function Handles.Install(box, deps)
                     for j = 1, #points do
                         local p = points[j]
                         frame:SetPoint(p.point, p.relTo or box._mock, p.relPoint or p.point, (p.x or 0) + dx, (p.y or 0) + dy)
+                    end
+                    -- Direct drag painting temporarily mutates the same region
+                    -- cached by Group Preview Name layout. Mark it dirty so the
+                    -- next render reasserts saved geometry even if a write was
+                    -- rejected or rounded back to its starting value.
+                    if frame._msufPreviewNameNaturalWidth == true then
+                        frame._msufPreviewNameGeometryDirty = true
                     end
                     moved = true
                 end
@@ -699,6 +699,8 @@ function Handles.Install(box, deps)
             handle._dragStartY = nil
             handle._dragCfgStartX = nil
             handle._dragCfgStartY = nil
+            handle._dragEndpointBiasX = nil
+            handle._dragEndpointBiasY = nil
             handle._dragCursorX = nil
             handle._dragCursorY = nil
             handle._dragScale = nil
@@ -762,7 +764,7 @@ function Handles.Install(box, deps)
             if previewScale <= 0 then previewScale = 1 end
             local dx = ((cx - (handle._dragCursorX or cx)) / uiScale) / previewScale
             local dy = ((cy - (handle._dragCursorY or cy)) / uiScale) / previewScale
-            local nextX = Round((handle._dragCfgStartX or 0) + TextDragConfigDeltaX(handle, dx))
+            local nextX = Round((handle._dragCfgStartX or 0) + dx)
             local nextY = Round((handle._dragCfgStartY or 0) + dy)
             if handle._lastDragX == nextX and handle._lastDragY == nextY then return end
             handle._lastDragX = nextX
@@ -806,6 +808,13 @@ function Handles.Install(box, deps)
             local _, cfgX, cfgY = HandleOffsets(handle)
             handle._dragCfgStartX = tonumber(cfgX) or 0
             handle._dragCfgStartY = tonumber(cfgY) or 0
+            if handle._cfgTextKind == "name" then
+                local fs = box._mock and box._mock._nameFS
+                handle._dragEndpointBiasX = (tonumber(fs and fs._msufPreviewNameEndpointX)
+                    or handle._dragCfgStartX) - handle._dragCfgStartX
+                handle._dragEndpointBiasY = (tonumber(fs and fs._msufPreviewNameEndpointY)
+                    or handle._dragCfgStartY) - handle._dragCfgStartY
+            end
             CaptureTextDragRegions(handle)
             if box.SetTextDragRefreshSuppressed then
                 box:SetTextDragRefreshSuppressed(true)
@@ -971,11 +980,30 @@ function Handles.Install(box, deps)
         handle._iconStacks = handle._iconStacks or {}
         handle._iconTimers = handle._iconTimers or {}
         handle._iconDurationBars = handle._iconDurationBars or {}
+        -- Runtime AuraButtons keep the duration bar, cooldown swipe and text on
+        -- separate child frames inside the selected universal Layer slot.  The
+        -- preview used to create every region directly on the handle, which
+        -- made all of them inherit the icon's base level and let overlapping
+        -- text lie about the real runtime ordering.
+        local function EnsureDetailLayer(key)
+            local layer = handle[key]
+            if not layer then
+                layer = CreateFrame("Frame", nil, handle)
+                layer:SetAllPoints(handle)
+                layer:EnableMouse(false)
+                if layer.SetMouseMotionEnabled then layer:SetMouseMotionEnabled(false) end
+                handle[key] = layer
+            end
+            return layer
+        end
+        local durationLayer = EnsureDetailLayer("_iconDurationLayer")
+        local swipeLayer = EnsureDetailLayer("_iconSwipeLayer")
+        local textLayer = EnsureDetailLayer("_iconTextLayer")
         for i = 1, count do
             local tex = handle._icons[i] or handle:CreateTexture(nil, "ARTWORK")
             tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
             handle._icons[i] = tex
-            local swipe = handle._iconSwipes[i] or handle:CreateTexture(nil, "ARTWORK")
+            local swipe = handle._iconSwipes[i] or swipeLayer:CreateTexture(nil, "ARTWORK")
             swipe:SetTexture(WHITE8X8)
             swipe:SetVertexColor(0, 0, 0, 0.28)
             swipe:Hide()
@@ -983,21 +1011,23 @@ function Handles.Install(box, deps)
             local border = handle._iconBorders[i] or handle:CreateTexture(nil, "OVERLAY")
             border:Hide()
             handle._iconBorders[i] = border
-            local stack = handle._iconStacks[i] or handle:CreateFontString(nil, "OVERLAY")
+            local stack = handle._iconStacks[i] or textLayer:CreateFontString(nil, "OVERLAY")
             if stack.SetFont and stack._msufGFPreviewFont ~= true then
                 stack:SetFont(_G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", T.FontSize("micro"), "OUTLINE")
                 stack._msufGFPreviewFont = true
             end
+            if stack.SetDrawLayer then stack:SetDrawLayer("OVERLAY", 6) end
             stack:Hide()
             handle._iconStacks[i] = stack
-            local timer = handle._iconTimers[i] or handle:CreateFontString(nil, "OVERLAY")
+            local timer = handle._iconTimers[i] or textLayer:CreateFontString(nil, "OVERLAY")
             if timer.SetFont and timer._msufGFPreviewFont ~= true then
                 timer:SetFont(_G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", T.FontSize("micro"), "OUTLINE")
                 timer._msufGFPreviewFont = true
             end
+            if timer.SetDrawLayer then timer:SetDrawLayer("OVERLAY", 7) end
             timer:Hide()
             handle._iconTimers[i] = timer
-            local durationBar = handle._iconDurationBars[i] or handle:CreateTexture(nil, "OVERLAY")
+            local durationBar = handle._iconDurationBars[i] or durationLayer:CreateTexture(nil, "OVERLAY")
             durationBar:SetTexture(WHITE8X8)
             local durationR, durationG, durationB = AuraDurationBarColor()
             durationBar:SetVertexColor(durationR, durationG, durationB, 0.92)
@@ -1115,7 +1145,7 @@ function Handles.Install(box, deps)
         local guide = CreateFrame("Frame", nil, mock, T.Template())
         guide:SetAllPoints(mock)
         guide:EnableMouse(false)
-        if guide.SetFrameLevel and mock.GetFrameLevel then guide:SetFrameLevel((mock:GetFrameLevel() or 0) + 135) end
+        if guide.SetFrameLevel then guide:SetFrameLevel(InteractionLevel(1)) end
         guide:SetBackdrop({ bgFile = WHITE8X8, edgeFile = WHITE8X8, edgeSize = 2 })
         guide._text = T.Font(guide, "GameFontNormal", Tr("Drop to place spell icon"), { 0.72, 0.90, 1, 1 })
         guide._text:SetPoint("BOTTOM", guide, "TOP", 0, 6)

@@ -345,7 +345,7 @@ local function BuildText(ctx, builder, unit)
             })
         else
             local anchor = BadgeValue(OptionText(TEXT_ANCHORS, ReadText(unit, "nameTextAnchor", "TOPLEFT")))
-            if RaidGroupNameAllowed(unit) and ReadStatusBool(unit, "showRaidGroupInName", false) then anchor = anchor .. " + Group" end
+            if RaidGroupNameAllowed(unit) and ReadStatusBool(unit, "showRaidGroupInName", false) then anchor = M.Format("%s + Group", anchor) end
             W.SetCollapsibleBadges(sec, {
                 { text = nameOn and "Shown" or "Hidden", kind = nameOn and "ok" or "muted" },
                 { text = anchor, kind = nameOn and "info" or "muted" },
@@ -731,7 +731,7 @@ local function BuildText(ctx, builder, unit)
             if type(M.SelectPage) == "function" then M.SelectPage("classpower") end
         end)
     end
-    local advancedLayers = TextCard(advancedTab, "Text Layers", "Controls draw order when text overlaps bars, portraits, or status icons.", leftX, -4, cardW, 260)
+    local advancedLayers = TextCard(advancedTab, "Text Layers", "Controls text layers when text overlaps bars, portraits, or status icons.", leftX, -4, cardW, 260)
     local function BindAdvancedLayer(label, y, key, defaultValue, reason)
         local control = W.Slider(advancedLayers, label, 0, 30, 1, 260)
         PlaceSlider(advancedLayers, control, 16, y, cardW - 72)

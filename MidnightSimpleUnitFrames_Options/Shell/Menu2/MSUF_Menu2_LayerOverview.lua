@@ -336,7 +336,7 @@ Overview.RegisterProvider("unit-frames", function(sink)
             local value, layerInherited = ReadUnitValue(db, scope.key, prefix .. "Level", 1)
             sink:Layer({
                 id = "unit." .. scope.key .. "." .. prefix .. "Level",
-                area = "Unit Texture Layers", scope = scope.label, label = "Texture Layer " .. slot,
+                area = "Unit Texture Layers", scope = scope.label, label = string.format(Tr("Texture Layer %s"), tostring(slot)),
                 value = value, default = 1,
                 enabled = ReadUnitBool(db, scope.key, prefix .. "Enabled", false),
                 inherited = layerInherited, settingKey = scope.key .. "." .. prefix .. "Level",
@@ -455,7 +455,7 @@ Overview.RegisterProvider("unit-auras", function(sink)
             local frame = present and type(item.frame) == "table" and item.frame or nil
             sink:Layer({
                 id = "auras3." .. scope.key .. ".custom." .. token .. ".frame.layer",
-                area = "Unit Auras", scope = scope.label, label = label .. " Full-Frame Effect",
+                area = "Unit Auras", scope = scope.label, label = string.format(Tr("%s Full-Frame Effect"), Tr(label)),
                 value = frame and frame.layer, default = 0,
                 enabled = enabled and frame and frame.type ~= nil and frame.type ~= "none",
                 settingKey = "auras3.customContainers." .. scope.key .. "." .. index .. ".frame.layer",
@@ -463,7 +463,7 @@ Overview.RegisterProvider("unit-auras", function(sink)
             })
             sink:Strata({
                 id = "auras3." .. scope.key .. ".custom." .. token .. ".frame.strata",
-                area = "Unit Auras", scope = scope.label, label = label .. " Full-Frame Effect",
+                area = "Unit Auras", scope = scope.label, label = string.format(Tr("%s Full-Frame Effect"), Tr(label)),
                 value = frame and frame.strata, default = "AUTO",
                 enabled = enabled and frame and frame.type ~= nil and frame.type ~= "none",
                 settingKey = "auras3.customContainers." .. scope.key .. "." .. index .. ".frame.strata",
@@ -654,7 +654,7 @@ Overview.RegisterProvider("group-frames", function(sink)
                     local frame = type(item.frame) == "table" and item.frame or nil
                     sink:Layer({
                         id = "group." .. scope.key .. ".spellIndicators." .. token .. ".frame.layer",
-                        area = "Spell Indicators", scope = scope.label, label = label .. " Frame Effect",
+                        area = "Spell Indicators", scope = scope.label, label = string.format(Tr("%s Frame Effect"), Tr(label)),
                         value = frame and frame.layer, default = 0,
                         enabled = enabled and frame and frame.type ~= nil and frame.type ~= "none",
                         settingKey = scope.dbKey .. ".spellIndicators.specs." .. token .. ".frame.layer",
@@ -662,7 +662,7 @@ Overview.RegisterProvider("group-frames", function(sink)
                     })
                     sink:Strata({
                         id = "group." .. scope.key .. ".spellIndicators." .. token .. ".frame.strata",
-                        area = "Spell Indicators", scope = scope.label, label = label .. " Frame Effect",
+                        area = "Spell Indicators", scope = scope.label, label = string.format(Tr("%s Frame Effect"), Tr(label)),
                         value = frame and frame.strata, default = "AUTO",
                         enabled = enabled and frame and frame.type ~= nil and frame.type ~= "none",
                         settingKey = scope.dbKey .. ".spellIndicators.specs." .. token .. ".frame.strata",
@@ -1194,7 +1194,7 @@ local function AcquireVisualRow(popup, index)
         if _G.GameTooltip then
             _G.GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             _G.GameTooltip:SetText(Tr("Edit FrameStrata"))
-            _G.GameTooltip:AddLine(Tr("Click and choose the Blizzard draw order."), 0.78, 0.88, 1.00, true)
+            _G.GameTooltip:AddLine(Tr("Click and choose the Blizzard layer."), 0.78, 0.88, 1.00, true)
             _G.GameTooltip:Show()
         end
     end)

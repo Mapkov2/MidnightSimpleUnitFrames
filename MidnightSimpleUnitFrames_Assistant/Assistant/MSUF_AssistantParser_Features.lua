@@ -2657,7 +2657,15 @@ local function ParseSupportWorkflow(text, raw)
         } or nil
     end
 
-    if ContainsAny(text, FeaturesPhrases[317]) then
+    -- "msuf status" is a report request, but ContainsAny matches it anywhere:
+    -- "set msuf status afk text offset x to 0" names the Status AFK Text Offset
+    -- X control and was answered with the Assistant overview panel instead. A
+    -- status report never carries a value, so a number or a "to <value>" tail
+    -- means this is a setting request that merely contains the words.
+    if ContainsAny(text, FeaturesPhrases[317])
+        and not tostring(text or ""):find("%d")
+        and not tostring(text or ""):lower():find("%sto%s")
+    then
         local action = Registry and Registry:GetAction("assistant_status")
         return action and {
             kind = "action",

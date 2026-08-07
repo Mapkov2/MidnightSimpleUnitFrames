@@ -94,7 +94,9 @@ Media\MSUF_Media.lua
 Runtime\MSUF_BorderStyles.lua
 Runtime\MSUF_PortraitMedia.lua
 State\MSUF_ProfileIO.lua
-Runtime\MSUF_ChatAndTooltips.lua
+Runtime\MSUF_SlashCommands.lua
+Runtime\MSUF_UnitTooltips.lua
+Runtime\MSUF_BlizzEditModeBridge.lua
 Libs\MSUFUnitFrames\MSUFUnitFrames.xml
 Game\Classic\UnitFrames\MSUF_UF_Config.lua
 UnitFrames\Engine\MSUF_UF_PreviewAnimation.lua

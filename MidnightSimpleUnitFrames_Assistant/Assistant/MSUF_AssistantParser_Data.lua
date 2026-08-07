@@ -261,7 +261,7 @@ Data.ROOT_PARSER = {
         [108] = { "y offset", "offset y", "vertical offset", "vertical position" },
         [109] = { "size", "icon size", "text size", "font size" },
         [110] = {
-        "layer", "frame level", "framelevel", "draw layer", "draw order", "strata", "frame strata",
+        "layer", "frame level", "framelevel", "draw layer", "strata", "frame strata",
         "layer up", "layer down", "bring forward", "send back",
         "front", "behind", "backward", "backwards", "above", "below",
     },

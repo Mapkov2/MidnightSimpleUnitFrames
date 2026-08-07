@@ -401,7 +401,7 @@ local function BuildGFAuras(ctx)
     end
     BuildAuraWorkspaceTabs(ctx, top, scope, lane, top._msuf2Width or auraBuilder.width or 720)
     if type(M.AttachAuraFontsAndColors) == "function" then
-        M.AttachAuraFontsAndColors(top, "Auras", scope)
+        M.AttachAuraFontsAndColors(top, M.Format("Auras"), scope)
     end
 
     local rootSection = auraBuilder:Section("Group Aura Visibility", 88)

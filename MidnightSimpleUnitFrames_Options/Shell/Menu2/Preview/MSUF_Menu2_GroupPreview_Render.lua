@@ -12,6 +12,67 @@ local F = M.Fallbacks or {}
 local Layers = MSUF.UF and MSUF.UF.Layers or {}
 local issecretvalue = _G.issecretvalue or function(_) return false end
 local wipe = _G.wipe or function(tbl) for key in pairs(tbl) do tbl[key] = nil end return tbl end
+local function ResolvePreviewNameGeometry(conf, runtimeText, baselineOffset)
+    conf, runtimeText = conf or {}, runtimeText or {}
+    local x = tonumber(conf.nameOffsetX)
+    if x == nil then x = tonumber(runtimeText.nameX) or 0 end
+    local y = tonumber(conf.nameOffsetY)
+    if y ~= nil then
+        y = y + (tonumber(baselineOffset) or 0)
+    else
+        y = tonumber(runtimeText.nameY) or 0
+    end
+    return conf.nameAnchor or runtimeText.nameAnchor or "LEFT", x, y
+end
+local function ResolvePreviewNamePoint(anchor, x, y)
+    anchor = tostring(anchor or "LEFT"):upper()
+    x, y = tonumber(x) or 0, tonumber(y) or 0
+    -- LayoutBarAnchoredName uses a 3px inset on both ends of its runtime span.
+    -- Resolve the visible glyph endpoint from that span so the natural-width
+    -- preview FontString and its interaction outline share one exact rectangle.
+    if anchor == "TOPLEFT" then
+        return "TOPLEFT", x + 3, y, "LEFT"
+    elseif anchor == "TOP" then
+        return "TOP", x, y, "CENTER"
+    elseif anchor == "TOPRIGHT" then
+        return "TOPRIGHT", x - 3, y, "RIGHT"
+    elseif anchor == "CENTER" then
+        return "CENTER", x, y, "CENTER"
+    elseif anchor == "RIGHT" then
+        return "RIGHT", x - 3, y, "RIGHT"
+    end
+    return "LEFT", x + 3, y, "LEFT"
+end
+local function LayoutPreviewName(fs, relativeTo, point, x, y, justify)
+    if not (fs and relativeTo) then return end
+    if fs._msufPreviewNameGeometryDirty == true
+        or fs._msufPreviewNameNaturalWidth ~= true
+        or fs._msufPreviewNameRelativeTo ~= relativeTo
+        or fs._msufPreviewNamePoint ~= point
+        or fs._msufPreviewNameX ~= x
+        or fs._msufPreviewNameY ~= y then
+        fs:ClearAllPoints()
+        if fs._msufPreviewNameNaturalWidth ~= true then
+            fs:SetWidth(0)
+            fs._msufPreviewNameNaturalWidth = true
+        end
+        fs:SetPoint(point, relativeTo, point, x, y)
+        fs._msufPreviewNameRelativeTo = relativeTo
+        fs._msufPreviewNamePoint = point
+        fs._msufPreviewNameX = x
+        fs._msufPreviewNameY = y
+        fs._msufPreviewNameGeometryDirty = nil
+    end
+    if fs._msufPreviewJustifyH ~= justify then
+        fs:SetJustifyH(justify)
+        fs._msufPreviewJustifyH = justify
+    end
+end
+-- Kept as narrow test seams: Group Preview is the only consumer, and exposing
+-- the pure geometry avoids testing a second copy of these anchor rules.
+Render._ResolvePreviewNameGeometry = ResolvePreviewNameGeometry
+Render._ResolvePreviewNamePoint = ResolvePreviewNamePoint
+Render._LayoutPreviewName = LayoutPreviewName
 local function DefaultCompiledAuraLane(_, _, fallback) return fallback or {} end
 local function DefaultInt(value, fallback, minValue, maxValue)
     local n = math.floor((tonumber(value) or tonumber(fallback) or 0) + 0.0001)
@@ -78,7 +139,7 @@ end
 --- Sample subgroup label for the preview, formatted by the live raid-group
 --- formatter so the preview cannot drift from the runtime text.
 local GROUP_BLOCK_BORDER_EDGES = { "top", "bottom", "left", "right" }
-local SetPreviewFrameLevel
+local SetPreviewFrameLevel, PreviewElementLevel, PreviewInteractionLevel
 --- Mirror of ApplyGroupBorder in the group header engine: same edge geometry,
 --- scaled into preview space. Without this the Group Border card had no visual
 --- feedback at all in the menu preview.
@@ -391,7 +452,7 @@ local function PaintGroupPreviewDispelOverlay(scene)
     host:ClearAllPoints()
     host:SetAllPoints(health)
     local level = scene.S.Layers and scene.S.Layers.ElementLevel
-        and scene.S.Layers.ElementLevel(overlay.dispelOverlayLayer, 0, 12)
+        and PreviewElementLevel(mock, scene.S.Layers, overlay.dispelOverlayLayer, 0, 12)
         or (((mock.GetFrameLevel and mock:GetFrameLevel()) or 1)
             + (tonumber(overlay.dispelOverlayLayer) or 0) + 12)
     SetPreviewFrameLevel(host, level)
@@ -559,7 +620,7 @@ local function PaintGroupPreviewPortrait(scene)
     local level = math.max(0, math.min(30, tonumber(portrait.levelOffset) or 7))
     if holder.SetFrameLevel and scene.mock.GetFrameLevel then
         local layers = scene.S.Layers or {}
-        local handleLevel = layers.ElementLevel and layers.ElementLevel(level, 7, 0)
+        local handleLevel = layers.ElementLevel and PreviewElementLevel(scene.mock, layers, level, 7, 0)
             or ((scene.mock:GetFrameLevel() or 1) + level)
         if handle then SetPreviewFrameLevel(handle, handleLevel) end
         if holder ~= handle then SetPreviewFrameLevel(holder, handleLevel) end
@@ -649,11 +710,8 @@ local function NormalizeFrameStrata(value, fallback)
     return rank and rank[value] and value or (fallback or "AUTO")
 end
 local PREVIEW_UNITFRAME_STRATA = "MEDIUM"
-local PREVIEW_STRATA_LEVEL_STEP = 40
--- Reserve a local numeric band below the mock so lower configured strata can
--- be represented without producing negative frame levels. The band is rebased
--- from the preview box on every refresh, so cached pages cannot accumulate
--- parent-level changes across Edit Mode transitions.
+-- Raise the cached mock above the preview canvas, then use that exact level as
+-- the bias for every absolute runtime ElementLevel encoded below.
 local PREVIEW_LOCAL_BASE_OFFSET = 400
 local PREVIEW_FRAME_LEVEL_MAX = 65535
 local function SafePreviewFrameLevel(value)
@@ -667,6 +725,30 @@ SetPreviewFrameLevel = function(frame, value)
     value = SafePreviewFrameLevel(value)
     frame:SetFrameLevel(value)
     return value
+end
+--- The live layer encoder is intentionally absolute. Menu2, however, raises
+--- its cached Group mock into a private frame-level band so it stays above the
+--- preview canvas. Translate every encoded live level by that one mock-owned
+--- bias; mixing an unshifted ElementLevel with the raised mock puts ordinary
+--- Layer 0..9 content (notably Name/HP/Power text) underneath the health bar.
+PreviewElementLevel = function(mock, layerAPI, layer, fallback, detail)
+    local encoded
+    if layerAPI and layerAPI.ElementLevel then
+        encoded = layerAPI.ElementLevel(layer, fallback, detail)
+    else
+        local value = math.floor((tonumber(layer) or fallback or 0) + 0.5)
+        if value < 0 then value = 0 elseif value > 30 then value = 30 end
+        detail = math.floor((tonumber(detail) or 0) + 0.5)
+        if detail < 0 then detail = 0 elseif detail > 31 then detail = 31 end
+        encoded = 100 + value * 32 + detail
+    end
+    return SafePreviewFrameLevel((tonumber(mock and mock._msufPreviewElementLevelBias) or 0) + encoded)
+end
+PreviewInteractionLevel = function(mock, layerAPI, extra)
+    local top = PreviewElementLevel(mock, layerAPI, 30, 30,
+        layerAPI and layerAPI.ELEMENT_DETAIL_MAX or 31)
+    return SafePreviewFrameLevel(top + (tonumber(layerAPI and layerAPI.ELEMENT_LEVEL_STRIDE) or 32)
+        + (tonumber(extra) or 0))
 end
 local function FrameStrataRank(value)
     local rank = _G.MSUF_FRAME_STRATA_RANK
@@ -1043,10 +1125,9 @@ local function PlaceTextHandles(scene)
     local box, mock, H = scene.box, scene.mock, scene.H
     local handles = scene.textHandles
     for i = 1, #TEXT_HANDLE_KEYS do handles[TEXT_HANDLE_KEYS[i]]._previewScale = scene.previewScale end
-    -- fitText: the bar-anchored name spans the whole health bar, so the raw
-    -- region rect would make the grab handle bar-wide. Matches the text focus
-    -- ring, which already fits to the drawn string.
-    if not H.PlaceHandleAroundRegions(handles.name, mock, { mock._nameFS }, 3, { fitText = true }) then handles.name:Hide() end
+    -- Name is a natural-width FontString. Its actual region is the sole source
+    -- for glyph, grab-handle and focus geometry.
+    if not H.PlaceHandleAroundRegions(handles.name, mock, { mock._nameFS }, 3, "name") then handles.name:Hide() end
     local function PlaceGroup(groupKey, prefix, regions)
         if H.TextMovesTogether(scene.kind, prefix) then
             handles[prefix .. "Left"]:Hide()
@@ -1101,12 +1182,24 @@ local function ApplyHandleStrata(scene, handle, value, live, host)
     return 0
 end
 
+local function SyncIconDetailLevels(layers, handle)
+    if not (handle and handle.GetFrameLevel) then return end
+    layers = layers or {}
+    local baseLevel = handle:GetFrameLevel() or 0
+    SetPreviewFrameLevel(handle._iconDurationLayer,
+        baseLevel + (layers.AURA_DURATION_BAR_LEVEL_OFFSET or 2))
+    SetPreviewFrameLevel(handle._iconSwipeLayer,
+        baseLevel + (layers.AURA_COOLDOWN_LEVEL_OFFSET or 4))
+    SetPreviewFrameLevel(handle._iconTextLayer,
+        baseLevel + (layers.AURA_TEXT_LEVEL_OFFSET or 8))
+end
+
 local function FinalizeScene(scene)
     local S, box, mock = scene.S, scene.box, scene.mock
     local conf, runtimeText, runtimeStatus = scene.conf, scene.runtimeText, scene.runtimeStatus
     local baseLevel = mock.GetFrameLevel and mock:GetFrameLevel() or 1
-    local ElementLevel = S.Layers.ElementLevel or function(layer, fallback, detail)
-        return baseLevel + S.ClampLayer(layer, fallback) + (detail or 0)
+    local function ElementLevel(layer, fallback, detail)
+        return PreviewElementLevel(mock, S.Layers, layer, fallback, detail)
     end
     PlaceTextHandles(scene)
     local liveStrata, hostStrata = PreviewHostStrata(scene)
@@ -1125,6 +1218,7 @@ local function FinalizeScene(scene)
                 local owner = handle._auraStyleOwners[j]
                 if owner and owner.SetFrameLevel then SetPreviewFrameLevel(owner, level) end
             end
+            SyncIconDetailLevels(S.Layers, handle)
         end
     end
     for i = 1, #S.statusHandles do
@@ -1152,6 +1246,7 @@ local function FinalizeScene(scene)
     local selected = scene.selectedSpellCfg
     ApplyHandleStrata(scene, S.spellHandle, "AUTO", liveStrata, hostStrata)
     SetPreviewFrameLevel(S.spellHandle, ElementLevel(selected and selected.layer or spellLayer, 9, 1))
+    SyncIconDetailLevels(S.Layers, S.spellHandle)
     local selectedEffectOwner = box._msufGFSelectedSpellEffectOwner
     local selectedEffectRoot = selectedEffectOwner and selectedEffectOwner._msufSpellPreviewEffectRoot
     if selectedEffectRoot and selectedEffectRoot.IsShown and selectedEffectRoot:IsShown() then
@@ -1177,6 +1272,7 @@ local function FinalizeScene(scene)
     for _, handle in pairs(scene.dynamicSpellHandlesActive or {}) do
         ApplyHandleStrata(scene, handle, "AUTO", liveStrata, hostStrata)
         SetPreviewFrameLevel(handle, ElementLevel(handle._msufSpellIndicatorLayer or spellLayer, 9, 1))
+        SyncIconDetailLevels(S.Layers, handle)
         local effectRoot = handle._msufSpellPreviewEffectRoot
         if effectRoot and effectRoot.IsShown and effectRoot:IsShown() then
             local priority = max(1, min(10, floor((tonumber(effectRoot._msufSpellPreviewPriority) or 5) + 0.5)))
@@ -1840,8 +1936,12 @@ function Render.Install(box, ctx, deps)
         SetPreviewFrameLevel(self._stage, previewRootLevel + 2)
         SetPreviewFrameLevel(self._layers, previewRootLevel + 3)
         SetPreviewFrameLevel(mock, previewRootLevel + PREVIEW_LOCAL_BASE_OFFSET)
+        -- One constant translation preserves the exact live ElementLevel order
+        -- while keeping every preview visual above the raised mock body.
+        mock._msufPreviewElementLevelBias = mock.GetFrameLevel and (mock:GetFrameLevel() or 0)
+            or (previewRootLevel + PREVIEW_LOCAL_BASE_OFFSET)
         if self._dragFrame then
-            SetPreviewFrameLevel(self._dragFrame, previewRootLevel + PREVIEW_LOCAL_BASE_OFFSET + 140)
+            SetPreviewFrameLevel(self._dragFrame, PreviewInteractionLevel(mock, Layers, 2))
         end
         local scene = BuildScene(self, reason)
         local S = scene.S
@@ -2356,6 +2456,12 @@ function Render.Install(box, ctx, deps)
             powerBarHandle:SetShown(powerH > 0 and LayerOn("power"))
             powerBarHandle:SetAlpha(LayerAlpha("power"))
         end
+        local powerFrameLevel = powerDetached
+            and PreviewElementLevel(mock, Layers,
+                runtimePower.detachedLevel or conf.detachedPowerBarFrameLevelOffset, 6, 0)
+            or ((mock.GetFrameLevel and mock:GetFrameLevel()) or 1) + 1
+        SetPreviewFrameLevel(mock._power, powerFrameLevel)
+        if powerBarHandle then SetPreviewFrameLevel(powerBarHandle, powerFrameLevel) end
         -- Layer gating hides only the drawn bar; the health inset keeps following
         -- the settings so hiding the preview layer never fakes a layout change.
         if powerH > 0 and LayerOn("power") then
@@ -2411,20 +2517,20 @@ function Render.Install(box, ctx, deps)
             if mock._nameTextLayer.GetParent and mock._nameTextLayer:GetParent() ~= mock and mock._nameTextLayer.SetParent then mock._nameTextLayer:SetParent(mock) end
             mock._nameTextLayer:ClearAllPoints()
             mock._nameTextLayer:SetAllPoints(mock)
-            SetPreviewFrameLevel(mock._nameTextLayer, Layers.ElementLevel and Layers.ElementLevel(runtimeText.nameLayer or conf.nameTextLayer, 5, 8)
+            SetPreviewFrameLevel(mock._nameTextLayer, Layers.ElementLevel and PreviewElementLevel(mock, Layers, runtimeText.nameLayer or conf.nameTextLayer, 5, 8)
                 or (((mock.GetFrameLevel and mock:GetFrameLevel()) or 1) + ClampLayer(runtimeText.nameLayer or conf.nameTextLayer, 5) + 8))
         end
         if mock._healthTextLayer then
             if mock._healthTextLayer.GetParent and mock._healthTextLayer:GetParent() ~= mock and mock._healthTextLayer.SetParent then mock._healthTextLayer:SetParent(mock) end
             mock._healthTextLayer:ClearAllPoints()
             mock._healthTextLayer:SetAllPoints(mock)
-            SetPreviewFrameLevel(mock._healthTextLayer, Layers.ElementLevel and Layers.ElementLevel(runtimeText.healthLayer or conf.textLayer, 5, 8)
+            SetPreviewFrameLevel(mock._healthTextLayer, Layers.ElementLevel and PreviewElementLevel(mock, Layers, runtimeText.healthLayer or conf.textLayer, 5, 8)
                 or (((mock.GetFrameLevel and mock:GetFrameLevel()) or 1) + ClampLayer(runtimeText.healthLayer or conf.textLayer, 5) + 8))
         end
         if mock._powerTextLayer then
             mock._powerTextLayer:ClearAllPoints()
             mock._powerTextLayer:SetAllPoints(mock)
-            SetPreviewFrameLevel(mock._powerTextLayer, Layers.ElementLevel and Layers.ElementLevel(runtimeText.powerLayer or conf.powerTextLayer, 2, 8)
+            SetPreviewFrameLevel(mock._powerTextLayer, Layers.ElementLevel and PreviewElementLevel(mock, Layers, runtimeText.powerLayer or conf.powerTextLayer, 2, 8)
                 or (((mock.GetFrameLevel and mock:GetFrameLevel()) or 1) + ClampLayer(runtimeText.powerLayer or conf.powerTextLayer, 2) + 8))
         end
         local showText = LayerOn("text")
@@ -2466,24 +2572,6 @@ function Render.Install(box, ctx, deps)
             fs:SetPoint(point, relativeTo or fs:GetParent(), relPoint or point, x or 0, y or 0)
             fs:SetJustifyH(justify or "LEFT")
             fs._msufPreviewJustifyH = justify or "LEFT"
-            fs._msufPreviewSpan = nil
-        end
-        -- Live parity with LayoutTextSpan in the engine's text element: a
-        -- LEFT+RIGHT pair spans the bar and defines the width, so the explicit
-        -- SetWidth has to be cleared for the anchors to win.
-        local function LayoutPreviewSpan(fs, relativeTo, leftX, rightX, y, justify, verticalPoint)
-            if not (fs and relativeTo) then return end
-            verticalPoint = verticalPoint == "TOP" and "TOP" or "CENTER"
-            local leftPoint = verticalPoint == "TOP" and "TOPLEFT" or "LEFT"
-            local rightPoint = verticalPoint == "TOP" and "TOPRIGHT" or "RIGHT"
-            fs:ClearAllPoints()
-            fs:SetPoint(leftPoint, relativeTo, leftPoint, leftX or 0, y or 0)
-            fs:SetPoint(rightPoint, relativeTo, rightPoint, rightX or 0, y or 0)
-            fs:SetJustifyH(justify or "LEFT")
-            fs._msufPreviewJustifyH = justify or "LEFT"
-            -- Read by the handle drag: a span moves with +x on every anchor,
-            -- unlike the mirrored TOPRIGHT fallback.
-            fs._msufPreviewSpan = true
         end
         local function PaintPreviewText(fs, size, mode, point, relPoint, x, y, justify, r, g, b, a, shown, text)
             if not fs then return end
@@ -2505,57 +2593,38 @@ function Render.Install(box, ctx, deps)
             or (not runtimeSpec and conf.alphaExcludeTextPortrait == true)
         if not alphaExcludeText then textAlpha = textAlpha * hpFillAlpha end
         local baselineOffset = (runtimeSpec and 0) or (gf and gf.ResolveFontBaselineOffset and gf.ResolveFontBaselineOffset(kind)) or 0
-        SetPreviewFont(mock._nameFS, max(6, ScaleValue((runtimeSpec and runtimeSpec.nameFontSize) or conf.nameFontSize or 12, previewScale, 6)))
-        local previewName = (scene.liveData and scene.liveData.name) or self._msufGFRenderState.GF_PREVIEW_NAMES[5]
-        if gf and gf.ResolveNameTruncation and gf.TruncateName then
-            local maxC, noEllipsis, clipSide = gf.ResolveNameTruncation(kind)
-            if maxC and maxC > 0 then previewName = gf.TruncateName(previewName, maxC, noEllipsis, clipSide) end
-        end
-        mock._nameFS:SetText(previewName)
-        local nr, ng, nb = fr, fg, fb
-        if gf and gf.ResolveNameColor then nr, ng, nb = gf.ResolveNameColor(kind, cls) end
-        mock._nameFS:SetTextColor(nr or 1, ng or 1, nb or 1, textAlpha)
-        mock._nameFS:ClearAllPoints()
-        local pad4 = ScaleValue(4, previewScale, 1)
-        local nox = ConfigToOffset(runtimeText.nameX or conf.nameOffsetX or 0, previewScale)
-        local noy = ConfigToOffset(runtimeText.nameY or ((conf.nameOffsetY or 0) + baselineOffset), previewScale)
-        local nameAnchor = runtimeText.nameAnchor or conf.nameAnchor or "LEFT"
-        -- Group specs always compile text.anchorToBars = true, so the live name
-        -- is a span across the health bar (LayoutBarAnchoredName), not a
-        -- TOPLEFT box on the frame like the unit-frame path. The mock health
-        -- bar already matches the live hpBar geometry (no inset, power height
-        -- reserved at the bottom). The TOP* branch stays as the fallback for
-        -- refreshes that run before the runtime spec is compilable.
-        if runtimeText.anchorToBars == true then
-            local nameRef = (runtimeText.nameAnchorToFrame ~= true and mock._health) or mock
-            local pad3 = ScaleValue(3, previewScale, 1)
-            mock._nameFS:SetWidth(0)
-            local justify = (nameAnchor == "TOP" or nameAnchor == "CENTER") and "CENTER"
-                or (nameAnchor == "TOPRIGHT" or nameAnchor == "RIGHT") and "RIGHT"
-                or "LEFT"
-            local rightX = justify == "LEFT" and -pad3 or (-pad3 + nox)
-            local verticalPoint = (nameAnchor == "TOPLEFT" or nameAnchor == "TOP" or nameAnchor == "TOPRIGHT") and "TOP" or "CENTER"
-            LayoutPreviewSpan(mock._nameFS, nameRef, pad3 + nox, rightX, noy, justify, verticalPoint)
-        else
-            local nameWidth = max(80, (tonumber(runtimeSpec and runtimeSpec.width) or liveW or 120) * 0.80)
-            mock._nameFS:SetWidth(max(40, ScaleValue(nameWidth, previewScale, 40)))
-            if nameAnchor == "TOP" then
-                LayoutPreviewText(mock._nameFS, "TOP", "TOP", nox, noy, "CENTER", mock)
-            elseif nameAnchor == "TOPRIGHT" then
-                LayoutPreviewText(mock._nameFS, "TOPRIGHT", "TOPRIGHT", -nox, noy, "RIGHT", mock)
-            elseif nameAnchor == "LEFT" then
-                LayoutPreviewText(mock._nameFS, "LEFT", "LEFT", nox, noy, "LEFT", mock)
-            elseif nameAnchor == "CENTER" then
-                LayoutPreviewText(mock._nameFS, "CENTER", "CENTER", nox, noy, "CENTER", mock)
-            elseif nameAnchor == "RIGHT" then
-                LayoutPreviewText(mock._nameFS, "RIGHT", "RIGHT", nox, noy, "RIGHT", mock)
-            else
-                LayoutPreviewText(mock._nameFS, "TOPLEFT", "TOPLEFT", nox, noy, "LEFT", mock)
+        do
+            SetPreviewFont(mock._nameFS, max(6, ScaleValue((runtimeSpec and runtimeSpec.nameFontSize) or conf.nameFontSize or 12, previewScale, 6)))
+            if mock._nameFS.SetWordWrap then mock._nameFS:SetWordWrap(false) end
+            if mock._nameFS.SetNonSpaceWrap then mock._nameFS:SetNonSpaceWrap(false) end
+            local previewName = (scene.liveData and scene.liveData.name) or self._msufGFRenderState.GF_PREVIEW_NAMES[5]
+            if gf and gf.ResolveNameTruncation and gf.TruncateName then
+                local maxC, noEllipsis, clipSide = gf.ResolveNameTruncation(kind)
+                if maxC and maxC > 0 then previewName = gf.TruncateName(previewName, maxC, noEllipsis, clipSide) end
             end
+            local nr, ng, nb = fr, fg, fb
+            if gf and gf.ResolveNameColor then nr, ng, nb = gf.ResolveNameColor(kind, cls) end
+            mock._nameFS:SetTextColor(nr or 1, ng or 1, nb or 1, textAlpha)
+            -- Anchor and offsets are one editor-owned tuple. A queued compiled spec
+            -- may legitimately lag this cold preview refresh by one apply tick.
+            local nameAnchor, nox, noy = ResolvePreviewNameGeometry(conf, runtimeText,
+                (runtimeSpec and gf and gf.ResolveFontBaselineOffset and gf.ResolveFontBaselineOffset(kind)) or baselineOffset)
+            local namePoint, nameX, nameY, nameJustify = ResolvePreviewNamePoint(nameAnchor, nox, noy)
+            mock._nameFS._msufPreviewNameEndpointX = nameX
+            mock._nameFS._msufPreviewNameEndpointY = nameY
+            -- Scale the complete runtime endpoint (x +/- 3), not its terms
+            -- separately. This avoids a one-pixel drift at fractional Fit scales.
+            nameX, nameY = ConfigToOffset(nameX, previewScale), ConfigToOffset(nameY, previewScale)
+            local nameAnchorToFrame = runtimeText.nameAnchorToFrame
+            if nameAnchorToFrame == nil then nameAnchorToFrame = conf._msufLegacyNameAnchorToFrame == true end
+            local nameRef = (runtimeText.anchorToBars ~= false and nameAnchorToFrame ~= true and mock._health) or mock
+            LayoutPreviewName(mock._nameFS, nameRef, namePoint, nameX, nameY, nameJustify)
+            -- SetText comes after geometry, matching the established natural-width
+            -- FontString path and making the region immediately authoritative.
+            mock._nameFS:SetText(previewName)
+            mock._nameFS:SetShown(showText and ((runtimeSpec and runtimeSpec.showName == true) or (not runtimeSpec and conf.showName ~= false)))
         end
-        if mock._nameFS.SetWordWrap then mock._nameFS:SetWordWrap(false) end
-        if mock._nameFS.SetNonSpaceWrap then mock._nameFS:SetNonSpaceWrap(false) end
-        mock._nameFS:SetShown(showText and ((runtimeSpec and runtimeSpec.showName == true) or (not runtimeSpec and conf.showName ~= false)))
+        local pad4 = ScaleValue(4, previewScale, 1)
         local hpSize = (runtimeSpec and runtimeSpec.healthFontSize) or conf.hpFontSize or 10
         -- Reverse order renders the configured Right slot on the physical left
         -- side (and vice versa); per-slot size and offsets follow the content,
@@ -2691,7 +2760,7 @@ function Render.Install(box, ctx, deps)
         local boundsEdge = max(1, outlineEdge)
         ApplyBoundsGuide(self, boundsEdge)
         if self._bounds.SetFrameLevel and mock.GetFrameLevel then
-            SetPreviewFrameLevel(self._bounds, Layers.ElementLevel and (Layers.ElementLevel(30, 30, 31) + 16)
+            SetPreviewFrameLevel(self._bounds, Layers.ElementLevel and (PreviewElementLevel(mock, Layers, 30, 30, 31) + 16)
                 or ((mock:GetFrameLevel() or 1) + (Layers.PREVIEW_BOUNDS_OFFSET or 48)))
         end
         self._bounds:SetShown(LayerOn("bounds"))

@@ -9,6 +9,8 @@ MSUF.MSUF2 = M
 local TextFocus = M.GroupPreviewTextFocus or {}
 M.GroupPreviewTextFocus = TextFocus
 local PreviewHelpers = M.PreviewHelpers or {}
+local NAME_FOCUS_PLACEMENT = { useScaledRect = true }
+local VALUE_FOCUS_PLACEMENT = { fitText = true, useScaledRect = true }
 function TextFocus.Install(deps)
     deps = deps or {}
     local CurrentScope = deps.CurrentScope or function() return M.gfScope or "party" end
@@ -61,11 +63,9 @@ local function GFPreviewSetTextMoveTogether(scope, kind, value)
     M.gfTextMoveTogether[scope] = M.gfTextMoveTogether[scope] or {}
     M.gfTextMoveTogether[scope][kind] = value ~= false
 end
-local function GFPreviewPlaceHandleAroundRegions(handle, parent, regions, pad)
-    return PreviewHelpers.PlaceHandleAroundRegions(handle, parent, regions, pad, {
-        fitText = true,
-        useScaledRect = true,
-    })
+local function GFPreviewPlaceHandleAroundRegions(handle, parent, regions, pad, kind)
+    return PreviewHelpers.PlaceHandleAroundRegions(handle, parent, regions, pad,
+        kind == "name" and NAME_FOCUS_PLACEMENT or VALUE_FOCUS_PLACEMENT)
 end
 local GFPreviewNormalizeTextFocusKind = PreviewHelpers.NormalizeTextFocusKind or function(kind)
     if kind == "name" or kind == "hp" or kind == "power" then return kind end

@@ -2042,9 +2042,61 @@ P.HasAbsoluteNumberTarget = function(text)
     return false
 end
 
+-- Multiplier wording: the request states the RESULT as a factor of the current
+-- value ("twice as tall"), not an amount to add.
+local PROPORTIONAL_MULTIPLIER_WORDS = {
+    { "twice as", 2 }, { "two times as", 2 }, { "double", 2 }, { "doppelt", 2 },
+    { "three times as", 3 }, { "triple", 3 }, { "thrice", 3 },
+    { "half as", 0.5 }, { "halve", 0.5 }, { "half the", 0.5 }, { "haelfte", 0.5 },
+}
+
+-- "20% bigger" and "twice as tall" are changes RELATIVE TO THE CURRENT VALUE, so
+-- the delta cannot be read off the text alone -- it has to be computed from what
+-- the setting holds right now.
+--
+-- Without this, "make player width 20% bigger" fell through to the plain amount
+-- reader, which sees the bare 20 and added 20 pixels instead of 20 percent
+-- (275 -> 295 where the player asked for 330). "twice as tall" matched no
+-- increase/decrease word at all, so it produced no value and the Assistant
+-- asked the player to supply the number it had just been given.
+function P.ProportionalNumberDeltaForSetting(setting, text)
+    if type(setting) ~= "table" or type(setting.get) ~= "function" then return nil end
+    text = tostring(text or "")
+    -- "set width to 50 percent" states the value outright; that is absolute.
+    if P.HasAbsoluteNumberTarget(text) then return nil end
+
+    local factor
+    for i = 1, #PROPORTIONAL_MULTIPLIER_WORDS do
+        local entry = PROPORTIONAL_MULTIPLIER_WORDS[i]
+        if text:find(entry[1], 1, true) then factor = entry[2] break end
+    end
+    if not factor then
+        local percent = text:match("(%d+%.?%d*)%s*%%") or text:match("(%d+%.?%d*)%s*percent")
+            or text:match("(%d+%.?%d*)%s*prozent")
+        percent = tonumber(percent)
+        if percent == nil then return nil end
+        -- A bare percentage says nothing about direction; only pair it with an
+        -- explicit increase/decrease word so "set scale to 90%" is left alone.
+        if ContainsAny(text, RELATIVE_INCREASE_TERMS) then factor = 1 + percent / 100
+        elseif ContainsAny(text, RELATIVE_DECREASE_TERMS) then factor = 1 - percent / 100
+        else return nil end
+    end
+
+    local ok, current = pcall(setting.get)
+    current = ok and tonumber(current) or nil
+    if current == nil or current == 0 then return nil end
+    local delta = current * factor - current
+    if delta == 0 then return nil end
+    return delta
+end
+
 RelativeNumberDeltaForText = function(setting, text, fallbackAmount)
     local directional = P.DirectionalNumberDeltaForSetting(setting, text, fallbackAmount)
     if directional ~= nil then return directional end
+    -- Before the plain amount reader: it would take the 20 out of "20% bigger"
+    -- and treat it as an absolute amount.
+    local proportional = P.ProportionalNumberDeltaForSetting(setting, text)
+    if proportional ~= nil then return proportional end
     local sign
     if ContainsAny(text, RELATIVE_INCREASE_TERMS) then sign = 1 end
     if ContainsAny(text, RELATIVE_DECREASE_TERMS) then sign = -1 end
@@ -2206,6 +2258,20 @@ ValueForRegistrySetting = function(setting, text, raw)
             and not ContainsAny(requestText, RegistryPhrases[44])
         then
             return nil
+        end
+        -- A stated "to on"/"to off" tail is the literal value of the setting and
+        -- must outrank every name-based inference below. The per-key branches
+        -- that follow exist because those settings are NAMED after a polarity
+        -- word, but they returned before any explicit value was consulted -- so
+        -- "set Disable Blizzard Unit Frames to off" read the "disable" in the
+        -- control's own name as the request and answered "already enabled",
+        -- exactly inverting the order. The label is already stripped from
+        -- requestText, so only a genuine trailing value is seen here.
+        local statedTail = requestText:match("%f[%w]to%s+(%a+)%s*$")
+            or requestText:match("=%s*(%a+)%s*$")
+        if statedTail == "off" or statedTail == "false" or statedTail == "aus" then return false end
+        if statedTail == "on" or statedTail == "true" or statedTail == "an" or statedTail == "ein" then
+            return true
         end
         if attr == "powerbardetached" or key:find("%.powerbardetached", 1, true) then
             if ContainsAny(text, RegistryPhrases[45]) then return false end

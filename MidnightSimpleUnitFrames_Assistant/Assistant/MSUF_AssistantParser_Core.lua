@@ -1285,7 +1285,23 @@ local function TargetAfterLastConnector(text, connectors)
     return tail
 end
 
+-- Phrases where "off" belongs to a phrasal verb or a noun rather than stating a
+-- polarity. "names are getting cut off" was read as an OFF command and offered
+-- to switch the name text off -- the exact opposite of the request, which is
+-- that the name is being TRUNCATED and the player wants more of it.
+local NON_POLARITY_OFF_PHRASES = {
+    "cut off", "cuts off", "cutting off", "cutoff", "cut%-off",
+    "off screen", "offscreen", "off center", "off centre", "off%-center",
+}
+local function MaskNonPolarityOff(text)
+    for i = 1, #NON_POLARITY_OFF_PHRASES do
+        text = text:gsub(NON_POLARITY_OFF_PHRASES[i], " ")
+    end
+    return text
+end
+
 local function DetectBoolean(text)
+    text = MaskNonPolarityOff(text)
     local target = TargetAfterLastConnector(text)
     if target then
         if ContainsAny(target, OFF_WORDS) then return false end

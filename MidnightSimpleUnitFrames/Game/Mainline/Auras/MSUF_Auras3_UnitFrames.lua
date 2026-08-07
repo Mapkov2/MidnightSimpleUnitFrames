@@ -4253,7 +4253,7 @@ local function PrepareAuraButton(button, lane, index)
         if not icon then
             -- The portrait itself is ARTWORK sublevel 0. Use the same sublevel
             -- contract as the proven cast-icon overlay; normal aura lanes keep
-            -- their existing draw order.
+            -- their existing layer order.
             icon = button:CreateTexture(nil, "ARTWORK", nil, lane.portraitOverlay == true and 1 or 0)
             button.Icon = icon
         elseif lane.portraitOverlay == true and icon.SetDrawLayer then
@@ -4483,7 +4483,7 @@ local function PrepareAuraButton(button, lane, index)
     end
 
     -- Shared icon style: border ring + soft drop shadow. All regions are
-    -- button-owned textures created once here (initializeFrame); draw order
+    -- button-owned textures created once here (initializeFrame); layer stack:
     -- BACKGROUND(-7) shadow < BORDER(-1) ring < ARTWORK icon < OVERLAY dispel
     -- border, so the dispel-type border overdraws the static ring for typed
     -- debuffs. Scopes that opted out arrive with ICON_STYLE_OFF and take the

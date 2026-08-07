@@ -1678,6 +1678,13 @@ end
 if g.showMinimapIcon == nil then
     g.showMinimapIcon = true
 end
+--- WoW 12.1 can turn contextual pings on the MSUF Player frame into native
+--- player-resource callouts. Match Blizzard's PlayerFrame by default while
+--- retaining an explicit opt-out; the client still chooses health or supported
+--- mana contexts and does not expose energy pings.
+if g.playerResourcePingEnabled == nil then
+    g.playerResourcePingEnabled = true
+end
 --- Login greeting in chat (Runtime/MSUF_WelcomeMessage.lua)
 if g.showWelcomeMessage == nil then
     g.showWelcomeMessage = true
@@ -1687,6 +1694,15 @@ end
 --- EllesmereUI integration is actually available.
 if g.ellesmereEditModeIntegration == nil then
     g.ellesmereEditModeIntegration = true
+end
+--- Optional native Edit Mode adapters. The third-party addons remain the sole
+--- owners of their frames and saved positions; these switches only control
+--- whether MSUF registers movers for them.
+if g.grid2EditModeIntegration == nil then
+    g.grid2EditModeIntegration = true
+end
+if g.detailsEditModeIntegration == nil then
+    g.detailsEditModeIntegration = true
 end
 if g.dropdownStyleMode == nil then
     g.dropdownStyleMode = "msuf"

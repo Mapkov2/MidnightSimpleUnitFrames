@@ -1347,8 +1347,11 @@ local function NormalizePageKey(key)
 end
 local function PushPageHistory(stack, key)
     key = NormalizePageKey(key)
-    if not key then return end
     stack = type(stack) == "table" and stack or {}
+    -- Search is a transient surface: its result state is torn down on leave,
+    -- so landing on it through Back/Forward would show an empty page. It never
+    -- enters either stack; Back skips straight to the page before it.
+    if not key or key == "search" then return stack end
     if stack[#stack] ~= key then stack[#stack + 1] = key end
     while #stack > PAGE_HISTORY_LIMIT do table.remove(stack, 1) end
     return stack
@@ -1393,9 +1396,15 @@ function M.GoBackPage()
     local current = M.activeKey
     if OpenHistoryPage(page) then
         M.pageForwardStack = PushPageHistory(M.pageForwardStack, current)
+        -- Count real Back activations: once the user has gone back a few
+        -- times, the discovery pulse on the button retires for good.
+        local g = type(M.GetGeneralDB) == "function" and M.GetGeneralDB() or nil
+        if type(g) == "table" then g.pageHistoryBackUses = (tonumber(g.pageHistoryBackUses) or 0) + 1 end
+        M.CallIf(M.RefreshPageHistoryNav, true)
         return true, "Opened previous page."
     end
     M.pageBackStack = PushPageHistory(M.pageBackStack, page)
+    M.CallIf(M.RefreshPageHistoryNav, true)
     return false, "Dashboard back navigation is not available right now."
 end
 function M.GoForwardPage()
@@ -1406,10 +1415,39 @@ function M.GoForwardPage()
     local current = M.activeKey
     if OpenHistoryPage(page) then
         M.pageBackStack = PushPageHistory(M.pageBackStack, current)
+        M.CallIf(M.RefreshPageHistoryNav, true)
         return true, "Opened next page."
     end
     M.pageForwardStack = PushPageHistory(M.pageForwardStack, page)
+    M.CallIf(M.RefreshPageHistoryNav, true)
     return false, "Dashboard forward navigation is not available right now."
+end
+--- Chrome hook: keeps the status-strip Back/Forward buttons in sync with the
+--- page history stacks. Cold path -- runs only on page navigation, and stays a
+--- no-op until BuildWindowChrome has created the buttons.
+--- Discovery: until the user has actually gone back a few times, a normal
+--- navigation that arms Back plays a soft one-shot pulse on the button
+--- (C-side animation, no OnUpdate). Navigations driven by the history buttons
+--- themselves pass suppressPulse so active use never blinks at the user.
+local PAGE_HISTORY_DISCOVERY_USES = 3
+function M.RefreshPageHistoryNav(suppressPulse)
+    local back, forward = M.pageHistoryBackButton, M.pageHistoryForwardButton
+    if not (back and forward) then return end
+    local state = M.GetPageHistoryState()
+    if back.SetEnabled then back:SetEnabled(state.canBack == true) end
+    if forward.SetEnabled then forward:SetEnabled(state.canForward == true) end
+    if suppressPulse or state.canBack ~= true then return end
+    local pulse = back._msuf2DiscoveryPulse
+    if not pulse then return end
+    -- Hard combat gate on top of the quiescence teardown: the pulse can never
+    -- start in combat, and a mid-play pulse is stopped by MenuRuntime:Quiesce
+    -- like every other tracked menu animation.
+    if _G.InCombatLockdown and _G.InCombatLockdown() then return end
+    if M.frame and M.frame.IsShown and not M.frame:IsShown() then return end
+    local g = type(M.GetGeneralDB) == "function" and M.GetGeneralDB() or nil
+    if type(g) ~= "table" or (tonumber(g.pageHistoryBackUses) or 0) >= PAGE_HISTORY_DISCOVERY_USES then return end
+    if pulse.Stop then pulse:Stop() end
+    if pulse.Play then pulse:Play() end
 end
 function M.SelectPage(key)
     if M.BlockCombatAction and M.BlockCombatAction() then return false end
@@ -1488,6 +1526,7 @@ function M.SelectPage(key)
     M.CallIf(M.SetActivePageHeader, entry)
     M.CallIf(M.RefreshLayerOverviewContext)
     if not suppressPageHistory then RecordPageNavigation(previousKey, key) end
+    M.CallIf(M.RefreshPageHistoryNav, suppressPageHistory == true)
     M.sessionLastPage = key
     if M.frame then M.frame._msufCurrentKey = key end
     if M.scrollChild then SetFrameHeightIfChanged(M.scrollChild, entry.height or CONTENT_H) end
@@ -2226,6 +2265,111 @@ local function BuildWindowChrome(state)
         if alpha then fs:SetAlpha(alpha) end
         return fs
     end
+    -- Browser-style Back/Forward page navigation. The history stacks live next
+    -- to SelectPage; these two ghost buttons are their only visible surface.
+    -- Cold path by construction: state changes on page navigation only, no
+    -- OnUpdate, no events. All colors come from theme tokens so every menu
+    -- accent (midnight, class, presets, custom, +tint) restyles them for free.
+    local function HistoryNavButton(rotation, onClick)
+        local btn = CreateFrame("Button", nil, status)
+        btn:SetSize(22, 22)
+        if btn.SetHitRectInsets then btn:SetHitRectInsets(-2, -2, -5, -5) end
+        local fill, edge = T.CreateSuperellipseLayers(btn, "_msuf2HistNav", 1, "BACKGROUND", "BORDER")
+        local icon = btn:CreateTexture(nil, "ARTWORK")
+        icon:SetTexture(T.media.dropdownChevron)
+        icon:SetSize(11, 11)
+        icon:SetPoint("CENTER", 0, 0)
+        if icon.SetRotation then icon:SetRotation(rotation) end
+        btn._msuf2HistNavIcon = icon
+        local function Paint(self, hover, down)
+            local c = T.colors
+            local disabled = self.IsEnabled and not self:IsEnabled()
+            if disabled then
+                if fill then fill:SetVertexColor(0, 0, 0, 0) end
+                if edge then edge:SetVertexColor(0, 0, 0, 0) end
+                icon:SetVertexColor(c.disabled[1], c.disabled[2], c.disabled[3], 0.55)
+            elseif down then
+                if fill then fill:SetVertexColor(c.pillActive[1], c.pillActive[2], c.pillActive[3], 0.90) end
+                if edge then edge:SetVertexColor(c.pillEdgeActive[1], c.pillEdgeActive[2], c.pillEdgeActive[3], 0.85) end
+                icon:SetVertexColor(c.pillTextActive[1], c.pillTextActive[2], c.pillTextActive[3], 1)
+            elseif hover then
+                if fill then fill:SetVertexColor(c.pillHover[1], c.pillHover[2], c.pillHover[3], 0.92) end
+                if edge then edge:SetVertexColor(c.pillEdgeHover[1], c.pillEdgeHover[2], c.pillEdgeHover[3], 0.80) end
+                icon:SetVertexColor(c.text[1], c.text[2], c.text[3], 1)
+            else
+                if fill then fill:SetVertexColor(0, 0, 0, 0) end
+                if edge then edge:SetVertexColor(0, 0, 0, 0) end
+                icon:SetVertexColor(c.muted[1], c.muted[2], c.muted[3], 0.96)
+            end
+        end
+        btn:SetScript("OnEnter", function(self) self._msuf2Hover = true; Paint(self, true, self._msuf2Down) end)
+        btn:SetScript("OnLeave", function(self) self._msuf2Hover = nil; self._msuf2Down = nil; Paint(self, false, false) end)
+        btn:SetScript("OnMouseDown", function(self) self._msuf2Down = true; Paint(self, self._msuf2Hover, true) end)
+        btn:SetScript("OnMouseUp", function(self) self._msuf2Down = nil; Paint(self, self._msuf2Hover, false) end)
+        btn:SetScript("OnEnable", function(self) Paint(self, self._msuf2Hover, self._msuf2Down) end)
+        btn:SetScript("OnDisable", function(self) Paint(self, false, false) end)
+        btn:SetScript("OnClick", onClick)
+        -- Disabled arrows keep their tooltip so the affordance stays learnable.
+        if btn.SetMotionScriptsWhileDisabled then btn:SetMotionScriptsWhileDisabled(true) end
+        Paint(btn, false, false)
+        return btn
+    end
+    -- Bottom-left of the strip, in line with the toolbar button row on the
+    -- right; the Profile/Edit/Combat text row above keeps its full width.
+    local histBack = HistoryNavButton(-math.pi * 0.5, function() M.GoBackPage() end)
+    histBack:SetPoint("BOTTOMLEFT", status, "BOTTOMLEFT", 18, 13)
+    local histForward = HistoryNavButton(math.pi * 0.5, function() M.GoForwardPage() end)
+    histForward:SetPoint("LEFT", histBack, "RIGHT", 2, 0)
+    M.pageHistoryBackButton = histBack
+    M.pageHistoryForwardButton = histForward
+    -- Discovery pulse for the Back button: a soft accent halo one frame level
+    -- below the button, driven purely by a C-side animation group. Base alpha
+    -- stays 0, so outside a one-shot Play() the halo costs nothing and shows
+    -- nothing; RefreshPageHistoryNav owns when it may fire.
+    local glow = CreateFrame("Frame", nil, status)
+    glow:SetPoint("TOPLEFT", histBack, "TOPLEFT", -2, 2)
+    glow:SetPoint("BOTTOMRIGHT", histBack, "BOTTOMRIGHT", 2, -2)
+    glow:SetFrameLevel(math.max(0, histBack:GetFrameLevel() - 1))
+    local glowFill, glowEdge = T.CreateSuperellipseLayers(glow, "_msuf2HistNavGlow", 1, "BACKGROUND", "BORDER")
+    if glowFill then glowFill:SetVertexColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.22) end
+    if glowEdge then glowEdge:SetVertexColor(T.colors.pillEdgeActive[1], T.colors.pillEdgeActive[2], T.colors.pillEdgeActive[3], 0.55) end
+    glow:SetAlpha(0)
+    if glow.CreateAnimationGroup then
+        local pulse = glow:CreateAnimationGroup()
+        if T.TrackMenuAnimationGroup then T.TrackMenuAnimationGroup(pulse) end
+        local function PulseStep(order, from, to, duration)
+            local step = pulse:CreateAnimation("Alpha")
+            step:SetOrder(order)
+            step:SetFromAlpha(from)
+            step:SetToAlpha(to)
+            step:SetDuration(duration)
+        end
+        PulseStep(1, 0, 1, 0.18)
+        PulseStep(2, 1, 0, 0.42)
+        histBack._msuf2DiscoveryPulse = pulse
+    end
+    local function HistoryTargetTitle(field)
+        local history = type(M.GetPageHistoryState) == "function" and M.GetPageHistoryState() or nil
+        local spec = history and history[field] and M.pages and M.pages[history[field]]
+        return spec and spec.title and M.Tr(spec.title) or ""
+    end
+    if M.AddTooltip then
+        M.AddTooltip(histBack, function() return M.Tr("Previous page") end,
+            function() return HistoryTargetTitle("previousPage") end, { hook = true })
+        M.AddTooltip(histForward, function() return M.Tr("Next page") end,
+            function() return HistoryTargetTitle("nextPage") end, { hook = true })
+    end
+    if M.RegisterMenuChromeControl then
+        M.RegisterMenuChromeControl(histBack, "toolbar.page-back", "Previous Page", "action", {
+            actionKey = "dashboard_page_back",
+            historyMode = "none", help = "Opens the previous page from the menu page history.",
+        })
+        M.RegisterMenuChromeControl(histForward, "toolbar.page-forward", "Next Page", "action", {
+            actionKey = "dashboard_page_forward",
+            historyMode = "none", help = "Opens the next page from the menu page history.",
+        })
+    end
+    M.RefreshPageHistoryNav(true)
     local sbProfile = StatusText("LEFT", status, "LEFT", 24, 15)
     local sbEdit = StatusText("LEFT", sbProfile, "RIGHT", 16, 0)
     local sbCombat = StatusText("LEFT", sbEdit, "RIGHT", 16, 0)

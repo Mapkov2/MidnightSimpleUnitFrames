@@ -255,6 +255,10 @@ general.classPowerPreviewGuidesEnabled
 ]], "The persisted Guides toggle belongs to the conditionally-created Class Resources inline preview; when that preview exists its layer control carries this exact settingKey.",
     "MSUF_Menu2_ClassPowerPreview.lua CreateLayerSidebar layer.guides registration")
 DefineMenuControlStandalone([[
+general.ellesmereEditModeIntegration
+]], "The EllesmereUI integration toggle is created only while EllesmereUI is loaded; when present it carries this exact settingKey.",
+    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GlobalMisc.lua conditional misc_ellesmere_ui section")
+DefineMenuControlStandalone([[
 general.gradientDirection barScope.gf_party.gradientDirection barScope.gf_raid.gradientDirection
 ]], "The current Bars UI edits independent multi-direction buttons; the legacy scalar direction setting has no equivalent single widget.",
     "MSUF_Menu2_GlobalBars.lua ToggleGradientDirectionForScope direction pad")

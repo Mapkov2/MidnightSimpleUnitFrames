@@ -216,7 +216,7 @@ local function HealthColorModeLabel(mode)
     return HEALTH_COLOR_LABELS[mode] or HEALTH_COLOR_LABELS.dark
 end
 local function HealthColorModeOptions()
-    HEALTH_COLOR_OPTIONS[1].text = "Use Global (" .. HealthColorModeLabel(GlobalHealthColorMode()) .. ")"
+    HEALTH_COLOR_OPTIONS[1].text = M.Format("Use Global (%s)", HealthColorModeLabel(GlobalHealthColorMode()))
     return HEALTH_COLOR_OPTIONS
 end
 local function ToTInlineNPCColorAvailable()
@@ -762,7 +762,7 @@ local function BuildBasics(ctx, builder, unit, label)
             end
             return refs
         end, {
-            title = UnitTopLabel(unit) .. " Health Colors",
+            title = M.Format("%s Health Colors", UnitTopLabel(unit)),
             note = "Colors follow this frame's effective Health Color Scheme.",
             historySource = "menu:unit-frame-basics-health-colors",
             context = function()
@@ -807,7 +807,7 @@ local function BuildBasics(ctx, builder, unit, label)
         function(v)
             if ReadBool(unit, "useBlizzardFrame", false) == (v == true) then return end
             SetBool(unit, "useBlizzardFrame", v, "MSUF2_BLIZZARD_FRAME_OWNERSHIP", { preview = false })
-            local reloadLabel = (label or UnitTopLabel(unit)) .. " Blizzard frame ownership"
+            local reloadLabel = M.Format("%s Blizzard frame ownership", label or UnitTopLabel(unit))
             if type(_G.MSUF_ShowReloadRecommendedPopup) == "function" then
                 _G.MSUF_ShowReloadRecommendedPopup(reloadLabel)
             elseif print then
@@ -823,11 +823,11 @@ local function BuildBasics(ctx, builder, unit, label)
     end
     W.Text(sec, blizzardHint, x2, -80, math.max(190, sectionW - x2 - 14), T.colors.muted)
     if M.AddTooltip then
-        local tooltip = "Keeps Blizzard's native frame active independently of the MSUF frame. Leave MSUF Enable on to show both, or turn MSUF Enable off to use only Blizzard. A UI reload is required."
+        local tooltip = M.Format("Keeps Blizzard's native frame active independently of the MSUF frame. Leave MSUF Enable on to show both, or turn MSUF Enable off to use only Blizzard. A UI reload is required.")
         if unit == "targettarget" then
-            tooltip = tooltip .. " Blizzard Target of Target is a child of Blizzard Target, so both native frames must remain active."
+            tooltip = tooltip .. " " .. M.Format("Blizzard Target of Target is a child of Blizzard Target, so both native frames must remain active.")
         elseif unit == "focustarget" then
-            tooltip = tooltip .. " Blizzard Focus Target is a child of Blizzard Focus, so both native frames must remain active."
+            tooltip = tooltip .. " " .. M.Format("Blizzard Focus Target is a child of Blizzard Focus, so both native frames must remain active.")
         end
         M.AddTooltip(blizzard, "Force Blizzard frame on", tooltip, { hook = true, owner = "ANCHOR_RIGHT" })
     end

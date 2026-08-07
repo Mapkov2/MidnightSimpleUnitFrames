@@ -175,6 +175,37 @@ function A.GlobalRegistry.RegisterBaseSettings(ctx)
         "welcome message", "startup welcome", "start message", "show welcome message", "login welcome message", "startup message", "willkommensnachricht",
         "willkommens nachricht", "willkommens meldung", "willkommen nachricht", "login nachricht", "start meldung",
     }, { category = "Global / Misc", frameType = "misc", reason = "MSUF_ASSISTANT_WELCOME" })
+    RegisterGeneralBoolean("grid2EditModeIntegration", "grid2EditModeIntegration", "Grid2 Edit Mode Integration", true, {
+        "grid2 edit mode", "grid2 mover", "move grid2", "show grid2 in edit mode", "grid2 integration",
+        "grid2 im edit mode", "grid2 verschieben", "grid2 mover anzeigen",
+    }, {
+        category = "Global / Misc", frameType = "misc", reason = "MSUF_ASSISTANT_GRID2_EDIT_MODE",
+        apply = function()
+            local fn = _G.MSUF_Grid2EditMode_SetEnabled
+            if type(fn) == "function" then fn(GeneralDB().grid2EditModeIntegration ~= false) end
+        end,
+    })
+    RegisterGeneralBoolean("detailsEditModeIntegration", "detailsEditModeIntegration", "Details! Edit Mode Integration", true, {
+        "details edit mode", "details mover", "move details", "show details in edit mode", "details integration",
+        "details im edit mode", "details verschieben", "details mover anzeigen",
+    }, {
+        category = "Global / Misc", frameType = "misc", reason = "MSUF_ASSISTANT_DETAILS_EDIT_MODE",
+        apply = function()
+            local fn = _G.MSUF_DetailsEditMode_SetEnabled
+            if type(fn) == "function" then fn(GeneralDB().detailsEditModeIntegration ~= false) end
+        end,
+    })
+    RegisterGeneralBoolean("ellesmereEditModeIntegration", "ellesmereEditModeIntegration", "EllesmereUI Unlock Mode Integration", true, {
+        "ellesmere edit mode", "ellesmereui edit mode", "ellesmere unlock mode", "ellesmereui unlock mode",
+        "ellesmere integration", "ellesmereui integration", "show msuf in ellesmere", "msuf in ellesmereui",
+        "ellesmere im edit mode", "ellesmereui entsperrmodus", "ellesmere entsperrmodus",
+    }, {
+        category = "Global / Misc", frameType = "misc", reason = "MSUF_ASSISTANT_ELLESMERE_EDIT_MODE",
+        apply = function()
+            local fn = _G.MSUF_EllesmereEditMode_SetEnabled
+            if type(fn) == "function" then fn(GeneralDB().ellesmereEditModeIntegration ~= false) end
+        end,
+    })
     RegisterGeneralBoolean("versionCheckEnabled", "versionCheck", "Peer Version Check", true, {
         "version check", "peer version check", "update check", "enable version check", "peer-to-peer version check", "version check peer to peer", "versions pruefung", "versionscheck",
         "version pruefung", "versionspruefung", "peer versionspruefung", "update pruefung", "addon versionscheck",
@@ -230,6 +261,20 @@ function A.GlobalRegistry.RegisterBaseSettings(ctx)
         "target select lost sounds", "play sound on target", "play sound on target lost", "play sound on target select", "ziel sound", "ziel sounds",
         "zielauswahl sound", "ziel verloren sound", "ziel verloren sounds", "sound bei ziel", "sound bei zielwechsel", "spiele sound bei ziel",
     }, { category = "Global / Misc", frameType = "misc", reason = "MSUF_ASSISTANT_TARGET_SOUNDS" })
+    RegisterGeneralBoolean("playerResourcePingEnabled", "playerResourcePing", "Native Player Resource Pings", true, {
+        "player resource ping", "player health ping", "health ping", "mana ping", "resource ping", "12.1 ping",
+        "spieler ressourcen ping", "spieler health ping", "spieler gesundheit ping", "gesundheits ping", "mana ping",
+    }, {
+        category = "Global / Misc",
+        frameType = "misc",
+        reason = "MSUF_ASSISTANT_PLAYER_RESOURCE_PING",
+        apply = function()
+            local fn = _G.MSUF_RefreshPlayerResourcePing
+            if type(fn) == "function" then fn() end
+        end,
+        combatSafe = true,
+        description = "Enables Blizzard's native 12.1 contextual player-resource callout on the MSUF Player frame. Blizzard chooses health or supported mana contexts; separate Health/Power selection and Energy, Rage or Focus pings are not exposed.",
+    })
     Registry:RegisterSetting({
         key = "general.menuLocale",
         label = "Menu Language",

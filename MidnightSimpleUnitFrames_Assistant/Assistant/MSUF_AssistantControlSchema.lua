@@ -1310,6 +1310,25 @@ local function ParseDescriptorValue(top, text)
     local setting = DescriptorValueSetting(top)
     if not setting then return nil, false end
     local Parser, normalized = A.Parser, Normalize(text)
+    -- Relative and proportional wording states no target number: "a bit wider",
+    -- "twice as tall", "20% bigger". Every reader below looks for a literal
+    -- value, so a catalog-backed control answered these by asking the player for
+    -- the number they had just expressed -- and for "20% bigger" the literal
+    -- readers would seize the bare 20 and set the value TO 20. Resolve it
+    -- against the control's current value first, before any of them run.
+    if setting.type == "number" and type(setting.get) == "function"
+        and Parser and type(Parser.RelativeNumberDeltaForText) == "function"
+    then
+        local okDelta, delta = pcall(Parser.RelativeNumberDeltaForText, setting, normalized)
+        if okDelta and type(delta) == "number" and delta ~= 0 then
+            local okCurrent, current = pcall(setting.get)
+            current = okCurrent and tonumber(current) or nil
+            if current then
+                local valid, canonical = Schema.NormalizeSettingValue(setting, current + delta)
+                if valid then return canonical, true end
+            end
+        end
+    end
     if Parser and type(Parser.ValueForRegistrySetting) == "function" then
         local ok, value = pcall(Parser.ValueForRegistrySetting, setting, normalized, text)
         if ok and value ~= nil then

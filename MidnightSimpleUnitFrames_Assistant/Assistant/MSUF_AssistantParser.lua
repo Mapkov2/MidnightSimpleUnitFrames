@@ -5274,6 +5274,8 @@ local function ParseGlobalUIShellPriorityShortcut(normalized, raw)
         { key = "general.showNavigationIcons", label = "Navigation Icons", terms = { "navigation icons", "nav icons" } },
         { key = "general.showGameMenuButton", label = "MSUF Game Menu Button", terms = { "msuf button in game menu", "game menu button", "msuf game menu button", "escape menu button" } },
         { key = "general.showWelcomeMessage", label = "Welcome Message", terms = { "welcome message", "startup message" } },
+        { key = "general.grid2EditModeIntegration", label = "Grid2 Edit Mode Integration", terms = { "grid2 edit mode", "grid2 mover", "move grid2", "grid2 integration" } },
+        { key = "general.detailsEditModeIntegration", label = "Details! Edit Mode Integration", terms = { "details edit mode", "details mover", "move details", "details integration" } },
         { key = "general.versionCheckEnabled", label = "Version Check", terms = { "version check", "version checker" } },
         { key = "general.showMinimapIcon", label = "Minimap Icon", terms = { "minimap icon", "minimap button" } },
         { key = "general.playTargetSelectLostSounds", label = "Target Sounds", terms = { "target sounds", "target select sound", "target lost sound" } },
@@ -7911,7 +7913,15 @@ function A.Parse(text, ctxOverride)
             actionKey = "assistant_nomatch_telemetry"
             label = "Show Assistant phrases to improve"
             summary = "Shows stored phrases that still need better Assistant answers."
-        elseif P.ContainsAny(normalized, P.RootPhrases[775]) then
+        elseif P.ContainsAny(normalized, P.RootPhrases[775])
+            -- ContainsAny matches "msuf status" anywhere, so "set msuf status
+            -- afk text offset x to 0" was answered with the Assistant overview
+            -- and the control was never touched. A status report never carries
+            -- a value, so a number or a "to <value>" tail means this request is
+            -- about a setting that merely contains the words.
+            and not tostring(normalized or ""):find("%d")
+            and not tostring(normalized or ""):find("%sto%s")
+        then
             actionKey = "assistant_status"
             label = "Show MSUF status"
             summary = "Shows read-only MSUF and Assistant details."

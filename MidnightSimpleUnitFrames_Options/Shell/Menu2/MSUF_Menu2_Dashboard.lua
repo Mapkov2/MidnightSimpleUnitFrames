@@ -885,7 +885,7 @@ local function BuildDashboardUX(ctx)
             PaintHeaderTone(open, false)
         end)
         RegisterDashboardControl(head, DashboardMeta(semanticPath, "ephemeral", {
-            help = "Shows or hides the " .. tostring(title) .. " dashboard section.",
+            help = M.Format("Shows or hides the %s dashboard section.", tostring(title)),
         }), title, "button")
         return head
     end

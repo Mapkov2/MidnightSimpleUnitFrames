@@ -91,12 +91,18 @@ local function RegisterBarsNumber(dbKey, attr, label, defaultValue, minValue, ma
         moveAmount = opts.moveAmount,
         intentGuard = opts.intentGuard,
         get = function()
+            if opts.get then return opts.get() end
             local value = tonumber(BarsDB()[dbKey])
             if value == nil then return defaultValue end
             return value
         end,
         set = function(value)
-            BarsDB()[dbKey] = ClampNumber(value, minValue, maxValue, opts.step or 1)
+            value = ClampNumber(value, minValue, maxValue, opts.step or 1)
+            if opts.set then
+                opts.set(value)
+                return
+            end
+            BarsDB()[dbKey] = value
         end,
         apply = function() ApplyRegistrySetting(opts, dbKey, ApplyClassPower) end,
         combatSafe = opts.combatSafe == true,

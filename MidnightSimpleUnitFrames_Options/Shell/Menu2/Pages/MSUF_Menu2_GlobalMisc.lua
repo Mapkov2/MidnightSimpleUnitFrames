@@ -379,6 +379,31 @@ local function BuildMisc(ctx)
             30, -88, (ellesmere._msuf2Width or ctx.width or 720) - 70, T.colors.muted)
         if ellesmereHelp.SetWordWrap then ellesmereHelp:SetWordWrap(true) end
     end
+    local external = b:CollapsibleSection("misc_external_edit_mode", "External Edit Mode", 190, true)
+    local grid2 = BindMiscToggle(external, "Show Grid2 in MSUF Edit Mode",
+        "grid2EditModeIntegration", true, "MSUF2_GRID2_EDIT_MODE", 14, -42, 430, PREVIEW_FALSE,
+        function(value)
+            if type(_G.MSUF_Grid2EditMode_SetEnabled) == "function" then
+                _G.MSUF_Grid2EditMode_SetEnabled(value)
+            end
+        end)
+    M.AddTooltip(grid2, "Grid2 Edit Mode integration",
+        "On (default): MSUF Edit Mode can move the Grid2 layout and its active detached groups. Grid2 remains the owner of its layout and saved positions.",
+        { hook = true })
+    local details = BindMiscToggle(external, "Show Details! in MSUF Edit Mode",
+        "detailsEditModeIntegration", true, "MSUF2_DETAILS_EDIT_MODE", 14, -78, 430, PREVIEW_FALSE,
+        function(value)
+            if type(_G.MSUF_DetailsEditMode_SetEnabled) == "function" then
+                _G.MSUF_DetailsEditMode_SetEnabled(value)
+            end
+        end)
+    M.AddTooltip(details, "Details! Edit Mode integration",
+        "On (default): MSUF Edit Mode can move every active Details! window. Windows snapped together by Details! move as one native group.",
+        { hook = true })
+    local externalHelp = W.Text(external,
+        "Turn either switch off to remove only those external movers. The third-party addon and its settings are not modified.",
+        30, -124, (external._msuf2Width or ctx.width or 720) - 70, T.colors.muted)
+    if externalHelp.SetWordWrap then externalHelp:SetWordWrap(true) end
     local mouseover = b:CollapsibleSection("misc_mouseover_highlight", "Frame Highlights", 340, true)
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(mouseover, { "highlight.mouseover" }, {
@@ -480,7 +505,7 @@ local function BuildMisc(ctx)
     --- Blizzard frame ownership is per unit ("Force Blizzard frame on" in each
     --- unit's Frame Basics), so this section only carries the remaining
     --- Blizzard-adjacent chrome toggles.
-    local blizzard = b:CollapsibleSection("misc_blizzard_frames", "Blizzard Frames", 124, false)
+    local blizzard = b:CollapsibleSection("misc_blizzard_frames", "Blizzard Frames", 170, false)
     BindMiscToggle(blizzard, "Show MSUF minimap icon", "showMinimapIcon", true, "MSUF2_MINIMAP_ICON", nil, nil, nil, nil,
         function(v)
             if type(_G.MSUF_SetMinimapIconEnabled) == "function" then
@@ -496,6 +521,14 @@ local function BuildMisc(ctx)
             Call("MSUF_TargetSoundDriver_ResetState")
             if v then Call("MSUF_TargetSoundDriver_Ensure") end
         end)
+    local resourcePing = BindMiscToggle(blizzard, "Enable native Player resource pings (12.1)",
+        "playerResourcePingEnabled", true, "MSUF2_PLAYER_RESOURCE_PING", nil, nil, nil, PREVIEW_FALSE,
+        function()
+            Call("MSUF_RefreshPlayerResourcePing")
+        end)
+    M.AddTooltip(resourcePing, "Native Player resource pings",
+        "Contextual pings over the MSUF Player frame can call out health and, when Blizzard supports it, mana. Blizzard does not expose separate Health/Power selection or Energy, Rage and Focus pings. The portrait keeps the normal Player unit ping and radial wheel.",
+        { hook = true })
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
-M.RegisterPage("opt_misc", { title = "MSUF Miscellaneous", build = BuildMisc, version = 15 })
+M.RegisterPage("opt_misc", { title = "MSUF Miscellaneous", build = BuildMisc, version = 16 })

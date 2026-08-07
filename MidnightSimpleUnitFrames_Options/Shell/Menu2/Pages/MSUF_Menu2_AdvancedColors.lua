@@ -2253,7 +2253,7 @@ for _, texSlot in ipairs({
         return target
     end)
     FixedContextFactory(slotId .. ".gradient", function()
-        local target = ContextTarget(slotId .. ".gradient", slotLabel .. " gradient end",
+        local target = ContextTarget(slotId .. ".gradient", M.Format("%s gradient end", Tr(slotLabel)),
             function() return GeneralRGB(slotPrefix .. "Gradient2", 0, 0, 0) end,
             function(r, g, b) M._SetAllTextureLayerRGB(slotPrefix .. "Gradient2", r, g, b) end)
         local state = ContextDBRowsState({ "general", "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" },

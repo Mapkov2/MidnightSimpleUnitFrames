@@ -113,6 +113,25 @@ local function BuildChanges(settings, value, relativeDelta, direction)
     return changes
 end
 
+-- Copying ONE dimension from another frame ("the same width as the target
+-- frame"). Kept beside the both-dimension patterns inside the shortcut below,
+-- which only ever matched requests naming the whole size.
+local SINGLE_DIMENSION_MATCH_PATTERNS = {
+    { dimension = "width",
+        "^(.-)%s+the same width as%s+(.+)$",
+        "^(.-)%s+same width as%s+(.+)$",
+        "^(.-)%s+as wide as%s+(.+)$",
+        "^(.-)%s+gleiche breite wie%s+(.+)$",
+        "^(.-)%s+so breit wie%s+(.+)$" },
+    { dimension = "height",
+        "^(.-)%s+the same height as%s+(.+)$",
+        "^(.-)%s+same height as%s+(.+)$",
+        "^(.-)%s+as tall as%s+(.+)$",
+        "^(.-)%s+as high as%s+(.+)$",
+        "^(.-)%s+gleiche hoehe wie%s+(.+)$",
+        "^(.-)%s+so hoch wie%s+(.+)$" },
+}
+
 function P.ParseUnitSizeMatchShortcut(text)
     -- "Make player as big as target" depends on current live setting values. Read them here
     -- to build an explicit width/height plan, then let the router apply the change normally.
@@ -162,7 +181,45 @@ function P.ParseUnitSizeMatchShortcut(text)
         if target and source and target ~= source then break end
         target, source = nil, nil
     end
+
+    -- The patterns above match BOTH dimensions at once. A request naming a
+    -- single one ("make the focus frame the same width as the target frame")
+    -- matched none of them and fell through to a generic "I'm not confident
+    -- enough to guess" -- even though it is the most precise form of the
+    -- request, because it says exactly which value to copy and from where.
+    local matchDimension
+    if not target or not source then
+        for i = 1, #SINGLE_DIMENSION_MATCH_PATTERNS do
+            local entry = SINGLE_DIMENSION_MATCH_PATTERNS[i]
+            for j = 1, #entry do
+                local before, after = text:match(entry[j])
+                if before then
+                    local candidateTarget, candidateSource = unitInFragment(before), unitInFragment(after)
+                    if candidateTarget and candidateSource and candidateTarget ~= candidateSource then
+                        target, source, matchDimension = candidateTarget, candidateSource, entry.dimension
+                        break
+                    end
+                end
+            end
+            if matchDimension then break end
+        end
+    end
     if not target or not source then return nil end
+
+    if matchDimension then
+        local setting = Registry and Registry:GetSetting(target .. "." .. matchDimension)
+        local sourceSetting = Registry and Registry:GetSetting(source .. "." .. matchDimension)
+        local sourceValue = sourceSetting and type(sourceSetting.get) == "function"
+            and tonumber(sourceSetting.get()) or nil
+        if not setting or sourceValue == nil then return nil end
+        return {
+            kind = "changes",
+            changes = { { setting = setting, value = sourceValue, valueLabel = tostring(sourceValue) } },
+            label = "Match unit frame " .. matchDimension,
+            summary = "Sets one unit frame dimension to another unit frame's current value.",
+            compoundComplete = true,
+        }
+    end
 
     local widthSetting = Registry and Registry:GetSetting(target .. ".width")
     local heightSetting = Registry and Registry:GetSetting(target .. ".height")
@@ -2072,24 +2129,60 @@ function P.ParseFrameSizeExactShortcut(text)
     }
 end
 
-function P.BuildFrameResizeChanges(kind, targets, dimension, widthDelta, heightDelta)
+-- A proportional resize ("20 percent bigger", "twice as big") cannot be one
+-- pixel amount: a 275px width and a 40px height need different deltas to grow by
+-- the same proportion. Returns the factor, or nil for a plain pixel request.
+function P.FrameResizeFactor(text, direction)
+    text = tostring(text or "")
+    local percent = tonumber(text:match("(%d+%.?%d*)%s*%%")
+        or text:match("(%d+%.?%d*)%s*percent")
+        or text:match("(%d+%.?%d*)%s*prozent"))
+    if percent == nil then
+        if text:find("twice as", 1, true) or text:find("double", 1, true) then return 2 end
+        if text:find("half as", 1, true) or text:find("halve", 1, true) then return 0.5 end
+        return nil
+    end
+    if percent <= 0 then return nil end
+    if direction == "decrease" then return 1 - percent / 100 end
+    return 1 + percent / 100
+end
+
+function P.BuildFrameResizeChanges(kind, targets, dimension, widthDelta, heightDelta, factor)
     local changes = {}
+    -- With a factor, each control's delta comes from its OWN current value.
+    -- Without this, "make the player frame 20 percent bigger" added a flat 20px
+    -- to both width and height (275 -> 295, 40 -> 60) instead of scaling them.
+    local function DeltaFor(setting, fallback)
+        if not factor or type(setting.get) ~= "function" then return fallback end
+        local ok, current = pcall(setting.get)
+        current = ok and tonumber(current) or nil
+        if not current or current == 0 then return fallback end
+        local delta = current * factor - current
+        if delta == 0 then return fallback end
+        return delta
+    end
     for i = 1, #(targets or {}) do
         local target = targets[i]
         if dimension == "both" or dimension == "width" then
             local setting = Registry and Registry:GetSetting(P.FrameResizeSettingKey(kind, target, "width"))
-            if setting then changes[#changes + 1] = { setting = setting, relativeDelta = widthDelta, direction = widthDelta < 0 and "decrease" or "increase" } end
+            if setting then
+                local delta = DeltaFor(setting, widthDelta)
+                changes[#changes + 1] = { setting = setting, relativeDelta = delta, direction = delta < 0 and "decrease" or "increase" }
+            end
         end
         if dimension == "both" or dimension == "height" then
             local setting = Registry and Registry:GetSetting(P.FrameResizeSettingKey(kind, target, "height"))
-            if setting then changes[#changes + 1] = { setting = setting, relativeDelta = heightDelta, direction = heightDelta < 0 and "decrease" or "increase" } end
+            if setting then
+                local delta = DeltaFor(setting, heightDelta)
+                changes[#changes + 1] = { setting = setting, relativeDelta = delta, direction = delta < 0 and "decrease" or "increase" }
+            end
         end
     end
     return changes
 end
 
-function P.FrameResizeChoice(kind, targets, dimension, widthDelta, heightDelta, direction)
-    local changes = P.BuildFrameResizeChanges(kind, targets, dimension, widthDelta, heightDelta)
+function P.FrameResizeChoice(kind, targets, dimension, widthDelta, heightDelta, direction, factor)
+    local changes = P.BuildFrameResizeChanges(kind, targets, dimension, widthDelta, heightDelta, factor)
     if #changes == 0 then return nil end
     local action = P.FrameResizeActionLabel(direction)
     local targetLabel = P.FrameResizeTargetLabel(kind, targets)
@@ -2163,9 +2256,10 @@ function P.ParseFrameResizeShortcut(text)
 
     local widthDelta = P.FrameResizeDelta(text, "width", direction)
     local heightDelta = P.FrameResizeDelta(text, "height", direction)
+    local factor = P.FrameResizeFactor(text, direction)
     local forceBoth = ContainsAny(text, GeometryPhrases[120])
     if forceBoth then
-        local changes = P.BuildFrameResizeChanges(kind, targets, "both", widthDelta, heightDelta)
+        local changes = P.BuildFrameResizeChanges(kind, targets, "both", widthDelta, heightDelta, factor)
         if #changes == 0 then return nil end
         return {
             kind = "changes",
@@ -2177,9 +2271,9 @@ function P.ParseFrameResizeShortcut(text)
     end
 
     local choices = {}
-    local both = P.FrameResizeChoice(kind, targets, "both", widthDelta, heightDelta, direction)
-    local width = P.FrameResizeChoice(kind, targets, "width", widthDelta, heightDelta, direction)
-    local height = P.FrameResizeChoice(kind, targets, "height", widthDelta, heightDelta, direction)
+    local both = P.FrameResizeChoice(kind, targets, "both", widthDelta, heightDelta, direction, factor)
+    local width = P.FrameResizeChoice(kind, targets, "width", widthDelta, heightDelta, direction, factor)
+    local height = P.FrameResizeChoice(kind, targets, "height", widthDelta, heightDelta, direction, factor)
     if both then choices[#choices + 1] = both end
     if width then choices[#choices + 1] = width end
     if height then choices[#choices + 1] = height end
@@ -2847,7 +2941,7 @@ local function BarOutlineHighlightSpec(text)
     if ContainsAny(text, GeometryPhrases[159]) then
         return "barOutlineColorA", "Bar Outline Opacity"
     end
-    -- Draw order before thickness: the layer phrases in [285] are supersets of
+    -- Layer before thickness: the layer phrases in [285] are supersets of
     -- the thickness phrases in [160] ("bar outline strata" contains "bar
     -- outline"), so probing thickness first would never leave a layer match.
     if ContainsAny(text, GeometryPhrases[285]) then

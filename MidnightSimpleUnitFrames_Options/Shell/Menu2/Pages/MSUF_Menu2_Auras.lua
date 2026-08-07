@@ -83,13 +83,14 @@ local function AURA_COOLDOWN_COLOR_REFERENCES()
 end
 local AURA_DURATION_BAR_COLOR_REFERENCES = { "aura.cooldown.safe" }
 local AURA_SHARED_COLOR_NOTE = "Shared by all Aura scopes."
+-- `title` arrives already localized; only the surrounding wording is a format key.
 function M.AttachAuraFontsAndColors(section, title, unit)
     if not (section and W.AttachContextColorReferences) then return end
     local references = AURA_COOLDOWN_COLOR_REFERENCES()
     if #references == 1 then references[2] = AURA_DURATION_BAR_COLOR_REFERENCES[1] end
     W.AttachContextColorReferences(section, references, {
-        title = title .. " Fonts & Colors",
-        historyLabel = title .. " color",
+        title = M.Format("%s Fonts & Colors", title),
+        historyLabel = M.Format("%s color", title),
         historySource = "menu:auras-fonts-colors",
         scopeTag = "Shared",
         note = AURA_SHARED_COLOR_NOTE,
@@ -100,7 +101,7 @@ function M.AttachAuraFontsAndColors(section, title, unit)
             unit = unit,
             kind = "aura",
             colorReferences = references,
-            colorTitle = title .. " Colors",
+            colorTitle = M.Format("%s Colors", title),
             colorScopeTag = "Shared",
             colorNote = AURA_SHARED_COLOR_NOTE,
             subtitle = "Aura text follows the shared Fonts settings; duration colors stay synchronized with Aura Colors.",
@@ -210,6 +211,11 @@ end
 local function Tr(text)
     if type(M.Tr) == "function" then return M.Tr(text) end
     return text
+end
+-- Search-result suffix shared by every aura list status line.
+local function MatchSuffix(query, count)
+    if query == nil or query == "" then return "" end
+    return M.Format(" - %d matches", count)
 end
 local function AuraCatalogToken(value, fallback)
     local token = tostring(value or ""):lower():gsub("[^%w]+", "-"):gsub("^%-+", ""):gsub("%-+$", "")
@@ -614,12 +620,12 @@ local function BuildAuraStyleNav(ctx, b, scope)
         end,
     }), values, "style.container.selector")
     local current = CurrentAuraStyleContainer(scope)
-    local title = current == "playerDefensives" and "Shared Player Defensives Preview"
-        or current == "targetDots" and "Shared Dots on Target Preview"
-        or scope == "shared" and ("Shared " .. LaneTitle(current) .. " Preview")
-        or current == "custom4" and (scope == "player" and "Defensive Buff Aura Style" or "Dots on target Aura Style")
-        or (tostring(current):match("^custom[123]$") and ("Custom " .. tostring(current):match("(%d)$") .. " Aura Style"))
-        or (LaneTitle(current) .. " Aura Style")
+    local title = current == "playerDefensives" and Tr("Shared Player Defensives Preview")
+        or current == "targetDots" and Tr("Shared Dots on Target Preview")
+        or scope == "shared" and M.Format("Shared %s Preview", Tr(LaneTitle(current)))
+        or current == "custom4" and (scope == "player" and Tr("Defensive Buff Aura Style") or Tr("Dots on target Aura Style"))
+        or (tostring(current):match("^custom[123]$") and M.Format("Custom %s Aura Style", tostring(current):match("(%d)$")))
+        or M.Format("%s Aura Style", Tr(LaneTitle(current)))
     M.AttachAuraFontsAndColors(section, title, scope)
     -- Dock the container strip beneath the already-docked scope strip, like
     -- the unit pages' Editing strip: scope, container and preview form one fixed
@@ -1552,7 +1558,7 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
                 end
             end
             local label = ScopeLabel(previewScope)
-            titleLabel:SetText(label .. " Sample Preview")
+            titleLabel:SetText(M.Format("%s Sample Preview", Tr(label)))
             if type(opts.getSampleMeta) == "function" then
                 meta:SetText(opts.getSampleMeta(cfg, previewScope) or "")
             else
@@ -1604,7 +1610,7 @@ local function BuildAuraStylePreviewWorkbench(ctx, b, scope, lane, previewContai
     local previewLabel = previewContainer == "playerDefensives" and "Player Defensives"
         or previewContainer == "targetDots" and "Dots on Target"
         or LanePlural(previewContainer or lane)
-    W.LabelAt(section, "Shared Preview - " .. previewLabel, pad, rowY,
+    W.LabelAt(section, M.Format("Shared Preview - %s", Tr(previewLabel)), pad, rowY,
         width - (pad * 2), "GameFontNormalSmall", T.colors.accent)
 
     local refreshPreview
@@ -1984,7 +1990,7 @@ local function BuildUnitStyle(ctx, b, scope, options)
         local ssw = BodyWidth(sharedShape)
         local appearanceLabel = previewContainer == "playerDefensives" and "Player Defensives"
             or previewContainer == "targetDots" and "Dots on Target" or LaneTitle(lane)
-        local shape = BindStyleDropdown(sharedShape, appearanceLabel .. " Icon Shape", 24, -48,
+        local shape = BindStyleDropdown(sharedShape, M.Format("%s Icon Shape", Tr(appearanceLabel)), 24, -48,
             M.AURA_ICON_SHAPE_VALUES, ssw - 48, ReadScopeIconShape, WriteScopeIconShape, "AURAS3_ICON_SHAPE")
         AddTooltip(shape, "Global icon shape",
             "Applies to every UnitFrame and GroupFrame icon of this Aura type. Spell Icons use the Buff appearance.")
@@ -2236,7 +2242,7 @@ local function BuildUnitStyle(ctx, b, scope, options)
     local stack = b:CollapsibleSection(baseId .. "_stack", "Stack Count", 296, false)
     if W.AttachContextColorShortcut then
         W.AttachContextColorShortcut(stack, {
-            title = LaneTitle(lane) .. " Stack Text Settings",
+            title = M.Format("%s Stack Text Settings", Tr(LaneTitle(lane))),
             historyLabel = "Aura stack text color",
             historySource = "menu:auras-stack-text-color",
             scopeTag = "Shared",
@@ -2280,7 +2286,7 @@ local function BuildUnitStyle(ctx, b, scope, options)
     local cooldown = b:CollapsibleSection(baseId .. "_cooldown", "Cooldown Text", 374, true)
     if W.AttachContextColorShortcut then
         W.AttachContextColorShortcut(cooldown, {
-            title = LaneTitle(lane) .. " Cooldown Text Settings",
+            title = M.Format("%s Cooldown Text Settings", Tr(LaneTitle(lane))),
             historyLabel = "Aura cooldown text color",
             historySource = "menu:auras-cooldown-text-color",
             scopeTag = "Shared",
@@ -2290,7 +2296,7 @@ local function BuildUnitStyle(ctx, b, scope, options)
                 unit = unit,
                 kind = "aura",
                 colorReferences = AURA_COOLDOWN_COLOR_REFERENCES,
-                colorTitle = LaneTitle(lane) .. " Cooldown Colors",
+                colorTitle = M.Format("%s Cooldown Colors", Tr(LaneTitle(lane))),
                 subtitle = "Aura cooldown text follows the shared Fonts settings.",
                 capabilities = {
                     opacity = false, baseline = false,
@@ -2315,7 +2321,7 @@ local function BuildUnitStyle(ctx, b, scope, options)
     -- accordion header in either the inline or narrow stacked layout.
     local durationBar = b:CollapsibleSection(baseId .. "_duration_bar", "Duration Bar", durationInline and 220 or 332, false)
     W.AttachContextColorReferences(durationBar, AURA_DURATION_BAR_COLOR_REFERENCES, {
-        title = LaneTitle(lane) .. " Duration Bar Color",
+        title = M.Format("%s Duration Bar Color", Tr(LaneTitle(lane))),
         scopeTag = "Shared",
         note = AURA_SHARED_COLOR_NOTE,
     })
@@ -2466,7 +2472,7 @@ local function BuildUnitStyle(ctx, b, scope, options)
             local decimal = Round(ReadScopeNumber("cooldownDecimalSeconds", 3, 0, 30))
             W.SetCollapsibleBadges(cooldown, {
                 { text = cooldownEnabled and (tostring(Round(ReadScopeNumber("cooldownTextSize", 14, 6, 40))) .. "px / " .. AnchorLabel(ReadScopeCooldownAnchor()) .. " / " .. ChoiceLabel(COOLDOWN_SWIPE_DIRECTION_VALUES, ReadScopeSwipeDirection(), "Normal")) or "Off", kind = cooldownEnabled and "accent" or "muted", showWhenClosed = true },
-                { text = decimal > 0 and ("Decimals below " .. tostring(decimal) .. "s") or "Whole seconds", kind = "info", showWhenClosed = true },
+                { text = decimal > 0 and M.Format("Decimals below %ds", decimal) or Tr("Whole seconds"), kind = "info", showWhenClosed = true },
             })
 
             refreshDurationBarSummary()
@@ -2540,7 +2546,7 @@ local function BuildGroupStyle(ctx, b, scope, options)
     local cooldown = b:CollapsibleSection(baseId .. "_cooldown", "Cooldown Text", 336, true)
     if W.AttachContextColorShortcut then
         W.AttachContextColorShortcut(cooldown, {
-            title = LaneTitle(lane) .. " Cooldown Text Settings",
+            title = M.Format("%s Cooldown Text Settings", Tr(LaneTitle(lane))),
             historyLabel = "Group aura cooldown text color",
             historySource = "menu:group-auras-cooldown-text-color",
             scopeTag = "Shared",
@@ -2549,7 +2555,7 @@ local function BuildGroupStyle(ctx, b, scope, options)
                 scope = "shared",
                 kind = "aura",
                 colorReferences = AURA_COOLDOWN_COLOR_REFERENCES,
-                colorTitle = LaneTitle(lane) .. " Cooldown Colors",
+                colorTitle = M.Format("%s Cooldown Colors", Tr(LaneTitle(lane))),
                 subtitle = "Group aura cooldown text follows the shared Fonts settings.",
                 capabilities = {
                     opacity = false, baseline = false,
@@ -2581,7 +2587,7 @@ local function BuildGroupStyle(ctx, b, scope, options)
     local durationInline = (b.width or 720) >= 520
     local durationBar = b:CollapsibleSection(baseId .. "_duration_bar", "Duration Bar", durationInline and 220 or 332, false)
     W.AttachContextColorReferences(durationBar, AURA_DURATION_BAR_COLOR_REFERENCES, {
-        title = LaneTitle(lane) .. " Duration Bar Color",
+        title = M.Format("%s Duration Bar Color", Tr(LaneTitle(lane))),
         scopeTag = "Shared",
         note = AURA_SHARED_COLOR_NOTE,
     })
@@ -2614,7 +2620,7 @@ local function BuildGroupStyle(ctx, b, scope, options)
     local stack = b:CollapsibleSection(baseId .. "_stack", "Stack Count", 270, false)
     if W.AttachContextColorShortcut then
         W.AttachContextColorShortcut(stack, {
-            title = LaneTitle(lane) .. " Stack Text Settings",
+            title = M.Format("%s Stack Text Settings", Tr(LaneTitle(lane))),
             historyLabel = "Group aura stack text color",
             historySource = "menu:group-auras-stack-text-color",
             scopeTag = "Shared",
@@ -2689,7 +2695,7 @@ local function BuildGroupStyle(ctx, b, scope, options)
         local decimal = Round(tonumber(group.cooldownDecimalSeconds) or 3)
         W.SetCollapsibleBadges(cooldown, {
             { text = cooldownEnabled and (tostring(Round(tonumber(group.cooldownSize) or 8)) .. "px / " .. AnchorLabel(group.cooldownAnchor or "CENTER") .. " / " .. (group.cooldownSwipeReverse == true and "Reverse" or "Normal")) or "Off", kind = cooldownEnabled and "accent" or "muted", showWhenClosed = true },
-            { text = decimal > 0 and ("Decimals below " .. tostring(decimal) .. "s") or "Whole seconds", kind = "info", showWhenClosed = true },
+            { text = decimal > 0 and M.Format("Decimals below %ds", decimal) or Tr("Whole seconds"), kind = "info", showWhenClosed = true },
         })
 
         refreshDurationBarSummary()
@@ -2825,11 +2831,11 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
         W.LabelAt(section, "Blizzard Filters & Lists", 24, originY - 24, w - 48, "GameFontNormal", T.colors.accent)
     end
     if showFilter then
-        local filter = Card(section, "Native " .. laneText .. " Filter", "Filter token for " .. ScopeLabel(scope) .. " group-frame " .. laneText .. "s.", 24, originY - 42, filterW, lane == "debuff" and 296 or 234)
-        W.LabelAt(filter, fixedLane and (laneText .. " Content") or "Filter Type", 16, -72, fixedLane and 260 or 90, "GameFontNormalSmall", T.colors.accent)
+        local filter = Card(section, M.Format("Native %s Filter", Tr(laneText)), M.Format("Filter token for %s group-frame %s.", Tr(ScopeLabel(scope)), Tr(LanePlural(lane))), 24, originY - 42, filterW, lane == "debuff" and 296 or 234)
+        W.LabelAt(filter, fixedLane and M.Format("%s Content", Tr(laneText)) or Tr("Filter Type"), 16, -72, fixedLane and 260 or 90, "GameFontNormalSmall", T.colors.accent)
         if not fixedLane then BuildLaneTabs(ctx, filter, "auraFilterLane", 112, -68, min(300, w - 180)) end
         local dropdownW = min(360, max(240, floor((filterW - 48) * 0.55)))
-        BindGroupDropdown(ctx, filter, laneText .. " Filter", 16, -142, GroupFilterValues(lane), dropdownW, scope, lane, "filterToken", "ALL", "visual")
+        BindGroupDropdown(ctx, filter, M.Format("%s Filter", Tr(laneText)), 16, -142, GroupFilterValues(lane), dropdownW, scope, lane, "filterToken", "ALL", "visual")
         W.Text(filter, "Choose which auras Blizzard provides for this lane.", 40 + dropdownW, -142, max(220, filterW - dropdownW - 64), T.colors.muted)
         local hidePermanent = BindSwitch(ctx, filter, "Hide permanent auras", 16, -192, dropdownW,
             ReadHidePermanent, WriteHidePermanent,
@@ -3002,7 +3008,8 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
             W.SetControlsEnabled({ directInput, directAdd, directRemove }, NATIVE_EXACT_AURA_FILTERS_ENABLED)
         end
         local entries = type(Model.GroupBlacklistEntries) == "function" and Model.GroupBlacklistEntries(scope, lane) or {}
-        prepared:SetText((#entries == 1 and "1 blocked spell" or tostring(#entries) .. " blocked spells") .. " · click an entry to remove")
+        prepared:SetText(#entries == 1 and Tr("1 blocked spell · click an entry to remove")
+            or M.Format("%d blocked spells · click an entry to remove", #entries))
         empty:SetShown(#entries == 0)
         listScroll:SetShown(#entries > 0)
         listChild:SetHeight(max(48, #entries * 24))
@@ -3062,7 +3069,7 @@ local function SetUnitAuraTool(unit, container, tool)
 end
 
 local function BuildCompactUnitAuraLayout(ctx, b, unit, kind)
-    local title = kind == "debuff" and "Debuff Layout" or "Buff Layout"
+    local title = kind == "debuff" and Tr("Debuff Layout") or Tr("Buff Layout")
     -- Stufe-1 pilot: this section renders through the uniform W.SettingsRows
     -- grid (fixed cell metrics, per-value reset) instead of hand-placed
     -- offsets. Control identities, setters and apply reasons are unchanged.
@@ -3456,8 +3463,9 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
                 or Model.BlacklistSpellValues(CurrentPreset())
             local missing = 0
             for i = 1, #setSpells do if not blocked[tostring(setSpells[i].value)] then missing = missing + 1 end end
-            selectedSummary:SetText(tostring(#setSpells) .. " spells in this set - "
-                .. (missing == 0 and "all already blocked" or (tostring(missing) .. " can still be added")))
+            selectedSummary:SetText(missing == 0
+                and M.Format("%d spells in this set - all already blocked", #setSpells)
+                or M.Format("%d spells in this set - %d can still be added", #setSpells, missing))
             W.SetControlEnabled(addSet, missing > 0)
             local selectedSpell = CurrentSpell()
             W.SetControlEnabled(addSpell, selectedSpell ~= nil and not blocked[tostring(selectedSpell)])
@@ -3470,8 +3478,7 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
                 .. tostring(entry.spellID or entry.value or "")):lower()
             if query == "" or haystack:find(query, 1, true) then visible[#visible + 1] = entry end
         end
-        prepared:SetText((#entries == 1 and "Blocked spells (1)" or ("Blocked spells (" .. tostring(#entries) .. ")"))
-            .. (query ~= "" and (" - " .. tostring(#visible) .. " matches") or ""))
+        prepared:SetText(M.Format("Blocked spells (%d)", #entries) .. MatchSuffix(query, #visible))
         empty:SetText(#entries == 0 and Tr(emptyText) or M.Format(Tr("No results for \"%s\"."), query))
         empty:SetShown(#visible == 0)
         listScroll:SetShown(#visible > 0)
@@ -3720,8 +3727,9 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
         local setSpells = Model.BlacklistSpellValues(CurrentPreset())
         local missing = 0
         for i = 1, #setSpells do if not blocked[tostring(setSpells[i].value)] then missing = missing + 1 end end
-        selectedSummary:SetText(tostring(#setSpells) .. " spells in this set - "
-            .. (missing == 0 and "all already blocked" or (tostring(missing) .. " can still be added")))
+        selectedSummary:SetText(missing == 0
+            and M.Format("%d spells in this set - all already blocked", #setSpells)
+            or M.Format("%d spells in this set - %d can still be added", #setSpells, missing))
         W.SetControlEnabled(addSet, missing > 0)
         local selectedSpell = CurrentSpell()
         W.SetControlEnabled(addSpell, selectedSpell ~= nil and not blocked[tostring(selectedSpell)])
@@ -3733,8 +3741,7 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
                 .. tostring(entry.spellID or entry.value or "")):lower()
             if query == "" or haystack:find(query, 1, true) then visible[#visible + 1] = entry end
         end
-        prepared:SetText((#entries == 1 and "Blocked spells (1)" or ("Blocked spells (" .. tostring(#entries) .. ")"))
-            .. (query ~= "" and (" - " .. tostring(#visible) .. " matches") or ""))
+        prepared:SetText(M.Format("Blocked spells (%d)", #entries) .. MatchSuffix(query, #visible))
         empty:SetText(#entries == 0 and Tr(emptyText) or M.Format(Tr("No results for \"%s\"."), query))
         empty:SetShown(#visible == 0)
         listScroll:SetShown(#visible > 0)
@@ -4024,9 +4031,8 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                 if icon then icon:SetShown(shown) end
                 if switch then switch:SetShown(shown) end
             end
-            predefinedStatus:SetText(tostring(enabledCount) .. " / " .. tostring(#predefined)
-                .. " predefined enabled"
-                .. (query ~= "" and (" - " .. tostring(visibleCount) .. " matches") or ""))
+            predefinedStatus:SetText(M.Format("%d / %d predefined enabled", enabledCount, #predefined)
+                .. MatchSuffix(query, visibleCount))
             predefinedChild:SetHeight(max(184, visibleCount * 30))
         end
         for i = 1, #predefined do
@@ -4119,9 +4125,8 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                 local haystack = (tostring(entry.text or "") .. " " .. tostring(entry.spellID or "")):lower()
                 if query == "" or haystack:find(query, 1, true) then visible[#visible + 1] = entry end
             end
-            status:SetText(tostring(enabledPredefined) .. " predefined enabled · "
-                .. tostring(#entries) .. " custom · click a custom entry to remove"
-                .. (query ~= "" and (" - " .. tostring(#visible) .. " matches") or ""))
+            status:SetText(M.Format("%d predefined enabled · %d custom · click a custom entry to remove",
+                enabledPredefined, #entries) .. MatchSuffix(query, #visible))
             empty:SetText(#entries == 0 and Tr("No custom buffs added.")
                 or M.Format(Tr("No results for \"%s\"."), query))
             empty:SetShown(#visible == 0)
@@ -4254,9 +4259,9 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                 local haystack = (tostring(entry.text or "") .. " " .. tostring(entry.spellID or "")):lower()
                 if query == "" or haystack:find(query, 1, true) then visible[#visible + 1] = entry end
             end
-            status:SetText((#entries == 1 and "1 tracked DoT" or tostring(#entries) .. " tracked DoTs")
-                .. " · click an entry to remove"
-                .. (query ~= "" and (" - " .. tostring(#visible) .. " matches") or ""))
+            status:SetText((#entries == 1 and Tr("1 tracked DoT · click an entry to remove")
+                or M.Format("%d tracked DoTs · click an entry to remove", #entries))
+                .. MatchSuffix(query, #visible))
             empty:SetText(#entries == 0 and Tr("No DoT selected. Choose one above or add a custom Spell ID.")
                 or M.Format(Tr("No results for \"%s\"."), query))
             empty:SetShown(#visible == 0)
@@ -4286,14 +4291,24 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
         local auraType = item.auraType == "DEBUFF" and "DEBUFF" or "BUFF"
         local auraNoun = auraType == "DEBUFF" and "debuff" or "buff"
         local auraPlural = auraNoun .. "s"
+        -- Whole sentences per lane: inserting the noun with %s breaks declension in
+        -- German and Russian. `auraNoun` itself stays raw - it feeds Assistant action ids.
+        local isDebuff = auraType == "DEBUFF"
+        local addLabel = isDebuff and Tr("Add debuff") or Tr("Add buff")
+        local trackHint = isDebuff and Tr("Track a debuff - Spell ID, link, or name")
+            or Tr("Track a buff - Spell ID, link, or name")
+        local addBody = isDebuff and Tr("Adds this exact debuff to the custom container.")
+            or Tr("Adds this exact buff to the custom container.")
+        local removeBody = isDebuff and Tr("Stops tracking this debuff in the custom container.")
+            or Tr("Stops tracking this buff in the custom container.")
         W.Text(section, auraType, 24, -36, 58, T.colors.accent)
         W.Text(section, Tr(NATIVE_EXACT_AURA_FILTERS_TEXT), 88, -36, inner - 64, T.colors.muted)
         local inputValue = ""
         local inputW = max(140, min(floor(inner * 0.62), inner - 120))
-        local input = BindTextInput(ctx, section, "Track a " .. auraNoun .. " - Spell ID, link, or name", 24, -76, inputW,
+        local input = BindTextInput(ctx, section, trackHint, 24, -76, inputW,
             function() return inputValue end, function(value) inputValue = value or "" end,
             false, AuraControlMeta(ctx, "custom-container.whitelist.input", "ephemeral"))
-        local add = ActionButton(section, "Add " .. auraNoun, 108, "primary")
+        local add = ActionButton(section, addLabel, 108, "primary")
         add:SetPoint("TOPLEFT", section, "TOPLEFT", 36 + inputW, -100)
         add:SetScript("OnClick", function()
             local value = input and input.GetText and input:GetText() or inputValue
@@ -4311,7 +4326,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
         })
         AddTooltip(input, "Exact aura tracking",
             "Enter a Spell ID, paste a spell link, or type a spell name. This whitelist tracks exact Spell IDs.")
-        AddTooltip(add, "Add " .. auraNoun, "Adds this exact " .. auraNoun .. " to the custom container.")
+        AddTooltip(add, addLabel, addBody)
         local status = W.Text(section, "", 24, -136, floor(inner * 0.52), T.colors.accent)
         local empty = W.Text(section, "No spells tracked. Add up to 40 exact SpellIDs.",
             24, -238, inner, T.colors.muted)
@@ -4363,8 +4378,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                     Rebuild(ctx)
                 end
             end)
-            AddTooltip(row.remove, "Remove from whitelist",
-                "Stops tracking this " .. auraNoun .. " in the custom container.")
+            AddTooltip(row.remove, "Remove from whitelist", removeBody)
             rows[i] = row
             return row
         end
@@ -4469,8 +4483,9 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
     end
 
     if tool == "layout" then
-        local section = b:Section(containerLabel .. " Layout", 190)
-        M.AttachAuraFontsAndColors(section, containerLabel .. " Layout", unit)
+        local layoutTitle = M.Format("%s Layout", Tr(containerLabel))
+        local section = b:Section(layoutTitle, 190)
+        M.AttachAuraFontsAndColors(section, layoutTitle, unit)
         local w = section._msuf2Width or b.width or 720
         local col3, gap3 = Grid(w, 3)
         BindDropdown(ctx, section, "Anchor", 24, -34, Model.AuraAnchorValues(), col3,
@@ -4640,8 +4655,8 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                 pandemicWarning:SetShown(enabled)
                 if W.SetCollapsibleBadges then
                     W.SetCollapsibleBadges(pandemic, { {
-                        text = enabled and ("On / " .. ChoiceLabel(M.AURA_PANDEMIC_STYLE_VALUES,
-                            item.placed.pandemicStyle or "BORDER", "Border")) or "Off",
+                        text = enabled and M.Format("On / %s", ChoiceLabel(M.AURA_PANDEMIC_STYLE_VALUES,
+                            item.placed.pandemicStyle or "BORDER", "Border")) or Tr("Off"),
                         kind = enabled and "accent" or "muted", showWhenClosed = true,
                     } })
                 end
@@ -4797,7 +4812,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                 local decimal = Round(tonumber(placed.cooldownDecimalSeconds) or 3)
                 W.SetCollapsibleBadges(cooldown, {
                     { text = cooldownEnabled and (tostring(Round(tonumber(placed.cooldownSize) or 14)) .. "px / " .. AnchorLabel(placed.cooldownAnchor or "CENTER") .. " / " .. ChoiceLabel(COOLDOWN_SWIPE_DIRECTION_VALUES, placed.cooldownSwipeReverse == true and "REVERSE" or "NORMAL", "Normal")) or "Off", kind = cooldownEnabled and "accent" or "muted", showWhenClosed = true },
-                    { text = decimal > 0 and ("Decimals below " .. tostring(decimal) .. "s") or "Whole seconds", kind = "info", showWhenClosed = true },
+                    { text = decimal > 0 and M.Format("Decimals below %ds", decimal) or Tr("Whole seconds"), kind = "info", showWhenClosed = true },
                 })
 
                 RefreshCustomDurationBarState()
@@ -4962,9 +4977,8 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
         -- was attempted exhaustively and reverted (2026-07-31). Keep users
         -- informed instead of letting them hunt for a shape option.
         W.Text(section, "Aura Style > Defensive Buffs can follow the frame portrait shape.", 24, -312, inner, T.colors.muted)
-        W.Text(section, "Source: player buffs · " .. tostring(predefined) .. " / "
-            .. tostring(predefinedTotal) .. " predefined enabled · " .. tostring(custom)
-            .. " custom · passive talent procs included", 24, -344, inner, T.colors.muted)
+        W.Text(section, M.Format("Source: player buffs · %d / %d predefined enabled · %d custom · passive talent procs included",
+        predefined, predefinedTotal, custom), 24, -344, inner, T.colors.muted)
         return
     end
 
@@ -5030,7 +5044,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             actionKey = "reset_aura_custom_container", actionFixedArgs = { scope = unit, index = index },
         })
         local count = #Model.CustomContainerSpellEntries(unit, index)
-        W.Text(section, "Source: this UnitFrame · Ownership: only mine · Harmful DoTs only · " .. tostring(count) .. " selected", 24, -324, inner, T.colors.muted)
+        W.Text(section, M.Format("Source: this UnitFrame · Ownership: only mine · Harmful DoTs only · %d selected", count), 24, -324, inner, T.colors.muted)
         W.Text(section, "Display: " .. (item.portraitIcon == true and "portrait position" or "normal DoT lane"), 24, -356, inner, T.colors.muted)
         return
     end
@@ -5071,7 +5085,8 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
         function(value) item.auraType = value == "DEBUFF" and "DEBUFF" or "BUFF"; Apply("AURAS3_CUSTOM_CONTAINER_TYPE", true); Rebuild(ctx) end,
         AuraControlMeta(ctx, "custom-container.setup.aura-type"))
     local count = #Model.CustomContainerSpellEntries(unit, index)
-    W.Text(section, tostring(count) .. " whitelisted " .. (count == 1 and "spell" or "spells") .. " · style remains live in Menu Preview and Edit Mode.", 24, compactSetup and -156 or -104, inner, T.colors.muted)
+    W.Text(section, count == 1 and Tr("1 whitelisted spell · style remains live in Menu Preview and Edit Mode.")
+        or M.Format("%d whitelisted spells · style remains live in Menu Preview and Edit Mode.", count), 24, compactSetup and -156 or -104, inner, T.colors.muted)
     M.TrackRefresh(ctx, function() W.SetControlEnabled(enabled, true) end)
 end
 

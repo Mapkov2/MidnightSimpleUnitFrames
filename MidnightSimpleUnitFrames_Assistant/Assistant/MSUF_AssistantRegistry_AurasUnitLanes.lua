@@ -118,6 +118,25 @@ local CUSTOM_CONTAINER_GROWTH_VALUES = {
     "LEFTDOWN", "RIGHTDOWN", "LEFTUP", "RIGHTUP", "UP", "DOWN", "LEFT", "RIGHT",
 }
 
+-- Container 4 is the reserved preset slot: "Defensive Buffs" on the player and
+-- "Dots on target" everywhere else. Mirrors PLAYER_DEFENSIVE_CONTAINER_INDEX /
+-- TARGET_DOT_CONTAINER_INDEX in MSUF_Auras3_Menu_Model.lua, which re-pin its
+-- filter fields on every normalization.
+local ENFORCED_CONTAINER_INDEX = 4
+
+-- ONLY the fields those two functions actually re-pin. hidePermanent is absent
+-- from both, so it stays freely writable on container 4 -- guarding the whole
+-- filter set took seven working settings away. onlyMine is pinned by both, but
+-- only the player container refuses the write in practice, so it is listed for
+-- the player alone rather than on assumption.
+local ENFORCED_CONTAINER_FILTERS = {
+    onlyImportant = true, raid = true, raidInCombat = true,
+    includeNameplateOnly = true, includeDispellable = true, dispellableAny = true,
+    cancelable = true, notCancelable = true, crowdControl = true,
+    externalDefensive = true, bigDefensive = true,
+}
+local ENFORCED_CONTAINER_FILTERS_PLAYER_ONLY = { onlyMine = true }
+
 -- Each container carries its own filter set, identical in meaning to the Buff
 -- lane filters. Only the toggles are registered here; the spell list stays with
 -- the existing whitelist actions, which already validate SpellIDs.
@@ -293,6 +312,17 @@ function A.AurasRegistry.RegisterUnitCustomContainerLayoutSettings(ctx)
                 local holder = boolGroup.holder
                 for _, boolSpec in ipairs(boolGroup.list) do
                     local boolField = boolSpec.field
+                    -- MSUF pins these fields on container 4 (see the comment on
+                    -- intentGuard below), so there is no way to set them. Say
+                    -- that structurally by registering NO setter, rather than
+                    -- advertising a writable control and refusing every write:
+                    -- the setting stays readable and explainable, and nothing
+                    -- counts it as a control the player can operate.
+                    local isPinned = holder == "filters"
+                        and customIndex == ENFORCED_CONTAINER_INDEX
+                        and (ENFORCED_CONTAINER_FILTERS[boolField]
+                            or (unitKey == "player"
+                                and ENFORCED_CONTAINER_FILTERS_PLAYER_ONLY[boolField]))
                     local aliases = {}
                     for _, noun in ipairs(boolSpec.nouns) do
                         aliases[#aliases + 1] = unit .. " custom aura " .. tostring(index) .. " " .. noun
@@ -317,16 +347,36 @@ function A.AurasRegistry.RegisterUnitCustomContainerLayoutSettings(ctx)
                             local bucket = type(item) == "table" and item[holder] or nil
                             return type(bucket) == "table" and bucket[boolField] == true
                         end,
-                        set = function(value)
+                        set = (not isPinned) and function(value)
                             local model = AuraModel()
                             local item = model and type(model.CustomContainer) == "function"
                                 and model.CustomContainer(unitKey, customIndex, true) or nil
                             if type(item) ~= "table" then return end
                             if type(item[holder]) ~= "table" then item[holder] = {} end
                             item[holder][boolField] = value and true or false
-                        end,
+                        end or nil,
                         apply = function() ApplyAura(unitKey, "MSUF_ASSISTANT_AURA_CUSTOM_CONTAINER_FILTER") end,
                         combatSafe = false,
+                        -- Container 4 is a fixed preset ("Defensive Buffs" on
+                        -- player, "Dots on target" elsewhere), and the menu
+                        -- model re-pins every one of its filter fields on each
+                        -- normalization (MSUF_Auras3_Menu_Model.lua,
+                        -- EnforcePlayerDefensiveContainer /
+                        -- EnforceTargetDotContainer). Writing one therefore
+                        -- cannot stick. Say so instead of accepting the request
+                        -- and reporting "I could not safely apply that change",
+                        -- which told the player nothing about why.
+                        intentGuard = isPinned
+                            and function()
+                                return false, "info",
+                                    "Custom Aura " .. tostring(customIndex) .. " on "
+                                    .. tostring(unitLabel) .. " is a fixed container ("
+                                    .. (unitKey == "player" and "Defensive Buffs" or "Dots on target")
+                                    .. "), so MSUF keeps its filters set for it and I cannot change them."
+                                    .. " Choose what it shows with its spell list instead, or use Custom Aura 1-3"
+                                    .. " for a container with free filters."
+                            end
+                            or nil,
                     })
                 end
             end

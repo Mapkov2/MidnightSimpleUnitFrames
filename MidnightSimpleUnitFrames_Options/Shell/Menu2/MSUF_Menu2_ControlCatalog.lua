@@ -60,7 +60,7 @@ M.InvokeBoundary = InvokeBoundary
 -- Assistant V2 validates this table during coverage and runtime acceptance.
 M.REQUIRED_SHELL_CONTRACT = {
     schemaVersion = 1,
-    minimumControls = 6,
+    minimumControls = 8,
     minimumDispositions = 14,
     controls = {
         ["menu2.menu-chrome.window-close"] = { classification = "action", kind = "button", actionKey = "menu_window_close" },
@@ -69,6 +69,8 @@ M.REQUIRED_SHELL_CONTRACT = {
         ["menu2.menu-chrome.window-restore"] = { classification = "action", kind = "button", actionKey = "menu_window_restore" },
         ["menu2.menu-chrome.search-clear"] = { classification = "action", kind = "button", actionKey = "menu_search_clear" },
         ["menu2.menu-chrome.search-intro-dismiss"] = { classification = "action", kind = "button", actionKey = "set_nav_search_intro" },
+        ["menu2.menu-chrome.toolbar-page-back"] = { classification = "action", kind = "button", actionKey = "dashboard_page_back" },
+        ["menu2.menu-chrome.toolbar-page-forward"] = { classification = "action", kind = "button", actionKey = "dashboard_page_forward" },
     },
     dispositions = {
         ["window.drag"] = "direct-manipulation",

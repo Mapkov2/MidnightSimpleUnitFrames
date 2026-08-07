@@ -272,7 +272,7 @@ function A.GlobalBarRegistry.RegisterScopedBarSettings(ctx)
             step = 1,
             apply = ctx.ApplyBarOutline,
             reason = "MSUF_ASSISTANT_SCOPED_BAR_OUTLINE_LAYER",
-            description = "Controls this scope's bar and frame outline draw order on the unified Layer 0-30 scale.",
+            description = "Controls this scope's bar and frame outline Layer (0-30).",
         })
         RegisterScopedSetting("barScope", scope, "barOutlineTexture", "outlineTexture", "Frame Outline Texture", "string", "", GlobalScopeAliases(scope, {
             "frame outline texture", "bar outline texture", "outline texture", "border texture",

@@ -293,14 +293,14 @@ if type(Data.RegisterFAQProvider) == "function" then
             {
                 l = "Why is text overlapping or in the wrong place?",
                 a = "Open the unit page > Text. Adjust anchors, offsets, font size, spacing, split spacing, and" ..
-                    " layer/draw order.",
+                    " layer.",
                 p = "uf_player",
                 t = "Opens: Player > Text",
-                x = "Text anchor offset font size layer draw order spacing split spacing overlaps bars portraits" ..
+                x = "Text anchor offset font size layer spacing split spacing overlaps bars portraits" ..
                     " status icons",
                 k = SearchKeywordList(
                     "text overlap|text overlapping|text wrong place|text on bar|text on portrait|name overlap",
-                    "hp text overlap|power text overlap|draw order|text layer|split spacing|move text"
+                    "hp text overlap|power text overlap|layer|text layer|split spacing|move text"
                 ),
                 y = 55,
             },

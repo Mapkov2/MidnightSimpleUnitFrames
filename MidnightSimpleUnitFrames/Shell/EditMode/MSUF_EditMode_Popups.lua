@@ -51,6 +51,7 @@ local function NotifyGuidedPopupOpened(key)
 end
 
 function Popups.CloseAll()
+    if EM2.ExternalPopup then EM2.ExternalPopup.Close() end
     if EM2.UnitPopup then EM2.UnitPopup.Close() end
     if EM2.CastPopup then EM2.CastPopup.Close() end
     if EM2.AuraPopup then EM2.AuraPopup.Close() end
@@ -82,7 +83,13 @@ function Popups.Open(key, anchorFrame)
 
     Popups.CloseAll()
 
-    if pType == "unit" then
+    if pType == "external" then
+        local external = EM2.ExternalElements
+        if external and type(external.Select) == "function" then
+            external.Select(key, "mover", anchorFrame)
+        end
+        if EM2.ExternalPopup then EM2.ExternalPopup.Open(key, anchorFrame) end
+    elseif pType == "unit" then
         ExportPublic("MSUF_EM2_ActiveAuraGroup", nil)
         ExportPublic("MSUF_EM2_ActiveAuraUnit", nil)
         local unit = key
@@ -136,7 +143,8 @@ function Popups.Open(key, anchorFrame)
 end
 
 function Popups.IsAnyOpen()
-    return (EM2.UnitPopup and EM2.UnitPopup.IsOpen())
+    return (EM2.ExternalPopup and EM2.ExternalPopup.IsOpen())
+        or (EM2.UnitPopup and EM2.UnitPopup.IsOpen())
         or (EM2.CastPopup and EM2.CastPopup.IsOpen())
         or (EM2.AuraPopup and EM2.AuraPopup.IsOpen())
         or (type(_G.MSUF_EM2_GFPopupIsOpen) == "function" and _G.MSUF_EM2_GFPopupIsOpen())

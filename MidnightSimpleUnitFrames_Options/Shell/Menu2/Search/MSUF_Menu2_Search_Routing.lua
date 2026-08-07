@@ -499,7 +499,7 @@ boss=boss frame|boss frames|boss unit|boss units|boss font|boss text|boss health
 local TEXT_KIND_TERMS = SearchTermRows [[
 hp=hp text|health text|hp slot|health slot|show hp|percent hp|hp percent|left hp|center hp|right hp|hp left|hp center|hp right|left health|center health|right health|health left|health center|health right
 power=power text|power slot|mana text|energy text|rage text|show power|left power|center power|right power|power left|power center|power right
-advanced=text layer|draw order|advanced text|name layer|hp layer|power layer
+advanced=text layer|advanced text|name layer|hp layer|power layer
 name=name text|show name|name position|name anchor|raid group name|left name|center name|right name
 ]]
 
@@ -679,7 +679,7 @@ unit_dispel_overlay=unitframe dispel overlay|unit frame dispel overlay|dispel ov
 unit_dispel_symbol=unitframe dispel symbol|unit frame dispel symbol|dispel symbol
 frame_basics=frame basics|enable|disable|width|height|scale|frame size|smooth fill|health animation
 anchoring=anchoring|anchor|position|x offset|y offset|custom anchor|global anchor
-text=text|name text|hp text|health text|power text|font size|text anchor|text position|draw order|text layer
+text=text|name text|hp text|health text|power text|font size|text anchor|text position|text layer|layer
 inline_text=inline text|inline color|target of target text|tot text|tot color|npc color|npc type color
 transparency=transparency|transparent|alpha|opacity|fade|in combat alpha|out of combat alpha
 portrait=portrait|class icon|2d portrait|3d portrait|avatar|face
@@ -923,7 +923,7 @@ local function SearchRouteGroupPage(route, pageKey, normalized)
     elseif pageKey == "gf_indicators" then
         local tabScope = scope or M.gfScope or "party"
         SearchRouteStatusTab(route, "gfStatusIconTabSelection", tabScope, normalized,
-            "advanced status|status icon advanced|advanced x offset|advanced y offset|advanced placement|extended x offset|extended y offset|draw order",
+            "advanced status|status icon advanced|advanced x offset|advanced y offset|advanced placement|extended x offset|extended y offset|layer",
             "status icons|status icon|ready check|summon|resurrect|phase|dead|ghost|offline|afk|dnd|leader icon|assist icon|role icon|raid marker")
         SearchRouteGroupStatusSelection(route, normalized)
         local cornerSlot = SearchFirstMatch(normalized, CORNER_SLOT_TERMS)
@@ -983,6 +983,7 @@ local function SearchRouteGlobalPage(route, pageKey, normalized)
             container = nil
         end
         if container then
+            SearchRouteSetState(route, "auraStyleContainer", container)
             SearchRouteSetState(route, "auraSharedStyleContainer", container)
             if container == "buff" or container == "debuff" then
                 SearchRouteSetState(route, "auraStyleGFLane", container)

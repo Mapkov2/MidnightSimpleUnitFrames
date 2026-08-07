@@ -196,7 +196,7 @@ local function SetPieceTexture(piece, texture, repeatEdge)
 end
 
 --- Create the eight textures for one owner. `layer`/`subLayer` place the whole
---- border in the owner's draw order; `texture` is the resolved edgeFile.
+--- border at the requested owner layer; `texture` is the resolved edgeFile.
 function B.Create(owner, layer, subLayer, texture)
     if not (owner and owner.CreateTexture) then return nil end
     local pieces = {}

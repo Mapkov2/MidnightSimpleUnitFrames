@@ -152,7 +152,9 @@ function M.SetNavHeaderOpen(section, open)
     end
     M.navHeaderState[id] = open
     ReflowNavRail()
-    return true, (open and "Opened " or "Closed ") .. tostring(label or id) .. " navigation section.", open, id, label
+    local sectionName = tostring(label or id)
+    return true, (open and M.Format("Opened %s navigation section.", sectionName)
+        or M.Format("Closed %s navigation section.", sectionName)), open, id, label
 end
 function M.SetSearchIntroSeen(seen)
     seen = seen and true or false

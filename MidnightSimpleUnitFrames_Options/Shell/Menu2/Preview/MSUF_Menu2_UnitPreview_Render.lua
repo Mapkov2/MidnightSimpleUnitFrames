@@ -16,6 +16,14 @@ local Layers = MSUF.UF and MSUF.UF.Layers or {}
 -- extents before this runs, avoiding stale configured portraitWidth/Height.
 local PREVIEW_RING_OPENING_INFLATE = 0.0952380952
 local PREVIEW_RING_REFERENCE_THICKNESS = 2
+local function ScalePreviewOutline(value, scale)
+    value = math.floor((tonumber(value) or 0) + 0.5)
+    if value <= 0 then return 0 end
+    scale = tonumber(scale) or 1
+    if scale <= 0 then scale = 1 end
+    return math.max(1, math.floor((value * scale) + 0.5))
+end
+Render.ScalePreviewOutline = ScalePreviewOutline
 local function PreviewPortraitRingInflation(portrait, thickness)
     local pw = tonumber(portrait and portrait._msufPreviewLayoutWidth)
         or (portrait and portrait.GetWidth and tonumber(portrait:GetWidth())) or 36
@@ -2325,6 +2333,11 @@ function Preview.Refresh(box, reason)
     end
     box._runtimePowerOutline = floor(box._runtimePowerOutline + 0.5)
     if box._runtimePowerOutline < 0 then box._runtimePowerOutline = 0 elseif box._runtimePowerOutline > 8 then box._runtimePowerOutline = 8 end
+    -- Preview geometry is drawn at an explicit Fit/manual zoom instead of by
+    -- scaling the live frame. Rectangular/rounded edge widths therefore need
+    -- the same geometry scale as the detached bar itself. Keep the raw value
+    -- separately: shaped edge textures use it as strength/alpha, not pixels.
+    box._previewPowerOutline = ScalePreviewOutline(box._runtimePowerOutline, scale)
     mock._msufPreviewPowerBorderR = tonumber(runtimePower and runtimePower.borderR)
         or tonumber(conf.barOutlineColorR) or tonumber(g.barBorderR) or 0
     mock._msufPreviewPowerBorderG = tonumber(runtimePower and runtimePower.borderG)
@@ -2352,7 +2365,7 @@ function Preview.Refresh(box, reason)
         local powerShapeInfo = PREVIEW_POWER_SHAPES[box._runtimeDetachedPowerShape or "BAR"]
         box._runtimeDetachedRoundedPower = powerShapeInfo == nil and true or nil
         if mock.detachedPower.SetBackdropColor then
-            if mock.detachedPower.SetBackdrop then mock.detachedPower:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = max(1, box._runtimePowerOutline) }) end
+            if mock.detachedPower.SetBackdrop then mock.detachedPower:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = max(1, box._previewPowerOutline) }) end
             mock.detachedPower:SetBackdropColor(0, 0, 0, 0)
             mock.detachedPower:SetBackdropBorderColor(0, 0, 0, (not powerShapeInfo and box._runtimePowerOutline > 0) and 1 or 0)
         end
@@ -2434,8 +2447,8 @@ function Preview.Refresh(box, reason)
             box._previewDispelOverlayAvailable, box._previewDispelSymbolAvailable, w, h)
     end
     R.ApplyPreviewRounded(box, key, powerOn, R.PreviewRoundedOutlineThickness(key, conf, scale),
-        box._runtimePowerEmbedded == true, box._runtimePowerOutline,
-        box._runtimeDetachedRoundedPower == true, box._runtimePowerOutline)
+        box._runtimePowerEmbedded == true, box._previewPowerOutline,
+        box._runtimeDetachedRoundedPower == true, box._previewPowerOutline)
     if R.ApplyPreviewFrameBorder then
         R.ApplyPreviewFrameBorder(box, mock._msufPreviewRoundedActive == true and nil or (runtimeSpec and runtimeSpec.border), scale)
     end
