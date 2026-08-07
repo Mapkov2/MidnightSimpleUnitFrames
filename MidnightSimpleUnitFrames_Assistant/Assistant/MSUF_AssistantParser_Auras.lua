@@ -389,6 +389,12 @@ local function ParseAuraGeometryShortcut(text)
         "external defensive lane", "externals lane", "external defensive strip",
         "external defensive max", "externals max", "external defensive count",
     }) then return nil end
+    -- "Big Defensive" is also a Sort Method VALUE, and sorting is not a lane
+    -- offset either. Without this, "set Player Buff Sort Method to big
+    -- defensive" -- the exact wording the menu's own dropdown produces -- was
+    -- answered with the explanation below on all eight scopes, so the value
+    -- could only be selected by typing its raw storage token.
+    if ContainsAny(text, { "sort", "sorting", "sort method", "sort order", "sortierung" }) then return nil end
     if ContainsAny(text, { "defensive", "defensives", "defensive aura", "defensive auras", "defensive buff", "defensive buffs" }) then
         return {
             kind = "answer",
