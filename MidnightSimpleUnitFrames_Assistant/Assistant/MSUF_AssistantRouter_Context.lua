@@ -191,6 +191,52 @@ R.HELP_CONTEXT_PRONOUN_CHANGE_TERMS = {    "make it", "make that", "make this", 
 
 R.HELP_CONTEXT_PRONOUN_TERMS = { "it", "that", "this", "them", "those" }
 
+-- A readability article ends by naming the controls it means ("set target width
+-- to 280; set target height to 44"). When the next turn supplies a value or a
+-- direction for one of them, that is the change -- repeating the same article
+-- and asking for "an exact Width, Height or text-size request" ignores what the
+-- player just answered.
+-- An array, not a keyed table: a request naming both dimensions must resolve the
+-- same way every time, and pairs() order is not stable.
+R.HELP_CONTEXT_DIMENSION_WORDS = {
+    { dimension = "width", words = { "wider", "width", "narrower", "thinner", "broader" } },
+    { dimension = "height", words = { "taller", "height", "shorter", "higher" } },
+}
+R.HELP_CONTEXT_INCREASE_WORDS = { "wider", "taller", "bigger", "larger", "higher", "broader", "more" }
+R.HELP_CONTEXT_DECREASE_WORDS = { "narrower", "thinner", "shorter", "smaller", "less" }
+
+local function HelpContextExampleCommands(ctx)
+    local out = {}
+    for chunk in tostring(ctx and ctx.examples or ""):gmatch("[^;]+") do
+        chunk = R.Trim((chunk:gsub("%.%s*$", "")))
+        if chunk ~= "" then out[#out + 1] = chunk end
+    end
+    return out
+end
+
+-- The example that matches the dimension the player named. A NAMED dimension is
+-- required: a bare "make it smaller" after a group-frame article could mean
+-- scale, spacing or any of the text sizes the article listed, and guessing the
+-- first one would be a wrong write. Those stay a clarification, and once the
+-- player has actually changed something the ordinary follow-up engine owns the
+-- next bare value anyway.
+local function HelpContextValueExample(ctx, norm)
+    local wanted
+    for i = 1, #R.HELP_CONTEXT_DIMENSION_WORDS do
+        local entry = R.HELP_CONTEXT_DIMENSION_WORDS[i]
+        if R.ContainsAny(norm, entry.words) then wanted = entry.dimension break end
+    end
+    if not wanted then return nil end
+    local commands = HelpContextExampleCommands(ctx)
+    for i = 1, #commands do
+        local command = R.Normalize(commands[i])
+        if command:match("^set%s+.+%s+to%s+[%d%.]+$") and command:find(wanted, 1, true) then
+            return command
+        end
+    end
+    return nil
+end
+
 function R.LooksLikeHelpContextFollowup(norm)    return R.ContainsAny(norm, R.HELP_CONTEXT_OPEN_TERMS)
         or (R.ContainsAny(norm, R.HELP_CONTEXT_LOCATION_TERMS) and R.ContainsAny(norm, R.HELP_CONTEXT_PRONOUN_TERMS))
         or R.ContainsAny(norm, R.HELP_CONTEXT_EXAMPLE_TERMS)
@@ -380,6 +426,38 @@ function R.TryHelpContextFollowup(text, coreHandler)    local ctx = type(A.lastA
             status = "info",
             summary = "Assistant help next step",
         }
+    end
+
+    -- "actually make it 320" / "make it a bit wider" after a readability
+    -- article: the article already named the controls, so the value or the
+    -- direction belongs to one of them. Runs before the clarification below,
+    -- which would otherwise reprint the same article and ask for the exact
+    -- request the player had just given.
+    if ctx.kind == "readability" and type(coreHandler) == "function" then
+        local wantsChange = R.ContainsAny(norm, R.HELP_CONTEXT_PRONOUN_CHANGE_TERMS)
+            or R.ContainsAny(norm, R.HELP_CONTEXT_INCREASE_WORDS)
+            or R.ContainsAny(norm, R.HELP_CONTEXT_DECREASE_WORDS)
+        if wantsChange then
+            local example = HelpContextValueExample(ctx, norm)
+            local subject = example and example:match("^set%s+(.-)%s+to%s+[%d%.]+$")
+            if subject then
+                local requested = norm:match("%f[%d](%d+%.?%d*)")
+                local command
+                if requested then
+                    command = "set " .. subject .. " to " .. requested
+                elseif R.ContainsAny(norm, R.HELP_CONTEXT_DECREASE_WORDS) then
+                    command = "decrease " .. subject
+                elseif R.ContainsAny(norm, R.HELP_CONTEXT_INCREASE_WORDS) then
+                    command = "increase " .. subject
+                end
+                if command then
+                    local ok, result = pcall(coreHandler, command)
+                    if ok and type(result) == "table" and not A.RouterIsUnknownResult(result) then
+                        return result
+                    end
+                end
+            end
+        end
     end
 
     if R.ContainsAny(norm, R.HELP_CONTEXT_PRONOUN_CHANGE_TERMS) and R.ContainsAny(norm, R.HELP_CONTEXT_PRONOUN_TERMS) then
