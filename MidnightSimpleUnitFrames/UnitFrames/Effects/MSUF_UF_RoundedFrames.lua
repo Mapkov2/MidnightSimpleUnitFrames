@@ -1482,8 +1482,14 @@ local function RefreshGroupBackdropAlpha(f, kind)
   end
 end
 
+-- Prediction overlays anchored with "Follow HP bar (overflow)" (mode 4) draw
+-- past the health bar on purpose. Every mask here is pinned to a frame rect, so
+-- masking those bars clips away exactly the segment the mode exists to show --
+-- at full health that is the whole segment. Leave them unmasked; the
+-- Begin/EndMaskRefresh pass removes a mask an earlier anchor mode left behind.
 local function MaskStatusBarFill(f, bar, group, anchor)
   if not (bar and type(bar.GetStatusBarTexture) == "function") then return end
+  if bar._msufPredictionMode == 4 then return end
   local tex = bar:GetStatusBarTexture()
   if tex then
     if group then MaskGroupTexture(f, tex, anchor or bar) else MaskTexture(f, tex, anchor or bar) end
