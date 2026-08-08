@@ -32,6 +32,27 @@ Data.CORE_PARSER = {
     GROUP_COPY_GUARD_TERMS = { "group copy", "copy group", "copy category", "copy categories", "copy scope" },
     GROUP_FRAME_TERMS = { "group frames", "group frame", "groups", "group", "gruppenframes", "gruppe", "gruppen" },
     GLOBAL_SCOPE_TERMS = { "shared", "global" },
+    -- "my name", "make my health text bigger": with no frame named anywhere,
+    -- this is the player's own frame. Consumed only as DetectUnits' last
+    -- resort, so an explicit unit always wins.
+    FIRST_PERSON_POSSESSIVE_TERMS = { "my", "mine", "my own", "mein", "meine", "meinen", "meiner" },
+    -- "all my frames" is every frame, not the speaker's own one: a bulk word
+    -- outranks the possessive, so the fallback above must stand down. Without
+    -- this, "reset the position of all my frames" reset only the Player frame.
+    FIRST_PERSON_POSSESSIVE_BULK_GUARD_TERMS = {
+        "all", "every", "each", "everything", "any",
+        "alle", "allen", "jede", "jeder", "jedes", "saemtliche",
+    },
+    -- Here the possessive says WHOSE AURA it is, not which frame: MSUF's own
+    -- control is called "Highlight My Buffs". Reading it as the Player frame
+    -- retargeted those requests onto Player Buffs visibility.
+    FIRST_PERSON_AURA_OWNERSHIP_TERMS = {
+        "my buff", "my buffs", "my debuff", "my debuffs", "my aura", "my auras",
+        "mine buff", "mine buffs", "mine debuff", "mine debuffs",
+        "my own buff", "my own buffs", "my own debuff", "my own debuffs",
+        "my own aura", "my own auras", "my cast", "my casts",
+        "meine buffs", "meine debuffs", "meine auren",
+    },
 
     ALT_MANA_TERMS = { "alt mana", "alternative mana", "secondary mana", "dual resource mana" },
     COMBAT_TIMER_TERMS = { "combat timer" },
