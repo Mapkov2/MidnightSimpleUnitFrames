@@ -292,6 +292,7 @@ local FRAME_NAMES = {
     [systemEnum.HudTooltip or -4] = "GameTooltipDefaultContainer",
     [systemEnum.Bags or -5] = "BagsBar",
     [systemEnum.ObjectiveTracker or -6] = "ObjectiveTrackerFrame",
+    [systemEnum.DamageMeter or -7] = "DamageMeter",
 }
 
 local function SystemFrame(systemId)
@@ -306,6 +307,40 @@ local function SystemFrame(systemId)
     local name = FRAME_NAMES[systemId]
     local fallback = name and _G[name]
     return type(fallback) == "table" and fallback or nil
+end
+
+--- Layouts saved before a system shipped carry NO row for it (the 12.x
+--- Damage Meter most visibly) — Blizzard's own manager reconciles those
+--- lazily (EditModeManager AddNewSystemsAndSettings), so a layout that
+--- never went through Blizzard's Edit Mode since the patch stays bare and
+--- every capture/move/setting dies on the missing entry. Seed the row from
+--- the frame's live anchor, CENTER-based; the next commit saves it.
+local function EnsureSystemEntry(systemId)
+    local entry, info = SystemEntry(systemId)
+    if entry then return entry, info end
+    local layout
+    info, layout = ActiveLayout()
+    if not layout then return nil end
+    local frame = SystemFrame(systemId)
+    if not (frame and frame.GetLeft and frame.GetRight and frame.GetTop and frame.GetBottom) then return nil end
+    local left, right, top, bottom = frame:GetLeft(), frame:GetRight(), frame:GetTop(), frame:GetBottom()
+    if not (left and right and top and bottom) then return nil end
+    local uiScale = _G.UIParent and _G.UIParent.GetEffectiveScale and _G.UIParent:GetEffectiveScale() or 1
+    local frameScale = frame.GetEffectiveScale and frame:GetEffectiveScale() or uiScale
+    local ratio = uiScale ~= 0 and frameScale / uiScale or 1
+    local screenW = _G.UIParent and _G.UIParent.GetWidth and _G.UIParent:GetWidth() or 0
+    local screenH = _G.UIParent and _G.UIParent.GetHeight and _G.UIParent:GetHeight() or 0
+    entry = {
+        system = systemId,
+        anchorInfo = {
+            point = "CENTER", relativeTo = "UIParent", relativePoint = "CENTER",
+            offsetX = (left + right) * 0.5 * ratio - screenW * 0.5,
+            offsetY = (bottom + top) * 0.5 * ratio - screenH * 0.5,
+        },
+        settings = {},
+    }
+    layout.systems[#layout.systems + 1] = entry
+    return entry, info
 end
 
 --- Layout settings live as { setting = enum, value = raw } rows next to the
@@ -443,6 +478,46 @@ local function ApplyVisual(systemId, entry)
         local padding = map[setting.BagSlotPadding or 3]
         if padding ~= nil then frame.bagPadding = padding end
         if type(frame.Layout) == "function" then frame:Layout() end
+    elseif systemId == systemEnum.DamageMeter then
+        --- Every damage meter setting applies through a plain method on the
+        --- (non-secure) DamageMeter frame — the same calls Blizzard's own
+        --- system mixin runs (EditModeSystemTemplates, system 23).
+        local setting = _G.Enum.EditModeDamageMeterSetting or {}
+        local width = map[setting.FrameWidth or 3]
+        local height = map[setting.FrameHeight or 4]
+        if (width ~= nil or height ~= nil) and type(frame.SetSize) == "function" then
+            frame:SetSize(
+                width and (width + 200) or (frame.GetWidth and frame:GetWidth()) or 300,
+                height and (height + 120) or (frame.GetHeight and frame:GetHeight()) or 200)
+        end
+        local barHeight = map[setting.BarHeight or 10]
+        if barHeight ~= nil and type(frame.SetBarHeight) == "function" then
+            frame:SetBarHeight(barHeight + 15)
+        end
+        local padding = map[setting.Padding or 5]
+        if padding ~= nil and type(frame.SetBarSpacing) == "function" then
+            frame:SetBarSpacing(padding + 2)
+        end
+        local transparency = map[setting.Transparency or 6]
+        if transparency ~= nil and type(frame.SetWindowTransparency) == "function" then
+            frame:SetWindowTransparency(transparency + 50)
+        end
+        local backgroundTransparency = map[setting.BackgroundTransparency or 12]
+        if backgroundTransparency ~= nil and type(frame.SetBackgroundTransparency) == "function" then
+            frame:SetBackgroundTransparency(backgroundTransparency)
+        end
+        local textSize = map[setting.TextSize or 11]
+        if textSize ~= nil and type(frame.SetTextSize) == "function" then
+            frame:SetTextSize(textSize * 10 + 50)
+        end
+        local specIcon = map[setting.ShowSpecIcon or 8]
+        if specIcon ~= nil and type(frame.SetShowBarIcons) == "function" then
+            frame:SetShowBarIcons(specIcon == 1)
+        end
+        local classColor = map[setting.ShowClassColor or 9]
+        if classColor ~= nil and type(frame.SetUseClassColor) == "function" then
+            frame:SetUseClassColor(classColor == 1)
+        end
     elseif systemId == systemEnum.ObjectiveTracker then
         --- Height is deliberately NOT exposed: the tracker's UpdateHeight
         --- branches on IsInDefaultPosition() from the MANAGER's cached state
@@ -473,6 +548,7 @@ local SNAPSHOT_KEYS = {
     [systemEnum.HudTooltip or -4] = "tooltip",
     [systemEnum.Bags or -5] = "bags",
     [systemEnum.ObjectiveTracker or -6] = "tracker",
+    [systemEnum.DamageMeter or -7] = "damagemeter",
 }
 
 --- Every committed anchor + raw settings row also lands in the MSUF profile
@@ -508,7 +584,7 @@ end
 
 local function MutateSettings(systemId, changes)
     if InCombat() then return false end
-    local entry, info = SystemEntry(systemId)
+    local entry, info = EnsureSystemEntry(systemId)
     if not entry then return false end
     local api = Blizzard()
     if not api then return false end
@@ -557,7 +633,7 @@ local function CaptureSettings(entry, settingIds)
 end
 
 local function Capture(systemId, settingIds)
-    local entry = SystemEntry(systemId)
+    local entry = EnsureSystemEntry(systemId)
     if not entry then return nil end
     local anchor = entry.anchorInfo
     local frame = SystemFrame(systemId)
@@ -578,7 +654,7 @@ local function Restore(systemId, state)
     if InCombat() or type(state) ~= "table" then return false end
     local x, y = tonumber(state.x), tonumber(state.y)
     if type(state.point) ~= "string" or not x or not y then return false end
-    local entry, info = SystemEntry(systemId)
+    local entry, info = EnsureSystemEntry(systemId)
     if not entry then return false end
     local api = Blizzard()
     if not api then return false end
@@ -872,6 +948,40 @@ local function Activate()
                 ToggleSetting(systemEnum.Bags, "reversedir",
                     "HUD_EDIT_MODE_SETTING_BAGS_DIRECTION", "Reverse direction", bagsDirection),
             }, { bagsSize, bagsPadding, bagsOrientation, bagsDirection }))
+    end
+    if systemEnum.DamageMeter then
+        local meterSetting = _G.Enum.EditModeDamageMeterSetting or {}
+        local meterWidth = meterSetting.FrameWidth or 3
+        local meterHeight = meterSetting.FrameHeight or 4
+        local meterBar = meterSetting.BarHeight or 10
+        local meterPad = meterSetting.Padding or 5
+        local meterAlpha = meterSetting.Transparency or 6
+        local meterBgAlpha = meterSetting.BackgroundTransparency or 12
+        local meterText = meterSetting.TextSize or 11
+        local meterSpec = meterSetting.ShowSpecIcon or 8
+        local meterClass = meterSetting.ShowClassColor or 9
+        Add(Element(systemEnum.DamageMeter, "damagemeter",
+            BlizzardLabel("HUD_EDIT_MODE_DAMAGE_METER_LABEL", "Damage Meter"), 866, {
+                SteppedSetting(systemEnum.DamageMeter, "width",
+                    "HUD_EDIT_MODE_SETTING_DAMAGE_METER_FRAME_WIDTH", "Width", 200, 600, 1, meterWidth),
+                SteppedSetting(systemEnum.DamageMeter, "height",
+                    "HUD_EDIT_MODE_SETTING_DAMAGE_METER_FRAME_HEIGHT", "Height", 120, 400, 1, meterHeight),
+                SteppedSetting(systemEnum.DamageMeter, "barheight",
+                    "HUD_EDIT_MODE_SETTING_DAMAGE_METER_BAR_HEIGHT", "Bar Height", 15, 40, 1, meterBar),
+                SteppedSetting(systemEnum.DamageMeter, "padding",
+                    "HUD_EDIT_MODE_SETTING_DAMAGE_METER_PADDING", "Padding", 2, 10, 1, meterPad),
+                SteppedSetting(systemEnum.DamageMeter, "transparency",
+                    "HUD_EDIT_MODE_SETTING_DAMAGE_METER_TRANSPARENCY", "Opacity", 50, 100, 1, meterAlpha),
+                SteppedSetting(systemEnum.DamageMeter, "bgtransparency",
+                    "HUD_EDIT_MODE_SETTING_DAMAGE_METER_BACKGROUND", "Background", 0, 100, 1, meterBgAlpha),
+                SteppedSetting(systemEnum.DamageMeter, "textsize",
+                    "HUD_EDIT_MODE_SETTING_DAMAGE_METER_TEXT_SIZE", "Text Size", 50, 150, 10, meterText),
+                ToggleSetting(systemEnum.DamageMeter, "specicon",
+                    "HUD_EDIT_MODE_SETTING_DAMAGE_METER_SHOW_SPEC_ICON", "Spec icons", meterSpec),
+                ToggleSetting(systemEnum.DamageMeter, "classcolor",
+                    "HUD_EDIT_MODE_SETTING_DAMAGE_METER_SHOW_CLASS_COLOR", "Class colors", meterClass),
+            }, { meterWidth, meterHeight, meterBar, meterPad, meterAlpha, meterBgAlpha,
+                meterText, meterSpec, meterClass }))
     end
     if systemEnum.ObjectiveTracker then
         local trackerSetting = _G.Enum.EditModeObjectiveTrackerSetting or {}
