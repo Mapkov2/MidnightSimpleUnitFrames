@@ -8,10 +8,36 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-RC14",
-    previousVersion = "6.0-RC13",
-    rangeLabel = "6.0-RC13 -> 6.0-RC14",
+    currentVersion = "6.0-RC15",
+    previousVersion = "6.0-RC14",
+    rangeLabel = "6.0-RC14 -> 6.0-RC15",
     entries = {
+        {
+            version = "6.0-RC15",
+            date = "2026-08-08",
+            sections = {
+                {
+                    title = "Changes",
+                    bullets = {
+                        "The Details!, Grid2 and DandersFrames popups gained a Scale stepper that writes through each addon's own setting - Details! windows 65-150 %, Grid2 layouts and DandersFrames party/raid 50-200 % - and it takes part in undo like every other quick control.",
+                        "The Blizzard Damage Meter joined the Blizzard Edit Mode integration: a mover plus Width, Height, Bar Height, Padding, Opacity, Background, Text Size and the spec icon / class color toggles.",
+                        "Stepper buttons on a control with a fixed native step now accelerate with Shift and Ctrl (x5 / x10) instead of ignoring the modifiers.",
+                        "Undo and redo name the change in plain words. Raw setting keys and internal apply reasons - hpBarAlpha, MSUF2_DASH_GLOBAL_SCALE - are turned into readable labels on the button, in its tooltip and in the status feedback.",
+                        "External Edit Mode elements report their position relative to the screen center, the same convention MSUF's own frames use, instead of absolute screen coordinates.",
+                        "Edit Mode snap is now remembered per profile rather than reset every session, and a fresh install starts with the grid on at 36 px, snap enabled and the backdrop dimmed to 55 %.",
+                        "Player Defensive icons follow the frame portrait shape by default. They replace the portrait, so the rectangular fallback never fit; an explicit shape you already chose stays untouched.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Fixed every Blizzard Edit Mode element failing to move or accept settings on a layout saved before that element existed in the game - the 12.x Damage Meter most visibly. The missing layout row is now seeded from the frame's live position.",
+                        "Fixed two tooltip movers being offered at once. While MSUF controls the tooltip anchor its own preview owns Edit Mode, and the Blizzard HUD Tooltip element stays hidden; when Blizzard controls it, only that element appears.",
+                        "Fixed long localized labels in external Edit Mode popups clipping past the popup edge. Two number controls only share a row when both labels fit; otherwise each gets its own.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-RC14",
             date = "2026-08-08",
@@ -118,36 +144,6 @@ local data = {
                         "Edit Mode frame positioning is now blocked at the combat boundary and rolls back atomically when an external anchor target cannot resolve.",
                         "Class Resources no longer runs its layout twice when the same Cooldown Viewer provides both its anchor and its width.",
                         "Font runtime resolves its apply-cache helpers once at load instead of per FontString, and the combat regen drivers arm their event only once per fight.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-RC11",
-            date = "2026-08-07",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "Added optional Grid2 and Details! integration to MSUF Edit Mode. Both addons keep ownership of their frames and saved positions.",
-                        "Added native WoW 12.1 Player resource pings for health and supported mana states. Portrait pings keep the normal radial wheel.",
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Added a public API for registering external frames with MSUF Edit Mode.",
-                        "Expanded translations for recent Aura, Preview, Class Resource and Layer settings.",
-                        "Unified the detached Player Power outline across settings, Copy To, live frames and previews.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed Group Preview layer order and Name positioning for all anchors.",
-                        "Fixed detached Player Power outline thickness at different preview zoom levels.",
-                        "Fixed exact Assistant commands being intercepted by greetings, guides or movement shortcuts.",
-                        "Added Assistant help for shortened and clipped Unit and Group names.",
                     },
                 },
             },

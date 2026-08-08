@@ -1,5 +1,23 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-RC15 - 2026-08-08
+
+### Changes
+
+- The Details!, Grid2 and DandersFrames popups gained a Scale stepper that writes through each addon's own setting — Details! windows 65-150 %, Grid2 layouts and DandersFrames party/raid 50-200 % — and it takes part in undo like every other quick control.
+- The Blizzard Damage Meter joined the Blizzard Edit Mode integration: a mover plus Width, Height, Bar Height, Padding, Opacity, Background, Text Size and the spec icon / class color toggles.
+- Stepper buttons on a control with a fixed native step now accelerate with Shift and Ctrl (×5 / ×10) instead of ignoring the modifiers.
+- Undo and redo name the change in plain words. Raw setting keys and internal apply reasons — `hpBarAlpha`, `MSUF2_DASH_GLOBAL_SCALE` — are turned into readable labels on the button, in its tooltip and in the status feedback.
+- External Edit Mode elements report their position relative to the screen center, the same convention MSUF's own frames use, instead of absolute screen coordinates.
+- Edit Mode snap is now remembered per profile rather than reset every session, and a fresh install starts with the grid on at 36 px, snap enabled and the backdrop dimmed to 55 %.
+- Player Defensive icons follow the frame portrait shape by default. They replace the portrait, so the rectangular fallback never fit; an explicit shape you already chose stays untouched.
+
+### Fixes & Performance
+
+- Fixed every Blizzard Edit Mode element failing to move or accept settings on a layout saved before that element existed in the game — the 12.x Damage Meter most visibly. The missing layout row is now seeded from the frame's live position.
+- Fixed two tooltip movers being offered at once. While MSUF controls the tooltip anchor its own preview owns Edit Mode, and the Blizzard HUD Tooltip element stays hidden; when Blizzard controls it, only that element appears.
+- Fixed long localized labels in external Edit Mode popups clipping past the popup edge. Two number controls only share a row when both labels fit; otherwise each gets its own.
+
 ## 6.0-RC14 - 2026-08-08
 
 ### Highlights
