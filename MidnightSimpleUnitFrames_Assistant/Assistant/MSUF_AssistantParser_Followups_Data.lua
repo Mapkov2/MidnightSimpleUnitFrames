@@ -186,6 +186,7 @@ Data.FOLLOWUPS_PARSER = {
         "shape", "circle", "circular", "round", "rounded", "square", "diamond",
         "style", "render", "2d", "3d", "zoom",
         "spacing", "gap", "thickness", "border", "alignment", "align", "opacity", "alpha",
+        "separator", "seperator", "delimiter", "divider", "trennzeichen",
         "show", "hide", "enable", "disable", "turn on", "turn off", "on", "off",
     },
     EXPLICIT_FOLLOWUP_REFERENCE_TERMS = { "it", "that", "this", "them", "those", "these", "same", "do it", "do that", "again", "more", "less", "opposite", "other way" },
@@ -203,6 +204,20 @@ Data.FOLLOWUPS_PARSER = {
     HALF_AMOUNT_TERMS = { "half", "half as much" },
     LARGE_AMOUNT_TERMS = { "a lot", "much", "way more", "way less", "far more", "far less", "big step", "large step", "twice", "double" },
 
+    -- Nouns that name a PROPERTY of something rather than a control in their
+    -- own right. Right after a change, "change the separator" means the
+    -- separator of the thing just changed -- a player who does not know MSUF's
+    -- own control names has no other way to say it, and requiring a pronoun
+    -- sent those requests to whichever unrelated control happened to share the
+    -- word (Class Resource Separator Width won "change the separator").
+    -- Deliberately narrow: only nouns that cannot stand alone as a request.
+    -- The follow-up still requires a fresh subject, no named frame, and a
+    -- family search that resolves to exactly one control.
+    SUBJECT_PROPERTY_FOLLOWUP_TERMS = {
+        "separator", "separators", "seperator", "seperators",
+        "delimiter", "delimiters", "divider", "dividers",
+        "trennzeichen", "trenner",
+    },
     GENERIC_REFERENCE_TERMS = {
         "it", "its", "that", "this", "them", "those", "these", "their",
         "the frame", "the frames", "the bar", "the bars", "the text", "the icon", "the icons",
@@ -222,6 +237,15 @@ Data.FOLLOWUPS_PARSER = {
     RENDER_TERMS = { "render", "2d", "3d", "class icon", "class portrait" },
     BORDER_STYLE_TERMS = { "border style", "border type", "outline style" },
     STYLE_TERMS = { "style", "appearance" },
+    -- MSUF calls this control a Separator on some frames and a Delimiter on
+    -- others; a player calls it whichever word came to mind, and spells it
+    -- however it came out. The registry attributes use both spellings too, so
+    -- the follow-up has to accept the whole family.
+    SEPARATOR_TERMS = {
+        "separator", "separators", "seperator", "seperators",
+        "delimiter", "delimiters", "divider", "dividers",
+        "trennzeichen", "trenner",
+    },
     ZOOM_TERMS = { "zoom", "zoom in", "zoom out" },
     SPACING_TERMS = { "spacing", "gap", "space", "closer", "farther", "further apart" },
     THICKNESS_TERMS = { "thickness", "thicker", "thinner", "border size", "border thickness", "outline thickness" },

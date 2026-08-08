@@ -629,7 +629,13 @@ local function BuildFollowup(text, ctx)
             and exactValueReference and FirstNumber(text) ~= nil)
     local commandIntent = ContainsAny(text, FollowupData.COMMAND_INTENT_TERMS)
     local auraLaneObjectIntent = ContainsAny(text, FollowupData.AURA_LANE_OBJECT_REFERENCE_TERMS) and ContainsAny(text, FollowupData.AURA_LANE_OBJECT_ACTION_TERMS)
-    local genericObjectIntent = ContainsAny(text, FollowupData.GENERIC_OBJECT_REFERENCE_TERMS) and ContainsAny(text, FollowupData.GENERIC_OBJECT_ACTION_TERMS)
+    -- A property noun with no pronoun still refers to the retained subject; see
+    -- SUBJECT_PROPERTY_FOLLOWUP_TERMS. It only survives as far as the generic
+    -- block below, which still demands a fresh subject, no named frame, and a
+    -- single resolved control.
+    local subjectPropertyFollowup = ContainsAny(text, FollowupData.SUBJECT_PROPERTY_FOLLOWUP_TERMS)
+    local genericObjectIntent = subjectPropertyFollowup
+        or (ContainsAny(text, FollowupData.GENERIC_OBJECT_REFERENCE_TERMS) and ContainsAny(text, FollowupData.GENERIC_OBJECT_ACTION_TERMS))
     local explicitFollowupReference = ContainsAny(text, FollowupData.EXPLICIT_FOLLOWUP_REFERENCE_TERMS)
     local wordCount = 0
     for _ in tostring(text or ""):gmatch("%S+") do wordCount = wordCount + 1 end
@@ -708,6 +714,7 @@ local function BuildFollowup(text, ctx)
         if ContainsAny(textValue, FollowupData.OPACITY_TERMS) then return "opacity" end
         if ContainsAny(textValue, FollowupData.SPACING_TERMS) then return "spacing" end
         if ContainsAny(textValue, FollowupData.ALIGNMENT_TERMS) then return "alignment" end
+        if ContainsAny(textValue, FollowupData.SEPARATOR_TERMS) then return "separator" end
         if ContainsAny(textValue, FollowupData.STYLE_TERMS) then return "style" end
         if ContainsAny(textValue, FollowupData.ANCHOR_TERMS) then return "anchor" end
         if direction and ContainsAny(textValue, FollowupData.MOVEMENT_TERMS) then
@@ -723,11 +730,44 @@ local function BuildFollowup(text, ctx)
         return nil
     end
 
+    -- One object, two attribute stems: the Leader icon's toggle is
+    -- showLeaderIcon and its styling is leaderIconStyle, but its geometry is
+    -- leaderSize / leaderOffsetY / leaderLayer -- the object noun is dropped.
+    -- Offering only the noun-carrying stem meant "turn on player leader icon"
+    -- then "make it bigger" found nothing and answered "Player / Status Icons
+    -- does not expose one unambiguous Size control", which is untrue for the
+    -- object the player was talking about. Every status indicator shares this
+    -- shape, so strip the trailing noun as an additional candidate.
+    local RELATED_OBJECT_NOUNS = { "Icon", "Indicator", "Text", "Symbol", "Marker", "State" }
+    local RELATED_STEM_MIN_LENGTH = 3
     local function RelatedPrefixAliases(prefix)
         local out, seen = {}, {}
         AddUniqueValue(out, seen, prefix)
         local shownObject = tostring(prefix or ""):gsub("^show(%u)", function(first) return first:lower() end)
         if shownObject ~= prefix then AddUniqueValue(out, seen, shownObject) end
+        -- Iterative: an object can carry two of these nouns at once
+        -- (showCombatStateIndicator -> combatState -> combat, whose geometry
+        -- lives under statusCombat*). Bounded by the shrinking stem.
+        local index = 1
+        while index <= #out do
+            local candidate = out[index]
+            for j = 1, #RELATED_OBJECT_NOUNS do
+                local noun = RELATED_OBJECT_NOUNS[j]
+                if #candidate - #noun >= RELATED_STEM_MIN_LENGTH and candidate:sub(-#noun) == noun then
+                    AddUniqueValue(out, seen, candidate:sub(1, #candidate - #noun))
+                end
+            end
+            index = index + 1
+        end
+        -- A third convention in the same family: the runtime-driven status
+        -- indicators store their geometry under statusPvp*/statusResting*
+        -- rather than under the object's own name.
+        for i = 1, #out do
+            local candidate = out[i]
+            if candidate ~= "" and candidate:sub(1, 6) ~= "status" then
+                AddUniqueValue(out, seen, "status" .. candidate:sub(1, 1):upper() .. candidate:sub(2))
+            end
+        end
         if prefix == "hp" then
             AddUniqueValue(out, seen, "healthText")
         elseif prefix == "healthText" then
@@ -853,6 +893,14 @@ local function BuildFollowup(text, ctx)
         elseif targetAttr == "opacity" then
             addForPrefix("Opacity")
             addForPrefix("Alpha")
+        elseif targetAttr == "separator" then
+            -- Both spellings are in use across the registry: the ToT inline
+            -- text stores totInlineSeparator while the HP/Power text stores
+            -- hpTextSeparator on units and textDelimiter on group frames.
+            addForPrefix("Separator")
+            addForPrefix("Delimiter")
+            addForPrefix("TextSeparator")
+            addForPrefix("TextDelimiter")
         elseif targetAttr == "spacing" then
             addForPrefix("Spacing")
             addForPrefix("Gap")
@@ -1259,7 +1307,8 @@ local function BuildFollowup(text, ctx)
         }
     end
 
-    local genericObjectFollowupReference = HasGenericObjectFollowupReference(text) or bareDirectionalFollowup
+    local genericObjectFollowupReference = HasGenericObjectFollowupReference(text)
+        or bareDirectionalFollowup or subjectPropertyFollowup
     local genericTargetAttr = genericObjectFollowupReference and GenericFollowupTargetAttr(text, followDirection) or nil
     local genericContextEligible = ContextSubjectRecent(ctx, 3)
         or (bareDirectionalFollowup and ctx.lastSubjectTurn == nil and ctx.lastMentionedTurn == nil)
@@ -1319,6 +1368,26 @@ local function BuildFollowup(text, ctx)
             local previous = ctx.lastChangeBundle[1]
             local missingTextControl = MissingTextControlAnswer(previous, targetAttr)
             if missingTextControl then return missingTextControl end
+            -- The family search may have found the control and produced no
+            -- change simply because the request named no value: "I want a
+            -- different separator for it" identifies the control perfectly and
+            -- states nothing to set. Offering its choices is the answer; the
+            -- refusal below reads as "I have no such control", which is false
+            -- and leaves a player who does not know MSUF's own wording stuck.
+            local valuelessOwners, valuelessSetting = 0, nil
+            for i = 1, #ctx.lastChangeBundle do
+                local settings = FindGenericRelatedSettings(ctx.lastChangeBundle[i], targetAttr)
+                for j = 1, #settings do
+                    if settings[j] and settings[j] ~= valuelessSetting then
+                        valuelessOwners = valuelessOwners + 1
+                        valuelessSetting = settings[j]
+                    end
+                end
+            end
+            if valuelessOwners == 1 and valuelessSetting and type(P.MissingValueResponse) == "function" then
+                local response = P.MissingValueResponse({ { setting = valuelessSetting, score = 100 } }, text)
+                if response then return response end
+            end
             local previousSetting = previous and previous.key and Registry:GetSetting(previous.key) or nil
             local subject = tostring(previousSetting and (previousSetting.category or previousSetting.label) or "the retained MSUF object")
             local property = type(A.HumanizeDisplayKey) == "function" and A.HumanizeDisplayKey(targetAttr) or tostring(targetAttr)
