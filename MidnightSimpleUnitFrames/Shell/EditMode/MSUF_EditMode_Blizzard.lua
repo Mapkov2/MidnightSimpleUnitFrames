@@ -841,6 +841,13 @@ end
 --- Blizzard's own Edit Mode; mirror that for the MSUF session so its mover
 --- has a visible, highlighted target. MSUF unit tooltips using the default
 --- anchor follow the moved position automatically.
+--- MSUF's tooltip module exports the control mode; without it (older
+--- runtime) the Blizzard element stays available.
+local function TooltipIsBlizzardControlled()
+    local check = _G.MSUF_Tooltip_IsBlizzardControlled
+    return type(check) ~= "function" or check() == true
+end
+
 local function SessionChanged(enabled)
     if not enabled then
         if layoutDialog then layoutDialog:Hide() end
@@ -859,7 +866,7 @@ local function SessionChanged(enabled)
     end
     local container = SystemFrame(systemEnum.HudTooltip)
     if not container then return end
-    if enabled then
+    if enabled and TooltipIsBlizzardControlled() then
         if container.IsShown and not container:IsShown() and container.Show then
             tooltipContainerShown = true
             container:Show()
@@ -928,8 +935,17 @@ local function Activate()
                 "HUD_EDIT_MODE_SETTING_MICRO_MENU_ORDER_REVERSE", "Reverse", microOrder),
         }, { microSize, microEye, microOrientation, microOrder }))
     if systemEnum.HudTooltip then
-        Add(Element(systemEnum.HudTooltip, "tooltip",
-            BlizzardLabel("HUD_EDIT_MODE_HUD_TOOLTIP_LABEL", "Tooltip"), 863, nil, nil))
+        local tooltipElement = Element(systemEnum.HudTooltip, "tooltip",
+            BlizzardLabel("HUD_EDIT_MODE_HUD_TOOLTIP_LABEL", "Tooltip"), 863, nil, nil)
+        local tooltipBaseEnabled = tooltipElement.isEnabled
+        --- Only ONE tooltip surface may exist: while MSUF controls the
+        --- tooltip anchor, its own preview/drag owns Edit Mode and this
+        --- element stays hidden (and vice versa in the runtime module).
+        tooltipElement.isEnabled = function()
+            if not TooltipIsBlizzardControlled() then return false end
+            return tooltipBaseEnabled()
+        end
+        Add(tooltipElement)
     end
     if systemEnum.Bags then
         local bagsSetting = _G.Enum.EditModeBagsSetting or {}
