@@ -156,9 +156,11 @@ local function PrepareControls(list)
             end
         end
         if #prepared >= 12 then return nil, "too_many_controls" end
+        local stepValue = tonumber(spec.step)
         prepared[#prepared + 1] = {
             id = spec.id, label = spec.label, kind = spec.kind,
             get = spec.get, set = spec.set, min = minValue, max = maxValue,
+            step = (spec.kind == "number" and Finite(stepValue) and stepValue > 0) and stepValue or nil,
             transient = spec.transient == true,
         }
     end

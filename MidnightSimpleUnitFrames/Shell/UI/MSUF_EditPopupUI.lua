@@ -439,7 +439,12 @@ end
 
 function Quick.WireStepper(minus, box, plus, cb)
     local function commit(delta)
-        box:SetText(tostring(Quick.San(box:GetText(), 0) + ((delta or 0) * GetStep())))
+        --- A control with a fixed native step (box._msufStep, e.g. Blizzard
+        --- Edit Mode sliders) must move by exactly that step, or the setter
+        --- rounds a +/-1 back onto the same raw value and the click does
+        --- nothing. Modifier-scaled nudging stays for free-step boxes.
+        local step = tonumber(box._msufStep) or GetStep()
+        box:SetText(tostring(Quick.San(box:GetText(), 0) + ((delta or 0) * step)))
         if cb then cb() end
     end
     minus:SetScript("OnClick", function() commit(-1) end)

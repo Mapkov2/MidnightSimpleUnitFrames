@@ -93,12 +93,15 @@ local function BuildControlSet(controls)
                 first.label, "boxA", function() ApplyNumberControl(first.id, holder.boxA) end,
                 second.label, "boxB", function() ApplyNumberControl(second.id, holder.boxB) end,
                 { boxWidth = 48 })
+            holder.boxA._msufStep = tonumber(first.step)
+            holder.boxB._msufStep = tonumber(second.step)
             set.numbers[#set.numbers + 1] = { id = first.id, box = holder.boxA }
             set.numbers[#set.numbers + 1] = { id = second.id, box = holder.boxB }
         else
             row = Quick.SingleValueAt(holder, frame, 20, y,
                 first.label, "boxA", function() ApplyNumberControl(first.id, holder.boxA) end,
                 { boxWidth = 48 })
+            holder.boxA._msufStep = tonumber(first.step)
             set.numbers[#set.numbers + 1] = { id = first.id, box = holder.boxA }
         end
         set.rows[#set.rows + 1] = row
