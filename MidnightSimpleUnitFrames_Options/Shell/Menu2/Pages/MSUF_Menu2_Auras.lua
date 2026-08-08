@@ -1147,7 +1147,14 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
             cfg.perRow = tonumber(runtimePreview and runtimePreview.perRow) or Model.ReadNumber(readScope, "perRow", 12, 1, 40)
             cfg.maxIcons = cfg.perRow * 2
         end
-        cfg.spacing = tonumber(runtimePreview and runtimePreview.spacing) or Model.ReadNumber(readScope, "spacing", 2, 0, 12)
+        -- Gap is per lane like Size and Per row; only the laneless preview
+        -- (shared style workbench) falls back to the unit-wide value.
+        if lane == "buff" or lane == "debuff" then
+            cfg.spacing = tonumber(runtimePreview and runtimePreview[lane .. "Spacing"])
+                or Model.ReadLaneSpacing(readScope, lane)
+        else
+            cfg.spacing = tonumber(runtimePreview and runtimePreview.spacing) or Model.ReadNumber(readScope, "spacing", 2, 0, 12)
+        end
         cfg.iconZoom = lane and Model.ReadLaneStyleNumber(readScope, lane, "iconZoom", 100, 100, 200)
             or Model.ReadNumber(readScope, "iconZoom", 100, 100, 200)
         local configuredIconShape = type(Model.ReadSharedAppearanceIconShape) == "function"
@@ -3167,8 +3174,8 @@ local function BuildCompactUnitAuraLayout(ctx, b, unit, kind)
                 function() return Model.ReadLanePerRow(unit, kind) end,
                 function(v) Model.WriteLanePerRow(unit, kind, v); ApplyUnit(ctx, unit, "AURAS3_UNIT_PER_ROW") end),
             NumberRow("Gap", "gap", "spacing", 0, 12, 2,
-                function() return Model.ReadNumber(unit, "spacing", 2, 0, 64) end,
-                function(v) Model.WriteNumber(unit, "spacing", v, 0, 64); ApplyUnit(ctx, unit, "AURAS3_UNIT_SPACING") end),
+                function() return Model.ReadLaneSpacing(unit, kind) end,
+                function(v) Model.WriteLaneSpacing(unit, kind, v); ApplyUnit(ctx, unit, "AURAS3_UNIT_SPACING") end),
             NumberRow("Layer (0-30)", "layer", "layer", 0, 30, kind == "buff" and 5 or 6,
                 function() return type(Model.ReadLaneLayer) == "function" and Model.ReadLaneLayer(unit, kind) or (kind == "buff" and 5 or 6) end,
                 function(v) if type(Model.WriteLaneLayer) == "function" then Model.WriteLaneLayer(unit, kind, v); ApplyUnit(ctx, unit, "AURAS3_UNIT_LAYER") end end),

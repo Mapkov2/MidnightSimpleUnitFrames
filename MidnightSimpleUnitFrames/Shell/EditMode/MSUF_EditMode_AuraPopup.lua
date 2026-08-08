@@ -17,6 +17,7 @@ local GROUP_SPECS = {
         xKey = "buffGroupOffsetX",
         yKey = "buffGroupOffsetY",
         sizeKey = "buffGroupIconSize",
+        spacingKey = "buffSpacing",
         defaultX = 0,
         defaultY = 36,
         defaultSize = 26,
@@ -26,6 +27,7 @@ local GROUP_SPECS = {
         xKey = "debuffGroupOffsetX",
         yKey = "debuffGroupOffsetY",
         sizeKey = "debuffGroupIconSize",
+        spacingKey = "debuffSpacing",
         defaultX = 0,
         defaultY = 6,
         defaultSize = 26,
@@ -174,7 +176,9 @@ local function Apply()
         local layout, unitCfg = UnitLayout(units[i], true)
         if layout and unitCfg then
             unitCfg.overrideLayout = true
-            layout.spacing = spacing
+            -- The popup edits one lane at a time, so Spacing writes that
+            -- lane's key; the shared `spacing` stays as the legacy fallback.
+            layout[spec.spacingKey] = spacing
             layout[spec.xKey] = x
             layout[spec.yKey] = y
             layout[spec.sizeKey] = size
@@ -278,7 +282,8 @@ function Sync()
     SetLabel(pf.spacingBoxLabel, "Spacing")
     if pf.buffLaneBtn and pf.buffLaneBtn.SetCheckedVisual then pf.buffLaneBtn:SetCheckedVisual(activeGroup == "buff") end
     if pf.debuffLaneBtn and pf.debuffLaneBtn.SetCheckedVisual then pf.debuffLaneBtn:SetCheckedVisual(activeGroup == "debuff") end
-    Quick.SetBoxText(pf.spacingBox, ReadValue(layout, sh, "spacing", "spacing", 2))
+    Quick.SetBoxText(pf.spacingBox,
+        ReadValue(layout, sh, spec.spacingKey, spec.spacingKey, ReadValue(layout, sh, "spacing", "spacing", 2)))
     Quick.SetBoxText(pf.xBox, ReadValue(layout, sh, spec.xKey, spec.xKey, spec.defaultX))
     Quick.SetBoxText(pf.yBox, ReadValue(layout, sh, spec.yKey, spec.yKey, spec.defaultY))
     Quick.SetBoxText(pf.sizeBox, ReadValue(layout, sh, spec.sizeKey, spec.sizeKey, spec.defaultSize))

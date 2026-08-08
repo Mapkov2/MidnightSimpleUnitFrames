@@ -561,6 +561,7 @@ local LANE_SPECS = {
         layerKey = "buffLayer",
         strataKey = "buffStrata",
         perRowKey = "buffPerRow",
+        spacingKey = "buffSpacing",
         growthKey = "buffGrowthX",
         wrapKey = "buffGrowthY",
         showTextKey = "buffShowCooldownText",
@@ -602,6 +603,7 @@ local LANE_SPECS = {
         layerKey = "debuffLayer",
         strataKey = "debuffStrata",
         perRowKey = "debuffPerRow",
+        spacingKey = "debuffSpacing",
         growthKey = "debuffGrowthX",
         wrapKey = "debuffGrowthY",
         showTextKey = "debuffShowCooldownText",
@@ -1828,7 +1830,11 @@ local function CompileUnitLane(unit, shared, layout, filtersRoot, kind, candidat
     local zoomDefault = ReadRaw(layout, shared, spec.iconZoomKey) or ReadRaw(layout, shared, "iconZoom") or DEFAULT_SHARED.iconZoom
     local iconShapeSource = Shape.SharedValue(rootShared, kind)
     local iconShape, requestedIconShape = Shape.Resolve(iconShapeSource, portraitShape)
-    local spacing = ReadNumber(layout, shared, "spacing", DEFAULT_SHARED.spacing, 0, 64)
+    -- Per lane like perRow: buffSpacing/debuffSpacing, falling back to the
+    -- legacy unit-wide `spacing` so profiles that never split the two keep
+    -- the gap they already had.
+    local spacing = ReadNumber(layout, shared, spec.spacingKey,
+        ReadNumber(layout, shared, "spacing", DEFAULT_SHARED.spacing, 0, 64), 0, 64)
     local perRow = ReadNumber(shared, nil, spec.perRowKey, ReadRaw(shared, nil, "perRow") or DEFAULT_SHARED.perRow, 1, 40)
     local maxCount = ReadNumber(shared, nil, spec.maxKey, DEFAULT_SHARED[spec.maxKey] or 12, 0, 80)
     local enabled = ReadBool(shared, nil, spec.showKey, true) and maxCount > 0

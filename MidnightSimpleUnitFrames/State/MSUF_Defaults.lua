@@ -193,6 +193,7 @@ local MSUF_DEFAULTS_AURA_NUMERIC_KEYS = {
     iconZoom = { 100, 200 }, buffIconZoom = { 100, 200 }, debuffIconZoom = { 100, 200 },
     buffGroupIconSize = { 1, 256 }, debuffGroupIconSize = { 1, 256 },
     spacing = { 0, 128 }, splitSpacing = { 0, 256 },
+    buffSpacing = { 0, 128 }, debuffSpacing = { 0, 128 },
     perRow = { 1, 80 }, buffPerRow = { 1, 80 }, debuffPerRow = { 1, 80 },
     maxIcons = { 0, 80 }, maxBuffs = { 0, 80 }, maxDebuffs = { 0, 80 },
     stackTextSize = { 1, 128 }, cooldownTextSize = { 1, 128 },

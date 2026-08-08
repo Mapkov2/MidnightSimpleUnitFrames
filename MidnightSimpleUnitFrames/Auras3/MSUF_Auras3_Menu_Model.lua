@@ -364,6 +364,7 @@ local GROUPS = {
         layerKey = "buffLayer",
         strataKey = "buffStrata",
         perRowKey = "buffPerRow",
+        spacingKey = "buffSpacing",
         growthKey = "buffGrowthX",
         wrapKey = "buffGrowthY",
         defaultAnchor = "BOTTOMRIGHT",
@@ -379,6 +380,7 @@ local GROUPS = {
         layerKey = "debuffLayer",
         strataKey = "debuffStrata",
         perRowKey = "debuffPerRow",
+        spacingKey = "debuffSpacing",
         growthKey = "debuffGrowthX",
         wrapKey = "debuffGrowthY",
         defaultAnchor = "TOPLEFT",
@@ -1781,6 +1783,24 @@ function Model.WriteLanePerRow(unit, kind, value)
     kind = NormalizeKind(kind)
     local spec = GROUPS[kind]
     Model.WriteNumber(unit, spec and spec.perRowKey or "perRow", value, 1, 40)
+end
+
+--- The runtime has always read `buffSpacing`/`debuffSpacing` with the shared
+--- `spacing` as its fallback, but nothing ever wrote the lane keys, so the menu
+--- Gap slider drove both lanes off the one shared key. Reading through the same
+--- fallback keeps every existing profile on the value it already shows; the
+--- first write of either lane is what splits them apart.
+function Model.ReadLaneSpacing(unit, kind)
+    kind = NormalizeKind(kind)
+    local spec = GROUPS[kind]
+    local fallback = Model.ReadNumber(unit, "spacing", 2, 0, 64)
+    return Model.ReadNumber(unit, spec and spec.spacingKey or "spacing", fallback, 0, 64)
+end
+
+function Model.WriteLaneSpacing(unit, kind, value)
+    kind = NormalizeKind(kind)
+    local spec = GROUPS[kind]
+    Model.WriteNumber(unit, spec and spec.spacingKey or "spacing", value, 0, 64)
 end
 
 function Model.ReadLaneGrowth(unit, kind)
@@ -3714,6 +3734,8 @@ function Model.ReadPreviewConfig(unit)
         perRow = (buffMetrics and buffMetrics.perRow) or (debuffMetrics and debuffMetrics.perRow) or Model.ReadNumber(unit, "perRow", 12, 1, 40),
         buffPerRow = buffMetrics and buffMetrics.perRow or Model.ReadLanePerRow(unit, "buff"),
         debuffPerRow = debuffMetrics and debuffMetrics.perRow or Model.ReadLanePerRow(unit, "debuff"),
+        buffSpacing = buffMetrics and buffMetrics.spacing or Model.ReadLaneSpacing(unit, "buff"),
+        debuffSpacing = debuffMetrics and debuffMetrics.spacing or Model.ReadLaneSpacing(unit, "debuff"),
         maxBuffs = buffMetrics and buffMetrics.num or Model.ReadNumber(unit, "maxBuffs", 12, 0, 80),
         maxDebuffs = debuffMetrics and debuffMetrics.num or Model.ReadNumber(unit, "maxDebuffs", 12, 0, 80),
         growth = (buffMetrics and buffMetrics.growth) or (debuffMetrics and debuffMetrics.growth) or Model.ReadGrowth(unit),

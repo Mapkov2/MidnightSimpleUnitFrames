@@ -78,6 +78,7 @@ local GROUPS = {
         maxKey = "maxBuffs",
         showKey = "showBuffs",
         perRowKey = "buffPerRow",
+        spacingKey = "buffSpacing",
         growthKey = "buffGrowthX",
         wrapKey = "buffGrowthY",
         texture = "Interface\\Icons\\Spell_Holy_WordFortitude",
@@ -97,6 +98,7 @@ local GROUPS = {
         maxKey = "maxDebuffs",
         showKey = "showDebuffs",
         perRowKey = "debuffPerRow",
+        spacingKey = "debuffSpacing",
         growthKey = "debuffGrowthX",
         wrapKey = "debuffGrowthY",
         texture = "Interface\\Icons\\Spell_Shadow_ShadowWordPain",
@@ -654,7 +656,12 @@ local function ReadGroupConfig(unit, kind)
         or (shared and type(shared.iconShape) == "string" and shared.iconShape)
         or "RECTANGLE"
 
-    local spacing = ReadNumber(shared, layout, "spacing", 2, 0, 64)
+    -- Per lane like perRow below, with the legacy unit-wide `spacing` as the
+    -- fallback so untouched profiles keep the gap they already had.
+    local spacing = (spec.spacingKey and layout and type(layout[spec.spacingKey]) == "number" and layout[spec.spacingKey])
+        or (spec.spacingKey and shared and type(shared[spec.spacingKey]) == "number" and shared[spec.spacingKey])
+        or ReadNumber(shared, layout, "spacing", 2, 0, 64)
+    spacing = Clamp(spacing, 2, 0, 64)
     local perRow = (ls and type(ls[spec.perRowKey]) == "number" and ls[spec.perRowKey])
         or (shared and type(shared[spec.perRowKey]) == "number" and shared[spec.perRowKey])
         or (ls and type(ls.perRow) == "number" and ls.perRow)
