@@ -8,10 +8,46 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-RC13",
-    previousVersion = "6.0-RC12",
-    rangeLabel = "6.0-RC12 -> 6.0-RC13",
+    currentVersion = "6.0-RC14",
+    previousVersion = "6.0-RC13",
+    rangeLabel = "6.0-RC13 -> 6.0-RC14",
     entries = {
+        {
+            version = "6.0-RC14",
+            date = "2026-08-08",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Added optional Blizzard Edit Mode integration. The Minimap, Chat, Micro Menu, Bags, Objective Tracker and Tooltip get MSUF movers, and their Blizzard Edit Mode settings - sizes, Minimap rotation, Chat width and height, Micro Menu and Bags layout, tracker opacity and text size - appear as popup controls that apply instantly. Everything is written through the game's own Edit Mode layout, so positions stay taint-free and survive a reload. Selecting an element while a Blizzard preset is active asks for a layout name and saves an editable copy first.",
+                        "The Blizzard Edit Mode arrangement can ride MSUF profile export and import through an opt-in switch on the profiles page. It is off by default in both directions, so a foreign profile string can never rearrange your HUD.",
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "External Edit Mode elements can declare a fixed step for their number controls. Stepper buttons then move by exactly that step instead of the modifier-scaled nudge.",
+                        "The Assistant answers newcomer phrasings of \"what can you do\" - including what is this addon, where do i start and how does this work - with the capability overview instead of the catch-all reply.",
+                        "The Assistant now reads a first-person possessive as the Player frame when no frame is named: make my name bigger works like make the player name bigger. Bulk wording (all my frames) and aura ownership (my buffs) keep their old meaning.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Fixed the Buff and Debuff Gap sliders being one shared setting (#66). Each lane now stores its own gap on unit frames, in the Edit Mode aura popup, in the preview and for the Assistant. Profiles that never split the two keep the value they had.",
+                        "Fixed the Group preview losing its selected element whenever an element's settings opened on another page. The selection, its coordinates and the axis pulse now survive the page switch.",
+                        "Fixed the Group preview's Dispel Symbol chip pointing at the Dispel Overlay section instead of the accordion that owns the symbol.",
+                        "Fixed the first click on an external Edit Mode element being swallowed. A steady click no longer counts as a drag, so selecting the element opens its popup right away.",
+                        "Fixed external Edit Mode movers going invisible in preview test mode. Dominos, DandersFrames and Blizzard elements keep their tinted band and label, which is the only marker that MSUF controls them.",
+                        "Removed the duplicate Cast Target Text color swatch from the Castbar page. The color is reached through the card's ::: shortcut and the Colors page, which is the single entry point for every text color.",
+                        "Fixed change the separator after a change landing on an unrelated control. A property noun with no pronoun now continues the subject of the previous turn, and both the Separator and Delimiter spellings resolve.",
+                        "Fixed a follow-up that names a control but no value being answered with \"no such control\". The Assistant now offers that control's choices instead.",
+                        "Fixed make it bigger after enabling a status indicator finding nothing. Status icon geometry is stored under a shorter stem than the toggle, and the follow-up now searches those too.",
+                        "Fixed pronoun follow-ups being answered by a catalog token search, which produced confidently wrong readings from unrelated sliders.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-RC13",
             date = "2026-08-07",
@@ -112,44 +148,6 @@ local data = {
                         "Fixed detached Player Power outline thickness at different preview zoom levels.",
                         "Fixed exact Assistant commands being intercepted by greetings, guides or movement shortcuts.",
                         "Added Assistant help for shortened and clipped Unit and Group names.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-RC10",
-            date = "2026-08-06",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "Reworked Menu2 preview interaction around the rendered result. The preview background can now pan directly, selected position controls stand out more clearly, disabled elements route to their owning settings, and all selection handles stay centered on the pixels they actually represent.",
-                        "Made Group target and focus indicators safe for WoW 12.1 restricted combat data. Readable identities continue to use the existing O(1) GUID buckets, while secret comparison results are forwarded directly to Blizzard's restricted-safe region alpha API without scanning the group or branching on protected values.",
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Removed the Navigation Hover Size option and its row magnification behavior. Navigation entries now keep a stable width and layout while hovered, and the retired setting has been removed from defaults, profile repair, locales, search and Assistant metadata.",
-                        "Renamed the Unit and Group transparency base state from In Combat to General so the editor matches its actual always-on ownership; the separate Out of Combat state remains unchanged.",
-                        "Selecting a visible castbar icon border style now restores a minimal border thickness when the independent thickness value was still disabled.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed Group Border leaking between Party and Raid layouts. Persistent border anchors now follow the active live scope immediately, including roster transitions during combat, so Party borders cannot remain visible in a raid and Raid/Mythic Raid borders cannot remain visible in a party or while solo.",
-                        "Fixed clipping and overlapping controls in the Group Spell Icon Style editor. The Stack Count controls now stay inside their card, the shared appearance hint clears both columns, and enabling Duration Bar immediately activates Height, Display, Position and Fill Mode without reopening the menu.",
-                        "Fixed Group target/focus borders under restricted combat data, reconnects and target changes. Rounded and square indicators now share the same secret-safe visibility contract, retain readable frame identity through restrictions and update only the affected GUID bucket or hinted frame.",
-                        "Fixed Unit and Group preview text, text handles and composite element handles drifting at non-default frame scale, Fit zoom or after panning. Text now uses the same font-size-then-frame-scale order as live frames, scaled rectangles are converted into canvas space once, and pan-following handles move without a full repaint.",
-                        "Fixed additional preview interaction issues: minimum-size and remaining handles are centered, Dispel Symbol bounds use the rendered art, castbar child handles win over their container, direct Aura navigation stays expanded, and non-Player previews no longer expose Class Resource controls.",
-                        "Fixed full Unit previews inheriting an unintended first-use Fit scale instead of opening at 1:1, while later user-selected zoom and pan remain authoritative.",
-                        "Fixed the Color Painter hiding disabled castbars or empty Aura lanes and reusing an unrelated camera state. Castbar and Aura color views now start fitted, remain inspectable and remember their own zoom and pan.",
-                        "Removed temporary table allocations from live castbar interrupt feedback while preserving the public options-table compatibility path.",
-                        "Fixed Assistant routing added around RC9 controls: Group scope words and conversational lead-ins no longer block exact settings, Pandemic details no longer mutate unrelated borders, contracted questions remain read-only, and explicit activate/deactivate commands keep the requested polarity.",
-                        "Fixed more Assistant exact-setting commands phrased with polite lead-ins or everyday verbs such as Configure, Update, Modify, Customize and Tweak. Numeric requests containing text-mode words such as max now continue to their actual numeric control instead of being intercepted as an incomplete HP-text command. These routes reuse already-warm label and alias indexes, keeping the cold synchronous preflight fast and leaving conjunctions to compound-command parsing.",
-                        "Fixed Assistant Copy To handling for independent Aura Options, Aura Style and Texture Layer categories so style-only requests no longer fall back to broader content or default copies.",
-                        "Fixed Assistant catalog-only controls, percentage-bearing labels and ambiguous commands with supplied values. Exact catalog controls now get their turn before generic guidance, % survives rendered labels, and a numeric follow-up can complete the selected mutation without retyping the request.",
                     },
                 },
             },

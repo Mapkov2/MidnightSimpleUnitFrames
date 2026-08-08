@@ -1,5 +1,31 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-RC14 - 2026-08-08
+
+### Highlights
+
+- Added optional Blizzard Edit Mode integration. The Minimap, Chat, Micro Menu, Bags, Objective Tracker and Tooltip get MSUF movers, and their Blizzard Edit Mode settings — sizes, Minimap rotation, Chat width and height, Micro Menu and Bags layout, tracker opacity and text size — appear as popup controls that apply instantly. Everything is written through the game's own Edit Mode layout, so positions stay taint-free and survive a reload. Selecting an element while a Blizzard preset is active asks for a layout name and saves an editable copy first.
+- The Blizzard Edit Mode arrangement can ride MSUF profile export and import through an opt-in switch on the profiles page. It is off by default in both directions, so a foreign profile string can never rearrange your HUD.
+
+### Changes
+
+- External Edit Mode elements can declare a fixed step for their number controls. Stepper buttons then move by exactly that step instead of the modifier-scaled nudge.
+- The Assistant answers newcomer phrasings of "what can you do" — including `what is this addon`, `where do i start` and `how does this work` — with the capability overview instead of the catch-all reply.
+- The Assistant now reads a first-person possessive as the Player frame when no frame is named: `make my name bigger` works like `make the player name bigger`. Bulk wording (`all my frames`) and aura ownership (`my buffs`) keep their old meaning.
+
+### Fixes & Performance
+
+- Fixed the Buff and Debuff `Gap` sliders being one shared setting (#66). Each lane now stores its own gap on unit frames, in the Edit Mode aura popup, in the preview and for the Assistant. Profiles that never split the two keep the value they had.
+- Fixed the Group preview losing its selected element whenever an element's settings opened on another page. The selection, its coordinates and the axis pulse now survive the page switch.
+- Fixed the Group preview's Dispel Symbol chip pointing at the Dispel Overlay section instead of the accordion that owns the symbol.
+- Fixed the first click on an external Edit Mode element being swallowed. A steady click no longer counts as a drag, so selecting the element opens its popup right away.
+- Fixed external Edit Mode movers going invisible in preview test mode. Dominos, DandersFrames and Blizzard elements keep their tinted band and label, which is the only marker that MSUF controls them.
+- Removed the duplicate Cast Target Text color swatch from the Castbar page. The color is reached through the card's `:::` shortcut and the Colors page, which is the single entry point for every text color.
+- Fixed `change the separator` after a change landing on an unrelated control. A property noun with no pronoun now continues the subject of the previous turn, and both the Separator and Delimiter spellings resolve.
+- Fixed a follow-up that names a control but no value being answered with "no such control". The Assistant now offers that control's choices instead.
+- Fixed `make it bigger` after enabling a status indicator finding nothing. Status icon geometry is stored under a shorter stem than the toggle, and the follow-up now searches those too.
+- Fixed pronoun follow-ups being answered by a catalog token search, which produced confidently wrong readings from unrelated sliders.
+
 ## 6.0-RC13 - 2026-08-07
 
 ### Highlights
