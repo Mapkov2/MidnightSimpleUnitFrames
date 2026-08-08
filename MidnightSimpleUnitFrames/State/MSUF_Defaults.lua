@@ -1089,6 +1089,17 @@ local function MSUF_Defaults_CreateFactoryProfile()
     MSUF_Defaults_DeepCopy(out, payload)
     MSUF_Defaults_ApplyFreshInstallOverrides(out)
     MSUF_Defaults_NormalizeProfileTo60Defaults(out)
+    --- The compact snapshot predates the shared Appearance products, and its
+    --- Player Defensive container replaces the portrait (portraitIcon = true).
+    --- Factory baselines therefore follow the frame portrait shape instead of
+    --- inheriting the rectangular legacy fallback.
+    if type(out.auras3) == "table" then
+        local auraShared = type(out.auras3.shared) == "table" and out.auras3.shared or {}
+        out.auras3.shared = auraShared
+        local shapes = type(auraShared.appearanceIconShapes) == "table" and auraShared.appearanceIconShapes or {}
+        auraShared.appearanceIconShapes = shapes
+        if shapes.playerDefensives == nil then shapes.playerDefensives = "FOLLOW_PORTRAIT" end
+    end
     out.general = out.general or {}
     out.general._msufFactoryProfileApplied = true
     out._msufFactoryPlayerDefensivesEnabled_v1 = MSUF_FACTORY_DEFAULT_PLAYER_DEFENSIVES_ENABLED
@@ -1239,9 +1250,10 @@ local MSUF_DEFAULTS_CURRENT_PROFILE_SCHEMA = 600
 --- Persisted completion marker for the broad default-fill/repair pass below.
 --- Bump this whenever MSUF_EnsureDB_Heavy gains a new mandatory default or
 --- one-shot repair; current profiles can then be repaired exactly once again.
-local MSUF_DEFAULTS_CURRENT_REVISION = 9
+local MSUF_DEFAULTS_CURRENT_REVISION = 10
 local MSUF_DEFAULTS_NAVIGATION_ICONS_REVISION = 7
 local MSUF_DEFAULTS_CLASS_POWER_PREVIEW_GUIDES_REVISION = 9
+local MSUF_DEFAULTS_PLAYER_DEFENSIVE_SHAPE_REVISION = 10
 
 --- Root tables are the contract every other module assumes after EnsureDB.
 --- Add new top-level SavedVariables buckets here before modules start reading
@@ -3431,6 +3443,7 @@ end
                 iconZoom = 100,
                 buffIconZoom = 100,
                 debuffIconZoom = 100,
+                appearanceIconShapes = { playerDefensives = "FOLLOW_PORTRAIT" },
                 spacing = 2,
                 stackTextSize = 14,
                 growth = "RIGHT",
@@ -3699,6 +3712,17 @@ filters = {
                 a3.shared.debuffTypeBorderMode = "OFF"
             end
             a3.shared._msufA3_debuffTypeBorderModeMigrated_v1 = true
+        end
+        --- Defaults revision 10: Player Defensives icons follow the frame
+        --- portrait. Profiles predating the shared Appearance products fell
+        --- back to RECTANGLE inside the portrait replacement, so the shape is
+        --- seeded exactly once; a stored choice (including an explicit
+        --- Rectangular) stays authoritative afterwards.
+        if (tonumber(MSUF_DB._msufDefaultsRevision) or 0) < MSUF_DEFAULTS_PLAYER_DEFENSIVE_SHAPE_REVISION then
+            a3.shared._msufA3_factoryDefensiveShape_v1 = nil
+            local shapes = type(a3.shared.appearanceIconShapes) == "table" and a3.shared.appearanceIconShapes or {}
+            a3.shared.appearanceIconShapes = shapes
+            if shapes.playerDefensives == nil then shapes.playerDefensives = "FOLLOW_PORTRAIT" end
         end
 
         local function EnsureImportantSplit(f)
