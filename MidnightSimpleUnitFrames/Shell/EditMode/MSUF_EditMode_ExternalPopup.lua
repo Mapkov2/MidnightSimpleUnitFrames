@@ -74,6 +74,23 @@ local function ControlSignature(controls)
     return table.concat(parts, "|")
 end
 
+--- Two paired steppers only fit the 420px shell when both labels stay
+--- inside the fixed budget (two stepper blocks eat ~276px). Long localized
+--- labels — the Blizzard Edit Mode strings most visibly — get their own
+--- row instead of clipping past the popup edge.
+local PAIR_LABEL_BUDGET = 104
+
+local function LabelWidth(text)
+    if not frame._labelProbe then
+        frame._labelProbe = Quick.FS(frame, "caption")
+        frame._labelProbe:Hide()
+    end
+    --- Measure what the row will actually render: the translated label, with
+    --- a small factor covering the readable-size bump the row labels get.
+    frame._labelProbe:SetText(Quick.Tr and Quick.Tr(text or "") or text or "")
+    return (frame._labelProbe:GetStringWidth() or 0) * 1.08
+end
+
 local function BuildControlSet(controls)
     local set = { rows = {}, numbers = {}, toggles = {}, height = 0 }
     local numbers, toggles = {}, {}
@@ -87,6 +104,9 @@ local function BuildControlSet(controls)
         rowIndex = rowIndex + 1
         local y = CONTROLS_TOP - (rowIndex - 1) * CONTROL_ROW_H
         local first, second = numbers[index], numbers[index + 1]
+        if second and LabelWidth(first.label) + LabelWidth(second.label) > PAIR_LABEL_BUDGET then
+            second = nil
+        end
         local holder, row = {}, nil
         if second then
             row = Quick.ValuePairAt(holder, frame, 20, y,
@@ -97,15 +117,16 @@ local function BuildControlSet(controls)
             holder.boxB._msufStep = tonumber(second.step)
             set.numbers[#set.numbers + 1] = { id = first.id, box = holder.boxA }
             set.numbers[#set.numbers + 1] = { id = second.id, box = holder.boxB }
+            index = index + 2
         else
             row = Quick.SingleValueAt(holder, frame, 20, y,
                 first.label, "boxA", function() ApplyNumberControl(first.id, holder.boxA) end,
                 { boxWidth = 48 })
             holder.boxA._msufStep = tonumber(first.step)
             set.numbers[#set.numbers + 1] = { id = first.id, box = holder.boxA }
+            index = index + 1
         end
         set.rows[#set.rows + 1] = row
-        index = index + 2
     end
     index = 1
     while index <= #toggles do
