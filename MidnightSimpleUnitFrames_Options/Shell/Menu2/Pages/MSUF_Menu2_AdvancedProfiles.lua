@@ -990,6 +990,30 @@ local function BuildProfiles(ctx)
         if M.ShowStatusFeedback then M.ShowStatusFeedback(M.Tr(M.profileImportCreateNew == true and "New-profile import on" or "New-profile import off"), "info", 1.2) end
         if M.RequestRefresh then M.RequestRefresh(ctx, "profiles-import-mode") elseif M.Refresh then M.Refresh(ctx) end
     end)
+    --- Blizzard Edit Mode data is opt-in per session for BOTH directions
+    --- (never exported by default). The switch drives the two ProfileIO
+    --- flags directly; nothing is persisted across reloads.
+    local includeBlizzEM = W.SwitchAt(actionsCard, "Include Blizzard Edit Mode layout", 20, -262,
+        max(220, actionsCardW - 40))
+    RegisterControl(includeBlizzEM, ProfilesMeta("import_export.blizzard_edit_mode", "ephemeral"),
+        "Include Blizzard Edit Mode layout", "toggle")
+    AddProfileTooltip(includeBlizzEM, "Include Blizzard Edit Mode layout",
+        "Off (default): profile strings never carry or change the Blizzard Edit Mode arrangement. On: full-profile exports include it and imports apply it.")
+    local function SyncBlizzEMFlag()
+        local on = M.profileIncludeBlizzardEM == true
+        includeBlizzEM:SetChecked(on)
+        CallGlobal("MSUF_Profiles_SetExportBlizzardEditMode", on)
+        CallGlobal("MSUF_Profiles_SetImportBlizzardEditMode", on)
+    end
+    includeBlizzEM:SetScript("OnClick", function(self)
+        if BlockCombatAction() then
+            self:SetChecked(M.profileIncludeBlizzardEM == true)
+            return
+        end
+        M.profileIncludeBlizzardEM = not (M.profileIncludeBlizzardEM == true)
+        SyncBlizzEMFlag()
+    end)
+    SyncBlizzEMFlag()
     local legacy = ProfileButton(actionsCard, "Import Legacy", function()
         if BlockCombatAction() then return end
         local text = blob:GetText()

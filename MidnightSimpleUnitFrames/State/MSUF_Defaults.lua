@@ -1709,6 +1709,9 @@ end
 if g.dandersEditModeIntegration == nil then
     g.dandersEditModeIntegration = true
 end
+if g.blizzardEditModeIntegration == nil then
+    g.blizzardEditModeIntegration = true
+end
 if g.dropdownStyleMode == nil then
     g.dropdownStyleMode = "msuf"
 elseif g.dropdownStyleMode ~= "old" and g.dropdownStyleMode ~= "msuf" and g.dropdownStyleMode ~= "blizzard" and g.dropdownStyleMode ~= "legacy" then

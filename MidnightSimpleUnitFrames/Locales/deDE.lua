@@ -5302,6 +5302,24 @@ L["Padding"] = "Innenabstand"
 L["Faded opacity"] = "Fade-Deckkraft"
 L["Click through"] = "Durchklickbar"
 
+-- Menu localization pass 2026-08-07 (part 5): Blizzard Edit Mode integration.
+L["Show Blizzard frames in MSUF Edit Mode"] = "Blizzard-Frames im MSUF Edit Mode anzeigen"
+L["Blizzard Edit Mode integration"] = "Blizzard-Edit-Mode-Integration"
+L["On (default): MSUF Edit Mode can move the Blizzard Minimap, Chat, Micro Menu and Tooltip through the game's own Edit Mode layout. If a Blizzard preset is active, selecting an element creates and activates a saved 'MSUF' layout automatically."] = "An (Standard): Der MSUF Edit Mode kann Blizzards Minimap, Chat, Mikromenü und Tooltip über das spieleigene Edit-Mode-Layout verschieben. Ist ein Blizzard-Preset aktiv, legt die Auswahl eines Elements automatisch ein gespeichertes Layout 'MSUF' an und aktiviert es."
+
+-- Menu localization pass 2026-08-08 (part 2): Blizzard Edit Mode profile opt-in.
+L["Include Blizzard Edit Mode layout"] = "Blizzard-Edit-Mode-Layout einbeziehen"
+L["Off (default): profile strings never carry or change the Blizzard Edit Mode arrangement. On: full-profile exports include it and imports apply it."] = "Aus (Standard): Profil-Strings enthalten oder ändern die Blizzard-Edit-Mode-Anordnung nie. An: Vollprofil-Exporte enthalten sie und Importe wenden sie an."
+
+-- Menu localization pass 2026-08-08 (part 3): Blizzard layout dialog status line.
+L["All Edit Mode layout slots are full (5 account + 5 character). Delete a layout in Blizzard's Edit Mode, then try again."] = "Alle Edit-Mode-Layout-Plätze sind belegt (5 Account + 5 Charakter). Lösche ein Layout in Blizzards Edit Mode und versuche es erneut."
+L["Layout creation failed:"] = "Layout-Erstellung fehlgeschlagen:"
+
+-- Menu localization pass 2026-08-08: Blizzard layout dialog.
+L["Create Edit Mode layout"] = "Edit-Mode-Layout erstellen"
+L["Blizzard presets cannot be edited. Save a copy as a new layout to move and adjust Blizzard frames."] = "Blizzard-Voreinstellungen können nicht bearbeitet werden. Speichere eine Kopie als neues Layout, um Blizzard-Frames zu verschieben und anzupassen."
+L["Create"] = "Erstellen"
+
 -- Menu localization pass 2026-08-06 (part 6): pandemic badge format key.
 L["On / %s"] = "An / %s"
 

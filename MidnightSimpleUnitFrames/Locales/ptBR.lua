@@ -4862,6 +4862,24 @@ L["Padding"] = "Margem interna"
 L["Faded opacity"] = "Opacidade esmaecida"
 L["Click through"] = "Clique atravessa"
 
+-- Menu localization pass 2026-08-07 (part 5): Blizzard Edit Mode integration.
+L["Show Blizzard frames in MSUF Edit Mode"] = "Mostrar quadros da Blizzard no Modo de edição do MSUF"
+L["Blizzard Edit Mode integration"] = "Integração com o Modo de edição da Blizzard"
+L["On (default): MSUF Edit Mode can move the Blizzard Minimap, Chat, Micro Menu and Tooltip through the game's own Edit Mode layout. If a Blizzard preset is active, selecting an element creates and activates a saved 'MSUF' layout automatically."] = "Ligado (padrão): o Modo de edição do MSUF pode mover o minimapa, o bate-papo, o micromenu e a dica de ferramenta da Blizzard através do layout do Modo de edição do próprio jogo. Se uma predefinição da Blizzard estiver ativa, selecionar um elemento cria e ativa automaticamente um layout salvo 'MSUF'."
+
+-- Menu localization pass 2026-08-08 (part 2): Blizzard Edit Mode profile opt-in.
+L["Include Blizzard Edit Mode layout"] = "Incluir layout do Modo de edição da Blizzard"
+L["Off (default): profile strings never carry or change the Blizzard Edit Mode arrangement. On: full-profile exports include it and imports apply it."] = "Desligado (padrão): strings de perfil nunca contêm ou alteram a organização do Modo de edição da Blizzard. Ligado: exportações de perfil completo a incluem e importações a aplicam."
+
+-- Menu localization pass 2026-08-08 (part 3): Blizzard layout dialog status line.
+L["All Edit Mode layout slots are full (5 account + 5 character). Delete a layout in Blizzard's Edit Mode, then try again."] = "Todos os espaços de layout do Modo de edição estão ocupados (5 de conta + 5 de personagem). Exclua um layout no Modo de edição da Blizzard e tente novamente."
+L["Layout creation failed:"] = "Falha ao criar o layout:"
+
+-- Menu localization pass 2026-08-08: Blizzard layout dialog.
+L["Create Edit Mode layout"] = "Criar layout do Modo de edição"
+L["Blizzard presets cannot be edited. Save a copy as a new layout to move and adjust Blizzard frames."] = "As predefinições da Blizzard não podem ser editadas. Salve uma cópia como um novo layout para mover e ajustar os quadros da Blizzard."
+L["Create"] = "Criar"
+
 -- Menu localization pass 2026-08-06 (part 6): pandemic badge format key.
 L["On / %s"] = "Ligado / %s"
 

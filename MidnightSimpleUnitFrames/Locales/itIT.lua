@@ -4936,6 +4936,24 @@ L["Padding"] = "Margine interno"
 L["Faded opacity"] = "Opacità attenuata"
 L["Click through"] = "Clic attraverso"
 
+-- Menu localization pass 2026-08-07 (part 5): Blizzard Edit Mode integration.
+L["Show Blizzard frames in MSUF Edit Mode"] = "Mostra i riquadri Blizzard nella Modalità modifica di MSUF"
+L["Blizzard Edit Mode integration"] = "Integrazione con la Modalità modifica di Blizzard"
+L["On (default): MSUF Edit Mode can move the Blizzard Minimap, Chat, Micro Menu and Tooltip through the game's own Edit Mode layout. If a Blizzard preset is active, selecting an element creates and activates a saved 'MSUF' layout automatically."] = "Attivo (predefinito): la Modalità modifica di MSUF può spostare minimappa, chat, micromenu e tooltip di Blizzard tramite la disposizione della Modalità modifica del gioco. Se è attiva una preimpostazione Blizzard, selezionare un elemento crea e attiva automaticamente una disposizione salvata 'MSUF'."
+
+-- Menu localization pass 2026-08-08 (part 2): Blizzard Edit Mode profile opt-in.
+L["Include Blizzard Edit Mode layout"] = "Includi disposizione della Modalità modifica Blizzard"
+L["Off (default): profile strings never carry or change the Blizzard Edit Mode arrangement. On: full-profile exports include it and imports apply it."] = "Disattivato (predefinito): le stringhe profilo non contengono né modificano mai la disposizione della Modalità modifica Blizzard. Attivato: le esportazioni del profilo completo la includono e le importazioni la applicano."
+
+-- Menu localization pass 2026-08-08 (part 3): Blizzard layout dialog status line.
+L["All Edit Mode layout slots are full (5 account + 5 character). Delete a layout in Blizzard's Edit Mode, then try again."] = "Tutti gli spazi per le disposizioni della Modalità modifica sono occupati (5 account + 5 personaggio). Elimina una disposizione nella Modalità modifica di Blizzard e riprova."
+L["Layout creation failed:"] = "Creazione della disposizione non riuscita:"
+
+-- Menu localization pass 2026-08-08: Blizzard layout dialog.
+L["Create Edit Mode layout"] = "Crea disposizione della Modalità modifica"
+L["Blizzard presets cannot be edited. Save a copy as a new layout to move and adjust Blizzard frames."] = "Le preimpostazioni Blizzard non possono essere modificate. Salva una copia come nuova disposizione per spostare e regolare i riquadri Blizzard."
+L["Create"] = "Crea"
+
 -- Menu localization pass 2026-08-06 (part 6): pandemic badge format key.
 L["On / %s"] = "Attivo / %s"
 

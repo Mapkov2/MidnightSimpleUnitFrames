@@ -379,7 +379,7 @@ local function BuildMisc(ctx)
             30, -88, (ellesmere._msuf2Width or ctx.width or 720) - 70, T.colors.muted)
         if ellesmereHelp.SetWordWrap then ellesmereHelp:SetWordWrap(true) end
     end
-    local external = b:CollapsibleSection("misc_external_edit_mode", "External Edit Mode", 262, true)
+    local external = b:CollapsibleSection("misc_external_edit_mode", "External Edit Mode", 298, true)
     local grid2 = BindMiscToggle(external, "Show Grid2 in MSUF Edit Mode",
         "grid2EditModeIntegration", true, "MSUF2_GRID2_EDIT_MODE", 14, -42, 430, PREVIEW_FALSE,
         function(value)
@@ -420,9 +420,19 @@ local function BuildMisc(ctx)
     M.AddTooltip(danders, "DandersFrames Edit Mode integration",
         "On (default): MSUF Edit Mode can move the DandersFrames party and raid containers and free pinned sets. Sets glued to the frames follow them, and DandersFrames remains the owner of all saved positions.",
         { hook = true })
+    local blizzardEM = BindMiscToggle(external, "Show Blizzard frames in MSUF Edit Mode",
+        "blizzardEditModeIntegration", true, "MSUF2_BLIZZARD_EDIT_MODE", 14, -186, 430, PREVIEW_FALSE,
+        function(value)
+            if type(_G.MSUF_BlizzardEditMode_SetEnabled) == "function" then
+                _G.MSUF_BlizzardEditMode_SetEnabled(value)
+            end
+        end)
+    M.AddTooltip(blizzardEM, "Blizzard Edit Mode integration",
+        "On (default): MSUF Edit Mode can move the Blizzard Minimap, Chat, Micro Menu and Tooltip through the game's own Edit Mode layout. If a Blizzard preset is active, selecting an element creates and activates a saved 'MSUF' layout automatically.",
+        { hook = true })
     local externalHelp = W.Text(external,
         "Turn any of these switches off to remove only those external movers. The third-party addons and their settings are not modified.",
-        30, -196, (external._msuf2Width or ctx.width or 720) - 70, T.colors.muted)
+        30, -232, (external._msuf2Width or ctx.width or 720) - 70, T.colors.muted)
     if externalHelp.SetWordWrap then externalHelp:SetWordWrap(true) end
     local mouseover = b:CollapsibleSection("misc_mouseover_highlight", "Frame Highlights", 340, true)
     if W.AttachContextColorReferences then

@@ -4913,6 +4913,24 @@ L["Padding"] = "여백"
 L["Faded opacity"] = "흐림 투명도"
 L["Click through"] = "클릭 통과"
 
+-- Menu localization pass 2026-08-07 (part 5): Blizzard Edit Mode integration.
+L["Show Blizzard frames in MSUF Edit Mode"] = "MSUF 편집 모드에 Blizzard 프레임 표시"
+L["Blizzard Edit Mode integration"] = "Blizzard 편집 모드 연동"
+L["On (default): MSUF Edit Mode can move the Blizzard Minimap, Chat, Micro Menu and Tooltip through the game's own Edit Mode layout. If a Blizzard preset is active, selecting an element creates and activates a saved 'MSUF' layout automatically."] = "켜짐(기본값): MSUF 편집 모드가 게임 자체 편집 모드 배치를 통해 Blizzard의 미니맵, 대화창, 마이크로 메뉴, 툴팁을 이동할 수 있습니다. Blizzard 기본 배치가 활성화된 상태에서 요소를 선택하면 저장된 'MSUF' 배치가 자동으로 생성되고 활성화됩니다."
+
+-- Menu localization pass 2026-08-08 (part 2): Blizzard Edit Mode profile opt-in.
+L["Include Blizzard Edit Mode layout"] = "Blizzard 편집 모드 배치 포함"
+L["Off (default): profile strings never carry or change the Blizzard Edit Mode arrangement. On: full-profile exports include it and imports apply it."] = "끄기(기본값): 프로필 문자열은 Blizzard 편집 모드 배치를 포함하거나 변경하지 않습니다. 켜기: 전체 프로필 내보내기에 포함되며 가져오기 시 적용됩니다."
+
+-- Menu localization pass 2026-08-08 (part 3): Blizzard layout dialog status line.
+L["All Edit Mode layout slots are full (5 account + 5 character). Delete a layout in Blizzard's Edit Mode, then try again."] = "편집 모드 배치 슬롯이 모두 찼습니다(계정 5개 + 캐릭터 5개). Blizzard 편집 모드에서 배치를 하나 삭제한 뒤 다시 시도하세요."
+L["Layout creation failed:"] = "배치 생성 실패:"
+
+-- Menu localization pass 2026-08-08: Blizzard layout dialog.
+L["Create Edit Mode layout"] = "편집 모드 배치 만들기"
+L["Blizzard presets cannot be edited. Save a copy as a new layout to move and adjust Blizzard frames."] = "Blizzard 기본 배치는 편집할 수 없습니다. 복사본을 새 배치로 저장하면 Blizzard 프레임을 이동하고 조정할 수 있습니다."
+L["Create"] = "만들기"
+
 -- Menu localization pass 2026-08-06 (part 6): pandemic badge format key.
 L["On / %s"] = "켜짐 / %s"
 

@@ -473,6 +473,11 @@ MSUF_ProfileIO_PostProfileRuntimeApply = function(reason, applyAll)
         not (type(activeGeneral) == "table" and activeGeneral.dominosEditModeIntegration == false))
     MSUF_ProfileIO_CallGlobal("MSUF_DandersEditMode_SetEnabled",
         not (type(activeGeneral) == "table" and activeGeneral.dandersEditModeIntegration == false))
+    MSUF_ProfileIO_CallGlobal("MSUF_BlizzardEditMode_SetEnabled",
+        not (type(activeGeneral) == "table" and activeGeneral.blizzardEditModeIntegration == false))
+    --- The profile carries the last committed Blizzard Edit Mode arrangement
+    --- (general.blizzardEditModeSnapshot); re-apply it for the new profile.
+    MSUF_ProfileIO_CallGlobal("MSUF_BlizzardEditMode_ApplyProfileSnapshot")
     --- Group-frame config tables are cached by identity. Drop those references
     --- before the runtime rebuild reads the newly active profile root.
     MSUF_ProfileIO_CallGlobal("MSUF_GF_InvalidateConfCache")
@@ -3897,6 +3902,19 @@ local function MSUF_CopyGroupFramePayload()
     end
     return payload
 end
+--- Blizzard Edit Mode data in profile strings is strictly opt-in, per
+--- direction: exports never carry general.blizzardEditModeSnapshot and
+--- imports never apply it unless the profiles-page switch is on. Both flags
+--- are session-transient by design — the user decides per session.
+local MSUF_ProfileIO_ExportBlizzardEM = false
+local MSUF_ProfileIO_ImportBlizzardEM = false
+ExportPublic("MSUF_Profiles_SetExportBlizzardEditMode", function(value)
+    MSUF_ProfileIO_ExportBlizzardEM = value == true
+end)
+ExportPublic("MSUF_Profiles_SetImportBlizzardEditMode", function(value)
+    MSUF_ProfileIO_ImportBlizzardEM = value == true
+end)
+
 local function MSUF_SnapshotForKind(kind)
     MSUF_ProfileIO_EnsureCompleteProfileDB()
     local payload = {}
@@ -3931,6 +3949,17 @@ local function MSUF_SnapshotForKind(kind)
         MSUF_ProfileIO_NormalizeGroupFramePayloadForExport(payload)
     else
          return nil
+    end
+    if type(payload.general) == "table" then
+        payload.general.blizzardEditModeSnapshot = nil
+    end
+    if kind == "all" and MSUF_ProfileIO_ExportBlizzardEM then
+        local blizzSnapshot = type(MSUF_DB) == "table" and type(MSUF_DB.general) == "table"
+            and MSUF_DB.general.blizzardEditModeSnapshot or nil
+        if type(blizzSnapshot) == "table" then
+            if type(payload.general) ~= "table" then payload.general = {} end
+            payload.general.blizzardEditModeSnapshot = MSUF_DeepCopy(blizzSnapshot)
+        end
     end
     return {
         addon   = "MSUF",
@@ -4163,6 +4192,12 @@ local function MSUF_ApplySnapshotToActiveProfile(snapshot)
     if type(kind) ~= "string" or type(payload) ~= "table" then
          return false, "invalid snapshot"
     end
+    --- Opt-in gate for imported Blizzard Edit Mode data: stripped before the
+    --- merge unless the profiles-page switch is on, so a foreign string can
+    --- never silently rearrange the local Blizzard HUD.
+    if not MSUF_ProfileIO_ImportBlizzardEM and type(payload.general) == "table" then
+        payload.general.blizzardEditModeSnapshot = nil
+    end
     if kind == "unitframe" or kind == "groupframe" or kind == "all" then
         MSUF_ProfileIO_TranslateProfileToCurrent(payload, {
             source = "snapshot_import",
@@ -4310,6 +4345,10 @@ local function MSUF_ApplySnapshotToActiveProfile(snapshot)
     MSUF_ProfileIO_PostImportApply_Auras(snapshot.kind, payload)
     MSUF_ProfileIO_PostImportApply_GroupFrames(snapshot.kind, payload)
     MSUF_ProfileIO_PostImportApply_UnitAlphas(kind, payload)
+    if type(payload.general) == "table"
+        and type(payload.general.blizzardEditModeSnapshot) == "table" then
+        MSUF_ProfileIO_CallGlobal("MSUF_BlizzardEditMode_ApplyProfileSnapshot")
+    end
     MSUF_ProfileIO_PostProfileRuntimeApply("PROFILE_IMPORT", true)
     MSUF.ProfileIOCompleteFirstLoadImport()
      return true
@@ -4364,6 +4403,9 @@ local function MSUF_ApplyLegacyTableToActiveProfile(tbl)
         return false
     end
     tbl = staged
+    if not MSUF_ProfileIO_ImportBlizzardEM and type(tbl.general) == "table" then
+        tbl.general.blizzardEditModeSnapshot = nil
+    end
     MSUF_ProfileIO_RunEnsureDB()
     MSUF_ProfileIO_CollectProfileMediaWarnings(tbl)
     --- Keep profile table reference stable; wipe + copy.

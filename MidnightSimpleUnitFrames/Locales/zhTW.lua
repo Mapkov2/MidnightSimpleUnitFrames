@@ -4957,6 +4957,24 @@ L["Padding"] = "內邊距"
 L["Faded opacity"] = "淡出透明度"
 L["Click through"] = "點擊穿透"
 
+-- Menu localization pass 2026-08-07 (part 5): Blizzard Edit Mode integration.
+L["Show Blizzard frames in MSUF Edit Mode"] = "在 MSUF 編輯模式中顯示暴雪框架"
+L["Blizzard Edit Mode integration"] = "暴雪編輯模式整合"
+L["On (default): MSUF Edit Mode can move the Blizzard Minimap, Chat, Micro Menu and Tooltip through the game's own Edit Mode layout. If a Blizzard preset is active, selecting an element creates and activates a saved 'MSUF' layout automatically."] = "開啟（預設）：MSUF 編輯模式可透過遊戲內建的編輯模式版面配置移動暴雪的小地圖、聊天視窗、微型選單和滑鼠提示。若目前使用暴雪預設版面配置，選擇任一元素會自動建立並啟用名為'MSUF'的已儲存版面配置。"
+
+-- Menu localization pass 2026-08-08 (part 2): Blizzard Edit Mode profile opt-in.
+L["Include Blizzard Edit Mode layout"] = "包含暴雪編輯模式版面配置"
+L["Off (default): profile strings never carry or change the Blizzard Edit Mode arrangement. On: full-profile exports include it and imports apply it."] = "關閉（預設）：設定檔字串不會包含或變更暴雪編輯模式版面配置。開啟：完整設定檔匯出會包含該配置，匯入時會套用。"
+
+-- Menu localization pass 2026-08-08 (part 3): Blizzard layout dialog status line.
+L["All Edit Mode layout slots are full (5 account + 5 character). Delete a layout in Blizzard's Edit Mode, then try again."] = "編輯模式版面配置欄位已全部佔滿（帳號5個+角色5個）。請在暴雪編輯模式中刪除一個版面配置後重試。"
+L["Layout creation failed:"] = "版面配置建立失敗："
+
+-- Menu localization pass 2026-08-08: Blizzard layout dialog.
+L["Create Edit Mode layout"] = "建立編輯模式版面配置"
+L["Blizzard presets cannot be edited. Save a copy as a new layout to move and adjust Blizzard frames."] = "暴雪預設版面配置無法編輯。將其另存為新版面配置後即可移動和調整暴雪框架。"
+L["Create"] = "建立"
+
 -- Menu localization pass 2026-08-06 (part 6): pandemic badge format key.
 L["On / %s"] = "開啟 / %s"
 

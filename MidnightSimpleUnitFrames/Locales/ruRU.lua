@@ -4953,6 +4953,24 @@ L["Padding"] = "Отступ"
 L["Faded opacity"] = "Прозрачность затухания"
 L["Click through"] = "Сквозные клики"
 
+-- Menu localization pass 2026-08-07 (part 5): Blizzard Edit Mode integration.
+L["Show Blizzard frames in MSUF Edit Mode"] = "Показывать фреймы Blizzard в Режиме редактирования MSUF"
+L["Blizzard Edit Mode integration"] = "Интеграция с Режимом редактирования Blizzard"
+L["On (default): MSUF Edit Mode can move the Blizzard Minimap, Chat, Micro Menu and Tooltip through the game's own Edit Mode layout. If a Blizzard preset is active, selecting an element creates and activates a saved 'MSUF' layout automatically."] = "Включено (по умолчанию): Режим редактирования MSUF может перемещать мини-карту, чат, микроменю и подсказку Blizzard через игровой макет Режима редактирования. Если активна предустановка Blizzard, выбор элемента автоматически создаёт и включает сохранённый макет 'MSUF'."
+
+-- Menu localization pass 2026-08-08 (part 2): Blizzard Edit Mode profile opt-in.
+L["Include Blizzard Edit Mode layout"] = "Включать макет Режима редактирования Blizzard"
+L["Off (default): profile strings never carry or change the Blizzard Edit Mode arrangement. On: full-profile exports include it and imports apply it."] = "Выкл. (по умолчанию): строки профиля никогда не содержат и не меняют расположение Режима редактирования Blizzard. Вкл.: экспорт полного профиля включает его, а импорт применяет."
+
+-- Menu localization pass 2026-08-08 (part 3): Blizzard layout dialog status line.
+L["All Edit Mode layout slots are full (5 account + 5 character). Delete a layout in Blizzard's Edit Mode, then try again."] = "Все ячейки макетов Режима редактирования заняты (5 на учётную запись + 5 на персонажа). Удалите макет в Режиме редактирования Blizzard и попробуйте снова."
+L["Layout creation failed:"] = "Не удалось создать макет:"
+
+-- Menu localization pass 2026-08-08: Blizzard layout dialog.
+L["Create Edit Mode layout"] = "Создать макет Режима редактирования"
+L["Blizzard presets cannot be edited. Save a copy as a new layout to move and adjust Blizzard frames."] = "Предустановки Blizzard нельзя редактировать. Сохраните копию как новый макет, чтобы перемещать и настраивать фреймы Blizzard."
+L["Create"] = "Создать"
+
 -- Menu localization pass 2026-08-06 (part 6): pandemic badge format key.
 L["On / %s"] = "Вкл. / %s"
 
