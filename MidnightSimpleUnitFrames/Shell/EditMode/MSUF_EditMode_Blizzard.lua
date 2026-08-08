@@ -23,7 +23,7 @@ if type(systemEnum) ~= "table" then return end
 local OWNER, SETTING = "MSUF.Blizzard", "blizzardEditModeIntegration"
 local LAYOUT_NAME = "MSUF"
 local registered = {}
-local active, tooltipContainerShown = false, false
+local active, tooltipContainerShown, sessionActive = false, false, false
 
 local function Export(name, value)
     if type(MSUF.ExportPublic) == "function" then return MSUF.ExportPublic(name, value) end
@@ -745,6 +745,19 @@ local function ApplyProfileSnapshot()
             tonumber(anchor.offsetX) or 0, tonumber(anchor.offsetY) or 0)
         ApplyVisual(systemId, entry)
     end
+    --- One-shot hard resync (LibEditModeOverride's trick): toggling
+    --- Blizzard's Edit Mode panel makes the manager reload and re-apply the
+    --- saved layouts, so its internal caches finally match our data-only
+    --- saves. Only here — after a profile apply a brief flash is fine; per
+    --- stepper click it would not be. Never mid-session or in combat.
+    if not sessionActive and not InCombat() then
+        local manager = _G.EditModeManagerFrame
+        if manager and type(_G.ShowUIPanel) == "function" and type(_G.HideUIPanel) == "function" then
+            _G.ShowUIPanel(manager)
+            _G.HideUIPanel(manager)
+            InvalidateLayoutCache()
+        end
+    end
     return true
 end
 
@@ -752,6 +765,12 @@ local function OpenSettings()
     local manager = _G.EditModeManagerFrame
     if InCombat() or not manager then return false end
     if type(_G.ShowUIPanel) == "function" then
+        --- Blizzard's own manager can switch the active layout while the MSUF
+        --- session stays open. The cached info predates that switch, so keeping
+        --- it would make the next mover drag edit the previous layout and save
+        --- the whole stale table back over the user's choice. Handing control
+        --- over is a save-free moment, so dropping the cache is safe here.
+        InvalidateLayoutCache()
         _G.ShowUIPanel(manager)
         return true
     end
@@ -849,6 +868,7 @@ local function TooltipIsBlizzardControlled()
 end
 
 local function SessionChanged(enabled)
+    sessionActive = enabled == true
     if not enabled then
         if layoutDialog then layoutDialog:Hide() end
         SnapshotAll()

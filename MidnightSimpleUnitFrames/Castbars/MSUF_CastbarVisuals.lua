@@ -570,20 +570,23 @@ local function AnchorFontString(fs, relativeTo, position, x, y, defaultJustify)
     fs:ClearAllPoints()
     if position == "CENTER" then
         fs:SetPoint("CENTER", relativeTo, "CENTER", x, y)
-        fs:SetJustifyH(justify)
     elseif position == "RIGHT" then
         fs:SetPoint("RIGHT", relativeTo, "RIGHT", x, y)
-        fs:SetJustifyH(justify)
     elseif position == "ABOVE" then
         fs:SetPoint("BOTTOM", relativeTo, "TOP", x, y + 2)
-        fs:SetJustifyH(justify)
     elseif position == "BELOW" then
         fs:SetPoint("TOP", relativeTo, "BOTTOM", x, y - 2)
-        fs:SetJustifyH(justify)
     else
         fs:SetPoint("LEFT", relativeTo, "LEFT", 2 + x, y)
-        fs:SetJustifyH(justify)
     end
+    -- SetJustifyH on a rect that is still unresolved after an anchor change
+    -- leaves the FontString stuck on its previous alignment, so the Alignment
+    -- setting stayed invisible until a later width/font change re-laid the
+    -- string out. Blizzard resolves the rect first for the same reason (see
+    -- EncounterTimelineTimerEventMixin:UpdateNameTextLayout). This runs on the
+    -- cold path only: the cache above already returned for unchanged anchors.
+    if fs.GetRect then fs:GetRect() end
+    fs:SetJustifyH(justify)
 end
 
 local function ResolveTimeTextFontSize(g, prefix)

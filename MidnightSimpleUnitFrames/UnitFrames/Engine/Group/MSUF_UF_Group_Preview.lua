@@ -88,15 +88,18 @@ local function IsRaidLikeKind(kind)
 end
 
 local function AnchorPoint(conf)
+  if GF.GetAnchorPoint then return GF.GetAnchorPoint(conf) end
   local point = conf and (conf.anchorPoint or conf.point) or "CENTER"
   if not VALID_POINTS[point] then point = "CENTER" end
   return point
 end
 
-local function RelativeAnchorPoint(conf, fallback)
-  local point = conf and conf.relativePoint or fallback or "CENTER"
-  if not VALID_POINTS[point] then point = fallback or "CENTER" end
-  return point
+--- Both sides of a group anchor come from the single visible Anchor Point; see
+--- GF.ResolveAnchorPoint (MSUF_GroupFrames_DB.lua) for the legacy pair it retires.
+local function ResolveAnchorPoint(kind, conf, parent)
+  if GF.ResolveAnchorPoint then return GF.ResolveAnchorPoint(kind, conf, parent) end
+  local point = AnchorPoint(conf)
+  return point, point
 end
 
 local function PointFraction(point)
@@ -276,11 +279,13 @@ local function PositionContainer(kind, count)
   if parent then
     point, relativePoint, relative, x, y = "CENTER", "CENTER", parent, 0, 0
   else
+    relative = ResolveAnchorFrame(conf, container)
+    -- Resolving can retire a legacy relativePoint into the offsets, so read
+    -- those afterwards.
+    point, relativePoint = ResolveAnchorPoint(kind, conf, relative)
     local cx, cy = tonumber(conf.offsetX), tonumber(conf.offsetY)
     if cx == nil or cy == nil then cx, cy = DefaultCenter(kind) end
-    point = AnchorPoint(conf)
-    relativePoint = RelativeAnchorPoint(conf, point)
-    relative, x, y = ResolveAnchorFrame(conf, container), floor(cx + 0.5), floor(cy + 0.5)
+    x, y = floor(cx + 0.5), floor(cy + 0.5)
     x, y = ClampPreviewOffsetOnScreen(point, relativePoint, relative, x, y, containerW, containerH)
   end
   local containerKey = tostring(point) .. "\030" .. tostring(relativePoint) .. "\030" .. tostring(relative) .. "\030" .. tostring(x) .. "\030" .. tostring(y)

@@ -741,6 +741,94 @@ local function IsDefaultsConf(kind, conf)
 end
 
 ---
+--- Anchor point
+--- Party, Raid and Mythic Raid expose exactly ONE anchor control ("Anchor
+--- Point"): it pins the chosen corner of the block to the identical corner of
+--- the anchor frame. `point` is only its legacy projection, and `relativePoint`
+--- has no control at all - but profiles still carry both, and the placement code
+--- used to let a stale `relativePoint` win over the visible setting. A scope
+--- whose leftover said CENTER anchored to the middle of the anchor frame while a
+--- scope without one anchored to its corner, so two scopes showing the same
+--- Anchor Point and the same X/Y landed half an anchor frame apart (GitHub #67).
+--- Retire the leftovers on the first placement - folding them into the saved
+--- offsets keeps the block exactly where it is - and let the visible setting own
+--- both sides from then on. Priority Frames are excluded on purpose: point and
+--- relativePoint are real, settable options there (GF.SetPriorityOption).
+---
+local ANCHOR_POINTS = {
+    CENTER = true, TOP = true, BOTTOM = true, LEFT = true, RIGHT = true,
+    TOPLEFT = true, TOPRIGHT = true, BOTTOMLEFT = true, BOTTOMRIGHT = true,
+}
+
+local function AnchorPointFraction(point)
+    local fx, fy = 0.5, 0.5
+    if point == "LEFT" or point == "TOPLEFT" or point == "BOTTOMLEFT" then
+        fx = 0
+    elseif point == "RIGHT" or point == "TOPRIGHT" or point == "BOTTOMRIGHT" then
+        fx = 1
+    end
+    if point == "BOTTOM" or point == "BOTTOMLEFT" or point == "BOTTOMRIGHT" then
+        fy = 0
+    elseif point == "TOP" or point == "TOPLEFT" or point == "TOPRIGHT" then
+        fy = 1
+    end
+    return fx, fy
+end
+
+function GF.GetAnchorPoint(conf)
+    local point = conf and (conf.anchorPoint or conf.point) or "CENTER"
+    if not ANCHOR_POINTS[point] then point = "CENTER" end
+    return point
+end
+
+--- Convert a legacy relativePoint into the saved offsets. Returns false while
+--- the anchor frame has no measurable size so the next placement can retry;
+--- until then the old pair stays live and the block does not jump.
+local function RetireLegacyRelativePoint(conf, point, parent)
+    local legacy = conf.relativePoint
+    if not ANCHOR_POINTS[legacy] or legacy == point then
+        conf.relativePoint = nil
+        return true
+    end
+    local w = parent and parent.GetWidth and tonumber(parent:GetWidth())
+    local h = parent and parent.GetHeight and tonumber(parent:GetHeight())
+    if not (w and h and w > 0 and h > 0) then return false end
+    local fx, fy = AnchorPointFraction(point)
+    local rfx, rfy = AnchorPointFraction(legacy)
+    conf.offsetX = math_floor(((tonumber(conf.offsetX) or 0) + w * (rfx - fx)) + 0.5)
+    conf.offsetY = math_floor(((tonumber(conf.offsetY) or 0) + h * (rfy - fy)) + 0.5)
+    conf.relativePoint = nil
+    return true
+end
+
+--- Anchor points for one group block, ready to feed a SetPoint call. `parent` is
+--- the already resolved anchor frame; it is only read to retire the legacy pair.
+--- Callers must read conf.offsetX/offsetY AFTER this, since retiring rewrites
+--- them. Cold path only (header setup, preview build, Edit Mode sync).
+function GF.ResolveAnchorPoint(kind, conf, parent)
+    local point = GF.GetAnchorPoint(conf)
+    if kind == "priority" then
+        local relativePoint = conf and conf.relativePoint
+        return point, ANCHOR_POINTS[relativePoint] and relativePoint or point
+    end
+    --- Callers reach this with a header key ("raid" also carries the Mythic Raid
+    --- conf), so reject every defaults table instead of the one for `kind`:
+    --- a shared defaults table must never collect a scope's position.
+    if type(conf) ~= "table"
+        or conf == PARTY_DEFAULTS or conf == RAID_DEFAULTS
+        or conf == MYTHIC_RAID_DEFAULTS or conf == PRIORITY_DEFAULTS then
+        return point, point
+    end
+    if conf.relativePoint ~= nil and not RetireLegacyRelativePoint(conf, point, parent) then
+        return point, conf.relativePoint
+    end
+    --- Keep the legacy projection in step so exports, imports and the Assistant
+    --- never read a point the menu no longer shows.
+    if conf.point ~= point then conf.point = point end
+    return point, point
+end
+
+---
 --- Group Frame Scaling
 --- Scales the physical frame geometry first; render modules then use the
 --- cached scale for fonts and icons. Keeping the math here prevents the

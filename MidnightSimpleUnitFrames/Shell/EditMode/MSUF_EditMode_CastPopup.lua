@@ -137,6 +137,18 @@ local function RefreshUFPreview(reason)
     if type(fn) == "function" then fn(reason or "EM2_CASTBAR_POPUP") end
 end
 
+--- Menu2 loads after this file and may be absent entirely, so the route is resolved
+--- at call time. Only size writes need it: the Castbar section paints the manual
+--- width/height sliders and the Width mode dropdown that a manual width forces back
+--- to "manual". The position offsets have no Menu2 control, so they stay off this path.
+--- Every caller sits behind Apply's combat fail-close, and the route itself defers
+--- nothing, so this cannot cost a single cycle once combat starts.
+local function SyncMenuAfterSizeWrite()
+    if EM2.Focus and type(EM2.Focus.NotifySettingChanged) == "function" then
+        EM2.Focus.NotifySettingChanged()
+    end
+end
+
 local function ReapplyCastbar(unit)
     if type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
         _G.MSUF_ApplyCastbarUnitAndSync(unit)
@@ -195,6 +207,7 @@ local function Apply(mode)
     end
 
     ReapplyCastbar(unit)
+    if mode ~= "position" then SyncMenuAfterSizeWrite() end
     if pf and pf:IsShown() then Sync() end
 end
 

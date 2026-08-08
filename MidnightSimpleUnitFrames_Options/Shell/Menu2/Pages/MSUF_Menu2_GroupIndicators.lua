@@ -1738,7 +1738,7 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
     }
     RegisterControl(previewAll, ctx, "spell.preview_all", "Preview all spells", "button", "ephemeral")
     if M.AddTooltip then
-        M.AddTooltip(previewAll, "Preview all spells", "On previews every enabled spell for this spec. Off previews only the selected spell.", { hook = true })
+        M.AddTooltip(previewAll, "Preview all spells", "On previews every enabled spell of every tracked spec, including spells that only draw a frame effect. Off previews only the selected spell.", { hook = true })
     end
     RefreshPreviewAllButton()
     local multiSpecDrop = W.Dropdown(spells, Tr("Multi-Spec Entry"), function() return SpellTrackedSpecValues() end, siRightW)

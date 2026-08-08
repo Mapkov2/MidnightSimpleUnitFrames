@@ -8,10 +8,35 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-RC15",
-    previousVersion = "6.0-RC14",
-    rangeLabel = "6.0-RC14 -> 6.0-RC15",
+    currentVersion = "6.0-RC16",
+    previousVersion = "6.0-RC15",
+    rangeLabel = "6.0-RC15 -> 6.0-RC16",
     entries = {
+        {
+            version = "6.0-RC16",
+            date = "2026-08-08",
+            sections = {
+                {
+                    title = "Changes",
+                    bullets = {
+                        "The castbar icon border style is now a dropdown on the Castbar Icon tab: None, Dark or the castbar border color. The thickness slider still decides whether a border shows at all, and new castbars default to Dark.",
+                        "The Dispel Symbol card's runtime preview toggle is labeled \"Runtime Preview: live UnitFrame (drag)\" so it is no longer identical to the Dispel Overlay preview on the same page.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Fixed Party and Raid frames landing in different places from the same X/Y with the same Anchor To and Anchor Point (#67). A leftover relativePoint from older profiles silently anchored one scope to the middle of the anchor frame; the Anchor Point now owns both sides, and the leftover is folded into the saved X/Y so nothing moves.",
+                        "Fixed the castbar Spell Text and Time Text Alignment setting doing nothing until an unrelated width or font change re-laid the text out (#69). Both the live castbar and the menu preview now apply the alignment immediately.",
+                        "Fixed an imported Blizzard Edit Mode arrangement not being picked up by the game's own Edit Mode manager. Applying a profile ends with a one-shot resync, out of combat only.",
+                        "Fixed a mover drag editing the previously active Blizzard layout after Blizzard's own Edit Mode panel switched layouts. The cached layout is dropped when MSUF hands control over.",
+                        "Fixed castbar size changes made in the Edit Mode quick popup leaving the open Castbar menu page on the old values. The width and height sliders and the Width mode dropdown now repaint with the write.",
+                        "Fixed the aura blacklist not repainting after an entry was added or removed, and the preset spell dropdown still offering spells that are already on the list.",
+                        "Fixed \"Preview all spells\" showing only the spec the editor happened to display and skipping spells whose indicator is a frame effect. It now mirrors the compiled runtime set across every tracked spec; corner custom slots stay with Corner Indicators.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-RC15",
             date = "2026-08-08",
@@ -110,40 +135,6 @@ local data = {
                         "Fixed the Assistant rejecting an Inline Custom Separator longer than five characters instead of storing the trimmed value.",
                         "Fixed the Big Defensive sort method being unselectable by name, and Only Mine on the preset custom container reporting a failed write instead of explaining that MSUF pins it.",
                         "Follow-ups to a readability answer (make it wider, actually make it 320) now apply to the control that answer named, and a shortened indicator name continues the subject already under discussion.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-RC12",
-            date = "2026-08-07",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "Added Back and Forward page navigation to the menu status strip. Both buttons name their target page in the tooltip, skip the transient Search page, and are available to the Assistant.",
-                        "MSUF frames now follow a supported Cooldown Manager provider live while out of combat. Unit frames, Group headers and Class Resources keep a real anchor link to Arc UI, Skiron, Coolinator and Blizzard's viewer, and that link is severed at the combat edge so provider movement can never drag a protected frame mid-fight.",
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "The Detached Power width mode now outranks a Detached width typed on the frame; the shared Class Resources width mode remains its fallback while width sync is on. Manual resolves to no source, so untouched profiles keep their current width.",
-                        "Status text colors now have one entry point per surface: the ::: shortcut on the Status > Selected card and the canonical Colors page. The duplicate swatch on Status > Placement was removed.",
-                        "Split the runtime chat/tooltip file into dedicated slash command, unit tooltip and Blizzard Edit Mode bridge modules. Load order, exports and behavior are unchanged.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed MSUF frames not following a Cooldown Manager provider that moved or resized without changing identity. Provider movement is now free out of combat, and combat-time changes are replayed once after regen instead of being lost.",
-                        "Fixed frames anchored to a provider whose geometry is not readable yet rendering nowhere. They now keep the cached screen position or fall back to UIParent and retry on the bounded late-anchor pass.",
-                        "Fixed Group Cooldown Font and Stack Font not applying until an unrelated setting was changed. Aura text sizes now invalidate the aura domain instead of the text-only fast path.",
-                        "Fixed the Custom Aura Pandemic color losing its menu entry. The color is reached through the section's ::: shortcut, and menu search and the Assistant resolve to that shortcut.",
-                        "Fixed the detached Power width preview disagreeing with live frames when a Cooldown Viewer source was selected.",
-                        "Edit Mode frame positioning is now blocked at the combat boundary and rolls back atomically when an external anchor target cannot resolve.",
-                        "Class Resources no longer runs its layout twice when the same Cooldown Viewer provides both its anchor and its width.",
-                        "Font runtime resolves its apply-cache helpers once at load instead of per FontString, and the combat regen drivers arm their event only once per fight.",
                     },
                 },
             },

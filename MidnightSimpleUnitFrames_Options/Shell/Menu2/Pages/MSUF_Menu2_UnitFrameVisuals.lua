@@ -21,7 +21,11 @@ local CASTBAR_ICON_POSITIONS = VT("LEFT", "Left", "RIGHT", "Right", "INSIDE_LEFT
 local CASTBAR_TEXT_POSITIONS = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right", "ABOVE", "Above", "BELOW", "Below")
 local CASTBAR_TIME_FORMATS = VT("CURRENT", "Remaining", "ELAPSED", "Elapsed", "ELAPSED_MAX", "Elapsed / Total", "CURRENT_MAX", "Remaining / Total")
 local CASTBAR_TAB_VALUES = VT("general", "General", "icon", "Icon", "spell", "Spell Text", "time", "Time Text", "advanced", "Advanced")
-local CASTBAR_TAB_HEIGHTS = { general = 392, icon = 486, spell = 386, time = 386, advanced = 480 }
+--- The thickness slider owns on/off (0 hides the border); this picks how the
+--- visible border is painted. "Castbar border color" is the only value the
+--- Castbar Icon Border Color shortcut applies to.
+local CASTBAR_ICON_BORDER_STYLES = VT("NONE", "None", "DARK", "Dark", "CASTBAR", "Castbar border color")
+local CASTBAR_TAB_HEIGHTS = { general = 392, icon = 540, spell = 386, time = 386, advanced = 480 }
 local CASTBAR_WIDTH_SOURCE_VALUES = VT("manual", "Manual width", "unitframe", "Auto: Unit Frame", "essential", "Auto: Essential Cooldowns", "utility", "Auto: Utility Cooldowns")
 local CASTBAR_TEXT_ALIGN = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right")
 local CASTBAR_TRUNCATE_VALUES = VT("AUTO", "Auto fit", "CLIP", "Manual width", "NONE", "No width limit")
@@ -928,7 +932,7 @@ local function BuildCastbar(ctx, builder, unit)
     local generalCard = W.ControlCard(generalTab, nil, nil, leftX, -4, leftW, 132)
     local providerCard = W.ControlCard(generalTab, "Provider & Surface", nil, rightX, -4, rightW, 132)
     local sizeCard = W.ControlCard(generalTab, "Size", "Width can use manual bounds or follow another frame.", leftX, -154, sectionW - 32, 166)
-    local iconCard = W.ControlCard(iconTab, nil, nil, leftX, -4, leftW, 370)
+    local iconCard = W.ControlCard(iconTab, nil, nil, leftX, -4, leftW, 424)
     local portraitIconCard = W.ControlCard(iconTab, "Portrait Cast Icon", nil, rightX, -4, rightW, 156)
     local spellCard = W.ControlCard(spellTab, nil, nil, leftX, -4, leftW, 270)
     local targetNameCard = fields.targetName and W.ControlCard(spellTab, "Cast Target Text", nil, rightX, -4, rightW, 270) or nil
@@ -1136,10 +1140,21 @@ local function BuildCastbar(ctx, builder, unit)
         { "slider", "Icon Zoom (%)", 16, -196, controlWLeft, 100, 200, 1, DetailKey("IconZoom"), 100, "MSUF2_CASTBAR_ICON_ZOOM" },
         { "slider", "Spacing", 16, -250, controlWLeft, 0, 40, 1, DetailKey("IconSpacing"), 1, "MSUF2_CASTBAR_ICON_SPACING" },
         { "slider", "Border thickness", 16, -304, controlWLeft, 0, 8, 1, DetailKey("IconBorderThickness"), 0, "MSUF2_CASTBAR_ICON_BORDER_THICKNESS", function(v)
-            if tonumber(v) and tonumber(v) > 0 and tostring(ReadGeneralValue(DetailKey("IconBorderStyle"), "NONE")):upper() == "NONE" then
+            if tonumber(v) and tonumber(v) > 0 and tostring(ReadGeneralValue(DetailKey("IconBorderStyle"), "DARK")):upper() == "NONE" then
                 GetGeneral()[DetailKey("IconBorderStyle")] = "DARK"
+                -- The Border style dropdown below must show what this just
+                -- wrote. Only the one-shot upgrade refreshes, never every tick
+                -- of the drag.
+                M.RequestRefresh(ctx, "castbar-icon-border-style-upgrade")
             end
         end },
+        { "dropdown", "Border Style", 16, -358, min(260, controlWLeft), CASTBAR_ICON_BORDER_STYLES,
+            DetailKey("IconBorderStyle"), "DARK", "MSUF2_CASTBAR_ICON_BORDER_STYLE", function()
+                -- The Castbar Icon Border Color shortcut is relevant only for
+                -- the Castbar style, so its ::: dot re-evaluates on every
+                -- change here.
+                M.RequestRefresh(ctx, "castbar-icon-border-style")
+            end },
     })
     -- Second surface for the Portrait section's cast-icon toggle: players look for
     -- it next to the castbar icon options. Both toggles write the same per-unit key

@@ -356,15 +356,22 @@ local VALID_POINTS = {
 }
 
 local function AnchorPoint(conf)
+  local gf = GF()
+  if gf and type(gf.GetAnchorPoint) == "function" then return gf.GetAnchorPoint(conf) end
   local point = conf and (conf.anchorPoint or conf.point) or "CENTER"
   if not VALID_POINTS[point] then point = "CENTER" end
   return point
 end
 
-local function RelativeAnchorPoint(conf, fallback)
-  local point = conf and conf.relativePoint or fallback or "CENTER"
-  if not VALID_POINTS[point] then point = fallback or "CENTER" end
-  return point
+--- Both sides of a group anchor come from the single visible Anchor Point; see
+--- GF.ResolveAnchorPoint (MSUF_GroupFrames_DB.lua) for the legacy pair it retires.
+local function ResolveAnchorPoint(kind, conf, parent)
+  local gf = GF()
+  if gf and type(gf.ResolveAnchorPoint) == "function" then
+    return gf.ResolveAnchorPoint(kind, conf, parent)
+  end
+  local point = AnchorPoint(conf)
+  return point, point
 end
 
 local function PointFraction(point)
@@ -655,14 +662,15 @@ local function PositionLogicalPreviewAnchor(kind, conf, totalW, totalH)
       return anchor
     end
   end
+  local parent = ResolveAnchorFrame(conf, anchor)
+  -- Resolving can retire a legacy relativePoint into the offsets, so read those
+  -- afterwards.
+  local point, relativePoint = ResolveAnchorPoint(kind, conf, parent)
   local defX, defY = GetDefaultCenter(kind)
   local cx = tonumber(conf and conf.offsetX)
   local cy = tonumber(conf and conf.offsetY)
   if cx == nil then cx = defX end
   if cy == nil then cy = defY end
-  local point = AnchorPoint(conf)
-  local relativePoint = RelativeAnchorPoint(conf, point)
-  local parent = ResolveAnchorFrame(conf, anchor)
   cx, cy = ClampAnchorOffsetOnScreen(point, relativePoint, parent, floor(cx + 0.5), floor(cy + 0.5), totalW, totalH)
   anchor:SetPoint(point, parent, relativePoint, floor(cx + 0.5), floor(cy + 0.5))
   anchor:Show()
@@ -730,14 +738,14 @@ local function SyncContainer(kind)
     if container._msufGFLogicalAnchor then
       container:SetPoint("CENTER", container._msufGFLogicalAnchor, "CENTER", 0, 0)
     else
+      local parent = ResolveAnchorFrame(conf, container)
+      local point, relativePoint = ResolveAnchorPoint(kind, conf, parent)
       local defX, defY = GetDefaultCenter(kind)
       local cx = tonumber(conf.offsetX)
       local cy = tonumber(conf.offsetY)
       if cx == nil then cx = defX end
       if cy == nil then cy = defY end
-      local point = AnchorPoint(conf)
-      local relativePoint = RelativeAnchorPoint(conf, point)
-      container:SetPoint(point, ResolveAnchorFrame(conf, container), relativePoint, floor(cx + 0.5), floor(cy + 0.5))
+      container:SetPoint(point, parent, relativePoint, floor(cx + 0.5), floor(cy + 0.5))
     end
   end
   local nativeActive = kind ~= "priority" and HasNativePreviewAPI(gf)

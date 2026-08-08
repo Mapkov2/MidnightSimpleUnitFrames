@@ -987,22 +987,32 @@ local function BuildScene(box, reason)
             local placed = exactSlot and item or (item and item.placed)
             local placedType = placed and (exactSlot and placed.visual or placed.type) or "none"
             local placedShown = placed and placedType ~= "none" and item.hiddenVisual ~= true
-            if selectedItem or (scene.previewAllSpecSpellIcons and item and item.specKey == selectedSpellSpecKey and placedShown) then
+            local effect = item and (exactSlot and item.frameEffect or item.frame) or nil
+            local effectKind = type(effect) == "table" and tostring(effect.type or "none"):lower() or "none"
+            local effectShown = effectKind ~= "" and effectKind ~= "none"
+            -- Preview all spells mirrors the compiled runtime set instead of the
+            -- one spec the editor happens to show: Multi-Spec compiles every
+            -- tracked spec, and a spell whose indicator is a frame effect owns no
+            -- placed icon yet still draws. Corner custom slots carry no specKey
+            -- and stay out - they belong to Corner Indicators, not to this list.
+            local previewAllItem = scene.previewAllSpecSpellIcons == true
+                and not selectedItem and item ~= nil and item.specKey ~= nil
+                and (placedShown or effectShown)
+            if selectedItem then
                 if placedShown then scene.previewSpellItems[#scene.previewSpellItems + 1] = item end
+            elseif previewAllItem then
+                scene.previewSpellItems[#scene.previewSpellItems + 1] = item
             end
             if selectedItem then
                 if placedShown then scene.runtimeSpellPlacedAvailable = true end
-                local effect = exactSlot and item.frameEffect or item.frame
                 if effect ~= nil then
                     scene.selectedSpellEffect = effect
-                    local effectKind = type(effect) == "table" and tostring(effect.type or "none"):lower() or "none"
-                    scene.selectedSpellEffectAvailable = effectKind ~= "" and effectKind ~= "none"
+                    scene.selectedSpellEffectAvailable = effectShown
                 end
-                if effect and effect.type and effect.type ~= "none" then
-                    scene.runtimeSpellEffectAvailable = true
-                end
-            elseif scene.previewAllSpecSpellIcons and item and item.specKey == selectedSpellSpecKey and placedShown then
-                scene.runtimeSpellPlacedAvailable = true
+                if effectShown then scene.runtimeSpellEffectAvailable = true end
+            elseif previewAllItem then
+                if placedShown then scene.runtimeSpellPlacedAvailable = true end
+                if effectShown then scene.runtimeSpellEffectAvailable = true end
             end
         end
     end
@@ -3062,7 +3072,8 @@ function Render.Install(box, ctx, deps)
                 local placed = exactSlot and item or (item and item.placed)
                 local selectedItem = item and item.specKey == scene.selectedSpellSpecKey
                     and item.auraName == scene.selectedSpellAuraName
-                local effect = selectedItem and ((exactSlot and item.frameEffect) or item.frame or selectedSpellEffect) or nil
+                local effect = (exactSlot and item.frameEffect) or item.frame
+                    or (selectedItem and selectedSpellEffect) or nil
                 local handle = box:EnsureSpellIndicatorHandle(item, i)
                 local placedType = placed and (exactSlot and placed.visual or placed.type) or "none"
                 local placedShown = placed and placedType ~= "none" and item.hiddenVisual ~= true
@@ -3084,9 +3095,15 @@ function Render.Install(box, ctx, deps)
                 end
                 if handle and (placedShown or effect) then
                     dynamicSpellHandlesActive[handle._msufSpellIndicatorPreviewKey] = handle
-                    -- Full-frame effects have a stable mock-owned preview root;
-                    -- transient icon handles own only their placed/icon visuals.
-                    HideSpellEffectPreview(handle)
+                    -- The selected spell's full-frame effect keeps its stable
+                    -- mock-owned preview root. Every other previewed spell owns
+                    -- its own root, so Preview all spells composites the frame
+                    -- effects by priority exactly like the live frame does.
+                    if effect and not selectedItem then
+                        ApplySpellEffectPreview(handle, effect)
+                    else
+                        HideSpellEffectPreview(handle)
+                    end
                 end
             end
         end

@@ -1563,22 +1563,28 @@ local function ResolveGroupAnchor(conf, owner)
 end
 
 local function GroupAnchorPoint(conf)
+    local gf = MSUF and MSUF.GF
+    if gf and type(gf.GetAnchorPoint) == "function" then return gf.GetAnchorPoint(conf) end
     local point = conf and (conf.anchorPoint or conf.point) or "CENTER"
     if not GROUP_VALID_POINTS[point] then point = "CENTER" end
     return point
 end
 
-local function GroupRelativeAnchorPoint(conf, fallback)
-    local point = conf and conf.relativePoint or fallback or "CENTER"
-    if not GROUP_VALID_POINTS[point] then point = fallback or "CENTER" end
-    return point
+--- Both sides of a group anchor come from the single visible Anchor Point; see
+--- GF.ResolveAnchorPoint (MSUF_GroupFrames_DB.lua) for the legacy pair it retires.
+local function GroupAnchorPoints(kind, conf, parent)
+    local gf = MSUF and MSUF.GF
+    if gf and type(gf.ResolveAnchorPoint) == "function" then
+        return gf.ResolveAnchorPoint(kind, conf, parent)
+    end
+    local point = GroupAnchorPoint(conf)
+    return point, point
 end
 
 local function GroupOffsetFromCenter(bar, conf, centerX, centerY, gridDX, gridDY)
-    local point = GroupAnchorPoint(conf)
-    local relativePoint = GroupRelativeAnchorPoint(conf, point)
     local owner = bar and (bar._msufGFLiveAnchor or bar._msufGFLogicalAnchor or bar) or nil
     local anchor = ResolveGroupAnchor(conf, owner)
+    local point, relativePoint = GroupAnchorPoints(bar and bar._msufGFKind, conf, anchor)
     local ax, ay = PointXY(anchor, relativePoint)
     if not (ax and ay) then
         ax = ((UIParent and UIParent.GetWidth and UIParent:GetWidth()) or 0) * 0.5

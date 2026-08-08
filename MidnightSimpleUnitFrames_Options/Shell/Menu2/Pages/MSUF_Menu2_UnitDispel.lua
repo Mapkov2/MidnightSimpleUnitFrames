@@ -369,7 +369,10 @@ local function BuildUnitDispelSymbolSection(ctx, builder, unit)
             Sync()
         end,
         Meta(ctx, unit, "symbol.enabled", "unitDispelSymbolEnabled"))
-    local preview = W.ToggleAt(card, "Runtime Preview: live UnitFrame", previewX,
+    --- Distinct from the Overlay card's preview on the same page: this one is
+    --- draggable, and two identically labelled toggles gave no way to tell
+    --- them apart. The "(drag)" wording already ships in every locale.
+    local preview = W.ToggleAt(card, "Runtime Preview: live UnitFrame (drag)", previewX,
         wide and -16 or -54, previewW)
     M.BindBoolWidget(ctx, preview,
         function() return _G.MSUF_DispelSymbolPreviewMode == true and _G.MSUF_DispelSymbolPreviewScope == unit end,
