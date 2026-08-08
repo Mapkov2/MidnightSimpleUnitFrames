@@ -400,6 +400,15 @@ local function CreateMover(key, cfg)
     function mover:UpdateLabelVisibility()
         if self._label then self._label:SetText(MoverLabelText(key, cfg)) end
         if _G.MSUF_PreviewTestMode and not (_G.MSUF_InCombat or (_G.InCombatLockdown and _G.InCombatLockdown())) then
+            if cfg.externalPublicElement then
+                --- External elements (Dominos/Danders/Blizzard) have no MSUF
+                --- preview frame underneath, so the tinted band + label stay
+                --- visible as the "MSUF controls this" marker.
+                self._label:Show()
+                self._bg:SetColorTexture(th.bgR, th.bgG, th.bgB, 0.55)
+                self._brd:SetBackdropBorderColor(th.edgeR, th.edgeG, th.edgeB, 0.60)
+                return
+            end
             if cfg.popupType == "unit" and key ~= "boss" and not self._dragging then
                 self._label:Show()
             else
@@ -436,6 +445,11 @@ local function CreateMover(key, cfg)
             return false
         end
         self._dragging = true
+        if type(_G.GetCursorPosition) == "function" then
+            self._msufDragCursorX, self._msufDragCursorY = _G.GetCursorPosition()
+        else
+            self._msufDragCursorX, self._msufDragCursorY = nil, nil
+        end
         self:UpdateLabelVisibility()
         if self._msufGuidedPlacementCue then self._msufGuidedPlacementCue:Hide() end
         self._coordFS:Show()
@@ -479,7 +493,19 @@ local function CreateMover(key, cfg)
         self._brd:SetBackdropBorderColor(t.edgeR, t.edgeG, t.edgeB, 0.60)
         self._label:SetTextColor(t.textR, t.textG, t.textB, 0.85)
         self:UpdateLabelVisibility()
-        if moved then self._suppressNextClick = true end
+        --- A steady click still jitters a pixel or two while the Ticker's
+        --- commit threshold is 0.5px — without a click slop the follow-up
+        --- OnClick (select + open popup) gets eaten on the first click of a
+        --- new element. Only a real cursor drag suppresses it.
+        local suppress = moved
+        if suppress and self._msufDragCursorX and type(_G.GetCursorPosition) == "function" then
+            local cursorX, cursorY = _G.GetCursorPosition()
+            if cursorX and math.abs(cursorX - self._msufDragCursorX) <= 4
+                and math.abs(cursorY - (self._msufDragCursorY or 0)) <= 4 then
+                suppress = false
+            end
+        end
+        if suppress then self._suppressNextClick = true end
         if EM2.Focus and EM2.Focus.SetHover and self:IsMouseOver() then
             EM2.Focus.SetHover(key, nil, nil, { source = "mover", force = true })
         end
