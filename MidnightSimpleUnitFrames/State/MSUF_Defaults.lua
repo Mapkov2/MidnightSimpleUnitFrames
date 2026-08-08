@@ -1060,6 +1060,13 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
         --- after the factory profile has been created.
         g.unitPreviewGuidesEnabled = true
         g.classPowerPreviewGuidesEnabled = true
+        --- Factory Edit Mode baseline: grid on at 36px with snap, backdrop
+        --- dimmed to 55%. The compact snapshot predates these tuned values,
+        --- so they are set unconditionally over its stale ones.
+        g.editModeGridEnabled = true
+        g.editModeGridStep = 36
+        g.editModeSnapEnabled = true
+        g.editModeBgAlpha = 0.55
         g.menuFontKey = MSUF_Defaults_GetMenuFontDefault()
         g._msufFactoryNameShorteningFixed_v1 = true
         g._msufFactoryScopedNameShorteningFixed_v1 = true

@@ -473,8 +473,23 @@ local W8 = "Interface/Buttons/WHITE8X8"
 local enabled = false
 local THRESH  = 8
 
-function Snap.IsEnabled()    return enabled end
-function Snap.SetEnabled(v)  enabled = v and true or false end
+--- Snap persists per profile via general.editModeSnapEnabled; the session
+--- local only covers reads before SavedVariables exist.
+local function SnapGeneral()
+    local db = _G.MSUF_DB
+    return type(db) == "table" and type(db.general) == "table" and db.general or nil
+end
+
+function Snap.IsEnabled()
+    local g = SnapGeneral()
+    if g and g.editModeSnapEnabled ~= nil then return g.editModeSnapEnabled == true end
+    return enabled
+end
+function Snap.SetEnabled(v)
+    enabled = v and true or false
+    local g = SnapGeneral()
+    if g then g.editModeSnapEnabled = enabled end
+end
 function Snap.GetThreshold() return THRESH end
 function Snap.SetThreshold(v) THRESH = max(2, min(20, tonumber(v) or 8)) end
 
@@ -609,7 +624,7 @@ end
 --- hw, hh = half width/height of dragged mover
 --- dragKey = registry key of dragged element (excluded from targets)
 function Snap.Apply(cx, cy, hw, hh, dragKey)
-    if not enabled then return cx, cy end
+    if not Snap.IsEnabled() then return cx, cy end
 
     ClearActiveGuides(false)
 
