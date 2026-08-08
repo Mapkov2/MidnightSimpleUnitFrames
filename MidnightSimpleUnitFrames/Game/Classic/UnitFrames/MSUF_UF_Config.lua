@@ -1059,7 +1059,8 @@ end
 local function StatusAllowed(key, id)
   if id == "petHappiness" then
     local client = MSUF.Client
-    return key == "pet" and client and (client.IsVanilla == true or client.IsTBC == true)
+    return key == "pet" and client and (client.SupportsPetHappiness == true
+      or client.SupportsPetHappiness == nil and (client.IsVanilla == true or client.IsTBC == true))
   elseif id == "leader" or id == "assist" or id == "combat" or id == "incomingRes" then
     return key == "player" or key == "target"
   elseif id == "pvp" then

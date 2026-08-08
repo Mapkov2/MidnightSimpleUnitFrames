@@ -122,7 +122,7 @@ local DEFAULT_SHARED = {
     perRow = 12,
     maxBuffs = 12,
     maxDebuffs = 12,
-    sortOrder = 0,
+    sortOrder = 1,
     growth = "RIGHT",
     rowWrap = "DOWN",
     offsetX = 0,
@@ -391,6 +391,7 @@ function A3._ClassicSortMode(value, fallback)
     if value == "EXPIRATION_ONLY" then return 4 end
     if value == "NAME" then return 5 end
     if value == "NAME_ONLY" then return 6 end
+    if value == "INSTANCE_ID" then return 0 end
     return fallback
 end
 
@@ -889,37 +890,28 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
     local laneBlacklist = type(blacklist) == "table"
         and type(blacklist[spec.dbKey]) == "table"
         and blacklist[spec.dbKey] or blacklist
-    local exclusive = filters and filters.exclusive
-    local onlyImportant = filters and (filters.onlyImportant == true or exclusive == "important")
+    local exclusive = nil
+    local onlyImportant = false
     local onlyMine = filters and filters.onlyMine == true
-    local raid = filters and (filters.raid == true or exclusive == "raid")
-    local includeStealable = kind == "buff" and filters and filters.includeStealable == true
-    local boss = filters and (filters.boss == true or filters.includeBoss == true)
-    local onlyBoss = activeRootFilters and activeRootFilters.onlyBossAuras == true
+    local raid = false
+    local includeStealable = false
+    local boss = false
+    local onlyBoss = false
     local hidePermanent = type(laneBlacklist) == "table" and laneBlacklist.hidePermanent == true
     if hidePermanent ~= true and kind == "buff" and activeRootFilters then
         -- Legacy profiles stored this one level above the per-lane filter.
         hidePermanent = activeRootFilters.hidePermanent == true
     end
-    local maxDuration = kind == "debuff" and type(laneBlacklist) == "table"
-        and ClampNumber(laneBlacklist.maxDuration, 0, 0, 180) or 0
+    local maxDuration = 0
     local showSated = kind ~= "buff" or ReadBool(nil, shared, "showSated", true)
     local satedThreshold = kind == "buff" and ReadNumber(nil, shared, "satedShowAtSeconds", 0, 0, 3600) or 0
     local satedFilter = kind == "buff" and (showSated ~= true or satedThreshold > 0)
     local ownHighlight = kind == "buff"
         and ReadBool(nil, shared, "highlightOwnBuffs", false)
         or (kind == "debuff" and ReadBool(nil, shared, "highlightOwnDebuffs", false))
-    local raidInCombat = filters and (
-        filters.raidInCombat == true
-        or filters.raidInCombatPlayer == true
-        or filters.RaidInCombat == true
-        or filters.RaidInCombatPlayer == true
-    )
+    local raidInCombat = false
     local filterPlan = A3.ClassicFeatures and A3.ClassicFeatures.CompileSettingsFilter
-        and A3.ClassicFeatures.CompileSettingsFilter(filters, kind == "buff", {
-            stealable = includeStealable == true,
-            boss = boss == true or onlyBoss == true,
-        }) or nil
+        and A3.ClassicFeatures.CompileSettingsFilter(filters, kind == "buff") or nil
     local visualNeedsPlayer = kind == "debuff" and visual and visual.needsPlayerFlag == true
     local hasInclusive = filterPlan and filterPlan.hasRequirements == true
         or onlyMine or raid or includeStealable or boss or onlyBoss or raidInCombat
@@ -976,6 +968,7 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
     local dispelVisual = (kind == "debuff" and (visual or (showDispelTypeBorder and CompileDispelVisual(nil)))) or nil
     local needsPlayerFlag = (filterPlan and filterPlan.needsPlayerFlag == true)
         or onlyMine == true or ownHighlight == true or (visualNeedsPlayer == true and visualDirect ~= true)
+        or sortOrder == 1 or sortOrder == 2 or sortOrder == 3 or sortOrder == 5
     local sortComparator = sortOrder == 0 and (needsPlayerFlag and SortAuras or SortAurasID) or SortComparator(Round(sortOrder))
     local naturalOrder = sortOrder == 0 and needsPlayerFlag ~= true
     local visibleOnlyScan = renderEnabled == true
@@ -1113,6 +1106,15 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
     local layer = ClampNumber(source[spec.layerKey], spec.defaultLayer, 1, 15)
     local alpha = ClampNumber(source[spec.alphaKey], 1, 0, 1)
     local rawFilter = source[spec.filterKey] or spec.filter
+    if kind == "buff" or kind == "debuff" then
+        -- Generic Classic group lanes support only All and Player. Do not
+        -- rewrite the stored token: Retail can consume it again after import.
+        local playerOnly = false
+        for token in tostring(rawFilter):gmatch("[^|]+") do
+            if token:upper():gsub("%s+", "") == "PLAYER" then playerOnly = true end
+        end
+        rawFilter = playerOnly and (spec.filter .. "|PLAYER") or spec.filter
+    end
     local filterPlan = A3.ClassicFeatures and A3.ClassicFeatures.CompileRawFilter
         and A3.ClassicFeatures.CompileRawFilter(rawFilter, kind == "buff") or nil
     local filter = filterPlan and filterPlan.scanFilter or spec.filter
@@ -1142,7 +1144,7 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
         end
     end
     local hidePermanent = spec.hidePermanentKey and source[spec.hidePermanentKey] == true or false
-    local maxDuration = spec.maxDurationKey and ClampNumber(source[spec.maxDurationKey], 0, 0, 180) or 0
+    local maxDuration = 0
     local hasFilterWork = black ~= nil or type(includeSpellIDs) == "table" or hidePermanent or maxDuration > 0
         or (filterPlan and filterPlan.hasRequirements == true)
     local visualDirect = kind == "debuff"
@@ -1171,7 +1173,7 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
     local roundedPerRow = Round(perRow)
     local cols, rows = GridShape(roundedMax, roundedPerRow, verticalGrowth)
     local sortOrder = A3._ClassicSortMode(source[kind .. "SortMethod"] or source.sortMethod,
-        source.sortByDuration == true and 2 or 0)
+        source.sortByDuration == true and 2 or 1)
     local sortReverse = source[kind .. "SortReverse"] == true
         or (source[kind .. "SortReverse"] == nil and source.sortReverse == true)
     local showDispelTypeBorder = kind == "debuff" and renderEnabled == true and source.debuffShowDispelBorder == true
@@ -1179,6 +1181,7 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
     local needsPlayerFlag = source.preferPlayer == true
         or (filterPlan and filterPlan.needsPlayerFlag == true)
         or (kind == "debuff" and visual and visual.needsPlayerFlag == true and visualDirect ~= true)
+        or sortOrder == 1 or sortOrder == 2 or sortOrder == 3 or sortOrder == 5
 
     local naturalOrder = sortOrder == 0 and needsPlayerFlag ~= true
     local visibleOnlyScan = renderEnabled == true
@@ -1522,10 +1525,12 @@ local function OnAuraEnter(button)
         return
     end
     local filter = lane.config.filter
-    if lane.config.harmful ~= true and GameTooltip.SetUnitBuffByAuraInstanceID then
-        GameTooltip:SetUnitBuffByAuraInstanceID(lane.unit, button.auraInstanceID)
+    if GameTooltip.SetUnitAuraByAuraInstanceID then
+        GameTooltip:SetUnitAuraByAuraInstanceID(lane.unit, button.auraInstanceID)
+    elseif lane.config.harmful ~= true and GameTooltip.SetUnitBuffByAuraInstanceID then
+        GameTooltip:SetUnitBuffByAuraInstanceID(lane.unit, button.auraInstanceID, filter)
     elseif lane.config.harmful == true and GameTooltip.SetUnitDebuffByAuraInstanceID then
-        GameTooltip:SetUnitDebuffByAuraInstanceID(lane.unit, button.auraInstanceID)
+        GameTooltip:SetUnitDebuffByAuraInstanceID(lane.unit, button.auraInstanceID, filter)
     else
         local index = A3._ClassicAuraIndexByInstanceID(lane.unit, button.auraInstanceID, filter)
         if index and lane.config.harmful ~= true and GameTooltip.SetUnitBuff then

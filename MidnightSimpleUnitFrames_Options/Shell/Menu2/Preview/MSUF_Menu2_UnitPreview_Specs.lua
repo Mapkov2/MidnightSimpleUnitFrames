@@ -13,10 +13,14 @@ local function PetHappinessSupported()
     local getMetadata = _G.C_AddOns and _G.C_AddOns.GetAddOnMetadata or _G.GetAddOnMetadata
     if type(getMetadata) == "function" then
         local flavor = getMetadata(addonName, "X-MSUF-Client")
-        if flavor ~= nil then return flavor == "Vanilla" or flavor == "TBC" end
+        if flavor ~= nil then
+            flavor = tostring(flavor):lower():gsub("^%s+", ""):gsub("%s+$", "")
+            return flavor == "vanilla" or flavor == "tbc"
+        end
     end
     local client = MSUF and MSUF.Client
-    return client and (client.IsVanilla == true or client.IsTBC == true) or false
+    return client and (client.SupportsPetHappiness == true
+        or client.SupportsPetHappiness == nil and (client.IsVanilla == true or client.IsTBC == true)) or false
 end
 local function Allowed(words, capability)
     if not words or words == "" then return nil end

@@ -144,38 +144,14 @@ local function FinalizeFilterPlan(helpful, includeNameplateOnly, req)
 end
 
 
-function Features.CompileSettingsFilter(filters, helpful, extra)
+function Features.CompileSettingsFilter(filters, helpful)
     filters = type(filters) == "table" and filters.enabled ~= false and filters or {}
-    extra = type(extra) == "table" and extra or {}
     local req = NewFilterRequirements()
-    local exclusive = tostring(filters.exclusive or "none"):lower()
-    local playerScoped = filters.onlyMine == true
-    local raid = filters.raid == true or exclusive == "raid"
-    local raidInCombat = filters.raidInCombat == true
-        or filters.raidInCombatPlayer == true
-        or filters.RaidInCombat == true
-        or filters.RaidInCombatPlayer == true
-    local nonPlayerScoped = not playerScoped and (raid or raidInCombat
-        or (helpful and (filters.cancelable == true or filters.notCancelable == true
-            or filters.externalDefensive == true or filters.bigDefensive == true)))
-
-    if playerScoped then req.player = true elseif nonPlayerScoped then req.notPlayer = true end
-    if filters.onlyImportant == true or exclusive == "important" then req.important = true end
-    if raid then req.raid = true end
-    if raidInCombat then req.raidInCombat = true end
-    if filters.includeDispellable == true or filters.dispellable == true then
-        req.raidPlayerDispellable = true
-    end
-    if filters.dispellableAny == true then req.dispellableAny = true end
-    if helpful and filters.cancelable == true then req.cancelable = true end
-    if helpful and filters.notCancelable == true then req.notCancelable = true end
-    if not helpful and filters.crowdControl == true then req.crowdControl = true end
-    if helpful and filters.externalDefensive == true then req.externalDefensive = true end
-    if helpful and filters.bigDefensive == true then req.bigDefensive = true end
-    if extra.stealable == true then req.stealable = true end
-    if extra.boss == true then req.boss = true end
-
-    return FinalizeFilterPlan(helpful, filters.includeNameplateOnly == true, req)
+    -- Classic deliberately exposes only the stable PLAYER token. Keep every
+    -- other Retail-era setting untouched in SavedVariables so profiles can be
+    -- moved between clients without losing their richer Retail configuration.
+    if filters.onlyMine == true then req.player = true end
+    return FinalizeFilterPlan(helpful, false, req)
 end
 
 function Features.CompileRawFilter(filter, helpful)
@@ -322,9 +298,11 @@ end
 
 local function SortMode(value)
     value = tostring(value or "DEFAULT"):upper():gsub("[%s%-]+", "_")
+    if value == "DEFAULT" or value == "PLAYER" then return 1 end
     if value == "EXPIRATION" or value == "EXPIRATION_ONLY" then return 3 end
     if value == "NAME" or value == "NAME_ONLY" then return 5 end
     if value == "DURATION" or value == "DURATION_ONLY" or value == "BIG_DEFENSIVE" then return 2 end
+    if value == "INSTANCE_ID" then return 0 end
     return 0
 end
 
@@ -423,18 +401,19 @@ local function BaseLane(unit, kind, entry, index, spellIDs, helpful, rootKey, fo
         hasFilterWork = true,
         classicFeatureMatch = true,
         hidePermanent = filters.hidePermanent == true,
-        maxDuration = Number(filters.maxDuration, 0, 0, 180),
+        maxDuration = 0,
         onlyMine = onlyMine,
-        onlyImportant = activeFilters and activeFilters.onlyImportant == true or false,
-        raid = activeFilters and activeFilters.raid == true or false,
-        raidInCombat = activeFilters and activeFilters.raidInCombat == true or false,
-        includeDispellable = activeFilters and activeFilters.includeDispellable == true or false,
-        dispellableAny = activeFilters and activeFilters.dispellableAny == true or false,
-        crowdControl = activeFilters and activeFilters.crowdControl == true or false,
-        externalDefensive = activeFilters and activeFilters.externalDefensive == true or false,
-        bigDefensive = activeFilters and activeFilters.bigDefensive == true or false,
+        onlyImportant = false,
+        raid = false,
+        raidInCombat = false,
+        includeDispellable = false,
+        dispellableAny = false,
+        crowdControl = false,
+        externalDefensive = false,
+        bigDefensive = false,
         hasInclusive = hasInclusive,
-        needsPlayerFlag = filterPlan.needsPlayerFlag == true,
+        needsPlayerFlag = filterPlan.needsPlayerFlag == true
+            or sortOrder == 1 or sortOrder == 2 or sortOrder == 3 or sortOrder == 5,
         needsCombatRefresh = filterPlan.needsCombatRefresh == true,
         frameEffect = type(entry.frame) == "table" and entry.frame or nil,
         visual = tostring(placed.type or "icon"):lower(),

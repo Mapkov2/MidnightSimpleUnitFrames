@@ -12,8 +12,13 @@ local UF_STATUS = "status icons status indicators indicator selected indicator l
 local PET_HAPPINESS = ""
 local getMetadata = _G.C_AddOns and _G.C_AddOns.GetAddOnMetadata or _G.GetAddOnMetadata
 local optionsFlavor = type(getMetadata) == "function" and getMetadata(addonName, "X-MSUF-Client") or nil
-local petHappinessSupported = optionsFlavor ~= nil and (optionsFlavor == "Vanilla" or optionsFlavor == "TBC")
-    or optionsFlavor == nil and MSUF.Client and (MSUF.Client.IsVanilla == true or MSUF.Client.IsTBC == true)
+if optionsFlavor ~= nil then
+    optionsFlavor = tostring(optionsFlavor):lower():gsub("^%s+", ""):gsub("%s+$", "")
+end
+local petHappinessSupported = optionsFlavor ~= nil and (optionsFlavor == "vanilla" or optionsFlavor == "tbc")
+    or optionsFlavor == nil and MSUF.Client and (MSUF.Client.SupportsPetHappiness == true
+        or MSUF.Client.SupportsPetHappiness == nil
+            and (MSUF.Client.IsVanilla == true or MSUF.Client.IsTBC == true))
 if petHappinessSupported then
     PET_HAPPINESS = " pet happiness pet mood hunter pet happy content unhappy happiness icon pet loyalty pet damage 125 100 75 haustier zufriedenheit tierzufriedenheit gluecklich zufrieden ungluecklich"
 end

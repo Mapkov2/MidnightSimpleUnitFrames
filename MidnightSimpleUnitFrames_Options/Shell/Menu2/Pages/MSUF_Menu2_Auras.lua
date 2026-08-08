@@ -149,6 +149,8 @@ local DEBUFF_TYPE_BORDER_PREVIEW_ATLAS = {
 }
 local NATIVE_EXACT_AURA_FILTERS_ENABLED = true
 local NATIVE_EXACT_AURA_FILTERS_TEXT = "Exact Spell IDs are used when Blizzard exposes them."
+M.CLASSIC_AURA_FILTERS_REDUCED = MSUF.Client and MSUF.Client.IsClassic == true
+    or (_G.WOW_PROJECT_ID ~= nil and _G.WOW_PROJECT_ID ~= _G.WOW_PROJECT_MAINLINE)
 local GROUP_NATIVE_FILTER_LABELS = {
     ALL = "All",
     Player = "Player",
@@ -206,7 +208,12 @@ local GROUP_NATIVE_FILTER_CANONICAL = {
 }
 local function CanonicalGroupFilterValue(value)
     local key = tostring(value or "ALL"):upper():gsub("[^A-Z0-9]", "")
-    return GROUP_NATIVE_FILTER_CANONICAL[key] or "ALL"
+    local canonical = GROUP_NATIVE_FILTER_CANONICAL[key] or "ALL"
+    if M.CLASSIC_AURA_FILTERS_REDUCED == true then
+        if canonical == "Player" or canonical:sub(-6) == "Player" then return "Player" end
+        return "ALL"
+    end
+    return canonical
 end
 local function Tr(text)
     if type(M.Tr) == "function" then return M.Tr(text) end
@@ -796,6 +803,9 @@ local function AuraFilter()
     return (gf and gf.AuraFilter) or _G.MSUF_GF_AuraFilter
 end
 local function GroupFilterValues(groupKey)
+    if M.CLASSIC_AURA_FILTERS_REDUCED == true then
+        return VT("ALL", "All", "Player", "Only mine")
+    end
     local af = AuraFilter()
     local source = groupKey == "debuff" and af and af.DEBUFF_FILTER_ITEMS or af and af.BUFF_FILTER_ITEMS
     local allowed = GROUP_NATIVE_FILTER_ALLOWED[groupKey == "debuff" and "debuff" or "buff"]
@@ -2862,7 +2872,7 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
             ReadHidePermanent, WriteHidePermanent,
             AuraControlMeta(ctx, "group-filter.lane." .. AuraCatalogToken(lane) .. ".hide-permanent"))
         AddHidePermanentTooltip(hidePermanent)
-        if lane == "debuff" then
+        if lane == "debuff" and M.CLASSIC_AURA_FILTERS_REDUCED ~= true then
             ConfigureMaxDurationSlider(BindSlider(ctx, filter, "Maximum duration", 16, -230, 0, 180, 1, filterW - 32,
                 ReadMaxDuration, WriteMaxDuration,
                 AuraControlMeta(ctx, "group-filter.lane.debuff.max-duration", nil, {
@@ -3196,12 +3206,51 @@ local function BuildCompactUnitAuraLayout(ctx, b, unit, kind)
 end
 
 local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
-    local section = b:Section((lane == "debuff" and "Debuff" or "Buff") .. " Filters", lane == "debuff" and 224 or 182)
+    local section = b:Section((lane == "debuff" and "Debuff" or "Buff") .. " Filters",
+        M.CLASSIC_AURA_FILTERS_REDUCED == true and 118 or (lane == "debuff" and 224 or 182))
     local w = section._msuf2Width or b.width or 720
     local inner = w - 48
     local gap = 12
     local colW = floor((inner - gap * 3) / 4)
     local filterControls = {}
+    if M.CLASSIC_AURA_FILTERS_REDUCED == true then
+        local onlyMine = BindSwitch(ctx, section, "Only mine", 24, -42, colW,
+            function()
+                return Model.ScopeFiltersEnabled(unit)
+                    and Model.ReadFilter(unit, lane, "onlyMine", false) == true
+            end,
+            function(value)
+                if value == true and Model.ScopeFiltersEnabled(unit) ~= true then
+                    Model.SetScopeFiltersEnabled(unit, true)
+                end
+                Model.WriteFilter(unit, lane, "onlyMine", value == true)
+                ApplyUnit(ctx, unit, "AURAS3_FILTER_" .. lane .. "_onlyMine", true)
+            end,
+            AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.only-mine", nil,
+                "auras3." .. unit .. "." .. lane .. ".filter.onlyMine"))
+        AddTooltip(onlyMine, "Only mine", lane == "debuff"
+            and "Only Debuffs applied by the player."
+            or "Only auras applied by the player.")
+        local hidePermanent = BindSwitch(ctx, section, "Hide permanent", 24 + colW + gap, -42, colW,
+            function()
+                return type(Model.ReadBlacklistHidePermanent) == "function"
+                    and Model.ReadBlacklistHidePermanent(unit, lane) == true
+            end,
+            function(value)
+                if type(Model.WriteBlacklistHidePermanent) == "function"
+                    and Model.WriteBlacklistHidePermanent(unit, lane, value) then
+                    ApplyUnit(ctx, unit, "AURAS3_HIDE_PERMANENT", true)
+                end
+            end,
+            AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.hide-permanent", nil,
+                "auras3." .. unit .. "." .. lane .. ".blacklist.hidePermanent"))
+        AddTooltip(hidePermanent, "Hide permanent auras", "Always excludes auras without a duration.")
+        M.TrackRefresh(ctx, function()
+            W.SetControlEnabled(onlyMine, true)
+            W.SetControlEnabled(hidePermanent, true)
+        end)
+        return
+    end
     -- Filter ownership is an internal compatibility detail. Migrated Auras2
     -- profiles keep overrideFilters exactly as saved; the first edit in this
     -- unit workspace materializes a private copy through the model setters.
@@ -3315,6 +3364,7 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
     local isDebuff = lane == "debuff"
     local enemyDebuff = isDebuff and unit ~= "player"
     local showPresets = not enemyDebuff
+    local refreshList
     local section = b:Section(laneTitle .. " Blacklist", isDebuff and 446 or 528)
     local w = section._msuf2Width or b.width or 720
     local inner = w - 48
@@ -3332,7 +3382,11 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
         add:SetScript("OnClick", function()
             local value = input and input.GetText and input:GetText() or inputValue
             local changed = Model.AddBlacklistSpell(unit, value, lane)
-            if changed then ApplyUnit(ctx, unit, "AURAS3_BLACKLIST_ADD", true) end
+            if changed then
+                ApplyUnit(ctx, unit, "AURAS3_BLACKLIST_ADD", true)
+                if refreshList then refreshList() end
+                QueueAurasPageRefresh(ctx, "aura-blacklist-manual-added")
+            end
             if input and input.SetText then input:SetText("") end
             inputValue = ""
             return changed and true or false
@@ -3369,8 +3423,16 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
             and Model.UnitBlacklistSpellValues(unit, lane, CurrentPreset())
             or Model.BlacklistSpellValues(CurrentPreset())
         local selected = M.auraBlacklistSpell
-        for i = 1, #values do if values[i].value == selected then return selected end end
-        return values[1] and values[1].value or nil
+        local entries = Model.BlacklistEntries(unit, lane)
+        local blocked = {}
+        for i = 1, #entries do blocked[tostring(entries[i].value)] = true end
+        for i = 1, #values do
+            if values[i].value == selected and not blocked[tostring(selected)] then return selected end
+        end
+        for i = 1, #values do
+            if values[i].value ~= nil and not blocked[tostring(values[i].value)] then return values[i].value end
+        end
+        return nil
     end
     local selectedSummary, addSet, addSpell
     if showPresets then
@@ -3382,7 +3444,12 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
         addSet:SetPoint("TOPLEFT", section, "TOPLEFT", 36 + presetW, -60 + curatedOffset)
         addSet:SetScript("OnClick", function()
             local count = Model.AddBlacklistPresetGroup(unit, CurrentPreset(), lane)
-            if count > 0 then ApplyUnit(ctx, unit, "AURAS3_BLACKLIST_PRESET_GROUP_ADD", true) end
+            if count > 0 then
+                M.auraBlacklistSpell = nil
+                ApplyUnit(ctx, unit, "AURAS3_BLACKLIST_PRESET_GROUP_ADD", true)
+                if refreshList then refreshList() end
+                QueueAurasPageRefresh(ctx, "aura-blacklist-preset-group-added")
+            end
             return count > 0
         end)
         RegisterAuraControl(ctx, addSet, "Add entire set", "button", "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.add-preset-set", "action", {
@@ -3404,7 +3471,12 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
         addSpell:SetPoint("TOPLEFT", section, "TOPLEFT", 36 + spellW, -144 + curatedOffset)
         addSpell:SetScript("OnClick", function()
             local changed = Model.AddBlacklistPresetSpell(unit, CurrentSpell(), lane)
-            if changed then ApplyUnit(ctx, unit, "AURAS3_BLACKLIST_PRESET_ADD", true) end
+            if changed then
+                M.auraBlacklistSpell = nil
+                ApplyUnit(ctx, unit, "AURAS3_BLACKLIST_PRESET_ADD", true)
+                if refreshList then refreshList() end
+                QueueAurasPageRefresh(ctx, "aura-blacklist-preset-spell-added")
+            end
             return changed and true or false
         end)
         RegisterAuraControl(ctx, addSpell, "Add spell", "button", "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.add-preset-spell", "action", {
@@ -3419,7 +3491,6 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
     local listOffset = enemyDebuff and 44 or curatedOffset
     local prepared = W.Text(section, "", 24, -186 + listOffset, inner, T.colors.accent)
     local searchValue = ""
-    local refreshList
     local searchInput = BindTextInput(ctx, section, "Search", 24, -210 + listOffset, inner,
         function() return searchValue end,
         function(value)
@@ -3468,6 +3539,8 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
         row.remove:SetScript("OnClick", function()
             if row._spellID and Model.RemoveBlacklistSpell(unit, row._spellID, lane) then
                 ApplyUnit(ctx, unit, "AURAS3_BLACKLIST_REMOVE", true)
+                if refreshList then refreshList() end
+                QueueAurasPageRefresh(ctx, "aura-blacklist-removed")
             end
         end)
         AddTooltip(row.remove, "Remove from blacklist", "Stops blocking this aura.")
@@ -3526,7 +3599,8 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
     local laneTitle = lane == "debuff" and "Debuff" or "Buff"
     local values = GroupFilterValues(lane)
     local optionRows = max(1, ceil(#values / 4))
-    local sectionHeight = max(150, 104 + optionRows * 32) + (lane == "debuff" and 58 or 0)
+    local sectionHeight = max(150, 104 + optionRows * 32)
+        + (lane == "debuff" and M.CLASSIC_AURA_FILTERS_REDUCED ~= true and 58 or 0)
     local section = b:Section(laneTitle .. " Filters", sectionHeight)
     local w = section._msuf2Width or b.width or 720
     local inner = w - 48
@@ -3577,7 +3651,7 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
                 } or nil))
         AddTooltip(control, item.text or item.value, "Only one filter can be active.")
     end
-    if lane == "debuff" then
+    if lane == "debuff" and M.CLASSIC_AURA_FILTERS_REDUCED ~= true then
         ConfigureMaxDurationSlider(BindSlider(ctx, section, "Maximum duration", 24, -78 - optionRows * 32, 0, 180, 1, inner,
             function()
                 return type(Model.ReadGroupBlacklistMaxDuration) == "function"
@@ -3640,8 +3714,17 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
     end
     local function CurrentSpell()
         local values, selected = Model.BlacklistSpellValues(CurrentPreset()), M.auraBlacklistSpell
-        for i = 1, #values do if values[i].value == selected then return selected end end
-        return values[1] and values[1].value or nil
+        local entries = type(Model.GroupBlacklistEntries) == "function"
+            and Model.GroupBlacklistEntries(scope, lane) or {}
+        local blocked = {}
+        for i = 1, #entries do blocked[tostring(entries[i].value)] = true end
+        for i = 1, #values do
+            if values[i].value == selected and not blocked[tostring(selected)] then return selected end
+        end
+        for i = 1, #values do
+            if values[i].value ~= nil and not blocked[tostring(values[i].value)] then return values[i].value end
+        end
+        return nil
     end
     local preset = W.Dropdown(section, "Preset", function() return Model.BlacklistPresetValues() end, presetW)
     W.MoveWidget(preset, section, 24, -36 + curatedOffset, presetW)
@@ -3655,6 +3738,7 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
     addSet:SetScript("OnClick", function()
         local count = Model.AddGroupBlacklistPresetGroup(scope, lane, CurrentPreset())
         if count > 0 then
+            M.auraBlacklistSpell = nil
             QueueGroupScope(scope, "visual")
             Rebuild(ctx)
         end
@@ -3676,6 +3760,7 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
     addSpell:SetScript("OnClick", function()
         local changed = Model.AddGroupBlacklistSpell(scope, lane, CurrentSpell())
         if changed then
+            M.auraBlacklistSpell = nil
             QueueGroupScope(scope, "visual")
             Rebuild(ctx)
         end

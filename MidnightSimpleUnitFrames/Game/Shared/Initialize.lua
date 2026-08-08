@@ -27,10 +27,12 @@ local function ReadTOCFlavor()
 end
 
 local tocFlavor = ReadTOCFlavor()
+tocFlavor = type(tocFlavor) == "string"
+    and tocFlavor:lower():gsub("^%s+", ""):gsub("%s+$", "") or nil
 local isRetail = mainlineID ~= nil and projectID == mainlineID
-local isVanilla = (vanillaID ~= nil and projectID == vanillaID) or tocFlavor == "Vanilla"
-local isMists = (mistsID ~= nil and projectID == mistsID) or tocFlavor == "Mists"
-local isTBC = (tbcID ~= nil and projectID == tbcID) or tocFlavor == "TBC"
+local isVanilla = (vanillaID ~= nil and projectID == vanillaID) or tocFlavor == "vanilla"
+local isMists = (mistsID ~= nil and projectID == mistsID) or tocFlavor == "mists"
+local isTBC = (tbcID ~= nil and projectID == tbcID) or tocFlavor == "tbc"
 
 local interfaceNumber
 if type(_G.GetBuildInfo) == "function" then
@@ -49,6 +51,7 @@ Client.IsEra = isVanilla
 Client.IsMists = isMists
 Client.IsTBC = isTBC
 Client.IsClassic = isVanilla or isMists or isTBC
+Client.SupportsPetHappiness = isVanilla or isTBC
 Client.IsSupported = isRetail or isVanilla or isMists or isTBC
 
 local unsupportedEvents = Client.UnsupportedEvents or {}
