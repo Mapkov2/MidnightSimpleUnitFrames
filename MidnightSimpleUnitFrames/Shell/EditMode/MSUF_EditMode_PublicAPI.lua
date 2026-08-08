@@ -558,7 +558,14 @@ function External.GetInspectorValues(key)
             local uiScale = _G.UIParent and _G.UIParent.GetEffectiveScale and _G.UIParent:GetEffectiveScale() or 1
             local frameScale = frame.GetEffectiveScale and frame:GetEffectiveScale() or uiScale
             local ratio = uiScale ~= 0 and frameScale / uiScale or 1
-            return record.label, Round((left + right) * 0.5 * ratio), Round((bottom + top) * 0.5 * ratio),
+            --- Displayed X/Y are relative to the SCREEN CENTER, matching the
+            --- convention of MSUF's own frames — external elements otherwise
+            --- read as absurd absolute screen coordinates next to them.
+            local screenW = _G.UIParent and _G.UIParent.GetWidth and _G.UIParent:GetWidth() or 0
+            local screenH = _G.UIParent and _G.UIParent.GetHeight and _G.UIParent:GetHeight() or 0
+            return record.label,
+                Round((left + right) * 0.5 * ratio - screenW * 0.5),
+                Round((bottom + top) * 0.5 * ratio - screenH * 0.5),
                 Round((right - left) * ratio), Round((top - bottom) * ratio)
         end
     end
