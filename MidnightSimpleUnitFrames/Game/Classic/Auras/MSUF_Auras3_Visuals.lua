@@ -15,6 +15,7 @@ local type, tostring, tonumber, select = type, tostring, tonumber, select
 local math_floor, math_max, math_min = math.floor, math.max, math.min
 local CreateFrame = _G.CreateFrame
 local C_UnitAuras = _G.C_UnitAuras
+local STEALABLE_TEXTURE = "Interface\\TargetingFrame\\UI-TargetingFrame-Stealable"
 
 local function Clamp(value, fallback, minValue, maxValue)
     value = tonumber(value)
@@ -650,6 +651,49 @@ local function ApplyIndicatorVisual(button, cfg)
     return visual
 end
 
+local function EnsureStealableTexture(button, key, subLevel)
+    local texture = button[key]
+    if texture then return texture end
+    texture = button:CreateTexture(nil, "OVERLAY", nil, subLevel)
+    texture:SetTexture(STEALABLE_TEXTURE)
+    if texture.SetBlendMode then texture:SetBlendMode("ADD") end
+    texture:Hide()
+    button[key] = texture
+    return texture
+end
+
+local function UpdateStealableMarker(button, cfg, data)
+    local active = cfg.showStealableMarker == true and data and data.isStealable == true
+    local border = button._msufA3ClassicStealableBorder
+    local icon = button._msufA3ClassicStealableIcon
+    if active ~= true then
+        if border then border:Hide() end
+        if icon then icon:Hide() end
+        return
+    end
+
+    local style = type(A3.NormalizeClassicStealableStyle) == "function"
+        and A3.NormalizeClassicStealableStyle(cfg.stealableStyle) or "BORDER_ICON"
+    if style == "BORDER" or style == "BORDER_ICON" then
+        border = border or EnsureStealableTexture(button, "_msufA3ClassicStealableBorder", 5)
+        border:ClearAllPoints()
+        border:SetAllPoints(button)
+        border:Show()
+    elseif border then
+        border:Hide()
+    end
+    if style == "ICON" or style == "BORDER_ICON" then
+        icon = icon or EnsureStealableTexture(button, "_msufA3ClassicStealableIcon", 6)
+        local size = math_max(8, math_floor(((cfg.size or 24) * 0.42) + 0.5))
+        icon:ClearAllPoints()
+        icon:SetSize(size, size)
+        icon:SetPoint("TOPLEFT", button, "TOPLEFT", 1, -1)
+        icon:Show()
+    elseif icon then
+        icon:Hide()
+    end
+end
+
 function V.UpdateButtonVisual(lane, button, unit, data)
     local cfg = lane and lane.config
     if not (cfg and button) then return end
@@ -660,6 +704,7 @@ function V.UpdateButtonVisual(lane, button, unit, data)
         button.Count:SetText(applications)
         button.Count:Show()
     end
+    UpdateStealableMarker(button, cfg, data)
     ApplyFrameEffect(lane, button, data)
     if cfg.showDurationBar == true then
         local bar = DurationBar(button, cfg)
@@ -692,6 +737,8 @@ function V.HideButtonVisual(button)
     if button._msufA3DurationBar then button._msufA3DurationBar:Hide() end
     if button._msufA3ClassicIndicatorSwatch then button._msufA3ClassicIndicatorSwatch:Hide() end
     if button._msufA3ClassicIconGlow then button._msufA3ClassicIconGlow:Hide() end
+    if button._msufA3ClassicStealableBorder then button._msufA3ClassicStealableBorder:Hide() end
+    if button._msufA3ClassicStealableIcon then button._msufA3ClassicStealableIcon:Hide() end
     HideFrameEffect(button)
 end
 

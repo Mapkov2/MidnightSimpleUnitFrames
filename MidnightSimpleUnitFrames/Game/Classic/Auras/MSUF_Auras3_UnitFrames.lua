@@ -51,12 +51,34 @@ local AuraUtil = _G.AuraUtil
 local CreateColor = _G.CreateColor
 local Enum = _G.Enum
 local InCombatLockdown = _G.InCombatLockdown
+local UnitIsUnit = _G.UnitIsUnit
 local IsSecret = _G.issecretvalue or function() return false end
 
 local GetAuraSlots = C_UnitAuras and C_UnitAuras.GetAuraSlots
 local GetAuraDataByIndex = C_UnitAuras and C_UnitAuras.GetAuraDataByIndex
 local GetAuraDataBySlot = C_UnitAuras and C_UnitAuras.GetAuraDataBySlot
 local GetAuraDataByAuraInstanceID = C_UnitAuras and C_UnitAuras.GetAuraDataByAuraInstanceID
+
+-- Saved profiles can arrive from Retail, an older Classic build, or another
+-- Classic family client. Keep the explicit three-state setting authoritative
+-- while preserving the former boolean contract (which represented the old
+-- border+symbol presentation).
+A3.NormalizeClassicDebuffTypeBorderMode = A3.NormalizeClassicDebuffTypeBorderMode or function(value, legacyBorder, legacySymbol)
+    local mode = type(value) == "string" and value:upper() or nil
+    if mode == "SYMBOL" or mode == "BORDER" then return mode end
+    if mode == "OFF" then
+        if legacySymbol == true then return "SYMBOL" end
+        if legacyBorder == true then return "SYMBOL" end
+        return "OFF"
+    end
+    if legacySymbol == true or legacyBorder == true then return "SYMBOL" end
+    return "OFF"
+end
+A3.NormalizeClassicStealableStyle = A3.NormalizeClassicStealableStyle or function(value)
+    value = type(value) == "string" and value:upper() or "BORDER_ICON"
+    if value == "BORDER" or value == "BORDER_ICON" or value == "ICON" then return value end
+    return "BORDER_ICON"
+end
 local GetAuraApplicationDisplayCount = C_UnitAuras and C_UnitAuras.GetAuraApplicationDisplayCount
 local GetAuraDispelTypeColor = C_UnitAuras and C_UnitAuras.GetAuraDispelTypeColor
 
@@ -171,6 +193,7 @@ local LANE_SPECS = {
         xKey = "buffGroupOffsetX",
         yKey = "buffGroupOffsetY",
         sizeKey = "buffGroupIconSize",
+        spacingKey = "buffSpacing",
         anchorKey = "buffAnchor",
         layerKey = "buffLayer",
         perRowKey = "buffPerRow",
@@ -198,6 +221,7 @@ local LANE_SPECS = {
         xKey = "debuffGroupOffsetX",
         yKey = "debuffGroupOffsetY",
         sizeKey = "debuffGroupIconSize",
+        spacingKey = "debuffSpacing",
         anchorKey = "debuffAnchor",
         layerKey = "debuffLayer",
         perRowKey = "debuffPerRow",
@@ -864,7 +888,8 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
         or tonumber(ReadRaw(layout, shared, "iconSize"))
         or DEFAULT_SHARED.iconSize
     local size = ClampNumber(sizeDefault, DEFAULT_SHARED.iconSize, 1, 128)
-    local spacing = ReadNumber(layout, shared, "spacing", DEFAULT_SHARED.spacing, 0, 64)
+    local spacing = ReadNumber(layout, shared, spec.spacingKey,
+        ReadNumber(layout, shared, "spacing", DEFAULT_SHARED.spacing, 0, 64), 0, 64)
     local perRow = ReadNumber(sharedLayout, shared, spec.perRowKey, ReadShared(shared, "perRow"), 1, 40)
     local maxCount = ReadNumber(sharedLayout, shared, spec.maxKey, DEFAULT_SHARED[spec.maxKey] or 12, 0, 80)
     local show = ReadBool(sharedLayout, shared, spec.showKey, true)
@@ -879,6 +904,7 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
         or ReadRaw(sharedLayout, shared, "rowWrap")
         or DEFAULT_SHARED.rowWrap
     local growthX, growthY, xSign, ySign, verticalGrowth = GrowthParts(growth, rowWrap)
+    local lanePadding = Round(ClampNumber(ReadRaw(layout, shared, "stylePadding"), 0, 0, 16))
     local x = ReadNumber(layout, shared, spec.xKey, DEFAULT_SHARED[spec.xKey] or 0, -4096, 4096)
     local y = ReadNumber(layout, shared, spec.yKey, DEFAULT_SHARED[spec.yKey] or 0, -4096, 4096)
     local anchor = ReadAnchor(layout, shared, spec.anchorKey, spec.defaultAnchor)
@@ -978,7 +1004,11 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
         cooldownUrgentR, cooldownUrgentG, cooldownUrgentB = ReadGeneralColor("aurasCooldownTextUrgentColor", 1, 0.55, 0.10)
     end
     local baseFilter = filterPlan and filterPlan.scanFilter or spec.filter
-    local showDispelTypeBorder = kind == "debuff" and renderEnabled == true and ReadBool(nil, shared, "useDebuffTypeBorders", false)
+    local nativePlayerFilter = filterPlan and filterPlan.nativePlayerFilter == true or false
+    local debuffTypeBorderMode = kind == "debuff" and A3.NormalizeClassicDebuffTypeBorderMode(
+        ReadRaw(sharedLayout, shared, "debuffTypeBorderMode"),
+        ReadBool(sharedLayout, shared, "useDebuffTypeBorders", false), false) or "OFF"
+    local showDispelTypeBorder = kind == "debuff" and renderEnabled == true and debuffTypeBorderMode ~= "OFF"
     local dispelVisual = (kind == "debuff" and (visual or (showDispelTypeBorder and CompileDispelVisual(nil)))) or nil
     local needsPlayerFlag = (filterPlan and filterPlan.needsPlayerFlag == true)
         or onlyMine == true or ownHighlight == true or (visualNeedsPlayer == true and visualDirect ~= true)
@@ -997,7 +1027,7 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
         renderEnabled = renderEnabled == true,
         harmful = spec.harmful == true,
         filter = baseFilter,
-        playerFilter = baseFilter .. "|PLAYER",
+        playerFilter = nativePlayerFilter and baseFilter or (baseFilter .. "|PLAYER"),
         importantFilter = baseFilter .. "|IMPORTANT",
         raidFilter = baseFilter .. "|RAID",
         raidInCombatFilter = baseFilter .. "|RAID_IN_COMBAT",
@@ -1013,8 +1043,9 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
         perRow = roundedPerRow,
         cols = cols,
         rows = rows,
-        width = math_max(1, cols * size + math_max(cols - 1, 0) * spacing),
-        height = math_max(1, rows * size + math_max(rows - 1, 0) * spacing),
+        padding = lanePadding,
+        width = math_max(1, cols * size + math_max(cols - 1, 0) * spacing + 2 * lanePadding),
+        height = math_max(1, rows * size + math_max(rows - 1, 0) * spacing + 2 * lanePadding),
         x = Round(x),
         y = Round(y),
         anchor = anchor,
@@ -1056,6 +1087,8 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
         cooldownWarningSeconds = ClampNumber(general and general.aurasCooldownTextWarningSeconds, 15, 0, 60),
         cooldownUrgentSeconds = ClampNumber(general and general.aurasCooldownTextUrgentSeconds, 5, 0, 60),
         cooldownSize = ReadNumber(layout, shared, spec.cooldownSizeKey, ReadShared(shared, "cooldownTextSize") or DEFAULT_SHARED.cooldownTextSize, 6, 40),
+        cooldownDecimalSeconds = ReadNumber(sharedLayout, shared, kind .. "CooldownDecimalSeconds",
+            ReadNumber(sharedLayout, shared, "cooldownDecimalSeconds", 3, 0, 30), 0, 30),
         cooldownAnchor = ReadAnchor(layout, shared, kind .. "CooldownTextAnchor", ReadShared(shared, "cooldownTextAnchor") or "CENTER"),
         cooldownX = ReadNumber(layout, shared, spec.cooldownXKey, ReadShared(shared, "cooldownTextOffsetX") or DEFAULT_SHARED.cooldownTextOffsetX, -2000, 2000),
         cooldownY = ReadNumber(layout, shared, spec.cooldownYKey, ReadShared(shared, "cooldownTextOffsetY") or DEFAULT_SHARED.cooldownTextOffsetY, -2000, 2000),
@@ -1070,6 +1103,7 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
         blacklist = black,
         filterPlan = filterPlan,
         filterRequirements = filterPlan and filterPlan.requirements or nil,
+        nativePlayerFilter = nativePlayerFilter,
         hasFilterWork = hasFilterWork,
         visualDirect = visualDirect == true,
         exclusiveImportant = exclusive == "important",
@@ -1089,6 +1123,11 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
         needsCombatRefresh = filterPlan and filterPlan.needsCombatRefresh == true or raidInCombat == true,
         visual = kind == "debuff" and visual or nil,
         showDispelTypeBorder = showDispelTypeBorder == true,
+        showDispelTypeSymbol = showDispelTypeBorder == true and debuffTypeBorderMode == "SYMBOL",
+        showStealableMarker = kind == "buff" and renderEnabled == true
+            and ReadBool(sharedLayout, shared, "buffShowStealable", false),
+        stealableStyle = kind == "buff" and A3.NormalizeClassicStealableStyle(
+            ReadRaw(sharedLayout, shared, "buffStealableStyle")) or nil,
         dispelColorCurve = dispelVisual and dispelVisual.dispelColorCurve or nil,
         dispelNoneReady = dispelVisual and dispelVisual.dispelNoneReady == true or false,
         dispelNoneR = dispelVisual and dispelVisual.dispelNoneR or nil,
@@ -1132,6 +1171,7 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
     local filterPlan = A3.ClassicFeatures and A3.ClassicFeatures.CompileRawFilter
         and A3.ClassicFeatures.CompileRawFilter(rawFilter, kind == "buff") or nil
     local filter = filterPlan and filterPlan.scanFilter or spec.filter
+    local nativePlayerFilter = filterPlan and filterPlan.nativePlayerFilter == true or false
     local black = CompileBlacklistHash(source[spec.blacklistKey])
     -- Classic aura payloads often carry a different spellId than the
     -- configured one (TBC spell ranks, Mists cast-vs-aura ID drift), so the
@@ -1183,6 +1223,7 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
         cooldownUrgentR, cooldownUrgentG, cooldownUrgentB = ReadGeneralColor("aurasCooldownTextUrgentColor", 1, 0.55, 0.10)
     end
     local step = size + spacing
+    local lanePadding = Round(ClampNumber(source.stylePadding, 0, 0, 16))
     local roundedMax = Round(maxCount)
     local roundedPerRow = Round(perRow)
     local cols, rows = GridShape(roundedMax, roundedPerRow, verticalGrowth)
@@ -1190,7 +1231,11 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
         source.sortByDuration == true and 2 or 1)
     local sortReverse = source[kind .. "SortReverse"] == true
         or (source[kind .. "SortReverse"] == nil and source.sortReverse == true)
-    local showDispelTypeBorder = kind == "debuff" and renderEnabled == true and source.debuffShowDispelBorder == true
+    local debuffTypeBorderMode = kind == "debuff" and A3.NormalizeClassicDebuffTypeBorderMode(
+        source.debuffDispelBorderMode or source.debuffTypeBorderMode or source.dispelBorderMode,
+        source.debuffShowDispelBorder == true or source.showDispelBorder == true,
+        source.debuffShowDispelSymbol == true or source.showDispelSymbol == true) or "OFF"
+    local showDispelTypeBorder = kind == "debuff" and renderEnabled == true and debuffTypeBorderMode ~= "OFF"
     local dispelVisual = (kind == "debuff" and (visual or (showDispelTypeBorder and CompileDispelVisual(nil)))) or nil
     local needsPlayerFlag = source.preferPlayer == true
         or (filterPlan and filterPlan.needsPlayerFlag == true)
@@ -1209,7 +1254,7 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
         renderEnabled = renderEnabled == true,
         harmful = spec.harmful == true,
         filter = filter,
-        playerFilter = filter .. "|PLAYER",
+        playerFilter = nativePlayerFilter and filter or (filter .. "|PLAYER"),
         importantFilter = filter .. "|IMPORTANT",
         raidFilter = filter .. "|RAID",
         raidInCombatFilter = filter .. "|RAID_IN_COMBAT",
@@ -1223,8 +1268,9 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
         perRow = roundedPerRow,
         cols = cols,
         rows = rows,
-        width = math_max(1, cols * size + math_max(cols - 1, 0) * spacing),
-        height = math_max(1, rows * size + math_max(rows - 1, 0) * spacing),
+        padding = lanePadding,
+        width = math_max(1, cols * size + math_max(cols - 1, 0) * spacing + 2 * lanePadding),
+        height = math_max(1, rows * size + math_max(rows - 1, 0) * spacing + 2 * lanePadding),
         x = Round(x),
         y = Round(y),
         anchor = anchor,
@@ -1263,6 +1309,7 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
         cooldownWarningSeconds = ClampNumber(general and general.aurasCooldownTextWarningSeconds, 15, 0, 60),
         cooldownUrgentSeconds = ClampNumber(general and general.aurasCooldownTextUrgentSeconds, 5, 0, 60),
         cooldownSize = ClampNumber(source[spec.cooldownSizeKey] or source.cooldownSize, DEFAULT_SHARED.cooldownTextSize, 6, 40),
+        cooldownDecimalSeconds = ClampNumber(source[kind .. "CooldownDecimalSeconds"] or source.cooldownDecimalSeconds, 3, 0, 30),
         cooldownAnchor = ReadAnchor(source, nil, spec.cooldownAnchorKey, "CENTER"),
         cooldownX = 0,
         cooldownY = 0,
@@ -1279,6 +1326,7 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
         includeSpellNames = includeSpellNames,
         filterPlan = filterPlan,
         filterRequirements = filterPlan and filterPlan.requirements or nil,
+        nativePlayerFilter = nativePlayerFilter,
         hasFilterWork = hasFilterWork,
         visualDirect = visualDirect == true,
         exclusiveImportant = false,
@@ -1295,6 +1343,7 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
         needsCombatRefresh = filterPlan and filterPlan.needsCombatRefresh == true or false,
         visual = kind == "debuff" and visual or nil,
         showDispelTypeBorder = showDispelTypeBorder == true,
+        showDispelTypeSymbol = showDispelTypeBorder == true and debuffTypeBorderMode == "SYMBOL",
         dispelColorCurve = dispelVisual and dispelVisual.dispelColorCurve or nil,
         dispelNoneReady = dispelVisual and dispelVisual.dispelNoneReady == true or false,
         dispelNoneR = dispelVisual and dispelVisual.dispelNoneR or nil,
@@ -1387,8 +1436,8 @@ local function BuildUnitFrameConfig(unit, frameSpec)
     local cfg = { unit = unit, enabled = false, lanes = {}, laneOrder = {}, visual = visual }
     local auraIconsEnabled = auras.enabled == true and flag and auras[flag] == true
     local needDebuffScan = visual and visual.enabled == true
+    local layout, sharedLayout, blacklist, filtersRoot = EffectiveTables(auras, unit)
     if auraIconsEnabled or needDebuffScan then
-        local layout, sharedLayout, blacklist, filtersRoot = EffectiveTables(auras, unit)
         local buff = auraIconsEnabled and CompileLane(unit, shared, layout, sharedLayout, blacklist, filtersRoot, "buff", false, nil, true) or nil
         local debuff = (auraIconsEnabled or needDebuffScan)
             and CompileLane(unit, shared, layout, sharedLayout, blacklist, filtersRoot, "debuff", needDebuffScan, visual, auraIconsEnabled == true) or nil
@@ -1408,7 +1457,9 @@ local function BuildUnitFrameConfig(unit, frameSpec)
     end
 
     if A3.ClassicFeatures and type(A3.ClassicFeatures.CompileUnitLanes) == "function" then
-        local extraLanes, extraOrder, extraSource = A3.ClassicFeatures.CompileUnitLanes(auras, unit, frameSpec)
+        local lanePadding = ReadRaw(layout, shared, "stylePadding")
+        local extraLanes, extraOrder, extraSource = A3.ClassicFeatures.CompileUnitLanes(
+            auras, unit, frameSpec, lanePadding)
         if type(extraLanes) == "table" then
             if type(A3.ClassicFeatures.ApplyAutoExclusions) == "function" then
                 A3.ClassicFeatures.ApplyAutoExclusions(cfg.lanes.buff, cfg.lanes.debuff, extraLanes, extraSource, unit)
@@ -1471,6 +1522,7 @@ function A3.BuildAuraLaneMetrics(configOrUnit, kind)
         rows = lane.rows,
         width = lane.width,
         height = lane.height,
+        padding = lane.padding,
         alpha = lane.alpha,
         iconZoom = lane.iconZoom,
         iconShape = lane.iconShape,
@@ -1616,8 +1668,9 @@ local function PositionButton(lane, button, index)
         col = idx % perRow
         row = (idx - col) / perRow
     end
-    local x = col * (cfg.stepX or cfg.step) * cfg.xSign
-    local y = row * (cfg.stepY or cfg.step) * cfg.ySign
+    local padding = cfg.padding or 0
+    local x = (padding + col * (cfg.stepX or cfg.step)) * cfg.xSign
+    local y = (padding + row * (cfg.stepY or cfg.step)) * cfg.ySign
     button:ClearAllPoints()
     button:SetPoint(cfg.initialAnchor, lane.frame, cfg.initialAnchor, x, y)
 end
@@ -1671,10 +1724,21 @@ local function ApplyButtonLayout(lane, button, index)
     if not cfg then return end
     button._msufA3Lane = lane
     button:SetSize(cfg.buttonWidth or cfg.size, cfg.buttonHeight or cfg.size)
-    button:EnableMouse(not cfg.clickThrough)
+    -- Click-through and tooltip hover are independent on every supported
+    -- Classic branch. EnableMouse(false) disabled both and made the tooltip
+    -- setting silently non-functional for the common click-through profile.
+    if button.SetMouseClickEnabled and button.SetMouseMotionEnabled then
+        button:SetMouseClickEnabled(cfg.clickThrough ~= true)
+        button:SetMouseMotionEnabled(cfg.showTooltip == true)
+    else
+        button:EnableMouse(cfg.clickThrough ~= true or cfg.showTooltip == true)
+    end
     if button.Cooldown then
         if button.Cooldown.SetDrawSwipe then button.Cooldown:SetDrawSwipe(cfg.showCooldown == true and cfg.showCooldownSwipe ~= false) end
         if button.Cooldown.SetHideCountdownNumbers then button.Cooldown:SetHideCountdownNumbers(cfg.showCooldownText == false) end
+        if button.Cooldown.SetCountdownMillisecondsThreshold then
+            button.Cooldown:SetCountdownMillisecondsThreshold(cfg.cooldownDecimalSeconds or 0)
+        end
         ApplyCooldownTextLayout(button.Cooldown, button, cfg)
         if cfg.cooldownTextBuckets ~= true and ResetCooldownTextColor then
             ResetCooldownTextColor(button.Cooldown)
@@ -1706,6 +1770,9 @@ local function ApplyButtonLayout(lane, button, index)
     if cfg.showDispelTypeBorder ~= true and button._msufA3DispelOverlay then
         button._msufA3DispelOverlay._msufA3Shown = nil
         button._msufA3DispelOverlay:Hide()
+    end
+    if cfg.showDispelTypeSymbol ~= true and button._msufA3DispelTypeSymbol then
+        button._msufA3DispelTypeSymbol:Hide()
     end
     if cfg.ownHighlight ~= true and button._msufA3OwnHighlight then
         button._msufA3OwnHighlight._msufA3Shown = nil
@@ -2035,24 +2102,41 @@ local function Filtered(unit, auraInstanceID, filter)
     return A3._ClassicAuraTokenSet(unit, filter)[auraInstanceID] ~= true
 end
 
-local function ProcessData(lane, unit, data)
+local function ProcessData(lane, unit, data, fromLaneScan)
     if type(data) ~= "table" then return nil end
     local auraInstanceID = data.auraInstanceID
     if auraInstanceID == nil then return nil end
     local cfg = lane.config
-    if cfg.needsPlayerFlag == true then
+    if cfg.nativePlayerFilter == true then
+        -- Full-scan data already passed Blizzard's PLAYER filter. Delta
+        -- payloads do not carry that guarantee, so test their exact native
+        -- membership before they can enter or remain in an Only Mine lane.
+        data.isPlayerAura = fromLaneScan == true
+            or not Filtered(unit, auraInstanceID, cfg.filter)
+    elseif cfg.needsPlayerFlag == true then
         -- Mists/TBC do not reliably populate isFromPlayerOrPlayerPet (the
         -- player's own party-frame HoTs carried false/nil, which blanked
-        -- "only mine" lanes). Blizzard's Classic frames identify own casts
-        -- by the caster unit, so sourceUnit is authoritative here; the
-        -- membership fallback only covers auras with no readable caster.
+        -- "only mine" lanes). Blizzard compares sourceUnit through UnitIsUnit,
+        -- because the player or pet can arrive through an equivalent group /
+        -- vehicle token. A positive legacy flag is still useful, but false is
+        -- not authoritative; fall back to PLAYER scan membership when neither
+        -- source gives a positive identity.
         local sourceUnit = data.sourceUnit
         local fromPlayer = data.isFromPlayerOrPlayerPet
         if sourceUnit ~= nil and not IsSecret(sourceUnit) then
-            data.isPlayerAura = sourceUnit == "player"
-                or sourceUnit == "pet" or sourceUnit == "vehicle"
-        elseif fromPlayer ~= nil and not IsSecret(fromPlayer) then
-            data.isPlayerAura = fromPlayer == true
+            local sourceIsPlayer
+            if UnitIsUnit then
+                sourceIsPlayer = UnitIsUnit("player", sourceUnit)
+                    or UnitIsUnit("pet", sourceUnit)
+                    or UnitIsUnit("vehicle", sourceUnit)
+            else
+                sourceIsPlayer = sourceUnit == "player"
+                    or sourceUnit == "pet" or sourceUnit == "vehicle"
+            end
+            data.isPlayerAura = sourceIsPlayer == true
+                or (fromPlayer ~= nil and not IsSecret(fromPlayer) and fromPlayer == true)
+        elseif fromPlayer ~= nil and not IsSecret(fromPlayer) and fromPlayer == true then
+            data.isPlayerAura = true
         else
             data.isPlayerAura = not Filtered(unit, auraInstanceID, cfg.playerFilter)
         end
@@ -2118,7 +2202,15 @@ local function AuraDispelColorByCurve(curve, unit, data)
 end
 
 local function AuraDispelColor(cfg, unit, data)
-    return AuraDispelColorByCurve(cfg and cfg.dispelColorCurve, unit, data)
+    local hasColor, r, g, b, a, secret = AuraDispelColorByCurve(cfg and cfg.dispelColorCurve, unit, data)
+    if hasColor then return hasColor, r, g, b, a, secret end
+    local name = PlainString(data and data.dispelName)
+    local color = name and _G.DebuffTypeColor and _G.DebuffTypeColor[name]
+    if color then
+        r, g, b, a = ColorObjectRGBA(color)
+        if r then return true, r, g, b, a or 1, HasSecretColor(r, g, b, a) end
+    end
+    return false
 end
 
 local function AuraDispelNoneColor(cfg)
@@ -2409,8 +2501,8 @@ local function DataMatchesLane(data, cfg)
     return auraInstanceID ~= nil and not Filtered(cfg.unit, auraInstanceID, cfg.filter)
 end
 
-local function AddAuraToLane(lane, unit, data)
-    data = ProcessData(lane, unit, data)
+local function AddAuraToLane(lane, unit, data, fromLaneScan)
+    data = ProcessData(lane, unit, data, fromLaneScan)
     if not data then return false, nil end
     local auraInstanceID = data.auraInstanceID
     local isNew = lane.all[auraInstanceID] == nil
@@ -2439,8 +2531,8 @@ local function AddAuraToLane(lane, unit, data)
     return false, data
 end
 
-local function AddVisibleAuraToCappedLane(lane, unit, data)
-    data = ProcessData(lane, unit, data)
+local function AddVisibleAuraToCappedLane(lane, unit, data, fromLaneScan)
+    data = ProcessData(lane, unit, data, fromLaneScan)
     if not data then return false, nil end
     if lane.config.hasFilterWork == true and ShouldShowAura(lane, unit, data) ~= true then
         return false, data
@@ -2464,7 +2556,7 @@ local function AuraUtilScanCallback(data)
     local scan = AURA_UTIL_SCAN
     local lane = scan.lane
     local unit = scan.unit
-    local active, processed = scan.addAura(lane, unit, data)
+    local active, processed = scan.addAura(lane, unit, data, true)
     if scan.inlineRender == true
         and active == true
         and processed
@@ -2553,7 +2645,7 @@ local function FullScanLane(lane, unit, renderInline)
             lane.slotScratch = slots
             if inlineRender then
                 for i = 2, count do
-                    local active, processed = addAura(lane, unit, GetAuraDataBySlot(unit, slots[i]))
+                    local active, processed = addAura(lane, unit, GetAuraDataBySlot(unit, slots[i]), true)
                     if active == true and processed and visible < maxVisible then
                         visible = visible + 1
                         local button = EnsureButton(lane, visible)
@@ -2563,7 +2655,7 @@ local function FullScanLane(lane, unit, renderInline)
                 end
             else
                 for i = 2, count do
-                    addAura(lane, unit, GetAuraDataBySlot(unit, slots[i]))
+                    addAura(lane, unit, GetAuraDataBySlot(unit, slots[i]), true)
                 end
             end
         else
@@ -2578,7 +2670,7 @@ local function FullScanLane(lane, unit, renderInline)
                 lane.slotScratch = slots
                 continuation = slots[1]
                 for i = 2, count do
-                    local active, processed = addAura(lane, unit, GetAuraDataBySlot(unit, slots[i]))
+                    local active, processed = addAura(lane, unit, GetAuraDataBySlot(unit, slots[i]), true)
                     if active == true and processed and visible < maxVisible then
                         visible = visible + 1
                         local button = EnsureButton(lane, visible)
@@ -2684,6 +2776,37 @@ local function EnsureDispelTypeOverlay(button)
     return tex
 end
 
+A3._EnsureClassicAuraDispelTypeSymbol = function(button)
+    local tex = button and button._msufA3DispelTypeSymbol
+    if tex then return tex end
+    if not button then return nil end
+    tex = button:CreateTexture(nil, "OVERLAY", nil, 6)
+    tex:Hide()
+    button._msufA3DispelTypeSymbol = tex
+    return tex
+end
+
+A3._UpdateClassicAuraDispelTypeSymbol = function(button, cfg, data)
+    local tex = button and button._msufA3DispelTypeSymbol
+    local dispelName = cfg and cfg.showDispelTypeSymbol == true and PlainString(data and data.dispelName) or nil
+    local visuals = A3.ClassicVisuals
+    if not (dispelName and visuals and type(visuals.SetDispelSymbolArt) == "function") then
+        if tex then tex:Hide() end
+        return false
+    end
+    tex = tex or A3._EnsureClassicAuraDispelTypeSymbol(button)
+    if not (tex and visuals.SetDispelSymbolArt(tex, "BLIZZARD", dispelName)) then
+        if tex then tex:Hide() end
+        return false
+    end
+    local size = math_max(8, math_floor(((cfg.size or 24) * 0.44) + 0.5))
+    tex:ClearAllPoints()
+    tex:SetSize(size, size)
+    tex:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 1, -1)
+    tex:Show()
+    return true
+end
+
 local function UpdateDispelTypeOverlay(button, lane, unit, data)
     local cfg = lane and lane.config
     if not (cfg and cfg.showDispelTypeBorder == true) then
@@ -2692,6 +2815,7 @@ local function UpdateDispelTypeOverlay(button, lane, unit, data)
             tex._msufA3Shown = nil
             tex:Hide()
         end
+        A3._UpdateClassicAuraDispelTypeSymbol(button, cfg, nil)
         return
     end
     local hasColor, r, g, b, a, secret = AuraDispelColor(cfg, unit, data)
@@ -2701,6 +2825,14 @@ local function UpdateDispelTypeOverlay(button, lane, unit, data)
     local tex = button._msufA3DispelOverlay
     if hasColor then
         tex = tex or EnsureDispelTypeOverlay(button)
+        local shaped = type(A3.ApplyAuraDispelPreview) == "function"
+            and A3.ApplyAuraDispelPreview(tex, button.Icon or button, cfg.size, "BORDER", cfg.iconShape) == true
+        if not shaped then
+            tex:SetTexture(DEBUFF_OVERLAY_TEXTURE)
+            if tex.SetTexCoord then tex:SetTexCoord(0.296875, 0.5703125, 0, 0.515625) end
+            tex:ClearAllPoints()
+            tex:SetAllPoints(button)
+        end
         r, g, b, a = r or 1, g or 1, b or 1, a or 1
         if secret == true or tex._msufA3ColorPlain ~= true
             or tex._msufA3R ~= r or tex._msufA3G ~= g
@@ -2723,6 +2855,7 @@ local function UpdateDispelTypeOverlay(button, lane, unit, data)
             tex:Hide()
         end
     end
+    A3._UpdateClassicAuraDispelTypeSymbol(button, cfg, data)
 end
 
 local function UpdateOwnHighlight(button, cfg, data)
@@ -3747,61 +3880,6 @@ local function ResetAurasForIdentity(frame)
     return UpdateAuras(frame, "ForceUpdate", A3._ClassicBindFrameUnit(frame), nil, true)
 end
 
--- Deferred identity aura rebuild. A full rescan of a raid-buffed unit (40+
--- buffs) costs ~1.6ms and was the dominant cost in the target-change tick
--- (IdProbe: target.Auras 1.634ms vs everything else <0.3ms). oUF never runs a
--- synchronous scan on a swap -- the C-fired UNIT_AURA full-update does it on
--- its own frame. We mirror that: identity reasons enqueue the frame and one
--- C_Timer.After(0) flush rebuilds it next tick. Bars/name/portrait still
--- update instantly in the identity pass; only the (expensive) aura scan moves
--- off the tick. Frame-keyed set => natural coalescing under swap spam; the
--- unit is re-read at flush so the latest target always wins.
--- (State and helpers hang off A3 rather than file-scope locals: this file is
--- at Lua's 200-local-per-chunk ceiling.)
-A3._identityAuraPending = A3._identityAuraPending or {}
-
-function A3.FlushIdentityAuraRebuilds()
-    if not A3._identityAuraQueued then
-        A3._identityAuraFlushScheduled = false
-        return
-    end
-    A3._identityAuraQueued = false
-    A3._identityAuraFlushScheduled = false
-    local pending = A3._identityAuraPending
-    A3._identityAuraPending = {}
-    -- Clear every pending flag and arm the full-scan fallback BEFORE running
-    -- any rebuild. HandleUnitAura drops UNIT_AURA deltas while the flag is
-    -- set, so a Lua error inside one frame's rebuild must not leave the
-    -- remaining frames flagged -- that froze their auras until reload. With
-    -- needFullUpdate armed, a rebuild that never ran is healed by the next
-    -- UNIT_AURA escalating to a full scan.
-    for frame in pairs(pending) do
-        frame._msufA3IdentityRebuildPending = nil
-        local state = frame._msufA3State
-        if state then state.needFullUpdate = true end
-    end
-    for frame in pairs(pending) do
-        if frame._msufActiveElements and frame._msufActiveElements.Auras == true then
-            UpdateAuras(frame, "ForceUpdate", A3._ClassicBindFrameUnit(frame), nil, true)
-        end
-    end
-end
-
-function A3.QueueIdentityAuraRebuild(frame)
-    if not frame then return false end
-    if not (C_Timer and C_Timer.After) then
-        return ResetAurasForIdentity(frame)
-    end
-    A3._identityAuraPending[frame] = true
-    A3._identityAuraQueued = true
-    frame._msufA3IdentityRebuildPending = true
-    if not A3._identityAuraFlushScheduled then
-        A3._identityAuraFlushScheduled = true
-        C_Timer.After(0, A3.FlushIdentityAuraRebuilds)
-    end
-    return true
-end
-
 local function NeedsCombatAuraEvents(cfg)
     if not (cfg and cfg.enabled and cfg.lanes) then return false end
     for _, lane in pairs(cfg.lanes) do
@@ -3855,13 +3933,6 @@ A3.ForceUpdateFrame = A3.RenderFrame
 A3.RenderCachedFrame = RenderCachedAuras
 
 function A3.HandleUnitAura(frame, event, unit, updateInfo)
-    -- A coalesced target/focus swap owns the next full rebuild (see the
-    -- aura-identity coalescing in MSUF_UF_Runtime.lua). Interim deltas
-    -- describe a unit the lane no longer tracks and are superseded by that
-    -- rebuild, so they are dropped instead of being merged into stale state.
-    if frame and frame._msufA3IdentityRebuildPending == true then
-        return false
-    end
     return UpdateAuras(frame, event, unit, updateInfo, false)
 end
 
@@ -4372,7 +4443,10 @@ function A3.RenderUnitChangedFrame(frame, oldUnit, newUnit)
     if A3._ClassicAuraRuntimeCombatBlocked() then
         return A3._QueueDeferredAuraRuntime(newUnit or "shared", "AURAS3_CLASSIC_UNIT_CHANGED")
     end
-    return A3.QueueIdentityAuraRebuild(frame)
+    -- This is a cold identity path. Blizzard's Classic TargetFrame performs a
+    -- complete synchronous UpdateAuras here; delaying ours could leave a lane
+    -- on the previous/partial unit until an unrelated menu apply or unit swap.
+    return ResetAurasForIdentity(frame)
 end
 
 A3.OnFrameUnitChanged = A3.RenderUnitChangedFrame
@@ -4382,6 +4456,20 @@ local AurasElement = {
     events = { "UNIT_AURA" },
     unitlessEvents = EMPTY_EVENTS,
 }
+
+local function EnsureClassicAuraOnShowRefresh(frame)
+    if not (frame and frame.HookScript) or frame._msufA3ClassicOnShowHooked == true then return end
+    frame._msufA3ClassicOnShowHooked = true
+    frame:HookScript("OnShow", function(owner)
+        local active = owner and owner._msufActiveElements
+        -- Hidden target/focus/boss frames can miss their identity event before
+        -- RegisterUnitWatch shows them. The core's lean OnShow reseed excludes
+        -- Auras by design, so Classic owns this one cold full scan itself.
+        if active and active.Auras == true and not IsGroupFrame(owner) then
+            ResetAurasForIdentity(owner)
+        end
+    end)
+end
 
 A3._ClassicWeaponAuraEvents = A3._ClassicWeaponAuraEvents or { "WEAPON_ENCHANT_CHANGED", "WEAPON_SLOT_CHANGED" }
 A3._ClassicCombatWeaponAuraEvents = A3._ClassicCombatWeaponAuraEvents
@@ -4446,7 +4534,10 @@ function AurasElement.GetUnitlessEvents(frame)
 end
 
 function AurasElement.Create(frame)
-    if frame then EnsureState(frame) end
+    if frame then
+        EnsureState(frame)
+        EnsureClassicAuraOnShowRefresh(frame)
+    end
 end
 
 function AurasElement.Apply(frame)
@@ -4469,6 +4560,7 @@ function AurasElement.Apply(frame)
 end
 
 function AurasElement.Enable(frame)
+    EnsureClassicAuraOnShowRefresh(frame)
     local unit = A3._ClassicBindFrameUnit(frame)
     if IsGroupFrame(frame) then
         frame._msufA3GroupRuntime = true
@@ -4500,19 +4592,17 @@ function AurasElement.Update(frame, event, unit, updateInfo)
         -- Classic does not guarantee a UNIT_AURA payload when a stable token
         -- (target/focus/bossN) changes GUID. Blizzard's own TargetFrame performs
         -- a full UpdateAuras from PLAYER_TARGET_CHANGED for the same reason.
-        -- Reuse the existing next-tick, frame-keyed queue so swap spam coalesces
-        -- into one scan and the latest identity always wins.
-        return A3.QueueIdentityAuraRebuild(frame)
+        -- Keep this cold-path scan synchronous, matching Blizzard's Classic
+        -- TargetFrame. Deferring it could leave a partial/previous identity
+        -- visible until an unrelated menu apply or another unit swap.
+        return ResetAurasForIdentity(frame)
     end
     if event == "WEAPON_ENCHANT_CHANGED" or event == "WEAPON_SLOT_CHANGED" then
         return UpdateAuras(frame, event, A3._ClassicBindFrameUnit(frame), nil, true)
     end
     if event == "MSUF_UNIT_IDENTITY_AURAS"
         or event == "MSUF_UNIT_IDENTITY_SOFT_AURAS" then
-        -- Defer the expensive full rescan off the identity tick (see
-        -- QueueIdentityAuraRebuild). Group identity keeps the synchronous path
-        -- below via A3.RenderFrame so roster builds settle in one pass.
-        return A3.QueueIdentityAuraRebuild(frame)
+        return ResetAurasForIdentity(frame)
     end
     if event == "ForceUpdate"
         or event == "MSUF_FORCE_UPDATE"

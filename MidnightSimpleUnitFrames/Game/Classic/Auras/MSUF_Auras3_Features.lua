@@ -12,6 +12,16 @@ MSUF = MSUF or _G.MSUF_NS or {}
 local A3 = MSUF.MSUF_Auras3
 if type(A3) ~= "table" then return end
 
+A3.NormalizeClassicDebuffTypeBorderMode = A3.NormalizeClassicDebuffTypeBorderMode or function(value, legacyBorder, legacySymbol)
+    local mode = type(value) == "string" and value:upper() or nil
+    if mode == "SYMBOL" or mode == "BORDER" then return mode end
+    if mode == "OFF" then
+        if legacySymbol == true or legacyBorder == true then return "SYMBOL" end
+        return "OFF"
+    end
+    return (legacySymbol == true or legacyBorder == true) and "SYMBOL" or "OFF"
+end
+
 local Features = A3.ClassicFeatures or {}
 A3.ClassicFeatures = Features
 
@@ -122,7 +132,8 @@ end
 --- their AuraUtil whitelist does not accept every Retail token (notably
 --- IMPORTANT, DISPELLABLE, BOSS, STEALABLE, and !PLAYER).  Passing those
 --- strings into GetAuraSlots can silently empty a lane, so Classic scans only
---- with the universally valid base token and the additive nameplate flag.
+--- with the universally valid base token plus the stable PLAYER/nameplate
+--- tokens and resolves all remaining requirements after the scan.
 local function NewFilterRequirements()
     return {}
 end
@@ -133,11 +144,18 @@ end
 
 local function FinalizeFilterPlan(helpful, includeNameplateOnly, req)
     local base = helpful and "HELPFUL" or "HARMFUL"
+    local scanFilter = includeNameplateOnly and (base .. "|INCLUDE_NAME_PLATE_ONLY") or base
+    -- PLAYER is the one inclusive Classic token that must be applied by the
+    -- native API. AuraData source fields are incomplete on supported Classic
+    -- clients, while Blizzard's own filter resolves player/pet ownership.
+    local nativePlayerFilter = req and req.player == true and req.notPlayer ~= true or false
+    if nativePlayerFilter then scanFilter = scanFilter .. "|PLAYER" end
     return {
         helpful = helpful == true,
-        scanFilter = includeNameplateOnly and (base .. "|INCLUDE_NAME_PLATE_ONLY") or base,
+        scanFilter = scanFilter,
         requirements = HasFilterRequirements(req) and req or nil,
         hasRequirements = HasFilterRequirements(req),
+        nativePlayerFilter = nativePlayerFilter,
         needsPlayerFlag = req and (req.player == true or req.notPlayer == true) or false,
         needsCombatRefresh = req and req.raidInCombat == true or false,
     }
@@ -306,7 +324,7 @@ local function SortMode(value)
     return 0
 end
 
-local function BaseLane(unit, kind, entry, index, spellIDs, helpful, rootKey, forcePlayer)
+local function BaseLane(unit, kind, entry, index, spellIDs, helpful, rootKey, forcePlayer, lanePadding)
     local placed = type(entry.placed) == "table" and entry.placed or {}
     local filters = type(entry.filters) == "table" and entry.filters
         or { enabled = true, onlyMine = entry.onlyOwn == true }
@@ -320,6 +338,7 @@ local function BaseLane(unit, kind, entry, index, spellIDs, helpful, rootKey, fo
     local perRow = Round(Number(placed.perRow, 4, 1, 40))
     local xSign, ySign, vertical = Growth(placed.growth)
     local cols, rows = Grid(maxCount, perRow, vertical)
+    lanePadding = Round(Number(lanePadding, 0, 0, 16))
     local sortOrder = SortMode(placed.sortMethod)
     if forcePlayer == true and (not activeFilters or activeFilters.onlyMine ~= true) then
         local source = activeFilters or {}
@@ -331,6 +350,8 @@ local function BaseLane(unit, kind, entry, index, spellIDs, helpful, rootKey, fo
     local filter = filterPlan.scanFilter
     local onlyMine = activeFilters and activeFilters.onlyMine == true or false
     local hasInclusive = filterPlan.hasRequirements == true
+    local debuffTypeBorderMode = helpful ~= true and type(A3.NormalizeClassicDebuffTypeBorderMode) == "function"
+        and A3.NormalizeClassicDebuffTypeBorderMode(placed.debuffTypeBorderMode, false, false) or "OFF"
     local cfg = {
         kind = kind,
         rootKey = rootKey,
@@ -340,7 +361,7 @@ local function BaseLane(unit, kind, entry, index, spellIDs, helpful, rootKey, fo
         renderEnabled = maxCount > 0,
         harmful = helpful ~= true,
         filter = filter,
-        playerFilter = filter .. "|PLAYER",
+        playerFilter = filterPlan.nativePlayerFilter == true and filter or (filter .. "|PLAYER"),
         importantFilter = filter .. "|IMPORTANT",
         raidFilter = filter .. "|RAID",
         raidInCombatFilter = filter .. "|RAID_IN_COMBAT",
@@ -361,8 +382,9 @@ local function BaseLane(unit, kind, entry, index, spellIDs, helpful, rootKey, fo
         perRow = perRow,
         cols = cols,
         rows = rows,
-        width = math_max(1, cols * buttonWidth + math_max(cols - 1, 0) * spacing),
-        height = math_max(1, rows * buttonHeight + math_max(rows - 1, 0) * spacing),
+        padding = lanePadding,
+        width = math_max(1, cols * buttonWidth + math_max(cols - 1, 0) * spacing + 2 * lanePadding),
+        height = math_max(1, rows * buttonHeight + math_max(rows - 1, 0) * spacing + 2 * lanePadding),
         x = Round(Number(placed.x, 0, -4096, 4096)),
         y = Round(Number(placed.y, 0, -4096, 4096)),
         anchor = Anchor(placed.anchor, "TOPRIGHT"),
@@ -384,7 +406,10 @@ local function BaseLane(unit, kind, entry, index, spellIDs, helpful, rootKey, fo
         showCooldownSwipe = placed.showCooldownSwipe ~= false,
         showCooldownText = placed.showCooldown ~= false,
         showCooldown = placed.showCooldown ~= false,
+        cooldownDecimalSeconds = Number(placed.cooldownDecimalSeconds, 3, 0, 30),
         showStacks = placed.showStacks ~= false,
+        showDispelTypeBorder = debuffTypeBorderMode ~= "OFF",
+        showDispelTypeSymbol = debuffTypeBorderMode == "SYMBOL",
         cooldownSize = Number(placed.cooldownSize, 14, 6, 40),
         cooldownAnchor = Anchor(placed.cooldownAnchor, "CENTER"),
         cooldownX = Number(placed.cooldownX, 0, -2000, 2000),
@@ -398,6 +423,7 @@ local function BaseLane(unit, kind, entry, index, spellIDs, helpful, rootKey, fo
         includeSpellNames = NameHash(spellIDs),
         filterPlan = filterPlan,
         filterRequirements = filterPlan.requirements,
+        nativePlayerFilter = filterPlan.nativePlayerFilter == true,
         hasFilterWork = true,
         classicFeatureMatch = true,
         hidePermanent = filters.hidePermanent == true,
@@ -448,6 +474,7 @@ local function PortraitLane(lane, frameSpec, entry, kind, rootKey)
     out.stepY = height + out.spacing
     out.perRow = maxCount
     out.cols, out.rows = maxCount, 1
+    out.padding = 0
     out.width = maxCount * width + math_max(maxCount - 1, 0) * out.spacing
     out.height = height
     out.anchor = "CENTER"
@@ -473,7 +500,7 @@ local function EffectiveDisplays(auras, unit)
     return nil
 end
 
-function Features.CompileUnitLanes(auras, unit, frameSpec)
+function Features.CompileUnitLanes(auras, unit, frameSpec, lanePadding)
     local source = EffectiveContainers(auras, unit)
     local lanes, order = {}, {}
     if type(source) == "table" then
@@ -488,7 +515,7 @@ function Features.CompileUnitLanes(auras, unit, frameSpec)
                     local helpful = playerDefensive or tostring(entry.auraType or "BUFF"):upper() ~= "DEBUFF"
                     local kind = "custom" .. tostring(index)
                     local lane = BaseLane(unit, kind, entry, index, spellIDs, helpful,
-                        "CustomAuras" .. tostring(index), targetDot)
+                        "CustomAuras" .. tostring(index), targetDot, lanePadding)
                     if entry.portraitIcon == true and playerDefensive then
                         lane = PortraitLane(lane, frameSpec, entry, "defensivePortrait", "DefensivePortrait") or lane
                     elseif entry.portraitIcon == true and targetDot then
@@ -513,7 +540,7 @@ function Features.CompileUnitLanes(auras, unit, frameSpec)
             if spellIDs then
                 local kind = "customDisplay" .. tostring(index)
                 local lane = BaseLane(unit, kind, entry, index, spellIDs,
-                    tostring(entry.auraType or "BUFF"):upper() ~= "DEBUFF", "CustomDisplay" .. tostring(index))
+                    tostring(entry.auraType or "BUFF"):upper() ~= "DEBUFF", "CustomDisplay" .. tostring(index), nil, lanePadding)
                 lane.max = 1
                 if A3.ClassicVisuals and type(A3.ClassicVisuals.EnrichCustomLane) == "function" then
                     A3.ClassicVisuals.EnrichCustomLane(lane, entry, frameSpec)
