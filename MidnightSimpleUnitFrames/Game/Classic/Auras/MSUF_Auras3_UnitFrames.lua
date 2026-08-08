@@ -884,12 +884,13 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
     local anchor = ReadAnchor(layout, shared, spec.anchorKey, spec.defaultAnchor)
     local layer = ReadNumber(layout, shared, spec.layerKey, spec.defaultLayer, 1, 15)
     local stackAnchor = ReadAnchor(sharedLayout, shared, spec.stackAnchorKey, ReadShared(shared, "stackCountAnchor") or "TOPRIGHT")
-    local filters = FilterTable(filtersRoot, spec.dbKey)
     local rootFilters = type(filtersRoot) == "table" and filtersRoot or nil
-    local activeRootFilters = rootFilters and rootFilters.enabled ~= false and rootFilters or nil
-    local laneBlacklist = type(blacklist) == "table"
-        and type(blacklist[spec.dbKey]) == "table"
-        and blacklist[spec.dbKey] or blacklist
+    local storedLaneFilters = rootFilters and type(rootFilters[spec.dbKey]) == "table"
+        and rootFilters[spec.dbKey] or nil
+    local filters = FilterTable(filtersRoot, spec.dbKey)
+    local explicitLaneBlacklist = type(blacklist) == "table"
+        and type(blacklist[spec.dbKey]) == "table" and blacklist[spec.dbKey] or nil
+    local laneBlacklist = explicitLaneBlacklist or blacklist
     local exclusive = nil
     local onlyImportant = false
     local onlyMine = filters and filters.onlyMine == true
@@ -897,10 +898,23 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
     local includeStealable = false
     local boss = false
     local onlyBoss = false
-    local hidePermanent = type(laneBlacklist) == "table" and laneBlacklist.hidePermanent == true
-    if hidePermanent ~= true and kind == "buff" and activeRootFilters then
-        -- Legacy profiles stored this one level above the per-lane filter.
-        hidePermanent = activeRootFilters.hidePermanent == true
+    local hidePermanent
+    if explicitLaneBlacklist and explicitLaneBlacklist.hidePermanent ~= nil then
+        -- The current menu writes the blacklist lane. Keep an explicit false
+        -- authoritative so a unit can disable an inherited legacy rule.
+        hidePermanent = explicitLaneBlacklist.hidePermanent == true
+    else
+        hidePermanent = type(laneBlacklist) == "table" and laneBlacklist.hidePermanent == true
+        -- Portable/legacy profiles can carry the rule in the effective filter
+        -- lane. Retail still consumes that shape, so Classic must read it
+        -- without rewriting the saved payload. The old root field applied to
+        -- Buffs only and remains a final compatibility fallback.
+        if hidePermanent ~= true then
+            hidePermanent = storedLaneFilters and storedLaneFilters.hidePermanent == true
+        end
+        if hidePermanent ~= true and kind == "buff" and rootFilters then
+            hidePermanent = rootFilters.hidePermanent == true
+        end
     end
     local maxDuration = 0
     local showSated = kind ~= "buff" or ReadBool(nil, shared, "showSated", true)

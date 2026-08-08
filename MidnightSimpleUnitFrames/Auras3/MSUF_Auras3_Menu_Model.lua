@@ -3029,12 +3029,24 @@ local function BlacklistLane(root, kind, create)
 end
 
 local function EnsureRuntimeBlacklist(auras, runtimeUnit, create, kind)
-    local pu = PerUnit(auras, runtimeUnit, true)
+    local pu = PerUnit(auras, runtimeUnit, create)
+    if not create then
+        if pu and pu.overrideBlacklist == true and type(pu.blacklist) == "table" then
+            return BlacklistLane(pu.blacklist, kind, false)
+        end
+        local shared = type(auras) == "table" and auras.shared or nil
+        local sharedBlacklist = type(shared) == "table" and shared.blacklist or nil
+        return BlacklistLane(sharedBlacklist, kind, false)
+    end
     if not pu then return nil end
+    if pu.overrideBlacklist ~= true or type(pu.blacklist) ~= "table" then
+        local shared = type(auras) == "table" and auras.shared or nil
+        local sharedBlacklist = type(shared) == "table" and shared.blacklist or nil
+        pu.blacklist = DeepCopy(type(sharedBlacklist) == "table" and sharedBlacklist or { spells = {} })
+    end
     pu.overrideBlacklist = true -- retained only for old profile/import compatibility
-    if type(pu.blacklist) ~= "table" then pu.blacklist = { spells = {} } end
     if type(pu.blacklist.spells) ~= "table" then pu.blacklist.spells = {} end
-    return BlacklistLane(pu.blacklist, kind, create) or BlacklistLane(pu.blacklist, kind, true)
+    return BlacklistLane(pu.blacklist, kind, true)
 end
 
 local function EnsureBlacklist(scope, create, kind)
@@ -3069,7 +3081,17 @@ end
 
 function Model.ReadBlacklistHidePermanent(scope, kind)
     local list = EnsureBlacklist(scope, false, kind)
-    return type(list) == "table" and list.hidePermanent == true
+    if type(list) == "table" and list.hidePermanent ~= nil then
+        return list.hidePermanent == true
+    end
+    local filters = EnsureScopeFilters(scope, false)
+    kind = NormalizeKind(kind)
+    local laneKey = kind == "buff" and "buffs" or "debuffs"
+    local laneFilters = type(filters) == "table" and filters[laneKey] or nil
+    if type(laneFilters) == "table" and laneFilters.hidePermanent ~= nil then
+        return laneFilters.hidePermanent == true
+    end
+    return kind == "buff" and type(filters) == "table" and filters.hidePermanent == true or false
 end
 
 function Model.WriteBlacklistHidePermanent(scope, kind, value)
