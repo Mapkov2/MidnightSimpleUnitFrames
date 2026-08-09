@@ -109,6 +109,8 @@ function A.AurasRegistry.BuildRegistrationHelpers(ctx)
     local AuraWriteLaneAnchor = LaneRegistrationHelpers.AuraWriteLaneAnchor
     local AuraReadLaneLayer = LaneRegistrationHelpers.AuraReadLaneLayer
     local AuraWriteLaneLayer = LaneRegistrationHelpers.AuraWriteLaneLayer
+    local AuraReadLaneSpacing = LaneRegistrationHelpers.AuraReadLaneSpacing
+    local AuraWriteLaneSpacing = LaneRegistrationHelpers.AuraWriteLaneSpacing
     local AuraReadLaneGrowthPair = LaneRegistrationHelpers.AuraReadLaneGrowthPair
     local AuraWriteLaneGrowthPair = LaneRegistrationHelpers.AuraWriteLaneGrowthPair
     local AuraReadLaneStyleBool = LaneRegistrationHelpers.AuraReadLaneStyleBool
@@ -137,6 +139,8 @@ function A.AurasRegistry.BuildRegistrationHelpers(ctx)
         AuraWriteLaneAnchor = AuraWriteLaneAnchor,
         AuraReadLaneLayer = AuraReadLaneLayer,
         AuraWriteLaneLayer = AuraWriteLaneLayer,
+        AuraReadLaneSpacing = AuraReadLaneSpacing,
+        AuraWriteLaneSpacing = AuraWriteLaneSpacing,
         AuraReadLaneGrowthPair = AuraReadLaneGrowthPair,
         AuraWriteLaneGrowthPair = AuraWriteLaneGrowthPair,
         AuraReadLaneStyleBool = AuraReadLaneStyleBool,

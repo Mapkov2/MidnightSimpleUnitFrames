@@ -84,6 +84,12 @@ local function Save(group)
     end
 end
 
+local function MemberScale(member)
+    if type(member) ~= "table" or type(member.CreatePositionTable) ~= "function" then return nil end
+    local ok, position = pcall(member.CreatePositionTable, member)
+    return ok and type(position) == "table" and tonumber(position.scale) or nil
+end
+
 local function Capture(id)
     local root = Root(id)
     if not root then return nil end
@@ -96,7 +102,7 @@ local function Capture(id)
         local memberId = Id(member)
         if memberId and type(position) == "table" and tonumber(position.x) and tonumber(position.y) then
             local entry = { id = memberId, mode = mode, x = tonumber(position.x), y = tonumber(position.y),
-                w = tonumber(position.w), h = tonumber(position.h) }
+                w = tonumber(position.w), h = tonumber(position.h), scale = MemberScale(member) }
             state.members[#state.members + 1] = entry
             if memberId == state.rootId then
                 state.x, state.y = entry.x, entry.y
@@ -119,6 +125,11 @@ local function Restore(id, state, reason)
             position.x, position.y = x, y
             if tonumber(entry.w) then position.w = tonumber(entry.w) end
             if tonumber(entry.h) then position.h = tonumber(entry.h) end
+        end
+        local scale = tonumber(entry.scale)
+        if member and scale and scale ~= MemberScale(member)
+            and type(member.SetWindowScale) == "function" then
+            pcall(member.SetWindowScale, member, scale, false)
         end
     end
     if type(root.BaseFrameSnap) == "function" then root:BaseFrameSnap()
@@ -143,9 +154,31 @@ local function Move(id, request)
     return Restore(id, state, request.phase)
 end
 
+--- Window scale via the documented Details! API (SetWindowScale 0.65–1.5,
+--- refresh_group true keeps snapped windows aligned), shown as percent.
+local function ScaleControl(id)
+    return {
+        id = "scale", kind = "number", label = "Scale", min = 65, max = 150, step = 5,
+        get = function()
+            local root = Root(id)
+            local scale = root and MemberScale(root)
+            return scale and math.floor(scale * 100 + 0.5) or nil
+        end,
+        set = function(value)
+            local root = Root(id)
+            value = tonumber(value)
+            if not (root and value and type(root.SetWindowScale) == "function") then return false end
+            local ok = pcall(root.SetWindowScale, root, value / 100, true)
+            if ok then Save(Group(root)) end
+            return ok == true
+        end,
+    }
+end
+
 local function Element(id)
     return {
         id = "window_" .. id, label = ("Details! Window %d"):format(id), group = "Details!", order = 900 + id,
+        extraControls = { ScaleControl(id) },
         getFrame = function() local root = Root(id); return root and root.baseframe end,
         isEnabled = function() return active and Enabled() and Root(id) ~= nil end,
         captureState = function() return Capture(id) end,

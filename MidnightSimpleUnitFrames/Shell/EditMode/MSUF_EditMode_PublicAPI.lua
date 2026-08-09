@@ -4,6 +4,7 @@ MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 
 local EM2 = _G.MSUF_EM2
 if not (EM2 and EM2.Registry) then return end
+local Util = EM2.Util or {}
 
 local API, External = { VERSION = 1 }, {}
 local records, owners, listeners = {}, {}, {}
@@ -156,9 +157,11 @@ local function PrepareControls(list)
             end
         end
         if #prepared >= 12 then return nil, "too_many_controls" end
+        local stepValue = tonumber(spec.step)
         prepared[#prepared + 1] = {
             id = spec.id, label = spec.label, kind = spec.kind,
             get = spec.get, set = spec.set, min = minValue, max = maxValue,
+            step = (spec.kind == "number" and Finite(stepValue) and stepValue > 0) and stepValue or nil,
             transient = spec.transient == true,
         }
     end
@@ -550,14 +553,34 @@ function External.GetInspectorValues(key)
     local record = records[key]
     if not record then return nil end
     local frame = Frame(record)
+    if type(Util.FramePositionValues) == "function" then
+        local x, y, width, height = Util.FramePositionValues(frame)
+        if x ~= nil then return record.label, x, y, width, height end
+    end
     if frame and frame.GetLeft and frame.GetRight and frame.GetTop and frame.GetBottom then
         local left, right, top, bottom = frame:GetLeft(), frame:GetRight(), frame:GetTop(), frame:GetBottom()
         if left and right and top and bottom then
             local uiScale = _G.UIParent and _G.UIParent.GetEffectiveScale and _G.UIParent:GetEffectiveScale() or 1
             local frameScale = frame.GetEffectiveScale and frame:GetEffectiveScale() or uiScale
             local ratio = uiScale ~= 0 and frameScale / uiScale or 1
-            return record.label, Round((left + right) * 0.5 * ratio), Round((bottom + top) * 0.5 * ratio),
-                Round((right - left) * ratio), Round((top - bottom) * ratio)
+            --- Fallback when Core's shared geometry helper is unavailable:
+            --- use the same center-facing horizontal edge as native elements.
+            local screenW = _G.UIParent and _G.UIParent.GetWidth and _G.UIParent:GetWidth() or 0
+            local screenH = _G.UIParent and _G.UIParent.GetHeight and _G.UIParent:GetHeight() or 0
+            local uiLeft, uiRight = left * ratio, right * ratio
+            local centerX = screenW * 0.5
+            local x
+            if uiRight <= centerX then
+                x = uiRight - centerX
+            elseif uiLeft >= centerX then
+                x = uiLeft - centerX
+            else
+                x = 0
+            end
+            return record.label,
+                Round(x),
+                Round(top * ratio - screenH * 0.5),
+                Round(uiRight - uiLeft), Round((top - bottom) * ratio)
         end
     end
     if record.getInspectorValues then

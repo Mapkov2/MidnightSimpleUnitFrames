@@ -484,6 +484,26 @@ function Focus.NotifyPositionChanged(_, immediate)
     return false
 end
 
+--- Quick popups write settings straight into SavedVariables, so an open Menu2 page
+--- keeps painting the pre-edit values until it is rebuilt. The narrow slider route
+--- used by drags is not enough here: a value write also moves paired dropdowns and
+--- enable gates (a manual castbar width clears the width source, which flips Width
+--- mode back to "manual" and re-enables that slider), and those only live in the
+--- page's refresher list. Positions keep the cheaper Focus.NotifyPositionChanged.
+---
+--- This refreshes synchronously on purpose. The debounced Menu2 route would leave a
+--- queued timer behind that can fire after PLAYER_REGEN_DISABLED, and every caller
+--- here is already fail-closed on combat, so the work belongs in the same frame as
+--- the write - that keeps the combat cost of this route at exactly zero.
+--- M.Refresh resolves the page through M.cache, which InvalidatePage clears, so a
+--- torn-down page resolves to nothing instead of repainting released widgets.
+function Focus.NotifySettingChanged()
+    local menu = Menu2()
+    if not (menu and type(menu.Refresh) == "function") then return false end
+    menu.Refresh(nil)
+    return true
+end
+
 function Focus.Show(key)
     state.active = true
     if key then state.key = NormalizeKey(key) end

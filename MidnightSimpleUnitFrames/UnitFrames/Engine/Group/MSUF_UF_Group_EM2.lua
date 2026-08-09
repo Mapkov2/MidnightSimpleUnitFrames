@@ -17,6 +17,9 @@ local EM2 = _G.MSUF_EM2
 if not EM2 or not EM2.Registry then return end
 
 local Reg = EM2.Registry
+local EditUtil = EM2.Util or {}
+local FramePositionValues = EditUtil.FramePositionValues
+local TranslateFramePosition = EditUtil.TranslateFramePosition
 local C_Timer = C_Timer
 local CreateFrame = CreateFrame
 local GetNumGroupMembers = GetNumGroupMembers
@@ -356,15 +359,22 @@ local VALID_POINTS = {
 }
 
 local function AnchorPoint(conf)
+  local gf = GF()
+  if gf and type(gf.GetAnchorPoint) == "function" then return gf.GetAnchorPoint(conf) end
   local point = conf and (conf.anchorPoint or conf.point) or "CENTER"
   if not VALID_POINTS[point] then point = "CENTER" end
   return point
 end
 
-local function RelativeAnchorPoint(conf, fallback)
-  local point = conf and conf.relativePoint or fallback or "CENTER"
-  if not VALID_POINTS[point] then point = fallback or "CENTER" end
-  return point
+--- Both sides of a group anchor come from the single visible Anchor Point; see
+--- GF.ResolveAnchorPoint (MSUF_GroupFrames_DB.lua) for the legacy pair it retires.
+local function ResolveAnchorPoint(kind, conf, parent)
+  local gf = GF()
+  if gf and type(gf.ResolveAnchorPoint) == "function" then
+    return gf.ResolveAnchorPoint(kind, conf, parent)
+  end
+  local point = AnchorPoint(conf)
+  return point, point
 end
 
 local function PointFraction(point)
@@ -458,7 +468,7 @@ local function EnsureContainer(kind)
   f:SetPoint("CENTER", UIParent, "CENTER", GetDefaultCenter(kind))
   f:SetFrameStrata("FULLSCREEN")
   f:SetFrameLevel(320)
-  f:SetClampedToScreen(true)
+  if kind == "priority" then f:SetClampedToScreen(true) end
   f:EnableMouse(true)
   f:Hide()
   f.msufConfigKey = KIND_TO_KEY[kind]
@@ -655,15 +665,21 @@ local function PositionLogicalPreviewAnchor(kind, conf, totalW, totalH)
       return anchor
     end
   end
+  local parent = ResolveAnchorFrame(conf, anchor)
+  -- Resolving can retire a legacy relativePoint into the offsets, so read those
+  -- afterwards.
+  local point, relativePoint = ResolveAnchorPoint(kind, conf, parent)
   local defX, defY = GetDefaultCenter(kind)
   local cx = tonumber(conf and conf.offsetX)
   local cy = tonumber(conf and conf.offsetY)
   if cx == nil then cx = defX end
   if cy == nil then cy = defY end
-  local point = AnchorPoint(conf)
-  local relativePoint = RelativeAnchorPoint(conf, point)
-  local parent = ResolveAnchorFrame(conf, anchor)
-  cx, cy = ClampAnchorOffsetOnScreen(point, relativePoint, parent, floor(cx + 0.5), floor(cy + 0.5), totalW, totalH)
+  local gf = GF()
+  if gf and type(gf.ConfigureAnchorPointScreenClamp) == "function" then
+    gf.ConfigureAnchorPointScreenClamp(anchor, point, totalW, totalH)
+  else
+    cx, cy = ClampAnchorOffsetOnScreen(point, relativePoint, parent, floor(cx + 0.5), floor(cy + 0.5), totalW, totalH)
+  end
   anchor:SetPoint(point, parent, relativePoint, floor(cx + 0.5), floor(cy + 0.5))
   anchor:Show()
   return anchor
@@ -719,6 +735,9 @@ local function SyncContainer(kind)
   container:SetSize(max(totalW, 1), max(totalH, 1))
   container._msufGFGridWidth = max(totalW, 1)
   container._msufGFGridHeight = max(totalH, 1)
+  if kind ~= "priority" and gf and type(gf.ConfigureAnchorPointScreenClamp) == "function" then
+    gf.ConfigureAnchorPointScreenClamp(container, "CENTER", totalW, totalH)
+  end
   container:ClearAllPoints()
   if runtime then
     container:SetPoint("CENTER", runtime, "CENTER", 0, 0)
@@ -730,14 +749,14 @@ local function SyncContainer(kind)
     if container._msufGFLogicalAnchor then
       container:SetPoint("CENTER", container._msufGFLogicalAnchor, "CENTER", 0, 0)
     else
+      local parent = ResolveAnchorFrame(conf, container)
+      local point, relativePoint = ResolveAnchorPoint(kind, conf, parent)
       local defX, defY = GetDefaultCenter(kind)
       local cx = tonumber(conf.offsetX)
       local cy = tonumber(conf.offsetY)
       if cx == nil then cx = defX end
       if cy == nil then cy = defY end
-      local point = AnchorPoint(conf)
-      local relativePoint = RelativeAnchorPoint(conf, point)
-      container:SetPoint(point, ResolveAnchorFrame(conf, container), relativePoint, floor(cx + 0.5), floor(cy + 0.5))
+      container:SetPoint(point, parent, relativePoint, floor(cx + 0.5), floor(cy + 0.5))
     end
   end
   local nativeActive = kind ~= "priority" and HasNativePreviewAPI(gf)
@@ -1541,14 +1560,23 @@ local function BuildGFPopup(mode)
       _G.MSUF_EM_UndoBeforeChange("gf", mode)
     end
 
-    conf.offsetX = San(popup.xBox and popup.xBox:GetText(), conf.offsetX or 0)
-    conf.offsetY = San(popup.yBox and popup.yBox:GetText(), conf.offsetY or 0)
+    local currentX = San(conf.offsetX, 0)
+    local currentY = San(conf.offsetY, 0)
+    local displayX = popup.xBox and tonumber(popup.xBox:GetText())
+    local displayY = popup.yBox and tonumber(popup.yBox:GetText())
     conf.positionMode = STABLE_GRID_POSITION_MODE
 
     local w = popup.wBox and tonumber(popup.wBox:GetText())
     if w then conf.width = floor(max(40, min(400, w)) + 0.5) end
     local h = popup.hBox and tonumber(popup.hBox:GetText())
     if h then conf.height = floor(max(16, min(200, h)) + 0.5) end
+
+    local frame = SyncContainer(mode)
+    if type(TranslateFramePosition) == "function" then
+      conf.offsetX, conf.offsetY = TranslateFramePosition(frame, currentX, currentY, displayX, displayY)
+    else
+      conf.offsetX, conf.offsetY = San(displayX, currentX), San(displayY, currentY)
+    end
 
     RefreshAfterPopupApply(mode)
     local key = KIND_TO_KEY[mode]
@@ -1564,8 +1592,12 @@ local function BuildGFPopup(mode)
       if box and box.SetText then box:SetText(tostring(value or 0)) end
     end
 
-    S(popup.xBox, San(conf.offsetX, 0))
-    S(popup.yBox, San(conf.offsetY, 0))
+    local x, y
+    if type(FramePositionValues) == "function" then
+      x, y = FramePositionValues(SyncContainer(mode))
+    end
+    S(popup.xBox, x ~= nil and x or San(conf.offsetX, 0))
+    S(popup.yBox, y ~= nil and y or San(conf.offsetY, 0))
     S(popup.wBox, conf.width or (isRaid and 80 or 120))
     S(popup.hBox, conf.height or (isRaid and 32 or 40))
   end
@@ -1600,9 +1632,8 @@ local function BuildGFPopup(mode)
     QuickPopup().OpenPage(pageKey, popup)
   end
 
-  --- Copies the source group's size only. Position stays untouched on purpose: two
-  --- group frames sharing offsetX/offsetY end up stacked, and the lower one can no
-  --- longer be grabbed for dragging.
+  --- Copies the source group's size only. Position stays untouched so a size
+  --- copy cannot unexpectedly move another group block.
   local function CopySizeTo(targetMode)
     targetMode = NormalizeKind(targetMode)
     if not targetMode or targetMode == mode then return end

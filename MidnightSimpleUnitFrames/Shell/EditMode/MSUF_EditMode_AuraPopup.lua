@@ -17,6 +17,7 @@ local GROUP_SPECS = {
         xKey = "buffGroupOffsetX",
         yKey = "buffGroupOffsetY",
         sizeKey = "buffGroupIconSize",
+        spacingKey = "buffSpacing",
         defaultX = 0,
         defaultY = 36,
         defaultSize = 26,
@@ -26,6 +27,7 @@ local GROUP_SPECS = {
         xKey = "debuffGroupOffsetX",
         yKey = "debuffGroupOffsetY",
         sizeKey = "debuffGroupIconSize",
+        spacingKey = "debuffSpacing",
         defaultX = 0,
         defaultY = 6,
         defaultSize = 26,
@@ -35,6 +37,8 @@ local GROUP_SPECS = {
 local pf
 local Sync
 local Util = EM2.Util or {}
+local FramePositionValues = Util.FramePositionValues
+local TranslateFramePosition = Util.TranslateFramePosition
 local SyncMovers = (EM2.Util and EM2.Util.SyncMovers) or function() if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end end
 local UnitPageKey = Util.UnitPageKey or function() return "uf_player" end
 local NormalizeSimpleUnit = Util.NormalizeSimpleUnit or function(unit)
@@ -93,16 +97,17 @@ local function UnitLayout(unit, create)
     if create then
         a2.perUnit = a2.perUnit or {}
         a2.perUnit[unit] = a2.perUnit[unit] or {}
-        a2.perUnit[unit].layout = a2.perUnit[unit].layout or {}
-        return a2.perUnit[unit].layout, a2.perUnit[unit]
+        local unitCfg = a2.perUnit[unit]
+        --- Match the Menu Model ownership contract: while Shared Layout is in
+        --- use, the local table is dormant and must not spring back to life on
+        --- the first Edit Mode write. Start from the currently effective shared
+        --- values and materialize only the fields edited below.
+        if unitCfg.overrideLayout ~= true then unitCfg.layout = {} end
+        unitCfg.layout = unitCfg.layout or {}
+        return unitCfg.layout, unitCfg
     end
     local pu = a2.perUnit and a2.perUnit[unit]
     return (pu and pu.layout) or {}, pu
-end
-
-local function EffectiveUnit(unit, shared)
-    if IsBoss(unit) and (not shared or shared.bossEditTogether ~= false) then return "boss1" end
-    return unit
 end
 
 local function AffectedUnits(unit, shared)
@@ -112,10 +117,31 @@ local function AffectedUnits(unit, shared)
     return { unit }
 end
 
+--- Aura layout offsets remain anchor-local runtime values. Edit Mode exposes
+--- the same visible center-relative coordinate contract as every other element,
+--- so use the lane body (not the 18px editor chrome) as the translation surface.
+local function ActiveLaneFrame(unit, kind)
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    local edit = a3 and a3.EditMode
+    local groups = edit and edit.groups
+    local group = groups and groups[unit] and groups[unit][kind]
+    local parent = pf and pf.parent
+    if not group and parent and parent._msufA3Unit == unit and parent._msufA3MoverKind == kind then
+        group = parent
+    end
+    return group and (group.Body or group) or nil
+end
+
 local function ReadValue(layout, shared, layoutKey, sharedKey, fallback)
     if layout and layout[layoutKey] ~= nil then return layout[layoutKey] end
     if shared and shared[sharedKey] ~= nil then return shared[sharedKey] end
     return fallback
+end
+
+local function RuntimeLayout(unit)
+    local layout, unitCfg = UnitLayout(unit, false)
+    if unitCfg and unitCfg.overrideLayout == true then return layout or {} end
+    return {}
 end
 
 local function ReapplyAuras(units)
@@ -152,6 +178,17 @@ local function ReadBox(box, fallback, low, high)
     return v
 end
 
+local function ApplyBossTogether()
+    if Quick.BlockConfigCombatLocked() or not (pf and IsBoss(pf.unit)) then return end
+    local sh = Shared(true)
+    if not sh then return end
+    if type(_G.MSUF_EM_UndoBeforeChange) == "function" then
+        _G.MSUF_EM_UndoBeforeChange("aura", pf.unit)
+    end
+    sh.bossEditTogether = pf.bossTogetherBtn and pf.bossTogetherBtn._checked == true or false
+    if pf and pf:IsShown() then Sync() end
+end
+
 local function Apply()
     if Quick.BlockConfigCombatLocked() or not (pf and pf.unit) then return end
     local a2 = AurasDB(true)
@@ -160,30 +197,96 @@ local function Apply()
 
     if type(_G.MSUF_EM_UndoBeforeChange) == "function" then _G.MSUF_EM_UndoBeforeChange("aura", pf.unit) end
 
-    if pf.bossTogetherBtn and pf.bossTogetherBtn:IsShown() then
-        sh.bossEditTogether = pf.bossTogetherBtn._checked and true or false
-    end
     local units = AffectedUnits(pf.unit, sh)
-    local _, spec = ActiveGroup()
-    local spacing = ReadBox(pf.spacingBox, 2, 0, 64)
-    local x = ReadBox(pf.xBox, spec.defaultX)
-    local y = ReadBox(pf.yBox, spec.defaultY)
-    local size = ReadBox(pf.sizeBox, spec.defaultSize, 10, 80)
+    local activeGroup, spec = ActiveGroup()
+    local sourceLayout = RuntimeLayout(pf.unit)
+    local currentX = ReadValue(sourceLayout, sh, spec.xKey, spec.xKey, spec.defaultX)
+    local currentY = ReadValue(sourceLayout, sh, spec.yKey, spec.yKey, spec.defaultY)
+    local currentSize = ReadValue(sourceLayout, sh, spec.sizeKey, spec.sizeKey, spec.defaultSize)
+    local currentSpacing = ReadValue(sourceLayout, sh, spec.spacingKey, spec.spacingKey,
+        ReadValue(sourceLayout, sh, "spacing", "spacing", 2))
+    local visibleX, visibleY
+    local positionFrame = ActiveLaneFrame(pf.unit, activeGroup)
+    if type(FramePositionValues) == "function" then
+        visibleX, visibleY = FramePositionValues(positionFrame)
+    end
+    local displayX = ReadBox(pf.xBox, visibleX ~= nil and visibleX or currentX)
+    local displayY = ReadBox(pf.yBox, visibleY ~= nil and visibleY or currentY)
+    local spacing = ReadBox(pf.spacingBox, currentSpacing, 0, 64)
+    local size = ReadBox(pf.sizeBox, currentSize, 10, 80)
 
+    local before = {}
+    local geometryChanged = false
     for i = 1, #units do
-        local layout, unitCfg = UnitLayout(units[i], true)
-        if layout and unitCfg then
-            unitCfg.overrideLayout = true
-            layout.spacing = spacing
-            layout[spec.xKey] = x
-            layout[spec.yKey] = y
-            layout[spec.sizeKey] = size
-            layout.width = nil
-            layout.height = nil
+        local unitLayout = RuntimeLayout(units[i])
+        local values = {
+            x = ReadValue(unitLayout, sh, spec.xKey, spec.xKey, spec.defaultX),
+            y = ReadValue(unitLayout, sh, spec.yKey, spec.yKey, spec.defaultY),
+            size = ReadValue(unitLayout, sh, spec.sizeKey, spec.sizeKey, spec.defaultSize),
+            spacing = ReadValue(unitLayout, sh, spec.spacingKey, spec.spacingKey,
+                ReadValue(unitLayout, sh, "spacing", "spacing", 2)),
+        }
+        before[i] = values
+        if values.size ~= size or values.spacing ~= spacing then geometryChanged = true end
+    end
+
+    local function WriteLayout()
+        for i = 1, #units do
+            local layout, unitCfg = UnitLayout(units[i], true)
+            if layout and unitCfg then
+                unitCfg.overrideLayout = true
+                -- The popup edits one lane at a time, so Spacing writes that
+                -- lane's key; the shared `spacing` stays as the legacy fallback.
+                layout[spec.spacingKey] = spacing
+                layout[spec.sizeKey] = size
+                layout.width = nil
+                layout.height = nil
+            end
         end
     end
 
-    ReapplyAuras(units)
+    local function WritePosition(x, y)
+        for i = 1, #units do
+            local layout, unitCfg = UnitLayout(units[i], true)
+            if layout and unitCfg then
+                unitCfg.overrideLayout = true
+                layout[spec.xKey] = x
+                layout[spec.yKey] = y
+            end
+        end
+    end
+
+    -- A size/gap change can move a lane's visible reference edges. Materialize
+    -- that geometry first, then translate the displayed position back into the
+    -- lane's anchor-local offsets.
+    if geometryChanged then
+        WriteLayout()
+        ReapplyAuras(units)
+        positionFrame = ActiveLaneFrame(pf.unit, activeGroup)
+    end
+
+    local x, y
+    if positionFrame and type(TranslateFramePosition) == "function" then
+        x, y = TranslateFramePosition(positionFrame, currentX, currentY, displayX, displayY)
+    else
+        x, y = displayX, displayY
+    end
+    WritePosition(x, y)
+
+    local positionChanged = false
+    for i = 1, #units do
+        if before[i].x ~= x or before[i].y ~= y then
+            positionChanged = true
+            break
+        end
+    end
+    if not geometryChanged then
+        WriteLayout()
+        ReapplyAuras(units)
+    elseif positionChanged then
+        ReapplyAuras(units)
+    end
+    if pf and pf:IsShown() then Sync() end
 end
 
 local function ResetPosition()
@@ -269,7 +372,7 @@ end
 function Sync()
     if not (pf and pf.unit) then return end
     local sh = Shared(false) or {}
-    local layout = UnitLayout(EffectiveUnit(pf.unit, sh), false) or {}
+    local layout = RuntimeLayout(pf.unit)
     local activeGroup, spec = ActiveGroup()
     if pf._titleFS then pf._titleFS:SetText(Quick.Tr(UnitLabel(pf.unit)) .. " " .. Quick.Tr("Auras")) end
     SetLabel(pf.xBoxLabel, "X")
@@ -278,9 +381,14 @@ function Sync()
     SetLabel(pf.spacingBoxLabel, "Spacing")
     if pf.buffLaneBtn and pf.buffLaneBtn.SetCheckedVisual then pf.buffLaneBtn:SetCheckedVisual(activeGroup == "buff") end
     if pf.debuffLaneBtn and pf.debuffLaneBtn.SetCheckedVisual then pf.debuffLaneBtn:SetCheckedVisual(activeGroup == "debuff") end
-    Quick.SetBoxText(pf.spacingBox, ReadValue(layout, sh, "spacing", "spacing", 2))
-    Quick.SetBoxText(pf.xBox, ReadValue(layout, sh, spec.xKey, spec.xKey, spec.defaultX))
-    Quick.SetBoxText(pf.yBox, ReadValue(layout, sh, spec.yKey, spec.yKey, spec.defaultY))
+    Quick.SetBoxText(pf.spacingBox,
+        ReadValue(layout, sh, spec.spacingKey, spec.spacingKey, ReadValue(layout, sh, "spacing", "spacing", 2)))
+    local x, y
+    if type(FramePositionValues) == "function" then
+        x, y = FramePositionValues(ActiveLaneFrame(pf.unit, activeGroup))
+    end
+    Quick.SetBoxText(pf.xBox, x ~= nil and x or ReadValue(layout, sh, spec.xKey, spec.xKey, spec.defaultX))
+    Quick.SetBoxText(pf.yBox, y ~= nil and y or ReadValue(layout, sh, spec.yKey, spec.yKey, spec.defaultY))
     Quick.SetBoxText(pf.sizeBox, ReadValue(layout, sh, spec.sizeKey, spec.sizeKey, spec.defaultSize))
     if pf.bossTogetherBtn and pf.bossTogetherBtn.SetCheckedVisual then
         local isBoss = IsBoss(pf.unit)
@@ -323,7 +431,7 @@ local function Build()
         { label = "Size", key = "sizeBox", onChanged = Apply },
         { label = "Spacing", key = "spacingBox", onChanged = Apply },
     }, { height = 132, boxWidth = 64, peelSkin = true })
-    pf.bossTogetherBtn = Quick.ToggleAt(pf, "Edit Boss 1-5 together", 160, -242, 240, 28, Apply,
+    pf.bossTogetherBtn = Quick.ToggleAt(pf, "Edit Boss 1-5 together", 160, -242, 240, 28, ApplyBossTogether,
         ButtonOpts(function() if pf and pf:IsShown() then Sync() end end))
     pf.unitAurasBtn = WirePopupFocus(Quick.ButtonAt(pf, "Open detailed settings", 20, -244, 334, 34, OpenUnitAuras, {
         variant = "primary", hoverWash = true,
@@ -373,7 +481,10 @@ function AuraPopup.GetAssistantField(field)
     if not (pf and pf.unit and pf:IsShown()) then return nil end
     if field == "lane" then return ActiveGroup() end
     if field == "bossTogether" then
-        return pf.bossTogetherBtn and pf.bossTogetherBtn:IsShown() and pf.bossTogetherBtn._checked == true or nil
+        if pf.bossTogetherBtn and pf.bossTogetherBtn:IsShown() then
+            return pf.bossTogetherBtn._checked == true
+        end
+        return nil
     end
     local widget = ASSISTANT_AURA_FIELDS[field] and pf[ASSISTANT_AURA_FIELDS[field]]
     return widget and tonumber(widget.GetText and widget:GetText()) or nil
@@ -388,7 +499,7 @@ function AuraPopup.SetAssistantField(field, value)
         local checked = value == true
         if pf.bossTogetherBtn.SetCheckedVisual then pf.bossTogetherBtn:SetCheckedVisual(checked) end
         pf.bossTogetherBtn._checked = checked
-        Apply()
+        ApplyBossTogether()
     else
         local widget = ASSISTANT_AURA_FIELDS[field] and pf[ASSISTANT_AURA_FIELDS[field]]
         if not widget then return false end

@@ -473,8 +473,23 @@ local W8 = "Interface/Buttons/WHITE8X8"
 local enabled = false
 local THRESH  = 8
 
-function Snap.IsEnabled()    return enabled end
-function Snap.SetEnabled(v)  enabled = v and true or false end
+--- Snap persists per profile via general.editModeSnapEnabled; the session
+--- local only covers reads before SavedVariables exist.
+local function SnapGeneral()
+    local db = _G.MSUF_DB
+    return type(db) == "table" and type(db.general) == "table" and db.general or nil
+end
+
+function Snap.IsEnabled()
+    local g = SnapGeneral()
+    if g and g.editModeSnapEnabled ~= nil then return g.editModeSnapEnabled == true end
+    return enabled
+end
+function Snap.SetEnabled(v)
+    enabled = v and true or false
+    local g = SnapGeneral()
+    if g then g.editModeSnapEnabled = enabled end
+end
 function Snap.GetThreshold() return THRESH end
 function Snap.SetThreshold(v) THRESH = max(2, min(20, tonumber(v) or 8)) end
 
@@ -609,7 +624,7 @@ end
 --- hw, hh = half width/height of dragged mover
 --- dragKey = registry key of dragged element (excluded from targets)
 function Snap.Apply(cx, cy, hw, hh, dragKey)
-    if not enabled then return cx, cy end
+    if not Snap.IsEnabled() then return cx, cy end
 
     ClearActiveGuides(false)
 
@@ -1073,6 +1088,10 @@ local function NudgeTarget(dx, dy, exactDelta)
                     for _, k in ipairs(applyKeys) do
                         a2.perUnit[k] = a2.perUnit[k] or {}
                         local uc = a2.perUnit[k]
+                        --- Match Aura Menu/drag ownership: a Shared-layout
+                        --- scope's local table is dormant and must not revive
+                        --- stale fields on the first keyboard nudge.
+                        if uc.overrideLayout ~= true then uc.layout = {} end
                         uc.layout = uc.layout or {}
                         uc.overrideLayout = true
                         local lay = uc.layout
@@ -1548,22 +1567,28 @@ local function ResolveGroupAnchor(conf, owner)
 end
 
 local function GroupAnchorPoint(conf)
+    local gf = MSUF and MSUF.GF
+    if gf and type(gf.GetAnchorPoint) == "function" then return gf.GetAnchorPoint(conf) end
     local point = conf and (conf.anchorPoint or conf.point) or "CENTER"
     if not GROUP_VALID_POINTS[point] then point = "CENTER" end
     return point
 end
 
-local function GroupRelativeAnchorPoint(conf, fallback)
-    local point = conf and conf.relativePoint or fallback or "CENTER"
-    if not GROUP_VALID_POINTS[point] then point = fallback or "CENTER" end
-    return point
+--- Both sides of a group anchor come from the single visible Anchor Point; see
+--- GF.ResolveAnchorPoint (MSUF_GroupFrames_DB.lua) for the legacy pair it retires.
+local function GroupAnchorPoints(kind, conf, parent)
+    local gf = MSUF and MSUF.GF
+    if gf and type(gf.ResolveAnchorPoint) == "function" then
+        return gf.ResolveAnchorPoint(kind, conf, parent)
+    end
+    local point = GroupAnchorPoint(conf)
+    return point, point
 end
 
 local function GroupOffsetFromCenter(bar, conf, centerX, centerY, gridDX, gridDY)
-    local point = GroupAnchorPoint(conf)
-    local relativePoint = GroupRelativeAnchorPoint(conf, point)
     local owner = bar and (bar._msufGFLiveAnchor or bar._msufGFLogicalAnchor or bar) or nil
     local anchor = ResolveGroupAnchor(conf, owner)
+    local point, relativePoint = GroupAnchorPoints(bar and bar._msufGFKind, conf, anchor)
     local ax, ay = PointXY(anchor, relativePoint)
     if not (ax and ay) then
         ax = ((UIParent and UIParent.GetWidth and UIParent:GetWidth()) or 0) * 0.5
@@ -1873,9 +1898,26 @@ local function OnUpdate(self, elapsed)
             d.mover:SetPoint("TOPLEFT", UIParent, "TOPLEFT", moverX, moverY)
 
             if d.mover._coordFS then
+                local displayX, displayY
+                if type(U.FramePositionValues) == "function" then
+                    displayX, displayY = U.FramePositionValues(d.bar)
+                end
+                local fallbackX
+                if not displayX then
+                    local left = snapCX - d.halfW
+                    local right = snapCX + d.halfW
+                    local centerX = screenW * 0.5
+                    if right <= centerX then
+                        fallbackX = right - centerX
+                    elseif left >= centerX then
+                        fallbackX = left - centerX
+                    else
+                        fallbackX = 0
+                    end
+                end
                 d.mover._coordFS:SetText(format("%.0f, %.0f",
-                    round(snapCX - screenW * 0.5),
-                    round(snapCY - screenH * 0.5)))
+                    displayX or round(fallbackX),
+                    displayY or round(snapCY + d.halfH - screenH * 0.5)))
             end
         end
 
@@ -1888,9 +1930,6 @@ local function OnUpdate(self, elapsed)
             return
         end
 
-        if d.isGroupFrame and d.mover._coordFS then
-            d.mover._coordFS:SetText(format("%.0f, %.0f", d.conf.offsetX or 0, d.conf.offsetY or 0))
-        end
         if d.isGroupFrame then
             SyncGFPopupDuringDrag(d, elapsed)
         else

@@ -25,6 +25,8 @@ local Util = EM2.Util or {}
 local SyncMovers = (EM2.Util and EM2.Util.SyncMovers) or function() if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end end
 local UnitPageKey = Util.UnitPageKey or function() return "uf_player" end
 local UnitLabel = Util.UnitLabel or function(unit) return tostring(unit or "") end
+local FramePositionValues = Util.FramePositionValues
+local TranslateFramePosition = Util.TranslateFramePosition
 local NormalizeUnit = Util.NormalizeSimpleUnit or function(unit)
     if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" then return unit end
     if type(unit) == "string" and unit:match("^boss%d+$") then return "boss" end
@@ -137,6 +139,18 @@ local function RefreshUFPreview(reason)
     if type(fn) == "function" then fn(reason or "EM2_CASTBAR_POPUP") end
 end
 
+--- Menu2 loads after this file and may be absent entirely, so the route is resolved
+--- at call time. Only size writes need it: the Castbar section paints the manual
+--- width/height sliders and the Width mode dropdown that a manual width forces back
+--- to "manual". The position offsets have no Menu2 control, so they stay off this path.
+--- Every caller sits behind Apply's combat fail-close, and the route itself defers
+--- nothing, so this cannot cost a single cycle once combat starts.
+local function SyncMenuAfterSizeWrite()
+    if EM2.Focus and type(EM2.Focus.NotifySettingChanged) == "function" then
+        EM2.Focus.NotifySettingChanged()
+    end
+end
+
 local function ReapplyCastbar(unit)
     if type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
         _G.MSUF_ApplyCastbarUnitAndSync(unit)
@@ -174,11 +188,11 @@ local function Apply(mode)
 
     if type(_G.MSUF_EM_UndoBeforeChange) == "function" then _G.MSUF_EM_UndoBeforeChange("castbar", unit) end
 
-    if mode == "position" or mode == "all" then
-        local dx, dy = DefaultOffsets(unit)
-        g[xKey] = Quick.San(pf.xBox and pf.xBox:GetText(), dx)
-        g[yKey] = Quick.San(pf.yBox and pf.yBox:GetText(), dy)
-    end
+    local dx, dy = DefaultOffsets(unit)
+    local currentX = Quick.San(g[xKey], dx)
+    local currentY = Quick.San(g[yKey], dy)
+    local displayX = pf.xBox and tonumber(pf.xBox:GetText())
+    local displayY = pf.yBox and tonumber(pf.yBox:GetText())
 
     if mode == "width" or mode == "all" then
         local w = tonumber(pf.wBox and pf.wBox:GetText())
@@ -194,7 +208,19 @@ local function Apply(mode)
         if h then g[hKey] = floor(max(8, min(100, h)) + 0.5) end
     end
 
-    ReapplyCastbar(unit)
+    --- Size changes may move the visible center-facing X edge. Materialize the
+    --- new geometry first, then translate the displayed X/Y fields back into
+    --- the provider's saved anchor offsets.
+    if mode ~= "position" then ReapplyCastbar(unit) end
+    if type(TranslateFramePosition) == "function" then
+        local changed
+        g[xKey], g[yKey], changed = TranslateFramePosition(CastbarFrame(unit), currentX, currentY, displayX, displayY)
+        if mode == "position" or changed then ReapplyCastbar(unit) end
+    else
+        g[xKey], g[yKey] = Quick.San(displayX, currentX), Quick.San(displayY, currentY)
+        ReapplyCastbar(unit)
+    end
+    if mode ~= "position" then SyncMenuAfterSizeWrite() end
     if pf and pf:IsShown() then Sync() end
 end
 
@@ -286,10 +312,14 @@ function Sync()
     local xKey, yKey = OffsetKeys(unit)
     local dx, dy = DefaultOffsets(unit)
     local w, h = EffectiveSize(g, unit)
+    local x, y
+    if type(FramePositionValues) == "function" then
+        x, y = FramePositionValues(CastbarFrame(unit))
+    end
 
     if pf._titleFS then pf._titleFS:SetText(Quick.Tr(UnitLabel(unit)) .. " " .. Quick.Tr("Castbar")) end
-    Quick.SetBoxText(pf.xBox, Quick.San(xKey and g[xKey], dx))
-    Quick.SetBoxText(pf.yBox, Quick.San(yKey and g[yKey], dy))
+    Quick.SetBoxText(pf.xBox, x ~= nil and x or Quick.San(xKey and g[xKey], dx))
+    Quick.SetBoxText(pf.yBox, y ~= nil and y or Quick.San(yKey and g[yKey], dy))
     Quick.SetBoxText(pf.wBox, w)
     Quick.SetBoxText(pf.hBox, h)
     if pf.detachBtn and pf.detachBtn.SetCheckedVisual then

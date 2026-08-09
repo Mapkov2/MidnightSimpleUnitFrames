@@ -194,6 +194,20 @@ end
 
 local UNIT_AURA_ELEMENTS = { "Auras" }
 
+local function RefreshEditAuraPreview(a3, unit)
+    -- The Edit Mode dummy is an addon-owned preview surface, not a UF element.
+    -- RefreshElements may reach it indirectly through A3.EnableFrame, but that
+    -- is not an ownership guarantee (for example when no runtime frame is
+    -- visited). Keep the visible dummy as one explicit cold-path follower of
+    -- the completed runtime apply. RefreshEditPreview is itself preview-active
+    -- and combat gated, so this adds no idle or combat work.
+    if a3 and type(a3.RefreshEditPreview) == "function" then
+        local ok = Apply.Invoke(a3.RefreshEditPreview, unit)
+        return ok == true
+    end
+    return false
+end
+
 local function ApplyUnitAuras(unit, reason, configAlreadyApplied)
     reason = reason or "MSUF2_UNIT_AURAS"
     -- Aura layout writes go into the Auras3 saved model, which the UF element
@@ -210,12 +224,16 @@ local function ApplyUnitAuras(unit, reason, configAlreadyApplied)
 
     -- notify=false deliberately skips the broad unit apply. Refresh the Auras
     -- element through UF so Config.RefreshUnit runs before Auras3 consumes the
-    -- compiled frame spec. A false return may simply mean combat queued it;
-    -- the successful call still owns the refresh and must not gain a follower.
+    -- compiled frame spec. Afterwards refresh the separate Edit Mode preview
+    -- owner from the same post-write state; the generic Menu preview is queued
+    -- later by FlushApply.
     local UF = MSUF and MSUF.UF
     if UF and type(UF.RefreshElements) == "function" then
         local called = Apply.Invoke(UF.RefreshElements, unit, UNIT_AURA_ELEMENTS, reason)
-        if called then return true end
+        if called then
+            RefreshEditAuraPreview(a3, unit)
+            return true
+        end
     end
     return ApplyAuraScope(unit, reason)
 end

@@ -80,6 +80,7 @@ local function CaptureMode(mode)
     local frame = ModeFrame(mode)
     return {
         x = tonumber(db[spec.xField]) or 0, y = tonumber(db[spec.yField]) or 0,
+        scale = tonumber(db.frameScale),
         width = frame and frame.GetWidth and frame:GetWidth() or nil,
         height = frame and frame.GetHeight and frame:GetHeight() or nil,
     }
@@ -91,9 +92,37 @@ local function RestoreMode(mode, state)
     local x, y = tonumber(state.x), tonumber(state.y)
     if not x or not y then return false end
     local spec = MODES[mode]
+    local scale = tonumber(state.scale)
+    local scaleChanged = scale ~= nil and scale ~= tonumber(db.frameScale)
+    if scale ~= nil then db.frameScale = scale end
     db[spec.xField], db[spec.yField] = x, y
     spec.apply(df)
+    if scaleChanged and type(df.UpdateAllFrames) == "function" then df:UpdateAllFrames() end
     return true
+end
+
+--- Frame Scale in the popup: the value lives in the scope's own db
+--- (DandersFrames' Options slider writes the same frameScale field,
+--- 0.5–2.0) and applies through the addon's own updaters.
+local function ScaleControl(mode)
+    return {
+        id = mode .. "_scale", kind = "number", label = "Scale",
+        min = 50, max = 200, step = 5,
+        get = function()
+            local db = ModeDB(mode)
+            if not db then return nil end
+            return math.floor(((tonumber(db.frameScale) or 1) * 100) + 0.5)
+        end,
+        set = function(value)
+            local db, df = ModeDB(mode)
+            value = tonumber(value)
+            if InCombat() or not (db and df and value) then return false end
+            db.frameScale = value / 100
+            MODES[mode].apply(df)
+            if type(df.UpdateAllFrames) == "function" then df:UpdateAllFrames() end
+            return true
+        end,
+    }
 end
 
 --- Pinned frame sets. Sets glued to the party/raid container via
@@ -298,7 +327,7 @@ local function PreviewControls()
     }
 end
 
-local function Element(id, label, order, resolveFrame, isReady, capture, restore, select, settings)
+local function Element(id, label, order, resolveFrame, isReady, capture, restore, select, settings, controls)
     return {
         id = id, label = label, group = "DandersFrames", order = order,
         getFrame = resolveFrame,
@@ -308,8 +337,14 @@ local function Element(id, label, order, resolveFrame, isReady, capture, restore
         movePosition = function(request) return Move(restore, request) end,
         openSettings = settings,
         onSelect = select,
-        extraControls = PreviewControls(),
+        extraControls = controls or PreviewControls(),
     }
+end
+
+local function ModeControls(mode)
+    local controls = PreviewControls()
+    controls[#controls + 1] = ScaleControl(mode)
+    return controls
 end
 
 local function Add(element)
@@ -336,7 +371,8 @@ local function Activate()
         function() return CaptureMode("party") end,
         function(state) return RestoreMode("party", state) end,
         function() return SelectMode("party") end,
-        function(_, context) return OpenScopeSettings("party", context) end)) then
+        function(_, context) return OpenScopeSettings("party", context) end,
+        ModeControls("party"))) then
         active = false
         return false
     end
@@ -346,7 +382,8 @@ local function Activate()
         function() return CaptureMode("raid") end,
         function(state) return RestoreMode("raid", state) end,
         function() return SelectMode("raid") end,
-        function(_, context) return OpenScopeSettings("raid", context) end))
+        function(_, context) return OpenScopeSettings("raid", context) end,
+        ModeControls("raid")))
     for index = 1, 4 do
         Add(Element(("pinned_%d"):format(index), ("Danders Pinned Set %d"):format(index), 832 + index,
             function() return PinnedFrame(index) end,

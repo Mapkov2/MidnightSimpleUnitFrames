@@ -388,6 +388,7 @@ end
 DefineActionPolicies([[
 assistant.diagnostic.editMode.status assistant.workflow.status assistant_help
 assistant_nomatch_telemetry assistant_nomatch_worklist assistant_scope_help assistant_status
+apply_aura_quick_preset
 aura_blacklist_summary aura_custom_whitelist_summary aura_group_blacklist_summary
 aura_group_category_blacklist_summary copy_support_link copy_wago_profiles_link
 custom_anchor_picker_status diagnose_aura_visibility diagnose_castbar_visibility
@@ -454,7 +455,7 @@ toggle_highlight_border_test
 
 -- Active-profile mutations covered by the normal MSUF_DB snapshot.
 DefineActionPolicies([[
-apply_aura_quick_preset apply_global_scale_preset assistant.action.editMode.auras
+apply_global_scale_preset assistant.action.editMode.auras
 aura_blacklist_add_preset aura_blacklist_add_spell aura_blacklist_clear_spells
 aura_blacklist_remove_spell
 aura_custom_whitelist_add_spell aura_custom_whitelist_clear_spells aura_custom_whitelist_remove_spell

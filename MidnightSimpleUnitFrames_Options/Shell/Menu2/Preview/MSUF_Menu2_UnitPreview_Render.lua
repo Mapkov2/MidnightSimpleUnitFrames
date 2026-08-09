@@ -342,22 +342,28 @@ local function ApplyCastbarPreviewIconBorder(icon, style, thickness, g)
 end
 local function AnchorCastbarPreviewText(fs, relativeTo, position, x, y, justify, S)
     fs:ClearAllPoints()
+    local fallback
     if position == "CENTER" then
         fs:SetPoint("CENTER", relativeTo, "CENTER", S(x), S(y))
-        fs:SetJustifyH(justify or "CENTER")
+        fallback = "CENTER"
     elseif position == "RIGHT" then
         fs:SetPoint("RIGHT", relativeTo, "RIGHT", S(x), S(y))
-        fs:SetJustifyH(justify or "RIGHT")
+        fallback = "RIGHT"
     elseif position == "ABOVE" then
         fs:SetPoint("BOTTOM", relativeTo, "TOP", S(x), S(y + 2))
-        fs:SetJustifyH(justify or "CENTER")
+        fallback = "CENTER"
     elseif position == "BELOW" then
         fs:SetPoint("TOP", relativeTo, "BOTTOM", S(x), S(y - 2))
-        fs:SetJustifyH(justify or "CENTER")
+        fallback = "CENTER"
     else
         fs:SetPoint("LEFT", relativeTo, "LEFT", S(2 + x), S(y))
-        fs:SetJustifyH(justify or "LEFT")
+        fallback = "LEFT"
     end
+    -- Same rule as the live castbar (AnchorFontString in MSUF_CastbarVisuals):
+    -- SetJustifyH on a rect that the anchor change left unresolved keeps the
+    -- previous alignment, so the preview has to force-resolve it too.
+    if fs.GetRect then fs:GetRect() end
+    fs:SetJustifyH(justify or fallback)
 end
 local function ResolvePreviewTextSlotSize(runtimeText, conf, runtimeKey, dbKey, fallback)
     local value = tonumber(runtimeText and runtimeText[runtimeKey]) or tonumber(conf and conf[dbKey])

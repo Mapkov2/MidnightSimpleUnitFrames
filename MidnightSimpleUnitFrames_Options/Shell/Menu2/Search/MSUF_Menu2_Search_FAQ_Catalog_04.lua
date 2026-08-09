@@ -118,19 +118,6 @@ if type(Data.RegisterFAQProvider) == "function" then
                 y = 45,
             },
             {
-                l = "Where do I change click-through auras?",
-                a = "Open the unit page > Auras for click-through aura behavior. Gameplay contains click-cast and" ..
-                    " targeting behavior.",
-                p = "uf_player",
-                t = "Opens: Player > Auras",
-                x = "Auras click-through auras click through click cast gameplay targeting",
-                k = SearchKeywordList(
-                    "clickthrough auras|click-through auras|click through auras|auras block mouse",
-                    "can't click through buffs|aura mouse|click aura|click cast not working|mouse blocked by auras"
-                ),
-                y = 45,
-            },
-            {
                 l = "Where are optional modules or style modules?",
                 a = "Open Modules > Style for optional style modules such as portrait decoration and dropdown" ..
                     " styling.",
@@ -321,20 +308,6 @@ if type(Data.RegisterFAQProvider) == "function" then
                     "green health bars|health bar class color|target class color|player class color|raid class colors"
                 ),
                 y = 105,
-            },
-            {
-                l = "How do I change click-casting so aura icons do not block heals?",
-                a = "Open the relevant unit page > Auras for click-through aura behavior, then use Gameplay for" ..
-                    " click-cast, mouseover, and targeting behavior.",
-                p = "uf_player",
-                t = "Opens: Player > Auras",
-                x = "Auras click-through auras Gameplay click cast mouseover healing party frames",
-                k = SearchKeywordList(
-                    "auras block heals|buffs block click casting|debuffs block click cast|can't heal through buffs",
-                    "mouseover heal blocked|click cast blocked by aura|heal mouseover auras",
-                    "party frame click through buffs"
-                ),
-                y = 115,
             },
             {
                 l = "How do I open the MSUF options?",

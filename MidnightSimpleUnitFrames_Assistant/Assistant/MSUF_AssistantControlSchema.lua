@@ -1717,6 +1717,27 @@ function Schema.TryConversation(text)
         and (HasAny(normalized, MODE_START_TERMS) or HasAny(normalized, MODE_OFF_TERMS) or HasAny(normalized, MODE_TOGGLE_TERMS))
     if not location and not wantsOpen and not mutation and not modeIntent and not wantsExplain and not wantsChoices and not wantsCurrent then return nil end
 
+    -- This layer searches the generated catalog by token and has no idea what
+    -- "it" refers to. When the request names its subject only by pronoun and the
+    -- conversation still has a fresh one, the registry follow-up owns that
+    -- reference -- letting a token search answer instead produced confidently
+    -- wrong replies ("what is its separator" -> "Separator is currently 1",
+    -- reading a Class Resource width slider). Standing down here costs nothing:
+    -- this lane is consulted as a fallback, so the caller simply continues.
+    do
+        -- HasAny adds the surrounding spaces itself, so these are bare words.
+        local pronounOnlySubject = HasAny(normalized, { "it", "its", "that", "this" })
+        if pronounOnlySubject then
+            local ctx = type(A.GetContext) == "function" and A.GetContext() or nil
+            if type(ctx) == "table" and type(ctx.lastSetting) == "string" and ctx.lastSetting ~= "" then
+                local turn = tonumber(ctx.turnSerial or ctx.lastTurnSerial) or 0
+                local subjectTurn = tonumber(ctx.lastSubjectTurn or ctx.lastMentionedTurn)
+                local age = subjectTurn and (turn - subjectTurn) or nil
+                if age and age >= 0 and age <= 3 then return nil end
+            end
+        end
+    end
+
     local searchText, verblessText
     if mutation then searchText, verblessText = MutationTargetText(text) else searchText = text end
     local results = Schema.Find(searchText, { limit = 4 })

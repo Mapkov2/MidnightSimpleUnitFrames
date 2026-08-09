@@ -33,6 +33,8 @@ function A.AurasRegistry.RegisterUnitLaneGeometrySettings(ctx, unit, laneInfo)
     local AuraWriteLaneAnchor = ctx.AuraWriteLaneAnchor
     local AuraReadLaneLayer = ctx.AuraReadLaneLayer
     local AuraWriteLaneLayer = ctx.AuraWriteLaneLayer
+    local AuraReadLaneSpacing = ctx.AuraReadLaneSpacing
+    local AuraWriteLaneSpacing = ctx.AuraWriteLaneSpacing
     local lane = laneInfo.key
 
     if type(unit) ~= "string" or type(lane) ~= "string" then return end
@@ -44,6 +46,7 @@ function A.AurasRegistry.RegisterUnitLaneGeometrySettings(ctx, unit, laneInfo)
     if type(AuraReadLaneGrowthPair) ~= "function" or type(AuraWriteLaneGrowthPair) ~= "function" then return end
     if type(AuraReadLaneAnchor) ~= "function" or type(AuraWriteLaneAnchor) ~= "function" then return end
     if type(AuraReadLaneLayer) ~= "function" or type(AuraWriteLaneLayer) ~= "function" then return end
+    if type(AuraReadLaneSpacing) ~= "function" or type(AuraWriteLaneSpacing) ~= "function" then return end
     if type(Assistant._AssistantAddAuraAllLaneNouns) ~= "function" then return end
     if type(Assistant._AssistantAddAllAuraNouns) ~= "function" then return end
 
@@ -131,8 +134,8 @@ function A.AurasRegistry.RegisterUnitLaneGeometrySettings(ctx, unit, laneInfo)
     Assistant._AssistantAddAllAuraNouns(aliases, lane, "all unit", { "spacing", "gap", "icon gap" })
     Assistant._AssistantAddAllAuraNouns(aliases, lane, "all", { "spacing", "gap", "icon gap" })
     RegisterAuraUnitLaneNumber(unit, lane, "spacing", laneInfo.label .. " Spacing", 2, 0, 12, 1, aliases,
-        function() return AuraReadNumber(unit, "spacing", 2, 0, 64) end,
-        function(value) AuraWriteNumber(unit, "spacing", value, 0, 64) end)
+        function() return AuraReadLaneSpacing(unit, lane) end,
+        function(value) AuraWriteLaneSpacing(unit, lane, value) end)
 
     aliases = {}
     AddAuraLaneAliases(aliases, unit, lane, "layer")

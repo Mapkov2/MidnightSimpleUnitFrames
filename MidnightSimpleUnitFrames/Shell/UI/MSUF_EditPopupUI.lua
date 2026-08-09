@@ -439,7 +439,19 @@ end
 
 function Quick.WireStepper(minus, box, plus, cb)
     local function commit(delta)
-        box:SetText(tostring(Quick.San(box:GetText(), 0) + ((delta or 0) * GetStep())))
+        --- A control with a fixed native step (box._msufStep, e.g. Blizzard
+        --- Edit Mode sliders) must move by MULTIPLES of that step, or the
+        --- setter rounds the value back onto the same raw and the click does
+        --- nothing. Shift/Ctrl accelerate in native steps (×5/×10), exactly
+        --- like the free-step boxes.
+        local step = tonumber(box._msufStep)
+        if step then
+            if IsShiftKeyDown and IsShiftKeyDown() then step = step * 5
+            elseif IsControlKeyDown and IsControlKeyDown() then step = step * 10 end
+        else
+            step = GetStep()
+        end
+        box:SetText(tostring(Quick.San(box:GetText(), 0) + ((delta or 0) * step)))
         if cb then cb() end
     end
     minus:SetScript("OnClick", function() commit(-1) end)

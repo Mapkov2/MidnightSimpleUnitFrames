@@ -1162,6 +1162,48 @@ UpdateHint = function(box, handle)
     box._hint:SetText(GroupPreviewDefaultHint())
 end
 local NudgeStep = PreviewHelpers.NudgeStep or F.One
+--- The selected element is user intent, but `_selectedHandle` is a live frame
+--- pointer on a box whose lifecycle is suspend/resume: one shared native box
+--- serves every Group preview page, and Group sections open on *other* pages, so
+--- opening an element's settings suspends the box mid-click. Storing the
+--- selection only as that pointer therefore destroyed the intent on every
+--- suspend, and the selection bar resumed reading "No element selected" - no
+--- X/Y, no axis pulse. Unit frames never showed it because their sections open
+--- on the page their preview already sits on, so nothing suspends.
+---
+--- Suspend hands the key over, resume takes it back. Both halves are exact
+--- inverses and neither knows anything about navigation.
+local function SuspendSelection(box)
+    local handle = box._selectedHandle
+    if handle and handle._key ~= nil then box._msufGFSuspendedSelectionKey = handle._key end
+    box._selectedHandle = nil
+end
+local function ResumeSelection(box)
+    if box._msufGFSuspendedSelectionKey == nil then return nil end
+    if box._selectedHandle then
+        -- Only a *different* element retires the key. Suspending stops the drag
+        -- first, which refreshes while the selection it is about to hand over is
+        -- still live, so retiring on any live selection would drop the key one
+        -- step before the resume could ever run.
+        if box._selectedHandle._key ~= box._msufGFSuspendedSelectionKey then
+            box._msufGFSuspendedSelectionKey = nil
+        end
+        return box._selectedHandle
+    end
+    -- Mid-transition the box is already invisible while its handles still carry
+    -- their own Shown flag. Resuming there would spend the key on the page that
+    -- is being torn down.
+    if box.IsVisible and not box:IsVisible() then return nil end
+    local handle = box._handles and box._handles[box._msufGFSuspendedSelectionKey]
+    if not handle or handle._locked then return nil end
+    if handle.IsVisible and not handle:IsVisible() then return nil end
+    box._msufGFSuspendedSelectionKey = nil
+    -- A plain re-select: the menu-state side effects of a real click (aura lane,
+    -- status entry, text tab) were written when it was clicked, and the keyboard
+    -- focus belongs to whatever the resumed page opened.
+    box._selectedHandle = handle
+    return handle
+end
 local function RefreshHandleSelection(box)
     if not box then return end
     local selected = box._selectedHandle
@@ -1170,6 +1212,8 @@ local function RefreshHandleSelection(box)
         selected = nil
         box._selectedHandle = nil
     end
+    local resumed = ResumeSelection(box)
+    if resumed then selected = resumed end
     if PreviewHelpers.RefreshSelectedLayerButtons then
         PreviewHelpers.RefreshSelectedLayerButtons(box, selected, "_layerButtons")
     end
@@ -1494,7 +1538,10 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         { "CD/Stack", { 1.00, 0.82, 0.28 }, "textcolor", "auraText" },
         { "Status", { 0.95, 0.78, 0.22 }, "sicons", "status" },
         { "Dispel Overlay", { 0.25, 0.72, 1.00 }, "dispel", "dispelOverlay" },
-        { "Dispel Symbol", { 0.34, 0.84, 1.00 }, "dispel", "dispelSymbol" },
+        -- Own section, not the overlay's: a chip whose layer is off in settings
+        -- turns into a shortcut to the setting that enables it, so it has to name
+        -- the accordion that actually owns it.
+        { "Dispel Symbol", { 0.34, 0.84, 1.00 }, "dispelSymbol", "dispelSymbol" },
         { "Bounds", { 0.25, 0.75, 0.88 }, "layout", "bounds" },
     }
     box._layerButtons = {}
@@ -1946,7 +1993,11 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         self._msufGFRefreshReason = nil
         if self.SuspendSpellPreviewEffects then self:SuspendSpellPreviewEffects() end
         StopHandleDrag(self and self._selectedHandle)
-        self._selectedHandle = nil
+        -- This is the one place the runtime preview is suspended - page switches,
+        -- the fixed-preview expander and window hides all funnel through here,
+        -- repeatedly and in any order - so it is also the one place the selection
+        -- is handed over rather than destroyed.
+        SuspendSelection(self)
         if PreviewHelpers.ReleaseKeyboardCapture then
             PreviewHelpers.ReleaseKeyboardCapture(self)
         elseif self.SetPropagateKeyboardInput then

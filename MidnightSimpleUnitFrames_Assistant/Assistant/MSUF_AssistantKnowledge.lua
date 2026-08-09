@@ -2347,6 +2347,16 @@ local function DirectHelpAnswer(query, opts)
     if norm == "help" or norm == "show commands" or norm == "commands" or norm == "what can you do"
         or norm == "what can i ask" or norm == "what can i ask you" or norm == "what can the assistant do"
         or norm == "what can msuf assistant do" or norm == "what can msuf do" or norm == "assistant help"
+        -- Someone meeting the addon for the first time asks this in whatever
+        -- words come out. The overview is read-only, so widening the list only
+        -- costs an exact-string comparison and saves them the catch-all reply.
+        or norm == "what can this addon do" or norm == "what does this addon do"
+        or norm == "what can this do" or norm == "what do you do" or norm == "what can you help me with"
+        or norm == "what can you help with" or norm == "what are you" or norm == "who are you"
+        or norm == "what is this" or norm == "what is this addon" or norm == "how does this work"
+        or norm == "how do i use this" or norm == "how do i use you" or norm == "what should i do"
+        or norm == "where do i start" or norm == "how do i start" or norm == "getting started"
+        or norm == "what are my options" or norm == "show me what you can do"
     then
         return CapabilityHelp(false)
     end
@@ -2354,6 +2364,9 @@ local function DirectHelpAnswer(query, opts)
         or norm == "was kann der assistant" or norm == "was kann der assistent" or norm == "was kann msuf assistant"
         or norm == "was kann msuf assistent" or norm == "was kann ich fragen" or norm == "zeig mir befehle"
         or norm == "assistant hilfe" or norm == "assistent hilfe"
+        or norm == "was macht dieses addon" or norm == "was kann dieses addon"
+        or norm == "was ist das" or norm == "wie funktioniert das" or norm == "wie fange ich an"
+        or norm == "wo fange ich an"
     then
         return CapabilityHelp(false)
     end

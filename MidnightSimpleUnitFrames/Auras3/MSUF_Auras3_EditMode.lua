@@ -78,6 +78,7 @@ local GROUPS = {
         maxKey = "maxBuffs",
         showKey = "showBuffs",
         perRowKey = "buffPerRow",
+        spacingKey = "buffSpacing",
         growthKey = "buffGrowthX",
         wrapKey = "buffGrowthY",
         texture = "Interface\\Icons\\Spell_Holy_WordFortitude",
@@ -97,6 +98,7 @@ local GROUPS = {
         maxKey = "maxDebuffs",
         showKey = "showDebuffs",
         perRowKey = "debuffPerRow",
+        spacingKey = "debuffSpacing",
         growthKey = "debuffGrowthX",
         wrapKey = "debuffGrowthY",
         texture = "Interface\\Icons\\Spell_Shadow_ShadowWordPain",
@@ -422,6 +424,10 @@ local function GetLayout(auras, unit, create)
             pu = {}
             auras.perUnit[unit] = pu
         end
+        --- Shared-layout scopes may still carry an old dormant local table.
+        --- The first Edit Mode drag must follow the same ownership transition
+        --- as Menu/Popup writes instead of reactivating stale geometry/style.
+        if pu.overrideLayout ~= true then pu.layout = {} end
         pu.overrideLayout = true
         pu.layout = (type(pu.layout) == "table") and pu.layout or {}
         return pu.layout, pu
@@ -484,7 +490,10 @@ end
 local function ReadLaneTextBool(shared, layout, kind, key, defaultValue)
     kind = NormalizeKind(kind)
     local laneKey = kind and LANE_STYLE_KEYS[kind] and LANE_STYLE_KEYS[kind][key]
-    local v = laneKey and ReadRawValue(shared, layout, laneKey) or nil
+    -- `false` is a real per-lane override. The usual and/or shortcut turns it
+    -- into nil and incorrectly falls back to the generic/shared On value.
+    local v
+    if laneKey then v = ReadRawValue(shared, layout, laneKey) end
     if v == nil then v = ReadRawValue(shared, layout, key) end
     if v == nil then return defaultValue == true end
     return v == true
@@ -654,7 +663,12 @@ local function ReadGroupConfig(unit, kind)
         or (shared and type(shared.iconShape) == "string" and shared.iconShape)
         or "RECTANGLE"
 
-    local spacing = ReadNumber(shared, layout, "spacing", 2, 0, 64)
+    -- Per lane like perRow below, with the legacy unit-wide `spacing` as the
+    -- fallback so untouched profiles keep the gap they already had.
+    local spacing = (spec.spacingKey and layout and type(layout[spec.spacingKey]) == "number" and layout[spec.spacingKey])
+        or (spec.spacingKey and shared and type(shared[spec.spacingKey]) == "number" and shared[spec.spacingKey])
+        or ReadNumber(shared, layout, "spacing", 2, 0, 64)
+    spacing = Clamp(spacing, 2, 0, 64)
     local perRow = (ls and type(ls[spec.perRowKey]) == "number" and ls[spec.perRowKey])
         or (shared and type(shared[spec.perRowKey]) == "number" and shared[spec.perRowKey])
         or (ls and type(ls.perRow) == "number" and ls.perRow)
@@ -1000,7 +1014,7 @@ local BeginAuraGroupDrag
 local function OpenAuraGroupPopup(group)
     if not (group and IsEditModeActive() and not IsConfigBlocked()) then return false end
     local kind = group._msufA3MoverKind
-    if type(kind) == "string" and kind:match("^custom[1-3]$") then
+    if type(kind) == "string" and kind:match("^custom[1-4]$") then
         local menu = MSUF and MSUF.MSUF2
         local unit = group._msufA3Unit
         local scope = BOSS_UNITS[unit] and "boss" or unit
@@ -1444,6 +1458,9 @@ local function SetLaneMouseSuppressed(element, container, suppressed)
     local canForward = forwardKind == "buff" or forwardKind == "debuff"
     local laneCfg = element and element._msufA3Config and element._msufA3Config.lanes and element._msufA3Config.lanes[laneKind]
     local motionEnabled = not laneCfg or laneCfg.showTooltip ~= false
+    local nativeLaneCfg = container._msufA3NativeLaneConfig or laneCfg
+    local cancelablePlayerBuff = forwardKind == "buff"
+        and nativeLaneCfg and nativeLaneCfg.unit == "player"
     if suppressed then
         if canForward then WireNativeAuraEditForward(container, container) end
         SuppressAuraMouse(container, canForward)
@@ -1463,7 +1480,10 @@ local function SetLaneMouseSuppressed(element, container, suppressed)
                 if canForward then WireNativeAuraEditForward(button, container) end
                 SuppressAuraMouse(button, canForward)
             else
-                RestoreAuraMouse(button, motionEnabled, true)
+                -- Forbidden buttons can hide their stored input state. Restore
+                -- the sole runtime exception (Player Buff RightButtonUp cancel)
+                -- and keep every other AuraButton click-through.
+                RestoreAuraMouse(button, motionEnabled, cancelablePlayerBuff)
             end
         end
     end
@@ -1519,9 +1539,11 @@ local function EnsureIcon(group, index)
     shade:SetColorTexture(0, 0, 0, 0)
     icon.Shade = shade
 
+    -- Preview-only deterministic swipe. The shared preview animation advances
+    -- its width; no native Cooldown state survives an Off -> On transition.
     local swipe = icon:CreateTexture(nil, "ARTWORK", nil, 1)
     swipe:SetTexture(W8)
-    swipe:SetVertexColor(0, 0, 0, 0.32)
+    swipe:SetVertexColor(0, 0, 0, 0.58)
     swipe:Hide()
     icon.Swipe = swipe
 
@@ -1565,7 +1587,9 @@ local function LayoutPreviewSwipe(icon, cfg, remainingFrac)
         return
     end
     local size = math_max(1, (icon.GetWidth and icon:GetWidth()) or 1)
-    local frac = math_max(0.02, math_min(1, tonumber(remainingFrac) or 0.48))
+    -- Keep the preview legible at both ends of its loop while preserving the
+    -- configured direction and the existing event-driven animation cadence.
+    local frac = math_max(0.08, math_min(0.92, tonumber(remainingFrac) or 0.48))
     swipe:ClearAllPoints()
     swipe:SetWidth(math_max(1, math_floor(size * frac + 0.5)))
     swipe:SetHeight(size)
@@ -1647,13 +1671,23 @@ local function ApplyPreviewIconText(icon, unit, cfg)
     end
 end
 
-local function PreviewAuraState(kind, index, icon, cfg)
-    local fn = _G.MSUF_GetPreviewAnimationAuraState
+local function PreviewAuraState(kind, index, icon, cfg, elapsed)
+    local previewAnimation = MSUF and MSUF.PreviewAnimation
+    local fn = elapsed ~= nil and (previewAnimation and previewAnimation.BuildAuraState
+        or _G.MSUF_BuildPreviewAnimationAuraState)
+        or _G.MSUF_GetPreviewAnimationAuraState
     if type(fn) ~= "function" then return nil end
     icon._msufA3PreviewAuraScratch = icon._msufA3PreviewAuraScratch or {}
-    return fn(kind, index, icon._msufA3PreviewAuraScratch, {
-        decimalThreshold = tonumber(cfg and cfg.cooldownDecimalSeconds) or 3,
-    })
+    local options = icon._msufA3PreviewAuraOptions
+    if not options then
+        options = {}
+        icon._msufA3PreviewAuraOptions = options
+    end
+    options.decimalThreshold = tonumber(cfg and cfg.cooldownDecimalSeconds) or 3
+    if elapsed ~= nil then
+        return fn(kind, index, icon._msufA3PreviewAuraScratch, options, elapsed)
+    end
+    return fn(kind, index, icon._msufA3PreviewAuraScratch, options)
 end
 
 local function ApplyPreviewDurationBarProgress(icon, cfg, auraState)
@@ -1693,13 +1727,13 @@ local function ApplyPreviewDurationBarProgress(icon, cfg, auraState)
     bar:Show()
 end
 
-local function ApplyPreviewAuraAnimation(group, kind, shownIcons, textCfg)
+local function ApplyPreviewAuraAnimation(group, kind, shownIcons, textCfg, elapsed)
     local icons = group and group._icons
     if not icons then return end
     for i = 1, shownIcons do
         local icon = icons[i]
         if icon then
-            local auraState = PreviewAuraState(kind, i, icon, textCfg)
+            local auraState = PreviewAuraState(kind, i, icon, textCfg, elapsed)
             if icon.Count then icon.Count:SetText(textCfg.showStackCount ~= false and (auraState and auraState.stacks or (i == 1 and "3" or "")) or "") end
             if icon.CooldownText then icon.CooldownText:SetText(textCfg.showCooldownText ~= false and (auraState and auraState.text or (i == 1 and "1m" or "32")) or "") end
             LayoutPreviewSwipe(icon, textCfg, auraState and auraState.remainingFrac)
@@ -1911,8 +1945,9 @@ end
 local function RefreshSignature(unit, kind, cfg, metrics, textCfg, shownIcons, size, step, perRow, laneW, laneH, growthX, growthY, vertical, initialAnchor, x, y, anchor, frameSig)
     return tostring(unit) .. "\030" .. tostring(kind) .. "\030" .. tostring(frameSig)
         .. "\030" .. EditModeThemeRevision()
-        .. "\030" .. tostring(cfg and cfg.show) .. "\030" .. tostring(cfg and cfg.max)
-        .. "\030" .. tostring(cfg and cfg.layer) .. "\030" .. tostring(cfg and cfg.spacing)
+        .. "\030" .. tostring(cfg and cfg.show) .. "\030" .. tostring(metrics and metrics.num or cfg and cfg.max)
+        .. "\030" .. tostring(metrics and metrics.layer or cfg and cfg.layer)
+        .. "\030" .. tostring(metrics and metrics.spacing or cfg and cfg.spacing)
         .. "\030" .. tostring(metrics and metrics.alpha or cfg and cfg.alpha)
         .. "\030" .. tostring(shownIcons) .. "\030" .. tostring(size)
         .. "\030" .. tostring(step) .. "\030" .. tostring(perRow)
@@ -2029,7 +2064,10 @@ function EM.RefreshUnit(unit)
             group._msufA3RefreshSignature = nil
             group:Hide()
         else
-            local textCfg = ReadTextConfig(unit, kind)
+            -- Existing lanes use the compiler-finalized Runtime contract.
+            -- ReadTextConfig remains only for edit-only placeholders that do
+            -- not have a compiled lane yet.
+            local textCfg = (metrics and metrics.textConfig) or ReadTextConfig(unit, kind)
             local shownIcons
             if entries then
                 -- Custom lanes preview the tracked spells 1:1: one icon per
@@ -2081,8 +2119,9 @@ function EM.RefreshUnit(unit)
                 if group.Body then group.Body:SetSize(laneW, laneH) end
                 if group.Body then group.Body:SetAlpha(Clamp(metrics and metrics.alpha or cfg.alpha, 1, 0, 1)) end
                 local layers = MSUF.UF and MSUF.UF.Layers
-                group:SetFrameLevel(layers and layers.ElementLevel and layers.ElementLevel(cfg.layer, 5, 0)
-                    or (900 + Clamp(cfg.layer, 5, 0, 30)))
+                local layer = (metrics and metrics.layer) or cfg.layer
+                group:SetFrameLevel(layers and layers.ElementLevel and layers.ElementLevel(layer, 5, 0)
+                    or (900 + Clamp(layer, 5, 0, 30)))
                 if group.Hitbox and group.Hitbox.SetFrameLevel then
                     group.Hitbox:SetFrameLevel((group:GetFrameLevel() or 0) + 20)
                 end
@@ -2125,6 +2164,13 @@ function EM.RefreshUnit(unit)
                 end
             end
 
+            -- Cache the already-resolved lane state so Menu2's existing
+            -- animation tick can advance only these visible regions.  It must
+            -- not rerun DB reads, metrics, anchoring, or a full RefreshUnit at
+            -- 20 Hz merely to keep Edit Mode in phase with the menu preview.
+            group._msufA3AnimationKind = kind
+            group._msufA3AnimationShownIcons = shownIcons
+            group._msufA3AnimationTextConfig = textCfg
             ApplyPreviewAuraAnimation(group, kind, shownIcons, textCfg)
             if spec.customIndex then ApplyEditModeCustomEffect(group, frame, CustomItem(unit, spec.customIndex, false)) end
             group:Show()
@@ -2180,25 +2226,6 @@ function A3.RefreshAll(...)
     if IsConfigBlocked() then return ret end
     RequestEditModeAurasRefresh(0)
     return ret
-end
-
-local CoreEnableFrame = A3.EnableFrame
-if type(CoreEnableFrame) == "function" then
-    function A3.EnableFrame(frame, ...)
-        local ret = CoreEnableFrame(frame, ...)
-        -- Engine frames carry the unit in MSUFUnitKey; the secure "unit"
-        -- attribute never surfaces as frame.unit, so that field alone would
-        -- leave edit-mode previews stale on targeted element refreshes.
-        local unit = frame and (frame.MSUFUnitKey or frame.unit)
-        if unit then
-            if UnitPreviewActive(unit) then
-                EM.RefreshUnit(unit)
-            else
-                EM.HideUnit(unit)
-            end
-        end
-        return ret
-    end
 end
 
 local CoreDisableFrame = A3.DisableFrame
@@ -2264,6 +2291,37 @@ function A3.RefreshEditPreview(unit)
     end
     if unit then return EM.RefreshUnit(unit) end
     return EM.RefreshAll()
+end
+
+--- Advances only already-built Edit Mode aura dummy regions from Menu2's
+--- existing preview clock.  This creates no driver of its own and is rejected
+--- during combat; layout/config work remains on the normal cold refresh path.
+function A3.RefreshEditPreviewAnimation(unit, elapsed)
+    if IsConfigBlocked() or not EditPreviewActive() then return false end
+    elapsed = tonumber(elapsed)
+    if elapsed == nil then return false end
+    if IsBossScope(unit) then
+        local any = false
+        ForEachBossUnit(function(bossUnit)
+            any = A3.RefreshEditPreviewAnimation(bossUnit, elapsed) or any
+        end)
+        return any
+    end
+    local byUnit = unit and EM.groups and EM.groups[unit]
+    if not byUnit then return false end
+    local any = false
+    for kind, group in pairs(byUnit) do
+        if group and group.IsShown and group:IsShown() then
+            local textCfg = group._msufA3AnimationTextConfig
+            local shownIcons = tonumber(group._msufA3AnimationShownIcons) or 0
+            if textCfg and shownIcons > 0 then
+                ApplyPreviewAuraAnimation(group, group._msufA3AnimationKind or kind,
+                    shownIcons, textCfg, elapsed)
+                any = true
+            end
+        end
+    end
+    return any
 end
 
 local function OpenAuras3PositionPopup(unit, parent)

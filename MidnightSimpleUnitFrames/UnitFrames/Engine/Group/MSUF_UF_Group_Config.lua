@@ -1376,7 +1376,6 @@ local function CompileCoreAuras(kind, conf)
     showDebuffs = showDebuffs,
     showExternals = showExternals,
     showTooltip = root == nil or root.showTooltip ~= false,
-    clickThrough = false,
     showSwipe = true,
     showStacks = true,
     stackAnchor = "BOTTOMRIGHT",

@@ -42,8 +42,6 @@ local function RegisterControl(widget, meta, label, kind, values)
     M.RegisterSearchWidget(widget, payload)
     return widget
 end
-local AURA_LAYOUT_OVERRIDE_KEYS = WL "iconSize spacing cooldownTextSize stackTextSize reminderGrowth"
-local AURA_CAPS_OVERRIDE_KEYS = WL "maxBuffs maxDebuffs maxIcons perRow layoutMode growth buffGrowth debuffGrowth rowWrap buffRowWrap debuffRowWrap buffDebuffAnchor splitSpacing stackCountAnchor sortOrder"
 local function CallGlobal(name, ...)
     local apply = M.ApplyService
     if apply and type(apply.CallGlobal) == "function" then return apply.CallGlobal(name, ...) end
@@ -91,21 +89,6 @@ local function DeepCopyTable(src)
     if type(src) ~= "table" then return src end
     if type(CopyTable) == "function" then return CopyTable(src) end
     return M.DeepCopy(src)
-end
-local function IsEmptyAuraFilterTable(filters)
-    if type(filters) ~= "table" then return true end
-    for key, value in pairs(filters) do
-        if key == "buffs" or key == "debuffs" then
-            if type(value) == "table" then
-                for _ in pairs(value) do return false end
-            elseif value ~= nil then
-                return false
-            end
-        elseif value ~= nil then
-            return false
-        end
-    end
-    return true
 end
 local BindToggleControl, BindDropdownControl = M.BindBoolWidget, M.BindDropdownWidget
 local function BindSliderControl(ctx, slider, getValue, setValue, fallback, step, metadata)
@@ -171,102 +154,6 @@ local function ApplyAuras()
         Run()
     end
 end
-local function AurasDB()
-    local db = DB()
-    db.auras3 = db.auras3 or {}
-    local a2 = db.auras3
-    a2.shared = a2.shared or {}
-    a2.perUnit = a2.perUnit or {}
-    return a2, a2.shared
-end
-local function AurasUnit(key)
-    local a2 = AurasDB()
-    a2.perUnit[key] = a2.perUnit[key] or {}
-    local u = a2.perUnit[key]
-    u.layout = u.layout or {}
-    u.layoutShared = u.layoutShared or {}
-    u.filters = u.filters or {}
-    u.filters.buffs = u.filters.buffs or {}
-    u.filters.debuffs = u.filters.debuffs or {}
-    return u
-end
-local function AuraScope()
-    return M.auraScope or "shared"
-end
-local function AuraShared()
-    local _, shared = AurasDB()
-    return shared
-end
-local function AuraLayout()
-    local scope = AuraScope()
-    if scope == "shared" then return AuraShared() end
-    local u = AurasUnit(scope)
-    if u.overrideLayout == true then return u.layout end
-    return AuraShared()
-end
-local function AuraCaps()
-    local scope = AuraScope()
-    if scope == "shared" then return AuraShared() end
-    local u = AurasUnit(scope)
-    if u.overrideSharedLayout == true then return u.layoutShared end
-    return AuraShared()
-end
-local function AuraFilters()
-    local scope = AuraScope()
-    local shared = AuraShared()
-    shared.filters = shared.filters or {}
-    shared.filters.buffs = shared.filters.buffs or {}
-    shared.filters.debuffs = shared.filters.debuffs or {}
-    if scope == "shared" then return shared.filters end
-    local u = AurasUnit(scope)
-    if u.overrideFilters == true then return u.filters end
-    return shared.filters
-end
-local function AuraBuffFilters()
-    local f = AuraFilters()
-    f.buffs = f.buffs or {}
-    return f.buffs
-end
-local function AuraDebuffFilters()
-    local f = AuraFilters()
-    f.debuffs = f.debuffs or {}
-    return f.debuffs
-end
-local function ForceAuraLayoutOverride()
-    local scope = AuraScope()
-    if scope == "shared" then return end
-    local shared = AuraShared()
-    local u = AurasUnit(scope)
-    u.overrideLayout = true
-    if type(u.layout) ~= "table" then u.layout = {} end
-    local layout = u.layout
-    for _, key in ipairs(AURA_LAYOUT_OVERRIDE_KEYS) do
-        if layout[key] == nil then layout[key] = shared[key] end
-    end
-end
-local function ForceAuraCapsOverride()
-    local scope = AuraScope()
-    if scope == "shared" then return end
-    local shared = AuraShared()
-    local u = AurasUnit(scope)
-    u.overrideSharedLayout = true
-    if type(u.layoutShared) ~= "table" then u.layoutShared = {} end
-    local layout = u.layoutShared
-    for _, key in ipairs(AURA_CAPS_OVERRIDE_KEYS) do
-        if layout[key] == nil then layout[key] = shared[key] end
-    end
-end
-local function ForceAuraFilterOverride()
-    local scope = AuraScope()
-    if scope == "shared" then return end
-    local shared = AuraShared()
-    local u = AurasUnit(scope)
-    local hadOverride = (u.overrideFilters == true)
-    u.overrideFilters = true
-    if type(u.filters) ~= "table" or u.filters == shared.filters or (not hadOverride and IsEmptyAuraFilterTable(u.filters)) then u.filters = DeepCopyTable(shared.filters or {}) end
-    u.filters.buffs = u.filters.buffs or {}
-    u.filters.debuffs = u.filters.debuffs or {}
-end
 local function MoveWidget(widget, parent, x, y)
     return W.MoveWidget(widget, parent, x, y)
 end
@@ -329,75 +216,12 @@ local function BuildTableControlSpecs(ctx, parent, getTable, defaultApply, specs
     end })
 end
 local SetControlEnabled = W.SetControlEnabled
-local function RefreshAurasPage(ctx)
-    if M.RequestRefresh then M.RequestRefresh(ctx, "advanced-auras-ui") elseif M.Refresh then M.Refresh(ctx) end
-end
-local AURA_QUICK_PRESETS = {
-    clean = {
-        label = "Clean",
-        maxBuffs = 6, maxDebuffs = 12, perRow = 10, splitSpacing = 4, iconSize = 24, spacing = 2, sortOrder = 0,
-        layoutMode = "SEPARATE", buffGrowth = "RIGHT", debuffGrowth = "RIGHT", buffRowWrap = "DOWN", debuffRowWrap = "DOWN",
-        hidePermanent = true, buffIncludeBoss = false, debuffIncludeBoss = true,
-        includeDispellable = true, onlyMineBuffs = false, onlyMineDebuffs = false,
-        highlightOwnBuffs = true, highlightOwnDebuffs = true, showCooldownSwipe = true, showCooldownText = true, showStackCount = true, useBlizzardTimerText = true,
-    },
-    focused = {
-        label = "Focused",
-        maxBuffs = 10, maxDebuffs = 16, perRow = 10, splitSpacing = 6, iconSize = 26, spacing = 2, sortOrder = 3,
-        layoutMode = "SEPARATE", buffGrowth = "RIGHT", debuffGrowth = "RIGHT", buffRowWrap = "DOWN", debuffRowWrap = "DOWN",
-        hidePermanent = false, buffIncludeBoss = true, debuffIncludeBoss = true,
-        includeDispellable = true, onlyMineBuffs = true, onlyMineDebuffs = true,
-        highlightOwnBuffs = true, highlightOwnDebuffs = true, showCooldownSwipe = true, showCooldownText = true, showStackCount = true, useBlizzardTimerText = true,
-    },
-    performance = {
-        label = "Fast",
-        maxBuffs = 4, maxDebuffs = 8, perRow = 8, splitSpacing = 2, iconSize = 22, spacing = 1, sortOrder = 0,
-        layoutMode = "SEPARATE", buffGrowth = "RIGHT", debuffGrowth = "RIGHT", buffRowWrap = "DOWN", debuffRowWrap = "DOWN",
-        hidePermanent = true, buffIncludeBoss = false, debuffIncludeBoss = true,
-        includeDispellable = false, onlyMineBuffs = false, onlyMineDebuffs = false,
-        highlightOwnBuffs = false, highlightOwnDebuffs = false, showCooldownSwipe = false, showCooldownText = true, showStackCount = false, useBlizzardTimerText = true,
-    },
-}
-function M.ApplyAuraQuickPreset(scope, name, opts)
-    local p = AURA_QUICK_PRESETS[name]
-    if not p then return false end
-    scope = scope or AuraScope()
-    local previousScope = M.auraScope
-    M.auraScope = scope
-    local sharedScope = AuraScope() == "shared"
-    if not sharedScope then
-        ForceAuraFilterOverride()
-        ForceAuraCapsOverride()
-        ForceAuraLayoutOverride()
-    end
-    local caps = AuraCaps()
-    local layout = AuraLayout()
-    local filters = AuraFilters()
-    local buffs = AuraBuffFilters()
-    local debuffs = AuraDebuffFilters()
-    caps.maxBuffs, caps.maxDebuffs, caps.perRow = p.maxBuffs, p.maxDebuffs, p.perRow
-    caps.splitSpacing, caps.sortOrder = p.splitSpacing, p.sortOrder
-    caps.layoutMode = p.layoutMode or caps.layoutMode or "SEPARATE"
-    caps.buffGrowth, caps.debuffGrowth = p.buffGrowth, p.debuffGrowth
-    caps.buffRowWrap, caps.debuffRowWrap = p.buffRowWrap, p.debuffRowWrap
-    layout.iconSize, layout.spacing = p.iconSize, p.spacing
-    filters.hidePermanent = p.hidePermanent
-    buffs.includeBoss, debuffs.includeBoss = p.buffIncludeBoss, p.debuffIncludeBoss
-    debuffs.includeDispellable = p.includeDispellable
-    buffs.onlyMine, debuffs.onlyMine = p.onlyMineBuffs, p.onlyMineDebuffs
-    if sharedScope then
-        local shared = AuraShared()
-        shared.highlightOwnBuffs = p.highlightOwnBuffs
-        shared.highlightOwnDebuffs = p.highlightOwnDebuffs
-        shared.showCooldownSwipe = p.showCooldownSwipe
-        shared.showCooldownText = p.showCooldownText
-        shared.showStackCount = p.showStackCount
-        shared.useBlizzardTimerText = p.useBlizzardTimerText
-    end
-    M.auraScope = previousScope
-    ApplyAuras()
-    if opts and opts.refresh == true then RefreshAurasPage(opts.ctx) end
-    return true, p.label
+function M.ApplyAuraQuickPreset()
+    -- These presets were defined against the Auras2 table layout. Silently
+    -- writing those aliases after Auras3 migration produces a success message
+    -- without changing the live lanes, so keep the entry point but reject it
+    -- until native Auras3 preset definitions exist.
+    return false, "Aura quick presets are disabled because the legacy preset schema is not compatible with Auras3."
 end
 local AdvancedPage = M.AdvancedPage or {}
 M.AdvancedPage = AdvancedPage

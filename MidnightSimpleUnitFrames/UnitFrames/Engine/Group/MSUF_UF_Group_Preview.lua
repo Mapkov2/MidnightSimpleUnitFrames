@@ -88,15 +88,18 @@ local function IsRaidLikeKind(kind)
 end
 
 local function AnchorPoint(conf)
+  if GF.GetAnchorPoint then return GF.GetAnchorPoint(conf) end
   local point = conf and (conf.anchorPoint or conf.point) or "CENTER"
   if not VALID_POINTS[point] then point = "CENTER" end
   return point
 end
 
-local function RelativeAnchorPoint(conf, fallback)
-  local point = conf and conf.relativePoint or fallback or "CENTER"
-  if not VALID_POINTS[point] then point = fallback or "CENTER" end
-  return point
+--- Both sides of a group anchor come from the single visible Anchor Point; see
+--- GF.ResolveAnchorPoint (MSUF_GroupFrames_DB.lua) for the legacy pair it retires.
+local function ResolveAnchorPoint(kind, conf, parent)
+  if GF.ResolveAnchorPoint then return GF.ResolveAnchorPoint(kind, conf, parent) end
+  local point = AnchorPoint(conf)
+  return point, point
 end
 
 local function PointFraction(point)
@@ -243,7 +246,6 @@ local function EnsureContainer(kind, parent)
   if not container then
     container = CreateFrame("Frame", "MSUF_GFPreviewContainer_" .. kind, desiredParent)
     container:EnableMouse(false)
-    if container.SetClampedToScreen then container:SetClampedToScreen(true) end
     GF._previewContainer[kind] = container
   end
   if container:GetParent() ~= desiredParent then container:SetParent(desiredParent) end
@@ -276,11 +278,17 @@ local function PositionContainer(kind, count)
   if parent then
     point, relativePoint, relative, x, y = "CENTER", "CENTER", parent, 0, 0
   else
+    relative = ResolveAnchorFrame(conf, container)
+    -- Resolving can retire a legacy relativePoint into the offsets, so read
+    -- those afterwards.
+    point, relativePoint = ResolveAnchorPoint(kind, conf, relative)
     local cx, cy = tonumber(conf.offsetX), tonumber(conf.offsetY)
     if cx == nil or cy == nil then cx, cy = DefaultCenter(kind) end
-    point = AnchorPoint(conf)
-    relativePoint = RelativeAnchorPoint(conf, point)
-    relative, x, y = ResolveAnchorFrame(conf, container), floor(cx + 0.5), floor(cy + 0.5)
+    x, y = floor(cx + 0.5), floor(cy + 0.5)
+  end
+  if GF.ConfigureAnchorPointScreenClamp then
+    GF.ConfigureAnchorPointScreenClamp(container, point, containerW, containerH)
+  else
     x, y = ClampPreviewOffsetOnScreen(point, relativePoint, relative, x, y, containerW, containerH)
   end
   local containerKey = tostring(point) .. "\030" .. tostring(relativePoint) .. "\030" .. tostring(relative) .. "\030" .. tostring(x) .. "\030" .. tostring(y)
@@ -518,7 +526,7 @@ local function ApplyFrameAuraPreview(frame, kind, visual, lane, descriptor, slot
     swipe:SetPoint("TOPLEFT", visual, "TOPLEFT", 0, 0)
     swipe:SetPoint("BOTTOMRIGHT", visual, "BOTTOMRIGHT", 0, size * 0.42)
     swipe:SetTexture(PREVIEW_WHITE)
-    swipe:SetVertexColor(0, 0, 0, 0.38)
+    swipe:SetVertexColor(0, 0, 0, 0.58)
     swipe:Show()
   end
 
@@ -899,7 +907,7 @@ local function ApplySpellIndicatorPreview(frame, kind, visual, slot)
       swipe:SetPoint("TOPLEFT", visual, "TOPLEFT", 0, 0)
       swipe:SetPoint("BOTTOMRIGHT", visual, "BOTTOMRIGHT", 0, size * 0.42)
       swipe:SetTexture(PREVIEW_WHITE)
-      swipe:SetVertexColor(0, 0, 0, 0.38)
+      swipe:SetVertexColor(0, 0, 0, 0.58)
       swipe:Show()
     end
 

@@ -5340,6 +5340,7 @@ local function ParseGlobalUIShellPriorityShortcut(normalized, raw)
         { key = "general.detailsEditModeIntegration", label = "Details! Edit Mode Integration", terms = { "details edit mode", "details mover", "move details", "details integration" } },
         { key = "general.dominosEditModeIntegration", label = "Dominos Edit Mode Integration", terms = { "dominos edit mode", "dominos mover", "move dominos", "dominos integration" } },
         { key = "general.dandersEditModeIntegration", label = "DandersFrames Edit Mode Integration", terms = { "dandersframes edit mode", "danders edit mode", "danders mover", "move dandersframes", "danders integration" } },
+        { key = "general.blizzardEditModeIntegration", label = "Blizzard Edit Mode Integration", terms = { "blizzard edit mode", "move minimap", "move chat", "move micro menu", "blizzard integration" } },
         { key = "general.versionCheckEnabled", label = "Version Check", terms = { "version check", "version checker" } },
         { key = "general.showMinimapIcon", label = "Minimap Icon", terms = { "minimap icon", "minimap button" } },
         { key = "general.playTargetSelectLostSounds", label = "Target Sounds", terms = { "target sounds", "target select sound", "target lost sound" } },

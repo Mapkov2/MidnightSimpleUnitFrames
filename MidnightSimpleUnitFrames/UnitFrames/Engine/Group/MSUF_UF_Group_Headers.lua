@@ -250,6 +250,7 @@ function GF.ResolveAnchorFrame(conf, owner)
 end
 
 local function AnchorPoint(conf)
+  if GF.GetAnchorPoint then return GF.GetAnchorPoint(conf) end
   local point = conf and (conf.anchorPoint or conf.point) or "CENTER"
   if not VALID_POINTS[point] then
     point = "CENTER"
@@ -257,10 +258,12 @@ local function AnchorPoint(conf)
   return point
 end
 
-local function RelativeAnchorPoint(conf, fallback)
-  local point = conf and conf.relativePoint or fallback or "CENTER"
-  if not VALID_POINTS[point] then point = fallback or "CENTER" end
-  return point
+--- Both sides of a group anchor come from the single visible Anchor Point; see
+--- GF.ResolveAnchorPoint (MSUF_GroupFrames_DB.lua) for the legacy pair it retires.
+local function ResolveAnchorPoint(kind, conf, parent)
+  if GF.ResolveAnchorPoint then return GF.ResolveAnchorPoint(kind, conf, parent) end
+  local point = AnchorPoint(conf)
+  return point, point
 end
 
 local function PointFraction(point)
@@ -342,14 +345,12 @@ local function EnsureAnchor(key, conf, totalW, totalH)
     anchor:SetParent(desiredParent)
   end
   anchor._msufOwnedAnchorRoot = true
-  if anchor.SetClampedToScreen and anchor._msufScreenClampEnabled ~= true then
+  if key == "priority" and anchor.SetClampedToScreen and anchor._msufScreenClampEnabled ~= true then
     anchor:SetClampedToScreen(true)
     anchor._msufScreenClampEnabled = true
   end
   anchor:SetSize(totalW, totalH)
   anchor:ClearAllPoints()
-  local point = AnchorPoint(conf)
-  local relativePoint = RelativeAnchorPoint(conf, point)
   local parent, missingAnchorName, rejectedAnchorName = GF.ResolveAnchorFrame(conf, anchor)
   anchor._msufMissingAnchorName = missingAnchorName
   anchor._msufRejectedAnchorName = rejectedAnchorName
@@ -357,13 +358,21 @@ local function EnsureAnchor(key, conf, totalW, totalH)
     _G.MSUF_ScheduleLateAnchorReanchor()
   end
   anchor:Show()
+  -- The Anchor Point owns both sides of a group anchor; resolving it can retire
+  -- a legacy relativePoint into the offsets, so read those afterwards.
+  local point, relativePoint = ResolveAnchorPoint(key, conf, parent)
   local offsetX, offsetY = conf.offsetX or 0, conf.offsetY or 0
+  if key ~= "priority" and GF.ConfigureAnchorPointScreenClamp then
+    GF.ConfigureAnchorPointScreenClamp(anchor, point, totalW, totalH)
+  end
   -- Resolve, apply and clamp in the logical anchor's coordinate space. An
   -- external parent stays live so the header follows provider movement out of
   -- combat; the Factory combat-edge freeze severs the link while a fight
   -- lasts.
   anchor:SetPoint(point, parent, relativePoint, offsetX, offsetY)
-  ClampAnchorOnScreen(anchor, point, relativePoint, parent, offsetX, offsetY, totalW, totalH)
+  if key == "priority" then
+    ClampAnchorOnScreen(anchor, point, relativePoint, parent, offsetX, offsetY, totalW, totalH)
+  end
   local ownedParent = parent == UIParent or (parent and parent._msufOwnedAnchorRoot == true)
   local resolvable = ownedParent or anchor:GetCenter() ~= nil
   if not resolvable then

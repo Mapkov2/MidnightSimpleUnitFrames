@@ -24,6 +24,90 @@ local Util = EM2.Util
 if type(Util) ~= "table" then Util = {} end
 EM2.Util = Util
 
+--- Edit Mode position fields use one visual coordinate contract regardless of
+--- the frame's saved anchor pair. X is the signed gap from the screen center to
+--- the center-facing horizontal edge: a frame left of center uses its RIGHT
+--- edge, a frame right of center uses its LEFT edge, and an overlapping frame
+--- reports zero. Y remains the TOP edge relative to the screen center. Runtime
+--- profile offsets stay untouched until the user edits a field; then the
+--- requested visual delta is translated back into the existing anchor's local
+--- scale. Mirrored left/right elements therefore report equal magnitudes.
+local function EditFrameRectToUI(frame)
+    if not (frame and frame.GetLeft and frame.GetRight and frame.GetTop and frame.GetBottom) then return nil end
+    local left, right, top, bottom = frame:GetLeft(), frame:GetRight(), frame:GetTop(), frame:GetBottom()
+    if not (left and right and top and bottom) then return nil end
+    local frameScale = frame.GetEffectiveScale and tonumber(frame:GetEffectiveScale()) or 1
+    local uiScale = UIParent and UIParent.GetEffectiveScale and tonumber(UIParent:GetEffectiveScale()) or 1
+    if not frameScale or frameScale <= 0 then frameScale = 1 end
+    if not uiScale or uiScale <= 0 then uiScale = 1 end
+    local ratio = frameScale / uiScale
+    return left * ratio, right * ratio, top * ratio, bottom * ratio, frameScale, uiScale
+end
+
+local function EditScreenCenter()
+    local left, right, top, bottom = EditFrameRectToUI(UIParent)
+    if left then return (left + right) * 0.5, (bottom + top) * 0.5 end
+    return ((UIParent and UIParent.GetWidth and UIParent:GetWidth()) or 0) * 0.5,
+        ((UIParent and UIParent.GetHeight and UIParent:GetHeight()) or 0) * 0.5
+end
+
+local function EditRound(value)
+    value = tonumber(value) or 0
+    return value >= 0 and math.floor(value + 0.5) or math.ceil(value - 0.5)
+end
+
+local function EditHorizontalPosition(left, right, centerX)
+    if right <= centerX then return right - centerX end
+    if left >= centerX then return left - centerX end
+    return 0
+end
+
+function Util.FramePositionValues(frame)
+    local left, right, top, bottom = EditFrameRectToUI(frame)
+    if not left then return nil end
+    local centerX, centerY = EditScreenCenter()
+    return EditRound(EditHorizontalPosition(left, right, centerX)), EditRound(top - centerY),
+        EditRound(right - left), EditRound(top - bottom)
+end
+
+function Util.TranslateFramePosition(frame, currentOffsetX, currentOffsetY, displayX, displayY)
+    local left, right, top, _, frameScale, uiScale = EditFrameRectToUI(frame)
+    if not left then
+        return tonumber(currentOffsetX) or 0, tonumber(currentOffsetY) or 0, false
+    end
+    local centerX, centerY = EditScreenCenter()
+    local currentX, currentY = EditHorizontalPosition(left, right, centerX), top - centerY
+    local savedX = tonumber(currentOffsetX) or 0
+    local savedY = tonumber(currentOffsetY) or 0
+    local requestedX = tonumber(displayX)
+    local requestedY = tonumber(displayY)
+    local scaleRatio = uiScale / frameScale
+    local nextX, nextY = savedX, savedY
+    --- The edit boxes show rounded geometry. Treat that same rounded value as
+    --- unchanged so editing width/height or another field cannot introduce a
+    --- sub-pixel position drift. After a resize, the rounded reference edge
+    --- changes and the old field value deliberately restores it.
+    if requestedX ~= nil and requestedX ~= EditRound(currentX) then
+        local currentEdgeX
+        if requestedX < 0 then
+            currentEdgeX = right - centerX
+        elseif requestedX > 0 then
+            currentEdgeX = left - centerX
+        elseif right <= centerX then
+            currentEdgeX = right - centerX
+        elseif left >= centerX then
+            currentEdgeX = left - centerX
+        end
+        if currentEdgeX ~= nil then
+            nextX = EditRound(savedX + (requestedX - currentEdgeX) * scaleRatio)
+        end
+    end
+    if requestedY ~= nil and requestedY ~= EditRound(currentY) then
+        nextY = EditRound(savedY + (requestedY - currentY) * scaleRatio)
+    end
+    return nextX, nextY, nextX ~= savedX or nextY ~= savedY
+end
+
 function Util.ApplyAllSettingsSafe()
     local UF = MSUF and MSUF.UF
     if UF and UF.Apply then

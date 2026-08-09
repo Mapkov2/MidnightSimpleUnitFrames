@@ -16,7 +16,7 @@ local floor = math.floor
 local max, min = math.max, math.min
 local VT = M.ValueTextList
 local UNIT_PAGES, LOAD_CONDITIONS, BOSS_LAYOUT_OPTIONS, SEPARATORS, UF_COPY_CATEGORIES = M.PickDefaults(UP, [[UNIT_PAGES LOAD_CONDITIONS BOSS_LAYOUT_OPTIONS SEPARATORS UF_COPY_CATEGORIES]])
-local GetConf, GetGeneral, Call, DefaultCopyTarget, UnitTopLabel, UnitTopPillWidth, NewCopyScopeDefaults, CopyUnitSettings, ToggleEditMode, IsEditModeActive, ReadBool, SetBool, ReadNumber, SetNumber, ReadGeneralBool, SetControlEnabled, NormalizeBossLayoutMode, UpdateLoadActive, ControlMeta, SettingMeta, ReviewedMeta, RegisterControl = M.Pick(UP, [[GetConf GetGeneral Call DefaultCopyTarget UnitTopLabel UnitTopPillWidth NewCopyScopeDefaults CopyUnitSettings ToggleEditMode IsEditModeActive ReadBool SetBool ReadNumber SetNumber ReadGeneralBool SetControlEnabled NormalizeBossLayoutMode UpdateLoadActive ControlMeta SettingMeta ReviewedMeta RegisterControl]])
+local GetConf, GetGeneral, Call, DefaultCopyTarget, UnitTopLabel, UnitTopPillWidth, NewCopyScopeDefaults, ConfirmCopyToAll, CopyUnitSettings, ToggleEditMode, IsEditModeActive, ReadBool, SetBool, ReadNumber, SetNumber, ReadGeneralBool, SetControlEnabled, NormalizeBossLayoutMode, UpdateLoadActive, ControlMeta, SettingMeta, ReviewedMeta, RegisterControl = M.Pick(UP, [[GetConf GetGeneral Call DefaultCopyTarget UnitTopLabel UnitTopPillWidth NewCopyScopeDefaults ConfirmCopyToAll CopyUnitSettings ToggleEditMode IsEditModeActive ReadBool SetBool ReadNumber SetNumber ReadGeneralBool SetControlEnabled NormalizeBossLayoutMode UpdateLoadActive ControlMeta SettingMeta ReviewedMeta RegisterControl]])
 local UNIT_AURAS_MENU_UNITS = M.KeySetFromWords "player target focus boss"
 local TOT_INLINE_CUSTOM_SEPARATOR = "__CUSTOM__"
 local TOT_INLINE_CUSTOM_SEPARATOR_MAX = 5
@@ -441,6 +441,10 @@ local function BuildPreview(ctx, builder, unit)
         end
         Call("MSUF_UFPreview_RequestRefresh", reason)
     end
+    -- Aura Style owns this exact embedded preview box. Publishing the scoped
+    -- refresher avoids repainting Preview.active, which may belong to another
+    -- cached, pinned, or reparented unit page.
+    if ctx then ctx._msuf2RefreshUnitPreview = RefreshThisPreview end
     EnsurePreviewExpander = function()
         if not (box and W.AttachFixedPreviewExpander) then return nil end
         if expander and expander.box == box and not expander.disposed then
@@ -627,12 +631,44 @@ local function BuildTopActions(ctx, builder, unit, label)
         end,
         onRun = function(api, popup)
             local dest = NormalizeCopyDest(unit)
-            local function RunCopy()
-                CopyUnitSettings(unit, dest, copyScopes)
+            local destinationLabel = dest == "all" and M.Tr("All") or UnitTopLabel(dest)
+            local function CopyFeedback(applied, result)
+                result = type(result) == "table" and result or {}
+                if applied == true then
+                    local message = M.Format(M.Tr("Copied to %s"), destinationLabel)
+                    if result.auraSkipped == true then
+                        message = message .. " " .. M.Tr("Aura settings were skipped for unsupported UnitFrames.")
+                    end
+                    if M.ShowStatusFeedback then
+                        M.ShowStatusFeedback(message, result.auraSkipped == true and "warning" or "ok", 1.8)
+                    end
+                    popup:Hide()
+                    return
+                end
+                local message
+                if result.reason == "no_categories" then
+                    message = M.Tr("No copy categories selected.")
+                elseif result.reason == "unsupported_aura_scope" or result.reason == "aura_copy_unavailable" then
+                    message = M.Tr("Aura settings are only available for Player, Target, Focus, and Boss Frames.")
+                else
+                    message = M.Tr("Nothing was copied.")
+                end
+                if M.ShowStatusFeedback then M.ShowStatusFeedback(message, "warning", 2.0) end
             end
-            M.RunWithHistory("Copy Unit Settings", "unit:copy:" .. tostring(unit), RunCopy)
-            if M.ShowStatusFeedback then M.ShowStatusFeedback(M.Format(M.Tr("Copied to %s"), UnitTopLabel(dest)), "ok", 1.35) end
-            popup:Hide()
+            local function RunCopy(allConfirmed)
+                return CopyUnitSettings(unit, dest, copyScopes, CopyFeedback, allConfirmed == true)
+            end
+            local historyKey = "unit:copy:" .. tostring(unit)
+            if dest == "all" and type(ConfirmCopyToAll) == "function" then
+                -- Confirm before opening the history transaction. The old order
+                -- committed an empty undo step and announced success even when
+                -- the player cancelled the confirmation dialog.
+                ConfirmCopyToAll(function()
+                    M.RunWithHistory("Copy Unit Settings", historyKey, function() RunCopy(true) end)
+                end)
+            else
+                M.RunWithHistory("Copy Unit Settings", historyKey, RunCopy)
+            end
         end,
     })
     RegisterControl(copy, ctx, "copy.open", "Copy To", "button", "ephemeral")

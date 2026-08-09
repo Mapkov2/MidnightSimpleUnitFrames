@@ -355,8 +355,6 @@ local MSUF_LOCALE_COVERAGE_enUS = {
     ["Open Profiles. Check active profile, spec profiles, import/export, and legacy imports. Large imports may need a reload."] = "Open Profiles. Check active profile, spec profiles, import/export, and legacy imports. Large imports may need a reload.",
     ["Open Target of Target. Use Frame Basics to enable it, Text for labels, and Anchoring/Edit Mode for placement."] = "Open Target of Target. Use Frame Basics to enable it, Text for labels, and Anchoring/Edit Mode for placement.",
     ["Open Unit Auras > Caps & Icons. Lower max buffs/debuffs, rows, icon size, and adjust filters."] = "Open Unit Auras > Caps & Icons. Lower max buffs/debuffs, rows, icon size, and adjust filters.",
-    ["Open Unit Auras > Display for click-through aura behavior, then use Gameplay for click-cast, mouseover, and targeting behavior."] = "Open Unit Auras > Display for click-through aura behavior, then use Gameplay for click-cast, mouseover, and targeting behavior.",
-    ["Open Unit Auras > Display for click-through aura behavior. Gameplay contains click-cast and targeting behavior."] = "Open Unit Auras > Display for click-through aura behavior. Gameplay contains click-cast and targeting behavior.",
     ["Open Unit Auras > Text Coloring for timer colors and text sizes. Group aura cooldown style is in Group Frames > Buffs & Debuffs > Cooldown Style."] = "Open Unit Auras > Text Coloring for timer colors and text sizes. Group aura cooldown style is in Group Frames > Buffs & Debuffs > Cooldown Style.",
     ["Open Unit Auras and use Display plus Caps & Icons for unit-frame aura placement. Buff/debuff icons are configured as aura layout, not moved through MSUF Edit Mode."] = "Open Unit Auras and use Display plus Caps & Icons for unit-frame aura placement. Buff/debuff icons are configured as aura layout, not moved through MSUF Edit Mode.",
     ["Open Unit Auras for unit-frame aura icon sizing and filters. For group frames, use Group Frames > Buffs & Debuffs and custom buff/debuff controls."] = "Open Unit Auras for unit-frame aura icon sizing and filters. For group frames, use Group Frames > Buffs & Debuffs and custom buff/debuff controls.",
@@ -1271,7 +1269,7 @@ L["Only relevant sorting methods are shown for buffs and debuffs."] = "Only rele
 L["Reversed flips the complete priority order."] = "Reversed flips the complete priority order."
 L["Choose which auras Blizzard provides for this lane."] = "Choose which auras Blizzard provides for this lane."
 L["85% above 15 members · 70% above 25"] = "85% above 15 members · 70% above 25"
-L["|cffffd700MSUF 6.0 RC13|r · Built for WoW 12.1 PTR."] = "|cffffd700MSUF 6.0 RC13|r · Built for WoW 12.1 PTR."
+L["|cffffd700MSUF 6.0 RC17|r · Built for WoW 12.1 PTR."] = "|cffffd700MSUF 6.0 RC17|r · Built for WoW 12.1 PTR."
 L["|cffffd700Auras|r use Blizzard's native 12.1 system."] = "|cffffd700Auras|r use Blizzard's native 12.1 system."
 L["|cff40ff40Thanks for testing!|r Report bugs on Discord or GitHub."] = "|cff40ff40Thanks for testing!|r Report bugs on Discord or GitHub."
 L["Free (UIParent)"] = "Screen"
@@ -1730,7 +1728,7 @@ L["No nameplate cast events are registered while disabled."] = "No nameplate cas
 L["No public aura category data is loaded."] = "No public aura category data is loaded."
 L["No spells tracked. Add up to 40 exact SpellIDs."] = "No spells tracked. Add up to 40 exact SpellIDs."
 L["Normal"] = "Normal"
-L["On previews every enabled spell for this spec. Off previews only the selected spell."] = "On previews every enabled spell for this spec. Off previews only the selected spell."
+L["On previews every enabled spell of every tracked spec, including spells that only draw a frame effect. Off previews only the selected spell."] = "On previews every enabled spell of every tracked spec, including spells that only draw a frame effect. Off previews only the selected spell."
 L["Opacity remains beside the setting when that element supports it."] = "Opacity remains beside the setting when that element supports it."
 L["Open Aura Style"] = "Open Aura Style"
 L["Open Bars"] = "Open Bars"
@@ -2711,6 +2709,8 @@ L["Icon Shadow Color"] = "Icon Shadow Color"
 
 --- Aura icon border style + per-scope icon styling (6.0 Beta 29)
 L["Border Style"] = "Border Style"
+L["Castbar border color"] = "Castbar border color"
+L["Dark"] = "Dark"
 L["Icon border style"] = "Icon border style"
 L["Use icon border & shadow on %s frames"] = "Use icon border & shadow on %s frames"
 L["Icon border and shadow on this scope"] = "Icon border and shadow on this scope"
@@ -3573,8 +3573,6 @@ L["Open a unit page, then use Range Fade. It is available for Target, Target of 
 L["Open the affected UnitFrame > Auras for icon size, placement, and filters. Use Appearance > Auras for scope-aware text and cooldown styling."] = "Open the affected UnitFrame > Auras for icon size, placement, and filters. Use Appearance > Auras for scope-aware text and cooldown styling."
 L["Open the affected UnitFrame > Auras or Group Frames > Auras and reduce visible counts, timer text, or unnecessary native filter rules."] = "Open the affected UnitFrame > Auras or Group Frames > Auras and reduce visible counts, timer text, or unnecessary native filter rules."
 L["Open the affected UnitFrame > Auras, choose Buffs or Debuffs, then adjust filters, icon size, rows, caps, and spacing. Party/Raid settings are in Group Frames > Auras."] = "Open the affected UnitFrame > Auras, choose Buffs or Debuffs, then adjust filters, icon size, rows, caps, and spacing. Party/Raid settings are in Group Frames > Auras."
-L["Open the relevant unit page > Auras for click-through aura behavior, then use Gameplay for click-cast, mouseover, and targeting behavior."] = "Open the relevant unit page > Auras for click-through aura behavior, then use Gameplay for click-cast, mouseover, and targeting behavior."
-L["Open the unit page > Auras for click-through aura behavior. Gameplay contains click-cast and targeting behavior."] = "Open the unit page > Auras for click-through aura behavior. Gameplay contains click-cast and targeting behavior."
 L["Open the unit page > Auras or the aura Position Popup for unit-frame aura placement. Buff/debuff icons are configured as aura layout, not moved through MSUF Edit Mode."] = "Open the unit page > Auras or the aura Position Popup for unit-frame aura placement. Buff/debuff icons are configured as aura layout, not moved through MSUF Edit Mode."
 L["Range Fade group frame range check raid range check party range check out of range alpha offline opacity affects frame HP"] = "Range Fade group frame range check raid range check party range check out of range alpha offline opacity affects frame HP"
 L["Range Fade unit frame range check range checker distance check out of range range alpha distance fade target targettarget focus focustarget pet boss"] = "Range Fade unit frame range check range checker distance check out of range range alpha distance fade target targettarget focus focustarget pet boss"
@@ -3705,6 +3703,24 @@ L["Columns"] = "Columns"
 L["Padding"] = "Padding"
 L["Faded opacity"] = "Faded opacity"
 L["Click through"] = "Click through"
+
+-- Menu localization pass 2026-08-07 (part 5): Blizzard Edit Mode integration.
+L["Show Blizzard frames in MSUF Edit Mode"] = "Show Blizzard frames in MSUF Edit Mode"
+L["Blizzard Edit Mode integration"] = "Blizzard Edit Mode integration"
+L["On (default): MSUF Edit Mode can move the Blizzard Minimap, Chat, Micro Menu and Tooltip through the game's own Edit Mode layout. If a Blizzard preset is active, selecting an element creates and activates a saved 'MSUF' layout automatically."] = "On (default): MSUF Edit Mode can move the Blizzard Minimap, Chat, Micro Menu and Tooltip through the game's own Edit Mode layout. If a Blizzard preset is active, selecting an element creates and activates a saved 'MSUF' layout automatically."
+
+-- Menu localization pass 2026-08-08 (part 2): Blizzard Edit Mode profile opt-in.
+L["Include Blizzard Edit Mode layout"] = "Include Blizzard Edit Mode layout"
+L["Off (default): profile strings never carry or change the Blizzard Edit Mode arrangement. On: full-profile exports include it and imports apply it."] = "Off (default): profile strings never carry or change the Blizzard Edit Mode arrangement. On: full-profile exports include it and imports apply it."
+
+-- Menu localization pass 2026-08-08 (part 3): Blizzard layout dialog status line.
+L["All Edit Mode layout slots are full (5 account + 5 character). Delete a layout in Blizzard's Edit Mode, then try again."] = "All Edit Mode layout slots are full (5 account + 5 character). Delete a layout in Blizzard's Edit Mode, then try again."
+L["Layout creation failed:"] = "Layout creation failed:"
+
+-- Menu localization pass 2026-08-08: Blizzard layout dialog.
+L["Create Edit Mode layout"] = "Create Edit Mode layout"
+L["Blizzard presets cannot be edited. Save a copy as a new layout to move and adjust Blizzard frames."] = "Blizzard presets cannot be edited. Save a copy as a new layout to move and adjust Blizzard frames."
+L["Create"] = "Create"
 
 -- Menu localization pass 2026-08-06 (part 6): pandemic badge format key.
 L["On / %s"] = "On / %s"

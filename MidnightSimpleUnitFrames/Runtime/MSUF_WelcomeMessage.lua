@@ -29,7 +29,7 @@ local MUTED = "|cffa8b4c7"
 local ACCENT = "|cffffd700"
 local STOP = "|r"
 local DOT = "\194\183"
-local PREVIEW_BUILD_KEY = "|cffffd700MSUF 6.0 RC13|r \194\183 Built for WoW 12.1 PTR."
+local PREVIEW_BUILD_KEY = "|cffffd700MSUF 6.0 RC17|r \194\183 Built for WoW 12.1 PTR."
 local PREVIEW_AURAS_KEY = "|cffffd700Auras|r use Blizzard's native 12.1 system."
 local PREVIEW_THANKS_KEY = "|cff40ff40Thanks for testing!|r Report bugs on Discord or GitHub."
 
@@ -67,7 +67,7 @@ end
 
 local function PreviewBuildText()
     local text = PlainText(PREVIEW_BUILD_KEY)
-    text = text:gsub("^MSUF 6%.0 RC13", "", 1):gsub("^%s+", "", 1)
+    text = text:gsub("^MSUF 6%.0 RC17", "", 1):gsub("^%s+", "", 1)
     if text:sub(1, #DOT) == DOT then
         text = text:sub(#DOT + 1):gsub("^%s+", "", 1)
     end

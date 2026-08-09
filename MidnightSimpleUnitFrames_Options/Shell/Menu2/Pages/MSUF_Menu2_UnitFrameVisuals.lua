@@ -21,7 +21,11 @@ local CASTBAR_ICON_POSITIONS = VT("LEFT", "Left", "RIGHT", "Right", "INSIDE_LEFT
 local CASTBAR_TEXT_POSITIONS = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right", "ABOVE", "Above", "BELOW", "Below")
 local CASTBAR_TIME_FORMATS = VT("CURRENT", "Remaining", "ELAPSED", "Elapsed", "ELAPSED_MAX", "Elapsed / Total", "CURRENT_MAX", "Remaining / Total")
 local CASTBAR_TAB_VALUES = VT("general", "General", "icon", "Icon", "spell", "Spell Text", "time", "Time Text", "advanced", "Advanced")
-local CASTBAR_TAB_HEIGHTS = { general = 392, icon = 486, spell = 426, time = 386, advanced = 480 }
+--- The thickness slider owns on/off (0 hides the border); this picks how the
+--- visible border is painted. "Castbar border color" is the only value the
+--- Castbar Icon Border Color shortcut applies to.
+local CASTBAR_ICON_BORDER_STYLES = VT("NONE", "None", "DARK", "Dark", "CASTBAR", "Castbar border color")
+local CASTBAR_TAB_HEIGHTS = { general = 392, icon = 540, spell = 386, time = 386, advanced = 480 }
 local CASTBAR_WIDTH_SOURCE_VALUES = VT("manual", "Manual width", "unitframe", "Auto: Unit Frame", "essential", "Auto: Essential Cooldowns", "utility", "Auto: Utility Cooldowns")
 local CASTBAR_TEXT_ALIGN = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right")
 local CASTBAR_TRUNCATE_VALUES = VT("AUTO", "Auto fit", "CLIP", "Manual width", "NONE", "No width limit")
@@ -830,70 +834,13 @@ local function BuildCastbar(ctx, builder, unit)
             end)())
         return control
     end
-    -- Castbar detail text colors are stored as a complete triple or not at all:
-    -- the castbar font path falls back to the shared castbar text color when the
-    -- override is absent. The swatch therefore shows the *effective* color, and a
-    -- right-click clears the override rather than pinning the inherited value as
-    -- an explicit one, which is the only way back to "follow the shared color".
-    local function DetailColorRGB(detail)
-        local get = _G.MSUF_GetCastbarDetailTextColor
-        if type(get) == "function" then
-            local r, g, b, custom = get(unit, detail)
-            if custom == true then return r, g, b end
-        end
-        local shared = _G.MSUF_GetCastbarTextColor
-        if type(shared) == "function" then
-            local r, g, b = shared()
-            return tonumber(r) or 1, tonumber(g) or 1, tonumber(b) or 1
-        end
-        return 1, 1, 1
-    end
-    local function BindDetailColor(parent, list, label, x, y, labelWidth, detail, reason)
-        local control = W.Color(parent, label)
-        AddControl(list, control)
-        W.AttachUnitEditFocus(control, unit, "castbar")
-        local colorKey = DetailKey(detail .. "Color")
-        M.BindColor(ctx, control,
-            function() return DetailColorRGB(detail) end,
-            function(r, g, b)
-                SetGeneralValue(colorKey .. "R", r, reason)
-                SetGeneralValue(colorKey .. "G", g, reason)
-                SetGeneralValue(colorKey .. "B", b, reason)
-            end,
-            SettingMeta(ctx, "castbar.detail." .. tostring(reason), "general", colorKey))
-        if control._msuf2Title then
-            local width = tonumber(labelWidth) or 150
-            control._msuf2Title:ClearAllPoints()
-            control._msuf2Title:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
-            control._msuf2Title:SetWidth(width)
-            control:SetSize(44, 18)
-            control:ClearAllPoints()
-            control:SetPoint("TOPLEFT", parent, "TOPLEFT", x + width + 12, y + 2)
-        end
-        if control.RegisterForClicks then control:RegisterForClicks("LeftButtonUp", "RightButtonUp") end
-        local baseClick = control.GetScript and control:GetScript("OnClick")
-        control:SetScript("OnClick", function(self, mouseButton, ...)
-            if mouseButton == "RightButton" then
-                if self.IsEnabled and not self:IsEnabled() then return end
-                SetGeneralValue(colorKey .. "R", nil, reason)
-                SetGeneralValue(colorKey .. "G", nil, reason)
-                SetGeneralValue(colorKey .. "B", nil, reason)
-                self:SetRGB(DetailColorRGB(detail))
-                return
-            end
-            if type(baseClick) == "function" then baseClick(self, mouseButton, ...) end
-        end)
-        if M.AddTooltip then
-            M.AddTooltip(control, label,
-                "Right-click to follow the shared castbar text color again.", { hook = true })
-        end
-        return control
-    end
+    -- No castbar detail color binder lives here on purpose: every castbar text
+    -- reaches its color through the card's three-dot shortcut and the Colors page,
+    -- so this page never grows a second swatch for a key it already edits.
     local function BuildDetailControls(parent, list, specs)
         M.BuildControlSpecs(specs, {
             dropdown = function(s) return BindDetailDropdown(parent, list, s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10]) end,
             slider = function(s) return BindDetailSlider(parent, list, s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10], s[11], s[12]) end,
-            color = function(s) return BindDetailColor(parent, list, s[2], s[3], s[4], s[5], s[6], s[7]) end,
         })
     end
     local function NormalizeBackend(value)
@@ -985,10 +932,10 @@ local function BuildCastbar(ctx, builder, unit)
     local generalCard = W.ControlCard(generalTab, nil, nil, leftX, -4, leftW, 132)
     local providerCard = W.ControlCard(generalTab, "Provider & Surface", nil, rightX, -4, rightW, 132)
     local sizeCard = W.ControlCard(generalTab, "Size", "Width can use manual bounds or follow another frame.", leftX, -154, sectionW - 32, 166)
-    local iconCard = W.ControlCard(iconTab, nil, nil, leftX, -4, leftW, 370)
+    local iconCard = W.ControlCard(iconTab, nil, nil, leftX, -4, leftW, 424)
     local portraitIconCard = W.ControlCard(iconTab, "Portrait Cast Icon", nil, rightX, -4, rightW, 156)
     local spellCard = W.ControlCard(spellTab, nil, nil, leftX, -4, leftW, 270)
-    local targetNameCard = fields.targetName and W.ControlCard(spellTab, "Cast Target Text", nil, rightX, -4, rightW, 310) or nil
+    local targetNameCard = fields.targetName and W.ControlCard(spellTab, "Cast Target Text", nil, rightX, -4, rightW, 270) or nil
     local timeCard = W.ControlCard(timeTab, nil, nil, leftX, -4, leftW, 270)
     local textAdvancedCard = W.ControlCard(advancedTab, "Spell Text Behavior", nil, leftX, -4, leftW, 190)
     local iconAdvancedCard = W.ControlCard(advancedTab, "Icon Style", nil, rightX, -4, rightW, 212)
@@ -1193,10 +1140,21 @@ local function BuildCastbar(ctx, builder, unit)
         { "slider", "Icon Zoom (%)", 16, -196, controlWLeft, 100, 200, 1, DetailKey("IconZoom"), 100, "MSUF2_CASTBAR_ICON_ZOOM" },
         { "slider", "Spacing", 16, -250, controlWLeft, 0, 40, 1, DetailKey("IconSpacing"), 1, "MSUF2_CASTBAR_ICON_SPACING" },
         { "slider", "Border thickness", 16, -304, controlWLeft, 0, 8, 1, DetailKey("IconBorderThickness"), 0, "MSUF2_CASTBAR_ICON_BORDER_THICKNESS", function(v)
-            if tonumber(v) and tonumber(v) > 0 and tostring(ReadGeneralValue(DetailKey("IconBorderStyle"), "NONE")):upper() == "NONE" then
+            if tonumber(v) and tonumber(v) > 0 and tostring(ReadGeneralValue(DetailKey("IconBorderStyle"), "DARK")):upper() == "NONE" then
                 GetGeneral()[DetailKey("IconBorderStyle")] = "DARK"
+                -- The Border style dropdown below must show what this just
+                -- wrote. Only the one-shot upgrade refreshes, never every tick
+                -- of the drag.
+                M.RequestRefresh(ctx, "castbar-icon-border-style-upgrade")
             end
         end },
+        { "dropdown", "Border Style", 16, -358, min(260, controlWLeft), CASTBAR_ICON_BORDER_STYLES,
+            DetailKey("IconBorderStyle"), "DARK", "MSUF2_CASTBAR_ICON_BORDER_STYLE", function()
+                -- The Castbar Icon Border Color shortcut is relevant only for
+                -- the Castbar style, so its ::: dot re-evaluates on every
+                -- change here.
+                M.RequestRefresh(ctx, "castbar-icon-border-style")
+            end },
     })
     -- Second surface for the Portrait section's cast-icon toggle: players look for
     -- it next to the castbar icon options. Both toggles write the same per-unit key
@@ -1243,7 +1201,9 @@ local function BuildCastbar(ctx, builder, unit)
             { "dropdown", "Position preset", 16, -88, min(260, controlWRight), CASTBAR_TEXT_POSITIONS, DetailKey("TargetNamePosition"), "BELOW", "MSUF2_CASTBAR_TARGET_NAME_POSITION" },
             { "slider", "Size", 16, -142, controlWRight, 6, 48, 1, DetailKey("TargetNameFontSize"), 10, "MSUF2_CASTBAR_TARGET_NAME_SIZE" },
             { "dropdown", "Alignment", 16, -196, min(260, controlWRight), CASTBAR_TEXT_ALIGN, DetailKey("TargetNameAlign"), "RIGHT", "MSUF2_CASTBAR_TARGET_NAME_ALIGN" },
-            { "color", "Target text color", 16, -250, min(200, controlWRight - 60), "TargetName", "MSUF2_CASTBAR_TARGET_NAME_COLOR" },
+            -- Target text color deliberately lives on the Colors page (castbar
+            -- detail colors) and in the per-control color shortcuts only; a second
+            -- inline swatch here double-writes the same key.
         })
     end
     local function ReadSpellTextWidthMode()

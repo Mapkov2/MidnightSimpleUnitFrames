@@ -39,9 +39,15 @@ local function FillMissing(dst, defaults)
 end
 
 local function NewPlayerDefensiveContainer()
+    local createCanonical = (type(MSUF) == "table"
+            and MSUF.MSUF_CreateCanonicalPlayerDefensiveAuraContainer)
+        or _G.MSUF_CreateCanonicalPlayerDefensiveAuraContainer
+    if type(createCanonical) == "function" then
+        local ok, item = pcall(createCanonical)
+        if ok and type(item) == "table" then return item end
+    end
     return {
         enabled = true,
-        [PLAYER_DEFENSIVE_CORE_DEFAULT_MARKER] = true,
         name = "Defensive Buffs",
         auraType = "BUFF",
         sourceUnit = "player",
@@ -98,7 +104,11 @@ local function EnsurePlayerDefensiveCoreDefault(auras, factoryEnabled)
         item = NewPlayerDefensiveContainer()
         record.items[4] = item
     end
-    if type(factoryEnabled) == "boolean" then
+    local canonicalAuraModel = tonumber(auras.profileModelRevision) == 1
+    if canonicalAuraModel then
+        if type(factoryEnabled) == "boolean" then item.enabled = factoryEnabled end
+        item[PLAYER_DEFENSIVE_CORE_DEFAULT_MARKER] = nil
+    elseif type(factoryEnabled) == "boolean" then
         -- Factory resets own this one initial value. The policy marker is
         -- consumed below, so later user toggles remain ordinary saved choices.
         item.enabled = factoryEnabled
@@ -239,18 +249,40 @@ function A3.EnsureDB()
             current._msufAuras3TranslatedFromLegacyAuras2 = true
         end
         db.auras2 = nil
-        current._msufAurasRuntime = 3
-        MigrateFrameOwnedAuraLists(current)
+        current._msufAurasRuntime = nil
+        if tonumber(current.profileModelRevision) == 1 then
+            -- Canonical profiles already use frame-owned Aura lists. Running
+            -- the retired fan-out would only repopulate compatibility records
+            -- and migration markers in a freshly reset tree.
+            current._msufA3FrameOwnedLists_v1 = nil
+        else
+            MigrateFrameOwnedAuraLists(current)
+        end
         EnsurePlayerDefensiveProfileDefault(db, current)
         A3.DBRef = current
         return current, current.shared
     end
 
-    current = type(db.auras2) == "table" and db.auras2 or {}
+    if type(db.auras2) == "table" then
+        current = db.auras2
+    else
+        local createCanonical = (type(MSUF) == "table" and MSUF.MSUF_CreateCanonicalUnitAuras)
+            or _G.MSUF_CreateCanonicalUnitAuras
+        if type(createCanonical) == "function" then
+            local ok, value = pcall(createCanonical)
+            current = ok and type(value) == "table" and value or {}
+        else
+            current = {}
+        end
+    end
     db.auras3 = current
     db.auras2 = nil
-    current._msufAurasRuntime = 3
-    MigrateFrameOwnedAuraLists(current)
+    current._msufAurasRuntime = nil
+    if tonumber(current.profileModelRevision) == 1 then
+        current._msufA3FrameOwnedLists_v1 = nil
+    else
+        MigrateFrameOwnedAuraLists(current)
+    end
     EnsurePlayerDefensiveProfileDefault(db, current)
     A3.DBRef = current
     return current, current.shared

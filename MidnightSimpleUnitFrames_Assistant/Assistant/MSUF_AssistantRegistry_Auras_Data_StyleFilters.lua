@@ -200,7 +200,7 @@ Data.AURA_LANE_STYLE_NUMBER_SPECS = {
 }
 
 Data.AURA_FILTER_BOOLEAN_SPECS = {
-    { lane = "buff", key = "onlyMine", label = "Buff Player Filter", words = { "buff player filter", "only my buffs", "my buffs only", "show only my buffs", "show my buffs only", "player buffs only", "own buffs only" } },
+    { lane = "buff", key = "onlyMine", label = "Buff Player Filter", words = { "aura filter only mine", "buff player filter", "only my buffs", "my buffs only", "show only my buffs", "show my buffs only", "player buffs only", "own buffs only" } },
     { lane = "buff", key = "raid", label = "Buff Raid Filter", words = { "buff raid filter", "raid buffs filter", "raid buffs", "show raid buffs", "show only raid buffs", "raid buffs only" } },
     { lane = "buff", key = "raidInCombat", label = "Buff Raid In Combat Filter", words = { "buff raid in combat filter", "raid in combat buffs", "combat raid buffs", "show raid combat buffs", "show raid in combat buffs" } },
     { lane = "buff", key = "includeNameplateOnly", label = "Buff Include Nameplate-only Filter", words = { "buff nameplate-only filter", "buff nameplate only filter", "include nameplate-only buffs", "include nameplate only buffs", "nameplate-only buffs", "nameplate only buffs", "show nameplate-only buffs" } },
@@ -211,7 +211,7 @@ Data.AURA_FILTER_BOOLEAN_SPECS = {
     { lane = "buff", key = "onlyImportant", label = "Buff Important Filter", words = { "buff important filter", "important buffs", "important buffs only", "show important buffs", "show only important buffs" } },
     { lane = "buff", key = "includeDispellable", label = "Buff Dispellable or Stealable by Group Filter", words = { "buff dispellable by group filter", "dispellable buffs", "stealable buffs", "purgeable buffs", "buffs the group can dispel", "buffs the group can steal" } },
     { lane = "buff", key = "dispellableAny", label = "Buff Any Dispel or Steal Type Filter", words = { "buff any dispel type filter", "buffs with any dispel type", "buffs with any steal type" } },
-    { lane = "debuff", key = "onlyMine", label = "Debuff Player Filter", words = { "debuff player filter", "only my debuffs", "my debuffs only", "show only my debuffs", "show my debuffs only", "player debuffs only", "own debuffs only" } },
+    { lane = "debuff", key = "onlyMine", label = "Debuff Player Filter", words = { "aura filter only mine", "debuff player filter", "only my debuffs", "my debuffs only", "show only my debuffs", "show my debuffs only", "player debuffs only", "own debuffs only" } },
     { lane = "debuff", key = "raid", label = "Debuff Raid Filter", words = { "debuff raid filter", "raid debuffs filter", "raid debuffs", "show raid debuffs", "show only raid debuffs", "raid debuffs only" } },
     { lane = "debuff", key = "raidInCombat", label = "Debuff Raid In Combat Filter", words = { "debuff raid in combat filter", "raid in combat debuffs", "combat raid debuffs", "show raid combat debuffs", "show raid in combat debuffs" } },
     { lane = "debuff", key = "includeNameplateOnly", label = "Debuff Include Nameplate-only Filter", words = { "debuff nameplate-only filter", "debuff nameplate only filter", "include nameplate-only debuffs", "include nameplate only debuffs", "nameplate-only debuffs", "nameplate only debuffs", "show nameplate-only debuffs" } },

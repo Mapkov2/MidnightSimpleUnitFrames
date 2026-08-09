@@ -222,6 +222,18 @@ function A.GlobalRegistry.RegisterBaseSettings(ctx)
             if type(fn) == "function" then fn(GeneralDB().dominosEditModeIntegration ~= false) end
         end,
     })
+    RegisterGeneralBoolean("blizzardEditModeIntegration", "blizzardEditModeIntegration", "Blizzard Edit Mode Integration", true, {
+        "blizzard edit mode", "blizzard frames edit mode", "move blizzard frames", "move minimap", "move chat",
+        "move micro menu", "minimap mover", "chat mover", "micro menu mover", "blizzard integration",
+        "blizzard im edit mode", "blizzard frames verschieben", "minimap verschieben", "chat verschieben",
+        "mikromenue verschieben",
+    }, {
+        category = "Global / Misc", frameType = "misc", reason = "MSUF_ASSISTANT_BLIZZARD_EDIT_MODE",
+        apply = function()
+            local fn = _G.MSUF_BlizzardEditMode_SetEnabled
+            if type(fn) == "function" then fn(GeneralDB().blizzardEditModeIntegration ~= false) end
+        end,
+    })
     RegisterGeneralBoolean("dandersEditModeIntegration", "dandersEditModeIntegration", "DandersFrames Edit Mode Integration", true, {
         "dandersframes edit mode", "danders edit mode", "danders mover", "move dandersframes", "move danders frames",
         "show dandersframes in edit mode", "dandersframes integration", "danders integration",

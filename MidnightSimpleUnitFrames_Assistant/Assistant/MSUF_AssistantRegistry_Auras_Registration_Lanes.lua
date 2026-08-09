@@ -108,6 +108,25 @@ function A.AurasRegistry.BuildLaneRegistrationHelpers(ctx)
         AuraWriteNumber(scope, AuraLaneKey(lane, "buffLayer", "debuffLayer"), value, 0, 30)
     end
 
+    --- Gap is stored per lane (buffSpacing/debuffSpacing) with the legacy
+    --- unit-wide `spacing` as the fallback, so a profile that never touched a
+    --- lane key keeps showing the value it always had.
+    local function AuraReadLaneSpacing(scope, lane)
+        local Model = AuraModel()
+        if Model and type(Model.ReadLaneSpacing) == "function" then return Model.ReadLaneSpacing(scope, lane) end
+        local fallback = AuraReadNumber(scope, "spacing", 2, 0, 64)
+        return AuraReadNumber(scope, AuraLaneKey(lane, "buffSpacing", "debuffSpacing"), fallback, 0, 64)
+    end
+
+    local function AuraWriteLaneSpacing(scope, lane, value)
+        local Model = AuraModel()
+        if Model and type(Model.WriteLaneSpacing) == "function" then
+            Model.WriteLaneSpacing(scope, lane, value)
+            return
+        end
+        AuraWriteNumber(scope, AuraLaneKey(lane, "buffSpacing", "debuffSpacing"), value, 0, 64)
+    end
+
     local function AuraReadLaneGrowthPair(scope, lane)
         local Model = AuraModel()
         if Model and type(Model.ReadLaneGrowthPair) == "function" then return Model.ReadLaneGrowthPair(scope, lane) end
@@ -143,6 +162,8 @@ function A.AurasRegistry.BuildLaneRegistrationHelpers(ctx)
         AuraWriteLaneAnchor = AuraWriteLaneAnchor,
         AuraReadLaneLayer = AuraReadLaneLayer,
         AuraWriteLaneLayer = AuraWriteLaneLayer,
+        AuraReadLaneSpacing = AuraReadLaneSpacing,
+        AuraWriteLaneSpacing = AuraWriteLaneSpacing,
         AuraReadLaneGrowthPair = AuraReadLaneGrowthPair,
         AuraWriteLaneGrowthPair = AuraWriteLaneGrowthPair,
         AuraReadLaneStyleBool = StyleHelpers.AuraReadLaneStyleBool,

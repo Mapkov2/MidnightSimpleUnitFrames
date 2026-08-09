@@ -60,6 +60,11 @@ local function Restore(layout, frame, state, reason)
     if InCombat() or not (profile and frame and type(state) == "table") then return false end
     local anchor, x, y = state.anchor, tonumber(state.x), tonumber(state.y)
     if type(anchor) ~= "string" or not x or not y then return false end
+    local layoutScale = tonumber(state.layoutScale)
+    if layoutScale and layoutScale > 0 and layoutScale ~= tonumber(profile.ScaleSize) then
+        profile.ScaleSize = layoutScale
+        layout:RestorePosition()
+    end
     if state.positionKey then profile.Positions[state.positionKey] = { anchor, x, y }
     else profile.anchor, profile.PosX, profile.PosY = anchor, x, y end
     if frame == layout.frame then layout:RestorePosition()
@@ -82,8 +87,33 @@ local function Capture(layout, frame)
     local visual = frame.frameBack or frame
     return {
         anchor = anchor, x = x, y = y, positionKey = key,
+        layoutScale = tonumber(profile.ScaleSize),
         width = visual.GetWidth and visual:GetWidth(),
         height = visual.GetHeight and visual:GetHeight(),
+    }
+end
+
+--- One layout-wide scale (profile.ScaleSize, Grid2's own setting): applied
+--- through Grid2's RestorePosition, which SetScales the layout frame and
+--- repositions it against the new scale.
+local function ScaleControl()
+    return {
+        id = "scale", kind = "number", label = "Scale", min = 50, max = 200, step = 5,
+        get = function()
+            local layout = Layout()
+            local profile = layout and Profile(layout)
+            if not profile then return nil end
+            return math.floor(((tonumber(profile.ScaleSize) or 1) * 100) + 0.5)
+        end,
+        set = function(value)
+            local layout = Layout()
+            local profile = layout and Profile(layout)
+            value = tonumber(value)
+            if InCombat() or not (profile and value) then return false end
+            profile.ScaleSize = value / 100
+            layout:RestorePosition()
+            return true
+        end,
     }
 end
 
@@ -108,10 +138,11 @@ local function Move(layout, resolve, request)
     return true
 end
 
-local function Element(layout, id, label, order, resolve, reset)
+local function Element(layout, id, label, order, resolve, reset, controls)
     local function State() return Capture(layout, resolve()) end
     return {
         id = id, label = label, group = "Grid2", order = order,
+        extraControls = controls,
         getFrame = function()
             local frame = resolve()
             return frame and (frame.frameBack or frame)
@@ -230,7 +261,7 @@ local function Activate()
         if InCombat() or not layout.ResetPosition then return false end
         layout:ResetPosition()
         return true
-    end)) then active = false; return false end
+    end, { ScaleControl() })) then active = false; return false end
     API.RegisterSessionListener(OWNER, SessionChanged)
     SyncHeaders()
     return true

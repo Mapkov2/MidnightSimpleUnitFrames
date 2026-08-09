@@ -992,60 +992,33 @@ do
         return dh
     end
 
-    local function MSUF_Tooltip_EnsureSettingsHandle(parent)
-        if tooltipSettingsHandle then
-            if tooltipSettingsHandle:GetParent() ~= parent then
-                tooltipSettingsHandle:SetParent(parent)
-            end
-            tooltipSettingsHandle:SetAllPoints(parent)
-            return tooltipSettingsHandle
-        end
-
-        local h = CreateFrame("Button", "MSUF_TooltipSettingsHandle", parent)
-        h:SetAllPoints(parent)
-        h:EnableMouse(true)
-        h:RegisterForClicks("LeftButtonUp")
-        h:SetFrameLevel((parent.GetFrameLevel and parent:GetFrameLevel() or 0) + 10)
-
-        local hover = h:CreateTexture(nil, "HIGHLIGHT")
-        hover:SetAllPoints()
-        hover:SetColorTexture(0.2, 0.6, 1.0, 0.08)
-        h._hover = hover
-
-        h:SetScript("OnClick", function(self)
-            MSUF_Tooltip_ShowMiniPopup(self)
-        end)
-        tooltipSettingsHandle = h
-        return h
-    end
-
     --- --- Edit Mode enter/exit ---
+    --- Blizzard-controlled = GameTooltip provider + external anchor. The
+    --- Blizzard HUD Tooltip element in MSUF Edit Mode is then the ONLY
+    --- tooltip surface — the Blizzard adapter reads this to decide which of
+    --- the two tooltip movers exists, never both.
+    local function MSUF_Tooltip_IsBlizzardControlled()
+        local g = MSUF_GetTooltipGeneral()
+        local provider, anchor = MSUF_NormalizeTooltipSettings(g)
+        return provider == TOOLTIP_PROVIDER_GAME and anchor == TOOLTIP_ANCHOR_EXTERNAL
+    end
+    ExportPublic("MSUF_Tooltip_IsBlizzardControlled", MSUF_Tooltip_IsBlizzardControlled)
+
     local function MSUF_Tooltip_ShowEditPreview()
         local f = MSUF_GetPlayerInfoFrame()
         if not f then return end
 
-        local g = MSUF_GetTooltipGeneral()
-        local provider, anchor = MSUF_NormalizeTooltipSettings(g)
-        local blizzardControlled = (provider == TOOLTIP_PROVIDER_GAME and anchor == TOOLTIP_ANCHOR_EXTERNAL)
-
-        if blizzardControlled then
+        if MSUF_Tooltip_IsBlizzardControlled() then
             if tooltipDragHandle then
                 tooltipDragHandle:Hide()
             end
+            if tooltipSettingsHandle then
+                tooltipSettingsHandle:Hide()
+            end
             tooltipEditPreviewActive = false
             f:SetMovable(false)
-
-            if f.name  then f.name:SetText(Tr("GameTooltip (addon-compatible)")) end
-            if f.line2 then f.line2:SetText(Tr("Addon / Blizzard controlled")) end
-            if f.line3 then f.line3:SetText(Tr("Player Name")) end
-            if f.line4 then f.line4:SetText(Tr("Level 80 Human Paladin")) end
-            if f.line5 then f.line5:SetText("") end
-
-            f:ClearAllPoints()
-            f:SetPoint("BOTTOMRIGHT", UIParent, "BOTTOMRIGHT", -16, 16)
-            f:Show()
-            f._msufEditPreviewActive = true
-            MSUF_Tooltip_EnsureSettingsHandle(f):Show()
+            f._msufEditPreviewActive = false
+            f:Hide()
             return
         end
 

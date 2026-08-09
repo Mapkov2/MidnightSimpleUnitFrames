@@ -550,8 +550,6 @@ local T = {
     ['Shows stack/application counts (e.g. "2") on aura icons. Disable to hide stack numbers.'] = "在光环图标上显示堆叠/应用数量 (例如 \"2\"). 禁用以隐藏堆叠数字.",
     ["Show cooldown text"] =  "显示冷却文本",
     ["Shows the countdown numbers on aura icons. Disable to hide cooldown numbers (swipe can remain enabled)."] = "在光环图标上显示倒计时数字. 禁用以隐藏冷却数字 (扫过可以保持启用).",
-    ["Click-through auras"] = "点击穿透光环",
-    ["Makes aura icons click-through so mouse clicks pass to the game world.\n\nWhen 'Show tooltip' is also enabled, hovering still shows aura tooltips.\nWhen 'Show tooltip' is off, icons are fully non-interactive."] = "使光环图标点击穿透, 以便鼠标点击传递到游戏世界.\n\n当同时启用 '显示提示' 时, 悬停仍然会显示光环工具提示.\n当关闭 '显示提示' 时, 图标完全不可交互.",
 
     ["Show tooltip"] = "显示鼠标提示",
 
@@ -590,8 +588,6 @@ local T = {
 
     ["Include boss buffs"] =  "包含首领Buffs",
     ["Include boss debuffs"] =  "包含首领Debuffs",
-    ["Show Sated/Exhaustion"]   = "显示嗜血/英勇冷却" ,
-    ["Controls whether Bloodlust lockout auras (Sated/Exhaustion/Temporal Displacement, etc.) are shown."]  = "控制嗜血/英勇冷却光环是否显示.",
     ["Always include dispellable debuffs"] =  "始终包含可驱散的Debuffs",
     ["Additive: this will NOT hide your normal debuffs."] = "附加: 不会隐藏您的正常Debuffs.",
     ["Only show boss auras"] =   "仅显示首领光环",
@@ -1633,7 +1629,6 @@ local MSUF2_HELPER_zhCN = {
     ["Buff (any caster)"] = "浅黄色（任何施法者）",
     ["Buff (cast by me)"] = "浅黄（我选的）",
     ["buffs"] = "爱好者",
-    ["buffs block click casting"] = "buffs 阻止点击投射",
     ["Buffs Right / Debuffs Left"] = "右侧增益/左侧减益",
     ["Buffs Top / Debuffs Bottom"] = "顶部增益/底部减益",
     ["By Power Type"] = "按电源类型",
@@ -1659,7 +1654,6 @@ local MSUF2_HELPER_zhCN = {
     ["classpower"] = "阶级权力",
     ["click casting"] = "点击投射",
     ["click through"] = "点击浏览",
-    ["click-through auras"] = "点击光环",
     ["clickcast"] = "点击广播",
     ["clickthrough"] = "点击率",
     ["Color aura timers by remaining time"] = "按剩余时间为光环计时器着色",
@@ -1810,7 +1804,6 @@ local MSUF2_HELPER_zhCN = {
     ["How do I change castbars?"] = "如何更换施法杆？",
     ["How do I change class resources?"] = "如何更改班级资源？",
     ["How do I change click, mouseover, or targeting behavior?"] = "如何更改点击、鼠标悬停或定位行为？",
-    ["How do I change click-casting so aura icons do not block heals?"] = "如何更改点击投射以使光环图标不会阻止治疗？",
     ["How do I change colors?"] = "我如何改变颜色？",
     ["How do I change dead, offline, AFK, or ready-check indicators?"] = "如何更改失效、离线、AFK 或就绪检查指示器？",
     ["How do I change fonts and text?"] = "如何更改字体和文本？",
@@ -2016,7 +2009,6 @@ local MSUF2_HELPER_zhCN = {
     ["Rounded"] = "圆形",
     ["Row layout"] = "行布局",
     ["Safe"] = "安全",
-    ["Sated threshold"] = "满足阈值",
     ["scale"] = "规模",
     ["Shapes"] = "形状",
     ["Shift"] = "Shift",
@@ -2128,7 +2120,6 @@ local MSUF2_HELPER_zhCN = {
     ["Where do I change aggro, threat, dispel, or raid markers?"] = "在哪里可以更改仇恨、威胁、驱散或突袭标记？",
     ["Where do I change aura cooldown text?"] = "在哪里更改光环冷却文本？",
     ["Where do I change castbar spell names or long cast text?"] = "在哪里更改施法栏法术名称或长施法文本？",
-    ["Where do I change click-through auras?"] = "在哪里更改点击光环？",
     ["Where do I change group health text or power bars?"] = "在哪里更改群组健康文本或能量栏？",
     ["Where do I change HP, name, or power text position?"] = "在哪里更改 HP、名称或电源文本位置？",
     ["Where do I configure detached power or alternative mana?"] = "我在哪里配置独立力量或替代法力？",
@@ -2324,8 +2315,6 @@ local MSUF_LOCALE_COVERAGE_zhCN = {
     ["Open Profiles. Check active profile, spec profiles, import/export, and legacy imports. Large imports may need a reload."] = "打开个人资料。检查活动配置文件、规格配置文件、导入/export 和旧导入。大量进口可能需要重新加载。",
     ["Open Target of Target. Use Frame Basics to enable it, Text for labels, and Anchoring/Edit Mode for placement."] = "打开目标的目标。使用框架基础知识启用它，使用标签文本，使用 Anchoring/Edit 模式进行放置。",
     ["Open Unit Auras > Caps & Icons. Lower max buffs/debuffs, rows, icon size, and adjust filters."] = "打开单位光环 > 上限和图标。降低最大增益/debuffs、行、图标大小并调整过滤器。",
-    ["Open Unit Auras > Display for click-through aura behavior, then use Gameplay for click-cast, mouseover, and targeting behavior."] = "打开“Unit Auras”>“Display”以进行点击光环行为，然后使用“Gameplay”进行点击投射、鼠标悬停和瞄准行为。",
-    ["Open Unit Auras > Display for click-through aura behavior. Gameplay contains click-cast and targeting behavior."] = "打开单位光环 > 显示点击光环行为。游戏玩法包含点击投射和定位行为。",
     ["Open Unit Auras > Text Coloring for timer colors and text sizes. Group aura cooldown style is in Group Frames > Buffs & Debuffs > Cooldown Style."] = "打开 Unit Auras > Text Coloring 以设置计时器颜色和文本大小。团体光环冷却风格位于“团体框架”>“增益和减益”>“冷却风格”中。",
     ["Open Unit Auras and use Display plus Caps & Icons for unit-frame aura placement. Buff/debuff icons are configured as aura layout, not moved through MSUF Edit Mode."] = "打开单位光环并使用 Display plus Caps & Icons 进行单位框架光环放置。 Buff/debuff 图标被配置为光环布局，不会通过 MSUF 编辑模式移动。",
     ["Open Unit Auras for unit-frame aura icon sizing and filters. For group frames, use Group Frames > Buffs & Debuffs and custom buff/debuff controls."] = "打开单位光环，用于调整单位框架光环图标大小和过滤器。对于组帧，请使用组帧 > Buffs & Debuffs 和自定义 buff/debuff 控件。",
@@ -3572,7 +3561,7 @@ L["Only relevant sorting methods are shown for buffs and debuffs."] = "仅显示
 L["Reversed flips the complete priority order."] = "反向翻转完整的优先顺序。"
 L["Choose which auras Blizzard provides for this lane."] = "选择暴雪为此车道提供的光环。"
 L["85% above 15 members · 70% above 25"] = "85% 15 名以上会员 · 70% 25 名以上"
-L["|cffffd700MSUF 6.0 RC13|r · Built for WoW 12.1 PTR."] = "|cffffd700MSUF 6.0 RC13|r · 专为《魔兽世界》12.1 PTR 打造。"
+L["|cffffd700MSUF 6.0 RC17|r · Built for WoW 12.1 PTR."] = "|cffffd700MSUF 6.0 RC17|r · 专为《魔兽世界》12.1 PTR 打造。"
 L["|cffffd700Auras|r use Blizzard's native 12.1 system."] = "|cffffd700Auras|r使用暴雪原生12.1系统。"
 L["|cff40ff40Thanks for testing!|r Report bugs on Discord or GitHub."] = "|cff40ff40感谢您的测试！|r 在 Discord 或 GitHub 上报告错误。"
 L["Show auras"] = "展现光环"
@@ -3918,7 +3907,7 @@ L["No nameplate cast events are registered while disabled."] = "禁用时不会�
 L["No public aura category data is loaded."] = "未加载公共光环类别数据。"
 L["No spells tracked. Add up to 40 exact SpellIDs."] = "没有追踪到咒语。最多添加 40 个准确的 SpellID。"
 L["Normal"] = "正常"
-L["On previews every enabled spell for this spec. Off previews only the selected spell."] = "预览此规格的每个启用的咒语。关闭仅预览选定的咒语。"
+L["On previews every enabled spell of every tracked spec, including spells that only draw a frame effect. Off previews only the selected spell."] = "开启时预览所有已追踪专精的每个启用法术，包括仅绘制边框效果的法术。关闭时仅预览选定的法术。"
 L["Opacity remains beside the setting when that element supports it."] = "当该元素支持时，不透明度保留在设置旁边。"
 L["Open Aura Style"] = "开放气场风格"
 L["Open Bars"] = "开放式状态条"
@@ -4575,6 +4564,8 @@ L["Icon Shadow Color"] = "图标阴影颜色"
 
 --- Aura icon border style + per-scope icon styling (6.0 Beta 29)
 L["Border Style"] = "边框样式"
+L["Castbar border color"] = "施法条边框颜色"
+L["Dark"] = "深色"
 L["Icon border style"] = "图标边框样式"
 L["Use icon border & shadow on %s frames"] = "在%s框架上使用图标边框与阴影"
 L["Icon border and shadow on this scope"] = "该范围的图标边框与阴影"
@@ -5424,8 +5415,6 @@ L["Open a unit page, then use Range Fade. It is available for Target, Target of 
 L["Open the affected UnitFrame > Auras for icon size, placement, and filters. Use Appearance > Auras for scope-aware text and cooldown styling."] = "打开受影响的 UnitFrame > 光环，设置图标大小、位置和过滤器。按作用域生效的文本和冷却样式请使用外观 > 光环。"
 L["Open the affected UnitFrame > Auras or Group Frames > Auras and reduce visible counts, timer text, or unnecessary native filter rules."] = "打开受影响的 UnitFrame > 光环或小队/团队框体 > 光环，减少可见数量、计时器文本或不必要的原生过滤规则。"
 L["Open the affected UnitFrame > Auras, choose Buffs or Debuffs, then adjust filters, icon size, rows, caps, and spacing. Party/Raid settings are in Group Frames > Auras."] = "打开受影响的 UnitFrame > 光环，选择增益或减益效果，然后调整过滤器、图标大小、行数、上限和间距。小队/团队的设置位于小队/团队框体 > 光环。"
-L["Open the relevant unit page > Auras for click-through aura behavior, then use Gameplay for click-cast, mouseover, and targeting behavior."] = "打开相关单位页面 > 光环设置光环的点击穿透行为，然后使用游戏设置调整点击施法、鼠标悬停和选中目标的行为。"
-L["Open the unit page > Auras for click-through aura behavior. Gameplay contains click-cast and targeting behavior."] = "打开单位页面 > 光环设置光环的点击穿透行为。游戏设置中包含点击施法和选中目标的行为。"
 L["Open the unit page > Auras or the aura Position Popup for unit-frame aura placement. Buff/debuff icons are configured as aura layout, not moved through MSUF Edit Mode."] = "打开单位页面 > 光环或光环位置弹窗来放置单位框体的光环。增益/减益图标属于光环布局设置，不通过 MSUF 编辑模式移动。"
 L["Range Fade group frame range check raid range check party range check out of range alpha offline opacity affects frame HP"] = "距离淡出 小队框体 距离检测 团队距离检测 小队距离检测 超出距离 alpha 离线不透明度 影响 框体 生命"
 L["Range Fade unit frame range check range checker distance check out of range range alpha distance fade target targettarget focus focustarget pet boss"] = "距离淡出 单位框体 距离检测 距离检查 超出距离 距离 alpha 距离淡出 目标 目标的目标 焦点 焦点的目标 宠物 首领"
@@ -5556,6 +5545,24 @@ L["Columns"] = "列数"
 L["Padding"] = "内边距"
 L["Faded opacity"] = "淡出透明度"
 L["Click through"] = "点击穿透"
+
+-- Menu localization pass 2026-08-07 (part 5): Blizzard Edit Mode integration.
+L["Show Blizzard frames in MSUF Edit Mode"] = "在 MSUF 编辑模式中显示暴雪框体"
+L["Blizzard Edit Mode integration"] = "暴雪编辑模式集成"
+L["On (default): MSUF Edit Mode can move the Blizzard Minimap, Chat, Micro Menu and Tooltip through the game's own Edit Mode layout. If a Blizzard preset is active, selecting an element creates and activates a saved 'MSUF' layout automatically."] = "开启（默认）：MSUF 编辑模式可通过游戏自带的编辑模式布局移动暴雪的小地图、聊天框、微型菜单和鼠标提示。若当前使用暴雪预设布局，选择任一元素会自动创建并启用名为'MSUF'的已保存布局。"
+
+-- Menu localization pass 2026-08-08 (part 2): Blizzard Edit Mode profile opt-in.
+L["Include Blizzard Edit Mode layout"] = "包含暴雪编辑模式布局"
+L["Off (default): profile strings never carry or change the Blizzard Edit Mode arrangement. On: full-profile exports include it and imports apply it."] = "关闭（默认）：配置文件字符串不会包含或更改暴雪编辑模式布局。开启：完整配置导出会包含该布局，导入时会应用。"
+
+-- Menu localization pass 2026-08-08 (part 3): Blizzard layout dialog status line.
+L["All Edit Mode layout slots are full (5 account + 5 character). Delete a layout in Blizzard's Edit Mode, then try again."] = "编辑模式布局槽位已全部占满（账号5个+角色5个）。请在暴雪编辑模式中删除一个布局后重试。"
+L["Layout creation failed:"] = "布局创建失败："
+
+-- Menu localization pass 2026-08-08: Blizzard layout dialog.
+L["Create Edit Mode layout"] = "创建编辑模式布局"
+L["Blizzard presets cannot be edited. Save a copy as a new layout to move and adjust Blizzard frames."] = "暴雪预设布局无法编辑。将其另存为新布局后即可移动和调整暴雪框体。"
+L["Create"] = "创建"
 
 -- Menu localization pass 2026-08-06 (part 6): pandemic badge format key.
 L["On / %s"] = "开启 / %s"

@@ -1186,6 +1186,28 @@ local function DetectUnits(text)
         if ContainsAny(text, UnitTerms.targettarget) then AddUnique(units, "targettarget") end
         if ContainsAny(text, UnitTerms.focustarget) then AddUnique(units, "focustarget") end
     end
+    -- Someone who has never opened MSUF does not say "player frame", they say
+    -- "my name" or "make my health text bigger". With no frame named anywhere
+    -- in the sentence, a first-person possessive can only mean their own frame
+    -- -- "make the player name bigger" already worked, so this closes a gap in
+    -- wording rather than in capability. Last resort on purpose: any explicitly
+    -- named unit above wins, and a named group scope ("my party frames") is
+    -- left to DetectGroups instead of being mixed with a unit.
+    if #units == 0 and ContainsAny(text, CoreData.FIRST_PERSON_POSSESSIVE_TERMS or {})
+        and not ContainsAny(text, CoreData.FIRST_PERSON_POSSESSIVE_BULK_GUARD_TERMS or {})
+        and not ContainsAny(text, CoreData.GROUP_FRAME_TERMS or {})
+        and not ContainsAny(text, CoreData.PARTY_GROUP_TERMS or {})
+        and not ContainsAny(text, CoreData.RAID_GROUP_TERMS or {})
+        and not ContainsAny(text, CoreData.MYTHIC_GROUP_TERMS or {})
+        -- "my buffs" is not a frame, it is whose aura it is: MSUF names those
+        -- controls with the same word ("Highlight My Buffs"), so reading the
+        -- possessive as the Player frame retargeted them onto Player Buffs.
+        -- Matched as whole phrases, not by the bare word, so "make my name
+        -- bigger" keeps resolving to the Player frame.
+        and not ContainsAny(text, CoreData.FIRST_PERSON_AURA_OWNERSHIP_TERMS or {})
+    then
+        AddUnique(units, "player")
+    end
     return units
 end
 

@@ -13,15 +13,17 @@ function A.AurasRegistry.RegisterSharedAuraMenuSettings(ctx)
     local Registry = ctx.Registry
     local AuraRootBool = ctx.AuraRootBool
     local SetAuraRootBool = ctx.SetAuraRootBool
-    local AuraSharedTable = ctx.AuraSharedTable
     local AuraSharedBool = ctx.AuraSharedBool
     local SetAuraSharedBool = ctx.SetAuraSharedBool
+    local AuraFiltersEnabled = ctx.AuraFiltersEnabled
+    local AuraSetFiltersEnabled = ctx.AuraSetFiltersEnabled
     local ApplyAura = ctx.ApplyAura
 
     if not (Registry and type(Registry.RegisterSetting) == "function") then return end
     if type(AuraRootBool) ~= "function" or type(SetAuraRootBool) ~= "function" then return end
-    if type(AuraSharedTable) ~= "function" or type(AuraSharedBool) ~= "function" then return end
+    if type(AuraSharedBool) ~= "function" then return end
     if type(SetAuraSharedBool) ~= "function" or type(ApplyAura) ~= "function" then return end
+    if type(AuraFiltersEnabled) ~= "function" or type(AuraSetFiltersEnabled) ~= "function" then return end
 
     Registry:RegisterSetting({
         key = "auras3.enabled",
@@ -49,14 +51,8 @@ function A.AurasRegistry.RegisterSharedAuraMenuSettings(ctx)
         type = "boolean",
         aliases = { "aura filters", "auras filters", "aura filtering", "filter auras", "filter buffs", "filter debuffs" },
         exactAliases = { "aura filters", "auras filters", "aura filtering", "filter auras", "filter buffs", "filter debuffs" },
-        get = function()
-            local filters = AuraSharedTable("filters")
-            if filters.enabled == nil then return true end
-            return filters.enabled == true
-        end,
-        set = function(value)
-            AuraSharedTable("filters").enabled = value and true or false
-        end,
+        get = function() return AuraFiltersEnabled("shared") end,
+        set = function(value) AuraSetFiltersEnabled("shared", value) end,
         apply = function() ApplyAura("shared", "MSUF_ASSISTANT_AURA_FILTERS_ENABLED") end,
         combatSafe = false,
     })

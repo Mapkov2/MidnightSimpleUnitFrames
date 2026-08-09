@@ -373,6 +373,74 @@ function M.SyncExternalHistoryState()
     NotifyHistoryChanged(false)
     return true
 end
+-- History labels arrive from three different worlds: hand-written page strings
+-- ("Copy Unit Settings"), raw DB keys ("hpBarAlpha") and machine apply reasons
+-- ("MSUF2_DASH_GLOBAL_SCALE"). Only the first kind reads like a sentence, so the
+-- undo/redo surfaces run every label through one normalizer instead of showing
+-- the token. Display only: the stored entry keeps its original label/source.
+local HISTORY_LABEL_ACRONYMS = KS("MSUF", "UI", "HP", "NPC", "GCD", "RGB", "AOE", "PVP", "PVE", "XP", "ID")
+local HISTORY_LABEL_WORDS = {
+    MSUF2 = "MSUF",
+    DASH = "Dashboard",
+    CLASSPOWER = "Class Power",
+    OOC = "Out of Combat",
+    TOT = "Target of Target",
+    GF = "Group",
+    UF = "Unit Frame",
+    BG = "Background",
+}
+local HISTORY_LABEL_OVERRIDES = {
+    ["MSUF change"] = "Menu change",
+    ["MSUF2 change"] = "Menu change",
+    ["MSUF2 option"] = "Menu option",
+}
+local historyLabelCache = {}
+local historyLabelCacheCount = 0
+local function HistoryLabelWord(word)
+    local upper = word:upper()
+    local mapped = HISTORY_LABEL_WORDS[upper]
+    if mapped then return mapped end
+    if HISTORY_LABEL_ACRONYMS[upper] then return upper end
+    return word:sub(1, 1):upper() .. word:sub(2):lower()
+end
+-- token is one run of [%w_]; only machine-shaped runs (snake, camel, ALLCAPS,
+-- or a label that is a bare key with no spaces at all) get rewritten.
+local function HistoryLabelToken(token, forceWords)
+    local machine = token:find("_", 1, true) ~= nil
+        or token:find("%l%u") ~= nil
+        or token:match("^%u[%u%d]+$") ~= nil
+    if not (machine or forceWords) then return token end
+    local spaced = token:gsub("_+", " "):gsub("(%l)(%u)", "%1 %2"):gsub("(%u)(%u%l)", "%1 %2")
+    local out
+    for word in spaced:gmatch("%w+") do
+        local piece = HistoryLabelWord(word)
+        out = out and (out .. " " .. piece) or piece
+    end
+    return out or token
+end
+function M.HistoryDisplayLabel(label)
+    local text = tostring(label or "")
+    text = text:gsub("^%s+", ""):gsub("%s+$", "")
+    if text == "" then return "Menu change" end
+    local cached = historyLabelCache[text]
+    if cached then return cached end
+    local out = HISTORY_LABEL_OVERRIDES[text]
+    if not out then
+        local body = text:gsub("^MSUF2?_+", "")
+        if body == "" then body = text end
+        local forceWords = body:find("%s") == nil
+        out = body:gsub("[%w_]+", function(token) return HistoryLabelToken(token, forceWords) end)
+        out = out:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+        if out == "" then out = text end
+    end
+    if historyLabelCacheCount > 300 then
+        WipeTable(historyLabelCache)
+        historyLabelCacheCount = 0
+    end
+    historyLabelCache[text] = out
+    historyLabelCacheCount = historyLabelCacheCount + 1
+    return out
+end
 local function FeedbackLabel(text, limit)
     text = tostring(text or "")
     limit = tonumber(limit) or 34
@@ -403,7 +471,7 @@ local function PushHistory(label, source, before, after)
     end
     NotifyHistoryChanged(false)
     if type(M.ShowHistoryFeedback) == "function" then
-        M.ShowHistoryFeedback(FeedbackLabel(label or "MSUF2 change", 30), 2.0)
+        M.ShowHistoryFeedback(FeedbackLabel(M.HistoryDisplayLabel(label), 30), 2.0)
     end
     return true
 end
@@ -959,8 +1027,8 @@ function M.GetHistoryState()
         canUndo = undo ~= nil,
         canRedo = redo ~= nil,
         canResetAll = historySessionActive and type(historySessionBaseSnapshot) == "table" and historySessionDirty,
-        undoLabel = undo and undo.label or nil,
-        redoLabel = redo and redo.label or nil,
+        undoLabel = undo and M.HistoryDisplayLabel(undo.label) or nil,
+        redoLabel = redo and M.HistoryDisplayLabel(redo.label) or nil,
         undoCount = #undoStack,
         redoCount = #redoStack,
         activeSurfaces = historySurfaceCount,
@@ -982,7 +1050,7 @@ function M.Undo()
         undo[#undo + 1] = entry
     end
     NotifyHistoryChanged()
-    if ok then CommandFeedback("Undid " .. FeedbackLabel(entry.label), "info", 1.25) end
+    if ok then CommandFeedback("Undid " .. FeedbackLabel(M.HistoryDisplayLabel(entry.label)), "info", 1.25) end
     return ok
 end
 function M.Redo()
@@ -1001,7 +1069,7 @@ function M.Redo()
         redo[#redo + 1] = entry
     end
     NotifyHistoryChanged()
-    if ok then CommandFeedback("Redid " .. FeedbackLabel(entry.label), "info", 1.25) end
+    if ok then CommandFeedback("Redid " .. FeedbackLabel(M.HistoryDisplayLabel(entry.label)), "info", 1.25) end
     return ok
 end
 local function WidgetHistoryLabel(ctx, widget, fallback)
@@ -1145,8 +1213,7 @@ local BARS_GENERAL_KEYS = KSW [[
     healPredictionBarHeight healPredictionBarOffsetY healPredictionBarOpacity healPredictionBarTexture
     enableAbsorbBar absorbTextMode absorbAnchorMode absorbBarHeight absorbBarOffsetY absorbBarOpacity
     healAbsorbEnabled healAbsorbAnchorMode healAbsorbBarHeight healAbsorbBarOffsetY healAbsorbBarOpacity
-    overAbsorbOverlay fullHealthAbsorbStripe absorbBarTexture healAbsorbBarTexture dispelBorderTrigger unitDispelOverlayEnabled unitDispelOverlayStyle
-    unitDispelOverlayOnHealth unitDispelOverlayAlpha unitDispelOverlayTrigger bossTargetOutlineMode
+    overAbsorbOverlay fullHealthAbsorbStripe absorbBarTexture healAbsorbBarTexture dispelBorderTrigger bossTargetOutlineMode
     bossTargetHighlightEnabled hlPrioEnabled hlPrioOrder highlightPrioEnabled highlightPrioOrder roundedFramesEnabled roundedUnitFrames
     roundedGroupFrames roundedPowerBars roundedCastbars roundedMouseover barOutlineColorR barOutlineColorG
     barOutlineColorB barOutlineColorA
@@ -1156,8 +1223,7 @@ local BARS_SCOPE_KEYS = KSW [[
     absorbBarHeight absorbBarOffsetY healAbsorbEnabled healAbsorbAnchorMode healAbsorbBarHeight healAbsorbBarOffsetY
     healPredEnabled healPredAnchorMode healPredictionBarHeight healPredictionBarOffsetY healPredictionBarOpacity healPredictionBarTexture
     overAbsorbOverlay fullHealthAbsorbStripe absorbBarOpacity healAbsorbBarOpacity barOutlineThickness barOutlineLayer barOutlineStrata barOutlineTexture highlightBorderThickness hlAggroSize
-    aggroOutlineMode dispelOutlineMode dispelBorderTrigger unitDispelOverlayEnabled unitDispelOverlayStyle
-    unitDispelOverlayOnHealth unitDispelOverlayAlpha unitDispelOverlayTrigger
+    aggroOutlineMode dispelOutlineMode dispelBorderTrigger
     purgeOutlineMode hlPrioEnabled hlPrioOrder enableGradient enablePowerGradient gradientStrength
     gradientDirection gradientDirRight gradientDirLeft gradientDirUp gradientDirDown powerSmoothFill
     barOutlineColorR barOutlineColorG barOutlineColorB barOutlineColorA
@@ -1533,6 +1599,8 @@ local function ApplyAfterPageReset(pageKey, info)
             not (type(general) == "table" and general.dominosEditModeIntegration == false))
         CallGlobal("MSUF_DandersEditMode_SetEnabled",
             not (type(general) == "table" and general.dandersEditModeIntegration == false))
+        CallGlobal("MSUF_BlizzardEditMode_SetEnabled",
+            not (type(general) == "table" and general.blizzardEditModeIntegration == false))
     end
     -- Page reset fanout is intentionally keyed by page kind so a unit reset does not rebuild
     -- secure group headers or Auras3 lanes unnecessarily.

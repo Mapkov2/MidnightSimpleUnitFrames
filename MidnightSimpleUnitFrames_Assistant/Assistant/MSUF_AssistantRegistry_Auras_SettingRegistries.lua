@@ -51,6 +51,8 @@ function A.AurasRegistry.InstallSettingRegistries(ctx)
             AuraSharedTable = SharedStateHelpers.AuraSharedTable,
             AuraSharedBool = C.AuraSharedBool,
             SetAuraSharedBool = C.SetAuraSharedBool,
+            AuraFiltersEnabled = C.AuraFiltersEnabled,
+            AuraSetFiltersEnabled = C.AuraSetFiltersEnabled,
             AuraScopeFromArg = AliasHelpers.AuraScopeFromArg,
             ApplyAura = C.ApplyAura,
         })
@@ -60,6 +62,7 @@ function A.AurasRegistry.InstallSettingRegistries(ctx)
     if type(RegisterAuraSharedSettings) == "function" then
         RegisterAuraSharedSettings({
             Registry = Registry,
+            AuraModel = C.AuraModel,
             AURA_UNITS = Data.AURA_UNITS,
             AURA_SCOPE_OVERRIDE_SPECS = Data.AURA_SCOPE_OVERRIDE_SPECS or {},
             AURA_SHARED_BOOLEAN_SPECS = Data.AURA_SHARED_BOOLEAN_SPECS or {},
@@ -80,6 +83,8 @@ function A.AurasRegistry.InstallSettingRegistries(ctx)
             AuraSharedString = SharedStateHelpers.AuraSharedString,
             SetAuraSharedString = SharedStateHelpers.SetAuraSharedString,
             AuraSharedTable = SharedStateHelpers.AuraSharedTable,
+            AuraReadLaneStyleBool = RegistrationHelpers.AuraReadLaneStyleBool,
+            AuraWriteLaneStyleBool = RegistrationHelpers.AuraWriteLaneStyleBool,
             ApplyAura = C.ApplyAura,
             ApplyAuraReminders = SharedStateHelpers.ApplyAuraReminders,
         })
@@ -111,6 +116,8 @@ function A.AurasRegistry.InstallSettingRegistries(ctx)
             AuraWriteNumber = C.AuraWriteNumber,
             AuraReadLanePerRow = C.AuraReadLanePerRow,
             AuraWriteLanePerRow = C.AuraWriteLanePerRow,
+            AuraReadLaneSpacing = RegistrationHelpers.AuraReadLaneSpacing,
+            AuraWriteLaneSpacing = RegistrationHelpers.AuraWriteLaneSpacing,
             AURA_LANE_GROWTH_VALUES = Data.AURA_LANE_GROWTH_VALUES,
             AURA_LANE_GROWTH_ALIASES = Data.AURA_LANE_GROWTH_ALIASES,
             AuraReadLaneGrowthPair = RegistrationHelpers.AuraReadLaneGrowthPair,

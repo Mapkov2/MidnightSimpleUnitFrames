@@ -20,7 +20,7 @@ local unpack = unpack or table.unpack
 local DISPEL_BORDER_121_PTR_DISABLED = false
 local PURGE_BORDER_121_PTR_DISABLED = false
 local DISPEL_PURGE_BORDER_121_PTR_MESSAGE = "Dispel and Purge use native 12.1 AuraContainer detection."
-local UNITFRAME_DISPEL_AURA_WARNING = "No UnitFrame auras: Dispel Border/Overlay need Player/Target/Focus/Boss auras."
+local UNITFRAME_DISPEL_AURA_WARNING = "Dispel Border, Overlay, and Symbol need each UnitFrame's Aura sensor. Enable Buffs or Debuffs on the affected UnitFrame, or turn on its Dispel feature to enable the sensor automatically. Both icon caps may stay at 0."
 local UNITFRAME_DISPEL_AURA_WARNING_COLOR = { 0.90, 0.84, 0.76, 1 }
 local UNITFRAME_DISPEL_AURA_UNITS = { "player", "target", "focus", "boss" }
 local ROUNDED_PREVIEW_MASK_ROOT = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\"
@@ -295,14 +295,41 @@ local function RegisterDragRows(container, path)
     end
     return container
 end
-local function AnyUnitFrameAuraEnabled()
+local function UnitFrameAuraScopeUnits()
+    local scope = CurrentBarsScope()
+    if scope == "shared" then return UNITFRAME_DISPEL_AURA_UNITS end
+    for i = 1, #UNITFRAME_DISPEL_AURA_UNITS do
+        if UNITFRAME_DISPEL_AURA_UNITS[i] == scope then return { scope } end
+    end
+    return nil
+end
+local function UnitFrameAuraSensorMissingForScope()
     local a3 = MSUF and MSUF.MSUF_Auras3
     local model = a3 and a3.MenuModel
-    if not (model and type(model.UnitEnabled) == "function") then return true end
-    for i = 1, #UNITFRAME_DISPEL_AURA_UNITS do
-        if model.UnitEnabled(UNITFRAME_DISPEL_AURA_UNITS[i]) then return true end
+    if not (model and type(model.UnitEnabled) == "function") then return false end
+    local units = UnitFrameAuraScopeUnits()
+    if not units then return false end
+    for i = 1, #units do
+        if model.UnitEnabled(units[i]) ~= true then return true end
     end
     return false
+end
+local function EnsureUnitFrameAuraSensorsForScope()
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    local model = a3 and a3.MenuModel
+    if not (model and type(model.UnitEnabled) == "function" and type(model.SetUnitEnabled) == "function") then return false end
+    local units, changed = UnitFrameAuraScopeUnits(), false
+    if not units then return false end
+    for i = 1, #units do
+        if model.UnitEnabled(units[i]) ~= true then
+            model.SetUnitEnabled(units[i], true)
+            changed = true
+        end
+    end
+    if changed and type(M.ShowStatusFeedback) == "function" then
+        M.ShowStatusFeedback("Aura sensor enabled for Dispel. Buff and Debuff icon caps may stay at 0.", "info", 3.0)
+    end
+    return changed
 end
 -- Scope rules are shared by all page sections. Keeping them outside the page builder
 -- prevents every widget callback from being routed through one giant closure.
@@ -1843,12 +1870,13 @@ local function BuildHighlightSection(ctx, b)
         W.MoveWidget(control, modesFrame, hlLeftX, y, hlLeftW, "LEFT")
         return control
     end
-    local function BindBorderModeDropdown(label, key, defaultValue, reason, y, flag, setter, apply)
+    local function BindBorderModeDropdown(label, key, defaultValue, reason, y, flag, setter, apply, onEnabled)
         return BindHighlightDropdown(label, borderModes, y,
             function() return tonumber(BarScopeGet(key, defaultValue)) or defaultValue end,
             function(v)
                 local value = tonumber(v) or defaultValue
                 BarScopeSet(key, value, reason, true)
+                if value == 1 and onEnabled then onEnabled() end
                 StopBorderTest(flag, setter, value)
                 apply()
             end,
@@ -1865,7 +1893,8 @@ local function BuildHighlightSection(ctx, b)
         end,
         "highlight.aggro.roles")
     local dispelBorder = BindBorderModeDropdown("Dispel border", "dispelOutlineMode", 1, "MSUF2_DISPEL_BORDER", -244,
-        "MSUF_DispelBorderTestMode", "MSUF_SetDispelBorderTestMode", RequestDispelPurgeBorderRuntime)
+        "MSUF_DispelBorderTestMode", "MSUF_SetDispelBorderTestMode", RequestDispelPurgeBorderRuntime,
+        EnsureUnitFrameAuraSensorsForScope)
     local dispelTrigger = BindHighlightDropdown("Dispel border detects", DISPEL_TRIGGERS, -298,
         function() return NormalizeDispelTrigger(BarScopeGet("dispelBorderTrigger", "DISPEL_TYPE")) end,
         function(v)
@@ -1972,7 +2001,9 @@ local function BuildHighlightSection(ctx, b)
         SetControlEnabled(purgeTest, scopedActive and purgeSupported and purgeOn and not PURGE_BORDER_121_PTR_DISABLED)
         SetControlEnabled(bossTargetTest, sharedActive and bossTargetOn)
         if dispelPurgePtrHint and dispelPurgePtrHint.SetShown then dispelPurgePtrHint:SetShown(PURGE_BORDER_121_PTR_DISABLED) end
-        if unitAuraDispelHint and unitAuraDispelHint.SetShown then unitAuraDispelHint:SetShown((not GroupScope()) and not AnyUnitFrameAuraEnabled()) end
+        if unitAuraDispelHint and unitAuraDispelHint.SetShown then
+            unitAuraDispelHint:SetShown((not GroupScope()) and dispelOn and UnitFrameAuraSensorMissingForScope())
+        end
         local hintColor = sharedActive and T.colors.dim or T.colors.muted
         bossSharedHint:SetTextColor(hintColor[1], hintColor[2], hintColor[3], sharedActive and 0.75 or 1)
     end)

@@ -66,6 +66,7 @@ State\MSUF_Changelog.lua
 State\MSUF_Defaults.lua
 Runtime\MSUF_NumberFormat.lua
 State\MSUF_Profiles.lua
+Game\Classic\MSUF_ProfilePolicy.lua
 Shell\UI\MSUF_Style.lua
 Kernel\MSUF_Modules.lua
 Kernel\MSUF_EventBus.lua

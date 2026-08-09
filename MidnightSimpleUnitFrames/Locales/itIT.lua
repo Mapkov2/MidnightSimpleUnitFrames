@@ -750,7 +750,6 @@ local MSUF2_HELPER_itIT = {
     ["Buff Growth"] = "Crescita potenziata",
     ["Buff wrap rows"] = "Righe avvolgenti",
     ["buffs"] = "appassionati",
-    ["buffs block click casting"] = "i buff bloccano il click casting",
     ["Buffs Right / Debuffs Left"] = "Buff a destra/Debuff a sinistra",
     ["Buffs Top / Debuffs Bottom"] = "Buff in alto/Debuff in basso",
     ["By Power Type"] = "Per tipo di alimentazione",
@@ -782,8 +781,6 @@ local MSUF2_HELPER_itIT = {
     ["click casting"] = "fare clic su trasmissione",
     ["click through"] = "fare clic",
     ["Click-through (ALT to drag when unlocked)"] = "Click-through (ALT per trascinare quando sbloccato)",
-    ["click-through auras"] = "aure cliccabili",
-    ["Click-through auras"] = "Aure cliccabili",
     ["clickcast"] = "clickcast",
     ["clickthrough"] = "clic",
     ["Color aura timers by remaining time"] = "Colora i timer dell'aura in base al tempo rimanente",
@@ -995,7 +992,6 @@ local MSUF2_HELPER_itIT = {
     ["How do I change castbars?"] = "Come posso cambiare le castbar?",
     ["How do I change class resources?"] = "Come posso modificare le risorse della classe?",
     ["How do I change click, mouseover, or targeting behavior?"] = "Come posso modificare il comportamento di clic, passaggio del mouse o targeting?",
-    ["How do I change click-casting so aura icons do not block heals?"] = "Come posso modificare il click-casting in modo che le icone dell'aura non blocchino le cure?",
     ["How do I change colors?"] = "Come posso cambiare i colori?",
     ["How do I change dead, offline, AFK, or ready-check indicators?"] = "Come posso modificare gli indicatori di inattività, offline, AFK o ready-check?",
     ["How do I change fonts and text?"] = "Come posso cambiare i caratteri e il testo?",
@@ -1255,7 +1251,6 @@ local MSUF2_HELPER_itIT = {
     ["Runes"] = "Rune",
     ["Runic Power"] = "Potere runico",
     ["Safe"] = "Sicuro",
-    ["Sated threshold"] = "Soglia sazia",
     ["scale"] = "scala",
     ["Separate rows"] = "Righe separate",
     ["Separator"] = "Separatore",
@@ -1291,7 +1286,6 @@ local MSUF2_HELPER_itIT = {
     ["Show resource prediction"] = "Mostra la previsione delle risorse",
     ["Show resource text"] = "Mostra il testo della risorsa",
     ["Show rune time (per rune)"] = "Mostra il tempo delle rune (per runa)",
-    ["Show Sated/Exhaustion"] = "Mostra sazio/Exhaustion",
     ["Show spark (leading edge highlight)"] = "Mostra scintilla (bordo avanzato evidenziato)",
     ["Show stack count"] = "Mostra conteggio stack",
     ["Show Stack Count"] = "Mostra conteggio stack",
@@ -1414,7 +1408,6 @@ local MSUF2_HELPER_itIT = {
     ["Where do I change aggro, threat, dispel, or raid markers?"] = "Dove posso cambiare i segnalini di aggressività, minaccia, dispersione o raid?",
     ["Where do I change aura cooldown text?"] = "Dove posso cambiare il testo del tempo di recupero dell'aura?",
     ["Where do I change castbar spell names or long cast text?"] = "Dove posso modificare i nomi degli incantesimi della barra di lancio o il testo del lancio lungo?",
-    ["Where do I change click-through auras?"] = "Dove posso cambiare le aure click-through?",
     ["Where do I change group health text or power bars?"] = "Dove posso modificare il testo della salute del gruppo o le barre della potenza?",
     ["Where do I change HP, name, or power text position?"] = "Dove posso modificare HP, nome o posizione del testo potente?",
     ["Where do I configure detached power or alternative mana?"] = "Dove configuro il potere distaccato o il mana alternativo?",
@@ -1616,8 +1609,6 @@ local MSUF_LOCALE_COVERAGE_itIT = {
     ["Open Profiles. Check active profile, spec profiles, import/export, and legacy imports. Large imports may need a reload."] = "Apri Profili. Controlla il profilo attivo, i profili delle specifiche, import/export e le importazioni legacy. Le grandi importazioni potrebbero richiedere un ricaricamento.",
     ["Open Target of Target. Use Frame Basics to enable it, Text for labels, and Anchoring/Edit Mode for placement."] = "Apri bersaglio di bersaglio. Utilizza Nozioni di base sui frame per abilitarlo, Testo per le etichette e Modalità ancoraggio/Edit per il posizionamento.",
     ["Open Unit Auras > Caps & Icons. Lower max buffs/debuffs, rows, icon size, and adjust filters."] = "Apri Aure unità > Cappellini e icone. Riduci i potenziamenti massimi/debuffs, le righe, le dimensioni delle icone e regola i filtri.",
-    ["Open Unit Auras > Display for click-through aura behavior, then use Gameplay for click-cast, mouseover, and targeting behavior."] = "Apri Aure unità > Visualizza per il comportamento dell'aura click-through, quindi utilizza Gameplay per il comportamento click-cast, mouseover e targeting.",
-    ["Open Unit Auras > Display for click-through aura behavior. Gameplay contains click-cast and targeting behavior."] = "Apri Aure unità > Visualizza per il comportamento dell'aura click-through. Il gioco contiene comportamenti di click-cast e targeting.",
     ["Open Unit Auras > Text Coloring for timer colors and text sizes. Group aura cooldown style is in Group Frames > Buffs & Debuffs > Cooldown Style."] = "Apri Aure unità > Colorazione testo per i colori del timer e le dimensioni del testo. Lo stile di ricarica dell'aura di gruppo si trova in Frame di gruppo > Buff e debuff > Stile di ricarica.",
     ["Open Unit Auras and use Display plus Caps & Icons for unit-frame aura placement. Buff/debuff icons are configured as aura layout, not moved through MSUF Edit Mode."] = "Apri Aure di unità e utilizza Display plus Caps & Icons per il posizionamento dell'aura nel frame dell'unità. Le icone Buff/debuff sono configurate come layout dell'aura, non spostate attraverso la modalità di modifica MSUF.",
     ["Open Unit Auras for unit-frame aura icon sizing and filters. For group frames, use Group Frames > Buffs & Debuffs and custom buff/debuff controls."] = "Apri Unit Auras per ridimensionare e filtrare le icone dell'aura del frame unitario. Per i frame di gruppo, usa Frame di gruppo > Buff e debuff e controlli buff/debuff personalizzati.",
@@ -2935,7 +2926,7 @@ L["Only relevant sorting methods are shown for buffs and debuffs."] = "Vengono m
 L["Reversed flips the complete priority order."] = "Invertito capovolge l'ordine di priorità completo."
 L["Choose which auras Blizzard provides for this lane."] = "Scegli quali aure Blizzard fornisce per questa corsia."
 L["85% above 15 members · 70% above 25"] = "85% sopra i 15 membri · 70% sopra i 25 membri"
-L["|cffffd700MSUF 6.0 RC13|r · Built for WoW 12.1 PTR."] = "|cffffd700MSUF 6.0 RC13|r · Realizzato per WoW 12.1 PTR."
+L["|cffffd700MSUF 6.0 RC17|r · Built for WoW 12.1 PTR."] = "|cffffd700MSUF 6.0 RC17|r · Realizzato per WoW 12.1 PTR."
 L["|cffffd700Auras|r use Blizzard's native 12.1 system."] = "|cffffd700Auras|r utilizza il sistema 12.1 nativo di Blizzard."
 L["|cff40ff40Thanks for testing!|r Report bugs on Discord or GitHub."] = "|cff40ff40Grazie per il test!|r Segnala bug su Discord o GitHub."
 L["Show auras"] = "Mostra le aure"
@@ -3281,7 +3272,7 @@ L["No nameplate cast events are registered while disabled."] = "Nessun evento ca
 L["No public aura category data is loaded."] = "Non sono stati caricati dati relativi alla categoria dell'aura pubblica."
 L["No spells tracked. Add up to 40 exact SpellIDs."] = "Nessun incantesimo tracciato. Aggiungi fino a 40 SpellID esatti."
 L["Normal"] = "Normale"
-L["On previews every enabled spell for this spec. Off previews only the selected spell."] = "Su vengono visualizzate le anteprime di ogni incantesimo abilitato per questa specifica. Disattivato visualizza in anteprima solo l'incantesimo selezionato."
+L["On previews every enabled spell of every tracked spec, including spells that only draw a frame effect. Off previews only the selected spell."] = "Attivo mostra l'anteprima di ogni incantesimo abilitato di tutte le specializzazioni tracciate, inclusi gli incantesimi che disegnano solo un effetto cornice. Disattivato mostra in anteprima solo l'incantesimo selezionato."
 L["Opacity remains beside the setting when that element supports it."] = "L'opacità rimane accanto all'impostazione quando quell'elemento la supporta."
 L["Open Aura Style"] = "Apri lo stile Aura"
 L["Open Bars"] = "Bar aperti"
@@ -3955,6 +3946,8 @@ L["Icon Shadow Color"] = "Colore dell'ombra dell'icona"
 
 --- Aura icon border style + per-scope icon styling (6.0 Beta 29)
 L["Border Style"] = "Stile bordo"
+L["Castbar border color"] = "Colore del bordo della barra di lancio"
+L["Dark"] = "Scuro"
 L["Icon border style"] = "Stile del bordo dell'icona"
 L["Use icon border & shadow on %s frames"] = "Usa bordo e ombra icona sui riquadri %s"
 L["Icon border and shadow on this scope"] = "Bordo e ombra dell'icona in questo ambito"
@@ -4803,8 +4796,6 @@ L["Open a unit page, then use Range Fade. It is available for Target, Target of 
 L["Open the affected UnitFrame > Auras for icon size, placement, and filters. Use Appearance > Auras for scope-aware text and cooldown styling."] = "Apri il UnitFrame interessato > Aure per dimensione dell'icona, posizione e filtri. Usa Aspetto > Aure per il testo e lo stile di recupero legati all'ambito."
 L["Open the affected UnitFrame > Auras or Group Frames > Auras and reduce visible counts, timer text, or unnecessary native filter rules."] = "Apri il UnitFrame interessato > Aure oppure Frame gruppo/raid > Aure e riduci il numero di aure visibili, il testo dei timer o le regole di filtro native non necessarie."
 L["Open the affected UnitFrame > Auras, choose Buffs or Debuffs, then adjust filters, icon size, rows, caps, and spacing. Party/Raid settings are in Group Frames > Auras."] = "Apri il UnitFrame interessato > Aure, scegli Buff o Debuff, poi regola filtri, dimensione delle icone, righe, limiti e spaziatura. Le impostazioni per gruppo e incursione sono in Frame gruppo/raid > Aure."
-L["Open the relevant unit page > Auras for click-through aura behavior, then use Gameplay for click-cast, mouseover, and targeting behavior."] = "Apri la pagina unità pertinente > Aure per il comportamento di clic attraverso le aure, poi usa Giocabilità per clic-lancio, passaggio del mouse e comportamento di bersagliamento."
-L["Open the unit page > Auras for click-through aura behavior. Gameplay contains click-cast and targeting behavior."] = "Apri la pagina unità > Aure per il comportamento di clic attraverso le aure. Giocabilità contiene clic-lancio e comportamento di bersagliamento."
 L["Open the unit page > Auras or the aura Position Popup for unit-frame aura placement. Buff/debuff icons are configured as aura layout, not moved through MSUF Edit Mode."] = "Apri la pagina unità > Aure oppure la finestra di posizione delle aure per collocare le aure del riquadro unità. Le icone di buff e debuff si configurano come disposizione delle aure e non si spostano con la Modalità modifica di MSUF."
 L["Range Fade group frame range check raid range check party range check out of range alpha offline opacity affects frame HP"] = "Dissolvenza per distanza riquadro di gruppo controllo portata incursione gruppo fuori portata alfa opacità offline interessa riquadro salute"
 L["Range Fade unit frame range check range checker distance check out of range range alpha distance fade target targettarget focus focustarget pet boss"] = "Dissolvenza per distanza riquadro unità controllo portata controllo distanza fuori portata alfa di portata bersaglio bersaglio del bersaglio focus bersaglio del focus famiglio boss"
@@ -4935,6 +4926,24 @@ L["Columns"] = "Colonne"
 L["Padding"] = "Margine interno"
 L["Faded opacity"] = "Opacità attenuata"
 L["Click through"] = "Clic attraverso"
+
+-- Menu localization pass 2026-08-07 (part 5): Blizzard Edit Mode integration.
+L["Show Blizzard frames in MSUF Edit Mode"] = "Mostra i riquadri Blizzard nella Modalità modifica di MSUF"
+L["Blizzard Edit Mode integration"] = "Integrazione con la Modalità modifica di Blizzard"
+L["On (default): MSUF Edit Mode can move the Blizzard Minimap, Chat, Micro Menu and Tooltip through the game's own Edit Mode layout. If a Blizzard preset is active, selecting an element creates and activates a saved 'MSUF' layout automatically."] = "Attivo (predefinito): la Modalità modifica di MSUF può spostare minimappa, chat, micromenu e tooltip di Blizzard tramite la disposizione della Modalità modifica del gioco. Se è attiva una preimpostazione Blizzard, selezionare un elemento crea e attiva automaticamente una disposizione salvata 'MSUF'."
+
+-- Menu localization pass 2026-08-08 (part 2): Blizzard Edit Mode profile opt-in.
+L["Include Blizzard Edit Mode layout"] = "Includi disposizione della Modalità modifica Blizzard"
+L["Off (default): profile strings never carry or change the Blizzard Edit Mode arrangement. On: full-profile exports include it and imports apply it."] = "Disattivato (predefinito): le stringhe profilo non contengono né modificano mai la disposizione della Modalità modifica Blizzard. Attivato: le esportazioni del profilo completo la includono e le importazioni la applicano."
+
+-- Menu localization pass 2026-08-08 (part 3): Blizzard layout dialog status line.
+L["All Edit Mode layout slots are full (5 account + 5 character). Delete a layout in Blizzard's Edit Mode, then try again."] = "Tutti gli spazi per le disposizioni della Modalità modifica sono occupati (5 account + 5 personaggio). Elimina una disposizione nella Modalità modifica di Blizzard e riprova."
+L["Layout creation failed:"] = "Creazione della disposizione non riuscita:"
+
+-- Menu localization pass 2026-08-08: Blizzard layout dialog.
+L["Create Edit Mode layout"] = "Crea disposizione della Modalità modifica"
+L["Blizzard presets cannot be edited. Save a copy as a new layout to move and adjust Blizzard frames."] = "Le preimpostazioni Blizzard non possono essere modificate. Salva una copia come nuova disposizione per spostare e regolare i riquadri Blizzard."
+L["Create"] = "Crea"
 
 -- Menu localization pass 2026-08-06 (part 6): pandemic badge format key.
 L["On / %s"] = "Attivo / %s"
