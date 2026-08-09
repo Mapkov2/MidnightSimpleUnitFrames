@@ -150,10 +150,10 @@ local LAYOUT_KEYS = {
     iconSize = true,
     buffIconZoom = true,
     debuffIconZoom = true,
-    buffIconShape = true,
-    debuffIconShape = true,
     stylePadding = true,
     spacing = true,
+    buffSpacing = true,
+    debuffSpacing = true,
     offsetX = true,
     offsetY = true,
     buffGroupOffsetX = true,
@@ -174,7 +174,6 @@ local LAYOUT_KEYS = {
     cooldownTextSize = true,
     cooldownTextOffsetX = true,
     cooldownTextOffsetY = true,
-    cooldownDecimalSeconds = true,
     durationBarHeight = true,
     buffStackTextSize = true,
     buffStackTextOffsetX = true,
@@ -182,7 +181,6 @@ local LAYOUT_KEYS = {
     buffCooldownTextSize = true,
     buffCooldownTextOffsetX = true,
     buffCooldownTextOffsetY = true,
-    buffCooldownDecimalSeconds = true,
     buffDurationBarHeight = true,
     debuffStackTextSize = true,
     debuffStackTextOffsetX = true,
@@ -190,11 +188,11 @@ local LAYOUT_KEYS = {
     debuffCooldownTextSize = true,
     debuffCooldownTextOffsetX = true,
     debuffCooldownTextOffsetY = true,
-    debuffCooldownDecimalSeconds = true,
     debuffDurationBarHeight = true,
 }
 
-local STYLE_LAYOUT_KEYS = {
+local STYLE_LAYOUT_KEYS = A3.UnitStyleLayoutKeys or {
+    iconZoom = true,
     buffIconZoom = true,
     debuffIconZoom = true,
     stylePadding = true,
@@ -204,7 +202,6 @@ local STYLE_LAYOUT_KEYS = {
     cooldownTextSize = true,
     cooldownTextOffsetX = true,
     cooldownTextOffsetY = true,
-    cooldownDecimalSeconds = true,
     durationBarHeight = true,
     buffStackTextSize = true,
     buffStackTextOffsetX = true,
@@ -212,7 +209,6 @@ local STYLE_LAYOUT_KEYS = {
     buffCooldownTextSize = true,
     buffCooldownTextOffsetX = true,
     buffCooldownTextOffsetY = true,
-    buffCooldownDecimalSeconds = true,
     buffDurationBarHeight = true,
     debuffStackTextSize = true,
     debuffStackTextOffsetX = true,
@@ -220,7 +216,6 @@ local STYLE_LAYOUT_KEYS = {
     debuffCooldownTextSize = true,
     debuffCooldownTextOffsetX = true,
     debuffCooldownTextOffsetY = true,
-    debuffCooldownDecimalSeconds = true,
     debuffDurationBarHeight = true,
 }
 
@@ -228,6 +223,8 @@ local SHARED_LAYOUT_KEYS = {
     showTooltip = true,
     showCooldownSwipe = true,
     cooldownSwipeReverse = true,
+    sortMethod = true,
+    sortReverse = true,
     showDurationBar = true,
     durationBarDisplay = true,
     durationBarPosition = true,
@@ -235,6 +232,7 @@ local SHARED_LAYOUT_KEYS = {
     showCooldownText = true,
     showStackCount = true,
     debuffTypeBorderMode = true,
+    dispelBorderMode = true,
     useDebuffTypeBorders = true,
     buffShowCooldownSwipe = true,
     buffCooldownSwipeReverse = true,
@@ -294,10 +292,12 @@ local SHARED_LAYOUT_KEYS = {
     debuffFrameEffectStrata = true,
 }
 
-local STYLE_SHARED_LAYOUT_KEYS = {
+local STYLE_SHARED_LAYOUT_KEYS = A3.UnitStyleSharedLayoutKeys or {
     showTooltip = true,
     showCooldownSwipe = true,
     cooldownSwipeReverse = true,
+    sortMethod = true,
+    sortReverse = true,
     showDurationBar = true,
     durationBarDisplay = true,
     durationBarPosition = true,
@@ -305,6 +305,7 @@ local STYLE_SHARED_LAYOUT_KEYS = {
     showCooldownText = true,
     showStackCount = true,
     debuffTypeBorderMode = true,
+    dispelBorderMode = true,
     useDebuffTypeBorders = true,
     buffShowCooldownSwipe = true,
     buffCooldownSwipeReverse = true,
@@ -353,7 +354,7 @@ local STYLE_SHARED_LAYOUT_KEYS = {
     debuffFrameEffectStrata = true,
 }
 
-local GROUPS = {
+local GROUPS = A3.UnitLaneSpecs or {
     buff = {
         showKey = "showBuffs",
         maxKey = "maxBuffs",
@@ -387,6 +388,32 @@ local GROUPS = {
         defaultLayer = 6,
     },
 }
+
+-- Lane geometry/cap ownership is declared by GROUPS. Derive the routing maps
+-- from that schema as well, so adding a lane-specific key cannot silently make
+-- the menu write Shared while the runtime reads the unit scope (the gap bug).
+local LANE_LAYOUT_FIELDS = A3.UnitLaneLayoutFields
+    or { "xKey", "yKey", "sizeKey", "anchorKey", "layerKey", "strataKey", "spacingKey" }
+local LANE_SHARED_LAYOUT_FIELDS = A3.UnitLaneSharedLayoutFields
+    or { "maxKey", "perRowKey", "growthKey", "wrapKey" }
+local SCOPE_MATERIALIZED_LAYOUT_KEYS = {}
+for key in pairs(STYLE_LAYOUT_KEYS) do LAYOUT_KEYS[key] = true end
+for key in pairs(STYLE_SHARED_LAYOUT_KEYS) do SHARED_LAYOUT_KEYS[key] = true end
+for _, spec in pairs(GROUPS) do
+    for _, field in ipairs(LANE_LAYOUT_FIELDS) do
+        local key = spec[field]
+        if key then LAYOUT_KEYS[key] = true end
+    end
+    for _, field in ipairs(LANE_SHARED_LAYOUT_FIELDS) do
+        local key = spec[field]
+        if key then SHARED_LAYOUT_KEYS[key] = true end
+    end
+    if spec.spacingKey then SCOPE_MATERIALIZED_LAYOUT_KEYS[spec.spacingKey] = true end
+end
+for key in pairs(LAYOUT_KEYS) do
+    assert(SHARED_LAYOUT_KEYS[key] ~= true,
+        "MSUF Auras3 key has conflicting layout ownership: " .. tostring(key))
+end
 
 local LANE_STYLE_KEYS = {
     buff = {
@@ -503,7 +530,6 @@ local DEFAULT_SHARED = {
     debuffFrameEffectThickness = 2,
     debuffFrameEffectLayer = 0,
     debuffFrameEffectStrata = "AUTO",
-    clickThroughAuras = false,
     iconSize = 26,
     iconZoom = 100,
     buffIconZoom = 100,
@@ -1292,12 +1318,27 @@ function Model.EnsureDB()
     -- frame participation and shape-follow switches from upgraded profiles.
     shared.styleScopeDisabled = nil
     shared.iconShapeFollowSharedScopes = nil
-    DefaultsIntoOnce(shared, DEFAULT_SHARED)
-    if shared._msufA3_debuffTypeBorderModeMigrated_v1 ~= true then
+    local canonicalAuraModel = tonumber(auras.profileModelRevision) == 1
+    if canonicalAuraModel then
+        -- The Defaults-owned factory is deliberately sparse and authoritative.
+        -- Runtime/Menu readers already provide fallbacks, so do not densify a
+        -- freshly reset tree with compatibility aliases merely by opening UI.
+        if type(shared.filters) ~= "table" then
+            shared.filters = DeepCopy(DEFAULT_SHARED.filters)
+        end
+    else
+        DefaultsIntoOnce(shared, DEFAULT_SHARED)
+    end
+    -- The canonical profile model is already normalized.  Never seed legacy
+    -- migration markers back into a freshly hard-reset Aura tree.
+    if tonumber(auras.profileModelRevision) ~= 1
+        and shared._msufA3_debuffTypeBorderModeMigrated_v1 ~= true then
         shared.debuffTypeBorderMode = shared.useDebuffTypeBorders == true and "SYMBOL" or NormalizeDebuffTypeBorderMode(shared.debuffTypeBorderMode, "OFF")
         shared._msufA3_debuffTypeBorderModeMigrated_v1 = true
     end
-    NormalizeSparseVisualOverrides(auras, shared)
+    if not canonicalAuraModel then
+        NormalizeSparseVisualOverrides(auras, shared)
+    end
     return auras, shared
 end
 
@@ -1434,7 +1475,9 @@ end
 local function ClearInheritedBasicLayoutKeys(layout, shared, keys, styleKeys)
     if type(keys) ~= "table" then return end
     for key in pairs(keys) do
-        if not (styleKeys and styleKeys[key]) then ClearInheritedLayoutKey(layout, shared, key) end
+        if not SCOPE_MATERIALIZED_LAYOUT_KEYS[key] and not (styleKeys and styleKeys[key]) then
+            ClearInheritedLayoutKey(layout, shared, key)
+        end
     end
 end
 
@@ -1460,9 +1503,6 @@ local function ReadKeyRaw(auras, shared, unit, key)
     if LAYOUT_KEYS[key] then
         if layout and layout[key] ~= nil and (not STYLE_LAYOUT_KEYS[key] or styleActive) then return layout[key] end
     end
-    -- Keys in both sets (the cooldown decimal trio) are written to layoutShared
-    -- by WriteUnitLayoutValue, so a layout miss must still consult it; layout
-    -- keeps precedence to match the runtime's effective-table resolution.
     if SHARED_LAYOUT_KEYS[key] then
         if sharedLayout and sharedLayout[key] ~= nil and (not STYLE_SHARED_LAYOUT_KEYS[key] or styleActive) then return sharedLayout[key] end
     end
@@ -1473,12 +1513,26 @@ local function WriteUnitLayoutValue(auras, shared, unit, key, value)
     EachRuntimeUnit(unit, function(runtimeUnit)
         local pu = PerUnit(auras, runtimeUnit, true)
         if not pu then return end
+        local styleKey = STYLE_LAYOUT_KEYS[key] == true or STYLE_SHARED_LAYOUT_KEYS[key] == true
+        if styleKey and pu.overrideStyle ~= true then
+            -- Visual sharing is independent from layout ownership. A unit can
+            -- keep custom geometry while all old Style fields are dormant; the
+            -- first Style edit must not reactivate the rest of that stale set.
+            ClearKeys(pu.layout, STYLE_LAYOUT_KEYS)
+            ClearKeys(pu.layoutShared, STYLE_SHARED_LAYOUT_KEYS)
+            pu.overrideStyle = true
+        end
         if SHARED_LAYOUT_KEYS[key] then
+            -- A disabled override table is dormant state, not an inheritance
+            -- source. Starting a new custom edit from it would reactivate old
+            -- unrelated values that were invisible while Shared was active.
+            if pu.overrideSharedLayout ~= true then pu.layoutShared = {} end
             if type(pu.layoutShared) ~= "table" then pu.layoutShared = {} end
             pu.overrideSharedLayout = true
             pu.layoutShared[key] = value
             if STYLE_SHARED_LAYOUT_KEYS[key] then pu.overrideStyle = true end
         else
+            if pu.overrideLayout ~= true then pu.layout = {} end
             if type(pu.layout) ~= "table" then pu.layout = {} end
             pu.overrideLayout = true
             pu.layout[key] = value
@@ -1688,6 +1742,10 @@ local function EnsureUnitStyleOverrides(auras, runtimeUnit)
     if not pu then return end
     pu.layout = type(pu.layout) == "table" and pu.layout or {}
     pu.layoutShared = type(pu.layoutShared) == "table" and pu.layoutShared or {}
+    if pu.overrideStyle ~= true then
+        ClearKeys(pu.layout, STYLE_LAYOUT_KEYS)
+        ClearKeys(pu.layoutShared, STYLE_SHARED_LAYOUT_KEYS)
+    end
     pu.overrideStyle = true
 end
 
@@ -1785,11 +1843,9 @@ function Model.WriteLanePerRow(unit, kind, value)
     Model.WriteNumber(unit, spec and spec.perRowKey or "perRow", value, 1, 40)
 end
 
---- The runtime has always read `buffSpacing`/`debuffSpacing` with the shared
---- `spacing` as its fallback, but nothing ever wrote the lane keys, so the menu
---- Gap slider drove both lanes off the one shared key. Reading through the same
---- fallback keeps every existing profile on the value it already shows; the
---- first write of either lane is what splits them apart.
+--- Lane gaps are layout-owned exactly like the legacy common `spacing` value.
+--- The canonical profile writes both lane keys; the common value remains only
+--- as a defensive fallback for sparse or manually edited current payloads.
 function Model.ReadLaneSpacing(unit, kind)
     kind = NormalizeKind(kind)
     local spec = GROUPS[kind]
@@ -2234,7 +2290,33 @@ Model.CustomContainerStylePlacedKeys = Model.CustomContainerStylePlacedKeys or {
     pandemicBorderAlpha = true,
     pandemicTintAlpha = true,
     pandemicBlend = true,
+    sortMethod = true,
+    sortReverse = true,
 }
+
+--- Custom-4 represents two different products: Player Defensive buffs on
+--- Player and Target DoTs everywhere else. Their common presentation can be
+--- copied, but these destination-only controls have no compatible value on the
+--- opposite product. Preserve them instead of clearing them to defaults (or
+--- importing a sort method from the wrong helpful/harmful domain).
+local INCOMPATIBLE_CUSTOM4_DESTINATION_STYLE_KEYS = {
+    debuffTypeBorderMode = true,
+    sortMethod = true,
+    sortReverse = true,
+    pandemicEnabled = true,
+    pandemicStyle = true,
+    pandemicColor = true,
+    pandemicThickness = true,
+    pandemicPadding = true,
+    pandemicBorderAlpha = true,
+    pandemicTintAlpha = true,
+    pandemicBlend = true,
+}
+
+local function CustomContainerStyleProduct(unit, index)
+    if index ~= PLAYER_DEFENSIVE_CONTAINER_INDEX then return nil end
+    return NormalizeUnit(unit) == "player" and "playerDefensives" or "targetDots"
+end
 
 --- Older builds stored Custom-4 presentation in one global specialStyles
 --- record.  Materialize that last effective look into every owning frame once,
@@ -2291,6 +2373,7 @@ function Model.CaptureUnitStyle(unit)
         local item = Model.CustomContainer(unit, index, true)
         local placed = type(item) == "table" and type(item.placed) == "table" and item.placed or nil
         snapshot.custom[index] = {
+            product = CustomContainerStyleProduct(unit, index),
             placed = SelectedCopy(placed, Model.CustomContainerStylePlacedKeys),
             frame = type(item) == "table" and type(item.frame) == "table" and DeepCopy(item.frame) or nil,
         }
@@ -2326,8 +2409,24 @@ function Model.ApplyUnitStyleSnapshot(destinationUnit, snapshot)
         local sourceStyle = type(snapshot.custom) == "table" and snapshot.custom[index] or nil
         if destinationItem and type(sourceStyle) == "table" then
             destinationItem.placed = type(destinationItem.placed) == "table" and destinationItem.placed or {}
+            local destinationProduct = CustomContainerStyleProduct(destinationUnit, index)
+            local preserveDestinationProductStyle = sourceStyle.product ~= nil
+                and destinationProduct ~= nil
+                and sourceStyle.product ~= destinationProduct
+            local destinationProductStyle
+            if preserveDestinationProductStyle then
+                destinationProductStyle = SelectedCopy(
+                    destinationItem.placed, INCOMPATIBLE_CUSTOM4_DESTINATION_STYLE_KEYS)
+            end
             ClearKeys(destinationItem.placed, Model.CustomContainerStylePlacedKeys)
             for key, value in pairs(sourceStyle.placed or {}) do destinationItem.placed[key] = DeepCopy(value) end
+            if preserveDestinationProductStyle then
+                -- Iterate the complete schema so an absent destination value
+                -- also removes an incompatible source-only value.
+                for key in pairs(INCOMPATIBLE_CUSTOM4_DESTINATION_STYLE_KEYS) do
+                    destinationItem.placed[key] = DeepCopy(destinationProductStyle[key])
+                end
+            end
             destinationItem.frame = type(sourceStyle.frame) == "table" and DeepCopy(sourceStyle.frame) or nil
             destinationItem._msufA3LocalStyleFromShared_v1 = true
             -- Re-apply the product invariants without replacing copied Style.
@@ -2695,10 +2794,28 @@ local function LaneStyleKey(kind, key)
     return map and map[key] or key
 end
 
-function Model.ReadLaneStyleBool(unit, kind, key, defaultValue)
+local function ReadLaneStyleRaw(unit, kind, key)
+    local auras, shared = Model.EnsureDB()
+    if type(shared) ~= "table" then return nil end
     local laneKey = LaneStyleKey(kind, key)
-    local value = Model.ReadValue(unit, laneKey, nil)
-    if value == nil and laneKey ~= key then value = Model.ReadValue(unit, key, defaultValue and true or false) end
+    if NormalizeScope(unit) ~= "shared" then
+        local layout, sharedLayout, pu = EffectiveLayoutTables(auras, unit)
+        if UnitStyleOverrideActive(pu) then
+            local localOwner = STYLE_SHARED_LAYOUT_KEYS[laneKey] and sharedLayout or layout
+            if type(localOwner) == "table" then
+                local value = localOwner[laneKey]
+                if value == nil and laneKey ~= key then value = localOwner[key] end
+                if value ~= nil then return value end
+            end
+        end
+    end
+    local value = shared[laneKey]
+    if value == nil and laneKey ~= key then value = shared[key] end
+    return value
+end
+
+function Model.ReadLaneStyleBool(unit, kind, key, defaultValue)
+    local value = ReadLaneStyleRaw(unit, kind, key)
     if value == nil then return defaultValue and true or false end
     return value == true
 end
@@ -2708,17 +2825,15 @@ function Model.WriteLaneStyleBool(unit, kind, key, value)
 end
 
 function Model.ReadLaneStyleString(unit, kind, key, defaultValue)
-    if NormalizeScope(unit) == "shared" and key == "iconShape" then
+    if key == "iconShape" then
         return Model.ReadSharedAppearanceIconShape(kind)
     end
-    local laneKey = LaneStyleKey(kind, key)
-    local value = Model.ReadValue(unit, laneKey, nil)
-    if value == nil and laneKey ~= key then value = Model.ReadValue(unit, key, defaultValue) end
+    local value = ReadLaneStyleRaw(unit, kind, key)
     return tostring(value or defaultValue or "")
 end
 
 function Model.WriteLaneStyleString(unit, kind, key, value)
-    if NormalizeScope(unit) == "shared" and key == "iconShape" then
+    if key == "iconShape" then
         Model.WriteSharedAppearanceIconShape(kind, value)
         return
     end
@@ -2731,8 +2846,10 @@ function Model.ReadDebuffTypeBorderMode(unit)
     if NormalizeScope(unit) ~= "shared" then
         local _, sharedLayout, pu = EffectiveLayoutTables(auras, unit)
         if UnitStyleOverrideActive(pu) and type(sharedLayout) == "table" then
-            if sharedLayout.debuffTypeBorderMode ~= nil then
-                local mode = NormalizeDebuffTypeBorderMode(sharedLayout.debuffTypeBorderMode, "OFF")
+            local storedMode = sharedLayout.debuffTypeBorderMode
+            if storedMode == nil then storedMode = sharedLayout.dispelBorderMode end
+            if storedMode ~= nil then
+                local mode = NormalizeDebuffTypeBorderMode(storedMode, "OFF")
                 return (mode == "OFF" and sharedLayout.useDebuffTypeBorders == true) and "SYMBOL" or mode
             end
             if sharedLayout.useDebuffTypeBorders ~= nil then
@@ -2740,8 +2857,10 @@ function Model.ReadDebuffTypeBorderMode(unit)
             end
         end
     end
-    if shared.debuffTypeBorderMode ~= nil then
-        local mode = NormalizeDebuffTypeBorderMode(shared.debuffTypeBorderMode, "OFF")
+    local storedMode = shared.debuffTypeBorderMode
+    if storedMode == nil then storedMode = shared.dispelBorderMode end
+    if storedMode ~= nil then
+        local mode = NormalizeDebuffTypeBorderMode(storedMode, "OFF")
         return (mode == "OFF" and shared.useDebuffTypeBorders == true) and "SYMBOL" or mode
     end
     return shared.useDebuffTypeBorders == true and "SYMBOL" or "OFF"
@@ -2754,9 +2873,7 @@ function Model.WriteDebuffTypeBorderMode(unit, value)
 end
 
 function Model.ReadLaneStyleNumber(unit, kind, key, defaultValue, minValue, maxValue)
-    local laneKey = LaneStyleKey(kind, key)
-    local value = Model.ReadValue(unit, laneKey, nil)
-    if value == nil and laneKey ~= key then value = Model.ReadValue(unit, key, defaultValue) end
+    local value = ReadLaneStyleRaw(unit, kind, key)
     return ClampNumber(value, defaultValue, minValue, maxValue)
 end
 
@@ -2767,8 +2884,7 @@ function Model.WriteLaneStyleNumber(unit, kind, key, value, minValue, maxValue)
 end
 
 function Model.ReadLaneStackAnchor(unit, kind)
-    local laneKey = LaneStyleKey(kind, "stackCountAnchor")
-    local value = tostring(Model.ReadValue(unit, laneKey, nil) or Model.ReadValue(unit, "stackCountAnchor", "TOPRIGHT") or "TOPRIGHT")
+    local value = tostring(ReadLaneStyleRaw(unit, kind, "stackCountAnchor") or "TOPRIGHT")
     return STACK_ANCHOR_OK[value] and value or "TOPRIGHT"
 end
 
@@ -2788,10 +2904,7 @@ function Model.WriteCooldownAnchor(unit, value)
 end
 
 function Model.ReadLaneCooldownAnchor(unit, kind)
-    local laneKey = LaneStyleKey(kind, "cooldownTextAnchor")
-    local value = tostring(Model.ReadValue(unit, laneKey, nil) or "")
-    if AURA_ANCHOR_OK[value] then return value end
-    value = tostring(Model.ReadValue(unit, "cooldownTextAnchor", "CENTER") or "CENTER")
+    local value = tostring(ReadLaneStyleRaw(unit, kind, "cooldownTextAnchor") or "CENTER")
     return AURA_ANCHOR_OK[value] and value or "CENTER"
 end
 
@@ -2818,9 +2931,7 @@ local function NormalizeDurationBarDisplay(value, fallback)
 end
 
 function Model.ReadLaneDurationBarPosition(unit, kind)
-    local laneKey = LaneStyleKey(kind, "durationBarPosition")
-    local value = Model.ReadValue(unit, laneKey, nil)
-    if value == nil and laneKey ~= "durationBarPosition" then value = Model.ReadValue(unit, "durationBarPosition", "BOTTOM") end
+    local value = ReadLaneStyleRaw(unit, kind, "durationBarPosition")
     return NormalizeDurationBarPosition(value, "BOTTOM")
 end
 
@@ -2829,9 +2940,7 @@ function Model.WriteLaneDurationBarPosition(unit, kind, value)
 end
 
 function Model.ReadLaneDurationBarDirection(unit, kind)
-    local laneKey = LaneStyleKey(kind, "durationBarDirection")
-    local value = Model.ReadValue(unit, laneKey, nil)
-    if value == nil and laneKey ~= "durationBarDirection" then value = Model.ReadValue(unit, "durationBarDirection", "REMAINING") end
+    local value = ReadLaneStyleRaw(unit, kind, "durationBarDirection")
     return NormalizeDurationBarDirection(value, "REMAINING")
 end
 
@@ -2840,9 +2949,7 @@ function Model.WriteLaneDurationBarDirection(unit, kind, value)
 end
 
 function Model.ReadLaneDurationBarDisplay(unit, kind)
-    local laneKey = LaneStyleKey(kind, "durationBarDisplay")
-    local value = Model.ReadValue(unit, laneKey, nil)
-    if value == nil and laneKey ~= "durationBarDisplay" then value = Model.ReadValue(unit, "durationBarDisplay", "BAR_ONLY") end
+    local value = ReadLaneStyleRaw(unit, kind, "durationBarDisplay")
     return NormalizeDurationBarDisplay(value, "BAR_ONLY")
 end
 
@@ -2889,6 +2996,9 @@ local function EnsureScopeFilters(scope, create)
     local pu = PerUnit(auras, unit, create)
     if not pu then return shared.filters end
     if create then
+        if pu.overrideFilters ~= true then
+            pu.filters = DeepCopy(shared.filters or DEFAULT_SHARED.filters)
+        end
         pu.overrideFilters = true
         if type(pu.filters) ~= "table" then pu.filters = DeepCopy(shared.filters or DEFAULT_SHARED.filters) end
         DefaultsIntoOnce(pu.filters, DEFAULT_SHARED.filters)
@@ -2972,6 +3082,9 @@ function Model.SetScopeFiltersEnabled(scope, enabled)
             if NormalizeScope(scope) == "shared" and type(shared) == "table" then
                 if snap.onlyMyBuffs ~= nil then shared.onlyMyBuffs = snap.onlyMyBuffs end
                 if snap.onlyMyDebuffs ~= nil then shared.onlyMyDebuffs = snap.onlyMyDebuffs end
+            end
+            if snap.hidePermanent ~= nil then
+                filters.hidePermanent = snap.hidePermanent == true
             end
             filters.disabledSnapshot = nil
         end
@@ -3834,8 +3947,14 @@ function Model.Apply(unit, reason)
         return false
     end
     local function Refresh(runtimeUnit)
-        if type(A3.UpdateUnitAnchor) == "function" then A3.UpdateUnitAnchor(runtimeUnit) end
-        if type(A3.RefreshUnit) == "function" then A3.RefreshUnit(runtimeUnit) end
+        -- RefreshUnit owns both the runtime lane and its Edit Mode follower.
+        -- UpdateUnitAnchor is only the preview half of the same operation and
+        -- calling both repaints every dummy twice.
+        if type(A3.RefreshUnit) == "function" then
+            A3.RefreshUnit(runtimeUnit)
+        elseif type(A3.UpdateUnitAnchor) == "function" then
+            A3.UpdateUnitAnchor(runtimeUnit)
+        end
     end
     if unit and IsGroupApplyScope(unit) then
         RefreshGroup(unit)

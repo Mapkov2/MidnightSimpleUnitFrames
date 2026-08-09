@@ -941,7 +941,7 @@ end
 
 local _pvpContextKnown, _pvpContextActive = false, false
 
-local function ComputePVPIndicatorContextActive()
+local function ComputePVPIndicatorContextActive(warModeOverride)
   local instanceType = CurrentInstanceType()
   if instanceType == "pvp" or instanceType == "arena" then
     return true
@@ -949,15 +949,37 @@ local function ComputePVPIndicatorContextActive()
     return false
   end
 
+  -- WAR_MODE_STATUS_UPDATE carries the new desired state. Treat it as the
+  -- authoritative boundary so a still-active deactivation timer cannot keep
+  -- the compiled UF/GF PvP paths warm after War Mode was switched off.
+  if warModeOverride ~= nil then
+    return warModeOverride == true
+  end
+
   local cpvp = _G.C_PvP
   if cpvp then
-    if APIBool(cpvp.IsWarModeActive) or APIBool(cpvp.IsWarModeDesired) then
+    if type(cpvp.IsWarModeDesired) == "function" then
+      if APIBool(cpvp.IsWarModeDesired) then
+        return true
+      end
+      -- During War Mode deactivation, IsWarModeActive/UnitIsPVP and the PvP
+      -- timer may deliberately remain true. Desired=false means this cold
+      -- visibility path must already be disabled; the timer is UI text only.
+      if APIBool(cpvp.IsWarModeActive) or APIBool(IsPVPTimerRunning) then
+        return false
+      end
+    elseif APIBool(cpvp.IsWarModeActive) then
       return true
     end
   end
+
+  -- A running timer represents PvP deactivation, not a reason to retain the
+  -- icon runtime. Keep manual /pvp as a fallback once no timer is running.
+  if APIBool(IsPVPTimerRunning) then
+    return false
+  end
   return APIBool(UnitIsPVPFreeForAll, "player")
     or APIBool(UnitIsPVP, "player")
-    or APIBool(IsPVPTimerRunning)
 end
 
 function UF.InvalidatePVPIndicatorContext()
@@ -973,11 +995,27 @@ function UF.PVPIndicatorContextActive()
 end
 
 local PVP_CONTEXT_REFRESH_ELEMENTS = { "StatusIndicators", "PVPIndicator", "GroupStatusRuntime" }
+local PVP_CONTEXT_UNIT_EVENTS = {
+  UNIT_FACTION = true,
+  PLAYER_FLAGS_CHANGED = true,
+  PVP_TIMER_UPDATE = true,
+}
+local PVP_CONTEXT_FORCE_EVENTS = {
+  PLAYER_ENTERING_WORLD = true,
+  WAR_MODE_STATUS_UPDATE = true,
+}
 
-function UF.RefreshPVPIndicatorContext(reason, force)
+function UF.RefreshPVPIndicatorContext(reason, force, warModeOverride)
   local oldKnown, oldActive = _pvpContextKnown, _pvpContextActive
-  UF.InvalidatePVPIndicatorContext()
-  local active = UF.PVPIndicatorContextActive()
+  local active
+  if warModeOverride ~= nil then
+    active = ComputePVPIndicatorContextActive(warModeOverride == true) == true
+    _pvpContextActive = active
+    _pvpContextKnown = true
+  else
+    UF.InvalidatePVPIndicatorContext()
+    active = UF.PVPIndicatorContextActive()
+  end
   if force ~= true and oldKnown and oldActive == active then
     return false
   end
@@ -1005,16 +1043,36 @@ end
 
 if not UF.pvpIndicatorContextDriver then
   local pvpDriver = CreateFrame("Frame")
-  pvpDriver:SetScript("OnEvent", function(_, event, unit)
-    if unit and unit ~= "player" then
+  pvpDriver:SetScript("OnEvent", function(_, event, arg1)
+    -- This driver owns cold recompilation only. PvP textures already have their
+    -- native per-frame event routing, so never query context or rebuild UF/GF
+    -- specs in combat.
+    if InCombatLockdown and InCombatLockdown() then
       return
     end
-    UF.RefreshPVPIndicatorContext("MSUF_PVP_CONTEXT_" .. tostring(event), event == "PLAYER_ENTERING_WORLD")
+    -- Several context events carry booleans (WAR_MODE_STATUS_UPDATE and
+    -- PLAYER_ENTERING_WORLD), not unit tokens. Only filter events whose first
+    -- payload is actually a unit or a true War Mode transition gets dropped.
+    if PVP_CONTEXT_UNIT_EVENTS[event] == true and arg1 and arg1 ~= "player" then
+      return
+    end
+    local force = PVP_CONTEXT_FORCE_EVENTS[event] == true
+    local warModeOverride
+    if event == "WAR_MODE_STATUS_UPDATE" then
+      warModeOverride = PlainTrue(arg1) == true
+    end
+    -- This is a compile boundary, not just a repaint: false disables the
+    -- cached UF status path and the GF runtime/event path before both refresh.
+    UF.RefreshPVPIndicatorContext(
+      "MSUF_PVP_CONTEXT_" .. tostring(event),
+      force,
+      warModeOverride
+    )
   end)
   RegisterPVPContextEvent(pvpDriver, "PLAYER_ENTERING_WORLD")
   RegisterPVPContextEvent(pvpDriver, "ZONE_CHANGED_NEW_AREA")
-  RegisterPVPContextEvent(pvpDriver, "PVP_TIMER_UPDATE")
-  RegisterPVPContextEvent(pvpDriver, "PLAYER_FLAGS_CHANGED")
+  RegisterPVPContextEvent(pvpDriver, "PVP_TIMER_UPDATE", "player")
+  RegisterPVPContextEvent(pvpDriver, "PLAYER_FLAGS_CHANGED", "player")
   RegisterPVPContextEvent(pvpDriver, "WAR_MODE_STATUS_UPDATE")
   RegisterPVPContextEvent(pvpDriver, "UNIT_FACTION", "player")
   UF.pvpIndicatorContextDriver = pvpDriver
@@ -2058,6 +2116,14 @@ local function CompileUnitPrediction(out, conf, general, key)
 end
 
 local function CompileUnitDispel(out, conf, general)
+  -- These controls live on the individual Player/Target/Focus/Boss pages and
+  -- are independent of the Bars override gate.  general.* is retained only as
+  -- a compatibility fallback for profiles predating per-unit ownership.
+  local function UnitDispelValue(key, fallback)
+    if conf and conf[key] ~= nil then return conf[key] end
+    if general and general[key] ~= nil then return general[key] end
+    return fallback
+  end
   local dispel = out.dispel or {}
   out.dispel = dispel
   dispel.r = 0.25
@@ -2066,28 +2132,28 @@ local function CompileUnitDispel(out, conf, general)
   dispel.a = 1
   local overlay = out.dispelOverlay or {}
   out.dispelOverlay = overlay
-  overlay.enabled = ScopedValue(conf, general, "unitDispelOverlayEnabled", false) == true
-  overlay.trigger = NormalizeDispelOverlayTrigger(ScopedValue(conf, general, "unitDispelOverlayTrigger", "BORDER"))
-  overlay.style = NormalizeDispelOverlayStyle(ScopedValue(conf, general, "unitDispelOverlayStyle", "FULL"))
-  overlay.onHealth = ScopedValue(conf, general, "unitDispelOverlayOnHealth", true) ~= false
-  overlay.alpha = Clamp01(ScopedValue(conf, general, "unitDispelOverlayAlpha", 0.35), 0.35)
+  overlay.enabled = UnitDispelValue("unitDispelOverlayEnabled", false) == true
+  overlay.trigger = NormalizeDispelOverlayTrigger(UnitDispelValue("unitDispelOverlayTrigger", "BORDER"))
+  overlay.style = NormalizeDispelOverlayStyle(UnitDispelValue("unitDispelOverlayStyle", "FULL"))
+  overlay.onHealth = UnitDispelValue("unitDispelOverlayOnHealth", true) ~= false
+  overlay.alpha = Clamp01(UnitDispelValue("unitDispelOverlayAlpha", 0.35), 0.35)
   -- Dispel-type symbol indicator. Auras3 normalizes/clamps every field, so this
   -- only has to forward the raw scoped values.
   local symbol = out.dispelSymbol or {}
   out.dispelSymbol = symbol
-  symbol.enabled = ScopedValue(conf, general, "unitDispelSymbolEnabled", false) == true
-  symbol.style = ScopedValue(conf, general, "unitDispelSymbolStyle", "BLIZZARD")
-  symbol.mode = ScopedValue(conf, general, "unitDispelSymbolMode", "ALL")
-  symbol.trigger = ScopedValue(conf, general, "unitDispelSymbolTrigger", "BORDER")
-  symbol.size = ScopedValue(conf, general, "unitDispelSymbolSize", 14)
-  symbol.spacing = ScopedValue(conf, general, "unitDispelSymbolSpacing", 2)
-  symbol.growth = ScopedValue(conf, general, "unitDispelSymbolGrowth", "RIGHT")
-  symbol.anchor = ScopedValue(conf, general, "unitDispelSymbolAnchor", "TOPRIGHT")
-  symbol.x = ScopedValue(conf, general, "unitDispelSymbolX", 0)
-  symbol.y = ScopedValue(conf, general, "unitDispelSymbolY", 0)
-  symbol.alpha = Clamp01(ScopedValue(conf, general, "unitDispelSymbolAlpha", 1), 1)
-  symbol.layer = ScopedValue(conf, general, "unitDispelSymbolLayer", 8)
-  symbol.strata = ScopedValue(conf, general, "unitDispelSymbolStrata", "AUTO")
+  symbol.enabled = UnitDispelValue("unitDispelSymbolEnabled", false) == true
+  symbol.style = UnitDispelValue("unitDispelSymbolStyle", "BLIZZARD")
+  symbol.mode = UnitDispelValue("unitDispelSymbolMode", "ALL")
+  symbol.trigger = UnitDispelValue("unitDispelSymbolTrigger", "BORDER")
+  symbol.size = UnitDispelValue("unitDispelSymbolSize", 14)
+  symbol.spacing = UnitDispelValue("unitDispelSymbolSpacing", 2)
+  symbol.growth = UnitDispelValue("unitDispelSymbolGrowth", "RIGHT")
+  symbol.anchor = UnitDispelValue("unitDispelSymbolAnchor", "TOPRIGHT")
+  symbol.x = UnitDispelValue("unitDispelSymbolX", 0)
+  symbol.y = UnitDispelValue("unitDispelSymbolY", 0)
+  symbol.alpha = Clamp01(UnitDispelValue("unitDispelSymbolAlpha", 1), 1)
+  symbol.layer = UnitDispelValue("unitDispelSymbolLayer", 8)
+  symbol.strata = UnitDispelValue("unitDispelSymbolStrata", "AUTO")
 end
 
 local function CompileUnitBorder(out, conf, general, bars)

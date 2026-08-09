@@ -352,6 +352,14 @@ local function CurrentSelectionKey()
 end
 
 local function CurrentFocusSelection()
+    local auraPopup = EM2.AuraPopup
+    if auraPopup and type(auraPopup.IsOpen) == "function" and auraPopup.IsOpen() then
+        local unit = rawget(_G, "MSUF_EM2_ActiveAuraUnit")
+        if type(unit) == "string" then
+            local key = unit:match("^boss%d+$") and "boss" or unit
+            if UNIT_KEYS[key] then return key, "auras", nil end
+        end
+    end
     if EM2.Focus and EM2.Focus.GetSelection then
         local key, component, slot = EM2.Focus.GetSelection()
         if key then return key, component, slot end
@@ -363,6 +371,20 @@ local function SelectionDetail(component, slot)
     local label = component and (COMPONENT_LABEL[component] or component) or nil
     if label and slot then return label .. " " .. tostring(slot) end
     return label
+end
+
+local function AuraSelectionFrame(key, component)
+    if component ~= "auras" then return nil end
+    local unit = rawget(_G, "MSUF_EM2_ActiveAuraUnit")
+    local kind = rawget(_G, "MSUF_EM2_ActiveAuraGroup")
+    if type(unit) ~= "string" or type(kind) ~= "string" then return nil end
+    local selectionUnit = unit:match("^boss%d+$") and "boss" or unit
+    if selectionUnit ~= key then return nil end
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    local edit = a3 and a3.EditMode
+    local groups = edit and edit.groups
+    local group = groups and groups[unit] and groups[unit][kind]
+    return group and (group.Body or group) or nil
 end
 
 local function SelectionValues(key, component, slot)
@@ -387,6 +409,15 @@ local function SelectionValues(key, component, slot)
     local label = HelpText(LABEL_BY_KEY[key] or key)
     local detail = SelectionDetail(component, slot)
     if detail then label = label .. " / " .. HelpText(detail) end
+    local frame = AuraSelectionFrame(key, component)
+    if not frame and cfg and type(cfg.getFrame) == "function" then
+        local ok, resolved = pcall(cfg.getFrame)
+        if ok then frame = resolved end
+    end
+    if frame and type(U.FramePositionValues) == "function" then
+        local x, y, width, height = U.FramePositionValues(frame)
+        if x ~= nil then return label, x, y, width, height end
+    end
     if not conf then return label end
     local x = floor((tonumber(conf.offsetX) or 0) + 0.5)
     local y = floor((tonumber(conf.offsetY) or 0) + 0.5)

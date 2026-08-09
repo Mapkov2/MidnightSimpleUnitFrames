@@ -1519,15 +1519,8 @@ local function PrepareButton(button, slot, parentFrame, forceGeometry)
         ApplyButtonFrameEffect(button, slot, parentFrame)
     end
     SyncMissingFrame(parentFrame, slot, button)
-    -- Spell Icons must never steal click-cast input from their GroupFrame, but
-    -- motion stays enabled when this style requests the native Aura tooltip.
-    -- PTR exposes separate click and motion gates (the same split Blizzard's
-    -- CooldownViewer uses), so tooltip hover no longer implies clickable icons.
-    if type(button.SetMouseClickEnabled) == "function" then
-        button:SetMouseClickEnabled(false)
-    elseif button.EnableMouse then
-        button:EnableMouse(slot.showTooltip ~= false)
-    end
+    -- The shared AuraButton preparer permanently disables click input for
+    -- every Unit/Group aura. Only tooltip motion remains lane-selectable here.
     button:SetMouseMotionEnabled(slot.showTooltip ~= false)
     return true
 end

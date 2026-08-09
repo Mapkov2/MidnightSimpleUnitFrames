@@ -175,6 +175,8 @@ local Sync
 local UnitSectionForComponent = U.UnitSectionForComponent
 local SyncMovers = U.SyncMovers or function() if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end end
 local NotifyPositionChanged = U.NotifyPositionChanged or function(key, immediate) if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(key, immediate) end end
+local FramePositionValues = U.FramePositionValues
+local TranslateFramePosition = U.TranslateFramePosition
 
 local function FrameForUnitKey(key)
     local uf = MSUF and MSUF.UF
@@ -210,7 +212,10 @@ local function Apply()
     if not pf or not pf.unit then return end
     local key=CK(pf.unit); local conf=key and Conf(key); if not conf then return end
     if type(_G.MSUF_EM_UndoBeforeChange)=="function" then _G.MSUF_EM_UndoBeforeChange("unit", key) end
-    conf.offsetX=San(pf.xBox and tonumber(pf.xBox:GetText()),0); conf.offsetY=San(pf.yBox and tonumber(pf.yBox:GetText()),0)
+    local frame = FrameForUnitKey(key) or pf.parent
+    local currentX, currentY = San(conf.offsetX, 0), San(conf.offsetY, 0)
+    local displayX = pf.xBox and tonumber(pf.xBox:GetText())
+    local displayY = pf.yBox and tonumber(pf.yBox:GetText())
     local w=pf.wBox and tonumber(pf.wBox:GetText()); if w then conf.width=floor(max(SizeBounds.minW,min(SizeBounds.maxW,w))+0.5) end
     local h=pf.hBox and tonumber(pf.hBox:GetText()); if h then conf.height=floor(max(SizeBounds.minH,min(SizeBounds.maxH,h))+0.5) end
     if conf.powerBarDetached and CanDetachPower(key) then
@@ -227,16 +232,21 @@ local function Apply()
     end
     --- Direct SetSize: MarkDirty/UpdateSimpleUnitFrame only handles health/power/text,
     --- not frame dimensions. Apply width/height immediately.
-    if pf.parent and conf.width and conf.height then
-        pf.parent:SetSize(conf.width, conf.height)
+    if frame and conf.width and conf.height then
+        frame:SetSize(conf.width, conf.height)
     end
-    if pf.parent and pf.parent.ForceUpdate then pf.parent:ForceUpdate("EM2_UNIT_POPUP") end
+    if type(TranslateFramePosition) == "function" then
+        conf.offsetX, conf.offsetY = TranslateFramePosition(frame, currentX, currentY, displayX, displayY)
+    else
+        conf.offsetX, conf.offsetY = San(displayX, currentX), San(displayY, currentY)
+    end
+    if frame and frame.ForceUpdate then frame:ForceUpdate("EM2_UNIT_POPUP") end
     --- Full layout re-apply (power bar embed, text anchors, borders, etc.)
     if type(_G.MSUF_ApplyUnitFrameKey_Immediate)=="function" then _G.MSUF_ApplyUnitFrameKey_Immediate(key) end
     if type(_G.MSUF_ForceTextLayoutForUnitKey)=="function" then _G.MSUF_ForceTextLayoutForUnitKey(key) end
     --- Clear PBEmbedLayout stamp so width/height changes are re-applied
-    if pf.parent then
-        local cs=_G.MSUF_NS and _G.MSUF_NS.Cache; if cs and cs.ClearStamp then cs.ClearStamp(pf.parent, "PBEmbedLayout") end
+    if frame then
+        local cs=_G.MSUF_NS and _G.MSUF_NS.Cache; if cs and cs.ClearStamp then cs.ClearStamp(frame, "PBEmbedLayout") end
     end
     ApplyPowerLayoutForUnitKey(key, conf.powerBarDetached == true and CanDetachPower(key))
     if pf._refreshVisibility then pf._refreshVisibility() end
@@ -250,9 +260,14 @@ function Sync()
     if not pf or not pf.unit then return end
     local key=CK(pf.unit); local conf=key and Conf(key); if not conf then return end
     if pf._titleFS then pf._titleFS:SetText(Tr(UnitLabel(key)) .. " " .. Tr("Frame")) end
-    Quick.SetBoxText(pf.xBox,San(conf.offsetX,0)); Quick.SetBoxText(pf.yBox,San(conf.offsetY,0))
-    Quick.SetBoxText(pf.wBox,conf.width or (pf.parent and pf.parent:GetWidth()) or 250)
-    Quick.SetBoxText(pf.hBox,conf.height or (pf.parent and pf.parent:GetHeight()) or 40)
+    local frame = FrameForUnitKey(key) or pf.parent
+    local x, y, width, height
+    if type(FramePositionValues) == "function" then
+        x, y, width, height = FramePositionValues(frame)
+    end
+    Quick.SetBoxText(pf.xBox,x ~= nil and x or San(conf.offsetX,0)); Quick.SetBoxText(pf.yBox,y ~= nil and y or San(conf.offsetY,0))
+    Quick.SetBoxText(pf.wBox,conf.width or width or (frame and frame:GetWidth()) or 250)
+    Quick.SetBoxText(pf.hBox,conf.height or height or (frame and frame:GetHeight()) or 40)
     if pf.detachBtn and pf.detachBtn.SetCheckedVisual then
         local canDetach = CanDetachPower(key)
         local detachedOn = canDetach and conf.powerBarDetached == true
@@ -389,11 +404,9 @@ local function ResetPosition()
     if pf and pf:IsShown() then Sync() end
 end
 
---- Copies the source frame's size only. Position is deliberately excluded: two unit
---- frames sharing offsetX/offsetY always end up stacked on top of each other, which
---- also makes the lower one unreachable for dragging. The unit page copy dialog
---- ("Frame Size") holds the same line -- placement is set by dragging here, never by
---- a copy.
+--- Copies the source frame's size only. Position is deliberately excluded so a
+--- size copy cannot unexpectedly move another frame. The unit page copy dialog
+--- ("Frame Size") holds the same contract -- placement stays independently editable.
 local function CopySizeTo(targetKey)
     if BlockConfigCombatLocked() then return end
     if not pf or not pf.unit or not targetKey then return end
@@ -525,11 +538,11 @@ local function Build()
     dpbTitle:SetText(Tr("Detached power bar"))
     local dpbHint = FS(pf.dpbPanel, "caption", C.muted)
     dpbHint:SetPoint("LEFT", dpbTitle, "RIGHT", 12, 0)
-    dpbHint:SetText(Tr("position, size, and layer"))
+    dpbHint:SetText(Tr("offset, size, and layer"))
     pf.dpbTextBtn = Quick.ToggleAt(pf.dpbPanel, "Text on bar", 16, -36, 112, 30, Apply, toggleOpts)
     pf.dpbSyncBtn = Quick.ToggleAt(pf.dpbPanel, "Sync class", 140, -36, 112, 30, Apply, toggleOpts)
     pf.dpbAnchorBtn = Quick.ToggleAt(pf.dpbPanel, "Anchor class", 264, -36, 114, 30, Apply, toggleOpts)
-    pf.dpbXYRow = Quick.ValuePairAt(pf, pf.dpbPanel, 16, -92, "X", "dpbXBox", Apply, "Y", "dpbYBox", Apply)
+    pf.dpbXYRow = Quick.ValuePairAt(pf, pf.dpbPanel, 16, -92, "X offset", "dpbXBox", Apply, "Y offset", "dpbYBox", Apply)
     pf.dpbWHRow = Quick.ValuePairAt(pf, pf.dpbPanel, 16, -126, "Width", "dpbWBox", Apply, "Height", "dpbHBox", Apply)
     pf.dpbLayerRow = Quick.SingleValueAt(pf, pf.dpbPanel, 16, -160, "Layer", "dpbLevelBox", Apply)
     do

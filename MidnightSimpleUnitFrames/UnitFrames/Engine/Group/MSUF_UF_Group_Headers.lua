@@ -345,7 +345,7 @@ local function EnsureAnchor(key, conf, totalW, totalH)
     anchor:SetParent(desiredParent)
   end
   anchor._msufOwnedAnchorRoot = true
-  if anchor.SetClampedToScreen and anchor._msufScreenClampEnabled ~= true then
+  if key == "priority" and anchor.SetClampedToScreen and anchor._msufScreenClampEnabled ~= true then
     anchor:SetClampedToScreen(true)
     anchor._msufScreenClampEnabled = true
   end
@@ -362,12 +362,17 @@ local function EnsureAnchor(key, conf, totalW, totalH)
   -- a legacy relativePoint into the offsets, so read those afterwards.
   local point, relativePoint = ResolveAnchorPoint(key, conf, parent)
   local offsetX, offsetY = conf.offsetX or 0, conf.offsetY or 0
+  if key ~= "priority" and GF.ConfigureAnchorPointScreenClamp then
+    GF.ConfigureAnchorPointScreenClamp(anchor, point, totalW, totalH)
+  end
   -- Resolve, apply and clamp in the logical anchor's coordinate space. An
   -- external parent stays live so the header follows provider movement out of
   -- combat; the Factory combat-edge freeze severs the link while a fight
   -- lasts.
   anchor:SetPoint(point, parent, relativePoint, offsetX, offsetY)
-  ClampAnchorOnScreen(anchor, point, relativePoint, parent, offsetX, offsetY, totalW, totalH)
+  if key == "priority" then
+    ClampAnchorOnScreen(anchor, point, relativePoint, parent, offsetX, offsetY, totalW, totalH)
+  end
   local ownedParent = parent == UIParent or (parent and parent._msufOwnedAnchorRoot == true)
   local resolvable = ownedParent or anchor:GetCenter() ~= nil
   if not resolvable then

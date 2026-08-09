@@ -1005,7 +1005,7 @@ function Handles.Install(box, deps)
             handle._icons[i] = tex
             local swipe = handle._iconSwipes[i] or swipeLayer:CreateTexture(nil, "ARTWORK")
             swipe:SetTexture(WHITE8X8)
-            swipe:SetVertexColor(0, 0, 0, 0.28)
+            swipe:SetVertexColor(0, 0, 0, 0.58)
             swipe:Hide()
             handle._iconSwipes[i] = swipe
             local border = handle._iconBorders[i] or handle:CreateTexture(nil, "OVERLAY")

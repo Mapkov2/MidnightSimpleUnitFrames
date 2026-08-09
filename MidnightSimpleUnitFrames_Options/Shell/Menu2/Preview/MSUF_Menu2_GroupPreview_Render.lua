@@ -1477,7 +1477,7 @@ local function RenderAuras(scene)
     end
     local function LayoutAuraPreviewSwipe(swipe, icon, size, remainingFrac, reverse)
         if not (swipe and icon) then return end
-        remainingFrac = max(0.02, min(1, tonumber(remainingFrac) or 0.48))
+        remainingFrac = max(0.08, min(0.92, tonumber(remainingFrac) or 0.48))
         local w = max(1, floor((tonumber(size) or 1) * remainingFrac + 0.5))
         swipe:ClearAllPoints()
         swipe:SetWidth(w)
@@ -3023,7 +3023,7 @@ function Render.Install(box, ctx, deps)
                 if spellSwipe and showSwipe and not barOnly then
                     LayoutAuraPreviewSwipe(spellSwipe, spellTex or handle, spellSize, 0.48,
                         appearance.cooldownSwipeReverse == true)
-                    spellSwipe:SetVertexColor(0, 0, 0, 0.32)
+                    spellSwipe:SetVertexColor(0, 0, 0, 0.58)
                     spellSwipe:Show()
                 end
                 LayoutAuraDurationBar(spellDurationBar, spellTex or handle, appearance, spellSize, nil)

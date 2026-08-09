@@ -49,14 +49,6 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
     local RegisterAuraScopeLaneBoolean = ctx.RegisterAuraScopeLaneBoolean
     local RegisterAuraScopeLaneNumber = ctx.RegisterAuraScopeLaneNumber
     local RegisterAuraScopeLaneEnum = ctx.RegisterAuraScopeLaneEnum
-    local AuraSharedBool = ctx.AuraSharedBool
-    local SetAuraSharedBool = ctx.SetAuraSharedBool
-    local AuraReadNumber = ctx.AuraReadNumber
-    local AuraWriteNumber = ctx.AuraWriteNumber
-    local AuraReadStackAnchor = ctx.AuraReadStackAnchor
-    local AuraWriteStackAnchor = ctx.AuraWriteStackAnchor
-    local AuraReadCooldownAnchor = ctx.AuraReadCooldownAnchor
-    local AuraWriteCooldownAnchor = ctx.AuraWriteCooldownAnchor
     local AuraReadLaneStyleBool = ctx.AuraReadLaneStyleBool
     local AuraWriteLaneStyleBool = ctx.AuraWriteLaneStyleBool
     local AuraReadLaneStyleNumber = ctx.AuraReadLaneStyleNumber
@@ -375,21 +367,6 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
         end
     end
 
-    local function AuraReadStyleBool(scope, key, defaultValue)
-        local Model = type(AuraModel) == "function" and AuraModel() or nil
-        if Model and type(Model.ReadBool) == "function" then return Model.ReadBool(scope, key, defaultValue) end
-        return AuraSharedBool(key, defaultValue)
-    end
-
-    local function AuraWriteStyleBool(scope, key, value)
-        local Model = type(AuraModel) == "function" and AuraModel() or nil
-        if Model and type(Model.WriteBool) == "function" then
-            Model.WriteBool(scope, key, value)
-            return
-        end
-        SetAuraSharedBool(key, value)
-    end
-
     local function AuraReadDebuffTypeBorderMode(scope)
         local Model = type(AuraModel) == "function" and AuraModel() or nil
         if Model and type(Model.ReadDebuffTypeBorderMode) == "function" then
@@ -413,24 +390,33 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
         AddAliasesForAuraScope(aliases, scope, "show stack count")
         AddAliasesForAuraScope(aliases, scope, "stack count")
         RegisterAuraScopeBoolean(scope, "showStackCount", "Show Stack Count", true, aliases,
-            function() return AuraSharedBool("showStackCount", true) end,
-            function(value) SetAuraSharedBool("showStackCount", value) end,
+            function() return AuraReadLaneStyleBool(scope, "buff", "showStackCount", true) end,
+            function(value)
+                AuraWriteLaneStyleBool(scope, "buff", "showStackCount", value)
+                AuraWriteLaneStyleBool(scope, "debuff", "showStackCount", value)
+            end,
             true)
 
         aliases = {}
         AddAliasesForAuraScope(aliases, scope, "show cooldown text")
         AddAliasesForAuraScope(aliases, scope, "cooldown text")
         RegisterAuraScopeBoolean(scope, "showCooldownText", "Show Cooldown Text", true, aliases,
-            function() return AuraSharedBool("showCooldownText", true) end,
-            function(value) SetAuraSharedBool("showCooldownText", value) end,
+            function() return AuraReadLaneStyleBool(scope, "buff", "showCooldownText", true) end,
+            function(value)
+                AuraWriteLaneStyleBool(scope, "buff", "showCooldownText", value)
+                AuraWriteLaneStyleBool(scope, "debuff", "showCooldownText", value)
+            end,
             true)
 
         aliases = {}
         AddAliasesForAuraScope(aliases, scope, "show cooldown swipe")
         AddAliasesForAuraScope(aliases, scope, "cooldown swipe")
         RegisterAuraScopeBoolean(scope, "showCooldownSwipe", "Show Cooldown Swipe", true, aliases,
-            function() return AuraSharedBool("showCooldownSwipe", true) end,
-            function(value) SetAuraSharedBool("showCooldownSwipe", value) end,
+            function() return AuraReadLaneStyleBool(scope, "buff", "showCooldownSwipe", true) end,
+            function(value)
+                AuraWriteLaneStyleBool(scope, "buff", "showCooldownSwipe", value)
+                AuraWriteLaneStyleBool(scope, "debuff", "showCooldownSwipe", value)
+            end,
             true)
 
         if scope ~= "shared" then
@@ -440,8 +426,11 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
             AddAliasesForAuraScope(aliases, scope, "aura tooltip")
             AddAliasesForAuraScope(aliases, scope, "aura tooltips")
             RegisterAuraScopeBoolean(scope, "showTooltip", "Aura Tooltips", true, aliases,
-                function() return AuraReadStyleBool(scope, "showTooltip", true) end,
-                function(value) AuraWriteStyleBool(scope, "showTooltip", value) end,
+                function() return AuraReadLaneStyleBool(scope, "buff", "showTooltip", true) end,
+                function(value)
+                    AuraWriteLaneStyleBool(scope, "buff", "showTooltip", value)
+                    AuraWriteLaneStyleBool(scope, "debuff", "showTooltip", value)
+                end,
                 true)
         end
 
@@ -474,8 +463,11 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
         AddAliasesForAuraScope(aliases, scope, "stack anchor")
         AddAliasesForAuraScope(aliases, scope, "stack count anchor")
         RegisterAuraScopeEnum(scope, "stackAnchor", "Stack Count Anchor", AURA_STACK_ANCHOR_VALUES, AURA_STACK_ANCHOR_ALIASES, aliases,
-            function() return AuraReadStackAnchor(scope) end,
-            function(value) AuraWriteStackAnchor(scope, value) end,
+            function() return AuraReadLaneStackAnchor(scope, "buff") end,
+            function(value)
+                AuraWriteLaneStackAnchor(scope, "buff", value)
+                AuraWriteLaneStackAnchor(scope, "debuff", value)
+            end,
             true)
 
         aliases = {}
@@ -483,24 +475,33 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
         AddAliasesForAuraScope(aliases, scope, "cooldown text anchor")
         AddAliasesForAuraScope(aliases, scope, "timer text anchor")
         RegisterAuraScopeEnum(scope, "cooldownAnchor", "Cooldown Anchor", AURA_ANCHOR_VALUES, AURA_ANCHOR_ALIASES, aliases,
-            function() return AuraReadCooldownAnchor(scope) end,
-            function(value) AuraWriteCooldownAnchor(scope, value) end,
+            function() return AuraReadLaneCooldownAnchor(scope, "buff") end,
+            function(value)
+                AuraWriteLaneCooldownAnchor(scope, "buff", value)
+                AuraWriteLaneCooldownAnchor(scope, "debuff", value)
+            end,
             true)
 
         aliases = {}
         AddAliasesForAuraScope(aliases, scope, "stack size")
         AddAliasesForAuraScope(aliases, scope, "stack text size")
         RegisterAuraScopeNumber(scope, "stackTextSize", "Stack Text Size", 14, 6, 40, aliases,
-            function() return AuraReadNumber(scope, "stackTextSize", 14, 6, 40) end,
-            function(value) AuraWriteNumber(scope, "stackTextSize", value, 6, 40) end,
+            function() return AuraReadLaneStyleNumber(scope, "buff", "stackTextSize", 14, 6, 40) end,
+            function(value)
+                AuraWriteLaneStyleNumber(scope, "buff", "stackTextSize", value, 6, 40)
+                AuraWriteLaneStyleNumber(scope, "debuff", "stackTextSize", value, 6, 40)
+            end,
             true)
 
         aliases = {}
         AddAliasesForAuraScope(aliases, scope, "cooldown size")
         AddAliasesForAuraScope(aliases, scope, "cooldown text size")
         RegisterAuraScopeNumber(scope, "cooldownTextSize", "Cooldown Text Size", 14, 6, 40, aliases,
-            function() return AuraReadNumber(scope, "cooldownTextSize", 14, 6, 40) end,
-            function(value) AuraWriteNumber(scope, "cooldownTextSize", value, 6, 40) end,
+            function() return AuraReadLaneStyleNumber(scope, "buff", "cooldownTextSize", 14, 6, 40) end,
+            function(value)
+                AuraWriteLaneStyleNumber(scope, "buff", "cooldownTextSize", value, 6, 40)
+                AuraWriteLaneStyleNumber(scope, "debuff", "cooldownTextSize", value, 6, 40)
+            end,
             true)
 
         for _, laneInfo in ipairs(AURA_LANES) do

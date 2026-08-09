@@ -51,7 +51,10 @@ local function PreviewEnabled()
     if _G.MSUF2_CastbarPagePreviewUnit == "boss" then
         return not (MSUF_DB.boss and MSUF_DB.boss.enabled == false)
     end
-    if not general.castbarPlayerPreviewEnabled then
+    -- Edit-mode preview flags live in SavedVariables for legacy integrations.
+    -- A logout can bypass the normal Edit Mode exit and leave that flag true,
+    -- so the runtime session state must remain the authority for visibility.
+    if _G.MSUF_UnitEditModeActive ~= true or not general.castbarPlayerPreviewEnabled then
         return false
     end
 

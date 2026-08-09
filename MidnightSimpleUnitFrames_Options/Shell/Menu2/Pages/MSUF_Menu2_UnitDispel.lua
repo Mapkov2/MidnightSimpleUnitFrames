@@ -3,9 +3,9 @@ MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 
--- UnitFrame dispel presentation belongs beside the unit's Aura workspace.
--- Persistence and runtime ownership stay unchanged: a frame with a Bars
--- override edits its unit table, while a frame following Shared edits general.
+-- UnitFrame dispel presentation belongs beside the unit's Aura workspace and
+-- is owned by that unit.  general.* remains a legacy/default fallback only;
+-- changing Player must never mutate Target/Focus/Boss.
 local W = M.Widgets or {}
 local UP = M.UnitPage or {}
 local min, max, floor, ceil = math.min, math.max, math.floor, math.ceil
@@ -16,8 +16,7 @@ local GetConf = UP.GetConf
 local GetGeneral = UP.GetGeneral
 
 local SUPPORTED_UNITS = { player = true, target = true, focus = true, boss = true }
-local SUPPORTED_UNIT_ORDER = { "player", "target", "focus", "boss" }
-local UNITFRAME_DISPEL_AURA_WARNING = "No UnitFrame auras: Dispel Border/Overlay need Player/Target/Focus/Boss auras."
+local UNITFRAME_DISPEL_AURA_WARNING = "Dispel Border, Overlay, and Symbol need this UnitFrame's Aura sensor. Enable Buffs or Debuffs, or turn on this Dispel feature to enable the sensor automatically. Set both icon caps to 0 if you want no aura icons."
 local UNITFRAME_DISPEL_AURA_WARNING_COLOR = { 0.90, 0.84, 0.76, 1 }
 local UNIT_APPLY_OPTS = { history = false, preview = true, auras = true, notify = false }
 
@@ -57,20 +56,13 @@ local function NormalizeUnitDispelOverlayTrigger(value)
     return NormalizeDispelTrigger(value)
 end
 
-local function UsesUnitBarsOverride(unit)
-    local conf = GetConf and GetConf(unit)
-    return conf and conf.hlOverride == true or false
-end
-
 local function ValueOwner(unit)
-    if UsesUnitBarsOverride(unit) then return GetConf(unit), "unit" end
-    return GetGeneral(), "shared"
+    return GetConf and GetConf(unit) or nil
 end
 
 local function ReadValue(unit, key, defaultValue)
     local conf = GetConf and GetConf(unit)
-    local value
-    if conf and conf.hlOverride == true and conf[key] ~= nil then value = conf[key] end
+    local value = conf and conf[key]
     if value == nil then
         local general = GetGeneral and GetGeneral()
         value = general and general[key]
@@ -98,13 +90,7 @@ local function RequestUnitRuntime(unit, reason)
 end
 
 local function RequestRuntime(unit, reason)
-    reason = reason or "MSUF2_UF_DISPEL"
-    if UsesUnitBarsOverride(unit) then return RequestUnitRuntime(unit, reason) end
-    local changed = false
-    for i = 1, #SUPPORTED_UNIT_ORDER do
-        changed = RequestUnitRuntime(SUPPORTED_UNIT_ORDER[i], reason) ~= false or changed
-    end
-    return changed
+    return RequestUnitRuntime(unit, reason or "MSUF2_UF_DISPEL")
 end
 
 local function SetValue(unit, key, value, reason)
@@ -146,17 +132,58 @@ local function UnitAuraEnabled(unit)
     return model.UnitEnabled(unit) == true
 end
 
+local function ModeEnabled(value, fallback)
+    if value == nil then value = fallback end
+    if value == true or value == false then return value end
+    value = tonumber(value)
+    if value == nil then return fallback == true end
+    return value == 1
+end
+
+local function UnitDispelRequested(unit)
+    if ReadValue(unit, "unitDispelOverlayEnabled", false) == true
+        or ReadValue(unit, "unitDispelSymbolEnabled", false) == true then
+        return true
+    end
+    local conf, general = GetConf(unit), GetGeneral()
+    local mode
+    if conf and conf.hlOverride == true then mode = conf.dispelOutlineMode end
+    if mode == nil then mode = general and general.dispelOutlineMode end
+    local legacy = general and (general.dispelBorderEnabled == true or general.hlDispelBorderEnabled == true)
+    if general and general.dispelBorderEnabled == nil and general.hlDispelBorderEnabled == nil then legacy = true end
+    return ModeEnabled(mode, legacy)
+end
+
+local function SetDispelMasterValue(unit, key, enabled, reason)
+    enabled = enabled and true or false
+    local changed = StoreValue(unit, key, enabled)
+    local sensorChanged = false
+    if enabled and not UnitAuraEnabled(unit) then
+        local a3 = MSUF and MSUF.MSUF_Auras3
+        local model = a3 and a3.MenuModel
+        if model and type(model.SetUnitEnabled) == "function" then
+            model.SetUnitEnabled(unit, true)
+            sensorChanged = true
+            if type(M.ShowStatusFeedback) == "function" then
+                M.ShowStatusFeedback("Aura sensor enabled for Dispel. Buff and Debuff icon caps may stay at 0.", "info", 3.0)
+            end
+        end
+    end
+    if changed or sensorChanged then RequestRuntime(unit, reason) end
+    return changed or sensorChanged
+end
+
 local function RefreshAuraWarning(warning, unit)
     if not warning then return end
-    warning:SetShown(not UnitAuraEnabled(unit))
+    warning:SetShown(UnitDispelRequested(unit) and not UnitAuraEnabled(unit))
 end
 
 local function Meta(ctx, unit, path, key, classification)
     local meta = UP.ControlMeta and UP.ControlMeta(ctx, "dispel." .. tostring(path), classification or "setting") or {}
     if key then
         meta.assistantDisposition = "dynamic"
-        meta.assistantDispositionReason = "This UnitFrame page edits Shared Bars or the unit Bars override, whichever currently owns the effective value."
-        meta.assistantSettingKeys = { "general." .. tostring(key), tostring(unit) .. "." .. tostring(key) }
+        meta.assistantDispositionReason = "This control is owned by the UnitFrame currently open in Menu2."
+        meta.assistantSettingKeys = { tostring(unit) .. "." .. tostring(key), "general." .. tostring(key) }
     end
     return meta
 end
@@ -214,7 +241,7 @@ local function BuildUnitDispelOverlaySection(ctx, builder, unit)
     M.BindBoolWidget(ctx, master,
         function() return ReadValue(unit, "unitDispelOverlayEnabled", false) == true end,
         function(value)
-            SetValue(unit, "unitDispelOverlayEnabled", value and true or false, "MSUF2_UF_DISPEL_OVERLAY")
+            SetDispelMasterValue(unit, "unitDispelOverlayEnabled", value, "MSUF2_UF_DISPEL_OVERLAY")
             Sync()
         end,
         Meta(ctx, unit, "overlay.enabled", "unitDispelOverlayEnabled"))
@@ -305,15 +332,15 @@ local function BuildUnitDispelSymbolSection(ctx, builder, unit)
     local previewW = wide and min(380, cardW - 32) or controlW
     local previewX = wide and floor((cardW - previewW) * 0.5) or leftX
 
-    local function RegisterPreviewOffsetVirtual(axis, settingKey, label)
+    local function RegisterPreviewOffsetVirtual(axis, unitSettingKey, legacySettingKey, label)
         if unit ~= "player" or type(M.RegisterVirtualRuntimeControl) ~= "function" then return end
         local path = "preview.selection.dispel_symbol_offset_" .. tostring(axis)
         local meta = UP.ControlMeta and UP.ControlMeta(ctx, path, "setting") or {}
         meta.kind = "textinput"
         meta.label = label
         meta.assistantDisposition = "dynamic"
-        meta.assistantDispositionReason = "The lazy Unit Preview exact-offset field edits this shared Dispel Symbol coordinate."
-        meta.assistantSettingKeys = { settingKey }
+        meta.assistantDispositionReason = "The lazy Unit Preview exact-offset field edits Player's Dispel Symbol coordinate."
+        meta.assistantSettingKeys = { unitSettingKey, legacySettingKey }
         meta.command = {
             kind = "textinput",
             historyMode = "single",
@@ -335,8 +362,10 @@ local function BuildUnitDispelSymbolSection(ctx, builder, unit)
         }
         M.RegisterVirtualRuntimeControl(meta, "unit-preview-offset")
     end
-    RegisterPreviewOffsetVirtual("x", "general.unitDispelSymbolX", "UnitFrame Dispel Symbol Offset X")
-    RegisterPreviewOffsetVirtual("y", "general.unitDispelSymbolY", "UnitFrame Dispel Symbol Offset Y")
+    RegisterPreviewOffsetVirtual("x", "player.unitDispelSymbolX", "general.unitDispelSymbolX",
+        "UnitFrame Dispel Symbol Offset X")
+    RegisterPreviewOffsetVirtual("y", "player.unitDispelSymbolY", "general.unitDispelSymbolY",
+        "UnitFrame Dispel Symbol Offset Y")
 
     local function BindDropdown(label, values, key, defaultValue, reason, x, y)
         local dropdown = W.Dropdown(card, label, values, 280)
@@ -365,7 +394,7 @@ local function BuildUnitDispelSymbolSection(ctx, builder, unit)
     M.BindBoolWidget(ctx, master,
         function() return ReadValue(unit, "unitDispelSymbolEnabled", false) == true end,
         function(value)
-            SetValue(unit, "unitDispelSymbolEnabled", value and true or false, "MSUF2_UF_DISPEL_SYMBOL")
+            SetDispelMasterValue(unit, "unitDispelSymbolEnabled", value, "MSUF2_UF_DISPEL_SYMBOL")
             Sync()
         end,
         Meta(ctx, unit, "symbol.enabled", "unitDispelSymbolEnabled"))

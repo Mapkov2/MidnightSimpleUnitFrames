@@ -256,10 +256,11 @@ for _, slot in ipairs(WL [[Name HealthLeft HealthCenter HealthRight PowerLeft Po
 end
 local COPY_INDICATOR_FIELDS = M.CopyFieldsFromSpecs(STATUS_CONTROLS, "leader assist raidmarker raidgroupname eliteicon", nil, "show iconStyle customIcon x y anchor size layer symbol")
 local COPY_STATUSICON_FIELDS = M.CopyFieldsFromSpecs(STATUS_CONTROLS, "level raceText classText statusText statusGhostText statusAFKText statusDNDText statusCombat statusResting statusIncomingRes statusPvp", "statusIconsTestMode statusIconsMidnightStyle statusIconsAlpha statusTextEnabled", "show iconStyle customIcon x y anchor size layer symbol")
---- Everything below "healthColorMode" is the per-unit Bars override scope (gated by
---- hlOverride, see MSUF_Menu2_Bindings BARS_SCOPE_KEYS). Copying the gate flag along
---- with the values keeps a destination that follows the global Bars page following it.
---- powerSmoothFill is owned by the Power Bar category, hpPowerTextOverride by Text.
+--- Most fields below "healthColorMode" are the per-unit Bars override scope (gated by
+--- hlOverride, see MSUF_Menu2_Bindings BARS_SCOPE_KEYS). UnitFrame Dispel Overlay/Symbol
+--- are the deliberate exception: they are copied with Frame settings but stay owned by
+--- the source/destination units regardless of the Bars override. powerSmoothFill is
+--- owned by the Power Bar category, hpPowerTextOverride by Text.
 local COPY_FRAME_BASIC_FIELDS = WL [[
     enabled showName showHP showPower reverseFillBars verticalFillBars smoothFill healthColorMode
     hlOverride barTexture barBackgroundTexture barBgTexture
@@ -668,18 +669,52 @@ local function ConfirmCopyToAll(callback)
         callback()
     end
 end
-local function CopyUnitSettings(unit, target, scopes)
+local AURA_COPY_SCOPE_KEYS = { auras = true, aurastyle = true }
+local function SelectedCopyScopeState(scopes)
+    local anySelected, nonAuraSelected = false, false
+    for i = 1, #UF_COPY_CATEGORIES do
+        local key = UF_COPY_CATEGORIES[i].key
+        if scopes[key] == true then
+            anySelected = true
+            if not AURA_COPY_SCOPE_KEYS[key] then nonAuraSelected = true end
+        end
+    end
+    return anySelected, nonAuraSelected
+end
+local function CompleteUnitCopy(callback, applied, result)
+    if type(callback) == "function" then callback(applied == true, result) end
+    return applied == true, result
+end
+local function CopyUnitSettings(unit, target, scopes, onComplete, allConfirmed)
     M.EnsureDB()
     ExportPublic("MSUF_DB", _G.MSUF_DB or {})
     _G.MSUF_DB.general = _G.MSUF_DB.general or {}
     local g = _G.MSUF_DB.general
     local src, srcKey = EnsureUnitDB(unit)
-    if not src or not srcKey then return end
+    if not src or not srcKey then
+        return CompleteUnitCopy(onComplete, false, { reason = "invalid_source", source = unit, destination = target })
+    end
     target = (type(target) == "string") and target:lower() or DefaultCopyTarget(srcKey)
     scopes = (type(scopes) == "table") and scopes or NewCopyScopeDefaults()
+    local anySelected, nonAuraSelected = SelectedCopyScopeState(scopes)
+    if not anySelected then
+        return CompleteUnitCopy(onComplete, false, {
+            reason = "no_categories", source = srcKey, destination = target,
+            anySelected = false, nonAuraSelected = false,
+        })
+    end
     local function CopyOne(toKey)
         local dst, dstKey = EnsureUnitDB(toKey)
-        if not dst or not dstKey or dstKey == srcKey then return end
+        local result = {
+            source = srcKey,
+            destination = dstKey or toKey,
+            anySelected = anySelected,
+            nonAuraSelected = nonAuraSelected,
+            auraOptionsRequested = scopes.auras == true,
+            auraStyleRequested = scopes.aurastyle == true,
+        }
+        if not dst or not dstKey then result.reason = "invalid_destination"; return false, result end
+        if dstKey == srcKey then result.reason = "same_destination"; return false, result end
         if scopes.basics then CopyFields(dst, src, COPY_FRAME_BASIC_FIELDS) end
         --- The override gate flags travel with their values on purpose. Clearing them
         --- here would leave the destination showing the copied values on the frame while
@@ -690,6 +725,16 @@ local function CopyUnitSettings(unit, target, scopes)
         local copiedAuraOptions = scopes.auras and CopyAuras3UnitSettings(srcKey, dstKey) or false
         local copiedAuraStyle = scopes.aurastyle and CopyAuras3UnitStyle(srcKey, dstKey) or false
         local copiedAuras = copiedAuraOptions or copiedAuraStyle
+        result.auraOptionsApplied = copiedAuraOptions == true
+        result.auraStyleApplied = copiedAuraStyle == true
+        result.auraSupported = AURA_COPY_UNITS[srcKey] == true and AURA_COPY_UNITS[dstKey] == true
+        result.auraSkipped = (result.auraOptionsRequested and not result.auraOptionsApplied)
+            or (result.auraStyleRequested and not result.auraStyleApplied)
+        local copiedAny = nonAuraSelected or copiedAuras
+        if not copiedAny then
+            result.reason = result.auraSupported and "aura_copy_unavailable" or "unsupported_aura_scope"
+            return false, result
+        end
         if scopes.status then
             CopyFields(dst, src, COPY_INDICATOR_FIELDS)
             CopyFields(dst, src, COPY_STATUSICON_FIELDS)
@@ -715,6 +760,8 @@ local function CopyUnitSettings(unit, target, scopes)
             --- rebuilt for the destination rather than a plain layout pass.
             fonts = scopes.text,
         })
+        result.applied = true
+        return true, result
     end
     local function FinishCopy(statusUnit)
         if scopes.status then
@@ -723,19 +770,44 @@ local function CopyUnitSettings(unit, target, scopes)
         end
     end
     if target == "all" then
-        ConfirmCopyToAll(function()
+        local function CopyAll()
+            local summary = {
+                source = srcKey, destination = "all", anySelected = anySelected,
+                nonAuraSelected = nonAuraSelected, targets = {}, appliedTargets = 0,
+                auraOptionsRequested = scopes.auras == true,
+                auraStyleRequested = scopes.aurastyle == true,
+            }
             for i = 1, #UNIT_COPY_TARGETS do
                 local value = UNIT_COPY_TARGETS[i].value
-                if value ~= srcKey then CopyOne(value) end
+                if value ~= srcKey then
+                    local applied, result = CopyOne(value)
+                    summary.targets[value] = result
+                    if applied then summary.appliedTargets = summary.appliedTargets + 1 end
+                    if result and result.auraSkipped then summary.auraSkipped = true end
+                end
             end
-            FinishCopy()
-        end)
-        return
+            if summary.appliedTargets > 0 then FinishCopy() end
+            summary.applied = summary.appliedTargets > 0
+            if not summary.applied then
+                summary.reason = (summary.auraOptionsRequested or summary.auraStyleRequested)
+                    and "unsupported_aura_scope" or "nothing_copied"
+            end
+            return CompleteUnitCopy(onComplete, summary.applied, summary)
+        end
+        if allConfirmed == true then return CopyAll() end
+        ConfirmCopyToAll(CopyAll)
+        return nil, { pending = true, source = srcKey, destination = "all" }
     end
     target = CanonUnitKey(target)
-    if not target or target == srcKey then return end
-    CopyOne(target)
-    FinishCopy(target)
+    if not target or target == srcKey then
+        return CompleteUnitCopy(onComplete, false, {
+            reason = target == srcKey and "same_destination" or "invalid_destination",
+            source = srcKey, destination = target,
+        })
+    end
+    local applied, result = CopyOne(target)
+    if applied then FinishCopy(target) end
+    return CompleteUnitCopy(onComplete, applied, result)
 end
 local function ToggleEditMode(unit)
     if type(_G.MSUF_BlockConfigCombatLocked) == "function" and _G.MSUF_BlockConfigCombatLocked() then return end
@@ -1054,6 +1126,7 @@ M.Assign(UnitPage, {
     ReviewedMeta = UnitReviewedMeta,
     RegisterControl = RegisterUnitControl,
     NewCopyScopeDefaults = NewCopyScopeDefaults,
+    ConfirmCopyToAll = ConfirmCopyToAll,
     CopyUnitSettings = CopyUnitSettings,
     ToggleEditMode = ToggleEditMode,
     IsEditModeActive = IsEditModeActive,

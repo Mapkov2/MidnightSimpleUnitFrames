@@ -1213,8 +1213,7 @@ local BARS_GENERAL_KEYS = KSW [[
     healPredictionBarHeight healPredictionBarOffsetY healPredictionBarOpacity healPredictionBarTexture
     enableAbsorbBar absorbTextMode absorbAnchorMode absorbBarHeight absorbBarOffsetY absorbBarOpacity
     healAbsorbEnabled healAbsorbAnchorMode healAbsorbBarHeight healAbsorbBarOffsetY healAbsorbBarOpacity
-    overAbsorbOverlay fullHealthAbsorbStripe absorbBarTexture healAbsorbBarTexture dispelBorderTrigger unitDispelOverlayEnabled unitDispelOverlayStyle
-    unitDispelOverlayOnHealth unitDispelOverlayAlpha unitDispelOverlayTrigger bossTargetOutlineMode
+    overAbsorbOverlay fullHealthAbsorbStripe absorbBarTexture healAbsorbBarTexture dispelBorderTrigger bossTargetOutlineMode
     bossTargetHighlightEnabled hlPrioEnabled hlPrioOrder highlightPrioEnabled highlightPrioOrder roundedFramesEnabled roundedUnitFrames
     roundedGroupFrames roundedPowerBars roundedCastbars roundedMouseover barOutlineColorR barOutlineColorG
     barOutlineColorB barOutlineColorA
@@ -1224,8 +1223,7 @@ local BARS_SCOPE_KEYS = KSW [[
     absorbBarHeight absorbBarOffsetY healAbsorbEnabled healAbsorbAnchorMode healAbsorbBarHeight healAbsorbBarOffsetY
     healPredEnabled healPredAnchorMode healPredictionBarHeight healPredictionBarOffsetY healPredictionBarOpacity healPredictionBarTexture
     overAbsorbOverlay fullHealthAbsorbStripe absorbBarOpacity healAbsorbBarOpacity barOutlineThickness barOutlineLayer barOutlineStrata barOutlineTexture highlightBorderThickness hlAggroSize
-    aggroOutlineMode dispelOutlineMode dispelBorderTrigger unitDispelOverlayEnabled unitDispelOverlayStyle
-    unitDispelOverlayOnHealth unitDispelOverlayAlpha unitDispelOverlayTrigger
+    aggroOutlineMode dispelOutlineMode dispelBorderTrigger
     purgeOutlineMode hlPrioEnabled hlPrioOrder enableGradient enablePowerGradient gradientStrength
     gradientDirection gradientDirRight gradientDirLeft gradientDirUp gradientDirDown powerSmoothFill
     barOutlineColorR barOutlineColorG barOutlineColorB barOutlineColorA

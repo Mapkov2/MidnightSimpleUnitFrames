@@ -458,9 +458,13 @@ end
 
 ExportPublic("MSUF_SetBossCastbarTestMode", SetBossCastbarTestMode)
 
+local function EditModeCastbarPreviewActive()
+    return _G.MSUF_UnitEditModeActive == true
+end
+
 local function ShouldShowBossPreview()
     local general = EnsureGeneralDB()
-    if not general.castbarPlayerPreviewEnabled then return false end
+    if not EditModeCastbarPreviewActive() or not general.castbarPlayerPreviewEnabled then return false end
 
     local db = _G.MSUF_DB
     if db and db.boss and db.boss.enabled == false then return false end
@@ -549,7 +553,7 @@ end
 
 local function UpdatePlayerCastbarPreview()
     local general = EnsureGeneralDB()
-    if not general.castbarPlayerPreviewEnabled then
+    if not EditModeCastbarPreviewActive() or not general.castbarPlayerPreviewEnabled then
         for unit, config in pairs(PREVIEW_UNITS) do
             local frame = _G[config.name]
             if frame then frame:Hide() end

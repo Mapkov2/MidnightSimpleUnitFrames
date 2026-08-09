@@ -781,6 +781,42 @@ function GF.GetAnchorPoint(conf)
     return point
 end
 
+--- Clamp the configured anchor point, not the complete group footprint.
+--- Party and Raid can have very different grid sizes. Full-frame clamping
+--- silently adds a size-dependent delta after SetPoint, so identical
+--- Anchor To / Anchor Point / X / Y values no longer identify the same screen
+--- point. Blizzard's clamp rect supports an exact point-sized selection (the
+--- same mechanism Edit Mode uses for selection bounds), preserving recovery at
+--- the screen edge without changing the saved coordinate contract.
+function GF.ConfigureAnchorPointScreenClamp(frame, point, width, height)
+    if not (frame and frame.SetClampedToScreen) then return false end
+    point = ANCHOR_POINTS[point] and point or "CENTER"
+    local w = tonumber(width) or (frame.GetWidth and tonumber(frame:GetWidth()))
+    local h = tonumber(height) or (frame.GetHeight and tonumber(frame:GetHeight()))
+    if not (frame.SetClampRectInsets and w and h and w >= 0 and h >= 0) then
+        --- A full-frame fallback would reintroduce the Party/Raid divergence.
+        frame:SetClampedToScreen(false)
+        frame._msufScreenClampEnabled = nil
+        frame._msufGFAnchorPointClampKey = nil
+        return false
+    end
+
+    local fx, fy = AnchorPointFraction(point)
+    local half = 0.5
+    local left, right = w * fx - half, -w * (1 - fx) + half
+    local top, bottom = -h * (1 - fy) + half, h * fy - half
+    local key = point .. "\030" .. tostring(w) .. "\030" .. tostring(h)
+    if frame._msufGFAnchorPointClampKey ~= key then
+        frame:SetClampRectInsets(left, right, top, bottom)
+        frame._msufGFAnchorPointClampKey = key
+    end
+    if frame._msufScreenClampEnabled ~= true then
+        frame:SetClampedToScreen(true)
+        frame._msufScreenClampEnabled = true
+    end
+    return true
+end
+
 --- Convert a legacy relativePoint into the saved offsets. Returns false while
 --- the anchor frame has no measurable size so the next placement can retry;
 --- until then the old pair stays live and the block does not jump.
@@ -1321,6 +1357,29 @@ end
 
 local GF_NATIVE_AURA_RENDERER = "NATIVE_12_1"
 local GF_CUSTOM_AURA_RENDERER = "CUSTOM"
+local GF_AURA_PROFILE_MODEL_REVISION = 1
+local GF_RETIRED_AURA_ROOT_KEYS = {
+    "aurasEnabled", "auraMaxIcons", "auraIconSize", "auraAnchor",
+    "auraGrowthX", "auraGrowthY", "auraSpacing", "auraPerRow",
+    "privateAurasEnabled", "privateAuraMax", "privateAuraSize",
+    "privateAuraAnchor", "privateAuraX", "privateAuraY", "privateAuraCountdown",
+}
+local function ClearRetiredAuraRootFields(conf)
+    if type(conf) ~= "table" then return false end
+    local changed = false
+    for i = 1, #GF_RETIRED_AURA_ROOT_KEYS do
+        local key = GF_RETIRED_AURA_ROOT_KEYS[i]
+        if conf[key] ~= nil then
+            conf[key] = nil
+            changed = true
+        end
+    end
+    if conf._auraMigV2 ~= nil then
+        conf._auraMigV2 = nil
+        changed = true
+    end
+    return changed
+end
 local GF_BLIZZARD_AURA_TYPE_DEFAULTS = {
     buffs = true,
     debuffs = true,
@@ -1681,7 +1740,9 @@ function GF.EnsureDB()
     RepairAuraFilters(db.gf_mythicraid)
     --- Migration v2: force-enable auras + defensives (showstopper fix)
     RepairAuraV2 = RepairAuraV2 or function(conf)
-        if type(conf.auras) == "table" and not conf._auraMigV2 then
+        if type(conf.auras) == "table"
+            and tonumber(conf.auras.profileModelRevision) ~= GF_AURA_PROFILE_MODEL_REVISION
+            and not conf._auraMigV2 then
             conf._auraMigV2 = true
             if conf.auras.enabled == false or conf.auras.enabled == nil then
                 conf.auras.enabled = true
@@ -1808,6 +1869,26 @@ local function CopyAuraDefaults(defaults)
     return copy
 end
 
+local function FillMissingAuraModel(dst, src)
+    if type(dst) ~= "table" or type(src) ~= "table" then return false end
+    local changed = false
+    for key, value in pairs(src) do
+        if dst[key] == nil then
+            if type(value) == "table" then
+                local copy = {}
+                FillMissingAuraModel(copy, value)
+                dst[key] = copy
+            else
+                dst[key] = value
+            end
+            changed = true
+        elseif type(dst[key]) == "table" and type(value) == "table" then
+            changed = FillMissingAuraModel(dst[key], value) or changed
+        end
+    end
+    return changed
+end
+
 local function LegacyBuffDefaults()
     return CopyAuraDefaults(LEGACY_BUFF_DEFAULTS)
 end
@@ -1902,6 +1983,39 @@ end
 function GF.MigrateAuraConfig(conf, isRaid)
     if type(conf) ~= "table" then return false end
     local changed = false
+    if type(conf.auras) == "table"
+        and tonumber(conf.auras.profileModelRevision) == GF_AURA_PROFILE_MODEL_REVISION then
+        -- applyDefaults still carries the pre-Auras3 compatibility keys for
+        -- genuinely legacy profiles. Never let those aliases become persisted
+        -- state again once the canonical native model owns this scope.
+        changed = ClearRetiredAuraRootFields(conf) or changed
+        -- Native 6.0 profiles are completed only from the native factory
+        -- model. Never run the legacy flat/Aura2 default fillers over them.
+        local createCanonical = (type(MSUF) == "table" and MSUF.MSUF_CreateCanonicalGroupAuraState)
+            or _G.MSUF_CreateCanonicalGroupAuraState
+        if type(createCanonical) == "function" then
+            local state = createCanonical()
+            state = type(state) == "table" and state[isRaid and "gf_raid" or "gf_party"] or nil
+            if type(state) == "table" then
+                changed = FillMissingAuraModel(conf.auras, state.auras) or changed
+                if type(conf.privateAuras) ~= "table" and type(state.privateAuras) == "table" then
+                    conf.privateAuras = {}
+                    FillMissingAuraModel(conf.privateAuras, state.privateAuras)
+                    changed = true
+                end
+                if type(conf.spellIndicators) ~= "table" and type(state.spellIndicators) == "table" then
+                    conf.spellIndicators = {}
+                    FillMissingAuraModel(conf.spellIndicators, state.spellIndicators)
+                    changed = true
+                end
+            end
+        end
+        if type(GF.EnsureSpellIndicatorStyle) == "function" then
+            local _, styleChanged = GF.EnsureSpellIndicatorStyle(conf)
+            changed = styleChanged or changed
+        end
+        return changed
+    end
     local hadFlatAuras = conf.aurasEnabled ~= nil and type(conf.auras) ~= "table"
     if hadFlatAuras then
         local buff = LegacyBuffDefaults()

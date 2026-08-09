@@ -208,7 +208,12 @@ local GROUP_NATIVE_FILTER_CANONICAL = {
 }
 local function CanonicalGroupFilterValue(value)
     local key = tostring(value or "ALL"):upper():gsub("[^A-Z0-9]", "")
-    return GROUP_NATIVE_FILTER_CANONICAL[key] or "ALL"
+    local canonical = GROUP_NATIVE_FILTER_CANONICAL[key] or "ALL"
+    if M.CLASSIC_AURA_FILTERS_REDUCED == true then
+        if canonical == "Player" or canonical:sub(-6) == "Player" then return "Player" end
+        return "ALL"
+    end
+    return canonical
 end
 local function Tr(text)
     if type(M.Tr) == "function" then return M.Tr(text) end
@@ -668,13 +673,32 @@ end
 local function UnitLaneShown(unit, kind)
     return Model.UnitEnabled(unit) and Model.GroupShown(unit, kind)
 end
-local UNIT_AURA_DISPEL_WARNING_UNITS = { "player", "target", "focus", "boss" }
-local UNIT_AURA_DISPEL_WARNING = "No UnitFrame auras: Dispel Border/Overlay need Player/Target/Focus/Boss auras."
-local function AnyUnitFrameAuraEnabled()
-    for i = 1, #UNIT_AURA_DISPEL_WARNING_UNITS do
-        if Model.UnitEnabled(UNIT_AURA_DISPEL_WARNING_UNITS[i]) then return true end
-    end
-    return false
+local UNIT_AURA_DISPEL_WARNING = "Dispel Border, Overlay, and Symbol need this UnitFrame's Aura sensor. Enable Buffs or Debuffs, or turn on a Dispel feature to enable the sensor automatically. Set both icon caps to 0 if you want no aura icons."
+local function UnitAuraSensorEnabled(unit)
+    return Model.UnitEnabled(unit) == true
+end
+local function ModeEnabled(value, fallback)
+    if value == nil then value = fallback end
+    if value == true or value == false then return value end
+    value = tonumber(value)
+    if value == nil then return fallback == true end
+    return value == 1
+end
+local function UnitDispelRequested(unit)
+    local db = _G.MSUF_DB
+    local general = type(db) == "table" and type(db.general) == "table" and db.general or nil
+    local conf = type(db) == "table" and type(db[unit]) == "table" and db[unit] or nil
+    local overlay = conf and conf.unitDispelOverlayEnabled
+    if overlay == nil then overlay = general and general.unitDispelOverlayEnabled end
+    local symbol = conf and conf.unitDispelSymbolEnabled
+    if symbol == nil then symbol = general and general.unitDispelSymbolEnabled end
+    if overlay == true or symbol == true then return true end
+    local mode
+    if conf and conf.hlOverride == true then mode = conf.dispelOutlineMode end
+    if mode == nil then mode = general and general.dispelOutlineMode end
+    local legacy = general and (general.dispelBorderEnabled == true or general.hlDispelBorderEnabled == true)
+    if general and general.dispelBorderEnabled == nil and general.hlDispelBorderEnabled == nil then legacy = true end
+    return ModeEnabled(mode, legacy)
 end
 local function ShowNoUnitAuraDispelWarning()
     if type(M.ShowStatusFeedback) == "function" then
@@ -688,10 +712,11 @@ local function SetUnitLaneShown(ctx, unit, kind, shown, reason)
         Model.SetGroupShown(unit, kind, true)
     else
         Model.SetGroupShown(unit, kind, false)
-        if not Model.GroupShown(unit, OtherLane(kind)) then Model.SetUnitEnabled(unit, false) end
+        -- Hiding the last native lane must not disable the shared Aura sensor.
+        -- A 0 icon cap is the supported sensor-only state used by Dispel.
     end
     ApplyUnit(ctx, unit, reason or "AURAS3_VISIBILITY", true)
-    if not shown and not AnyUnitFrameAuraEnabled() then ShowNoUnitAuraDispelWarning() end
+    if UnitDispelRequested(unit) and not UnitAuraSensorEnabled(unit) then ShowNoUnitAuraDispelWarning() end
 end
 local function GF()
     if type(GP.GF) == "function" then return GP.GF() end
@@ -945,11 +970,13 @@ local function CreateAuraPreviewIcon(parent)
     f.icon:SetPoint("TOPLEFT", f, "TOPLEFT", 1, -1)
     f.icon:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -1, 1)
     if f.icon.SetTexCoord then f.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
-    f.swipe = f:CreateTexture(nil, "ARTWORK")
+    -- Match the full Unit Preview: the swipe must sort above the icon rather
+    -- than sharing its otherwise undefined ARTWORK ordering.
+    f.swipe = f:CreateTexture(nil, "ARTWORK", nil, 1)
     f.swipe:SetPoint("TOPLEFT", f, "TOP", 0, -1)
     f.swipe:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -1, 1)
     f.swipe:SetTexture(TEX_W8)
-    f.swipe:SetVertexColor(0, 0, 0, 0.28)
+    f.swipe:SetVertexColor(0, 0, 0, 0.58)
     f.swipe:Hide()
     f.durationBar = f:CreateTexture(nil, "OVERLAY")
     f.durationBar:SetTexture(TEX_W8)
@@ -1778,9 +1805,18 @@ local function BuildUnitStyle(ctx, b, scope, options)
     local function RefreshStylePreview()
         if refreshMiniPreview then
             RefreshMiniAuraPreviewNow(refreshMiniPreview)
-        elseif embeddedUnitPreview and type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
-            _G.MSUF_UFPreview_RequestRefresh("AURAS3_UNIT_STYLE_DUMMY")
+        elseif embeddedUnitPreview then
+            local refreshOwnedPreview = ctx and ctx._msuf2RefreshUnitPreview
+            if type(refreshOwnedPreview) == "function" then
+                refreshOwnedPreview("AURAS3_UNIT_STYLE_DUMMY")
+            elseif type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
+                _G.MSUF_UFPreview_RequestRefresh("AURAS3_UNIT_STYLE_DUMMY")
+            end
         end
+    end
+    local function FlushStyleApply()
+        local apply = M.ApplyService or _G.MSUF_Menu2_ApplyService
+        if apply and type(apply.Flush) == "function" then apply.Flush() end
     end
     local function ReadScopeBool(key, defaultValue)
         if sharedGlobalsOnly and type(Model.ReadSharedAppearanceBool) == "function" then
@@ -1926,6 +1962,10 @@ local function BuildUnitStyle(ctx, b, scope, options)
             function(v)
                 WriteScopeBool(key, v)
                 ApplyUnit(ctx, unit, reason)
+                -- Switches are discrete writes. Compile/apply the new value
+                -- before repainting so Menu and Edit Mode observe one state.
+                -- ApplyService itself defers this flush during combat.
+                FlushStyleApply()
                 RefreshStylePreview()
                 if type(afterSet) == "function" then afterSet() end
             end,
@@ -1937,6 +1977,7 @@ local function BuildUnitStyle(ctx, b, scope, options)
             function(v)
                 setValue(v)
                 ApplyUnit(ctx, unit, reason)
+                FlushStyleApply()
                 RefreshStylePreview()
                 if type(afterSet) == "function" then afterSet() end
             end,
@@ -3716,8 +3757,17 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
     end
     local function CurrentSpell()
         local values, selected = Model.BlacklistSpellValues(CurrentPreset()), M.auraBlacklistSpell
-        for i = 1, #values do if values[i].value == selected then return selected end end
-        return values[1] and values[1].value or nil
+        local entries = type(Model.GroupBlacklistEntries) == "function"
+            and Model.GroupBlacklistEntries(scope, lane) or {}
+        local blocked = {}
+        for i = 1, #entries do blocked[tostring(entries[i].value)] = true end
+        for i = 1, #values do
+            if values[i].value == selected and not blocked[tostring(selected)] then return selected end
+        end
+        for i = 1, #values do
+            if values[i].value ~= nil and not blocked[tostring(values[i].value)] then return values[i].value end
+        end
+        return nil
     end
     local preset = W.Dropdown(section, "Preset", function() return Model.BlacklistPresetValues() end, presetW)
     W.MoveWidget(preset, section, 24, -36 + curatedOffset, presetW)
@@ -3731,6 +3781,7 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
     addSet:SetScript("OnClick", function()
         local count = Model.AddGroupBlacklistPresetGroup(scope, lane, CurrentPreset())
         if count > 0 then
+            M.auraBlacklistSpell = nil
             QueueGroupScope(scope, "visual")
             Rebuild(ctx)
         end
@@ -3752,6 +3803,7 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
     addSpell:SetScript("OnClick", function()
         local changed = Model.AddGroupBlacklistSpell(scope, lane, CurrentSpell())
         if changed then
+            M.auraBlacklistSpell = nil
             QueueGroupScope(scope, "visual")
             Rebuild(ctx)
         end
@@ -3914,8 +3966,11 @@ end
 
 function M.BuildAuras3UnitSection(ctx, builder, unit)
     if not Model.UnitSupported(unit) then return end
-    ctx._auraAppearancePreviewRefresh = function()
-        if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
+    ctx._auraAppearancePreviewRefresh = function(reason)
+        local refreshOwnedPreview = ctx._msuf2RefreshUnitPreview
+        if type(refreshOwnedPreview) == "function" then
+            refreshOwnedPreview(reason or "AURAS3_UNIT_STYLE_DUMMY")
+        elseif type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
             _G.MSUF_UFPreview_RequestRefresh("AURAS3_UNIT_STYLE_DUMMY")
         end
     end
@@ -4003,7 +4058,7 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
         "Aura Options and Aura Style belong to this UnitFrame. Shared icon theme: Appearance > Aura Style.",
         16, footerY - 8, sectionW - 198, T.colors.muted)
     M.TrackRefresh(ctx, function()
-        workspaceHint:SetText(normalLane and not AnyUnitFrameAuraEnabled()
+        workspaceHint:SetText(normalLane and UnitDispelRequested(unit) and not UnitAuraSensorEnabled(unit)
             and UNIT_AURA_DISPEL_WARNING
             or "Aura Options and Aura Style belong to this UnitFrame. Shared icon theme: Appearance > Aura Style.")
     end)

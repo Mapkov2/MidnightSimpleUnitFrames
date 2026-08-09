@@ -1088,6 +1088,10 @@ local function NudgeTarget(dx, dy, exactDelta)
                     for _, k in ipairs(applyKeys) do
                         a2.perUnit[k] = a2.perUnit[k] or {}
                         local uc = a2.perUnit[k]
+                        --- Match Aura Menu/drag ownership: a Shared-layout
+                        --- scope's local table is dormant and must not revive
+                        --- stale fields on the first keyboard nudge.
+                        if uc.overrideLayout ~= true then uc.layout = {} end
                         uc.layout = uc.layout or {}
                         uc.overrideLayout = true
                         local lay = uc.layout
@@ -1894,9 +1898,26 @@ local function OnUpdate(self, elapsed)
             d.mover:SetPoint("TOPLEFT", UIParent, "TOPLEFT", moverX, moverY)
 
             if d.mover._coordFS then
+                local displayX, displayY
+                if type(U.FramePositionValues) == "function" then
+                    displayX, displayY = U.FramePositionValues(d.bar)
+                end
+                local fallbackX
+                if not displayX then
+                    local left = snapCX - d.halfW
+                    local right = snapCX + d.halfW
+                    local centerX = screenW * 0.5
+                    if right <= centerX then
+                        fallbackX = right - centerX
+                    elseif left >= centerX then
+                        fallbackX = left - centerX
+                    else
+                        fallbackX = 0
+                    end
+                end
                 d.mover._coordFS:SetText(format("%.0f, %.0f",
-                    round(snapCX - screenW * 0.5),
-                    round(snapCY - screenH * 0.5)))
+                    displayX or round(fallbackX),
+                    displayY or round(snapCY + d.halfH - screenH * 0.5)))
             end
         end
 
@@ -1909,9 +1930,6 @@ local function OnUpdate(self, elapsed)
             return
         end
 
-        if d.isGroupFrame and d.mover._coordFS then
-            d.mover._coordFS:SetText(format("%.0f, %.0f", d.conf.offsetX or 0, d.conf.offsetY or 0))
-        end
         if d.isGroupFrame then
             SyncGFPopupDuringDrag(d, elapsed)
         else

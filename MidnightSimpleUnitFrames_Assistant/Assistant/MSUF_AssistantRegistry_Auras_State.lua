@@ -65,15 +65,6 @@ function A.AurasRegistry.BuildStateHelpers(ctx)
         return type(pu) == "table" and pu[key] == true
     end
 
-    local function SeedAuraTable(dst, src, keys)
-        if type(dst) ~= "table" then return end
-        src = type(src) == "table" and src or {}
-        for i = 1, #keys do
-            local key = keys[i]
-            if dst[key] == nil then dst[key] = src[key] end
-        end
-    end
-
     local function SetAuraOverrideBool(scope, key, value)
         if scope == "shared" then return end
         local pu, _, auras = AuraPerUnit(scope, true)
@@ -82,6 +73,7 @@ function A.AurasRegistry.BuildStateHelpers(ctx)
             pu[key] = false
             return
         end
+        local wasEnabled = pu[key] == true
         pu[key] = true
         local shared = type(auras) == "table" and type(auras.shared) == "table" and auras.shared or {}
         if key == "overrideFilters" then
@@ -101,20 +93,12 @@ function A.AurasRegistry.BuildStateHelpers(ctx)
             pu.filters.buffs = type(pu.filters.buffs) == "table" and pu.filters.buffs or {}
             pu.filters.debuffs = type(pu.filters.debuffs) == "table" and pu.filters.debuffs or {}
         elseif key == "overrideSharedLayout" then
-            pu.layoutShared = type(pu.layoutShared) == "table" and pu.layoutShared or {}
-            SeedAuraTable(pu.layoutShared, shared, {
-                "maxBuffs", "maxDebuffs", "maxIcons", "perRow", "layoutMode", "growth",
-                "buffGrowth", "debuffGrowth", "rowWrap", "buffRowWrap", "debuffRowWrap",
-                "buffDebuffAnchor", "splitSpacing", "stackCountAnchor", "sortOrder",
-            })
+            -- Auras3 overrides are sparse. Reusing or pre-seeding an inactive
+            -- Auras2 table can resurrect unrelated legacy values on the first
+            -- scope-aware edit, so begin with a clean owner table.
+            if not wasEnabled or type(pu.layoutShared) ~= "table" then pu.layoutShared = {} end
         elseif key == "overrideLayout" then
-            pu.layout = type(pu.layout) == "table" and pu.layout or {}
-            SeedAuraTable(pu.layout, shared, { "iconSize", "spacing", "cooldownTextSize", "stackTextSize", "reminderGrowth" })
-        elseif key == "overrideIgnore" then
-            pu.ignoreCats = type(pu.ignoreCats) == "table" and pu.ignoreCats or {}
-            if type(shared.ignoreCats) == "table" then
-                for k, v in pairs(shared.ignoreCats) do pu.ignoreCats[k] = v end
-            end
+            if not wasEnabled or type(pu.layout) ~= "table" then pu.layout = {} end
         end
     end
 

@@ -246,7 +246,6 @@ local function EnsureContainer(kind, parent)
   if not container then
     container = CreateFrame("Frame", "MSUF_GFPreviewContainer_" .. kind, desiredParent)
     container:EnableMouse(false)
-    if container.SetClampedToScreen then container:SetClampedToScreen(true) end
     GF._previewContainer[kind] = container
   end
   if container:GetParent() ~= desiredParent then container:SetParent(desiredParent) end
@@ -286,6 +285,10 @@ local function PositionContainer(kind, count)
     local cx, cy = tonumber(conf.offsetX), tonumber(conf.offsetY)
     if cx == nil or cy == nil then cx, cy = DefaultCenter(kind) end
     x, y = floor(cx + 0.5), floor(cy + 0.5)
+  end
+  if GF.ConfigureAnchorPointScreenClamp then
+    GF.ConfigureAnchorPointScreenClamp(container, point, containerW, containerH)
+  else
     x, y = ClampPreviewOffsetOnScreen(point, relativePoint, relative, x, y, containerW, containerH)
   end
   local containerKey = tostring(point) .. "\030" .. tostring(relativePoint) .. "\030" .. tostring(relative) .. "\030" .. tostring(x) .. "\030" .. tostring(y)
@@ -523,7 +526,7 @@ local function ApplyFrameAuraPreview(frame, kind, visual, lane, descriptor, slot
     swipe:SetPoint("TOPLEFT", visual, "TOPLEFT", 0, 0)
     swipe:SetPoint("BOTTOMRIGHT", visual, "BOTTOMRIGHT", 0, size * 0.42)
     swipe:SetTexture(PREVIEW_WHITE)
-    swipe:SetVertexColor(0, 0, 0, 0.38)
+    swipe:SetVertexColor(0, 0, 0, 0.58)
     swipe:Show()
   end
 
@@ -904,7 +907,7 @@ local function ApplySpellIndicatorPreview(frame, kind, visual, slot)
       swipe:SetPoint("TOPLEFT", visual, "TOPLEFT", 0, 0)
       swipe:SetPoint("BOTTOMRIGHT", visual, "BOTTOMRIGHT", 0, size * 0.42)
       swipe:SetTexture(PREVIEW_WHITE)
-      swipe:SetVertexColor(0, 0, 0, 0.38)
+      swipe:SetVertexColor(0, 0, 0, 0.58)
       swipe:Show()
     end
 

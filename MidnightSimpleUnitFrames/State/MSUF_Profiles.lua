@@ -1978,7 +1978,31 @@ local MSUF_PROFILEIO_LEGACY_PROFILE_SCHEMA_56 = 560
 --- MSUF_ProfileIO_TranslateProfileToCurrent, independently from the broad
 --- default-fill revision owned by MSUF_Defaults.lua. Bump it whenever that
 --- translation pipeline gains a new mandatory repair.
-local MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION = 15
+local MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION = 20
+local MSUF_PROFILEIO_UNIT_AURA_MODEL_REVISION = 1
+local MSUF_PROFILEIO_UNIT_AURA_MODEL_KEY = "profileModelRevision"
+local MSUF_PROFILEIO_GROUP_AURA_MODEL_REVISION = 1
+local MSUF_PROFILEIO_GROUP_AURA_SCOPES = { "gf_party", "gf_raid", "gf_mythicraid" }
+function MSUF.ProfileIOGroupHasRetiredAuraFields(conf)
+    return type(conf) == "table" and (
+        conf.aurasEnabled ~= nil or conf.auraMaxIcons ~= nil or conf.auraIconSize ~= nil
+        or conf.auraAnchor ~= nil or conf.auraGrowthX ~= nil or conf.auraGrowthY ~= nil
+        or conf.auraSpacing ~= nil or conf.auraPerRow ~= nil
+        or conf.privateAurasEnabled ~= nil or conf.privateAuraMax ~= nil
+        or conf.privateAuraSize ~= nil or conf.privateAuraAnchor ~= nil
+        or conf.privateAuraX ~= nil or conf.privateAuraY ~= nil
+        or conf.privateAuraCountdown ~= nil or conf._auraMigV2 ~= nil)
+end
+function MSUF.ProfileIOGroupHasAuraPayload(conf)
+    return type(conf) == "table" and (
+        type(conf.auras) == "table" or type(conf.privateAuras) == "table"
+        or type(conf.spellIndicators) == "table"
+        or MSUF.ProfileIOGroupHasRetiredAuraFields(conf))
+end
+local MSUF_PROFILEIO_UNIT_AURA_RESET_UNITS = {
+    "player", "target", "focus",
+    "boss1", "boss2", "boss3", "boss4", "boss5",
+}
 local MSUF_PROFILEIO_LEGACY_UNIT_NAME_ANCHORS = {
     LEFT = "TOPLEFT",
     CENTER = "TOP",
@@ -2318,204 +2342,6 @@ local function MSUF_ProfileIO_CopyAuraGrowthAlias(tbl, fromKey, toGrowthKey, toW
     return changed
 end
 
-local MSUF_PROFILEIO_A2_AURA_FRAME_DEFAULT_SIZE = {
-    player = { 275, 40 },
-    target = { 276, 40 },
-    focus = { 216, 30 },
-    targettarget = { 170, 36 },
-    focustarget = { 170, 30 },
-    boss = { 264, 35 },
-}
-
-local function MSUF_ProfileIO_A2AuraFrameKey(unit)
-    if unit == "tot" or unit == "targetoftarget" then return "targettarget" end
-    if unit == "focus_target" or unit == "focustargettarget" then return "focustarget" end
-    if type(unit) == "string" and unit:match("^boss%d+$") then return "boss" end
-    return unit
-end
-
-local function MSUF_ProfileIO_A2AuraFrameSize(profile, unit)
-    local key = MSUF_ProfileIO_A2AuraFrameKey(unit)
-    local conf = type(profile) == "table" and type(profile[key]) == "table" and profile[key] or nil
-    local defaults = MSUF_PROFILEIO_A2_AURA_FRAME_DEFAULT_SIZE[key] or MSUF_PROFILEIO_A2_AURA_FRAME_DEFAULT_SIZE.player
-    local width = MSUF_ProfileIO_ToNumber(conf and (conf.width or conf.frameWidth)) or defaults[1]
-    local height = MSUF_ProfileIO_ToNumber(conf and (conf.height or conf.frameHeight)) or defaults[2]
-    if width < 1 then width = defaults[1] end
-    if height < 1 then height = defaults[2] end
-    return width, height
-end
-
-local function MSUF_ProfileIO_A2AuraReadNumber(primary, secondary, key, fallback)
-    local n = type(primary) == "table" and MSUF_ProfileIO_ToNumber(primary[key]) or nil
-    if n ~= nil then return n end
-    n = type(secondary) == "table" and MSUF_ProfileIO_ToNumber(secondary[key]) or nil
-    if n ~= nil then return n end
-    return fallback or 0
-end
-
-local function MSUF_ProfileIO_ConvertLegacyAuras2Geometry(auras, profile)
-    if type(auras) ~= "table" or auras._msufAuras3LegacyGeometry_v3 == true then return false end
-    local shared = type(auras.shared) == "table" and auras.shared or {}
-    auras.shared = shared
-    -- Aura2 v11f/5.57 kept the old buff/debuffOffset fields in its DB, but its
-    -- renderer positioned the containers exclusively with the corresponding
-    -- buff/debuffGroupOffset fields. In particular, buffOffsetY = 30 was a
-    -- retired default, not an additional visible lane offset.
-    local useRetiredLaneOffsetAliases = shared._msufA2_migrated_v11f ~= true
-    local repairV1 = auras._msufAuras3LegacyGeometry_v1 == true
-    local repairV2 = auras._msufAuras3LegacyGeometry_v2 == true
-    local changed = false
-
-    local function ReadRaw(primary, secondary, ...)
-        for i = 1, select("#", ...) do
-            local key = select(i, ...)
-            local value = type(primary) == "table" and primary[key] or nil
-            if value ~= nil then return value end
-            value = type(secondary) == "table" and secondary[key] or nil
-            if value ~= nil then return value end
-        end
-        return nil
-    end
-
-    local function GrowthParts(value, wrap)
-        value = tostring(value or "RIGHT"):upper()
-        wrap = tostring(wrap or "DOWN"):upper()
-        local combined = MSUF_PROFILEIO_AURA_GROWTH_PARTS[value]
-        if combined then
-            value = combined[1]
-            wrap = combined[2] or wrap
-        end
-        if value ~= "LEFT" and value ~= "UP" and value ~= "DOWN" then value = "RIGHT" end
-        if wrap ~= "UP" then wrap = "DOWN" end
-        if value == "LEFT" then return -1, wrap == "UP" and 1 or -1, false end
-        if value == "UP" then return 1, 1, true end
-        if value == "DOWN" then return 1, -1, true end
-        return 1, wrap == "UP" and 1 or -1, false
-    end
-
-    local function InitialAnchor(xSign, ySign)
-        return (ySign > 0 and "BOTTOM" or "TOP") .. (xSign > 0 and "LEFT" or "RIGHT")
-    end
-
-    local function LegacyFirstIconAnchor(growth)
-        growth = tostring(growth or "RIGHT"):upper()
-        local combined = MSUF_PROFILEIO_AURA_GROWTH_PARTS[growth]
-        if combined then growth = combined[1] end
-        if growth == "LEFT" then return "BOTTOMRIGHT" end
-        if growth == "DOWN" then return "TOPLEFT" end
-        return "BOTTOMLEFT"
-    end
-
-    local function ConvertScope(unit, unitCfg, existedBeforeV3)
-        if type(unitCfg) ~= "table" then return end
-        local layout = type(unitCfg.layout) == "table" and unitCfg.layout or {}
-        unitCfg.layout = layout
-        local effectiveLayout = unitCfg.overrideLayout == true and layout or nil
-        local layoutShared = unitCfg.overrideSharedLayout == true and type(unitCfg.layoutShared) == "table"
-            and unitCfg.layoutShared or nil
-        local width, height = MSUF_ProfileIO_A2AuraFrameSize(profile, unit)
-        local baseX = MSUF_ProfileIO_A2AuraReadNumber(effectiveLayout, shared, "offsetX", 0)
-        local baseY = MSUF_ProfileIO_A2AuraReadNumber(effectiveLayout, shared, "offsetY", 0)
-
-        local function ReadLaneNumber(primary, secondary, key, aliasKey, fallback)
-            local n = type(primary) == "table" and MSUF_ProfileIO_ToNumber(primary[key]) or nil
-            if n ~= nil then return n end
-            if useRetiredLaneOffsetAliases then
-                n = type(primary) == "table" and MSUF_ProfileIO_ToNumber(primary[aliasKey]) or nil
-                if n ~= nil then return n end
-            end
-            n = type(secondary) == "table" and MSUF_ProfileIO_ToNumber(secondary[key]) or nil
-            if n ~= nil then return n end
-            if useRetiredLaneOffsetAliases then
-                n = type(secondary) == "table" and MSUF_ProfileIO_ToNumber(secondary[aliasKey]) or nil
-                if n ~= nil then return n end
-            end
-            return fallback or 0
-        end
-
-        local function ConvertLane(kind, xKey, yKey, anchorKey, legacyXKey, legacyYKey)
-            local originX
-            local originY
-            if repairV2 and existedBeforeV3 then
-                -- v2 stored the old Aura2 container's BOTTOMLEFT origin. It
-                -- still anchored Auras3's full-capacity lane there, which is
-                -- why LEFT/UP and RIGHT/DOWN profiles drifted by whole rows.
-                originX = ReadLaneNumber(layout, nil, xKey, legacyXKey, 0)
-                originY = ReadLaneNumber(layout, nil, yKey, legacyYKey, 0)
-            elseif repairV1 and existedBeforeV3 then
-                local x = ReadLaneNumber(layout, nil, xKey, legacyXKey, 0)
-                local y = ReadLaneNumber(layout, nil, yKey, legacyYKey, 0)
-                local oldAnchor = tostring(layout[anchorKey] or ""):upper()
-                if oldAnchor == "TOPRIGHT" or oldAnchor == "BOTTOMRIGHT" then
-                    x = x + width
-                end
-                if oldAnchor == "TOPLEFT" or oldAnchor == "TOPRIGHT" then
-                    y = y + height
-                end
-                originX, originY = x, y
-            else
-                originX = baseX + ReadLaneNumber(effectiveLayout, shared, xKey, legacyXKey, 0)
-                originY = height + baseY + ReadLaneNumber(effectiveLayout, shared, yKey, legacyYKey, 0)
-            end
-
-            local growth = ReadRaw(layoutShared, shared, kind .. "GrowthX", kind .. "Growth", "growth") or "RIGHT"
-            local wrap = ReadRaw(layoutShared, shared, kind .. "GrowthY", kind .. "RowWrap", "rowWrap") or "DOWN"
-            local xSign, ySign = GrowthParts(growth, wrap)
-            local anchor = InitialAnchor(xSign, ySign)
-            local oldIconAnchor = LegacyFirstIconAnchor(growth)
-            local size = MSUF_ProfileIO_ToNumber(ReadRaw(effectiveLayout, shared,
-                kind .. "GroupIconSize", kind .. "IconSize", "iconSize")) or 26
-            if size < 1 then size = 26 end
-
-            -- Preserve the first Aura2 icon's rectangle, not the old empty
-            -- container origin. Auras3 anchors a full-capacity layout host, so
-            -- TOP/RIGHT anchors must be expressed relative to that host's far
-            -- edge while keeping the first icon pixel-identical.
-            local oldLeft = originX - (oldIconAnchor:find("RIGHT", 1, true) and size or 0)
-            local oldBottom = originY - (oldIconAnchor:find("TOP", 1, true) and size or 0)
-            local absoluteAnchorX = oldLeft + (anchor:find("RIGHT", 1, true) and size or 0)
-            local absoluteAnchorY = oldBottom + (anchor:find("TOP", 1, true) and size or 0)
-            local x = absoluteAnchorX - (anchor:find("RIGHT", 1, true) and width or 0)
-            local y = absoluteAnchorY - (anchor:find("TOP", 1, true) and height or 0)
-            if layout[anchorKey] ~= anchor then layout[anchorKey] = anchor; changed = true end
-            if layout[xKey] ~= x then layout[xKey] = x; changed = true end
-            if layout[yKey] ~= y then layout[yKey] = y; changed = true end
-
-            local layerKey = kind .. "Layer"
-            local strataKey = kind .. "Strata"
-            if layout[layerKey] == nil then layout[layerKey] = 30; changed = true end
-            -- The relational 0..30 layer model inherits the unit frame's
-            -- strata.  Seeding MEDIUM here made a generated compatibility
-            -- value indistinguishable from a user's explicit MEDIUM choice.
-            if layout[strataKey] == nil then layout[strataKey] = "AUTO"; changed = true end
-        end
-
-        ConvertLane("buff", "buffGroupOffsetX", "buffGroupOffsetY", "buffAnchor", "buffOffsetX", "buffOffsetY")
-        ConvertLane("debuff", "debuffGroupOffsetX", "debuffGroupOffsetY", "debuffAnchor", "debuffOffsetX", "debuffOffsetY")
-        if unitCfg.overrideLayout ~= true then unitCfg.overrideLayout = true; changed = true end
-    end
-
-    local perUnit = type(auras.perUnit) == "table" and auras.perUnit or {}
-    auras.perUnit = perUnit
-    local existing = {}
-    for unit in pairs(perUnit) do existing[unit] = true end
-    -- Aura2 supported these scopes even when no per-unit override table had
-    -- ever been created. Materialize them because their frame heights differ;
-    -- one converted shared Y value cannot preserve all four geometries.
-    local scopes = { "player", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5" }
-    for i = 1, #scopes do
-        local unit = scopes[i]
-        if type(perUnit[unit]) ~= "table" then perUnit[unit] = {}; changed = true end
-    end
-    for unit, unitCfg in pairs(perUnit) do
-        ConvertScope(unit, unitCfg, existing[unit] == true)
-    end
-    auras._msufAuras3LegacyGeometry_v1 = true
-    auras._msufAuras3LegacyGeometry_v2 = true
-    auras._msufAuras3LegacyGeometry_v3 = true
-    return true
-end
-
 local function MSUF_ProfileIO_HasScopedFontOverrideValue(scope)
     if type(scope) ~= "table" then return false end
     if scope.fontOutline ~= nil or scope.noOutline ~= nil or scope.boldText ~= nil then return true end
@@ -2723,8 +2549,8 @@ local function MSUF_ProfileIO_AuraOverridesNeedRepair(profile)
     if type(perUnit) ~= "table" then return false end
     for _, unitCfg in pairs(perUnit) do
         if type(unitCfg) == "table" then
-            if MSUF_ProfileIO_TableHasAnyValue(unitCfg.layout) and unitCfg.overrideLayout ~= true then return true end
-            if MSUF_ProfileIO_TableHasAnyValue(unitCfg.layoutShared) and unitCfg.overrideSharedLayout ~= true then return true end
+            if MSUF_ProfileIO_TableHasAnyValue(unitCfg.layout) and unitCfg.overrideLayout == nil then return true end
+            if MSUF_ProfileIO_TableHasAnyValue(unitCfg.layoutShared) and unitCfg.overrideSharedLayout == nil then return true end
         end
     end
     return false
@@ -2745,14 +2571,29 @@ end
 
 local function MSUF_ProfileIO_ProfileNeedsLegacyRepair(profile)
     if type(profile) ~= "table" then return false end
-    if type(profile.auras2) == "table" then return true end
-    local translatedAuras = type(profile.auras3) == "table"
-        and profile.auras3._msufAuras3TranslatedFromLegacyAuras2 == true
+    if profile.auras ~= nil or type(profile.auras2) == "table" then return true end
+    local auras = type(profile.auras3) == "table" and profile.auras3 or nil
+    if auras and tonumber(auras[MSUF_PROFILEIO_UNIT_AURA_MODEL_KEY]) ~= MSUF_PROFILEIO_UNIT_AURA_MODEL_REVISION then
+        return true
+    end
+    for i = 1, #MSUF_PROFILEIO_GROUP_AURA_SCOPES do
+        local conf = profile[MSUF_PROFILEIO_GROUP_AURA_SCOPES[i]]
+        if type(conf) == "table" then
+            local groupAuras = type(conf.auras) == "table" and conf.auras or nil
+            local hasAuraPayload = MSUF.ProfileIOGroupHasAuraPayload(conf)
+            if hasAuraPayload and (not groupAuras
+                or tonumber(groupAuras[MSUF_PROFILEIO_UNIT_AURA_MODEL_KEY]) ~= MSUF_PROFILEIO_GROUP_AURA_MODEL_REVISION
+                or MSUF.ProfileIOGroupHasRetiredAuraFields(conf)) then
+                return true
+            end
+        end
+    end
+    local translatedAuras = auras
+        and auras._msufAuras3TranslatedFromLegacyAuras2 == true
     local legacyVisualProfile = translatedAuras
         or profile._msufLegacy55FrameOutlineBackground_v1 == true
     if translatedAuras
-        and (profile.auras3._msufAuras3LegacyGeometry_v3 ~= true
-            or profile._msufLegacy55FrameOutlineBackground_v1 ~= true) then return true end
+        and profile._msufLegacy55FrameOutlineBackground_v1 ~= true then return true end
     if legacyVisualProfile and profile._msufLegacy55PowerTextVisibility_v1 ~= true then return true end
     if legacyVisualProfile and profile._msufLegacy55UnitTextSlots_v1 ~= true then return true end
     if legacyVisualProfile and profile._msufLegacy55GroupTextGeometry_v1 ~= true then return true end
@@ -3144,29 +2985,676 @@ MSUF.ProfileIONormalizeLegacy55VisualCompatibility = function(profile, legacyPro
     return changed
 end
 
-local function MSUF_ProfileIO_NormalizeLegacyAuras(profile, legacyProfile)
+local MSUF_PROFILEIO_AURA_RESETTERS = {}
+do
+local MSUF_PROFILEIO_UNIT_AURA_RESET_LANES = {
+    buff = {
+        sizeKey = "buffGroupIconSize",
+        xKey = "buffGroupOffsetX",
+        yKey = "buffGroupOffsetY",
+        anchorKey = "buffAnchor",
+        spacingKey = "buffSpacing",
+        perRowKey = "buffPerRow",
+        maxKey = "maxBuffs",
+        growthKey = "buffGrowthX",
+        wrapKey = "buffGrowthY",
+        legacyGrowthKey = "buffGrowth",
+        defaultX = 0,
+        defaultY = 36,
+        defaultAnchor = "BOTTOMRIGHT",
+    },
+    debuff = {
+        sizeKey = "debuffGroupIconSize",
+        xKey = "debuffGroupOffsetX",
+        yKey = "debuffGroupOffsetY",
+        anchorKey = "debuffAnchor",
+        spacingKey = "debuffSpacing",
+        perRowKey = "debuffPerRow",
+        maxKey = "maxDebuffs",
+        growthKey = "debuffGrowthX",
+        wrapKey = "debuffGrowthY",
+        legacyGrowthKey = "debuffGrowth",
+        defaultX = 0,
+        defaultY = 6,
+        defaultAnchor = "TOPLEFT",
+    },
+}
+local MSUF_PROFILEIO_UNIT_AURA_RESET_LANE_ORDER = { "buff", "debuff" }
+local MSUF_PROFILEIO_UNIT_AURA_RESET_ANCHORS = {
+    TOPLEFT = { 0, 1 }, TOP = { 0.5, 1 }, TOPRIGHT = { 1, 1 },
+    LEFT = { 0, 0.5 }, CENTER = { 0.5, 0.5 }, RIGHT = { 1, 0.5 },
+    BOTTOMLEFT = { 0, 0 }, BOTTOM = { 0.5, 0 }, BOTTOMRIGHT = { 1, 0 },
+}
+
+local function MSUF_ProfileIO_AuraResetNumber(value, fallback, minValue, maxValue)
+    value = tonumber(value)
+    if value == nil or value ~= value then value = tonumber(fallback) or 0 end
+    if minValue ~= nil and value < minValue then value = minValue end
+    if maxValue ~= nil and value > maxValue then value = maxValue end
+    return value
+end
+
+local function MSUF_ProfileIO_AuraResetRound(value)
+    return math.floor((tonumber(value) or 0) + 0.5)
+end
+
+local function MSUF_ProfileIO_AuraResetReadRaw(primary, secondary, key)
+    local value = type(primary) == "table" and primary[key] or nil
+    if value ~= nil then return value end
+    return type(secondary) == "table" and secondary[key] or nil
+end
+
+local function MSUF_ProfileIO_AuraResetGrowthParts(growth, rowWrap)
+    growth = tostring(growth or "RIGHT")
+    rowWrap = tostring(rowWrap or "DOWN")
+    if growth == "LEFTUP" then return -1, 1, false end
+    if growth == "LEFTDOWN" then return -1, -1, false end
+    if growth == "RIGHTUP" then return 1, 1, false end
+    if growth == "RIGHTDOWN" then return 1, -1, false end
+    if growth == "LEFT" then return -1, rowWrap == "UP" and 1 or -1, false end
+    if growth == "UP" then return 1, 1, true end
+    if growth == "DOWN" then return 1, -1, true end
+    return 1, rowWrap == "UP" and 1 or -1, false
+end
+
+local function MSUF_ProfileIO_AuraResetGridShape(maxCount, perRow, verticalGrowth)
+    maxCount = MSUF_ProfileIO_AuraResetRound(maxCount)
+    perRow = math.max(MSUF_ProfileIO_AuraResetRound(perRow), 1)
+    if maxCount <= 0 then return 1, 1 end
+    if verticalGrowth then return 1, maxCount end
+    return math.min(perRow, maxCount), math.floor((maxCount + perRow - 1) / perRow)
+end
+
+local function MSUF_ProfileIO_AuraResetAnchor(value, fallback)
+    if type(value) == "string" and MSUF_PROFILEIO_UNIT_AURA_RESET_ANCHORS[value] then
+        return value
+    end
+    return fallback
+end
+
+--- Reproduce the current Auras3 compiler's effective layout on the profile
+--- translation cold path. No runtime module is loaded or called here: this is
+--- only used once to preserve the visible first icon while the rest of the old
+--- Aura tree is discarded.
+local function MSUF_ProfileIO_AuraResetA3LaneMetrics(auras, unit, kind, sizeOverride)
+    local spec = MSUF_PROFILEIO_UNIT_AURA_RESET_LANES[kind]
+    local rootShared = type(auras) == "table" and type(auras.shared) == "table" and auras.shared or {}
+    local perUnit = type(auras) == "table" and type(auras.perUnit) == "table" and auras.perUnit or nil
+    local unitCfg = perUnit and type(perUnit[unit]) == "table" and perUnit[unit] or nil
+    local layout = unitCfg and unitCfg.overrideLayout == true and type(unitCfg.layout) == "table"
+        and unitCfg.layout or nil
+    local layoutShared = unitCfg and unitCfg.overrideSharedLayout == true
+        and type(unitCfg.layoutShared) == "table" and unitCfg.layoutShared or nil
+
+    local function LayoutRaw(key)
+        return MSUF_ProfileIO_AuraResetReadRaw(layout, rootShared, key)
+    end
+    local function SharedRaw(key)
+        return MSUF_ProfileIO_AuraResetReadRaw(layoutShared, rootShared, key)
+    end
+
+    local sizeRaw = LayoutRaw(spec.sizeKey)
+    if sizeRaw == nil then sizeRaw = LayoutRaw("iconSize") end
+    local size = MSUF_ProfileIO_AuraResetNumber(
+        sizeOverride ~= nil and sizeOverride or sizeRaw, 26, 1, 128)
+    local genericSpacing = MSUF_ProfileIO_AuraResetNumber(LayoutRaw("spacing"), 2, 0, 64)
+    local spacing = MSUF_ProfileIO_AuraResetNumber(LayoutRaw(spec.spacingKey), genericSpacing, 0, 64)
+    local perRowFallback = SharedRaw("perRow")
+    if perRowFallback == nil then perRowFallback = 12 end
+    local perRow = MSUF_ProfileIO_AuraResetNumber(SharedRaw(spec.perRowKey), perRowFallback, 1, 40)
+    local maxCount = MSUF_ProfileIO_AuraResetNumber(SharedRaw(spec.maxKey), 12, 0, 80)
+    local growth = SharedRaw(spec.growthKey)
+    if growth == nil then growth = SharedRaw("growth") end
+    if growth == nil then growth = "RIGHT" end
+    local rowWrap = SharedRaw(spec.wrapKey)
+    if rowWrap == nil then rowWrap = SharedRaw("rowWrap") end
+    if rowWrap == nil then rowWrap = "DOWN" end
+    local xSign, ySign, verticalGrowth = MSUF_ProfileIO_AuraResetGrowthParts(growth, rowWrap)
+    local cols, rows = MSUF_ProfileIO_AuraResetGridShape(maxCount, perRow, verticalGrowth)
+
+    local styleActive = false
+    if unitCfg then
+        if unitCfg.overrideStyle ~= nil then
+            styleActive = unitCfg.overrideStyle == true
+        elseif layout and layout.stylePadding ~= nil then
+            -- stylePadding itself is a Style-layout key, so its presence is
+            -- sufficient to activate legacy nil-gate style ownership.
+            styleActive = true
+        end
+    end
+    local paddingRaw = styleActive and layout and layout.stylePadding or rootShared.stylePadding
+    local padding = MSUF_ProfileIO_AuraResetRound(
+        MSUF_ProfileIO_AuraResetNumber(paddingRaw, 0, 0, 16))
+    local width = math.max(1, cols * size + math.max(cols - 1, 0) * spacing + 2 * padding)
+    local height = math.max(1, rows * size + math.max(rows - 1, 0) * spacing + 2 * padding)
+    local x = MSUF_ProfileIO_AuraResetRound(
+        MSUF_ProfileIO_AuraResetNumber(LayoutRaw(spec.xKey), spec.defaultX, -4096, 4096))
+    local y = MSUF_ProfileIO_AuraResetRound(
+        MSUF_ProfileIO_AuraResetNumber(LayoutRaw(spec.yKey), spec.defaultY, -4096, 4096))
+    local anchor = MSUF_ProfileIO_AuraResetAnchor(LayoutRaw(spec.anchorKey), spec.defaultAnchor)
+    return {
+        size = size,
+        spacing = spacing,
+        width = width,
+        height = height,
+        padding = padding,
+        xSign = xSign,
+        ySign = ySign,
+        x = x,
+        y = y,
+        anchor = anchor,
+    }
+end
+
+local function MSUF_ProfileIO_AuraResetFirstOffset(metrics, anchor)
+    local anchorParts = MSUF_PROFILEIO_UNIT_AURA_RESET_ANCHORS[anchor]
+        or MSUF_PROFILEIO_UNIT_AURA_RESET_ANCHORS.CENTER
+    local ax, ay = anchorParts[1], anchorParts[2]
+    local ix = metrics.xSign < 0 and 1 or 0
+    local iy = metrics.ySign > 0 and 0 or 1
+    local dx = (ix - ax) * metrics.width + metrics.padding * metrics.xSign - ix * metrics.size
+    local dy = (iy - ay) * metrics.height + metrics.padding * metrics.ySign - iy * metrics.size
+    return dx, dy
+end
+
+local function MSUF_ProfileIO_AuraResetSnapshotA3(auras)
+    local snapshots = {}
+    for i = 1, #MSUF_PROFILEIO_UNIT_AURA_RESET_UNITS do
+        local unit = MSUF_PROFILEIO_UNIT_AURA_RESET_UNITS[i]
+        local unitSnapshot = {}
+        snapshots[unit] = unitSnapshot
+        for j = 1, #MSUF_PROFILEIO_UNIT_AURA_RESET_LANE_ORDER do
+            local kind = MSUF_PROFILEIO_UNIT_AURA_RESET_LANE_ORDER[j]
+            local metrics = MSUF_ProfileIO_AuraResetA3LaneMetrics(auras, unit, kind)
+            local dx, dy = MSUF_ProfileIO_AuraResetFirstOffset(metrics, metrics.anchor)
+            unitSnapshot[kind] = {
+                size = metrics.size,
+                anchor = metrics.anchor,
+                firstX = metrics.x + dx,
+                firstY = metrics.y + dy,
+            }
+        end
+    end
+    return snapshots
+end
+
+local MSUF_PROFILEIO_A2_VALID_GROWTH = { RIGHT = true, LEFT = true, UP = true, DOWN = true }
+local function MSUF_ProfileIO_AuraResetSnapshotA2(auras)
+    local snapshots = {}
+    local shared = type(auras) == "table" and type(auras.shared) == "table" and auras.shared or {}
+    local perUnit = type(auras) == "table" and type(auras.perUnit) == "table" and auras.perUnit or nil
+    for i = 1, #MSUF_PROFILEIO_UNIT_AURA_RESET_UNITS do
+        local unit = MSUF_PROFILEIO_UNIT_AURA_RESET_UNITS[i]
+        local unitCfg = perUnit and type(perUnit[unit]) == "table" and perUnit[unit] or nil
+        local layout = unitCfg and unitCfg.overrideLayout == true and type(unitCfg.layout) == "table"
+            and unitCfg.layout or nil
+        local layoutShared = unitCfg and unitCfg.overrideSharedLayout == true
+            and type(unitCfg.layoutShared) == "table" and unitCfg.layoutShared or nil
+        local baseX = type(shared.offsetX) == "number" and shared.offsetX or 0
+        local baseY = type(shared.offsetY) == "number" and shared.offsetY or 6
+        if layout and type(layout.offsetX) == "number" then baseX = layout.offsetX end
+        if layout and type(layout.offsetY) == "number" then baseY = layout.offsetY end
+
+        local function GroupOffset(key)
+            local value = layout and layout[key] ~= nil and layout[key] or shared[key]
+            return MSUF_ProfileIO_AuraResetRound(
+                MSUF_ProfileIO_AuraResetNumber(value, 0, -2000, 2000))
+        end
+        local function ValidGrowth(tbl, key)
+            local value = type(tbl) == "table" and tbl[key] or nil
+            return MSUF_PROFILEIO_A2_VALID_GROWTH[value] and value or nil
+        end
+        local sharedGenericGrowth = ValidGrowth(shared, "growth") or "RIGHT"
+        local localGenericGrowth = ValidGrowth(layoutShared, "growth")
+        local unitSnapshot = {}
+        snapshots[unit] = unitSnapshot
+        for j = 1, #MSUF_PROFILEIO_UNIT_AURA_RESET_LANE_ORDER do
+            local kind = MSUF_PROFILEIO_UNIT_AURA_RESET_LANE_ORDER[j]
+            local spec = MSUF_PROFILEIO_UNIT_AURA_RESET_LANES[kind]
+            local size = type(shared.iconSize) == "number" and shared.iconSize or 26
+            if layout and type(layout.iconSize) == "number" and layout.iconSize > 1 then
+                size = layout.iconSize
+            end
+            if type(shared[spec.sizeKey]) == "number" and shared[spec.sizeKey] > 1 then
+                size = shared[spec.sizeKey]
+            end
+            if layout and type(layout[spec.sizeKey]) == "number" and layout[spec.sizeKey] > 1 then
+                size = layout[spec.sizeKey]
+            end
+            size = MSUF_ProfileIO_AuraResetNumber(size, 26, 1, 128)
+            local growth = ValidGrowth(layoutShared, spec.legacyGrowthKey)
+                or ValidGrowth(shared, spec.legacyGrowthKey)
+                or localGenericGrowth
+                or sharedGenericGrowth
+            local rx = baseX + GroupOffset(spec.xKey)
+            local ry = baseY + GroupOffset(spec.yKey)
+            local ix = growth == "LEFT" and 1 or 0
+            local iy = growth == "DOWN" and 1 or 0
+            unitSnapshot[kind] = {
+                size = size,
+                anchor = "TOPLEFT",
+                firstX = rx + ix * (1 - size),
+                firstY = ry + iy * (1 - size),
+            }
+        end
+    end
+    return snapshots
+end
+
+local function MSUF_ProfileIO_AuraResetRebaseLane(cleanAuras, unit, kind, snapshot)
+    local target = MSUF_ProfileIO_AuraResetA3LaneMetrics(cleanAuras, unit, kind, snapshot.size)
+    local dx, dy = MSUF_ProfileIO_AuraResetFirstOffset(target, snapshot.anchor)
+    return {
+        size = snapshot.size,
+        anchor = snapshot.anchor,
+        x = math.max(-4096, math.min(4096,
+            MSUF_ProfileIO_AuraResetRound(snapshot.firstX - dx))),
+        y = math.max(-4096, math.min(4096,
+            MSUF_ProfileIO_AuraResetRound(snapshot.firstY - dy))),
+    }
+end
+
+local function MSUF_ProfileIO_AuraResetWriteLane(layout, kind, geometry)
+    local spec = MSUF_PROFILEIO_UNIT_AURA_RESET_LANES[kind]
+    layout[spec.sizeKey] = geometry.size
+    layout[spec.anchorKey] = geometry.anchor
+    layout[spec.xKey] = geometry.x
+    layout[spec.yKey] = geometry.y
+end
+
+local function MSUF_ProfileIO_AuraResetSnapshotMatches(cleanAuras, unit, kind, desired)
+    local metrics = MSUF_ProfileIO_AuraResetA3LaneMetrics(cleanAuras, unit, kind)
+    local dx, dy = MSUF_ProfileIO_AuraResetFirstOffset(metrics, metrics.anchor)
+    return math.abs(metrics.size - desired.size) < 0.0001
+        and metrics.anchor == desired.anchor
+        and math.abs((metrics.x + dx) - desired.firstX) <= 0.51
+        and math.abs((metrics.y + dy) - desired.firstY) <= 0.51
+end
+
+local function MSUF_ProfileIO_ResetUnitAuras(profile)
     if type(profile) ~= "table" then return false end
+    local sourceA3 = type(profile.auras3) == "table" and profile.auras3 or nil
+    if sourceA3 and next(sourceA3) == nil and type(profile.auras2) == "table" then
+        -- A few hybrid beta/import payloads carried an empty Auras3 placeholder
+        -- beside the still-live Aura2 tree. Match the old EnsureDB fallback so
+        -- its position/size source is not discarded merely by that placeholder.
+        sourceA3 = nil
+    end
+    if sourceA3
+        and tonumber(sourceA3[MSUF_PROFILEIO_UNIT_AURA_MODEL_KEY]) == MSUF_PROFILEIO_UNIT_AURA_MODEL_REVISION then
+        local changed = false
+        if profile.auras ~= nil then profile.auras, changed = nil, true end
+        if profile.auras2 ~= nil then profile.auras2, changed = nil, true end
+        return changed
+    end
+    local sourceA2 = not sourceA3 and type(profile.auras2) == "table" and profile.auras2 or nil
+    if not sourceA3 and not sourceA2 and profile.auras == nil then return false end
+
+    local snapshots = sourceA3 and MSUF_ProfileIO_AuraResetSnapshotA3(sourceA3)
+        or sourceA2 and MSUF_ProfileIO_AuraResetSnapshotA2(sourceA2) or nil
+    local createCanonical = (type(MSUF) == "table" and MSUF.MSUF_CreateCanonicalUnitAuras)
+        or _G.MSUF_CreateCanonicalUnitAuras
+    local ok, cleanAuras = MSUF_ProfileIO_RunProtected(
+        "canonical Unit Aura reset", createCanonical)
+    if not ok or type(cleanAuras) ~= "table" then
+        -- Never destroy the old data if the Defaults-owned factory is missing.
+        -- The absent revision keeps this profile eligible for a retry.
+        return false
+    end
+    cleanAuras[MSUF_PROFILEIO_UNIT_AURA_MODEL_KEY] = MSUF_PROFILEIO_UNIT_AURA_MODEL_REVISION
+
+    if snapshots then
+        local shared = type(cleanAuras.shared) == "table" and cleanAuras.shared or {}
+        cleanAuras.shared = shared
+        local playerSnapshot = snapshots.player
+        if playerSnapshot then
+            for j = 1, #MSUF_PROFILEIO_UNIT_AURA_RESET_LANE_ORDER do
+                local kind = MSUF_PROFILEIO_UNIT_AURA_RESET_LANE_ORDER[j]
+                MSUF_ProfileIO_AuraResetWriteLane(shared, kind,
+                    MSUF_ProfileIO_AuraResetRebaseLane(cleanAuras, "player", kind, playerSnapshot[kind]))
+            end
+        end
+
+        local perUnit = type(cleanAuras.perUnit) == "table" and cleanAuras.perUnit or {}
+        cleanAuras.perUnit = perUnit
+        for i = 2, #MSUF_PROFILEIO_UNIT_AURA_RESET_UNITS do
+            local unit = MSUF_PROFILEIO_UNIT_AURA_RESET_UNITS[i]
+            local desired = snapshots[unit]
+            if desired then
+                local unitCfg = type(perUnit[unit]) == "table" and perUnit[unit] or {}
+                perUnit[unit] = unitCfg
+                local needsLocal = unitCfg.overrideLayout == true
+                for j = 1, #MSUF_PROFILEIO_UNIT_AURA_RESET_LANE_ORDER do
+                    local kind = MSUF_PROFILEIO_UNIT_AURA_RESET_LANE_ORDER[j]
+                    needsLocal = needsLocal
+                        or not MSUF_ProfileIO_AuraResetSnapshotMatches(cleanAuras, unit, kind, desired[kind])
+                end
+                if needsLocal then
+                    if unitCfg.overrideLayout ~= true then unitCfg.layout = {} end
+                    local layout = type(unitCfg.layout) == "table" and unitCfg.layout or {}
+                    unitCfg.layout = layout
+                    unitCfg.overrideLayout = true
+                    for j = 1, #MSUF_PROFILEIO_UNIT_AURA_RESET_LANE_ORDER do
+                        local kind = MSUF_PROFILEIO_UNIT_AURA_RESET_LANE_ORDER[j]
+                        MSUF_ProfileIO_AuraResetWriteLane(layout, kind,
+                            MSUF_ProfileIO_AuraResetRebaseLane(cleanAuras, unit, kind, desired[kind]))
+                    end
+                end
+            end
+        end
+    end
+
+    profile.auras3 = cleanAuras
+    profile.auras = nil
+    profile.auras2 = nil
+    return true
+end
+
+local MSUF_PROFILEIO_GROUP_AURA_RESET_LANES = {
+    buff = {
+        groupKey = "buff", defaultSizeParty = 22, defaultSizeRaid = 16,
+        defaultMax = 4, defaultPerRow = 4, defaultGrowth = "LEFTUP", defaultAnchor = "BOTTOMRIGHT",
+    },
+    debuff = {
+        groupKey = "debuff", defaultSizeParty = 20, defaultSizeRaid = 16,
+        defaultMax = 4, defaultPerRow = 3, defaultGrowth = "RIGHTDOWN", defaultAnchor = "TOPLEFT",
+    },
+    externals = {
+        groupKey = "externals", defaultSizeParty = 28, defaultSizeRaid = 22,
+        defaultMax = 2, defaultPerRow = 3, defaultGrowth = "RIGHTDOWN", defaultAnchor = "CENTER",
+    },
+}
+local MSUF_PROFILEIO_GROUP_AURA_RESET_LANE_ORDER = { "buff", "debuff", "externals" }
+local MSUF_PROFILEIO_GROUP_AURA_RETIRED_FLAT_KEYS = {
+    "aurasEnabled", "auraMaxIcons", "auraIconSize", "auraAnchor",
+    "auraGrowthX", "auraGrowthY", "auraSpacing", "auraPerRow",
+    "privateAurasEnabled", "privateAuraMax", "privateAuraSize",
+    "privateAuraAnchor", "privateAuraX", "privateAuraY", "privateAuraCountdown",
+}
+
+local function MSUF_ProfileIO_ClearRetiredGroupAuraFields(conf)
     local changed = false
-    local fromLegacyAuras2 = false
-    if type(profile.auras2) == "table" and (legacyProfile == true or type(profile.auras3) ~= "table") then
-        profile.auras3 = MSUF_DeepCopy(profile.auras2)
-        profile.auras3._msufAuras3TranslatedFromLegacyAuras2 = true
-        fromLegacyAuras2 = true
-        changed = true
+    for i = 1, #MSUF_PROFILEIO_GROUP_AURA_RETIRED_FLAT_KEYS do
+        local key = MSUF_PROFILEIO_GROUP_AURA_RETIRED_FLAT_KEYS[i]
+        if conf[key] ~= nil then conf[key], changed = nil, true end
     end
-    if profile.auras ~= nil then
-        profile.auras = nil
-        changed = true
+    if conf._auraMigV2 ~= nil then conf._auraMigV2, changed = nil, true end
+    return changed
+end
+
+local function MSUF_ProfileIO_AuraResetGroupRound(value)
+    value = tonumber(value) or 0
+    if value >= 0 then return math.floor(value + 0.5) end
+    return -math.floor((-value) + 0.5)
+end
+
+--- Dynamic Group Aura scaling never persisted the roster count that selected
+--- its 1.00/0.85/0.70 factor. Capture the live count once on this cold
+--- translation path, using the same API and thresholds as both 5.57 and the
+--- current Group compiler. Missing/invalid API data deliberately resolves to
+--- zero: both runtimes select 1.00 for every count <= 15.
+local function MSUF_ProfileIO_AuraResetCurrentGroupCount()
+    local getter = _G.GetNumGroupMembers
+    if type(getter) ~= "function" then return 0 end
+    local ok, value = pcall(getter)
+    if not ok then return 0 end
+    value = tonumber(value)
+    if value == nil or value ~= value then return 0 end
+    value = math.floor(value + 0.5)
+    if value < 0 then return 0 end
+    if value > 40 then return 40 end
+    return value
+end
+
+local function MSUF_ProfileIO_AuraResetGroupDynamicScale(root, groupCount)
+    if not (type(root) == "table" and root.dynamicScale == true) then return 1 end
+    groupCount = MSUF_ProfileIO_AuraResetNumber(groupCount, 0, 0, 40)
+    if groupCount <= 15 then return 1 end
+    if groupCount <= 25 then return 0.85 end
+    return 0.70
+end
+
+--- Matches Group Config's SplitAuraGrowth exactly. Values such as a bare
+--- LEFT were never a distinct Group mode and therefore rendered RIGHT/DOWN.
+local function MSUF_ProfileIO_AuraResetGroupGrowth(value, fallback)
+    value = value or fallback or "RIGHTDOWN"
+    if value == "LEFTUP" then return "LEFTUP" end
+    if value == "LEFTDOWN" then return "LEFTDOWN" end
+    if value == "RIGHTUP" then return "RIGHTUP" end
+    if value == "UP" then return "UP" end
+    if value == "DOWN" then return "DOWN" end
+    return "RIGHTDOWN"
+end
+
+local function MSUF_ProfileIO_AuraResetGroupLaneMetrics(
+    conf, laneName, sizeOverride, groupCount, legacyGeometry)
+    local spec = MSUF_PROFILEIO_GROUP_AURA_RESET_LANES[laneName]
+    local root = type(conf) == "table" and type(conf.auras) == "table" and conf.auras or {}
+    local group = type(root[spec.groupKey]) == "table" and root[spec.groupKey] or {}
+    local isRaid = conf and conf._msufAuraResetScope ~= "gf_party"
+    local defaultSize = isRaid and spec.defaultSizeRaid or spec.defaultSizeParty
+    local dynamicScale = MSUF_ProfileIO_AuraResetGroupDynamicScale(root, groupCount)
+    -- 5.57's custom renderer scaled icon size only; its spacing and container
+    -- offsets used frameScale alone. The current compiler applies dynamicScale
+    -- to size, spacing, x, and y. Preserve each source model exactly.
+    local layoutScale = legacyGeometry == true and 1 or dynamicScale
+    local iconScale = MSUF_ProfileIO_AuraResetNumber(group.iconScale, 100, 20, 300) / 100
+    local rawSize = sizeOverride ~= nil and sizeOverride
+        or (MSUF_ProfileIO_AuraResetNumber(group.size, defaultSize) * iconScale)
+    rawSize = rawSize * dynamicScale
+    local size = MSUF_ProfileIO_AuraResetNumber(
+        MSUF_ProfileIO_AuraResetGroupRound(rawSize), defaultSize,
+        legacyGeometry == true and 8 or 1, 256)
+    local spacing = MSUF_ProfileIO_AuraResetNumber(group.spacing, 1, 0, 64)
+    spacing = MSUF_ProfileIO_AuraResetNumber(
+        MSUF_ProfileIO_AuraResetGroupRound(spacing * layoutScale), 1, 0, 64)
+    local maxCount = MSUF_ProfileIO_AuraResetNumber(group.max,
+        laneName == "externals" and 2 or MSUF_ProfileIO_AuraResetNumber(conf and conf.auraMaxIcons, spec.defaultMax),
+        0, 80)
+    local perRow = MSUF_ProfileIO_AuraResetNumber(group.perRow, spec.defaultPerRow, 1, 40)
+    local growth = MSUF_ProfileIO_AuraResetGroupGrowth(group.growth, spec.defaultGrowth)
+    local xSign, ySign, verticalGrowth = MSUF_ProfileIO_AuraResetGrowthParts(growth, "DOWN")
+    local cols, rows = MSUF_ProfileIO_AuraResetGridShape(maxCount, perRow, verticalGrowth)
+    local anchor = MSUF_ProfileIO_AuraResetAnchor(group.anchor, spec.defaultAnchor)
+    return {
+        size = size,
+        spacing = spacing,
+        width = math.max(1, cols * size + math.max(cols - 1, 0) * spacing),
+        height = math.max(1, rows * size + math.max(rows - 1, 0) * spacing),
+        padding = 0,
+        xSign = xSign,
+        ySign = ySign,
+        x = MSUF_ProfileIO_AuraResetGroupRound((tonumber(group.x) or 0) * layoutScale),
+        y = MSUF_ProfileIO_AuraResetGroupRound((tonumber(group.y) or 0) * layoutScale),
+        anchor = anchor,
+    }
+end
+
+local function MSUF_ProfileIO_AuraResetSnapshotGroup(conf, scope, legacyProfile, groupCount)
+    if type(conf) ~= "table" then return nil end
+    if type(conf.auras) ~= "table" then
+        if legacyProfile ~= true then return nil end
+        -- Flat 5.x Group settings were Blizzard-owned by default. Blizzard did
+        -- not persist a movable lane position, so preserve only the effective
+        -- visible sizes and let the new native factory own every position.
+        return {
+            -- Aura2's flat auraIconSize fed only dormant custom tables. The
+            -- default BLIZZARD owner rendered Buffs/Debuffs at its own 20 px.
+            buff = { size = 20, sizeOnly = true },
+            debuff = { size = 20, sizeOnly = true },
+            externals = {
+                size = conf.aurasEnabled ~= nil and 28 or (scope == "gf_party" and 28 or 24),
+                sizeOnly = true,
+            },
+        }
     end
-    if profile.auras2 ~= nil then
-        profile.auras2 = nil
-        changed = true
+    local proxy = { auras = conf.auras, auraMaxIcons = conf.auraMaxIcons, _msufAuraResetScope = scope }
+    local snapshot = {}
+    local legacyRenderer = tostring(conf.auras.renderer or "BLIZZARD"):upper()
+    local legacyCustom = legacyProfile == true
+        and legacyRenderer ~= "BLIZZARD"
+        and legacyRenderer ~= "MIXED"
+        and legacyRenderer ~= "BOTH"
+        and legacyRenderer ~= "CUSTOM_BLIZZARD"
+        and legacyRenderer ~= "CUSTOM+BLIZZARD"
+    local legacyTypes = type(conf.auras.blizzardTypes) == "table" and conf.auras.blizzardTypes or nil
+    local legacyBlizzardSize = MSUF_ProfileIO_AuraResetNumber(conf.auras.blizzardIconSize,
+        20, legacyProfile == true and 8 or 1, 256)
+    local dynamicScale = MSUF_ProfileIO_AuraResetGroupDynamicScale(conf.auras, groupCount)
+    for i = 1, #MSUF_PROFILEIO_GROUP_AURA_RESET_LANE_ORDER do
+        local laneName = MSUF_PROFILEIO_GROUP_AURA_RESET_LANE_ORDER[i]
+        local legacyTypeKey = laneName == "buff" and "buffs"
+            or laneName == "debuff" and "debuffs" or "externals"
+        local laneWasCustom = legacyProfile ~= true or legacyCustom
+            or (legacyTypes and legacyTypes[legacyTypeKey] ~= nil
+                and legacyTypes[legacyTypeKey] ~= true)
+        if not laneWasCustom then
+            local nativeSize = legacyBlizzardSize
+            if laneName == "externals" then
+                local group = type(conf.auras.externals) == "table" and conf.auras.externals or nil
+                nativeSize = MSUF_ProfileIO_AuraResetNumber(group and group.size, 28, 8, 256)
+            end
+            -- 5.57 passed the same dynamic factor into its Blizzard-owned
+            -- container sizing; frameScale remains outside the Aura tree and
+            -- therefore survives this profile-only cut independently.
+            nativeSize = MSUF_ProfileIO_AuraResetNumber(
+                MSUF_ProfileIO_AuraResetGroupRound(nativeSize * dynamicScale),
+                nativeSize, legacyProfile == true and 8 or 1, 256)
+            snapshot[laneName] = { size = nativeSize, sizeOnly = true }
+        else
+            local legacySize
+            local legacyGroup
+            if legacyProfile == true then
+                local spec = MSUF_PROFILEIO_GROUP_AURA_RESET_LANES[laneName]
+                legacyGroup = type(conf.auras[spec.groupKey]) == "table" and conf.auras[spec.groupKey] or nil
+                local legacyFallback = laneName == "buff" and 22
+                    or laneName == "debuff" and 20 or 28
+                legacySize = legacyGroup and legacyGroup.size
+                    or legacyFallback
+                legacySize = MSUF_ProfileIO_AuraResetNumber(legacySize,
+                    legacyFallback, 8, 256)
+            end
+            local metrics = MSUF_ProfileIO_AuraResetGroupLaneMetrics(
+                proxy, laneName, legacySize, groupCount, legacyProfile)
+            local dx, dy
+            if legacyProfile == true then
+                local growth = tostring(legacyGroup and legacyGroup.growth or ""):upper()
+                if growth == "CENTER_H" or growth == "CENTER_V" then
+                    metrics.anchor = "CENTER"
+                end
+                local parts = MSUF_PROFILEIO_UNIT_AURA_RESET_ANCHORS[metrics.anchor]
+                    or MSUF_PROFILEIO_UNIT_AURA_RESET_ANCHORS.CENTER
+                dx, dy = -parts[1] * metrics.size, -parts[2] * metrics.size
+            else
+                dx, dy = MSUF_ProfileIO_AuraResetFirstOffset(metrics, metrics.anchor)
+            end
+            snapshot[laneName] = {
+                size = metrics.size,
+                anchor = metrics.anchor,
+                firstX = metrics.x + dx,
+                firstY = metrics.y + dy,
+            }
+        end
     end
+    return snapshot
+end
+
+local function MSUF_ProfileIO_AuraResetRebaseGroupLane(state, scope, laneName, snapshot)
+    local proxy = { auras = state.auras, _msufAuraResetScope = scope }
+    local target = MSUF_ProfileIO_AuraResetGroupLaneMetrics(proxy, laneName, snapshot.size)
+    local dx, dy = MSUF_ProfileIO_AuraResetFirstOffset(target, snapshot.anchor)
+    return {
+        size = snapshot.size,
+        anchor = snapshot.anchor,
+        x = math.max(-4096, math.min(4096,
+            MSUF_ProfileIO_AuraResetGroupRound(snapshot.firstX - dx))),
+        y = math.max(-4096, math.min(4096,
+            MSUF_ProfileIO_AuraResetGroupRound(snapshot.firstY - dy))),
+    }
+end
+
+local function MSUF_ProfileIO_ResetGroupAuras(profile, legacyProfile, groupCount)
+    if type(profile) ~= "table" then return false end
+    local createCanonical = (type(MSUF) == "table" and MSUF.MSUF_CreateCanonicalGroupAuraState)
+        or _G.MSUF_CreateCanonicalGroupAuraState
+    local canonical
+    local changed = false
+    for i = 1, #MSUF_PROFILEIO_GROUP_AURA_SCOPES do
+        local scope = MSUF_PROFILEIO_GROUP_AURA_SCOPES[i]
+        local conf = profile[scope]
+        if type(conf) == "table" then
+            local sourceAuras = type(conf.auras) == "table" and conf.auras or nil
+            local hasAuraPayload = MSUF.ProfileIOGroupHasAuraPayload(conf)
+            if hasAuraPayload and (not sourceAuras
+                or tonumber(sourceAuras[MSUF_PROFILEIO_UNIT_AURA_MODEL_KEY]) ~= MSUF_PROFILEIO_GROUP_AURA_MODEL_REVISION) then
+                if groupCount == nil and sourceAuras and sourceAuras.dynamicScale == true then
+                    groupCount = MSUF_ProfileIO_AuraResetCurrentGroupCount()
+                end
+                local snapshot = MSUF_ProfileIO_AuraResetSnapshotGroup(
+                    conf, scope, legacyProfile, groupCount)
+                if canonical == nil then
+                    local ok, value = MSUF_ProfileIO_RunProtected(
+                        "canonical Group Aura reset", createCanonical)
+                    if ok and type(value) == "table" then canonical = value else canonical = false end
+                end
+                local state = canonical and canonical[scope]
+                if type(state) == "table" and type(state.auras) == "table" then
+                    if snapshot then
+                        for j = 1, #MSUF_PROFILEIO_GROUP_AURA_RESET_LANE_ORDER do
+                            local laneName = MSUF_PROFILEIO_GROUP_AURA_RESET_LANE_ORDER[j]
+                            local laneSnapshot = snapshot[laneName]
+                            if laneSnapshot then
+                                local group = type(state.auras[laneName]) == "table" and state.auras[laneName] or {}
+                                state.auras[laneName] = group
+                                if laneSnapshot.sizeOnly == true then
+                                    group.size = laneSnapshot.size
+                                else
+                                    local geometry = MSUF_ProfileIO_AuraResetRebaseGroupLane(
+                                        state, scope, laneName, laneSnapshot)
+                                    group.size = geometry.size
+                                    group.anchor = geometry.anchor
+                                    group.x = geometry.x
+                                    group.y = geometry.y
+                                end
+                            end
+                        end
+                    end
+                    conf.auras = MSUF_DeepCopy(state.auras)
+                    conf.privateAuras = type(state.privateAuras) == "table"
+                        and MSUF_DeepCopy(state.privateAuras) or nil
+                    conf.spellIndicators = type(state.spellIndicators) == "table"
+                        and MSUF_DeepCopy(state.spellIndicators) or nil
+                    MSUF_ProfileIO_ClearRetiredGroupAuraFields(conf)
+                    changed = true
+                end
+            elseif sourceAuras
+                and tonumber(sourceAuras[MSUF_PROFILEIO_UNIT_AURA_MODEL_KEY]) == MSUF_PROFILEIO_GROUP_AURA_MODEL_REVISION then
+                changed = MSUF_ProfileIO_ClearRetiredGroupAuraFields(conf) or changed
+            end
+        end
+    end
+    return changed
+end
+
+MSUF_PROFILEIO_AURA_RESETTERS.ResetUnit = MSUF_ProfileIO_ResetUnitAuras
+MSUF_PROFILEIO_AURA_RESETTERS.ResetGroup = MSUF_ProfileIO_ResetGroupAuras
+end
+
+local function MSUF_ProfileIO_NormalizeLegacyAuras(profile, legacyProfile, forceScopeRepair)
+    if type(profile) ~= "table" then return false end
+    -- A 6.0 beta profile can still carry a translated-from-5.x marker, which
+    -- makes the broad compatibility classifier return `legacyProfile=true`.
+    -- Its Group Aura geometry was nevertheless rendered by the 6.0 host-grid
+    -- compiler. Only a genuinely pre-600 declared profile uses the 5.x direct
+    -- 1x1-container formula.
+    local hadAuras3 = type(profile.auras3) == "table" and next(profile.auras3) ~= nil
+    local legacyGroupGeometry = legacyProfile == true
+        and (tonumber(profile._msufProfileSchema) or 0) < MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA
+        and not hadAuras3
+    local changed = MSUF_PROFILEIO_AURA_RESETTERS.ResetUnit(profile)
+    changed = MSUF_PROFILEIO_AURA_RESETTERS.ResetGroup(profile, legacyGroupGeometry) or changed
     local auras = profile.auras3
     if type(auras) ~= "table" then return changed end
-    if fromLegacyAuras2 or (auras._msufAuras3TranslatedFromLegacyAuras2 == true and auras._msufAuras3LegacyGeometry_v3 ~= true) then
-        changed = MSUF_ProfileIO_ConvertLegacyAuras2Geometry(auras, profile) or changed
-    end
     local repairAuraOverrides = legacyProfile == true or MSUF_ProfileIO_AuraOverridesNeedRepair(profile)
     changed = MSUF_ProfileIO_NormalizeAuraLayoutTable(auras.shared) or changed
     if type(auras.perUnit) == "table" then
@@ -3175,11 +3663,11 @@ local function MSUF_ProfileIO_NormalizeLegacyAuras(profile, legacyProfile)
                 changed = MSUF_ProfileIO_NormalizeAuraLayoutTable(unitCfg.layout) or changed
                 changed = MSUF_ProfileIO_NormalizeAuraLayoutTable(unitCfg.layoutShared) or changed
                 if repairAuraOverrides then
-                    if MSUF_ProfileIO_TableHasAnyValue(unitCfg.layout) and unitCfg.overrideLayout ~= true then
+                    if MSUF_ProfileIO_TableHasAnyValue(unitCfg.layout) and unitCfg.overrideLayout == nil then
                         unitCfg.overrideLayout = true
                         changed = true
                     end
-                    if MSUF_ProfileIO_TableHasAnyValue(unitCfg.layoutShared) and unitCfg.overrideSharedLayout ~= true then
+                    if MSUF_ProfileIO_TableHasAnyValue(unitCfg.layoutShared) and unitCfg.overrideSharedLayout == nil then
                         unitCfg.overrideSharedLayout = true
                         changed = true
                     end
@@ -3266,7 +3754,8 @@ MSUF_ProfileIO_TranslateProfileToCurrent = function(profile, context)
     end
     changed = MSUF_ProfileIO_MigrateSplitStatusText(profile) or changed
     changed = MSUF.ProfileIONormalizeLegacy55VisualCompatibility(profile, legacyProfile, context) or changed
-    changed = MSUF_ProfileIO_NormalizeLegacyAuras(profile, legacyProfile) or changed
+    changed = MSUF_ProfileIO_NormalizeLegacyAuras(
+        profile, legacyProfile, context.trustNormalizationMarker ~= true) or changed
     local normalizeLayers = _G.MSUF_NormalizeNumericLayers
     if type(normalizeLayers) ~= "function" and type(MSUF) == "table" then
         normalizeLayers = MSUF.MSUF_NormalizeNumericLayers

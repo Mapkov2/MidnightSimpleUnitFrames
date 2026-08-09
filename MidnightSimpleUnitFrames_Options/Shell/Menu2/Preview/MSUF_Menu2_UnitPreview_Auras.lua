@@ -1276,11 +1276,14 @@ local function CreateIcon(parent)
     f.tex = f:CreateTexture(nil, "ARTWORK")
     f.tex:SetAllPoints(f)
     if f.tex.SetTexCoord then f.tex:SetTexCoord(0, 1, 0, 1) end
-    f.swipe = f:CreateTexture(nil, "ARTWORK")
+    -- Keep the animated swipe deterministically above the icon artwork.  The
+    -- client does not guarantee ordering for two regions on the same draw
+    -- layer/sublevel, which could leave this shown region hidden by f.tex.
+    f.swipe = f:CreateTexture(nil, "ARTWORK", nil, 1)
     f.swipe:SetPoint("TOPLEFT", f, "TOP", 0, 0)
     f.swipe:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, 0)
     f.swipe:SetTexture(TEX_W8)
-    f.swipe:SetVertexColor(0, 0, 0, 0.28)
+    f.swipe:SetVertexColor(0, 0, 0, 0.58)
     f.swipe:Hide()
     f.durationBar = f:CreateTexture(nil, "OVERLAY")
     f.durationBar:SetTexture(TEX_W8)
@@ -1532,7 +1535,9 @@ end
 
 local function LayoutPreviewAuraSwipe(swipe, icon, size, remainingFrac, reverse)
     if not (swipe and icon) then return end
-    remainingFrac = max(0.02, min(1, tonumber(remainingFrac) or 0.48))
+    -- Avoid an effectively invisible one-pixel endpoint while keeping the
+    -- shared dummy animation and configured direction obvious.
+    remainingFrac = max(0.08, min(0.92, tonumber(remainingFrac) or 0.48))
     local iconWidth = icon.GetWidth and icon:GetWidth() or tonumber(size) or 1
     local iconHeight = icon.GetHeight and icon:GetHeight() or tonumber(size) or 1
     local w = max(1, floor(iconWidth * remainingFrac + 0.5))

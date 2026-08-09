@@ -31,8 +31,11 @@ function A.AurasRegistry.RegisterSharedSettings(ctx)
     local RegisterAuraScopeBoolean = ctx.RegisterAuraScopeBoolean
     local AuraReadNumber = ctx.AuraReadNumber
     local AuraWriteNumber = ctx.AuraWriteNumber
+    local AuraModel = ctx.AuraModel
     local AuraSharedString = ctx.AuraSharedString
     local SetAuraSharedString = ctx.SetAuraSharedString
+    local AuraReadLaneStyleBool = ctx.AuraReadLaneStyleBool
+    local AuraWriteLaneStyleBool = ctx.AuraWriteLaneStyleBool
     local ApplyAura = ctx.ApplyAura
 
     if not (Registry and type(Registry.RegisterSetting) == "function") then return end
@@ -41,6 +44,7 @@ function A.AurasRegistry.RegisterSharedSettings(ctx)
     if type(RegisterAuraScopeBoolean) ~= "function" or type(AuraReadNumber) ~= "function" then return end
     if type(AuraWriteNumber) ~= "function" or type(AuraSharedString) ~= "function" then return end
     if type(SetAuraSharedString) ~= "function" or type(ApplyAura) ~= "function" then return end
+    if type(AuraReadLaneStyleBool) ~= "function" or type(AuraWriteLaneStyleBool) ~= "function" then return end
 
     for _, scope in ipairs(AURA_UNITS) do
         for _, spec in ipairs(AURA_SCOPE_OVERRIDE_SPECS) do
@@ -70,13 +74,51 @@ function A.AurasRegistry.RegisterSharedSettings(ctx)
         end
     end
 
-    for _, spec in ipairs(AURA_SHARED_BOOLEAN_SPECS) do
+    local canonicalLaneBool = {
+        showTooltip = "showTooltip",
+        -- The Auras2 name described the reverse cooldown swipe. Preserve the
+        -- Assistant phrase, but write the two Auras3 lane-owned fields.
+        cooldownSwipeDarkenOnLoss = "cooldownSwipeReverse",
+    }
+
+    local function RegisterSharedBooleanSpec(spec)
         local aliases = {}
         for i = 1, #(spec.aliases or {}) do
             aliases[#aliases + 1] = spec.aliases[i]
             AddAliasesForAuraScope(aliases, "shared", spec.aliases[i])
         end
-        RegisterAuraScopeBoolean("shared", spec.attr, spec.label, spec.defaultValue, aliases, nil, nil, nil, spec.aliases)
+        local laneKey = canonicalLaneBool[spec.attr]
+        local read, write
+        if spec.attr == "useDebuffTypeBorders" then
+            read = function()
+                local Model = type(AuraModel) == "function" and AuraModel() or nil
+                if Model and type(Model.ReadDebuffTypeBorderMode) == "function" then
+                    return Model.ReadDebuffTypeBorderMode("shared") ~= "OFF"
+                end
+                return AuraReadLaneStyleBool("shared", "debuff", "useDebuffTypeBorders", spec.defaultValue)
+            end
+            write = function(value)
+                local Model = type(AuraModel) == "function" and AuraModel() or nil
+                if Model and type(Model.WriteDebuffTypeBorderMode) == "function" then
+                    Model.WriteDebuffTypeBorderMode("shared", value and "BORDER" or "OFF")
+                    return
+                end
+                AuraWriteLaneStyleBool("shared", "debuff", "useDebuffTypeBorders", value)
+            end
+        elseif laneKey then
+            read = function()
+                return AuraReadLaneStyleBool("shared", "buff", laneKey, spec.defaultValue)
+            end
+            write = function(value)
+                AuraWriteLaneStyleBool("shared", "buff", laneKey, value)
+                AuraWriteLaneStyleBool("shared", "debuff", laneKey, value)
+            end
+        end
+        RegisterAuraScopeBoolean("shared", spec.attr, spec.label, spec.defaultValue, aliases, read, write, nil, spec.aliases)
+    end
+
+    for _, spec in ipairs(AURA_SHARED_BOOLEAN_SPECS) do
+        RegisterSharedBooleanSpec(spec)
     end
 
     local RegisterSharedReminderCoreSettings = A.AurasRegistry and A.AurasRegistry.RegisterSharedReminderCoreSettings

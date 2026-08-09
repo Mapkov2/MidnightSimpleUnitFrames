@@ -993,7 +993,7 @@ local function BuildProfiles(ctx)
     --- Blizzard Edit Mode data is opt-in per session for BOTH directions
     --- (never exported by default). The switch drives the two ProfileIO
     --- flags directly; nothing is persisted across reloads.
-    local includeBlizzEM = W.SwitchAt(actionsCard, "Include Blizzard Edit Mode layout", 20, -262,
+    local includeBlizzEM = W.SwitchAt(actionsCard, "Include Blizzard Edit Mode layout", 20, -292,
         max(220, actionsCardW - 40))
     RegisterControl(includeBlizzEM, ProfilesMeta("import_export.blizzard_edit_mode", "ephemeral"),
         "Include Blizzard Edit Mode layout", "toggle")
@@ -1045,7 +1045,7 @@ local function BuildProfiles(ctx)
     PlaceActionRow(actionsCard, 20, legacy, wago, -126)
     MoveWidget(importProfileName, actionsCard, 20, -230, importNameW)
     StyleProfileInput(importProfileName, importNameW, 28, false)
-    local importModeHelp = W.Text(actionsCard, "", 20, -306, max(220, actionsCardW - 40), T.colors.muted)
+    local importModeHelp = W.Text(actionsCard, "", 20, -336, max(220, actionsCardW - 40), T.colors.muted)
     if importModeHelp and importModeHelp.SetWordWrap then importModeHelp:SetWordWrap(true) end
     local EXPORT_KIND_LABELS = {
         all = "Full profile",

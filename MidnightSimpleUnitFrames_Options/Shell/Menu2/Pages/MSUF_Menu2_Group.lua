@@ -722,6 +722,13 @@ local function CopyGroupSettings(srcKind, dstKind, scopes)
         CopyGroupAuraStyle(srcKind, dstKind)
         CopyGroupSpellIndicatorStyle(srcKind, dstKind)
     end
+    if scopes.features or scopes.aurastyle then
+        local gf = GF()
+        local spellIndicators = gf and gf.SpellIndicators
+        if spellIndicators and type(spellIndicators.InvalidateRuntimeCaches) == "function" then
+            spellIndicators.InvalidateRuntimeCaches()
+        end
+    end
     if scopes.general then
         QueueGF(dstKind, "rebuild")
     else

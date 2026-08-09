@@ -1374,8 +1374,6 @@ local function ParseAuraDirectSettingShortcut(text, raw)
             attr = "overrideSharedLayout"
         elseif ContainsAny(text, AurasPhrases[105]) then
             attr = "overrideLayout"
-        elseif ContainsAny(text, AurasPhrases[106]) then
-            attr = "overrideIgnore"
         end
         local value = AuraBooleanValue(text)
         if attr and value ~= nil then
@@ -1540,53 +1538,9 @@ local function ParseAuraDirectSettingShortcut(text, raw)
         local value = AuraBooleanValue(text)
         if value ~= nil then return AuraDirectSettingChange("auras3.shared.filtersEnabled", value, "Shared Filters") end
     end
-    if ContainsAny(text, AurasPhrases[126])
-        and not ContainsAny(text, AurasPhrases[127])
-    then
-        local value = AuraBooleanValue(text)
-        if value ~= nil then return AuraDirectSettingChange("auras3.shared.showReminders", value, "Buff Reminders") end
-    end
-    if ContainsAny(text, AurasPhrases[128]) then
-        local value = FirstNumber(text)
-        if value ~= nil then return AuraDirectSettingChange("auras3.shared.reminderThreshold", value, "Buff Reminder Expiry Warning") end
-    end
-    do
-        local data = A.AurasRegistryData or {}
-        local reminderSpecs = data.AURA_REMINDER_SPECS or {}
-        local bestSpec
-        local bestLen = 0
-        for i = 1, #reminderSpecs do
-            local spec = reminderSpecs[i]
-            local aliases = type(spec.aliases) == "table" and spec.aliases or {}
-            for j = 1, #aliases do
-                local alias = tostring(aliases[j] or "")
-                if alias ~= "" and ContainsAny(text, AurasPhrases[129]) then
-                    local len = #Compact(alias)
-                    if len > bestLen then
-                        bestSpec = spec
-                        bestLen = len
-                    end
-                end
-            end
-        end
-        if bestSpec then
-            local value = AuraBooleanValue(text)
-            if value ~= nil then
-                return AuraDirectSettingChange("auras3.shared.reminders." .. tostring(bestSpec.key), value, tostring(bestSpec.label or "Buff Reminder"))
-            end
-        end
-    end
     local explicitUnits = DetectUnits(text)
     local explicitGroups = DetectGroups(text)
     if #explicitUnits == 0 and #explicitGroups == 0 and not ContainsAny(text, AurasPhrases[130]) then
-        if ContainsAny(text, AurasPhrases[131]) then
-            local value = AuraBooleanValue(text)
-            if value ~= nil then return AuraDirectSettingChange("auras3.shared.highlightOwnBuffs", value, "Highlight Own Buffs") end
-        end
-        if ContainsAny(text, AurasPhrases[132]) then
-            local value = AuraBooleanValue(text)
-            if value ~= nil then return AuraDirectSettingChange("auras3.shared.highlightOwnDebuffs", value, "Highlight Own Debuffs") end
-        end
         if ContainsAny(text, AurasPhrases[133]) then
             local value = AuraBooleanValue(text)
             if value ~= nil then return AuraDirectSettingChange("auras3.shared.showBuffs", value, "Show Buffs") end
@@ -1600,7 +1554,6 @@ local function ParseAuraDirectSettingShortcut(text, raw)
         for i = 1, #sharedSpecs do
             local spec = sharedSpecs[i]
             if spec.attr ~= "showBuffs" and spec.attr ~= "showDebuffs"
-                and spec.attr ~= "highlightOwnBuffs" and spec.attr ~= "highlightOwnDebuffs"
                 and ContainsAny(text, spec.aliases)
             then
                 local value = AuraBooleanValue(text)
@@ -1611,23 +1564,13 @@ local function ParseAuraDirectSettingShortcut(text, raw)
         end
     end
 
-    if ContainsAny(text, AurasPhrases[135]) then
-        return AuraDirectSettingChange("auras3.shared.clickThroughAuras", AuraBooleanValue(text), "Click-through Auras")
-    end
     if ContainsAny(text, AurasPhrases[136]) then
         return AuraDirectSettingChange("auras3.shared.showInEditMode", AuraBooleanValue(text), "Aura Edit Preview")
     end
     if ContainsAny(text, AurasPhrases[137]) then
         return AuraDirectSettingChange("general.aurasCooldownTextUseBuckets", AuraBooleanValue(text), "Aura Timer Color Buckets")
     end
-    if ContainsAny(text, AurasPhrases[138]) then
-        return AuraDirectSettingChange("auras3.shared.showSated", AuraBooleanValue(text), "Show Sated/Exhaustion")
-    end
-
     local direction = AuraDirectionValue(text)
-    if direction and ContainsAny(text, AurasPhrases[139]) then
-        return AuraDirectSettingChange("auras3.shared.reminderGrowth", direction, "Buff Reminder Growth")
-    end
     if direction and ContainsAny(text, AurasPhrases[140]) then
         return AuraDirectSettingChange("auras3.shared.buffGrowth", direction, "Buff Growth")
     end
@@ -1645,9 +1588,6 @@ local function ParseAuraDirectSettingShortcut(text, raw)
     if number ~= nil then
         if ContainsAny(text, AurasPhrases[144]) then
             return AuraDirectSettingChange("auras3.shared.sortOrder", number, "Aura Sort Order")
-        end
-        if ContainsAny(text, AurasPhrases[145]) then
-            return AuraDirectSettingChange("auras3.shared.satedShowAtSeconds", number, "Sated Threshold")
         end
         if ContainsAny(text, AurasPhrases[146]) then
             return AuraDirectSettingChange("general.aurasCooldownTextSafeSeconds", number, "Aura Safe Timer Threshold")

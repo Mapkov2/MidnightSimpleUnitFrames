@@ -133,14 +133,39 @@ Registry:RegisterAction({
                 userFacingFailure = true,
             }
         end
-        local targetLabels = {}
+        local targetLabels, skippedLabels = {}, {}
+        local unsupportedAuraOnly = false
         for i = 1, #targets do
-            UP.CopyUnitSettings(src, targets[i], args.scopes)
-            targetLabels[#targetLabels + 1] = DisplayUnitLabel(targets[i])
+            local applied, result = UP.CopyUnitSettings(src, targets[i], args.scopes)
+            -- Older Menu2 providers returned nil after a successful copy. Treat
+            -- only an explicit false as failure so the Assistant remains
+            -- compatible while current providers can report a precise no-op.
+            if applied == false then
+                skippedLabels[#skippedLabels + 1] = DisplayUnitLabel(targets[i])
+                unsupportedAuraOnly = unsupportedAuraOnly
+                    or (type(result) == "table"
+                        and (result.reason == "unsupported_aura_scope" or result.reason == "aura_copy_unavailable"))
+            else
+                targetLabels[#targetLabels + 1] = DisplayUnitLabel(targets[i])
+                if type(result) == "table" and result.auraSkipped == true then
+                    skippedLabels[#skippedLabels + 1] = DisplayUnitLabel(targets[i])
+                end
+            end
+        end
+        if #targetLabels == 0 then
+            local message = unsupportedAuraOnly
+                and "Nothing was copied. Aura settings are only available for Player, Target, Focus, and Boss Frames."
+                or "Nothing was copied to the selected destination."
+            return false, message, { noMutation = true, userFacingFailure = true }
         end
         local targetText = table.concat(targetLabels, ", ")
         if targetText == "" then targetText = "the selected destination" end
-        return true, "Done. I copied " .. DisplayUnitLabel(src) .. " options to " .. targetText .. "." .. UnitCopyScopeSummary(args and args.scopes)
+        local message = "Done. I copied " .. DisplayUnitLabel(src) .. " options to " .. targetText .. "."
+            .. UnitCopyScopeSummary(args and args.scopes)
+        if #skippedLabels > 0 then
+            message = message .. " Aura settings were skipped for " .. table.concat(skippedLabels, ", ") .. "."
+        end
+        return true, message
     end,
 })
 

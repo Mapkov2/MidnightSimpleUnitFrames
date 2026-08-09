@@ -8,10 +8,38 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-RC16",
-    previousVersion = "6.0-RC15",
-    rangeLabel = "6.0-RC15 -> 6.0-RC16",
+    currentVersion = "6.0-RC17",
+    previousVersion = "6.0-RC16",
+    rangeLabel = "6.0-RC16 -> 6.0-RC17",
     entries = {
+        {
+            version = "6.0-RC17",
+            date = "2026-08-09",
+            sections = {
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Fresh and reset profiles now start from the native 6.0 Aura model. Focus Auras are enabled by default with 3 Buff and 4 Debuff slots, matching the useful Target/Boss baseline while keeping the Focus-specific placement.",
+                        "Edit Mode X/Y fields now use one visual screen-center contract for Unit Frames, Castbars, Auras, Group Frames and external elements. Resizing an element keeps the displayed position stable.",
+                        "Retired Assistant controls for old Auras2 reminders and incompatible quick presets now report that they are unavailable instead of accepting writes that cannot affect Auras3.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Fixed legacy Unit and Group Aura fields being restored into current profiles. The one-time native-model repair removes retired state while preserving the visible first icon position and size for upgraded and imported profiles.",
+                        "Fixed Aura layout and style ownership drifting between live frames, the menu, Edit Mode and the Assistant. Lane gaps, sorting, text, swipes, duration bars, tooltips and shared/per-frame overrides now read and write the same owner without reviving dormant values.",
+                        "Fixed Dispel Border, Overlay and Symbol depending on another UnitFrame's Auras or a shared Bars owner. Each supported UnitFrame now owns its Dispel settings and automatically enables its Aura sensor; both icon caps may remain at 0.",
+                        "Fixed Aura icons intercepting clicks. Only normal Player Buffs keep Right-click cancellation; every other Unit and Group Aura remains click-through while configured tooltips still work.",
+                        "Fixed cooldown swipes being hidden or out of sync in menu and Edit Mode previews. Edit Mode now follows the existing menu animation clock, adds no second driver and remains paused in combat.",
+                        "Fixed Copy To reporting success when nothing was copied or when Copy to All was cancelled. Unsupported Aura destinations are reported accurately, Player Defensive and Target DoT-only style fields stay with their product, and Group Spell Indicator caches are refreshed after a copy.",
+                        "Fixed PvP indicator paths staying compiled after War Mode was disabled during its deactivation timer. Context recompiles remain event-driven and are skipped in combat.",
+                        "Fixed Group Frame screen clamping adding a grid-size-dependent offset, so the same Anchor Point and X/Y identify the same position for Party and Raid.",
+                        "Fixed stale Edit Mode SavedVariables making Player or Boss castbar previews reappear after logout or reload.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-RC16",
             date = "2026-08-08",
@@ -95,46 +123,6 @@ local data = {
                         "Fixed a follow-up that names a control but no value being answered with \"no such control\". The Assistant now offers that control's choices instead.",
                         "Fixed make it bigger after enabling a status indicator finding nothing. Status icon geometry is stored under a shorter stem than the toggle, and the follow-up now searches those too.",
                         "Fixed pronoun follow-ups being answered by a catalog token search, which produced confidently wrong readings from unrelated sliders.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-RC13",
-            date = "2026-08-07",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "Added optional Dominos integration to MSUF Edit Mode. Undocked bars get movers and a native MSUF popup covering the bar's layout settings - Buttons, Columns, Spacing, Padding, Scale, Opacity, Faded Opacity, visibility and click-through - while Dominos keeps ownership of all bar settings.",
-                        "Added optional DandersFrames integration to MSUF Edit Mode. Party, raid and free pinned sets get movers, selecting an element starts DandersFrames' own unlock preview for that scope, and DandersFrames keeps ownership of all saved positions.",
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "External Edit Mode elements can now declare their own quick controls. MSUF renders them as native stepper and toggle rows in the external popup and routes every change through the normal undo history.",
-                        "The Edit Mode toolbar now slides in from its docked edge when Edit Mode opens. Reduce Menu Motion skips the animation.",
-                        "Trimmed the Dashboard's Display & recovery card to Reset Positions, Print Help and Factory Reset All. The duplicate Wago and Discord buttons were removed; both links stay in the Wago and support rows.",
-                        "Restarting an already completed Guided Setup from the Dashboard now asks for confirmation. Resuming an active tour and the first run stay one click.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed the Follow HP bar (overflow) prediction anchor drawing into neighbouring group frames. The overlay is now clipped natively to Blizzard's 5% overflow allowance.",
-                        "Fixed overflow prediction bars dropping behind neighbouring frames after re-parenting, and rounded frames clipping away the segment that anchor mode exists to show.",
-                        "Fixed group frames built after the startup pass - login roster races and late joins - never receiving their rounded mask.",
-                        "Fixed Edit Mode tooltips drawing underneath the toolbar, and the Cancel All / Exit buttons ignoring the toolbar font.",
-                        "Fixed the Aura style preview staying hidden when returning to an already built Aura page.",
-                        "Fixed set Custom Menu Accent Color to red storing black. The setting now uses the same single-color contract as every other color.",
-                        "Fixed Assistant enum values with an underscore being unselectable by name, such as the Blizzard Ring portrait shape and the Dispel Symbol styles that share a stem.",
-                        "Fixed control names longer than eight words never entering the Assistant's exact-label index; 36 controls could not be reached by the name the menu prints.",
-                        "Fixed a command that spells exactly one control's name being answered with a candidate list instead of changing it - colors above all.",
-                        "Fixed enable target combat state indicator toggling the global Combat Enter/Leave Text or the Blizzard Totem Frame instead of the unit's Combat Indicator.",
-                        "Fixed the Assistant rejecting an Inline Custom Separator longer than five characters instead of storing the trimmed value.",
-                        "Fixed the Big Defensive sort method being unselectable by name, and Only Mine on the preset custom container reporting a failed write instead of explaining that MSUF pins it.",
-                        "Follow-ups to a readability answer (make it wider, actually make it 320) now apply to the control that answer named, and a shortened indicator name continues the subject already under discussion.",
                     },
                 },
             },

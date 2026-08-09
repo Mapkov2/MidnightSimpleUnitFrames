@@ -156,8 +156,8 @@ local function RegisterUnitPreviewRuntimeControls(box, pageKey)
             Register(selectionBar.editX, "selection.dispel_symbol_offset_x", "UnitFrame Dispel Symbol Offset X",
                 "textinput", "setting", {
                     assistantDisposition = "dynamic",
-                    assistantDispositionReason = "The shared Preview X field is pinned to the Player Dispel Symbol handle for this exact Assistant route.",
-                    assistantSettingKeys = { "general.unitDispelSymbolX" },
+                    assistantDispositionReason = "The shared Preview X field is pinned to the Player-owned Dispel Symbol handle for this exact Assistant route.",
+                    assistantSettingKeys = { "player.unitDispelSymbolX" },
                     command = selectionAPI.BuildExactOffsetCommand(box, "dispelSymbol", "x", {
                         previewSurface = "unit", previewUnitKey = "player",
                     }),
@@ -165,8 +165,8 @@ local function RegisterUnitPreviewRuntimeControls(box, pageKey)
             Register(selectionBar.editY, "selection.dispel_symbol_offset_y", "UnitFrame Dispel Symbol Offset Y",
                 "textinput", "setting", {
                     assistantDisposition = "dynamic",
-                    assistantDispositionReason = "The shared Preview Y field is pinned to the Player Dispel Symbol handle for this exact Assistant route.",
-                    assistantSettingKeys = { "general.unitDispelSymbolY" },
+                    assistantDispositionReason = "The shared Preview Y field is pinned to the Player-owned Dispel Symbol handle for this exact Assistant route.",
+                    assistantSettingKeys = { "player.unitDispelSymbolY" },
                     command = selectionAPI.BuildExactOffsetCommand(box, "dispelSymbol", "y", {
                         previewSurface = "unit", previewUnitKey = "player",
                     }),
@@ -1484,6 +1484,20 @@ local function RefreshPreviewAnimationFrame(box)
     else
         RequestPreviewLayoutRefresh(box, "UNIT_PREVIEW_ANIMATE")
     end
+    -- The large menu preview owns this clock.  Feed the exact same elapsed
+    -- value into already-built Edit Mode aura dummies so their timers/swipes
+    -- stay in phase without starting a second OnUpdate or doing full layouts.
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    local refreshEditAnimation = a3 and a3.RefreshEditPreviewAnimation
+    if type(refreshEditAnimation) == "function" then
+        refreshEditAnimation(box and box.key, box and box._animationElapsed)
+    end
+end
+
+Preview.RestoreStaticEditModeAuraPreview = function(box)
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    local refresh = a3 and a3.RefreshEditPreview
+    if type(refresh) == "function" then refresh(box and box.key) end
 end
 local function PreviewAnimationOnUpdate(box, elapsed)
     if not (box and box._animationEnabled == true and box.IsShown and box:IsShown()) then
@@ -1531,6 +1545,7 @@ SetPreviewAnimationEnabled = function(box, enabled, reason)
         StopPreviewAnimationDriver(box)
         box._previewAnimationState = nil
         box._previewAnimationData = nil
+        Preview.RestoreStaticEditModeAuraPreview(box)
     end
     RefreshPreviewAnimationButton(box)
     RequestPreviewLayoutRefresh(box, reason or "UNIT_PREVIEW_ANIMATE_TOGGLE")
@@ -1567,7 +1582,7 @@ local function CreatePreviewAnimationButton(box)
         end,
     }
     if M2.AddTooltip then
-        M2.AddTooltip(btn, "Animate Preview", "Animates health, power, absorbs, cast progress, aura timers, and the target-DoT Pandemic window in this preview only. Pauses during combat.", { hook = true })
+        M2.AddTooltip(btn, "Animate Preview", "Animates health, power, absorbs, cast progress, aura timers, and the target-DoT Pandemic window. Matching Edit Mode aura dummies use the same clock. Pauses during combat.", { hook = true })
     end
     box.animateCombatButton = btn
     box.RefreshAnimationButton = RefreshPreviewAnimationButton
@@ -2316,6 +2331,7 @@ local function BuildPreview(parent, panel, width, height)
     end)
     box:SetScript("OnHide", function(self)
         StopPreviewAnimationDriver(self)
+        if PreviewAnimationActive(self) then Preview.RestoreStaticEditModeAuraPreview(self) end
         ReleaseUnitPreviewLiveState(self)
         self._refreshSerial = (tonumber(self._refreshSerial) or 0) + 1
         self._refreshQueued = nil
