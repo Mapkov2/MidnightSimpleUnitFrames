@@ -48,6 +48,13 @@ local function LiveCastbarFrame(key)
         return _G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar or _G.MSUF_FocusCastbarPreview
     end
 end
+local function ScaledCenter(frame)
+    if not (frame and frame.GetCenter and frame.GetEffectiveScale) then return nil end
+    local x, y = frame:GetCenter()
+    local scale = tonumber(frame:GetEffectiveScale())
+    if type(x) ~= "number" or type(y) ~= "number" or not scale or scale <= 0 then return nil end
+    return x * scale, y * scale
+end
 local function EffectiveScaleRatio(frame, targetFrame)
     local sourceEffective = frame and frame.GetEffectiveScale and tonumber(frame:GetEffectiveScale())
     local targetEffective = targetFrame and targetFrame.GetEffectiveScale and tonumber(targetFrame:GetEffectiveScale())
@@ -127,4 +134,18 @@ function Runtime.CastbarVisualScaleForPreviewKey(key, targetFrame)
     -- scale so its castbar-local desired width is rendered at the same screen
     -- size as runtime instead of inheriting the unit-frame scale.
     return EffectiveScaleRatio(LiveCastbarFrame(key) or _G.UIParent, targetFrame) or 1
+end
+function Runtime.DetachedCastbarOffsetForPreviewKey(key)
+    -- Detached castbar offsets are UIParent-relative SavedVariables, while the
+    -- Unit Preview canvas is unit-frame-relative. Project the already-applied
+    -- live geometry into unit-frame coordinates so the preview mirrors the
+    -- real relationship without rewriting the user's absolute position.
+    local runtimeUnit = key == "boss" and "boss1" or key
+    local unitFrame = CoreFrame(runtimeUnit) or (runtimeUnit and _G["MSUF_" .. runtimeUnit])
+    local castbar = LiveCastbarFrame(key)
+    local unitX, unitY = ScaledCenter(unitFrame)
+    local castX, castY = ScaledCenter(castbar)
+    local unitScale = unitFrame and unitFrame.GetEffectiveScale and tonumber(unitFrame:GetEffectiveScale())
+    if not (unitX and unitY and castX and castY and unitScale and unitScale > 0) then return nil end
+    return (castX - unitX) / unitScale, (castY - unitY) / unitScale
 end
