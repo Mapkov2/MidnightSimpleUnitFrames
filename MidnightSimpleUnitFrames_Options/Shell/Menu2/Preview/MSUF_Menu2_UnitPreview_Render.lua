@@ -1536,6 +1536,13 @@ function Preview.Refresh(box, reason)
     local castPreviewVisible = castEnabled and PreviewLayerWanted(box, "castbar")
     -- Kept on the box instead of in locals: Refresh already sits at the Lua 5.1
     -- ceiling of 200 locals per function, so two more would fail to compile.
+    box._detachedCastProjectedX, box._detachedCastProjectedY = nil, nil
+    if castDetached and type(R.DetachedCastbarOffsetForPreviewKey) == "function" then
+        box._detachedCastProjectedX, box._detachedCastProjectedY = R.DetachedCastbarOffsetForPreviewKey(key)
+        if tonumber(box._detachedCastProjectedX) and tonumber(box._detachedCastProjectedY) then
+            castOffsetX, castOffsetY = box._detachedCastProjectedX, box._detachedCastProjectedY
+        end
+    end
     box._bossBorderInset = 0
     if key == "boss"
         and runtimeSpec and runtimeSpec.border
@@ -2944,7 +2951,7 @@ function Preview.Refresh(box, reason)
         if castDetached then
             box._detachedCastPreview = true
             box._detachedCastBaseOffsetX, box._detachedCastBaseOffsetY = S(castOffsetX), S(castOffsetY)
-            mock.cast:SetPoint("CENTER", canvas, "CENTER", box._detachedCastBaseOffsetX + panX, box._detachedCastBaseOffsetY + panY)
+            mock.cast:SetPoint("CENTER", mock, "CENTER", box._detachedCastBaseOffsetX, box._detachedCastBaseOffsetY)
         elseif key == "player" then
             mock.cast:SetPoint("BOTTOM", mock, "TOP", S(castOffsetX), S(castOffsetY))
         elseif key == "boss" then
