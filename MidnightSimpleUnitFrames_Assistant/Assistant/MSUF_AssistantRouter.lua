@@ -2526,6 +2526,10 @@ R.CREATION_GUIDES = {
 function R.TryCreationGuidance(text)
     local norm = R.Normalize(text)
     if norm == "" or #norm > 120 then return nil end
+    -- Explicit onboarding wording belongs to the native guided setup. Without
+    -- this guard, phrases such as "profile setup guide" are mistaken for a
+    -- profile-creation question because "setup" is also a creation verb.
+    if R.LooksLikeGuidedTourRequest(norm) then return nil end
     if not R.ContainsAny(norm, R.CREATION_VERB_TERMS) then return nil end
 
     -- A concrete container command is not a build question. "add 871 to player
