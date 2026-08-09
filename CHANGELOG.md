@@ -1681,10 +1681,11 @@
 
 ### Major Highlight: Addon Integrations
 - MSUF 6.0 can bring supported third-party frames into MSUF Edit Mode without taking ownership of those addons, their frames, or their saved positions.
-- Grid2 and Details! can be moved alongside MSUF frames through optional Edit Mode integration.
+- Grid2, Details!, DandersFrames and Dominos can be moved alongside MSUF frames through optional Edit Mode integration, with native quick controls that still write through the owning addon.
 - EllesmereUI can open and control MSUF frames through its Unlock Mode integration.
 - Arc UI, Skiron, Coolinator, Cooldown Manager Centered, Essential Cooldown Viewer, and EllesmereUI Cooldown Manager can provide the global cooldown anchor. MSUF detects the active provider and asks before following it.
-- A public registration API lets other addons expose compatible frames to MSUF Edit Mode while retaining their own layout logic.
+- Blizzard's Minimap, Chat, Micro Menu, Bags, Objective Tracker, Tooltip and Damage Meter can join the same workspace while Blizzard Edit Mode remains their only layout owner.
+- Public versioned APIs let other addons register compatible Edit Mode frames and provide nicknames for Unit and Group Frames. Both contracts preserve provider ownership and remain event-driven and combat-safe.
 
 ### What You Will Notice First
 - Auras are the biggest change. Buffs and debuffs now use the WoW 12.1 native aura system instead of the old 5.60 aura renderer.
@@ -1704,9 +1705,9 @@
 - Native dispel detection is wired into the new aura path.
 - Party Targeted Spell Indicators can show enemy nameplate casts on the party member being targeted.
 - MSUF4 profile strings are now supported, while older MSUF2/MSUF3 strings are still handled as fallback imports.
-- Northern Sky Raid Tools nicknames can be used for unit-frame names.
+- Northern Sky Raid Tools nicknames can be used for unit-frame names through the same public provider contract available to other addons.
 - External anchor support was added, including Skiron cooldown anchors.
-- Added optional Grid2 and Details! Edit Mode integration, native EllesmereUI Unlock Mode support, automatic cooldown-provider discovery, and a public API for external frame registration.
+- Added optional Grid2, Details!, DandersFrames and Dominos Edit Mode integration, native EllesmereUI Unlock Mode support, automatic cooldown-provider discovery, Blizzard Edit Mode elements, and public APIs for external frames and nickname providers.
 - Added native WoW 12.1 Player resource pings for health and supported mana states while preserving the normal portrait radial ping wheel.
 - New class-resource and power-bar shapes were added: circle, diamond, hex, round, crystal, and orb-style options.
 - Class Resources now has shape presets such as Classic Bar, Clean Dots, Gems, Hex Pips, and Compact.
@@ -1720,7 +1721,7 @@
 - Castbars existed in 5.60, but 6.0 integrates Player, Target, Focus, Boss, Focus Kick, and Interrupt Ready into the main addon flow with better previews and cleaner ownership.
 - Class Resources were expanded with better class/spec previews, shape media, smoother resource presentation, detached power-bar controls, and the optional Player HP bridge.
 - Menu2 was already present in 5.60, but 6.0 turns it into a fuller settings shell with navigation, previews, search, Assistant support, and better window handling.
-- Edit Mode moved from the old EditMode2 path to the new 6.0 Edit Mode, including aura handles, cast/aura popups, popup scaling, and the new logo intro.
+- Edit Mode moved from the old EditMode2 path to the new 6.0 Edit Mode, including aura handles, cast/aura popups, popup scaling, external and Blizzard-owned elements, profile-aware snap settings, readable undo/redo, and one screen-center coordinate contract.
 - Gameplay helpers were reorganized and hardened around combat, reloads, target sound, totem preview, and related helper settings.
 
 ### Auras In Plain English
@@ -1750,6 +1751,18 @@
 - MSUF4 is the new profile string format for 6.0.
 - Older MSUF2/MSUF3 profile strings are still attempted through fallback import paths.
 - Imported profiles can be applied to the current profile or brought in as a new profile, depending on the workflow.
+
+### Stabilized During RC1-RC18
+- Aura profiles now converge on one native 6.0 model. Legacy Unit and Group Aura state is repaired once, each lane keeps its own layout and style owner, and Runtime, Menu, Edit Mode and the Assistant read the same settings.
+- Aura previews now match live icon shapes, sorting, gaps, cooldown swipes, duration bars, text, tooltips and disabled master switches. Non-cancellable icons stay click-through, while normal Player Buffs retain Right-click cancellation.
+- Unit and Group Frames use consistent pixel-snapped geometry, layer ordering and screen-center coordinates. Boss health, power, backgrounds and borders stay attached to their secure owner across combat reloads instead of drifting off-screen.
+- Castbars gained rounded styling, exact width ownership, immediate text alignment, reliable name shortening, consistent secret-safe text rendering and interrupt feedback. Boss previews now respect detached positions and the configured leading-edge spark.
+- MSUF Edit Mode can safely coordinate its own frames, supported external addons and Blizzard Edit Mode layouts. Combat boundaries, ownership handoff, missing native layout rows and opt-in profile import/export are handled without storing one position in two systems.
+- Group previews keep their selected element, coordinates, layer order and exact settings route across page changes. Party and Raid anchoring, clamping, borders, indicators, rounded masks and prediction overlays now follow the same ownership rules as runtime.
+- Profile import, export and normalization recover more safely from legacy schemas, numeric keys, unavailable media and stale aliases. Failed operations explain the real cause, and destructive or incompatible Assistant actions are rejected instead of partially applying.
+- The Assistant now uses a reviewed generated control schema, exact setting identities and bounded follow-up context. It understands newcomer wording, natural scoped requests, control choices, readable corrections and explicit guided setup without broad fuzzy routes stealing the request.
+- Menu search and previews navigate to the exact owning page, tab, accordion and state. Preview scaling, panning, expanded layout, rendered interaction bounds and live/runtime geometry were aligned so editing no longer depends on a second visual contract.
+- Runtime refreshes added during 6.0 are event-driven and coalesced: nickname providers, cooldown anchors, combat deferrals, aura preview animation and status recompiles add no polling ticker or idle `OnUpdate` owner.
 
 ### From Alpha 1 To Beta1
 - Alpha 1 opened the 6.0 branch with the new foundation, previews, castbar work, class-resource work, profile import/export, group-frame work, and the first Auras3 version.
