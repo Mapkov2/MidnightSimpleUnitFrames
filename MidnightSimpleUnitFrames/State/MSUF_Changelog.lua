@@ -8,10 +8,35 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-RC17",
-    previousVersion = "6.0-RC16",
-    rangeLabel = "6.0-RC16 -> 6.0-RC17",
+    currentVersion = "6.0-RC18",
+    previousVersion = "6.0-RC17",
+    rangeLabel = "6.0-RC17 -> 6.0-RC18",
     entries = {
+        {
+            version = "6.0-RC18",
+            date = "2026-08-09",
+            sections = {
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Added a versioned nickname-provider API for Unit and Group Frames. Providers are priority ordered, cached, event-driven and deferred safely across combat; the bundled Northern Sky Raid Tools adapter now uses the same public contract.",
+                        "Documented the supported Nickname and Edit Mode provider APIs for addon authors in the README.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Fixed Boss Frame health, power, background and border geometry moving or leaving the screen after a combat reload (#77). Pixel-snapped regions now remain attached to their secure frame owner.",
+                        "Fixed Boss castbar spell-name shortening being ignored at runtime and in Edit Mode previews (#78), including the renderer-only path required for secret combat values.",
+                        "Fixed Edit Mode always showing the Boss castbar leading-edge spark even when the setting was disabled (#79). The animation no longer overrides the cold style owner every tick.",
+                        "Fixed detached Boss castbars appearing outside the Unit Preview (#80). The preview projects the applied runtime relationship without changing the saved absolute position.",
+                        "Fixed Player Defensives being re-enabled by Menu normalization after the user disabled them. Runtime, Menu preview and Edit Mode now honor the same master switch, while tracked Target DoTs keep their disabled configuration preview.",
+                        "Fixed Player search routes treating the layer substring inside player as a Text section request. Portrait and other exact results no longer open an unrelated accordion or rebuild the page unnecessarily.",
+                        "Fixed explicit guided-setup phrases containing topics such as profiles being consumed by text creation guidance instead of opening the native guided setup.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-RC17",
             date = "2026-08-09",
