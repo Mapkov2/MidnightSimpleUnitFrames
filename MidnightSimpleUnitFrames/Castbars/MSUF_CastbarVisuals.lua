@@ -643,11 +643,15 @@ local function ApplySpellTextLayout(frame, g, unit, prefix)
     local statusW = RegionNumber(statusBar, "GetWidth", nil) or RegionNumber(frame, "GetWidth", 250)
     local maxWidth = DetailNum(g, prefix, "SpellNameMaxWidth", nil, 0)
     local truncate = NormalizeSpellNameTruncate(DetailString(g, prefix, "SpellNameTruncate", nil, "AUTO"))
+    local shortening, shorteningMaxLen, shorteningReserved
+    if type(_G.MSUF_GetCastbarSpellNameShorteningConfig) == "function" then
+        shortening, shorteningMaxLen, shorteningReserved = _G.MSUF_GetCastbarSpellNameShorteningConfig(frame)
+    end
     local function AutoWidth()
-        local reserve = 0
+        local reserve = shortening and (tonumber(shorteningReserved) or 0) or 0
         if frame.timeText and frame.timeText.IsShown and frame.timeText:IsShown() then
             local timeW = RegionNumber(frame.timeText, "GetStringWidth", nil)
-            reserve = timeW and math.max(44, timeW + 10) or ApproxTimeTextReserve(frame, g, prefix, statusW)
+            reserve = reserve + (timeW and math.max(44, timeW + 10) or ApproxTimeTextReserve(frame, g, prefix, statusW))
         end
         return math.max(20, statusW - reserve - 8)
     end
@@ -658,6 +662,16 @@ local function ApplySpellTextLayout(frame, g, unit, prefix)
         width = (maxWidth and maxWidth > 0) and maxWidth or AutoWidth()
     else
         width = AutoWidth()
+    end
+    if shortening then
+        -- Restricted unit cast names can be secret in combat and therefore
+        -- cannot legally pass through Lua substring/concatenation. A bounded
+        -- one-line FontString gives those values the same renderer-side
+        -- truncation contract as the non-secret shortener, on this cold layout
+        -- path only.
+        local shorteningWidth = math.floor(((tonumber(shorteningMaxLen) or 30) * size * 0.60) + 6.5)
+        shorteningWidth = math.max(40, math.min(800, shorteningWidth))
+        width = math.min(width, shorteningWidth)
     end
     if fs.SetWidth then fs:SetWidth(width) end
 

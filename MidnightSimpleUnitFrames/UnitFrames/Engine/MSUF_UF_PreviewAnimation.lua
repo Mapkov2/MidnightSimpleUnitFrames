@@ -730,7 +730,6 @@ local function StoreCastbarRestore(frame)
     if frame.latencyBar.GetWidth then restore.latencyWidth = frame.latencyBar:GetWidth() end
     if frame.latencyBar.IsShown then restore.latencyShown = frame.latencyBar:IsShown() end
   end
-  if frame.spark and frame.spark.IsShown then restore.sparkShown = frame.spark:IsShown() end
   return restore
 end
 
@@ -767,7 +766,6 @@ local function RestoreCastbarFrame(frame)
     if frame.latencyBar.SetWidth and restore.latencyWidth ~= nil then frame.latencyBar:SetWidth(restore.latencyWidth) end
     if restore.latencyShown ~= nil then SetRegionShown(frame.latencyBar, restore.latencyShown == true) end
   end
-  if frame.spark and restore.sparkShown ~= nil then SetRegionShown(frame.spark, restore.sparkShown == true) end
   if restore.source == "edit_mode" then
     frame.MSUF_testMode = nil
     frame._msufTestActive = nil
@@ -784,6 +782,29 @@ local function RestoreCastbarFrame(frame)
   if type(_G.MSUF_ResetCastbarGlowFade) == "function" then _G.MSUF_ResetCastbarGlowFade(frame) end
   frame._msufPreviewAnimCastState = nil
   frame._msufPreviewAnimCastRestore = nil
+  frame._msufPreviewAnimCastLabel = nil
+  frame._msufPreviewAnimCastLabelRevision = nil
+end
+
+local function ApplyCastbarPreviewLabel(frame, label)
+  label = label or "Test Cast"
+  local revision = _G.MSUF_CastbarStyleRevision or 1
+  local applyTexts = _G.MSUF_CB_ApplyTexts
+  if type(applyTexts) ~= "function" then
+    -- The shared formatter is loaded before this module in production. Keep
+    -- the fallback uncached so an unusual late load repairs itself next tick.
+    frame._msufPreviewAnimCastLabel = nil
+    frame._msufPreviewAnimCastLabelRevision = nil
+    SetTextIfChanged(frame.castText, label)
+    return
+  end
+  if frame._msufPreviewAnimCastLabel == label
+    and frame._msufPreviewAnimCastLabelRevision == revision then
+    return
+  end
+  frame._msufPreviewAnimCastLabel = label
+  frame._msufPreviewAnimCastLabelRevision = revision
+  applyTexts(frame, nil, label, nil)
 end
 
 local function ApplyCastbarPreviewFrame(frame, index, kind, label)
@@ -808,7 +829,7 @@ local function ApplyCastbarPreviewFrame(frame, index, kind, label)
   local tex = bar.GetStatusBarTexture and bar:GetStatusBarTexture()
   if tex and tex.SetAlpha then tex:SetAlpha(1) end
 
-  SetTextIfChanged(frame.castText, label or "Test Cast")
+  ApplyCastbarPreviewLabel(frame, label)
   if frame.timeText then
     local showTime = CastbarTimeEnabled(frame.MSUFUnitKey or kind)
     frame.timeText:Show()
@@ -816,7 +837,9 @@ local function ApplyCastbarPreviewFrame(frame, index, kind, label)
     SetTextIfChanged(frame.timeText, showTime and FormatCastbarPreviewTime(frame, remaining, duration) or "")
   end
   if frame.icon and frame.icon.Show then frame.icon:Show() end
-  if frame.spark and frame.spark.Show then frame.spark:Show() end
+  -- Spark creation, geometry, and visibility are owned by the cold castbar
+  -- style pass. Preview animation only advances the fill and must not override
+  -- the user's castbarShowSpark setting on every animation tick.
   if frame.latencyBar and type(_G.MSUF_PlayerCastbar_UpdateLatencyZone) == "function" then
     _G.MSUF_PlayerCastbar_UpdateLatencyZone(frame, false, duration)
   end
