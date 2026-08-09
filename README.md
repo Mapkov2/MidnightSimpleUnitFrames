@@ -103,22 +103,38 @@ Changes reported in combat are coalesced and applied once after
 `PLAYER_REGEN_ENABLED`.
 
 ```lua
+local OWNER = "YourAddon"
+local PRIORITY = 50
 local MSUF = _G.MSUF
 local API = MSUF and MSUF.API and MSUF.API.Nicknames
-if API and API.GetVersion() >= 1 then
-    API.RegisterProvider("YourAddon", function(unit, nativeName, fullName)
-        return YourAddon.GetNickname(unit, fullName) -- nickname or nil
-    end)
 
-    -- Call after YourAddon changes its nickname database or enabled state.
-    API.NotifyChanged("YourAddon")
+local function ResolveNickname(unit, nativeName, fullName)
+    local nickname = YourAddon:GetNickname(unit)
+    return nickname ~= nativeName and nickname or nil
+end
+
+local function SetNicknameProviderEnabled(enabled)
+    if not (API and API.GetVersion() >= 1) then return end
+    if enabled then
+        API.RegisterProvider(OWNER, ResolveNickname, PRIORITY)
+    else
+        API.UnregisterProvider(OWNER)
+    end
+end
+
+local function NotifyNicknamesChanged()
+    if API and API.IsProviderRegistered(OWNER) then
+        API.NotifyChanged(OWNER)
+    end
 end
 ```
 
 Add `## OptionalDeps: MidnightSimpleUnitFrames` when MSUF should load before the
 provider. `RegisterProvider(owner, resolver, priority)` accepts an optional
 numeric priority; higher priorities run first. Use
-`UnregisterProvider(owner)` during teardown.
+`UnregisterProvider(owner)` when the integration is disabled. Call the enable
+function once after loading the provider's persisted state, and call the change
+notification only when its nickname data changes.
 
 ### Edit Mode provider integration
 
