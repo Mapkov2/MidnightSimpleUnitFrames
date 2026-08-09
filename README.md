@@ -14,14 +14,14 @@
   </p>
 
   <p>
-    <img src="https://img.shields.io/badge/Version-6.0%20RC1-38C7F0?style=flat-square" alt="MSUF version 6.0 RC1">
+    <img src="https://img.shields.io/badge/Version-6.0%20RC18-38C7F0?style=flat-square" alt="MSUF version 6.0 RC18">
     <img src="https://img.shields.io/badge/WoW-Retail%2012.1-148EFF?style=flat-square&logo=worldofwarcraft&logoColor=white" alt="World of Warcraft Retail 12.1">
     <img src="https://img.shields.io/github/last-commit/Mapkov2/MidnightSimpleUnitFrames?style=flat-square&logo=github" alt="Latest GitHub commit">
   </p>
 </div>
 
 > [!IMPORTANT]
-> **6.0 RC1 is a prerelease build.** Release candidates continue to use the **Beta** channel on addon platforms until the final 6.0 release.
+> **6.0 RC18 is a prerelease build.** Release candidates continue to use the **Beta** channel on addon platforms until the final 6.0 release.
 
 ## What is MSUF?
 
@@ -86,7 +86,7 @@ The Core addon runs normally without opening Options or the Assistant. Both comp
 | --- | --- |
 | **Game** | World of Warcraft Retail |
 | **Interface versions** | 12.0.7 and 12.1.0 |
-| **Current source version** | 6.0 RC1 |
+| **Current source version** | 6.0 RC18 |
 | **Main command** | `/msuf` |
 | **Optional integrations** | Masque, LibSharedMedia, Clique and WagoAnalytics |
 
