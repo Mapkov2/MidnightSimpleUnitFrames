@@ -2036,12 +2036,14 @@ local PLAYER_DEFENSIVE_CONTAINER_INDEX = 4
 local PLAYER_DEFENSIVE_CORE_DEFAULT_MARKER =
     A3.PlayerDefensiveCoreDefaultMarker or "_msufA3PlayerDefensivesCoreDefault_v1"
 
-local function EnforcePlayerDefensiveContainer(item)
+local function EnforcePlayerDefensiveContainer(item, canonicalAuraModel)
     if type(item) ~= "table" then return item end
     -- Fallback for standalone menu-model consumers and old profiles that have
     -- not passed through Auras3 Core yet. This is one-shot by design: once the
     -- user turns the feature off in Menu2, later normalization preserves it.
-    if item[PLAYER_DEFENSIVE_CORE_DEFAULT_MARKER] ~= true then
+    -- Canonical profiles are already Defaults-owned and intentionally carry no
+    -- legacy marker, so their saved false value must never be treated as new.
+    if canonicalAuraModel ~= true and item[PLAYER_DEFENSIVE_CORE_DEFAULT_MARKER] ~= true then
         item.enabled = true
         item[PLAYER_DEFENSIVE_CORE_DEFAULT_MARKER] = true
     end
@@ -2200,13 +2202,14 @@ end
 local function EnsureUnitCustomContainers(unit, create)
     unit = NormalizeScope(unit)
     if unit == "shared" then unit = "player" end
-    local root = Model.EnsureDB().customContainers
+    local auras = Model.EnsureDB()
+    local root = auras.customContainers
     local record = root.perUnit[unit]
     if type(record) ~= "table" and create then
         record = { items = {} }
         root.perUnit[unit] = record
     end
-    if type(record) ~= "table" then return nil end
+    if type(record) ~= "table" then return nil, auras end
     if type(record.items) ~= "table" then record.items = {} end
     if record._msufA3CustomContainersMigrated_v1 ~= true then
         local oldRoot = Model.EnsureDB().customDisplays
@@ -2222,7 +2225,7 @@ local function EnsureUnitCustomContainers(unit, create)
         end
         record._msufA3CustomContainersMigrated_v1 = true
     end
-    return record
+    return record, auras
 end
 
 function Model.CustomContainerMax()
@@ -2235,7 +2238,7 @@ function Model.CustomContainer(unit, index, create)
     unit = NormalizeScope(unit)
     if unit == "shared" then unit = "player" end
     index = math_floor(ClampNumber(index, 1, 1, CUSTOM_CONTAINER_MAX))
-    local record = EnsureUnitCustomContainers(unit, create == true)
+    local record, auras = EnsureUnitCustomContainers(unit, create == true)
     if not record then return nil end
     local item = record.items[index]
     if type(item) ~= "table" and create == true then
@@ -2243,7 +2246,7 @@ function Model.CustomContainer(unit, index, create)
         record.items[index] = item
     end
     if index == PLAYER_DEFENSIVE_CONTAINER_INDEX and unit == "player" then
-        EnforcePlayerDefensiveContainer(item)
+        EnforcePlayerDefensiveContainer(item, tonumber(auras and auras.profileModelRevision) == 1)
     elseif index == TARGET_DOT_CONTAINER_INDEX then
         EnforceTargetDotContainer(item)
     end
