@@ -376,9 +376,11 @@ local function UnitHasCustomPreview(unit)
         local placed = item and item.placed
         if item and (tonumber(placed and placed.max) or 8) > 0 then
             if item.enabled == true then return true end
-            -- Curated index-4 lanes reveal their real tracked entries even
-            -- while disabled (player defensives or target DoTs).
-            if index == 4 and CustomPreviewEntries(unit, "custom4") then return true end
+            -- Tracked target DoTs keep their configuration preview while the
+            -- lane is disabled. Player Defensives use `enabled` as a strict
+            -- master switch, matching both Runtime and the Menu2 preview.
+            if unit ~= "player" and index == 4
+                and CustomPreviewEntries(unit, "custom4") then return true end
         end
     end
     return false
@@ -2053,9 +2055,10 @@ function EM.RefreshUnit(unit)
         local group = CreateGroup(unit, kind)
         SyncPreviewGroupStrata(group)
         local entries = spec.customIndex and CustomPreviewEntries(unit, kind) or nil
-        -- Curated player defensives and target DoTs reveal their real entries
-        -- exactly like the in-menu preview, even while disabled.
-        local laneShown = cfg.show or (spec.customIndex == 4 and entries ~= nil)
+        -- Target DoTs retain their configuration preview while disabled.
+        -- Player Defensives obey their master switch in Edit Mode as well.
+        local laneShown = cfg.show
+            or (unit ~= "player" and spec.customIndex == 4 and entries ~= nil)
         -- Outside edit mode custom lanes stay strictly 1:1 with the runtime:
         -- nothing tracked means nothing to preview. Placeholder-only custom
         -- lanes exist purely as edit-mode drag surfaces.
