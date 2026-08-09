@@ -1,5 +1,13 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-RC19 - 2026-08-09
+
+### Fixes & Performance
+
+- Fixed Unit and Group Aura layout controls not updating their per-row availability immediately after changing a lane's growth direction.
+- Fixed detached power bars being unavailable or reattached in Edit Mode and Unit previews for Target of Target, Focus Target, Pet and Boss frames. Runtime, Edit Mode and Menu previews now share one unit-capability contract.
+- Fixed Castbar Spell Text exposing a separate Alignment setting that could conflict with its Position preset. Position now owns both the anchor and visible alignment consistently in live frames, previews, search and the Assistant.
+
 ## 6.0-RC18 - 2026-08-09
 
 ### Changes

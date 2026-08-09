@@ -8,10 +8,24 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-RC18",
-    previousVersion = "6.0-RC17",
-    rangeLabel = "6.0-RC17 -> 6.0-RC18",
+    currentVersion = "6.0-RC19",
+    previousVersion = "6.0-rc18",
+    rangeLabel = "6.0-rc18 -> 6.0-RC19",
     entries = {
+        {
+            version = "6.0-RC19",
+            date = "2026-08-09",
+            sections = {
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Fixed Unit and Group Aura layout controls not updating their per-row availability immediately after changing a lane's growth direction.",
+                        "Fixed detached power bars being unavailable or reattached in Edit Mode and Unit previews for Target of Target, Focus Target, Pet and Boss frames. Runtime, Edit Mode and Menu previews now share one unit-capability contract.",
+                        "Fixed Castbar Spell Text exposing a separate Alignment setting that could conflict with its Position preset. Position now owns both the anchor and visible alignment consistently in live frames, previews, search and the Assistant.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-RC18",
             date = "2026-08-09",
@@ -86,32 +100,6 @@ local data = {
                         "Fixed castbar size changes made in the Edit Mode quick popup leaving the open Castbar menu page on the old values. The width and height sliders and the Width mode dropdown now repaint with the write.",
                         "Fixed the aura blacklist not repainting after an entry was added or removed, and the preset spell dropdown still offering spells that are already on the list.",
                         "Fixed \"Preview all spells\" showing only the spec the editor happened to display and skipping spells whose indicator is a frame effect. It now mirrors the compiled runtime set across every tracked spec; corner custom slots stay with Corner Indicators.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-RC15",
-            date = "2026-08-08",
-            sections = {
-                {
-                    title = "Changes",
-                    bullets = {
-                        "The Details!, Grid2 and DandersFrames popups gained a Scale stepper that writes through each addon's own setting - Details! windows 65-150 %, Grid2 layouts and DandersFrames party/raid 50-200 % - and it takes part in undo like every other quick control.",
-                        "The Blizzard Damage Meter joined the Blizzard Edit Mode integration: a mover plus Width, Height, Bar Height, Padding, Opacity, Background, Text Size and the spec icon / class color toggles.",
-                        "Stepper buttons on a control with a fixed native step now accelerate with Shift and Ctrl (x5 / x10) instead of ignoring the modifiers.",
-                        "Undo and redo name the change in plain words. Raw setting keys and internal apply reasons - hpBarAlpha, MSUF2_DASH_GLOBAL_SCALE - are turned into readable labels on the button, in its tooltip and in the status feedback.",
-                        "External Edit Mode elements report their position relative to the screen center, the same convention MSUF's own frames use, instead of absolute screen coordinates.",
-                        "Edit Mode snap is now remembered per profile rather than reset every session, and a fresh install starts with the grid on at 36 px, snap enabled and the backdrop dimmed to 55 %.",
-                        "Player Defensive icons follow the frame portrait shape by default. They replace the portrait, so the rectangular fallback never fit; an explicit shape you already chose stays untouched.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed every Blizzard Edit Mode element failing to move or accept settings on a layout saved before that element existed in the game - the 12.x Damage Meter most visibly. The missing layout row is now seeded from the frame's live position.",
-                        "Fixed two tooltip movers being offered at once. While MSUF controls the tooltip anchor its own preview owns Edit Mode, and the Blizzard HUD Tooltip element stays hidden; when Blizzard controls it, only that element appears.",
-                        "Fixed long localized labels in external Edit Mode popups clipping past the popup edge. Two number controls only share a row when both labels fit; otherwise each gets its own.",
                     },
                 },
             },
