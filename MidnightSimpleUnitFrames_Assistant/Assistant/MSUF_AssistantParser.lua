@@ -7512,8 +7512,8 @@ function A.Parse(text, ctxOverride)
             attr = "spellMaxWidth"
         elseif P.ContainsAny(normalized, P.RootPhrases[708]) then
             attr = "spellFontSize"
-        elseif P.ContainsAny(normalized, P.RootPhrases[709]) then
-            attr = "spellAlign"
+        -- SpellNameAlign is retired: SpellNamePosition owns anchor and justify.
+        -- Keep alignment wording non-executable instead of targeting legacy DB.
         elseif P.ContainsAny(normalized, P.RootPhrases[710]) then
             attr = "spellPosition"
         elseif P.ContainsAny(normalized, P.RootPhrases[711]) then
@@ -7527,7 +7527,7 @@ function A.Parse(text, ctxOverride)
                 spellPosition = "general.castbarPlayerSpellNamePosition",
                 textX = "general.castbarPlayerTextOffsetX",
                 textY = "general.castbarPlayerTextOffsetY",
-                spellAlign = "general.castbarPlayerSpellNameAlign",
+                -- Retired SpellNameAlign intentionally has no executable route.
                 spellFontSize = "general.castbarPlayerSpellNameFontSize",
                 spellMaxWidth = "general.castbarPlayerSpellNameMaxWidth",
                 spellTruncate = "general.castbarPlayerSpellNameTruncate",
@@ -7541,7 +7541,7 @@ function A.Parse(text, ctxOverride)
                 spellPosition = "general.castbarTargetSpellNamePosition",
                 textX = "general.castbarTargetTextOffsetX",
                 textY = "general.castbarTargetTextOffsetY",
-                spellAlign = "general.castbarTargetSpellNameAlign",
+                -- Retired SpellNameAlign intentionally has no executable route.
                 spellFontSize = "general.castbarTargetSpellNameFontSize",
                 spellMaxWidth = "general.castbarTargetSpellNameMaxWidth",
                 spellTruncate = "general.castbarTargetSpellNameTruncate",
@@ -7555,7 +7555,7 @@ function A.Parse(text, ctxOverride)
                 spellPosition = "general.castbarFocusSpellNamePosition",
                 textX = "general.castbarFocusTextOffsetX",
                 textY = "general.castbarFocusTextOffsetY",
-                spellAlign = "general.castbarFocusSpellNameAlign",
+                -- Retired SpellNameAlign intentionally has no executable route.
                 spellFontSize = "general.castbarFocusSpellNameFontSize",
                 spellMaxWidth = "general.castbarFocusSpellNameMaxWidth",
                 spellTruncate = "general.castbarFocusSpellNameTruncate",
@@ -7569,7 +7569,7 @@ function A.Parse(text, ctxOverride)
                 spellPosition = "general.bossCastSpellNamePosition",
                 textX = "general.bossCastTextOffsetX",
                 textY = "general.bossCastTextOffsetY",
-                spellAlign = "general.bossCastSpellNameAlign",
+                -- Retired SpellNameAlign intentionally has no executable route.
                 spellFontSize = "general.bossCastSpellNameFontSize",
                 spellMaxWidth = "general.bossCastSpellNameMaxWidth",
                 spellTruncate = "general.bossCastSpellNameTruncate",

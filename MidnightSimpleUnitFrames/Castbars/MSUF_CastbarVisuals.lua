@@ -162,6 +162,11 @@ local function NormalizeTextPosition(value, fallback)
     return "LEFT"
 end
 
+local function JustifyForTextPosition(position)
+    if position == "LEFT" or position == "RIGHT" then return position end
+    return "CENTER"
+end
+
 local function NormalizeJustify(value, fallback)
     value = tostring(value or fallback or "LEFT"):upper()
     if value == "CENTER" or value == "RIGHT" then return value end
@@ -637,8 +642,7 @@ local function ApplySpellTextLayout(frame, g, unit, prefix)
     local x = DetailNum(g, prefix, "TextOffsetX", nil, 0)
     local y = DetailNum(g, prefix, "TextOffsetY", nil, 0)
     local position = NormalizeTextPosition(DetailString(g, prefix, "SpellNamePosition", nil, "LEFT"), "LEFT")
-    local justify = NormalizeJustify(DetailString(g, prefix, "SpellNameAlign", nil, position == "RIGHT" and "RIGHT" or position == "CENTER" and "CENTER" or "LEFT"), "LEFT")
-    AnchorFontString(fs, statusBar, position, x, y, justify)
+    AnchorFontString(fs, statusBar, position, x, y, JustifyForTextPosition(position))
 
     local statusW = RegionNumber(statusBar, "GetWidth", nil) or RegionNumber(frame, "GetWidth", 250)
     local maxWidth = DetailNum(g, prefix, "SpellNameMaxWidth", nil, 0)
@@ -705,7 +709,7 @@ local function ApplyTimeTextLayout(frame, g, unit, prefix)
     local y = DetailNum(g, prefix, "TimeOffsetY", unit ~= "boss" and "castbarPlayerTimeOffsetY" or nil, 0)
     if unit == "boss" then x = -2 + (tonumber(x) or 0) end
     local position = NormalizeTextPosition(DetailString(g, prefix, "TimePosition", nil, "RIGHT"), "RIGHT")
-    AnchorFontString(fs, statusBar, position, x, y, position == "LEFT" and "LEFT" or position == "CENTER" and "CENTER" or "RIGHT")
+    AnchorFontString(fs, statusBar, position, x, y, JustifyForTextPosition(position))
     return fontReady
 end
 

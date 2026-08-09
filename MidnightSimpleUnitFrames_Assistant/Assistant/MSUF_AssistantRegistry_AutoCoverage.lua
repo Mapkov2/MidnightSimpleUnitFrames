@@ -265,6 +265,10 @@ local COMPATIBILITY_PROJECTIONS = {
         hpSpacerSelectedUnitKey = "Retired health-spacer scope selector; no runtime or Menu2 consumer reads it, only the default profile still carries the field.",
         hpTextMode = "Legacy shared text-mode seed retained for migration/import; every live UnitFrame and GroupFrame uses its reviewed text-slot controls.",
         powerTextMode = "Legacy shared power-text seed retained for migration/import; every live UnitFrame and GroupFrame uses its reviewed power-text-slot controls.",
+        bossCastSpellNameAlign = "Retired castbar spell-text alignment field; SpellNamePosition owns both the anchor and visible alignment.",
+        castbarFocusSpellNameAlign = "Retired castbar spell-text alignment field; SpellNamePosition owns both the anchor and visible alignment.",
+        castbarPlayerSpellNameAlign = "Retired castbar spell-text alignment field; SpellNamePosition owns both the anchor and visible alignment.",
+        castbarTargetSpellNameAlign = "Retired castbar spell-text alignment field; SpellNamePosition owns both the anchor and visible alignment.",
     },
     bars = {
         classPowerOutlineColorR = "Retired class-resource outline color channel; the runtime exposes outline thickness only.",

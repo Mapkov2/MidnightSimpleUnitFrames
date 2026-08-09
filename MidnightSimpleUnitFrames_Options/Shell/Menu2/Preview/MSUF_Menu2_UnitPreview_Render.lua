@@ -147,6 +147,10 @@ local function NormalizeCastbarPreviewTextPos(value, fallback)
     if value == "CENTER" or value == "RIGHT" or value == "ABOVE" or value == "BELOW" then return value end
     return "LEFT"
 end
+local function CastbarPreviewJustifyForPosition(position)
+    if position == "LEFT" or position == "RIGHT" then return position end
+    return "CENTER"
+end
 local function NormalizeCastbarPreviewJustify(value, fallback)
     value = tostring(value or fallback or "LEFT"):upper()
     if value == "CENTER" or value == "RIGHT" then return value end
@@ -639,8 +643,7 @@ local function ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, s
         local textX = ReadCastbarNum(g, key, "TextOffsetX", "bossCastTextOffsetX", 0)
         local textY = ReadCastbarNum(g, key, "TextOffsetY", "bossCastTextOffsetY", 0)
         local textPosition = NormalizeCastbarPreviewTextPos(ReadCastbarPreviewString(g, key, detailPrefix, "SpellNamePosition", "bossCastSpellNamePosition", "LEFT"), "LEFT")
-        local textJustify = NormalizeCastbarPreviewJustify(ReadCastbarPreviewString(g, key, detailPrefix, "SpellNameAlign", "bossCastSpellNameAlign", textPosition == "RIGHT" and "RIGHT" or textPosition == "CENTER" and "CENTER" or "LEFT"), "LEFT")
-        AnchorCastbarPreviewText(mock.cast.text, surface, textPosition, textX, textY, textJustify, S)
+        AnchorCastbarPreviewText(mock.cast.text, surface, textPosition, textX, textY, CastbarPreviewJustifyForPosition(textPosition), S)
         local textMaxWidth = ReadCastbarNum(g, key, "SpellNameMaxWidth", "bossCastSpellNameMaxWidth", 0)
         local truncate = NormalizeCastbarPreviewTruncate(ReadCastbarPreviewString(g, key, detailPrefix, "SpellNameTruncate", "bossCastSpellNameTruncate", "AUTO"))
         local spellName = ShortenCastbarPreviewSpellName(key, TR(key == "boss" and "Celestial Ruin" or "Arcane Surge"))
@@ -715,7 +718,7 @@ local function ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, s
         local tr, tg, tb = g[(detailPrefix or "") .. "TimeColorR"], g[(detailPrefix or "") .. "TimeColorG"], g[(detailPrefix or "") .. "TimeColorB"]
         if tr or tg or tb then mock.cast.time:SetTextColor(tr or fr, tg or fg, tb or fb, 1) else mock.cast.time:SetTextColor(fr, fg, fb, 1) end
         local timePosition = NormalizeCastbarPreviewTextPos(ReadCastbarPreviewString(g, key, detailPrefix, "TimePosition", "bossCastTimePosition", "RIGHT"), "RIGHT")
-        AnchorCastbarPreviewText(mock.cast.time, surface, timePosition, timeX, timeY, timePosition == "LEFT" and "LEFT" or timePosition == "CENTER" and "CENTER" or "RIGHT", S)
+        AnchorCastbarPreviewText(mock.cast.time, surface, timePosition, timeX, timeY, CastbarPreviewJustifyForPosition(timePosition), S)
         box.handleCastbarTime:SetSize(max(28, mock.cast.time:GetStringWidth() + 10), max(18, mock.cast.time:GetStringHeight() + 6))
         if not UnitPreviewText.PlaceHandleAroundRegions(box.handleCastbarTime, canvas,
             { mock.cast.time }, 3, CASTBAR_TEXT_HANDLE_OPTS)

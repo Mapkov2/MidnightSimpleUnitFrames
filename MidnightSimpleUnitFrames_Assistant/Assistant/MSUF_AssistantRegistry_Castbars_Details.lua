@@ -107,8 +107,8 @@ function A.CastbarsRegistry.RegisterDetailSettings(ctx)
         RegisterGeneralNumber(spec.prefix .. "TextOffsetX", unit, "castbar", "textOffsetX", "Castbar Spell Text X Offset", spec.textX, -300, 300, aliases)
         aliases = UnitCastbarAliases(unit, "castbar text y", "castbar spell name y", "castbar spell text y", "castbar text y offset")
         RegisterGeneralNumber(spec.prefix .. "TextOffsetY", unit, "castbar", "textOffsetY", "Castbar Spell Text Y Offset", spec.textY, -300, 300, aliases)
-        aliases = UnitCastbarAliases(unit, "castbar spell name alignment", "castbar spell text alignment", "castbar text alignment")
-        RegisterGeneralEnumSetting(spec.prefix .. "SpellNameAlign", unit, "castbar", "spellNameAlign", "Castbar Spell Name Alignment", "LEFT", CASTBAR_TEXT_ALIGN_VALUES, aliases, CASTBAR_TEXT_ALIGN_ALIASES)
+        -- SpellNameAlign is retained in old profiles only. SpellNamePosition
+        -- now owns both the visible anchor and its natural justification.
         aliases = UnitCastbarAliases(unit, "castbar spell name font size", "castbar text font size", "castbar spell text size")
         RegisterGeneralNumber(spec.prefix .. "SpellNameFontSize", unit, "castbar", "spellNameFontSize", "Castbar Spell Name Font Size", 0, 0, 48, aliases)
         aliases = UnitCastbarAliases(unit,

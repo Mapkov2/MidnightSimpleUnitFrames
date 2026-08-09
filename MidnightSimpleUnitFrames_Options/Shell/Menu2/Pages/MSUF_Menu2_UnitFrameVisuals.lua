@@ -1180,7 +1180,7 @@ local function BuildCastbar(ctx, builder, unit)
     BuildDetailControls(spellCard, spellControls, {
         { "dropdown", "Position preset", 16, -88, min(260, controlWLeft), CASTBAR_TEXT_POSITIONS, DetailKey("SpellNamePosition"), "LEFT", "MSUF2_CASTBAR_SPELL_POSITION" },
         { "slider", "Size", 16, -142, controlWLeft, 0, 48, 1, DetailKey("SpellNameFontSize"), 0, "MSUF2_CASTBAR_SPELL_SIZE" },
-        { "dropdown", "Alignment", 16, -196, min(260, controlWLeft), CASTBAR_TEXT_ALIGN, DetailKey("SpellNameAlign"), "LEFT", "MSUF2_CASTBAR_SPELL_ALIGN" },
+        -- Position owns the visible justification, matching Time Text.
         -- Spell text color deliberately lives on the Colors page (castbar
         -- detail colors) and in the per-control color shortcuts only; a second
         -- inline swatch here double-writes the same key.

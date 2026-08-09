@@ -1801,7 +1801,6 @@ local function CompactPathMatchScore(compacts, rawPath)
     if rawPath:find("/power/detached", 1, true) and not rawPath:find("detachedpowerbar", 1, true) then
         segments.powerbardetached = true
     end
-    if rawPath:find("/castbar/detail/msuf2_castbar_spell_align", 1, true) then segments.spellnamealign = true end
     if rawPath:find("/castbar/detail/msuf2_castbar_spell_position", 1, true) then segments.spellnameposition = true end
     if rawPath:find("/castbar/detail/msuf2_castbar_spell_size", 1, true) then segments.spellnamefontsize = true end
     if rawPath:find("/castbar/detail/msuf2_castbar_spell_x", 1, true) then segments.textoffsetx = true end
