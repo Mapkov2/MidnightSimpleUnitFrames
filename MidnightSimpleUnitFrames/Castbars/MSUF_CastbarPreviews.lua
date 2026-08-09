@@ -255,6 +255,14 @@ local function PositionFocusCastbarPreview()
     PositionPreview("focus", _G.MSUF_FocusCastbarPreview or CreatePreview("focus"))
 end
 
+local function ApplyPreviewCastText(frame, label)
+    if type(_G.MSUF_CB_ApplyTexts) == "function" then
+        _G.MSUF_CB_ApplyTexts(frame, nil, label, nil)
+    else
+        SetTextIfChanged(frame and frame.castText, label)
+    end
+end
+
 local function ClearPreviewTest(frame, unit)
     if not frame then return end
 
@@ -276,7 +284,7 @@ local function ClearPreviewTest(frame, unit)
 
     SetTextIfChanged(frame.timeText, "")
     if frame.castText then
-        SetTextIfChanged(frame.castText, Translate(PREVIEW_LABELS[unit] or PREVIEW_LABELS.boss))
+        ApplyPreviewCastText(frame, Translate(PREVIEW_LABELS[unit] or PREVIEW_LABELS.boss))
     end
     if frame.castTargetText then
         SetTextIfChanged(frame.castTargetText, "")
@@ -340,7 +348,7 @@ local function StartPreviewTest(frame)
     local fillTexture = frame.statusBar.GetStatusBarTexture and frame.statusBar:GetStatusBarTexture()
     if fillTexture and fillTexture.SetAlpha then fillTexture:SetAlpha(1) end
 
-    SetTextIfChanged(frame.castText, Translate(PREVIEW_LABELS.test))
+    ApplyPreviewCastText(frame, Translate(PREVIEW_LABELS.test))
     if frame.icon then
         frame.icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
         if frame.icon.Show then frame.icon:Show() end
