@@ -3,8 +3,16 @@
 -- frame refreshes.
 _G = _G or _ENV
 
+local root = tostring(arg and arg[1] or ""):gsub("[\\/]+$", "")
+
 local function ResolvePath(relative)
-    local candidates = { "MidnightSimpleUnitFrames/" .. relative, relative }
+    local candidates = {}
+    if root ~= "" then
+        candidates[#candidates + 1] = root .. "/MidnightSimpleUnitFrames/" .. relative
+        candidates[#candidates + 1] = root .. "/" .. relative
+    end
+    candidates[#candidates + 1] = "MidnightSimpleUnitFrames/" .. relative
+    candidates[#candidates + 1] = relative
     for i = 1, #candidates do
         local handle = io.open(candidates[i], "r")
         if handle then handle:close(); return candidates[i] end
@@ -214,11 +222,18 @@ Check(not source:find("OnUpdate", 1, true), "nickname API must not install OnUpd
 Check(not source:find("NewTicker", 1, true), "nickname API must not install a ticker")
 Check(not source:find("C_Timer", 1, true), "nickname API must not schedule timers")
 
-local toc = Read("MidnightSimpleUnitFrames.toc")
-local apiPos = assert(toc:find("Integrations\\MSUF_Integration_NicknameProviders.lua", 1, true),
-    "nickname provider API missing from TOC")
-local nsrtPos = assert(toc:find("Integrations\\MSUF_Integration_NSRTNicknames.lua", 1, true),
-    "NSRT nickname adapter missing from TOC")
-Check(apiPos < nsrtPos, "nickname provider API must load before the NSRT adapter")
+for _, tocName in ipairs({
+    "MidnightSimpleUnitFrames_Mainline.toc",
+    "MidnightSimpleUnitFrames_Vanilla.toc",
+    "MidnightSimpleUnitFrames_Mists.toc",
+    "MidnightSimpleUnitFrames_TBC.toc",
+}) do
+    local toc = Read(tocName)
+    local apiPos = assert(toc:find("Integrations\\MSUF_Integration_NicknameProviders.lua", 1, true),
+        "nickname provider API missing from " .. tocName)
+    local nsrtPos = assert(toc:find("Integrations\\MSUF_Integration_NSRTNicknames.lua", 1, true),
+        "NSRT nickname adapter missing from " .. tocName)
+    Check(apiPos < nsrtPos, "nickname provider API must load before the NSRT adapter in " .. tocName)
+end
 
 print("nickname_provider_api_smoke: ok")
