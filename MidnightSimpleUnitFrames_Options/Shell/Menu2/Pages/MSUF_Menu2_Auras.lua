@@ -3195,7 +3195,7 @@ local function BuildCompactUnitAuraLayout(ctx, b, unit, kind)
                 end,
                 set = function(v)
                     if type(Model.WriteLaneGrowthPair) == "function" then Model.WriteLaneGrowthPair(unit, kind, v) else Model.WriteLaneGrowth(unit, kind, v) end
-                    ApplyUnit(ctx, unit, "AURAS3_UNIT_GROWTH")
+                    ApplyUnit(ctx, unit, "AURAS3_UNIT_GROWTH", true)
                 end,
             }, "growth"),
         },
@@ -4646,7 +4646,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             AuraControlMeta(ctx, "custom-container.layout.anchor"))
         BindDropdown(ctx, section, "Growth", 24 + col3 + gap3, -34, Model.LaneGrowthValues(), col3,
             function() return item.placed.growth or "LEFTDOWN" end,
-            function(value) item.placed.growth = value or "LEFTDOWN"; Apply("AURAS3_CUSTOM_GROWTH") end,
+            function(value) item.placed.growth = value or "LEFTDOWN"; Apply("AURAS3_CUSTOM_GROWTH", true) end,
             AuraControlMeta(ctx, "custom-container.layout.growth"))
         local col4, gap4 = Grid(w, 4)
         local values = {
