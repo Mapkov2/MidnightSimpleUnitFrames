@@ -124,6 +124,7 @@ Runtime\MSUF_BarBackgroundRuntime.lua
 Runtime\MSUF_IconLayoutRuntime.lua
 Runtime\MSUF_FontRegistry.lua
 UnitFrames\Embeds\MSUF_UFCore\MSUF_UFCore_Elements.xml
+Integrations\MSUF_Integration_NicknameProviders.lua
 Integrations\MSUF_Integration_NSRTNicknames.lua
 Integrations\MSUF_Integration_ThirdPartyAnchors.lua
 UnitFrames\Embeds\MSUF_UFCore\MSUF_UFCore_Factory.xml

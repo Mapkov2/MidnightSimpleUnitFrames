@@ -4,6 +4,8 @@
 local addonName, MSUF = ...
 local Text = MSUF and MSUF.UFText
 if not Text then return end
+local NicknameAPI = MSUF.API and MSUF.API.Nicknames
+if not (NicknameAPI and NicknameAPI.GetVersion and NicknameAPI.GetVersion() >= 1) then return end
 
 local UnitName = Text.UnitName
 local UnitIsPlayer = Text.UnitIsPlayer
@@ -17,10 +19,11 @@ local pairs = pairs
 
 local CALLBACK_OWNER = "MidnightSimpleUnitFrames"
 local NSRT_ADDON_KEY = "MSUF"
-local NICKNAME_EVENT = "MSUF_NICKNAME_UPDATE"
+local PROVIDER_OWNER = "NorthernSkyRaidTools"
+local PROVIDER_PRIORITY = 100
 
 local eventFrame
-local resolverInstalled = false
+local providerRegistered = false
 local callbacksRegistered = false
 local pendingNameRefresh = false
 local nicknameByFullName = {}
@@ -184,14 +187,6 @@ local function ResolveDisplayName(unit)
   return CleanDisplayName(nicknameByName[name], name)
 end
 
-local function SetResolver(resolver)
-  if type(Text.SetDisplayNameResolver) == "function" then
-    Text.SetDisplayNameResolver(resolver)
-  else
-    Text._pendingDisplayNameResolver = resolver
-  end
-end
-
 local function UpdateResolver()
   local _, settings, nicknames = GetNSRT()
   if not settings then
@@ -201,59 +196,20 @@ local function UpdateResolver()
   local enabled = NSRTSettingsEnabled(settings)
   local nicknameCount = enabled and RebuildNicknameCache(nicknames) or 0
   if enabled and nicknameCount > 0 then
-    if not resolverInstalled then
-      SetResolver(ResolveDisplayName)
-      Text.ResolveDisplayName = ResolveDisplayName
-      resolverInstalled = true
+    if not providerRegistered then
+      local ok = NicknameAPI.RegisterProvider(PROVIDER_OWNER, ResolveDisplayName, PROVIDER_PRIORITY)
+      providerRegistered = ok == true
+    else
+      NicknameAPI.NotifyChanged(PROVIDER_OWNER)
     end
   else
     RebuildNicknameCache(nil)
-    if resolverInstalled then
-      SetResolver(nil)
-      resolverInstalled = false
-    end
-    if Text.ResolveDisplayName == ResolveDisplayName then
-      Text.ResolveDisplayName = nil
-    end
-    if Text._pendingDisplayNameResolver == ResolveDisplayName then
-      Text._pendingDisplayNameResolver = nil
+    if providerRegistered then
+      NicknameAPI.UnregisterProvider(PROVIDER_OWNER)
+      providerRegistered = false
     end
   end
   return true
-end
-
-local function RefreshUnitFrameName(frame, _, runtime)
-  local active = frame and frame._msufActiveElements
-  if not active then
-    return false
-  end
-  local touched = false
-  if active.NameText == true and runtime.UpdateName then
-    runtime.UpdateName(frame, NICKNAME_EVENT, frame.MSUFUnitKey)
-    touched = true
-  end
-  if active.Text == true and runtime.UpdateInline then
-    runtime.UpdateInline(frame, NICKNAME_EVENT, nil)
-    touched = true
-  end
-  return touched
-end
-
-local function RefreshUnitFrameNames()
-  local UF = MSUF and MSUF.UF
-  local runtime = MSUF and MSUF.UFTextRuntime
-  if not (UF and UF.ForEachFrame and runtime) then
-    return false
-  end
-  return UF.ForEachFrame(RefreshUnitFrameName, runtime) == true
-end
-
-local function RefreshGroupFrameNames()
-  local GF = MSUF and MSUF.GF
-  if not (GF and GF.RefreshGroupNames) then
-    return false
-  end
-  return GF.RefreshGroupNames() == true
 end
 
 local function QueuePostCombatRefresh()
@@ -265,8 +221,6 @@ end
 
 local function RefreshNamesNow()
   UpdateResolver()
-  RefreshUnitFrameNames()
-  RefreshGroupFrameNames()
 end
 
 local function RefreshNames()
@@ -331,5 +285,3 @@ if CreateFrame then
 end
 
 TryEnableNSRT(false)
-
-Text.RefreshDisplayNames = RefreshNames

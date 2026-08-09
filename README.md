@@ -90,6 +90,105 @@ The Core addon runs normally without opening Options or the Assistant. Both comp
 | **Main command** | `/msuf` |
 | **Optional integrations** | Masque, LibSharedMedia, Clique and WagoAnalytics |
 
+## Developer APIs
+
+Only APIs documented in this section are stable integration contracts.
+Arbitrary `MSUF_*` globals, frame registries, runtime namespaces and saved
+variables are implementation details.
+
+`MSUF.API.Nicknames` V1 lets another addon provide display names for MSUF unit
+and group frames without frame hooks. It is event-driven: there is no polling,
+ticker or idle `OnUpdate`; providers and nickname refreshes never run in combat.
+Changes reported in combat are coalesced and applied once after
+`PLAYER_REGEN_ENABLED`.
+
+```lua
+local MSUF = _G.MSUF
+local API = MSUF and MSUF.API and MSUF.API.Nicknames
+if API and API.GetVersion() >= 1 then
+    API.RegisterProvider("YourAddon", function(unit, nativeName, fullName)
+        return YourAddon.GetNickname(unit, fullName) -- nickname or nil
+    end)
+
+    -- Call after YourAddon changes its nickname database or enabled state.
+    API.NotifyChanged("YourAddon")
+end
+```
+
+Add `## OptionalDeps: MidnightSimpleUnitFrames` when MSUF should load before the
+provider. `RegisterProvider(owner, resolver, priority)` accepts an optional
+numeric priority; higher priorities run first. Use
+`UnregisterProvider(owner)` during teardown.
+
+### Edit Mode provider integration
+
+`MSUF_EditModeAPI` V1 lets another addon expose its own movable frames inside
+MSUF Edit Mode. The provider keeps ownership of frame creation, saved positions,
+profiles, anchors and protected-frame operations; MSUF supplies the mover,
+selection, grid/snap, arrow nudge, Undo/Redo and Save/Discard shell.
+
+Feature-detect and register after adding the same optional dependency:
+
+```lua
+local EditMode = _G.MSUF_EditModeAPI
+if not EditMode or EditMode.GetVersion() < 1 then return end
+
+local ok, reason = EditMode.RegisterElements("YourAddon", {
+    {
+        id = "main",
+        label = "Your Addon Frames",
+        group = "Your Addon",
+        order = 100,
+
+        getFrame = function()
+            return YourAddon.GetMovableContainer()
+        end,
+
+        getPosition = function()
+            local point, relativeToName, relativePoint, x, y = YourAddon.GetPosition()
+            return {
+                point = point,
+                relativeToName = relativeToName,
+                relativePoint = relativePoint,
+                offsetX = x,
+                offsetY = y,
+            }
+        end,
+
+        setPosition = function(position, changeReason)
+            return YourAddon.SetPosition(position, changeReason)
+        end,
+
+        -- Optional links/actions shown by the MSUF-owned popup.
+        openSettings = YourAddon.OpenSettings,
+        resetPosition = YourAddon.ResetPosition,
+    },
+})
+
+if not ok then
+    print("YourAddon: MSUF Edit Mode registration failed: " .. tostring(reason))
+end
+```
+
+Each `id` is stable within its owner and represents one independently movable
+frame or container. A provider may instead implement the advanced transaction
+callbacks `captureState`, `restoreState`, and `movePosition` when a simple
+position table is insufficient.
+
+Notify MSUF only after an event changes availability or geometry:
+
+```lua
+MSUF_EditModeAPI.RefreshElement("YourAddon", "main")
+-- or refresh every registered element owned by the addon:
+MSUF_EditModeAPI.RefreshOwner("YourAddon")
+```
+
+These are cold event notifications, not per-frame APIs. Registration installs
+no polling, ticker, global hook, or idle `OnUpdate`. Configuration writes are
+rejected during combat, and providers must enforce their own protected-frame
+rules inside callbacks. Dynamic teardown uses
+`UnregisterElement("YourAddon", "main")` or `UnregisterOwner("YourAddon")`.
+
 ## Support development
 
 If MSUF improves your UI, you can support continued development through any of the links below. These are the same official links shown inside the MSUF Dashboard.
