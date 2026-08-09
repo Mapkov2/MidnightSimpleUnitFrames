@@ -42,8 +42,10 @@ local Model = Preview.Model or {}
 Preview.Model = Model
 local PreviewHelpers = M.PreviewHelpers or {}
 local UnitPage = M.UnitPage or {}
+local CanDetachUnitPowerBar = _G.MSUF_CanDetachUnitPowerBar
 local UNIT_KEYS = { "player", "target", "targettarget", "focustarget", "focus", "boss", "pet" }
-local UNIT_SET = M.KeySetFromWords "player target targettarget focustarget focus boss pet"
+local UNIT_SET = {}
+for i = 1, #UNIT_KEYS do UNIT_SET[UNIT_KEYS[i]] = true end
 local CONTROL_CHILD_KEYS, CONTROL_NAME_SUFFIXES = M.WordList "minusButton plusButton Button _msufPeelButton", M.WordList "Button Text Low High"
 local UNIT_LABELS = { player = "Player", target = "Target", targettarget = "Target of Target", focustarget = "Focus Target", focus = "Focus", boss = "Boss Frames", pet = "Pet" }
 local UNIT_DATA = {
@@ -977,8 +979,13 @@ local function ReadPowerBarEnabled(conf, key)
     return POWER_BAR_DEFAULT_ON[key] == true
 end
 local function CanDetachPowerBarKey(key)
+    if type(CanDetachUnitPowerBar) == "function" then
+        return CanDetachUnitPowerBar(key) == true
+    end
     key = CanonKey(key)
-    return key == "player" or key == "target" or key == "focus"
+    local powerUnits = UnitPage.POWER_UNITS
+    if type(powerUnits) == "table" then return powerUnits[key] == true end
+    return UNIT_SET[key] == true
 end
 local function ReadPowerBarHeight(conf)
     local h = tonumber(conf.powerBarHeight) or 3

@@ -169,7 +169,12 @@ local UNIT_COPY_TARGETS = {
     { key="boss", label="Boss" },
 }
 local San = Quick.San
-local function CanDetachPower(key) return key=="player" or key=="target" or key=="focus" end
+local CanDetachUnitPowerBar = _G.MSUF_CanDetachUnitPowerBar
+local CanonPowerBarUnitKey = _G.MSUF_CanonPowerBarUnitKey
+local function CanDetachPower(key)
+    if type(CanDetachUnitPowerBar) == "function" then return CanDetachUnitPowerBar(key) == true end
+    return type(CanonPowerBarUnitKey) == "function" and CanonPowerBarUnitKey(key) ~= nil
+end
 local pf
 local Sync
 local UnitSectionForComponent = U.UnitSectionForComponent
