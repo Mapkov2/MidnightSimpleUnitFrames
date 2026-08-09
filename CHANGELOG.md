@@ -15,6 +15,7 @@
 - Fixed detached Boss castbars appearing outside the Unit Preview (#80). The preview projects the applied runtime relationship without changing the saved absolute position.
 - Fixed Player Defensives being re-enabled by Menu normalization after the user disabled them. Runtime, Menu preview and Edit Mode now honor the same master switch, while tracked Target DoTs keep their disabled configuration preview.
 - Fixed Player search routes treating the `layer` substring inside `player` as a Text section request. Portrait and other exact results no longer open an unrelated accordion or rebuild the page unnecessarily.
+- Fixed explicit guided-setup phrases containing topics such as profiles being consumed by text creation guidance instead of opening the native guided setup.
 
 ## 6.0-RC17 - 2026-08-09
 
