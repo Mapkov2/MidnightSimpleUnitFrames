@@ -505,8 +505,8 @@ end
 
 -- Boss unitframes are CENTER anchored. At fractional UI scales, odd and even
 -- heights put that center on opposite half-pixel phases. Resolve the visible
--- HP/power rectangle once in absolute screen space so every surface shares the
--- same physical edges without moving the secure click container itself.
+-- HP/power rectangle in physical screen space, then express those snapped edges
+-- relative to the secure click container so every surface follows its owner.
 ApplyBossPhysicalBarGeometry = function(frame)
   if not (frame and frame.hpBar and IsBossFrame(frame)) or InCombat() then
     return false
@@ -554,21 +554,21 @@ ApplyBossPhysicalBarGeometry = function(frame)
     end
   end
 
-  if not setRect(frame.hpBar, left, hpBottom, right, top) then
+  if not setRect(frame.hpBar, left, hpBottom, right, top, frame) then
     return false
   end
   if frame.bg then
-    setRect(frame.bg, left, hpBottom, right, top)
+    setRect(frame.bg, left, hpBottom, right, top, frame)
   end
 
   if powerEnabled and not powerDetached then
     if powerEmbedded then
-      setRect(power, left, bottom, right, hpBottom)
+      setRect(power, left, bottom, right, hpBottom, frame)
     else
       -- Preserve the detached-inline layout's visual gap, but make that gap
       -- exactly one physical pixel instead of one scale-dependent UI unit.
       local powerTop = bottom - pixel
-      setRect(power, left, powerTop - powerScreenHeight, right, powerTop)
+      setRect(power, left, powerTop - powerScreenHeight, right, powerTop, frame)
     end
   end
 

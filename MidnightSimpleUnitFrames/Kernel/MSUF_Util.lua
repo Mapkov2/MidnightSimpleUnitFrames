@@ -776,12 +776,11 @@ do
         return GetStepFor(frame) * pixels
     end
 
-    -- Return one absolute screen rectangle whose origin and dimensions are all
-    -- integer physical pixels. GetScaledRect already uses the common
-    -- screen-scale coordinate space, where 768 / physicalHeight is one pixel.
-    local function MSUF_GetPhysicalScreenRect(frame)
+    -- Read one region in the common physical screen coordinate space used by
+    -- GetScaledRect. The fallback converts the region's local coordinates with
+    -- its effective scale into the same space.
+    local function ReadPhysicalScreenRect(frame)
         if not frame then return nil end
-        EnsureBase()
 
         local left, bottom, width, height
         if frame.GetScaledRect then
@@ -806,6 +805,17 @@ do
             width, height = width * effectiveScale, height * effectiveScale
         end
 
+        return left, bottom, width, height
+    end
+
+    -- Return one absolute screen rectangle whose origin and dimensions are all
+    -- integer physical pixels. GetScaledRect already uses the common
+    -- screen-scale coordinate space, where 768 / physicalHeight is one pixel.
+    local function MSUF_GetPhysicalScreenRect(frame)
+        EnsureBase()
+        local left, bottom, width, height = ReadPhysicalScreenRect(frame)
+        if not (left and bottom and width and height) then return nil end
+
         local pixel = _cachedBase768 or 1
         local snappedLeft = RoundToGrid(left, pixel)
         local snappedBottom = RoundToGrid(bottom, pixel)
@@ -816,11 +826,13 @@ do
             pixel
     end
 
-    -- Place a region on an already-resolved absolute physical rectangle.
-    -- Absolute edge anchors prevent children from inheriting the alternating
-    -- half-pixel phase of an odd/even CENTER-anchored boss container.
-    local function MSUF_SetRegionPhysicalScreenRect(region, left, bottom, right, top)
-        if not (region and region.SetPoint and UIParent) then return false end
+    -- Place a region on an already-resolved absolute physical rectangle while
+    -- retaining a live point relationship to its MSUF-owned layout root. The
+    -- small parent-relative correction removes the root's fractional pixel
+    -- phase, but later UIParent/provider movement still carries every child
+    -- with the secure unit button instead of leaving it at a stale screen point.
+    local function MSUF_SetRegionPhysicalScreenRect(region, left, bottom, right, top, owner)
+        if not (region and region.SetPoint) then return false end
         if type(left) ~= "number" or type(bottom) ~= "number"
             or type(right) ~= "number" or type(top) ~= "number"
         then
@@ -830,16 +842,24 @@ do
             return false
         end
 
+        if not owner and region.GetParent then owner = region:GetParent() end
+        owner = owner or UIParent
+        if not owner then return false end
+        local ownerLeft, ownerBottom = ReadPhysicalScreenRect(owner)
+        if type(ownerLeft) ~= "number" or type(ownerBottom) ~= "number" then
+            return false
+        end
+
         local regionScale = (region.GetEffectiveScale and region:GetEffectiveScale())
             or (UIParent.GetEffectiveScale and UIParent:GetEffectiveScale())
             or (UIParent.GetScale and UIParent:GetScale()) or 1
         if regionScale == 0 then regionScale = 1 end
 
         region:ClearAllPoints()
-        region:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT",
-            left / regionScale, bottom / regionScale)
-        region:SetPoint("TOPRIGHT", UIParent, "BOTTOMLEFT",
-            right / regionScale, top / regionScale)
+        region:SetPoint("BOTTOMLEFT", owner, "BOTTOMLEFT",
+            (left - ownerLeft) / regionScale, (bottom - ownerBottom) / regionScale)
+        region:SetPoint("TOPRIGHT", owner, "BOTTOMLEFT",
+            (right - ownerLeft) / regionScale, (top - ownerBottom) / regionScale)
         return true
     end
 

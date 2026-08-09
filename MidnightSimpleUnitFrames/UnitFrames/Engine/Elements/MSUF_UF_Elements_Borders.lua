@@ -156,16 +156,10 @@ local function EnsureEdge(parent, key)
   return edge
 end
 
-local function SetPhysicalEdgeRect(region, left, bottom, right, top)
-  if not (region and region.SetPoint and UIParent) then return false end
-  local scale = (region.GetEffectiveScale and region:GetEffectiveScale())
-    or (UIParent.GetEffectiveScale and UIParent:GetEffectiveScale())
-    or (UIParent.GetScale and UIParent:GetScale()) or 1
-  if scale == 0 then scale = 1 end
-  region:ClearAllPoints()
-  region:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", left / scale, bottom / scale)
-  region:SetPoint("TOPRIGHT", UIParent, "BOTTOMLEFT", right / scale, top / scale)
-  return true
+local function SetPhysicalEdgeRect(region, owner, left, bottom, right, top)
+  local setRect = _G.MSUF_SetRegionPhysicalScreenRect
+  if type(setRect) ~= "function" then return false end
+  return setRect(region, left, bottom, right, top, owner)
 end
 
 local function LayoutPhysicalBossBorder(frame, thickness)
@@ -214,10 +208,13 @@ local function LayoutPhysicalBossBorder(frame, thickness)
     leftEdge:Hide()
     rightEdge:Hide()
   end
-  SetPhysicalEdgeRect(topEdge, left - edgeSize, top, right + edgeSize, top + edgeSize)
-  SetPhysicalEdgeRect(bottomEdge, left - edgeSize, bottom - edgeSize, right + edgeSize, bottom)
-  SetPhysicalEdgeRect(leftEdge, left - edgeSize, bottom, left, top)
-  SetPhysicalEdgeRect(rightEdge, right, bottom, right + edgeSize, top)
+  if not SetPhysicalEdgeRect(topEdge, frame, left - edgeSize, top, right + edgeSize, top + edgeSize)
+    or not SetPhysicalEdgeRect(bottomEdge, frame, left - edgeSize, bottom - edgeSize, right + edgeSize, bottom)
+    or not SetPhysicalEdgeRect(leftEdge, frame, left - edgeSize, bottom, left, top)
+    or not SetPhysicalEdgeRect(rightEdge, frame, right, bottom, right + edgeSize, top)
+  then
+    return false
+  end
 
   frame._msufBorderThickness = thickness
   frame._msufBorderLayoutReady = true
