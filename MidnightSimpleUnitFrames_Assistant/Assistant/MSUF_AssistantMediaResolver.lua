@@ -135,6 +135,25 @@ function R.StatusbarItems()
     return out
 end
 
+function R.BorderItems()
+    local out, usedValue, usedLabel = {}, {}, {}
+    local styles = (MSUF and MSUF.BorderStyles) or _G.MSUF_BorderStyles
+    local items = styles and type(styles.FrameList) == "function"
+        and styles.FrameList("None (solid color)") or {}
+    local section = "True Outline"
+    for i = 1, #items do
+        local item = items[i]
+        if item.header == true or item.categoryHeader == true then
+            section = item.text or section
+        else
+            AddItem(out, usedValue, usedLabel, item.value,
+                section .. ": " .. tostring(item.text or item.value),
+                item.text or item.value, item.texture, section)
+        end
+    end
+    return out
+end
+
 local function LooksLikeFontSetting(setting)
     if not setting or setting.type ~= "string" then return false end
     if setting.mediaType == "font" then return true end
@@ -152,6 +171,10 @@ local function LooksLikeTextureSetting(setting)
     local key = tostring(setting.key or ""):lower()
     if label:find("texture", 1, true) or attr:find("texture", 1, true) or key:find("texture", 1, true) then return true end
     return false
+end
+
+local function LooksLikeBorderSetting(setting)
+    return setting and setting.type == "string" and setting.mediaType == "border"
 end
 
 -- Portrait packs are not LibSharedMedia: the options page builds its dropdown
@@ -184,6 +207,7 @@ end
 function R.MediaTypeForSetting(setting)
     -- Declared media wins over the name heuristics below.
     if type(setting) == "table" and setting.mediaType == "portraitpack" then return "portraitpack" end
+    if LooksLikeBorderSetting(setting) then return "border" end
     if LooksLikeFontSetting(setting) then return "font" end
     if LooksLikeTextureSetting(setting) then return "statusbar" end
     return nil
@@ -328,6 +352,7 @@ function R.Find(mediaType, query, opts)
     if query == "" then return nil end
     local items = mediaType == "font" and R.FontItems()
         or mediaType == "portraitpack" and R.PortraitPackItems()
+        or mediaType == "border" and R.BorderItems()
         or R.StatusbarItems()
     local limit = tonumber(opts.limit) or 8
     local top = {}
@@ -345,7 +370,7 @@ function R.Find(mediaType, query, opts)
             matchCount = matchCount + 1
             InsertTopMediaResult(top, item, limit)
             if score > best then best = score end
-            local labels = { item.label, item.value }
+            local labels = { item.label, item.value, item.key }
             for j = 1, #labels do
                 local label = labels[j]
                 if type(label) == "string" and label ~= "" then
@@ -389,6 +414,7 @@ end
 function R.NoMatchMessage(mediaType, query)
     local label = mediaType == "font" and "font"
         or mediaType == "portraitpack" and "portrait pack"
+        or mediaType == "border" and "outline style"
         or "texture"
     return "I don't see a matching " .. label .. " in the current MSUF media list. Pick one of the names shown there."
 end

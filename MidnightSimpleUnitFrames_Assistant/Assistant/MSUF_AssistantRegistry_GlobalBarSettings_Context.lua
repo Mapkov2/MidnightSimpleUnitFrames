@@ -54,6 +54,8 @@ function A.GlobalBarRegistry.BuildGlobalBarSettingsContext(ctx)
 
     local NormalizeTextureKeyForAssistant = GlobalBarData.NormalizeTextureKeyForAssistant
     if type(NormalizeTextureKeyForAssistant) ~= "function" then return nil end
+    local NormalizeBorderKeyForAssistant = GlobalBarData.NormalizeBorderKeyForAssistant
+    if type(NormalizeBorderKeyForAssistant) ~= "function" then return nil end
 
     local GRADIENT_DIRECTION_VALUES = GlobalBarData.GRADIENT_DIRECTION_VALUES
     local GRADIENT_DIRECTION_KEYS = GlobalBarData.GRADIENT_DIRECTION_KEYS
@@ -126,6 +128,7 @@ function A.GlobalBarRegistry.BuildGlobalBarSettingsContext(ctx)
         RegisterScopedMappedEnum = RegisterScopedMappedEnum,
         GlobalBarData = GlobalBarData,
         NormalizeTextureKeyForAssistant = NormalizeTextureKeyForAssistant,
+        NormalizeBorderKeyForAssistant = NormalizeBorderKeyForAssistant,
         GRADIENT_DIRECTION_VALUES = GRADIENT_DIRECTION_VALUES,
         GRADIENT_DIRECTION_KEYS = GRADIENT_DIRECTION_KEYS,
         GRADIENT_DIRECTION_ALIASES = GRADIENT_DIRECTION_ALIASES,

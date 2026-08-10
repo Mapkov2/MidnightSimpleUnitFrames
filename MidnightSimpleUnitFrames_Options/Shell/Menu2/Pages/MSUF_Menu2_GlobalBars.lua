@@ -1596,10 +1596,42 @@ local function BuildOutlineSection(ctx, b)
             RequestOutlineRuntime()
         end,
         0, Meta("outline.layer", "setting", { step = 1, roundStep = true }))
-    local outlineTexture = W.Dropdown(outline, "Outline texture",
-        function() return TextureValues("None (solid color)") end, 300)
+    local function OutlineTextureValues()
+        local styles = MSUF and MSUF.BorderStyles or _G.MSUF_BorderStyles
+        if styles and type(styles.FrameList) == "function" then
+            return styles.FrameList("None (solid color)")
+        end
+        -- Minimal fallback for isolated catalog tests; live menus use FrameList.
+        local items = {
+            { text = "True Outline", header = true, disabled = true, translate = false },
+            { value = "", text = "None (solid color)" },
+            { value = "BORDER:GLOW", text = "Soft Glow" },
+            { value = "BORDER:SHADOW", text = "Shadow" },
+            { value = "BORDER:BLIZZARD", text = "Blizzard Tooltip" },
+            { value = "BORDER:DIALOG", text = "Blizzard Dialog" },
+            { value = "BORDER:ACHIEVEMENT", text = "Blizzard Achievement" },
+            { text = "Texture", header = true, disabled = true, translate = false },
+        }
+        local textures = type(TextureValues) == "function" and TextureValues() or nil
+        for i = 1, #(textures or {}) do
+            local item = textures[i]
+            if type(item) == "table" and item.value ~= "" then items[#items + 1] = item end
+        end
+        return items
+    end
+    local outlineTexture = W.Dropdown(outline, "Outline style", OutlineTextureValues, 300)
     M.BindDropdownWidget(ctx, outlineTexture,
-        function() return BarScopeGetBars("barOutlineTexture", "") end,
+        function()
+            local value = BarScopeGetBars("barOutlineTexture", "")
+            local styles = MSUF and MSUF.BorderStyles or _G.MSUF_BorderStyles
+            if styles and type(styles.NormalizeFrame) == "function" then
+                return styles.NormalizeFrame(value)
+            elseif styles and type(styles.Normalize) == "function" then
+                value = styles.Normalize(value)
+                if value == styles.SOLID then return "" end
+            end
+            return value
+        end,
         function(value)
             BarScopeSetBars("barOutlineTexture", value or "", "MSUF2_BAR_OUTLINE_TEXTURE", true)
             RequestOutlineRuntime()
@@ -1607,7 +1639,7 @@ local function BuildOutlineSection(ctx, b)
         Meta("outline.texture"))
     local hintY = outline._msuf2CursorY or -184
     outline._msuf2CursorY = hintY - 26
-    W.Text(outline, "Rounded frames ignore the outline texture and keep the solid outline color.",
+    W.Text(outline, "Rounded frames ignore True Outline and Texture styles and keep the solid outline color.",
         outline._msuf2ContentX or 16, hintY, 560)
     AttachBarsColorShortcut(outline,
         "Frame Outline Color",

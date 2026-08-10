@@ -24,6 +24,7 @@ function A.GlobalBarRegistry.RegisterTextureGradientSettings(ctx)
     local ApplyBars = ctx.ApplyBars
     local ApplyBarGradients = ctx.ApplyBarGradients
     local NormalizeTextureKeyForAssistant = ctx.NormalizeTextureKeyForAssistant
+    local NormalizeBorderKeyForAssistant = ctx.NormalizeBorderKeyForAssistant
     local GRADIENT_DIRECTION_VALUES = ctx.GRADIENT_DIRECTION_VALUES
     local GRADIENT_DIRECTION_KEYS = ctx.GRADIENT_DIRECTION_KEYS
     local GRADIENT_DIRECTION_ALIASES = ctx.GRADIENT_DIRECTION_ALIASES
@@ -32,7 +33,7 @@ function A.GlobalBarRegistry.RegisterTextureGradientSettings(ctx)
     if type(GeneralDB) ~= "function" or type(RegisterGeneralString) ~= "function" then return end
     if type(RegisterGeneralBoolean) ~= "function" or type(RegisterGeneralNumberSetting) ~= "function" then return end
     if type(ApplyBars) ~= "function" or type(ApplyBarGradients) ~= "function" then return end
-    if type(NormalizeTextureKeyForAssistant) ~= "function" then return end
+    if type(NormalizeTextureKeyForAssistant) ~= "function" or type(NormalizeBorderKeyForAssistant) ~= "function" then return end
     if type(GRADIENT_DIRECTION_VALUES) ~= "table" or type(GRADIENT_DIRECTION_KEYS) ~= "table" then return end
 
     RegisterGeneralString("barTexture", "texture", "Global Bar Texture", "Solid", {
@@ -80,16 +81,17 @@ function A.GlobalBarRegistry.RegisterTextureGradientSettings(ctx)
             normalizeValue = NormalizeTextureKeyForAssistant,
             description = "Background art behind every unit's power bar. Overridable per unit on the unit page.",
         })
-        -- Square frame outline art. Empty means the classic solid-color outline;
-        -- Rounded Frames ignores the texture and keeps its tinted rounded edge.
-        RegisterBarsString("barOutlineTexture", "outlineTexture", "Global Frame Outline Texture", "", {
+        -- Square frame outline art. Empty means the classic solid-color outline.
+        RegisterBarsString("barOutlineTexture", "outlineTexture", "Global Frame Outline Style", "", {
+            "frame outline style", "outline style", "true outline",
             "frame outline texture", "bar outline texture", "outline texture",
             "border texture", "frame border texture",
         }, {
             category = "Global / Bars / Outline",
+            mediaType = "border",
             apply = type(ctx.ApplyBarOutline) == "function" and ctx.ApplyBarOutline or ApplyBars,
             reason = "MSUF_ASSISTANT_BAR_OUTLINE_TEXTURE",
-            normalizeValue = NormalizeTextureKeyForAssistant,
+            normalizeValue = NormalizeBorderKeyForAssistant,
             description = "Optional texture for the square frame outline. Leave empty for the classic solid color; rounded frames always keep the solid outline color.",
         })
     end

@@ -151,10 +151,14 @@ local function EnsureFrameBorderOverlay(mock, border)
     if not (mock and mock.CreateTexture) then return nil end
     local overlay = mock._msufPreviewFrameBorder
     if not overlay then
-        overlay = CreateFrame("Frame", nil, mock)
+        overlay = CreateFrame("Frame", nil, mock, "BackdropTemplate")
         overlay:EnableMouse(false)
         overlay:SetAllPoints(mock)
         overlay._edges = {}
+        if overlay.SetBackdrop then
+            overlay:SetBackdrop({ edgeFile = TEX_W8, edgeSize = 1 })
+            overlay:SetBackdropBorderColor(0, 0, 0, 0)
+        end
         mock._msufPreviewFrameBorder = overlay
     end
     if overlay.SetFrameLevel and mock.GetFrameLevel then
@@ -186,7 +190,30 @@ end
 local function SetFrameBorderShown(mock, shown)
     local overlay = mock and mock._msufPreviewFrameBorder
     if overlay then Core.SetShownSafe(overlay, shown) end
-    if PreviewHelpers.SetEdgeLinesShown then PreviewHelpers.SetEdgeLinesShown(overlay, shown, FRAME_BORDER_OPTS) end
+    if not shown then
+        if PreviewHelpers.SetEdgeLinesShown then PreviewHelpers.SetEdgeLinesShown(overlay, false, FRAME_BORDER_OPTS) end
+        if overlay and overlay.SetBackdropBorderColor then overlay:SetBackdropBorderColor(0, 0, 0, 0) end
+    end
+end
+
+local function ApplyTrueOutlineFrameBorder(mock, overlay, border, thickness)
+    local texture = border and border.texture
+    local styles = MSUF.BorderStyles or _G.MSUF_BorderStyles
+    local trueOutlineMode = styles and styles.FRAME_BORDER or "border"
+    if not border or border.textureMode ~= trueOutlineMode
+        or type(texture) ~= "string" or texture == ""
+        or not (overlay.SetBackdrop and overlay.SetBackdropBorderColor) then
+        if overlay.SetBackdropBorderColor then overlay:SetBackdropBorderColor(0, 0, 0, 0) end
+        return false
+    end
+    local edgeSize = type(styles.EdgeSize) == "function"
+        and styles.EdgeSize(border.textureKey, thickness) or thickness
+    local r, g, b, a = border.r, border.g, border.b, border.a
+    if r == nil then r, g, b, a = Core.BaseEdgeColor() end
+    overlay:SetBackdrop({ edgeFile = texture, edgeSize = edgeSize })
+    overlay:SetBackdropBorderColor(r or 0, g or 0, b or 0, a == nil and 1 or a)
+    if PreviewHelpers.SetEdgeLinesShown then PreviewHelpers.SetEdgeLinesShown(overlay, false, FRAME_BORDER_OPTS) end
+    return true
 end
 function Core.ApplyFrameBorder(box, border, scale)
     local mock = box and box.mock
@@ -203,14 +230,26 @@ function Core.ApplyFrameBorder(box, border, scale)
     local overlay = EnsureFrameBorderOverlay(mock, border)
     if not overlay then return end
     overlay:ClearAllPoints()
-    overlay:SetPoint("TOPLEFT", mock, "TOPLEFT", -thickness, thickness)
-    overlay:SetPoint("BOTTOMRIGHT", mock, "BOTTOMRIGHT", thickness, -thickness)
-    FRAME_BORDER_OPTS.color = function()
-        local r, g, b, a = border.r, border.g, border.b, border.a
-        if r == nil then r, g, b, a = Core.BaseEdgeColor() end
-        return r or 0, g or 0, b or 0, a == nil and 1 or a
+    if border.textureMode == "border" then
+        overlay:SetAllPoints(mock)
+    else
+        overlay:SetPoint("TOPLEFT", mock, "TOPLEFT", -thickness, thickness)
+        overlay:SetPoint("BOTTOMRIGHT", mock, "BOTTOMRIGHT", thickness, -thickness)
     end
-    if PreviewHelpers.LayoutEdgeLines then PreviewHelpers.LayoutEdgeLines(overlay, thickness, FRAME_BORDER_OPTS) end
+    if not ApplyTrueOutlineFrameBorder(mock, overlay, border, thickness) then
+        local styles = MSUF.BorderStyles or _G.MSUF_BorderStyles
+        local textureMode = styles and styles.FRAME_TEXTURE or "texture"
+        local usesTexture = border.textureMode == textureMode
+        FRAME_BORDER_OPTS.color = function()
+            local r, g, b, a = border.r, border.g, border.b, border.a
+            if r == nil then r, g, b, a = Core.BaseEdgeColor() end
+            if usesTexture then return 1, 1, 1, a == nil and 1 or a end
+            return r or 0, g or 0, b or 0, a == nil and 1 or a
+        end
+        FRAME_BORDER_OPTS.texture = usesTexture and border.texture or TEX_W8
+        if PreviewHelpers.LayoutEdgeLines then PreviewHelpers.LayoutEdgeLines(overlay, thickness, FRAME_BORDER_OPTS) end
+        if PreviewHelpers.SetEdgeLinesShown then PreviewHelpers.SetEdgeLinesShown(overlay, true, FRAME_BORDER_OPTS) end
+    end
     mock._msufPreviewFrameBorderEnabled = true
     SetFrameBorderShown(mock, true)
 end

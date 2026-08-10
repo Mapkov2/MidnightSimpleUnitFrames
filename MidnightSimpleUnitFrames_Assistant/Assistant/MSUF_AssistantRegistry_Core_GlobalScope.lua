@@ -78,6 +78,7 @@ local function RegisterScopedSetting(kind, scope, dbKey, attr, label, settingTyp
         dbScopesReplace = type(dbScopes) == "table" and #dbScopes > 0,
         intentScopes = opts.intentScopes or ScopedIntentScopes(scope),
         type = settingType,
+        mediaType = opts.mediaType,
         aliases = aliases,
         values = opts.values,
         valueAliases = opts.valueAliases,

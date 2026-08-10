@@ -33,6 +33,7 @@ local GROUP_THREAT_EVENT = {
 local TARGET_CHANGE_EVENTS = { "PLAYER_TARGET_CHANGED" }
 local SetShown = V.SetShown
 local ResolveGroupAggroThreat = V.ResolveGroupAggroThreat
+local BorderStyles = MSUF.BorderStyles or _G.MSUF_BorderStyles
 
 local Borders = {}
 local IsAggroBorderUnit
@@ -160,6 +161,20 @@ local function SetPhysicalEdgeRect(region, owner, left, bottom, right, top)
   local setRect = _G.MSUF_SetRegionPhysicalScreenRect
   if type(setRect) ~= "function" then return false end
   return setRect(region, left, bottom, right, top, owner)
+end
+
+local function EnsureTexturedBorderPieces(frame, texture)
+  if not (frame and BorderStyles and type(BorderStyles.Create) == "function") then return nil end
+  local pieces = frame.MSUFBorderTexturePieces
+  if not pieces then
+    pieces = BorderStyles.Create(EnsureBorderOverlay(frame), "OVERLAY", 0, texture)
+    frame.MSUFBorderTexturePieces = pieces
+    if pieces and type(BorderStyles.Hide) == "function" then BorderStyles.Hide(pieces) end
+  elseif texture and frame._msufBorderPiecesTexture ~= texture and type(BorderStyles.SetTexture) == "function" then
+    BorderStyles.SetTexture(pieces, texture)
+  end
+  if pieces and texture then frame._msufBorderPiecesTexture = texture end
+  return pieces
 end
 
 local function LayoutPhysicalBossBorder(frame, thickness)
@@ -453,14 +468,20 @@ local function SetBorder(frame, show, r, g, b, a)
     return
   end
   r, g, b, a = r or 0, g or 0, b or 0, a or 1
-  -- Optional outline texture, resolved at compile time. All runtime states
-  -- (normal + highlights) tint it via SetVertexColor, so event updates keep
-  -- the same per-edge call count as the solid-color path.
   local texture = frame._msufBorderRuntimeTexture
+  local textureMode = frame._msufBorderRuntimeTextureMode
   local textureChanged = frame._msufBorderTexPath ~= texture
+  local textureModeChanged = frame._msufBorderTextureMode ~= textureMode
+  local textureKey = frame._msufBorderRuntimeTextureKey
+  local textureKeyChanged = frame._msufBorderTextureKey ~= textureKey
+  local textureThickness = frame._msufBorderVisualThickness or frame._msufBorderRuntimeNormalThickness or 1
+  local trueOutline = texture and textureMode == (BorderStyles and BorderStyles.FRAME_BORDER or "border")
+  local stretchedTexture = textureMode == (BorderStyles and BorderStyles.FRAME_TEXTURE or "texture")
+  local texturedLayoutChanged = texture and trueOutline
+    and (textureKeyChanged or frame._msufBorderTextureThickness ~= textureThickness)
   local secretColor = IsSecretValue(r) or IsSecretValue(g) or IsSecretValue(b) or IsSecretValue(a)
   local showChanged = frame._msufBorderShown ~= show
-  local colorChanged = secretColor == true or textureChanged
+  local colorChanged = secretColor == true or textureChanged or textureModeChanged
   if not colorChanged then
     if frame._msufBorderSecretColor == true then
       colorChanged = true
@@ -471,11 +492,13 @@ local function SetBorder(frame, show, r, g, b, a)
         or frame._msufBorderA ~= a
     end
   end
-  if not (showChanged or colorChanged) then
+  if not (showChanged or colorChanged or texturedLayoutChanged) then
     return
   end
   frame._msufBorderShown = show
   frame._msufBorderTexPath = texture
+  frame._msufBorderTextureMode = textureMode
+  frame._msufBorderTextureKey = textureKey
   if secretColor then
     frame._msufBorderSecretColor = true
     frame._msufBorderR, frame._msufBorderG, frame._msufBorderB, frame._msufBorderA = nil, nil, nil, nil
@@ -483,26 +506,63 @@ local function SetBorder(frame, show, r, g, b, a)
     frame._msufBorderSecretColor = nil
     frame._msufBorderR, frame._msufBorderG, frame._msufBorderB, frame._msufBorderA = r, g, b, a
   end
+  local visible = show and frame._msufRUFModernBorderSuppressed ~= true
+  local pieces
+  if trueOutline and visible and BorderStyles and type(BorderStyles.Apply) == "function" then
+    pieces = EnsureTexturedBorderPieces(frame, texture)
+    if pieces then
+      local edgeSize = type(BorderStyles.EdgeSize) == "function"
+        and BorderStyles.EdgeSize(textureKey, textureThickness) or textureThickness
+      local width = frame.GetWidth and frame:GetWidth() or 0
+      local height = frame.GetHeight and frame:GetHeight() or 0
+      if NotSecretValue(width) ~= true then width = 0 end
+      if NotSecretValue(height) ~= true then height = 0 end
+      BorderStyles.Apply(pieces, frame, edgeSize, width, height, r, g, b, a)
+      frame._msufBorderTextureThickness = textureThickness
+    end
+  else
+    if frame.MSUFBorderTexturePieces and BorderStyles and type(BorderStyles.Hide) == "function" then
+      BorderStyles.Hide(frame.MSUFBorderTexturePieces)
+    end
+    frame._msufBorderTextureThickness = nil
+  end
   for i = 1, #EDGE_KEYS do
     local edge = frame.MSUFBorderEdges[EDGE_KEYS[i]]
     if edge then
-      if colorChanged then
-        if texture then
-          if textureChanged then
-            edge:SetTexture(texture)
+      if pieces then
+        edge:Hide()
+      else
+        if colorChanged then
+          if texture and stretchedTexture then
+            if textureChanged or textureModeChanged then edge:SetTexture(texture) end
+            -- Statusbar media commonly stores its visible structure in RGB,
+            -- so multiplying by a black outline color flattens it completely.
+            -- Preserve the source texture and only apply the configured alpha.
+            edge:SetVertexColor(1, 1, 1, a)
+          else
+            edge:SetVertexColor(1, 1, 1, 1)
+            edge:SetColorTexture(r, g, b, a)
           end
-          edge:SetVertexColor(r, g, b, a)
-        else
-          edge:SetVertexColor(1, 1, 1, 1)
-          edge:SetColorTexture(r, g, b, a)
         end
-      end
-      if showChanged then
-        SetShown(edge, show and frame._msufRUFModernBorderSuppressed ~= true)
+        if showChanged or textureChanged or textureModeChanged or texturedLayoutChanged then
+          SetShown(edge, visible)
+        end
       end
     end
   end
 end
+
+local function RefreshSquareBorderVisual(frame)
+  if not frame then return end
+  local shown = frame._msufBorderShown == true
+  -- Force the visibility branch: Rounded Frames can transfer ownership while
+  -- the selected texture/color itself remains unchanged.
+  frame._msufBorderShown = nil
+  frame._msufBorderTextureThickness = nil
+  SetBorder(frame, shown, frame._msufBorderR, frame._msufBorderG,
+    frame._msufBorderB, frame._msufBorderA)
+end
+ExportPublic("MSUF_RefreshSquareFrameBorderVisual", RefreshSquareBorderVisual)
 
 local function NotifyRoundedBorder(frame, shown, source, thickness, r, g, b, a)
   if roundedVisualCallback then
@@ -728,6 +788,7 @@ end
 
 function Borders.Create(frame)
   LayoutBorder(frame, 1)
+  EnsureTexturedBorderPieces(frame)
 end
 
 function Borders.Apply(frame, spec)
@@ -743,7 +804,9 @@ function Borders.Apply(frame, spec)
     frame._msufBorderRuntimeAggroMode = cfg and NormalizeAggroMode(cfg.aggroMode) or nil
     frame._msufBorderRuntimeHighlightThickness = tonumber(cfg and cfg.highlightThickness) or 3
     frame._msufBorderRuntimeNormalThickness = BorderNormalThickness(cfg)
+    frame._msufBorderRuntimeTextureKey = cfg and cfg.textureKey or nil
     frame._msufBorderRuntimeTexture = cfg and cfg.texture or nil
+    frame._msufBorderRuntimeTextureMode = cfg and cfg.textureMode or nil
     frame._msufBorderRuntimePriority = customPriority and cfg.prioOrder or nil
     frame._msufBorderRuntimeCustomPriority = customPriority and true or nil
     frame._msufBorderRuntimeLevelDispel = cfg and HighlightBorderLevel(cfg, "dispel") or nil

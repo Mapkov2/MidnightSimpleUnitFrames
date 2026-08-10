@@ -1608,7 +1608,7 @@ local REVIEWED_MENU_MEDIA = {
         source = "absorb.heal_prediction.texture", menuKey = "healPredictionBarTexture" },
     tempMaxHealthTexture = { mediaType = "statusbar",
         source = "temp_max_health.texture", menuKey = "tempMaxHealthTexture" },
-    barOutlineTexture = { mediaType = "statusbar",
+    barOutlineTexture = { mediaType = "border",
         source = "outline.texture", menuKey = "barOutlineTexture" },
     -- Not LibSharedMedia: the class portrait dropdown is filled from
     -- MSUF.PortraitMedia.GetPackOptions(), so the installed packs decide the

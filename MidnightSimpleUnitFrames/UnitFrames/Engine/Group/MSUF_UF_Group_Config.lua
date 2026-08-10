@@ -1755,18 +1755,21 @@ local function CompileBorderSpec(kind, conf, general)
   local bars = _G.MSUF_DB and _G.MSUF_DB.bars or nil
   local borderStrata = NormalizeFrameOutlineStrata(conf.hlOverride == true and conf.barOutlineStrata ~= nil and conf.barOutlineStrata or (bars and bars.barOutlineStrata))
   local borderLayer = Layer(conf.hlOverride == true and conf.barOutlineLayer ~= nil and conf.barOutlineLayer or (bars and bars.barOutlineLayer), 0)
-  -- Optional outline texture, same scope rails as thickness/layer. nil keeps
-  -- the solid-color edges; Rounded group frames ignore it (tinted edge only).
-  local borderTexture
+  -- Optional typed outline media, same scope rails as thickness/layer. True
+  -- borders use edgeFile geometry; textures use the historic stretched edges.
+  local borderTextureMode, borderTextureKeyResolved, borderTexture
   local borderTextureKey = conf.hlOverride == true and conf.barOutlineTexture ~= nil and conf.barOutlineTexture or (bars and bars.barOutlineTexture)
-  if type(borderTextureKey) == "string" and borderTextureKey ~= "" then
-    borderTexture = ResolveStatusbarTextureKey(borderTextureKey, nil)
-    if borderTexture == WHITE then borderTexture = nil end
+  local styles = MSUF.BorderStyles or _G.MSUF_BorderStyles
+  if type(borderTextureKey) == "string" and borderTextureKey ~= ""
+    and styles and type(styles.ResolveFrame) == "function" then
+    borderTextureMode, borderTextureKeyResolved, borderTexture = styles.ResolveFrame(borderTextureKey)
   end
   return {
     enabled = conf.borderEnabled ~= false,
     thickness = borderThickness,
+    textureKey = borderTextureKeyResolved,
     texture = borderTexture,
+    textureMode = borderTextureMode,
     layer = borderLayer,
     strata = borderStrata,
     r = Num(ScopedValue(conf, general, "barOutlineColorR", conf.borderR or general and general.barBorderR), 0),

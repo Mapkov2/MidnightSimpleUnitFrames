@@ -192,3 +192,13 @@ function Data.NormalizeTextureKeyForAssistant(value)
     local lower = value:lower():gsub("%s+", " ")
     return TEXTURE_KEY_ALIASES[lower] or TEXTURE_KEY_ALIASES[lower:gsub("%s+", "")] or value
 end
+
+function Data.NormalizeBorderKeyForAssistant(value)
+    value = Data.NormalizeTextureKeyForAssistant(value)
+    if value == "" or value:lower() == "none" then return "" end
+    local styles = MSUF.BorderStyles or _G.MSUF_BorderStyles
+    if styles and type(styles.NormalizeFrame) == "function" then
+        return styles.NormalizeFrame(value)
+    end
+    return value
+end

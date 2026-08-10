@@ -2168,14 +2168,15 @@ local function CompileUnitBorder(out, conf, general, bars)
   local outlineLayer = conf.hlOverride == true and conf.barOutlineLayer ~= nil and conf.barOutlineLayer or bars.barOutlineLayer
   border.layer = max(0, min(30, floor((tonumber(outlineLayer) or 0) + 0.5)))
   border.strata = NormalizeFrameOutlineStrata(conf.hlOverride == true and conf.barOutlineStrata ~= nil and conf.barOutlineStrata or bars.barOutlineStrata)
-  -- Optional outline texture. Resolved to a file path at compile time; nil
-  -- keeps the solid-color edges. Rounded Frames ignores this and keeps its
-  -- tinted rounded edge, so the outline color stays authoritative there.
-  border.texture = nil
+  -- Optional typed outline media. True borders use eight-piece edgeFile
+  -- geometry; statusbar textures keep the historic four stretched edges.
+  -- Rounded Frames ignores both and keeps its tinted rounded edge.
+  border.textureMode, border.textureKey, border.texture = nil, nil, nil
   local outlineTextureKey = conf.hlOverride == true and conf.barOutlineTexture ~= nil and conf.barOutlineTexture or bars.barOutlineTexture
-  if type(outlineTextureKey) == "string" and outlineTextureKey ~= "" then
-    border.texture = ResolveStatusbarTextureKey(outlineTextureKey, nil)
-    if border.texture == WHITE then border.texture = nil end
+  local styles = MSUF.BorderStyles or _G.MSUF_BorderStyles
+  if type(outlineTextureKey) == "string" and outlineTextureKey ~= ""
+    and styles and type(styles.ResolveFrame) == "function" then
+    border.textureMode, border.textureKey, border.texture = styles.ResolveFrame(outlineTextureKey)
   end
   border.r = Number(ScopedValue(conf, general, "barOutlineColorR", general.barBorderR), 0)
   border.g = Number(ScopedValue(conf, general, "barOutlineColorG", general.barBorderG), 0)

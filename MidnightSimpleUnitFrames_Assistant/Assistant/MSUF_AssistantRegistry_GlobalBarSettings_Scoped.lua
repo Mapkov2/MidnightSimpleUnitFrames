@@ -28,6 +28,7 @@ function A.GlobalBarRegistry.RegisterScopedBarSettings(ctx)
     local GlobalScopeWrite = ctx.GlobalScopeWrite
     local GlobalScopeAliases = ctx.GlobalScopeAliases
     local NormalizeTextureKeyForAssistant = ctx.NormalizeTextureKeyForAssistant
+    local NormalizeBorderKeyForAssistant = ctx.NormalizeBorderKeyForAssistant
     local GRADIENT_DIRECTION_VALUES = ctx.GRADIENT_DIRECTION_VALUES
     local GRADIENT_DIRECTION_KEYS = ctx.GRADIENT_DIRECTION_KEYS
     local GRADIENT_DIRECTION_ALIASES = ctx.GRADIENT_DIRECTION_ALIASES
@@ -37,7 +38,7 @@ function A.GlobalBarRegistry.RegisterScopedBarSettings(ctx)
     if type(GLOBAL_SCOPE_ORDER) ~= "table" or type(GlobalScopeAliases) ~= "function" then return false end
     if type(GlobalScopeHasOverride) ~= "function" then return false end
     if type(GlobalScopeSetOverride) ~= "function" or type(GlobalScopeRead) ~= "function" or type(GlobalScopeWrite) ~= "function" then return false end
-    if type(NormalizeTextureKeyForAssistant) ~= "function" then return false end
+    if type(NormalizeTextureKeyForAssistant) ~= "function" or type(NormalizeBorderKeyForAssistant) ~= "function" then return false end
     if type(GRADIENT_DIRECTION_VALUES) ~= "table" or type(GRADIENT_DIRECTION_KEYS) ~= "table" then return false end
 
     local HIGHLIGHT_KEYS = { "dispel", "aggro", "purge", "bossTarget" }
@@ -274,12 +275,13 @@ function A.GlobalBarRegistry.RegisterScopedBarSettings(ctx)
             reason = "MSUF_ASSISTANT_SCOPED_BAR_OUTLINE_LAYER",
             description = "Controls this scope's bar and frame outline Layer (0-30).",
         })
-        RegisterScopedSetting("barScope", scope, "barOutlineTexture", "outlineTexture", "Frame Outline Texture", "string", "", GlobalScopeAliases(scope, {
-            "frame outline texture", "bar outline texture", "outline texture", "border texture",
+        RegisterScopedSetting("barScope", scope, "barOutlineTexture", "outlineTexture", "Frame Outline Style", "string", "", GlobalScopeAliases(scope, {
+            "frame outline style", "outline style", "true outline", "frame outline texture", "bar outline texture", "outline texture", "border texture",
         }), {
             flag = "hlOverride",
             shared = "bars",
-            normalizeValue = NormalizeTextureKeyForAssistant,
+            mediaType = "border",
+            normalizeValue = NormalizeBorderKeyForAssistant,
             apply = ctx.ApplyBarOutline,
             reason = "MSUF_ASSISTANT_SCOPED_BAR_OUTLINE_TEXTURE",
             description = "Optional texture for this scope's square frame outline. Empty keeps the classic solid color; rounded frames always keep the solid outline color.",

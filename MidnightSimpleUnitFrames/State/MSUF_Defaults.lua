@@ -3899,9 +3899,8 @@ if MSUF_DB.bars.barOutlineLayer == nil then
     MSUF_DB.bars.barOutlineLayer = 0
 end
 if MSUF_DB.bars.barOutlineTexture == nil then
-    -- Optional statusbar texture for the square frame outline. Empty keeps the
-    -- classic solid-color outline, so 5.x profiles are unaffected. Rounded
-    -- frames always ignore this and keep the tinted rounded edge.
+    -- Optional square-frame edgeFile or stretched statusbar texture. Empty
+    -- keeps the classic solid-color outline; Rounded Frames ignores both.
     MSUF_DB.bars.barOutlineTexture = ""
 end
 --- Bar background alpha (0..100). Independent from unit alpha in/out of combat.

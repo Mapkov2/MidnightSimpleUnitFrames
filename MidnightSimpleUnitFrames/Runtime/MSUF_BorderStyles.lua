@@ -16,6 +16,9 @@
 ---
 --- API:
 ---   MSUF.BorderStyles.List()                 -- ordered {value,text,...} items
+---   MSUF.BorderStyles.FrameList(text)        -- grouped true-outline + texture items
+---   MSUF.BorderStyles.NormalizeFrame(key)    -- frame key -> typed stored value
+---   MSUF.BorderStyles.ResolveFrame(key)      -- key -> mode, render key, path
 ---   MSUF.BorderStyles.Resolve(key)           -- key -> texture path (nil = SOLID)
 ---   MSUF.BorderStyles.EdgeSize(key, size)    -- style-tuned edgeSize in px
 ---   MSUF.BorderStyles.Normalize(key)         -- unknown/missing -> "SOLID"
@@ -35,6 +38,9 @@ local table_sort = table.sort
 local MEDIA = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Borders\\"
 
 B.SOLID = "SOLID"
+B.FRAME_BORDER = "border"
+B.FRAME_TEXTURE = "texture"
+B.FRAME_BORDER_PREFIX = "BORDER:"
 
 -- Built-in styles, in dropdown order.
 --
@@ -114,6 +120,66 @@ function B.List()
         end
     end
     return items
+end
+
+
+local function StatusbarItems()
+    local provider = _G.MSUF_StatusBarTextureItems
+        or (MSUF and MSUF.UI and MSUF.UI.StatusBarTextureItems)
+    local items = type(provider) == "function" and provider() or nil
+    return type(items) == "table" and items or nil
+end
+
+--- Frame outlines keep their historic empty-string value for the solid-color
+--- ring. True edgeFiles get a prefix; existing statusbar values stay unchanged.
+function B.FrameList(solidText)
+    local items = {
+        { text = "True Outline", header = true, disabled = true, translate = false },
+        { value = "", text = solidText or "None (solid color)" },
+    }
+    local styles = B.List()
+    for i = 1, #styles do
+        local item = styles[i]
+        if item.value ~= B.SOLID then
+            items[#items + 1] = {
+                value = B.FRAME_BORDER_PREFIX .. item.value,
+                text = item.text,
+                translate = item.translate,
+            }
+        end
+    end
+    items[#items + 1] = { text = "Texture", header = true, disabled = true, translate = false }
+    local textures = StatusbarItems()
+    for i = 1, #(textures or {}) do
+        local item = textures[i]
+        if type(item) == "table" and item.value ~= "" then items[#items + 1] = item end
+    end
+    return items
+end
+
+--- Keep statusbar keys backward-compatible; only true outlines are typed.
+function B.NormalizeFrame(key)
+    if type(key) ~= "string" or key == "" or key == B.SOLID or key == "None" then return "" end
+    key = key:match("^TEXTURE:(.+)$") or key -- short-lived development format
+    local borderKey = key:match("^" .. B.FRAME_BORDER_PREFIX .. "(.+)$")
+    if not borderKey then return key end
+    borderKey = B.Normalize(borderKey)
+    return borderKey == B.SOLID and "" or B.FRAME_BORDER_PREFIX .. borderKey
+end
+
+--- Resolve the selected renderer contract. Texture keys deliberately remain
+--- the same values used everywhere else in MSUF's statusbar library.
+function B.ResolveFrame(key)
+    local normalized = B.NormalizeFrame(key)
+    if normalized == "" then return nil, "", nil end
+    local borderKey = normalized:match("^" .. B.FRAME_BORDER_PREFIX .. "(.+)$")
+    if borderKey then
+        local texture = B.Resolve(borderKey)
+        return texture and B.FRAME_BORDER or nil, borderKey, texture
+    end
+    local resolve = _G.MSUF_ResolveStatusbarTextureKey
+    local texture = type(resolve) == "function" and AssetAllowed(resolve(normalized)) or nil
+    return texture and B.FRAME_TEXTURE or nil, normalized, texture
 end
 
 --- Style key -> texture path. Returns nil for SOLID and for anything that no

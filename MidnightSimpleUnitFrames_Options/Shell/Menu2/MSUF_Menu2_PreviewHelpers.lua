@@ -2814,9 +2814,9 @@ function H.LayoutEdgeLines(frame, edge, opts)
         local key = keys[i]
         if not lines[key] then
             lines[key] = frame:CreateTexture(nil, opts.layer or "OVERLAY")
-            lines[key]:SetTexture(texture)
             snap(lines[key])
         end
+        lines[key]:SetTexture(texture)
     end
     local r, g, b, a = 0, 0, 0, 1
     if type(opts.color) == "function" then r, g, b, a = opts.color(frame) end

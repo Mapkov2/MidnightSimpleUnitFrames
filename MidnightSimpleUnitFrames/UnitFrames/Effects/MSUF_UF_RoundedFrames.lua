@@ -1245,6 +1245,11 @@ local function SetModernBorderEdgesSuppressed(f, suppressed)
   else
     f._msufRUFModernBorderSuppressed = nil
   end
+  local refreshSquare = _G.MSUF_RefreshSquareFrameBorderVisual
+  if type(refreshSquare) == "function" then
+    refreshSquare(f)
+    return
+  end
   local shown = not suppressed and f._msufBorderShown == true
   for i = 1, #MODERN_BORDER_EDGE_KEYS do
     local edge = edges[MODERN_BORDER_EDGE_KEYS[i]]
