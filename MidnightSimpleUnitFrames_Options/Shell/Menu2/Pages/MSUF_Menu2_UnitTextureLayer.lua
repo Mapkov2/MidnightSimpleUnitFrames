@@ -19,14 +19,96 @@ local SLOT_PREFIXES = { "texLayer", "texLayer2", "texLayer3" }
 local TEXLAYER_ANCHORS = VTP "TOPLEFT=Top Left|TOP=Top|TOPRIGHT=Top Right|LEFT=Left|CENTER=Center|RIGHT=Right|BOTTOMLEFT=Bottom Left|BOTTOM=Bottom|BOTTOMRIGHT=Bottom Right"
 local TEXLAYER_STRATA = VTP "AUTO=Frame default|BACKGROUND=Background|LOW=Low|MEDIUM=Medium|HIGH=High|DIALOG=Dialog|TOOLTIP=Tooltip"
 local TEXLAYER_ANCHOR_TARGETS = VTP "FRAME=Whole frame|HEALTH=Health bar|POWER=Power bar|PORTRAIT=Portrait"
-local TEXLAYER_VISIBILITY = VTP "ALWAYS=Always|COMBAT=In combat only|OOC=Out of combat only"
-local TEXLAYER_COLOR_MODES = VTP "CUSTOM=Custom color|CLASS=Class color"
+local TEXLAYER_VISIBILITY = VTP "ALWAYS=Always|COMBAT=In combat only|OOC=Out of combat only|TARGET=Current target only"
+local TEXLAYER_CROP_MODES = VTP "FULL=Full texture|TOP_HALF=Top half|BOTTOM_HALF=Bottom half"
 local PAD_DIRECTION_SUFFIXES = { UP = "GradientDirUp", LEFT = "GradientDirLeft", RIGHT = "GradientDirRight", DOWN = "GradientDirDown" }
 local TEXLAYER_TABS = M.WordList "general placement style visibility"
 local TEXLAYER_TAB_TEXTS = { general = "General", placement = "Placement", style = "Style", visibility = "Visibility" }
 local TEXLAYER_SECTION_H = 512
 local TEXLAYER_CARD_Y = -108
 local TEXLAYER_CARD_H = 370
+local HIGHLIGHT_TEXTURE_PRESET = {
+    Texture = "",
+    CustomTexturePath = "Interface\\PETBATTLES\\PetBattle-SelectedPetGlow",
+    FollowFrameAlpha = true,
+    Strata = "AUTO",
+    Level = 1,
+    AnchorTarget = "FRAME",
+    Anchor = "CENTER",
+    OffsetX = 0,
+    OffsetY = 0,
+    Width = 0,
+    Height = 0,
+    GradientEnabled = false,
+    GradientDirRight = true,
+    GradientDirLeft = false,
+    GradientDirUp = false,
+    GradientDirDown = false,
+    BlendMode = "ADD",
+    MirrorH = false,
+    MirrorV = false,
+    CropMode = "BOTTOM_HALF",
+    EdgeSoftness = 0,
+    RoundedClip = false,
+}
+
+local function HighlightTextureConfigured(conf, prefix)
+    if type(conf) ~= "table" or type(prefix) ~= "string" then return false end
+    for suffix, value in pairs(HIGHLIGHT_TEXTURE_PRESET) do
+        if conf[prefix .. suffix] ~= value then return false end
+    end
+    return true
+end
+
+local function ApplyHighlightTextureConfig(conf, prefix, enabled)
+    if type(conf) ~= "table" or type(prefix) ~= "string" then return false end
+    local changed = false
+    if enabled then
+        local alpha = tonumber(conf[prefix .. "Alpha"])
+        local colorMode = conf[prefix .. "ColorMode"]
+        local initializeAppearance = (conf[prefix .. "Texture"] == nil or conf[prefix .. "Texture"] == "")
+            and (conf[prefix .. "CustomTexturePath"] == nil or conf[prefix .. "CustomTexturePath"] == "")
+            and (alpha == nil or alpha == 1)
+            and (colorMode == nil or colorMode == "CUSTOM")
+            and (tonumber(conf[prefix .. "ColorR"]) == nil or tonumber(conf[prefix .. "ColorR"]) == 1)
+            and (tonumber(conf[prefix .. "ColorG"]) == nil or tonumber(conf[prefix .. "ColorG"]) == 1)
+            and (tonumber(conf[prefix .. "ColorB"]) == nil or tonumber(conf[prefix .. "ColorB"]) == 1)
+        for suffix, value in pairs(HIGHLIGHT_TEXTURE_PRESET) do
+            local key = prefix .. suffix
+            if conf[key] ~= value then
+                conf[key] = value
+                changed = true
+            end
+        end
+        if initializeAppearance then
+            local defaults = { Alpha = 0.05, ColorMode = "CUSTOM", ColorR = 1, ColorG = 0.82, ColorB = 0 }
+            for suffix, value in pairs(defaults) do
+                local key = prefix .. suffix
+                if conf[key] ~= value then
+                    conf[key] = value
+                    changed = true
+                end
+            end
+        end
+    elseif HighlightTextureConfigured(conf, prefix) then
+        -- Remove only the highlight recipe. Master enable, opacity,
+        -- visibility and color remain independent.
+        local replacements = {
+            CustomTexturePath = "",
+            CropMode = "FULL",
+            BlendMode = "BLEND",
+        }
+        for suffix, value in pairs(replacements) do
+            local key = prefix .. suffix
+            if conf[key] ~= value then
+                conf[key] = value
+                changed = true
+            end
+        end
+    end
+    return changed
+end
+M.ApplyTextureLayerHighlightConfig = ApplyHighlightTextureConfig
 
 local function BuildTextureLayer(ctx, builder, unit)
     local ReadBool = UP.ReadBool
@@ -52,6 +134,19 @@ local function BuildTextureLayer(ctx, builder, unit)
     end
     local function RefreshLayer()
         Call("MSUF_RefreshUnitTextureLayers", unit)
+    end
+    local function SetHighlightTextureEnabled(enabled)
+        if M.BlockCombatAction and M.BlockCombatAction() then return false end
+        local conf = GetConf(unit)
+        local prefix = SLOT_PREFIXES[CurrentSlot()]
+        local changed = ApplyHighlightTextureConfig(conf, prefix, enabled)
+        if not changed then return false end
+        if M.RequestUnitApply then
+            M.RequestUnitApply(unit, "MSUF2_TEXLAYER_HIGHLIGHT_TEXTURE", { preview = true, history = false })
+        end
+        RefreshLayer()
+        if M.RequestRefresh then M.RequestRefresh(ctx, "texture-layer-highlight-texture") end
+        return true
     end
 
     local sec = builder:CollapsibleSection("texture_layer", "Texture Layer", TEXLAYER_SECTION_H, false)
@@ -165,18 +260,49 @@ local function BuildTextureLayer(ctx, builder, unit)
         LayerMeta("CustomTexturePath"))
     W.MoveWidget(customPath, generalCard, colX, -140, colW - 16, "LEFT")
     Track(customPath)
+    local highlightTexture = W.ToggleAt(generalCard, "Highlight texture", 16, -264, colW - 16)
+    M.BindBoolWidget(ctx, highlightTexture,
+        function()
+            local prefix = SLOT_PREFIXES[CurrentSlot()]
+            return HighlightTextureConfigured(GetConf(unit), prefix)
+        end,
+        SetHighlightTextureEnabled,
+        ReviewedMeta(ctx, "texture_layer.highlight_texture", "ephemeral", "ephemeral",
+            "Applies or removes the built-in highlight appearance without changing whether the texture layer is enabled."))
+    local classColor = W.ToggleAt(generalCard, "Class color", colX, -264, colW - 16)
+    M.BindBoolWidget(ctx, classColor,
+        function() return GetConf(unit)[Key("ColorMode")] == "CLASS" end,
+        function(enabled)
+            SetString(unit, Key("ColorMode"), enabled and "CLASS" or "CUSTOM",
+                "MSUF2_TEXLAYER", { preview = true })
+            RefreshLayer()
+        end,
+        LayerMeta("ColorMode", "class_color"))
+    Track(classColor)
+    local currentTargetOnly = W.ToggleAt(generalCard, "Current target only", 16, -310, colW - 16)
+    M.BindBoolWidget(ctx, currentTargetOnly,
+        function() return GetConf(unit)[Key("Visibility")] == "TARGET" end,
+        function(enabled)
+            SetString(unit, Key("Visibility"), enabled and "TARGET" or "ALWAYS",
+                "MSUF2_TEXLAYER", { preview = true })
+            RefreshLayer()
+        end,
+        LayerMeta("Visibility", "current_target_only"))
+    Track(currentTargetOnly)
 
     -- Placement: Preview owns position; this card keeps anchor target and size.
     Track(BindLayerDropdown(placementCard, "Anchor to", 16, -54, colW - 16, TEXLAYER_ANCHOR_TARGETS, "AnchorTarget", "FRAME"))
     Track(BindLayerDropdown(placementCard, "Anchor", 16, -130, colW - 16, TEXLAYER_ANCHORS, "Anchor", "TOP"))
     Track(BindLayerSlider(placementCard, "Width", 16, -214, colW, 0, 600, 1, "Width", 0))
-    Track(BindLayerSlider(placementCard, "Height", colX, -62, colW, 1, 120, 1, "Height", 16))
+    Track(BindLayerSlider(placementCard, "Height (0 = auto)", colX, -62, colW, 0, 120, 1, "Height", 16))
     W.LabelAt(placementCard, "Use the colored Texture handle in Preview for exact placement.", colX, -130,
         colW - 16, "GameFontNormalSmall", T.colors and T.colors.muted)
+    Track(BindLayerDropdown(placementCard, "Texture region", colX, -214, colW - 16,
+        TEXLAYER_CROP_MODES, "CropMode", "FULL"))
 
-    -- Style: color mode, gradient with a Bars-style direction D-pad, blend,
-    -- mirroring, opacity and a four-edge feather mask. Colors themselves live on the Colors page and behind
-    -- this card's three-dot context shortcut.
+    -- Style: gradient with a Bars-style direction D-pad, blend, mirroring,
+    -- opacity and a four-edge feather mask. Color selection lives in the
+    -- compact General toggle and on the Colors page/context shortcut.
     local padButtons = {}
     local pad
     local function DirectionActive(value)
@@ -193,22 +319,12 @@ local function BuildTextureLayer(ctx, builder, unit)
             SetControlEnabled(btn, on)
         end
     end
-    local colorMode = W.Dropdown(styleCard, "Color mode", TEXLAYER_COLOR_MODES, colW - 16)
-    M.BindDropdownWidget(ctx, colorMode,
-        function() return GetConf(unit)[Key("ColorMode")] == "CLASS" and "CLASS" or "CUSTOM" end,
-        function(v)
-            SetString(unit, Key("ColorMode"), v == "CLASS" and "CLASS" or "CUSTOM", "MSUF2_TEXLAYER", { preview = true })
-            RefreshLayer()
-        end,
-        LayerMeta("ColorMode"))
-    W.MoveWidget(colorMode, styleCard, 16, -54, colW - 16, "LEFT")
-    Track(colorMode)
-    Track(BindLayerToggle(styleCard, "Gradient", 16, -122, colW - 16, "GradientEnabled", false, RefreshGradientControls))
-    W.LabelAt(styleCard, "Direction", 16, -156, colW - 16, "GameFontNormalSmall", T.colors and T.colors.accent)
+    Track(BindLayerToggle(styleCard, "Gradient", 16, -54, colW - 16, "GradientEnabled", false, RefreshGradientControls))
+    W.LabelAt(styleCard, "Direction", 16, -88, colW - 16, "GameFontNormalSmall", T.colors and T.colors.accent)
     local padW, padH = 104, 78
     local padButtonW, padButtonH = 22, 18
     pad = T.Panel(styleCard, nil, (T.colors and T.colors.panel2) or { 0.014, 0.038, 0.072, 0.55 }, T.colors and T.colors.borderSoft)
-    pad:SetPoint("TOPLEFT", styleCard, "TOPLEFT", 16, -178)
+    pad:SetPoint("TOPLEFT", styleCard, "TOPLEFT", 16, -110)
     pad:SetSize(padW, padH)
     local padCenter = pad:CreateTexture(nil, "ARTWORK")
     padCenter:SetPoint("CENTER", pad, "CENTER", 0, 0)

@@ -3,8 +3,9 @@
 -- name-bar style decoration). Everything here is cold path: settings changes
 -- and frame applies re-stamp the layers; the only events are a lazily
 -- registered regen pair (combat/ooc visibility) and target/focus lifecycle
--- events (class-color mode on dynamic units) -- both registered ONLY while a
--- layer actually uses those features, so an unused feature costs nothing.
+-- events (target-only visibility or class color on dynamic units) -- all
+-- registered ONLY while a layer actually uses those features, so an unused
+-- feature costs nothing.
 -- Each layer is a child frame of the unit frame, so range fade / out-of-combat
 -- fade / load conditions are inherited for free; "own alpha" multiplies on top,
 -- and the follow toggle maps to SetIgnoreParentAlpha.
@@ -19,6 +20,7 @@ end
 local CreateFrame = CreateFrame
 local CreateColor = _G.CreateColor
 local InCombatLockdown = _G.InCombatLockdown
+local UnitIsUnit = _G.UnitIsUnit
 local type = type
 local tonumber = tonumber
 local tostring = tostring
@@ -117,6 +119,17 @@ local function ResolveClassRGB(unitKey)
   if type(exists) == "function" and exists(unit) ~= true then return nil end
   local _, token = UnitClass(unit)
   if issecretvalue(token) == true or type(token) ~= "string" or token == "" then return nil end
+  -- Keep texture accents on the same effective class palette as health bars,
+  -- including MSUF's user-configured class colors. Resolve at apply time so a
+  -- settings-cache refresh is reflected without any recurring work.
+  local fastClassColor = _G.MSUF_UFCore_GetClassBarColorFast
+  if type(fastClassColor) == "function" then
+    local r, g, b = fastClassColor(token)
+    if issecretvalue(r) ~= true and issecretvalue(g) ~= true and issecretvalue(b) ~= true
+      and type(r) == "number" and type(g) == "number" and type(b) == "number" then
+      return r, g, b
+    end
+  end
   local colors = _G.CUSTOM_CLASS_COLORS or _G.RAID_CLASS_COLORS
   local color = colors and colors[token]
   if not color then return nil end
@@ -136,8 +149,9 @@ local function DriverOnEvent(_, event)
   if event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then
     RefreshUnitTextureLayers(nil)
   elseif event == "PLAYER_TARGET_CHANGED" then
-    RefreshUnitTextureLayers("target")
-    RefreshUnitTextureLayers("targettarget")
+    -- A Current Target layer can belong to Player, Pet, Focus, Boss or ToT,
+    -- and both the previously-targeted and newly-targeted frame must repaint.
+    RefreshUnitTextureLayers(nil)
   elseif event == "PLAYER_FOCUS_CHANGED" then
     RefreshUnitTextureLayers("focus")
     RefreshUnitTextureLayers("focustarget")
@@ -168,6 +182,7 @@ end
 local function NoteDynamicNeeds(unitKey, conf, prefix)
   local visibility = conf[prefix .. "Visibility"]
   if visibility == "COMBAT" or visibility == "OOC" then wantRegenEvents = true end
+  if visibility == "TARGET" then wantTargetEvents = true end
   if conf[prefix .. "ColorMode"] == "CLASS" then
     if unitKey == "target" or unitKey == "targettarget" then wantTargetEvents = true end
     if unitKey == "focus" or unitKey == "focustarget" then wantFocusEvents = true end
@@ -314,9 +329,19 @@ local function ApplyClip(frame, holder, tex, clipWanted)
   end
 end
 
-local function LayerVisible(conf, prefix)
+local function LayerVisible(conf, prefix, frame, unitKey)
   if _G.MSUF_UnitEditModeActive == true then return true end
   local visibility = conf[prefix .. "Visibility"]
+  if visibility == "TARGET" then
+    local unit = frame and frame.MSUFUnitKey or unitKey
+    -- Menu previews have no live unit token; keep the configured art visible
+    -- there so the user can edit it. Live frames always pass their token.
+    if type(unit) ~= "string" or unit == "" then return true end
+    if type(UnitIsUnit) ~= "function" then return false end
+    local isTarget = UnitIsUnit("target", unit)
+    if issecretvalue(isTarget) == true then return false end
+    return isTarget == true or isTarget == 1
+  end
   if visibility ~= "COMBAT" and visibility ~= "OOC" then return true end
   local inCombat = type(InCombatLockdown) == "function" and InCombatLockdown() == true
   if visibility == "COMBAT" then return inCombat end
@@ -325,6 +350,20 @@ end
 TextureLayer.LayerVisible = LayerVisible
 TextureLayer.ResolveLayerTexture = ResolveLayerTexture
 TextureLayer.ResolveClassRGB = ResolveClassRGB
+
+local function ResolveTexCoords(conf, prefix)
+  local left, right, top, bottom = 0, 1, 0, 1
+  local cropMode = conf[prefix .. "CropMode"]
+  if cropMode == "TOP_HALF" then
+    bottom = 0.5
+  elseif cropMode == "BOTTOM_HALF" then
+    top = 0.5
+  end
+  if conf[prefix .. "MirrorH"] == true then left, right = right, left end
+  if conf[prefix .. "MirrorV"] == true then top, bottom = bottom, top end
+  return left, right, top, bottom
+end
+TextureLayer.ResolveTexCoords = ResolveTexCoords
 
 local function ApplyLayerStrata(frame, holder, strata)
   if not (holder and holder.SetFrameStrata) then return end
@@ -342,15 +381,13 @@ local function ApplySlot(frame, conf, unitKey, slot)
   local prefix = SLOT_PREFIXES[slot]
   local holders = frame._msufTexLayers
   local holder = holders and holders[slot]
-  if conf[prefix .. "Enabled"] ~= true or not LayerVisible(conf, prefix) then
+  if conf[prefix .. "Enabled"] ~= true or not LayerVisible(conf, prefix, frame, unitKey) then
     if holder then
       ClearSoftEdgeMask(holder)
       holder:Hide()
     end
-    if conf[prefix .. "Enabled"] == true then NoteDynamicNeeds(unitKey, conf, prefix) end
     return
   end
-  NoteDynamicNeeds(unitKey, conf, prefix)
 
   if not holder then
     if not holders then
@@ -392,8 +429,12 @@ local function ApplySlot(frame, conf, unitKey, slot)
     width = (target.GetWidth and target:GetWidth()) or (frame.GetWidth and frame:GetWidth()) or 100
     if issecretvalue(width) == true or not width or width < 1 then width = 100 end
   end
-  local height = tonumber(conf[prefix .. "Height"]) or 16
-  if height < 1 then height = 1 end
+  local height = tonumber(conf[prefix .. "Height"])
+  if height == nil then height = 16 end
+  if height <= 0 then
+    height = (target.GetHeight and target:GetHeight()) or (frame.GetHeight and frame:GetHeight()) or 16
+    if issecretvalue(height) == true or not height or height < 1 then height = 16 end
+  end
   holder:SetSize(width, height)
   holder:ClearAllPoints()
   holder:SetPoint(point, target, point, tonumber(conf[prefix .. "OffsetX"]) or 0, tonumber(conf[prefix .. "OffsetY"]) or 0)
@@ -404,11 +445,8 @@ local function ApplySlot(frame, conf, unitKey, slot)
   if tex.SetBlendMode then
     tex:SetBlendMode(conf[prefix .. "BlendMode"] == "ADD" and "ADD" or "BLEND")
   end
-  -- Mirroring flips the texture coordinates; cheap and purely cold path.
-  local mirrorH = conf[prefix .. "MirrorH"] == true
-  local mirrorV = conf[prefix .. "MirrorV"] == true
   if tex.SetTexCoord then
-    tex:SetTexCoord(mirrorH and 1 or 0, mirrorH and 0 or 1, mirrorV and 1 or 0, mirrorV and 0 or 1)
+    tex:SetTexCoord(ResolveTexCoords(conf, prefix))
   end
 
   local r = Clamp01(conf[prefix .. "ColorR"], 1)
@@ -487,6 +525,25 @@ local function FrameMatchesUnitScope(frame, unit)
   return false
 end
 
+local function RecomputeDriverNeeds(frames)
+  wantRegenEvents, wantTargetEvents, wantFocusEvents, wantBossEvents = false, false, false, false
+  for _, frame in pairs(frames) do
+    if frame and frame._msufIsGroupFrame ~= true then
+      local unitKey = frame.MSUFUnitKey
+      local conf = unitKey and ConfForUnitKey(unitKey)
+      if conf then
+        for slot = 1, #SLOT_PREFIXES do
+          local prefix = SLOT_PREFIXES[slot]
+          if conf[prefix .. "Enabled"] == true then
+            NoteDynamicNeeds(unitKey, conf, prefix)
+          end
+        end
+      end
+    end
+  end
+  SyncDriverEvents()
+end
+
 RefreshUnitTextureLayers = function(unit)
   if unit ~= nil then
     unit = tostring(unit)
@@ -496,15 +553,15 @@ RefreshUnitTextureLayers = function(unit)
   local UF = MSUF and MSUF.UF
   local frames = UF and UF.frames
   if type(frames) ~= "table" then return false end
-  if unit == nil then
-    wantRegenEvents, wantTargetEvents, wantFocusEvents, wantBossEvents = false, false, false, false
-  end
   for _, frame in pairs(frames) do
     if frame and FrameMatchesUnitScope(frame, unit) then
       ApplyToUnitFrame(frame)
     end
   end
-  if unit == nil then SyncDriverEvents() end
+  -- Recompute from every applied frame even after a scoped refresh. This both
+  -- registers a newly-enabled conditional layer immediately and unregisters
+  -- the last such layer without waiting for a later full visual refresh.
+  RecomputeDriverNeeds(frames)
   return true
 end
 TextureLayer.Refresh = RefreshUnitTextureLayers

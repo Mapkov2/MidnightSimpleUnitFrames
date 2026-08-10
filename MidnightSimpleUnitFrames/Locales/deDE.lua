@@ -4489,6 +4489,13 @@ L["Texture Layer Colors"] = "Textur-Ebenen-Farben"
 L["Texture layer color"] = "Textur-Ebenen-Farbe"
 L["Texture layer gradient end"] = "Textur-Ebene: Verlaufs-Endfarbe"
 L["Direction"] = "Richtung"
+L["Highlight texture"] = "Highlight-Textur"
+L["Height (0 = auto)"] = "Höhe (0 = automatisch)"
+L["Texture region"] = "Texturbereich"
+L["Full texture"] = "Ganze Textur"
+L["Top half"] = "Obere Hälfte"
+L["Bottom half"] = "Untere Hälfte"
+L["Current target only"] = "Nur aktuelles Ziel"
 
 -- Profil-Arbeitsbereich (Kopfbereich, Verwaltung, Spezialisierung, Backup).
 L["!"] = "!"

@@ -2896,6 +2896,13 @@ L["Texture Layer Colors"] = "Texture Layer Colors"
 L["Texture layer color"] = "Texture layer color"
 L["Texture layer gradient end"] = "Texture layer gradient end"
 L["Direction"] = "Direction"
+L["Highlight texture"] = "Highlight texture"
+L["Height (0 = auto)"] = "Height (0 = auto)"
+L["Texture region"] = "Texture region"
+L["Full texture"] = "Full texture"
+L["Top half"] = "Top half"
+L["Bottom half"] = "Bottom half"
+L["Current target only"] = "Current target only"
 
 -- Profile workspace (hero, management, specialization, backup & transfer).
 L["!"] = "!"

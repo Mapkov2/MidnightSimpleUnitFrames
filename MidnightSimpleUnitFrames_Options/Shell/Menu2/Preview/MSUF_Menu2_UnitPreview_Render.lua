@@ -1262,7 +1262,9 @@ local function RenderTextureLayerSlotPreview(box, mock, conf, slot, wanted, scal
     if holder.SetFrameLevel then
         local level = tonumber(conf[prefix .. "Level"]) or 1
         if level < 0 then level = 0 elseif level > 30 then level = 30 end
-        holder:SetFrameLevel((baseLevel or 0) + level)
+        local resolvedLevel = Layers.ElementLevel and Layers.ElementLevel(level, 1, 0)
+            or ((baseLevel or 0) + level)
+        holder:SetFrameLevel(resolvedLevel)
     end
     if holder.SetIgnoreParentAlpha then
         holder:SetIgnoreParentAlpha(conf[prefix .. "FollowFrameAlpha"] == false)
@@ -1288,7 +1290,14 @@ local function RenderTextureLayerSlotPreview(box, mock, conf, slot, wanted, scal
         width = (target.GetWidth and target:GetWidth()) or sw
         if not width or width < 1 then width = sw end
     end
-    local height = scaleFn(tonumber(conf[prefix .. "Height"]) or 16)
+    local rawHeight = tonumber(conf[prefix .. "Height"])
+    if rawHeight == nil then rawHeight = 16 end
+    local height
+    if rawHeight <= 0 then
+        height = (target.GetHeight and target:GetHeight()) or (mock.GetHeight and mock:GetHeight()) or scaleFn(16)
+    else
+        height = scaleFn(rawHeight)
+    end
     holder:SetSize(math.max(1, width), math.max(1, height))
     local tex = holder.tex
     local path = textureRuntime and type(textureRuntime.ResolveLayerTexture) == "function"
@@ -1305,12 +1314,17 @@ local function RenderTextureLayerSlotPreview(box, mock, conf, slot, wanted, scal
     if tex.SetBlendMode then
         tex:SetBlendMode(conf[prefix .. "BlendMode"] == "ADD" and "ADD" or "BLEND")
     end
-    -- Mirroring runs after setTexture so its coordinate flip wins over the
-    -- shared SetTex inset.
-    local mirrorH = conf[prefix .. "MirrorH"] == true
-    local mirrorV = conf[prefix .. "MirrorV"] == true
+    -- Crop/mirroring runs after setTexture so the explicit region wins over
+    -- the shared SetTex inset. Runtime owns the resolver to keep both views
+    -- pixel-identical.
     if tex.SetTexCoord then
-        tex:SetTexCoord(mirrorH and 1 or 0, mirrorH and 0 or 1, mirrorV and 1 or 0, mirrorV and 0 or 1)
+        if textureRuntime and type(textureRuntime.ResolveTexCoords) == "function" then
+            tex:SetTexCoord(textureRuntime.ResolveTexCoords(conf, prefix))
+        else
+            local mirrorH = conf[prefix .. "MirrorH"] == true
+            local mirrorV = conf[prefix .. "MirrorV"] == true
+            tex:SetTexCoord(mirrorH and 1 or 0, mirrorH and 0 or 1, mirrorV and 1 or 0, mirrorV and 0 or 1)
+        end
     end
     local r = tonumber(conf[prefix .. "ColorR"]) or 1
     local g = tonumber(conf[prefix .. "ColorG"]) or 1
