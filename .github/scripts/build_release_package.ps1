@@ -168,8 +168,12 @@ function Normalize-ReleaseVersion {
     $normalized = $normalized -replace '(?i)^MSUF[\s._-]*', ''
     $normalized = $normalized -replace '^v(?=\d)', ''
     if ($normalized -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|preview|rc|pre|a|b)[\s._-]*(?<number>\d+(?:\.\d+)*))?\s*$') {
+        $authoredBase = $Matches["base"]
         $base = (($Matches["base"] -split '\.') | ForEach-Object { [int]$_ }) -join "."
-        if ([string]::IsNullOrWhiteSpace($Matches["channel"])) { return $base }
+        # Stable-looking release tags are also the user-facing AddOn version.
+        # Preserve authored zero padding (for example 6.01) while prerelease
+        # tags retain the established normalized channel contract.
+        if ([string]::IsNullOrWhiteSpace($Matches["channel"])) { return $authoredBase }
         $channel = $Matches["channel"].ToLowerInvariant()
         if ($channel -eq "a") { $channel = "alpha" }
         if ($channel -eq "b") { $channel = "beta" }

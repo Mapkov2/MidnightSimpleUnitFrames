@@ -32,6 +32,7 @@ on:
           - github
           - wago
           - curseforge
+          - wago+curseforge
 
 permissions:
   contents: write
@@ -118,7 +119,7 @@ jobs:
             }
           }
           if (-not [string]::IsNullOrWhiteSpace($tagContents)) {
-            $match = [regex]::Match($tagContents, '(?im)^\s*publish-target\s*:\s*(all|github|wago|curseforge)\s*$')
+            $match = [regex]::Match($tagContents, '(?im)^\s*publish-target\s*:\s*(all|github|wago|curseforge|wago\+curseforge)\s*$')
             if ($match.Success) {
               $target = $match.Groups[1].Value
             }
@@ -130,8 +131,8 @@ jobs:
             $target = "github"
           }
           $target = $target.Trim().ToLowerInvariant()
-          if ($target -notin @("all", "github", "wago", "curseforge")) {
-            throw "Invalid publish target '$target'. Use all, github, wago, or curseforge."
+          if ($target -notin @("all", "github", "wago", "curseforge", "wago+curseforge")) {
+            throw "Invalid publish target '$target'. Use all, github, wago, curseforge, or wago+curseforge."
           }
 
           $isPrereleaseTag = (
@@ -144,8 +145,8 @@ jobs:
           }
 
           $publishToGitHub = $target -eq "all" -or $target -eq "github"
-          $publishToWago = $target -eq "all" -or $target -eq "wago"
-          $publishToCurseForge = $target -eq "all" -or $target -eq "curseforge"
+          $publishToWago = $target -eq "all" -or $target -eq "wago" -or $target -eq "wago+curseforge"
+          $publishToCurseForge = $target -eq "all" -or $target -eq "curseforge" -or $target -eq "wago+curseforge"
 
           "PUBLISH_TARGET=$target" >> $env:GITHUB_ENV
           "PUBLISH_TO_GITHUB=$($publishToGitHub.ToString().ToLowerInvariant())" >> $env:GITHUB_ENV
@@ -245,6 +246,13 @@ jobs:
 
           $tag = $env:RELEASE_VERSION
           $eventIsPrerelease = $env:RELEASE_IS_PRERELEASE -eq "true"
+          $tagContents = ""
+          $tagContentLines = @(git for-each-ref "refs/tags/$tag" --format='%(contents)' 2>$null)
+          if ($LASTEXITCODE -eq 0) {
+            $tagContents = $tagContentLines -join [Environment]::NewLine
+          }
+          $tagRequestsCurseForgeBeta = -not [string]::IsNullOrWhiteSpace($tagContents) -and
+            [regex]::IsMatch($tagContents, '(?im)^\s*curseforge-channel\s*:\s*beta\s*$')
           $releaseName = $env:RELEASE_NAME_INPUT
           if ([string]::IsNullOrWhiteSpace($releaseName)) {
             $tagSubject = git for-each-ref "refs/tags/$tag" --format='%(contents:subject)' 2>$null
@@ -300,7 +308,7 @@ jobs:
             $curseForgeType = "beta"
           } else {
             $wagoStability = "stable"
-            $curseForgeType = "release"
+            $curseForgeType = if ($tagRequestsCurseForgeBeta) { "beta" } else { "release" }
           }
 
           "RELEASE_IS_PRERELEASE=$($isPrerelease.ToString().ToLowerInvariant())" >> $env:GITHUB_ENV
@@ -310,7 +318,7 @@ jobs:
           "release_is_prerelease=$($isPrerelease.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
           "github_make_latest=$(if ($isPrerelease) { 'false' } else { 'true' })" >> $env:GITHUB_OUTPUT
           "release_name=$releaseName" >> $env:GITHUB_OUTPUT
-          Write-Host "Release $tag uses name '$releaseName', Wago stability '$wagoStability', and CurseForge type '$curseForgeType'."
+          Write-Host "Release $tag uses name '$releaseName', Wago stability '$wagoStability', and CurseForge type '$curseForgeType' (CurseForge beta override=$tagRequestsCurseForgeBeta)."
 
       - name: Enforce prerelease channels for prerelease tags
         shell: pwsh
