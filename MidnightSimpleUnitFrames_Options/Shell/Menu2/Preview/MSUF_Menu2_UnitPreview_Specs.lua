@@ -62,7 +62,9 @@ texLayer|Texture|0.80,0.55,0.25|Decorative texture layer.
 power|Power|0.95,0.72,0.18
 classPower|Class|0.30,0.78,0.55
 castbar|Cast|0.20,0.90,0.85
-auras|Auras|0.42,0.72,1.00
+buff|Buffs|0.20,0.90,0.35
+debuff|Debuffs|0.90,0.20,0.22
+auras|Custom|0.42,0.72,1.00
 dispelOverlay|Dispel Overlay|0.25,0.72,1.00|Configured cleanse-color wash over the health bar.
 dispelSymbol|Dispel Symbol|0.34,0.84,1.00|Configured dispel-type symbols and placement.
 status|Status|0.85,0.70,0.25

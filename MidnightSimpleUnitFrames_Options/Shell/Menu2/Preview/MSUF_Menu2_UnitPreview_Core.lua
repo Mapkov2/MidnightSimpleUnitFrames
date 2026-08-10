@@ -623,11 +623,10 @@ function Core.ApplyLayerVisibility(box)
         Core.SetShownSafe(box.handleCastbarTime, false)
     end
     if mock.cast and mock.cast.sizeTag then Core.SetShownSafe(mock.cast.sizeTag, guidesOn and castOn and mock.cast:IsShown()) end
-    if not LayerOn("auras") then
-        local Auras = MSUF.UFPreviewAuras
-        if Auras and type(Auras.Hide) == "function" then Auras.Hide(box) end
-    end
     local Auras = MSUF.UFPreviewAuras
+    if Auras and type(Auras.ApplyLayerVisibility) == "function" then
+        Auras.ApplyLayerVisibility(box)
+    end
     if Auras and type(Auras.ApplyDispelLayerVisibility) == "function" then
         Auras.ApplyDispelLayerVisibility(box)
     end

@@ -1821,8 +1821,9 @@ function Preview.Refresh(box, reason)
     end
     local auraPreviewState = Auras and Auras.BuildState
         and Auras.BuildState(key, w, h, runtimeSpec, box._msuf2ColorPainterForceAuras == true)
-    local auraFootprintState = PreviewLayerWanted(box, "auras") and auraPreviewState or nil
-    if auraFootprintState and Auras.ExpandFootprint then minX, maxX, minY, maxY = Auras.ExpandFootprint(auraFootprintState, minX, maxX, minY, maxY) end
+    local auraFootprintState = Auras and Auras.HasVisibleLayer
+        and Auras.HasVisibleLayer(auraPreviewState, box.layerVisibility) and auraPreviewState or nil
+    if auraFootprintState and Auras.ExpandFootprint then minX, maxX, minY, maxY = Auras.ExpandFootprint(auraFootprintState, minX, maxX, minY, maxY, box.layerVisibility) end
     if Auras and type(Auras.DispelPreview) == "table" and type(Auras.DispelPreview.Availability) == "function" then
         box._previewDispelOverlayAvailable, box._previewDispelSymbolAvailable =
             Auras.DispelPreview.Availability(key, runtimeSpec)
@@ -3087,7 +3088,11 @@ function Preview.Refresh(box, reason)
         power = powerEnabled == true,
         classPower = classPowerOn,
         castbar = castEnabled,
-        auras = auraPreviewState ~= nil,
+        buff = auraPreviewState ~= nil and auraPreviewState.buff ~= nil,
+        debuff = auraPreviewState ~= nil and auraPreviewState.debuff ~= nil,
+        auras = auraPreviewState ~= nil and (auraPreviewState.custom1 ~= nil
+            or auraPreviewState.custom2 ~= nil or auraPreviewState.custom3 ~= nil or auraPreviewState.custom4 ~= nil
+            or auraPreviewState.defensivePortrait ~= nil or auraPreviewState.targetDotPortrait ~= nil),
         dispelOverlay = box._previewDispelOverlayAvailable == true,
         dispelSymbol = box._previewDispelSymbolAvailable == true,
         status = statusLayerAvailable,
