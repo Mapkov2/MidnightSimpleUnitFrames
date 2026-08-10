@@ -98,6 +98,17 @@ local function ResolveLayerTexture(conf, prefix)
   return WHITE8
 end
 
+local function ApplyColorTreatment(tex, conf, prefix)
+  local monochrome = conf and conf[prefix .. "ColorTreatment"] == "MONOCHROME"
+  if tex and tex.SetDesaturated then
+    -- Always stamp both states because texture regions are reused across
+    -- profile changes and Menu2 edits.
+    tex:SetDesaturated(monochrome)
+  end
+  return monochrome
+end
+TextureLayer.ApplyColorTreatment = ApplyColorTreatment
+
 local function ResolveAnchorTarget(frame, mode)
   if mode == "HEALTH" then
     return frame.hpBar or frame.Health or frame
@@ -442,6 +453,7 @@ local function ApplySlot(frame, conf, unitKey, slot)
   local clipWanted = WantsRoundedClip(conf, prefix)
   local tex = EnsureBaseTexture(holder, clipWanted)
   tex:SetTexture(ResolveLayerTexture(conf, prefix))
+  ApplyColorTreatment(tex, conf, prefix)
   if tex.SetBlendMode then
     tex:SetBlendMode(conf[prefix .. "BlendMode"] == "ADD" and "ADD" or "BLEND")
   end

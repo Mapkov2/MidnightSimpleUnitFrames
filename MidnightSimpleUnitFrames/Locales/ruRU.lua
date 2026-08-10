@@ -2513,6 +2513,9 @@ L["Cancel"]="Отмена"; L["Disabled"]="Выключено"; L["Enabled"]="В
 
 -- MSUF FULL CORE MENU COVERAGE
 -- Generated missing non-Assistant core keys for ruRU.
+L["Source color"] = "Исходный цвет"
+L["Monochrome"] = "Монохромный"
+L["Original"] = "Оригинал"
 L["Gradient colors"] = "Градиентные цвета"
 L["Health gradient"] = "Градиент здоровья"
 L["Power gradient"] = "Градиент мощности"

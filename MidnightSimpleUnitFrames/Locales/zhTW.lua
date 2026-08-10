@@ -2524,6 +2524,9 @@ L["Cancel"]="取消"; L["Disabled"]="已停用"; L["Enabled"]="已啟用"; L["Gr
 
 -- MSUF FULL CORE MENU COVERAGE
 -- Generated missing non-Assistant core keys for zhTW.
+L["Source color"] = "來源顏色"
+L["Monochrome"] = "單色"
+L["Original"] = "原始"
 L["Gradient colors"] = "漸層色"
 L["Health gradient"] = "健康梯度"
 L["Power gradient"] = "功率梯度"

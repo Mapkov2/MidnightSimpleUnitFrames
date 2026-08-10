@@ -3136,6 +3136,9 @@ L["Cancel"]="取消"; L["Disabled"]="已禁用"; L["Enabled"]="已启用"; L["Gr
 
 -- MSUF FULL CORE MENU COVERAGE
 -- Generated missing non-Assistant core keys for zhCN.
+L["Source color"] = "源颜色"
+L["Monochrome"] = "单色"
+L["Original"] = "原始"
 L["Gradient colors"] = "渐变色"
 L["Health gradient"] = "健康梯度"
 L["Power gradient"] = "功率梯度"

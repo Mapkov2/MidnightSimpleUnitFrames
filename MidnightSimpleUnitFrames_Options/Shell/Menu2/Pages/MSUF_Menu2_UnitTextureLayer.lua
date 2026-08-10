@@ -21,6 +21,7 @@ local TEXLAYER_STRATA = VTP "AUTO=Frame default|BACKGROUND=Background|LOW=Low|ME
 local TEXLAYER_ANCHOR_TARGETS = VTP "FRAME=Whole frame|HEALTH=Health bar|POWER=Power bar|PORTRAIT=Portrait"
 local TEXLAYER_VISIBILITY = VTP "ALWAYS=Always|COMBAT=In combat only|OOC=Out of combat only|TARGET=Current target only"
 local TEXLAYER_CROP_MODES = VTP "FULL=Full texture|TOP_HALF=Top half|BOTTOM_HALF=Bottom half"
+local TEXLAYER_COLOR_TREATMENTS = VTP "ORIGINAL=Original|MONOCHROME=Monochrome"
 local PAD_DIRECTION_SUFFIXES = { UP = "GradientDirUp", LEFT = "GradientDirLeft", RIGHT = "GradientDirRight", DOWN = "GradientDirDown" }
 local TEXLAYER_TABS = M.WordList "general placement style visibility"
 local TEXLAYER_TAB_TEXTS = { general = "General", placement = "Placement", style = "Style", visibility = "Visibility" }
@@ -359,6 +360,8 @@ local function BuildTextureLayer(ctx, builder, unit)
     PadButton("<", "LEFT", padCenterX - padSideOffset, -padCenterY)
     PadButton(">", "RIGHT", padCenterX + padSideOffset, -padCenterY)
     PadButton("v", "DOWN", padCenterX, -(padCenterY + padSideOffset))
+    Track(BindLayerDropdown(styleCard, "Source color", 16, -214, colW - 16,
+        TEXLAYER_COLOR_TREATMENTS, "ColorTreatment", "ORIGINAL"))
     Track(BindLayerSlider(styleCard, "Opacity", colX, -62, colW, 0, 1, 0.05, "Alpha", 1, true))
     local blend = W.ToggleAt(styleCard, "Additive glow", colX, -122, colW - 16)
     M.BindBoolWidget(ctx, blend,

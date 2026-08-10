@@ -2488,6 +2488,9 @@ L["Cancel"]="Annulla"; L["Disabled"]="Disattivato"; L["Enabled"]="Attivato"; L["
 
 -- MSUF FULL CORE MENU COVERAGE
 -- Generated missing non-Assistant core keys for itIT.
+L["Source color"] = "Colore sorgente"
+L["Monochrome"] = "Monocromatico"
+L["Original"] = "Originale"
 L["Gradient colors"] = "Colori sfumati"
 L["Health gradient"] = "Gradiente di salute"
 L["Power gradient"] = "Gradiente di potenza"

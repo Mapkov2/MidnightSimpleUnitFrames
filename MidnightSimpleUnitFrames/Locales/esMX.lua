@@ -2660,6 +2660,9 @@ L["Cancel"]="Cancelar"; L["Disabled"]="Desactivado"; L["Enabled"]="Activado"; L[
 
 -- MSUF FULL CORE MENU COVERAGE
 -- Generated missing non-Assistant core keys for esMX.
+L["Source color"] = "Color de origen"
+L["Monochrome"] = "Monocromo"
+L["Original"] = "Original"
 L["Gradient colors"] = "Colores degradados"
 L["Health gradient"] = "gradiente de salud"
 L["Power gradient"] = "gradiente de potencia"

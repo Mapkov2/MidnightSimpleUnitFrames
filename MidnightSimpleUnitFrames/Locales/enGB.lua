@@ -836,6 +836,9 @@ L["Cancel"]="Cancel"; L["Disabled"]="Disabled"; L["Enabled"]="Enabled"; L["Growt
 
 -- MSUF FULL CORE MENU COVERAGE
 -- Generated missing non-Assistant core keys for enGB.
+L["Source color"] = "Source colour"
+L["Monochrome"] = "Monochrome"
+L["Original"] = "Original"
 L["Gradient colors"] = "Gradient colors"
 L["Health gradient"] = "Health gradient"
 L["Power gradient"] = "Power gradient"

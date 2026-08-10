@@ -1285,6 +1285,11 @@ local function RenderTextureLayerSlotPreview(box, mock, conf, slot, wanted, scal
         path = (type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture()) or "Interface\\Buttons\\WHITE8x8"
     end
     setTexture(tex, path)
+    if textureRuntime and type(textureRuntime.ApplyColorTreatment) == "function" then
+        textureRuntime.ApplyColorTreatment(tex, conf, prefix)
+    elseif tex.SetDesaturated then
+        tex:SetDesaturated(conf[prefix .. "ColorTreatment"] == "MONOCHROME")
+    end
     if tex.SetBlendMode then
         tex:SetBlendMode(conf[prefix .. "BlendMode"] == "ADD" and "ADD" or "BLEND")
     end

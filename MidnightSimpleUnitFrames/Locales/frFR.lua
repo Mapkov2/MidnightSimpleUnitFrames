@@ -2906,6 +2906,9 @@ L["Cancel"]="Annuler"; L["Disabled"]="Désactivé"; L["Enabled"]="Activé"; L["G
 
 -- MSUF FULL CORE MENU COVERAGE
 -- Generated missing non-Assistant core keys for frFR.
+L["Source color"] = "Couleur source"
+L["Monochrome"] = "Monochrome"
+L["Original"] = "Original"
 L["Gradient colors"] = "Couleurs dégradées"
 L["Health gradient"] = "Dégradé de santé"
 L["Power gradient"] = "Dégradé de puissance"

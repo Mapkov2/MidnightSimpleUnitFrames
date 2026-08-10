@@ -12,6 +12,10 @@ L["Force Blizzard frame on"] = "Force Blizzard frame on"
 L["Keeps Blizzard's native frame active independently of the MSUF frame. Leave MSUF Enable on to show both, or turn MSUF Enable off to use only Blizzard. A UI reload is required."] = "Keeps Blizzard's native frame active independently of the MSUF frame. Leave MSUF Enable on to show both, or turn MSUF Enable off to use only Blizzard. A UI reload is required."
 L["Shared name shortening affects all unit names and group frames unless a scope has custom font settings."] = "Shared name shortening affects all unit names and group frames unless a scope has custom font settings."
 
+L["Source color"] = "Source color"
+L["Monochrome"] = "Monochrome"
+L["Original"] = "Original"
+
 L["Gradient colors"] = "Gradient colors"
 L["Health gradient"] = "Health gradient"
 L["Power gradient"] = "Power gradient"

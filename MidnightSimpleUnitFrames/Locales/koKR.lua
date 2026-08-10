@@ -2473,6 +2473,9 @@ L["Cancel"]="취소"; L["Disabled"]="비활성화됨"; L["Enabled"]="활성화�
 
 -- MSUF FULL CORE MENU COVERAGE
 -- Generated missing non-Assistant core keys for koKR.
+L["Source color"] = "원본 색상"
+L["Monochrome"] = "단색"
+L["Original"] = "원본"
 L["Gradient colors"] = "그라데이션 색상"
 L["Health gradient"] = "건강 변화도"
 L["Power gradient"] = "전력 구배"

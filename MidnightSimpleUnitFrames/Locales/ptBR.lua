@@ -2415,6 +2415,9 @@ L["Cancel"]="Cancelar"; L["Disabled"]="Desativado"; L["Enabled"]="Ativado"; L["G
 
 -- MSUF FULL CORE MENU COVERAGE
 -- Generated missing non-Assistant core keys for ptBR.
+L["Source color"] = "Cor de origem"
+L["Monochrome"] = "Monocromático"
+L["Original"] = "Original"
 L["Gradient colors"] = "Cores gradientes"
 L["Health gradient"] = "Gradiente de saúde"
 L["Power gradient"] = "Gradiente de potência"

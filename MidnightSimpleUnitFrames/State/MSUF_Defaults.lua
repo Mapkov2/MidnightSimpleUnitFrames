@@ -4465,6 +4465,7 @@ local function fill(key, defaults)
             if u[texP .. "Width"] == nil then u[texP .. "Width"] = 0 end
             if u[texP .. "Height"] == nil then u[texP .. "Height"] = 16 end
             if u[texP .. "ColorMode"] == nil then u[texP .. "ColorMode"] = "CUSTOM" end
+            if u[texP .. "ColorTreatment"] == nil then u[texP .. "ColorTreatment"] = "ORIGINAL" end
             if u[texP .. "ColorR"] == nil then u[texP .. "ColorR"] = 1 end
             if u[texP .. "ColorG"] == nil then u[texP .. "ColorG"] = 1 end
             if u[texP .. "ColorB"] == nil then u[texP .. "ColorB"] = 1 end
