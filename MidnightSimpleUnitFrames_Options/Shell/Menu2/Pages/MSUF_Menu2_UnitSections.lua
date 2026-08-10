@@ -647,8 +647,12 @@ local function BuildTopActions(ctx, builder, unit, label)
                     if result.auraSkipped == true then
                         message = message .. " " .. M.Tr("Aura settings were skipped for unsupported UnitFrames.")
                     end
+                    if result.castbarSkipped == true then
+                        message = message .. " " .. M.Tr("Castbar settings were skipped for UnitFrames without Castbars.")
+                    end
+                    local skipped = result.auraSkipped == true or result.castbarSkipped == true
                     if M.ShowStatusFeedback then
-                        M.ShowStatusFeedback(message, result.auraSkipped == true and "warning" or "ok", 1.8)
+                        M.ShowStatusFeedback(message, skipped and "warning" or "ok", 1.8)
                     end
                     popup:Hide()
                     return
@@ -658,6 +662,8 @@ local function BuildTopActions(ctx, builder, unit, label)
                     message = M.Tr("No copy categories selected.")
                 elseif result.reason == "unsupported_aura_scope" or result.reason == "aura_copy_unavailable" then
                     message = M.Tr("Aura settings are only available for Player, Target, Focus, and Boss Frames.")
+                elseif result.reason == "unsupported_castbar_scope" then
+                    message = M.Tr("Castbar settings are only available for Player, Target, Focus, and Boss Frames.")
                 else
                     message = M.Tr("Nothing was copied.")
                 end

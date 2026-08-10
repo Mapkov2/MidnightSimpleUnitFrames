@@ -677,15 +677,18 @@ local function ConfirmCopyToAll(callback)
 end
 local AURA_COPY_SCOPE_KEYS = { auras = true, aurastyle = true }
 local function SelectedCopyScopeState(scopes)
-    local anySelected, nonAuraSelected = false, false
+    local anySelected, nonAuraSelected, nonCastbarSelected = false, false, false
     for i = 1, #UF_COPY_CATEGORIES do
         local key = UF_COPY_CATEGORIES[i].key
         if scopes[key] == true then
             anySelected = true
-            if not AURA_COPY_SCOPE_KEYS[key] then nonAuraSelected = true end
+            if not AURA_COPY_SCOPE_KEYS[key] then
+                nonAuraSelected = true
+                if key ~= "castbar" then nonCastbarSelected = true end
+            end
         end
     end
-    return anySelected, nonAuraSelected
+    return anySelected, nonAuraSelected, nonCastbarSelected
 end
 local function CompleteUnitCopy(callback, applied, result)
     if type(callback) == "function" then callback(applied == true, result) end
@@ -702,7 +705,7 @@ local function CopyUnitSettings(unit, target, scopes, onComplete, allConfirmed)
     end
     target = (type(target) == "string") and target:lower() or DefaultCopyTarget(srcKey)
     scopes = (type(scopes) == "table") and scopes or NewCopyScopeDefaults()
-    local anySelected, nonAuraSelected = SelectedCopyScopeState(scopes)
+    local anySelected, nonAuraSelected, nonCastbarSelected = SelectedCopyScopeState(scopes)
     if not anySelected then
         return CompleteUnitCopy(onComplete, false, {
             reason = "no_categories", source = srcKey, destination = target,
@@ -718,9 +721,12 @@ local function CopyUnitSettings(unit, target, scopes, onComplete, allConfirmed)
             nonAuraSelected = nonAuraSelected,
             auraOptionsRequested = scopes.auras == true,
             auraStyleRequested = scopes.aurastyle == true,
+            castbarRequested = scopes.castbar == true,
         }
         if not dst or not dstKey then result.reason = "invalid_destination"; return false, result end
         if dstKey == srcKey then result.reason = "same_destination"; return false, result end
+        result.castbarSupported = CASTBAR_FIELDS[srcKey] ~= nil and CASTBAR_FIELDS[dstKey] ~= nil
+        result.castbarSkipped = result.castbarRequested and not result.castbarSupported
         if scopes.basics then CopyFields(dst, src, COPY_FRAME_BASIC_FIELDS) end
         --- The override gate flags travel with their values on purpose. Clearing them
         --- here would leave the destination showing the copied values on the frame while
@@ -736,18 +742,25 @@ local function CopyUnitSettings(unit, target, scopes, onComplete, allConfirmed)
         result.auraSupported = AURA_COPY_UNITS[srcKey] == true and AURA_COPY_UNITS[dstKey] == true
         result.auraSkipped = (result.auraOptionsRequested and not result.auraOptionsApplied)
             or (result.auraStyleRequested and not result.auraStyleApplied)
-        local copiedAny = nonAuraSelected or copiedAuras
+        local copiedAny = nonCastbarSelected
+            or (result.castbarRequested and result.castbarSupported)
+            or copiedAuras
         if not copiedAny then
-            result.reason = result.auraSupported and "aura_copy_unavailable" or "unsupported_aura_scope"
+            if result.castbarSkipped then
+                result.reason = "unsupported_castbar_scope"
+            else
+                result.reason = result.auraSupported and "aura_copy_unavailable" or "unsupported_aura_scope"
+            end
             return false, result
         end
         if scopes.status then
             CopyFields(dst, src, COPY_INDICATOR_FIELDS)
             CopyFields(dst, src, COPY_STATUSICON_FIELDS)
         end
-        if scopes.castbar then
+        if result.castbarRequested and result.castbarSupported then
             dst.showInterrupt = src.showInterrupt
             if CopyCastbar(g, srcKey, dstKey) then
+                result.castbarApplied = true
                 Call("MSUF_UpdateCastbarWidthSourceSync", g, dstKey)
             end
         end
@@ -760,7 +773,7 @@ local function CopyUnitSettings(unit, target, scopes, onComplete, allConfirmed)
             text = scopes.text or scopes.status,
             power = scopes.power,
             alpha = scopes.transparency,
-            castbar = scopes.castbar,
+            castbar = result.castbarApplied == true,
             auras = copiedAuras,
             --- Text carries this unit's font override scope, which needs the font runtime
             --- rebuilt for the destination rather than a plain layout pass.
@@ -782,6 +795,7 @@ local function CopyUnitSettings(unit, target, scopes, onComplete, allConfirmed)
                 nonAuraSelected = nonAuraSelected, targets = {}, appliedTargets = 0,
                 auraOptionsRequested = scopes.auras == true,
                 auraStyleRequested = scopes.aurastyle == true,
+                castbarRequested = scopes.castbar == true,
             }
             for i = 1, #UNIT_COPY_TARGETS do
                 local value = UNIT_COPY_TARGETS[i].value
@@ -790,13 +804,18 @@ local function CopyUnitSettings(unit, target, scopes, onComplete, allConfirmed)
                     summary.targets[value] = result
                     if applied then summary.appliedTargets = summary.appliedTargets + 1 end
                     if result and result.auraSkipped then summary.auraSkipped = true end
+                    if result and result.castbarSkipped then summary.castbarSkipped = true end
                 end
             end
             if summary.appliedTargets > 0 then FinishCopy() end
             summary.applied = summary.appliedTargets > 0
             if not summary.applied then
-                summary.reason = (summary.auraOptionsRequested or summary.auraStyleRequested)
-                    and "unsupported_aura_scope" or "nothing_copied"
+                if summary.castbarRequested and summary.castbarSkipped then
+                    summary.reason = "unsupported_castbar_scope"
+                else
+                    summary.reason = (summary.auraOptionsRequested or summary.auraStyleRequested)
+                        and "unsupported_aura_scope" or "nothing_copied"
+                end
             end
             return CompleteUnitCopy(onComplete, summary.applied, summary)
         end
