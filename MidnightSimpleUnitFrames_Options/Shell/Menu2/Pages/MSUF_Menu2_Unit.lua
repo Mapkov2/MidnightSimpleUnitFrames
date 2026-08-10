@@ -90,7 +90,7 @@ end
 local STATUS_LEVEL_ANCHORS = WithNameAnchors("Right to name", "Left to name")
 local RAID_GROUP_NAME_ANCHORS = WithNameAnchors("Right to name", "Left to name")
 local COMBAT_SYMBOLS = VTP "DEFAULT=Default|weapon_axes_crossed=Axes|weapon_bows_crossed=Bows|weapon_crossbows_crossed=Crossbows|weapon_daggers_crossed=Daggers|weapon_fishing_poles_crossed=Fishing|weapon_fist_crossed=Fist|weapon_guns_crossed=Guns|weapon_maces_crossed=Maces|weapon_polearms_crossed=Polearms|weapon_shuriken=Shuriken|weapon_staves_crossed=Staves|weapon_swords_crossed=Swords|weapon_thrown_crossed=Thorn|weapon_wands_crossed=Wands|weapon_warglaives_crossed=Warglaives"
-local RESTED_SYMBOLS = VTP "DEFAULT=Default|rested_moonzzz=Moon (3 z)|rested_moonzzzz=Moon (4 z)|rested_sleep_zzzz=Sleep ZzzZ|rested_zzz_compact=Compact Zzz|rested_zzz_diag=Diagonal Zzz|rested_zzz_stack=Stacked Zzz"
+local RESTED_SYMBOLS = VTP "DEFAULT=Default|rested_blizzard_animated=Blizzard animated Zzz|rested_moonzzz=Moon (3 z)|rested_moonzzzz=Moon (4 z)|rested_sleep_zzzz=Sleep ZzzZ|rested_zzz_compact=Compact Zzz|rested_zzz_diag=Diagonal Zzz|rested_zzz_stack=Stacked Zzz"
 local RESS_SYMBOLS = VTP "DEFAULT=Default|resurrection_ankh=Ankh|resurrection_cross=Cross|resurrection_soul=Soul|resurrection_wings=Angelic Wings"
 local DEFAULT_SYMBOLS = VT("DEFAULT", "Default")
 local function StatusIconPackValues()

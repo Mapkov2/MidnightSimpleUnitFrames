@@ -136,6 +136,8 @@ local READY_TEXTURES = {
 local READY_REZ_TEXTURE = "Interface\\RaidFrame\\Raid-Icon-Rez"
 local PHASE_TEXTURE = "Interface\\TargetingFrame\\UI-PhasingIcon"
 local STATE_TEXTURE = "Interface\\CharacterFrame\\UI-StateIcon"
+local RESTING_ANIMATED_SYMBOL = "rested_blizzard_animated"
+local RESTING_FLIPBOOK_ATLAS = "UI-HUD-UnitFrame-Player-Rest-Flipbook"
 local PVP_FFA_ATLAS = "UI-HUD-UnitFrame-Player-PVP-FFAIcon"
 local PVP_ALLIANCE_ATLAS = "UI-HUD-UnitFrame-Player-PVP-AllianceIcon"
 local PVP_HORDE_ATLAS = "UI-HUD-UnitFrame-Player-PVP-HordeIcon"
@@ -285,6 +287,54 @@ local function AtlasAvailable(region, atlas)
   end
   return textureAPI.GetAtlasInfo(atlas) ~= nil
 end
+
+local function StopRestingFlipbook(tex, resetAtlas)
+  if not tex then return end
+  local group = tex._msufRestingFlipbook
+  if group and tex._msufRestingFlipbookPlaying == true then
+    group:Stop()
+    tex._msufRestingFlipbookPlaying = nil
+  end
+  if resetAtlas == true then
+    tex._msufRestingFlipbookAtlas = nil
+    tex._msufStatusAtlas = nil
+  end
+end
+
+local function ApplyRestingFlipbook(tex, play)
+  if not (tex and tex.SetAtlas and tex.CreateAnimationGroup) then return false end
+  if tex._msufRestingFlipbookAtlas ~= true then
+    tex:SetAtlas(RESTING_FLIPBOOK_ATLAS)
+    tex._msufRestingFlipbookAtlas = true
+    tex._msufStatusAtlas = RESTING_FLIPBOOK_ATLAS
+    tex._msufStatusTexture, tex._aTex, tex._aColorTexture = nil, nil, nil
+    tex._msufStatusL, tex._msufStatusR, tex._msufStatusT, tex._msufStatusB = nil, nil, nil, nil
+  end
+  if play ~= true then
+    StopRestingFlipbook(tex)
+    return true
+  end
+  local group = tex._msufRestingFlipbook
+  if not group then
+    group = tex:CreateAnimationGroup()
+    group:SetLooping("REPEAT")
+    group:SetToFinalAlpha(true)
+    local flipbook = group:CreateAnimation("FlipBook")
+    flipbook:SetSmoothing("NONE")
+    flipbook:SetFlipBookRows(7)
+    flipbook:SetFlipBookColumns(6)
+    flipbook:SetFlipBookFrames(42)
+    flipbook:SetDuration(1.5)
+    tex._msufRestingFlipbook = group
+  end
+  if tex._msufRestingFlipbookPlaying ~= true then
+    group:Play()
+    tex._msufRestingFlipbookPlaying = true
+  end
+  return true
+end
+
+MSUF.UFRestingFlipbook = { Apply = ApplyRestingFlipbook, Stop = StopRestingFlipbook }
 
 local function SetTexCoord(region, l, r, t, b)
   if region and region.SetTexCoord
@@ -773,7 +823,14 @@ local function ApplyStatusIconPackTexture(tex, cfg, status, iconType, variant)
   return true
 end
 
-local function ApplyStateOrPackIconTexture(tex, kind, cfg, status, variant)
+local function ApplyStateOrPackIconTexture(tex, kind, cfg, status, variant, playAnimation)
+  if kind == "resting" then
+    if cfg and cfg.symbol == RESTING_ANIMATED_SYMBOL
+      and ApplyRestingFlipbook(tex, playAnimation == true) then
+      return true
+    end
+    StopRestingFlipbook(tex, true)
+  end
   if SymbolPath(cfg and cfg.symbol, status and status.useMidnight == true) then
     ApplyStateIconTexture(tex, kind, cfg, status)
     return true
@@ -835,6 +892,7 @@ local function ApplyConfiguredRegion(frame, spec, status, def)
     def[1], def[2], def[3], def[5], def[6], def[7], def[8], def[10]
   local cfg = status[key]
   if not (cfg and cfg.enabled) then
+    if key == "resting" then StopRestingFlipbook(frame and frame.restingIndicatorIcon) end
     HideConfiguredRegion(frame, def)
     return
   end
@@ -1723,6 +1781,7 @@ local function UpdateResting(frame, status)
   local cfg = status and status.resting
   local tex = frame.restingIndicatorIcon
   if not (cfg and cfg.enabled and tex) then
+    StopRestingFlipbook(tex)
     SetShown(tex, false)
     return
   end
@@ -1732,9 +1791,10 @@ local function UpdateResting(frame, status)
     active = BoolTrue(activeRaw)
   end
   if active == true then
-    ApplyStateOrPackIconTexture(tex, "resting", cfg, status, "resting")
+    ApplyStateOrPackIconTexture(tex, "resting", cfg, status, "resting", true)
     SetShown(tex, true)
   else
+    StopRestingFlipbook(tex)
     SetShown(tex, false)
   end
 end
@@ -1827,6 +1887,7 @@ function Status.Apply(frame, spec)
 end
 
 function Status.Disable(frame)
+  StopRestingFlipbook(frame and frame.restingIndicatorIcon)
   for i = 1, #CONFIGURED_REGION_DEFS do
     HideConfiguredRegion(frame, CONFIGURED_REGION_DEFS[i])
   end
@@ -2069,6 +2130,7 @@ local function RegisterStatusIndicator(def)
   end
 
   function element.Disable(frame)
+    if key == "resting" then StopRestingFlipbook(frame and frame.restingIndicatorIcon) end
     HideField(frame, hide)
   end
 
