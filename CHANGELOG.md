@@ -1,5 +1,24 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.01 - 2026-08-10
+
+### Final Beta Release Highlights
+
+- Expanded Texture Layers with a built-in target-highlight recipe, Current Target visibility, custom-class-color following, automatic sizing, top/bottom texture cropping, and Original or Monochrome source treatment.
+- Added real eight-piece outline media alongside the existing solid and stretched-texture Frame Outline styles.
+- Added optional rounded rectangular Class Resources and Blizzard's animated native Resting symbol across live frames and previews.
+- Refreshed the complete fresh-install visual baseline with cohesive dark bars, warm target accents, and deliberate 6.01 defaults without changing existing profiles.
+
+### Fixes & Performance
+
+- Fixed nickname-provider Target refreshes so only the affected Unit and Group Frames are invalidated, with combat changes still coalesced safely.
+- Fixed restricted 12.1 Class Resource values hiding their text in combat; protected values now pass directly to Blizzard's native text and StatusBar sinks while preserving configured styling.
+- Fixed Unit Copy To bypassing its action guard and reporting unsupported Castbar copies as successful. Pet, Target of Target, and Focus Target now skip Castbar settings explicitly while mixed copies keep every supported category.
+- Fixed Castbar Spell, Time, and Target text using different layout rules in the Unit Preview than on the live runtime castbar.
+- Fixed Manual Detached Power width losing authority to a synchronized width source in Edit Mode and Menu controls.
+- Fixed Boss portrait refreshes missing frames that had not yet been seeded into the Edit Mode registry.
+- Fixed rounded mouseover edges retaining their previous color until the next hover transition.
+
 ## 6.0-RC19 - 2026-08-09
 
 ### Fixes & Performance
