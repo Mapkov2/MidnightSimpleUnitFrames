@@ -2039,6 +2039,10 @@ end
 
 local function ApplyAll()
   EnsureDB()
+  -- ApplyAll is also the cold startup/profile boundary.  Rounded mouseover
+  -- rendering bypasses MSUF_UF_Highlight's own cached style, so seed this
+  -- renderer from the active profile before it adopts the live hover hooks.
+  UpdateMouseoverEdgeColor()
   UpdateRoundedMediaState()
   MSUF.__msufRoundedPending = nil
   local enabled = IsEnabled()
@@ -2142,7 +2146,6 @@ local function HookOnce()
   MSUF.__msufRoundedUF_Hooked = true
 
   ExportPublic("MSUF_RoundedUF_OnApplyAll", function()
-    UpdateMouseoverEdgeColor()
     ApplyAll()
   end)
   ExportPublic("MSUF_RoundedUF_OnGroupMouseover", function(frame, active)
@@ -2362,7 +2365,6 @@ end
 
 local function ApplyRoundedUnitframes()
   forceDisabled = false
-  UpdateMouseoverEdgeColor()
   if IsEnabled() then
     SetRoundedCallbacksActive(true)
   else
