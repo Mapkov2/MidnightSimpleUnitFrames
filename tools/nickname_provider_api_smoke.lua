@@ -26,11 +26,13 @@ end
 local combat = false
 local names = {
     player = { "Native", "Realm" },
+    target = { "Native", "Realm" },
     party1 = { "Other", "Realm" },
 }
 local eventFrame
 local unitRefreshes, groupRefreshes = 0, 0
 local lastGroupRefreshUnit
+local refreshedGroupUnits = {}
 local activeResolver
 
 _G.InCombatLockdown = function() return combat end
@@ -62,6 +64,10 @@ local otherUnitFrame = {
     MSUFUnitKey = "party1",
     _msufActiveElements = { NameText = true, Text = true },
 }
+local aliasUnitFrame = {
+    MSUFUnitKey = "target",
+    _msufActiveElements = { NameText = true, Text = true },
+}
 local Text = {
     UnitName = _G.UnitName,
     CreateFrame = _G.CreateFrame,
@@ -78,16 +84,26 @@ local MSUF = {
         UpdateInline = function() unitRefreshes = unitRefreshes + 1 end,
     },
     UF = {
-        ForEachFrame = function(callback, runtime, targetUnit)
-            callback(unitFrame, nil, runtime, targetUnit)
-            callback(otherUnitFrame, nil, runtime, targetUnit)
+        ForEachFrame = function(callback, runtime, targetUnit, targetFullName)
+            callback(unitFrame, nil, runtime, targetUnit, targetFullName)
+            callback(aliasUnitFrame, nil, runtime, targetUnit, targetFullName)
+            callback(otherUnitFrame, nil, runtime, targetUnit, targetFullName)
             return true
         end,
     },
     GF = {
+        ForEachFrame = function(callback, includeHidden, a, b, c)
+            callback({}, "player", nil, a, b, c)
+            callback({}, "target", nil, a, b, c)
+            callback({}, "party1", nil, a, b, c)
+            return true
+        end,
         RefreshGroupNames = function(unit)
             groupRefreshes = groupRefreshes + 1
             lastGroupRefreshUnit = unit
+            if unit then
+                refreshedGroupUnits[unit] = (refreshedGroupUnits[unit] or 0) + 1
+            end
             return true
         end,
     },
@@ -139,14 +155,19 @@ Check(activeResolver("party1") == "OtherNick" and highCalls == 2,
 local beforeTargetedUnitRefreshes = unitRefreshes
 local beforeTargetedGroupRefreshes = groupRefreshes
 currentNickname = "Targeted"
+refreshedGroupUnits = {}
 ok, reason = API.NotifyChanged("High", "player")
 Check(ok and reason == nil, "targeted nickname change failed")
-Check(unitRefreshes == beforeTargetedUnitRefreshes + 2,
-    "targeted change did not refresh only the matching unit frame name sinks")
-Check(groupRefreshes == beforeTargetedGroupRefreshes + 1 and lastGroupRefreshUnit == "player",
-    "targeted change did not preserve the group unit token")
+Check(unitRefreshes == beforeTargetedUnitRefreshes + 4,
+    "targeted change did not refresh every unit-frame alias of the identity")
+Check(groupRefreshes == beforeTargetedGroupRefreshes + 2
+    and refreshedGroupUnits.player == 1 and refreshedGroupUnits.target == 1
+    and refreshedGroupUnits.party1 == nil,
+    "targeted change did not fan out to exactly the matching group-frame aliases")
 Check(activeResolver("player") == "Targeted" and highCalls == 3,
     "targeted change did not invalidate only the unit cache")
+Check(activeResolver("target") == "Targeted" and highCalls == 3,
+    "targeted change did not rebuild the shared identity cache for an alias")
 Check(activeResolver("party1") == "OtherNick" and highCalls == 3,
     "targeted change invalidated an unrelated unit cache")
 
@@ -177,10 +198,10 @@ combat = false
 eventFrame.callback(eventFrame, "PLAYER_REGEN_ENABLED")
 Check(not eventFrame.events.PLAYER_REGEN_ENABLED,
     "post-combat event was not unregistered after the deferred flush")
-Check(unitRefreshes == beforeCombatUnitRefreshes + 2,
-    "unit and inline names were not refreshed exactly once after combat")
-Check(groupRefreshes == beforeCombatGroupRefreshes + 1,
-    "group names were not refreshed exactly once after combat")
+Check(unitRefreshes == beforeCombatUnitRefreshes + 4,
+    "unit and inline names for every identity alias were not refreshed exactly once after combat")
+Check(groupRefreshes == beforeCombatGroupRefreshes + 2,
+    "group-frame identity aliases were not refreshed exactly once after combat")
 Check(activeResolver("player") == "Second", "post-combat nickname was not applied")
 Check(highCalls == 4 and lowCalls == 0, "post-combat resolution did not use one cached provider call")
 
@@ -238,7 +259,7 @@ combat = false
 eventFrame.callback(eventFrame, "PLAYER_REGEN_ENABLED")
 Check(activeResolver("player") == "NSRTSecond",
     "NSRT nickname was not rebuilt after combat")
-Check(unitRefreshes == beforeCombatUnitRefreshes + 4,
+Check(unitRefreshes == beforeCombatUnitRefreshes + 6,
     "NSRT post-combat unit/inline refresh count drifted")
 Check(groupRefreshes == beforeCombatGroupRefreshes + 1,
     "NSRT post-combat group refresh count drifted")

@@ -124,6 +124,23 @@ local function FullNameForUnit(unit, nativeName)
   return name .. "-" .. realm
 end
 
+local function UnitMatchesIdentity(unit, targetUnit, targetFullName)
+  if unit == targetUnit then return true end
+  if type(targetFullName) ~= "string" or targetFullName == ""
+    or type(unit) ~= "string" or unit == ""
+    or issecretvalue(unit) == true then
+    return false
+  end
+  local nativeName
+  if UnitName then nativeName = UnitName(unit) end
+  if issecretvalue(nativeName) == true
+    or type(nativeName) ~= "string"
+    or nativeName == "" then
+    return false
+  end
+  return FullNameForUnit(unit, nativeName) == targetFullName
+end
+
 local function CacheShortName(nativeName, displayName)
   local cached = resolvedByShortName[nativeName]
   if cached == nil then
@@ -241,8 +258,9 @@ local function SyncResolver()
   resolverInstalled = shouldInstall
 end
 
-local function RefreshUnitFrameName(frame, _, runtime, targetUnit)
-  if targetUnit and frame and frame.MSUFUnitKey ~= targetUnit then
+local function RefreshUnitFrameName(frame, _, runtime, targetUnit, targetFullName)
+  if targetUnit and (not frame
+    or not UnitMatchesIdentity(frame.MSUFUnitKey, targetUnit, targetFullName)) then
     return false
   end
   local active = frame and frame._msufActiveElements
@@ -259,16 +277,32 @@ local function RefreshUnitFrameName(frame, _, runtime, targetUnit)
   return touched
 end
 
-local function RefreshUnitFrameNames(unit)
+local function RefreshUnitFrameNames(unit, targetFullName)
   local UF = MSUF.UF
   local runtime = MSUF.UFTextRuntime
   if not (UF and UF.ForEachFrame and runtime) then return false end
-  return UF.ForEachFrame(RefreshUnitFrameName, runtime, unit) == true
+  return UF.ForEachFrame(RefreshUnitFrameName, runtime, unit, targetFullName) == true
 end
 
-local function RefreshGroupFrameNames(unit)
+local function CollectMatchingGroupUnit(_, frameUnit, _, targetUnit, targetFullName, matchingUnits)
+  if UnitMatchesIdentity(frameUnit, targetUnit, targetFullName) then
+    matchingUnits[frameUnit] = true
+  end
+  return false
+end
+
+local function RefreshGroupFrameNames(unit, targetFullName)
   local GF = MSUF.GF
   if not (GF and GF.RefreshGroupNames) then return false end
+  if unit and targetFullName and type(GF.ForEachFrame) == "function" then
+    local matchingUnits = {}
+    GF.ForEachFrame(CollectMatchingGroupUnit, true, unit, targetFullName, matchingUnits)
+    local touched = false
+    for matchingUnit in pairs(matchingUnits) do
+      if GF.RefreshGroupNames(matchingUnit) == true then touched = true end
+    end
+    return touched
+  end
   return GF.RefreshGroupNames(unit) == true
 end
 
@@ -283,7 +317,8 @@ local function ApplyChanges()
 end
 
 local function InvalidateUnitCache(unit)
-  local nativeName = UnitName and UnitName(unit) or nil
+  local nativeName
+  if UnitName then nativeName = UnitName(unit) end
   if issecretvalue(nativeName) == true
     or type(nativeName) ~= "string"
     or nativeName == "" then
@@ -297,16 +332,21 @@ local function InvalidateUnitCache(unit)
 
   resolvedByFullName[fullName] = nil
   RebuildShortCache(nativeName)
-  return true
+  return fullName
 end
 
 local function ApplyUnitChanges(unit)
   if InCombat() then return false end
   if orderDirty then return ApplyChanges() end
-  if not InvalidateUnitCache(unit) then return false end
+  local fullName = InvalidateUnitCache(unit)
+  if not fullName then return false end
   SyncResolver()
-  RefreshUnitFrameNames(unit)
-  RefreshGroupFrameNames(unit)
+  -- Prime the shared identity cache through the unit the provider explicitly
+  -- notified. Alias frames then reuse that one result instead of letting frame
+  -- iteration order choose which unit token reaches the provider first.
+  ResolveDisplayName(unit)
+  RefreshUnitFrameNames(unit, fullName)
+  RefreshGroupFrameNames(unit, fullName)
   return true
 end
 
