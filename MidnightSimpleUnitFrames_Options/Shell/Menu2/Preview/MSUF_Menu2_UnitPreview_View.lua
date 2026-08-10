@@ -900,10 +900,6 @@ SelectPreviewHandle = function(handle, skipSectionOpen)
         end
         local textKind, textSlot = PreviewTextKindSlotForKey(handle._key)
         StorePreviewTextSelection(menu, box.key, textKind, textSlot)
-        if menu and (handle._key == "auraBuffs" or handle._key == "auraDebuffs") then
-            menu.unitAuraTabSelection = menu.unitAuraTabSelection or {}
-            menu.unitAuraTabSelection[box.key or "player"] = handle._key == "auraDebuffs" and "debuff" or "buff"
-        end
         do
             local focus = _G.MSUF_EM2_SetFocusSelection
             if type(focus) == "function" then
