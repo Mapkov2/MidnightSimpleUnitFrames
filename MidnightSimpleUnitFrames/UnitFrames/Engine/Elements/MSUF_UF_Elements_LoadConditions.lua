@@ -655,9 +655,11 @@ function UF.ApplyBossPreviewState(active, reason)
     return true
   end
 
-  if not active then
-    ApplyBossPreviewFrames(false)
-  end
+  -- Seed the synthetic identity and make missing boss frames visible before
+  -- structural elements are refreshed. Portrait.Apply otherwise sees a hidden,
+  -- unitless frame and defers the image to an OnShow transition which a secure
+  -- preview visibility handoff does not always produce.
+  ApplyBossPreviewFrames(active)
   UF.RefreshVisibilityDrivers("boss")
   if active and type(UF.RefreshElements) == "function" then
     UF.RefreshElements("boss", BOSS_PREVIEW_REFRESH_ELEMENTS, refreshReason)
