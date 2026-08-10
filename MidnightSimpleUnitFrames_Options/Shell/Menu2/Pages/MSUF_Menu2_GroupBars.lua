@@ -352,6 +352,8 @@ local function BuildGFResourceBarSection(ctx, b)
         local detached = enabled and Bool(CurrentScope(), "powerBarDetached", false)
         SetOptionEnabled(powerEnabled, true)
         SetOptionsEnabled(powerControls, enabled)
+        SetOptionEnabled(powerHeight, enabled and not detached)
+        SetOptionEnabled(embedPower, enabled and not detached)
         -- Same gating the unit page applies: detached geometry only while the bar
         -- is detached, thickness only while the border is on.
         SetOptionsEnabled(detachedControls, detached)

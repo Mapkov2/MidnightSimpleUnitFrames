@@ -223,15 +223,35 @@ local function Apply()
     local displayY = pf.yBox and tonumber(pf.yBox:GetText())
     local w=pf.wBox and tonumber(pf.wBox:GetText()); if w then conf.width=floor(max(SizeBounds.minW,min(SizeBounds.maxW,w))+0.5) end
     local h=pf.hBox and tonumber(pf.hBox:GetText()); if h then conf.height=floor(max(SizeBounds.minH,min(SizeBounds.maxH,h))+0.5) end
+    local sharedDetachedWidthSourceChanged = false
     if conf.powerBarDetached and CanDetachPower(key) then
+        local manualDetachedWidthSelected = false
         local dx=pf.dpbXBox and tonumber(pf.dpbXBox:GetText()); if dx then conf.detachedPowerBarOffsetX=San(dx,0) end
         local dy=pf.dpbYBox and tonumber(pf.dpbYBox:GetText()); if dy then conf.detachedPowerBarOffsetY=San(dy,-4) end
-        local dw=pf.dpbWBox and tonumber(pf.dpbWBox:GetText()); if dw then conf.detachedPowerBarWidth=floor(max(20,min(800,dw))+0.5) end
+        local dw=pf.dpbWBox and tonumber(pf.dpbWBox:GetText())
+        if dw then
+            dw = floor(max(20,min(800,dw))+0.5)
+            local original = tonumber(pf._msufDetachedWidthOriginal)
+            manualDetachedWidthSelected = original ~= nil and dw ~= original
+            if manualDetachedWidthSelected then
+                local bars = _G.MSUF_DB and _G.MSUF_DB.bars
+                sharedDetachedWidthSourceChanged = bars and bars.detachedPowerBarWidthMode ~= nil or false
+                if bars then bars.detachedPowerBarWidthMode = nil end
+                conf.detachedPowerBarWidth = dw
+                if key == "player" then conf.detachedPowerBarSyncClassPower = false end
+                if pf.dpbSyncBtn and pf.dpbSyncBtn.SetCheckedVisual then pf.dpbSyncBtn:SetCheckedVisual(false) end
+            else
+                conf.detachedPowerBarWidth = dw
+            end
+            pf._msufDetachedWidthOriginal = dw
+        end
         local dh=pf.dpbHBox and tonumber(pf.dpbHBox:GetText()); if dh then conf.detachedPowerBarHeight=floor(max(2,min(80,dh))+0.5) end
         local dl=pf.dpbLevelBox and tonumber(pf.dpbLevelBox:GetText()); if dl then conf.detachedPowerBarFrameLevelOffset=floor(max(0,min(30,dl))+0.5) end
         if pf.dpbTextBtn then conf.detachedPowerBarTextOnBar = pf.dpbTextBtn._checked and true or false end
         if key == "player" then
-            if pf.dpbSyncBtn then conf.detachedPowerBarSyncClassPower = pf.dpbSyncBtn._checked and true or false end
+            if pf.dpbSyncBtn and not manualDetachedWidthSelected then
+                conf.detachedPowerBarSyncClassPower = pf.dpbSyncBtn._checked and true or false
+            end
             if pf.dpbAnchorBtn then conf.detachedPowerBarAnchorToClassPower = pf.dpbAnchorBtn._checked and true or false end
         end
     end
@@ -247,7 +267,12 @@ local function Apply()
     end
     if frame and frame.ForceUpdate then frame:ForceUpdate("EM2_UNIT_POPUP") end
     --- Full layout re-apply (power bar embed, text anchors, borders, etc.)
-    if type(_G.MSUF_ApplyUnitFrameKey_Immediate)=="function" then _G.MSUF_ApplyUnitFrameKey_Immediate(key) end
+    if sharedDetachedWidthSourceChanged then
+        ApplyAllSettingsSafe()
+        if type(_G.MSUF_EnsureCooldownWidthObservers) == "function" then _G.MSUF_EnsureCooldownWidthObservers() end
+    elseif type(_G.MSUF_ApplyUnitFrameKey_Immediate)=="function" then
+        _G.MSUF_ApplyUnitFrameKey_Immediate(key)
+    end
     if type(_G.MSUF_ForceTextLayoutForUnitKey)=="function" then _G.MSUF_ForceTextLayoutForUnitKey(key) end
     --- Clear PBEmbedLayout stamp so width/height changes are re-applied
     if frame then
@@ -287,7 +312,9 @@ function Sync()
         if detachedOn then
             Quick.SetBoxText(pf.dpbXBox, San(conf.detachedPowerBarOffsetX, 0))
             Quick.SetBoxText(pf.dpbYBox, San(conf.detachedPowerBarOffsetY, -4))
-            Quick.SetBoxText(pf.dpbWBox, conf.detachedPowerBarWidth or conf.width or 250)
+            local detachedWidth = floor(max(20, min(800, tonumber(conf.detachedPowerBarWidth or conf.width) or 250)) + 0.5)
+            Quick.SetBoxText(pf.dpbWBox, detachedWidth)
+            pf._msufDetachedWidthOriginal = detachedWidth
             Quick.SetBoxText(pf.dpbHBox, conf.detachedPowerBarHeight or 6)
             Quick.SetBoxText(pf.dpbLevelBox, conf.detachedPowerBarFrameLevelOffset or 6)
             if pf.dpbTextBtn and pf.dpbTextBtn.SetCheckedVisual then
