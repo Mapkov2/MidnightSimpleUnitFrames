@@ -2165,6 +2165,10 @@ function Preview.Refresh(box, reason)
         cp.runeShowTime = bars.runeShowTime ~= false
         if bars.runeShowTime == nil and bars.runeShowTimeText ~= nil then cp.runeShowTime = bars.runeShowTimeText == true end
         cp.runeTextSize = max(6, S((tonumber(bars.classPowerFontSize) or 16) - 2))
+        cp.runeTextOffsetX = S(tonumber(bars.classPowerTextOffsetX) or 0)
+        cp.runeTextOffsetY = S(tonumber(bars.classPowerTextOffsetY) or 0)
+        cp.runeTextAlpha = tonumber(g.fontTextAlpha) or 1
+        if cp.runeTextAlpha < 0.7 then cp.runeTextAlpha = 0.7 elseif cp.runeTextAlpha > 1 then cp.runeTextAlpha = 1 end
         for i = 1, #mock.classPower.segments do
             local seg = mock.classPower.segments[i]
             local segBg = mock.classPower.segmentBgs and mock.classPower.segmentBgs[i]
@@ -2254,12 +2258,16 @@ function Preview.Refresh(box, reason)
                             ApplyPreviewFont(runeText, cp.runeTextSize)
                             cp.tr, cp.tg, cp.tb = R.CPPreview.ResolveTextColor(fr or 1, fg or 1, fb or 1)
                             runeText:SetText(cp.runeText)
-                            runeText:SetTextColor(cp.tr, cp.tg, cp.tb, 1)
+                            runeText:SetTextColor(cp.tr, cp.tg, cp.tb, cp.runeTextAlpha)
                             runeText:ClearAllPoints()
                             if bars.classPowerFillReverse == true then
-                                runeText:SetPoint("CENTER", mock.classPower, "TOPRIGHT", -(anchorX + floor(segW * 0.5 + 0.5)), -floor(max(2, S(cpH)) * 0.5 + 0.5))
+                                runeText:SetPoint("CENTER", mock.classPower, "TOPRIGHT",
+                                    -(anchorX + floor(segW * 0.5 + 0.5)) + cp.runeTextOffsetX,
+                                    -floor(max(2, S(cpH)) * 0.5 + 0.5) + cp.runeTextOffsetY)
                             else
-                                runeText:SetPoint("CENTER", mock.classPower, "TOPLEFT", anchorX + floor(segW * 0.5 + 0.5), -floor(max(2, S(cpH)) * 0.5 + 0.5))
+                                runeText:SetPoint("CENTER", mock.classPower, "TOPLEFT",
+                                    anchorX + floor(segW * 0.5 + 0.5) + cp.runeTextOffsetX,
+                                    -floor(max(2, S(cpH)) * 0.5 + 0.5) + cp.runeTextOffsetY)
                             end
                             runeText:Show()
                         else
@@ -2291,7 +2299,7 @@ function Preview.Refresh(box, reason)
                 mock.classPower.text:SetText((cp.preview and cp.preview.previewText) or "3")
             end
             cp.tr, cp.tg, cp.tb = R.CPPreview.ResolveTextColor(fr or 1, fg or 1, fb or 1)
-            mock.classPower.text:SetTextColor(cp.tr, cp.tg, cp.tb, 1)
+            mock.classPower.text:SetTextColor(cp.tr, cp.tg, cp.tb, cp.runeTextAlpha)
             mock.classPower.text:ClearAllPoints()
             mock.classPower.text:SetPoint("CENTER", mock.classPower, "CENTER", S(tonumber(bars.classPowerTextOffsetX) or 0), S(tonumber(bars.classPowerTextOffsetY) or 0))
             mock.classPower.text:Show()

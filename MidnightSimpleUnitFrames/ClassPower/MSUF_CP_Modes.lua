@@ -55,9 +55,9 @@ end
 --- the cache (they cannot be compared) and clear it, so a later plain write
 --- can never be skipped against a stale entry. Every path that writes a bar
 --- value outside this helper must clear _msufCPValue for the same reason.
-local function CP_SetPowerValue(bar, value, smoothInterp)
-    if _issecretvalue and _issecretvalue(value) == true then
-        bar._msufCPValue = nil
+local function CP_SetPowerValue(bar, value, smoothInterp, valueIsSecret)
+    if valueIsSecret == true or (_issecretvalue and _issecretvalue(value) == true) then
+        if bar._msufCPValue ~= nil then bar._msufCPValue = nil end
         if smoothInterp then
             bar:SetValue(value, smoothInterp)
         else
@@ -79,6 +79,33 @@ local function CP_StampText(txt, value)
     if txt._msufCPText == value then return end
     txt:SetText(value)
     txt._msufCPText = value
+end
+
+-- FontString:SetText/SetFormattedText explicitly accept secret text arguments
+-- on 12.1. Pass restricted resource values straight to the native widget; never
+-- compare, format, concatenate, or cache them in Lua.
+local function CP_SetPassthroughText(txt, value)
+    if not txt then return end
+    txt:SetText(value)
+    if txt._msufCPText ~= nil then txt._msufCPText = nil end
+end
+
+local function CP_SetPassthroughFormattedText(txt, format, ...)
+    if not txt then return end
+    txt:SetFormattedText(format, ...)
+    if txt._msufCPText ~= nil then txt._msufCPText = nil end
+end
+
+local function CP_StampTextColor(txt, r, g, b, a)
+    if not txt then return end
+    a = a or 1
+    if txt._msufCPTextColorR == r and txt._msufCPTextColorG == g
+        and txt._msufCPTextColorB == b and txt._msufCPTextColorA == a then
+        return
+    end
+    txt._msufCPTextColorR, txt._msufCPTextColorG = r, g
+    txt._msufCPTextColorB, txt._msufCPTextColorA = b, a
+    txt:SetTextColor(r, g, b, a)
 end
 
 local function CP_StampVertexColor(tex, r, g, b, a)
@@ -233,6 +260,7 @@ local function CreateNativeTimerSupport(E)
         else
             return false
         end
+        if type(binding.UpdateFontString) == "function" then binding:UpdateFontString() end
         fontString:Show()
         fontString._msufCPShown = true
         owner[durationKey] = duration
@@ -277,6 +305,7 @@ modeBuilders.SEGMENTED = function(E)
     local _essRate       = 0
     local _essActiveBar  = nil
     local _essNativeBar  = nil
+    local _essRestricted = false
     local SetEssenceOnUpdate
 
     local function StopNativeEssence(bar)
@@ -375,23 +404,76 @@ modeBuilders.SEGMENTED = function(E)
         _essPrevCur    = nil
         _essRechargeAt = 0
         _essRate       = 0
+        _essRestricted = false
     end
 
     local function UpdateEssence(powerType, maxPower)
         if maxPower <= 0 then return end
         local cur = UnitPower("player", powerType)
         if not NotSecret(cur) then
+            local visual = CP_GetVisual(E)
+            local smoothInterp = visual and visual.smoothInterp
+            local baseR = visual and visual.baseR or 1
+            local baseG = visual and visual.baseG or 1
+            local baseB = visual and visual.baseB or 1
+            local useSlotColors = visual and visual.useSlotColors == true
+            local bgR = visual and visual.bgR or 0
+            local bgG = visual and visual.bgG or 0
+            local bgB = visual and visual.bgB or 0
+            local bgA = visual and visual.bgAlpha or 0.3
+            local filledAlpha = visual and visual.filledAlpha or E.GetFilledAlpha()
+            local visualVersion = visual and visual.version or 0
+
+            -- A restricted player-power value cannot be inspected in Lua, but
+            -- StatusBar:SetValue accepts it natively. Give every pip its own
+            -- [i-1, i] range so the client clamps the same secret Essence value
+            -- into the correct full/empty layout instead of showing every pip
+            -- as full. Partial recharge selection cannot be derived from a
+            -- secret value, so retire any formerly known timer before writing
+            -- the authoritative native whole-point state.
+            local enteredRestricted = not _essRestricted
+            if enteredRestricted then
+                StopEssenceOnUpdates()
+                _essRestricted = true
+            end
             for i = 1, maxPower do
                 local bar = CP.bars[i]
-                if bar then SetEssenceValue(bar, 1) end
+                if bar then
+                    CP_StampMinMax(bar, i - 1, i)
+                    CP_SetPowerValue(bar, cur, smoothInterp, true)
+                    if enteredRestricted then
+                        bar._msufEssenceValue = nil
+                        bar._msufEssenceValueVersion = nil
+                    end
+                    CP_StampAlpha(bar, filledAlpha)
+                    if enteredRestricted or bar._msufCPVisualVersion ~= visualVersion
+                        or bar._msufCPFullColor ~= nil then
+                        local slotR = useSlotColors and visual.slotR and visual.slotR[i]
+                        CP_StampStatusBarColor(bar, slotR or baseR,
+                            slotR and visual.slotG[i] or baseG,
+                            slotR and visual.slotB[i] or baseB, 1)
+                        CP_StampVertexColor(bar._bg, bgR, bgG, bgB, bgA)
+                        bar._msufCPVisualVersion = visualVersion
+                        bar._msufCPFullColor = nil
+                    end
+                end
             end
-            if CP.text then CP_StampShown(CP.text, false) end
-            StopEssenceOnUpdates()
+            local txt = CP.text
+            if txt then
+                if visual and visual.showText == true then
+                    CP_SetPassthroughText(txt, cur)
+                    CP_StampShown(txt, true)
+                    CP_StampTextColor(txt, 1, 1, 1, 1)
+                else
+                    CP_StampShown(txt, false)
+                end
+            end
             --- A secret power value only blocks the full/empty rules; the combat
             --- rule still has to run, so pass nil instead of dropping the check.
             CP_CheckAutoHide(nil, maxPower)
             return
         end
+        _essRestricted = false
         cur = tonumber(cur) or 0
         local previousCur = _essPrevCur
 
@@ -460,6 +542,7 @@ modeBuilders.SEGMENTED = function(E)
             if bar then
                 if i <= cur then
                     StopNativeEssence(bar)
+                    CP_StampMinMax(bar, 0, 1)
                     SetEssenceValue(bar, 1)
                     CP_StampAlpha(bar, filledAlpha)
                     SetEssenceOnUpdate(bar, false)
@@ -472,6 +555,7 @@ modeBuilders.SEGMENTED = function(E)
                     if ApplyNativeEssence(bar, _essRechargeAt, _essRate, now, partialProgress) then
                         SetEssenceOnUpdate(bar, false)
                     else
+                        CP_StampMinMax(bar, 0, 1)
                         SetEssenceValue(bar, progress)
                         bar._essStart = _essRechargeAt
                         bar._essRate  = _essRate
@@ -481,6 +565,7 @@ modeBuilders.SEGMENTED = function(E)
                     end
                 else
                     StopNativeEssence(bar)
+                    CP_StampMinMax(bar, 0, 1)
                     SetEssenceValue(bar, 0)
                     CP_StampAlpha(bar, emptyAlpha)
                     SetEssenceOnUpdate(bar, false)
@@ -509,7 +594,7 @@ modeBuilders.SEGMENTED = function(E)
             if showText then
                 CP_StampText(txt, cur)
                 CP_StampShown(txt, true)
-                txt:SetTextColor(1, 1, 1, 1)
+                CP_StampTextColor(txt, 1, 1, 1, 1)
             else
                 CP_StampShown(txt, false)
             end
@@ -534,11 +619,27 @@ modeBuilders.SEGMENTED = function(E)
                 local bar = CP.bars[i]
                 if bar then
                     CP_StampMinMax(bar, i - 1, i)
-                    CP_SetPowerValue(bar, cur, smoothInterp)
+                    CP_SetPowerValue(bar, cur, smoothInterp, true)
                     CP_StampAlpha(bar, filledAlpha)
                 end
             end
-            if CP.text then CP_StampShown(CP.text, false) end
+            local txt = CP.text
+            if txt then
+                if visual and visual.showText == true then
+                    local predictionActive = PLAYER_CLASS == "WARLOCK"
+                        and visual.showPrediction ~= false
+                        and CP.wlPredDelta ~= 0
+                    if predictionActive then
+                        CP_SetPassthroughFormattedText(txt, "%s*", cur)
+                    else
+                        CP_SetPassthroughText(txt, cur)
+                    end
+                    CP_StampShown(txt, true)
+                    CP_StampTextColor(txt, 1, 1, 1, 1)
+                else
+                    CP_StampShown(txt, false)
+                end
+            end
             --- A secret power value only blocks the full/empty rules; the combat
             --- rule still has to run, so pass nil instead of dropping the check.
             CP_CheckAutoHide(nil, maxPower)
@@ -598,14 +699,15 @@ modeBuilders.SEGMENTED = function(E)
             if showText then
                 local predOn = visual.showPrediction ~= false
                 local predDelta = CP.wlPredDelta
-                if predDelta ~= 0 and PLAYER_CLASS == "WARLOCK" then CP_StampText(txt, cur .. "*") else CP_StampText(txt, cur) end
+                if predOn and predDelta ~= 0 and PLAYER_CLASS == "WARLOCK" then CP_StampText(txt, cur .. "*") else CP_StampText(txt, cur) end
                 CP_StampShown(txt, true)
                 if PLAYER_CLASS == "WARLOCK" and predOn then
                     local spec = GetSpec and GetSpec()
                     local threshold = spec and CPConst.WL_LOW_SHARD_THRESHOLD[spec]
-                    if threshold and cur < threshold then txt:SetTextColor(1,0.1,0.1,1) else txt:SetTextColor(1,1,1,1) end
+                    if threshold and cur < threshold then CP_StampTextColor(txt, 1, 0.1, 0.1, 1)
+                    else CP_StampTextColor(txt, 1, 1, 1, 1) end
                 else
-                    txt:SetTextColor(1,1,1,1)
+                    CP_StampTextColor(txt, 1, 1, 1, 1)
                 end
             else CP_StampShown(txt, false) end
         end
@@ -643,7 +745,7 @@ modeBuilders.FRACTIONAL = function(E)
                 if bar then
                     if modSafe then
                         CP_StampMinMax(bar, (i - 1) * mod, i * mod)
-                        CP_SetPowerValue(bar, rawCur, smoothInterp)
+                        CP_SetPowerValue(bar, rawCur, smoothInterp, true)
                     else
                         CP_StampMinMax(bar, 0, 1)
                         CP_SetPowerValue(bar, 1, smoothInterp)
@@ -651,7 +753,24 @@ modeBuilders.FRACTIONAL = function(E)
                     CP_StampAlpha(bar, filledAlpha)
                 end
             end
-            if CP.text then CP_StampShown(CP.text, false) end
+            local txt = CP.text
+            if txt then
+                if visual and visual.showText == true then
+                    -- The unmodified value drives fractional fill natively; the
+                    -- regular UnitPower result is the user-facing shard count.
+                    local displayPower = UnitPower("player", powerType)
+                    local predictionActive = visual.showPrediction ~= false and CP.wlPredDelta ~= 0
+                    if predictionActive then
+                        CP_SetPassthroughFormattedText(txt, "%s*", displayPower)
+                    else
+                        CP_SetPassthroughText(txt, displayPower)
+                    end
+                    CP_StampShown(txt, true)
+                    CP_StampTextColor(txt, 1, 1, 1, 1)
+                else
+                    CP_StampShown(txt, false)
+                end
+            end
             --- A secret power value only blocks the full/empty rules; the combat
             --- rule still has to run, so pass nil instead of dropping the check.
             CP_CheckAutoHide(nil, maxPower)
@@ -695,7 +814,7 @@ modeBuilders.FRACTIONAL = function(E)
             if showText then
                 local predOn = visual.showPrediction ~= false
                 local predDelta = CP.wlPredDelta
-                if predDelta ~= 0 then
+                if predOn and predDelta ~= 0 then
                     if partial > 0.001 then CP_StampText(txt, string_format("%.1f*", fractional)) else CP_StampText(txt, fullBars .. "*") end
                 else
                     if partial > 0.001 then CP_StampText(txt, string_format("%.1f", fractional)) else CP_StampText(txt, fullBars) end
@@ -703,8 +822,9 @@ modeBuilders.FRACTIONAL = function(E)
                 CP_StampShown(txt, true)
                 if predOn then
                     local threshold = CPConst.WL_LOW_SHARD_THRESHOLD[CPK.SPEC.WARLOCK_DESTRUCTION]
-                    if threshold and fullBars < threshold then txt:SetTextColor(1,0.1,0.1,1) else txt:SetTextColor(1,1,1,1) end
-                else txt:SetTextColor(1,1,1,1) end
+                    if threshold and fullBars < threshold then CP_StampTextColor(txt, 1, 0.1, 0.1, 1)
+                    else CP_StampTextColor(txt, 1, 1, 1, 1) end
+                else CP_StampTextColor(txt, 1, 1, 1, 1) end
             else CP_StampShown(txt, false) end
         end
         CP_CheckAutoHide(fullBars, maxPower)
@@ -732,6 +852,7 @@ modeBuilders.RUNE = function(E)
     local ApplyFont = E.ApplyFont
     local nativeTimer = CreateNativeTimerSupport(E)
     local _runeTimeTextCache = {}
+    local runeTextPresentationDirty = false
 
     local function GetRuneTimeText(q)
         local s = _runeTimeTextCache[q]
@@ -760,6 +881,13 @@ modeBuilders.RUNE = function(E)
         bar._runeNativeTotal = nil
     end
 
+    local function EnsureRuneTimeText(bar)
+        if not (bar and EnsureRuneText) then return nil end
+        local rfs, created = EnsureRuneText(bar)
+        if created then runeTextPresentationDirty = true end
+        return rfs
+    end
+
     local function ApplyNativeRune(bar, startTime, total, showTime)
         local duration = nativeTimer.EnsureDuration(bar, "_msufCPRuneDuration")
         if not duration then return false end
@@ -774,9 +902,7 @@ modeBuilders.RUNE = function(E)
         end
 
         if showTime then
-            local rfs, created
-            if EnsureRuneText then rfs, created = EnsureRuneText(bar) end
-            if created and ApplyFont then ApplyFont() end
+            local rfs = bar._runeText or EnsureRuneTimeText(bar)
             if not nativeTimer.BindRemainingText(bar, "_msufCPRuneBinding", rfs, duration, "{}") then
                 StopNativeRune(bar)
                 return false
@@ -951,6 +1077,7 @@ modeBuilders.RUNE = function(E)
                         if wasShowingTime ~= showRuneTime then
                             bar._runeTextQ = -1
                         end
+                        if showRuneTime and not bar._runeText then EnsureRuneTimeText(bar) end
                         ApplyRuneText(bar, duration - runeDuration)
                     end
                 else
@@ -969,8 +1096,28 @@ modeBuilders.RUNE = function(E)
                 CP_StampShown(bar, true)
             end
         end
+        -- Rune text lives on the shared elevated text frame, not below the
+        -- individual status bar. Retire stale bindings explicitly when a
+        -- future spec/client rule lowers maxPower; hiding the bar alone would
+        -- no longer hide its independently parented FontString.
+        for i = maxPower + 1, CP.maxBars do
+            local bar = CP.bars[i]
+            if bar then
+                StopNativeRune(bar)
+                bar._runeOUA = false
+                bar._runeDuration = nil
+                bar._runeStart = nil
+                bar._runeTotalDuration = nil
+                ClearRuneText(bar)
+            end
+        end
         for i = activeRuneOUA + 1, #activeBars do
             activeBars[i] = nil
+        end
+
+        if runeTextPresentationDirty then
+            runeTextPresentationDirty = false
+            if ApplyFont then ApplyFont() end
         end
 
         CP.runeOUAAny = activeRuneOUA > 0
@@ -996,7 +1143,7 @@ modeBuilders.RUNE = function(E)
         local txt = CP.text
         if txt then
             local showText = visual and visual.showText == true
-            if showText and readyCount > 0 then
+            if showText then
                 CP_StampText(txt, readyCount)
                 CP_StampShown(txt, true)
             else
@@ -1076,13 +1223,14 @@ modeBuilders.AURA = function(E)
         if powerType == "SOUL_FRAGMENTS_VENG" then
             local rawCur = C_Spell.GetSpellCastCount(CPK.SPELL.SOUL_CLEAVE)
             local curSafe = NotSecret(rawCur)
+            local rawCurSecret = not curSafe
             if curSafe and rawCur == nil then rawCur = 0 end
             local isFull = visual and visual.useFullColor == true and curSafe and (tonumber(rawCur) or 0) >= maxPower
             for i = 1, maxPower do
                 local bar = CP.bars[i]
                 if bar then
                     CP_StampMinMax(bar, i - 1, i)
-                    CP_SetPowerValue(bar, rawCur, smoothInterp)
+                    CP_SetPowerValue(bar, rawCur, smoothInterp, rawCurSecret)
                     CP_StampAlpha(bar, filledAlpha)
                     local slotR = useSlotColors and visual.slotR and visual.slotR[i]
                     CP_StampStatusBarColor(bar, isFull and visual.fullR or (slotR or baseR),
@@ -1096,11 +1244,10 @@ modeBuilders.AURA = function(E)
                 local showText = visual and visual.showText == true
                 if showText then
                     if NotSecret(rawCur) then
-                        txt:SetFormattedText("%d / %d", tonumber(rawCur) or 0, maxPower)
+                        CP_SetPassthroughFormattedText(txt, "%d / %d", tonumber(rawCur) or 0, maxPower)
                     else
-                        txt:SetText(rawCur)
+                        CP_SetPassthroughFormattedText(txt, "%s / %d", rawCur, maxPower)
                     end
-                    txt._msufCPText = nil
                     CP_StampShown(txt, true)
                 else
                     CP_StampShown(txt, false)
@@ -1109,14 +1256,17 @@ modeBuilders.AURA = function(E)
             CP_CheckAutoHide(curSafe and tonumber(rawCur) or nil, maxPower)
         else
             local cur = 0
+            local textValue = 0
             if powerType == "MAELSTROM_WEAPON" then
                 local info = GetPlayerAura(CPK.SPELL.MAELSTROM_WEAPON)
                 if info then
                     local apps = info.applications
+                    textValue = apps
                     if NotSecret(apps) and apps ~= nil then cur = tonumber(apps) or 0 end
                 end
             elseif powerType == "WHIRLWIND" then
                 cur = WW.GetStacks()
+                textValue = cur
             elseif powerType == "TIP_OF_THE_SPEAR" then
                 local tipAuraID = E.TIP and E.TIP.AURA_ID
                 local useLocal = CP.spLocalUntil and GetTime and GetTime() < CP.spLocalUntil
@@ -1124,6 +1274,7 @@ modeBuilders.AURA = function(E)
                     local info = not useLocal and GetPlayerAura(tipAuraID) or nil
                     if info then
                         local apps = info.applications
+                        textValue = apps
                         if NotSecret(apps) and apps ~= nil then
                             cur = tonumber(apps) or 0
                             CP.spStacks = cur
@@ -1136,6 +1287,7 @@ modeBuilders.AURA = function(E)
                         end
                     else
                         cur = GetTrackedTipStacks()
+                        textValue = cur
                     end
                 end
             elseif powerType == "ICICLES" then
@@ -1144,6 +1296,7 @@ modeBuilders.AURA = function(E)
                     local info = GetPlayerAura(icicleID)
                     if info then
                         local apps = info.applications
+                        textValue = apps
                         if NotSecret(apps) and apps ~= nil then cur = tonumber(apps) or 0 end
                     end
                 end
@@ -1171,13 +1324,13 @@ modeBuilders.AURA = function(E)
                     CP_StampVertexColor(bar._bg, bgR, bgG, bgB, bgA)
                 end
             end
+            if CP.icicleNativeText and CP.icicleNativeText.Hide then CP.icicleNativeText:Hide() end
             local txt = CP.text
             if txt then
                 local showText = visual and visual.showText == true
-                if powerType == "ICICLES" and CP.icicleNativeText then
-                    CP_StampShown(txt, false)
-                elseif showText and cur > 0 then
-                    CP_StampText(txt, cur)
+                if showText then
+                    if NotSecret(textValue) then CP_StampText(txt, tonumber(textValue) or 0)
+                    else CP_SetPassthroughText(txt, textValue) end
                     CP_StampShown(txt, true)
                 else
                     CP_StampShown(txt, false)
@@ -1204,6 +1357,7 @@ modeBuilders.AURA = function(E)
         local segCount = tonumber(maxPower) or 1
         local segmented = segCount > 1
         local cur, displayCur, inMeta = 0, 0, false
+        local textValue = 0
         inMeta = not not GetPlayerAura(CPK.SPELL.VOID_METAMORPHOSIS)
         --- Published for the segment-count resolver: outside meta this aura is
         --- absent, so re-reading it there costs a real aura query per event.
@@ -1212,6 +1366,7 @@ modeBuilders.AURA = function(E)
             local whispers = GetPlayerAura(CPK.SPELL.SILENCE_THE_WHISPERS)
             if whispers then
                 local apps = whispers.applications
+                textValue = apps
                 if NotSecret(apps) and apps ~= nil then
                     displayCur = tonumber(apps) or 0
                     --- The normalization divisor is only needed for the single
@@ -1230,6 +1385,7 @@ modeBuilders.AURA = function(E)
             local darkHeart = GetPlayerAura(CPK.SPELL.DARK_HEART)
             if darkHeart then
                 local apps = darkHeart.applications
+                textValue = apps
                 if NotSecret(apps) and apps ~= nil then
                     displayCur = tonumber(apps) or 0
                     if not segmented then
@@ -1286,7 +1442,13 @@ modeBuilders.AURA = function(E)
         local txt = CP.text
         if txt then
             local showText = visual and visual.showText == true
-            if showText and displayCur > 0 then CP_StampText(txt, displayCur); CP_StampShown(txt, true) else CP_StampShown(txt, false) end
+            if showText then
+                if NotSecret(textValue) then CP_StampText(txt, tonumber(textValue) or 0)
+                else CP_SetPassthroughText(txt, textValue) end
+                CP_StampShown(txt, true)
+            else
+                CP_StampShown(txt, false)
+            end
         end
         if segmented then
             CP_CheckAutoHide(displayCur, segCount)
@@ -1552,7 +1714,7 @@ modeBuilders.CONTINUOUS = function(E)
             cur = tonumber(rawCur) or 0
             CP_SetPowerValue(bar, cur, smoothInterp)
         else
-            CP_SetPowerValue(bar, rawCur, smoothInterp)
+            CP_SetPowerValue(bar, rawCur, smoothInterp, true)
             cur = nil
         end
 
@@ -1577,9 +1739,12 @@ modeBuilders.CONTINUOUS = function(E)
         local txt = CP.text
         if txt then
             local showText = visual and visual.showText == true
-            if showText and cur and mx then
-                txt:SetFormattedText("%d / %d", cur, mx)
-                txt._msufCPText = nil
+            if showText then
+                if curSafe and mxSafe then
+                    CP_SetPassthroughFormattedText(txt, "%d / %d", cur, mx)
+                else
+                    CP_SetPassthroughFormattedText(txt, "%d / %d", rawCur, rawMx)
+                end
                 CP_StampShown(txt, true)
             else
                 CP_StampShown(txt, false)
@@ -1662,7 +1827,7 @@ modeBuilders.STAGGER = function(E)
             CP_SetPowerValue(bar, cur)
             active = cur > 0
         else
-            CP_SetPowerValue(bar, rawCur)
+            CP_SetPowerValue(bar, rawCur, nil, true)
         end
 
         local visual = CP_GetVisual(E)
@@ -1700,7 +1865,7 @@ modeBuilders.STAGGER = function(E)
         local txt = CP.text
         if txt then
             local showText = visual and visual.showText == true
-            if showText and NotSecret(cur) then
+            if showText and curSafe then
                 if cur >= 1000 then
                     txt:SetFormattedText("%.1fK", cur / 1000)
                 else
@@ -1709,8 +1874,8 @@ modeBuilders.STAGGER = function(E)
                 txt._msufCPText = nil
                 CP_StampShown(txt, true)
             elseif showText then
-                CP_StampText(txt, "")
-                CP_StampShown(txt, false)
+                CP_SetPassthroughText(txt, rawCur)
+                CP_StampShown(txt, true)
             else
                 CP_StampShown(txt, false)
             end

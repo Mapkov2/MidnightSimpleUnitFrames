@@ -908,7 +908,7 @@ local CP = {
     ticks     = {},      --- [i] = Texture (separator lines)
     bgTex     = nil,     --- background texture
     container = nil,     --- parent frame
-    textFrame = nil,     --- Frame: elevated overlay for text (MRB pattern)
+    textFrame = nil,     --- Shared elevated overlay for resource and Rune text
     text      = nil,     --- FontString: resource count (e.g. "4")
     maxBars   = 0,       --- currently allocated bar count
     currentMax = 0,      --- current max power (e.g. 5 combo pts)
@@ -1396,11 +1396,11 @@ local function CP_SetIciclesSensorActive(active)
                 count:SetShadowColor(0, 0, 0, 1)
                 count:SetShadowOffset(1, -1)
 
-                -- No custom formatter here: formatter objects created by addon
-                -- code reject secret values, and FormatNumber(applications)
-                -- receives a secret count on this build. The bare native path
-                -- (count text for 2+ applications) is the only secret-safe one.
+                -- Keep the native AuraContainer application binding as a hidden
+                -- secret-safe sink. The visible count is owned by CP.text so the
+                -- Show resource text setting and its offsets remain authoritative.
                 button:SetApplicationCount(count, {})
+                count:Hide()
                 CP.icicleNativeText = count
             end)
             if CP.icicleSensor then
@@ -1684,6 +1684,8 @@ do
         GetFilledAlpha = function() return _filledAlpha end,
         GetEmptyAlpha = function() return _emptyAlpha end,
         GetVisual = function() return CP.visual end,
+        EnsureRuneText = CP_EnsureRuneText,
+        ApplyFont = function() if CP_ApplyFont then CP_ApplyFont() end end,
     }
 
     local rune = CP_CallBuilder(CPModeBuilders.RUNE, commonEnv)
@@ -3078,7 +3080,7 @@ end)
 --- Refresh class power text font (called from UpdateAllFonts)
 CP.ApplyFontsPublic = function()
     _CP_RefreshConfig()
-    if CP.visible and _cpDB.showText then
+    if CP.visible then
         _cpFontRev = 0  --- force re-apply
         CP_ApplyFont()
     end
