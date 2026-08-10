@@ -904,8 +904,8 @@ local function MSUF_Defaults_ApplyPredictionBarBaseline(db)
 end
 
 --- Fresh-install completion (applied only when the factory profile payload is seeded).
---- The compact factory export is the visual source of truth; this pass completes
---- structural fields and locale/runtime-dependent product defaults.
+--- The compact factory export provides the baseline; this pass completes
+--- structural fields plus intentional factory-only product defaults.
 local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     if not db then  return end
     local function SetDefault(tbl, key, value)
@@ -996,6 +996,65 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     EnsureFreshGroupAuraNativeRenderer(db.gf_party)
     EnsureFreshGroupAuraNativeRenderer(db.gf_raid)
     EnsureFreshGroupAuraNativeRenderer(db.gf_mythicraid)
+    --- Factory profiles keep every frame's health coloring linked to the
+    --- shared Global Style instead of carrying per-frame color overrides.
+    for _, key in ipairs(MSUF_DEFAULTS_TEXT_SCOPE_KEYS) do
+        if type(db[key]) == "table" then
+            db[key].healthColorMode = nil
+        end
+    end
+    for _, key in ipairs(MSUF_DEFAULTS_GROUP_SCOPE_KEYS) do
+        if type(db[key]) == "table" then
+            db[key].gfBarMode = nil
+        end
+    end
+    --- Factory visual baseline: near-black health bars with a restrained warm
+    --- target accent. The layer remains an ordinary Texture Layer afterward,
+    --- so users can recolor it, change its visibility, or disable it normally.
+    if type(db.general) ~= "table" then db.general = {} end
+    db.general.barMode = "dark"
+    db.general.darkMode = true
+    db.general.useClassColors = false
+    db.general.darkBarTone = "black"
+    db.general.darkBarGray = 0.03
+    db.general.darkBarR = nil
+    db.general.darkBarG = nil
+    db.general.darkBarB = nil
+    local function ApplyFactoryTargetAccent(conf)
+        if type(conf) ~= "table" then return end
+        conf.texLayerEnabled = true
+        conf.texLayerTexture = ""
+        conf.texLayerCustomTexturePath = "Interface\\PETBATTLES\\PetBattle-SelectedPetGlow"
+        conf.texLayerAlpha = 0.10
+        conf.texLayerFollowFrameAlpha = true
+        conf.texLayerStrata = "AUTO"
+        conf.texLayerLevel = 1
+        conf.texLayerAnchorTarget = "FRAME"
+        conf.texLayerAnchor = "CENTER"
+        conf.texLayerOffsetX = 0
+        conf.texLayerOffsetY = 0
+        conf.texLayerWidth = 0
+        conf.texLayerHeight = 0
+        conf.texLayerColorMode = "CUSTOM"
+        conf.texLayerColorR = 1
+        conf.texLayerColorG = 0.82
+        conf.texLayerColorB = 0
+        conf.texLayerGradientEnabled = false
+        conf.texLayerGradientDirRight = true
+        conf.texLayerGradientDirLeft = false
+        conf.texLayerGradientDirUp = false
+        conf.texLayerGradientDirDown = false
+        conf.texLayerBlendMode = "ADD"
+        conf.texLayerMirrorH = false
+        conf.texLayerMirrorV = false
+        conf.texLayerCropMode = "BOTTOM_HALF"
+        conf.texLayerEdgeSoftness = 0
+        conf.texLayerVisibility = "TARGET"
+        conf.texLayerRoundedClip = false
+    end
+    for _, key in ipairs(MSUF_DEFAULTS_TEXT_SCOPE_KEYS) do
+        ApplyFactoryTargetAccent(db[key])
+    end
     --- Factory-only dispel-symbol policy. "Symbol detects" is owned by the
     --- Unit/Group frame roots, not by the Aura lane filter tables. Override
     --- every scope carried by the factory snapshot so a stale local value
@@ -1062,6 +1121,7 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
             SetDefault(g.UIScale, "Enabled", false)
             SetDefault(g.UIScale, "Scale", 1.0)
         end
+        g.slashMenuScale = 0.8
         SetDefault(g, "msufUiScale", 1.0)
         --- English/German use MSUF's highly readable UI face. Other locales
         --- retain Blizzard's locale-specific glyph coverage.
