@@ -2250,8 +2250,14 @@ local function FullRefresh()
         CP_SetIciclesSensorActive(powerType == "ICICLES")
         --- Belt-and-suspenders: ensure outline survives parent Hide/Show cycle
         if CP._outline then
-            local outlineShape = tostring((_cpDB.bars and _cpDB.bars.classPowerShape) or "BAR"):upper()
-            if outlineShape == "BAR" then CP._outline:Show() else CP._outline:Hide() end
+            local outlineBars = _cpDB.bars or {}
+            local outlineShape = tostring(outlineBars.classPowerShape or "BAR"):upper()
+            local outlineSize = tonumber(outlineBars.classPowerOutline) or 1
+            if outlineShape == "BAR" and outlineSize > 0 and CP._msufRoundedOutlineSuppressed ~= true then
+                CP._outline:Show()
+            else
+                CP._outline:Hide()
+            end
         end
 
     else
@@ -3111,6 +3117,14 @@ CP.RefreshVisualsPublic = function()
     end
 end
 ExportPublic("MSUF_ClassPower_RefreshVisuals", CP.RefreshVisualsPublic)
+
+CP.ApplyRoundedSurfacePublic = function(masterEnabled)
+    local rounded = MSUF and MSUF.RoundedSurface
+    local apply = rounded and rounded.ApplyClassPower
+    if type(apply) ~= "function" then return false end
+    return apply(CP, masterEnabled)
+end
+ExportPublic("MSUF_ClassPower_ApplyRoundedSurface", CP.ApplyRoundedSurfacePublic)
 
 CP.ApplyPublic = function(opts)
     if type(opts) ~= "table" then

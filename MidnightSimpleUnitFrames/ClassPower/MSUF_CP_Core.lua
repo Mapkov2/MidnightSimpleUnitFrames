@@ -479,7 +479,7 @@ builders.LAYOUT = function(E)
         --- mode divides one row into stable segments and optional separators.
         if shapeMode then
             if CP._outline then CP._outline:Hide() end
-        elseif outlineThick > 0 then
+        elseif outlineThick > 0 and CP._msufRoundedOutlineSuppressed ~= true then
             if not CP._outline then
                 local tpl = (BackdropTemplateMixin and "BackdropTemplate") or nil
                 local ol = CreateFrame("Frame", nil, CP.container, tpl)
@@ -661,6 +661,9 @@ builders.LAYOUT = function(E)
 
         CP.currentMax = maxPower
         CP.height = h
+
+        local applyRounded = _G.MSUF_ClassPower_ApplyRoundedSurface
+        if type(applyRounded) == "function" then applyRounded() end
 
         --- Detached player power can anchor to ClassPower. If ClassPower's
         --- anchor dimensions changed, ask the power-bar embed layout to refresh
@@ -922,6 +925,8 @@ builders.PRESENTATION = function(E)
             CP.bgTex:SetTexture(activeBgPath)
             CP._msufCPBgTexturePath = activeBgPath
         end
+        local applyRounded = _G.MSUF_ClassPower_ApplyRoundedSurface
+        if type(applyRounded) == "function" then applyRounded() end
     end
 
     return {

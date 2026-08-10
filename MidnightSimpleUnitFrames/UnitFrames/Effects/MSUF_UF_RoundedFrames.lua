@@ -430,19 +430,19 @@ local function EndMaskRefresh(f, maskKey, maskedKey)
 end
 
 local function MaskTextureWith(f, tex, maskKey, maskedKey, anchor, maskPath)
-  if not (f and tex) then return end
-  if type(tex.AddMaskTexture) ~= "function" then return end
+  if not (f and tex) then return false end
+  if type(tex.AddMaskTexture) ~= "function" then return false end
 
   local masked = f[maskedKey]
   -- Adding a first mask can allocate protected regions on secure frames. If the
   -- texture was already masked, re-applying is safe; otherwise defer to regen.
   if IsCombatLocked() and not (masked and masked[tex]) then
     DeferApply()
-    return
+    return false
   end
 
   local m = EnsureMaskForAnchor(f, maskKey, anchor, tex, maskPath)
-  if not m then return end
+  if not m then return false end
 
   f[maskedKey] = f[maskedKey] or {}
   local seen = f[maskedKey .. "Refreshing"]
@@ -451,7 +451,7 @@ local function MaskTextureWith(f, tex, maskKey, maskedKey, anchor, maskPath)
   local old = f[maskedKey][tex]
   local needsRebind = m._msufRoundedNeedsRebind == true
   m._msufRoundedNeedsRebind = nil
-  if old == m and not needsRebind then return end
+  if old == m and not needsRebind then return true end
   if old and tex.RemoveMaskTexture then
     if old ~= true then
       tex:RemoveMaskTexture(old)
@@ -462,6 +462,7 @@ local function MaskTextureWith(f, tex, maskKey, maskedKey, anchor, maskPath)
 
   tex:AddMaskTexture(m)
   f[maskedKey][tex] = m
+  return true
 end
 
 RoundedSurface.ClearMasks = ClearMasks
@@ -627,6 +628,176 @@ local function ApplyRoundedEdgeStack(owner, parent, baseEdge, anchor, thickness,
 
   return true
 end
+
+local function RestoreClassPowerOutline(CP, shape)
+  if not CP then return end
+  CP._msufRoundedOutlineSuppressed = nil
+  local host = CP._msufRCPOutlineHost
+  local edge = CP._msufRCPOutlineEdge
+  if host then host:Hide() end
+  HideRoundedEdgeStack(CP, edge, "_msufRCPOutlineEdgeStack")
+
+  local outline = CP._outline
+  if outline then
+    local bars = BarsDB()
+    local thickness = tonumber(bars and bars.classPowerOutline) or 1
+    if shape == "BAR" and thickness > 0 then outline:Show() else outline:Hide() end
+  end
+end
+
+local function EnsureClassPowerRoundedOutline(CP)
+  local container = CP and CP.container
+  if not container then return nil, nil end
+  local host = CP._msufRCPOutlineHost
+  if not host then
+    if not (CreateFrame and CanCreateRoundedRegion(host)) then return nil, nil end
+    host = CreateFrame("Frame", nil, container)
+    host:SetAllPoints(container)
+    if host.EnableMouse then host:EnableMouse(false) end
+    CP._msufRCPOutlineHost = host
+  end
+  local hostLevel = container:GetFrameLevel() + 3
+  if CP._msufRCPOutlineHostLevel ~= hostLevel then
+    CP._msufRCPOutlineHostLevel = hostLevel
+    host:SetFrameLevel(hostLevel)
+  end
+
+  local edge = CP._msufRCPOutlineEdge
+  if not edge then
+    if not CanCreateRoundedRegion(edge) then return host, nil end
+    edge = host:CreateTexture(nil, "OVERLAY", nil, 0)
+    SE_SnapOff(edge)
+    CP._msufRCPOutlineEdge = edge
+  end
+  return host, edge
+end
+
+local function ClassPowerBoundaryRefs(bar)
+  if not bar then return nil, nil end
+  local fill = bar.GetStatusBarTexture and bar:GetStatusBarTexture() or nil
+  return fill, bar._bg
+end
+
+local function MaskClassPowerBoundary(container, bar)
+  local fill, bg = ClassPowerBoundaryRefs(bar)
+  local fillApplied = MaskTextureWith(container, fill, "_msufRCPMask", "_msufRCPMaskedTextures", container, roundedMaskPath)
+  local bgApplied = MaskTextureWith(container, bg, "_msufRCPMask", "_msufRCPMaskedTextures", container, roundedMaskPath)
+  return fillApplied == true and bgApplied == true
+end
+
+local function ClassPowerRoundedStampMatches(stamp, active, shape, thickness, count, level,
+    bgTex, firstFill, firstBg, lastFill, lastBg)
+  if not stamp or stamp.active ~= active or stamp.shape ~= shape or stamp.thickness ~= thickness then
+    return false
+  end
+  if not active then return true end
+  return stamp.count == count and stamp.level == level
+    and stamp.maskPath == roundedMaskPath and stamp.edgePath == roundedEdgePath
+    and stamp.bgTex == bgTex and stamp.firstFill == firstFill and stamp.firstBg == firstBg
+    and stamp.lastFill == lastFill and stamp.lastBg == lastBg
+end
+
+local function StampClassPowerRounded(CP, active, shape, thickness, count, level,
+    bgTex, firstFill, firstBg, lastFill, lastBg)
+  local stamp = CP._msufRCPApplyStamp
+  if not stamp then
+    stamp = {}
+    CP._msufRCPApplyStamp = stamp
+  end
+  stamp.active, stamp.shape, stamp.thickness = active, shape, thickness
+  stamp.count, stamp.level = count, level
+  stamp.maskPath, stamp.edgePath = active and roundedMaskPath or nil, active and roundedEdgePath or nil
+  stamp.bgTex = active and bgTex or nil
+  stamp.firstFill, stamp.firstBg = active and firstFill or nil, active and firstBg or nil
+  stamp.lastFill, stamp.lastBg = active and lastFill or nil, active and lastBg or nil
+end
+
+-- Class resources are segmented StatusBars, not unit-frame bars. Round only the
+-- outer contour of rectangular BAR mode: the shared background plus the first
+-- and last segment textures. Interior separators and all pip shapes stay native.
+local function ApplyClassPowerRounded(CP, masterEnabled)
+  local container = CP and CP.container
+  if not container then return false end
+  local bars = BarsDB()
+  local shape = tostring(bars and bars.classPowerShape or "BAR"):upper()
+  if shape ~= "CIRCLE" and shape ~= "DIAMOND" and shape ~= "HEX" then shape = "BAR" end
+  local master = masterEnabled
+  if master == nil then master = IsEnabled() end
+  local active = master == true and ReadRoundedBool("roundedClassResources", false) and shape == "BAR"
+  local thickness = ClampEdgeSize(bars and bars.classPowerOutline, 1, 4)
+
+  local cpBars = CP.bars
+  local available = type(cpBars) == "table" and #cpBars or 0
+  local count = math.floor((tonumber(CP.currentMax) or 0) + 0.5)
+  if count < 1 then count = available > 0 and 1 or 0 end
+  if count > available then count = available end
+  local first = count > 0 and cpBars[1] or nil
+  local last = count > 0 and cpBars[count] or nil
+  local firstFill, firstBg = ClassPowerBoundaryRefs(first)
+  local lastFill, lastBg = ClassPowerBoundaryRefs(last)
+  local level = container.GetFrameLevel and container:GetFrameLevel() or 0
+
+  if active then UpdateRoundedMediaState() end
+  if ClassPowerRoundedStampMatches(CP._msufRCPApplyStamp, active, shape, thickness, count, level,
+      CP.bgTex, firstFill, firstBg, lastFill, lastBg)
+      and (not active or CP._msufRoundedClassResourcesActive == true
+        and CP._msufRoundedOutlineSuppressed == true) then
+    -- CP_Layout owns the legacy rectangular outline and may run independently
+    -- of this stamped surface pass. Reassert the rounded ownership invariant
+    -- before taking the cache hit so a square outline can never sit on top of
+    -- the rounded edge after a later layout refresh.
+    if active and CP._outline
+        and (type(CP._outline.IsShown) ~= "function" or CP._outline:IsShown()) then
+      CP._outline:Hide()
+    end
+    return active
+  end
+
+  if IsCombatLocked() then
+    DeferApply()
+    return CP._msufRoundedClassResourcesActive == true
+  end
+
+  if not active then
+    ClearMasks(container, "_msufRCPMask", "_msufRCPMaskedTextures")
+    CP._msufRoundedClassResourcesActive = nil
+    RestoreClassPowerOutline(CP, shape)
+    StampClassPowerRounded(CP, false, shape, thickness, count, level)
+    return false
+  end
+
+  BeginMaskRefresh(container, "_msufRCPMaskedTextures")
+  local masksApplied = MaskTextureWith(container, CP.bgTex, "_msufRCPMask", "_msufRCPMaskedTextures", container, roundedMaskPath) == true
+  masksApplied = MaskClassPowerBoundary(container, first) and masksApplied
+  if last ~= first then masksApplied = MaskClassPowerBoundary(container, last) and masksApplied end
+  EndMaskRefresh(container, "_msufRCPMask", "_msufRCPMaskedTextures")
+
+  local outlineApplied = thickness <= 0
+  if thickness > 0 then
+    local host, edge = EnsureClassPowerRoundedOutline(CP)
+    if host and edge and ApplyRoundedEdgeStack(CP, host, edge, container, thickness,
+        "_msufRCPOutlineEdgeStack", "_msufRCPOutlineMaskedTextures", "OVERLAY", 0) then
+      SetRoundedEdgeStackColor(CP, edge, "_msufRCPOutlineEdgeStack", 0, 0, 0, 1)
+      host:Show()
+      outlineApplied = true
+    end
+  else
+    local host = CP._msufRCPOutlineHost
+    if host then host:Hide() end
+    HideRoundedEdgeStack(CP, CP._msufRCPOutlineEdge, "_msufRCPOutlineEdgeStack")
+  end
+
+  CP._msufRoundedClassResourcesActive = true
+  CP._msufRoundedOutlineSuppressed = true
+  if CP._outline then CP._outline:Hide() end
+  if masksApplied and outlineApplied then
+    StampClassPowerRounded(CP, true, shape, thickness, count, level,
+      CP.bgTex, firstFill, firstBg, lastFill, lastBg)
+  end
+  return true
+end
+
+RoundedSurface.ApplyClassPower = ApplyClassPowerRounded
 
 local function ResolveUnitEdgeColor(f)
   local key = f and tonumber(f._msufHighlightActiveKey or f._msufHighlightColorKey) or 0
@@ -1873,6 +2044,10 @@ local function ApplyAll()
   local enabled = IsEnabled()
   unitRoundedVisualHotEnabled = enabled and RoundedUnitFramesEnabled() or false
   groupIndicatorHotEnabled = enabled and RoundedGroupFramesEnabled() or false
+  local applyRoundedClassPower = _G.MSUF_ClassPower_ApplyRoundedSurface
+  if type(applyRoundedClassPower) == "function" then
+    applyRoundedClassPower(enabled)
+  end
   if not enabled and not MSUF.__msufRoundedUF_Hooked then
     ExportPublic("MSUF_RoundedUF_Active", nil)
     UpdateMouseoverHotState(false)
@@ -1982,8 +2157,10 @@ local function HookOnce()
   ExportPublic("MSUF_RoundedUF_OnBorderVisualChanged", function(frame, shown, source, thickness, r, g, b, a)
     return ApplyModernRoundedBorderVisual(frame, shown, thickness, r, g, b, a)
   end)
-  ExportPublic("MSUF_RoundedUF_OnPowerBorderChanged", function(frame, enabled)
-    return ApplyPowerRoundedEdge(frame, enabled and RoundedPowerBarsEnabled())
+  ExportPublic("MSUF_RoundedUF_OnPowerBorderChanged", function(frame)
+    if not frame then return false end
+    ApplyToUnitFrame(frame)
+    return true
   end)
   ExportPublic("MSUF_RoundedUF_OnUnitDispelOverlayChanged", function(frame)
     if not frame then return end

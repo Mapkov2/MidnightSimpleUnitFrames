@@ -1039,6 +1039,7 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     SetDefault(db.bars, "roundedGroupFrames", true)
     SetDefault(db.bars, "roundedPowerBars", true)
     SetDefault(db.bars, "roundedCastbars", false)
+    SetDefault(db.bars, "roundedClassResources", false)
     SetDefault(db.bars, "roundedMouseover", true)
     SetDefault(db.bars, "roundedCornerStrength", 3)
     --- Fresh-install defaults: status indicators (AFK/DND) off by default
@@ -3861,6 +3862,9 @@ if MSUF_DB.bars == nil then
     end
     if MSUF_DB.bars.roundedCastbars == nil then
         MSUF_DB.bars.roundedCastbars = false
+    end
+    if MSUF_DB.bars.roundedClassResources == nil then
+        MSUF_DB.bars.roundedClassResources = false
     end
     if MSUF_DB.bars.roundedMouseover == nil then
         MSUF_DB.bars.roundedMouseover = true

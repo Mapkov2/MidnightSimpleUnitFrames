@@ -158,6 +158,20 @@ local function NormalizeCastbarPreviewJustify(value, fallback)
 end
 local PREVIEW_CLASS_POWER_SHAPES = CPPreview.CLASS_SHAPES
 local PREVIEW_POWER_SHAPES = CPPreview.POWER_SHAPES
+local UNIT_CP_ROUNDED_OPTS = {
+    bgKey = "_msufUnitCPRoundedBg",
+    edgeKey = "_msufUnitCPRoundedEdge",
+    stackKey = "_msufUnitCPRoundedEdgeStack",
+    countKey = "_msufUnitCPRoundedEdgeCount",
+    maskStoreKey = "_msufUnitCPRoundedMasks",
+    maskedKey = "_msufUnitCPRoundedMasked",
+    whiteTexture = "Interface\\Buttons\\WHITE8X8",
+    edgeLayer = "OVERLAY",
+    edgeSubLevel = 6,
+    maxEdgeSize = 8,
+    snapOff = PreviewHelpers.SnapOff,
+    baseEdgeColor = function() return 0, 0, 0, 1 end,
+}
 local NormalizePreviewClassPowerShape = CPPreview.NormalizeClassShape
 local function NormalizePreviewClassPowerShapeAlign(value)
     value = tostring(value or "CENTER"):upper()
@@ -2133,10 +2147,13 @@ function Preview.Refresh(box, reason)
         if cp.bgAlpha < 0 then cp.bgAlpha = 0 elseif cp.bgAlpha > 1 then cp.bgAlpha = 1 end
         cp.shape = NormalizePreviewClassPowerShape(bars.classPowerShape)
         cp.shapeInfo = PREVIEW_CLASS_POWER_SHAPES[cp.shape]
+        cp.rounded = cp.shapeInfo == nil and bars.roundedFramesEnabled == true
+            and bars.roundedClassResources == true
         if mock.classPower.SetBackdropColor then
             cp.bgr, cp.bgg, cp.bgb = R.CPPreview.ColorOverride("classPowerBgColorOverrides", cp.token)
-            mock.classPower:SetBackdropColor(cp.bgr or 0, cp.bgg or 0, cp.bgb or 0, cp.shapeInfo and 0 or cp.bgAlpha)
-            mock.classPower:SetBackdropBorderColor(0, 0, 0, cp.shapeInfo and 0 or 1)
+            mock.classPower:SetBackdropColor(cp.bgr or 0, cp.bgg or 0, cp.bgb or 0,
+                (cp.shapeInfo or cp.rounded) and 0 or cp.bgAlpha)
+            mock.classPower:SetBackdropBorderColor(0, 0, 0, (cp.shapeInfo or cp.rounded) and 0 or 1)
         end
         cp.segCount = floor(tonumber(cp.preview and cp.preview.segments) or 5)
         if cp.segCount < 1 then cp.segCount = 1 end
@@ -2302,6 +2319,16 @@ function Preview.Refresh(box, reason)
                 if runeText then runeText:Hide() end
             end
         end
+        if PreviewHelpers.ApplyRoundedClassPowerSurface then
+            local roundedApplied = PreviewHelpers.ApplyRoundedClassPowerSurface(mock.classPower, cp.rounded,
+                mock.classPower.segments, nil, cp.segCount,
+                ScalePreviewOutline(bars.classPowerOutline or 1, scale), UNIT_CP_ROUNDED_OPTS,
+                cp.bgr or 0, cp.bgg or 0, cp.bgb or 0, cp.bgAlpha)
+            if cp.rounded and not roundedApplied and mock.classPower.SetBackdropColor then
+                mock.classPower:SetBackdropColor(cp.bgr or 0, cp.bgg or 0, cp.bgb or 0, cp.bgAlpha)
+                mock.classPower:SetBackdropBorderColor(0, 0, 0, 1)
+            end
+        end
         local classTextOn = bars.classPowerShowText == true
         if classTextOn then
             local cpTextSize = S(tonumber(bars.classPowerFontSize) or 16)
@@ -2326,6 +2353,10 @@ function Preview.Refresh(box, reason)
         box.handleClassPower:SetSize(max(36, S(cpW)), max(18, max(2, S(cpH)) + 8))
         PlaceHandle(box.handleClassPower, mock.classPower)
     else
+        if PreviewHelpers.ApplyRoundedClassPowerSurface then
+            PreviewHelpers.ApplyRoundedClassPowerSurface(mock.classPower, false,
+                mock.classPower.segments, nil, 0, 0, UNIT_CP_ROUNDED_OPTS)
+        end
         mock.classPower:Hide()
         for i = 1, #mock.classPower.segments do mock.classPower.segments[i]:Hide() end
         if mock.classPower.text then mock.classPower.text:Hide() end

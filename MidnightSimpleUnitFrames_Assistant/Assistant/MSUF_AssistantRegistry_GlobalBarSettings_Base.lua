@@ -118,6 +118,15 @@ function A.GlobalBarRegistry.RegisterBaseBarSettings(ctx)
         reason = "MSUF_ASSISTANT_ROUNDED_CASTBARS",
         description = "Rounds MSUF castbar surfaces and outlines without changing Blizzard castbars, spell icons, or the GCD bar.",
     })
+    RegisterBarsBoolean("roundedClassResources", "roundedClassResources", "Rounded Class Resources", false, {
+        "rounded class resources", "rounded combo points", "rounded soul shards", "class resource corners",
+    }, {
+        category = "Global / Bars / Rounded",
+        frameType = "globalBars",
+        apply = ApplyRoundedBars,
+        reason = "MSUF_ASSISTANT_ROUNDED_CLASS_RESOURCES",
+        description = "Rounds rectangular Class Resource bars without changing Circle, Diamond, or Hex shapes.",
+    })
     RegisterBarsBoolean("roundedMouseover", "roundedMouseover", "Rounded Mouseover Highlights", true, {
         "rounded mouseover", "rounded hover", "rounded hover border", "mouseover rounded", "rounded mouseover highlights",
     }, { category = "Global / Bars / Rounded", frameType = "globalBars", apply = ApplyRoundedBars, reason = "MSUF_ASSISTANT_ROUNDED_MOUSEOVER" })

@@ -1215,7 +1215,7 @@ local BARS_GENERAL_KEYS = KSW [[
     healAbsorbEnabled healAbsorbAnchorMode healAbsorbBarHeight healAbsorbBarOffsetY healAbsorbBarOpacity
     overAbsorbOverlay fullHealthAbsorbStripe absorbBarTexture healAbsorbBarTexture dispelBorderTrigger bossTargetOutlineMode
     bossTargetHighlightEnabled hlPrioEnabled hlPrioOrder highlightPrioEnabled highlightPrioOrder roundedFramesEnabled roundedUnitFrames
-    roundedGroupFrames roundedPowerBars roundedCastbars roundedMouseover barOutlineColorR barOutlineColorG
+    roundedGroupFrames roundedPowerBars roundedCastbars roundedClassResources roundedMouseover barOutlineColorR barOutlineColorG
     barOutlineColorB barOutlineColorA
 ]]
 local BARS_SCOPE_KEYS = KSW [[
@@ -1230,7 +1230,7 @@ local BARS_SCOPE_KEYS = KSW [[
 ]]
 local BARS_TABLE_KEYS = KSW [[
     barOutlineThickness barOutlineLayer barOutlineStrata barOutlineTexture smoothPowerBar realtimePowerText roundedFramesEnabled roundedUnitFrames
-    roundedGroupFrames roundedPowerBars roundedCastbars roundedMouseover
+    roundedGroupFrames roundedPowerBars roundedCastbars roundedClassResources roundedMouseover
 ]]
 local FONT_GENERAL_KEYS = KSW "fontKey boldText noOutline textBackdrop fontMonochrome fontShadowStrength fontShadowOpacity fontShadowDistance fontTextAlpha fontBaselineOffset nameClassColor npcNameRed nameNpcClassColor colorPowerTextByType colorHealthTextByHealth nameColorMode nameColorR nameColorG nameColorB"
 local FONT_SCOPE_KEYS = KSW [[

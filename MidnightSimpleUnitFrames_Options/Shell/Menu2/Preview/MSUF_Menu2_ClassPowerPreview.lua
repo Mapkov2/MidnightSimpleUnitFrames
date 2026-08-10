@@ -512,6 +512,24 @@ local CP_POWER_ROUNDED_OPTS = {
             tonumber(player.barOutlineColorA) or tonumber(general.barBorderA) or 1
     end,
 }
+local CP_CLASS_ROUNDED_OPTS = {
+    bgKey = "_msufCPClassRoundedBg",
+    edgeKey = "_msufCPClassRoundedEdge",
+    stackKey = "_msufCPClassRoundedEdgeStack",
+    countKey = "_msufCPClassRoundedEdgeCount",
+    maskStoreKey = "_msufCPClassRoundedMasks",
+    maskedKey = "_msufCPClassRoundedMasked",
+    whiteTexture = WHITE8,
+    edgeLayer = "OVERLAY",
+    edgeSubLevel = 6,
+    maxEdgeSize = 8,
+    snapOff = Helpers.SnapOff,
+    baseEdgeColor = function() return 0, 0, 0, 1 end,
+}
+local function RoundedClassResourcesPreviewEnabled(bars)
+    return bars and bars.roundedFramesEnabled == true
+        and bars.roundedClassResources == true
+end
 local function RoundedPowerPreviewEnabled()
     local bars = _G.MSUF_DB and _G.MSUF_DB.bars
     return bars and bars.roundedFramesEnabled == true
@@ -1213,6 +1231,9 @@ local function RenderClassPower(preview, bars, spec)
     local frame = EnsureClassPower(preview)
     local enabled, disabledReason = ClassPowerPreviewState(bars, spec)
     if not enabled then
+        if Helpers.ApplyRoundedClassPowerSurface then
+            Helpers.ApplyRoundedClassPowerSurface(frame, false, frame.segments, frame.bgs, 0, 0, CP_CLASS_ROUNDED_OPTS)
+        end
         frame:Hide()
         HideBarOutline(frame)
         HideTableRegions(frame.segments)
@@ -1235,6 +1256,7 @@ local function RenderClassPower(preview, bars, spec)
     frame:Show()
     local shape = NormalizeClassShape(bars.classPowerShape)
     local shapeInfo = CP_SHAPES[shape]
+    local roundClassResources = shapeInfo == nil and RoundedClassResourcesPreviewEnabled(bars)
     local token = CPToken(spec)
     local r, g, b = CPBaseColor(spec, bars, 1, 1, 1)
     local bgr, bgg, bgb = CPBgColor(token)
@@ -1266,7 +1288,7 @@ local function RenderClassPower(preview, bars, spec)
         slot = nil
         startX = 0
         rowW = barSpace
-        ApplyBarOutline(frame, outline)
+        if roundClassResources then HideBarOutline(frame) else ApplyBarOutline(frame, outline) end
     end
     local xPos, prevBoundary = 0, 0
     local elapsed = PreviewElapsed(preview)
@@ -1369,6 +1391,11 @@ local function RenderClassPower(preview, bars, spec)
             edge:Hide()
             if runeText then runeText:Hide() end
         end
+    end
+    if Helpers.ApplyRoundedClassPowerSurface then
+        local roundedApplied = Helpers.ApplyRoundedClassPowerSurface(frame, roundClassResources,
+            frame.segments, frame.bgs, count, outline, CP_CLASS_ROUNDED_OPTS)
+        if not shapeInfo and not roundedApplied then ApplyBarOutline(frame, outline) end
     end
     if spec.mode == "ironfur" and bars.guardianIronfurShowHashLines ~= false then
         local fractions = { 0.82, 0.51, 0.24 }

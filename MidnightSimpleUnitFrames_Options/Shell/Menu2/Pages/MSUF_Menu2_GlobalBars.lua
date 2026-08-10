@@ -55,6 +55,7 @@ local BAR_SETTING_BY_PATH = {
     ["rounded.roundedGroupFrames"] = "bars.roundedGroupFrames",
     ["rounded.roundedPowerBars"] = "bars.roundedPowerBars",
     ["rounded.roundedCastbars"] = "bars.roundedCastbars",
+    ["rounded.roundedClassResources"] = "bars.roundedClassResources",
     ["rounded.roundedMouseover"] = "bars.roundedMouseover",
     ["rounded.roundedCornerStrength"] = "bars.roundedCornerStrength",
     ["power.realtime_text"] = "bars.realtimePowerText",
@@ -424,7 +425,7 @@ local function RegisterRoundedSearch(control, label, extraKeywords, help, kind, 
         anchor = control._msuf2Title or control._msuf2Label or control,
         values = { "On", "Off", "Enable", "Disable", "Einschalten", "Ausschalten" },
         keywords = keywords,
-        help = help or "Controls the rounded frame texture style for unit frames, group frames, power bars, castbars, and mouseover highlights.",
+        help = help or "Controls the rounded frame texture style for unit frames, group frames, power bars, class resources, castbars, and mouseover highlights.",
     }
     if type(meta) == "table" then for key, value in pairs(meta) do payload[key] = value end end
     M.RegisterSearchWidget(control, payload)
@@ -1700,13 +1701,14 @@ local function BuildRoundedSection(ctx, b)
         { "master", "Rounded frame texture", roundLeftX, -52, "roundedFramesEnabled", false, true, "master toggle|all rounded frames|rounded frames master|rounded frames on|rounded frames off|rounded frames einschalten|rounded frames ausschalten|alle abgerundeten frames", "Master switch for the rounded frame texture style.", true },
         { "units", "Unit frames", roundLeftX, -90, "roundedUnitFrames", true, nil, "rounded unit frames|rounded unitframes|unit frame corners|unitframe corners|abgerundete unitframes|unitframes abgerundet|player target focus boss rounded", "Enable or disable rounded textures on unit frames." },
         { "groups", "Group frames", roundLeftX, -128, "roundedGroupFrames", true, nil, "rounded group frames|rounded party frames|rounded raid frames|group frame corners|abgerundete gruppenframes|party raid abgerundet", "Enable or disable rounded textures on group frames." },
+        { "classResources", "Class resources", roundLeftX, -166, "roundedClassResources", false, nil, "rounded class resources|rounded combo points|rounded soul shards|class resource bar corners|klassenressourcen abgerundet|combo punkte abrunden|seelensplitter abrunden", "Round rectangular class resource bars. Circle, Diamond, and Hex shapes are unchanged." },
         { "power", "Power bars", roundRightX, -52, "roundedPowerBars", true, nil, "rounded power bars|rounded powerbar|power bar corners|powerbar corners|powerbars abgerundet|powerbar abrunden", "Enable or disable rounded textures on power bars." },
         { "mouseover", "Mouseover highlights", roundRightX, -90, "roundedMouseover", true, nil, "rounded mouseover|rounded hover|rounded hover border|mouseover rounded|mouseover highlight rounded|mouseover abgerundet|hover abgerundet", "Enable or disable rounded mouseover highlight edges." },
         { "castbars", "Castbars", roundRightX, -128, "roundedCastbars", false, nil, "rounded castbars|castbar corners|cast bars rounded|castbars abgerundet|zauberbalken abgerundet", "Round MSUF castbar surfaces and outlines. Blizzard castbars, spell icons, and the GCD bar are not changed." },
     }, { ["*"] = function(s) return BindRoundedToggle(s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10]), s[1] end })
     local roundedPreview
     local roundingSlider = W.Slider(rounded, "Corner rounding", 1, 5, 1, 300)
-    W.MoveWidget(roundingSlider, rounded, roundLeftX, -166, 300, "LEFT")
+    W.MoveWidget(roundingSlider, rounded, roundRightX, -166, 300, "LEFT")
     local roundingApplyPending, roundingApplyTimer, roundingReleaseScheduled
     local function CancelRoundingApplyTimer()
         if roundingApplyTimer and type(roundingApplyTimer.Cancel) == "function" then roundingApplyTimer:Cancel() end
@@ -1768,13 +1770,13 @@ local function BuildRoundedSection(ctx, b)
     roundingSlider:HookScript("OnShow", FlushRoundingRuntime)
     RegisterRoundedSearch(roundingSlider, "Corner rounding",
         "corner rounding|rounding strength|rounded strength|corner radius|rounding radius|abrundungsstaerke|eckenradius|staerke der abrundung",
-        "Controls how subtle or strong the rounded corners appear. Masks, outlines, highlights, mouseover edges, power bars, and enabled castbars use the same value.",
+        "Controls how subtle or strong the rounded corners appear. Masks, outlines, highlights, mouseover edges, power bars, enabled class resources, and enabled castbars use the same value.",
         "slider", Meta("rounded.roundedCornerStrength", "setting", { step = 1, min = 1, max = 5 }))
     roundedPreview = CreateRoundedTexturePreview(rounded, roundLeftX, -214, max(320, (rounded._msuf2Width or ctx.width or 720) - 60))
     RegisterRoundedSearch(roundedPreview, "Rounded Texture Preview",
         "rounded preview|rounded example|rounded image|rounded frame preview|preview rounded frames|rounded frames aussehen|vorschau abgerundete frames",
         "Shows a small preview of the rounded frame texture style.", "preview")
-    local roundedDependentControls = { roundedControls.units, roundedControls.groups, roundedControls.power, roundedControls.mouseover, roundedControls.castbars, roundingSlider }
+    local roundedDependentControls = { roundedControls.units, roundedControls.groups, roundedControls.classResources, roundedControls.power, roundedControls.mouseover, roundedControls.castbars, roundingSlider }
     SyncRoundedControls(M.BindGateGroup(ctx, nil, {
         { controls = roundedDependentControls, on = function() return ReadB("roundedFramesEnabled", false) == true end },
     }, {
