@@ -693,20 +693,18 @@ local function BuildCastbars(ctx)
                 if fontPath and self.castTargetText.SetFont then
                     pcall(self.castTargetText.SetFont, self.castTargetText, fontPath, max(7, S(targetSize)), fontFlags)
                 end
-                local targetR, targetG, targetB = 1, 0.82, 0.20
-                local getTargetColor = _G.MSUF_GetCastbarTargetNameColor
-                if type(getTargetColor) == "function" then
-                    local r, gColor, b, custom = getTargetColor()
-                    if custom == true then targetR, targetG, targetB = r, gColor, b end
-                end
+                local targetR, targetG, targetB = CastbarPreview.ResolveTargetTextPreviewColor(unit, 1, 0.82, 0.20)
                 self.castTargetText:SetTextColor(targetR, targetG, targetB, 1)
                 self.castTargetText:SetText(M.Tr("Cleave Training Dummy"))
-                self.castTargetText:SetWidth(max(20, scw - S(4)))
-                self.castTargetText:ClearAllPoints()
                 local targetX = ReadCastbarNum(g, unit, "TargetNameOffsetX", "bossCastTargetNameOffsetX", 0)
                 local targetY = ReadCastbarNum(g, unit, "TargetNameOffsetY", "bossCastTargetNameOffsetY", 1)
-                self.castTargetText:SetPoint("TOP", self.bar, "BOTTOM", S(targetX), S(targetY) - 2)
-                self.castTargetText:SetJustifyH("RIGHT")
+                local targetPosition = CastbarPreview.NormalizeTextPosition(
+                    CastbarPreview.ReadString(g, unit, "TargetNamePosition", "bossCastTargetNamePosition", "BELOW"), "BELOW")
+                local targetJustify = CastbarPreview.NormalizeTextJustify(
+                    CastbarPreview.ReadString(g, unit, "TargetNameAlign", "bossCastTargetNameAlign", "RIGHT"), "RIGHT")
+                self.castTargetText:SetWidth(max(20, barWLocal - S(4)))
+                CastbarPreview.AnchorText(self.castTargetText, self.statusBar or self.bar,
+                    targetPosition, targetX, targetY, targetJustify, S)
             else
                 self.castTargetText:SetText("")
             end

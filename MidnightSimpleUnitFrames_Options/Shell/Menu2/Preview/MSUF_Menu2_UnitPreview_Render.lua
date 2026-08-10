@@ -11,6 +11,7 @@ local Pick, PickFallbackTable = MenuState.Pick, MenuState.PickFallbackTable
 local F = MenuState.Fallbacks or {}
 local PreviewHelpers = MenuState.PreviewHelpers or {}
 local CPPreview = MenuState.ClassPowerPreview or {}
+local CastbarPreview = MSUF.UFPreviewCastbar or {}
 local Layers = MSUF.UF and MSUF.UF.Layers or {}
 -- Mirrors the live relief renderer. FULL overlays cache their resolved anchor
 -- extents before this runs, avoiding stale configured portraitWidth/Height.
@@ -120,12 +121,6 @@ local function CastbarPreviewDetailPrefix(unitKey)
     if unitKey == "boss" then return "bossCast" end
     return nil
 end
-local function ReadCastbarPreviewString(g, key, detailPrefix, suffix, bossKey, fallback)
-    local value = detailPrefix and g[detailPrefix .. suffix] or nil
-    if (value == nil or value == "") and key == "boss" and bossKey then value = g[bossKey] end
-    if value == nil or value == "" then value = fallback end
-    return tostring(value or fallback or "")
-end
 local function NormalizeCastbarPreviewIconPos(value)
     value = tostring(value or "LEFT"):upper():gsub("%s+", "_"):gsub("-", "_")
     if value == "INSIDELEFT" then value = "INSIDE_LEFT" end
@@ -142,20 +137,11 @@ local function ApplyCastbarPreviewIconZoom(icon, zoom)
     local inset = (1 - visible) * 0.5
     texture:SetTexCoord(inset, 1 - inset, inset, 1 - inset)
 end
-local function NormalizeCastbarPreviewTextPos(value, fallback)
-    value = tostring(value or fallback or "LEFT"):upper():gsub("%s+", "_"):gsub("-", "_")
-    if value == "CENTER" or value == "RIGHT" or value == "ABOVE" or value == "BELOW" then return value end
-    return "LEFT"
-end
-local function CastbarPreviewJustifyForPosition(position)
-    if position == "LEFT" or position == "RIGHT" then return position end
-    return "CENTER"
-end
-local function NormalizeCastbarPreviewJustify(value, fallback)
-    value = tostring(value or fallback or "LEFT"):upper()
-    if value == "CENTER" or value == "RIGHT" then return value end
-    return "LEFT"
-end
+-- UnitPreview_Castbar loads immediately before this file and owns the text
+-- contract shared with the page-local castbar preview.
+local NormalizeCastbarPreviewTextPos = CastbarPreview.NormalizeTextPosition
+local CastbarPreviewJustifyForPosition = CastbarPreview.JustifyForTextPosition
+local NormalizeCastbarPreviewJustify = CastbarPreview.NormalizeTextJustify
 local PREVIEW_CLASS_POWER_SHAPES = CPPreview.CLASS_SHAPES
 local PREVIEW_POWER_SHAPES = CPPreview.POWER_SHAPES
 local UNIT_CP_ROUNDED_OPTS = {
@@ -358,31 +344,7 @@ local function ApplyCastbarPreviewIconBorder(icon, style, thickness, g)
         icon._msufCastbarPreviewBorderA = a
     end
 end
-local function AnchorCastbarPreviewText(fs, relativeTo, position, x, y, justify, S)
-    fs:ClearAllPoints()
-    local fallback
-    if position == "CENTER" then
-        fs:SetPoint("CENTER", relativeTo, "CENTER", S(x), S(y))
-        fallback = "CENTER"
-    elseif position == "RIGHT" then
-        fs:SetPoint("RIGHT", relativeTo, "RIGHT", S(x), S(y))
-        fallback = "RIGHT"
-    elseif position == "ABOVE" then
-        fs:SetPoint("BOTTOM", relativeTo, "TOP", S(x), S(y + 2))
-        fallback = "CENTER"
-    elseif position == "BELOW" then
-        fs:SetPoint("TOP", relativeTo, "BOTTOM", S(x), S(y - 2))
-        fallback = "CENTER"
-    else
-        fs:SetPoint("LEFT", relativeTo, "LEFT", S(2 + x), S(y))
-        fallback = "LEFT"
-    end
-    -- Same rule as the live castbar (AnchorFontString in MSUF_CastbarVisuals):
-    -- SetJustifyH on a rect that the anchor change left unresolved keeps the
-    -- previous alignment, so the preview has to force-resolve it too.
-    if fs.GetRect then fs:GetRect() end
-    fs:SetJustifyH(justify or fallback)
-end
+local AnchorCastbarPreviewText = CastbarPreview.AnchorText
 local function ResolvePreviewTextSlotSize(runtimeText, conf, runtimeKey, dbKey, fallback)
     local value = tonumber(runtimeText and runtimeText[runtimeKey]) or tonumber(conf and conf[dbKey])
     return value and value > 0 and value or fallback
@@ -601,10 +563,10 @@ local function ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, s
     if iconSize < 6 then iconSize = 6 elseif iconSize > 128 then iconSize = 128 end
     local sIcon = max(6, S(iconSize))
     local iconZoom = ReadCastbarNum(g, key, "IconZoom", "bossCastIconZoom", 100)
-    local iconPosition = NormalizeCastbarPreviewIconPos(ReadCastbarPreviewString(g, key, detailPrefix, "IconPosition", "bossCastIconPosition", "LEFT"))
+    local iconPosition = NormalizeCastbarPreviewIconPos(CastbarPreview.ReadString(g, key, "IconPosition", "bossCastIconPosition", "LEFT"))
     local iconSpacing = max(0, min(40, ReadCastbarNum(g, key, "IconSpacing", "bossCastIconSpacing", 1)))
     local iconBorderThickness = max(0, min(8, ReadCastbarNum(g, key, "IconBorderThickness", "bossCastIconBorderThickness", 0)))
-    local iconBorderStyle = ReadCastbarPreviewString(g, key, detailPrefix, "IconBorderStyle", "bossCastIconBorderStyle", "NONE")
+    local iconBorderStyle = CastbarPreview.ReadString(g, key, "IconBorderStyle", "bossCastIconBorderStyle", "NONE")
     if showIcon then
         ApplyCastbarPreviewIconBorder(mock.cast.icon, iconBorderStyle, iconBorderThickness, g)
         ApplyCastbarPreviewIconZoom(mock.cast.icon, iconZoom)
@@ -656,10 +618,10 @@ local function ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, s
         ApplyPreviewFont(mock.cast.text, max(7, S(textSize)))
         local textX = ReadCastbarNum(g, key, "TextOffsetX", "bossCastTextOffsetX", 0)
         local textY = ReadCastbarNum(g, key, "TextOffsetY", "bossCastTextOffsetY", 0)
-        local textPosition = NormalizeCastbarPreviewTextPos(ReadCastbarPreviewString(g, key, detailPrefix, "SpellNamePosition", "bossCastSpellNamePosition", "LEFT"), "LEFT")
+        local textPosition = NormalizeCastbarPreviewTextPos(CastbarPreview.ReadString(g, key, "SpellNamePosition", "bossCastSpellNamePosition", "LEFT"), "LEFT")
         AnchorCastbarPreviewText(mock.cast.text, surface, textPosition, textX, textY, CastbarPreviewJustifyForPosition(textPosition), S)
         local textMaxWidth = ReadCastbarNum(g, key, "SpellNameMaxWidth", "bossCastSpellNameMaxWidth", 0)
-        local truncate = NormalizeCastbarPreviewTruncate(ReadCastbarPreviewString(g, key, detailPrefix, "SpellNameTruncate", "bossCastSpellNameTruncate", "AUTO"))
+        local truncate = NormalizeCastbarPreviewTruncate(CastbarPreview.ReadString(g, key, "SpellNameTruncate", "bossCastSpellNameTruncate", "AUTO"))
         local spellName = ShortenCastbarPreviewSpellName(key, TR(key == "boss" and "Celestial Ruin" or "Arcane Surge"))
         mock.cast.text:SetText(spellName)
         if truncate == "NONE" then
@@ -687,20 +649,18 @@ local function ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, s
         local targetSize = ReadCastbarNum(g, key, "TargetNameFontSize", "bossCastTargetNameFontSize", 10)
         if not targetSize or targetSize <= 0 then targetSize = 10 end
         ApplyPreviewFont(mock.cast.target, max(7, S(targetSize)))
-        local targetR, targetG, targetB = 1, 0.82, 0.20
-        local getTargetColor = _G.MSUF_GetCastbarTargetNameColor
-        if type(getTargetColor) == "function" then
-            local r, gColor, b, custom = getTargetColor()
-            if custom == true then targetR, targetG, targetB = r, gColor, b end
-        end
+        local targetR, targetG, targetB = CastbarPreview.ResolveTargetTextPreviewColor(key, 1, 0.82, 0.20)
         mock.cast.target:SetTextColor(targetR, targetG, targetB, 1)
         mock.cast.target:SetText(TR("Cleave Training Dummy"))
         local targetX = ReadCastbarNum(g, key, "TargetNameOffsetX", "bossCastTargetNameOffsetX", 0)
         local targetY = ReadCastbarNum(g, key, "TargetNameOffsetY", "bossCastTargetNameOffsetY", 1)
-        local targetPosition = NormalizeCastbarPreviewTextPos(ReadCastbarPreviewString(g, key, detailPrefix, "TargetNamePosition", "bossCastTargetNamePosition", "BELOW"), "BELOW")
-        local targetJustify = NormalizeCastbarPreviewJustify(ReadCastbarPreviewString(g, key, detailPrefix, "TargetNameAlign", "bossCastTargetNameAlign", "RIGHT"), "RIGHT")
-        mock.cast.target:SetWidth(max(20, scw - S(4)))
-        AnchorCastbarPreviewText(mock.cast.target, mock.cast, targetPosition, targetX, targetY, targetJustify, S)
+        local targetPosition = NormalizeCastbarPreviewTextPos(CastbarPreview.ReadString(g, key, "TargetNamePosition", "bossCastTargetNamePosition", "BELOW"), "BELOW")
+        local targetJustify = NormalizeCastbarPreviewJustify(CastbarPreview.ReadString(g, key, "TargetNameAlign", "bossCastTargetNameAlign", "RIGHT"), "RIGHT")
+        -- Runtime sizes and anchors this rect against frame.statusBar, whose
+        -- width excludes external icons and the castbar outline. `surface` is
+        -- the Unit Preview equivalent; using mock.cast shifts LEFT/CENTER text.
+        mock.cast.target:SetWidth(max(20, fillMaxW - S(4)))
+        AnchorCastbarPreviewText(mock.cast.target, surface, targetPosition, targetX, targetY, targetJustify, S)
         box.handleCastbarTarget:SetSize(max(48, mock.cast.target:GetStringWidth() + 10), max(18, mock.cast.target:GetStringHeight() + 6))
         if not UnitPreviewText.PlaceHandleAroundRegions(box.handleCastbarTarget, canvas,
             { mock.cast.target }, 3, CASTBAR_TEXT_HANDLE_OPTS)
@@ -731,7 +691,7 @@ local function ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, s
         ApplyPreviewFont(mock.cast.time, max(7, S(timeSize)))
         local tr, tg, tb = g[(detailPrefix or "") .. "TimeColorR"], g[(detailPrefix or "") .. "TimeColorG"], g[(detailPrefix or "") .. "TimeColorB"]
         if tr or tg or tb then mock.cast.time:SetTextColor(tr or fr, tg or fg, tb or fb, 1) else mock.cast.time:SetTextColor(fr, fg, fb, 1) end
-        local timePosition = NormalizeCastbarPreviewTextPos(ReadCastbarPreviewString(g, key, detailPrefix, "TimePosition", "bossCastTimePosition", "RIGHT"), "RIGHT")
+        local timePosition = NormalizeCastbarPreviewTextPos(CastbarPreview.ReadString(g, key, "TimePosition", "bossCastTimePosition", "RIGHT"), "RIGHT")
         AnchorCastbarPreviewText(mock.cast.time, surface, timePosition, timeX, timeY, CastbarPreviewJustifyForPosition(timePosition), S)
         box.handleCastbarTime:SetSize(max(28, mock.cast.time:GetStringWidth() + 10), max(18, mock.cast.time:GetStringHeight() + 6))
         if not UnitPreviewText.PlaceHandleAroundRegions(box.handleCastbarTime, canvas,
