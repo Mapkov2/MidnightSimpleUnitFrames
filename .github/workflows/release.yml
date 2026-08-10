@@ -566,7 +566,7 @@ jobs:
           prerelease: ${{ steps.channel.outputs.release_is_prerelease }}
           make_latest: ${{ steps.channel.outputs.github_make_latest }}
 
-      # Wago runs only for an explicit stable `publish-target: wago|all` tag
+      # Wago runs only for an explicit stable `publish-target: wago|all|wago+curseforge` tag
       # annotation or workflow_dispatch target. Alpha, beta, RC, pre and preview
       # builds are rejected before packaging and again inside this upload step.
       - name: Upload to Wago
@@ -616,7 +616,7 @@ jobs:
           }
 
           # Second lock: Wago must always be an explicit publish destination.
-          if ($env:PUBLISH_TARGET -notin @("all", "wago")) {
+          if ($env:PUBLISH_TARGET -notin @("all", "wago", "wago+curseforge")) {
             throw "Refusing Wago upload for publish target '$env:PUBLISH_TARGET'."
           }
 
