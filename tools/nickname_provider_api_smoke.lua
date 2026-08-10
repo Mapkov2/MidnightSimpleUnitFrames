@@ -30,6 +30,7 @@ local names = {
 }
 local eventFrame
 local unitRefreshes, groupRefreshes = 0, 0
+local lastGroupRefreshUnit
 local activeResolver
 
 _G.InCombatLockdown = function() return combat end
@@ -57,6 +58,10 @@ local unitFrame = {
     MSUFUnitKey = "player",
     _msufActiveElements = { NameText = true, Text = true },
 }
+local otherUnitFrame = {
+    MSUFUnitKey = "party1",
+    _msufActiveElements = { NameText = true, Text = true },
+}
 local Text = {
     UnitName = _G.UnitName,
     CreateFrame = _G.CreateFrame,
@@ -73,14 +78,16 @@ local MSUF = {
         UpdateInline = function() unitRefreshes = unitRefreshes + 1 end,
     },
     UF = {
-        ForEachFrame = function(callback, runtime)
-            callback(unitFrame, nil, runtime)
+        ForEachFrame = function(callback, runtime, targetUnit)
+            callback(unitFrame, nil, runtime, targetUnit)
+            callback(otherUnitFrame, nil, runtime, targetUnit)
             return true
         end,
     },
     GF = {
-        RefreshGroupNames = function()
+        RefreshGroupNames = function(unit)
             groupRefreshes = groupRefreshes + 1
+            lastGroupRefreshUnit = unit
             return true
         end,
     },
@@ -95,6 +102,7 @@ Check(API.GetVersion() == 1, "unexpected nickname API version")
 local capabilities = API.GetCapabilities()
 Check(capabilities.eventDriven and capabilities.cached and capabilities.multipleProviders,
     "nickname API capabilities missing")
+Check(capabilities.targetedUpdates == true, "targeted update capability missing")
 Check(capabilities.combatUpdates == false and capabilities.polling == false,
     "combat/polling capability boundary drifted")
 
@@ -106,11 +114,16 @@ local ok, reason = API.RegisterProvider("Low", function()
 end, 10)
 Check(ok and reason == nil, "low-priority provider registration failed")
 
-ok, reason = API.RegisterProvider("High", function(_, nativeName, fullName)
+ok, reason = API.RegisterProvider("High", function(unit, nativeName, fullName)
     highCalls = highCalls + 1
-    Check(nativeName == "Native", "provider did not receive native name")
-    Check(fullName == "Native-Realm", "provider did not receive full name")
-    return currentNickname
+    if unit == "player" then
+        Check(nativeName == "Native", "provider did not receive native name")
+        Check(fullName == "Native-Realm", "provider did not receive full name")
+        return currentNickname
+    end
+    Check(unit == "party1" and nativeName == "Other" and fullName == "Other-Realm",
+        "provider did not receive the targeted secondary identity")
+    return "OtherNick"
 end, 50)
 Check(ok and reason == nil, "high-priority provider registration failed")
 Check(type(activeResolver) == "function", "nickname resolver was not installed")
@@ -120,24 +133,45 @@ Check(resolved == "First", "highest-priority nickname was not selected")
 Check(highCalls == 1 and lowCalls == 0, "provider priority order was not respected")
 Check(activeResolver("player") == "First" and highCalls == 1,
     "resolved nickname was not cached")
+Check(activeResolver("party1") == "OtherNick" and highCalls == 2,
+    "secondary nickname was not cached")
+
+local beforeTargetedUnitRefreshes = unitRefreshes
+local beforeTargetedGroupRefreshes = groupRefreshes
+currentNickname = "Targeted"
+ok, reason = API.NotifyChanged("High", "player")
+Check(ok and reason == nil, "targeted nickname change failed")
+Check(unitRefreshes == beforeTargetedUnitRefreshes + 2,
+    "targeted change did not refresh only the matching unit frame name sinks")
+Check(groupRefreshes == beforeTargetedGroupRefreshes + 1 and lastGroupRefreshUnit == "player",
+    "targeted change did not preserve the group unit token")
+Check(activeResolver("player") == "Targeted" and highCalls == 3,
+    "targeted change did not invalidate only the unit cache")
+Check(activeResolver("party1") == "OtherNick" and highCalls == 3,
+    "targeted change invalidated an unrelated unit cache")
+
+ok, reason = API.NotifyChanged("High", {})
+Check(not ok and reason == "invalid_unit", "invalid targeted unit was accepted")
 
 local beforeCombatUnitRefreshes = unitRefreshes
 local beforeCombatGroupRefreshes = groupRefreshes
 currentNickname = "Second"
 combat = true
-ok, reason = API.NotifyChanged("High")
+ok, reason = API.NotifyChanged("High", "player")
 Check(ok and reason == "deferred_combat", "combat change was not deferred")
+ok, reason = API.NotifyChanged("High", "player")
+Check(ok and reason == "deferred_combat", "duplicate combat unit change was not coalesced")
 Check(eventFrame and eventFrame.events.PLAYER_REGEN_ENABLED,
     "deferred change did not request the one-shot post-combat event")
 Check(unitRefreshes == beforeCombatUnitRefreshes and groupRefreshes == beforeCombatGroupRefreshes,
     "nickname frames refreshed in combat")
-Check(activeResolver("player") == "First", "combat did not preserve the frozen nickname")
-Check(highCalls == 1 and lowCalls == 0, "a nickname provider ran in combat")
+Check(activeResolver("player") == "Targeted", "combat did not preserve the frozen nickname")
+Check(highCalls == 3 and lowCalls == 0, "a nickname provider ran in combat")
 
 eventFrame.callback(eventFrame, "PLAYER_REGEN_ENABLED")
 Check(unitRefreshes == beforeCombatUnitRefreshes and groupRefreshes == beforeCombatGroupRefreshes,
     "regen event refreshed while combat lockdown was still active")
-Check(highCalls == 1, "regen event called a provider while still in combat")
+Check(highCalls == 3, "regen event called a provider while still in combat")
 
 combat = false
 eventFrame.callback(eventFrame, "PLAYER_REGEN_ENABLED")
@@ -148,7 +182,7 @@ Check(unitRefreshes == beforeCombatUnitRefreshes + 2,
 Check(groupRefreshes == beforeCombatGroupRefreshes + 1,
     "group names were not refreshed exactly once after combat")
 Check(activeResolver("player") == "Second", "post-combat nickname was not applied")
-Check(highCalls == 2 and lowCalls == 0, "post-combat resolution did not use one cached provider call")
+Check(highCalls == 4 and lowCalls == 0, "post-combat resolution did not use one cached provider call")
 
 combat = true
 beforeCombatUnitRefreshes = unitRefreshes
@@ -204,7 +238,7 @@ combat = false
 eventFrame.callback(eventFrame, "PLAYER_REGEN_ENABLED")
 Check(activeResolver("player") == "NSRTSecond",
     "NSRT nickname was not rebuilt after combat")
-Check(unitRefreshes == beforeCombatUnitRefreshes + 2,
+Check(unitRefreshes == beforeCombatUnitRefreshes + 4,
     "NSRT post-combat unit/inline refresh count drifted")
 Check(groupRefreshes == beforeCombatGroupRefreshes + 1,
     "NSRT post-combat group refresh count drifted")
