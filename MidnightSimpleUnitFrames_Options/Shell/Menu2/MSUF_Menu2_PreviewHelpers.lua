@@ -20,6 +20,11 @@ CP.WHITE8 = CP.WHITE8 or "Interface\\Buttons\\WHITE8X8"
 CP.MEDIA = CP.MEDIA or ("Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\ClassPower\\")
 local ROUNDED_MEDIA_ROOT = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\"
 local ROUNDED_SLICE_MARGIN = 9.5
+local ROUNDED_MASK_PATHS, ROUNDED_EDGE_PATHS = {}, {}
+for i = 1, 5 do
+    ROUNDED_MASK_PATHS[i] = ROUNDED_MEDIA_ROOT .. "rounded_clean_mask_s" .. i .. ".png"
+    ROUNDED_EDGE_PATHS[i] = ROUNDED_MEDIA_ROOT .. "rounded_clean_edge_s" .. i .. ".png"
+end
 local STRETCHED_SLICE_MODE = _G.Enum and _G.Enum.UITextureSliceMode
     and _G.Enum.UITextureSliceMode.Stretched
 local PREVIEW_BACKGROUND_MEDIA = "Interface\\AddOns\\MidnightSimpleUnitFrames_Options\\Media\\PreviewBackgrounds\\"
@@ -39,9 +44,7 @@ function H.ResolveRoundedMedia()
     local bars = _G.MSUF_DB and _G.MSUF_DB.bars
     local strength = floor((tonumber(bars and bars.roundedCornerStrength) or 3) + 0.5)
     if strength < 1 then strength = 1 elseif strength > 5 then strength = 5 end
-    return ROUNDED_MEDIA_ROOT .. "rounded_clean_mask_s" .. strength .. ".png",
-        ROUNDED_MEDIA_ROOT .. "rounded_clean_edge_s" .. strength .. ".png",
-        strength
+    return ROUNDED_MASK_PATHS[strength], ROUNDED_EDGE_PATHS[strength], strength
 end
 
 function H.ApplyRoundedMediaSlice(region, strength)
@@ -614,6 +617,7 @@ function CP.TokenForValue(spec, value)
 end
 function CP.FillForSegment(spec, index, valueOverride)
     if not spec then return index <= 3 and 1 or 0 end
+    if spec.nativeDurationText == true then return 0 end
     local mode = spec.mode or "segmented"
     local value = tonumber(valueOverride)
     if value == nil then value = tonumber(spec.value) or 0 end
@@ -658,7 +662,7 @@ function CP.TextForValue(spec, value)
     if value == nil then return spec.previewText or "" end
     local mode = spec.mode or "segmented"
     if mode == "continuous" then return tostring(floor((value * 100) + 0.5)) .. " / 100" end
-    if mode == "timer_bar" then return string.format("%.1fs", floor((value * 20 * 10) + 0.5) / 10) end
+    if mode == "timer_bar" then return string.format("%.1f", floor((value * 20 * 10) + 0.5) / 10) end
     if mode == "stagger" then return tostring(floor((value * 34) + 0.5)) .. "K" end
     if mode == "aura_single" then return tostring(floor((value * 5) + 0.5)) end
     if mode == "fractional" then return string.format("%.1f", value) end
@@ -2814,9 +2818,9 @@ function H.LayoutEdgeLines(frame, edge, opts)
         local key = keys[i]
         if not lines[key] then
             lines[key] = frame:CreateTexture(nil, opts.layer or "OVERLAY")
-            lines[key]:SetTexture(texture)
             snap(lines[key])
         end
+        lines[key]:SetTexture(texture)
     end
     local r, g, b, a = 0, 0, 0, 1
     if type(opts.color) == "function" then r, g, b, a = opts.color(frame) end
@@ -2963,4 +2967,126 @@ function H.BaseEdgeColor()
                1
     end
     return 0, 0, 0, 1
+end
+
+-- Shared ClassPower preview contract. BAR mode only needs its two boundary
+-- segments clipped; every interior separator remains square and every non-BAR
+-- shape bypasses this helper entirely.
+local function BindClassPowerPreviewBoundary(frame, tex, key, maskStoreKey, maskedKey, maskPath, snap, seen)
+    if not tex then return end
+    local mask = H.EnsureRoundedMask(frame, key, frame, tex, maskStoreKey, maskPath, snap)
+    if not mask then return end
+    H.SetMask(frame, tex, mask, maskedKey)
+    seen[tex] = true
+end
+
+function H.ApplyRoundedClassPowerSurface(frame, enabled, fills, backgrounds, count, outline, opts, bgR, bgG, bgB, bgA)
+    if not frame then return false end
+    opts = opts or {}
+    local maskedKey = opts.maskedKey or "_msufCPPreviewRoundedMasked"
+    local maskStoreKey = opts.maskStoreKey or "_msufCPPreviewRoundedMasks"
+    local stateKey = opts.stateKey or "_msufCPPreviewRoundedState"
+    local state = frame[stateKey]
+    local roundedBg = frame[opts.bgKey or "_msufCPPreviewRoundedBg"]
+    local canApply = enabled and H.ResolveRoundedMedia and H.EnsureRoundedMask and H.SetMask
+        and H.EnsureRoundedVisuals and H.ApplyRoundedEdgeStack
+
+    count = math.floor((tonumber(count) or 0) + 0.5)
+    if count < 1 then canApply = false end
+    if not canApply then
+        if state and state.active == false then return false end
+        H.ClearMasks(frame, maskedKey)
+        H.SetRoundedEdgeStackShown(frame, false, opts)
+        if roundedBg then roundedBg:Hide() end
+        if not state then
+            state = {}
+            frame[stateKey] = state
+        end
+        state.active = false
+        return false
+    end
+
+    local maskPath, edgePath, strength = H.ResolveRoundedMedia()
+    outline = H.ClampEdgeSize(outline, 0, opts.maxEdgeSize or 8)
+    local fillFirst = type(fills) == "table" and fills[1] or nil
+    local fillLast = type(fills) == "table" and count > 1 and fills[count] or nil
+    local bgFirst = type(backgrounds) == "table" and backgrounds[1] or nil
+    local bgLast = type(backgrounds) == "table" and count > 1 and backgrounds[count] or nil
+    local edgeAnchor = type(opts.anchor) == "function" and opts.anchor(frame) or opts.anchor or frame
+    local edgeR, edgeG, edgeB, edgeA
+    if type(opts.baseEdgeColor) == "function" then
+        edgeR, edgeG, edgeB, edgeA = opts.baseEdgeColor(frame)
+    else
+        edgeR, edgeG, edgeB, edgeA = H.BaseEdgeColor()
+    end
+    if state and state.active == true and state.count == count and state.outline == outline
+        and state.maskPath == maskPath and state.edgePath == edgePath and state.anchor == edgeAnchor
+        and state.fillFirst == fillFirst and state.fillLast == fillLast
+        and state.bgFirst == bgFirst and state.bgLast == bgLast and state.roundedBg == roundedBg
+        and state.bgR == bgR and state.bgG == bgG and state.bgB == bgB and state.bgA == bgA
+        and state.edgeR == edgeR and state.edgeG == edgeG
+        and state.edgeB == edgeB and state.edgeA == edgeA then
+        return true
+    end
+
+    if not state then
+        state = {}
+        frame[stateKey] = state
+    end
+    local seen = state.seen
+    if not seen then
+        seen = {}
+        state.seen = seen
+    else
+        for tex in pairs(seen) do seen[tex] = nil end
+    end
+
+    frame._msufPreviewRoundedMediaStrength = strength
+    opts.edgeTexture = edgePath
+    opts.mediaStrength = strength
+    if not H.EnsureRoundedVisuals(frame, opts) then return false end
+
+    roundedBg = frame[opts.bgKey or "_msufCPPreviewRoundedBg"]
+    local snap = opts.snapOff or H.SnapOff
+    BindClassPowerPreviewBoundary(frame, fillFirst, "fillFirst", maskStoreKey, maskedKey, maskPath, snap, seen)
+    BindClassPowerPreviewBoundary(frame, fillLast, "fillLast", maskStoreKey, maskedKey, maskPath, snap, seen)
+    BindClassPowerPreviewBoundary(frame, bgFirst, "backgroundFirst", maskStoreKey, maskedKey, maskPath, snap, seen)
+    BindClassPowerPreviewBoundary(frame, bgLast, "backgroundLast", maskStoreKey, maskedKey, maskPath, snap, seen)
+    if bgR ~= nil and roundedBg then
+        if roundedBg._msufCPRoundedAnchor ~= frame then
+            roundedBg:ClearAllPoints()
+            roundedBg:SetAllPoints(frame)
+            roundedBg._msufCPRoundedAnchor = frame
+        end
+        roundedBg:SetVertexColor(bgR or 0, bgG or 0, bgB or 0, bgA or 0)
+        roundedBg:Show()
+        BindClassPowerPreviewBoundary(frame, roundedBg, "sharedBackground",
+            maskStoreKey, maskedKey, maskPath, snap, seen)
+    elseif roundedBg then
+        roundedBg:Hide()
+    end
+
+    local masked = frame[maskedKey]
+    if masked then
+        for tex, mask in pairs(masked) do
+            if not seen[tex] then
+                if tex and tex.RemoveMaskTexture and mask then tex:RemoveMaskTexture(mask) end
+                masked[tex] = nil
+            end
+        end
+        if not next(masked) then frame[maskedKey] = nil end
+    end
+
+    if outline > 0 then
+        H.ApplyRoundedEdgeStack(frame, outline, opts)
+    else
+        H.SetRoundedEdgeStackShown(frame, false, opts)
+    end
+    state.active, state.count, state.outline = true, count, outline
+    state.maskPath, state.edgePath, state.anchor = maskPath, edgePath, edgeAnchor
+    state.fillFirst, state.fillLast = fillFirst, fillLast
+    state.bgFirst, state.bgLast, state.roundedBg = bgFirst, bgLast, roundedBg
+    state.bgR, state.bgG, state.bgB, state.bgA = bgR, bgG, bgB, bgA
+    state.edgeR, state.edgeG, state.edgeB, state.edgeA = edgeR, edgeG, edgeB, edgeA
+    return true
 end

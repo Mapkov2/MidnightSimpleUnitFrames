@@ -64,7 +64,7 @@ statusGhostText|statusGhostTextEnabled|statusGhostTextSize|statusGhostTextAnchor
 statusAFKText|statusAFKTextEnabled|statusAFKTextSize|statusAFKTextAnchor|statusAFKTextOffsetX|statusAFKTextOffsetY|statusAFKTextLayer|7|16|CENTER|0|0|AFK|0.68,0.70,0.74|AFK text|MSUF_RequestStatusTextRefresh|false|
 statusDNDText|statusDNDTextEnabled|statusDNDTextSize|statusDNDTextAnchor|statusDNDTextOffsetX|statusDNDTextOffsetY|statusDNDTextLayer|7|16|CENTER|0|0|DND|0.68,0.70,0.74|DND text|MSUF_RequestStatusTextRefresh|false|
 statusCombat|showCombatStateIndicator|combatStateIndicatorSize|combatStateIndicatorAnchor|combatStateIndicatorOffsetX|combatStateIndicatorOffsetY|combatStateIndicatorLayer|7|18|TOPLEFT|0|0|C|1.0,0.22,0.16|Combat icon|MSUF_RequestStatusCombatIndicatorRefresh||player target|combatStateIndicatorCustomIcon
-statusResting|showRestingIndicator|restedStateIndicatorSize|restedStateIndicatorAnchor|restedStateIndicatorOffsetX|restedStateIndicatorOffsetY|restedStateIndicatorLayer|7|18|TOPLEFT|0|0|Z|0.34,0.62,1.0|Rested icon|MSUF_RequestStatusRestingIndicatorRefresh|false|player|restedStateIndicatorCustomIcon
+statusResting|showRestingIndicator|restedStateIndicatorSize|restedStateIndicatorAnchor|restedStateIndicatorOffsetX|restedStateIndicatorOffsetY|restedStateIndicatorLayer|25|39|TOPLEFT|-40|50|Z|0.34,0.62,1.0|Rested icon|MSUF_RequestStatusRestingIndicatorRefresh||player|restedStateIndicatorCustomIcon
 statusIncomingRes|showIncomingResIndicator|incomingResIndicatorSize|incomingResIndicatorAnchor|incomingResIndicatorOffsetX|incomingResIndicatorOffsetY|incomingResIndicatorLayer|7|18|TOPRIGHT|0|0|+|0.22,1.0,0.56|Incoming Rez icon|MSUF_RequestStatusIncomingResIndicatorRefresh||player target|incomingResIndicatorCustomIcon
 statusPvp|showPvpIndicator|pvpIndicatorSize|pvpIndicatorAnchor|pvpIndicatorOffsetX|pvpIndicatorOffsetY|pvpIndicatorLayer|7|18|TOPRIGHT|0|0|PVP|0.32,0.62,1.0|PvP flag (War Mode/PvP)|MSUF_RequestStatusPvpIndicatorRefresh||player target focus targettarget focustarget|pvpIndicatorCustomIcon
 statusPetHappiness|showPetHappinessIndicator|petHappinessIndicatorSize|petHappinessIndicatorAnchor|petHappinessIndicatorOffsetX|petHappinessIndicatorOffsetY|petHappinessIndicatorLayer|7|24|RIGHT|-7|-4|:)|0.38,0.82,0.24|Pet Happiness (Vanilla/TBC)|MSUF_RequestPetHappinessIndicatorRefresh||pet||petHappiness
@@ -79,7 +79,9 @@ texLayer|Texture|0.80,0.55,0.25|Decorative texture layer.
 power|Power|0.95,0.72,0.18
 classPower|Class|0.30,0.78,0.55
 castbar|Cast|0.20,0.90,0.85
-auras|Auras|0.42,0.72,1.00
+buff|Buffs|0.20,0.90,0.35
+debuff|Debuffs|0.90,0.20,0.22
+auras|Custom|0.42,0.72,1.00
 dispelOverlay|Dispel Overlay|0.25,0.72,1.00|Configured cleanse-color wash over the health bar.
 dispelSymbol|Dispel Symbol|0.34,0.84,1.00|Configured dispel-type symbols and placement.
 status|Status|0.85,0.70,0.25

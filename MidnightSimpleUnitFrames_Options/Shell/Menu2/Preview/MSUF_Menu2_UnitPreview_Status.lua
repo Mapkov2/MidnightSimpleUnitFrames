@@ -24,6 +24,13 @@ local VALID_STATE_SYMBOLS = {
 }
 local PVP_ALLIANCE_ATLAS = "UI-HUD-UnitFrame-Player-PVP-AllianceIcon"
 local PVP_HORDE_ATLAS = "UI-HUD-UnitFrame-Player-PVP-HordeIcon"
+local RESTING_ANIMATED_SYMBOL = "rested_blizzard_animated"
+local RestingFlipbook = MSUF.UFRestingFlipbook or {}
+local ApplyRestingFlipbook = RestingFlipbook.Apply
+local StopRestingFlipbook = RestingFlipbook.Stop
+local function StatusIconOnHide(self)
+    if StopRestingFlipbook then StopRestingFlipbook(self.tex) end
+end
 local Preview = MSUF.UFPreview or {}
 local PreviewModel = Preview.Model or {}
 local MakeFS = PreviewModel.MakeFS
@@ -177,11 +184,13 @@ function Status.CreateIcon(parent, color, text)
     f.txt:SetPoint("CENTER")
     f.txt:SetText(text or "")
     f.txt:SetTextColor(color[1], color[2], color[3], 1)
+    if StopRestingFlipbook then f:SetScript("OnHide", StatusIconOnHide) end
     return f
 end
 function Status.SetIconTexture(icon, spec, conf, g, key, data, runtimeCfg, statusPreviewText)
     if not icon or not spec then return end
     local tex, txt = icon.tex, icon.txt
+    if StopRestingFlipbook then StopRestingFlipbook(tex, true) end
     if tex then
         tex:Show()
         tex:SetVertexColor(1, 1, 1, 1)
@@ -230,8 +239,11 @@ function Status.SetIconTexture(icon, spec, conf, g, key, data, runtimeCfg, statu
             if tex.SetTexCoord then tex:SetTexCoord(0.5, 1, 0, 0.5) end
         end
     elseif spec.id == "statusResting" then
-        local path = StatusSymbolTexture((runtimeCfg and runtimeCfg.symbol) or conf.restedStateIndicatorSymbol or conf.restingStateIndicatorSymbol or g.restedStateIndicatorSymbol or g.restingStateIndicatorSymbol)
-        if tex and path then
+        local symbol = (runtimeCfg and runtimeCfg.symbol) or conf.restedStateIndicatorSymbol or conf.restingStateIndicatorSymbol or g.restedStateIndicatorSymbol or g.restingStateIndicatorSymbol
+        local path = StatusSymbolTexture(symbol)
+        if tex and symbol == RESTING_ANIMATED_SYMBOL and ApplyRestingFlipbook and ApplyRestingFlipbook(tex, true) then
+            -- Blizzard's native 42-frame rested loop applied above.
+        elseif tex and path then
             tex:SetTexture(path)
         elseif tex and ApplyStatusIconPackPreview(tex, spec, conf, g, runtimeCfg, "resting", "resting") then
             -- Custom texture applied above.

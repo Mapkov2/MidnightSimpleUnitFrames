@@ -18,6 +18,9 @@ local CallGlobal, Bars, BoolValue, NumValue, SetValue, DeepCopyTable, BuildTable
 local CLASSPOWER_SETTING_KEY_BY_PATH = {
     ["alternative_mana.enabled"] = "bars.showAltMana",
     ["alternative_mana.layout.height"] = "bars.altManaHeight",
+    ["alternative_mana.layout.widthMode"] = "bars.altManaWidthMode",
+    ["alternative_mana.layout.width"] = "bars.altManaWidth",
+    ["alternative_mana.layout.x"] = "bars.altManaOffsetX",
     ["alternative_mana.layout.y"] = "bars.altManaOffsetY",
     ["alternative_mana.smooth_fill"] = "bars.altManaSmoothFill",
     ["behavior.anchor"] = "bars.classPowerAnchorToCooldown",
@@ -228,6 +231,7 @@ local DETACHED_POWER_TEXT_PRESET_VALUES = VTP "OFF=Off|CURRENT=Current|CURMAX=Cu
 local DETACHED_POWER_TEXT_OUTLINE_VALUES = VTP "OUTLINE=Outline|THICKOUTLINE=Thick Outline|NONE=None"
 local PLAYER_HP_ANCHOR_VALUES = VTP "CLASS_TOP=Above Class Resource|CLASS_BOTTOM=Below Class Resource|POWER_TOP=Above Player Power|POWER_BOTTOM=Below Player Power"
 local PLAYER_HP_WIDTH_VALUES = VTP "class=Class Resource|power=Player Power|player=Player Frame|custom=Custom"
+local ALT_MANA_WIDTH_VALUES = VTP "player=Player Frame|custom=Custom"
 local PLAYER_HP_SHAPE_VALUES = VTP "BAR=Bar|FOLLOW_POWER=Follow Player Power|ROUND=Round|CRYSTAL=Crystal|ORB=Orb"
 local PLAYER_HP_COLOR_VALUES = VTP "GLOBAL=Global|CLASS=Class Color|DARK=Dark Mode|GRADIENT=HP Gradient"
 local PLAYER_HP_TEXT_VALUES = VTP "PERCENT=Percent|CURRENT=Current|MAX=Max|DEFICIT=Deficit|CURMAX=Current / Max|CURPERCENT=Current / Percent|CURMAXPERCENT=Current / Max / Percent|MAXPERCENT=Max / Percent|PERCENTCUR=Percent / Current|PERCENTMAX=Percent / Max|PERCENTCURMAX=Percent / Current / Max|NONE=None"
@@ -244,7 +248,7 @@ local CLASS_POWER_PREVIEW_SPECS = {
     { key = "druid_guardian", label = "Druid - Guardian Ironfur", token = "IRONFUR", mode = "ironfur", segments = 1, value = 0.72, previewText = "3" },
     { key = "druid_balance", label = "Druid - Balance (no class bar)", mode = "none", enabled = false },
     { key = "evoker_essence", label = "Evoker - Essence", token = "ESSENCE", mode = "segmented", segments = 6, value = 4, previewText = "4" },
-    { key = "evoker_augmentation_ebon", label = "Evoker - Augmentation Ebon Might", token = "EBON_MIGHT", mode = "timer_bar", segments = 1, value = 0.58, previewText = "12.0s" },
+    { key = "evoker_augmentation_ebon", label = "Evoker - Augmentation Ebon Might", token = "EBON_MIGHT", mode = "timer_bar", segments = 1, value = 0.58, previewText = "12.0", nativeDurationText = true },
     { key = "hunter_survival_tip", label = "Hunter - Survival Tip of the Spear", token = "TIP_OF_THE_SPEAR", mode = "aura_segmented", segments = 3, value = 2, previewText = "2" },
     { key = "mage_arcane", label = "Mage - Arcane Charges", token = "ARCANE_CHARGES", mode = "segmented", segments = 4, value = 3, previewText = "3" },
     { key = "mage_frost", label = "Mage - Frost Icicles", token = "ICICLES", mode = "aura_segmented", segments = 5, value = 3, previewText = "3" },
@@ -923,7 +927,7 @@ function Page:BuildClassBehavior()
         { "rune", "toggle", "Show rune time (per rune)", "runeShowTime", true, group = "cp" },
         { "reverse", "toggle", "Fill right-to-left", "classPowerFillReverse", false, group = "cp" },
         { "ele", "toggle", "Show Maelstrom bar (Ele)", "showEleMaelstrom", false, group = "cp" },
-        { "ebon", "toggle", "Show Ebon Might timer (Aug)", "showEbonMight", true, group = "cp" },
+        { "ebon", "toggle", "Show Ebon Might duration (Aug)", "showEbonMight", true, group = "cp" },
         { "shadow", "toggle", "Show Insanity bar (Shadow)", "showShadowMana", false, group = "cp" },
         { "ironfur", "toggle", "Show Ironfur tracker (Guardian)", "showGuardianIronfur", false, group = "cp",
             helpTitle = "Guardian Ironfur Tracker", help = "In Bear Form, replaces the empty Guardian class-resource slot with an estimated Ironfur lifetime bar. Each successful cast adds one moving marker; Ursoc's Endurance and Guardian of Elune are included." },
@@ -1331,10 +1335,10 @@ function Page:BuildPlayerHP()
 end
 
 function Page:BuildAlternativeMana()
-    local section = self.b:CollapsibleSection("classpower_alt_mana", "Alternative Mana", 306, false)
+    local section = self.b:CollapsibleSection("classpower_alt_mana", "Alternative Mana", 476, false)
     local cardW = min(620, (section._msuf2Width or self.width) - 28)
     local controlW = min(360, cardW - 64)
-    local manaCard = W.ControlCard(section, "Visibility & Size", "For specializations that use mana alongside another resource.", 14, -38, cardW, 234)
+    local manaCard = W.ControlCard(section, "Visibility & Size", "For specializations that use mana alongside another resource.", 14, -38, cardW, 404)
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(manaCard, { "class_power.alt_mana" }, {
             title = "Alternative Mana Color",
@@ -1343,12 +1347,17 @@ function Page:BuildAlternativeMana()
     end
     self.altToggle = SwitchAt(self.ctx, section, "Show mana bar (dual resource)", 32, -98, controlW, Bars, "showAltMana", false, ApplyClassPower, Meta("alternative_mana.enabled"))
     local smooth = SwitchAt(self.ctx, section, "Smooth fill", 32, -132, controlW, Bars, "altManaSmoothFill", false, ApplyClassPowerSmoothing, Meta("alternative_mana.smooth_fill"))
+    local applyRefresh = self:WithRefresh(ApplyClassPower)
     local fields = self:Controls(section, Bars, ApplyClassPower, "alternative_mana.layout", {
+        { "widthMode", "dropdown", "Width mode", ALT_MANA_WIDTH_VALUES, 300, "altManaWidthMode", "player", applyRefresh },
+        { "width", "slider", "Custom width", 20, 1200, 1, 300, "altManaWidth", 0 },
         { "height", "slider", "Height", 2, 30, 1, 300, "altManaHeight", 4 },
+        { "x", "slider", "X offset", -1000, 1000, 1, 300, "altManaOffsetX", 0 },
         { "y", "slider", "Y offset", -50, 50, 1, 300, "altManaOffsetY", -2 },
     })
-    PlaceColumn(section, 32, -174, 54, controlW, "LEFT", fields.height, fields.y)
-    self:AddNamed("altMana", fields, "height y"); self:Add("altMana", smooth)
+    PlaceColumn(section, 32, -174, 54, controlW, "LEFT", fields.widthMode, fields.width, fields.height, fields.x, fields.y)
+    self.altManaWidth = fields.width
+    self:AddNamed("altMana", fields, "widthMode width height x y"); self:Add("altMana", smooth)
 end
 
 function Page:RefreshControlState()
@@ -1406,7 +1415,9 @@ function Page:RefreshControlState()
     end
     SetControlsEnabled(self.groups.hpTextPosition, hpTextOn)
     SetControlEnabled(self.hpUse, true)
-    SetControlsEnabled(self.groups.altMana, BoolValue(bars, "showAltMana", false))
+    local altManaOn = BoolValue(bars, "showAltMana", false)
+    SetControlsEnabled(self.groups.altMana, altManaOn)
+    SetControlEnabled(self.altManaWidth, altManaOn and (bars.altManaWidthMode or "player") == "custom")
     SetControlEnabled(self.altToggle, true); SetControlEnabled(self.cpEnable, true)
 end
 
@@ -1449,7 +1460,7 @@ function Page:Build()
     self:LazySection("classpower_visibility", "Auto-Hide", 216, Page.BuildClassVisibility)
     self:LazySection("classpower_detached_power", "Player Power", function() return DetachedPowerSectionHeight(self.width) end, Page.BuildDetachedPower)
     self:LazySection("classpower_player_hp", "Extra Health Bar", function() return self.width < 680 and 980 or 700 end, Page.BuildPlayerHP)
-    self:LazySection("classpower_alt_mana", "Alternative Mana", 306, Page.BuildAlternativeMana)
+    self:LazySection("classpower_alt_mana", "Alternative Mana", 476, Page.BuildAlternativeMana)
     -- All callbacks share one late-bound state refresh instead of capturing every control.
     self.refresh = self.refresh(function() self:RefreshControlState() end)
     M.RefreshClassPowerDetachedState = self.refresh

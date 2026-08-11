@@ -180,6 +180,63 @@ function Castbar.ReadNumber(g, key, suffix, bossKey, fallback)
     end
     return (v ~= nil) and v or fallback
 end
+function Castbar.ReadString(g, key, suffix, bossKey, fallback)
+    local dbKey = TextKey(key, suffix, bossKey)
+    local value = dbKey and g and g[dbKey] or nil
+    if value == nil or value == "" then value = fallback end
+    return tostring(value or fallback or "")
+end
+function Castbar.NormalizeTextPosition(value, fallback)
+    value = tostring(value or fallback or "LEFT"):upper():gsub("%s+", "_"):gsub("-", "_")
+    if value == "CENTER" or value == "RIGHT" or value == "ABOVE" or value == "BELOW" then return value end
+    return "LEFT"
+end
+function Castbar.JustifyForTextPosition(position)
+    if position == "LEFT" or position == "RIGHT" then return position end
+    return "CENTER"
+end
+function Castbar.NormalizeTextJustify(value, fallback)
+    value = tostring(value or fallback or "LEFT"):upper()
+    if value == "CENTER" or value == "RIGHT" then return value end
+    return "LEFT"
+end
+function Castbar.AnchorText(fontString, relativeTo, position, x, y, justify, scaleFn)
+    if not (fontString and relativeTo) then return end
+    position = Castbar.NormalizeTextPosition(position, "LEFT")
+    justify = Castbar.NormalizeTextJustify(justify, Castbar.JustifyForTextPosition(position))
+    x, y = tonumber(x) or 0, tonumber(y) or 0
+    if type(scaleFn) ~= "function" then scaleFn = tonumber end
+    fontString:ClearAllPoints()
+    if position == "CENTER" then
+        fontString:SetPoint("CENTER", relativeTo, "CENTER", scaleFn(x), scaleFn(y))
+    elseif position == "RIGHT" then
+        fontString:SetPoint("RIGHT", relativeTo, "RIGHT", scaleFn(x), scaleFn(y))
+    elseif position == "ABOVE" then
+        fontString:SetPoint("BOTTOM", relativeTo, "TOP", scaleFn(x), scaleFn(y + 2))
+    elseif position == "BELOW" then
+        fontString:SetPoint("TOP", relativeTo, "BOTTOM", scaleFn(x), scaleFn(y - 2))
+    else
+        fontString:SetPoint("LEFT", relativeTo, "LEFT", scaleFn(2 + x), scaleFn(y))
+    end
+    -- PTR FrameXML resolves the new rect before justification for the same
+    -- stale-alignment edge case (EncounterTimelineTimerEvent:UpdateNameTextLayout).
+    if fontString.GetRect then fontString:GetRect() end
+    fontString:SetJustifyH(justify)
+end
+function Castbar.ResolveTargetTextPreviewColor(key, fallbackR, fallbackG, fallbackB)
+    key = CanonKey(key)
+    local getDetailColor = _G.MSUF_GetCastbarDetailTextColor
+    if type(getDetailColor) == "function" and key then
+        local r, g, b, custom = getDetailColor(key, "TargetName")
+        if custom == true then return r, g, b, true end
+    end
+    local getSharedColor = _G.MSUF_GetCastbarTargetNameColor
+    if type(getSharedColor) == "function" then
+        local r, g, b, custom = getSharedColor()
+        if custom == true then return r, g, b, true end
+    end
+    return fallbackR or 1, fallbackG or 0.82, fallbackB or 0.20, false
+end
 function Castbar.FormatPreviewTime(g, key, current, total)
     local mode = "CURRENT"
     if type(_G.MSUF_GetCastbarTimeFormat) == "function" then mode = _G.MSUF_GetCastbarTimeFormat(key, g) end

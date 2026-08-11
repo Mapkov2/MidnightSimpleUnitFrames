@@ -374,6 +374,7 @@ local function BuildGFAuras(ctx)
                 group[key] = value
                 RefreshAuraPreviews(activeScope)
                 QueueGF(activeScope, "auras")
+                if key == "growth" then M.CallIf(RefreshContext, ctx) end
             end,
             meta or AuraControlMeta(ctx,
                 "group-workspace.lane." .. AuraCatalogToken(lane) .. ".layout." .. AuraCatalogToken(key)))

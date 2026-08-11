@@ -693,20 +693,18 @@ local function BuildCastbars(ctx)
                 if fontPath and self.castTargetText.SetFont then
                     pcall(self.castTargetText.SetFont, self.castTargetText, fontPath, max(7, S(targetSize)), fontFlags)
                 end
-                local targetR, targetG, targetB = 1, 0.82, 0.20
-                local getTargetColor = _G.MSUF_GetCastbarTargetNameColor
-                if type(getTargetColor) == "function" then
-                    local r, gColor, b, custom = getTargetColor()
-                    if custom == true then targetR, targetG, targetB = r, gColor, b end
-                end
+                local targetR, targetG, targetB = CastbarPreview.ResolveTargetTextPreviewColor(unit, 1, 0.82, 0.20)
                 self.castTargetText:SetTextColor(targetR, targetG, targetB, 1)
                 self.castTargetText:SetText(M.Tr("Cleave Training Dummy"))
-                self.castTargetText:SetWidth(max(20, scw - S(4)))
-                self.castTargetText:ClearAllPoints()
                 local targetX = ReadCastbarNum(g, unit, "TargetNameOffsetX", "bossCastTargetNameOffsetX", 0)
                 local targetY = ReadCastbarNum(g, unit, "TargetNameOffsetY", "bossCastTargetNameOffsetY", 1)
-                self.castTargetText:SetPoint("TOP", self.bar, "BOTTOM", S(targetX), S(targetY) - 2)
-                self.castTargetText:SetJustifyH("RIGHT")
+                local targetPosition = CastbarPreview.NormalizeTextPosition(
+                    CastbarPreview.ReadString(g, unit, "TargetNamePosition", "bossCastTargetNamePosition", "BELOW"), "BELOW")
+                local targetJustify = CastbarPreview.NormalizeTextJustify(
+                    CastbarPreview.ReadString(g, unit, "TargetNameAlign", "bossCastTargetNameAlign", "RIGHT"), "RIGHT")
+                self.castTargetText:SetWidth(max(20, barWLocal - S(4)))
+                CastbarPreview.AnchorText(self.castTargetText, self.statusBar or self.bar,
+                    targetPosition, targetX, targetY, targetJustify, S)
             else
                 self.castTargetText:SetText("")
             end
@@ -733,8 +731,10 @@ local function BuildCastbars(ctx)
                     timeX = -2 + (tonumber(g.bossCastTimeOffsetX) or 0)
                     timeY = tonumber(g.bossCastTimeOffsetY) or 0
                 end
-                self.time:SetPoint("RIGHT", self.statusBar or self.bar, "RIGHT", S(timeX), S(timeY))
-                if self.time.SetJustifyH then self.time:SetJustifyH("RIGHT") end
+                local timePosition = CastbarPreview.NormalizeTextPosition(
+                    CastbarPreview.ReadString(g, unit, "TimePosition", "bossCastTimePosition", "RIGHT"), "RIGHT")
+                CastbarPreview.AnchorText(self.time, self.statusBar or self.bar,
+                    timePosition, timeX, timeY, CastbarPreview.JustifyForTextPosition(timePosition), S)
             else
                 self.time:SetText("")
             end
@@ -752,6 +752,8 @@ local function BuildCastbars(ctx)
                 if self.spell.SetWordWrap then self.spell:SetWordWrap(false) end
                 local textX = ReadCastbarNum(g, unit, "TextOffsetX", "bossCastTextOffsetX", 0)
                 local textY = ReadCastbarNum(g, unit, "TextOffsetY", "bossCastTextOffsetY", 0)
+                local textPosition = CastbarPreview.NormalizeTextPosition(
+                    CastbarPreview.ReadString(g, unit, "SpellNamePosition", "bossCastSpellNamePosition", "LEFT"), "LEFT")
                 local leftPad = (unit == "boss") and 2 or 4
                 local gap = (unit == "boss") and 6 or 4
                 local shorteningMode = tonumber(ReadG("castbarSpellNameShortening", 0)) or 0
@@ -772,20 +774,14 @@ local function BuildCastbars(ctx)
                     local estimated = floor((maxLen * (textSizePx * 0.60)) + S(6) + 0.5)
                     if estimated < S(40) then estimated = S(40) end
                     if estimated > S(800) then estimated = S(800) end
-                    self.spell:SetPoint("LEFT", self.statusBar or self.bar, "LEFT", S(leftPad + textX), S(textY))
                     self.spell:SetWidth(max(S(20), min(estimated, avail)))
-                    if self.spell.SetJustifyH then self.spell:SetJustifyH("LEFT") end
                 elseif showTime then
                     self.spell:SetWidth(max(S(20), barWLocal - timeW - S(leftPad + gap + 4)))
-                    self.spell:SetPoint("LEFT", self.statusBar or self.bar, "LEFT", S(leftPad + textX), S(textY))
-                    self.spell:SetPoint("RIGHT", self.time, "LEFT", -S(gap), 0)
-                    if self.spell.SetJustifyH then self.spell:SetJustifyH("LEFT") end
                 else
                     self.spell:SetWidth(max(S(20), barWLocal - S(leftPad + 4)))
-                    self.spell:SetPoint("LEFT", self.statusBar or self.bar, "LEFT", S(leftPad + textX), S(textY))
-                    self.spell:SetPoint("RIGHT", self.statusBar or self.bar, "RIGHT", -S(4), 0)
-                    if self.spell.SetJustifyH then self.spell:SetJustifyH("LEFT") end
                 end
+                CastbarPreview.AnchorText(self.spell, self.statusBar or self.bar,
+                    textPosition, textX, textY, CastbarPreview.JustifyForTextPosition(textPosition), S)
             else
                 self.spell:SetText("")
             end

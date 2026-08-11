@@ -466,6 +466,19 @@ local function BuildPower(ctx, builder, unit)
         end
         return Write()
     end
+    local function SetManualDetachedPowerWidth(value, reason)
+        local conf, bars = GetConf(unit), GetBars()
+        local sharedSourceChanged = bars.detachedPowerBarWidthMode ~= nil
+        bars.detachedPowerBarWidthMode = nil
+        if isPlayer then conf.detachedPowerBarSyncClassPower = false end
+        SetNumber(unit, "detachedPowerBarWidth", value, reason, DETACHED_POWER_OPTS)
+        if detachedSync and detachedSync.SetChecked then detachedSync:SetChecked(false) end
+        Call("MSUF_EnsureCooldownWidthObservers")
+        if sharedSourceChanged then
+            M.RequestGeneralApply(reason, DETACHED_POWER_OPTS)
+        end
+        RefreshClassPowerDetachedState()
+    end
     local function BindPowerSlider(parent, addFn, label, x, y, width, minValue, maxValue, step, key, defaultValue, reason, readFn, opts)
         local control = addFn(W.Slider(parent, label, minValue, maxValue, step, 300))
         W.MoveWidget(control, parent, x, y, width, "CENTER")
@@ -474,7 +487,12 @@ local function BuildPower(ctx, builder, unit)
                 if readFn then return readFn() end
                 return ReadNumber(unit, key, ResolveDefault(defaultValue))
             end,
-            function(v) SetNumber(unit, key, v, reason, opts or POWER_OPTS) end,
+            function(v)
+                if key == "detachedPowerBarWidth" then
+                    return SetManualDetachedPowerWidth(v, reason)
+                end
+                return SetNumber(unit, key, v, reason, opts or POWER_OPTS)
+            end,
             ResolveDefault(defaultValue), (function()
                 local meta = SettingMeta(ctx, "power." .. tostring(key), unit, key)
                 meta.step, meta.roundStep = step, true
@@ -576,7 +594,7 @@ local function BuildPower(ctx, builder, unit)
     BuildPowerControls(borderCard, AddPowerControl, {
         { "toggle", "Smooth fill", 16, -158, rightW - 32, "powerSmoothFill", false, "MSUF2_POWER_SMOOTH" },
     })
-    BuildPowerControls(mainCard, AddPowerControl, {
+    local attachedPowerFields = BuildPowerControls(mainCard, AddPowerControl, {
         { "slider", "Power bar height", 16, -76, cardW - 72, 1, 20, 1, "powerBarHeight", 3, "MSUF2_POWER_HEIGHT",
         function()
             local conf = GetConf(unit)
@@ -589,6 +607,8 @@ local function BuildPower(ctx, builder, unit)
             return GetBars().embedPowerBarIntoHealth == true
         end },
     })
+    local attachedPowerHeight = attachedPowerFields.powerBarHeight
+    local embedPower = attachedPowerFields.embedPowerBarIntoHealth
     local borderSize = AddPowerControl(W.Slider(borderCard, "Border thickness", 0, isPlayer and 8 or 6, 1, 300))
     W.MoveWidget(borderSize, borderCard, 16, -108, rightW - 72, "CENTER")
     M.BindNumberWidget(ctx, borderSize, ReadPowerBorderThickness, function(value)
@@ -658,7 +678,7 @@ local function BuildPower(ctx, builder, unit)
     detachedWidth, detachedHeight = detachedFields.width, detachedFields.height
     if detachedWidth and M.AddTooltip then
         M.AddTooltip(detachedWidth, "Detached width",
-            "A Width mode that follows a cooldown source outranks this width, as does a visible Class Resource bar while width sync is on.",
+            "Changing this value selects Manual width. For Player, it also turns off Sync width to Class Resource so the new width takes effect immediately.",
             { hook = true, owner = "ANCHOR_RIGHT" })
     end
     if isPlayer then
@@ -689,6 +709,7 @@ local function BuildPower(ctx, builder, unit)
     RefreshPowerEnabled = RefreshPowerEnabled(M.BindGateGroup(ctx, nil, {
         { enable = show, controls = powerControls, on = PowerOn },
         { controls = detachedControls, on = DetachedOn },
+        { controls = { attachedPowerHeight, embedPower }, on = function() return PowerOn() and not DetachedOn() end },
         { controls = borderSize, on = function() return PowerOn() and ReadPowerBorderEnabled() end },
         -- Detached width/height/sync exist only when a detached card was built; the `when`
         -- guard keeps the optional Player-only detached controls safe.
@@ -1180,7 +1201,7 @@ local function BuildCastbar(ctx, builder, unit)
     BuildDetailControls(spellCard, spellControls, {
         { "dropdown", "Position preset", 16, -88, min(260, controlWLeft), CASTBAR_TEXT_POSITIONS, DetailKey("SpellNamePosition"), "LEFT", "MSUF2_CASTBAR_SPELL_POSITION" },
         { "slider", "Size", 16, -142, controlWLeft, 0, 48, 1, DetailKey("SpellNameFontSize"), 0, "MSUF2_CASTBAR_SPELL_SIZE" },
-        { "dropdown", "Alignment", 16, -196, min(260, controlWLeft), CASTBAR_TEXT_ALIGN, DetailKey("SpellNameAlign"), "LEFT", "MSUF2_CASTBAR_SPELL_ALIGN" },
+        -- Position owns the visible justification, matching Time Text.
         -- Spell text color deliberately lives on the Colors page (castbar
         -- detail colors) and in the per-control color shortcuts only; a second
         -- inline swatch here double-writes the same key.

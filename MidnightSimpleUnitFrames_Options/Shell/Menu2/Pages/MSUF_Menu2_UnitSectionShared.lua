@@ -200,6 +200,12 @@ local function CopyPopupButton(parent, text, width, role)
         btn = W.TopButton(parent, text, width, 24, nil, false)
     end
     btn:SetHeight(24)
+    -- Popup chrome and selectors only edit transient menu state. Let their
+    -- callbacks run in combat so the owning copy action can report its own
+    -- blocked result instead of being swallowed by T.Button's generic proxy.
+    -- The mutating callbacks still go through RunWithHistory/BlockCombatAction.
+    btn._msuf2AllowCombatClick = true
+    btn._msuf2SkipHistoryCheckpoint = true
     return btn
 end
 -- Category switches flow top-to-bottom into a fixed number of columns. Pages keep

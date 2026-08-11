@@ -588,6 +588,10 @@ local function BuildTopActions(ctx, builder, unit, label)
     local copy = (W.RoleButton and W.RoleButton(sec, M.Tr("Copy To"), "success", 82, 24))
         or W.TopButton(sec, M.Tr("Copy To"), 82, 24, nil, false)
     copy:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -16, rowY)
+    -- Opening the selector is safe in combat. The actual copy remains guarded
+    -- in onRun below, where a blocked click can produce visible feedback.
+    copy._msuf2AllowCombatClick = true
+    copy._msuf2SkipHistoryCheckpoint = true
     local function DefaultScopes()
         if type(NewCopyScopeDefaults) == "function" then return NewCopyScopeDefaults() end
         local t = {}
@@ -630,6 +634,10 @@ local function BuildTopActions(ctx, builder, unit, label)
             if W.RegisterGuidedRegion then W.RegisterGuidedRegion(ctx, popup, "Copy Player settings", "unit_copy_popup") end
         end,
         onRun = function(api, popup)
+            -- Copy popup buttons deliberately bypass the generic combat-click
+            -- proxy so this action owns the failure path instead of becoming a
+            -- silent no-op before CopyUnitSettings is reached.
+            if M.BlockCombatAction and M.BlockCombatAction() then return false end
             local dest = NormalizeCopyDest(unit)
             local destinationLabel = dest == "all" and M.Tr("All") or UnitTopLabel(dest)
             local function CopyFeedback(applied, result)
@@ -639,8 +647,12 @@ local function BuildTopActions(ctx, builder, unit, label)
                     if result.auraSkipped == true then
                         message = message .. " " .. M.Tr("Aura settings were skipped for unsupported UnitFrames.")
                     end
+                    if result.castbarSkipped == true then
+                        message = message .. " " .. M.Tr("Castbar settings were skipped for UnitFrames without Castbars.")
+                    end
+                    local skipped = result.auraSkipped == true or result.castbarSkipped == true
                     if M.ShowStatusFeedback then
-                        M.ShowStatusFeedback(message, result.auraSkipped == true and "warning" or "ok", 1.8)
+                        M.ShowStatusFeedback(message, skipped and "warning" or "ok", 1.8)
                     end
                     popup:Hide()
                     return
@@ -650,6 +662,8 @@ local function BuildTopActions(ctx, builder, unit, label)
                     message = M.Tr("No copy categories selected.")
                 elseif result.reason == "unsupported_aura_scope" or result.reason == "aura_copy_unavailable" then
                     message = M.Tr("Aura settings are only available for Player, Target, Focus, and Boss Frames.")
+                elseif result.reason == "unsupported_castbar_scope" then
+                    message = M.Tr("Castbar settings are only available for Player, Target, Focus, and Boss Frames.")
                 else
                     message = M.Tr("Nothing was copied.")
                 end
@@ -666,8 +680,9 @@ local function BuildTopActions(ctx, builder, unit, label)
                 ConfirmCopyToAll(function()
                     M.RunWithHistory("Copy Unit Settings", historyKey, function() RunCopy(true) end)
                 end)
+                return true
             else
-                M.RunWithHistory("Copy Unit Settings", historyKey, RunCopy)
+                return M.RunWithHistory("Copy Unit Settings", historyKey, RunCopy)
             end
         end,
     })

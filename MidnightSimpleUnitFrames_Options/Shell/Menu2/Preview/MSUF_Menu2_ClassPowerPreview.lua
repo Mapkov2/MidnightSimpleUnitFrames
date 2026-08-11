@@ -336,6 +336,12 @@ local function CPTextColor(fallbackR, fallbackG, fallbackB)
     if CPPreview.ResolveTextColor then return CPPreview.ResolveTextColor(fallbackR, fallbackG, fallbackB) end
     return fallbackR or 1, fallbackG or 1, fallbackB or 1
 end
+local function CPTextAlpha()
+    local g = _G.MSUF_DB and _G.MSUF_DB.general
+    local alpha = tonumber(g and g.fontTextAlpha) or 1
+    if alpha < 0.7 then alpha = 0.7 elseif alpha > 1 then alpha = 1 end
+    return alpha
+end
 local function CPBgColor(token)
     if CPPreview.ColorOverride then return CPPreview.ColorOverride("classPowerBgColorOverrides", token) end
     return nil
@@ -427,8 +433,24 @@ local function ApplyFont(region, size)
     if not ok then
         pcall(region.SetFont, region, "Fonts\\FRIZQT__.TTF", size, fontFlags)
     end
-    if region.SetShadowColor then region:SetShadowColor(0, 0, 0, 1) end
-    if region.SetShadowOffset then region:SetShadowOffset(1, -1) end
+    local g = _G.MSUF_DB and _G.MSUF_DB.general
+    local useShadow
+    if type(_G.MSUF_GetGlobalFontSettings) == "function" then
+        local _, _, _, _, _, _, enabled = _G.MSUF_GetGlobalFontSettings()
+        useShadow = enabled
+    end
+    if useShadow == nil then useShadow = not (g and g.textBackdrop == false) end
+    if useShadow then
+        local shadowAlpha, shadowX, shadowY = 1, 1, -1
+        if type(_G.MSUF_ResolveFontShadowMetrics) == "function" then
+            shadowAlpha, shadowX, shadowY = _G.MSUF_ResolveFontShadowMetrics(
+                g and g.fontShadowOpacity, g and g.fontShadowDistance, g and g.fontShadowStrength)
+        end
+        if region.SetShadowColor then region:SetShadowColor(0, 0, 0, shadowAlpha) end
+        if region.SetShadowOffset then region:SetShadowOffset(shadowX, shadowY) end
+    elseif region.SetShadowOffset then
+        region:SetShadowOffset(0, 0)
+    end
 end
 local function HideTableRegions(t)
     if not t then return end
@@ -490,6 +512,24 @@ local CP_POWER_ROUNDED_OPTS = {
             tonumber(player.barOutlineColorA) or tonumber(general.barBorderA) or 1
     end,
 }
+local CP_CLASS_ROUNDED_OPTS = {
+    bgKey = "_msufCPClassRoundedBg",
+    edgeKey = "_msufCPClassRoundedEdge",
+    stackKey = "_msufCPClassRoundedEdgeStack",
+    countKey = "_msufCPClassRoundedEdgeCount",
+    maskStoreKey = "_msufCPClassRoundedMasks",
+    maskedKey = "_msufCPClassRoundedMasked",
+    whiteTexture = WHITE8,
+    edgeLayer = "OVERLAY",
+    edgeSubLevel = 6,
+    maxEdgeSize = 8,
+    snapOff = Helpers.SnapOff,
+    baseEdgeColor = function() return 0, 0, 0, 1 end,
+}
+local function RoundedClassResourcesPreviewEnabled(bars)
+    return bars and bars.roundedFramesEnabled == true
+        and bars.roundedClassResources == true
+end
 local function RoundedPowerPreviewEnabled()
     local bars = _G.MSUF_DB and _G.MSUF_DB.bars
     return bars and bars.roundedFramesEnabled == true
@@ -1020,8 +1060,8 @@ local function PlaceTextHandle(handle, parent, regions)
     handle:Hide()
     return false
 end
-local function MakeText(parent, layer, justify)
-    local fs = parent:CreateFontString(nil, layer or "OVERLAY", "GameFontHighlightSmall")
+local function MakeText(parent, layer, justify, subLevel)
+    local fs = parent:CreateFontString(nil, layer or "OVERLAY", "GameFontHighlightSmall", subLevel)
     fs:SetJustifyH(justify or "CENTER")
     if fs.SetJustifyV then fs:SetJustifyV("MIDDLE") end
     if fs.SetWordWrap then fs:SetWordWrap(false) end
@@ -1047,12 +1087,12 @@ local function EnsureClassPower(preview)
         frame.bgs[i] = MakeTexture(frame, "BACKGROUND", nil, nil, true)
         frame.segments[i] = MakeTexture(frame, "ARTWORK", nil, nil, true)
         frame.edges[i] = MakeTexture(frame, "OVERLAY", 5, nil, true)
-        local runeText = MakeText(frame, "OVERLAY", "CENTER")
+        local runeText = MakeText(frame, "OVERLAY", "CENTER", 9)
         runeText:Hide()
         frame.runeTexts[i] = runeText
         frame.hashes[i] = MakeTexture(frame, "OVERLAY", 7, nil, true)
     end
-    frame.text = MakeText(frame, "OVERLAY", "CENTER")
+    frame.text = MakeText(frame, "OVERLAY", "CENTER", 9)
     frame.text:Hide()
     preview.classPower = frame
     return frame
@@ -1191,6 +1231,9 @@ local function RenderClassPower(preview, bars, spec)
     local frame = EnsureClassPower(preview)
     local enabled, disabledReason = ClassPowerPreviewState(bars, spec)
     if not enabled then
+        if Helpers.ApplyRoundedClassPowerSurface then
+            Helpers.ApplyRoundedClassPowerSurface(frame, false, frame.segments, frame.bgs, 0, 0, CP_CLASS_ROUNDED_OPTS)
+        end
         frame:Hide()
         HideBarOutline(frame)
         HideTableRegions(frame.segments)
@@ -1213,6 +1256,7 @@ local function RenderClassPower(preview, bars, spec)
     frame:Show()
     local shape = NormalizeClassShape(bars.classPowerShape)
     local shapeInfo = CP_SHAPES[shape]
+    local roundClassResources = shapeInfo == nil and RoundedClassResourcesPreviewEnabled(bars)
     local token = CPToken(spec)
     local r, g, b = CPBaseColor(spec, bars, 1, 1, 1)
     local bgr, bgg, bgb = CPBgColor(token)
@@ -1244,7 +1288,7 @@ local function RenderClassPower(preview, bars, spec)
         slot = nil
         startX = 0
         rowW = barSpace
-        ApplyBarOutline(frame, outline)
+        if roundClassResources then HideBarOutline(frame) else ApplyBarOutline(frame, outline) end
     end
     local xPos, prevBoundary = 0, 0
     local elapsed = PreviewElapsed(preview)
@@ -1258,6 +1302,9 @@ local function RenderClassPower(preview, bars, spec)
     end
     local runeOrder = spec.mode == "rune" and CPPreview.BuildRuneOrder and CPPreview.BuildRuneOrder({}, bars, spec, elapsed, animated) or nil
     local textColorR, textColorG, textColorB = CPTextColor(1, 1, 1)
+    local textAlpha = CPTextAlpha()
+    local textOffsetX = tonumber(bars.classPowerTextOffsetX) or 0
+    local textOffsetY = tonumber(bars.classPowerTextOffsetY) or 0
     for i = 1, #frame.segments do
         local fill = frame.segments[i]
         local bg = frame.bgs[i]
@@ -1326,9 +1373,11 @@ local function RenderClassPower(preview, bars, spec)
                     local txt = CPPreview.FormatSeconds and CPPreview.FormatSeconds(rune.remaining) or ""
                     ApplyFont(runeText, Clamp((tonumber(bars.classPowerFontSize) or 16) - 2, 12, 6, 48))
                     runeText:SetText(txt)
-                    runeText:SetTextColor(textColorR, textColorG, textColorB, 1)
+                    runeText:SetTextColor(textColorR, textColorG, textColorB, textAlpha)
                     runeText:ClearAllPoints()
-                    runeText:SetPoint("CENTER", frame, "TOPLEFT", sx + floor(segW * 0.5 + 0.5), -floor(h * 0.5 + 0.5))
+                    runeText:SetPoint("CENTER", frame, "TOPLEFT",
+                        sx + floor(segW * 0.5 + 0.5) + textOffsetX,
+                        -floor(h * 0.5 + 0.5) + textOffsetY)
                     if txt ~= "" then runeText:Show() else runeText:Hide() end
                 else
                     runeText:Hide()
@@ -1342,6 +1391,11 @@ local function RenderClassPower(preview, bars, spec)
             edge:Hide()
             if runeText then runeText:Hide() end
         end
+    end
+    if Helpers.ApplyRoundedClassPowerSurface then
+        local roundedApplied = Helpers.ApplyRoundedClassPowerSurface(frame, roundClassResources,
+            frame.segments, frame.bgs, count, outline, CP_CLASS_ROUNDED_OPTS)
+        if not shapeInfo and not roundedApplied then ApplyBarOutline(frame, outline) end
     end
     if spec.mode == "ironfur" and bars.guardianIronfurShowHashLines ~= false then
         local fractions = { 0.82, 0.51, 0.24 }
@@ -1377,12 +1431,13 @@ local function RenderClassPower(preview, bars, spec)
         textColorR = textColorR,
         textColorG = textColorG,
         textColorB = textColorB,
+        textAlpha = textAlpha,
     }
-    if bars.classPowerShowText == true then
+    if bars.classPowerShowText == true or spec.nativeDurationText == true then
         local textSize = Clamp(bars.classPowerFontSize, 16, 6, 48)
         ApplyFont(frame.text, textSize)
         frame.text:SetText(CPPreview.TextForValue and CPPreview.TextForValue(spec, animatedValue) or tostring(spec.previewText or "3"))
-        frame.text:SetTextColor(textColorR, textColorG, textColorB, 1)
+        frame.text:SetTextColor(textColorR, textColorG, textColorB, textAlpha)
         frame.text:ClearAllPoints()
         frame.text:SetPoint("CENTER", frame, "CENTER", tonumber(bars.classPowerTextOffsetX) or 0, tonumber(bars.classPowerTextOffsetY) or 0)
         frame.text:Show()
@@ -1719,7 +1774,7 @@ local function UpdateClassPowerAnimation(preview, frame)
             end
         end
     end
-    if frame.text and bars.classPowerShowText == true then
+    if frame.text and (bars.classPowerShowText == true or spec.nativeDurationText == true) then
         frame.text:SetText(CPPreview.TextForValue and CPPreview.TextForValue(spec, animatedValue) or tostring(spec.previewText or "3"))
         if LayerOn(preview, "classText") then frame.text:Show() end
     end

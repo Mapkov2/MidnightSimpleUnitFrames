@@ -19,7 +19,13 @@ local VTP = M.ValueTextPairs
 local KLR, KSW, WL = M.KeyLabelRows, M.KeySetFromWords, M.WordList
 local NAV_SUBPAGE_LABELS = M.navSubpageLabels or {}
 local UNIT_PAGES = { uf_player = { unit = "player", title = "MSUF Player", label = NAV_SUBPAGE_LABELS.uf_player or "Player" }, uf_target = { unit = "target", title = "MSUF Target", label = NAV_SUBPAGE_LABELS.uf_target or "Target" }, uf_targettarget = { unit = "targettarget", title = "MSUF Target of Target", label = NAV_SUBPAGE_LABELS.uf_targettarget or "Target of Target" }, uf_focustarget = { unit = "focustarget", title = "MSUF Focus Target", label = NAV_SUBPAGE_LABELS.uf_focustarget or "Focus Target" }, uf_focus = { unit = "focus", title = "MSUF Focus", label = NAV_SUBPAGE_LABELS.uf_focus or "Focus" }, uf_pet = { unit = "pet", title = "MSUF Pet", label = NAV_SUBPAGE_LABELS.uf_pet or "Pet" }, uf_boss = { unit = "boss", title = "MSUF Boss Frames", label = NAV_SUBPAGE_LABELS.uf_boss or "Boss" } }
-local POWER_UNITS = KSW("player target focus targettarget focustarget pet boss")
+local POWER_UNITS = {}
+local CanDetachUnitPowerBar = _G.MSUF_CanDetachUnitPowerBar
+for _, page in pairs(UNIT_PAGES) do
+    if type(CanDetachUnitPowerBar) ~= "function" or CanDetachUnitPowerBar(page.unit) then
+        POWER_UNITS[page.unit] = true
+    end
+end
 local CASTBAR_FIELDS = {
     -- Castbar settings live in general DB rather than each unit DB. Keep this map as the one
     -- place where unit pages translate a unit key into the correct castbar field names.
@@ -56,7 +62,7 @@ local CASTBAR_FIELDS = {
         offsetX = "bossCastbarOffsetX", offsetY = "bossCastbarOffsetY",
     },
 }
-local CASTBAR_COPY_SUFFIXES = WL [[IconPosition IconSize IconZoom IconOffsetX IconOffsetY IconSpacing IconBorderThickness IconBorderStyle IconFrameLevelOffset SpellNamePosition SpellNameFontSize TextOffsetX TextOffsetY SpellNameAlign SpellNameMaxWidth SpellNameTruncate TimePosition TimeFontSize TimeOffsetX TimeOffsetY FrameLevelOffset SpellNameColorR SpellNameColorG SpellNameColorB TimeColorR TimeColorG TimeColorB]]
+local CASTBAR_COPY_SUFFIXES = WL [[IconPosition IconSize IconZoom IconOffsetX IconOffsetY IconSpacing IconBorderThickness IconBorderStyle IconFrameLevelOffset SpellNamePosition SpellNameFontSize TextOffsetX TextOffsetY SpellNameMaxWidth SpellNameTruncate TimePosition TimeFontSize TimeOffsetX TimeOffsetY FrameLevelOffset SpellNameColorR SpellNameColorG SpellNameColorB TimeColorR TimeColorG TimeColorB]]
 --- OffsetX/OffsetY mean two different things depending on the detach state: anchored
 --- to the unit frame they are a relative gap and safe to copy, detached they are an
 --- absolute UIParent position (see MSUF_CastbarAnchors) and copying them would stack
@@ -84,7 +90,7 @@ end
 local STATUS_LEVEL_ANCHORS = WithNameAnchors("Right to name", "Left to name")
 local RAID_GROUP_NAME_ANCHORS = WithNameAnchors("Right to name", "Left to name")
 local COMBAT_SYMBOLS = VTP "DEFAULT=Default|weapon_axes_crossed=Axes|weapon_bows_crossed=Bows|weapon_crossbows_crossed=Crossbows|weapon_daggers_crossed=Daggers|weapon_fishing_poles_crossed=Fishing|weapon_fist_crossed=Fist|weapon_guns_crossed=Guns|weapon_maces_crossed=Maces|weapon_polearms_crossed=Polearms|weapon_shuriken=Shuriken|weapon_staves_crossed=Staves|weapon_swords_crossed=Swords|weapon_thrown_crossed=Thorn|weapon_wands_crossed=Wands|weapon_warglaives_crossed=Warglaives"
-local RESTED_SYMBOLS = VTP "DEFAULT=Default|rested_moonzzz=Moon (3 z)|rested_moonzzzz=Moon (4 z)|rested_sleep_zzzz=Sleep ZzzZ|rested_zzz_compact=Compact Zzz|rested_zzz_diag=Diagonal Zzz|rested_zzz_stack=Stacked Zzz"
+local RESTED_SYMBOLS = VTP "DEFAULT=Default|rested_blizzard_animated=Blizzard animated Zzz|rested_moonzzz=Moon (3 z)|rested_moonzzzz=Moon (4 z)|rested_sleep_zzzz=Sleep ZzzZ|rested_zzz_compact=Compact Zzz|rested_zzz_diag=Diagonal Zzz|rested_zzz_stack=Stacked Zzz"
 local RESS_SYMBOLS = VTP "DEFAULT=Default|resurrection_ankh=Ankh|resurrection_cross=Cross|resurrection_soul=Soul|resurrection_wings=Angelic Wings"
 local DEFAULT_SYMBOLS = VT("DEFAULT", "Default")
 local function PetHappinessSupported()
@@ -129,7 +135,7 @@ local STATUS_CONTROLS = {
     StatusControl("statusAFKText", "AFK Text", "statusAFKTextEnabled", false, "statusAFKTextSize", 16, "statusAFKTextAnchor", "CENTER", STATUS_CORNER_ANCHORS, "statusAFKTextOffsetX", 0, "statusAFKTextOffsetY", 0, "statusAFKTextLayer", 7, "MSUF_RequestStatusTextRefresh", { statusRuntime = true, statusTextState = "AFK", colorPrefix = "statusAFKText", legacyShow = "statusTextEnabled", legacyState = "showAFK", legacySize = "statusTextSize", legacyAnchor = "statusTextAnchor", legacyX = "statusTextOffsetX", legacyY = "statusTextOffsetY", legacyLayer = "statusTextLayer" }),
     StatusControl("statusDNDText", "DND Text", "statusDNDTextEnabled", false, "statusDNDTextSize", 16, "statusDNDTextAnchor", "CENTER", STATUS_CORNER_ANCHORS, "statusDNDTextOffsetX", 0, "statusDNDTextOffsetY", 0, "statusDNDTextLayer", 7, "MSUF_RequestStatusTextRefresh", { statusRuntime = true, statusTextState = "DND", colorPrefix = "statusDNDText", legacyShow = "statusTextEnabled", legacyState = "showDND", legacySize = "statusTextSize", legacyAnchor = "statusTextAnchor", legacyX = "statusTextOffsetX", legacyY = "statusTextOffsetY", legacyLayer = "statusTextLayer" }),
     StatusControl("statusCombat", "Combat", "showCombatStateIndicator", true, "combatStateIndicatorSize", 18, "combatStateIndicatorAnchor", "TOPLEFT", STATUS_CORNER_ANCHORS, "combatStateIndicatorOffsetX", 0, "combatStateIndicatorOffsetY", 0, "combatStateIndicatorLayer", 7, "MSUF_RequestStatusCombatIndicatorRefresh", { allowed = function(unit) return unit == "player" or unit == "target" end, symbol = "combatStateIndicatorSymbol", symbols = COMBAT_SYMBOLS, statusRuntime = true, iconStyle = "combatStateIndicatorIconStyle", defaultIconStyle = "BLIZZARD", customIcon = "combatStateIndicatorCustomIcon" }),
-    StatusControl("statusResting", "Rested (player only)", "showRestingIndicator", false, "restedStateIndicatorSize", 18, "restedStateIndicatorAnchor", "TOPLEFT", STATUS_CORNER_ANCHORS, "restedStateIndicatorOffsetX", 0, "restedStateIndicatorOffsetY", 0, "restedStateIndicatorLayer", 7, "MSUF_RequestStatusRestingIndicatorRefresh", { allowed = function(unit) return unit == "player" end, symbol = "restedStateIndicatorSymbol", symbols = RESTED_SYMBOLS, statusRuntime = true, iconStyle = "restedStateIndicatorIconStyle", defaultIconStyle = "BLIZZARD", customIcon = "restedStateIndicatorCustomIcon" }),
+    StatusControl("statusResting", "Rested (player only)", "showRestingIndicator", true, "restedStateIndicatorSize", 39, "restedStateIndicatorAnchor", "TOPLEFT", STATUS_CORNER_ANCHORS, "restedStateIndicatorOffsetX", -40, "restedStateIndicatorOffsetY", 50, "restedStateIndicatorLayer", 25, "MSUF_RequestStatusRestingIndicatorRefresh", { allowed = function(unit) return unit == "player" end, symbol = "restedStateIndicatorSymbol", symbols = RESTED_SYMBOLS, statusRuntime = true, iconStyle = "restedStateIndicatorIconStyle", defaultIconStyle = "BLIZZARD", customIcon = "restedStateIndicatorCustomIcon" }),
     StatusControl("statusIncomingRes", "Incoming Rez", "showIncomingResIndicator", true, "incomingResIndicatorSize", 18, "incomingResIndicatorAnchor", "TOPRIGHT", STATUS_CORNER_ANCHORS, "incomingResIndicatorOffsetX", 0, "incomingResIndicatorOffsetY", 0, "incomingResIndicatorLayer", 7, "MSUF_RequestStatusIncomingResIndicatorRefresh", { allowed = function(unit) return unit == "player" or unit == "target" end, symbol = "incomingResIndicatorSymbol", symbols = RESS_SYMBOLS, statusRuntime = true, iconStyle = "incomingResIndicatorIconStyle", defaultIconStyle = "BLIZZARD", customIcon = "incomingResIndicatorCustomIcon" }),
     StatusControl("statusPvp", "PvP Flag (War Mode/PvP)", "showPvpIndicator", true, "pvpIndicatorSize", 18, "pvpIndicatorAnchor", "TOPRIGHT", STATUS_CORNER_ANCHORS, "pvpIndicatorOffsetX", 0, "pvpIndicatorOffsetY", 0, "pvpIndicatorLayer", 7, "MSUF_RequestStatusPvpIndicatorRefresh", { allowed = function(unit) return unit == "player" or unit == "target" or unit == "focus" or unit == "targettarget" or unit == "focustarget" end, statusRuntime = true, iconStyle = "pvpIndicatorIconStyle", defaultIconStyle = "BLIZZARD", customIcon = "pvpIndicatorCustomIcon" }),
     StatusControl("statusPetHappiness", "Pet Happiness (Vanilla/TBC)", "showPetHappinessIndicator", true, "petHappinessIndicatorSize", 24, "petHappinessIndicatorAnchor", "RIGHT", STATUS_CORNER_ANCHORS, "petHappinessIndicatorOffsetX", -7, "petHappinessIndicatorOffsetY", -4, "petHappinessIndicatorLayer", 7, "MSUF_RequestPetHappinessIndicatorRefresh", { allowed = function(unit) return unit == "pet" and PetHappinessSupported() end, statusRuntime = true }),
@@ -298,7 +304,7 @@ local COPY_FRAME_BASIC_FIELDS = WL [[
 local COPY_TRANSPARENCY_FIELDS = WL [[hpBarAlpha powerBarAlpha hpBgAlpha powerBarBgAlpha alphaExcludeTextPortrait oocFadeEnabled oocFadeAlpha rangeFadeEnabled rangeFadeAlpha rangeFadeLayerMode]]
 local COPY_TEXLAYER_FIELDS = WL [[texLayerLinkGeometry texLayerLinkSize]]
 for _, texP in ipairs({ "texLayer", "texLayer2", "texLayer3" }) do
-    for _, texBase in ipairs(WL [[Enabled SourceMode Texture CustomTexturePath Alpha FollowFrameAlpha Strata Level AnchorTarget Anchor OffsetX OffsetY ResponsiveSize SizeMode EdgeAttach Width Height ColorMode ColorR ColorG ColorB GradientEnabled Gradient2R Gradient2G Gradient2B GradientDirRight GradientDirLeft GradientDirUp GradientDirDown BlendMode MirrorH MirrorV EdgeSoftness Visibility RoundedClip]]) do
+    for _, texBase in ipairs(WL [[Enabled SourceMode Texture CustomTexturePath Alpha FollowFrameAlpha Strata Level AnchorTarget Anchor OffsetX OffsetY ResponsiveSize SizeMode EdgeAttach Width Height ColorMode ColorTreatment ColorR ColorG ColorB GradientEnabled Gradient2R Gradient2G Gradient2B GradientDirRight GradientDirLeft GradientDirUp GradientDirDown BlendMode MirrorH MirrorV CropMode EdgeSoftness Visibility RoundedClip]]) do
         COPY_TEXLAYER_FIELDS[#COPY_TEXLAYER_FIELDS + 1] = texP .. texBase
     end
 end
@@ -683,15 +689,18 @@ local function ConfirmCopyToAll(callback)
 end
 local AURA_COPY_SCOPE_KEYS = { auras = true, aurastyle = true }
 local function SelectedCopyScopeState(scopes)
-    local anySelected, nonAuraSelected = false, false
+    local anySelected, nonAuraSelected, nonCastbarSelected = false, false, false
     for i = 1, #UF_COPY_CATEGORIES do
         local key = UF_COPY_CATEGORIES[i].key
         if scopes[key] == true then
             anySelected = true
-            if not AURA_COPY_SCOPE_KEYS[key] then nonAuraSelected = true end
+            if not AURA_COPY_SCOPE_KEYS[key] then
+                nonAuraSelected = true
+                if key ~= "castbar" then nonCastbarSelected = true end
+            end
         end
     end
-    return anySelected, nonAuraSelected
+    return anySelected, nonAuraSelected, nonCastbarSelected
 end
 local function CompleteUnitCopy(callback, applied, result)
     if type(callback) == "function" then callback(applied == true, result) end
@@ -708,7 +717,7 @@ local function CopyUnitSettings(unit, target, scopes, onComplete, allConfirmed)
     end
     target = (type(target) == "string") and target:lower() or DefaultCopyTarget(srcKey)
     scopes = (type(scopes) == "table") and scopes or NewCopyScopeDefaults()
-    local anySelected, nonAuraSelected = SelectedCopyScopeState(scopes)
+    local anySelected, nonAuraSelected, nonCastbarSelected = SelectedCopyScopeState(scopes)
     if not anySelected then
         return CompleteUnitCopy(onComplete, false, {
             reason = "no_categories", source = srcKey, destination = target,
@@ -724,9 +733,12 @@ local function CopyUnitSettings(unit, target, scopes, onComplete, allConfirmed)
             nonAuraSelected = nonAuraSelected,
             auraOptionsRequested = scopes.auras == true,
             auraStyleRequested = scopes.aurastyle == true,
+            castbarRequested = scopes.castbar == true,
         }
         if not dst or not dstKey then result.reason = "invalid_destination"; return false, result end
         if dstKey == srcKey then result.reason = "same_destination"; return false, result end
+        result.castbarSupported = CASTBAR_FIELDS[srcKey] ~= nil and CASTBAR_FIELDS[dstKey] ~= nil
+        result.castbarSkipped = result.castbarRequested and not result.castbarSupported
         if scopes.basics then CopyFields(dst, src, COPY_FRAME_BASIC_FIELDS) end
         --- The override gate flags travel with their values on purpose. Clearing them
         --- here would leave the destination showing the copied values on the frame while
@@ -742,18 +754,25 @@ local function CopyUnitSettings(unit, target, scopes, onComplete, allConfirmed)
         result.auraSupported = AURA_COPY_UNITS[srcKey] == true and AURA_COPY_UNITS[dstKey] == true
         result.auraSkipped = (result.auraOptionsRequested and not result.auraOptionsApplied)
             or (result.auraStyleRequested and not result.auraStyleApplied)
-        local copiedAny = nonAuraSelected or copiedAuras
+        local copiedAny = nonCastbarSelected
+            or (result.castbarRequested and result.castbarSupported)
+            or copiedAuras
         if not copiedAny then
-            result.reason = result.auraSupported and "aura_copy_unavailable" or "unsupported_aura_scope"
+            if result.castbarSkipped then
+                result.reason = "unsupported_castbar_scope"
+            else
+                result.reason = result.auraSupported and "aura_copy_unavailable" or "unsupported_aura_scope"
+            end
             return false, result
         end
         if scopes.status then
             CopyFields(dst, src, COPY_INDICATOR_FIELDS)
             CopyFields(dst, src, COPY_STATUSICON_FIELDS)
         end
-        if scopes.castbar then
+        if result.castbarRequested and result.castbarSupported then
             dst.showInterrupt = src.showInterrupt
             if CopyCastbar(g, srcKey, dstKey) then
+                result.castbarApplied = true
                 Call("MSUF_UpdateCastbarWidthSourceSync", g, dstKey)
             end
         end
@@ -766,7 +785,7 @@ local function CopyUnitSettings(unit, target, scopes, onComplete, allConfirmed)
             text = scopes.text or scopes.status,
             power = scopes.power,
             alpha = scopes.transparency,
-            castbar = scopes.castbar,
+            castbar = result.castbarApplied == true,
             auras = copiedAuras,
             --- Text carries this unit's font override scope, which needs the font runtime
             --- rebuilt for the destination rather than a plain layout pass.
@@ -788,6 +807,7 @@ local function CopyUnitSettings(unit, target, scopes, onComplete, allConfirmed)
                 nonAuraSelected = nonAuraSelected, targets = {}, appliedTargets = 0,
                 auraOptionsRequested = scopes.auras == true,
                 auraStyleRequested = scopes.aurastyle == true,
+                castbarRequested = scopes.castbar == true,
             }
             for i = 1, #UNIT_COPY_TARGETS do
                 local value = UNIT_COPY_TARGETS[i].value
@@ -796,13 +816,18 @@ local function CopyUnitSettings(unit, target, scopes, onComplete, allConfirmed)
                     summary.targets[value] = result
                     if applied then summary.appliedTargets = summary.appliedTargets + 1 end
                     if result and result.auraSkipped then summary.auraSkipped = true end
+                    if result and result.castbarSkipped then summary.castbarSkipped = true end
                 end
             end
             if summary.appliedTargets > 0 then FinishCopy() end
             summary.applied = summary.appliedTargets > 0
             if not summary.applied then
-                summary.reason = (summary.auraOptionsRequested or summary.auraStyleRequested)
-                    and "unsupported_aura_scope" or "nothing_copied"
+                if summary.castbarRequested and summary.castbarSkipped then
+                    summary.reason = "unsupported_castbar_scope"
+                else
+                    summary.reason = (summary.auraOptionsRequested or summary.auraStyleRequested)
+                        and "unsupported_aura_scope" or "nothing_copied"
+                end
             end
             return CompleteUnitCopy(onComplete, summary.applied, summary)
         end

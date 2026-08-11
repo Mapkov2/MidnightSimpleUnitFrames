@@ -12,6 +12,9 @@ local UP = M.UnitPage or {}
 local Shared = M.UnitSectionsShared or {}
 if not (W and T) then return end
 local CreateFrame = _G.CreateFrame
+local RestingFlipbook = MSUF.UFRestingFlipbook or {}
+local ApplyRestingFlipbook = RestingFlipbook.Apply
+local StopRestingFlipbook = RestingFlipbook.Stop
 local floor = math.floor
 local max = math.max
 local min = math.min
@@ -308,6 +311,7 @@ local function BuildStatus(ctx, builder, unit)
     end
     local function StatusSymbolPreviewTexture(symbolKey)
         if type(symbolKey) ~= "string" or symbolKey == "" or symbolKey == "DEFAULT" then return nil end
+        if symbolKey == "rested_blizzard_animated" then return nil end
         local mid = ReadGeneralBool("statusIconsUseMidnightStyle", false)
         local folder, suffix = "Combat", mid and "_midnight_128_clean.tga" or "_classic_128_clean.tga"
         if symbolKey:find("^rested_") then
@@ -401,7 +405,11 @@ local function BuildStatus(ctx, builder, unit)
         if not entry then return nil end
         local symbolKey = entry[3]
         if symbolKey then
-            local path = StatusSymbolPreviewTexture(ReadStatusString(unit, symbolKey, "DEFAULT"))
+            local selectedSymbol = ReadStatusString(unit, symbolKey, "DEFAULT")
+            if selectedSymbol == "rested_blizzard_animated" then
+                return nil, 0, 1, 0, 1, "UI-HUD-UnitFrame-Player-Rest-Flipbook", true
+            end
+            local path = StatusSymbolPreviewTexture(selectedSymbol)
             if path then return path, 0, 1, 0, 1 end
         end
         local customPath = spec and spec.customIcon and ReadStatusString(unit, spec.customIcon, "") or ""
@@ -655,17 +663,30 @@ local function BuildStatus(ctx, builder, unit)
         holder:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
         iconPreviewTextures[i] = holder
     end
+    local function StopIconPreviewAnimations(resetAtlas)
+        if not StopRestingFlipbook then return end
+        resetAtlas = resetAtlas == true
+        for i = 1, #iconPreviewTextures do
+            StopRestingFlipbook(iconPreviewTextures[i].tex, resetAtlas)
+        end
+    end
+    iconPreviewStrip:SetScript("OnHide", StopIconPreviewAnimations)
     local function RefreshIconPreviewStrip(spec, enabled)
         local entries = StatusPreviewEntries(spec)
         iconPreviewLabel:SetShown(entries and true or false)
         iconPreviewStrip:SetShown(entries and true or false)
+        StopIconPreviewAnimations(true)
         if not entries then return end
         iconPreviewStrip:SetAlpha(enabled and 1 or 0.46)
         for i = 1, #iconPreviewTextures do
             local holder = iconPreviewTextures[i]
             holder._msufStatusPreviewLabel = entries[i] and entries[i][4] or nil
-            local path, l, r, t, b, atlas = ResolvePreviewStatusIcon(spec, entries[i])
-            if type(atlas) == "string" and atlas ~= "" and holder.tex.SetAtlas then
+            local path, l, r, t, b, atlas, animated = ResolvePreviewStatusIcon(spec, entries[i])
+            if animated == true and ApplyRestingFlipbook and ApplyRestingFlipbook(holder.tex, true) then
+                holder.tex:SetVertexColor(1, 1, 1, 1)
+                holder:Show()
+            elseif type(atlas) == "string" and atlas ~= "" and holder.tex.SetAtlas
+                and C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(atlas) then
                 holder.tex:SetAtlas(atlas)
                 holder.tex:SetVertexColor(1, 1, 1, 1)
                 holder:Show()

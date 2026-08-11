@@ -704,7 +704,9 @@ Preview.DisabledLayerRoutes = Preview.DisabledLayerRoutes or {
     power = { key = "power", section = "power" },
     classPower = { key = "classPower", section = "classPower" },
     castbar = { key = "castbar", section = "castbar" },
-    auras = { key = "auras", section = "auras" },
+    buff = { key = "auraBuffs", section = "auras3", auraPreviewKind = "buff" },
+    debuff = { key = "auraDebuffs", section = "auras3", auraPreviewKind = "debuff" },
+    auras = { key = "auraCustom1", section = "auras3", auraPreviewKind = "custom1" },
     dispelOverlay = { key = "dispelOverlay", section = "dispel_overlay" },
     dispelSymbol = { key = "dispelSymbol", section = "dispel_symbol" },
     status = { key = "status", section = "status" },
@@ -715,7 +717,7 @@ function Preview.OpenUnavailableLayerSettings(box, layerKey)
     return OpenPreviewHandleSettings({
         _key = route.key,
         _preview = box,
-        _fields = { section = route.section },
+        _fields = { section = route.section, auraPreviewKind = route.auraPreviewKind },
     }, "disabled-layer")
 end
 local function WriteHandleOffsets(handle, x, y, reason)
@@ -913,10 +915,6 @@ SelectPreviewHandle = function(handle, skipSectionOpen)
         end
         local textKind, textSlot = PreviewTextKindSlotForKey(handle._key)
         StorePreviewTextSelection(menu, box.key, textKind, textSlot)
-        if menu and (handle._key == "auraBuffs" or handle._key == "auraDebuffs") then
-            menu.unitAuraTabSelection = menu.unitAuraTabSelection or {}
-            menu.unitAuraTabSelection[box.key or "player"] = handle._key == "auraDebuffs" and "debuff" or "buff"
-        end
         do
             local focus = _G.MSUF_EM2_SetFocusSelection
             if type(focus) == "function" then
@@ -1152,6 +1150,7 @@ local function UnitPreviewLayerForHandle(key, fields)
     fields = fields or {}
     if fields.previewLayer then return fields.previewLayer end
     if fields.texLayer or tostring(key or ""):match("^texLayer") then return "texLayer" end
+    if fields.auraPreviewKind == "buff" or fields.auraPreviewKind == "debuff" then return fields.auraPreviewKind end
     if fields.auraPreviewKind then return "auras" end
     if fields.portrait then return "portrait" end
     if fields.detachedPower then return "power" end

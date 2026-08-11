@@ -42,7 +42,8 @@ local ROUNDED_PREVIEW_SLICE_MARGIN = 9.5
 local ROUNDED_PREVIEW_STRETCHED = _G.Enum and _G.Enum.UITextureSliceMode
     and _G.Enum.UITextureSliceMode.Stretched
 local ROUNDED_STRENGTH_APPLY_DELAY = 0.12
-local ROUNDED_SECTION_HEIGHT = 306
+local ROUNDED_SECTION_HEIGHT = 310
+local ROUNDED_PREVIEW_CARD_HEIGHT = 92
 local GRADIENT_DIR_KEYS, PRIORITY_LABELS = M.PickDefaults(GP, [[GRADIENT_DIR_KEYS PRIORITY_LABELS]])
 local DISPEL_TRIGGERS = VT("BY_ME", "Dispellable by me", "BY_RAID", "Dispellable by group",
     "DISPEL_TYPE", "Any dispel type")
@@ -55,6 +56,7 @@ local BAR_SETTING_BY_PATH = {
     ["rounded.roundedGroupFrames"] = "bars.roundedGroupFrames",
     ["rounded.roundedPowerBars"] = "bars.roundedPowerBars",
     ["rounded.roundedCastbars"] = "bars.roundedCastbars",
+    ["rounded.roundedClassResources"] = "bars.roundedClassResources",
     ["rounded.roundedMouseover"] = "bars.roundedMouseover",
     ["rounded.roundedCornerStrength"] = "bars.roundedCornerStrength",
     ["power.realtime_text"] = "bars.realtimePowerText",
@@ -424,7 +426,7 @@ local function RegisterRoundedSearch(control, label, extraKeywords, help, kind, 
         anchor = control._msuf2Title or control._msuf2Label or control,
         values = { "On", "Off", "Enable", "Disable", "Einschalten", "Ausschalten" },
         keywords = keywords,
-        help = help or "Controls the rounded frame texture style for unit frames, group frames, power bars, castbars, and mouseover highlights.",
+        help = help or "Controls the rounded frame texture style for unit frames, group frames, power bars, class resources, castbars, and mouseover highlights.",
     }
     if type(meta) == "table" then for key, value in pairs(meta) do payload[key] = value end end
     M.RegisterSearchWidget(control, payload)
@@ -434,7 +436,9 @@ end
 -- refreshed by ApplyService. Descriptors remove the former texture-by-texture boilerplate.
 local function CreateRoundedTexturePreview(parent, x, y, width)
     width = max(320, floor((tonumber(width) or 560) + 0.5))
-    local card = W.ControlCard(parent, "Preview", nil, x, y, width, 88)
+    -- The two-pixel rounded edge extends beyond the 46px sample. Keep a small
+    -- inset below it so the card boundary cannot clip the power-bar edge.
+    local card = W.ControlCard(parent, "Preview", nil, x, y, width, ROUNDED_PREVIEW_CARD_HEIGHT)
     if not card then return end
     local sample, sampleW, sampleH, powerH = CreateFrame("Frame", nil, card), min(440, max(280, width - 44)), 46, 8
     sample:SetPoint("TOPLEFT", card, "TOPLEFT", 20, -40)
@@ -1596,10 +1600,42 @@ local function BuildOutlineSection(ctx, b)
             RequestOutlineRuntime()
         end,
         0, Meta("outline.layer", "setting", { step = 1, roundStep = true }))
-    local outlineTexture = W.Dropdown(outline, "Outline texture",
-        function() return TextureValues("None (solid color)") end, 300)
+    local function OutlineTextureValues()
+        local styles = MSUF and MSUF.BorderStyles or _G.MSUF_BorderStyles
+        if styles and type(styles.FrameList) == "function" then
+            return styles.FrameList("None (solid color)")
+        end
+        -- Minimal fallback for isolated catalog tests; live menus use FrameList.
+        local items = {
+            { text = "True Outline", header = true, disabled = true, translate = false },
+            { value = "", text = "None (solid color)" },
+            { value = "BORDER:GLOW", text = "Soft Glow" },
+            { value = "BORDER:SHADOW", text = "Shadow" },
+            { value = "BORDER:BLIZZARD", text = "Blizzard Tooltip" },
+            { value = "BORDER:DIALOG", text = "Blizzard Dialog" },
+            { value = "BORDER:ACHIEVEMENT", text = "Blizzard Achievement" },
+            { text = "Texture", header = true, disabled = true, translate = false },
+        }
+        local textures = type(TextureValues) == "function" and TextureValues() or nil
+        for i = 1, #(textures or {}) do
+            local item = textures[i]
+            if type(item) == "table" and item.value ~= "" then items[#items + 1] = item end
+        end
+        return items
+    end
+    local outlineTexture = W.Dropdown(outline, "Outline style", OutlineTextureValues, 300)
     M.BindDropdownWidget(ctx, outlineTexture,
-        function() return BarScopeGetBars("barOutlineTexture", "") end,
+        function()
+            local value = BarScopeGetBars("barOutlineTexture", "")
+            local styles = MSUF and MSUF.BorderStyles or _G.MSUF_BorderStyles
+            if styles and type(styles.NormalizeFrame) == "function" then
+                return styles.NormalizeFrame(value)
+            elseif styles and type(styles.Normalize) == "function" then
+                value = styles.Normalize(value)
+                if value == styles.SOLID then return "" end
+            end
+            return value
+        end,
         function(value)
             BarScopeSetBars("barOutlineTexture", value or "", "MSUF2_BAR_OUTLINE_TEXTURE", true)
             RequestOutlineRuntime()
@@ -1607,7 +1643,7 @@ local function BuildOutlineSection(ctx, b)
         Meta("outline.texture"))
     local hintY = outline._msuf2CursorY or -184
     outline._msuf2CursorY = hintY - 26
-    W.Text(outline, "Rounded frames ignore the outline texture and keep the solid outline color.",
+    W.Text(outline, "Rounded frames ignore True Outline and Texture styles and keep the solid outline color.",
         outline._msuf2ContentX or 16, hintY, 560)
     AttachBarsColorShortcut(outline,
         "Frame Outline Color",
@@ -1668,13 +1704,14 @@ local function BuildRoundedSection(ctx, b)
         { "master", "Rounded frame texture", roundLeftX, -52, "roundedFramesEnabled", false, true, "master toggle|all rounded frames|rounded frames master|rounded frames on|rounded frames off|rounded frames einschalten|rounded frames ausschalten|alle abgerundeten frames", "Master switch for the rounded frame texture style.", true },
         { "units", "Unit frames", roundLeftX, -90, "roundedUnitFrames", true, nil, "rounded unit frames|rounded unitframes|unit frame corners|unitframe corners|abgerundete unitframes|unitframes abgerundet|player target focus boss rounded", "Enable or disable rounded textures on unit frames." },
         { "groups", "Group frames", roundLeftX, -128, "roundedGroupFrames", true, nil, "rounded group frames|rounded party frames|rounded raid frames|group frame corners|abgerundete gruppenframes|party raid abgerundet", "Enable or disable rounded textures on group frames." },
+        { "classResources", "Class resources", roundLeftX, -166, "roundedClassResources", false, nil, "rounded class resources|rounded combo points|rounded soul shards|class resource bar corners|klassenressourcen abgerundet|combo punkte abrunden|seelensplitter abrunden", "Round rectangular class resource bars. Circle, Diamond, and Hex shapes are unchanged." },
         { "power", "Power bars", roundRightX, -52, "roundedPowerBars", true, nil, "rounded power bars|rounded powerbar|power bar corners|powerbar corners|powerbars abgerundet|powerbar abrunden", "Enable or disable rounded textures on power bars." },
         { "mouseover", "Mouseover highlights", roundRightX, -90, "roundedMouseover", true, nil, "rounded mouseover|rounded hover|rounded hover border|mouseover rounded|mouseover highlight rounded|mouseover abgerundet|hover abgerundet", "Enable or disable rounded mouseover highlight edges." },
         { "castbars", "Castbars", roundRightX, -128, "roundedCastbars", false, nil, "rounded castbars|castbar corners|cast bars rounded|castbars abgerundet|zauberbalken abgerundet", "Round MSUF castbar surfaces and outlines. Blizzard castbars, spell icons, and the GCD bar are not changed." },
     }, { ["*"] = function(s) return BindRoundedToggle(s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10]), s[1] end })
     local roundedPreview
     local roundingSlider = W.Slider(rounded, "Corner rounding", 1, 5, 1, 300)
-    W.MoveWidget(roundingSlider, rounded, roundLeftX, -166, 300, "LEFT")
+    W.MoveWidget(roundingSlider, rounded, roundRightX, -166, 300, "LEFT")
     local roundingApplyPending, roundingApplyTimer, roundingReleaseScheduled
     local function CancelRoundingApplyTimer()
         if roundingApplyTimer and type(roundingApplyTimer.Cancel) == "function" then roundingApplyTimer:Cancel() end
@@ -1736,13 +1773,13 @@ local function BuildRoundedSection(ctx, b)
     roundingSlider:HookScript("OnShow", FlushRoundingRuntime)
     RegisterRoundedSearch(roundingSlider, "Corner rounding",
         "corner rounding|rounding strength|rounded strength|corner radius|rounding radius|abrundungsstaerke|eckenradius|staerke der abrundung",
-        "Controls how subtle or strong the rounded corners appear. Masks, outlines, highlights, mouseover edges, power bars, and enabled castbars use the same value.",
+        "Controls how subtle or strong the rounded corners appear. Masks, outlines, highlights, mouseover edges, power bars, enabled class resources, and enabled castbars use the same value.",
         "slider", Meta("rounded.roundedCornerStrength", "setting", { step = 1, min = 1, max = 5 }))
     roundedPreview = CreateRoundedTexturePreview(rounded, roundLeftX, -214, max(320, (rounded._msuf2Width or ctx.width or 720) - 60))
     RegisterRoundedSearch(roundedPreview, "Rounded Texture Preview",
         "rounded preview|rounded example|rounded image|rounded frame preview|preview rounded frames|rounded frames aussehen|vorschau abgerundete frames",
         "Shows a small preview of the rounded frame texture style.", "preview")
-    local roundedDependentControls = { roundedControls.units, roundedControls.groups, roundedControls.power, roundedControls.mouseover, roundedControls.castbars, roundingSlider }
+    local roundedDependentControls = { roundedControls.units, roundedControls.groups, roundedControls.classResources, roundedControls.power, roundedControls.mouseover, roundedControls.castbars, roundingSlider }
     SyncRoundedControls(M.BindGateGroup(ctx, nil, {
         { controls = roundedDependentControls, on = function() return ReadB("roundedFramesEnabled", false) == true end },
     }, {

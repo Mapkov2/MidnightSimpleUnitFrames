@@ -73,6 +73,10 @@ local AURA_HANDLE_FIELDS = {
     custom4 = { customIndex = 4, defaultX = 0, defaultY = 0, label = "Dots on target", color = { 0.88, 0.24, 0.42 } },
 }
 local AURA_PREVIEW_KINDS = { "buff", "debuff", "custom1", "custom2", "custom3", "custom4" }
+local AURA_PREVIEW_LAYER = {
+    buff = "buff", debuff = "debuff",
+    custom1 = "auras", custom2 = "auras", custom3 = "auras", custom4 = "auras",
+}
 local AURA_ANCHOR_OK = {
     TOPLEFT=true, TOP=true, TOPRIGHT=true,
     LEFT=true, CENTER=true, RIGHT=true,
@@ -885,10 +889,12 @@ function Auras.BuildState(key, frameW, frameH, runtimeSpec, forceStandardLanes)
         forceStandardLanes or stylePreviewKind == "buff")
     local debuff = LaneBounds(cfg, "debuff", frameW, frameH, key, runtimeSpec,
         forceStandardLanes or stylePreviewKind == "debuff")
+    local previewFrameEffect = SelectedUnitAuraFrameEffect(model, key, stylePreviewKind)
     local state = {
         unit = key, cfg = cfg, runtime = runtimeAuras,
         buff = buff, debuff = debuff, stylePreviewKind = stylePreviewKind,
-        previewFrameEffect = SelectedUnitAuraFrameEffect(model, key, stylePreviewKind),
+        previewFrameEffect = previewFrameEffect,
+        previewFrameEffectLayer = previewFrameEffect and AURA_PREVIEW_LAYER[stylePreviewKind] or nil,
     }
     for index = 1, 4 do
         local kind = "custom" .. tostring(index)
@@ -921,11 +927,19 @@ function Auras.BuildState(key, frameW, frameH, runtimeSpec, forceStandardLanes)
     end
     return state
 end
-function Auras.ExpandFootprint(state, minX, maxX, minY, maxY)
+function Auras.HasVisibleLayer(state, visibility)
+    if not state then return false end
+    for _, kind in ipairs(AURA_PREVIEW_KINDS) do
+        if state[kind] and (not visibility or visibility[AURA_PREVIEW_LAYER[kind]] ~= false) then return true end
+    end
+    return (state.defensivePortrait or state.targetDotPortrait) ~= nil
+        and (not visibility or visibility.auras ~= false)
+end
+function Auras.ExpandFootprint(state, minX, maxX, minY, maxY, visibility)
     if not state then return minX, maxX, minY, maxY end
     for _, kind in ipairs(AURA_PREVIEW_KINDS) do
         local b = state[kind]
-        if b then
+        if b and (not visibility or visibility[AURA_PREVIEW_LAYER[kind]] ~= false) then
             minX = min(minX, b.left)
             maxX = max(maxX, b.right)
             minY = min(minY, b.bottom)
@@ -1415,6 +1429,7 @@ end
 
 function Auras.Hide(box)
     if not box then return end
+    box._msufAuraFrameEffectPreviewLayer = nil
     if box.handleAuraCustom4 then
         box.handleAuraCustom4._msufAuraPortraitVisual = nil
     end
@@ -1426,6 +1441,30 @@ function Auras.Hide(box)
     end
     HideVisual(box.defensivePortraitPreview)
     HideFrameEffectPreview(box)
+end
+function Auras.ApplyLayerVisibility(box)
+    if not box then return end
+    local visible, available = box.layerVisibility or {}, box.layerAvailable or {}
+    if visible.buff == false or available.buff == false then
+        HideHandle(box.handleAuraBuffs)
+        HideVisual(box.auraPreviewVisuals and box.auraPreviewVisuals.buff)
+    end
+    if visible.debuff == false or available.debuff == false then
+        HideHandle(box.handleAuraDebuffs)
+        HideVisual(box.auraPreviewVisuals and box.auraPreviewVisuals.debuff)
+    end
+    if visible.auras == false or available.auras == false then
+        if box.handleAuraCustom4 then box.handleAuraCustom4._msufAuraPortraitVisual = nil end
+        for index = 1, 4 do
+            HideHandle(box["handleAuraCustom" .. tostring(index)])
+            HideVisual(box.auraPreviewVisuals and box.auraPreviewVisuals["custom" .. tostring(index)])
+        end
+        HideVisual(box.defensivePortraitPreview)
+    end
+    local effectLayer = box._msufAuraFrameEffectPreviewLayer
+    if effectLayer and (visible[effectLayer] == false or available[effectLayer] == false) then
+        HideFrameEffectPreview(box)
+    end
 end
 local function ValueOr(value, fallback)
     if value ~= nil then return value end
@@ -1949,5 +1988,6 @@ function Auras.Layout(box, mock, state, S, baseLevel)
         end
     end
     LayoutDefensivePortrait(box, mock, state, S)
+    box._msufAuraFrameEffectPreviewLayer = state.previewFrameEffectLayer
     LayoutFrameEffectPreview(box, mock, state.previewFrameEffect, S)
 end

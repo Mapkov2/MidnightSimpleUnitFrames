@@ -1430,12 +1430,35 @@ end
 --- (C-side animation, no OnUpdate). Navigations driven by the history buttons
 --- themselves pass suppressPulse so active use never blinks at the user.
 local PAGE_HISTORY_DISCOVERY_USES = 3
+function M.SetPageHistoryTourCue(enabled)
+    local back, forward = M.pageHistoryBackButton, M.pageHistoryForwardButton
+    if not (back and forward
+        and type(back._msuf2SetTourCue) == "function"
+        and type(forward._msuf2SetTourCue) == "function")
+    then
+        return false
+    end
+    M._pageHistoryTourCuePage = enabled == true and M.activeKey or nil
+    local shown = M._pageHistoryTourCuePage ~= nil
+    back._msuf2SetTourCue(shown)
+    forward._msuf2SetTourCue(shown)
+    return shown
+end
 function M.RefreshPageHistoryNav(suppressPulse)
     local back, forward = M.pageHistoryBackButton, M.pageHistoryForwardButton
     if not (back and forward) then return end
     local state = M.GetPageHistoryState()
     if back.SetEnabled then back:SetEnabled(state.canBack == true) end
     if forward.SetEnabled then forward:SetEnabled(state.canForward == true) end
+    local cuePage = M._pageHistoryTourCuePage
+    local showTourCue = cuePage ~= nil and M.activeKey == cuePage
+    if cuePage ~= nil and not showTourCue then M._pageHistoryTourCuePage = nil end
+    if type(back._msuf2SetTourCue) == "function" then
+        back._msuf2SetTourCue(showTourCue)
+    end
+    if type(forward._msuf2SetTourCue) == "function" then
+        forward._msuf2SetTourCue(showTourCue)
+    end
     if suppressPulse or state.canBack ~= true then return end
     local pulse = back._msuf2DiscoveryPulse
     if not pulse then return end
@@ -2288,7 +2311,11 @@ local function BuildWindowChrome(state)
         local function Paint(self, hover, down)
             local c = T.colors
             local disabled = self.IsEnabled and not self:IsEnabled()
-            if disabled then
+            if self._msuf2TourCue then
+                if fill then fill:SetVertexColor(c.pillActive[1], c.pillActive[2], c.pillActive[3], 0.90) end
+                if edge then edge:SetVertexColor(c.pillEdgeActive[1], c.pillEdgeActive[2], c.pillEdgeActive[3], 0.92) end
+                icon:SetVertexColor(c.pillTextActive[1], c.pillTextActive[2], c.pillTextActive[3], 1)
+            elseif disabled then
                 if fill then fill:SetVertexColor(0, 0, 0, 0) end
                 if edge then edge:SetVertexColor(0, 0, 0, 0) end
                 icon:SetVertexColor(c.disabled[1], c.disabled[2], c.disabled[3], 0.55)
@@ -2313,6 +2340,31 @@ local function BuildWindowChrome(state)
         btn:SetScript("OnEnable", function(self) Paint(self, self._msuf2Hover, self._msuf2Down) end)
         btn:SetScript("OnDisable", function(self) Paint(self, false, false) end)
         btn:SetScript("OnClick", onClick)
+        -- The first upgrade-tour stop deliberately makes this impossible to
+        -- miss. A native animation group flashes the complete button quickly;
+        -- there is no Lua OnUpdate, and MenuRuntime quiescence tracks/stops it
+        -- with every other menu animation.
+        local tourBlink
+        if btn.CreateAnimationGroup then
+            tourBlink = btn:CreateAnimationGroup()
+            if T.TrackMenuAnimationGroup then T.TrackMenuAnimationGroup(tourBlink) end
+            if tourBlink.SetLooping then tourBlink:SetLooping("BOUNCE") end
+            local fade = tourBlink:CreateAnimation("Alpha")
+            fade:SetFromAlpha(1)
+            fade:SetToAlpha(0.08)
+            fade:SetDuration(0.16)
+            btn._msuf2TourBlink = tourBlink
+        end
+        btn._msuf2SetTourCue = function(enabled)
+            btn._msuf2TourCue = enabled == true or nil
+            Paint(btn, btn._msuf2Hover, btn._msuf2Down)
+            if btn._msuf2TourCue then
+                if tourBlink and (not tourBlink.IsPlaying or not tourBlink:IsPlaying()) then tourBlink:Play() end
+            else
+                if tourBlink and tourBlink.Stop then tourBlink:Stop() end
+                btn:SetAlpha(1)
+            end
+        end
         -- Disabled arrows keep their tooltip so the affordance stays learnable.
         if btn.SetMotionScriptsWhileDisabled then btn:SetMotionScriptsWhileDisabled(true) end
         Paint(btn, false, false)
