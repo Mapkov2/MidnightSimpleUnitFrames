@@ -997,6 +997,18 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     EnsureFreshGroupAuraNativeRenderer(db.gf_party)
     EnsureFreshGroupAuraNativeRenderer(db.gf_raid)
     EnsureFreshGroupAuraNativeRenderer(db.gf_mythicraid)
+    --- Factory profiles keep every frame's health coloring linked to the
+    --- shared Global Style instead of carrying per-frame color overrides.
+    for _, key in ipairs(MSUF_DEFAULTS_TEXT_SCOPE_KEYS) do
+        if type(db[key]) == "table" then
+            db[key].healthColorMode = nil
+        end
+    end
+    for _, key in ipairs(MSUF_DEFAULTS_GROUP_SCOPE_KEYS) do
+        if type(db[key]) == "table" then
+            db[key].gfBarMode = nil
+        end
+    end
     --- Factory-only dispel-symbol policy. "Symbol detects" is owned by the
     --- Unit/Group frame roots, not by the Aura lane filter tables. Override
     --- every scope carried by the factory snapshot so a stale local value
@@ -1016,6 +1028,9 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     end
     db.bars = db.bars or {}
     SetDefault(db.bars, "showAltMana", false)
+    SetDefault(db.bars, "altManaWidthMode", "player")
+    SetDefault(db.bars, "altManaWidth", 0)
+    SetDefault(db.bars, "altManaOffsetX", 0)
     SetDefault(db.bars, "showGuardianIronfur", false)
     SetDefault(db.bars, "guardianIronfurShowHashLines", true)
     -- Performance baseline: native interpolation is an
@@ -1040,6 +1055,7 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     SetDefault(db.bars, "roundedGroupFrames", true)
     SetDefault(db.bars, "roundedPowerBars", true)
     SetDefault(db.bars, "roundedCastbars", false)
+    SetDefault(db.bars, "roundedClassResources", false)
     SetDefault(db.bars, "roundedMouseover", true)
     SetDefault(db.bars, "roundedCornerStrength", 3)
     --- Fresh-install defaults: status indicators (AFK/DND) off by default
@@ -1062,6 +1078,7 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
             SetDefault(g.UIScale, "Enabled", false)
             SetDefault(g.UIScale, "Scale", 1.0)
         end
+        g.slashMenuScale = 0.8
         SetDefault(g, "msufUiScale", 1.0)
         --- English/German use MSUF's highly readable UI face. Other locales
         --- retain Blizzard's locale-specific glyph coverage.
@@ -3587,27 +3604,30 @@ if g.kickNotReadyColor   == nil then g.kickNotReadyColor   = { ["1"] = 1, ["2"] 
     if g.showRestingIndicator == nil then
         g.showRestingIndicator = true
     end
-	--- Rested icon defaults ("Moon Zzzz")
-	--- Requirement: default size 30 and anchored TOPLEFT.
+	--- Rested icon defaults (Blizzard animated Zzz)
+	--- Requirement: default size 39 and centered above the attached Player portrait.
 	--- Only apply when the profile does not already carry explicit values (no regression for users who moved it).
 	if g.restedStateIndicatorSymbol == nil then
-		g.restedStateIndicatorSymbol = "rested_moonzzz"
+		g.restedStateIndicatorSymbol = "rested_blizzard_animated"
+	end
+	if g.restedStateIndicatorIconStyle == nil then
+		g.restedStateIndicatorIconStyle = "BLIZZARD"
 	end
 	if g.restedStateIndicatorAnchor == nil then
 		g.restedStateIndicatorAnchor = "TOPLEFT"
 	end
 	if g.restedStateIndicatorOffsetX == nil or type(g.restedStateIndicatorOffsetX) ~= "number" then
-		g.restedStateIndicatorOffsetX = 0
+		g.restedStateIndicatorOffsetX = -40
 	end
 	if g.restedStateIndicatorOffsetY == nil or type(g.restedStateIndicatorOffsetY) ~= "number" then
-		g.restedStateIndicatorOffsetY = 0
+		g.restedStateIndicatorOffsetY = 50
 	end
 	if g.restedStateIndicatorSize == nil or type(g.restedStateIndicatorSize) ~= "number" or g.restedStateIndicatorSize <= 0 then
-		g.restedStateIndicatorSize = 30
+		g.restedStateIndicatorSize = 39
 	end
-    if g.restedStateIndicatorLayer == nil then
-        g.restedStateIndicatorLayer = 7
-    end
+	if g.restedStateIndicatorLayer == nil then
+		g.restedStateIndicatorLayer = 25
+	end
     if g.stateIconsTestMode == nil then
         g.stateIconsTestMode = false
     end
@@ -3876,6 +3896,9 @@ if MSUF_DB.bars == nil then
     if MSUF_DB.bars.roundedCastbars == nil then
         MSUF_DB.bars.roundedCastbars = false
     end
+    if MSUF_DB.bars.roundedClassResources == nil then
+        MSUF_DB.bars.roundedClassResources = false
+    end
     if MSUF_DB.bars.roundedMouseover == nil then
         MSUF_DB.bars.roundedMouseover = true
     end
@@ -3913,9 +3936,8 @@ if MSUF_DB.bars.barOutlineLayer == nil then
     MSUF_DB.bars.barOutlineLayer = 0
 end
 if MSUF_DB.bars.barOutlineTexture == nil then
-    -- Optional statusbar texture for the square frame outline. Empty keeps the
-    -- classic solid-color outline, so 5.x profiles are unaffected. Rounded
-    -- frames always ignore this and keep the tinted rounded edge.
+    -- Optional square-frame edgeFile or stretched statusbar texture. Empty
+    -- keeps the classic solid-color outline; Rounded Frames ignores both.
     MSUF_DB.bars.barOutlineTexture = ""
 end
 --- Bar background alpha (0..100). Independent from unit alpha in/out of combat.
@@ -4480,6 +4502,7 @@ local function fill(key, defaults)
             if u[texP .. "Width"] == nil then u[texP .. "Width"] = 0 end
             if u[texP .. "Height"] == nil then u[texP .. "Height"] = 16 end
             if u[texP .. "ColorMode"] == nil then u[texP .. "ColorMode"] = "CUSTOM" end
+            if u[texP .. "ColorTreatment"] == nil then u[texP .. "ColorTreatment"] = "ORIGINAL" end
             if u[texP .. "ColorR"] == nil then u[texP .. "ColorR"] = 1 end
             if u[texP .. "ColorG"] == nil then u[texP .. "ColorG"] = 1 end
             if u[texP .. "ColorB"] == nil then u[texP .. "ColorB"] = 1 end
@@ -4495,6 +4518,7 @@ local function fill(key, defaults)
             if u[texP .. "BlendMode"] == nil then u[texP .. "BlendMode"] = "BLEND" end
             if u[texP .. "MirrorH"] == nil then u[texP .. "MirrorH"] = false end
             if u[texP .. "MirrorV"] == nil then u[texP .. "MirrorV"] = false end
+            if u[texP .. "CropMode"] == nil then u[texP .. "CropMode"] = "FULL" end
             if u[texP .. "EdgeSoftness"] == nil then u[texP .. "EdgeSoftness"] = 0 end
             if u[texP .. "Visibility"] == nil then u[texP .. "Visibility"] = "ALWAYS" end
             if u[texP .. "RoundedClip"] == nil then u[texP .. "RoundedClip"] = false end

@@ -120,7 +120,6 @@ K.TIP = {
 
 K.EBON = {
     SPELL_ID = 395296,
-    MAX_DURATION = 20,
 }
 
 K.STAGGER = {
@@ -229,7 +228,7 @@ ExportPublic("MSUF_CP_MODE_EVENT_PROFILE", {
     [MODE.AURA_SEGMENTED] = { power = false, maxPower = false, aura = true,  rune = false, health = false, pointCharge = false, warlockPred = false },
     [MODE.AURA_SINGLE]    = { power = false, maxPower = false, aura = true,  rune = false, health = false, pointCharge = false, warlockPred = false },
     [MODE.CONTINUOUS]     = { power = true,  maxPower = false, aura = false, rune = false, health = false, pointCharge = false, warlockPred = false },
-    [MODE.TIMER_BAR]      = { power = false, maxPower = false, aura = true,  rune = false, health = false, pointCharge = false, warlockPred = false },
+    [MODE.TIMER_BAR]      = { power = false, maxPower = false, aura = false, rune = false, health = false, pointCharge = false, warlockPred = false },
     [MODE.STAGGER]        = { power = false, maxPower = false, aura = true,  rune = false, health = true,  pointCharge = false, warlockPred = false },
     [MODE.IRONFUR]        = { power = false, maxPower = false, aura = false, rune = false, health = false, pointCharge = false, warlockPred = false },
 })

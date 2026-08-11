@@ -326,7 +326,14 @@ builders.PLAYER_HP = function(E)
                 return r, g, b
             end
         end
-        local pct = Percent(hp, maxHP) / 100
+        local pct
+        if issecretvalue(hp) == true or issecretvalue(maxHP) == true then
+            pct = UnitPercent()
+            if pct == nil then return 1, 1, 0 end
+        else
+            pct = Percent(hp, maxHP)
+        end
+        pct = pct / 100
         if pct <= 0.5 then return 1, pct * 2, 0 end
         return (1 - pct) * 2, 1, 0
     end
@@ -951,9 +958,10 @@ builders.PLAYER_HP = function(E)
             SetText(PHP.right, "")
             return
         end
-        if UsePlayerText(b) and CopyRenderedPlayerText(hp, maxHP) then return end
         local hpSecret = issecretvalue(hp) == true
         local maxSecret = issecretvalue(maxHP) == true
+        if not hpSecret and not maxSecret
+            and UsePlayerText(b) and CopyRenderedPlayerText(hp, maxHP) then return end
         if (hpSecret or maxSecret) and UsePlayerText(b) and CopyPlayerTextBestEffort() then return end
 
         local left, center, right, delimiter, reverse
@@ -1020,8 +1028,9 @@ builders.PLAYER_HP = function(E)
     local function Update(event)
         if not PHP.visible or not PHP.bar then return end
         local common = _G.MSUF_NS and _G.MSUF_NS.UFBarTextCommon
-        local hp = UnitHealth and UnitHealth("player") or 0
-        local maxHP = UnitHealthMax and UnitHealthMax("player") or 1
+        local hp, maxHP
+        if type(UnitHealth) == "function" then hp = UnitHealth("player") end
+        if type(UnitHealthMax) == "function" then maxHP = UnitHealthMax("player") end
         local hpSecret = issecretvalue(hp) == true
         local maxSecret = issecretvalue(maxHP) == true
         if not hpSecret then hp = tonumber(hp) or 0 end

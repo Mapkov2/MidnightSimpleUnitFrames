@@ -77,6 +77,15 @@ local MSUF_POWER_BAR_DEFAULTS = {
     pet = true,
     boss = true,
 }
+local MSUF_POWER_BAR_UNIT_KEYS = {
+    player = true,
+    target = true,
+    focus = true,
+    targettarget = true,
+    focustarget = true,
+    pet = true,
+    boss = true,
+}
 
 local CanonPowerBarUnitKey = _G.MSUF_CanonPowerBarUnitKey
 if type(CanonPowerBarUnitKey) ~= "function" then
@@ -85,18 +94,27 @@ if type(CanonPowerBarUnitKey) ~= "function" then
     unitKey = unitKey:lower()
     if unitKey == "tot" or unitKey == "targetoftarget" or unitKey == "target_of_target" then
         unitKey = "targettarget"
+    elseif unitKey == "focus_target" or unitKey == "focustargettarget" then
+        unitKey = "focustarget"
     elseif GetBossIndexFromToken(unitKey) then
         unitKey = "boss"
     end
-    if unitKey == "player" or unitKey == "target" or unitKey == "focus"
-        or unitKey == "targettarget" or unitKey == "focustarget"
-        or unitKey == "pet" or unitKey == "boss" then
-        return unitKey
-    end
+    if MSUF_POWER_BAR_UNIT_KEYS[unitKey] then return unitKey end
     return nil
 end
 end
 ExportPublic("MSUF_CanonPowerBarUnitKey", CanonPowerBarUnitKey)
+
+--- One capability contract for runtime, Edit Mode, and Options previews.  The
+--- shared Power element detaches every managed single-unit frame; Player-only
+--- shape/Class Resource options are separate capabilities.
+local CanDetachUnitPowerBar = _G.MSUF_CanDetachUnitPowerBar
+if type(CanDetachUnitPowerBar) ~= "function" then
+    function CanDetachUnitPowerBar(unitKey)
+        return CanonPowerBarUnitKey(unitKey) ~= nil
+    end
+end
+ExportPublic("MSUF_CanDetachUnitPowerBar", CanDetachUnitPowerBar)
 
 local ReadUnitPowerBarEnabled = _G.MSUF_ReadUnitPowerBarEnabled
 if type(ReadUnitPowerBarEnabled) ~= "function" then

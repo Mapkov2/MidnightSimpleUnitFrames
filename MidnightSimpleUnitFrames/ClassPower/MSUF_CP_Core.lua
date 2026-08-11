@@ -103,11 +103,27 @@ builders.BUILD = function(E)
     local CP_ResolveTexture = E.CP_ResolveTexture
     local math_floor = E.math_floor or math.floor
 
+    local function CP_EnsureTextFrame()
+        if CP.textFrame then return CP.textFrame end
+        local c = CP.container
+        if not c then return nil end
+
+        local tf = CreateFrame("Frame", nil, c)
+        tf:SetAllPoints(c)
+        tf:SetFrameLevel(c:GetFrameLevel() + 10)
+        if tf.SetFrameStrata and c.GetFrameStrata then tf:SetFrameStrata(c:GetFrameStrata()) end
+        if tf.EnableMouse then tf:EnableMouse(false) end
+        CP.textFrame = tf
+        return tf
+    end
+
     local function CP_EnsureRuneText(bar)
         if not bar then return nil, false end
         if bar._runeText then return bar._runeText, false end
+        local tf = CP_EnsureTextFrame()
+        if not tf then return nil, false end
 
-        local rfs = bar:CreateFontString(nil, "OVERLAY")
+        local rfs = tf:CreateFontString(nil, "OVERLAY")
         rfs:SetPoint("CENTER", bar, "CENTER", 0, 0)
         rfs:SetJustifyH("CENTER")
         if rfs.SetJustifyV then rfs:SetJustifyV("MIDDLE") end
@@ -122,13 +138,8 @@ builders.BUILD = function(E)
 
     local function CP_EnsureMainText()
         if CP.text then return CP.text, false end
-        local c = CP.container
-        if not c then return nil, false end
-
-        local tf = CreateFrame("Frame", nil, c)
-        tf:SetAllPoints(c)
-        tf:SetFrameLevel(c:GetFrameLevel() + 10)
-        CP.textFrame = tf
+        local tf = CP_EnsureTextFrame()
+        if not tf then return nil, false end
 
         local fs = tf:CreateFontString(nil, "OVERLAY")
         fs:SetPoint("CENTER", tf, "CENTER", 0, 0)
@@ -293,6 +304,13 @@ builders.LAYOUT = function(E)
                 if CP.textFrame._msufFrameLevelStamp ~= textLevel then
                     CP.textFrame:SetFrameLevel(textLevel)
                     CP.textFrame._msufFrameLevelStamp = textLevel
+                end
+                if CP.textFrame.SetFrameStrata and CP.container.GetFrameStrata then
+                    local textStrata = CP.container:GetFrameStrata()
+                    if CP.textFrame._msufFrameStrataStamp ~= textStrata then
+                        CP.textFrame:SetFrameStrata(textStrata)
+                        CP.textFrame._msufFrameStrataStamp = textStrata
+                    end
                 end
             end
         end
@@ -461,7 +479,7 @@ builders.LAYOUT = function(E)
         --- mode divides one row into stable segments and optional separators.
         if shapeMode then
             if CP._outline then CP._outline:Hide() end
-        elseif outlineThick > 0 then
+        elseif outlineThick > 0 and CP._msufRoundedOutlineSuppressed ~= true then
             if not CP._outline then
                 local tpl = (BackdropTemplateMixin and "BackdropTemplate") or nil
                 local ol = CreateFrame("Frame", nil, CP.container, tpl)
@@ -644,6 +662,9 @@ builders.LAYOUT = function(E)
         CP.currentMax = maxPower
         CP.height = h
 
+        local applyRounded = _G.MSUF_ClassPower_ApplyRoundedSurface
+        if type(applyRounded) == "function" then applyRounded() end
+
         --- Detached player power can anchor to ClassPower. If ClassPower's
         --- anchor dimensions changed, ask the power-bar embed layout to refresh
         --- outside combat or mark it dirty for the post-combat pass.
@@ -706,12 +727,45 @@ builders.PRESENTATION = function(E)
     local function CP_ApplyTextOffset()
         local fs = CP.text
         local tf = CP.textFrame
-        if not fs or not tf then return end
         local b = _cpDB.bars
         local ox = (b and tonumber(b.classPowerTextOffsetX)) or 0
         local oy = (b and tonumber(b.classPowerTextOffsetY)) or 0
-        fs:ClearAllPoints()
-        fs:SetPoint("CENTER", tf, "CENTER", ox, oy)
+        local function ApplyOffset(region, anchor)
+            if not (region and anchor) then return end
+            if region._msufCPTextAnchor ~= anchor or region._msufCPTextOffsetX ~= ox
+                or region._msufCPTextOffsetY ~= oy then
+                region._msufCPTextAnchor = anchor
+                region._msufCPTextOffsetX, region._msufCPTextOffsetY = ox, oy
+                region:ClearAllPoints()
+                region:SetPoint("CENTER", anchor, "CENTER", ox, oy)
+            end
+        end
+        ApplyOffset(fs, tf)
+        for i = 1, (CP.maxBars or 0) do
+            local bar = CP.bars[i]
+            ApplyOffset(bar and bar._runeText, bar)
+        end
+    end
+
+    local function ApplyClassPowerTextStyle(region, r, g, b, a, useShadow, shadowAlpha, shadowX, shadowY)
+        if not region then return end
+        if region._msufCPTextColorR ~= r or region._msufCPTextColorG ~= g
+            or region._msufCPTextColorB ~= b or region._msufCPTextColorA ~= a then
+            region._msufCPTextColorR, region._msufCPTextColorG = r, g
+            region._msufCPTextColorB, region._msufCPTextColorA = b, a
+            region:SetTextColor(r, g, b, a)
+        end
+        local targetShadowAlpha = useShadow and shadowAlpha or 0
+        local targetShadowX = useShadow and shadowX or 0
+        local targetShadowY = useShadow and shadowY or 0
+        if useShadow and region._msufCPShadowAlpha ~= targetShadowAlpha then
+            region:SetShadowColor(0, 0, 0, targetShadowAlpha)
+        end
+        if region._msufCPShadowX ~= targetShadowX or region._msufCPShadowY ~= targetShadowY then
+            region:SetShadowOffset(targetShadowX, targetShadowY)
+        end
+        region._msufCPShadowAlpha = targetShadowAlpha
+        region._msufCPShadowX, region._msufCPShadowY = targetShadowX, targetShadowY
     end
 
     local function ClassPowerFontApplied(region, fontPath, size, fontFlags)
@@ -811,17 +865,13 @@ builders.PRESENTATION = function(E)
             end
         end
 
-        if fs then
-            fs:SetTextColor(tr, tg, tb, textAlpha)
-
-            if useShadow then
-                fs:SetShadowColor(0, 0, 0, shadowAlpha)
-                fs:SetShadowOffset(shadowX, shadowY)
-            else
-                fs:SetShadowOffset(0, 0)
-            end
-            CP_ApplyTextOffset()
+        ApplyClassPowerTextStyle(fs, tr, tg, tb, textAlpha, useShadow, shadowAlpha, shadowX, shadowY)
+        for i = 1, (CP.maxBars or 0) do
+            local bar = CP.bars[i]
+            ApplyClassPowerTextStyle(bar and bar._runeText, tr, tg, tb, textAlpha,
+                useShadow, shadowAlpha, shadowX, shadowY)
         end
+        CP_ApplyTextOffset()
     end
 
     local function CP_ApplyColors(powerType)
@@ -875,6 +925,8 @@ builders.PRESENTATION = function(E)
             CP.bgTex:SetTexture(activeBgPath)
             CP._msufCPBgTexturePath = activeBgPath
         end
+        local applyRounded = _G.MSUF_ClassPower_ApplyRoundedSurface
+        if type(applyRounded) == "function" then applyRounded() end
     end
 
     return {
@@ -924,10 +976,8 @@ builders.RUNTIME = function(env)
     local CP_RefreshEventBindings = env.CP_RefreshEventBindings
     local ThrottledFullRefresh = env.ThrottledFullRefresh
     local FullRefresh = env.FullRefresh
-    local SetTimerBarOnUpdate = env.SetTimerBarOnUpdate
     local CP_SyncRuntimeOnUpdates = env.CP_SyncRuntimeOnUpdates
     local CP_ShouldUseLiteBindings = env.CP_ShouldUseLiteBindings
-    local CP_UpdateValues_TimerBar = env.CP_UpdateValues_TimerBar
     local CP_UpdateValues_Stagger = env.CP_UpdateValues_Stagger
     local OnWarlockCastStart = env.OnWarlockCastStart
     local OnWarlockCastEnd = env.OnWarlockCastEnd
@@ -1116,9 +1166,8 @@ builders.RUNTIME = function(env)
     end
 
     --- Aura-backed class resources keep their own player-only UNIT_AURA traffic.
-    --- UnitFrame aura display is native AuraContainer-owned in 12.1 and does
-    --- not share this path. Keep the branch narrow: segmented aura resources,
-    --- timer bars, and stagger each have a dedicated value updater.
+    --- Ebon Might is native AuraContainer-owned in 12.1 and never enters this
+    --- path; only segmented aura resources and Stagger update here.
     local function OnAuraUpdate(unit)
         if CP.visible and CP.isAuraPower then
             RunActiveUpdate(CP.powerType, CP.currentMax)
@@ -1132,11 +1181,6 @@ builders.RUNTIME = function(env)
                     RefreshVisibleModeLight(segCount)
                 end
             end
-        end
-        if CP.visible and CP.renderMode == CPK.MODE.TIMER_BAR then
-            CP.tbCachedQ = -1
-            local timerActive = CP_UpdateValues_TimerBar and CP_UpdateValues_TimerBar(CP.powerType, CP.currentMax)
-            CP_SyncRuntimeOnUpdates(timerActive)
         end
         if CP.visible and CP.renderMode == CPK.MODE.STAGGER then
             RunActiveUpdate(CP.powerType, CP.currentMax)

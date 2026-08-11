@@ -26,6 +26,8 @@ local providerCount = 0
 local resolverInstalled = false
 local orderDirty = false
 local pendingApply = false
+local pendingFullApply = false
+local pendingUnits = {}
 local eventFrame
 
 local resolvedByFullName = {}
@@ -41,6 +43,13 @@ local function ValidOwner(owner)
     and owner ~= ""
     and #owner <= 80
     and owner:match("^[%w_.%-]+$") ~= nil
+end
+
+local function ValidUnitToken(unit)
+  return type(unit) == "string"
+    and unit ~= ""
+    and #unit <= 80
+    and issecretvalue(unit) ~= true
 end
 
 local function FiniteNumber(value)
@@ -63,6 +72,29 @@ end
 local function ClearResolvedCache()
   Wipe(resolvedByFullName)
   Wipe(resolvedByShortName)
+end
+
+local function RebuildShortCache(nativeName)
+  local prefix = nativeName .. "-"
+  local found = false
+  local displayName
+  for fullName, cached in pairs(resolvedByFullName) do
+    if type(fullName) == "string"
+      and fullName:sub(1, #prefix) == prefix then
+      if not found then
+        found = true
+        displayName = cached
+      elseif displayName ~= cached then
+        displayName = AMBIGUOUS
+        break
+      end
+    end
+  end
+  if found then
+    resolvedByShortName[nativeName] = displayName
+  else
+    resolvedByShortName[nativeName] = nil
+  end
 end
 
 local function FullNameForUnit(unit, nativeName)
@@ -90,6 +122,23 @@ local function FullNameForUnit(unit, nativeName)
     return nil
   end
   return name .. "-" .. realm
+end
+
+local function UnitMatchesIdentity(unit, targetUnit, targetFullName)
+  if unit == targetUnit then return true end
+  if type(targetFullName) ~= "string" or targetFullName == ""
+    or type(unit) ~= "string" or unit == ""
+    or issecretvalue(unit) == true then
+    return false
+  end
+  local nativeName
+  if UnitName then nativeName = UnitName(unit) end
+  if issecretvalue(nativeName) == true
+    or type(nativeName) ~= "string"
+    or nativeName == "" then
+    return false
+  end
+  return FullNameForUnit(unit, nativeName) == targetFullName
 end
 
 local function CacheShortName(nativeName, displayName)
@@ -209,7 +258,11 @@ local function SyncResolver()
   resolverInstalled = shouldInstall
 end
 
-local function RefreshUnitFrameName(frame, _, runtime)
+local function RefreshUnitFrameName(frame, _, runtime, targetUnit, targetFullName)
+  if targetUnit and (not frame
+    or not UnitMatchesIdentity(frame.MSUFUnitKey, targetUnit, targetFullName)) then
+    return false
+  end
   local active = frame and frame._msufActiveElements
   if not active then return false end
   local touched = false
@@ -224,17 +277,33 @@ local function RefreshUnitFrameName(frame, _, runtime)
   return touched
 end
 
-local function RefreshUnitFrameNames()
+local function RefreshUnitFrameNames(unit, targetFullName)
   local UF = MSUF.UF
   local runtime = MSUF.UFTextRuntime
   if not (UF and UF.ForEachFrame and runtime) then return false end
-  return UF.ForEachFrame(RefreshUnitFrameName, runtime) == true
+  return UF.ForEachFrame(RefreshUnitFrameName, runtime, unit, targetFullName) == true
 end
 
-local function RefreshGroupFrameNames()
+local function CollectMatchingGroupUnit(_, frameUnit, _, targetUnit, targetFullName, matchingUnits)
+  if UnitMatchesIdentity(frameUnit, targetUnit, targetFullName) then
+    matchingUnits[frameUnit] = true
+  end
+  return false
+end
+
+local function RefreshGroupFrameNames(unit, targetFullName)
   local GF = MSUF.GF
   if not (GF and GF.RefreshGroupNames) then return false end
-  return GF.RefreshGroupNames() == true
+  if unit and targetFullName and type(GF.ForEachFrame) == "function" then
+    local matchingUnits = {}
+    GF.ForEachFrame(CollectMatchingGroupUnit, true, unit, targetFullName, matchingUnits)
+    local touched = false
+    for matchingUnit in pairs(matchingUnits) do
+      if GF.RefreshGroupNames(matchingUnit) == true then touched = true end
+    end
+    return touched
+  end
+  return GF.RefreshGroupNames(unit) == true
 end
 
 local function ApplyChanges()
@@ -247,16 +316,76 @@ local function ApplyChanges()
   return true
 end
 
+local function InvalidateUnitCache(unit)
+  local nativeName
+  if UnitName then nativeName = UnitName(unit) end
+  if issecretvalue(nativeName) == true
+    or type(nativeName) ~= "string"
+    or nativeName == "" then
+    return false
+  end
+
+  local fullName = FullNameForUnit(unit, nativeName)
+  if not fullName then
+    return false
+  end
+
+  resolvedByFullName[fullName] = nil
+  RebuildShortCache(nativeName)
+  return fullName
+end
+
+local function ApplyUnitChanges(unit)
+  if InCombat() then return false end
+  if orderDirty then return ApplyChanges() end
+  local fullName = InvalidateUnitCache(unit)
+  if not fullName then return false end
+  SyncResolver()
+  -- Prime the shared identity cache through the unit the provider explicitly
+  -- notified. Alias frames then reuse that one result instead of letting frame
+  -- iteration order choose which unit token reaches the provider first.
+  ResolveDisplayName(unit)
+  RefreshUnitFrameNames(unit, fullName)
+  RefreshGroupFrameNames(unit, fullName)
+  return true
+end
+
+local function QueueApply(unit)
+  pendingApply = true
+  if unit == nil then
+    pendingFullApply = true
+    Wipe(pendingUnits)
+  elseif not pendingFullApply then
+    pendingUnits[unit] = true
+  end
+end
+
+local function FlushPendingChanges()
+  if InCombat() or not pendingApply then return false end
+
+  local applyAll = pendingFullApply
+  local units = pendingUnits
+  pendingApply = false
+  pendingFullApply = false
+  pendingUnits = {}
+
+  if applyAll then
+    ApplyChanges()
+  else
+    for unit in pairs(units) do
+      ApplyUnitChanges(unit)
+    end
+  end
+  return true
+end
+
 local function EnsurePostCombatEvent()
   if not eventFrame and CreateFrame then
     eventFrame = CreateFrame("Frame")
     eventFrame:SetScript("OnEvent", function(_, event)
       if event ~= "PLAYER_REGEN_ENABLED" or InCombat() then return end
       eventFrame:UnregisterEvent("PLAYER_REGEN_ENABLED")
-      if pendingApply then
-        pendingApply = false
-        ApplyChanges()
-      end
+      FlushPendingChanges()
     end)
   end
   if eventFrame then
@@ -264,14 +393,22 @@ local function EnsurePostCombatEvent()
   end
 end
 
-local function RequestApply()
+local function RequestApply(unit)
   if InCombat() then
-    pendingApply = true
+    QueueApply(unit)
     EnsurePostCombatEvent()
     return true, "deferred_combat"
   end
-  pendingApply = false
-  ApplyChanges()
+
+  if pendingApply then
+    QueueApply(unit)
+    if eventFrame then eventFrame:UnregisterEvent("PLAYER_REGEN_ENABLED") end
+    FlushPendingChanges()
+  elseif unit then
+    ApplyUnitChanges(unit)
+  else
+    ApplyChanges()
+  end
   return true
 end
 
@@ -284,6 +421,7 @@ function API.GetCapabilities()
     multipleProviders = true,
     priorities = true,
     cached = true,
+    targetedUpdates = true,
     eventDriven = true,
     combatUpdates = false,
     polling = false,
@@ -327,12 +465,13 @@ function API.UnregisterProvider(owner)
   return RequestApply()
 end
 
-function API.NotifyChanged(owner)
+function API.NotifyChanged(owner, unit)
   if not ValidOwner(owner) then return false, "invalid_owner" end
+  if unit ~= nil and not ValidUnitToken(unit) then return false, "invalid_unit" end
   local record = providers[OwnerKey(owner)]
   if not record then return false, "not_registered" end
   record.failed = false
-  return RequestApply()
+  return RequestApply(unit)
 end
 
 function API.IsProviderRegistered(owner)
