@@ -291,10 +291,16 @@ end
 local function StopRestingFlipbook(tex, resetAtlas)
   if not tex then return end
   local group = tex._msufRestingFlipbook
-  if group and tex._msufRestingFlipbookPlaying == true then
-    group:Stop()
-    tex._msufRestingFlipbookPlaying = nil
+  if group then
+    local playing = tex._msufRestingFlipbookPlaying == true
+    if group.IsPlaying then
+      playing = group:IsPlaying() == true
+    end
+    if playing then
+      group:Stop()
+    end
   end
+  tex._msufRestingFlipbookPlaying = nil
   if resetAtlas == true then
     tex._msufRestingFlipbookAtlas = nil
     tex._msufStatusAtlas = nil
@@ -310,10 +316,14 @@ local function ApplyRestingFlipbook(tex, play)
     tex._msufStatusTexture, tex._aTex, tex._aColorTexture = nil, nil, nil
     tex._msufStatusL, tex._msufStatusR, tex._msufStatusT, tex._msufStatusB = nil, nil, nil, nil
   end
-  if play ~= true then
+  if play == false then
     StopRestingFlipbook(tex)
     return true
   end
+  -- Structural StatusIndicators applies configure the texture without owning
+  -- its active state. Preserve an existing loop until RestingIndicator says
+  -- explicitly whether it should play or stop.
+  if play ~= true then return true end
   local group = tex._msufRestingFlipbook
   if not group then
     group = tex:CreateAnimationGroup()
@@ -327,10 +337,14 @@ local function ApplyRestingFlipbook(tex, play)
     flipbook:SetDuration(1.5)
     tex._msufRestingFlipbook = group
   end
-  if tex._msufRestingFlipbookPlaying ~= true then
-    group:Play()
-    tex._msufRestingFlipbookPlaying = true
+  local playing = tex._msufRestingFlipbookPlaying == true
+  if group.IsPlaying then
+    playing = group:IsPlaying() == true
   end
+  if not playing then
+    group:Play()
+  end
+  tex._msufRestingFlipbookPlaying = true
   return true
 end
 
@@ -826,7 +840,7 @@ end
 local function ApplyStateOrPackIconTexture(tex, kind, cfg, status, variant, playAnimation)
   if kind == "resting" then
     if cfg and cfg.symbol == RESTING_ANIMATED_SYMBOL
-      and ApplyRestingFlipbook(tex, playAnimation == true) then
+      and ApplyRestingFlipbook(tex, playAnimation) then
       return true
     end
     StopRestingFlipbook(tex, true)
@@ -1791,8 +1805,8 @@ local function UpdateResting(frame, status)
     active = BoolTrue(activeRaw)
   end
   if active == true then
-    ApplyStateOrPackIconTexture(tex, "resting", cfg, status, "resting", true)
     SetShown(tex, true)
+    ApplyStateOrPackIconTexture(tex, "resting", cfg, status, "resting", true)
   else
     StopRestingFlipbook(tex)
     SetShown(tex, false)
