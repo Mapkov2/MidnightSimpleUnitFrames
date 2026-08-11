@@ -477,8 +477,18 @@ local function SetBorder(frame, show, r, g, b, a)
   local textureThickness = frame._msufBorderVisualThickness or frame._msufBorderRuntimeNormalThickness or 1
   local trueOutline = texture and textureMode == (BorderStyles and BorderStyles.FRAME_BORDER or "border")
   local stretchedTexture = textureMode == (BorderStyles and BorderStyles.FRAME_TEXTURE or "texture")
+  local outlineWidth, outlineHeight
+  if trueOutline then
+    outlineWidth = frame.GetWidth and frame:GetWidth() or 0
+    outlineHeight = frame.GetHeight and frame:GetHeight() or 0
+    if NotSecretValue(outlineWidth) ~= true then outlineWidth = 0 end
+    if NotSecretValue(outlineHeight) ~= true then outlineHeight = 0 end
+  end
   local texturedLayoutChanged = texture and trueOutline
-    and (textureKeyChanged or frame._msufBorderTextureThickness ~= textureThickness)
+    and (textureKeyChanged
+      or frame._msufBorderTextureThickness ~= textureThickness
+      or frame._msufBorderTrueOutlineWidth ~= outlineWidth
+      or frame._msufBorderTrueOutlineHeight ~= outlineHeight)
   local secretColor = IsSecretValue(r) or IsSecretValue(g) or IsSecretValue(b) or IsSecretValue(a)
   local showChanged = frame._msufBorderShown ~= show
   local colorChanged = secretColor == true or textureChanged or textureModeChanged
@@ -513,18 +523,18 @@ local function SetBorder(frame, show, r, g, b, a)
     if pieces then
       local edgeSize = type(BorderStyles.EdgeSize) == "function"
         and BorderStyles.EdgeSize(textureKey, textureThickness) or textureThickness
-      local width = frame.GetWidth and frame:GetWidth() or 0
-      local height = frame.GetHeight and frame:GetHeight() or 0
-      if NotSecretValue(width) ~= true then width = 0 end
-      if NotSecretValue(height) ~= true then height = 0 end
-      BorderStyles.Apply(pieces, frame, edgeSize, width, height, r, g, b, a)
+      BorderStyles.Apply(pieces, frame, edgeSize, outlineWidth, outlineHeight, r, g, b, a)
       frame._msufBorderTextureThickness = textureThickness
+      frame._msufBorderTrueOutlineWidth = outlineWidth
+      frame._msufBorderTrueOutlineHeight = outlineHeight
     end
   else
     if frame.MSUFBorderTexturePieces and BorderStyles and type(BorderStyles.Hide) == "function" then
       BorderStyles.Hide(frame.MSUFBorderTexturePieces)
     end
     frame._msufBorderTextureThickness = nil
+    frame._msufBorderTrueOutlineWidth = nil
+    frame._msufBorderTrueOutlineHeight = nil
   end
   for i = 1, #EDGE_KEYS do
     local edge = frame.MSUFBorderEdges[EDGE_KEYS[i]]
