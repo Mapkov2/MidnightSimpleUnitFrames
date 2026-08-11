@@ -22,8 +22,8 @@ A.AutoCoverageManifest = Manifest
 -- Defaults generated offline on 2026-08-11 from the current factory profile
 -- through the same decode and normalization path used by MSUF in game.
 -- Regenerate and verify with tools/assistant_autocoverage_manifest_regression.py.
--- 4762 top-level scalar fallbacks across every required AutoCoverage scope.
-Manifest.scalarCount = 4762
+-- 4763 top-level scalar fallbacks across every required AutoCoverage scope.
+Manifest.scalarCount = 4763
 Manifest.requiredScopes = {
     "bars", "boss", "focus", "focustarget", "gameplay", "general",
     "gf_mythicraid", "gf_party", "gf_raid", "pet", "player", "target", "targettarget",
@@ -1777,11 +1777,12 @@ Manifest.defaults = {
         rangeFadeEnabled = true,
         rangeFadePortrait = true,
         restedStateIndicatorAnchor = "TOPLEFT",
-        restedStateIndicatorLayer = 7,
-        restedStateIndicatorOffsetX = 0,
-        restedStateIndicatorOffsetY = 0,
-        restedStateIndicatorSize = 30,
-        restedStateIndicatorSymbol = "rested_moonzzz",
+        restedStateIndicatorIconStyle = "BLIZZARD",
+        restedStateIndicatorLayer = 25,
+        restedStateIndicatorOffsetX = -40,
+        restedStateIndicatorOffsetY = 50,
+        restedStateIndicatorSize = 39,
+        restedStateIndicatorSymbol = "rested_blizzard_animated",
         roundedUnitframes = false,
         shortenNameClipSide = "RIGHT",
         shortenNameFrontMaskPx = 0,
@@ -3793,10 +3794,10 @@ Manifest.defaults = {
         restedStateIndicatorAnchor = "TOPLEFT",
         restedStateIndicatorIconStyle = "BLIZZARD",
         restedStateIndicatorLayer = 25,
-        restedStateIndicatorOffsetX = -24,
-        restedStateIndicatorOffsetY = 20,
-        restedStateIndicatorSize = 14,
-        restedStateIndicatorSymbol = "rested_moonzzzz",
+        restedStateIndicatorOffsetX = -40,
+        restedStateIndicatorOffsetY = 50,
+        restedStateIndicatorSize = 39,
+        restedStateIndicatorSymbol = "rested_blizzard_animated",
         reverseFillBars = false,
         shortenNameClipSide = "RIGHT",
         shortenNameFrontMaskPx = 0,
@@ -3819,7 +3820,7 @@ Manifest.defaults = {
         showRaceIndicator = false,
         showRaidGroupInName = false,
         showRaidMarker = true,
-        showRestingIndicator = false,
+        showRestingIndicator = true,
         showSelfHealPrediction = true,
         smoothFill = false,
         stateIconsTestMode = false,
@@ -4819,4 +4820,4 @@ Manifest.defaults = {
     },
 }
 
--- top-level scalar paths: 4762
+-- top-level scalar paths: 4763
