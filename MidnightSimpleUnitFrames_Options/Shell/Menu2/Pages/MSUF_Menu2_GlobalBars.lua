@@ -42,7 +42,8 @@ local ROUNDED_PREVIEW_SLICE_MARGIN = 9.5
 local ROUNDED_PREVIEW_STRETCHED = _G.Enum and _G.Enum.UITextureSliceMode
     and _G.Enum.UITextureSliceMode.Stretched
 local ROUNDED_STRENGTH_APPLY_DELAY = 0.12
-local ROUNDED_SECTION_HEIGHT = 306
+local ROUNDED_SECTION_HEIGHT = 310
+local ROUNDED_PREVIEW_CARD_HEIGHT = 92
 local GRADIENT_DIR_KEYS, PRIORITY_LABELS = M.PickDefaults(GP, [[GRADIENT_DIR_KEYS PRIORITY_LABELS]])
 local DISPEL_TRIGGERS = VT("BY_ME", "Dispellable by me", "BY_RAID", "Dispellable by group",
     "DISPEL_TYPE", "Any dispel type")
@@ -435,7 +436,9 @@ end
 -- refreshed by ApplyService. Descriptors remove the former texture-by-texture boilerplate.
 local function CreateRoundedTexturePreview(parent, x, y, width)
     width = max(320, floor((tonumber(width) or 560) + 0.5))
-    local card = W.ControlCard(parent, "Preview", nil, x, y, width, 88)
+    -- The two-pixel rounded edge extends beyond the 46px sample. Keep a small
+    -- inset below it so the card boundary cannot clip the power-bar edge.
+    local card = W.ControlCard(parent, "Preview", nil, x, y, width, ROUNDED_PREVIEW_CARD_HEIGHT)
     if not card then return end
     local sample, sampleW, sampleH, powerH = CreateFrame("Frame", nil, card), min(440, max(280, width - 44)), 46, 8
     sample:SetPoint("TOPLEFT", card, "TOPLEFT", 20, -40)
