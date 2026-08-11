@@ -2218,6 +2218,10 @@ function R.LooksLikeGuidedTourRequest(text)    local norm = R.Normalize(text)
     if norm == "" then return false end
     if R.ContainsAny(norm, {
         "guided setup", "setup guide", "start guide", "start tour", "tour guide",
+        "highlight tour", "highlights tour", "upgrade highlight", "update highlight",
+        "restart the tour", "restart tour", "start the tour again", "start tour again", "replay the tour",
+        "highlight tour starten", "upgrade highlights starten", "tour neu starten",
+        "tour nochmal starten", "tour wieder starten", "tour erneut starten", "tour wiederholen",
         "show me around", "walk me through", "getting started", "beginner guide",
         "beginner setup", "onboarding", "first time msuf", "new to msuf",
         "never used msuf", "never used this addon", "start with msuf",

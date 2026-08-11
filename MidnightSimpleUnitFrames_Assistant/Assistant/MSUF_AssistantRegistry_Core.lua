@@ -297,6 +297,7 @@ local function StringSettingControlNoun(setting)
         if ok then mediaType = tostring(resolved or ""):lower() end
     end
     if mediaType:find("font", 1, true) then return "font choice" end
+    if mediaType:find("border", 1, true) then return "border texture choice" end
     if mediaType:find("texture", 1, true) or mediaType:find("statusbar", 1, true) then return "texture choice" end
 
     local hint = table.concat({

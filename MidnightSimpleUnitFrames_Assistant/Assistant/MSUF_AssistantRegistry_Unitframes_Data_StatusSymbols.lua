@@ -29,7 +29,7 @@ Data.COMBAT_SYMBOL_VALUES = {
     "weapon_warglaives_crossed",
 }
 Data.RESTED_SYMBOL_VALUES = {
-    "DEFAULT", "rested_moonzzz", "rested_moonzzzz",
+    "DEFAULT", "rested_blizzard_animated", "rested_moonzzz", "rested_moonzzzz",
     "rested_sleep_zzzz", "rested_zzz_compact",
     "rested_zzz_diag", "rested_zzz_stack",
 }
@@ -59,6 +59,10 @@ Data.STATUS_SYMBOL_ALIASES = {
     thrown = "weapon_thrown_crossed",
     wands = "weapon_wands_crossed",
     warglaives = "weapon_warglaives_crossed",
+    ["animated zzz"] = "rested_blizzard_animated",
+    ["blizzard animated zzz"] = "rested_blizzard_animated",
+    ["blizzard zzz"] = "rested_blizzard_animated",
+    ["blizzard zzz animation"] = "rested_blizzard_animated",
     moon = "rested_moonzzz",
     ["moon 3 z"] = "rested_moonzzz",
     ["moon 4 z"] = "rested_moonzzzz",

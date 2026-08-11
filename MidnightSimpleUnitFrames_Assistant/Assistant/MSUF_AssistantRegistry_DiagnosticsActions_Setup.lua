@@ -79,6 +79,24 @@ function A.DiagnosticsRegistry.RegisterGuidedSetupActions(ctx)
     })
 
     Registry:RegisterAction({
+        key = "restart_upgrade_highlight_tour",
+        label = "Restart Upgrade Highlight Tour",
+        aliases = {
+            "start the highlight tour", "restart the highlight tour", "replay the highlight tour",
+            "start upgrade highlights", "show update highlights again", "tour nochmal starten",
+        },
+        type = "setup",
+        combatSafe = false,
+        confirmRequired = false,
+        run = function()
+            if not (M and type(M.RestartUpgradeHighlightTour) == "function") then
+                return false, "The upgrade highlight tour is not available in this menu build."
+            end
+            return M.RestartUpgradeHighlightTour("assistant")
+        end,
+    })
+
+    Registry:RegisterAction({
         key = "guided_setup_step",
         label = "Open Guided Setup",
         type = "setup",

@@ -17,7 +17,9 @@ function A.ClassPowerRegistry.RegisterAltManaSettings(ctx)
 
     local RegisterBarsBoolean = ctx.RegisterBarsBoolean
     local RegisterBarsNumber = ctx.RegisterBarsNumber
+    local RegisterBarsEnum = ctx.RegisterBarsEnum
     if type(RegisterBarsBoolean) ~= "function" or type(RegisterBarsNumber) ~= "function" then return end
+    if type(RegisterBarsEnum) ~= "function" then return end
 
     RegisterBarsBoolean("showAltMana", "altMana", "Alternative Mana Bar", false, {
         "alternative mana bar", "alt mana bar", "dual resource mana bar", "secondary mana bar",
@@ -35,12 +37,40 @@ function A.ClassPowerRegistry.RegisterAltManaSettings(ctx)
         reason = "MSUF_ASSISTANT_ALT_MANA_SMOOTH_FILL",
         description = "Uses native StatusBar interpolation and frequent power events for Alternative Mana.",
     })
+    RegisterBarsEnum("altManaWidthMode", "widthMode", "Alternative Mana Width Mode", "player", {
+        "player", "custom",
+    }, {
+        "alternative mana width mode", "alt mana width mode", "alternative mana width source",
+        "alt mana follows player frame", "alternative mana custom width",
+    }, {
+        category = "Global / Class Resources / Alternative Mana",
+        frameType = "altMana",
+        reason = "MSUF_ASSISTANT_ALT_MANA_WIDTH_MODE",
+        valueAliases = {
+            ["player frame"] = "player", ["follow player"] = "player",
+            auto = "player", automatic = "player", manual = "custom", ["custom width"] = "custom",
+        },
+    })
+    RegisterBarsNumber("altManaWidth", "width", "Alternative Mana Width", 0, 20, 1200, {
+        "alternative mana width", "alt mana width", "secondary mana width", "dual resource mana width",
+    }, {
+        category = "Global / Class Resources / Alternative Mana",
+        frameType = "altMana",
+        reason = "MSUF_ASSISTANT_ALT_MANA_WIDTH",
+    })
     RegisterBarsNumber("altManaHeight", "height", "Alternative Mana Height", 4, 2, 30, {
         "alternative mana height", "alt mana height", "secondary mana height", "dual resource mana height",
     }, {
         category = "Global / Class Resources / Alternative Mana",
         frameType = "altMana",
         reason = "MSUF_ASSISTANT_ALT_MANA_HEIGHT",
+    })
+    RegisterBarsNumber("altManaOffsetX", "offsetX", "Alternative Mana Offset X", 0, -1000, 1000, {
+        "alternative mana x", "alternative mana x offset", "alt mana x", "alt mana x offset", "secondary mana x offset",
+    }, {
+        category = "Global / Class Resources / Alternative Mana",
+        frameType = "altMana",
+        reason = "MSUF_ASSISTANT_ALT_MANA_X",
     })
     RegisterBarsNumber("altManaOffsetY", "offsetY", "Alternative Mana Offset Y", -2, -50, 50, {
         "alternative mana y", "alternative mana y offset", "alt mana y", "alt mana y offset", "secondary mana y offset",

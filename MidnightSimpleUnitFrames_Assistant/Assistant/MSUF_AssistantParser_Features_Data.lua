@@ -923,5 +923,20 @@ Data.FEATURES_PARSER = {
         "players", "raider", "raiders", "people", "members", "player count", "raid size",
         "full raid", "when full", "large raid", "small raid", "five man", "5 man", "5m",
     },
+        [427] = { "width", "wide", "wider", "narrow", "narrower" },
+        [428] = { "x offset", "offset x", " x", "left", "right" },
+        [429] = {
+        "highlight tour", "highlights tour", "upgrade highlight tour", "upgrade highlights tour",
+        "release highlight tour", "update highlight tour", "start upgrade highlights",
+        "show upgrade highlights", "show update highlights again", "replay upgrade highlights",
+        "highlight tour starten", "highlight tour neu starten", "highlights tour starten",
+        "upgrade highlights starten", "upgrade tour neu starten", "tour der highlights",
+    },
+        [430] = {
+        "restart the tour", "restart tour", "start the tour again", "start tour again",
+        "replay the tour", "replay tour", "show the tour again",
+        "tour neu starten", "tour nochmal starten", "tour wieder starten",
+        "tour erneut starten", "tour wiederholen", "zeige die tour nochmal",
+    },
     },
 }
