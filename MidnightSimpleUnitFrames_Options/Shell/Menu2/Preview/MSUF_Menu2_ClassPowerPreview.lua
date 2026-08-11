@@ -1433,7 +1433,7 @@ local function RenderClassPower(preview, bars, spec)
         textColorB = textColorB,
         textAlpha = textAlpha,
     }
-    if bars.classPowerShowText == true then
+    if bars.classPowerShowText == true or spec.nativeDurationText == true then
         local textSize = Clamp(bars.classPowerFontSize, 16, 6, 48)
         ApplyFont(frame.text, textSize)
         frame.text:SetText(CPPreview.TextForValue and CPPreview.TextForValue(spec, animatedValue) or tostring(spec.previewText or "3"))
@@ -1774,7 +1774,7 @@ local function UpdateClassPowerAnimation(preview, frame)
             end
         end
     end
-    if frame.text and bars.classPowerShowText == true then
+    if frame.text and (bars.classPowerShowText == true or spec.nativeDurationText == true) then
         frame.text:SetText(CPPreview.TextForValue and CPPreview.TextForValue(spec, animatedValue) or tostring(spec.previewText or "3"))
         if LayerOn(preview, "classText") then frame.text:Show() end
     end

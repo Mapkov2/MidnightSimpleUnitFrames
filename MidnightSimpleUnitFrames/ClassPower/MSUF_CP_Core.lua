@@ -976,10 +976,8 @@ builders.RUNTIME = function(env)
     local CP_RefreshEventBindings = env.CP_RefreshEventBindings
     local ThrottledFullRefresh = env.ThrottledFullRefresh
     local FullRefresh = env.FullRefresh
-    local SetTimerBarOnUpdate = env.SetTimerBarOnUpdate
     local CP_SyncRuntimeOnUpdates = env.CP_SyncRuntimeOnUpdates
     local CP_ShouldUseLiteBindings = env.CP_ShouldUseLiteBindings
-    local CP_UpdateValues_TimerBar = env.CP_UpdateValues_TimerBar
     local CP_UpdateValues_Stagger = env.CP_UpdateValues_Stagger
     local OnWarlockCastStart = env.OnWarlockCastStart
     local OnWarlockCastEnd = env.OnWarlockCastEnd
@@ -1168,9 +1166,8 @@ builders.RUNTIME = function(env)
     end
 
     --- Aura-backed class resources keep their own player-only UNIT_AURA traffic.
-    --- UnitFrame aura display is native AuraContainer-owned in 12.1 and does
-    --- not share this path. Keep the branch narrow: segmented aura resources,
-    --- timer bars, and stagger each have a dedicated value updater.
+    --- Ebon Might is native AuraContainer-owned in 12.1 and never enters this
+    --- path; only segmented aura resources and Stagger update here.
     local function OnAuraUpdate(unit)
         if CP.visible and CP.isAuraPower then
             RunActiveUpdate(CP.powerType, CP.currentMax)
@@ -1184,11 +1181,6 @@ builders.RUNTIME = function(env)
                     RefreshVisibleModeLight(segCount)
                 end
             end
-        end
-        if CP.visible and CP.renderMode == CPK.MODE.TIMER_BAR then
-            CP.tbCachedQ = -1
-            local timerActive = CP_UpdateValues_TimerBar and CP_UpdateValues_TimerBar(CP.powerType, CP.currentMax)
-            CP_SyncRuntimeOnUpdates(timerActive)
         end
         if CP.visible and CP.renderMode == CPK.MODE.STAGGER then
             RunActiveUpdate(CP.powerType, CP.currentMax)

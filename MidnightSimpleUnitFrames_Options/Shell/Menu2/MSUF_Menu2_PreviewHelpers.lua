@@ -617,6 +617,7 @@ function CP.TokenForValue(spec, value)
 end
 function CP.FillForSegment(spec, index, valueOverride)
     if not spec then return index <= 3 and 1 or 0 end
+    if spec.nativeDurationText == true then return 0 end
     local mode = spec.mode or "segmented"
     local value = tonumber(valueOverride)
     if value == nil then value = tonumber(spec.value) or 0 end
@@ -661,7 +662,7 @@ function CP.TextForValue(spec, value)
     if value == nil then return spec.previewText or "" end
     local mode = spec.mode or "segmented"
     if mode == "continuous" then return tostring(floor((value * 100) + 0.5)) .. " / 100" end
-    if mode == "timer_bar" then return string.format("%.1fs", floor((value * 20 * 10) + 0.5) / 10) end
+    if mode == "timer_bar" then return string.format("%.1f", floor((value * 20 * 10) + 0.5) / 10) end
     if mode == "stagger" then return tostring(floor((value * 34) + 0.5)) .. "K" end
     if mode == "aura_single" then return tostring(floor((value * 5) + 0.5)) end
     if mode == "fractional" then return string.format("%.1f", value) end

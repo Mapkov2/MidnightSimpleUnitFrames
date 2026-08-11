@@ -2296,6 +2296,7 @@ function Preview.Refresh(box, reason)
             end
         end
         local classTextOn = bars.classPowerShowText == true
+            or (cp.preview and cp.preview.nativeDurationText == true)
         if classTextOn then
             local cpTextSize = S(tonumber(bars.classPowerFontSize) or 16)
             if cpTextSize < 7 then cpTextSize = 7 end

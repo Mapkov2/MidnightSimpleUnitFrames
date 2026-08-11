@@ -14,8 +14,9 @@
 --- - Render modes: each class/spec resolves to a render mode at FullRefresh.
 --- Hot-path dispatch is a single mode check - zero branching for inactive.
 --- - Secret-safe: raw UnitPower/UnitPowerMax (2 args), nil-guarded.
---- - Max performance: Rune, Essence, and Ebon timers use native 12.1 duration
---- objects; Lua polling remains only for active Stagger or a degraded API path.
+--- - Max performance: Rune and Essence use native 12.1 duration objects;
+--- Ebon is fully AuraContainer-owned. Lua polling remains only for active
+--- Stagger or a degraded non-Ebon API path.
 
 --- Guard: only load once.
 if _G.__MSUF_ClassPower_Loaded then return end
@@ -371,7 +372,7 @@ end
 --- orchestrator.
 
 --- Hunter Survival: Tip of the Spear (talent 260285)
---- Evoker Augmentation: Ebon Might timer bar (MCR-sourced)
+--- Evoker Augmentation: native 12.1 Ebon Might duration text.
 --- DB Defaults (self-contained; runs on every login, no-ops if keys exist)
 local function EnsureDefaults()
     if not MSUF_DB then return end
@@ -454,7 +455,7 @@ local function EnsureDefaults()
 
     --- Ele Shaman: Maelstrom Power continuous bar (off by default - niche preference)
     if b.showEleMaelstrom     == nil then b.showEleMaelstrom     = false end
-    --- Evoker Aug: Ebon Might timer bar (on by default)
+    --- Evoker Aug: native Ebon Might duration text (on by default)
     if b.showEbonMight        == nil then b.showEbonMight        = true  end
     --- Shadow Priest: show Mana as main bar, Insanity as class resource (off by default)
     if b.showShadowMana       == nil then b.showShadowMana       = false end
@@ -925,14 +926,10 @@ local CP = {
     height    = 4,
     --- Warlock shard prediction state (Jay's approach: predicted post-cast value)
     wlPredDelta = 0,       --- shard delta for active cast (0 = no prediction)
-    --- Timer Bar state (Ebon Might)
-    tbCachedQ   = -1,      --- quantized percentage for skip-if-same
-    tbOUA       = false,   --- true if timer-bar OnUpdate is active
     runeOUAAny  = false,   --- true if any rune bar currently has an OnUpdate
     runeNativeAny = false, --- true while any Rune bar uses a native duration
     essenceOUAAny = false, --- true if Essence recharge pip has an OnUpdate
     essenceNativeAny = false, --- true while one Essence pip uses a native duration
-    timerNativeActive = false, --- true while Ebon Might uses native durations
     powerToken  = nil,     --- cached POWER_TYPE_TOKENS[powerType] for hot event filters
     visual      = nil,     --- compiled static visual runtime values for active mode
     slotR       = {},      --- persistent compiled per-slot colors (no refresh allocations)
@@ -1076,7 +1073,6 @@ function CPAuras.ActiveSpellKind(powerType, renderMode, spellID)
             return "stacks"
         end
     end
-    if renderMode == CPK.MODE.TIMER_BAR and spellID == EBON.SPELL_ID then return "timer" end
     return nil
 end
 
@@ -1097,8 +1093,6 @@ function CPAuras.RefreshActive(powerType, renderMode)
         Refresh(CPK.SPELL.VOID_METAMORPHOSIS, "stacks")
         Refresh(CPK.SPELL.SILENCE_THE_WHISPERS, "stacks")
         Refresh(CPK.SPELL.DARK_HEART, "stacks")
-    elseif renderMode == CPK.MODE.TIMER_BAR then
-        Refresh(EBON.SPELL_ID, "timer")
     elseif powerType == "SOUL_FRAGMENTS_VENG" then
         --- Vengeance reads the native spell cast count; UNIT_AURA is only a
         --- value-change signal and does not require any aura-cache queries.
@@ -1245,7 +1239,6 @@ CPAuras.AddSpell(CPConst.ICICLES and CPConst.ICICLES.AURA_ID)
 CPAuras.AddSpell(CPK.SPELL.VOID_METAMORPHOSIS)
 CPAuras.AddSpell(CPK.SPELL.SILENCE_THE_WHISPERS)
 CPAuras.AddSpell(CPK.SPELL.DARK_HEART)
-CPAuras.AddSpell(EBON.SPELL_ID)
 for spellID in pairs(CPConst.ECLIPSE_AURAS or {}) do
     CPAuras.AddSpell(spellID)
 end
@@ -1373,6 +1366,13 @@ do
     end
 end
 
+CP.ebonNative = CP_CallBuilder(CPCoreBuilders.EBON_MIGHT, {
+    CP = CP,
+    EBON = EBON,
+    _cpDB = _cpDB,
+    CreateFrame = CreateFrame,
+})
+
 local function CP_SetIciclesSensorActive(active)
     if active and not CP.icicleSensor then
         local A3 = _G.MSUF_Auras3
@@ -1427,6 +1427,11 @@ local _autoHideActive = false  --- true if any auto-hide option is enabled
 local function CP_CheckAutoHide(cur, maxP)
     if not _autoHideActive or not CP.visible then return end
     if not CP.container then return end
+
+    if _G.MSUF_UnitEditModeActive == true then
+        CP.container:SetAlpha(1)
+        return
+    end
 
     local b = _cpDB.bars or {}
 
@@ -1490,7 +1495,7 @@ local CP_UpdateValues_AuraSegmented
 local CP_UpdateValues_AuraSingle
 local CP_UpdateValues_Continuous
 local CP_UpdateValues_RuneCD
-local CP_UpdateValues_TimerBar
+local CP_UpdateEbonHost
 local CP_UpdateValues_Stagger
 local CP_StopEssenceOnUpdates
 local _essenceRuntimeTick
@@ -1607,13 +1612,9 @@ ExportPublic("MSUF_CDM_GetScaledWidth", CDM_GetScaledWidth)
 --- UnitPower(unit, type, true) / UnitPowerDisplayMod(type) gives e.g. 3.7
 --- Fractional mode runner moved to ClassPower/Modes/MSUF_CP_Mode_Fractional.lua
 
---- CPK.MODE.RUNE_CD / CPK.MODE.TIMER_BAR
---- Phase 3 CP split: rune + timer mode runners now live in
---- ClassPower/Modes/MSUF_CP_Mode_Rune.lua and MSUF_CP_Mode_Timer.lua.
---- Degraded/Stagger tick: native duration modes never enter this driver.
+--- Rune cooldown animation and the Stagger fallback share one central driver.
+--- Ebon Might is fully native in 12.1 and never enters this driver.
 local CP_StopRuneOnUpdates
-local SetTimerBarOnUpdate
-local StopTimerBar
 
 --- Central CP runtime tick for Stagger and guarded degraded fallbacks.
 local _cpTickFrame
@@ -1662,16 +1663,12 @@ CP_StopCentralTick = function()
 end
 
 local _runeRuntimeTick
-local _timerRuntimeTick
 
 do
     local commonEnv = {
         CP = CP,
         _cpDB = _cpDB,
         CPK = CPK,
-        EBON = EBON,
-        C_UnitAuras = C_UnitAuras,
-        GetTrackedPlayerAura = CPAuras.Get,
         NotSecret = NotSecret,
         GetTime = GetTime,
         GetRuneCooldown = GetRuneCooldown,
@@ -1697,10 +1694,7 @@ do
 
     local timer = CP_CallBuilder(CPModeBuilders.TIMER, commonEnv)
     if timer then
-        if type(timer.Update) == "function" then CP_UpdateValues_TimerBar = timer.Update end
-        if type(timer.SetOnUpdate) == "function" then SetTimerBarOnUpdate = timer.SetOnUpdate end
-        if type(timer.Stop) == "function" then StopTimerBar = timer.Stop end
-        if type(timer.RuntimeTick) == "function" then _timerRuntimeTick = timer.RuntimeTick end
+        if type(timer.Update) == "function" then CP_UpdateEbonHost = timer.Update end
     end
 end
 
@@ -1726,7 +1720,6 @@ local function CP_SyncRuntimeOnUpdates(timerActive)
 
     if mode == CPK.MODE.STAGGER then
         if (CP.essenceOUAAny or CP.essenceNativeAny) and CP_StopEssenceOnUpdates then CP_StopEssenceOnUpdates() end
-        if StopTimerBar and (CP.timerNativeActive or CP.tbOUA) then StopTimerBar() end
         if timerActive and _staggerRuntimeTick then
             CP_StartCentralTick(_staggerRuntimeTick)
         else
@@ -1737,14 +1730,8 @@ local function CP_SyncRuntimeOnUpdates(timerActive)
 
     if mode == CPK.MODE.TIMER_BAR then
         if (CP.essenceOUAAny or CP.essenceNativeAny) and CP_StopEssenceOnUpdates then CP_StopEssenceOnUpdates() end
-        if SetTimerBarOnUpdate then SetTimerBarOnUpdate(timerActive == true) end
-        if timerActive and _timerRuntimeTick then
-            CP_StartCentralTick(_timerRuntimeTick)
-        else
-            CP_StopCentralTick()
-        end
+        CP_StopCentralTick()
     else
-        if StopTimerBar and (CP.timerNativeActive or CP.tbOUA) then StopTimerBar() end
         --- SEGMENTED mode: essence may tick.
         if CP.essenceOUAAny and _essenceRuntimeTick then
             CP_StartCentralTick(_essenceRuntimeTick)
@@ -1820,7 +1807,7 @@ local MODE_UPDATE_FN = {
     [CPK.MODE.AURA_SEGMENTED] = CP_UpdateValues_AuraSegmented,
     [CPK.MODE.AURA_SINGLE]    = CP_UpdateValues_AuraSingle,
     [CPK.MODE.CONTINUOUS]     = CP_UpdateValues_Continuous,
-    [CPK.MODE.TIMER_BAR]      = CP_UpdateValues_TimerBar,
+    [CPK.MODE.TIMER_BAR]      = CP_UpdateEbonHost,
     [CPK.MODE.STAGGER]        = CP_UpdateValues_Stagger,
     [CPK.MODE.IRONFUR]        = CP.ironfur and CP.ironfur.Update or nil,
 }
@@ -2142,7 +2129,7 @@ local function FullRefresh()
         elseif renderMode == CPK.MODE.STAGGER then
             maxP = 1  --- Brewmaster Monk: single stagger bar (max = UnitHealthMax inside update fn)
         elseif renderMode == CPK.MODE.TIMER_BAR then
-            maxP = 1  --- Ebon Might: single countdown bar
+            maxP = 1  --- Ebon Might: one host for the native duration text
         elseif renderMode == CPK.MODE.IRONFUR then
             maxP = 1  --- Guardian Ironfur: normalized longest remaining lifetime
         elseif renderMode == CPK.MODE.AURA_SEGMENTED then
@@ -2214,14 +2201,11 @@ local function FullRefresh()
         if renderMode ~= CPK.MODE.RUNE_CD and CP_StopRuneOnUpdates then
             CP_StopRuneOnUpdates(true)
         end
-        if renderMode ~= CPK.MODE.TIMER_BAR and (StopTimerBar or SetTimerBarOnUpdate) then
-            if StopTimerBar then StopTimerBar() else SetTimerBarOnUpdate(false) end
-        end
         if (renderMode ~= CPK.MODE.SEGMENTED or powerType ~= PT.Essence) and CP_StopEssenceOnUpdates then
             CP_StopEssenceOnUpdates()
         end
 
-        if b.classPowerShowText == true and CP_EnsureMainText then
+        if (b.classPowerShowText == true or powerType == "EBON_MIGHT") and CP_EnsureMainText then
             CP_EnsureMainText()
         end
         CP_ApplyFont()
@@ -2244,6 +2228,8 @@ local function FullRefresh()
 
         CP.container._msufAnchorOnly = nil
         CP.container:Show()
+        CP.SetEbonSensorActive(powerType == "EBON_MIGHT"
+            and renderMode == CPK.MODE.TIMER_BAR)
         --- The container is measurable only now, so a synced detached Power bar
         --- can finally match it.
         CP.RefreshSyncedPowerWidth(playerFrame)
@@ -2261,15 +2247,14 @@ local function FullRefresh()
         end
 
     else
-        --- Clean up rune/timer/essence OnUpdate scripts when hiding
+        --- Clean up resource runtime state when hiding.
+        CP.SetEbonSensorActive(false)
         CP_SetIciclesSensorActive(false)
         if CP.ironfur and CP.ironfur.SetActive then CP.ironfur.SetActive(false) end
         CP.visual = nil
         if (CP.renderMode == CPK.MODE.RUNE_CD or CP.runeOUAAny or CP.runeNativeAny) and CP_StopRuneOnUpdates then
             CP_StopRuneOnUpdates(true)
         end
-        if StopTimerBar then StopTimerBar()
-        elseif SetTimerBarOnUpdate then SetTimerBarOnUpdate(false) end
         if (CP.essenceOUAAny or CP.essenceNativeAny) and CP_StopEssenceOnUpdates then CP_StopEssenceOnUpdates() end
         CP_StopCentralTick()
         local maintainedAnchor = CP_EnsureHiddenAnchorGeometry(playerFrame, cpHeight)
@@ -2410,10 +2395,8 @@ do
             CP_RefreshEventBindings = function() return CP_RefreshEventBindings() end,
             ThrottledFullRefresh = function() return ThrottledFullRefresh() end,
             FullRefresh = function() return FullRefresh() end,
-            SetTimerBarOnUpdate = SetTimerBarOnUpdate,
             CP_SyncRuntimeOnUpdates = CP_SyncRuntimeOnUpdates,
             CP_ShouldUseLiteBindings = function() return CP_ShouldUseLiteBindings() end,
-            CP_UpdateValues_TimerBar = CP_UpdateValues_TimerBar,
             CP_UpdateValues_Stagger = CP_UpdateValues_Stagger,
             CP_UpdateValues_RuneCD = CP_UpdateValues_RuneCD,
             OnWarlockCastStart = OnWarlockCastStart,
@@ -2760,8 +2743,8 @@ local function ClassPowerOnEvent(_, event, arg1, arg2, arg3)
         if arg1 == "player" then
             --- Stagger uses UNIT_AURA only as a lightweight change signal and
             --- never reads aura payloads. Avoid rebuilding the aura cache for it.
-            local resourceChanged = true
-            if CP.isAuraPower or CP.renderMode == CPK.MODE.TIMER_BAR then
+            local resourceChanged = false
+            if CP.isAuraPower then
                 resourceChanged = CPAuras.ProcessUnitAuraUpdate(arg2, CP.powerType, CP.renderMode)
             end
             if resourceChanged or CP.renderMode == CPK.MODE.STAGGER then
@@ -3089,6 +3072,9 @@ CP.ApplyFontsPublic = function()
     if CP.visible then
         _cpFontRev = 0  --- force re-apply
         CP_ApplyFont()
+        CP.SetEbonSensorActive(CP.powerType == "EBON_MIGHT"
+            and CP.renderMode == CPK.MODE.TIMER_BAR)
+        CP.ApplyEbonTextStyle()
     end
     if PHP.visible then
         PHP._fontStamp = nil
@@ -3105,6 +3091,7 @@ CP.RefreshVisualsPublic = function()
         if CP_RefreshTexture then CP_RefreshTexture() end
         if CP_ApplyFont then CP_ApplyFont() end
         if CP_ApplyColors then CP_ApplyColors(CP.powerType) end
+        CP.ApplyEbonTextStyle()
         if CP.powerType == "IRONFUR" and CP.ironfur and CP.ironfur.RefreshVisual then
             CP.ironfur.RefreshVisual()
         end
@@ -3181,6 +3168,17 @@ CP.ApplyPublic = function(opts)
 end
 ExportPublic("MSUF_ClassPower_Apply", CP.ApplyPublic)
 
+if type(_G.MSUF_RegisterAnyEditModeListener) == "function" then
+    _G.MSUF_RegisterAnyEditModeListener(function(active)
+        if not (CP.visible and CP.container) then return end
+        if active == true then
+            CP.container:SetAlpha(1)
+        else
+            CP_RunActiveUpdate(CP.powerType, CP.currentMax)
+        end
+    end)
+end
+
 do
     if MSUF and MSUF.UF and type(MSUF.UF.RegisterVisualRefreshCallback) == "function" then
         MSUF.UF.RegisterVisualRefreshCallback("ClassPower", function(unit)
@@ -3255,6 +3253,7 @@ do
                 CP_RefreshEventBindings()
                 CP_SetStructuralEventsBound(false)
                 CP.SyncControllerEvents(false)
+                CP.SetEbonSensorActive(false)
                 if CP.container then CP.container:Hide() end
                 if AM.container then AM.container:Hide() end
                 if PHP.container then PHP.container:Hide() end

@@ -1461,217 +1461,49 @@ modeBuilders.AURA = function(E)
     return { UpdateSegmented = UpdateSegmented, UpdateSingle = UpdateSingle, BuildWWRender = BuildWWRender }
 end
 
---- MSUF_CP_Mode_Timer.lua
---- Phase 3 ClassPower split: timer-bar mode extracted from the core file.
-
+--- 12.1 Ebon presentation host. Aura discovery and the countdown are owned by
+--- MSUF_CP_EbonMight's native CustomAuraContainer; Lua never reads or ticks the
+--- aura duration here.
 modeBuilders.TIMER = function(E)
-    local string_format = string.format
-    local math_floor = math.floor
     local CP = E.CP
-    local C_UnitAuras = E.C_UnitAuras
-    local GetTrackedPlayerAura = E.GetTrackedPlayerAura
-    local NotSecret = E.NotSecret or function() return true end
-    local GetTime = E.GetTime
-    local EBON = E.EBON
-    local CPK = E.CPK
     local CP_CheckAutoHide = E.CP_CheckAutoHide
-    local GetFilledAlpha = E.GetFilledAlpha
     local GetEmptyAlpha = E.GetEmptyAlpha
-    local EnsureMainText = E.EnsureMainText
-    local ApplyFont = E.ApplyFont
-    local nativeTimer = CreateNativeTimerSupport(E)
 
-    local _tbElapsed = 0
-    local Update
-    local SetOnUpdate
-
-    local function StopNativeTimer()
+    local function Update()
         local bar = CP.bars[1]
-        if bar and bar._timerNativeActive then
-            nativeTimer.ResetDuration(bar._msufCPTimerDisplayDuration)
-            bar._timerNativeActive = nil
-            bar._timerNativeAuraID = nil
-            bar._timerNativeEndTime = nil
-        end
-        nativeTimer.DisableBinding(CP, "_msufCPTimerBinding", CP.text)
-        CP.timerNativeActive = false
-    end
-
-    local function ApplyNativeTimer(aura, bar, visual, forceBarSync)
-        local auraInstanceID = aura and aura.auraInstanceID
-        local getAuraDuration = C_UnitAuras and C_UnitAuras.GetAuraDuration
-        if not (auraInstanceID and type(getAuraDuration) == "function") then return false end
-        local sourceDuration = getAuraDuration("player", auraInstanceID)
-        if not (sourceDuration and type(sourceDuration.GetEndTime) == "function") then return false end
-
-        local displayDuration = nativeTimer.EnsureDuration(bar, "_msufCPTimerDisplayDuration")
-        if not displayDuration then return false end
-        -- GetEndTime may return a secret; NotSecret gates every comparison on it.
-        local endTime = sourceDuration:GetEndTime()
-        local comparableEndTime = NotSecret(endTime)
-        local needsDurationSync = forceBarSync == true
-            or bar._timerNativeActive ~= true
-            or bar._timerNativeAuraID ~= auraInstanceID
-            or not comparableEndTime
-            or bar._timerNativeEndTime ~= endTime
-        if needsDurationSync then
-            if not nativeTimer.SetTimeFromEnd(displayDuration, endTime, EBON.MAX_DURATION) then return false end
-        end
-        --- SetTimerDuration binds the mutable duration object to the bar. Ebon
-        --- extensions only need to update that object; rebinding the StatusBar
-        --- on every (often secret) aura refresh restarts its native interpolation
-        --- and can visibly flicker while the player is casting.
-        if forceBarSync == true or bar._timerNativeActive ~= true then
-            if not nativeTimer.ApplyRemaining(bar, displayDuration) then return false end
-        end
-        bar._timerNativeAuraID = auraInstanceID
-        bar._timerNativeEndTime = comparableEndTime and endTime or nil
-
-        local showText = visual and visual.timerShowText == true
-        if showText then
-            local txt, created
-            if EnsureMainText then txt, created = EnsureMainText() end
-            if created and ApplyFont then ApplyFont() end
-            --- The display duration has the same end time as the aura. Binding
-            --- text to this stable object keeps the FontString attached while
-            --- extensions mutate the timer, instead of swapping duration
-            --- objects during cast-driven UNIT_AURA bursts.
-            if not nativeTimer.BindRemainingText(CP, "_msufCPTimerBinding", txt, displayDuration, "{}s") then
-                StopNativeTimer()
-                return false
-            end
-        else
-            nativeTimer.DisableBinding(CP, "_msufCPTimerBinding", CP.text)
-        end
-        bar._timerNativeActive = true
-        CP.timerNativeActive = true
-        return true
-    end
-
-    local function GetPlayerAura(spellID)
-        if type(GetTrackedPlayerAura) == "function" then
-            return GetTrackedPlayerAura(spellID)
-        end
-        return C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID and C_UnitAuras.GetPlayerAuraBySpellID(spellID) or nil
-    end
-
-    Update = function(powerType, maxPower)
-        local aura = GetPlayerAura(EBON.SPELL_ID)
-        local expirationTime = aura and aura.expirationTime
-        local remaining = 0
-        local remainingKnown = false
-        if NotSecret(expirationTime) and expirationTime ~= nil then
-            remaining = (tonumber(expirationTime) or 0) - GetTime()
-            remainingKnown = true
-        end
-        if remaining < 0 then remaining = 0 end
-        local active = remaining > 0.05
-        local bar = CP.bars[1]
-        if not bar then return active end
-
         local visual = CP_GetVisual(E)
-        local filledAlpha = visual and visual.filledAlpha or GetFilledAlpha()
-
-        local visualVersion = visual and visual.version or 0
-        local visualChanged = CP._timerVisualVersion ~= visualVersion
-        if visualChanged then
-            local r, g, bl = visual and visual.baseR or 1, visual and visual.baseG or 1, visual and visual.baseB or 1
-            local bgA = visual and visual.bgAlpha or 0.3
-            local bgR, bgG, bgB = visual and visual.bgR or 0, visual and visual.bgG or 0, visual and visual.bgB or 0
-            CP_StampStatusBarColor(bar, r, g, bl, 1)
-            CP_StampMinMax(bar, 0, 1)
-            CP_StampShown(bar, true)
-            CP_StampVertexColor(bar._bg, bgR, bgG, bgB, bgA)
-            for i = 2, CP.maxBars do
-                local b2 = CP.bars[i]
-                if b2 then CP_StampShown(b2, false) end
+        if bar then
+            local visualVersion = visual and visual.version or 0
+            if CP._timerVisualVersion ~= visualVersion then
+                CP_StampMinMax(bar, 0, 1)
+                CP_StampStatusBarColor(bar,
+                    visual and visual.baseR or 1,
+                    visual and visual.baseG or 1,
+                    visual and visual.baseB or 1, 1)
+                CP_StampVertexColor(bar._bg,
+                    visual and visual.bgR or 0,
+                    visual and visual.bgG or 0,
+                    visual and visual.bgB or 0,
+                    visual and visual.bgAlpha or 0.3)
+                CP_StampShown(bar, true)
+                for i = 2, CP.maxBars do
+                    if CP.bars[i] then CP_StampShown(CP.bars[i], false) end
+                end
+                for i = 1, #CP.ticks do
+                    if CP.ticks[i] then CP_StampShown(CP.ticks[i], false) end
+                end
+                CP._timerVisualVersion = visualVersion
             end
-            for i = 1, #CP.ticks do
-                if CP.ticks[i] then CP_StampShown(CP.ticks[i], false) end
-            end
-            CP._timerVisualVersion = visualVersion
+            CP_SetPowerValue(bar, 0)
+            CP_StampAlpha(bar, visual and visual.emptyAlpha or GetEmptyAlpha())
         end
-
-        if aura and (not remainingKnown or active) and ApplyNativeTimer(aura, bar, visual, visualChanged) then
-            CP_StampAlpha(bar, filledAlpha)
-            CP_CheckAutoHide(remainingKnown and 1 or nil, 1)
-            CP.tbCachedQ = -1
-            return false
-        end
-
-        StopNativeTimer()
-        local qPct = math_floor(remaining * 10 + 0.5)
-        if qPct == CP.tbCachedQ then
-            --- The bar art is unchanged, but combat state may not be. An idle Ebon
-            --- Might sits on qPct 0 forever, so returning here without the check
-            --- would freeze auto-hide at whatever alpha the last repaint left.
-            CP_CheckAutoHide(remaining > 0.1 and 1 or 0, 1)
-            return active
-        end
-        CP.tbCachedQ = qPct
-
-        local mx = EBON.MAX_DURATION
-        local pct = remaining / mx
-        if pct > 1 then pct = 1 end
-        CP_SetPowerValue(bar, pct)
-        local emptyAlpha = visual and visual.emptyAlpha or GetEmptyAlpha()
-        CP_StampAlpha(bar, remaining > 0 and filledAlpha or emptyAlpha)
-
-        local txt = CP.text
-        if txt then
-            local showText = visual and visual.timerShowText == true
-            if showText then
-                CP_StampText(txt, string_format("%.1fs", remaining))
-                CP_StampShown(txt, true)
-            else
-                CP_StampShown(txt, false)
-            end
-        end
-
-        local intCur = remaining > 0.1 and 1 or 0
-        CP_CheckAutoHide(intCur, 1)
-        return active
+        if CP.text then CP_StampShown(CP.text, false) end
+        if CP.container then CP.container:SetAlpha(1) end
+        CP_CheckAutoHide(nil, nil)
+        return false
     end
 
-    --- Degraded Ebon tick; the 12.1 native path never enters this function.
-    local function RuntimeTick(elapsed)
-        if not CP.visible or CP.renderMode ~= CPK.MODE.TIMER_BAR then return false end
-        _tbElapsed = _tbElapsed + elapsed
-        if _tbElapsed < 0.05 then return true end
-        _tbElapsed = 0
-        local active = Update(CP.powerType, CP.currentMax)
-        if not active then
-            --- Returning false lets the controller stop its central tick now.
-            CP.tbOUA = false
-        end
-        return active
-    end
-
-    --- Flag-only management (no SetScript ? controller owns the tick).
-    SetOnUpdate = function(on)
-        if on and CP.renderMode ~= CPK.MODE.TIMER_BAR then
-            on = false
-        end
-        if on then
-            if not CP.tbOUA then _tbElapsed = 0 end
-            CP.tbOUA = true
-        else
-            CP.tbOUA = false
-            _tbElapsed = 0
-        end
-    end
-
-    local function Stop()
-        SetOnUpdate(false)
-        StopNativeTimer()
-    end
-
-    return {
-        Update = Update,
-        SetOnUpdate = SetOnUpdate,
-        Stop = Stop,
-        RuntimeTick = RuntimeTick,
-    }
+    return { Update = Update }
 end
 
 --- MSUF_CP_Mode_Continuous.lua
