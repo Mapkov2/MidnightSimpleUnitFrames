@@ -4441,11 +4441,11 @@ local function SyncContainerGeometry(container, lane, parentFrame, forceGeometry
         if layoutHost and layoutHost.SetFrameLevel then
             layoutHost:SetFrameLevel(level)
         end
-        -- Reference-addon model: the CONTAINER is the single layering
-        -- authority — its level and strata are written explicitly and
-        -- relatively on every geometry sync (container writes stick on PTR 7,
-        -- probe-verified; fresh containers take them pre-seal). AuraButtons
-        -- are never re-leveled: they spawn at container level + 1 and follow.
+        -- For flowing AuraGroup lanes the CONTAINER is the layering authority:
+        -- its level and strata are written on every geometry sync (writes stick
+        -- on PTR 7; fresh containers take them pre-seal). Flow AuraButtons spawn
+        -- at container level + 1 and follow; fixed AuraSlots instead use their
+        -- own initializeFrame contract below because they share this owner.
         if container.SetFrameLevel then
             container:SetFrameLevel(level)
         end
@@ -5509,6 +5509,16 @@ local function BuildGroupLaneSlotOptions(container, lane, parentFrame, buttonInd
             button._msufA3ManagedAuraButton = true
             button._msufA3ParentFrame = parentFrame
             container[buttonIndex] = button
+            -- AuraSlots share one native container with Spell/Dispel slots and
+            -- an optional flowing AuraGroup, so the container cannot represent
+            -- several independently configured lane Layers. Give this button
+            -- the same final level/strata it would receive in a standalone
+            -- flowing lane while initializeFrame is still allowed to mutate it.
+            -- The sealed update path deliberately never touches it again.
+            if button.SetFrameLevel then
+                button:SetFrameLevel(ManagedLaneFrameLevel(parentFrame, lane) + 1)
+            end
+            SyncFrameStrata(button, ResolveFrameStrata(parentFrame, lane.strata))
             PrepareAuraButton(button, lane, 1)
             -- One icon fills the old fixed-size lane host exactly, so anchoring
             -- that icon by the configured outer anchor preserves its position.
