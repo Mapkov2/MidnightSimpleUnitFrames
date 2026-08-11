@@ -293,19 +293,19 @@ local function SetupWantedHeaders(kind)
   local raidKind = LiveRaidKind()
 
   if scope ~= "raid" and scope ~= "priority" and wantParty then
-    local header, scanned
-    header, scanned = SetupLiveHeader("party", "party")
+    local header, scanHandled
+    header, scanHandled = SetupLiveHeader("party", "party")
     if header and header.Show then header:Show() end
-    if not scanned and GF.ScheduleScan then GF.ScheduleScan("party", "party") end
+    if not scanHandled and GF.ScheduleScan then GF.ScheduleScan("party", "party") end
   elseif scope ~= "raid" and scope ~= "priority" then
     RetireHeader("party")
   end
 
   if scope ~= "party" and scope ~= "priority" and wantRaid then
-    local header, scanned
-    header, scanned = SetupLiveHeader("raid", raidKind)
+    local header, scanHandled
+    header, scanHandled = SetupLiveHeader("raid", raidKind)
     if header and header.Show then header:Show() end
-    if not scanned and GF.ScheduleScan then GF.ScheduleScan("raid", raidKind) end
+    if not scanHandled and GF.ScheduleScan then GF.ScheduleScan("raid", raidKind) end
   elseif scope ~= "party" and scope ~= "priority" then
     RetireHeader("raid")
   end

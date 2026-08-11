@@ -1334,11 +1334,15 @@ function GF.SetupHeader(key, kind)
   end
   EndHeaderLayoutRebind(header, coalescedShow)
   -- Attribute writes on a hidden header only update the secure layout recipe.
-  -- Scanning children is needed for new/reused headers, explicit roster forces,
-  -- or when a visible header was hide/show cycled and may have retargeted children.
+  -- SecureGroupHeaderTemplate births its managed children from OnShow, so a
+  -- new/reused hidden header cannot consume the scan here. Runtime shows it and
+  -- performs the one required scan afterward. A visible hide/show rebind can be
+  -- scanned synchronously here and reports that work as already handled.
   local needsChildScan = newHeader or reused or GF._forceScanHeaders == true or wasHiddenForLayout == true
-  if GF.ScheduleScan and needsChildScan then
+  local scanHandled = false
+  if GF.ScheduleScan and needsChildScan and header.IsShown and header:IsShown() then
     GF.ScheduleScan(key, kind)
+    scanHandled = true
   end
-  return header, needsChildScan
+  return header, scanHandled
 end
