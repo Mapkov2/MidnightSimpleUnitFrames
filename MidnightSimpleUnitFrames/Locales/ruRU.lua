@@ -4993,7 +4993,7 @@ L["Next page"] = "Следующая страница"
 L["Previous page"] = "Предыдущая страница"
 
 L["UnitFrame Debuff blacklist"] = "Чёрный список отрицательных эффектов UnitFrame"
-L["On hostile UnitFrames, you can blacklist any debuff by exact Spell ID. On friendly or otherwise assistable UnitFrames, Blizzard permits exact Spell ID filters only for approved public auras."] = "На враждебных UnitFrame можно добавить любой отрицательный эффект в чёрный список по точному ID заклинания. На дружественных или доступных для помощи UnitFrame Blizzard разрешает точные фильтры по ID заклинания только для одобренных общедоступных аур."
+L["You can blacklist any debuff applied by the player on the %s UnitFrame using its exact Spell ID."] = "Можно добавить в чёрный список любой отрицательный эффект, наложенный игроком на UnitFrame %s, используя точный ID заклинания."
 
 -- Guided setup restart confirmation.
 L["Run the guided setup again? The walkthrough starts over at the first step."] = "Запустить пошаговую настройку заново? Обучение начнётся с первого шага."

@@ -5379,7 +5379,7 @@ L["Next page"] = "Page suivante"
 L["Previous page"] = "Page précédente"
 
 L["UnitFrame Debuff blacklist"] = "Liste noire des affaiblissements des UnitFrames"
-L["On hostile UnitFrames, you can blacklist any debuff by exact Spell ID. On friendly or otherwise assistable UnitFrames, Blizzard permits exact Spell ID filters only for approved public auras."] = "Sur les UnitFrames hostiles, vous pouvez placer n’importe quel affaiblissement sur liste noire via son ID de sort exact. Sur les UnitFrames amicales ou pouvant être assistées, Blizzard n’autorise les filtres d’ID de sort exacts que pour les auras publiques approuvées."
+L["You can blacklist any debuff applied by the player on the %s UnitFrame using its exact Spell ID."] = "Vous pouvez placer sur liste noire tout affaiblissement appliqué par le joueur sur l’UnitFrame %s via son ID de sort exact."
 
 -- Guided setup restart confirmation.
 L["Run the guided setup again? The walkthrough starts over at the first step."] = "Relancer la configuration guidée ? Le parcours reprend depuis la première étape."

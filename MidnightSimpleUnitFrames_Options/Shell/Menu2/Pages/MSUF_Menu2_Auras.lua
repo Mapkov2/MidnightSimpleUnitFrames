@@ -354,7 +354,7 @@ end
 
 local CUSTOM_DEBUFF_BLACKLIST_INFO_SEEN_KEY = "auraEnemyDebuffBlacklistInfoSeen"
 local CUSTOM_DEBUFF_BLACKLIST_INFO_TITLE = "UnitFrame Debuff blacklist"
-local CUSTOM_DEBUFF_BLACKLIST_INFO_BODY = "On hostile UnitFrames, you can blacklist any debuff by exact Spell ID. On friendly or otherwise assistable UnitFrames, Blizzard permits exact Spell ID filters only for approved public auras."
+local CUSTOM_DEBUFF_BLACKLIST_INFO_BODY = "You can blacklist any debuff applied by the player on the %s UnitFrame using its exact Spell ID."
 
 local function CustomDebuffBlacklistInfoSeen()
     local general = type(M.GetGeneralDB) == "function" and M.GetGeneralDB() or nil
@@ -367,7 +367,7 @@ local function StopCustomDebuffBlacklistInfoPulse(button)
     if button and button.SetAlpha then button:SetAlpha(1) end
 end
 
-local function CreateCustomDebuffBlacklistInfoButton(parent, input)
+local function CreateCustomDebuffBlacklistInfoButton(parent, input, unit)
     local button = ActionButton(parent, "I", 28)
     button:SetSize(28, 26)
     button._msuf2SkipHistoryCheckpoint = true
@@ -388,7 +388,9 @@ local function CreateCustomDebuffBlacklistInfoButton(parent, input)
             button:SetPoint("LEFT", labelAnchor, "RIGHT", 8, 0)
         end
     end
-    AddTooltip(button, CUSTOM_DEBUFF_BLACKLIST_INFO_TITLE, CUSTOM_DEBUFF_BLACKLIST_INFO_BODY)
+    local unitLabel = M.Tr(AURA_SCOPE_LABELS[unit] or tostring(unit or "Unit"))
+    AddTooltip(button, CUSTOM_DEBUFF_BLACKLIST_INFO_TITLE,
+        M.Format(CUSTOM_DEBUFF_BLACKLIST_INFO_BODY, unitLabel))
     button:SetScript("OnClick", function(self)
         local general = type(M.GetGeneralDB) == "function" and M.GetGeneralDB() or nil
         if type(general) == "table" then general[CUSTOM_DEBUFF_BLACKLIST_INFO_SEEN_KEY] = true end
@@ -3503,7 +3505,7 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
         local input = BindTextInput(ctx, section, inputLabel, 24, -36, inputW,
             function() return inputValue end, function(value) inputValue = value or "" end,
             false, AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.manual-input", "ephemeral"))
-        if enemyDebuff then CreateCustomDebuffBlacklistInfoButton(section, input) end
+        if enemyDebuff then CreateCustomDebuffBlacklistInfoButton(section, input, unit) end
         local add = ActionButton(section, addLabel, enemyDebuff and 132 or 118, "primary")
         add:SetPoint("TOPLEFT", section, "TOPLEFT", 36 + inputW, -60)
         add:SetScript("OnClick", function()

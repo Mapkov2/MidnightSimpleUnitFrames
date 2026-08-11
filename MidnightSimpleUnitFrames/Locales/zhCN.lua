@@ -5595,7 +5595,7 @@ L["Next page"] = "下一页"
 L["Previous page"] = "上一页"
 
 L["UnitFrame Debuff blacklist"] = "单位框架减益屏蔽列表"
-L["On hostile UnitFrames, you can blacklist any debuff by exact Spell ID. On friendly or otherwise assistable UnitFrames, Blizzard permits exact Spell ID filters only for approved public auras."] = "在敌对单位框架上，你可以通过精确法术 ID 屏蔽任意减益效果。在友方或可协助单位框架上，暴雪仅允许对获准的公开光环使用精确法术 ID 过滤。"
+L["You can blacklist any debuff applied by the player on the %s UnitFrame using its exact Spell ID."] = "你可以使用精确的法术 ID，将玩家施加在%s单位框架上的任意减益效果加入黑名单。"
 
 -- Guided setup restart confirmation.
 L["Run the guided setup again? The walkthrough starts over at the first step."] = "要再次运行引导设置吗？向导将从第一步重新开始。"

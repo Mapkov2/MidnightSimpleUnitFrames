@@ -5364,7 +5364,7 @@ L["Next page"] = "Nächste Seite"
 L["Previous page"] = "Vorherige Seite"
 
 L["UnitFrame Debuff blacklist"] = "UnitFrame-Debuff-Blacklist"
-L["On hostile UnitFrames, you can blacklist any debuff by exact Spell ID. On friendly or otherwise assistable UnitFrames, Blizzard permits exact Spell ID filters only for approved public auras."] = "Auf feindlichen UnitFrames kannst du jeden Debuff über seine exakte Zauber-ID ausblenden. Auf freundlichen oder anderweitig unterstützbaren UnitFrames erlaubt Blizzard exakte Zauber-ID-Filter nur für freigegebene öffentliche Auren."
+L["You can blacklist any debuff applied by the player on the %s UnitFrame using its exact Spell ID."] = "Du kannst jeden vom Spieler verursachten Debuff auf dem %s-UnitFrame über seine exakte Zauber-ID ausblenden."
 
 -- Guided setup restart confirmation.
 L["Run the guided setup again? The walkthrough starts over at the first step."] = "Das geführte Setup erneut ausführen? Die Tour beginnt wieder beim ersten Schritt."
