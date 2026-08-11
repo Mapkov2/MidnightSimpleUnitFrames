@@ -1,8 +1,8 @@
-# MSUF 6.01 — Changelog Since 5.77b
+# MSUF 6.02 — Changelog Since 5.77b
 
 This is a changelog, not a list of everything MSUF can do.
 
-The changelog below includes only features, behavior, architecture, fixes, and removals that actually changed between the remote **5.77b** release and **6.01**. Features already present in 5.77b are mentioned only when 6.01 changed their implementation, scope, behavior, or ownership.
+The changelog below includes only features, behavior, architecture, fixes, and removals that actually changed between the remote **5.77b** release and **6.02**. Features already present in 5.77b are mentioned only when 6.02 changed their implementation, scope, behavior, or ownership.
 
 ## 11 Highlights
 
@@ -18,21 +18,35 @@ The changelog below includes only features, behavior, architecture, fixes, and r
 10. **Class Resources got a wardrobe.** Circle, Diamond, and Hex pips; Round, Crystal, and Orb styles for the detached Player Power bar and the new optional Player Health bar; plus shape presets like Clean Dots, Gems, and Compact. Guardian Druids get an Ironfur lifetime tracker.
 11. **MSUF plays well with your other addons.** Edit Mode doubles as a shared layout workspace: Grid2, Details!, Dominos, DandersFrames, and Blizzard's own HUD — Minimap, Chat, Micro Menu, Bags, Objective Tracker, Tooltip, and the Damage Meter — can be moved alongside MSUF, most of them with a popup that edits the addon's own layout settings. EllesmereUI can unlock MSUF from its own Unlock Mode, and Arc UI, Skiron, Coolinator, Cooldown Manager Centered, and Blizzard's viewer can anchor the whole layout and are followed live out of combat. MSUF asks before following any of them, and every one of those addons keeps ownership of its own settings. A second public API lets addons provide Unit and Group Frame nicknames without hooking MSUF frames; the bundled Northern Sky Raid Tools adapter uses that same contract.
 
+## 6.02 Final Release Updates
+
+- Unit Preview Buffs and Debuffs now render on independent layers, and clicking either lane's handle rebuilds and opens the correct Aura workspace.
+- Debuff blacklist presets cover the expanded crowd-control and encounter set, with menu copy that makes the selected frame and Debuff-lane ownership explicit.
+- Ebon Might now uses Blizzard's native duration-text contract.
+- Alternative Mana gained independent safe width geometry with matching runtime, Menu, preview, search, and Assistant controls.
+- Player Health resource mode guards secret combat values before Lua comparisons and forwards readable values through Blizzard's native display path.
+- Blizzard's animated Resting symbol is now part of the fresh default profile while existing profile choices remain untouched.
+- Nickname-provider refresh and fallback resolution now target the correct Unit and Group Frames without adding broad polling.
+- Texture Layer target refreshes, rounded clipping, true-outline geometry, and rounded preview edges now remain synchronized after live setting changes.
+- Castbar text-position controls now repaint the Unit Preview immediately through the same layout contract used by runtime castbars.
+- The final upgrade tour teaches Back and Forward navigation first, pulses the real arrows only while that page is open, and performs every advertised page action.
+- The Assistant can restart a skipped or completed upgrade-highlight tour from natural-language requests while preserving its load-on-demand boundary.
+
 ## Package and Upgrade Changes
 
 - The 5.77b package contained the main addon, a standalone Castbars addon, and a standalone UUF importer.
-- The 6.01 package contains the main addon, the load-on-demand Options companion, and the optional load-on-demand Assistant.
+- The 6.02 package contains the main addon, the load-on-demand Options companion, and the optional load-on-demand Assistant.
 - The 21-file standalone Castbars addon was removed after its runtime, settings, previews, and modules moved into the main addon.
-- The standalone UUF importer was removed instead of being carried into the final 6.01 transfer workspace.
+- The standalone UUF importer was removed instead of being carried into the final 6.02 transfer workspace.
 - Menu2 moved out of the gameplay addon and now loads only when the menu is requested.
 - The Assistant is a new optional companion and remains unloaded until used.
-- Existing 5.x profiles are normalized into the 6.01 schema.
+- Existing 5.x profiles are normalized into the 6.02 schema.
 - Migration covers old frame aliases, Aura2 lanes, reverse-fill flags, text anchors, group layouts, detached-bar ownership, and removed settings.
 - New profiles are created from factory defaults rather than cloning the active profile.
-- The public full-profile and Wago-compatible format remains `MSUF3`; 6.01 did not introduce a new public full-profile generation.
+- The public full-profile and Wago-compatible format remains `MSUF3`; 6.02 did not introduce a new public full-profile generation.
 - Category-scoped transfers gained a separate internal structured envelope.
 - Import/export was hardened for numeric table keys, missing SharedMedia assets, long strings, and complete category round trips.
-- Release packaging and publishing were rebuilt for the three-folder 6.01 package and stricter prerelease/stable channel handling.
+- Release packaging and publishing were rebuilt for the three-folder 6.02 package and stricter prerelease/stable channel handling.
 
 ## Unit Frames
 
@@ -135,7 +149,7 @@ The changelog below includes only features, behavior, architecture, fixes, and r
 - Dots on Target gained an optional Pandemic warning with Border, Tint, and Border + Tint styles plus color, thickness, padding, opacity, and blend controls. It remains disabled by default because Blizzard's native Pandemic region may run an `OnUpdate` on each affected visible aura button.
 - Aura icon shapes were added: Rectangular, Circle, Rounded, Diamond, Hexagon, Star, Blizzard Portrait, and Follow Frame Portrait.
 - Player Defensives follow the frame portrait shape by default because they replace the portrait; an explicitly chosen shape stays untouched.
-- Fresh, reset, imported, and upgraded profiles now converge on one native 6.01 Aura model. Retired Unit and Group Aura fields are repaired once without reviving dormant Auras2 ownership.
+- Fresh, reset, imported, and upgraded profiles now converge on one native 6.02 Aura model. Retired Unit and Group Aura fields are repaired once without reviving dormant Auras2 ownership.
 - Runtime, Menu, Edit Mode, and the Assistant now read the same owner for lane gaps, sorting, text, cooldown swipes, duration bars, tooltips, filters, and shared-versus-frame-local style.
 - Disabling Player Defensives remains authoritative during Menu normalization and in both previews. Tracked Target DoTs can still show their configured disabled preview without enabling the live lane.
 - Edit Mode follows the existing Menu preview clock for cooldown swipes instead of creating a second animation driver, and that follower remains paused in combat.
@@ -183,7 +197,7 @@ The changelog below includes only features, behavior, architecture, fixes, and r
 - Optional detached Player Health was added to the Class Resource workspace.
 - A Guardian Druid Ironfur lifetime tracker was added.
 - The Ironfur tracker creates one marker per application and accounts for Ursoc's Endurance and Guardian of Elune duration changes.
-- Detached Player Power was not introduced by 6.01; its existing feature was migrated from the old detached-bar owner to shared Bars/Class Resource ownership.
+- Detached Player Power was not introduced by 6.02; its existing feature was migrated from the old detached-bar owner to shared Bars/Class Resource ownership.
 - The Detached Power width mode now outranks a Detached width typed on the frame, with the shared Class Resources width mode as its fallback while width sync is on; `Manual` resolves to no source, so untouched profiles keep their current width.
 - Detached Power and Player Health now participate in the shared layer, outline, preview, copy, and Edit Mode contracts.
 - Balance Druid and alternate-mana handling were adapted to the new controller/runtime split.
@@ -227,7 +241,7 @@ The changelog below includes only features, behavior, architecture, fixes, and r
 - Edit Mode gained tighter exact-position, rollback, snapping, element-layer, preview, and anchor-picker integration.
 - The Edit Mode toolbar slides in from its docked edge when Edit Mode opens; Reduce Menu Motion skips the animation.
 - Edit Mode snap is remembered per profile instead of resetting every session, and a fresh install starts with the grid on at 36 px, snap enabled, and the backdrop dimmed to 55 percent.
-- The final fresh-install visual baseline was recaptured across the complete 6.01 surface: new profiles start with a cohesive dark health treatment, warm current-target accents, and deliberate portrait, Aura, castbar, Group, and Class Resource defaults; existing profiles are never overwritten.
+- The final fresh-install visual baseline was recaptured across the complete 6.02 surface: new profiles start with a cohesive dark health treatment, warm current-target accents, and deliberate portrait, Aura, castbar, Group, and Class Resource defaults; existing profiles are never overwritten.
 - Undo and redo name the change in plain words on the button, in its tooltip, and in the status feedback instead of showing raw setting keys or internal apply reasons.
 - Stepper buttons on a control with a fixed native step accelerate with Shift and Ctrl (5x / 10x) instead of ignoring the modifiers.
 - External Edit Mode elements report their position relative to the screen center, the same convention MSUF's own frames use, instead of absolute screen coordinates.
@@ -238,7 +252,7 @@ The changelog below includes only features, behavior, architecture, fixes, and r
 
 ## Profiles and Transfers
 
-- Profile normalization was rebuilt for the new 6.01 ownership model.
+- Profile normalization was rebuilt for the new 6.02 ownership model.
 - New-profile creation now uses factory defaults rather than cloning the active profile.
 - The profile workspace was reorganized and Backup & Transfer was renamed Import & Export.
 - Full-profile/Wago-compatible export remains `MSUF3`.
@@ -254,11 +268,11 @@ The changelog below includes only features, behavior, architecture, fixes, and r
 - Unit Copy To now reports and skips Castbar settings for Pet, Target of Target, and Focus Target instead of treating the unsupported category as a successful copy or requesting a Castbar apply on frames that do not own one; mixed copies still apply every supported category.
 - Existing shared Custom/Defensive/Dots presentation migrates once into its owning Unit Frames without moving their content or placement.
 - Group Copy To now includes maximum frames, automatic tanks, scaling, detached Power details, individual Health/Power text slots, status indicators, role visibility, color ownership, and Aggro settings.
-- Existing specialization assignments were retained and hardened rather than counted as a new 6.01 feature.
+- Existing specialization assignments were retained and hardened rather than counted as a new 6.02 feature.
 
 ## MSUF Assistant
 
-- The optional load-on-demand MSUF Assistant is entirely new in 6.01.
+- The optional load-on-demand MSUF Assistant is entirely new in 6.02.
 - It can answer feature-existence questions, explain exact controls, locate settings, and apply safe changes.
 - Setting lookup uses indexed catalogs instead of rescanning every setting for each question.
 - Follow-ups can retarget the previous request to a different unit or scope.
@@ -315,7 +329,7 @@ The changelog below includes only features, behavior, architecture, fixes, and r
 - Six new bar textures were added: Dreamy, Dreamy Soft, Dreamy Ultra Soft, Foggy, Glass, and Mirrored Glass.
 - New aura borders, radial glow, portrait rings, preview backgrounds, tour artwork, and Menu2 media were added.
 - Fritz Soundscape was added as a bundled font.
-- All twelve shipped locale files were expanded for the 6.01 additions and changed controls.
+- All twelve shipped locale files were expanded for the 6.02 additions and changed controls.
 - Locale startup was changed so the saved profile language applies after SavedVariables load and the startup event unregisters afterward.
 - Responsive controls were improved for long translated labels.
 - Priority Frames gained a dedicated localized FAQ.
@@ -350,7 +364,7 @@ The changelog below includes only features, behavior, architecture, fixes, and r
 - Early 6.01 configurable Private Aura controls were removed.
 - Player Dots on Target was removed.
 - The separate Rounded Aura Borders toggle was removed.
-- The obsolete Masque dependency, saved Aura toggle, menu control, and Assistant route were removed; MSUF 6.01 does not register its Aura buttons with Masque.
+- The obsolete Masque dependency, saved Aura toggle, menu control, and Assistant route were removed; MSUF 6.02 does not register its Aura buttons with Masque.
 - Duplicate inline castbar text-color controls were removed after ownership moved to each text field.
 - Duplicate color swatches were removed wherever a surface already reaches the color through its `:::` shortcut and the canonical Colors page, which is the single entry point for every text color.
 - Pin Preview was removed.
