@@ -1273,7 +1273,16 @@ local function RenderTextureLayerSlotPreview(box, mock, conf, slot, wanted, scal
         height = scaleFn(rawHeight)
     end
     holder:SetSize(math.max(1, width), math.max(1, height))
+    local clipWanted = conf[prefix .. "RoundedClip"] == true
+        and _G.MSUF_RoundedUF_Active == true
+        and type(_G.MSUF_RoundedUF_OnDispelOverlayChanged) == "function"
     local tex = holder.tex
+    if tex and tex._msufTextureLayerRoundedClip == true and not clipWanted then
+        tex:Hide()
+        tex = holder:CreateTexture(nil, "ARTWORK", nil, 0)
+        tex:SetAllPoints(holder)
+        holder.tex = tex
+    end
     local path = textureRuntime and type(textureRuntime.ResolveLayerTexture) == "function"
         and textureRuntime.ResolveLayerTexture(conf, prefix) or conf[prefix .. "CustomTexturePath"]
     if type(path) ~= "string" or path == "" then path = nil end
@@ -1318,6 +1327,10 @@ local function RenderTextureLayerSlotPreview(box, mock, conf, slot, wanted, scal
     elseif tex.SetVertexColor then
         tex:SetVertexColor(r, g, b, 1)
     end
+    if clipWanted then
+        _G.MSUF_RoundedUF_OnDispelOverlayChanged(mock, tex)
+        tex._msufTextureLayerRoundedClip = true
+    end
     local featherTextures = { tex }
     -- Bars-style multi-direction gradient: one overlay per active edge, exactly
     -- mirroring UnitFrames/Effects/MSUF_UF_TextureLayer.lua.
@@ -1340,12 +1353,20 @@ local function RenderTextureLayerSlotPreview(box, mock, conf, slot, wanted, scal
                 grads = {}
                 holder.grads = grads
             end
+            if overlay and overlay._msufTextureLayerRoundedClip == true and not clipWanted then
+                overlay:Hide()
+                overlay = nil
+            end
             if not overlay then
                 overlay = holder:CreateTexture(nil, "ARTWORK", nil, 1)
                 overlay:SetAllPoints(holder)
                 overlay:SetTexture("Interface\\Buttons\\WHITE8x8")
                 if overlay.SetBlendMode then overlay:SetBlendMode("BLEND") end
                 grads[direction] = overlay
+            end
+            if clipWanted then
+                _G.MSUF_RoundedUF_OnDispelOverlayChanged(mock, overlay)
+                overlay._msufTextureLayerRoundedClip = true
             end
             local orientation = (direction == "up" or direction == "down") and "VERTICAL" or "HORIZONTAL"
             local minA, maxA = 0, 1

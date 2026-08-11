@@ -150,13 +150,16 @@ end
 --- The regen/retarget driver exists only while some applied layer needs it.
 local driver
 local driverEvents = {}
+local driverUnitFilters = {}
 local wantRegenEvents = false
 local wantTargetEvents = false
 local wantFocusEvents = false
+local wantUnitTargetTarget = false
+local wantUnitTargetFocus = false
 local wantBossEvents = false
 local RefreshUnitTextureLayers
 
-local function DriverOnEvent(_, event)
+local function DriverOnEvent(_, event, unit)
   if event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then
     RefreshUnitTextureLayers(nil)
   elseif event == "PLAYER_TARGET_CHANGED" then
@@ -166,8 +169,35 @@ local function DriverOnEvent(_, event)
   elseif event == "PLAYER_FOCUS_CHANGED" then
     RefreshUnitTextureLayers("focus")
     RefreshUnitTextureLayers("focustarget")
+  elseif event == "UNIT_TARGET" then
+    if unit == "target" then
+      RefreshUnitTextureLayers("targettarget")
+    elseif unit == "focus" then
+      RefreshUnitTextureLayers("focustarget")
+    end
   elseif event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" then
     RefreshUnitTextureLayers("boss")
+  end
+end
+
+local function SetDriverUnitEvent(event, wantTarget, wantFocus)
+  local wanted = wantTarget or wantFocus
+  local filter = wantTarget and (wantFocus and "target,focus" or "target") or (wantFocus and "focus" or nil)
+  if (driverEvents[event] == true) == (wanted == true) and driverUnitFilters[event] == filter then return end
+  if wanted and not driver then
+    driver = CreateFrame("Frame")
+    driver:SetScript("OnEvent", DriverOnEvent)
+  end
+  if not driver then return end
+  driverEvents[event] = wanted or nil
+  driverUnitFilters[event] = filter
+  driver:UnregisterEvent(event)
+  if wantTarget and wantFocus then
+    driver:RegisterUnitEvent(event, "target", "focus")
+  elseif wantTarget then
+    driver:RegisterUnitEvent(event, "target")
+  elseif wantFocus then
+    driver:RegisterUnitEvent(event, "focus")
   end
 end
 
@@ -187,6 +217,7 @@ local function SyncDriverEvents()
   SetDriverEvent("PLAYER_REGEN_ENABLED", wantRegenEvents)
   SetDriverEvent("PLAYER_TARGET_CHANGED", wantTargetEvents)
   SetDriverEvent("PLAYER_FOCUS_CHANGED", wantFocusEvents)
+  SetDriverUnitEvent("UNIT_TARGET", wantUnitTargetTarget, wantUnitTargetFocus)
   SetDriverEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT", wantBossEvents)
 end
 
@@ -194,6 +225,10 @@ local function NoteDynamicNeeds(unitKey, conf, prefix)
   local visibility = conf[prefix .. "Visibility"]
   if visibility == "COMBAT" or visibility == "OOC" then wantRegenEvents = true end
   if visibility == "TARGET" then wantTargetEvents = true end
+  if (visibility == "TARGET" or conf[prefix .. "ColorMode"] == "CLASS") then
+    if unitKey == "targettarget" then wantUnitTargetTarget = true end
+    if unitKey == "focustarget" then wantUnitTargetFocus = true end
+  end
   if conf[prefix .. "ColorMode"] == "CLASS" then
     if unitKey == "target" or unitKey == "targettarget" then wantTargetEvents = true end
     if unitKey == "focus" or unitKey == "focustarget" then wantFocusEvents = true end
@@ -302,7 +337,7 @@ TextureLayer.ApplySoftEdgeMask = ApplySoftEdgeMask
 
 local function EnsureBaseTexture(holder, clipWanted)
   local tex = holder.tex
-  if tex and holder.clipApplied and not clipWanted then
+  if tex and tex._msufTextureLayerRoundedClip == true and not clipWanted then
     tex:Hide()
     tex = nil
   end
@@ -321,7 +356,7 @@ local function EnsureOverlayTexture(holder, direction, clipWanted)
     holder.grads = grads
   end
   local tex = grads[direction]
-  if tex and holder.clipApplied and not clipWanted then
+  if tex and tex._msufTextureLayerRoundedClip == true and not clipWanted then
     tex:Hide()
     tex = nil
   end
@@ -337,6 +372,7 @@ end
 local function ApplyClip(frame, holder, tex, clipWanted)
   if clipWanted then
     _G.MSUF_RoundedUF_OnDispelOverlayChanged(frame, tex)
+    tex._msufTextureLayerRoundedClip = true
   end
 end
 
@@ -538,7 +574,7 @@ local function FrameMatchesUnitScope(frame, unit)
 end
 
 local function RecomputeDriverNeeds(frames)
-  wantRegenEvents, wantTargetEvents, wantFocusEvents, wantBossEvents = false, false, false, false
+  wantRegenEvents, wantTargetEvents, wantFocusEvents, wantUnitTargetTarget, wantUnitTargetFocus, wantBossEvents = false, false, false, false, false, false
   for _, frame in pairs(frames) do
     if frame and frame._msufIsGroupFrame ~= true then
       local unitKey = frame.MSUFUnitKey
