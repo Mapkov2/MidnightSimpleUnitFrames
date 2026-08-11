@@ -304,6 +304,7 @@ local function CaptureOnboardingState()
     state.level = "fields"
     state.firstLoad6 = CaptureField(globalDB.global, "firstLoad6")
     state.guidedTour6 = CaptureField(globalDB.global, "guidedTour6")
+    state.upgradeHighlights = CaptureField(globalDB.global, "upgradeHighlights")
     return state
 end
 
@@ -338,6 +339,7 @@ local function RestoreOnboardingState(state)
     if type(globalDB.global) ~= "table" then globalDB.global = {} end
     local restored = RestoreOwnedTableField(globalDB.global, "firstLoad6", state.firstLoad6)
         and RestoreOwnedTableField(globalDB.global, "guidedTour6", state.guidedTour6)
+        and RestoreOwnedTableField(globalDB.global, "upgradeHighlights", state.upgradeHighlights)
     if restored and M and type(M.InvalidatePage) == "function" then pcall(M.InvalidatePage, "home") end
     return restored
 end
@@ -393,6 +395,7 @@ local ACTION_TRANSACTION_ADAPTERS = {
             ["first_load.full_settings"] = true,
             guided_setup = true,
             guided_setup_step = true,
+            restart_upgrade_highlight_tour = true,
         },
     },
     managedHistory = {

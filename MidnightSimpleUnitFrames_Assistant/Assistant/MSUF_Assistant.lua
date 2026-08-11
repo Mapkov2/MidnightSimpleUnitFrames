@@ -7453,6 +7453,7 @@ function A.ExecutePlan(plan, opts)
     local actionMutability = plan.kind == "action" and tostring(plan.action and plan.action.mutability or "") or nil
     local actionKey = plan.kind == "action" and tostring(plan.action and plan.action.key or "") or ""
     local guidedTourAction = actionKey == "guided_setup" or actionKey == "guided_setup_step"
+        or actionKey == "restart_upgrade_highlight_tour"
     if guarded and not guidedTourAction
         and (plan.kind == "changes" or (plan.kind == "action" and actionMutability ~= "readOnly" and actionMutability ~= "navigation")) then
         return NormalizePlanResult(AP.ReadOnlyGuardResult(sourceText))

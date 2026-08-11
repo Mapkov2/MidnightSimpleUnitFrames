@@ -3969,7 +3969,30 @@ local function ParseCastbarDirectionClarification(text)
         summary = "That could mean the Target opposite-fill checkbox or the global Cast Bar Fill Direction.",
     }
 end
+local function UpgradeHighlightTourWasSkipped()
+    local controller = MSUF and MSUF.UpgradeHighlights
+    if not (type(controller) == "table" and type(controller.GetDebugSummary) == "function") then return false end
+    local ok, _, status = pcall(controller.GetDebugSummary, controller)
+    return ok and status == "skipped"
+end
+
+local function ParseUpgradeHighlightTour(text)
+    local explicit = ContainsAny(text, FeaturesPhrases[429])
+    local skippedReplay = UpgradeHighlightTourWasSkipped() and ContainsAny(text, FeaturesPhrases[430])
+    if not explicit and not skippedReplay then return nil end
+    local action = Registry and Registry:GetAction("restart_upgrade_highlight_tour")
+    return action and {
+        kind = "action",
+        action = action,
+        args = {},
+        label = "Restart upgrade highlight tour",
+        summary = "Restarts the skipped release-highlight tour at highlight 1.",
+    } or nil
+end
+
 local function ParseGuidedSetup(text)
+    local highlightTour = ParseUpgradeHighlightTour(text)
+    if highlightTour then return highlightTour end
     if not ContainsAny(text, FeaturesPhrases[411]) then return nil end
     local action = Registry and Registry:GetAction("guided_setup")
     return action and {
@@ -4103,5 +4126,6 @@ P.ParseCastbarPreviewAction = ParseCastbarPreviewAction
 P.CASTBAR_GLOBAL_BOOLEAN_DETAILS = CASTBAR_GLOBAL_BOOLEAN_DETAILS
 P.ParseCastbarGlobalDetail = ParseCastbarGlobalDetail
 P.ParseCastbarDirectionClarification = ParseCastbarDirectionClarification
+P.ParseUpgradeHighlightTour = ParseUpgradeHighlightTour
 P.ParseGuidedSetup = ParseGuidedSetup
 P.ParseGuidedSetupFollowup = ParseGuidedSetupFollowup
