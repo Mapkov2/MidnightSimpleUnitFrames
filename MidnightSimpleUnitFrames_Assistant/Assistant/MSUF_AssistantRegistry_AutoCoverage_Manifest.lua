@@ -22,8 +22,8 @@ A.AutoCoverageManifest = Manifest
 -- Defaults generated offline on 2026-08-11 from the current factory profile
 -- through the same decode and normalization path used by MSUF in game.
 -- Regenerate and verify with tools/assistant_autocoverage_manifest_regression.py.
--- 4763 top-level scalar fallbacks across every required AutoCoverage scope.
-Manifest.scalarCount = 4763
+-- 4766 top-level scalar fallbacks across every required AutoCoverage scope.
+Manifest.scalarCount = 4766
 Manifest.requiredScopes = {
     "bars", "boss", "focus", "focustarget", "gameplay", "general",
     "gf_mythicraid", "gf_party", "gf_raid", "pet", "player", "target", "targettarget",
@@ -34,8 +34,11 @@ Manifest.defaults = {
         altManaColorG = 0,
         altManaColorR = 0,
         altManaHeight = 4,
+        altManaOffsetX = 0,
         altManaOffsetY = -6,
         altManaSmoothFill = false,
+        altManaWidth = 0,
+        altManaWidthMode = "player",
         barBackgroundAlpha = 82,
         barOutlineLayer = 0,
         barOutlineStrata = "BACKGROUND",
@@ -4820,4 +4823,4 @@ Manifest.defaults = {
     },
 }
 
--- top-level scalar paths: 4763
+-- top-level scalar paths: 4766

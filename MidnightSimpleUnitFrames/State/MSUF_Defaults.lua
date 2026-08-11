@@ -1027,6 +1027,9 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     end
     db.bars = db.bars or {}
     SetDefault(db.bars, "showAltMana", false)
+    SetDefault(db.bars, "altManaWidthMode", "player")
+    SetDefault(db.bars, "altManaWidth", 0)
+    SetDefault(db.bars, "altManaOffsetX", 0)
     SetDefault(db.bars, "showGuardianIronfur", false)
     SetDefault(db.bars, "guardianIronfurShowHashLines", true)
     -- Performance baseline: native interpolation is an

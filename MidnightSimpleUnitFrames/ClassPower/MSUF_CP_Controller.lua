@@ -407,6 +407,9 @@ local function EnsureDefaults()
     --- AltMana defaults
     if b.showAltMana          == nil then b.showAltMana          = false end
     if b.altManaHeight        == nil then b.altManaHeight        = 4     end
+    if b.altManaWidthMode ~= "custom" then b.altManaWidthMode   = "player" end
+    if b.altManaWidth         == nil then b.altManaWidth         = 0     end
+    if b.altManaOffsetX       == nil then b.altManaOffsetX       = 0     end
     if b.altManaOffsetY       == nil then b.altManaOffsetY       = -2    end
     if b.altManaColorR        == nil then b.altManaColorR        = 0.0   end
     if b.altManaColorG        == nil then b.altManaColorG        = 0.0   end
@@ -2023,7 +2026,7 @@ local function FullRefresh()
 
     --- Edit mode: keep class power visible as live preview so bars-menu
     --- adjustments (width, height, offsets) are visible immediately.
-    --- Alt-mana bar has no user-facing settings -> stay hidden in edit mode.
+    --- Alt-mana remains a live Menu2/runtime surface, not an Edit Mode mover.
     local inEditMode = (_G.MSUF_UnitEditModeActive == true)
 
     --- --- ClassPower ---

@@ -108,7 +108,15 @@ builders.ALT_MANA = function(E)
 
         local h = tonumber(b.altManaHeight) or 4
         if h < 2 then h = 2 elseif h > 30 then h = 30 end
+        local oX = tonumber(b.altManaOffsetX) or 0
+        if oX < -1000 then oX = -1000 elseif oX > 1000 then oX = 1000 end
         local oY = tonumber(b.altManaOffsetY) or -2
+        local customW
+        if b.altManaWidthMode == "custom" then
+            customW = tonumber(b.altManaWidth)
+            if customW and customW < 20 then customW = nil end
+            if customW and customW > 1200 then customW = 1200 end
+        end
         local layers = MSUF.UF and MSUF.UF.Layers
         if AM.container.SetFrameLevel then
             local level = layers and layers.ElementLevel and layers.ElementLevel(b.classPowerFrameLevelOffset, 5, 0)
@@ -119,8 +127,15 @@ builders.ALT_MANA = function(E)
         end
 
         AM.container:ClearAllPoints()
-        AM.container:SetPoint("TOPLEFT",  playerFrame, "BOTTOMLEFT",   2, oY)
-        AM.container:SetPoint("TOPRIGHT", playerFrame, "BOTTOMRIGHT", -2, oY)
+        if customW then
+            AM.container:SetPoint("TOP", playerFrame, "BOTTOM", oX, oY)
+            AM.container:SetWidth(customW)
+        else
+            --- Legacy/default mode remains live-linked to Player width. Applying
+            --- the same X delta to both edge anchors moves without resizing.
+            AM.container:SetPoint("TOPLEFT",  playerFrame, "BOTTOMLEFT",   2 + oX, oY)
+            AM.container:SetPoint("TOPRIGHT", playerFrame, "BOTTOMRIGHT", -2 + oX, oY)
+        end
         AM.container:SetHeight(h)
     end
 
