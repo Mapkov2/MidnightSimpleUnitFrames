@@ -73,6 +73,37 @@ local function RefreshHome()
     if type(M.SelectPage) == "function" then M.SelectPage("home") end
 end
 
+function M.RestartUpgradeHighlightTour(source)
+    if BlockedByCombat() then
+        return false, "Leave combat, then ask me to restart the highlight tour again.",
+            { noMutation = true, userFacingFailure = true }
+    end
+    local controller = Controller()
+    if not (controller and type(controller.ResetCurrent) == "function" and type(controller.Start) == "function") then
+        return false, "The upgrade highlight tour is not available in this menu build.",
+            { noMutation = true, userFacingFailure = true }
+    end
+    if type(M.SetPageHistoryTourCue) == "function" then M.SetPageHistoryTourCue(false) end
+    local reset, releaseKey = controller:ResetCurrent()
+    if reset ~= true then
+        return false, "I could not reset the upgrade highlight tour.",
+            { noMutation = true, userFacingFailure = true }
+    end
+    local started = controller:Start()
+    if started ~= true then
+        return false, "I reset the upgrade highlights but could not start the tour.",
+            { userFacingFailure = true }
+    end
+    if type(M.InvalidatePage) == "function" then M.InvalidatePage("home") end
+    local opened = type(M.Open) == "function" and M.Open("home")
+    if opened == false or opened == nil then
+        return false, "The highlight tour was restarted, but I could not open its first page.",
+            { userFacingFailure = true }
+    end
+    return true, "Restarted the " .. tostring(releaseKey or "current")
+        .. " upgrade highlight tour at highlight 1.", { source = tostring(source or "assistant") }
+end
+
 local function ApplyTargetRoute(item)
     local route = type(item) == "table" and item.route or nil
     if type(route) ~= "table" then return end
@@ -470,11 +501,32 @@ local function BuildActive(ctx, scene, T, releaseKey, spec, record, contentWidth
     local buttonsTop = cardTop - cardHeight - 20
     local buttonY = buttonsTop
     local function ConfigureCurrent()
+        local openAssistant = item.id == "assistant"
+        if openAssistant then
+            -- Home normally rebuilds straight back into the still-active
+            -- highlight tour. Bypass that scene for exactly this rebuild so
+            -- the Dashboard can create its cold Assistant card before the LoD
+            -- bridge starts the runtime. The next normal Home build resumes
+            -- the tour at the following highlight.
+            M._upgradeHighlightAssistantDetour = true
+        end
         Controller():Advance("opened")
         OpenPage(item)
+        if item.id == "page_history"
+            and type(M.SetPageHistoryTourCue) == "function"
+        then
+            M.SetPageHistoryTourCue(true)
+        end
         -- The Assistant remains load-on-demand. Only its explicit final
         -- highlight action promotes the normal Home card and loads runtime.
-        if item.id == "assistant" then
+        if openAssistant then
+            -- A refused/redundant page rebuild must not leak the one-shot
+            -- bypass into a later unrelated Home navigation.
+            M._upgradeHighlightAssistantDetour = nil
+            if type(M.StartNewAssistantTask) == "function" then
+                M.StartNewAssistantTask()
+                return
+            end
             local assistant = MSUF and MSUF.Assistant
             if type(assistant) == "table" and type(assistant.StartNewTaskWithRuntime) == "function" then
                 assistant.StartNewTaskWithRuntime("upgrade-highlights")
@@ -589,6 +641,10 @@ local function BuildSkipWarning(ctx, scene, T, releaseKey, spec, record, content
 end
 
 function M.BuildUpgradeHighlightDashboardScene(ctx)
+    if M._upgradeHighlightAssistantDetour == true then
+        M._upgradeHighlightAssistantDetour = nil
+        return false
+    end
     local controller = Controller()
     if not controller or type(controller.ShouldShow) ~= "function" or not controller:ShouldShow() then return false end
     local T = M.Theme

@@ -30,6 +30,16 @@ local DATA = {
             intro = "Your current profile stays exactly as it is. Take a quick tour of the new controls, then decide what you want to configure.",
             highlights = {
                 {
+                    id = "page_history",
+                    icon = "home",
+                    pageKey = "uf_player",
+                    title = "Back and Forward between pages",
+                    summary = "New Back and Forward arrows in the bottom-left menu bar remember the pages you visit.",
+                    impact = "Jump between recent settings pages without finding them again in navigation or search.",
+                    missed = "Back and Forward page history in the bottom-left menu bar",
+                    action = "Try the Back button",
+                },
+                {
                     id = "custom_aura_tracking",
                     icon = "auras3_styling",
                     pageKey = "uf_player",
@@ -49,11 +59,11 @@ local DATA = {
                     id = "auras3_rework",
                     icon = "auras3_styling",
                     pageKey = "auras3_styling",
-                    title = "Auras3: a full Aura menu rework",
-                    summary = "The old Auras2 page has been rebuilt as Auras3, with separate Unitframe and Group workspaces plus Buff, Debuff and Custom lanes.",
-                    impact = "Each lane gets its own live preview, layout, growth, sorting, filters, blacklist or whitelist, cooldown text, swipe, stacks, duration bars and icon border styles with a real soft drop shadow.",
-                    missed = "the rebuilt Auras3 workspace, lane-specific previews, layouts, sorting, filters and styling",
-                    action = "Explore the Aura rework",
+                    title = "Aura settings in the right place",
+                    summary = "Setup and individual styling now live in the matching Unitframe and Party/Raid menus. Appearance > Auras holds the expanded shared styles.",
+                    impact = "Configure each frame in context, then use Auras for shared icon shapes, borders, shadows, colors and spacing.",
+                    missed = "per-frame Aura controls and expanded shared styling in Appearance > Auras",
+                    action = "Open shared Aura styles",
                 },
                 {
                     id = "priority_frames",
