@@ -3,7 +3,7 @@
 ## Notes: Classic prototype for The Burning Crusade Classic.
 ## Author: Mapko
 ## Category: Combat
-## Version: 6.5-alpha1
+## Version: 6.5-alpha2
 ## SavedVariables: MSUF_DB, MSUF_GlobalDB
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## OptionalDeps: LibSharedMedia-3.0, Clique, WagoAnalytics

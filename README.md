@@ -122,9 +122,9 @@ local function SetNicknameProviderEnabled(enabled)
     end
 end
 
-local function NotifyNicknamesChanged()
+local function NotifyNicknamesChanged(unit)
     if API and API.IsProviderRegistered(OWNER) then
-        API.NotifyChanged(OWNER)
+        API.NotifyChanged(OWNER, unit)
     end
 end
 ```
@@ -134,7 +134,8 @@ provider. `RegisterProvider(owner, resolver, priority)` accepts an optional
 numeric priority; higher priorities run first. Use
 `UnregisterProvider(owner)` when the integration is disabled. Call the enable
 function once after loading the provider's persisted state, and call the change
-notification only when its nickname data changes.
+notification with the changed unit token. Omit the unit only for bulk database
+changes or enabled-state changes that affect every displayed name.
 
 ### Edit Mode provider integration
 

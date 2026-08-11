@@ -1,5 +1,32 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.5-alpha2 - 2026-08-11
+
+### Highlights
+
+- Brought the unified Mainline, Mists, TBC and Vanilla package up to feature parity with MSUF 6.01 plus the current post-release fixes. Client-specific ClassPower owners remain separated by TOC, while shared profiles, menus, previews and Assistant controls use the same contracts.
+- Reworked the upgrade highlight tour around the real navigation history feature. Back and Forward are introduced first, their menu arrows pulse prominently while that page stays active, and the local Assistant can replay a skipped tour from requests such as `start the highlight tour` or `restart the tour`.
+- Expanded Texture Layers with target-only accents, source-color treatments, crop and mirror controls, rounded clipping and matching Unit Preview controls.
+- Added rounded Class Resources, safe alternative-mana width and X-offset controls, native Ebon Might duration text on Mainline, and protected-value-safe ClassPower text and Player-health handling.
+
+### Changes
+
+- Updated the Auras menus to describe the current Unit Frame and Group Frame workspaces directly, with shorter upgrade-highlight copy and more styling controls on the Auras page.
+- Added the animated Blizzard resting symbol to the shared status model and fresh profile defaults. Mainline uses the native flipbook atlas; Classic clients detect that the atlas is unavailable and fall back to the existing static resting icon.
+- Extended debuff-blacklist presets and clarified that blacklist choices apply only to the selected lane and frame scope.
+- Split Unit Preview Buff and Debuff strata, rebuilt the correct Aura lane after handle clicks and aligned castbar spell/time positioning with runtime.
+- Improved nickname-provider refreshes so unit-aware providers update the correct Unit and Group Frames without periodic polling.
+- Distinguished true outline geometry from texture borders and exposed the matching controls and previews.
+
+### Fixes & Performance
+
+- Fixed manual detached Power width being overwritten by automatic geometry.
+- Fixed Boss preview initialization before portrait refresh and kept mouseover outline colors current after style changes.
+- Fixed Unit copy actions bypassing their action guard and added the missing Castbar copy path.
+- Fixed rounded Texture Layer and preview edges being clipped, and refreshed target-dependent visibility on `UNIT_TARGET`.
+- Fixed restricted ClassPower values hiding text that can still be rendered safely, including native Ebon Might duration text.
+- Refreshed Assistant, search and generated menu inventories for the new controls and replay-tour commands.
+
 ## 6.0-RC18 - 2026-08-09
 
 ### Changes
