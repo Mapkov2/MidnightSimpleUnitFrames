@@ -475,27 +475,42 @@ jobs:
             (Get-PrereleaseFallbackKey $tag),
             (Get-PrereleaseFallbackKey $display)
           ) | Where-Object { $_ } | Select-Object -Unique
-          $lines = [regex]::Split((Get-Content -LiteralPath "CHANGELOG.md" -Raw), "\r?\n")
-          $start = -1
-          $end = $lines.Count
+          $tagContents = @(git for-each-ref "refs/tags/$tag" --format='%(contents)' 2>$null) -join [Environment]::NewLine
+          $useFullChangelog = -not [string]::IsNullOrWhiteSpace($tagContents) -and
+            [regex]::IsMatch($tagContents, '(?im)^\s*changelog-source\s*:\s*full\s*$')
+          $notes = $null
 
-          for ($i = 0; $i -lt $lines.Count; $i++) {
-            if ($lines[$i] -match '^##\s+(.+?)(?:\s+-\s+\d{4}-\d{2}-\d{2})?\s*$') {
-              if ($wanted -contains (Normalize-Key $Matches[1])) {
-                $start = $i
-                for ($j = $i + 1; $j -lt $lines.Count; $j++) {
-                  if ($lines[$j] -match '^##\s+') {
-                    $end = $j
-                    break
+          if ($useFullChangelog) {
+            $fullChangelogPath = "MSUF_6.0_FULL_CHANGELOG.md"
+            if (-not (Test-Path -LiteralPath $fullChangelogPath -PathType Leaf)) {
+              throw "Full release changelog is missing: $fullChangelogPath"
+            }
+            $notes = [string[]][regex]::Split((Get-Content -LiteralPath $fullChangelogPath -Raw), "\r?\n")
+          } else {
+            $lines = [regex]::Split((Get-Content -LiteralPath "CHANGELOG.md" -Raw), "\r?\n")
+            $start = -1
+            $end = $lines.Count
+
+            for ($i = 0; $i -lt $lines.Count; $i++) {
+              if ($lines[$i] -match '^##\s+(.+?)(?:\s+-\s+\d{4}-\d{2}-\d{2})?\s*$') {
+                if ($wanted -contains (Normalize-Key $Matches[1])) {
+                  $start = $i
+                  for ($j = $i + 1; $j -lt $lines.Count; $j++) {
+                    if ($lines[$j] -match '^##\s+') {
+                      $end = $j
+                      break
+                    }
                   }
+                  break
                 }
-                break
               }
             }
-          }
 
-          if ($start -lt 0) {
-            throw "Could not find CHANGELOG.md section for release '$tag' ('$display')."
+            if ($start -lt 0) {
+              throw "Could not find CHANGELOG.md section for release '$tag' ('$display')."
+            }
+
+            $notes = [string[]]$lines[$start..($end - 1)]
           }
 
           function Close-List {
@@ -509,6 +524,12 @@ jobs:
             $trimmed = $line.Trim()
             if ([string]::IsNullOrWhiteSpace($trimmed)) {
               Close-List
+              return
+            }
+
+            if ($trimmed -match '^#\s+(.+?)\s*$') {
+              Close-List
+              $script:HtmlLines += ("<h1>" + [System.Net.WebUtility]::HtmlEncode($Matches[1].Trim()) + "</h1>")
               return
             }
 
@@ -542,7 +563,6 @@ jobs:
           }
 
           New-Item -ItemType Directory -Force -Path "dist" | Out-Null
-          $notes = [string[]]$lines[$start..($end - 1)]
           [System.IO.File]::WriteAllText("dist/RELEASE_NOTES.md", (($notes -join [Environment]::NewLine).TrimEnd() + [Environment]::NewLine), [System.Text.UTF8Encoding]::new($false))
 
           $script:HtmlLines = @()
