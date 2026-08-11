@@ -351,6 +351,77 @@ local function ActionButton(parent, label, width, role)
     if W.StyleTopActionButton then W.StyleTopActionButton(btn) end
     return btn
 end
+
+local CUSTOM_DEBUFF_BLACKLIST_INFO_SEEN_KEY = "auraEnemyDebuffBlacklistInfoSeen"
+local CUSTOM_DEBUFF_BLACKLIST_INFO_TITLE = "UnitFrame Debuff blacklist"
+local CUSTOM_DEBUFF_BLACKLIST_INFO_BODY = "On hostile UnitFrames, you can blacklist any debuff by exact Spell ID. On friendly or otherwise assistable UnitFrames, Blizzard permits exact Spell ID filters only for approved public auras."
+
+local function CustomDebuffBlacklistInfoSeen()
+    local general = type(M.GetGeneralDB) == "function" and M.GetGeneralDB() or nil
+    return type(general) == "table" and general[CUSTOM_DEBUFF_BLACKLIST_INFO_SEEN_KEY] == true
+end
+
+local function StopCustomDebuffBlacklistInfoPulse(button)
+    local pulse = button and button._msuf2CustomDebuffBlacklistInfoPulse
+    if pulse and pulse.Stop then pulse:Stop() end
+    if button and button.SetAlpha then button:SetAlpha(1) end
+end
+
+local function CreateCustomDebuffBlacklistInfoButton(parent, input)
+    local button = ActionButton(parent, "I", 28)
+    button:SetSize(28, 26)
+    button._msuf2SkipHistoryCheckpoint = true
+    button._msuf2AllowCombatClick = true
+    if M.MarkRuntimeControlComponent and input then M.MarkRuntimeControlComponent(button, input) end
+    if T.CenterButtonLabel then T.CenterButtonLabel(button) end
+    if button._msuf2Label and T.ApplyMenuFont then
+        T.ApplyMenuFont(button._msuf2Label, 3, "heading")
+    end
+    local labelAnchor = input and input._msuf2Title
+    if labelAnchor then
+        local textWidth = labelAnchor.GetStringWidth and tonumber(labelAnchor:GetStringWidth()) or nil
+        local titleWidth = labelAnchor.GetWidth and tonumber(labelAnchor:GetWidth()) or nil
+        if textWidth and textWidth > 0 then
+            local visibleTextWidth = titleWidth and min(textWidth, max(0, titleWidth - 36)) or textWidth
+            button:SetPoint("LEFT", labelAnchor, "CENTER", floor((visibleTextWidth * 0.5) + 8), 0)
+        else
+            button:SetPoint("LEFT", labelAnchor, "RIGHT", 8, 0)
+        end
+    end
+    AddTooltip(button, CUSTOM_DEBUFF_BLACKLIST_INFO_TITLE, CUSTOM_DEBUFF_BLACKLIST_INFO_BODY)
+    button:SetScript("OnClick", function(self)
+        local general = type(M.GetGeneralDB) == "function" and M.GetGeneralDB() or nil
+        if type(general) == "table" then general[CUSTOM_DEBUFF_BLACKLIST_INFO_SEEN_KEY] = true end
+        StopCustomDebuffBlacklistInfoPulse(self)
+        return true
+    end)
+
+    if not CustomDebuffBlacklistInfoSeen()
+        and button.CreateAnimationGroup
+        and not (T.ReducedMotionEnabled and T.ReducedMotionEnabled())
+    then
+        local pulse = button:CreateAnimationGroup()
+        if T.TrackMenuAnimationGroup then T.TrackMenuAnimationGroup(pulse) end
+        if pulse.SetLooping then pulse:SetLooping("REPEAT") end
+        local fadeOut = pulse:CreateAnimation("Alpha")
+        fadeOut:SetFromAlpha(1)
+        fadeOut:SetToAlpha(0.45)
+        fadeOut:SetDuration(0.8)
+        fadeOut:SetOrder(1)
+        if fadeOut.SetSmoothing then fadeOut:SetSmoothing("IN_OUT") end
+        local fadeIn = pulse:CreateAnimation("Alpha")
+        fadeIn:SetFromAlpha(0.45)
+        fadeIn:SetToAlpha(1)
+        fadeIn:SetDuration(0.8)
+        fadeIn:SetOrder(2)
+        if fadeIn.SetSmoothing then fadeIn:SetSmoothing("IN_OUT") end
+        if pulse.SetScript then pulse:SetScript("OnStop", function() button:SetAlpha(1) end) end
+        button._msuf2CustomDebuffBlacklistInfoPulse = pulse
+        pulse:Play()
+    end
+    return button
+end
+
 local function Card(parent, title, subtitle, x, y, width, height)
     local card = W.ControlCard(parent, title, subtitle, x, y, width, height)
     if card and T.ApplyBackdrop then T.ApplyBackdrop(card, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft) end
@@ -2993,25 +3064,34 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
     end
     local presetW = max(152, floor((w - 96) * 0.22))
     local spellW = max(210, floor((w - 96) * 0.30))
+    local function PresetValues()
+        return type(Model.GroupBlacklistPresetValues) == "function"
+            and Model.GroupBlacklistPresetValues(lane) or Model.BlacklistPresetValues()
+    end
     local function CurrentPreset()
-        local key = M.auraBlacklistPreset or "RAID_BUFFS"
-        local values = Model.BlacklistPresetValues()
+        local defaultKey = lane == "debuff" and "SATED" or "RAID_BUFFS"
+        local key = M.auraBlacklistPreset or defaultKey
+        local values = PresetValues()
         for i = 1, #values do if values[i].value == key then return key end end
-        return values[1] and values[1].value or "RAID_BUFFS"
+        return values[1] and values[1].value or defaultKey
+    end
+    local function PresetSpellValues()
+        return type(Model.GroupBlacklistSpellValues) == "function"
+            and Model.GroupBlacklistSpellValues(lane, CurrentPreset()) or Model.BlacklistSpellValues(CurrentPreset())
     end
     local directPresetY = lane == "debuff" and -72 or -126
-    local preset = W.Dropdown(direct, "Preset", function() return Model.BlacklistPresetValues() end, presetW)
+    local preset = W.Dropdown(direct, "Preset", PresetValues, presetW)
     W.MoveWidget(preset, direct, 16, directPresetY, presetW)
     M.BindDropdownWidget(ctx, preset, CurrentPreset, function(value)
         M.auraBlacklistPreset = value
         M.auraBlacklistSpell = nil
         QueueAurasPageRefresh(ctx, "group-aura-blacklist-preset")
     end, AuraControlMeta(ctx, "group-blacklist.lane." .. AuraCatalogToken(lane) .. ".preset-selection", "ephemeral"))
-    local spell = W.Dropdown(direct, "Spell", function() return Model.BlacklistSpellValues(CurrentPreset()) end, spellW)
+    local spell = W.Dropdown(direct, "Spell", PresetSpellValues, spellW)
     W.MoveWidget(spell, direct, 26 + presetW, directPresetY, spellW)
     M.BindDropdownWidget(ctx, spell,
         function()
-            local values, selected = Model.BlacklistSpellValues(CurrentPreset()), M.auraBlacklistSpell
+            local values, selected = PresetSpellValues(), M.auraBlacklistSpell
             for i = 1, #values do if values[i].value == selected then return selected end end
             return values[1] and values[1].value or nil
         end,
@@ -3020,7 +3100,7 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
     local addSpell = ActionButton(direct, "Add spell", 96)
     addSpell:SetPoint("TOPLEFT", direct, "TOPLEFT", 36 + presetW + spellW, directPresetY - 22)
     addSpell:SetScript("OnClick", function()
-        local values = Model.BlacklistSpellValues(CurrentPreset())
+        local values = PresetSpellValues()
         local spellID = M.auraBlacklistSpell or (values[1] and values[1].value)
         if Model.AddGroupBlacklistSpell(scope, lane, spellID) then
             QueueGroupScope(scope, "visual")
@@ -3406,9 +3486,12 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
     local laneTitle = lane == "debuff" and "Debuff" or "Buff"
     local isDebuff = lane == "debuff"
     local enemyDebuff = isDebuff and unit ~= "player"
-    local showPresets = not enemyDebuff
+    local showPresets = not isDebuff or type(Model.UnitBlacklistPresetValues) ~= "function"
+        or #Model.UnitBlacklistPresetValues(unit, lane) > 0
+    local combinedManualAndPresets = (not isDebuff or enemyDebuff) and showPresets
     local refreshList
-    local section = b:Section(laneTitle .. " Blacklist", isDebuff and 446 or 528)
+    local section = b:Section(laneTitle .. " Blacklist",
+        combinedManualAndPresets and 528 or 446)
     local w = section._msuf2Width or b.width or 720
     local inner = w - 48
     if not isDebuff or enemyDebuff then
@@ -3420,6 +3503,7 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
         local input = BindTextInput(ctx, section, inputLabel, 24, -36, inputW,
             function() return inputValue end, function(value) inputValue = value or "" end,
             false, AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.manual-input", "ephemeral"))
+        if enemyDebuff then CreateCustomDebuffBlacklistInfoButton(section, input) end
         local add = ActionButton(section, addLabel, enemyDebuff and 132 or 118, "primary")
         add:SetPoint("TOPLEFT", section, "TOPLEFT", 36 + inputW, -60)
         add:SetScript("OnClick", function()
@@ -3445,7 +3529,7 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
             AddTooltip(add, "Add custom buff", "Adds one exact buff to this frame's blacklist.")
         end
     end
-    local curatedOffset = isDebuff and 0 or -82
+    local curatedOffset = combinedManualAndPresets and -82 or 0
     local presetW = max(130, min(floor(inner * 0.62), inner - 138))
     local spellW = max(160, min(floor(inner * 0.68), inner - 108))
     local function PresetValues()
@@ -3531,7 +3615,7 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
             "Enemy debuffs: hide only exact noisy SpellIDs. Selected Dots on target are handled automatically by that scope's Auto-blacklist toggle.",
             24, -104, inner, T.colors.muted)
     end
-    local listOffset = enemyDebuff and 44 or curatedOffset
+    local listOffset = showPresets and curatedOffset or 44
     local prepared = W.Text(section, "", 24, -186 + listOffset, inner, T.colors.accent)
     local searchValue = ""
     local searchInput = BindTextInput(ctx, section, "Search", 24, -210 + listOffset, inner,
@@ -3548,7 +3632,8 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
             if refreshList then refreshList() end
         end)
     end
-    local emptyText = enemyDebuff and "No blocked enemy debuffs. Add an exact SpellID above."
+    local emptyText = enemyDebuff and not showPresets and "No blocked enemy debuffs. Add an exact SpellID above."
+        or (enemyDebuff and "No blocked spells. Add one above or use a preset.")
         or (isDebuff and "No blocked spells. Add one from the allowed presets above."
         or "No blocked spells. Add one above or use a preset.")
     local empty = W.Text(section, emptyText, 24, -284 + listOffset, inner, T.colors.muted)
@@ -3748,15 +3833,23 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
     local curatedOffset = isDebuff and 0 or -82
     local presetW = max(130, min(floor(inner * 0.62), inner - 138))
     local spellW = max(160, min(floor(inner * 0.68), inner - 108))
+    local function PresetValues()
+        return type(Model.GroupBlacklistPresetValues) == "function"
+            and Model.GroupBlacklistPresetValues(lane) or Model.BlacklistPresetValues()
+    end
     local function CurrentPreset()
         local defaultKey = lane == "debuff" and "SATED" or "RAID_BUFFS"
         local key = M.auraBlacklistPreset or defaultKey
-        local values = Model.BlacklistPresetValues()
+        local values = PresetValues()
         for i = 1, #values do if values[i].value == key then return key end end
         return values[1] and values[1].value or defaultKey
     end
+    local function PresetSpellValues()
+        return type(Model.GroupBlacklistSpellValues) == "function"
+            and Model.GroupBlacklistSpellValues(lane, CurrentPreset()) or Model.BlacklistSpellValues(CurrentPreset())
+    end
     local function CurrentSpell()
-        local values, selected = Model.BlacklistSpellValues(CurrentPreset()), M.auraBlacklistSpell
+        local values, selected = PresetSpellValues(), M.auraBlacklistSpell
         local entries = type(Model.GroupBlacklistEntries) == "function"
             and Model.GroupBlacklistEntries(scope, lane) or {}
         local blocked = {}
@@ -3769,7 +3862,7 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
         end
         return nil
     end
-    local preset = W.Dropdown(section, "Preset", function() return Model.BlacklistPresetValues() end, presetW)
+    local preset = W.Dropdown(section, "Preset", PresetValues, presetW)
     W.MoveWidget(preset, section, 24, -36 + curatedOffset, presetW)
     M.BindDropdownWidget(ctx, preset, CurrentPreset, function(value)
         M.auraBlacklistPreset = value
@@ -3792,7 +3885,7 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
     })
     AddTooltip(addSet, "Add entire set", "Blocks every aura in the selected curated MSUF set.")
     local selectedSummary = W.Text(section, "", 24, -92 + curatedOffset, inner, T.colors.muted)
-    local spell = W.Dropdown(section, "Spell", function() return Model.BlacklistSpellValues(CurrentPreset()) end, spellW)
+    local spell = W.Dropdown(section, "Spell", PresetSpellValues, spellW)
     W.MoveWidget(spell, section, 24, -120 + curatedOffset, spellW)
     M.BindDropdownWidget(ctx, spell,
         CurrentSpell,
@@ -3873,7 +3966,7 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
         local entries = type(Model.GroupBlacklistEntries) == "function" and Model.GroupBlacklistEntries(scope, lane) or {}
         local blocked = {}
         for i = 1, #entries do blocked[tostring(entries[i].value)] = true end
-        local setSpells = Model.BlacklistSpellValues(CurrentPreset())
+        local setSpells = PresetSpellValues()
         local missing = 0
         for i = 1, #setSpells do if not blocked[tostring(setSpells[i].value)] then missing = missing + 1 end end
         selectedSummary:SetText(missing == 0

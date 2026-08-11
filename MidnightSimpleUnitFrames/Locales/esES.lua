@@ -5137,6 +5137,9 @@ L["External frame"] = "Marco externo"
 L["Next page"] = "Página siguiente"
 L["Previous page"] = "Página anterior"
 
+L["UnitFrame Debuff blacklist"] = "Lista negra de perjuicios de UnitFrames"
+L["On hostile UnitFrames, you can blacklist any debuff by exact Spell ID. On friendly or otherwise assistable UnitFrames, Blizzard permits exact Spell ID filters only for approved public auras."] = "En UnitFrames hostiles puedes incluir cualquier perjuicio en la lista negra mediante su ID de hechizo exacto. En UnitFrames amistosos o a los que se puede ayudar, Blizzard solo permite filtros de ID de hechizo exactos para auras públicas autorizadas."
+
 -- Guided setup restart confirmation.
 L["Run the guided setup again? The walkthrough starts over at the first step."] = "¿Ejecutar de nuevo la configuración guiada? El recorrido volverá a empezar en el primer paso."
 end

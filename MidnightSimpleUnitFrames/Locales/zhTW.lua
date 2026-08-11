@@ -4994,6 +4994,9 @@ L["External frame"] = "外部框架"
 L["Next page"] = "下一頁"
 L["Previous page"] = "上一頁"
 
+L["UnitFrame Debuff blacklist"] = "單位框架減益封鎖清單"
+L["On hostile UnitFrames, you can blacklist any debuff by exact Spell ID. On friendly or otherwise assistable UnitFrames, Blizzard permits exact Spell ID filters only for approved public auras."] = "在敵對單位框架上，你可以透過精確法術 ID 封鎖任何減益效果。在友方或可協助單位框架上，暴雪只允許對核准的公開光環使用精確法術 ID 過濾。"
+
 -- Guided setup restart confirmation.
 L["Run the guided setup again? The walkthrough starts over at the first step."] = "要再次執行引導設定嗎？導覽將從第一步重新開始。"
 end

@@ -4954,6 +4954,9 @@ L["External frame"] = "외부 프레임"
 L["Next page"] = "다음 페이지"
 L["Previous page"] = "이전 페이지"
 
+L["UnitFrame Debuff blacklist"] = "유닛 프레임 약화 효과 차단 목록"
+L["On hostile UnitFrames, you can blacklist any debuff by exact Spell ID. On friendly or otherwise assistable UnitFrames, Blizzard permits exact Spell ID filters only for approved public auras."] = "적대적인 유닛 프레임에서는 정확한 주문 ID로 모든 약화 효과를 차단 목록에 추가할 수 있습니다. 아군 또는 지원 가능한 유닛 프레임에서는 블리자드가 승인한 공개 오라에만 정확한 주문 ID 필터를 허용합니다."
+
 -- Guided setup restart confirmation.
 L["Run the guided setup again? The walkthrough starts over at the first step."] = "가이드 설정을 다시 진행할까요? 설정 안내가 첫 단계부터 다시 시작됩니다."
 end

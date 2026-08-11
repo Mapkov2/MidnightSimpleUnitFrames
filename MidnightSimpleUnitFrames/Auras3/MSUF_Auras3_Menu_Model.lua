@@ -785,9 +785,9 @@ local PRESET_CATEGORIES = {
     SKYRIDING = "Utility",
 }
 
--- UnitFrame preset menus are lane-specific. Friendly harmful auras are exact
--- SpellID-filterable only when Blizzard marks them NeverSecret; enemy Debuffs
--- have no honest universal preset, so Target/Focus/Boss use manual IDs instead.
+-- UnitFrame preset menus are lane-specific. These harmful-aura sets mirror
+-- EnhanceQoL's curated NeverSecret list, so every supported UnitFrame and
+-- Group Frame can expose the same exact Debuff presets honestly.
 local UNIT_BUFF_PRESET_KEYS = {
     RAID_BUFFS = true,
     PRESERVATION_EVOKER = true,
@@ -805,7 +805,7 @@ local UNIT_BUFF_PRESET_KEYS = {
     RESOURCE_AURAS = true,
     COOLDOWNS = true,
 }
-local UNIT_FRIENDLY_DEBUFF_PRESET_KEYS = {
+local UNIT_CURATED_DEBUFF_PRESET_KEYS = {
     SATED = true,
     DESERTER = true,
     CHALLENGE_DEBUFFS = true,
@@ -3376,6 +3376,11 @@ local function BuildBlacklistPresetValues(allowedKeys)
     return values
 end
 
+local function BlacklistPresetKeysForKind(kind)
+    if NormalizeKind(kind) == "debuff" then return UNIT_CURATED_DEBUFF_PRESET_KEYS end
+    return UNIT_BUFF_PRESET_KEYS
+end
+
 function Model.BlacklistPresetValues()
     return BuildBlacklistPresetValues(nil)
 end
@@ -3383,27 +3388,21 @@ end
 function Model.UnitBlacklistPresetAllowed(scope, kind, presetKey)
     kind = NormalizeKind(kind)
     presetKey = tostring(presetKey or "")
-    if kind == "buff" then return UNIT_BUFF_PRESET_KEYS[presetKey] == true end
-    if NormalizeScope(scope) == "player" then
-        return UNIT_FRIENDLY_DEBUFF_PRESET_KEYS[presetKey] == true
-    end
-    return false
+    if NormalizeScope(scope) == "shared" then return false end
+    return BlacklistPresetKeysForKind(kind)[presetKey] == true
 end
 
 function Model.UnitBlacklistPresetValues(scope, kind)
     kind = NormalizeKind(kind)
-    if kind == "buff" then return BuildBlacklistPresetValues(UNIT_BUFF_PRESET_KEYS) end
-    if NormalizeScope(scope) == "player" then
-        return BuildBlacklistPresetValues(UNIT_FRIENDLY_DEBUFF_PRESET_KEYS)
-    end
-    return {}
+    if NormalizeScope(scope) == "shared" then return {} end
+    return BuildBlacklistPresetValues(BlacklistPresetKeysForKind(kind))
 end
 
 function Model.UnitBlacklistDefaultPreset(scope, kind)
     kind = NormalizeKind(kind)
+    if NormalizeScope(scope) == "shared" then return nil end
     if kind == "buff" then return "RAID_BUFFS" end
-    if NormalizeScope(scope) == "player" then return "SATED" end
-    return nil
+    return "SATED"
 end
 
 function Model.BlacklistSpellValues(presetKey)
@@ -3621,8 +3620,22 @@ function Model.GroupBlacklistEntries(scope, groupKey)
     return out
 end
 
+function Model.GroupBlacklistPresetAllowed(groupKey, presetKey)
+    presetKey = tostring(presetKey or "")
+    return BlacklistPresetKeysForKind(groupKey)[presetKey] == true
+end
+
+function Model.GroupBlacklistPresetValues(groupKey)
+    return BuildBlacklistPresetValues(BlacklistPresetKeysForKind(groupKey))
+end
+
+function Model.GroupBlacklistSpellValues(groupKey, presetKey)
+    if not Model.GroupBlacklistPresetAllowed(groupKey, presetKey) then return {} end
+    return Model.BlacklistSpellValues(presetKey)
+end
+
 function Model.AddGroupBlacklistPresetGroup(scope, groupKey, presetKey)
-    local values = Model.BlacklistSpellValues(presetKey)
+    local values = Model.GroupBlacklistSpellValues(groupKey, presetKey)
     local count = 0
     for i = 1, #values do
         local item = values[i]

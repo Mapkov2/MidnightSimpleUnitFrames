@@ -3682,6 +3682,9 @@ L["External frame"] = "External frame"
 L["Next page"] = "Next page"
 L["Previous page"] = "Previous page"
 
+L["UnitFrame Debuff blacklist"] = "UnitFrame Debuff blacklist"
+L["On hostile UnitFrames, you can blacklist any debuff by exact Spell ID. On friendly or otherwise assistable UnitFrames, Blizzard permits exact Spell ID filters only for approved public auras."] = "On hostile UnitFrames, you can blacklist any debuff by exact Spell ID. On friendly or otherwise assistable UnitFrames, Blizzard permits exact Spell ID filters only for approved public auras."
+
 -- Guided setup restart confirmation.
 L["Run the guided setup again? The walkthrough starts over at the first step."] = "Run the guided setup again? The walkthrough starts over at the first step."
 end
