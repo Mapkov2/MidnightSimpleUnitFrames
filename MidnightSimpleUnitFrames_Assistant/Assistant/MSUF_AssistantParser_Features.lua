@@ -962,6 +962,12 @@ function A._ParseClassPowerAltManaShortcut(text, raw)
     if ContainsAny(text, FeaturesPhrases[133]) then
         key = "bars.altManaHeight"
         label = "Alternative Mana Height"
+    elseif ContainsAny(text, FeaturesPhrases[427]) then
+        key = "bars.altManaWidth"
+        label = "Alternative Mana Width"
+    elseif ContainsAny(text, FeaturesPhrases[428]) then
+        key = "bars.altManaOffsetX"
+        label = "Alternative Mana Offset X"
     elseif ContainsAny(text, FeaturesPhrases[134]) then
         key = "bars.altManaOffsetY"
         label = "Alternative Mana Offset Y"

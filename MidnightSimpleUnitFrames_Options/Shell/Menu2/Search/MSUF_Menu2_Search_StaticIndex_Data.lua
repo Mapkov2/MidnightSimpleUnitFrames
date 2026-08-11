@@ -10,7 +10,7 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local Search = M.Search or {}
 M.Search = Search
-Search.StaticIndexRecordCount = 2671
+Search.StaticIndexRecordCount = 2674
 Search.StaticIndexBlob = [==[
 auras3_buffs	Border Alpha (%)	slider			Shared > Icon Style	border alpha	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eshared%2Eicon-style%2Estylebordercolor-alpha	border alpha shared icon style auras style shared icon style stylebordercolor alpha auras3 buffs slider
 auras3_buffs	Border Style	dropdown			Shared > Icon Style	border style	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eshared%2Eicon-style%2Eborder-style	border style shared icon style auras style shared icon style border style auras3 buffs dropdown
@@ -54,6 +54,7 @@ classpower	Color by resource type	toggle	bars.classPowerColorByType		Style > Res
 classpower	Current / Percent	dropdown	bars.playerHPBarTextRight		Hp > Text	current percent	idclasspowermenu2%2Eclasspower%2Eadvanced%2Eplayer%2Ehp%2Etext%2Eright	current percent hp text classpower advanced player hp text right classpower dropdown bars playerhpbartextright
 classpower	Current / Percent	dropdown	player.powerTextRight		Power > Text	current percent	idclasspowermenu2%2Eclasspower%2Eadvanced%2Edetached%2Epower%2Etext%2Eright	current percent power text classpower advanced detached power text right classpower dropdown player powertextright
 classpower	Custom Slots	dropdown			Power > Text	custom slots	idclasspowermenu2%2Eclasspower%2Eadvanced%2Edetached%2Epower%2Etext%2Epreset	custom slots power text classpower advanced detached power text preset classpower dropdown
+classpower	Custom width	slider	bars.altManaWidth		Mana > Layout	custom width	idclasspowermenu2%2Eclasspower%2Eadvanced%2Ealternative%2Emana%2Elayout%2Ewidth	custom width mana layout classpower advanced alternative mana layout width classpower slider bars altmanawidth
 classpower	Custom width	slider	bars.playerHPBarWidth		Layout > Manual	custom width	idclasspowermenu2%2Eclasspower%2Eadvanced%2Eplayer%2Ehp%2Elayout%2Emanual%2Ewidth	custom width layout manual classpower advanced player hp layout manual width classpower slider bars playerhpbarwidth
 classpower	Delimiter	dropdown	player.powerTextSeparator		Power > Text	delimiter	idclasspowermenu2%2Eclasspower%2Eadvanced%2Edetached%2Epower%2Etext%2Esep	delimiter power text classpower advanced detached power text sep classpower dropdown player powertextseparator
 classpower	Detached player power	toggle	player.powerBarDetached		Detached > Power	detached player power	idclasspowermenu2%2Eclasspower%2Eadvanced%2Edetached%2Epower%2Eenabled	detached player power detached power classpower advanced detached power enabled classpower toggle player powerbardetached
@@ -91,6 +92,7 @@ classpower	Orb size	slider	player.detachedPowerOrbSize		Layout > Orb	orb size	id
 classpower	Outline	slider	bars.classPowerOutline		Style > Pips	outline	idclasspowermenu2%2Eclasspower%2Eadvanced%2Estyle%2Epips%2Eoutline	outline style pips classpower advanced style pips outline classpower slider bars classpoweroutline
 classpower	Outline	slider	bars.playerHPBarOutline		Hp > Textures	outline	idclasspowermenu2%2Eclasspower%2Eadvanced%2Eplayer%2Ehp%2Etextures%2Eoutline	outline hp textures classpower advanced player hp textures outline classpower slider bars playerhpbaroutline
 classpower	Pip gap	slider	bars.classPowerGap		Style > Pips	pip gap	idclasspowermenu2%2Eclasspower%2Eadvanced%2Estyle%2Epips%2Egap	pip gap style pips classpower advanced style pips gap classpower slider bars classpowergap
+classpower	Player Frame	dropdown	bars.altManaWidthMode		Layout > Width	player frame	idclasspowermenu2%2Eclasspower%2Eadvanced%2Ealternative%2Emana%2Elayout%2Ewidth%2Emode	player frame layout width classpower advanced alternative mana layout width mode classpower dropdown bars altmanawidthmode
 classpower	Player text outline	segment			Power > Text	player text outline	idclasspowermenu2%2Eclasspower%2Eadvanced%2Edetached%2Epower%2Etext%2Eoutline	player text outline power text classpower advanced detached power text outline classpower segment
 classpower	Power X	slider	player.detachedPowerBarOffsetX		Power > Layout	power x	idclasspowermenu2%2Eclasspower%2Eadvanced%2Edetached%2Epower%2Elayout%2Ex	power x power layout classpower advanced detached power layout x classpower slider player detachedpowerbaroffsetx
 classpower	Power Y	slider	player.detachedPowerBarOffsetY		Power > Layout	power y	idclasspowermenu2%2Eclasspower%2Eadvanced%2Edetached%2Epower%2Elayout%2Ey	power y power layout classpower advanced detached power layout y classpower slider player detachedpowerbaroffsety
@@ -140,6 +142,7 @@ classpower	Use global bar texture	dropdown	bars.classPowerTexture		Resources > F
 classpower	Use global bar texture	dropdown	bars.playerHPBarTexture		Hp > Textures	use global bar texture	idclasspowermenu2%2Eclasspower%2Eadvanced%2Eplayer%2Ehp%2Etextures%2Efg	use global bar texture hp textures classpower advanced player hp textures fg classpower dropdown bars playerhpbartexture
 classpower	Width	slider	bars.classPowerWidth		Advanced > Layout	width	idclasspowermenu2%2Eclasspower%2Eadvanced%2Elayout%2Ewidth	width advanced layout classpower advanced layout width classpower slider bars classpowerwidth
 classpower	Width mode	dropdown	bars.classPowerWidthMode		Layout > Width	width mode	idclasspowermenu2%2Eclasspower%2Eadvanced%2Elayout%2Ewidth%2Emode	width mode layout width classpower advanced layout width mode classpower dropdown bars classpowerwidthmode
+classpower	X offset	slider	bars.altManaOffsetX		Mana > Layout	x offset	idclasspowermenu2%2Eclasspower%2Eadvanced%2Ealternative%2Emana%2Elayout%2Ex	x offset mana layout classpower advanced alternative mana layout x classpower slider bars altmanaoffsetx
 classpower	Y offset	slider	bars.altManaOffsetY		Mana > Layout	y offset	idclasspowermenu2%2Eclasspower%2Eadvanced%2Ealternative%2Emana%2Elayout%2Ey	y offset mana layout classpower advanced alternative mana layout y classpower slider bars altmanaoffsety
 classpower	space	dropdown	bars.playerHPBarTextSeparator		Hp > Text	space	idclasspowermenu2%2Eclasspower%2Eadvanced%2Eplayer%2Ehp%2Etext%2Esep	space hp text classpower advanced player hp text sep classpower dropdown bars playerhpbartextseparator
 gameplay	Anchor	dropdown	gameplay.combatTimerAnchor		Combat > Timer	anchor	idgameplaymenu2%2Egameplay%2Eadvanced%2Esetting%2Ecombat%2Etimer%2Eanchor	anchor combat timer gameplay advanced setting combat timer anchor gameplay dropdown gameplay combattimeranchor

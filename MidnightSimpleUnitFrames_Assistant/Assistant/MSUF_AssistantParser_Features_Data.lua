@@ -923,5 +923,7 @@ Data.FEATURES_PARSER = {
         "players", "raider", "raiders", "people", "members", "player count", "raid size",
         "full raid", "when full", "large raid", "small raid", "five man", "5 man", "5m",
     },
+        [427] = { "width", "wide", "wider", "narrow", "narrower" },
+        [428] = { "x offset", "offset x", " x", "left", "right" },
     },
 }

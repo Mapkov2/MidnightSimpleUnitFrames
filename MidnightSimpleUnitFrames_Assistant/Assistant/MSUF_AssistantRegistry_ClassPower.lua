@@ -133,5 +133,6 @@ if type(RegisterAltManaSettings) == "function" then
     RegisterAltManaSettings({
         RegisterBarsBoolean = RegisterBarsBoolean,
         RegisterBarsNumber = RegisterBarsNumber,
+        RegisterBarsEnum = RegisterBarsEnum,
     })
 end
