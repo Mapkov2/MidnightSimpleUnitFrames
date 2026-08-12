@@ -5011,6 +5011,11 @@ L["Top half"] = "Metà superiore"
 L["True Outline"] = "Contorno reale"
 L["offset, size, and layer"] = "offset, dimensioni e livello"
 
+L["Requires a UI reload."] = "Richiede un ricaricamento dell'interfaccia."
+L["Shared entries apply to every spec."] = "Le voci condivise si applicano a tutte le specializzazioni."
+L["down"] = "in basso"
+L["left"] = "sinistra"
+
 -- Guided setup restart confirmation.
 L["Run the guided setup again? The walkthrough starts over at the first step."] = "Eseguire di nuovo la configurazione guidata? La procedura riparte dal primo passaggio."
 end

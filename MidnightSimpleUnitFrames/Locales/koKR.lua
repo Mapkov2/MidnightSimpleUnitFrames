@@ -4992,6 +4992,11 @@ L["True Outline"] = "실제 외곽선"
 L["Try the Back button"] = "뒤로 버튼 사용해 보기"
 L["offset, size, and layer"] = "오프셋, 크기 및 레이어"
 
+L["Requires a UI reload."] = "UI를 다시 불러와야 합니다."
+L["Shared entries apply to every spec."] = "공유 항목은 모든 전문화에 적용됩니다."
+L["down"] = "아래"
+L["left"] = "왼쪽"
+
 -- Guided setup restart confirmation.
 L["Run the guided setup again? The walkthrough starts over at the first step."] = "가이드 설정을 다시 진행할까요? 설정 안내가 첫 단계부터 다시 시작됩니다."
 end

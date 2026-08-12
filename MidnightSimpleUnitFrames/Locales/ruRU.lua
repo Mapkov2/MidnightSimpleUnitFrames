@@ -5030,6 +5030,11 @@ L["True Outline"] = "Настоящий контур"
 L["Try the Back button"] = "Попробовать кнопку Назад"
 L["offset, size, and layer"] = "смещение, размер и слой"
 
+L["Requires a UI reload."] = "Требуется перезагрузка интерфейса."
+L["Shared entries apply to every spec."] = "Общие записи применяются ко всем специализациям."
+L["down"] = "вниз"
+L["left"] = "влево"
+
 -- Guided setup restart confirmation.
 L["Run the guided setup again? The walkthrough starts over at the first step."] = "Запустить пошаговую настройку заново? Обучение начнётся с первого шага."
 end

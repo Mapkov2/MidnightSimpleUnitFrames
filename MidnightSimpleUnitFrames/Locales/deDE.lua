@@ -5388,6 +5388,11 @@ L["Rounded frames ignore True Outline and Texture styles and keep the solid outl
 L["True Outline"] = "Echte Kontur"
 L["offset, size, and layer"] = "Versatz, Größe und Ebene"
 
+L["Requires a UI reload."] = "Erfordert ein UI-Reload."
+L["Shared entries apply to every spec."] = "Gemeinsame Einträge gelten für jede Spezialisierung."
+L["down"] = "unten"
+L["left"] = "links"
+
 -- Guided setup restart confirmation.
 L["Run the guided setup again? The walkthrough starts over at the first step."] = "Das geführte Setup erneut ausführen? Die Tour beginnt wieder beim ersten Schritt."
 end

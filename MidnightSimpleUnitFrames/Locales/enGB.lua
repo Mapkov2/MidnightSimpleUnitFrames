@@ -3714,6 +3714,11 @@ L["Top half"] = "Top half"
 L["True Outline"] = "True Outline"
 L["offset, size, and layer"] = "offset, size, and layer"
 
+L["Requires a UI reload."] = "Requires a UI reload."
+L["Shared entries apply to every spec."] = "Shared entries apply to every spec."
+L["down"] = "down"
+L["left"] = "left"
+
 -- Guided setup restart confirmation.
 L["Run the guided setup again? The walkthrough starts over at the first step."] = "Run the guided setup again? The walkthrough starts over at the first step."
 end

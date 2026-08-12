@@ -5411,6 +5411,11 @@ L["Top half"] = "Moitié supérieure"
 L["True Outline"] = "Contour réel"
 L["offset, size, and layer"] = "décalage, taille et calque"
 
+L["Requires a UI reload."] = "Nécessite un rechargement de l'interface."
+L["Shared entries apply to every spec."] = "Les entrées partagées s'appliquent à toutes les spécialisations."
+L["down"] = "bas"
+L["left"] = "gauche"
+
 -- Guided setup restart confirmation.
 L["Run the guided setup again? The walkthrough starts over at the first step."] = "Relancer la configuration guidée ? Le parcours reprend depuis la première étape."
 end

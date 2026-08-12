@@ -5032,6 +5032,11 @@ L["True Outline"] = "真實輪廓"
 L["Try the Back button"] = "試用返回按鈕"
 L["offset, size, and layer"] = "偏移、大小和層級"
 
+L["Requires a UI reload."] = "需要重新載入介面。"
+L["Shared entries apply to every spec."] = "共用項目套用至所有專精。"
+L["down"] = "下"
+L["left"] = "左"
+
 -- Guided setup restart confirmation.
 L["Run the guided setup again? The walkthrough starts over at the first step."] = "要再次執行引導設定嗎？導覽將從第一步重新開始。"
 end
