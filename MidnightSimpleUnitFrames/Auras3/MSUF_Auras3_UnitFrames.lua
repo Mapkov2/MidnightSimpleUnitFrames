@@ -5477,14 +5477,10 @@ local function CreateNativeAuraContainer(root, parentOverride)
         if container.Hide then container:Hide() end
         return nil
     end
-    -- CustomAuraContainerTemplate registers this static event during its
-    -- intrinsic OnLoad and swaps to Blizzard's generic Edit Mode sample auras
-    -- when it fires. MSUF renders its own Edit Mode/Menu previews, so its live
-    -- containers must stay on C_UnitAuras; otherwise sample Buff 1-6 can occupy
-    -- exact-ID lanes such as Player Defensives during a provider transition.
-    if type(container.UnregisterEvent) == "function" then
-        container:UnregisterEvent("AURA_DATA_PROVIDER_SWITCH")
-    end
+    -- Event registrations on CustomAuraContainerTemplate are intrinsic and
+    -- carry Blizzard's forbidden EventRegistrations aspect. Leave the static
+    -- AURA_DATA_PROVIDER_SWITCH subscription entirely Blizzard-owned; addon
+    -- calls to RegisterEvent/UnregisterEvent on this object taint execution.
     container._msufA3Root = root
     return container
 end

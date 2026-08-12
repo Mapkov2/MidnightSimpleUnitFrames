@@ -58,6 +58,8 @@ assert(has(runtime, "SyncCuratedBigDefensiveContainer(container)"), "identity re
 assert(has(runtime, "if playerScoped then filter = filter .. \"|PLAYER\" end"), "Player modifier is not explicit")
 assert(not has(runtime, "elseif nonPlayerScoped then"), "classification filters still inject implicit !PLAYER")
 assert(has(runtime, "if broadening and candidatesChanged then"), "friendly transition is not fail-closed")
+assert(not has(runtime, "container:UnregisterEvent(\"AURA_DATA_PROVIDER_SWITCH\")"),
+    "CustomAuraContainer event registrations must remain Blizzard-owned")
 
 local blockStart = assert(runtime:find("local function RemoveNativeFilterToken", 1, true))
 local blockStop = assert(runtime:find("local function FinalizeLane", blockStart, true))
