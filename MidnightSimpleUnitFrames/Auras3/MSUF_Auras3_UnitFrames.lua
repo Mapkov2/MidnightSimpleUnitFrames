@@ -3020,6 +3020,131 @@ function A3.ResolveUnitFrameConfig(unit, frameSpec)
     return cfg
 end
 
+--- Cold-path diagnostics for Assistant/support surfaces.  Blizzard owns the
+--- native AuraSlot assignment and may keep its visibility secret, so this API
+--- reports the effective configured owners without querying AuraButton state.
+--- It creates no frame, event, timer, or OnUpdate.
+function A3.GetUnitFrameEffectDiagnostics(unit, frame)
+    unit = NormalizeRuntimeUnit(unit or (frame and frame.MSUFUnitKey))
+    if not unit then return nil end
+
+    frame = frame
+        or (A3._runtimeFrames and A3._runtimeFrames[unit])
+        or (UF and UF.GetFrame and UF.GetFrame(unit))
+        or (UF and UF.frames and UF.frames[unit])
+        or _G["MSUF_" .. unit]
+    local root = frame and frame.Auras
+    local appliedConfig = root and type(root._msufA3Config) == "table" and root._msufA3Config or nil
+    local cfg = appliedConfig or A3.ResolveUnitFrameConfig(unit, frame and frame.MSUFSpec)
+    local installed = root ~= nil and root._msufA3Applied == true and appliedConfig == cfg
+
+    local auras = EnsureDB()
+    local _, effectiveShared = EffectiveUnitTables(auras, unit)
+    local perUnit = type(auras) == "table" and type(auras.perUnit) == "table" and auras.perUnit or nil
+    local unitConfig = perUnit and perUnit[unit] or nil
+    local localShared = type(unitConfig) == "table"
+        and unitConfig.overrideSharedLayout == true
+        and UnitStyleOverrideActive(unitConfig)
+        and type(unitConfig.layoutShared) == "table"
+        and unitConfig.layoutShared or nil
+    local laneSlots = cfg and cfg.laneEffects and cfg.laneEffects.enabled == true
+        and type(cfg.laneEffects.slots) == "table" and cfg.laneEffects.slots or nil
+
+    local function CopyColor(color)
+        color = type(color) == "table" and color or nil
+        return {
+            tonumber(color and color[1]) or 0.69,
+            tonumber(color and color[2]) or 0.50,
+            tonumber(color and color[3]) or 0.88,
+            tonumber(color and color[4]) or 0.80,
+        }
+    end
+
+    local function FindLaneSlot(kind)
+        if not laneSlots then return nil end
+        local itemKey = "uflane_effect:" .. kind
+        for i = 1, #laneSlots do
+            local slot = laneSlots[i]
+            if type(slot) == "table" and slot.itemKey == itemKey then return slot end
+        end
+        return nil
+    end
+
+    local function LaneSnapshot(kind)
+        local prefix = kind == "buff" and "buff" or "debuff"
+        local keyPrefix = prefix .. "FrameEffect"
+        local slot = FindLaneSlot(kind)
+        local effect = slot and type(slot.frameEffect) == "table" and slot.frameEffect or nil
+        local configuredType = tostring(ReadRaw(effectiveShared, nil, keyPrefix .. "Type") or "none"):lower()
+        local color = effect and effect.color or ReadRaw(effectiveShared, nil, keyPrefix .. "Color")
+        return {
+            ownerKind = "lane",
+            lane = kind,
+            display = kind == "buff" and "Buffs" or "Debuffs",
+            configuredType = configuredType,
+            renderedType = effect and tostring(effect.type or configuredType):lower() or nil,
+            armed = slot ~= nil,
+            installed = installed and slot ~= nil,
+            visibility = "native-opaque",
+            color = CopyColor(color),
+            priority = tonumber(effect and effect.priority)
+                or ReadNumber(effectiveShared, nil, keyPrefix .. "Priority", 5, 1, 10),
+            thickness = tonumber(effect and effect.thickness)
+                or ReadNumber(effectiveShared, nil, keyPrefix .. "Thickness", 2, 1, 16),
+            layer = tonumber(effect and effect.layer)
+                or ReadNumber(effectiveShared, nil, keyPrefix .. "Layer", 0, 0, 30),
+            strata = tostring((effect and effect.strata)
+                or ReadRaw(effectiveShared, nil, keyPrefix .. "Strata") or "AUTO"),
+            nativeFilter = slot and slot.nativeFilter or nil,
+            candidateFilterSignature = slot and slot.candidateFilterSignature or nil,
+            source = localShared and localShared[keyPrefix .. "Type"] ~= nil and "unit" or "shared",
+        }
+    end
+
+    local snapshot = {
+        unit = unit,
+        applied = installed,
+        configSource = appliedConfig and "applied" or "resolved",
+        visibility = "native-opaque",
+        lanes = {
+            buff = LaneSnapshot("buff"),
+            debuff = LaneSnapshot("debuff"),
+        },
+        custom = {},
+    }
+
+    -- Custom Aura and Target-DoT Full-Frame effects share the same renderer.
+    -- Expose their compiled owners too, while still leaving visibility opaque.
+    for _, rootKey in ipairs({ "spellIndicators", "targetDotEffects" }) do
+        local effectRoot = cfg and cfg[rootKey]
+        local slots = effectRoot and effectRoot.enabled == true and type(effectRoot.slots) == "table" and effectRoot.slots or nil
+        for i = 1, #(slots or {}) do
+            local slot = slots[i]
+            local effect = type(slot) == "table" and type(slot.frameEffect) == "table" and slot.frameEffect or nil
+            if effect and tostring(effect.type or "none"):lower() ~= "none" then
+                snapshot.custom[#snapshot.custom + 1] = {
+                    ownerKind = rootKey == "targetDotEffects" and "targetDots" or "custom",
+                    itemKey = slot.itemKey,
+                    display = slot.display,
+                    configuredType = tostring(effect.type):lower(),
+                    renderedType = tostring(effect.type):lower(),
+                    armed = true,
+                    installed = installed,
+                    visibility = "native-opaque",
+                    color = CopyColor(effect.color),
+                    priority = tonumber(effect.priority) or 5,
+                    thickness = tonumber(effect.thickness) or 2,
+                    layer = tonumber(effect.layer) or 0,
+                    strata = tostring(effect.strata or "AUTO"),
+                    nativeFilter = slot.nativeFilter,
+                    candidateFilterSignature = slot.candidateFilterSignature,
+                }
+            end
+        end
+    end
+    return snapshot
+end
+
 local function AppendSpellIndicatorItems(out, source)
     local items = type(source) == "table" and source.enabled == true and type(source.items) == "table" and source.items or nil
     if not items then return false end

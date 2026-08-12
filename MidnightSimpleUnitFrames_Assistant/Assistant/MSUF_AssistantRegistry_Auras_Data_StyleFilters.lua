@@ -221,6 +221,34 @@ Data.AURA_FILTER_BOOLEAN_SPECS = {
     { lane = "debuff", key = "crowdControl", label = "Debuff Crowd Control Filter", words = { "debuff crowd control filter", "crowd control debuffs", "crowd control debuffs only", "cc debuffs", "cc debuffs only", "show cc debuffs", "show crowd control debuffs" } },
 }
 
+-- Buff/Debuff lane effects rendered on the UnitFrame health surface.  Keep the
+-- stored values lowercase to match Auras3/Menu_Model and the Menu dropdown.
+Data.AURA_FRAME_EFFECT_TYPE_VALUES = { "none", "border", "glow", "pulse", "healthtint", "namecolor" }
+Data.AURA_FRAME_EFFECT_TYPE_ALIASES = {
+    none = "none",
+    off = "none",
+    disabled = "none",
+    disable = "none",
+    remove = "none",
+    border = "border",
+    outline = "border",
+    rand = "border",
+    umrandung = "border",
+    glow = "glow",
+    leuchten = "glow",
+    pulse = "pulse",
+    pulsing = "pulse",
+    pulsieren = "pulse",
+    tint = "healthtint",
+    ["health tint"] = "healthtint",
+    ["health bar tint"] = "healthtint",
+    ["health color"] = "healthtint",
+    ["health colour"] = "healthtint",
+    ["name overlay"] = "namecolor",
+    ["name color"] = "namecolor",
+    ["name colour"] = "namecolor",
+}
+
 -- Native classification tokens are intersections, not independent OR flags.
 -- Keep Assistant writes identical to Menu2: one classification per lane, with
 -- Player and Include Nameplate-only retained as explicit modifiers.

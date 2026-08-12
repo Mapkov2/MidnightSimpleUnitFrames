@@ -238,10 +238,14 @@ local function AuraCatalogPageKey(value, fallback)
     local token = tostring(value or ""):lower():gsub("[^%w_%-]+", "-"):gsub("^%-+", ""):gsub("%-+$", "")
     return token ~= "" and token or (fallback or "auras")
 end
-local function LaneFrameEffectAssistantContract()
+local function LaneFrameEffectAssistantContract(unit, lane, field)
+    if field == "type" then
+        return "auras3." .. tostring(unit or "shared") .. "."
+            .. (lane == "buff" and "buff" or "debuff") .. ".frameEffectType"
+    end
     return {
         assistantDisposition = "compound",
-        assistantDispositionReason = "This scope-aware Buff/Debuff Full-Frame effect writes the active shared or per-unit Aura style and has no Assistant setting contract yet.",
+        assistantDispositionReason = "This Full-Frame effect detail shares a compound color or numeric value; only its Effect dropdown has a direct Assistant setting contract.",
     }
 end
 M._customContainerAssistantSuffixes = {
@@ -2504,7 +2508,7 @@ local function BuildUnitStyle(ctx, b, scope, options)
         function() return tostring(ReadEffectValue("Type", "none")) end,
         function(value) WriteEffectValue("Type", value or "none", "AURAS3_LANE_FRAME_EFFECT") end,
         AuraControlMeta(ctx, "style.lane." .. AuraCatalogToken(lane) .. ".full-frame.type", nil,
-            LaneFrameEffectAssistantContract())))
+            LaneFrameEffectAssistantContract(unit, lane, "type"))))
     local effectColor = W.Color(frameEffect, "Color")
     M.BindColor(ctx, effectColor,
         function()
@@ -2516,7 +2520,7 @@ local function BuildUnitStyle(ctx, b, scope, options)
             WriteEffectValue("Color", { r, g, blue, c[4] or 0.80 }, "AURAS3_LANE_FRAME_EFFECT_COLOR")
         end,
         AuraControlMeta(ctx, "style.lane." .. AuraCatalogToken(lane) .. ".full-frame.color", nil,
-            LaneFrameEffectAssistantContract()))
+            LaneFrameEffectAssistantContract(unit, lane, "color")))
     -- BindColor remains the single command/history owner and automatically
     -- feeds the card's three-dot picker.  The duplicate inline swatch is hidden
     -- so Full-Frame colors have one visible entry point only.
@@ -2546,7 +2550,7 @@ local function BuildUnitStyle(ctx, b, scope, options)
                 end
             end,
             AuraControlMeta(ctx, "style.lane." .. AuraCatalogToken(lane) .. ".full-frame." .. AuraCatalogToken(suffix), nil,
-                LaneFrameEffectAssistantContract())))
+                LaneFrameEffectAssistantContract(unit, lane, suffix))))
     end
     EffectSlider("Opacity", 0, -96, 5, 100, 5, "Alpha", 0.80, "AURAS3_LANE_FRAME_EFFECT_ALPHA")
     EffectSlider("Layer (0-30)", 1, -96, 0, 30, 1, "Layer", 0, "AURAS3_LANE_FRAME_EFFECT_LAYER")

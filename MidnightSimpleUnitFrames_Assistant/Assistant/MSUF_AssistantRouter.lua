@@ -1423,22 +1423,27 @@ function R.TryRetargetCorrection(text, coreHandler)
     return result
 end
 
--- "Turn off all full frame effects of auras on player" describes MSUF's
--- frame-wide, aura-driven effect by what it looks like rather than by its name.
--- The control is the UnitFrame Dispel Overlay family: an overlay tinted by the
--- dispel type of an aura on the unit, drawn across the whole frame. Nothing in
--- the registry is called "full frame effect", so the request used to reach the
--- aura clarification instead of the control that owns it.
+-- Auras3 owns real Buff/Debuff Full-Frame Effects.  Keep them distinct from
+-- UnitFrame Dispel Overlay: they have different triggers, saved owners and
+-- render paths even though players can describe both as an aura overlay.
 R.FULL_FRAME_EFFECT_SHAPE_TERMS = {
-    "full frame", "fullframe", "whole frame", "entire frame",
-    "frame wide", "framewide", "full bar", "across the frame",
+    "full frame", "full-frame", "fullframe", "whole frame", "entire frame",
+    "frame wide", "frame-wide", "framewide", "full bar", "across the frame",
+    "vollbild", "ganzer rahmen", "gesamter rahmen",
 }
 R.FULL_FRAME_EFFECT_KIND_TERMS = {
     "effect", "effects", "overlay", "overlays", "glow", "glows",
-    "tint", "tints", "flash", "flashes",
+    "tint", "tints", "flash", "flashes", "border", "outline", "rand", "effekt",
 }
 R.FULL_FRAME_EFFECT_SOURCE_TERMS = {
     "aura", "auras", "buff", "buffs", "debuff", "debuffs", "dispel", "dispels",
+}
+R.FULL_FRAME_EFFECT_STYLE_TERMS = {
+    { value = "namecolor", words = { "name overlay", "name color", "name colour" } },
+    { value = "healthtint", words = { "health tint", "health bar tint", "health color", "health colour", "tint" } },
+    { value = "border", words = { "border", "outline", "rand", "umrandung" } },
+    { value = "glow", words = { "glow", "glowing", "leuchten" } },
+    { value = "pulse", words = { "pulse", "pulsing", "pulsieren" } },
 }
 
 function R.FullFrameAuraEffectRequest(text)
@@ -1451,33 +1456,141 @@ function R.FullFrameAuraEffectRequest(text)
     return norm
 end
 
+function R.FullFrameAuraEffectStyle(norm)
+    for i = 1, #R.FULL_FRAME_EFFECT_STYLE_TERMS do
+        local spec = R.FULL_FRAME_EFFECT_STYLE_TERMS[i]
+        if R.ContainsAny(norm, spec.words) then return spec.value end
+    end
+    return nil
+end
+
+function R.FullFrameAuraEffectSetting(scope, lane)
+    local key = "auras3." .. tostring(scope or "") .. "." .. tostring(lane or "") .. ".frameEffectType"
+    return A.Registry and type(A.Registry.GetSetting) == "function" and A.Registry:GetSetting(key) or nil
+end
+
+function R.FullFrameAuraEffectClarification(scopeLabel, laneLabel, reason)
+    local subject = tostring(scopeLabel or "that frame")
+    if laneLabel then subject = subject .. " " .. laneLabel end
+    return {
+        text = tostring(reason or ("Which " .. subject .. " Full-Frame Effect do you mean?"))
+            .. "\nChoose Buffs or Debuffs, then choose Border, Glow, Pulse, Health Tint, or Name Overlay."
+            .. " This is under " .. subject:gsub(" Buff$", ""):gsub(" Debuff$", "")
+            .. " > Auras > " .. tostring(laneLabel and (laneLabel .. "s") or "Buffs/Debuffs")
+            .. " > Style > Full-Frame Effect. UnitFrame Dispel Overlay is a separate feature. I kept MSUF unchanged.",
+        status = "ambiguous",
+        result = "ambiguous",
+        summary = "Clarifies the Aura lane and Full-Frame effect style before changing anything.",
+    }
+end
+
 function R.TryFullFrameAuraEffectRequest(text)
     local norm = R.FullFrameAuraEffectRequest(text)
     if not norm then return nil end
 
-    local unit = R.UnitScopeFromText and select(1, R.UnitScopeFromText(norm)) or nil
-    local key = unit and ("barScope." .. unit .. ".unitDispelOverlayEnabled")
-        or "general.unitDispelOverlayEnabled"
-    local setting = A.Registry and type(A.Registry.GetSetting) == "function"
-        and A.Registry:GetSetting(key) or nil
-    if not setting then return nil end
+    -- Explicit Dispel Overlay wording belongs to the existing UnitFrame owner.
+    if R.ContainsAny(norm, { "dispel overlay", "unitframe dispel", "unit frame dispel" }) then return nil end
+    local hasAuraLaneWord = R.ContainsAny(norm, { "buff", "buffs", "debuff", "debuffs", "aura", "auras" })
+    if R.ContainsAny(norm, { "dispel", "dispels" }) and not hasAuraLaneWord then return nil end
 
-    local enable = not R.ContainsAny(norm, {
+    local scope, scopeLabel
+    if R.UnitScopeFromText then scope, scopeLabel = R.UnitScopeFromText(norm) end
+    if not scope and R.ContainsAny(norm, { "shared", "global", "all unit auras" }) then
+        scope, scopeLabel = "shared", "Shared"
+    end
+    local lane, laneLabel
+    if R.AuraLaneFromText then lane, laneLabel = R.AuraLaneFromText(norm) end
+    local disable = R.ContainsAny(norm, {
         "turn off", "off", "disable", "remove", "hide", "no", "without",
-        "stop", "get rid of", "kill", "dont", "do not",
+        "stop", "get rid of", "kill", "dont", "do not", "ausschalten", "deaktivieren", "entfernen",
     })
+    local enable = R.ContainsAny(norm, {
+        "turn on", "enable", "show", "use", "apply", "einschalten", "aktivieren", "anzeigen",
+    })
+    local style = R.FullFrameAuraEffectStyle(norm)
+    local readOnlyRequest = (R.LooksLikeKnowledgeQuestionPrefix and R.LooksLikeKnowledgeQuestionPrefix(norm))
+        or norm:match("^why%s+") or norm:match("^what%s+") or norm:match("^where%s+")
+        or norm:match("^how%s+") or norm:match("^is%s+") or norm:match("^are%s+")
+        or norm:match("^does%s+") or norm:match("^do%s+i%s+")
+        or norm:match("^can%s+i%s+") or norm:match("^could%s+i%s+") or norm:match("^should%s+i%s+")
+        or norm:match("^warum%s+") or norm:match("^was%s+") or norm:match("^wo%s+")
+        or norm:match("^wie%s+") or norm:match("^ist%s+") or norm:match("^sind%s+")
+        or norm:match("^show%s+me%s+") or norm:match("^tell%s+me%s+")
+        or norm:match("^zeige%s+mir%s+")
+    local mutation = not readOnlyRequest and (disable or enable or R.StartsWithMutationCommand(norm))
+
+    if not mutation then
+        -- A visual question can carry the exact control name. Prefer the
+        -- compiled live owner/color explanation over the generic glossary.
+        local live = R.TryLiveUnitColorExplanation and R.TryLiveUnitColorExplanation(text)
+        if live then return live end
+        return {
+            text = "MSUF has separate Buff and Debuff Full-Frame Effects: Border, Glow, Pulse, Health Tint, or Name Overlay."
+                .. " They are Aura lane effects, not UnitFrame Dispel Overlay. The exact native AuraSlot match can be opaque,"
+                .. " but I can identify the configured owner, color, thickness, and trigger without changing anything."
+                .. " Open a Unit Frame > Auras > Buffs or Debuffs > Style > Full-Frame Effect.",
+            status = "info",
+            summary = "Explains Auras3 Full-Frame Effect ownership.",
+        }
+    end
+    if not scope then
+        return R.FullFrameAuraEffectClarification(nil, laneLabel,
+            "Which Unit Frame should I change: Player, Target, Focus, or Boss?")
+    end
+    if scope ~= "shared" and scope ~= "player" and scope ~= "target"
+        and scope ~= "focus" and scope ~= "boss"
+    then
+        return R.FullFrameAuraEffectClarification(nil, laneLabel,
+            "Aura Full-Frame Effects are available for Player, Target, Focus, and Boss, not "
+                .. tostring(scopeLabel or scope) .. ".")
+    end
+
+    local changes = {}
+    if disable and not lane and R.ContainsAny(norm, { "all", "both", "effects", "auras" }) then
+        local buffSetting = R.FullFrameAuraEffectSetting(scope, "buff")
+        local debuffSetting = R.FullFrameAuraEffectSetting(scope, "debuff")
+        if not buffSetting or not debuffSetting then return nil end
+        changes[1] = { setting = buffSetting, value = "none" }
+        changes[2] = { setting = debuffSetting, value = "none" }
+    elseif not lane then
+        local active = {}
+        if disable then
+            for _, kind in ipairs({ "buff", "debuff" }) do
+                local setting = R.FullFrameAuraEffectSetting(scope, kind)
+                local ok, value = false, nil
+                if setting and type(setting.get) == "function" then ok, value = pcall(setting.get) end
+                if setting and tostring(value or "none") ~= "none" then active[#active + 1] = setting end
+            end
+        end
+        if #active == 1 then
+            changes[1] = { setting = active[1], value = "none" }
+        else
+            return R.FullFrameAuraEffectClarification(scopeLabel, nil,
+                enable and ("Choose the " .. tostring(scopeLabel) .. " Buff or Debuff lane and an effect style before I turn it on.")
+                    or ("Choose the " .. tostring(scopeLabel) .. " Buff or Debuff Full-Frame Effect."))
+        end
+    else
+        local setting = R.FullFrameAuraEffectSetting(scope, lane)
+        if not setting then return nil end
+        if disable then style = "none" end
+        if not style then
+            return R.FullFrameAuraEffectClarification(scopeLabel, laneLabel,
+                "Which " .. tostring(scopeLabel) .. " " .. tostring(laneLabel) .. " Full-Frame style should I use?")
+        end
+        changes[1] = { setting = setting, value = style }
+    end
 
     local result = A.ExecutePlan({
         kind = "changes",
-        changes = { { setting = setting, value = enable } },
-        label = tostring(setting.label or "Dispel Overlay"),
-        summary = "Routes a frame-wide aura effect request to the dispel overlay control.",
+        changes = changes,
+        label = #changes == 2 and (tostring(scopeLabel) .. " Buff and Debuff Full-Frame Effects")
+            or tostring(changes[1] and changes[1].setting and changes[1].setting.label or "Aura Full-Frame Effect"),
+        summary = "Changes the Auras3 Buff/Debuff Full-Frame effect without touching UnitFrame Dispel Overlay.",
     })
     if type(result) == "table" then
         result.text = tostring(result.text or "")
-            .. "\nMSUF calls that effect the UnitFrame Dispel Overlay: it tints the whole frame by the dispel type of an aura on the unit."
-            .. "\nIts detection, style, opacity and health-only variants are separate controls, for example: set "
-            .. tostring(setting.label or "dispel overlay"):gsub(" Dispel Overlay$", " Dispel Overlay Opacity") .. " to 0.5."
+            .. "\nThis changes Auras > " .. tostring(laneLabel and (laneLabel .. "s") or "Buffs and Debuffs")
+            .. " > Style > Full-Frame Effect. UnitFrame Dispel Overlay remains separate."
     end
     return result
 end
@@ -5942,11 +6055,15 @@ local LIVE_COLOR_QUESTION_TERMS = {
     "why is", "why does", "why did", "what does", "what is", "what means",
     "what do", "what are", "what causes", "explain", "different color",
     "different frame color", "changed color", "color changed", "colour changed",
+    "warum ist", "warum hat", "warum wird", "warum wurde", "was ist", "was bedeutet",
+    "woher kommt", "erklaer", "erklaere",
 }
 
 local LIVE_COLOR_VISUAL_TERMS = {
     "color", "colors", "colored", "colour", "colours", "coloured", "red", "green", "blue",
-    "yellow", "orange", "purple", "gray", "grey", "white", "black",
+    "yellow", "orange", "purple", "violet", "gray", "grey", "white", "black", "pink", "cyan",
+    "rot", "gruen", "blau", "gelb", "orange", "lila", "violett", "grau", "weiss", "schwarz",
+    "border", "outline", "edge", "rand", "umrandung", "glow", "tint", "pulse",
 }
 
 local LIVE_COLOR_DEBUFF_TERMS = {
@@ -6000,9 +6117,9 @@ end
 local function LiveColorGeneralGuide()
     return {
         text = "MSUF frame color guide\n"
-            .. "A frame can show several independent color layers, so one color does not always have one meaning. The health fill can use player class colors, friendly/neutral/hostile NPC reaction colors, NPC Type colors, a health gradient, or a fixed Unified/Dark color. The border or outline can separately show a dispel/debuff, aggro, purge, or Boss Target highlight; the first active highlight wins.\n"
-            .. "For example, an orange Target health fill can mean a neutral NPC, while an orange border can be a dispel/debuff highlight. A debuff normally affects its aura icon or highlight border, not the health fill itself.\n"
-            .. "Open Colors for health and border colors. For Party/Raid dispel overlays and debuff stripes, check Group Dispel Overlay. I kept MSUF unchanged.",
+            .. "A frame can show several independent color layers, so one color does not always have one meaning. The health fill can use player class colors, friendly/neutral/hostile NPC reaction colors, NPC Type colors, a health gradient, or a fixed Unified/Dark color. The border or outline can separately show an Auras3 Buff/Debuff Full-Frame Effect, dispel/debuff, aggro, purge, or Boss Target highlight.\n"
+            .. "For example, an orange Target health fill can mean a neutral NPC, while an Aura Full-Frame Border can use its own configured color and follow the current health fill.\n"
+            .. "Open Colors for health and normal border colors. For UnitFrame Aura effects, open that frame > Auras > Buffs or Debuffs > Style > Full-Frame Effect. For Party/Raid overlays and stripes, check Group Dispel Overlay. I kept MSUF unchanged.",
         status = "info",
         summary = "MSUF frame color guide",
     }
@@ -6048,6 +6165,182 @@ local function LiveDebuffCount(unit)
         count = count + 1
     end
     return count
+end
+
+R.LIVE_AURA_EFFECT_LABELS = {
+    border = "Border",
+    glow = "Glow",
+    pulse = "Pulse",
+    healthtint = "Health Tint",
+    namecolor = "Name Overlay",
+}
+
+function R.LiveAuraRequestedEffectType(norm)
+    if R.ContainsAny(norm, { "border", "outline", "edge", "rand", "umrandung" }) then return "border" end
+    if R.ContainsAny(norm, { "glow", "glowing", "leuchten" }) then return "glow" end
+    if R.ContainsAny(norm, { "pulse", "pulsing", "pulsieren" }) then return "pulse" end
+    if R.ContainsAny(norm, { "health tint", "health bar tint", "tint" }) then return "healthtint" end
+    if R.ContainsAny(norm, { "name overlay", "name color", "name colour" }) then return "namecolor" end
+    return nil
+end
+
+function R.LiveAuraEffectColorMatches(norm, effect)
+    local color = effect and effect.color
+    local r, g, b = tonumber(color and color[1]), tonumber(color and color[2]), tonumber(color and color[3])
+    if not (r and g and b) then return false end
+    if R.ContainsAny(norm, { "purple", "violet", "lila", "violett" }) then return b > g and r > g end
+    if R.ContainsAny(norm, { "pink", "rosa" }) then return r > 0.55 and b > 0.35 and g < r end
+    if R.ContainsAny(norm, { "orange" }) then return r > 0.65 and g > 0.20 and g < r and b < g end
+    if R.ContainsAny(norm, { "yellow", "gelb" }) then return r > 0.60 and g > 0.55 and b < 0.45 end
+    if R.ContainsAny(norm, { "red", "rot" }) then return r > g * 1.25 and r > b * 1.25 end
+    if R.ContainsAny(norm, { "green", "gruen" }) then return g > r * 1.20 and g > b * 1.20 end
+    if R.ContainsAny(norm, { "blue", "blau", "cyan" }) then return b > r * 1.20 and b > g * 1.05 end
+    if R.ContainsAny(norm, { "black", "schwarz" }) then return math.max(r, g, b) < 0.25 end
+    if R.ContainsAny(norm, { "white", "weiss" }) then return math.min(r, g, b) > 0.75 end
+    if R.ContainsAny(norm, { "gray", "grey", "grau" }) then return math.max(r, g, b) - math.min(r, g, b) < 0.12 end
+    return false
+end
+
+function R.LiveAuraHasSpecificColor(norm)
+    return R.ContainsAny(norm, {
+        "purple", "violet", "lila", "violett", "pink", "rosa", "orange",
+        "yellow", "gelb", "red", "rot", "green", "gruen", "blue", "blau", "cyan",
+        "black", "schwarz", "white", "weiss", "gray", "grey", "grau",
+    })
+end
+
+function R.LiveAuraFrameEffectDiagnostics(frame, unit)
+    local a3 = MSUF and MSUF.MSUF_Auras3 or _G.MSUF_Auras3
+    if not (a3 and type(a3.GetUnitFrameEffectDiagnostics) == "function") then return nil end
+    local ok, snapshot = pcall(a3.GetUnitFrameEffectDiagnostics, unit, frame)
+    return ok and type(snapshot) == "table" and snapshot or nil
+end
+
+function R.LiveAuraFrameEffectCandidate(norm, frame, unit)
+    local snapshot = R.LiveAuraFrameEffectDiagnostics(frame, unit)
+    if not snapshot then return nil end
+    local laneHint = R.AuraLaneFromText and select(1, R.AuraLaneFromText(norm)) or nil
+    local requestedType = R.LiveAuraRequestedEffectType(norm)
+    local auraHint = R.ContainsAny(norm, { "aura", "auras", "buff", "buffs", "debuff", "debuffs" })
+    local customHint = R.ContainsAny(norm, { "custom aura", "tracked aura", "target dot", "dots on target" })
+    local targetDotsHint = R.ContainsAny(norm, { "target dot", "dots on target" })
+    local best, bestScore, matches
+
+    local function Consider(effect)
+        if type(effect) ~= "table" then return end
+        local kind = tostring(effect.renderedType or effect.configuredType or "none"):lower()
+        if kind == "none" or kind == "" then return end
+        -- A configured but unarmed lane cannot be the visible effect: its
+        -- lane is disabled, has no capacity, or was otherwise compiled out.
+        if effect.armed ~= true then return end
+        if laneHint and effect.ownerKind == "lane" and effect.lane ~= laneHint then return end
+        if requestedType and kind ~= requestedType then return end
+        local colorMatch = R.LiveAuraEffectColorMatches(norm, effect)
+        if R.LiveAuraHasSpecificColor(norm) and not colorMatch then return end
+        local relevant = colorMatch or auraHint or laneHint ~= nil or requestedType ~= nil
+        if not relevant then return end
+        local score = (effect.armed == true and 8 or 0)
+            + (effect.installed == true and 4 or 0)
+            + (colorMatch and 50 or 0)
+            + (requestedType and 40 or 0)
+            + (laneHint and effect.lane == laneHint and 100 or 0)
+            + (customHint and effect.ownerKind == "custom" and 80 or 0)
+            + (targetDotsHint and effect.ownerKind == "targetDots" and 120 or 0)
+        if not bestScore or score > bestScore then
+            best, bestScore, matches = effect, score, { effect }
+        elseif score == bestScore then
+            matches[#matches + 1] = effect
+        end
+    end
+
+    local lanes = snapshot.lanes
+    if type(lanes) == "table" then
+        Consider(lanes.buff)
+        Consider(lanes.debuff)
+    end
+    for i = 1, #(snapshot.custom or {}) do Consider(snapshot.custom[i]) end
+    return best, snapshot, matches
+end
+
+function R.LiveAuraFrameEffectAmbiguityExplanation(unitLabel, effects)
+    local found = {}
+    for i = 1, #(effects or {}) do
+        local effect = effects[i]
+        local ownerLabel
+        if effect.ownerKind == "lane" then
+            ownerLabel = effect.lane == "buff" and "Buff" or "Debuff"
+        elseif effect.ownerKind == "targetDots" then
+            ownerLabel = tostring(effect.display or "Dots on Target")
+        else
+            ownerLabel = tostring(effect.display or "Custom Aura")
+        end
+        local kind = tostring(effect.renderedType or effect.configuredType or "effect"):lower()
+        local kindLabel = R.LIVE_AURA_EFFECT_LABELS[kind] or kind
+        local color = effect.color
+        local r, g, b = tonumber(color and color[1]), tonumber(color and color[2]), tonumber(color and color[3])
+        local rgb = r and g and b and string.format(" (RGB %d, %d, %d)",
+            math.floor(r * 255 + 0.5), math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5)) or ""
+        found[#found + 1] = tostring(ownerLabel) .. " " .. tostring(kindLabel) .. rgb
+    end
+    return "I found multiple matching " .. tostring(unitLabel) .. " Aura Full-Frame effects: "
+        .. table.concat(found, "; ") .. ". WoW keeps the exact live native AuraSlot match opaque to addon Lua, so I cannot safely choose one from configuration alone."
+        .. " Name the Buff, Debuff, Custom Aura, or Dots-on-Target owner and I can explain that setting precisely."
+        .. " I did not fall back to the normal UnitFrame border and kept MSUF unchanged."
+end
+
+function R.LiveAuraFrameEffectExplanation(unitLabel, effect)
+    local kind = tostring(effect and (effect.renderedType or effect.configuredType) or "none"):lower()
+    local effectLabel = R.LIVE_AURA_EFFECT_LABELS[kind]
+        or tostring(effect and (effect.renderedType or effect.configuredType) or "Effect")
+    local laneLabel
+    if effect and effect.ownerKind == "lane" then
+        laneLabel = effect.lane == "buff" and "Buff" or "Debuff"
+    else
+        laneLabel = tostring(effect and effect.display or "Custom Aura")
+    end
+    local color = effect and effect.color or {}
+    local r, g, b = tonumber(color[1]), tonumber(color[2]), tonumber(color[3])
+    local a = tonumber(color[4])
+    local colorLine = r and g and b and string.format(
+        " Its effective color is RGB %d, %d, %d%s.",
+        math.floor(r * 255 + 0.5), math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5),
+        a and (" at " .. tostring(math.floor(a * 100 + 0.5)) .. "% opacity") or "") or ""
+    local detailLine = " Thickness " .. tostring(tonumber(effect and effect.thickness) or 2)
+        .. ", priority " .. tostring(tonumber(effect and effect.priority) or 5)
+        .. ", layer " .. tostring(tonumber(effect and effect.layer) or 0) .. "."
+    local ownerLine
+    if effect and effect.ownerKind == "targetDots" then
+        ownerLine = " The Effect value is owned by this Dots-on-Target tracking slot."
+    elseif effect and effect.ownerKind == "custom" then
+        ownerLine = " The Effect value is owned by this tracked Custom Aura slot."
+    elseif effect and effect.source == "unit" then
+        ownerLine = " The Effect value is owned by the " .. tostring(unitLabel)
+            .. " Aura Style override, so resetting only the Unit Frame does not reset it."
+    else
+        ownerLine = " The Effect value is inherited from Shared Aura Style by " .. tostring(unitLabel) .. "."
+    end
+    local armedLine = effect and effect.armed == true
+        and " It is armed in the compiled Aura lane and can appear while WoW assigns a matching aura to that native slot."
+        or " It is configured but is not armed in the compiled lane right now, for example because that Aura lane is disabled."
+    local triggerLine
+    if effect and effect.ownerKind == "lane" then
+        triggerLine = effect.lane == "buff"
+            and " Its trigger is any helpful aura that passes the Buff lane's native filters and blacklist."
+            or " Its trigger is any harmful aura that passes the Debuff lane's native filters and blacklist."
+    elseif effect and effect.ownerKind == "targetDots" then
+        triggerLine = " Its trigger is the tracked Dots-on-Target aura configured for this slot."
+    else
+        triggerLine = " Its trigger is the tracked Custom Aura configured for this slot."
+    end
+    local geometryLine = kind == "namecolor" and " Name Overlay colors the UnitFrame name instead of drawing on the health fill."
+        or " The renderer attaches this visual to the current StatusBar health-fill texture, not the outer UnitFrame; at 49% health its right edge sits at the fill edge, and at 100% it reaches the frame edge."
+    local pathLine = effect and effect.ownerKind == "lane"
+        and (" Change it at " .. tostring(unitLabel) .. " > Auras > " .. tostring(laneLabel) .. "s > Style > Full-Frame Effect; set Effect to None to remove it.")
+        or (" Change it in " .. tostring(unitLabel) .. " > Auras > " .. tostring(laneLabel) .. " > Style > Full-Frame Effect.")
+    return tostring(unitLabel) .. " " .. tostring(laneLabel) .. " Full-Frame Effect is configured as " .. effectLabel .. "."
+        .. colorLine .. detailLine .. ownerLine .. armedLine .. triggerLine .. geometryLine
+        .. " WoW keeps the exact live AuraSlot match opaque to addon Lua, so I can identify the owner and configuration but cannot safely name the assigned aura right now."
+        .. pathLine .. " UnitFrame Dispel Overlay is separate. I kept MSUF unchanged."
 end
 
 local function LiveBorderVisual(frame, uf, spec)
@@ -6111,6 +6404,30 @@ function R.TryLiveUnitColorExplanation(text)
         return LiveColorGeneralGuide()
     end
 
+    local frame = _G["MSUF_" .. unit]
+    local uf = MSUF and (MSUF.UnitFrames or MSUF.UF)
+    if not frame and uf and type(uf.GetFrame) == "function" then frame = uf.GetFrame(unit) end
+    local spec = frame and frame.MSUFSpec
+    local health = spec and spec.health or {}
+    local asksBorder = R.ContainsAny(norm, { "border", "outline", "highlight", "edge", "rand", "umrandung" })
+    local asksHealthFill = R.ContainsAny(norm, { "health", "health bar", "health fill", "bar fill", "hp bar", "lebensbalken" })
+    local auraEffect, _, auraMatches = R.LiveAuraFrameEffectCandidate(norm, frame, unit)
+    if auraEffect and (asksBorder or not asksHealthFill
+        or R.ContainsAny(norm, { "aura", "buff", "debuff", "glow", "tint", "pulse" })) then
+        if type(auraMatches) == "table" and #auraMatches > 1 then
+            return {
+                text = R.LiveAuraFrameEffectAmbiguityExplanation(unitLabel, auraMatches),
+                status = "info",
+                summary = "Ambiguous live Auras3 Full-Frame Effect explanation",
+            }
+        end
+        return {
+            text = R.LiveAuraFrameEffectExplanation(unitLabel, auraEffect),
+            status = "info",
+            summary = "Live Auras3 Full-Frame Effect explanation",
+        }
+    end
+
     local exists = type(_G.UnitExists) == "function" and SafeLiveValue(_G.UnitExists(unit)) or nil
     if exists == false or exists == nil then
         local debuffHint = R.ContainsAny(norm, LIVE_COLOR_DEBUFF_TERMS)
@@ -6127,14 +6444,7 @@ function R.TryLiveUnitColorExplanation(text)
         }
     end
 
-    local frame = _G["MSUF_" .. unit]
-    local uf = MSUF and (MSUF.UnitFrames or MSUF.UF)
-    if not frame and uf and type(uf.GetFrame) == "function" then frame = uf.GetFrame(unit) end
-    local spec = frame and frame.MSUFSpec
-    local health = spec and spec.health or {}
     local borderVisual = LiveBorderVisual(frame, uf, spec)
-    local asksBorder = R.ContainsAny(norm, { "border", "outline", "highlight", "edge", "rand", "umrandung" })
-    local asksHealthFill = R.ContainsAny(norm, { "health", "health bar", "health fill", "bar fill", "hp bar", "lebensbalken" })
     if borderVisual and (asksBorder or (tostring(borderVisual.source or "normal") ~= "normal" and not asksHealthFill)) then
         return {
             text = LiveBorderExplanation(unitLabel, borderVisual)

@@ -24,6 +24,8 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
     local AURA_STACK_ANCHOR_ALIASES = ctx.AURA_STACK_ANCHOR_ALIASES or {}
     local AURA_COOLDOWN_SWIPE_DIRECTION_VALUES = ctx.AURA_COOLDOWN_SWIPE_DIRECTION_VALUES or {}
     local AURA_COOLDOWN_SWIPE_DIRECTION_ALIASES = ctx.AURA_COOLDOWN_SWIPE_DIRECTION_ALIASES or {}
+    local AURA_FRAME_EFFECT_TYPE_VALUES = ctx.AURA_FRAME_EFFECT_TYPE_VALUES or {}
+    local AURA_FRAME_EFFECT_TYPE_ALIASES = ctx.AURA_FRAME_EFFECT_TYPE_ALIASES or {}
     local AURA_SORT_METHOD_VALUES = ctx.AURA_SORT_METHOD_VALUES or {}
     local AURA_SORT_METHOD_ALIASES = ctx.AURA_SORT_METHOD_ALIASES or {}
     local AURA_SORT_DIRECTION_VALUES = ctx.AURA_SORT_DIRECTION_VALUES or {}
@@ -74,6 +76,9 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
     end
     if #AURA_COOLDOWN_SWIPE_DIRECTION_VALUES == 0 then
         AURA_COOLDOWN_SWIPE_DIRECTION_VALUES = { "NORMAL", "REVERSE" }
+    end
+    if #AURA_FRAME_EFFECT_TYPE_VALUES == 0 then
+        AURA_FRAME_EFFECT_TYPE_VALUES = { "none", "border", "glow", "pulse", "healthtint", "namecolor" }
     end
     if type(AURA_SORT_METHOD_VALUES.buff) ~= "table" or #AURA_SORT_METHOD_VALUES.buff == 0 then
         AURA_SORT_METHOD_VALUES.buff = { "DEFAULT", "BIG_DEFENSIVE", "IMPORTANT_FIRST", "EXPIRATION", "EXPIRATION_ONLY", "NAME", "NAME_ONLY" }
@@ -162,6 +167,42 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
             Model.WriteLaneStyleString(scope, lane, "sortMethod", value)
         else
             AuraFallbackLaneStyle(scope, lane, "sortMethod", "DEFAULT", value)
+        end
+    end
+
+    local frameEffectTypeAllowed = {}
+    for i = 1, #AURA_FRAME_EFFECT_TYPE_VALUES do
+        frameEffectTypeAllowed[AURA_FRAME_EFFECT_TYPE_VALUES[i]] = true
+    end
+
+    local function NormalizeLaneFrameEffectType(value)
+        value = tostring(value or "none"):lower():gsub("[%s_%-]+", "")
+        if value == "outline" then value = "border" end
+        if value == "tint" or value == "healthbartint" then value = "healthtint" end
+        if value == "nameoverlay" then value = "namecolor" end
+        return frameEffectTypeAllowed[value] and value or "none"
+    end
+
+    local function AuraReadLaneFrameEffectType(scope, lane)
+        local key = LaneStyleKey(lane, "frameEffectType")
+        local Model = type(AuraModel) == "function" and AuraModel() or nil
+        local value
+        if Model and type(Model.ReadValue) == "function" then
+            value = Model.ReadValue(scope, key, "none")
+        else
+            value = AuraFallbackLaneStyle(scope, lane, "frameEffectType", "none")
+        end
+        return NormalizeLaneFrameEffectType(value)
+    end
+
+    local function AuraWriteLaneFrameEffectType(scope, lane, value)
+        value = NormalizeLaneFrameEffectType(value)
+        local key = LaneStyleKey(lane, "frameEffectType")
+        local Model = type(AuraModel) == "function" and AuraModel() or nil
+        if Model and type(Model.WriteValue) == "function" then
+            Model.WriteValue(scope, key, value)
+        else
+            AuraFallbackLaneStyle(scope, lane, "frameEffectType", "none", value)
         end
     end
 
@@ -520,6 +561,21 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
                     function(value) AuraWriteLaneStyleBool(settingScope, settingLane, spec.key, value) end,
                     true)
             end
+
+            aliases = {}
+            AddAuraLaneAliases(aliases, settingScope, settingLane, "full frame effect", "vollbild effekt")
+            AddAuraLaneAliases(aliases, settingScope, settingLane, "frame effect", "rahmeneffekt")
+            RegisterAuraScopeLaneEnum(settingScope, settingLane, "frameEffectType", "Full-Frame Effect",
+                AURA_FRAME_EFFECT_TYPE_VALUES, AURA_FRAME_EFFECT_TYPE_ALIASES, aliases,
+                function() return AuraReadLaneFrameEffectType(settingScope, settingLane) end,
+                function(value) AuraWriteLaneFrameEffectType(settingScope, settingLane, value) end,
+                true, {
+                    page = settingScope == "shared"
+                        and (settingLane == "buff" and "auras3_buffs" or "auras3_debuffs")
+                        or ("uf_" .. settingScope),
+                    exactAliases = aliases,
+                    description = "Chooses the Aura-driven Full-Frame visual for this Buff or Debuff lane; it is separate from UnitFrame Dispel Overlay.",
+                })
 
             aliases = {}
             AddAuraLaneAliases(aliases, settingScope, settingLane, "stack anchor")
