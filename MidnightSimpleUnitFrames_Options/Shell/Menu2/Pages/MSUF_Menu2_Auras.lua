@@ -658,10 +658,10 @@ local function LanePlural(kind)
     return "Debuffs"
 end
 local function CurrentAuraStyleContainer(scope)
-    local container = scope == "shared"
-        and (M.auraSharedStyleContainer or CurrentLane("auraStyleGFLane", "debuff"))
+    local container = scope == "appearance"
+        and (M.auraAppearanceContainer or CurrentLane("auraStyleGFLane", "debuff"))
         or (M.auraStyleContainer or CurrentLane("auraStyleGFLane", "debuff"))
-    if scope == "shared" then
+    if scope == "appearance" then
         if container ~= "buff" and container ~= "debuff"
             and container ~= "playerDefensives" and container ~= "targetDots"
         then
@@ -687,19 +687,19 @@ local function BuildAuraStyleNav(ctx, b, scope)
     b.y = b.y - h - 12
     if ctx and ctx.SetContentHeight then ctx:SetContentHeight(abs(b.y) + 28) end
     local w = section._msuf2Width or b.width or 720
-    local values = scope == "shared" and M.SHARED_AURA_STYLE_CONTAINER_VALUES
+    local values = scope == "appearance" and M.SHARED_AURA_STYLE_CONTAINER_VALUES
         or ((not IsGroupScope(scope))
             and (scope == "player" and UNIT_STYLE_CONTAINER_VALUES_PLAYER or UNIT_STYLE_CONTAINER_VALUES)
             or LANE_VALUES)
     local bar = RegisterAuraChoiceBar(ctx, W.ScopeOverrideBar(ctx, section, {
         values = values,
         width = w,
-        label = scope == "shared" and "Preview:" or "Container:",
+        label = scope == "appearance" and "Aura type:" or "Container:",
         labelWidth = 88,
         centerY = -28,
         getValue = function() return CurrentAuraStyleContainer(scope) end,
         setValue = function(container)
-            M.SetMenuStateValue(scope == "shared" and "auraSharedStyleContainer" or "auraStyleContainer", container)
+            M.SetMenuStateValue(scope == "appearance" and "auraAppearanceContainer" or "auraStyleContainer", container)
             if container == "buff" or container == "debuff" then SetCurrentLane("auraStyleGFLane", container) end
             local key = (ctx and ctx.key) or M.activeKey
             if key == "auras3_buffs" or key == "auras3_debuffs" then
@@ -710,9 +710,9 @@ local function BuildAuraStyleNav(ctx, b, scope)
         end,
     }), values, "style.container.selector")
     local current = CurrentAuraStyleContainer(scope)
-    local title = current == "playerDefensives" and Tr("Shared Player Defensives Preview")
-        or current == "targetDots" and Tr("Shared Dots on Target Preview")
-        or scope == "shared" and M.Format("Shared %s Preview", Tr(LaneTitle(current)))
+    local title = current == "playerDefensives" and Tr("Player Defensives Appearance Preview")
+        or current == "targetDots" and Tr("Dots on Target Appearance Preview")
+        or scope == "appearance" and M.Format("%s Appearance Preview", Tr(LaneTitle(current)))
         or current == "custom4" and (scope == "player" and Tr("Defensive Buff Aura Style") or Tr("Dots on target Aura Style"))
         or (tostring(current):match("^custom[123]$") and M.Format("Custom %s Aura Style", tostring(current):match("(%d)$")))
         or M.Format("%s Aura Style", Tr(LaneTitle(current)))
@@ -791,7 +791,6 @@ end
 local function SetUnitLaneShown(ctx, unit, kind, shown, reason)
     if shown then
         Model.SetUnitEnabled(unit, true)
-        Model.WriteSharedBool(kind == "buff" and "showBuffs" or "showDebuffs", true)
         Model.SetGroupShown(unit, kind, true)
     else
         Model.SetGroupShown(unit, kind, false)
@@ -1866,12 +1865,12 @@ end
 local function BuildUnitStyle(ctx, b, scope, options)
     options = type(options) == "table" and options or nil
     local embeddedUnitPreview = options and options.embeddedUnitPreview == true
-    local sharedGlobalsOnly = options and options.sharedGlobalsOnly == true
+    local appearanceGlobalsOnly = options and options.appearanceGlobalsOnly == true
     local previewContainer = options and options.previewContainer
-    local sharedAppearanceKind = previewContainer or CurrentLane("auraStyleGFLane", "debuff")
-    local unit = scope == "shared" and "shared" or scope
+    local appearanceKind = previewContainer or CurrentLane("auraStyleGFLane", "debuff")
+    local unit = scope == "appearance" and "shared" or scope
     local lane = CurrentLane("auraStyleGFLane", "debuff")
-    local styleCatalogLane = sharedGlobalsOnly and sharedAppearanceKind or lane
+    local styleCatalogLane = appearanceGlobalsOnly and appearanceKind or lane
     local styleControls = {}
     local refreshMiniPreview
     local refreshDurationBarSummary
@@ -1892,16 +1891,16 @@ local function BuildUnitStyle(ctx, b, scope, options)
         if apply and type(apply.Flush) == "function" then apply.Flush() end
     end
     local function ReadScopeBool(key, defaultValue)
-        if sharedGlobalsOnly and type(Model.ReadSharedAppearanceBool) == "function" then
-            return Model.ReadSharedAppearanceBool(sharedAppearanceKind, key, defaultValue)
+        if appearanceGlobalsOnly and type(Model.ReadSharedAppearanceBool) == "function" then
+            return Model.ReadSharedAppearanceBool(appearanceKind, key, defaultValue)
         end
         if type(Model.ReadLaneStyleBool) == "function" then return Model.ReadLaneStyleBool(unit, lane, key, defaultValue) end
         if type(Model.ReadBool) == "function" then return Model.ReadBool(unit, key, defaultValue) end
         return Model.ReadSharedBool(key, defaultValue)
     end
     local function WriteScopeBool(key, value)
-        if sharedGlobalsOnly and type(Model.WriteSharedAppearanceBool) == "function" then
-            Model.WriteSharedAppearanceBool(sharedAppearanceKind, key, value)
+        if appearanceGlobalsOnly and type(Model.WriteSharedAppearanceBool) == "function" then
+            Model.WriteSharedAppearanceBool(appearanceKind, key, value)
         elseif type(Model.WriteLaneStyleBool) == "function" then
             Model.WriteLaneStyleBool(unit, lane, key, value)
         elseif type(Model.WriteBool) == "function" then
@@ -1923,15 +1922,15 @@ local function BuildUnitStyle(ctx, b, scope, options)
         end
     end
     local function ReadScopeNumber(key, defaultValue, minValue, maxValue)
-        if sharedGlobalsOnly and type(Model.ReadSharedAppearanceNumber) == "function" then
-            return Model.ReadSharedAppearanceNumber(sharedAppearanceKind, key, defaultValue, minValue, maxValue)
+        if appearanceGlobalsOnly and type(Model.ReadSharedAppearanceNumber) == "function" then
+            return Model.ReadSharedAppearanceNumber(appearanceKind, key, defaultValue, minValue, maxValue)
         end
         if type(Model.ReadLaneStyleNumber) == "function" then return Model.ReadLaneStyleNumber(unit, lane, key, defaultValue, minValue, maxValue) end
         return Model.ReadNumber(unit, key, defaultValue, minValue, maxValue)
     end
     local function WriteScopeNumber(key, value, minValue, maxValue)
-        if sharedGlobalsOnly and type(Model.WriteSharedAppearanceNumber) == "function" then
-            Model.WriteSharedAppearanceNumber(sharedAppearanceKind, key, value, minValue, maxValue)
+        if appearanceGlobalsOnly and type(Model.WriteSharedAppearanceNumber) == "function" then
+            Model.WriteSharedAppearanceNumber(appearanceKind, key, value, minValue, maxValue)
         elseif type(Model.WriteLaneStyleNumber) == "function" then
             Model.WriteLaneStyleNumber(unit, lane, key, value, minValue, maxValue)
         else
@@ -1939,8 +1938,8 @@ local function BuildUnitStyle(ctx, b, scope, options)
         end
     end
     local function ReadScopeIconShape()
-        if sharedGlobalsOnly and type(Model.ReadSharedAppearanceIconShape) == "function" then
-            return Model.ReadSharedAppearanceIconShape(sharedAppearanceKind)
+        if appearanceGlobalsOnly and type(Model.ReadSharedAppearanceIconShape) == "function" then
+            return Model.ReadSharedAppearanceIconShape(appearanceKind)
         end
         local appearanceKind = lane == "debuff" and "debuff" or "buff"
         local value = type(Model.ReadSharedAppearanceIconShape) == "function"
@@ -1948,8 +1947,8 @@ local function BuildUnitStyle(ctx, b, scope, options)
         return type(A3.NormalizeAuraIconShape) == "function" and A3.NormalizeAuraIconShape(value) or value
     end
     local function WriteScopeIconShape(value)
-        if sharedGlobalsOnly and type(Model.WriteSharedAppearanceIconShape) == "function" then
-            Model.WriteSharedAppearanceIconShape(sharedAppearanceKind, value or "RECTANGLE")
+        if appearanceGlobalsOnly and type(Model.WriteSharedAppearanceIconShape) == "function" then
+            Model.WriteSharedAppearanceIconShape(appearanceKind, value or "RECTANGLE")
             return
         end
         -- Icon Shape belongs exclusively to the global Appearance product.
@@ -2072,7 +2071,7 @@ local function BuildUnitStyle(ctx, b, scope, options)
     local function BodyWidth(body)
         return body and (body._msuf2Width or body.GetWidth and body:GetWidth()) or b.width or 720
     end
-    local baseId = "aura_style_" .. tostring(scope or "shared") .. "_" .. lane
+    local baseId = "aura_style_" .. tostring(scope or "unit") .. "_" .. lane
 
     if not embeddedUnitPreview then
         refreshMiniPreview = BuildAuraStylePreviewWorkbench(ctx, b, unit, lane, previewContainer)
@@ -2080,7 +2079,7 @@ local function BuildUnitStyle(ctx, b, scope, options)
 
     local frameBasics
     local stealableStyleControl
-    if not sharedGlobalsOnly then
+    if not appearanceGlobalsOnly then
         local stealableLane = lane == "buff" and unit ~= "player"
         frameBasics = b:CollapsibleSection(baseId .. "_frame_basics", "Frame Basics", stealableLane and 228 or 194, true)
         local basicsWidth = BodyWidth(frameBasics)
@@ -2125,19 +2124,19 @@ local function BuildUnitStyle(ctx, b, scope, options)
         end
     end
 
-    if sharedGlobalsOnly then
-        local sharedShape = b:CollapsibleSection(baseId .. "_shared_shape", "Icon Shape", 112, false)
-        local ssw = BodyWidth(sharedShape)
+    if appearanceGlobalsOnly then
+        local appearanceShape = b:CollapsibleSection(baseId .. "_appearance_shape", "Icon Shape", 112, false)
+        local ssw = BodyWidth(appearanceShape)
         local appearanceLabel = previewContainer == "playerDefensives" and "Player Defensives"
             or previewContainer == "targetDots" and "Dots on Target" or LaneTitle(lane)
-        local shape = BindStyleDropdown(sharedShape, M.Format("%s Icon Shape", Tr(appearanceLabel)), 24, -48,
+        local shape = BindStyleDropdown(appearanceShape, M.Format("%s Icon Shape", Tr(appearanceLabel)), 24, -48,
             M.AURA_ICON_SHAPE_VALUES, ssw - 48, ReadScopeIconShape, WriteScopeIconShape, "AURAS3_ICON_SHAPE")
         AddTooltip(shape, "Global icon shape",
             "Applies to every UnitFrame and GroupFrame icon of this Aura type. Spell Icons use the Buff appearance.")
     end
 
     local iconStyleGates = { border = {}, shadow = {}, Apply = function() end }
-    if sharedGlobalsOnly then
+    if appearanceGlobalsOnly then
     -- Border and shadow are global for the selected Aura product. There is no
     -- frame-level opt-out; UF/GF Style owns only the remaining local details.
     -- Detail controls gray out while their master toggle is off, matching the
@@ -2189,7 +2188,7 @@ local function BuildUnitStyle(ctx, b, scope, options)
     end
     local function IconStyleWrite(key, value, reason, previewOnly)
         if type(Model.WriteSharedAppearanceValue) == "function" then
-            Model.WriteSharedAppearanceValue(sharedAppearanceKind, key, value)
+            Model.WriteSharedAppearanceValue(appearanceKind, key, value)
         end
         if previewOnly ~= true then ApplyIconStyleRuntime(reason) end
         if key == "styleBorderEnabled" or key == "styleShadowEnabled" then iconStyleGates.Apply() end
@@ -2242,7 +2241,7 @@ local function BuildUnitStyle(ctx, b, scope, options)
     end
     local function IconStyleReadColor(colorKey, defaultColor)
         local c = type(Model.ReadSharedAppearanceValue) == "function"
-            and Model.ReadSharedAppearanceValue(sharedAppearanceKind, colorKey, defaultColor) or defaultColor
+            and Model.ReadSharedAppearanceValue(appearanceKind, colorKey, defaultColor) or defaultColor
         if type(c) ~= "table" then c = defaultColor end
         return c
     end
@@ -2250,7 +2249,7 @@ local function BuildUnitStyle(ctx, b, scope, options)
         return AddStyleControl(BindSwitch(ctx, iconStyle, label, 24, y, styleCol,
             function() return ReadScopeBool(key, false) == true end,
             function(v) IconStyleWrite(key, v == true, reason) end,
-            AuraControlMeta(ctx, "style.shared.icon-style." .. AuraCatalogToken(key))))
+            AuraControlMeta(ctx, "style.appearance.icon-style." .. AuraCatalogToken(key))))
     end
     local function IconStyleSlider(label, col, y, minVal, maxVal, key, defaultValue, reason)
         local slider
@@ -2263,7 +2262,7 @@ local function BuildUnitStyle(ctx, b, scope, options)
                 IconStyleWrite(key, tonumber(value) or defaultValue, reason, true)
                 QueueIconStyleApply(slider, reason)
             end,
-            AuraControlMeta(ctx, "style.shared.icon-style." .. AuraCatalogToken(key))))
+            AuraControlMeta(ctx, "style.appearance.icon-style." .. AuraCatalogToken(key))))
         slider:HookScript("OnMouseUp", ScheduleIconStyleReleaseApply)
         slider:HookScript("OnHide", FlushIconStyleApply)
         return slider
@@ -2285,7 +2284,7 @@ local function BuildUnitStyle(ctx, b, scope, options)
                 IconStyleWrite(colorKey, { c[1] or defaultColor[1], c[2] or defaultColor[2], c[3] or defaultColor[3], (tonumber(value) or 100) / 100 }, reason, true)
                 QueueIconStyleApply(slider, reason)
             end,
-            AuraControlMeta(ctx, "style.shared.icon-style." .. AuraCatalogToken(colorKey) .. "-alpha")))
+            AuraControlMeta(ctx, "style.appearance.icon-style." .. AuraCatalogToken(colorKey) .. "-alpha")))
         slider:HookScript("OnMouseUp", ScheduleIconStyleReleaseApply)
         slider:HookScript("OnHide", FlushIconStyleApply)
         return slider
@@ -2336,13 +2335,13 @@ local function BuildUnitStyle(ctx, b, scope, options)
     IconStyleSwitch("Icon Border", -34, "styleBorderEnabled", "AURAS3_ICON_STYLE_BORDER")
     local borderStyleDropdown = AddStyleControl(BindDropdown(ctx, iconStyle, "Border Style", 24, -70,
         Model.BorderStyleValues, isw - 48,
-        function() return Model.ReadSharedAppearanceBorderStyle(sharedAppearanceKind) end,
+        function() return Model.ReadSharedAppearanceBorderStyle(appearanceKind) end,
         function(v)
-            Model.WriteSharedAppearanceBorderStyle(sharedAppearanceKind, v)
+            Model.WriteSharedAppearanceBorderStyle(appearanceKind, v)
             ApplyIconStyleRuntime("AURAS3_ICON_STYLE_BORDER")
             RefreshStylePreview()
         end,
-        AuraControlMeta(ctx, "style.shared.icon-style.border-style")))
+        AuraControlMeta(ctx, "style.appearance.icon-style.border-style")))
     AddTooltip(borderStyleDropdown, "Icon border style",
         "Solid draws a crisp pixel ring around the icon. Soft Glow adds a halo, and Shadow shades the icon's own edges. The Blizzard entries and any LibSharedMedia border are drawn as edge art. Thickness scales the edge.")
     iconStyleGates.border[1] = borderStyleDropdown
@@ -2353,7 +2352,7 @@ local function BuildUnitStyle(ctx, b, scope, options)
     iconStyleGates.shadow[2] = IconStyleAlphaSlider("Shadow Alpha (%)", 1, -210, "styleShadowColor", ICON_STYLE_SHADOW_DEFAULT, "AURAS3_ICON_STYLE_SHADOW_COLOR")
     end
 
-    if sharedGlobalsOnly and previewContainer == "buff" then
+    if appearanceGlobalsOnly and previewContainer == "buff" then
         local nativeFlow = b:CollapsibleSection(baseId .. "_native_flow", "Native Aura Flow", 112, false)
         local nfw = BodyWidth(nativeFlow)
         local weaponEnchants = BindSwitch(ctx, nativeFlow, "Show Weapon Enchants on Player", 24, -44, nfw - 48,
@@ -2363,7 +2362,7 @@ local function BuildUnitStyle(ctx, b, scope, options)
                 RequestAuraRuntime("shared", "AURAS3_WEAPON_ENCHANTS")
                 RefreshStylePreview()
             end,
-            AuraControlMeta(ctx, "style.shared.native-flow.weapon-enchants"))
+            AuraControlMeta(ctx, "style.appearance.native-flow.weapon-enchants"))
         AddTooltip(weaponEnchants, "Native weapon enchant auras",
             "Adds Blizzard's temporary weapon-enchantment buttons to the Player Buff container. This is one shared setting and uses the native aura flow without an MSUF ticker or OnUpdate.")
         M.TrackRefresh(ctx, function()
@@ -2377,7 +2376,7 @@ local function BuildUnitStyle(ctx, b, scope, options)
             end
         end)
     end
-    if sharedGlobalsOnly then return end
+    if appearanceGlobalsOnly then return end
 
     local stack = b:CollapsibleSection(baseId .. "_stack", "Stack Count", 296, false)
     if W.AttachContextColorShortcut then
@@ -2866,20 +2865,20 @@ end
 local function BuildAuraStylePage(ctx)
     local b = W.PageBuilder(ctx)
     Model.EnsureDB()
-    b:GlobalStyleHeader("Shared Aura Style", "Global Appearance theme selected only by Aura type. All layout, filters, timers, text and effects stay scope-aware in the corresponding UnitFrame or GroupFrame.", 84)
-    local container = BuildAuraStyleNav(ctx, b, "shared")
+    b:GlobalStyleHeader("Global Aura Appearance", "Global Appearance theme selected only by Aura type. All layout, filters, timers, text and effects stay scope-aware in the corresponding UnitFrame or GroupFrame.", 84)
+    local container = BuildAuraStyleNav(ctx, b, "appearance")
     local themeLane = container == "targetDots" and "debuff" or "buff"
     if container == "debuff" then themeLane = "debuff" end
     SetCurrentLane("auraStyleGFLane", themeLane)
-    BuildUnitStyle(ctx, b, "shared", {
-        sharedGlobalsOnly = true,
+    BuildUnitStyle(ctx, b, "appearance", {
+        appearanceGlobalsOnly = true,
         previewContainer = container,
     })
     FinishPage(ctx, b)
 end
 local function BuildAuraStyleLanePage(ctx, lane)
     SetCurrentLane("auraStyleGFLane", lane)
-    M.SetMenuStateValue("auraSharedStyleContainer", lane)
+    M.SetMenuStateValue("auraAppearanceContainer", lane)
     BuildAuraStylePage(ctx)
 end
 local function GFReadBlacklistCat(scope, groupKey, catKey)
@@ -3341,12 +3340,12 @@ local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
     if M.CLASSIC_AURA_FILTERS_REDUCED == true then
         local onlyMine = BindSwitch(ctx, section, "Only mine", 24, -42, colW,
             function()
-                return Model.ScopeFiltersEnabled(unit)
+                return Model.LaneFiltersEnabled(unit, lane)
                     and Model.ReadFilter(unit, lane, "onlyMine", false) == true
             end,
             function(value)
-                if value == true and Model.ScopeFiltersEnabled(unit) ~= true then
-                    Model.SetScopeFiltersEnabled(unit, true)
+                if value == true and Model.LaneFiltersEnabled(unit, lane) ~= true then
+                    Model.SetLaneFiltersEnabled(unit, lane, true)
                 end
                 Model.WriteFilter(unit, lane, "onlyMine", value == true)
                 ApplyUnit(ctx, unit, "AURAS3_FILTER_" .. lane .. "_onlyMine", true)
@@ -3376,15 +3375,12 @@ local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
         end)
         return
     end
-    -- Filter ownership is an internal compatibility detail. Migrated Auras2
-    -- profiles keep overrideFilters exactly as saved; the first edit in this
-    -- unit workspace materializes a private copy through the model setters.
     local enabled = BindSwitch(ctx, section, "Enable filters", 24, -42, colW,
-        function() return Model.ScopeFiltersEnabled(unit) end,
-        function(value) Model.SetScopeFiltersEnabled(unit, value); ApplyUnit(ctx, unit, "AURAS3_FILTER_ENABLE", true) end,
+        function() return Model.LaneFiltersEnabled(unit, lane) end,
+        function(value) Model.SetLaneFiltersEnabled(unit, lane, value); ApplyUnit(ctx, unit, "AURAS3_FILTER_ENABLE", true) end,
         AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.enabled", nil,
-            "auras3." .. unit .. ".filtersEnabled"))
-    AddTooltip(enabled, "Enable filters", "Turns aura classification filters on or off for this frame. Big Defensive uses MSUF's curated list on friendly frames; the first change automatically creates frame-specific rules.")
+            "auras3." .. unit .. "." .. lane .. ".filtersEnabled"))
+    AddTooltip(enabled, "Enable filters", "Turns aura classification filters on or off for this exact lane. Big Defensive uses MSUF's curated list on friendly frames.")
     local hidePermanent = BindSwitch(ctx, section, "Hide permanent", 24 + colW + gap, -42, colW,
         function()
             return type(Model.ReadBlacklistHidePermanent) == "function"
@@ -3494,7 +3490,7 @@ local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
         W.SetControlEnabled(enabled, true)
         W.SetControlEnabled(hidePermanent, true)
         W.SetControlEnabled(maxDuration, true)
-        W.SetControlsEnabled(filterControls, Model.ScopeFiltersEnabled(unit))
+        W.SetControlsEnabled(filterControls, Model.LaneFiltersEnabled(unit, lane))
     end)
 end
 
@@ -4150,26 +4146,26 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
         getValue = function() return CurrentUnitAuraTool(unit, currentTab) end,
         setValue = function(value) SetUnitAuraTool(unit, currentTab, value); Rebuild(ctx) end,
     }), tools, "unit-workspace.tool-selector")
-    local openStyle = ActionButton(top, "Shared Aura Style", 150, "normal")
+    local openStyle = ActionButton(top, "Global Aura Appearance", 170, "normal")
     openStyle:SetPoint("TOPRIGHT", top, "TOPRIGHT", -16, footerY)
     openStyle:SetScript("OnClick", function()
         local previewContainer = currentTab == "custom4"
             and (unit == "player" and "playerDefensives" or "targetDots")
             or currentTab
-        M.SetMenuStateValue("auraSharedStyleContainer", previewContainer)
+        M.SetMenuStateValue("auraAppearanceContainer", previewContainer)
         if normalLane then SetCurrentLane("auraStyleGFLane", currentTab) end
         SelectPage("auras3_styling")
     end)
-    RegisterAuraControl(ctx, openStyle, "Shared Aura Style", "button", "unit-workspace.open-aura-style", "navigation", "auras3_styling")
-    AddTooltip(openStyle, "Shared Aura Style",
-        "Opens the global Aura icon theme: border, shadow, colors, lane padding and native Player weapon enchants. This frame's container Style stays here.")
+    RegisterAuraControl(ctx, openStyle, "Global Aura Appearance", "button", "unit-workspace.open-aura-style", "navigation", "auras3_styling")
+    AddTooltip(openStyle, "Global Aura Appearance",
+        "Opens the global Aura icon appearance: shape, border, shadow, colors and native Player weapon enchants. This frame's container Style stays here.")
     local workspaceHint = W.Text(top,
-        "Aura Options and Aura Style belong to this UnitFrame. Shared icon theme: Appearance > Aura Style.",
+        "Aura Options and Aura Style belong to this UnitFrame. Global icon appearance: Appearance > Aura Style.",
         16, footerY - 8, sectionW - 198, T.colors.muted)
     M.TrackRefresh(ctx, function()
         workspaceHint:SetText(normalLane and UnitDispelRequested(unit) and not UnitAuraSensorEnabled(unit)
             and UNIT_AURA_DISPEL_WARNING
-            or "Aura Options and Aura Style belong to this UnitFrame. Shared icon theme: Appearance > Aura Style.")
+            or "Aura Options and Aura Style belong to this UnitFrame. Global icon appearance: Appearance > Aura Style.")
     end)
 
     if normalLane then
@@ -4825,7 +4821,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
         end
 
         local harmfulContainer = isTargetDots or tostring(item.auraType or "BUFF"):upper() == "DEBUFF"
-        local frameBasics = b:CollapsibleSection(CustomStyleSectionId(index, "frame_basics"), "Frame Basics", 162, true)
+        local frameBasics = b:CollapsibleSection(CustomStyleSectionId(index, "frame_basics"), "Frame Basics", 220, true)
         local frameBasicsWidth = frameBasics._msuf2Width or b.width or 720
         local frameBasicsGap = 10
         local frameBasicsCol = max(180, floor((frameBasicsWidth - 48 - frameBasicsGap) / 2))
@@ -4845,6 +4841,10 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             function() return floor(((tonumber(item.placed.alpha) or 1) * 100) + 0.5) end,
             function(value) item.placed.alpha = (tonumber(value) or 100) / 100; Apply("AURAS3_CUSTOM_ALPHA") end,
             AuraControlMeta(ctx, "custom-container.appearance.opacity"))
+        BindSlider(ctx, frameBasics, "Lane Padding", 24, -164, 0, 16, 1, frameBasicsCol,
+            function() return tonumber(item.placed.stylePadding) or 0 end,
+            function(value) item.placed.stylePadding = tonumber(value) or 0; Apply("AURAS3_CUSTOM_STYLE_PADDING") end,
+            AuraControlMeta(ctx, "custom-container.appearance.style-padding"))
         if harmfulContainer then
             BindDropdown(ctx, frameBasics, "Dispel-type Border", frameBasicsRightX, -106,
                 DEBUFF_TYPE_BORDER_MODE_VALUES, frameBasicsCol,
@@ -5397,10 +5397,10 @@ local function BuildMovedAuraPage(ctx)
 end
 
 -- Old content/filter routes remain as compatibility landings. The Buff/Debuff
--- aliases open the matching shared-theme preview; individual Style stays on the
+-- aliases open the matching global Appearance preview; individual Style stays on the
 -- selected UnitFrame or GroupFrame page.
-M.RegisterPage("auras3_buffs", { title = "Shared Aura Style: Buffs", build = function(ctx) BuildAuraStyleLanePage(ctx, "buff") end, version = 25 })
-M.RegisterPage("auras3_debuffs", { title = "Shared Aura Style: Debuffs", build = function(ctx) BuildAuraStyleLanePage(ctx, "debuff") end, version = 25 })
+M.RegisterPage("auras3_buffs", { title = "Global Aura Appearance: Buffs", build = function(ctx) BuildAuraStyleLanePage(ctx, "buff") end, version = 25 })
+M.RegisterPage("auras3_debuffs", { title = "Global Aura Appearance: Debuffs", build = function(ctx) BuildAuraStyleLanePage(ctx, "debuff") end, version = 25 })
 M.RegisterPage("auras3_custom", { title = "MSUF Auras", build = BuildMovedAuraPage, version = 2 })
 M.RegisterPage("auras3_styling", { title = "Aura Style", build = BuildAuraStylePage, version = 53 })
 M.RegisterPage("auras3_filters", { title = "MSUF Auras", build = BuildMovedAuraPage, version = 31 })

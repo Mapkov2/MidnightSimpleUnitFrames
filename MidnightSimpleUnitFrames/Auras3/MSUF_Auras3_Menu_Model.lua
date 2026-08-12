@@ -418,6 +418,7 @@ end
 local LANE_STYLE_KEYS = {
     buff = {
         iconZoom = "buffIconZoom",
+        stylePadding = "buffStylePadding",
         iconShape = "buffIconShape",
         showCooldownSwipe = "buffShowCooldownSwipe",
         cooldownSwipeReverse = "buffCooldownSwipeReverse",
@@ -445,6 +446,7 @@ local LANE_STYLE_KEYS = {
     },
     debuff = {
         iconZoom = "debuffIconZoom",
+        stylePadding = "debuffStylePadding",
         iconShape = "debuffIconShape",
         showCooldownSwipe = "debuffShowCooldownSwipe",
         cooldownSwipeReverse = "debuffCooldownSwipeReverse",
@@ -587,6 +589,7 @@ local DEFAULT_SHARED = {
     filters = {
         enabled = true,
         buffs = {
+            enabled = true,
             onlyMine = false,
             onlyImportant = false,
             includeDispellable = false,
@@ -601,6 +604,7 @@ local DEFAULT_SHARED = {
             exclusive = "none",
         },
         debuffs = {
+            enabled = true,
             onlyMine = false,
             onlyImportant = false,
             includeDispellable = false,
@@ -1331,7 +1335,7 @@ function Model.EnsureDB()
     -- frame participation and shape-follow switches from upgraded profiles.
     shared.styleScopeDisabled = nil
     shared.iconShapeFollowSharedScopes = nil
-    local canonicalAuraModel = tonumber(auras.profileModelRevision) == 1
+    local canonicalAuraModel = tonumber(auras.profileModelRevision) == 2
     if canonicalAuraModel then
         -- The Defaults-owned factory is deliberately sparse and authoritative.
         -- Runtime/Menu readers already provide fallbacks, so do not densify a
@@ -1344,7 +1348,7 @@ function Model.EnsureDB()
     end
     -- The canonical profile model is already normalized.  Never seed legacy
     -- migration markers back into a freshly hard-reset Aura tree.
-    if tonumber(auras.profileModelRevision) ~= 1
+    if tonumber(auras.profileModelRevision) ~= 2
         and shared._msufA3_debuffTypeBorderModeMigrated_v1 ~= true then
         shared.debuffTypeBorderMode = shared.useDebuffTypeBorders == true and "SYMBOL" or NormalizeDebuffTypeBorderMode(shared.debuffTypeBorderMode, "OFF")
         shared._msufA3_debuffTypeBorderModeMigrated_v1 = true
@@ -1430,8 +1434,8 @@ end
 --- so pages, assistant commands, and edit-mode popups do not diverge.
 local function EffectiveLayoutTables(auras, unit)
     local pu = PerUnit(auras, unit, false)
-    local layout = (pu and pu.overrideLayout == true and type(pu.layout) == "table") and pu.layout or nil
-    local sharedLayout = (pu and pu.overrideSharedLayout == true and type(pu.layoutShared) == "table") and pu.layoutShared or nil
+    local layout = (pu and type(pu.layout) == "table") and pu.layout or nil
+    local sharedLayout = (pu and type(pu.layoutShared) == "table") and pu.layoutShared or nil
     return layout, sharedLayout, pu
 end
 
@@ -1511,15 +1515,14 @@ NormalizeSparseVisualOverrides = function(auras, shared)
 end
 
 local function ReadKeyRaw(auras, shared, unit, key)
-    local layout, sharedLayout, pu = EffectiveLayoutTables(auras, unit)
-    local styleActive = UnitStyleOverrideActive(pu)
+    local layout, sharedLayout = EffectiveLayoutTables(auras, unit)
     if LAYOUT_KEYS[key] then
-        if layout and layout[key] ~= nil and (not STYLE_LAYOUT_KEYS[key] or styleActive) then return layout[key] end
+        if layout and layout[key] ~= nil then return layout[key] end
     end
     if SHARED_LAYOUT_KEYS[key] then
-        if sharedLayout and sharedLayout[key] ~= nil and (not STYLE_SHARED_LAYOUT_KEYS[key] or styleActive) then return sharedLayout[key] end
+        if sharedLayout and sharedLayout[key] ~= nil then return sharedLayout[key] end
     end
-    return shared and shared[key]
+    return nil
 end
 
 local function WriteUnitLayoutValue(auras, shared, unit, key, value)
@@ -1527,25 +1530,12 @@ local function WriteUnitLayoutValue(auras, shared, unit, key, value)
         local pu = PerUnit(auras, runtimeUnit, true)
         if not pu then return end
         local styleKey = STYLE_LAYOUT_KEYS[key] == true or STYLE_SHARED_LAYOUT_KEYS[key] == true
-        if styleKey and pu.overrideStyle ~= true then
-            -- Visual sharing is independent from layout ownership. A unit can
-            -- keep custom geometry while all old Style fields are dormant; the
-            -- first Style edit must not reactivate the rest of that stale set.
-            ClearKeys(pu.layout, STYLE_LAYOUT_KEYS)
-            ClearKeys(pu.layoutShared, STYLE_SHARED_LAYOUT_KEYS)
-            pu.overrideStyle = true
-        end
         if SHARED_LAYOUT_KEYS[key] then
-            -- A disabled override table is dormant state, not an inheritance
-            -- source. Starting a new custom edit from it would reactivate old
-            -- unrelated values that were invisible while Shared was active.
-            if pu.overrideSharedLayout ~= true then pu.layoutShared = {} end
             if type(pu.layoutShared) ~= "table" then pu.layoutShared = {} end
             pu.overrideSharedLayout = true
             pu.layoutShared[key] = value
             if STYLE_SHARED_LAYOUT_KEYS[key] then pu.overrideStyle = true end
         else
-            if pu.overrideLayout ~= true then pu.layout = {} end
             if type(pu.layout) ~= "table" then pu.layout = {} end
             pu.overrideLayout = true
             pu.layout[key] = value
@@ -1612,20 +1602,14 @@ local function NormalizeSharedAppearanceKind(kind)
 end
 
 --- Shared Appearance is selected only by Aura product, never by Unit/Group
---- frame.  Buff/Debuff retain their legacy scalar fallback so existing
---- profiles keep the exact same shape until the user changes this theme.
+--- frame. Legacy scalar values are materialized once by Defaults and are not
+--- active read owners afterwards.
 function Model.ReadSharedAppearanceIconShape(kind)
     kind = NormalizeSharedAppearanceKind(kind)
     local _, shared = Model.EnsureDB()
     local shapes = type(shared) == "table" and shared.appearanceIconShapes or nil
     local value = type(shapes) == "table" and shapes[kind] or nil
-    if value == nil then
-        local fallbackKind = kind == "targetDots" and "debuff"
-            or kind == "playerDefensives" and "buff" or kind
-        local key = fallbackKind == "debuff" and "debuffIconShape" or "buffIconShape"
-        value = type(shared) == "table" and (shared[key] or shared.iconShape) or nil
-    end
-    value = tostring(value or "RECTANGLE")
+    value = tostring(value or (kind == "playerDefensives" and "FOLLOW_PORTRAIT" or "RECTANGLE"))
     return type(A3.NormalizeAuraIconShape) == "function" and A3.NormalizeAuraIconShape(value) or value
 end
 
@@ -1643,9 +1627,7 @@ function Model.WriteSharedAppearanceIconShape(kind, value)
 end
 
 --- Appearance values are global by Aura product. They deliberately have no
---- UnitFrame/GroupFrame scope and no participation switch. Legacy scalar
---- values remain read-only fallbacks until a product is edited, preserving
---- old profiles without keeping the former cross-scope ownership model alive.
+--- UnitFrame/GroupFrame scope and no participation switch.
 function Model.ReadSharedAppearanceValue(kind, key, defaultValue)
     kind = NormalizeSharedAppearanceKind(kind)
     local _, shared = Model.EnsureDB()
@@ -1653,7 +1635,6 @@ function Model.ReadSharedAppearanceValue(kind, key, defaultValue)
     local styles = type(shared.appearanceIconStyles) == "table" and shared.appearanceIconStyles or nil
     local style = type(styles) == "table" and styles[kind] or nil
     if type(style) == "table" and style[key] ~= nil then return style[key] end
-    if shared[key] ~= nil then return shared[key] end
     return defaultValue
 end
 
@@ -1745,9 +1726,7 @@ function Model.SetUnitEnabled(unit, enabled)
 end
 
 function Model.UseSharedVisuals(unit)
-    local auras = Model.EnsureDB()
-    local pu = PerUnit(auras, unit, false)
-    return not UnitStyleOverrideActive(pu)
+    return false
 end
 
 local function EnsureUnitStyleOverrides(auras, runtimeUnit)
@@ -1763,19 +1742,10 @@ local function EnsureUnitStyleOverrides(auras, runtimeUnit)
 end
 
 function Model.SetUseSharedVisuals(unit, useShared)
-    local auras, shared = Model.EnsureDB()
+    local auras = Model.EnsureDB()
     if type(auras) ~= "table" then return end
     EachRuntimeUnit(unit, function(runtimeUnit)
-        local pu = PerUnit(auras, runtimeUnit, true)
-        if not pu then return end
-        if useShared then
-            pu.overrideStyle = false
-            ClearKeys(pu.layout, STYLE_LAYOUT_KEYS)
-            ClearKeys(pu.layoutShared, STYLE_SHARED_LAYOUT_KEYS)
-            RefreshLayoutOverrideFlags(pu)
-        else
-            EnsureUnitStyleOverrides(auras, runtimeUnit)
-        end
+        EnsureUnitStyleOverrides(auras, runtimeUnit)
     end)
 end
 
@@ -1802,8 +1772,6 @@ function Model.WriteValue(unit, key, value)
         shared[key] = value
     elseif LAYOUT_KEYS[key] or SHARED_LAYOUT_KEYS[key] then
         WriteUnitLayoutValue(auras, shared, unit, key, value)
-    else
-        shared[key] = value
     end
 end
 
@@ -1846,8 +1814,7 @@ end
 function Model.ReadLanePerRow(unit, kind)
     kind = NormalizeKind(kind)
     local spec = GROUPS[kind]
-    local fallback = Model.ReadNumber(unit, "perRow", 12, 1, 40)
-    return Model.ReadNumber(unit, spec and spec.perRowKey or "perRow", fallback, 1, 40)
+    return Model.ReadNumber(unit, spec and spec.perRowKey or "perRow", 12, 1, 40)
 end
 
 function Model.WriteLanePerRow(unit, kind, value)
@@ -1856,14 +1823,10 @@ function Model.WriteLanePerRow(unit, kind, value)
     Model.WriteNumber(unit, spec and spec.perRowKey or "perRow", value, 1, 40)
 end
 
---- Lane gaps are layout-owned exactly like the legacy common `spacing` value.
---- The canonical profile writes both lane keys; the common value remains only
---- as a defensive fallback for sparse or manually edited current payloads.
 function Model.ReadLaneSpacing(unit, kind)
     kind = NormalizeKind(kind)
     local spec = GROUPS[kind]
-    local fallback = Model.ReadNumber(unit, "spacing", 2, 0, 64)
-    return Model.ReadNumber(unit, spec and spec.spacingKey or "spacing", fallback, 0, 64)
+    return Model.ReadNumber(unit, spec and spec.spacingKey or "spacing", 2, 0, 64)
 end
 
 function Model.WriteLaneSpacing(unit, kind, value)
@@ -1875,7 +1838,7 @@ end
 function Model.ReadLaneGrowth(unit, kind)
     kind = NormalizeKind(kind)
     local spec = GROUPS[kind]
-    local fallback = Model.ReadGrowth(unit)
+    local fallback = "RIGHT"
     local v = tostring(Model.ReadValue(unit, spec and spec.growthKey or "growth", fallback) or fallback)
     return GROWTH_OK[v] and v or fallback
 end
@@ -1906,7 +1869,7 @@ end
 function Model.ReadLaneRowWrap(unit, kind)
     kind = NormalizeKind(kind)
     local spec = GROUPS[kind]
-    local fallback = Model.ReadRowWrap(unit)
+    local fallback = "DOWN"
     local v = tostring(Model.ReadValue(unit, spec and spec.wrapKey or "rowWrap", fallback) or fallback)
     return ROW_WRAP_OK[v] and v or fallback
 end
@@ -2259,7 +2222,7 @@ function Model.CustomContainer(unit, index, create)
         record.items[index] = item
     end
     if index == PLAYER_DEFENSIVE_CONTAINER_INDEX and unit == "player" then
-        EnforcePlayerDefensiveContainer(item, tonumber(auras and auras.profileModelRevision) == 1)
+        EnforcePlayerDefensiveContainer(item, (tonumber(auras and auras.profileModelRevision) or 0) >= 1)
     elseif index == TARGET_DOT_CONTAINER_INDEX then
         EnforceTargetDotContainer(item)
     end
@@ -2814,20 +2777,13 @@ local function ReadLaneStyleRaw(unit, kind, key)
     local auras, shared = Model.EnsureDB()
     if type(shared) ~= "table" then return nil end
     local laneKey = LaneStyleKey(kind, key)
-    if NormalizeScope(unit) ~= "shared" then
-        local layout, sharedLayout, pu = EffectiveLayoutTables(auras, unit)
-        if UnitStyleOverrideActive(pu) then
-            local localOwner = STYLE_SHARED_LAYOUT_KEYS[laneKey] and sharedLayout or layout
-            if type(localOwner) == "table" then
-                local value = localOwner[laneKey]
-                if value == nil and laneKey ~= key then value = localOwner[key] end
-                if value ~= nil then return value end
-            end
-        end
+    if NormalizeScope(unit) == "shared" then return shared[laneKey] end
+    local layout, sharedLayout = EffectiveLayoutTables(auras, unit)
+    local localOwner = STYLE_SHARED_LAYOUT_KEYS[laneKey] and sharedLayout or layout
+    if type(localOwner) == "table" then
+        return localOwner[laneKey]
     end
-    local value = shared[laneKey]
-    if value == nil and laneKey ~= key then value = shared[key] end
-    return value
+    return nil
 end
 
 function Model.ReadLaneStyleBool(unit, kind, key, defaultValue)
@@ -2860,8 +2816,8 @@ function Model.ReadDebuffTypeBorderMode(unit)
     local auras, shared = Model.EnsureDB()
     if type(shared) ~= "table" then return "OFF" end
     if NormalizeScope(unit) ~= "shared" then
-        local _, sharedLayout, pu = EffectiveLayoutTables(auras, unit)
-        if UnitStyleOverrideActive(pu) and type(sharedLayout) == "table" then
+        local _, sharedLayout = EffectiveLayoutTables(auras, unit)
+        if type(sharedLayout) == "table" then
             local storedMode = sharedLayout.debuffTypeBorderMode
             if storedMode == nil then storedMode = sharedLayout.dispelBorderMode end
             if storedMode ~= nil then
@@ -2976,8 +2932,7 @@ end
 function Model.GroupShown(unit, kind)
     kind = NormalizeKind(kind)
     local spec = GROUPS[kind]
-    local _, shared = Model.EnsureDB()
-    if not spec or type(shared) ~= "table" or shared[spec.showKey] == false then return false end
+    if not spec or Model.ReadBool(unit, spec.showKey, true) ~= true then return false end
     return Model.ReadNumber(unit, spec.maxKey, 12, 0, 80) > 0
 end
 
@@ -2985,21 +2940,33 @@ function Model.SetGroupShown(unit, kind, shown)
     kind = NormalizeKind(kind)
     local spec = GROUPS[kind]
     if not spec then return end
-    local _, shared = Model.EnsureDB()
-    if type(shared) ~= "table" then return end
+    Model.WriteBool(unit, spec.showKey, shown == true)
     if shown then
-        shared[spec.showKey] = true
         if Model.ReadNumber(unit, spec.maxKey, 0, 0, 80) <= 0 then
             Model.WriteNumber(unit, spec.maxKey, kind == "buff" and 8 or 12, 0, 80)
         end
-    else
-        Model.WriteNumber(unit, spec.maxKey, 0, 0, 80)
     end
 end
 
 --- Filter scopes are independent from visual layout scopes. A unit can share
 --- its icon positions while overriding aura rules, so reads/writes go through
 --- EnsureScopeFilters rather than the layout helpers above.
+local function EnsureRuntimeFilters(auras, shared, unit, create)
+    local pu = PerUnit(auras, unit, create)
+    if not pu then return DEFAULT_SHARED.filters end
+    if create then
+        pu.overrideFilters = true
+        if type(pu.filters) ~= "table" then pu.filters = DeepCopy(DEFAULT_SHARED.filters) end
+        DefaultsIntoOnce(pu.filters, DEFAULT_SHARED.filters)
+        return pu.filters
+    end
+    if type(pu.filters) == "table" then
+        DefaultsIntoOnce(pu.filters, DEFAULT_SHARED.filters)
+        return pu.filters
+    end
+    return DEFAULT_SHARED.filters
+end
+
 local function EnsureScopeFilters(scope, create)
     local auras, shared = Model.EnsureDB()
     scope = NormalizeScope(scope)
@@ -3007,47 +2974,37 @@ local function EnsureScopeFilters(scope, create)
         DefaultsIntoOnce(shared.filters, DEFAULT_SHARED.filters)
         return shared.filters
     end
+    return EnsureRuntimeFilters(auras, shared, RuntimeUnit(scope), create)
+end
 
-    local unit = RuntimeUnit(scope)
-    local pu = PerUnit(auras, unit, create)
-    if not pu then return shared.filters end
-    if create then
-        if pu.overrideFilters ~= true then
-            pu.filters = DeepCopy(shared.filters or DEFAULT_SHARED.filters)
-        end
-        pu.overrideFilters = true
-        if type(pu.filters) ~= "table" then pu.filters = DeepCopy(shared.filters or DEFAULT_SHARED.filters) end
-        DefaultsIntoOnce(pu.filters, DEFAULT_SHARED.filters)
-        return pu.filters
+local function ForEachScopeFilters(scope, create, callback)
+    if type(callback) ~= "function" then return end
+    local auras, shared = Model.EnsureDB()
+    scope = NormalizeScope(scope)
+    if scope == "shared" then
+        DefaultsIntoOnce(shared.filters, DEFAULT_SHARED.filters)
+        callback(shared.filters, true, shared)
+        return
     end
-    if pu.overrideFilters == true and type(pu.filters) == "table" then
-        DefaultsIntoOnce(pu.filters, DEFAULT_SHARED.filters)
-        return pu.filters
-    end
-    return shared.filters
+    EachRuntimeUnit(scope, function(runtimeUnit)
+        callback(EnsureRuntimeFilters(auras, shared, runtimeUnit, create), false, shared)
+    end)
 end
 
 function Model.UseSharedRules(scope)
-    scope = NormalizeScope(scope)
-    if scope == "shared" then return true end
-    local auras = Model.EnsureDB()
-    local pu = PerUnit(auras, scope, false)
-    return not (pu and pu.overrideFilters == true)
+    return false
 end
 
 function Model.SetUseSharedRules(scope, useShared)
     scope = NormalizeScope(scope)
     if scope == "shared" then return end
+    local auras, shared = Model.EnsureDB()
     EachRuntimeUnit(scope, function(runtimeUnit)
-        local pu = PerUnit(Model.EnsureDB(), runtimeUnit, true)
+        local pu = PerUnit(auras, runtimeUnit, true)
         if not pu then return end
-        if useShared then
-            pu.overrideFilters = false
-        else
-            local f = EnsureScopeFilters(runtimeUnit, true)
-            pu.filters = f
-            pu.overrideFilters = true
-        end
+        local f = EnsureRuntimeFilters(auras, shared, runtimeUnit, true)
+        pu.filters = f
+        pu.overrideFilters = true
     end)
 end
 
@@ -3064,22 +3021,40 @@ function Model.ReadFilter(scope, kind, key, defaultValue)
 end
 
 function Model.WriteFilter(scope, kind, key, value)
-    local filters = EnsureScopeFilters(scope, true)
     kind = NormalizeKind(kind)
     local tableKey = kind == "buff" and "buffs" or "debuffs"
-    if type(filters[tableKey]) ~= "table" then filters[tableKey] = {} end
     if key == "exclusive" and value == "important" then value = "none" end
-    filters[tableKey][key] = value
+    ForEachScopeFilters(scope, true, function(filters)
+        if type(filters) ~= "table" then return end
+        if type(filters[tableKey]) ~= "table" then filters[tableKey] = {} end
+        filters[tableKey][key] = value
+    end)
+end
+
+function Model.LaneFiltersEnabled(scope, kind)
+    local filters = EnsureScopeFilters(scope, false)
+    kind = NormalizeKind(kind)
+    local tableKey = kind == "buff" and "buffs" or "debuffs"
+    local lane = type(filters) == "table" and filters[tableKey] or nil
+    return type(lane) ~= "table" or lane.enabled ~= false
+end
+
+function Model.SetLaneFiltersEnabled(scope, kind, enabled)
+    kind = NormalizeKind(kind)
+    local tableKey = kind == "buff" and "buffs" or "debuffs"
+    ForEachScopeFilters(scope, true, function(filters)
+        if type(filters) ~= "table" then return end
+        if type(filters[tableKey]) ~= "table" then filters[tableKey] = {} end
+        filters[tableKey].enabled = enabled == true
+    end)
 end
 
 function Model.ScopeFiltersEnabled(scope)
-    local filters = EnsureScopeFilters(scope, false)
-    return type(filters) ~= "table" or filters.enabled ~= false
+    return Model.LaneFiltersEnabled(scope, "buff")
+        and Model.LaneFiltersEnabled(scope, "debuff")
 end
 
-function Model.SetScopeFiltersEnabled(scope, enabled)
-    local _, shared = Model.EnsureDB()
-    local filters = EnsureScopeFilters(scope, true)
+local function ApplyScopeFiltersEnabled(filters, enabled, sharedScope, shared)
     if type(filters) ~= "table" then return end
 
     local snap = filters.disabledSnapshot
@@ -3095,7 +3070,7 @@ function Model.SetScopeFiltersEnabled(scope, enabled)
                     end
                 end
             end
-            if NormalizeScope(scope) == "shared" and type(shared) == "table" then
+            if sharedScope and type(shared) == "table" then
                 if snap.onlyMyBuffs ~= nil then shared.onlyMyBuffs = snap.onlyMyBuffs end
                 if snap.onlyMyDebuffs ~= nil then shared.onlyMyDebuffs = snap.onlyMyDebuffs end
             end
@@ -3121,7 +3096,7 @@ function Model.SetScopeFiltersEnabled(scope, enabled)
                 snap[groupKey] = groupSnap
             end
         end
-        if NormalizeScope(scope) == "shared" and type(shared) == "table" then
+        if sharedScope and type(shared) == "table" then
             snap.onlyMyBuffs = shared.onlyMyBuffs
             snap.onlyMyDebuffs = shared.onlyMyDebuffs
         end
@@ -3153,11 +3128,21 @@ function Model.SetScopeFiltersEnabled(scope, enabled)
         filters.debuffs.crowdControl = false
         filters.debuffs.exclusive = "none"
     end
-    if NormalizeScope(scope) == "shared" and type(shared) == "table" then
+    if sharedScope and type(shared) == "table" then
         shared.onlyMyBuffs = false
         shared.onlyMyDebuffs = false
     end
     filters.enabled = false
+end
+
+function Model.SetScopeFiltersEnabled(scope, enabled)
+    ForEachScopeFilters(scope, true, function(filters, sharedScope, shared)
+        ApplyScopeFiltersEnabled(filters, enabled == true, sharedScope, shared)
+        filters.buffs = type(filters.buffs) == "table" and filters.buffs or {}
+        filters.debuffs = type(filters.debuffs) == "table" and filters.debuffs or {}
+        filters.buffs.enabled = enabled == true
+        filters.debuffs.enabled = enabled == true
+    end)
 end
 
 --- Blacklists remain saved in human-editable form. The 12.1 native runtime does
@@ -3984,6 +3969,7 @@ function Model.Apply(unit, reason)
         elseif type(A3.UpdateUnitAnchor) == "function" then
             A3.UpdateUnitAnchor(runtimeUnit)
         end
+        return "OFF"
     end
     if unit and IsGroupApplyScope(unit) then
         RefreshGroup(unit)

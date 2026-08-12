@@ -175,7 +175,7 @@ local function BuildAuraWorkspaceTabs(ctx, section, scope, lane, width)
     openStyle:SetPoint("TOPRIGHT", section, "TOPRIGHT", -16, -76)
     if T.CenterButtonLabel then T.CenterButtonLabel(openStyle) end
     openStyle:SetScript("OnClick", function()
-        M.SetMenuStateValue("auraSharedStyleContainer", sharedLane)
+        M.SetMenuStateValue("auraAppearanceContainer", sharedLane)
         M.SetMenuStateValue("auraStyleGFLane", sharedLane)
         if M.SelectPage then M.SelectPage("auras3_styling") end
     end)

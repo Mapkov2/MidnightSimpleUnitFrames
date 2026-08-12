@@ -465,6 +465,13 @@ local MANAGED_UNITS = {
     boss1 = true, boss2 = true, boss3 = true, boss4 = true, boss5 = true,
 }
 
+-- The menu exposes one Boss filter scope, while layout remains frame-local for
+-- boss1..boss5. Keep boss1 as the persisted token/blacklist rule owner so an
+-- older profile with absent or stale siblings cannot compile different filters.
+local BOSS_FILTER_SCOPE_OWNER = {
+    boss1 = "boss1", boss2 = "boss1", boss3 = "boss1", boss4 = "boss1", boss5 = "boss1",
+}
+
 local UNIT_FLAG = {
     player = "showPlayer",
     target = "showTarget",
@@ -555,6 +562,7 @@ local LANE_SPECS = {
         xKey = "buffGroupOffsetX",
         yKey = "buffGroupOffsetY",
         sizeKey = "buffGroupIconSize",
+        paddingKey = "buffStylePadding",
         iconZoomKey = "buffIconZoom",
         iconShapeKey = "buffIconShape",
         anchorKey = "buffAnchor",
@@ -597,6 +605,7 @@ local LANE_SPECS = {
         xKey = "debuffGroupOffsetX",
         yKey = "debuffGroupOffsetY",
         sizeKey = "debuffGroupIconSize",
+        paddingKey = "debuffStylePadding",
         iconZoomKey = "debuffIconZoom",
         iconShapeKey = "debuffIconShape",
         anchorKey = "debuffAnchor",
@@ -736,10 +745,10 @@ local LANE_LAYOUT_FIELDS = {
     "xKey", "yKey", "sizeKey", "anchorKey", "layerKey", "strataKey", "spacingKey",
 }
 local LANE_SHARED_LAYOUT_FIELDS = {
-    "maxKey", "perRowKey", "growthKey", "wrapKey",
+    "showKey", "maxKey", "perRowKey", "growthKey", "wrapKey",
 }
 local STYLE_LANE_LAYOUT_FIELDS = {
-    "iconZoomKey", "durationBarHeightKey",
+    "iconZoomKey", "paddingKey", "durationBarHeightKey",
     "stackSizeKey", "stackXKey", "stackYKey",
     "cooldownSizeKey", "cooldownXKey", "cooldownYKey",
 }
@@ -783,7 +792,6 @@ RegisterLaneFieldOwners(STYLE_LANE_SHARED_FIELDS, "styleLayoutShared")
 local LANE_NON_SCOPED_FIELDS = {
     rootKey = true,
     filterKey = true,
-    showKey = true,
     iconShapeKey = true,
 }
 for kind, spec in pairs(LANE_SPECS) do
@@ -1152,25 +1160,25 @@ end
 -- layout-owned values fall back only to the root Shared table; layoutShared-
 -- owned values never consult layout. This makes stale/misplaced keys inert and
 -- keeps a fresh runtime compile identical to the setting the menu displays.
-local function ReadUnitStyleRaw(layout, sharedLocal, rootShared, key)
+local function ReadUnitStyleRaw(layout, laneLayout, rootShared, key)
     if STYLE_SHARED_LAYOUT_KEYS[key] then
-        return ReadRaw(sharedLocal, rootShared, key)
+        return ReadRaw(laneLayout, nil, key)
     end
-    return ReadRaw(layout, rootShared, key)
+    return ReadRaw(layout, nil, key)
 end
 
-local function ReadUnitStyleBool(layout, sharedLocal, rootShared, key, fallback)
-    local value = ReadUnitStyleRaw(layout, sharedLocal, rootShared, key)
+local function ReadUnitStyleBool(layout, laneLayout, rootShared, key, fallback)
+    local value = ReadUnitStyleRaw(layout, laneLayout, rootShared, key)
     if value == nil then return fallback == true end
     return value == true
 end
 
-local function ReadUnitStyleNumber(layout, sharedLocal, rootShared, key, fallback, minValue, maxValue)
-    return ClampNumber(ReadUnitStyleRaw(layout, sharedLocal, rootShared, key), fallback, minValue, maxValue)
+local function ReadUnitStyleNumber(layout, laneLayout, rootShared, key, fallback, minValue, maxValue)
+    return ClampNumber(ReadUnitStyleRaw(layout, laneLayout, rootShared, key), fallback, minValue, maxValue)
 end
 
-local function ReadUnitStyleAnchor(layout, sharedLocal, rootShared, key, fallback)
-    local value = ReadUnitStyleRaw(layout, sharedLocal, rootShared, key)
+local function ReadUnitStyleAnchor(layout, laneLayout, rootShared, key, fallback)
+    local value = ReadUnitStyleRaw(layout, laneLayout, rootShared, key)
     if value == "TOPLEFT" or value == "TOP" or value == "TOPRIGHT"
         or value == "LEFT" or value == "CENTER" or value == "RIGHT"
         or value == "BOTTOMLEFT" or value == "BOTTOM" or value == "BOTTOMRIGHT" then
@@ -1179,33 +1187,27 @@ local function ReadUnitStyleAnchor(layout, sharedLocal, rootShared, key, fallbac
     return fallback or "CENTER"
 end
 
--- A generic per-unit Style control (for example "Aura Stack Text Size")
--- applies to both lanes until that lane has its own explicit value. Shared is
--- default-filled with lane keys, so the local generic value must be checked
--- before the Shared lane default or the generic control becomes a no-op.
-local function ReadUnitLaneStyleRaw(layout, sharedLocal, rootShared, laneKey, genericKey)
-    local sharedOwned = STYLE_SHARED_LAYOUT_KEYS[laneKey] == true
-    local localOwner = sharedOwned and sharedLocal or layout
-    local value = ReadRaw(localOwner, nil, laneKey)
-    if value == nil and genericKey then value = ReadRaw(localOwner, nil, genericKey) end
-    if value == nil then value = ReadRaw(rootShared, nil, laneKey) end
-    if value == nil and genericKey then value = ReadRaw(rootShared, nil, genericKey) end
-    return value
+-- Buff and Debuff Style values are strict lane owners. Generic and root
+-- Shared keys are legacy migration inputs only and never participate here.
+local function ReadUnitLaneStyleRaw(layout, laneLayout, rootShared, laneKey, genericKey)
+    local laneLayoutOwned = STYLE_SHARED_LAYOUT_KEYS[laneKey] == true
+    local localOwner = laneLayoutOwned and laneLayout or layout
+    return ReadRaw(localOwner, nil, laneKey)
 end
 
-local function ReadUnitLaneStyleBool(layout, sharedLocal, rootShared, laneKey, genericKey, fallback)
-    local value = ReadUnitLaneStyleRaw(layout, sharedLocal, rootShared, laneKey, genericKey)
+local function ReadUnitLaneStyleBool(layout, laneLayout, rootShared, laneKey, genericKey, fallback)
+    local value = ReadUnitLaneStyleRaw(layout, laneLayout, rootShared, laneKey, genericKey)
     if value == nil then return fallback == true end
     return value == true
 end
 
-local function ReadUnitLaneStyleNumber(layout, sharedLocal, rootShared, laneKey, genericKey, fallback, minValue, maxValue)
-    return ClampNumber(ReadUnitLaneStyleRaw(layout, sharedLocal, rootShared, laneKey, genericKey),
+local function ReadUnitLaneStyleNumber(layout, laneLayout, rootShared, laneKey, genericKey, fallback, minValue, maxValue)
+    return ClampNumber(ReadUnitLaneStyleRaw(layout, laneLayout, rootShared, laneKey, genericKey),
         fallback, minValue, maxValue)
 end
 
-local function ReadUnitLaneStyleAnchor(layout, sharedLocal, rootShared, laneKey, genericKey, fallback)
-    local value = ReadUnitLaneStyleRaw(layout, sharedLocal, rootShared, laneKey, genericKey)
+local function ReadUnitLaneStyleAnchor(layout, laneLayout, rootShared, laneKey, genericKey, fallback)
+    local value = ReadUnitLaneStyleRaw(layout, laneLayout, rootShared, laneKey, genericKey)
     if value == "TOPLEFT" or value == "TOP" or value == "TOPRIGHT"
         or value == "LEFT" or value == "CENTER" or value == "RIGHT"
         or value == "BOTTOMLEFT" or value == "BOTTOM" or value == "BOTTOMRIGHT" then
@@ -1264,9 +1266,7 @@ function Shape.SharedValue(shared, kind)
     if type(appearanceShapes) == "table" and appearanceShapes[kind] ~= nil then
         return appearanceShapes[kind]
     end
-    local harmful = kind == "debuff" or kind == "targetDots"
-    local key = harmful and "debuffIconShape" or "buffIconShape"
-    return ReadRaw(shared, nil, key) or ReadRaw(shared, nil, "iconShape")
+    return kind == "playerDefensives" and "FOLLOW_PORTRAIT" or "RECTANGLE"
 end
 
 local function NormalizeRuntimeUnit(unit)
@@ -1289,55 +1289,20 @@ local function UnitAuraIconsEnabled(auras, unit)
     return flag and auras[flag] == true or false
 end
 
-local function TableHasAnyKey(tbl, keys)
-    if type(tbl) ~= "table" or type(keys) ~= "table" then return false end
-    for key in pairs(keys) do
-        if tbl[key] ~= nil then return true end
-    end
-    return false
-end
-
-local function UnitStyleOverrideActive(unitCfg)
-    if type(unitCfg) ~= "table" then return false end
-    if unitCfg.overrideStyle ~= nil then return unitCfg.overrideStyle == true end
-    return TableHasAnyKey(unitCfg.layout, STYLE_LAYOUT_KEYS) or TableHasAnyKey(unitCfg.layoutShared, STYLE_SHARED_LAYOUT_KEYS)
-end
-
-local function UnitLayoutValue(layout, styleKeys, styleActive, key)
-    if type(layout) ~= "table" then return nil end
-    local value = layout[key]
-    if value ~= nil and (not styleKeys[key] or styleActive) then return value end
-    return nil
-end
-
 local function EffectiveUnitTables(auras, unit)
-    local shared = type(auras.shared) == "table" and auras.shared or {}
     local perUnit = type(auras.perUnit) == "table" and auras.perUnit or nil
     local unitCfg = perUnit and perUnit[unit] or nil
-    local layout = unitCfg and unitCfg.overrideLayout == true and type(unitCfg.layout) == "table" and unitCfg.layout or nil
-    local layoutShared = unitCfg and unitCfg.overrideSharedLayout == true and type(unitCfg.layoutShared) == "table" and unitCfg.layoutShared or nil
-    local filters = unitCfg and unitCfg.overrideFilters == true and type(unitCfg.filters) == "table" and unitCfg.filters or nil
-    local styleActive = UnitStyleOverrideActive(unitCfg)
-    local effectiveLayout = layout and setmetatable({}, { __index = function(_, key)
-        return UnitLayoutValue(layout, STYLE_LAYOUT_KEYS, styleActive, key)
-    end }) or {}
-    if layoutShared then
-        local effectiveSharedLocal = setmetatable({}, { __index = function(_, key)
-            return UnitLayoutValue(layoutShared, STYLE_SHARED_LAYOUT_KEYS, styleActive, key)
-        end })
-        return effectiveLayout, setmetatable({}, { __index = function(_, key)
-            local value = effectiveSharedLocal[key]
-            if value ~= nil then return value end
-            return shared[key]
-        end }), filters or shared.filters, effectiveSharedLocal
-    end
-    return effectiveLayout, shared, filters or shared.filters, {}
+    local filterCfg = perUnit and perUnit[BOSS_FILTER_SCOPE_OWNER[unit] or unit] or nil
+    local layout = unitCfg and type(unitCfg.layout) == "table" and unitCfg.layout or {}
+    local layoutShared = unitCfg and type(unitCfg.layoutShared) == "table" and unitCfg.layoutShared or {}
+    local filters = filterCfg and type(filterCfg.filters) == "table" and filterCfg.filters or {}
+    return layout, layoutShared, filters
 end
 
 local function EffectiveUnitBlacklist(auras, unit)
     if type(auras) ~= "table" then return nil end
     local perUnit = type(auras.perUnit) == "table" and auras.perUnit or nil
-    local unitCfg = perUnit and perUnit[unit] or nil
+    local unitCfg = perUnit and perUnit[BOSS_FILTER_SCOPE_OWNER[unit] or unit] or nil
     return unitCfg and type(unitCfg.blacklist) == "table" and unitCfg.blacklist or nil
 end
 
@@ -1582,7 +1547,6 @@ local function SharedIconStyle(kind)
     source = type(source) == "table" and source or nil
     local function Read(key, fallback)
         if source and source[key] ~= nil then return source[key] end
-        if shared[key] ~= nil then return shared[key] end
         return fallback
     end
     local bc = Read("styleBorderColor", DEFAULT_SHARED.styleBorderColor)
@@ -2017,39 +1981,34 @@ local function CompileDispelSensor(unit, frameSpec, groupMode, visual)
     }
 end
 
-local function CompileUnitLane(unit, shared, sharedLocal, layout, filtersRoot, kind, candidateFilters, candidateFilterSignature, portraitShape, rootShared)
+local function CompileUnitLane(unit, laneLayout, layout, filtersRoot, kind, candidateFilters, candidateFilterSignature, portraitShape, rootShared)
     local spec = LANE_SPECS[kind]
     local filters = type(filtersRoot) == "table" and type(filtersRoot[spec.filterKey]) == "table" and filtersRoot[spec.filterKey] or nil
-    local filtersEnabled = type(filtersRoot) ~= "table" or filtersRoot.enabled ~= false
+    local filtersEnabled = type(filters) ~= "table" or filters.enabled ~= false
     candidateFilters, candidateFilterSignature = AddHidePermanentCandidateFilter(
         candidateFilters, candidateFilterSignature,
         kind == "buff" and type(filtersRoot) == "table"
             and (filtersRoot.hidePermanent == true or (filters and filters.hidePermanent == true)))
-    local sizeDefault = ReadRaw(layout, rootShared, spec.sizeKey) or ReadRaw(layout, rootShared, "iconSize") or DEFAULT_SHARED.iconSize
+    local sizeDefault = ReadRaw(layout, nil, spec.sizeKey) or DEFAULT_SHARED.iconSize
     local size = ClampNumber(sizeDefault, DEFAULT_SHARED.iconSize, 1, 128)
-    local zoomDefault = ReadUnitLaneStyleRaw(layout, sharedLocal, rootShared,
+    local zoomDefault = ReadUnitLaneStyleRaw(layout, laneLayout, rootShared,
         spec.iconZoomKey, "iconZoom") or DEFAULT_SHARED.iconZoom
     local iconShapeSource = Shape.SharedValue(rootShared, kind)
     local iconShape, requestedIconShape = Shape.Resolve(iconShapeSource, portraitShape)
-    -- Per lane like perRow: buffSpacing/debuffSpacing, falling back to the
-    -- legacy unit-wide `spacing` so profiles that never split the two keep
-    -- the gap they already had.
-    local spacing = ReadNumber(layout, rootShared, spec.spacingKey,
-        ReadNumber(layout, rootShared, "spacing", DEFAULT_SHARED.spacing, 0, 64), 0, 64)
-    local perRow = ReadNumber(shared, nil, spec.perRowKey, ReadRaw(shared, nil, "perRow") or DEFAULT_SHARED.perRow, 1, 40)
-    local maxCount = ReadNumber(shared, nil, spec.maxKey, DEFAULT_SHARED[spec.maxKey] or 12, 0, 80)
-    -- Lane visibility and weapon enchants are global Aura switches. Stale
-    -- values in a unit's layoutShared table must never mask the Shared page.
-    local enabled = ReadBool(rootShared, nil, spec.showKey, true) and maxCount > 0
-    local growth = ReadRaw(shared, nil, spec.growthKey) or ReadRaw(shared, nil, "growth") or DEFAULT_SHARED.growth
-    local rowWrap = ReadRaw(shared, nil, spec.wrapKey) or ReadRaw(shared, nil, "rowWrap") or DEFAULT_SHARED.rowWrap
+    local spacing = ReadNumber(layout, nil, spec.spacingKey, DEFAULT_SHARED.spacing, 0, 64)
+    local perRow = ReadNumber(laneLayout, nil, spec.perRowKey, DEFAULT_SHARED.perRow, 1, 40)
+    local maxCount = ReadNumber(laneLayout, nil, spec.maxKey, DEFAULT_SHARED[spec.maxKey] or 12, 0, 80)
+    local enabled = ReadBool(laneLayout, nil, spec.showKey, true) and maxCount > 0
+    local growth = ReadRaw(laneLayout, nil, spec.growthKey) or DEFAULT_SHARED.growth
+    local rowWrap = ReadRaw(laneLayout, nil, spec.wrapKey) or DEFAULT_SHARED.rowWrap
     local growthX, growthY, xSign, ySign, verticalGrowth = GrowthParts(growth, rowWrap)
     local cols, rows = GridShape(maxCount, perRow, verticalGrowth)
-    local lanePadding = Round(ClampNumber(ReadUnitStyleRaw(layout, sharedLocal, rootShared, "stylePadding"), 0, 0, 16))
-    local debuffTypeBorderMode = kind == "debuff" and ReadDebuffTypeBorderMode(shared, nil) or "OFF"
-    local cooldownAnchor = ReadUnitStyleAnchor(layout, sharedLocal, rootShared,
+    local lanePadding = Round(ClampNumber(ReadUnitLaneStyleRaw(layout, laneLayout, rootShared,
+        spec.paddingKey, nil), 0, 0, 16))
+    local debuffTypeBorderMode = kind == "debuff" and ReadDebuffTypeBorderMode(laneLayout, nil) or "OFF"
+    local cooldownAnchor = ReadUnitStyleAnchor(layout, laneLayout, rootShared,
         "cooldownTextAnchor", DEFAULT_SHARED.cooldownTextAnchor)
-    local rawStrata = ReadRaw(layout, rootShared, spec.strataKey)
+    local rawStrata = ReadRaw(layout, nil, spec.strataKey)
     if issecretvalue(rawStrata) == true then rawStrata = nil end
     return FinalizeLane({
         kind = kind,
@@ -2057,9 +2016,8 @@ local function CompileUnitLane(unit, shared, sharedLocal, layout, filtersRoot, k
         rootKey = spec.rootKey,
         unit = unit,
         enabled = enabled == true,
-        -- filters.enabled is a root master gate; the lane table intentionally
-        -- does not duplicate it. Hide Permanent remains an independent
-        -- candidate filter, matching the Menu2 contract.
+        -- Each lane owns its own filter gate. Hide Permanent remains an
+        -- independent candidate filter, matching the Menu2 contract.
         nativeFilter = NativeFilter(spec.filter, filtersEnabled and filters or nil),
         candidateFilters = candidateFilters,
         candidateFilterSignature = candidateFilterSignature,
@@ -2078,10 +2036,10 @@ local function CompileUnitLane(unit, shared, sharedLocal, layout, filtersRoot, k
             and ReadBool(rootShared, nil, "showWeaponEnchants", false),
         width = math_max(1, cols * size + math_max(cols - 1, 0) * spacing + 2 * lanePadding),
         height = math_max(1, rows * size + math_max(rows - 1, 0) * spacing + 2 * lanePadding),
-        x = Round(ReadNumber(layout, rootShared, spec.xKey, DEFAULT_SHARED[spec.xKey] or 0, -4096, 4096)),
-        y = Round(ReadNumber(layout, rootShared, spec.yKey, DEFAULT_SHARED[spec.yKey] or 0, -4096, 4096)),
-        anchor = ReadAnchor(layout, rootShared, spec.anchorKey, spec.defaultAnchor),
-        layer = Round(ReadNumber(layout, rootShared, spec.layerKey, spec.defaultLayer, 0, 30)),
+        x = Round(ReadNumber(layout, nil, spec.xKey, DEFAULT_SHARED[spec.xKey] or 0, -4096, 4096)),
+        y = Round(ReadNumber(layout, nil, spec.yKey, DEFAULT_SHARED[spec.yKey] or 0, -4096, 4096)),
+        anchor = ReadAnchor(layout, nil, spec.anchorKey, spec.defaultAnchor),
+        layer = Round(ReadNumber(layout, nil, spec.layerKey, spec.defaultLayer, 0, 30)),
         strata = NormalizeFrameStrata(rawStrata, "AUTO"),
         alpha = 1,
         growthX = growthX,
@@ -2090,59 +2048,58 @@ local function CompileUnitLane(unit, shared, sharedLocal, layout, filtersRoot, k
         ySign = ySign,
         verticalGrowth = verticalGrowth == true,
         initialAnchor = ButtonAnchor(xSign, ySign),
-        showCooldownText = ReadUnitLaneStyleBool(layout, sharedLocal, rootShared,
+        showCooldownText = ReadUnitLaneStyleBool(layout, laneLayout, rootShared,
             spec.showTextKey, "showCooldownText", true),
-        showCooldownSwipe = ReadUnitLaneStyleBool(layout, sharedLocal, rootShared,
+        showCooldownSwipe = ReadUnitLaneStyleBool(layout, laneLayout, rootShared,
             spec.swipeKey, "showCooldownSwipe", true),
-        cooldownSwipeReverse = ReadUnitLaneStyleBool(layout, sharedLocal, rootShared,
+        cooldownSwipeReverse = ReadUnitLaneStyleBool(layout, laneLayout, rootShared,
             spec.swipeReverseKey, "cooldownSwipeReverse", false),
-        sortMethod = NormalizeAuraSortMethod(ReadUnitLaneStyleRaw(layout, sharedLocal, rootShared,
-            spec.sortMethodKey, "sortMethod")),
-        sortReverse = ReadUnitLaneStyleBool(layout, sharedLocal, rootShared,
-            spec.sortReverseKey, "sortReverse", false),
-        -- Duration-bar visibility is a layoutShared/style key. Prefer that
-        -- authoritative table exactly like cooldown text/swipe/tooltip above;
-        -- old profiles can still carry a stale pre-split copy in layout, which
-        -- must never mask the current per-scope override written by Menu2.
-        showDurationBar = ReadUnitLaneStyleBool(layout, sharedLocal, rootShared,
+        -- Native sorting belongs to this exact Aura container. Unlike the
+        -- other Style fields, it must not fall back to a generic unit-wide key.
+        sortMethod = NormalizeAuraSortMethod(ReadUnitLaneStyleRaw(layout, laneLayout, rootShared,
+            spec.sortMethodKey, nil)),
+        sortReverse = ReadUnitLaneStyleBool(layout, laneLayout, rootShared,
+            spec.sortReverseKey, nil, false),
+        -- Duration-bar visibility belongs to the local lane-layout owner.
+        showDurationBar = ReadUnitLaneStyleBool(layout, laneLayout, rootShared,
             spec.showDurationBarKey, "showDurationBar", false),
-        durationBarHeight = ReadUnitLaneStyleNumber(layout, sharedLocal, rootShared,
+        durationBarHeight = ReadUnitLaneStyleNumber(layout, laneLayout, rootShared,
             spec.durationBarHeightKey, "durationBarHeight", DEFAULT_SHARED.durationBarHeight, 1, 16),
         durationBarDisplay = NormalizeDurationBarDisplay(
-            ReadUnitLaneStyleRaw(layout, sharedLocal, rootShared, spec.durationBarDisplayKey, "durationBarDisplay"),
+            ReadUnitLaneStyleRaw(layout, laneLayout, rootShared, spec.durationBarDisplayKey, "durationBarDisplay"),
             DEFAULT_SHARED.durationBarDisplay),
         durationBarPosition = NormalizeDurationBarPosition(
-            ReadUnitLaneStyleRaw(layout, sharedLocal, rootShared, spec.durationBarPositionKey, "durationBarPosition"),
+            ReadUnitLaneStyleRaw(layout, laneLayout, rootShared, spec.durationBarPositionKey, "durationBarPosition"),
             DEFAULT_SHARED.durationBarPosition),
         durationBarDirection = NormalizeDurationBarDirection(
-            ReadUnitLaneStyleRaw(layout, sharedLocal, rootShared, spec.durationBarDirectionKey, "durationBarDirection"),
+            ReadUnitLaneStyleRaw(layout, laneLayout, rootShared, spec.durationBarDirectionKey, "durationBarDirection"),
             DEFAULT_SHARED.durationBarDirection),
-        showStacks = ReadUnitLaneStyleBool(layout, sharedLocal, rootShared,
+        showStacks = ReadUnitLaneStyleBool(layout, laneLayout, rootShared,
             spec.showStackKey, "showStackCount", true),
-        showTooltip = ReadUnitLaneStyleBool(layout, sharedLocal, rootShared,
+        showTooltip = ReadUnitLaneStyleBool(layout, laneLayout, rootShared,
             spec.tooltipKey, "showTooltip", DEFAULT_SHARED.showTooltip),
         showAuraBorder = debuffTypeBorderMode ~= "OFF",
         showAuraSymbol = debuffTypeBorderMode == "SYMBOL",
-        showStealableMarker = kind == "buff" and ReadUnitStyleBool(layout, sharedLocal, rootShared, "buffShowStealable", false),
+        showStealableMarker = kind == "buff" and ReadUnitStyleBool(layout, laneLayout, rootShared, "buffShowStealable", false),
         stealableStyle = kind == "buff" and A3.NormalizeStealableStyle(
-            ReadUnitStyleRaw(layout, sharedLocal, rootShared, "buffStealableStyle")) or nil,
-        cooldownSize = ReadUnitLaneStyleNumber(layout, sharedLocal, rootShared,
+            ReadUnitStyleRaw(layout, laneLayout, rootShared, "buffStealableStyle")) or nil,
+        cooldownSize = ReadUnitLaneStyleNumber(layout, laneLayout, rootShared,
             spec.cooldownSizeKey, "cooldownTextSize", DEFAULT_SHARED.cooldownTextSize, 6, 40),
-        cooldownAnchor = ReadUnitLaneStyleAnchor(layout, sharedLocal, rootShared,
+        cooldownAnchor = ReadUnitLaneStyleAnchor(layout, laneLayout, rootShared,
             spec.cooldownAnchorKey, "cooldownTextAnchor", cooldownAnchor),
-        cooldownX = ReadUnitLaneStyleNumber(layout, sharedLocal, rootShared,
+        cooldownX = ReadUnitLaneStyleNumber(layout, laneLayout, rootShared,
             spec.cooldownXKey, "cooldownTextOffsetX", DEFAULT_SHARED.cooldownTextOffsetX, -2000, 2000),
-        cooldownY = ReadUnitLaneStyleNumber(layout, sharedLocal, rootShared,
+        cooldownY = ReadUnitLaneStyleNumber(layout, laneLayout, rootShared,
             spec.cooldownYKey, "cooldownTextOffsetY", DEFAULT_SHARED.cooldownTextOffsetY, -2000, 2000),
-        cooldownDecimalSeconds = ReadUnitLaneStyleNumber(layout, sharedLocal, rootShared,
+        cooldownDecimalSeconds = ReadUnitLaneStyleNumber(layout, laneLayout, rootShared,
             spec.cooldownDecimalKey, "cooldownDecimalSeconds", DEFAULT_SHARED.cooldownDecimalSeconds, 0, 30),
-        stackAnchor = ReadUnitLaneStyleAnchor(layout, sharedLocal, rootShared,
+        stackAnchor = ReadUnitLaneStyleAnchor(layout, laneLayout, rootShared,
             spec.stackAnchorKey, "stackCountAnchor", DEFAULT_SHARED.stackCountAnchor),
-        stackSize = ReadUnitLaneStyleNumber(layout, sharedLocal, rootShared,
+        stackSize = ReadUnitLaneStyleNumber(layout, laneLayout, rootShared,
             spec.stackSizeKey, "stackTextSize", DEFAULT_SHARED.stackTextSize, 6, 40),
-        stackX = ReadUnitLaneStyleNumber(layout, sharedLocal, rootShared,
+        stackX = ReadUnitLaneStyleNumber(layout, laneLayout, rootShared,
             spec.stackXKey, "stackTextOffsetX", DEFAULT_SHARED.stackTextOffsetX, -2000, 2000),
-        stackY = ReadUnitLaneStyleNumber(layout, sharedLocal, rootShared,
+        stackY = ReadUnitLaneStyleNumber(layout, laneLayout, rootShared,
             spec.stackYKey, "stackTextOffsetY", DEFAULT_SHARED.stackTextOffsetY, -2000, 2000),
     })
 end
@@ -2226,8 +2183,8 @@ local function CompileGroupLane(unit, source, kind, groupKind, portraitShape, sh
         showCooldownText = source[spec.showTextKey] ~= false,
         showCooldownSwipe = source[spec.swipeKey] ~= false,
         cooldownSwipeReverse = cooldownSwipeReverse == true,
-        sortMethod = NormalizeAuraSortMethod(source[spec.sortMethodKey] or source.sortMethod),
-        sortReverse = source[spec.sortReverseKey] == true or (source[spec.sortReverseKey] == nil and source.sortReverse == true),
+        sortMethod = NormalizeAuraSortMethod(source[spec.sortMethodKey]),
+        sortReverse = source[spec.sortReverseKey] == true,
         showDurationBar = source[spec.showDurationBarKey] == true or source.showDurationBar == true,
         durationBarHeight = ClampNumber(source[spec.durationBarHeightKey] or source.durationBarHeight, DEFAULT_SHARED.durationBarHeight, 1, 16),
         durationBarDisplay = NormalizeDurationBarDisplay(source[spec.durationBarDisplayKey] or source.durationBarDisplay, DEFAULT_SHARED.durationBarDisplay),
@@ -2705,6 +2662,8 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec,
     local candidateFilters, candidateFilterSignature = CandidateFiltersFromSpellIDs(includeSpellIDs, "includeSpellIDs")
     local layoutPlaced = type(entry.placed) == "table" and entry.placed or {}
     local placed, styleFrame = A3._ResolveSpecialCustomStyle(auras, unit, index, entry)
+    lanePadding = ClampNumber((type(placed) == "table" and placed.stylePadding)
+        or layoutPlaced.stylePadding, 0, 0, 16)
     local filters = type(entry.filters) == "table" and entry.filters or { enabled = true, onlyMine = entry.onlyOwn == true }
     local sourceUnit = unit
     local helpful = not targetDots and tostring(entry.auraType or "BUFF"):upper() ~= "DEBUFF"
@@ -2832,13 +2791,11 @@ end
 local function CompileUnitCustomContainers(auras, unit, frameSpec)
     local source = EffectiveUnitCustomContainers(auras, unit)
     if type(source) ~= "table" then return nil, nil end
-    -- Custom containers honor the shared "Lane Padding" slider exactly like
-    -- the Buff/Debuff lanes; the per-container record carries no padding key.
-    local layout = EffectiveUnitTables(auras, unit)
-    local lanePadding = ReadRaw(layout, auras.shared, "stylePadding")
+    -- Custom containers carry their own spacing in the per-container record;
+    -- there is no Unit-wide or Shared lane-padding fallback.
     local lanes, effectItems, targetDotEffectItems = {}, {}, {}
     for i = 1, 4 do
-        local lane, effect, portraitLane = CompileUnitCustomLane(unit, source[i], i, lanePadding, frameSpec, auras.shared, auras)
+        local lane, effect, portraitLane = CompileUnitCustomLane(unit, source[i], i, nil, frameSpec, auras.shared, auras)
         if lane then lanes["custom" .. tostring(i)] = lane end
         if portraitLane then lanes[portraitLane.kind] = portraitLane end
         if effect then
@@ -2859,14 +2816,14 @@ local function CompileUnitCustomContainers(auras, unit, frameSpec)
 end
 A3._CompileUnitCustomContainers = CompileUnitCustomContainers
 
-local function CompileUnitLaneEffects(unit, shared, buff, debuff)
+local function CompileUnitLaneEffects(unit, laneLayout, buff, debuff)
     local items = {}
     local function Add(kind, lane)
         if not (lane and lane.enabled == true) then return end
         local prefix = kind == "buff" and "buff" or "debuff"
-        local effectType = tostring(ReadRaw(shared, nil, prefix .. "FrameEffectType") or "none"):lower()
+        local effectType = tostring(ReadRaw(laneLayout, nil, prefix .. "FrameEffectType") or "none"):lower()
         if effectType == "none" or effectType == "" then return end
-        local color = ReadRaw(shared, nil, prefix .. "FrameEffectColor")
+        local color = ReadRaw(laneLayout, nil, prefix .. "FrameEffectColor")
         items[#items + 1] = {
             key = "uflane_effect:" .. kind,
             display = kind == "buff" and "Buffs" or "Debuffs",
@@ -2879,10 +2836,10 @@ local function CompileUnitLaneEffects(unit, shared, buff, debuff)
             frame = {
                 type = effectType,
                 color = type(color) == "table" and color or { 0.69, 0.50, 0.88, 0.80 },
-                priority = ReadNumber(shared, nil, prefix .. "FrameEffectPriority", 5, 1, 10),
-                thickness = ReadNumber(shared, nil, prefix .. "FrameEffectThickness", 2, 1, 16),
-                layer = ReadNumber(shared, nil, prefix .. "FrameEffectLayer", 0, 0, 30),
-                strata = ReadRaw(shared, nil, prefix .. "FrameEffectStrata") or "AUTO",
+                priority = ReadNumber(laneLayout, nil, prefix .. "FrameEffectPriority", 5, 1, 10),
+                thickness = ReadNumber(laneLayout, nil, prefix .. "FrameEffectThickness", 2, 1, 16),
+                layer = ReadNumber(laneLayout, nil, prefix .. "FrameEffectLayer", 0, 0, 30),
+                strata = ReadRaw(laneLayout, nil, prefix .. "FrameEffectStrata") or "AUTO",
             },
             layer = 9,
             strata = "AUTO",
@@ -2917,7 +2874,7 @@ local function BuildUnitFrameConfig(unit, frameSpec)
     local dispelSymbol = iconsEnabled and CompileDispelSensor(unit, frameSpec, false, "symbol") or nil
     local buff, debuff, laneEffects
     if iconsEnabled then
-        local layout, sharedLayout, filtersRoot, sharedLocal = EffectiveUnitTables(auras, unit)
+        local layout, laneLayout, filtersRoot = EffectiveUnitTables(auras, unit)
         local blacklist = EffectiveUnitBlacklist(auras, unit)
         local buffBlacklist = type(blacklist) == "table" and type(blacklist.buffs) == "table" and blacklist.buffs or blacklist
         local debuffBlacklist = type(blacklist) == "table" and type(blacklist.debuffs) == "table" and blacklist.debuffs or blacklist
@@ -2944,9 +2901,9 @@ local function BuildUnitFrameConfig(unit, frameSpec)
                 type(customContainers) == "table" and customContainers[4] or nil, tracked)
         end
         local portraitShape = frameSpec and frameSpec.portrait and frameSpec.portrait.shape
-        buff = CompileUnitLane(unit, sharedLayout, sharedLocal, layout, filtersRoot, "buff", buffCandidates, buffCandidateSignature, portraitShape, auras.shared)
-        debuff = CompileUnitLane(unit, sharedLayout, sharedLocal, layout, filtersRoot, "debuff", debuffCandidates, debuffCandidateSignature, portraitShape, auras.shared)
-        laneEffects = CompileUnitLaneEffects(unit, sharedLayout, buff, debuff)
+        buff = CompileUnitLane(unit, laneLayout, layout, filtersRoot, "buff", buffCandidates, buffCandidateSignature, portraitShape, auras.shared)
+        debuff = CompileUnitLane(unit, laneLayout, layout, filtersRoot, "debuff", debuffCandidates, debuffCandidateSignature, portraitShape, auras.shared)
+        laneEffects = CompileUnitLaneEffects(unit, laneLayout, buff, debuff)
     end
     local hasNativeAuraWork = (buff and buff.enabled == true) or (debuff and debuff.enabled == true)
         or (dispelBorder and dispelBorder.enabled == true) or (purgeBorder and purgeBorder.enabled == true)
@@ -3040,13 +2997,7 @@ function A3.GetUnitFrameEffectDiagnostics(unit, frame)
 
     local auras = EnsureDB()
     local _, effectiveShared = EffectiveUnitTables(auras, unit)
-    local perUnit = type(auras) == "table" and type(auras.perUnit) == "table" and auras.perUnit or nil
-    local unitConfig = perUnit and perUnit[unit] or nil
-    local localShared = type(unitConfig) == "table"
-        and unitConfig.overrideSharedLayout == true
-        and UnitStyleOverrideActive(unitConfig)
-        and type(unitConfig.layoutShared) == "table"
-        and unitConfig.layoutShared or nil
+    local localShared = effectiveShared
     local laneSlots = cfg and cfg.laneEffects and cfg.laneEffects.enabled == true
         and type(cfg.laneEffects.slots) == "table" and cfg.laneEffects.slots or nil
 
@@ -3078,7 +3029,7 @@ function A3.GetUnitFrameEffectDiagnostics(unit, frame)
         local configuredType = tostring(ReadRaw(effectiveShared, nil, keyPrefix .. "Type") or "none"):lower()
         local color = effect and effect.color or ReadRaw(effectiveShared, nil, keyPrefix .. "Color")
         local function FieldSource(suffix)
-            return localShared and localShared[keyPrefix .. suffix] ~= nil and "unit" or "shared"
+            return localShared and localShared[keyPrefix .. suffix] ~= nil and "unit" or "default"
         end
         return {
             ownerKind = "lane",

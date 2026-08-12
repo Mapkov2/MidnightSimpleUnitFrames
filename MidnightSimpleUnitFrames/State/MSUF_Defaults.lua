@@ -1116,7 +1116,7 @@ end
 --- Canonical Unit Aura baseline for the one-time 6.0 Aura reset and for the
 --- no-payload fallback. Factory profiles apply a separate explicit overlay
 --- below so product positioning can evolve without changing hard-cut geometry.
-local MSUF_DEFAULTS_AURAS3_PROFILE_MODEL_REVISION = 1
+local MSUF_DEFAULTS_AURAS3_PROFILE_MODEL_REVISION = 2
 local MSUF_DEFAULTS_GROUP_AURA_PROFILE_MODEL_REVISION = 1
 local MSUF_DEFAULTS_GROUP_AURA_SCOPES = { "gf_party", "gf_raid", "gf_mythicraid" }
 local function MSUF_Defaults_CreateCanonicalPlayerDefensiveAuraContainer()
@@ -1153,7 +1153,7 @@ local function MSUF_Defaults_CreateCanonicalPlayerDefensiveAuraContainer()
         placed = {
             type = "icon", anchor = "TOPRIGHT", growth = "LEFTDOWN",
             x = 0, y = 0, size = 24, barWidth = 54,
-            max = 8, perRow = 4, spacing = 2,
+            max = 8, perRow = 4, spacing = 2, stylePadding = 0,
             showCooldown = true, showCooldownSwipe = true, showStacks = true,
         },
         layer = 9,
@@ -1170,6 +1170,237 @@ if type(MSUF) == "table" then
     MSUF.MSUF_CreateCanonicalPlayerDefensiveAuraContainer =
         MSUF_Defaults_CreateCanonicalPlayerDefensiveAuraContainer
 end
+
+-- Unit Aura lanes no longer inherit mutable values from auras3.shared.  This
+-- cold-path migration snapshots the profile's previously effective values
+-- into the exact Unit + Buff/Debuff owner before runtime or Menu2 reads them.
+-- The old Shared fields stay as import compatibility input, but changing them
+-- afterwards cannot alter a Unit lane.
+local MSUF_DEFAULTS_UNIT_AURA_RUNTIME_UNITS = {
+    "player", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5",
+}
+local MSUF_DEFAULTS_UNIT_AURA_LANES = {
+    buff = {
+        prefix = "buff",
+        showKey = "showBuffs", maxKey = "maxBuffs",
+        xKey = "buffGroupOffsetX", yKey = "buffGroupOffsetY",
+        sizeKey = "buffGroupIconSize", anchorKey = "buffAnchor",
+        layerKey = "buffLayer", strataKey = "buffStrata",
+        spacingKey = "buffSpacing", perRowKey = "buffPerRow",
+        growthKey = "buffGrowthX", wrapKey = "buffGrowthY",
+        defaultAnchor = "BOTTOMRIGHT", defaultLayer = 5,
+    },
+    debuff = {
+        prefix = "debuff",
+        showKey = "showDebuffs", maxKey = "maxDebuffs",
+        xKey = "debuffGroupOffsetX", yKey = "debuffGroupOffsetY",
+        sizeKey = "debuffGroupIconSize", anchorKey = "debuffAnchor",
+        layerKey = "debuffLayer", strataKey = "debuffStrata",
+        spacingKey = "debuffSpacing", perRowKey = "debuffPerRow",
+        growthKey = "debuffGrowthX", wrapKey = "debuffGrowthY",
+        defaultAnchor = "TOPLEFT", defaultLayer = 6,
+    },
+}
+local MSUF_DEFAULTS_UNIT_AURA_STYLE_LAYOUT = {
+    { "IconZoom", "iconZoom", 100 },
+    { "StylePadding", "stylePadding", 0 },
+    { "DurationBarHeight", "durationBarHeight", 2 },
+    { "StackTextSize", "stackTextSize", 14 },
+    { "StackTextOffsetX", "stackTextOffsetX", -1 },
+    { "StackTextOffsetY", "stackTextOffsetY", 1 },
+    { "CooldownTextSize", "cooldownTextSize", 14 },
+    { "CooldownTextOffsetX", "cooldownTextOffsetX", 0 },
+    { "CooldownTextOffsetY", "cooldownTextOffsetY", 0 },
+}
+local MSUF_DEFAULTS_UNIT_AURA_STYLE_SHARED = {
+    { "ShowCooldownText", "showCooldownText", true },
+    { "ShowCooldownSwipe", "showCooldownSwipe", true },
+    { "CooldownSwipeReverse", "cooldownSwipeReverse", false },
+    { "SortMethod", "sortMethod", "DEFAULT" },
+    { "SortReverse", "sortReverse", false },
+    { "ShowDurationBar", "showDurationBar", false },
+    { "DurationBarDisplay", "durationBarDisplay", "BAR_ONLY" },
+    { "DurationBarPosition", "durationBarPosition", "BOTTOM" },
+    { "DurationBarDirection", "durationBarDirection", "REMAINING" },
+    { "ShowTooltip", "showTooltip", true },
+    { "ShowStackCount", "showStackCount", true },
+    { "StackCountAnchor", "stackCountAnchor", "TOPRIGHT" },
+    { "CooldownTextAnchor", "cooldownTextAnchor", "CENTER" },
+    { "CooldownDecimalSeconds", "cooldownDecimalSeconds", 3 },
+}
+local MSUF_DEFAULTS_AURA_APPEARANCE_KINDS = {
+    "buff", "debuff", "playerDefensives", "targetDots",
+}
+local MSUF_DEFAULTS_AURA_APPEARANCE_STYLE_DEFAULTS = {
+    styleBorderEnabled = false,
+    styleBorderStyle = "SOLID",
+    styleBorderThickness = 1,
+    styleBorderColor = { 0, 0, 0, 1 },
+    styleShadowEnabled = false,
+    styleShadowSize = 4,
+    styleShadowColor = { 0, 0, 0, 0.8 },
+}
+
+local function MSUF_Defaults_CopyAuraOwnedValue(value)
+    if type(value) ~= "table" then return value end
+    local out = {}
+    MSUF_Defaults_DeepCopy(out, value)
+    return out
+end
+
+local function MSUF_Defaults_ReadAuraLegacyOwner(owner, ownerActive, shared, laneKey, genericKey, fallback)
+    if ownerActive and type(owner) == "table" then
+        if owner[laneKey] ~= nil then return owner[laneKey] end
+        if genericKey and owner[genericKey] ~= nil then return owner[genericKey] end
+    end
+    if type(shared) == "table" then
+        if shared[laneKey] ~= nil then return shared[laneKey] end
+        if genericKey and shared[genericKey] ~= nil then return shared[genericKey] end
+    end
+    return fallback
+end
+
+local function MSUF_Defaults_WriteAuraOwnedValue(owner, key, value)
+    owner[key] = MSUF_Defaults_CopyAuraOwnedValue(value)
+end
+
+local function MSUF_Defaults_MaterializeUnitAuraLaneOwners(auras)
+    if type(auras) ~= "table" then return false end
+    if auras._msufA3UnitLaneOwners_v1 == true then return false end
+    auras.shared = type(auras.shared) == "table" and auras.shared or {}
+    auras.perUnit = type(auras.perUnit) == "table" and auras.perUnit or {}
+    local shared = auras.shared
+
+    for i = 1, #MSUF_DEFAULTS_UNIT_AURA_RUNTIME_UNITS do
+        local unit = MSUF_DEFAULTS_UNIT_AURA_RUNTIME_UNITS[i]
+        local pu = type(auras.perUnit[unit]) == "table" and auras.perUnit[unit] or {}
+        auras.perUnit[unit] = pu
+        local oldLayout = type(pu.layout) == "table" and pu.layout or nil
+        local oldSharedLayout = type(pu.layoutShared) == "table" and pu.layoutShared or nil
+        local layoutActive = pu.overrideLayout == true
+        local sharedLayoutActive = pu.overrideSharedLayout == true
+        local styleActive = pu.overrideStyle == true
+            or (pu.overrideStyle == nil and ((oldLayout and next(oldLayout)) or (oldSharedLayout and next(oldSharedLayout))))
+        local layout, layoutShared = {}, {}
+
+        for kind, spec in pairs(MSUF_DEFAULTS_UNIT_AURA_LANES) do
+            MSUF_Defaults_WriteAuraOwnedValue(layout, spec.xKey,
+                MSUF_Defaults_ReadAuraLegacyOwner(oldLayout, layoutActive, shared, spec.xKey, nil, 0))
+            MSUF_Defaults_WriteAuraOwnedValue(layout, spec.yKey,
+                MSUF_Defaults_ReadAuraLegacyOwner(oldLayout, layoutActive, shared, spec.yKey, nil, kind == "buff" and 36 or 6))
+            MSUF_Defaults_WriteAuraOwnedValue(layout, spec.sizeKey,
+                MSUF_Defaults_ReadAuraLegacyOwner(oldLayout, layoutActive, shared, spec.sizeKey, "iconSize", 26))
+            MSUF_Defaults_WriteAuraOwnedValue(layout, spec.anchorKey,
+                MSUF_Defaults_ReadAuraLegacyOwner(oldLayout, layoutActive, shared, spec.anchorKey, nil, spec.defaultAnchor))
+            MSUF_Defaults_WriteAuraOwnedValue(layout, spec.layerKey,
+                MSUF_Defaults_ReadAuraLegacyOwner(oldLayout, layoutActive, shared, spec.layerKey, nil, spec.defaultLayer))
+            MSUF_Defaults_WriteAuraOwnedValue(layout, spec.strataKey,
+                MSUF_Defaults_ReadAuraLegacyOwner(oldLayout, layoutActive, shared, spec.strataKey, nil, "AUTO"))
+            MSUF_Defaults_WriteAuraOwnedValue(layout, spec.spacingKey,
+                MSUF_Defaults_ReadAuraLegacyOwner(oldLayout, layoutActive, shared, spec.spacingKey, "spacing", 2))
+
+            MSUF_Defaults_WriteAuraOwnedValue(layoutShared, spec.showKey,
+                MSUF_Defaults_ReadAuraLegacyOwner(oldSharedLayout, sharedLayoutActive, shared, spec.showKey, nil, true))
+            MSUF_Defaults_WriteAuraOwnedValue(layoutShared, spec.maxKey,
+                MSUF_Defaults_ReadAuraLegacyOwner(oldSharedLayout, sharedLayoutActive, shared, spec.maxKey, nil, 12))
+            MSUF_Defaults_WriteAuraOwnedValue(layoutShared, spec.perRowKey,
+                MSUF_Defaults_ReadAuraLegacyOwner(oldSharedLayout, sharedLayoutActive, shared, spec.perRowKey, "perRow", 12))
+            MSUF_Defaults_WriteAuraOwnedValue(layoutShared, spec.growthKey,
+                MSUF_Defaults_ReadAuraLegacyOwner(oldSharedLayout, sharedLayoutActive, shared, spec.growthKey, "growth", "RIGHT"))
+            MSUF_Defaults_WriteAuraOwnedValue(layoutShared, spec.wrapKey,
+                MSUF_Defaults_ReadAuraLegacyOwner(oldSharedLayout, sharedLayoutActive, shared, spec.wrapKey, "rowWrap", "DOWN"))
+
+            for j = 1, #MSUF_DEFAULTS_UNIT_AURA_STYLE_LAYOUT do
+                local field = MSUF_DEFAULTS_UNIT_AURA_STYLE_LAYOUT[j]
+                local laneKey = spec.prefix .. field[1]
+                MSUF_Defaults_WriteAuraOwnedValue(layout, laneKey,
+                    MSUF_Defaults_ReadAuraLegacyOwner(oldLayout, layoutActive and styleActive,
+                        shared, laneKey, field[2], field[3]))
+            end
+            for j = 1, #MSUF_DEFAULTS_UNIT_AURA_STYLE_SHARED do
+                local field = MSUF_DEFAULTS_UNIT_AURA_STYLE_SHARED[j]
+                local laneKey = spec.prefix .. field[1]
+                MSUF_Defaults_WriteAuraOwnedValue(layoutShared, laneKey,
+                    MSUF_Defaults_ReadAuraLegacyOwner(oldSharedLayout, sharedLayoutActive and styleActive,
+                        shared, laneKey, field[2], field[3]))
+            end
+
+            local framePrefix = spec.prefix .. "FrameEffect"
+            for _, suffix in ipairs({ "Type", "Color", "Priority", "Thickness", "Layer", "Strata" }) do
+                local key = framePrefix .. suffix
+                local fallback = suffix == "Type" and "none"
+                    or (suffix == "Color" and { 0.69, 0.50, 0.88, 0.80 })
+                    or (suffix == "Priority" and 5)
+                    or (suffix == "Thickness" and 2)
+                    or (suffix == "Strata" and "AUTO") or 0
+                MSUF_Defaults_WriteAuraOwnedValue(layoutShared, key,
+                    MSUF_Defaults_ReadAuraLegacyOwner(oldSharedLayout, sharedLayoutActive and styleActive,
+                        shared, key, nil, fallback))
+            end
+        end
+
+        MSUF_Defaults_WriteAuraOwnedValue(layoutShared, "buffShowStealable",
+            MSUF_Defaults_ReadAuraLegacyOwner(oldSharedLayout, sharedLayoutActive and styleActive,
+                shared, "buffShowStealable", nil, false))
+        MSUF_Defaults_WriteAuraOwnedValue(layoutShared, "buffStealableStyle",
+            MSUF_Defaults_ReadAuraLegacyOwner(oldSharedLayout, sharedLayoutActive and styleActive,
+                shared, "buffStealableStyle", nil, "BORDER_ICON"))
+        MSUF_Defaults_WriteAuraOwnedValue(layoutShared, "debuffTypeBorderMode",
+            MSUF_Defaults_ReadAuraLegacyOwner(oldSharedLayout, sharedLayoutActive and styleActive,
+                shared, "debuffTypeBorderMode", nil, shared.useDebuffTypeBorders == true and "SYMBOL" or "OFF"))
+        layoutShared.useDebuffTypeBorders = layoutShared.debuffTypeBorderMode ~= "OFF"
+
+        local sourceFilters = pu.overrideFilters == true and type(pu.filters) == "table" and pu.filters
+            or (type(shared.filters) == "table" and shared.filters) or {}
+        local filters = MSUF_Defaults_CopyAuraOwnedValue(sourceFilters)
+        filters = type(filters) == "table" and filters or {}
+        filters.buffs = type(filters.buffs) == "table" and filters.buffs or {}
+        filters.debuffs = type(filters.debuffs) == "table" and filters.debuffs or {}
+        if filters.buffs.enabled == nil then filters.buffs.enabled = sourceFilters.enabled ~= false end
+        if filters.debuffs.enabled == nil then filters.debuffs.enabled = sourceFilters.enabled ~= false end
+
+        pu.layout = layout
+        pu.layoutShared = layoutShared
+        pu.filters = filters
+        pu.overrideLayout = true
+        pu.overrideSharedLayout = true
+        pu.overrideStyle = true
+        pu.overrideFilters = true
+    end
+
+    -- Appearance is the one intentional global Aura owner, keyed by product.
+    -- Snapshot legacy flat style/shape values so those old scalars become inert.
+    shared.appearanceIconShapes = type(shared.appearanceIconShapes) == "table"
+        and shared.appearanceIconShapes or {}
+    shared.appearanceIconStyles = type(shared.appearanceIconStyles) == "table"
+        and shared.appearanceIconStyles or {}
+    for i = 1, #MSUF_DEFAULTS_AURA_APPEARANCE_KINDS do
+        local kind = MSUF_DEFAULTS_AURA_APPEARANCE_KINDS[i]
+        local harmful = kind == "debuff" or kind == "targetDots"
+        if shared.appearanceIconShapes[kind] == nil then
+            shared.appearanceIconShapes[kind] = shared[harmful and "debuffIconShape" or "buffIconShape"]
+                or shared.iconShape or (kind == "playerDefensives" and "FOLLOW_PORTRAIT" or "RECTANGLE")
+        end
+        local style = type(shared.appearanceIconStyles[kind]) == "table"
+            and shared.appearanceIconStyles[kind] or {}
+        shared.appearanceIconStyles[kind] = style
+        for key, fallback in pairs(MSUF_DEFAULTS_AURA_APPEARANCE_STYLE_DEFAULTS) do
+            if style[key] == nil then
+                style[key] = MSUF_Defaults_CopyAuraOwnedValue(
+                    shared[key] ~= nil and shared[key] or fallback)
+            end
+        end
+    end
+
+    auras.profileModelRevision = MSUF_DEFAULTS_AURAS3_PROFILE_MODEL_REVISION
+    auras._msufA3UnitLaneOwners_v1 = true
+    return true
+end
+ExportPublic("MSUF_MaterializeUnitAuraLaneOwners", MSUF_Defaults_MaterializeUnitAuraLaneOwners)
+if type(MSUF) == "table" then
+    MSUF.MSUF_MaterializeUnitAuraLaneOwners = MSUF_Defaults_MaterializeUnitAuraLaneOwners
+end
+
 local function MSUF_Defaults_CreateCanonicalUnitAuras()
     local function Filters()
         return {
@@ -1358,6 +1589,7 @@ local function MSUF_Defaults_CreateCanonicalUnitAuras()
             filters = Filters(),
         }
     end
+    MSUF_Defaults_MaterializeUnitAuraLaneOwners(auras)
     return auras
 end
 ExportPublic("MSUF_CreateCanonicalUnitAuras", MSUF_Defaults_CreateCanonicalUnitAuras)
@@ -1425,6 +1657,8 @@ local function MSUF_Defaults_CreateFactoryUnitAuras()
     defensive.portraitIcon = true
     defensive.placed.x = -293
     defensive.placed.y = 11
+    auras._msufA3UnitLaneOwners_v1 = nil
+    MSUF_Defaults_MaterializeUnitAuraLaneOwners(auras)
     return auras
 end
 
