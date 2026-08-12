@@ -1,5 +1,22 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0 - 2026-08-11
+
+### Final Release Changes
+
+- Rebuilt Unit Preview Aura handling with independent Buff and Debuff layers, correct lane routing from every handle, and clearer Aura-menu copy for the actual Unit/Group styling workspaces.
+- Expanded the Debuff blacklist presets and clarified that blacklist entries belong to the selected frame and Debuff lane.
+- Added native Ebon Might duration text plus safe, independently configurable Alternative Mana width geometry across runtime, previews, search, and the Assistant.
+- Made Blizzard's animated Resting symbol part of the fresh default profile while preserving existing profiles and live resting state.
+- Reworked the upgrade-highlight tour so Back/Forward history is taught first, the real navigation arrows pulse while that page is open, page actions perform their advertised action, and the Assistant can restart a skipped or completed tour from natural-language requests.
+
+### Fixes & Performance
+
+- Fixed nickname-provider refreshes and fallback resolution so updated Target names reach the correct Unit and Group Frames without broad polling.
+- Guarded secret Player Health values before Class Resource logic can inspect them in combat.
+- Fixed Texture Layer target refreshes, rounded clipping, true-outline geometry, and rounded preview edges after live setting changes.
+- Fixed Resting state/default normalization and Castbar preview text positions drifting from their runtime owners.
+
 ## 6.01 - 2026-08-10
 
 ### Final Beta Release Highlights

@@ -309,6 +309,7 @@ end
 
 local function ApplyRestingFlipbook(tex, play)
   if not (tex and tex.SetAtlas and tex.CreateAnimationGroup) then return false end
+  if not AtlasAvailable(tex, RESTING_FLIPBOOK_ATLAS) then return false end
   if tex._msufRestingFlipbookAtlas ~= true then
     tex:SetAtlas(RESTING_FLIPBOOK_ATLAS)
     tex._msufRestingFlipbookAtlas = true
