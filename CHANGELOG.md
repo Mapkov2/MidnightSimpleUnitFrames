@@ -17,7 +17,8 @@
 - Fixed Health and Power gradients missing or differing in Unit and Group previews. Embedded, detached, and rounded Power previews now reuse the same gradient composition as runtime rendering.
 - Made Cleanse Border changes request the required UI reload.
 - Kept the Player Castbar provider selectable in the Bars menu.
-- Fixed Blizzard Party and Raid frames not recovering reliably when MSUF returned frame ownership, while preserving Blizzard event registrations and prior visibility.
+- Fixed native Aura containers triggering a forbidden `EventRegistrations` error during Unit Frame aura setup.
+- Fixed a WoW 12.1 taint loop when Blizzard Party or Raid frames were selected instead of MSUF. MSUF no longer rewires Blizzard CompactUnitFrame scripts or manually refreshes those frames; provider and fallback handoffs now complete safely after the required UI reload.
 - Isolated Group Spell Indicator preview positions from live saved positions.
 - Restored continuous Devourer class-resource updates and removed obsolete partial-update ownership from the resource pipeline.
 - Refreshed Unit Frame names immediately after anchor changes.
