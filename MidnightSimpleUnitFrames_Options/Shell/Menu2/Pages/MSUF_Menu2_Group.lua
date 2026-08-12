@@ -1816,7 +1816,9 @@ local function SpellSpecValues()
     if si and type(si.SpecInfo) == "table" then
         local specs = {}
         for specKey, info in pairs(si.SpecInfo) do
-            specs[#specs + 1] = SpellSpecOption(specKey, info)
+            if type(info) ~= "table" or info.customOnly ~= true then
+                specs[#specs + 1] = SpellSpecOption(specKey, info)
+            end
         end
         table.sort(specs, function(a, b)
             local left, right = tostring(a.text), tostring(b.text)
@@ -1839,6 +1841,12 @@ local function SpellTrackedSpecValues()
     end
     if #values == 0 then values[1] = { value = "", text = "No supported specs", disabled = true } end
     return values
+end
+local function IsAllSpecsSpellSpec(specKey)
+    local gf = GF()
+    local si = gf and gf.SpellIndicators
+    local info = specKey and si and si.SpecInfo and si.SpecInfo[specKey]
+    return type(info) == "table" and info.universal == true
 end
 local function CurrentSpellMultiSpec(kind)
     M.gfSpellMultiSpecSelection = M.gfSpellMultiSpecSelection or {}
@@ -2143,6 +2151,7 @@ M.Assign(GroupPage, {
     QueueSpellIndicators = QueueSpellIndicators,
     SpellSpecValues = SpellSpecValues,
     SpellTrackedSpecValues = SpellTrackedSpecValues,
+    IsAllSpecsSpellSpec = IsAllSpecsSpellSpec,
     CurrentSpellMultiSpec = CurrentSpellMultiSpec,
     EffectiveSpellSpec = EffectiveSpellSpec,
     SpellAuraValues = SpellAuraValues,

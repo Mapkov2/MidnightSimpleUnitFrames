@@ -1,5 +1,15 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.03 - 2026-08-12
+
+### Highlights
+
+- Track any group buff from any specialization. Group Frame Spell Icons now provide a shared All Specs workspace, so entries such as Feint can be configured once and remain active across every character specialization.
+
+### Changes
+
+- Multi-Spec now exposes all 40 Retail specializations. Custom Aura IDs can also be added to an individual specialization, allowing a Holy Priest configuration, for example, to track Feint (`1966`) on another group member while **Only show my casts** is disabled.
+
 ## 6.02 - 2026-08-11
 
 ### WoW 12.1 Release Highlights

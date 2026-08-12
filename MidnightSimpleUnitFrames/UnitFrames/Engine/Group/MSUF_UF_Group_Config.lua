@@ -1223,10 +1223,15 @@ local function CollectSpellIndicatorSpecs(siCfg, si)
     end
   end
   if selected == "multi" then
+    local allSpecsKey = si and si.ALL_SPECS_KEY
+    local allSpecsConfig = allSpecsKey and type(siCfg and siCfg.specs) == "table" and siCfg.specs[allSpecsKey]
+    if type(allSpecsConfig) == "table" and next(allSpecsConfig) ~= nil then
+      Add(allSpecsKey)
+    end
     local multi = type(siCfg and siCfg.multiSpecs) == "table" and siCfg.multiSpecs or nil
     if multi then
       for specKey, enabled in pairs(multi) do
-        if enabled then Add(specKey) end
+        if enabled and specKey ~= allSpecsKey then Add(specKey) end
       end
     end
   elseif selected ~= "auto" then

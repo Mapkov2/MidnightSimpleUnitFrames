@@ -20,25 +20,69 @@ GF.SpellIndicators = SI
 
 SI.SpecMap = {}
 SI.SpecInfo = {}
-local function Spec(classToken, specIndex, specKey, specID)
+local function Spec(classToken, specIndex, specKey, specID, builtIn)
   SI.SpecMap[classToken .. "_" .. specIndex] = specKey
   SI.SpecInfo[specKey] = {
     display = specKey:gsub("(%l)(%u)", "%1 %2"),
     class = classToken,
     specID = specID,
+    customOnly = builtIn ~= true or nil,
   }
 end
-Spec("DRUID", 4, "RestorationDruid", 105)
-Spec("SHAMAN", 3, "RestorationShaman", 264)
-Spec("PRIEST", 1, "DisciplinePriest", 256)
-Spec("PRIEST", 2, "HolyPriest", 257)
-Spec("PRIEST", 3, "ShadowPriest", 258)
-Spec("PALADIN", 1, "HolyPaladin", 65)
-Spec("PALADIN", 2, "ProtectionPaladin", 66)
-Spec("PALADIN", 3, "RetributionPaladin", 70)
-Spec("EVOKER", 2, "PreservationEvoker", 1468)
-Spec("EVOKER", 3, "AugmentationEvoker", 1473)
-Spec("MONK", 2, "MistweaverMonk", 270)
+
+-- Multi-Spec is also the unrestricted custom-buff workspace. Keep every
+-- Retail specialization addressable here, even when MSUF ships no built-in
+-- indicators for it, so DPS and tank specs can track arbitrary exact Aura IDs.
+-- customOnly keeps those empty specs out of the single-spec preset picker.
+Spec("DEATHKNIGHT", 1, "BloodDeathKnight", 250)
+Spec("DEATHKNIGHT", 2, "FrostDeathKnight", 251)
+Spec("DEATHKNIGHT", 3, "UnholyDeathKnight", 252)
+Spec("DEMONHUNTER", 1, "HavocDemonHunter", 577)
+Spec("DEMONHUNTER", 2, "VengeanceDemonHunter", 581)
+Spec("DEMONHUNTER", 3, "DevourerDemonHunter", 1480)
+Spec("DRUID", 1, "BalanceDruid", 102)
+Spec("DRUID", 2, "FeralDruid", 103)
+Spec("DRUID", 3, "GuardianDruid", 104)
+Spec("DRUID", 4, "RestorationDruid", 105, true)
+Spec("EVOKER", 1, "DevastationEvoker", 1467)
+Spec("EVOKER", 2, "PreservationEvoker", 1468, true)
+Spec("EVOKER", 3, "AugmentationEvoker", 1473, true)
+Spec("HUNTER", 1, "BeastMasteryHunter", 253)
+Spec("HUNTER", 2, "MarksmanshipHunter", 254)
+Spec("HUNTER", 3, "SurvivalHunter", 255)
+Spec("MAGE", 1, "ArcaneMage", 62)
+Spec("MAGE", 2, "FireMage", 63)
+Spec("MAGE", 3, "FrostMage", 64)
+Spec("MONK", 1, "BrewmasterMonk", 268)
+Spec("MONK", 2, "MistweaverMonk", 270, true)
+Spec("MONK", 3, "WindwalkerMonk", 269)
+Spec("PALADIN", 1, "HolyPaladin", 65, true)
+Spec("PALADIN", 2, "ProtectionPaladin", 66, true)
+Spec("PALADIN", 3, "RetributionPaladin", 70, true)
+Spec("PRIEST", 1, "DisciplinePriest", 256, true)
+Spec("PRIEST", 2, "HolyPriest", 257, true)
+Spec("PRIEST", 3, "ShadowPriest", 258, true)
+Spec("ROGUE", 1, "AssassinationRogue", 259)
+Spec("ROGUE", 2, "OutlawRogue", 260)
+Spec("ROGUE", 3, "SubtletyRogue", 261)
+Spec("SHAMAN", 1, "ElementalShaman", 262)
+Spec("SHAMAN", 2, "EnhancementShaman", 263)
+Spec("SHAMAN", 3, "RestorationShaman", 264, true)
+Spec("WARLOCK", 1, "AfflictionWarlock", 265)
+Spec("WARLOCK", 2, "DemonologyWarlock", 266)
+Spec("WARLOCK", 3, "DestructionWarlock", 267)
+Spec("WARRIOR", 1, "ArmsWarrior", 71)
+Spec("WARRIOR", 2, "FuryWarrior", 72)
+Spec("WARRIOR", 3, "ProtectionWarrior", 73)
+
+-- Shared Multi-Spec workspace. Custom entries stored under this key compile
+-- once whenever Multi-Spec is active and therefore apply to every WoW spec.
+SI.ALL_SPECS_KEY = "AllSpecs"
+SI.SpecInfo[SI.ALL_SPECS_KEY] = {
+  display = "All Specs (Shared)",
+  customOnly = true,
+  universal = true,
+}
 
 local PALADIN_BLESSING_IDS = {
   BlessingOfProtection = 1022,
