@@ -788,7 +788,10 @@ end
 local function BuildBasics(ctx, builder, unit, label)
     -- Default-open so the page greets users with real settings instead of a
     -- stack of closed headers; saved accordion state still wins afterwards.
-    local sec = builder:CollapsibleSection("frame_basics", "Frame Basics", 202, true)
+    -- Leave a full footer gutter below the disabled-frame notice. The next
+    -- accordion header is created later and can otherwise cover the notice's
+    -- lower edge at some UI scales.
+    local sec = builder:CollapsibleSection("frame_basics", "Frame Basics", 216, true)
     if W.AttachContextColorReferences then
         local function EffectiveHealthMode()
             return NormalizeHealthColorMode(GetConf(unit).healthColorMode) or GlobalHealthColorMode()

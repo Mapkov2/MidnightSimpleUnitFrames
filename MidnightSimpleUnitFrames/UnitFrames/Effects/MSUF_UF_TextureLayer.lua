@@ -44,6 +44,50 @@ local Layers = MSUF.UF and MSUF.UF.Layers or {}
 
 local SLOT_PREFIXES = { "texLayer", "texLayer2", "texLayer3" }
 TextureLayer.SLOT_PREFIXES = SLOT_PREFIXES
+local function BuildSlotKeys(prefix)
+  return {
+    prefix = prefix,
+    Enabled = prefix .. "Enabled",
+    CustomTexturePath = prefix .. "CustomTexturePath",
+    Texture = prefix .. "Texture",
+    ColorTreatment = prefix .. "ColorTreatment",
+    Visibility = prefix .. "Visibility",
+    ColorMode = prefix .. "ColorMode",
+    RoundedClip = prefix .. "RoundedClip",
+    Strata = prefix .. "Strata",
+    Level = prefix .. "Level",
+    FollowFrameAlpha = prefix .. "FollowFrameAlpha",
+    Alpha = prefix .. "Alpha",
+    AnchorTarget = prefix .. "AnchorTarget",
+    Anchor = prefix .. "Anchor",
+    Width = prefix .. "Width",
+    Height = prefix .. "Height",
+    OffsetX = prefix .. "OffsetX",
+    OffsetY = prefix .. "OffsetY",
+    BlendMode = prefix .. "BlendMode",
+    CropMode = prefix .. "CropMode",
+    MirrorH = prefix .. "MirrorH",
+    MirrorV = prefix .. "MirrorV",
+    ColorR = prefix .. "ColorR",
+    ColorG = prefix .. "ColorG",
+    ColorB = prefix .. "ColorB",
+    GradientEnabled = prefix .. "GradientEnabled",
+    Gradient2R = prefix .. "Gradient2R",
+    Gradient2G = prefix .. "Gradient2G",
+    Gradient2B = prefix .. "Gradient2B",
+    GradientDirRight = prefix .. "GradientDirRight",
+    GradientDirLeft = prefix .. "GradientDirLeft",
+    GradientDirUp = prefix .. "GradientDirUp",
+    GradientDirDown = prefix .. "GradientDirDown",
+    EdgeSoftness = prefix .. "EdgeSoftness",
+  }
+end
+local SLOT_KEYS = {
+  BuildSlotKeys(SLOT_PREFIXES[1]),
+  BuildSlotKeys(SLOT_PREFIXES[2]),
+  BuildSlotKeys(SLOT_PREFIXES[3]),
+}
+local SLOT_BITS = { 1, 2, 4 }
 
 local VALID_POINTS = {
   TOPLEFT = true, TOP = true, TOPRIGHT = true,
@@ -77,10 +121,10 @@ local function ConfForUnitKey(unitKey)
   return type(conf) == "table" and conf or nil
 end
 
-local function ResolveLayerTexture(conf, prefix)
-  local custom = conf[prefix .. "CustomTexturePath"]
+local function ResolveLayerTexture(conf, prefix, keys)
+  local custom = conf[keys and keys.CustomTexturePath or (prefix .. "CustomTexturePath")]
   if type(custom) == "string" and custom ~= "" then return custom end
-  local key = conf[prefix .. "Texture"]
+  local key = conf[keys and keys.Texture or (prefix .. "Texture")]
   if type(key) == "string" and key ~= "" then
     local resolve = _G.MSUF_ResolveStatusbarTextureKey
     local texture = type(resolve) == "function" and resolve(key) or nil
@@ -98,8 +142,9 @@ local function ResolveLayerTexture(conf, prefix)
   return WHITE8
 end
 
-local function ApplyColorTreatment(tex, conf, prefix)
-  local monochrome = conf and conf[prefix .. "ColorTreatment"] == "MONOCHROME"
+local function ApplyColorTreatment(tex, conf, prefix, keys)
+  local monochrome = conf
+    and conf[keys and keys.ColorTreatment or (prefix .. "ColorTreatment")] == "MONOCHROME"
   if tex and tex.SetDesaturated then
     -- Always stamp both states because texture regions are reused across
     -- profile changes and Menu2 edits.
@@ -158,25 +203,44 @@ local wantUnitTargetTarget = false
 local wantUnitTargetFocus = false
 local wantBossEvents = false
 local RefreshUnitTextureLayers
+local RefreshDynamicTextureLayers
+local DYNAMIC_MASK_FIELDS = {
+  "_msufTexLayerRegenMask",
+  "_msufTexLayerTargetMask",
+  "_msufTexLayerTargetColorMask",
+  "_msufTexLayerFocusMask",
+  "_msufTexLayerFocusColorMask",
+  "_msufTexLayerUnitTargetTargetMask",
+  "_msufTexLayerUnitTargetTargetColorMask",
+  "_msufTexLayerUnitTargetFocusMask",
+  "_msufTexLayerUnitTargetFocusColorMask",
+  "_msufTexLayerBossMask",
+  "_msufTexLayerBossColorMask",
+}
+local dynamicFrameLists, dynamicFrameCounts = {}, {}
+for i = 1, #DYNAMIC_MASK_FIELDS do
+  local field = DYNAMIC_MASK_FIELDS[i]
+  dynamicFrameLists[field] = {}
+  dynamicFrameCounts[field] = 0
+end
 
 local function DriverOnEvent(_, event, unit)
   if event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then
-    RefreshUnitTextureLayers(nil)
+    RefreshDynamicTextureLayers("_msufTexLayerRegenMask")
   elseif event == "PLAYER_TARGET_CHANGED" then
-    -- A Current Target layer can belong to Player, Pet, Focus, Boss or ToT,
-    -- and both the previously-targeted and newly-targeted frame must repaint.
-    RefreshUnitTextureLayers(nil)
+    RefreshDynamicTextureLayers("_msufTexLayerTargetMask", "_msufTexLayerTargetColorMask")
   elseif event == "PLAYER_FOCUS_CHANGED" then
-    RefreshUnitTextureLayers("focus")
-    RefreshUnitTextureLayers("focustarget")
+    RefreshDynamicTextureLayers("_msufTexLayerFocusMask", "_msufTexLayerFocusColorMask")
   elseif event == "UNIT_TARGET" then
     if unit == "target" then
-      RefreshUnitTextureLayers("targettarget")
+      RefreshDynamicTextureLayers("_msufTexLayerUnitTargetTargetMask",
+        "_msufTexLayerUnitTargetTargetColorMask")
     elseif unit == "focus" then
-      RefreshUnitTextureLayers("focustarget")
+      RefreshDynamicTextureLayers("_msufTexLayerUnitTargetFocusMask",
+        "_msufTexLayerUnitTargetFocusColorMask")
     end
   elseif event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" then
-    RefreshUnitTextureLayers("boss")
+    RefreshDynamicTextureLayers("_msufTexLayerBossMask", "_msufTexLayerBossColorMask")
   end
 end
 
@@ -221,26 +285,110 @@ local function SyncDriverEvents()
   SetDriverEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT", wantBossEvents)
 end
 
-local function NoteDynamicNeeds(unitKey, conf, prefix)
-  local visibility = conf[prefix .. "Visibility"]
-  if visibility == "COMBAT" or visibility == "OOC" then wantRegenEvents = true end
-  if visibility == "TARGET" then wantTargetEvents = true end
-  if (visibility == "TARGET" or conf[prefix .. "ColorMode"] == "CLASS") then
-    if unitKey == "targettarget" then wantUnitTargetTarget = true end
-    if unitKey == "focustarget" then wantUnitTargetFocus = true end
+local function AddMaskBit(mask, bit)
+  return mask % (bit + bit) >= bit and mask or (mask + bit)
+end
+
+-- Compile the exact slot set each dynamic event can affect. The masks are
+-- rebuilt only by the cold visual-refresh path; combat/target events merely
+-- consume them and never rescan configuration or restamp unrelated slots.
+local function CompileDynamicMasks(frame, unitKey, conf)
+  local regenMask, targetMask, focusMask = 0, 0, 0
+  local unitTargetTargetMask, unitTargetFocusMask, bossMask = 0, 0, 0
+  local targetColorMask, focusColorMask = 0, 0
+  local unitTargetTargetColorMask, unitTargetFocusColorMask, bossColorMask = 0, 0, 0
+  local bossUnit = unitKey:match("^boss") ~= nil
+  for slot = 1, #SLOT_KEYS do
+    local keys = SLOT_KEYS[slot]
+    if conf[keys.Enabled] == true then
+      local bit = SLOT_BITS[slot]
+      local visibility = conf[keys.Visibility]
+      local classColor = conf[keys.ColorMode] == "CLASS"
+      if visibility == "COMBAT" or visibility == "OOC" then
+        regenMask = AddMaskBit(regenMask, bit)
+      end
+      -- A Current Target layer can belong to any displayed single unit; both
+      -- the previous and new match must repaint on PLAYER_TARGET_CHANGED.
+      if visibility == "TARGET" then
+        targetMask = AddMaskBit(targetMask, bit)
+      end
+      if unitKey == "target" or unitKey == "targettarget" then
+        if classColor then
+          if visibility == "TARGET" then
+            targetMask = AddMaskBit(targetMask, bit)
+          else
+            targetColorMask = AddMaskBit(targetColorMask, bit)
+          end
+        end
+      end
+      if unitKey == "focus" or unitKey == "focustarget" then
+        if visibility == "TARGET" then
+          focusMask = AddMaskBit(focusMask, bit)
+        elseif classColor then
+          focusColorMask = AddMaskBit(focusColorMask, bit)
+        end
+      end
+      if unitKey == "targettarget" and (visibility == "TARGET" or classColor) then
+        if visibility == "TARGET" then
+          unitTargetTargetMask = AddMaskBit(unitTargetTargetMask, bit)
+        else
+          unitTargetTargetColorMask = AddMaskBit(unitTargetTargetColorMask, bit)
+        end
+      end
+      if unitKey == "focustarget" and (visibility == "TARGET" or classColor) then
+        if visibility == "TARGET" then
+          unitTargetFocusMask = AddMaskBit(unitTargetFocusMask, bit)
+        else
+          unitTargetFocusColorMask = AddMaskBit(unitTargetFocusColorMask, bit)
+        end
+      end
+      if bossUnit and (visibility == "TARGET" or classColor) then
+        if visibility == "TARGET" then
+          bossMask = AddMaskBit(bossMask, bit)
+        else
+          bossColorMask = AddMaskBit(bossColorMask, bit)
+        end
+      end
+    end
   end
-  if conf[prefix .. "ColorMode"] == "CLASS" then
-    if unitKey == "target" or unitKey == "targettarget" then wantTargetEvents = true end
-    if unitKey == "focus" or unitKey == "focustarget" then wantFocusEvents = true end
-    if unitKey:match("^boss") then wantBossEvents = true end
+  frame._msufTexLayerRegenMask = regenMask > 0 and regenMask or nil
+  frame._msufTexLayerTargetMask = targetMask > 0 and targetMask or nil
+  frame._msufTexLayerTargetColorMask = targetColorMask > 0 and targetColorMask or nil
+  frame._msufTexLayerFocusMask = focusMask > 0 and focusMask or nil
+  frame._msufTexLayerFocusColorMask = focusColorMask > 0 and focusColorMask or nil
+  frame._msufTexLayerUnitTargetTargetMask = unitTargetTargetMask > 0 and unitTargetTargetMask or nil
+  frame._msufTexLayerUnitTargetTargetColorMask = unitTargetTargetColorMask > 0
+    and unitTargetTargetColorMask or nil
+  frame._msufTexLayerUnitTargetFocusMask = unitTargetFocusMask > 0 and unitTargetFocusMask or nil
+  frame._msufTexLayerUnitTargetFocusColorMask = unitTargetFocusColorMask > 0
+    and unitTargetFocusColorMask or nil
+  frame._msufTexLayerBossMask = bossMask > 0 and bossMask or nil
+  frame._msufTexLayerBossColorMask = bossColorMask > 0 and bossColorMask or nil
+  if regenMask > 0 then wantRegenEvents = true end
+  if targetMask > 0 or targetColorMask > 0 then wantTargetEvents = true end
+  if focusMask > 0 or focusColorMask > 0 then wantFocusEvents = true end
+  if unitTargetTargetMask > 0 or unitTargetTargetColorMask > 0 then wantUnitTargetTarget = true end
+  if unitTargetFocusMask > 0 or unitTargetFocusColorMask > 0 then wantUnitTargetFocus = true end
+  -- Match the previous registration contract: boss lifecycle events exist only
+  -- for class-colored boss layers; TARGET visibility is refreshed incidentally
+  -- when such a layer is present, just as the former scoped full refresh did.
+  if bossUnit then
+    for slot = 1, #SLOT_KEYS do
+      local keys = SLOT_KEYS[slot]
+      if conf[keys.Enabled] == true and conf[keys.ColorMode] == "CLASS" then
+        wantBossEvents = true
+        break
+      end
+    end
   end
 end
 
 --- Rounded clipping borrows the dispel-overlay mask hook from RoundedFrames.
 --- Masks cannot be detached through that hook, so un-clipping swaps in a fresh
 --- texture object (cold path, toggles are rare).
-local function WantsRoundedClip(conf, prefix)
-  return conf[prefix .. "RoundedClip"] == true and _G.MSUF_RoundedUF_Active == true
+local function WantsRoundedClip(conf, prefix, keys)
+  return conf[keys and keys.RoundedClip or (prefix .. "RoundedClip")] == true
+    and _G.MSUF_RoundedUF_Active == true
     and type(_G.MSUF_RoundedUF_OnDispelOverlayChanged) == "function"
 end
 
@@ -307,7 +455,13 @@ local function ApplySoftEdgeMask(holder, textures, rawSoftness)
     ClearSoftEdgeMask(holder)
     return false
   end
-  local active = {}
+  local active = holder.softEdgeActiveTextures
+  if not active then
+    active = {}
+    holder.softEdgeActiveTextures = active
+  else
+    for tex in pairs(active) do active[tex] = nil end
+  end
   for i = 1, #textures do
     local tex = textures[i]
     if tex then active[tex] = true end
@@ -376,9 +530,9 @@ local function ApplyClip(frame, holder, tex, clipWanted)
   end
 end
 
-local function LayerVisible(conf, prefix, frame, unitKey)
+local function LayerVisible(conf, prefix, frame, unitKey, keys)
   if _G.MSUF_UnitEditModeActive == true then return true end
-  local visibility = conf[prefix .. "Visibility"]
+  local visibility = conf[keys and keys.Visibility or (prefix .. "Visibility")]
   if visibility == "TARGET" then
     local unit = frame and frame.MSUFUnitKey or unitKey
     -- Menu previews have no live unit token; keep the configured art visible
@@ -398,16 +552,16 @@ TextureLayer.LayerVisible = LayerVisible
 TextureLayer.ResolveLayerTexture = ResolveLayerTexture
 TextureLayer.ResolveClassRGB = ResolveClassRGB
 
-local function ResolveTexCoords(conf, prefix)
+local function ResolveTexCoords(conf, prefix, keys)
   local left, right, top, bottom = 0, 1, 0, 1
-  local cropMode = conf[prefix .. "CropMode"]
+  local cropMode = conf[keys and keys.CropMode or (prefix .. "CropMode")]
   if cropMode == "TOP_HALF" then
     bottom = 0.5
   elseif cropMode == "BOTTOM_HALF" then
     top = 0.5
   end
-  if conf[prefix .. "MirrorH"] == true then left, right = right, left end
-  if conf[prefix .. "MirrorV"] == true then top, bottom = bottom, top end
+  if conf[keys and keys.MirrorH or (prefix .. "MirrorH")] == true then left, right = right, left end
+  if conf[keys and keys.MirrorV or (prefix .. "MirrorV")] == true then top, bottom = bottom, top end
   return left, right, top, bottom
 end
 TextureLayer.ResolveTexCoords = ResolveTexCoords
@@ -424,11 +578,35 @@ local function ApplyLayerStrata(frame, holder, strata)
 end
 TextureLayer.ApplyLayerStrata = ApplyLayerStrata
 
+local function ApplyBaseColor(holder, tex, r, g, b)
+  if tex.SetGradient and CreateColor then
+    -- One SetGradient call with equal ends keeps the base texture solid and
+    -- doubles as the "clear gradient" path after profile/copy changes. Reuse
+    -- the ColorMixin so recurring dynamic-unit events allocate nothing.
+    local solid = holder._msufTexLayerSolidColor
+    if not solid then
+      solid = CreateColor(r, g, b, 1)
+      holder._msufTexLayerSolidColor = solid
+    elseif solid.SetRGBA then
+      solid:SetRGBA(r, g, b, 1)
+    else
+      solid.r, solid.g, solid.b, solid.a = r, g, b, 1
+    end
+    tex:SetGradient("HORIZONTAL", solid, solid)
+  elseif tex.SetVertexColor then
+    tex:SetVertexColor(r, g, b, 1)
+  end
+  holder._msufTexLayerBaseR = r
+  holder._msufTexLayerBaseG = g
+  holder._msufTexLayerBaseB = b
+end
+
 local function ApplySlot(frame, conf, unitKey, slot)
-  local prefix = SLOT_PREFIXES[slot]
+  local keys = SLOT_KEYS[slot]
+  local prefix = keys.prefix
   local holders = frame._msufTexLayers
   local holder = holders and holders[slot]
-  if conf[prefix .. "Enabled"] ~= true or not LayerVisible(conf, prefix, frame, unitKey) then
+  if conf[keys.Enabled] ~= true or not LayerVisible(conf, prefix, frame, unitKey, keys) then
     if holder then
       ClearSoftEdgeMask(holder)
       holder:Hide()
@@ -446,9 +624,9 @@ local function ApplySlot(frame, conf, unitKey, slot)
     holders[slot] = holder
   end
 
-  ApplyLayerStrata(frame, holder, conf[prefix .. "Strata"])
+  ApplyLayerStrata(frame, holder, conf[keys.Strata])
   if holder.SetFrameLevel and frame.GetFrameLevel then
-    local offset = tonumber(conf[prefix .. "Level"]) or 1
+    local offset = tonumber(conf[keys.Level]) or 1
     if offset < 0 then offset = 0 elseif offset > 30 then offset = 30 end
     local level = Layers.ElementLevel and Layers.ElementLevel(offset, 1, 0)
       or ((frame:GetFrameLevel() or 0) + offset)
@@ -462,21 +640,21 @@ local function ApplySlot(frame, conf, unitKey, slot)
   -- unless the user detaches the layer from it; the layer's own alpha always
   -- applies on top.
   if holder.SetIgnoreParentAlpha then
-    holder:SetIgnoreParentAlpha(conf[prefix .. "FollowFrameAlpha"] == false)
+    holder:SetIgnoreParentAlpha(conf[keys.FollowFrameAlpha] == false)
   end
-  holder:SetAlpha(Clamp01(conf[prefix .. "Alpha"], 1))
+  holder:SetAlpha(Clamp01(conf[keys.Alpha], 1))
 
   -- Placement: anchor to the frame or one of its elements.
-  local anchorMode = conf[prefix .. "AnchorTarget"]
+  local anchorMode = conf[keys.AnchorTarget]
   local target = ResolveAnchorTarget(frame, anchorMode)
-  local point = conf[prefix .. "Anchor"]
+  local point = conf[keys.Anchor]
   if not VALID_POINTS[point] then point = "TOP" end
-  local width = tonumber(conf[prefix .. "Width"]) or 0
+  local width = tonumber(conf[keys.Width]) or 0
   if width <= 0 then
     width = (target.GetWidth and target:GetWidth()) or (frame.GetWidth and frame:GetWidth()) or 100
     if issecretvalue(width) == true or not width or width < 1 then width = 100 end
   end
-  local height = tonumber(conf[prefix .. "Height"])
+  local height = tonumber(conf[keys.Height])
   if height == nil then height = 16 end
   if height <= 0 then
     height = (target.GetHeight and target:GetHeight()) or (frame.GetHeight and frame:GetHeight()) or 16
@@ -484,45 +662,46 @@ local function ApplySlot(frame, conf, unitKey, slot)
   end
   holder:SetSize(width, height)
   holder:ClearAllPoints()
-  holder:SetPoint(point, target, point, tonumber(conf[prefix .. "OffsetX"]) or 0, tonumber(conf[prefix .. "OffsetY"]) or 0)
+  holder:SetPoint(point, target, point, tonumber(conf[keys.OffsetX]) or 0, tonumber(conf[keys.OffsetY]) or 0)
 
-  local clipWanted = WantsRoundedClip(conf, prefix)
+  local clipWanted = WantsRoundedClip(conf, prefix, keys)
   local tex = EnsureBaseTexture(holder, clipWanted)
-  tex:SetTexture(ResolveLayerTexture(conf, prefix))
-  ApplyColorTreatment(tex, conf, prefix)
+  tex:SetTexture(ResolveLayerTexture(conf, prefix, keys))
+  ApplyColorTreatment(tex, conf, prefix, keys)
   if tex.SetBlendMode then
-    tex:SetBlendMode(conf[prefix .. "BlendMode"] == "ADD" and "ADD" or "BLEND")
+    tex:SetBlendMode(conf[keys.BlendMode] == "ADD" and "ADD" or "BLEND")
   end
   if tex.SetTexCoord then
-    tex:SetTexCoord(ResolveTexCoords(conf, prefix))
+    tex:SetTexCoord(ResolveTexCoords(conf, prefix, keys))
   end
 
-  local r = Clamp01(conf[prefix .. "ColorR"], 1)
-  local g = Clamp01(conf[prefix .. "ColorG"], 1)
-  local b = Clamp01(conf[prefix .. "ColorB"], 1)
-  if conf[prefix .. "ColorMode"] == "CLASS" then
-    local cr, cg, cb = ResolveClassRGB(unitKey)
-    if cr then r, g, b = cr, cg, cb end
+  local r, g, b
+  if conf[keys.ColorMode] == "CLASS" then
+    r, g, b = ResolveClassRGB(unitKey)
   end
-  if tex.SetGradient and CreateColor then
-    -- One SetGradient call with equal ends keeps the base texture solid and
-    -- doubles as the "clear gradient" path after profile/copy changes.
-    local solid = CreateColor(r, g, b, 1)
-    tex:SetGradient("HORIZONTAL", solid, solid)
-  elseif tex.SetVertexColor then
-    tex:SetVertexColor(r, g, b, 1)
+  if not r then
+    r = Clamp01(conf[keys.ColorR], 1)
+    g = Clamp01(conf[keys.ColorG], 1)
+    b = Clamp01(conf[keys.ColorB], 1)
   end
+  ApplyBaseColor(holder, tex, r, g, b)
   ApplyClip(frame, holder, tex, clipWanted)
-  local featherTextures = { tex }
+  local featherTextures = holder._msufTexLayerFeatherTextures
+  if not featherTextures then
+    featherTextures = {}
+    holder._msufTexLayerFeatherTextures = featherTextures
+  end
+  featherTextures[1] = tex
+  local featherCount = 1
 
   -- Bars-style multi-direction gradient: one WHITE8 overlay per active edge,
   -- fading from transparent to the gradient end color toward that edge.
-  local gradientOn = conf[prefix .. "GradientEnabled"] == true
-  local r2 = Clamp01(conf[prefix .. "Gradient2R"], 0)
-  local g2 = Clamp01(conf[prefix .. "Gradient2G"], 0)
-  local b2 = Clamp01(conf[prefix .. "Gradient2B"], 0)
+  local gradientOn = conf[keys.GradientEnabled] == true
+  local r2 = Clamp01(conf[keys.Gradient2R], 0)
+  local g2 = Clamp01(conf[keys.Gradient2G], 0)
+  local b2 = Clamp01(conf[keys.Gradient2B], 0)
   for direction, suffix in pairs(GRADIENT_DIR_SUFFIXES) do
-    local value = conf[prefix .. suffix]
+    local value = conf[keys[suffix]]
     local active = gradientOn and (direction == "right" and value ~= false or value == true)
     if active then
       local overlay = EnsureOverlayTexture(holder, direction, clipWanted)
@@ -530,19 +709,39 @@ local function ApplySlot(frame, conf, unitKey, slot)
       local minA, maxA = 0, 1
       if direction == "left" or direction == "down" then minA, maxA = 1, 0 end
       if overlay.SetGradient and CreateColor then
-        overlay:SetGradient(orientation, CreateColor(r2, g2, b2, minA), CreateColor(r2, g2, b2, maxA))
+        local minColor = overlay._msufTexLayerMinColor
+        if not minColor then
+          minColor = CreateColor(r2, g2, b2, minA)
+          overlay._msufTexLayerMinColor = minColor
+        elseif minColor.SetRGBA then
+          minColor:SetRGBA(r2, g2, b2, minA)
+        else
+          minColor.r, minColor.g, minColor.b, minColor.a = r2, g2, b2, minA
+        end
+        local maxColor = overlay._msufTexLayerMaxColor
+        if not maxColor then
+          maxColor = CreateColor(r2, g2, b2, maxA)
+          overlay._msufTexLayerMaxColor = maxColor
+        elseif maxColor.SetRGBA then
+          maxColor:SetRGBA(r2, g2, b2, maxA)
+        else
+          maxColor.r, maxColor.g, maxColor.b, maxColor.a = r2, g2, b2, maxA
+        end
+        overlay:SetGradient(orientation, minColor, maxColor)
       elseif overlay.SetVertexColor then
         overlay:SetVertexColor(r2, g2, b2, 0.5)
       end
       ApplyClip(frame, holder, overlay, clipWanted)
-      featherTextures[#featherTextures + 1] = overlay
+      featherCount = featherCount + 1
+      featherTextures[featherCount] = overlay
       overlay:Show()
     else
       local overlay = holder.grads and holder.grads[direction]
       if overlay then overlay:Hide() end
     end
   end
-  ApplySoftEdgeMask(holder, featherTextures, conf[prefix .. "EdgeSoftness"])
+  for i = featherCount + 1, #featherTextures do featherTextures[i] = nil end
+  ApplySoftEdgeMask(holder, featherTextures, conf[keys.EdgeSoftness])
   holder.clipApplied = clipWanted or nil
   holder:Show()
 end
@@ -558,6 +757,76 @@ local function ApplyToUnitFrame(frame)
   end
 end
 TextureLayer.ApplyToUnitFrame = ApplyToUnitFrame
+
+local function ApplySlotMask(frame, conf, unitKey, mask)
+  if mask == 1 then
+    ApplySlot(frame, conf, unitKey, 1)
+  elseif mask == 2 then
+    ApplySlot(frame, conf, unitKey, 2)
+  elseif mask == 3 then
+    ApplySlot(frame, conf, unitKey, 1)
+    ApplySlot(frame, conf, unitKey, 2)
+  elseif mask == 4 then
+    ApplySlot(frame, conf, unitKey, 3)
+  elseif mask == 5 then
+    ApplySlot(frame, conf, unitKey, 1)
+    ApplySlot(frame, conf, unitKey, 3)
+  elseif mask == 6 then
+    ApplySlot(frame, conf, unitKey, 2)
+    ApplySlot(frame, conf, unitKey, 3)
+  elseif mask == 7 then
+    ApplySlot(frame, conf, unitKey, 1)
+    ApplySlot(frame, conf, unitKey, 2)
+    ApplySlot(frame, conf, unitKey, 3)
+  end
+end
+
+-- Dynamic-unit class changes do not alter layout, texture, masks, visibility,
+-- alpha, or gradients. Keep those events on a color-only path after the cold
+-- apply has created the holder; a hidden/uncreated layer will be fully applied
+-- by its own visibility event later.
+local function ApplyClassColorSlot(frame, conf, unitKey, slot)
+  local keys = SLOT_KEYS[slot]
+  if conf[keys.Enabled] ~= true or conf[keys.ColorMode] ~= "CLASS" then return end
+  local holders = frame._msufTexLayers
+  local holder = holders and holders[slot]
+  local tex = holder and holder.tex
+  if not tex then return end
+  if holder.IsShown and holder:IsShown() ~= true then return end
+  local r, g, b = ResolveClassRGB(unitKey)
+  if not r then
+    r = Clamp01(conf[keys.ColorR], 1)
+    g = Clamp01(conf[keys.ColorG], 1)
+    b = Clamp01(conf[keys.ColorB], 1)
+  end
+  if holder._msufTexLayerBaseR == r
+    and holder._msufTexLayerBaseG == g
+    and holder._msufTexLayerBaseB == b then return end
+  ApplyBaseColor(holder, tex, r, g, b)
+end
+
+local function ApplyClassColorMask(frame, conf, unitKey, mask)
+  if mask == 1 then
+    ApplyClassColorSlot(frame, conf, unitKey, 1)
+  elseif mask == 2 then
+    ApplyClassColorSlot(frame, conf, unitKey, 2)
+  elseif mask == 3 then
+    ApplyClassColorSlot(frame, conf, unitKey, 1)
+    ApplyClassColorSlot(frame, conf, unitKey, 2)
+  elseif mask == 4 then
+    ApplyClassColorSlot(frame, conf, unitKey, 3)
+  elseif mask == 5 then
+    ApplyClassColorSlot(frame, conf, unitKey, 1)
+    ApplyClassColorSlot(frame, conf, unitKey, 3)
+  elseif mask == 6 then
+    ApplyClassColorSlot(frame, conf, unitKey, 2)
+    ApplyClassColorSlot(frame, conf, unitKey, 3)
+  elseif mask == 7 then
+    ApplyClassColorSlot(frame, conf, unitKey, 1)
+    ApplyClassColorSlot(frame, conf, unitKey, 2)
+    ApplyClassColorSlot(frame, conf, unitKey, 3)
+  end
+end
 
 local function FrameMatchesUnitScope(frame, unit)
   if unit == nil then return true end
@@ -575,21 +844,60 @@ end
 
 local function RecomputeDriverNeeds(frames)
   wantRegenEvents, wantTargetEvents, wantFocusEvents, wantUnitTargetTarget, wantUnitTargetFocus, wantBossEvents = false, false, false, false, false, false
+  for i = 1, #DYNAMIC_MASK_FIELDS do
+    local field = DYNAMIC_MASK_FIELDS[i]
+    local list = dynamicFrameLists[field]
+    for index = 1, dynamicFrameCounts[field] do list[index] = nil end
+    dynamicFrameCounts[field] = 0
+  end
   for _, frame in pairs(frames) do
     if frame and frame._msufIsGroupFrame ~= true then
       local unitKey = frame.MSUFUnitKey
       local conf = unitKey and ConfForUnitKey(unitKey)
       if conf then
-        for slot = 1, #SLOT_PREFIXES do
-          local prefix = SLOT_PREFIXES[slot]
-          if conf[prefix .. "Enabled"] == true then
-            NoteDynamicNeeds(unitKey, conf, prefix)
+        CompileDynamicMasks(frame, unitKey, conf)
+        for i = 1, #DYNAMIC_MASK_FIELDS do
+          local field = DYNAMIC_MASK_FIELDS[i]
+          if frame[field] then
+            local count = dynamicFrameCounts[field] + 1
+            dynamicFrameCounts[field] = count
+            dynamicFrameLists[field][count] = frame
           end
         end
+      else
+        for i = 1, #DYNAMIC_MASK_FIELDS do frame[DYNAMIC_MASK_FIELDS[i]] = nil end
       end
     end
   end
   SyncDriverEvents()
+end
+
+local function RefreshDynamicMask(maskField, colorOnly)
+  local frames = dynamicFrameLists[maskField]
+  local count = dynamicFrameCounts[maskField] or 0
+  if not frames or count == 0 then return false end
+  for i = 1, count do
+    local frame = frames[i]
+    local mask = frame[maskField]
+    if mask then
+      local unitKey = frame.MSUFUnitKey
+      local conf = unitKey and ConfForUnitKey(unitKey)
+      if conf then
+        if colorOnly then
+          ApplyClassColorMask(frame, conf, unitKey, mask)
+        else
+          ApplySlotMask(frame, conf, unitKey, mask)
+        end
+      end
+    end
+  end
+  return true
+end
+
+RefreshDynamicTextureLayers = function(maskField, colorMaskField)
+  local refreshed = RefreshDynamicMask(maskField, false)
+  if colorMaskField and RefreshDynamicMask(colorMaskField, true) then refreshed = true end
+  return refreshed
 end
 
 RefreshUnitTextureLayers = function(unit)

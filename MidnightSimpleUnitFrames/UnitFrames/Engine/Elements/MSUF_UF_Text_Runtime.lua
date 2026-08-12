@@ -2000,6 +2000,13 @@ HealthText.NoDispatchUpdates = {
   [MarkHealthTextDirty] = true,
   [MarkGroupHealthTextDirty] = true,
 }
+-- Core may omit a repeated UNIT_HEALTH marker while either mask containing the
+-- health bit is already pending. The deferred writer rereads the latest unit
+-- values at drain time, so repeated markers carry no event payload or state.
+HealthText.DirtyGateUpdates = {
+  [MarkHealthTextDirty] = true,
+  [MarkGroupHealthTextDirty] = true,
+}
 PowerText.NoDispatchUpdates = { [MarkPowerTextDirty] = true }
 
 UF.RegisterElement("PowerText", PowerText)
