@@ -1344,7 +1344,6 @@ modeBuilders.AURA = function(E)
                     CP_StampVertexColor(bar._bg, bgR, bgG, bgB, bgA)
                 end
             end
-            if CP.icicleNativeText and CP.icicleNativeText.Hide then CP.icicleNativeText:Hide() end
             local txt = CP.text
             if txt then
                 local showText = visual and visual.showText == true
@@ -1357,7 +1356,7 @@ modeBuilders.AURA = function(E)
                 end
             end
             local autoHideCur = cur
-            if restrictedApplications or (powerType == "ICICLES" and CP.icicleNativeText) then autoHideCur = nil end
+            if restrictedApplications then autoHideCur = nil end
             CP_CheckAutoHide(autoHideCur, maxPower)
         end
     end

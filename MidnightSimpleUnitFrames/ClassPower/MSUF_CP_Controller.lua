@@ -943,9 +943,6 @@ local CP = {
     spExpires   = nil,     --- GetTime() expiry timestamp (nil = no timer)
     spLocalUntil = nil,    --- brief spellcast-led window before aura correction
     spCachedQ   = -1,      --- skip-if-same quantizer
-    icicleSensor = nil,    --- native AuraContainer fallback for secret Icicles
-    icicleButton = nil,
-    icicleNativeText = nil,
 }
 
 local CPAuras = {
@@ -1183,6 +1180,16 @@ function CPAuras.ScanUnitAuras()
 end
 
 function CPAuras.ProcessUnitAuraUpdate(unitAuraUpdateInfo, powerType, renderMode)
+    if powerType == "ICICLES" then
+        --- Icicles owns one exact player aura. Refresh it directly on each
+        --- UNIT_AURA signal instead of relying on incremental aura identity,
+        --- which can be restricted, incomplete, or unrelated on Midnight.
+        --- The returned applications value remains secret-safe because the
+        --- segmented renderer passes it only to native StatusBar setters.
+        CPAuras.RefreshSpell(CPConst.ICICLES and CPConst.ICICLES.AURA_ID, "stacks")
+        return true
+    end
+
     if not CPAuras.CanProcessIncrementalUpdate(unitAuraUpdateInfo) then
         --- Midnight can hide the incremental payload. Refresh only the aura(s)
         --- consumed by the active resource instead of querying every class.
@@ -1295,9 +1302,6 @@ local function CP_CompileVisual(powerType, renderMode, maxP)
     visual.baseR, visual.baseG, visual.baseB = baseR, baseG, baseB
     visual.bgR, visual.bgG, visual.bgB = bgR, bgG, bgB
     visual.chargedR, visual.chargedG, visual.chargedB = chargedR, chargedG, chargedB
-    if powerType == "ICICLES" and CP.icicleNativeText then
-        CP.icicleNativeText:SetTextColor(baseR, baseG, baseB, 1)
-    end
     visual.runeShowTime = b.runeShowTime ~= false
     visual.timerShowText = b.classPowerShowText == true
     local slotMode = ResolveSlotColorMode(visual.powerToken)
@@ -1375,46 +1379,6 @@ CP.ebonNative = CP_CallBuilder(CPCoreBuilders.EBON_MIGHT, {
     _cpDB = _cpDB,
     CreateFrame = CreateFrame,
 })
-
-local function CP_SetIciclesSensorActive(active)
-    if active and not CP.icicleSensor then
-        local A3 = _G.MSUF_Auras3
-        local createSensor = A3 and A3.CreateClassPowerAuraSensor
-        local icicleID = CPConst.ICICLES and CPConst.ICICLES.AURA_ID
-        if type(createSensor) == "function" and icicleID and CP.container then
-            CP.icicleSensor = createSensor(CP.container, "msuf_cp_icicles", { [icicleID] = true }, function(button)
-                CP.icicleButton = button
-                button:ClearAllPoints()
-                button:SetAllPoints(button:GetParent())
-                button:SetMouseMotionEnabled(false)
-                if button.EnableMouse then button:EnableMouse(false) end
-                button:SetFrameLevel(CP.container:GetFrameLevel() + 16)
-
-                local count = button:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-                count:SetPoint("CENTER", button, "CENTER", 0, 0)
-                count:SetJustifyH("CENTER")
-                count:SetJustifyV("MIDDLE")
-                local r, g, b = ResolveClassPowerColor("ICICLES")
-                count:SetTextColor(r, g, b, 1)
-                count:SetShadowColor(0, 0, 0, 1)
-                count:SetShadowOffset(1, -1)
-
-                -- Keep the native AuraContainer application binding as a hidden
-                -- secret-safe sink. The visible count is owned by CP.text so the
-                -- Show resource text setting and its offsets remain authoritative.
-                button:SetApplicationCount(count, {})
-                count:Hide()
-                CP.icicleNativeText = count
-            end)
-            if CP.icicleSensor then
-                CP.icicleSensor:SetAllPoints(CP.container)
-                CP.icicleSensor:SetFrameLevel(CP.container:GetFrameLevel() + 15)
-            end
-        end
-    end
-
-    if CP.icicleSensor then CP.icicleSensor:SetShown(active == true) end
-end
 
 --- Font / text-offset presentation helpers now live in
 --- ClassPower presentation helpers.
@@ -2225,7 +2189,6 @@ local function FullRefresh()
         --- The container is measurable only now, so a synced detached Power bar
         --- can finally match it.
         CP.RefreshSyncedPowerWidth(playerFrame)
-        CP_SetIciclesSensorActive(powerType == "ICICLES")
         --- Belt-and-suspenders: ensure outline survives parent Hide/Show cycle
         if CP._outline then
             local outlineBars = _cpDB.bars or {}
@@ -2241,7 +2204,6 @@ local function FullRefresh()
     else
         --- Clean up resource runtime state when hiding.
         CP.SetEbonSensorActive(false)
-        CP_SetIciclesSensorActive(false)
         if CP.ironfur and CP.ironfur.SetActive then CP.ironfur.SetActive(false) end
         CP.visual = nil
         if (CP.renderMode == CPK.MODE.RUNE_CD or CP.runeOUAAny or CP.runeNativeAny) and CP_StopRuneOnUpdates then

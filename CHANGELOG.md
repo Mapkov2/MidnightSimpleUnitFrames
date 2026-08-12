@@ -24,7 +24,7 @@
 - Fixed Clique and other click-cast providers losing their Unit Frame bindings after profile or configuration updates. MSUF now preserves provider-owned secure click attributes after the initial fallback setup.
 - Isolated Group Spell Indicator preview positions from live saved positions.
 - Restored continuous Devourer class-resource updates and removed obsolete partial-update ownership from the resource pipeline.
-- Fixed protected Icicle and Maelstrom Weapon stack counts leaving their Class Resource pips empty in combat. Restricted counts now fill the segmented bars through Blizzard's native StatusBar clamping without Lua comparisons.
+- Fixed Icicles showing an Aura icon over Class Resources or retaining incorrect stack counts. Icicles now refreshes the exact player Aura on each Aura change, while protected Icicle and Maelstrom Weapon counts fill their pips through Blizzard's native StatusBar clamping without Lua comparisons.
 - Refreshed Unit Frame names immediately after anchor changes.
 - Restored live Group frames correctly after preview roster handoffs.
 - Honored configured Aura layers for fixed Group slots.
