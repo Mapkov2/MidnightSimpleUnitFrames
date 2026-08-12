@@ -1244,6 +1244,7 @@ local MISC_GENERAL_KEYS = KSW [[
     menuLocale slashMenuSnapEnabled hideAdvancedMenu showWelcomeMessage versionCheckEnabled disableUnitInfoTooltips
     unitInfoTooltipStyle unitTooltipProvider unitTooltipAnchor unitTooltipMode unitTooltipModifier
     showMinimapIcon showNavigationIcons previewDragHintAnimationEnabled playTargetSelectLostSounds ellesmereEditModeIntegration
+    nsrtNicknameIntegration
     highlightEnabled highlightStyle highlightThickness
 ]]
 local MISC_UNIT_KEYS = {}
@@ -1617,6 +1618,7 @@ local function ApplyAfterPageReset(pageKey, info)
     if info and info.kind == "misc" then
         local db = M.EnsureDB()
         local general = db and db.general
+        CallGlobal("MSUF_NSRTNicknames_ApplySetting")
         CallGlobal("MSUF_EllesmereEditMode_SetEnabled",
             not (type(general) == "table" and general.ellesmereEditModeIntegration == false))
         CallGlobal("MSUF_Grid2EditMode_SetEnabled",

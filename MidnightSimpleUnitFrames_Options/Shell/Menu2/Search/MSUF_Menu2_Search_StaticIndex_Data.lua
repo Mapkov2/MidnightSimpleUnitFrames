@@ -10,7 +10,7 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local Search = M.Search or {}
 M.Search = Search
-Search.StaticIndexRecordCount = 2666
+Search.StaticIndexRecordCount = 2667
 Search.StaticIndexBlob = [==[
 auras3_buffs	Border Alpha (%)	slider			Appearance > Icon Style	border alpha	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eappearance%2Eicon-style%2Estylebordercolor-alpha	border alpha appearance icon style auras style appearance icon style stylebordercolor alpha auras3 buffs slider
 auras3_buffs	Border Style	dropdown			Appearance > Icon Style	border style	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eappearance%2Eicon-style%2Eborder-style	border style appearance icon style auras style appearance icon style border style auras3 buffs dropdown
@@ -898,6 +898,7 @@ opt_misc	Style	dropdown	general.highlightStyle		Global > Mouseover	style	idopt_
 opt_misc	Tint menu surfaces	toggle	general.menuAccentTintSurfaces		Accent > Tint	tint menu surfaces	idopt_miscmenu2%2Eopt%2Emisc%2Eglobal%2Esetting%2Emenu%2Eaccent%2Etint%2Esurfaces	tint menu surfaces accent tint opt misc global setting menu accent tint surfaces opt misc toggle general menuaccenttintsurfaces
 opt_misc	Tooltip anchor	dropdown	general.unitTooltipAnchor		Global > Tooltips	tooltip anchor	idopt_miscmenu2%2Eopt%2Emisc%2Eglobal%2Etooltips%2Eanchor	tooltip anchor global tooltips opt misc global tooltips anchor opt misc dropdown general unittooltipanchor
 opt_misc	Tooltip source	dropdown	general.unitTooltipProvider		Global > Tooltips	tooltip source	idopt_miscmenu2%2Eopt%2Emisc%2Eglobal%2Etooltips%2Eprovider	tooltip source global tooltips opt misc global tooltips provider opt misc dropdown general unittooltipprovider
+opt_misc	Use NSRT nicknames on MSUF frames	toggle	general.nsrtNicknameIntegration		Nsrt > Nickname	use nsrt nicknames on msuf frames	idopt_miscmenu2%2Eopt%2Emisc%2Eglobal%2Esetting%2Ensrt%2Enickname%2Eintegration	use nsrt nicknames on msuf frames nsrt nickname opt misc global setting nsrt nickname integration opt misc toggle general nsrtnicknameintegration
 profiles	Active profile	dropdown		switch_profile	Active > Profile	active profile	idprofilesmenu2%2Eprofiles%2Eadvanced%2Eactive%2Eprofile%2Eselect	active profile active profile profiles advanced active profile select profiles dropdown switch profile
 profiles	Auto-switch profile by specialization	toggle	profiles.specAutoSwitch		Auto > Switch	auto switch profile by specialization	idprofilesmenu2%2Eprofiles%2Eadvanced%2Especialization%2Eauto%2Eswitch%2Eenabled	auto switch profile by specialization auto switch profiles advanced specialization auto switch enabled profiles toggle profiles specautoswitch
 profiles	Browse Wago Profiles	button		copy_wago_profiles_link	Advanced > Browse	browse wago profiles	idprofilesmenu2%2Eprofiles%2Eadvanced%2Eprofiles%2Ebrowse%2Ewago	browse wago profiles advanced browse profiles advanced profiles browse wago profiles button copy wago profiles link

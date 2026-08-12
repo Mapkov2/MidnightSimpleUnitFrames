@@ -2495,6 +2495,11 @@ end
 if g.ellesmereEditModeIntegration == nil then
     g.ellesmereEditModeIntegration = true
 end
+--- Northern Sky Raid Tools nicknames are enabled for MSUF by default to
+--- preserve the established integration behavior, with a profile-local opt-out.
+if g.nsrtNicknameIntegration == nil then
+    g.nsrtNicknameIntegration = true
+end
 --- Optional native Edit Mode adapters. The third-party addons remain the sole
 --- owners of their frames and saved positions; these switches only control
 --- whether MSUF registers movers for them.
