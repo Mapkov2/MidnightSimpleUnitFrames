@@ -26,13 +26,12 @@ Data.GF_AURA_ANCHORS = { "CENTER", "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMR
 Data.GF_AURA_GROWTH = { "RIGHTDOWN", "LEFTDOWN", "RIGHTUP", "LEFTUP", "UP", "DOWN" }
 Data.GF_AURA_FILTER_VALUES = {
     buff = {
-        "ALL", "Player", "BigDefensivePlayer", "ExternalDefensivePlayer", "RaidInCombatPlayer",
-        "CancelablePlayer", "NotCancelablePlayer", "RaidPlayer", "BigDefensive",
-        "ExternalDefensive", "RaidInCombat", "Cancelable", "NotCancelable", "Raid", "IMPORTANT",
+        "ALL", "Player", "BigDefensive", "BigDefensivePlayer", "ExternalDefensive",
+        "ExternalDefensivePlayer", "RaidInCombat", "Raid", "RaidPlayer",
     },
     debuff = {
-        "ALL", "Player", "RaidPlayer", "RaidInCombatPlayer", "Raid", "RaidInCombat",
-        "INCLUDE_NAME_PLATE_ONLY", "RAID_PLAYER_DISPELLABLE", "DISPELLABLE", "IMPORTANT", "CROWD_CONTROL",
+        "ALL", "Player", "Raid", "RaidInCombat", "RAID_PLAYER_DISPELLABLE",
+        "DISPELLABLE", "CROWD_CONTROL",
     },
 }
 Data.GF_AURA_FILTER_ALIASES = {

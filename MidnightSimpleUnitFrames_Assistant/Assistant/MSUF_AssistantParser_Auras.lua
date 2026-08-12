@@ -622,8 +622,8 @@ local function AddAuraShortcutChange(changes, setting, value, label)
 end
 
 local UNIT_AURA_FILTER_KEYS = {
-    buff = { "onlyMine", "raid", "raidInCombat", "includeNameplateOnly", "cancelable", "notCancelable", "externalDefensive", "bigDefensive" },
-    debuff = { "onlyMine", "raid", "raidInCombat", "includeNameplateOnly", "includeDispellable", "crowdControl" },
+    buff = { "onlyMine", "raid", "raidInCombat", "includeNameplateOnly", "cancelable", "notCancelable", "externalDefensive", "bigDefensive", "onlyImportant", "includeDispellable", "dispellableAny" },
+    debuff = { "onlyMine", "raid", "raidInCombat", "includeNameplateOnly", "includeDispellable", "dispellableAny", "onlyImportant", "crowdControl" },
 }
 
 local AURA_FILTER_LABELS = {
@@ -649,7 +649,7 @@ local AURA_FILTER_EFFECTS = {
     cancelable = "shows buffs you can cancel.",
     notCancelable = "shows buffs you cannot cancel.",
     externalDefensive = "focuses external defensive cooldown buffs.",
-    bigDefensive = "focuses major personal defensive cooldown buffs.",
+    bigDefensive = "uses MSUF's curated major-defensive Spell-ID list on friendly frames and Blizzard's safe native fallback where exact identity filtering is restricted.",
     includeDispellable = "shows debuffs someone in your group can dispel.",
     dispellableAny = "shows debuffs with any dispel type, regardless of group capability.",
     onlyImportant = "shows auras Blizzard flags as important.",
@@ -661,23 +661,23 @@ local GROUP_AURA_FILTER_EFFECTS = {
     Player = "shows only your own auras.",
     RaidPlayer = "shows raid-relevant auras applied by you.",
     RaidInCombatPlayer = "shows combat raid-frame auras applied by you.",
-    Raid = "shows player-actionable RAID auras not applied by you (harmful means player-dispellable).",
-    RaidInCombat = "shows combat raid-frame auras not applied by you.",
-    BigDefensivePlayer = "shows major defensive cooldown buffs applied by you.",
+    Raid = "shows player-actionable RAID auras (harmful means player-dispellable).",
+    RaidInCombat = "shows combat raid-frame auras regardless of caster.",
+    BigDefensivePlayer = "shows MSUF's curated major-defensive buffs applied by you.",
     ExternalDefensivePlayer = "shows external defensive cooldown buffs applied by you.",
     CancelablePlayer = "shows cancelable buffs applied by you.",
     NotCancelablePlayer = "shows non-cancelable buffs applied by you.",
-    BigDefensive = "shows major defensive cooldown buffs not applied by you.",
-    ExternalDefensive = "shows external defensive cooldown buffs not applied by you.",
-    Cancelable = "shows cancelable buffs not applied by you.",
-    NotCancelable = "shows non-cancelable buffs not applied by you.",
+    BigDefensive = "shows MSUF's curated major-defensive buffs regardless of caster.",
+    ExternalDefensive = "shows external defensive cooldown buffs regardless of caster.",
+    Cancelable = "shows cancelable buffs regardless of caster.",
+    NotCancelable = "shows non-cancelable buffs regardless of caster.",
     PLAYER = "shows only your own auras.",
     RAID = "shows helpful auras the player can apply or harmful auras the player can dispel.",
     RAID_IN_COMBAT = "shows a cleaner raid-relevant set during combat.",
     RAID_PLAYER_DISPELLABLE = "shows auras someone in your group can dispel, including helpful enrages on enemies.",
     DISPELLABLE = "shows auras with any dispel type, even when nobody in your group can remove them.",
     IMPORTANT = "shows auras Blizzard flags as important.",
-    BIG_DEFENSIVE = "shows major defensive cooldown buffs.",
+    BIG_DEFENSIVE = "shows MSUF's curated major-defensive buffs on friendly frames.",
     EXTERNAL_DEFENSIVE = "shows external defensive cooldown buffs.",
     CROWD_CONTROL = "shows crowd-control effects.",
 }
@@ -760,13 +760,12 @@ local function AuraUnitFilterGuidance(scope, scopeLabel, lane, laneLabel)
     local active = {}
     local tokens = { lane == "buff" and "HELPFUL" or "HARMFUL" }
     local playerScoped = false
-    local nonPlayerScoped = false
+    local bigDefensiveActive = false
     local exclusive = AuraReadSettingValue("auras3." .. tostring(scope) .. "." .. tostring(lane) .. ".filter.exclusive")
     if tostring(exclusive or "none") ~= "none" then
         active[#active + 1] = "Exclusive: starts from the stricter " .. tostring(exclusive) .. " list."
         if tostring(exclusive) == "raid" then
             tokens[#tokens + 1] = "RAID"
-            nonPlayerScoped = true
         end
     end
     local keys = UNIT_AURA_FILTER_KEYS[lane] or {}
@@ -776,19 +775,20 @@ local function AuraUnitFilterGuidance(scope, scopeLabel, lane, laneLabel)
         if value == true then
             active[#active + 1] = tostring(AURA_FILTER_LABELS[key] or key) .. ": " .. tostring(AURA_FILTER_EFFECTS[key] or "narrows this lane.")
             if key == "onlyMine" then playerScoped = true end
-            if key == "raid" then tokens[#tokens + 1] = "RAID"; nonPlayerScoped = true end
-            if key == "raidInCombat" then tokens[#tokens + 1] = "RAID_IN_COMBAT"; nonPlayerScoped = true end
-            if key == "cancelable" then tokens[#tokens + 1] = "CANCELABLE"; nonPlayerScoped = true end
-            if key == "notCancelable" then tokens[#tokens + 1] = "!CANCELABLE"; nonPlayerScoped = true end
-            if key == "externalDefensive" then tokens[#tokens + 1] = "EXTERNAL_DEFENSIVE"; nonPlayerScoped = true end
-            if key == "bigDefensive" then tokens[#tokens + 1] = "BIG_DEFENSIVE"; nonPlayerScoped = true end
+            if key == "raid" then tokens[#tokens + 1] = "RAID" end
+            if key == "raidInCombat" then tokens[#tokens + 1] = "RAID_IN_COMBAT" end
+            if key == "includeNameplateOnly" then tokens[#tokens + 1] = "INCLUDE_NAME_PLATE_ONLY" end
+            if key == "cancelable" then tokens[#tokens + 1] = "CANCELABLE" end
+            if key == "notCancelable" then tokens[#tokens + 1] = "!CANCELABLE" end
+            if key == "externalDefensive" then tokens[#tokens + 1] = "EXTERNAL_DEFENSIVE" end
+            if key == "bigDefensive" then tokens[#tokens + 1] = "BIG_DEFENSIVE"; bigDefensiveActive = true end
+            if key == "onlyImportant" then tokens[#tokens + 1] = "IMPORTANT" end
+            if key == "includeDispellable" then tokens[#tokens + 1] = "RAID_PLAYER_DISPELLABLE" end
+            if key == "dispellableAny" then tokens[#tokens + 1] = "DISPELLABLE" end
+            if key == "crowdControl" then tokens[#tokens + 1] = "CROWD_CONTROL" end
         end
     end
-    if playerScoped then
-        tokens[#tokens + 1] = "PLAYER"
-    elseif nonPlayerScoped then
-        tokens[#tokens + 1] = "!PLAYER"
-    end
+    if playerScoped then tokens[#tokens + 1] = "PLAYER" end
     if #active == 0 then
         lines[#lines + 1] = "Active filters right now: none. This lane is not being narrowed by MSUF's live filter toggles."
         lines[#lines + 1] = lane == "debuff"
@@ -799,6 +799,9 @@ local function AuraUnitFilterGuidance(scope, scopeLabel, lane, laneLabel)
         for i = 1, #active do lines[#lines + 1] = "- " .. active[i] end
     end
     lines[#lines + 1] = "Native filter string MSUF builds from this: " .. table.concat(tokens, "|") .. "."
+    if bigDefensiveActive then
+        lines[#lines + 1] = "Big Defensive execution: MSUF replaces that token with its curated exact Spell-ID gate on friendly frames and retains BIG_DEFENSIVE as the safe hostile/restricted fallback."
+    end
     lines[#lines + 1] = "Safe next commands: 'turn on " .. tostring(scope) .. " " .. tostring(lane) .. " raid filter', 'turn off " .. tostring(scope) .. " " .. tostring(lane) .. " player filter', or 'set " .. tostring(scope) .. " " .. tostring(lane) .. " exclusive filter to none'."
     return { kind = "answer", status = "info", result = "info", text = table.concat(lines, "\n"), summary = "Explains active unit aura filters." }
 end

@@ -1624,8 +1624,61 @@ local function SharedIconStyle(kind)
     return style
 end
 
+local function RemoveNativeFilterToken(filter, removeToken, fallback)
+    removeToken = tostring(removeToken or ""):upper()
+    local kept = {}
+    for token in tostring(filter or ""):gmatch("[^|]+") do
+        local normalized = token:upper():gsub("^%s+", ""):gsub("%s+$", "")
+        if normalized ~= removeToken then kept[#kept + 1] = token end
+    end
+    return NormalizeNativeFilterString(table_concat(kept, "|"), fallback)
+end
+
+local function ConfigureCuratedBigDefensiveLane(lane)
+    if not (lane and tostring(lane.nativeFilter or ""):find("BIG_DEFENSIVE", 1, true)) then return lane end
+    local getHash = A3.GetBigDefensiveSpellIDHash
+    if type(getHash) ~= "function" then return lane end
+    local spellIDs, spellIDSignature = getHash()
+    if type(spellIDs) ~= "table" or not next(spellIDs) then return lane end
+
+    local candidateFilters = {}
+    for key, value in pairs(type(lane.candidateFilters) == "table" and lane.candidateFilters or {}) do
+        candidateFilters[key] = value
+    end
+    candidateFilters.includeSpellIDs = spellIDs
+    lane._msufA3BigDefensiveFilter = RemoveNativeFilterToken(lane.nativeFilter, "BIG_DEFENSIVE", "HELPFUL")
+    lane._msufA3BigDefensiveCandidateFilters = candidateFilters
+    lane._msufA3BigDefensiveCandidateSignature = lane.candidateFilterSignature
+        and (lane.candidateFilterSignature .. ";" .. spellIDSignature) or spellIDSignature
+    return lane
+end
+
+local function UnitSupportsCuratedBigDefensive(unit)
+    unit = tostring(unit or "")
+    if unit == "player" or unit:match("^party%d+$") or unit:match("^raid%d+$") then return true end
+    if unit ~= "target" and unit ~= "focus" then return false end
+    local unitCanAssist = _G.UnitCanAssist
+    if type(unitCanAssist) ~= "function" then return false end
+    local canAssist = unitCanAssist("player", unit)
+    if issecretvalue(canAssist) == true then return false end
+    return canAssist == true
+end
+
+local function EffectiveLaneFilters(lane)
+    if lane and lane._msufA3BigDefensiveFilter and UnitSupportsCuratedBigDefensive(lane.unit) then
+        return lane._msufA3BigDefensiveFilter,
+            lane._msufA3BigDefensiveCandidateFilters,
+            lane._msufA3BigDefensiveCandidateSignature
+    end
+    return lane and lane.nativeFilter,
+        lane and lane.candidateFilters,
+        lane and lane.candidateFilterSignature
+end
+A3._EffectiveBigDefensiveLaneFilters = EffectiveLaneFilters
+
 local function FinalizeLane(lane, appearanceKind)
     if lane then
+        ConfigureCuratedBigDefensiveLane(lane)
         lane.appearanceKind = NormalizeAppearanceKind(appearanceKind or lane.appearanceKind or lane.kind)
         lane.iconStyle = SharedIconStyle(lane.appearanceKind)
         -- Aura visibility is lane-local. The global Unitframe tooltip mode
@@ -1649,10 +1702,6 @@ local function NativeFilter(baseFilter, filters)
     local harmful = filter:find("HARMFUL", 1, true) ~= nil
     if filters and filters.enabled ~= false then
         local playerScoped = filters.onlyMine == true
-        local nonPlayerScoped = not playerScoped
-            and ((filters.exclusive == "raid") or (filters.raid == true) or (filters.raidInCombat == true)
-                or (helpful and (filters.cancelable == true or filters.notCancelable == true
-                    or filters.externalDefensive == true or filters.bigDefensive == true)))
         if filters.exclusive == "raid" then filter = filter .. "|RAID" end
         if filters.raid == true then filter = filter .. "|RAID" end
         if filters.includeNameplateOnly == true then filter = filter .. "|INCLUDE_NAME_PLATE_ONLY" end
@@ -1666,11 +1715,7 @@ local function NativeFilter(baseFilter, filters)
         if filters.crowdControl == true and harmful then filter = filter .. "|CROWD_CONTROL" end
         if filters.externalDefensive == true and helpful then filter = filter .. "|EXTERNAL_DEFENSIVE" end
         if filters.bigDefensive == true and helpful then filter = filter .. "|BIG_DEFENSIVE" end
-        if playerScoped then
-            filter = filter .. "|PLAYER"
-        elseif nonPlayerScoped then
-            filter = filter .. "|!PLAYER"
-        end
+        if playerScoped then filter = filter .. "|PLAYER" end
     end
     local normalized = NormalizeNativeFilterString(filter, baseFilter)
     -- Cold-path safety net: MSUF's token whitelist normalizes user input, but
@@ -5378,9 +5423,10 @@ end
 local function BuildManagedAuraGroupOptions(container, lane)
     local nextIndex = 0
     local sortMethod, sortDirection = AuraSortEnums(lane)
+    local _, candidateFilters = EffectiveLaneFilters(lane)
     return {
         maxFrameCount = lane.max,
-        candidateFilters = lane.candidateFilters,
+        candidateFilters = candidateFilters,
         sortMethod = sortMethod,
         sortDirection = sortDirection,
         initializeFrame = function(button)
@@ -5431,6 +5477,14 @@ local function CreateNativeAuraContainer(root, parentOverride)
         if container.Hide then container:Hide() end
         return nil
     end
+    -- CustomAuraContainerTemplate registers this static event during its
+    -- intrinsic OnLoad and swaps to Blizzard's generic Edit Mode sample auras
+    -- when it fires. MSUF renders its own Edit Mode/Menu previews, so its live
+    -- containers must stay on C_UnitAuras; otherwise sample Buff 1-6 can occupy
+    -- exact-ID lanes such as Player Defensives during a provider transition.
+    if type(container.UnregisterEvent) == "function" then
+        container:UnregisterEvent("AURA_DATA_PROVIDER_SWITCH")
+    end
     container._msufA3Root = root
     return container
 end
@@ -5444,8 +5498,10 @@ local function CreateManagedNativeLane(container, lane, parentFrame)
     container.createdButtons = lane.max or 0
     ConfigureNativeAuraContainer(container, lane.unit)
 
-    container:AddAuraGroup(container._msufA3ManagedGroupKey, lane.nativeFilter, BuildManagedAuraGroupOptions(container, lane))
-    container._msufA3FilterString = lane.nativeFilter
+    local nativeFilter, _, candidateFilterSignature = EffectiveLaneFilters(lane)
+    container:AddAuraGroup(container._msufA3ManagedGroupKey, nativeFilter, BuildManagedAuraGroupOptions(container, lane))
+    container._msufA3FilterString = nativeFilter
+    container._msufA3CandidateFilterSignature = candidateFilterSignature
     container._msufA3SortSignature = AuraSortSignature(lane)
     -- PTR 7 item enchantments: temporary weapon enchants render as native
     -- buttons inside the player buff flow. The frames are CustomAuraButtons,
@@ -5501,8 +5557,9 @@ end
 
 local function BuildGroupLaneSlotOptions(container, lane, parentFrame, buttonIndex)
     local sortMethod, sortDirection = AuraSortEnums(lane)
+    local _, candidateFilters = EffectiveLaneFilters(lane)
     return {
-        candidateFilters = lane.candidateFilters,
+        candidateFilters = candidateFilters,
         sortMethod = sortMethod,
         sortDirection = sortDirection,
         initializeFrame = function(button)
@@ -5529,20 +5586,72 @@ local function BuildGroupLaneSlotOptions(container, lane, parentFrame, buttonInd
     }
 end
 
-local function UpdateGroupLaneSlot(container, lane)
+local function UpdateAuraGroupEffectiveFilters(container, lane)
+    if not (container and lane and container._msufA3ManagedGroupKey) then return false end
+    local groupKey = container._msufA3ManagedGroupKey
+    local nativeFilter, candidateFilters, candidateSignature = EffectiveLaneFilters(lane)
+    local oldFilter = container._msufA3FilterString
+    local oldCandidateSignature = container._msufA3CandidateFilterSignature
+    local filterChanged = oldFilter ~= nativeFilter
+    local candidatesChanged = oldCandidateSignature ~= candidateSignature
+    if not filterChanged and not candidatesChanged then return false end
+
+    -- Moving from BIG_DEFENSIVE to HELPFUL broadens the native pass. Install
+    -- the exact-ID gate first; moving back narrows the native pass first. This
+    -- keeps both halves of a target/focus identity transition fail-closed even
+    -- though Blizzard refreshes after each setter.
+    local broadening = filterChanged
+        and tostring(oldFilter or ""):find("BIG_DEFENSIVE", 1, true) ~= nil
+        and tostring(nativeFilter or ""):find("BIG_DEFENSIVE", 1, true) == nil
+    if broadening and candidatesChanged then
+        container:SetAuraGroupCandidateFilters(groupKey, candidateFilters)
+        container._msufA3CandidateFilterSignature = candidateSignature
+    end
+    if filterChanged then
+        container:SetAuraGroupFilterString(groupKey, nativeFilter)
+        container._msufA3FilterString = nativeFilter
+    end
+    if candidatesChanged and not broadening then
+        container:SetAuraGroupCandidateFilters(groupKey, candidateFilters)
+        container._msufA3CandidateFilterSignature = candidateSignature
+    end
+    return true
+end
+
+local function UpdateAuraSlotEffectiveFilters(container, lane)
     if not (container and lane) then return false end
     local slotKey = GroupLaneSlotKey(lane)
     local filters = container._msufA3LaneSlotFilterStrings
     local candidates = container._msufA3LaneSlotCandidateSignatures
+    local nativeFilter, candidateFilters, candidateSignature = EffectiveLaneFilters(lane)
+    local oldFilter = filters[slotKey]
+    local oldCandidateSignature = candidates[slotKey]
+    local filterChanged = oldFilter ~= nativeFilter
+    local candidatesChanged = oldCandidateSignature ~= candidateSignature
+    if not filterChanged and not candidatesChanged then return false end
+    local broadening = filterChanged
+        and tostring(oldFilter or ""):find("BIG_DEFENSIVE", 1, true) ~= nil
+        and tostring(nativeFilter or ""):find("BIG_DEFENSIVE", 1, true) == nil
+    if broadening and candidatesChanged then
+        container:SetAuraSlotCandidateFilters(slotKey, candidateFilters)
+        candidates[slotKey] = candidateSignature
+    end
+    if filterChanged then
+        container:SetAuraSlotFilterString(slotKey, nativeFilter)
+        filters[slotKey] = nativeFilter
+    end
+    if candidatesChanged and not broadening then
+        container:SetAuraSlotCandidateFilters(slotKey, candidateFilters)
+        candidates[slotKey] = candidateSignature
+    end
+    return true
+end
+
+local function UpdateGroupLaneSlot(container, lane)
+    if not (container and lane) then return false end
+    local slotKey = GroupLaneSlotKey(lane)
     local sorts = container._msufA3LaneSlotSortSignatures
-    if filters[slotKey] ~= lane.nativeFilter then
-        container:SetAuraSlotFilterString(slotKey, lane.nativeFilter)
-        filters[slotKey] = lane.nativeFilter
-    end
-    if candidates[slotKey] ~= lane.candidateFilterSignature then
-        container:SetAuraSlotCandidateFilters(slotKey, lane.candidateFilters)
-        candidates[slotKey] = lane.candidateFilterSignature
-    end
+    UpdateAuraSlotEffectiveFilters(container, lane)
     local sortSignature = AuraSortSignature(lane)
     if sorts[slotKey] ~= sortSignature then
         local sortMethod, sortDirection = AuraSortEnums(lane)
@@ -5556,18 +5665,11 @@ local function UpdateGroupFlowLane(container, lane)
     if not (container and lane and container._msufA3ManagedGroupKey) then return false end
     local groupKey = container._msufA3ManagedGroupKey
     local refresh = false
-    if container._msufA3FilterString ~= lane.nativeFilter then
-        container:SetAuraGroupFilterString(groupKey, lane.nativeFilter)
-        container._msufA3FilterString = lane.nativeFilter
-    end
+    UpdateAuraGroupEffectiveFilters(container, lane)
     if container._msufA3MaxFrameCount ~= lane.max then
         container:SetAuraGroupMaxFrameCount(groupKey, lane.max)
         container._msufA3MaxFrameCount = lane.max
         refresh = true
-    end
-    if container._msufA3CandidateFilterSignature ~= lane.candidateFilterSignature then
-        container:SetAuraGroupCandidateFilters(groupKey, lane.candidateFilters)
-        container._msufA3CandidateFilterSignature = lane.candidateFilterSignature
     end
     local sortSignature = AuraSortSignature(lane)
     if container._msufA3SortSignature ~= sortSignature then
@@ -5879,23 +5981,25 @@ local function CreateManagedGroupSlots(container, groupSlots, parentFrame)
         for i = 1, #slotLanes do
             local lane = slotLanes[i]
             local slotKey = GroupLaneSlotKey(lane)
+            local nativeFilter, _, candidateFilterSignature = EffectiveLaneFilters(lane)
             buttonIndex = buttonIndex + 1
-            container:AddAuraSlot(slotKey, lane.nativeFilter,
+            container:AddAuraSlot(slotKey, nativeFilter,
                 BuildGroupLaneSlotOptions(container, lane, parentFrame, buttonIndex))
-            container._msufA3LaneSlotFilterStrings[slotKey] = lane.nativeFilter
-            container._msufA3LaneSlotCandidateSignatures[slotKey] = lane.candidateFilterSignature
+            container._msufA3LaneSlotFilterStrings[slotKey] = nativeFilter
+            container._msufA3LaneSlotCandidateSignatures[slotKey] = candidateFilterSignature
             container._msufA3LaneSlotSortSignatures[slotKey] = AuraSortSignature(lane)
         end
     end
     container._msufA3FixedButtonCount = buttonIndex
     if flowLane then
+        local nativeFilter, _, candidateFilterSignature = EffectiveLaneFilters(flowLane)
         container._msufA3ManagedAuraGroups = true
         container._msufA3ManagedGroupKey = ManagedAuraKey(flowLane)
-        container:AddAuraGroup(container._msufA3ManagedGroupKey, flowLane.nativeFilter,
+        container:AddAuraGroup(container._msufA3ManagedGroupKey, nativeFilter,
             BuildManagedAuraGroupOptions(container, flowLane))
-        container._msufA3FilterString = flowLane.nativeFilter
+        container._msufA3FilterString = nativeFilter
         container._msufA3MaxFrameCount = flowLane.max
-        container._msufA3CandidateFilterSignature = flowLane.candidateFilterSignature
+        container._msufA3CandidateFilterSignature = candidateFilterSignature
         container._msufA3SortSignature = AuraSortSignature(flowLane)
         if not ApplyManagedAuraGroupLayout(container, container._msufA3ManagedGroupKey, flowLane) then
             if container.Hide then container:Hide() end
@@ -6183,6 +6287,29 @@ local function ContainerOwnsHelpfulAuras(container, lane)
     return lane and NativeFilterOwnsHelpfulAuras(lane.nativeFilter)
 end
 
+local function SyncCuratedBigDefensiveContainer(container)
+    local config = container and container._msufA3NativeLaneConfig
+    if not config then return false end
+    local changed = false
+    if container._msufA3GroupSlotsRoot == true then
+        local slotLanes = config.slotLanes
+        for i = 1, #(slotLanes or {}) do
+            local lane = slotLanes[i]
+            if lane and lane._msufA3BigDefensiveFilter then
+                changed = UpdateAuraSlotEffectiveFilters(container, lane) or changed
+            end
+        end
+        local flowLane = config.flowLane
+        if flowLane and flowLane._msufA3BigDefensiveFilter then
+            changed = UpdateAuraGroupEffectiveFilters(container, flowLane) or changed
+        end
+    elseif config._msufA3BigDefensiveFilter then
+        changed = UpdateAuraGroupEffectiveFilters(container, config)
+    end
+    return changed
+end
+A3._SyncCuratedBigDefensiveContainer = SyncCuratedBigDefensiveContainer
+
 A3._DirectIdentityRefreshUnit = function(unit, forceSpellIndicatorGeometry, recreateHelpfulAuras)
     local byUnit = A3._directIdentityAuraContainers
     local containers = byUnit and byUnit[unit]
@@ -6201,9 +6328,10 @@ A3._DirectIdentityRefreshUnit = function(unit, forceSpellIndicatorGeometry, recr
             if seedPartyParents then
                 partyParents = CollectPartyAuraParent(partyParents, container)
             end
+            local filterChanged = SyncCuratedBigDefensiveContainer(container)
             local update = container and container.UpdateAllAuras
             if type(update) == "function" then
-                if A3._NativeContainerVisible(container) then update(container) end
+                if not filterChanged and A3._NativeContainerVisible(container) then update(container) end
                 if container._msufA3ForceManagedAuraGeometry == true
                     or container._msufA3ForceSpellIndicatorGeometry == true then
                     A3._SyncManagedAuraContainerGeometry(container, true)
@@ -6234,6 +6362,7 @@ A3._DirectIdentityRefreshUnit = function(unit, forceSpellIndicatorGeometry, recr
             helpfulRecreates[#helpfulRecreates + 1] = container
             any = true
         else
+            local filterChanged = SyncCuratedBigDefensiveContainer(container)
             if container and A3._ManagedAuraContainerSupportsGeometryRepair(container) then
                 -- Hidden containers cannot be repaired in this pass. Keep the
                 -- request on the container so its next visible/config sync consumes
@@ -6245,7 +6374,7 @@ A3._DirectIdentityRefreshUnit = function(unit, forceSpellIndicatorGeometry, recr
                 end
             end
             if container and type(container.UpdateAllAuras) == "function" then
-                if A3._NativeContainerVisible(container) then
+                if not filterChanged and A3._NativeContainerVisible(container) then
                     container:UpdateAllAuras()
                 end
                 -- Zone/world transitions can desync a reused container while cache looks current.
@@ -6657,23 +6786,17 @@ ApplyLane = function(root, lane, parentFrame, forceRecreate)
     local trackingSignature = lane._msufA3TrackingSignature or LaneTrackingSignature(lane)
     local structuralSignature = lane._msufA3StructuralSignature or LaneStructuralSignature(lane)
     local layoutSignature = lane._msufA3LayoutSignature or LaneLayoutSignature(lane)
+    local nativeFilter, _, candidateFilterSignature = EffectiveLaneFilters(lane)
     local current = root[key]
     if forceRecreate ~= true and current and current._msufA3StructuralSignature == structuralSignature then
         A3._RebindNativeContainerUnit(current, lane.unit)
         local refresh = false
         local layoutChanged = current._msufA3LayoutSignature ~= layoutSignature
-        if current._msufA3FilterString ~= lane.nativeFilter then
-            current:SetAuraGroupFilterString(current._msufA3ManagedGroupKey, lane.nativeFilter)
-            current._msufA3FilterString = lane.nativeFilter
-        end
+        UpdateAuraGroupEffectiveFilters(current, lane)
         if current._msufA3MaxFrameCount ~= lane.max then
             current:SetAuraGroupMaxFrameCount(current._msufA3ManagedGroupKey, lane.max)
             current._msufA3MaxFrameCount = lane.max
             refresh = true
-        end
-        if current._msufA3CandidateFilterSignature ~= lane.candidateFilterSignature then
-            current:SetAuraGroupCandidateFilters(current._msufA3ManagedGroupKey, lane.candidateFilters)
-            current._msufA3CandidateFilterSignature = lane.candidateFilterSignature
         end
         local sortSignature = AuraSortSignature(lane)
         if current._msufA3SortSignature ~= sortSignature then
@@ -6703,8 +6826,8 @@ ApplyLane = function(root, lane, parentFrame, forceRecreate)
         current._msufA3StructuralSignature = structuralSignature
         current._msufA3LayoutSignature = layoutSignature
         current._msufA3MaxFrameCount = lane.max
-        current._msufA3FilterString = lane.nativeFilter
-        current._msufA3CandidateFilterSignature = lane.candidateFilterSignature
+        current._msufA3FilterString = nativeFilter
+        current._msufA3CandidateFilterSignature = candidateFilterSignature
         root[key] = current
     end
     return current

@@ -52,6 +52,9 @@ local initializerSource = runtimeSource:sub(initializerStart, initializerEnd - 1
 local prepared = {}
 local environment = setmetatable({
     AuraSortEnums = function() return "DEFAULT", "NORMAL" end,
+    EffectiveLaneFilters = function(lane)
+        return lane.nativeFilter, lane.candidateFilters, lane.candidateFilterSignature
+    end,
     ManagedLaneFrameLevel = function(_, lane)
         return Layers.ElementLevel(lane and lane.layer, 1, 0)
     end,

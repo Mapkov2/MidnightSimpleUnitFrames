@@ -94,8 +94,8 @@ function A.AurasRegistry.RegisterFilterSettings(ctx, scope)
         {
             page = scopePage,
             description = (scope == "shared"
-                    and "Master gate for Shared Blizzard aura filter tokens. Unit scopes that follow Shared Rules use this gate. "
-                    or "Master gate for this unit's Blizzard aura filter tokens. Changing it creates or updates this unit's own filter rules. ")
+                    and "Master gate for Shared aura classification filters. Unit scopes that follow Shared Rules use this gate. "
+                    or "Master gate for this unit's aura classification filters. Changing it creates or updates this unit's own filter rules. ")
                 .. "It does not show or hide the Buff or Debuff lane, and Hide Permanent remains active independently.",
         })
 
@@ -108,7 +108,12 @@ function A.AurasRegistry.RegisterFilterSettings(ctx, scope)
             label = AuraScopeLabel(scope) .. " " .. spec.label,
             category = AuraScopeLabel(scope) .. " / Aura Filters",
             page = scopePage,
-            description = "Blizzard token filter for " .. tostring(AuraScopeLabel(scope)) .. " "
+            description = (spec.key == "bigDefensive"
+                    and "MSUF curated major-defensive Spell-ID filter on friendly frames, with Blizzard's BIG_DEFENSIVE fallback where exact identity filtering is restricted, for "
+                    or (spec.key == "includeNameplateOnly"
+                        and "Blizzard inclusion modifier that broadens the active filter with nameplate-only auras for "
+                        or "Blizzard classification filter for "))
+                .. tostring(AuraScopeLabel(scope)) .. " "
                 .. (spec.lane == "buff" and "Buffs" or "Debuffs")
                 .. ". It is evaluated only while Filters Enabled is on; it does not show or hide the aura lane.",
             unit = scope,
@@ -123,6 +128,9 @@ function A.AurasRegistry.RegisterFilterSettings(ctx, scope)
                     for k = 1, #spec.conflicts do
                         AuraWriteFilter(scope, spec.lane, spec.conflicts[k], false)
                     end
+                end
+                if value == true and spec.classification == true then
+                    AuraWriteFilter(scope, spec.lane, "exclusive", "none")
                 end
                 AuraWriteFilter(scope, spec.lane, spec.key, value)
             end,

@@ -153,13 +153,13 @@ M.CLASSIC_AURA_FILTERS_REDUCED = MSUF.Client and MSUF.Client.IsClassic == true
     or (_G.WOW_PROJECT_ID ~= nil and _G.WOW_PROJECT_ID ~= _G.WOW_PROJECT_MAINLINE)
 local GROUP_NATIVE_FILTER_LABELS = {
     ALL = "All",
-    Player = "Player",
-    BigDefensivePlayer = "Big Defensive Player",
-    ExternalDefensivePlayer = "External Defensive Player",
+    Player = "Cast by Me",
+    BigDefensivePlayer = "Big Defensive by Me",
+    ExternalDefensivePlayer = "External Defensive by Me",
     RaidInCombatPlayer = "Raid In Combat Player",
     CancelablePlayer = "Cancelable Player",
     NotCancelablePlayer = "Not Cancelable Player",
-    RaidPlayer = "Raid Player",
+    RaidPlayer = "Applicable and Cast by Me",
     BigDefensive = "Big Defensive",
     ExternalDefensive = "External Defensive",
     RaidInCombat = "Raid In Combat",
@@ -175,14 +175,11 @@ local GROUP_NATIVE_FILTER_LABELS = {
 local GROUP_NATIVE_FILTER_ALLOWED = {
     buff = {
         ALL = true, Player = true, BigDefensivePlayer = true, ExternalDefensivePlayer = true,
-        RaidInCombatPlayer = true, CancelablePlayer = true, NotCancelablePlayer = true,
-        RaidPlayer = true, BigDefensive = true, ExternalDefensive = true, RaidInCombat = true,
-        Cancelable = true, NotCancelable = true, Raid = true, IMPORTANT = true,
+        BigDefensive = true, ExternalDefensive = true, RaidInCombat = true, Raid = true, RaidPlayer = true,
     },
     debuff = {
-        ALL = true, Player = true, RaidPlayer = true, RaidInCombatPlayer = true,
-        Raid = true, RaidInCombat = true, INCLUDE_NAME_PLATE_ONLY = true,
-        RAID_PLAYER_DISPELLABLE = true, DISPELLABLE = true, IMPORTANT = true, CROWD_CONTROL = true,
+        ALL = true, Player = true, Raid = true, RaidInCombat = true,
+        RAID_PLAYER_DISPELLABLE = true, DISPELLABLE = true, CROWD_CONTROL = true,
     },
 }
 local GROUP_NATIVE_FILTER_CANONICAL = {
@@ -919,33 +916,23 @@ local function GroupFilterValues(groupKey)
     if groupKey == "buff" then
         return VT(
             "ALL", "All Buffs",
-            "Player", "Player",
-            "BigDefensivePlayer", "Big Defensive Player",
-            "ExternalDefensivePlayer", "External Defensive Player",
-            "RaidInCombatPlayer", "Raid In Combat Player",
-            "CancelablePlayer", "Cancelable Player",
-            "NotCancelablePlayer", "Not Cancelable Player",
-            "RaidPlayer", "Raid Player",
+            "Player", "Cast by Me",
             "BigDefensive", "Big Defensive",
+            "BigDefensivePlayer", "Big Defensive by Me",
             "ExternalDefensive", "External Defensive",
+            "ExternalDefensivePlayer", "External Defensive by Me",
             "RaidInCombat", "Raid In Combat",
-            "Cancelable", "Cancelable",
-            "NotCancelable", "Not Cancelable",
             "Raid", "Applicable by Me (Raid)",
-            "IMPORTANT", "Important"
+            "RaidPlayer", "Applicable and Cast by Me"
         )
     end
     return VT(
         "ALL", "All Debuffs",
-        "Player", "Player",
-        "RaidPlayer", "Raid Player",
-        "RaidInCombatPlayer", "Raid In Combat Player",
+        "Player", "Cast by Me",
         "Raid", "Dispellable by Me (Raid)",
         "RaidInCombat", "Raid In Combat",
-        "INCLUDE_NAME_PLATE_ONLY", "Include Nameplate-only",
         "RAID_PLAYER_DISPELLABLE", "Dispellable by Group",
         "DISPELLABLE", "Any Dispel Type",
-        "IMPORTANT", "Important",
         "CROWD_CONTROL", "Crowd Control"
     )
 end
@@ -3384,7 +3371,7 @@ local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
         function(value) Model.SetScopeFiltersEnabled(unit, value); ApplyUnit(ctx, unit, "AURAS3_FILTER_ENABLE", true) end,
         AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.enabled", nil,
             "auras3." .. unit .. ".filtersEnabled"))
-    AddTooltip(enabled, "Enable filters", "Turns Blizzard token filters on or off for this frame. The first change automatically creates frame-specific rules; migrated Shared rules remain Shared until edited.")
+    AddTooltip(enabled, "Enable filters", "Turns aura classification filters on or off for this frame. Big Defensive uses MSUF's curated list on friendly frames; the first change automatically creates frame-specific rules.")
     local hidePermanent = BindSwitch(ctx, section, "Hide permanent", 24 + colW + gap, -42, colW,
         function()
             return type(Model.ReadBlacklistHidePermanent) == "function"
@@ -3422,11 +3409,11 @@ local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
         { "Important", "onlyImportant", "Only auras Blizzard flags as important." },
         { "Applicable by me", "raid", "Helpful auras your character can apply (Blizzard RAID token)." },
         { "Raid combat", "raidInCombat", "Blizzard's in-combat raid Buff filter." },
-        { "Nameplate-only", "includeNameplateOnly", "Include Buffs marked nameplate-only." },
+        { "Also include nameplate-only", "includeNameplateOnly", "Broadens the selected filter to also admit Buffs Blizzard marks nameplate-only; it is not a standalone only-filter." },
         { "Dispellable / stealable by group", "includeDispellable", "Helpful enemy auras someone in your group can dispel, purge, or steal." },
         { "Any dispel / steal type", "dispellableAny", "Helpful enemy auras with any dispel type, even when your group cannot remove them." },
         { "External defensive", "externalDefensive", "External defensive Buffs." },
-        { "Big defensive", "bigDefensive", "Major defensive Buffs." },
+        { "Big defensive", "bigDefensive", "MSUF's curated major-defensive Spell-ID list on friendly frames; Blizzard's safe native classification is used where exact identity filtering is restricted." },
         { "Cancelable", "cancelable", "Only cancelable Buffs.", { "notCancelable" } },
         { "Not cancelable", "notCancelable", "Only non-cancelable Buffs.", { "cancelable" } },
     } or {
@@ -3434,7 +3421,7 @@ local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
         { "Important", "onlyImportant", "Only Debuffs Blizzard flags as important." },
         { "Dispellable by me", "raid", "Harmful auras your character can dispel (Blizzard RAID token)." },
         { "Raid combat", "raidInCombat", "Blizzard's in-combat raid Debuff filter." },
-        { "Nameplate-only", "includeNameplateOnly", "Include Debuffs marked nameplate-only." },
+        { "Also include nameplate-only", "includeNameplateOnly", "Broadens the selected filter to also admit Debuffs Blizzard marks nameplate-only; it is not a standalone only-filter." },
         { "Dispellable by group", "includeDispellable", "Debuffs someone in your group can dispel." },
         { "Any dispel type", "dispellableAny", "Debuffs with a dispel type, even when your group cannot remove them." },
         { "Crowd control", "crowdControl", "Crowd-control Debuffs." },
@@ -3462,6 +3449,20 @@ local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
                 return Model.ReadFilter(unit, lane, spec[2], false) == true
             end,
             function(value)
+                local key = spec[2]
+                local modifier = key == "onlyMine" or key == "includeNameplateOnly"
+                if value == true and not modifier then
+                    -- Blizzard joins native filter tokens as an intersection.
+                    -- Present classification choices as one active selector so
+                    -- the switch UI cannot accidentally build empty AND chains;
+                    -- caster and nameplate inclusion remain explicit modifiers.
+                    for j = 1, #specs do
+                        local otherKey = specs[j][2]
+                        if otherKey ~= key and otherKey ~= "onlyMine" and otherKey ~= "includeNameplateOnly" then
+                            Model.WriteFilter(unit, lane, otherKey, false)
+                        end
+                    end
+                end
                 if value == true and type(spec[4]) == "table" then for j = 1, #spec[4] do Model.WriteFilter(unit, lane, spec[4][j], false) end end
                 -- Older profiles stored the same RAID token in a second
                 -- Exclusive dropdown. Fold it into the visible Raid switch so
@@ -3469,7 +3470,7 @@ local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
                 if spec[2] == "raid" then Model.WriteFilter(unit, lane, "exclusive", "none") end
                 Model.WriteFilter(unit, lane, spec[2], value)
                 ApplyUnit(ctx, unit, "AURAS3_FILTER_" .. lane .. "_" .. spec[2], true)
-                if spec[4] then QueueAurasPageRefresh(ctx, "auras-filter-conflict") end
+                if not modifier or spec[4] then QueueAurasPageRefresh(ctx, "auras-filter-conflict") end
             end,
             AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".filters." .. AuraCatalogToken(spec[2]), nil,
                 settingContract))

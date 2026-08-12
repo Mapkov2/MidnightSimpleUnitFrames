@@ -221,6 +221,29 @@ Data.AURA_FILTER_BOOLEAN_SPECS = {
     { lane = "debuff", key = "crowdControl", label = "Debuff Crowd Control Filter", words = { "debuff crowd control filter", "crowd control debuffs", "crowd control debuffs only", "cc debuffs", "cc debuffs only", "show cc debuffs", "show crowd control debuffs" } },
 }
 
+-- Native classification tokens are intersections, not independent OR flags.
+-- Keep Assistant writes identical to Menu2: one classification per lane, with
+-- Player and Include Nameplate-only retained as explicit modifiers.
+local AURA_CLASSIFICATION_KEYS = {
+    buff = { "raid", "raidInCombat", "cancelable", "notCancelable", "externalDefensive", "bigDefensive", "onlyImportant", "includeDispellable", "dispellableAny" },
+    debuff = { "raid", "raidInCombat", "includeDispellable", "dispellableAny", "onlyImportant", "crowdControl" },
+}
+for i = 1, #Data.AURA_FILTER_BOOLEAN_SPECS do
+    local spec = Data.AURA_FILTER_BOOLEAN_SPECS[i]
+    local keys = AURA_CLASSIFICATION_KEYS[spec.lane]
+    local isClassification = false
+    for j = 1, #(keys or {}) do
+        if keys[j] == spec.key then isClassification = true; break end
+    end
+    if isClassification then
+        spec.classification = true
+        spec.conflicts = {}
+        for j = 1, #keys do
+            if keys[j] ~= spec.key then spec.conflicts[#spec.conflicts + 1] = keys[j] end
+        end
+    end
+end
+
 Data.AURA_EXCLUSIVE_FILTER_VALUES = {
     buff = { "none" },
     debuff = { "none", "raid" },

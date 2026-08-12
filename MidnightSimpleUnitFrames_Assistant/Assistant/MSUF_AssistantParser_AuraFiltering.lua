@@ -169,6 +169,15 @@ local function AddChange(changes, seen, key, value, valueLabel)
     return true
 end
 
+local function AddChangeWhenDifferent(changes, seen, key, value, valueLabel)
+    local setting = Setting(key)
+    if setting and type(setting.get) == "function" then
+        local ok, current = pcall(setting.get)
+        if ok and current == value then return false end
+    end
+    return AddChange(changes, seen, key, value, valueLabel)
+end
+
 local function ScopeLabel(kind, scope)
     if kind == "group" then return GROUP_LABELS[scope] or tostring(scope) end
     return UNIT_LABELS[scope] or tostring(scope)
@@ -634,9 +643,9 @@ end
 
 local function AddUnitFilterClearChanges(changes, seen, scope, lane, clearPermanent)
     local keys = UNIT_FILTER_KEYS[lane] or {}
-    for i = 1, #keys do AddChange(changes, seen, "auras3." .. scope .. "." .. lane .. ".filter." .. keys[i], false) end
-    AddChange(changes, seen, "auras3." .. scope .. "." .. lane .. ".filter.exclusive", "none")
-    if clearPermanent and scope ~= "shared" then AddChange(changes, seen, PermanentKey("unit", scope, lane), false) end
+    for i = 1, #keys do AddChangeWhenDifferent(changes, seen, "auras3." .. scope .. "." .. lane .. ".filter." .. keys[i], false) end
+    AddChangeWhenDifferent(changes, seen, "auras3." .. scope .. "." .. lane .. ".filter.exclusive", "none")
+    if clearPermanent and scope ~= "shared" then AddChangeWhenDifferent(changes, seen, PermanentKey("unit", scope, lane), false) end
 end
 
 local function UnitFilterPlan(scope, lane, spec, mode, sourceIntent)
@@ -729,9 +738,6 @@ local function GroupFilterValue(spec, sourceIntent)
     if sourceIntent == "mine" then
         local playerValues = {
             Raid = "RaidPlayer",
-            RaidInCombat = "RaidInCombatPlayer",
-            Cancelable = "CancelablePlayer",
-            NotCancelable = "NotCancelablePlayer",
             ExternalDefensive = "ExternalDefensivePlayer",
             BigDefensive = "BigDefensivePlayer",
         }

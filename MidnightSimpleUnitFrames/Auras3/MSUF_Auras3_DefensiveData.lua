@@ -1,5 +1,6 @@
 --- Auras3/MSUF_Auras3_DefensiveData.lua
---- Curated player defensive BUFF aura IDs for the player-only defensive lane.
+--- Curated defensive BUFF aura IDs for the normal Big Defensive filter and
+--- the broader player-only defensive lane.
 ---
 --- Data baseline:
 ---   Retail 12.0.7.68453 (2026-07-18 hotfix data)
@@ -37,6 +38,133 @@ function A3.AddAuraSpellIDAndAliases(out, spellID)
         local auraSpellID = tonumber(aliases[i])
         if auraSpellID and auraSpellID > 0 then out[math.floor(auraSpellID + 0.5)] = true end
     end
+end
+
+--- Curated major-defensive aura IDs used by the normal Unit/Group "Big
+--- Defensive" filter. This is deliberately narrower than PlayerDefensiveData:
+--- it mirrors the enabled EllesmereUI 8.8.3 Defensives preset and excludes its
+--- disabled/passive/maintenance entries. Blizzard's BIG_DEFENSIVE token remains
+--- the fallback where helpful Spell-ID candidate filters are identity-restricted.
+A3.BigDefensiveDataVersion = "EUI-8.8.3+12.1.0.69189"
+A3.BigDefensiveData = {
+    DEATHKNIGHT = {
+        { 48707, "Anti-Magic Shell", { 444741 } },
+        { 48792, "Icebound Fortitude" },
+        { 55233, "Vampiric Blood" },
+        { 101568, "Dark Succor" },
+    },
+    DEMONHUNTER = {
+        { 212800, "Blur" },
+        { 187827, "Metamorphosis" },
+        { 207771, "Fiery Brand" },
+    },
+    DRUID = {
+        { 22812, "Barkskin" },
+        { 22842, "Frenzied Regeneration" },
+        { 61336, "Survival Instincts" },
+        { 1261872, "Survival Instincts" },
+    },
+    EVOKER = {
+        { 404381, "Defensive" },
+        { 363916, "Obsidian Scales" },
+        { 374349, "Renewing Blaze" },
+    },
+    HUNTER = {
+        { 186265, "Aspect of the Turtle" },
+        { 264735, "Survival of the Fittest" },
+    },
+    MAGE = {
+        { 342246, "Alter Time" },
+        { 45438, "Ice Block" },
+        { 414658, "Ice Cold" },
+        { 449336, "Merely a Setback" },
+        { 1309793, "Defensive" },
+    },
+    MONK = {
+        { 122783, "Diffuse Magic" },
+        { 115203, "Fortifying Brew", { 120954 } },
+        { 125174, "Touch of Karma" },
+        { 132578, "Invoke Niuzao" },
+        { 322507, "Celestial Brew" },
+        { 1241059, "Defensive" },
+    },
+    PALADIN = {
+        { 498, "Divine Protection", { 403876 } },
+        { 642, "Divine Shield" },
+        { 31850, "Ardent Defender" },
+        { 86659, "Guardian of Ancient Kings" },
+    },
+    PRIEST = {
+        { 19236, "Desperate Prayer" },
+        { 47585, "Dispersion" },
+        { 586, "Fade" },
+        { 193065, "Protective Light" },
+        { 27827, "Spirit of Redemption" },
+    },
+    ROGUE = {
+        { 31224, "Cloak of Shadows" },
+        { 5277, "Evasion" },
+        { 1966, "Feint" },
+        { 185311, "Crimson Vial" },
+    },
+    SHAMAN = {
+        { 108271, "Astral Shift" },
+        { 260881, "Spirit Wolf" },
+    },
+    WARLOCK = {
+        { 108416, "Dark Pact" },
+        { 104773, "Unending Resolve" },
+        { 132413, "Shadow Bulwark" },
+        { 387636, "Soulburn: Healthstone" },
+        { 389614, "Abyss Walker" },
+    },
+    WARRIOR = {
+        { 118038, "Die by the Sword" },
+        { 184364, "Enraged Regeneration" },
+        { 190456, "Ignore Pain", { 1277297 } },
+        { 147833, "Intervene" },
+        { 385391, "Spell Block" },
+        { 871, "Shield Wall" },
+    },
+}
+
+local bigDefensiveSpellIDHash
+local bigDefensiveSpellIDSignature
+
+--- Build the immutable all-class hash lazily. The normal Big Defensive filter
+--- is used on mixed Party/Raid units, so class-local filtering would omit valid
+--- auras whenever the unit token changes owner.
+function A3.GetBigDefensiveSpellIDHash()
+    if bigDefensiveSpellIDHash then
+        return bigDefensiveSpellIDHash, bigDefensiveSpellIDSignature
+    end
+    local hash, ids = {}, {}
+    for _, entries in pairs(A3.BigDefensiveData) do
+        for i = 1, #entries do
+            local entry = entries[i]
+            local spellID = tonumber(entry[1])
+            if spellID and spellID > 0 then
+                spellID = math.floor(spellID + 0.5)
+                if hash[spellID] ~= true then ids[#ids + 1] = spellID end
+                hash[spellID] = true
+            end
+            local alts = entry[3]
+            for j = 1, type(alts) == "table" and #alts or 0 do
+                local altID = tonumber(alts[j])
+                if altID and altID > 0 then
+                    altID = math.floor(altID + 0.5)
+                    if hash[altID] ~= true then ids[#ids + 1] = altID end
+                    hash[altID] = true
+                end
+            end
+        end
+    end
+    table.sort(ids)
+    local parts = {}
+    for i = 1, #ids do parts[i] = tostring(ids[i]) end
+    bigDefensiveSpellIDHash = hash
+    bigDefensiveSpellIDSignature = "bigDefensive:" .. table.concat(parts, ",")
+    return bigDefensiveSpellIDHash, bigDefensiveSpellIDSignature
 end
 
 A3.PlayerDefensiveData = {
