@@ -469,23 +469,26 @@ local function ConfigureGradientTexture(tex, direction, alpha, r, g, b)
   tex._msufGradientR, tex._msufGradientG, tex._msufGradientB = r, g, b
 end
 
-local function EnsureGradientTexture(bar, grads, direction)
+local function EnsureGradientTexture(textureOwner, grads, direction)
   local tex = grads and grads[direction]
   if tex then
     return tex
   end
-  if not (bar and bar.CreateTexture) then
+  if not (textureOwner and textureOwner.CreateTexture) then
     return nil
   end
-  tex = bar:CreateTexture(nil, "OVERLAY", nil, 0)
+  tex = textureOwner:CreateTexture(nil, "OVERLAY", nil, 0)
   tex:SetTexture(WHITE)
   tex:SetBlendMode("BLEND")
   grads[direction] = tex
   return tex
 end
 
-local function ApplyBarGradient(frame, bar, spec, storeKey)
-  if not (frame and bar) then
+--- Applies the exact runtime gradient composition to an arbitrary fill Texture.
+--- StatusBars use ApplyBarGradient below; preview-only texture bars use this
+--- lower-level form so both surfaces share direction/color/caching semantics.
+local function ApplyBarGradientToTarget(frame, textureOwner, target, spec, storeKey)
+  if not (frame and textureOwner and storeKey) then
     return nil
   end
   local grads = frame[storeKey]
@@ -493,27 +496,38 @@ local function ApplyBarGradient(frame, bar, spec, storeKey)
     grads = {}
     frame[storeKey] = grads
   end
-  if frame._msufIsGroupFrame == true then
-    bar._msufGFGrads = grads
-  end
   if not GradientActive(spec) then
     HideBarGradient(grads)
     return grads
   end
-  local target = GradientTarget(bar)
+  if not target then
+    HideBarGradient(grads)
+    return grads
+  end
   local alpha = Clamp01(spec.strength, 0.45)
   local r, g, b = Clamp01(spec.r, 0), Clamp01(spec.g, 0), Clamp01(spec.b, 0)
   for i = 1, #GRADIENT_DIRS do
     local direction = GRADIENT_DIRS[i]
     local tex = grads[direction]
     if spec[direction] == true then
-      tex = EnsureGradientTexture(bar, grads, direction)
+      tex = EnsureGradientTexture(textureOwner, grads, direction)
       AnchorGradientTexture(tex, target)
       ConfigureGradientTexture(tex, direction, alpha, r, g, b)
       SetShownCached(tex, true)
     else
       SetShownCached(tex, false)
     end
+  end
+  return grads
+end
+
+local function ApplyBarGradient(frame, bar, spec, storeKey)
+  if not (frame and bar) then
+    return nil
+  end
+  local grads = ApplyBarGradientToTarget(frame, bar, GradientTarget(bar), spec, storeKey)
+  if frame._msufIsGroupFrame == true then
+    bar._msufGFGrads = grads
   end
   return grads
 end
@@ -1384,6 +1398,7 @@ MSUF.UFBarTextCommon = {
   ApplyTextureColor = ApplyTextureColor,
   SetShownCached = SetShownCached,
   ApplyBarGradient = ApplyBarGradient,
+  ApplyBarGradientToTarget = ApplyBarGradientToTarget,
   HideBarGradient = HideBarGradient,
   UpdateAllBarGradients = UpdateAllBarGradients,
   SetFrameLevelCached = SetFrameLevelCached,

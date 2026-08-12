@@ -2079,6 +2079,11 @@ function Preview.Refresh(box, reason)
             tonumber(box._msuf2RangeFadePreviewAlpha) or 1))
     end
     mock.hp:SetAlpha(healthFillAlpha)
+    if MSUF.UFBarTextCommon and MSUF.UFBarTextCommon.ApplyBarGradient then
+        MSUF.UFBarTextCommon.ApplyBarGradient(mock, mock.healthBar,
+            runtimeSpec and runtimeSpec.health and runtimeSpec.health.barGradient,
+            "_msufPreviewHealthGradients")
+    end
     RenderTextureLayerPreview(box, mock, conf, PreviewLayerWanted(box, "texLayer"), S, sw, baseLevel, SetTex, PlaceHandle, R.ClassColor(data.class))
     if powerOn then
         mock.powerBG:Show(); mock.power:Show()
@@ -2106,6 +2111,12 @@ function Preview.Refresh(box, reason)
         mock.power:SetVertexColor(pr, pg, pb, 1)
     else
         mock.powerBG:Hide(); mock.power:Hide()
+    end
+    if MSUF.UFBarTextCommon and MSUF.UFBarTextCommon.ApplyBarGradientToTarget then
+        MSUF.UFBarTextCommon.ApplyBarGradientToTarget(mock, mock, mock.power,
+            powerOn and PreviewLayerWanted(box, "power")
+                and runtimePower and runtimePower.barGradient or nil,
+            "_msufPreviewPowerGradients")
     end
     local fr, fg, fb = R.FontColor()
     local pr, pg, pb = ResolvePreviewPowerColor(R, data, runtimePower)
@@ -2474,6 +2485,13 @@ function Preview.Refresh(box, reason)
     else
         mock.detachedPower:Hide()
         box.handleDetachedPower:Hide()
+    end
+    if MSUF.UFBarTextCommon and MSUF.UFBarTextCommon.ApplyBarGradientToTarget then
+        MSUF.UFBarTextCommon.ApplyBarGradientToTarget(mock, mock.detachedPower, mock.detachedPower.fill,
+            detachedPowerInUnitPreview and PreviewLayerWanted(box, "power")
+                and box._runtimeDetachedRoundedPower == true
+                and runtimePower and runtimePower.barGradient or nil,
+            "_msufPreviewDetachedPowerGradients")
     end
     if Auras and type(Auras.LayoutDispelLayers) == "function" then
         Auras.LayoutDispelLayers(box, mock, runtimeSpec, S, baseLevel,
