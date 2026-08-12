@@ -964,7 +964,6 @@ builders.RUNTIME = function(env)
     local math_floor = env.math_floor
     local C_Timer = env.C_Timer
 
-    local GetTrackedPlayerAura = env.GetTrackedPlayerAura
     local GetPlayerFrame = env.GetPlayerFrame
     local CP_EnsureBars = env.CP_EnsureBars
     local CP_Layout = env.CP_Layout
@@ -984,32 +983,6 @@ builders.RUNTIME = function(env)
     local OnTipOfTheSpearSpellCast = env.OnTipOfTheSpearSpellCast
     local OnSpellTrackerReset = env.OnSpellTrackerReset
 
-    --- Devourer's segment count is the only dynamic one on a single-bar mode: it
-    --- follows Void Metamorphosis and the collapsing star cost.
-    --- Two things keep this off the hot path. The value update already resolves
-    --- the meta state on every aura event, so CP.dhInMeta is reused instead of
-    --- querying the aura API a second time - outside meta that aura is absent,
-    --- which means a cache miss and a real GetPlayerAuraBySpellID call. And the
-    --- out-of-meta maximum is a static spell value, so it is memoized; only the
-    --- collapsing star cost is re-read, because it can change while meta is up.
-    local function ResolveDevourerVisibleMax()
-        local resolver = CPConst and CPConst.ResolveDevourerSegments
-        if type(resolver) ~= "function" then return 1 end
-        local inMeta = CP.dhInMeta
-        if inMeta == nil then
-            inMeta = (type(GetTrackedPlayerAura) == "function")
-                and (GetTrackedPlayerAura(CPK.SPELL.VOID_METAMORPHOSIS) ~= nil)
-                or false
-            CP.dhInMeta = inMeta
-        end
-        if inMeta == false and CP._dhSegMeta == false and CP._dhSegCount then
-            return CP._dhSegCount
-        end
-        local segCount = resolver(inMeta, NotSecret)
-        CP._dhSegCount, CP._dhSegMeta = segCount, inMeta
-        return segCount
-    end
-
     --- Resolve the visible segment count for the active render mode. This is
     --- intentionally separate from layout so rare max-power changes can be
     --- handled without a full ClassPower rebuild.
@@ -1022,7 +995,7 @@ builders.RUNTIME = function(env)
         if mode == CPK.MODE.RUNE_CD then
             maxP = 6
         elseif mode == CPK.MODE.AURA_SINGLE then
-            maxP = (powerType == "SOUL_FRAGMENTS") and ResolveDevourerVisibleMax() or 1
+            maxP = 1
         elseif mode == CPK.MODE.CONTINUOUS or mode == CPK.MODE.STAGGER or mode == CPK.MODE.TIMER_BAR then
             maxP = 1
         elseif mode == CPK.MODE.AURA_SEGMENTED then
@@ -1171,16 +1144,6 @@ builders.RUNTIME = function(env)
     local function OnAuraUpdate(unit)
         if CP.visible and CP.isAuraPower then
             RunActiveUpdate(CP.powerType, CP.currentMax)
-            if CP.renderMode == CPK.MODE.AURA_SINGLE and CP.powerType == "SOUL_FRAGMENTS" then
-                --- Devourer: the value update above already resolved the meta
-                --- state, so the segment count costs comparisons rather than
-                --- another aura query. Only an actual change re-lays out, and
-                --- entering/leaving Void Metamorphosis is the only trigger.
-                local segCount = ResolveDevourerVisibleMax()
-                if segCount ~= CP.currentMax then
-                    RefreshVisibleModeLight(segCount)
-                end
-            end
         end
         if CP.visible and CP.renderMode == CPK.MODE.STAGGER then
             RunActiveUpdate(CP.powerType, CP.currentMax)

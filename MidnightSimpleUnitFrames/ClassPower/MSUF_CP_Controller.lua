@@ -2113,20 +2113,9 @@ local function FullRefresh()
         if renderMode == CPK.MODE.RUNE_CD then
             maxP = 6  --- DK always 6 runes
         elseif renderMode == CPK.MODE.AURA_SINGLE then
-            --- DH Devourer: pips when Blizzard exposes an integer max (collapsing
-            --- star cost in Void Metamorphosis, Dark Heart max applications
-            --- otherwise), single normalized bar when it is secret/unavailable.
+            --- DH Devourer mirrors Blizzard and Elemental: one continuous bar,
+            --- normalized against the real Soul Fragment maximum at runtime.
             maxP = 1
-            if powerType == "SOUL_FRAGMENTS" and type(CPConst.ResolveDevourerSegments) == "function" then
-                --- The full refresh is the cold path (login, spec, talents), so
-                --- it reads the meta state once and seeds the runtime memo with
-                --- it. Talent changes reach us as a structural refresh, which is
-                --- exactly what makes memoizing the static maximum safe.
-                local inMeta = CPAuras.Get(CPK.SPELL.VOID_METAMORPHOSIS) ~= nil
-                maxP = CPConst.ResolveDevourerSegments(inMeta, NotSecret)
-                CP.dhInMeta = inMeta
-                CP._dhSegCount, CP._dhSegMeta = maxP, inMeta
-            end
         elseif renderMode == CPK.MODE.CONTINUOUS then
             maxP = 1  --- Ele Maelstrom: single continuous bar
         elseif renderMode == CPK.MODE.STAGGER then
@@ -2382,7 +2371,6 @@ do
             tonumber = tonumber,
             math_floor = math_floor,
             C_Timer = C_Timer,
-            GetTrackedPlayerAura = CPAuras.Get,
             GetPlayerFrame = GetPlayerFrame,
             CP_EnsureBars = CP_EnsureBars,
             CP_Layout = CP_Layout,
