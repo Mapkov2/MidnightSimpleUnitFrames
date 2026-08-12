@@ -339,6 +339,17 @@ local function RefreshBorderTestFrames()
     elseif gf.MarkAllDirty then
       gf.MarkAllDirty(gf.DIRTY_BORDER or gf.DIRTY_VISUAL or 2)
     end
+    -- The menu/edit-mode group preview pool is intentionally detached from
+    -- GF.frameList, so the live-frame refresh above cannot reach it. Route the
+    -- same border-only apply through the preview owner; the preview apply then
+    -- re-enters the normal Rounded Frames callback for the refreshed frame.
+    if gf.RefreshPreviewLayout then
+      gf.RefreshPreviewLayout(nil, {
+        reason = "MSUF_BORDER_TEST_PREVIEW",
+        dirtyMask = gf.DIRTY_BORDER or gf.DIRTY_VISUAL,
+        immediate = true,
+      })
+    end
   end
 end
 
