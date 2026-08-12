@@ -1,9 +1,9 @@
 --- UnitFrames/Engine/Group/MSUF_UF_Group_Blizzard.lua
 --- Ownership adapter for Blizzard party/raid frames.
 ---
---- When MSUF group frames are enabled, Blizzard's group frames must be hidden or
---- restored without tainting protected frames. This file centralizes the
---- hide/reparent/restore logic and defers protected work out of combat.
+--- When MSUF group frames are enabled, Blizzard's group-frame owners are hidden
+--- without touching their secret-aware unit buttons. Returning ownership is a
+--- reload-only transition; protected hide/reparent work is deferred out of combat.
 
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
@@ -25,27 +25,19 @@ local GetNumGroupMembers = GetNumGroupMembers
 local hooksecurefunc = hooksecurefunc
 local type = type
 local next = next
-local pairs = pairs
 local tostring = tostring
-
-local MEMBERS_PER_RAID_GROUP = _G.MEMBERS_PER_RAID_GROUP or 5
-local MAX_RAID_GROUPS = _G.NUM_RAID_GROUPS or 8
-local MAX_RAID_MEMBERS = _G.MAX_RAID_MEMBERS or 40
 
 local hiddenParent
 local eventFrame
 local applyScheduled
 local hookedSetParent = {}
-local hookedShow = {}
 local ownedFrames = {}
 local pendingHide = {}
-local pendingRestore = {}
 local lastOwnershipSig
 local rosterEventRegistered = false
 local BlizzardRosterEventWanted
 local MSUFOwnsLiveGroupFrames
 local blizzardEventsActive = false
-local suspendedScripts = {}
 
 local function InCombat()
   return InCombatLockdown and InCombatLockdown()
@@ -116,11 +108,6 @@ local function DeferHide(frame)
   EnsureEventFrame():RegisterEvent("PLAYER_REGEN_ENABLED")
 end
 
-local function DeferRestore(frame, showAfter)
-  pendingRestore[frame] = showAfter and true or false
-  EnsureEventFrame():RegisterEvent("PLAYER_REGEN_ENABLED")
-end
-
 --- Hard hiding prefers reparenting to a hidden parent. Protected frames cannot
 --- always be reparented in combat, so those requests are queued for regen.
 local function ReparentHidden(frame)
@@ -149,98 +136,17 @@ local function ResetParent(frame, parent)
   ReparentHidden(frame)
 end
 
-local function HideIfOwned(frame)
-  local info = ownedFrames[frame]
-  if info and info.hidden and frame and frame.Hide and not IsForbidden(frame) then
-    frame:Hide()
-  end
-end
-
-local function HookFrame(frame, doNotReparent)
+local function HookFrame(frame)
   if not frame or IsForbidden(frame) then
     return
   end
-  if not doNotReparent and frame.SetParent and not hookedSetParent[frame] then
+  if frame.SetParent and not hookedSetParent[frame] then
     hooksecurefunc(frame, "SetParent", ResetParent)
     hookedSetParent[frame] = true
   end
-  if frame.HookScript and not hookedShow[frame] then
-    frame:HookScript("OnShow", HideIfOwned)
-    hookedShow[frame] = true
-  end
 end
 
---- Event registrations can carry unit filters and WoW exposes no API that enumerates
---- them. Keep those registrations intact and suspend the handlers instead; this is the
---- only lossless in-session inverse when control is returned to Blizzard.
-local function SuspendOneFrameScripts(frame)
-  if not frame or suspendedScripts[frame] or IsForbidden(frame)
-    or type(frame.GetScript) ~= "function" or type(frame.SetScript) ~= "function" then
-    return
-  end
-  local state = {
-    onEvent = frame:GetScript("OnEvent") or false,
-    onUpdate = frame:GetScript("OnUpdate") or false,
-  }
-  suspendedScripts[frame] = state
-  if state.onEvent then frame:SetScript("OnEvent", nil) end
-  if state.onUpdate then frame:SetScript("OnUpdate", nil) end
-end
-
-local function RestoreOneFrameScripts(frame)
-  local state = frame and suspendedScripts[frame]
-  if not state then return end
-  suspendedScripts[frame] = nil
-  if IsForbidden(frame) or type(frame.SetScript) ~= "function" then return end
-  frame:SetScript("OnEvent", state.onEvent ~= false and state.onEvent or nil)
-  frame:SetScript("OnUpdate", state.onUpdate ~= false and state.onUpdate or nil)
-end
-
-local function SuspendFrameScripts(frame)
-  SuspendOneFrameScripts(frame)
-  if frame then SuspendOneFrameScripts(frame.onUpdateFrame) end
-end
-
-local function RestoreFrameScripts(frame)
-  RestoreOneFrameScripts(frame)
-  if frame then RestoreOneFrameScripts(frame.onUpdateFrame) end
-end
-
-local function ForEachKnownChild(frame, fn)
-  if not frame then
-    return
-  end
-  local child = frame.healthBar or frame.healthbar or frame.HealthBar or (frame.HealthBarsContainer and frame.HealthBarsContainer.healthBar)
-  fn(child)
-  child = frame.manabar or frame.ManaBar or frame.PowerBar
-  fn(child)
-  child = frame.castBar or frame.spellbar or frame.CastingBarFrame
-  fn(child)
-  child = frame.powerBarAlt or frame.PowerBarAlt
-  fn(child)
-  child = frame.BuffFrame or frame.AurasFrame
-  fn(child)
-  child = frame.DebuffFrame
-  fn(child)
-  child = frame.pingIconFrame or frame.PingIconFrame
-  fn(child)
-  child = frame.petFrame or frame.PetFrame
-  fn(child)
-  child = frame.totFrame or frame.TargetFrameToT
-  fn(child)
-  child = frame.CcRemoverFrame
-  fn(child)
-end
-
-local function SuspendKnownChildren(frame)
-  ForEachKnownChild(frame, SuspendFrameScripts)
-end
-
-local function RestoreKnownChildren(frame)
-  ForEachKnownChild(frame, RestoreFrameScripts)
-end
-
-local function HardHideFrame(frame, doNotReparent)
+local function HardHideFrame(frame)
   frame = ResolveFrame(frame)
   if not frame or IsForbidden(frame) then
     return nil
@@ -248,208 +154,28 @@ local function HardHideFrame(frame, doNotReparent)
 
   local info = ownedFrames[frame]
   if not info then
-    info = { parent = frame.GetParent and frame:GetParent() or UIParent }
-    ownedFrames[frame] = info
-  elseif info.parent == nil and frame.GetParent then
-    info.parent = frame:GetParent()
-  end
-  if not info.visibilityCaptured and frame.IsShown then
-    info.wasShown = frame:IsShown() and true or false
-    info.visibilityCaptured = true
-  end
-  info.hidden = true
-
-  SuspendFrameScripts(frame)
-  SuspendKnownChildren(frame)
-  if frame.Hide then
-    frame:Hide()
-  end
-  HookFrame(frame, doNotReparent)
-
-  if not doNotReparent then
-    ReparentHidden(frame)
-  end
-  return frame
-end
-
-local function SoftHideFrame(frame, doNotReparent)
-  frame = ResolveFrame(frame)
-  if not frame or IsForbidden(frame) then
-    return nil
-  end
-
-  local info = ownedFrames[frame]
-  if not info then
-    info = { parent = frame.GetParent and frame:GetParent() or UIParent }
+    info = {}
     ownedFrames[frame] = info
   end
-  if not info.visibilityCaptured and frame.IsShown then
-    info.wasShown = frame:IsShown() and true or false
-    info.visibilityCaptured = true
-  end
   info.hidden = true
-
-  if frame.Hide then
-    frame:Hide()
-  end
-  HookFrame(frame, doNotReparent)
-  if not doNotReparent then
-    ReparentHidden(frame)
-  end
-  return frame
-end
-
-local function RestoreFrame(frame, showAfter)
-  frame = ResolveFrame(frame)
-  if not frame or IsForbidden(frame) then
-    return
-  end
-  local info = ownedFrames[frame]
-  if not info then
-    if showAfter and frame.Show then frame:Show() end
-    return
-  end
 
   if InCombat() and frame.IsProtected and frame:IsProtected() then
-    DeferRestore(frame, showAfter)
-    return
+    DeferHide(frame)
+    return frame
   end
-
-  info.hidden = false
-  pendingHide[frame] = nil
-  local hidden = HiddenParent()
-  local parent = info.parent or UIParent
-  if frame.GetParent and frame:GetParent() == hidden then
-    if frame.SetParent and parent then
-      frame:SetParent(parent)
-    end
-  end
-  RestoreFrameScripts(frame)
-  RestoreKnownChildren(frame)
-  local restoreShown = info.visibilityCaptured and info.wasShown == true
-  local restoreVisibility = info.visibilityCaptured == true
-  info.visibilityCaptured = nil
-  info.wasShown = nil
-  if showAfter and frame.Show then
-    frame:Show()
-  elseif restoreVisibility and frame.SetShown then
-    frame:SetShown(restoreShown)
-  elseif restoreVisibility and restoreShown and frame.Show then
-    frame:Show()
-  elseif restoreVisibility and frame.Hide then
+  if frame.Hide then
     frame:Hide()
   end
+  HookFrame(frame)
+  ReparentHidden(frame)
+  return frame
 end
 
-local function ForEachPoolActive(pool, fn)
-  if not (pool and pool.EnumerateActive) then
-    return
-  end
-  for frame in pool:EnumerateActive() do
-    if frame then
-      fn(frame)
-    end
-  end
-end
-
-local function ForEachFrameTable(list, fn)
-  if type(list) ~= "table" then
-    return
-  end
-  for _, frame in pairs(list) do
-    if type(frame) == "table" then
-      fn(frame)
-    end
-  end
-end
-
-local function RefreshBlizzardParty()
-  local party = _G.PartyFrame
-  local compact = _G.CompactPartyFrame
-
-  --- PartyFrame is Blizzard's persistent Edit Mode/layout parent. Its children own
-  --- runtime visibility, but Blizzard never re-Shows this parent after an addon Hide.
-  if party and party.Show and not IsForbidden(party) then
-    party:Show()
-  end
-  if compact and type(compact.RefreshMembers) == "function" then
-    compact:RefreshMembers()
-  end
-  if type(_G.UpdateRaidAndPartyFrames) == "function" then
-    _G.UpdateRaidAndPartyFrames()
-  elseif party and type(party.UpdatePartyFrames) == "function" then
-    party:UpdatePartyFrames()
-  elseif type(_G.PartyFrame_Update) == "function" and party then
-    _G.PartyFrame_Update(party)
-  end
-  if compact and type(compact.UpdateVisibility) == "function" then
-    compact:UpdateVisibility()
-  elseif type(_G.CompactPartyFrame_UpdateShown) == "function" then
-    _G.CompactPartyFrame_UpdateShown()
-  end
-end
-
-local function RefreshBlizzardRaid()
-  if type(_G.CompactRaidFrameManager_UpdateShown) == "function" then
-    _G.CompactRaidFrameManager_UpdateShown()
-  end
-  local container = _G.CompactRaidFrameContainer
-  if container and type(container.TryUpdate) == "function" then
-    container:TryUpdate()
-  elseif type(_G.CompactRaidFrameContainer_TryUpdate) == "function" then
-    _G.CompactRaidFrameContainer_TryUpdate(_G.CompactRaidFrameContainer)
-  end
-  if type(_G.CompactRaidFrameManager_UpdateOptionsFlowContainer) == "function" then
-    _G.CompactRaidFrameManager_UpdateOptionsFlowContainer()
-  end
-end
-
-local function HidePartyFrames(hard)
-  local hide = hard and HardHideFrame or SoftHideFrame
-  hide(_G.PartyFrame)
-  if _G.PartyFrame then
-    ForEachPoolActive(_G.PartyFrame.PartyMemberFramePool, function(frame)
-      hide(frame, true)
-    end)
-  end
-  hide(_G.CompactPartyFrame)
-  hide(_G.CompactPartyFrameTitle)
-  if _G.CompactPartyFrame then
-    ForEachFrameTable(_G.CompactPartyFrame.memberUnitFrames, function(frame)
-      hide(frame, true)
-    end)
-  end
-  for i = 1, MEMBERS_PER_RAID_GROUP do
-    hide(_G["CompactPartyFrameMember" .. i])
-  end
-  for i = 1, 4 do
-    hide(_G["PartyMemberFrame" .. i])
-    hide(_G["PartyMemberFrame" .. i .. "PetFrame"])
-  end
-end
-
-local function RestorePartyFrames(showAfter)
-  RestoreFrame(_G.PartyFrame, showAfter)
-  if _G.PartyFrame then
-    ForEachPoolActive(_G.PartyFrame.PartyMemberFramePool, function(frame)
-      RestoreFrame(frame, showAfter)
-    end)
-  end
-  RestoreFrame(_G.CompactPartyFrame, showAfter)
-  RestoreFrame(_G.CompactPartyFrameTitle, showAfter)
-  if _G.CompactPartyFrame then
-    ForEachFrameTable(_G.CompactPartyFrame.memberUnitFrames, function(frame)
-      RestoreFrame(frame, showAfter)
-    end)
-  end
-  for i = 1, MEMBERS_PER_RAID_GROUP do
-    RestoreFrame(_G["CompactPartyFrameMember" .. i], showAfter)
-  end
-  for i = 1, 4 do
-    RestoreFrame(_G["PartyMemberFrame" .. i], showAfter)
-    RestoreFrame(_G["PartyMemberFrame" .. i .. "PetFrame"], showAfter)
-  end
-  RefreshBlizzardParty()
+local function HidePartyFrames()
+  -- CompactPartyFrame and the classic PartyMemberFrame pool are descendants of
+  -- PartyFrame on 12.1. Hide only that owner; touching individual unit buttons
+  -- would taint their secret-aware health/event execution.
+  HardHideFrame(_G.PartyFrame)
 end
 
 --- CompactRaidFrameManager is deliberately absent here. The tab is a tool panel
@@ -458,51 +184,12 @@ end
 --- setting -- reparenting it makes later alpha writes ineffective -- so the dropdown did
 --- nothing whenever MSUF owned any group frames. Its AUTO mode reproduces the old "gone
 --- while MSUF owns the frames" behavior.
-local function HideRaidFrames(hard)
-  local hide = hard and HardHideFrame or SoftHideFrame
-  hide(_G.CompactRaidFrameReservationManager)
-  hide(_G.CompactRaidFrameContainer)
-  if _G.CompactRaidFrameContainer then
-    ForEachFrameTable(_G.CompactRaidFrameContainer.memberUnitFrames, function(frame)
-      hide(frame, true)
-    end)
-    ForEachFrameTable(_G.CompactRaidFrameContainer.flowFrames, function(frame)
-      hide(frame, true)
-    end)
-    ForEachFrameTable(_G.CompactRaidFrameContainer.groupFrames, function(frame)
-      hide(frame, true)
-    end)
-  end
-  for i = 1, MAX_RAID_GROUPS do
-    hide(_G["CompactRaidGroup" .. i])
-  end
-  for i = 1, MAX_RAID_MEMBERS do
-    hide(_G["CompactRaidFrame" .. i], true)
-  end
-end
-
---- Mirrors HideRaidFrames: the manager tab is not part of the ownership handover.
-local function RestoreRaidFrames(showAfter)
-  RestoreFrame(_G.CompactRaidFrameReservationManager, showAfter)
-  RestoreFrame(_G.CompactRaidFrameContainer, showAfter)
-  if _G.CompactRaidFrameContainer then
-    ForEachFrameTable(_G.CompactRaidFrameContainer.memberUnitFrames, function(frame)
-      RestoreFrame(frame, showAfter)
-    end)
-    ForEachFrameTable(_G.CompactRaidFrameContainer.flowFrames, function(frame)
-      RestoreFrame(frame, showAfter)
-    end)
-    ForEachFrameTable(_G.CompactRaidFrameContainer.groupFrames, function(frame)
-      RestoreFrame(frame, showAfter)
-    end)
-  end
-  for i = 1, MAX_RAID_GROUPS do
-    RestoreFrame(_G["CompactRaidGroup" .. i], showAfter)
-  end
-  for i = 1, MAX_RAID_MEMBERS do
-    RestoreFrame(_G["CompactRaidFrame" .. i], showAfter)
-  end
-  RefreshBlizzardRaid()
+local function HideRaidFrames()
+  -- All generated CompactRaidGroup/CompactRaidFrame unit buttons are children
+  -- of CompactRaidFrameContainer. Hide only the owners and leave Blizzard's
+  -- unit-button scripts, events, colors and secret values completely untouched.
+  HardHideFrame(_G.CompactRaidFrameReservationManager)
+  HardHideFrame(_G.CompactRaidFrameContainer)
 end
 
 --- Blizzard Raid Manager visibility.
@@ -736,47 +423,23 @@ function MSUFOwnsLiveGroupFrames()
   return PartyScopeActive() or RaidScopeActive()
 end
 
-local function BlizzardRaidManagerWantsShown()
-  local getSetting = _G.CompactRaidFrameManager_GetSetting
-  if type(getSetting) ~= "function" then
-    return nil
-  end
-  local value = getSetting("IsShown")
-  if value == 1 or value == true or value == "1" or value == "true" then
-    return true
-  end
-  if value == 0 or value == false or value == "0" or value == "false" then
-    return false
-  end
-  return nil
-end
-
 local function ApplyDisabledPartyFallback(mode)
   mode = NormalizeBlizzardFallbackMode(mode)
   if mode == "NONE" then
-    HidePartyFrames(true)
-  elseif mode == "SHOW" then
-    RestorePartyFrames(true)
-  else
-    RestorePartyFrames(false)
+    HidePartyFrames()
   end
+  -- AUTO/SHOW deliberately leave Blizzard untouched. Returning a frame that
+  -- MSUF hid earlier in this session requires /reload; the provider control
+  -- already presents that requirement. Calling Blizzard's Show/update paths
+  -- here would run secret-aware CompactUnitFrame code under addon taint.
 end
 
 local function ApplyDisabledRaidFallback(mode)
   mode = NormalizeBlizzardFallbackMode(mode)
   if mode == "NONE" then
-    HideRaidFrames(true)
-  elseif mode == "SHOW" then
-    RestoreRaidFrames(true)
-  else
-    local wantsShown = BlizzardRaidManagerWantsShown()
-    RestoreRaidFrames(wantsShown == true)
-    if wantsShown == false and _G.CompactRaidFrameContainer and _G.CompactRaidFrameContainer.Hide then
-      if not IsForbidden(_G.CompactRaidFrameContainer) then
-        _G.CompactRaidFrameContainer:Hide()
-      end
-    end
+    HideRaidFrames()
   end
+  -- AUTO/SHOW are Blizzard-owned until reload; see the Party path above.
 end
 
 BlizzardRosterEventWanted = function()
@@ -790,21 +453,22 @@ BlizzardRosterEventWanted = function()
 end
 
 function GF.HideBlizzardPartyFrames()
-  HidePartyFrames(true)
+  HidePartyFrames()
 end
 
 function GF.HideBlizzardRaidFrames()
-  HideRaidFrames(true)
+  HideRaidFrames()
 end
 
-function GF.RestoreBlizzardGroupFrames(showAfter)
-  lastOwnershipSig = nil
-  RestorePartyFrames(showAfter == true)
-  RestoreRaidFrames(showAfter == true)
+function GF.RestoreBlizzardGroupFrames()
+  -- Restoring/rebuilding Blizzard CompactUnitFrames from addon execution is
+  -- not secret-safe on 12.1. Provider changes are applied by the clean native
+  -- load path after /reload instead.
+  return false
 end
 
 --- Main ownership reconciliation. It compares MSUF group-frame state and the
---- configured Blizzard fallback mode, then hides/restores party and raid frames.
+--- configured Blizzard fallback mode, then hides only frames owned by MSUF.
 function GF.ApplyBlizzardGroupFrameOwnership(reason)
   if not blizzardEventsActive then SetBlizzardEventsEnabled() end
   if InCombat() then
@@ -829,7 +493,6 @@ function GF.ApplyBlizzardGroupFrameOwnership(reason)
   local raidActive = RaidScopeActive()
   local partyMode = NormalizeBlizzardFallbackMode(partyConf.blizzardFallbackMode)
   local raidMode = NormalizeBlizzardFallbackMode(raidConf.blizzardFallbackMode)
-  local wantsShown = (not raidUsesMSUF and raidMode == "AUTO") and BlizzardRaidManagerWantsShown() or nil
   local sig = "on|" .. tostring(groupCount)
     .. "|" .. tostring(inRaid)
     .. "|" .. tostring(raidKind)
@@ -840,28 +503,26 @@ function GF.ApplyBlizzardGroupFrameOwnership(reason)
     .. "|" .. tostring(raidActive)
     .. "|" .. tostring(partyMode)
     .. "|" .. tostring(raidMode)
-    .. "|" .. tostring(wantsShown)
     .. "|" .. tostring(ResolveRaidManagerMode())
 
-  if not force and lastOwnershipSig == sig and not next(pendingHide) and not next(pendingRestore) then
+  if not force and lastOwnershipSig == sig and not next(pendingHide) then
     return true
   end
   lastOwnershipSig = sig
 
   if partyUsesMSUF then
-    HidePartyFrames(true)
+    HidePartyFrames()
   else
     ApplyDisabledPartyFallback(partyMode)
   end
 
   if raidUsesMSUF then
-    HideRaidFrames(true)
+    HideRaidFrames()
   else
     ApplyDisabledRaidFallback(raidMode)
   end
 
-  --- Runs last: RestoreRaidFrames above may have re-shown the manager, and the tab's
-  --- own visibility mode outranks whatever the ownership pass left behind.
+  --- The manager tab is independent from the secret-aware unit-frame owners.
   ApplyRaidManagerMode()
 
   RefreshRosterEventRegistration()
@@ -887,12 +548,9 @@ local function FlushPending()
       if frame.Hide and not IsForbidden(frame) then
         frame:Hide()
       end
+      HookFrame(frame)
       ReparentHidden(frame)
     end
-  end
-  for frame, showAfter in pairs(pendingRestore) do
-    pendingRestore[frame] = nil
-    RestoreFrame(frame, showAfter)
   end
   if raidManagerPendingMouse ~= nil then
     local wanted = raidManagerPendingMouse

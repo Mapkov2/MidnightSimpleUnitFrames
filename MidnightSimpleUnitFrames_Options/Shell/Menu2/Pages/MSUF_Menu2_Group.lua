@@ -518,7 +518,7 @@ local function SetFrameProvider(kind, provider)
         conf.enabled = nextEnabled
         if not nextEnabled then conf.blizzardFallbackMode = provider end
         QueueGF(kind, "rebuild")
-        if enabledChanged and type(_G.MSUF_ShowGroupFrameReloadRequiredPopup) == "function" then
+        if (enabledChanged or fallbackChanged) and type(_G.MSUF_ShowGroupFrameReloadRequiredPopup) == "function" then
             _G.MSUF_ShowGroupFrameReloadRequiredPopup()
         end
         return true
