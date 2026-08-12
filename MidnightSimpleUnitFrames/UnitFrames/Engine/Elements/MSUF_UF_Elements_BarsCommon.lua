@@ -63,12 +63,14 @@ local StatusBarInterpolation = Enum and Enum.StatusBarInterpolation
 local SMOOTH_INTERP = StatusBarInterpolation and StatusBarInterpolation.ExponentialEaseOut or nil
 local C_CurveUtil = _G.C_CurveUtil
 local CreateColor = _G.CreateColor
+local C_ClassColor_GetClassColor = _G.C_ClassColor and _G.C_ClassColor.GetClassColor
 local Secrets = MSUF.Secrets or {}
 local IsSecret = Secrets.IsSecret or function(_) return false end
 local IsNil = Secrets.IsNil or function(value) return value == nil end
 local issecretvalue = _G.issecretvalue or function(_) return false end
 local SafeNumber = Secrets.SafeNumber or tonumber
 local POWER_TYPE_MANA = Enum and Enum.PowerType and Enum.PowerType.Mana or 0
+local SECRET_DEPENDENT_CLASS_COLOR = 2
 
 local npcTypeReferenceLevel
 local npcTypeReferenceInstanceType
@@ -630,8 +632,11 @@ local function ClassColor(unit)
   return 0.12, 0.62, 0.95
 end
 
-local function DispatchClassColor(frame, unit)
+local function DispatchClassColor(frame, unit, allowSecretPassThrough)
   local _, class = ReadUnitClassCached(frame, unit)
+  if allowSecretPassThrough == true and issecretvalue(class) == true then
+    return class, nil, nil, SECRET_DEPENDENT_CLASS_COLOR
+  end
   local r, g, b = ClassColorForToken(class)
   if r ~= nil then return r, g, b end
   return 0.12, 0.62, 0.95
@@ -1209,7 +1214,7 @@ local function HealthColor(frame, unit, hp, maxHP, calc, event)
   end
 
   if state and state.isPlayerKnown and state.isPlayer then
-    return DispatchClassColor(frame, unit)
+    return DispatchClassColor(frame, unit, unit == "targettarget" or unit == "focustarget")
   end
 
   if health.npcClassColorBar == true and spec and spec.key ~= "pet" and spec.key ~= "boss"
@@ -1236,6 +1241,18 @@ local function ApplyHealthStatusColor(bar, frame, unit, hp, maxHP, calc, event)
   local spec = frame and frame.MSUFSpec
   local health = spec and spec.health or {}
   local r, g, b, raw = HealthColor(frame, unit, hp, maxHP, calc, event)
+  if raw == SECRET_DEPENDENT_CLASS_COLOR then
+    -- UnitClass can return an identity-restricted token for targettarget and
+    -- focustarget. C_ClassColor and SetStatusBarColor explicitly accept this
+    -- secret pipeline; never inspect or retain the resulting RGB components.
+    local classColor = C_ClassColor_GetClassColor and C_ClassColor_GetClassColor(r)
+    if classColor then
+      bar:SetStatusBarColor(classColor:GetRGB())
+      bar._msufStatusR, bar._msufStatusG, bar._msufStatusB, bar._msufStatusA = nil, nil, nil, nil
+      return true
+    end
+    r, g, b, raw = 0.12, 0.62, 0.95, nil
+  end
   if health.mode == "gradient" and raw == true then
     if issecretvalue(r) == true or issecretvalue(g) == true or issecretvalue(b) == true then
       -- Restricted curve results cannot participate in Lua comparisons. Pass

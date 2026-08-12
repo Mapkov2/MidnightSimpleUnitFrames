@@ -25,8 +25,9 @@ local SetFrameLevelCached = Text.SetFrameLevelCached
 local SetShownCached = Text.SetShownCached
 local SetTextCached = Text.SetTextCached
 local SetFont = Text.SetFont
-local SetNameTextColor = Text.SetNameTextColor
-local NameTextColor = Text.NameTextColor
+local ApplyNameTextColor = Text.ApplyNameTextColor or function(frame, unit)
+  Text.SetNameTextColor(frame, Text.NameTextColor(frame, unit))
+end
 local ResolveHealthTextModes = Text.ResolveHealthTextModes
 local CompileTextRuntime = Text.CompileTextRuntime
 local SetHealthTextColor = Text.SetHealthTextColor
@@ -1015,7 +1016,7 @@ local function RefreshAppliedTextColors(frame, spec, text)
     UpdateHealthTextColor(frame, rt, frame.MSUFUnitKey)
   end
   if frame.nameText then
-    SetNameTextColor(frame, NameTextColor(frame, frame.MSUFUnitKey))
+    ApplyNameTextColor(frame, frame.MSUFUnitKey)
   end
   frame._msufTextColorRevision = spec and spec._msufTextColorRevision
 end
@@ -1253,7 +1254,7 @@ function Text.Apply(frame, spec)
     UpdateHealthTextColor(frame, rt, frame.MSUFUnitKey)
   end
   if frame.nameText then
-    SetNameTextColor(frame, NameTextColor(frame, frame.MSUFUnitKey))
+    ApplyNameTextColor(frame, frame.MSUFUnitKey)
   end
   if frame._msufNameRelativeStatus == true and RefreshNameRelativeStatusAnchors then
     RefreshNameRelativeStatusAnchors(frame)
