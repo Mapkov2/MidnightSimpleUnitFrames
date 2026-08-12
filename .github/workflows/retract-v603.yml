@@ -19,6 +19,7 @@ jobs:
       CF_API_KEY: ${{ secrets.CF_API_KEY || secrets.CURSEFORGE }}
     steps:
       - name: Retract exact CurseForge file
+        continue-on-error: true
         shell: pwsh
         run: |
           if ([string]::IsNullOrWhiteSpace($env:CF_API_KEY)) {
@@ -65,6 +66,7 @@ jobs:
           }
 
       - name: Find and retract exact Wago release
+        if: always()
         shell: pwsh
         run: |
           if ([string]::IsNullOrWhiteSpace($env:WAGO_API_TOKEN)) {
