@@ -1273,28 +1273,8 @@ modeBuilders.AURA = function(E)
                 cur = WW.GetStacks()
                 textValue = cur
             elseif powerType == "TIP_OF_THE_SPEAR" then
-                local tipAuraID = E.TIP and E.TIP.AURA_ID
-                local useLocal = CP.spLocalUntil and GetTime and GetTime() < CP.spLocalUntil
-                if tipAuraID then
-                    local info = not useLocal and GetPlayerAura(tipAuraID) or nil
-                    if info then
-                        local apps = info.applications
-                        textValue = apps
-                        if NotSecret(apps) and apps ~= nil then
-                            cur = tonumber(apps) or 0
-                            CP.spStacks = cur
-                            local expirationTime = info.expirationTime
-                            if NotSecret(expirationTime) and expirationTime ~= nil then
-                                CP.spExpires = tonumber(expirationTime)
-                            end
-                        else
-                            cur = GetTrackedTipStacks()
-                        end
-                    else
-                        cur = GetTrackedTipStacks()
-                        textValue = cur
-                    end
-                end
+                cur = GetTrackedTipStacks()
+                textValue = cur
             elseif powerType == "ICICLES" then
                 local icicleID = CPK.SPELL and CPK.SPELL.ICICLES
                 if icicleID then

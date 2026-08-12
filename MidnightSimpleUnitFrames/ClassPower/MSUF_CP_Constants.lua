@@ -105,16 +105,25 @@ K.ICICLES = {
 
 K.TIP = {
     TALENT_ID = 260285,
-    AURA_ID = 260286,
     KILL_COMMAND = 259489,
     TWIN_FANG = 1272139,
     TAKEDOWN = 1250646,
+    TAKEDOWN_HIT = 1253859,
     PRIMAL_SURGE = 1272154,
+    TWIN_FANG_GAIN = 3,
     MAX_STACKS = 3,
     DURATION = 10,
     SPENDERS = {
-        [259495] = true, [259387] = true, [271788] = true, [187708] = true,
-        [1217525] = true, [320976] = true, [1206791] = true, [271014] = true,
+        [186270] = true,  -- Raptor Strike
+        [265189] = true,  -- Raptor Strike (ranged)
+        [1262293] = true, -- Raptor Swipe
+        [1262343] = true, -- Raptor Swipe (ranged)
+        [259495] = true,  -- Wildfire Bomb
+        [193265] = true,  -- Hatchet Toss
+        [1264949] = true, -- Chakram
+        [1261193] = true, -- Boomstick
+        [1253859] = true, -- Takedown impact
+        [1251592] = true, -- Flamefang Pitch
     },
 }
 

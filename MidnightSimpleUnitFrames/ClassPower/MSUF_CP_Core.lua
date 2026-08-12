@@ -1202,8 +1202,10 @@ builders.SPECIALS = function(env)
     local GetTime = env.GetTime
     local math_min = env.math_min
     local C_SpellBook = env.C_SpellBook
+    local C_Timer = env.C_Timer
     local RunActiveUpdate = env.RunActiveUpdate
     local RunAuraSegmentedUpdate = env.RunAuraSegmentedUpdate
+    local tipExpiryGeneration = 0
 
     --- Warlock shard prediction is speculative UI only; it is cleared on cast
     --- end and never writes profile/runtime structure.
@@ -1225,44 +1227,75 @@ builders.SPECIALS = function(env)
         RunActiveUpdate()
     end
 
-    --- Tip of the Spear is tracked from spell casts because the visible stack
-    --- state can lead aura refreshes. The authoritative aura update still gets
-    --- a chance to correct the display afterward.
+    local function ResetTipState(render)
+        tipExpiryGeneration = tipExpiryGeneration + 1
+        CP.spStacks = 0
+        CP.spExpires = nil
+        if render and CP.visible and CP.powerType == "TIP_OF_THE_SPEAR" then
+            RunAuraSegmentedUpdate()
+        end
+    end
+
+    local function ScheduleTipExpiry()
+        tipExpiryGeneration = tipExpiryGeneration + 1
+        local generation = tipExpiryGeneration
+        if not (C_Timer and type(C_Timer.After) == "function") then return end
+        C_Timer.After(TIP.DURATION + 0.05, function()
+            if generation ~= tipExpiryGeneration then return end
+            if CP.spExpires and GetTime() >= CP.spExpires then
+                ResetTipState(true)
+            end
+        end)
+    end
+
+    local function NormalizeExpiredTipState()
+        if CP.spExpires and GetTime() >= CP.spExpires then
+            ResetTipState(false)
+        end
+    end
+
+    --- EUI's secret-safe contract: Tip is derived exclusively from successful
+    --- player casts. No aura lookup, UNIT_AURA parsing, polling, or OnUpdate.
     local function OnTipOfTheSpearSpellCast(spellID)
+        local isRelevant = spellID == TIP.KILL_COMMAND
+            or spellID == TIP.TAKEDOWN
+            or TIP.SPENDERS[spellID] == true
+        if not isRelevant then return end
         local known = C_SpellBook and C_SpellBook.IsSpellKnown
         if not known then return end
         if not known(TIP.TALENT_ID) then return end
+        NormalizeExpiredTipState()
         if spellID == TIP.KILL_COMMAND then
             local gain = known(TIP.PRIMAL_SURGE) and 2 or 1
             CP.spStacks = math_min(TIP.MAX_STACKS, CP.spStacks + gain)
             CP.spExpires = GetTime() + TIP.DURATION
-            CP.spLocalUntil = GetTime() + 0.35
-            CP.spCachedQ = -1
+            ScheduleTipExpiry()
             RunAuraSegmentedUpdate()
             return
         end
         if spellID == TIP.TAKEDOWN and known(TIP.TWIN_FANG) then
-            CP.spStacks = math_min(TIP.MAX_STACKS, CP.spStacks + 2)
+            --- Twin Fangs grants three, then its impact spends one. Resolve the
+            --- net result here so same-frame event ordering cannot leave +1.
+            CP.spStacks = math_min(TIP.MAX_STACKS,
+                CP.spStacks + (TIP.TWIN_FANG_GAIN or 3)) - 1
             CP.spExpires = GetTime() + TIP.DURATION
-            CP.spLocalUntil = GetTime() + 0.35
-            CP.spCachedQ = -1
+            ScheduleTipExpiry()
             RunAuraSegmentedUpdate()
             return
         end
         if TIP.SPENDERS[spellID] and CP.spStacks > 0 then
+            if spellID == TIP.TAKEDOWN_HIT and known(TIP.TWIN_FANG) then return end
             CP.spStacks = CP.spStacks - 1
-            if CP.spStacks == 0 then CP.spExpires = nil end
-            CP.spLocalUntil = GetTime() + 0.35
-            CP.spCachedQ = -1
+            if CP.spStacks == 0 then
+                tipExpiryGeneration = tipExpiryGeneration + 1
+                CP.spExpires = nil
+            end
             RunAuraSegmentedUpdate()
         end
     end
 
     local function OnSpellTrackerReset()
-        CP.spStacks = 0
-        CP.spExpires = nil
-        CP.spLocalUntil = nil
-        CP.spCachedQ = -1
+        ResetTipState(false)
     end
 
     return {

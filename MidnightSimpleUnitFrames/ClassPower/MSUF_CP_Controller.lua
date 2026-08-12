@@ -941,8 +941,6 @@ local CP = {
     --- Spell Tracker state (Tip of the Spear only - Whirlwind uses WW module)
     spStacks    = 0,       --- current stack count
     spExpires   = nil,     --- GetTime() expiry timestamp (nil = no timer)
-    spLocalUntil = nil,    --- brief spellcast-led window before aura correction
-    spCachedQ   = -1,      --- skip-if-same quantizer
 }
 
 local CPAuras = {
@@ -1064,7 +1062,6 @@ function CPAuras.ActiveSpellKind(powerType, renderMode, spellID)
     spellID = CPAuras.NormalizeID(spellID)
     if not spellID then return nil end
     if powerType == "MAELSTROM_WEAPON" and spellID == CPK.SPELL.MAELSTROM_WEAPON then return "stacks" end
-    if powerType == "TIP_OF_THE_SPEAR" and spellID == TIP.AURA_ID then return "tip" end
     if powerType == "ICICLES" and CPConst.ICICLES and spellID == CPConst.ICICLES.AURA_ID then return "stacks" end
     if powerType == "SOUL_FRAGMENTS" then
         if spellID == CPK.SPELL.VOID_METAMORPHOSIS
@@ -1085,8 +1082,6 @@ function CPAuras.RefreshActive(powerType, renderMode)
 
     if powerType == "MAELSTROM_WEAPON" then
         Refresh(CPK.SPELL.MAELSTROM_WEAPON, "stacks")
-    elseif powerType == "TIP_OF_THE_SPEAR" then
-        Refresh(TIP.AURA_ID, "tip")
     elseif powerType == "ICICLES" then
         Refresh(CPConst.ICICLES and CPConst.ICICLES.AURA_ID, "stacks")
     elseif powerType == "SOUL_FRAGMENTS" then
@@ -1244,7 +1239,6 @@ function CPAuras.ProcessUnitAuraUpdate(unitAuraUpdateInfo, powerType, renderMode
 end
 
 CPAuras.AddSpell(CPK.SPELL.MAELSTROM_WEAPON)
-CPAuras.AddSpell(TIP.AURA_ID)
 CPAuras.AddSpell(CPConst.ICICLES and CPConst.ICICLES.AURA_ID)
 CPAuras.AddSpell(CPK.SPELL.VOID_METAMORPHOSIS)
 CPAuras.AddSpell(CPK.SPELL.SILENCE_THE_WHISPERS)
@@ -1741,6 +1735,7 @@ do
             GetTime = GetTime,
             math_min = math_min,
             C_SpellBook = C_SpellBook,
+            C_Timer = C_Timer,
             RunActiveUpdate = function() return CP_RunActiveUpdate(CP.powerType, CP.currentMax) end,
             RunAuraSegmentedUpdate = function()
                 if CP_UpdateValues_AuraSegmented then
@@ -1795,6 +1790,9 @@ local function CP_GetModeEventProfile(renderMode, powerType, isAuraPower)
     profile.spellSucceeded = profile.warlockPred
         or (powerType == "TIP_OF_THE_SPEAR")
         or (powerType == "SOUL_FRAGMENTS_VENG")
+    --- Tip is fully spellcast-tracked like EUI. Do not bind UNIT_AURA or touch
+    --- its protected aura payload for a resource whose state is deterministic.
+    if powerType == "TIP_OF_THE_SPEAR" then profile.aura = false end
     profile.deadAlive = (powerType == "TIP_OF_THE_SPEAR")
     return profile
 end
@@ -2105,8 +2103,6 @@ local function FullRefresh()
                 maxP = TIP.MAX_STACKS  --- Survival Hunter: 3 Tip of the Spear stacks
                 CP.spStacks = 0
                 CP.spExpires = nil
-                CP.spLocalUntil = nil
-                CP.spCachedQ = -1
             elseif powerType == "ICICLES" then
                 maxP = CPConst.ICICLES and CPConst.ICICLES.MAX_STACKS or 5
             else
@@ -2232,8 +2228,6 @@ local function FullRefresh()
         CP.wlPredDelta = 0
         CP.spStacks = 0
         CP.spExpires = nil
-        CP.spLocalUntil = nil
-        CP.spCachedQ = -1
     end
 
     --- --- AltMana ---

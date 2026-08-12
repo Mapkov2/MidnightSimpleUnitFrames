@@ -50,6 +50,7 @@ local data = {
                         "Group Spell Indicator preview positions remain isolated from live saved positions.",
                         "Devourer class resources update continuously again through one authoritative resource pipeline.",
                         "Icicles no longer shows an Aura icon over Class Resources or retains incorrect stack counts. It refreshes the exact player Aura on each Aura change, while protected Icicle and Maelstrom Weapon counts fill their pips through Blizzard's native StatusBar clamping without Lua comparisons.",
+                        "Tip of the Spear now shows the correct stacks after current Survival Hunter spenders and Takedown with Twin Fangs, and expires correctly without protected Aura reads.",
                         "Unit Frame names refresh immediately after anchor changes.",
                         "Live Group frames restore correctly after preview roster handoffs.",
                         "Fixed Group Aura slots honor their configured layers.",
