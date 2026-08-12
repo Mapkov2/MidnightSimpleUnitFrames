@@ -1425,8 +1425,10 @@ local function CompileCoreAuras(kind, conf)
     showTooltip = buff.trackedShowTooltip,
     showCooldownSwipe = buff.trackedShowCooldownSwipe,
     cooldownSwipeReverse = buff.trackedCooldownSwipeReverse,
-    sortMethod = buff.trackedSortMethod or buff.sortMethod,
-    sortReverse = buff.trackedSortReverse == true or (buff.trackedSortReverse == nil and buff.sortReverse == true),
+    -- Tracked Buffs are their own native AuraGroup. Keep their ordering local
+    -- instead of silently inheriting the normal Buff container's comparator.
+    sortMethod = buff.trackedSortMethod,
+    sortReverse = buff.trackedSortReverse == true,
     showDurationBar = buff.trackedShowDurationBar,
     durationBarHeight = buff.trackedDurationBarHeight,
     durationBarDisplay = buff.trackedDurationBarDisplay,
