@@ -45,9 +45,6 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
     local AddAliasesForAuraScope = ctx.AddAliasesForAuraScope
     local AddAuraLaneAliases = ctx.AddAuraLaneAliases
     local AuraScopeLabel = ctx.AuraScopeLabel
-    local RegisterAuraScopeBoolean = ctx.RegisterAuraScopeBoolean
-    local RegisterAuraScopeNumber = ctx.RegisterAuraScopeNumber
-    local RegisterAuraScopeEnum = ctx.RegisterAuraScopeEnum
     local RegisterAuraScopeLaneBoolean = ctx.RegisterAuraScopeLaneBoolean
     local RegisterAuraScopeLaneNumber = ctx.RegisterAuraScopeLaneNumber
     local RegisterAuraScopeLaneEnum = ctx.RegisterAuraScopeLaneEnum
@@ -59,17 +56,13 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
     local AuraWriteLaneStackAnchor = ctx.AuraWriteLaneStackAnchor
     local AuraReadLaneCooldownAnchor = ctx.AuraReadLaneCooldownAnchor
     local AuraWriteLaneCooldownAnchor = ctx.AuraWriteLaneCooldownAnchor
-    local AuraUseSharedVisuals = ctx.AuraUseSharedVisuals
-    local AuraSetUseSharedVisuals = ctx.AuraSetUseSharedVisuals
-    local AuraUseSharedRules = ctx.AuraUseSharedRules
-    local AuraSetUseSharedRules = ctx.AuraSetUseSharedRules
     local AuraModel = ctx.AuraModel
     local EnsureAuraFallbackDB = ctx.EnsureAuraFallbackDB
     local ApplyAura = ctx.ApplyAura
 
     if not (Registry and type(Registry.RegisterSetting) == "function") then return end
     if type(AddAliasesForAuraScope) ~= "function" or type(AddAuraLaneAliases) ~= "function" then return end
-    if type(AuraScopeLabel) ~= "function" or type(RegisterAuraScopeBoolean) ~= "function" then return end
+    if type(AuraScopeLabel) ~= "function" then return end
 
     if #AURA_DEBUFF_TYPE_BORDER_VALUES == 0 then
         AURA_DEBUFF_TYPE_BORDER_VALUES = { "OFF", "BORDER", "SYMBOL" }
@@ -135,18 +128,9 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
     end
 
     local function AuraFallbackLaneStyle(scope, lane, key, defaultValue, writeValue)
-        if type(EnsureAuraFallbackDB) ~= "function" then return defaultValue end
-        local _, shared = EnsureAuraFallbackDB()
-        if type(shared) ~= "table" then return defaultValue end
-        local laneKey = LaneStyleKey(lane, key)
-        if writeValue ~= nil then
-            shared[laneKey] = writeValue
-            return writeValue
-        end
-        local value = shared[laneKey]
-        if value == nil then value = shared[key] end
-        if value == nil then return defaultValue end
-        return value
+        -- The Assistant must never turn a missing Unit model into a write to
+        -- another owner. Returning the declared default fails closed.
+        return defaultValue
     end
 
     local function AuraReadLaneSortMethod(scope, lane)
@@ -227,7 +211,7 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
             value = tostring(value or "")
             if value ~= "" and not seen[value] then seen[value] = true; out[#out + 1] = value end
         end
-        local scopeWords = scope == "shared" and { "shared", "all" } or { scope }
+        local scopeWords = { scope }
         for i = 1, #nouns do
             local noun = nouns[i]
             for j = 1, #scopeWords do
@@ -291,7 +275,7 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
         local function add(value)
             if value ~= "" and not seen[value] then seen[value] = true; out[#out + 1] = value end
         end
-        local scopeWords = scope == "shared" and { "shared", "all" } or { scope }
+        local scopeWords = { scope }
         local singular = lane == "buff" and "buff" or "debuff"
         local plural = lane == "buff" and "buffs" or "debuffs"
         for i = 1, #scopeWords do
@@ -428,61 +412,13 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
 
     for _, scope in ipairs(AURA_SCOPES) do
         local aliases = {}
-        AddAliasesForAuraScope(aliases, scope, "show stack count")
-        AddAliasesForAuraScope(aliases, scope, "stack count")
-        RegisterAuraScopeBoolean(scope, "showStackCount", "Show Stack Count", true, aliases,
-            function() return AuraReadLaneStyleBool(scope, "buff", "showStackCount", true) end,
-            function(value)
-                AuraWriteLaneStyleBool(scope, "buff", "showStackCount", value)
-                AuraWriteLaneStyleBool(scope, "debuff", "showStackCount", value)
-            end,
-            true)
-
-        aliases = {}
-        AddAliasesForAuraScope(aliases, scope, "show cooldown text")
-        AddAliasesForAuraScope(aliases, scope, "cooldown text")
-        RegisterAuraScopeBoolean(scope, "showCooldownText", "Show Cooldown Text", true, aliases,
-            function() return AuraReadLaneStyleBool(scope, "buff", "showCooldownText", true) end,
-            function(value)
-                AuraWriteLaneStyleBool(scope, "buff", "showCooldownText", value)
-                AuraWriteLaneStyleBool(scope, "debuff", "showCooldownText", value)
-            end,
-            true)
-
-        aliases = {}
-        AddAliasesForAuraScope(aliases, scope, "show cooldown swipe")
-        AddAliasesForAuraScope(aliases, scope, "cooldown swipe")
-        RegisterAuraScopeBoolean(scope, "showCooldownSwipe", "Show Cooldown Swipe", true, aliases,
-            function() return AuraReadLaneStyleBool(scope, "buff", "showCooldownSwipe", true) end,
-            function(value)
-                AuraWriteLaneStyleBool(scope, "buff", "showCooldownSwipe", value)
-                AuraWriteLaneStyleBool(scope, "debuff", "showCooldownSwipe", value)
-            end,
-            true)
-
-        if scope ~= "shared" then
-            aliases = {}
-            AddAliasesForAuraScope(aliases, scope, "show tooltip")
-            AddAliasesForAuraScope(aliases, scope, "tooltip")
-            AddAliasesForAuraScope(aliases, scope, "aura tooltip")
-            AddAliasesForAuraScope(aliases, scope, "aura tooltips")
-            RegisterAuraScopeBoolean(scope, "showTooltip", "Aura Tooltips", true, aliases,
-                function() return AuraReadLaneStyleBool(scope, "buff", "showTooltip", true) end,
-                function(value)
-                    AuraWriteLaneStyleBool(scope, "buff", "showTooltip", value)
-                    AuraWriteLaneStyleBool(scope, "debuff", "showTooltip", value)
-                end,
-                true)
-        end
-
-        aliases = {}
         AddAliasesForAuraScope(aliases, scope, "debuff type border")
         AddAliasesForAuraScope(aliases, scope, "debuff border mode")
         AddAliasesForAuraScope(aliases, scope, "dispel type border")
         AddAliasesForAuraScope(aliases, scope, "dispel border mode")
         AddAliasesForAuraScope(aliases, scope, "aura debuff border")
         Registry:RegisterSetting({
-            key = "auras3." .. scope .. ".debuffTypeBorderMode",
+            key = "auras3." .. scope .. ".debuff.debuffTypeBorderMode",
             label = AuraScopeLabel(scope) .. " Debuff Type Border",
             category = AuraScopeLabel(scope) .. " / Aura Style",
             unit = scope,
@@ -499,51 +435,6 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
             end,
             combatSafe = false,
         })
-
-        aliases = {}
-        AddAliasesForAuraScope(aliases, scope, "stack anchor")
-        AddAliasesForAuraScope(aliases, scope, "stack count anchor")
-        RegisterAuraScopeEnum(scope, "stackAnchor", "Stack Count Anchor", AURA_STACK_ANCHOR_VALUES, AURA_STACK_ANCHOR_ALIASES, aliases,
-            function() return AuraReadLaneStackAnchor(scope, "buff") end,
-            function(value)
-                AuraWriteLaneStackAnchor(scope, "buff", value)
-                AuraWriteLaneStackAnchor(scope, "debuff", value)
-            end,
-            true)
-
-        aliases = {}
-        AddAliasesForAuraScope(aliases, scope, "cooldown anchor")
-        AddAliasesForAuraScope(aliases, scope, "cooldown text anchor")
-        AddAliasesForAuraScope(aliases, scope, "timer text anchor")
-        RegisterAuraScopeEnum(scope, "cooldownAnchor", "Cooldown Anchor", AURA_ANCHOR_VALUES, AURA_ANCHOR_ALIASES, aliases,
-            function() return AuraReadLaneCooldownAnchor(scope, "buff") end,
-            function(value)
-                AuraWriteLaneCooldownAnchor(scope, "buff", value)
-                AuraWriteLaneCooldownAnchor(scope, "debuff", value)
-            end,
-            true)
-
-        aliases = {}
-        AddAliasesForAuraScope(aliases, scope, "stack size")
-        AddAliasesForAuraScope(aliases, scope, "stack text size")
-        RegisterAuraScopeNumber(scope, "stackTextSize", "Stack Text Size", 14, 6, 40, aliases,
-            function() return AuraReadLaneStyleNumber(scope, "buff", "stackTextSize", 14, 6, 40) end,
-            function(value)
-                AuraWriteLaneStyleNumber(scope, "buff", "stackTextSize", value, 6, 40)
-                AuraWriteLaneStyleNumber(scope, "debuff", "stackTextSize", value, 6, 40)
-            end,
-            true)
-
-        aliases = {}
-        AddAliasesForAuraScope(aliases, scope, "cooldown size")
-        AddAliasesForAuraScope(aliases, scope, "cooldown text size")
-        RegisterAuraScopeNumber(scope, "cooldownTextSize", "Cooldown Text Size", 14, 6, 40, aliases,
-            function() return AuraReadLaneStyleNumber(scope, "buff", "cooldownTextSize", 14, 6, 40) end,
-            function(value)
-                AuraWriteLaneStyleNumber(scope, "buff", "cooldownTextSize", value, 6, 40)
-                AuraWriteLaneStyleNumber(scope, "debuff", "cooldownTextSize", value, 6, 40)
-            end,
-            true)
 
         for _, laneInfo in ipairs(AURA_LANES) do
             local lane = laneInfo.key
@@ -570,9 +461,7 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
                 function() return AuraReadLaneFrameEffectType(settingScope, settingLane) end,
                 function(value) AuraWriteLaneFrameEffectType(settingScope, settingLane, value) end,
                 true, {
-                    page = settingScope == "shared"
-                        and (settingLane == "buff" and "auras3_buffs" or "auras3_debuffs")
-                        or ("uf_" .. settingScope),
+                    page = "uf_" .. settingScope,
                     exactAliases = aliases,
                     description = "Chooses the Aura-driven Full-Frame visual for this Buff or Debuff lane; it is separate from UnitFrame Dispel Overlay.",
                 })
@@ -706,41 +595,6 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
                     function(value) AuraWriteLaneStyleNumber(settingScope, settingLane, spec.key, value, spec.minValue, spec.maxValue) end,
                     true)
             end
-        end
-
-        if scope ~= "shared" then
-            aliases = {}
-            AddAliasesForAuraScope(aliases, scope, "custom aura style")
-            AddAliasesForAuraScope(aliases, scope, "use custom aura style")
-            AddAliasesForAuraScope(aliases, scope, "use custom aura style for this scope")
-            AddAliasesForAuraScope(aliases, scope, "aura style override")
-            AddAliasesForAuraScope(aliases, scope, "custom aura visuals")
-            RegisterAuraScopeBoolean(scope, "customStyle", "Custom Aura Style", false, aliases,
-                function() return not AuraUseSharedVisuals(scope) end,
-                function(value) AuraSetUseSharedVisuals(scope, not value) end,
-                false,
-                { "custom aura style", "use custom aura style", "use custom aura style for this scope", "aura style override", "custom aura visuals" })
-
-            aliases = {}
-            AddAliasesForAuraScope(aliases, scope, "use shared style")
-            AddAliasesForAuraScope(aliases, scope, "shared aura style")
-            RegisterAuraScopeBoolean(scope, "useSharedStyle", "Use Shared Style", true, aliases,
-                function() return AuraUseSharedVisuals(scope) end,
-                function(value) AuraSetUseSharedVisuals(scope, value) end,
-                false)
-
-            aliases = {}
-            AddAliasesForAuraScope(aliases, scope, "use shared rules")
-            AddAliasesForAuraScope(aliases, scope, "shared aura rules")
-            AddAliasesForAuraScope(aliases, scope, "use shared filters")
-            AddAliasesForAuraScope(aliases, scope, "shared filters")
-            AddAliasesForAuraScope(aliases, scope, "shared aura filters")
-            AddAliasesForAuraScope(aliases, scope, "inherit filters")
-            AddAliasesForAuraScope(aliases, scope, "follow shared filters")
-            RegisterAuraScopeBoolean(scope, "useSharedRules", "Use Shared Rules", true, aliases,
-                function() return AuraUseSharedRules(scope) end,
-                function(value) AuraSetUseSharedRules(scope, value) end,
-                false)
         end
 
         local RegisterFilterSettings = A.AurasRegistry and A.AurasRegistry.RegisterFilterSettings

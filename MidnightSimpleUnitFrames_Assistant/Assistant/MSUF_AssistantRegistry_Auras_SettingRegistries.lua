@@ -24,7 +24,6 @@ function A.AurasRegistry.InstallSettingRegistries(ctx)
     local Data = ctx.AurasData or ARef.AurasRegistryData or {}
     local AliasHelpers = ctx.AuraAliasHelpers or {}
     local StateHelpers = ctx.AuraStateHelpers or {}
-    local SharedStateHelpers = ctx.AuraSharedStateHelpers or {}
     local RegistrationHelpers = ctx.AuraRegistrationHelpers or {}
 
     local RegisterAuraMenuSettings = RegistryNS.RegisterMenuSettings
@@ -32,8 +31,6 @@ function A.AurasRegistry.InstallSettingRegistries(ctx)
         RegisterAuraMenuSettings({
             Registry = Registry,
             M = ctx.M or M,
-            AURA_EDIT_SCOPE_VALUES = Data.AURA_EDIT_SCOPE_VALUES,
-            AURA_EDIT_SCOPE_ALIASES = Data.AURA_EDIT_SCOPE_ALIASES,
             AURA_LANE_MENU_VALUES = Data.AURA_LANE_MENU_VALUES,
             AURA_LANE_MENU_ALIASES = Data.AURA_LANE_MENU_ALIASES,
             AURA_STYLE_LANE_ALIASES = Data.AURA_STYLE_LANE_ALIASES,
@@ -48,45 +45,9 @@ function A.AurasRegistry.InstallSettingRegistries(ctx)
             AURA_UX_MODE_VALUE_ALIASES = Data.AURA_UX_MODE_VALUE_ALIASES,
             AuraRootBool = StateHelpers.AuraRootBool,
             SetAuraRootBool = StateHelpers.SetAuraRootBool,
-            AuraSharedTable = SharedStateHelpers.AuraSharedTable,
-            AuraSharedBool = C.AuraSharedBool,
-            SetAuraSharedBool = C.SetAuraSharedBool,
             AuraFiltersEnabled = C.AuraFiltersEnabled,
             AuraSetFiltersEnabled = C.AuraSetFiltersEnabled,
-            AuraScopeFromArg = AliasHelpers.AuraScopeFromArg,
             ApplyAura = C.ApplyAura,
-        })
-    end
-
-    local RegisterAuraSharedSettings = RegistryNS.RegisterSharedSettings
-    if type(RegisterAuraSharedSettings) == "function" then
-        RegisterAuraSharedSettings({
-            Registry = Registry,
-            AuraModel = C.AuraModel,
-            AURA_UNITS = Data.AURA_UNITS,
-            AURA_SCOPE_OVERRIDE_SPECS = Data.AURA_SCOPE_OVERRIDE_SPECS or {},
-            AURA_SHARED_BOOLEAN_SPECS = Data.AURA_SHARED_BOOLEAN_SPECS or {},
-            AURA_REMINDER_SPECS = Data.AURA_REMINDER_SPECS or {},
-            AURA_GROWTH_VALUES = Data.AURA_GROWTH_VALUES,
-            AURA_GROWTH_ALIASES = Data.AURA_GROWTH_ALIASES,
-            AURA_ROW_WRAP_VALUES = Data.AURA_ROW_WRAP_VALUES,
-            AURA_ROW_WRAP_ALIASES = Data.AURA_ROW_WRAP_ALIASES,
-            AddAliasesForAuraScope = AliasHelpers.AddAliasesForAuraScope,
-            AuraScopeLabel = AliasHelpers.AuraScopeLabel,
-            AuraOverrideBool = StateHelpers.AuraOverrideBool,
-            SetAuraOverrideBool = StateHelpers.SetAuraOverrideBool,
-            RegisterAuraScopeBoolean = RegistrationHelpers.RegisterAuraScopeBoolean,
-            AuraSharedBool = C.AuraSharedBool,
-            SetAuraSharedBool = C.SetAuraSharedBool,
-            AuraReadNumber = C.AuraReadNumber,
-            AuraWriteNumber = C.AuraWriteNumber,
-            AuraSharedString = SharedStateHelpers.AuraSharedString,
-            SetAuraSharedString = SharedStateHelpers.SetAuraSharedString,
-            AuraSharedTable = SharedStateHelpers.AuraSharedTable,
-            AuraReadLaneStyleBool = RegistrationHelpers.AuraReadLaneStyleBool,
-            AuraWriteLaneStyleBool = RegistrationHelpers.AuraWriteLaneStyleBool,
-            ApplyAura = C.ApplyAura,
-            ApplyAuraReminders = SharedStateHelpers.ApplyAuraReminders,
         })
     end
 
@@ -167,14 +128,9 @@ function A.AurasRegistry.InstallSettingRegistries(ctx)
             AddAliasesForAuraScope = AliasHelpers.AddAliasesForAuraScope,
             AddAuraLaneAliases = AliasHelpers.AddAuraLaneAliases,
             AuraScopeLabel = AliasHelpers.AuraScopeLabel,
-            RegisterAuraScopeBoolean = RegistrationHelpers.RegisterAuraScopeBoolean,
-            RegisterAuraScopeNumber = RegistrationHelpers.RegisterAuraScopeNumber,
-            RegisterAuraScopeEnum = RegistrationHelpers.RegisterAuraScopeEnum,
             RegisterAuraScopeLaneBoolean = RegistrationHelpers.RegisterAuraScopeLaneBoolean,
             RegisterAuraScopeLaneNumber = RegistrationHelpers.RegisterAuraScopeLaneNumber,
             RegisterAuraScopeLaneEnum = RegistrationHelpers.RegisterAuraScopeLaneEnum,
-            AuraSharedBool = C.AuraSharedBool,
-            SetAuraSharedBool = C.SetAuraSharedBool,
             AuraReadNumber = C.AuraReadNumber,
             AuraWriteNumber = C.AuraWriteNumber,
             AuraReadStackAnchor = C.AuraReadStackAnchor,
@@ -189,10 +145,6 @@ function A.AurasRegistry.InstallSettingRegistries(ctx)
             AuraWriteLaneStackAnchor = RegistrationHelpers.AuraWriteLaneStackAnchor,
             AuraReadLaneCooldownAnchor = RegistrationHelpers.AuraReadLaneCooldownAnchor,
             AuraWriteLaneCooldownAnchor = RegistrationHelpers.AuraWriteLaneCooldownAnchor,
-            AuraUseSharedVisuals = C.AuraUseSharedVisuals,
-            AuraSetUseSharedVisuals = C.AuraSetUseSharedVisuals,
-            AuraUseSharedRules = C.AuraUseSharedRules,
-            AuraSetUseSharedRules = C.AuraSetUseSharedRules,
             AuraModel = C.AuraModel,
             EnsureAuraFallbackDB = C.EnsureAuraFallbackDB,
             AuraFiltersEnabled = C.AuraFiltersEnabled,

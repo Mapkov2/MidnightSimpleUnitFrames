@@ -1099,7 +1099,7 @@ local function FailurePageHints(query)
         local unitPage = scope == "Target" and "uf_target" or scope == "Focus" and "uf_focus"
             or scope == "Boss" and "uf_boss" or "uf_player"
         local page = groupScope and "gf_auras" or sharedAppearance and "auras3_styling" or unitPage
-        local pageLabel = groupScope and "Group Auras" or sharedAppearance and "Shared Aura Appearance"
+        local pageLabel = groupScope and "Group Auras" or sharedAppearance and "Global Aura Appearance"
             or tostring(scope or "Player") .. " UnitFrame"
         local control = FailureContainsAny(normalized, { " growth ", " grow ", " direction " }) and "Growth"
             or FailureContainsAny(normalized, { " anchor ", " attach " }) and "Anchor"
@@ -7458,22 +7458,21 @@ function A.ExecutePlan(plan, opts)
         and (plan.kind == "changes" or (plan.kind == "action" and actionMutability ~= "readOnly" and actionMutability ~= "navigation")) then
         return NormalizePlanResult(AP.ReadOnlyGuardResult(sourceText))
     end
-    -- Individual per-unit filters are ineffective while the scope still
-    -- inherits Shared rules, and enabled filter values are ineffective while
-    -- the master gate is off. Expand these dependencies into the same
-    -- transaction so the visible widgets, runtime config, undo, and redo all
-    -- agree. Group filter dropdowns similarly require their lane to be active.
+    -- Enabled per-unit filter values require that exact lane's gate. Expand
+    -- this dependency into the same transaction. Group filter dropdowns
+    -- similarly require their lane to be active.
     if plan.kind == "changes" and type(plan.changes) == "table" then
         local existing, unitScopes, groupLanes = {}, {}, {}
         for i = 1, #plan.changes do
             local change = plan.changes[i]
             local key = tostring(change and change.setting and change.setting.key or "")
             existing[key] = true
-            local scope = key:match("^auras3%.([^.]+)%.[^.]+%.filter%.")
+            local scope, lane = key:match("^auras3%.([^.]+)%.([^.]+)%.filter%.")
             if scope and scope ~= "shared" then
-                local need = unitScopes[scope] or { enable = false }
+                local owner = scope .. "." .. tostring(lane)
+                local need = unitScopes[owner] or { scope = scope, lane = lane, enable = false }
                 need.enable = need.enable or (change.value ~= false and change.value ~= "none")
-                unitScopes[scope] = need
+                unitScopes[owner] = need
             end
             local lanePrefix = key:match("^(gf_[^.]+%.auras%.[^.]+)%.filterToken$")
             if lanePrefix then groupLanes[lanePrefix] = true end
@@ -7487,11 +7486,12 @@ function A.ExecutePlan(plan, opts)
                 dependencies[#dependencies + 1] = { setting = setting, value = value }
             end
         end
-        for _, scope in ipairs({ "player", "target", "focus", "boss" }) do
-            local need = unitScopes[scope]
+        for _, owner in ipairs({ "player.buff", "player.debuff", "target.buff", "target.debuff", "focus.buff", "focus.debuff", "boss.buff", "boss.debuff" }) do
+            local need = unitScopes[owner]
             if need then
-                AddDependency("auras3." .. scope .. ".useSharedRules", false)
-                if need.enable then AddDependency("auras3." .. scope .. ".filtersEnabled", true) end
+                if need.enable then
+                    AddDependency("auras3." .. need.scope .. "." .. need.lane .. ".filtersEnabled", true)
+                end
             end
         end
         local orderedGroupLanes = {}

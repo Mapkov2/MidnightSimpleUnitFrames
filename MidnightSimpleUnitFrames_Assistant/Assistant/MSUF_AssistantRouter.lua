@@ -6329,14 +6329,10 @@ function R.LiveAuraFrameEffectExplanation(unitLabel, effect)
         ownerLine = " The Effect value is owned by this tracked Custom Aura slot."
     elseif effect and effect.source == "unit" then
         ownerLine = " The Effect value is owned by the " .. tostring(unitLabel)
-            .. " Aura Style override, so resetting only the Unit Frame does not reset it."
-    elseif effect and (effect.colorSource == "unit" or effect.thicknessSource == "unit"
-        or effect.prioritySource == "unit" or effect.layerSource == "unit" or effect.strataSource == "unit")
-    then
-        ownerLine = " The Effect type is inherited from Shared Aura Style, while one or more visual details are owned by the "
-            .. tostring(unitLabel) .. " Aura Style override; resetting only the Unit Frame does not reset those Aura values."
+            .. " " .. tostring(laneLabel) .. " Aura lane."
     else
-        ownerLine = " The Effect value is inherited from Shared Aura Style by " .. tostring(unitLabel) .. "."
+        ownerLine = " The Effect value uses the built-in default of the " .. tostring(unitLabel)
+            .. " " .. tostring(laneLabel) .. " Aura lane."
     end
     local armedLine = effect and effect.armed == true
         and " It is armed in the compiled Aura lane and can appear while WoW assigns a matching aura to that native slot."
@@ -6642,7 +6638,7 @@ function R.AuraFilterOverviewReply(norm)
 end
 
 function R.AuraUnitFilterStatusReply(norm, scope, scopeLabel, lane, laneLabel, requestedKey)
-    local filtersEnabled = R.AuraReadSettingValue("auras3." .. tostring(scope) .. ".filtersEnabled")
+    local filtersEnabled = R.AuraReadSettingValue("auras3." .. tostring(scope) .. "." .. tostring(lane) .. ".filtersEnabled")
     if filtersEnabled == nil then filtersEnabled = true end
 
     local lines = {}
@@ -13907,7 +13903,7 @@ function R.OpenEndedLikelyPage(subject, norm)
         if groupScope then
             page, label, detail = "gf_auras", "Group Auras", "Party and Raid aura controls live in Group Auras."
         elseif R.ContainsAny(subject, { "appearance", "shared", "theme", "icon shape", "icon border", "icon shadow" }) then
-            page, label, detail = "auras3_styling", "Shared Aura Appearance", "The global Aura icon theme is selected by Aura product in Appearance > Aura Style."
+            page, label, detail = "auras3_styling", "Global Aura Appearance", "The global Aura icon theme is selected by Aura product in Appearance > Aura Style."
         else
             local unit, unitLabel = R.UnitScopeFromText(norm)
             if unit and unitLabel then

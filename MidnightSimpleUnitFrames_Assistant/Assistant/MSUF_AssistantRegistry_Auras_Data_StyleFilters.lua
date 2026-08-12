@@ -189,6 +189,7 @@ Data.AURA_DURATION_BAR_DIRECTION_ALIASES = {
 }
 
 Data.AURA_LANE_STYLE_NUMBER_SPECS = {
+    { key = "stylePadding", label = "Lane Padding", defaultValue = 0, minValue = 0, maxValue = 16, words = { "lane padding", "aura lane padding", "container padding", "icon lane padding" } },
     { key = "stackTextSize", label = "Stack Text Size", defaultValue = 14, minValue = 6, maxValue = 40, words = { "stack size", "stack text size", "stack count text size" } },
     { key = "stackTextOffsetX", label = "Stack Text X Offset", defaultValue = -1, minValue = -2000, maxValue = 2000, words = { "stack x", "stack x offset", "stack text x", "stack text x offset" } },
     { key = "stackTextOffsetY", label = "Stack Text Y Offset", defaultValue = 1, minValue = -2000, maxValue = 2000, words = { "stack y", "stack y offset", "stack text y", "stack text y offset" } },

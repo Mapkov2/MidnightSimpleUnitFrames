@@ -125,8 +125,8 @@ D.patternGateRules = {
     {
         id = "unit-aura-filters",
         scanTop = "auras3",
-        match = "^auras3%.([^.]+)%.[^.]+%.filter%..+",
-        parent = "auras3.{1}.filtersEnabled",
+        match = "^auras3%.([^.]+)%.([^.]+)%.filter%..+",
+        parent = "auras3.{1}.{2}.filtersEnabled",
         kind = "availability",
         impact = "filterEvaluation",
         reason = "Individual filter switches participate only while filters are enabled for this Aura scope.",
@@ -589,20 +589,7 @@ D.crossPrefixInheritanceRules = {
     },
 }
 
-D.auraInheritance = {
-    styleLeafKeys = {
-        "showStackCount", "showCooldownText", "showCooldownSwipe", "showTooltip", "showDurationBar",
-        "stackAnchor", "cooldownAnchor", "cooldownSwipeReverse", "cooldownDecimalSeconds",
-        "sortMethod", "sortReverse",
-        "stackTextSize", "stackTextOffsetX", "stackTextOffsetY", "cooldownTextSize",
-        "cooldownTextOffsetX", "cooldownTextOffsetY", "durationBarPosition",
-        "durationBarDisplay", "durationBarDirection", "durationBarHeight", "debuffTypeBorderMode",
-    },
-    styleGateSuffix = "useSharedStyle",
-    rulesGateSuffix = "useSharedRules",
-    evidenceStyle = "MSUF_AssistantRegistry_Auras_Registration_Lanes_Style.lua and Auras_StyleFilters.lua:useSharedStyle",
-    evidenceRules = "MSUF_AssistantRegistry_Auras_Filters.lua and Auras_StyleFilters.lua:useSharedRules",
-}
+D.auraInheritance = nil
 
 -- Conflicts are sourced from A.AurasRegistryData.AURA_FILTER_BOOLEAN_SPECS at
 -- build time, so the graph cannot drift from the setter that turns the paired

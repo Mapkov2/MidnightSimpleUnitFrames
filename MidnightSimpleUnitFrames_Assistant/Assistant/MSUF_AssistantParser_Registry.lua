@@ -203,7 +203,6 @@ local function IsAuraLaneVisibilitySetting(setting)
     if setting.type ~= "boolean" then return false end
     local key = tostring(setting.key or ""):lower()
     local attr = tostring(setting.attribute or ""):lower()
-    if key == "auras3.shared.showbuffs" or key == "auras3.shared.showdebuffs" then return true end
     if key:find("%.buff%.visible", 1, true) or key:find("%.debuff%.visible", 1, true) then return true end
     if key:find("%.auras%.buff%.enabled", 1, true) or key:find("%.auras%.debuff%.enabled", 1, true) then return true end
     return attr == "aurashowbuffs"
@@ -398,25 +397,6 @@ local function SettingAllowedByExplicitScopes(setting, text)
     local unit = tostring(setting.unit or "")
     local keyScope = SettingKeyScope(setting)
     local units, groups = ExplicitScopes(text)
-    if frameType == "aura"
-        and unit == "shared"
-        and (#units > 0 or #groups > 0)
-        and not ContainsAny(text, RegistryPhrases[10])
-    then
-        return false
-    end
-    -- Shared aura controls can be valid for "all auras", but some lane-level shared growth
-    -- options are deliberately excluded because they would fight the per-frame buff/debuff
-    -- settings the user usually means.
-    if frameType == "aura"
-        and unit == "shared"
-        and HasAllScopeIntent(text)
-        and ContainsAny(text, RegistryPhrases[11])
-        and ContainsAny(text, RegistryPhrases[12])
-    then
-        local key = tostring(setting.key or ""):lower()
-        if key == "auras3.shared.buffgrowth" or key == "auras3.shared.debuffgrowth" then return false end
-    end
     if setting.frameType == "aura" and ContainsAny(text, RegistryPhrases[13])
         and not tostring(setting.attribute or ""):lower():find("filter", 1, true) then
         return false
@@ -424,9 +404,6 @@ local function SettingAllowedByExplicitScopes(setting, text)
     local auraFilterScope = P.ExplicitAuraFilterScope and P.ExplicitAuraFilterScope(text)
     if setting.frameType == "aura" and auraFilterScope then
         return unit == auraFilterScope or keyScope == auraFilterScope
-    end
-    if setting.frameType == "aura" and unit == "shared" and ContainsAny(text, RegistryPhrases[14]) then
-        return true
     end
     if setting.frameType == "group" or setting.frameType == "groupAura" then
         if #groups > 0 then
@@ -3513,24 +3490,6 @@ local function ParsePowerColorPriorityShortcut(text, raw)
     return A._ParsePowerColorShortcut and A._ParsePowerColorShortcut(text, raw) or nil
 end
 
-local function ParseSharedAuraFiltersMenuShortcut(text)
-    if not ContainsAny(text, RegistryPhrases[175]) then return nil end
-    if ContainsAny(text, RegistryPhrases[176]) then
-        return nil
-    end
-    local value = DetectBoolean(text)
-    if value == nil then value = true end
-    local changes = {}
-    AddRegisteredChange(changes, "auras3.shared.filters.enabled", value)
-    if #changes == 0 then return nil end
-    return {
-        kind = "changes",
-        changes = changes,
-        label = "Aura Filters",
-        summary = "Changes the shared Aura Filters menu toggle.",
-    }
-end
-
 P.ParseRegistryPriorityShortcut = function(text, raw)
     return ParseBossTargetHighlightShortcut(text)
         or ParseGroupBorderColorShortcut(text, raw)
@@ -3538,7 +3497,6 @@ P.ParseRegistryPriorityShortcut = function(text, raw)
         or ParseDispelOverlayHealthOnlyShortcut(text)
         or ParseClassPowerBooleanDetailShortcut(text)
         or ParsePowerColorPriorityShortcut(text, raw)
-        or ParseSharedAuraFiltersMenuShortcut(text)
         or ParseUnitTextBooleanDetailShortcut(text)
         or ParseUnitStatusDetailShortcut(text)
         or ParseUnitCoreBooleanShortcut(text)

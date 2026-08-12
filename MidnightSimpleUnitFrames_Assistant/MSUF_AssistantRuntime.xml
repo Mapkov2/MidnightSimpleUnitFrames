@@ -72,12 +72,10 @@
     <Script file="Assistant\MSUF_AssistantRegistry_Castbars_Actions.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_Auras_Data.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_Auras_Data_Layout.lua"/>
-    <Script file="Assistant\MSUF_AssistantRegistry_Auras_Data_Shared.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_Auras_Data_BlacklistPresets.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_Auras_Data_GroupCategories.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_Auras_Data_StyleFilters.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_Auras_Aliases.lua"/>
-    <Script file="Assistant\MSUF_AssistantRegistry_Auras_State_Shared.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_Auras_State.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_Auras_Registration_Lanes_Style.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_Auras_Registration_Lanes.lua"/>
@@ -86,12 +84,9 @@
     <Script file="Assistant\MSUF_AssistantRegistry_Auras_Registration.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_AurasUnitLanes_Geometry.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_AurasUnitLanes.lua"/>
-    <Script file="Assistant\MSUF_AssistantRegistry_Auras_Menu_Shared.lua"/>
+    <Script file="Assistant\MSUF_AssistantRegistry_Auras_Menu_Root.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_Auras_Menu_Blacklist.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_Auras_Menu.lua"/>
-    <Script file="Assistant\MSUF_AssistantRegistry_Auras_Shared_Layout.lua"/>
-    <Script file="Assistant\MSUF_AssistantRegistry_Auras_Shared.lua"/>
-    <Script file="Assistant\MSUF_AssistantRegistry_Auras_Shared_Reminders.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_Auras_Filters.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_Auras_StyleFilters.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_Auras_SettingRegistries.lua"/>
@@ -112,7 +107,6 @@
     <Script file="Assistant\MSUF_AssistantRegistry_AurasActions_Blacklist.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_AurasActions_Parsers_Blacklist.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_AurasActions_Parsers.lua"/>
-    <Script file="Assistant\MSUF_AssistantRegistry_AurasActions_Presets.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_AurasActions.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_AurasGroupActions_Blacklist.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_AurasGroupActions_Parsers_DirectHelpers.lua"/>

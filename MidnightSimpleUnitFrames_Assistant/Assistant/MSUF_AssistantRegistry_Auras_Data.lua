@@ -15,7 +15,7 @@ local Data = A.AurasRegistryData or {}
 A.AurasRegistryData = Data
 
 Data.AURA_UNITS = { "player", "target", "focus", "boss" }
-Data.AURA_SCOPES = { "shared", "player", "target", "focus", "boss" }
+Data.AURA_SCOPES = { "player", "target", "focus", "boss" }
 Data.AURA_LANES = {
     { key = "buff", label = "Buff", plural = "Buffs" },
     { key = "debuff", label = "Debuff", plural = "Debuffs" },
@@ -161,16 +161,11 @@ Data.GF_AURA_FILTER_ALIASES = {
     ["my big defensive"] = "BigDefensivePlayer",
     ["my major defensive"] = "BigDefensivePlayer",
 }
-Data.AURA_SCOPE_ALIASES = {
-    shared = { "shared", "global", "all auras", "all aura", "auras", "aura" },
-}
+Data.AURA_SCOPE_ALIASES = {}
 
-Data.AURA_EDIT_SCOPES = { "shared", "player", "target", "focus", "boss", "party", "raid" }
-Data.AURA_EDIT_SCOPE_VALUES = { "shared", "player", "target", "focus", "boss", "party", "raid" }
+Data.AURA_EDIT_SCOPES = { "player", "target", "focus", "boss", "party", "raid" }
+Data.AURA_EDIT_SCOPE_VALUES = { "player", "target", "focus", "boss", "party", "raid" }
 Data.AURA_EDIT_SCOPE_ALIASES = {
-    shared = "shared",
-    global = "shared",
-    all = "shared",
     player = "player",
     spieler = "player",
     target = "target",

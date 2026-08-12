@@ -1478,8 +1478,8 @@ local function IsLaunchableMode(row)
     -- offered as runnable test modes because the marker matches the path.
     if path:find("/preview/palette/", 1, true) then return false end
     if path:find("/preview/height/", 1, true) then return false end
-    -- Appearance's Aura-type selector chooses which shared dummy/settings are
-    -- shown; it does not launch a preview mode.
+    -- Appearance's Aura-type selector chooses which product-specific dummy and
+    -- settings are shown; it does not launch a preview mode.
     if path:find("auras/style/container/selector", 1, true) then return false end
     local text = " " .. ModeText(row) .. " "
     local marked = HasAny(text, MODE_MARKERS)
@@ -1621,11 +1621,9 @@ local function CurrentValueResult(top)
         status = "info", result = "info", summary = top.label, value = value }
 end
 
--- Menu2 renders one surface on several pages: the shared aura icon style shows
--- up on Auras > Buffs, > Debuffs and > Styling, and all three write the single
--- MSUF_DB.auras3.shared field. Offering them as rival choices -- or refusing
--- because "more than one control matched" -- is noise about a value that has
--- exactly one home.
+-- Menu2 can render one exact control on several pages. Offering those mirrors
+-- as rival choices -- or refusing because "more than one control matched" --
+-- is noise about a value that still has exactly one product-specific home.
 --
 -- Identity has to be exact before two rows may merge: same path, name, widget,
 -- value domain and setting key. The page must additionally be a plain menu
