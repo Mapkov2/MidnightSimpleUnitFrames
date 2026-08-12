@@ -2326,6 +2326,8 @@ local function DirectHelpAnswer(query, opts)
     local norm = Normalize(query)
     local addonCompanions = ComplementaryAddonAnswer(query)
     if addonCompanions then return addonCompanions end
+    local priorityFrames = PriorityFramesAnswer(norm)
+    if priorityFrames then return priorityFrames end
     -- A question that names one exact control is about that control, not about
     -- the topic its words happen to belong to. Concept vocabulary turns up
     -- inside plenty of real labels ("UnitFrame Dispel Overlay Opacity" was
@@ -2378,8 +2380,6 @@ local function DirectHelpAnswer(query, opts)
     end
     local pageHelp = TryWhatCanPageHelp(norm)
     if pageHelp then return pageHelp end
-    local priorityFrames = PriorityFramesAnswer(norm)
-    if priorityFrames then return priorityFrames end
     if ContainsAny(norm, { "gcd", "global cooldown", "global cool down" })
         and ContainsAny(norm, { "what", "what is", "what does", "help", "explain", "mean" })
     then
