@@ -6602,6 +6602,66 @@ A3._ScheduleDirectIdentityRefreshAll = function(groupOnly, forceSpellIndicatorGe
     return true
 end
 
+-- UNIT_FACTION can arrive several times for the same unit during one cinematic
+-- transition. Queue each affected unit in a lazily allocated set and spend one
+-- native full reparse per unit on the next frame, regardless of burst size.
+-- The callback is one-shot: there is no ticker, OnUpdate, or steady-state work.
+A3._UpdateDirectIdentityFactionAssistState = function(unit, comparePrevious)
+    local unitCanAssist = _G.UnitCanAssist
+    if type(unitCanAssist) ~= "function" then return comparePrevious == true end
+    local canAssist = unitCanAssist("player", unit)
+    if canAssist == nil or issecretvalue(canAssist) == true then
+        -- Never branch on a secret reaction. The one-shot burst coalescer still
+        -- bounds work when the client cannot expose a comparable boolean.
+        return comparePrevious == true
+    end
+    local states = A3._directIdentityFactionAssistStates
+    if not states then
+        states = {}
+        A3._directIdentityFactionAssistStates = states
+    end
+    local current = canAssist == true
+    local unchanged = states[unit] ~= nil and states[unit] == current
+    states[unit] = current
+    return comparePrevious ~= true or not unchanged
+end
+
+A3._FlushScheduledDirectIdentityFactionRefresh = function()
+    A3._directIdentityFactionRefreshPending = nil
+    local units = A3._directIdentityFactionRefreshUnits
+    if not units then return false end
+    local any = false
+    for unit in pairs(units) do
+        units[unit] = nil
+        if A3._UpdateDirectIdentityFactionAssistState(unit, true) then
+            any = A3._DirectIdentityRefreshUnit(unit) or any
+        end
+    end
+    return any
+end
+
+A3._ScheduleDirectIdentityFactionRefresh = function(unit)
+    if type(unit) ~= "string" or unit == "" then return false end
+    local containers = A3._directIdentityAuraContainers
+    containers = containers and containers[unit]
+    if not (containers and next(containers)) then return false end
+    local units = A3._directIdentityFactionRefreshUnits
+    if units and units[unit] == true then return true end
+    if not units then
+        units = {}
+        A3._directIdentityFactionRefreshUnits = units
+    end
+    units[unit] = true
+    if A3._directIdentityFactionRefreshPending == true then return true end
+    A3._directIdentityFactionRefreshPending = true
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, A3._FlushScheduledDirectIdentityFactionRefresh)
+    else
+        A3._FlushScheduledDirectIdentityFactionRefresh()
+    end
+    return true
+end
+
 -- The shared driver is active exactly while at least one eligible native
 -- container exists. Its event set follows the active unit families so a
 -- group-only runtime never receives target/focus/boss identity callbacks.
@@ -6650,6 +6710,7 @@ local function SyncDirectIdentityRefreshEvents(frame)
 
     SetDirectIdentityRefreshEvent(frame, "PLAYER_ENTERING_WORLD", true)
     SetDirectIdentityRefreshEvent(frame, "ZONE_CHANGED_NEW_AREA", true)
+    SetDirectIdentityRefreshEvent(frame, "UNIT_FACTION", true)
     SetDirectIdentityRefreshEvent(frame, "PLAYER_TARGET_CHANGED", hasTarget)
     SetDirectIdentityRefreshEvent(frame, "PLAYER_FOCUS_CHANGED", hasFocus)
     SetDirectIdentityRefreshEvent(frame, "INSTANCE_ENCOUNTER_ENGAGE_UNIT", hasBoss)
@@ -6658,7 +6719,8 @@ end
 
 local function DirectIdentityRefreshEventsAlreadyCover(unit)
     if directIdentityRefreshRegisteredEvents.PLAYER_ENTERING_WORLD ~= true
-        or directIdentityRefreshRegisteredEvents.ZONE_CHANGED_NEW_AREA ~= true then
+        or directIdentityRefreshRegisteredEvents.ZONE_CHANGED_NEW_AREA ~= true
+        or directIdentityRefreshRegisteredEvents.UNIT_FACTION ~= true then
         return false
     end
     if unit == "target" then
@@ -6678,7 +6740,17 @@ A3._EnsureDirectIdentityRefreshFrame = function()
     local frame = A3._directIdentityAuraFrame
     if not frame then
         frame = CreateFrame("Frame")
-        frame:SetScript("OnEvent", function(_, event)
+        frame:SetScript("OnEvent", function(_, event, unit)
+        if event == "UNIT_FACTION" then
+            if issecretvalue(unit) ~= true and type(unit) == "string" and unit ~= "" then
+                -- Blizzard's identity candidate filters intentionally depend on
+                -- UnitCanAssist(). Cinematics can change that result without an
+                -- accompanying UNIT_AURA delta, so reparse only this unit's
+                -- registered native owners once after the event burst settles.
+                A3._ScheduleDirectIdentityFactionRefresh(unit)
+            end
+            return
+        end
         if A3._directIdentityRefreshAllEvents[event] == true then
             if event == "PLAYER_ENTERING_WORLD" then
                 A3._directIdentityRefreshRecreateHelpfulAuras = true
@@ -6725,6 +6797,10 @@ A3._RegisterDirectIdentityRefreshContainer = function(container)
     end
     set[container] = true
     container._msufA3DirectIdentityUnit = unit
+    local states = A3._directIdentityFactionAssistStates
+    if not states or states[unit] == nil then
+        A3._UpdateDirectIdentityFactionAssistState(unit, false)
+    end
     local frame = A3._EnsureDirectIdentityRefreshFrame()
     -- A visible boss frame commonly registers three native lanes, and five
     -- bosses can appear in the same callback. The first lane establishes the
@@ -7391,10 +7467,11 @@ local function CreateClassPowerAuraSensor(parent, key, spellIDs, initializeFrame
     local container = CreateNativeAuraContainer(parent)
     if not container then return nil end
     -- This standalone slot receives its geometry from a caller-owned
-    -- initializeFrame callback. That callback is not guaranteed idempotent, so
-    -- do not include it in Auras3's generic world-repair registry until it has a
-    -- stored geometry descriptor that can be replayed safely.
-    container._msufA3SkipDirectIdentityRefresh = true
+    -- initializeFrame callback and deliberately has no managed lane descriptor.
+    -- The shared identity registry may therefore reparse its candidate filters
+    -- on UNIT_FACTION, while _ManagedAuraContainerSupportsGeometryRepair keeps
+    -- the caller-owned geometry out of generic world/zone repair.
+    container.unit = "player"
     ConfigureNativeAuraContainer(container, "player")
     container:AddAuraSlot(tostring(key or "msuf_classpower"), "HELPFUL", {
         maxFrameCount = 1,
