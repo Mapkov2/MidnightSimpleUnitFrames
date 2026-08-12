@@ -619,22 +619,26 @@ local function IsPlayerUnit(unit)
 end
 
 local function AddNameListEntry(entries, unit, index, conf, raidIndex)
-  if UnitMissing(unit) then
-    return
+  local name, subgroup, classFile, role
+  if raidIndex then
+    if not GetRaidRosterInfo then return false end
+    -- SecureGroupHeader_Update compares nameList entries against the exact name
+    -- returned by GetRaidRosterInfo(). Use that same authoritative snapshot:
+    -- UnitExists/UnitName can lag one roster dispatch and must never make a
+    -- complete raid header silently publish a partial NAMELIST.
+    local assignedRole
+    name, _, subgroup, _, _, classFile, _, _, _, _, _, assignedRole = GetRaidRosterInfo(raidIndex)
+    if issecretvalue(name) == true or type(name) ~= "string" or name == "" then return false end
+    role = assignedRole == "TANK" or assignedRole == "HEALER" or assignedRole == "DAMAGER"
+      and assignedRole or UnitRole(unit)
+  else
+    if UnitMissing(unit) then return false end
+    role = UnitRole(unit)
+    classFile = UnitClassFile(unit)
+    name = UnitFullName(unit)
+    if not name then return false end
   end
-  local subgroup
-  local role = UnitRole(unit)
-  local classFile = UnitClassFile(unit)
-  if raidIndex and GetRaidRosterInfo then
-    subgroup = select(3, GetRaidRosterInfo(raidIndex))
-    if subgroup and not GroupFilterAllows(conf, subgroup, classFile, role) then
-      return
-    end
-  end
-  local name = UnitFullName(unit)
-  if not name then
-    return
-  end
+  if subgroup and not GroupFilterAllows(conf, subgroup, classFile, role) then return true end
   entries[#entries + 1] = {
     name = name,
     role = role,
@@ -642,6 +646,7 @@ local function AddNameListEntry(entries, unit, index, conf, raidIndex)
     player = IsPlayerUnit(unit),
     group = subgroup or 0,
   }
+  return true
 end
 
 local function BuildPlayerFirstRoleNameList(key, kind, conf)
@@ -713,10 +718,16 @@ local function BuildRaidFreezeNameList(kind, conf, mode, descending)
   end
 
   local entries = {}
+  local rosterComplete = true
   for i = 1, count do
-    AddNameListEntry(entries, "raid" .. i, i, conf, i)
+    if AddNameListEntry(entries, "raid" .. i, i, conf, i) ~= true then
+      rosterComplete = false
+    end
   end
-  if #entries == 0 then
+  -- A partial nameList is a filter, not merely an ordering hint: Blizzard will
+  -- omit every roster name absent from it. Fall back to its native complete
+  -- roster path until all authoritative names are available.
+  if not rosterComplete or #entries == 0 then
     return nil
   end
 
