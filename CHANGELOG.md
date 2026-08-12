@@ -10,6 +10,19 @@
 
 - Multi-Spec now exposes all 40 Retail specializations. Custom Aura IDs can also be added to an individual specialization, allowing a Holy Priest configuration, for example, to track Feint (`1966`) on another group member while **Only show my casts** is disabled.
 
+### Fixes & Performance
+
+- Fixed Target of Target and Focus Target health bars and names losing class colors when WoW protects dependent-unit class data in combat. Protected colors now flow directly through Blizzard-native color sinks without polling or persistent secret-value caches.
+- Matched Unit and Group preview bar gradients to runtime rendering.
+- Made Cleanse Border changes request the required UI reload.
+- Kept the Player Castbar provider selectable in the Bars menu.
+- Fixed Blizzard Party and Raid frames not recovering reliably when MSUF returned frame ownership, while preserving Blizzard event registrations and prior visibility.
+- Isolated Group Spell Indicator preview positions from live saved positions.
+- Restored continuous Devourer class-resource updates and removed obsolete partial-update ownership from the resource pipeline.
+- Refreshed Unit Frame names immediately after anchor changes.
+- Restored live Group frames correctly after preview roster handoffs.
+- Honored configured Aura layers for fixed Group slots.
+
 ## 6.02 - 2026-08-11
 
 ### WoW 12.1 Release Highlights

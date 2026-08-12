@@ -270,8 +270,8 @@ local function Apply()
     if sharedDetachedWidthSourceChanged then
         ApplyAllSettingsSafe()
         if type(_G.MSUF_EnsureCooldownWidthObservers) == "function" then _G.MSUF_EnsureCooldownWidthObservers() end
-    elseif type(_G.MSUF_ApplyUnitFrameKey_Immediate)=="function" then
-        _G.MSUF_ApplyUnitFrameKey_Immediate(key)
+    elseif not ApplySettingsForKeySafe(key) then
+        ApplyAllSettingsSafe()
     end
     if type(_G.MSUF_ForceTextLayoutForUnitKey)=="function" then _G.MSUF_ForceTextLayoutForUnitKey(key) end
     --- Clear PBEmbedLayout stamp so width/height changes are re-applied
@@ -409,7 +409,7 @@ local function ApplyDetachPower(checked)
         conf.detachedPowerBarFrameLevelOffset = tonumber(conf.detachedPowerBarFrameLevelOffset) or 6
         if key == "player" and conf.detachedPowerBarSyncClassPower == nil then conf.detachedPowerBarSyncClassPower = true end
     end
-    if type(_G.MSUF_ApplyUnitFrameKey_Immediate)=="function" then _G.MSUF_ApplyUnitFrameKey_Immediate(key) end
+    if not ApplySettingsForKeySafe(key) then ApplyAllSettingsSafe() end
     ApplyPowerLayoutForUnitKey(key, conf.powerBarDetached == true)
     if pf.parent and pf.parent.ForceUpdate then pf.parent:ForceUpdate("EM2_UNIT_POPUP_DETACH") end
     SyncMovers()
@@ -428,7 +428,7 @@ local function ResetPosition()
     local dx, dy = 0, 0
     if type(_G.MSUF_GetDefaultUnitOffsets) == "function" then dx, dy = _G.MSUF_GetDefaultUnitOffsets(key) end
     conf.offsetX, conf.offsetY = dx, dy
-    if type(_G.MSUF_ApplyUnitFrameKey_Immediate)=="function" then _G.MSUF_ApplyUnitFrameKey_Immediate(key) end
+    if not ApplySettingsForKeySafe(key) then ApplyAllSettingsSafe() end
     if pf.parent and pf.parent.ForceUpdate then pf.parent:ForceUpdate("EM2_UNIT_POPUP_RESETPOS") end
     SyncMovers()
     RefreshUFPreview("EM2_UNIT_POPUP_RESETPOS", key)
@@ -453,13 +453,7 @@ local function CopySizeTo(targetKey)
     if not dst then db[targetKey] = {}; dst = db[targetKey] end
     if src.width ~= nil then dst.width = floor(max(SizeBounds.minW, min(SizeBounds.maxW, tonumber(src.width) or 250)) + 0.5) end
     if src.height ~= nil then dst.height = floor(max(SizeBounds.minH, min(SizeBounds.maxH, tonumber(src.height) or 40)) + 0.5) end
-    local applied = false
-    if type(_G.MSUF_ApplyUnitFrameKey_Immediate)=="function" then
-        _G.MSUF_ApplyUnitFrameKey_Immediate(targetKey)
-        applied = true
-    elseif ApplySettingsForKeySafe(targetKey) then
-        applied = true
-    end
+    local applied = ApplySettingsForKeySafe(targetKey)
     ApplyPowerLayoutForUnitKey(targetKey, dst.powerBarDetached == true and CanDetachPower(targetKey))
     if not applied and not ApplyAllSettingsSafe() and type(_G.MSUF_UpdateAllFrames)=="function" then _G.MSUF_UpdateAllFrames() end
     SyncMovers()
