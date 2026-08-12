@@ -1594,7 +1594,7 @@ local function BuildUnitPage(info)
         end, {
             sectionId = "frame_basics",
             title = "Frame Basics",
-            height = 170,
+            height = 216,
             prepareShell = function(lazyCtx, sec, lazyUnit)
                 local refresh = AttachBasicsHeaderStatus(sec, lazyUnit)
                 if refresh then
