@@ -1488,6 +1488,15 @@ function R.TryFullFrameAuraEffectRequest(text)
     local norm = R.FullFrameAuraEffectRequest(text)
     if not norm then return nil end
 
+    -- Refusals and scoped exclusions are handled by the shared fail-closed
+    -- lanes below this specialist. Never let their negative words become an
+    -- Aura mutation merely because "off" also looks like a setting value.
+    if R.IsExplicitMutationRefusal and R.IsExplicitMutationRefusal(text) then return nil end
+    if R.ContainsAny(norm, {
+        "except", "except for", "but not", "other than", "excluding",
+        "ausser", "ausser fuer", "aber nicht",
+    }) then return nil end
+
     -- Explicit Dispel Overlay wording belongs to the existing UnitFrame owner.
     if R.ContainsAny(norm, { "dispel overlay", "unitframe dispel", "unit frame dispel" }) then return nil end
     local hasAuraLaneWord = R.ContainsAny(norm, { "buff", "buffs", "debuff", "debuffs", "aura", "auras" })
@@ -1508,15 +1517,17 @@ function R.TryFullFrameAuraEffectRequest(text)
         "turn on", "enable", "show", "use", "apply", "einschalten", "aktivieren", "anzeigen",
     })
     local style = R.FullFrameAuraEffectStyle(norm)
-    local readOnlyRequest = (R.LooksLikeKnowledgeQuestionPrefix and R.LooksLikeKnowledgeQuestionPrefix(norm))
-        or norm:match("^why%s+") or norm:match("^what%s+") or norm:match("^where%s+")
-        or norm:match("^how%s+") or norm:match("^is%s+") or norm:match("^are%s+")
-        or norm:match("^does%s+") or norm:match("^do%s+i%s+")
-        or norm:match("^can%s+i%s+") or norm:match("^could%s+i%s+") or norm:match("^should%s+i%s+")
-        or norm:match("^warum%s+") or norm:match("^was%s+") or norm:match("^wo%s+")
-        or norm:match("^wie%s+") or norm:match("^ist%s+") or norm:match("^sind%s+")
-        or norm:match("^show%s+me%s+") or norm:match("^tell%s+me%s+")
-        or norm:match("^zeige%s+mir%s+")
+    local intentNorm = norm:gsub("^please%s+", ""):gsub("^bitte%s+", "")
+    local readOnlyRequest = (R.LooksLikeKnowledgeQuestionPrefix and R.LooksLikeKnowledgeQuestionPrefix(intentNorm))
+        or intentNorm:match("^why%s+") or intentNorm:match("^what%s+") or intentNorm:match("^where%s+")
+        or intentNorm:match("^how%s+") or intentNorm:match("^is%s+") or intentNorm:match("^are%s+")
+        or intentNorm:match("^does%s+") or intentNorm:match("^do%s+i%s+")
+        or intentNorm:match("^can%s+i%s+") or intentNorm:match("^could%s+i%s+") or intentNorm:match("^should%s+i%s+")
+        or intentNorm:match("^if%s+") or intentNorm:match("^would%s+it%s+") or intentNorm:match("^will%s+it%s+")
+        or intentNorm:match("^warum%s+") or intentNorm:match("^was%s+") or intentNorm:match("^wo%s+")
+        or intentNorm:match("^wie%s+") or intentNorm:match("^ist%s+") or intentNorm:match("^sind%s+")
+        or intentNorm:match("^show%s+me%s+") or intentNorm:match("^tell%s+me%s+")
+        or intentNorm:match("^zeige%s+mir%s+")
     local mutation = not readOnlyRequest and (disable or enable or R.StartsWithMutationCommand(norm))
 
     if not mutation then
@@ -1546,7 +1557,7 @@ function R.TryFullFrameAuraEffectRequest(text)
     end
 
     local changes = {}
-    if disable and not lane and R.ContainsAny(norm, { "all", "both", "effects", "auras" }) then
+    if disable and not lane and R.ContainsAny(norm, { "all", "both" }) then
         local buffSetting = R.FullFrameAuraEffectSetting(scope, "buff")
         local debuffSetting = R.FullFrameAuraEffectSetting(scope, "debuff")
         if not buffSetting or not debuffSetting then return nil end
@@ -6233,6 +6244,9 @@ function R.LiveAuraFrameEffectCandidate(norm, frame, unit)
         -- A configured but unarmed lane cannot be the visible effect: its
         -- lane is disabled, has no capacity, or was otherwise compiled out.
         if effect.armed ~= true then return end
+        -- If a live frame exists, a merely resolvable setting is not enough:
+        -- the effect must actually be installed on that frame.
+        if frame ~= nil and effect.installed ~= true then return end
         if laneHint and effect.ownerKind == "lane" and effect.lane ~= laneHint then return end
         if requestedType and kind ~= requestedType then return end
         local colorMatch = R.LiveAuraEffectColorMatches(norm, effect)
@@ -6316,6 +6330,11 @@ function R.LiveAuraFrameEffectExplanation(unitLabel, effect)
     elseif effect and effect.source == "unit" then
         ownerLine = " The Effect value is owned by the " .. tostring(unitLabel)
             .. " Aura Style override, so resetting only the Unit Frame does not reset it."
+    elseif effect and (effect.colorSource == "unit" or effect.thicknessSource == "unit"
+        or effect.prioritySource == "unit" or effect.layerSource == "unit" or effect.strataSource == "unit")
+    then
+        ownerLine = " The Effect type is inherited from Shared Aura Style, while one or more visual details are owned by the "
+            .. tostring(unitLabel) .. " Aura Style override; resetting only the Unit Frame does not reset those Aura values."
     else
         ownerLine = " The Effect value is inherited from Shared Aura Style by " .. tostring(unitLabel) .. "."
     end

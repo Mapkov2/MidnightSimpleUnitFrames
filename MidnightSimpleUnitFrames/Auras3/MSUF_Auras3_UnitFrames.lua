@@ -3077,6 +3077,9 @@ function A3.GetUnitFrameEffectDiagnostics(unit, frame)
         local effect = slot and type(slot.frameEffect) == "table" and slot.frameEffect or nil
         local configuredType = tostring(ReadRaw(effectiveShared, nil, keyPrefix .. "Type") or "none"):lower()
         local color = effect and effect.color or ReadRaw(effectiveShared, nil, keyPrefix .. "Color")
+        local function FieldSource(suffix)
+            return localShared and localShared[keyPrefix .. suffix] ~= nil and "unit" or "shared"
+        end
         return {
             ownerKind = "lane",
             lane = kind,
@@ -3097,7 +3100,12 @@ function A3.GetUnitFrameEffectDiagnostics(unit, frame)
                 or ReadRaw(effectiveShared, nil, keyPrefix .. "Strata") or "AUTO"),
             nativeFilter = slot and slot.nativeFilter or nil,
             candidateFilterSignature = slot and slot.candidateFilterSignature or nil,
-            source = localShared and localShared[keyPrefix .. "Type"] ~= nil and "unit" or "shared",
+            source = FieldSource("Type"),
+            colorSource = FieldSource("Color"),
+            thicknessSource = FieldSource("Thickness"),
+            prioritySource = FieldSource("Priority"),
+            layerSource = FieldSource("Layer"),
+            strataSource = FieldSource("Strata"),
         }
     end
 
