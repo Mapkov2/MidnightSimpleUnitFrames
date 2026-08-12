@@ -26,6 +26,7 @@
 - Restored continuous Devourer class-resource updates and removed obsolete partial-update ownership from the resource pipeline.
 - Fixed Icicles showing an Aura icon over Class Resources or retaining incorrect stack counts. Icicles now refreshes the exact player Aura on each Aura change, while protected Icicle and Maelstrom Weapon counts fill their pips through Blizzard's native StatusBar clamping without Lua comparisons.
 - Fixed Tip of the Spear showing incorrect stacks after current Survival Hunter spenders and Takedown with Twin Fangs. Stack tracking now also expires correctly without protected Aura reads.
+- Fixed native Auras, Spell Indicators, and Aura-based Class Resources becoming stale or retaining incorrect durations after cinematics and entering the world. Lifecycle refreshes are now coalesced and event-driven without polling.
 - Refreshed Unit Frame names immediately after anchor changes.
 - Restored live Group frames correctly after preview roster handoffs.
 - Honored configured Aura layers for fixed Group slots.
