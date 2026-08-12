@@ -1902,9 +1902,9 @@ end
 local function SpellSelectionKey(kind, specKey)
     return tostring(kind or "") .. "\030" .. tostring(specKey or "")
 end
-local function SetCurrentSpellAura(kind, auraName)
+local function SetCurrentSpellAura(kind, auraName, specKey)
     M.gfSpellIndicatorSelection = M.gfSpellIndicatorSelection or {}
-    local specKey = EffectiveSpellSpec(kind)
+    specKey = specKey or EffectiveSpellSpec(kind)
     if specKey then M.gfSpellIndicatorSelection[SpellSelectionKey(kind, specKey)] = auraName or "" end
     M.gfSpellIndicatorSelection[kind] = auraName or ""
 end
