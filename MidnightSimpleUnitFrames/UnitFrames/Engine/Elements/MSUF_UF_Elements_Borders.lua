@@ -351,6 +351,13 @@ local function RefreshBorderTestFrames()
       })
     end
   end
+  -- Rounded frames reuse their normal outline edge for the resolved Border
+  -- element. The UF/GF refreshes above can therefore be followed by a normal
+  -- rounded layout pass that repaints that shared edge with its base colour.
+  -- Finish this explicit preview transaction in the rounded owner so the
+  -- already-resolved test colour/thickness is the final visible state.
+  local refreshRounded = _G.MSUF_RoundedUF_OnApplyAll
+  if type(refreshRounded) == "function" then refreshRounded() end
 end
 
 local function RefreshBorderTestModesActive()
