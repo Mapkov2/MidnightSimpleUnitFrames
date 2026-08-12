@@ -304,6 +304,33 @@ Check(previewName.fontWrites == previewFontWrites,
   "Boss preview anchor transition required a font-size/font rewrite")
 Check(previewName:IsShown(), "Boss preview anchor transition hid the name FontString")
 
+-- Level/race/class preview text shares the name-relative glyph geometry above.
+-- Keep its font owner aligned with the runtime status element: the compiled
+-- unit font must be applied before SetPreviewIconTexture restores the
+-- indicator-specific text color, and the layout branch must not overwrite it.
+local previewFile = assert(io.open(
+  "MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua", "rb"))
+local previewSource = previewFile:read("*a")
+previewFile:close()
+local runtimeFontCall =
+  "ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, icon.txt, max(7, sz))"
+local runtimeFontPos = previewSource:find(runtimeFontCall, 1, true)
+Check(runtimeFontPos ~= nil, "identity Preview does not use the compiled runtime font")
+local previewTextPos = runtimeFontPos and previewSource:find(
+  "R.SetPreviewIconTexture(icon, spec, conf, g, key, data, statusCfg, box._previewStatusText)",
+  runtimeFontPos, true)
+Check(previewTextPos ~= nil and runtimeFontPos < previewTextPos,
+  "identity Preview applies its font after its indicator color")
+local identityLayoutPos = previewTextPos and previewSource:find(
+  "if isIdentityText then", previewTextPos, true)
+local statusTextLayoutPos = identityLayoutPos and previewSource:find(
+  "elseif R.PreviewStatus.IsStatusTextState", identityLayoutPos, true)
+local identityLayout = identityLayoutPos and statusTextLayoutPos
+  and previewSource:sub(identityLayoutPos, statusTextLayoutPos - 1) or ""
+Check(identityLayout ~= "", "identity Preview layout branch is missing")
+Check(not identityLayout:find("ApplyPreviewFont(icon.txt", 1, true),
+  "identity Preview layout overwrites the compiled runtime font")
+
 if #failures > 0 then
   error("unit name anchor reflow smoke failed:\n - " .. table.concat(failures, "\n - "), 0)
 end

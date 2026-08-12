@@ -3063,6 +3063,13 @@ function Preview.Refresh(box, reason)
                 icon:SetFrameLevel((Layers.ElementLevel and Layers.ElementLevel(rawLayer, spec.defaultLayer or 7, 8))
                     or ((canvas.GetFrameLevel and canvas:GetFrameLevel() or 0) + ClampPreviewLayer(rawLayer, spec.defaultLayer or 7)))
             end
+            if isIdentityText and icon.txt then
+                -- Runtime status text uses the compiled unit font/shadow before
+                -- applying the indicator color. Preserve that ownership here so
+                -- glyph metrics (and therefore NAMELEFT/NAMERIGHT placement)
+                -- remain identical when a unit-specific font is configured.
+                ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, icon.txt, max(7, sz))
+            end
             R.SetPreviewIconTexture(icon, spec, conf, g, key, data, statusCfg, box._previewStatusText)
             if spec.id == "statusCombat" and icon.SetAlpha then
                 icon:SetAlpha(animState and (0.55 + ((tonumber(animState.pulse) or 0) * 0.45)) or 1)
@@ -3072,7 +3079,6 @@ function Preview.Refresh(box, reason)
             if isIdentityText then
                 local anchor, x, y = StatusAnchorOffsets(spec, statusCfg)
                 if icon.txt then
-                    ApplyPreviewFont(icon.txt, max(7, sz))
                     icon.txt:ClearAllPoints()
                     icon.txt:SetPoint("LEFT", icon, "LEFT", 0, 0)
                     icon.txt:SetJustifyH("LEFT")
