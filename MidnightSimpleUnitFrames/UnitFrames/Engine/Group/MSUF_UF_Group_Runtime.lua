@@ -279,13 +279,25 @@ local function SetupWantedPriority()
   return header ~= nil
 end
 
+local function FinishOwnershipHandoff()
+  -- Group borders live on persistent, unprotected anchors rather than on the
+  -- secure headers retired above. Reconcile both anchors after every scope
+  -- transition so the inactive Party/Raid border cannot survive the switch.
+  if type(GF.ApplyGroupBorder) == "function" then GF.ApplyGroupBorder() end
+
+  if GF.ApplyBlizzardGroupFrameOwnership then
+    GF.ApplyBlizzardGroupFrameOwnership("lean-runtime")
+  end
+  return true
+end
+
 local function SetupWantedHeaders(kind)
   local scope = HeaderScope(kind)
   if not AnyGroupFrameEnabled() then
     if not scope or scope == "party" then RetireHeader("party") end
     if not scope or scope == "raid" then RetireHeader("raid") end
     RetireHeader("priority")
-    return true
+    return FinishOwnershipHandoff()
   end
 
   local wantParty = WantParty() and not PreviewSuppressesHeader("party")
@@ -314,15 +326,7 @@ local function SetupWantedHeaders(kind)
   -- Raid scoped layout changes must update the one switching secure header.
   SetupWantedPriority()
 
-  -- Group borders live on persistent, unprotected anchors rather than on the
-  -- secure headers retired above. Reconcile both anchors after every scope
-  -- transition so the inactive Party/Raid border cannot survive the switch.
-  if type(GF.ApplyGroupBorder) == "function" then GF.ApplyGroupBorder() end
-
-  if GF.ApplyBlizzardGroupFrameOwnership then
-    GF.ApplyBlizzardGroupFrameOwnership("lean-runtime")
-  end
-  return true
+  return FinishOwnershipHandoff()
 end
 
 local function ApplyFrameDirty(frame, kind, mask, reason, applyMask)
