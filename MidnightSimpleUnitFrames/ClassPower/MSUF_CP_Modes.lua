@@ -1257,12 +1257,17 @@ modeBuilders.AURA = function(E)
         else
             local cur = 0
             local textValue = 0
+            local restrictedApplications = false
             if powerType == "MAELSTROM_WEAPON" then
                 local info = GetPlayerAura(CPK.SPELL.MAELSTROM_WEAPON)
                 if info then
                     local apps = info.applications
                     textValue = apps
-                    if NotSecret(apps) and apps ~= nil then cur = tonumber(apps) or 0 end
+                    if NotSecret(apps) then
+                        if apps ~= nil then cur = tonumber(apps) or 0 end
+                    else
+                        restrictedApplications = true
+                    end
                 end
             elseif powerType == "WHIRLWIND" then
                 cur = WW.GetStacks()
@@ -1297,7 +1302,11 @@ modeBuilders.AURA = function(E)
                     if info then
                         local apps = info.applications
                         textValue = apps
-                        if NotSecret(apps) and apps ~= nil then cur = tonumber(apps) or 0 end
+                        if NotSecret(apps) then
+                            if apps ~= nil then cur = tonumber(apps) or 0 end
+                        else
+                            restrictedApplications = true
+                        end
                     end
                 end
             end
@@ -1308,13 +1317,24 @@ modeBuilders.AURA = function(E)
             for i = 1, maxPower do
                 local bar = CP.bars[i]
                 if bar then
-                    local isFilled = (i <= cur)
-                    CP_StampMinMax(bar, 0, 1)
-                    CP_SetPowerValue(bar, isFilled and 1 or 0, smoothInterp)
-                    CP_StampAlpha(bar, isFilled and filledAlpha or emptyAlpha)
-                    if isFull then
+                    local isFilled = not restrictedApplications and (i <= cur)
+                    if restrictedApplications then
+                        -- Blizzard's CustomAuraButton application bar follows
+                        -- this same contract: restricted application counts go
+                        -- straight into StatusBar:SetValue. Giving every pip its
+                        -- own [i-1, i] range lets native clamping resolve the
+                        -- filled state without comparing the secret in Lua.
+                        CP_StampMinMax(bar, i - 1, i)
+                        CP_SetPowerValue(bar, textValue, smoothInterp, true)
+                        CP_StampAlpha(bar, filledAlpha)
+                    else
+                        CP_StampMinMax(bar, 0, 1)
+                        CP_SetPowerValue(bar, isFilled and 1 or 0, smoothInterp)
+                        CP_StampAlpha(bar, isFilled and filledAlpha or emptyAlpha)
+                    end
+                    if not restrictedApplications and isFull then
                         CP_StampStatusBarColor(bar, visual.fullR, visual.fullG, visual.fullB, 1)
-                    elseif mwAbove5 and isFilled and i > CPK.THRESH.MW_SPEND then
+                    elseif not restrictedApplications and mwAbove5 and isFilled and i > CPK.THRESH.MW_SPEND then
                         CP_StampStatusBarColor(bar, abR, abG, abB, 1)
                     else
                         local slotR = useSlotColors and visual.slotR and visual.slotR[i]
@@ -1337,7 +1357,7 @@ modeBuilders.AURA = function(E)
                 end
             end
             local autoHideCur = cur
-            if powerType == "ICICLES" and CP.icicleNativeText then autoHideCur = nil end
+            if restrictedApplications or (powerType == "ICICLES" and CP.icicleNativeText) then autoHideCur = nil end
             CP_CheckAutoHide(autoHideCur, maxPower)
         end
     end

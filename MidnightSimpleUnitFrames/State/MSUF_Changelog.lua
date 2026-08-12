@@ -9,8 +9,8 @@ end
 
 local data = {
     currentVersion = "6.03",
-    previousVersion = "5.77b",
-    rangeLabel = "5.77b -> 6.03",
+    previousVersion = "",
+    rangeLabel = "6.03",
     entries = {
         {
             version = "6.03",
@@ -49,6 +49,7 @@ local data = {
                         "Clique and other click-cast providers retain their Unit Frame bindings after profile or configuration updates because MSUF no longer overwrites provider-owned secure click attributes after initial fallback setup.",
                         "Group Spell Indicator preview positions remain isolated from live saved positions.",
                         "Devourer class resources update continuously again through one authoritative resource pipeline.",
+                        "Protected Icicle and Maelstrom Weapon stack counts fill their Class Resource pips in combat through Blizzard's native StatusBar clamping without Lua comparisons.",
                         "Unit Frame names refresh immediately after anchor changes.",
                         "Live Group frames restore correctly after preview roster handoffs.",
                         "Fixed Group Aura slots honor their configured layers.",
