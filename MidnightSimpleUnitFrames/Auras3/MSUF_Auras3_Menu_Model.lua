@@ -1126,48 +1126,71 @@ GF_AURA_FILTER.DEBUFF_FILTER_ITEMS = {
 local function GFNativeFilterKey(token)
     return tostring(token or "ALL"):upper():gsub("[^A-Z0-9]", "")
 end
+local GF_CURRENT_BUFF_FILTER_TOKENS = {
+    ALL = "ALL",
+    PLAYER = "Player",
+    BIGDEFENSIVE = "BigDefensive",
+    BIGDEFENSIVEPLAYER = "BigDefensivePlayer",
+    EXTERNALDEFENSIVE = "ExternalDefensive",
+    EXTERNALDEFENSIVEPLAYER = "ExternalDefensivePlayer",
+    RAIDINCOMBAT = "RaidInCombat",
+    RAID = "Raid",
+    RAIDPLAYER = "RaidPlayer",
+}
+local GF_CURRENT_DEBUFF_FILTER_TOKENS = {
+    ALL = "ALL",
+    PLAYER = "Player",
+    RAID = "Raid",
+    RAIDINCOMBAT = "RaidInCombat",
+    RAIDPLAYERDISPELLABLE = "RAID_PLAYER_DISPELLABLE",
+    DISPELLABLE = "DISPELLABLE",
+    CROWDCONTROL = "CROWD_CONTROL",
+}
+--- Stored Group Aura filters must never retain a token that the current UI no
+--- longer exposes. Reset retired/unknown filters to the lane's visible default
+--- instead of silently continuing an uneditable Blizzard filter expression.
+local function NormalizeGFStoredFilterToken(lane, token)
+    local current = lane == "debuff" and GF_CURRENT_DEBUFF_FILTER_TOKENS
+        or lane == "buff" and GF_CURRENT_BUFF_FILTER_TOKENS
+        or nil
+    if not current then return token end
+    return current[GFNativeFilterKey(token)] or "ALL"
+end
+GF_AURA_FILTER.NormalizeFilterToken = NormalizeGFStoredFilterToken
 local GF_NATIVE_BUFF_FILTERS = {
     ALL = false,
     PLAYER = "PLAYER",
     BIGDEFENSIVEPLAYER = "BIG_DEFENSIVE|PLAYER",
     EXTERNALDEFENSIVEPLAYER = "EXTERNAL_DEFENSIVE|PLAYER",
-    RAIDINCOMBATPLAYER = "RAID_IN_COMBAT|PLAYER",
-    CANCELABLEPLAYER = "CANCELABLE|PLAYER",
-    NOTCANCELABLEPLAYER = "!CANCELABLE|PLAYER",
     RAIDPLAYER = "RAID|PLAYER",
     BIGDEFENSIVE = "BIG_DEFENSIVE",
     EXTERNALDEFENSIVE = "EXTERNAL_DEFENSIVE",
     RAIDINCOMBAT = "RAID_IN_COMBAT",
-    CANCELABLE = "CANCELABLE",
-    NOTCANCELABLE = "!CANCELABLE",
     RAID = "RAID",
-    IMPORTANT = "IMPORTANT",
-    INCLUDENAMEPLATEONLY = "INCLUDE_NAME_PLATE_ONLY",
 }
 local GF_NATIVE_DEBUFF_FILTERS = {
     ALL = false,
     PLAYER = "PLAYER",
-    RAIDPLAYER = "RAID|PLAYER",
-    RAIDINCOMBATPLAYER = "RAID_IN_COMBAT|PLAYER",
     RAID = "RAID",
     RAIDINCOMBAT = "RAID_IN_COMBAT",
-    INCLUDENAMEPLATEONLY = "INCLUDE_NAME_PLATE_ONLY",
     RAIDPLAYERDISPELLABLE = "RAID_PLAYER_DISPELLABLE",
     DISPELLABLE = "DISPELLABLE",
-    IMPORTANT = "IMPORTANT",
     CROWDCONTROL = "CROWD_CONTROL",
 }
-local function ResolveGFNativeFilter(token, baseFilter, filterMap)
-    local filter = filterMap[GFNativeFilterKey(token)]
+local function ResolveGFNativeFilter(lane, token, baseFilter, filterMap)
+    local key = GFNativeFilterKey(token)
+    local current = lane == "debuff" and GF_CURRENT_DEBUFF_FILTER_TOKENS or GF_CURRENT_BUFF_FILTER_TOKENS
+    if not current[key] then key = "ALL" end
+    local filter = filterMap[key]
     if filter == false then return baseFilter end
     if type(filter) == "string" and filter ~= "" then return baseFilter .. "|" .. filter end
     return baseFilter
 end
 GF_AURA_FILTER.ResolveBuffFilter = function(token)
-    return ResolveGFNativeFilter(token, "HELPFUL", GF_NATIVE_BUFF_FILTERS)
+    return ResolveGFNativeFilter("buff", token, "HELPFUL", GF_NATIVE_BUFF_FILTERS)
 end
 GF_AURA_FILTER.ResolveDebuffFilter = function(token)
-    return ResolveGFNativeFilter(token, "HARMFUL", GF_NATIVE_DEBUFF_FILTERS)
+    return ResolveGFNativeFilter("debuff", token, "HARMFUL", GF_NATIVE_DEBUFF_FILTERS)
 end
 -- Blizzard's 12.1 external-defensive token already selects defensives received
 -- from other players. Keep the dedicated lane identical to the native viewer;

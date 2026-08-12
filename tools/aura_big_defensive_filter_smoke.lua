@@ -13,6 +13,22 @@ local MSUF = { MSUF_Auras3 = {} }
 _G.MSUF_NS = MSUF
 assert(loadfile("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_DefensiveData.lua"))("MidnightSimpleUnitFrames", MSUF)
 local A3 = assert(MSUF.MSUF_Auras3)
+assert(loadfile("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Menu_Model.lua"))("MidnightSimpleUnitFrames", MSUF)
+local groupAuraFilter = assert(_G.MSUF_GF_AuraFilter)
+assert(groupAuraFilter.NormalizeFilterToken("buff", "BigDefensive") == "BigDefensive"
+    and groupAuraFilter.NormalizeFilterToken("debuff", "CROWD_CONTROL") == "CROWD_CONTROL",
+    "current Group Aura filters were not preserved")
+for _, token in ipairs({ "IMPORTANT", "Cancelable", "NotCancelablePlayer", "INCLUDE_NAME_PLATE_ONLY", "unknown" }) do
+    assert(groupAuraFilter.NormalizeFilterToken("buff", token) == "ALL",
+        "retired Group Buff filter was not reset: " .. token)
+end
+for _, token in ipairs({ "IMPORTANT", "RaidPlayer", "RaidInCombatPlayer", "INCLUDE_NAME_PLATE_ONLY", "unknown" }) do
+    assert(groupAuraFilter.NormalizeFilterToken("debuff", token) == "ALL",
+        "retired Group Debuff filter was not reset: " .. token)
+end
+assert(groupAuraFilter.ResolveBuffFilter("IMPORTANT") == "HELPFUL"
+    and groupAuraFilter.ResolveDebuffFilter("RaidPlayer") == "HARMFUL",
+    "runtime still executes retired Group Aura filters")
 local hash, signature = A3.GetBigDefensiveSpellIDHash()
 local sameHash, sameSignature = A3.GetBigDefensiveSpellIDHash()
 assert(hash == sameHash, "Big Defensive hash should be cached")
@@ -87,11 +103,29 @@ assert((effective(lane)) == "HELPFUL|BIG_DEFENSIVE|PLAYER", "secret Target dispo
 local model = readFile("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Menu_Model.lua")
 assert(has(model, "BIGDEFENSIVE = \"BIG_DEFENSIVE\","), "Group Big Defensive still excludes player-cast auras")
 assert(has(model, "RAIDINCOMBAT = \"RAID_IN_COMBAT\","), "Group Raid In Combat still excludes player-cast auras")
-assert(has(model, "INCLUDENAMEPLATEONLY = \"INCLUDE_NAME_PLATE_ONLY\","), "legacy Group token resolver was removed")
+assert(has(model, "GF_AURA_FILTER.NormalizeFilterToken = NormalizeGFStoredFilterToken"),
+    "Group filter-token migration contract is missing")
+local nativeFilterStart = assert(model:find("local GF_NATIVE_BUFF_FILTERS", 1, true))
+local nativeFilterStop = assert(model:find("local function ResolveGFNativeFilter", nativeFilterStart, true))
+local nativeFilters = model:sub(nativeFilterStart, nativeFilterStop - 1)
+assert(not has(nativeFilters, "IMPORTANT")
+    and not has(nativeFilters, "CANCELABLE")
+    and not has(nativeFilters, "INCLUDENAMEPLATEONLY")
+    and not has(nativeFilters, "RAIDINCOMBATPLAYER"),
+    "retired Group filters remain executable in the native resolver")
 local buffItems = assert(model:match("GF_AURA_FILTER%.BUFF_FILTER_ITEMS = {(.-)}%s*GF_AURA_FILTER%.DEBUFF_FILTER_ITEMS"))
 local debuffItems = assert(model:match("GF_AURA_FILTER%.DEBUFF_FILTER_ITEMS = {(.-)}%s*local function GFNativeFilterKey"))
 assert(not has(buffItems, "CancelablePlayer") and not has(buffItems, "IMPORTANT"), "obsolete Group Buff choices remain visible")
 assert(not has(debuffItems, "INCLUDE_NAME_PLATE_ONLY") and not has(debuffItems, "IMPORTANT"), "modifier/no-op Group Debuff choices remain visible")
+
+local profiles = readFile("MidnightSimpleUnitFrames/State/MSUF_Profiles.lua")
+assert(has(profiles, "MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION = 21")
+    and has(profiles, "MSUF_ProfileIO_NormalizeGFAuraFilterTokens(profile, false)")
+    and has(profiles, "MSUF_ProfileIO_NormalizeGFAuraFilterTokens(profile, true)"),
+    "stored/imported profiles do not repair retired Group filter tokens")
+local groupDB = readFile("MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB.lua")
+assert(has(groupDB, "g.filterToken = normalize(gk, g.filterToken)"),
+    "active Group DB cold repair does not normalize retired filter tokens")
 
 local assistantData = readFile("MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantRegistry_Auras_Data.lua")
 local groupValues = assert(assistantData:match("Data%.GF_AURA_FILTER_VALUES = {(.-)}%s*Data%.GF_AURA_FILTER_ALIASES"))

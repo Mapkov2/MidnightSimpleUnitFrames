@@ -9,11 +9,12 @@
 ### Changes
 
 - Multi-Spec now exposes all 40 Retail specializations. Custom Aura IDs can also be added to an individual specialization, allowing a Holy Priest configuration, for example, to track Feint (`1966`) on another group member while **Only show my casts** is disabled.
+- Added a curated, class-wide Big Defensive Spell-ID filter for friendly Unit and Group Frames, with Blizzard's native classification as the restricted-data fallback. Aura classification choices are now mutually exclusive while **Only mine** and **Also include nameplate-only** remain explicit modifiers, and Menu, search, and the Assistant share the same contract.
 
 ### Fixes & Performance
 
 - Fixed Target of Target and Focus Target health bars and names losing class colors when WoW protects dependent-unit class data in combat. Protected colors now flow directly through Blizzard-native color sinks without polling or persistent secret-value caches.
-- Matched Unit and Group preview bar gradients to runtime rendering.
+- Fixed Health and Power gradients missing or differing in Unit and Group previews. Embedded, detached, and rounded Power previews now reuse the same gradient composition as runtime rendering.
 - Made Cleanse Border changes request the required UI reload.
 - Kept the Player Castbar provider selectable in the Bars menu.
 - Fixed Blizzard Party and Raid frames not recovering reliably when MSUF returned frame ownership, while preserving Blizzard event registrations and prior visibility.
@@ -22,6 +23,8 @@
 - Refreshed Unit Frame names immediately after anchor changes.
 - Restored live Group frames correctly after preview roster handoffs.
 - Honored configured Aura layers for fixed Group slots.
+- Fixed the animated Resting symbol trying to use an unavailable Blizzard atlas; unsupported clients now fall back safely.
+- Fixed Unit Frame Edit Mode quick actions applying stale compiled settings after size, position, reset, copy, or detached Power changes.
 
 ## 6.02 - 2026-08-11
 

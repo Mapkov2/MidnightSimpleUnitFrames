@@ -203,14 +203,23 @@ local GROUP_NATIVE_FILTER_CANONICAL = {
     IMPORTANT = "IMPORTANT",
     CROWDCONTROL = "CROWD_CONTROL",
 }
-local function CanonicalGroupFilterValue(value)
-    local key = tostring(value or "ALL"):upper():gsub("[^A-Z0-9]", "")
-    local canonical = GROUP_NATIVE_FILTER_CANONICAL[key] or "ALL"
+local function CanonicalGroupFilterValue(value, lane)
     if M.CLASSIC_AURA_FILTERS_REDUCED == true then
+        local key = tostring(value or "ALL"):upper():gsub("[^A-Z0-9]", "")
+        local canonical = GROUP_NATIVE_FILTER_CANONICAL[key] or "ALL"
         if canonical == "Player" or canonical:sub(-6) == "Player" then return "Player" end
         return "ALL"
     end
-    return canonical
+    local auraFilter = (type(MSUF.GF) == "table" and MSUF.GF.AuraFilter) or _G.MSUF_GF_AuraFilter
+    local canonical
+    if auraFilter and type(auraFilter.NormalizeFilterToken) == "function" then
+        canonical = auraFilter.NormalizeFilterToken(lane, value)
+    else
+        local key = tostring(value or "ALL"):upper():gsub("[^A-Z0-9]", "")
+        canonical = GROUP_NATIVE_FILTER_CANONICAL[key] or "ALL"
+    end
+    local allowed = GROUP_NATIVE_FILTER_ALLOWED[lane == "debuff" and "debuff" or "buff"]
+    return allowed[canonical] and canonical or "ALL"
 end
 local function Tr(text)
     if type(M.Tr) == "function" then return M.Tr(text) end
@@ -903,7 +912,7 @@ local function GroupFilterValues(groupKey)
     if type(source) == "table" then
         for i = 1, #source do
             local item = source[i]
-            local value = CanonicalGroupFilterValue(item and (item.value or item.key))
+            local value = CanonicalGroupFilterValue(item and (item.value or item.key), groupKey)
             if allowed[value] then
                 out[#out + 1] = {
                     value = value,
@@ -991,13 +1000,13 @@ local function BindGroupDropdown(ctx, parent, label, x, y, values, width, scope,
         function()
             local group = GFReadGroup(scope, groupKey)
             local value = group[key] or defaultValue
-            if key == "filterToken" then value = CanonicalGroupFilterValue(value) end
+            if key == "filterToken" then value = CanonicalGroupFilterValue(value, groupKey) end
             if key == "sortMethod" then value = NormalizeAuraSortMethodForLane(groupKey, value) end
             return value
         end,
         function(v)
             local value = v or defaultValue
-            if key == "filterToken" then value = CanonicalGroupFilterValue(value) end
+            if key == "filterToken" then value = CanonicalGroupFilterValue(value, groupKey) end
             if key == "sortMethod" then value = NormalizeAuraSortMethodForLane(groupKey, value) end
             GFWriteGroupValue(scope, groupKey, key, value, mode or "visual")
             if afterSet then afterSet(value) end
@@ -3756,7 +3765,7 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
                 ".auras." .. lane .. ".blacklist.hidePermanent"),
         }))
     AddTooltip(hidePermanent, "Hide permanent auras", "Always excludes auras without a duration.")
-    local selectedFilterToken = CanonicalGroupFilterValue((GFReadGroup(scope, lane) or {}).filterToken or "ALL")
+    local selectedFilterToken = CanonicalGroupFilterValue((GFReadGroup(scope, lane) or {}).filterToken or "ALL", lane)
     for i = 1, #values do
         local item = values[i]
         local col = (i - 1) % 4
@@ -3764,11 +3773,11 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
         local control = BindSwitch(ctx, section, item.text or item.value, 24 + col * (colW + gap), -78 - row * 32, colW,
             function()
                 local group = GFReadGroup(scope, lane)
-                return CanonicalGroupFilterValue(group.filterToken or "ALL") == item.value
+                return CanonicalGroupFilterValue(group.filterToken or "ALL", lane) == item.value
             end,
             function(enabled)
                 local group = GFReadGroup(scope, lane)
-                local current = CanonicalGroupFilterValue(group.filterToken or "ALL")
+                local current = CanonicalGroupFilterValue(group.filterToken or "ALL", lane)
                 local value = enabled and item.value or (current == item.value and "ALL" or current)
                 GFWriteGroupValue(scope, lane, "filterToken", value, "visual")
                 QueueAurasPageRefresh(ctx, "group-native-filter-choice")

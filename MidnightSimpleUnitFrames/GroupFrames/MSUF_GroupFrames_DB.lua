@@ -1707,6 +1707,16 @@ function GF.EnsureDB()
                     if g.filterToken == nil then
                         g.filterToken = (gk == "externals") and "RAID" or "ALL"
                     end
+                    --- This runs only during the cold EnsureDB repair pass.
+                    --- Retired/unknown native filters must not remain active
+                    --- invisibly after their controls were removed from Menu2.
+                    if gk == "buff" or gk == "debuff" then
+                        local AF = GF.AuraFilter or _G.MSUF_GF_AuraFilter
+                        local normalize = AF and AF.NormalizeFilterToken
+                        if type(normalize) == "function" then
+                            g.filterToken = normalize(gk, g.filterToken)
+                        end
+                    end
                     if type(g.blacklistCats) ~= "table" then
                         --- Apply sensible defaults from AuraFilter module
                         local AF = GF.AuraFilter or _G.MSUF_GF_AuraFilter

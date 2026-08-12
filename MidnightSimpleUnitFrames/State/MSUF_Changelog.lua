@@ -37,8 +37,9 @@ local data = {
                     title = "6.03 Stability Updates",
                     bullets = {
                         "Multi-Spec Group Frame Spell Icons expose all 40 Retail specializations and a shared All Specs workspace. Custom Aura IDs work both in the shared workspace and inside an individual specialization; Only show my casts remains disabled by default for custom entries so buffs such as Feint can be shown on other group members.",
+                        "Friendly Unit and Group Frames gained a curated, class-wide Big Defensive Spell-ID filter, with Blizzard's native classification retained as the restricted-data fallback. Aura classification choices are mutually exclusive while Only mine and Also include nameplate-only remain explicit modifiers, and Menu, search, and the Assistant share the same contract.",
                         "Target of Target and Focus Target health bars and names retain class colors when WoW protects dependent-unit class data in combat; protected colors flow directly through Blizzard-native sinks without polling or persistent secret-value caches.",
-                        "Unit and Group preview bar gradients match runtime rendering.",
+                        "Health and Power gradients render correctly in Unit and Group previews; embedded, detached, and rounded Power previews reuse the same composition as runtime rendering.",
                         "Cleanse Border changes request the required UI reload.",
                         "The Player Castbar provider remains selectable in the Bars menu.",
                         "Blizzard Party and Raid frames recover reliably when MSUF returns ownership, without losing Blizzard event registrations or prior visibility.",
@@ -47,6 +48,8 @@ local data = {
                         "Unit Frame names refresh immediately after anchor changes.",
                         "Live Group frames restore correctly after preview roster handoffs.",
                         "Fixed Group Aura slots honor their configured layers.",
+                        "The animated Resting symbol falls back safely when its Blizzard atlas is unavailable.",
+                        "Unit Frame Edit Mode quick actions refresh the compiled frame spec before applying size, position, reset, copy, or detached Power changes, so current edits cannot be replaced by stale settings.",
                     },
                 },
                 {
