@@ -187,6 +187,19 @@ function Status.CreateIcon(parent, color, text)
     if StopRestingFlipbook then f:SetScript("OnHide", StatusIconOnHide) end
     return f
 end
+local function ElitePreviewState(key, data)
+    local classification = data and data.classification
+    if classification == "worldboss" then return "BOSS" end
+    if classification == "rareelite" then return "RAREELITE" end
+    if classification == "rare" then return "RARE" end
+    if classification == "elite" then return "ELITE" end
+    return key == "boss" and "BOSS" or "ELITE"
+end
+local function ElitePreviewAtlas(state)
+    if state == "RARE" then return "UI-HUD-UnitFrame-Target-PortraitOn-Boss-Rare-Star" end
+    if state == "RAREELITE" then return "nameplates-icon-elite-silver" end
+    return "nameplates-icon-elite-gold"
+end
 function Status.SetIconTexture(icon, spec, conf, g, key, data, runtimeCfg, statusPreviewText)
     if not icon or not spec then return end
     local tex, txt = icon.tex, icon.txt
@@ -218,10 +231,11 @@ function Status.SetIconTexture(icon, spec, conf, g, key, data, runtimeCfg, statu
             tex:SetTexture(path)
         end
     elseif spec.id == "elite" then
-        if tex and ApplyStatusIconPackPreview(tex, spec, conf, g, runtimeCfg, "elite", (key == "boss") and "BOSS" or "ELITE") then
+        local state = ElitePreviewState(key, data)
+        if tex and ApplyStatusIconPackPreview(tex, spec, conf, g, runtimeCfg, "elite", state) then
             -- Custom texture applied above.
         elseif tex and tex.SetAtlas then
-            tex:SetAtlas((key == "boss") and "nameplates-icon-elite-gold" or "nameplates-icon-elite-silver")
+            tex:SetAtlas(ElitePreviewAtlas(state))
         elseif tex then
             tex:SetTexture("Interface\\TargetingFrame\\UI-TargetingFrame-Skull")
         end

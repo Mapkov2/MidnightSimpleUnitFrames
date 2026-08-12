@@ -1516,10 +1516,14 @@ local function UpdateRaidGroup(frame, status)
 end
 
 local function EliteAtlas(state)
-  if state == "BOSS" then
-    return "nameplates-icon-elite-gold"
+  -- Mirror Blizzard_NamePlateClassificationFrame exactly: elite/worldboss use
+  -- gold, rare elite uses silver, and rare uses the standalone rare star.
+  if state == "RARE" then
+    return "UI-HUD-UnitFrame-Target-PortraitOn-Boss-Rare-Star"
+  elseif state == "RAREELITE" then
+    return "nameplates-icon-elite-silver"
   end
-  return "nameplates-icon-elite-silver"
+  return "nameplates-icon-elite-gold"
 end
 
 local function EliteState(frame, unit, unitState)

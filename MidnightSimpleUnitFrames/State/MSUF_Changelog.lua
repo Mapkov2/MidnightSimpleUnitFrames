@@ -8,10 +8,22 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.03",
-    previousVersion = "6.02",
-    rangeLabel = "6.02 -> 6.03",
+    currentVersion = "6.04",
+    previousVersion = "6.03",
+    rangeLabel = "6.03 -> 6.04",
     entries = {
+        {
+            version = "6.04",
+            date = "2026-08-12",
+            sections = {
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Fixed the Elite Indicator missing from Unit Frame previews. Elite, Rare Elite, Rare, and Boss classifications now use their matching Blizzard icons in runtime and previews while sharing one position, size, and layer.",
+                    },
+                },
+            },
+        },
         {
             version = "6.03",
             date = "2026-08-12",
@@ -101,20 +113,6 @@ local data = {
                         "Fixed Manual Detached Power width losing authority to a synchronized width source in Edit Mode and Menu controls.",
                         "Fixed Boss portrait refreshes missing frames that had not yet been seeded into the Edit Mode registry.",
                         "Fixed rounded mouseover edges retaining their previous color until the next hover transition.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-RC19",
-            date = "2026-08-09",
-            sections = {
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed Unit and Group Aura layout controls not updating their per-row availability immediately after changing a lane's growth direction.",
-                        "Fixed detached power bars being unavailable or reattached in Edit Mode and Unit previews for Target of Target, Focus Target, Pet and Boss frames. Runtime, Edit Mode and Menu previews now share one unit-capability contract.",
-                        "Fixed Castbar Spell Text exposing a separate Alignment setting that could conflict with its Position preset. Position now owns both the anchor and visible alignment consistently in live frames, previews, search and the Assistant.",
                     },
                 },
             },

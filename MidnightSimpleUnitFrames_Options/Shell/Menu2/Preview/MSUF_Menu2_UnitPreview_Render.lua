@@ -1727,7 +1727,6 @@ function Preview.Refresh(box, reason)
                     show = (showVal == nil) and (spec.defaultShow ~= false) or (showVal ~= false)
                 end
                 if spec.allowed and not spec.allowed(key) then show = false end
-                if spec.id == "elite" and not data.elite then show = false end
                 if Preview.GetStatusPreviewMode() ~= "all" then
                     local selected = R.NormalizeStatusPreviewId(Preview.selectedStatusId)
                     if selected == "" then selected = "raidmarker" end
@@ -3032,7 +3031,6 @@ function Preview.Refresh(box, reason)
             show = (showVal == nil) and (spec.defaultShow ~= false) or (showVal ~= false)
         end
         if spec.allowed and not spec.allowed(key) then show = false end
-        if spec.id == "elite" and not data.elite then show = false end
         if Preview.GetStatusPreviewMode() ~= "all" then
             local selected = R.NormalizeStatusPreviewId(Preview.selectedStatusId)
             if selected == "" then selected = "raidmarker" end

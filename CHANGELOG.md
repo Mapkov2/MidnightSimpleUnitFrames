@@ -1,5 +1,11 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.04 - 2026-08-12
+
+### Fixes & Performance
+
+- Fixed the Elite Indicator missing from Unit Frame previews. Elite, Rare Elite, Rare, and Boss classifications now use their matching Blizzard icons in runtime and previews while sharing one position, size, and layer.
+
 ## 6.03 - 2026-08-12
 
 ### Highlights
