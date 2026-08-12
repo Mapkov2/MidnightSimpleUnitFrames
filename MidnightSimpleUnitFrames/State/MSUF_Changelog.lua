@@ -14,12 +14,26 @@ local data = {
     entries = {
         {
             version = "6.04",
-            date = "2026-08-12",
+            date = "2026-08-13",
             sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Reworked Unit Frame Auras around explicit lane ownership. Every Buff and Debuff lane now owns its exact layout, filtering, text, effect, and visibility settings, while icon appearance remains global by Aura type. Existing profiles retain their visible setup, and runtime, Menu, Edit Mode, search, and the Assistant now use the same ownership model.",
+                        "Added a profile-specific option to disable Northern Sky Raid Tools nicknames on MSUF frames without changing NSRT or its settings. The integration remains enabled by default and can also be controlled through the Assistant.",
+                    },
+                },
                 {
                     title = "Fixes & Performance",
                     bullets = {
+                        "Reduced recurring work on frequent Health and Texture Layer events. Health prediction and text followers now skip already-pending updates, while dynamic Texture Layers refresh only affected slots, use color-only updates where possible, and reuse their runtime objects.",
                         "Fixed the Elite Indicator missing from Unit Frame previews. Elite, Rare Elite, Rare, and Boss classifications now use their matching Blizzard icons in runtime and previews while sharing one position, size, and layer.",
+                        "Fixed identity-dependent Aura displays becoming stale after taxi transitions and helpful Group auras remaining visible when their caster identity could no longer be verified out of range. The existing range and lifecycle events now refresh them without polling.",
+                        "Fixed sorted or filtered Raid headers temporarily omitting roster members when unit-name data lagged behind the authoritative Raid roster. MSUF now waits for a complete name list and otherwise falls back to Blizzard's native roster path.",
+                        "Fixed Tracked Buffs silently inheriting the normal Buff container's sort method and direction instead of using their own ordering.",
+                        "Fixed Group Frame preview borders not repainting immediately, and fixed rounded borders overwriting active Aggro or Dispel test colors after the preview refresh.",
+                        "Kept reload-required popups above the MSUF options window and expanded Unit Frame Basics sections so their controls no longer clip.",
+                        "Improved the disabled Options-module error so it tells the user to enable MSUF Options in Blizzard's AddOns menu.",
                     },
                 },
             },
