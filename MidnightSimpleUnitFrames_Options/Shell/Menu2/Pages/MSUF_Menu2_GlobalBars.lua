@@ -422,7 +422,10 @@ local function ShowRoundedReloadRequiredPopup()
             end
         end,
     })
-    _G.StaticPopup_Show("MSUF2_ROUNDED_RELOAD_REQUIRED")
+    local dialog = _G.StaticPopup_Show("MSUF2_ROUNDED_RELOAD_REQUIRED")
+    if dialog and type(M.ApplyPopupFramePriority) == "function" then
+        M.ApplyPopupFramePriority(dialog)
+    end
 end
 local function SetRoundedBool(key, value, requireReload)
     value = value and true or false
