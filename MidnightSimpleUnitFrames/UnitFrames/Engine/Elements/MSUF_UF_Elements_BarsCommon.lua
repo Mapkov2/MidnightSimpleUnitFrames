@@ -652,14 +652,14 @@ local function FriendlyNPCClassToken(state, frame, unit)
     if reaction and reaction >= 5 then
       state.npcClassEligible = true
       local _, class = ReadUnitClassCached(frame, unit)
-      if issecretvalue(class) ~= true then
-        state.npcClass = class
-      end
+      state.npcClassSecret = issecretvalue(class) == true
+      state.npcClass = class
     else
       state.npcClassEligible = nil
+      state.npcClassSecret = nil
     end
   end
-  return state.npcClass
+  return state.npcClass, state.npcClassSecret == true
 end
 
 local function PlainTrue(value)
@@ -942,7 +942,7 @@ local function RefreshUnitState(frame, unit, spec, event)
     and state.identityReady == true
     and state.isPlayerKnown == true
     and (state.isPlayer == true or state.npcKindKnown == true)
-    and (state.npcClassEligible ~= true or state.npcClass ~= nil)
+    and (state.npcClassEligible ~= true or state.npcClassSecret == true or state.npcClass ~= nil)
   local oldExists, oldExistsKnown = state.exists, state.existsKnown
   local oldDead, oldDeadKnown = state.dead, state.deadKnown
   local oldConnected, oldConnectedKnown = state.connected, state.connectedKnown
@@ -983,6 +983,7 @@ local function RefreshUnitState(frame, unit, spec, event)
     state.npcClass = nil
     state.npcClassRead = nil
     state.npcClassEligible = nil
+    state.npcClassSecret = nil
     state._npcKindTypeReady = nil
     state._npcKindType = nil
     state._npcKindReactionReady = nil
@@ -1219,7 +1220,14 @@ local function HealthColor(frame, unit, hp, maxHP, calc, event)
 
   if health.npcClassColorBar == true and spec and spec.key ~= "pet" and spec.key ~= "boss"
       and state and state.isPlayerKnown and not state.isPlayer then
-    local r, g, b = ClassColorForToken(FriendlyNPCClassToken(state, frame, unit))
+    local class, secretClass = FriendlyNPCClassToken(state, frame, unit)
+    if secretClass == true then
+      if unit == "targettarget" or unit == "focustarget" then
+        return class, nil, nil, SECRET_DEPENDENT_CLASS_COLOR
+      end
+      class = nil
+    end
+    local r, g, b = ClassColorForToken(class)
     if r ~= nil then
       return r, g, b
     end
