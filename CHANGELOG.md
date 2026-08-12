@@ -10,15 +10,18 @@
 
 - Multi-Spec now exposes all 40 Retail specializations. Custom Aura IDs can also be added to an individual specialization, allowing a Holy Priest configuration, for example, to track Feint (`1966`) on another group member while **Only show my casts** is disabled.
 - Added a curated, class-wide Big Defensive Spell-ID filter for friendly Unit and Group Frames, with Blizzard's native classification as the restricted-data fallback. Aura classification choices are now mutually exclusive while **Only mine** and **Also include nameplate-only** remain explicit modifiers, and Menu, search, and the Assistant share the same contract.
+- Added direct Assistant control and cold-path diagnostics for Unit Frame Buff and Debuff Full-Frame Effects. Menu and Assistant now share the same effect choices without polling or reading protected native Aura visibility.
 
 ### Fixes & Performance
 
 - Fixed Target of Target and Focus Target health bars and names losing class colors when WoW protects dependent-unit class data in combat. Protected colors now flow directly through Blizzard-native color sinks without polling or persistent secret-value caches.
 - Fixed Health and Power gradients missing or differing in Unit and Group previews. Embedded, detached, and rounded Power previews now reuse the same gradient composition as runtime rendering.
+- Fixed Level, Race, and Class text in Unit Frame previews using the default preview font instead of the selected unit font.
 - Made Cleanse Border changes request the required UI reload.
 - Kept the Player Castbar provider selectable in the Bars menu.
 - Fixed native Aura containers triggering a forbidden `EventRegistrations` error during Unit Frame aura setup.
-- Fixed a WoW 12.1 taint loop when Blizzard Party or Raid frames were selected instead of MSUF. MSUF no longer rewires Blizzard CompactUnitFrame scripts or manually refreshes those frames; provider and fallback handoffs now complete safely after the required UI reload.
+- Improved the ownership handoff between MSUF and Blizzard Party/Raid frames. Provider and fallback changes now return frames reliably through Blizzard's own lifecycle and request the required UI reload.
+- Fixed Clique and other click-cast providers losing their Unit Frame bindings after profile or configuration updates. MSUF now preserves provider-owned secure click attributes after the initial fallback setup.
 - Isolated Group Spell Indicator preview positions from live saved positions.
 - Restored continuous Devourer class-resource updates and removed obsolete partial-update ownership from the resource pipeline.
 - Refreshed Unit Frame names immediately after anchor changes.
