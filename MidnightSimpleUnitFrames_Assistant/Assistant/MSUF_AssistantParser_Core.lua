@@ -1272,6 +1272,11 @@ local OFF_WORDS = {
     -- resource preview", "remove profile") and reading them as a boolean turns
     -- an action request into a setting write.
     "stop showing", "stop the", "get rid of", "no more",
+    -- Border/highlight toggles are asked for by their effect: "stop
+    -- highlighting frames when i have threat" names OFF without any state
+    -- word. Phrases only -- bare "highlight" also names controls (Focus
+    -- Highlight, Highlight Priority) and must never read as a polarity.
+    "stop highlighting", "quit highlighting", "no longer highlight",
     "aus", "deaktivieren", "deaktiviert", "ausschalten", "ausgeschaltet",
     "deaktiviere", "schalte aus", "mach aus", "verstecken", "versteckt",
     "verstecke", "ausblenden", "ausgeblendet", "blende aus", "nein",
@@ -1285,6 +1290,11 @@ local ON_WORDS = {
     -- "add" and "give me" also start size requests ("add more space between
     -- party frames"), where a boolean reading writes the wrong setting.
     "want to see", "let me see",
+    -- Mirror of the OFF highlight phrases: "highlight the frame when
+    -- something is attacking me" is an ON request with no state word. Word
+    -- boundaries keep this from matching "highlighting" (OFF is also checked
+    -- first, so "stop highlighting the frame" stays OFF).
+    "highlight the", "highlight when", "highlight my", "start highlighting",
     "an", "aktivieren", "aktiviert", "einschalten", "eingeschaltet",
     "aktiviere", "schalte an", "mach an", "anzeigen", "zeige",
     "zeig", "einblenden", "eingeblendet", "blende ein", "sichtbar",

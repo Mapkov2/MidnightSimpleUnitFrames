@@ -7834,6 +7834,44 @@ function A.HandleCommandInput(text)
         return NormalizePlanResult({ text = message, result = ok and "applied" or "failed" })
     end
     if parsed.kind == "ambiguous" then
+        -- Two rows that are the same boolean setting split only by polarity
+        -- ("Aggro Border: off / on") are not a real ambiguity when the
+        -- sentence states its own direction ("stop highlighting frames...",
+        -- "highlight the frame when something is attacking me"). Ask the
+        -- shared polarity vocabulary first; only a sentence with no stated
+        -- polarity still gets the question.
+        local pairChoices = parsed.choices or {}
+        if #pairChoices == 2 then
+            -- Booleans arrive as true/false, on/off-style string settings
+            -- (aggroOutlineMode) as "on"/"off"; both are the same two-state
+            -- question to the player.
+            local function ChoicePolarity(value)
+                if type(value) == "boolean" then return value end
+                local v = tostring(value or ""):lower()
+                if v == "on" or v == "true" or v == "enabled" then return true end
+                if v == "off" or v == "false" or v == "disabled" then return false end
+                return nil
+            end
+            local first, second = pairChoices[1], pairChoices[2]
+            local firstKey = first and first.setting and first.setting.key
+            local firstPolarity = first and ChoicePolarity(first.value)
+            local secondPolarity = second and ChoicePolarity(second.value)
+            if firstKey and second and second.setting and second.setting.key == firstKey
+                and firstPolarity ~= nil and secondPolarity ~= nil
+                and firstPolarity ~= secondPolarity
+            then
+                local Parser = A.Parser
+                local implied
+                if Parser and type(Parser.DetectBoolean) == "function" then
+                    -- No and-or shorthand here: a detected OFF is `false`,
+                    -- which the idiom would collapse into nil.
+                    implied = Parser.DetectBoolean(text)
+                end
+                if implied ~= nil then
+                    return NormalizePlanResult(ExecuteChoice(firstPolarity == implied and first or second))
+                end
+            end
+        end
         A.pendingChoices = parsed.choices or {}
         AP.SetPendingCandidates(A.pendingChoices)
         local ctx = A.GetContext and A.GetContext()

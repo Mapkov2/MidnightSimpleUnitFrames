@@ -98,6 +98,11 @@ function A.GlobalBarRegistry.RegisterTextureGradientSettings(ctx)
             "frame outline texture", "bar outline texture", "outline texture",
             "border texture", "frame border texture", "border style for the frame outline",
             "frame border style", "outline art",
+            -- "Border" is the word players actually use for the square outline;
+            -- without these phrasings the dispel-border family outranks it for
+            -- "put a border around my frames".
+            "border around my frames", "border around the frames",
+            "border around frames", "border around the frame",
         }, {
             category = "Global / Bars / Outline",
             mediaType = "border",

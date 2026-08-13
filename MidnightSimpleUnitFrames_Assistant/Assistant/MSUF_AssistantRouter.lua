@@ -12782,6 +12782,22 @@ function R.RegistryDecisionSubject(norm)
     norm = R.Normalize(norm)
     local naturalSubject = R.NaturalRegistryDecisionSubject(norm)
     if naturalSubject then return naturalSubject end
+    -- How-to and lookup scaffolding carries zero setting information but
+    -- poisons the knowledge search ("how do i get rounded corners on my
+    -- frames" scores 0; the same words without the scaffold land on Rounded
+    -- Frame Texture). Strip the interrogative shell before subject matching.
+    local howto = norm:match("^how%s+do%s+i%s+(.+)$") or norm:match("^how%s+can%s+i%s+(.+)$")
+        or norm:match("^how%s+do%s+you%s+(.+)$") or norm:match("^how%s+would%s+i%s+(.+)$")
+        or norm:match("^how%s+to%s+(.+)$")
+        or norm:match("^where%s+do%s+i%s+(.+)$") or norm:match("^where%s+can%s+i%s+(.+)$")
+        or norm:match("^show%s+me%s+the%s+(.+)$") or norm:match("^show%s+me%s+(.+)$")
+        or norm:match("^wie%s+kann%s+ich%s+(.+)$") or norm:match("^wie%s+mache%s+ich%s+(.+)$")
+        or norm:match("^wie%s+bekomme%s+ich%s+(.+)$") or norm:match("^wo%s+finde%s+ich%s+(.+)$")
+    if howto then norm = R.Trim(howto) end
+    local whatDoes = norm:match("^what%s+does%s+(.+)%s+do%s+on%s+the%s+.+%s+page$")
+        or norm:match("^what%s+does%s+(.+)%s+do$")
+        or norm:match("^was%s+macht%s+(.+)$")
+    if whatDoes then norm = R.Trim(whatDoes) end
     local property, scope = norm:match("^what%s+(.+)%s+do%s+you%s+recommend%s+for%s+(.+)$")
     if property and scope then return R.Trim(scope .. " " .. property) end
     local directSubject = norm:match("^what%s+do%s+you%s+recommend%s+for%s+(.+)$")
@@ -18075,6 +18091,34 @@ function A.RouteInput(text, coreHandler)
             if navLocated then return navLocated end
             local navDirect = R.NamedSettingDirectAnswer and R.NamedSettingDirectAnswer(navNamed)
             if navDirect then return navDirect end
+        end
+        -- Before conceding, run the same knowledge retrieval the advisory
+        -- lane uses: a request like "show me the healing that is on its way"
+        -- names no control, but its folded subject ranks Heal Prediction
+        -- Overlay far above everything else. Naming the closest controls
+        -- turns a dead end into a one-reply detour; the generic text stays
+        -- for genuinely unmatchable wording (and while the index is cold).
+        local navSubject = R.RegistryDecisionSubject and R.RegistryDecisionSubject(text) or nil
+        local navEntries = (navSubject and navSubject ~= "" and R.RegistrySettingSearchEntries)
+            and R.RegistrySettingSearchEntries(navSubject, R.Normalize(text), 5) or nil
+        if navEntries and #navEntries > 0 then
+            local navLines = {
+                "I could not match that wording to one exact MSUF destination, so I kept every setting unchanged. The closest controls:",
+            }
+            for i = 1, math.min(#navEntries, 3) do
+                local navItem = navEntries[i].item or {}
+                navLines[#navLines + 1] = string.format("%d. %s - %s",
+                    i, tostring(navItem.label or "MSUF setting"), tostring(navItem.pageLabel or "MSUF page"))
+            end
+            navLines[#navLines + 1] = "Say a number to open one, or name the exact control."
+            return {
+                text = table.concat(navLines, "\n"),
+                status = "info",
+                result = "info",
+                summary = "Explicit navigation request did not authorize a setting change.",
+                searchResults = R.RegistryLocationResultFollowups
+                    and R.RegistryLocationResultFollowups(navEntries, 3) or nil,
+            }
         end
         return {
             text = "I could not identify one exact MSUF destination from that wording, so I kept every setting unchanged. Name the page or exact control you want me to open.",

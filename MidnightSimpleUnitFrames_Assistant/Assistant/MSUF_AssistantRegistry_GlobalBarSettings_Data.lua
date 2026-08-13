@@ -222,13 +222,41 @@ function Data.NormalizeTextureKeyForAssistant(value)
     value = tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
     if value == "" then return "" end
     local lower = value:lower():gsub("%s+", " ")
-    return TEXTURE_KEY_ALIASES[lower] or TEXTURE_KEY_ALIASES[lower:gsub("%s+", "")] or value
+    local direct = TEXTURE_KEY_ALIASES[lower] or TEXTURE_KEY_ALIASES[lower:gsub("%s+", "")]
+    if direct then return direct end
+    -- Connectorless requests hand over the raw tail ("use the flat texture");
+    -- storing that literally writes a broken SharedMedia key. Strip the
+    -- filler and retry the SAME lookup -- unknown strings still pass through
+    -- unchanged so real custom keys survive.
+    local cleaned = lower:gsub("^use%s+the%s+", ""):gsub("^use%s+", ""):gsub("^the%s+", "")
+    cleaned = cleaned:gsub("%s+texture$", ""):gsub("%s+art$", "")
+    return TEXTURE_KEY_ALIASES[cleaned] or TEXTURE_KEY_ALIASES[cleaned:gsub("%s+", "")] or value
 end
 
 function Data.NormalizeBorderKeyForAssistant(value)
     value = Data.NormalizeTextureKeyForAssistant(value)
     if value == "" or value:lower() == "none" then return "" end
     local styles = MSUF.BorderStyles or _G.MSUF_BorderStyles
+    -- A bare style name ("shadow", "shadow border") must store the canonical
+    -- BORDER:KEY form, or the outline renderer treats it as a statusbar key.
+    -- Resolve against the known border list by key or display text; unknown
+    -- strings still pass through so historic statusbar values keep working.
+    if styles and type(styles.List) == "function" then
+        local bare = value:lower():gsub("%s+border$", ""):gsub("%s+style$", ""):gsub("^border%s+", "")
+        bare = bare:gsub("^%s+", ""):gsub("%s+$", "")
+        if bare ~= "" then
+            local list = styles.List()
+            for i = 1, #(list or {}) do
+                local item = list[i]
+                local key = tostring(item and item.value or "")
+                if key ~= "" and key ~= styles.SOLID
+                    and (bare == key:lower() or bare == tostring(item.text or ""):lower())
+                then
+                    return tostring(styles.FRAME_BORDER_PREFIX or "BORDER:") .. key
+                end
+            end
+        end
+    end
     if styles and type(styles.NormalizeFrame) == "function" then
         return styles.NormalizeFrame(value)
     end

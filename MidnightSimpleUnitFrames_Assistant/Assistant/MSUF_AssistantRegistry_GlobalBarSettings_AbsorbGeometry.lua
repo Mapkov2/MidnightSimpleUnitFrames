@@ -33,6 +33,10 @@ local ABSORB_HEIGHT_ALIASES = {
     "absorb bar is too thin", "shield bar too small", "absorb bar taller", "shield bar taller",
     "absorb bar thickness", "absorb bar thicker", "absorb bar thinner",
     "make the absorb bar shorter", "make the shield bar smaller", "absorb bar shorter",
+    -- "make the shield bar 6 pixels tall" names height only through "tall";
+    -- without these the per-unit frame Heights outrank the absorb bar.
+    "shield bar pixels tall", "shield bar tall", "absorb bar pixels tall", "absorb bar tall",
+    "make the shield bar", "make the absorb bar",
 }
 local ABSORB_OFFSET_ALIASES = {
     "absorb bar vertical offset", "absorb bar offset y", "absorb vertical offset",

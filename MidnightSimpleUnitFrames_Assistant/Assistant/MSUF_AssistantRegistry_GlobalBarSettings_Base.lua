@@ -68,6 +68,10 @@ function A.GlobalBarRegistry.RegisterBaseBarSettings(ctx)
     RegisterBarsNumber("barOutlineLayer", "layer", "Global Bar Outline Layer", 0, 0, 30, {
         "bar outline strata", "bar outline layer", "frame outline strata", "frame outline layer",
         "global bar outline strata", "global frame outline strata", "outline strata", "outline layer",
+        -- "draw the frame outline on layer 5" has no contiguous "outline
+        -- layer" token pair, so Thickness ("frame outline" + a number) used
+        -- to win and wrote 5 into the wrong control.
+        "outline on layer", "frame outline on layer", "draw the frame outline on layer",
     }, {
         category = "Global / Bars / Outline",
         frameType = "globalBars",
@@ -80,6 +84,12 @@ function A.GlobalBarRegistry.RegisterBaseBarSettings(ctx)
         "bar outline opacity", "bar outline alpha", "frame outline opacity", "frame outline alpha",
         "bar border opacity", "bar border alpha", "frame border opacity", "frame border alpha",
         "outline opacity", "outline alpha",
+        -- "make the frame border half transparent" routed to Thickness via
+        -- its bare "frame border" alias and wrote thickness 0. Transparency
+        -- wording belongs to opacity, whatever the value words are.
+        "frame border half transparent", "border half transparent",
+        "frame border transparent", "outline half transparent",
+        "frame border transparency", "border transparency", "outline transparency",
     }, {
         category = "Global / Bars / Outline",
         frameType = "globalBars",
