@@ -171,6 +171,7 @@ local GROUP_NATIVE_FILTER_LABELS = {
     DISPELLABLE = "Any Dispel Type",
     IMPORTANT = "Important",
     CROWD_CONTROL = "Crowd Control",
+    NonPlayer = "Non-Player Auras",
 }
 local GROUP_NATIVE_FILTER_ALLOWED = {
     buff = {
@@ -180,6 +181,7 @@ local GROUP_NATIVE_FILTER_ALLOWED = {
     debuff = {
         ALL = true, Player = true, Raid = true, RaidInCombat = true,
         RAID_PLAYER_DISPELLABLE = true, DISPELLABLE = true, CROWD_CONTROL = true,
+        NonPlayer = true,
     },
 }
 local GROUP_NATIVE_FILTER_CANONICAL = {
@@ -202,6 +204,7 @@ local GROUP_NATIVE_FILTER_CANONICAL = {
     DISPELLABLE = "DISPELLABLE",
     IMPORTANT = "IMPORTANT",
     CROWDCONTROL = "CROWD_CONTROL",
+    NONPLAYER = "NonPlayer",
 }
 local function CanonicalGroupFilterValue(value, lane)
     if M.CLASSIC_AURA_FILTERS_REDUCED == true then
@@ -945,7 +948,8 @@ local function GroupFilterValues(groupKey)
         "RaidInCombat", "Raid In Combat",
         "RAID_PLAYER_DISPELLABLE", "Dispellable by Group",
         "DISPELLABLE", "Any Dispel Type",
-        "CROWD_CONTROL", "Crowd Control"
+        "CROWD_CONTROL", "Crowd Control",
+        "NonPlayer", "Non-Player Auras"
     )
 end
 local function GFAnchorValues()
@@ -3331,7 +3335,7 @@ end
 
 local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
     local section = b:Section((lane == "debuff" and "Debuff" or "Buff") .. " Filters",
-        M.CLASSIC_AURA_FILTERS_REDUCED == true and 118 or (lane == "debuff" and 224 or 182))
+        M.CLASSIC_AURA_FILTERS_REDUCED == true and 118 or (lane == "debuff" and 256 or 182))
     local w = section._msuf2Width or b.width or 720
     local inner = w - 48
     local gap = 12
@@ -3397,7 +3401,7 @@ local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
     AddTooltip(hidePermanent, "Hide permanent auras", "Always excludes auras without a duration, even when Blizzard token filters are disabled.")
     local maxDuration
     if lane == "debuff" then
-        maxDuration = ConfigureMaxDurationSlider(BindSlider(ctx, section, "Maximum duration", 24, -142, 0, 180, 1, inner,
+        maxDuration = ConfigureMaxDurationSlider(BindSlider(ctx, section, "Maximum duration", 24, -174, 0, 180, 1, inner,
             function()
                 return type(Model.ReadBlacklistMaxDuration) == "function"
                     and Model.ReadBlacklistMaxDuration(unit, lane) or 0
@@ -3426,7 +3430,7 @@ local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
         { "Cancelable", "cancelable", "Only cancelable Buffs.", { "notCancelable" } },
         { "Not cancelable", "notCancelable", "Only non-cancelable Buffs.", { "cancelable" } },
     } or {
-        { "Only mine", "onlyMine", "Only Debuffs applied by the player." },
+        { "Only mine", "onlyMine", "Only Debuffs applied by the player.", { "nonPlayer" } },
         { "Important", "onlyImportant", "Only Debuffs Blizzard flags as important." },
         { "Dispellable by me", "raid", "Harmful auras your character can dispel (Blizzard RAID token)." },
         { "Raid combat", "raidInCombat", "Blizzard's in-combat raid Debuff filter." },
@@ -3434,6 +3438,7 @@ local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
         { "Dispellable by group", "includeDispellable", "Debuffs someone in your group can dispel." },
         { "Any dispel type", "dispellableAny", "Debuffs with a dispel type, even when your group cannot remove them." },
         { "Crowd control", "crowdControl", "Crowd-control Debuffs." },
+        { "Non-player auras", "nonPlayer", "Only Debuffs not caused by any player or player pet.", { "onlyMine" } },
     }
     for i = 1, #specs do
         local spec = specs[i]

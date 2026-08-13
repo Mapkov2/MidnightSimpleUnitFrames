@@ -476,7 +476,7 @@ local LANE_STYLE_KEYS = {
 
 local RUNTIME_FILTER_KEYS = {
     buffs = { "onlyMine", "onlyImportant", "raid", "raidInCombat", "includeNameplateOnly", "includeDispellable", "dispellableAny", "cancelable", "notCancelable", "externalDefensive", "bigDefensive", "exclusive" },
-    debuffs = { "onlyMine", "onlyImportant", "raid", "raidInCombat", "includeNameplateOnly", "includeDispellable", "dispellableAny", "crowdControl", "exclusive" },
+    debuffs = { "onlyMine", "onlyImportant", "raid", "raidInCombat", "includeNameplateOnly", "includeDispellable", "dispellableAny", "crowdControl", "nonPlayer", "exclusive" },
 }
 
 local DEFAULT_SHARED = {
@@ -613,6 +613,7 @@ local DEFAULT_SHARED = {
             raidInCombat = false,
             includeNameplateOnly = false,
             crowdControl = false,
+            nonPlayer = false,
             exclusive = "none",
         },
     },
@@ -1126,6 +1127,7 @@ GF_AURA_FILTER.DEBUFF_FILTER_ITEMS = {
     { value = "RAID_PLAYER_DISPELLABLE", text = "Dispellable by Group" },
     { value = "DISPELLABLE", text = "Any Dispel Type" },
     { value = "CROWD_CONTROL", text = "Crowd Control" },
+    { value = "NonPlayer", text = "Non-Player Auras" },
 }
 local function GFNativeFilterKey(token)
     return tostring(token or "ALL"):upper():gsub("[^A-Z0-9]", "")
@@ -1149,6 +1151,7 @@ local GF_CURRENT_DEBUFF_FILTER_TOKENS = {
     RAIDPLAYERDISPELLABLE = "RAID_PLAYER_DISPELLABLE",
     DISPELLABLE = "DISPELLABLE",
     CROWDCONTROL = "CROWD_CONTROL",
+    NONPLAYER = "NonPlayer",
 }
 --- Stored Group Aura filters must never retain a token that the current UI no
 --- longer exposes. Reset retired/unknown filters to the lane's visible default
@@ -1180,6 +1183,7 @@ local GF_NATIVE_DEBUFF_FILTERS = {
     RAIDPLAYERDISPELLABLE = "RAID_PLAYER_DISPELLABLE",
     DISPELLABLE = "DISPELLABLE",
     CROWDCONTROL = "CROWD_CONTROL",
+    NONPLAYER = false,
 }
 local function ResolveGFNativeFilter(lane, token, baseFilter, filterMap)
     local key = GFNativeFilterKey(token)
@@ -1195,6 +1199,9 @@ GF_AURA_FILTER.ResolveBuffFilter = function(token)
 end
 GF_AURA_FILTER.ResolveDebuffFilter = function(token)
     return ResolveGFNativeFilter("debuff", token, "HARMFUL", GF_NATIVE_DEBUFF_FILTERS)
+end
+GF_AURA_FILTER.IsNonPlayerDebuffFilter = function(token)
+    return GFNativeFilterKey(token) == "NONPLAYER"
 end
 -- Blizzard's 12.1 external-defensive token already selects defensives received
 -- from other players. Keep the dedicated lane identical to the native viewer;
@@ -3126,6 +3133,7 @@ local function ApplyScopeFiltersEnabled(filters, enabled, sharedScope, shared)
         filters.debuffs.includeDispellable = false
         filters.debuffs.dispellableAny = false
         filters.debuffs.crowdControl = false
+        filters.debuffs.nonPlayer = false
         filters.debuffs.exclusive = "none"
     end
     if sharedScope and type(shared) == "table" then

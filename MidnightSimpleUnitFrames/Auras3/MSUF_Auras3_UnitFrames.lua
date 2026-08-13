@@ -877,6 +877,7 @@ local GROUP_LANE_SPECS = {
         blacklistHashKey = "debuffBlacklistHash",
         hidePermanentKey = "debuffHidePermanent",
         maxDurationKey = "debuffMaxDuration",
+        nonPlayerKey = "debuffNonPlayer",
         showTextKey = "debuffShowCooldown", showStackKey = "debuffShowStacks", swipeKey = "debuffShowCooldownSwipe",
         swipeReverseKey = "debuffCooldownSwipeReverse", tooltipKey = "debuffShowTooltip",
         sortMethodKey = "debuffSortMethod", sortReverseKey = "debuffSortReverse",
@@ -1588,6 +1589,15 @@ local function SharedIconStyle(kind)
     return style
 end
 
+local function AddNonPlayerCandidateFilter(candidateFilters, candidateFilterSignature, enabled)
+    if enabled ~= true then return candidateFilters, candidateFilterSignature end
+    candidateFilters = candidateFilters or {}
+    candidateFilters.isFromPlayerOrPlayerPet = false
+    local part = "isFromPlayerOrPlayerPet:false"
+    candidateFilterSignature = candidateFilterSignature and (candidateFilterSignature .. ";" .. part) or part
+    return candidateFilters, candidateFilterSignature
+end
+
 local function RemoveNativeFilterToken(filter, removeToken, fallback)
     removeToken = tostring(removeToken or ""):upper()
     local kept = {}
@@ -1989,6 +1999,9 @@ local function CompileUnitLane(unit, laneLayout, layout, filtersRoot, kind, cand
         candidateFilters, candidateFilterSignature,
         kind == "buff" and type(filtersRoot) == "table"
             and (filtersRoot.hidePermanent == true or (filters and filters.hidePermanent == true)))
+    candidateFilters, candidateFilterSignature = AddNonPlayerCandidateFilter(
+        candidateFilters, candidateFilterSignature,
+        kind == "debuff" and filtersEnabled and filters and filters.nonPlayer == true)
     local sizeDefault = ReadRaw(layout, nil, spec.sizeKey) or DEFAULT_SHARED.iconSize
     local size = ClampNumber(sizeDefault, DEFAULT_SHARED.iconSize, 1, 128)
     local zoomDefault = ReadUnitLaneStyleRaw(layout, laneLayout, rootShared,
@@ -2116,6 +2129,9 @@ local function CompileGroupLane(unit, source, kind, groupKind, portraitShape, sh
     candidateFilters, candidateFilterSignature = AddMaxDurationCandidateFilter(
         candidateFilters, candidateFilterSignature,
         spec.maxDurationKey and source[spec.maxDurationKey], source[spec.hidePermanentKey] == true)
+    candidateFilters, candidateFilterSignature = AddNonPlayerCandidateFilter(
+        candidateFilters, candidateFilterSignature,
+        spec.nonPlayerKey and source[spec.nonPlayerKey] == true)
     local size = ClampNumber(source[spec.sizeKey] or source.iconSize, spec.defaultSize, 1, 256)
     local sharedLane = kind == "debuff" and "debuff" or "buff"
     local iconShapeSource = Shape.SharedValue(shared, sharedLane)
