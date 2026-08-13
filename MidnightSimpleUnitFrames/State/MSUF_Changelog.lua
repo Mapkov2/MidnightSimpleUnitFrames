@@ -8,10 +8,28 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.05",
-    previousVersion = "6.04",
-    rangeLabel = "6.04 -> 6.05",
+    currentVersion = "6.06",
+    previousVersion = "6.05",
+    rangeLabel = "6.05 -> 6.06",
     entries = {
+        {
+            version = "6.06",
+            date = "2026-08-13",
+            sections = {
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Added a Non-Player Auras Debuff filter for Unit and Group Frames, including Menu, profile import, diagnostics, and Assistant support. It keeps encounter and environment Debuffs while excluding effects caused by players or player pets.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Fixed an edge case where Player, Target, Boss, and other Unit Frame health text remained hidden after importing profiles with a conflicting obsolete visibility value. Current profile settings now always win, while legacy-only profiles retain their previous behavior without profile rewrites or recurring runtime work.",
+                    },
+                },
+            },
+        },
         {
             version = "6.05",
             date = "2026-08-13",
@@ -110,29 +128,6 @@ local data = {
                         "Honored configured Aura layers for fixed Group slots.",
                         "Fixed the animated Resting symbol trying to use an unavailable Blizzard atlas; unsupported clients now fall back safely.",
                         "Fixed Unit Frame Edit Mode quick actions applying stale compiled settings after size, position, reset, copy, or detached Power changes.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.02",
-            date = "2026-08-11",
-            sections = {
-                {
-                    title = "WoW 12.1 Release Highlights",
-                    bullets = {
-                        "Split Unit Preview Buffs and Debuffs into independent layers with correct handle-to-menu routing, and expanded the frame-local Debuff blacklist presets.",
-                        "Added Blizzard-native Ebon Might duration text plus safe, independently configurable Alternative Mana width geometry across runtime, previews, search, and the Assistant.",
-                        "Made Blizzard's animated Resting symbol part of the fresh default profile while preserving existing profile choices and live Resting state.",
-                        "Reworked the upgrade-highlight tour around real Back/Forward navigation and added Assistant commands that can restart a skipped or completed tour.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed nickname-provider fallback refreshes so updated names reach the correct Unit and Group Frames without broad polling.",
-                        "Guarded secret Player Health values before Class Resource logic can inspect them in combat.",
-                        "Fixed Texture Layer target refreshes, rounded clipping, true-outline geometry, rounded preview edges, and Castbar preview text positions after live setting changes.",
                     },
                 },
             },

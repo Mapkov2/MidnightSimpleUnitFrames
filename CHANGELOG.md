@@ -1,5 +1,15 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.06 - 2026-08-13
+
+### Changes
+
+- Added a **Non-Player Auras** Debuff filter for Unit and Group Frames, including Menu, profile import, diagnostics, and Assistant support. It keeps encounter and environment Debuffs while excluding effects caused by players or player pets.
+
+### Fixes & Performance
+
+- Fixed an edge case where Player, Target, Boss, and other Unit Frame health text remained hidden after importing profiles with a conflicting obsolete visibility value. Current profile settings now always win, while legacy-only profiles retain their previous behavior without profile rewrites or recurring runtime work.
+
 ## 6.05 - 2026-08-13
 
 ### Highlights
