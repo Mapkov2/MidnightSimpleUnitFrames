@@ -2902,7 +2902,7 @@ end
 local function GFWriteBlacklistCat(scope, groupKey, catKey, value)
     if Model and type(Model.WriteGroupBlacklistCategory) == "function" then
         local changed = Model.WriteGroupBlacklistCategory(scope, groupKey, catKey, value)
-        if changed then QueueGroupScope(scope, "visual") end
+        if changed then QueueGroupScope(scope, "auras") end
         return
     end
     local changed
@@ -2919,7 +2919,7 @@ local function GFWriteBlacklistCat(scope, groupKey, catKey, value)
     if b then write(b) end
     if changed then
         GFInvalidateBlacklist(scope, groupKey)
-        QueueGroupScope(scope, "visual")
+        QueueGroupScope(scope, "auras")
     end
 end
 local function CategoryLabel(cat)
@@ -2955,7 +2955,7 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
     local function WriteHidePermanent(value)
         if type(Model.WriteGroupBlacklistHidePermanent) == "function"
             and Model.WriteGroupBlacklistHidePermanent(scope, lane, value) then
-            QueueGroupScope(scope, "visual")
+            QueueGroupScope(scope, "auras")
         end
     end
     local function ReadMaxDuration()
@@ -2965,7 +2965,7 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
     local function WriteMaxDuration(value)
         if type(Model.WriteGroupBlacklistMaxDuration) == "function"
             and Model.WriteGroupBlacklistMaxDuration(scope, lane, value) then
-            QueueGroupScope(scope, "visual")
+            QueueGroupScope(scope, "auras")
         end
     end
     local function AddHidePermanentTooltip(control)
@@ -2981,7 +2981,7 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
         W.LabelAt(filter, fixedLane and M.Format("%s Content", Tr(laneText)) or Tr("Filter Type"), 16, -72, fixedLane and 260 or 90, "GameFontNormalSmall", T.colors.accent)
         if not fixedLane then BuildLaneTabs(ctx, filter, "auraFilterLane", 112, -68, min(300, w - 180)) end
         local dropdownW = min(360, max(240, floor((filterW - 48) * 0.55)))
-        BindGroupDropdown(ctx, filter, M.Format("%s Filter", Tr(laneText)), 16, -142, GroupFilterValues(lane), dropdownW, scope, lane, "filterToken", "ALL", "visual")
+        BindGroupDropdown(ctx, filter, M.Format("%s Filter", Tr(laneText)), 16, -142, GroupFilterValues(lane), dropdownW, scope, lane, "filterToken", "ALL", "auras")
         W.Text(filter, "Choose which auras Blizzard provides for this lane.", 40 + dropdownW, -142, max(220, filterW - dropdownW - 64), T.colors.muted)
         local hidePermanent = BindSwitch(ctx, filter, "Hide permanent auras", 16, -192, dropdownW,
             ReadHidePermanent, WriteHidePermanent,
@@ -3040,7 +3040,7 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
             if changed then
                 if directInput and directInput.SetText then directInput:SetText("") end
                 directInputValue = ""
-                QueueGroupScope(scope, "visual")
+                QueueGroupScope(scope, "auras")
                 Rebuild(ctx)
             end
             return changed and true or false
@@ -3054,7 +3054,7 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
             local value = directInput and directInput.GetText and directInput:GetText() or directInputValue
             local changed = Model.RemoveGroupBlacklistSpell(scope, lane, value)
             if changed then
-                QueueGroupScope(scope, "visual")
+                QueueGroupScope(scope, "auras")
                 Rebuild(ctx)
             end
             return changed and true or false
@@ -3104,7 +3104,7 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
         local values = PresetSpellValues()
         local spellID = M.auraBlacklistSpell or (values[1] and values[1].value)
         if Model.AddGroupBlacklistSpell(scope, lane, spellID) then
-            QueueGroupScope(scope, "visual")
+            QueueGroupScope(scope, "auras")
             Rebuild(ctx)
         end
     end)
@@ -3115,7 +3115,7 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
     addSet:SetPoint("LEFT", addSpell, "RIGHT", 8, 0)
     addSet:SetScript("OnClick", function()
         if Model.AddGroupBlacklistPresetGroup(scope, lane, CurrentPreset()) > 0 then
-            QueueGroupScope(scope, "visual")
+            QueueGroupScope(scope, "auras")
             Rebuild(ctx)
         end
     end)
@@ -3149,7 +3149,7 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
         row.text:SetPoint("LEFT", row.icon, "RIGHT", 8, 0)
         row:SetScript("OnClick", function(self)
             if self._spellID and Model.RemoveGroupBlacklistSpell(scope, lane, self._spellID) then
-                QueueGroupScope(scope, "visual")
+                QueueGroupScope(scope, "auras")
                 Rebuild(ctx)
             end
         end)
@@ -3749,7 +3749,7 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
                 return CanonicalGroupFilterValue(group.filterToken or "ALL", lane) == "Player"
             end,
             function(value)
-                GFWriteGroupValue(scope, lane, "filterToken", value == true and "Player" or "ALL", "visual")
+                GFWriteGroupValue(scope, lane, "filterToken", value == true and "Player" or "ALL", "auras")
             end,
             AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.only-mine", nil, {
                 assistantDisposition = "dynamic",
@@ -3768,7 +3768,7 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
             function(value)
                 if type(Model.WriteGroupBlacklistHidePermanent) == "function"
                     and Model.WriteGroupBlacklistHidePermanent(scope, lane, value) then
-                    QueueGroupScope(scope, "visual")
+                    QueueGroupScope(scope, "auras")
                 end
             end,
             AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.hide-permanent", nil, {
@@ -3802,7 +3802,7 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
         function(value)
             if type(Model.WriteGroupBlacklistHidePermanent) == "function"
                 and Model.WriteGroupBlacklistHidePermanent(scope, lane, value) then
-                QueueGroupScope(scope, "visual")
+                QueueGroupScope(scope, "auras")
             end
         end,
         AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.hide-permanent", nil, {
@@ -3826,7 +3826,7 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
                 local group = GFReadGroup(scope, lane)
                 local current = CanonicalGroupFilterValue(group.filterToken or "ALL", lane)
                 local value = enabled and item.value or (current == item.value and "ALL" or current)
-                GFWriteGroupValue(scope, lane, "filterToken", value, "visual")
+                GFWriteGroupValue(scope, lane, "filterToken", value, "auras")
                 QueueAurasPageRefresh(ctx, "group-native-filter-choice")
             end,
             AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.native." .. AuraCatalogToken(item.value), nil,
@@ -3847,7 +3847,7 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
             function(value)
                 if type(Model.WriteGroupBlacklistMaxDuration) == "function"
                     and Model.WriteGroupBlacklistMaxDuration(scope, lane, value) then
-                    QueueGroupScope(scope, "visual")
+                    QueueGroupScope(scope, "auras")
                 end
             end,
             AuraControlMeta(ctx, "group-workspace.lane.debuff.filters.max-duration", nil, {
@@ -3877,7 +3877,7 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
             local value = input and input.GetText and input:GetText() or inputValue
             local changed = Model.AddGroupBlacklistSpell(scope, lane, value)
             if changed then
-                QueueGroupScope(scope, "visual")
+                QueueGroupScope(scope, "auras")
                 Rebuild(ctx)
             end
             if input and input.SetText then input:SetText("") end
@@ -3934,7 +3934,7 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
         local count = Model.AddGroupBlacklistPresetGroup(scope, lane, CurrentPreset())
         if count > 0 then
             M.auraBlacklistSpell = nil
-            QueueGroupScope(scope, "visual")
+            QueueGroupScope(scope, "auras")
             Rebuild(ctx)
         end
         return count > 0
@@ -3956,7 +3956,7 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
         local changed = Model.AddGroupBlacklistSpell(scope, lane, CurrentSpell())
         if changed then
             M.auraBlacklistSpell = nil
-            QueueGroupScope(scope, "visual")
+            QueueGroupScope(scope, "auras")
             Rebuild(ctx)
         end
         return changed and true or false
@@ -4013,7 +4013,7 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
         row.remove:SetPoint("RIGHT", row, "RIGHT", -8, 0)
         row.remove:SetScript("OnClick", function()
             if row._spellID and Model.RemoveGroupBlacklistSpell(scope, lane, row._spellID) then
-                QueueGroupScope(scope, "visual")
+                QueueGroupScope(scope, "auras")
                 Rebuild(ctx)
             end
         end)

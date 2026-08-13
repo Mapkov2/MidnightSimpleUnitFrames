@@ -2311,10 +2311,31 @@ local function ConsiderLaneAuraVisual(lane, unit, data)
     end
 end
 
-local function TimedAura(data)
+local function TimedAura(unit, data)
     local duration = PlainNumber(data and data.duration)
     local expirationTime = PlainNumber(data and data.expirationTime)
-    return duration and expirationTime and duration > 0 and expirationTime > 0
+    if duration ~= nil and expirationTime ~= nil then
+        return duration > 0 and expirationTime > 0
+    end
+
+    -- Group-unit AuraData may protect the raw duration fields even though the
+    -- permanent/timed distinction is still available through the sanctioned
+    -- LuaDurationObject API. IsZero is scale-independent, so it is also safe
+    -- on the Classic clients where binding this object as a cooldown produced
+    -- millisecond/second drift. Keep an unreadable result indeterminate rather
+    -- than misclassifying every protected timed aura as permanent.
+    local auraInstanceID = data and data.auraInstanceID
+    local getAuraDuration = C_UnitAuras and C_UnitAuras.GetAuraDuration
+    if unit ~= nil and auraInstanceID ~= nil and not IsSecret(auraInstanceID)
+        and type(getAuraDuration) == "function" then
+        local durationObject = getAuraDuration(unit, auraInstanceID)
+        local isZero = durationObject and durationObject.IsZero
+        if type(isZero) == "function" then
+            local zero = isZero(durationObject)
+            if not IsSecret(zero) then return zero ~= true end
+        end
+    end
+    return nil
 end
 
 local function RemainingTime(data)
@@ -2359,7 +2380,7 @@ local function ShouldShowAura(lane, unit, data)
         end
         if not matched then return false end
     end
-    if cfg.hidePermanent == true and not TimedAura(data) then return false end
+    if cfg.hidePermanent == true and TimedAura(unit, data) == false then return false end
     if cfg.maxDuration and cfg.maxDuration > 0 then
         local duration = PlainNumber(data and data.duration) or 0
         if duration > cfg.maxDuration then return false end
