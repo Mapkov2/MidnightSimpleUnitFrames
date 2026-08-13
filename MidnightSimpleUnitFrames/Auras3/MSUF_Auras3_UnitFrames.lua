@@ -6857,7 +6857,12 @@ A3._DirectIdentityRefreshUnit = function(unit, forceSpellIndicatorGeometry, recr
         end
     end
     if seedGroupAssist then
-        A3._UpdateGroupAuraAssistState(unit, false, true, false, true)
+        -- PLAYER_ENTERING_WORLD may replace helpful containers instead of
+        -- reparsing the registered instance in place. Let an already-dirty
+        -- assist revision finish normally in that exceptional recreation pass;
+        -- all in-place direct refreshes can adopt the satisfied parse.
+        A3._UpdateGroupAuraAssistState(
+            unit, false, true, false, recreateHelpfulAuras ~= true)
     end
     return any
 end
