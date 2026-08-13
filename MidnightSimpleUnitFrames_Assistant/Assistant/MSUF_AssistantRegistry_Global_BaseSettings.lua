@@ -192,6 +192,16 @@ function A.GlobalRegistry.RegisterBaseSettings(ctx)
         "welcome message", "startup welcome", "start message", "show welcome message", "login welcome message", "startup message", "willkommensnachricht",
         "willkommens nachricht", "willkommens meldung", "willkommen nachricht", "login nachricht", "start meldung",
     }, { category = "Global / Misc", frameType = "misc", reason = "MSUF_ASSISTANT_WELCOME" })
+    RegisterGeneralBoolean("nsrtNicknameIntegration", "nsrtNicknameIntegration", "NSRT Nickname Integration", true, {
+        "nsrt nicknames", "nsrt nickname integration", "northern sky raid tools nicknames", "use nsrt nicknames",
+        "disable nsrt nicknames", "show character names instead of nsrt nicknames", "nsrt spitznamen", "nsrt namen deaktivieren",
+    }, {
+        category = "Global / Misc", frameType = "misc", reason = "MSUF_ASSISTANT_NSRT_NICKNAMES",
+        apply = function()
+            local fn = _G.MSUF_NSRTNicknames_ApplySetting
+            if type(fn) == "function" then fn() end
+        end,
+    })
     RegisterGeneralBoolean("grid2EditModeIntegration", "grid2EditModeIntegration", "Grid2 Edit Mode Integration", true, {
         "grid2 edit mode", "grid2 mover", "move grid2", "show grid2 in edit mode", "grid2 integration",
         "grid2 im edit mode", "grid2 verschieben", "grid2 mover anzeigen",

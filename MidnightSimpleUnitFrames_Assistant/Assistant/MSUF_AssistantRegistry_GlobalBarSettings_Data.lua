@@ -22,6 +22,14 @@ Data.GRADIENT_DIRECTION_KEYS = {
     UP = "gradientDirUp",
     DOWN = "gradientDirDown",
 }
+-- The power gradient carries its own direction flags; the Bars page writes
+-- these whenever the selected scope has a power direction of its own.
+Data.POWER_GRADIENT_DIRECTION_KEYS = {
+    RIGHT = "powerGradientDirRight",
+    LEFT = "powerGradientDirLeft",
+    UP = "powerGradientDirUp",
+    DOWN = "powerGradientDirDown",
+}
 Data.GRADIENT_DIRECTION_ALIASES = {
     right = "RIGHT",
     left = "LEFT",

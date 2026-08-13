@@ -203,7 +203,6 @@ local function IsAuraLaneVisibilitySetting(setting)
     if setting.type ~= "boolean" then return false end
     local key = tostring(setting.key or ""):lower()
     local attr = tostring(setting.attribute or ""):lower()
-    if key == "auras3.shared.showbuffs" or key == "auras3.shared.showdebuffs" then return true end
     if key:find("%.buff%.visible", 1, true) or key:find("%.debuff%.visible", 1, true) then return true end
     if key:find("%.auras%.buff%.enabled", 1, true) or key:find("%.auras%.debuff%.enabled", 1, true) then return true end
     return attr == "aurashowbuffs"
@@ -398,25 +397,6 @@ local function SettingAllowedByExplicitScopes(setting, text)
     local unit = tostring(setting.unit or "")
     local keyScope = SettingKeyScope(setting)
     local units, groups = ExplicitScopes(text)
-    if frameType == "aura"
-        and unit == "shared"
-        and (#units > 0 or #groups > 0)
-        and not ContainsAny(text, RegistryPhrases[10])
-    then
-        return false
-    end
-    -- Shared aura controls can be valid for "all auras", but some lane-level shared growth
-    -- options are deliberately excluded because they would fight the per-frame buff/debuff
-    -- settings the user usually means.
-    if frameType == "aura"
-        and unit == "shared"
-        and HasAllScopeIntent(text)
-        and ContainsAny(text, RegistryPhrases[11])
-        and ContainsAny(text, RegistryPhrases[12])
-    then
-        local key = tostring(setting.key or ""):lower()
-        if key == "auras3.shared.buffgrowth" or key == "auras3.shared.debuffgrowth" then return false end
-    end
     if setting.frameType == "aura" and ContainsAny(text, RegistryPhrases[13])
         and not tostring(setting.attribute or ""):lower():find("filter", 1, true) then
         return false
@@ -424,9 +404,6 @@ local function SettingAllowedByExplicitScopes(setting, text)
     local auraFilterScope = P.ExplicitAuraFilterScope and P.ExplicitAuraFilterScope(text)
     if setting.frameType == "aura" and auraFilterScope then
         return unit == auraFilterScope or keyScope == auraFilterScope
-    end
-    if setting.frameType == "aura" and unit == "shared" and ContainsAny(text, RegistryPhrases[14]) then
-        return true
     end
     if setting.frameType == "group" or setting.frameType == "groupAura" then
         if #groups > 0 then
@@ -2005,12 +1982,37 @@ end
 
 local RELATIVE_INCREASE_TERMS = {
     "increase", "raise", "bump up", "more", "higher", "larger", "bigger", "wider", "taller", "thicker", "grow", "add",
+    "stronger", "strengthen", "rounder", "longer", "brighter", "turn it up", "turn up", "crank",
     "erhoehe", "erhoehen", "hoeher", "groesser", "mehr", "breiter", "dicker",
 }
 local RELATIVE_DECREASE_TERMS = {
     "decrease", "reduce", "lower", "less", "smaller", "narrower", "shorter", "thinner", "shrink", "subtract", "down",
+    "weaker", "weaken", "subtler", "softer", "fainter", "dimmer", "transparent", "tone down", "turn it down",
     "verringere", "reduziere", "tiefer", "niedriger", "kleiner", "weniger", "schmaler", "duenner", "runter",
 }
+
+-- Some phrases pair an increase word with a decrease meaning and the other way
+-- round: "more transparent" is LESS opacity, "less faded" is more. Checked
+-- before the single words, which would otherwise see the "more" and turn the
+-- slider the wrong way. "too <adjective>" states the complaint rather than the
+-- direction, so it is listed with the direction it asks for.
+local RELATIVE_PHRASE_SIGNS = {
+    { "more transparent", -1 }, { "more see through", -1 }, { "more seethrough", -1 },
+    { "less opaque", -1 }, { "more subtle", -1 }, { "more faded", -1 }, { "less visible", -1 },
+    { "too strong", -1 }, { "too intense", -1 }, { "too bright", -1 }, { "too much", -1 },
+    { "less transparent", 1 }, { "less see through", 1 }, { "more opaque", 1 },
+    { "less subtle", 1 }, { "less faded", 1 }, { "more visible", 1 },
+    { "too subtle", 1 }, { "too weak", 1 }, { "too faint", 1 }, { "too thin", 1 },
+    { "too small", 1 }, { "too little", 1 },
+}
+local function RelativePhraseSign(text)
+    text = tostring(text or ""):lower()
+    for i = 1, #RELATIVE_PHRASE_SIGNS do
+        local entry = RELATIVE_PHRASE_SIGNS[i]
+        if text:find(entry[1], 1, true) then return entry[2] end
+    end
+    return nil
+end
 
 P.DIRECTIONAL_MOVE_TERMS = {
     "move", "nudge", "shift", "position", "offset", "left", "right", "up", "down",
@@ -2102,7 +2104,9 @@ function P.ProportionalNumberDeltaForSetting(setting, text)
         if percent == nil then return nil end
         -- A bare percentage says nothing about direction; only pair it with an
         -- explicit increase/decrease word so "set scale to 90%" is left alone.
-        if ContainsAny(text, RELATIVE_INCREASE_TERMS) then factor = 1 + percent / 100
+        local phraseSign = RelativePhraseSign(text)
+        if phraseSign then factor = 1 + phraseSign * percent / 100
+        elseif ContainsAny(text, RELATIVE_INCREASE_TERMS) then factor = 1 + percent / 100
         elseif ContainsAny(text, RELATIVE_DECREASE_TERMS) then factor = 1 - percent / 100
         else return nil end
     end
@@ -2122,9 +2126,11 @@ RelativeNumberDeltaForText = function(setting, text, fallbackAmount)
     -- and treat it as an absolute amount.
     local proportional = P.ProportionalNumberDeltaForSetting(setting, text)
     if proportional ~= nil then return proportional end
-    local sign
-    if ContainsAny(text, RELATIVE_INCREASE_TERMS) then sign = 1 end
-    if ContainsAny(text, RELATIVE_DECREASE_TERMS) then sign = -1 end
+    local sign = RelativePhraseSign(text)
+    if not sign then
+        if ContainsAny(text, RELATIVE_INCREASE_TERMS) then sign = 1 end
+        if ContainsAny(text, RELATIVE_DECREASE_TERMS) then sign = -1 end
+    end
     if not sign then return nil end
     if P.HasAbsoluteNumberTarget(text) then return nil end
     local amount = A._RelativeNumberAmountForText(text)
@@ -3513,24 +3519,6 @@ local function ParsePowerColorPriorityShortcut(text, raw)
     return A._ParsePowerColorShortcut and A._ParsePowerColorShortcut(text, raw) or nil
 end
 
-local function ParseSharedAuraFiltersMenuShortcut(text)
-    if not ContainsAny(text, RegistryPhrases[175]) then return nil end
-    if ContainsAny(text, RegistryPhrases[176]) then
-        return nil
-    end
-    local value = DetectBoolean(text)
-    if value == nil then value = true end
-    local changes = {}
-    AddRegisteredChange(changes, "auras3.shared.filters.enabled", value)
-    if #changes == 0 then return nil end
-    return {
-        kind = "changes",
-        changes = changes,
-        label = "Aura Filters",
-        summary = "Changes the shared Aura Filters menu toggle.",
-    }
-end
-
 P.ParseRegistryPriorityShortcut = function(text, raw)
     return ParseBossTargetHighlightShortcut(text)
         or ParseGroupBorderColorShortcut(text, raw)
@@ -3538,7 +3526,6 @@ P.ParseRegistryPriorityShortcut = function(text, raw)
         or ParseDispelOverlayHealthOnlyShortcut(text)
         or ParseClassPowerBooleanDetailShortcut(text)
         or ParsePowerColorPriorityShortcut(text, raw)
-        or ParseSharedAuraFiltersMenuShortcut(text)
         or ParseUnitTextBooleanDetailShortcut(text)
         or ParseUnitStatusDetailShortcut(text)
         or ParseUnitCoreBooleanShortcut(text)

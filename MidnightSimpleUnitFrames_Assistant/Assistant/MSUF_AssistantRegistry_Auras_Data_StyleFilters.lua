@@ -189,6 +189,7 @@ Data.AURA_DURATION_BAR_DIRECTION_ALIASES = {
 }
 
 Data.AURA_LANE_STYLE_NUMBER_SPECS = {
+    { key = "stylePadding", label = "Lane Padding", defaultValue = 0, minValue = 0, maxValue = 16, words = { "lane padding", "aura lane padding", "container padding", "icon lane padding" } },
     { key = "stackTextSize", label = "Stack Text Size", defaultValue = 14, minValue = 6, maxValue = 40, words = { "stack size", "stack text size", "stack count text size" } },
     { key = "stackTextOffsetX", label = "Stack Text X Offset", defaultValue = -1, minValue = -2000, maxValue = 2000, words = { "stack x", "stack x offset", "stack text x", "stack text x offset" } },
     { key = "stackTextOffsetY", label = "Stack Text Y Offset", defaultValue = 1, minValue = -2000, maxValue = 2000, words = { "stack y", "stack y offset", "stack text y", "stack text y offset" } },
@@ -220,6 +221,57 @@ Data.AURA_FILTER_BOOLEAN_SPECS = {
     { lane = "debuff", key = "onlyImportant", label = "Debuff Important Filter", words = { "debuff important filter", "important debuffs", "important debuffs only", "show important debuffs", "show only important debuffs" } },
     { lane = "debuff", key = "crowdControl", label = "Debuff Crowd Control Filter", words = { "debuff crowd control filter", "crowd control debuffs", "crowd control debuffs only", "cc debuffs", "cc debuffs only", "show cc debuffs", "show crowd control debuffs" } },
 }
+
+-- Buff/Debuff lane effects rendered on the UnitFrame health surface.  Keep the
+-- stored values lowercase to match Auras3/Menu_Model and the Menu dropdown.
+Data.AURA_FRAME_EFFECT_TYPE_VALUES = { "none", "border", "glow", "pulse", "healthtint", "namecolor" }
+Data.AURA_FRAME_EFFECT_TYPE_ALIASES = {
+    none = "none",
+    off = "none",
+    disabled = "none",
+    disable = "none",
+    remove = "none",
+    border = "border",
+    outline = "border",
+    rand = "border",
+    umrandung = "border",
+    glow = "glow",
+    leuchten = "glow",
+    pulse = "pulse",
+    pulsing = "pulse",
+    pulsieren = "pulse",
+    tint = "healthtint",
+    ["health tint"] = "healthtint",
+    ["health bar tint"] = "healthtint",
+    ["health color"] = "healthtint",
+    ["health colour"] = "healthtint",
+    ["name overlay"] = "namecolor",
+    ["name color"] = "namecolor",
+    ["name colour"] = "namecolor",
+}
+
+-- Native classification tokens are intersections, not independent OR flags.
+-- Keep Assistant writes identical to Menu2: one classification per lane, with
+-- Player and Include Nameplate-only retained as explicit modifiers.
+local AURA_CLASSIFICATION_KEYS = {
+    buff = { "raid", "raidInCombat", "cancelable", "notCancelable", "externalDefensive", "bigDefensive", "onlyImportant", "includeDispellable", "dispellableAny" },
+    debuff = { "raid", "raidInCombat", "includeDispellable", "dispellableAny", "onlyImportant", "crowdControl" },
+}
+for i = 1, #Data.AURA_FILTER_BOOLEAN_SPECS do
+    local spec = Data.AURA_FILTER_BOOLEAN_SPECS[i]
+    local keys = AURA_CLASSIFICATION_KEYS[spec.lane]
+    local isClassification = false
+    for j = 1, #(keys or {}) do
+        if keys[j] == spec.key then isClassification = true; break end
+    end
+    if isClassification then
+        spec.classification = true
+        spec.conflicts = {}
+        for j = 1, #keys do
+            if keys[j] ~= spec.key then spec.conflicts[#spec.conflicts + 1] = keys[j] end
+        end
+    end
+end
 
 Data.AURA_EXCLUSIVE_FILTER_VALUES = {
     buff = { "none" },

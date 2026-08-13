@@ -22,8 +22,6 @@ function A.AurasRegistry.BuildRegistrationHelpers(ctx)
     local ApplyAura = ctx.ApplyAura
     local ApplyAuraText = ctx.ApplyAuraText
     local EnsureAuraFallbackDB = ctx.EnsureAuraFallbackDB
-    local AuraSharedBool = ctx.AuraSharedBool
-    local SetAuraSharedBool = ctx.SetAuraSharedBool
     local AuraReadNumber = ctx.AuraReadNumber
     local AuraWriteNumber = ctx.AuraWriteNumber
     local AuraReadStackAnchor = ctx.AuraReadStackAnchor
@@ -38,7 +36,6 @@ function A.AurasRegistry.BuildRegistrationHelpers(ctx)
     if type(AuraScopeLabel) ~= "function" or type(AuraModel) ~= "function" then return nil end
     if type(ApplyAura) ~= "function" or type(ApplyAuraText) ~= "function" then return nil end
     if type(EnsureAuraFallbackDB) ~= "function" then return nil end
-    if type(AuraSharedBool) ~= "function" or type(SetAuraSharedBool) ~= "function" then return nil end
     if type(AuraReadNumber) ~= "function" or type(AuraWriteNumber) ~= "function" then return nil end
     if type(AuraReadStackAnchor) ~= "function" or type(AuraWriteStackAnchor) ~= "function" then return nil end
     if type(AuraReadCooldownAnchor) ~= "function" or type(AuraWriteCooldownAnchor) ~= "function" then return nil end
@@ -65,8 +62,6 @@ function A.AurasRegistry.BuildRegistrationHelpers(ctx)
     local ScopeRegistrationHelpers = type(BuildScopeRegistrationHelpers) == "function" and BuildScopeRegistrationHelpers({
         Registry = Registry,
         AuraScopeLabel = AuraScopeLabel,
-        AuraSharedBool = AuraSharedBool,
-        SetAuraSharedBool = SetAuraSharedBool,
         AuraReadNumber = AuraReadNumber,
         AuraWriteNumber = AuraWriteNumber,
         ApplyAuraScope = ApplyAuraScope,
@@ -76,22 +71,14 @@ function A.AurasRegistry.BuildRegistrationHelpers(ctx)
     local RegisterAuraScopeLaneBoolean = ScopeRegistrationHelpers.RegisterAuraScopeLaneBoolean
     local RegisterAuraScopeLaneNumber = ScopeRegistrationHelpers.RegisterAuraScopeLaneNumber
     local RegisterAuraScopeLaneEnum = ScopeRegistrationHelpers.RegisterAuraScopeLaneEnum
-    local RegisterAuraScopeBoolean = ScopeRegistrationHelpers.RegisterAuraScopeBoolean
-    local RegisterAuraScopeNumber = ScopeRegistrationHelpers.RegisterAuraScopeNumber
-    local RegisterAuraScopeEnum = ScopeRegistrationHelpers.RegisterAuraScopeEnum
     if type(RegisterAuraScopeLaneBoolean) ~= "function" then return nil end
     if type(RegisterAuraScopeLaneNumber) ~= "function" then return nil end
     if type(RegisterAuraScopeLaneEnum) ~= "function" then return nil end
-    if type(RegisterAuraScopeBoolean) ~= "function" then return nil end
-    if type(RegisterAuraScopeNumber) ~= "function" then return nil end
-    if type(RegisterAuraScopeEnum) ~= "function" then return nil end
 
     local BuildLaneRegistrationHelpers = A.AurasRegistry and A.AurasRegistry.BuildLaneRegistrationHelpers
     local LaneRegistrationHelpers = type(BuildLaneRegistrationHelpers) == "function" and BuildLaneRegistrationHelpers({
         AuraModel = AuraModel,
         EnsureAuraFallbackDB = EnsureAuraFallbackDB,
-        AuraSharedBool = AuraSharedBool,
-        SetAuraSharedBool = SetAuraSharedBool,
         AuraReadNumber = AuraReadNumber,
         AuraWriteNumber = AuraWriteNumber,
         AuraReadStackAnchor = AuraReadStackAnchor,
@@ -129,9 +116,6 @@ function A.AurasRegistry.BuildRegistrationHelpers(ctx)
         RegisterAuraScopeLaneBoolean = RegisterAuraScopeLaneBoolean,
         RegisterAuraScopeLaneNumber = RegisterAuraScopeLaneNumber,
         RegisterAuraScopeLaneEnum = RegisterAuraScopeLaneEnum,
-        RegisterAuraScopeBoolean = RegisterAuraScopeBoolean,
-        RegisterAuraScopeNumber = RegisterAuraScopeNumber,
-        RegisterAuraScopeEnum = RegisterAuraScopeEnum,
         AuraReadValue = AuraReadValue,
         AuraWriteValue = AuraWriteValue,
         AuraLaneKey = AuraLaneKey,

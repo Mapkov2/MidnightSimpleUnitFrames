@@ -1266,6 +1266,9 @@ local OFF_WORDS = {
     -- "switch off party bold text" were understood as neither on nor off.
     "deactivate", "deactivated", "switch off", "switched off", "shut off",
     "toggle off", "turned off",
+    -- How players actually phrase "off" when they are describing a result
+    -- rather than naming a state: "stop showing X", "get rid of X", "no more X".
+    "stop", "stop showing", "get rid of", "no more", "remove",
     "aus", "deaktivieren", "deaktiviert", "ausschalten", "ausgeschaltet",
     "deaktiviere", "schalte aus", "mach aus", "verstecken", "versteckt",
     "verstecke", "ausblenden", "ausgeblendet", "blende aus", "nein",
@@ -1273,7 +1276,7 @@ local OFF_WORDS = {
 local ON_WORDS = {
     "on", "enable", "enabled", "show", "visible", "true", "yes",
     "activate", "activated", "switch on", "switched on", "unhide",
-    "toggle on", "turned on",
+    "toggle on", "turned on", "display", "displayed",
     "an", "aktivieren", "aktiviert", "einschalten", "eingeschaltet",
     "aktiviere", "schalte an", "mach an", "anzeigen", "zeige",
     "zeig", "einblenden", "eingeblendet", "blende ein", "sichtbar",

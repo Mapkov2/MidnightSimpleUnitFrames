@@ -26,6 +26,16 @@ if type(RegisterAbsorbSettings) == "function" then
     RegisterAbsorbSettings(BarContext)
 end
 
+local RegisterAbsorbGeometrySettings = A.GlobalBarRegistry and A.GlobalBarRegistry.RegisterAbsorbGeometrySettings
+if type(RegisterAbsorbGeometrySettings) == "function" then
+    RegisterAbsorbGeometrySettings(BarContext)
+end
+
+local RegisterMaxHealthLossSettings = A.GlobalBarRegistry and A.GlobalBarRegistry.RegisterMaxHealthLossSettings
+if type(RegisterMaxHealthLossSettings) == "function" then
+    RegisterMaxHealthLossSettings(BarContext)
+end
+
 local RegisterBaseBarSettings = A.GlobalBarRegistry and A.GlobalBarRegistry.RegisterBaseBarSettings
 if type(RegisterBaseBarSettings) == "function" then
     RegisterBaseBarSettings(BarContext)

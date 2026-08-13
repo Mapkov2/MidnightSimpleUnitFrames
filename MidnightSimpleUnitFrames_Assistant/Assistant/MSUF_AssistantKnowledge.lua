@@ -1200,7 +1200,7 @@ local PAGE_HELP = {
         actions = { "Export Current Profile", "Copy Wago Profiles Link", "Import Profile" },
     },
     auras3 = { title = "Auras help", lines = { "Aura Options and Aura Style live on the frame they affect. Open UnitFrames > Auras for Player/Target/Focus/Boss, or Group Frames > Auras for Party/Raid.", "Aura Options controls content, filters, lists, and layout. Aura Style controls that frame's zoom, timers, stacks, duration bar, ordering, pandemic warning, and Full-Frame effect.", "Appearance > Aura Style is only the global icon theme selected by Aura product: Buffs, Debuffs, Player Defensives, or Dots on Target." }, actions = { "Open Target", "Open Player", "Open Group Auras" } },
-    auras3_styling = { title = "Shared Aura Appearance help", lines = { "Appearance > Aura Style is global. Select Buffs, Debuffs, Player Defensives, or Dots on Target to preview and edit that shared icon theme.", "Frame-specific cooldown text, stack text, duration bars, pandemic warnings, ordering, and Full-Frame effects stay under the owning UnitFrame or GroupFrame > Auras > Style.", "Group Spell Icons keep their own local Style, but their icon shape, border, and shadow use the shared Buff Appearance." }, actions = { "Open Aura Style", "Open Player", "Open Group Auras" } },
+    auras3_styling = { title = "Global Aura Appearance help", lines = { "Appearance > Auras is global by Aura type. Select Buffs, Debuffs, Player Defensives, or Dots on Target to preview and edit that product's icon theme.", "Frame-specific cooldown text, stack text, duration bars, pandemic warnings, ordering, and Full-Frame effects stay under the owning UnitFrame or GroupFrame > Auras > Style.", "Group Spell Icons keep their own local Style, but their icon shape, border, and shadow use the global Buff Appearance." }, actions = { "Open Auras", "Open Player", "Open Group Auras" } },
     auras3_buffs = { title = "Aura Buffs help", lines = { "Open the affected UnitFrame > Auras > Buffs for its Options and frame-local Style; use Group Frames > Auras for Party/Raid Buffs.", "Appearance > Aura Style > Buffs contains only the global Buff icon theme." }, actions = { "Open Target", "Open Player", "Open Group Auras" } },
     auras3_debuffs = { title = "Aura Debuffs help", lines = { "Open the affected UnitFrame > Auras > Debuffs for its Options and frame-local Style; use Group Frames > Auras for Party/Raid Debuffs.", "Appearance > Aura Style > Debuffs contains only the global Debuff icon theme." }, actions = { "Open Target", "Open Focus", "Open Group Auras" } },
     auras3_custom = { title = "Custom Auras help", lines = { "Every supported UnitFrame has Custom 1, Custom 2, Custom 3, and its special Player Defensives or Dots on Target container under Auras.", "Setup, lists, layout, deep Style, pandemic warning, and Full-Frame effects remain local to that UnitFrame. Only the corresponding icon theme is global under Appearance > Aura Style." }, actions = { "Open Aura Style", "Open Target", "Open Player" } },
@@ -2326,6 +2326,8 @@ local function DirectHelpAnswer(query, opts)
     local norm = Normalize(query)
     local addonCompanions = ComplementaryAddonAnswer(query)
     if addonCompanions then return addonCompanions end
+    local priorityFrames = PriorityFramesAnswer(norm)
+    if priorityFrames then return priorityFrames end
     -- A question that names one exact control is about that control, not about
     -- the topic its words happen to belong to. Concept vocabulary turns up
     -- inside plenty of real labels ("UnitFrame Dispel Overlay Opacity" was
@@ -2378,8 +2380,6 @@ local function DirectHelpAnswer(query, opts)
     end
     local pageHelp = TryWhatCanPageHelp(norm)
     if pageHelp then return pageHelp end
-    local priorityFrames = PriorityFramesAnswer(norm)
-    if priorityFrames then return priorityFrames end
     if ContainsAny(norm, { "gcd", "global cooldown", "global cool down" })
         and ContainsAny(norm, { "what", "what is", "what does", "help", "explain", "mean" })
     then

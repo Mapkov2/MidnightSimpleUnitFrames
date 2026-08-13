@@ -3928,7 +3928,7 @@ if not P.InitUnsupportedAuraCommand then
                 "aura blacklist", "blacklist aura", "blacklist spell", "hidden aura", "hidden auras",
                 "player aura", "player auras", "target aura", "target auras",
                 "focus aura", "focus auras", "boss aura", "boss auras",
-                "shared aura", "shared auras", "unit aura", "unit auras",
+                "unit aura", "unit auras",
             }
         end
 

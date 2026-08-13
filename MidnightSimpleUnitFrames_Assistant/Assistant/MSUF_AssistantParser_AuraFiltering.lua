@@ -23,7 +23,7 @@ local ContainsAny = P.ContainsAny
 local DetectUnits = P.DetectUnits
 
 local UNIT_LABELS = {
-    shared = "Shared", player = "Player", target = "Target", focus = "Focus", boss = "Boss",
+    player = "Player", target = "Target", focus = "Focus", boss = "Boss",
 }
 
 local GROUP_LABELS = {
@@ -169,6 +169,15 @@ local function AddChange(changes, seen, key, value, valueLabel)
     return true
 end
 
+local function AddChangeWhenDifferent(changes, seen, key, value, valueLabel)
+    local setting = Setting(key)
+    if setting and type(setting.get) == "function" then
+        local ok, current = pcall(setting.get)
+        if ok and current == value then return false end
+    end
+    return AddChange(changes, seen, key, value, valueLabel)
+end
+
 local function ScopeLabel(kind, scope)
     if kind == "group" then return GROUP_LABELS[scope] or tostring(scope) end
     return UNIT_LABELS[scope] or tostring(scope)
@@ -222,10 +231,6 @@ local function ResolveScope(text, ctx)
     if HasAny(text, { "party", "party frame", "party frames", "party buff", "party buffs", "party debuff", "party debuffs", "party aura", "party auras" }) then
         return "group", "party", true
     end
-    if HasAny(text, { "shared aura", "shared auras", "shared buff", "shared buffs", "shared debuff", "shared debuffs", "global aura", "global auras", "all unit auras" }) then
-        return "unit", "shared", true
-    end
-
     local units = type(DetectUnits) == "function" and DetectUnits(text) or {}
     local chosen
     for i = 1, #units do
@@ -446,7 +451,7 @@ local function ExistingAuraFilterSpecialistOwns(text)
     if text:match("^open%s") or HasAny(text, { "take me to", "go to", "navigate to", "show the page", "show me where" }) then return true end
     if text == "turn on aura filters" or text == "turn off aura filters"
         or text == "enable aura filters" or text == "disable aura filters"
-        or HasAny(text, { "custom filters", "shared filters", "own filters" })
+        or HasAny(text, { "custom filters", "own filters" })
     then
         return true
     end
@@ -467,8 +472,8 @@ local function ExistingAuraFilterSpecialistOwns(text)
     if HasAny(text, {
         "what filters are active", "what filter is active", "which filters are active",
         "current aura filters", "current buff filters", "current debuff filters", "filter status",
-        "use shared aura filters", "use custom aura filters", "use its own aura filters",
-        "shared aura filters", "custom aura filters", "own aura filters",
+        "use custom aura filters", "use its own aura filters",
+        "custom aura filters", "own aura filters",
     }) then
         return true
     end
@@ -489,7 +494,6 @@ local function PermanentKey(kind, scope, lane)
         scope = GroupSettingScopeForPermanent(scope)
         return "gf_" .. tostring(scope) .. ".auras." .. tostring(lane) .. ".blacklist.hidePermanent"
     end
-    if scope == "shared" then return nil end
     return "auras3." .. tostring(scope) .. "." .. tostring(lane) .. ".blacklist.hidePermanent"
 end
 
@@ -609,16 +613,6 @@ local function DurationPlan(text, ctx)
     end
 
     local lanes = lane == "both" and { "buff", "debuff" } or { lane }
-    if kind == "unit" and scope == "shared" then
-        local requestedValue = value
-        if requestedValue == nil then requestedValue = true end
-        return {
-            kind = "ambiguous",
-            choices = DurationScopeChoices(lane, requestedValue),
-            choiceIntro = "Hide Permanent is not a Shared-rules control. It is stored per Player, Target, Focus, Boss, Party, or Raid lane. Which real frame should use it?",
-            summary = "Redirects a nonexistent Shared permanent filter to executable frame choices.",
-        }
-    end
     if question or value == nil then
         local choices = {}
         AddChoice(choices, ChoiceFromPlan(PermanentPlan(kind, scope, lanes, true), "Hide no-expiration " .. LaneLabel(lane):lower()))
@@ -634,9 +628,9 @@ end
 
 local function AddUnitFilterClearChanges(changes, seen, scope, lane, clearPermanent)
     local keys = UNIT_FILTER_KEYS[lane] or {}
-    for i = 1, #keys do AddChange(changes, seen, "auras3." .. scope .. "." .. lane .. ".filter." .. keys[i], false) end
-    AddChange(changes, seen, "auras3." .. scope .. "." .. lane .. ".filter.exclusive", "none")
-    if clearPermanent and scope ~= "shared" then AddChange(changes, seen, PermanentKey("unit", scope, lane), false) end
+    for i = 1, #keys do AddChangeWhenDifferent(changes, seen, "auras3." .. scope .. "." .. lane .. ".filter." .. keys[i], false) end
+    AddChangeWhenDifferent(changes, seen, "auras3." .. scope .. "." .. lane .. ".filter.exclusive", "none")
+    if clearPermanent then AddChangeWhenDifferent(changes, seen, PermanentKey("unit", scope, lane), false) end
 end
 
 local function UnitFilterPlan(scope, lane, spec, mode, sourceIntent)
@@ -645,7 +639,7 @@ local function UnitFilterPlan(scope, lane, spec, mode, sourceIntent)
     local changes, seen = {}, {}
     if mode == "clear" then
         AddUnitFilterClearChanges(changes, seen, scope, lane, true)
-        AddChange(changes, seen, "auras3." .. scope .. ".filtersEnabled", true)
+        AddChange(changes, seen, "auras3." .. scope .. "." .. lane .. ".filtersEnabled", true)
     elseif mode == "disable" then
         AddChange(changes, seen, "auras3." .. scope .. "." .. lane .. ".filter." .. spec.unitKey, false)
     else
@@ -657,7 +651,7 @@ local function UnitFilterPlan(scope, lane, spec, mode, sourceIntent)
         if type(spec.conflicts) == "table" then
             for i = 1, #spec.conflicts do AddChange(changes, seen, "auras3." .. scope .. "." .. lane .. ".filter." .. spec.conflicts[i], false) end
         end
-        AddChange(changes, seen, "auras3." .. scope .. ".filtersEnabled", true)
+        AddChange(changes, seen, "auras3." .. scope .. "." .. lane .. ".filtersEnabled", true)
     end
     if #changes == 0 then return nil end
     local scopeLabel, laneLabel = ScopeLabel("unit", scope), LaneLabel(lane)
@@ -729,9 +723,6 @@ local function GroupFilterValue(spec, sourceIntent)
     if sourceIntent == "mine" then
         local playerValues = {
             Raid = "RaidPlayer",
-            RaidInCombat = "RaidInCombatPlayer",
-            Cancelable = "CancelablePlayer",
-            NotCancelable = "NotCancelablePlayer",
             ExternalDefensive = "ExternalDefensivePlayer",
             BigDefensive = "BigDefensivePlayer",
         }
@@ -805,14 +796,13 @@ local function FilterMasterIntent(text)
     if not HasAny(text, { "filter", "filters", "filtering", "filter master" }) then return nil end
     if FindFilterSpec(text) then return nil end
     local scopeEvidence = HasAny(text, {
-        "player filters", "target filters", "focus filters", "boss filters", "shared filters",
-        "player aura", "target aura", "focus aura", "boss aura", "shared aura",
+        "player filters", "target filters", "focus filters", "boss filters",
+        "player aura", "target aura", "focus aura", "boss aura",
         "player buff", "player buffs", "player debuff", "player debuffs",
         "target buff", "target buffs", "target debuff", "target debuffs",
         "focus buff", "focus buffs", "focus debuff", "focus debuffs",
         "boss buff", "boss buffs", "boss debuff", "boss debuffs",
-        "shared buff", "shared buffs", "shared debuff", "shared debuffs",
-        "for player", "for target", "for focus", "for boss", "for shared",
+        "for player", "for target", "for focus", "for boss",
     })
     if not scopeEvidence then return nil end
     if HasAny(text, { "turn off", "disable" }) then return false end
@@ -831,8 +821,16 @@ local function FilterMasterPlan(text, ctx)
             summary = "Explains the group aura filter-gate model.",
         }
     end
+    local requestedLane = ResolveLane(text, ctx)
+    if not requestedLane then
+        return {
+            kind = "answer", status = "ambiguous",
+            text = "Filters Enabled belongs to one exact Buff or Debuff lane. Name the lane, for example 'disable Target Buff filters'. I changed nothing.",
+            summary = "Asks for the missing unit Aura filter lane.",
+        }
+    end
     local function PlanFor(unitScope)
-        local setting = Setting("auras3." .. unitScope .. ".filtersEnabled")
+        local setting = Setting("auras3." .. unitScope .. "." .. requestedLane .. ".filtersEnabled")
         if not setting then return nil end
         local label = ScopeLabel("unit", unitScope)
         return {
@@ -846,7 +844,7 @@ local function FilterMasterPlan(text, ctx)
     if kind == "unit" and scope then return PlanFor(scope) end
 
     local choices = {}
-    local scopes = { "shared", "player", "target", "focus", "boss" }
+    local scopes = { "player", "target", "focus", "boss" }
     for i = 1, #scopes do
         local unitScope = scopes[i]
         AddChoice(choices, ChoiceFromPlan(PlanFor(unitScope), ScopeLabel("unit", unitScope)))

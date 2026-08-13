@@ -28,8 +28,9 @@ function A.AurasRegistry.BuildBlacklistActionParsers(ctx)
         local P = Assistant.Parser or {}
         local normalized = AuraActionNormalized(text)
         local scope = type(P.AuraBlacklistScope) == "function" and P.AuraBlacklistScope(normalized) or AuraActionEditScope(normalized)
+        if not scope then return false end
         local lane = type(P.AuraBlacklistLane) == "function" and P.AuraBlacklistLane(normalized) or "both"
-        return { scope = scope or "shared", lane = lane or "both" }, {
+        return { scope = scope, lane = lane or "both" }, {
             summary = "Uses the native exact-SpellID hidden-aura list for the selected aura lane.",
         }
     end
@@ -102,8 +103,9 @@ function A.AurasRegistry.BuildBlacklistActionParsers(ctx)
         local value = type(P.AuraBlacklistSpellValue) == "function" and P.AuraBlacklistSpellValue(raw or text) or nil
         if type(value) ~= "string" or value == "" then return false end
         local scope = type(P.AuraBlacklistScope) == "function" and P.AuraBlacklistScope(normalized) or AuraActionEditScope(normalized)
+        if not scope then return false end
         local lane = type(P.AuraBlacklistLane) == "function" and P.AuraBlacklistLane(normalized) or "both"
-        return { scope = scope or "shared", lane = lane or "both", value = value }, {
+        return { scope = scope, lane = lane or "both", value = value }, {
             summary = "Edits the native exact-SpellID hidden-aura list for the selected aura lane.",
         }
     end
@@ -169,8 +171,9 @@ function A.AurasRegistry.BuildBlacklistActionParsers(ctx)
         local preset = type(P.AuraBlacklistPresetForText) == "function" and P.AuraBlacklistPresetForText(normalized) or nil
         if not preset then return false end
         local scope = type(P.AuraBlacklistScope) == "function" and P.AuraBlacklistScope(normalized) or AuraActionEditScope(normalized)
+        if not scope then return false end
         local lane = type(P.AuraBlacklistLane) == "function" and P.AuraBlacklistLane(normalized) or "both"
-        return { scope = scope or "shared", lane = lane or "both", preset = preset }, {
+        return { scope = scope, lane = lane or "both", preset = preset }, {
             summary = "Adds missing preset SpellIDs to the native hidden-aura list.",
         }
     end
@@ -193,7 +196,7 @@ function A.AurasRegistry.BuildBlacklistActionParsers(ctx)
         if mode == "summary" and not isSummary then return false end
         if mode == "add" and (isRemove or isClear or isSummary) then return false end
         local scope = type(P.AuraBlacklistScope) == "function" and P.AuraBlacklistScope(normalized) or AuraActionEditScope(normalized)
-        if scope == "shared" then return false end
+        if not scope then return false end
         local args = { scope = scope, index = index }
         if mode == "add" or mode == "remove" then
             args.value = type(P.AuraBlacklistSpellValue) == "function" and P.AuraBlacklistSpellValue(raw or text) or nil

@@ -57,7 +57,7 @@ function A.AurasRegistry.RegisterBlacklistActions(ctx)
 
     local function RequireModelAndScope(args)
         local Model = AuraModel()
-        local scope = args and args.scope or "shared"
+        local scope = args and args.scope
         if not (Model and type(Model.AddBlacklistSpell) == "function") then
             return nil, nil, "Open Aura Filters first so I can edit the native hidden-aura list."
         end

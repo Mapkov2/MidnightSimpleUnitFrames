@@ -437,6 +437,8 @@ Data.GEOMETRY_PARSER = {
         "bar outline", "outline opacity", "outline alpha", "border opacity", "border alpha",
         "highlight border", "group border", "dead background", "dead bg", "health fade",
         "temp max health", "temporary max health", "temp maximum health",
+        "maximum health loss", "max health loss", "max hp loss", "maximum health reduction",
+        "max health reduction", "maximum health loss overlay", "max health loss overlay",
         "heal prediction", "healing prediction", "incoming heal",
     },
         [220] = { "power bar", "powerbar", "power opacity", "power alpha", "mana bar", "mana opacity", "mana alpha", "resource bar", "resource opacity", "resource alpha" },
