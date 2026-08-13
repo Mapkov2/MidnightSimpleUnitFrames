@@ -465,6 +465,13 @@ local MANAGED_UNITS = {
     boss1 = true, boss2 = true, boss3 = true, boss4 = true, boss5 = true,
 }
 
+-- The menu exposes one Boss filter scope, while layout remains frame-local for
+-- boss1..boss5. Keep boss1 as the persisted token/blacklist rule owner so an
+-- older profile with absent or stale siblings cannot compile different filters.
+local BOSS_FILTER_SCOPE_OWNER = {
+    boss1 = "boss1", boss2 = "boss1", boss3 = "boss1", boss4 = "boss1", boss5 = "boss1",
+}
+
 local UNIT_FLAG = {
     player = "showPlayer",
     target = "showTarget",
@@ -555,6 +562,7 @@ local LANE_SPECS = {
         xKey = "buffGroupOffsetX",
         yKey = "buffGroupOffsetY",
         sizeKey = "buffGroupIconSize",
+        paddingKey = "buffStylePadding",
         iconZoomKey = "buffIconZoom",
         iconShapeKey = "buffIconShape",
         anchorKey = "buffAnchor",
@@ -597,6 +605,7 @@ local LANE_SPECS = {
         xKey = "debuffGroupOffsetX",
         yKey = "debuffGroupOffsetY",
         sizeKey = "debuffGroupIconSize",
+        paddingKey = "debuffStylePadding",
         iconZoomKey = "debuffIconZoom",
         iconShapeKey = "debuffIconShape",
         anchorKey = "debuffAnchor",
@@ -736,10 +745,10 @@ local LANE_LAYOUT_FIELDS = {
     "xKey", "yKey", "sizeKey", "anchorKey", "layerKey", "strataKey", "spacingKey",
 }
 local LANE_SHARED_LAYOUT_FIELDS = {
-    "maxKey", "perRowKey", "growthKey", "wrapKey",
+    "showKey", "maxKey", "perRowKey", "growthKey", "wrapKey",
 }
 local STYLE_LANE_LAYOUT_FIELDS = {
-    "iconZoomKey", "durationBarHeightKey",
+    "iconZoomKey", "paddingKey", "durationBarHeightKey",
     "stackSizeKey", "stackXKey", "stackYKey",
     "cooldownSizeKey", "cooldownXKey", "cooldownYKey",
 }
@@ -783,7 +792,6 @@ RegisterLaneFieldOwners(STYLE_LANE_SHARED_FIELDS, "styleLayoutShared")
 local LANE_NON_SCOPED_FIELDS = {
     rootKey = true,
     filterKey = true,
-    showKey = true,
     iconShapeKey = true,
 }
 for kind, spec in pairs(LANE_SPECS) do
@@ -1152,25 +1160,25 @@ end
 -- layout-owned values fall back only to the root Shared table; layoutShared-
 -- owned values never consult layout. This makes stale/misplaced keys inert and
 -- keeps a fresh runtime compile identical to the setting the menu displays.
-local function ReadUnitStyleRaw(layout, sharedLocal, rootShared, key)
+local function ReadUnitStyleRaw(layout, laneLayout, rootShared, key)
     if STYLE_SHARED_LAYOUT_KEYS[key] then
-        return ReadRaw(sharedLocal, rootShared, key)
+        return ReadRaw(laneLayout, nil, key)
     end
-    return ReadRaw(layout, rootShared, key)
+    return ReadRaw(layout, nil, key)
 end
 
-local function ReadUnitStyleBool(layout, sharedLocal, rootShared, key, fallback)
-    local value = ReadUnitStyleRaw(layout, sharedLocal, rootShared, key)
+local function ReadUnitStyleBool(layout, laneLayout, rootShared, key, fallback)
+    local value = ReadUnitStyleRaw(layout, laneLayout, rootShared, key)
     if value == nil then return fallback == true end
     return value == true
 end
 
-local function ReadUnitStyleNumber(layout, sharedLocal, rootShared, key, fallback, minValue, maxValue)
-    return ClampNumber(ReadUnitStyleRaw(layout, sharedLocal, rootShared, key), fallback, minValue, maxValue)
+local function ReadUnitStyleNumber(layout, laneLayout, rootShared, key, fallback, minValue, maxValue)
+    return ClampNumber(ReadUnitStyleRaw(layout, laneLayout, rootShared, key), fallback, minValue, maxValue)
 end
 
-local function ReadUnitStyleAnchor(layout, sharedLocal, rootShared, key, fallback)
-    local value = ReadUnitStyleRaw(layout, sharedLocal, rootShared, key)
+local function ReadUnitStyleAnchor(layout, laneLayout, rootShared, key, fallback)
+    local value = ReadUnitStyleRaw(layout, laneLayout, rootShared, key)
     if value == "TOPLEFT" or value == "TOP" or value == "TOPRIGHT"
         or value == "LEFT" or value == "CENTER" or value == "RIGHT"
         or value == "BOTTOMLEFT" or value == "BOTTOM" or value == "BOTTOMRIGHT" then
@@ -1179,33 +1187,27 @@ local function ReadUnitStyleAnchor(layout, sharedLocal, rootShared, key, fallbac
     return fallback or "CENTER"
 end
 
--- A generic per-unit Style control (for example "Aura Stack Text Size")
--- applies to both lanes until that lane has its own explicit value. Shared is
--- default-filled with lane keys, so the local generic value must be checked
--- before the Shared lane default or the generic control becomes a no-op.
-local function ReadUnitLaneStyleRaw(layout, sharedLocal, rootShared, laneKey, genericKey)
-    local sharedOwned = STYLE_SHARED_LAYOUT_KEYS[laneKey] == true
-    local localOwner = sharedOwned and sharedLocal or layout
-    local value = ReadRaw(localOwner, nil, laneKey)
-    if value == nil and genericKey then value = ReadRaw(localOwner, nil, genericKey) end
-    if value == nil then value = ReadRaw(rootShared, nil, laneKey) end
-    if value == nil and genericKey then value = ReadRaw(rootShared, nil, genericKey) end
-    return value
+-- Buff and Debuff Style values are strict lane owners. Generic and root
+-- Shared keys are legacy migration inputs only and never participate here.
+local function ReadUnitLaneStyleRaw(layout, laneLayout, rootShared, laneKey, genericKey)
+    local laneLayoutOwned = STYLE_SHARED_LAYOUT_KEYS[laneKey] == true
+    local localOwner = laneLayoutOwned and laneLayout or layout
+    return ReadRaw(localOwner, nil, laneKey)
 end
 
-local function ReadUnitLaneStyleBool(layout, sharedLocal, rootShared, laneKey, genericKey, fallback)
-    local value = ReadUnitLaneStyleRaw(layout, sharedLocal, rootShared, laneKey, genericKey)
+local function ReadUnitLaneStyleBool(layout, laneLayout, rootShared, laneKey, genericKey, fallback)
+    local value = ReadUnitLaneStyleRaw(layout, laneLayout, rootShared, laneKey, genericKey)
     if value == nil then return fallback == true end
     return value == true
 end
 
-local function ReadUnitLaneStyleNumber(layout, sharedLocal, rootShared, laneKey, genericKey, fallback, minValue, maxValue)
-    return ClampNumber(ReadUnitLaneStyleRaw(layout, sharedLocal, rootShared, laneKey, genericKey),
+local function ReadUnitLaneStyleNumber(layout, laneLayout, rootShared, laneKey, genericKey, fallback, minValue, maxValue)
+    return ClampNumber(ReadUnitLaneStyleRaw(layout, laneLayout, rootShared, laneKey, genericKey),
         fallback, minValue, maxValue)
 end
 
-local function ReadUnitLaneStyleAnchor(layout, sharedLocal, rootShared, laneKey, genericKey, fallback)
-    local value = ReadUnitLaneStyleRaw(layout, sharedLocal, rootShared, laneKey, genericKey)
+local function ReadUnitLaneStyleAnchor(layout, laneLayout, rootShared, laneKey, genericKey, fallback)
+    local value = ReadUnitLaneStyleRaw(layout, laneLayout, rootShared, laneKey, genericKey)
     if value == "TOPLEFT" or value == "TOP" or value == "TOPRIGHT"
         or value == "LEFT" or value == "CENTER" or value == "RIGHT"
         or value == "BOTTOMLEFT" or value == "BOTTOM" or value == "BOTTOMRIGHT" then
@@ -1264,9 +1266,7 @@ function Shape.SharedValue(shared, kind)
     if type(appearanceShapes) == "table" and appearanceShapes[kind] ~= nil then
         return appearanceShapes[kind]
     end
-    local harmful = kind == "debuff" or kind == "targetDots"
-    local key = harmful and "debuffIconShape" or "buffIconShape"
-    return ReadRaw(shared, nil, key) or ReadRaw(shared, nil, "iconShape")
+    return kind == "playerDefensives" and "FOLLOW_PORTRAIT" or "RECTANGLE"
 end
 
 local function NormalizeRuntimeUnit(unit)
@@ -1289,55 +1289,20 @@ local function UnitAuraIconsEnabled(auras, unit)
     return flag and auras[flag] == true or false
 end
 
-local function TableHasAnyKey(tbl, keys)
-    if type(tbl) ~= "table" or type(keys) ~= "table" then return false end
-    for key in pairs(keys) do
-        if tbl[key] ~= nil then return true end
-    end
-    return false
-end
-
-local function UnitStyleOverrideActive(unitCfg)
-    if type(unitCfg) ~= "table" then return false end
-    if unitCfg.overrideStyle ~= nil then return unitCfg.overrideStyle == true end
-    return TableHasAnyKey(unitCfg.layout, STYLE_LAYOUT_KEYS) or TableHasAnyKey(unitCfg.layoutShared, STYLE_SHARED_LAYOUT_KEYS)
-end
-
-local function UnitLayoutValue(layout, styleKeys, styleActive, key)
-    if type(layout) ~= "table" then return nil end
-    local value = layout[key]
-    if value ~= nil and (not styleKeys[key] or styleActive) then return value end
-    return nil
-end
-
 local function EffectiveUnitTables(auras, unit)
-    local shared = type(auras.shared) == "table" and auras.shared or {}
     local perUnit = type(auras.perUnit) == "table" and auras.perUnit or nil
     local unitCfg = perUnit and perUnit[unit] or nil
-    local layout = unitCfg and unitCfg.overrideLayout == true and type(unitCfg.layout) == "table" and unitCfg.layout or nil
-    local layoutShared = unitCfg and unitCfg.overrideSharedLayout == true and type(unitCfg.layoutShared) == "table" and unitCfg.layoutShared or nil
-    local filters = unitCfg and unitCfg.overrideFilters == true and type(unitCfg.filters) == "table" and unitCfg.filters or nil
-    local styleActive = UnitStyleOverrideActive(unitCfg)
-    local effectiveLayout = layout and setmetatable({}, { __index = function(_, key)
-        return UnitLayoutValue(layout, STYLE_LAYOUT_KEYS, styleActive, key)
-    end }) or {}
-    if layoutShared then
-        local effectiveSharedLocal = setmetatable({}, { __index = function(_, key)
-            return UnitLayoutValue(layoutShared, STYLE_SHARED_LAYOUT_KEYS, styleActive, key)
-        end })
-        return effectiveLayout, setmetatable({}, { __index = function(_, key)
-            local value = effectiveSharedLocal[key]
-            if value ~= nil then return value end
-            return shared[key]
-        end }), filters or shared.filters, effectiveSharedLocal
-    end
-    return effectiveLayout, shared, filters or shared.filters, {}
+    local filterCfg = perUnit and perUnit[BOSS_FILTER_SCOPE_OWNER[unit] or unit] or nil
+    local layout = unitCfg and type(unitCfg.layout) == "table" and unitCfg.layout or {}
+    local layoutShared = unitCfg and type(unitCfg.layoutShared) == "table" and unitCfg.layoutShared or {}
+    local filters = filterCfg and type(filterCfg.filters) == "table" and filterCfg.filters or {}
+    return layout, layoutShared, filters
 end
 
 local function EffectiveUnitBlacklist(auras, unit)
     if type(auras) ~= "table" then return nil end
     local perUnit = type(auras.perUnit) == "table" and auras.perUnit or nil
-    local unitCfg = perUnit and perUnit[unit] or nil
+    local unitCfg = perUnit and perUnit[BOSS_FILTER_SCOPE_OWNER[unit] or unit] or nil
     return unitCfg and type(unitCfg.blacklist) == "table" and unitCfg.blacklist or nil
 end
 
@@ -1582,7 +1547,6 @@ local function SharedIconStyle(kind)
     source = type(source) == "table" and source or nil
     local function Read(key, fallback)
         if source and source[key] ~= nil then return source[key] end
-        if shared[key] ~= nil then return shared[key] end
         return fallback
     end
     local bc = Read("styleBorderColor", DEFAULT_SHARED.styleBorderColor)
@@ -1624,8 +1588,61 @@ local function SharedIconStyle(kind)
     return style
 end
 
+local function RemoveNativeFilterToken(filter, removeToken, fallback)
+    removeToken = tostring(removeToken or ""):upper()
+    local kept = {}
+    for token in tostring(filter or ""):gmatch("[^|]+") do
+        local normalized = token:upper():gsub("^%s+", ""):gsub("%s+$", "")
+        if normalized ~= removeToken then kept[#kept + 1] = token end
+    end
+    return NormalizeNativeFilterString(table_concat(kept, "|"), fallback)
+end
+
+local function ConfigureCuratedBigDefensiveLane(lane)
+    if not (lane and tostring(lane.nativeFilter or ""):find("BIG_DEFENSIVE", 1, true)) then return lane end
+    local getHash = A3.GetBigDefensiveSpellIDHash
+    if type(getHash) ~= "function" then return lane end
+    local spellIDs, spellIDSignature = getHash()
+    if type(spellIDs) ~= "table" or not next(spellIDs) then return lane end
+
+    local candidateFilters = {}
+    for key, value in pairs(type(lane.candidateFilters) == "table" and lane.candidateFilters or {}) do
+        candidateFilters[key] = value
+    end
+    candidateFilters.includeSpellIDs = spellIDs
+    lane._msufA3BigDefensiveFilter = RemoveNativeFilterToken(lane.nativeFilter, "BIG_DEFENSIVE", "HELPFUL")
+    lane._msufA3BigDefensiveCandidateFilters = candidateFilters
+    lane._msufA3BigDefensiveCandidateSignature = lane.candidateFilterSignature
+        and (lane.candidateFilterSignature .. ";" .. spellIDSignature) or spellIDSignature
+    return lane
+end
+
+local function UnitSupportsCuratedBigDefensive(unit)
+    unit = tostring(unit or "")
+    if unit == "player" or unit:match("^party%d+$") or unit:match("^raid%d+$") then return true end
+    if unit ~= "target" and unit ~= "focus" then return false end
+    local unitCanAssist = _G.UnitCanAssist
+    if type(unitCanAssist) ~= "function" then return false end
+    local canAssist = unitCanAssist("player", unit)
+    if issecretvalue(canAssist) == true then return false end
+    return canAssist == true
+end
+
+local function EffectiveLaneFilters(lane)
+    if lane and lane._msufA3BigDefensiveFilter and UnitSupportsCuratedBigDefensive(lane.unit) then
+        return lane._msufA3BigDefensiveFilter,
+            lane._msufA3BigDefensiveCandidateFilters,
+            lane._msufA3BigDefensiveCandidateSignature
+    end
+    return lane and lane.nativeFilter,
+        lane and lane.candidateFilters,
+        lane and lane.candidateFilterSignature
+end
+A3._EffectiveBigDefensiveLaneFilters = EffectiveLaneFilters
+
 local function FinalizeLane(lane, appearanceKind)
     if lane then
+        ConfigureCuratedBigDefensiveLane(lane)
         lane.appearanceKind = NormalizeAppearanceKind(appearanceKind or lane.appearanceKind or lane.kind)
         lane.iconStyle = SharedIconStyle(lane.appearanceKind)
         -- Aura visibility is lane-local. The global Unitframe tooltip mode
@@ -1649,10 +1666,6 @@ local function NativeFilter(baseFilter, filters)
     local harmful = filter:find("HARMFUL", 1, true) ~= nil
     if filters and filters.enabled ~= false then
         local playerScoped = filters.onlyMine == true
-        local nonPlayerScoped = not playerScoped
-            and ((filters.exclusive == "raid") or (filters.raid == true) or (filters.raidInCombat == true)
-                or (helpful and (filters.cancelable == true or filters.notCancelable == true
-                    or filters.externalDefensive == true or filters.bigDefensive == true)))
         if filters.exclusive == "raid" then filter = filter .. "|RAID" end
         if filters.raid == true then filter = filter .. "|RAID" end
         if filters.includeNameplateOnly == true then filter = filter .. "|INCLUDE_NAME_PLATE_ONLY" end
@@ -1666,11 +1679,7 @@ local function NativeFilter(baseFilter, filters)
         if filters.crowdControl == true and harmful then filter = filter .. "|CROWD_CONTROL" end
         if filters.externalDefensive == true and helpful then filter = filter .. "|EXTERNAL_DEFENSIVE" end
         if filters.bigDefensive == true and helpful then filter = filter .. "|BIG_DEFENSIVE" end
-        if playerScoped then
-            filter = filter .. "|PLAYER"
-        elseif nonPlayerScoped then
-            filter = filter .. "|!PLAYER"
-        end
+        if playerScoped then filter = filter .. "|PLAYER" end
     end
     local normalized = NormalizeNativeFilterString(filter, baseFilter)
     -- Cold-path safety net: MSUF's token whitelist normalizes user input, but
@@ -1972,39 +1981,34 @@ local function CompileDispelSensor(unit, frameSpec, groupMode, visual)
     }
 end
 
-local function CompileUnitLane(unit, shared, sharedLocal, layout, filtersRoot, kind, candidateFilters, candidateFilterSignature, portraitShape, rootShared)
+local function CompileUnitLane(unit, laneLayout, layout, filtersRoot, kind, candidateFilters, candidateFilterSignature, portraitShape, rootShared)
     local spec = LANE_SPECS[kind]
     local filters = type(filtersRoot) == "table" and type(filtersRoot[spec.filterKey]) == "table" and filtersRoot[spec.filterKey] or nil
-    local filtersEnabled = type(filtersRoot) ~= "table" or filtersRoot.enabled ~= false
+    local filtersEnabled = type(filters) ~= "table" or filters.enabled ~= false
     candidateFilters, candidateFilterSignature = AddHidePermanentCandidateFilter(
         candidateFilters, candidateFilterSignature,
         kind == "buff" and type(filtersRoot) == "table"
             and (filtersRoot.hidePermanent == true or (filters and filters.hidePermanent == true)))
-    local sizeDefault = ReadRaw(layout, rootShared, spec.sizeKey) or ReadRaw(layout, rootShared, "iconSize") or DEFAULT_SHARED.iconSize
+    local sizeDefault = ReadRaw(layout, nil, spec.sizeKey) or DEFAULT_SHARED.iconSize
     local size = ClampNumber(sizeDefault, DEFAULT_SHARED.iconSize, 1, 128)
-    local zoomDefault = ReadUnitLaneStyleRaw(layout, sharedLocal, rootShared,
+    local zoomDefault = ReadUnitLaneStyleRaw(layout, laneLayout, rootShared,
         spec.iconZoomKey, "iconZoom") or DEFAULT_SHARED.iconZoom
     local iconShapeSource = Shape.SharedValue(rootShared, kind)
     local iconShape, requestedIconShape = Shape.Resolve(iconShapeSource, portraitShape)
-    -- Per lane like perRow: buffSpacing/debuffSpacing, falling back to the
-    -- legacy unit-wide `spacing` so profiles that never split the two keep
-    -- the gap they already had.
-    local spacing = ReadNumber(layout, rootShared, spec.spacingKey,
-        ReadNumber(layout, rootShared, "spacing", DEFAULT_SHARED.spacing, 0, 64), 0, 64)
-    local perRow = ReadNumber(shared, nil, spec.perRowKey, ReadRaw(shared, nil, "perRow") or DEFAULT_SHARED.perRow, 1, 40)
-    local maxCount = ReadNumber(shared, nil, spec.maxKey, DEFAULT_SHARED[spec.maxKey] or 12, 0, 80)
-    -- Lane visibility and weapon enchants are global Aura switches. Stale
-    -- values in a unit's layoutShared table must never mask the Shared page.
-    local enabled = ReadBool(rootShared, nil, spec.showKey, true) and maxCount > 0
-    local growth = ReadRaw(shared, nil, spec.growthKey) or ReadRaw(shared, nil, "growth") or DEFAULT_SHARED.growth
-    local rowWrap = ReadRaw(shared, nil, spec.wrapKey) or ReadRaw(shared, nil, "rowWrap") or DEFAULT_SHARED.rowWrap
+    local spacing = ReadNumber(layout, nil, spec.spacingKey, DEFAULT_SHARED.spacing, 0, 64)
+    local perRow = ReadNumber(laneLayout, nil, spec.perRowKey, DEFAULT_SHARED.perRow, 1, 40)
+    local maxCount = ReadNumber(laneLayout, nil, spec.maxKey, DEFAULT_SHARED[spec.maxKey] or 12, 0, 80)
+    local enabled = ReadBool(laneLayout, nil, spec.showKey, true) and maxCount > 0
+    local growth = ReadRaw(laneLayout, nil, spec.growthKey) or DEFAULT_SHARED.growth
+    local rowWrap = ReadRaw(laneLayout, nil, spec.wrapKey) or DEFAULT_SHARED.rowWrap
     local growthX, growthY, xSign, ySign, verticalGrowth = GrowthParts(growth, rowWrap)
     local cols, rows = GridShape(maxCount, perRow, verticalGrowth)
-    local lanePadding = Round(ClampNumber(ReadUnitStyleRaw(layout, sharedLocal, rootShared, "stylePadding"), 0, 0, 16))
-    local debuffTypeBorderMode = kind == "debuff" and ReadDebuffTypeBorderMode(shared, nil) or "OFF"
-    local cooldownAnchor = ReadUnitStyleAnchor(layout, sharedLocal, rootShared,
+    local lanePadding = Round(ClampNumber(ReadUnitLaneStyleRaw(layout, laneLayout, rootShared,
+        spec.paddingKey, nil), 0, 0, 16))
+    local debuffTypeBorderMode = kind == "debuff" and ReadDebuffTypeBorderMode(laneLayout, nil) or "OFF"
+    local cooldownAnchor = ReadUnitStyleAnchor(layout, laneLayout, rootShared,
         "cooldownTextAnchor", DEFAULT_SHARED.cooldownTextAnchor)
-    local rawStrata = ReadRaw(layout, rootShared, spec.strataKey)
+    local rawStrata = ReadRaw(layout, nil, spec.strataKey)
     if issecretvalue(rawStrata) == true then rawStrata = nil end
     return FinalizeLane({
         kind = kind,
@@ -2012,9 +2016,8 @@ local function CompileUnitLane(unit, shared, sharedLocal, layout, filtersRoot, k
         rootKey = spec.rootKey,
         unit = unit,
         enabled = enabled == true,
-        -- filters.enabled is a root master gate; the lane table intentionally
-        -- does not duplicate it. Hide Permanent remains an independent
-        -- candidate filter, matching the Menu2 contract.
+        -- Each lane owns its own filter gate. Hide Permanent remains an
+        -- independent candidate filter, matching the Menu2 contract.
         nativeFilter = NativeFilter(spec.filter, filtersEnabled and filters or nil),
         candidateFilters = candidateFilters,
         candidateFilterSignature = candidateFilterSignature,
@@ -2033,10 +2036,10 @@ local function CompileUnitLane(unit, shared, sharedLocal, layout, filtersRoot, k
             and ReadBool(rootShared, nil, "showWeaponEnchants", false),
         width = math_max(1, cols * size + math_max(cols - 1, 0) * spacing + 2 * lanePadding),
         height = math_max(1, rows * size + math_max(rows - 1, 0) * spacing + 2 * lanePadding),
-        x = Round(ReadNumber(layout, rootShared, spec.xKey, DEFAULT_SHARED[spec.xKey] or 0, -4096, 4096)),
-        y = Round(ReadNumber(layout, rootShared, spec.yKey, DEFAULT_SHARED[spec.yKey] or 0, -4096, 4096)),
-        anchor = ReadAnchor(layout, rootShared, spec.anchorKey, spec.defaultAnchor),
-        layer = Round(ReadNumber(layout, rootShared, spec.layerKey, spec.defaultLayer, 0, 30)),
+        x = Round(ReadNumber(layout, nil, spec.xKey, DEFAULT_SHARED[spec.xKey] or 0, -4096, 4096)),
+        y = Round(ReadNumber(layout, nil, spec.yKey, DEFAULT_SHARED[spec.yKey] or 0, -4096, 4096)),
+        anchor = ReadAnchor(layout, nil, spec.anchorKey, spec.defaultAnchor),
+        layer = Round(ReadNumber(layout, nil, spec.layerKey, spec.defaultLayer, 0, 30)),
         strata = NormalizeFrameStrata(rawStrata, "AUTO"),
         alpha = 1,
         growthX = growthX,
@@ -2045,59 +2048,58 @@ local function CompileUnitLane(unit, shared, sharedLocal, layout, filtersRoot, k
         ySign = ySign,
         verticalGrowth = verticalGrowth == true,
         initialAnchor = ButtonAnchor(xSign, ySign),
-        showCooldownText = ReadUnitLaneStyleBool(layout, sharedLocal, rootShared,
+        showCooldownText = ReadUnitLaneStyleBool(layout, laneLayout, rootShared,
             spec.showTextKey, "showCooldownText", true),
-        showCooldownSwipe = ReadUnitLaneStyleBool(layout, sharedLocal, rootShared,
+        showCooldownSwipe = ReadUnitLaneStyleBool(layout, laneLayout, rootShared,
             spec.swipeKey, "showCooldownSwipe", true),
-        cooldownSwipeReverse = ReadUnitLaneStyleBool(layout, sharedLocal, rootShared,
+        cooldownSwipeReverse = ReadUnitLaneStyleBool(layout, laneLayout, rootShared,
             spec.swipeReverseKey, "cooldownSwipeReverse", false),
-        sortMethod = NormalizeAuraSortMethod(ReadUnitLaneStyleRaw(layout, sharedLocal, rootShared,
-            spec.sortMethodKey, "sortMethod")),
-        sortReverse = ReadUnitLaneStyleBool(layout, sharedLocal, rootShared,
-            spec.sortReverseKey, "sortReverse", false),
-        -- Duration-bar visibility is a layoutShared/style key. Prefer that
-        -- authoritative table exactly like cooldown text/swipe/tooltip above;
-        -- old profiles can still carry a stale pre-split copy in layout, which
-        -- must never mask the current per-scope override written by Menu2.
-        showDurationBar = ReadUnitLaneStyleBool(layout, sharedLocal, rootShared,
+        -- Native sorting belongs to this exact Aura container. Unlike the
+        -- other Style fields, it must not fall back to a generic unit-wide key.
+        sortMethod = NormalizeAuraSortMethod(ReadUnitLaneStyleRaw(layout, laneLayout, rootShared,
+            spec.sortMethodKey, nil)),
+        sortReverse = ReadUnitLaneStyleBool(layout, laneLayout, rootShared,
+            spec.sortReverseKey, nil, false),
+        -- Duration-bar visibility belongs to the local lane-layout owner.
+        showDurationBar = ReadUnitLaneStyleBool(layout, laneLayout, rootShared,
             spec.showDurationBarKey, "showDurationBar", false),
-        durationBarHeight = ReadUnitLaneStyleNumber(layout, sharedLocal, rootShared,
+        durationBarHeight = ReadUnitLaneStyleNumber(layout, laneLayout, rootShared,
             spec.durationBarHeightKey, "durationBarHeight", DEFAULT_SHARED.durationBarHeight, 1, 16),
         durationBarDisplay = NormalizeDurationBarDisplay(
-            ReadUnitLaneStyleRaw(layout, sharedLocal, rootShared, spec.durationBarDisplayKey, "durationBarDisplay"),
+            ReadUnitLaneStyleRaw(layout, laneLayout, rootShared, spec.durationBarDisplayKey, "durationBarDisplay"),
             DEFAULT_SHARED.durationBarDisplay),
         durationBarPosition = NormalizeDurationBarPosition(
-            ReadUnitLaneStyleRaw(layout, sharedLocal, rootShared, spec.durationBarPositionKey, "durationBarPosition"),
+            ReadUnitLaneStyleRaw(layout, laneLayout, rootShared, spec.durationBarPositionKey, "durationBarPosition"),
             DEFAULT_SHARED.durationBarPosition),
         durationBarDirection = NormalizeDurationBarDirection(
-            ReadUnitLaneStyleRaw(layout, sharedLocal, rootShared, spec.durationBarDirectionKey, "durationBarDirection"),
+            ReadUnitLaneStyleRaw(layout, laneLayout, rootShared, spec.durationBarDirectionKey, "durationBarDirection"),
             DEFAULT_SHARED.durationBarDirection),
-        showStacks = ReadUnitLaneStyleBool(layout, sharedLocal, rootShared,
+        showStacks = ReadUnitLaneStyleBool(layout, laneLayout, rootShared,
             spec.showStackKey, "showStackCount", true),
-        showTooltip = ReadUnitLaneStyleBool(layout, sharedLocal, rootShared,
+        showTooltip = ReadUnitLaneStyleBool(layout, laneLayout, rootShared,
             spec.tooltipKey, "showTooltip", DEFAULT_SHARED.showTooltip),
         showAuraBorder = debuffTypeBorderMode ~= "OFF",
         showAuraSymbol = debuffTypeBorderMode == "SYMBOL",
-        showStealableMarker = kind == "buff" and ReadUnitStyleBool(layout, sharedLocal, rootShared, "buffShowStealable", false),
+        showStealableMarker = kind == "buff" and ReadUnitStyleBool(layout, laneLayout, rootShared, "buffShowStealable", false),
         stealableStyle = kind == "buff" and A3.NormalizeStealableStyle(
-            ReadUnitStyleRaw(layout, sharedLocal, rootShared, "buffStealableStyle")) or nil,
-        cooldownSize = ReadUnitLaneStyleNumber(layout, sharedLocal, rootShared,
+            ReadUnitStyleRaw(layout, laneLayout, rootShared, "buffStealableStyle")) or nil,
+        cooldownSize = ReadUnitLaneStyleNumber(layout, laneLayout, rootShared,
             spec.cooldownSizeKey, "cooldownTextSize", DEFAULT_SHARED.cooldownTextSize, 6, 40),
-        cooldownAnchor = ReadUnitLaneStyleAnchor(layout, sharedLocal, rootShared,
+        cooldownAnchor = ReadUnitLaneStyleAnchor(layout, laneLayout, rootShared,
             spec.cooldownAnchorKey, "cooldownTextAnchor", cooldownAnchor),
-        cooldownX = ReadUnitLaneStyleNumber(layout, sharedLocal, rootShared,
+        cooldownX = ReadUnitLaneStyleNumber(layout, laneLayout, rootShared,
             spec.cooldownXKey, "cooldownTextOffsetX", DEFAULT_SHARED.cooldownTextOffsetX, -2000, 2000),
-        cooldownY = ReadUnitLaneStyleNumber(layout, sharedLocal, rootShared,
+        cooldownY = ReadUnitLaneStyleNumber(layout, laneLayout, rootShared,
             spec.cooldownYKey, "cooldownTextOffsetY", DEFAULT_SHARED.cooldownTextOffsetY, -2000, 2000),
-        cooldownDecimalSeconds = ReadUnitLaneStyleNumber(layout, sharedLocal, rootShared,
+        cooldownDecimalSeconds = ReadUnitLaneStyleNumber(layout, laneLayout, rootShared,
             spec.cooldownDecimalKey, "cooldownDecimalSeconds", DEFAULT_SHARED.cooldownDecimalSeconds, 0, 30),
-        stackAnchor = ReadUnitLaneStyleAnchor(layout, sharedLocal, rootShared,
+        stackAnchor = ReadUnitLaneStyleAnchor(layout, laneLayout, rootShared,
             spec.stackAnchorKey, "stackCountAnchor", DEFAULT_SHARED.stackCountAnchor),
-        stackSize = ReadUnitLaneStyleNumber(layout, sharedLocal, rootShared,
+        stackSize = ReadUnitLaneStyleNumber(layout, laneLayout, rootShared,
             spec.stackSizeKey, "stackTextSize", DEFAULT_SHARED.stackTextSize, 6, 40),
-        stackX = ReadUnitLaneStyleNumber(layout, sharedLocal, rootShared,
+        stackX = ReadUnitLaneStyleNumber(layout, laneLayout, rootShared,
             spec.stackXKey, "stackTextOffsetX", DEFAULT_SHARED.stackTextOffsetX, -2000, 2000),
-        stackY = ReadUnitLaneStyleNumber(layout, sharedLocal, rootShared,
+        stackY = ReadUnitLaneStyleNumber(layout, laneLayout, rootShared,
             spec.stackYKey, "stackTextOffsetY", DEFAULT_SHARED.stackTextOffsetY, -2000, 2000),
     })
 end
@@ -2134,12 +2136,12 @@ local function CompileGroupLane(unit, source, kind, groupKind, portraitShape, sh
     if rawStrata == nil then rawStrata = source.strata end
     local nativeFilter = NormalizeNativeFilterString(source[spec.filterKey], spec.filter)
     -- Helpful spell-ID filters and the dedicated tracked/external lanes depend
-    -- on identity data that can become unavailable at party range boundaries.
+    -- on identity data that can become unavailable at group range boundaries.
     -- Compile that fact once so the hot event path only forwards Blizzard's
     -- (possibly secret) range boolean to native alpha sinks.
-    local partyAccessGate = kind == "trackedBuff" or kind == "external"
+    local groupAccessGate = kind == "trackedBuff" or kind == "external"
     if kind == "buff" then
-        partyAccessGate = candidateFilters ~= nil
+        groupAccessGate = candidateFilters ~= nil
             and (candidateFilters.includeSpellIDs ~= nil or candidateFilters.excludeSpellIDs ~= nil)
             or nativeFilter:find("EXTERNAL_DEFENSIVE", 1, true) ~= nil
             or nativeFilter:find("BIG_DEFENSIVE", 1, true) ~= nil
@@ -2153,7 +2155,7 @@ local function CompileGroupLane(unit, source, kind, groupKind, portraitShape, sh
         nativeFilter = nativeFilter,
         candidateFilters = candidateFilters,
         candidateFilterSignature = candidateFilterSignature,
-        partyAccessGate = partyAccessGate == true,
+        groupAccessGate = groupAccessGate == true,
         max = Round(maxCount),
         size = size,
         iconZoom = ClampNumber(source[spec.iconZoomKey] or source.iconZoom, 100, 100, 200),
@@ -2181,8 +2183,8 @@ local function CompileGroupLane(unit, source, kind, groupKind, portraitShape, sh
         showCooldownText = source[spec.showTextKey] ~= false,
         showCooldownSwipe = source[spec.swipeKey] ~= false,
         cooldownSwipeReverse = cooldownSwipeReverse == true,
-        sortMethod = NormalizeAuraSortMethod(source[spec.sortMethodKey] or source.sortMethod),
-        sortReverse = source[spec.sortReverseKey] == true or (source[spec.sortReverseKey] == nil and source.sortReverse == true),
+        sortMethod = NormalizeAuraSortMethod(source[spec.sortMethodKey]),
+        sortReverse = source[spec.sortReverseKey] == true,
         showDurationBar = source[spec.showDurationBarKey] == true or source.showDurationBar == true,
         durationBarHeight = ClampNumber(source[spec.durationBarHeightKey] or source.durationBarHeight, DEFAULT_SHARED.durationBarHeight, 1, 16),
         durationBarDisplay = NormalizeDurationBarDisplay(source[spec.durationBarDisplayKey] or source.durationBarDisplay, DEFAULT_SHARED.durationBarDisplay),
@@ -2660,6 +2662,8 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec,
     local candidateFilters, candidateFilterSignature = CandidateFiltersFromSpellIDs(includeSpellIDs, "includeSpellIDs")
     local layoutPlaced = type(entry.placed) == "table" and entry.placed or {}
     local placed, styleFrame = A3._ResolveSpecialCustomStyle(auras, unit, index, entry)
+    lanePadding = ClampNumber((type(placed) == "table" and placed.stylePadding)
+        or layoutPlaced.stylePadding, 0, 0, 16)
     local filters = type(entry.filters) == "table" and entry.filters or { enabled = true, onlyMine = entry.onlyOwn == true }
     local sourceUnit = unit
     local helpful = not targetDots and tostring(entry.auraType or "BUFF"):upper() ~= "DEBUFF"
@@ -2787,13 +2791,11 @@ end
 local function CompileUnitCustomContainers(auras, unit, frameSpec)
     local source = EffectiveUnitCustomContainers(auras, unit)
     if type(source) ~= "table" then return nil, nil end
-    -- Custom containers honor the shared "Lane Padding" slider exactly like
-    -- the Buff/Debuff lanes; the per-container record carries no padding key.
-    local layout = EffectiveUnitTables(auras, unit)
-    local lanePadding = ReadRaw(layout, auras.shared, "stylePadding")
+    -- Custom containers carry their own spacing in the per-container record;
+    -- there is no Unit-wide or Shared lane-padding fallback.
     local lanes, effectItems, targetDotEffectItems = {}, {}, {}
     for i = 1, 4 do
-        local lane, effect, portraitLane = CompileUnitCustomLane(unit, source[i], i, lanePadding, frameSpec, auras.shared, auras)
+        local lane, effect, portraitLane = CompileUnitCustomLane(unit, source[i], i, nil, frameSpec, auras.shared, auras)
         if lane then lanes["custom" .. tostring(i)] = lane end
         if portraitLane then lanes[portraitLane.kind] = portraitLane end
         if effect then
@@ -2814,14 +2816,14 @@ local function CompileUnitCustomContainers(auras, unit, frameSpec)
 end
 A3._CompileUnitCustomContainers = CompileUnitCustomContainers
 
-local function CompileUnitLaneEffects(unit, shared, buff, debuff)
+local function CompileUnitLaneEffects(unit, laneLayout, buff, debuff)
     local items = {}
     local function Add(kind, lane)
         if not (lane and lane.enabled == true) then return end
         local prefix = kind == "buff" and "buff" or "debuff"
-        local effectType = tostring(ReadRaw(shared, nil, prefix .. "FrameEffectType") or "none"):lower()
+        local effectType = tostring(ReadRaw(laneLayout, nil, prefix .. "FrameEffectType") or "none"):lower()
         if effectType == "none" or effectType == "" then return end
-        local color = ReadRaw(shared, nil, prefix .. "FrameEffectColor")
+        local color = ReadRaw(laneLayout, nil, prefix .. "FrameEffectColor")
         items[#items + 1] = {
             key = "uflane_effect:" .. kind,
             display = kind == "buff" and "Buffs" or "Debuffs",
@@ -2834,10 +2836,10 @@ local function CompileUnitLaneEffects(unit, shared, buff, debuff)
             frame = {
                 type = effectType,
                 color = type(color) == "table" and color or { 0.69, 0.50, 0.88, 0.80 },
-                priority = ReadNumber(shared, nil, prefix .. "FrameEffectPriority", 5, 1, 10),
-                thickness = ReadNumber(shared, nil, prefix .. "FrameEffectThickness", 2, 1, 16),
-                layer = ReadNumber(shared, nil, prefix .. "FrameEffectLayer", 0, 0, 30),
-                strata = ReadRaw(shared, nil, prefix .. "FrameEffectStrata") or "AUTO",
+                priority = ReadNumber(laneLayout, nil, prefix .. "FrameEffectPriority", 5, 1, 10),
+                thickness = ReadNumber(laneLayout, nil, prefix .. "FrameEffectThickness", 2, 1, 16),
+                layer = ReadNumber(laneLayout, nil, prefix .. "FrameEffectLayer", 0, 0, 30),
+                strata = ReadRaw(laneLayout, nil, prefix .. "FrameEffectStrata") or "AUTO",
             },
             layer = 9,
             strata = "AUTO",
@@ -2872,7 +2874,7 @@ local function BuildUnitFrameConfig(unit, frameSpec)
     local dispelSymbol = iconsEnabled and CompileDispelSensor(unit, frameSpec, false, "symbol") or nil
     local buff, debuff, laneEffects
     if iconsEnabled then
-        local layout, sharedLayout, filtersRoot, sharedLocal = EffectiveUnitTables(auras, unit)
+        local layout, laneLayout, filtersRoot = EffectiveUnitTables(auras, unit)
         local blacklist = EffectiveUnitBlacklist(auras, unit)
         local buffBlacklist = type(blacklist) == "table" and type(blacklist.buffs) == "table" and blacklist.buffs or blacklist
         local debuffBlacklist = type(blacklist) == "table" and type(blacklist.debuffs) == "table" and blacklist.debuffs or blacklist
@@ -2899,9 +2901,9 @@ local function BuildUnitFrameConfig(unit, frameSpec)
                 type(customContainers) == "table" and customContainers[4] or nil, tracked)
         end
         local portraitShape = frameSpec and frameSpec.portrait and frameSpec.portrait.shape
-        buff = CompileUnitLane(unit, sharedLayout, sharedLocal, layout, filtersRoot, "buff", buffCandidates, buffCandidateSignature, portraitShape, auras.shared)
-        debuff = CompileUnitLane(unit, sharedLayout, sharedLocal, layout, filtersRoot, "debuff", debuffCandidates, debuffCandidateSignature, portraitShape, auras.shared)
-        laneEffects = CompileUnitLaneEffects(unit, sharedLayout, buff, debuff)
+        buff = CompileUnitLane(unit, laneLayout, layout, filtersRoot, "buff", buffCandidates, buffCandidateSignature, portraitShape, auras.shared)
+        debuff = CompileUnitLane(unit, laneLayout, layout, filtersRoot, "debuff", debuffCandidates, debuffCandidateSignature, portraitShape, auras.shared)
+        laneEffects = CompileUnitLaneEffects(unit, laneLayout, buff, debuff)
     end
     local hasNativeAuraWork = (buff and buff.enabled == true) or (debuff and debuff.enabled == true)
         or (dispelBorder and dispelBorder.enabled == true) or (purgeBorder and purgeBorder.enabled == true)
@@ -2973,6 +2975,133 @@ function A3.ResolveUnitFrameConfig(unit, frameSpec)
     local cfg = BuildUnitFrameConfig(unit, nil)
     A3._runtimeConfigCache[unit] = { gen = gen, visualGen = visualGen, config = cfg }
     return cfg
+end
+
+--- Cold-path diagnostics for Assistant/support surfaces.  Blizzard owns the
+--- native AuraSlot assignment and may keep its visibility secret, so this API
+--- reports the effective configured owners without querying AuraButton state.
+--- It creates no frame, event, timer, or OnUpdate.
+function A3.GetUnitFrameEffectDiagnostics(unit, frame)
+    unit = NormalizeRuntimeUnit(unit or (frame and frame.MSUFUnitKey))
+    if not unit then return nil end
+
+    frame = frame
+        or (A3._runtimeFrames and A3._runtimeFrames[unit])
+        or (UF and UF.GetFrame and UF.GetFrame(unit))
+        or (UF and UF.frames and UF.frames[unit])
+        or _G["MSUF_" .. unit]
+    local root = frame and frame.Auras
+    local appliedConfig = root and type(root._msufA3Config) == "table" and root._msufA3Config or nil
+    local cfg = appliedConfig or A3.ResolveUnitFrameConfig(unit, frame and frame.MSUFSpec)
+    local installed = root ~= nil and root._msufA3Applied == true and appliedConfig == cfg
+
+    local auras = EnsureDB()
+    local _, effectiveShared = EffectiveUnitTables(auras, unit)
+    local localShared = effectiveShared
+    local laneSlots = cfg and cfg.laneEffects and cfg.laneEffects.enabled == true
+        and type(cfg.laneEffects.slots) == "table" and cfg.laneEffects.slots or nil
+
+    local function CopyColor(color)
+        color = type(color) == "table" and color or nil
+        return {
+            tonumber(color and color[1]) or 0.69,
+            tonumber(color and color[2]) or 0.50,
+            tonumber(color and color[3]) or 0.88,
+            tonumber(color and color[4]) or 0.80,
+        }
+    end
+
+    local function FindLaneSlot(kind)
+        if not laneSlots then return nil end
+        local itemKey = "uflane_effect:" .. kind
+        for i = 1, #laneSlots do
+            local slot = laneSlots[i]
+            if type(slot) == "table" and slot.itemKey == itemKey then return slot end
+        end
+        return nil
+    end
+
+    local function LaneSnapshot(kind)
+        local prefix = kind == "buff" and "buff" or "debuff"
+        local keyPrefix = prefix .. "FrameEffect"
+        local slot = FindLaneSlot(kind)
+        local effect = slot and type(slot.frameEffect) == "table" and slot.frameEffect or nil
+        local configuredType = tostring(ReadRaw(effectiveShared, nil, keyPrefix .. "Type") or "none"):lower()
+        local color = effect and effect.color or ReadRaw(effectiveShared, nil, keyPrefix .. "Color")
+        local function FieldSource(suffix)
+            return localShared and localShared[keyPrefix .. suffix] ~= nil and "unit" or "default"
+        end
+        return {
+            ownerKind = "lane",
+            lane = kind,
+            display = kind == "buff" and "Buffs" or "Debuffs",
+            configuredType = configuredType,
+            renderedType = effect and tostring(effect.type or configuredType):lower() or nil,
+            armed = slot ~= nil,
+            installed = installed and slot ~= nil,
+            visibility = "native-opaque",
+            color = CopyColor(color),
+            priority = tonumber(effect and effect.priority)
+                or ReadNumber(effectiveShared, nil, keyPrefix .. "Priority", 5, 1, 10),
+            thickness = tonumber(effect and effect.thickness)
+                or ReadNumber(effectiveShared, nil, keyPrefix .. "Thickness", 2, 1, 16),
+            layer = tonumber(effect and effect.layer)
+                or ReadNumber(effectiveShared, nil, keyPrefix .. "Layer", 0, 0, 30),
+            strata = tostring((effect and effect.strata)
+                or ReadRaw(effectiveShared, nil, keyPrefix .. "Strata") or "AUTO"),
+            nativeFilter = slot and slot.nativeFilter or nil,
+            candidateFilterSignature = slot and slot.candidateFilterSignature or nil,
+            source = FieldSource("Type"),
+            colorSource = FieldSource("Color"),
+            thicknessSource = FieldSource("Thickness"),
+            prioritySource = FieldSource("Priority"),
+            layerSource = FieldSource("Layer"),
+            strataSource = FieldSource("Strata"),
+        }
+    end
+
+    local snapshot = {
+        unit = unit,
+        applied = installed,
+        configSource = appliedConfig and "applied" or "resolved",
+        visibility = "native-opaque",
+        lanes = {
+            buff = LaneSnapshot("buff"),
+            debuff = LaneSnapshot("debuff"),
+        },
+        custom = {},
+    }
+
+    -- Custom Aura and Target-DoT Full-Frame effects share the same renderer.
+    -- Expose their compiled owners too, while still leaving visibility opaque.
+    for _, rootKey in ipairs({ "spellIndicators", "targetDotEffects" }) do
+        local effectRoot = cfg and cfg[rootKey]
+        local slots = effectRoot and effectRoot.enabled == true and type(effectRoot.slots) == "table" and effectRoot.slots or nil
+        for i = 1, #(slots or {}) do
+            local slot = slots[i]
+            local effect = type(slot) == "table" and type(slot.frameEffect) == "table" and slot.frameEffect or nil
+            if effect and tostring(effect.type or "none"):lower() ~= "none" then
+                snapshot.custom[#snapshot.custom + 1] = {
+                    ownerKind = rootKey == "targetDotEffects" and "targetDots" or "custom",
+                    itemKey = slot.itemKey,
+                    display = slot.display,
+                    configuredType = tostring(effect.type):lower(),
+                    renderedType = tostring(effect.type):lower(),
+                    armed = true,
+                    installed = installed,
+                    visibility = "native-opaque",
+                    color = CopyColor(effect.color),
+                    priority = tonumber(effect.priority) or 5,
+                    thickness = tonumber(effect.thickness) or 2,
+                    layer = tonumber(effect.layer) or 0,
+                    strata = tostring(effect.strata or "AUTO"),
+                    nativeFilter = slot.nativeFilter,
+                    candidateFilterSignature = slot.candidateFilterSignature,
+                }
+            end
+        end
+    end
+    return snapshot
 end
 
 local function AppendSpellIndicatorItems(out, source)
@@ -3062,7 +3191,7 @@ local function ResolveGroupFrameConfig(frame, unit)
     -- stamps a signature when it reads the settings; this path only compares it,
     -- because it runs per frame per identity event.
     local symbolSignature = (spec and spec.dispelSymbol and spec.dispelSymbol.signature) or "-"
-    local partyRangeGate = frame._msufGFKind == "party" and frame._msufGFIsPreviewFrame ~= true
+    local groupRangeGate = IsGroupFrame(frame) and frame._msufGFIsPreviewFrame ~= true
     -- The group kind doubles as the aura scope key for the shared icon style
     -- opt-out; party/raid/mythicraid can each be excluded independently.
     local groupKind = frame._msufGFKind
@@ -3074,7 +3203,7 @@ local function ResolveGroupFrameConfig(frame, unit)
         and frame._msufA3NativeGroupCornerSource == cornerSource and frame._msufA3NativeGroupUnit == unit
         and frame._msufA3NativeGroupSymbolSignature == symbolSignature
         and frame._msufA3NativeGroupGen == gen and frame._msufA3NativeGroupVisualGen == visualGen
-        and cached.partyRangeGate == partyRangeGate then
+        and cached.groupRangeGate == groupRangeGate then
         return cached
     end
     -- Compiled group specs are immutable for their revision. Preview frames all
@@ -3083,7 +3212,7 @@ local function ResolveGroupFrameConfig(frame, unit)
     -- tables without changing the result. Share that cold-path config on the spec;
     -- live frames with distinct unit tokens still receive distinct entries.
     local sharedCache = spec and spec._msufA3NativeGroupConfigCache
-    local sharedKey = tostring(unit) .. "\031" .. tostring(groupKind) .. (partyRangeGate and "\031party" or "\031shared")
+    local sharedKey = tostring(unit) .. "\031" .. tostring(groupKind) .. (groupRangeGate and "\031group" or "\031shared")
     local shared = sharedCache and sharedCache[sharedKey]
     if shared and shared.source == source and shared.spellSource == spellSource
         and shared.cornerSource == cornerSource and shared.symbolSignature == symbolSignature
@@ -3107,7 +3236,7 @@ local function ResolveGroupFrameConfig(frame, unit)
         lanes = {},
         sensors = {},
         group = true,
-        partyRangeGate = partyRangeGate,
+        groupRangeGate = groupRangeGate,
         _msufA3ConfigGen = gen,
         _msufA3VisualGen = visualGen,
         _msufA3Source = source,
@@ -4196,10 +4325,10 @@ end
 
 -- One CustomAuraContainer owns every compatible group-frame display for a unit:
 -- fixed Spell/Dispel AuraSlots, every one-icon lane as another AuraSlot, and at
--- most one flowing AuraGroup. Live Party frames are the only exception: their
+-- most one flowing AuraGroup. Live group frames are the only exception: their
 -- identity-dependent helpful displays must fail closed at range boundaries,
--- while ordinary token-only Debuffs must remain visible. Keep those two gate
--- classes in separate native owners instead of weakening either contract.
+-- while ordinary token-only Buffs/Debuffs must remain visible. Keep those two
+-- gate classes in separate native owners instead of weakening either contract.
 local function BuildGroupAuraOwner(cfg, rangeGated, includeFixed, rootKey)
     local sensorRoot = includeFixed and GetDispelSensorRootConfig(cfg) or nil
     local spellRoot = includeFixed and SpellIndicatorsRuntime.RootConfig(cfg) or nil
@@ -4208,7 +4337,7 @@ local function BuildGroupAuraOwner(cfg, rangeGated, includeFixed, rootKey)
     local order = A3._normalAuraLaneOrder
     for i = 1, #order do
         local lane = lanes and lanes[order[i]]
-        local laneRangeGated = cfg.partyRangeGate == true and lane and lane.partyAccessGate == true
+        local laneRangeGated = cfg.groupRangeGate == true and lane and lane.groupAccessGate == true
         if lane and lane.enabled == true and laneRangeGated == rangeGated then
             if lane.max == 1 then
                 slotLanes = slotLanes or {}
@@ -4258,7 +4387,7 @@ local function GetGroupSlotsRootConfig(cfg)
     if cached ~= nil then return cached ~= false and cached or nil end
 
     local primary, secondary
-    if cfg.partyRangeGate == true then
+    if cfg.groupRangeGate == true then
         primary = BuildGroupAuraOwner(cfg, true, true, "GroupSlots")
         secondary = BuildGroupAuraOwner(cfg, false, false, "GroupAuraFlow")
         if not primary then
@@ -4441,11 +4570,11 @@ local function SyncContainerGeometry(container, lane, parentFrame, forceGeometry
         if layoutHost and layoutHost.SetFrameLevel then
             layoutHost:SetFrameLevel(level)
         end
-        -- Reference-addon model: the CONTAINER is the single layering
-        -- authority — its level and strata are written explicitly and
-        -- relatively on every geometry sync (container writes stick on PTR 7,
-        -- probe-verified; fresh containers take them pre-seal). AuraButtons
-        -- are never re-leveled: they spawn at container level + 1 and follow.
+        -- For flowing AuraGroup lanes the CONTAINER is the layering authority:
+        -- its level and strata are written on every geometry sync (writes stick
+        -- on PTR 7; fresh containers take them pre-seal). Flow AuraButtons spawn
+        -- at container level + 1 and follow; fixed AuraSlots instead use their
+        -- own initializeFrame contract below because they share this owner.
         if container.SetFrameLevel then
             container:SetFrameLevel(level)
         end
@@ -5378,9 +5507,10 @@ end
 local function BuildManagedAuraGroupOptions(container, lane)
     local nextIndex = 0
     local sortMethod, sortDirection = AuraSortEnums(lane)
+    local _, candidateFilters = EffectiveLaneFilters(lane)
     return {
         maxFrameCount = lane.max,
-        candidateFilters = lane.candidateFilters,
+        candidateFilters = candidateFilters,
         sortMethod = sortMethod,
         sortDirection = sortDirection,
         initializeFrame = function(button)
@@ -5391,7 +5521,7 @@ local function BuildManagedAuraGroupOptions(container, lane)
             -- GetAuraGroupFrame/GetAuraGroupFrameCount for enumeration.
             PrepareAuraButton(button, lane, nextIndex)
             -- A mixed owner stays at alpha 1 so fixed slots retain their own
-            -- opacity and Party range can gate the owner. Carry flow opacity on
+            -- opacity and group range can gate the owner. Carry flow opacity on
             -- its buttons instead of multiplying every sibling AuraSlot.
             if container._msufA3GroupSlotsRoot == true then button:SetAlpha(lane.alpha or 1) end
         end,
@@ -5431,6 +5561,10 @@ local function CreateNativeAuraContainer(root, parentOverride)
         if container.Hide then container:Hide() end
         return nil
     end
+    -- Event registrations on CustomAuraContainerTemplate are intrinsic and
+    -- carry Blizzard's forbidden EventRegistrations aspect. Leave the static
+    -- AURA_DATA_PROVIDER_SWITCH subscription entirely Blizzard-owned; addon
+    -- calls to RegisterEvent/UnregisterEvent on this object taint execution.
     container._msufA3Root = root
     return container
 end
@@ -5444,8 +5578,10 @@ local function CreateManagedNativeLane(container, lane, parentFrame)
     container.createdButtons = lane.max or 0
     ConfigureNativeAuraContainer(container, lane.unit)
 
-    container:AddAuraGroup(container._msufA3ManagedGroupKey, lane.nativeFilter, BuildManagedAuraGroupOptions(container, lane))
-    container._msufA3FilterString = lane.nativeFilter
+    local nativeFilter, _, candidateFilterSignature = EffectiveLaneFilters(lane)
+    container:AddAuraGroup(container._msufA3ManagedGroupKey, nativeFilter, BuildManagedAuraGroupOptions(container, lane))
+    container._msufA3FilterString = nativeFilter
+    container._msufA3CandidateFilterSignature = candidateFilterSignature
     container._msufA3SortSignature = AuraSortSignature(lane)
     -- PTR 7 item enchantments: temporary weapon enchants render as native
     -- buttons inside the player buff flow. The frames are CustomAuraButtons,
@@ -5501,14 +5637,25 @@ end
 
 local function BuildGroupLaneSlotOptions(container, lane, parentFrame, buttonIndex)
     local sortMethod, sortDirection = AuraSortEnums(lane)
+    local _, candidateFilters = EffectiveLaneFilters(lane)
     return {
-        candidateFilters = lane.candidateFilters,
+        candidateFilters = candidateFilters,
         sortMethod = sortMethod,
         sortDirection = sortDirection,
         initializeFrame = function(button)
             button._msufA3ManagedAuraButton = true
             button._msufA3ParentFrame = parentFrame
             container[buttonIndex] = button
+            -- AuraSlots share one native container with Spell/Dispel slots and
+            -- an optional flowing AuraGroup, so the container cannot represent
+            -- several independently configured lane Layers. Give this button
+            -- the same final level/strata it would receive in a standalone
+            -- flowing lane while initializeFrame is still allowed to mutate it.
+            -- The sealed update path deliberately never touches it again.
+            if button.SetFrameLevel then
+                button:SetFrameLevel(ManagedLaneFrameLevel(parentFrame, lane) + 1)
+            end
+            SyncFrameStrata(button, ResolveFrameStrata(parentFrame, lane.strata))
             PrepareAuraButton(button, lane, 1)
             -- One icon fills the old fixed-size lane host exactly, so anchoring
             -- that icon by the configured outer anchor preserves its position.
@@ -5519,20 +5666,72 @@ local function BuildGroupLaneSlotOptions(container, lane, parentFrame, buttonInd
     }
 end
 
-local function UpdateGroupLaneSlot(container, lane)
+local function UpdateAuraGroupEffectiveFilters(container, lane)
+    if not (container and lane and container._msufA3ManagedGroupKey) then return false end
+    local groupKey = container._msufA3ManagedGroupKey
+    local nativeFilter, candidateFilters, candidateSignature = EffectiveLaneFilters(lane)
+    local oldFilter = container._msufA3FilterString
+    local oldCandidateSignature = container._msufA3CandidateFilterSignature
+    local filterChanged = oldFilter ~= nativeFilter
+    local candidatesChanged = oldCandidateSignature ~= candidateSignature
+    if not filterChanged and not candidatesChanged then return false end
+
+    -- Moving from BIG_DEFENSIVE to HELPFUL broadens the native pass. Install
+    -- the exact-ID gate first; moving back narrows the native pass first. This
+    -- keeps both halves of a target/focus identity transition fail-closed even
+    -- though Blizzard refreshes after each setter.
+    local broadening = filterChanged
+        and tostring(oldFilter or ""):find("BIG_DEFENSIVE", 1, true) ~= nil
+        and tostring(nativeFilter or ""):find("BIG_DEFENSIVE", 1, true) == nil
+    if broadening and candidatesChanged then
+        container:SetAuraGroupCandidateFilters(groupKey, candidateFilters)
+        container._msufA3CandidateFilterSignature = candidateSignature
+    end
+    if filterChanged then
+        container:SetAuraGroupFilterString(groupKey, nativeFilter)
+        container._msufA3FilterString = nativeFilter
+    end
+    if candidatesChanged and not broadening then
+        container:SetAuraGroupCandidateFilters(groupKey, candidateFilters)
+        container._msufA3CandidateFilterSignature = candidateSignature
+    end
+    return true
+end
+
+local function UpdateAuraSlotEffectiveFilters(container, lane)
     if not (container and lane) then return false end
     local slotKey = GroupLaneSlotKey(lane)
     local filters = container._msufA3LaneSlotFilterStrings
     local candidates = container._msufA3LaneSlotCandidateSignatures
+    local nativeFilter, candidateFilters, candidateSignature = EffectiveLaneFilters(lane)
+    local oldFilter = filters[slotKey]
+    local oldCandidateSignature = candidates[slotKey]
+    local filterChanged = oldFilter ~= nativeFilter
+    local candidatesChanged = oldCandidateSignature ~= candidateSignature
+    if not filterChanged and not candidatesChanged then return false end
+    local broadening = filterChanged
+        and tostring(oldFilter or ""):find("BIG_DEFENSIVE", 1, true) ~= nil
+        and tostring(nativeFilter or ""):find("BIG_DEFENSIVE", 1, true) == nil
+    if broadening and candidatesChanged then
+        container:SetAuraSlotCandidateFilters(slotKey, candidateFilters)
+        candidates[slotKey] = candidateSignature
+    end
+    if filterChanged then
+        container:SetAuraSlotFilterString(slotKey, nativeFilter)
+        filters[slotKey] = nativeFilter
+    end
+    if candidatesChanged and not broadening then
+        container:SetAuraSlotCandidateFilters(slotKey, candidateFilters)
+        candidates[slotKey] = candidateSignature
+    end
+    return true
+end
+
+local function UpdateGroupLaneSlot(container, lane)
+    if not (container and lane) then return false end
+    local slotKey = GroupLaneSlotKey(lane)
     local sorts = container._msufA3LaneSlotSortSignatures
-    if filters[slotKey] ~= lane.nativeFilter then
-        container:SetAuraSlotFilterString(slotKey, lane.nativeFilter)
-        filters[slotKey] = lane.nativeFilter
-    end
-    if candidates[slotKey] ~= lane.candidateFilterSignature then
-        container:SetAuraSlotCandidateFilters(slotKey, lane.candidateFilters)
-        candidates[slotKey] = lane.candidateFilterSignature
-    end
+    UpdateAuraSlotEffectiveFilters(container, lane)
     local sortSignature = AuraSortSignature(lane)
     if sorts[slotKey] ~= sortSignature then
         local sortMethod, sortDirection = AuraSortEnums(lane)
@@ -5546,18 +5745,11 @@ local function UpdateGroupFlowLane(container, lane)
     if not (container and lane and container._msufA3ManagedGroupKey) then return false end
     local groupKey = container._msufA3ManagedGroupKey
     local refresh = false
-    if container._msufA3FilterString ~= lane.nativeFilter then
-        container:SetAuraGroupFilterString(groupKey, lane.nativeFilter)
-        container._msufA3FilterString = lane.nativeFilter
-    end
+    UpdateAuraGroupEffectiveFilters(container, lane)
     if container._msufA3MaxFrameCount ~= lane.max then
         container:SetAuraGroupMaxFrameCount(groupKey, lane.max)
         container._msufA3MaxFrameCount = lane.max
         refresh = true
-    end
-    if container._msufA3CandidateFilterSignature ~= lane.candidateFilterSignature then
-        container:SetAuraGroupCandidateFilters(groupKey, lane.candidateFilters)
-        container._msufA3CandidateFilterSignature = lane.candidateFilterSignature
     end
     local sortSignature = AuraSortSignature(lane)
     if container._msufA3SortSignature ~= sortSignature then
@@ -5869,23 +6061,25 @@ local function CreateManagedGroupSlots(container, groupSlots, parentFrame)
         for i = 1, #slotLanes do
             local lane = slotLanes[i]
             local slotKey = GroupLaneSlotKey(lane)
+            local nativeFilter, _, candidateFilterSignature = EffectiveLaneFilters(lane)
             buttonIndex = buttonIndex + 1
-            container:AddAuraSlot(slotKey, lane.nativeFilter,
+            container:AddAuraSlot(slotKey, nativeFilter,
                 BuildGroupLaneSlotOptions(container, lane, parentFrame, buttonIndex))
-            container._msufA3LaneSlotFilterStrings[slotKey] = lane.nativeFilter
-            container._msufA3LaneSlotCandidateSignatures[slotKey] = lane.candidateFilterSignature
+            container._msufA3LaneSlotFilterStrings[slotKey] = nativeFilter
+            container._msufA3LaneSlotCandidateSignatures[slotKey] = candidateFilterSignature
             container._msufA3LaneSlotSortSignatures[slotKey] = AuraSortSignature(lane)
         end
     end
     container._msufA3FixedButtonCount = buttonIndex
     if flowLane then
+        local nativeFilter, _, candidateFilterSignature = EffectiveLaneFilters(flowLane)
         container._msufA3ManagedAuraGroups = true
         container._msufA3ManagedGroupKey = ManagedAuraKey(flowLane)
-        container:AddAuraGroup(container._msufA3ManagedGroupKey, flowLane.nativeFilter,
+        container:AddAuraGroup(container._msufA3ManagedGroupKey, nativeFilter,
             BuildManagedAuraGroupOptions(container, flowLane))
-        container._msufA3FilterString = flowLane.nativeFilter
+        container._msufA3FilterString = nativeFilter
         container._msufA3MaxFrameCount = flowLane.max
-        container._msufA3CandidateFilterSignature = flowLane.candidateFilterSignature
+        container._msufA3CandidateFilterSignature = candidateFilterSignature
         container._msufA3SortSignature = AuraSortSignature(flowLane)
         if not ApplyManagedAuraGroupLayout(container, container._msufA3ManagedGroupKey, flowLane) then
             if container.Hide then container:Hide() end
@@ -6012,17 +6206,17 @@ local function SetRangeAlpha(region, value, trueAlpha)
     return true
 end
 
-local function IsLivePartyAuraFrame(frame)
-    return frame and frame._msufGFIsPreviewFrame ~= true and frame._msufGFKind == "party" or false
+local function IsLiveGroupAuraFrame(frame)
+    return frame and frame._msufGFIsPreviewFrame ~= true and IsGroupFrame(frame) or false
 end
 
-local function ApplyPartyLaneAccessGate(root, lanes, laneKey, rootKey, inRange)
+local function ApplyGroupLaneAccessGate(root, lanes, laneKey, rootKey, inRange)
     local lane = lanes and lanes[laneKey]
-    if not (lane and lane.partyAccessGate == true) then return false end
+    if not (lane and lane.groupAccessGate == true) then return false end
     return SetRangeAlpha(root[rootKey], inRange, lane.alpha or 1)
 end
 
-local function NeedsPartyAuraRangeGate(cfg)
+local function NeedsGroupAuraRangeGate(cfg)
     if not (cfg and cfg.group == true and cfg.enabled == true) then return false end
     local groupSlots = GetGroupSlotsRootConfig(cfg)
     if groupSlots and (groupSlots.rangeGated == true
@@ -6031,18 +6225,18 @@ local function NeedsPartyAuraRangeGate(cfg)
     end
     local lanes = cfg.lanes
     return lanes and (
-        lanes.buff and lanes.buff.enabled == true and lanes.buff.partyAccessGate == true
-        or lanes.trackedBuff and lanes.trackedBuff.enabled == true and lanes.trackedBuff.partyAccessGate == true
-        or lanes.external and lanes.external.enabled == true and lanes.external.partyAccessGate == true)
+        lanes.buff and lanes.buff.enabled == true and lanes.buff.groupAccessGate == true
+        or lanes.trackedBuff and lanes.trackedBuff.enabled == true and lanes.trackedBuff.groupAccessGate == true
+        or lanes.external and lanes.external.enabled == true and lanes.external.groupAccessGate == true)
         or false
 end
-A3._NeedsPartyAuraRangeGate = NeedsPartyAuraRangeGate
+A3._NeedsGroupAuraRangeGate = NeedsGroupAuraRangeGate
 
 -- Flat-lane range fast path. Only identity-dependent helpful displays and the
 -- fixed Spell/Dispel slot owner are fail-closed out of range. Ordinary token-
 -- filtered Buff/Debuff flows remain under AuraContainer's incremental UNIT_AURA
 -- ownership and are never reparsed merely because a range edge fired.
-local function ApplyPartyAuraRangeGate(frame, inRange)
+local function ApplyGroupAuraRangeGate(frame, inRange)
     local root = frame.Auras
     if not (root and root._msufA3NativeRoot == true) then return false end
 
@@ -6058,19 +6252,19 @@ local function ApplyPartyAuraRangeGate(frame, inRange)
     end
 
     local lanes = cfg and cfg.lanes
-    any = ApplyPartyLaneAccessGate(root, lanes, "buff", "Buffs", inRange) or any
-    any = ApplyPartyLaneAccessGate(root, lanes, "trackedBuff", "TrackedBuffs", inRange) or any
-    any = ApplyPartyLaneAccessGate(root, lanes, "external", "Externals", inRange) or any
+    any = ApplyGroupLaneAccessGate(root, lanes, "buff", "Buffs", inRange) or any
+    any = ApplyGroupLaneAccessGate(root, lanes, "trackedBuff", "TrackedBuffs", inRange) or any
+    any = ApplyGroupLaneAccessGate(root, lanes, "external", "Externals", inRange) or any
 
-    any = SpellIndicatorsRuntime.ApplyPartyRangeGate(frame, inRange) or any
+    any = SpellIndicatorsRuntime.ApplyGroupRangeGate(frame, inRange) or any
     return any
 end
 
-A3._SeedPartyAuraRangeGate = function(frame, fallbackUnit)
+A3._SeedGroupAuraRangeGate = function(frame, fallbackUnit)
     local unitInRange = _G.UnitInRange
-    if not (IsLivePartyAuraFrame(frame) and unitInRange) then return false end
+    if not (IsLiveGroupAuraFrame(frame) and unitInRange) then return false end
     local root = frame.Auras
-    if not NeedsPartyAuraRangeGate(root and root._msufA3Config) then return false end
+    if not NeedsGroupAuraRangeGate(root and root._msufA3Config) then return false end
     -- Secure-header retirement/rebinding can briefly clear MSUFUnitKey while
     -- the native container is still present in the direct-identity registry.
     -- That registry key is the authoritative fallback for this cold refresh.
@@ -6084,23 +6278,23 @@ A3._SeedPartyAuraRangeGate = function(frame, fallbackUnit)
     if unit ~= "player" and not (A3._IsGroupUnitToken and A3._IsGroupUnitToken(unit)) then return false end
     local inRange = unitInRange(unit)
     if issecretvalue(inRange) or inRange ~= nil then
-        return ApplyPartyAuraRangeGate(frame, inRange)
+        return ApplyGroupAuraRangeGate(frame, inRange)
     end
     return false
 end
 
-local function CollectPartyAuraParent(parents, container)
+local function CollectGroupAuraParent(parents, container)
     local frame = container and container._msufA3ParentFrame
-    if not IsLivePartyAuraFrame(frame) then return parents end
+    if not IsLiveGroupAuraFrame(frame) then return parents end
     parents = parents or {}
     parents[frame] = true
     return parents
 end
 
-local function SeedPartyAuraParents(parents, unit)
+local function SeedGroupAuraParents(parents, unit)
     if not parents then return end
     for frame in pairs(parents) do
-        A3._SeedPartyAuraRangeGate(frame, unit)
+        A3._SeedGroupAuraRangeGate(frame, unit)
     end
 end
 
@@ -6173,27 +6367,51 @@ local function ContainerOwnsHelpfulAuras(container, lane)
     return lane and NativeFilterOwnsHelpfulAuras(lane.nativeFilter)
 end
 
+local function SyncCuratedBigDefensiveContainer(container)
+    local config = container and container._msufA3NativeLaneConfig
+    if not config then return false end
+    local changed = false
+    if container._msufA3GroupSlotsRoot == true then
+        local slotLanes = config.slotLanes
+        for i = 1, #(slotLanes or {}) do
+            local lane = slotLanes[i]
+            if lane and lane._msufA3BigDefensiveFilter then
+                changed = UpdateAuraSlotEffectiveFilters(container, lane) or changed
+            end
+        end
+        local flowLane = config.flowLane
+        if flowLane and flowLane._msufA3BigDefensiveFilter then
+            changed = UpdateAuraGroupEffectiveFilters(container, flowLane) or changed
+        end
+    elseif config._msufA3BigDefensiveFilter then
+        changed = UpdateAuraGroupEffectiveFilters(container, config)
+    end
+    return changed
+end
+A3._SyncCuratedBigDefensiveContainer = SyncCuratedBigDefensiveContainer
+
 A3._DirectIdentityRefreshUnit = function(unit, forceSpellIndicatorGeometry, recreateHelpfulAuras)
     local byUnit = A3._directIdentityAuraContainers
     local containers = byUnit and byUnit[unit]
     if not containers then return false end
     -- Only Party/Raid registry units (plus the Party self-frame shared under
-    -- "player") can own the range-gated Party aura parent. Target, focus and
+    -- "player") can own a range-gated group aura parent. Target, focus and
     -- boss identity refreshes must not inspect every container for group work.
-    local seedPartyParents = unit == "player" or A3._directIdentityRefreshUnits[unit] ~= true
+    local seedGroupParents = unit == "player" or A3._directIdentityRefreshUnits[unit] ~= true
 
     if forceSpellIndicatorGeometry ~= true then
         -- Target/focus swaps use this direct route. Keep the exceptional
         -- world-transition recreation machinery out of the steady path while
         -- still consuming any one-shot geometry marker left by a hidden frame.
-        local any, partyParents = false, nil
+        local any, groupParents = false, nil
         for container in pairs(containers) do
-            if seedPartyParents then
-                partyParents = CollectPartyAuraParent(partyParents, container)
+            if seedGroupParents then
+                groupParents = CollectGroupAuraParent(groupParents, container)
             end
+            local filterChanged = SyncCuratedBigDefensiveContainer(container)
             local update = container and container.UpdateAllAuras
             if type(update) == "function" then
-                if A3._NativeContainerVisible(container) then update(container) end
+                if not filterChanged and A3._NativeContainerVisible(container) then update(container) end
                 if container._msufA3ForceManagedAuraGeometry == true
                     or container._msufA3ForceSpellIndicatorGeometry == true then
                     A3._SyncManagedAuraContainerGeometry(container, true)
@@ -6201,14 +6419,14 @@ A3._DirectIdentityRefreshUnit = function(unit, forceSpellIndicatorGeometry, recr
                 any = true
             end
         end
-        if seedPartyParents then SeedPartyAuraParents(partyParents, unit) end
+        if seedGroupParents then SeedGroupAuraParents(groupParents, unit) end
         return any
     end
 
-    local any, spellRecreates, helpfulRecreates, partyParents = false, nil, nil, nil
+    local any, spellRecreates, helpfulRecreates, groupParents = false, nil, nil, nil
     for container in pairs(containers) do
-        if seedPartyParents then
-            partyParents = CollectPartyAuraParent(partyParents, container)
+        if seedGroupParents then
+            groupParents = CollectGroupAuraParent(groupParents, container)
         end
         local lane = container and container._msufA3NativeLaneConfig
         local deferSpellRecreate = container and container._msufA3SpellIndicatorRoot == true
@@ -6224,6 +6442,7 @@ A3._DirectIdentityRefreshUnit = function(unit, forceSpellIndicatorGeometry, recr
             helpfulRecreates[#helpfulRecreates + 1] = container
             any = true
         else
+            local filterChanged = SyncCuratedBigDefensiveContainer(container)
             if container and A3._ManagedAuraContainerSupportsGeometryRepair(container) then
                 -- Hidden containers cannot be repaired in this pass. Keep the
                 -- request on the container so its next visible/config sync consumes
@@ -6235,7 +6454,7 @@ A3._DirectIdentityRefreshUnit = function(unit, forceSpellIndicatorGeometry, recr
                 end
             end
             if container and type(container.UpdateAllAuras) == "function" then
-                if A3._NativeContainerVisible(container) then
+                if not filterChanged and A3._NativeContainerVisible(container) then
                     container:UpdateAllAuras()
                 end
                 -- Zone/world transitions can desync a reused container while cache looks current.
@@ -6278,7 +6497,7 @@ A3._DirectIdentityRefreshUnit = function(unit, forceSpellIndicatorGeometry, recr
             any = SpellIndicatorsRuntime.Recreate(spellRecreates[i]) ~= nil or any
         end
     end
-    if seedPartyParents then SeedPartyAuraParents(partyParents, unit) end
+    if seedGroupParents then SeedGroupAuraParents(groupParents, unit) end
     return any
 end
 
@@ -6334,6 +6553,63 @@ A3._ScheduleDirectIdentityRefreshAll = function(groupOnly, forceSpellIndicatorGe
     return true
 end
 
+-- UNIT_FACTION and player UNIT_FLAGS can each arrive several times during one
+-- cinematic/taxi transition. Queue every affected unit in a lazily allocated
+-- set and run one refresh pass per unit on the next frame; each registered
+-- native owner is reparsed at most once per burst. Do not suppress the reparse
+-- from a UnitCanAssist cache: the native container may have parsed during a
+-- transient reaction even when the final reaction equals its previous value.
+-- The callback is one-shot: there is no ticker, OnUpdate, or steady-state work.
+A3._FlushScheduledDirectIdentityEventRefresh = function()
+    A3._directIdentityEventRefreshPending = nil
+    local units = A3._directIdentityEventRefreshUnits
+    if not units then return false end
+    local any = false
+    for unit in pairs(units) do
+        units[unit] = nil
+        any = A3._DirectIdentityRefreshUnit(unit) or any
+    end
+    return any
+end
+
+A3._ScheduleDirectIdentityEventRefresh = function(unit)
+    if type(unit) ~= "string" or unit == "" then return false end
+    local containers = A3._directIdentityAuraContainers
+    containers = containers and containers[unit]
+    if not (containers and next(containers)) then return false end
+    local units = A3._directIdentityEventRefreshUnits
+    if units and units[unit] == true then return true end
+    if not units then
+        units = {}
+        A3._directIdentityEventRefreshUnits = units
+    end
+    units[unit] = true
+    if A3._directIdentityEventRefreshPending == true then return true end
+    A3._directIdentityEventRefreshPending = true
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, A3._FlushScheduledDirectIdentityEventRefresh)
+    else
+        A3._FlushScheduledDirectIdentityEventRefresh()
+    end
+    return true
+end
+
+-- UNIT_FLAGS covers many unrelated player states. For the missing flightpath
+-- lifecycle, only the taxi landing edge matters: parsing while UnitOnTaxi is
+-- true can still use the transient reaction, while the false edge is the first
+-- useful point to restore the configured candidate-filter assignments. Cache
+-- this cold state so ordinary player flag churn never schedules an aura parse.
+A3._UpdateDirectIdentityPlayerTaxiState = function()
+    local unitOnTaxi = _G.UnitOnTaxi
+    if type(unitOnTaxi) ~= "function" then return nil, nil end
+    local onTaxi = unitOnTaxi("player")
+    if onTaxi == nil or issecretvalue(onTaxi) == true then return nil, nil end
+    local current = onTaxi == true
+    local previous = A3._directIdentityPlayerOnTaxi
+    A3._directIdentityPlayerOnTaxi = current
+    return previous, current
+end
+
 -- The shared driver is active exactly while at least one eligible native
 -- container exists. Its event set follows the active unit families so a
 -- group-only runtime never receives target/focus/boss identity callbacks.
@@ -6345,10 +6621,14 @@ local function DirectIdentityBossUnit(unit)
         or unit == "boss4" or unit == "boss5"
 end
 
-local function SetDirectIdentityRefreshEvent(frame, event, enabled)
+local function SetDirectIdentityRefreshEvent(frame, event, enabled, unit)
     if enabled == true then
         if directIdentityRefreshRegisteredEvents[event] ~= true then
-            frame:RegisterEvent(event)
+            if unit and type(frame.RegisterUnitEvent) == "function" then
+                frame:RegisterUnitEvent(event, unit)
+            else
+                frame:RegisterEvent(event)
+            end
             directIdentityRefreshRegisteredEvents[event] = true
         end
     elseif directIdentityRefreshRegisteredEvents[event] == true then
@@ -6359,13 +6639,15 @@ end
 
 local function SyncDirectIdentityRefreshEvents(frame)
     local byUnit = A3._directIdentityAuraContainers
-    local hasAny, hasTarget, hasFocus, hasBoss = false, false, false, false
+    local hasAny, hasPlayer, hasTarget, hasFocus, hasBoss = false, false, false, false, false
     if byUnit then
         for unit, containers in pairs(byUnit) do
             if containers and next(containers) then
                 hasAny = true
                 if not A3._IsGroupUnitToken(unit) then
-                    if unit == "target" then
+                    if unit == "player" then
+                        hasPlayer = true
+                    elseif unit == "target" then
                         hasTarget = true
                     elseif unit == "focus" then
                         hasFocus = true
@@ -6382,6 +6664,17 @@ local function SyncDirectIdentityRefreshEvents(frame)
 
     SetDirectIdentityRefreshEvent(frame, "PLAYER_ENTERING_WORLD", true)
     SetDirectIdentityRefreshEvent(frame, "ZONE_CHANGED_NEW_AREA", true)
+    SetDirectIdentityRefreshEvent(frame, "UNIT_FACTION", true)
+    SetDirectIdentityRefreshEvent(frame, "PLAYER_CONTROL_LOST", hasPlayer)
+    local playerOnTaxi
+    if hasPlayer then
+        _, playerOnTaxi = A3._UpdateDirectIdentityPlayerTaxiState()
+    end
+    -- Do not keep UNIT_FLAGS in the normal player/combat event surface. Taxi
+    -- start binds it temporarily; creation during an active flight binds it
+    -- here. If UnitOnTaxi is unavailable, retain the safe filtered fallback.
+    SetDirectIdentityRefreshEvent(frame, "UNIT_FLAGS",
+        hasPlayer and playerOnTaxi ~= false, "player")
     SetDirectIdentityRefreshEvent(frame, "PLAYER_TARGET_CHANGED", hasTarget)
     SetDirectIdentityRefreshEvent(frame, "PLAYER_FOCUS_CHANGED", hasFocus)
     SetDirectIdentityRefreshEvent(frame, "INSTANCE_ENCOUNTER_ENGAGE_UNIT", hasBoss)
@@ -6390,8 +6683,12 @@ end
 
 local function DirectIdentityRefreshEventsAlreadyCover(unit)
     if directIdentityRefreshRegisteredEvents.PLAYER_ENTERING_WORLD ~= true
-        or directIdentityRefreshRegisteredEvents.ZONE_CHANGED_NEW_AREA ~= true then
+        or directIdentityRefreshRegisteredEvents.ZONE_CHANGED_NEW_AREA ~= true
+        or directIdentityRefreshRegisteredEvents.UNIT_FACTION ~= true then
         return false
+    end
+    if unit == "player" then
+        return directIdentityRefreshRegisteredEvents.PLAYER_CONTROL_LOST == true
     end
     if unit == "target" then
         return directIdentityRefreshRegisteredEvents.PLAYER_TARGET_CHANGED == true
@@ -6410,19 +6707,45 @@ A3._EnsureDirectIdentityRefreshFrame = function()
     local frame = A3._directIdentityAuraFrame
     if not frame then
         frame = CreateFrame("Frame")
-        frame:SetScript("OnEvent", function(_, event)
-        if A3._directIdentityRefreshAllEvents[event] == true then
-            if event == "PLAYER_ENTERING_WORLD" then
-                A3._directIdentityRefreshRecreateHelpfulAuras = true
+        frame:SetScript("OnEvent", function(_, event, unit)
+            if event == "PLAYER_CONTROL_LOST" then
+                local _, isOnTaxi = A3._UpdateDirectIdentityPlayerTaxiState()
+                SetDirectIdentityRefreshEvent(frame, "UNIT_FLAGS", isOnTaxi ~= false, "player")
+                return
             end
-            A3._ScheduleDirectIdentityRefreshAll(false, true)
-            return
-        end
-        local units = A3._directIdentityEventUnits[event]
-        if not units then return end
-        for i = 1, #units do
-            A3._DirectIdentityRefreshUnit(units[i])
-        end
+            if event == "UNIT_FACTION" or event == "UNIT_FLAGS" then
+                if issecretvalue(unit) ~= true and type(unit) == "string" and unit ~= "" then
+                    local shouldRefresh = true
+                    if event == "UNIT_FLAGS" then
+                        local wasOnTaxi, isOnTaxi = A3._UpdateDirectIdentityPlayerTaxiState()
+                        -- If UnitOnTaxi is unavailable, retain the safe event-based
+                        -- fallback. Otherwise only landing invalidates the player.
+                        shouldRefresh = wasOnTaxi == nil or isOnTaxi == nil
+                            or (wasOnTaxi == true and isOnTaxi == false)
+                        if isOnTaxi == false then
+                            SetDirectIdentityRefreshEvent(frame, "UNIT_FLAGS", false)
+                        end
+                    end
+                    -- Blizzard's identity candidate filters intentionally depend on
+                    -- UnitCanAssist(). Cinematics and taxi state can change that
+                    -- result without an accompanying UNIT_AURA delta, so reparse
+                    -- only this unit's owners once after the event burst settles.
+                    if shouldRefresh then A3._ScheduleDirectIdentityEventRefresh(unit) end
+                end
+                return
+            end
+            if A3._directIdentityRefreshAllEvents[event] == true then
+                if event == "PLAYER_ENTERING_WORLD" then
+                    A3._directIdentityRefreshRecreateHelpfulAuras = true
+                end
+                A3._ScheduleDirectIdentityRefreshAll(false, true)
+                return
+            end
+            local units = A3._directIdentityEventUnits[event]
+            if not units then return end
+            for i = 1, #units do
+                A3._DirectIdentityRefreshUnit(units[i])
+            end
         end)
         A3._directIdentityAuraFrame = frame
     end
@@ -6478,7 +6801,10 @@ A3._UnregisterDirectIdentityRefreshContainer = function(container)
     local set = byUnit and byUnit[unit]
     if set then
         set[container] = nil
-        if not next(set) then byUnit[unit] = nil end
+        if not next(set) then
+            byUnit[unit] = nil
+            if unit == "player" then A3._directIdentityPlayerOnTaxi = nil end
+        end
     end
     container._msufA3DirectIdentityUnit = nil
     if not A3._HasDirectIdentityRefreshContainers() then
@@ -6647,23 +6973,17 @@ ApplyLane = function(root, lane, parentFrame, forceRecreate)
     local trackingSignature = lane._msufA3TrackingSignature or LaneTrackingSignature(lane)
     local structuralSignature = lane._msufA3StructuralSignature or LaneStructuralSignature(lane)
     local layoutSignature = lane._msufA3LayoutSignature or LaneLayoutSignature(lane)
+    local nativeFilter, _, candidateFilterSignature = EffectiveLaneFilters(lane)
     local current = root[key]
     if forceRecreate ~= true and current and current._msufA3StructuralSignature == structuralSignature then
         A3._RebindNativeContainerUnit(current, lane.unit)
         local refresh = false
         local layoutChanged = current._msufA3LayoutSignature ~= layoutSignature
-        if current._msufA3FilterString ~= lane.nativeFilter then
-            current:SetAuraGroupFilterString(current._msufA3ManagedGroupKey, lane.nativeFilter)
-            current._msufA3FilterString = lane.nativeFilter
-        end
+        UpdateAuraGroupEffectiveFilters(current, lane)
         if current._msufA3MaxFrameCount ~= lane.max then
             current:SetAuraGroupMaxFrameCount(current._msufA3ManagedGroupKey, lane.max)
             current._msufA3MaxFrameCount = lane.max
             refresh = true
-        end
-        if current._msufA3CandidateFilterSignature ~= lane.candidateFilterSignature then
-            current:SetAuraGroupCandidateFilters(current._msufA3ManagedGroupKey, lane.candidateFilters)
-            current._msufA3CandidateFilterSignature = lane.candidateFilterSignature
         end
         local sortSignature = AuraSortSignature(lane)
         if current._msufA3SortSignature ~= sortSignature then
@@ -6693,8 +7013,8 @@ ApplyLane = function(root, lane, parentFrame, forceRecreate)
         current._msufA3StructuralSignature = structuralSignature
         current._msufA3LayoutSignature = layoutSignature
         current._msufA3MaxFrameCount = lane.max
-        current._msufA3FilterString = lane.nativeFilter
-        current._msufA3CandidateFilterSignature = lane.candidateFilterSignature
+        current._msufA3FilterString = nativeFilter
+        current._msufA3CandidateFilterSignature = candidateFilterSignature
         root[key] = current
     end
     return current
@@ -7000,7 +7320,7 @@ local function ApplyConfig(frame, cfg, reason)
     if not root then return false end
     if RootAppliedConfigIsCurrent(root, frame, cfg, reason) then
         RefreshAppliedNativeRoot(root, false)
-        A3._SeedPartyAuraRangeGate(frame)
+        A3._SeedGroupAuraRangeGate(frame)
         return true
     end
     root.unit = cfg.unit or frame.MSUFUnitKey
@@ -7059,7 +7379,7 @@ local function ApplyConfig(frame, cfg, reason)
     root._msufA3FrameSpec = frame.MSUFSpec
     root.needFullUpdate = nil
     root:Show()
-    A3._SeedPartyAuraRangeGate(frame)
+    A3._SeedGroupAuraRangeGate(frame)
     return ok == true
 end
 
@@ -7129,10 +7449,11 @@ local function CreateClassPowerAuraSensor(parent, key, spellIDs, initializeFrame
     local container = CreateNativeAuraContainer(parent)
     if not container then return nil end
     -- This standalone slot receives its geometry from a caller-owned
-    -- initializeFrame callback. That callback is not guaranteed idempotent, so
-    -- do not include it in Auras3's generic world-repair registry until it has a
-    -- stored geometry descriptor that can be replayed safely.
-    container._msufA3SkipDirectIdentityRefresh = true
+    -- initializeFrame callback and deliberately has no managed lane descriptor.
+    -- The shared identity registry may therefore reparse its candidate filters
+    -- on UNIT_FACTION/player UNIT_FLAGS, while geometry ownership remains with
+    -- the caller instead of the generic world/zone repair path.
+    container.unit = "player"
     ConfigureNativeAuraContainer(container, "player")
     container:AddAuraSlot(tostring(key or "msuf_classpower"), "HELPFUL", {
         maxFrameCount = 1,
@@ -7156,7 +7477,7 @@ return {
     FrameConfigIsCurrent = FrameAppliedConfigIsCurrent,
     CanReuseContainers = RootCanReuseContainersForConfig,
     ReasonRequiresApply = ReasonRequiresAuraApply,
-    ApplyPartyRangeGate = ApplyPartyAuraRangeGate,
+    ApplyGroupRangeGate = ApplyGroupAuraRangeGate,
     CreateClassPowerAuraSensor = CreateClassPowerAuraSensor,
 }
 end)()
@@ -7171,7 +7492,7 @@ local RootAppliedConfigIsCurrent = NativeRuntime.RootConfigIsCurrent
 local FrameAppliedConfigIsCurrent = NativeRuntime.FrameConfigIsCurrent
 local RootCanReuseContainersForConfig = NativeRuntime.CanReuseContainers
 local ReasonRequiresAuraApply = NativeRuntime.ReasonRequiresApply
-local ApplyPartyAuraRangeGate = NativeRuntime.ApplyPartyRangeGate
+local ApplyGroupAuraRangeGate = NativeRuntime.ApplyGroupRangeGate
 
 function A3.SetUnitFrameOwner(unit, frame, owns)
     if not unit then return end
@@ -7579,14 +7900,14 @@ local AurasElement = {
     unitlessEvents = EMPTY_EVENTS,
 }
 
-local PARTY_AURA_RANGE_EVENTS = {
+local GROUP_AURA_RANGE_EVENTS = {
     "UNIT_IN_RANGE_UPDATE",
 }
 
 function AurasElement.GetEvents(frame)
-    if IsGroupFrame(frame) and frame._msufGFIsPreviewFrame ~= true and frame._msufGFKind == "party" then
+    if IsGroupFrame(frame) and frame._msufGFIsPreviewFrame ~= true then
         local cfg = ResolveGroupFrameConfig(frame, frame.MSUFUnitKey)
-        if A3._NeedsPartyAuraRangeGate(cfg) then
+        if A3._NeedsGroupAuraRangeGate(cfg) then
             local spec = frame.MSUFSpec
             local group = spec and spec.group
             local active = frame._msufActiveElements
@@ -7597,7 +7918,7 @@ function AurasElement.GetEvents(frame)
                 -- avoiding a second Core callback/dispatch on every edge.
                 return EMPTY_EVENTS
             end
-            return PARTY_AURA_RANGE_EVENTS
+            return GROUP_AURA_RANGE_EVENTS
         end
     end
     return EMPTY_EVENTS
@@ -7607,12 +7928,12 @@ end
 -- UNIT_IN_RANGE_UPDATE's first payload value can be secret on 12.1: forward it
 -- directly to SetAlphaFromBoolean gates. Never turn a range edge into
 -- UpdateAllAuras/FullAuraRebuild work.
-function AurasElement.UpdatePartyAuraRange(frame, _event, _unit, inRange)
-    return ApplyPartyAuraRangeGate(frame, inRange)
+function AurasElement.UpdateGroupAuraRange(frame, _event, _unit, inRange)
+    return ApplyGroupAuraRangeGate(frame, inRange)
 end
 
 function AurasElement.SelectEventUpdate(_frame, _spec, event)
-    if event == "UNIT_IN_RANGE_UPDATE" then return AurasElement.UpdatePartyAuraRange end
+    if event == "UNIT_IN_RANGE_UPDATE" then return AurasElement.UpdateGroupAuraRange end
 end
 
 function AurasElement.IsEnabled(frame)
@@ -7630,11 +7951,10 @@ end
 function AurasElement.Apply(frame)
     if frame then
         local cfg = ResolveGroupFrameConfig(frame, frame.MSUFUnitKey)
-        frame._msufApplyPartyAuraRangeGate = IsGroupFrame(frame)
+        frame._msufApplyGroupAuraRangeGate = IsGroupFrame(frame)
             and frame._msufGFIsPreviewFrame ~= true
-            and frame._msufGFKind == "party"
-            and A3._NeedsPartyAuraRangeGate(cfg)
-            and ApplyPartyAuraRangeGate
+            and A3._NeedsGroupAuraRangeGate(cfg)
+            and ApplyGroupAuraRangeGate
             or nil
     end
     return frame ~= nil
@@ -7653,10 +7973,9 @@ function AurasElement.Enable(frame)
         end
         frame._msufA3GroupRuntime = true
         local cfg = ResolveGroupFrameConfig(frame, frame and frame.MSUFUnitKey)
-        frame._msufApplyPartyAuraRangeGate = frame._msufGFIsPreviewFrame ~= true
-            and frame._msufGFKind == "party"
-            and A3._NeedsPartyAuraRangeGate(cfg)
-            and ApplyPartyAuraRangeGate
+        frame._msufApplyGroupAuraRangeGate = frame._msufGFIsPreviewFrame ~= true
+            and A3._NeedsGroupAuraRangeGate(cfg)
+            and ApplyGroupAuraRangeGate
             or nil
         if not (cfg and cfg.enabled) then
             HideState(frame)
@@ -7668,7 +7987,7 @@ function AurasElement.Enable(frame)
 end
 
 function AurasElement.Disable(frame)
-    if frame then frame._msufApplyPartyAuraRangeGate = nil end
+    if frame then frame._msufApplyGroupAuraRangeGate = nil end
     return A3.DisableFrame(frame)
 end
 

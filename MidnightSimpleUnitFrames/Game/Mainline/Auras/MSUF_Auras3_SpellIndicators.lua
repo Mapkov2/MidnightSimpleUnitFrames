@@ -1211,11 +1211,11 @@ local function ApplyExpiringButtonFrameEffect(button, slot, parentFrame)
     -- Duration and range are independent secret-backed gates. Keep them on
     -- separate ancestors so multiplying the range alpha never overwrites the
     -- duration curve or a Pulse animation running on the effect root.
-    local rangeGate = gate._msufA3PartyRangeGate
+    local rangeGate = gate._msufA3GroupRangeGate
     if not rangeGate then
         rangeGate = CreateFrame("Frame", nil, gate)
         rangeGate:EnableMouse(false)
-        gate._msufA3PartyRangeGate = rangeGate
+        gate._msufA3GroupRangeGate = rangeGate
     end
     rangeGate:ClearAllPoints()
     rangeGate:SetAllPoints(gate)
@@ -1316,13 +1316,13 @@ end
 -- addon-owned siblings sit outside the restricted AuraButton tree, so forward
 -- the same opaque range boolean to their own native sinks without inspecting
 -- it in Lua.
-function Runtime.ApplyPartyRangeGate(parentFrame, inRange)
+function Runtime.ApplyGroupRangeGate(parentFrame, inRange)
     if not parentFrame then return false end
     local any = false
     local gates = parentFrame._msufA3SpellIndicatorExpiringEffectGates
     if gates then
         for gate in pairs(gates) do
-            any = SetRangeAlpha(gate._msufA3PartyRangeGate, inRange, 1) or any
+            any = SetRangeAlpha(gate._msufA3GroupRangeGate, inRange, 1) or any
         end
     end
     local missing = parentFrame._msufA3SpellIndicatorMissingFrames

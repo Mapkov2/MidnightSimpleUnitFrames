@@ -715,20 +715,18 @@ end
 local function EffectiveTables(auras, runtimeUnit)
     local pu = auras and auras.perUnit and auras.perUnit[runtimeUnit]
     local shared = auras and auras.shared
-    local layout = pu and pu.overrideLayout == true and type(pu.layout) == "table" and pu.layout or nil
-    local sharedLayout = pu and pu.overrideSharedLayout == true and type(pu.layoutShared) == "table" and pu.layoutShared or nil
+    -- Defaults/Core materialize every Unit lane into its explicit owner once.
+    -- Runtime must never resume inheriting mutable layout/style/filter values
+    -- from auras3.shared after that migration.
+    local layout = pu and type(pu.layout) == "table" and pu.layout or {}
+    local sharedLayout = pu and type(pu.layoutShared) == "table" and pu.layoutShared or {}
     local blacklist = nil
     if pu and pu.overrideBlacklist == true and type(pu.blacklist) == "table" then
         blacklist = pu.blacklist
     else
         blacklist = shared and shared.blacklist
     end
-    local filters = nil
-    if pu and pu.overrideFilters == true and type(pu.filters) == "table" then
-        filters = pu.filters
-    else
-        filters = shared and shared.filters
-    end
+    local filters = pu and type(pu.filters) == "table" and pu.filters or {}
     return layout, sharedLayout, blacklist, filters
 end
 
@@ -767,9 +765,9 @@ end
 
 local function FilterTable(filtersRoot, dbKey)
     local root = type(filtersRoot) == "table" and filtersRoot or nil
-    if not root or root.enabled == false then return nil end
+    if not root then return nil end
     local filters = root[dbKey]
-    return type(filters) == "table" and filters or nil
+    return type(filters) == "table" and filters.enabled ~= false and filters or nil
 end
 
 local SortAuras, SortAurasID, SortComparator
@@ -884,32 +882,22 @@ end
 
 local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist, filtersRoot, kind, forceScan, visual, renderAllowed)
     local spec = LANE_SPECS[kind]
-    local sizeDefault = tonumber(ReadRaw(layout, shared, spec.sizeKey))
-        or tonumber(ReadRaw(layout, shared, "iconSize"))
+    local sizeDefault = tonumber(ReadRaw(layout, nil, spec.sizeKey))
         or DEFAULT_SHARED.iconSize
     local size = ClampNumber(sizeDefault, DEFAULT_SHARED.iconSize, 1, 128)
-    local spacing = ReadNumber(layout, shared, spec.spacingKey,
-        ReadNumber(layout, shared, "spacing", DEFAULT_SHARED.spacing, 0, 64), 0, 64)
-    local perRow = ReadNumber(sharedLayout, shared, spec.perRowKey, ReadShared(shared, "perRow"), 1, 40)
-    local maxCount = ReadNumber(sharedLayout, shared, spec.maxKey, DEFAULT_SHARED[spec.maxKey] or 12, 0, 80)
-    local show = ReadBool(sharedLayout, shared, spec.showKey, true)
-    local legacyGrowthKey = kind == "buff" and "buffGrowth" or "debuffGrowth"
-    local legacyWrapKey = kind == "buff" and "buffRowWrap" or "debuffRowWrap"
-    local growth = ReadRaw(sharedLayout, shared, spec.growthKey)
-        or ReadRaw(sharedLayout, shared, legacyGrowthKey)
-        or ReadRaw(sharedLayout, shared, "growth")
-        or DEFAULT_SHARED.growth
-    local rowWrap = ReadRaw(sharedLayout, shared, spec.wrapKey)
-        or ReadRaw(sharedLayout, shared, legacyWrapKey)
-        or ReadRaw(sharedLayout, shared, "rowWrap")
-        or DEFAULT_SHARED.rowWrap
+    local spacing = ReadNumber(layout, nil, spec.spacingKey, DEFAULT_SHARED.spacing, 0, 64)
+    local perRow = ReadNumber(sharedLayout, nil, spec.perRowKey, DEFAULT_SHARED.perRow, 1, 40)
+    local maxCount = ReadNumber(sharedLayout, nil, spec.maxKey, DEFAULT_SHARED[spec.maxKey] or 12, 0, 80)
+    local show = ReadBool(sharedLayout, nil, spec.showKey, true)
+    local growth = ReadRaw(sharedLayout, nil, spec.growthKey) or DEFAULT_SHARED.growth
+    local rowWrap = ReadRaw(sharedLayout, nil, spec.wrapKey) or DEFAULT_SHARED.rowWrap
     local growthX, growthY, xSign, ySign, verticalGrowth = GrowthParts(growth, rowWrap)
-    local lanePadding = Round(ClampNumber(ReadRaw(layout, shared, "stylePadding"), 0, 0, 16))
-    local x = ReadNumber(layout, shared, spec.xKey, DEFAULT_SHARED[spec.xKey] or 0, -4096, 4096)
-    local y = ReadNumber(layout, shared, spec.yKey, DEFAULT_SHARED[spec.yKey] or 0, -4096, 4096)
-    local anchor = ReadAnchor(layout, shared, spec.anchorKey, spec.defaultAnchor)
-    local layer = ReadNumber(layout, shared, spec.layerKey, spec.defaultLayer, 1, 15)
-    local stackAnchor = ReadAnchor(sharedLayout, shared, spec.stackAnchorKey, ReadShared(shared, "stackCountAnchor") or "TOPRIGHT")
+    local lanePadding = Round(ClampNumber(ReadRaw(layout, nil, kind .. "StylePadding"), 0, 0, 16))
+    local x = ReadNumber(layout, nil, spec.xKey, DEFAULT_SHARED[spec.xKey] or 0, -4096, 4096)
+    local y = ReadNumber(layout, nil, spec.yKey, DEFAULT_SHARED[spec.yKey] or 0, -4096, 4096)
+    local anchor = ReadAnchor(layout, nil, spec.anchorKey, spec.defaultAnchor)
+    local layer = ReadNumber(layout, nil, spec.layerKey, spec.defaultLayer, 1, 15)
+    local stackAnchor = ReadAnchor(sharedLayout, nil, spec.stackAnchorKey, DEFAULT_SHARED.stackCountAnchor or "TOPRIGHT")
     local rootFilters = type(filtersRoot) == "table" and filtersRoot or nil
     local storedLaneFilters = rootFilters and type(rootFilters[spec.dbKey]) == "table"
         and rootFilters[spec.dbKey] or nil
@@ -976,13 +964,10 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
     local roundedMax = Round(maxCount)
     local roundedPerRow = Round(perRow)
     local cols, rows = GridShape(roundedMax, roundedPerRow, verticalGrowth)
-    local legacySortOrder = ReadNumber(sharedLayout, shared, "sortOrder", DEFAULT_SHARED.sortOrder, 0, 6)
-    local sortOrder = A3._ClassicSortMode(ReadRaw(sharedLayout, shared, kind .. "SortMethod")
-        or ReadRaw(sharedLayout, shared, "sortMethod"), legacySortOrder)
-    local sortReverse = ReadBool(sharedLayout, shared, kind .. "SortReverse",
-        ReadBool(sharedLayout, shared, "sortReverse", false))
-    local showCooldownSwipe = ReadBool(sharedLayout, shared, spec.showSwipeKey, ReadShared(shared, "showCooldownSwipe") ~= false)
-    local showCooldownText = ReadBool(sharedLayout, shared, spec.showTextKey, ReadShared(shared, "showCooldownText") ~= false)
+    local sortOrder = A3._ClassicSortMode(ReadRaw(sharedLayout, nil, kind .. "SortMethod"), DEFAULT_SHARED.sortOrder)
+    local sortReverse = ReadBool(sharedLayout, nil, kind .. "SortReverse", false)
+    local showCooldownSwipe = ReadBool(sharedLayout, nil, spec.showSwipeKey, DEFAULT_SHARED.showCooldownSwipe ~= false)
+    local showCooldownText = ReadBool(sharedLayout, nil, spec.showTextKey, DEFAULT_SHARED.showCooldownText ~= false)
     local cooldownSwipeDarken = ReadBool(nil, shared, "cooldownSwipeDarkenOnLoss", false)
     local stackR, stackG, stackB = ReadGeneralColor("aurasStackCountColor", 1, 1, 1)
     local ownR, ownG, ownB = 1, 1, 1
@@ -1006,8 +991,8 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
     local baseFilter = filterPlan and filterPlan.scanFilter or spec.filter
     local nativePlayerFilter = filterPlan and filterPlan.nativePlayerFilter == true or false
     local debuffTypeBorderMode = kind == "debuff" and A3.NormalizeClassicDebuffTypeBorderMode(
-        ReadRaw(sharedLayout, shared, "debuffTypeBorderMode"),
-        ReadBool(sharedLayout, shared, "useDebuffTypeBorders", false), false) or "OFF"
+        ReadRaw(sharedLayout, nil, "debuffTypeBorderMode"),
+        ReadBool(sharedLayout, nil, "useDebuffTypeBorders", false), false) or "OFF"
     local showDispelTypeBorder = kind == "debuff" and renderEnabled == true and debuffTypeBorderMode ~= "OFF"
     local dispelVisual = (kind == "debuff" and (visual or (showDispelTypeBorder and CompileDispelVisual(nil)))) or nil
     local needsPlayerFlag = (filterPlan and filterPlan.needsPlayerFlag == true)
@@ -1068,7 +1053,7 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
         ownG = ownG,
         ownB = ownB,
         clickThrough = ReadBool(nil, shared, "clickThroughAuras", false),
-        showTooltip = ReadBool(sharedLayout, shared, kind .. "ShowTooltip", ReadBool(nil, shared, "showTooltip", true)),
+        showTooltip = ReadBool(sharedLayout, nil, kind .. "ShowTooltip", DEFAULT_SHARED.showTooltip ~= false),
         showCooldownSwipe = showCooldownSwipe,
         showCooldownText = showCooldownText,
         showCooldown = renderEnabled == true and (showCooldownSwipe ~= false or showCooldownText ~= false),
@@ -1086,17 +1071,17 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
         cooldownSafeSeconds = ClampNumber(general and general.aurasCooldownTextSafeSeconds, 60, 0, 600),
         cooldownWarningSeconds = ClampNumber(general and general.aurasCooldownTextWarningSeconds, 15, 0, 60),
         cooldownUrgentSeconds = ClampNumber(general and general.aurasCooldownTextUrgentSeconds, 5, 0, 60),
-        cooldownSize = ReadNumber(layout, shared, spec.cooldownSizeKey, ReadShared(shared, "cooldownTextSize") or DEFAULT_SHARED.cooldownTextSize, 6, 40),
-        cooldownDecimalSeconds = ReadNumber(sharedLayout, shared, kind .. "CooldownDecimalSeconds",
-            ReadNumber(sharedLayout, shared, "cooldownDecimalSeconds", 3, 0, 30), 0, 30),
-        cooldownAnchor = ReadAnchor(layout, shared, kind .. "CooldownTextAnchor", ReadShared(shared, "cooldownTextAnchor") or "CENTER"),
-        cooldownX = ReadNumber(layout, shared, spec.cooldownXKey, ReadShared(shared, "cooldownTextOffsetX") or DEFAULT_SHARED.cooldownTextOffsetX, -2000, 2000),
-        cooldownY = ReadNumber(layout, shared, spec.cooldownYKey, ReadShared(shared, "cooldownTextOffsetY") or DEFAULT_SHARED.cooldownTextOffsetY, -2000, 2000),
-        showStacks = ReadBool(sharedLayout, shared, spec.showStackKey, ReadShared(shared, "showStackCount") ~= false),
+        cooldownSize = ReadNumber(layout, nil, spec.cooldownSizeKey, DEFAULT_SHARED.cooldownTextSize, 6, 40),
+        cooldownDecimalSeconds = ReadNumber(sharedLayout, nil, kind .. "CooldownDecimalSeconds",
+            DEFAULT_SHARED.cooldownDecimalSeconds or 3, 0, 30),
+        cooldownAnchor = ReadAnchor(sharedLayout, nil, kind .. "CooldownTextAnchor", DEFAULT_SHARED.cooldownTextAnchor or "CENTER"),
+        cooldownX = ReadNumber(layout, nil, spec.cooldownXKey, DEFAULT_SHARED.cooldownTextOffsetX, -2000, 2000),
+        cooldownY = ReadNumber(layout, nil, spec.cooldownYKey, DEFAULT_SHARED.cooldownTextOffsetY, -2000, 2000),
+        showStacks = ReadBool(sharedLayout, nil, spec.showStackKey, DEFAULT_SHARED.showStackCount ~= false),
         stackAnchor = stackAnchor,
-        stackSize = ReadNumber(layout, shared, spec.stackSizeKey, ReadShared(shared, "stackTextSize"), 6, 40),
-        stackX = ReadNumber(layout, shared, spec.stackXKey, ReadShared(shared, "stackTextOffsetX"), -2000, 2000),
-        stackY = ReadNumber(layout, shared, spec.stackYKey, ReadShared(shared, "stackTextOffsetY"), -2000, 2000),
+        stackSize = ReadNumber(layout, nil, spec.stackSizeKey, DEFAULT_SHARED.stackTextSize, 6, 40),
+        stackX = ReadNumber(layout, nil, spec.stackXKey, DEFAULT_SHARED.stackTextOffsetX, -2000, 2000),
+        stackY = ReadNumber(layout, nil, spec.stackYKey, DEFAULT_SHARED.stackTextOffsetY, -2000, 2000),
         stackR = stackR,
         stackG = stackG,
         stackB = stackB,
@@ -1125,9 +1110,9 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
         showDispelTypeBorder = showDispelTypeBorder == true,
         showDispelTypeSymbol = showDispelTypeBorder == true and debuffTypeBorderMode == "SYMBOL",
         showStealableMarker = kind == "buff" and renderEnabled == true
-            and ReadBool(sharedLayout, shared, "buffShowStealable", false),
+            and ReadBool(sharedLayout, nil, "buffShowStealable", false),
         stealableStyle = kind == "buff" and A3.NormalizeClassicStealableStyle(
-            ReadRaw(sharedLayout, shared, "buffStealableStyle")) or nil,
+            ReadRaw(sharedLayout, nil, "buffStealableStyle")) or nil,
         dispelColorCurve = dispelVisual and dispelVisual.dispelColorCurve or nil,
         dispelNoneReady = dispelVisual and dispelVisual.dispelNoneReady == true or false,
         dispelNoneR = dispelVisual and dispelVisual.dispelNoneR or nil,
@@ -1457,7 +1442,7 @@ local function BuildUnitFrameConfig(unit, frameSpec)
     end
 
     if A3.ClassicFeatures and type(A3.ClassicFeatures.CompileUnitLanes) == "function" then
-        local lanePadding = ReadRaw(layout, shared, "stylePadding")
+        local lanePadding = ReadRaw(layout, nil, "buffStylePadding")
         local extraLanes, extraOrder, extraSource = A3.ClassicFeatures.CompileUnitLanes(
             auras, unit, frameSpec, lanePadding)
         if type(extraLanes) == "table" then

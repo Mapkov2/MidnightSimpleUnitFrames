@@ -180,44 +180,50 @@ local ICON_STYLE_OFF = {
     shadowSize = 0,
 }
 
-function V.SharedIconStyle(shared, scope)
+function V.SharedIconStyle(shared, scope, appearanceKind)
     shared = type(shared) == "table" and shared or {}
     local normalized = tostring(scope or ""):lower()
     if normalized:match("^boss%d+$") then normalized = "boss" end
     local disabled = type(shared.styleScopeDisabled) == "table" and shared.styleScopeDisabled
     if normalized ~= "" and disabled and disabled[normalized] == true then return ICON_STYLE_OFF end
-    local borderR, borderG, borderB, borderA = Color(shared.styleBorderColor, 0, 0, 0, 1)
-    local shadowR, shadowG, shadowB, shadowA = Color(shared.styleShadowColor, 0, 0, 0, 0.8)
+    local stylesByKind = type(shared.appearanceIconStyles) == "table" and shared.appearanceIconStyles or nil
+    local style = stylesByKind and type(stylesByKind[appearanceKind]) == "table"
+        and stylesByKind[appearanceKind] or shared
+    local borderR, borderG, borderB, borderA = Color(style.styleBorderColor, 0, 0, 0, 1)
+    local shadowR, shadowG, shadowB, shadowA = Color(style.styleShadowColor, 0, 0, 0, 0.8)
     local styles = MSUF.BorderStyles
-    local key = styles and styles.Normalize(shared.styleBorderStyle) or "SOLID"
+    local key = styles and styles.Normalize(style.styleBorderStyle) or "SOLID"
     local texture = styles and styles.Resolve(key) or nil
     return {
-        borderEnabled = shared.styleBorderEnabled == true,
+        borderEnabled = style.styleBorderEnabled == true,
         borderStyle = key,
         borderTexture = texture,
-        borderThickness = Clamp(shared.styleBorderThickness, 1, 1, 8),
+        borderThickness = Clamp(style.styleBorderThickness, 1, 1, 8),
         borderR = borderR, borderG = borderG, borderB = borderB, borderA = borderA,
-        borderEdge = texture and styles and styles.EdgeSize(key, Clamp(shared.styleBorderThickness, 1, 1, 8)) or nil,
+        borderEdge = texture and styles and styles.EdgeSize(key, Clamp(style.styleBorderThickness, 1, 1, 8)) or nil,
         borderPlacement = texture and styles and styles.Placement(key) or nil,
-        shadowEnabled = shared.styleShadowEnabled == true,
-        shadowSize = Clamp(shared.styleShadowSize, 4, 1, 16),
+        shadowEnabled = style.styleShadowEnabled == true,
+        shadowSize = Clamp(style.styleShadowSize, 4, 1, 16),
         shadowR = shadowR, shadowG = shadowG, shadowB = shadowB, shadowA = shadowA,
     }
 end
 
 local function Enrich(lane, layout, shared, prefix, portraitShape, scope)
     if not lane then return nil end
-    local shapeValue = Read(layout, shared, prefix .. "IconShape", Read(shared, nil, "iconShape", "RECTANGLE"))
+    local shapes = type(shared) == "table" and type(shared.appearanceIconShapes) == "table"
+        and shared.appearanceIconShapes or nil
+    local shapeValue = shapes and shapes[prefix]
+        or Read(shared, nil, prefix .. "IconShape", Read(shared, nil, "iconShape", "RECTANGLE"))
     lane.iconShape = Shape.Resolve(shapeValue, portraitShape)
-    lane.iconZoom = Clamp(Read(layout, shared, prefix .. "IconZoom", Read(shared, nil, "iconZoom", 100)), 100, 100, 200)
-    lane.cooldownSwipeReverse = Read(layout, shared, prefix .. "CooldownSwipeReverse", false) == true
-    lane.showDurationBar = Read(layout, shared, prefix .. "ShowDurationBar", Read(shared, nil, "showDurationBar", false)) == true
-    local display = tostring(Read(layout, shared, prefix .. "DurationBarDisplay", Read(shared, nil, "durationBarDisplay", "BAR_ONLY"))):upper()
+    lane.iconZoom = Clamp(Read(layout, nil, prefix .. "IconZoom", 100), 100, 100, 200)
+    lane.cooldownSwipeReverse = Read(layout, nil, prefix .. "CooldownSwipeReverse", false) == true
+    lane.showDurationBar = Read(layout, nil, prefix .. "ShowDurationBar", false) == true
+    local display = tostring(Read(layout, nil, prefix .. "DurationBarDisplay", "BAR_ONLY")):upper()
     lane.durationBarDisplay = display == "OVERLAY" and "OVERLAY" or "BAR_ONLY"
-    lane.durationBarHeight = Clamp(Read(layout, shared, prefix .. "DurationBarHeight", Read(shared, nil, "durationBarHeight", 2)), 2, 1, 16)
-    lane.durationBarPosition = tostring(Read(layout, shared, prefix .. "DurationBarPosition", Read(shared, nil, "durationBarPosition", "BOTTOM"))):upper()
-    lane.durationBarDirection = tostring(Read(layout, shared, prefix .. "DurationBarDirection", Read(shared, nil, "durationBarDirection", "REMAINING"))):upper()
-    lane.iconStyle = V.SharedIconStyle(shared, scope or lane.unit)
+    lane.durationBarHeight = Clamp(Read(layout, nil, prefix .. "DurationBarHeight", 2), 2, 1, 16)
+    lane.durationBarPosition = tostring(Read(layout, nil, prefix .. "DurationBarPosition", "BOTTOM")):upper()
+    lane.durationBarDirection = tostring(Read(layout, nil, prefix .. "DurationBarDirection", "REMAINING")):upper()
+    lane.iconStyle = V.SharedIconStyle(shared, scope or lane.unit, prefix)
     lane.classicVisualStyle = true
     lane.buttonWidth = lane.buttonWidth or lane.size
     lane.buttonHeight = lane.buttonHeight or lane.size
@@ -245,7 +251,11 @@ function V.EnrichCustomLane(lane, entry, frameSpec)
     local placed = type(entry) == "table" and type(entry.placed) == "table" and entry.placed or {}
     local root = _G.MSUF_DB and _G.MSUF_DB.auras3
     local shared = root and root.shared or {}
-    lane.iconShape = Shape.Resolve(placed.iconShape, frameSpec and frameSpec.portrait and frameSpec.portrait.shape)
+    local appearanceKind = lane.appearanceKind
+        or (lane.harmful == true and "debuff" or "buff")
+    local shapes = type(shared.appearanceIconShapes) == "table" and shared.appearanceIconShapes or nil
+    lane.iconShape = Shape.Resolve(shapes and shapes[appearanceKind] or placed.iconShape,
+        frameSpec and frameSpec.portrait and frameSpec.portrait.shape)
     lane.iconZoom = Clamp(placed.iconZoom, 100, 100, 200)
     lane.cooldownSwipeReverse = placed.cooldownSwipeReverse == true
     lane.showDurationBar = placed.showDurationBar == true
@@ -253,7 +263,7 @@ function V.EnrichCustomLane(lane, entry, frameSpec)
     lane.durationBarHeight = Clamp(placed.durationBarHeight, 2, 1, 16)
     lane.durationBarPosition = tostring(placed.durationBarPosition or "BOTTOM"):upper()
     lane.durationBarDirection = tostring(placed.durationBarDirection or "REMAINING"):upper()
-    lane.iconStyle = V.SharedIconStyle(shared, lane.unit)
+    lane.iconStyle = V.SharedIconStyle(shared, lane.unit, appearanceKind)
     lane.classicVisualStyle = true
     return lane
 end

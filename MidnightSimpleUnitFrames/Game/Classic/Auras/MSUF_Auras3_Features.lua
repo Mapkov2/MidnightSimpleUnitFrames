@@ -338,7 +338,7 @@ local function BaseLane(unit, kind, entry, index, spellIDs, helpful, rootKey, fo
     local perRow = Round(Number(placed.perRow, 4, 1, 40))
     local xSign, ySign, vertical = Growth(placed.growth)
     local cols, rows = Grid(maxCount, perRow, vertical)
-    lanePadding = Round(Number(lanePadding, 0, 0, 16))
+    lanePadding = Round(Number(placed.stylePadding, lanePadding or 0, 0, 16))
     local sortOrder = SortMode(placed.sortMethod)
     if forcePlayer == true and (not activeFilters or activeFilters.onlyMine ~= true) then
         local source = activeFilters or {}
@@ -516,6 +516,8 @@ function Features.CompileUnitLanes(auras, unit, frameSpec, lanePadding)
                     local kind = "custom" .. tostring(index)
                     local lane = BaseLane(unit, kind, entry, index, spellIDs, helpful,
                         "CustomAuras" .. tostring(index), targetDot, lanePadding)
+                    lane.appearanceKind = playerDefensive and "playerDefensives"
+                        or targetDot and "targetDots" or (helpful and "buff" or "debuff")
                     if entry.portraitIcon == true and playerDefensive then
                         lane = PortraitLane(lane, frameSpec, entry, "defensivePortrait", "DefensivePortrait") or lane
                     elseif entry.portraitIcon == true and targetDot then
@@ -541,6 +543,7 @@ function Features.CompileUnitLanes(auras, unit, frameSpec, lanePadding)
                 local kind = "customDisplay" .. tostring(index)
                 local lane = BaseLane(unit, kind, entry, index, spellIDs,
                     tostring(entry.auraType or "BUFF"):upper() ~= "DEBUFF", "CustomDisplay" .. tostring(index), nil, lanePadding)
+                lane.appearanceKind = lane.harmful == true and "debuff" or "buff"
                 lane.max = 1
                 if A3.ClassicVisuals and type(A3.ClassicVisuals.EnrichCustomLane) == "function" then
                     A3.ClassicVisuals.EnrichCustomLane(lane, entry, frameSpec)
