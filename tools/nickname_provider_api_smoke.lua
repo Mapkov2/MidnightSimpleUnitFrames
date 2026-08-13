@@ -117,6 +117,8 @@ local MSUF = {
     },
 }
 
+_G.MSUF_DB = { general = {} }
+
 local chunk = assert(loadfile(ResolvePath("Integrations/MSUF_Integration_NicknameProviders.lua")))
 chunk("MidnightSimpleUnitFrames", MSUF)
 
@@ -251,6 +253,22 @@ Check(API.IsProviderRegistered("NorthernSkyRaidTools"),
 Check(activeResolver("player") == "NSRTFirst", "NSRT nickname was not resolved")
 Check(type(nsrtCallbacks.NSRT_NICKNAME_UPDATED) == "function",
     "NSRT nickname callback was not registered")
+
+_G.MSUF_DB.general.nsrtNicknameIntegration = false
+Check(type(_G.MSUF_NSRTNicknames_ApplySetting) == "function",
+    "NSRT setting apply hook was not exported")
+_G.MSUF_NSRTNicknames_ApplySetting()
+Check(not API.IsProviderRegistered("NorthernSkyRaidTools"),
+    "disabling the MSUF NSRT integration did not unregister the provider")
+Check(activeResolver("player") == "Native",
+    "disabling the MSUF NSRT integration did not restore the character name")
+
+_G.MSUF_DB.general.nsrtNicknameIntegration = true
+_G.MSUF_NSRTNicknames_ApplySetting()
+Check(API.IsProviderRegistered("NorthernSkyRaidTools"),
+    "re-enabling the MSUF NSRT integration did not restore the provider")
+Check(activeResolver("player") == "NSRTFirst",
+    "re-enabling the MSUF NSRT integration did not restore the nickname")
 
 combat = true
 beforeCombatUnitRefreshes = unitRefreshes
