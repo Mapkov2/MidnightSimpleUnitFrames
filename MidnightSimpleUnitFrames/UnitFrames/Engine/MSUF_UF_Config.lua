@@ -1247,16 +1247,18 @@ local function CompileStatusEntryDef(status, conf, general, key, def, fallbackSi
 end
 
 local LOAD_CONDITION_KEYS = {
-  { "hideMounted", "HideMounted" },
-  { "hideOutOfCombat", "HideOutOfCombat" },
-  { "hideSolo", "HideSolo" },
-  { "hideInVehicle", "HideInVehicle" },
+  { "hideInHousing", "HideInHousing" },
+  { "hideInCombat", "HideInCombat" },
   { "hideInGroup", "HideInGroup" },
   { "hideInInstance", "HideInInstance" },
+  { "hideInVehicle", "HideInVehicle" },
+  { "hideMounted", "HideMounted" },
+  { "hideNoTarget", "HideNoTarget" },
+  { "hideOutOfCombat", "HideOutOfCombat" },
+  { "hideOutOfCombatNoTarget", "HideOutOfCombatNoTarget" },
   { "hideResting", "HideResting" },
-  { "hideInCombat", "HideInCombat" },
+  { "hideSolo", "HideSolo" },
   { "hideStealthed", "HideStealthed" },
-  { "hideInHousing", "HideInHousing" },
 }
 
 local function CompileLoadConditions(out, conf)
