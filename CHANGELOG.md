@@ -1,5 +1,27 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.05 - 2026-08-13
+
+### Highlights
+
+- Reworked Augmentation Evoker resources into one coherent Player Power surface: segmented Essence remains visible while Ebon Might uses its own native duration row. Runtime, embedded and detached layouts, rounded styling, text layers, Menu previews, search, and the Assistant now share the same geometry and ownership.
+
+### Changes
+
+- Added Unit Frame load conditions for **No target** and **Out of combat and no target**, including Copy To, search, diagnostics, and Assistant control.
+- Added a dedicated Class Resource text layer so resource numbers, Rune times, and Ebon Might duration text can be ordered independently from the resource bar and normal Player Power text.
+- Added a delayed warning with a direct settings shortcut when Unit Frames are configured to follow Essential Cooldowns but no supported Blizzard or third-party cooldown anchor is active.
+
+### Fixes & Performance
+
+- Fixed helpful and hostile Group Aura owners retaining invalid exact-ID assignments after assistability, roster-presence, or instance transitions. Updates remain event-driven and fail closed without polling or restricted Aura reads.
+- Fixed Interrupt Ready colors and Focus Kick state becoming stale when a protected cooldown completed. MSUF now uses Blizzard's native duration completion callback with a one-shot fallback and ignores unrelated cooldown events.
+- Fixed Group Range Fade briefly treating members from another instance or phase as in range after portal and party-presence transitions.
+- Fixed Castbars jumping when switching between Unit Frame anchoring and independent Edit Mode placement.
+- Fixed later canonical Aura profile revisions being mistaken for legacy data eligible for the original Aura reset.
+- Refreshed cached Menu pages when reopening MSUF, made exported profile strings immediately selectable for copying, and exposed the HEX value in the compact color picker.
+- Improved Assistant handling for direct control wording, target-aware visibility requests, outline sizing, background textures, and maximum-health-loss textures.
+
 ## 6.04 - 2026-08-13
 
 ### Highlights
