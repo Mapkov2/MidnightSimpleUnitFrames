@@ -33,6 +33,7 @@ local data = {
                 {
                     title = "Fixes & Performance",
                     bullets = {
+                        "Fixed Spell Icon Full-Frame Effects ignoring their configured element layer. Effects now use a frame-local surface so their 0-30 layer orders correctly against bars, text, and other Unit Frame elements.",
                         "Fixed helpful and hostile Group Aura owners retaining invalid exact-ID assignments after assistability, roster-presence, or instance transitions. Updates remain event-driven and fail closed without polling or restricted Aura reads.",
                         "Fixed Interrupt Ready colors and Focus Kick state becoming stale when a protected cooldown completed. MSUF now uses Blizzard's native duration completion callback with a one-shot fallback and ignores unrelated cooldown events.",
                         "Fixed Group Range Fade briefly treating members from another instance or phase as in range after portal and party-presence transitions.",
