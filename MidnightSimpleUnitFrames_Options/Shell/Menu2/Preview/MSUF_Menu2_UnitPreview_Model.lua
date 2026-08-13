@@ -54,11 +54,11 @@ local UNIT_DATA = {
     -- this table backfills any unit or field that is unavailable (unit does
     -- not exist, loading screens, secret-restricted values).
     player = { name = "MIDNIGHT", class = "ROGUE", className = "Rogue", race = "Night Elf", hp = 0.72, power = 0.52, powerToken = "ENERGY", level = "80", elite = false, isPlayer = true, portraitTexture = "Interface\\ICONS\\Ability_Stealth" },
-    target = { name = "Astral Warden", class = "MAGE", className = "Mage", race = "Construct", hp = 0.41, power = 0.68, powerToken = "MANA", level = "82", elite = true, reactionKind = "neutral", npcKind = "npcRegular", portraitTexture = "Interface\\ICONS\\Spell_Frost_FrostBolt02" },
+    target = { name = "Astral Warden", class = "MAGE", className = "Mage", race = "Construct", hp = 0.41, power = 0.68, powerToken = "MANA", level = "82", elite = true, classification = "elite", reactionKind = "neutral", npcKind = "npcRegular", portraitTexture = "Interface\\ICONS\\Spell_Frost_FrostBolt02" },
     targettarget = { name = "Moonlit Tank", class = "WARRIOR", className = "Warrior", race = "Human", hp = 0.88, power = 0.36, powerToken = "RAGE", level = "80", elite = false, isPlayer = true, portraitTexture = "Interface\\ICONS\\Ability_Warrior_DefensiveStance" },
     focustarget = { name = "Marked Add", class = "WARRIOR", className = "Warrior", race = "Orc", hp = 0.57, power = 0.24, powerToken = "RAGE", level = "81", elite = false, reactionKind = "enemy", npcKind = "npcMelee", portraitTexture = "Interface\\ICONS\\Ability_Warrior_Charge" },
-    focus = { name = "Voidcaller", class = "WARLOCK", className = "Warlock", race = "Orc", hp = 0.63, power = 0.81, powerToken = "MANA", level = "81", elite = true, reactionKind = "enemy", npcKind = "npcCaster", portraitTexture = "Interface\\ICONS\\Spell_Shadow_Metamorphosis" },
-    boss = { name = "Boss Preview", class = "DEATHKNIGHT", className = "Death Knight", race = "Undead", hp = 0.55, power = 0.35, powerToken = "MANA", level = "??", elite = true, reactionKind = "enemy", npcKind = "npcBoss", portraitTexture = "Interface\\ICONS\\Achievement_Boss_LichKing" },
+    focus = { name = "Voidcaller", class = "WARLOCK", className = "Warlock", race = "Orc", hp = 0.63, power = 0.81, powerToken = "MANA", level = "81", elite = true, classification = "rareelite", reactionKind = "enemy", npcKind = "npcCaster", portraitTexture = "Interface\\ICONS\\Spell_Shadow_Metamorphosis" },
+    boss = { name = "Boss Preview", class = "DEATHKNIGHT", className = "Death Knight", race = "Undead", hp = 0.55, power = 0.35, powerToken = "MANA", level = "??", elite = true, classification = "worldboss", reactionKind = "enemy", npcKind = "npcBoss", portraitTexture = "Interface\\ICONS\\Achievement_Boss_LichKing" },
     pet = { name = "Companion", class = "HUNTER", className = "Hunter", race = "Beast", hp = 0.79, power = 0.44, powerToken = "FOCUS", level = "80", elite = false, isPet = true, reactionKind = "friendly", portraitTexture = "Interface\\ICONS\\Ability_Hunter_BeastCall" },
 }
 local POWER_BAR_MASTER_KEYS = {
@@ -201,6 +201,7 @@ local function LiveUnitData(key)
     d.isPlayer = isPlayer == true
     d.isPet = key == "pet"
     local classification = _G.UnitClassification and LivePlain(_G.UnitClassification(unit))
+    d.classification = classification or mock.classification
     d.elite = classification == "elite" or classification == "rareelite"
         or classification == "worldboss" or classification == "rare"
         or (classification == nil and mock.elite == true)

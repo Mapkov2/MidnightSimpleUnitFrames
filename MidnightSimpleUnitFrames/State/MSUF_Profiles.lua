@@ -462,6 +462,7 @@ MSUF_ProfileIO_PostProfileRuntimeApply = function(reason, applyAll)
     MSUF_ProfileIO_RunDisableBlizzardFrames()
     MSUF_ProfileIO_RunFrameScaleApply()
     MSUF_ProfileIO_CallGlobal("MSUF_TargetSoundDriver_ApplySetting")
+    MSUF_ProfileIO_CallGlobal("MSUF_NSRTNicknames_ApplySetting")
     local activeGeneral = _G.MSUF_DB and _G.MSUF_DB.general
     MSUF_ProfileIO_CallGlobal("MSUF_EllesmereEditMode_SetEnabled",
         not (type(activeGeneral) == "table" and activeGeneral.ellesmereEditModeIntegration == false))
@@ -1978,11 +1979,67 @@ local MSUF_PROFILEIO_LEGACY_PROFILE_SCHEMA_56 = 560
 --- MSUF_ProfileIO_TranslateProfileToCurrent, independently from the broad
 --- default-fill revision owned by MSUF_Defaults.lua. Bump it whenever that
 --- translation pipeline gains a new mandatory repair.
-local MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION = 20
+local MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION = 21
 local MSUF_PROFILEIO_UNIT_AURA_MODEL_REVISION = 1
 local MSUF_PROFILEIO_UNIT_AURA_MODEL_KEY = "profileModelRevision"
 local MSUF_PROFILEIO_GROUP_AURA_MODEL_REVISION = 1
 local MSUF_PROFILEIO_GROUP_AURA_SCOPES = { "gf_party", "gf_raid", "gf_mythicraid" }
+local MSUF_PROFILEIO_GROUP_AURA_FILTER_LANES = { "buff", "debuff" }
+local MSUF_PROFILEIO_GF_CURRENT_FILTER_TOKENS = {
+    buff = {
+        ALL = "ALL",
+        PLAYER = "Player",
+        BIGDEFENSIVE = "BigDefensive",
+        BIGDEFENSIVEPLAYER = "BigDefensivePlayer",
+        EXTERNALDEFENSIVE = "ExternalDefensive",
+        EXTERNALDEFENSIVEPLAYER = "ExternalDefensivePlayer",
+        RAIDINCOMBAT = "RaidInCombat",
+        RAID = "Raid",
+        RAIDPLAYER = "RaidPlayer",
+    },
+    debuff = {
+        ALL = "ALL",
+        PLAYER = "Player",
+        RAID = "Raid",
+        RAIDINCOMBAT = "RaidInCombat",
+        RAIDPLAYERDISPELLABLE = "RAID_PLAYER_DISPELLABLE",
+        DISPELLABLE = "DISPELLABLE",
+        CROWDCONTROL = "CROWD_CONTROL",
+    },
+}
+local function MSUF_ProfileIO_NormalizeGFAuraFilterToken(lane, token)
+    if lane ~= "buff" and lane ~= "debuff" then return token end
+    local auraFilter = (type(MSUF) == "table" and type(MSUF.GF) == "table" and MSUF.GF.AuraFilter)
+        or _G.MSUF_GF_AuraFilter
+    local normalize = auraFilter and auraFilter.NormalizeFilterToken
+    if type(normalize) == "function" then
+        return normalize(lane, token)
+    end
+    local key = tostring(token or "ALL"):upper():gsub("[^A-Z0-9]", "")
+    return MSUF_PROFILEIO_GF_CURRENT_FILTER_TOKENS[lane][key] or "ALL"
+end
+local function MSUF_ProfileIO_NormalizeGFAuraFilterTokens(profile, apply)
+    if type(profile) ~= "table" then return false end
+    local changed = false
+    for i = 1, #MSUF_PROFILEIO_GROUP_AURA_SCOPES do
+        local conf = profile[MSUF_PROFILEIO_GROUP_AURA_SCOPES[i]]
+        local auras = type(conf) == "table" and conf.auras or nil
+        if type(auras) == "table" then
+            for j = 1, #MSUF_PROFILEIO_GROUP_AURA_FILTER_LANES do
+                local lane = MSUF_PROFILEIO_GROUP_AURA_FILTER_LANES[j]
+                local group = auras[lane]
+                if type(group) == "table" and group.filterToken ~= nil then
+                    local normalized = MSUF_ProfileIO_NormalizeGFAuraFilterToken(lane, group.filterToken)
+                    if normalized ~= group.filterToken then
+                        changed = true
+                        if apply then group.filterToken = normalized end
+                    end
+                end
+            end
+        end
+    end
+    return changed
+end
 function MSUF.ProfileIOGroupHasRetiredAuraFields(conf)
     return type(conf) == "table" and (
         conf.aurasEnabled ~= nil or conf.auraMaxIcons ~= nil or conf.auraIconSize ~= nil
@@ -2571,6 +2628,7 @@ end
 
 local function MSUF_ProfileIO_ProfileNeedsLegacyRepair(profile)
     if type(profile) ~= "table" then return false end
+    if MSUF_ProfileIO_NormalizeGFAuraFilterTokens(profile, false) then return true end
     if profile.auras ~= nil or type(profile.auras2) == "table" then return true end
     local auras = type(profile.auras3) == "table" and profile.auras3 or nil
     if auras and tonumber(auras[MSUF_PROFILEIO_UNIT_AURA_MODEL_KEY]) ~= MSUF_PROFILEIO_UNIT_AURA_MODEL_REVISION then
@@ -3756,6 +3814,7 @@ MSUF_ProfileIO_TranslateProfileToCurrent = function(profile, context)
     changed = MSUF.ProfileIONormalizeLegacy55VisualCompatibility(profile, legacyProfile, context) or changed
     changed = MSUF_ProfileIO_NormalizeLegacyAuras(
         profile, legacyProfile, context.trustNormalizationMarker ~= true) or changed
+    changed = MSUF_ProfileIO_NormalizeGFAuraFilterTokens(profile, true) or changed
     local normalizeLayers = _G.MSUF_NormalizeNumericLayers
     if type(normalizeLayers) ~= "function" and type(MSUF) == "table" then
         normalizeLayers = MSUF.MSUF_NormalizeNumericLayers
@@ -4076,6 +4135,7 @@ local function MSUF_ProfileIO_NormalizeGFAuraGroupForExport(auras, groupKey, def
             group.filterToken = defaultToken
         end
     end
+    group.filterToken = MSUF_ProfileIO_NormalizeGFAuraFilterToken(groupKey, group.filterToken)
 
     if type(group.blacklistCats) ~= "table" then
         group.blacklistCats = MSUF_ProfileIO_CopyDefaultBlacklistCats(groupKey)
@@ -4279,6 +4339,7 @@ local function MSUF_ProfileIO_NormalizeGFAuraGroupForWago(auras, groupKey, defau
     if group.filterToken == nil then
         group.filterToken = defaultToken
     end
+    group.filterToken = MSUF_ProfileIO_NormalizeGFAuraFilterToken(groupKey, group.filterToken)
     if type(group.blacklist) == "table" then
         group.blacklist.spells = nil
     end

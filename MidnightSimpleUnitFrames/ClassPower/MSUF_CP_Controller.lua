@@ -941,11 +941,6 @@ local CP = {
     --- Spell Tracker state (Tip of the Spear only - Whirlwind uses WW module)
     spStacks    = 0,       --- current stack count
     spExpires   = nil,     --- GetTime() expiry timestamp (nil = no timer)
-    spLocalUntil = nil,    --- brief spellcast-led window before aura correction
-    spCachedQ   = -1,      --- skip-if-same quantizer
-    icicleSensor = nil,    --- native AuraContainer fallback for secret Icicles
-    icicleButton = nil,
-    icicleNativeText = nil,
 }
 
 local CPAuras = {
@@ -1067,7 +1062,6 @@ function CPAuras.ActiveSpellKind(powerType, renderMode, spellID)
     spellID = CPAuras.NormalizeID(spellID)
     if not spellID then return nil end
     if powerType == "MAELSTROM_WEAPON" and spellID == CPK.SPELL.MAELSTROM_WEAPON then return "stacks" end
-    if powerType == "TIP_OF_THE_SPEAR" and spellID == TIP.AURA_ID then return "tip" end
     if powerType == "ICICLES" and CPConst.ICICLES and spellID == CPConst.ICICLES.AURA_ID then return "stacks" end
     if powerType == "SOUL_FRAGMENTS" then
         if spellID == CPK.SPELL.VOID_METAMORPHOSIS
@@ -1088,8 +1082,6 @@ function CPAuras.RefreshActive(powerType, renderMode)
 
     if powerType == "MAELSTROM_WEAPON" then
         Refresh(CPK.SPELL.MAELSTROM_WEAPON, "stacks")
-    elseif powerType == "TIP_OF_THE_SPEAR" then
-        Refresh(TIP.AURA_ID, "tip")
     elseif powerType == "ICICLES" then
         Refresh(CPConst.ICICLES and CPConst.ICICLES.AURA_ID, "stacks")
     elseif powerType == "SOUL_FRAGMENTS" then
@@ -1183,6 +1175,16 @@ function CPAuras.ScanUnitAuras()
 end
 
 function CPAuras.ProcessUnitAuraUpdate(unitAuraUpdateInfo, powerType, renderMode)
+    if powerType == "ICICLES" then
+        --- Icicles owns one exact player aura. Refresh it directly on each
+        --- UNIT_AURA signal instead of relying on incremental aura identity,
+        --- which can be restricted, incomplete, or unrelated on Midnight.
+        --- The returned applications value remains secret-safe because the
+        --- segmented renderer passes it only to native StatusBar setters.
+        CPAuras.RefreshSpell(CPConst.ICICLES and CPConst.ICICLES.AURA_ID, "stacks")
+        return true
+    end
+
     if not CPAuras.CanProcessIncrementalUpdate(unitAuraUpdateInfo) then
         --- Midnight can hide the incremental payload. Refresh only the aura(s)
         --- consumed by the active resource instead of querying every class.
@@ -1237,7 +1239,6 @@ function CPAuras.ProcessUnitAuraUpdate(unitAuraUpdateInfo, powerType, renderMode
 end
 
 CPAuras.AddSpell(CPK.SPELL.MAELSTROM_WEAPON)
-CPAuras.AddSpell(TIP.AURA_ID)
 CPAuras.AddSpell(CPConst.ICICLES and CPConst.ICICLES.AURA_ID)
 CPAuras.AddSpell(CPK.SPELL.VOID_METAMORPHOSIS)
 CPAuras.AddSpell(CPK.SPELL.SILENCE_THE_WHISPERS)
@@ -1295,9 +1296,6 @@ local function CP_CompileVisual(powerType, renderMode, maxP)
     visual.baseR, visual.baseG, visual.baseB = baseR, baseG, baseB
     visual.bgR, visual.bgG, visual.bgB = bgR, bgG, bgB
     visual.chargedR, visual.chargedG, visual.chargedB = chargedR, chargedG, chargedB
-    if powerType == "ICICLES" and CP.icicleNativeText then
-        CP.icicleNativeText:SetTextColor(baseR, baseG, baseB, 1)
-    end
     visual.runeShowTime = b.runeShowTime ~= false
     visual.timerShowText = b.classPowerShowText == true
     local slotMode = ResolveSlotColorMode(visual.powerToken)
@@ -1375,46 +1373,6 @@ CP.ebonNative = CP_CallBuilder(CPCoreBuilders.EBON_MIGHT, {
     _cpDB = _cpDB,
     CreateFrame = CreateFrame,
 })
-
-local function CP_SetIciclesSensorActive(active)
-    if active and not CP.icicleSensor then
-        local A3 = _G.MSUF_Auras3
-        local createSensor = A3 and A3.CreateClassPowerAuraSensor
-        local icicleID = CPConst.ICICLES and CPConst.ICICLES.AURA_ID
-        if type(createSensor) == "function" and icicleID and CP.container then
-            CP.icicleSensor = createSensor(CP.container, "msuf_cp_icicles", { [icicleID] = true }, function(button)
-                CP.icicleButton = button
-                button:ClearAllPoints()
-                button:SetAllPoints(button:GetParent())
-                button:SetMouseMotionEnabled(false)
-                if button.EnableMouse then button:EnableMouse(false) end
-                button:SetFrameLevel(CP.container:GetFrameLevel() + 16)
-
-                local count = button:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-                count:SetPoint("CENTER", button, "CENTER", 0, 0)
-                count:SetJustifyH("CENTER")
-                count:SetJustifyV("MIDDLE")
-                local r, g, b = ResolveClassPowerColor("ICICLES")
-                count:SetTextColor(r, g, b, 1)
-                count:SetShadowColor(0, 0, 0, 1)
-                count:SetShadowOffset(1, -1)
-
-                -- Keep the native AuraContainer application binding as a hidden
-                -- secret-safe sink. The visible count is owned by CP.text so the
-                -- Show resource text setting and its offsets remain authoritative.
-                button:SetApplicationCount(count, {})
-                count:Hide()
-                CP.icicleNativeText = count
-            end)
-            if CP.icicleSensor then
-                CP.icicleSensor:SetAllPoints(CP.container)
-                CP.icicleSensor:SetFrameLevel(CP.container:GetFrameLevel() + 15)
-            end
-        end
-    end
-
-    if CP.icicleSensor then CP.icicleSensor:SetShown(active == true) end
-end
 
 --- Font / text-offset presentation helpers now live in
 --- ClassPower presentation helpers.
@@ -1777,6 +1735,7 @@ do
             GetTime = GetTime,
             math_min = math_min,
             C_SpellBook = C_SpellBook,
+            C_Timer = C_Timer,
             RunActiveUpdate = function() return CP_RunActiveUpdate(CP.powerType, CP.currentMax) end,
             RunAuraSegmentedUpdate = function()
                 if CP_UpdateValues_AuraSegmented then
@@ -1831,6 +1790,9 @@ local function CP_GetModeEventProfile(renderMode, powerType, isAuraPower)
     profile.spellSucceeded = profile.warlockPred
         or (powerType == "TIP_OF_THE_SPEAR")
         or (powerType == "SOUL_FRAGMENTS_VENG")
+    --- Tip is fully spellcast-tracked like EUI. Do not bind UNIT_AURA or touch
+    --- its protected aura payload for a resource whose state is deterministic.
+    if powerType == "TIP_OF_THE_SPEAR" then profile.aura = false end
     profile.deadAlive = (powerType == "TIP_OF_THE_SPEAR")
     return profile
 end
@@ -2113,20 +2075,9 @@ local function FullRefresh()
         if renderMode == CPK.MODE.RUNE_CD then
             maxP = 6  --- DK always 6 runes
         elseif renderMode == CPK.MODE.AURA_SINGLE then
-            --- DH Devourer: pips when Blizzard exposes an integer max (collapsing
-            --- star cost in Void Metamorphosis, Dark Heart max applications
-            --- otherwise), single normalized bar when it is secret/unavailable.
+            --- DH Devourer mirrors Blizzard and Elemental: one continuous bar,
+            --- normalized against the real Soul Fragment maximum at runtime.
             maxP = 1
-            if powerType == "SOUL_FRAGMENTS" and type(CPConst.ResolveDevourerSegments) == "function" then
-                --- The full refresh is the cold path (login, spec, talents), so
-                --- it reads the meta state once and seeds the runtime memo with
-                --- it. Talent changes reach us as a structural refresh, which is
-                --- exactly what makes memoizing the static maximum safe.
-                local inMeta = CPAuras.Get(CPK.SPELL.VOID_METAMORPHOSIS) ~= nil
-                maxP = CPConst.ResolveDevourerSegments(inMeta, NotSecret)
-                CP.dhInMeta = inMeta
-                CP._dhSegCount, CP._dhSegMeta = maxP, inMeta
-            end
         elseif renderMode == CPK.MODE.CONTINUOUS then
             maxP = 1  --- Ele Maelstrom: single continuous bar
         elseif renderMode == CPK.MODE.STAGGER then
@@ -2152,8 +2103,6 @@ local function FullRefresh()
                 maxP = TIP.MAX_STACKS  --- Survival Hunter: 3 Tip of the Spear stacks
                 CP.spStacks = 0
                 CP.spExpires = nil
-                CP.spLocalUntil = nil
-                CP.spCachedQ = -1
             elseif powerType == "ICICLES" then
                 maxP = CPConst.ICICLES and CPConst.ICICLES.MAX_STACKS or 5
             else
@@ -2236,7 +2185,6 @@ local function FullRefresh()
         --- The container is measurable only now, so a synced detached Power bar
         --- can finally match it.
         CP.RefreshSyncedPowerWidth(playerFrame)
-        CP_SetIciclesSensorActive(powerType == "ICICLES")
         --- Belt-and-suspenders: ensure outline survives parent Hide/Show cycle
         if CP._outline then
             local outlineBars = _cpDB.bars or {}
@@ -2252,7 +2200,6 @@ local function FullRefresh()
     else
         --- Clean up resource runtime state when hiding.
         CP.SetEbonSensorActive(false)
-        CP_SetIciclesSensorActive(false)
         if CP.ironfur and CP.ironfur.SetActive then CP.ironfur.SetActive(false) end
         CP.visual = nil
         if (CP.renderMode == CPK.MODE.RUNE_CD or CP.runeOUAAny or CP.runeNativeAny) and CP_StopRuneOnUpdates then
@@ -2281,8 +2228,6 @@ local function FullRefresh()
         CP.wlPredDelta = 0
         CP.spStacks = 0
         CP.spExpires = nil
-        CP.spLocalUntil = nil
-        CP.spCachedQ = -1
     end
 
     --- --- AltMana ---
@@ -2382,7 +2327,6 @@ do
             tonumber = tonumber,
             math_floor = math_floor,
             C_Timer = C_Timer,
-            GetTrackedPlayerAura = CPAuras.Get,
             GetPlayerFrame = GetPlayerFrame,
             CP_EnsureBars = CP_EnsureBars,
             CP_Layout = CP_Layout,

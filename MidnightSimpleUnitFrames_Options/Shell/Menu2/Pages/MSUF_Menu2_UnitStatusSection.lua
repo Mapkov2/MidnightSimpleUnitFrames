@@ -326,7 +326,14 @@ local function BuildStatus(ctx, builder, unit)
         if value == "leader" then return { { "leader" } } end
         if value == "assist" then return { { "assist" } } end
         if value == "raidmarker" then return { { "raidMarker", 8 } } end
-        if value == "eliteicon" then return { { "elite", "ELITE" }, { "elite", "BOSS" } } end
+        if value == "eliteicon" then
+            return {
+                { "elite", "ELITE" },
+                { "elite", "RAREELITE" },
+                { "elite", "RARE" },
+                { "elite", "BOSS" },
+            }
+        end
         if value == "statusCombat" then return { { "combat", "combat", "combatStateIndicatorSymbol" } } end
         if value == "statusResting" then return { { "resting", "resting", "restedStateIndicatorSymbol" } } end
         if value == "statusIncomingRes" then return { { "incomingRes", "resurrect", "incomingResIndicatorSymbol" } } end
@@ -418,7 +425,9 @@ local function BuildStatus(ctx, builder, unit)
         -- built-in Elite / Rare indicator.  Returning the atlas alongside the skull fallback
         -- keeps this compact strip visually identical without changing custom-icon behavior.
         if entry[1] == "elite" then
-            local atlas = entry[2] == "BOSS" and "nameplates-icon-elite-gold" or "nameplates-icon-elite-silver"
+            local atlas = entry[2] == "RARE" and "UI-HUD-UnitFrame-Target-PortraitOn-Boss-Rare-Star"
+                or entry[2] == "RAREELITE" and "nameplates-icon-elite-silver"
+                or "nameplates-icon-elite-gold"
             return "Interface\\TargetingFrame\\UI-TargetingFrame-Skull", 0, 1, 0, 1, atlas
         end
         local resolver = _G.MSUF_GetStatusIconTexture
@@ -777,8 +786,9 @@ local function BuildStatus(ctx, builder, unit)
         SetDropdownTitle(iconPack, StatusIconStyleLabel(spec))
         SetDropdownTitle(customIcon, SpecificIconLabel(spec))
         if iconPreviewLabel and iconPreviewLabel.SetText then
-            iconPreviewLabel:SetText(M.Tr(spec and spec.textIndicator and "Text preview"
-                or (IsRoleStatusSpec(spec) and "Role icon preview" or "Icon preview")))
+            iconPreviewLabel:SetText(M.Tr(spec and spec.value == "eliteicon" and "Elite / Rare Elite / Rare / Boss previews"
+                or (spec and spec.textIndicator and "Text preview"
+                or (IsRoleStatusSpec(spec) and "Role icon preview" or "Icon preview"))))
         end
         local hasSymbol = spec and spec.symbol
         local hasIconPack = false

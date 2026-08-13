@@ -25,8 +25,9 @@ local SetFrameLevelCached = Text.SetFrameLevelCached
 local SetShownCached = Text.SetShownCached
 local SetTextCached = Text.SetTextCached
 local SetFont = Text.SetFont
-local SetNameTextColor = Text.SetNameTextColor
-local NameTextColor = Text.NameTextColor
+local ApplyNameTextColor = Text.ApplyNameTextColor or function(frame, unit)
+  Text.SetNameTextColor(frame, Text.NameTextColor(frame, unit))
+end
 local ResolveHealthTextModes = Text.ResolveHealthTextModes
 local CompileTextRuntime = Text.CompileTextRuntime
 local SetHealthTextColor = Text.SetHealthTextColor
@@ -1015,7 +1016,7 @@ local function RefreshAppliedTextColors(frame, spec, text)
     UpdateHealthTextColor(frame, rt, frame.MSUFUnitKey)
   end
   if frame.nameText then
-    SetNameTextColor(frame, NameTextColor(frame, frame.MSUFUnitKey))
+    ApplyNameTextColor(frame, frame.MSUFUnitKey)
   end
   frame._msufTextColorRevision = spec and spec._msufTextColorRevision
 end
@@ -1028,14 +1029,16 @@ local FONT_EPOCH_TEXT_FIELDS = {
   "_msufInlineDotsFS",
 }
 
+local function InvalidateCachedText(region)
+  if not region then return end
+  region._aText = nil
+  region._aTextPlain = nil
+  region._msufLastSetT = nil
+end
+
 local function InvalidateTextForFontEpoch(frame)
   for i = 1, #FONT_EPOCH_TEXT_FIELDS do
-    local region = frame[FONT_EPOCH_TEXT_FIELDS[i]]
-    if region then
-      region._aText = nil
-      region._aTextPlain = nil
-      region._msufLastSetT = nil
-    end
+    InvalidateCachedText(frame[FONT_EPOCH_TEXT_FIELDS[i]])
   end
   frame._msufTextApplySignature = nil
   frame._msufTextLayoutRevision = nil
@@ -1127,6 +1130,13 @@ function Text.Apply(frame, spec)
     ClearNameClip(frame)
   else
     ApplyNameClip(frame, spec, text)
+  end
+  -- Re-anchoring a FontString can invalidate its rendered glyph geometry even
+  -- when the text itself is unchanged. Force the next cold runtime name update
+  -- to restamp both the visible name and its secret-safe anchor proxy.
+  InvalidateCachedText(frame.nameText)
+  if frame._msufNameAnchorTextActive == true then
+    InvalidateCachedText(frame._msufNameAnchorText)
   end
   if inlineEnabled then
     frame._msufInlineAnchorDynamic = frame.nameText and frame.nameText._msufJustifyH == "LEFT" and text.nameShorten ~= true and true or nil
@@ -1244,7 +1254,7 @@ function Text.Apply(frame, spec)
     UpdateHealthTextColor(frame, rt, frame.MSUFUnitKey)
   end
   if frame.nameText then
-    SetNameTextColor(frame, NameTextColor(frame, frame.MSUFUnitKey))
+    ApplyNameTextColor(frame, frame.MSUFUnitKey)
   end
   if frame._msufNameRelativeStatus == true and RefreshNameRelativeStatusAnchors then
     RefreshNameRelativeStatusAnchors(frame)

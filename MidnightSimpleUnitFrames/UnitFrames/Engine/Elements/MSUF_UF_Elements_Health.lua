@@ -439,7 +439,9 @@ local function UpdateSingle(frame, event, unit)
       and (event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, pct, pctSecret)) then
       if not ApplyRuntimeColor(frame, event, unit, pct, 100) then SetColor(frame) end
     end
-    NotifyHealthState(frame, event, unit, pct, pctSecret)
+    if frame._msufUpdateStatusTextIndicator then
+      NotifyHealthState(frame, event, unit, pct, pctSecret)
+    end
     return pct, maxValue, percentReady
   end
 
@@ -448,7 +450,9 @@ local function UpdateSingle(frame, event, unit)
     and (event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, hp, hpSecret)) then
     if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
   end
-  NotifyHealthState(frame, event, unit, hp, hpSecret)
+  if frame._msufUpdateStatusTextIndicator then
+    NotifyHealthState(frame, event, unit, hp, hpSecret)
+  end
   return hp, maxHP, absolutePercentReady
 end
 
@@ -466,7 +470,9 @@ local function UpdateSingleAbsolute(frame, event, unit)
     and (event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, hp, hpSecret)) then
     if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
   end
-  NotifyHealthState(frame, event, unit, hp, hpSecret)
+  if frame._msufUpdateStatusTextIndicator then
+    NotifyHealthState(frame, event, unit, hp, hpSecret)
+  end
   return hp, maxHP, percentReady
 end
 
@@ -487,7 +493,9 @@ local function UpdateSingleCurrent(frame, event, unit)
     and (event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, hp, hpSecret)) then
     if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
   end
-  NotifyHealthState(frame, event, unit, hp, hpSecret)
+  if frame._msufUpdateStatusTextIndicator then
+    NotifyHealthState(frame, event, unit, hp, hpSecret)
+  end
   return hp, nil, false
 end
 

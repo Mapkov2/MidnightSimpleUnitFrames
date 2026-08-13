@@ -63,12 +63,14 @@ local StatusBarInterpolation = Enum and Enum.StatusBarInterpolation
 local SMOOTH_INTERP = StatusBarInterpolation and StatusBarInterpolation.ExponentialEaseOut or nil
 local C_CurveUtil = _G.C_CurveUtil
 local CreateColor = _G.CreateColor
+local C_ClassColor_GetClassColor = _G.C_ClassColor and _G.C_ClassColor.GetClassColor
 local Secrets = MSUF.Secrets or {}
 local IsSecret = Secrets.IsSecret or function(_) return false end
 local IsNil = Secrets.IsNil or function(value) return value == nil end
 local issecretvalue = _G.issecretvalue or function(_) return false end
 local SafeNumber = Secrets.SafeNumber or tonumber
 local POWER_TYPE_MANA = Enum and Enum.PowerType and Enum.PowerType.Mana or 0
+local SECRET_DEPENDENT_CLASS_COLOR = 2
 
 local npcTypeReferenceLevel
 local npcTypeReferenceInstanceType
@@ -469,23 +471,26 @@ local function ConfigureGradientTexture(tex, direction, alpha, r, g, b)
   tex._msufGradientR, tex._msufGradientG, tex._msufGradientB = r, g, b
 end
 
-local function EnsureGradientTexture(bar, grads, direction)
+local function EnsureGradientTexture(textureOwner, grads, direction)
   local tex = grads and grads[direction]
   if tex then
     return tex
   end
-  if not (bar and bar.CreateTexture) then
+  if not (textureOwner and textureOwner.CreateTexture) then
     return nil
   end
-  tex = bar:CreateTexture(nil, "OVERLAY", nil, 0)
+  tex = textureOwner:CreateTexture(nil, "OVERLAY", nil, 0)
   tex:SetTexture(WHITE)
   tex:SetBlendMode("BLEND")
   grads[direction] = tex
   return tex
 end
 
-local function ApplyBarGradient(frame, bar, spec, storeKey)
-  if not (frame and bar) then
+--- Applies the exact runtime gradient composition to an arbitrary fill Texture.
+--- StatusBars use ApplyBarGradient below; preview-only texture bars use this
+--- lower-level form so both surfaces share direction/color/caching semantics.
+local function ApplyBarGradientToTarget(frame, textureOwner, target, spec, storeKey)
+  if not (frame and textureOwner and storeKey) then
     return nil
   end
   local grads = frame[storeKey]
@@ -493,27 +498,38 @@ local function ApplyBarGradient(frame, bar, spec, storeKey)
     grads = {}
     frame[storeKey] = grads
   end
-  if frame._msufIsGroupFrame == true then
-    bar._msufGFGrads = grads
-  end
   if not GradientActive(spec) then
     HideBarGradient(grads)
     return grads
   end
-  local target = GradientTarget(bar)
+  if not target then
+    HideBarGradient(grads)
+    return grads
+  end
   local alpha = Clamp01(spec.strength, 0.45)
   local r, g, b = Clamp01(spec.r, 0), Clamp01(spec.g, 0), Clamp01(spec.b, 0)
   for i = 1, #GRADIENT_DIRS do
     local direction = GRADIENT_DIRS[i]
     local tex = grads[direction]
     if spec[direction] == true then
-      tex = EnsureGradientTexture(bar, grads, direction)
+      tex = EnsureGradientTexture(textureOwner, grads, direction)
       AnchorGradientTexture(tex, target)
       ConfigureGradientTexture(tex, direction, alpha, r, g, b)
       SetShownCached(tex, true)
     else
       SetShownCached(tex, false)
     end
+  end
+  return grads
+end
+
+local function ApplyBarGradient(frame, bar, spec, storeKey)
+  if not (frame and bar) then
+    return nil
+  end
+  local grads = ApplyBarGradientToTarget(frame, bar, GradientTarget(bar), spec, storeKey)
+  if frame._msufIsGroupFrame == true then
+    bar._msufGFGrads = grads
   end
   return grads
 end
@@ -616,8 +632,11 @@ local function ClassColor(unit)
   return 0.12, 0.62, 0.95
 end
 
-local function DispatchClassColor(frame, unit)
+local function DispatchClassColor(frame, unit, allowSecretPassThrough)
   local _, class = ReadUnitClassCached(frame, unit)
+  if allowSecretPassThrough == true and issecretvalue(class) == true then
+    return class, nil, nil, SECRET_DEPENDENT_CLASS_COLOR
+  end
   local r, g, b = ClassColorForToken(class)
   if r ~= nil then return r, g, b end
   return 0.12, 0.62, 0.95
@@ -633,14 +652,14 @@ local function FriendlyNPCClassToken(state, frame, unit)
     if reaction and reaction >= 5 then
       state.npcClassEligible = true
       local _, class = ReadUnitClassCached(frame, unit)
-      if issecretvalue(class) ~= true then
-        state.npcClass = class
-      end
+      state.npcClassSecret = issecretvalue(class) == true
+      state.npcClass = class
     else
       state.npcClassEligible = nil
+      state.npcClassSecret = nil
     end
   end
-  return state.npcClass
+  return state.npcClass, state.npcClassSecret == true
 end
 
 local function PlainTrue(value)
@@ -923,7 +942,7 @@ local function RefreshUnitState(frame, unit, spec, event)
     and state.identityReady == true
     and state.isPlayerKnown == true
     and (state.isPlayer == true or state.npcKindKnown == true)
-    and (state.npcClassEligible ~= true or state.npcClass ~= nil)
+    and (state.npcClassEligible ~= true or state.npcClassSecret == true or state.npcClass ~= nil)
   local oldExists, oldExistsKnown = state.exists, state.existsKnown
   local oldDead, oldDeadKnown = state.dead, state.deadKnown
   local oldConnected, oldConnectedKnown = state.connected, state.connectedKnown
@@ -964,6 +983,7 @@ local function RefreshUnitState(frame, unit, spec, event)
     state.npcClass = nil
     state.npcClassRead = nil
     state.npcClassEligible = nil
+    state.npcClassSecret = nil
     state._npcKindTypeReady = nil
     state._npcKindType = nil
     state._npcKindReactionReady = nil
@@ -1195,12 +1215,19 @@ local function HealthColor(frame, unit, hp, maxHP, calc, event)
   end
 
   if state and state.isPlayerKnown and state.isPlayer then
-    return DispatchClassColor(frame, unit)
+    return DispatchClassColor(frame, unit, unit == "targettarget" or unit == "focustarget")
   end
 
   if health.npcClassColorBar == true and spec and spec.key ~= "pet" and spec.key ~= "boss"
       and state and state.isPlayerKnown and not state.isPlayer then
-    local r, g, b = ClassColorForToken(FriendlyNPCClassToken(state, frame, unit))
+    local class, secretClass = FriendlyNPCClassToken(state, frame, unit)
+    if secretClass == true then
+      if unit == "targettarget" or unit == "focustarget" then
+        return class, nil, nil, SECRET_DEPENDENT_CLASS_COLOR
+      end
+      class = nil
+    end
+    local r, g, b = ClassColorForToken(class)
     if r ~= nil then
       return r, g, b
     end
@@ -1222,6 +1249,18 @@ local function ApplyHealthStatusColor(bar, frame, unit, hp, maxHP, calc, event)
   local spec = frame and frame.MSUFSpec
   local health = spec and spec.health or {}
   local r, g, b, raw = HealthColor(frame, unit, hp, maxHP, calc, event)
+  if raw == SECRET_DEPENDENT_CLASS_COLOR then
+    -- UnitClass can return an identity-restricted token for targettarget and
+    -- focustarget. C_ClassColor and SetStatusBarColor explicitly accept this
+    -- secret pipeline; never inspect or retain the resulting RGB components.
+    local classColor = C_ClassColor_GetClassColor and C_ClassColor_GetClassColor(r)
+    if classColor then
+      bar:SetStatusBarColor(classColor:GetRGB())
+      bar._msufStatusR, bar._msufStatusG, bar._msufStatusB, bar._msufStatusA = nil, nil, nil, nil
+      return true
+    end
+    r, g, b, raw = 0.12, 0.62, 0.95, nil
+  end
   if health.mode == "gradient" and raw == true then
     if issecretvalue(r) == true or issecretvalue(g) == true or issecretvalue(b) == true then
       -- Restricted curve results cannot participate in Lua comparisons. Pass
@@ -1384,6 +1423,7 @@ MSUF.UFBarTextCommon = {
   ApplyTextureColor = ApplyTextureColor,
   SetShownCached = SetShownCached,
   ApplyBarGradient = ApplyBarGradient,
+  ApplyBarGradientToTarget = ApplyBarGradientToTarget,
   HideBarGradient = HideBarGradient,
   UpdateAllBarGradients = UpdateAllBarGradients,
   SetFrameLevelCached = SetFrameLevelCached,

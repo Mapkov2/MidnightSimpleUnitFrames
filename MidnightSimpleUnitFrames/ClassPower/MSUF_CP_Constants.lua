@@ -105,16 +105,25 @@ K.ICICLES = {
 
 K.TIP = {
     TALENT_ID = 260285,
-    AURA_ID = 260286,
     KILL_COMMAND = 259489,
     TWIN_FANG = 1272139,
     TAKEDOWN = 1250646,
+    TAKEDOWN_HIT = 1253859,
     PRIMAL_SURGE = 1272154,
+    TWIN_FANG_GAIN = 3,
     MAX_STACKS = 3,
     DURATION = 10,
     SPENDERS = {
-        [259495] = true, [259387] = true, [271788] = true, [187708] = true,
-        [1217525] = true, [320976] = true, [1206791] = true, [271014] = true,
+        [186270] = true,  -- Raptor Strike
+        [265189] = true,  -- Raptor Strike (ranged)
+        [1262293] = true, -- Raptor Swipe
+        [1262343] = true, -- Raptor Swipe (ranged)
+        [259495] = true,  -- Wildfire Bomb
+        [193265] = true,  -- Hatchet Toss
+        [1264949] = true, -- Chakram
+        [1261193] = true, -- Boomstick
+        [1253859] = true, -- Takedown impact
+        [1251592] = true, -- Flamefang Pitch
     },
 }
 
@@ -175,30 +184,6 @@ K.POWER_TYPE_TOKENS = {
 }
 
 K.MAX_CLASS_POWER = 10
-
---- Devourer Demon Hunter segment count.
---- Blizzard's own bar (DemonHunterSoulFragmentsBar:GetCurrentMinMaxPower) reads
---- an integer maximum: the collapsing star cost inside Void Metamorphosis, Dark
---- Heart's max cumulative applications outside it. Returning 1 means "not
---- usable as a segment count" and keeps the caller on the normalized
---- single-bar rendering, which is what older clients and secret-value states
---- get. The meta state is passed in because every caller already knows it.
-function K.ResolveDevourerSegments(inMeta, notSecret)
-    local raw
-    if inMeta then
-        local cost = _G.GetCollapsingStarCost
-        raw = (type(cost) == "function") and cost() or nil
-    else
-        local C_Spell = _G.C_Spell
-        local spellMax = C_Spell and C_Spell.GetSpellMaxCumulativeAuraApplications
-        raw = (type(spellMax) == "function") and spellMax(K.CPK.SPELL.DARK_HEART) or nil
-    end
-    if type(notSecret) == "function" and not notSecret(raw) then return 1 end
-    raw = math.floor((tonumber(raw) or 0) + 0.5)
-    if raw < 2 then return 1 end
-    if raw > K.MAX_CLASS_POWER then return K.MAX_CLASS_POWER end
-    return raw
-end
 
 K.CDM_FRAMES = {
     cooldown      = "EssentialCooldownViewer",
