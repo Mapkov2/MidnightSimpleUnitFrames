@@ -589,6 +589,16 @@ local function EnsurePicker()
     end)
     if M.AddTooltip then M.AddTooltip(opacity, "Opacity", "Adjusts the alpha channel of this color.") end
 
+    local compactHexTitle = Font(wheelCard, "GameFontNormalSmall", "HEX", T.colors.muted)
+    local compactHex = Input(wheelCard, 64, false); panel.compactHexTitle, panel.compactHex = compactHexTitle, compactHex
+    compactHex:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
+    compactHex:SetScript("OnMouseUp", function(self) self:HighlightText() end)
+    compactHex:SetScript("OnEditFocusLost", function(self) self:SetText(panel._readoutHex or "") end)
+    compactHex:SetScript("OnTextChanged", function(self, userInput)
+        if userInput then self:SetText(panel._readoutHex or ""); self:HighlightText() end
+    end)
+    if M.AddTooltip then M.AddTooltip(compactHex, "HEX color", "Click to select the value, then press Ctrl+C to copy it.") end
+
     local advancedCard = T.Panel(panel, nil, T.colors.coreSurface, T.colors.cardBorder or T.colors.borderSoft)
     advancedCard:SetPoint("TOPLEFT", PICKER_PAD + LEFT_CARD_WIDTH + PICKER_GAP, -133)
     advancedCard:SetSize(ADVANCED_WIDTH - PICKER_PAD * 2 - LEFT_CARD_WIDTH - PICKER_GAP, 227)
@@ -800,6 +810,9 @@ local function EnsurePicker()
         self.colorValue:SetSize(25, wheelSize)
         self.colorValueThumb:SetSize(35, 11)
         self.advancedCard:SetShown(advanced)
+        self.compactHex:ClearAllPoints(); self.compactHex:SetPoint("TOPRIGHT", self.wheelCard, "TOPRIGHT", -6, -55)
+        self.compactHexTitle:ClearAllPoints(); self.compactHexTitle:SetPoint("BOTTOMLEFT", self.compactHex, "TOPLEFT", 0, 3)
+        self.compactHexTitle:SetShown(not advanced); self.compactHex:SetShown(not advanced)
         if not self._advancedChildLayout then
             self._advancedChildLayout = true
             self.opacityLabel:SetPoint("TOPLEFT", 12, -171)
@@ -916,6 +929,7 @@ local function EnsurePicker()
             self._readoutR, self._readoutG, self._readoutB = byteR, byteG, byteB
             local hexValue = string.format("#%02X%02X%02X", byteR, byteG, byteB)
             self._readoutHex = hexValue
+            self.compactHex:SetText(hexValue)
             if not self.hex:HasFocus() then self.hex:SetText(hexValue) end
             if not self.rgb[1]:HasFocus() then self.rgb[1]:SetText(byteR) end
             if not self.rgb[2]:HasFocus() then self.rgb[2]:SetText(byteG) end
