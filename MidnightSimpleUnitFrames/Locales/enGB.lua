@@ -3731,6 +3731,13 @@ L["left"] = "left"
 L["No target"] = "No target"
 L["Out of combat and no target"] = "Out of combat and no target"
 
+L["Class Resource Text"] = "Class Resource Text"
+L["Click to select the value, then press Ctrl+C to copy it."] = "Click to select the value, then press Ctrl+C to copy it."
+L["HEX color"] = "HEX colour"
+L["NSRT nickname integration"] = "NSRT nickname integration"
+L["Nickname Integration"] = "Nickname Integration"
+L["On (default): names supplied by Northern Sky Raid Tools replace character names on MSUF unit and group frames. Turn this off to always show character names in MSUF. NSRT and its settings are not modified."] = "On (default): names supplied by Northern Sky Raid Tools replace character names on MSUF unit and group frames. Turn this off to always show character names in MSUF. NSRT and its settings are not modified."
+
 -- Guided setup restart confirmation.
 L["Run the guided setup again? The walkthrough starts over at the first step."] = "Run the guided setup again? The walkthrough starts over at the first step."
 end

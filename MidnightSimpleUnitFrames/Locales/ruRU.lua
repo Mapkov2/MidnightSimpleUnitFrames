@@ -5047,6 +5047,13 @@ L["left"] = "влево"
 L["No target"] = "Нет цели"
 L["Out of combat and no target"] = "Вне боя и нет цели"
 
+L["Class Resource Text"] = "Текст ресурса класса"
+L["Click to select the value, then press Ctrl+C to copy it."] = "Щёлкните, чтобы выбрать значение, затем нажмите Ctrl+C для копирования."
+L["HEX color"] = "Цвет HEX"
+L["NSRT nickname integration"] = "Интеграция псевдонимов NSRT"
+L["Nickname Integration"] = "Интеграция псевдонимов"
+L["On (default): names supplied by Northern Sky Raid Tools replace character names on MSUF unit and group frames. Turn this off to always show character names in MSUF. NSRT and its settings are not modified."] = "Включено (по умолчанию): псевдонимы из Northern Sky Raid Tools заменяют имена персонажей на одиночных и групповых рамках MSUF. Отключите эту опцию, чтобы MSUF всегда показывал имена персонажей. NSRT и его настройки не изменяются."
+
 -- Guided setup restart confirmation.
 L["Run the guided setup again? The walkthrough starts over at the first step."] = "Запустить пошаговую настройку заново? Обучение начнётся с первого шага."
 end

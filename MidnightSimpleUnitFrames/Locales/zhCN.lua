@@ -5649,6 +5649,13 @@ L["left"] = "左"
 L["No target"] = "无目标"
 L["Out of combat and no target"] = "非战斗状态且无目标"
 
+L["Class Resource Text"] = "职业资源文本"
+L["Click to select the value, then press Ctrl+C to copy it."] = "点击选择该值，然后按 Ctrl+C 复制。"
+L["HEX color"] = "HEX 颜色"
+L["NSRT nickname integration"] = "NSRT 昵称集成"
+L["Nickname Integration"] = "昵称集成"
+L["On (default): names supplied by Northern Sky Raid Tools replace character names on MSUF unit and group frames. Turn this off to always show character names in MSUF. NSRT and its settings are not modified."] = "开启（默认）：Northern Sky Raid Tools 提供的昵称会替换 MSUF 单位框架和团队框架中的角色名称。关闭此选项可让 MSUF 始终显示角色名称。NSRT 及其设置不会被修改。"
+
 -- Guided setup restart confirmation.
 L["Run the guided setup again? The walkthrough starts over at the first step."] = "要再次运行引导设置吗？向导将从第一步重新开始。"
 end

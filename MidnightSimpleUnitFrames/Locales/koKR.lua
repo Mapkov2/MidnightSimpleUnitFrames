@@ -5009,6 +5009,13 @@ L["left"] = "왼쪽"
 L["No target"] = "대상 없음"
 L["Out of combat and no target"] = "비전투 중이며 대상 없음"
 
+L["Class Resource Text"] = "직업 자원 텍스트"
+L["Click to select the value, then press Ctrl+C to copy it."] = "값을 선택하려면 클릭한 뒤 Ctrl+C를 눌러 복사하세요."
+L["HEX color"] = "HEX 색상"
+L["NSRT nickname integration"] = "NSRT 별명 연동"
+L["Nickname Integration"] = "별명 연동"
+L["On (default): names supplied by Northern Sky Raid Tools replace character names on MSUF unit and group frames. Turn this off to always show character names in MSUF. NSRT and its settings are not modified."] = "켜짐(기본값): Northern Sky Raid Tools가 제공하는 별명이 MSUF 유닛 및 그룹 프레임의 캐릭터 이름을 대체합니다. MSUF에서 항상 캐릭터 이름을 표시하려면 이 옵션을 끄세요. NSRT와 해당 설정은 변경되지 않습니다."
+
 -- Guided setup restart confirmation.
 L["Run the guided setup again? The walkthrough starts over at the first step."] = "가이드 설정을 다시 진행할까요? 설정 안내가 첫 단계부터 다시 시작됩니다."
 end
