@@ -135,6 +135,34 @@ local function GFDispelSymbolSectionHeight(ctx)
     local width = min(900, max(320, (((ctx and ctx.width) or 720) - 40)))
     return width >= 760 and 368 or 564
 end
+local function BindExclusivePowerFill(ctx, parent, label, x, y, width, key, peerKey, historyLabel)
+    local control = W.ToggleAt(parent, label, x, y, width)
+    M.BindBoolWidget(ctx, control,
+        function() return Bool(CurrentScope(), key, false) end,
+        function(value)
+            value = value == true
+            local scope = CurrentScope()
+            local function Write()
+                local conf = Conf(scope)
+                local changed = conf[key] ~= value
+                conf[key] = value
+                if value and conf[peerKey] ~= false then
+                    conf[peerKey] = false
+                    changed = true
+                end
+                if not changed then return false end
+                QueueGF(scope, "visual")
+                RequestGroupBarsRefresh(ctx, "gf-power-fill-mode")
+                return true
+            end
+            if type(M.RunWithHistory) == "function" then
+                return M.RunWithHistory(historyLabel, "group:" .. tostring(scope) .. ":powerFillMode", Write)
+            end
+            return Write()
+        end,
+        ControlMeta(ctx, "field." .. tostring(key)))
+    return control
+end
 
 local function BuildGFDispelSymbolSection(ctx, b)
     local section = b:CollapsibleSection("dispelSymbol", "Dispel Symbol", GFDispelSymbolSectionHeight(ctx), false)
@@ -228,7 +256,7 @@ local function BuildGFResourceBarSection(ctx, b)
     -- Border & fill, Detached placement); Roles is the group-only addition.
     -- Bar art and colour stay off this page for the same reason they are off the
     -- unit page: they are configured once globally.
-    local powerCardH = 220
+    local powerCardH = 250
     local roleCardH = 178
     local detachedCardH = 244
     local _, powerCardY = W.NextRow(power, powerCardH + 12)
@@ -259,6 +287,11 @@ local function BuildGFResourceBarSection(ctx, b)
             historySource = "menu:group-resource-bar-colors",
             offsetX = -76,
             maxTargets = 12,
+        })
+        W.AttachContextColorReferences(powerBorderCard, { "bar.power_loss" }, {
+            title = "Power Loss Color",
+            note = "Changes only the disappearing loss glow and is shared by every frame.",
+            historySource = "menu:group-power-loss-color",
         })
     end
     local powerEnabled = W.SwitchAt(powerMainCard, "Show Power Bar", powerLeftW - 62, -24, 0, "HIDDEN")
@@ -313,7 +346,10 @@ local function BuildGFResourceBarSection(ctx, b)
         ControlMeta(ctx, "field.powerBarBorderEnabled"))
     local powerBorderSize = ScopeSlider(ctx, powerBorderCard, "Border thickness", 0, 6, 1, powerRightW - 72,
         "powerBarBorderThickness", 1, "color", 16, -108, powerRightW - 72)
-    local smoothFill = BindScopeToggle(ctx, W.ToggleAt(powerBorderCard, "Smooth fill", 16, -158, powerRightW - 32), "powerSmoothFill", false, "visual")
+    local smoothFill = BindExclusivePowerFill(ctx, powerBorderCard, "Smooth fill", 16, -158, powerRightW - 32,
+        "powerSmoothFill", "powerChunkedFill", "Smooth group power fill")
+    local chunkedFill = BindExclusivePowerFill(ctx, powerBorderCard, "Chunked power loss", 16, -188, powerRightW - 32,
+        "powerChunkedFill", "powerSmoothFill", "Chunked group power loss")
     local roleLabel = powerRoleCard and powerRoleCard.title
     local showTank = BindScopeToggle(ctx, W.ToggleAt(powerRoleCard, "Tank", 16, -66, powerLeftW - 32), "powerShowTank", true, "visual")
     local showHealer = BindScopeToggle(ctx, W.ToggleAt(powerRoleCard, "Healer", 16, -100, powerLeftW - 32), "powerShowHealer", true, "visual")
@@ -343,7 +379,7 @@ local function BuildGFResourceBarSection(ctx, b)
     local detachedLayer = ScopeSlider(ctx, detachedCard, "Detached layer", 0, 30, 1, detachedSliderW,
         "detachedPowerBarFrameLevelOffset", 6, "geometry", 16, -182, detachedSliderW)
     local powerControls = {
-        powerHeight, smoothFill, showTank, showHealer, showDamager,
+        powerHeight, smoothFill, chunkedFill, showTank, showHealer, showDamager,
         embedPower, detachPower, powerBorder,
     }
     local detachedControls = { detachedText, detachedWidth, detachedHeight, detachedLayer }
@@ -1064,4 +1100,4 @@ local function BuildGFBars(ctx)
     BuildGFDebuffStripeSection(ctx, b)
     FinalizeScopePage(ctx, b)
 end
-M.RegisterPage("gf_bars", { title = "MSUF Group Dispel Overlay", build = BuildGFBars, version = 20 })
+M.RegisterPage("gf_bars", { title = "MSUF Group Dispel Overlay", build = BuildGFBars, version = 21 })

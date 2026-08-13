@@ -814,11 +814,13 @@ local function BuildBasics(ctx, builder, unit, label)
             if general.barBgMatchHPColor ~= true and general.barBgClassColor ~= true then
                 refs[#refs + 1] = "bar.background_tint"
             end
+            refs[#refs + 1] = "bar.health_loss"
             return refs
         end, {
             title = M.Format("%s Health Colors", UnitTopLabel(unit)),
             note = "Colors follow this frame's effective Health Color Scheme.",
             historySource = "menu:unit-frame-basics-health-colors",
+            maxTargets = 5,
             context = function()
                 local context = { unit = unit, healthMode = EffectiveHealthMode() }
                 if unit == "pet" and GetGeneral().petFrameUsePlayerClassColor == true and type(_G.UnitClass) == "function" then
@@ -838,6 +840,26 @@ local function BuildBasics(ctx, builder, unit, label)
     local x3 = x2 + colW + gap
     local labelW = math.max(104, colW - 34)
     local row1 = -42
+    local function SetHealthFillMode(key, peerKey, value, reason, historyLabel)
+        value = value == true
+        local function Write()
+            local conf = GetConf(unit)
+            local changed = conf[key] ~= value
+            conf[key] = value
+            if value and conf[peerKey] ~= false then
+                conf[peerKey] = false
+                changed = true
+            end
+            if not changed then return false end
+            M.RequestUnitApply(unit, reason, { preview = true })
+            if M.RequestRefresh then M.RequestRefresh(ctx, "unit-health-fill-mode") end
+            return true
+        end
+        if type(M.RunWithHistory) == "function" then
+            return M.RunWithHistory(historyLabel, "unit:" .. tostring(unit) .. ":healthFillMode", Write)
+        end
+        return Write()
+    end
     local enable = W.SwitchAt(sec, "Enable", x1, row1, labelW)
     enable._msuf2UnitFrameGateAlwaysEnabled = true
     M.BindBoolWidget(ctx, enable,
@@ -852,8 +874,13 @@ local function BuildBasics(ctx, builder, unit, label)
     local smooth = W.ToggleAt(sec, "Smooth fill", x2, row1, labelW)
     M.BindBoolWidget(ctx, smooth,
         function() return ReadBool(unit, "smoothFill", false) end,
-        function(v) SetBool(unit, "smoothFill", v, "MSUF2_SMOOTH_FILL", { preview = true }) end,
+        function(v) SetHealthFillMode("smoothFill", "chunkedFill", v, "MSUF2_SMOOTH_FILL", "Smooth health fill") end,
         SettingMeta(ctx, "basics.smooth_fill", unit, "smoothFill"))
+    local chunked = W.ToggleAt(sec, "Chunked health loss", x3, row1, labelW)
+    M.BindBoolWidget(ctx, chunked,
+        function() return ReadBool(unit, "chunkedFill", false) end,
+        function(v) SetHealthFillMode("chunkedFill", "smoothFill", v, "MSUF2_CHUNKED_FILL", "Chunked health loss") end,
+        SettingMeta(ctx, "basics.chunked_fill", unit, "chunkedFill"))
     local blizzard = W.SwitchAt(sec, "Force Blizzard frame on", x1, -76, math.max(196, colW + 24))
     blizzard._msuf2UnitFrameGateAlwaysEnabled = true
     M.BindBoolWidget(ctx, blizzard,
@@ -947,7 +974,9 @@ local function BuildBasics(ctx, builder, unit, label)
         end
     end
     if W.AttachUnitEditFocus then
-        for _, control in ipairs({ enable, reverse, smooth, blizzard, colorMode, petPlayerClassColor }) do W.AttachUnitEditFocus(control, unit, "frame") end
+        for _, control in ipairs({ enable, smooth, chunked, blizzard, colorMode, fillDir, petPlayerClassColor }) do
+            W.AttachUnitEditFocus(control, unit, "frame")
+        end
     end
     local sectionEntry = sec and sec._msuf2CollapsibleEntry
     local RefreshBasicsState = AttachBasicsHeaderStatus(sec, unit) or function() end
@@ -978,7 +1007,7 @@ local function BuildBasics(ctx, builder, unit, label)
         M.RequestOrRefresh(ctx, "frame-basics-enable-now")
     end)
     notice:Hide()
-    local basicsDependentControls = { reverse, smooth, colorMode }
+    local basicsDependentControls = { smooth, chunked, colorMode, fillDir }
     local function RefreshBasicsEnabled()
         local ownOn = ReadBool(unit, "enabled", true)
         local parentOff = unit == "focustarget" and not ReadBool("focus", "enabled", true)
@@ -1635,6 +1664,6 @@ for key, info in pairs(UNIT_PAGES) do
     M.RegisterPage(key, {
         title = info.title,
         build = BuildUnitPage(info),
-        version = 28,
+        version = 29,
     })
 end

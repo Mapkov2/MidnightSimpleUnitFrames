@@ -47,7 +47,7 @@ local ROUNDED_PREVIEW_CARD_HEIGHT = 92
 local GRADIENT_DIR_KEYS, PRIORITY_LABELS = M.PickDefaults(GP, [[GRADIENT_DIR_KEYS PRIORITY_LABELS]])
 local DISPEL_TRIGGERS = VT("BY_ME", "Dispellable by me", "BY_RAID", "Dispellable by group",
     "DISPEL_TYPE", "Any dispel type")
-local Call, DB, G, Bars, ReadG, ReadGBool, ReadB, NormalizeScopeKey, ScopeDBKeys, ScopeHasOverride, ScopeSetOverride, CurrentBarsScope, IsGFScope, BarScopeGet, BarScopeSet, BarScopeGetBars, BarScopeSetBars, GradientScopeGet, GradientScopeSet, GradientScopeHasExplicit, TextureValues, CurrentPowerBarScopeUnit, SmoothPowerGet, SmoothPowerSet, PriorityOrder, PriorityColor, RefreshBorderTestModes, SetAbsorbTextureTest, SetControlEnabled, SetControlsEnabled, ApplyBars, ControlMeta, RegisterControl = M.Pick(GP, [[Call DB G Bars ReadG ReadGBool ReadB NormalizeScopeKey ScopeDBKeys ScopeHasOverride ScopeSetOverride CurrentBarsScope IsGFScope BarScopeGet BarScopeSet BarScopeGetBars BarScopeSetBars GradientScopeGet GradientScopeSet GradientScopeHasExplicit TextureValues CurrentPowerBarScopeUnit SmoothPowerGet SmoothPowerSet PriorityOrder PriorityColor RefreshBorderTestModes SetAbsorbTextureTest SetControlEnabled SetControlsEnabled ApplyBars ControlMeta RegisterControl]])
+local Call, DB, G, Bars, ReadG, ReadGBool, ReadB, NormalizeScopeKey, ScopeDBKeys, ScopeHasOverride, ScopeSetOverride, CurrentBarsScope, IsGFScope, BarScopeGet, BarScopeSet, BarScopeGetBars, BarScopeSetBars, GradientScopeGet, GradientScopeSet, GradientScopeHasExplicit, TextureValues, CurrentPowerBarScopeUnit, SmoothPowerGet, SmoothPowerSet, ChunkedPowerGet, ChunkedPowerSet, PriorityOrder, PriorityColor, RefreshBorderTestModes, SetAbsorbTextureTest, SetControlEnabled, SetControlsEnabled, ApplyBars, ControlMeta, RegisterControl = M.Pick(GP, [[Call DB G Bars ReadG ReadGBool ReadB NormalizeScopeKey ScopeDBKeys ScopeHasOverride ScopeSetOverride CurrentBarsScope IsGFScope BarScopeGet BarScopeSet BarScopeGetBars BarScopeSetBars GradientScopeGet GradientScopeSet GradientScopeHasExplicit TextureValues CurrentPowerBarScopeUnit SmoothPowerGet SmoothPowerSet ChunkedPowerGet ChunkedPowerSet PriorityOrder PriorityColor RefreshBorderTestModes SetAbsorbTextureTest SetControlEnabled SetControlsEnabled ApplyBars ControlMeta RegisterControl]])
 local IsAbsorbTextureTestEnabled = GP.IsAbsorbTextureTestEnabled or function() return _G.MSUF_AbsorbTextureTestMode == true end
 local BAR_SETTING_BY_PATH = {
     ["highlight.boss_target.mode"] = "general.bossTargetOutlineMode",
@@ -122,6 +122,7 @@ local BAR_DYNAMIC_SETTING_KEYS_BY_PATH = {
     ["highlight.border_mode.purgeOutlineMode"] = { "general.purgeOutlineMode" },
     ["highlight.priority.enabled"] = { "general.hlPrioEnabled" },
     ["power.smooth_fill"] = { "bars.smoothPowerBar" },
+    ["power.chunked_fill"] = { "bars.chunkedPowerBar" },
 }
 local BAR_DYNAMIC_SETTING_SUFFIX_BY_PATH = {
     ["scope.override.enabled"] = "override",
@@ -188,6 +189,7 @@ local function IsDynamicBarPath(path)
     path = tostring(path or "")
     return path == "scope.override.enabled"
         or path == "power.smooth_fill"
+        or path == "power.chunked_fill"
         or path:find("^textures%.") ~= nil
         or path:find("^gradient%.") ~= nil
         or path:find("^temp_max_health%.") ~= nil
@@ -2140,12 +2142,23 @@ local function BuildHighlightSection(ctx, b)
 end
 
 local function BuildPowerSection(ctx, b)
-    local power = b:CollapsibleSection("bars_power", "Bar Animation + Text Accuracy", 152, false)
+    local power = b:CollapsibleSection("bars_power", "Bar Animation + Text Accuracy", 184, false)
     local smoothPower = W.Toggle(power, "Smooth power bar")
     M.BindBoolWidget(ctx, smoothPower,
         function() return SmoothPowerGet() end,
-        function(v) SmoothPowerSet(v, "MSUF2_BARS_SMOOTH_POWER") end,
+        function(v)
+            SmoothPowerSet(v, "MSUF2_BARS_SMOOTH_POWER")
+            if M.RequestRefresh then M.RequestRefresh(ctx, "bars-power-fill-mode") end
+        end,
         Meta("power.smooth_fill"))
+    local chunkedPower = W.Toggle(power, "Chunked power loss")
+    M.BindBoolWidget(ctx, chunkedPower,
+        function() return ChunkedPowerGet() end,
+        function(v)
+            ChunkedPowerSet(v, "MSUF2_BARS_CHUNKED_POWER")
+            if M.RequestRefresh then M.RequestRefresh(ctx, "bars-power-fill-mode") end
+        end,
+        Meta("power.chunked_fill"))
     local realtimePower = W.Toggle(power, "Realtime power text")
     M.BindBoolWidget(ctx, realtimePower,
         function() return ReadB("realtimePowerText", true) ~= false end,
@@ -2162,7 +2175,7 @@ local function BuildPowerSection(ctx, b)
         end,
         Meta("power.realtime_text"))
     M.BindGateGroup(ctx, nil, {
-        { controls = smoothPower, on = function() return CurrentPowerBarScopeUnit() ~= nil end },
+        { controls = { smoothPower, chunkedPower }, on = function() return CurrentPowerBarScopeUnit() ~= nil end },
         { controls = realtimePower, on = SharedScope },
     })
 end
@@ -2192,7 +2205,7 @@ local GLOBAL_BARS_LAZY_SECTION_SPECS = {
     { sectionId = "bars_outline", title = "Frame Outline", height = 252, build = BuildOutlineSection },
     { sectionId = "bars_rounded", title = "Rounded Texture", height = ROUNDED_SECTION_HEIGHT, defaultOpen = true, build = BuildRoundedSection },
     { sectionId = "bars_highlight", title = "Highlight Borders", height = 710, defaultOpen = true, build = BuildHighlightSection },
-    { sectionId = "bars_power", title = "Bar Animation + Text Accuracy", height = 152, build = BuildPowerSection },
+    { sectionId = "bars_power", title = "Bar Animation + Text Accuracy", height = 184, build = BuildPowerSection },
 }
 local function BuildGlobalBarsSectionLazy(ctx, b, spec)
     local buildLazy = M.UnitPage and M.UnitPage.BuildSectionLazy

@@ -35,6 +35,34 @@ local function AttachGroupFocus(widget, component)
     W.AttachGroupEditFocus(widget, CurrentEditFocusKey, component or "layout")
     return widget
 end
+local function BindExclusiveFillToggle(ctx, parent, label, x, y, width, key, peerKey, historyLabel)
+    local control = AttachGroupFocus(W.ToggleAt(parent, label, x, y, width), "bars")
+    M.BindBoolWidget(ctx, control,
+        function() return Bool(CurrentScope(), key, false) end,
+        function(value)
+            value = value == true
+            local scope = CurrentScope()
+            local function Write()
+                local conf = Conf(scope)
+                local changed = conf[key] ~= value
+                conf[key] = value
+                if value and conf[peerKey] ~= false then
+                    conf[peerKey] = false
+                    changed = true
+                end
+                if not changed then return false end
+                QueueGF(scope, "visual")
+                if M.RequestRefresh then M.RequestRefresh(ctx, "group-health-fill-mode") end
+                return true
+            end
+            if type(M.RunWithHistory) == "function" then
+                return M.RunWithHistory(historyLabel, "group:" .. tostring(scope) .. ":healthFillMode", Write)
+            end
+            return Write()
+        end,
+        ControlMeta(ctx, "field." .. tostring(key)))
+    return control
+end
 local function CurrentGroupHealthMode()
     return tostring(Val(CurrentScope(), "gfBarMode", "GLOBAL") or "GLOBAL"):upper()
 end
@@ -121,7 +149,7 @@ local function RefreshFrameBasicsProviderHeader(section)
     return provider, usesMSUF, offlineHidden
 end
 local function BuildGFGeneralSection(ctx, b)
-    local general = b:CollapsibleSection("general", "Frame Basics", 480, false)
+    local general = b:CollapsibleSection("general", "Frame Basics", 520, false)
     local generalW = general._msuf2Width or b.width or 720
     local generalLeftX = 32
     local generalRightX = min(max(430, floor(generalW * 0.52)), max(360, generalW - 360))
@@ -136,11 +164,13 @@ local function BuildGFGeneralSection(ctx, b)
             if Bool(CurrentScope(), "deadBgEnabled", false) and CurrentGroupEffectiveHealthMode() ~= "GRADIENT" then
                 references[#references + 1] = "group.dead"
             end
+            references[#references + 1] = "bar.health_loss"
             return references
         end, {
             title = "Group Frame Colors",
             note = function() return GroupHealthColorNote("Shared by Party, Raid and Mythic Raid.") end,
             historySource = "menu:group-frame-basics-colors",
+            maxTargets = 5,
             offsetY = -10,
             context = CurrentGroupHealthColorContext,
         })
@@ -168,14 +198,17 @@ local function BuildGFGeneralSection(ctx, b)
         generalRightX, -58, generalRightW, T.colors.muted)
     if providerHelp and providerHelp.SetWordWrap then providerHelp:SetWordWrap(true) end
     local msufControls = {}
+    msufControls[#msufControls + 1] = BindExclusiveFillToggle(ctx, general, "Smooth health fill",
+        generalRightX, -124, generalRightToggleW, "smoothFill", "chunkedFill", "Smooth group health fill")
+    msufControls[#msufControls + 1] = BindExclusiveFillToggle(ctx, general, "Chunked health loss",
+        generalRightX, -154, generalRightToggleW, "chunkedFill", "smoothFill", "Chunked group health loss")
     M.BuildControlSpecs({
         { "Show player", generalLeftX, -124, generalLeftToggleW, "layout", "showPlayer", true, "rebuild" },
         { "Show while solo", generalLeftX, -154, generalLeftToggleW, "layout", "showSolo", false, "rebuild" },
         { "Hide in Housing", generalLeftX, -184, generalLeftToggleW, "layout", "hideInHousing", false, "visual" },
-        { "Smooth health fill", generalRightX, -124, generalRightToggleW, "bars", "smoothFill", false, "visual" },
-        { "Reverse fill direction", generalRightX, -154, generalRightToggleW, "bars", "reverseFill", false, "visual" },
-        { "Hide during client scene", generalRightX, -184, generalRightToggleW, "layout", "hideInClientScene", true, "visual" },
-        { "Click casting / Clique", generalRightX, -214, generalRightToggleW, "layout", "clickCastEnabled", true, "rebuild" },
+        { "Reverse fill direction", generalRightX, -184, generalRightToggleW, "bars", "reverseFill", false, "visual" },
+        { "Hide during client scene", generalRightX, -214, generalRightToggleW, "layout", "hideInClientScene", true, "visual" },
+        { "Click casting / Clique", generalRightX, -244, generalRightToggleW, "layout", "clickCastEnabled", true, "rebuild" },
     }, { ["*"] = function(s) return BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(general, s[1], s[2], s[3], s[4]), s[5]), s[6], s[7], s[8]) end }, nil, msufControls)
     --- Blizzard's Raid Manager tab is one shared frame, so this control is deliberately
     --- not scope-bound: it reads and writes Party, Raid and Mythic Raid together. It also
@@ -198,18 +231,18 @@ local function BuildGFGeneralSection(ctx, b)
     end
     local raidManagerHelp = W.Text(general,
         "Shared by Party, Raid, and Mythic Raid. Automatic keeps the tab hidden while MSUF provides the group frames.",
-        generalRightX, -250, generalRightW, T.colors.muted)
+        generalLeftX, -278, generalW - generalLeftX - 32, T.colors.muted)
     if raidManagerHelp and raidManagerHelp.SetWordWrap then raidManagerHelp:SetWordWrap(true) end
-    W.DividerAt(general, -306, generalLeftX, 32)
-    W.LabelAt(general, "Offline Members", generalLeftX, -324, generalLeftW, "GameFontNormalSmall", T.colors.accent)
-    local hideOfflineEnabled = BindScopeToggle(ctx, AttachGroupFocus(W.SwitchAt(general, "Offline Members", generalLeftX, -350, generalLeftW), "layout"), "hideOfflineEnabled", false, "visual")
-    local hideOfflineCombat = BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(general, "Hide offline in combat", generalRightX, -350, generalRightToggleW), "layout"), "hideOfflineInCombat", false, "visual")
-    local hideOffline = AttachGroupFocus(ScopeSlider(ctx, general, "Hide offline after", 0, 120, 1, offlineSliderW, "hideOfflineDelay", 0, "visual", generalLeftX, -384, offlineSliderW, "LEFT"), "layout")
+    W.DividerAt(general, -326, generalLeftX, 32)
+    W.LabelAt(general, "Offline Members", generalLeftX, -344, generalLeftW, "GameFontNormalSmall", T.colors.accent)
+    local hideOfflineEnabled = BindScopeToggle(ctx, AttachGroupFocus(W.SwitchAt(general, "Offline Members", generalLeftX, -370, generalLeftW), "layout"), "hideOfflineEnabled", false, "visual")
+    local hideOfflineCombat = BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(general, "Hide offline in combat", generalRightX, -370, generalRightToggleW), "layout"), "hideOfflineInCombat", false, "visual")
+    local hideOffline = AttachGroupFocus(ScopeSlider(ctx, general, "Hide offline after", 0, 120, 1, offlineSliderW, "hideOfflineDelay", 0, "visual", generalLeftX, -404, offlineSliderW, "LEFT"), "layout")
     local hideOfflineControls = { hideOfflineCombat, hideOffline }
     local generalNotice, generalNoticeButton
     if type(CreateSectionNotice) == "function" then
         local _
-        generalNotice, _, generalNoticeButton = CreateSectionNotice(general, -424, "Use MSUF", 104)
+        generalNotice, _, generalNoticeButton = CreateSectionNotice(general, -464, "Use MSUF", 104)
     end
     if generalNoticeButton then
         RegisterControl(generalNoticeButton, ctx, "scope.use_msuf_now", "Use MSUF", "button", "setting", {
@@ -697,7 +730,7 @@ end
 
 local GROUP_LAYOUT_SECTION_SPECS = {
     {
-        sectionId = "general", title = "Frame Basics", height = 480, build = BuildGFGeneralSection,
+        sectionId = "general", title = "Frame Basics", height = 520, build = BuildGFGeneralSection,
         prepareShell = function(ctx, section)
             local function RefreshProviderHeader() RefreshFrameBasicsProviderHeader(section) end
             if M.AddRefresherOnce then
@@ -748,4 +781,4 @@ local function BuildGFLayout(ctx)
     end
     FinalizeScopePage(ctx, b)
 end
-M.RegisterPage("gf_layout", { title = "MSUF Group Layout", build = BuildGFLayout, version = 27 })
+M.RegisterPage("gf_layout", { title = "MSUF Group Layout", build = BuildGFLayout, version = 28 })

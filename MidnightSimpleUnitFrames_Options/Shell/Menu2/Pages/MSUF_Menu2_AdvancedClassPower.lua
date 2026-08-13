@@ -360,6 +360,8 @@ local function ApplyDetachedPowerWidthMode()
     ApplyClassPowerPage("MSUF2_DETACHED_POWER_WIDTH_MODE", APPLY_DETACHED_POWER_WIDTH_MODE, CP_APPLY_DETACHED_POWER)
 end
 local function ApplyDetachedPlayerPowerSmoothing()
+    local player = Player()
+    if player.powerSmoothFill == true then player.powerChunkedFill = false end
     RefreshClassPowerInlinePreview()
     M.RequestUnitApply("player", "MSUF2_CLASSPOWER_PLAYER_POWER_SMOOTH", {
         preview = true, applyAll = false, power = true, classpowerApplied = true,
@@ -469,8 +471,8 @@ local QUICK_DPB_GAP = 4
 local QUICK_CDM_GAP = 4
 local QUICK_FALLBACK_Y_FRAC = 0.60
 local QUICK_KEYS = {
-    bars = M.WordList [[showClassPower classPowerShape classPowerShapeAlign classPowerShowText classPowerAnchorToCooldown classPowerWidthMode showEleMaelstrom showEbonMight showChargedComboPoints runeShowTime runeShowTimeText classPowerOffsetX classPowerOffsetY classPowerOutline detachedPowerBarWidthMode smoothPowerBar realtimePowerText classPowerSmoothFill altManaSmoothFill]],
-    player = M.WordList [[showPowerBar powerBarDetached detachedPowerBarShape detachedPowerOrbSize detachedPowerBarWidth detachedPowerBarHeight detachedPowerBarOffsetX detachedPowerBarOffsetY detachedPowerBarAnchorMode detachedPowerBarFrameLevelOffset detachedPowerBarTextOnBar detachedPowerBarSyncClassPower detachedPowerBarAnchorToClassPower powerSmoothFill]],
+    bars = M.WordList [[showClassPower classPowerShape classPowerShapeAlign classPowerShowText classPowerAnchorToCooldown classPowerWidthMode showEleMaelstrom showEbonMight showChargedComboPoints runeShowTime runeShowTimeText classPowerOffsetX classPowerOffsetY classPowerOutline detachedPowerBarWidthMode smoothPowerBar chunkedPowerBar realtimePowerText classPowerSmoothFill altManaSmoothFill]],
+    player = M.WordList [[showPowerBar powerBarDetached detachedPowerBarShape detachedPowerOrbSize detachedPowerBarWidth detachedPowerBarHeight detachedPowerBarOffsetX detachedPowerBarOffsetY detachedPowerBarAnchorMode detachedPowerBarFrameLevelOffset detachedPowerBarTextOnBar detachedPowerBarSyncClassPower detachedPowerBarAnchorToClassPower powerSmoothFill powerChunkedFill]],
 }
 local quickSetupUndoSnapshot
 local quickSetupFirstRunChecked = false
@@ -583,7 +585,7 @@ local function QuickApplyPhase1(offsets)
         classPowerOutline = 1,
         -- One-click always opts the managed Player power bar into native smooth
         -- interpolation and the high-frequency player power event contract.
-        smoothPowerBar = true, realtimePowerText = true,
+        smoothPowerBar = true, chunkedPowerBar = false, realtimePowerText = true,
         classPowerSmoothFill = true, altManaSmoothFill = true,
     })
     bars.classPowerAnchorToCooldown = offsets.anchorCPtoCDM and true or false
@@ -601,6 +603,7 @@ local function QuickApplyPhase1(offsets)
         detachedPowerBarHeight = tonumber(player.detachedPowerBarHeight) or 6,
         detachedPowerBarFrameLevelOffset = tonumber(player.detachedPowerBarFrameLevelOffset) or 6,
         powerSmoothFill = true,
+        powerChunkedFill = false,
     })
 end
 local function QuickApplyPhase2NoCP(offsets)

@@ -214,7 +214,7 @@ local function DeepCopy(src)
     if type(CopyTable) == "function" then return CopyTable(src) end
     return M.DeepCopy(src)
 end
-local COPY_POWER_BAR_FIELDS = WL [[showPowerBar powerBarHeight embedPowerBarIntoHealth powerBarBorderEnabled powerBarBorderThickness powerSmoothFill powerBarDetached detachedPowerBarShape detachedPowerOrbSize detachedPowerBarWidth detachedPowerBarHeight detachedPowerBarOffsetX detachedPowerBarOffsetY detachedPowerBarAnchorMode detachedPowerBarFrameLevelOffset detachedPowerBarTextOnBar detachedPowerBarSyncClassPower detachedPowerBarAnchorToClassPower powerBarTexture powerBarBgTexture]]
+local COPY_POWER_BAR_FIELDS = WL [[showPowerBar powerBarHeight embedPowerBarIntoHealth powerBarBorderEnabled powerBarBorderThickness powerSmoothFill powerChunkedFill powerBarDetached detachedPowerBarShape detachedPowerOrbSize detachedPowerBarWidth detachedPowerBarHeight detachedPowerBarOffsetX detachedPowerBarOffsetY detachedPowerBarAnchorMode detachedPowerBarFrameLevelOffset detachedPowerBarTextOnBar detachedPowerBarSyncClassPower detachedPowerBarAnchorToClassPower powerBarTexture powerBarBgTexture]]
 --- Must cover every per-unit portrait key the engine reads (CompileUnitPortrait in
 --- MSUF_UF_Config.lua) and the Visuals page binds. Border/background COLORS are
 --- intentionally absent: those live in MSUF_DB.general and are shared by all units.
@@ -270,7 +270,7 @@ local COPY_STATUSICON_FIELDS = M.CopyFieldsFromSpecs(STATUS_CONTROLS, "level rac
 --- the source/destination units regardless of the Bars override. powerSmoothFill is
 --- owned by the Power Bar category, hpPowerTextOverride by Text.
 local COPY_FRAME_BASIC_FIELDS = WL [[
-    enabled showName showHP showPower reverseFillBars verticalFillBars smoothFill healthColorMode
+    enabled showName showHP showPower reverseFillBars verticalFillBars smoothFill chunkedFill healthColorMode
     hlOverride barTexture barBackgroundTexture barBgTexture
     barOutlineThickness barOutlineLayer barOutlineStrata barOutlineTexture barOutlineColorR barOutlineColorG barOutlineColorB barOutlineColorA
     highlightBorderThickness hlAggroSize aggroOutlineMode dispelOutlineMode purgeOutlineMode dispelBorderTrigger
@@ -445,6 +445,11 @@ local POWER_COPY_OVERRIDES = {
         if unitKey ~= "player" then return false end
         local b = BarsDB()
         return b and b.smoothPowerBar == true or false
+    end },
+    { key = "powerChunkedFill", read = ConfTrue, fallback = function(unitKey)
+        if unitKey ~= "player" then return false end
+        local b = BarsDB()
+        return b and b.chunkedPowerBar == true or false
     end },
 }
 local function ReadPowerCopyValue(conf, unitKey, spec)

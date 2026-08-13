@@ -651,15 +651,47 @@ local function SmoothPowerSet(enabled, reason)
     reason = reason or "MSUF2_BARS_SMOOTH_POWER"
     local key = CurrentPowerBarScopeUnit()
     if key then
-        Unit(key).powerSmoothFill = enabled
+        local conf = Unit(key)
+        if conf.powerSmoothFill == enabled and (not enabled or conf.powerChunkedFill == false) then return end
+        conf.powerSmoothFill = enabled
+        if enabled then conf.powerChunkedFill = false end
         M.RequestUnitApply(key, reason, { preview = true, power = true })
         return
     end
     local bars = Bars()
-    if bars.smoothPowerBar == enabled then return end
+    if bars.smoothPowerBar == enabled and (not enabled or bars.chunkedPowerBar == false) then return end
     bars.smoothPowerBar = enabled
+    if enabled then bars.chunkedPowerBar = false end
     -- Shared smooth power is a Player fallback. A targeted Player apply is
     -- required to recompile the spec and update StatusBar interpolation live.
+    M.RequestUnitApply("player", reason, { preview = true, power = true })
+end
+local function ChunkedPowerGet()
+    local key = CurrentPowerBarScopeUnit()
+    if key then
+        local u = Unit(key)
+        if u.powerChunkedFill ~= nil then return u.powerChunkedFill == true end
+        if key == "player" then return ReadB("chunkedPowerBar", false) == true end
+        return false
+    end
+    return ReadB("chunkedPowerBar", false) == true
+end
+local function ChunkedPowerSet(enabled, reason)
+    enabled = enabled and true or false
+    reason = reason or "MSUF2_BARS_CHUNKED_POWER"
+    local key = CurrentPowerBarScopeUnit()
+    if key then
+        local conf = Unit(key)
+        if conf.powerChunkedFill == enabled and (not enabled or conf.powerSmoothFill == false) then return end
+        conf.powerChunkedFill = enabled
+        if enabled then conf.powerSmoothFill = false end
+        M.RequestUnitApply(key, reason, { preview = true, power = true })
+        return
+    end
+    local bars = Bars()
+    if bars.chunkedPowerBar == enabled and (not enabled or bars.smoothPowerBar == false) then return end
+    bars.chunkedPowerBar = enabled
+    if enabled then bars.smoothPowerBar = false end
     M.RequestUnitApply("player", reason, { preview = true, power = true })
 end
 local NormalizeHpMode = M.NormalizeHpMode
@@ -885,6 +917,7 @@ M.Assign(GlobalPage, {
     ControlMeta = ControlMeta, RegisterControl = RegisterControl,
     SCOPE_VALUES = GLOBAL_SCOPE_VALUES, CurrentPowerBarScopeUnit = CurrentPowerBarScopeUnit,
     BuildScopeOverrideSection = BuildScopeOverrideSection, SmoothPowerGet = SmoothPowerGet, SmoothPowerSet = SmoothPowerSet,
+    ChunkedPowerGet = ChunkedPowerGet, ChunkedPowerSet = ChunkedPowerSet,
     NormalizeHpMode = NormalizeHpMode, NormalizePowerMode = NormalizePowerMode,
     PriorityOrder = PriorityOrder, PriorityColor = PriorityColor, SetPriorityOrder = SetPriorityOrder,
     RefreshBorderTestModes = RefreshBorderTestModes, SetAbsorbTextureTest = SetAbsorbTextureTest,

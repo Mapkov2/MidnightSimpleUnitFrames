@@ -494,6 +494,8 @@ local PARTY_DEFAULTS = {
     reverseFill           = false,
     --- Smooth fill
     smoothFill            = false,
+    --- Instant fill with a delayed recent-loss trail.
+    chunkedFill           = false,
     --- Dispel overlay (color wash on health bar when dispellable debuff active)
     dispelOverlayEnabled  = false,
     dispelOverlayStyle    = "FULL",   --- FULL / BOTTOM / TOP / LEFT / RIGHT
@@ -559,6 +561,7 @@ local PARTY_DEFAULTS = {
     powerTextDelimiter    = " / ",
     --- Power smooth fill
     powerSmoothFill       = false,
+    powerChunkedFill      = false,
     --- Power bar parity with the unit-frame Resource Bar section. Bar art and
     --- colour stay global (same as the unit page, which configures them once on
     --- Bars); these are the per-scope keys that page actually exposes.
