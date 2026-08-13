@@ -8,10 +8,22 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.04",
-    previousVersion = "6.03",
-    rangeLabel = "6.03 -> 6.04",
+    currentVersion = "6.04b",
+    previousVersion = "6.04",
+    rangeLabel = "6.04 -> 6.04b",
     entries = {
+        {
+            version = "6.04b",
+            date = "2026-08-13",
+            sections = {
+                {
+                    title = "Emergency Hotfix",
+                    bullets = {
+                        "Fixed 6.04 treating the new Unit Aura profile revision as legacy and resetting saved Aura settings on a later login, reload, profile switch, or import. Existing canonical Aura profiles now remain intact while genuine pre-6.0 profiles retain their one-time migration.",
+                    },
+                },
+            },
+        },
         {
             version = "6.04",
             date = "2026-08-13",
@@ -100,33 +112,6 @@ local data = {
                         "Fixed nickname-provider fallback refreshes so updated names reach the correct Unit and Group Frames without broad polling.",
                         "Guarded secret Player Health values before Class Resource logic can inspect them in combat.",
                         "Fixed Texture Layer target refreshes, rounded clipping, true-outline geometry, rounded preview edges, and Castbar preview text positions after live setting changes.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.01",
-            date = "2026-08-10",
-            sections = {
-                {
-                    title = "Final Beta Release Highlights",
-                    bullets = {
-                        "Expanded Texture Layers with a built-in target-highlight recipe, Current Target visibility, custom-class-color following, automatic sizing, top/bottom texture cropping, and Original or Monochrome source treatment.",
-                        "Added real eight-piece outline media alongside the existing solid and stretched-texture Frame Outline styles.",
-                        "Added optional rounded rectangular Class Resources and Blizzard's animated native Resting symbol across live frames and previews.",
-                        "Refreshed the complete fresh-install visual baseline with cohesive dark bars, warm target accents, and deliberate 6.01 defaults without changing existing profiles.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed nickname-provider Target refreshes so only the affected Unit and Group Frames are invalidated, with combat changes still coalesced safely.",
-                        "Fixed restricted 12.1 Class Resource values hiding their text in combat; protected values now pass directly to Blizzard's native text and StatusBar sinks while preserving configured styling.",
-                        "Fixed Unit Copy To bypassing its action guard and reporting unsupported Castbar copies as successful. Pet, Target of Target, and Focus Target now skip Castbar settings explicitly while mixed copies keep every supported category.",
-                        "Fixed Castbar Spell, Time, and Target text using different layout rules in the Unit Preview than on the live runtime castbar.",
-                        "Fixed Manual Detached Power width losing authority to a synchronized width source in Edit Mode and Menu controls.",
-                        "Fixed Boss portrait refreshes missing frames that had not yet been seeded into the Edit Mode registry.",
-                        "Fixed rounded mouseover edges retaining their previous color until the next hover transition.",
                     },
                 },
             },

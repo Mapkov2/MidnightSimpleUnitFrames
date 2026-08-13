@@ -1,5 +1,11 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.04b - 2026-08-13
+
+### Emergency Hotfix
+
+- Fixed 6.04 treating the new Unit Aura profile revision as legacy and resetting saved Aura settings on a later login, reload, profile switch, or import. Existing canonical Aura profiles now remain intact while genuine pre-6.0 profiles retain their one-time migration.
+
 ## 6.04 - 2026-08-13
 
 ### Highlights
