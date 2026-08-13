@@ -1134,7 +1134,7 @@ local function BuildLayout(ctx, builder, unit)
     RegisterControl(customAnchor.pick, ctx, "anchoring.custom.pick", "Pick", "button", "action", {
         actionKey = "start_unit_custom_anchor_picker", actionFixedArgs = { unit = unit },
     })
-    local cooldownAnchor = W.SwitchAt(sec, "Follow Main Cooldowns", anchorLeftX, -184, anchorInnerW)
+    local cooldownAnchor = W.SwitchAt(sec, "Follow Blizzard's Essential Cooldowns", anchorLeftX, -184, anchorInnerW)
     M.BindBoolWidget(ctx, cooldownAnchor,
         CooldownAnchorEnabled,
         function(enabled)
@@ -1152,7 +1152,7 @@ local function BuildLayout(ctx, builder, unit)
     local function RefreshLayoutState()
         local _, automaticProviderLabel = AutomaticCooldownProvider()
         local cooldownAnchorEnabled = CooldownAnchorEnabled()
-        local cooldownAnchorLabel = automaticProviderLabel and (automaticProviderLabel .. " Anchor") or M.Tr("Follow Main Cooldowns")
+        local cooldownAnchorLabel = automaticProviderLabel and (automaticProviderLabel .. " Anchor") or M.Tr("Follow Blizzard's Essential Cooldowns")
         if cooldownAnchor._msuf2Label and cooldownAnchor._msuf2Label.SetText then
             cooldownAnchor._msuf2Label:SetText(cooldownAnchorLabel)
         end
