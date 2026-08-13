@@ -37,7 +37,10 @@ function A.GlobalBarRegistry.RegisterTextureGradientSettings(ctx)
     if type(GRADIENT_DIRECTION_VALUES) ~= "table" or type(GRADIENT_DIRECTION_KEYS) ~= "table" then return end
 
     RegisterGeneralString("barTexture", "texture", "Global Bar Texture", "Solid", {
-        "bar texture", "bars texture", "global bar texture", "global bars texture", "health bar texture", "power bar texture", "foreground bar texture", "foreground texture", "foreground bar texture",
+        "bar texture", "bars texture", "global bar texture", "global bars texture", "health bar texture",
+        "foreground bar texture", "foreground texture", "foreground bar art", "health bar art",
+        "texture for my health bars", "texture for the health bars", "bar art",
+        "solid looking bar texture", "plain bar texture",
     }, {
         category = "Global / Bars / Textures",
         frameType = "globalBars",
@@ -46,7 +49,10 @@ function A.GlobalBarRegistry.RegisterTextureGradientSettings(ctx)
         normalizeValue = NormalizeTextureKeyForAssistant,
     })
     RegisterGeneralString("barBackgroundTexture", "backgroundTexture", "Global Bar Background Texture", "Solid", {
-        "bar background texture", "global bar background texture", "background bar texture", "bar bg texture", "background texture", "background texture bars", "bars background texture",
+        "bar background texture", "global bar background texture", "background bar texture", "bar bg texture",
+        "background texture", "background texture bars", "bars background texture",
+        "empty part of the bar", "background art behind the health bar", "art behind the health bar",
+        "empty part of the health bar texture",
     }, {
         category = "Global / Bars / Textures",
         frameType = "globalBars",
@@ -63,7 +69,8 @@ function A.GlobalBarRegistry.RegisterTextureGradientSettings(ctx)
     if type(RegisterBarsString) == "function" then
         RegisterBarsString("powerBarTexture", "texture", "Power Bar Texture", "", {
             "power bar texture", "power texture", "mana bar texture", "resource bar texture",
-            "power bar foreground texture", "power foreground texture",
+            "power bar foreground texture", "power foreground texture", "power bar art",
+            "texture for the power bars", "texture for the mana bar", "mana bar art",
         }, {
             category = "Global / Bars / Textures",
             apply = ApplyBars,
@@ -74,6 +81,8 @@ function A.GlobalBarRegistry.RegisterTextureGradientSettings(ctx)
         RegisterBarsString("powerBarBgTexture", "backgroundTexture", "Power Bar Background Texture", "", {
             "power bar background texture", "power background texture", "power bar bg texture",
             "mana bar background texture", "resource bar background texture",
+            "background behind the mana bar", "background behind the power bar",
+            "art behind the power bar",
         }, {
             category = "Global / Bars / Textures",
             apply = ApplyBars,
@@ -85,7 +94,8 @@ function A.GlobalBarRegistry.RegisterTextureGradientSettings(ctx)
         RegisterBarsString("barOutlineTexture", "outlineTexture", "Global Frame Outline Style", "", {
             "frame outline style", "outline style", "true outline",
             "frame outline texture", "bar outline texture", "outline texture",
-            "border texture", "frame border texture",
+            "border texture", "frame border texture", "border style for the frame outline",
+            "frame border style", "outline art",
         }, {
             category = "Global / Bars / Outline",
             mediaType = "border",
@@ -99,14 +109,65 @@ function A.GlobalBarRegistry.RegisterTextureGradientSettings(ctx)
         "hp bar gradient", "health bar gradient", "health gradient", "hp gradient",
         "bar gradient", "bars gradient", "bar gradients", "unitframe gradient",
         "unit frame gradient", "unitframe bar gradient", "unit frame bar gradient",
-    }, { category = "Global / Bars / Gradient", frameType = "globalBars", apply = ApplyBarGradients, reason = "MSUF_ASSISTANT_HP_GRADIENT" })
+        "colour fade on the health bars", "color fade on the health bars", "gradient look",
+        "gradient on my health bars", "health bars a gradient look", "shade the health bars",
+        "colour fade to the health bars", "color fade to the health bars",
+        "gradient from the health bars", "gradient on the health bars",
+        "add a colour fade", "add a color fade", "a colour fade to the health bars",
+        "remove the gradient from the health bars",
+        "colour fade health bars", "color fade health bars", "gradient health bars",
+    }, {
+        category = "Global / Bars / Gradient",
+        frameType = "globalBars",
+        apply = ApplyBarGradients,
+        reason = "MSUF_ASSISTANT_HP_GRADIENT",
+        description = "Shades the health bar from its base colour towards a darker or lighter tone.",
+    })
     RegisterGeneralBoolean("enablePowerGradient", "powerGradient", "Power Bar Gradient", false, {
         "power bar gradient", "power gradient", "mana gradient", "mana bar gradient",
         "resource gradient", "resource bar gradient",
-    }, { category = "Global / Bars / Gradient", frameType = "globalBars", apply = ApplyBarGradients, reason = "MSUF_ASSISTANT_POWER_GRADIENT" })
+        "gradient on the power bars", "colour fade on the power bars", "color fade on the power bars",
+        "power bars to have a colour fade", "power bars to have a color fade",
+        "shade the power bars",
+    }, {
+        category = "Global / Bars / Gradient",
+        frameType = "globalBars",
+        apply = ApplyBarGradients,
+        reason = "MSUF_ASSISTANT_POWER_GRADIENT",
+        description = "Shades the power bar from its base colour towards a darker or lighter tone.",
+    })
+    -- The health and power gradients have separate strength sliders on the
+    -- Bars page, so "power gradient strength" must not resolve to this one.
     RegisterGeneralNumberSetting("gradientStrength", "gradientStrength", "Bar Gradient Strength", 0.45, 0, 1, {
-        "gradient strength", "bar gradient strength", "health gradient strength", "power gradient strength",
-    }, { category = "Global / Bars / Gradient", frameType = "globalBars", apply = ApplyBarGradients, reason = "MSUF_ASSISTANT_GRADIENT_STRENGTH", step = 0.05, percent = true })
+        "gradient strength", "bar gradient strength", "health gradient strength", "hp gradient strength",
+        "health bar gradient strength", "stronger gradient", "weaker gradient", "subtle gradient",
+        "make the gradient stronger", "make the gradient weaker", "gradient stronger", "gradient weaker",
+        "bar gradient is too subtle", "gradient is too subtle", "gradient too subtle",
+        "gradient intensity", "health gradient intensity",
+    }, {
+        category = "Global / Bars / Gradient",
+        frameType = "globalBars",
+        apply = ApplyBarGradients,
+        reason = "MSUF_ASSISTANT_GRADIENT_STRENGTH",
+        step = 0.05,
+        percent = true,
+        description = "How far the health bar gradient shades from its base colour.",
+    })
+    RegisterGeneralNumberSetting("powerGradientStrength", "powerGradientStrength", "Power Gradient Strength", 0.45, 0, 1, {
+        "power gradient strength", "power bar gradient strength", "mana gradient strength",
+        "mana bar gradient strength", "resource gradient strength", "stronger power gradient",
+        "weaker power gradient", "power gradient stronger", "power gradient intensity",
+        "make the power gradient stronger", "turn up the power bar gradient strength",
+        "turn up the power gradient", "power gradient is too subtle",
+    }, {
+        category = "Global / Bars / Gradient",
+        frameType = "globalBars",
+        apply = ApplyBarGradients,
+        reason = "MSUF_ASSISTANT_POWER_GRADIENT_STRENGTH",
+        step = 0.05,
+        percent = true,
+        description = "How far the power bar gradient shades from its base colour.",
+    })
     Registry:RegisterSetting({
         key = "general.gradientDirection",
         label = "Bar Gradient Direction",
@@ -116,12 +177,16 @@ function A.GlobalBarRegistry.RegisterTextureGradientSettings(ctx)
         attribute = "gradientDirection",
         type = "enum",
         aliases = {
-            "gradient direction", "bar gradient direction", "health gradient direction", "power gradient direction",
+            "gradient direction", "bar gradient direction", "health gradient direction",
+            "health bar gradient direction", "hp gradient direction",
             "global bar gradient direction", "global bars gradient direction",
             "global bar right", "global bar right gradient", "global bar right direction",
             "global bar right color", "bar right gradient", "bar right direction", "right bar gradient",
             "gradient from right", "gradient from left", "gradient from top", "gradient from bottom",
             "bar gradient from right", "bar gradient from left", "bar gradient from top", "bar gradient from bottom",
+            "health bar gradient fade from", "gradient fades from", "which side the gradient fades from",
+            "health bar gradient fade from the left", "health bar gradient fade from the right",
+            "gradient fade from the left", "gradient fade from the right",
         },
         values = GRADIENT_DIRECTION_VALUES,
         valueAliases = GRADIENT_DIRECTION_ALIASES,
@@ -145,5 +210,58 @@ function A.GlobalBarRegistry.RegisterTextureGradientSettings(ctx)
         end,
         apply = function() ApplyBarGradients("MSUF_ASSISTANT_GRADIENT_DIRECTION") end,
         combatSafe = false,
+        description = "Which edge the health bar gradient fades from.",
+    })
+    -- The power gradient keeps its own direction flags; before this the four
+    -- powerGradientDir* booleans were storage with no way to name them.
+    local POWER_GRADIENT_DIRECTION_KEYS = ctx.POWER_GRADIENT_DIRECTION_KEYS
+    Registry:RegisterSetting({
+        key = "general.powerGradientDirection",
+        label = "Power Gradient Direction",
+        category = "Global / Bars / Gradient",
+        unit = "global",
+        frameType = "globalBars",
+        attribute = "powerGradientDirection",
+        type = "enum",
+        aliases = {
+            "power gradient direction", "power bar gradient direction", "mana gradient direction",
+            "mana bar gradient direction", "resource gradient direction",
+            "power gradient from right", "power gradient from left",
+            "power gradient from top", "power gradient from bottom",
+            "power bar gradient fade from", "which side the power gradient fades from",
+        },
+        values = GRADIENT_DIRECTION_VALUES,
+        valueAliases = GRADIENT_DIRECTION_ALIASES,
+        dbScopes = {
+            { scope = "general", dbKey = "powerGradientDirection" },
+            { scope = "general", dbKey = "powerGradientDirRight" },
+            { scope = "general", dbKey = "powerGradientDirLeft" },
+            { scope = "general", dbKey = "powerGradientDirUp" },
+            { scope = "general", dbKey = "powerGradientDirDown" },
+        },
+        dbScopesReplace = true,
+        get = function()
+            local g = GeneralDB()
+            for i = 1, #GRADIENT_DIRECTION_VALUES do
+                local value = GRADIENT_DIRECTION_VALUES[i]
+                if g[POWER_GRADIENT_DIRECTION_KEYS[value]] == true then return value end
+            end
+            -- No explicit power direction yet: the runtime falls back to the
+            -- health direction, so report what the bar actually shows.
+            local value = g.powerGradientDirection or g.gradientDirection
+            return POWER_GRADIENT_DIRECTION_KEYS[value] and value or "RIGHT"
+        end,
+        set = function(value)
+            if not POWER_GRADIENT_DIRECTION_KEYS[value] then value = "RIGHT" end
+            local g = GeneralDB()
+            for i = 1, #GRADIENT_DIRECTION_VALUES do
+                local dir = GRADIENT_DIRECTION_VALUES[i]
+                g[POWER_GRADIENT_DIRECTION_KEYS[dir]] = dir == value
+            end
+            g.powerGradientDirection = value
+        end,
+        apply = function() ApplyBarGradients("MSUF_ASSISTANT_POWER_GRADIENT_DIRECTION") end,
+        combatSafe = false,
+        description = "Which edge the power bar gradient fades from.",
     })
 end

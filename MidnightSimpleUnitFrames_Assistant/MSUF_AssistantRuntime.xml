@@ -190,6 +190,8 @@
     <Script file="Assistant\MSUF_AssistantRegistry_GlobalBarSettings_Context.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_GlobalBarSettings_TextureGradient.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_GlobalBarSettings_Absorb.lua"/>
+    <Script file="Assistant\MSUF_AssistantRegistry_GlobalBarSettings_AbsorbGeometry.lua"/>
+    <Script file="Assistant\MSUF_AssistantRegistry_GlobalBarSettings_MaxHealthLoss.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_GlobalBarSettings_Base.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_GlobalBarSettings_Scoped.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_GlobalBarSettings_Scoped_Overlays_Unit.lua"/>

@@ -60,6 +60,7 @@ function A.GlobalBarRegistry.BuildGlobalBarSettingsContext(ctx)
     local GRADIENT_DIRECTION_VALUES = GlobalBarData.GRADIENT_DIRECTION_VALUES
     local GRADIENT_DIRECTION_KEYS = GlobalBarData.GRADIENT_DIRECTION_KEYS
     local GRADIENT_DIRECTION_ALIASES = GlobalBarData.GRADIENT_DIRECTION_ALIASES
+    local POWER_GRADIENT_DIRECTION_KEYS = GlobalBarData.POWER_GRADIENT_DIRECTION_KEYS
     local OUTLINE_STRATA_VALUES = GlobalBarData.OUTLINE_STRATA_VALUES
     local OUTLINE_STRATA_ALIASES = GlobalBarData.OUTLINE_STRATA_ALIASES
     local ON_OFF_STORAGE = GlobalBarData.ON_OFF_STORAGE
@@ -86,6 +87,7 @@ function A.GlobalBarRegistry.BuildGlobalBarSettingsContext(ctx)
     local UNIT_DISPEL_SYMBOL_STRATA_VALUES = GlobalBarData.UNIT_DISPEL_SYMBOL_STRATA_VALUES
 
     if type(GRADIENT_DIRECTION_VALUES) ~= "table" or type(GRADIENT_DIRECTION_KEYS) ~= "table" or type(GRADIENT_DIRECTION_ALIASES) ~= "table" then return nil end
+    if type(POWER_GRADIENT_DIRECTION_KEYS) ~= "table" then return nil end
     if type(OUTLINE_STRATA_VALUES) ~= "table" or type(OUTLINE_STRATA_ALIASES) ~= "table" then return nil end
     if type(ON_OFF_STORAGE) ~= "table" or type(ON_OFF_VALUES) ~= "table" or type(ON_OFF_ALIASES) ~= "table" then return nil end
     if type(AGGRO_MODE_VALUES) ~= "table" or type(AGGRO_MODE_ALIASES) ~= "table" then return nil end
@@ -124,6 +126,8 @@ function A.GlobalBarRegistry.BuildGlobalBarSettingsContext(ctx)
         GlobalScopeRead = GlobalScopeRead,
         GlobalScopeWrite = GlobalScopeWrite,
         GlobalScopeAliases = GlobalScopeAliases,
+        GlobalScopeLabel = C.GlobalScopeLabel,
+        NormalizeGlobalScope = C.NormalizeGlobalScope,
         RegisterScopedSetting = RegisterScopedSetting,
         RegisterScopedMappedEnum = RegisterScopedMappedEnum,
         GlobalBarData = GlobalBarData,
@@ -132,6 +136,7 @@ function A.GlobalBarRegistry.BuildGlobalBarSettingsContext(ctx)
         GRADIENT_DIRECTION_VALUES = GRADIENT_DIRECTION_VALUES,
         GRADIENT_DIRECTION_KEYS = GRADIENT_DIRECTION_KEYS,
         GRADIENT_DIRECTION_ALIASES = GRADIENT_DIRECTION_ALIASES,
+        POWER_GRADIENT_DIRECTION_KEYS = POWER_GRADIENT_DIRECTION_KEYS,
         OUTLINE_STRATA_VALUES = OUTLINE_STRATA_VALUES,
         OUTLINE_STRATA_ALIASES = OUTLINE_STRATA_ALIASES,
         ON_OFF_STORAGE = ON_OFF_STORAGE,

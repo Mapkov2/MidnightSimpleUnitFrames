@@ -1140,6 +1140,42 @@ end
 
 local function MissingValueResponse(matches, raw)
     if #matches == 0 then return nil end
+    -- Media requests put the value in front of the control ("use the flat
+    -- texture for the absorb bar"). The alias reader finds the control and no
+    -- value, so before asking for one, re-read the sentence in the order the
+    -- value parser understands.
+    do
+        local router = A.RouterPrivate
+        -- The stated value may belong to a SIBLING of the control the words
+        -- name: "make the frame outline red" names the outline family, whose
+        -- bare words are the thickness slider, and states a colour.
+        local siblingPlan = type(router) == "table"
+            and type(router.StatedValueKindSiblingPlan) == "function"
+            and router.StatedValueKindSiblingPlan(raw) or nil
+        if siblingPlan then return siblingPlan end
+        local reordered = type(router) == "table"
+            and type(router.CanonicalValueBeforeControlCommand) == "function"
+            and router.CanonicalValueBeforeControlCommand(raw, true) or nil
+        if reordered then
+            for i = 1, #matches do
+                local candidate = matches[i] and matches[i].setting
+                -- P.ValueForRegistrySetting, not the file-local upvalue: the
+                -- local is declared further down and is still nil here.
+                local value = candidate and type(P.ValueForRegistrySetting) == "function"
+                    and P.ValueForRegistrySetting(candidate, Normalize(reordered), reordered) or nil
+                if value ~= nil then
+                    return {
+                        kind = "changes",
+                        changes = { { setting = candidate, value = value } },
+                        label = candidate.label or "Assistant option change",
+                        summary = "Changes the control named after its value.",
+                        raw = raw,
+                        sourceText = raw,
+                    }
+                end
+            end
+        end
+    end
     local best
     for i = 1, #matches do
         if i % 16 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
@@ -1982,12 +2018,37 @@ end
 
 local RELATIVE_INCREASE_TERMS = {
     "increase", "raise", "bump up", "more", "higher", "larger", "bigger", "wider", "taller", "thicker", "grow", "add",
+    "stronger", "strengthen", "rounder", "longer", "brighter", "turn it up", "turn up", "crank",
     "erhoehe", "erhoehen", "hoeher", "groesser", "mehr", "breiter", "dicker",
 }
 local RELATIVE_DECREASE_TERMS = {
     "decrease", "reduce", "lower", "less", "smaller", "narrower", "shorter", "thinner", "shrink", "subtract", "down",
+    "weaker", "weaken", "subtler", "softer", "fainter", "dimmer", "transparent", "tone down", "turn it down",
     "verringere", "reduziere", "tiefer", "niedriger", "kleiner", "weniger", "schmaler", "duenner", "runter",
 }
+
+-- Some phrases pair an increase word with a decrease meaning and the other way
+-- round: "more transparent" is LESS opacity, "less faded" is more. Checked
+-- before the single words, which would otherwise see the "more" and turn the
+-- slider the wrong way. "too <adjective>" states the complaint rather than the
+-- direction, so it is listed with the direction it asks for.
+local RELATIVE_PHRASE_SIGNS = {
+    { "more transparent", -1 }, { "more see through", -1 }, { "more seethrough", -1 },
+    { "less opaque", -1 }, { "more subtle", -1 }, { "more faded", -1 }, { "less visible", -1 },
+    { "too strong", -1 }, { "too intense", -1 }, { "too bright", -1 }, { "too much", -1 },
+    { "less transparent", 1 }, { "less see through", 1 }, { "more opaque", 1 },
+    { "less subtle", 1 }, { "less faded", 1 }, { "more visible", 1 },
+    { "too subtle", 1 }, { "too weak", 1 }, { "too faint", 1 }, { "too thin", 1 },
+    { "too small", 1 }, { "too little", 1 },
+}
+local function RelativePhraseSign(text)
+    text = tostring(text or ""):lower()
+    for i = 1, #RELATIVE_PHRASE_SIGNS do
+        local entry = RELATIVE_PHRASE_SIGNS[i]
+        if text:find(entry[1], 1, true) then return entry[2] end
+    end
+    return nil
+end
 
 P.DIRECTIONAL_MOVE_TERMS = {
     "move", "nudge", "shift", "position", "offset", "left", "right", "up", "down",
@@ -2079,7 +2140,9 @@ function P.ProportionalNumberDeltaForSetting(setting, text)
         if percent == nil then return nil end
         -- A bare percentage says nothing about direction; only pair it with an
         -- explicit increase/decrease word so "set scale to 90%" is left alone.
-        if ContainsAny(text, RELATIVE_INCREASE_TERMS) then factor = 1 + percent / 100
+        local phraseSign = RelativePhraseSign(text)
+        if phraseSign then factor = 1 + phraseSign * percent / 100
+        elseif ContainsAny(text, RELATIVE_INCREASE_TERMS) then factor = 1 + percent / 100
         elseif ContainsAny(text, RELATIVE_DECREASE_TERMS) then factor = 1 - percent / 100
         else return nil end
     end
@@ -2099,9 +2162,11 @@ RelativeNumberDeltaForText = function(setting, text, fallbackAmount)
     -- and treat it as an absolute amount.
     local proportional = P.ProportionalNumberDeltaForSetting(setting, text)
     if proportional ~= nil then return proportional end
-    local sign
-    if ContainsAny(text, RELATIVE_INCREASE_TERMS) then sign = 1 end
-    if ContainsAny(text, RELATIVE_DECREASE_TERMS) then sign = -1 end
+    local sign = RelativePhraseSign(text)
+    if not sign then
+        if ContainsAny(text, RELATIVE_INCREASE_TERMS) then sign = 1 end
+        if ContainsAny(text, RELATIVE_DECREASE_TERMS) then sign = -1 end
+    end
     if not sign then return nil end
     if P.HasAbsoluteNumberTarget(text) then return nil end
     local amount = A._RelativeNumberAmountForText(text)

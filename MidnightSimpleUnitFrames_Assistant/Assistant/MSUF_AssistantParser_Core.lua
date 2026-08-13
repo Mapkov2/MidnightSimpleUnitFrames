@@ -1266,6 +1266,12 @@ local OFF_WORDS = {
     -- "switch off party bold text" were understood as neither on nor off.
     "deactivate", "deactivated", "switch off", "switched off", "shut off",
     "toggle off", "turned off",
+    -- How players actually phrase "off" when they are describing a result
+    -- rather than naming a state. Deliberately phrases, never the bare verbs:
+    -- "stop" and "remove" alone belong to Assistant actions ("stop the class
+    -- resource preview", "remove profile") and reading them as a boolean turns
+    -- an action request into a setting write.
+    "stop showing", "stop the", "get rid of", "no more",
     "aus", "deaktivieren", "deaktiviert", "ausschalten", "ausgeschaltet",
     "deaktiviere", "schalte aus", "mach aus", "verstecken", "versteckt",
     "verstecke", "ausblenden", "ausgeblendet", "blende aus", "nein",
@@ -1273,7 +1279,12 @@ local OFF_WORDS = {
 local ON_WORDS = {
     "on", "enable", "enabled", "show", "visible", "true", "yes",
     "activate", "activated", "switch on", "switched on", "unhide",
-    "toggle on", "turned on",
+    "toggle on", "turned on", "display", "displayed",
+    -- "i want to see the absorb bar" is how a player asks for a toggle without
+    -- ever naming a state. Only the phrases that can mean nothing else: bare
+    -- "add" and "give me" also start size requests ("add more space between
+    -- party frames"), where a boolean reading writes the wrong setting.
+    "want to see", "let me see",
     "an", "aktivieren", "aktiviert", "einschalten", "eingeschaltet",
     "aktiviere", "schalte an", "mach an", "anzeigen", "zeige",
     "zeig", "einblenden", "eingeblendet", "blende ein", "sichtbar",
@@ -1361,6 +1372,11 @@ function A._ExplicitNumberValue(text)
         "%f[%w]be%f[%W]%s+([-+]?%d+%.?%d*)",
         "%f[%w]value%f[%W]%s+([-+]?%d+%.?%d*)",
         "=%s*([-+]?%d+%.?%d*)",
+        -- Players state a size in its unit rather than after a connector:
+        -- "make the shield bar 6 pixels tall", "give my frames a 3 pixel outline".
+        "([-+]?%d+%.?%d*)%s*pixels",
+        "([-+]?%d+%.?%d*)%s*pixel",
+        "([-+]?%d+%.?%d*)%s*px",
     }) do
         for numberText in text:gmatch(pattern) do
             value = tonumber(numberText)

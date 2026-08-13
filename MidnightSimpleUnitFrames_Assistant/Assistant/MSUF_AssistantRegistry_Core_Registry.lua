@@ -21,7 +21,12 @@ local AddSettingToFindIndex
 -- Alias permutation helpers can emit thousands of near-identical phrases per
 -- setting. Canonical phrases are emitted first, so a small normalized head is
 -- both a better query surface and dramatically cheaper to retain and score.
-local MAX_SETTING_ALIASES = 16
+--
+-- The head must still be long enough to hold the hand-written phrasings a
+-- control needs. At 16 every alias past the sixteenth was dropped in silence:
+-- a control with a full set of storage-name variants had no room left for the
+-- sentences players actually type, and adding one changed nothing at all.
+local MAX_SETTING_ALIASES = 20
 local MAX_SETTING_EXACT_ALIAS_EXTRAS = 32
 
 local function FoldAliasPhrases(value)
