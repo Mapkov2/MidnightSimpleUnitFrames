@@ -8,10 +8,42 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.5-alpha2",
-    previousVersion = "6.0-RC18",
-    rangeLabel = "6.0-RC18 -> 6.5-alpha2",
+    currentVersion = "6.5-alpha3",
+    previousVersion = "6.5-alpha2",
+    rangeLabel = "6.5-alpha2 -> 6.5-alpha3",
     entries = {
+        {
+            version = "6.5-alpha3",
+            date = "2026-08-13",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Synchronized the unified Mainline, Mists, TBC and Vanilla package with the MSUF 6.04 feature and fix set while retaining client-specific API owners.",
+                        "Reworked Unit Frame Auras around explicit lane ownership. Buff and Debuff lanes now own their layout, filtering, text, effects and visibility, while icon appearance remains global by Aura type across runtime, Menu, Edit Mode, search and the Assistant.",
+                        "Expanded Assistant control of Absorb, Heal Absorb, Heal Prediction and Maximum Health Loss bars, including natural comparative requests such as making an overlay stronger, softer or more transparent.",
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Added a profile-specific option to disable Northern Sky Raid Tools nicknames on MSUF frames without changing NSRT itself. The integration remains enabled by default.",
+                        "Added the shared All Specs Group Spell Indicator workspace, curated Big Defensive filtering and direct Full-Frame Aura Effect control.",
+                        "Refreshed the generated Assistant schema and complete Menu search index for the synchronized controls.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Reduced recurring Health and Texture Layer work by coalescing pending updates, refreshing only affected texture slots and reusing runtime objects.",
+                        "Fixed Elite, Rare Elite, Rare and Boss classifications in Unit Frame previews and kept runtime and preview icons on one shared position.",
+                        "Fixed incomplete Raid roster name data omitting members, restored live Group frames after preview handoffs and honored configured Aura layers for fixed Group slots.",
+                        "Fixed Tracked Buff sorting ownership, immediate Group preview border refreshes and rounded borders overwriting active Aggro or Dispel test colors.",
+                        "Kept reload-required popups above the options window, expanded clipped Unit Frame Basics sections and clarified the disabled Options-module error.",
+                    },
+                },
+            },
+        },
         {
             version = "6.5-alpha2",
             date = "2026-08-11",
@@ -99,31 +131,6 @@ local data = {
                         "Fixed PvP indicator paths staying compiled after War Mode was disabled during its deactivation timer. Context recompiles remain event-driven and are skipped in combat.",
                         "Fixed Group Frame screen clamping adding a grid-size-dependent offset, so the same Anchor Point and X/Y identify the same position for Party and Raid.",
                         "Fixed stale Edit Mode SavedVariables making Player or Boss castbar previews reappear after logout or reload.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-RC16",
-            date = "2026-08-08",
-            sections = {
-                {
-                    title = "Changes",
-                    bullets = {
-                        "The castbar icon border style is now a dropdown on the Castbar Icon tab: None, Dark or the castbar border color. The thickness slider still decides whether a border shows at all, and new castbars default to Dark.",
-                        "The Dispel Symbol card's runtime preview toggle is labeled \"Runtime Preview: live UnitFrame (drag)\" so it is no longer identical to the Dispel Overlay preview on the same page.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed Party and Raid frames landing in different places from the same X/Y with the same Anchor To and Anchor Point (#67). A leftover relativePoint from older profiles silently anchored one scope to the middle of the anchor frame; the Anchor Point now owns both sides, and the leftover is folded into the saved X/Y so nothing moves.",
-                        "Fixed the castbar Spell Text and Time Text Alignment setting doing nothing until an unrelated width or font change re-laid the text out (#69). Both the live castbar and the menu preview now apply the alignment immediately.",
-                        "Fixed an imported Blizzard Edit Mode arrangement not being picked up by the game's own Edit Mode manager. Applying a profile ends with a one-shot resync, out of combat only.",
-                        "Fixed a mover drag editing the previously active Blizzard layout after Blizzard's own Edit Mode panel switched layouts. The cached layout is dropped when MSUF hands control over.",
-                        "Fixed castbar size changes made in the Edit Mode quick popup leaving the open Castbar menu page on the old values. The width and height sliders and the Width mode dropdown now repaint with the write.",
-                        "Fixed the aura blacklist not repainting after an entry was added or removed, and the preset spell dropdown still offering spells that are already on the list.",
-                        "Fixed \"Preview all spells\" showing only the spec the editor happened to display and skipping spells whose indicator is a frame effect. It now mirrors the compiled runtime set across every tracked spec; corner custom slots stay with Corner Indicators.",
                     },
                 },
             },

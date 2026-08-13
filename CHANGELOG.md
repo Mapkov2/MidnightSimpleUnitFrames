@@ -1,5 +1,27 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.5-alpha3 - 2026-08-13
+
+### Highlights
+
+- Synchronized the unified Mainline, Mists, TBC and Vanilla package with the MSUF 6.04 feature and fix set while retaining client-specific API owners.
+- Reworked Unit Frame Auras around explicit lane ownership. Buff and Debuff lanes now own their layout, filtering, text, effects and visibility, while icon appearance remains global by Aura type across runtime, Menu, Edit Mode, search and the Assistant.
+- Expanded Assistant control of Absorb, Heal Absorb, Heal Prediction and Maximum Health Loss bars, including natural comparative requests such as making an overlay stronger, softer or more transparent.
+
+### Changes
+
+- Added a profile-specific option to disable Northern Sky Raid Tools nicknames on MSUF frames without changing NSRT itself. The integration remains enabled by default.
+- Added the shared All Specs Group Spell Indicator workspace, curated Big Defensive filtering and direct Full-Frame Aura Effect control.
+- Refreshed the generated Assistant schema and complete Menu search index for the synchronized controls.
+
+### Fixes & Performance
+
+- Reduced recurring Health and Texture Layer work by coalescing pending updates, refreshing only affected texture slots and reusing runtime objects.
+- Fixed Elite, Rare Elite, Rare and Boss classifications in Unit Frame previews and kept runtime and preview icons on one shared position.
+- Fixed incomplete Raid roster name data omitting members, restored live Group frames after preview handoffs and honored configured Aura layers for fixed Group slots.
+- Fixed Tracked Buff sorting ownership, immediate Group preview border refreshes and rounded borders overwriting active Aggro or Dispel test colors.
+- Kept reload-required popups above the options window, expanded clipped Unit Frame Basics sections and clarified the disabled Options-module error.
+
 ## 6.5-alpha2 - 2026-08-11
 
 ### Highlights
