@@ -1084,6 +1084,30 @@ local function ApplyButtonFrameEffect(button, slot, parentFrame)
     return true
 end
 
+-- Presence is an independent, plain-boolean output gate.  Keep it outside the
+-- secret-backed AuraButton tree and compose it with the already validated
+-- UnitCanAssist polarity rather than letting either lifecycle overwrite the
+-- other's alpha.
+local function GroupOutputVisible(parentFrame, identityMode)
+    if not parentFrame then return false end
+    -- Unit-frame Spell Indicators do not participate in the Group presence or
+    -- UnitCanAssist state machines. Their outer effect surfaces must therefore
+    -- remain transparent to this Group-only composition helper.
+    if parentFrame._msufA3GroupAuraOutputOwned ~= true then return true end
+    if parentFrame._msufA3GroupAuraPresenceVisible == false then
+        return false
+    end
+    if identityMode == "assist" then
+        return parentFrame._msufA3GroupAuraAssistReady == true
+            and parentFrame._msufA3GroupAuraCanAssist == true
+    end
+    if identityMode == "hostile" then
+        return parentFrame._msufA3GroupAuraAssistReady == true
+            and parentFrame._msufA3GroupAuraCanAssist == false
+    end
+    return true
+end
+
 --- Cold-path adapter for the options preview.  It deliberately reuses the
 --- live renderer so Border, Glow, Pulse, Health Tint, Name Overlay, layer and
 --- priority cannot drift into a second Menu2-only implementation.
@@ -1142,6 +1166,7 @@ local function EnsureExternalEffectSurface(parentFrame, slot)
     assistGate:ClearAllPoints()
     assistGate:SetAllPoints(healthBar)
     assistGate:Show()
+    SetAssistAlpha(assistGate, GroupOutputVisible(parentFrame, identityMode), 1)
 
     parentFrame._msufA3SpellIndicatorExternalEffectPool = parentFrame._msufA3SpellIndicatorExternalEffectPool or {}
     local pool = parentFrame._msufA3SpellIndicatorExternalEffectPool
@@ -1459,10 +1484,17 @@ end
 -- the already validated UnitCanAssist boolean to their native sinks.
 function Runtime.ApplyGroupAssistGate(parentFrame, canAssist, ready)
     if not parentFrame then return false end
+    parentFrame._msufA3GroupAuraOutputOwned = true
     local any = false
     local known = issecretvalue(canAssist) ~= true and type(canAssist) == "boolean"
-    local assistVisible = ready ~= false and known and canAssist == true
-    local hostileVisible = ready ~= false and known and canAssist == false
+    parentFrame._msufA3GroupAuraAssistReady = ready ~= false and known
+    if known then
+        parentFrame._msufA3GroupAuraCanAssist = canAssist
+    else
+        parentFrame._msufA3GroupAuraCanAssist = nil
+    end
+    local assistVisible = GroupOutputVisible(parentFrame, "assist")
+    local hostileVisible = GroupOutputVisible(parentFrame, "hostile")
     any = SetAssistAlpha(parentFrame._msufA3SpellIndicatorExternalAssistGate, assistVisible, 1) or any
     any = SetAssistAlpha(parentFrame._msufA3SpellIndicatorExternalHostileGate, hostileVisible, 1) or any
     local missing = parentFrame._msufA3SpellIndicatorMissingFrames
@@ -1474,6 +1506,27 @@ function Runtime.ApplyGroupAssistGate(parentFrame, canAssist, ready)
             elseif mode == "hostile" then
                 any = SetAssistAlpha(frame, hostileVisible, 1) or any
             end
+        end
+    end
+    return any
+end
+
+function Runtime.ApplyGroupPresenceGate(parentFrame, present)
+    if not parentFrame or type(present) ~= "boolean" then return false end
+    parentFrame._msufA3GroupAuraOutputOwned = true
+    parentFrame._msufA3GroupAuraPresenceVisible = present
+    local any = false
+    any = SetAssistAlpha(parentFrame._msufA3SpellIndicatorExternalNeutralGate,
+        GroupOutputVisible(parentFrame, "neutral"), 1) or any
+    any = SetAssistAlpha(parentFrame._msufA3SpellIndicatorExternalAssistGate,
+        GroupOutputVisible(parentFrame, "assist"), 1) or any
+    any = SetAssistAlpha(parentFrame._msufA3SpellIndicatorExternalHostileGate,
+        GroupOutputVisible(parentFrame, "hostile"), 1) or any
+    local missing = parentFrame._msufA3SpellIndicatorMissingFrames
+    if missing then
+        for _, frame in pairs(missing) do
+            local mode = frame and frame._msufA3IdentityCandidateMode or "neutral"
+            any = SetAssistAlpha(frame, GroupOutputVisible(parentFrame, mode), 1) or any
         end
     end
     return any
@@ -1512,6 +1565,8 @@ local function EnsureMissingFrame(parentFrame, slot)
         parentFrame._msufA3SpellIndicatorMissingFrames[slot.slotKey] = frame
     end
     frame._msufA3IdentityCandidateMode = Runtime.IdentityCandidateMode(slot)
+    SetAssistAlpha(frame, GroupOutputVisible(parentFrame,
+        frame._msufA3IdentityCandidateMode or "neutral"), 1)
     return frame
 end
 
