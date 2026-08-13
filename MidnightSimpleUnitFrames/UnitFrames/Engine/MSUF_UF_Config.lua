@@ -1750,6 +1750,15 @@ local function ResolveUnitContext(db, unit)
   return key, def, conf, general, bars, bossIndex
 end
 
+--- Unit frames canonically store HP-text visibility in showHP. Older imports
+--- may only carry showHPText, so use that alias strictly when the canonical
+--- field is absent. Never let a stale alias override an explicit current value.
+local function UnitHealthTextEnabled(conf)
+  local enabled = conf.showHP
+  if enabled == nil then enabled = conf.showHPText end
+  return enabled ~= false
+end
+
 local function CompileUnitBase(out, unit, key, def, conf, general, bars, bossIndex)
   out.unit = unit
   out.key = key
@@ -1793,7 +1802,7 @@ local function CompileUnitBase(out, unit, key, def, conf, general, bars, bossInd
   else
     out.showName = def.showName ~= false
   end
-  out.showHealthText = conf.showHP ~= false and conf.showHPText ~= false
+  out.showHealthText = UnitHealthTextEnabled(conf)
   if conf.showPowerText ~= nil then
     out.showPowerText = conf.showPowerText ~= false
   elseif conf.showPower ~= nil then
