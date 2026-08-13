@@ -276,7 +276,7 @@ end
 -- to forward into the secret-aware alpha path.
 local function FilteredRangeEventUpdate(frame, event, _unit, inRange)
   local changed = GroupRangeFade.Update(frame, event, nil, inRange)
-  local applyAuraGate = frame and frame._msufApplyPartyAuraRangeGate
+  local applyAuraGate = frame and frame._msufApplyGroupAuraRangeGate
   if changed and applyAuraGate then applyAuraGate(frame, inRange) end
   return changed
 end

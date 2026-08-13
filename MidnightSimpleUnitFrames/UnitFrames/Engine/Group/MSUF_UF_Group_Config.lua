@@ -1223,10 +1223,15 @@ local function CollectSpellIndicatorSpecs(siCfg, si)
     end
   end
   if selected == "multi" then
+    local allSpecsKey = si and si.ALL_SPECS_KEY
+    local allSpecsConfig = allSpecsKey and type(siCfg and siCfg.specs) == "table" and siCfg.specs[allSpecsKey]
+    if type(allSpecsConfig) == "table" and next(allSpecsConfig) ~= nil then
+      Add(allSpecsKey)
+    end
     local multi = type(siCfg and siCfg.multiSpecs) == "table" and siCfg.multiSpecs or nil
     if multi then
       for specKey, enabled in pairs(multi) do
-        if enabled then Add(specKey) end
+        if enabled and specKey ~= allSpecsKey then Add(specKey) end
       end
     end
   elseif selected ~= "auto" then
@@ -1420,8 +1425,10 @@ local function CompileCoreAuras(kind, conf)
     showTooltip = buff.trackedShowTooltip,
     showCooldownSwipe = buff.trackedShowCooldownSwipe,
     cooldownSwipeReverse = buff.trackedCooldownSwipeReverse,
-    sortMethod = buff.trackedSortMethod or buff.sortMethod,
-    sortReverse = buff.trackedSortReverse == true or (buff.trackedSortReverse == nil and buff.sortReverse == true),
+    -- Tracked Buffs are their own native AuraGroup. Keep their ordering local
+    -- instead of silently inheriting the normal Buff container's comparator.
+    sortMethod = buff.trackedSortMethod,
+    sortReverse = buff.trackedSortReverse == true,
     showDurationBar = buff.trackedShowDurationBar,
     durationBarHeight = buff.trackedDurationBarHeight,
     durationBarDisplay = buff.trackedDurationBarDisplay,

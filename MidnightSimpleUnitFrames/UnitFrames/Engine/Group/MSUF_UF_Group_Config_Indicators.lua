@@ -360,10 +360,15 @@ local function CollectSpecs(siCfg, si)
   local out, seen = {}, {}
   local selected = siCfg and siCfg.spec or "auto"
   if selected == "multi" then
+    local allSpecsKey = si and si.ALL_SPECS_KEY
+    local allSpecsConfig = allSpecsKey and type(siCfg and siCfg.specs) == "table" and siCfg.specs[allSpecsKey]
+    if type(allSpecsConfig) == "table" and next(allSpecsConfig) ~= nil then
+      AddSpec(out, seen, si, allSpecsKey)
+    end
     local multi = type(siCfg and siCfg.multiSpecs) == "table" and siCfg.multiSpecs or nil
     if multi then
       for specKey, enabled in pairs(multi) do
-        if enabled == true then AddSpec(out, seen, si, specKey) end
+        if enabled == true and specKey ~= allSpecsKey then AddSpec(out, seen, si, specKey) end
       end
     end
   elseif selected ~= "auto" then
