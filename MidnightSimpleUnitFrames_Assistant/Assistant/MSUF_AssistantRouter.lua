@@ -6281,6 +6281,7 @@ R.AURA_UNIT_FILTER_SPECS = {
         { key = "dispellableAny", label = "Any dispel type", token = "DISPELLABLE", effect = "shows every aura with a dispel type.", bestFor = "seeing purge or cleanse types regardless of the current group.", caution = "Some shown auras may not be removable by your group." },
         { key = "onlyImportant", label = "Important", token = "IMPORTANT", effect = "shows auras Blizzard flags as important.", bestFor = "a compact important-aura view.", caution = "Blizzard, not MSUF, owns the importance flag." },
         { key = "crowdControl", label = "Crowd-control filter", token = "CROWD_CONTROL", effect = "shows crowd-control debuffs such as control or lockout-style effects Blizzard classifies as CC.", bestFor = "PvP, crowd-control tracking, and knowing when a unit is controlled.", caution = "It is usually not the first choice for raid PvE debuff cleanup." },
+        { key = "nonPlayer", label = "Non-player auras filter", token = "isFromPlayerOrPlayerPet=false", effect = "shows only debuffs not caused by any player or player pet.", bestFor = "removing player-caused noise such as gateway-related debuffs while retaining encounter and environment effects.", caution = "It intentionally hides debuffs caused by every player, not only your own casts." },
     },
 }
 
@@ -6311,10 +6312,11 @@ R.AURA_GROUP_FILTER_EFFECTS = {
     DISPELLABLE = "shows every aura with a dispel type, regardless of group capability.",
     IMPORTANT = "shows auras Blizzard flags as important.",
     CROWD_CONTROL = "shows crowd-control debuffs.",
+    NonPlayer = "shows only debuffs not caused by any player or player pet.",
 }
 
 function R.AuraFilterStatusWantsAnswer(norm)
-    if not R.ContainsAny(norm, { "filter", "filters", "dispellable", "raid in combat", "nameplate", "crowd control", "cc", "cancelable", "cancellable", "defensive", "exclusive" }) then return false end
+    if not R.ContainsAny(norm, { "filter", "filters", "dispellable", "raid in combat", "nameplate", "crowd control", "cc", "cancelable", "cancellable", "defensive", "exclusive", "non-player" }) then return false end
     if R.ContainsAny(norm, {
         "what filter", "which filter", "which filters", "active filter", "active filters", "current filter", "current filters",
         "what does", "what do", "what is", "explain", "explain filters", "explain filter", "how does", "why use",
@@ -6337,6 +6339,7 @@ function R.AuraFilterKeyFromText(norm)
     if R.ContainsAny(norm, { "important aura", "important buff", "important debuff" }) then return "onlyImportant" end
     if R.ContainsAny(norm, { "dispellable", "dispelable", "purgeable" }) then return "includeDispellable" end
     if R.ContainsAny(norm, { "crowd control", "cc debuff", "cc debuffs" }) then return "crowdControl" end
+    if R.ContainsAny(norm, { "non-player aura", "non-player auras", "non-player debuff", "non-player debuffs", "not from a player", "not caused by a player" }) then return "nonPlayer" end
     if R.ContainsAny(norm, { "not cancelable", "not cancellable", "non cancelable", "uncancelable" }) then return "notCancelable" end
     if R.ContainsAny(norm, { "cancelable", "cancellable" }) then return "cancelable" end
     if R.ContainsAny(norm, { "external defensive", "external defensives", "external buffs" }) then return "externalDefensive" end
@@ -6348,7 +6351,7 @@ end
 
 function R.AuraFilterLaneForKey(key, lane)
     if lane then return lane end
-    if key == "includeDispellable" or key == "dispellableAny" or key == "crowdControl" then return "debuff" end
+    if key == "includeDispellable" or key == "dispellableAny" or key == "crowdControl" or key == "nonPlayer" then return "debuff" end
     if key == "cancelable" or key == "notCancelable" or key == "externalDefensive" or key == "bigDefensive" then return "buff" end
     return nil
 end
