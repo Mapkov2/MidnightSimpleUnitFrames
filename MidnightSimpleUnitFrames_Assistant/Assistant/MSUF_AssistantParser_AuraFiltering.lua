@@ -40,7 +40,7 @@ local UNIT_FILTER_KEYS = {
     },
     debuff = {
         "onlyMine", "onlyImportant", "raid", "raidInCombat", "includeNameplateOnly",
-        "includeDispellable", "dispellableAny", "crowdControl",
+        "includeDispellable", "dispellableAny", "crowdControl", "nonPlayer",
     },
 }
 
@@ -86,6 +86,11 @@ local FILTER_SPECS = {
         terms = { "crowd control", "cc", "cc debuff", "cc debuffs", "control effects" },
     },
     {
+        id = "nonPlayer", unitKey = "nonPlayer", groupValue = "NonPlayer",
+        label = "Non-player auras", lane = "debuff", conflicts = { "onlyMine" },
+        terms = { "non-player aura", "non-player auras", "non-player debuff", "non-player debuffs", "not from a player", "not caused by a player", "not caused by players" },
+    },
+    {
         id = "nameplateOnly", unitKey = "includeNameplateOnly", groupValue = "INCLUDE_NAME_PLATE_ONLY",
         label = "Nameplate-only", lane = nil,
         terms = { "nameplate only", "nameplate-only", "nameplate auras", "include nameplate" },
@@ -112,7 +117,7 @@ local FILTER_SPECS = {
     },
     {
         id = "onlyMine", unitKey = "onlyMine", groupValue = "Player",
-        label = "Only mine", lane = nil,
+        label = "Only mine", lane = nil, conflicts = { "nonPlayer" },
         terms = {
             "only my", "only mine", "only show my", "show only my", "only let my", "my buffs", "my debuffs",
             "mine only", "own buffs", "own debuffs", "other players", "from everyone",
@@ -665,6 +670,8 @@ local function UnitFilterPlan(scope, lane, spec, mode, sourceIntent)
         effectLabel = "debuffs you can dispel"
     elseif spec.id == "crowdControl" then
         effectLabel = "crowd-control debuffs"
+    elseif spec.id == "nonPlayer" then
+        effectLabel = "debuffs not caused by any player or player pet"
     end
     local success
     if mode == "clear" then

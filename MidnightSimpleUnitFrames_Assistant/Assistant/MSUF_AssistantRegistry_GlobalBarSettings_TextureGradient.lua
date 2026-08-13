@@ -40,6 +40,7 @@ function A.GlobalBarRegistry.RegisterTextureGradientSettings(ctx)
         "bar texture", "bars texture", "global bar texture", "global bars texture", "health bar texture",
         "foreground bar texture", "foreground texture", "foreground bar art", "health bar art",
         "texture for my health bars", "texture for the health bars", "bar art",
+        "solid looking bar texture", "plain bar texture",
     }, {
         category = "Global / Bars / Textures",
         frameType = "globalBars",
@@ -48,10 +49,12 @@ function A.GlobalBarRegistry.RegisterTextureGradientSettings(ctx)
         normalizeValue = NormalizeTextureKeyForAssistant,
     })
     RegisterGeneralString("barBackgroundTexture", "backgroundTexture", "Global Bar Background Texture", "Solid", {
-        "bar background texture", "global bar background texture", "background bar texture", "bar bg texture",
-        "background texture", "background texture bars", "bars background texture",
-        "empty part of the bar", "background art behind the health bar", "art behind the health bar",
-        "empty part of the health bar texture",
+        -- Human wording first; the alias head is capped.
+        "bar background texture", "background bar texture", "bars background texture",
+        "empty part of the bar", "empty part of the health bar",
+        "make the empty part of the bar use the flat texture",
+        "background art behind the health bar", "art behind the health bar",
+        "global bar background texture", "bar bg texture", "background texture",
     }, {
         category = "Global / Bars / Textures",
         frameType = "globalBars",
@@ -110,6 +113,11 @@ function A.GlobalBarRegistry.RegisterTextureGradientSettings(ctx)
         "unit frame gradient", "unitframe bar gradient", "unit frame bar gradient",
         "colour fade on the health bars", "color fade on the health bars", "gradient look",
         "gradient on my health bars", "health bars a gradient look", "shade the health bars",
+        "colour fade to the health bars", "color fade to the health bars",
+        "gradient from the health bars", "gradient on the health bars",
+        "add a colour fade", "add a color fade", "a colour fade to the health bars",
+        "remove the gradient from the health bars",
+        "colour fade health bars", "color fade health bars", "gradient health bars",
     }, {
         category = "Global / Bars / Gradient",
         frameType = "globalBars",
@@ -121,6 +129,7 @@ function A.GlobalBarRegistry.RegisterTextureGradientSettings(ctx)
         "power bar gradient", "power gradient", "mana gradient", "mana bar gradient",
         "resource gradient", "resource bar gradient",
         "gradient on the power bars", "colour fade on the power bars", "color fade on the power bars",
+        "power bars to have a colour fade", "power bars to have a color fade",
         "shade the power bars",
     }, {
         category = "Global / Bars / Gradient",
@@ -135,6 +144,7 @@ function A.GlobalBarRegistry.RegisterTextureGradientSettings(ctx)
         "gradient strength", "bar gradient strength", "health gradient strength", "hp gradient strength",
         "health bar gradient strength", "stronger gradient", "weaker gradient", "subtle gradient",
         "make the gradient stronger", "make the gradient weaker", "gradient stronger", "gradient weaker",
+        "bar gradient is too subtle", "gradient is too subtle", "gradient too subtle",
         "gradient intensity", "health gradient intensity",
     }, {
         category = "Global / Bars / Gradient",
@@ -149,6 +159,8 @@ function A.GlobalBarRegistry.RegisterTextureGradientSettings(ctx)
         "power gradient strength", "power bar gradient strength", "mana gradient strength",
         "mana bar gradient strength", "resource gradient strength", "stronger power gradient",
         "weaker power gradient", "power gradient stronger", "power gradient intensity",
+        "make the power gradient stronger", "turn up the power bar gradient strength",
+        "turn up the power gradient", "power gradient is too subtle",
     }, {
         category = "Global / Bars / Gradient",
         frameType = "globalBars",
@@ -175,6 +187,8 @@ function A.GlobalBarRegistry.RegisterTextureGradientSettings(ctx)
             "gradient from right", "gradient from left", "gradient from top", "gradient from bottom",
             "bar gradient from right", "bar gradient from left", "bar gradient from top", "bar gradient from bottom",
             "health bar gradient fade from", "gradient fades from", "which side the gradient fades from",
+            "health bar gradient fade from the left", "health bar gradient fade from the right",
+            "gradient fade from the left", "gradient fade from the right",
         },
         values = GRADIENT_DIRECTION_VALUES,
         valueAliases = GRADIENT_DIRECTION_ALIASES,

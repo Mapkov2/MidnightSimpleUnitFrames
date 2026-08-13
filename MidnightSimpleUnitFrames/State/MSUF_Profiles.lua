@@ -1980,8 +1980,11 @@ local MSUF_PROFILEIO_LEGACY_PROFILE_SCHEMA_56 = 560
 --- default-fill revision owned by MSUF_Defaults.lua. Bump it whenever that
 --- translation pipeline gains a new mandatory repair.
 local MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION = 21
-local MSUF_PROFILEIO_UNIT_AURA_MODEL_REVISION = 1
 local MSUF_PROFILEIO_UNIT_AURA_MODEL_KEY = "profileModelRevision"
+--- RC17's destructive hard cut established revision 1 as the canonical Unit
+--- Aura baseline. Later revisions may migrate ownership or storage in place;
+--- they must never make an already-canonical profile eligible for this reset.
+local MSUF_PROFILEIO_UNIT_AURA_RESET_BASELINE_REVISION = 1
 local MSUF_PROFILEIO_GROUP_AURA_MODEL_REVISION = 1
 local MSUF_PROFILEIO_GROUP_AURA_SCOPES = { "gf_party", "gf_raid", "gf_mythicraid" }
 local MSUF_PROFILEIO_GROUP_AURA_FILTER_LANES = { "buff", "debuff" }
@@ -2005,8 +2008,15 @@ local MSUF_PROFILEIO_GF_CURRENT_FILTER_TOKENS = {
         RAIDPLAYERDISPELLABLE = "RAID_PLAYER_DISPELLABLE",
         DISPELLABLE = "DISPELLABLE",
         CROWDCONTROL = "CROWD_CONTROL",
+        NONPLAYER = "NonPlayer",
     },
 }
+
+local function MSUF_ProfileIO_HasCanonicalUnitAuraBaseline(auras)
+    return type(auras) == "table"
+        and (tonumber(auras[MSUF_PROFILEIO_UNIT_AURA_MODEL_KEY]) or 0)
+            >= MSUF_PROFILEIO_UNIT_AURA_RESET_BASELINE_REVISION
+end
 local function MSUF_ProfileIO_NormalizeGFAuraFilterToken(lane, token)
     if lane ~= "buff" and lane ~= "debuff" then return token end
     local auraFilter = (type(MSUF) == "table" and type(MSUF.GF) == "table" and MSUF.GF.AuraFilter)
@@ -2631,7 +2641,7 @@ local function MSUF_ProfileIO_ProfileNeedsLegacyRepair(profile)
     if MSUF_ProfileIO_NormalizeGFAuraFilterTokens(profile, false) then return true end
     if profile.auras ~= nil or type(profile.auras2) == "table" then return true end
     local auras = type(profile.auras3) == "table" and profile.auras3 or nil
-    if auras and tonumber(auras[MSUF_PROFILEIO_UNIT_AURA_MODEL_KEY]) ~= MSUF_PROFILEIO_UNIT_AURA_MODEL_REVISION then
+    if auras and not MSUF_ProfileIO_HasCanonicalUnitAuraBaseline(auras) then
         return true
     end
     for i = 1, #MSUF_PROFILEIO_GROUP_AURA_SCOPES do
@@ -3338,8 +3348,7 @@ local function MSUF_ProfileIO_ResetUnitAuras(profile)
         -- its position/size source is not discarded merely by that placeholder.
         sourceA3 = nil
     end
-    if sourceA3
-        and tonumber(sourceA3[MSUF_PROFILEIO_UNIT_AURA_MODEL_KEY]) == MSUF_PROFILEIO_UNIT_AURA_MODEL_REVISION then
+    if MSUF_ProfileIO_HasCanonicalUnitAuraBaseline(sourceA3) then
         local changed = false
         if profile.auras ~= nil then profile.auras, changed = nil, true end
         if profile.auras2 ~= nil then profile.auras2, changed = nil, true end
@@ -3359,7 +3368,7 @@ local function MSUF_ProfileIO_ResetUnitAuras(profile)
         -- The absent revision keeps this profile eligible for a retry.
         return false
     end
-    cleanAuras[MSUF_PROFILEIO_UNIT_AURA_MODEL_KEY] = MSUF_PROFILEIO_UNIT_AURA_MODEL_REVISION
+    cleanAuras[MSUF_PROFILEIO_UNIT_AURA_MODEL_KEY] = MSUF_PROFILEIO_UNIT_AURA_RESET_BASELINE_REVISION
 
     if snapshots then
         local shared = type(cleanAuras.shared) == "table" and cleanAuras.shared or {}

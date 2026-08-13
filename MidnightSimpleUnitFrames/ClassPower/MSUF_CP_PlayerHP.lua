@@ -129,11 +129,21 @@ builders.PLAYER_HP = function(E)
         return db and db.player or nil, db and db.general or nil
     end
 
+    --- showHP is the current unit-frame setting. Preserve support for profiles
+    --- that only carry the old showHPText alias, but never let that alias veto
+    --- an explicit current value.
+    local function PlayerHealthTextEnabled(player)
+        if not player then return true end
+        local enabled = player.showHP
+        if enabled == nil then enabled = player.showHPText end
+        return enabled ~= false
+    end
+
     local function TextEnabled(b)
         if not b or b.playerHPBarTextEnabled == false then return false end
         if UsePlayerText(b) then
             local player = PlayerConfig()
-            return not player or (player.showHP ~= false and player.showHPText ~= false)
+            return PlayerHealthTextEnabled(player)
         end
         return true
     end

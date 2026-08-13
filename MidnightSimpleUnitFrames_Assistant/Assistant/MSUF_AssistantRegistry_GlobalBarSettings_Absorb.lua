@@ -48,6 +48,7 @@ function A.GlobalBarRegistry.RegisterAbsorbSettings(ctx)
         "where the absorb bar sits", "absorb bar follows the health bar",
         "absorb bar follow the health bar", "shield bar follows the hp bar",
         "shield bar anchor", "shield bar side", "absorb bar side",
+        "shield bar should follow the hp bar", "shield bar should follow the health bar",
         "global absorb bar anchor", "global bar absorb anchor",
         "global bar right absorb", "global absorb right", "right absorb bar", "right absorb anchor",
         "absorb right side", "absorb anchor right", "absorb bar right side",
@@ -83,6 +84,7 @@ function A.GlobalBarRegistry.RegisterAbsorbSettings(ctx)
         "heal prediction", "heal prediction overlay", "incoming heal prediction", "self heal prediction",
         "show heal prediction", "incoming heals", "show incoming heals", "incoming healing",
         "heals on the way", "healing on the way", "predicted heals", "heals that are still casting",
+        "healing on its way", "heals on its way", "healing that is coming",
     }, {
         category = "Global / Bars / Absorb",
         frameType = "globalBars",

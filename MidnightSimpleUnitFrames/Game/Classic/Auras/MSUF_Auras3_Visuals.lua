@@ -491,9 +491,15 @@ local function EnsureFrameEffectRoot(button, frame)
     if not (button and target) then return nil end
     local root = button._msufA3ClassicFrameEffectRoot
     if not root then
-        root = CreateFrame("Frame", nil, button)
+        -- Keep the effect surface as a unit-frame child so its configured
+        -- absolute element layer can order below or above the Aura button.
+        -- Classic AuraData is public, so button updates own visibility directly
+        -- and no native secret-backed descendant gate is required here.
+        root = CreateFrame("Frame", nil, frame)
         if root.EnableMouse then root:EnableMouse(false) end
         button._msufA3ClassicFrameEffectRoot = root
+    elseif root.GetParent and root:GetParent() ~= frame and root.SetParent then
+        root:SetParent(frame)
     end
     root:ClearAllPoints()
     root:SetAllPoints(target)

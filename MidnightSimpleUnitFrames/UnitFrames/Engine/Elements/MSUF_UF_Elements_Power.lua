@@ -43,6 +43,7 @@ local POWER_EVENTS = C and C.POWER_EVENTS
 local POWER_EVENTS_FAST = {
   "UNIT_POWER_FREQUENT", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE",
 }
+local EMPTY_EVENTS = {}
 -- Group power bars never show alternate power, so they skip the BAR_SHOW/HIDE
 -- registrations (matches the lean per-unit tracker baseline).
 local POWER_EVENTS_GROUP = { "UNIT_POWER_UPDATE", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER" }
@@ -86,6 +87,28 @@ end
 
 local function SpecPower(frame)
   return frame and frame.MSUFSpec and frame.MSUFSpec.power or nil
+end
+
+local function ResolveAugPowerReplacement(frame)
+  if not (frame and frame.MSUFUnitKey == "player") then return false end
+  local getMetrics = _G.MSUF_GetAugPowerReplacementMetrics
+  if type(getMetrics) ~= "function" then return false end
+  local active, totalHeight, essenceHeight = getMetrics(frame)
+  if active ~= true then return false end
+  totalHeight = tonumber(totalHeight)
+  essenceHeight = tonumber(essenceHeight)
+  if not IsFiniteNumber(totalHeight) or totalHeight <= 0
+    or not IsFiniteNumber(essenceHeight) or essenceHeight <= 0 then
+    return false
+  end
+  return true, totalHeight, essenceHeight
+end
+
+local function ClearAugPowerReplacement(frame)
+  if not frame then return end
+  frame._msufAugPowerReplacementActive = nil
+  frame._msufAugPowerReplacementHeight = nil
+  frame._msufAugPowerReplacementEssenceHeight = nil
 end
 
 local function ResolveDynamicPowerColor(frame, unit, powerType, token, metaKnown)
@@ -360,14 +383,14 @@ end
 --      predicted class width) as the sync fallback. It lives on another page and
 --      silently applies to every unit, so it must not outrank the frame itself.
 --   5. the frame width.
-local function ResolveDetachedWidth(frame, power)
+local function ResolveDetachedWidth(frame, power, avoidClassPower)
   local bar = frame and frame.targetPowerBar
   local width = CachedExternalFrameWidth(power.detachedWidthFrameName, bar)
-  if width == nil and power.detachedSyncClass == true then
+  if width == nil and avoidClassPower ~= true and power.detachedSyncClass == true then
     width = FrameWidth(_G.MSUF_ClassPowerContainer)
   end
   width = width or Number(power.detachedWidthExplicit, nil)
-  if width == nil and power.detachedSyncClass == true then
+  if width == nil and avoidClassPower ~= true and power.detachedSyncClass == true then
     width = CachedExternalFrameWidth(power.detachedClassWidthFrameName, bar)
       or Number(power.detachedClassWidth, nil)
   end
@@ -377,9 +400,10 @@ local function ResolveDetachedWidth(frame, power)
 end
 Power.ResolveDetachedWidth = ResolveDetachedWidth
 
-local function ResolveDetachedAnchor(power)
+local function ResolveDetachedAnchor(power, avoidClassPower)
   local anchor = _G.MSUF_ClassPowerContainer
-  if power.detachedAnchorClass == true and anchor and anchor.GetWidth and anchor:GetWidth() > 1
+  if avoidClassPower ~= true and power.detachedAnchorClass == true
+    and anchor and anchor.GetWidth and anchor:GetWidth() > 1
     and (not anchor.IsShown or anchor:IsShown()) then
     return anchor, "TOP", "BOTTOM"
   end
@@ -500,14 +524,16 @@ local function SetPowerFrameLevel(bar, level)
   bar._msufPowerFrameLevel = level
 end
 
-local function LayoutDetached(frame, bar, power, defaultHeight)
+local function LayoutDetached(frame, bar, power, defaultHeight, augReplacement)
   local shape = NormalizeShape(power.shape)
-  local size = shape == "ORB" and RoundPositive(power.orbSize, power.detachedHeight or defaultHeight or 6) or nil
-  local width = size or ResolveDetachedWidth(frame, power)
-  local height = size or RoundPositive(power.detachedHeight, defaultHeight or 6)
+  local size = augReplacement ~= true and shape == "ORB"
+    and RoundPositive(power.orbSize, power.detachedHeight or defaultHeight or 6) or nil
+  local width = size or ResolveDetachedWidth(frame, power, augReplacement)
+  local height = augReplacement == true and defaultHeight
+    or size or RoundPositive(power.detachedHeight, defaultHeight or 6)
   local x = math_floor(Number(power.detachedX, 0) + 0.5)
   local y = math_floor(Number(power.detachedY, -4) + 0.5)
-  local anchor, point, relativePoint = ResolveDetachedAnchor(power)
+  local anchor, point, relativePoint = ResolveDetachedAnchor(power, augReplacement)
 
   bar:ClearAllPoints()
   bar:SetSize(math_max(1, width), math_max(1, height))
@@ -535,7 +561,7 @@ end
 -- Resolve even when the last width stamp matches: outside combat this also
 -- clears the per-bar protected fallback cache when a source becomes hidden.
 local function RefreshDetachedWidthOnly(frame, bar, power)
-  local width = ResolveDetachedWidth(frame, power)
+  local width = ResolveDetachedWidth(frame, power, frame and frame._msufAugPowerReplacementActive == true)
   if bar._msufDetachedWidth ~= width then
     bar:SetWidth(math_max(1, width))
     bar._msufDetachedWidth = width
@@ -605,10 +631,13 @@ end
 
 function Power.IsEnabled(frame, spec)
   local power = spec and spec.power
-  return power and power.enabled == true
+  return (power and power.enabled == true) or ResolveAugPowerReplacement(frame) == true
 end
 
 function Power.GetEvents(frame, spec)
+  if frame and frame._msufAugPowerReplacementActive == true then
+    return EMPTY_EVENTS
+  end
   local power = spec and spec.power
   -- Realtime player text is the only unit-frame feature that needs Blizzard's
   -- high-frequency stream.  The compiler publishes that decision on the
@@ -631,6 +660,7 @@ function Power.Disable(frame)
   HidePowerBorder(frame and frame.targetPowerBar)
   if HideBarGradient and frame then HideBarGradient(frame.powerGradients) end
   if frame then
+    ClearAugPowerReplacement(frame)
     frame._msufPowerBarDetached = nil
     if Health and Health.Layout then Health.Layout(frame, frame.MSUFSpec, false) end
   end
@@ -663,11 +693,19 @@ function Power.Apply(frame, spec)
   frame.power = bar
 
   local power = spec and spec.power or {}
-  local h = tonumber(power.height) or 3
+  local augReplacement, augHeight, augEssenceHeight = ResolveAugPowerReplacement(frame)
+  if augReplacement then
+    frame._msufAugPowerReplacementActive = true
+    frame._msufAugPowerReplacementHeight = augHeight
+    frame._msufAugPowerReplacementEssenceHeight = augEssenceHeight
+  else
+    ClearAugPowerReplacement(frame)
+  end
+  local h = augReplacement and augHeight or tonumber(power.height) or 3
   frame._msufPowerBarDetached = power.detached == true and true or nil
-  if Health and Health.Layout then Health.Layout(frame, spec, power.enabled == true) end
+  if Health and Health.Layout then Health.Layout(frame, spec, augReplacement or power.enabled == true) end
   if power.detached == true then
-    LayoutDetached(frame, bar, power, h)
+    LayoutDetached(frame, bar, power, h, augReplacement)
   else
     bar._msufDetached = nil
     bar._msufDetachedWidth = nil
@@ -687,6 +725,17 @@ function Power.Apply(frame, spec)
   if frame.powerBarBG then
     frame.powerBarBG:ClearAllPoints()
     frame.powerBarBG:SetAllPoints(bar)
+  end
+  if augReplacement then
+    -- Essence + Ebon Might own the visible surface. Keep the ordinary Player
+    -- Power StatusBar only as their geometry carrier, with no visual layers or
+    -- recurring value work of its own.
+    ApplyShapeMedia(frame, nil, power.texture or spec and spec.texture or WHITE)
+    SetShown(frame, false)
+    HidePowerBorder(bar)
+    if HideBarGradient then HideBarGradient(frame.powerGradients) end
+    NotifyRoundedPowerBorder(frame, false)
+    return
   end
   local texture = power.texture or spec and spec.texture or WHITE
   if power.detached == true then
@@ -1024,6 +1073,7 @@ local function PowerValuePlan(frame)
 end
 
 function Power.Update(frame, event, unit, eventPowerToken)
+  if frame and frame._msufAugPowerReplacementActive == true then return end
   local spec = frame and frame.MSUFSpec
   if frame and (frame._msufIsGroupFrame == true or (spec and spec.scope == "group")) then
     return UpdatePercentPath(frame, event, unit, eventPowerToken)
@@ -1036,6 +1086,9 @@ function Power.Update(frame, event, unit, eventPowerToken)
 end
 
 function Power.SelectUpdate(frame, spec)
+  if frame and frame._msufAugPowerReplacementActive == true then
+    return Power.Update
+  end
   if (spec and spec.scope == "group") or (frame and frame._msufIsGroupFrame == true) then
     -- No power-text consumers -> the folded single-pass lane; any power slot
     -- keeps the generic path that owns the text-runtime percent handshake.

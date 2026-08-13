@@ -3180,7 +3180,17 @@ function K.NoMatch(query)
     -- keeping a second spelling list here.
     if not topic and A.RouterPrivate and type(A.RouterPrivate.CorrectControlTypos) == "function" then
         local corrected = A.RouterPrivate.CorrectControlTypos(query)
-        if corrected and corrected ~= query then topic = K.TopicGuidance(corrected) end
+        -- The corrector works against control vocabulary, so it can turn a
+        -- perfectly good word into a nearby control word ("gradient look" ->
+        -- "gradient lock"). That rewrite must not resurrect a topic article
+        -- the ORIGINAL sentence already earned its way past by naming a
+        -- control outright.
+        if corrected and corrected ~= query then
+            local router = A.RouterPrivate
+            local named = type(router.CommandNamedSettingLabel) == "function"
+                and router.CommandNamedSettingLabel(query, true) or nil
+            if not named then topic = K.TopicGuidance(corrected) end
+        end
     end
     if topic then
         local lines = { topic.title }
@@ -3256,6 +3266,19 @@ function K.NoMatch(query)
         }
     end
 
+    -- Last stop before "I did not catch that": the sentence may describe a
+    -- boolean control by the result it wants rather than by a state word
+    -- ("mark shields that overflow past full health"). Executing it is the
+    -- honest answer; an apology is not.
+    do
+        local router = A and A.RouterPrivate
+        local plan = type(router) == "table" and type(router.NamedBooleanIntentPlan) == "function"
+            and router.NamedBooleanIntentPlan(query) or nil
+        if plan and type(A.ExecutePlan) == "function" then
+            local ok, result = pcall(A.ExecutePlan, plan, { sourceText = query })
+            if ok and type(result) == "table" and result.text then return result end
+        end
+    end
     return {
         text = "I did not catch which MSUF option you meant."
             .. "\nI work from MSUF's own menu, so the fastest way to reach anything is to name the frame and the option: 'set target cast bar height to 20', 'turn on party dead background', 'hide player name'."
@@ -3376,6 +3399,22 @@ function K.TopicGuidance(query)
                 -- Deliberately last: only reached once a topic already matched,
                 -- which keeps the catalog lookup off the general input path.
                 if K.QueryNamesCatalogControl(norm) then return nil end
+                -- Same rule for the registry: "give the health bars a gradient
+                -- look" is an instruction that names one control, and a page
+                -- tour about health and power bars is the wrong answer to it.
+                -- Only long, number-free sentences pay for the index build,
+                -- and a question ("what does the bar gradient do") has no
+                -- leading verb, so it never reaches it.
+                local router = A and A.RouterPrivate
+                if type(router) == "table" and type(router.CommandNamedSettingLabel) == "function" then
+                    local tokens = 0
+                    for _ in norm:gmatch("%S+") do tokens = tokens + 1 end
+                    if tokens >= 5 and not norm:find("%d")
+                        and router.CommandNamedSettingLabel(query, true)
+                    then
+                        return nil
+                    end
+                end
                 return topic
             end
         end

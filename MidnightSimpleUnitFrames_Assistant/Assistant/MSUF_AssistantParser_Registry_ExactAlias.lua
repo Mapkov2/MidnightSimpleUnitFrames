@@ -649,6 +649,19 @@ function P.PlanForExactRegistrySetting(setting, text, raw)
     local guarded = GuardedSettingResponse(setting, text, raw)
     if guarded then return guarded end
 
+    -- The words may name a family whose bare form is one control while the
+    -- stated value belongs to a sibling: "make the frame border half
+    -- transparent" resolves the thickness slider and then turns it down.
+    -- Only pays for a lookup when the sentence states a colour or an opacity.
+    local router = A.RouterPrivate
+    if type(router) == "table" and type(router.SiblingSettingForStatedValueKind) == "function" then
+        local sibling = router.SiblingSettingForStatedValueKind(raw or text)
+        if sibling and sibling ~= setting then
+            local siblingPlan = router.StatedValueKindSiblingPlan(raw or text)
+            if siblingPlan then return siblingPlan end
+        end
+    end
+
     local relativeDelta = setting.type == "number" and RelativeNumberDeltaForText
         and RelativeNumberDeltaForText(setting, text) or nil
     local value

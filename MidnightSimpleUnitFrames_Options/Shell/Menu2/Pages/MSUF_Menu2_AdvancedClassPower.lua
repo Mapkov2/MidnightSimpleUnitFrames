@@ -108,6 +108,7 @@ local CLASSPOWER_SETTING_KEY_BY_PATH = {
     ["style.resources.comboColor"] = "bars.classPowerComboPointColorMode",
     ["style.resources.fgTex"] = "bars.classPowerTexture",
     ["style.text.font"] = "bars.classPowerFontSize",
+    ["style.text.layer"] = "bars.classPowerTextLayer",
     ["style.text.textX"] = "bars.classPowerTextOffsetX",
     ["style.text.textY"] = "bars.classPowerTextOffsetY",
     ["visibility.out_of_combat"] = "bars.classPowerHideOOC",
@@ -248,7 +249,8 @@ local CLASS_POWER_PREVIEW_SPECS = {
     { key = "druid_guardian", label = "Druid - Guardian Ironfur", token = "IRONFUR", mode = "ironfur", segments = 1, value = 0.72, previewText = "3" },
     { key = "druid_balance", label = "Druid - Balance (no class bar)", mode = "none", enabled = false },
     { key = "evoker_essence", label = "Evoker - Essence", token = "ESSENCE", mode = "segmented", segments = 6, value = 4, previewText = "4" },
-    { key = "evoker_augmentation_ebon", label = "Evoker - Augmentation Ebon Might", token = "EBON_MIGHT", mode = "timer_bar", segments = 1, value = 0.58, previewText = "12.0", nativeDurationText = true },
+    { key = "evoker_augmentation_ebon", label = "Evoker - Augmentation Ebon Might", token = "ESSENCE", mode = "segmented", segments = 6, value = 4, previewText = "4",
+        secondaryTimer = { token = "EBON_MIGHT", mode = "timer_bar", segments = 1, value = 0.6, previewText = "12.0", nativeDurationText = true } },
     { key = "hunter_survival_tip", label = "Hunter - Survival Tip of the Spear", token = "TIP_OF_THE_SPEAR", mode = "aura_segmented", segments = 3, value = 2, previewText = "2" },
     { key = "mage_arcane", label = "Mage - Arcane Charges", token = "ARCANE_CHARGES", mode = "segmented", segments = 4, value = 3, previewText = "3" },
     { key = "mage_frost", label = "Mage - Frost Icicles", token = "ICICLES", mode = "aura_segmented", segments = 5, value = 3, previewText = "3" },
@@ -887,7 +889,7 @@ function Page:BuildClassLayout()
         { "width", "slider", "Width", 30, 800, 1, 300, "classPowerWidth", 0 },
         { "x", "slider", "Offset X", -800, 800, 1, 300, "classPowerOffsetX", 0 },
         { "y", "slider", "Offset Y", -800, 800, 1, 300, "classPowerOffsetY", 0 },
-        { "level", "slider", "Layer", 0, 30, 1, 300, "classPowerFrameLevelOffset", 5 },
+        { "level", "slider", "Class Resource layer", 0, 30, 1, 300, "classPowerFrameLevelOffset", 5 },
     })
     local alignValues = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right")
     self.cpAlign = W.Segment(section, "Shape alignment", alignValues, 300)
@@ -906,6 +908,7 @@ function Page:BuildClassLayout()
         end,
         Meta("layout.independent_powerbar_shape", "setting", { settingKey = "player.detachedPowerBarShape" }))
     AddTooltip(self.cpPowerShape, "Independent Powerbar Shape", "Changes only the detached Player Powerbar. Class Resource shape on the left changes only Class Resources.")
+    AddTooltip(self.cp.level, "Class Resource Layer", "Orders the Class Resource bar and pips. Its numeric, Rune and Ebon duration text uses the separate Class Resource text layer under Appearance > Text.")
     self:Add("detachedPlayer", self.cpPowerShape)
     local rightX = compact and 32 or min(max(430, floor(width * .52)), max(360, width - 360))
     local leftW = compact and max(250, width - 64) or max(250, rightX - 74)
@@ -962,9 +965,11 @@ function Page:BuildClassStyle()
     }))
     M.Assign(self.cp, self:Controls(text, Bars, ApplyClassPowerText, "style.text", {
         { "font", "slider", "Font size", 6, 32, 1, 300, "classPowerFontSize", 16, group = "cpText" },
+        { "layer", "slider", "Class Resource text layer", 0, 30, 1, 300, "classPowerTextLayer", 5, ApplyClassPower, group = "cpText" },
         { "textX", "slider", "Text X", -200, 200, 1, 300, "classPowerTextOffsetX", 0, group = "cpText" },
         { "textY", "slider", "Text Y", -200, 200, 1, 300, "classPowerTextOffsetY", 0, group = "cpText" },
     }))
+    AddTooltip(self.cp.layer, "Class Resource Text Layer", "Orders Class Resource numeric text, Rune times and the Ebon Might duration text independently from the Class Resource bar and Player Power text.")
     M.Assign(self.cp, self:Controls(opacity, Bars, ApplyClassPower, "style.opacity", {
         { "bg", "alpha", "BG opacity", "classPowerBgAlpha", .3, nil, 1, group = "cp" },
         { "filled", "alpha", "Filled %", "classPowerFilledAlpha", 1, nil, 5, group = "cp" },
@@ -976,7 +981,7 @@ function Page:BuildClassStyle()
         { "gap", "slider", "Pip gap", 0, 8, 1, 300, "classPowerGap", 0, group = "cp" },
     }))
     local resourcesCard, textCard, pipsCard
-    for _, card in ipairs({ { resources, "Resource & Textures", 248 }, { text, "Text", 210 }, { opacity, "Opacity", 204 }, { pips, "Pips & Border", 230 } }) do
+    for _, card in ipairs({ { resources, "Resource & Textures", 248 }, { text, "Text", 262 }, { opacity, "Opacity", 204 }, { pips, "Pips & Border", 230 } }) do
         local controlCard = W.ControlCard(card[1], card[2], nil, 18, -38, cardW + 28, card[3])
         if card[1] == resources then resourcesCard = controlCard end
         if card[1] == text then textCard = controlCard end
@@ -1026,7 +1031,7 @@ function Page:BuildClassStyle()
     MoveWidget(self.cp.color, resources, 32, -72)
     MoveWidget(self.cp.comboColor, resources, 32, -104, controlW)
     PlaceColumn(resources, 32, -192, 54, controlW, nil, self.cp.fgTex, self.cp.bgTex)
-    PlaceColumn(text, 32, -84, 52, controlW, nil, self.cp.font, self.cp.textX, self.cp.textY)
+    PlaceColumn(text, 32, -84, 52, controlW, nil, self.cp.font, self.cp.layer, self.cp.textX, self.cp.textY)
     PlaceColumn(opacity, 32, -84, 52, controlW, nil, self.cp.bg, self.cp.filled, self.cp.empty)
     PlaceColumn(pips, 32, -84, 52, controlW, nil, self.cp.separator, self.cp.outline, self.cp.gap)
 end
@@ -1088,11 +1093,12 @@ function Page:BuildDetachedPower()
         { "x", "slider", "Power X", -1000, 1000, 1, 300, "detachedPowerBarOffsetX", 0, group = "detachedPlayer" },
         { "y", "slider", "Power Y", -1000, 1000, 1, 300, "detachedPowerBarOffsetY", -4, group = "detachedPlayer" },
         { "height", "slider", "Power height", 2, 80, 1, 300, "detachedPowerBarHeight", 6, group = "detachedPlayer" },
-        { "layer", "slider", "Power layer", 0, 30, 1, 300, "detachedPowerBarFrameLevelOffset", 6, group = "detachedPlayer" },
+        { "layer", "slider", "Player Power layer", 0, 30, 1, 300, "detachedPowerBarFrameLevelOffset", 6, group = "detachedPlayer" },
     })
     AddTooltip(self.dpbUse, "Detached Player Power", "Moves the Player power bar out of the unit frame. Anchor connects it to the Class Resources stack; Sync only follows the stack width.")
     AddTooltip(self.dpb.anchor, "Anchor To Class Resource", "Keeps detached Player power attached to the Class Resource bar. Player power controls are disabled while this connection is active.")
     AddTooltip(self.dpb.sync, "Sync Width", "Uses the Class Resource width for detached Player power without making Class Resources own the Player power controls.")
+    AddTooltip(self.dpb.layer, "Player Power Layer", "Orders only the normal Player Power bar. It does not control Class Resource pips or their text.")
     local powerTextCard = W.ControlCard(text, "Power Text", nil, 14, -38, cardW, twoColumns and 620 or 850)
     if W.AttachContextColorShortcut then
         W.AttachContextColorShortcut(powerTextCard, {
@@ -1116,7 +1122,7 @@ function Page:BuildDetachedPower()
         { "size", "slider", "Power text size", 6, 48, 1, 300, "powerFontSize", 14, group = "detachedText" },
         { "x", "slider", "Text X", -300, 300, 1, 300, "powerOffsetX", -4, group = "detachedText" },
         { "y", "slider", "Text Y", -300, 300, 1, 300, "powerOffsetY", 4, group = "detachedText" },
-        { "layer", "slider", "Power text layer", 0, 30, 1, 300, "powerTextLayer", 2, group = "detachedText" },
+        { "layer", "slider", "Player Power text layer", 0, 30, 1, 300, "powerTextLayer", 2, group = "detachedText" },
     })
     self.dpbHide = {
         self:SourceToggle(text, "Hide right % sign", Player, "powerTextRightHidePercentSymbol", ApplyDetachedPowerText, "detached_power.text"),
@@ -1160,6 +1166,7 @@ function Page:BuildDetachedPower()
     AddTooltip(self.dpbText.preset, "Power Text", "Simple presets for Player power text while detached power is managed by Class Resources. Custom Slots means the existing slot layout is kept until you choose a preset.")
     AddTooltip(self.dpbText.onBar, "Power Text On Bar", "Places Player power text on the detached power bar. When off, the same Player power text remains positioned by the normal text layout.")
     AddTooltip(self.dpbText.x, "Text X", "Moves all detached Player power text slots together. Slot X/Y controls below add per-slot offsets.")
+    AddTooltip(self.dpbText.layer, "Player Power Text Layer", "Orders only the normal Player Power text. The visible Essence count and Ebon Might time belong to Class Resource text.")
     AddTooltip(fontOutline, "Player Text Outline", "Sets the Player font scope used by detached Power text. Player Name and HP text share this outline setting.")
     -- Power art is owned by the Bars page and the Player unit page (detached or
     -- not); this tab keeps only the shape edge that Class Resources still owns.
@@ -1370,7 +1377,9 @@ function Page:RefreshControlState()
     if self.cp.height and self.cp.height._msuf2Title then self.cp.height._msuf2Title:SetText(M.Tr(classBar and "Height" or "Pip size")) end
     SetControlEnabled(self.cp.separator, cpOn and classBar); SetControlEnabled(self.cp.outline, cpOn and classBar)
     SetControlEnabled(self.cpAlign, cpOn and not classBar)
-    SetControlsEnabled(self.groups.cpText, cpOn and BoolValue(bars, "classPowerShowText", false))
+    -- Ebon Might owns a native duration text even when the optional aggregate
+    -- resource text is disabled, so its shared text styling/layer stays usable.
+    SetControlsEnabled(self.groups.cpText, cpOn)
     local anyDetached = false
     for _, key in ipairs({ "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" }) do
         if db[key] and db[key].powerBarDetached then anyDetached = true; break end
@@ -1470,4 +1479,4 @@ function Page:Build()
 end
 
 local function BuildClassPower(ctx) Page.New(ctx):Build() end
-M.RegisterPage("classpower", { title = "MSUF Class Resources", build = BuildClassPower, version = 20 })
+M.RegisterPage("classpower", { title = "MSUF Class Resources", build = BuildClassPower, version = 21 })

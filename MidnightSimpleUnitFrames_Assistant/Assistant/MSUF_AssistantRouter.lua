@@ -869,6 +869,10 @@ R.SETTING_QUESTION_LEAD_INS = {
     -- as a command and answered with "what value do you want me to use?".
     "whats ", "wheres ", "hows ", "whats the ", "wheres the ",
     "explain ", "find ",
+    -- "how do i decide which border is shown first" names a control just as
+    -- exactly as "how do i change" does; without the lead-in the question fell
+    -- to a topic article about colour layers.
+    "how do i decide ", "how do i pick ", "how do i choose ", "how do i control ",
 }
 
 -- Command counterpart to SETTING_QUESTION_LEAD_INS. Kept separate on purpose:
@@ -890,6 +894,11 @@ R.SETTING_COMMAND_VERBS = {
     "enable ", "disable ", "activate ", "deactivate ",
     "show ", "hide ", "set ", "change ", "adjust ", "configure ", "update ",
     "make ", "put ", "raise ", "lower ", "increase ", "decrease ",
+    -- Result-shaped verbs. A player describing what they want to end up with
+    -- ("i want to see damage absorbs") names the control just as exactly as
+    -- "turn on damage absorbs", and the guidance lanes were claiming those.
+    "see ", "display ", "keep ", "stop ", "remove ", "round ",
+    "give ", "add ", "mark ", "highlight ", "animate ", "anchor ", "move ", "draw ", "use ",
 }
 R.SETTING_COMMAND_ARTICLES = { "the ", "my ", "a ", "an ", "its " }
 
@@ -898,7 +907,7 @@ R.SETTING_COMMAND_ARTICLES = { "the ", "my ", "a ", "an ", "its " }
 -- exists. Call it only where a lane is about to answer with generic help --
 -- never on the general input path, where building the index would blow the
 -- cold-path budgets.
-function R.CommandNamedSettingLabel(text)
+function R.CommandNamedSettingLabel(text, force)
     local norm = R.Trim((R.Normalize(text):gsub("%s*%?+%s*$", "")))
     if norm == "" then return nil end
     local function StripOnce(text, list)
@@ -929,10 +938,10 @@ function R.CommandNamedSettingLabel(text)
     -- costs ~47ms to build; the question-shaped lane above returns early for
     -- commands, so it never pays that itself. Every later pass runs warm, which
     -- is where this lane does its work.
-    if type(R._settingLabelIndex) ~= "table" then return nil end
+    if type(R._settingLabelIndex) ~= "table" and not force then return nil end
     local map = R.EnsureSettingLabelIndex and R.EnsureSettingLabelIndex()
     local setting = map and map[subject] or nil
-    if not setting and type(R._settingAliasIndex) == "table" then
+    if not setting and (force or type(R._settingAliasIndex) == "table") then
         -- Alias fallback only when that index is already warm. Forcing it here
         -- costs ~80ms, and Submit's synchronous preflight has an 8ms budget to
         -- keep; the label index above is the cheap one and covers the common
@@ -989,6 +998,37 @@ function R.ExactLabelSingleChange(text)
     local unique = R.UniqueSettingLabelIndex and R.UniqueSettingLabelIndex()
     local setting = unique and unique[subject] or nil
     if type(setting) ~= "table" or type(setting.set) ~= "function" then return nil end
+    -- The sentence may name a frame as well as the control ("turn on the
+    -- dispel border for party frames"). The subject resolves to the shared
+    -- control, because the scope word sits outside it, so swap in the scoped
+    -- twin: same attribute, that scope's key.
+    do
+        local scope = type(R.UnitScopeFromText) == "function" and R.UnitScopeFromText(norm) or nil
+        if type(scope) == "string" and scope ~= "" and tostring(setting.unit or "") == "global" then
+            local attribute = tostring(setting.attribute or "")
+            local wanted = { ["barScope." .. scope .. "."] = true }
+            if scope == "party" then wanted["barScope.gf_party."] = true end
+            if scope == "raid" then wanted["barScope.gf_raid."] = true end
+            if attribute ~= "" and A.Registry and type(A.Registry.AllSettings) == "function" then
+                local all = A.Registry:AllSettings()
+                for i = 1, #all do
+                    local candidate = all[i]
+                    local key = tostring(candidate.key or "")
+                    for prefix in pairs(wanted) do
+                        if key:sub(1, #prefix) == prefix
+                            and tostring(candidate.attribute or "") == attribute
+                            and candidate.type == setting.type
+                            and type(candidate.set) == "function"
+                        then
+                            setting = candidate
+                            break
+                        end
+                    end
+                    if setting == candidate then break end
+                end
+            end
+        end
+    end
     local parser = A.Parser or {}
     if type(parser.ValueForRegistrySetting) ~= "function" then return nil end
     local ok, value = pcall(parser.ValueForRegistrySetting, setting, R.Normalize(text), text)
@@ -2053,11 +2093,11 @@ function R.ComparativeChangeSubject(text)
     for i = 1, #COMPARATIVE_TRAILING_FILLER do
         norm = R.Trim((norm:gsub(COMPARATIVE_TRAILING_FILLER[i], "")))
     end
-    local body
+    local body, matchedTail
     for i = 1, #R.COMPARATIVE_CHANGE_TAILS do
         local candidate = norm:match("^(.-)%s+" .. R.COMPARATIVE_CHANGE_TAILS[i] .. "$")
         if candidate and candidate ~= "" then
-            body = candidate
+            body, matchedTail = candidate, R.COMPARATIVE_CHANGE_TAILS[i]
             break
         end
     end
@@ -2065,19 +2105,208 @@ function R.ComparativeChangeSubject(text)
     -- "make it thicker" names no control; the follow-up lane owns that.
     body = R.Trim((body:gsub("%s+it$", ""):gsub("%s+them$", "")))
     if body == "" then return nil end
-    return R.CommandSubjectPhrase(body .. " to 1")
+    return R.CommandSubjectPhrase(body .. " to 1"), matchedTail
 end
 
 -- Does a comparative change name exactly one control? Only called from
 -- RequestNamesOneControl, which already pays for an index build, so forcing
 -- the label and alias maps here adds no cost to the general input path.
 function R.ComparativeChangeNamesOneControl(text)
-    local subject = R.ComparativeChangeSubject(text)
+    local subject, tail = R.ComparativeChangeSubject(text)
     if not subject then return false end
     local map = R.EnsureSettingLabelIndex and R.EnsureSettingLabelIndex()
-    if map and map[subject] then return true end
     local aliasMap = R.EnsureSettingAliasIndex and R.EnsureSettingAliasIndex()
-    return (aliasMap and aliasMap[subject]) ~= nil
+    -- Controls are named both ways: "outline thickness" drops the comparative,
+    -- while "corners rounder" IS the registered wording.
+    for _, candidate in ipairs({ subject, tail and (subject .. " " .. tail) or subject }) do
+        if map and map[candidate] then return true end
+        if aliasMap and aliasMap[candidate] then return true end
+    end
+    return false
+end
+
+-- Among several fuzzy candidates, the one whose own label or alias IS the
+-- request's subject is not a candidate -- it is the control. "change the bar
+-- texture to flat" lists Absorb Bar Texture and Boss Bar Texture beside it,
+-- because they all answer to those words, but only one is called that.
+function R.EntriesNamedExactlyOnce(entries, text)
+    if type(entries) ~= "table" or #entries < 2 then return nil end
+    local subject = type(R.CommandSubjectPhrase) == "function" and R.CommandSubjectPhrase(text) or nil
+    if not subject or subject == "" then return nil end
+    local found, count, globalFound, globalCount = nil, 0, nil, 0
+    for i = 1, #entries do
+        local item = entries[i] and entries[i].item
+        local setting = item and item.setting
+        if setting then
+            local names = { tostring(setting.label or "") }
+            for _, list in ipairs({ setting.exactAliases or {}, setting.aliases or {} }) do
+                for j = 1, #list do names[#names + 1] = tostring(list[j] or "") end
+            end
+            for j = 1, #names do
+                if names[j] ~= "" and R.Normalize(names[j]) == subject then
+                    count = count + 1
+                    found = item
+                    if tostring(setting.unit or "") == "global" then
+                        globalCount = globalCount + 1
+                        globalFound = item
+                    end
+                    break
+                end
+            end
+        end
+    end
+    if count == 1 then return found end
+    -- Every per-unit copy answers to the same bare words, so "bar texture" is
+    -- claimed by the shared control AND by seven generated per-unit ones. A
+    -- sentence that names no frame means the shared one.
+    if globalCount == 1
+        and not (type(R.UnitScopeFromText) == "function" and R.UnitScopeFromText(R.Normalize(text)))
+    then
+        return globalFound
+    end
+    -- Value-kind preference. When the request states a value of a recognisable
+    -- kind -- a colour name, an opacity word, a position, a texture key -- the
+    -- candidates that cannot hold such a value are not candidates at all. This
+    -- is the general form of the sibling lookup: no name guessing, just the
+    -- type the stated value needs.
+    if type(R.StatedValueKindForText) == "function" then
+        local wanted = R.StatedValueKindForText(text)
+        if wanted then
+            local typed, typedCount = nil, 0
+            for i = 1, #entries do
+                local item = entries[i] and entries[i].item
+                local candidate = item and item.setting
+                if candidate and candidate.type == wanted then
+                    typedCount = typedCount + 1
+                    typed = item
+                end
+            end
+            if typedCount == 1 then return typed end
+        end
+    end
+    return nil
+end
+
+-- A result-shaped sentence names a boolean control and never says "on":
+-- "give the health bars a gradient look", "mark shields that overflow past
+-- full health", "i don't want shields drawn on the health bar". Asking for a
+-- thing to exist is asking for it to be on, and asking for it not to is off.
+--
+-- Bounded on purpose: one control, resolved from the sentence's own subject,
+-- boolean only, and only for long number-free sentences so the index build
+-- stays off the cold route.
+R.NAMED_BOOLEAN_NEGATIONS = {
+    "dont", "do not", "no longer", "never", "stop showing", "stop the",
+    "get rid of", "without", "hide", "remove", "turn off", "switch off", "disable",
+}
+
+function R.NamedBooleanIntentPlan(text)
+    local norm = R.Normalize(text)
+    if norm == "" or norm:find("%d") then return nil end
+    local tokens = 0
+    for _ in norm:gmatch("%S+") do tokens = tokens + 1 end
+    if tokens < 5 then return nil end
+    local bestNamedLength = 0
+    local map = R.EnsureSettingLabelIndex and R.EnsureSettingLabelIndex()
+    local aliasMap = R.EnsureSettingAliasIndex and R.EnsureSettingAliasIndex()
+    local function Lookup(phrase)
+        if not phrase or phrase == "" then return nil end
+        return (map and map[phrase]) or (aliasMap and aliasMap[phrase]) or nil
+    end
+    local subject = type(R.CommandSubjectPhrase) == "function" and R.CommandSubjectPhrase(text) or nil
+    local setting = Lookup(subject)
+    if setting and subject then
+        -- Callers weigh how much of the sentence the control's own name
+        -- covered, so a subject match has to report its length too.
+        for _ in subject:gmatch("%S+") do bestNamedLength = bestNamedLength + 1 end
+    end
+    if not setting then
+        -- The subject rarely IS the control's name word for word: "i want a
+        -- marker for shields while my health is full" wraps it in filler that
+        -- no verb/article peeling removes. The registered wording is in there
+        -- somewhere, so take the longest run of words that names exactly one
+        -- control. Longest first, so a specific name always beats a shorter
+        -- one contained in it.
+        local words = {}
+        for word in norm:gmatch("%S+") do words[#words + 1] = word end
+        local bestLength = 0
+        bestNamedLength = 0
+        for first = 1, #words do
+            for last = #words, first + 2, -1 do
+                local length = last - first + 1
+                if length > bestLength then
+                    local candidate = Lookup(table.concat(words, " ", first, last))
+                    if candidate then
+                        setting, bestLength = candidate, length
+                        bestNamedLength = length
+                        break
+                    end
+                    -- (bestLength is reported below so callers can require a
+                    -- long, unambiguous wording before pre-empting a lane.)
+                end
+            end
+        end
+    end
+    if type(setting) ~= "table" or type(setting.set) ~= "function" then return nil end
+    -- Any type, not just booleans: once the subject resolves to exactly one
+    -- control, the rest of the sentence is its value ("anchor the heal absorb
+    -- bar to the left side"). Only when no value can be read does the boolean
+    -- polarity inference below take over.
+    if setting.type ~= "boolean" then
+        local parser = A.Parser or {}
+        local parsed = type(parser.ValueForRegistrySetting) == "function"
+            and parser.ValueForRegistrySetting(setting, norm, text) or nil
+        -- An on/off enum is a toggle wearing an enum's clothes: the border
+        -- controls store "on"/"off", so a sentence that describes the result
+        -- ("highlight the frame when something is attacking me") states its
+        -- value just as plainly as it would for a boolean.
+        if parsed == nil and setting.type == "enum" and type(setting.values) == "table"
+            and #setting.values == 2
+        then
+            local onOff = {}
+            for i = 1, #setting.values do onOff[tostring(setting.values[i])] = true end
+            if onOff.on and onOff.off then
+                parsed = R.ContainsAny(norm, R.NAMED_BOOLEAN_NEGATIONS) and "off" or "on"
+            end
+        end
+        if parsed == nil then
+            -- "i want a chunkier outline around my frames" names the control
+            -- and states a direction; the planner turns that into one step.
+            local plan = type(parser.PlanForExactRegistrySetting) == "function"
+                and parser.PlanForExactRegistrySetting(setting, norm, text) or nil
+            if type(plan) == "table" and plan.kind == "changes" then
+                plan.raw, plan.sourceText = text, text
+                plan.namedWordingTokens = bestNamedLength
+                return plan
+            end
+            return nil
+        end
+        return {
+            kind = "changes",
+            changes = { { setting = setting, value = parsed } },
+            label = tostring(setting.label or setting.key),
+            summary = "Changes the control the sentence names, with the value it states.",
+            raw = text,
+            sourceText = text,
+            exactSettingMutation = true,
+        }
+    end
+    -- Only HIDE-named controls are inverted ("Hide Name on Dead or Offline"),
+    -- and the reviewed parser owns those. A "Show ..." label is not inverted:
+    -- on means shown, which is exactly what this lane infers.
+    local hay = (tostring(setting.label or "") .. " " .. tostring(setting.key or "")):lower()
+    if hay:find("hide", 1, true) or hay:find("hidden", 1, true) then return nil end
+    local value = not R.ContainsAny(norm, R.NAMED_BOOLEAN_NEGATIONS)
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value } },
+        label = tostring(setting.label or setting.key),
+        summary = "Switches the boolean control the sentence describes.",
+        raw = text,
+        sourceText = text,
+        exactSettingMutation = true,
+        namedWordingTokens = bestNamedLength,
+    }
 end
 
 function R.RequestNamesOneControl(text)
@@ -2086,6 +2315,20 @@ function R.RequestNamesOneControl(text)
     if R.CanonicalValueConnectorCommand(text) then return true end
     if R.CanonicalValueBeforeControlCommand(text) then return true end
     if R.ComparativeChangeNamesOneControl(text) then return true end
+    -- A result-shaped command ("give the health bars a gradient look") names
+    -- its control in the subject even though it states no value word, so the
+    -- three rewrites above cannot see it and a guidance article claimed the
+    -- sentence.
+    --
+    -- Forcing the label and alias maps costs about a second on the very first
+    -- turn, so it is spent only on the shape that needs it: a long sentence
+    -- with no number in it. Every case pinned by assistant_perf_budget_smoke
+    -- ("move boss castbar down 5") carries a number and skips this entirely.
+    local norm = R.Normalize(text)
+    local tokens = 0
+    for _ in norm:gmatch("%S+") do tokens = tokens + 1 end
+    local descriptive = tokens >= 5 and not norm:find("%d")
+    if R.CommandNamedSettingLabel(text, descriptive) then return true end
     return false
 end
 
@@ -2108,6 +2351,11 @@ function R.TopicAnswerSurvivesExactControl(result, text)
         or norm:match("%s(on)$") or norm:match("%s(off)$")
         or norm:match("%s(enabled)$") or norm:match("%s(disabled)$")
         or R.LooksLikeMutation(text) or R.StartsWithMutationCommand(text)
+        -- Result-shaped commands carry no state word at all ("give the health
+        -- bars a gradient look"), yet they are instructions, not questions.
+        -- CommandSubjectPhrase is plain string work and needs a leading verb,
+        -- so a question can never match it.
+        or (type(R.CommandSubjectPhrase) == "function" and R.CommandSubjectPhrase(text) ~= nil)
     if not carriesValue then return result end
     if type(R.RequestNamesOneControl) == "function" and R.RequestNamesOneControl(text) then return nil end
     return result
@@ -2218,8 +2466,38 @@ function A.RouterIsFailClosedReadOnlyRequest(text)
             -- exactly what they typed.
             if openEnded.explicitValue == true
                 and (R.ExactAliasSingleChange(text)
-                    or (type(R.ExactLabelSingleChange) == "function" and R.ExactLabelSingleChange(text)))
+                    or (type(R.ExactLabelSingleChange) == "function" and R.ExactLabelSingleChange(text))
+                    or (type(R.CanonicalValueBeforeControlCommand) == "function"
+                        and R.CanonicalValueBeforeControlCommand(text))
+                    or R.EntriesNamedExactlyOnce(openEnded.entries, text))
             then
+                return false
+            end
+            -- A comparative names no value word, so the check above cannot see
+            -- one -- but "make the corners rounder" is still a change, and
+            -- fail-closing it answered a direct instruction with "ask for the
+            -- option's location". When the fuzzy search already resolved one
+            -- control confidently, the direction is all that was missing.
+            if type(R.ComparativeChangeSubject) == "function"
+                and R.ComparativeChangeSubject(text)
+                and (type(R.OpenEndedEntriesAreConfident) ~= "function"
+                    or R.OpenEndedEntriesAreConfident(openEnded.entries))
+            then
+                return false
+            end
+            -- Otherwise the sentence still earns the exemption if it spells a
+            -- control by name. That test is plain string work until a
+            -- comparative tail really matches, so ordinary requests pay
+            -- nothing for it.
+            if type(R.ComparativeChangeNamesOneControl) == "function"
+                and R.ComparativeChangeNamesOneControl(text)
+            then
+                return false
+            end
+            if type(R.NamedBooleanIntentPlan) == "function" and R.NamedBooleanIntentPlan(text) then
+                return false
+            end
+            if type(R.StatedValueKindSiblingPlan) == "function" and R.StatedValueKindSiblingPlan(text) then
                 return false
             end
             return true
@@ -6003,6 +6281,7 @@ R.AURA_UNIT_FILTER_SPECS = {
         { key = "dispellableAny", label = "Any dispel type", token = "DISPELLABLE", effect = "shows every aura with a dispel type.", bestFor = "seeing purge or cleanse types regardless of the current group.", caution = "Some shown auras may not be removable by your group." },
         { key = "onlyImportant", label = "Important", token = "IMPORTANT", effect = "shows auras Blizzard flags as important.", bestFor = "a compact important-aura view.", caution = "Blizzard, not MSUF, owns the importance flag." },
         { key = "crowdControl", label = "Crowd-control filter", token = "CROWD_CONTROL", effect = "shows crowd-control debuffs such as control or lockout-style effects Blizzard classifies as CC.", bestFor = "PvP, crowd-control tracking, and knowing when a unit is controlled.", caution = "It is usually not the first choice for raid PvE debuff cleanup." },
+        { key = "nonPlayer", label = "Non-player auras filter", token = "isFromPlayerOrPlayerPet=false", effect = "shows only debuffs not caused by any player or player pet.", bestFor = "removing player-caused noise such as gateway-related debuffs while retaining encounter and environment effects.", caution = "It intentionally hides debuffs caused by every player, not only your own casts." },
     },
 }
 
@@ -6033,10 +6312,11 @@ R.AURA_GROUP_FILTER_EFFECTS = {
     DISPELLABLE = "shows every aura with a dispel type, regardless of group capability.",
     IMPORTANT = "shows auras Blizzard flags as important.",
     CROWD_CONTROL = "shows crowd-control debuffs.",
+    NonPlayer = "shows only debuffs not caused by any player or player pet.",
 }
 
 function R.AuraFilterStatusWantsAnswer(norm)
-    if not R.ContainsAny(norm, { "filter", "filters", "dispellable", "raid in combat", "nameplate", "crowd control", "cc", "cancelable", "cancellable", "defensive", "exclusive" }) then return false end
+    if not R.ContainsAny(norm, { "filter", "filters", "dispellable", "raid in combat", "nameplate", "crowd control", "cc", "cancelable", "cancellable", "defensive", "exclusive", "non-player" }) then return false end
     if R.ContainsAny(norm, {
         "what filter", "which filter", "which filters", "active filter", "active filters", "current filter", "current filters",
         "what does", "what do", "what is", "explain", "explain filters", "explain filter", "how does", "why use",
@@ -6059,6 +6339,7 @@ function R.AuraFilterKeyFromText(norm)
     if R.ContainsAny(norm, { "important aura", "important buff", "important debuff" }) then return "onlyImportant" end
     if R.ContainsAny(norm, { "dispellable", "dispelable", "purgeable" }) then return "includeDispellable" end
     if R.ContainsAny(norm, { "crowd control", "cc debuff", "cc debuffs" }) then return "crowdControl" end
+    if R.ContainsAny(norm, { "non-player aura", "non-player auras", "non-player debuff", "non-player debuffs", "not from a player", "not caused by a player" }) then return "nonPlayer" end
     if R.ContainsAny(norm, { "not cancelable", "not cancellable", "non cancelable", "uncancelable" }) then return "notCancelable" end
     if R.ContainsAny(norm, { "cancelable", "cancellable" }) then return "cancelable" end
     if R.ContainsAny(norm, { "external defensive", "external defensives", "external buffs" }) then return "externalDefensive" end
@@ -6070,7 +6351,7 @@ end
 
 function R.AuraFilterLaneForKey(key, lane)
     if lane then return lane end
-    if key == "includeDispellable" or key == "dispellableAny" or key == "crowdControl" then return "debuff" end
+    if key == "includeDispellable" or key == "dispellableAny" or key == "crowdControl" or key == "nonPlayer" then return "debuff" end
     if key == "cancelable" or key == "notCancelable" or key == "externalDefensive" or key == "bigDefensive" then return "buff" end
     return nil
 end
@@ -9719,6 +10000,27 @@ function R.TryUncertainContextChoices(text)
     end
     if #choices == 0 or type(A.SetPendingChoices) ~= "function" then return nil end
 
+    -- Before handing back a guess list: the sentence may describe one boolean
+    -- control by the result it wants. That is not a guess, it is the control
+    -- the words name, so act on it instead of asking.
+    if type(R.StatedValueKindSiblingPlan) == "function" and type(A.ExecutePlan) == "function" then
+        local siblingPlan = R.StatedValueKindSiblingPlan(text)
+        if siblingPlan then
+            local okSibling, siblingResult = pcall(A.ExecutePlan, siblingPlan, { sourceText = text })
+            if okSibling and type(siblingResult) == "table" and not A.RouterIsUnknownResult(siblingResult) then
+                return siblingResult
+            end
+        end
+    end
+    if type(R.NamedBooleanIntentPlan) == "function" and type(A.ExecutePlan) == "function" then
+        local intentPlan = R.NamedBooleanIntentPlan(text)
+        if intentPlan then
+            local okIntent, intentResult = pcall(A.ExecutePlan, intentPlan, { sourceText = text })
+            if okIntent and type(intentResult) == "table" and not A.RouterIsUnknownResult(intentResult) then
+                return intentResult
+            end
+        end
+    end
     local listText = A.SetPendingChoices(choices)
     return {
         text = "I'm not confident enough to guess what you meant, so I kept MSUF unchanged. Pick the closest option:\n" .. tostring(listText or ""),
@@ -14457,6 +14759,131 @@ function R.OpenColorSettingPickerResult(item, summary)
     }
 end
 
+-- A request names the FAMILY and states a value of one particular kind:
+-- "make the frame outline red" names the outline and a colour, "make the frame
+-- border half transparent" names it and an opacity. The bare family words
+-- ("frame outline") belong to the thickness slider, so both were answered with
+-- "what value do you want me to use for ... Thickness?".
+--
+-- The sibling is found the way a player would name it: append the kind's own
+-- word to the subject and look that up. No new index and no ranking change.
+local VALUE_KIND_SUFFIXES = {
+    color = { " color", " colour" },
+    opacity = { " opacity", " alpha" },
+    anchor = { " anchor", " bar anchor" },
+    texture = { " texture", " bar texture" },
+}
+local COLOR_VALUE_WORDS = {
+    "red", "green", "blue", "yellow", "orange", "purple", "pink", "white", "black",
+    "grey", "gray", "cyan", "magenta", "brown", "teal", "gold",
+}
+local OPACITY_VALUE_WORDS = {
+    "transparent", "opaque", "see through", "invisible", "translucent",
+}
+-- "anchor the heal absorb bar to the left side" states a POSITION, and the bare
+-- family words ("heal absorb bar") belong to the show toggle -- so the toggle
+-- answered a question about where the bar sits.
+-- Texture keys are the value kind most often stated next to a family name
+-- ("use the flat texture for the maximum health loss overlay").
+local TEXTURE_VALUE_WORDS = {
+    "flat texture", "blizzard texture", "skills texture", "outline texture",
+    "raidhp texture", "raidpower texture", "solid texture",
+}
+local ANCHOR_VALUE_WORDS = {
+    "left side", "right side", "to the left", "to the right",
+    "follow the hp bar", "follow the health bar", "follow hp bar",
+    "reverse from max", "overflow",
+}
+
+-- The setting TYPE a stated value needs, for callers that rank candidates
+-- rather than look up a sibling by name.
+function R.StatedValueKindForText(text)
+    local norm = R.Normalize(text)
+    if norm == "" then return nil end
+    if R.ContainsAny(norm, COLOR_VALUE_WORDS) then return "color" end
+    if R.ContainsAny(norm, OPACITY_VALUE_WORDS) then return "number" end
+    if R.ContainsAny(norm, ANCHOR_VALUE_WORDS) then return "enum" end
+    if R.ContainsAny(norm, TEXTURE_VALUE_WORDS) then return "string" end
+    return nil
+end
+
+function R.SiblingSettingForStatedValueKind(text)
+    local norm = R.Normalize(text)
+    if norm == "" then return nil end
+    local kind
+    if R.ContainsAny(norm, COLOR_VALUE_WORDS) then kind = "color"
+    elseif R.ContainsAny(norm, OPACITY_VALUE_WORDS) then kind = "opacity"
+    elseif R.ContainsAny(norm, ANCHOR_VALUE_WORDS) then kind = "anchor"
+    elseif R.ContainsAny(norm, TEXTURE_VALUE_WORDS) then kind = "texture" end
+    if not kind then return nil end
+    local subject = type(R.CommandSubjectPhrase) == "function" and R.CommandSubjectPhrase(text) or nil
+    if not subject or subject == "" then return nil end
+    -- Peel the value words off the tail: what remains is the family name.
+    local words = kind == "color" and COLOR_VALUE_WORDS
+        or kind == "anchor" and ANCHOR_VALUE_WORDS
+        or kind == "texture" and TEXTURE_VALUE_WORDS
+        or OPACITY_VALUE_WORDS
+    local trimmed, changed = subject, true
+    while changed do
+        changed = false
+        for i = 1, #words do
+            local stripped = trimmed:gsub("%s+" .. words[i] .. "$", "")
+            if stripped ~= trimmed then trimmed, changed = R.Trim(stripped), true end
+        end
+        for _, filler in ipairs({ "half", "fully", "more", "less", "a bit", "slightly", "completely" }) do
+            local stripped = trimmed:gsub("%s+" .. filler .. "$", "")
+            if stripped ~= trimmed then trimmed, changed = R.Trim(stripped), true end
+        end
+        -- "shield bar 50 transparent": the amount sits between the family name
+        -- and the value word once the tail has been peeled.
+        local withoutNumber = trimmed:gsub("%s+%d+%.?%d*%%?$", "")
+        if withoutNumber ~= trimmed then trimmed, changed = R.Trim(withoutNumber), true end
+    end
+    if trimmed == "" then return nil end
+    local map = R.EnsureSettingLabelIndex and R.EnsureSettingLabelIndex()
+    local aliasMap = R.EnsureSettingAliasIndex and R.EnsureSettingAliasIndex()
+    for _, suffix in ipairs(VALUE_KIND_SUFFIXES[kind]) do
+        local candidate = trimmed .. suffix
+        local setting = (map and map[candidate]) or (aliasMap and aliasMap[candidate]) or nil
+        if type(setting) == "table" and type(setting.set) == "function" then
+            local wanted = kind == "color" and "color"
+                or kind == "anchor" and "enum"
+                or kind == "texture" and "string"
+                or "number"
+            if setting.type == wanted then return setting end
+        end
+    end
+    return nil
+end
+
+function R.StatedValueKindSiblingPlan(text)
+    local setting = R.SiblingSettingForStatedValueKind(text)
+    if not setting then return nil end
+    local parser = A.Parser or {}
+    local value = type(parser.ValueForRegistrySetting) == "function"
+        and parser.ValueForRegistrySetting(setting, R.Normalize(text), text) or nil
+    if value == nil then
+        -- "half transparent" states a direction, not a number; the planner
+        -- turns that into a step on the opacity slider.
+        local plan = type(parser.PlanForExactRegistrySetting) == "function"
+            and parser.PlanForExactRegistrySetting(setting, R.Normalize(text), text) or nil
+        if type(plan) == "table" and plan.kind == "changes" then
+            plan.raw, plan.sourceText = text, text
+            return plan
+        end
+        return nil
+    end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value } },
+        label = tostring(setting.label or setting.key),
+        summary = "Changes the sibling control the stated value belongs to.",
+        raw = text,
+        sourceText = text,
+        exactSettingMutation = true,
+    }
+end
+
 local function ExactSettingValuePrompt(item, invalidValue)
     local setting = item and item.setting
     if not setting then return nil end
@@ -14695,6 +15122,15 @@ function R.TryExactRegistrySettingMutation(text)
                 planText = reordered
             end
         end
+        local siblingPlan = R.StatedValueKindSiblingPlan(text)
+        if siblingPlan and type(A.ExecutePlan) == "function" then
+            local okSibling, siblingResult = pcall(A.ExecutePlan, siblingPlan, { sourceText = text })
+            if okSibling and type(siblingResult) == "table"
+                and not A.RouterIsUnknownResult(siblingResult)
+            then
+                return siblingResult
+            end
+        end
         local relativePlan = type(parser.PlanForExactRegistrySetting) == "function"
             and parser.PlanForExactRegistrySetting(setting, R.Normalize(planText), planText) or nil
         if type(relativePlan) == "table" and relativePlan.kind == "changes"
@@ -14861,6 +15297,33 @@ function R.TryOpenEndedSettingIdea(text, coreHandler)
                 end
             end
         end
+        -- "change the bar texture to flat" names no frame, and every per-unit
+        -- copy of the same option answers to the same bare words. A request
+        -- that mentions no frame means the shared control, so when exactly one
+        -- candidate is the global one, that is the answer rather than a list.
+        if type(entries) == "table" and #entries > 1 and type(A.ExecutePlan) == "function"
+            and not R.OpenEndedEntriesAreConfident(entries)
+            and not (type(R.UnitScopeFromText) == "function" and R.UnitScopeFromText(R.Normalize(text)))
+        then
+            local namedItem = R.EntriesNamedExactlyOnce(entries, text)
+            local parser = A.Parser or {}
+            local setting = namedItem and namedItem.setting or nil
+            local value = setting and type(parser.ValueForRegistrySetting) == "function"
+                and parser.ValueForRegistrySetting(setting, R.Normalize(text), text) or nil
+            if value ~= nil then
+                local ok, result = pcall(A.ExecutePlan, {
+                    kind = "changes",
+                    changes = { { setting = setting, value = value } },
+                    label = tostring(setting.label or setting.key),
+                    summary = "Changes the one control whose own name the request spells.",
+                    raw = text,
+                    sourceText = text,
+                }, { sourceText = text })
+                if ok and type(result) == "table" and not A.RouterIsUnknownResult(result) then
+                    return result
+                end
+            end
+        end
         if type(entries) == "table" and #entries > 1 and not R.OpenEndedEntriesAreConfident(entries) then
             local visible = math.min(tonumber(entries[1] and entries[1].visibleLimit) or 3, #entries)
             -- The value is already known, so a number should FINISH the change,
@@ -14948,6 +15411,15 @@ function R.TryOpenEndedSettingIdea(text, coreHandler)
             if canonical then
                 local rewritten = coreHandler(canonical)
                 if rewritten and not A.RouterIsUnknownResult(rewritten) then return rewritten end
+            end
+        end
+        if type(A.ExecutePlan) == "function" then
+            local plan = R.NamedBooleanIntentPlan(text)
+            if plan then
+                local ok, result = pcall(A.ExecutePlan, plan, { sourceText = text })
+                if ok and type(result) == "table" and not A.RouterIsUnknownResult(result) then
+                    return result
+                end
             end
         end
         local page = analysis.page
@@ -17729,6 +18201,21 @@ function A.RouteInput(text, coreHandler)
                 and R.TryRegistryLocationSpecialistGuidance
                 and R.TryRegistryLocationSpecialistGuidance(text, Core) or nil
             if settingLocation then return settingLocation end
+            -- Before the encyclopaedia answers: the sentence may describe a
+            -- boolean control by result rather than by state ("mark shields
+            -- that overflow past full health"). That is an instruction, and
+            -- an article about the area is the wrong reply to it.
+            if type(A.ExecutePlan) == "function" and type(R.NamedBooleanIntentPlan) == "function" then
+                local intentPlan = R.NamedBooleanIntentPlan(text)
+                if intentPlan then
+                    local okIntent, intentResult = pcall(A.ExecutePlan, intentPlan, { sourceText = text })
+                    if okIntent and type(intentResult) == "table"
+                        and not A.RouterIsUnknownResult(intentResult)
+                    then
+                        return intentResult
+                    end
+                end
+            end
             local answer = A.Knowledge.Answer(text, { currentPage = M and M.activeKey })
             if answer then return answer end
         end

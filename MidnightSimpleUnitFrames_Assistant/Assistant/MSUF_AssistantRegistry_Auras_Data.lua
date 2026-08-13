@@ -31,7 +31,7 @@ Data.GF_AURA_FILTER_VALUES = {
     },
     debuff = {
         "ALL", "Player", "Raid", "RaidInCombat", "RAID_PLAYER_DISPELLABLE",
-        "DISPELLABLE", "CROWD_CONTROL",
+        "DISPELLABLE", "CROWD_CONTROL", "NonPlayer",
     },
 }
 Data.GF_AURA_FILTER_ALIASES = {
@@ -140,6 +140,13 @@ Data.GF_AURA_FILTER_ALIASES = {
     ["cc debuffs only"] = "CROWD_CONTROL",
     ["crowd control"] = "CROWD_CONTROL",
     ["crowd control debuffs"] = "CROWD_CONTROL",
+    ["non-player"] = "NonPlayer",
+    ["non-player aura"] = "NonPlayer",
+    ["non-player auras"] = "NonPlayer",
+    ["non-player debuff"] = "NonPlayer",
+    ["non-player debuffs"] = "NonPlayer",
+    ["not from a player"] = "NonPlayer",
+    ["not caused by a player"] = "NonPlayer",
     external = "ExternalDefensive",
     externals = "ExternalDefensive",
     ["external defensive"] = "ExternalDefensive",

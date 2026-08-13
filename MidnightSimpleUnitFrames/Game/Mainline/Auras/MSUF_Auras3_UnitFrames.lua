@@ -877,6 +877,7 @@ local GROUP_LANE_SPECS = {
         blacklistHashKey = "debuffBlacklistHash",
         hidePermanentKey = "debuffHidePermanent",
         maxDurationKey = "debuffMaxDuration",
+        nonPlayerKey = "debuffNonPlayer",
         showTextKey = "debuffShowCooldown", showStackKey = "debuffShowStacks", swipeKey = "debuffShowCooldownSwipe",
         swipeReverseKey = "debuffCooldownSwipeReverse", tooltipKey = "debuffShowTooltip",
         sortMethodKey = "debuffSortMethod", sortReverseKey = "debuffSortReverse",
@@ -1588,6 +1589,15 @@ local function SharedIconStyle(kind)
     return style
 end
 
+local function AddNonPlayerCandidateFilter(candidateFilters, candidateFilterSignature, enabled)
+    if enabled ~= true then return candidateFilters, candidateFilterSignature end
+    candidateFilters = candidateFilters or {}
+    candidateFilters.isFromPlayerOrPlayerPet = false
+    local part = "isFromPlayerOrPlayerPet:false"
+    candidateFilterSignature = candidateFilterSignature and (candidateFilterSignature .. ";" .. part) or part
+    return candidateFilters, candidateFilterSignature
+end
+
 local function RemoveNativeFilterToken(filter, removeToken, fallback)
     removeToken = tostring(removeToken or ""):upper()
     local kept = {}
@@ -1989,6 +1999,9 @@ local function CompileUnitLane(unit, laneLayout, layout, filtersRoot, kind, cand
         candidateFilters, candidateFilterSignature,
         kind == "buff" and type(filtersRoot) == "table"
             and (filtersRoot.hidePermanent == true or (filters and filters.hidePermanent == true)))
+    candidateFilters, candidateFilterSignature = AddNonPlayerCandidateFilter(
+        candidateFilters, candidateFilterSignature,
+        kind == "debuff" and filtersEnabled and filters and filters.nonPlayer == true)
     local sizeDefault = ReadRaw(layout, nil, spec.sizeKey) or DEFAULT_SHARED.iconSize
     local size = ClampNumber(sizeDefault, DEFAULT_SHARED.iconSize, 1, 128)
     local zoomDefault = ReadUnitLaneStyleRaw(layout, laneLayout, rootShared,
@@ -2116,6 +2129,9 @@ local function CompileGroupLane(unit, source, kind, groupKind, portraitShape, sh
     candidateFilters, candidateFilterSignature = AddMaxDurationCandidateFilter(
         candidateFilters, candidateFilterSignature,
         spec.maxDurationKey and source[spec.maxDurationKey], source[spec.hidePermanentKey] == true)
+    candidateFilters, candidateFilterSignature = AddNonPlayerCandidateFilter(
+        candidateFilters, candidateFilterSignature,
+        spec.nonPlayerKey and source[spec.nonPlayerKey] == true)
     local size = ClampNumber(source[spec.sizeKey] or source.iconSize, spec.defaultSize, 1, 256)
     local sharedLane = kind == "debuff" and "debuff" or "buff"
     local iconShapeSource = Shape.SharedValue(shared, sharedLane)
@@ -2135,16 +2151,25 @@ local function CompileGroupLane(unit, source, kind, groupKind, portraitShape, sh
     if issecretvalue(rawStrata) == true then rawStrata = nil end
     if rawStrata == nil then rawStrata = source.strata end
     local nativeFilter = NormalizeNativeFilterString(source[spec.filterKey], spec.filter)
-    -- Helpful spell-ID filters and the dedicated tracked/external lanes depend
-    -- on identity data that can become unavailable at group range boundaries.
-    -- Compile that fact once so the hot event path only forwards Blizzard's
-    -- (possibly secret) range boolean to native alpha sinks.
-    local groupAccessGate = kind == "trackedBuff" or kind == "external"
-    if kind == "buff" then
-        groupAccessGate = candidateFilters ~= nil
-            and (candidateFilters.includeSpellIDs ~= nil or candidateFilters.excludeSpellIDs ~= nil)
-            or nativeFilter:find("EXTERNAL_DEFENSIVE", 1, true) ~= nil
-            or nativeFilter:find("BIG_DEFENSIVE", 1, true) ~= nil
+    -- Blizzard applies exact spell-ID candidate filters only while the unit's
+    -- current identity supports that aura polarity: HELPFUL while assistable,
+    -- HARMFUL while non-assistable. Compile the access mode once so rare
+    -- identity events never inspect saved settings. The standard group debuff
+    -- blacklist is intentionally neutral: hiding that entire lane whenever a
+    -- friendly unit is assistable would be worse than Blizzard's exclude-only
+    -- 12.1 limitation. A future HARMFUL include-ID lane is handled correctly.
+    local hasIncludeIDs = candidateFilters and candidateFilters.includeSpellIDs ~= nil
+    local hasExactIDs = hasIncludeIDs
+        or candidateFilters and candidateFilters.excludeSpellIDs ~= nil
+    local identityCandidateMode
+    if kind == "trackedBuff" or kind == "external" then
+        identityCandidateMode = "assist"
+    elseif hasIncludeIDs and nativeFilter:find("HARMFUL", 1, true) ~= nil then
+        identityCandidateMode = "hostile"
+    elseif kind == "buff" and (hasExactIDs
+        or nativeFilter:find("EXTERNAL_DEFENSIVE", 1, true) ~= nil
+        or nativeFilter:find("BIG_DEFENSIVE", 1, true) ~= nil) then
+        identityCandidateMode = "assist"
     end
     return FinalizeLane({
         kind = kind,
@@ -2155,7 +2180,8 @@ local function CompileGroupLane(unit, source, kind, groupKind, portraitShape, sh
         nativeFilter = nativeFilter,
         candidateFilters = candidateFilters,
         candidateFilterSignature = candidateFilterSignature,
-        groupAccessGate = groupAccessGate == true,
+        identityCandidateMode = identityCandidateMode,
+        groupAccessGate = identityCandidateMode ~= nil,
         max = Round(maxCount),
         size = size,
         iconZoom = ClampNumber(source[spec.iconZoomKey] or source.iconZoom, 100, 100, 200),
@@ -3191,7 +3217,7 @@ local function ResolveGroupFrameConfig(frame, unit)
     -- stamps a signature when it reads the settings; this path only compares it,
     -- because it runs per frame per identity event.
     local symbolSignature = (spec and spec.dispelSymbol and spec.dispelSymbol.signature) or "-"
-    local groupRangeGate = IsGroupFrame(frame) and frame._msufGFIsPreviewFrame ~= true
+    local groupAssistGate = IsGroupFrame(frame) and frame._msufGFIsPreviewFrame ~= true
     -- The group kind doubles as the aura scope key for the shared icon style
     -- opt-out; party/raid/mythicraid can each be excluded independently.
     local groupKind = frame._msufGFKind
@@ -3203,7 +3229,7 @@ local function ResolveGroupFrameConfig(frame, unit)
         and frame._msufA3NativeGroupCornerSource == cornerSource and frame._msufA3NativeGroupUnit == unit
         and frame._msufA3NativeGroupSymbolSignature == symbolSignature
         and frame._msufA3NativeGroupGen == gen and frame._msufA3NativeGroupVisualGen == visualGen
-        and cached.groupRangeGate == groupRangeGate then
+        and cached.groupAssistGate == groupAssistGate then
         return cached
     end
     -- Compiled group specs are immutable for their revision. Preview frames all
@@ -3212,7 +3238,7 @@ local function ResolveGroupFrameConfig(frame, unit)
     -- tables without changing the result. Share that cold-path config on the spec;
     -- live frames with distinct unit tokens still receive distinct entries.
     local sharedCache = spec and spec._msufA3NativeGroupConfigCache
-    local sharedKey = tostring(unit) .. "\031" .. tostring(groupKind) .. (groupRangeGate and "\031group" or "\031shared")
+    local sharedKey = tostring(unit) .. "\031" .. tostring(groupKind) .. (groupAssistGate and "\031group" or "\031shared")
     local shared = sharedCache and sharedCache[sharedKey]
     if shared and shared.source == source and shared.spellSource == spellSource
         and shared.cornerSource == cornerSource and shared.symbolSignature == symbolSignature
@@ -3236,7 +3262,7 @@ local function ResolveGroupFrameConfig(frame, unit)
         lanes = {},
         sensors = {},
         group = true,
-        groupRangeGate = groupRangeGate,
+        groupAssistGate = groupAssistGate,
         _msufA3ConfigGen = gen,
         _msufA3VisualGen = visualGen,
         _msufA3Source = source,
@@ -3877,6 +3903,12 @@ local function EnsureRoot(frame)
         -- Child AuraContainers already run UpdateAllAuras from their secure
         -- OnShow; avoid a second forced full parse here.
         if RefreshAppliedNativeRoot then RefreshAppliedNativeRoot(self, false) end
+        -- Hidden secure-header children register their native owners only now.
+        -- Seed after registration so a newly visible group frame cannot spend
+        -- one frame fail-open while waiting for an unrelated identity event.
+        if type(A3._SeedGroupAuraAssistGate) == "function" then
+            A3._SeedGroupAuraAssistGate(self:GetParent(), self.unit)
+        end
     end)
     root:Hide()
     frame.Auras = root
@@ -3939,7 +3971,8 @@ LaneStructuralSignature = function(lane)
     -- The public 12.1 group-filter setter reparses native assignments in place.
     -- Button visuals and item-enchantment slots still belong to container
     -- creation and remain structural.
-    return tostring(lane.kind) .. "\030" .. tostring(LaneLayoutSignature(lane))
+    return tostring(lane.kind) .. "\030" .. tostring(lane.identityCandidateMode)
+        .. "\030" .. tostring(LaneLayoutSignature(lane))
         .. "\030" .. tostring(lane.weaponEnchants)
 end
 
@@ -4326,19 +4359,23 @@ end
 -- One CustomAuraContainer owns every compatible group-frame display for a unit:
 -- fixed Spell/Dispel AuraSlots, every one-icon lane as another AuraSlot, and at
 -- most one flowing AuraGroup. Live group frames are the only exception: their
--- identity-dependent helpful displays must fail closed at range boundaries,
--- while ordinary token-only Buffs/Debuffs must remain visible. Keep those two
--- gate classes in separate native owners instead of weakening either contract.
-local function BuildGroupAuraOwner(cfg, rangeGated, includeFixed, rootKey)
-    local sensorRoot = includeFixed and GetDispelSensorRootConfig(cfg) or nil
-    local spellRoot = includeFixed and SpellIndicatorsRuntime.RootConfig(cfg) or nil
+-- identity-dependent helpful displays must fail closed while UnitCanAssist is
+-- false, while ordinary token-only Buffs/Debuffs must remain visible. Keep
+-- those two gate classes in separate native owners.
+local function BuildGroupAuraOwner(cfg, assistMode, includeFixed, rootKey, spellRootOverride)
+    local sensorRoot = includeFixed and assistMode == nil and GetDispelSensorRootConfig(cfg) or nil
+    local spellRoot = spellRootOverride
+    if spellRoot == nil and includeFixed and cfg.groupAssistGate ~= true then
+        spellRoot = SpellIndicatorsRuntime.RootConfig(cfg)
+    end
     local slotLanes, flowLane, ownedLaneKeys, signatureParts
     local lanes = cfg.lanes
     local order = A3._normalAuraLaneOrder
     for i = 1, #order do
         local lane = lanes and lanes[order[i]]
-        local laneRangeGated = cfg.groupRangeGate == true and lane and lane.groupAccessGate == true
-        if lane and lane.enabled == true and laneRangeGated == rangeGated then
+        local laneAssistMode = cfg.groupAssistGate == true and lane and lane.groupAccessGate == true
+            and lane.identityCandidateMode or nil
+        if lane and lane.enabled == true and laneAssistMode == assistMode then
             if lane.max == 1 then
                 slotLanes = slotLanes or {}
                 slotLanes[#slotLanes + 1] = lane
@@ -4354,7 +4391,7 @@ local function BuildGroupAuraOwner(cfg, rangeGated, includeFixed, rootKey)
     if not sensorRoot and not spellRoot and not slotLanes and not flowLane then return nil end
 
     signatureParts = {
-        rangeGated and "range:1" or "range:0",
+        "identity:" .. tostring(assistMode or "neutral"),
         tostring(sensorRoot and sensorRoot._msufA3StructuralSignature or "-"),
         tostring(spellRoot and spellRoot._msufA3StructuralSignature or "-"),
         flowLane and ("flow:" .. tostring(flowLane.rootKey) .. ":"
@@ -4376,7 +4413,8 @@ local function BuildGroupAuraOwner(cfg, rangeGated, includeFixed, rootKey)
         slotLanes = slotLanes,
         flowLane = flowLane,
         ownedLaneKeys = ownedLaneKeys,
-        rangeGated = rangeGated == true,
+        identityCandidateMode = assistMode,
+        assistGated = assistMode ~= nil,
         _msufA3StructuralSignature = table_concat(signatureParts, "\028"),
     }
 end
@@ -4386,26 +4424,38 @@ local function GetGroupSlotsRootConfig(cfg)
     local cached = cfg.groupSlotsRoot
     if cached ~= nil then return cached ~= false and cached or nil end
 
-    local primary, secondary
-    if cfg.groupRangeGate == true then
-        primary = BuildGroupAuraOwner(cfg, true, true, "GroupSlots")
-        secondary = BuildGroupAuraOwner(cfg, false, false, "GroupAuraFlow")
+    local primary, secondary, tertiary
+    if cfg.groupAssistGate == true then
+        local spellRoot = SpellIndicatorsRuntime.RootConfig(cfg)
+        local helpfulSpellRoot = SpellIndicatorsRuntime.PartitionRoot(
+            spellRoot, "assist", "GroupSpellAssist")
+        local hostileSpellRoot = SpellIndicatorsRuntime.PartitionRoot(
+            spellRoot, "hostile", "GroupSpellHostile")
+        local neutralSpellRoot = SpellIndicatorsRuntime.PartitionRoot(
+            spellRoot, "neutral", "GroupSpellNeutral")
+        primary = BuildGroupAuraOwner(cfg, nil, true, "GroupSlots", neutralSpellRoot)
+        secondary = BuildGroupAuraOwner(cfg, "assist", false, "GroupAuraAssist", helpfulSpellRoot)
+        tertiary = BuildGroupAuraOwner(cfg, "hostile", false, "GroupAuraHostile", hostileSpellRoot)
+        if not primary then primary = BuildGroupAuraOwner(cfg, nil, true, "GroupSlots", false) end
         if not primary then
-            primary, secondary = secondary, nil
+            primary = secondary or tertiary
+            if primary == secondary then secondary = nil else tertiary = nil end
             if primary then primary.rootKey = "GroupSlots" end
         end
     else
-        primary = BuildGroupAuraOwner(cfg, false, true, "GroupSlots")
+        primary = BuildGroupAuraOwner(cfg, nil, true, "GroupSlots")
     end
     if not primary then
         cfg.groupSlotsRoot = false
         return nil
     end
     primary.secondaryRoot = secondary
-    if secondary then
+    primary.tertiaryRoot = tertiary
+    if secondary or tertiary then
         primary.allOwnedLaneKeys = {}
         for key in pairs(primary.ownedLaneKeys or {}) do primary.allOwnedLaneKeys[key] = true end
-        for key in pairs(secondary.ownedLaneKeys or {}) do primary.allOwnedLaneKeys[key] = true end
+        for key in pairs(secondary and secondary.ownedLaneKeys or {}) do primary.allOwnedLaneKeys[key] = true end
+        for key in pairs(tertiary and tertiary.ownedLaneKeys or {}) do primary.allOwnedLaneKeys[key] = true end
     else
         primary.allOwnedLaneKeys = primary.ownedLaneKeys
     end
@@ -6197,10 +6247,10 @@ A3._NativeContainerVisible = function(container)
     return true
 end
 
--- UNIT_IN_RANGE_UPDATE guarantees a boolean payload and 12.1 Frames expose the
--- secret-safe sink. Keep this direct: range edges must never enter Lua fallback
--- decisions or native aura rebuilds.
-local function SetRangeAlpha(region, value, trueAlpha)
+-- UnitCanAssist is a normal non-secret boolean in the 12.1 API contract. Keep
+-- the write on the native boolean sink so every affected owner receives one
+-- direct alpha update without inspecting any restricted aura data.
+local function SetAssistAlpha(region, value, trueAlpha)
     if not region then return false end
     region:SetAlphaFromBoolean(value, trueAlpha, 0)
     return true
@@ -6210,92 +6260,93 @@ local function IsLiveGroupAuraFrame(frame)
     return frame and frame._msufGFIsPreviewFrame ~= true and IsGroupFrame(frame) or false
 end
 
-local function ApplyGroupLaneAccessGate(root, lanes, laneKey, rootKey, inRange)
+local function ApplyGroupLaneAccessGate(root, lanes, laneKey, rootKey, canAssist, ready)
     local lane = lanes and lanes[laneKey]
     if not (lane and lane.groupAccessGate == true) then return false end
-    return SetRangeAlpha(root[rootKey], inRange, lane.alpha or 1)
+    local known = issecretvalue(canAssist) ~= true and type(canAssist) == "boolean"
+    local visible = ready ~= false and known and (lane.identityCandidateMode == "hostile"
+        and canAssist == false or lane.identityCandidateMode ~= "hostile" and canAssist == true)
+    return SetAssistAlpha(root[rootKey], visible, lane.alpha or 1)
 end
 
-local function NeedsGroupAuraRangeGate(cfg)
+local function NeedsGroupAuraAssistGate(cfg)
     if not (cfg and cfg.group == true and cfg.enabled == true) then return false end
     local groupSlots = GetGroupSlotsRootConfig(cfg)
-    if groupSlots and (groupSlots.rangeGated == true
-        or groupSlots.secondaryRoot and groupSlots.secondaryRoot.rangeGated == true) then
+    if groupSlots and (groupSlots.assistGated == true
+        or groupSlots.secondaryRoot and groupSlots.secondaryRoot.assistGated == true
+        or groupSlots.tertiaryRoot and groupSlots.tertiaryRoot.assistGated == true) then
         return true
     end
     local lanes = cfg.lanes
     return lanes and (
         lanes.buff and lanes.buff.enabled == true and lanes.buff.groupAccessGate == true
+        or lanes.debuff and lanes.debuff.enabled == true and lanes.debuff.groupAccessGate == true
         or lanes.trackedBuff and lanes.trackedBuff.enabled == true and lanes.trackedBuff.groupAccessGate == true
         or lanes.external and lanes.external.enabled == true and lanes.external.groupAccessGate == true)
         or false
 end
-A3._NeedsGroupAuraRangeGate = NeedsGroupAuraRangeGate
+A3._NeedsGroupAuraAssistGate = NeedsGroupAuraAssistGate
 
--- Flat-lane range fast path. Only identity-dependent helpful displays and the
--- fixed Spell/Dispel slot owner are fail-closed out of range. Ordinary token-
--- filtered Buff/Debuff flows remain under AuraContainer's incremental UNIT_AURA
--- ownership and are never reparsed merely because a range edge fired.
-local function ApplyGroupAuraRangeGate(frame, inRange)
+-- Exact-ID owners are polarity-aware: helpful filters are valid only while
+-- assistable, harmful filters only while non-assistable. Ordinary token-only
+-- Buff/Debuff and Dispel flows remain under incremental UNIT_AURA ownership.
+local function ApplyGroupAuraAssistGate(frame, canAssist, ready)
     local root = frame.Auras
     if not (root and root._msufA3NativeRoot == true) then return false end
+    local known = issecretvalue(canAssist) ~= true and type(canAssist) == "boolean"
+    ready = ready ~= false and known
 
     local cfg = root._msufA3Config
     local groupSlots = GetGroupSlotsRootConfig(cfg)
     local any = false
-    if groupSlots and groupSlots.rangeGated == true then
-        any = SetRangeAlpha(root[groupSlots.rootKey or "GroupSlots"], inRange, 1)
-    end
-    local secondary = groupSlots and groupSlots.secondaryRoot
-    if secondary and secondary.rangeGated == true then
-        any = SetRangeAlpha(root[secondary.rootKey], inRange, 1) or any
+    local owners = groupSlots and {
+        groupSlots,
+        groupSlots.secondaryRoot,
+        groupSlots.tertiaryRoot,
+    } or {}
+    for index = 1, 3 do
+        local owner = owners[index]
+        if owner and owner.assistGated == true then
+            local visible = ready and (owner.identityCandidateMode == "hostile"
+                and canAssist == false or owner.identityCandidateMode ~= "hostile" and canAssist == true)
+            any = SetAssistAlpha(root[owner.rootKey or "GroupSlots"], visible, 1) or any
+        end
     end
 
     local lanes = cfg and cfg.lanes
-    any = ApplyGroupLaneAccessGate(root, lanes, "buff", "Buffs", inRange) or any
-    any = ApplyGroupLaneAccessGate(root, lanes, "trackedBuff", "TrackedBuffs", inRange) or any
-    any = ApplyGroupLaneAccessGate(root, lanes, "external", "Externals", inRange) or any
+    any = ApplyGroupLaneAccessGate(root, lanes, "buff", "Buffs", canAssist, ready) or any
+    any = ApplyGroupLaneAccessGate(root, lanes, "debuff", "Debuffs", canAssist, ready) or any
+    any = ApplyGroupLaneAccessGate(root, lanes, "trackedBuff", "TrackedBuffs", canAssist, ready) or any
+    any = ApplyGroupLaneAccessGate(root, lanes, "external", "Externals", canAssist, ready) or any
 
-    any = SpellIndicatorsRuntime.ApplyGroupRangeGate(frame, inRange) or any
+    any = SpellIndicatorsRuntime.ApplyGroupAssistGate(frame, canAssist, ready) or any
     return any
 end
 
-A3._SeedGroupAuraRangeGate = function(frame, fallbackUnit)
-    local unitInRange = _G.UnitInRange
-    if not (IsLiveGroupAuraFrame(frame) and unitInRange) then return false end
+A3._SeedGroupAuraAssistGate = function(frame, fallbackUnit)
+    if not IsLiveGroupAuraFrame(frame) then return false end
     local root = frame.Auras
-    if not NeedsGroupAuraRangeGate(root and root._msufA3Config) then return false end
+    if not NeedsGroupAuraAssistGate(root and root._msufA3Config) then return false end
     -- Secure-header retirement/rebinding can briefly clear MSUFUnitKey while
     -- the native container is still present in the direct-identity registry.
-    -- That registry key is the authoritative fallback for this cold refresh.
-    -- Never pass nil/retired tokens into UnitInRange: the API raises instead
-    -- of returning an unavailable range result.
+    -- That registry key is the authoritative fallback for this cold check.
     local unit = frame.MSUFUnitKey
     if issecretvalue(unit) == true or type(unit) ~= "string" or unit == "" then
         unit = fallbackUnit
     end
     if issecretvalue(unit) == true or type(unit) ~= "string" or unit == "" then return false end
-    if unit ~= "player" and not (A3._IsGroupUnitToken and A3._IsGroupUnitToken(unit)) then return false end
-    local inRange = unitInRange(unit)
-    if issecretvalue(inRange) or inRange ~= nil then
-        return ApplyGroupAuraRangeGate(frame, inRange)
+    if unit ~= "player" and not (A3._IsGroupUnitToken and A3._IsGroupUnitToken(unit)) then
+        return false
     end
-    return false
-end
-
-local function CollectGroupAuraParent(parents, container)
-    local frame = container and container._msufA3ParentFrame
-    if not IsLiveGroupAuraFrame(frame) then return parents end
-    parents = parents or {}
-    parents[frame] = true
-    return parents
-end
-
-local function SeedGroupAuraParents(parents, unit)
-    if not parents then return end
-    for frame in pairs(parents) do
-        A3._SeedGroupAuraRangeGate(frame, unit)
+    if type(A3._UpdateGroupAuraAssistState) == "function" then
+        return A3._UpdateGroupAuraAssistState(unit, false, true)
     end
+    local unitCanAssist = _G.UnitCanAssist
+    if type(unitCanAssist) ~= "function" then return ApplyGroupAuraAssistGate(frame, nil, false) end
+    local canAssist = unitCanAssist("player", unit)
+    local known = issecretvalue(canAssist) ~= true and type(canAssist) == "boolean"
+    if not known then canAssist = nil end
+    return ApplyGroupAuraAssistGate(frame, canAssist, known)
 end
 
 A3._directIdentityRefreshUnits = A3._directIdentityRefreshUnits or {
@@ -6312,6 +6363,7 @@ A3._directIdentityRefreshUnits = A3._directIdentityRefreshUnits or {
 A3._directIdentityRefreshAllEvents = A3._directIdentityRefreshAllEvents or {
     PLAYER_ENTERING_WORLD = true,
     ZONE_CHANGED_NEW_AREA = true,
+    ENTERED_DIFFERENT_INSTANCE_FROM_PARTY = true,
 }
 
 A3._directIdentityEventUnits = A3._directIdentityEventUnits or {
@@ -6367,6 +6419,307 @@ local function ContainerOwnsHelpfulAuras(container, lane)
     return lane and NativeFilterOwnsHelpfulAuras(lane.nativeFilter)
 end
 
+-- Identity-sensitive group owners are deliberately discoverable from their
+-- cold compiled descriptors. Lifecycle events therefore route by unit and scan
+-- only that unit's tiny native-owner set; no frame-local event or roster walk is
+-- needed for a normal per-unit edge.
+A3._ContainerOwnsGroupAuraAssistGate = function(container)
+    local parentFrame = container and container._msufA3ParentFrame
+    if not IsLiveGroupAuraFrame(parentFrame) then return false end
+    local config = container._msufA3NativeLaneConfig
+    if type(config) ~= "table" then return false end
+    if container._msufA3GroupSlotsRoot == true then
+        return config.assistGated == true
+    end
+    return config.groupAccessGate == true
+end
+
+A3._GroupAuraAssistOwnerVisible = function(container, canAssist)
+    if issecretvalue(canAssist) == true or type(canAssist) ~= "boolean" then return false end
+    local config = container and container._msufA3NativeLaneConfig
+    if type(config) ~= "table" then return false end
+    if config.identityCandidateMode == "hostile" then return canAssist ~= true end
+    return canAssist == true
+end
+
+A3._GroupAuraAssistUnitHasOwners = function(unit)
+    local counts = A3._groupAuraAssistOwnerCounts
+    return counts ~= nil and (counts[unit] or 0) > 0
+end
+
+A3._HasGroupAuraAssistOwners = function()
+    local byUnit = A3._directIdentityAuraContainers
+    if not byUnit then
+        A3._groupAuraAssistOwnerCount = 0
+        return false
+    end
+    return (A3._groupAuraAssistOwnerCount or 0) > 0
+end
+
+A3._ApplyGroupAuraAssistStateToUnit = function(unit, canAssist)
+    local byUnit = A3._directIdentityAuraContainers
+    local containers = byUnit and byUnit[unit]
+    if not containers then return false end
+    local parents, any = {}, false
+    for container in pairs(containers) do
+        if A3._ContainerOwnsGroupAuraAssistGate(container) then
+            local parentFrame = container._msufA3ParentFrame
+            if parentFrame and parents[parentFrame] ~= true then
+                parents[parentFrame] = true
+                any = ApplyGroupAuraAssistGate(parentFrame, canAssist, true) or any
+            end
+        end
+    end
+    return any
+end
+
+
+A3._HideGroupAuraAssistOwners = function(unit, canAssist)
+    local byUnit = A3._directIdentityAuraContainers
+    local containers = byUnit and byUnit[unit]
+    if not containers then return false end
+    local parents, any = {}, false
+    for container in pairs(containers) do
+        if A3._ContainerOwnsGroupAuraAssistGate(container) then
+            local parentFrame = container._msufA3ParentFrame
+            if parentFrame and parents[parentFrame] ~= true then
+                parents[parentFrame] = true
+                any = ApplyGroupAuraAssistGate(parentFrame, canAssist, false) or any
+            end
+        end
+    end
+    return any
+end
+
+A3._ReadGroupAuraAssistIdentity = function(unit, readGUID)
+    local unitCanAssist = _G.UnitCanAssist
+    if type(unitCanAssist) ~= "function" then return nil, false, nil, false end
+    local canAssist = unitCanAssist("player", unit)
+    local assistKnown = issecretvalue(canAssist) ~= true and type(canAssist) == "boolean"
+    if not assistKnown then canAssist = nil end
+
+    if readGUID ~= true then return canAssist, assistKnown, nil, false end
+    local unitGUID = _G.UnitGUID
+    if type(unitGUID) ~= "function" then return canAssist, assistKnown, nil, false end
+    local guid = unitGUID(unit)
+    if issecretvalue(guid) == true or (guid ~= nil and type(guid) ~= "string") then
+        return canAssist, assistKnown, nil, false
+    end
+    return canAssist, assistKnown, guid, true
+end
+
+A3._RefreshGroupAuraAssistOwners = function(unit, canAssist)
+    local byUnit = A3._directIdentityAuraContainers
+    local containers = byUnit and byUnit[unit]
+    if not containers then return false end
+    local any = false
+    for container in pairs(containers) do
+        if A3._ContainerOwnsGroupAuraAssistGate(container)
+            and A3._GroupAuraAssistOwnerVisible(container, canAssist) then
+            local update = container and container.UpdateAllAuras
+            if type(update) == "function" then
+                -- Alpha zero does not make a Frame non-visible. Marking a
+                -- temporarily hidden owner dirty is still safe: Blizzard's
+                -- RunWhenVisibleOnce processes it on the next visible frame.
+                update(container)
+                any = true
+            end
+        end
+    end
+    return any
+end
+
+A3._FlushGroupAuraAssistReveal = function()
+    A3._groupAuraAssistRevealPending = nil
+    local units = A3._groupAuraAssistRevealUnits
+    A3._groupAuraAssistRevealUnits = nil
+    local states = A3._groupAuraAssistState
+    if not (units and states) then return false end
+    local any = false
+    for unit, revision in pairs(units) do
+        local state = states[unit]
+        if state and state.revision == revision
+            and state.assistKnown == true and state.dirty == true then
+            state.dirty = false
+            any = A3._ApplyGroupAuraAssistStateToUnit(unit, state.canAssist) or any
+        end
+    end
+    return any
+end
+
+A3._ScheduleGroupAuraAssistReveal = function(unit, revision)
+    local units = A3._groupAuraAssistRevealUnits
+    if not units then
+        units = {}
+        A3._groupAuraAssistRevealUnits = units
+    end
+    units[unit] = revision
+    if A3._groupAuraAssistRevealPending == true then return true end
+    A3._groupAuraAssistRevealPending = true
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, A3._FlushGroupAuraAssistReveal)
+    else
+        A3._FlushGroupAuraAssistReveal()
+    end
+    return true
+end
+
+A3._FlushScheduledGroupAuraAssistRefresh = function()
+    A3._groupAuraAssistRefreshPending = nil
+    if A3._directIdentityRefreshPending == true then
+        -- A portal/world job already covers every group identity owner. Let the
+        -- wider job win regardless of callback order: an all-owner pass adopts
+        -- the satisfied parse, while a group-presence pass queues one fresh
+        -- eligible-polarity repair after it invalidates native assignments.
+        A3._groupAuraAssistRefreshUnits = nil
+        return false
+    end
+    local units = A3._groupAuraAssistRefreshUnits
+    A3._groupAuraAssistRefreshUnits = nil
+    local states = A3._groupAuraAssistState
+    if not (units and states) then return false end
+    local any = false
+    for unit, revision in pairs(units) do
+        local state = states[unit]
+        if state and state.revision == revision
+            and state.assistKnown == true and state.dirty == true then
+            any = A3._RefreshGroupAuraAssistOwners(unit, state.canAssist) or any
+            A3._ScheduleGroupAuraAssistReveal(unit, revision)
+        end
+    end
+    return any
+end
+
+A3._ScheduleGroupAuraAssistRefresh = function(unit, revision)
+    local units = A3._groupAuraAssistRefreshUnits
+    if not units then
+        units = {}
+        A3._groupAuraAssistRefreshUnits = units
+    end
+    units[unit] = revision
+    if A3._groupAuraAssistRefreshPending == true then return true end
+    A3._groupAuraAssistRefreshPending = true
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, A3._FlushScheduledGroupAuraAssistRefresh)
+    else
+        A3._FlushScheduledGroupAuraAssistRefresh()
+    end
+    return true
+end
+
+-- State transitions are fail-closed. Both polarity owners stay hidden while
+-- UnitCanAssist is unavailable/secret. A known edge keeps both hidden, reparses
+-- only the newly eligible owner, then reveals it on the following one-shot tick.
+A3._UpdateGroupAuraAssistState = function(unit, checkIdentity, forceApply, forceRefresh, reparseSatisfied)
+    if issecretvalue(unit) == true or type(unit) ~= "string" or unit == "" then return false end
+    if not A3._GroupAuraAssistUnitHasOwners(unit) then
+        local states = A3._groupAuraAssistState
+        if states then states[unit] = nil end
+        return false
+    end
+
+    local states = A3._groupAuraAssistState
+    if not states then
+        states = {}
+        A3._groupAuraAssistState = states
+    end
+    local state = states[unit]
+    local hadState = state ~= nil and state.initialized == true
+    local canAssist, assistKnown, guid, guidKnown = A3._ReadGroupAuraAssistIdentity(
+        unit, checkIdentity == true or hadState ~= true)
+    if not state then
+        state = { revision = 0 }
+        states[unit] = state
+    end
+    local previous = state.canAssist
+    local previousKnown = state.assistKnown == true
+    local identityChanged = checkIdentity == true and hadState == true
+        and (guidKnown ~= true or state.guidKnown ~= true or state.guid ~= guid)
+    if guidKnown == true then
+        state.guid = guid
+        state.guidKnown = true
+    end
+    state.initialized = true
+    if assistKnown then state.canAssist = canAssist else state.canAssist = nil end
+    state.assistKnown = assistKnown == true
+
+    local needsRefresh = hadState ~= true or previousKnown ~= (assistKnown == true)
+        or assistKnown == true and previous ~= canAssist
+        or identityChanged or forceRefresh == true
+    if reparseSatisfied == true then
+        -- The direct identity path has already reparsed every owner for this
+        -- unit. Adopt that parse into the state machine instead of scheduling
+        -- the eligible polarity a second time. Bumping the revision also makes
+        -- any older queued refresh/reveal a harmless no-op.
+        state.revision = (state.revision or 0) + 1
+        state.dirty = nil
+        if assistKnown ~= true then
+            A3._HideGroupAuraAssistOwners(unit, nil)
+        else
+            A3._ApplyGroupAuraAssistStateToUnit(unit, canAssist)
+        end
+        return true
+    end
+    if assistKnown ~= true then
+        if needsRefresh or forceApply == true then
+            state.revision = (state.revision or 0) + 1
+            state.dirty = nil
+            A3._HideGroupAuraAssistOwners(unit, nil)
+        end
+        return true
+    end
+    if needsRefresh then
+        state.revision = (state.revision or 0) + 1
+        state.dirty = true
+        -- Both polarity owners stay fail-closed until the newly eligible owner
+        -- has reparsed. Passing ready=false hides HELPFUL and HARMFUL custom
+        -- owners together without touching neutral aura flows.
+        A3._HideGroupAuraAssistOwners(unit, canAssist)
+        A3._ScheduleGroupAuraAssistRefresh(unit, state.revision)
+    elseif state.dirty == true then
+        if forceApply == true then A3._HideGroupAuraAssistOwners(unit, canAssist) end
+        A3._ScheduleGroupAuraAssistRefresh(unit, state.revision)
+    elseif forceApply == true then
+        A3._ApplyGroupAuraAssistStateToUnit(unit, canAssist)
+    end
+    return true
+end
+
+A3._UpdateAllGroupAuraAssistStates = function(checkIdentity, forceRefresh)
+    local counts = A3._groupAuraAssistOwnerCounts
+    if not counts then return false end
+    local any = false
+    for unit, count in pairs(counts) do
+        if count > 0 then
+            any = A3._UpdateGroupAuraAssistState(unit, checkIdentity, false, forceRefresh) or any
+        end
+    end
+    return any
+end
+
+A3._FlushScheduledGroupAuraAssistRefreshAll = function()
+    A3._groupAuraAssistRefreshAllPending = nil
+    local checkIdentity = A3._groupAuraAssistRefreshAllCheckIdentity == true
+    local forceRefresh = A3._groupAuraAssistRefreshAllForce == true
+    A3._groupAuraAssistRefreshAllCheckIdentity = nil
+    A3._groupAuraAssistRefreshAllForce = nil
+    return A3._UpdateAllGroupAuraAssistStates(checkIdentity, forceRefresh)
+end
+
+A3._ScheduleGroupAuraAssistRefreshAll = function(checkIdentity, forceRefresh)
+    if not A3._HasGroupAuraAssistOwners() then return false end
+    if checkIdentity == true then A3._groupAuraAssistRefreshAllCheckIdentity = true end
+    if forceRefresh == true then A3._groupAuraAssistRefreshAllForce = true end
+    if A3._groupAuraAssistRefreshAllPending == true then return true end
+    A3._groupAuraAssistRefreshAllPending = true
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, A3._FlushScheduledGroupAuraAssistRefreshAll)
+    else
+        A3._FlushScheduledGroupAuraAssistRefreshAll()
+    end
+    return true
+end
+
 local function SyncCuratedBigDefensiveContainer(container)
     local config = container and container._msufA3NativeLaneConfig
     if not config then return false end
@@ -6390,24 +6743,55 @@ local function SyncCuratedBigDefensiveContainer(container)
 end
 A3._SyncCuratedBigDefensiveContainer = SyncCuratedBigDefensiveContainer
 
+-- Presence transitions are container-scoped rather than token-scoped. Party
+-- self shares the registry key "player" with standalone player owners, so a
+-- group-only repair must inspect the live parent and must not touch the other
+-- player containers. Neutral owners reparse here; identity-gated owners remain
+-- exclusively owned by the UnitCanAssist state machine.
+A3._DirectGroupPresenceRefreshUnit = function(unit)
+    local byUnit = A3._directIdentityAuraContainers
+    local containers = byUnit and byUnit[unit]
+    if not containers then return false end
+    local any, hasAssistOwner = false, false
+    for container in pairs(containers) do
+        if IsLiveGroupAuraFrame(container and container._msufA3ParentFrame) then
+            if A3._ContainerOwnsGroupAuraAssistGate(container) then
+                hasAssistOwner = true
+            else
+                local filterChanged = SyncCuratedBigDefensiveContainer(container)
+                local update = container and container.UpdateAllAuras
+                if type(update) == "function" then
+                    if not filterChanged and A3._NativeContainerVisible(container) then
+                        update(container)
+                    end
+                    any = true
+                end
+            end
+        end
+    end
+    if hasAssistOwner then
+        -- The portal/member edge explicitly invalidates native assignments even
+        -- when the final UnitCanAssist value did not change.
+        any = A3._UpdateGroupAuraAssistState(unit, false, false, true) or any
+    end
+    return any
+end
+
 A3._DirectIdentityRefreshUnit = function(unit, forceSpellIndicatorGeometry, recreateHelpfulAuras)
     local byUnit = A3._directIdentityAuraContainers
     local containers = byUnit and byUnit[unit]
     if not containers then return false end
     -- Only Party/Raid registry units (plus the Party self-frame shared under
-    -- "player") can own a range-gated group aura parent. Target, focus and
-    -- boss identity refreshes must not inspect every container for group work.
-    local seedGroupParents = unit == "player" or A3._directIdentityRefreshUnits[unit] ~= true
+    -- "player") can own an assist-gated group aura parent. Target, focus and
+    -- boss identity refreshes must not inspect group state.
+    local seedGroupAssist = unit == "player" or A3._directIdentityRefreshUnits[unit] ~= true
 
     if forceSpellIndicatorGeometry ~= true then
         -- Target/focus swaps use this direct route. Keep the exceptional
         -- world-transition recreation machinery out of the steady path while
         -- still consuming any one-shot geometry marker left by a hidden frame.
-        local any, groupParents = false, nil
+        local any = false
         for container in pairs(containers) do
-            if seedGroupParents then
-                groupParents = CollectGroupAuraParent(groupParents, container)
-            end
             local filterChanged = SyncCuratedBigDefensiveContainer(container)
             local update = container and container.UpdateAllAuras
             if type(update) == "function" then
@@ -6419,15 +6803,14 @@ A3._DirectIdentityRefreshUnit = function(unit, forceSpellIndicatorGeometry, recr
                 any = true
             end
         end
-        if seedGroupParents then SeedGroupAuraParents(groupParents, unit) end
+        if seedGroupAssist then
+            A3._UpdateGroupAuraAssistState(unit, false, true, false, true)
+        end
         return any
     end
 
-    local any, spellRecreates, helpfulRecreates, groupParents = false, nil, nil, nil
+    local any, spellRecreates, helpfulRecreates = false, nil, nil
     for container in pairs(containers) do
-        if seedGroupParents then
-            groupParents = CollectGroupAuraParent(groupParents, container)
-        end
         local lane = container and container._msufA3NativeLaneConfig
         local deferSpellRecreate = container and container._msufA3SpellIndicatorRoot == true
         local recreateHelpfulContainer = recreateHelpfulAuras == true
@@ -6497,7 +6880,39 @@ A3._DirectIdentityRefreshUnit = function(unit, forceSpellIndicatorGeometry, recr
             any = SpellIndicatorsRuntime.Recreate(spellRecreates[i]) ~= nil or any
         end
     end
-    if seedGroupParents then SeedGroupAuraParents(groupParents, unit) end
+    if seedGroupAssist then
+        -- PLAYER_ENTERING_WORLD may replace helpful containers instead of
+        -- reparsing the registered instance in place. Let an already-dirty
+        -- assist revision finish normally in that exceptional recreation pass;
+        -- all in-place direct refreshes can adopt the satisfied parse.
+        A3._UpdateGroupAuraAssistState(
+            unit, false, true, false, recreateHelpfulAuras ~= true)
+    end
+    return any
+end
+
+-- The player token can simultaneously own a standalone ClassPower candidate
+-- slot and the Party self-frame. Player disposition/taxi events must refresh
+-- the former without bypassing the latter's assist-gated state machine.
+A3._DirectIdentityRefreshNonGroupUnit = function(unit)
+    local byUnit = A3._directIdentityAuraContainers
+    local containers = byUnit and byUnit[unit]
+    if not containers then return false end
+    local any = false
+    for container in pairs(containers) do
+        if not IsLiveGroupAuraFrame(container and container._msufA3ParentFrame) then
+            local filterChanged = SyncCuratedBigDefensiveContainer(container)
+            local update = container and container.UpdateAllAuras
+            if type(update) == "function" then
+                if not filterChanged and A3._NativeContainerVisible(container) then update(container) end
+                if container._msufA3ForceManagedAuraGeometry == true
+                    or container._msufA3ForceSpellIndicatorGeometry == true then
+                    A3._SyncManagedAuraContainerGeometry(container, true)
+                end
+                any = true
+            end
+        end
+    end
     return any
 end
 
@@ -6509,14 +6924,16 @@ A3._DirectIdentityRefreshAll = function(groupOnly, forceSpellIndicatorGeometry, 
     -- mutating the registry cannot make pairs() skip another unit family.
     local units = {}
     for unit in pairs(byUnit) do
-        if groupOnly ~= true or A3._IsGroupUnitToken(unit) then
-            units[#units + 1] = unit
-        end
+        units[#units + 1] = unit
     end
     local any = false
     for i = 1, #units do
-        any = A3._DirectIdentityRefreshUnit(
-            units[i], forceSpellIndicatorGeometry, recreateHelpfulAuras) or any
+        if groupOnly == true then
+            any = A3._DirectGroupPresenceRefreshUnit(units[i]) or any
+        else
+            any = A3._DirectIdentityRefreshUnit(
+                units[i], forceSpellIndicatorGeometry, recreateHelpfulAuras) or any
+        end
     end
     return any
 end
@@ -6553,37 +6970,37 @@ A3._ScheduleDirectIdentityRefreshAll = function(groupOnly, forceSpellIndicatorGe
     return true
 end
 
--- UNIT_FACTION and player UNIT_FLAGS can each arrive several times during one
--- cinematic/taxi transition. Queue every affected unit in a lazily allocated
--- set and run one refresh pass per unit on the next frame; each registered
--- native owner is reparsed at most once per burst. Do not suppress the reparse
--- from a UnitCanAssist cache: the native container may have parsed during a
--- transient reaction even when the final reaction equals its previous value.
--- The callback is one-shot: there is no ticker, OnUpdate, or steady-state work.
+-- Non-group identity owners retain the existing burst coalescer. Group owners
+-- take the narrower UnitCanAssist state path above, so player events can refresh
+-- standalone candidate slots without touching Party self-frame containers.
 A3._FlushScheduledDirectIdentityEventRefresh = function()
     A3._directIdentityEventRefreshPending = nil
     local units = A3._directIdentityEventRefreshUnits
     if not units then return false end
     local any = false
-    for unit in pairs(units) do
+    for unit, mode in pairs(units) do
         units[unit] = nil
-        any = A3._DirectIdentityRefreshUnit(unit) or any
+        if mode == "nonGroup" then
+            any = A3._DirectIdentityRefreshNonGroupUnit(unit) or any
+        else
+            any = A3._DirectIdentityRefreshUnit(unit) or any
+        end
     end
     return any
 end
 
-A3._ScheduleDirectIdentityEventRefresh = function(unit)
+A3._ScheduleDirectIdentityEventRefresh = function(unit, nonGroupOnly)
     if type(unit) ~= "string" or unit == "" then return false end
     local containers = A3._directIdentityAuraContainers
     containers = containers and containers[unit]
     if not (containers and next(containers)) then return false end
     local units = A3._directIdentityEventRefreshUnits
-    if units and units[unit] == true then return true end
     if not units then
         units = {}
         A3._directIdentityEventRefreshUnits = units
     end
-    units[unit] = true
+    local requestedMode = nonGroupOnly == true and "nonGroup" or "all"
+    if units[unit] ~= "all" then units[unit] = requestedMode end
     if A3._directIdentityEventRefreshPending == true then return true end
     A3._directIdentityEventRefreshPending = true
     if C_Timer and C_Timer.After then
@@ -6603,7 +7020,7 @@ A3._UpdateDirectIdentityPlayerTaxiState = function()
     local unitOnTaxi = _G.UnitOnTaxi
     if type(unitOnTaxi) ~= "function" then return nil, nil end
     local onTaxi = unitOnTaxi("player")
-    if onTaxi == nil or issecretvalue(onTaxi) == true then return nil, nil end
+    if issecretvalue(onTaxi) == true or onTaxi == nil then return nil, nil end
     local current = onTaxi == true
     local previous = A3._directIdentityPlayerOnTaxi
     A3._directIdentityPlayerOnTaxi = current
@@ -6616,30 +7033,151 @@ end
 local directIdentityRefreshEventFrame
 local directIdentityRefreshRegisteredEvents = {}
 
+-- Unit identity events can be noisy across every visible world unit. Keep the
+-- group-token variants outside the shared global driver: stable four-token
+-- RegisterUnitEvent shards match
+-- Blizzard's 12.1 MAX_UNIT_TOKENS_IN_EVENT contract. A roster change only
+-- rebuilds the affected cold topology; movement and foreign-unit flags never
+-- enter Lua. A real flag edge on a registered raid token costs one cached
+-- UnitCanAssist comparison and no aura rebuild when the value is unchanged.
+A3._groupAuraAssistShardEvents = A3._groupAuraAssistShardEvents or {
+    "UNIT_FLAGS", "UNIT_PHASE", "UNIT_CTR_OPTIONS", "UNIT_CONNECTION",
+    "UNIT_OTHER_PARTY_CHANGED",
+}
+A3._GroupAuraAssistFlagBucket = function(unit)
+    if issecretvalue(unit) == true or type(unit) ~= "string" then return nil end
+    local partyIndex = tonumber(unit:match("^party(%d+)$"))
+    if partyIndex and partyIndex >= 1 and partyIndex <= 4 then return 1 end
+    local raidIndex = tonumber(unit:match("^raid(%d+)$"))
+    if raidIndex and raidIndex >= 1 and raidIndex <= 40 then
+        return 2 + math_floor((raidIndex - 1) / 4)
+    end
+    return nil
+end
+
+A3._ClearGroupAuraAssistFlagShards = function()
+    local shards = A3._groupAuraAssistFlagShards
+    if not shards then return false end
+    for _, shard in pairs(shards) do
+        shard:UnregisterAllEvents()
+        shard._msufA3Units = nil
+        shard._msufA3UnitSet = nil
+        shard._msufA3Signature = nil
+    end
+    return true
+end
+
+A3._SyncGroupAuraAssistFlagShards = function()
+    local desired = {}
+    for unit, count in pairs(A3._groupAuraAssistOwnerCounts or {}) do
+        if count > 0 then
+            local bucket = A3._GroupAuraAssistFlagBucket(unit)
+            if bucket then
+                local units = desired[bucket]
+                if not units then
+                    units = {}
+                    desired[bucket] = units
+                end
+                units[#units + 1] = unit
+            end
+        end
+    end
+
+    local shards = A3._groupAuraAssistFlagShards
+    if not shards then
+        if next(desired) == nil then return false end
+        shards = {}
+        A3._groupAuraAssistFlagShards = shards
+    end
+    for bucket, units in pairs(desired) do
+        table_sort(units)
+        local signature = table_concat(units, "\030")
+        local shard = shards[bucket]
+        if not shard then
+            shard = CreateFrame("Frame")
+            shard:SetScript("OnEvent", function(self, _, unit)
+                local knownUnit = issecretvalue(unit) ~= true and type(unit) == "string" and unit ~= ""
+                if knownUnit then
+                    if self._msufA3UnitSet and self._msufA3UnitSet[unit] then
+                        A3._UpdateGroupAuraAssistState(unit, false, false, false)
+                    end
+                    return
+                end
+                -- Restricted payload fallback stays bounded to this shard's at
+                -- most four registered tokens and reads the transient edge now.
+                local shardUnits = self._msufA3Units or {}
+                for i = 1, #shardUnits do
+                    A3._UpdateGroupAuraAssistState(shardUnits[i], false, false, false)
+                end
+            end)
+            shards[bucket] = shard
+        end
+        if shard._msufA3Signature ~= signature then
+            shard:UnregisterAllEvents()
+            shard._msufA3Units = units
+            shard._msufA3UnitSet = {}
+            for i = 1, #units do shard._msufA3UnitSet[units[i]] = true end
+            shard._msufA3Signature = signature
+            for eventIndex = 1, #A3._groupAuraAssistShardEvents do
+                local event = A3._groupAuraAssistShardEvents[eventIndex]
+                local registered = shard:RegisterUnitEvent(event, units)
+                if registered == false then
+                    shard:UnregisterEvent(event)
+                    local unpackUnits = _G.unpack or table.unpack
+                    registered = unpackUnits and shard:RegisterUnitEvent(
+                        event, unpackUnits(units, 1, #units)) or false
+                    if registered == false then
+                        -- Last-resort correctness fallback for a client rejecting
+                        -- both documented forms. Foreign plain payloads are ignored.
+                        shard:RegisterEvent(event)
+                    end
+                end
+            end
+        end
+    end
+    for bucket, shard in pairs(shards) do
+        if desired[bucket] == nil then
+            shard:UnregisterAllEvents()
+            shard._msufA3Units = nil
+            shard._msufA3UnitSet = nil
+            shard._msufA3Signature = nil
+        end
+    end
+    return next(desired) ~= nil
+end
+
 local function DirectIdentityBossUnit(unit)
     return unit == "boss1" or unit == "boss2" or unit == "boss3"
         or unit == "boss4" or unit == "boss5"
 end
 
 local function SetDirectIdentityRefreshEvent(frame, event, enabled, unit)
-    if enabled == true then
-        if directIdentityRefreshRegisteredEvents[event] ~= true then
-            if unit and type(frame.RegisterUnitEvent) == "function" then
-                frame:RegisterUnitEvent(event, unit)
-            else
-                frame:RegisterEvent(event)
-            end
-            directIdentityRefreshRegisteredEvents[event] = true
-        end
-    elseif directIdentityRefreshRegisteredEvents[event] == true then
+    local desiredMode = enabled == true and (unit and ("unit:" .. unit) or "global") or nil
+    local currentMode = directIdentityRefreshRegisteredEvents[event]
+    if currentMode == desiredMode then return end
+    if currentMode ~= nil then
         frame:UnregisterEvent(event)
         directIdentityRefreshRegisteredEvents[event] = nil
+    end
+    if desiredMode ~= nil then
+        if unit and type(frame.RegisterUnitEvent) == "function" then
+            local registered = frame:RegisterUnitEvent(event, unit)
+            if registered == false then
+                frame:RegisterEvent(event)
+                desiredMode = "global"
+            end
+        else
+            frame:RegisterEvent(event)
+        end
+        directIdentityRefreshRegisteredEvents[event] = desiredMode
     end
 end
 
 local function SyncDirectIdentityRefreshEvents(frame)
     local byUnit = A3._directIdentityAuraContainers
-    local hasAny, hasPlayer, hasTarget, hasFocus, hasBoss = false, false, false, false, false
+    local hasAny, hasGroup, hasPlayer, hasTarget, hasFocus, hasBoss = false, false, false, false, false, false
+    local hasGroupAssist = A3._HasGroupAuraAssistOwners()
+    hasGroup = (A3._directIdentityGroupOwnerCount or 0) > 0
     if byUnit then
         for unit, containers in pairs(byUnit) do
             if containers and next(containers) then
@@ -6664,17 +7202,32 @@ local function SyncDirectIdentityRefreshEvents(frame)
 
     SetDirectIdentityRefreshEvent(frame, "PLAYER_ENTERING_WORLD", true)
     SetDirectIdentityRefreshEvent(frame, "ZONE_CHANGED_NEW_AREA", true)
+    SetDirectIdentityRefreshEvent(frame, "ENTERED_DIFFERENT_INSTANCE_FROM_PARTY", hasGroup)
     SetDirectIdentityRefreshEvent(frame, "UNIT_FACTION", true)
-    SetDirectIdentityRefreshEvent(frame, "PLAYER_CONTROL_LOST", hasPlayer)
+    SetDirectIdentityRefreshEvent(frame, "GROUP_ROSTER_UPDATE", hasGroupAssist)
+    -- Group-token payloads stay in the shards. The player observer can change
+    -- UnitCanAssist for every token, so retain one filtered rare-event binding.
+    SetDirectIdentityRefreshEvent(frame, "UNIT_PHASE", hasGroupAssist, "player")
+    SetDirectIdentityRefreshEvent(frame, "UNIT_CTR_OPTIONS", hasGroupAssist, "player")
+    SetDirectIdentityRefreshEvent(frame, "UNIT_CONNECTION", hasGroupAssist, "player")
+    SetDirectIdentityRefreshEvent(frame, "UNIT_OTHER_PARTY_CHANGED", hasGroupAssist, "player")
+    SetDirectIdentityRefreshEvent(frame, "PARTY_MEMBER_ENABLE", hasGroup)
+    SetDirectIdentityRefreshEvent(frame, "PARTY_MEMBER_DISABLE", hasGroup)
+    SetDirectIdentityRefreshEvent(frame, "PLAYER_CONTROL_LOST", hasPlayer or hasGroupAssist)
+    if hasGroupAssist then
+        A3._SyncGroupAuraAssistFlagShards()
+    else
+        A3._ClearGroupAuraAssistFlagShards()
+    end
     local playerOnTaxi
-    if hasPlayer then
+    if hasPlayer or hasGroupAssist then
         _, playerOnTaxi = A3._UpdateDirectIdentityPlayerTaxiState()
     end
-    -- Do not keep UNIT_FLAGS in the normal player/combat event surface. Taxi
-    -- start binds it temporarily; creation during an active flight binds it
-    -- here. If UnitOnTaxi is unavailable, retain the safe filtered fallback.
+    -- Group-unit flags are handled by the four-token shards above. The shared
+    -- driver binds only the player observer, and only while a taxi transition
+    -- is active/unknown, then removes it immediately on the landing edge.
     SetDirectIdentityRefreshEvent(frame, "UNIT_FLAGS",
-        hasPlayer and playerOnTaxi ~= false, "player")
+        (hasPlayer or hasGroupAssist) and playerOnTaxi ~= false, "player")
     SetDirectIdentityRefreshEvent(frame, "PLAYER_TARGET_CHANGED", hasTarget)
     SetDirectIdentityRefreshEvent(frame, "PLAYER_FOCUS_CHANGED", hasFocus)
     SetDirectIdentityRefreshEvent(frame, "INSTANCE_ENCOUNTER_ENGAGE_UNIT", hasBoss)
@@ -6682,22 +7235,31 @@ local function SyncDirectIdentityRefreshEvents(frame)
 end
 
 local function DirectIdentityRefreshEventsAlreadyCover(unit)
-    if directIdentityRefreshRegisteredEvents.PLAYER_ENTERING_WORLD ~= true
-        or directIdentityRefreshRegisteredEvents.ZONE_CHANGED_NEW_AREA ~= true
-        or directIdentityRefreshRegisteredEvents.UNIT_FACTION ~= true then
+    if directIdentityRefreshRegisteredEvents.PLAYER_ENTERING_WORLD == nil
+        or directIdentityRefreshRegisteredEvents.ZONE_CHANGED_NEW_AREA == nil
+        or directIdentityRefreshRegisteredEvents.UNIT_FACTION == nil then
+        return false
+    end
+    if (A3._directIdentityGroupOwnerCount or 0) > 0
+        and directIdentityRefreshRegisteredEvents.ENTERED_DIFFERENT_INSTANCE_FROM_PARTY == nil then
+        return false
+    end
+    if (A3._directIdentityGroupOwnerCount or 0) > 0
+        and (directIdentityRefreshRegisteredEvents.PARTY_MEMBER_ENABLE == nil
+            or directIdentityRefreshRegisteredEvents.PARTY_MEMBER_DISABLE == nil) then
         return false
     end
     if unit == "player" then
-        return directIdentityRefreshRegisteredEvents.PLAYER_CONTROL_LOST == true
+        return directIdentityRefreshRegisteredEvents.PLAYER_CONTROL_LOST ~= nil
     end
     if unit == "target" then
-        return directIdentityRefreshRegisteredEvents.PLAYER_TARGET_CHANGED == true
+        return directIdentityRefreshRegisteredEvents.PLAYER_TARGET_CHANGED ~= nil
     end
     if unit == "focus" then
-        return directIdentityRefreshRegisteredEvents.PLAYER_FOCUS_CHANGED == true
+        return directIdentityRefreshRegisteredEvents.PLAYER_FOCUS_CHANGED ~= nil
     end
     if DirectIdentityBossUnit(unit) then
-        return directIdentityRefreshRegisteredEvents.INSTANCE_ENCOUNTER_ENGAGE_UNIT == true
+        return directIdentityRefreshRegisteredEvents.INSTANCE_ENCOUNTER_ENGAGE_UNIT ~= nil
     end
     return true
 end
@@ -6710,35 +7272,92 @@ A3._EnsureDirectIdentityRefreshFrame = function()
         frame:SetScript("OnEvent", function(_, event, unit)
             if event == "PLAYER_CONTROL_LOST" then
                 local _, isOnTaxi = A3._UpdateDirectIdentityPlayerTaxiState()
-                SetDirectIdentityRefreshEvent(frame, "UNIT_FLAGS", isOnTaxi ~= false, "player")
-                return
-            end
-            if event == "UNIT_FACTION" or event == "UNIT_FLAGS" then
-                if issecretvalue(unit) ~= true and type(unit) == "string" and unit ~= "" then
-                    local shouldRefresh = true
-                    if event == "UNIT_FLAGS" then
-                        local wasOnTaxi, isOnTaxi = A3._UpdateDirectIdentityPlayerTaxiState()
-                        -- If UnitOnTaxi is unavailable, retain the safe event-based
-                        -- fallback. Otherwise only landing invalidates the player.
-                        shouldRefresh = wasOnTaxi == nil or isOnTaxi == nil
-                            or (wasOnTaxi == true and isOnTaxi == false)
-                        if isOnTaxi == false then
-                            SetDirectIdentityRefreshEvent(frame, "UNIT_FLAGS", false)
-                        end
-                    end
-                    -- Blizzard's identity candidate filters intentionally depend on
-                    -- UnitCanAssist(). Cinematics and taxi state can change that
-                    -- result without an accompanying UNIT_AURA delta, so reparse
-                    -- only this unit's owners once after the event burst settles.
-                    if shouldRefresh then A3._ScheduleDirectIdentityEventRefresh(unit) end
+                local hasGroupAssist = directIdentityRefreshRegisteredEvents.GROUP_ROSTER_UPDATE ~= nil
+                if hasGroupAssist then
+                    SyncDirectIdentityRefreshEvents(frame)
+                else
+                    SetDirectIdentityRefreshEvent(frame, "UNIT_FLAGS", isOnTaxi ~= false, "player")
                 end
+                -- Capture a transient false state as early as possible. This is
+                -- a direct rare-event scan, not a recurring flight/combat loop.
+                if hasGroupAssist then A3._UpdateAllGroupAuraAssistStates(false, false) end
                 return
             end
             if A3._directIdentityRefreshAllEvents[event] == true then
+                if event == "ENTERED_DIFFERENT_INSTANCE_FROM_PARTY" then
+                    -- This synchronous event has no unit payload. Blizzard may
+                    -- leave native group-aura assignments stale across the
+                    -- portal edge. The group-only pass partitions neutral and
+                    -- identity-gated owners and also includes Party self under
+                    -- the shared player registry token.
+                    A3._ScheduleDirectIdentityRefreshAll(true, false)
+                    return
+                end
                 if event == "PLAYER_ENTERING_WORLD" then
                     A3._directIdentityRefreshRecreateHelpfulAuras = true
                 end
                 A3._ScheduleDirectIdentityRefreshAll(false, true)
+                return
+            end
+            if event == "GROUP_ROSTER_UPDATE" then
+                -- Roster bursts can reuse the same unit token with a different
+                -- GUID while UnitCanAssist remains true. One coalesced identity
+                -- scan catches that rebind without reparsing stable members.
+                A3._ScheduleGroupAuraAssistRefreshAll(true, false)
+                return
+            end
+            local groupAssistEvent = event == "UNIT_FACTION" or event == "UNIT_PHASE"
+                or event == "UNIT_CTR_OPTIONS"
+                or event == "UNIT_CONNECTION" or event == "UNIT_FLAGS"
+                or event == "UNIT_OTHER_PARTY_CHANGED"
+                or event == "PARTY_MEMBER_ENABLE" or event == "PARTY_MEMBER_DISABLE"
+            if groupAssistEvent then
+                local hasGroupAssist = directIdentityRefreshRegisteredEvents.GROUP_ROSTER_UPDATE ~= nil
+                local partyPresenceEvent = event == "PARTY_MEMBER_ENABLE"
+                    or event == "PARTY_MEMBER_DISABLE"
+                if partyPresenceEvent then
+                    -- Blizzard treats these payloads as a group-wide presence
+                    -- invalidation. Coalesce the whole burst with the portal
+                    -- event so each native group owner reparses at most once.
+                    A3._ScheduleDirectIdentityRefreshAll(true, false)
+                    return
+                end
+                if issecretvalue(unit) == true or type(unit) ~= "string" or unit == "" then
+                    -- The payload itself may be restricted even though the
+                    -- registered party/raid tokens are ordinary strings. Read
+                    -- those states now: deferring two cinematic flag events to
+                    -- one final-value scan could otherwise miss the transient
+                    -- false edge that makes the native filter stale.
+                    if hasGroupAssist then A3._UpdateAllGroupAuraAssistStates(false, false) end
+                    return
+                end
+                local taxiLanding, refreshNonGroup = false, event == "UNIT_FACTION"
+                if event == "UNIT_FLAGS" and unit == "player" then
+                    local wasOnTaxi, isOnTaxi = A3._UpdateDirectIdentityPlayerTaxiState()
+                    taxiLanding = wasOnTaxi == true and isOnTaxi == false
+                    refreshNonGroup = wasOnTaxi == nil or isOnTaxi == nil or taxiLanding
+                    if isOnTaxi == false then
+                        SetDirectIdentityRefreshEvent(frame, "UNIT_FLAGS", false)
+                    end
+                end
+
+                if hasGroupAssist then
+                    if unit == "player" then
+                        -- A player disposition edge changes the observer side of
+                        -- UnitCanAssist("player", raidN), so evaluate each active
+                        -- assist-gated token once. Taxi landing forces one repair
+                        -- even if a short false interval escaped the final cache.
+                        if event ~= "UNIT_FLAGS" or refreshNonGroup then
+                            A3._UpdateAllGroupAuraAssistStates(false, taxiLanding)
+                        end
+                    elseif A3._IsGroupUnitToken(unit) then
+                        A3._UpdateGroupAuraAssistState(unit, false, false, false)
+                    end
+                end
+
+                if refreshNonGroup and (unit == "player" or not A3._IsGroupUnitToken(unit)) then
+                    A3._ScheduleDirectIdentityEventRefresh(unit, unit == "player")
+                end
                 return
             end
             local units = A3._directIdentityEventUnits[event]
@@ -6760,9 +7379,21 @@ A3._RegisterDirectIdentityRefreshContainer = function(container)
         A3._UnregisterDirectIdentityRefreshContainer(container)
         return false
     end
-    A3._directIdentityAuraContainers = A3._directIdentityAuraContainers or {}
+    if not A3._directIdentityAuraContainers then
+        A3._directIdentityAuraContainers = {}
+        A3._groupAuraAssistOwnerCount = 0
+        A3._directIdentityGroupOwnerCount = 0
+    end
+    A3._groupAuraAssistOwnerCounts = A3._groupAuraAssistOwnerCounts or {}
     local oldUnit = container._msufA3DirectIdentityUnit
+    local oldAssistGated = container._msufA3DirectIdentityAssistGated == true
+    local oldGroupOwner = container._msufA3DirectIdentityGroupOwner == true
     local topologyChanged = false
+    local ownerCounts = A3._groupAuraAssistOwnerCounts
+    local oldUnitAssistCountBefore = oldUnit and (ownerCounts[oldUnit] or 0) or 0
+    local newUnitAssistCountBefore = ownerCounts[unit] or 0
+    local totalAssistCountBefore = A3._groupAuraAssistOwnerCount or 0
+    local totalGroupCountBefore = A3._directIdentityGroupOwnerCount or 0
     if oldUnit and oldUnit ~= unit then
         local oldSet = A3._directIdentityAuraContainers[oldUnit]
         if oldSet then
@@ -6777,9 +7408,47 @@ A3._RegisterDirectIdentityRefreshContainer = function(container)
     if not set then
         set = {}
         A3._directIdentityAuraContainers[unit] = set
+        topologyChanged = true
     end
     set[container] = true
     container._msufA3DirectIdentityUnit = unit
+    local assistGated = A3._ContainerOwnsGroupAuraAssistGate(container)
+    local groupOwner = IsLiveGroupAuraFrame(container._msufA3ParentFrame)
+    container._msufA3DirectIdentityAssistGated = assistGated == true
+    container._msufA3DirectIdentityGroupOwner = groupOwner == true
+    if oldAssistGated and (oldUnit ~= unit or not assistGated) then
+        ownerCounts[oldUnit] = math_max(0, (ownerCounts[oldUnit] or 0) - 1)
+        if ownerCounts[oldUnit] == 0 then ownerCounts[oldUnit] = nil end
+        A3._groupAuraAssistOwnerCount = math_max(0, (A3._groupAuraAssistOwnerCount or 0) - 1)
+    end
+    if assistGated and (not oldAssistGated or oldUnit ~= unit) then
+        ownerCounts[unit] = (ownerCounts[unit] or 0) + 1
+        A3._groupAuraAssistOwnerCount = (A3._groupAuraAssistOwnerCount or 0) + 1
+    end
+    if oldGroupOwner and (oldUnit ~= unit or not groupOwner) then
+        A3._directIdentityGroupOwnerCount = math_max(
+            0, (A3._directIdentityGroupOwnerCount or 0) - 1)
+    end
+    if groupOwner and (not oldGroupOwner or oldUnit ~= unit) then
+        A3._directIdentityGroupOwnerCount = (A3._directIdentityGroupOwnerCount or 0) + 1
+    end
+    local assistUnitTopologyChanged = oldUnit ~= nil
+        and ((oldUnitAssistCountBefore == 0) ~= ((ownerCounts[oldUnit] or 0) == 0))
+        or ((newUnitAssistCountBefore == 0) ~= ((ownerCounts[unit] or 0) == 0))
+    local assistGlobalTopologyChanged = (totalAssistCountBefore == 0)
+        ~= ((A3._groupAuraAssistOwnerCount or 0) == 0)
+    local groupGlobalTopologyChanged = (totalGroupCountBefore == 0)
+        ~= ((A3._directIdentityGroupOwnerCount or 0) == 0)
+    if oldUnit and oldUnit ~= unit and oldAssistGated
+        and not A3._GroupAuraAssistUnitHasOwners(oldUnit) then
+        local states = A3._groupAuraAssistState
+        if states then states[oldUnit] = nil end
+    end
+    if oldUnit == unit and oldAssistGated and not assistGated
+        and not A3._GroupAuraAssistUnitHasOwners(unit) then
+        local states = A3._groupAuraAssistState
+        if states then states[unit] = nil end
+    end
     local frame = A3._EnsureDirectIdentityRefreshFrame()
     -- A visible boss frame commonly registers three native lanes, and five
     -- bosses can appear in the same callback. The first lane establishes the
@@ -6788,7 +7457,10 @@ A3._RegisterDirectIdentityRefreshContainer = function(container)
     -- lifecycle overhead. Additions can take this O(1) coverage gate. Rebinds
     -- that removed a unit family still use the authoritative topology scan so
     -- no obsolete target/focus/boss subscription can survive.
-    if topologyChanged or not DirectIdentityRefreshEventsAlreadyCover(unit) then
+    if topologyChanged or assistUnitTopologyChanged or assistGlobalTopologyChanged
+        or groupGlobalTopologyChanged
+        or (assistGated and directIdentityRefreshRegisteredEvents.GROUP_ROSTER_UPDATE == nil)
+        or not DirectIdentityRefreshEventsAlreadyCover(unit) then
         SyncDirectIdentityRefreshEvents(frame)
     end
     return true
@@ -6797,25 +7469,71 @@ end
 A3._UnregisterDirectIdentityRefreshContainer = function(container)
     local unit = container and container._msufA3DirectIdentityUnit
     if not unit then return end
+    local wasAssistGated = container._msufA3DirectIdentityAssistGated == true
+    local wasGroupOwner = container._msufA3DirectIdentityGroupOwner == true
+    local unitAssistCountBefore = A3._groupAuraAssistOwnerCounts
+        and (A3._groupAuraAssistOwnerCounts[unit] or 0) or 0
+    local totalAssistCountBefore = A3._groupAuraAssistOwnerCount or 0
+    local totalGroupCountBefore = A3._directIdentityGroupOwnerCount or 0
+    local topologyChanged = false
     local byUnit = A3._directIdentityAuraContainers
     local set = byUnit and byUnit[unit]
     if set then
         set[container] = nil
         if not next(set) then
             byUnit[unit] = nil
+            topologyChanged = true
             if unit == "player" then A3._directIdentityPlayerOnTaxi = nil end
         end
     end
     container._msufA3DirectIdentityUnit = nil
+    container._msufA3DirectIdentityAssistGated = nil
+    container._msufA3DirectIdentityGroupOwner = nil
+    if wasAssistGated then
+        local ownerCounts = A3._groupAuraAssistOwnerCounts
+        if ownerCounts then
+            ownerCounts[unit] = math_max(0, (ownerCounts[unit] or 0) - 1)
+            if ownerCounts[unit] == 0 then ownerCounts[unit] = nil end
+        end
+        A3._groupAuraAssistOwnerCount = math_max(0, (A3._groupAuraAssistOwnerCount or 0) - 1)
+    end
+    if wasGroupOwner then
+        A3._directIdentityGroupOwnerCount = math_max(
+            0, (A3._directIdentityGroupOwnerCount or 0) - 1)
+    end
+    local assistUnitTopologyChanged = wasAssistGated and unitAssistCountBefore == 1
+    local assistGlobalTopologyChanged = wasAssistGated and totalAssistCountBefore == 1
+    local groupGlobalTopologyChanged = wasGroupOwner and totalGroupCountBefore == 1
+    if wasAssistGated and not A3._GroupAuraAssistUnitHasOwners(unit) then
+        local states = A3._groupAuraAssistState
+        if states then states[unit] = nil end
+        local refreshUnits = A3._groupAuraAssistRefreshUnits
+        if refreshUnits then refreshUnits[unit] = nil end
+        local revealUnits = A3._groupAuraAssistRevealUnits
+        if revealUnits then revealUnits[unit] = nil end
+    end
     if not A3._HasDirectIdentityRefreshContainers() then
         A3._directIdentityRefreshPending = nil
         A3._directIdentityRefreshGroupOnly = nil
         A3._directIdentityRefreshForceSpellIndicatorGeometry = nil
+        A3._groupAuraAssistState = nil
+        A3._groupAuraAssistOwnerCount = 0
+        A3._groupAuraAssistOwnerCounts = nil
+        A3._directIdentityGroupOwnerCount = 0
+        A3._groupAuraAssistRefreshUnits = nil
+        A3._groupAuraAssistRefreshPending = nil
+        A3._groupAuraAssistRevealUnits = nil
+        A3._groupAuraAssistRevealPending = nil
+        A3._groupAuraAssistRefreshAllPending = nil
+        A3._groupAuraAssistRefreshAllCheckIdentity = nil
+        A3._groupAuraAssistRefreshAllForce = nil
         local frame = A3._directIdentityAuraFrame
         if frame then frame:UnregisterAllEvents() end
+        A3._ClearGroupAuraAssistFlagShards()
         directIdentityRefreshRegisteredEvents = {}
         directIdentityRefreshEventFrame = nil
-    else
+    elseif topologyChanged or assistUnitTopologyChanged or assistGlobalTopologyChanged
+        or groupGlobalTopologyChanged then
         SyncDirectIdentityRefreshEvents(directIdentityRefreshEventFrame)
     end
 end
@@ -7089,7 +7807,8 @@ local function HideGroupSlots(root, parentFrame, groupSlots, rootKeyOverride)
     local current = root[rootKey]
     if current and current._msufA3SpellIndicatorRoot == true then
         local currentConfig = current._msufA3NativeLaneConfig
-        SpellIndicatorsRuntime.HideRootMissing(parentFrame, currentConfig and currentConfig.spellIndicatorRoot)
+        SpellIndicatorsRuntime.HideRootMissing(
+            parentFrame, currentConfig and currentConfig.spellIndicatorRoot, current)
         SpellIndicatorsRuntime.ReleaseContainerEffects(current, parentFrame)
     end
     A3._HideLane(current)
@@ -7175,7 +7894,7 @@ SpellIndicatorsRuntime.Install({
     IsVisible = A3._NativeContainerVisible,
     HideContainer = A3._HideLane,
     RecreateGroupSlots = RecreateGroupSlots,
-    SetRangeAlpha = SetRangeAlpha,
+    SetAssistAlpha = SetAssistAlpha,
     ValidateAuraButton = ValidateNativeAuraButtonContract,
     PrepareAuraButton = PrepareAuraButton,
 })
@@ -7223,6 +7942,10 @@ RefreshAppliedNativeRoot = function(root, forceRefresh)
             if secondary then
                 ok = RefreshNativeContainer(root[secondary.rootKey], forceRefresh, secondary, parentFrame) and ok
             end
+            local tertiary = groupSlots.tertiaryRoot
+            if tertiary then
+                ok = RefreshNativeContainer(root[tertiary.rootKey], forceRefresh, tertiary, parentFrame) and ok
+            end
         end
     else
         local sensorRoot = GetDispelSensorRootConfig(cfg)
@@ -7267,6 +7990,8 @@ local function HideState(frame)
     A3._HideLane(root.TargetDotPortrait)
     A3._HideLane(root.GroupSlots)
     A3._HideLane(root.GroupAuraFlow)
+    A3._HideLane(root.GroupAuraAssist)
+    A3._HideLane(root.GroupAuraHostile)
     A3._HideLane(root.DispelSensor)
     A3._HideLane(root.DispelBorderSensor)
     A3._HideLane(root.DispelOverlaySensor)
@@ -7301,6 +8026,8 @@ local function HideState(frame)
     root.TargetDotPortrait = nil
     root.GroupSlots = nil
     root.GroupAuraFlow = nil
+    root.GroupAuraAssist = nil
+    root.GroupAuraHostile = nil
     root.DispelSensor = nil
     root.DispelBorderSensor = nil
     root.DispelOverlaySensor = nil
@@ -7320,7 +8047,7 @@ local function ApplyConfig(frame, cfg, reason)
     if not root then return false end
     if RootAppliedConfigIsCurrent(root, frame, cfg, reason) then
         RefreshAppliedNativeRoot(root, false)
-        A3._SeedGroupAuraRangeGate(frame)
+        A3._SeedGroupAuraAssistGate(frame)
         return true
     end
     root.unit = cfg.unit or frame.MSUFUnitKey
@@ -7343,14 +8070,21 @@ local function ApplyConfig(frame, cfg, reason)
             local secondary = groupSlots.secondaryRoot
             if secondary then
                 if not ApplyGroupSlots(root, secondary, frame, forceRecreate) then ok = false end
-            else
-                HideGroupSlots(root, frame, nil, "GroupAuraFlow")
             end
+            local tertiary = groupSlots.tertiaryRoot
+            if tertiary and not ApplyGroupSlots(root, tertiary, frame, forceRecreate) then ok = false end
+            if not secondary then HideGroupSlots(root, frame, nil, "GroupAuraAssist") end
+            if not tertiary then HideGroupSlots(root, frame, nil, "GroupAuraHostile") end
+            HideGroupSlots(root, frame, nil, "GroupAuraFlow")
         else
             HideGroupSlots(root, frame)
             HideGroupSlots(root, frame, nil, "GroupAuraFlow")
+            HideGroupSlots(root, frame, nil, "GroupAuraAssist")
+            HideGroupSlots(root, frame, nil, "GroupAuraHostile")
         end
-        anyEffectRoot = groupSlots and groupSlots.spellIndicatorRoot ~= nil or false
+        anyEffectRoot = groupSlots and (groupSlots.spellIndicatorRoot ~= nil
+            or groupSlots.secondaryRoot and groupSlots.secondaryRoot.spellIndicatorRoot ~= nil
+            or groupSlots.tertiaryRoot and groupSlots.tertiaryRoot.spellIndicatorRoot ~= nil) or false
     else
         if sensorRoot and sensorRoot.enabled and not ApplyDispelSensorRoot(root, sensorRoot, frame, forceRecreate) then ok = false end
         if not (sensorRoot and sensorRoot.enabled) then A3._HideLane(root.DispelSensor) end
@@ -7379,7 +8113,7 @@ local function ApplyConfig(frame, cfg, reason)
     root._msufA3FrameSpec = frame.MSUFSpec
     root.needFullUpdate = nil
     root:Show()
-    A3._SeedGroupAuraRangeGate(frame)
+    A3._SeedGroupAuraAssistGate(frame)
     return ok == true
 end
 
@@ -7409,15 +8143,19 @@ local function RootCanReuseContainersForConfig(root, cfg)
         elseif current and current.IsShown and current:IsShown() == true then
             return false
         end
-        local secondary = groupSlots and groupSlots.secondaryRoot
-        local secondaryCurrent = root.GroupAuraFlow
-        if secondary then
-            if not (secondaryCurrent
-                and secondaryCurrent._msufA3StructuralSignature == secondary._msufA3StructuralSignature) then
+        for _, pair in ipairs({
+            { groupSlots and groupSlots.secondaryRoot, "GroupAuraAssist" },
+            { groupSlots and groupSlots.tertiaryRoot, "GroupAuraHostile" },
+        }) do
+            local owner, key = pair[1], pair[2]
+            local current = root[key]
+            if owner then
+                if not (current and current._msufA3StructuralSignature == owner._msufA3StructuralSignature) then
+                    return false
+                end
+            elseif current and current.IsShown and current:IsShown() == true then
                 return false
             end
-        elseif secondaryCurrent and secondaryCurrent.IsShown and secondaryCurrent:IsShown() == true then
-            return false
         end
     else
         local sensorRoot = GetDispelSensorRootConfig(cfg)
@@ -7477,7 +8215,7 @@ return {
     FrameConfigIsCurrent = FrameAppliedConfigIsCurrent,
     CanReuseContainers = RootCanReuseContainersForConfig,
     ReasonRequiresApply = ReasonRequiresAuraApply,
-    ApplyGroupRangeGate = ApplyGroupAuraRangeGate,
+    ApplyGroupAssistGate = ApplyGroupAuraAssistGate,
     CreateClassPowerAuraSensor = CreateClassPowerAuraSensor,
 }
 end)()
@@ -7492,7 +8230,7 @@ local RootAppliedConfigIsCurrent = NativeRuntime.RootConfigIsCurrent
 local FrameAppliedConfigIsCurrent = NativeRuntime.FrameConfigIsCurrent
 local RootCanReuseContainersForConfig = NativeRuntime.CanReuseContainers
 local ReasonRequiresAuraApply = NativeRuntime.ReasonRequiresApply
-local ApplyGroupAuraRangeGate = NativeRuntime.ApplyGroupRangeGate
+local ApplyGroupAuraAssistGate = NativeRuntime.ApplyGroupAssistGate
 
 function A3.SetUnitFrameOwner(unit, frame, owns)
     if not unit then return end
@@ -7900,40 +8638,12 @@ local AurasElement = {
     unitlessEvents = EMPTY_EVENTS,
 }
 
-local GROUP_AURA_RANGE_EVENTS = {
-    "UNIT_IN_RANGE_UPDATE",
-}
-
-function AurasElement.GetEvents(frame)
-    if IsGroupFrame(frame) and frame._msufGFIsPreviewFrame ~= true then
-        local cfg = ResolveGroupFrameConfig(frame, frame.MSUFUnitKey)
-        if A3._NeedsGroupAuraRangeGate(cfg) then
-            local spec = frame.MSUFSpec
-            local group = spec and spec.group
-            local active = frame._msufActiveElements
-            if group and group.rangeFadeEnabled == true
-                and active and active.GroupRangeFade == true then
-                -- GroupRangeFade already owns this filtered event. Its direct
-                -- route forwards the same opaque payload to our compiled gate,
-                -- avoiding a second Core callback/dispatch on every edge.
-                return EMPTY_EVENTS
-            end
-            return GROUP_AURA_RANGE_EVENTS
-        end
-    end
+function AurasElement.GetEvents()
     return EMPTY_EVENTS
 end
 
--- RegisterUnitEvent has already filtered this callback to frame.MSUFUnitKey.
--- UNIT_IN_RANGE_UPDATE's first payload value can be secret on 12.1: forward it
--- directly to SetAlphaFromBoolean gates. Never turn a range edge into
--- UpdateAllAuras/FullAuraRebuild work.
-function AurasElement.UpdateGroupAuraRange(frame, _event, _unit, inRange)
-    return ApplyGroupAuraRangeGate(frame, inRange)
-end
-
-function AurasElement.SelectEventUpdate(_frame, _spec, event)
-    if event == "UNIT_IN_RANGE_UPDATE" then return AurasElement.UpdateGroupAuraRange end
+function AurasElement.SelectEventUpdate()
+    return nil
 end
 
 function AurasElement.IsEnabled(frame)
@@ -7949,14 +8659,6 @@ function AurasElement.Create(frame)
 end
 
 function AurasElement.Apply(frame)
-    if frame then
-        local cfg = ResolveGroupFrameConfig(frame, frame.MSUFUnitKey)
-        frame._msufApplyGroupAuraRangeGate = IsGroupFrame(frame)
-            and frame._msufGFIsPreviewFrame ~= true
-            and A3._NeedsGroupAuraRangeGate(cfg)
-            and ApplyGroupAuraRangeGate
-            or nil
-    end
     return frame ~= nil
 end
 
@@ -7973,10 +8675,6 @@ function AurasElement.Enable(frame)
         end
         frame._msufA3GroupRuntime = true
         local cfg = ResolveGroupFrameConfig(frame, frame and frame.MSUFUnitKey)
-        frame._msufApplyGroupAuraRangeGate = frame._msufGFIsPreviewFrame ~= true
-            and A3._NeedsGroupAuraRangeGate(cfg)
-            and ApplyGroupAuraRangeGate
-            or nil
         if not (cfg and cfg.enabled) then
             HideState(frame)
             return false
@@ -7987,7 +8685,6 @@ function AurasElement.Enable(frame)
 end
 
 function AurasElement.Disable(frame)
-    if frame then frame._msufApplyGroupAuraRangeGate = nil end
     return A3.DisableFrame(frame)
 end
 

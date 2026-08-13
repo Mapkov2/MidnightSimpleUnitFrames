@@ -1140,6 +1140,42 @@ end
 
 local function MissingValueResponse(matches, raw)
     if #matches == 0 then return nil end
+    -- Media requests put the value in front of the control ("use the flat
+    -- texture for the absorb bar"). The alias reader finds the control and no
+    -- value, so before asking for one, re-read the sentence in the order the
+    -- value parser understands.
+    do
+        local router = A.RouterPrivate
+        -- The stated value may belong to a SIBLING of the control the words
+        -- name: "make the frame outline red" names the outline family, whose
+        -- bare words are the thickness slider, and states a colour.
+        local siblingPlan = type(router) == "table"
+            and type(router.StatedValueKindSiblingPlan) == "function"
+            and router.StatedValueKindSiblingPlan(raw) or nil
+        if siblingPlan then return siblingPlan end
+        local reordered = type(router) == "table"
+            and type(router.CanonicalValueBeforeControlCommand) == "function"
+            and router.CanonicalValueBeforeControlCommand(raw, true) or nil
+        if reordered then
+            for i = 1, #matches do
+                local candidate = matches[i] and matches[i].setting
+                -- P.ValueForRegistrySetting, not the file-local upvalue: the
+                -- local is declared further down and is still nil here.
+                local value = candidate and type(P.ValueForRegistrySetting) == "function"
+                    and P.ValueForRegistrySetting(candidate, Normalize(reordered), reordered) or nil
+                if value ~= nil then
+                    return {
+                        kind = "changes",
+                        changes = { { setting = candidate, value = value } },
+                        label = candidate.label or "Assistant option change",
+                        summary = "Changes the control named after its value.",
+                        raw = raw,
+                        sourceText = raw,
+                    }
+                end
+            end
+        end
+    end
     local best
     for i = 1, #matches do
         if i % 16 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
@@ -1764,16 +1800,18 @@ local function HideSettingValueForText(text, defaultValue)
 end
 
 local UNIT_LOAD_CONDITION_SPECS = {
-    { key = "loadCondHideMounted", label = "Hide Mounted", terms = { "mounted", "mount", "on mount", "while mounted", "when mounted", "gemountet", "reittier" } },
-    { key = "loadCondHideOutOfCombat", label = "Hide Out of Combat", terms = { "out of combat", "outside combat", "not in combat", "ooc", "while out of combat", "when out of combat", "ausserhalb kampf", "ausser kampf", "nicht im kampf" } },
-    { key = "loadCondHideSolo", label = "Hide Solo", terms = { "solo", "alone", "while solo", "when solo", "allein" } },
-    { key = "loadCondHideInVehicle", label = "Hide in Vehicle", terms = { "in vehicle", "vehicle", "while in vehicle", "when in vehicle", "fahrzeug" } },
+    { key = "loadCondHideInHousing", label = "Hide in Housing", terms = { "housing", "house", "in housing", "while in housing", "when in housing", "player housing", "haus", "spielerhaus" } },
+    { key = "loadCondHideInCombat", label = "Hide in Combat", terms = { "in combat", "combat", "fight", "while in combat", "when in combat", "im kampf", "kampf" } },
     { key = "loadCondHideInGroup", label = "Hide in Group", terms = { "in group", "while in group", "when in group", "grouped", "in party", "in raid", "in gruppe", "gruppe" } },
     { key = "loadCondHideInInstance", label = "Hide in Instance", terms = { "in instance", "instance", "dungeon", "while in instance", "when in instance", "instanz" } },
+    { key = "loadCondHideInVehicle", label = "Hide in Vehicle", terms = { "in vehicle", "vehicle", "while in vehicle", "when in vehicle", "fahrzeug" } },
+    { key = "loadCondHideMounted", label = "Hide Mounted", terms = { "mounted", "mount", "on mount", "while mounted", "when mounted", "gemountet", "reittier" } },
+    { key = "loadCondHideNoTarget", label = "Hide with No Target", terms = { "no target", "without target", "when no target", "target selected", "has target", "with target", "kein ziel", "ohne ziel", "ziel ausgewählt", "hat ein ziel", "mit ziel" } },
+    { key = "loadCondHideOutOfCombat", label = "Hide Out of Combat", terms = { "out of combat", "outside combat", "not in combat", "ooc", "while out of combat", "when out of combat", "ausserhalb kampf", "ausser kampf", "nicht im kampf" } },
+    { key = "loadCondHideOutOfCombatNoTarget", label = "Hide Out of Combat with No Target", terms = { "out of combat and no target", "out of combat with no target", "no target while out of combat", "outside combat with no target", "target selected or in combat", "has target or in combat", "target or combat", "ausserhalb kampf und kein ziel", "kein ziel ausserhalb kampf", "ziel oder im kampf" } },
     { key = "loadCondHideResting", label = "Hide Resting", terms = { "resting", "rested", "rest area", "while resting", "when resting", "ruhend", "erholt" } },
-    { key = "loadCondHideInCombat", label = "Hide in Combat", terms = { "in combat", "combat", "fight", "while in combat", "when in combat", "im kampf", "kampf" } },
+    { key = "loadCondHideSolo", label = "Hide Solo", terms = { "solo", "alone", "while solo", "when solo", "allein" } },
     { key = "loadCondHideStealthed", label = "Hide Stealthed", terms = { "stealthed", "stealth", "in stealth", "while stealthed", "when stealthed", "getarnt", "verstohlen" } },
-    { key = "loadCondHideInHousing", label = "Hide in Housing", terms = { "housing", "house", "in housing", "while in housing", "when in housing", "player housing", "haus", "spielerhaus" } },
 }
 
 local LOAD_CONDITION_TERMS = {
@@ -1828,6 +1866,34 @@ local function HasUnitLoadConditionIntent(text, spec)
     end
     return #units > 0 and HasVisibilityVerb(text)
 end
+
+P.TARGET_GATE_LOAD_CONDITIONS = {
+    loadCondHideNoTarget = true,
+    loadCondHideOutOfCombatNoTarget = true,
+}
+P.TARGET_GATE_OFF_TERMS = {
+    "turn off", "disable", "disabled", "deactivate", "deactivated", "remove", "clear",
+    "dont hide", "do not hide", "never hide", "always show",
+    "deaktivieren", "deaktiviert", "ausschalten", "ausgeschaltet", "entfernen", "loeschen",
+    "nicht verstecken", "nicht ausblenden", "immer anzeigen",
+}
+
+function P.UnitLoadConditionValueForText(text, spec)
+    if spec and P.TARGET_GATE_LOAD_CONDITIONS[spec.key] == true then
+        -- For target gates, "show with a target" describes enabling the Hide
+        -- No Target rule rather than disabling a generic Hide setting. Only an
+        -- explicit request to turn the rule off wins over that semantic form.
+        if ContainsAny(text, P.TARGET_GATE_OFF_TERMS) then return false end
+        return true
+    end
+    return HideSettingValueForText(text, true)
+end
+
+P.TARGET_GATE_INTENT_TERMS = {
+    "no target", "without target", "target selected", "has target", "with target",
+    "target or combat", "target selected or in combat", "has target or in combat",
+    "kein ziel", "ohne ziel", "ziel ausgewählt", "hat ein ziel", "mit ziel", "ziel oder im kampf",
+}
 
 local function GroupAvailabilityAttributeForText(text)
     if ContainsAny(text, RegistryPhrases[26]) then
@@ -4705,12 +4771,12 @@ local function ParseUnitLoadConditionShortcut(text)
         return {
             kind = "answer",
             status = "ambiguous",
-            text = "Which unit frame visibility rule do you want me to change? MSUF offers Mounted, Out of combat, Solo, In vehicle, In group, In instance, Resting, In combat, and Stealthed.",
+            text = "Which unit frame visibility rule do you want me to change? MSUF offers Housing, In combat, In group, In instance, In vehicle, Mounted, No target, Out of combat, Out of combat and no target, Resting, Solo, and Stealthed.",
             summary = "Asks which unit frame visibility rule to change.",
         }
     end
 
-    local value = HideSettingValueForText(text, true)
+    local value = P.UnitLoadConditionValueForText(text, spec)
     local units, concrete = UnitLoadConditionScopes(text)
     if #units == 0 then
         local choices = UnitLoadConditionChoices(spec, value)
@@ -4743,6 +4809,17 @@ local function ParseUnitLoadConditionShortcut(text)
         label = "Which unit frame?",
         summary = "The request matched a unit frame visibility rule but did not name a unit.",
     }
+end
+
+function P.ParseTargetGateLoadConditionShortcut(text)
+    if not ContainsAny(text, P.TARGET_GATE_INTENT_TERMS) then return nil end
+    local parsed = ParseUnitLoadConditionShortcut(text)
+    local change = parsed and parsed.changes and parsed.changes[1]
+    local key = change and change.setting and change.setting.attribute
+    if key == "loadCondHideNoTarget" or key == "loadCondHideOutOfCombatNoTarget" then
+        return parsed
+    end
+    return nil
 end
 
 local function PowerBarScopes(text, unitOnly)

@@ -18,19 +18,21 @@ M.Assistant = A
 
 A.GlobalBarRegistry = A.GlobalBarRegistry or {}
 
+-- Human wording first: the registry keeps only the first MAX_SETTING_ALIASES
+-- entries, so anything past that is dropped in silence.
 local ABSORB_ENABLED_ALIASES = {
-    "show positive absorbs", "positive absorbs", "absorb bar", "absorb bars", "show absorbs",
-    "show absorb bar", "show shields", "shield bar", "show shield bar", "shields on health bar",
-    "shields on the health bar", "absorb shields", "show absorb shields", "damage absorbs",
-    "damage absorb bar", "show damage absorbs", "absorb overlay", "display absorbs",
-    "see damage absorbs", "shields drawn on the health bar", "shields on my health bar",
-    "absorbs on the health bar",
+    "show positive absorbs", "positive absorbs", "absorb bar", "absorb bars",
+    "shields on my health bar", "shields on the health bar", "shields drawn on the health bar",
+    "see damage absorbs", "damage absorbs", "absorbs on the health bar",
+    "show shields", "shield bar", "show shield bar", "absorb shields", "show absorb shields",
+    "show absorbs", "show absorb bar", "damage absorb bar", "absorb overlay", "display absorbs",
 }
 local ABSORB_HEIGHT_ALIASES = {
-    "absorb bar height", "absorb height", "shield bar height", "absorb bar thickness",
-    "absorb bar taller", "absorb bar shorter", "shield bar taller", "shield bar bigger",
-    "make the absorb bar taller", "make the absorb bar shorter", "make the shield bar bigger",
-    "make the shield bar smaller", "absorb bar thicker", "absorb bar thinner",
+    "absorb bar height", "shield bar height", "absorb height",
+    "make the absorb bar taller", "make the shield bar bigger", "shield bar is too thin",
+    "absorb bar is too thin", "shield bar too small", "absorb bar taller", "shield bar taller",
+    "absorb bar thickness", "absorb bar thicker", "absorb bar thinner",
+    "make the absorb bar shorter", "make the shield bar smaller", "absorb bar shorter",
 }
 local ABSORB_OFFSET_ALIASES = {
     "absorb bar vertical offset", "absorb bar offset y", "absorb vertical offset",
@@ -38,15 +40,17 @@ local ABSORB_OFFSET_ALIASES = {
     "absorb bar up", "absorb bar down", "shield bar offset",
 }
 local HEAL_ABSORB_ENABLED_ALIASES = {
-    "show negative heal absorbs", "negative heal absorbs", "heal absorb bar", "heal absorbs",
-    "show heal absorbs", "healing absorbs", "show healing absorbs", "heal absorption",
-    "healing absorption", "blocked healing", "show blocked healing", "healing that is blocked",
-    "how much healing is being blocked", "healing being blocked", "healing absorb shields",
+    "show negative heal absorbs", "negative heal absorbs", "heal absorb bar",
+    "how much healing is being blocked", "healing being blocked", "blocked healing",
+    "show blocked healing", "healing that is blocked", "healing absorb shields",
+    "heal absorbs", "show heal absorbs", "healing absorbs", "show healing absorbs",
+    "heal absorption", "healing absorption",
 }
 local HEAL_ABSORB_ANCHOR_ALIASES = {
     "heal absorb anchor", "heal absorb bar anchor", "healing absorb anchor",
     "heal absorb bar side", "heal absorb anchoring", "negative absorb anchor",
     "where the heal absorb bar sits", "healing absorb bar side", "healing absorb bar position",
+    "healing absorb bar on the left", "healing absorb bar on the right",
 }
 local HEAL_ABSORB_HEIGHT_ALIASES = {
     "heal absorb bar height", "heal absorb height", "healing absorb bar height",

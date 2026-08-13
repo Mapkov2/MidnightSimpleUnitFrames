@@ -323,6 +323,7 @@ local GROUP_LANE_SPECS = {
         blacklistKey = "debuffBlacklistHash",
         hidePermanentKey = "debuffHidePermanent",
         maxDurationKey = "debuffMaxDuration",
+        nonPlayerKey = "debuffNonPlayer",
         showSwipeKey = "debuffShowCooldownSwipe",
         showCooldownKey = "debuffShowCooldown",
         showStackKey = "debuffShowStacks",
@@ -902,6 +903,7 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
     local storedLaneFilters = rootFilters and type(rootFilters[spec.dbKey]) == "table"
         and rootFilters[spec.dbKey] or nil
     local filters = FilterTable(filtersRoot, spec.dbKey)
+    local nonPlayerFilter = kind == "debuff" and filters and filters.nonPlayer == true or false
     local explicitLaneBlacklist = type(blacklist) == "table"
         and type(blacklist[spec.dbKey]) == "table" and blacklist[spec.dbKey] or nil
     local laneBlacklist = explicitLaneBlacklist or blacklist
@@ -944,7 +946,7 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
     local hasInclusive = filterPlan and filterPlan.hasRequirements == true
         or onlyMine or raid or includeStealable or boss or onlyBoss or raidInCombat
     local black = CompileBlacklist(laneBlacklist)
-    local hasFilterWork = black ~= nil or onlyImportant or hasInclusive or hidePermanent
+    local hasFilterWork = black ~= nil or onlyImportant or hasInclusive or hidePermanent or nonPlayerFilter
         or maxDuration > 0 or satedFilter
     local renderEnabled = renderAllowed ~= false and show and maxCount > 0
     local visualDirect = kind == "debuff"
@@ -1098,6 +1100,7 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
         includeStealable = includeStealable == true,
         boss = boss == true,
         hidePermanent = hidePermanent == true,
+        nonPlayerFilter = nonPlayerFilter,
         maxDuration = maxDuration,
         showSated = showSated == true,
         satedThreshold = satedThreshold,
@@ -1183,15 +1186,17 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
         end
     end
     local hidePermanent = spec.hidePermanentKey and source[spec.hidePermanentKey] == true or false
+    local nonPlayerFilter = spec.nonPlayerKey and source[spec.nonPlayerKey] == true or false
     local maxDuration = 0
-    local hasFilterWork = black ~= nil or type(includeSpellIDs) == "table" or hidePermanent or maxDuration > 0
+    local hasFilterWork = black ~= nil or type(includeSpellIDs) == "table" or hidePermanent
+        or nonPlayerFilter or maxDuration > 0
         or (filterPlan and filterPlan.hasRequirements == true)
     local visualDirect = kind == "debuff"
         and visual
         and visual.directVisualEligible == true
         and hasFilterWork ~= true
     local enabled = renderEnabled or (forceScan == true and kind == "debuff" and visualDirect ~= true)
-    local cappedFilterScan = (black ~= nil or hidePermanent or maxDuration > 0)
+    local cappedFilterScan = (black ~= nil or hidePermanent or nonPlayerFilter or maxDuration > 0)
         and type(includeSpellIDs) ~= "table"
         and not (filterPlan and filterPlan.hasRequirements == true)
     local showCooldown = source[spec.showCooldownKey] ~= false
@@ -1323,6 +1328,7 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
         raidInCombat = false,
         hasInclusive = false,
         hidePermanent = hidePermanent,
+        nonPlayerFilter = nonPlayerFilter,
         maxDuration = maxDuration,
         needsPlayerFlag = needsPlayerFlag == true,
         needsCombatRefresh = filterPlan and filterPlan.needsCombatRefresh == true or false,
@@ -2338,6 +2344,34 @@ local function TimedAura(unit, data)
     return nil
 end
 
+A3._ClassicAuraFromAnyPlayerOrPet = function(data)
+    if type(data) ~= "table" then return nil end
+    local raw = data.isFromPlayerOrPlayerPet
+    if raw ~= nil and not IsSecret(raw) and raw == true then return true end
+
+    -- Supported Classic clients expose the AuraData flag, but some Mists/TBC
+    -- group payloads report false/nil for player-owned effects. Use the public
+    -- source token to reject those false negatives before accepting a public
+    -- false flag as an environment/NPC aura.
+    local sourceUnit = data.sourceUnit
+    if sourceUnit ~= nil and not IsSecret(sourceUnit) then
+        local unitIsPlayer = _G.UnitIsPlayer
+        local isPlayer = type(unitIsPlayer) == "function" and unitIsPlayer(sourceUnit) or nil
+        if isPlayer ~= nil and not IsSecret(isPlayer) and isPlayer == true then return true end
+        local unitPlayerOrPetInParty = _G.UnitPlayerOrPetInParty
+        local inParty = type(unitPlayerOrPetInParty) == "function"
+            and unitPlayerOrPetInParty(sourceUnit) or nil
+        if inParty ~= nil and not IsSecret(inParty) and inParty == true then return true end
+        local unitPlayerOrPetInRaid = _G.UnitPlayerOrPetInRaid
+        local inRaid = type(unitPlayerOrPetInRaid) == "function"
+            and unitPlayerOrPetInRaid(sourceUnit) or nil
+        if inRaid ~= nil and not IsSecret(inRaid) and inRaid == true then return true end
+    end
+
+    if raw ~= nil and not IsSecret(raw) then return raw == true end
+    return nil
+end
+
 local function RemainingTime(data)
     local expirationTime = PlainNumber(data and data.expirationTime)
     if not (expirationTime and expirationTime > 0 and GetTime) then return nil end
@@ -2380,6 +2414,7 @@ local function ShouldShowAura(lane, unit, data)
         end
         if not matched then return false end
     end
+    if cfg.nonPlayerFilter == true and A3._ClassicAuraFromAnyPlayerOrPet(data) ~= false then return false end
     if cfg.hidePermanent == true and TimedAura(unit, data) == false then return false end
     if cfg.maxDuration and cfg.maxDuration > 0 then
         local duration = PlainNumber(data and data.duration) or 0

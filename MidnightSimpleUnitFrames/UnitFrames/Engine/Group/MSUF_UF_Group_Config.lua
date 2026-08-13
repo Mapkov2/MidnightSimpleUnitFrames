@@ -1096,7 +1096,15 @@ local function ApplyAuraLane(out, prefix, groupKey, group, defaults, maxCount, i
   out[prefix .. "Filter"] = AuraFilterString(groupKey, group)
   local blacklist = type(group.blacklist) == "table" and group.blacklist or nil
   out[prefix .. "HidePermanent"] = group.hidePermanent == true or (blacklist and blacklist.hidePermanent == true) or false
-  if prefix == "debuff" then out.debuffMaxDuration = Num(blacklist and blacklist.maxDuration, 0) end
+  if prefix == "debuff" then
+    out.debuffMaxDuration = Num(blacklist and blacklist.maxDuration, 0)
+    local filter = GF.AuraFilter or _G.MSUF_GF_AuraFilter
+    local nonPlayer = tostring(group.filterToken or ""):upper():gsub("[^A-Z0-9]", "") == "NONPLAYER"
+    if filter and filter.IsNonPlayerDebuffFilter then
+      nonPlayer = filter.IsNonPlayerDebuffFilter(group.filterToken) == true
+    end
+    out.debuffNonPlayer = nonPlayer
+  end
   if group.showTooltip ~= nil then
     out[prefix .. "ShowTooltip"] = group.showTooltip == true
   end

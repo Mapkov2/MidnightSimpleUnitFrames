@@ -178,6 +178,8 @@ function A.GlobalBarRegistry.RegisterScopedBarSettings(ctx)
         RegisterHighlightPriority(scope)
         RegisterScopedSetting("barScope", scope, "override", "override", "Bars Override", "boolean", false, GlobalScopeAliases(scope, {
             "bars override", "custom bars", "custom bar settings", "bar custom settings",
+            "frame have its own bar settings", "have its own bar settings",
+            "frames have their own bar settings",
         }), {
             flag = "hlOverride",
             get = function(scopeKey) return GlobalScopeHasOverride(scopeKey, "hlOverride") end,

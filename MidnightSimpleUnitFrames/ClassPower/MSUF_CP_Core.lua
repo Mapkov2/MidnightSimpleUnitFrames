@@ -94,6 +94,21 @@ local function ClearShapeEdge(bar)
     end
 end
 
+local function CP_ResolveTextLayerLevel(frame, bars)
+    local textLayer = tonumber(bars and bars.classPowerTextLayer) or 5
+    if textLayer < 0 then textLayer = 0 elseif textLayer > 30 then textLayer = 30 end
+    textLayer = math.floor(textLayer + 0.5)
+    local layers = MSUF.UF and MSUF.UF.Layers
+    if layers and type(layers.TextLevel) == "function" then
+        return layers.TextLevel(frame, textLayer, 5)
+    end
+    if layers and type(layers.ElementLevel) == "function" then
+        return layers.ElementLevel(textLayer, 5, 8)
+    end
+    local baseLevel = frame and frame.GetFrameLevel and (frame:GetFrameLevel() or 0) or 0
+    return baseLevel + 10
+end
+
 --- BUILD is the only block that creates ClassPower frames. It is cold-path code:
 --- create reusable bars and text once, then let layout/runtime reuse them.
 builders.BUILD = function(E)
@@ -110,7 +125,9 @@ builders.BUILD = function(E)
 
         local tf = CreateFrame("Frame", nil, c)
         tf:SetAllPoints(c)
-        tf:SetFrameLevel(c:GetFrameLevel() + 10)
+        local textLevel = CP_ResolveTextLayerLevel(c, _cpDB.bars)
+        tf:SetFrameLevel(textLevel)
+        tf._msufFrameLevelStamp = textLevel
         if tf.SetFrameStrata and c.GetFrameStrata then tf:SetFrameStrata(c:GetFrameStrata()) end
         if tf.EnableMouse then tf:EnableMouse(false) end
         CP.textFrame = tf
@@ -287,6 +304,12 @@ builders.LAYOUT = function(E)
 
         local h = height
         local b = _cpDB.bars or {}
+        local augPowerBar = CP.augCompositeActive == true
+            and playerFrame._msufAugPowerReplacementActive == true
+            and playerFrame.targetPowerBar or nil
+        if augPowerBar then
+            h = tonumber(playerFrame._msufAugPowerReplacementEssenceHeight) or h
+        end
         local layoutCache = type(_G.MSUF_GetProfileScopedCache) == "function" and _G.MSUF_GetProfileScopedCache("classPowerLayoutCache") or nil
         local levelOffset = tonumber(b.classPowerFrameLevelOffset) or 5
         if levelOffset < 0 then levelOffset = 0 elseif levelOffset > 30 then levelOffset = 30 end
@@ -299,18 +322,18 @@ builders.LAYOUT = function(E)
                 CP.container:SetFrameLevel(targetLevel)
                 CP.container._msufFrameLevelStamp = targetLevel
             end
-            if CP.textFrame and CP.textFrame.SetFrameLevel then
-                local textLevel = targetLevel + 10
-                if CP.textFrame._msufFrameLevelStamp ~= textLevel then
-                    CP.textFrame:SetFrameLevel(textLevel)
-                    CP.textFrame._msufFrameLevelStamp = textLevel
-                end
-                if CP.textFrame.SetFrameStrata and CP.container.GetFrameStrata then
-                    local textStrata = CP.container:GetFrameStrata()
-                    if CP.textFrame._msufFrameStrataStamp ~= textStrata then
-                        CP.textFrame:SetFrameStrata(textStrata)
-                        CP.textFrame._msufFrameStrataStamp = textStrata
-                    end
+        end
+        if CP.textFrame and CP.textFrame.SetFrameLevel then
+            local textLevel = CP_ResolveTextLayerLevel(CP.container, b)
+            if CP.textFrame._msufFrameLevelStamp ~= textLevel then
+                CP.textFrame:SetFrameLevel(textLevel)
+                CP.textFrame._msufFrameLevelStamp = textLevel
+            end
+            if CP.textFrame.SetFrameStrata and CP.container.GetFrameStrata then
+                local textStrata = CP.container:GetFrameStrata()
+                if CP.textFrame._msufFrameStrataStamp ~= textStrata then
+                    CP.textFrame:SetFrameStrata(textStrata)
+                    CP.textFrame._msufFrameStrataStamp = textStrata
                 end
             end
         end
@@ -333,8 +356,13 @@ builders.LAYOUT = function(E)
         --- Width can follow the player frame, explicit settings, or supported
         --- cooldown frames. Cooldown widths are cached so entering combat does
         --- not force protected anchor/measurement work.
-        local cdmName = CPConst.CDM_FRAMES[widthMode]
-        if shapeMode and widthMode == "auto_pips" then
+        local cdmName = not augPowerBar and CPConst.CDM_FRAMES[widthMode] or nil
+        if augPowerBar and augPowerBar.GetWidth then
+            userW = augPowerBar:GetWidth()
+            if not userW or userW < 1 then
+                userW = (playerFrame.GetWidth and playerFrame:GetWidth()) or playerSpecW
+            end
+        elseif shapeMode and widthMode == "auto_pips" then
             local slot = tonumber(h) or 1
             if slot < 1 then slot = 1 end
             if type(snap) == "function" then slot = snap(CP.container, slot) or slot end
@@ -376,7 +404,7 @@ builders.LAYOUT = function(E)
             end
             userW = userW - 4
         end
-        if type(snap) == "function" then
+        if not augPowerBar and type(snap) == "function" then
             userW = snap(CP.container, userW)
         end
         if not userW or userW < 1 then userW = 1 end
@@ -392,7 +420,7 @@ builders.LAYOUT = function(E)
         local positionFrozen = inLockdown
         local positionDeferred = false
         CP.container:SetSize(userW, h)
-        if inLockdown and CP.container._msufPositionInitialized ~= true
+        if not augPowerBar and inLockdown and CP.container._msufPositionInitialized ~= true
             and b.classPowerAnchorToCooldown == true then
             if type(_G.MSUF_ApplyCachedUnitFrameScreenPosition) == "function"
                 and _G.MSUF_ApplyCachedUnitFrameScreenPosition(CP.container, "classpower", "classpower")
@@ -411,7 +439,13 @@ builders.LAYOUT = function(E)
         end
 
         if not positionFrozen then CP.container:ClearAllPoints() end
-        if b.classPowerAnchorToCooldown == true and not positionFrozen then
+        if augPowerBar and not positionFrozen then
+            CP.container:SetPoint("TOPLEFT", augPowerBar, "TOPLEFT", 0, 0)
+            CP.container:SetPoint("TOPRIGHT", augPowerBar, "TOPRIGHT", 0, 0)
+            CP.container._msufDirectCooldownAnchor = nil
+            CP.container._msufHardLockPoint = nil
+            CP.container._msufStableExternalAnchor = nil
+        elseif b.classPowerAnchorToCooldown == true and not positionFrozen then
             local ecv = not inLockdown and (
                 (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer"))
                 or _G["EssentialCooldownViewer"]
@@ -1254,7 +1288,7 @@ builders.SPECIALS = function(env)
         end
     end
 
-    --- EUI's secret-safe contract: Tip is derived exclusively from successful
+    --- Secret-safe contract: Tip is derived exclusively from successful
     --- player casts. No aura lookup, UNIT_AURA parsing, polling, or OnUpdate.
     local function OnTipOfTheSpearSpellCast(spellID)
         local isRelevant = spellID == TIP.KILL_COMMAND

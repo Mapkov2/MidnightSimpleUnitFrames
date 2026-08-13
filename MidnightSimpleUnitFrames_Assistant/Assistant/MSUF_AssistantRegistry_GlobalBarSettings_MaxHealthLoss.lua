@@ -18,24 +18,30 @@ M.Assistant = A
 
 A.GlobalBarRegistry = A.GlobalBarRegistry or {}
 
+-- Order matters: the registry keeps only the first MAX_SETTING_ALIASES of a
+-- list, so the wording players actually type has to come before the
+-- storage-name variants, not after them.
 local ENABLED_ALIASES = {
-    "maximum health loss", "maximum-health loss", "max health loss", "max hp loss",
-    "show maximum health loss", "show max health loss", "maximum health loss overlay",
-    "max health loss overlay", "maximum health reduction", "max health reduction",
-    "max hp reduction", "maximum hp reduction", "lost maximum health", "lost max health",
-    "missing maximum health", "unavailable maximum health", "temporary max health loss",
-    "temp max health", "temp max health enabled", "max health debuff overlay",
-    "health lost to a debuff", "reduced maximum health",
+    "maximum health loss", "max health loss", "maximum health loss overlay",
+    "max health loss overlay", "show maximum health loss", "show max health loss",
+    "how much maximum health i lost", "how much max health i lost",
+    "maximum health i lost", "max health i lost",
+    "part of the bar i lost", "part of the bar i lost to a max health debuff",
+    "lost to a max health debuff", "max health debuff overlay", "max health debuff",
+    "maximum health reduction", "max health reduction", "max hp reduction",
+    "lost maximum health", "missing maximum health",
 }
 local TEXTURE_ALIASES = {
-    "maximum health loss texture", "max health loss texture", "max hp loss texture",
-    "temp max health texture", "maximum health loss overlay texture",
-    "maximum health loss art", "max health loss art",
+    "maximum health loss texture", "max health loss texture",
+    "texture for the maximum health loss overlay", "texture for the max health loss overlay",
+    "maximum health loss overlay texture", "max hp loss texture",
+    "temp max health texture", "maximum health loss art", "max health loss art",
 }
 local COLOR_ALIASES = {
     "maximum health loss color", "maximum health loss colour", "max health loss color",
     "max health loss colour", "max hp loss color", "temp max health color",
     "maximum health loss overlay color", "loss color", "lost health color",
+    "max health loss part", "maximum health loss part",
 }
 local OPACITY_ALIASES = {
     "maximum health loss opacity", "max health loss opacity", "max hp loss opacity",
@@ -45,6 +51,7 @@ local OPACITY_ALIASES = {
     "maximum health loss more transparent", "max health loss more transparent",
     "fade the maximum health loss overlay", "fade max health loss",
     "maximum health loss stronger", "max health loss stronger",
+    "max health loss overlay is too strong", "maximum health loss overlay is too strong",
 }
 local BACKGROUND_ALIASES = {
     "maximum health loss background opacity", "max health loss background opacity",

@@ -1829,10 +1829,14 @@ UF.RegisterElement("HealthText", HealthText)
 local PowerText = {}
 
 function PowerText.IsEnabled(frame, spec)
+  if frame and frame._msufAugPowerReplacementActive == true then return false end
   return PowerTextEnabled(spec)
 end
 
 function PowerText.GetEvents(frame, spec)
+  if frame and frame._msufAugPowerReplacementActive == true then
+    return EMPTY_EVENTS
+  end
   if not PowerTextEnabled(spec) then
     return EMPTY_EVENTS
   end

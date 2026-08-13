@@ -56,11 +56,14 @@ function A.GlobalBarRegistry.RegisterBaseBarSettings(ctx)
     if type(RegisterBarsBoolean) ~= "function" or type(RegisterBarsNumber) ~= "function" or type(RegisterBarsEnum) ~= "function" then return end
 
     RegisterBarsNumber("barOutlineThickness", "outline", "Global Bar Outline Thickness", 1, 0, 8, {
-        "bar outline thickness", "bar outline thicknesses", "bar outline", "global bar outline", "global frame outline", "frame outline", "frame outline thickness",
-        "bar border thickness", "bar border", "frame border", "global frame border", "border thickness", "outline thickness",
-        "make border thicker", "make border thinner", "make border bigger", "make border smaller",
-        "make frame outline bigger", "make frame outline smaller", "make outline bigger", "make outline smaller",
-        "border thicker", "border thinner", "border bigger", "border smaller", "outline thicker", "outline thinner", "outline bigger", "outline smaller",
+        -- Human wording first: the registry keeps only the first
+        -- MAX_SETTING_ALIASES entries and drops the rest in silence.
+        "bar outline thickness", "frame outline thickness", "border thickness", "outline thickness",
+        "border around my frames", "border around the frames", "put a border around my frames",
+        "chunkier outline", "chunkier outline around my frames", "chunkier frame outline",
+        "make border thicker", "make border thinner", "make frame outline bigger",
+        "make outline bigger", "make outline smaller", "thicker frame border",
+        "bar outline", "frame outline", "frame border", "bar border thickness",
     }, { category = "Global / Bars / Outline", frameType = "globalBars", apply = ApplyBarOutline, reason = "MSUF_ASSISTANT_BAR_OUTLINE" })
     RegisterBarsNumber("barOutlineLayer", "layer", "Global Bar Outline Layer", 0, 0, 30, {
         "bar outline strata", "bar outline layer", "frame outline strata", "frame outline layer",
@@ -89,8 +92,14 @@ function A.GlobalBarRegistry.RegisterBaseBarSettings(ctx)
     -- "square" is how a player asks for rounding OFF, and it appears in no
     -- on/off word list; without these the sentence resolved the control and
     -- then had no value to apply.
+    -- Longest match wins, so the negations have to be longer than the bare
+    -- "round" they contain -- otherwise "don't round the unit frames" reads as
+    -- the word "round" and switches rounding ON.
     local ROUNDED_POLARITY = {
         square = false, squared = false, ["square corners"] = false, ["sharp corners"] = false,
+        ["dont round"] = false, ["do not round"] = false, ["never round"] = false,
+        ["stop rounding"] = false, ["no rounding"] = false, ["not rounded"] = false,
+        ["dont round my party and raid frames"] = false, ["dont round my"] = false,
         rounded = true, round = true, ["round corners"] = true, ["rounded corners"] = true,
         ["soft corners"] = true,
     }
@@ -195,6 +204,8 @@ function A.GlobalBarRegistry.RegisterBaseBarSettings(ctx)
         "border when i have aggro", "border when i have threat", "border when something is attacking me",
         "highlight when i have aggro", "highlight the frame when i have threat",
         "highlighting frames when i have threat", "show me when i pull aggro",
+        "frame when something is attacking me", "highlight the frame when something is attacking me",
+        "stop highlighting frames when i have threat", "highlighting frames when i have threat",
     }, { category = "Global / Bars / Highlight Borders", frameType = "globalBars", apply = ApplyAggroBorder, reason = "MSUF_ASSISTANT_AGGRO_BORDER", valueAliases = ON_OFF_ALIASES })
     RegisterGeneralEnum("aggroMode", "aggroMode", "Aggro Shows For", "ALL", AGGRO_MODE_VALUES, {
         "aggro shows for", "aggro role filter", "aggro non tanks", "aggro not tank", "threat non tanks",
@@ -216,6 +227,8 @@ function A.GlobalBarRegistry.RegisterBaseBarSettings(ctx)
         "dispel border detects", "dispel border trigger", "dispel detection",
         "what the dispel border reacts to", "dispel border reacts to", "dispel border react to",
         "which debuffs the dispel border shows", "dispel border rule",
+        "only react to debuffs i can dispel myself", "dispel border should only react to debuffs",
+        "react to debuffs i can dispel myself",
     }, { category = "Global / Bars / Highlight Borders", frameType = "globalBars", apply = ApplyDispelPurgeBorder, reason = "MSUF_ASSISTANT_DISPEL_BORDER_TRIGGER", valueAliases = DISPEL_TRIGGER_ALIASES })
     RegisterGeneralMappedEnum("purgeOutlineMode", "purgeBorder", "Purge Border", "off", ON_OFF_VALUES, ON_OFF_STORAGE, {
         "purge border", "purge outline", "purgeable border", "purge highlight",
@@ -226,6 +239,7 @@ function A.GlobalBarRegistry.RegisterBaseBarSettings(ctx)
         "boss target border", "boss target highlight", "boss target outline",
         "who the boss is attacking", "highlighting who the boss is attacking",
         "border for the boss target", "mark who the boss is targeting", "boss aggro target border",
+        "stop highlighting who the boss is attacking", "highlighting who the boss is attacking",
     }, {
         category = "Global / Bars / Highlight Borders",
         frameType = "globalBars",
@@ -327,6 +341,8 @@ function A.GlobalBarRegistry.RegisterBaseBarSettings(ctx)
         "smooth power bar", "smooth power", "smooth mana bar", "power bar smoothing",
         "animate the power bar", "power bar animation", "mana bar animation",
         "power bar slide", "mana bar slide instead of jumping", "power bar animate smoothly",
+        "mana bar to slide instead of jumping", "power bar to slide instead of jumping",
+        "make the power bar animate smoothly", "power bar animate smoothly",
     }, {
         category = "Global / Bars / Power",
         frameType = "globalBars",
@@ -338,6 +354,7 @@ function A.GlobalBarRegistry.RegisterBaseBarSettings(ctx)
         "realtime power text", "real time power text", "instant power text", "accurate power text",
         "power text updates instantly", "power text update instantly", "power number accuracy",
         "mana number accurate", "mana number accurate at all times", "power text accuracy",
+        "power text to update instantly", "power text to update instantly at all times",
     }, {
         category = "Global / Bars / Power",
         frameType = "globalBars",

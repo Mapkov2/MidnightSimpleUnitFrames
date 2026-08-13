@@ -586,7 +586,7 @@ end
 
 local UNIT_AURA_FILTER_KEYS = {
     buff = { "onlyMine", "raid", "raidInCombat", "includeNameplateOnly", "cancelable", "notCancelable", "externalDefensive", "bigDefensive", "onlyImportant", "includeDispellable", "dispellableAny" },
-    debuff = { "onlyMine", "raid", "raidInCombat", "includeNameplateOnly", "includeDispellable", "dispellableAny", "onlyImportant", "crowdControl" },
+    debuff = { "onlyMine", "raid", "raidInCombat", "includeNameplateOnly", "includeDispellable", "dispellableAny", "onlyImportant", "crowdControl", "nonPlayer" },
 }
 
 local AURA_FILTER_LABELS = {
@@ -602,6 +602,7 @@ local AURA_FILTER_LABELS = {
     dispellableAny = "Any Dispel Type",
     onlyImportant = "Important",
     crowdControl = "Crowd Control",
+    nonPlayer = "Non-Player Auras",
 }
 
 local AURA_FILTER_EFFECTS = {
@@ -617,6 +618,7 @@ local AURA_FILTER_EFFECTS = {
     dispellableAny = "shows debuffs with any dispel type, regardless of group capability.",
     onlyImportant = "shows auras Blizzard flags as important.",
     crowdControl = "focuses crowd-control debuffs.",
+    nonPlayer = "shows only debuffs not caused by any player or player pet.",
 }
 
 local GROUP_AURA_FILTER_EFFECTS = {
@@ -643,6 +645,7 @@ local GROUP_AURA_FILTER_EFFECTS = {
     BIG_DEFENSIVE = "shows MSUF's curated major-defensive buffs on friendly frames.",
     EXTERNAL_DEFENSIVE = "shows external defensive cooldown buffs.",
     CROWD_CONTROL = "shows crowd-control effects.",
+    NonPlayer = "shows only debuffs not caused by any player or player pet.",
 }
 
 local function AuraReadSettingValue(key)
@@ -749,6 +752,7 @@ local function AuraUnitFilterGuidance(scope, scopeLabel, lane, laneLabel)
             if key == "includeDispellable" then tokens[#tokens + 1] = "RAID_PLAYER_DISPELLABLE" end
             if key == "dispellableAny" then tokens[#tokens + 1] = "DISPELLABLE" end
             if key == "crowdControl" then tokens[#tokens + 1] = "CROWD_CONTROL" end
+            if key == "nonPlayer" then tokens[#tokens + 1] = "candidate:isFromPlayerOrPlayerPet=false" end
         end
     end
     if playerScoped then tokens[#tokens + 1] = "PLAYER" end
@@ -1640,7 +1644,7 @@ local function GroupAuraFilterLaneForText(text, value)
         or value == "CancelablePlayer" or value == "NotCancelablePlayer" or value == "ExternalDefensivePlayer" or value == "BigDefensivePlayer" then
         return "buff"
     end
-    if value == "RAID_PLAYER_DISPELLABLE" or value == "DISPELLABLE" or value == "CROWD_CONTROL" then return "debuff" end
+    if value == "RAID_PLAYER_DISPELLABLE" or value == "DISPELLABLE" or value == "CROWD_CONTROL" or value == "NonPlayer" then return "debuff" end
     return nil
 end
 
@@ -1649,6 +1653,16 @@ local function GroupAuraFilterValueForText(text)
         or ((HasPhrase(text, "to all") or HasPhrase(text, "all filter") or HasPhrase(text, "filter all")) and ContainsAny(text, AurasPhrases[180]))
     then
         return "ALL"
+    end
+    -- Scope words can make a longer generic alias win (for example,
+    -- "non-player raid debuffs" also contains the alias "raid debuffs").
+    -- Treat this explicit classifier as the value before the scope/lane words
+    -- are considered by the generic longest-alias resolver.
+    if ContainsAny(text, {
+        "non-player", "non player",
+        "not from a player", "not caused by a player",
+    }) then
+        return "NonPlayer"
     end
     local data = A.AurasRegistryData or {}
     return AuraEnumAliasValue(text, data.GF_AURA_FILTER_ALIASES)

@@ -38,6 +38,12 @@ builders.ALT_MANA = function(E)
     local ResolveClassPowerColor = E.ResolveClassPowerColor
     local GetBarTexture = E.GetBarTexture
 
+    local function ApplyRoundedSurface()
+        local rounded = MSUF and MSUF.RoundedSurface
+        local apply = rounded and rounded.ApplyAltMana
+        if type(apply) == "function" then apply(AM) end
+    end
+
     local function NeedsAltManaBar()
         if _G.MSUF_EleMaelstromActive then return false end
         if _G.MSUF_AugEvokerActive then return true end
@@ -137,6 +143,7 @@ builders.ALT_MANA = function(E)
             AM.container:SetPoint("TOPRIGHT", playerFrame, "BOTTOMRIGHT", -2 + oX, oY)
         end
         AM.container:SetHeight(h)
+        ApplyRoundedSurface()
     end
 
     local function AM_ApplyColor()
@@ -177,6 +184,7 @@ builders.ALT_MANA = function(E)
     local function AM_RefreshTexture()
         if not AM.bar then return end
         AM.bar:SetStatusBarTexture(GetBarTexture and GetBarTexture() or "Interface\\Buttons\\WHITE8x8")
+        ApplyRoundedSurface()
     end
 
     return {

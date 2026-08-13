@@ -5677,8 +5677,9 @@ function A.ParseSimpleChange(text, ctxOverride)
     -- shortcut.  Resolve it first so words such as "anchor", "name", "scale",
     -- or "power text" cannot redirect a generated or human exact-label command
     -- to the parent frame control.
-    local exactFullAlias = P.ParseRegistryExactAliasShortcut
-        and P.ParseRegistryExactAliasShortcut(normalized, raw, { minTokens = 3, fullPhrase = true })
+    local exactFullAlias = (P.ParseTargetGateLoadConditionShortcut and P.ParseTargetGateLoadConditionShortcut(normalized))
+        or (P.ParseRegistryExactAliasShortcut
+            and P.ParseRegistryExactAliasShortcut(normalized, raw, { minTokens = 3, fullPhrase = true }))
     if normalized:find(" text anchor ", 1, true) and not normalized:find("custom value", 1, true) then exactFullAlias = nil end
     local parsed = nameDots or exactFullAlias
         or (A._ParseHumanSafetyGuidanceShortcut and A._ParseHumanSafetyGuidanceShortcut(normalized))
@@ -5850,8 +5851,9 @@ function A.Parse(text, ctxOverride)
     local colorResetIntent = P.ParseColorAction
         and P.ContainsAny(normalized, P.RootPhrases[779])
         and P.ContainsAny(normalized, P.RootPhrases[780])
-    local exactFullAlias = not colorResetIntent and P.ParseRegistryExactAliasShortcut
-        and P.ParseRegistryExactAliasShortcut(normalized, raw, { minTokens = 3, fullPhrase = true })
+    local exactFullAlias = (P.ParseTargetGateLoadConditionShortcut and P.ParseTargetGateLoadConditionShortcut(normalized))
+        or (not colorResetIntent and P.ParseRegistryExactAliasShortcut
+            and P.ParseRegistryExactAliasShortcut(normalized, raw, { minTokens = 3, fullPhrase = true }))
     if normalized:find(" text anchor ", 1, true) and not normalized:find("custom value", 1, true) then exactFullAlias = nil end
     if exactFullAlias then
         exactFullAlias.raw = raw
@@ -6431,8 +6433,9 @@ function A.Parse(text, ctxOverride)
     -- visibility) cannot swallow a precisely named child/root option.
     -- Full-phrase mode requires the whole command minus verb and value to be
     -- exactly one alias; anything less precise continues through the pipeline.
-    local exactAliasPriorityParsed = not colorResetIntent and P.ParseRegistryExactAliasShortcut
-        and P.ParseRegistryExactAliasShortcut(normalized, raw, { minTokens = 3, fullPhrase = true })
+    local exactAliasPriorityParsed = (P.ParseTargetGateLoadConditionShortcut and P.ParseTargetGateLoadConditionShortcut(normalized))
+        or (not colorResetIntent and P.ParseRegistryExactAliasShortcut
+            and P.ParseRegistryExactAliasShortcut(normalized, raw, { minTokens = 3, fullPhrase = true }))
     if exactAliasPriorityParsed then
         exactAliasPriorityParsed.raw = raw
         exactAliasPriorityParsed.normalized = normalized
