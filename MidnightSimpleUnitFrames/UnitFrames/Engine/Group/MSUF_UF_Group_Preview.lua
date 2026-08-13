@@ -1049,10 +1049,10 @@ local function RaidGroupPreviewText(style, subgroup)
   return "(" .. subgroup .. ")"
 end
 
-local function SetBar(bar, value, maxValue, r, g, b, a)
+local function SetBar(bar, value, maxValue, animate, r, g, b, a)
   if not bar then return end
   if bar.SetMinMaxValues then bar:SetMinMaxValues(0, maxValue or 100) end
-  if bar.SetValue then bar:SetValue(value or 0) end
+  if bar.SetValue then bar:SetValue(value or 0, animate == true and bar._msufSmoothInterp or nil) end
   if bar.SetStatusBarColor then bar:SetStatusBarColor(r or 1, g or 1, b or 1, a or 1) end
   if bar.Show then bar:Show() end
 end
@@ -1251,7 +1251,7 @@ local function ApplyPreviewData(frame, index, kind)
   end
   local hpMax = 100
   local hp = floor(hpPct * hpMax + 0.5)
-  SetBar(frame.hpBar or frame.Health or frame.health, hp, hpMax, PreviewHealthColor(frame, class, hpPct))
+  SetBar(frame.hpBar or frame.Health or frame.health, hp, hpMax, true, PreviewHealthColor(frame, class, hpPct))
 
   local powerMax = 100
   local power = min(powerMax, 35 + ((index * 11) % 55))
@@ -1260,7 +1260,7 @@ local function ApplyPreviewData(frame, index, kind)
   end
   local powerBar = frame.targetPowerBar or frame.powerBar or frame.Power or frame.power
   if powerBar and (not powerBar.IsShown or powerBar:IsShown()) then
-    SetBar(powerBar, power, powerMax, 0.10, 0.45, 0.95, 1)
+    SetBar(powerBar, power, powerMax, true, 0.10, 0.45, 0.95, 1)
   end
 
   ApplyPreviewText(frame, hp, hpMax, power, powerMax, class)

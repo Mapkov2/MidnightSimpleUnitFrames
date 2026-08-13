@@ -341,15 +341,245 @@ local function SnapBarInterpolation(bar)
   return true
 end
 
-local function SetBarSmoothing(bar, enabled)
+local function CreateLossTrail(parent, texture, initialValue)
+  if not parent then return nil end
+  local trail = CreateFrame("StatusBar", nil, parent)
+  trail:SetMinMaxValues(0, 100)
+  trail:SetValue(initialValue or 0)
+  trail:SetStatusBarTexture(texture or WHITE)
+  if trail.EnableMouse then trail:EnableMouse(false) end
+  trail:Hide()
+  if trail.CreateAnimationGroup then
+    local animation = trail:CreateAnimationGroup()
+    local hold = animation:CreateAnimation("Alpha")
+    hold:SetFromAlpha(1)
+    hold:SetToAlpha(1)
+    hold:SetDuration(0.4)
+    hold:SetOrder(1)
+    local fade = animation:CreateAnimation("Alpha")
+    fade:SetFromAlpha(1)
+    fade:SetToAlpha(0)
+    fade:SetDuration(0.2)
+    fade:SetOrder(2)
+    animation:SetScript("OnFinished", function()
+      trail._msufLossAnimating = nil
+      trail:Hide()
+      trail:SetAlpha(1)
+    end)
+    trail._msufLossAnimation = animation
+  end
+  return trail
+end
+
+local function CreateLossTrailPool(parent, texture, initialValue, count)
+  count = tonumber(count) or 1
+  if count < 1 then count = 1 end
+  local root = CreateLossTrail(parent, texture, initialValue)
+  if not root or count == 1 then return root end
+  local pool = { root }
+  root._msufLossTrailPool = pool
+  for i = 2, count do
+    local trail = CreateLossTrail(parent, texture, initialValue)
+    if not trail then break end
+    trail._msufLossTrailRoot = root
+    pool[#pool + 1] = trail
+  end
+  return root
+end
+
+local function StopSingleLossTrailAnimation(trail)
+  if not trail then return end
+  local animation = trail._msufLossAnimation
+  if animation and animation.Stop then animation:Stop() end
+  trail._msufLossAnimating = nil
+  trail:SetAlpha(1)
+  trail:Hide()
+end
+
+local function StopLossTrailAnimation(trail)
+  if not trail then return end
+  local pool = trail._msufLossTrailPool
+  if pool then
+    for i = 1, #pool do StopSingleLossTrailAnimation(pool[i]) end
+    trail._msufLossTrailNext = nil
+    return
+  end
+  StopSingleLossTrailAnimation(trail)
+end
+
+local function PlaySingleLossTrailAnimation(trail)
+  if not trail then return end
+  trail:SetAlpha(1)
+  trail:Show()
+  trail._msufLossAnimating = true
+  local animation = trail._msufLossAnimation
+  if animation and animation.Play then animation:Play() end
+end
+
+local function SetSingleLossTrailValue(trail, value)
+  if not trail then return end
+  trail:SetValue(value)
+end
+
+local function SetLossTrailValue(trail, value)
+  if not trail then return end
+  local pool = trail._msufLossTrailPool
+  if pool then
+    for i = 1, #pool do SetSingleLossTrailValue(pool[i], value) end
+    return
+  end
+  SetSingleLossTrailValue(trail, value)
+end
+
+-- Clip the old-value StatusBar at the live fill edge. The mask follows the
+-- native StatusBar texture geometry, so the visible region is exactly the
+-- old/new delta without reading or doing arithmetic on opaque combat values.
+local function AnchorSingleLossTrailMask(bar, trail)
+  if not (bar and trail and bar.GetStatusBarTexture and trail.GetStatusBarTexture) then return end
+  local liveFill = bar:GetStatusBarTexture()
+  local trailFill = trail:GetStatusBarTexture()
+  if not (liveFill and trailFill and trailFill.AddMaskTexture) then return end
+  if trailFill.SetBlendMode then trailFill:SetBlendMode(trail._msufLossBlendMode or "ADD") end
+
+  local mask = trail._msufLossClipMask
+  if not mask and trail.CreateMaskTexture then
+    mask = trail:CreateMaskTexture()
+    mask:SetTexture(WHITE)
+    trail._msufLossClipMask = mask
+  end
+  if not mask then return end
+
+  local maskedFill = trail._msufLossMaskedFill
+  if maskedFill ~= trailFill then
+    if maskedFill and maskedFill.RemoveMaskTexture then maskedFill:RemoveMaskTexture(mask) end
+    trailFill:AddMaskTexture(mask)
+    trail._msufLossMaskedFill = trailFill
+  end
+
+  mask:ClearAllPoints()
+  local orientation = bar._msufPowerOrientation or bar._msufOrientation or "HORIZONTAL"
+  local reverse = bar._msufReverseFill == true
+  if orientation == "VERTICAL" then
+    if reverse then
+      mask:SetPoint("TOPRIGHT", liveFill, "BOTTOMRIGHT", 0, 0)
+      mask:SetPoint("BOTTOMLEFT", bar, "BOTTOMLEFT", 0, 0)
+    else
+      mask:SetPoint("BOTTOMLEFT", liveFill, "TOPLEFT", 0, 0)
+      mask:SetPoint("TOPRIGHT", bar, "TOPRIGHT", 0, 0)
+    end
+  elseif reverse then
+    mask:SetPoint("TOPLEFT", bar, "TOPLEFT", 0, 0)
+    mask:SetPoint("BOTTOMRIGHT", liveFill, "BOTTOMLEFT", 0, 0)
+  else
+    mask:SetPoint("TOPLEFT", liveFill, "TOPRIGHT", 0, 0)
+    mask:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 0, 0)
+  end
+end
+
+local function AnchorLossTrailMask(bar, trail)
+  if not trail then return end
+  local pool = trail._msufLossTrailPool
+  if pool then
+    for i = 1, #pool do AnchorSingleLossTrailMask(bar, pool[i]) end
+    return
+  end
+  AnchorSingleLossTrailMask(bar, trail)
+end
+
+local function AcquireLossTrailSnapshot(root)
+  local pool = root and root._msufLossTrailPool
+  if not pool then return root end
+  local count = #pool
+  local start = root._msufLossTrailNext or 1
+  local selected
+  for offset = 0, count - 1 do
+    local index = ((start + offset - 1) % count) + 1
+    local candidate = pool[index]
+    if candidate._msufLossAnimating ~= true then
+      selected = candidate
+      root._msufLossTrailNext = (index % count) + 1
+      break
+    end
+  end
+  if selected then return selected end
+  selected = pool[start]
+  root._msufLossTrailNext = (start % count) + 1
+  StopSingleLossTrailAnimation(selected)
+  return selected
+end
+
+-- This mirrors the loss-bar portion of Blizzard's BuilderSpender feedback:
+-- keep the old/new delta for 0.4s, then fade it by 0.6s while the real bar
+-- snaps immediately. Native StatusBar geometry and the mask above avoid
+-- inspecting, comparing, or subtracting opaque Midnight values in Lua.
+local function ChunkedSetValue(bar, value, interpolation)
+  local nativeSetValue = bar._msufNativeSetValue
+  local trail = bar._msufLossTrail
+  if interpolation == SMOOTH_INTERP and trail then
+    local snapshot = AcquireLossTrailSnapshot(trail)
+    local startTrail = trail._msufLossTrailPool ~= nil or snapshot._msufLossAnimating ~= true
+    if startTrail then SetSingleLossTrailValue(snapshot, bar:GetValue()) end
+    nativeSetValue(bar, value)
+    -- A Player power pool gives every dense Energy tick its own native
+    -- snapshot. Gain snapshots stay clipped away while a subsequent spend
+    -- remains visible for its complete hold/fade window.
+    if startTrail then PlaySingleLossTrailAnimation(snapshot) end
+    return
+  end
+  nativeSetValue(bar, value, interpolation)
+  if trail then
+    StopLossTrailAnimation(trail)
+    SetLossTrailValue(trail, value)
+  end
+end
+
+local function ChunkedSetMinMaxValues(bar, minValue, maxValue)
+  bar._msufNativeSetMinMaxValues(bar, minValue, maxValue)
+  local trail = bar._msufLossTrail
+  if trail then
+    trail:SetMinMaxValues(minValue, maxValue)
+  end
+end
+
+local function RestoreNativeBarMethods(bar)
+  if bar._msufNativeSetValue then
+    bar.SetValue = bar._msufNativeSetValue
+    bar._msufNativeSetValue = nil
+  end
+  if bar._msufNativeSetMinMaxValues then
+    bar.SetMinMaxValues = bar._msufNativeSetMinMaxValues
+    bar._msufNativeSetMinMaxValues = nil
+  end
+end
+
+local function SetBarSmoothing(bar, enabled, chunked, lossTrail)
   if not bar then
     return
   end
-  local interp = enabled == true and SMOOTH_INTERP or nil
-  if bar._msufSmoothInterp ~= interp then
+  local useChunked = chunked == true and lossTrail ~= nil and SMOOTH_INTERP ~= nil
+  local interp = (enabled == true or useChunked) and SMOOTH_INTERP or nil
+  if useChunked then AnchorLossTrailMask(bar, lossTrail) end
+  if bar._msufSmoothInterp ~= interp
+    or bar._msufChunkedLoss ~= useChunked
+    or (useChunked and bar._msufLossTrail ~= lossTrail) then
     SnapBarInterpolation(bar)
+    local oldTrail = bar._msufLossTrail
+    StopLossTrailAnimation(oldTrail)
+    RestoreNativeBarMethods(bar)
+    if oldTrail and oldTrail ~= lossTrail then oldTrail:Hide() end
+    bar._msufLossTrail = useChunked and lossTrail or nil
+    bar._msufChunkedLoss = useChunked
     bar._msufSmoothInterp = interp
+    if useChunked then
+      lossTrail:SetMinMaxValues(bar:GetMinMaxValues())
+      SetLossTrailValue(lossTrail, bar:GetValue())
+      bar._msufNativeSetValue = bar.SetValue
+      bar._msufNativeSetMinMaxValues = bar.SetMinMaxValues
+      bar.SetValue = ChunkedSetValue
+      bar.SetMinMaxValues = ChunkedSetMinMaxValues
+    end
   end
+  if lossTrail and not useChunked then StopLossTrailAnimation(lossTrail) end
 end
 
 local function ApplyTextureColor(region, texture, r, g, b, a, force)
@@ -1419,6 +1649,8 @@ MSUF.UFBarTextCommon = {
   SetBarValueKnown = SetBarValueKnown,
   SetBarValuePlain = SetBarValuePlain,
   SnapBarInterpolation = SnapBarInterpolation,
+  CreateLossTrail = CreateLossTrail,
+  CreateLossTrailPool = CreateLossTrailPool,
   SetBarSmoothing = SetBarSmoothing,
   ApplyTextureColor = ApplyTextureColor,
   SetShownCached = SetShownCached,

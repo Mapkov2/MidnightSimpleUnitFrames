@@ -1935,7 +1935,11 @@ local function CompileUnitHealth(out, db, conf, general, bars)
   health.backgroundTexture = out.backgroundTexture
   health.reverse = conf.reverseFillBars == true
   health.vertical = conf.verticalFillBars == true
-  health.smooth = conf.smoothFill == true
+  health.chunked = conf.chunkedFill == true
+  health.smooth = conf.smoothFill == true and health.chunked ~= true
+  health.lossR = Clamp01(general.healthLossColorR, 1)
+  health.lossG = Clamp01(general.healthLossColorG, 0.55)
+  health.lossB = Clamp01(general.healthLossColorB, 0.08)
   health.mode = ResolveUnitBarMode(conf, general)
   health.gradient = general.enableHealthGradient ~= false
   health.gradientLowR = Number(general.healthGradientLowR, 1)
@@ -2081,10 +2085,18 @@ local function CompileUnitPower(out, unit, key, conf, general, bars, health)
   power.barGradient = ResolveBarGradient(conf, general, "enablePowerGradient")
   power.reverse = health.reverse == true
   power.vertical = health.vertical == true
-  if conf.powerSmoothFill ~= nil then
-    power.smooth = conf.powerSmoothFill == true
+  power.lossR = Clamp01(general.powerLossColorR, 0.70)
+  power.lossG = Clamp01(general.powerLossColorG, 0.90)
+  power.lossB = Clamp01(general.powerLossColorB, 1)
+  if conf.powerChunkedFill ~= nil then
+    power.chunked = conf.powerChunkedFill == true
   else
-    power.smooth = unit == "player" and bars.smoothPowerBar == true or false
+    power.chunked = unit == "player" and bars.chunkedPowerBar == true or false
+  end
+  if conf.powerSmoothFill ~= nil then
+    power.smooth = conf.powerSmoothFill == true and power.chunked ~= true
+  else
+    power.smooth = unit == "player" and bars.smoothPowerBar == true and power.chunked ~= true or false
   end
 end
 

@@ -321,13 +321,13 @@ local function PrepareEditModePreviewForAnimation()
   end
 end
 
-local function SetBar(bar, value, maxValue)
+local function SetBar(bar, value, maxValue, animate)
   if not bar then return false end
   maxValue = tonumber(maxValue) or 1
   if maxValue <= 0 then maxValue = 1 end
   value = max(0, min(maxValue, tonumber(value) or 0))
   if bar.SetMinMaxValues then bar:SetMinMaxValues(0, maxValue) end
-  if bar.SetValue then bar:SetValue(value) end
+  if bar.SetValue then bar:SetValue(value, animate == true and bar._msufSmoothInterp or nil) end
   if bar.Show then bar:Show() end
   return true
 end
@@ -860,8 +860,8 @@ function PA.ApplyUnitFrame(frame, index, kind)
   local powerMax = 240000
   local power = floor(powerMax * (state.powerPct or 0.75) + 0.5)
 
-  SetBar(frame.hpBar or frame.Health or frame.health, hp, hpMax)
-  SetBar(frame.targetPowerBar or frame.powerBar or frame.Power or frame.power, power, powerMax)
+  SetBar(frame.hpBar or frame.Health or frame.health, hp, hpMax, true)
+  SetBar(frame.targetPowerBar or frame.powerBar or frame.Power or frame.power, power, powerMax, true)
   ApplyPrediction(frame, hpMax, state)
   ApplyPreviewName(frame, kind)
   ApplyText(frame, hp, hpMax, power, powerMax, state.hpPct, state.powerPct)

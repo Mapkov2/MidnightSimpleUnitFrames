@@ -16,6 +16,8 @@ local PowerBarColor = C and C.PowerBarColor or PowerBarColor
 local ResolvePowerColor = C and C.PowerColor
 local WHITE = C and C.WHITE or "Interface\\Buttons\\WHITE8X8"
 local SCALE_100 = C and C.SCALE_100
+local CreateLossTrail = C and C.CreateLossTrail
+local CreateLossTrailPool = C and C.CreateLossTrailPool
 local SetBarSmoothing = C and C.SetBarSmoothing
 local SnapBarInterpolation = C and C.SnapBarInterpolation
 local ApplyBackgrounds = C and C.ApplyBackgrounds
@@ -170,6 +172,18 @@ local function SetShown(frame, shown)
   end
   local bg = frame.powerBarBG
   if bg then if shown then bg:Show() else bg:Hide() end end
+  local trail = frame.powerLossTrail
+  if trail then
+    local pool = trail._msufLossTrailPool
+    if pool then
+      for i = 1, #pool do
+        local snapshot = pool[i]
+        snapshot:SetShown(shown and snapshot._msufLossAnimating == true)
+      end
+    else
+      trail:SetShown(shown and trail._msufLossAnimating == true)
+    end
+  end
 end
 
 local function SetRegionShown(region, shown)
@@ -520,6 +534,16 @@ end
 
 local function SetPowerFrameLevel(bar, level)
   if not (bar and bar.SetFrameLevel) or bar._msufPowerFrameLevel == level then return end
+  local trail = bar._msufPowerLossTrail
+  if trail and trail.SetFrameLevel then
+    local trailLevel = math_max(0, level - 1)
+    local pool = trail._msufLossTrailPool
+    if pool then
+      for i = 1, #pool do pool[i]:SetFrameLevel(trailLevel) end
+    else
+      trail:SetFrameLevel(trailLevel)
+    end
+  end
   bar:SetFrameLevel(level)
   bar._msufPowerFrameLevel = level
 end
@@ -669,6 +693,9 @@ end
 
 function Power.Create(frame, spec)
   if frame.targetPowerBar then return end
+  local snapshotCount = frame.MSUFUnitKey == "player" and 12 or 1
+  local createTrail = CreateLossTrailPool or CreateLossTrail
+  local trail = createTrail and createTrail(frame, (spec and spec.texture) or WHITE, 0, snapshotCount) or nil
   local bar = CreateFrame("StatusBar", nil, frame)
   bar:SetMinMaxValues(0, 100)
   bar:SetValue(0)
@@ -677,8 +704,25 @@ function Power.Create(frame, spec)
   frame.powerBar = bar
   frame.Power = bar
   frame.power = bar
+  if trail then
+    local pool = trail._msufLossTrailPool
+    if pool then
+      for i = 1, #pool do
+        pool[i]._msufLossBlendMode = "BLEND"
+        pool[i]:SetAllPoints(bar)
+        pool[i]:SetStatusBarColor(0.70, 0.90, 1, 1)
+      end
+    else
+      trail:SetAllPoints(bar)
+      trail:SetStatusBarColor(0.70, 0.90, 1, 1)
+    end
+    bar._msufPowerLossTrail = trail
+    frame.powerLossTrail = trail
+  end
 
-  local bg = bar:CreateTexture(nil, "BACKGROUND", nil, -1)
+  -- Keep the background below the sibling loss trail. Anchoring still follows
+  -- the StatusBar for embedded and detached geometry.
+  local bg = frame:CreateTexture(nil, "BACKGROUND", nil, -1)
   bg:SetAllPoints(bar)
   bg:SetColorTexture(0, 0, 0, spec and spec.backgroundAlpha or 0.72)
   frame.powerBarBG = bg
@@ -731,6 +775,7 @@ function Power.Apply(frame, spec)
     -- Power StatusBar only as their geometry carrier, with no visual layers or
     -- recurring value work of its own.
     ApplyShapeMedia(frame, nil, power.texture or spec and spec.texture or WHITE)
+    if SetBarSmoothing then SetBarSmoothing(bar, false, false, frame.powerLossTrail) end
     SetShown(frame, false)
     HidePowerBorder(bar)
     if HideBarGradient then HideBarGradient(frame.powerGradients) end
@@ -746,6 +791,22 @@ function Power.Apply(frame, spec)
   if bar._msufTexture ~= texture then
     bar:SetStatusBarTexture(texture)
     bar._msufTexture = texture
+  end
+  local trail = frame.powerLossTrail
+  if trail then
+    local pool = trail._msufLossTrailPool
+    if pool then
+      for i = 1, #pool do
+        local snapshot = pool[i]
+        if snapshot._msufTexture ~= texture then
+          snapshot:SetStatusBarTexture(texture)
+          snapshot._msufTexture = texture
+        end
+      end
+    elseif trail._msufTexture ~= texture then
+      trail:SetStatusBarTexture(texture)
+      trail._msufTexture = texture
+    end
   end
   if bar._msufPowerShapeActive == true then
     ApplyBackgroundMedia(frame, power)
@@ -772,11 +833,34 @@ function Power.Apply(frame, spec)
       bar._msufReverseFill = nil
     end
   end
+  if trail and bar._msufPowerOrientation then
+    local pool = trail._msufLossTrailPool
+    local count = pool and #pool or 1
+    for i = 1, count do
+      local snapshot = pool and pool[i] or trail
+      if snapshot._msufPowerOrientation ~= bar._msufPowerOrientation then
+        snapshot:SetOrientation(bar._msufPowerOrientation)
+        snapshot._msufPowerOrientation = bar._msufPowerOrientation
+        snapshot._msufReverseFill = nil
+      end
+    end
+  end
   if bar.SetReverseFill then
     local reverse = power.reverse == true
     if bar._msufReverseFill ~= reverse then
       bar:SetReverseFill(reverse)
       bar._msufReverseFill = reverse
+    end
+    if trail then
+      local pool = trail._msufLossTrailPool
+      local count = pool and #pool or 1
+      for i = 1, count do
+        local snapshot = pool and pool[i] or trail
+        if snapshot._msufReverseFill ~= reverse then
+          snapshot:SetReverseFill(reverse)
+          snapshot._msufReverseFill = reverse
+        end
+      end
     end
   end
   bar._msufMinMax = nil
@@ -791,7 +875,18 @@ function Power.Apply(frame, spec)
   bar._msufPowerToken = nil
   bar._msufPowerTypeKnown = nil
   bar._msufPowerTypeUnit = nil
-  if SetBarSmoothing then SetBarSmoothing(bar, power.smooth == true) end
+  if trail then
+    local pool = trail._msufLossTrailPool
+    local count = pool and #pool or 1
+    local lossR = power.lossR or 0.70
+    local lossG = power.lossG or 0.90
+    local lossB = power.lossB or 1
+    for i = 1, count do
+      local snapshot = pool and pool[i] or trail
+      snapshot:SetStatusBarColor(lossR, lossG, lossB, power.alpha or 1)
+    end
+  end
+  if SetBarSmoothing then SetBarSmoothing(bar, power.smooth == true, power.chunked == true, trail) end
   SetColor(frame, true)
   local enabled = power.enabled == true
   SetShown(frame, enabled)

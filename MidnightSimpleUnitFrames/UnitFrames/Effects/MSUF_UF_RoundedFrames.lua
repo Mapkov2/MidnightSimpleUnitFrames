@@ -1742,6 +1742,16 @@ local function MaskStatusBarFill(f, bar, group, anchor)
   end
 end
 
+local function MaskLossTrailPool(f, trail, group, anchor)
+  if not trail then return end
+  local pool = trail._msufLossTrailPool
+  if pool then
+    for i = 1, #pool do MaskStatusBarFill(f, pool[i], group, anchor) end
+    return
+  end
+  MaskStatusBarFill(f, trail, group, anchor)
+end
+
 local GRADIENT_KEYS = { "left", "right", "up", "down" }
 
 local function MaskGradientTable(f, grads, anchor, group)
@@ -1927,6 +1937,7 @@ local function ApplyToUnitFrame(f)
     local hbFill = f.hpBar:GetStatusBarTexture()
     if hbFill then MaskTexture(f, hbFill, healthMaskAnchor) end
   end
+  MaskLossTrailPool(f, f.healthLossTrail, false, healthMaskAnchor)
   if f.hpBarBG then
     MaskTexture(f, f.hpBarBG, sharedFrameMaskAnchor or f.hpBar or f.hpBarBG)
   end
@@ -1950,6 +1961,7 @@ local function ApplyToUnitFrame(f)
       local pbFill = powerBar:GetStatusBarTexture()
       if pbFill then MaskTexture(f, pbFill, powerMaskAnchor) end
     end
+    MaskLossTrailPool(f, f.powerLossTrail, false, powerMaskAnchor)
     if f.powerBarBG then
       MaskTexture(f, f.powerBarBG, powerMaskAnchor or f.powerBarBG)
     end
@@ -2037,7 +2049,9 @@ ApplyToGroupFrame = function(f, kind)
   if f._msufBehindBarBg then MaskGroupTexture(f, f._msufBehindBarBg, f.barGroup) end
 
   MaskStatusBarFill(f, f.health, true, sharedFrameMaskAnchor)
+  MaskLossTrailPool(f, f.healthLossTrail, true, sharedFrameMaskAnchor)
   if roundPower then MaskStatusBarFill(f, f.power, true, sharedFrameMaskAnchor) end
+  if roundPower then MaskLossTrailPool(f, f.powerLossTrail, true, sharedFrameMaskAnchor) end
   if f.tempMaxHealthBackground then
     MaskGroupTexture(f, f.tempMaxHealthBackground, sharedFrameMaskAnchor or f.tempMaxHealthBar or f.health)
   end

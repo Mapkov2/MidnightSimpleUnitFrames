@@ -12,12 +12,14 @@ local UnitHealthMax = C and C.UnitHealthMax or UnitHealthMax
 local UnitHealthPercent = C and C.UnitHealthPercent or UnitHealthPercent
 local WHITE = C and C.WHITE or "Interface\\Buttons\\WHITE8X8"
 local SCALE_100 = C and C.SCALE_100
+local CreateLossTrail = C and C.CreateLossTrail
 local SetBarSmoothing = C and C.SetBarSmoothing
 local ApplyHealthStatusColor = C and C.ApplyHealthStatusColor
 local ApplyBackgrounds = C and C.ApplyBackgrounds
 local ApplyBarGradient = C and C.ApplyBarGradient
 local PrepareHealthGradientCurve = C and C.PrepareHealthGradientCurve
 local issecretvalue = _G.issecretvalue or function(_) return false end
+local math_max = math.max
 local ExportPublic = MSUF.ExportPublic or function(name, value)
   _G[name] = value
   return value
@@ -169,6 +171,7 @@ function Health.Create(frame, spec)
   frame.hpBarBG = bg
   frame.healthBg = bg
 
+  local trail = CreateLossTrail and CreateLossTrail(frame, (spec and spec.texture) or WHITE, 100) or nil
   local bar = CreateFrame("StatusBar", nil, frame)
   bar:SetMinMaxValues(0, 100)
   bar:SetValue(100)
@@ -176,6 +179,15 @@ function Health.Create(frame, spec)
   frame.hpBar = bar
   frame.Health = bar
   frame.health = bar
+  if trail then
+    trail:SetAllPoints(bar)
+    trail:SetStatusBarColor(1, 0.55, 0.08, 1)
+    if trail.SetFrameLevel and bar.GetFrameLevel then
+      local level = bar:GetFrameLevel() or 1
+      trail:SetFrameLevel(math_max(0, level - 1))
+    end
+    frame.healthLossTrail = trail
+  end
   Health.Layout(frame, spec)
 end
 
@@ -199,6 +211,7 @@ function Health.Apply(frame, spec)
   frame._msufHealthRuntimeColorEnabled = mode ~= "dark" and mode ~= "unified"
   frame._msufHealthRuntimeGradient = mode == "gradient"
   SetTexture(frame.hpBar, h and h.texture or spec and spec.texture or WHITE)
+  SetTexture(frame.healthLossTrail, h and h.texture or spec and spec.texture or WHITE)
   if frame.hpBar.SetOrientation then
     -- Native fill axis; set-once per Apply, no hot-path cost. VERTICAL combines
     -- with SetReverseFill below (reverse flips the direction within the axis).
@@ -209,12 +222,21 @@ function Health.Apply(frame, spec)
       -- Force the reverse-fill block below to re-apply after an axis flip.
       frame.hpBar._msufReverseFill = nil
     end
+    if frame.healthLossTrail and frame.healthLossTrail._msufOrientation ~= orientation then
+      frame.healthLossTrail:SetOrientation(orientation)
+      frame.healthLossTrail._msufOrientation = orientation
+      frame.healthLossTrail._msufReverseFill = nil
+    end
   end
   if frame.hpBar.SetReverseFill then
     local reverse = h and h.reverse == true
     if frame.hpBar._msufReverseFill ~= reverse then
       frame.hpBar:SetReverseFill(reverse)
       frame.hpBar._msufReverseFill = reverse
+    end
+    if frame.healthLossTrail and frame.healthLossTrail._msufReverseFill ~= reverse then
+      frame.healthLossTrail:SetReverseFill(reverse)
+      frame.healthLossTrail._msufReverseFill = reverse
     end
   end
   frame.hpBar._msufMinMax = nil
@@ -225,7 +247,16 @@ function Health.Apply(frame, spec)
   frame.hpBar._msufHealthMaxReady = nil
   frame.hpBar._msufHealthPercentValue = nil
   frame.hpBar._msufHealthPercentUnit = nil
-  if SetBarSmoothing then SetBarSmoothing(frame.hpBar, h and h.smooth == true) end
+  if frame.healthLossTrail then
+    frame.healthLossTrail:SetStatusBarColor(
+      h and h.lossR or 1,
+      h and h.lossG or 0.55,
+      h and h.lossB or 0.08,
+      1)
+  end
+  if SetBarSmoothing then
+    SetBarSmoothing(frame.hpBar, h and h.smooth == true, h and h.chunked == true, frame.healthLossTrail)
+  end
   if ApplyBarGradient then ApplyBarGradient(frame, frame.hpBar, h and h.barGradient, "hpGradients") end
   SetColor(frame, true)
   -- Apply is the authoritative cold path. A secure show/startup transition can
