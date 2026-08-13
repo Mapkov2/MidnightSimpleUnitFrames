@@ -2356,6 +2356,57 @@ local function BuildUnitStyle(ctx, b, scope, options)
     iconStyleGates.shadow[2] = IconStyleAlphaSlider("Shadow Alpha (%)", 1, -210, "styleShadowColor", ICON_STYLE_SHADOW_DEFAULT, "AURAS3_ICON_STYLE_SHADOW_COLOR")
     end
 
+    if appearanceGlobalsOnly and (previewContainer == "buff" or previewContainer == "debuff") then
+        local blizzardFrames = b:CollapsibleSection(baseId .. "_blizzard_aura_frames", "Blizzard Buff & Debuff Frames", 152, false)
+        local bfw = BodyWidth(blizzardFrames)
+        local function RefreshBlizzardAuraFrameBadge()
+            if not W.SetCollapsibleBadges then return end
+            local buffsHidden = type(Model.ReadHideBlizzardBuffFrame) == "function"
+                and Model.ReadHideBlizzardBuffFrame() == true
+            local debuffsHidden = type(Model.ReadHideBlizzardDebuffFrame) == "function"
+                and Model.ReadHideBlizzardDebuffFrame() == true
+            W.SetCollapsibleBadges(blizzardFrames, {{
+                text = Tr(buffsHidden and "Buffs hidden" or "Buffs visible"),
+                kind = buffsHidden and "accent" or "muted",
+                showWhenClosed = true,
+            }, {
+                text = Tr(debuffsHidden and "Debuffs hidden" or "Debuffs visible"),
+                kind = debuffsHidden and "accent" or "muted",
+                showWhenClosed = true,
+            }})
+        end
+        local hideBlizzardBuffs = BindSwitch(ctx, blizzardFrames, "Hide Blizzard Buff Frame", 24, -44, bfw - 48,
+            function()
+                return type(Model.ReadHideBlizzardBuffFrame) == "function"
+                    and Model.ReadHideBlizzardBuffFrame() == true
+            end,
+            function(value)
+                if type(Model.WriteHideBlizzardBuffFrame) == "function" then
+                    Model.WriteHideBlizzardBuffFrame(value == true)
+                end
+                RefreshBlizzardAuraFrameBadge()
+            end,
+            AuraControlMeta(ctx, "style.appearance.blizzard-aura-frames.hide-buffs"))
+        AddTooltip(hideBlizzardBuffs, "Blizzard Buff & Debuff Frames",
+            "Hides Blizzard's player Buff Frame near the minimap.")
+        local hideBlizzardDebuffs = BindSwitch(ctx, blizzardFrames, "Hide Blizzard Debuff Frame", 24, -84, bfw - 48,
+            function()
+                return type(Model.ReadHideBlizzardDebuffFrame) == "function"
+                    and Model.ReadHideBlizzardDebuffFrame() == true
+            end,
+            function(value)
+                if type(Model.WriteHideBlizzardDebuffFrame) == "function" then
+                    Model.WriteHideBlizzardDebuffFrame(value == true)
+                end
+                RefreshBlizzardAuraFrameBadge()
+            end,
+            AuraControlMeta(ctx, "style.appearance.blizzard-aura-frames.hide-debuffs"))
+        AddTooltip(hideBlizzardDebuffs, "Blizzard Buff & Debuff Frames",
+            "Hides only Blizzard's normal Debuff icons near the minimap. Private Auras and Deadly Debuff warnings remain visible.")
+        RefreshBlizzardAuraFrameBadge()
+        M.TrackRefresh(ctx, RefreshBlizzardAuraFrameBadge)
+    end
+
     if appearanceGlobalsOnly and previewContainer == "buff" then
         local nativeFlow = b:CollapsibleSection(baseId .. "_native_flow", "Native Aura Flow", 112, false)
         local nfw = BodyWidth(nativeFlow)

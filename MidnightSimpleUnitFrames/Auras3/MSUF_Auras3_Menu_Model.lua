@@ -196,6 +196,8 @@ local STYLE_LAYOUT_KEYS = A3.UnitStyleLayoutKeys or {
     buffIconZoom = true,
     debuffIconZoom = true,
     stylePadding = true,
+    buffStylePadding = true,
+    debuffStylePadding = true,
     stackTextSize = true,
     stackTextOffsetX = true,
     stackTextOffsetY = true,
@@ -395,7 +397,7 @@ local GROUPS = A3.UnitLaneSpecs or {
 local LANE_LAYOUT_FIELDS = A3.UnitLaneLayoutFields
     or { "xKey", "yKey", "sizeKey", "anchorKey", "layerKey", "strataKey", "spacingKey" }
 local LANE_SHARED_LAYOUT_FIELDS = A3.UnitLaneSharedLayoutFields
-    or { "maxKey", "perRowKey", "growthKey", "wrapKey" }
+    or { "showKey", "maxKey", "perRowKey", "growthKey", "wrapKey" }
 local SCOPE_MATERIALIZED_LAYOUT_KEYS = {}
 for key in pairs(STYLE_LAYOUT_KEYS) do LAYOUT_KEYS[key] = true end
 for key in pairs(STYLE_SHARED_LAYOUT_KEYS) do SHARED_LAYOUT_KEYS[key] = true end
@@ -1667,6 +1669,59 @@ end
 
 function Model.WriteSharedAppearanceBool(kind, key, value)
     return Model.WriteSharedAppearanceValue(kind, key, value == true)
+end
+
+--- Buff and Debuff Appearance mirror these two profile-wide values. The
+--- controls stay synchronized between pages while each Blizzard frame remains
+--- independently configurable.
+local function EnsureBlizzardAuraFrameSettings(shared)
+    if type(shared) ~= "table" then return end
+    local legacy = shared.hideBlizzardAuraFrames
+    if legacy ~= nil then
+        if shared.hideBlizzardBuffFrame == nil then
+            shared.hideBlizzardBuffFrame = legacy == true
+        end
+        if shared.hideBlizzardDebuffFrame == nil then
+            shared.hideBlizzardDebuffFrame = legacy == true
+        end
+        shared.hideBlizzardAuraFrames = nil
+    end
+end
+
+local function ReadHideBlizzardAuraFrame(key)
+    local _, shared = Model.EnsureDB()
+    EnsureBlizzardAuraFrameSettings(shared)
+    return type(shared) == "table" and shared[key] == true
+end
+
+local function WriteHideBlizzardAuraFrame(key, value)
+    local _, shared = Model.EnsureDB()
+    if type(shared) ~= "table" then return false end
+    EnsureBlizzardAuraFrameSettings(shared)
+    value = value == true
+    local changed = shared[key] ~= value
+    shared[key] = value
+    local UF = MSUF and MSUF.UF
+    if UF and type(UF.ApplyBlizzardAuraVisibility) == "function" then
+        UF.ApplyBlizzardAuraVisibility()
+    end
+    return changed
+end
+
+function Model.ReadHideBlizzardBuffFrame()
+    return ReadHideBlizzardAuraFrame("hideBlizzardBuffFrame")
+end
+
+function Model.WriteHideBlizzardBuffFrame(value)
+    return WriteHideBlizzardAuraFrame("hideBlizzardBuffFrame", value)
+end
+
+function Model.ReadHideBlizzardDebuffFrame()
+    return ReadHideBlizzardAuraFrame("hideBlizzardDebuffFrame")
+end
+
+function Model.WriteHideBlizzardDebuffFrame(value)
+    return WriteHideBlizzardAuraFrame("hideBlizzardDebuffFrame", value)
 end
 
 function Model.ReadSharedAppearanceNumber(kind, key, defaultValue, minValue, maxValue)

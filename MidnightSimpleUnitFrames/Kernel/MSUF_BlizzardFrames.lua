@@ -22,6 +22,11 @@ local hookedFrames = {}
 local looseFrames = {}
 local visibleFrames = {}
 local watcher
+local blizzardAuraHiddenParent
+local buffAuraOriginalParent
+local debuffAuraOriginalParent
+local buffAuraSuppressedByMSUF = false
+local debuffAuraSuppressedByMSUF = false
 
 local CASTBAR_KEYS = {
     player = "enablePlayerCastbar",
@@ -289,6 +294,80 @@ local function HandleFrame(frame, doNotReparent, unit)
     end
 end
 
+--- The minimap-adjacent player BuffFrame and DebuffFrame are ordinary,
+--- unprotected Blizzard Edit Mode frames on 12.1. Suppression is passive:
+--- reparent the requested presentation below one permanently hidden frame.
+--- Blizzard can keep updating its own shown state without any MSUF hook,
+--- event, timer, or OnUpdate. DebuffFrame's normal icons live below
+--- AuraContainer while PrivateAuraAnchors are direct siblings, so moving only
+--- the container preserves private encounter auras and DeadlyDebuffFrame.
+local function BlizzardAuraHideSettings()
+    local db = _G.MSUF_DB
+    local auras = type(db) == "table" and type(db.auras3) == "table" and db.auras3 or nil
+    local shared = type(auras) == "table" and type(auras.shared) == "table" and auras.shared or nil
+    if not shared then return false, false end
+    local legacy = shared.hideBlizzardAuraFrames == true
+    return legacy or shared.hideBlizzardBuffFrame == true,
+        legacy or shared.hideBlizzardDebuffFrame == true
+end
+
+local function EnsureBlizzardAuraHiddenParent()
+    if blizzardAuraHiddenParent then return blizzardAuraHiddenParent end
+    blizzardAuraHiddenParent = CreateFrame("Frame", nil, UIParent)
+    blizzardAuraHiddenParent:Hide()
+    return blizzardAuraHiddenParent
+end
+
+local function CanReparentBlizzardAuraFrame(frame)
+    if not frame or (frame.IsForbidden and frame:IsForbidden()) then return false end
+    -- These frames are unprotected in Blizzard_BuffFrame on 12.1. If that ever
+    -- changes, fail closed instead of adding a combat event or touching a
+    -- protected frame. This keeps the feature at zero recurring MSUF CPU.
+    if frame.IsProtected and frame:IsProtected() then return false end
+    return true
+end
+
+local function SetPassiveBlizzardAuraSuppression(frame, suppress, originalParent, owned)
+    if not CanReparentBlizzardAuraFrame(frame) then
+        return originalParent, owned, nil
+    end
+    if not suppress and not owned then
+        return originalParent, owned, nil
+    end
+    local hidden = EnsureBlizzardAuraHiddenParent()
+    if suppress then
+        if not owned then
+            originalParent = frame:GetParent()
+        end
+        if frame:GetParent() ~= hidden then frame:SetParent(hidden) end
+        return originalParent, true, "hidden"
+    end
+
+    if owned then
+        if frame:GetParent() == hidden then frame:SetParent(originalParent or UIParent) end
+        return nil, false, "restored"
+    end
+    return originalParent, owned, nil
+end
+
+local function ApplyBlizzardAuraVisibility()
+    local hideBuffs, hideDebuffs = BlizzardAuraHideSettings()
+    local buffFrame = _G.BuffFrame
+    local debuffFrame = _G.DebuffFrame
+
+    buffAuraOriginalParent, buffAuraSuppressedByMSUF = SetPassiveBlizzardAuraSuppression(
+        buffFrame, hideBuffs, buffAuraOriginalParent, buffAuraSuppressedByMSUF)
+
+    local debuffContainer = debuffFrame and debuffFrame.AuraContainer
+    local debuffAction
+    debuffAuraOriginalParent, debuffAuraSuppressedByMSUF, debuffAction = SetPassiveBlizzardAuraSuppression(
+        debuffContainer, hideDebuffs, debuffAuraOriginalParent, debuffAuraSuppressedByMSUF)
+    if debuffAction == "restored" and debuffFrame and type(debuffFrame.UpdateAuraContainerAnchor) == "function" then
+        debuffFrame:UpdateAuraContainerAnchor()
+    end
+    return buffAuraSuppressedByMSUF, debuffAuraSuppressedByMSUF
+end
+
 local function DisableBlizzardFrames()
     --- PlayerFrame owns no castbar on 12.x (Blizzard_UnitFrame/Mainline/
     --- PlayerFrame.lua), so suppressing it loses no castbar handling. Keep
@@ -326,6 +405,8 @@ local function DisableBlizzardFrames()
             HandleFrame(_G["Boss" .. i .. "TargetFrame"], true, "boss")
         end
     end
+
+    ApplyBlizzardAuraVisibility()
 end
 
 local function SafeDisableMouse(frame)
@@ -356,6 +437,7 @@ local function GetBlizzardCastbarOwner()
 end
 
 UF.DisableBlizzardFrames = DisableBlizzardFrames
+UF.ApplyBlizzardAuraVisibility = ApplyBlizzardAuraVisibility
 UF.ShouldUseMSUFUnitFrame = ShouldUseMSUFUnitFrame
 UF.ShouldHideBlizzardUnitFrame = ShouldHideBlizzardUnitFrame
 UF.ShouldUseMSUFCastbar = ShouldUseMSUFCastbar
@@ -365,3 +447,8 @@ UF.ShouldUseBlizzardUnitFrame = ShouldUseBlizzardUnitFrame
 UF.SafeDisableMouse = SafeDisableMouse
 UF.ClaimBlizzardCastbarOwnership = ClaimBlizzardCastbarOwnership
 UF.GetBlizzardCastbarOwner = GetBlizzardCastbarOwner
+
+-- Blizzard_BuffFrame is a non-LoD Blizzard addon on 12.1, so its frames exist
+-- before MSUF loads. Apply once at file load; profile/toggle changes call this
+-- bridge explicitly. There is deliberately no late-load watcher or polling.
+ApplyBlizzardAuraVisibility()
