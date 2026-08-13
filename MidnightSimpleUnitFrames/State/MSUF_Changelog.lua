@@ -26,6 +26,7 @@ local data = {
                     title = "Fixes & Performance",
                     bullets = {
                         "Fixed an edge case where Player, Target, Boss, and other Unit Frame health text remained hidden after importing profiles with a conflicting obsolete visibility value. Current profile settings now always win, while legacy-only profiles retain their previous behavior without profile rewrites or recurring runtime work.",
+                        "Fixed the MSUF Game Menu button using mismatched dimensions and styling. It now follows the active Game Menu button template, size, font, and EllesmereUI skin without stretching.",
                     },
                 },
             },
