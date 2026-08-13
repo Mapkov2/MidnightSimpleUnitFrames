@@ -1831,9 +1831,10 @@ local function ApplyEditModeCustomEffect(group, frame, item)
     root:ClearAllPoints()
     root:SetAllPoints(health or frame)
     if root.SetFrameLevel then
-        root:SetFrameLevel((group:GetFrameLevel() or 900) + SPELL_FRAME_EFFECT_BASE_OFFSET
-            + (11 - Clamp(effect.priority, 5, 1, 10))
-            + Clamp(effect.layer, 0, 0, 30))
+        local priority = Clamp(effect.priority, 5, 1, 10)
+        local layer = Clamp(effect.layer, 0, 0, 30)
+        root:SetFrameLevel(FrameLayers.ElementLevel and FrameLayers.ElementLevel(layer, 0, 11 - priority)
+            or ((group:GetFrameLevel() or 900) + SPELL_FRAME_EFFECT_BASE_OFFSET + (11 - priority) + layer))
     end
     root.tint:Hide()
     for i = 1, 4 do root.edges[i]:Hide() end
