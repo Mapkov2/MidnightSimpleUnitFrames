@@ -49,10 +49,12 @@ function A.GlobalBarRegistry.RegisterTextureGradientSettings(ctx)
         normalizeValue = NormalizeTextureKeyForAssistant,
     })
     RegisterGeneralString("barBackgroundTexture", "backgroundTexture", "Global Bar Background Texture", "Solid", {
-        "bar background texture", "global bar background texture", "background bar texture", "bar bg texture",
-        "background texture", "background texture bars", "bars background texture",
-        "empty part of the bar", "background art behind the health bar", "art behind the health bar",
-        "empty part of the health bar texture",
+        -- Human wording first; the alias head is capped.
+        "bar background texture", "background bar texture", "bars background texture",
+        "empty part of the bar", "empty part of the health bar",
+        "make the empty part of the bar use the flat texture",
+        "background art behind the health bar", "art behind the health bar",
+        "global bar background texture", "bar bg texture", "background texture",
     }, {
         category = "Global / Bars / Textures",
         frameType = "globalBars",

@@ -32,9 +32,10 @@ local ENABLED_ALIASES = {
     "lost maximum health", "missing maximum health",
 }
 local TEXTURE_ALIASES = {
-    "maximum health loss texture", "max health loss texture", "max hp loss texture",
-    "temp max health texture", "maximum health loss overlay texture",
-    "maximum health loss art", "max health loss art",
+    "maximum health loss texture", "max health loss texture",
+    "texture for the maximum health loss overlay", "texture for the max health loss overlay",
+    "maximum health loss overlay texture", "max hp loss texture",
+    "temp max health texture", "maximum health loss art", "max health loss art",
 }
 local COLOR_ALIASES = {
     "maximum health loss color", "maximum health loss colour", "max health loss color",

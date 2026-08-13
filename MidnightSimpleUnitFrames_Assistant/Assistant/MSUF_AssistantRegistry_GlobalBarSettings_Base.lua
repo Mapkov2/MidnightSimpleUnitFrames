@@ -56,14 +56,14 @@ function A.GlobalBarRegistry.RegisterBaseBarSettings(ctx)
     if type(RegisterBarsBoolean) ~= "function" or type(RegisterBarsNumber) ~= "function" or type(RegisterBarsEnum) ~= "function" then return end
 
     RegisterBarsNumber("barOutlineThickness", "outline", "Global Bar Outline Thickness", 1, 0, 8, {
-        "bar outline thickness", "bar outline thicknesses", "bar outline", "global bar outline", "global frame outline", "frame outline", "frame outline thickness",
-        "bar border thickness", "bar border", "frame border", "global frame border", "border thickness", "outline thickness",
-        "make border thicker", "make border thinner", "make border bigger", "make border smaller",
-        "make frame outline bigger", "make frame outline smaller", "make outline bigger", "make outline smaller",
-        "border thicker", "border thinner", "border bigger", "border smaller", "outline thicker", "outline thinner", "outline bigger", "outline smaller",
+        -- Human wording first: the registry keeps only the first
+        -- MAX_SETTING_ALIASES entries and drops the rest in silence.
+        "bar outline thickness", "frame outline thickness", "border thickness", "outline thickness",
         "border around my frames", "border around the frames", "put a border around my frames",
-        "chunkier outline", "chunkier outline around my frames",
-        "chunkier frame outline", "chunkier bar outline", "thicker frame border",
+        "chunkier outline", "chunkier outline around my frames", "chunkier frame outline",
+        "make border thicker", "make border thinner", "make frame outline bigger",
+        "make outline bigger", "make outline smaller", "thicker frame border",
+        "bar outline", "frame outline", "frame border", "bar border thickness",
     }, { category = "Global / Bars / Outline", frameType = "globalBars", apply = ApplyBarOutline, reason = "MSUF_ASSISTANT_BAR_OUTLINE" })
     RegisterBarsNumber("barOutlineLayer", "layer", "Global Bar Outline Layer", 0, 0, 30, {
         "bar outline strata", "bar outline layer", "frame outline strata", "frame outline layer",

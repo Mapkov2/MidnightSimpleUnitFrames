@@ -9304,7 +9304,14 @@ function A.Submit(text)
                     and router.NamedBooleanIntentPlan(text))
                 or nil
             if plan then
-                local okPlan, planned = pcall(A.ExecutePlan, plan, { sourceText = text })
+                -- The normal path already declined this sentence, and the
+                -- fail-closed read-only gate would decline it again for the
+                -- same reason -- leaving a request that names one control
+                -- answered with "ask for its location". The plan resolved from
+                -- the control's own registered wording, so run it without
+                -- re-submitting the sentence to that gate.
+                plan.sourceText, plan.raw = nil, nil
+                local okPlan, planned = pcall(A.ExecutePlan, plan, {})
                 local plannedStatus = okPlan and type(planned) == "table"
                     and tostring(planned.status or planned.result or "") or ""
                 if plannedStatus == "applied" or plannedStatus == "changed" then return planned end

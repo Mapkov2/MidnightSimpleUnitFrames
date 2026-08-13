@@ -2269,7 +2269,18 @@ function R.NamedBooleanIntentPlan(text)
                 parsed = R.ContainsAny(norm, R.NAMED_BOOLEAN_NEGATIONS) and "off" or "on"
             end
         end
-        if parsed == nil then return nil end
+        if parsed == nil then
+            -- "i want a chunkier outline around my frames" names the control
+            -- and states a direction; the planner turns that into one step.
+            local plan = type(parser.PlanForExactRegistrySetting) == "function"
+                and parser.PlanForExactRegistrySetting(setting, norm, text) or nil
+            if type(plan) == "table" and plan.kind == "changes" then
+                plan.raw, plan.sourceText = text, text
+                plan.namedWordingTokens = bestNamedLength
+                return plan
+            end
+            return nil
+        end
         return {
             kind = "changes",
             changes = { { setting = setting, value = parsed } },
