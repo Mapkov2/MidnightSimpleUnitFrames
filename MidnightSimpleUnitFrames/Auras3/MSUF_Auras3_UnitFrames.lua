@@ -6550,6 +6550,14 @@ end
 
 A3._FlushScheduledGroupAuraAssistRefresh = function()
     A3._groupAuraAssistRefreshPending = nil
+    if A3._directIdentityRefreshPending == true then
+        -- A portal/world job already covers every group identity owner. Let the
+        -- wider job win regardless of callback order: an all-owner pass adopts
+        -- the satisfied parse, while a group-presence pass queues one fresh
+        -- eligible-polarity repair after it invalidates native assignments.
+        A3._groupAuraAssistRefreshUnits = nil
+        return false
+    end
     local units = A3._groupAuraAssistRefreshUnits
     A3._groupAuraAssistRefreshUnits = nil
     local states = A3._groupAuraAssistState
