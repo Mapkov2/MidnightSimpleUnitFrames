@@ -308,6 +308,58 @@ local function PortraitFrameVisible(frame)
   return holder ~= nil
 end
 
+local PLAYER_PORTRAIT_WORLD_EVENT_KEY = "MSUF_UF_PLAYER_PORTRAIT_WORLD_ENTRY"
+local playerPortraitWorldFrame
+local playerPortraitWorldEventRegistered
+
+local function OnPlayerPortraitWorldEntry()
+  local frame = playerPortraitWorldFrame
+  local p = frame and (frame._msufPortraitRuntimeCfg or (frame.MSUFSpec and frame.MSUFSpec.portrait))
+  if not (p and p.enabled == true and p.render ~= "CLASS") then
+    return
+  end
+
+  -- PLAYER_LOGIN can seed the native render target before the world and a
+  -- secure visibility driver have settled. Blizzard re-runs its player
+  -- portrait on PLAYER_ENTERING_WORLD; mirror that cold-path contract here.
+  frame._msufPortraitForceRefresh = true
+  if PortraitFrameVisible(frame) then
+    Portrait.Update(frame, "PLAYER_ENTERING_WORLD", frame.MSUFUnitKey)
+  else
+    -- The frame-local event set is suspended while LoadConditions hides the
+    -- frame. Retain the one-shot force until the existing OnShow repair runs.
+    frame._msufPortraitNeedsVisibleRefresh = true
+  end
+end
+
+local function SyncPlayerPortraitWorldEvent(frame, spec, p)
+  local ownsPlayerPortrait = frame and spec and spec.key == "player"
+    and frame.MSUFUnitKey == "player"
+    and p and p.enabled == true and p.render ~= "CLASS"
+
+  if ownsPlayerPortrait then
+    playerPortraitWorldFrame = frame
+    if playerPortraitWorldEventRegistered == true then return end
+    local registerEvent = _G.MSUF_EventBus_Register
+    if type(registerEvent) == "function"
+      and registerEvent("PLAYER_ENTERING_WORLD", PLAYER_PORTRAIT_WORLD_EVENT_KEY,
+        OnPlayerPortraitWorldEntry) ~= false then
+      playerPortraitWorldEventRegistered = true
+    end
+    return
+  end
+
+  if frame ~= playerPortraitWorldFrame then return end
+  playerPortraitWorldFrame = nil
+  if playerPortraitWorldEventRegistered == true then
+    local unregisterEvent = _G.MSUF_EventBus_Unregister
+    if type(unregisterEvent) == "function" then
+      unregisterEvent("PLAYER_ENTERING_WORLD", PLAYER_PORTRAIT_WORLD_EVENT_KEY)
+    end
+    playerPortraitWorldEventRegistered = nil
+  end
+end
+
 local function ApplyPortraitUpdate(frame, castAlreadyChecked,
     keyPrepared, preparedKey, preparedGuid, preparedExists)
   if not frame then
@@ -1492,6 +1544,7 @@ function Portrait.Apply(frame, spec)
     Portrait.Disable(frame)
     return
   end
+  SyncPlayerPortraitWorldEvent(frame, spec, p)
   frame._msufPortraitPositionAnchorOnly = nil
   frame._msufUpdatePortraitConnection = Portrait.UpdateConnectionState
   if p.castSpellIcon == true then
@@ -1529,6 +1582,7 @@ function Portrait.Apply(frame, spec)
 end
 
 function Portrait.Disable(frame)
+  SyncPlayerPortraitWorldEvent(frame, frame and frame.MSUFSpec, nil)
   local holder = frame.MSUFPortraitHolder
   frame._msufPortraitNeedsVisibleRefresh = nil
   frame._msufPortraitForceRefresh = nil
@@ -1624,7 +1678,7 @@ function Portrait.Update(frame, event, unit)
   else
     if ShouldRefresh2DPortraitForEvent(event, identityVisual) then
       local changed, keyPrepared, preparedKey, preparedGuid, preparedExists
-      if forceRefresh == true then
+      if forceRefresh == true or frame._msufPortraitForceRefresh == true then
         changed = true
       else
         changed, keyPrepared, preparedKey, preparedGuid, preparedExists =
