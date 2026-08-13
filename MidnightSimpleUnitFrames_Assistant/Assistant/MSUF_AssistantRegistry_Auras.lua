@@ -26,6 +26,8 @@ local ApplyAura = C.ApplyAura
 local ApplyAuraText = C.ApplyAuraText
 local EnsureAuraFallbackDB = C.EnsureAuraFallbackDB
 local AuraRuntimeUnit = C.AuraRuntimeUnit
+local AuraSharedBool = C.AuraSharedBool
+local SetAuraSharedBool = C.SetAuraSharedBool
 local AuraReadNumber = C.AuraReadNumber
 local AuraWriteNumber = C.AuraWriteNumber
 local AuraReadStackAnchor = C.AuraReadStackAnchor
@@ -69,6 +71,18 @@ local AuraStateHelpers = type(BuildAuraStateHelpers) == "function" and BuildAura
     AuraRuntimeUnit = AuraRuntimeUnit,
 }) or nil
 if type(AuraStateHelpers) ~= "table" then return end
+local ResetAuraScope = AuraStateHelpers.ResetAuraScope
+local ResetAllAuraOverrides = AuraStateHelpers.ResetAllAuraOverrides
+
+local BuildAuraSharedStateHelpers = A.AurasRegistry and A.AurasRegistry.BuildSharedStateHelpers
+local AuraSharedStateHelpers = type(BuildAuraSharedStateHelpers) == "function" and BuildAuraSharedStateHelpers({
+    MSUF = MSUF,
+    AuraModel = AuraModel,
+    EnsureAuraFallbackDB = EnsureAuraFallbackDB,
+    ApplyAura = ApplyAura,
+}) or nil
+if type(AuraSharedStateHelpers) ~= "table" then return end
+
 local BuildAuraRegistrationHelpers = A.AurasRegistry and A.AurasRegistry.BuildRegistrationHelpers
 local AuraRegistrationHelpers = type(BuildAuraRegistrationHelpers) == "function" and BuildAuraRegistrationHelpers({
     Registry = Registry,
@@ -78,6 +92,8 @@ local AuraRegistrationHelpers = type(BuildAuraRegistrationHelpers) == "function"
     ApplyAura = ApplyAura,
     ApplyAuraText = ApplyAuraText,
     EnsureAuraFallbackDB = EnsureAuraFallbackDB,
+    AuraSharedBool = AuraSharedBool,
+    SetAuraSharedBool = SetAuraSharedBool,
     AuraReadNumber = AuraReadNumber,
     AuraWriteNumber = AuraWriteNumber,
     AuraReadStackAnchor = AuraReadStackAnchor,
@@ -99,6 +115,7 @@ if type(InstallAuraSettingRegistries) == "function" then
         AurasData = AurasData,
         AuraAliasHelpers = AuraAliasHelpers,
         AuraStateHelpers = AuraStateHelpers,
+        AuraSharedStateHelpers = AuraSharedStateHelpers,
         AuraRegistrationHelpers = AuraRegistrationHelpers,
     })
 end
@@ -112,5 +129,7 @@ if type(InstallAuraRuntimeContexts) == "function" then
         AurasData = AurasData,
         AuraScopeFromArg = AuraScopeFromArg,
         AuraScopeLabel = AuraScopeLabel,
+        ResetAuraScope = ResetAuraScope,
+        ResetAllAuraOverrides = ResetAllAuraOverrides,
     })
 end

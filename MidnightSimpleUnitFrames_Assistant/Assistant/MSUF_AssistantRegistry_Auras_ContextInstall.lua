@@ -45,5 +45,7 @@ function A.AurasRegistry.InstallRuntimeContexts(ctx)
         AURA_RELATIVE_SIZE_NOUNS = ctx.AURA_RELATIVE_SIZE_NOUNS or Data.AURA_RELATIVE_SIZE_NOUNS,
         AuraScopeFromArg = ctx.AuraScopeFromArg,
         AuraScopeLabel = ctx.AuraScopeLabel,
+        ResetAuraScope = ctx.ResetAuraScope,
+        ResetAllAuraOverrides = ctx.ResetAllAuraOverrides,
     })
 end

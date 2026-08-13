@@ -361,15 +361,6 @@ local function BuildMisc(ctx)
         function()
             Call("MSUF_ApplyModules")
         end)
-    local nicknameIntegration = b:CollapsibleSection("misc_nickname_integration", "Nickname Integration", 124, true)
-    local nsrtNicknames = BindMiscToggle(nicknameIntegration, "Use NSRT nicknames on MSUF frames",
-        "nsrtNicknameIntegration", true, "MSUF2_NSRT_NICKNAMES", 14, -42, 430, PREVIEW_FALSE,
-        function()
-            Call("MSUF_NSRTNicknames_ApplySetting")
-        end)
-    M.AddTooltip(nsrtNicknames, "NSRT nickname integration",
-        "On (default): names supplied by Northern Sky Raid Tools replace character names on MSUF unit and group frames. Turn this off to always show character names in MSUF. NSRT and its settings are not modified.",
-        { hook = true })
     if type(_G.MSUF_EllesmereEditMode_IsAvailable) == "function"
         and _G.MSUF_EllesmereEditMode_IsAvailable() then
         local ellesmere = b:CollapsibleSection("misc_ellesmere_ui", "EllesmereUI", 138, true)
@@ -570,4 +561,4 @@ local function BuildMisc(ctx)
         { hook = true })
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
-M.RegisterPage("opt_misc", { title = "MSUF Miscellaneous", build = BuildMisc, version = 17 })
+M.RegisterPage("opt_misc", { title = "MSUF Miscellaneous", build = BuildMisc, version = 16 })

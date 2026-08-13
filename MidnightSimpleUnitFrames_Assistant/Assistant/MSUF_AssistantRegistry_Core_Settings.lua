@@ -45,26 +45,18 @@ local function RegisterGeneralBoolean(dbKey, attr, label, defaultValue, aliases,
         type = "boolean",
         aliases = aliases,
         exactAliases = opts.exactAliases,
-        -- Lets a toggle name its own polarity words ("square" is rounded off),
-        -- which the boolean value reader consults before the generic on/off list.
-        valueAliases = opts.valueAliases,
         get = function()
             local value = GeneralDB()[dbKey]
             if value == nil then return defaultValue and true or false end
             return value and true or false
         end,
         set = function(value)
-            value = value and true or false
-            GeneralDB()[dbKey] = value
+            GeneralDB()[dbKey] = value and true or false
             if dbKey == "showMinimapIcon" then
                 local g = GeneralDB()
                 g.minimapIconDB = type(g.minimapIconDB) == "table" and g.minimapIconDB or {}
-                g.minimapIconDB.hide = not value
+                g.minimapIconDB.hide = not (value and true or false)
             end
-            -- Some menu toggles own a second storage key (the absorb toggle
-            -- also writes the display mode). Writing only the flag would leave
-            -- the control reading as on while the bar stays hidden.
-            if opts.afterSet then opts.afterSet(value) end
         end,
         apply = function()
             ApplyRegistrySetting(opts, dbKey, ApplyGeneral, { preview = false, applyAll = false })

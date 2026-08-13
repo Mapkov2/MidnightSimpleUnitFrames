@@ -671,7 +671,7 @@ local function StageCue(stage, position, touched)
         if decision == "independent" then
             return Tr("YOUR MOVE - Press Open MSUF Edit Mode, then drag the double-arrow frame once.")
         end
-        return Tr("YOUR MOVE - Choose Follow Blizzard's Essential Cooldowns or Independent placement below.")
+        return Tr("YOUR MOVE - Choose Follow Main Cooldowns or Independent placement below.")
     end
     if stage.id == "group_intro" then return Tr("PART 2 - Build Party once, then copy it to Raid or Mythic Raid.") end
     if stage.id == "group_edit_mode" then
@@ -3132,7 +3132,7 @@ local function BuildEditModePage(ctx, T, W)
     local decisionCard = b:Section("", 146)
     if decisionCard.title then decisionCard.title:SetText("") end
     local decisionValues = {
-        { value = "cooldown", text = Tr("Follow Blizzard's Essential Cooldowns") },
+        { value = "cooldown", text = Tr("Follow Main Cooldowns") },
         { value = "independent", text = Tr("Independent placement") },
     }
     local decision = W.Segment(decisionCard, Tr("Should all Unitframes follow the Cooldown Manager?"), decisionValues, max(240, b.width - 32))
@@ -3176,9 +3176,9 @@ local function BuildEditModePage(ctx, T, W)
                 or Tr("Should all Unitframes follow the Cooldown Manager?"))
         end
         if anchorDecision == "cooldown" then
-            decisionCopy:SetText(Tr("Selected: Unitframes follow Blizzard's Essential Cooldowns. If Blizzard's Essential Cooldowns move, the anchored Unitframe layout follows."))
+            decisionCopy:SetText(Tr("Selected: Unitframes follow Essential Cooldown Manager. If Main Cooldowns move, the anchored Unitframe layout follows."))
         elseif anchorDecision == "independent" then
-            decisionCopy:SetText(Tr("Selected: Unitframes use the current global/custom anchor. Moving Blizzard's Essential Cooldowns will not move them."))
+            decisionCopy:SetText(Tr("Selected: Unitframes use the current global/custom anchor. Moving Main Cooldowns will not move them."))
         else
             decisionCopy:SetText(Tr("Required before placement. Changing this later can shift the whole layout because the saved offsets use a different anchor."))
         end

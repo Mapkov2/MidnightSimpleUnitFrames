@@ -17,6 +17,8 @@ function A.AurasRegistry.BuildLaneRegistrationHelpers(ctx)
 
     local AuraModel = ctx.AuraModel
     local EnsureAuraFallbackDB = ctx.EnsureAuraFallbackDB
+    local AuraSharedBool = ctx.AuraSharedBool
+    local SetAuraSharedBool = ctx.SetAuraSharedBool
     local AuraReadNumber = ctx.AuraReadNumber
     local AuraWriteNumber = ctx.AuraWriteNumber
     local AuraReadStackAnchor = ctx.AuraReadStackAnchor
@@ -27,6 +29,7 @@ function A.AurasRegistry.BuildLaneRegistrationHelpers(ctx)
     local BuildLaneStyleRegistrationHelpers = A.AurasRegistry and A.AurasRegistry.BuildLaneStyleRegistrationHelpers
 
     if type(AuraModel) ~= "function" or type(EnsureAuraFallbackDB) ~= "function" then return nil end
+    if type(AuraSharedBool) ~= "function" or type(SetAuraSharedBool) ~= "function" then return nil end
     if type(AuraReadNumber) ~= "function" or type(AuraWriteNumber) ~= "function" then return nil end
     if type(AuraReadStackAnchor) ~= "function" or type(AuraWriteStackAnchor) ~= "function" then return nil end
     if type(AuraReadCooldownAnchor) ~= "function" or type(AuraWriteCooldownAnchor) ~= "function" then return nil end
@@ -34,6 +37,8 @@ function A.AurasRegistry.BuildLaneRegistrationHelpers(ctx)
 
     local StyleHelpers = BuildLaneStyleRegistrationHelpers({
         AuraModel = AuraModel,
+        AuraSharedBool = AuraSharedBool,
+        SetAuraSharedBool = SetAuraSharedBool,
         AuraReadNumber = AuraReadNumber,
         AuraWriteNumber = AuraWriteNumber,
         AuraReadStackAnchor = AuraReadStackAnchor,
@@ -46,7 +51,10 @@ function A.AurasRegistry.BuildLaneRegistrationHelpers(ctx)
     local function AuraReadValue(scope, key, defaultValue)
         local Model = AuraModel()
         if Model and type(Model.ReadValue) == "function" then return Model.ReadValue(scope, key, defaultValue) end
-        return defaultValue
+        local _, shared = EnsureAuraFallbackDB()
+        local value = shared and shared[key]
+        if value == nil then return defaultValue end
+        return value
     end
 
     local function AuraWriteValue(scope, key, value)
@@ -55,7 +63,8 @@ function A.AurasRegistry.BuildLaneRegistrationHelpers(ctx)
             Model.WriteValue(scope, key, value)
             return
         end
-        -- No Shared fallback for Unit lane writes.
+        local _, shared = EnsureAuraFallbackDB()
+        if type(shared) == "table" then shared[key] = value end
     end
 
     local function AuraLaneKey(lane, buffKey, debuffKey)

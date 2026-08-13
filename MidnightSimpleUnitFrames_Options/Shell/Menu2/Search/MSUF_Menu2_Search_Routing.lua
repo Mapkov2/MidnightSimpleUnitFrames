@@ -984,7 +984,7 @@ local function SearchRouteGlobalPage(route, pageKey, normalized)
         end
         if container then
             SearchRouteSetState(route, "auraStyleContainer", container)
-            SearchRouteSetState(route, "auraAppearanceContainer", container)
+            SearchRouteSetState(route, "auraSharedStyleContainer", container)
             if container == "buff" or container == "debuff" then
                 SearchRouteSetState(route, "auraStyleGFLane", container)
             end

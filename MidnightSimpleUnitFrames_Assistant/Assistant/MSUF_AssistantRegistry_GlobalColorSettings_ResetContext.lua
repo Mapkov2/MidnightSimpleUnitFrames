@@ -28,6 +28,7 @@ function A.GlobalRegistry.InstallColorResetActions(ctx, colorCore, auraPortraitC
         ApplyAuraColors = ctx.ApplyAuraColors,
         ApplyPortraitColors = ctx.ApplyPortraitColors,
         ApplyClassPowerColors = ctx.ApplyClassPowerColors,
+        AuraSharedDB = colorCore.AuraSharedDB,
         SetAllPortraitRGB = auraPortraitColorSettings and auraPortraitColorSettings.SetAllPortraitRGB,
     }
 

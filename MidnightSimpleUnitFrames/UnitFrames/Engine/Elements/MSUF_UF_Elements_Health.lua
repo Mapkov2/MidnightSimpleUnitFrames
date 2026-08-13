@@ -147,9 +147,7 @@ function Health.Layout(frame, spec, powerEnabled)
   if powerEnabled == nil then powerEnabled = power and power.enabled == true end
   local powerInset = 0
   if powerEnabled == true and power and power.embed ~= false and power.detached ~= true then
-    local replacementHeight = frame._msufAugPowerReplacementActive == true
-      and tonumber(frame._msufAugPowerReplacementHeight) or nil
-    powerInset = replacementHeight or tonumber(power.height) or 3
+    powerInset = tonumber(power.height) or 3
     if not IsFiniteNumber(powerInset) or powerInset < 0 then powerInset = 0 end
   end
   if bar._msufHealthPowerInset == powerInset and bar._msufHealthLayoutFrame == frame then return end
@@ -441,9 +439,7 @@ local function UpdateSingle(frame, event, unit)
       and (event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, pct, pctSecret)) then
       if not ApplyRuntimeColor(frame, event, unit, pct, 100) then SetColor(frame) end
     end
-    if frame._msufUpdateStatusTextIndicator then
-      NotifyHealthState(frame, event, unit, pct, pctSecret)
-    end
+    NotifyHealthState(frame, event, unit, pct, pctSecret)
     return pct, maxValue, percentReady
   end
 
@@ -452,9 +448,7 @@ local function UpdateSingle(frame, event, unit)
     and (event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, hp, hpSecret)) then
     if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
   end
-  if frame._msufUpdateStatusTextIndicator then
-    NotifyHealthState(frame, event, unit, hp, hpSecret)
-  end
+  NotifyHealthState(frame, event, unit, hp, hpSecret)
   return hp, maxHP, absolutePercentReady
 end
 
@@ -472,9 +466,7 @@ local function UpdateSingleAbsolute(frame, event, unit)
     and (event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, hp, hpSecret)) then
     if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
   end
-  if frame._msufUpdateStatusTextIndicator then
-    NotifyHealthState(frame, event, unit, hp, hpSecret)
-  end
+  NotifyHealthState(frame, event, unit, hp, hpSecret)
   return hp, maxHP, percentReady
 end
 
@@ -495,9 +487,7 @@ local function UpdateSingleCurrent(frame, event, unit)
     and (event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, hp, hpSecret)) then
     if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
   end
-  if frame._msufUpdateStatusTextIndicator then
-    NotifyHealthState(frame, event, unit, hp, hpSecret)
-  end
+  NotifyHealthState(frame, event, unit, hp, hpSecret)
   return hp, nil, false
 end
 

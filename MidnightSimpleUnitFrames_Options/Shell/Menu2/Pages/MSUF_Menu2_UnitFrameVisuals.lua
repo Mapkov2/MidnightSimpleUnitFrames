@@ -1077,10 +1077,6 @@ local function BuildCastbar(ctx, builder, unit)
     local provider
     if canUseBlizzardProvider then
         provider = W.Dropdown(providerCard, "Castbar provider", CASTBAR_BACKEND_VALUES, min(260, controlWRight))
-        -- Player castbar ownership is independent from Player UnitFrame
-        -- ownership, so the page-level frame-disabled gate must not lock this
-        -- provider selector while the MSUF Player frame is off.
-        provider._msuf2UnitFrameGateAlwaysEnabled = true
         W.MoveWidget(provider, providerCard, 16, -52, min(260, controlWRight))
         W.AttachUnitEditFocus(provider, unit, "castbar")
         M.BindDropdownWidget(ctx, provider,

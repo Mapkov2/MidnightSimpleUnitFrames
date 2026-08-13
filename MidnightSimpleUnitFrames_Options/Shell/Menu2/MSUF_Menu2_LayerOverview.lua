@@ -718,14 +718,6 @@ Overview.RegisterProvider("class-resources", function(sink)
         edit = { kind = "class-resources", key = "classPowerFrameLevelOffset" },
     })
     sink:Layer({
-        id = "class-resources.classPowerTextLayer",
-        area = "Class Resources", scope = "Player", label = "Class Resource Text",
-        value = bars.classPowerTextLayer, default = 5,
-        enabled = bars.showClassPower ~= false,
-        settingKey = "bars.classPowerTextLayer",
-        edit = { kind = "class-resources", key = "classPowerTextLayer" },
-    })
-    sink:Layer({
         id = "class-resources.playerHPBarFrameLevelOffset",
         area = "Class Resources", scope = "Player", label = "Secondary Health Bar",
         value = bars.playerHPBarFrameLevelOffset, default = 7,

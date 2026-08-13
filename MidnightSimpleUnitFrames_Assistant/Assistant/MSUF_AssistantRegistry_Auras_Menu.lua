@@ -1,4 +1,4 @@
--- Assistant Auras menu registry: root Aura system and menu state settings.
+-- Assistant Auras menu registry: shared aura system and menu state settings.
 -- Loaded before MSUF_AssistantRegistry_Auras.lua; the main domain passes its local helpers in.
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
@@ -17,6 +17,8 @@ function A.AurasRegistry.RegisterMenuSettings(ctx)
 
     local Registry = ctx.Registry
     local Menu = ctx.M or M
+    local AURA_EDIT_SCOPE_VALUES = ctx.AURA_EDIT_SCOPE_VALUES or {}
+    local AURA_EDIT_SCOPE_ALIASES = ctx.AURA_EDIT_SCOPE_ALIASES or {}
     local AURA_LANE_MENU_VALUES = ctx.AURA_LANE_MENU_VALUES or {}
     local AURA_LANE_MENU_ALIASES = ctx.AURA_LANE_MENU_ALIASES or {}
     local AURA_STYLE_LANE_ALIASES = ctx.AURA_STYLE_LANE_ALIASES or {}
@@ -27,20 +29,50 @@ function A.AurasRegistry.RegisterMenuSettings(ctx)
     local AURA_UX_MODE_ALIASES = ctx.AURA_UX_MODE_ALIASES or {}
     local AURA_UX_MODE_EXACT_ALIASES = ctx.AURA_UX_MODE_EXACT_ALIASES or {}
     local AURA_UX_MODE_VALUE_ALIASES = ctx.AURA_UX_MODE_VALUE_ALIASES or {}
-    local RegisterAuraRootMenuSettings = A.AurasRegistry and A.AurasRegistry.RegisterAuraRootMenuSettings
+    local AuraScopeFromArg = ctx.AuraScopeFromArg
+    local RegisterSharedAuraMenuSettings = A.AurasRegistry and A.AurasRegistry.RegisterSharedAuraMenuSettings
     local RegisterBlacklistMenuSettings = A.AurasRegistry and A.AurasRegistry.RegisterBlacklistMenuSettings
 
     if not (Registry and type(Registry.RegisterSetting) == "function") then return end
-    if type(RegisterAuraRootMenuSettings) ~= "function" then return end
+    if type(AuraScopeFromArg) ~= "function" or type(RegisterSharedAuraMenuSettings) ~= "function" then return end
     if type(RegisterBlacklistMenuSettings) ~= "function" then return end
 
-    RegisterAuraRootMenuSettings(ctx)
+    RegisterSharedAuraMenuSettings(ctx)
+
+    Registry:RegisterSetting({
+        key = "menu.auraScope",
+        label = "Aura Editing Scope",
+        category = "Menu / Auras",
+        unit = "shared",
+        frameType = "aura",
+        attribute = "auraEditScope",
+        type = "enum",
+        aliases = { "aura editing scope", "editing aura scope", "aura scope", "edit aura scope" },
+        exactAliases = { "aura editing scope", "editing aura scope", "aura scope", "edit aura scope" },
+        values = AURA_EDIT_SCOPE_VALUES,
+        valueAliases = AURA_EDIT_SCOPE_ALIASES,
+        get = function() return AuraScopeFromArg(Menu.auraScope or "shared") end,
+        set = function(value)
+            value = AuraScopeFromArg(value)
+            if value ~= "shared" and value ~= "player" and value ~= "target" and value ~= "focus" and value ~= "boss" and value ~= "party" and value ~= "raid" then value = "shared" end
+            if type(Menu.PersistMenuStateValue) == "function" then Menu.PersistMenuStateValue("auraScope", value) else Menu.auraScope = value end
+            if value == "party" or value == "raid" then
+                if type(Menu.PersistMenuStateValue) == "function" then Menu.PersistMenuStateValue("auraStyleGFScope", value) else Menu.auraStyleGFScope = value end
+            end
+        end,
+        apply = function()
+            if type(Menu.SelectPage) == "function" then Menu.SelectPage("auras3") elseif type(Menu.Open) == "function" then Menu.Open("auras3") end
+            if type(Menu.Refresh) == "function" then Menu.Refresh() end
+            if type(Menu.InvalidatePage) == "function" then Menu.InvalidatePage("auras3") end
+        end,
+        combatSafe = true,
+    })
 
     Registry:RegisterSetting({
         key = "menu.auraStyleGFLane",
         label = "Aura Style Lane",
         category = "Menu / Auras",
-        unit = "global",
+        unit = "shared",
         frameType = "aura",
         attribute = "auraStyleLane",
         type = "enum",
@@ -68,7 +100,7 @@ function A.AurasRegistry.RegisterMenuSettings(ctx)
         key = "menu.auraFilterLane",
         label = "Aura Filter Lane",
         category = "Menu / Auras",
-        unit = "global",
+        unit = "shared",
         frameType = "aura",
         attribute = "auraFilterLane",
         type = "enum",
@@ -98,7 +130,7 @@ function A.AurasRegistry.RegisterMenuSettings(ctx)
         key = "menu.aurasUXMode",
         label = "Aura Options View",
         category = "Menu / Auras",
-        unit = "global",
+        unit = "shared",
         frameType = "aura",
         attribute = "auraSettingsView",
         type = "enum",

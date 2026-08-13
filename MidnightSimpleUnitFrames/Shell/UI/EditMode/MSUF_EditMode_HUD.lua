@@ -560,7 +560,9 @@ function HUD.ResetCurrentPosition()
     end
     conf.offsetX = 0
     conf.offsetY = 0
-    if not ApplySettingsForKeySafe(key) then
+    if type(_G.MSUF_ApplyUnitFrameKey_Immediate) == "function" then
+        _G.MSUF_ApplyUnitFrameKey_Immediate(key)
+    elseif not ApplySettingsForKeySafe(key) then
         ApplyAllSettingsSafe()
     end
     if type(_G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey) == "function" then

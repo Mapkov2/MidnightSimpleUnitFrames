@@ -21,13 +21,14 @@ local ApplyGameplayColors = ctx.ApplyGameplayColors
 local ApplyAuraColors = ctx.ApplyAuraColors
 local ApplyPortraitColors = ctx.ApplyPortraitColors
 local ApplyClassPowerColors = ctx.ApplyClassPowerColors
+local AuraSharedDB = ctx.AuraSharedDB
 local SetAllPortraitRGB = ctx.SetAllPortraitRGB
 
 if not (Registry and type(Registry.RegisterAction) == "function") then return end
 if type(GeneralDB) ~= "function" or type(GameplayDB) ~= "function" then return end
 if type(ApplyGameplayColors) ~= "function" or type(ApplyAuraColors) ~= "function" then return end
 if type(ApplyPortraitColors) ~= "function" or type(ApplyClassPowerColors) ~= "function" then return end
-if type(SetAllPortraitRGB) ~= "function" then return end
+if type(AuraSharedDB) ~= "function" or type(SetAllPortraitRGB) ~= "function" then return end
 
 local function ParseClassPowerFullColorAliasArgs(text)
     local normalized = tostring(text or ""):lower():gsub("[^%w]+", " ")
@@ -85,6 +86,8 @@ Registry:RegisterAction({
         g.aurasCooldownTextSafeSeconds = 60
         g.aurasCooldownTextWarningSeconds = 15
         g.aurasCooldownTextUrgentSeconds = 5
+        local sh = AuraSharedDB()
+        sh.pandemicR, sh.pandemicG, sh.pandemicB = 0, 0.4, 1
         ApplyAuraColors("MSUF_ASSISTANT_RESET_AURA_COLORS")
         return true, "Done. Aura colors reset."
     end,

@@ -2267,19 +2267,8 @@ local function ApplyPredictionValues(frame, cfg, unit, cacheUnit, event, hp, max
       if refreshAbsorb == true and frame._msufPredictionMixedFollowClamp == true then
         glowAbsorb = ReadDamageAbsorbs(frame, unit)
       end
-      local holder = frame.overAbsorbGlowBar
-      local knownInactive = refreshAbsorb == true
-        and frame._msufPredictionFullHealthStripe ~= true
-        and issecretvalue(glowAbsorb) ~= true
-        and (type(glowAbsorb) ~= "number" or glowAbsorb <= 0)
-        and (holder == nil or (holder._msufOverAbsorbShown == false
-          and holder._msufOverAbsorbValuePlain == true
-          and (type(holder._msufOverAbsorbValue) ~= "number"
-            or holder._msufOverAbsorbValue <= 0)))
-      if not knownInactive then
-        UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, glowAbsorb,
-          event == "UNIT_MAXHEALTH" or event == "UNIT_CONNECTION", refreshAbsorb == true)
-      end
+      UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, glowAbsorb,
+        event == "UNIT_MAXHEALTH" or event == "UNIT_CONNECTION", refreshAbsorb == true)
     end
   end
 

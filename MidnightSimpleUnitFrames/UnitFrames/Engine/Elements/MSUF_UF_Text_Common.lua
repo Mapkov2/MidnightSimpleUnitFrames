@@ -35,7 +35,6 @@ local UnitReaction = C.UnitReaction
 local UnitSelectionColor = C.UnitSelectionColor
 local PowerBarColor = C.PowerBarColor
 local RAID_CLASS_COLORS = C.RAID_CLASS_COLORS
-local C_ClassColor_GetClassColor = _G.C_ClassColor and _G.C_ClassColor.GetClassColor
 local type = C.type
 local tonumber = C.tonumber
 local format = C.format
@@ -83,7 +82,6 @@ local IsSecret = C.IsSecret or Secrets.IsSecret or function(_) return false end
 -- states. Cache normal numbers, but never persist secret-backed color tuples.
 local nativeSecrets = _G.issecretvalue ~= nil
 local issecretvalue = _G.issecretvalue or function(_) return false end
-local SECRET_DEPENDENT_CLASS_COLOR = 2
 
 local STANDARD_FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local EXPRESSWAY_REGULAR = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Fonts\\Expressway Regular.ttf"
@@ -405,11 +403,8 @@ local function PlainUnitIsPlayer(frame, unit)
   return nil
 end
 
-local function DispatchClassColor(frame, unit, allowSecretPassThrough)
+local function DispatchClassColor(frame, unit)
   local _, class = ReadUnitClassCached(frame, unit)
-  if allowSecretPassThrough == true and issecretvalue(class) == true then
-    return class, nil, nil, SECRET_DEPENDENT_CLASS_COLOR
-  end
   local r, g, b = ClassColorForToken(class)
   if r ~= nil then return r, g, b end
   return 0.12, 0.62, 0.95
@@ -437,9 +432,8 @@ local function NameTextColorFor(frame, unit, classNames, npcNames, keyOverride, 
   end
   if isPlayer then
     if classNames then
-      local r, g, b, secretClass = DispatchClassColor(
-        frame, unit, unit == "targettarget" or unit == "focustarget")
-      return r, g, b, fa, secretClass
+      local r, g, b = DispatchClassColor(frame, unit)
+      return r, g, b, fa
     end
   else
     if npcClassNames then
@@ -517,9 +511,8 @@ local function InlineTextColor(frame, unit, inline)
   end
   if isPlayer then
     if inline and inline.targetNameClassColor == true then
-      local r, g, b, secretClass = DispatchClassColor(
-        frame, unit, unit == "targettarget" or unit == "focustarget")
-      return r, g, b, fa, secretClass
+      local r, g, b = DispatchClassColor(frame, unit)
+      return r, g, b, fa
     end
   else
     if inline and inline.targetNameNpcClassColor == true then
@@ -535,41 +528,6 @@ local function InlineTextColor(frame, unit, inline)
     end
   end
   return fr, fg, fb, fa
-end
-
-local function ApplySecretClassTextColor(primary, secondary, class, alpha)
-  local classColor = C_ClassColor_GetClassColor and C_ClassColor_GetClassColor(class)
-  if not classColor then return false end
-  -- Keep the secret RGB tuple only on this stack frame so both text regions
-  -- share one native lookup. Do not inspect it or persist it in Lua caches.
-  local r, g, b = classColor:GetRGB()
-  if primary then primary:SetTextColor(r, g, b, alpha) end
-  if secondary then secondary:SetTextColor(r, g, b, alpha) end
-  return true
-end
-
-local function ApplyNameTextColor(frame, unit)
-  local r, g, b, a, secretClass = NameTextColor(frame, unit)
-  if secretClass == SECRET_DEPENDENT_CLASS_COLOR then
-    if ApplySecretClassTextColor(frame and frame.nameText, frame and frame._msufNameDotsFS, r, a) then
-      frame._msufNameTextR, frame._msufNameTextG, frame._msufNameTextB, frame._msufNameTextA = nil, nil, nil, nil
-      return
-    end
-    r, g, b = 0.12, 0.62, 0.95
-  end
-  SetNameTextColor(frame, r, g, b, a)
-end
-
-local function ApplyInlineTextColor(frame, unit, inline)
-  local r, g, b, a, secretClass = InlineTextColor(frame, unit, inline)
-  if secretClass == SECRET_DEPENDENT_CLASS_COLOR then
-    if ApplySecretClassTextColor(frame and frame.totInlineText, frame and frame._msufInlineDotsFS, r, a) then
-      frame._msufInlineTextR, frame._msufInlineTextG, frame._msufInlineTextB, frame._msufInlineTextA = nil, nil, nil, nil
-      return
-    end
-    r, g, b = 0.12, 0.62, 0.95
-  end
-  SetInlineTextColor(frame, r, g, b, a)
 end
 Text.C = C
 Text.UF = UF
@@ -650,8 +608,6 @@ Text.UpdateHealthTextColor = UpdateHealthTextColor
 Text.SetNameTextColor = SetNameTextColor
 Text.NameTextColorFor = NameTextColorFor
 Text.NameTextColor = NameTextColor
-Text.ApplyNameTextColor = ApplyNameTextColor
 Text.NPCTypeTextColorEnabled = TextWantsNPCTypeColor
 Text.SetInlineTextColor = SetInlineTextColor
 Text.InlineTextColor = InlineTextColor
-Text.ApplyInlineTextColor = ApplyInlineTextColor

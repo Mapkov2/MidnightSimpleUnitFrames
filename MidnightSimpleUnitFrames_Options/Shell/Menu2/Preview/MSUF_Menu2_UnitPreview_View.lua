@@ -2127,9 +2127,6 @@ local function BuildPreview(parent, panel, width, height)
     mock.classPower.segmentBgs = {}
     mock.classPower.segmentEdges = {}
     mock.classPower.runeTexts = {}
-    mock.classPower.textOwner = CreateFrame("Frame", nil, mock.classPower)
-    mock.classPower.textOwner:SetAllPoints(mock.classPower)
-    if mock.classPower.textOwner.EnableMouse then mock.classPower.textOwner:EnableMouse(false) end
     local function ClassPowerTexture(bucket, index, layer, subLevel, hidden)
         local tex = mock.classPower:CreateTexture(nil, layer, nil, subLevel)
         tex:SetTexture(TEX_W8)
@@ -2141,7 +2138,7 @@ local function BuildPreview(parent, panel, width, height)
         ClassPowerTexture("segmentBgs", i, "BACKGROUND")
         ClassPowerTexture("segments", i, "ARTWORK", nil, false)
         ClassPowerTexture("segmentEdges", i, "OVERLAY")
-        local rfs = MakeFS(mock.classPower.textOwner, "OVERLAY", 8)
+        local rfs = MakeFS(mock.classPower, "OVERLAY", 8)
         rfs:SetJustifyH("CENTER")
         if rfs.SetJustifyV then rfs:SetJustifyV("MIDDLE") end
         if rfs.SetShadowColor then rfs:SetShadowColor(0, 0, 0, 1) end
@@ -2149,7 +2146,7 @@ local function BuildPreview(parent, panel, width, height)
         rfs:Hide()
         mock.classPower.runeTexts[i] = rfs
     end
-    mock.classPower.text = MakeFS(mock.classPower.textOwner, "OVERLAY", 12)
+    mock.classPower.text = MakeFS(mock.classPower, "OVERLAY", 12)
     mock.classPower.text:SetJustifyH("CENTER")
     if mock.classPower.text.SetJustifyV then mock.classPower.text:SetJustifyV("MIDDLE") end
     mock.classPower.text:SetPoint("CENTER", mock.classPower, "CENTER", 0, 0)

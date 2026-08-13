@@ -1257,24 +1257,39 @@ modeBuilders.AURA = function(E)
         else
             local cur = 0
             local textValue = 0
-            local restrictedApplications = false
             if powerType == "MAELSTROM_WEAPON" then
                 local info = GetPlayerAura(CPK.SPELL.MAELSTROM_WEAPON)
                 if info then
                     local apps = info.applications
                     textValue = apps
-                    if NotSecret(apps) then
-                        if apps ~= nil then cur = tonumber(apps) or 0 end
-                    else
-                        restrictedApplications = true
-                    end
+                    if NotSecret(apps) and apps ~= nil then cur = tonumber(apps) or 0 end
                 end
             elseif powerType == "WHIRLWIND" then
                 cur = WW.GetStacks()
                 textValue = cur
             elseif powerType == "TIP_OF_THE_SPEAR" then
-                cur = GetTrackedTipStacks()
-                textValue = cur
+                local tipAuraID = E.TIP and E.TIP.AURA_ID
+                local useLocal = CP.spLocalUntil and GetTime and GetTime() < CP.spLocalUntil
+                if tipAuraID then
+                    local info = not useLocal and GetPlayerAura(tipAuraID) or nil
+                    if info then
+                        local apps = info.applications
+                        textValue = apps
+                        if NotSecret(apps) and apps ~= nil then
+                            cur = tonumber(apps) or 0
+                            CP.spStacks = cur
+                            local expirationTime = info.expirationTime
+                            if NotSecret(expirationTime) and expirationTime ~= nil then
+                                CP.spExpires = tonumber(expirationTime)
+                            end
+                        else
+                            cur = GetTrackedTipStacks()
+                        end
+                    else
+                        cur = GetTrackedTipStacks()
+                        textValue = cur
+                    end
+                end
             elseif powerType == "ICICLES" then
                 local icicleID = CPK.SPELL and CPK.SPELL.ICICLES
                 if icicleID then
@@ -1282,11 +1297,7 @@ modeBuilders.AURA = function(E)
                     if info then
                         local apps = info.applications
                         textValue = apps
-                        if NotSecret(apps) then
-                            if apps ~= nil then cur = tonumber(apps) or 0 end
-                        else
-                            restrictedApplications = true
-                        end
+                        if NotSecret(apps) and apps ~= nil then cur = tonumber(apps) or 0 end
                     end
                 end
             end
@@ -1297,24 +1308,13 @@ modeBuilders.AURA = function(E)
             for i = 1, maxPower do
                 local bar = CP.bars[i]
                 if bar then
-                    local isFilled = not restrictedApplications and (i <= cur)
-                    if restrictedApplications then
-                        -- Blizzard's CustomAuraButton application bar follows
-                        -- this same contract: restricted application counts go
-                        -- straight into StatusBar:SetValue. Giving every pip its
-                        -- own [i-1, i] range lets native clamping resolve the
-                        -- filled state without comparing the secret in Lua.
-                        CP_StampMinMax(bar, i - 1, i)
-                        CP_SetPowerValue(bar, textValue, smoothInterp, true)
-                        CP_StampAlpha(bar, filledAlpha)
-                    else
-                        CP_StampMinMax(bar, 0, 1)
-                        CP_SetPowerValue(bar, isFilled and 1 or 0, smoothInterp)
-                        CP_StampAlpha(bar, isFilled and filledAlpha or emptyAlpha)
-                    end
-                    if not restrictedApplications and isFull then
+                    local isFilled = (i <= cur)
+                    CP_StampMinMax(bar, 0, 1)
+                    CP_SetPowerValue(bar, isFilled and 1 or 0, smoothInterp)
+                    CP_StampAlpha(bar, isFilled and filledAlpha or emptyAlpha)
+                    if isFull then
                         CP_StampStatusBarColor(bar, visual.fullR, visual.fullG, visual.fullB, 1)
-                    elseif not restrictedApplications and mwAbove5 and isFilled and i > CPK.THRESH.MW_SPEND then
+                    elseif mwAbove5 and isFilled and i > CPK.THRESH.MW_SPEND then
                         CP_StampStatusBarColor(bar, abR, abG, abB, 1)
                     else
                         local slotR = useSlotColors and visual.slotR and visual.slotR[i]
@@ -1324,6 +1324,7 @@ modeBuilders.AURA = function(E)
                     CP_StampVertexColor(bar._bg, bgR, bgG, bgB, bgA)
                 end
             end
+            if CP.icicleNativeText and CP.icicleNativeText.Hide then CP.icicleNativeText:Hide() end
             local txt = CP.text
             if txt then
                 local showText = visual and visual.showText == true
@@ -1336,7 +1337,7 @@ modeBuilders.AURA = function(E)
                 end
             end
             local autoHideCur = cur
-            if restrictedApplications then autoHideCur = nil end
+            if powerType == "ICICLES" and CP.icicleNativeText then autoHideCur = nil end
             CP_CheckAutoHide(autoHideCur, maxPower)
         end
     end
@@ -1347,43 +1348,56 @@ modeBuilders.AURA = function(E)
         end
     end
 
-    local function UpdateSingle()
-        --- Devourer mirrors Blizzard's 12.1 Soul Fragments bar and Elemental's
-        --- MSUF presentation: one continuous bar normalized to the real maximum.
+    local function UpdateSingle(powerType, maxPower)
+        --- Devourer renders as pips whenever the layout resolved an integer
+        --- segment count (Blizzard exposes one: collapsing star cost in Void
+        --- Metamorphosis, Dark Heart max applications outside it). maxPower == 1
+        --- means the count was secret or unavailable, and the bar stays on the
+        --- normalized single-bar path.
+        local segCount = tonumber(maxPower) or 1
+        local segmented = segCount > 1
         local cur, displayCur, inMeta = 0, 0, false
         local textValue = 0
         inMeta = not not GetPlayerAura(CPK.SPELL.VOID_METAMORPHOSIS)
-        local progressMax
+        --- Published for the segment-count resolver: outside meta this aura is
+        --- absent, so re-reading it there costs a real aura query per event.
+        CP.dhInMeta = inMeta
         if inMeta then
-            --- Collapsing Star's cost can change while Meta is active.
-            if type(GetCollapsingStarCost) == "function" then
-                local rawCost = GetCollapsingStarCost()
-                if NotSecret(rawCost) and rawCost ~= nil then progressMax = tonumber(rawCost) end
-            end
             local whispers = GetPlayerAura(CPK.SPELL.SILENCE_THE_WHISPERS)
             if whispers then
                 local apps = whispers.applications
                 textValue = apps
                 if NotSecret(apps) and apps ~= nil then
                     displayCur = tonumber(apps) or 0
+                    --- The normalization divisor is only needed for the single
+                    --- bar; segmented rendering already has it as maxPower.
+                    if not segmented then
+                        local cost = 1
+                        if type(GetCollapsingStarCost) == "function" then
+                            local rawCost = GetCollapsingStarCost()
+                            if NotSecret(rawCost) and rawCost ~= nil then cost = tonumber(rawCost) or 1 end
+                        end
+                        if cost > 0 then cur = displayCur / cost end
+                    end
                 end
             end
         else
-            --- Read Blizzard's live maximum just like its own bar and ElvUI do;
-            --- talent setups can expose 40, 50, or another supported maximum.
-            local rawMax = C_Spell.GetSpellMaxCumulativeAuraApplications(CPK.SPELL.DARK_HEART)
-            if NotSecret(rawMax) and rawMax ~= nil then progressMax = tonumber(rawMax) end
             local darkHeart = GetPlayerAura(CPK.SPELL.DARK_HEART)
             if darkHeart then
                 local apps = darkHeart.applications
                 textValue = apps
                 if NotSecret(apps) and apps ~= nil then
                     displayCur = tonumber(apps) or 0
+                    if not segmented then
+                        local maxApp = 1
+                        local rawMax = C_Spell.GetSpellMaxCumulativeAuraApplications(CPK.SPELL.DARK_HEART)
+                        if NotSecret(rawMax) and rawMax ~= nil then maxApp = tonumber(rawMax) or 1 end
+                        if maxApp > 0 then cur = displayCur / maxApp end
+                    end
                 end
             end
         end
-        if progressMax and progressMax > 0 then cur = displayCur / progressMax end
-        if cur < 0 then cur = 0 elseif cur > 1 then cur = 1 end
+        if cur > 1 then cur = 1 end
         local visual = CP_GetVisual(E)
         local smoothInterp = visual and visual.smoothInterp
         local colorByType = not visual or visual.colorByType ~= false
@@ -1392,20 +1406,38 @@ modeBuilders.AURA = function(E)
         local bgA = visual and visual.bgAlpha or 0.3
         local bgR, bgG, bgB = ResolveClassPowerBgColor(inMeta and "SOUL_FRAGMENTS_META" or "SOUL_FRAGMENTS")
         local filledAlpha, emptyAlpha = visual and visual.filledAlpha or E.GetFilledAlpha(), visual and visual.emptyAlpha or E.GetEmptyAlpha()
-        local bar = CP.bars[1]
-        if bar then
-            CP_StampMinMax(bar, 0, 1)
-            CP_SetPowerValue(bar, cur, smoothInterp)
-            CP_StampAlpha(bar, cur > 0.01 and filledAlpha or emptyAlpha)
-            CP_StampStatusBarColor(bar, r, g, bl, 1)
-            CP_StampVertexColor(bar._bg, bgR, bgG, bgB, bgA)
-        end
-        local visualVersion = visual and visual.version or 0
-        if CP._singleVisualVersion ~= visualVersion or CP._singleVisualMode ~= CP.renderMode then
-            for i = 2, CP.maxBars do if CP.bars[i] then CP_StampShown(CP.bars[i], false) end end
-            for i = 1, #CP.ticks do if CP.ticks[i] then CP_StampShown(CP.ticks[i], false) end end
-            CP._singleVisualVersion = visualVersion
-            CP._singleVisualMode = CP.renderMode
+        if segmented then
+            --- Layout owns hiding the unused bars and trailing ticks, exactly as
+            --- for the other segmented aura resources.
+            for i = 1, segCount do
+                local bar = CP.bars[i]
+                if bar then
+                    local isFilled = (i <= displayCur)
+                    CP_StampMinMax(bar, 0, 1)
+                    CP_SetPowerValue(bar, isFilled and 1 or 0, smoothInterp)
+                    CP_StampAlpha(bar, isFilled and filledAlpha or emptyAlpha)
+                    CP_StampStatusBarColor(bar, r, g, bl, 1)
+                    CP_StampVertexColor(bar._bg, bgR, bgG, bgB, bgA)
+                end
+            end
+            CP._singleVisualVersion = nil
+            CP._singleVisualMode = nil
+        else
+            local bar = CP.bars[1]
+            if bar then
+                CP_StampMinMax(bar, 0, 1)
+                CP_SetPowerValue(bar, cur, smoothInterp)
+                CP_StampAlpha(bar, cur > 0.01 and filledAlpha or emptyAlpha)
+                CP_StampStatusBarColor(bar, r, g, bl, 1)
+                CP_StampVertexColor(bar._bg, bgR, bgG, bgB, bgA)
+            end
+            local visualVersion = visual and visual.version or 0
+            if CP._singleVisualVersion ~= visualVersion or CP._singleVisualMode ~= CP.renderMode then
+                for i = 2, CP.maxBars do if CP.bars[i] then CP_StampShown(CP.bars[i], false) end end
+                for i = 1, #CP.ticks do if CP.ticks[i] then CP_StampShown(CP.ticks[i], false) end end
+                CP._singleVisualVersion = visualVersion
+                CP._singleVisualMode = CP.renderMode
+            end
         end
         local txt = CP.text
         if txt then
@@ -1418,7 +1450,12 @@ modeBuilders.AURA = function(E)
                 CP_StampShown(txt, false)
             end
         end
-        CP_CheckAutoHide(cur, 1)
+        if segmented then
+            CP_CheckAutoHide(displayCur, segCount)
+        else
+            local intCur = (cur > 0.01) and 1 or 0
+            CP_CheckAutoHide(intCur, 1)
+        end
     end
 
     return { UpdateSegmented = UpdateSegmented, UpdateSingle = UpdateSingle, BuildWWRender = BuildWWRender }

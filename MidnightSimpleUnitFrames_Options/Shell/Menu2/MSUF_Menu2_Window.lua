@@ -3039,11 +3039,6 @@ function M.Open(pageKey)
     f._msuf2Minimized = nil
     ApplyMenuFrameScale(f)
     ApplyMenuFramePriority(f)
-    -- Cached pages can outlive external model changes while the window is
-    -- hidden, including specialization-driven profile switches. Advance the
-    -- shared snapshot revision once per explicit open so SelectPage refreshes
-    -- the visible page from the current MSUF_DB instead of reusing stale UI.
-    M.MarkMenuDataDirty("menu-open")
     f:Show()
     -- An unqualified open resumes an active guided setup before considering the
     -- one-time welcome. Explicit deep links always keep their requested page.

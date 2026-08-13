@@ -117,24 +117,18 @@ function Handles.Install(box, deps)
             M.SetMenuStateValue("gfStatusIconSelection", handle._statusSpec.value)
         end
         if handle and handle._cfgSpellItem then
-            local scope = H.CurrentScope()
-            local specKey = handle._cfgSpellItem.specKey
-            local auraName = handle._cfgSpellItem.auraName
-            local conf = H.Conf(scope)
-            local si = conf and conf.spellIndicators
-            -- Multi-spec selection owns the aura dropdown namespace. Switch
-            -- it before recording the clicked aura, otherwise a spell from
-            -- spec B is written under the previously selected spec A.
-            if si and si.spec == "multi" then
-                M.gfSpellMultiSpecSelection = M.gfSpellMultiSpecSelection or {}
-                M.gfSpellMultiSpecSelection[scope] = specKey
-            end
             local gp = M.GroupPage or {}
             if type(gp.SetCurrentSpellAura) == "function" then
-                gp.SetCurrentSpellAura(scope, auraName, specKey)
+                gp.SetCurrentSpellAura(H.CurrentScope(), handle._cfgSpellItem.auraName)
             else
                 M.gfSpellIndicatorSelection = M.gfSpellIndicatorSelection or {}
-                M.gfSpellIndicatorSelection[scope] = auraName
+                M.gfSpellIndicatorSelection[H.CurrentScope()] = handle._cfgSpellItem.auraName
+            end
+            local conf = H.Conf(H.CurrentScope())
+            local si = conf and conf.spellIndicators
+            if si and si.spec == "multi" then
+                M.gfSpellMultiSpecSelection = M.gfSpellMultiSpecSelection or {}
+                M.gfSpellMultiSpecSelection[H.CurrentScope()] = handle._cfgSpellItem.specKey
             end
         end
         if handle and handle._cfgTextKind then
@@ -183,23 +177,11 @@ function Handles.Install(box, deps)
     end
     local function SpellPlacedForHandle(handle, create)
         local cfg = SpellConfigForHandle(handle, create)
-        if not cfg then
-            if not create and handle and type(handle._msufSpellIndicatorPlaced) == "table" then
-                return handle._msufSpellIndicatorPlaced
-            end
-            return nil
-        end
+        if not cfg then return nil end
         if create and type(cfg.placed) ~= "table" then
             cfg.placed = { type = "icon", anchor = "TOPLEFT", x = 0, y = 0, size = 18, showCooldownSwipe = true }
         end
-        if type(cfg.placed) == "table" then return cfg.placed end
-        -- Active multi-spec entries may still exist only in compiled
-        -- SpecDefaults. Read the exact geometry that was rendered until the
-        -- first write materializes its saved entry.
-        if not create and handle and type(handle._msufSpellIndicatorPlaced) == "table" then
-            return handle._msufSpellIndicatorPlaced
-        end
-        return nil
+        return type(cfg.placed) == "table" and cfg.placed or nil
     end
     local function OpenHandleSettings(handle)
         if handle and handle._sectionKey and type(OpenSection) == "function" then
@@ -520,13 +502,7 @@ function Handles.Install(box, deps)
         end
         local conf = H.Conf(H.CurrentScope())
         if not conf then return false end
-        local x, y
-        if handle._cfgSpell then
-            local placed = SpellPlacedForHandle(handle, false)
-            x, y = placed and placed.x, placed and placed.y
-        else
-            _, x, y = HandleOffsets(handle)
-        end
+        local _, x, y = HandleOffsets(handle)
         local step = H.NudgeStep()
         local cfgX, cfgY = Round((tonumber(x) or 0) + (dx * step)), Round((tonumber(y) or 0) + (dy * step))
         if handle._cfgGroup then
@@ -1140,7 +1116,6 @@ function Handles.Install(box, deps)
             specKey = item.specKey,
             auraName = item.auraName,
         }
-        handle._msufSpellIndicatorPlaced = item.spellIndicatorSlot == true and item or item.placed
         handle._previewText = item.display or item.auraName or "Spell"
         handle._msufSpellIndicatorPreviewKey = key
         return handle
@@ -1255,16 +1230,16 @@ function Handles.Install(box, deps)
             cfg.enabled = true
             placed.type = (placed.type and placed.type ~= "none") and placed.type or "icon"
             placed.anchor, placed.x, placed.y = anchor, nextX, nextY
-            if si and si.spec == "multi" then
-                M.gfSpellMultiSpecSelection = M.gfSpellMultiSpecSelection or {}
-                M.gfSpellMultiSpecSelection[kind] = specKey
-            end
             local gp = M.GroupPage or {}
             if type(gp.SetCurrentSpellAura) == "function" then
-                gp.SetCurrentSpellAura(kind, auraName, specKey)
+                gp.SetCurrentSpellAura(kind, auraName)
             else
                 M.gfSpellIndicatorSelection = M.gfSpellIndicatorSelection or {}
                 M.gfSpellIndicatorSelection[kind] = auraName
+            end
+            if si and si.spec == "multi" then
+                M.gfSpellMultiSpecSelection = M.gfSpellMultiSpecSelection or {}
+                M.gfSpellMultiSpecSelection[kind] = specKey
             end
             RefreshGroupPreviewAfterMove(dropHandle)
             placedSuccessfully = true

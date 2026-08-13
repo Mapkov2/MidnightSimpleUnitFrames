@@ -1403,64 +1403,6 @@ Edit.Transitions.SetMSUFEditModeDirect = MSUF_SetMSUFEditModeDirect
 --- --- AnyEditMode listeners (registration handled in State.lua) ---
 
 --- --- Castbar anchor toggle (detach/attach to unitframe) ---
-local function CastbarToggleFrameCenter(unit)
-    local preview, runtime
-    if unit == "player" then
-        preview = _G.MSUF_PlayerCastbarPreview
-        runtime = _G.MSUF_PlayerCastbar
-    elseif unit == "target" then
-        preview = _G.MSUF_TargetCastbarPreview
-        runtime = _G.MSUF_TargetCastbar or _G.MSUF_TargetCastBar
-    elseif unit == "focus" then
-        preview = _G.MSUF_FocusCastbarPreview
-        runtime = _G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar
-    elseif unit == "boss" then
-        preview = _G.MSUF_BossCastbarPreview or _G.MSUF_BossCastbarPreview1
-        local bossCastbars = _G.MSUF_BossCastbars
-        runtime = (bossCastbars and bossCastbars[1])
-            or _G.MSUF_BossCastbar1
-            or _G.MSUF_boss1CastBar
-    end
-
-    local function Center(frame)
-        local left, right, top, bottom = FrameRectToUI(frame)
-        if left then return frame, (left + right) * 0.5, (top + bottom) * 0.5 end
-    end
-
-    local frame, x, y = Center(preview)
-    if frame then return frame, x, y end
-    return Center(runtime)
-end
-
-local function ApplyCastbarAnchorState(unit)
-    if type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
-        _G.MSUF_ApplyCastbarUnitAndSync(unit)
-    else
-        local reanchorFns = {
-            player = "MSUF_ReanchorPlayerCastBar",
-            target = "MSUF_ReanchorTargetCastBar",
-            focus  = "MSUF_ReanchorFocusCastBar",
-            boss   = "MSUF_ApplyBossCastbarPositionSetting",
-        }
-        local ra = reanchorFns[unit]
-        if ra and type(_G[ra]) == "function" then _G[ra]() end
-        if type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
-            _G.MSUF_ApplyCastbarVisualsForUnit(unit)
-        elseif _G.MSUF_UpdateCastbarVisuals then
-            _G.MSUF_UpdateCastbarVisuals(unit)
-        end
-    end
-
-    if type(_G.MSUF_PositionCastbarPreviewUnit) == "function" then
-        _G.MSUF_PositionCastbarPreviewUnit(unit)
-    end
-end
-
-local function RoundCastbarOffset(value)
-    value = tonumber(value) or 0
-    return value >= 0 and math.floor(value + 0.5) or math.ceil(value - 0.5)
-end
-
 local MSUF_EM_SetCastbarAnchoredToUnit = _G.MSUF_EM_SetCastbarAnchoredToUnit or function(unit, anchored)
     if not unit then return end
     local db = _G.MSUF_DB; if not db then return end
@@ -1481,38 +1423,43 @@ local MSUF_EM_SetCastbarAnchoredToUnit = _G.MSUF_EM_SetCastbarAnchoredToUnit or 
     end
 
     local wantDetached = (anchored == false)
-    if (g[detachedKey] == true) == wantDetached then return end
-
-    local castbar, beforeX, beforeY = CastbarToggleFrameCenter(unit)
     g[detachedKey] = wantDetached or nil
-    ApplyCastbarAnchorState(unit)
 
-    if castbar and beforeX and beforeY then
-        local left, right, top, bottom = FrameRectToUI(castbar)
-        if left then
-            local afterX = (left + right) * 0.5
-            local afterY = (top + bottom) * 0.5
-            local frameScale = castbar.GetEffectiveScale and tonumber(castbar:GetEffectiveScale()) or 1
-            local uiScale = UIParent.GetEffectiveScale and tonumber(UIParent:GetEffectiveScale()) or 1
-            if not frameScale or frameScale <= 0 then frameScale = 1 end
-            if not uiScale or uiScale <= 0 then uiScale = 1 end
-
-            local defaultX, defaultY = 0, 0
-            if type(_G.MSUF_GetCastbarDefaultOffsets) == "function" then
-                defaultX, defaultY = _G.MSUF_GetCastbarDefaultOffsets(unit)
-            end
-            local currentX = tonumber(g[oxKey]) or tonumber(defaultX) or 0
-            local currentY = tonumber(g[oyKey]) or tonumber(defaultY) or 0
-            local localPerUI = uiScale / frameScale
-            local nextX = RoundCastbarOffset(currentX + (beforeX - afterX) * localPerUI)
-            local nextY = RoundCastbarOffset(currentY + (beforeY - afterY) * localPerUI)
-            if nextX ~= currentX or nextY ~= currentY then
-                g[oxKey], g[oyKey] = nextX, nextY
-                ApplyCastbarAnchorState(unit)
+    --- If detaching, save current castbar center as UIParent offset
+    if wantDetached then
+        local castbar
+        local pvNames = { player="MSUF_PlayerCastbarPreview", target="MSUF_TargetCastbarPreview", focus="MSUF_FocusCastbarPreview" }
+        local pvName = pvNames[unit]
+        if pvName then castbar = _G[pvName] end
+        if not castbar and unit == "boss" then castbar = _G.MSUF_BossCastbarPreview or _G["MSUF_BossCastbarPreview1"] end
+        if castbar and castbar.GetCenter then
+            local cx, cy = castbar:GetCenter()
+            local uiW = UIParent:GetWidth() or 1
+            local uiH = UIParent:GetHeight() or 1
+            if cx and cy then
+                g[oxKey] = math.floor(cx - uiW * 0.5 + 0.5)
+                g[oyKey] = math.floor(cy - uiH * 0.5 + 0.5)
             end
         end
     end
 
+    if type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
+        _G.MSUF_ApplyCastbarUnitAndSync(unit)
+    else
+        local reanchorFns = {
+            player = "MSUF_ReanchorPlayerCastBar",
+            target = "MSUF_ReanchorTargetCastBar",
+            focus  = "MSUF_ReanchorFocusCastBar",
+            boss   = "MSUF_ApplyBossCastbarPositionSetting",
+        }
+        local ra = reanchorFns[unit]
+        if ra and type(_G[ra]) == "function" then _G[ra]() end
+        if type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
+            _G.MSUF_ApplyCastbarVisualsForUnit(unit)
+        elseif _G.MSUF_UpdateCastbarVisuals then
+            _G.MSUF_UpdateCastbarVisuals(unit)
+        end
+    end
     RefreshUFPreview("EM2_CASTBAR_ANCHOR_TOGGLE", unit)
 end
 ExportPublic("MSUF_EM_SetCastbarAnchoredToUnit", MSUF_EM_SetCastbarAnchoredToUnit)

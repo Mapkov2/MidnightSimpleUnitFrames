@@ -143,8 +143,6 @@ local function BuildRuntimeVisibility(frame, spec)
     if load.hideResting == true then n = n + 1; rules[n] = "[resting] hide" end
     if load.hideInCombat == true then n = n + 1; rules[n] = "[combat] hide" end
     if load.hideOutOfCombat == true then n = n + 1; rules[n] = "[nocombat] hide" end
-    if load.hideNoTarget == true then n = n + 1; rules[n] = "[@target,noexists] hide" end
-    if load.hideOutOfCombatNoTarget == true then n = n + 1; rules[n] = "[nocombat,@target,noexists] hide" end
     if load.hideStealthed == true then n = n + 1; rules[n] = "[stealth] hide" end
     if load.hideSolo == true then n = n + 1; rules[n] = "[nogroup] hide" end
     if load.hideInGroup == true then n = n + 1; rules[n] = "[group] hide" end

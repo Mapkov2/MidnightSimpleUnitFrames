@@ -67,17 +67,14 @@ function A.DiagnosticsRegistry.BuildFrameDiagnostics(ctx)
     end
 
     local LOAD_CONDITION_FIXES = {
-        { key = "loadCondHideInHousing", label = "Hide in Housing" },
-        { key = "loadCondHideInCombat", label = "Hide in Combat" },
-        { key = "loadCondHideInGroup", label = "Hide in Group" },
-        { key = "loadCondHideInInstance", label = "Hide in Instance" },
-        { key = "loadCondHideInVehicle", label = "Hide in Vehicle" },
         { key = "loadCondHideMounted", label = "Hide Mounted" },
-        { key = "loadCondHideNoTarget", label = "Hide with No Target" },
-        { key = "loadCondHideOutOfCombat", label = "Hide Out of Combat" },
-        { key = "loadCondHideOutOfCombatNoTarget", label = "Hide Out of Combat with No Target" },
-        { key = "loadCondHideResting", label = "Hide Resting" },
+    { key = "loadCondHideOutOfCombat", label = "Hide Out of Combat" },
         { key = "loadCondHideSolo", label = "Hide Solo" },
+    { key = "loadCondHideInVehicle", label = "Hide in Vehicle" },
+    { key = "loadCondHideInGroup", label = "Hide in Group" },
+    { key = "loadCondHideInInstance", label = "Hide in Instance" },
+        { key = "loadCondHideResting", label = "Hide Resting" },
+    { key = "loadCondHideInCombat", label = "Hide in Combat" },
         { key = "loadCondHideStealthed", label = "Hide Stealthed" },
     }
 

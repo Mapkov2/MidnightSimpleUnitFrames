@@ -15,7 +15,7 @@ local Data = A.AurasRegistryData or {}
 A.AurasRegistryData = Data
 
 Data.AURA_UNITS = { "player", "target", "focus", "boss" }
-Data.AURA_SCOPES = { "player", "target", "focus", "boss" }
+Data.AURA_SCOPES = { "shared", "player", "target", "focus", "boss" }
 Data.AURA_LANES = {
     { key = "buff", label = "Buff", plural = "Buffs" },
     { key = "debuff", label = "Debuff", plural = "Debuffs" },
@@ -26,12 +26,13 @@ Data.GF_AURA_ANCHORS = { "CENTER", "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMR
 Data.GF_AURA_GROWTH = { "RIGHTDOWN", "LEFTDOWN", "RIGHTUP", "LEFTUP", "UP", "DOWN" }
 Data.GF_AURA_FILTER_VALUES = {
     buff = {
-        "ALL", "Player", "BigDefensive", "BigDefensivePlayer", "ExternalDefensive",
-        "ExternalDefensivePlayer", "RaidInCombat", "Raid", "RaidPlayer",
+        "ALL", "Player", "BigDefensivePlayer", "ExternalDefensivePlayer", "RaidInCombatPlayer",
+        "CancelablePlayer", "NotCancelablePlayer", "RaidPlayer", "BigDefensive",
+        "ExternalDefensive", "RaidInCombat", "Cancelable", "NotCancelable", "Raid", "IMPORTANT",
     },
     debuff = {
-        "ALL", "Player", "Raid", "RaidInCombat", "RAID_PLAYER_DISPELLABLE",
-        "DISPELLABLE", "CROWD_CONTROL", "NonPlayer",
+        "ALL", "Player", "RaidPlayer", "RaidInCombatPlayer", "Raid", "RaidInCombat",
+        "INCLUDE_NAME_PLATE_ONLY", "RAID_PLAYER_DISPELLABLE", "DISPELLABLE", "IMPORTANT", "CROWD_CONTROL",
     },
 }
 Data.GF_AURA_FILTER_ALIASES = {
@@ -140,13 +141,6 @@ Data.GF_AURA_FILTER_ALIASES = {
     ["cc debuffs only"] = "CROWD_CONTROL",
     ["crowd control"] = "CROWD_CONTROL",
     ["crowd control debuffs"] = "CROWD_CONTROL",
-    ["non-player"] = "NonPlayer",
-    ["non-player aura"] = "NonPlayer",
-    ["non-player auras"] = "NonPlayer",
-    ["non-player debuff"] = "NonPlayer",
-    ["non-player debuffs"] = "NonPlayer",
-    ["not from a player"] = "NonPlayer",
-    ["not caused by a player"] = "NonPlayer",
     external = "ExternalDefensive",
     externals = "ExternalDefensive",
     ["external defensive"] = "ExternalDefensive",
@@ -168,11 +162,16 @@ Data.GF_AURA_FILTER_ALIASES = {
     ["my big defensive"] = "BigDefensivePlayer",
     ["my major defensive"] = "BigDefensivePlayer",
 }
-Data.AURA_SCOPE_ALIASES = {}
+Data.AURA_SCOPE_ALIASES = {
+    shared = { "shared", "global", "all auras", "all aura", "auras", "aura" },
+}
 
-Data.AURA_EDIT_SCOPES = { "player", "target", "focus", "boss", "party", "raid" }
-Data.AURA_EDIT_SCOPE_VALUES = { "player", "target", "focus", "boss", "party", "raid" }
+Data.AURA_EDIT_SCOPES = { "shared", "player", "target", "focus", "boss", "party", "raid" }
+Data.AURA_EDIT_SCOPE_VALUES = { "shared", "player", "target", "focus", "boss", "party", "raid" }
 Data.AURA_EDIT_SCOPE_ALIASES = {
+    shared = "shared",
+    global = "shared",
+    all = "shared",
     player = "player",
     spieler = "player",
     target = "target",

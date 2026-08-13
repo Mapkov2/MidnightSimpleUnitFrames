@@ -21,12 +21,7 @@ local AddSettingToFindIndex
 -- Alias permutation helpers can emit thousands of near-identical phrases per
 -- setting. Canonical phrases are emitted first, so a small normalized head is
 -- both a better query surface and dramatically cheaper to retain and score.
---
--- The head must still be long enough to hold the hand-written phrasings a
--- control needs. At 16 every alias past the sixteenth was dropped in silence:
--- a control with a full set of storage-name variants had no room left for the
--- sentences players actually type, and adding one changed nothing at all.
-local MAX_SETTING_ALIASES = 20
+local MAX_SETTING_ALIASES = 16
 local MAX_SETTING_EXACT_ALIAS_EXTRAS = 32
 
 local function FoldAliasPhrases(value)
@@ -393,6 +388,7 @@ end
 DefineActionPolicies([[
 assistant.diagnostic.editMode.status assistant.workflow.status assistant_help
 assistant_nomatch_telemetry assistant_nomatch_worklist assistant_scope_help assistant_status
+apply_aura_quick_preset
 aura_blacklist_summary aura_custom_whitelist_summary aura_group_blacklist_summary
 aura_group_category_blacklist_summary copy_support_link copy_wago_profiles_link
 custom_anchor_picker_status diagnose_aura_visibility diagnose_castbar_visibility
@@ -410,7 +406,7 @@ export_profile profile_summary
 DefineActionPolicies([[
 assistant.panel.close cancel_custom_anchor_picker dashboard_page_back dashboard_page_forward
     menu_search_clear menu_search_query menu_window_close menu_window_maximize menu_window_minimize menu_window_restore
-open_dashboard_panel open_page open_setting_control open_profile_import open_recovery_tools support_links_summary
+open_dashboard_panel open_page open_setting_control open_profile_import open_recovery_tools set_aura_edit_scope support_links_summary
 set_dashboard_panel set_menu_selector_state set_nav_search_intro set_nav_section
 ]], {
     mutability = "navigation",
@@ -471,9 +467,9 @@ assistant.action.editMode.grid assistant.action.editMode.gridStep
 assistant.action.editMode.resetPosition class_power_quick_setup clear_group_custom_anchor
 clear_unit_custom_anchor copy_group copy_unit move_group_spell_indicator_order
 enable_focus_target_frame show_player_power_or_open_class_resources
-reset_all_scoped_global_bars_overrides
+reset_all_aura_overrides reset_all_aura_style_overrides reset_all_scoped_global_bars_overrides
 reset_all_scoped_global_font_overrides reset_all_unit_positions reset_aura_colors
-reset_bar_background_color reset_bar_colors reset_bar_gradient_colors reset_castbar_colors
+reset_aura_scope_overrides reset_bar_background_color reset_bar_colors reset_bar_gradient_colors reset_castbar_colors
 reset_class_colors reset_class_power_color_token reset_class_power_combo_slot_colors reset_class_power_slot_colors
 reset_focus_kick_position reset_gameplay_colors reset_global_font_color
 reset_group_corner_indicator_slot reset_group_corner_indicators

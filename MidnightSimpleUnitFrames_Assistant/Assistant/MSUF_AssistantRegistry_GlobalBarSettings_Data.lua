@@ -22,14 +22,6 @@ Data.GRADIENT_DIRECTION_KEYS = {
     UP = "gradientDirUp",
     DOWN = "gradientDirDown",
 }
--- The power gradient carries its own direction flags; the Bars page writes
--- these whenever the selected scope has a power direction of its own.
-Data.POWER_GRADIENT_DIRECTION_KEYS = {
-    RIGHT = "powerGradientDirRight",
-    LEFT = "powerGradientDirLeft",
-    UP = "powerGradientDirUp",
-    DOWN = "powerGradientDirDown",
-}
 Data.GRADIENT_DIRECTION_ALIASES = {
     right = "RIGHT",
     left = "LEFT",
@@ -82,14 +74,6 @@ Data.AGGRO_MODE_ALIASES = {
     ["non tank"] = "NON_TANK",
     ["non tanks"] = "NON_TANK",
     ["not tank"] = "NON_TANK",
-    -- Longest match wins, and "i am not the tank" contains the bare word
-    -- "tank": without these the role filter was set to Tanks only, the exact
-    -- opposite of the request.
-    ["not the tank"] = "NON_TANK",
-    ["i am not the tank"] = "NON_TANK",
-    ["im not the tank"] = "NON_TANK",
-    ["when i am not the tank"] = "NON_TANK",
-    ["not tanking"] = "NON_TANK",
     ["non-tank"] = "NON_TANK",
     ["non-tanks"] = "NON_TANK",
     healer = "HEALER",
@@ -109,10 +93,6 @@ Data.ABSORB_ANCHOR_ALIASES = {
     right = "right",
     follow = "follow",
     ["follow hp"] = "follow",
-    ["left side"] = "left",
-    ["to the left side"] = "left",
-    ["right side"] = "right",
-    ["to the right side"] = "right",
     hp = "follow",
     overflow = "overflow",
     ["follow overflow"] = "overflow",
@@ -125,16 +105,6 @@ Data.DISPEL_TRIGGER_ALIASES = {
     ["by me"] = "BY_ME",
     dispellable = "BY_ME",
     mine = "BY_ME",
-    -- The menu spells these out, so a player reads them off the dropdown and
-    -- types them back; without them the reply was "that is not one of its
-    -- available values" for the value the menu itself shows.
-    ["dispellable by me"] = "BY_ME",
-    ["i can dispel"] = "BY_ME",
-    ["i can dispel myself"] = "BY_ME",
-    ["debuffs i can dispel"] = "BY_ME",
-    ["only debuffs i can dispel"] = "BY_ME",
-    ["my group can dispel"] = "BY_RAID",
-    ["anyone in my group can dispel"] = "BY_RAID",
     byraid = "BY_RAID",
     ["by raid"] = "BY_RAID",
     ["by group"] = "BY_RAID",
@@ -198,8 +168,6 @@ local TEXTURE_KEY_ALIASES = {
     blizzard = "Blizzard",
     flat = "Flat",
     solid = "Flat",
-    ["solid looking"] = "Flat",
-    plain = "Flat",
     white = "Flat",
     raidhp = "RaidHP",
     ["raid hp"] = "RaidHP",

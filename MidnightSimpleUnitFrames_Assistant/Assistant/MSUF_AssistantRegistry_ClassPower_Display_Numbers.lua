@@ -51,19 +51,6 @@ function A.ClassPowerRegistry.RegisterDisplayNumberSettings(ctx)
             "combo points numbers size",
         },
     })
-    RegisterBarsNumber("classPowerTextLayer", "textLayer", "Class Resource Text Layer", 5, 0, 30, ClassPowerAliases("text layer", "number layer"), {
-        reason = "MSUF_ASSISTANT_CLASSPOWER_TEXT_LAYER",
-        exactAliases = {
-            "class resource text layer",
-            "class resources text layer",
-            "class power text layer",
-            "class resource number layer",
-            "rune text layer",
-            "essence text layer",
-            "ebon might text layer",
-        },
-        description = "Orders Class Resource numeric text, Rune times, and Ebon Might duration text independently from the Class Resource bar and Player Power text.",
-    })
     RegisterBarsNumber("classPowerTextOffsetX", "textOffsetX", "Class Resource Text Offset X", 0, -200, 200, ClassPowerAliases("text x", "text x offset", "number x offset"), {
         reason = "MSUF_ASSISTANT_CLASSPOWER_TEXT_X",
     })

@@ -1096,15 +1096,7 @@ local function ApplyAuraLane(out, prefix, groupKey, group, defaults, maxCount, i
   out[prefix .. "Filter"] = AuraFilterString(groupKey, group)
   local blacklist = type(group.blacklist) == "table" and group.blacklist or nil
   out[prefix .. "HidePermanent"] = group.hidePermanent == true or (blacklist and blacklist.hidePermanent == true) or false
-  if prefix == "debuff" then
-    out.debuffMaxDuration = Num(blacklist and blacklist.maxDuration, 0)
-    local filter = GF.AuraFilter or _G.MSUF_GF_AuraFilter
-    local nonPlayer = tostring(group.filterToken or ""):upper():gsub("[^A-Z0-9]", "") == "NONPLAYER"
-    if filter and filter.IsNonPlayerDebuffFilter then
-      nonPlayer = filter.IsNonPlayerDebuffFilter(group.filterToken) == true
-    end
-    out.debuffNonPlayer = nonPlayer
-  end
+  if prefix == "debuff" then out.debuffMaxDuration = Num(blacklist and blacklist.maxDuration, 0) end
   if group.showTooltip ~= nil then
     out[prefix .. "ShowTooltip"] = group.showTooltip == true
   end
@@ -1231,15 +1223,10 @@ local function CollectSpellIndicatorSpecs(siCfg, si)
     end
   end
   if selected == "multi" then
-    local allSpecsKey = si and si.ALL_SPECS_KEY
-    local allSpecsConfig = allSpecsKey and type(siCfg and siCfg.specs) == "table" and siCfg.specs[allSpecsKey]
-    if type(allSpecsConfig) == "table" and next(allSpecsConfig) ~= nil then
-      Add(allSpecsKey)
-    end
     local multi = type(siCfg and siCfg.multiSpecs) == "table" and siCfg.multiSpecs or nil
     if multi then
       for specKey, enabled in pairs(multi) do
-        if enabled and specKey ~= allSpecsKey then Add(specKey) end
+        if enabled then Add(specKey) end
       end
     end
   elseif selected ~= "auto" then
@@ -1433,10 +1420,8 @@ local function CompileCoreAuras(kind, conf)
     showTooltip = buff.trackedShowTooltip,
     showCooldownSwipe = buff.trackedShowCooldownSwipe,
     cooldownSwipeReverse = buff.trackedCooldownSwipeReverse,
-    -- Tracked Buffs are their own native AuraGroup. Keep their ordering local
-    -- instead of silently inheriting the normal Buff container's comparator.
-    sortMethod = buff.trackedSortMethod,
-    sortReverse = buff.trackedSortReverse == true,
+    sortMethod = buff.trackedSortMethod or buff.sortMethod,
+    sortReverse = buff.trackedSortReverse == true or (buff.trackedSortReverse == nil and buff.sortReverse == true),
     showDurationBar = buff.trackedShowDurationBar,
     durationBarHeight = buff.trackedDurationBarHeight,
     durationBarDisplay = buff.trackedDurationBarDisplay,

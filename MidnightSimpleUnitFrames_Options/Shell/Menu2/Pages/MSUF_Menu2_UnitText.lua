@@ -750,7 +750,7 @@ local function BuildText(ctx, builder, unit)
     end
     local advNameLayer = BindAdvancedLayer("Name layer", -76, "nameTextLayer", 5, "MSUF2_NAME_TEXT_LAYER_ADV")
     local advHpLayer = BindAdvancedLayer("HP layer", -136, "hpTextLayer", 5, "MSUF2_HP_TEXT_LAYER_ADV")
-    local advPowerLayer = BindAdvancedLayer("Power text layer", -196, "powerTextLayer", 2, "MSUF2_POWER_TEXT_LAYER_ADV")
+    local advPowerLayer = BindAdvancedLayer("Power layer", -196, "powerTextLayer", 2, "MSUF2_POWER_TEXT_LAYER_ADV")
     local function HookTextControls(kind, controls)
         for i = 1, #controls do HookPreviewTextFocus(controls[i][1], kind, controls[i][2]) end
     end

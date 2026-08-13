@@ -128,11 +128,22 @@ function A.DiagnosticsRegistry.BuildAuraDiagnostic(ctx)
         end
         for i = 1, #lanes do
             local lane = lanes[i]
+            local sharedKey = lane == "buff" and "auras3.shared.showBuffs" or "auras3.shared.showDebuffs"
+            local shared = Registry:GetSetting(sharedKey)
+            if shared and type(shared.get) == "function" and shared.get() == false then
+                issues[#issues + 1] = "Shared " .. AuraLaneLabel(lane) .. " are turned off."
+                AddFixChoice(choices, sharedKey, true, "Show shared " .. AuraLaneLabel(lane))
+            end
             if AuraLaneShown and not AuraLaneShown(scope, lane) then
                 issues[#issues + 1] = label .. " " .. AuraLaneLabel(lane) .. " are hidden or their max icon count is zero."
                 AddFixChoice(choices, "auras3." .. scope .. "." .. lane .. ".visible", true, "Show " .. label .. " " .. AuraLaneLabel(lane))
             end
             AddUnitAuraFilterDiagnostics(scope, label, lane, issues, choices)
+        end
+        local customFilters = Registry:GetSetting("auras3." .. scope .. ".overrideFilters")
+        if customFilters and type(customFilters.get) == "function" and customFilters.get() == true then
+            issues[#issues + 1] = label .. " uses custom aura filters. If only some auras are missing, check those filter options or turn custom filters off."
+            AddFixChoice(choices, "auras3." .. scope .. ".overrideFilters", false, "Turn off " .. label .. " custom aura filters")
         end
         AddUnitAuraBlacklistDiagnostics(scope, label, lanes, issues, choices)
         if #issues == 0 then

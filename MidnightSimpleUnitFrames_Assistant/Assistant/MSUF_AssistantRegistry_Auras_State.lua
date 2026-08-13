@@ -60,10 +60,71 @@ function A.AurasRegistry.BuildStateHelpers(ctx)
         if type(auras) == "table" then auras[key] = value and true or false end
     end
 
+    local function AuraOverrideBool(scope, key)
+        local pu = AuraPerUnit(scope, false)
+        return type(pu) == "table" and pu[key] == true
+    end
+
+    local function SetAuraOverrideBool(scope, key, value)
+        if scope == "shared" then return end
+        local pu, _, auras = AuraPerUnit(scope, true)
+        if type(pu) ~= "table" then return end
+        if not value then
+            pu[key] = false
+            return
+        end
+        local wasEnabled = pu[key] == true
+        pu[key] = true
+        local shared = type(auras) == "table" and type(auras.shared) == "table" and auras.shared or {}
+        if key == "overrideFilters" then
+            if type(pu.filters) ~= "table" then
+                pu.filters = {}
+                if type(shared.filters) == "table" then
+                    for k, v in pairs(shared.filters) do
+                        if type(v) == "table" then
+                            pu.filters[k] = {}
+                            for kk, vv in pairs(v) do pu.filters[k][kk] = vv end
+                        else
+                            pu.filters[k] = v
+                        end
+                    end
+                end
+            end
+            pu.filters.buffs = type(pu.filters.buffs) == "table" and pu.filters.buffs or {}
+            pu.filters.debuffs = type(pu.filters.debuffs) == "table" and pu.filters.debuffs or {}
+        elseif key == "overrideSharedLayout" then
+            -- Auras3 overrides are sparse. Reusing or pre-seeding an inactive
+            -- Auras2 table can resurrect unrelated legacy values on the first
+            -- scope-aware edit, so begin with a clean owner table.
+            if not wasEnabled or type(pu.layoutShared) ~= "table" then pu.layoutShared = {} end
+        elseif key == "overrideLayout" then
+            if not wasEnabled or type(pu.layout) ~= "table" then pu.layout = {} end
+        end
+    end
+
+    local function ResetAuraScope(scope)
+        if scope == "shared" then return false end
+        local _, unit, auras = AuraPerUnit(scope, false)
+        if type(auras) ~= "table" or type(auras.perUnit) ~= "table" then return false end
+        auras.perUnit[unit] = nil
+        return true
+    end
+
+    local function ResetAllAuraOverrides()
+        local auras = AuraRootDB()
+        if type(auras) ~= "table" then return false end
+        auras.perUnit = {}
+        return true
+    end
+
     return {
         AuraRootDB = AuraRootDB,
         AuraPerUnit = AuraPerUnit,
         AuraRootBool = AuraRootBool,
         SetAuraRootBool = SetAuraRootBool,
+        AuraOverrideBool = AuraOverrideBool,
+        SetAuraOverrideBool = SetAuraOverrideBool,
+        ResetAuraScope = ResetAuraScope,
+        ResetAllAuraOverrides = ResetAllAuraOverrides,
     }
 end

@@ -418,7 +418,6 @@ end
 local LANE_STYLE_KEYS = {
     buff = {
         iconZoom = "buffIconZoom",
-        stylePadding = "buffStylePadding",
         iconShape = "buffIconShape",
         showCooldownSwipe = "buffShowCooldownSwipe",
         cooldownSwipeReverse = "buffCooldownSwipeReverse",
@@ -446,7 +445,6 @@ local LANE_STYLE_KEYS = {
     },
     debuff = {
         iconZoom = "debuffIconZoom",
-        stylePadding = "debuffStylePadding",
         iconShape = "debuffIconShape",
         showCooldownSwipe = "debuffShowCooldownSwipe",
         cooldownSwipeReverse = "debuffCooldownSwipeReverse",
@@ -476,7 +474,7 @@ local LANE_STYLE_KEYS = {
 
 local RUNTIME_FILTER_KEYS = {
     buffs = { "onlyMine", "onlyImportant", "raid", "raidInCombat", "includeNameplateOnly", "includeDispellable", "dispellableAny", "cancelable", "notCancelable", "externalDefensive", "bigDefensive", "exclusive" },
-    debuffs = { "onlyMine", "onlyImportant", "raid", "raidInCombat", "includeNameplateOnly", "includeDispellable", "dispellableAny", "crowdControl", "nonPlayer", "exclusive" },
+    debuffs = { "onlyMine", "onlyImportant", "raid", "raidInCombat", "includeNameplateOnly", "includeDispellable", "dispellableAny", "crowdControl", "exclusive" },
 }
 
 local DEFAULT_SHARED = {
@@ -589,7 +587,6 @@ local DEFAULT_SHARED = {
     filters = {
         enabled = true,
         buffs = {
-            enabled = true,
             onlyMine = false,
             onlyImportant = false,
             includeDispellable = false,
@@ -604,7 +601,6 @@ local DEFAULT_SHARED = {
             exclusive = "none",
         },
         debuffs = {
-            enabled = true,
             onlyMine = false,
             onlyImportant = false,
             includeDispellable = false,
@@ -613,7 +609,6 @@ local DEFAULT_SHARED = {
             raidInCombat = false,
             includeNameplateOnly = false,
             crowdControl = false,
-            nonPlayer = false,
             exclusive = "none",
         },
     },
@@ -1110,98 +1105,79 @@ GF_AURA_FILTER.DECLASSIFIED_SPELLS = GF_AURA_FILTER.DECLASSIFIED_SPELLS or GF_AU
 GF_AURA_FILTER.DECLASSIFIED_META = GF_AURA_FILTER.DECLASSIFIED_META or GF_AURA_FILTER.PUBLIC_AURA_PRESET_META
 GF_AURA_FILTER.BUFF_FILTER_ITEMS = {
     { value = "ALL", text = "All Buffs" },
-    { value = "Player", text = "Cast by Me" },
+    { value = "Player", text = "Player" },
+    { value = "BigDefensivePlayer", text = "Big Defensive Player" },
+    { value = "ExternalDefensivePlayer", text = "External Defensive Player" },
+    { value = "RaidInCombatPlayer", text = "Raid In Combat Player" },
+    { value = "CancelablePlayer", text = "Cancelable Player" },
+    { value = "NotCancelablePlayer", text = "Not Cancelable Player" },
+    { value = "RaidPlayer", text = "Raid Player" },
     { value = "BigDefensive", text = "Big Defensive" },
-    { value = "BigDefensivePlayer", text = "Big Defensive by Me" },
     { value = "ExternalDefensive", text = "External Defensive" },
-    { value = "ExternalDefensivePlayer", text = "External Defensive by Me" },
     { value = "RaidInCombat", text = "Raid In Combat" },
+    { value = "Cancelable", text = "Cancelable" },
+    { value = "NotCancelable", text = "Not Cancelable" },
     { value = "Raid", text = "Applicable by Me (Raid)" },
-    { value = "RaidPlayer", text = "Applicable and Cast by Me" },
+    { value = "IMPORTANT", text = "Important" },
 }
 GF_AURA_FILTER.DEBUFF_FILTER_ITEMS = {
     { value = "ALL", text = "All Debuffs" },
-    { value = "Player", text = "Cast by Me" },
+    { value = "Player", text = "Player" },
+    { value = "RaidPlayer", text = "Raid Player" },
+    { value = "RaidInCombatPlayer", text = "Raid In Combat Player" },
     { value = "Raid", text = "Dispellable by Me (Raid)" },
     { value = "RaidInCombat", text = "Raid In Combat" },
+    { value = "INCLUDE_NAME_PLATE_ONLY", text = "Include Nameplate-only" },
     { value = "RAID_PLAYER_DISPELLABLE", text = "Dispellable by Group" },
     { value = "DISPELLABLE", text = "Any Dispel Type" },
+    { value = "IMPORTANT", text = "Important" },
     { value = "CROWD_CONTROL", text = "Crowd Control" },
-    { value = "NonPlayer", text = "Non-Player Auras" },
 }
 local function GFNativeFilterKey(token)
     return tostring(token or "ALL"):upper():gsub("[^A-Z0-9]", "")
 end
-local GF_CURRENT_BUFF_FILTER_TOKENS = {
-    ALL = "ALL",
-    PLAYER = "Player",
-    BIGDEFENSIVE = "BigDefensive",
-    BIGDEFENSIVEPLAYER = "BigDefensivePlayer",
-    EXTERNALDEFENSIVE = "ExternalDefensive",
-    EXTERNALDEFENSIVEPLAYER = "ExternalDefensivePlayer",
-    RAIDINCOMBAT = "RaidInCombat",
-    RAID = "Raid",
-    RAIDPLAYER = "RaidPlayer",
-}
-local GF_CURRENT_DEBUFF_FILTER_TOKENS = {
-    ALL = "ALL",
-    PLAYER = "Player",
-    RAID = "Raid",
-    RAIDINCOMBAT = "RaidInCombat",
-    RAIDPLAYERDISPELLABLE = "RAID_PLAYER_DISPELLABLE",
-    DISPELLABLE = "DISPELLABLE",
-    CROWDCONTROL = "CROWD_CONTROL",
-    NONPLAYER = "NonPlayer",
-}
---- Stored Group Aura filters must never retain a token that the current UI no
---- longer exposes. Reset retired/unknown filters to the lane's visible default
---- instead of silently continuing an uneditable Blizzard filter expression.
-local function NormalizeGFStoredFilterToken(lane, token)
-    local current = lane == "debuff" and GF_CURRENT_DEBUFF_FILTER_TOKENS
-        or lane == "buff" and GF_CURRENT_BUFF_FILTER_TOKENS
-        or nil
-    if not current then return token end
-    return current[GFNativeFilterKey(token)] or "ALL"
-end
-GF_AURA_FILTER.NormalizeFilterToken = NormalizeGFStoredFilterToken
 local GF_NATIVE_BUFF_FILTERS = {
     ALL = false,
     PLAYER = "PLAYER",
     BIGDEFENSIVEPLAYER = "BIG_DEFENSIVE|PLAYER",
     EXTERNALDEFENSIVEPLAYER = "EXTERNAL_DEFENSIVE|PLAYER",
+    RAIDINCOMBATPLAYER = "RAID_IN_COMBAT|PLAYER",
+    CANCELABLEPLAYER = "CANCELABLE|PLAYER",
+    NOTCANCELABLEPLAYER = "!CANCELABLE|PLAYER",
     RAIDPLAYER = "RAID|PLAYER",
-    BIGDEFENSIVE = "BIG_DEFENSIVE",
-    EXTERNALDEFENSIVE = "EXTERNAL_DEFENSIVE",
-    RAIDINCOMBAT = "RAID_IN_COMBAT",
-    RAID = "RAID",
+    BIGDEFENSIVE = "BIG_DEFENSIVE|!PLAYER",
+    EXTERNALDEFENSIVE = "EXTERNAL_DEFENSIVE|!PLAYER",
+    RAIDINCOMBAT = "RAID_IN_COMBAT|!PLAYER",
+    CANCELABLE = "CANCELABLE|!PLAYER",
+    NOTCANCELABLE = "!CANCELABLE|!PLAYER",
+    RAID = "RAID|!PLAYER",
+    IMPORTANT = "IMPORTANT",
+    INCLUDENAMEPLATEONLY = "INCLUDE_NAME_PLATE_ONLY",
 }
 local GF_NATIVE_DEBUFF_FILTERS = {
     ALL = false,
     PLAYER = "PLAYER",
-    RAID = "RAID",
-    RAIDINCOMBAT = "RAID_IN_COMBAT",
+    RAIDPLAYER = "RAID|PLAYER",
+    RAIDINCOMBATPLAYER = "RAID_IN_COMBAT|PLAYER",
+    RAID = "RAID|!PLAYER",
+    RAIDINCOMBAT = "RAID_IN_COMBAT|!PLAYER",
+    INCLUDENAMEPLATEONLY = "INCLUDE_NAME_PLATE_ONLY",
     RAIDPLAYERDISPELLABLE = "RAID_PLAYER_DISPELLABLE",
     DISPELLABLE = "DISPELLABLE",
+    IMPORTANT = "IMPORTANT",
     CROWDCONTROL = "CROWD_CONTROL",
-    NONPLAYER = false,
 }
-local function ResolveGFNativeFilter(lane, token, baseFilter, filterMap)
-    local key = GFNativeFilterKey(token)
-    local current = lane == "debuff" and GF_CURRENT_DEBUFF_FILTER_TOKENS or GF_CURRENT_BUFF_FILTER_TOKENS
-    if not current[key] then key = "ALL" end
-    local filter = filterMap[key]
+local function ResolveGFNativeFilter(token, baseFilter, filterMap)
+    local filter = filterMap[GFNativeFilterKey(token)]
     if filter == false then return baseFilter end
     if type(filter) == "string" and filter ~= "" then return baseFilter .. "|" .. filter end
     return baseFilter
 end
 GF_AURA_FILTER.ResolveBuffFilter = function(token)
-    return ResolveGFNativeFilter("buff", token, "HELPFUL", GF_NATIVE_BUFF_FILTERS)
+    return ResolveGFNativeFilter(token, "HELPFUL", GF_NATIVE_BUFF_FILTERS)
 end
 GF_AURA_FILTER.ResolveDebuffFilter = function(token)
-    return ResolveGFNativeFilter("debuff", token, "HARMFUL", GF_NATIVE_DEBUFF_FILTERS)
-end
-GF_AURA_FILTER.IsNonPlayerDebuffFilter = function(token)
-    return GFNativeFilterKey(token) == "NONPLAYER"
+    return ResolveGFNativeFilter(token, "HARMFUL", GF_NATIVE_DEBUFF_FILTERS)
 end
 -- Blizzard's 12.1 external-defensive token already selects defensives received
 -- from other players. Keep the dedicated lane identical to the native viewer;
@@ -1342,7 +1318,7 @@ function Model.EnsureDB()
     -- frame participation and shape-follow switches from upgraded profiles.
     shared.styleScopeDisabled = nil
     shared.iconShapeFollowSharedScopes = nil
-    local canonicalAuraModel = tonumber(auras.profileModelRevision) == 2
+    local canonicalAuraModel = tonumber(auras.profileModelRevision) == 1
     if canonicalAuraModel then
         -- The Defaults-owned factory is deliberately sparse and authoritative.
         -- Runtime/Menu readers already provide fallbacks, so do not densify a
@@ -1355,7 +1331,7 @@ function Model.EnsureDB()
     end
     -- The canonical profile model is already normalized.  Never seed legacy
     -- migration markers back into a freshly hard-reset Aura tree.
-    if tonumber(auras.profileModelRevision) ~= 2
+    if tonumber(auras.profileModelRevision) ~= 1
         and shared._msufA3_debuffTypeBorderModeMigrated_v1 ~= true then
         shared.debuffTypeBorderMode = shared.useDebuffTypeBorders == true and "SYMBOL" or NormalizeDebuffTypeBorderMode(shared.debuffTypeBorderMode, "OFF")
         shared._msufA3_debuffTypeBorderModeMigrated_v1 = true
@@ -1441,8 +1417,8 @@ end
 --- so pages, assistant commands, and edit-mode popups do not diverge.
 local function EffectiveLayoutTables(auras, unit)
     local pu = PerUnit(auras, unit, false)
-    local layout = (pu and type(pu.layout) == "table") and pu.layout or nil
-    local sharedLayout = (pu and type(pu.layoutShared) == "table") and pu.layoutShared or nil
+    local layout = (pu and pu.overrideLayout == true and type(pu.layout) == "table") and pu.layout or nil
+    local sharedLayout = (pu and pu.overrideSharedLayout == true and type(pu.layoutShared) == "table") and pu.layoutShared or nil
     return layout, sharedLayout, pu
 end
 
@@ -1522,14 +1498,15 @@ NormalizeSparseVisualOverrides = function(auras, shared)
 end
 
 local function ReadKeyRaw(auras, shared, unit, key)
-    local layout, sharedLayout = EffectiveLayoutTables(auras, unit)
+    local layout, sharedLayout, pu = EffectiveLayoutTables(auras, unit)
+    local styleActive = UnitStyleOverrideActive(pu)
     if LAYOUT_KEYS[key] then
-        if layout and layout[key] ~= nil then return layout[key] end
+        if layout and layout[key] ~= nil and (not STYLE_LAYOUT_KEYS[key] or styleActive) then return layout[key] end
     end
     if SHARED_LAYOUT_KEYS[key] then
-        if sharedLayout and sharedLayout[key] ~= nil then return sharedLayout[key] end
+        if sharedLayout and sharedLayout[key] ~= nil and (not STYLE_SHARED_LAYOUT_KEYS[key] or styleActive) then return sharedLayout[key] end
     end
-    return nil
+    return shared and shared[key]
 end
 
 local function WriteUnitLayoutValue(auras, shared, unit, key, value)
@@ -1537,12 +1514,25 @@ local function WriteUnitLayoutValue(auras, shared, unit, key, value)
         local pu = PerUnit(auras, runtimeUnit, true)
         if not pu then return end
         local styleKey = STYLE_LAYOUT_KEYS[key] == true or STYLE_SHARED_LAYOUT_KEYS[key] == true
+        if styleKey and pu.overrideStyle ~= true then
+            -- Visual sharing is independent from layout ownership. A unit can
+            -- keep custom geometry while all old Style fields are dormant; the
+            -- first Style edit must not reactivate the rest of that stale set.
+            ClearKeys(pu.layout, STYLE_LAYOUT_KEYS)
+            ClearKeys(pu.layoutShared, STYLE_SHARED_LAYOUT_KEYS)
+            pu.overrideStyle = true
+        end
         if SHARED_LAYOUT_KEYS[key] then
+            -- A disabled override table is dormant state, not an inheritance
+            -- source. Starting a new custom edit from it would reactivate old
+            -- unrelated values that were invisible while Shared was active.
+            if pu.overrideSharedLayout ~= true then pu.layoutShared = {} end
             if type(pu.layoutShared) ~= "table" then pu.layoutShared = {} end
             pu.overrideSharedLayout = true
             pu.layoutShared[key] = value
             if STYLE_SHARED_LAYOUT_KEYS[key] then pu.overrideStyle = true end
         else
+            if pu.overrideLayout ~= true then pu.layout = {} end
             if type(pu.layout) ~= "table" then pu.layout = {} end
             pu.overrideLayout = true
             pu.layout[key] = value
@@ -1609,14 +1599,20 @@ local function NormalizeSharedAppearanceKind(kind)
 end
 
 --- Shared Appearance is selected only by Aura product, never by Unit/Group
---- frame. Legacy scalar values are materialized once by Defaults and are not
---- active read owners afterwards.
+--- frame.  Buff/Debuff retain their legacy scalar fallback so existing
+--- profiles keep the exact same shape until the user changes this theme.
 function Model.ReadSharedAppearanceIconShape(kind)
     kind = NormalizeSharedAppearanceKind(kind)
     local _, shared = Model.EnsureDB()
     local shapes = type(shared) == "table" and shared.appearanceIconShapes or nil
     local value = type(shapes) == "table" and shapes[kind] or nil
-    value = tostring(value or (kind == "playerDefensives" and "FOLLOW_PORTRAIT" or "RECTANGLE"))
+    if value == nil then
+        local fallbackKind = kind == "targetDots" and "debuff"
+            or kind == "playerDefensives" and "buff" or kind
+        local key = fallbackKind == "debuff" and "debuffIconShape" or "buffIconShape"
+        value = type(shared) == "table" and (shared[key] or shared.iconShape) or nil
+    end
+    value = tostring(value or "RECTANGLE")
     return type(A3.NormalizeAuraIconShape) == "function" and A3.NormalizeAuraIconShape(value) or value
 end
 
@@ -1634,7 +1630,9 @@ function Model.WriteSharedAppearanceIconShape(kind, value)
 end
 
 --- Appearance values are global by Aura product. They deliberately have no
---- UnitFrame/GroupFrame scope and no participation switch.
+--- UnitFrame/GroupFrame scope and no participation switch. Legacy scalar
+--- values remain read-only fallbacks until a product is edited, preserving
+--- old profiles without keeping the former cross-scope ownership model alive.
 function Model.ReadSharedAppearanceValue(kind, key, defaultValue)
     kind = NormalizeSharedAppearanceKind(kind)
     local _, shared = Model.EnsureDB()
@@ -1642,6 +1640,7 @@ function Model.ReadSharedAppearanceValue(kind, key, defaultValue)
     local styles = type(shared.appearanceIconStyles) == "table" and shared.appearanceIconStyles or nil
     local style = type(styles) == "table" and styles[kind] or nil
     if type(style) == "table" and style[key] ~= nil then return style[key] end
+    if shared[key] ~= nil then return shared[key] end
     return defaultValue
 end
 
@@ -1733,7 +1732,9 @@ function Model.SetUnitEnabled(unit, enabled)
 end
 
 function Model.UseSharedVisuals(unit)
-    return false
+    local auras = Model.EnsureDB()
+    local pu = PerUnit(auras, unit, false)
+    return not UnitStyleOverrideActive(pu)
 end
 
 local function EnsureUnitStyleOverrides(auras, runtimeUnit)
@@ -1749,10 +1750,19 @@ local function EnsureUnitStyleOverrides(auras, runtimeUnit)
 end
 
 function Model.SetUseSharedVisuals(unit, useShared)
-    local auras = Model.EnsureDB()
+    local auras, shared = Model.EnsureDB()
     if type(auras) ~= "table" then return end
     EachRuntimeUnit(unit, function(runtimeUnit)
-        EnsureUnitStyleOverrides(auras, runtimeUnit)
+        local pu = PerUnit(auras, runtimeUnit, true)
+        if not pu then return end
+        if useShared then
+            pu.overrideStyle = false
+            ClearKeys(pu.layout, STYLE_LAYOUT_KEYS)
+            ClearKeys(pu.layoutShared, STYLE_SHARED_LAYOUT_KEYS)
+            RefreshLayoutOverrideFlags(pu)
+        else
+            EnsureUnitStyleOverrides(auras, runtimeUnit)
+        end
     end)
 end
 
@@ -1779,6 +1789,8 @@ function Model.WriteValue(unit, key, value)
         shared[key] = value
     elseif LAYOUT_KEYS[key] or SHARED_LAYOUT_KEYS[key] then
         WriteUnitLayoutValue(auras, shared, unit, key, value)
+    else
+        shared[key] = value
     end
 end
 
@@ -1821,7 +1833,8 @@ end
 function Model.ReadLanePerRow(unit, kind)
     kind = NormalizeKind(kind)
     local spec = GROUPS[kind]
-    return Model.ReadNumber(unit, spec and spec.perRowKey or "perRow", 12, 1, 40)
+    local fallback = Model.ReadNumber(unit, "perRow", 12, 1, 40)
+    return Model.ReadNumber(unit, spec and spec.perRowKey or "perRow", fallback, 1, 40)
 end
 
 function Model.WriteLanePerRow(unit, kind, value)
@@ -1830,10 +1843,14 @@ function Model.WriteLanePerRow(unit, kind, value)
     Model.WriteNumber(unit, spec and spec.perRowKey or "perRow", value, 1, 40)
 end
 
+--- Lane gaps are layout-owned exactly like the legacy common `spacing` value.
+--- The canonical profile writes both lane keys; the common value remains only
+--- as a defensive fallback for sparse or manually edited current payloads.
 function Model.ReadLaneSpacing(unit, kind)
     kind = NormalizeKind(kind)
     local spec = GROUPS[kind]
-    return Model.ReadNumber(unit, spec and spec.spacingKey or "spacing", 2, 0, 64)
+    local fallback = Model.ReadNumber(unit, "spacing", 2, 0, 64)
+    return Model.ReadNumber(unit, spec and spec.spacingKey or "spacing", fallback, 0, 64)
 end
 
 function Model.WriteLaneSpacing(unit, kind, value)
@@ -1845,7 +1862,7 @@ end
 function Model.ReadLaneGrowth(unit, kind)
     kind = NormalizeKind(kind)
     local spec = GROUPS[kind]
-    local fallback = "RIGHT"
+    local fallback = Model.ReadGrowth(unit)
     local v = tostring(Model.ReadValue(unit, spec and spec.growthKey or "growth", fallback) or fallback)
     return GROWTH_OK[v] and v or fallback
 end
@@ -1876,7 +1893,7 @@ end
 function Model.ReadLaneRowWrap(unit, kind)
     kind = NormalizeKind(kind)
     local spec = GROUPS[kind]
-    local fallback = "DOWN"
+    local fallback = Model.ReadRowWrap(unit)
     local v = tostring(Model.ReadValue(unit, spec and spec.wrapKey or "rowWrap", fallback) or fallback)
     return ROW_WRAP_OK[v] and v or fallback
 end
@@ -2229,7 +2246,7 @@ function Model.CustomContainer(unit, index, create)
         record.items[index] = item
     end
     if index == PLAYER_DEFENSIVE_CONTAINER_INDEX and unit == "player" then
-        EnforcePlayerDefensiveContainer(item, (tonumber(auras and auras.profileModelRevision) or 0) >= 1)
+        EnforcePlayerDefensiveContainer(item, tonumber(auras and auras.profileModelRevision) == 1)
     elseif index == TARGET_DOT_CONTAINER_INDEX then
         EnforceTargetDotContainer(item)
     end
@@ -2784,13 +2801,20 @@ local function ReadLaneStyleRaw(unit, kind, key)
     local auras, shared = Model.EnsureDB()
     if type(shared) ~= "table" then return nil end
     local laneKey = LaneStyleKey(kind, key)
-    if NormalizeScope(unit) == "shared" then return shared[laneKey] end
-    local layout, sharedLayout = EffectiveLayoutTables(auras, unit)
-    local localOwner = STYLE_SHARED_LAYOUT_KEYS[laneKey] and sharedLayout or layout
-    if type(localOwner) == "table" then
-        return localOwner[laneKey]
+    if NormalizeScope(unit) ~= "shared" then
+        local layout, sharedLayout, pu = EffectiveLayoutTables(auras, unit)
+        if UnitStyleOverrideActive(pu) then
+            local localOwner = STYLE_SHARED_LAYOUT_KEYS[laneKey] and sharedLayout or layout
+            if type(localOwner) == "table" then
+                local value = localOwner[laneKey]
+                if value == nil and laneKey ~= key then value = localOwner[key] end
+                if value ~= nil then return value end
+            end
+        end
     end
-    return nil
+    local value = shared[laneKey]
+    if value == nil and laneKey ~= key then value = shared[key] end
+    return value
 end
 
 function Model.ReadLaneStyleBool(unit, kind, key, defaultValue)
@@ -2823,8 +2847,8 @@ function Model.ReadDebuffTypeBorderMode(unit)
     local auras, shared = Model.EnsureDB()
     if type(shared) ~= "table" then return "OFF" end
     if NormalizeScope(unit) ~= "shared" then
-        local _, sharedLayout = EffectiveLayoutTables(auras, unit)
-        if type(sharedLayout) == "table" then
+        local _, sharedLayout, pu = EffectiveLayoutTables(auras, unit)
+        if UnitStyleOverrideActive(pu) and type(sharedLayout) == "table" then
             local storedMode = sharedLayout.debuffTypeBorderMode
             if storedMode == nil then storedMode = sharedLayout.dispelBorderMode end
             if storedMode ~= nil then
@@ -2939,7 +2963,8 @@ end
 function Model.GroupShown(unit, kind)
     kind = NormalizeKind(kind)
     local spec = GROUPS[kind]
-    if not spec or Model.ReadBool(unit, spec.showKey, true) ~= true then return false end
+    local _, shared = Model.EnsureDB()
+    if not spec or type(shared) ~= "table" or shared[spec.showKey] == false then return false end
     return Model.ReadNumber(unit, spec.maxKey, 12, 0, 80) > 0
 end
 
@@ -2947,33 +2972,21 @@ function Model.SetGroupShown(unit, kind, shown)
     kind = NormalizeKind(kind)
     local spec = GROUPS[kind]
     if not spec then return end
-    Model.WriteBool(unit, spec.showKey, shown == true)
+    local _, shared = Model.EnsureDB()
+    if type(shared) ~= "table" then return end
     if shown then
+        shared[spec.showKey] = true
         if Model.ReadNumber(unit, spec.maxKey, 0, 0, 80) <= 0 then
             Model.WriteNumber(unit, spec.maxKey, kind == "buff" and 8 or 12, 0, 80)
         end
+    else
+        Model.WriteNumber(unit, spec.maxKey, 0, 0, 80)
     end
 end
 
 --- Filter scopes are independent from visual layout scopes. A unit can share
 --- its icon positions while overriding aura rules, so reads/writes go through
 --- EnsureScopeFilters rather than the layout helpers above.
-local function EnsureRuntimeFilters(auras, shared, unit, create)
-    local pu = PerUnit(auras, unit, create)
-    if not pu then return DEFAULT_SHARED.filters end
-    if create then
-        pu.overrideFilters = true
-        if type(pu.filters) ~= "table" then pu.filters = DeepCopy(DEFAULT_SHARED.filters) end
-        DefaultsIntoOnce(pu.filters, DEFAULT_SHARED.filters)
-        return pu.filters
-    end
-    if type(pu.filters) == "table" then
-        DefaultsIntoOnce(pu.filters, DEFAULT_SHARED.filters)
-        return pu.filters
-    end
-    return DEFAULT_SHARED.filters
-end
-
 local function EnsureScopeFilters(scope, create)
     local auras, shared = Model.EnsureDB()
     scope = NormalizeScope(scope)
@@ -2981,37 +2994,47 @@ local function EnsureScopeFilters(scope, create)
         DefaultsIntoOnce(shared.filters, DEFAULT_SHARED.filters)
         return shared.filters
     end
-    return EnsureRuntimeFilters(auras, shared, RuntimeUnit(scope), create)
-end
 
-local function ForEachScopeFilters(scope, create, callback)
-    if type(callback) ~= "function" then return end
-    local auras, shared = Model.EnsureDB()
-    scope = NormalizeScope(scope)
-    if scope == "shared" then
-        DefaultsIntoOnce(shared.filters, DEFAULT_SHARED.filters)
-        callback(shared.filters, true, shared)
-        return
+    local unit = RuntimeUnit(scope)
+    local pu = PerUnit(auras, unit, create)
+    if not pu then return shared.filters end
+    if create then
+        if pu.overrideFilters ~= true then
+            pu.filters = DeepCopy(shared.filters or DEFAULT_SHARED.filters)
+        end
+        pu.overrideFilters = true
+        if type(pu.filters) ~= "table" then pu.filters = DeepCopy(shared.filters or DEFAULT_SHARED.filters) end
+        DefaultsIntoOnce(pu.filters, DEFAULT_SHARED.filters)
+        return pu.filters
     end
-    EachRuntimeUnit(scope, function(runtimeUnit)
-        callback(EnsureRuntimeFilters(auras, shared, runtimeUnit, create), false, shared)
-    end)
+    if pu.overrideFilters == true and type(pu.filters) == "table" then
+        DefaultsIntoOnce(pu.filters, DEFAULT_SHARED.filters)
+        return pu.filters
+    end
+    return shared.filters
 end
 
 function Model.UseSharedRules(scope)
-    return false
+    scope = NormalizeScope(scope)
+    if scope == "shared" then return true end
+    local auras = Model.EnsureDB()
+    local pu = PerUnit(auras, scope, false)
+    return not (pu and pu.overrideFilters == true)
 end
 
 function Model.SetUseSharedRules(scope, useShared)
     scope = NormalizeScope(scope)
     if scope == "shared" then return end
-    local auras, shared = Model.EnsureDB()
     EachRuntimeUnit(scope, function(runtimeUnit)
-        local pu = PerUnit(auras, runtimeUnit, true)
+        local pu = PerUnit(Model.EnsureDB(), runtimeUnit, true)
         if not pu then return end
-        local f = EnsureRuntimeFilters(auras, shared, runtimeUnit, true)
-        pu.filters = f
-        pu.overrideFilters = true
+        if useShared then
+            pu.overrideFilters = false
+        else
+            local f = EnsureScopeFilters(runtimeUnit, true)
+            pu.filters = f
+            pu.overrideFilters = true
+        end
     end)
 end
 
@@ -3028,40 +3051,22 @@ function Model.ReadFilter(scope, kind, key, defaultValue)
 end
 
 function Model.WriteFilter(scope, kind, key, value)
+    local filters = EnsureScopeFilters(scope, true)
     kind = NormalizeKind(kind)
     local tableKey = kind == "buff" and "buffs" or "debuffs"
+    if type(filters[tableKey]) ~= "table" then filters[tableKey] = {} end
     if key == "exclusive" and value == "important" then value = "none" end
-    ForEachScopeFilters(scope, true, function(filters)
-        if type(filters) ~= "table" then return end
-        if type(filters[tableKey]) ~= "table" then filters[tableKey] = {} end
-        filters[tableKey][key] = value
-    end)
-end
-
-function Model.LaneFiltersEnabled(scope, kind)
-    local filters = EnsureScopeFilters(scope, false)
-    kind = NormalizeKind(kind)
-    local tableKey = kind == "buff" and "buffs" or "debuffs"
-    local lane = type(filters) == "table" and filters[tableKey] or nil
-    return type(lane) ~= "table" or lane.enabled ~= false
-end
-
-function Model.SetLaneFiltersEnabled(scope, kind, enabled)
-    kind = NormalizeKind(kind)
-    local tableKey = kind == "buff" and "buffs" or "debuffs"
-    ForEachScopeFilters(scope, true, function(filters)
-        if type(filters) ~= "table" then return end
-        if type(filters[tableKey]) ~= "table" then filters[tableKey] = {} end
-        filters[tableKey].enabled = enabled == true
-    end)
+    filters[tableKey][key] = value
 end
 
 function Model.ScopeFiltersEnabled(scope)
-    return Model.LaneFiltersEnabled(scope, "buff")
-        and Model.LaneFiltersEnabled(scope, "debuff")
+    local filters = EnsureScopeFilters(scope, false)
+    return type(filters) ~= "table" or filters.enabled ~= false
 end
 
-local function ApplyScopeFiltersEnabled(filters, enabled, sharedScope, shared)
+function Model.SetScopeFiltersEnabled(scope, enabled)
+    local _, shared = Model.EnsureDB()
+    local filters = EnsureScopeFilters(scope, true)
     if type(filters) ~= "table" then return end
 
     local snap = filters.disabledSnapshot
@@ -3077,7 +3082,7 @@ local function ApplyScopeFiltersEnabled(filters, enabled, sharedScope, shared)
                     end
                 end
             end
-            if sharedScope and type(shared) == "table" then
+            if NormalizeScope(scope) == "shared" and type(shared) == "table" then
                 if snap.onlyMyBuffs ~= nil then shared.onlyMyBuffs = snap.onlyMyBuffs end
                 if snap.onlyMyDebuffs ~= nil then shared.onlyMyDebuffs = snap.onlyMyDebuffs end
             end
@@ -3103,7 +3108,7 @@ local function ApplyScopeFiltersEnabled(filters, enabled, sharedScope, shared)
                 snap[groupKey] = groupSnap
             end
         end
-        if sharedScope and type(shared) == "table" then
+        if NormalizeScope(scope) == "shared" and type(shared) == "table" then
             snap.onlyMyBuffs = shared.onlyMyBuffs
             snap.onlyMyDebuffs = shared.onlyMyDebuffs
         end
@@ -3133,24 +3138,13 @@ local function ApplyScopeFiltersEnabled(filters, enabled, sharedScope, shared)
         filters.debuffs.includeDispellable = false
         filters.debuffs.dispellableAny = false
         filters.debuffs.crowdControl = false
-        filters.debuffs.nonPlayer = false
         filters.debuffs.exclusive = "none"
     end
-    if sharedScope and type(shared) == "table" then
+    if NormalizeScope(scope) == "shared" and type(shared) == "table" then
         shared.onlyMyBuffs = false
         shared.onlyMyDebuffs = false
     end
     filters.enabled = false
-end
-
-function Model.SetScopeFiltersEnabled(scope, enabled)
-    ForEachScopeFilters(scope, true, function(filters, sharedScope, shared)
-        ApplyScopeFiltersEnabled(filters, enabled == true, sharedScope, shared)
-        filters.buffs = type(filters.buffs) == "table" and filters.buffs or {}
-        filters.debuffs = type(filters.debuffs) == "table" and filters.debuffs or {}
-        filters.buffs.enabled = enabled == true
-        filters.debuffs.enabled = enabled == true
-    end)
 end
 
 --- Blacklists remain saved in human-editable form. The 12.1 native runtime does
@@ -3977,7 +3971,6 @@ function Model.Apply(unit, reason)
         elseif type(A3.UpdateUnitAnchor) == "function" then
             A3.UpdateUnitAnchor(runtimeUnit)
         end
-        return "OFF"
     end
     if unit and IsGroupApplyScope(unit) then
         RefreshGroup(unit)

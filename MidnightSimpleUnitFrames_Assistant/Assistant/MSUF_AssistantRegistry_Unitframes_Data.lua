@@ -146,18 +146,16 @@ Data.TOT_INLINE_COLOR_ALIASES = {
 }
 Data.TOT_INLINE_SEPARATOR_CUSTOM = "__CUSTOM__"
 Data.LOAD_CONDITION_SPECS = {
-    { key = "loadCondHideInHousing", label = "Hide in Housing", aliases = { "hide in housing", "housing load condition" } },
-    { key = "loadCondHideInCombat", label = "Hide in Combat", aliases = { "hide in combat", "combat load condition" } },
+    { key = "loadCondHideMounted", label = "Hide Mounted", aliases = { "hide mounted", "mounted load condition" } },
+    { key = "loadCondHideOutOfCombat", label = "Hide Out of Combat", aliases = { "hide out of combat", "out of combat load condition" } },
+    { key = "loadCondHideSolo", label = "Hide Solo", aliases = { "hide solo", "solo load condition" } },
+    { key = "loadCondHideInVehicle", label = "Hide in Vehicle", aliases = { "hide in vehicle", "vehicle load condition" } },
     { key = "loadCondHideInGroup", label = "Hide in Group", aliases = { "hide in group", "group load condition" } },
     { key = "loadCondHideInInstance", label = "Hide in Instance", aliases = { "hide in instance", "instance load condition" } },
-    { key = "loadCondHideInVehicle", label = "Hide in Vehicle", aliases = { "hide in vehicle", "vehicle load condition" } },
-    { key = "loadCondHideMounted", label = "Hide Mounted", aliases = { "hide mounted", "mounted load condition" } },
-    { key = "loadCondHideNoTarget", label = "Hide with No Target", aliases = { "hide with no target", "no target load condition" } },
-    { key = "loadCondHideOutOfCombat", label = "Hide Out of Combat", aliases = { "hide out of combat", "out of combat load condition" } },
-    { key = "loadCondHideOutOfCombatNoTarget", label = "Hide Out of Combat with No Target", aliases = { "hide out of combat with no target", "target or combat load condition" } },
     { key = "loadCondHideResting", label = "Hide Resting", aliases = { "hide resting", "resting load condition" } },
-    { key = "loadCondHideSolo", label = "Hide Solo", aliases = { "hide solo", "solo load condition" } },
+    { key = "loadCondHideInCombat", label = "Hide in Combat", aliases = { "hide in combat", "combat load condition" } },
     { key = "loadCondHideStealthed", label = "Hide Stealthed", aliases = { "hide stealthed", "stealth load condition" } },
+    { key = "loadCondHideInHousing", label = "Hide in Housing", aliases = { "hide in housing", "housing load condition" } },
 }
 Data.STATUS_TEXT_STATE_SPECS = {
     {

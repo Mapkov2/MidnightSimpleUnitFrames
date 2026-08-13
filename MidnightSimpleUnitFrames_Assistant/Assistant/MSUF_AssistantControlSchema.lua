@@ -460,7 +460,6 @@ function Schema.Find(query, opts)
     local queryTokenKey = table.concat(exactTokens, "\031")
     local queryIdentityKey = normalized
     local queryIdentityAlternate = CanonicalIdentityQuery(query)
-    local queryRawLabel = Trim(query):lower()
     local cacheKey = contextId .. "\031" .. stateId .. "\031" .. tostring(limit) .. "\031" .. normalized
     if searchCache[cacheKey] then
         local copy = {}
@@ -498,13 +497,6 @@ function Schema.Find(query, opts)
     for i, row in ipairs(built.rows) do
         local wrongUnitPage = allowedUnitPages and SCOPE_PAGES[tostring(row.pageKey or "")]
             and not allowedUnitPages[tostring(row.pageKey or "")]
-        -- A scope word can also be part of the control's complete label. For
-        -- example, "Current target only" exists on every Unit Frame page and
-        -- must remain ambiguous without a separately named frame. Preserve
-        -- exact duplicate labels here; explicit scoped requests still filter.
-        if wrongUnitPage and tostring(row.label or ""):lower() == queryRawLabel then
-            wrongUnitPage = false
-        end
         if not wrongUnitPage and Available(row, contextId) and StateAvailable(row, stateId) then
             local score, matched, labelHits = 0, 0, 0
             for t = 1, #tokens do
@@ -1478,8 +1470,8 @@ local function IsLaunchableMode(row)
     -- offered as runnable test modes because the marker matches the path.
     if path:find("/preview/palette/", 1, true) then return false end
     if path:find("/preview/height/", 1, true) then return false end
-    -- Appearance's Aura-type selector chooses which product-specific dummy and
-    -- settings are shown; it does not launch a preview mode.
+    -- Appearance's Aura-type selector chooses which shared dummy/settings are
+    -- shown; it does not launch a preview mode.
     if path:find("auras/style/container/selector", 1, true) then return false end
     local text = " " .. ModeText(row) .. " "
     local marked = HasAny(text, MODE_MARKERS)
@@ -1621,9 +1613,11 @@ local function CurrentValueResult(top)
         status = "info", result = "info", summary = top.label, value = value }
 end
 
--- Menu2 can render one exact control on several pages. Offering those mirrors
--- as rival choices -- or refusing because "more than one control matched" --
--- is noise about a value that still has exactly one product-specific home.
+-- Menu2 renders one surface on several pages: the shared aura icon style shows
+-- up on Auras > Buffs, > Debuffs and > Styling, and all three write the single
+-- MSUF_DB.auras3.shared field. Offering them as rival choices -- or refusing
+-- because "more than one control matched" -- is noise about a value that has
+-- exactly one home.
 --
 -- Identity has to be exact before two rows may merge: same path, name, widget,
 -- value domain and setting key. The page must additionally be a plain menu
@@ -1745,20 +1739,7 @@ function Schema.TryConversation(text)
     end
 
     local searchText, verblessText
-    if mutation then
-        searchText, verblessText = MutationTargetText(text)
-    else
-        searchText = text
-        if explicitNavigation then
-            local navigationTarget = Normalize(text):gsub("^please%s+", ""):gsub("^bitte%s+", "")
-            navigationTarget = navigationTarget
-                :gsub("^take me to%s+", ""):gsub("^go to%s+", ""):gsub("^navigate to%s+", "")
-                :gsub("^jump to%s+", ""):gsub("^direct me to%s+", ""):gsub("^show me%s+", "")
-                :gsub("^bring me to%s+", ""):gsub("^fuehre mich zu%s+", "")
-                :gsub("^open%s+", ""):gsub("^oeffne%s+", "")
-            if navigationTarget ~= "" then searchText = navigationTarget end
-        end
-    end
+    if mutation then searchText, verblessText = MutationTargetText(text) else searchText = text end
     local results = Schema.Find(searchText, { limit = 4 })
     if #results == 0 and verblessText then results = Schema.Find(verblessText, { limit = 4 }) end
     if #results == 0 then
@@ -1899,7 +1880,7 @@ function Schema.TryConversation(text)
         -- different aura pages). A numbered list of identical names is no more
         -- answerable than no list at all, so every entry carries the page that
         -- tells them apart.
-        local function ChoiceBaseLabel(row)
+        local function ChoiceLabel(row)
             local label = tostring(DisplayLabel(row) ~= "" and DisplayLabel(row)
                 or row.matchedValue or row.semanticId or "")
             local pageKey = tostring(row.pageKey or "")
@@ -1911,21 +1892,10 @@ function Schema.TryConversation(text)
             return label .. " - " .. page
         end
 
-        local function ChoiceLabel(row, rowIndex)
-            local label = ChoiceBaseLabel(row)
-            for otherIndex = 1, count do
-                if otherIndex ~= rowIndex and ChoiceBaseLabel(results[otherIndex]) == label then
-                    local hint = DistinguishingSegment(row, results[otherIndex])
-                    if hint ~= "" then return label .. " (" .. hint .. ")" end
-                end
-            end
-            return label
-        end
-
         local choices = {}
         for i = 1, count do
             local row = results[i]
-            local label = ChoiceLabel(row, i)
+            local label = ChoiceLabel(row)
             local settingKey = Trim(row.settingKey)
             local setting = settingKey ~= "" and Registry and type(Registry.GetSetting) == "function"
                 and Registry:GetSetting(settingKey) or nil

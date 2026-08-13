@@ -1111,17 +1111,6 @@ local PlaceHandleAroundRegions = GFTextFocus.PlaceHandleAroundRegions or F.False
 local NormalizeTextFocusKind = GFTextFocus.NormalizeTextFocusKind or F.Identity
 local NormalizeTextFocusSlot = GFTextFocus.NormalizeTextFocusSlot or F.Identity
 local ApplyTextFocus = GFTextFocus.ApplyTextFocus or F.Noop
-local function SpellPlacedForHandle(handle, conf)
-    local item = handle and handle._cfgSpellItem
-    if type(item) ~= "table" then return nil end
-    local specKey, auraName = item.specKey, item.auraName
-    local specs = conf and conf.spellIndicators and conf.spellIndicators.specs
-    local cfg = specKey and auraName and type(specs) == "table"
-        and type(specs[specKey]) == "table" and specs[specKey][auraName] or nil
-    if type(cfg) == "table" and type(cfg.placed) == "table" then return cfg.placed end
-    if type(handle._msufSpellIndicatorPlaced) == "table" then return handle._msufSpellIndicatorPlaced end
-    return nil
-end
 local function HandleOffsets(handle)
     if not handle then return nil end
     local conf = Conf(CurrentScope()) or {}
@@ -1137,15 +1126,7 @@ local function HandleOffsets(handle)
         if not spec then return nil end
         return conf[spec.anchor] or spec.defaultAnchor, tonumber(conf[spec.x]) or 0, tonumber(conf[spec.y]) or 0
     elseif handle._cfgSpell then
-        -- Dynamic preview handles own an exact spec+aura identity. Never let
-        -- their coordinates fall back to whichever spell the menu happened
-        -- to select previously.
-        local cfg
-        if handle._cfgSpellItem then
-            cfg = SpellPlacedForHandle(handle, conf) or {}
-        else
-            cfg = CurrentSpellPlaced(CurrentScope()) or {}
-        end
+        local cfg = CurrentSpellPlaced(CurrentScope()) or {}
         return cfg.anchor, tonumber(cfg.x) or 0, tonumber(cfg.y) or 0
     elseif handle._cfgDispelSymbol then
         return "DISPEL", tonumber(conf.dispelSymbolX) or 0, tonumber(conf.dispelSymbolY) or 0

@@ -53,7 +53,6 @@ function A.DiagnosticsRegistry.BuildAuraDiagnosticFilterHelpers(ctx)
             { key = "includeNameplateOnly", label = "including nameplate-only debuffs" },
             { key = "includeDispellable", label = "only dispellable debuffs" },
             { key = "crowdControl", label = "only crowd-control debuffs" },
-            { key = "nonPlayer", label = "only debuffs not caused by players or player pets" },
         },
     }
 

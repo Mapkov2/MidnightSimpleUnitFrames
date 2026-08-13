@@ -69,18 +69,16 @@ local CASTBAR_COPY_SUFFIXES = WL [[IconPosition IconSize IconZoom IconOffsetX Ic
 --- both castbars on the same screen spot. Only the relative case travels.
 local CASTBAR_TARGET_NAME_COPY_SUFFIXES = WL [[TargetNamePosition TargetNameFontSize TargetNameAlign TargetNameOffsetX TargetNameOffsetY TargetNameColorR TargetNameColorG TargetNameColorB]]
 local LOAD_CONDITIONS = KLR [[
-loadCondHideInHousing=Housing
-loadCondHideInCombat=In combat
+loadCondHideMounted=Mounted
+loadCondHideOutOfCombat=Out of combat
+loadCondHideSolo=Solo
+loadCondHideInVehicle=In vehicle
 loadCondHideInGroup=In group
 loadCondHideInInstance=In instance
-loadCondHideInVehicle=In vehicle
-loadCondHideMounted=Mounted
-loadCondHideNoTarget=No target
-loadCondHideOutOfCombat=Out of combat
-loadCondHideOutOfCombatNoTarget=Out of combat and no target
 loadCondHideResting=Resting
-loadCondHideSolo=Solo
+loadCondHideInCombat=In combat
 loadCondHideStealthed=Stealthed
+loadCondHideInHousing=Housing
 ]]
 local STATUS_ANCHORS = VTP "TOPLEFT=Top Left|TOPRIGHT=Top Right|BOTTOMLEFT=Bottom Left|BOTTOMRIGHT=Bottom Right|CENTER=Center|TOP=Top|BOTTOM=Bottom|LEFT=Left|RIGHT=Right"
 local STATUS_CORNER_ANCHORS = STATUS_ANCHORS
@@ -310,7 +308,7 @@ for _, texP in ipairs({ "texLayer", "texLayer2", "texLayer3" }) do
         COPY_TEXLAYER_FIELDS[#COPY_TEXLAYER_FIELDS + 1] = texP .. texBase
     end
 end
-local COPY_LOAD_CONDITION_FIELDS = WL [[loadCondHideInHousing loadCondHideInCombat loadCondHideInGroup loadCondHideInInstance loadCondHideInVehicle loadCondHideMounted loadCondHideNoTarget loadCondHideOutOfCombat loadCondHideOutOfCombatNoTarget loadCondHideResting loadCondHideSolo loadCondHideStealthed loadCondActive]]
+local COPY_LOAD_CONDITION_FIELDS = WL [[loadCondHideMounted loadCondHideInVehicle loadCondHideResting loadCondHideInCombat loadCondHideOutOfCombat loadCondHideStealthed loadCondHideSolo loadCondHideInGroup loadCondHideInInstance loadCondHideInHousing loadCondActive]]
 --- Size only. Placement (offsetX/offsetY, point/relativePoint, anchorFrameName and
 --- anchorToUnitframe) must never travel through Copy To: two unit frames sharing a
 --- placement land exactly on top of each other, and the covered one is then

@@ -43,11 +43,6 @@ local function RegisterBarsString(dbKey, attr, label, defaultValue, aliases, opt
         exactAliases = opts.exactAliases,
         valuePrefixes = opts.valuePrefixes or aliases,
         mediaType = opts.mediaType,
-        -- A texture key is stored canonically ("flat" -> "Flat"), so without
-        -- this the transaction's verify step compares the request to the
-        -- stored value, sees a difference and rolls the write back with
-        -- "I could not safely apply that change".
-        normalizesValue = opts.normalizeValue ~= nil,
         get = function()
             local value = BarsDB()[dbKey]
             if type(value) ~= "string" or value == "" then return defaultValue or "" end

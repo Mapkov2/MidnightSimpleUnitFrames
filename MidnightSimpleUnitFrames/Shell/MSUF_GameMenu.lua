@@ -22,24 +22,17 @@ local BUTTON_LABEL = "MSUF"
 local ICON_PATH = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\MSUF_MinimapIcon.tga"
 local ICON_SIZE = 20
 local ICON_GAP = Space("sm", 8)
+local FONT_SIZE = 13
+local DEFAULT_BUTTON_HEIGHT = Space("xl", 24)
 local BODY_OFFSET_Y = Space("md", 12)
 local EXIT_OFFSET_Y = -Space("xxl", 32) + Space("xs", 4)
 local HEIGHT_PADDING = Space("md", 12)
-local ELLESMERE_BUTTON_KEEP = { "MSUFGameMenuIcon" }
 
 local exitLabels = {}
 local runtimeEnabled = false
 local positionGeneration = 0
 local initFrame
 local HookGameMenu
-local ellesmereSkin
-
-local function ApplyEllesmereSkin(button)
-    if not (ellesmereSkin and button) then return end
-    ellesmereSkin.Button(button, ELLESMERE_BUTTON_KEEP)
-    ellesmereSkin.Font(button:GetFontString())
-    ellesmereSkin.WhiteButtonLabel(button)
-end
 
 local function AddExitLabel(text)
     if type(text) == "string" and text ~= "" then
@@ -81,16 +74,28 @@ local function IsGameMenuButtonEnabled()
     return g.showGameMenuButton ~= false
 end
 
-local function SetButtonLabel(button, styleSource)
+local function SetButtonLabel(button)
     if not button then return end
 
     button:SetText(BUTTON_LABEL)
 
+    if type(button.SetNormalFontObject) == "function" and _G.GameFontNormal then
+        button:SetNormalFontObject(_G.GameFontNormal)
+    end
+    if type(button.SetHighlightFontObject) == "function" and _G.GameFontHighlight then
+        button:SetHighlightFontObject(_G.GameFontHighlight)
+    end
+    if type(button.SetDisabledFontObject) == "function" and _G.GameFontDisable then
+        button:SetDisabledFontObject(_G.GameFontDisable)
+    end
+
     local width = button.GetWidth and button:GetWidth()
     local fontString = button.GetFontString and button:GetFontString()
-    local sourceFontString = styleSource and styleSource.GetFontString and styleSource:GetFontString()
-    if fontString and sourceFontString then
-        fontString:SetFont(sourceFontString:GetFont())
+    if fontString and type(fontString.SetFontObject) == "function" then
+        fontString:SetFontObject(_G.GameFontHighlight)
+    end
+    if fontString and type(fontString.SetFont) == "function" and type(_G.STANDARD_TEXT_FONT) == "string" then
+        fontString:SetFont(_G.STANDARD_TEXT_FONT, FONT_SIZE, "")
     end
     if fontString and type(fontString.SetShadowOffset) == "function" then
         fontString:SetShadowOffset(1, -1)
@@ -182,12 +187,16 @@ local function EnsureButton()
         return button
     end
 
-    local getTemplateInfo = _G.C_XMLUtil and _G.C_XMLUtil.GetTemplateInfo
-    local buttonTemplate = gameMenu.buttonTemplate
-    if not (getTemplateInfo and buttonTemplate and getTemplateInfo(buttonTemplate)) then
-        buttonTemplate = "UIPanelButtonTemplate"
+    -- CreateFrame raises on an unknown template; probe template existence with
+    -- the sanctioned no-throw API instead of protecting the call.
+    local xmlUtil = _G.C_XMLUtil
+    local hasTemplate = xmlUtil and type(xmlUtil.GetTemplateInfo) == "function"
+        and xmlUtil.GetTemplateInfo("GameMenuButtonTemplate") ~= nil
+    if hasTemplate then
+        button = CreateFrame("Button", BUTTON_NAME, gameMenu, "GameMenuButtonTemplate")
+    else
+        button = CreateFrame("Button", BUTTON_NAME, gameMenu, "UIPanelButtonTemplate")
     end
-    button = CreateFrame("Button", BUTTON_NAME, gameMenu, buttonTemplate)
     if not button then return nil end
 
     SetButtonLabel(button)
@@ -196,14 +205,6 @@ local function EnsureButton()
 
     gameMenu.MSUF = button
     return button
-end
-
-local ellesmere = _G.EllesmereUI
-if ellesmere and type(ellesmere.RegisterSkin) == "function" then
-    ellesmere.RegisterSkin(tostring(addonName or "MidnightSimpleUnitFrames"), function(skin)
-        ellesmereSkin = skin
-        ApplyEllesmereSkin(_G[BUTTON_NAME])
-    end)
 end
 
 local function GetPointSnapshot(button)
@@ -370,18 +371,18 @@ local function PositionGameMenuButton()
         return
     end
 
-    local anchorWidth, anchorHeight = anchorButton:GetSize()
-    local skinInset = ellesmereSkin and 2 or 0
-    button:SetSize(math.max(1, anchorWidth - skinInset * 2), math.max(1, anchorHeight - skinInset * 2))
+    local anchorWidth = anchorButton.GetWidth and anchorButton:GetWidth()
+    local anchorHeight = anchorButton.GetHeight and anchorButton:GetHeight()
+    if anchorWidth and anchorWidth > 0 then button:SetWidth(anchorWidth) end
+    if anchorHeight and anchorHeight > 0 then button:SetHeight(anchorHeight) end
 
     button:ClearAllPoints()
-    button:SetPoint("TOPLEFT", anchorButton, "BOTTOMLEFT", skinInset, -skinInset)
-    button:SetPoint("TOPRIGHT", anchorButton, "BOTTOMRIGHT", -skinInset, -skinInset)
-    SetButtonLabel(button, anchorButton)
-    ApplyEllesmereSkin(button)
+    button:SetPoint("TOPLEFT", anchorButton, "BOTTOMLEFT", 0, 0)
+    button:SetPoint("TOPRIGHT", anchorButton, "BOTTOMRIGHT", 0, 0)
+    SetButtonLabel(button)
     button:Show()
 
-    local addedHeight = anchorHeight + HEIGHT_PADDING
+    local addedHeight = (button:GetHeight() or DEFAULT_BUTTON_HEIGHT) + HEIGHT_PADDING
     local adjustedHeight = baseHeight + addedHeight
     gameMenu.MSUFAddedHeight = addedHeight
     gameMenu.MSUFAdjustedHeight = adjustedHeight

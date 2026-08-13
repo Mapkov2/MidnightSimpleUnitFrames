@@ -21,9 +21,10 @@ function A.RegistryCoreBuilders.BuildUnitAuraLaneHelpers(ctx)
     local ClampNumber = ctx.ClampNumber
     local AuraUnitEnabled = ctx.AuraUnitEnabled
     local SetAuraUnitEnabled = ctx.SetAuraUnitEnabled
+    local SetAuraSharedBool = ctx.SetAuraSharedBool
 
     if type(AuraModel) ~= "function" or type(EnsureAuraFallbackDB) ~= "function" or type(ClampNumber) ~= "function" then return nil end
-    if type(AuraUnitEnabled) ~= "function" or type(SetAuraUnitEnabled) ~= "function" then return nil end
+    if type(AuraUnitEnabled) ~= "function" or type(SetAuraUnitEnabled) ~= "function" or type(SetAuraSharedBool) ~= "function" then return nil end
 
     local function AuraLaneFields(kind)
         return AURA_LANE_FIELDS[kind == "buff" and "buff" or "debuff"] or {}
@@ -39,7 +40,8 @@ function A.RegistryCoreBuilders.BuildUnitAuraLaneHelpers(ctx)
     local function AuraReadNumber(scope, key, defaultValue, minValue, maxValue)
         local Model = AuraModel()
         if Model and type(Model.ReadNumber) == "function" then return Model.ReadNumber(scope, key, defaultValue, minValue, maxValue) end
-        return ClampNumber(defaultValue, minValue, maxValue, 1) or defaultValue
+        local _, shared = EnsureAuraFallbackDB()
+        return ClampNumber(shared[key] ~= nil and shared[key] or defaultValue, minValue, maxValue, 1) or defaultValue
     end
 
     local function AuraWriteNumber(scope, key, value, minValue, maxValue)
@@ -48,8 +50,8 @@ function A.RegistryCoreBuilders.BuildUnitAuraLaneHelpers(ctx)
             Model.WriteNumber(scope, key, value, minValue, maxValue)
             return
         end
-        -- Unit Aura lane ownership requires the native Menu model. Never
-        -- redirect a missing model write into the retired Shared table.
+        local _, shared = EnsureAuraFallbackDB()
+        shared[key] = ClampNumber(value, minValue, maxValue, 1)
     end
 
     local function AuraReadLanePerRow(scope, kind)
@@ -71,7 +73,8 @@ function A.RegistryCoreBuilders.BuildUnitAuraLaneHelpers(ctx)
         local Model = AuraModel()
         if Model and type(Model.ReadLaneGrowth) == "function" then return Model.ReadLaneGrowth(scope, kind) end
         local key = kind == "buff" and "buffGrowthX" or "debuffGrowthX"
-        local value = "RIGHT"
+        local _, shared = EnsureAuraFallbackDB()
+        local value = shared[key] or "RIGHT"
         if value == "LEFT" or value == "UP" or value == "DOWN" then return value end
         return "RIGHT"
     end
@@ -83,14 +86,15 @@ function A.RegistryCoreBuilders.BuildUnitAuraLaneHelpers(ctx)
             Model.WriteLaneGrowth(scope, kind, value)
             return
         end
-        -- No Shared fallback: the transaction verifier reports the unavailable
-        -- native Unit owner instead of mutating another Aura lane.
+        local _, shared = EnsureAuraFallbackDB()
+        shared[kind == "buff" and "buffGrowthX" or "debuffGrowthX"] = value
     end
 
     local function AuraReadStackAnchor(scope)
         local Model = AuraModel()
         if Model and type(Model.ReadStackAnchor) == "function" then return Model.ReadStackAnchor(scope) end
-        local value = "TOPRIGHT"
+        local _, shared = EnsureAuraFallbackDB()
+        local value = shared.stackCountAnchor or "TOPRIGHT"
         if value == "TOPLEFT" or value == "BOTTOMRIGHT" or value == "BOTTOMLEFT" then return value end
         return "TOPRIGHT"
     end
@@ -102,13 +106,15 @@ function A.RegistryCoreBuilders.BuildUnitAuraLaneHelpers(ctx)
             Model.WriteStackAnchor(scope, value)
             return
         end
-        -- No Shared fallback.
+        local _, shared = EnsureAuraFallbackDB()
+        shared.stackCountAnchor = value
     end
 
     local function AuraReadCooldownAnchor(scope)
         local Model = AuraModel()
         if Model and type(Model.ReadCooldownAnchor) == "function" then return Model.ReadCooldownAnchor(scope) end
-        local value = "CENTER"
+        local _, shared = EnsureAuraFallbackDB()
+        local value = shared.cooldownTextAnchor or "CENTER"
         if value == "TOPLEFT" or value == "TOPRIGHT" or value == "BOTTOMLEFT" or value == "BOTTOMRIGHT" then return value end
         return "CENTER"
     end
@@ -120,7 +126,8 @@ function A.RegistryCoreBuilders.BuildUnitAuraLaneHelpers(ctx)
             Model.WriteCooldownAnchor(scope, value)
             return
         end
-        -- No Shared fallback.
+        local _, shared = EnsureAuraFallbackDB()
+        shared.cooldownTextAnchor = value
     end
 
     local function AuraLaneShown(unit, kind)
@@ -135,6 +142,7 @@ function A.RegistryCoreBuilders.BuildUnitAuraLaneHelpers(ctx)
         local Model = AuraModel()
         if shown then
             SetAuraUnitEnabled(unit, true)
+            SetAuraSharedBool(kind == "buff" and "showBuffs" or "showDebuffs", true)
             if Model and type(Model.SetGroupShown) == "function" then
                 Model.SetGroupShown(unit, kind, true)
             else

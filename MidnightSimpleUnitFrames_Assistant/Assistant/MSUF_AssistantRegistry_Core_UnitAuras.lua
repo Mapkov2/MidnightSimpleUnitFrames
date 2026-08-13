@@ -26,8 +26,25 @@ function A.RegistryCoreBuilders.BuildUnitAuraHelpers(ctx)
     local function AuraRuntimeUnit(unit)
         if unit == "boss" or unit == "boss1" or unit == "boss2" or unit == "boss3" or unit == "boss4" or unit == "boss5" then return "boss1" end
         if unit == "target" or unit == "focus" then return unit end
-        if unit == "player" then return "player" end
-        return nil
+        return "player"
+    end
+
+    local function AuraSharedBool(key, defaultValue)
+        local Model = AuraModel()
+        if Model and type(Model.ReadSharedBool) == "function" then return Model.ReadSharedBool(key, defaultValue) end
+        local _, shared = EnsureAuraFallbackDB()
+        if shared[key] == nil then return defaultValue and true or false end
+        return shared[key] == true
+    end
+
+    local function SetAuraSharedBool(key, value)
+        local Model = AuraModel()
+        if Model and type(Model.WriteSharedBool) == "function" then
+            Model.WriteSharedBool(key, value)
+            return
+        end
+        local _, shared = EnsureAuraFallbackDB()
+        shared[key] = value and true or false
     end
 
     local function AuraUnitEnabled(unit)
@@ -58,6 +75,7 @@ function A.RegistryCoreBuilders.BuildUnitAuraHelpers(ctx)
         ClampNumber = ClampNumber,
         AuraUnitEnabled = AuraUnitEnabled,
         SetAuraUnitEnabled = SetAuraUnitEnabled,
+        SetAuraSharedBool = SetAuraSharedBool,
     }) or nil
     if type(LaneHelpers) ~= "table" then return nil end
     local AuraLaneMaxKey = LaneHelpers.AuraLaneMaxKey
@@ -86,6 +104,10 @@ function A.RegistryCoreBuilders.BuildUnitAuraHelpers(ctx)
         EnsureAuraFallbackDB = EnsureAuraFallbackDB,
         AuraRuntimeUnit = AuraRuntimeUnit,
     }) or {}
+    local AuraUseSharedVisuals = AdvancedHelpers.AuraUseSharedVisuals
+    local AuraSetUseSharedVisuals = AdvancedHelpers.AuraSetUseSharedVisuals
+    local AuraUseSharedRules = AdvancedHelpers.AuraUseSharedRules
+    local AuraSetUseSharedRules = AdvancedHelpers.AuraSetUseSharedRules
     local AuraFiltersEnabled = AdvancedHelpers.AuraFiltersEnabled
     local AuraSetFiltersEnabled = AdvancedHelpers.AuraSetFiltersEnabled
     local AuraReadFilter = AdvancedHelpers.AuraReadFilter
@@ -93,6 +115,8 @@ function A.RegistryCoreBuilders.BuildUnitAuraHelpers(ctx)
 
     return {
         AuraRuntimeUnit = AuraRuntimeUnit,
+        AuraSharedBool = AuraSharedBool,
+        SetAuraSharedBool = SetAuraSharedBool,
         AuraUnitEnabled = AuraUnitEnabled,
         SetAuraUnitEnabled = SetAuraUnitEnabled,
         AuraLaneMaxKey = AuraLaneMaxKey,
@@ -113,6 +137,10 @@ function A.RegistryCoreBuilders.BuildUnitAuraHelpers(ctx)
         AuraWriteCooldownAnchor = AuraWriteCooldownAnchor,
         AuraLaneShown = AuraLaneShown,
         SetAuraLaneShown = SetAuraLaneShown,
+        AuraUseSharedVisuals = AuraUseSharedVisuals,
+        AuraSetUseSharedVisuals = AuraSetUseSharedVisuals,
+        AuraUseSharedRules = AuraUseSharedRules,
+        AuraSetUseSharedRules = AuraSetUseSharedRules,
         AuraFiltersEnabled = AuraFiltersEnabled,
         AuraSetFiltersEnabled = AuraSetFiltersEnabled,
         AuraReadFilter = AuraReadFilter,

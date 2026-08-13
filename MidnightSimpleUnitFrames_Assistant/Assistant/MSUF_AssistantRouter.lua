@@ -869,10 +869,6 @@ R.SETTING_QUESTION_LEAD_INS = {
     -- as a command and answered with "what value do you want me to use?".
     "whats ", "wheres ", "hows ", "whats the ", "wheres the ",
     "explain ", "find ",
-    -- "how do i decide which border is shown first" names a control just as
-    -- exactly as "how do i change" does; without the lead-in the question fell
-    -- to a topic article about colour layers.
-    "how do i decide ", "how do i pick ", "how do i choose ", "how do i control ",
 }
 
 -- Command counterpart to SETTING_QUESTION_LEAD_INS. Kept separate on purpose:
@@ -894,11 +890,6 @@ R.SETTING_COMMAND_VERBS = {
     "enable ", "disable ", "activate ", "deactivate ",
     "show ", "hide ", "set ", "change ", "adjust ", "configure ", "update ",
     "make ", "put ", "raise ", "lower ", "increase ", "decrease ",
-    -- Result-shaped verbs. A player describing what they want to end up with
-    -- ("i want to see damage absorbs") names the control just as exactly as
-    -- "turn on damage absorbs", and the guidance lanes were claiming those.
-    "see ", "display ", "keep ", "stop ", "remove ", "round ",
-    "give ", "add ", "mark ", "highlight ", "animate ", "anchor ", "move ", "draw ", "use ",
 }
 R.SETTING_COMMAND_ARTICLES = { "the ", "my ", "a ", "an ", "its " }
 
@@ -907,7 +898,7 @@ R.SETTING_COMMAND_ARTICLES = { "the ", "my ", "a ", "an ", "its " }
 -- exists. Call it only where a lane is about to answer with generic help --
 -- never on the general input path, where building the index would blow the
 -- cold-path budgets.
-function R.CommandNamedSettingLabel(text, force)
+function R.CommandNamedSettingLabel(text)
     local norm = R.Trim((R.Normalize(text):gsub("%s*%?+%s*$", "")))
     if norm == "" then return nil end
     local function StripOnce(text, list)
@@ -938,10 +929,10 @@ function R.CommandNamedSettingLabel(text, force)
     -- costs ~47ms to build; the question-shaped lane above returns early for
     -- commands, so it never pays that itself. Every later pass runs warm, which
     -- is where this lane does its work.
-    if type(R._settingLabelIndex) ~= "table" and not force then return nil end
+    if type(R._settingLabelIndex) ~= "table" then return nil end
     local map = R.EnsureSettingLabelIndex and R.EnsureSettingLabelIndex()
     local setting = map and map[subject] or nil
-    if not setting and (force or type(R._settingAliasIndex) == "table") then
+    if not setting and type(R._settingAliasIndex) == "table" then
         -- Alias fallback only when that index is already warm. Forcing it here
         -- costs ~80ms, and Submit's synchronous preflight has an 8ms budget to
         -- keep; the label index above is the cheap one and covers the common
@@ -998,37 +989,6 @@ function R.ExactLabelSingleChange(text)
     local unique = R.UniqueSettingLabelIndex and R.UniqueSettingLabelIndex()
     local setting = unique and unique[subject] or nil
     if type(setting) ~= "table" or type(setting.set) ~= "function" then return nil end
-    -- The sentence may name a frame as well as the control ("turn on the
-    -- dispel border for party frames"). The subject resolves to the shared
-    -- control, because the scope word sits outside it, so swap in the scoped
-    -- twin: same attribute, that scope's key.
-    do
-        local scope = type(R.UnitScopeFromText) == "function" and R.UnitScopeFromText(norm) or nil
-        if type(scope) == "string" and scope ~= "" and tostring(setting.unit or "") == "global" then
-            local attribute = tostring(setting.attribute or "")
-            local wanted = { ["barScope." .. scope .. "."] = true }
-            if scope == "party" then wanted["barScope.gf_party."] = true end
-            if scope == "raid" then wanted["barScope.gf_raid."] = true end
-            if attribute ~= "" and A.Registry and type(A.Registry.AllSettings) == "function" then
-                local all = A.Registry:AllSettings()
-                for i = 1, #all do
-                    local candidate = all[i]
-                    local key = tostring(candidate.key or "")
-                    for prefix in pairs(wanted) do
-                        if key:sub(1, #prefix) == prefix
-                            and tostring(candidate.attribute or "") == attribute
-                            and candidate.type == setting.type
-                            and type(candidate.set) == "function"
-                        then
-                            setting = candidate
-                            break
-                        end
-                    end
-                    if setting == candidate then break end
-                end
-            end
-        end
-    end
     local parser = A.Parser or {}
     if type(parser.ValueForRegistrySetting) ~= "function" then return nil end
     local ok, value = pcall(parser.ValueForRegistrySetting, setting, R.Normalize(text), text)
@@ -1463,27 +1423,22 @@ function R.TryRetargetCorrection(text, coreHandler)
     return result
 end
 
--- Auras3 owns real Buff/Debuff Full-Frame Effects.  Keep them distinct from
--- UnitFrame Dispel Overlay: they have different triggers, saved owners and
--- render paths even though players can describe both as an aura overlay.
+-- "Turn off all full frame effects of auras on player" describes MSUF's
+-- frame-wide, aura-driven effect by what it looks like rather than by its name.
+-- The control is the UnitFrame Dispel Overlay family: an overlay tinted by the
+-- dispel type of an aura on the unit, drawn across the whole frame. Nothing in
+-- the registry is called "full frame effect", so the request used to reach the
+-- aura clarification instead of the control that owns it.
 R.FULL_FRAME_EFFECT_SHAPE_TERMS = {
-    "full frame", "full-frame", "fullframe", "whole frame", "entire frame",
-    "frame wide", "frame-wide", "framewide", "full bar", "across the frame",
-    "vollbild", "ganzer rahmen", "gesamter rahmen",
+    "full frame", "fullframe", "whole frame", "entire frame",
+    "frame wide", "framewide", "full bar", "across the frame",
 }
 R.FULL_FRAME_EFFECT_KIND_TERMS = {
     "effect", "effects", "overlay", "overlays", "glow", "glows",
-    "tint", "tints", "flash", "flashes", "border", "outline", "rand", "effekt",
+    "tint", "tints", "flash", "flashes",
 }
 R.FULL_FRAME_EFFECT_SOURCE_TERMS = {
     "aura", "auras", "buff", "buffs", "debuff", "debuffs", "dispel", "dispels",
-}
-R.FULL_FRAME_EFFECT_STYLE_TERMS = {
-    { value = "namecolor", words = { "name overlay", "name color", "name colour" } },
-    { value = "healthtint", words = { "health tint", "health bar tint", "health color", "health colour", "tint" } },
-    { value = "border", words = { "border", "outline", "rand", "umrandung" } },
-    { value = "glow", words = { "glow", "glowing", "leuchten" } },
-    { value = "pulse", words = { "pulse", "pulsing", "pulsieren" } },
 }
 
 function R.FullFrameAuraEffectRequest(text)
@@ -1496,152 +1451,33 @@ function R.FullFrameAuraEffectRequest(text)
     return norm
 end
 
-function R.FullFrameAuraEffectStyle(norm)
-    for i = 1, #R.FULL_FRAME_EFFECT_STYLE_TERMS do
-        local spec = R.FULL_FRAME_EFFECT_STYLE_TERMS[i]
-        if R.ContainsAny(norm, spec.words) then return spec.value end
-    end
-    return nil
-end
-
-function R.FullFrameAuraEffectSetting(scope, lane)
-    local key = "auras3." .. tostring(scope or "") .. "." .. tostring(lane or "") .. ".frameEffectType"
-    return A.Registry and type(A.Registry.GetSetting) == "function" and A.Registry:GetSetting(key) or nil
-end
-
-function R.FullFrameAuraEffectClarification(scopeLabel, laneLabel, reason)
-    local subject = tostring(scopeLabel or "that frame")
-    if laneLabel then subject = subject .. " " .. laneLabel end
-    return {
-        text = tostring(reason or ("Which " .. subject .. " Full-Frame Effect do you mean?"))
-            .. "\nChoose Buffs or Debuffs, then choose Border, Glow, Pulse, Health Tint, or Name Overlay."
-            .. " This is under " .. subject:gsub(" Buff$", ""):gsub(" Debuff$", "")
-            .. " > Auras > " .. tostring(laneLabel and (laneLabel .. "s") or "Buffs/Debuffs")
-            .. " > Style > Full-Frame Effect. UnitFrame Dispel Overlay is a separate feature. I kept MSUF unchanged.",
-        status = "ambiguous",
-        result = "ambiguous",
-        summary = "Clarifies the Aura lane and Full-Frame effect style before changing anything.",
-    }
-end
-
 function R.TryFullFrameAuraEffectRequest(text)
     local norm = R.FullFrameAuraEffectRequest(text)
     if not norm then return nil end
 
-    -- Refusals and scoped exclusions are handled by the shared fail-closed
-    -- lanes below this specialist. Never let their negative words become an
-    -- Aura mutation merely because "off" also looks like a setting value.
-    if R.IsExplicitMutationRefusal and R.IsExplicitMutationRefusal(text) then return nil end
-    if R.ContainsAny(norm, {
-        "except", "except for", "but not", "other than", "excluding",
-        "ausser", "ausser fuer", "aber nicht",
-    }) then return nil end
+    local unit = R.UnitScopeFromText and select(1, R.UnitScopeFromText(norm)) or nil
+    local key = unit and ("barScope." .. unit .. ".unitDispelOverlayEnabled")
+        or "general.unitDispelOverlayEnabled"
+    local setting = A.Registry and type(A.Registry.GetSetting) == "function"
+        and A.Registry:GetSetting(key) or nil
+    if not setting then return nil end
 
-    -- Explicit Dispel Overlay wording belongs to the existing UnitFrame owner.
-    if R.ContainsAny(norm, { "dispel overlay", "unitframe dispel", "unit frame dispel" }) then return nil end
-    local hasAuraLaneWord = R.ContainsAny(norm, { "buff", "buffs", "debuff", "debuffs", "aura", "auras" })
-    if R.ContainsAny(norm, { "dispel", "dispels" }) and not hasAuraLaneWord then return nil end
-
-    local scope, scopeLabel
-    if R.UnitScopeFromText then scope, scopeLabel = R.UnitScopeFromText(norm) end
-    if not scope and R.ContainsAny(norm, { "shared", "global", "all unit auras" }) then
-        scope, scopeLabel = "shared", "Shared"
-    end
-    local lane, laneLabel
-    if R.AuraLaneFromText then lane, laneLabel = R.AuraLaneFromText(norm) end
-    local disable = R.ContainsAny(norm, {
+    local enable = not R.ContainsAny(norm, {
         "turn off", "off", "disable", "remove", "hide", "no", "without",
-        "stop", "get rid of", "kill", "dont", "do not", "ausschalten", "deaktivieren", "entfernen",
+        "stop", "get rid of", "kill", "dont", "do not",
     })
-    local enable = R.ContainsAny(norm, {
-        "turn on", "enable", "show", "use", "apply", "einschalten", "aktivieren", "anzeigen",
-    })
-    local style = R.FullFrameAuraEffectStyle(norm)
-    local intentNorm = norm:gsub("^please%s+", ""):gsub("^bitte%s+", "")
-    local readOnlyRequest = (R.LooksLikeKnowledgeQuestionPrefix and R.LooksLikeKnowledgeQuestionPrefix(intentNorm))
-        or intentNorm:match("^why%s+") or intentNorm:match("^what%s+") or intentNorm:match("^where%s+")
-        or intentNorm:match("^how%s+") or intentNorm:match("^is%s+") or intentNorm:match("^are%s+")
-        or intentNorm:match("^does%s+") or intentNorm:match("^do%s+i%s+")
-        or intentNorm:match("^can%s+i%s+") or intentNorm:match("^could%s+i%s+") or intentNorm:match("^should%s+i%s+")
-        or intentNorm:match("^if%s+") or intentNorm:match("^would%s+it%s+") or intentNorm:match("^will%s+it%s+")
-        or intentNorm:match("^warum%s+") or intentNorm:match("^was%s+") or intentNorm:match("^wo%s+")
-        or intentNorm:match("^wie%s+") or intentNorm:match("^ist%s+") or intentNorm:match("^sind%s+")
-        or intentNorm:match("^show%s+me%s+") or intentNorm:match("^tell%s+me%s+")
-        or intentNorm:match("^zeige%s+mir%s+")
-    local mutation = not readOnlyRequest and (disable or enable or R.StartsWithMutationCommand(norm))
-
-    if not mutation then
-        -- A visual question can carry the exact control name. Prefer the
-        -- compiled live owner/color explanation over the generic glossary.
-        local live = R.TryLiveUnitColorExplanation and R.TryLiveUnitColorExplanation(text)
-        if live then return live end
-        return {
-            text = "MSUF has separate Buff and Debuff Full-Frame Effects: Border, Glow, Pulse, Health Tint, or Name Overlay."
-                .. " They are Aura lane effects, not UnitFrame Dispel Overlay. The exact native AuraSlot match can be opaque,"
-                .. " but I can identify the configured owner, color, thickness, and trigger without changing anything."
-                .. " Open a Unit Frame > Auras > Buffs or Debuffs > Style > Full-Frame Effect.",
-            status = "info",
-            summary = "Explains Auras3 Full-Frame Effect ownership.",
-        }
-    end
-    if not scope then
-        return R.FullFrameAuraEffectClarification(nil, laneLabel,
-            "Which Unit Frame should I change: Player, Target, Focus, or Boss?")
-    end
-    if scope ~= "shared" and scope ~= "player" and scope ~= "target"
-        and scope ~= "focus" and scope ~= "boss"
-    then
-        return R.FullFrameAuraEffectClarification(nil, laneLabel,
-            "Aura Full-Frame Effects are available for Player, Target, Focus, and Boss, not "
-                .. tostring(scopeLabel or scope) .. ".")
-    end
-
-    local changes = {}
-    if disable and not lane and R.ContainsAny(norm, { "all", "both" }) then
-        local buffSetting = R.FullFrameAuraEffectSetting(scope, "buff")
-        local debuffSetting = R.FullFrameAuraEffectSetting(scope, "debuff")
-        if not buffSetting or not debuffSetting then return nil end
-        changes[1] = { setting = buffSetting, value = "none" }
-        changes[2] = { setting = debuffSetting, value = "none" }
-    elseif not lane then
-        local active = {}
-        if disable then
-            for _, kind in ipairs({ "buff", "debuff" }) do
-                local setting = R.FullFrameAuraEffectSetting(scope, kind)
-                local ok, value = false, nil
-                if setting and type(setting.get) == "function" then ok, value = pcall(setting.get) end
-                if setting and tostring(value or "none") ~= "none" then active[#active + 1] = setting end
-            end
-        end
-        if #active == 1 then
-            changes[1] = { setting = active[1], value = "none" }
-        else
-            return R.FullFrameAuraEffectClarification(scopeLabel, nil,
-                enable and ("Choose the " .. tostring(scopeLabel) .. " Buff or Debuff lane and an effect style before I turn it on.")
-                    or ("Choose the " .. tostring(scopeLabel) .. " Buff or Debuff Full-Frame Effect."))
-        end
-    else
-        local setting = R.FullFrameAuraEffectSetting(scope, lane)
-        if not setting then return nil end
-        if disable then style = "none" end
-        if not style then
-            return R.FullFrameAuraEffectClarification(scopeLabel, laneLabel,
-                "Which " .. tostring(scopeLabel) .. " " .. tostring(laneLabel) .. " Full-Frame style should I use?")
-        end
-        changes[1] = { setting = setting, value = style }
-    end
 
     local result = A.ExecutePlan({
         kind = "changes",
-        changes = changes,
-        label = #changes == 2 and (tostring(scopeLabel) .. " Buff and Debuff Full-Frame Effects")
-            or tostring(changes[1] and changes[1].setting and changes[1].setting.label or "Aura Full-Frame Effect"),
-        summary = "Changes the Auras3 Buff/Debuff Full-Frame effect without touching UnitFrame Dispel Overlay.",
+        changes = { { setting = setting, value = enable } },
+        label = tostring(setting.label or "Dispel Overlay"),
+        summary = "Routes a frame-wide aura effect request to the dispel overlay control.",
     })
     if type(result) == "table" then
         result.text = tostring(result.text or "")
-            .. "\nThis changes Auras > " .. tostring(laneLabel and (laneLabel .. "s") or "Buffs and Debuffs")
-            .. " > Style > Full-Frame Effect. UnitFrame Dispel Overlay remains separate."
+            .. "\nMSUF calls that effect the UnitFrame Dispel Overlay: it tints the whole frame by the dispel type of an aura on the unit."
+            .. "\nIts detection, style, opacity and health-only variants are separate controls, for example: set "
+            .. tostring(setting.label or "dispel overlay"):gsub(" Dispel Overlay$", " Dispel Overlay Opacity") .. " to 0.5."
     end
     return result
 end
@@ -2031,304 +1867,10 @@ function R.CanonicalValueConnectorCommand(text, skipVerify)
     return nil
 end
 
--- Media requests routinely put the value first and the control last: "use the
--- flat texture for the absorb bar", "apply the shadow border on my frames".
--- The parser expects "set <control> to <value>", so the whole family reported
--- "what value do you want me to use?" after correctly finding the control.
-local VALUE_BEFORE_CONTROL_VERBS = {
-    "use", "using", "apply", "set", "switch", "pick", "choose", "change", "put", "give",
-}
-local VALUE_BEFORE_CONTROL_NOUNS = { "texture", "art", "style", "border", "font", "skin", "shape" }
-
-function R.CanonicalValueBeforeControlCommand(text, skipVerify)
-    local norm = R.Normalize(text)
-    local verb, rest = norm:match("^(%a+)%s+(.+)$")
-    if not verb or not rest then return nil end
-    local verbAllowed = false
-    for i = 1, #VALUE_BEFORE_CONTROL_VERBS do
-        if verb == VALUE_BEFORE_CONTROL_VERBS[i] then verbAllowed = true break end
-    end
-    if not verbAllowed then return nil end
-    rest = rest:gsub("^the%s+", ""):gsub("^a%s+", ""):gsub("^an%s+", "")
-    for i = 1, #VALUE_BEFORE_CONTROL_NOUNS do
-        local noun = VALUE_BEFORE_CONTROL_NOUNS[i]
-        local value, control = rest:match("^(.-)%s+" .. noun .. "%s+for%s+(.+)$")
-        if not value then value, control = rest:match("^(.-)%s+" .. noun .. "%s+on%s+(.+)$") end
-        if value and control and value ~= "" and control ~= "" then
-            control = R.Trim((control:gsub("^the%s+", ""):gsub("^my%s+", "")))
-            for _, canonical in ipairs({
-                "set " .. control .. " " .. noun .. " to " .. value,
-                "set " .. control .. " to " .. value,
-            }) do
-                if skipVerify then return canonical end
-                if R.ExactAliasSingleChange(canonical) then return canonical end
-            end
-        end
-    end
-    return nil
-end
-
--- The third way people phrase a change carries no value at all, only a
--- direction: "make the frame border thicker", "make the maximum health loss
--- overlay more transparent", "move the absorb bar down a bit". There is no
--- number and no trailing on/off, so the two rewrites above cannot see it and a
--- topic article claimed the sentence.
-R.COMPARATIVE_CHANGE_TAILS = {
-    "more transparent", "less transparent", "more see through", "less see through",
-    "more opaque", "less opaque", "more subtle", "less subtle", "more visible", "less visible",
-    "more faded", "less faded", "more rounded", "less rounded",
-    "thicker", "thinner", "bigger", "smaller", "taller", "shorter", "wider", "narrower",
-    "stronger", "weaker", "rounder", "softer", "brighter", "dimmer", "fainter",
-    "longer", "higher", "lower", "up", "down", "transparent", "opaque",
-}
-local COMPARATIVE_TRAILING_FILLER = {
-    "%s+a%s+bit$", "%s+a%s+little$", "%s+a%s+lot$", "%s+slightly$", "%s+please$", "%s+now$",
-}
-
--- The control name a comparative change is about, or nil. Shares the subject
--- peeling of R.CommandSubjectPhrase so the two can never disagree.
-function R.ComparativeChangeSubject(text)
-    local norm = R.Trim((R.Normalize(text):gsub("%s*%?+%s*$", "")))
-    if norm == "" then return nil end
-    for i = 1, #COMPARATIVE_TRAILING_FILLER do
-        norm = R.Trim((norm:gsub(COMPARATIVE_TRAILING_FILLER[i], "")))
-    end
-    local body, matchedTail
-    for i = 1, #R.COMPARATIVE_CHANGE_TAILS do
-        local candidate = norm:match("^(.-)%s+" .. R.COMPARATIVE_CHANGE_TAILS[i] .. "$")
-        if candidate and candidate ~= "" then
-            body, matchedTail = candidate, R.COMPARATIVE_CHANGE_TAILS[i]
-            break
-        end
-    end
-    if not body then return nil end
-    -- "make it thicker" names no control; the follow-up lane owns that.
-    body = R.Trim((body:gsub("%s+it$", ""):gsub("%s+them$", "")))
-    if body == "" then return nil end
-    return R.CommandSubjectPhrase(body .. " to 1"), matchedTail
-end
-
--- Does a comparative change name exactly one control? Only called from
--- RequestNamesOneControl, which already pays for an index build, so forcing
--- the label and alias maps here adds no cost to the general input path.
-function R.ComparativeChangeNamesOneControl(text)
-    local subject, tail = R.ComparativeChangeSubject(text)
-    if not subject then return false end
-    local map = R.EnsureSettingLabelIndex and R.EnsureSettingLabelIndex()
-    local aliasMap = R.EnsureSettingAliasIndex and R.EnsureSettingAliasIndex()
-    -- Controls are named both ways: "outline thickness" drops the comparative,
-    -- while "corners rounder" IS the registered wording.
-    for _, candidate in ipairs({ subject, tail and (subject .. " " .. tail) or subject }) do
-        if map and map[candidate] then return true end
-        if aliasMap and aliasMap[candidate] then return true end
-    end
-    return false
-end
-
--- Among several fuzzy candidates, the one whose own label or alias IS the
--- request's subject is not a candidate -- it is the control. "change the bar
--- texture to flat" lists Absorb Bar Texture and Boss Bar Texture beside it,
--- because they all answer to those words, but only one is called that.
-function R.EntriesNamedExactlyOnce(entries, text)
-    if type(entries) ~= "table" or #entries < 2 then return nil end
-    local subject = type(R.CommandSubjectPhrase) == "function" and R.CommandSubjectPhrase(text) or nil
-    if not subject or subject == "" then return nil end
-    local found, count, globalFound, globalCount = nil, 0, nil, 0
-    for i = 1, #entries do
-        local item = entries[i] and entries[i].item
-        local setting = item and item.setting
-        if setting then
-            local names = { tostring(setting.label or "") }
-            for _, list in ipairs({ setting.exactAliases or {}, setting.aliases or {} }) do
-                for j = 1, #list do names[#names + 1] = tostring(list[j] or "") end
-            end
-            for j = 1, #names do
-                if names[j] ~= "" and R.Normalize(names[j]) == subject then
-                    count = count + 1
-                    found = item
-                    if tostring(setting.unit or "") == "global" then
-                        globalCount = globalCount + 1
-                        globalFound = item
-                    end
-                    break
-                end
-            end
-        end
-    end
-    if count == 1 then return found end
-    -- Every per-unit copy answers to the same bare words, so "bar texture" is
-    -- claimed by the shared control AND by seven generated per-unit ones. A
-    -- sentence that names no frame means the shared one.
-    if globalCount == 1
-        and not (type(R.UnitScopeFromText) == "function" and R.UnitScopeFromText(R.Normalize(text)))
-    then
-        return globalFound
-    end
-    -- Value-kind preference. When the request states a value of a recognisable
-    -- kind -- a colour name, an opacity word, a position, a texture key -- the
-    -- candidates that cannot hold such a value are not candidates at all. This
-    -- is the general form of the sibling lookup: no name guessing, just the
-    -- type the stated value needs.
-    if type(R.StatedValueKindForText) == "function" then
-        local wanted = R.StatedValueKindForText(text)
-        if wanted then
-            local typed, typedCount = nil, 0
-            for i = 1, #entries do
-                local item = entries[i] and entries[i].item
-                local candidate = item and item.setting
-                if candidate and candidate.type == wanted then
-                    typedCount = typedCount + 1
-                    typed = item
-                end
-            end
-            if typedCount == 1 then return typed end
-        end
-    end
-    return nil
-end
-
--- A result-shaped sentence names a boolean control and never says "on":
--- "give the health bars a gradient look", "mark shields that overflow past
--- full health", "i don't want shields drawn on the health bar". Asking for a
--- thing to exist is asking for it to be on, and asking for it not to is off.
---
--- Bounded on purpose: one control, resolved from the sentence's own subject,
--- boolean only, and only for long number-free sentences so the index build
--- stays off the cold route.
-R.NAMED_BOOLEAN_NEGATIONS = {
-    "dont", "do not", "no longer", "never", "stop showing", "stop the",
-    "get rid of", "without", "hide", "remove", "turn off", "switch off", "disable",
-}
-
-function R.NamedBooleanIntentPlan(text)
-    local norm = R.Normalize(text)
-    if norm == "" or norm:find("%d") then return nil end
-    local tokens = 0
-    for _ in norm:gmatch("%S+") do tokens = tokens + 1 end
-    if tokens < 5 then return nil end
-    local bestNamedLength = 0
-    local map = R.EnsureSettingLabelIndex and R.EnsureSettingLabelIndex()
-    local aliasMap = R.EnsureSettingAliasIndex and R.EnsureSettingAliasIndex()
-    local function Lookup(phrase)
-        if not phrase or phrase == "" then return nil end
-        return (map and map[phrase]) or (aliasMap and aliasMap[phrase]) or nil
-    end
-    local subject = type(R.CommandSubjectPhrase) == "function" and R.CommandSubjectPhrase(text) or nil
-    local setting = Lookup(subject)
-    if setting and subject then
-        -- Callers weigh how much of the sentence the control's own name
-        -- covered, so a subject match has to report its length too.
-        for _ in subject:gmatch("%S+") do bestNamedLength = bestNamedLength + 1 end
-    end
-    if not setting then
-        -- The subject rarely IS the control's name word for word: "i want a
-        -- marker for shields while my health is full" wraps it in filler that
-        -- no verb/article peeling removes. The registered wording is in there
-        -- somewhere, so take the longest run of words that names exactly one
-        -- control. Longest first, so a specific name always beats a shorter
-        -- one contained in it.
-        local words = {}
-        for word in norm:gmatch("%S+") do words[#words + 1] = word end
-        local bestLength = 0
-        bestNamedLength = 0
-        for first = 1, #words do
-            for last = #words, first + 2, -1 do
-                local length = last - first + 1
-                if length > bestLength then
-                    local candidate = Lookup(table.concat(words, " ", first, last))
-                    if candidate then
-                        setting, bestLength = candidate, length
-                        bestNamedLength = length
-                        break
-                    end
-                    -- (bestLength is reported below so callers can require a
-                    -- long, unambiguous wording before pre-empting a lane.)
-                end
-            end
-        end
-    end
-    if type(setting) ~= "table" or type(setting.set) ~= "function" then return nil end
-    -- Any type, not just booleans: once the subject resolves to exactly one
-    -- control, the rest of the sentence is its value ("anchor the heal absorb
-    -- bar to the left side"). Only when no value can be read does the boolean
-    -- polarity inference below take over.
-    if setting.type ~= "boolean" then
-        local parser = A.Parser or {}
-        local parsed = type(parser.ValueForRegistrySetting) == "function"
-            and parser.ValueForRegistrySetting(setting, norm, text) or nil
-        -- An on/off enum is a toggle wearing an enum's clothes: the border
-        -- controls store "on"/"off", so a sentence that describes the result
-        -- ("highlight the frame when something is attacking me") states its
-        -- value just as plainly as it would for a boolean.
-        if parsed == nil and setting.type == "enum" and type(setting.values) == "table"
-            and #setting.values == 2
-        then
-            local onOff = {}
-            for i = 1, #setting.values do onOff[tostring(setting.values[i])] = true end
-            if onOff.on and onOff.off then
-                parsed = R.ContainsAny(norm, R.NAMED_BOOLEAN_NEGATIONS) and "off" or "on"
-            end
-        end
-        if parsed == nil then
-            -- "i want a chunkier outline around my frames" names the control
-            -- and states a direction; the planner turns that into one step.
-            local plan = type(parser.PlanForExactRegistrySetting) == "function"
-                and parser.PlanForExactRegistrySetting(setting, norm, text) or nil
-            if type(plan) == "table" and plan.kind == "changes" then
-                plan.raw, plan.sourceText = text, text
-                plan.namedWordingTokens = bestNamedLength
-                return plan
-            end
-            return nil
-        end
-        return {
-            kind = "changes",
-            changes = { { setting = setting, value = parsed } },
-            label = tostring(setting.label or setting.key),
-            summary = "Changes the control the sentence names, with the value it states.",
-            raw = text,
-            sourceText = text,
-            exactSettingMutation = true,
-        }
-    end
-    -- Only HIDE-named controls are inverted ("Hide Name on Dead or Offline"),
-    -- and the reviewed parser owns those. A "Show ..." label is not inverted:
-    -- on means shown, which is exactly what this lane infers.
-    local hay = (tostring(setting.label or "") .. " " .. tostring(setting.key or "")):lower()
-    if hay:find("hide", 1, true) or hay:find("hidden", 1, true) then return nil end
-    local value = not R.ContainsAny(norm, R.NAMED_BOOLEAN_NEGATIONS)
-    return {
-        kind = "changes",
-        changes = { { setting = setting, value = value } },
-        label = tostring(setting.label or setting.key),
-        summary = "Switches the boolean control the sentence describes.",
-        raw = text,
-        sourceText = text,
-        exactSettingMutation = true,
-        namedWordingTokens = bestNamedLength,
-    }
-end
-
 function R.RequestNamesOneControl(text)
     if R.ExactAliasSingleChange(text) then return true end
     if R.CanonicalTrailingStateCommand(text) then return true end
     if R.CanonicalValueConnectorCommand(text) then return true end
-    if R.CanonicalValueBeforeControlCommand(text) then return true end
-    if R.ComparativeChangeNamesOneControl(text) then return true end
-    -- A result-shaped command ("give the health bars a gradient look") names
-    -- its control in the subject even though it states no value word, so the
-    -- three rewrites above cannot see it and a guidance article claimed the
-    -- sentence.
-    --
-    -- Forcing the label and alias maps costs about a second on the very first
-    -- turn, so it is spent only on the shape that needs it: a long sentence
-    -- with no number in it. Every case pinned by assistant_perf_budget_smoke
-    -- ("move boss castbar down 5") carries a number and skips this entirely.
-    local norm = R.Normalize(text)
-    local tokens = 0
-    for _ in norm:gmatch("%S+") do tokens = tokens + 1 end
-    local descriptive = tokens >= 5 and not norm:find("%d")
-    if R.CommandNamedSettingLabel(text, descriptive) then return true end
     return false
 end
 
@@ -2351,11 +1893,6 @@ function R.TopicAnswerSurvivesExactControl(result, text)
         or norm:match("%s(on)$") or norm:match("%s(off)$")
         or norm:match("%s(enabled)$") or norm:match("%s(disabled)$")
         or R.LooksLikeMutation(text) or R.StartsWithMutationCommand(text)
-        -- Result-shaped commands carry no state word at all ("give the health
-        -- bars a gradient look"), yet they are instructions, not questions.
-        -- CommandSubjectPhrase is plain string work and needs a leading verb,
-        -- so a question can never match it.
-        or (type(R.CommandSubjectPhrase) == "function" and R.CommandSubjectPhrase(text) ~= nil)
     if not carriesValue then return result end
     if type(R.RequestNamesOneControl) == "function" and R.RequestNamesOneControl(text) then return nil end
     return result
@@ -2466,38 +2003,8 @@ function A.RouterIsFailClosedReadOnlyRequest(text)
             -- exactly what they typed.
             if openEnded.explicitValue == true
                 and (R.ExactAliasSingleChange(text)
-                    or (type(R.ExactLabelSingleChange) == "function" and R.ExactLabelSingleChange(text))
-                    or (type(R.CanonicalValueBeforeControlCommand) == "function"
-                        and R.CanonicalValueBeforeControlCommand(text))
-                    or R.EntriesNamedExactlyOnce(openEnded.entries, text))
+                    or (type(R.ExactLabelSingleChange) == "function" and R.ExactLabelSingleChange(text)))
             then
-                return false
-            end
-            -- A comparative names no value word, so the check above cannot see
-            -- one -- but "make the corners rounder" is still a change, and
-            -- fail-closing it answered a direct instruction with "ask for the
-            -- option's location". When the fuzzy search already resolved one
-            -- control confidently, the direction is all that was missing.
-            if type(R.ComparativeChangeSubject) == "function"
-                and R.ComparativeChangeSubject(text)
-                and (type(R.OpenEndedEntriesAreConfident) ~= "function"
-                    or R.OpenEndedEntriesAreConfident(openEnded.entries))
-            then
-                return false
-            end
-            -- Otherwise the sentence still earns the exemption if it spells a
-            -- control by name. That test is plain string work until a
-            -- comparative tail really matches, so ordinary requests pay
-            -- nothing for it.
-            if type(R.ComparativeChangeNamesOneControl) == "function"
-                and R.ComparativeChangeNamesOneControl(text)
-            then
-                return false
-            end
-            if type(R.NamedBooleanIntentPlan) == "function" and R.NamedBooleanIntentPlan(text) then
-                return false
-            end
-            if type(R.StatedValueKindSiblingPlan) == "function" and R.StatedValueKindSiblingPlan(text) then
                 return false
             end
             return true
@@ -6270,7 +5777,7 @@ R.AURA_UNIT_FILTER_SPECS = {
         { key = "cancelable", label = "Cancelable filter", token = "CANCELABLE", effect = "shows buffs that can be canceled by the player.", bestFor = "debugging or trimming personal removable buffs.", caution = "Cancelable does not mean dangerous or important. It only means the buff can be removed." },
         { key = "notCancelable", label = "Not cancelable filter", token = "NOT_CANCELABLE", effect = "shows buffs that cannot be canceled by the player.", bestFor = "separating persistent/locked buffs from removable buffs.", caution = "It conflicts with Cancelable; using both would narrow the lane too hard." },
         { key = "externalDefensive", label = "External defensive filter", token = "EXTERNAL_DEFENSIVE", effect = "shows defensive cooldowns placed on the unit by someone else.", bestFor = "raid tanks and healers who want to see externals like major protection cooldowns.", caution = "It is a focused cooldown-tracking filter, not a general buff filter." },
-        { key = "bigDefensive", label = "Big defensive filter", token = "CURATED_SPELL_IDS", effect = "shows MSUF's curated major-defensive Spell-ID list on friendly frames and uses Blizzard's BIG_DEFENSIVE fallback where exact identity filtering is restricted.", bestFor = "tracking large personal defensives or raid survival cooldowns without passive and maintenance-buff noise.", caution = "It is intentionally narrow; normal buffs disappear when this is the active classification." },
+        { key = "bigDefensive", label = "Big defensive filter", token = "BIG_DEFENSIVE", effect = "shows major defensive buffs that Blizzard classifies as big defensives.", bestFor = "tracking large personal defensives or raid survival cooldowns without all normal buffs.", caution = "It is intentionally narrow; normal buffs disappear when this is the only active buff filter." },
     },
     debuff = {
         { key = "onlyMine", label = "Player filter", token = "PLAYER", effect = "shows only debuffs applied by you, your pet, or your vehicle.", bestFor = "DPS players tracking their own DoTs, bleeds, or personal debuffs on target/focus.", caution = "It hides raid mechanics and other players' debuffs, so it is bad as a general raid-warning filter." },
@@ -6281,7 +5788,6 @@ R.AURA_UNIT_FILTER_SPECS = {
         { key = "dispellableAny", label = "Any dispel type", token = "DISPELLABLE", effect = "shows every aura with a dispel type.", bestFor = "seeing purge or cleanse types regardless of the current group.", caution = "Some shown auras may not be removable by your group." },
         { key = "onlyImportant", label = "Important", token = "IMPORTANT", effect = "shows auras Blizzard flags as important.", bestFor = "a compact important-aura view.", caution = "Blizzard, not MSUF, owns the importance flag." },
         { key = "crowdControl", label = "Crowd-control filter", token = "CROWD_CONTROL", effect = "shows crowd-control debuffs such as control or lockout-style effects Blizzard classifies as CC.", bestFor = "PvP, crowd-control tracking, and knowing when a unit is controlled.", caution = "It is usually not the first choice for raid PvE debuff cleanup." },
-        { key = "nonPlayer", label = "Non-player auras filter", token = "isFromPlayerOrPlayerPet=false", effect = "shows only debuffs not caused by any player or player pet.", bestFor = "removing player-caused noise such as gateway-related debuffs while retaining encounter and environment effects.", caution = "It intentionally hides debuffs caused by every player, not only your own casts." },
     },
 }
 
@@ -6290,16 +5796,16 @@ R.AURA_GROUP_FILTER_EFFECTS = {
     Player = "shows only auras cast by you, your pet, or your vehicle.",
     RaidPlayer = "keeps raid-frame relevant auras cast by you, your pet, or your vehicle.",
     RaidInCombatPlayer = "uses Blizzard's stricter combat-aware raid-frame visibility for your own auras.",
-    Raid = "keeps player-actionable RAID auras (harmful means player-dispellable).",
-    RaidInCombat = "uses Blizzard's stricter combat-aware raid-frame visibility.",
+    Raid = "keeps player-actionable RAID auras not cast by you (harmful means player-dispellable).",
+    RaidInCombat = "uses Blizzard's stricter combat-aware raid-frame visibility for auras not cast by you.",
     CancelablePlayer = "shows cancelable buffs cast by you, your pet, or your vehicle.",
     NotCancelablePlayer = "shows non-cancelable buffs cast by you, your pet, or your vehicle.",
     ExternalDefensivePlayer = "shows external defensive cooldown buffs cast by you, your pet, or your vehicle.",
-    BigDefensivePlayer = "shows MSUF's curated major-defensive Spell-ID list cast by you, your pet, or your vehicle.",
-    Cancelable = "shows cancelable buffs regardless of caster.",
-    NotCancelable = "shows non-cancelable buffs regardless of caster.",
-    ExternalDefensive = "shows external defensive cooldown buffs regardless of caster.",
-    BigDefensive = "shows MSUF's curated major-defensive Spell-ID list regardless of caster on friendly Group frames.",
+    BigDefensivePlayer = "shows major defensive buffs cast by you, your pet, or your vehicle.",
+    Cancelable = "shows cancelable buffs not cast by you.",
+    NotCancelable = "shows non-cancelable buffs not cast by you.",
+    ExternalDefensive = "shows external defensive cooldown buffs not cast by you.",
+    BigDefensive = "shows major defensive buffs not cast by you.",
     PLAYER = "shows only auras cast by you, your pet, or your vehicle.",
     RAID = "shows helpful auras the player can apply or harmful auras the player can dispel.",
     RAID_IN_COMBAT = "uses Blizzard's stricter combat-aware raid-frame visibility.",
@@ -6307,16 +5813,15 @@ R.AURA_GROUP_FILTER_EFFECTS = {
     CANCELABLE = "shows buffs that can be canceled by the player.",
     NOT_CANCELABLE = "shows buffs that cannot be canceled by the player.",
     EXTERNAL_DEFENSIVE = "shows defensive cooldowns placed on the unit by someone else.",
-    BIG_DEFENSIVE = "shows MSUF's curated major-defensive Spell-ID list on friendly frames, with Blizzard's native fallback on restricted hostile targets.",
+    BIG_DEFENSIVE = "shows major defensive buffs Blizzard classifies as big defensives.",
     RAID_PLAYER_DISPELLABLE = "shows auras someone in your group can dispel.",
     DISPELLABLE = "shows every aura with a dispel type, regardless of group capability.",
     IMPORTANT = "shows auras Blizzard flags as important.",
     CROWD_CONTROL = "shows crowd-control debuffs.",
-    NonPlayer = "shows only debuffs not caused by any player or player pet.",
 }
 
 function R.AuraFilterStatusWantsAnswer(norm)
-    if not R.ContainsAny(norm, { "filter", "filters", "dispellable", "raid in combat", "nameplate", "crowd control", "cc", "cancelable", "cancellable", "defensive", "exclusive", "non-player" }) then return false end
+    if not R.ContainsAny(norm, { "filter", "filters", "dispellable", "raid in combat", "nameplate", "crowd control", "cc", "cancelable", "cancellable", "defensive", "exclusive" }) then return false end
     if R.ContainsAny(norm, {
         "what filter", "which filter", "which filters", "active filter", "active filters", "current filter", "current filters",
         "what does", "what do", "what is", "explain", "explain filters", "explain filter", "how does", "why use",
@@ -6339,7 +5844,6 @@ function R.AuraFilterKeyFromText(norm)
     if R.ContainsAny(norm, { "important aura", "important buff", "important debuff" }) then return "onlyImportant" end
     if R.ContainsAny(norm, { "dispellable", "dispelable", "purgeable" }) then return "includeDispellable" end
     if R.ContainsAny(norm, { "crowd control", "cc debuff", "cc debuffs" }) then return "crowdControl" end
-    if R.ContainsAny(norm, { "non-player aura", "non-player auras", "non-player debuff", "non-player debuffs", "not from a player", "not caused by a player" }) then return "nonPlayer" end
     if R.ContainsAny(norm, { "not cancelable", "not cancellable", "non cancelable", "uncancelable" }) then return "notCancelable" end
     if R.ContainsAny(norm, { "cancelable", "cancellable" }) then return "cancelable" end
     if R.ContainsAny(norm, { "external defensive", "external defensives", "external buffs" }) then return "externalDefensive" end
@@ -6351,7 +5855,7 @@ end
 
 function R.AuraFilterLaneForKey(key, lane)
     if lane then return lane end
-    if key == "includeDispellable" or key == "dispellableAny" or key == "crowdControl" or key == "nonPlayer" then return "debuff" end
+    if key == "includeDispellable" or key == "dispellableAny" or key == "crowdControl" then return "debuff" end
     if key == "cancelable" or key == "notCancelable" or key == "externalDefensive" or key == "bigDefensive" then return "buff" end
     return nil
 end
@@ -6438,15 +5942,11 @@ local LIVE_COLOR_QUESTION_TERMS = {
     "why is", "why does", "why did", "what does", "what is", "what means",
     "what do", "what are", "what causes", "explain", "different color",
     "different frame color", "changed color", "color changed", "colour changed",
-    "warum ist", "warum hat", "warum wird", "warum wurde", "was ist", "was bedeutet",
-    "woher kommt", "erklaer", "erklaere",
 }
 
 local LIVE_COLOR_VISUAL_TERMS = {
     "color", "colors", "colored", "colour", "colours", "coloured", "red", "green", "blue",
-    "yellow", "orange", "purple", "violet", "gray", "grey", "white", "black", "pink", "cyan",
-    "rot", "gruen", "blau", "gelb", "orange", "lila", "violett", "grau", "weiss", "schwarz",
-    "border", "outline", "edge", "rand", "umrandung", "glow", "tint", "pulse",
+    "yellow", "orange", "purple", "gray", "grey", "white", "black",
 }
 
 local LIVE_COLOR_DEBUFF_TERMS = {
@@ -6500,9 +6000,9 @@ end
 local function LiveColorGeneralGuide()
     return {
         text = "MSUF frame color guide\n"
-            .. "A frame can show several independent color layers, so one color does not always have one meaning. The health fill can use player class colors, friendly/neutral/hostile NPC reaction colors, NPC Type colors, a health gradient, or a fixed Unified/Dark color. The border or outline can separately show an Auras3 Buff/Debuff Full-Frame Effect, dispel/debuff, aggro, purge, or Boss Target highlight.\n"
-            .. "For example, an orange Target health fill can mean a neutral NPC, while an Aura Full-Frame Border can use its own configured color and follow the current health fill.\n"
-            .. "Open Colors for health and normal border colors. For UnitFrame Aura effects, open that frame > Auras > Buffs or Debuffs > Style > Full-Frame Effect. For Party/Raid overlays and stripes, check Group Dispel Overlay. I kept MSUF unchanged.",
+            .. "A frame can show several independent color layers, so one color does not always have one meaning. The health fill can use player class colors, friendly/neutral/hostile NPC reaction colors, NPC Type colors, a health gradient, or a fixed Unified/Dark color. The border or outline can separately show a dispel/debuff, aggro, purge, or Boss Target highlight; the first active highlight wins.\n"
+            .. "For example, an orange Target health fill can mean a neutral NPC, while an orange border can be a dispel/debuff highlight. A debuff normally affects its aura icon or highlight border, not the health fill itself.\n"
+            .. "Open Colors for health and border colors. For Party/Raid dispel overlays and debuff stripes, check Group Dispel Overlay. I kept MSUF unchanged.",
         status = "info",
         summary = "MSUF frame color guide",
     }
@@ -6548,186 +6048,6 @@ local function LiveDebuffCount(unit)
         count = count + 1
     end
     return count
-end
-
-R.LIVE_AURA_EFFECT_LABELS = {
-    border = "Border",
-    glow = "Glow",
-    pulse = "Pulse",
-    healthtint = "Health Tint",
-    namecolor = "Name Overlay",
-}
-
-function R.LiveAuraRequestedEffectType(norm)
-    if R.ContainsAny(norm, { "border", "outline", "edge", "rand", "umrandung" }) then return "border" end
-    if R.ContainsAny(norm, { "glow", "glowing", "leuchten" }) then return "glow" end
-    if R.ContainsAny(norm, { "pulse", "pulsing", "pulsieren" }) then return "pulse" end
-    if R.ContainsAny(norm, { "health tint", "health bar tint", "tint" }) then return "healthtint" end
-    if R.ContainsAny(norm, { "name overlay", "name color", "name colour" }) then return "namecolor" end
-    return nil
-end
-
-function R.LiveAuraEffectColorMatches(norm, effect)
-    local color = effect and effect.color
-    local r, g, b = tonumber(color and color[1]), tonumber(color and color[2]), tonumber(color and color[3])
-    if not (r and g and b) then return false end
-    if R.ContainsAny(norm, { "purple", "violet", "lila", "violett" }) then return b > g and r > g end
-    if R.ContainsAny(norm, { "pink", "rosa" }) then return r > 0.55 and b > 0.35 and g < r end
-    if R.ContainsAny(norm, { "orange" }) then return r > 0.65 and g > 0.20 and g < r and b < g end
-    if R.ContainsAny(norm, { "yellow", "gelb" }) then return r > 0.60 and g > 0.55 and b < 0.45 end
-    if R.ContainsAny(norm, { "red", "rot" }) then return r > g * 1.25 and r > b * 1.25 end
-    if R.ContainsAny(norm, { "green", "gruen" }) then return g > r * 1.20 and g > b * 1.20 end
-    if R.ContainsAny(norm, { "blue", "blau", "cyan" }) then return b > r * 1.20 and b > g * 1.05 end
-    if R.ContainsAny(norm, { "black", "schwarz" }) then return math.max(r, g, b) < 0.25 end
-    if R.ContainsAny(norm, { "white", "weiss" }) then return math.min(r, g, b) > 0.75 end
-    if R.ContainsAny(norm, { "gray", "grey", "grau" }) then return math.max(r, g, b) - math.min(r, g, b) < 0.12 end
-    return false
-end
-
-function R.LiveAuraHasSpecificColor(norm)
-    return R.ContainsAny(norm, {
-        "purple", "violet", "lila", "violett", "pink", "rosa", "orange",
-        "yellow", "gelb", "red", "rot", "green", "gruen", "blue", "blau", "cyan",
-        "black", "schwarz", "white", "weiss", "gray", "grey", "grau",
-    })
-end
-
-function R.LiveAuraFrameEffectDiagnostics(frame, unit)
-    local a3 = MSUF and MSUF.MSUF_Auras3 or _G.MSUF_Auras3
-    if not (a3 and type(a3.GetUnitFrameEffectDiagnostics) == "function") then return nil end
-    local ok, snapshot = pcall(a3.GetUnitFrameEffectDiagnostics, unit, frame)
-    return ok and type(snapshot) == "table" and snapshot or nil
-end
-
-function R.LiveAuraFrameEffectCandidate(norm, frame, unit)
-    local snapshot = R.LiveAuraFrameEffectDiagnostics(frame, unit)
-    if not snapshot then return nil end
-    local laneHint = R.AuraLaneFromText and select(1, R.AuraLaneFromText(norm)) or nil
-    local requestedType = R.LiveAuraRequestedEffectType(norm)
-    local auraHint = R.ContainsAny(norm, { "aura", "auras", "buff", "buffs", "debuff", "debuffs" })
-    local customHint = R.ContainsAny(norm, { "custom aura", "tracked aura", "target dot", "dots on target" })
-    local targetDotsHint = R.ContainsAny(norm, { "target dot", "dots on target" })
-    local best, bestScore, matches
-
-    local function Consider(effect)
-        if type(effect) ~= "table" then return end
-        local kind = tostring(effect.renderedType or effect.configuredType or "none"):lower()
-        if kind == "none" or kind == "" then return end
-        -- A configured but unarmed lane cannot be the visible effect: its
-        -- lane is disabled, has no capacity, or was otherwise compiled out.
-        if effect.armed ~= true then return end
-        -- If a live frame exists, a merely resolvable setting is not enough:
-        -- the effect must actually be installed on that frame.
-        if frame ~= nil and effect.installed ~= true then return end
-        if laneHint and effect.ownerKind == "lane" and effect.lane ~= laneHint then return end
-        if requestedType and kind ~= requestedType then return end
-        local colorMatch = R.LiveAuraEffectColorMatches(norm, effect)
-        if R.LiveAuraHasSpecificColor(norm) and not colorMatch then return end
-        local relevant = colorMatch or auraHint or laneHint ~= nil or requestedType ~= nil
-        if not relevant then return end
-        local score = (effect.armed == true and 8 or 0)
-            + (effect.installed == true and 4 or 0)
-            + (colorMatch and 50 or 0)
-            + (requestedType and 40 or 0)
-            + (laneHint and effect.lane == laneHint and 100 or 0)
-            + (customHint and effect.ownerKind == "custom" and 80 or 0)
-            + (targetDotsHint and effect.ownerKind == "targetDots" and 120 or 0)
-        if not bestScore or score > bestScore then
-            best, bestScore, matches = effect, score, { effect }
-        elseif score == bestScore then
-            matches[#matches + 1] = effect
-        end
-    end
-
-    local lanes = snapshot.lanes
-    if type(lanes) == "table" then
-        Consider(lanes.buff)
-        Consider(lanes.debuff)
-    end
-    for i = 1, #(snapshot.custom or {}) do Consider(snapshot.custom[i]) end
-    return best, snapshot, matches
-end
-
-function R.LiveAuraFrameEffectAmbiguityExplanation(unitLabel, effects)
-    local found = {}
-    for i = 1, #(effects or {}) do
-        local effect = effects[i]
-        local ownerLabel
-        if effect.ownerKind == "lane" then
-            ownerLabel = effect.lane == "buff" and "Buff" or "Debuff"
-        elseif effect.ownerKind == "targetDots" then
-            ownerLabel = tostring(effect.display or "Dots on Target")
-        else
-            ownerLabel = tostring(effect.display or "Custom Aura")
-        end
-        local kind = tostring(effect.renderedType or effect.configuredType or "effect"):lower()
-        local kindLabel = R.LIVE_AURA_EFFECT_LABELS[kind] or kind
-        local color = effect.color
-        local r, g, b = tonumber(color and color[1]), tonumber(color and color[2]), tonumber(color and color[3])
-        local rgb = r and g and b and string.format(" (RGB %d, %d, %d)",
-            math.floor(r * 255 + 0.5), math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5)) or ""
-        found[#found + 1] = tostring(ownerLabel) .. " " .. tostring(kindLabel) .. rgb
-    end
-    return "I found multiple matching " .. tostring(unitLabel) .. " Aura Full-Frame effects: "
-        .. table.concat(found, "; ") .. ". WoW keeps the exact live native AuraSlot match opaque to addon Lua, so I cannot safely choose one from configuration alone."
-        .. " Name the Buff, Debuff, Custom Aura, or Dots-on-Target owner and I can explain that setting precisely."
-        .. " I did not fall back to the normal UnitFrame border and kept MSUF unchanged."
-end
-
-function R.LiveAuraFrameEffectExplanation(unitLabel, effect)
-    local kind = tostring(effect and (effect.renderedType or effect.configuredType) or "none"):lower()
-    local effectLabel = R.LIVE_AURA_EFFECT_LABELS[kind]
-        or tostring(effect and (effect.renderedType or effect.configuredType) or "Effect")
-    local laneLabel
-    if effect and effect.ownerKind == "lane" then
-        laneLabel = effect.lane == "buff" and "Buff" or "Debuff"
-    else
-        laneLabel = tostring(effect and effect.display or "Custom Aura")
-    end
-    local color = effect and effect.color or {}
-    local r, g, b = tonumber(color[1]), tonumber(color[2]), tonumber(color[3])
-    local a = tonumber(color[4])
-    local colorLine = r and g and b and string.format(
-        " Its effective color is RGB %d, %d, %d%s.",
-        math.floor(r * 255 + 0.5), math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5),
-        a and (" at " .. tostring(math.floor(a * 100 + 0.5)) .. "% opacity") or "") or ""
-    local detailLine = " Thickness " .. tostring(tonumber(effect and effect.thickness) or 2)
-        .. ", priority " .. tostring(tonumber(effect and effect.priority) or 5)
-        .. ", layer " .. tostring(tonumber(effect and effect.layer) or 0) .. "."
-    local ownerLine
-    if effect and effect.ownerKind == "targetDots" then
-        ownerLine = " The Effect value is owned by this Dots-on-Target tracking slot."
-    elseif effect and effect.ownerKind == "custom" then
-        ownerLine = " The Effect value is owned by this tracked Custom Aura slot."
-    elseif effect and effect.source == "unit" then
-        ownerLine = " The Effect value is owned by the " .. tostring(unitLabel)
-            .. " " .. tostring(laneLabel) .. " Aura lane."
-    else
-        ownerLine = " The Effect value uses the built-in default of the " .. tostring(unitLabel)
-            .. " " .. tostring(laneLabel) .. " Aura lane."
-    end
-    local armedLine = effect and effect.armed == true
-        and " It is armed in the compiled Aura lane and can appear while WoW assigns a matching aura to that native slot."
-        or " It is configured but is not armed in the compiled lane right now, for example because that Aura lane is disabled."
-    local triggerLine
-    if effect and effect.ownerKind == "lane" then
-        triggerLine = effect.lane == "buff"
-            and " Its trigger is any helpful aura that passes the Buff lane's native filters and blacklist."
-            or " Its trigger is any harmful aura that passes the Debuff lane's native filters and blacklist."
-    elseif effect and effect.ownerKind == "targetDots" then
-        triggerLine = " Its trigger is the tracked Dots-on-Target aura configured for this slot."
-    else
-        triggerLine = " Its trigger is the tracked Custom Aura configured for this slot."
-    end
-    local geometryLine = kind == "namecolor" and " Name Overlay colors the UnitFrame name instead of drawing on the health fill."
-        or " The renderer attaches this visual to the current StatusBar health-fill texture, not the outer UnitFrame; at 49% health its right edge sits at the fill edge, and at 100% it reaches the frame edge."
-    local pathLine = effect and effect.ownerKind == "lane"
-        and (" Change it at " .. tostring(unitLabel) .. " > Auras > " .. tostring(laneLabel) .. "s > Style > Full-Frame Effect; set Effect to None to remove it.")
-        or (" Change it in " .. tostring(unitLabel) .. " > Auras > " .. tostring(laneLabel) .. " > Style > Full-Frame Effect.")
-    return tostring(unitLabel) .. " " .. tostring(laneLabel) .. " Full-Frame Effect is configured as " .. effectLabel .. "."
-        .. colorLine .. detailLine .. ownerLine .. armedLine .. triggerLine .. geometryLine
-        .. " WoW keeps the exact live AuraSlot match opaque to addon Lua, so I can identify the owner and configuration but cannot safely name the assigned aura right now."
-        .. pathLine .. " UnitFrame Dispel Overlay is separate. I kept MSUF unchanged."
 end
 
 local function LiveBorderVisual(frame, uf, spec)
@@ -6791,30 +6111,6 @@ function R.TryLiveUnitColorExplanation(text)
         return LiveColorGeneralGuide()
     end
 
-    local frame = _G["MSUF_" .. unit]
-    local uf = MSUF and (MSUF.UnitFrames or MSUF.UF)
-    if not frame and uf and type(uf.GetFrame) == "function" then frame = uf.GetFrame(unit) end
-    local spec = frame and frame.MSUFSpec
-    local health = spec and spec.health or {}
-    local asksBorder = R.ContainsAny(norm, { "border", "outline", "highlight", "edge", "rand", "umrandung" })
-    local asksHealthFill = R.ContainsAny(norm, { "health", "health bar", "health fill", "bar fill", "hp bar", "lebensbalken" })
-    local auraEffect, _, auraMatches = R.LiveAuraFrameEffectCandidate(norm, frame, unit)
-    if auraEffect and (asksBorder or not asksHealthFill
-        or R.ContainsAny(norm, { "aura", "buff", "debuff", "glow", "tint", "pulse" })) then
-        if type(auraMatches) == "table" and #auraMatches > 1 then
-            return {
-                text = R.LiveAuraFrameEffectAmbiguityExplanation(unitLabel, auraMatches),
-                status = "info",
-                summary = "Ambiguous live Auras3 Full-Frame Effect explanation",
-            }
-        end
-        return {
-            text = R.LiveAuraFrameEffectExplanation(unitLabel, auraEffect),
-            status = "info",
-            summary = "Live Auras3 Full-Frame Effect explanation",
-        }
-    end
-
     local exists = type(_G.UnitExists) == "function" and SafeLiveValue(_G.UnitExists(unit)) or nil
     if exists == false or exists == nil then
         local debuffHint = R.ContainsAny(norm, LIVE_COLOR_DEBUFF_TERMS)
@@ -6831,7 +6127,14 @@ function R.TryLiveUnitColorExplanation(text)
         }
     end
 
+    local frame = _G["MSUF_" .. unit]
+    local uf = MSUF and (MSUF.UnitFrames or MSUF.UF)
+    if not frame and uf and type(uf.GetFrame) == "function" then frame = uf.GetFrame(unit) end
+    local spec = frame and frame.MSUFSpec
+    local health = spec and spec.health or {}
     local borderVisual = LiveBorderVisual(frame, uf, spec)
+    local asksBorder = R.ContainsAny(norm, { "border", "outline", "highlight", "edge", "rand", "umrandung" })
+    local asksHealthFill = R.ContainsAny(norm, { "health", "health bar", "health fill", "bar fill", "hp bar", "lebensbalken" })
     if borderVisual and (asksBorder or (tostring(borderVisual.source or "normal") ~= "normal" and not asksHealthFill)) then
         return {
             text = LiveBorderExplanation(unitLabel, borderVisual)
@@ -7010,7 +6313,7 @@ function R.AuraFilterOverviewReply(norm)
 end
 
 function R.AuraUnitFilterStatusReply(norm, scope, scopeLabel, lane, laneLabel, requestedKey)
-    local filtersEnabled = R.AuraReadSettingValue("auras3." .. tostring(scope) .. "." .. tostring(lane) .. ".filtersEnabled")
+    local filtersEnabled = R.AuraReadSettingValue("auras3." .. tostring(scope) .. ".filtersEnabled")
     if filtersEnabled == nil then filtersEnabled = true end
 
     local lines = {}
@@ -10000,27 +9303,6 @@ function R.TryUncertainContextChoices(text)
     end
     if #choices == 0 or type(A.SetPendingChoices) ~= "function" then return nil end
 
-    -- Before handing back a guess list: the sentence may describe one boolean
-    -- control by the result it wants. That is not a guess, it is the control
-    -- the words name, so act on it instead of asking.
-    if type(R.StatedValueKindSiblingPlan) == "function" and type(A.ExecutePlan) == "function" then
-        local siblingPlan = R.StatedValueKindSiblingPlan(text)
-        if siblingPlan then
-            local okSibling, siblingResult = pcall(A.ExecutePlan, siblingPlan, { sourceText = text })
-            if okSibling and type(siblingResult) == "table" and not A.RouterIsUnknownResult(siblingResult) then
-                return siblingResult
-            end
-        end
-    end
-    if type(R.NamedBooleanIntentPlan) == "function" and type(A.ExecutePlan) == "function" then
-        local intentPlan = R.NamedBooleanIntentPlan(text)
-        if intentPlan then
-            local okIntent, intentResult = pcall(A.ExecutePlan, intentPlan, { sourceText = text })
-            if okIntent and type(intentResult) == "table" and not A.RouterIsUnknownResult(intentResult) then
-                return intentResult
-            end
-        end
-    end
     local listText = A.SetPendingChoices(choices)
     return {
         text = "I'm not confident enough to guess what you meant, so I kept MSUF unchanged. Pick the closest option:\n" .. tostring(listText or ""),
@@ -14296,7 +13578,7 @@ function R.OpenEndedLikelyPage(subject, norm)
         if groupScope then
             page, label, detail = "gf_auras", "Group Auras", "Party and Raid aura controls live in Group Auras."
         elseif R.ContainsAny(subject, { "appearance", "shared", "theme", "icon shape", "icon border", "icon shadow" }) then
-            page, label, detail = "auras3_styling", "Global Aura Appearance", "The global Aura icon theme is selected by Aura product in Appearance > Aura Style."
+            page, label, detail = "auras3_styling", "Shared Aura Appearance", "The global Aura icon theme is selected by Aura product in Appearance > Aura Style."
         else
             local unit, unitLabel = R.UnitScopeFromText(norm)
             if unit and unitLabel then
@@ -14759,131 +14041,6 @@ function R.OpenColorSettingPickerResult(item, summary)
     }
 end
 
--- A request names the FAMILY and states a value of one particular kind:
--- "make the frame outline red" names the outline and a colour, "make the frame
--- border half transparent" names it and an opacity. The bare family words
--- ("frame outline") belong to the thickness slider, so both were answered with
--- "what value do you want me to use for ... Thickness?".
---
--- The sibling is found the way a player would name it: append the kind's own
--- word to the subject and look that up. No new index and no ranking change.
-local VALUE_KIND_SUFFIXES = {
-    color = { " color", " colour" },
-    opacity = { " opacity", " alpha" },
-    anchor = { " anchor", " bar anchor" },
-    texture = { " texture", " bar texture" },
-}
-local COLOR_VALUE_WORDS = {
-    "red", "green", "blue", "yellow", "orange", "purple", "pink", "white", "black",
-    "grey", "gray", "cyan", "magenta", "brown", "teal", "gold",
-}
-local OPACITY_VALUE_WORDS = {
-    "transparent", "opaque", "see through", "invisible", "translucent",
-}
--- "anchor the heal absorb bar to the left side" states a POSITION, and the bare
--- family words ("heal absorb bar") belong to the show toggle -- so the toggle
--- answered a question about where the bar sits.
--- Texture keys are the value kind most often stated next to a family name
--- ("use the flat texture for the maximum health loss overlay").
-local TEXTURE_VALUE_WORDS = {
-    "flat texture", "blizzard texture", "skills texture", "outline texture",
-    "raidhp texture", "raidpower texture", "solid texture",
-}
-local ANCHOR_VALUE_WORDS = {
-    "left side", "right side", "to the left", "to the right",
-    "follow the hp bar", "follow the health bar", "follow hp bar",
-    "reverse from max", "overflow",
-}
-
--- The setting TYPE a stated value needs, for callers that rank candidates
--- rather than look up a sibling by name.
-function R.StatedValueKindForText(text)
-    local norm = R.Normalize(text)
-    if norm == "" then return nil end
-    if R.ContainsAny(norm, COLOR_VALUE_WORDS) then return "color" end
-    if R.ContainsAny(norm, OPACITY_VALUE_WORDS) then return "number" end
-    if R.ContainsAny(norm, ANCHOR_VALUE_WORDS) then return "enum" end
-    if R.ContainsAny(norm, TEXTURE_VALUE_WORDS) then return "string" end
-    return nil
-end
-
-function R.SiblingSettingForStatedValueKind(text)
-    local norm = R.Normalize(text)
-    if norm == "" then return nil end
-    local kind
-    if R.ContainsAny(norm, COLOR_VALUE_WORDS) then kind = "color"
-    elseif R.ContainsAny(norm, OPACITY_VALUE_WORDS) then kind = "opacity"
-    elseif R.ContainsAny(norm, ANCHOR_VALUE_WORDS) then kind = "anchor"
-    elseif R.ContainsAny(norm, TEXTURE_VALUE_WORDS) then kind = "texture" end
-    if not kind then return nil end
-    local subject = type(R.CommandSubjectPhrase) == "function" and R.CommandSubjectPhrase(text) or nil
-    if not subject or subject == "" then return nil end
-    -- Peel the value words off the tail: what remains is the family name.
-    local words = kind == "color" and COLOR_VALUE_WORDS
-        or kind == "anchor" and ANCHOR_VALUE_WORDS
-        or kind == "texture" and TEXTURE_VALUE_WORDS
-        or OPACITY_VALUE_WORDS
-    local trimmed, changed = subject, true
-    while changed do
-        changed = false
-        for i = 1, #words do
-            local stripped = trimmed:gsub("%s+" .. words[i] .. "$", "")
-            if stripped ~= trimmed then trimmed, changed = R.Trim(stripped), true end
-        end
-        for _, filler in ipairs({ "half", "fully", "more", "less", "a bit", "slightly", "completely" }) do
-            local stripped = trimmed:gsub("%s+" .. filler .. "$", "")
-            if stripped ~= trimmed then trimmed, changed = R.Trim(stripped), true end
-        end
-        -- "shield bar 50 transparent": the amount sits between the family name
-        -- and the value word once the tail has been peeled.
-        local withoutNumber = trimmed:gsub("%s+%d+%.?%d*%%?$", "")
-        if withoutNumber ~= trimmed then trimmed, changed = R.Trim(withoutNumber), true end
-    end
-    if trimmed == "" then return nil end
-    local map = R.EnsureSettingLabelIndex and R.EnsureSettingLabelIndex()
-    local aliasMap = R.EnsureSettingAliasIndex and R.EnsureSettingAliasIndex()
-    for _, suffix in ipairs(VALUE_KIND_SUFFIXES[kind]) do
-        local candidate = trimmed .. suffix
-        local setting = (map and map[candidate]) or (aliasMap and aliasMap[candidate]) or nil
-        if type(setting) == "table" and type(setting.set) == "function" then
-            local wanted = kind == "color" and "color"
-                or kind == "anchor" and "enum"
-                or kind == "texture" and "string"
-                or "number"
-            if setting.type == wanted then return setting end
-        end
-    end
-    return nil
-end
-
-function R.StatedValueKindSiblingPlan(text)
-    local setting = R.SiblingSettingForStatedValueKind(text)
-    if not setting then return nil end
-    local parser = A.Parser or {}
-    local value = type(parser.ValueForRegistrySetting) == "function"
-        and parser.ValueForRegistrySetting(setting, R.Normalize(text), text) or nil
-    if value == nil then
-        -- "half transparent" states a direction, not a number; the planner
-        -- turns that into a step on the opacity slider.
-        local plan = type(parser.PlanForExactRegistrySetting) == "function"
-            and parser.PlanForExactRegistrySetting(setting, R.Normalize(text), text) or nil
-        if type(plan) == "table" and plan.kind == "changes" then
-            plan.raw, plan.sourceText = text, text
-            return plan
-        end
-        return nil
-    end
-    return {
-        kind = "changes",
-        changes = { { setting = setting, value = value } },
-        label = tostring(setting.label or setting.key),
-        summary = "Changes the sibling control the stated value belongs to.",
-        raw = text,
-        sourceText = text,
-        exactSettingMutation = true,
-    }
-end
-
 local function ExactSettingValuePrompt(item, invalidValue)
     local setting = item and item.setting
     if not setting then return nil end
@@ -15105,42 +14262,9 @@ function R.TryExactRegistrySettingMutation(text)
     local setting = item and item.setting
     if not setting then return nil end
     if hasExplicitValue and R.ExactMutationSpansSeveralChanges(text) then return nil end
-    local parser = A.Parser or {}
-    if not hasExplicitValue then
-        -- "make the corners rounder" names the control and states a direction
-        -- but no number, and the same is true of every comparative request.
-        -- The planner turns that into one step; only when it cannot does the
-        -- request really lack a value.
-        --
-        -- "use the flat texture for the absorb bar" does carry its value, just
-        -- in front of the control, so the canonical rewrite is tried first.
-        local planText = text
-        local reordered = R.CanonicalValueBeforeControlCommand(text, true)
-        if reordered and type(parser.PlanForExactRegistrySetting) == "function" then
-            local reorderedPlan = parser.PlanForExactRegistrySetting(setting, R.Normalize(reordered), reordered)
-            if type(reorderedPlan) == "table" and reorderedPlan.kind == "changes" then
-                planText = reordered
-            end
-        end
-        local siblingPlan = R.StatedValueKindSiblingPlan(text)
-        if siblingPlan and type(A.ExecutePlan) == "function" then
-            local okSibling, siblingResult = pcall(A.ExecutePlan, siblingPlan, { sourceText = text })
-            if okSibling and type(siblingResult) == "table"
-                and not A.RouterIsUnknownResult(siblingResult)
-            then
-                return siblingResult
-            end
-        end
-        local relativePlan = type(parser.PlanForExactRegistrySetting) == "function"
-            and parser.PlanForExactRegistrySetting(setting, R.Normalize(planText), planText) or nil
-        if type(relativePlan) == "table" and relativePlan.kind == "changes"
-            and type(A.ExecutePlan) == "function"
-        then
-            return A.ExecutePlan(relativePlan, { sourceText = text })
-        end
-        return ExactSettingValuePrompt(item, false)
-    end
+    if not hasExplicitValue then return ExactSettingValuePrompt(item, false) end
 
+    local parser = A.Parser or {}
     local plan = type(parser.PlanForExactRegistrySetting) == "function"
         and parser.PlanForExactRegistrySetting(setting, R.Normalize(text), text) or nil
     if not plan then return ExactSettingValuePrompt(item, true) end
@@ -15297,33 +14421,6 @@ function R.TryOpenEndedSettingIdea(text, coreHandler)
                 end
             end
         end
-        -- "change the bar texture to flat" names no frame, and every per-unit
-        -- copy of the same option answers to the same bare words. A request
-        -- that mentions no frame means the shared control, so when exactly one
-        -- candidate is the global one, that is the answer rather than a list.
-        if type(entries) == "table" and #entries > 1 and type(A.ExecutePlan) == "function"
-            and not R.OpenEndedEntriesAreConfident(entries)
-            and not (type(R.UnitScopeFromText) == "function" and R.UnitScopeFromText(R.Normalize(text)))
-        then
-            local namedItem = R.EntriesNamedExactlyOnce(entries, text)
-            local parser = A.Parser or {}
-            local setting = namedItem and namedItem.setting or nil
-            local value = setting and type(parser.ValueForRegistrySetting) == "function"
-                and parser.ValueForRegistrySetting(setting, R.Normalize(text), text) or nil
-            if value ~= nil then
-                local ok, result = pcall(A.ExecutePlan, {
-                    kind = "changes",
-                    changes = { { setting = setting, value = value } },
-                    label = tostring(setting.label or setting.key),
-                    summary = "Changes the one control whose own name the request spells.",
-                    raw = text,
-                    sourceText = text,
-                }, { sourceText = text })
-                if ok and type(result) == "table" and not A.RouterIsUnknownResult(result) then
-                    return result
-                end
-            end
-        end
         if type(entries) == "table" and #entries > 1 and not R.OpenEndedEntriesAreConfident(entries) then
             local visible = math.min(tonumber(entries[1] and entries[1].visibleLimit) or 3, #entries)
             -- The value is already known, so a number should FINISH the change,
@@ -15407,19 +14504,9 @@ function R.TryOpenEndedSettingIdea(text, coreHandler)
         if type(coreHandler) == "function" then
             local canonical = R.CanonicalTrailingStateCommand(text, true)
                 or R.CanonicalValueConnectorCommand(text, true)
-                or R.CanonicalValueBeforeControlCommand(text, true)
             if canonical then
                 local rewritten = coreHandler(canonical)
                 if rewritten and not A.RouterIsUnknownResult(rewritten) then return rewritten end
-            end
-        end
-        if type(A.ExecutePlan) == "function" then
-            local plan = R.NamedBooleanIntentPlan(text)
-            if plan then
-                local ok, result = pcall(A.ExecutePlan, plan, { sourceText = text })
-                if ok and type(result) == "table" and not A.RouterIsUnknownResult(result) then
-                    return result
-                end
             end
         end
         local page = analysis.page
@@ -15471,23 +14558,6 @@ function R.TryOpenEndedSettingIdea(text, coreHandler)
             if canonical then
                 local rewritten = coreHandler(canonical)
                 if rewritten and not A.RouterIsUnknownResult(rewritten) then return rewritten end
-            end
-        end
-    end
-    -- The open-ended lane lands here with the right control whenever the
-    -- request states a direction instead of a value ("make the corners
-    -- rounder") or puts the value in front of the control ("use the flat
-    -- texture for the absorb bar"). Both carry enough to act on, so try them
-    -- before answering with "you did not choose a value".
-    do
-        local parser = A.Parser or {}
-        if type(parser.PlanForExactRegistrySetting) == "function" then
-            local reordered = R.CanonicalValueBeforeControlCommand(text, true)
-            for _, candidate in ipairs({ reordered or text, text }) do
-                local plan = parser.PlanForExactRegistrySetting(setting, R.Normalize(candidate), candidate)
-                if type(plan) == "table" and plan.kind == "changes" and type(A.ExecutePlan) == "function" then
-                    return A.ExecutePlan(plan, { sourceText = text })
-                end
             end
         end
     end
@@ -18201,21 +17271,6 @@ function A.RouteInput(text, coreHandler)
                 and R.TryRegistryLocationSpecialistGuidance
                 and R.TryRegistryLocationSpecialistGuidance(text, Core) or nil
             if settingLocation then return settingLocation end
-            -- Before the encyclopaedia answers: the sentence may describe a
-            -- boolean control by result rather than by state ("mark shields
-            -- that overflow past full health"). That is an instruction, and
-            -- an article about the area is the wrong reply to it.
-            if type(A.ExecutePlan) == "function" and type(R.NamedBooleanIntentPlan) == "function" then
-                local intentPlan = R.NamedBooleanIntentPlan(text)
-                if intentPlan then
-                    local okIntent, intentResult = pcall(A.ExecutePlan, intentPlan, { sourceText = text })
-                    if okIntent and type(intentResult) == "table"
-                        and not A.RouterIsUnknownResult(intentResult)
-                    then
-                        return intentResult
-                    end
-                end
-            end
             local answer = A.Knowledge.Answer(text, { currentPage = M and M.activeKey })
             if answer then return answer end
         end

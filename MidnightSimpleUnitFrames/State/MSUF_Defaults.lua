@@ -1117,7 +1117,7 @@ end
 --- Canonical Unit Aura baseline for the one-time 6.0 Aura reset and for the
 --- no-payload fallback. Factory profiles apply a separate explicit overlay
 --- below so product positioning can evolve without changing hard-cut geometry.
-local MSUF_DEFAULTS_AURAS3_PROFILE_MODEL_REVISION = 2
+local MSUF_DEFAULTS_AURAS3_PROFILE_MODEL_REVISION = 1
 local MSUF_DEFAULTS_GROUP_AURA_PROFILE_MODEL_REVISION = 1
 local MSUF_DEFAULTS_GROUP_AURA_SCOPES = { "gf_party", "gf_raid", "gf_mythicraid" }
 local function MSUF_Defaults_CreateCanonicalPlayerDefensiveAuraContainer()
@@ -1154,7 +1154,7 @@ local function MSUF_Defaults_CreateCanonicalPlayerDefensiveAuraContainer()
         placed = {
             type = "icon", anchor = "TOPRIGHT", growth = "LEFTDOWN",
             x = 0, y = 0, size = 24, barWidth = 54,
-            max = 8, perRow = 4, spacing = 2, stylePadding = 0,
+            max = 8, perRow = 4, spacing = 2,
             showCooldown = true, showCooldownSwipe = true, showStacks = true,
         },
         layer = 9,
@@ -1590,7 +1590,6 @@ local function MSUF_Defaults_CreateCanonicalUnitAuras()
             filters = Filters(),
         }
     end
-    MSUF_Defaults_MaterializeUnitAuraLaneOwners(auras)
     return auras
 end
 ExportPublic("MSUF_CreateCanonicalUnitAuras", MSUF_Defaults_CreateCanonicalUnitAuras)
@@ -1658,8 +1657,6 @@ local function MSUF_Defaults_CreateFactoryUnitAuras()
     defensive.portraitIcon = true
     defensive.placed.x = -293
     defensive.placed.y = 11
-    auras._msufA3UnitLaneOwners_v1 = nil
-    MSUF_Defaults_MaterializeUnitAuraLaneOwners(auras)
     return auras
 end
 
@@ -2495,11 +2492,6 @@ end
 --- EllesmereUI integration is actually available.
 if g.ellesmereEditModeIntegration == nil then
     g.ellesmereEditModeIntegration = true
-end
---- Northern Sky Raid Tools nicknames are enabled for MSUF by default to
---- preserve the established integration behavior, with a profile-local opt-out.
-if g.nsrtNicknameIntegration == nil then
-    g.nsrtNicknameIntegration = true
 end
 --- Optional native Edit Mode adapters. The third-party addons remain the sole
 --- owners of their frames and saved positions; these switches only control

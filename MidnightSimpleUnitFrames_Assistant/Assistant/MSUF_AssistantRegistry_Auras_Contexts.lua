@@ -45,5 +45,7 @@ function A.AurasRegistry.InstallContexts(ctx)
         AuraScopeLabel = ctx.AuraScopeLabel,
         AuraModel = ctx.AuraModel,
         ApplyAura = ctx.ApplyAura,
+        ResetAuraScope = ctx.ResetAuraScope,
+        ResetAllAuraOverrides = ctx.ResetAllAuraOverrides,
     }
 end

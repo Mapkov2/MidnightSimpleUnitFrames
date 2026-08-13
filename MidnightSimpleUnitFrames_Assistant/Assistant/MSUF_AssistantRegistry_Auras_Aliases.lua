@@ -35,7 +35,7 @@ function A.AurasRegistry.BuildAliasHelpers(ctx)
     end
 
     local function AuraScopeFromArg(value)
-        value = tostring(value or "player"):lower():gsub("%s+", "")
+        value = tostring(value or "shared"):lower():gsub("%s+", "")
         return AURA_EDIT_SCOPE_ALIASES[value] or value
     end
 

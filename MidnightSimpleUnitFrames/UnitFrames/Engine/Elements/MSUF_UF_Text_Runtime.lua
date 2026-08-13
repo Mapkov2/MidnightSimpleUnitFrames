@@ -25,13 +25,11 @@ local C_Timer = _G.C_Timer
 local PowerColor = Text.PowerColor
 local SetShownCached = Text.SetShownCached
 local SetTextCached = Text.SetTextCached
-local ApplyNameTextColor = Text.ApplyNameTextColor or function(frame, unit)
-  Text.SetNameTextColor(frame, Text.NameTextColor(frame, unit))
-end
+local SetNameTextColor = Text.SetNameTextColor
+local NameTextColor = Text.NameTextColor
 local NPCTypeTextColorEnabled = Text.NPCTypeTextColorEnabled
-local ApplyInlineTextColor = Text.ApplyInlineTextColor or function(frame, unit, inline)
-  Text.SetInlineTextColor(frame, Text.InlineTextColor(frame, unit, inline))
-end
+local SetInlineTextColor = Text.SetInlineTextColor
+local InlineTextColor = Text.InlineTextColor
 local SetPowerTextColor = Text.SetPowerTextColor
 local UpdateHealthTextColor = Text.UpdateHealthTextColor
 local HealthPercent = Text.HealthPercent
@@ -693,7 +691,7 @@ end
 
 function Text.UpdateNameColor(frame, event, unit)
   if RegionShown(frame and frame.nameText) then
-    ApplyNameTextColor(frame, unit or frame.MSUFUnitKey)
+    SetNameTextColor(frame, NameTextColor(frame, unit or frame.MSUFUnitKey))
     local rt = frame and frame._msufTextRuntime
     if rt and rt.inlineToT then
       Text.UpdateInline(frame, event, unit)
@@ -741,7 +739,7 @@ function Text.UpdateInline(frame, event, unit)
   end
   SetShownCached(frame.totInlineSep, true)
   SetShownCached(frame.totInlineText, true)
-  ApplyInlineTextColor(frame, inlineUnit, inline)
+  SetInlineTextColor(frame, InlineTextColor(frame, inlineUnit, inline))
 end
 
 local function SetNameTextCached(frame, value)
@@ -1829,14 +1827,10 @@ UF.RegisterElement("HealthText", HealthText)
 local PowerText = {}
 
 function PowerText.IsEnabled(frame, spec)
-  if frame and frame._msufAugPowerReplacementActive == true then return false end
   return PowerTextEnabled(spec)
 end
 
 function PowerText.GetEvents(frame, spec)
-  if frame and frame._msufAugPowerReplacementActive == true then
-    return EMPTY_EVENTS
-  end
   if not PowerTextEnabled(spec) then
     return EMPTY_EVENTS
   end
@@ -2001,13 +1995,6 @@ HealthText.MarkValueDirty = MarkHealthTextDirty
 HealthText.MarkGroupValueDirty = MarkGroupHealthTextDirty
 PowerText.MarkValueDirty = MarkPowerTextDirty
 HealthText.NoDispatchUpdates = {
-  [MarkHealthTextDirty] = true,
-  [MarkGroupHealthTextDirty] = true,
-}
--- Core may omit a repeated UNIT_HEALTH marker while either mask containing the
--- health bit is already pending. The deferred writer rereads the latest unit
--- values at drain time, so repeated markers carry no event payload or state.
-HealthText.DirtyGateUpdates = {
   [MarkHealthTextDirty] = true,
   [MarkGroupHealthTextDirty] = true,
 }

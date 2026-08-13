@@ -234,11 +234,10 @@ function Status.SetIconTexture(icon, spec, conf, g, key, data, runtimeCfg, statu
             tex:SetTexture(path)
         end
     elseif spec.id == "elite" then
-        local state = ElitePreviewState(key, data)
-        if tex and ApplyStatusIconPackPreview(tex, spec, conf, g, runtimeCfg, "elite", state) then
+        if tex and ApplyStatusIconPackPreview(tex, spec, conf, g, runtimeCfg, "elite", (key == "boss") and "BOSS" or "ELITE") then
             -- Custom texture applied above.
         elseif tex and tex.SetAtlas then
-            tex:SetAtlas(ElitePreviewAtlas(state))
+            tex:SetAtlas((key == "boss") and "nameplates-icon-elite-gold" or "nameplates-icon-elite-silver")
         elseif tex then
             tex:SetTexture("Interface\\TargetingFrame\\UI-TargetingFrame-Skull")
         end

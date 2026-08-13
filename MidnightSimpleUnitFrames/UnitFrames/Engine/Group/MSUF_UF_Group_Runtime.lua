@@ -279,7 +279,41 @@ local function SetupWantedPriority()
   return header ~= nil
 end
 
-local function FinishOwnershipHandoff()
+local function SetupWantedHeaders(kind)
+  local scope = HeaderScope(kind)
+  if not AnyGroupFrameEnabled() then
+    if not scope or scope == "party" then RetireHeader("party") end
+    if not scope or scope == "raid" then RetireHeader("raid") end
+    RetireHeader("priority")
+    return true
+  end
+
+  local wantParty = WantParty() and not PreviewSuppressesHeader("party")
+  local wantRaid = WantRaid() and not PreviewSuppressesHeader("raid")
+  local raidKind = LiveRaidKind()
+
+  if scope ~= "raid" and scope ~= "priority" and wantParty then
+    local header, scanned
+    header, scanned = SetupLiveHeader("party", "party")
+    if header and header.Show then header:Show() end
+    if not scanned and GF.ScheduleScan then GF.ScheduleScan("party", "party") end
+  elseif scope ~= "raid" and scope ~= "priority" then
+    RetireHeader("party")
+  end
+
+  if scope ~= "party" and scope ~= "priority" and wantRaid then
+    local header, scanned
+    header, scanned = SetupLiveHeader("raid", raidKind)
+    if header and header.Show then header:Show() end
+    if not scanned and GF.ScheduleScan then GF.ScheduleScan("raid", raidKind) end
+  elseif scope ~= "party" and scope ~= "priority" then
+    RetireHeader("raid")
+  end
+
+  -- Priority inherits whichever base group kind is active, so both Party and
+  -- Raid scoped layout changes must update the one switching secure header.
+  SetupWantedPriority()
+
   -- Group borders live on persistent, unprotected anchors rather than on the
   -- secure headers retired above. Reconcile both anchors after every scope
   -- transition so the inactive Party/Raid border cannot survive the switch.
@@ -289,44 +323,6 @@ local function FinishOwnershipHandoff()
     GF.ApplyBlizzardGroupFrameOwnership("lean-runtime")
   end
   return true
-end
-
-local function SetupWantedHeaders(kind)
-  local scope = HeaderScope(kind)
-  if not AnyGroupFrameEnabled() then
-    if not scope or scope == "party" then RetireHeader("party") end
-    if not scope or scope == "raid" then RetireHeader("raid") end
-    RetireHeader("priority")
-    return FinishOwnershipHandoff()
-  end
-
-  local wantParty = WantParty() and not PreviewSuppressesHeader("party")
-  local wantRaid = WantRaid() and not PreviewSuppressesHeader("raid")
-  local raidKind = LiveRaidKind()
-
-  if scope ~= "raid" and scope ~= "priority" and wantParty then
-    local header, scanHandled
-    header, scanHandled = SetupLiveHeader("party", "party")
-    if header and header.Show then header:Show() end
-    if not scanHandled and GF.ScheduleScan then GF.ScheduleScan("party", "party") end
-  elseif scope ~= "raid" and scope ~= "priority" then
-    RetireHeader("party")
-  end
-
-  if scope ~= "party" and scope ~= "priority" and wantRaid then
-    local header, scanHandled
-    header, scanHandled = SetupLiveHeader("raid", raidKind)
-    if header and header.Show then header:Show() end
-    if not scanHandled and GF.ScheduleScan then GF.ScheduleScan("raid", raidKind) end
-  elseif scope ~= "party" and scope ~= "priority" then
-    RetireHeader("raid")
-  end
-
-  -- Priority inherits whichever base group kind is active, so both Party and
-  -- Raid scoped layout changes must update the one switching secure header.
-  SetupWantedPriority()
-
-  return FinishOwnershipHandoff()
 end
 
 local function ApplyFrameDirty(frame, kind, mask, reason, applyMask)

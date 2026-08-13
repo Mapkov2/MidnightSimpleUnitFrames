@@ -16,6 +16,8 @@ function A.AurasRegistry.BuildLaneStyleRegistrationHelpers(ctx)
     if type(ctx) ~= "table" then return nil end
 
     local AuraModel = ctx.AuraModel
+    local AuraSharedBool = ctx.AuraSharedBool
+    local SetAuraSharedBool = ctx.SetAuraSharedBool
     local AuraReadNumber = ctx.AuraReadNumber
     local AuraWriteNumber = ctx.AuraWriteNumber
     local AuraReadStackAnchor = ctx.AuraReadStackAnchor
@@ -24,6 +26,7 @@ function A.AurasRegistry.BuildLaneStyleRegistrationHelpers(ctx)
     local AuraWriteCooldownAnchor = ctx.AuraWriteCooldownAnchor
 
     if type(AuraModel) ~= "function" then return nil end
+    if type(AuraSharedBool) ~= "function" or type(SetAuraSharedBool) ~= "function" then return nil end
     if type(AuraReadNumber) ~= "function" or type(AuraWriteNumber) ~= "function" then return nil end
     if type(AuraReadStackAnchor) ~= "function" or type(AuraWriteStackAnchor) ~= "function" then return nil end
     if type(AuraReadCooldownAnchor) ~= "function" or type(AuraWriteCooldownAnchor) ~= "function" then return nil end
@@ -31,7 +34,7 @@ function A.AurasRegistry.BuildLaneStyleRegistrationHelpers(ctx)
     local function AuraReadLaneStyleBool(scope, lane, key, defaultValue)
         local Model = AuraModel()
         if Model and type(Model.ReadLaneStyleBool) == "function" then return Model.ReadLaneStyleBool(scope, lane, key, defaultValue) end
-        return defaultValue and true or false
+        return AuraSharedBool(key, defaultValue)
     end
 
     local function AuraWriteLaneStyleBool(scope, lane, key, value)
@@ -40,7 +43,7 @@ function A.AurasRegistry.BuildLaneStyleRegistrationHelpers(ctx)
             Model.WriteLaneStyleBool(scope, lane, key, value)
             return
         end
-        -- No Shared fallback for Unit lane writes.
+        SetAuraSharedBool(key, value)
     end
 
     local function AuraReadLaneStyleNumber(scope, lane, key, defaultValue, minValue, maxValue)

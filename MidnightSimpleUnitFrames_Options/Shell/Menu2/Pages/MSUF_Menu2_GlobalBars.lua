@@ -384,28 +384,6 @@ local function ApplyRoundedRuntime()
     return RequestApply("RequestRoundedBars", "MSUF2_ROUNDED", CurrentBarsScope())
 end
 
-local function ShowDispelBorderReloadRequiredPopup()
-    if not (_G.StaticPopupDialogs and _G.StaticPopup_Show) then
-        if _G.print then
-            _G.print("|cffffd700MSUF:|r " .. M.Tr("Dispel border") .. ": " .. M.Tr("Requires a UI reload."))
-        end
-        return
-    end
-    M.InstallStaticPopup("MSUF2_DISPEL_BORDER_RELOAD_REQUIRED", {
-        text = M.Tr("Dispel border") .. "\n\n" .. M.Tr("Requires a UI reload."),
-        button1 = _G.RELOAD or M.Tr("Reload"),
-        hideOnEscape = false,
-        OnAccept = function()
-            if _G.InCombatLockdown and _G.InCombatLockdown() then
-                if _G.print then _G.print(M.Tr("|cffff5555MSUF|r: Can't reload UI in combat. Leave combat, then type /reload.")) end
-            elseif type(_G.ReloadUI) == "function" then
-                _G.ReloadUI()
-            end
-        end,
-    })
-    _G.StaticPopup_Show("MSUF2_DISPEL_BORDER_RELOAD_REQUIRED")
-end
-
 local function ShowRoundedReloadRequiredPopup()
     if not (_G.StaticPopupDialogs and _G.StaticPopup_Show) then
         if _G.print then _G.print(M.Tr("|cffffd700MSUF:|r Rounded frame texture changed. Reload the UI with /reload.")) end
@@ -422,10 +400,7 @@ local function ShowRoundedReloadRequiredPopup()
             end
         end,
     })
-    local dialog = _G.StaticPopup_Show("MSUF2_ROUNDED_RELOAD_REQUIRED")
-    if dialog and type(M.ApplyPopupFramePriority) == "function" then
-        M.ApplyPopupFramePriority(dialog)
-    end
+    _G.StaticPopup_Show("MSUF2_ROUNDED_RELOAD_REQUIRED")
 end
 local function SetRoundedBool(key, value, requireReload)
     value = value and true or false
@@ -1932,17 +1907,15 @@ local function BuildHighlightSection(ctx, b)
         W.MoveWidget(control, modesFrame, hlLeftX, y, hlLeftW, "LEFT")
         return control
     end
-    local function BindBorderModeDropdown(label, key, defaultValue, reason, y, flag, setter, apply, onEnabled, onChanged)
+    local function BindBorderModeDropdown(label, key, defaultValue, reason, y, flag, setter, apply, onEnabled)
         return BindHighlightDropdown(label, borderModes, y,
             function() return tonumber(BarScopeGet(key, defaultValue)) or defaultValue end,
             function(v)
                 local value = tonumber(v) or defaultValue
-                local previous = tonumber(BarScopeGet(key, defaultValue)) or defaultValue
                 BarScopeSet(key, value, reason, true)
                 if value == 1 and onEnabled then onEnabled() end
                 StopBorderTest(flag, setter, value)
                 apply()
-                if value ~= previous and onChanged then onChanged() end
             end,
             "highlight.border_mode." .. key)
     end
@@ -1958,15 +1931,12 @@ local function BuildHighlightSection(ctx, b)
         "highlight.aggro.roles")
     local dispelBorder = BindBorderModeDropdown("Dispel border", "dispelOutlineMode", 1, "MSUF2_DISPEL_BORDER", -244,
         "MSUF_DispelBorderTestMode", "MSUF_SetDispelBorderTestMode", RequestDispelPurgeBorderRuntime,
-        EnsureUnitFrameAuraSensorsForScope, ShowDispelBorderReloadRequiredPopup)
+        EnsureUnitFrameAuraSensorsForScope)
     local dispelTrigger = BindHighlightDropdown("Dispel border detects", DISPEL_TRIGGERS, -298,
         function() return NormalizeDispelTrigger(BarScopeGet("dispelBorderTrigger", "DISPEL_TYPE")) end,
         function(v)
-            local value = NormalizeDispelTrigger(v)
-            local previous = NormalizeDispelTrigger(BarScopeGet("dispelBorderTrigger", "DISPEL_TYPE"))
-            BarScopeSet("dispelBorderTrigger", value, "MSUF2_DISPEL_TRIGGER", true)
+            BarScopeSet("dispelBorderTrigger", NormalizeDispelTrigger(v), "MSUF2_DISPEL_TRIGGER", true)
             RequestDispelPurgeBorderRuntime()
-            if value ~= previous then ShowDispelBorderReloadRequiredPopup() end
         end,
         "highlight.dispel.trigger")
     local purge = BindBorderModeDropdown("Purge border", "purgeOutlineMode", 0, "MSUF2_PURGE_BORDER", -352,

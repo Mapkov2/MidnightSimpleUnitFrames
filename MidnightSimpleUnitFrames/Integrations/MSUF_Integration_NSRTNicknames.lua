@@ -4,10 +4,6 @@
 local addonName, MSUF = ...
 local Text = MSUF and MSUF.UFText
 if not Text then return end
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-  _G[name] = value
-  return value
-end
 local NicknameAPI = MSUF.API and MSUF.API.Nicknames
 if not (NicknameAPI and NicknameAPI.GetVersion and NicknameAPI.GetVersion() >= 1) then return end
 
@@ -86,12 +82,6 @@ local function NSRTSettingsEnabled(settings)
     return false, addonKey
   end
   return true, addonKey
-end
-
-local function MSUFIntegrationEnabled()
-  local db = _G.MSUF_DB
-  local general = type(db) == "table" and db.general
-  return not (type(general) == "table" and general.nsrtNicknameIntegration == false)
 end
 
 local function CacheShortName(fullName, nickname)
@@ -203,7 +193,7 @@ local function UpdateResolver()
     return false
   end
 
-  local enabled = MSUFIntegrationEnabled() and NSRTSettingsEnabled(settings)
+  local enabled = NSRTSettingsEnabled(settings)
   local nicknameCount = enabled and RebuildNicknameCache(nicknames) or 0
   if enabled and nicknameCount > 0 then
     if not providerRegistered then
@@ -240,8 +230,6 @@ local function RefreshNames()
   end
   RefreshNamesNow()
 end
-
-ExportPublic("MSUF_NSRTNicknames_ApplySetting", RefreshNames)
 
 local function RegisterNSRTCallbacks()
   if callbacksRegistered then

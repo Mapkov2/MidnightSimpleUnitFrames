@@ -22,7 +22,7 @@ local SPELL_INDICATORS_121_PTR_DISABLED = false
 local issecretvalue = _G.issecretvalue or function(_) return false end
 local STATUS_ICON_RESET_FIELDS = M.WordList "size anchor x y layer iconStyle customIcon"
 local AURA_ANCHORS, STATUS_ICON_ANCHORS, GF_STATUS_ICON_SPECS, GF_STATUS_ICON_VALUES, PLACED_INDICATOR_TYPES, FRAME_EFFECT_TYPES, FRAME_EFFECT_TIMINGS, ICON_EFFECT_TYPES, SPELL_GROWTH_VALUES, CI_SLOT_VALUES, CI_SLOT_DEFAULTS = M.PickDefaults(GP, [[AURA_ANCHORS STATUS_ICON_ANCHORS GF_STATUS_ICON_SPECS GF_STATUS_ICON_VALUES PLACED_INDICATOR_TYPES FRAME_EFFECT_TYPES FRAME_EFFECT_TIMINGS ICON_EFFECT_TYPES SPELL_GROWTH_VALUES CI_SLOT_VALUES CI_SLOT_DEFAULTS]])
-local GF, RefreshGFPreview, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection, CurrentScope, BindScopeToggle, ScopeDropdown, ScopeSlider, ScopeColor, SpellIndicators, IconStyleValues, CurrentGFStatusSpec, QueueSpellIndicators, SpellSpecValues, SpellTrackedSpecValues, IsAllSpecsSpellSpec, CurrentSpellMultiSpec, EffectiveSpellSpec, SpellAuraValues, SetCurrentSpellAura, ClearCurrentSpellAura, CurrentSpellAura, CurrentSpellConfig, PlacedConfig, FrameEffectConfig, CICategoryValues, CIFilterValues, CIModeValues, CurrentCISlot, CICustomConfig, BindNestedSlider, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, TrackSectionRefresh, OnOffBadge, OptionText, ControlMeta, RegisterControl = M.Pick(GP, [[GF RefreshGFPreview Conf Val QueueGF Set Bool Num ScopeSection CurrentScope BindScopeToggle ScopeDropdown ScopeSlider ScopeColor SpellIndicators IconStyleValues CurrentGFStatusSpec QueueSpellIndicators SpellSpecValues SpellTrackedSpecValues IsAllSpecsSpellSpec CurrentSpellMultiSpec EffectiveSpellSpec SpellAuraValues SetCurrentSpellAura ClearCurrentSpellAura CurrentSpellAura CurrentSpellConfig PlacedConfig FrameEffectConfig CICategoryValues CIFilterValues CIModeValues CurrentCISlot CICustomConfig BindNestedSlider SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus TrackSectionRefresh OnOffBadge OptionText ControlMeta RegisterControl]])
+local GF, RefreshGFPreview, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection, CurrentScope, BindScopeToggle, ScopeDropdown, ScopeSlider, ScopeColor, SpellIndicators, IconStyleValues, CurrentGFStatusSpec, QueueSpellIndicators, SpellSpecValues, SpellTrackedSpecValues, CurrentSpellMultiSpec, EffectiveSpellSpec, SpellAuraValues, SetCurrentSpellAura, ClearCurrentSpellAura, CurrentSpellAura, CurrentSpellConfig, PlacedConfig, FrameEffectConfig, CICategoryValues, CIFilterValues, CIModeValues, CurrentCISlot, CICustomConfig, BindNestedSlider, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, TrackSectionRefresh, OnOffBadge, OptionText, ControlMeta, RegisterControl = M.Pick(GP, [[GF RefreshGFPreview Conf Val QueueGF Set Bool Num ScopeSection CurrentScope BindScopeToggle ScopeDropdown ScopeSlider ScopeColor SpellIndicators IconStyleValues CurrentGFStatusSpec QueueSpellIndicators SpellSpecValues SpellTrackedSpecValues CurrentSpellMultiSpec EffectiveSpellSpec SpellAuraValues SetCurrentSpellAura ClearCurrentSpellAura CurrentSpellAura CurrentSpellConfig PlacedConfig FrameEffectConfig CICategoryValues CIFilterValues CIModeValues CurrentCISlot CICustomConfig BindNestedSlider SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus TrackSectionRefresh OnOffBadge OptionText ControlMeta RegisterControl]])
 OnOffBadge = OnOffBadge or M.OnOffBadge
 OptionText = OptionText or M.OptionText
 SetCurrentSpellAura = SetCurrentSpellAura or function(kind, auraName)
@@ -1758,21 +1758,17 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         ControlMeta(ctx, "spell.multi_spec.selector", "ephemeral"))
     W.MoveWidget(multiSpecDrop, spells, siRightX, -190, siRightW, "LEFT")
     local multiSpecEnabled = W.ToggleAt(spells, Tr("Track selected multi spec"), siRightX, -250, siRightW)
-    local allSpecsHint = W.Text(spells, Tr("Shared entries apply to every spec."), siRightX, -250, siRightW, T.colors.accent)
-    if allSpecsHint.SetWordWrap then allSpecsHint:SetWordWrap(true) end
-    allSpecsHint:Hide()
     M.BindBoolWidget(ctx, multiSpecEnabled,
         function()
             local cfg = SpellIndicators(CurrentScope())
             local specKey = CurrentSpellMultiSpec(CurrentScope())
-            if IsAllSpecsSpellSpec(specKey) then return true end
             return cfg.spec == "multi" and specKey ~= "" and cfg.multiSpecs and cfg.multiSpecs[specKey] == true
         end,
         function(value)
             local kind = CurrentScope()
             local cfg = SpellIndicators(kind)
             local specKey = CurrentSpellMultiSpec(kind)
-            if specKey == "" or IsAllSpecsSpellSpec(specKey) then return end
+            if specKey == "" then return end
             cfg.multiSpecs = cfg.multiSpecs or {}
             cfg.multiSpecs[specKey] = value and true or nil
             QueueSpellIndicators(kind)
@@ -2071,15 +2067,13 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         local spellCfg = SpellIndicators(CurrentScope())
         local indicatorsOn = (not SPELL_INDICATORS_121_PTR_DISABLED) and spellCfg.enabled == true
         local multi = spellCfg.spec == "multi"
-        local allSpecs = multi and IsAllSpecsSpellSpec(CurrentSpellMultiSpec(CurrentScope()))
         if W.SetControlShown then
             W.SetControlShown(multiSpecDrop, multi)
-            W.SetControlShown(multiSpecEnabled, multi and not allSpecs)
+            W.SetControlShown(multiSpecEnabled, multi)
         else
             multiSpecDrop:SetShown(multi)
-            multiSpecEnabled:SetShown(multi and not allSpecs)
+            multiSpecEnabled:SetShown(multi)
         end
-        allSpecsHint:SetShown(allSpecs == true)
         local placed = PlacedConfig(CurrentScope(), false)
         local hasSpell = indicatorsOn and EffectiveSpellSpec(CurrentScope()) ~= nil and CurrentSpellAura(CurrentScope()) ~= ""
         local currentCfg = CurrentSpellConfig(CurrentScope(), false)
@@ -2095,7 +2089,7 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         SetOptionEnabled(siEnable, not SPELL_INDICATORS_121_PTR_DISABLED)
         SetManyEnabled(indicatorsOn, siLayer, specDrop)
         SetOptionEnabled(multiSpecDrop, indicatorsOn and multi)
-        SetOptionEnabled(multiSpecEnabled, indicatorsOn and multi and not allSpecs and CurrentSpellMultiSpec(CurrentScope()) ~= "")
+        SetOptionEnabled(multiSpecEnabled, indicatorsOn and multi and CurrentSpellMultiSpec(CurrentScope()) ~= "")
         local externalBlacklistManaged = hasSpell
             and CurrentSpellIsExternalDefensive(CurrentScope())
             and ExternalAutoBlacklistActive(CurrentScope())

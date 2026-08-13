@@ -1437,10 +1437,7 @@ local function ApplyPreviewSpecIfNeeded(frame, kind, reason, w, h, dirtyMask, ex
   if not frame then return false end
   local currentRevision = PreviewApplyRevision(kind)
   local key = PreviewApplyKey(frame, kind, w, h, currentRevision)
-  if dirtyMask == nil and frame._msufGFPreviewDetached ~= true
-    and frame._msufGFPreviewApplyKey == key and frame.MSUFSpec then
-    return true
-  end
+  if frame._msufGFPreviewDetached ~= true and frame._msufGFPreviewApplyKey == key and frame.MSUFSpec then return true end
   local revisionCurrent = expectedRevision == nil or currentRevision == expectedRevision
   local canApplyDirty = frame._msufGFPreviewDetached ~= true
     and frame.MSUFSpec ~= nil
@@ -1624,7 +1621,7 @@ function GF.ShowPreview(kind, count, opts)
   local reason = opts and opts.reason or "MSUF_GF_PREVIEW"
   local dirtyMask = opts and opts.dirtyMask or nil
   local expectedRevision = PreviewApplyRevision(kind)
-  if dirtyMask == nil and PreviewSpecsCurrent(frames, visibleCount, kind, w, h, expectedRevision) then
+  if PreviewSpecsCurrent(frames, visibleCount, kind, w, h, expectedRevision) then
     if opts and opts.immediate == true or visibleCount <= PREVIEW_BUILD_SLICE_THRESHOLD then
       for i = 1, visibleCount do ApplyPreviewData(frames[i], i, kind) end
     else
@@ -1700,7 +1697,6 @@ function GF.RefreshPreviewLayout(kind, opts)
   return GF.ShowPreview(kind, count, {
     reason = opts and opts.reason or "MSUF_GF_PREVIEW_REFRESH",
     dirtyMask = opts and opts.dirtyMask or nil,
-    immediate = opts and opts.immediate == true or nil,
   })
 end
 

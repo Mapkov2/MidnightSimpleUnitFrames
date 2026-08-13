@@ -32,10 +32,8 @@ function A.GlobalBarRegistry.RegisterScopedBarSettings(ctx)
     local GRADIENT_DIRECTION_VALUES = ctx.GRADIENT_DIRECTION_VALUES
     local GRADIENT_DIRECTION_KEYS = ctx.GRADIENT_DIRECTION_KEYS
     local GRADIENT_DIRECTION_ALIASES = ctx.GRADIENT_DIRECTION_ALIASES
-    local POWER_GRADIENT_DIRECTION_KEYS = ctx.POWER_GRADIENT_DIRECTION_KEYS
 
     if type(GeneralDB) ~= "function" or type(ApplyHighlightBorders) ~= "function" then return false end
-    if type(POWER_GRADIENT_DIRECTION_KEYS) ~= "table" then return false end
     if type(RegisterScopedSetting) ~= "function" or type(RegisterScopedOverlaySettings) ~= "function" then return false end
     if type(GLOBAL_SCOPE_ORDER) ~= "table" or type(GlobalScopeAliases) ~= "function" then return false end
     if type(GlobalScopeHasOverride) ~= "function" then return false end
@@ -178,8 +176,6 @@ function A.GlobalBarRegistry.RegisterScopedBarSettings(ctx)
         RegisterHighlightPriority(scope)
         RegisterScopedSetting("barScope", scope, "override", "override", "Bars Override", "boolean", false, GlobalScopeAliases(scope, {
             "bars override", "custom bars", "custom bar settings", "bar custom settings",
-            "frame have its own bar settings", "have its own bar settings",
-            "frames have their own bar settings",
         }), {
             flag = "hlOverride",
             get = function(scopeKey) return GlobalScopeHasOverride(scopeKey, "hlOverride") end,
@@ -225,8 +221,7 @@ function A.GlobalBarRegistry.RegisterScopedBarSettings(ctx)
             reason = "MSUF_ASSISTANT_SCOPED_POWER_GRADIENT",
         })
         RegisterScopedSetting("barScope", scope, "gradientStrength", "gradientStrength", "Bar Gradient Strength", "number", 0.45, GlobalScopeAliases(scope, {
-            "gradient strength", "bar gradient strength", "health gradient strength", "hp gradient strength",
-            "health bar gradient strength", "gradient intensity",
+            "gradient strength", "bar gradient strength", "health gradient strength", "power gradient strength",
         }), {
             flag = "hlOverride",
             min = 0,
@@ -236,22 +231,8 @@ function A.GlobalBarRegistry.RegisterScopedBarSettings(ctx)
             apply = ApplyBarGradients,
             reason = "MSUF_ASSISTANT_SCOPED_GRADIENT_STRENGTH",
         })
-        RegisterScopedSetting("barScope", scope, "powerGradientStrength", "powerGradientStrength",
-            "Power Gradient Strength", "number", 0.45, GlobalScopeAliases(scope, {
-                "power gradient strength", "power bar gradient strength", "mana gradient strength",
-                "resource gradient strength", "power gradient intensity",
-            }), {
-                flag = "hlOverride",
-                min = 0,
-                max = 1,
-                step = 0.05,
-                percent = true,
-                apply = ApplyBarGradients,
-                reason = "MSUF_ASSISTANT_SCOPED_POWER_GRADIENT_STRENGTH",
-            })
         RegisterScopedSetting("barScope", scope, "gradientDirection", "gradientDirection", "Bar Gradient Direction", "enum", "RIGHT", GlobalScopeAliases(scope, {
-            "gradient direction", "bar gradient direction", "health gradient direction",
-            "health bar gradient direction", "hp gradient direction",
+            "gradient direction", "bar gradient direction", "health gradient direction", "power gradient direction",
             "bar right gradient", "bar right direction", "right bar gradient",
             "gradient from right", "gradient from left", "gradient from top", "gradient from bottom",
             "bar gradient from right", "bar gradient from left", "bar gradient from top", "bar gradient from bottom",
@@ -281,42 +262,6 @@ function A.GlobalBarRegistry.RegisterScopedBarSettings(ctx)
             apply = ApplyBarGradients,
             reason = "MSUF_ASSISTANT_SCOPED_GRADIENT_DIRECTION",
         })
-        RegisterScopedSetting("barScope", scope, "powerGradientDirection", "powerGradientDirection",
-            "Power Gradient Direction", "enum", "RIGHT", GlobalScopeAliases(scope, {
-                "power gradient direction", "power bar gradient direction", "mana gradient direction",
-                "resource gradient direction",
-            }), {
-                flag = "hlOverride",
-                values = GRADIENT_DIRECTION_VALUES,
-                valueAliases = GRADIENT_DIRECTION_ALIASES,
-                get = function(scopeKey)
-                    for i = 1, #GRADIENT_DIRECTION_VALUES do
-                        local value = GRADIENT_DIRECTION_VALUES[i]
-                        if GlobalScopeRead(scopeKey, "hlOverride", GeneralDB(),
-                            POWER_GRADIENT_DIRECTION_KEYS[value], false) == true then return value end
-                    end
-                    -- With no explicit power direction the runtime follows the
-                    -- health direction, so report the direction the bar shows.
-                    local value = GlobalScopeRead(scopeKey, "hlOverride", GeneralDB(), "powerGradientDirection", nil)
-                        or GlobalScopeRead(scopeKey, "hlOverride", GeneralDB(), "gradientDirection", "RIGHT")
-                    return POWER_GRADIENT_DIRECTION_KEYS[value] and value or "RIGHT"
-                end,
-                set = function(scopeKey, value)
-                    if not POWER_GRADIENT_DIRECTION_KEYS[value] then value = "RIGHT" end
-                    for i = 1, #GRADIENT_DIRECTION_VALUES do
-                        local dir = GRADIENT_DIRECTION_VALUES[i]
-                        GlobalScopeWrite(scopeKey, "hlOverride", GeneralDB(),
-                            POWER_GRADIENT_DIRECTION_KEYS[dir], dir == value)
-                    end
-                    GlobalScopeWrite(scopeKey, "hlOverride", GeneralDB(), "powerGradientDirection", value)
-                end,
-                dbScopeKeys = {
-                    "powerGradientDirRight", "powerGradientDirLeft", "powerGradientDirUp",
-                    "powerGradientDirDown", "powerGradientDirection",
-                },
-                apply = ApplyBarGradients,
-                reason = "MSUF_ASSISTANT_SCOPED_POWER_GRADIENT_DIRECTION",
-            })
         RegisterScopedSetting("barScope", scope, "barOutlineLayer", "layer", "Bar Outline Layer", "number", 0, GlobalScopeAliases(scope, {
             "bar outline strata", "bar outline layer", "frame outline strata", "frame outline layer",
             "outline strata", "outline layer",

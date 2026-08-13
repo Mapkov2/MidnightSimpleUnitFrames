@@ -35,7 +35,7 @@ local function IsReady()
 end
 
 local function PrintLoadFailure(detail)
-    local message = "|cffff4040MSUF:|r Please enable MSUF Options in Blizzard's AddOns menu"
+    local message = "|cffff4040MSUF:|r The options module could not be loaded"
     if detail and detail ~= "" then message = message .. " (" .. tostring(detail) .. ")" end
     message = message .. "."
     if type(_G.print) == "function" then _G.print(message) end

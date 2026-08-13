@@ -62,6 +62,7 @@ local ColorCore = type(BuildColorSettingsCoreContext) == "function" and BuildCol
 }) or nil
 if type(ColorCore) ~= "table" then return end
 
+local AuraSharedDB = ColorCore.AuraSharedDB
 local ColorSetting = ColorCore.ColorSetting
 local GeneralRGB = ColorCore.GeneralRGB
 local SetTableRGB = ColorCore.SetTableRGB
@@ -75,6 +76,7 @@ local AuraPortraitColorSettings = type(CreateAuraAndPortraitColorSettings) == "f
     EnsureDB = EnsureDB,
     TableRGB = TableRGB,
     SetTableRGB = SetTableRGB,
+    AuraSharedDB = AuraSharedDB,
     RegisterGeneralBoolean = RegisterGeneralBoolean,
     RegisterGeneralNumberSetting = RegisterGeneralNumberSetting,
     ApplyAuraColors = ApplyAuraColors,

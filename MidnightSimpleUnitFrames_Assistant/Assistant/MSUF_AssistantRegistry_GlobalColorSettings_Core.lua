@@ -46,6 +46,7 @@ function A.GlobalRegistry.BuildColorSettingsCoreContext(ctx)
     if type(ColorDBHelpers) ~= "table" then return nil end
     local ApiRGB = ColorDBHelpers.ApiRGB
     local ApiSetRGB = ColorDBHelpers.ApiSetRGB
+    local AuraSharedDB = ColorDBHelpers.AuraSharedDB
     local ColorAPI = ColorDBHelpers.ColorAPI
     local GeneralRGB = ColorDBHelpers.GeneralRGB
     local GeneralRGBAlias = ColorDBHelpers.GeneralRGBAlias
@@ -124,6 +125,7 @@ function A.GlobalRegistry.BuildColorSettingsCoreContext(ctx)
     return {
         ApiRGB = ApiRGB,
         ApiSetRGB = ApiSetRGB,
+        AuraSharedDB = AuraSharedDB,
         ClassPowerBgRGB = ClassPowerBgRGB,
         ClassPowerRGB = ClassPowerRGB,
         Clamp01 = Clamp01,

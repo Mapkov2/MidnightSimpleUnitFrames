@@ -2284,10 +2284,6 @@ function Render.Install(box, ctx, deps)
         mock._health:SetValue(hpPct)
         local hpReverse = runtimeHealth.reverse == true or (not runtimeSpec and conf.reverseFill == true)
         if mock._health.SetReverseFill then mock._health:SetReverseFill(hpReverse) end
-        if MSUF.UFBarTextCommon and MSUF.UFBarTextCommon.ApplyBarGradient then
-            MSUF.UFBarTextCommon.ApplyBarGradient(mock, mock._health,
-                runtimeHealth.barGradient, "_msufGFPreviewHealthGradients")
-        end
         mock._healthBg:SetTexture(bgTex)
         local hbCfg = runtimeHealth.background or {}
         local hbr, hbg, hbb = hbCfg.r or conf.bgR or 0.06, hbCfg.g or conf.bgG or 0.06, hbCfg.b or conf.bgB or 0.07
@@ -2512,11 +2508,6 @@ function Render.Install(box, ctx, deps)
         else
             mock._power:Hide()
             mock._powerBg:Hide()
-        end
-        if MSUF.UFBarTextCommon and MSUF.UFBarTextCommon.ApplyBarGradient then
-            MSUF.UFBarTextCommon.ApplyBarGradient(mock, mock._power,
-                powerH > 0 and LayerOn("power") and runtimePower.barGradient or nil,
-                "_msufGFPreviewPowerGradients")
         end
         end
         scene.previewScale = previewScale

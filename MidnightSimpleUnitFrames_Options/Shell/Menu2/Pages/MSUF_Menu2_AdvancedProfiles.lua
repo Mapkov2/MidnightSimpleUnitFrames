@@ -333,12 +333,9 @@ local function BuildProfiles(ctx)
         M.profileImportString = value
         if blob then
             blob:SetText(value)
-            blob:SetFocus()
             blob:HighlightText()
         end
-        if M.ShowStatusFeedback then
-            M.ShowStatusFeedback(M.Tr("Profile string ready - press Ctrl+C"), "info", 1.8)
-        end
+        if M.ShowStatusFeedback then M.ShowStatusFeedback(M.Tr("Profile string exported"), "ok", 1.5) end
         return true
     end
     local function StatusPill(parent, width)
