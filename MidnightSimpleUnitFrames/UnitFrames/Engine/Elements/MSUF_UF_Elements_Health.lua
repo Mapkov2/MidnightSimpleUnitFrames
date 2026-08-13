@@ -147,7 +147,9 @@ function Health.Layout(frame, spec, powerEnabled)
   if powerEnabled == nil then powerEnabled = power and power.enabled == true end
   local powerInset = 0
   if powerEnabled == true and power and power.embed ~= false and power.detached ~= true then
-    powerInset = tonumber(power.height) or 3
+    local replacementHeight = frame._msufAugPowerReplacementActive == true
+      and tonumber(frame._msufAugPowerReplacementHeight) or nil
+    powerInset = replacementHeight or tonumber(power.height) or 3
     if not IsFiniteNumber(powerInset) or powerInset < 0 then powerInset = 0 end
   end
   if bar._msufHealthPowerInset == powerInset and bar._msufHealthLayoutFrame == frame then return end

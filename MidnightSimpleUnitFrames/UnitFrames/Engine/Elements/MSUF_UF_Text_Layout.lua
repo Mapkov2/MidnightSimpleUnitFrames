@@ -1048,6 +1048,7 @@ end
 
 function Text.Apply(frame, spec)
   local text = spec and spec.text or {}
+  local augPowerReplacement = frame._msufAugPowerReplacementActive == true
   local fontEpoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
   if frame._msufTextFontAttemptEpoch ~= fontEpoch then
     InvalidateTextForFontEpoch(frame)
@@ -1059,6 +1060,7 @@ function Text.Apply(frame, spec)
     and not sinksChanged
     and sinksReady
     and frame._msufTextFontAttemptEpoch == fontEpoch
+    and frame._msufTextAugPowerReplacement == augPowerReplacement
     and layoutRevision ~= nil
     and frame._msufTextLayoutRevision == layoutRevision
   then
@@ -1070,6 +1072,7 @@ function Text.Apply(frame, spec)
     and not sinksChanged
     and sinksReady
     and frame._msufTextFontAttemptEpoch == fontEpoch
+    and frame._msufTextAugPowerReplacement == augPowerReplacement
     and frame._msufTextApplySignature == signature
   then
     RefreshAppliedTextColors(frame, spec, text)
@@ -1226,7 +1229,7 @@ function Text.Apply(frame, spec)
     HideDots(frame._msufInlineDotsFS)
   end
   local showHealth = spec and spec.showHealthText ~= false
-  local showPower = spec and spec.showPowerText ~= false
+  local showPower = spec and spec.showPowerText ~= false and not augPowerReplacement
   local healthLeft, healthCenter, healthRight = ResolveHealthTextModes(text)
   SetTextSlotShown(frame.hpTextLeft, showHealth, healthLeft)
   SetTextSlotShown(frame.hpTextCenter, showHealth, healthCenter)
@@ -1261,6 +1264,7 @@ function Text.Apply(frame, spec)
   end
   frame._msufTextApplySignature = signature
   frame._msufTextLayoutRevision = layoutRevision
+  frame._msufTextAugPowerReplacement = augPowerReplacement
   frame._msufTextColorRevision = spec and spec._msufTextColorRevision
   frame._msufTextFontAttemptEpoch = fontEpoch
   frame._msufTextFontEpoch = fontsReady and fontEpoch or nil

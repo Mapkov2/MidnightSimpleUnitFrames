@@ -799,6 +799,76 @@ end
 
 RoundedSurface.ApplyClassPower = ApplyClassPowerRounded
 
+local function ClearAltManaRounded(AM)
+  local container = AM and AM.container
+  if not container then return end
+  ClearMasks(container, "_msufRAMMask", "_msufRAMMaskedTextures")
+  local edge = AM._msufRAMOutlineEdge
+  if edge and edge._msufRAMActive then
+    edge._msufRAMActive = nil
+    edge:Hide()
+    AM._border:SetBackdropBorderColor(0, 0, 0, 1)
+    AM._border:Show()
+  end
+end
+
+-- Alternative Mana follows the normal Player power rounded toggles.
+local function ApplyAltManaRounded(AM, masterEnabled)
+  local container = AM and AM.container
+  if not container then return false end
+  local master = masterEnabled
+  if master == nil then master = IsEnabled() end
+  local active = master == true
+    and ReadRoundedBool("roundedUnitFrames", true)
+    and ReadRoundedBool("roundedPowerBars", true)
+  if IsCombatLocked() then
+    DeferApply()
+    local edge = AM._msufRAMOutlineEdge
+    return edge and edge._msufRAMActive == true or false
+  end
+  if not active then
+    ClearAltManaRounded(AM)
+    return false
+  end
+
+  UpdateRoundedMediaState()
+  local bar = AM.bar
+  local fill = bar and bar.GetStatusBarTexture and bar:GetStatusBarTexture() or nil
+  BeginMaskRefresh(container, "_msufRAMMaskedTextures")
+  local bgApplied = MaskTextureWith(container, AM.bgTex, "_msufRAMMask",
+    "_msufRAMMaskedTextures", container, roundedMaskPath) == true
+  local fillApplied = MaskTextureWith(container, fill, "_msufRAMMask",
+    "_msufRAMMaskedTextures", container, roundedMaskPath) == true
+  EndMaskRefresh(container, "_msufRAMMask", "_msufRAMMaskedTextures")
+
+  local border = AM._border
+  local edge = AM._msufRAMOutlineEdge
+  if bgApplied and fillApplied and border then
+    if not edge and CanCreateRoundedRegion(edge) then
+      edge = border:CreateTexture(nil, "OVERLAY", nil, 0)
+      SE_SnapOff(edge)
+      AM._msufRAMOutlineEdge = edge
+    end
+    if edge then
+      SetRoundedEdgeTexture(edge, roundedEdgePath)
+      if LayoutRoundedEdge(edge, container, 1, 1) then
+        if edge._msufRAMActive ~= true then
+          edge._msufRAMActive = true
+          edge:SetVertexColor(0, 0, 0, 1)
+          edge:Show()
+          border:SetBackdropBorderColor(0, 0, 0, 0)
+          border:Show()
+        end
+        return true
+      end
+    end
+  end
+  ClearAltManaRounded(AM)
+  return false
+end
+
+RoundedSurface.ApplyAltMana = ApplyAltManaRounded
+
 local function ResolveUnitEdgeColor(f)
   local key = f and tonumber(f._msufHighlightActiveKey or f._msufHighlightColorKey) or 0
   if key and key ~= 0 then
