@@ -8,10 +8,32 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.06",
-    previousVersion = "6.05",
-    rangeLabel = "6.05 -> 6.06",
+    currentVersion = "6.07-Beta1",
+    previousVersion = "6.06",
+    rangeLabel = "6.06 -> 6.07-Beta1",
     entries = {
+        {
+            version = "6.07-Beta1",
+            date = "2026-08-14",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Added Chunked Health and Power Loss for Unit and Group Frames. The live bar updates immediately while a short, configurable loss trail shows what was just spent or lost; Smooth and Chunked modes are mutually exclusive and share runtime-faithful previews, rounded-frame support, copy controls, and dedicated loss colors.",
+                        "Added independent profile-wide switches for Blizzard's player Buff Frame and normal Debuff icons near the minimap. Private Auras and Deadly Debuff warnings remain visible, and the feature stays passive with no polling or recurring MSUF work.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Fixed Group Aura lanes and Spell Indicators remaining visible for members who are offline, phased, on another map, or inside a different instance group. Presence now composes with helpful/hostile assistability and fails closed through coalesced lifecycle events.",
+                        "Fixed native Player portraits occasionally remaining stale or blank after login or world entry. Enabled 2D and 3D portraits now receive one cold-path refresh after Blizzard and secure visibility have settled.",
+                        "Fixed several Unit Aura layout settings writing to the wrong scope, including lane visibility and separate Buff/Debuff style padding.",
+                        "Improved Assistant handling for natural highlight on/off requests, texture names without connector words, border styles and opacity, outline layers, absorb height, gradient intensity, and how-to navigation. Unmatched navigation requests now offer the closest controls without changing settings.",
+                    },
+                },
+            },
+        },
         {
             version = "6.06",
             date = "2026-08-13",
@@ -86,49 +108,6 @@ local data = {
                         "Fixed Group Frame preview borders not repainting immediately, and fixed rounded borders overwriting active Aggro or Dispel test colors after the preview refresh.",
                         "Kept reload-required popups above the MSUF options window and expanded Unit Frame Basics sections so their controls no longer clip.",
                         "Improved the disabled Options-module error so it tells the user to enable MSUF Options in Blizzard's AddOns menu.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.03",
-            date = "2026-08-12",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "Track any group buff from any specialization. Group Frame Spell Icons now provide a shared All Specs workspace, so entries such as Feint can be configured once and remain active across every character specialization.",
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Multi-Spec now exposes all 40 Retail specializations. Custom Aura IDs can also be added to an individual specialization, allowing a Holy Priest configuration, for example, to track Feint (1966) on another group member while Only show my casts is disabled.",
-                        "Added a curated, class-wide Big Defensive Spell-ID filter for friendly Unit and Group Frames, with Blizzard's native classification as the restricted-data fallback. Aura classification choices are now mutually exclusive while Only mine and Also include nameplate-only remain explicit modifiers, and Menu, search, and the Assistant share the same contract.",
-                        "Added direct Assistant control and cold-path diagnostics for Unit Frame Buff and Debuff Full-Frame Effects. Menu and Assistant now share the same effect choices without polling or reading protected native Aura visibility.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed Target of Target and Focus Target health bars and names losing class colors when WoW protects dependent-unit class data in combat. Protected colors now flow directly through Blizzard-native color sinks without polling or persistent secret-value caches.",
-                        "Fixed Health and Power gradients missing or differing in Unit and Group previews. Embedded, detached, and rounded Power previews now reuse the same gradient composition as runtime rendering.",
-                        "Fixed Level, Race, and Class text in Unit Frame previews using the default preview font instead of the selected unit font.",
-                        "Made Cleanse Border changes request the required UI reload.",
-                        "Kept the Player Castbar provider selectable in the Bars menu.",
-                        "Fixed native Aura containers triggering a forbidden EventRegistrations error during Unit Frame aura setup.",
-                        "Improved the ownership handoff between MSUF and Blizzard Party/Raid frames. Provider and fallback changes now return frames reliably through Blizzard's own lifecycle and request the required UI reload.",
-                        "Fixed Clique and other click-cast providers losing their Unit Frame bindings after profile or configuration updates. MSUF now preserves provider-owned secure click attributes after the initial fallback setup.",
-                        "Isolated Group Spell Indicator preview positions from live saved positions.",
-                        "Restored continuous Devourer class-resource updates and removed obsolete partial-update ownership from the resource pipeline.",
-                        "Fixed Icicles showing an Aura icon over Class Resources or retaining incorrect stack counts. Icicles now refreshes the exact player Aura on each Aura change, while protected Icicle and Maelstrom Weapon counts fill their pips through Blizzard's native StatusBar clamping without Lua comparisons.",
-                        "Fixed Tip of the Spear showing incorrect stacks after current Survival Hunter spenders and Takedown with Twin Fangs. Stack tracking now also expires correctly without protected Aura reads.",
-                        "Fixed native Auras, Spell Indicators, and Aura-based Class Resources becoming stale or retaining incorrect durations after cinematics and entering the world. Lifecycle refreshes are now coalesced and event-driven without polling.",
-                        "Refreshed Unit Frame names immediately after anchor changes.",
-                        "Restored live Group frames correctly after preview roster handoffs.",
-                        "Honored configured Aura layers for fixed Group slots.",
-                        "Fixed the animated Resting symbol trying to use an unavailable Blizzard atlas; unsupported clients now fall back safely.",
-                        "Fixed Unit Frame Edit Mode quick actions applying stale compiled settings after size, position, reset, copy, or detached Power changes.",
                     },
                 },
             },
