@@ -1216,7 +1216,7 @@ local BARS_GENERAL_KEYS = KSW [[
     overAbsorbOverlay fullHealthAbsorbStripe absorbBarTexture healAbsorbBarTexture dispelBorderTrigger bossTargetOutlineMode
     bossTargetHighlightEnabled hlPrioEnabled hlPrioOrder highlightPrioEnabled highlightPrioOrder roundedFramesEnabled roundedUnitFrames
     roundedGroupFrames roundedPowerBars roundedCastbars roundedClassResources roundedMouseover barOutlineColorR barOutlineColorG
-    barOutlineColorB barOutlineColorA
+    barOutlineColorB barOutlineColorA healthLossColorR healthLossColorG healthLossColorB powerLossColorR powerLossColorG powerLossColorB
 ]]
 local BARS_SCOPE_KEYS = KSW [[
     hlOverride hpPowerTextOverride barTexture barBackgroundTexture barBgTexture enableAbsorbBar absorbTextMode absorbAnchorMode
@@ -1225,11 +1225,11 @@ local BARS_SCOPE_KEYS = KSW [[
     overAbsorbOverlay fullHealthAbsorbStripe absorbBarOpacity healAbsorbBarOpacity barOutlineThickness barOutlineLayer barOutlineStrata barOutlineTexture highlightBorderThickness hlAggroSize
     aggroOutlineMode dispelOutlineMode dispelBorderTrigger
     purgeOutlineMode hlPrioEnabled hlPrioOrder enableGradient enablePowerGradient gradientStrength
-    gradientDirection gradientDirRight gradientDirLeft gradientDirUp gradientDirDown powerSmoothFill
+    gradientDirection gradientDirRight gradientDirLeft gradientDirUp gradientDirDown powerSmoothFill powerChunkedFill
     barOutlineColorR barOutlineColorG barOutlineColorB barOutlineColorA
 ]]
 local BARS_TABLE_KEYS = KSW [[
-    barOutlineThickness barOutlineLayer barOutlineStrata barOutlineTexture smoothPowerBar realtimePowerText roundedFramesEnabled roundedUnitFrames
+    barOutlineThickness barOutlineLayer barOutlineStrata barOutlineTexture smoothPowerBar chunkedPowerBar realtimePowerText roundedFramesEnabled roundedUnitFrames
     roundedGroupFrames roundedPowerBars roundedCastbars roundedClassResources roundedMouseover
 ]]
 local FONT_GENERAL_KEYS = KSW "fontKey boldText noOutline textBackdrop fontMonochrome fontShadowStrength fontShadowOpacity fontShadowDistance fontTextAlpha fontBaselineOffset nameClassColor npcNameRed nameNpcClassColor colorPowerTextByType colorHealthTextByHealth nameColorMode nameColorR nameColorG nameColorB"
@@ -1443,8 +1443,11 @@ local function ResolvePageResetInfo(pageKey)
     for key, value in pairs(base) do info[key] = value end
     info.appearanceKind = ActiveAuraAppearanceKind(info)
     info.label = AURA_APPEARANCE_LABELS[info.appearanceKind] or info.label
+    local blizzardAuraScope = (info.appearanceKind == "buff" or info.appearanceKind == "debuff")
+        and ", plus the shared Blizzard Buff/Debuff visibility settings" or ""
     info.summary = "only the global " .. tostring(info.label)
-        .. " icon shape, border and shadow settings; other Aura types and all Unit/Group lane settings stay unchanged"
+        .. " icon shape, border and shadow settings" .. blizzardAuraScope
+        .. "; other Aura types and all Unit/Group lane settings stay unchanged"
     return info
 end
 local function ResetAuraAppearancePage(db, defaults, info)
@@ -1462,6 +1465,15 @@ local function ResetAuraAppearancePage(db, defaults, info)
         or (kind == "playerDefensives" and "FOLLOW_PORTRAIT" or "RECTANGLE")
     dst.appearanceIconStyles[kind] = DeepCopy(srcStyles[kind]) or {}
     if kind == "buff" then dst.showWeaponEnchants = src.showWeaponEnchants == true end
+    if kind == "buff" or kind == "debuff" then
+        dst.hideBlizzardAuraFrames = nil
+        dst.hideBlizzardBuffFrame = src.hideBlizzardBuffFrame == true
+        dst.hideBlizzardDebuffFrame = src.hideBlizzardDebuffFrame == true
+        local UF = MSUF and MSUF.UF
+        if UF and type(UF.ApplyBlizzardAuraVisibility) == "function" then
+            UF.ApplyBlizzardAuraVisibility()
+        end
+    end
 end
 local function ResetCastbarPage(db, defaults)
     ResetRootFiltered(db, defaults, "general", function(key)

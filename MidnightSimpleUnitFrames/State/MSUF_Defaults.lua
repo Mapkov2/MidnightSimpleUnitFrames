@@ -1035,18 +1035,23 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     -- Performance baseline: native interpolation is an
     -- explicit visual option, never an implicit cost on a fresh profile.
     db.bars.smoothPowerBar = false
+    db.bars.chunkedPowerBar = false
     db.bars.classPowerSmoothFill = false
     db.bars.altManaSmoothFill = false
     for _, key in ipairs({ "player", "target", "targettarget", "focustarget", "focus", "pet", "boss" }) do
         if type(db[key]) == "table" then
             db[key].smoothFill = false
+            db[key].chunkedFill = false
             db[key].powerSmoothFill = false
+            db[key].powerChunkedFill = false
         end
     end
     for _, key in ipairs({ "gf_party", "gf_raid", "gf_mythicraid" }) do
         if type(db[key]) == "table" then
             db[key].smoothFill = false
+            db[key].chunkedFill = false
             db[key].powerSmoothFill = false
+            db[key].powerChunkedFill = false
         end
     end
     SetDefault(db.bars, "roundedFramesEnabled", false)
@@ -1456,6 +1461,8 @@ local function MSUF_Defaults_CreateCanonicalUnitAuras()
         },
         shared = {
             bossEditTogether = true,
+            hideBlizzardBuffFrame = false,
+            hideBlizzardDebuffFrame = false,
             buffGroupOffsetX = 0,
             buffGroupOffsetY = 36,
             debuffGroupOffsetX = 0,
@@ -2665,6 +2672,12 @@ end
     if g.powerBarGradientColorR == nil or g.powerBarGradientColorG == nil or g.powerBarGradientColorB == nil then
         g.powerBarGradientColorR, g.powerBarGradientColorG, g.powerBarGradientColorB = 0, 0, 0
     end
+    if g.healthLossColorR == nil then g.healthLossColorR = 1 end
+    if g.healthLossColorG == nil then g.healthLossColorG = 0.55 end
+    if g.healthLossColorB == nil then g.healthLossColorB = 0.08 end
+    if g.powerLossColorR == nil then g.powerLossColorR = 0.70 end
+    if g.powerLossColorG == nil then g.powerLossColorG = 0.90 end
+    if g.powerLossColorB == nil then g.powerLossColorB = 1 end
     --- Bars: Aggro highlight overlay (Target/Focus/Boss)
     --- Aggro indicator: re-uses the HP outline border as an orange warning when YOU have aggro (target/focus/boss).
     if g.aggroIndicatorMode == nil then
@@ -3974,6 +3987,9 @@ if MSUF_DB.bars == nil then
     if MSUF_DB.bars.smoothPowerBar == nil then
         MSUF_DB.bars.smoothPowerBar = false
     end
+    if MSUF_DB.bars.chunkedPowerBar == nil then
+        MSUF_DB.bars.chunkedPowerBar = false
+    end
     if MSUF_DB.bars.classPowerSmoothFill == nil then
         MSUF_DB.bars.classPowerSmoothFill = MSUF_DB.bars.smoothPowerBar == true
     end
@@ -4246,6 +4262,18 @@ end
         if type(a3.customContainers) ~= "table" then a3.customContainers = {} end
         if type(a3.customContainers.perUnit) ~= "table" then a3.customContainers.perUnit = {} end
         if type(a3.shared) ~= "table" then a3.shared = {} end
+        --- The first local version exposed one combined Blizzard Aura switch.
+        --- Split that stored choice once so testers keep the same result while
+        --- Buff and Debuff visibility become independently configurable.
+        if a3.shared.hideBlizzardAuraFrames ~= nil then
+            if a3.shared.hideBlizzardBuffFrame == nil then
+                a3.shared.hideBlizzardBuffFrame = a3.shared.hideBlizzardAuraFrames == true
+            end
+            if a3.shared.hideBlizzardDebuffFrame == nil then
+                a3.shared.hideBlizzardDebuffFrame = a3.shared.hideBlizzardAuraFrames == true
+            end
+            a3.shared.hideBlizzardAuraFrames = nil
+        end
         local legacyAuraModel = tonumber(a3.profileModelRevision) ~= MSUF_DEFAULTS_AURAS3_PROFILE_MODEL_REVISION
         if legacyAuraModel and a3.shared._msufA3_debuffTypeBorderModeMigrated_v1 ~= true then
             if a3.shared.useDebuffTypeBorders == true then
@@ -4607,6 +4635,9 @@ local function fill(key, defaults)
             if u.powerSmoothFill == nil then
                 u.powerSmoothFill = (unitKey == "player") and (bars.smoothPowerBar == true) or false
             end
+            if u.powerChunkedFill == nil then
+                u.powerChunkedFill = (unitKey == "player") and (bars.chunkedPowerBar == true) or false
+            end
             if unitKey == "player" then
                 local legacyShape = tostring(u.detachedPowerBarShape or "FOLLOW_CLASS"):upper()
                 if legacyShape == "FOLLOW_CLASS" then
@@ -4678,6 +4709,9 @@ local function fill(key, defaults)
         --- Per-unitframe: smooth health fill animation (matches Group Frames default).
         if u.smoothFill == nil then
             u.smoothFill = false
+        end
+        if u.chunkedFill == nil then
+            u.chunkedFill = false
         end
         --- Unified alpha: HP fill opacity + power fill opacity + background texture
         --- opacity + a toggle to keep text/portrait opaque. Legacy combat/layered keys
