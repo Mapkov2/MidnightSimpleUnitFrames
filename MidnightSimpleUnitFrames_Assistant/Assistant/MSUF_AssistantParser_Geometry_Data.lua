@@ -637,5 +637,15 @@ Data.GEOMETRY_PARSER = {
         -- "blizzard" is safe here because it is only probed inside the shape
         -- branch opened by [17].
         [286] = { "blizzard", "blizzard ring", "gold ring", "goldring", "blizzard-ring" },
+        -- "highlight border(s)" as a whole: on the Bars page that name covers
+        -- the Aggro, Dispel and Purge borders together (plus Boss Target on the
+        -- shared control). Each one already answers to its own name; the
+        -- umbrella phrase had no owner at all, so "turn off highlight borders
+        -- for party frame" dead-ended -- and before that it disabled the party
+        -- frames outright.
+        [287] = {
+        "highlight border", "highlight borders", "highlight outline", "highlight outlines",
+        "hervorhebungsrahmen", "highlight rahmen",
+    },
     },
 }

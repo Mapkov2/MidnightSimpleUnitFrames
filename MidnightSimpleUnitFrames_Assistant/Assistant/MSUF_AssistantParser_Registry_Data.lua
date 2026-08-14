@@ -880,5 +880,16 @@ Data.REGISTRY_PARSER = {
         "color text by power", "color text by health",
     },
         [427] = { "bars", "bar", "bar texture", "health bar", "hp bar", "power bar", "gradient", "absorb", "outline", "border", "dispel", "aggro", "purge" },
+        -- Colour MODES that Name Text Color Mode cannot express. It offers only
+        -- Default and Class, but its lane derives the value from a hardcoded
+        -- spec rather than from the sentence, so any of these was silently
+        -- written as Class. They each belong to a sibling control (Health Text
+        -- Color Mode, Power Text Color Mode, NPC Name Text Color).
+        [428] = {
+        "health", "hp", "by health", "health color", "health colour",
+        "reaction", "reaction color", "reaction colour",
+        "power", "mana", "resource", "power type", "by type",
+        "threat", "aggro",
+    },
     },
 }

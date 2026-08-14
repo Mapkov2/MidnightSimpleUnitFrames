@@ -179,11 +179,31 @@ local ROOT_FRAME_ENABLED_DETAIL_TERMS = {
     "portrait", "portraits", "power bar", "mana bar",
     "health bar", "hp bar", "castbar", "cast bar", "name", "names", "text", "border", "outline",
     "alpha", "opacity", "range fade", "offline", "solo", "sort", "sorting", "role", "scale", "scaling",
+    -- ContainsAny matches whole words, so every singular above needed its
+    -- plural too: "turn off borders for party frame" was not covered by
+    -- "border" and disabled the party frames.
+    "borders", "outlines", "texts", "castbars", "cast bars", "power bars", "mana bars",
+    "health bars", "hp bars", "scales", "markers", "symbols",
+    -- Parts of a frame that had no entry here at all, so a request about one of
+    -- them could still be answered by switching the whole frame off.
+    "highlight", "highlights", "aggro", "threat", "dispel", "purge",
+    "aura", "auras", "buff", "buffs", "debuff", "debuffs",
+    "gradient", "texture", "color", "colour", "font",
+    "round", "rounded", "corner", "corners", "shape",
+    "spacing", "padding", "column", "columns", "growth", "position", "offset",
 }
 
 local function RootFrameEnabledBlockedByDetail(setting, text)
     if not (setting and setting.attribute == "enabled") then return false end
     if setting.frameType ~= "unitframe" and setting.frameType ~= "group" then return false end
+    return ContainsAny(text, ROOT_FRAME_ENABLED_DETAIL_TERMS)
+end
+
+-- Shared with the followup lane. Two lanes can write a frame's root "enabled"
+-- toggle, they each kept their own idea of "this sentence is about a detail,
+-- not the frame", and the shorter list let "turn off highlight borders for
+-- party frame" disable the player's party frames outright.
+function P.TextNamesFrameDetail(text)
     return ContainsAny(text, ROOT_FRAME_ENABLED_DETAIL_TERMS)
 end
 
@@ -3002,6 +3022,19 @@ local function ParseScopedFontTextColorShortcut(text)
 
     local setting = Registry and Registry:GetSetting("fontScope." .. tostring(scope) .. "." .. spec.key)
     if not setting then return nil end
+    -- This lane picks the value from the SPEC, not from the sentence: anything
+    -- that is not a "back to default" request becomes spec.on. For Name Text
+    -- Color Mode that is hardcoded CLASS, and the mode words below belong to
+    -- sibling controls it cannot express -- so "set target name color to
+    -- health" was silently written as Class colour, a value the player never
+    -- named. Name Text Color Mode offers only Default and Class; stand down and
+    -- let a lane that can answer the real question have the sentence.
+    if spec.key == "nameColorMode"
+        and ContainsAny(text, RegistryPhrases[428])
+        and not P._FontTextColorDefaultIntent(text, spec)
+    then
+        return nil
+    end
     local bareChoice = spec.key == "colorHealthTextByHealth" and P.ParseBareHPTextColorModeChoice(text)
     if bareChoice then return bareChoice end
     local value

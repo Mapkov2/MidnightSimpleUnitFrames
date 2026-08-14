@@ -2953,6 +2953,14 @@ local function BarOutlineHighlightSpec(text)
     if ContainsAny(text, GeometryPhrases[158]) then
         return "highlightBorderThickness", "Highlight Border Thickness"
     end
+    -- After [158] so "highlight border thickness" keeps the size control, and
+    -- only for a plain on/off: with a number the sentence is about a dimension,
+    -- not about switching the highlight borders on or off.
+    if ContainsAny(text, GeometryPhrases[287]) and FirstNumber(text) == nil
+        and DetectBoolean(text) ~= nil
+    then
+        return "highlightBorderGroup", "Highlight Borders"
+    end
     if ContainsAny(text, GeometryPhrases[159]) then
         return "barOutlineColorA", "Bar Outline Opacity"
     end
@@ -3001,6 +3009,36 @@ local function ParseBarOutlineHighlightShortcut(text)
     if not attr then return nil end
 
     local scopes = BarOutlineHighlightScopes(text)
+    -- "Highlight borders" is the page's name for the Aggro/Dispel/Purge trio
+    -- (plus Boss Target on the shared control), so the umbrella phrase writes
+    -- all of them for whichever scope was named.
+    if attr == "highlightBorderGroup" then
+        local on = DetectBoolean(text)
+        if on == nil then return nil end
+        local value = on and "on" or "off"
+        local members = { "aggroOutlineMode", "dispelOutlineMode", "purgeOutlineMode" }
+        local groupChanges = {}
+        local function add(key)
+            local setting = Registry and Registry:GetSetting(key)
+            if setting then groupChanges[#groupChanges + 1] = { setting = setting, value = value } end
+        end
+        if #scopes == 0 then
+            for i = 1, #members do add("general." .. members[i]) end
+            add("general.bossTargetOutlineMode")
+        else
+            for i = 1, #scopes do
+                for j = 1, #members do add("barScope." .. tostring(scopes[i]) .. "." .. members[j]) end
+            end
+        end
+        if #groupChanges == 0 then return nil end
+        return {
+            kind = "changes",
+            changes = groupChanges,
+            label = label,
+            bulkSafe = true,
+            summary = "Changes the bar outline or highlight border option without falling back to broad registry matching.",
+        }
+    end
     local changes = {}
     if #scopes == 0 then
         local setting = Registry and Registry:GetSetting(BarOutlineHighlightGlobalKey(attr))

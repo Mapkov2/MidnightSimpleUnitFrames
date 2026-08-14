@@ -2063,7 +2063,13 @@ local function ParseSetting(text, ctx)
             return nil
         end
     end
-    if attr == "enabled" and ContainsAny(text, FollowupData.ENABLED_GUARD_TERMS) then
+    if attr == "enabled" and (ContainsAny(text, FollowupData.ENABLED_GUARD_TERMS)
+        or (type(P.TextNamesFrameDetail) == "function" and P.TextNamesFrameDetail(text)))
+    then
+        -- Naming any part of the frame means the request is about that part.
+        -- ENABLED_GUARD_TERMS only listed load conditions and dispel overlays,
+        -- so "turn off highlight borders for party frame" reached the root
+        -- toggle and planned to disable the party frames.
         return nil
     end
     if (attr == "width" or attr == "height") and ContainsAny(text, FollowupData.DIMENSION_GUARD_TERMS) then
