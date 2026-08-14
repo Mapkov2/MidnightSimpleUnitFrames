@@ -20,7 +20,7 @@ local data = {
                     title = "Highlights",
                     bullets = {
                         "Expanded Texture Layers into three independently configurable, HP-reactive decoration slots with shared gradients, threshold colors, opacity rules, target/combat conditions, presets, and runtime-faithful previews.",
-                        "Added Chunked Health and Power Loss for Unit and Group Frames. Bars update immediately while a configurable loss trail shows recently spent Health or Power without polling.",
+                        "Added League of Legends-style Health and Power loss feedback for Unit and Group Frames. Bars update immediately while a configurable trailing chunk shows recently lost Health or spent Power without polling.",
                         "Added profile-wide controls for Blizzard's Player Buff Frame and normal Debuff icons while keeping Private Auras and Deadly Debuff warnings available.",
                     },
                 },
