@@ -360,10 +360,15 @@ local function CollectSpecs(siCfg, si)
   local out, seen = {}, {}
   local selected = siCfg and siCfg.spec or "auto"
   if selected == "multi" then
+    local allSpecsKey = si and si.ALL_SPECS_KEY
+    local allSpecsConfig = allSpecsKey and type(siCfg and siCfg.specs) == "table" and siCfg.specs[allSpecsKey]
+    if type(allSpecsConfig) == "table" and next(allSpecsConfig) ~= nil then
+      AddSpec(out, seen, si, allSpecsKey)
+    end
     local multi = type(siCfg and siCfg.multiSpecs) == "table" and siCfg.multiSpecs or nil
     if multi then
       for specKey, enabled in pairs(multi) do
-        if enabled == true then AddSpec(out, seen, si, specKey) end
+        if enabled == true and specKey ~= allSpecsKey then AddSpec(out, seen, si, specKey) end
       end
     end
   elseif selected ~= "auto" then
@@ -391,6 +396,10 @@ local function NormalizePlaced(placed, iconScale)
   if kind ~= "icon" and kind ~= "square" and kind ~= "bar" and kind ~= "number" and kind ~= "none" then
     kind = "icon"
   end
+  local growth = tostring(placed.growth or "RIGHTDOWN"):upper()
+  if growth ~= "RIGHTDOWN" and growth ~= "LEFTDOWN" and growth ~= "RIGHTUP" and growth ~= "LEFTUP" then
+    growth = "RIGHTDOWN"
+  end
   return {
     type = kind,
     anchor = tostring(placed.anchor or "TOPLEFT"):upper(),
@@ -398,7 +407,12 @@ local function NormalizePlaced(placed, iconScale)
     y = Num(placed.y, 0),
     size = Scaled(placed.size, iconScale, 18),
     barWidth = Scaled(placed.barWidth, iconScale, Num(placed.width, 54)),
-    growth = placed.growth,
+    growth = growth,
+    barSmoothFill = placed.barSmoothFill == true,
+    barShowTimer = placed.barShowTimer == true,
+    barTimerAnchor = tostring(placed.barTimerAnchor or "CENTER"):upper(),
+    barTimerX = Num(placed.barTimerX, 0),
+    barTimerY = Num(placed.barTimerY, 0),
     iconEffect = tostring(placed.iconEffect or "none"):lower(),
     missing = false,
     showCooldownSwipe = placed.showCooldownSwipe ~= false,
@@ -414,15 +428,8 @@ local function NormalizeFrameEffect(frame)
   local kind = tostring(frame.type or "none"):lower()
   if kind == "" or kind == "none" then return nil end
   local color = type(frame.color) == "table" and frame.color or {}
-  local timing = tostring(frame.timing or "always"):lower()
-  if timing ~= "expiring" then timing = "always" end
-  local expireThreshold = Num(frame.expireThreshold, 5)
-  if expireThreshold < 1 then expireThreshold = 1 end
-  if expireThreshold > 30 then expireThreshold = 30 end
   return {
     type = kind,
-    timing = timing,
-    expireThreshold = expireThreshold,
     color = {
       Alpha(color[1] or color.r, 1),
       Alpha(color[2] or color.g, 1),

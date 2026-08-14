@@ -23,7 +23,6 @@ function A.AurasRegistry.RegisterFilterSettings(ctx, scope)
     local AddAliasesForAuraScope = ctx.AddAliasesForAuraScope
     local AddAuraLaneAliases = ctx.AddAuraLaneAliases
     local AuraScopeLabel = ctx.AuraScopeLabel
-    local RegisterAuraScopeBoolean = ctx.RegisterAuraScopeBoolean
     local AuraFiltersEnabled = ctx.AuraFiltersEnabled
     local AuraSetFiltersEnabled = ctx.AuraSetFiltersEnabled
     local AuraReadFilter = ctx.AuraReadFilter
@@ -34,8 +33,8 @@ function A.AurasRegistry.RegisterFilterSettings(ctx, scope)
 
     if not (Registry and type(Registry.RegisterSetting) == "function") then return end
     if type(AddAliasesForAuraScope) ~= "function" or type(AddAuraLaneAliases) ~= "function" then return end
-    if type(AuraScopeLabel) ~= "function" or type(RegisterAuraScopeBoolean) ~= "function" then return end
-    local scopePage = scope == "shared" and "auras3_filters" or ("uf_" .. tostring(scope))
+    if type(AuraScopeLabel) ~= "function" then return end
+    local scopePage = "uf_" .. tostring(scope)
 
     local function AddAlias(out, value)
         if type(value) == "string" and value ~= "" then out[#out + 1] = value end
@@ -80,24 +79,6 @@ function A.AurasRegistry.RegisterFilterSettings(ctx, scope)
     end
 
     local aliases = {}
-    AddAlias(aliases, tostring(AuraScopeLabel(scope)):lower() .. " aura filter gate")
-    AddAlias(aliases, tostring(AuraScopeLabel(scope)):lower() .. " blizzard aura filters")
-    AddAlias(aliases, tostring(AuraScopeLabel(scope)):lower() .. " buff and debuff filters")
-    AddAlias(aliases, tostring(AuraScopeLabel(scope)):lower() .. " filter evaluation")
-    AddAliasesForAuraScope(aliases, scope, "filters")
-    AddAliasesForAuraScope(aliases, scope, "enable filters")
-    RegisterAuraScopeBoolean(scope, "filtersEnabled", "Filters Enabled", true, aliases,
-        function() return AuraFiltersEnabled(scope) end,
-        function(value) AuraSetFiltersEnabled(scope, value) end,
-        false,
-        nil,
-        {
-            page = scopePage,
-            description = (scope == "shared"
-                    and "Master gate for Shared Blizzard aura filter tokens. Unit scopes that follow Shared Rules use this gate. "
-                    or "Master gate for this unit's Blizzard aura filter tokens. Changing it creates or updates this unit's own filter rules. ")
-                .. "It does not show or hide the Buff or Debuff lane, and Hide Permanent remains active independently.",
-        })
 
     for i = 1, #AURA_FILTER_BOOLEAN_SPECS do
         local spec = AURA_FILTER_BOOLEAN_SPECS[i]
@@ -108,7 +89,12 @@ function A.AurasRegistry.RegisterFilterSettings(ctx, scope)
             label = AuraScopeLabel(scope) .. " " .. spec.label,
             category = AuraScopeLabel(scope) .. " / Aura Filters",
             page = scopePage,
-            description = "Blizzard token filter for " .. tostring(AuraScopeLabel(scope)) .. " "
+            description = (spec.key == "bigDefensive"
+                    and "MSUF curated major-defensive Spell-ID filter on friendly frames, with Blizzard's BIG_DEFENSIVE fallback where exact identity filtering is restricted, for "
+                    or (spec.key == "includeNameplateOnly"
+                        and "Blizzard inclusion modifier that broadens the active filter with nameplate-only auras for "
+                        or "Blizzard classification filter for "))
+                .. tostring(AuraScopeLabel(scope)) .. " "
                 .. (spec.lane == "buff" and "Buffs" or "Debuffs")
                 .. ". It is evaluated only while Filters Enabled is on; it does not show or hide the aura lane.",
             unit = scope,
@@ -124,6 +110,9 @@ function A.AurasRegistry.RegisterFilterSettings(ctx, scope)
                         AuraWriteFilter(scope, spec.lane, spec.conflicts[k], false)
                     end
                 end
+                if value == true and spec.classification == true then
+                    AuraWriteFilter(scope, spec.lane, "exclusive", "none")
+                end
                 AuraWriteFilter(scope, spec.lane, spec.key, value)
             end,
             apply = function() ApplyAura(scope, "MSUF_ASSISTANT_AURA_FILTER") end,
@@ -134,6 +123,27 @@ function A.AurasRegistry.RegisterFilterSettings(ctx, scope)
     for _, laneInfo in ipairs(AURA_LANES) do
         local lane = laneInfo.key
         local settingScope, settingLane = scope, lane
+        aliases = {}
+        AddAuraLaneAliases(aliases, settingScope, settingLane, "filter gate")
+        AddAuraLaneAliases(aliases, settingScope, settingLane, "enable filters")
+        AddAuraLaneAliases(aliases, settingScope, settingLane, "blizzard aura filters")
+        Registry:RegisterSetting({
+            key = "auras3." .. settingScope .. "." .. settingLane .. ".filtersEnabled",
+            label = AuraScopeLabel(settingScope) .. " " .. laneInfo.label .. " Filters Enabled",
+            category = AuraScopeLabel(settingScope) .. " / Aura Filters",
+            page = scopePage,
+            description = "Master gate for this exact " .. laneInfo.label
+                .. " lane's classification filters. It does not show or hide the lane, and Hide Permanent remains active independently.",
+            unit = settingScope,
+            frameType = "aura",
+            attribute = "aura" .. settingLane .. "FiltersEnabled",
+            type = "boolean",
+            aliases = aliases,
+            get = function() return AuraFiltersEnabled(settingScope, settingLane) end,
+            set = function(value) AuraSetFiltersEnabled(settingScope, settingLane, value) end,
+            apply = function() ApplyAura(settingScope, "MSUF_ASSISTANT_AURA_FILTER_ENABLE") end,
+            combatSafe = false,
+        })
         local values = AURA_EXCLUSIVE_FILTER_VALUES[settingLane] or { "none" }
         if #values > 1 then
         local defaultValue = values[1] or "none"
@@ -173,7 +183,7 @@ function A.AurasRegistry.RegisterFilterSettings(ctx, scope)
         })
         end
 
-        if scope ~= "shared" and type(AuraModel) == "function" then
+        if type(AuraModel) == "function" then
             local hideAliases = {}
             AddAuraLaneAliases(hideAliases, settingScope, settingLane, "hide permanent auras")
             AddAuraLaneAliases(hideAliases, settingScope, settingLane, "hide permanent")

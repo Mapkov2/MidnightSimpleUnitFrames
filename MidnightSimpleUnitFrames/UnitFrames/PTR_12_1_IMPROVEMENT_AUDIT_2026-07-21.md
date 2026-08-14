@@ -87,7 +87,7 @@ PTR API evidence:
 
 - `UnitHealthPercent(unit, usePredicted, curve)` returns the curve-evaluated result and is marked for secret returns.
 - `SimpleRegion:SetAlpha` accepts secret alpha arguments and carries the alpha aspect C-side.
-- MSUF already uses the same safe pattern for expiring spell-indicator effects through `LuaDuration:EvaluateRemainingDuration(curve)` followed by `SetAlpha`.
+- The former expiration-timed full-frame Spell Indicator experiment was removed: secret group-aura duration cannot reliably drive an arbitrary external frame effect without a restricted bridge or recurring polling.
 
 ### P1.2 - Add resource-aware power-text threshold hiding
 
@@ -212,7 +212,7 @@ Potential micro-candidates, only after an exact scenario proves material impact:
 
 - `SetFrameAlpha` verifies `GetAlpha()` even when its ownership cache matches. A forced/cold verification path and a trusted hot ownership path could avoid the native read, but the observed absolute cost was only 2.727 ms over 20 seconds.
 - Prediction `UpdateFull`/`UpdateCalc` and health-percent allocation should be revisited only in a heal/absorb-heavy raid trace, not inferred from target swapping.
-- The spell-indicator expiring-effect driver already runs only while gates exist and at 5 Hz. Do not replace it unless a dedicated trace shows it matters; secret duration prevents ordinary Lua threshold scheduling.
+- Do not restore an expiration-timed full-frame Spell Indicator driver. Keep full-frame effects on native AuraSlot ancestry for active-aura visibility; native cooldown, duration text, and duration bars remain the supported timing surfaces.
 - Target sound's observed self-time was allocation-free and dominated by native calls. Leave it alone unless a sound-disabled/current trace says otherwise.
 
 ## Code-quality work
@@ -231,7 +231,7 @@ Potential micro-candidates, only after an exact scenario proves material impact:
 ## What is already implemented and should not be rebuilt
 
 - Native Aura-container ownership, validated filters, `CROWD_CONTROL`, max-duration filters, and secret-safe Aura rendering.
-- Expiring spell-indicator frame effects and animated icon glow.
+- Active-aura spell-indicator frame effects, native duration bars, and animated icon glow.
 - Temporary maximum-health reduction overlay, default off.
 - Priority Frames with secure headers, event-driven updates, and zero polling.
 - Group-size auto-scaling breakpoints.

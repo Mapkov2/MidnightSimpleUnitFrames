@@ -2304,7 +2304,7 @@ local function BuildWindowChrome(state)
         local fill, edge = T.CreateSuperellipseLayers(btn, "_msuf2HistNav", 1, "BACKGROUND", "BORDER")
         local icon = btn:CreateTexture(nil, "ARTWORK")
         icon:SetTexture(T.media.dropdownChevron)
-        icon:SetSize(11, 11)
+        icon:SetSize(18, 18)
         icon:SetPoint("CENTER", 0, 0)
         if icon.SetRotation then icon:SetRotation(rotation) end
         btn._msuf2HistNavIcon = icon
@@ -3039,6 +3039,11 @@ function M.Open(pageKey)
     f._msuf2Minimized = nil
     ApplyMenuFrameScale(f)
     ApplyMenuFramePriority(f)
+    -- Cached pages can outlive external model changes while the window is
+    -- hidden, including specialization-driven profile switches. Advance the
+    -- shared snapshot revision once per explicit open so SelectPage refreshes
+    -- the visible page from the current MSUF_DB instead of reusing stale UI.
+    M.MarkMenuDataDirty("menu-open")
     f:Show()
     -- An unqualified open resumes an active guided setup before considering the
     -- one-time welcome. Explicit deep links always keep their requested page.

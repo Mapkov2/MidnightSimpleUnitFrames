@@ -32,6 +32,10 @@ local GROUP_SPECS = {
         defaultY = 6,
         defaultSize = 26,
     },
+    custom1 = { label = "Custom 1", customIndex = 1, xKey = "x", yKey = "y", sizeKey = "size", spacingKey = "spacing", defaultX = 0, defaultY = 0, defaultSize = 24, defaultSpacing = 2 },
+    custom2 = { label = "Custom 2", customIndex = 2, xKey = "x", yKey = "y", sizeKey = "size", spacingKey = "spacing", defaultX = 0, defaultY = 0, defaultSize = 24, defaultSpacing = 2 },
+    custom3 = { label = "Custom 3", customIndex = 3, xKey = "x", yKey = "y", sizeKey = "size", spacingKey = "spacing", defaultX = 0, defaultY = 0, defaultSize = 24, defaultSpacing = 2 },
+    custom4 = { label = "Dots on target", customIndex = 4, xKey = "x", yKey = "y", sizeKey = "size", spacingKey = "spacing", defaultX = 0, defaultY = 0, defaultSize = 24, defaultSpacing = 2 },
 }
 
 local pf
@@ -69,6 +73,20 @@ local function UnitLabel(unit)
     if unit == "focus" then return "Focus" end
     if IsBoss(unit) then return "Boss " .. (unit:match("%d+") or "1") end
     return tostring(unit or "")
+end
+
+local function LaneLabel(unit, kind, spec)
+    if unit == "player" and kind == "custom4" then return "Defensive Buffs" end
+    if spec and spec.customIndex and spec.customIndex < 4 then
+        local db = _G.MSUF_DB
+        local auras = db and db.auras3
+        local scope = IsBoss(unit) and "boss" or unit
+        local root = auras and auras.customContainers
+        local record = root and type(root.perUnit) == "table" and root.perUnit[scope] or nil
+        local item = record and type(record.items) == "table" and record.items[spec.customIndex] or nil
+        if item and type(item.name) == "string" and item.name ~= "" then return item.name end
+    end
+    return spec and spec.label or tostring(kind or "")
 end
 
 local function ActiveGroup()
@@ -117,9 +135,10 @@ local function AffectedUnits(unit, shared)
     return { unit }
 end
 
---- Aura layout offsets remain anchor-local runtime values. Edit Mode exposes
---- the same visible center-relative coordinate contract as every other element,
---- so use the lane body (not the 18px editor chrome) as the translation surface.
+--- Aura layout offsets remain anchor-local runtime values. The popup mirrors
+--- the existing Edit Mode readout and translates explicit edits back into that
+--- owner; it does not migrate or normalize anchors. Measure the lane body, not
+--- the 18px editor chrome.
 local function ActiveLaneFrame(unit, kind)
     local a3 = MSUF and MSUF.MSUF_Auras3
     local edit = a3 and a3.EditMode
@@ -142,6 +161,65 @@ local function RuntimeLayout(unit)
     local layout, unitCfg = UnitLayout(unit, false)
     if unitCfg and unitCfg.overrideLayout == true then return layout or {} end
     return {}
+end
+
+local function CustomPlaced(unit, spec, create)
+    if not (spec and spec.customIndex) then return nil end
+    local item
+    if create then
+        local a3 = MSUF and MSUF.MSUF_Auras3
+        local model = a3 and a3.MenuModel
+        item = model and type(model.CustomContainer) == "function"
+            and model.CustomContainer(unit, spec.customIndex, true) or nil
+    else
+        local auras = AurasDB(false)
+        local scope = IsBoss(unit) and "boss" or unit
+        local root = auras and auras.customContainers
+        local record = root and type(root.perUnit) == "table" and root.perUnit[scope] or nil
+        item = record and type(record.items) == "table" and record.items[spec.customIndex] or nil
+    end
+    if not item then return nil end
+    if create and type(item.placed) ~= "table" then item.placed = {} end
+    return type(item.placed) == "table" and item.placed or nil
+end
+
+local SPEC_DEFAULTS = {
+    x = "defaultX",
+    y = "defaultY",
+    size = "defaultSize",
+    spacing = "defaultSpacing",
+}
+local function ReadSpecValue(unit, spec, field, shared)
+    local fallback = spec and spec[SPEC_DEFAULTS[field]]
+    if field == "spacing" and fallback == nil then fallback = 2 end
+    local key = spec and spec[field .. "Key"]
+    if spec and spec.customIndex then
+        local placed = CustomPlaced(unit, spec, false)
+        return placed and placed[key] ~= nil and placed[key] or fallback
+    end
+    local layout = RuntimeLayout(unit)
+    if field == "spacing" then
+        return ReadValue(layout, shared, key, key, ReadValue(layout, shared, "spacing", "spacing", fallback))
+    end
+    return ReadValue(layout, shared, key, key, fallback)
+end
+
+local function ReadVisiblePosition(unit, kind, currentX, currentY)
+    local frame = ActiveLaneFrame(unit, kind)
+    if frame and type(FramePositionValues) == "function" then
+        local x, y = FramePositionValues(frame)
+        if x ~= nil and y ~= nil then return x, y end
+    end
+    return currentX, currentY
+end
+
+local function TranslateVisiblePosition(unit, kind, currentX, currentY, displayX, displayY)
+    local frame = ActiveLaneFrame(unit, kind)
+    if frame and type(TranslateFramePosition) == "function" then
+        return TranslateFramePosition(frame, currentX, currentY, displayX, displayY)
+    end
+    local x, y = tonumber(displayX) or currentX, tonumber(displayY) or currentY
+    return x, y, x ~= currentX or y ~= currentY
 end
 
 local function ReapplyAuras(units)
@@ -189,8 +267,63 @@ local function ApplyBossTogether()
     if pf and pf:IsShown() then Sync() end
 end
 
+local function ApplyCustom(unit, activeGroup, spec, shared)
+    local units = AffectedUnits(unit, shared)
+    local currentX = ReadSpecValue(unit, spec, "x", shared)
+    local currentY = ReadSpecValue(unit, spec, "y", shared)
+    local currentSize = ReadSpecValue(unit, spec, "size", shared)
+    local currentSpacing = ReadSpecValue(unit, spec, "spacing", shared)
+    local visibleX, visibleY = ReadVisiblePosition(unit, activeGroup, currentX, currentY)
+    local displayX = ReadBox(pf.xBox, visibleX ~= nil and visibleX or currentX)
+    local displayY = ReadBox(pf.yBox, visibleY ~= nil and visibleY or currentY)
+    local spacing = ReadBox(pf.spacingBox, currentSpacing, 0, 64)
+    local size = ReadBox(pf.sizeBox, currentSize, 10, 80)
+    local geometryChanged = currentSize ~= size or currentSpacing ~= spacing
+    local x, y, positionChanged
+    if not geometryChanged then
+        x, y, positionChanged = TranslateVisiblePosition(unit, activeGroup,
+            currentX, currentY, displayX, displayY)
+    end
+    if not geometryChanged and not positionChanged then return end
+
+    if type(_G.MSUF_EM_UndoBeforeChange) == "function" then
+        _G.MSUF_EM_UndoBeforeChange("aura", unit)
+    end
+
+    if geometryChanged then
+        for i = 1, #units do
+            local placed = CustomPlaced(units[i], spec, true)
+            if placed then
+                placed[spec.spacingKey] = spacing
+                placed[spec.sizeKey] = size
+            end
+        end
+        ReapplyAuras(units)
+        x, y, positionChanged = TranslateVisiblePosition(unit, activeGroup,
+            currentX, currentY, displayX, displayY)
+    end
+
+    if positionChanged then
+        for i = 1, #units do
+            local placed = CustomPlaced(units[i], spec, true)
+            if placed then
+                placed[spec.xKey] = x
+                placed[spec.yKey] = y
+            end
+        end
+    end
+
+    if not geometryChanged or positionChanged then ReapplyAuras(units) end
+    if pf and pf:IsShown() then Sync() end
+end
+
 local function Apply()
     if Quick.BlockConfigCombatLocked() or not (pf and pf.unit) then return end
+    local activeGroup, spec = ActiveGroup()
+    if spec.customIndex then
+        ApplyCustom(pf.unit, activeGroup, spec, Shared(false) or {})
+        return
+    end
     local a2 = AurasDB(true)
     local sh = Shared(true)
     if not (a2 and sh) then return end
@@ -198,7 +331,6 @@ local function Apply()
     if type(_G.MSUF_EM_UndoBeforeChange) == "function" then _G.MSUF_EM_UndoBeforeChange("aura", pf.unit) end
 
     local units = AffectedUnits(pf.unit, sh)
-    local activeGroup, spec = ActiveGroup()
     local sourceLayout = RuntimeLayout(pf.unit)
     local currentX = ReadValue(sourceLayout, sh, spec.xKey, spec.xKey, spec.defaultX)
     local currentY = ReadValue(sourceLayout, sh, spec.yKey, spec.yKey, spec.defaultY)
@@ -291,6 +423,27 @@ end
 
 local function ResetPosition()
     if Quick.BlockConfigCombatLocked() or not (pf and pf.unit) then return end
+    local _, activeSpec = ActiveGroup()
+    if activeSpec.customIndex then
+        local shared = Shared(false) or {}
+        local currentX = ReadSpecValue(pf.unit, activeSpec, "x", shared)
+        local currentY = ReadSpecValue(pf.unit, activeSpec, "y", shared)
+        if currentX == activeSpec.defaultX and currentY == activeSpec.defaultY then return end
+        if type(_G.MSUF_EM_UndoBeforeChange) == "function" then
+            _G.MSUF_EM_UndoBeforeChange("aura", pf.unit)
+        end
+        local units = AffectedUnits(pf.unit, shared)
+        for i = 1, #units do
+            local placed = CustomPlaced(units[i], activeSpec, true)
+            if placed then
+                placed[activeSpec.xKey] = activeSpec.defaultX
+                placed[activeSpec.yKey] = activeSpec.defaultY
+            end
+        end
+        ReapplyAuras(units)
+        if pf and pf:IsShown() then Sync() end
+        return
+    end
     local a2 = AurasDB(true)
     if not a2 then return end
     if type(_G.MSUF_EM_UndoBeforeChange) == "function" then _G.MSUF_EM_UndoBeforeChange("aura", pf.unit) end
@@ -323,12 +476,20 @@ local function OpenUnitAuras()
     CommitFields()
     local key = MenuUnit(pf.unit)
     local pageKey = UnitPageKey(key)
+    local activeGroup, spec = ActiveGroup()
+    if spec and spec.customIndex then
+        local menu = MSUF and MSUF.MSUF2
+        if menu then
+            menu.unitAuraTabSelection = menu.unitAuraTabSelection or {}
+            menu.unitAuraTabSelection[key] = activeGroup
+        end
+    end
     if EM2.Focus and EM2.Focus.SetSelection then
         EM2.Focus.SetSelection(key, "auras", nil, { source = "aura-popup", menu = false })
     end
     if Util.SetMenuFocusRequest then Util.SetMenuFocusRequest({
         key = key,
-        component = "auras",
+        component = spec and spec.customIndex and activeGroup or "auras",
         pageKey = pageKey,
         sectionId = "auras3",
         source = "aura-popup",
@@ -374,22 +535,35 @@ function Sync()
     local sh = Shared(false) or {}
     local layout = RuntimeLayout(pf.unit)
     local activeGroup, spec = ActiveGroup()
-    if pf._titleFS then pf._titleFS:SetText(Quick.Tr(UnitLabel(pf.unit)) .. " " .. Quick.Tr("Auras")) end
+    if pf._titleFS then
+        local laneLabel = spec.customIndex and LaneLabel(pf.unit, activeGroup, spec) or "Auras"
+        pf._titleFS:SetText(Quick.Tr(UnitLabel(pf.unit)) .. " " .. Quick.Tr(laneLabel))
+    end
     SetLabel(pf.xBoxLabel, "X")
     SetLabel(pf.yBoxLabel, "Y")
     SetLabel(pf.sizeBoxLabel, "Size")
     SetLabel(pf.spacingBoxLabel, "Spacing")
     if pf.buffLaneBtn and pf.buffLaneBtn.SetCheckedVisual then pf.buffLaneBtn:SetCheckedVisual(activeGroup == "buff") end
     if pf.debuffLaneBtn and pf.debuffLaneBtn.SetCheckedVisual then pf.debuffLaneBtn:SetCheckedVisual(activeGroup == "debuff") end
-    Quick.SetBoxText(pf.spacingBox,
-        ReadValue(layout, sh, spec.spacingKey, spec.spacingKey, ReadValue(layout, sh, "spacing", "spacing", 2)))
-    local x, y
-    if type(FramePositionValues) == "function" then
-        x, y = FramePositionValues(ActiveLaneFrame(pf.unit, activeGroup))
+    if spec.customIndex then
+        local currentX = ReadSpecValue(pf.unit, spec, "x", sh)
+        local currentY = ReadSpecValue(pf.unit, spec, "y", sh)
+        local x, y = ReadVisiblePosition(pf.unit, activeGroup, currentX, currentY)
+        Quick.SetBoxText(pf.spacingBox, ReadSpecValue(pf.unit, spec, "spacing", sh))
+        Quick.SetBoxText(pf.xBox, x ~= nil and x or currentX)
+        Quick.SetBoxText(pf.yBox, y ~= nil and y or currentY)
+        Quick.SetBoxText(pf.sizeBox, ReadSpecValue(pf.unit, spec, "size", sh))
+    else
+        Quick.SetBoxText(pf.spacingBox,
+            ReadValue(layout, sh, spec.spacingKey, spec.spacingKey, ReadValue(layout, sh, "spacing", "spacing", 2)))
+        local x, y
+        if type(FramePositionValues) == "function" then
+            x, y = FramePositionValues(ActiveLaneFrame(pf.unit, activeGroup))
+        end
+        Quick.SetBoxText(pf.xBox, x ~= nil and x or ReadValue(layout, sh, spec.xKey, spec.xKey, spec.defaultX))
+        Quick.SetBoxText(pf.yBox, y ~= nil and y or ReadValue(layout, sh, spec.yKey, spec.yKey, spec.defaultY))
+        Quick.SetBoxText(pf.sizeBox, ReadValue(layout, sh, spec.sizeKey, spec.sizeKey, spec.defaultSize))
     end
-    Quick.SetBoxText(pf.xBox, x ~= nil and x or ReadValue(layout, sh, spec.xKey, spec.xKey, spec.defaultX))
-    Quick.SetBoxText(pf.yBox, y ~= nil and y or ReadValue(layout, sh, spec.yKey, spec.yKey, spec.defaultY))
-    Quick.SetBoxText(pf.sizeBox, ReadValue(layout, sh, spec.sizeKey, spec.sizeKey, spec.defaultSize))
     if pf.bossTogetherBtn and pf.bossTogetherBtn.SetCheckedVisual then
         local isBoss = IsBoss(pf.unit)
         pf.bossTogetherBtn:SetShown(isBoss)
@@ -492,7 +666,7 @@ end
 function AuraPopup.SetAssistantField(field, value)
     if Quick.BlockConfigCombatLocked() or not (pf and pf.unit and pf:IsShown()) then return false end
     if field == "lane" then
-        if value ~= "buff" and value ~= "debuff" then return false end
+        if not GROUP_SPECS[value] then return false end
         SetActiveGroup(value)
     elseif field == "bossTogether" then
         if not (pf.bossTogetherBtn and pf.bossTogetherBtn:IsShown()) then return false end

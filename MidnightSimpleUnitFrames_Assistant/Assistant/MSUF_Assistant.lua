@@ -1099,7 +1099,7 @@ local function FailurePageHints(query)
         local unitPage = scope == "Target" and "uf_target" or scope == "Focus" and "uf_focus"
             or scope == "Boss" and "uf_boss" or "uf_player"
         local page = groupScope and "gf_auras" or sharedAppearance and "auras3_styling" or unitPage
-        local pageLabel = groupScope and "Group Auras" or sharedAppearance and "Shared Aura Appearance"
+        local pageLabel = groupScope and "Group Auras" or sharedAppearance and "Global Aura Appearance"
             or tostring(scope or "Player") .. " UnitFrame"
         local control = FailureContainsAny(normalized, { " growth ", " grow ", " direction " }) and "Growth"
             or FailureContainsAny(normalized, { " anchor ", " attach " }) and "Anchor"
@@ -7458,22 +7458,21 @@ function A.ExecutePlan(plan, opts)
         and (plan.kind == "changes" or (plan.kind == "action" and actionMutability ~= "readOnly" and actionMutability ~= "navigation")) then
         return NormalizePlanResult(AP.ReadOnlyGuardResult(sourceText))
     end
-    -- Individual per-unit filters are ineffective while the scope still
-    -- inherits Shared rules, and enabled filter values are ineffective while
-    -- the master gate is off. Expand these dependencies into the same
-    -- transaction so the visible widgets, runtime config, undo, and redo all
-    -- agree. Group filter dropdowns similarly require their lane to be active.
+    -- Enabled per-unit filter values require that exact lane's gate. Expand
+    -- this dependency into the same transaction. Group filter dropdowns
+    -- similarly require their lane to be active.
     if plan.kind == "changes" and type(plan.changes) == "table" then
         local existing, unitScopes, groupLanes = {}, {}, {}
         for i = 1, #plan.changes do
             local change = plan.changes[i]
             local key = tostring(change and change.setting and change.setting.key or "")
             existing[key] = true
-            local scope = key:match("^auras3%.([^.]+)%.[^.]+%.filter%.")
+            local scope, lane = key:match("^auras3%.([^.]+)%.([^.]+)%.filter%.")
             if scope and scope ~= "shared" then
-                local need = unitScopes[scope] or { enable = false }
+                local owner = scope .. "." .. tostring(lane)
+                local need = unitScopes[owner] or { scope = scope, lane = lane, enable = false }
                 need.enable = need.enable or (change.value ~= false and change.value ~= "none")
-                unitScopes[scope] = need
+                unitScopes[owner] = need
             end
             local lanePrefix = key:match("^(gf_[^.]+%.auras%.[^.]+)%.filterToken$")
             if lanePrefix then groupLanes[lanePrefix] = true end
@@ -7487,11 +7486,12 @@ function A.ExecutePlan(plan, opts)
                 dependencies[#dependencies + 1] = { setting = setting, value = value }
             end
         end
-        for _, scope in ipairs({ "player", "target", "focus", "boss" }) do
-            local need = unitScopes[scope]
+        for _, owner in ipairs({ "player.buff", "player.debuff", "target.buff", "target.debuff", "focus.buff", "focus.debuff", "boss.buff", "boss.debuff" }) do
+            local need = unitScopes[owner]
             if need then
-                AddDependency("auras3." .. scope .. ".useSharedRules", false)
-                if need.enable then AddDependency("auras3." .. scope .. ".filtersEnabled", true) end
+                if need.enable then
+                    AddDependency("auras3." .. need.scope .. "." .. need.lane .. ".filtersEnabled", true)
+                end
             end
         end
         local orderedGroupLanes = {}
@@ -7834,6 +7834,44 @@ function A.HandleCommandInput(text)
         return NormalizePlanResult({ text = message, result = ok and "applied" or "failed" })
     end
     if parsed.kind == "ambiguous" then
+        -- Two rows that are the same boolean setting split only by polarity
+        -- ("Aggro Border: off / on") are not a real ambiguity when the
+        -- sentence states its own direction ("stop highlighting frames...",
+        -- "highlight the frame when something is attacking me"). Ask the
+        -- shared polarity vocabulary first; only a sentence with no stated
+        -- polarity still gets the question.
+        local pairChoices = parsed.choices or {}
+        if #pairChoices == 2 then
+            -- Booleans arrive as true/false, on/off-style string settings
+            -- (aggroOutlineMode) as "on"/"off"; both are the same two-state
+            -- question to the player.
+            local function ChoicePolarity(value)
+                if type(value) == "boolean" then return value end
+                local v = tostring(value or ""):lower()
+                if v == "on" or v == "true" or v == "enabled" then return true end
+                if v == "off" or v == "false" or v == "disabled" then return false end
+                return nil
+            end
+            local first, second = pairChoices[1], pairChoices[2]
+            local firstKey = first and first.setting and first.setting.key
+            local firstPolarity = first and ChoicePolarity(first.value)
+            local secondPolarity = second and ChoicePolarity(second.value)
+            if firstKey and second and second.setting and second.setting.key == firstKey
+                and firstPolarity ~= nil and secondPolarity ~= nil
+                and firstPolarity ~= secondPolarity
+            then
+                local Parser = A.Parser
+                local implied
+                if Parser and type(Parser.DetectBoolean) == "function" then
+                    -- No and-or shorthand here: a detected OFF is `false`,
+                    -- which the idiom would collapse into nil.
+                    implied = Parser.DetectBoolean(text)
+                end
+                if implied ~= nil then
+                    return NormalizePlanResult(ExecuteChoice(firstPolarity == implied and first or second))
+                end
+            end
+        end
         A.pendingChoices = parsed.choices or {}
         AP.SetPendingCandidates(A.pendingChoices)
         local ctx = A.GetContext and A.GetContext()
@@ -8575,7 +8613,12 @@ function AP.TryImmediateSubmitResult(text, opts)
     local parser = A.Parser or {}
     local normalized = type(parser.Normalize) == "function" and parser.Normalize(text) or tostring(text or ""):lower()
     if AP.BarOutlineColorSemanticPlan(text) then return nil end
-    if type(A.RouterIsFailClosedReadOnlyRequest) == "function"
+    -- Pure small talk is exempt: it can only produce text, so the fail-closed
+    -- read-only gate has nothing to protect against, and applying it here sent
+    -- "tell me a joke" to the settings advisory instead of the joke lane.
+    local smallTalk = type(A.RouterIsPureSmallTalk) == "function"
+        and A.RouterIsPureSmallTalk(text) == true
+    if not smallTalk and type(A.RouterIsFailClosedReadOnlyRequest) == "function"
         and A.RouterIsFailClosedReadOnlyRequest(text)
     then
         return nil
@@ -9259,7 +9302,103 @@ function AP.SubmitNow(text, opts)    opts = opts or {}
 end
 
 function A.Submit(text)
-    local ok, result = xpcall(function() return AP.SubmitNow(text) end, AP.AssistantJobErrorHandler)
+    local ok, result = xpcall(function()
+        local produced = AP.SubmitNow(text)
+        -- Last word before the reply leaves: dozens of specialised lanes can
+        -- claim a sentence and then hand back a list, an article or an
+        -- apology. When the sentence's own subject resolves to exactly ONE
+        -- control, that is not a guess -- it is the control the player named,
+        -- so act on it rather than answering with a question.
+        local status = type(produced) == "table" and tostring(produced.status or produced.result or "") or ""
+        -- "navigated" is also a non-answer to a change request: opening the
+        -- page is what the Assistant does when it recognised the area but not
+        -- the control ("let the target frame have its own bar settings").
+        local unresolved = status == "ambiguous" or status == "failed" or status == "info"
+            or status == "needs_choice" or status == "unknown" or status == "navigated"
+        -- Only for openers that can ONLY mean navigation. "direct me to target
+        -- portrait position left" names the value to identify the control, and
+        -- this hook applied it. Deliberately not every navigation-shaped
+        -- sentence: "show me how much maximum health i lost" asks for a feature
+        -- to be switched on, and blocking that stopped it working. The other
+        -- half of the problem -- an enum value the sentence never contains at
+        -- all -- is fixed at its source in Router.EnumValueAppearsInText.
+        if type(A.RouterPrivate) == "table"
+            and type(A.RouterPrivate.IsUnambiguousNavigationCommand) == "function"
+            and A.RouterPrivate.IsUnambiguousNavigationCommand(text)
+        then
+            unresolved = false
+        end
+        -- Same rule for a question: "should i turn off Boss Buff Show Cooldown
+        -- Swipe?" names one control and one polarity, which is exactly what
+        -- this hook looks for -- so it answered the question by doing the
+        -- thing. Asking is never permission.
+        if type(A.RouterPrivate) == "table"
+            and type(A.RouterPrivate.IsAdviceQuestion) == "function"
+            and A.RouterPrivate.IsAdviceQuestion(text)
+        then
+            unresolved = false
+        end
+        -- A reply that offered real choices is a deliberate clarification and
+        -- the player's answer is expected next; overriding it would discard
+        -- the retained control (assistant_router_safety_regression pins this).
+        -- "turn on the dispel border for party frames" names a frame, and a
+        -- reply that changed nothing means the SHARED control answered while
+        -- the player asked about that frame's own copy.
+        -- "already set" is also what a near-miss looks like: the shared control
+        -- answering a frame-scoped question, or the aggro TOGGLE answering
+        -- "only show the aggro border when i am not the tank", which is about
+        -- the role filter. Nothing was written, so re-resolving costs nothing:
+        -- a plan that lands on the same control simply reports unchanged again
+        -- and the original reply stands.
+        if status == "unchanged" then unresolved = true end
+        -- A choice list is a deliberate clarification, so it normally stands.
+        -- The exception is a sentence that spells one control's registered
+        -- wording in full: offering that control among three guesses is not a
+        -- clarification, it is a miss, and the wording decides it.
+        local spelledOut = type(A.RouterPrivate) == "table"
+            and type(A.RouterPrivate.NamedBooleanIntentPlan) == "function"
+            and A.RouterPrivate.NamedBooleanIntentPlan(text) or nil
+        -- A size stated as a dimension idiom ("make the shield bar 6 pixels
+        -- tall") hides the attribute noun the registry indexes, so the lanes
+        -- above see a bare number on a subject and list every control whose
+        -- name contains that subject -- seven per-unit frame Heights, none of
+        -- them the shield bar. That list is a miss for the same reason spelled
+        -- out wording is: the rewrite resolves to exactly ONE control (checked
+        -- inside CanonicalDimensionCommand), so it decides the sentence.
+        local sized = type(A.RouterPrivate) == "table"
+            and type(A.RouterPrivate.CanonicalDimensionCommand) == "function"
+            and A.RouterPrivate.CanonicalDimensionCommand(text) or nil
+        if not sized and not (spelledOut and (tonumber(spelledOut.namedWordingTokens) or 0) >= 4) then
+            if type(A.pendingChoices) == "table" and #A.pendingChoices > 0 then unresolved = false end
+            if type(A.pendingCandidates) == "table" and #A.pendingCandidates > 0 then unresolved = false end
+        end
+        if unresolved and type(A.RouterPrivate) == "table" and type(A.ExecutePlan) == "function" then
+            local router = A.RouterPrivate
+            -- The dimension rewrite is consulted last so nothing the existing
+            -- two plans already claim moves.
+            local plan = (type(router.StatedValueKindSiblingPlan) == "function"
+                    and router.StatedValueKindSiblingPlan(text))
+                or (type(router.NamedBooleanIntentPlan) == "function"
+                    and router.NamedBooleanIntentPlan(text))
+                or (sized and type(router.ExactAliasSingleChange) == "function"
+                    and router.ExactAliasSingleChange(sized))
+                or nil
+            if plan then
+                -- The normal path already declined this sentence, and the
+                -- fail-closed read-only gate would decline it again for the
+                -- same reason -- leaving a request that names one control
+                -- answered with "ask for its location". The plan resolved from
+                -- the control's own registered wording, so run it without
+                -- re-submitting the sentence to that gate.
+                plan.sourceText, plan.raw = nil, nil
+                local okPlan, planned = pcall(A.ExecutePlan, plan, {})
+                local plannedStatus = okPlan and type(planned) == "table"
+                    and tostring(planned.status or planned.result or "") or ""
+                if plannedStatus == "applied" or plannedStatus == "changed" then return planned end
+            end
+        end
+        return produced
+    end, AP.AssistantJobErrorHandler)
     if ok then
         -- Every submit path funnels through here, so this is the one place that
         -- can guarantee a clamped value is explained regardless of which lane

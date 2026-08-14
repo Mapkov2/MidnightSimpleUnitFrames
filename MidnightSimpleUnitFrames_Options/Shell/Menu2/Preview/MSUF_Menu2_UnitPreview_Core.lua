@@ -136,6 +136,17 @@ end
 local function ClearPreviewRoundedMasks(mock)
     if PreviewHelpers.ClearMasks then PreviewHelpers.ClearMasks(mock, "_msufPreviewRoundedMasked") end
 end
+local PREVIEW_GRADIENT_DIRECTIONS = { "left", "right", "up", "down" }
+local function ApplyPreviewGradientMasks(mock, grads, key, anchor, enabled)
+    if type(grads) ~= "table" then return end
+    for i = 1, #PREVIEW_GRADIENT_DIRECTIONS do
+        local tex = grads[PREVIEW_GRADIENT_DIRECTIONS[i]]
+        if tex then
+            local mask = enabled and EnsurePreviewRoundedMask(mock, key, anchor, tex) or nil
+            PreviewSetMask(mock, tex, mask)
+        end
+    end
+end
 function Core.BaseEdgeColor()
     if PreviewHelpers.BaseEdgeColor then return PreviewHelpers.BaseEdgeColor() end
     return 0, 0, 0, 1
@@ -457,6 +468,8 @@ function Core.ApplyRounded(box, key, powerOn, outlineThickness, powerEmbedded, p
     local absorbMode = PreviewResolveAbsorbAnchorMode(conf, g)
     PreviewSetMask(mock, mock.hpBG, hpBgMask)
     PreviewSetMask(mock, mock.hp, hpMask)
+    ApplyPreviewGradientMasks(mock, mock._msufPreviewHealthGradients,
+        "healthGradient", healthAnchor, true)
     PreviewSetMask(mock, mock.tempMaxHealthBg, tempMaxBgMask)
     PreviewSetMask(mock, mock.tempMaxHealth, tempMaxMask)
     PreviewSetMask(mock, mock.healPred, healPredMode == 4 and nil or healPredMask)
@@ -471,6 +484,8 @@ function Core.ApplyRounded(box, key, powerOn, outlineThickness, powerEmbedded, p
     local powerMask = roundedPower and EnsurePreviewRoundedMask(mock, "power", powerAnchor, mock.power) or nil
     PreviewSetMask(mock, mock.powerBG, powerBgMask)
     PreviewSetMask(mock, mock.power, powerMask)
+    ApplyPreviewGradientMasks(mock, mock._msufPreviewPowerGradients,
+        "powerGradient", powerAnchor, roundedPower)
     local inlinePowerHost = mock._msufPreviewInlinePowerRoundedHost
     if roundedPower and not sharedPowerBody then
         inlinePowerHost = EnsureInlinePowerHost(mock)
@@ -504,6 +519,8 @@ function Core.ApplyRounded(box, key, powerOn, outlineThickness, powerEmbedded, p
         local detachedFillMask = EnsurePreviewRoundedMask(mock, "detachedPowerFill", detached, detached.fill)
         PreviewSetMask(mock, detached.bg, detachedBgMask)
         PreviewSetMask(mock, detached.fill, detachedFillMask)
+        ApplyPreviewGradientMasks(mock, mock._msufPreviewDetachedPowerGradients,
+            "detachedPowerGradient", detached, true)
         local edge = ClampPreviewEdgeSize(detachedEdgeSize, 1, 8)
         if edge > 0 and PreviewHelpers.ApplyRoundedEdgeStack then
             PreviewHelpers.ApplyRoundedEdgeStack(detached, edge, DETACHED_POWER_ROUNDED_OPTS)
@@ -517,6 +534,8 @@ function Core.ApplyRounded(box, key, powerOn, outlineThickness, powerEmbedded, p
             PreviewSetMask(mock, detached.bg, nil)
             PreviewSetMask(mock, detached.fill, nil)
         end
+        ApplyPreviewGradientMasks(mock, mock._msufPreviewDetachedPowerGradients,
+            "detachedPowerGradient", detached, false)
         SetDetachedRoundedShown(detached, false)
     end
     local edgeSize = ClampPreviewEdgeSize(outlineThickness, 1, 30)

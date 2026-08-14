@@ -109,7 +109,6 @@ local function WrapDriver(driver, label)
 end
 
 local function WrapKnownDrivers()
-  WrapDriver(MSUF and MSUF._msufA3ExpiringEffectDriver, "driver:A3Expiring")
   WrapDriver(_G.MSUF_SchedulerFrame, "driver:Scheduler")
 end
 

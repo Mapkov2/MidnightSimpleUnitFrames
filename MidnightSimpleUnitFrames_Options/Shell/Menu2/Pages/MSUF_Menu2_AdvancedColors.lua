@@ -37,8 +37,6 @@ local COLOR_SETTING_KEY_BY_PATH = {
     ["auras.color.aurasCooldownTextSafeColor"] = "general.aurasCooldownTextSafeColor",
     ["auras.color.aurasCooldownTextUrgentColor"] = "general.aurasCooldownTextUrgentColor",
     ["auras.color.aurasCooldownTextWarningColor"] = "general.aurasCooldownTextWarningColor",
-    ["auras.color.styleBorderColor"] = "auras3.shared.styleBorderColor",
-    ["auras.color.styleShadowColor"] = "auras3.shared.styleShadowColor",
     ["auras.cooldown.color_by_time"] = "general.aurasCooldownTextUseBuckets",
     ["auras.cooldown.safe_seconds"] = "general.aurasCooldownTextSafeSeconds",
     ["auras.cooldown.urgent_seconds"] = "general.aurasCooldownTextUrgentSeconds",
@@ -149,6 +147,12 @@ local COLOR_DYNAMIC_SETTING_KEYS_BY_PATH = {
         "general.healPredictionColorG",
         "general.healPredictionColorB",
     },
+    ["bar.health_loss_color"] = {
+        "general.healthLossColorR", "general.healthLossColorG", "general.healthLossColorB",
+    },
+    ["bar.power_loss_color"] = {
+        "general.powerLossColorR", "general.powerLossColorG", "general.powerLossColorB",
+    },
     ["power.editor.color"] = PrefixedSettingKeys("general.powerColorOverrides.",
         "MANA RAGE ENERGY FOCUS RUNIC_POWER INSANITY FURY PAIN ESSENCE LUNAR_POWER MAELSTROM"),
     ["class_power.editor.foreground_color"] = PrefixedSettingKeys("general.classPowerColorOverrides.",
@@ -205,6 +209,9 @@ local function ColorReviewedDisposition(path)
     end
     if path == "prediction.heal_color" then
         return "dynamic", "This RGB swatch writes the three persisted heal-prediction color channels as one visible color."
+    end
+    if path == "bar.health_loss_color" or path == "bar.power_loss_color" then
+        return "dynamic", "This swatch routes one visible color to the three persisted RGB channels for one recent-loss effect."
     end
     if path == "group_frame.health.color" then
         return "dynamic", "This swatch writes the active health-color mode across Party, Raid, and Mythic Raid."
@@ -1057,11 +1064,6 @@ local function ResetAuraColorSettings()
     g.aurasCooldownTextSafeSeconds = 60
     g.aurasCooldownTextWarningSeconds = 15
     g.aurasCooldownTextUrgentSeconds = 5
-    local db = DB()
-    db.auras3 = db.auras3 or {}
-    db.auras3.shared = db.auras3.shared or {}
-    db.auras3.shared.styleBorderColor = { 0, 0, 0, 1 }
-    db.auras3.shared.styleShadowColor = { 0, 0, 0, 0.8 }
     ApplyAuraColors()
 end
 local function SetAllPortraitRGB(prefix, r, g, b)
@@ -1299,40 +1301,8 @@ local function BuildAuraAndPortraitColors(ctx, b, CH, part)
         function(v) WriteAuraNumber("aurasCooldownTextUrgentSeconds", v, 0, 30) end,
         Meta("auras.cooldown.urgent_seconds"))
     W.Text(markers, "Thresholds choose when Warning and Urgent replace the Safe timer color.", 16, -276, colW - 32, T.colors.muted)
-    -- Icon border & shadow colors live in the shared Auras3 style config, not
-    -- in G(); read/write them through the Auras3 menu model so the shared scope
-    -- and DB normalization stay authoritative. ApplyAuraColors() routes through
-    -- ApplyAuraScope("shared") -> Model.Apply("shared"), which bumps the runtime
-    -- config generation and recreates the aura containers -- the structural
-    -- refresh a border/shadow change needs. Alpha stays on the Auras page sliders.
-    local iconStyle = Card(auras, "Icon Border & Shadow", "Applies to every aura lane on all frames.", 24, -434, w - 48, 96)
-    local A3Model = MSUF.MSUF_Auras3 and MSUF.MSUF_Auras3.MenuModel
-    local ICON_STYLE_BORDER_DEFAULT = { 0, 0, 0, 1 }
-    local ICON_STYLE_SHADOW_DEFAULT = { 0, 0, 0, 0.8 }
-    local function ReadIconStyleColor(key, default)
-        local c = A3Model and A3Model.ReadValue("shared", key, default) or default
-        if type(c) ~= "table" then c = default end
-        return c
-    end
-    local function IconStyleColorAt(label, x, key, default)
-        return ColorValueAt(ctx, iconStyle, label, x, -66,
-            function()
-                local c = ReadIconStyleColor(key, default)
-                return c[1] or default[1], c[2] or default[2], c[3] or default[3]
-            end,
-            function(r, g, blue)
-                if not A3Model then return end
-                local c = ReadIconStyleColor(key, default)
-                A3Model.WriteValue("shared", key, { r, g, blue, c[4] or default[4] })
-                ApplyAuraColors()
-            end,
-            150, nil, Meta("auras.color." .. key), { default[1], default[2], default[3] })
-    end
-    local iconStyleColHalf = floor((w - 48 - 32) / 2)
-    IconStyleColorAt("Icon Border Color", 16, "styleBorderColor", ICON_STYLE_BORDER_DEFAULT)
-    IconStyleColorAt("Icon Shadow Color", 16 + iconStyleColHalf, "styleShadowColor", ICON_STYLE_SHADOW_DEFAULT)
-    W.Text(auras, "Timer colors are shared by live unit/group auras and every preview.", 24, -544, w - 48, T.colors.muted)
-    CH.ButtonAt(auras, "Reset aura colors", 24, -578, 150, ResetAuraColorSettings, "auras.reset")
+    W.Text(auras, "Timer colors are shared by live unit/group auras and every preview. Icon border and shadow colors live in Appearance > Auras, scoped by Aura type.", 24, -448, w - 48, T.colors.muted)
+    CH.ButtonAt(auras, "Reset aura colors", 24, -492, 150, ResetAuraColorSettings, "auras.reset")
     M.TrackRefresh(ctx, RefreshColorSamples)
     end
     if part == "auras" then return end
@@ -2151,6 +2121,12 @@ end)
 FixedContextFactory("bar.heal_prediction", function()
     return ContextGeneral("bar.heal_prediction", "Heal prediction", "healPredictionColor", 0, 1, 0, ApplyColors)
 end)
+FixedContextFactory("bar.health_loss", function()
+    return ContextGeneral("bar.health_loss", "Health loss glow", "healthLossColor", 1, 0.55, 0.08, ApplyColors)
+end)
+FixedContextFactory("bar.power_loss", function()
+    return ContextGeneral("bar.power_loss", "Power loss glow", "powerLossColor", 0.70, 0.90, 1, ApplyColors)
+end)
 FixedContextFactory("bar.purge_border", function()
     local target = ContextTarget("bar.purge_border", "Purge border",
         function() return GeneralRGBAlias("hlPurgeColor", "purgeBorderColor", 1, 0.85, 0) end,
@@ -2720,7 +2696,8 @@ end
 local function BuildBackgroundAndAppearance(ctx, b, CH, part)
     if part ~= "appearance" then
     local background = b:CollapsibleSection("colors_background", "Bar Background Tint", 226, false)
-    LabelAt(background, "Tint applied to the bar background in *all* bar modes. Dark Mode uses this tint too.", 12, -8, 660, "GameFontHighlightSmall", T.colors.muted)
+    LabelAt(background, "Tint applies in all bar modes, including Dark Mode.", 12, -8, 660, "GameFontHighlightSmall", T.colors.muted)
+    LabelAt(background, "Opacity is multiplied by Unitframes > Opacity > Background. Set both to 100% for a solid background.", 12, -24, 660, "GameFontHighlightSmall", T.colors.muted)
     ApiOrGeneralColorAt(ctx, background, "Bar background tint", 12, -46, "GetClassBarBgColor", "SetClassBarBgColor", "classBarBg", 0, 0, 0, ApplyUnitframeColorWithReload)
     ValueToggleAt(ctx, background, "Background follows HP color", 12, -86,
         function() return ApiValue("GetBarBgMatchHP", function() return G().barBgMatchHPColor == true end) end,
@@ -2967,6 +2944,13 @@ local function BuildBarAndGroupColors(ctx, b, CH, includeGroup)
         end,
         nil, nil, Meta("prediction.heal_color"), { 0, 1, 0 })
     MarkSharedColor(healPredictionColor)
+    ColorValueAt(ctx, barColors, "Health loss glow", barLeftX, -182,
+        function() return GeneralRGB("healthLossColor", 1, 0.55, 0.08) end,
+        function(r, g, c)
+            SetGeneralRGB("healthLossColor", r, g, c)
+            ApplyColors()
+        end,
+        nil, nil, Meta("bar.health_loss_color"), { 1, 0.55, 0.08 })
     ColorValueAt(ctx, barColors, "Purge Border Color", barRightX, -74,
         function() return GeneralRGBAlias("hlPurgeColor", "purgeBorderColor", 1.00, 0.85, 0.00) end,
         function(r, g, c) SetGeneralRGBAlias("hlPurgeColor", "purgeBorderColor", r, g, c) end,
@@ -2991,10 +2975,19 @@ local function BuildBarAndGroupColors(ctx, b, CH, includeGroup)
             SetControlEnabled(powerBg, not (v and true or false))
         end,
         Meta("bar.power_background_match_health"))
+    ColorValueAt(ctx, barColors, "Power loss glow", barRightX, -182,
+        function() return GeneralRGB("powerLossColor", 0.70, 0.90, 1) end,
+        function(r, g, c)
+            SetGeneralRGB("powerLossColor", r, g, c)
+            ApplyColors()
+        end,
+        nil, nil, Meta("bar.power_loss_color"), { 0.70, 0.90, 1 })
     CH.ButtonAt(barColors, "Reset Bar Colors", barLeftX, -234, 160, function()
         local g = G()
         ClearRGBAs(g, "absorbBarColor", "healAbsorbBarColor", "powerBarBgColor", "aggroBorder", "purgeBorderColor", "barOutlineColor")
         ClearRGB(g, "healPredictionColor")
+        ClearRGB(g, "healthLossColor")
+        ClearRGB(g, "powerLossColor")
         g.barOutlineColorMode = nil
         ClearRGBs(g, "hlAggroColor", "hlPurgeColor", "aggroBorderColor")
         g.powerBarBgMatchBarColor = nil

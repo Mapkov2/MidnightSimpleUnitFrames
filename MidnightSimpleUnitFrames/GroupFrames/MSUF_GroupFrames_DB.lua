@@ -494,6 +494,8 @@ local PARTY_DEFAULTS = {
     reverseFill           = false,
     --- Smooth fill
     smoothFill            = false,
+    --- Instant fill with a delayed recent-loss trail.
+    chunkedFill           = false,
     --- Dispel overlay (color wash on health bar when dispellable debuff active)
     dispelOverlayEnabled  = false,
     dispelOverlayStyle    = "FULL",   --- FULL / BOTTOM / TOP / LEFT / RIGHT
@@ -559,6 +561,7 @@ local PARTY_DEFAULTS = {
     powerTextDelimiter    = " / ",
     --- Power smooth fill
     powerSmoothFill       = false,
+    powerChunkedFill      = false,
     --- Power bar parity with the unit-frame Resource Bar section. Bar art and
     --- colour stay global (same as the unit page, which configures them once on
     --- Bars); these are the per-scope keys that page actually exposes.
@@ -1455,7 +1458,9 @@ local GROUP_MENU_DOMAIN_REPAIR = {
     debuffStripeEdges = { BOTTOM = true, TOP = true },
     placedIndicatorTypes = { icon = true, square = true, bar = true, number = true },
     frameEffectTypes = { healthtint = true, border = true, glow = true, pulse = true, namecolor = true },
-    frameEffectTimings = { always = true, expiring = true },
+    -- Timed full-frame effects cannot be driven reliably from secret 12.1
+    -- group auras. Retained profile values fall back to the active-aura path.
+    frameEffectTimings = { always = true },
     iconEffectTypes = { none = true, glow = true },
     spellGrowth = { RIGHTDOWN = true, LEFTDOWN = true, RIGHTUP = true, LEFTUP = true },
     shiftedNameAnchors = { TOPLEFT = true, TOPRIGHT = true, BOTTOMLEFT = true, BOTTOMRIGHT = true },
@@ -1706,6 +1711,16 @@ function GF.EnsureDB()
                     --- Ensure new keys exist with defaults
                     if g.filterToken == nil then
                         g.filterToken = (gk == "externals") and "RAID" or "ALL"
+                    end
+                    --- This runs only during the cold EnsureDB repair pass.
+                    --- Retired/unknown native filters must not remain active
+                    --- invisibly after their controls were removed from Menu2.
+                    if gk == "buff" or gk == "debuff" then
+                        local AF = GF.AuraFilter or _G.MSUF_GF_AuraFilter
+                        local normalize = AF and AF.NormalizeFilterToken
+                        if type(normalize) == "function" then
+                            g.filterToken = normalize(gk, g.filterToken)
+                        end
                     end
                     if type(g.blacklistCats) ~= "table" then
                         --- Apply sensible defaults from AuraFilter module

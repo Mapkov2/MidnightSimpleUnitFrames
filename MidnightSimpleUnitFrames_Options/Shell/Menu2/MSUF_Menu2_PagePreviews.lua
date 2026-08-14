@@ -268,6 +268,13 @@ local function LiveRaidKind(gf)
     if kind == "mythicraid" then return "mythicraid" end
     return "raid"
 end
+local function GroupPreviewRosterState(gf)
+    local inGroup = _G.IsInGroup and _G.IsInGroup() and true or false
+    local inRaid = _G.IsInRaid and _G.IsInRaid() and true or false
+    local count = _G.GetNumGroupMembers and tonumber(_G.GetNumGroupMembers()) or 0
+    if count < 0 then count = 0 end
+    return inGroup, inRaid, math.floor(count + 0.5), inRaid and LiveRaidKind(gf) or nil
+end
 local function GroupConfEnabled(gf, kind)
     local conf = gf and type(gf.GetConf) == "function" and gf.GetConf(kind) or nil
     return conf and conf.enabled == true
@@ -286,11 +293,19 @@ local function LiveGroupFramesCoverKind(gf, kind)
     end
     return false
 end
+local function RestoreGFHeaders(gf)
+    if _G.InCombatLockdown and _G.InCombatLockdown() then return end
+    if gf and type(gf.UpdateGroupVisibility) == "function" then gf.UpdateGroupVisibility() end
+end
 local function ShowGFPreviewWhenNoLiveFrames(gf, kind, count)
     if not (gf and type(gf.ShowPreview) == "function" and type(gf.HidePreview) == "function") then return false end
     if LiveGroupFramesCoverKind(gf, kind) then
         ApplyGFScalingBreakpointTransform(gf, kind)
         gf.HidePreview(kind)
+        -- The preview itself suppresses the matching secure header. Hand live
+        -- ownership back only after clearing that suppression; restoring first
+        -- leaves the runtime with neither a preview nor a live header.
+        RestoreGFHeaders(gf)
         return false
     end
     local shown = gf.ShowPreview(kind, count or GFPreviewCount(kind)) == true
@@ -310,10 +325,6 @@ end
 local function SetGFPagePreviewFlag(active, kind)
     _G.MSUF2_GFPagePreviewActive = active and true or nil
     _G.MSUF2_GFPagePreviewKind = active and kind or nil
-end
-local function RestoreGFHeaders(gf)
-    if _G.InCombatLockdown and _G.InCombatLockdown() then return end
-    if gf and type(gf.UpdateGroupVisibility) == "function" then gf.UpdateGroupVisibility() end
 end
 local function GFPreviewRuntimeActive(gf)
     if _G.MSUF2_GFPagePreviewActive == true then return true end
@@ -341,6 +352,10 @@ local lastGFPreviewActive
 local lastGFPreviewKind
 local lastGFPreviewEditMode
 local lastGFPreviewRuntime
+local lastGFPreviewInGroup
+local lastGFPreviewInRaid
+local lastGFPreviewRosterCount
+local lastGFPreviewLiveRaidKind
 local groupPreviewRequestSerial = 0
 
 -- Page previews borrow runtime group headers only while the menu owns focus. This cache avoids
@@ -358,11 +373,16 @@ local function SyncGroupPagePreviewForKey(key, force)
     local kind = dualMenuPreviews and "bars" or CurrentGFMenuScope()
     local editMode = M.IsMSUFEditModeActive and M.IsMSUFEditModeActive() and true or false
     local hasRuntime = gf and type(gf.ShowPreview) == "function" and type(gf.HidePreview) == "function"
+    local inGroup, inRaid, rosterCount, liveRaidKind = GroupPreviewRosterState(gf)
     if not force
         and lastGFPreviewActive == active
         and lastGFPreviewKind == kind
         and lastGFPreviewEditMode == editMode
         and lastGFPreviewRuntime == hasRuntime
+        and lastGFPreviewInGroup == inGroup
+        and lastGFPreviewInRaid == inRaid
+        and lastGFPreviewRosterCount == rosterCount
+        and lastGFPreviewLiveRaidKind == liveRaidKind
     then
         if active or not GFPreviewRuntimeActive(gf) then return end
     end
@@ -370,6 +390,10 @@ local function SyncGroupPagePreviewForKey(key, force)
     lastGFPreviewKind = kind
     lastGFPreviewEditMode = editMode
     lastGFPreviewRuntime = hasRuntime
+    lastGFPreviewInGroup = inGroup
+    lastGFPreviewInRaid = inRaid
+    lastGFPreviewRosterCount = rosterCount
+    lastGFPreviewLiveRaidKind = liveRaidKind
     if editMode then
         if type(_G.MSUF_GF_EM2_SetActivePreviewKind) == "function" then _G.MSUF_GF_EM2_SetActivePreviewKind(nil) end
         SetGFPagePreviewFlag(false)

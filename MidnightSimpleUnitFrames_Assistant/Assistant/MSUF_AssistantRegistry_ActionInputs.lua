@@ -144,13 +144,8 @@ local GROUP_SCOPE = Enum({ "party", "raid", "mythicraid" }, {
 local GROUP_AURA_SCOPE = Enum({ "party", "raid" }, {
     group = "party", mythicraid = "raid", ["mythic raid"] = "raid", mythic = "raid",
 })
-local AURA_UNIT_INPUT_SCOPE = Enum({ "shared", "player", "target", "focus", "boss" }, {
-    global = "shared", all = "shared",
-})
+local AURA_UNIT_INPUT_SCOPE = Enum({ "player", "target", "focus", "boss" })
 local AURA_CUSTOM_CONTAINER_SCOPE = Enum({ "player", "target", "focus", "boss" })
-local AURA_EDIT_SCOPE = Enum({ "shared", "player", "target", "focus", "boss", "party", "raid" }, {
-    global = "shared", all = "shared", group = "party", mythicraid = "raid", ["mythic raid"] = "raid",
-})
 local AURA_DIAGNOSTIC_SCOPE = Enum({ "player", "target", "focus", "boss", "party", "raid", "mythicraid" }, {
     group = "party", ["mythic raid"] = "mythicraid", mythic = "mythicraid",
 })
@@ -171,7 +166,6 @@ local GLOBAL_SCOPE = Enum({
     ["target of target"] = "targettarget", tot = "targettarget", ["focus target"] = "focustarget",
 })
 
-local AURA_QUICK_PRESET = Enum({ "clean", "focused", "performance" }, { fast = "performance" })
 local GLOBAL_SCALE_PRESET = Enum({ "1080p", "1440p", "4k", "pixel", "auto" }, {
     ["1080"] = "1080p", ["1440"] = "1440p", ["2160"] = "4k", ["2160p"] = "4k",
     ["pixel perfect"] = "pixel", off = "auto", disabled = "auto",
@@ -408,7 +402,7 @@ first_load.full_settings first_load.import_profile first_load.not_now first_load
 first_load.use_defaults first_load.whats_new guided_setup restart_upgrade_highlight_tour menu_history_redo menu_history_reset_session
 menu_history_undo menu_reset_current_page_prompt menu_search_clear menu_window_close menu_window_maximize
 menu_window_minimize menu_window_restore open_profile_import open_recovery_tools preview_player_totems
-profile_summary recover_frames reset_all_aura_overrides reset_all_aura_style_overrides
+profile_summary recover_frames
 reset_all_scoped_global_bars_overrides reset_all_scoped_global_font_overrides reset_all_unit_positions
 reset_aura_colors reset_bar_background_color reset_bar_colors reset_bar_gradient_colors reset_castbar_colors reset_class_colors
 reset_class_power_combo_slot_colors reset_focus_kick_position reset_gameplay_colors reset_global_font_color
@@ -418,7 +412,6 @@ enable_focus_target_frame show_player_power_or_open_class_resources
 reset_selected_group_status_icon
 ]])
 
-DefineObject("apply_aura_quick_preset", { preset = AURA_QUICK_PRESET, scope = AURA_EDIT_SCOPE }, { required = { "preset" } })
 DefineObject("apply_global_scale_preset", { preset = GLOBAL_SCALE_PRESET }, { required = { "preset" } })
 
 DefineObject([[
@@ -475,9 +468,6 @@ DefineObject("aura_group_category_blacklist_set", {
 DefineObject("aura_group_category_blacklist_clear aura_group_category_blacklist_summary", {
     scope = GROUP_AURA_SCOPE, lane = GROUP_AURA_LANE,
 })
-DefineObject("reset_aura_scope_overrides", { scope = AURA_UNIT_INPUT_SCOPE }, { required = { "scope" } })
-DefineObject("set_aura_edit_scope", { scope = AURA_EDIT_SCOPE }, { required = { "scope" } })
-
 DefineObject("clear_group_custom_anchor reset_group_corner_indicators reset_group_status_icons", { scope = GROUP_SCOPE })
 DefineObject("clear_unit_custom_anchor reset_unit_page reset_unit_position", { unit = UNIT_FRAME }, { required = { "unit" } })
 DefineObject("copy_group", {
@@ -554,7 +544,8 @@ DefineObject("set_group_spell_indicator_aura", {
     field = Enum({
         "enabled", "onlyOwn", "placedType", "placedAnchor", "placedSize", "placedX", "placedY",
         "placedBarWidth", "placedGrowth", "placedMissing", "placedCooldownSwipe", "placedCooldown",
-        "placedCooldownSize", "frameType", "framePriority", "frameAlpha", "frameThickness", "frameColor",
+        "placedCooldownSize", "placedBarSmoothFill", "placedBarShowTimer", "placedBarTimerAnchor",
+        "placedBarTimerX", "placedBarTimerY", "frameType", "framePriority", "frameAlpha", "frameThickness", "frameColor",
     }),
     value = DYNAMIC_SCALAR,
 }, {
@@ -577,6 +568,11 @@ DefineObject("set_group_spell_indicator_aura", {
                 placedCooldownSwipe = BOOL,
                 placedCooldown = BOOL,
                 placedCooldownSize = Integer(6, 24),
+                placedBarSmoothFill = BOOL,
+                placedBarShowTimer = BOOL,
+                placedBarTimerAnchor = SPELL_PLACED_ANCHOR,
+                placedBarTimerX = Integer(-100, 100),
+                placedBarTimerY = Integer(-100, 100),
                 frameType = SPELL_FRAME_TYPE,
                 framePriority = Integer(1, 10),
                 frameAlpha = Number(0, 1),

@@ -309,6 +309,7 @@ end
 
 local function ApplyRestingFlipbook(tex, play)
   if not (tex and tex.SetAtlas and tex.CreateAnimationGroup) then return false end
+  if not AtlasAvailable(tex, RESTING_FLIPBOOK_ATLAS) then return false end
   if tex._msufRestingFlipbookAtlas ~= true then
     tex:SetAtlas(RESTING_FLIPBOOK_ATLAS)
     tex._msufRestingFlipbookAtlas = true
@@ -399,15 +400,19 @@ local function ApplyStatusFont(region, font, size, flags)
   return pathMatches and actualSize ~= nil and math.abs(actualSize - size) <= 0.01
 end
 
-local function SetFont(region, spec, size)
+local function SetFont(region, spec, size, role)
   if not region or not region.SetFont then
     return true
   end
-  local font = spec and spec.font
   local flags = spec and spec.fontFlags or "OUTLINE"
   size = tonumber(size) or 14
   if size <= 0 then size = 14 end
   if size < 6 then size = 6 elseif size > 128 then size = 128 end
+  local font = spec and spec.font
+  local resolveRoleFont = MSUF.UFText and MSUF.UFText.ResolveRoleFont
+  if role and type(resolveRoleFont) == "function" then
+    font = resolveRoleFont(font, role, size)
+  end
   local fontEpoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
   local fontReady = region._msufStatusFontPending ~= true
   if font and (region._msufStatusFontAttemptEpoch ~= fontEpoch
@@ -496,10 +501,19 @@ local function NameRelativeAnchor(frame, anchor)
 
   local clip = frame._msufNameInlineClip
   if clip then
-    if anchor == "NAMERIGHT" then
-      return clip, "LEFT", "RIGHT", 0
+    -- The shorten window stays maxChars wide however short the rendered name
+    -- is, so its edge only matches the glyphs while the name really overflows
+    -- (tracked by the warm fit). Fitting names anchor to the invisible
+    -- auto-width twin that mirrors the visible run inside the window.
+    local target = clip
+    if frame._msufNameCenterClipOverflow ~= true
+      and frame._msufNameAnchorTextActive == true and frame._msufNameAnchorText then
+      target = frame._msufNameAnchorText
     end
-    return clip, "RIGHT", "LEFT", 0
+    if anchor == "NAMERIGHT" then
+      return target, "LEFT", "RIGHT", 0
+    end
+    return target, "RIGHT", "LEFT", 0
   end
 
   -- Bar-anchored name FontStrings span the full health bar, so their region
@@ -544,7 +558,7 @@ local function AnchorRegion(region, frame, cfg)
   end
 end
 
-local function LayoutRegion(region, frame, spec, cfg, isText)
+local function LayoutRegion(region, frame, spec, cfg, isText, fontRole)
   if not (region and cfg) then
     return
   end
@@ -555,7 +569,7 @@ local function LayoutRegion(region, frame, spec, cfg, isText)
       region._msufStatusSize = size
     end
   else
-    SetFont(region, spec, cfg.size)
+    SetFont(region, spec, cfg.size, fontRole)
     ApplyTextColor(region, spec, cfg)
     if region.SetJustifyH then
       local anchor = cfg.anchor
@@ -887,6 +901,13 @@ local CONFIGURED_REGION_DEFS = {
   { "phase", "phaseIcon", nil, nil, nil, PHASE_TEXTURE, nil, nil, nil, true },
 }
 
+local NAME_FONT_STATUS = {
+  level = true,
+  race = true,
+  classText = true,
+  raidGroup = true,
+}
+
 local function HideConfiguredRegion(frame, def)
   local hide = def[4]
   if hide then
@@ -926,7 +947,8 @@ local function ApplyConfiguredRegion(frame, spec, status, def)
   if state then
     ApplyStateOrPackIconTexture(region, state, cfg, status, state)
   end
-  LayoutRegion(region, frame, spec, cfg, text)
+  local nameRelative = cfg.anchor == "NAMERIGHT" or cfg.anchor == "NAMELEFT"
+  LayoutRegion(region, frame, spec, cfg, text, NAME_FONT_STATUS[key] and nameRelative and "name" or nil)
 end
 
 local function ApplyConfiguredRegions(frame, spec)
@@ -1515,10 +1537,14 @@ local function UpdateRaidGroup(frame, status)
 end
 
 local function EliteAtlas(state)
-  if state == "BOSS" then
-    return "nameplates-icon-elite-gold"
+  -- Mirror Blizzard_NamePlateClassificationFrame exactly: elite/worldboss use
+  -- gold, rare elite uses silver, and rare uses the standalone rare star.
+  if state == "RARE" then
+    return "UI-HUD-UnitFrame-Target-PortraitOn-Boss-Rare-Star"
+  elseif state == "RAREELITE" then
+    return "nameplates-icon-elite-silver"
   end
-  return "nameplates-icon-elite-silver"
+  return "nameplates-icon-elite-gold"
 end
 
 local function EliteState(frame, unit, unitState)

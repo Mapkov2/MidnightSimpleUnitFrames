@@ -1247,16 +1247,18 @@ local function CompileStatusEntryDef(status, conf, general, key, def, fallbackSi
 end
 
 local LOAD_CONDITION_KEYS = {
-  { "hideMounted", "HideMounted" },
-  { "hideOutOfCombat", "HideOutOfCombat" },
-  { "hideSolo", "HideSolo" },
-  { "hideInVehicle", "HideInVehicle" },
+  { "hideInHousing", "HideInHousing" },
+  { "hideInCombat", "HideInCombat" },
   { "hideInGroup", "HideInGroup" },
   { "hideInInstance", "HideInInstance" },
+  { "hideInVehicle", "HideInVehicle" },
+  { "hideMounted", "HideMounted" },
+  { "hideNoTarget", "HideNoTarget" },
+  { "hideOutOfCombat", "HideOutOfCombat" },
+  { "hideOutOfCombatNoTarget", "HideOutOfCombatNoTarget" },
   { "hideResting", "HideResting" },
-  { "hideInCombat", "HideInCombat" },
+  { "hideSolo", "HideSolo" },
   { "hideStealthed", "HideStealthed" },
-  { "hideInHousing", "HideInHousing" },
 }
 
 local function CompileLoadConditions(out, conf)
@@ -1748,6 +1750,15 @@ local function ResolveUnitContext(db, unit)
   return key, def, conf, general, bars, bossIndex
 end
 
+--- Unit frames canonically store HP-text visibility in showHP. Older imports
+--- may only carry showHPText, so use that alias strictly when the canonical
+--- field is absent. Never let a stale alias override an explicit current value.
+local function UnitHealthTextEnabled(conf)
+  local enabled = conf.showHP
+  if enabled == nil then enabled = conf.showHPText end
+  return enabled ~= false
+end
+
 local function CompileUnitBase(out, unit, key, def, conf, general, bars, bossIndex)
   out.unit = unit
   out.key = key
@@ -1791,7 +1802,7 @@ local function CompileUnitBase(out, unit, key, def, conf, general, bars, bossInd
   else
     out.showName = def.showName ~= false
   end
-  out.showHealthText = conf.showHP ~= false and conf.showHPText ~= false
+  out.showHealthText = UnitHealthTextEnabled(conf)
   if conf.showPowerText ~= nil then
     out.showPowerText = conf.showPowerText ~= false
   elseif conf.showPower ~= nil then
@@ -1924,7 +1935,11 @@ local function CompileUnitHealth(out, db, conf, general, bars)
   health.backgroundTexture = out.backgroundTexture
   health.reverse = conf.reverseFillBars == true
   health.vertical = conf.verticalFillBars == true
-  health.smooth = conf.smoothFill == true
+  health.chunked = conf.chunkedFill == true
+  health.smooth = conf.smoothFill == true and health.chunked ~= true
+  health.lossR = Clamp01(general.healthLossColorR, 1)
+  health.lossG = Clamp01(general.healthLossColorG, 0.55)
+  health.lossB = Clamp01(general.healthLossColorB, 0.08)
   health.mode = ResolveUnitBarMode(conf, general)
   health.gradient = general.enableHealthGradient ~= false
   health.gradientLowR = Number(general.healthGradientLowR, 1)
@@ -2070,10 +2085,18 @@ local function CompileUnitPower(out, unit, key, conf, general, bars, health)
   power.barGradient = ResolveBarGradient(conf, general, "enablePowerGradient")
   power.reverse = health.reverse == true
   power.vertical = health.vertical == true
-  if conf.powerSmoothFill ~= nil then
-    power.smooth = conf.powerSmoothFill == true
+  power.lossR = Clamp01(general.powerLossColorR, 0.70)
+  power.lossG = Clamp01(general.powerLossColorG, 0.90)
+  power.lossB = Clamp01(general.powerLossColorB, 1)
+  if conf.powerChunkedFill ~= nil then
+    power.chunked = conf.powerChunkedFill == true
   else
-    power.smooth = unit == "player" and bars.smoothPowerBar == true or false
+    power.chunked = unit == "player" and bars.chunkedPowerBar == true or false
+  end
+  if conf.powerSmoothFill ~= nil then
+    power.smooth = conf.powerSmoothFill == true and power.chunked ~= true
+  else
+    power.smooth = unit == "player" and bars.smoothPowerBar == true and power.chunked ~= true or false
   end
 end
 

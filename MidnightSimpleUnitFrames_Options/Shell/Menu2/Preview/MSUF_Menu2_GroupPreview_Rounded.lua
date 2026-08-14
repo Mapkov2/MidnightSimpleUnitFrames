@@ -75,6 +75,17 @@ end
 local function ClearRoundedMasks(mock)
     if PreviewHelpers.ClearMasks then PreviewHelpers.ClearMasks(mock, "_msufGFRoundedPreviewMasked") end
 end
+local GF_PREVIEW_GRADIENT_DIRECTIONS = { "left", "right", "up", "down" }
+local function ApplyGradientMasks(mock, grads, key, anchor, enabled)
+    if type(grads) ~= "table" then return end
+    for i = 1, #GF_PREVIEW_GRADIENT_DIRECTIONS do
+        local tex = grads[GF_PREVIEW_GRADIENT_DIRECTIONS[i]]
+        if tex then
+            local mask = enabled and EnsureRoundedMask(mock, key, anchor, tex) or nil
+            SetMask(mock, tex, mask)
+        end
+    end
+end
 local function StatusBarTexture(bar)
     return bar and bar.GetStatusBarTexture and bar:GetStatusBarTexture() or nil
 end
@@ -264,6 +275,8 @@ local function ApplyRounded(mock, conf, powerOn, edgeSize, powerEmbed, powerDeta
     SetMask(mock, mock._roundedBg, bodyMask)
     SetMask(mock, mock._healthBg, healthBgMask)
     SetMask(mock, healthTex, healthTexMask)
+    ApplyGradientMasks(mock, mock._msufGFPreviewHealthGradients,
+        "healthGradient", healthAnchor, true)
     SetMask(mock, dispelOverlay, dispelOverlayMask)
     SetMask(mock, mock._tempMaxHealthBg, tempMaxHealthBgMask)
     SetMask(mock, tempMaxHealthTex, tempMaxHealthMask)
@@ -272,6 +285,8 @@ local function ApplyRounded(mock, conf, powerOn, edgeSize, powerEmbed, powerDeta
     SetMask(mock, healAbsorbTex, healAbsorbMask)
     SetMask(mock, mock._powerBg, powerBgMask)
     SetMask(mock, powerTex, powerTexMask)
+    ApplyGradientMasks(mock, mock._msufGFPreviewPowerGradients,
+        "powerGradient", powerAnchor, roundPower)
     if roundPower and not sharedBody and PreviewHelpers.EnsureRoundedVisuals
         and PreviewHelpers.EnsureRoundedVisuals(mock._power, GF_PREVIEW_POWER_ROUNDED_OPTS) then
         local powerEdge = Round(powerEdgeSize)

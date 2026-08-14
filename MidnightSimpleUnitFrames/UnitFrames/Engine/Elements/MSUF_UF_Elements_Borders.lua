@@ -339,7 +339,25 @@ local function RefreshBorderTestFrames()
     elseif gf.MarkAllDirty then
       gf.MarkAllDirty(gf.DIRTY_BORDER or gf.DIRTY_VISUAL or 2)
     end
+    -- The menu/edit-mode group preview pool is intentionally detached from
+    -- GF.frameList, so the live-frame refresh above cannot reach it. Route the
+    -- same border-only apply through the preview owner; the preview apply then
+    -- re-enters the normal Rounded Frames callback for the refreshed frame.
+    if gf.RefreshPreviewLayout then
+      gf.RefreshPreviewLayout(nil, {
+        reason = "MSUF_BORDER_TEST_PREVIEW",
+        dirtyMask = gf.DIRTY_BORDER or gf.DIRTY_VISUAL,
+        immediate = true,
+      })
+    end
   end
+  -- Rounded frames reuse their normal outline edge for the resolved Border
+  -- element. The UF/GF refreshes above can therefore be followed by a normal
+  -- rounded layout pass that repaints that shared edge with its base colour.
+  -- Finish this explicit preview transaction in the rounded owner so the
+  -- already-resolved test colour/thickness is the final visible state.
+  local refreshRounded = _G.MSUF_RoundedUF_OnApplyAll
+  if type(refreshRounded) == "function" then refreshRounded() end
 end
 
 local function RefreshBorderTestModesActive()

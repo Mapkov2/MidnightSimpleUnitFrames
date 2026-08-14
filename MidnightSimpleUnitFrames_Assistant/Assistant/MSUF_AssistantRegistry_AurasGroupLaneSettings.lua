@@ -438,9 +438,9 @@ function A.AurasRegistry.RegisterGroupAuraLaneSettings(ctx)
             AddGFAuraAliases(aliases, scope, lane, "content filter")
             RegisterGFAuraEnum(scope, lane, "FilterToken", "filterToken", laneInfo.label .. " Filter", GF_AURA_FILTER_VALUES[lane], GF_AURA_FILTER_ALIASES, "ALL", aliases, "visual", {
                 page = "gf_auras",
-                description = "Chooses which auras pass the native Blizzard content filter for " .. tostring(UNIT_LABELS[scope])
+                description = "Chooses which auras pass the content filter for " .. tostring(UNIT_LABELS[scope])
                     .. " " .. laneInfo.plural .. ". It does not show or hide the lane; Group Auras and the " .. laneInfo.label
-                    .. " lane must be enabled separately. Hide Permanent is an independent no-duration rule.",
+                    .. " lane must be enabled separately. Big Defensive uses MSUF's curated exact Spell-ID list; Hide Permanent is an independent no-duration rule.",
             })
 
             aliases = {}

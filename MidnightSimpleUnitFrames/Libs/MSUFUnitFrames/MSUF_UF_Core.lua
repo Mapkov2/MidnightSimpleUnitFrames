@@ -1200,7 +1200,167 @@ local function RouteCacheLeaf(root, fn1, fn2, fn3, fn4, mode, target)
   return nextNode, target or NIL_ROUTE_KEY
 end
 
-local function BuildHealthRoute(barFn, textFn, predictionFn, visualsFn, routeUnitless, target)
+local function BuildHealthRoute(barFn, textFn, predictionFn, visualsFn, routeUnitless, target,
+    predictionGated, textDirtyGated)
+  -- UNIT_HEALTH can compile two followers whose common state is already known
+  -- on the frame: the prediction owner publishes whether a health-dependent
+  -- absorb visual exists, while the text coalescer publishes its pending bit.
+  -- Keep those gates in this route so the overwhelmingly common no-op tick
+  -- never crosses either follower function boundary.
+  if predictionGated == true and textDirtyGated == true
+    and predictionFn and textFn and not visualsFn then
+    -- This exact UNIT_HEALTH archetype has no shared state consumer: Health
+    -- owns the bar payload, Prediction is a frame-local gate/follower, and the
+    -- deferred text marker retains no event payload. Group UNIT_HEALTH already
+    -- uses the same dispatch-free contract; single frames can avoid the token
+    -- churn too while connection/max/visual routes keep coherent dispatch.
+    if target then
+      return function(self, ev, _unit)
+        local hp, hpMax, percentReady
+        if barFn then hp, hpMax, percentReady = barFn(self, ev, target) end
+        if self._msufPredictionHealthVisualActive == true then
+          if percentReady == true then
+            predictionFn(self, ev, target)
+          else
+            predictionFn(self, ev, target, hp, hpMax)
+          end
+        end
+        local dirty = self._msufTextDirtyMask
+        if dirty ~= 1 and dirty ~= 3 then
+          if percentReady == true then textFn(self, ev, target) else textFn(self, ev, target, hp, hpMax) end
+        end
+      end
+    end
+    return function(self, ev, unit)
+      local u = routeUnitless == true and self.MSUFUnitKey or (unit or self.MSUFUnitKey)
+      local hp, hpMax, percentReady
+      if barFn then hp, hpMax, percentReady = barFn(self, ev, u) end
+      if self._msufPredictionHealthVisualActive == true then
+        if percentReady == true then
+          predictionFn(self, ev, u)
+        else
+          predictionFn(self, ev, u, hp, hpMax)
+        end
+      end
+      local dirty = self._msufTextDirtyMask
+      if dirty ~= 1 and dirty ~= 3 then
+        if percentReady == true then textFn(self, ev, u) else textFn(self, ev, u, hp, hpMax) end
+      end
+    end
+  end
+  if predictionGated == true and textDirtyGated == true and predictionFn and textFn then
+    if target then
+      return function(self, ev, _unit)
+        BeginFrameEvent(self, ev)
+        local hp, hpMax, percentReady
+        if barFn then hp, hpMax, percentReady = barFn(self, ev, target) end
+        if self._msufPredictionHealthVisualActive == true then
+          if percentReady == true then
+            predictionFn(self, ev, target)
+          else
+            predictionFn(self, ev, target, hp, hpMax)
+          end
+        end
+        local dirty = self._msufTextDirtyMask
+        if dirty ~= 1 and dirty ~= 3 then
+          if percentReady == true then textFn(self, ev, target) else textFn(self, ev, target, hp, hpMax) end
+        end
+        if visualsFn then visualsFn(self, ev, target, hp, hpMax, percentReady) end
+        EndFrameEvent(self)
+      end
+    end
+    return function(self, ev, unit)
+      BeginFrameEvent(self, ev)
+      local u = routeUnitless == true and self.MSUFUnitKey or (unit or self.MSUFUnitKey)
+      local hp, hpMax, percentReady
+      if barFn then hp, hpMax, percentReady = barFn(self, ev, u) end
+      if self._msufPredictionHealthVisualActive == true then
+        if percentReady == true then
+          predictionFn(self, ev, u)
+        else
+          predictionFn(self, ev, u, hp, hpMax)
+        end
+      end
+      local dirty = self._msufTextDirtyMask
+      if dirty ~= 1 and dirty ~= 3 then
+        if percentReady == true then textFn(self, ev, u) else textFn(self, ev, u, hp, hpMax) end
+      end
+      if visualsFn then visualsFn(self, ev, u, hp, hpMax, percentReady) end
+      EndFrameEvent(self)
+    end
+  end
+  if predictionGated == true and predictionFn then
+    if target then
+      return function(self, ev, _unit)
+        BeginFrameEvent(self, ev)
+        local hp, hpMax, percentReady
+        if barFn then hp, hpMax, percentReady = barFn(self, ev, target) end
+        if self._msufPredictionHealthVisualActive == true then
+          if percentReady == true then
+            predictionFn(self, ev, target)
+          else
+            predictionFn(self, ev, target, hp, hpMax)
+          end
+        end
+        if textFn then
+          if percentReady == true then textFn(self, ev, target) else textFn(self, ev, target, hp, hpMax) end
+        end
+        if visualsFn then visualsFn(self, ev, target, hp, hpMax, percentReady) end
+        EndFrameEvent(self)
+      end
+    end
+    return function(self, ev, unit)
+      BeginFrameEvent(self, ev)
+      local u = routeUnitless == true and self.MSUFUnitKey or (unit or self.MSUFUnitKey)
+      local hp, hpMax, percentReady
+      if barFn then hp, hpMax, percentReady = barFn(self, ev, u) end
+      if self._msufPredictionHealthVisualActive == true then
+        if percentReady == true then
+          predictionFn(self, ev, u)
+        else
+          predictionFn(self, ev, u, hp, hpMax)
+        end
+      end
+      if textFn then
+        if percentReady == true then textFn(self, ev, u) else textFn(self, ev, u, hp, hpMax) end
+      end
+      if visualsFn then visualsFn(self, ev, u, hp, hpMax, percentReady) end
+      EndFrameEvent(self)
+    end
+  end
+  if textDirtyGated == true and textFn then
+    if target then
+      return function(self, ev, _unit)
+        BeginFrameEvent(self, ev)
+        local hp, hpMax, percentReady
+        if barFn then hp, hpMax, percentReady = barFn(self, ev, target) end
+        if predictionFn then
+          if percentReady == true then predictionFn(self, ev, target) else predictionFn(self, ev, target, hp, hpMax) end
+        end
+        local dirty = self._msufTextDirtyMask
+        if dirty ~= 1 and dirty ~= 3 then
+          if percentReady == true then textFn(self, ev, target) else textFn(self, ev, target, hp, hpMax) end
+        end
+        if visualsFn then visualsFn(self, ev, target, hp, hpMax, percentReady) end
+        EndFrameEvent(self)
+      end
+    end
+    return function(self, ev, unit)
+      BeginFrameEvent(self, ev)
+      local u = routeUnitless == true and self.MSUFUnitKey or (unit or self.MSUFUnitKey)
+      local hp, hpMax, percentReady
+      if barFn then hp, hpMax, percentReady = barFn(self, ev, u) end
+      if predictionFn then
+        if percentReady == true then predictionFn(self, ev, u) else predictionFn(self, ev, u, hp, hpMax) end
+      end
+      local dirty = self._msufTextDirtyMask
+      if dirty ~= 1 and dirty ~= 3 then
+        if percentReady == true then textFn(self, ev, u) else textFn(self, ev, u, hp, hpMax) end
+      end
+      if visualsFn then visualsFn(self, ev, u, hp, hpMax, percentReady) end
+      EndFrameEvent(self)
+    end
+  end
   if target then
     if not predictionFn then
       return function(self, ev, _unit)
@@ -1339,18 +1499,23 @@ local function BuildPowerRoute(barFn, textFn, _unused, _unusedFollower, routeUni
   end
 end
 
-local function SharedDirectRoute(cache, builder, fn1, fn2, fn3, fn4, routeUnitless, target)
+local function SharedDirectRoute(cache, builder, fn1, fn2, fn3, fn4, routeUnitless, target,
+    predictionGated, textDirtyGated)
   if (fn1 and not IsRegisteredElementFunction(fn1))
     or (fn2 and not IsRegisteredElementFunction(fn2))
     or (fn3 and not IsRegisteredElementFunction(fn3))
     or (fn4 and not IsRegisteredElementFunction(fn4)) then
-    return builder(fn1, fn2, fn3, fn4, routeUnitless, target)
+    return builder(fn1, fn2, fn3, fn4, routeUnitless, target,
+      predictionGated, textDirtyGated)
   end
   local mode = target and "target" or (routeUnitless == true and "unitless" or "unit")
+  if predictionGated == true then mode = mode .. ":prediction-gated" end
+  if textDirtyGated == true then mode = mode .. ":text-dirty-gated" end
   local leaf, key = RouteCacheLeaf(cache, fn1, fn2, fn3, fn4, mode, target)
   local route = leaf[key]
   if not route then
-    route = builder(fn1, fn2, fn3, fn4, routeUnitless, target)
+    route = builder(fn1, fn2, fn3, fn4, routeUnitless, target,
+      predictionGated, textDirtyGated)
     leaf[key] = route
   end
   sharedFrameEventRoutes[route] = true
@@ -1362,7 +1527,8 @@ end
 -- shared unit-state consumer and must not enter the generic dispatch protocol.
 -- Rare connection/max-health/lifecycle paths retain BuildHealthRoute and its
 -- coherent state snapshot.
-local function BuildGroupHealthRoute(barFn, textFn, predictionFn, visualsFn, predictionGated)
+local function BuildGroupHealthRoute(barFn, textFn, predictionFn, visualsFn, predictionGated,
+    textDirtyGated)
   -- Bar-only gated archetype (group percent bar, no text, no extra visuals):
   -- the steady no-absorb UNIT_HEALTH tick is exactly one updater call.
   if predictionGated == true and barFn and not textFn and not visualsFn then
@@ -1384,7 +1550,10 @@ local function BuildGroupHealthRoute(barFn, textFn, predictionFn, visualsFn, pre
       local hp, hpMax, percentReady
       if barFn then hp, hpMax, percentReady = barFn(self, ev, u) end
       if textFn then
-        if percentReady == true then textFn(self, ev, u) else textFn(self, ev, u, hp, hpMax) end
+        local dirty = self._msufTextDirtyMask
+        if textDirtyGated ~= true or (dirty ~= 1 and dirty ~= 3) then
+          if percentReady == true then textFn(self, ev, u) else textFn(self, ev, u, hp, hpMax) end
+        end
       end
       if visualsFn then visualsFn(self, ev, u, hp, hpMax, percentReady) end
     end
@@ -1405,7 +1574,10 @@ local function BuildGroupHealthRoute(barFn, textFn, predictionFn, visualsFn, pre
         end
       end
       if textFn then
-        if percentReady == true then textFn(self, ev, u) else textFn(self, ev, u, hp, hpMax) end
+        local dirty = self._msufTextDirtyMask
+        if textDirtyGated ~= true or (dirty ~= 1 and dirty ~= 3) then
+          if percentReady == true then textFn(self, ev, u) else textFn(self, ev, u, hp, hpMax) end
+        end
       end
       if visualsFn then visualsFn(self, ev, u, hp, hpMax, percentReady) end
     end
@@ -1421,25 +1593,32 @@ local function BuildGroupHealthRoute(barFn, textFn, predictionFn, visualsFn, pre
       predictionFn(self, ev, u, hp, hpMax)
     end
     if textFn then
-      if percentReady == true then textFn(self, ev, u) else textFn(self, ev, u, hp, hpMax) end
+      local dirty = self._msufTextDirtyMask
+      if textDirtyGated ~= true or (dirty ~= 1 and dirty ~= 3) then
+        if percentReady == true then textFn(self, ev, u) else textFn(self, ev, u, hp, hpMax) end
+      end
     end
     if visualsFn then visualsFn(self, ev, u, hp, hpMax, percentReady) end
   end
 end
 
-local function SharedGroupHealthRoute(barFn, textFn, predictionFn, visualsFn, predictionGated)
+local function SharedGroupHealthRoute(barFn, textFn, predictionFn, visualsFn, predictionGated,
+    textDirtyGated)
   if (barFn and not IsRegisteredElementFunction(barFn))
     or (textFn and not IsRegisteredElementFunction(textFn))
     or (predictionFn and not IsRegisteredElementFunction(predictionFn))
     or (visualsFn and not IsRegisteredElementFunction(visualsFn)) then
-    return BuildGroupHealthRoute(barFn, textFn, predictionFn, visualsFn, predictionGated)
+    return BuildGroupHealthRoute(barFn, textFn, predictionFn, visualsFn,
+      predictionGated, textDirtyGated)
   end
   local mode = predictionGated == true and "prediction-gated" or "direct"
+  if textDirtyGated == true then mode = mode .. ":text-dirty-gated" end
   local leaf, key = RouteCacheLeaf(directGroupHealthRouteCache,
     barFn, textFn, predictionFn, visualsFn, mode, nil)
   local route = leaf[key]
   if not route then
-    route = BuildGroupHealthRoute(barFn, textFn, predictionFn, visualsFn, predictionGated)
+    route = BuildGroupHealthRoute(barFn, textFn, predictionFn, visualsFn,
+      predictionGated, textDirtyGated)
     leaf[key] = route
   end
   sharedFrameEventRoutes[route] = true
@@ -1608,17 +1787,23 @@ local function CompileFrameEventPath(frame, event, list)
     end
     if direct == true and (barFn or textFn or predictionFn or visualsFn) then
       if healthEvent then
+        local prediction = event == "UNIT_HEALTH" and UF.elements.Prediction or nil
+        local predictionGated = predictionFn and prediction
+          and prediction.HealthVisualGateUpdates
+          and prediction.HealthVisualGateUpdates[predictionFn] == true
+        local healthText = event == "UNIT_HEALTH" and UF.elements.HealthText or nil
+        local textDirtyGated = textFn and healthText
+          and healthText.DirtyGateUpdates
+          and healthText.DirtyGateUpdates[textFn] == true
         if frame._msufCoreScope == "group" and event == "UNIT_HEALTH"
           and target == nil and routeUnitless ~= true then
-          local prediction = UF.elements.Prediction
-          local gated = predictionFn and prediction
-            and prediction.HealthVisualGateUpdates
-            and prediction.HealthVisualGateUpdates[predictionFn] == true
           return SharedGroupHealthRoute(
-            barFn, textFn, predictionFn, visualsFn, gated == true)
+            barFn, textFn, predictionFn, visualsFn,
+            predictionGated == true, textDirtyGated == true)
         end
         return SharedDirectRoute(directHealthRouteCache, BuildHealthRoute,
-          barFn, textFn, predictionFn, visualsFn, routeUnitless, target)
+          barFn, textFn, predictionFn, visualsFn, routeUnitless, target,
+          predictionGated == true, textDirtyGated == true)
       end
       return SharedDirectRoute(directPowerRouteCache, BuildPowerRoute,
         barFn, textFn, nil, nil, routeUnitless, target)

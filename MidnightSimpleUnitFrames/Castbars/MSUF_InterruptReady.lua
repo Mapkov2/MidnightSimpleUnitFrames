@@ -18,9 +18,6 @@ local TimerAPI = _G.C_Timer
 local CurveAPI = _G.C_CurveUtil
 local EvaluateColorValueFromBoolean = CurveAPI and CurveAPI.EvaluateColorValueFromBoolean
 local EvaluateColorFromBoolean = CurveAPI and CurveAPI.EvaluateColorFromBoolean
-local GLOBAL_RECOVERY_CATEGORY = _G.Constants
-    and _G.Constants.SpellCooldownConsts
-    and _G.Constants.SpellCooldownConsts.GLOBAL_RECOVERY_CATEGORY
 
 local INTERRUPT_SPELLS = {
     DEATHKNIGHT = { DEFAULT = 47528 },
@@ -47,6 +44,8 @@ local SPECIALIZATION_KEYS = {
 local state = {}
 local cooldownTimerGeneration = 0
 local cooldownTimerEndTime
+local cooldownWakeFrame
+local cooldownWakeArmed = false
 local eventFrame
 local cooldownEventRegistered = false
 local activeIndicatorFrames = {}
@@ -56,6 +55,8 @@ local fillActiveFrameCount = 0
 local refreshActiveFrames = {}
 local UpdateCooldownEventRegistration
 local UpdateLifecycleEventRegistration
+local ClearCooldownWake
+local HandleCooldownWakeDone
 local cooldownSnapshot
 local cooldownSnapshotSpellID
 local cooldownSnapshotFrameStamp
@@ -81,7 +82,22 @@ end
 local plainIsSecret = _G.issecretvalue or function(_) return false end
 local plainHuge = math.huge
 
+local function HasKnownValue(value)
+    if plainIsSecret(value) == true then
+        return true
+    end
+
+    return value ~= nil
+end
+
 local function PlainNumber(value)
+    if plainIsSecret(value) == true then
+        local toPlain = _G.ToPlain
+        if type(toPlain) ~= "function" then return nil end
+        value = toPlain(value)
+        if plainIsSecret(value) == true then return nil end
+    end
+
     if value == nil then
         return nil
     end
@@ -89,16 +105,9 @@ local function PlainNumber(value)
     -- PERF fast path: a plain finite number needs no tostring/tonumber
     -- round-trip (that round-trip only exists to redact secrets and to map
     -- nan/inf to nil, which the guards below preserve exactly).
-    if type(value) == "number" and plainIsSecret(value) ~= true
+    if type(value) == "number"
         and value == value and value ~= plainHuge and value ~= -plainHuge then
         return value
-    end
-
-    if plainIsSecret(value) == true then
-        local toPlain = _G.ToPlain
-        if type(toPlain) ~= "function" then return nil end
-        value = toPlain(value)
-        if value == nil or plainIsSecret(value) == true then return nil end
     end
 
     local valueType = type(value)
@@ -154,15 +163,11 @@ local function ResolveInterruptSpellID()
     return spellID
 end
 
---- Mirror Blizzard_CooldownViewer's event narrowing: unrelated spell cooldown
---- events cannot change the interrupt display. Global recovery and nil-ID
---- broadcasts remain relevant, as do the current and previous override IDs.
-local function NeedsInterruptCooldownUpdate(spellID, baseSpellID, startRecoveryCategory)
+--- Unrelated spell and GCD events cannot change the dedicated interrupt
+--- cooldown because InterruptCooldown explicitly ignores the GCD. Nil-ID
+--- broadcasts remain relevant, as do current and previous override IDs.
+local function NeedsInterruptCooldownUpdate(spellID, baseSpellID)
     if spellID == nil then return true end
-    if GLOBAL_RECOVERY_CATEGORY == nil then return true end
-    if startRecoveryCategory == GLOBAL_RECOVERY_CATEGORY then
-        return true
-    end
 
     local interruptSpellID = state.spellID or ResolveInterruptSpellID()
     if spellID == interruptSpellID or baseSpellID == interruptSpellID then
@@ -193,7 +198,7 @@ local function InterruptCooldown()
         return cooldownSnapshot
     end
 
-    local cooldown = SpellAPI.GetSpellCooldownDuration(spellID)
+    local cooldown = SpellAPI.GetSpellCooldownDuration(spellID, true)
     if frameStamp ~= nil then
         cooldownSnapshot = cooldown
         cooldownSnapshotSpellID = spellID
@@ -218,16 +223,33 @@ local function CooldownRemaining(cooldown)
     return PlainNumber(remaining)
 end
 
+local function CooldownReadyValue(cooldown, remaining)
+    if remaining ~= nil then
+        return remaining <= 0.05
+    end
+
+    if cooldown and cooldown.IsZero then
+        local ready = cooldown:IsZero()
+        if HasKnownValue(ready) then
+            return ready
+        end
+    end
+
+    return nil
+end
+
 local function InterruptStatus(cooldown, cooldownResolved)
     if cooldownResolved ~= true then
         cooldown = InterruptCooldown()
     end
     local remaining = CooldownRemaining(cooldown)
-    if remaining == nil then
-        return false, nil
+    local ready = CooldownReadyValue(cooldown, remaining)
+
+    if not HasKnownValue(ready) then
+        ready = false
     end
 
-    return remaining <= 0.05, remaining
+    return ready, remaining, cooldown
 end
 
 local function ResolveStatus(status)
@@ -251,10 +273,6 @@ end
 local function InterruptReady()
     local ready = InterruptStatus()
     return ready
-end
-
-local function InterruptRemaining()
-    return CooldownRemaining(InterruptCooldown())
 end
 
 local function InterruptReadyBoolForTint()
@@ -324,12 +342,19 @@ end
 
 local function ColorForReady(isReady, general)
     local readyColor, notReadyColor = ReadyColors(general)
-    return isReady and readyColor or notReadyColor
+    if plainIsSecret(isReady) == true then
+        if EvaluateColorFromBoolean then
+            return EvaluateColorFromBoolean(isReady, readyColor, notReadyColor)
+        end
+        return notReadyColor
+    end
+
+    return isReady == true and readyColor or notReadyColor
 end
 
 local function RGBAForReady(isReady, general)
     general = general or GeneralDB()
-    if isReady then
+    if isReady == true then
         return ColorFromDB(general, "kickReadyColor", 0, 1, 0)
     end
     return ColorFromDB(general, "kickNotReadyColor", 1, 0, 0)
@@ -473,15 +498,6 @@ local function RestoreOutline(frame)
     end
 end
 
-local function HasKnownValue(value)
-    local isSecretValue = _G.issecretvalue
-    if type(isSecretValue) == "function" and isSecretValue(value) == true then
-        return true
-    end
-
-    return value ~= nil
-end
-
 --- Raw interruptibility can be nil, false, true, or a wrapped/secret value
 --- depending on which castbar path produced the state. Preserve "known false"
 --- instead of collapsing it with "unknown".
@@ -552,11 +568,37 @@ local function MarkInactiveFillFrame(frame)
 end
 
 local function EvaluateIndicatorRGBA(isReady, rawNotInterruptible, general)
-    local red, green, blue, alpha = RGBAForReady(isReady, general)
+    local readySecret = plainIsSecret(isReady) == true
+    local red, green, blue, alpha
+    if readySecret then
+        general = general or GeneralDB()
+        local readyR, readyG, readyB, readyA = ColorFromDB(general, "kickReadyColor", 0, 1, 0)
+        local notReadyR, notReadyG, notReadyB = ColorFromDB(general, "kickNotReadyColor", 1, 0, 0)
+
+        if EvaluateColorValueFromBoolean then
+            red = EvaluateColorValueFromBoolean(isReady, readyR, notReadyR)
+            green = EvaluateColorValueFromBoolean(isReady, readyG, notReadyG)
+            blue = EvaluateColorValueFromBoolean(isReady, readyB, notReadyB)
+            alpha = readyA
+        elseif EvaluateColorFromBoolean then
+            local color = ColorForReady(isReady, general)
+            if color and color.GetRGBA then
+                red, green, blue, alpha = color:GetRGBA()
+            end
+        end
+
+        if not HasKnownValue(red) then
+            red, green, blue, alpha = notReadyR, notReadyG, notReadyB, 1
+        end
+    else
+        red, green, blue, alpha = RGBAForReady(isReady == true, general)
+    end
+
     local rawSecret = plainIsSecret(rawNotInterruptible) == true
+    local cacheable = not readySecret and not rawSecret
 
     if not rawSecret and rawNotInterruptible == true then
-        return 0.6, 0.6, 0.6, 1
+        return 0.6, 0.6, 0.6, 1, cacheable
     end
 
     if (rawSecret or (rawNotInterruptible ~= nil and rawNotInterruptible ~= false))
@@ -565,7 +607,8 @@ local function EvaluateIndicatorRGBA(isReady, rawNotInterruptible, general)
         return EvaluateColorValueFromBoolean(rawNotInterruptible, 0.6, red),
             EvaluateColorValueFromBoolean(rawNotInterruptible, 0.6, green),
             EvaluateColorValueFromBoolean(rawNotInterruptible, 0.6, blue),
-            alpha
+            alpha,
+            false
     end
 
     -- Compatibility fallback for clients exposing only the older color-object
@@ -575,19 +618,20 @@ local function EvaluateIndicatorRGBA(isReady, rawNotInterruptible, general)
     then
         local color = EvaluateColorFromBoolean(rawNotInterruptible, NotInterruptibleColor(), ColorForReady(isReady, general))
         if color and color.GetRGBA then
-            return color:GetRGBA()
+            red, green, blue, alpha = color:GetRGBA()
+            return red, green, blue, alpha, false
         end
     end
 
-    return red, green, blue, alpha
+    return red, green, blue, alpha, cacheable
 end
 
 local function RawInterruptibleKey(value)
-    if value == nil then
-        return ""
-    end
     if plainIsSecret(value) == true then
         return nil
+    end
+    if value == nil then
+        return ""
     end
     if value == true then
         return "1"
@@ -679,12 +723,12 @@ local function RefreshFrame(frame, castState, status, general, updateFillColor)
 
     local isReady = ResolveStatus(status)
     local rawNotInterruptible = ResolveRawNotInterruptible(frame, castStateTable)
-    local red, green, blue, alpha = EvaluateIndicatorRGBA(isReady, rawNotInterruptible, general)
-    local rawKey = RawInterruptibleKey(rawNotInterruptible)
+    local red, green, blue, alpha, cacheable = EvaluateIndicatorRGBA(isReady, rawNotInterruptible, general)
+    local rawKey = cacheable and RawInterruptibleKey(rawNotInterruptible) or nil
     local visualKey
     if rawKey ~= nil then
         visualKey = style .. "|"
-            .. (isReady and "1" or "0") .. "|"
+            .. (isReady == true and "1" or "0") .. "|"
             .. rawKey .. "|"
             .. tostring(red) .. "|"
             .. tostring(green) .. "|"
@@ -744,6 +788,29 @@ local function StatusCooldown(status)
     return status.cooldown
 end
 
+local function ResolveFillStatus(status)
+    if status.resolved or fillActiveFrameCount <= 0 then
+        return
+    end
+
+    local cooldown = StatusCooldown(status)
+    status.remaining = CooldownRemaining(cooldown)
+    status.ready = CooldownReadyValue(cooldown, status.remaining)
+    status.resolved = HasKnownValue(status.ready)
+end
+
+local function RecordDisplayedReady(status)
+    if status.resolved ~= true then
+        return
+    end
+
+    if HasKnownValue(status.ready) and plainIsSecret(status.ready) ~= true then
+        state.cooldownDisplayReady = status.ready == true
+    elseif status.remaining ~= nil then
+        state.cooldownDisplayReady = status.remaining <= 0.05
+    end
+end
+
 local function RefreshAll(updateFillColor)
     local status = AcquireScratchStatus()
     local general = GeneralDB()
@@ -764,20 +831,10 @@ local function RefreshAll(updateFillColor)
         end
     end
 
-    if not status.resolved and fillActiveFrameCount > 0 then
-        status.remaining = CooldownRemaining(StatusCooldown(status))
-        status.resolved = status.remaining ~= nil
-    end
+    ResolveFillStatus(status)
+    RecordDisplayedReady(status)
 
-    if status.resolved == true then
-        if status.ready ~= nil then
-            state.cooldownDisplayReady = status.ready == true
-        else
-            state.cooldownDisplayReady = status.remaining ~= nil and status.remaining <= 0.05
-        end
-    end
-
-    return status.remaining, status.resolved == true
+    return status.remaining, status.resolved == true, status.cooldown, status.cooldownResolved == true
 end
 
 local function QueueActiveRefreshFrame(frame)
@@ -800,7 +857,7 @@ local function RefreshActive(updateFillColor, seededReady, seededRemaining, seed
         status.cooldown = seededCooldown
         status.cooldownResolved = true
     end
-    if seededReady ~= nil then
+    if HasKnownValue(seededReady) then
         status.ready = seededReady
         status.remaining = seededRemaining
         status.resolved = true
@@ -819,25 +876,85 @@ local function RefreshActive(updateFillColor, seededReady, seededRemaining, seed
         end
     end
 
-    if not status.resolved and fillActiveFrameCount > 0 then
-        status.remaining = CooldownRemaining(StatusCooldown(status))
-        status.resolved = status.remaining ~= nil
+    ResolveFillStatus(status)
+    RecordDisplayedReady(status)
+
+    return status.remaining, status.resolved == true, status.cooldown, status.cooldownResolved == true
+end
+
+local function RefreshExternalReadyConsumers()
+    local refreshFocusKick = _G.MSUF_FocusKick_RefreshReadyColor
+    if type(refreshFocusKick) == "function" then
+        refreshFocusKick()
+    end
+end
+
+local function EnsureCooldownWakeFrame()
+    if cooldownWakeFrame == false then
+        return nil
+    end
+    if cooldownWakeFrame then
+        return cooldownWakeFrame
     end
 
-    if status.resolved == true then
-        if status.ready ~= nil then
-            state.cooldownDisplayReady = status.ready == true
-        else
-            state.cooldownDisplayReady = status.remaining ~= nil and status.remaining <= 0.05
+    local frame = _G.CreateFrame("Cooldown", nil, eventFrame or _G.UIParent)
+    if not (frame and frame.SetCooldownFromDurationObject and frame.SetScript) then
+        cooldownWakeFrame = false
+        return nil
+    end
+
+    if frame.SetSize then frame:SetSize(1, 1) end
+    if frame.SetAlpha then frame:SetAlpha(0) end
+    if frame.SetDrawSwipe then frame:SetDrawSwipe(false) end
+    if frame.SetDrawEdge then frame:SetDrawEdge(false) end
+    if frame.SetDrawBling then frame:SetDrawBling(false) end
+    if frame.SetHideCountdownNumbers then frame:SetHideCountdownNumbers(true) end
+    frame:SetScript("OnCooldownDone", function()
+        if HandleCooldownWakeDone then
+            HandleCooldownWakeDone()
+        end
+    end)
+    if frame.Show then frame:Show() end
+
+    cooldownWakeFrame = frame
+    return frame
+end
+
+ClearCooldownWake = function()
+    cooldownWakeArmed = false
+    cooldownTimerGeneration = cooldownTimerGeneration + 1
+    cooldownTimerEndTime = nil
+    if cooldownWakeFrame and cooldownWakeFrame ~= false and cooldownWakeFrame.Clear then
+        cooldownWakeFrame:Clear()
+    end
+end
+
+--- Arm one native C-side cooldown completion callback from the secret-safe
+--- Duration object. Numeric one-shot timing is retained only as a degraded
+--- fallback for clients without SetCooldownFromDurationObject; neither path
+--- polls or installs a Lua OnUpdate.
+local function ScheduleCooldownRefresh(remaining, remainingResolved, cooldown, cooldownResolved)
+    if activeIndicatorFrameCount <= 0 and fillActiveFrameCount <= 0 then
+        ClearCooldownWake()
+        return false
+    end
+
+    if cooldownResolved ~= true then
+        cooldown = InterruptCooldown()
+        cooldownResolved = true
+    end
+
+    if cooldown then
+        local wakeFrame = EnsureCooldownWakeFrame()
+        if wakeFrame then
+            cooldownTimerGeneration = cooldownTimerGeneration + 1
+            cooldownTimerEndTime = nil
+            cooldownWakeArmed = true
+            wakeFrame:SetCooldownFromDurationObject(cooldown, true)
+            return true
         end
     end
 
-    return status.remaining, status.resolved == true
-end
-
---- When the interrupt is on cooldown, schedule one refresh near the expected
---- ready time instead of polling every frame.
-local function ScheduleCooldownRefresh(remaining, remainingResolved)
     if cooldownTimerEndTime then
         if remaining and remaining > 0.05 then
             local delay = math.min(remaining + 0.05, 90)
@@ -857,11 +974,11 @@ local function ScheduleCooldownRefresh(remaining, remainingResolved)
     cooldownTimerEndTime = nil
 
     if remaining == nil and not remainingResolved then
-        remaining = InterruptRemaining()
+        remaining = CooldownRemaining(cooldown)
     end
 
-    if not (remaining and remaining > 0.05) then
-        return
+    if not (remaining and remaining > 0.05 and TimerAPI and TimerAPI.After) then
+        return false
     end
 
     cooldownTimerGeneration = cooldownTimerGeneration + 1
@@ -872,12 +989,32 @@ local function ScheduleCooldownRefresh(remaining, remainingResolved)
     TimerAPI.After(delay, function()
         if generation == cooldownTimerGeneration then
             cooldownTimerEndTime = nil
-            local remaining, resolved = RefreshAll(true)
+            local remaining, resolved, nextCooldown, nextCooldownResolved = RefreshAll(true)
+            RefreshExternalReadyConsumers()
             if resolved then
-                ScheduleCooldownRefresh(remaining, true)
+                ScheduleCooldownRefresh(remaining, true, nextCooldown, nextCooldownResolved)
             end
         end
     end)
+    return true
+end
+
+HandleCooldownWakeDone = function()
+    if not cooldownWakeArmed then
+        return
+    end
+    cooldownWakeArmed = false
+
+    if activeIndicatorFrameCount <= 0 and fillActiveFrameCount <= 0 then
+        return
+    end
+
+    InvalidateCooldownSnapshot()
+    local cooldown = InterruptCooldown()
+    local remaining = CooldownRemaining(cooldown)
+    local ready = CooldownReadyValue(cooldown, remaining)
+    RefreshActive(true, ready, remaining, cooldown, true)
+    RefreshExternalReadyConsumers()
 end
 
 local function KickReady_Init()
@@ -888,8 +1025,7 @@ end
 
 local function KickReady_IsReady()
     if not FeatureEnabled() then return nil end
-    local ready, remaining = InterruptStatus()
-    ScheduleCooldownRefresh(remaining, true)
+    local ready = InterruptStatus()
     return ready
 end
 
@@ -907,7 +1043,8 @@ local function KickReady_EvaluateColor(ready)
 end
 
 local function KickReady_EvaluateRGBA(ready, rawNotInterruptible)
-    return EvaluateIndicatorRGBA(ready, rawNotInterruptible)
+    local red, green, blue, alpha = EvaluateIndicatorRGBA(ready, rawNotInterruptible)
+    return red, green, blue, alpha
 end
 
 local function KickReady_ApplyLayout(frame)
@@ -925,10 +1062,9 @@ end
 local function KickReady_RefreshFrame(frame, castState)
     local status = AcquireScratchStatus()
     RefreshFrame(frame, castState, status)
-    if status.resolved then
-        ScheduleCooldownRefresh(status.remaining, true)
-    elseif frame and fillActiveFrames[frame] then
-        ScheduleCooldownRefresh(CooldownRemaining(StatusCooldown(status)), true)
+    ResolveFillStatus(status)
+    if status.cooldownResolved == true then
+        ScheduleCooldownRefresh(status.remaining, true, status.cooldown, true)
     end
 end
 
@@ -936,17 +1072,16 @@ local function KickReady_RefreshAll()
     local enabled = FeatureEnabled()
     if UpdateLifecycleEventRegistration then UpdateLifecycleEventRegistration(enabled) end
     if not enabled then
-        cooldownTimerGeneration = cooldownTimerGeneration + 1
-        cooldownTimerEndTime = nil
+        ClearCooldownWake()
         InvalidateCooldownSnapshot()
         local remaining, resolved = RefreshAll(false)
         if UpdateCooldownEventRegistration then UpdateCooldownEventRegistration() end
         return remaining, resolved
     end
     ResolveInterruptSpellID()
-    local remaining, resolved = RefreshAll(true)
+    local remaining, resolved, cooldown, cooldownResolved = RefreshAll(true)
     if resolved then
-        ScheduleCooldownRefresh(remaining, true)
+        ScheduleCooldownRefresh(remaining, true, cooldown, cooldownResolved)
     end
     if UpdateCooldownEventRegistration then
         UpdateCooldownEventRegistration()
@@ -959,23 +1094,15 @@ local function CooldownEventAlreadyDisplayed()
     -- event's object for both readable-remaining and secret IsZero paths.
     local cooldown = InterruptCooldown()
     local remaining = CooldownRemaining(cooldown)
-    local ready
-    if remaining ~= nil then
-        ready = remaining <= 0.05
-    else
-        -- Secret-cooldown fallback: the numeric remaining is unreadable, but
-        -- IsZero can still yield a plain boolean readiness. Without this the
-        -- guard exits before recording state and every SPELL_UPDATE_COOLDOWN
-        -- (i.e. every player ability press) runs a full refresh pass.
-        if cooldown and cooldown.IsZero then
-            local zero = cooldown:IsZero()
-            if zero ~= nil and plainIsSecret(zero) ~= true then
-                ready = zero == true
-            end
-        end
-    end
-    if ready == nil then
+    local ready = CooldownReadyValue(cooldown, remaining)
+    if not HasKnownValue(ready) then
         return false, nil, nil, cooldown, true
+    end
+
+    -- Secret readiness cannot be compared or cached in Lua. It still travels
+    -- directly to the C-side color selectors in RefreshActive.
+    if plainIsSecret(ready) == true then
+        return false, ready, remaining, cooldown, true
     end
 
     if state.cooldownDisplayReady ~= ready then
@@ -987,9 +1114,6 @@ local function CooldownEventAlreadyDisplayed()
         return false, ready, remaining, cooldown, true
     end
 
-    if not ready then
-        ScheduleCooldownRefresh(remaining, true)
-    end
     return true, ready, remaining, cooldown, true
 end
 
@@ -1016,15 +1140,18 @@ UpdateCooldownEventRegistration = function()
         eventFrame:UnregisterEvent("SPELL_UPDATE_COOLDOWN")
         cooldownEventRegistered = false
     end
+    if not shouldRegister and ClearCooldownWake then
+        ClearCooldownWake()
+    end
 end
 
 eventFrame = CreateFrame("Frame", "MSUF_InterruptReady_EventFrame")
-eventFrame:SetScript("OnEvent", function(_, event, spellID, baseSpellID, _category, startRecoveryCategory)
+eventFrame:SetScript("OnEvent", function(_, event, spellID, baseSpellID)
     if event ~= "SPELL_UPDATE_COOLDOWN" then
         InvalidateCooldownSnapshot()
         ResolveInterruptSpellID()
     else
-        if not NeedsInterruptCooldownUpdate(spellID, baseSpellID, startRecoveryCategory) then
+        if not NeedsInterruptCooldownUpdate(spellID, baseSpellID) then
             return
         end
 
@@ -1039,22 +1166,31 @@ eventFrame:SetScript("OnEvent", function(_, event, spellID, baseSpellID, _catego
 
         local alreadyDisplayed, ready, remaining, cooldown, cooldownResolved = CooldownEventAlreadyDisplayed()
         if alreadyDisplayed then
+            ScheduleCooldownRefresh(remaining, true, cooldown, cooldownResolved)
             UpdateCooldownEventRegistration()
             return
         end
 
-        local resolved
-        remaining, resolved = RefreshActive(true, ready, remaining, cooldown, cooldownResolved)
+        local resolved, nextCooldown, nextCooldownResolved
+        remaining, resolved, nextCooldown, nextCooldownResolved = RefreshActive(
+            true,
+            ready,
+            remaining,
+            cooldown,
+            cooldownResolved
+        )
+        RefreshExternalReadyConsumers()
         if resolved then
-            ScheduleCooldownRefresh(remaining, true)
+            ScheduleCooldownRefresh(remaining, true, nextCooldown, nextCooldownResolved)
         end
         UpdateCooldownEventRegistration()
         return
     end
 
-    local remaining, resolved = RefreshAll(true)
+    local remaining, resolved, cooldown, cooldownResolved = RefreshAll(true)
+    RefreshExternalReadyConsumers()
     if resolved then
-        ScheduleCooldownRefresh(remaining, true)
+        ScheduleCooldownRefresh(remaining, true, cooldown, cooldownResolved)
     end
     UpdateCooldownEventRegistration()
 end)
@@ -1069,7 +1205,10 @@ UpdateLifecycleEventRegistration = function(enabled)
         eventFrame:UnregisterEvent("SPELL_UPDATE_COOLDOWN")
     end
     cooldownEventRegistered = false
-    if enabled ~= true then return false end
+    if enabled ~= true then
+        if ClearCooldownWake then ClearCooldownWake() end
+        return false
+    end
     eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
     eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
     UpdateCooldownEventRegistration()

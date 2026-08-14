@@ -799,6 +799,76 @@ end
 
 RoundedSurface.ApplyClassPower = ApplyClassPowerRounded
 
+local function ClearAltManaRounded(AM)
+  local container = AM and AM.container
+  if not container then return end
+  ClearMasks(container, "_msufRAMMask", "_msufRAMMaskedTextures")
+  local edge = AM._msufRAMOutlineEdge
+  if edge and edge._msufRAMActive then
+    edge._msufRAMActive = nil
+    edge:Hide()
+    AM._border:SetBackdropBorderColor(0, 0, 0, 1)
+    AM._border:Show()
+  end
+end
+
+-- Alternative Mana follows the normal Player power rounded toggles.
+local function ApplyAltManaRounded(AM, masterEnabled)
+  local container = AM and AM.container
+  if not container then return false end
+  local master = masterEnabled
+  if master == nil then master = IsEnabled() end
+  local active = master == true
+    and ReadRoundedBool("roundedUnitFrames", true)
+    and ReadRoundedBool("roundedPowerBars", true)
+  if IsCombatLocked() then
+    DeferApply()
+    local edge = AM._msufRAMOutlineEdge
+    return edge and edge._msufRAMActive == true or false
+  end
+  if not active then
+    ClearAltManaRounded(AM)
+    return false
+  end
+
+  UpdateRoundedMediaState()
+  local bar = AM.bar
+  local fill = bar and bar.GetStatusBarTexture and bar:GetStatusBarTexture() or nil
+  BeginMaskRefresh(container, "_msufRAMMaskedTextures")
+  local bgApplied = MaskTextureWith(container, AM.bgTex, "_msufRAMMask",
+    "_msufRAMMaskedTextures", container, roundedMaskPath) == true
+  local fillApplied = MaskTextureWith(container, fill, "_msufRAMMask",
+    "_msufRAMMaskedTextures", container, roundedMaskPath) == true
+  EndMaskRefresh(container, "_msufRAMMask", "_msufRAMMaskedTextures")
+
+  local border = AM._border
+  local edge = AM._msufRAMOutlineEdge
+  if bgApplied and fillApplied and border then
+    if not edge and CanCreateRoundedRegion(edge) then
+      edge = border:CreateTexture(nil, "OVERLAY", nil, 0)
+      SE_SnapOff(edge)
+      AM._msufRAMOutlineEdge = edge
+    end
+    if edge then
+      SetRoundedEdgeTexture(edge, roundedEdgePath)
+      if LayoutRoundedEdge(edge, container, 1, 1) then
+        if edge._msufRAMActive ~= true then
+          edge._msufRAMActive = true
+          edge:SetVertexColor(0, 0, 0, 1)
+          edge:Show()
+          border:SetBackdropBorderColor(0, 0, 0, 0)
+          border:Show()
+        end
+        return true
+      end
+    end
+  end
+  ClearAltManaRounded(AM)
+  return false
+end
+
+RoundedSurface.ApplyAltMana = ApplyAltManaRounded
+
 local function ResolveUnitEdgeColor(f)
   local key = f and tonumber(f._msufHighlightActiveKey or f._msufHighlightColorKey) or 0
   if key and key ~= 0 then
@@ -1672,6 +1742,16 @@ local function MaskStatusBarFill(f, bar, group, anchor)
   end
 end
 
+local function MaskLossTrailPool(f, trail, group, anchor)
+  if not trail then return end
+  local pool = trail._msufLossTrailPool
+  if pool then
+    for i = 1, #pool do MaskStatusBarFill(f, pool[i], group, anchor) end
+    return
+  end
+  MaskStatusBarFill(f, trail, group, anchor)
+end
+
 local GRADIENT_KEYS = { "left", "right", "up", "down" }
 
 local function MaskGradientTable(f, grads, anchor, group)
@@ -1857,6 +1937,7 @@ local function ApplyToUnitFrame(f)
     local hbFill = f.hpBar:GetStatusBarTexture()
     if hbFill then MaskTexture(f, hbFill, healthMaskAnchor) end
   end
+  MaskLossTrailPool(f, f.healthLossTrail, false, healthMaskAnchor)
   if f.hpBarBG then
     MaskTexture(f, f.hpBarBG, sharedFrameMaskAnchor or f.hpBar or f.hpBarBG)
   end
@@ -1880,6 +1961,7 @@ local function ApplyToUnitFrame(f)
       local pbFill = powerBar:GetStatusBarTexture()
       if pbFill then MaskTexture(f, pbFill, powerMaskAnchor) end
     end
+    MaskLossTrailPool(f, f.powerLossTrail, false, powerMaskAnchor)
     if f.powerBarBG then
       MaskTexture(f, f.powerBarBG, powerMaskAnchor or f.powerBarBG)
     end
@@ -1967,7 +2049,9 @@ ApplyToGroupFrame = function(f, kind)
   if f._msufBehindBarBg then MaskGroupTexture(f, f._msufBehindBarBg, f.barGroup) end
 
   MaskStatusBarFill(f, f.health, true, sharedFrameMaskAnchor)
+  MaskLossTrailPool(f, f.healthLossTrail, true, sharedFrameMaskAnchor)
   if roundPower then MaskStatusBarFill(f, f.power, true, sharedFrameMaskAnchor) end
+  if roundPower then MaskLossTrailPool(f, f.powerLossTrail, true, sharedFrameMaskAnchor) end
   if f.tempMaxHealthBackground then
     MaskGroupTexture(f, f.tempMaxHealthBackground, sharedFrameMaskAnchor or f.tempMaxHealthBar or f.health)
   end

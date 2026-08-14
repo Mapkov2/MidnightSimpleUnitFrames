@@ -1050,6 +1050,17 @@ end
 local function ParseUnitCopyScopeState(text)
     if ContainsAny(text, ProfileData.GROUP_COPY_SCOPE_REJECT_TERMS) then return nil end
     if not ContainsAny(text, ProfileData.COPY_SCOPE_KIND_TERMS) then return nil end
+    -- "category"/"categories" only ever names this popup's checkboxes, but
+    -- "scope" is an ordinary word: "reset target aura scope" ticked the Unit
+    -- Copy popup's Auras box for Target. A scope-only sentence must therefore
+    -- also be about copying, or name the popup outright -- the group variant
+    -- above has always required its selector terms for the same reason.
+    if not ContainsAny(text, { "category", "categories" })
+        and not ContainsAny(text, ProfileData.UNIT_COPY_SCOPE_SELECTOR_TERMS)
+        and not ContainsAny(text, ProfileData.COPY_SCOPE_INTENT_TERMS)
+    then
+        return nil
+    end
     local units = DetectUnits(text)
     local pageUnit
     local page = M and M.activeKey

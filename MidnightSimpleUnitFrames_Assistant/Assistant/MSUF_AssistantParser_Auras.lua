@@ -71,13 +71,13 @@ local AURA_BLACKLIST_PRESETS = {
 }
 
 local function AuraBlacklistScope(text)
-    if ContainsAny(text, AurasPhrases[1]) then return "shared" end
+    if ContainsAny(text, AurasPhrases[1]) then return nil end
     local units = DetectUnits(text)
     for i = 1, #units do
         local unit = units[i]
         if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" then return unit end
     end
-    return "shared"
+    return nil
 end
 
 local function AuraBlacklistLane(text)
@@ -86,12 +86,6 @@ local function AuraBlacklistLane(text)
     if text:find("buff", 1, true) or text:find("helpful", 1, true) then return "buff" end
     return "both"
 end
-
-local AURA_QUICK_PRESETS = {
-    { key = "clean", aliases = { "clean", "clean 6 12", "clean aura", "clean auras" } },
-    { key = "focused", aliases = { "focused", "focused 10 16", "focused aura", "focused auras" } },
-    { key = "performance", aliases = { "fast", "performance", "fast 4 8", "performance aura", "performance auras" } },
-}
 
 local AURA_GEOMETRY_UNITS = { "player", "target", "focus", "boss" }
 local AURA_GEOMETRY_GROUPS = { "party", "raid", "mythicraid" }
@@ -474,16 +468,8 @@ local function ParseAuraGeometryShortcut(text)
     }
 end
 
-local function AuraQuickPresetForText(text)
-    for i = 1, #AURA_QUICK_PRESETS do
-        local preset = AURA_QUICK_PRESETS[i]
-        if ContainsAny(text, preset.aliases) then return preset.key end
-    end
-    return nil
-end
-
 local function AuraEditScopeForText(text)
-    if ContainsAny(text, AurasPhrases[36]) then return "shared" end
+    if ContainsAny(text, AurasPhrases[36]) then return nil end
     if ContainsAny(text, AurasPhrases[37]) then return "player" end
     if ContainsAny(text, AurasPhrases[38]) then return "target" end
     if ContainsAny(text, AurasPhrases[39]) then return "focus" end
@@ -499,16 +485,11 @@ local function AuraEditScopeForText(text)
         if groups[i] == "party" then return "party" end
         if groups[i] == "raid" or groups[i] == "mythicraid" then return "raid" end
     end
-    local scope = M and M.auraScope
-    if scope == "player" or scope == "target" or scope == "focus" or scope == "boss" or scope == "party" or scope == "raid" or scope == "shared" then return scope end
     return nil
 end
 
-local function AuraShortcutScopes(text, allowShared)
+local function AuraShortcutScopes(text)
     local out = {}
-    if allowShared and ContainsAny(text, AurasPhrases[43]) then
-        AddAuraGeometryScope(out, "unit", "shared")
-    end
 
     local groups = DetectGroups(text)
     for i = 1, #groups do
@@ -526,11 +507,9 @@ local function AuraShortcutScopes(text, allowShared)
     end
 
     if #out == 0 and HasUnitAuraGeometryScope(text) then
-        if allowShared then AddAuraGeometryScope(out, "unit", "shared") end
         AddAuraGeometryUnits(out)
     end
     if #out == 0 and HasAllAuraGeometryScope(text) then
-        if allowShared then AddAuraGeometryScope(out, "unit", "shared") end
         AddAuraGeometryUnits(out)
         AddAuraGeometryGroups(out)
     end
@@ -540,24 +519,8 @@ local function AuraShortcutScopes(text, allowShared)
     local scope = AuraEditScopeForText(text)
     if scope == "party" or scope == "raid" then
         AddAuraGeometryScope(out, "group", scope)
-    elseif scope == "shared" then
-        if allowShared then AddAuraGeometryScope(out, "unit", "shared") end
     elseif scope == "player" or scope == "target" or scope == "focus" or scope == "boss" then
         AddAuraGeometryScope(out, "unit", scope)
-    end
-    return #out > 0 and out or nil
-end
-
-local function AuraScopeOverrideScopes(text)
-    local scopes = AuraShortcutScopes(text, false)
-    if not scopes then return nil end
-
-    local out = {}
-    for i = 1, #scopes do
-        local scope = scopes[i]
-        if scope.kind == "unit" and (scope.key == "player" or scope.key == "target" or scope.key == "focus" or scope.key == "boss") then
-            AddAuraGeometryScope(out, "unit", scope.key)
-        end
     end
     return #out > 0 and out or nil
 end
@@ -622,8 +585,8 @@ local function AddAuraShortcutChange(changes, setting, value, label)
 end
 
 local UNIT_AURA_FILTER_KEYS = {
-    buff = { "onlyMine", "raid", "raidInCombat", "includeNameplateOnly", "cancelable", "notCancelable", "externalDefensive", "bigDefensive" },
-    debuff = { "onlyMine", "raid", "raidInCombat", "includeNameplateOnly", "includeDispellable", "crowdControl" },
+    buff = { "onlyMine", "raid", "raidInCombat", "includeNameplateOnly", "cancelable", "notCancelable", "externalDefensive", "bigDefensive", "onlyImportant", "includeDispellable", "dispellableAny" },
+    debuff = { "onlyMine", "raid", "raidInCombat", "includeNameplateOnly", "includeDispellable", "dispellableAny", "onlyImportant", "crowdControl", "nonPlayer" },
 }
 
 local AURA_FILTER_LABELS = {
@@ -639,6 +602,7 @@ local AURA_FILTER_LABELS = {
     dispellableAny = "Any Dispel Type",
     onlyImportant = "Important",
     crowdControl = "Crowd Control",
+    nonPlayer = "Non-Player Auras",
 }
 
 local AURA_FILTER_EFFECTS = {
@@ -649,11 +613,12 @@ local AURA_FILTER_EFFECTS = {
     cancelable = "shows buffs you can cancel.",
     notCancelable = "shows buffs you cannot cancel.",
     externalDefensive = "focuses external defensive cooldown buffs.",
-    bigDefensive = "focuses major personal defensive cooldown buffs.",
+    bigDefensive = "uses MSUF's curated major-defensive Spell-ID list on friendly frames and Blizzard's safe native fallback where exact identity filtering is restricted.",
     includeDispellable = "shows debuffs someone in your group can dispel.",
     dispellableAny = "shows debuffs with any dispel type, regardless of group capability.",
     onlyImportant = "shows auras Blizzard flags as important.",
     crowdControl = "focuses crowd-control debuffs.",
+    nonPlayer = "shows only debuffs not caused by any player or player pet.",
 }
 
 local GROUP_AURA_FILTER_EFFECTS = {
@@ -661,25 +626,26 @@ local GROUP_AURA_FILTER_EFFECTS = {
     Player = "shows only your own auras.",
     RaidPlayer = "shows raid-relevant auras applied by you.",
     RaidInCombatPlayer = "shows combat raid-frame auras applied by you.",
-    Raid = "shows player-actionable RAID auras not applied by you (harmful means player-dispellable).",
-    RaidInCombat = "shows combat raid-frame auras not applied by you.",
-    BigDefensivePlayer = "shows major defensive cooldown buffs applied by you.",
+    Raid = "shows player-actionable RAID auras (harmful means player-dispellable).",
+    RaidInCombat = "shows combat raid-frame auras regardless of caster.",
+    BigDefensivePlayer = "shows MSUF's curated major-defensive buffs applied by you.",
     ExternalDefensivePlayer = "shows external defensive cooldown buffs applied by you.",
     CancelablePlayer = "shows cancelable buffs applied by you.",
     NotCancelablePlayer = "shows non-cancelable buffs applied by you.",
-    BigDefensive = "shows major defensive cooldown buffs not applied by you.",
-    ExternalDefensive = "shows external defensive cooldown buffs not applied by you.",
-    Cancelable = "shows cancelable buffs not applied by you.",
-    NotCancelable = "shows non-cancelable buffs not applied by you.",
+    BigDefensive = "shows MSUF's curated major-defensive buffs regardless of caster.",
+    ExternalDefensive = "shows external defensive cooldown buffs regardless of caster.",
+    Cancelable = "shows cancelable buffs regardless of caster.",
+    NotCancelable = "shows non-cancelable buffs regardless of caster.",
     PLAYER = "shows only your own auras.",
     RAID = "shows helpful auras the player can apply or harmful auras the player can dispel.",
     RAID_IN_COMBAT = "shows a cleaner raid-relevant set during combat.",
     RAID_PLAYER_DISPELLABLE = "shows auras someone in your group can dispel, including helpful enrages on enemies.",
     DISPELLABLE = "shows auras with any dispel type, even when nobody in your group can remove them.",
     IMPORTANT = "shows auras Blizzard flags as important.",
-    BIG_DEFENSIVE = "shows major defensive cooldown buffs.",
+    BIG_DEFENSIVE = "shows MSUF's curated major-defensive buffs on friendly frames.",
     EXTERNAL_DEFENSIVE = "shows external defensive cooldown buffs.",
     CROWD_CONTROL = "shows crowd-control effects.",
+    NonPlayer = "shows only debuffs not caused by any player or player pet.",
 }
 
 local function AuraReadSettingValue(key)
@@ -751,7 +717,7 @@ local function AuraFilterGuidanceOverview()
 end
 
 local function AuraUnitFilterGuidance(scope, scopeLabel, lane, laneLabel)
-    local filtersEnabled = AuraReadSettingValue("auras3." .. tostring(scope) .. ".filtersEnabled")
+    local filtersEnabled = AuraReadSettingValue("auras3." .. tostring(scope) .. "." .. tostring(lane) .. ".filtersEnabled")
     if filtersEnabled == nil then filtersEnabled = true end
     local lines = {}
     lines[#lines + 1] = scopeLabel .. " " .. laneLabel .. " filters"
@@ -760,13 +726,12 @@ local function AuraUnitFilterGuidance(scope, scopeLabel, lane, laneLabel)
     local active = {}
     local tokens = { lane == "buff" and "HELPFUL" or "HARMFUL" }
     local playerScoped = false
-    local nonPlayerScoped = false
+    local bigDefensiveActive = false
     local exclusive = AuraReadSettingValue("auras3." .. tostring(scope) .. "." .. tostring(lane) .. ".filter.exclusive")
     if tostring(exclusive or "none") ~= "none" then
         active[#active + 1] = "Exclusive: starts from the stricter " .. tostring(exclusive) .. " list."
         if tostring(exclusive) == "raid" then
             tokens[#tokens + 1] = "RAID"
-            nonPlayerScoped = true
         end
     end
     local keys = UNIT_AURA_FILTER_KEYS[lane] or {}
@@ -776,19 +741,21 @@ local function AuraUnitFilterGuidance(scope, scopeLabel, lane, laneLabel)
         if value == true then
             active[#active + 1] = tostring(AURA_FILTER_LABELS[key] or key) .. ": " .. tostring(AURA_FILTER_EFFECTS[key] or "narrows this lane.")
             if key == "onlyMine" then playerScoped = true end
-            if key == "raid" then tokens[#tokens + 1] = "RAID"; nonPlayerScoped = true end
-            if key == "raidInCombat" then tokens[#tokens + 1] = "RAID_IN_COMBAT"; nonPlayerScoped = true end
-            if key == "cancelable" then tokens[#tokens + 1] = "CANCELABLE"; nonPlayerScoped = true end
-            if key == "notCancelable" then tokens[#tokens + 1] = "!CANCELABLE"; nonPlayerScoped = true end
-            if key == "externalDefensive" then tokens[#tokens + 1] = "EXTERNAL_DEFENSIVE"; nonPlayerScoped = true end
-            if key == "bigDefensive" then tokens[#tokens + 1] = "BIG_DEFENSIVE"; nonPlayerScoped = true end
+            if key == "raid" then tokens[#tokens + 1] = "RAID" end
+            if key == "raidInCombat" then tokens[#tokens + 1] = "RAID_IN_COMBAT" end
+            if key == "includeNameplateOnly" then tokens[#tokens + 1] = "INCLUDE_NAME_PLATE_ONLY" end
+            if key == "cancelable" then tokens[#tokens + 1] = "CANCELABLE" end
+            if key == "notCancelable" then tokens[#tokens + 1] = "!CANCELABLE" end
+            if key == "externalDefensive" then tokens[#tokens + 1] = "EXTERNAL_DEFENSIVE" end
+            if key == "bigDefensive" then tokens[#tokens + 1] = "BIG_DEFENSIVE"; bigDefensiveActive = true end
+            if key == "onlyImportant" then tokens[#tokens + 1] = "IMPORTANT" end
+            if key == "includeDispellable" then tokens[#tokens + 1] = "RAID_PLAYER_DISPELLABLE" end
+            if key == "dispellableAny" then tokens[#tokens + 1] = "DISPELLABLE" end
+            if key == "crowdControl" then tokens[#tokens + 1] = "CROWD_CONTROL" end
+            if key == "nonPlayer" then tokens[#tokens + 1] = "candidate:isFromPlayerOrPlayerPet=false" end
         end
     end
-    if playerScoped then
-        tokens[#tokens + 1] = "PLAYER"
-    elseif nonPlayerScoped then
-        tokens[#tokens + 1] = "!PLAYER"
-    end
+    if playerScoped then tokens[#tokens + 1] = "PLAYER" end
     if #active == 0 then
         lines[#lines + 1] = "Active filters right now: none. This lane is not being narrowed by MSUF's live filter toggles."
         lines[#lines + 1] = lane == "debuff"
@@ -799,6 +766,9 @@ local function AuraUnitFilterGuidance(scope, scopeLabel, lane, laneLabel)
         for i = 1, #active do lines[#lines + 1] = "- " .. active[i] end
     end
     lines[#lines + 1] = "Native filter string MSUF builds from this: " .. table.concat(tokens, "|") .. "."
+    if bigDefensiveActive then
+        lines[#lines + 1] = "Big Defensive execution: MSUF replaces that token with its curated exact Spell-ID gate on friendly frames and retains BIG_DEFENSIVE as the safe hostile/restricted fallback."
+    end
     lines[#lines + 1] = "Safe next commands: 'turn on " .. tostring(scope) .. " " .. tostring(lane) .. " raid filter', 'turn off " .. tostring(scope) .. " " .. tostring(lane) .. " player filter', or 'set " .. tostring(scope) .. " " .. tostring(lane) .. " exclusive filter to none'."
     return { kind = "answer", status = "info", result = "info", text = table.concat(lines, "\n"), summary = "Explains active unit aura filters." }
 end
@@ -877,13 +847,13 @@ local AURA_STYLE_BOOL_SPECS = {
 }
 
 local function AuraStyleScopes(text)
-    local scopes = AuraShortcutScopes(text, true)
+    local scopes = AuraShortcutScopes(text)
     if scopes then
         local out = {}
         for i = 1, #scopes do
             local scope = scopes[i]
             if scope.kind == "unit"
-                and (scope.key == "shared" or scope.key == "player" or scope.key == "target" or scope.key == "focus" or scope.key == "boss")
+                and (scope.key == "player" or scope.key == "target" or scope.key == "focus" or scope.key == "boss")
             then
                 AddAuraGeometryScope(out, "unit", scope.key)
             elseif scope.kind == "group" and (scope.key == "party" or scope.key == "raid" or scope.key == "mythicraid") then
@@ -891,9 +861,6 @@ local function AuraStyleScopes(text)
             end
         end
         if #out > 0 then return out end
-    end
-    if ContainsAny(text, AurasPhrases[57]) then
-        return { { kind = "unit", key = "shared" } }
     end
     return nil
 end
@@ -1013,7 +980,7 @@ local function ParseAuraStyleNumberShortcut(text)
                     end
                 end
             end
-        elseif scope.kind == "unit" and (scope.key == "shared" or scope.key == "player" or scope.key == "target" or scope.key == "focus" or scope.key == "boss") then
+        elseif scope.kind == "unit" and (scope.key == "player" or scope.key == "target" or scope.key == "focus" or scope.key == "boss") then
             if lanes then
                 for j = 1, #lanes do
                     local setting = Registry and Registry:GetSetting("auras3." .. tostring(scope.key) .. "." .. lanes[j] .. "." .. spec.key)
@@ -1075,7 +1042,7 @@ local function ParseAuraStyleAnchorShortcut(text)
         return nil
     end
 
-    local scopes = AuraShortcutScopes(text, true)
+    local scopes = AuraShortcutScopes(text)
     if not scopes then return nil end
     local lanes = nil
     if ContainsAny(text, AurasPhrases[69]) then
@@ -1104,7 +1071,7 @@ local function ParseAuraStyleAnchorShortcut(text)
                     end
                 end
             end
-        elseif scope.kind == "unit" and (scope.key == "shared" or scope.key == "player" or scope.key == "target" or scope.key == "focus" or scope.key == "boss") then
+        elseif scope.kind == "unit" and (scope.key == "player" or scope.key == "target" or scope.key == "focus" or scope.key == "boss") then
             if lanes then
                 for j = 1, #lanes do
                     local setting = Registry and Registry:GetSetting("auras3." .. tostring(scope.key) .. "." .. lanes[j] .. "." .. attr)
@@ -1158,7 +1125,7 @@ local function ParseUnitAuraTooltipShortcut(text)
         return nil
     end
 
-    local scopes = AuraShortcutScopes(text, true)
+    local scopes = AuraShortcutScopes(text)
     if not scopes then return nil end
     local value = AuraBooleanValue(text)
     if value == nil then return nil end
@@ -1206,9 +1173,7 @@ local function ParseAuraExclusiveFilterShortcut(text)
     end
 
     local scopes = {}
-    if ContainsAny(text, AurasPhrases[76]) then
-        scopes[#scopes + 1] = "shared"
-    else
+    if not ContainsAny(text, AurasPhrases[76]) then
         local units = DetectUnits(text)
         for i = 1, #units do
             local unit = units[i]
@@ -1221,7 +1186,7 @@ local function ParseAuraExclusiveFilterShortcut(text)
         return {
             kind = "answer",
             status = "ambiguous",
-            text = "Which Aura scope should use that exclusive filter: Shared, Player, Target, Focus, or Boss?",
+            text = "Which UnitFrame Aura scope should use that exclusive filter: Player, Target, Focus, or Boss?",
             summary = "Asks for a concrete Aura scope before changing an exclusive filter.",
         }
     end
@@ -1334,11 +1299,6 @@ local function ParseAuraDirectSettingShortcut(text, raw)
         local value = AuraBooleanValue(text)
         if value ~= nil then return AuraDirectSettingChange("auras3.enabled", value, "Unit Auras") end
     end
-    if ContainsAny(text, AurasPhrases[97]) then
-        local setting = Registry and Registry:GetSetting("menu.auraScope")
-        local value = setting and P.EnumValueForText and P.EnumValueForText(setting, text) or nil
-        return AuraDirectSettingChange("menu.auraScope", value, "Aura Editing Scope")
-    end
     if ContainsAny(text, AurasPhrases[98]) then
         local setting = Registry and Registry:GetSetting("menu.auraStyleGFLane")
         local value = setting and P.EnumValueForText and P.EnumValueForText(setting, text) or nil
@@ -1368,35 +1328,6 @@ local function ParseAuraDirectSettingShortcut(text, raw)
             end
         end
     end
-    if ContainsAny(text, AurasPhrases[103]) then
-        local attr
-        if ContainsAny(text, AurasPhrases[104]) then
-            attr = "overrideSharedLayout"
-        elseif ContainsAny(text, AurasPhrases[105]) then
-            attr = "overrideLayout"
-        end
-        local value = AuraBooleanValue(text)
-        if attr and value ~= nil then
-            local scopes = AuraScopeOverrideScopes(text)
-            local changes = {}
-            if scopes then
-                for i = 1, #scopes do
-                    local scope = scopes[i]
-                    local setting = Registry and Registry:GetSetting("auras3." .. tostring(scope.key) .. "." .. tostring(attr))
-                    AddAuraShortcutChange(changes, setting, value, tostring(setting and setting.label or "Aura override"))
-                end
-            end
-            if #changes > 0 then
-                return {
-                    kind = "changes",
-                    changes = changes,
-                    bulkSafe = #changes > 1,
-                    label = "Change Aura scope override",
-                    summary = "Adjusts Aura scope override settings.",
-                }
-            end
-        end
-    end
     local laneUnits = DetectUnits(text)
     if #laneUnits > 0 and ContainsAny(text, AurasPhrases[107])
         and not ContainsAny(text, AurasPhrases[108])
@@ -1404,10 +1335,14 @@ local function ParseAuraDirectSettingShortcut(text, raw)
         local value = AuraBooleanValue(text)
         if value ~= nil then
             local changes = {}
+            local lanes = AuraShortcutLanes(text)
             for i = 1, #laneUnits do
                 local unit = laneUnits[i]
                 if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" then
-                    AddAuraRegisteredChange(changes, "auras3." .. tostring(unit) .. ".filtersEnabled", value)
+                    for j = 1, #lanes do
+                        AddAuraRegisteredChange(changes,
+                            "auras3." .. tostring(unit) .. "." .. tostring(lanes[j]) .. ".filtersEnabled", value)
+                    end
                 end
             end
             if #changes > 0 then
@@ -1528,67 +1463,12 @@ local function ParseAuraDirectSettingShortcut(text, raw)
             end
         end
     end
-    if ContainsAny(text, AurasPhrases[123])
-        and not ContainsAny(text, AurasPhrases[124])
-    then
-        local value = AuraBooleanValue(text)
-        if value ~= nil then return AuraDirectSettingChange("auras3.shared.filters.enabled", value, "Shared Aura Filters") end
-    end
-    if ContainsAny(text, AurasPhrases[125]) then
-        local value = AuraBooleanValue(text)
-        if value ~= nil then return AuraDirectSettingChange("auras3.shared.filtersEnabled", value, "Shared Filters") end
-    end
-    local explicitUnits = DetectUnits(text)
-    local explicitGroups = DetectGroups(text)
-    if #explicitUnits == 0 and #explicitGroups == 0 and not ContainsAny(text, AurasPhrases[130]) then
-        if ContainsAny(text, AurasPhrases[133]) then
-            local value = AuraBooleanValue(text)
-            if value ~= nil then return AuraDirectSettingChange("auras3.shared.showBuffs", value, "Show Buffs") end
-        end
-        if ContainsAny(text, AurasPhrases[134]) then
-            local value = AuraBooleanValue(text)
-            if value ~= nil then return AuraDirectSettingChange("auras3.shared.showDebuffs", value, "Show Debuffs") end
-        end
-        local data = A.AurasRegistryData or {}
-        local sharedSpecs = data.AURA_SHARED_BOOLEAN_SPECS or {}
-        for i = 1, #sharedSpecs do
-            local spec = sharedSpecs[i]
-            if spec.attr ~= "showBuffs" and spec.attr ~= "showDebuffs"
-                and ContainsAny(text, spec.aliases)
-            then
-                local value = AuraBooleanValue(text)
-                if value ~= nil then
-                    return AuraDirectSettingChange("auras3.shared." .. tostring(spec.attr), value, spec.label)
-                end
-            end
-        end
-    end
-
-    if ContainsAny(text, AurasPhrases[136]) then
-        return AuraDirectSettingChange("auras3.shared.showInEditMode", AuraBooleanValue(text), "Aura Edit Preview")
-    end
     if ContainsAny(text, AurasPhrases[137]) then
         return AuraDirectSettingChange("general.aurasCooldownTextUseBuckets", AuraBooleanValue(text), "Aura Timer Color Buckets")
-    end
-    local direction = AuraDirectionValue(text)
-    if direction and ContainsAny(text, AurasPhrases[140]) then
-        return AuraDirectSettingChange("auras3.shared.buffGrowth", direction, "Buff Growth")
-    end
-    if direction and ContainsAny(text, AurasPhrases[141]) then
-        return AuraDirectSettingChange("auras3.shared.debuffGrowth", direction, "Debuff Growth")
-    end
-    if direction and ContainsAny(text, AurasPhrases[142]) then
-        return AuraDirectSettingChange("auras3.shared.buffRowWrap", direction, "Buff Row Wrap")
-    end
-    if direction and ContainsAny(text, AurasPhrases[143]) then
-        return AuraDirectSettingChange("auras3.shared.debuffRowWrap", direction, "Debuff Row Wrap")
     end
 
     local number = FirstNumber(text)
     if number ~= nil then
-        if ContainsAny(text, AurasPhrases[144]) then
-            return AuraDirectSettingChange("auras3.shared.sortOrder", number, "Aura Sort Order")
-        end
         if ContainsAny(text, AurasPhrases[146]) then
             return AuraDirectSettingChange("general.aurasCooldownTextSafeSeconds", number, "Aura Safe Timer Threshold")
         end
@@ -1620,7 +1500,7 @@ local function ParseAuraDirectSettingShortcut(text, raw)
 end
 
 local function UnitAuraFilterExplicitScope(text)
-    if ContainsAny(text, AurasPhrases[152]) then return "shared" end
+    if ContainsAny(text, AurasPhrases[152]) then return nil end
     local units = DetectUnits(text)
     local playerIsFilterValue = ContainsAny(text, AurasPhrases[153])
     for i = 1, #units do
@@ -1628,10 +1508,6 @@ local function UnitAuraFilterExplicitScope(text)
         if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" then
             if not (unit == "player" and playerIsFilterValue and #units > 1) then return unit end
         end
-    end
-    if M then
-        local scope = M.auraScope
-        if scope == "shared" or scope == "player" or scope == "target" or scope == "focus" or scope == "boss" then return scope end
     end
     return nil
 end
@@ -1647,7 +1523,7 @@ local function UnitAuraFilterSpecForText(text)
     local specs = data.AURA_FILTER_BOOLEAN_SPECS or {}
     local compactText = Compact(text)
     local scopeStripped = " " .. Normalize(text) .. " "
-    for _, word in ipairs({ "shared", "global", "target", "focus", "boss" }) do
+    for _, word in ipairs({ "target", "focus", "boss" }) do
         scopeStripped = scopeStripped:gsub(" " .. word .. " ", " ")
     end
     scopeStripped = Trim(scopeStripped:gsub("%s+", " "))
@@ -1706,8 +1582,10 @@ local function HasNativeGroupAuraRootIntent(text)
     return ContainsAny(text, AurasPhrases[166])
 end
 
-local function AddUnitAuraFiltersEnabled(changes, scope)
-    AddAuraRegisteredChange(changes, "auras3." .. tostring(scope) .. ".filtersEnabled", true, "Enable Aura Filters")
+local function AddUnitAuraFiltersEnabled(changes, scope, lane)
+    AddAuraRegisteredChange(changes,
+        "auras3." .. tostring(scope) .. "." .. tostring(lane) .. ".filtersEnabled", true,
+        "Enable " .. tostring(lane) .. " Aura Filters")
 end
 
 local function AddUnitAuraFilterClearLaneChanges(changes, scope, lane)
@@ -1766,7 +1644,7 @@ local function GroupAuraFilterLaneForText(text, value)
         or value == "CancelablePlayer" or value == "NotCancelablePlayer" or value == "ExternalDefensivePlayer" or value == "BigDefensivePlayer" then
         return "buff"
     end
-    if value == "RAID_PLAYER_DISPELLABLE" or value == "DISPELLABLE" or value == "CROWD_CONTROL" then return "debuff" end
+    if value == "RAID_PLAYER_DISPELLABLE" or value == "DISPELLABLE" or value == "CROWD_CONTROL" or value == "NonPlayer" then return "debuff" end
     return nil
 end
 
@@ -1775,6 +1653,16 @@ local function GroupAuraFilterValueForText(text)
         or ((HasPhrase(text, "to all") or HasPhrase(text, "all filter") or HasPhrase(text, "filter all")) and ContainsAny(text, AurasPhrases[180]))
     then
         return "ALL"
+    end
+    -- Scope words can make a longer generic alias win (for example,
+    -- "non-player raid debuffs" also contains the alias "raid debuffs").
+    -- Treat this explicit classifier as the value before the scope/lane words
+    -- are considered by the generic longest-alias resolver.
+    if ContainsAny(text, {
+        "non-player", "non player",
+        "not from a player", "not caused by a player",
+    }) then
+        return "NonPlayer"
     end
     local data = A.AurasRegistryData or {}
     return AuraEnumAliasValue(text, data.GF_AURA_FILTER_ALIASES)
@@ -1864,7 +1752,7 @@ local function ParseUnitAuraLiveFilterShortcut(text)
         return {
             kind = "answer",
             status = "ambiguous",
-            text = "Which aura scope should use that live filter: Shared, Player, Target, Focus, Boss, Party, Raid, or Mythic Raid? Examples: 'show only dispellable target debuffs' or 'show only dispellable raid debuffs'.",
+            text = "Which UnitFrame Aura scope should use that live filter: Player, Target, Focus, or Boss? Example: 'show only dispellable target debuffs'.",
             summary = "Asks for a unit aura scope before changing live filters.",
         }
     end
@@ -1873,8 +1761,10 @@ local function ParseUnitAuraLiveFilterShortcut(text)
     if clearAll then
         local lanes = AuraShortcutLanes(text)
         local changes = {}
-        AddUnitAuraFiltersEnabled(changes, scope)
-        for i = 1, #lanes do AddUnitAuraFilterClearLaneChanges(changes, scope, lanes[i]) end
+        for i = 1, #lanes do
+            AddUnitAuraFiltersEnabled(changes, scope, lanes[i])
+            AddUnitAuraFilterClearLaneChanges(changes, scope, lanes[i])
+        end
         if #changes == 0 then return nil end
         return {
             kind = "changes",
@@ -1908,7 +1798,7 @@ local function ParseUnitAuraLiveFilterShortcut(text)
 
     local directChanges = {}
     AddUnitAuraFilterSetChange(directChanges, scope, lane, spec.key, value, spec.conflicts)
-    AddUnitAuraFiltersEnabled(directChanges, scope)
+    AddUnitAuraFiltersEnabled(directChanges, scope, lane)
     if #directChanges == 0 then return nil end
 
     local wantsOnly = value == true and ContainsAny(text, AurasPhrases[191])
@@ -1916,7 +1806,7 @@ local function ParseUnitAuraLiveFilterShortcut(text)
         local replaceChanges = {}
         AddUnitAuraFilterClearLaneChanges(replaceChanges, scope, lane)
         AddUnitAuraFilterSetChange(replaceChanges, scope, lane, spec.key, true, spec.conflicts)
-        AddUnitAuraFiltersEnabled(replaceChanges, scope)
+        AddUnitAuraFiltersEnabled(replaceChanges, scope, lane)
         if #replaceChanges > #directChanges then
             return {
                 kind = "ambiguous",
@@ -2022,7 +1912,7 @@ local function ParseUnitAuraFilterBooleanShortcut(text)
 
     local changes = {}
     AddUnitAuraFilterSetChange(changes, scope, lane, key, value, conflicts)
-    AddUnitAuraFiltersEnabled(changes, scope)
+    AddUnitAuraFiltersEnabled(changes, scope, lane)
     if #changes == 0 then return nil end
     return {
         kind = "changes",
@@ -2281,7 +2171,7 @@ local function ParseAuraCooldownSwipeDirectionShortcut(text)
     if not ContainsAny(text, AurasPhrases[237]) then return nil end
     if not ContainsAny(text, AurasPhrases[238]) then return nil end
 
-    local scopes = AuraShortcutScopes(text, true)
+    local scopes = AuraShortcutScopes(text)
     if not scopes then return nil end
 
     local value = AuraCooldownSwipeDirectionValue(text)
@@ -2350,7 +2240,7 @@ local function ParseAuraDurationBarShortcut(text)
         }
     end
 
-    local scopes = AuraShortcutScopes(text, true)
+    local scopes = AuraShortcutScopes(text)
     if not scopes then return nil end
 
     local lanes = AuraShortcutLanes(text)
@@ -2375,7 +2265,7 @@ end
 local function ParseAuraDebuffBorderModeShortcut(text)
     if not ContainsAny(text, AurasPhrases[243]) then return nil end
 
-    local scopes = AuraShortcutScopes(text, true)
+    local scopes = AuraShortcutScopes(text)
     if not scopes then return nil end
 
     local boolValue = DetectBoolean and DetectBoolean(text)
@@ -2420,7 +2310,7 @@ local function ParseAuraDebuffBorderModeShortcut(text)
         if scope.kind == "group" then
             key = "gf_" .. tostring(scope.key) .. ".auras.debuff.dispelBorderMode"
         else
-            key = "auras3." .. tostring(scope.key) .. ".debuffTypeBorderMode"
+            key = "auras3." .. tostring(scope.key) .. ".debuff.debuffTypeBorderMode"
         end
         local setting = Registry and Registry:GetSetting(key)
         AddAuraShortcutChange(changes, setting, value, tostring(setting and setting.label or "Debuff Dispel-type Border Mode"))
@@ -2436,50 +2326,7 @@ local function ParseAuraDebuffBorderModeShortcut(text)
 end
 
 local function ParseAuraScopeOverrideShortcut(text)
-    if ContainsAny(text, AurasPhrases[245]) then return nil end
-    if not ContainsAny(text, AurasPhrases[246]) then return nil end
-
-    local attr, value
-    local bool = DetectBoolean and DetectBoolean(text)
-    if ContainsAny(text, AurasPhrases[247]) then
-        attr = "customStyle"
-        value = bool == nil and true or bool
-    elseif ContainsAny(text, AurasPhrases[248]) then
-        attr = "useSharedStyle"
-        value = bool == nil and true or bool
-    elseif ContainsAny(text, AurasPhrases[249]) then
-        attr = "overrideFilters"
-        value = bool == nil and true or bool
-    elseif ContainsAny(text, AurasPhrases[250]) then
-        attr = "overrideFilters"
-        if bool == nil then
-            value = false
-        else
-            value = not bool
-        end
-    elseif ContainsAny(text, AurasPhrases[251]) then
-        attr = "useSharedRules"
-        value = bool == nil and true or bool
-    end
-    if not attr or value == nil then return nil end
-
-    local scopes = AuraScopeOverrideScopes(text)
-    if not scopes then return nil end
-
-    local changes = {}
-    for i = 1, #scopes do
-        local scope = scopes[i]
-        local setting = Registry and Registry:GetSetting("auras3." .. tostring(scope.key) .. "." .. tostring(attr))
-        AddAuraShortcutChange(changes, setting, value, tostring(setting and setting.label or "Aura override"))
-    end
-    if #changes == 0 then return nil end
-    return {
-        kind = "changes",
-        changes = changes,
-        bulkSafe = #changes > 1,
-        label = "Change Aura scope override",
-        summary = "Adjusts Aura scope override settings.",
-    }
+    return nil
 end
 
 local function AuraBlacklistPresetForText(text)
@@ -2625,8 +2472,6 @@ end
 P.AURA_BLACKLIST_PRESETS = AURA_BLACKLIST_PRESETS
 P.AuraBlacklistScope = AuraBlacklistScope
 P.AuraBlacklistLane = AuraBlacklistLane
-P.AURA_QUICK_PRESETS = AURA_QUICK_PRESETS
-P.AuraQuickPresetForText = AuraQuickPresetForText
 P.AuraEditScopeForText = AuraEditScopeForText
 P.ParseAuraGeometryShortcut = ParseAuraGeometryShortcut
 P.AuraGeometryShortcut = ParseAuraGeometryShortcut

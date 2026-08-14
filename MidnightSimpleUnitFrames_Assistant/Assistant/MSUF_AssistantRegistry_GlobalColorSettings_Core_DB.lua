@@ -83,17 +83,9 @@ function A.GlobalRegistry.BuildColorDBHelpers(ctx)
         if type(tbl) == "table" then tbl[key] = { r, gCol, b } end
     end
 
-    local function AuraSharedDB()
-        local db = GeneralDB()
-        db.auras3 = type(db.auras3) == "table" and db.auras3 or {}
-        db.auras3.shared = type(db.auras3.shared) == "table" and db.auras3.shared or {}
-        return db.auras3.shared
-    end
-
     return {
         ApiRGB = ApiRGB,
         ApiSetRGB = ApiSetRGB,
-        AuraSharedDB = AuraSharedDB,
         ColorAPI = ColorAPI,
         GeneralRGB = GeneralRGB,
         GeneralRGBAlias = GeneralRGBAlias,

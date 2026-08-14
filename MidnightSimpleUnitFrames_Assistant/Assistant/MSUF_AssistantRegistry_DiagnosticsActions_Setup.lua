@@ -85,6 +85,7 @@ function A.DiagnosticsRegistry.RegisterGuidedSetupActions(ctx)
             "start the highlight tour", "restart the highlight tour", "replay the highlight tour",
             "start upgrade highlights", "show update highlights again", "tour nochmal starten",
         },
+        aliasNoArgs = true,
         type = "setup",
         combatSafe = false,
         confirmRequired = false,

@@ -60,6 +60,12 @@ local cooldownConsentPromptProviderId
 local cooldownConsentPromptAfterCombat = false
 local COOLDOWN_CONSENT_POPUP = "MSUF_COOLDOWN_ANCHOR_CONSENT"
 local COOLDOWN_CONFIRM_POPUP = "MSUF_COOLDOWN_ANCHOR_CONFIRM"
+local COOLDOWN_MISSING_ANCHOR_POPUP = "MSUF_COOLDOWN_ANCHOR_MISSING"
+--- The existing bounded provider acquisition chain can take up to 4.05 seconds.
+--- Warn only after it has had time to resolve so login order does not create a
+--- false positive for Skiron, Coolinator or EllesmereUI.
+local COOLDOWN_MISSING_ANCHOR_WARNING_DELAY = 4.25
+local missingAnchorWarningShown = false
 
 local function Tr(text)
     local translate = MSUF and MSUF.Translate
@@ -528,6 +534,123 @@ function MSUF.GetArcUICooldownAnchor()
     return arcUIAnchor
 end
 
+local function BlizzardCooldownViewerEnabled()
+    local registry = _G.CVarCallbackRegistry
+    local getCached = registry and registry.GetCVarValueBool
+    if type(getCached) == "function" then
+        local ok, enabled = pcall(getCached, registry, "cooldownViewerEnabled")
+        if ok and enabled ~= nil then return enabled == true end
+    end
+
+    local cvar = _G.C_CVar
+    local getCVarBool = cvar and cvar.GetCVarBool
+    if type(getCVarBool) == "function" then
+        local ok, enabled = pcall(getCVarBool, "cooldownViewerEnabled")
+        if ok and enabled ~= nil then return enabled == true end
+    end
+
+    local legacy = _G.GetCVarBool
+    if type(legacy) == "function" then
+        local ok, enabled = pcall(legacy, "cooldownViewerEnabled")
+        if ok and enabled ~= nil then return enabled == true end
+    end
+    return false
+end
+
+local function BlizzardEssentialCooldownAnchorActive()
+    local api = _G.C_CooldownViewer
+    local isAvailable = api and api.IsCooldownViewerAvailable
+    if type(isAvailable) ~= "function" then return false end
+    local ok, available = pcall(isAvailable)
+    if not ok or available ~= true or not BlizzardCooldownViewerEnabled() then return false end
+
+    local viewer = _G.EssentialCooldownViewer
+    if not viewer then return false end
+    local visibleEnum = _G.Enum and _G.Enum.CooldownViewerVisibleSetting
+    if visibleEnum and viewer.visibleSetting == visibleEnum.Hidden then return false end
+    return true
+end
+
+--- Returns the configured provider that can own the Essential cooldown anchor.
+--- This is intentionally not an IsAddOnLoaded check: disabled providers may be
+--- loaded without exposing an anchor, while Coolinator exposes its own anchor
+--- with Blizzard's cooldownViewerEnabled CVar disabled.
+function MSUF.GetActiveCooldownAnchorProvider()
+    if arcUIAnchor then return "ArcUI", arcUIAnchor end
+
+    local skironProxy = _G.MSUF_SkironCooldownAnchor
+    if skironProxy and skironProxy.MSUFSkironSource ~= nil then
+        return "SkironCooldownManager", skironProxy
+    end
+    if coolinatorActiveSource then return "Coolinator", coolinatorActiveSource end
+    if ellesmereCooldownActiveSource then return "EllesmereUICooldownManager", ellesmereCooldownActiveSource end
+    if BlizzardEssentialCooldownAnchorActive() then
+        return "Blizzard", _G.EssentialCooldownViewer
+    end
+end
+
+local function MissingCooldownAnchorWarningText()
+    return "|cffff4040" .. Tr("No cooldown anchor found.") .. "|r"
+        .. "\n\n"
+        .. "|cffffffff" .. Tr("Follow Blizzard's Essential Cooldowns") .. "|r "
+        .. "|cffffd200" .. Tr("is ON, but no supported anchor is active.") .. "|r"
+        .. "\n\n"
+        .. "|cffff8000" .. Tr("This can cause major frame-position errors.") .. "|r"
+        .. "\n\n"
+        .. "|cff40ff80" .. Tr("Open Unit > Anchoring to fix it.") .. "|r"
+end
+
+local function OpenCooldownAnchorSetting()
+    local open = _G.MSUF_OpenExactSettingControl
+    if type(open) ~= "function" then return false end
+    return open("general.anchorToCooldown", Tr("Follow Blizzard's Essential Cooldowns"), "uf_player")
+end
+
+local function InstallMissingCooldownAnchorPopup()
+    local dialogs = _G.StaticPopupDialogs
+    if type(dialogs) ~= "table" then return false end
+    if dialogs[COOLDOWN_MISSING_ANCHOR_POPUP] then return true end
+    dialogs[COOLDOWN_MISSING_ANCHOR_POPUP] = {
+        text = "%s",
+        button1 = "|cff40ff80" .. Tr("Fix now") .. "|r",
+        button2 = _G.CANCEL or Tr("Cancel"),
+        OnAccept = OpenCooldownAnchorSetting,
+        timeout = 0,
+        whileDead = true,
+        hideOnEscape = true,
+        preferredIndex = 3,
+    }
+    return true
+end
+
+local function ShowMissingCooldownAnchorWarning()
+    if missingAnchorWarningShown then return false end
+    local general = type(_G.MSUF_DB) == "table" and _G.MSUF_DB.general or nil
+    if not MSUF.IsCooldownAnchorEnabled(general) then return false end
+    if MSUF.GetActiveCooldownAnchorProvider() then return false end
+    missingAnchorWarningShown = true
+
+    local text = MissingCooldownAnchorWarningText()
+    if InstallMissingCooldownAnchorPopup() and type(_G.StaticPopup_Show) == "function" then
+        _G.StaticPopup_Show(COOLDOWN_MISSING_ANCHOR_POPUP, text)
+        return true
+    end
+    if type(_G.print) == "function" then
+        _G.print("|cffffd700MSUF:|r " .. text:gsub("\n\n", " "))
+    end
+    return false
+end
+
+local function ScheduleMissingCooldownAnchorWarning()
+    local general = type(_G.MSUF_DB) == "table" and _G.MSUF_DB.general or nil
+    if not MSUF.IsCooldownAnchorEnabled(general) then return end
+    if _G.C_Timer and type(_G.C_Timer.After) == "function" then
+        _G.C_Timer.After(COOLDOWN_MISSING_ANCHOR_WARNING_DELAY, ShowMissingCooldownAnchorWarning)
+    else
+        ShowMissingCooldownAnchorWarning()
+    end
+end
+
 _G.MSUF_GetCoolinatorCooldownAnchor = function()
     return MSUF.GetCoolinatorCooldownAnchor()
 end
@@ -540,8 +663,16 @@ _G.MSUF_GetArcUICooldownAnchor = function()
     return MSUF.GetArcUICooldownAnchor()
 end
 
+_G.MSUF_GetActiveCooldownAnchorProvider = function()
+    return MSUF.GetActiveCooldownAnchorProvider()
+end
+
 local function RefreshEssentialCooldownAnchorConsumers(transition)
     if transition ~= "acquired" and transition ~= "lost" and transition ~= "switched" and transition ~= "changed" then return end
+    if (transition == "acquired" or transition == "switched")
+        and type(_G.StaticPopup_Hide) == "function" then
+        _G.StaticPopup_Hide(COOLDOWN_MISSING_ANCHOR_POPUP)
+    end
     local UF = MSUF.UF
     local factory = UF and UF.Factory
     local factoryHandled = false
@@ -824,6 +955,7 @@ watcher:SetScript("OnEvent", function(self, event, addon)
     RefreshAutomaticCooldownProvider(true)
     MaybeShowCooldownConsent()
     RegisterThirdPartyAnchors()
+    if event == "PLAYER_LOGIN" then ScheduleMissingCooldownAnchorWarning() end
 end)
 
 RefreshAutomaticCooldownProvider(false)

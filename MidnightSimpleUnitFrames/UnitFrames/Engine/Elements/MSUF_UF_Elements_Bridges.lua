@@ -4,6 +4,10 @@ MSUF = MSUF or _G.MSUF_NS or {}
 
 local UF = MSUF.UF
 local type = type
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+  _G[name] = value
+  return value
+end
 
 -- UnitFrame element bridge helpers.
 -- Queues cross-module refreshes from unitframe events into castbar/classpower/aura runtimes
@@ -134,6 +138,15 @@ function Castbars.Apply(frame, spec)
 end
 
 local ClassPower = {}
+
+local function RefreshPlayerPowerBar()
+  if UF and type(UF.RefreshPowerLayout) == "function" then
+    return UF.RefreshPowerLayout("player")
+  end
+  return false
+end
+
+ExportPublic("MSUF_RefreshPlayerPowerBar", RefreshPlayerPowerBar)
 
 function ClassPower.IsEnabled(frame, spec)
   return frame.MSUFUnitKey == "player" and spec and spec.classPower and spec.classPower.enabled == true

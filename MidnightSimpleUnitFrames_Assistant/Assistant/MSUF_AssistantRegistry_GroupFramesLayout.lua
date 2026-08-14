@@ -39,7 +39,12 @@ function A.GroupFramesRegistry.RegisterLayoutSettings(ctx, scope, defaults)
     RegisterGroupNumber(scope, "height", "height", "Height", heightDefault, 16, 120, 1, "rebuild", aliases)
 
     aliases = {}
-    AddAliasesForUnit(aliases, scope, "frame", "frame")
+    -- No bare "frame" alias here. AddAliasesForUnit expands it into "party
+    -- frame", "raid frame", "frame party" and so on, which name the FRAME, not
+    -- its horizontal offset -- so every sentence that merely mentioned the
+    -- frame exact-alias matched X Position and was answered with "what value do
+    -- you want me to use for Party X Position?". The remaining aliases all name
+    -- the control itself.
     AddAliasesForUnit(aliases, scope, "frame position", "frame position")
     AddAliasesForUnit(aliases, scope, "x position", "x position")
     AddAliasesForUnit(aliases, scope, "x offset", "x versatz")
@@ -49,7 +54,8 @@ function A.GroupFramesRegistry.RegisterLayoutSettings(ctx, scope, defaults)
     RegisterGroupNumber(scope, "offsetX", "offsetX", "X Position", 0, -4096, 4096, 1, "rebuild", aliases)
 
     aliases = {}
-    AddAliasesForUnit(aliases, scope, "frame", "frame")
+    -- Same as X Position above: a bare "frame" alias names the frame, not its
+    -- vertical offset.
     AddAliasesForUnit(aliases, scope, "frame position", "frame position")
     AddAliasesForUnit(aliases, scope, "y position", "y position")
     AddAliasesForUnit(aliases, scope, "y offset", "y versatz")

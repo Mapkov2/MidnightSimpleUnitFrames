@@ -226,6 +226,7 @@ Data.PROFILE_PARSER = {
     GROUP_COPY_SCOPE_SELECTOR_TERMS = { "group copy", "group frame copy", "group frames copy", "copy category", "copy categories", "copy scope", "copy scopes" },
     GROUP_COPY_SCOPE_REJECT_TERMS = { "group copy", "group frame copy", "group frames copy", "group copy category", "group copy categories", "group copy scope", "group copy scopes" },
     COPY_SCOPE_KIND_TERMS = { "category", "categories", "scope", "scopes" },
+    COPY_SCOPE_INTENT_TERMS = { "copy", "copies", "copying", "copied", "kopie", "kopiere", "kopieren", "uebernehmen" },
     COPY_SCOPE_ALL_TERMS = { "all categories", "select all", "turn on all", "enable all" },
     COPY_SCOPE_ALL_CONTEXT_TERMS = { "all" },
     COPY_SCOPE_ENABLE_TERMS = { "turn on", "enable", "select" },

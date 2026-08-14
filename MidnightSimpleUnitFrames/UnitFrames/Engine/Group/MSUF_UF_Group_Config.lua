@@ -352,6 +352,9 @@ local function ResolveHealthVisual(conf)
     r = Num(conf.healthCustomR, 0.2),
     g = Num(conf.healthCustomG, 0.8),
     b = Num(conf.healthCustomB, 0.2),
+    lossR = Clamp01(general and general.healthLossColorR, 1),
+    lossG = Clamp01(general and general.healthLossColorG, 0.55),
+    lossB = Clamp01(general and general.healthLossColorB, 0.08),
     backgroundMatchHealth = (cache and cache.barBgMatchHPColor == true) or (general and general.barBgMatchHPColor == true) or false,
     backgroundClassColor = (cache and cache.barBgClassColor == true) or (general and general.barBgClassColor == true) or false,
     npcClassColorBar = (cache and cache.npcClassColorBar == true) or (general and general.npcClassColorBar == true) or false,
@@ -409,6 +412,9 @@ local function ResolvePowerVisual(conf)
   local mode = NormalizePowerMode(conf.powerColorMode) or "type"
   local out = {
     mode = mode,
+    lossR = Clamp01(general and general.powerLossColorR, 0.70),
+    lossG = Clamp01(general and general.powerLossColorG, 0.90),
+    lossB = Clamp01(general and general.powerLossColorB, 1),
     -- No engine consumer reads this yet (the live behaviour comes from the
     -- global bar-background runtime); keep it truthful instead of hardcoded.
     backgroundMatchHealth = (general and general.powerBarBgMatchBarColor == true) or false,
@@ -1096,7 +1102,15 @@ local function ApplyAuraLane(out, prefix, groupKey, group, defaults, maxCount, i
   out[prefix .. "Filter"] = AuraFilterString(groupKey, group)
   local blacklist = type(group.blacklist) == "table" and group.blacklist or nil
   out[prefix .. "HidePermanent"] = group.hidePermanent == true or (blacklist and blacklist.hidePermanent == true) or false
-  if prefix == "debuff" then out.debuffMaxDuration = Num(blacklist and blacklist.maxDuration, 0) end
+  if prefix == "debuff" then
+    out.debuffMaxDuration = Num(blacklist and blacklist.maxDuration, 0)
+    local filter = GF.AuraFilter or _G.MSUF_GF_AuraFilter
+    local nonPlayer = tostring(group.filterToken or ""):upper():gsub("[^A-Z0-9]", "") == "NONPLAYER"
+    if filter and filter.IsNonPlayerDebuffFilter then
+      nonPlayer = filter.IsNonPlayerDebuffFilter(group.filterToken) == true
+    end
+    out.debuffNonPlayer = nonPlayer
+  end
   if group.showTooltip ~= nil then
     out[prefix .. "ShowTooltip"] = group.showTooltip == true
   end
@@ -1223,10 +1237,15 @@ local function CollectSpellIndicatorSpecs(siCfg, si)
     end
   end
   if selected == "multi" then
+    local allSpecsKey = si and si.ALL_SPECS_KEY
+    local allSpecsConfig = allSpecsKey and type(siCfg and siCfg.specs) == "table" and siCfg.specs[allSpecsKey]
+    if type(allSpecsConfig) == "table" and next(allSpecsConfig) ~= nil then
+      Add(allSpecsKey)
+    end
     local multi = type(siCfg and siCfg.multiSpecs) == "table" and siCfg.multiSpecs or nil
     if multi then
       for specKey, enabled in pairs(multi) do
-        if enabled then Add(specKey) end
+        if enabled and specKey ~= allSpecsKey then Add(specKey) end
       end
     end
   elseif selected ~= "auto" then
@@ -1420,8 +1439,10 @@ local function CompileCoreAuras(kind, conf)
     showTooltip = buff.trackedShowTooltip,
     showCooldownSwipe = buff.trackedShowCooldownSwipe,
     cooldownSwipeReverse = buff.trackedCooldownSwipeReverse,
-    sortMethod = buff.trackedSortMethod or buff.sortMethod,
-    sortReverse = buff.trackedSortReverse == true or (buff.trackedSortReverse == nil and buff.sortReverse == true),
+    -- Tracked Buffs are their own native AuraGroup. Keep their ordering local
+    -- instead of silently inheriting the normal Buff container's comparator.
+    sortMethod = buff.trackedSortMethod,
+    sortReverse = buff.trackedSortReverse == true,
     showDurationBar = buff.trackedShowDurationBar,
     durationBarHeight = buff.trackedDurationBarHeight,
     durationBarDisplay = buff.trackedDurationBarDisplay,
@@ -1604,6 +1625,7 @@ local function FillPowerVisualDomain(power, conf, general, texture, bgTexture)
   power.backgroundMatchHealth = visual.backgroundMatchHealth
   power.mode = visual.mode
   power.r, power.g, power.b = visual.r, visual.g, visual.b
+  power.lossR, power.lossG, power.lossB = visual.lossR, visual.lossG, visual.lossB
   power.colors = CompilePowerColorOverrides(power.colors)
   power.barGradient = ResolveBarGradient(conf, general, "enablePowerGradient")
   -- Mirrors CompileUnitPower: the power bar follows the health fill direction.
@@ -1912,6 +1934,9 @@ local function CompileSpecUncached(kind, frame, unit, conf)
       gradientHighR = healthVisual.gradientHighR,
       gradientHighG = healthVisual.gradientHighG,
       gradientHighB = healthVisual.gradientHighB,
+      lossR = healthVisual.lossR,
+      lossG = healthVisual.lossG,
+      lossB = healthVisual.lossB,
       texture = texture,
       backgroundTexture = bgTexture,
       background = CompileBarBackground(conf),
@@ -1920,12 +1945,14 @@ local function CompileSpecUncached(kind, frame, unit, conf)
       npcClassColorBar = healthVisual.npcClassColorBar == true,
       barGradient = ResolveBarGradient(conf, general, "enableGradient"),
       reverse = conf.reverseFill == true,
-      smooth = conf.smoothFill == true,
+      chunked = conf.chunkedFill == true,
+      smooth = conf.smoothFill == true and conf.chunkedFill ~= true,
     },
     power = FillPowerGeometry(FillPowerVisualDomain({
       enabled = powerHeight > 0,
       height = powerHeight,
-      smooth = conf.powerSmoothFill == true,
+      chunked = conf.powerChunkedFill == true,
+      smooth = conf.powerSmoothFill == true and conf.powerChunkedFill ~= true,
     }, conf, general, texture, bgTexture), conf, w),
     text = textSpec,
     tempMaxHealth = CompileTempMaxHealth(kind, conf, texture),
@@ -2020,6 +2047,7 @@ local function RefreshColorDomain(kind, base, conf)
   health.backgroundTexture = backgroundTexture
   health.mode = healthVisual.mode
   health.r, health.g, health.b = healthVisual.r, healthVisual.g, healthVisual.b
+  health.lossR, health.lossG, health.lossB = healthVisual.lossR, healthVisual.lossG, healthVisual.lossB
   health.gradientLowR, health.gradientLowG, health.gradientLowB = healthVisual.gradientLowR, healthVisual.gradientLowG, healthVisual.gradientLowB
   health.gradientMidR, health.gradientMidG, health.gradientMidB = healthVisual.gradientMidR, healthVisual.gradientMidG, healthVisual.gradientMidB
   health.gradientHighR, health.gradientHighG, health.gradientHighB = healthVisual.gradientHighR, healthVisual.gradientHighG, healthVisual.gradientHighB

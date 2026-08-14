@@ -228,5 +228,22 @@ Data.ACTIONS_PARSER = {
         [155] = { "aura blacklist spell", "blacklist spell", "selected aura blacklist spell", "aura spell preset" },
         [156] = { "set", "change" },
         [157] = { " to ", " as ", " = " },
+        -- Navigation verbs that only mean navigation when the sentence states
+        -- no value. "edit target auras" is a request to be taken to that page,
+        -- but "edit target buff size to 30" is a change, so ParseOpen consults
+        -- this list behind the same no-boolean/no-number guard the bare-noun
+        -- shortcut uses.
+        [158] = { "edit", "customize", "customise", "bearbeite", "bearbeiten", "anpassen" },
+        -- Subjects narrower than a whole unit page. Their presence means the
+        -- reset request is about one part of the frame, so the page-wide reset
+        -- fallback must not claim it.
+        [159] = {
+            "aura", "auras", "buff", "buffs", "debuff", "debuffs", "override", "overrides",
+            "castbar", "cast bar", "portrait", "text", "font", "color", "colour", "farbe",
+            "name", "health", "power", "mana", "absorb", "shield",
+            "size", "width", "height", "scale", "opacity", "alpha", "transparency",
+            "border", "outline", "texture", "gradient", "icon", "icons",
+            "indicator", "indicators", "filter", "filters", "highlight",
+        },
     },
 }

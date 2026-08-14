@@ -87,6 +87,7 @@ function A.GlobalRegistry.RegisterBarColorSettings(ctx)
     end, { category = "Colors / Bar Colors", attribute = "purgeBorderColor", defaultR = 1, defaultG = 0.85, defaultB = 0, apply = ApplyColors })
     ColorSetting("general.barOutlineColor", "Bar Outline Color", {
         "bar outline color", "frame outline color", "bar border color", "bars border color", "border outline color", "outline border color",
+        "my frames a red border", "border on my frames", "frames a border",
     }, function()
         return ApiRGB("GetBarOutlineColor", 0, 0, 0, function() return GeneralRGB("barOutlineColor", 0, 0, 0) end)
     end, function(r, g, b)

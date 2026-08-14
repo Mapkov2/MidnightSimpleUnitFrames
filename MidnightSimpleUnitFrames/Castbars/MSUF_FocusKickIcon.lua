@@ -652,6 +652,22 @@ local function ApplyCastState(state)
     AttachTimeDriver(state)
 end
 
+--- Cooldown-only repaint used by the shared interrupt-ready driver. The cast
+--- state and layout remain owned by the focus engine subscriber; this path
+--- only updates the visible border after the player's interrupt cooldown
+--- starts, changes, or completes.
+local function RefreshReadyColor()
+    if not (iconFrame and iconFrame.IsShown and iconFrame:IsShown()) then
+        return
+    end
+
+    local source = FocusSourceCastbar()
+    ApplyInterruptibilityColor(
+        source and source.isNotInterruptible == true,
+        source and source._msufApiNotInterruptibleRaw
+    )
+end
+
 local function PlayInterruptFeedbackIfEnabled()
     if not IsFocusKickEnabled() then return end
     EnsureIconFrame()
@@ -664,4 +680,5 @@ ExportPublic("MSUF_FocusKick_SetPreviewEnabled", SetPreviewEnabled)
 ExportPublic("MSUF_FocusKick_IsPreviewEnabled", IsPreviewEnabled)
 ExportPublic("MSUF_FocusKick_ApplyTimeTextFont", ApplyTimeTextFont)
 ExportPublic("MSUF_FocusKick_ApplyCastState", ApplyCastState)
+ExportPublic("MSUF_FocusKick_RefreshReadyColor", RefreshReadyColor)
 ExportPublic("MSUF_FocusKick_PlayInterruptFeedback", PlayInterruptFeedbackIfEnabled)

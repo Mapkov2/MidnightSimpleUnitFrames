@@ -71,6 +71,7 @@ local GROUPS = {
         xKey = "buffGroupOffsetX",
         yKey = "buffGroupOffsetY",
         sizeKey = "buffGroupIconSize",
+        paddingKey = "buffStylePadding",
         iconZoomKey = "buffIconZoom",
         iconShapeKey = "buffIconShape",
         anchorKey = "buffAnchor",
@@ -91,6 +92,7 @@ local GROUPS = {
         xKey = "debuffGroupOffsetX",
         yKey = "debuffGroupOffsetY",
         sizeKey = "debuffGroupIconSize",
+        paddingKey = "debuffStylePadding",
         iconZoomKey = "debuffIconZoom",
         iconShapeKey = "debuffIconShape",
         anchorKey = "debuffAnchor",
@@ -436,7 +438,7 @@ local function GetLayout(auras, unit, create)
     end
 
     local pu = auras.perUnit and auras.perUnit[unit]
-    if pu and pu.overrideLayout == true and type(pu.layout) == "table" then
+    if pu and type(pu.layout) == "table" then
         return pu.layout, pu
     end
     return nil, pu
@@ -444,7 +446,7 @@ end
 
 local function GetSharedLayout(auras, unit)
     local pu = auras and auras.perUnit and auras.perUnit[unit]
-    if pu and pu.overrideSharedLayout == true and type(pu.layoutShared) == "table" then
+    if pu and type(pu.layoutShared) == "table" then
         return pu.layoutShared
     end
     return nil
@@ -484,8 +486,7 @@ end
 local function ReadLaneTextNumber(shared, layout, kind, key, defaultValue, minValue, maxValue)
     kind = NormalizeKind(kind)
     local laneKey = kind and LANE_STYLE_KEYS[kind] and LANE_STYLE_KEYS[kind][key]
-    local v = laneKey and ReadRawNumber(shared, layout, laneKey) or nil
-    if v == nil then v = ReadRawNumber(shared, layout, key) end
+    local v = laneKey and ReadRawNumber(nil, layout, laneKey) or nil
     return Clamp(v, defaultValue, minValue, maxValue)
 end
 
@@ -495,8 +496,7 @@ local function ReadLaneTextBool(shared, layout, kind, key, defaultValue)
     -- `false` is a real per-lane override. The usual and/or shortcut turns it
     -- into nil and incorrectly falls back to the generic/shared On value.
     local v
-    if laneKey then v = ReadRawValue(shared, layout, laneKey) end
-    if v == nil then v = ReadRawValue(shared, layout, key) end
+    if laneKey then v = ReadRawValue(nil, layout, laneKey) end
     if v == nil then return defaultValue == true end
     return v == true
 end
@@ -504,16 +504,15 @@ end
 local function ReadLaneTextString(shared, layout, kind, key, fallback)
     kind = NormalizeKind(kind)
     local laneKey = kind and LANE_STYLE_KEYS[kind] and LANE_STYLE_KEYS[kind][key]
-    local v = laneKey and ReadRawValue(shared, layout, laneKey) or nil
-    if v == nil then v = ReadRawValue(shared, layout, key) end
+    local v = laneKey and ReadRawValue(nil, layout, laneKey) or nil
     return tostring(v or fallback or "")
 end
 
 local function ReadLaneTextAnchor(shared, layoutShared, kind)
     kind = NormalizeKind(kind)
     local laneKey = kind and LANE_STYLE_KEYS[kind] and LANE_STYLE_KEYS[kind].stackCountAnchor
-    local anchor = laneKey and ((layoutShared and layoutShared[laneKey]) or (shared and shared[laneKey])) or nil
-    anchor = anchor or (layoutShared and layoutShared.stackCountAnchor) or (shared and shared.stackCountAnchor) or "TOPRIGHT"
+    local anchor = laneKey and layoutShared and layoutShared[laneKey] or nil
+    anchor = anchor or "TOPRIGHT"
     if anchor ~= "TOPLEFT" and anchor ~= "BOTTOMLEFT" and anchor ~= "BOTTOMRIGHT" then
         anchor = "TOPRIGHT"
     end
@@ -523,8 +522,8 @@ end
 local function ReadLaneCooldownTextAnchor(shared, layoutShared, kind)
     kind = NormalizeKind(kind)
     local laneKey = kind and LANE_STYLE_KEYS[kind] and LANE_STYLE_KEYS[kind].cooldownTextAnchor
-    local anchor = laneKey and ((layoutShared and layoutShared[laneKey]) or (shared and shared[laneKey])) or nil
-    anchor = anchor or (layoutShared and layoutShared.cooldownTextAnchor) or (shared and shared.cooldownTextAnchor) or "CENTER"
+    local anchor = laneKey and layoutShared and layoutShared[laneKey] or nil
+    anchor = anchor or "CENTER"
     return AURA_TEXT_ANCHOR_OK[anchor] and anchor or "CENTER"
 end
 
@@ -569,12 +568,8 @@ local function ReadTextConfig(unit, kind)
         }
     end
     local auras, shared = EnsureDB()
-    local layout, pu = GetLayout(auras, unit, false)
+    local layout = GetLayout(auras, unit, false)
     local ls = GetSharedLayout(auras, unit)
-    if not UnitStyleOverrideActive(pu) then
-        layout = nil
-        ls = nil
-    end
     return {
         showStackCount = ReadLaneTextBool(shared, ls, kind, "showStackCount", true),
         showCooldownText = ReadLaneTextBool(shared, ls, kind, "showCooldownText", true),
@@ -618,6 +613,7 @@ local function ReadGroupConfig(unit, kind)
             iconZoom = Clamp(placed.iconZoom, 100, 100, 200),
             iconShape = type(placed.iconShape) == "string" and placed.iconShape or "RECTANGLE",
             size = Clamp(placed.size, 24, 1, 128),
+            padding = Clamp(placed.stylePadding, 0, 0, 16),
             spacing = Clamp(placed.spacing, 2, 0, 64),
             perRow = Clamp(placed.perRow, 4, 1, 40),
             max = Clamp(placed.max, 8, 0, 40),
@@ -634,73 +630,31 @@ local function ReadGroupConfig(unit, kind)
     local layout = GetLayout(auras, unit, false)
     local ls = GetSharedLayout(auras, unit)
 
-    local baseX = ReadNumber(shared, layout, "offsetX", 0, -4096, 4096)
-    local baseY = ReadNumber(shared, layout, "offsetY", 6, -4096, 4096)
-    local hasX = (layout and type(layout[spec.xKey]) == "number") or (shared and type(shared[spec.xKey]) == "number")
-    local hasY = (layout and type(layout[spec.yKey]) == "number") or (shared and type(shared[spec.yKey]) == "number")
-    local x = (layout and type(layout[spec.xKey]) == "number" and layout[spec.xKey])
-        or (shared and type(shared[spec.xKey]) == "number" and shared[spec.xKey])
-        or baseX
-    local y = (layout and type(layout[spec.yKey]) == "number" and layout[spec.yKey])
-        or (shared and type(shared[spec.yKey]) == "number" and shared[spec.yKey])
-        or baseY
-    if kind == "buff" and not hasY then
-        y = baseY + Clamp(shared and shared.buffOffsetY, 30, -4096, 4096)
-    end
-    if not hasX and kind == "buff" then
-        x = baseX + Clamp(shared and shared.buffOffsetX, 0, -4096, 4096)
-    end
-
-    local size = (layout and type(layout[spec.sizeKey]) == "number" and layout[spec.sizeKey])
-        or (shared and type(shared[spec.sizeKey]) == "number" and shared[spec.sizeKey])
-        or (layout and type(layout.iconSize) == "number" and layout.iconSize)
-        or (shared and type(shared.iconSize) == "number" and shared.iconSize)
-        or 26
-    local iconZoom = (layout and type(layout[spec.iconZoomKey]) == "number" and layout[spec.iconZoomKey])
-        or (shared and type(shared[spec.iconZoomKey]) == "number" and shared[spec.iconZoomKey])
-        or (shared and type(shared.iconZoom) == "number" and shared.iconZoom)
-        or 100
-    local iconShape = (layout and type(layout[spec.iconShapeKey]) == "string" and layout[spec.iconShapeKey])
-        or (shared and type(shared[spec.iconShapeKey]) == "string" and shared[spec.iconShapeKey])
-        or (shared and type(shared.iconShape) == "string" and shared.iconShape)
-        or "RECTANGLE"
-
-    -- Per lane like perRow below, with the legacy unit-wide `spacing` as the
-    -- fallback so untouched profiles keep the gap they already had.
-    local spacing = (spec.spacingKey and layout and type(layout[spec.spacingKey]) == "number" and layout[spec.spacingKey])
-        or (spec.spacingKey and shared and type(shared[spec.spacingKey]) == "number" and shared[spec.spacingKey])
-        or ReadNumber(shared, layout, "spacing", 2, 0, 64)
+    local x = layout and layout[spec.xKey] or 0
+    local y = layout and layout[spec.yKey] or 0
+    local size = layout and layout[spec.sizeKey] or 26
+    local iconZoom = layout and layout[spec.iconZoomKey] or 100
+    local shapes = type(shared) == "table" and shared.appearanceIconShapes or nil
+    local iconShape = type(shapes) == "table" and shapes[kind] or "RECTANGLE"
+    local spacing = layout and layout[spec.spacingKey] or 2
     spacing = Clamp(spacing, 2, 0, 64)
     local perRow = (ls and type(ls[spec.perRowKey]) == "number" and ls[spec.perRowKey])
-        or (shared and type(shared[spec.perRowKey]) == "number" and shared[spec.perRowKey])
-        or (ls and type(ls.perRow) == "number" and ls.perRow)
-        or (shared and shared.perRow)
         or 12
     local maxN = (ls and type(ls[spec.maxKey]) == "number" and ls[spec.maxKey])
-        or (shared and shared[spec.maxKey])
-        or (shared and shared.maxIcons)
         or 12
     local growth = (ls and ls[spec.growthKey])
-        or (shared and shared[spec.growthKey])
-        or (ls and ls.growth)
-        or (shared and shared.growth)
         or "RIGHT"
     if growth ~= "RIGHT" and growth ~= "LEFT" and growth ~= "UP" and growth ~= "DOWN" then growth = "RIGHT" end
     local rowWrap = (ls and ls[spec.wrapKey])
-        or (shared and shared[spec.wrapKey])
-        or (ls and ls.rowWrap)
-        or (shared and shared.rowWrap)
         or "DOWN"
     if rowWrap ~= "UP" and rowWrap ~= "DOWN" then rowWrap = "DOWN" end
     local anchor = (layout and layout[spec.anchorKey])
-        or (shared and shared[spec.anchorKey])
         or spec.defaultAnchor
         or "TOPLEFT"
     if not AURA_TEXT_ANCHOR_OK[anchor] then
         anchor = spec.defaultAnchor or "TOPLEFT"
     end
     local layer = (layout and layout[spec.layerKey] ~= nil and layout[spec.layerKey])
-        or (shared and shared[spec.layerKey])
         or spec.defaultLayer
         or 5
 
@@ -712,12 +666,13 @@ local function ReadGroupConfig(unit, kind)
         size = Clamp(size, 26, 1, 128),
         iconZoom = Clamp(iconZoom, 100, 100, 200),
         iconShape = iconShape,
+        padding = Clamp(layout and layout[spec.paddingKey], 0, 0, 16),
         spacing = spacing,
         perRow = Clamp(perRow, 12, 1, 40),
         max = Clamp(maxN, 12, 0, 80),
         growth = growth,
         rowWrap = rowWrap,
-        show = shared and shared[spec.showKey] ~= false,
+        show = not ls or ls[spec.showKey] ~= false,
     }
 end
 
@@ -831,6 +786,7 @@ end
 local function FallbackMetrics(cfg)
     local xSign, ySign, vertical, initialAnchor = GrowthParts(cfg and cfg.growth, cfg and cfg.rowWrap)
     local laneW, laneH = GridDimensions(cfg and cfg.max, cfg and cfg.perRow, cfg and cfg.size, cfg and cfg.spacing, vertical)
+    local padding = Clamp(cfg and cfg.padding, 0, 0, 16)
     return {
         enabled = cfg and cfg.show == true,
         num = cfg and Round(cfg.max) or 0,
@@ -840,8 +796,9 @@ local function FallbackMetrics(cfg)
         spacing = cfg and cfg.spacing or 2,
         step = ((cfg and cfg.size) or 26) + ((cfg and cfg.spacing) or 2),
         perRow = cfg and cfg.perRow or 12,
-        width = laneW,
-        height = laneH,
+        padding = padding,
+        width = laneW + 2 * padding,
+        height = laneH + 2 * padding,
         growthX = xSign,
         growthY = ySign,
         verticalGrowth = vertical == true,
@@ -873,24 +830,9 @@ end
 --- lane in edit mode, promote the effective runtime position back into the
 --- per-unit layout so future edits are stable and visible in the menu model.
 local function PromoteRuntimeLayout(unit, kind)
-    kind = NormalizeKind(kind or rawget(_G, "MSUF_EM2_ActiveAuraGroup"))
-    local spec = GROUPS[kind]
-    if spec and spec.customIndex then return end
-    local auras, shared = EnsureDB()
-    local layout = GetLayout(auras, unit, true)
-    if not layout or not shared then return end
-
-    local hasGroupOffset = type(layout[spec.xKey]) == "number" or type(shared[spec.xKey]) == "number"
-    if hasGroupOffset then
-        local cfg = ReadGroupConfig(unit, kind)
-        layout.offsetX = cfg.x
-        layout.offsetY = cfg.y
-    end
-
-    local hasGroupSize = type(layout[spec.sizeKey]) == "number" or type(shared[spec.sizeKey]) == "number"
-    if hasGroupSize then
-        layout.iconSize = ReadGroupConfig(unit, kind).size
-    end
+    -- Kept as a call-site compatibility no-op. Unit lanes already persist the
+    -- exact lane keys; promoting them into generic unit-wide aliases would
+    -- recreate the retired Shared-era ownership path.
 end
 
 local function ApplyDragUnit(auras, unit, moverKind, x, y)
@@ -1015,27 +957,6 @@ local BeginAuraGroupDrag
 
 local function OpenAuraGroupPopup(group)
     if not (group and IsEditModeActive() and not IsConfigBlocked()) then return false end
-    local kind = group._msufA3MoverKind
-    if type(kind) == "string" and kind:match("^custom[1-4]$") then
-        local menu = MSUF and MSUF.MSUF2
-        local unit = group._msufA3Unit
-        local scope = BOSS_UNITS[unit] and "boss" or unit
-        if menu then
-            menu.unitAuraTabSelection = menu.unitAuraTabSelection or {}
-            menu.unitAuraTabSelection[scope] = kind
-            if type(menu.SelectPage) == "function" then
-                ExportPublic("MSUF_EM2_MenuFocusRequest", {
-                    pageKey = "uf_" .. tostring(scope),
-                    sectionId = "auras",
-                    component = kind,
-                    source = "edit-mode-custom-aura",
-                    explicit = true,
-                })
-                menu.SelectPage("uf_" .. tostring(scope))
-                return true
-            end
-        end
-    end
     if type(_G.MSUF_OpenAuras3PositionPopup) ~= "function" then return false end
     ExportPublic("MSUF_EM2_ActiveAuraGroup", group._msufA3MoverKind)
     ExportPublic("MSUF_EM2_ActiveAuraUnit", group._msufA3Unit)
@@ -1889,9 +1810,15 @@ local function ApplyEditModeCustomEffect(group, frame, item)
     root:ClearAllPoints()
     root:SetAllPoints(health or frame)
     if root.SetFrameLevel then
-        root:SetFrameLevel((group:GetFrameLevel() or 900) + SPELL_FRAME_EFFECT_BASE_OFFSET
-            + (11 - Clamp(effect.priority, 5, 1, 10))
-            + Clamp(effect.layer, 0, 0, 30))
+        local priority = Clamp(effect.priority, 5, 1, 10)
+        local layer = Clamp(effect.layer, 0, 0, 30)
+        local targetOwner = health
+        if kind == "namecolor" then
+            targetOwner = nameSource and nameSource.GetParent and nameSource:GetParent() or frame
+        end
+        root:SetFrameLevel(FrameLayers.AuraEffectLevel and FrameLayers.AuraEffectLevel(layer, priority, targetOwner)
+            or FrameLayers.ElementLevel and FrameLayers.ElementLevel(layer, 0, 11 - priority)
+            or ((group:GetFrameLevel() or 900) + SPELL_FRAME_EFFECT_BASE_OFFSET + (11 - priority) + layer))
     end
     root.tint:Hide()
     for i = 1, 4 do root.edges[i]:Hide() end

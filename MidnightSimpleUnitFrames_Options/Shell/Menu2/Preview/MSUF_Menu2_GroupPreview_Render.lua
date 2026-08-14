@@ -1211,6 +1211,19 @@ local function FinalizeScene(scene)
     local function ElementLevel(layer, fallback, detail)
         return PreviewElementLevel(mock, S.Layers, layer, fallback, detail)
     end
+    local function SelectedSpellEffectLevel(layer, priority)
+        local level = ElementLevel(layer, 0, 11 - priority)
+        local effect = scene.selectedSpellEffect
+        if type(effect) == "table" and tostring(effect.type or "none"):lower() == "namecolor" then
+            -- The shared renderer already places Name Overlay above its source.
+            -- Preserve that one target floor when Group Preview rebases the
+            -- selected effect into its private frame-level band.
+            local nameOwner = mock._nameFS and mock._nameFS.GetParent and mock._nameFS:GetParent()
+            local nameLevel = nameOwner and nameOwner.GetFrameLevel and tonumber(nameOwner:GetFrameLevel())
+            if nameLevel ~= nil then level = max(level, nameLevel + 1) end
+        end
+        return level
+    end
     PlaceTextHandles(scene)
     local liveStrata, hostStrata = PreviewHostStrata(scene)
     local auraHandles = {
@@ -1268,7 +1281,7 @@ local function FinalizeScene(scene)
         -- produce a negative local offset below the menu mock. Keep the preview
         -- root on the host strata and express priority in a bounded local band.
         ApplyHandleStrata(scene, selectedEffectRoot, "AUTO", liveStrata, hostStrata)
-        SetPreviewFrameLevel(selectedEffectRoot, ElementLevel(effectLayer, 0, 11 - priority))
+        SetPreviewFrameLevel(selectedEffectRoot, SelectedSpellEffectLevel(effectLayer, priority))
     end
     if selectedEffectOwner then
         SetPreviewFrameLevel(selectedEffectOwner, baseLevel + 1)
@@ -1918,13 +1931,24 @@ function Render.Install(box, ctx, deps)
         end
         root:Hide()
     end
+    local function SuspendRuntimeSpellPreview(handle)
+        local owner = handle and handle._msufSpellPreviewRuntimeOwner
+        local a3 = MSUF and MSUF.MSUF_Auras3
+        local runtime = a3 and a3.SpellIndicators
+        if owner and runtime and type(runtime.HidePreviewFrameEffect) == "function" then
+            runtime.HidePreviewFrameEffect(owner)
+        end
+    end
     function box:SuspendSpellPreviewEffects()
         for _, handle in pairs(self._spellIndicatorHandles or {}) do
+            SuspendRuntimeSpellPreview(handle)
             SuspendSpellPreviewRoot(handle and handle._msufSpellPreviewEffectRoot)
             SuspendSpellPreviewRoot(handle and handle._msufSpellPreviewIconEffectRoot)
         end
+        SuspendRuntimeSpellPreview(spellHandle)
         SuspendSpellPreviewRoot(spellHandle and spellHandle._msufSpellPreviewEffectRoot)
         SuspendSpellPreviewRoot(spellHandle and spellHandle._msufSpellPreviewIconEffectRoot)
+        SuspendRuntimeSpellPreview(selectedSpellEffectOwner)
         SuspendSpellPreviewRoot(selectedSpellEffectOwner and selectedSpellEffectOwner._msufSpellPreviewEffectRoot)
     end
     --- Refresh is menu-only. It reads compiled/runtime-like specs to draw a mock
@@ -2043,7 +2067,27 @@ function Render.Install(box, ctx, deps)
             handle._msufSpellPreviewEffectRoot = root
             return root
         end
+        local function EnsureSpellEffectRuntimeOwner(handle)
+            if not handle then return nil end
+            local owner = handle._msufSpellPreviewRuntimeOwner
+            if not owner then
+                owner = CreateFrame("Frame", nil, mock)
+                owner:EnableMouse(false)
+                handle._msufSpellPreviewRuntimeOwner = owner
+            elseif owner.GetParent and owner:GetParent() ~= mock and owner.SetParent then
+                owner:SetParent(mock)
+            end
+            owner:ClearAllPoints()
+            owner:SetAllPoints(mock)
+            return owner
+        end
         local function HideSpellEffectPreview(handle)
+            local a3 = MSUF and MSUF.MSUF_Auras3
+            local runtime = a3 and a3.SpellIndicators
+            local owner = handle and handle._msufSpellPreviewRuntimeOwner
+            if owner and runtime and type(runtime.HidePreviewFrameEffect) == "function" then
+                runtime.HidePreviewFrameEffect(owner)
+            end
             local root = handle and handle._msufSpellPreviewEffectRoot
             if not root then return end
             StopPreviewAnimation(root._msufSpellPreviewPulse)
@@ -2128,6 +2172,50 @@ function Render.Install(box, ctx, deps)
         end
         local function ApplySpellEffectPreview(handle, effect)
             if not (handle and type(effect) == "table") then return end
+            local a3 = MSUF and MSUF.MSUF_Auras3
+            local runtime = a3 and a3.SpellIndicators
+            if runtime and type(runtime.ApplyPreviewFrameEffect) == "function" then
+                -- The Group mock predates the runtime-shaped health/name keys.
+                -- Publish the exact native surfaces expected by the shared
+                -- renderer; otherwise it rejects the preview and the legacy
+                -- stretched action-button glow below silently takes over.
+                mock.health = mock._health
+                mock.Name = mock._nameFS
+                local owner = EnsureSpellEffectRuntimeOwner(handle)
+                local legacyRoot = handle._msufSpellPreviewEffectRoot
+                local existingRuntimeRoot = owner and owner._msufA3SpellIndicatorEffectRoot
+                if legacyRoot and legacyRoot ~= existingRuntimeRoot then legacyRoot:Hide() end
+                local previewEffect = owner and (owner._msufSpellPreviewRuntimeEffect or {})
+                if owner then owner._msufSpellPreviewRuntimeEffect = previewEffect end
+                if previewEffect then
+                    local kind = tostring(effect.type or "none"):lower()
+                    previewEffect.type = effect.type
+                    previewEffect.color = effect.color
+                    previewEffect.priority = effect.priority
+                    previewEffect.thickness = max(1, ScaleValue(effect.thickness
+                        or (kind == "glow" and 3 or 2), mock._previewScale or 1, 1))
+                    previewEffect.layer = effect.layer
+                    previewEffect.strata = effect.strata or handle._msufSpellIndicatorStrata
+                    previewEffect.tintAlpha = effect.tintAlpha
+                    if runtime.ApplyPreviewFrameEffect(owner, previewEffect, mock) then
+                        local runtimeRoot = owner._msufA3SpellIndicatorEffectRoot
+                        if runtimeRoot then
+                            -- FinalizeScene rebases this established preview
+                            -- field into the local layer band after painting.
+                            handle._msufSpellPreviewEffectRoot = runtimeRoot
+                            runtimeRoot._msufSpellPreviewStrata = previewEffect.strata
+                            runtimeRoot._msufSpellPreviewPriority = max(1,
+                                min(10, floor((tonumber(previewEffect.priority) or 5) + 0.5)))
+                            runtimeRoot._msufSpellPreviewLayer = S.ClampLayer(previewEffect.layer, 0)
+                            return
+                        end
+                    end
+                end
+                -- Runtime is authoritative when present. Never paint the old
+                -- square IconAlert fallback after a rejected runtime apply.
+                HideSpellEffectPreview(handle)
+                return
+            end
             local root = EnsureSpellEffectPreview(handle)
             local healthBar = SpellPreviewHealthBar()
             local target = SpellPreviewHealthFill()
@@ -2162,7 +2250,8 @@ function Render.Install(box, ctx, deps)
             elseif kind == "namecolor" then
                 SyncSpellPreviewName(root, mock._nameFS, r, g, b, a)
             elseif kind == "glow" then
-                local padding = max(1, ScaleValue((tonumber(effect.thickness) or 3) + 2, mock._previewScale or 1, 1))
+                local padding = max(1,
+                    ScaleValue((tonumber(effect.thickness) or 3) + 2, mock._previewScale or 1, 1))
                 ShowPreviewGlow(root, target, r, g, b, a, padding)
             elseif kind == "border" or kind == "pulse" then
                 LayoutSpellPreviewEdges(root, target, effect, r, g, b, a)
@@ -2284,6 +2373,10 @@ function Render.Install(box, ctx, deps)
         mock._health:SetValue(hpPct)
         local hpReverse = runtimeHealth.reverse == true or (not runtimeSpec and conf.reverseFill == true)
         if mock._health.SetReverseFill then mock._health:SetReverseFill(hpReverse) end
+        if MSUF.UFBarTextCommon and MSUF.UFBarTextCommon.ApplyBarGradient then
+            MSUF.UFBarTextCommon.ApplyBarGradient(mock, mock._health,
+                runtimeHealth.barGradient, "_msufGFPreviewHealthGradients")
+        end
         mock._healthBg:SetTexture(bgTex)
         local hbCfg = runtimeHealth.background or {}
         local hbr, hbg, hbb = hbCfg.r or conf.bgR or 0.06, hbCfg.g or conf.bgG or 0.06, hbCfg.b or conf.bgB or 0.07
@@ -2508,6 +2601,11 @@ function Render.Install(box, ctx, deps)
         else
             mock._power:Hide()
             mock._powerBg:Hide()
+        end
+        if MSUF.UFBarTextCommon and MSUF.UFBarTextCommon.ApplyBarGradient then
+            MSUF.UFBarTextCommon.ApplyBarGradient(mock, mock._power,
+                powerH > 0 and LayerOn("power") and runtimePower.barGradient or nil,
+                "_msufGFPreviewPowerGradients")
         end
         end
         scene.previewScale = previewScale
@@ -2962,10 +3060,41 @@ function Render.Install(box, ctx, deps)
                 if spellTex then
                     spellTex:SetTexture(WHITE8X8)
                     spellTex:SetTexCoord(0, 1, 0, 1)
-                    spellTex:SetVertexColor(spellR, spellG, spellB, 1)
+                    spellTex:SetVertexColor(spellR * 0.18, spellG * 0.18, spellB * 0.18,
+                        ((color and color[4]) or 1) * 0.55)
                     spellTex:ClearAllPoints()
                     spellTex:SetAllPoints(handle)
                     spellTex:Show()
+                end
+                if spellDurationBar then
+                    -- Menu previews have no live AuraDurationObject. Show one
+                    -- representative native-fill state without adding preview
+                    -- animation or recurring work.
+                    spellDurationBar:SetTexture(WHITE8X8)
+                    spellDurationBar:SetTexCoord(0, 1, 0, 1)
+                    spellDurationBar:SetVertexColor(spellR, spellG, spellB, (color and color[4]) or 1)
+                    spellDurationBar:ClearAllPoints()
+                    local reverseFill = exactSlot and placed.durationBarReverseFill == true
+                        or (not exactSlot and tostring(placed.growth or "RIGHTDOWN"):upper():sub(1, 4) == "LEFT")
+                    local edge = reverseFill and "RIGHT" or "LEFT"
+                    spellDurationBar:SetPoint("TOP" .. edge, handle, "TOP" .. edge, 0, 0)
+                    spellDurationBar:SetPoint("BOTTOM" .. edge, handle, "BOTTOM" .. edge, 0, 0)
+                    spellDurationBar:SetWidth(max(1, barW * 0.68))
+                    spellDurationBar:Show()
+                end
+                local showTimer = exactSlot and placed.showCooldownText == true
+                    or (not exactSlot and placed.barShowTimer == true)
+                if spellTimer and showTimer then
+                    local cooldownSize = max(6, ScaleValue(appearance.cooldownSize or placed.cooldownSize or 8,
+                        previewScale, 6))
+                    SetPreviewFont(spellTimer, cooldownSize)
+                    spellTimer:SetTextColor(1, 1, 1, 1)
+                    PlaceAuraPreviewText(spellTimer, handle,
+                        RuntimeAuraTextAnchor(exactSlot and placed.cooldownAnchor or placed.barTimerAnchor, "CENTER"),
+                        ConfigToOffset(exactSlot and placed.cooldownX or placed.barTimerX or 0, previewScale),
+                        ConfigToOffset(exactSlot and placed.cooldownY or placed.barTimerY or 0, previewScale))
+                    spellTimer:SetText("12")
+                    spellTimer:Show()
                 end
             elseif spellType == "square" then
                 handle:SetSize(spellSize, spellSize)

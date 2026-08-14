@@ -1263,13 +1263,6 @@ local function InstallStateHooks()
       if active then EnterEditMode() else ExitEditMode() end
     end)
   end
-
-  if type(_G.MSUF_SetMSUFEditModeDirect) == "function" and not _G.MSUF_GF_EM2_DirectHooked then
-    ExportPublic("MSUF_GF_EM2_DirectHooked", true)
-    hooksecurefunc("MSUF_SetMSUFEditModeDirect", function(active)
-      if active then EnterEditMode() else ExitEditMode() end
-    end)
-  end
 end
 
 local function UpdateGFButton()

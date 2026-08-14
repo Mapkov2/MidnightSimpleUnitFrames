@@ -37,7 +37,6 @@ local GF_STATUS_ICON_SPECS = Specs.GF_STATUS_ICON_SPECS or {}
 local GF_STATUS_ICON_VALUES = Specs.GF_STATUS_ICON_VALUES or {}
 local PLACED_INDICATOR_TYPES = Specs.PLACED_INDICATOR_TYPES or {}
 local FRAME_EFFECT_TYPES = Specs.FRAME_EFFECT_TYPES or {}
-local FRAME_EFFECT_TIMINGS = Specs.FRAME_EFFECT_TIMINGS or {}
 local ICON_EFFECT_TYPES = Specs.ICON_EFFECT_TYPES or {}
 local SPELL_GROWTH_VALUES = Specs.SPELL_GROWTH_VALUES or {}
 local CI_SLOT_VALUES = Specs.CI_SLOT_VALUES or {}
@@ -518,7 +517,7 @@ local function SetFrameProvider(kind, provider)
         conf.enabled = nextEnabled
         if not nextEnabled then conf.blizzardFallbackMode = provider end
         QueueGF(kind, "rebuild")
-        if enabledChanged and type(_G.MSUF_ShowGroupFrameReloadRequiredPopup) == "function" then
+        if (enabledChanged or fallbackChanged) and type(_G.MSUF_ShowGroupFrameReloadRequiredPopup) == "function" then
             _G.MSUF_ShowGroupFrameReloadRequiredPopup()
         end
         return true
@@ -545,8 +544,8 @@ local GF_SHARED_COLOR_KEYS = M.KeySetFromWords [[
     ciAggroColorR ciAggroColorG ciAggroColorB
 ]]
 local GF_COPY_CATEGORIES = {
-    { key = "general", label = "Basics", keys = WL [[enabled blizzardFallbackMode showPlayer showSolo clickCastEnabled width height spacing growth groupFilter sortMode sortByRole roleOrder playerFirstInRole unitsPerColumn maxColumns maxFrames autoTanks preserveRaidGroups reverseFill smoothFill hideInClientScene hideInHousing hideOfflineEnabled hideOfflineInCombat hideOfflineDelay frameScaleEnabled frameScaleMode frameScaleManual scaleAt10 scaleAt20 scaleAt25 scaleOver25]] },
-    { key = "health", label = "Health & Bars", keys = WL [[gfBarMode healthColorMode healthCustomR healthCustomG healthCustomB gfDarkR gfDarkG gfDarkB gfUnifiedR gfUnifiedG gfUnifiedB barTexture barBackgroundTexture barBgTexture hpBarAlpha hpBgAlpha alphaExcludeTextPortrait powerBarEnabled powerHeight showPower showPowerText powerTextLeft powerTextCenter powerTextRight powerTextLeftHidePercentSymbol powerTextCenterHidePercentSymbol powerTextRightHidePercentSymbol powerTextDelimiter powerFontSize powerOffsetX powerOffsetY powerTextLayer powerSmoothFill powerShowTank powerShowHealer powerShowDamager powerBarDetached powerBarBorderEnabled powerBarBorderThickness embedPowerBarIntoHealth barOutlineTexture oocFadeEnabled oocFadeAlpha healthFadeEnabled healthFadeThreshold healthFadeAlpha deadBgEnabled deadBgOffline deadBgR deadBgG deadBgB deadBgA powerTextLeftFontSize powerTextCenterFontSize powerTextRightFontSize powerTextLeftOffsetX powerTextLeftOffsetY powerTextCenterOffsetX powerTextCenterOffsetY powerTextRightOffsetX powerTextRightOffsetY]], prefix = WL [[detachedPower]] },
+    { key = "general", label = "Basics", keys = WL [[enabled blizzardFallbackMode showPlayer showSolo clickCastEnabled width height spacing growth groupFilter sortMode sortByRole roleOrder playerFirstInRole unitsPerColumn maxColumns maxFrames autoTanks preserveRaidGroups reverseFill smoothFill chunkedFill hideInClientScene hideInHousing hideOfflineEnabled hideOfflineInCombat hideOfflineDelay frameScaleEnabled frameScaleMode frameScaleManual scaleAt10 scaleAt20 scaleAt25 scaleOver25]] },
+    { key = "health", label = "Health & Bars", keys = WL [[gfBarMode healthColorMode healthCustomR healthCustomG healthCustomB gfDarkR gfDarkG gfDarkB gfUnifiedR gfUnifiedG gfUnifiedB barTexture barBackgroundTexture barBgTexture hpBarAlpha hpBgAlpha alphaExcludeTextPortrait powerBarEnabled powerHeight showPower showPowerText powerTextLeft powerTextCenter powerTextRight powerTextLeftHidePercentSymbol powerTextCenterHidePercentSymbol powerTextRightHidePercentSymbol powerTextDelimiter powerFontSize powerOffsetX powerOffsetY powerTextLayer powerSmoothFill powerChunkedFill powerShowTank powerShowHealer powerShowDamager powerBarDetached powerBarBorderEnabled powerBarBorderThickness embedPowerBarIntoHealth barOutlineTexture oocFadeEnabled oocFadeAlpha healthFadeEnabled healthFadeThreshold healthFadeAlpha deadBgEnabled deadBgOffline deadBgR deadBgG deadBgB deadBgA powerTextLeftFontSize powerTextCenterFontSize powerTextRightFontSize powerTextLeftOffsetX powerTextLeftOffsetY powerTextCenterOffsetX powerTextCenterOffsetY powerTextRightOffsetX powerTextRightOffsetY]], prefix = WL [[detachedPower]] },
     { key = "dispel", label = "Dispel Overlay", keys = WL [[dispelOverlayEnabled dispelOverlayStyle dispelOverlayOnHealth dispelOverlayAlpha dispelOverlayTrigger dispelOverlayLayer dispelOverlayStrata]], prefix = WL [[dispelSymbol]] },
     { key = "text", label = "Text & Name", keys = WL [[showName hideNameOnDeadOffline nameFontSize nameAnchor nameOffsetX nameOffsetY nameTextLayer nameColorMode nameColorR nameColorG nameColorB nameShortenEnabled nameClipSide nameMaxChars nameNoEllipsis showHPText hpFontSize textLeft textCenter textRight hpTextLeftHidePercentSymbol hpTextCenterHidePercentSymbol hpTextRightHidePercentSymbol hpTextLeftAbsorbIcon hpTextCenterAbsorbIcon hpTextRightAbsorbIcon textDelimiter hpTextReverse healthTextDecimals hpTextDecimals hpFullValueShort hpAbsorbIcon hpOffsetX hpOffsetY textLayer hpTextLeftFontSize hpTextCenterFontSize hpTextRightFontSize hpTextLeftOffsetX hpTextLeftOffsetY hpTextCenterOffsetX hpTextCenterOffsetY hpTextRightOffsetX hpTextRightOffsetY]] },
     { key = "font", label = "Font Override", keys = WL [[fontOverride fontOutline useGlobalFontColor fontR fontG fontB colorHealthTextByHealth colorPowerTextByType powerTextColorByType]] },
@@ -1816,7 +1815,9 @@ local function SpellSpecValues()
     if si and type(si.SpecInfo) == "table" then
         local specs = {}
         for specKey, info in pairs(si.SpecInfo) do
-            specs[#specs + 1] = SpellSpecOption(specKey, info)
+            if type(info) ~= "table" or info.customOnly ~= true then
+                specs[#specs + 1] = SpellSpecOption(specKey, info)
+            end
         end
         table.sort(specs, function(a, b)
             local left, right = tostring(a.text), tostring(b.text)
@@ -1839,6 +1840,12 @@ local function SpellTrackedSpecValues()
     end
     if #values == 0 then values[1] = { value = "", text = "No supported specs", disabled = true } end
     return values
+end
+local function IsAllSpecsSpellSpec(specKey)
+    local gf = GF()
+    local si = gf and gf.SpellIndicators
+    local info = specKey and si and si.SpecInfo and si.SpecInfo[specKey]
+    return type(info) == "table" and info.universal == true
 end
 local function CurrentSpellMultiSpec(kind)
     M.gfSpellMultiSpecSelection = M.gfSpellMultiSpecSelection or {}
@@ -1902,9 +1909,9 @@ end
 local function SpellSelectionKey(kind, specKey)
     return tostring(kind or "") .. "\030" .. tostring(specKey or "")
 end
-local function SetCurrentSpellAura(kind, auraName)
+local function SetCurrentSpellAura(kind, auraName, specKey)
     M.gfSpellIndicatorSelection = M.gfSpellIndicatorSelection or {}
-    local specKey = EffectiveSpellSpec(kind)
+    specKey = specKey or EffectiveSpellSpec(kind)
     if specKey then M.gfSpellIndicatorSelection[SpellSelectionKey(kind, specKey)] = auraName or "" end
     M.gfSpellIndicatorSelection[kind] = auraName or ""
 end
@@ -2112,7 +2119,6 @@ M.Assign(GroupPage, {
     GF_STATUS_ICON_VALUES = GF_STATUS_ICON_VALUES,
     PLACED_INDICATOR_TYPES = PLACED_INDICATOR_TYPES,
     FRAME_EFFECT_TYPES = FRAME_EFFECT_TYPES,
-    FRAME_EFFECT_TIMINGS = FRAME_EFFECT_TIMINGS,
     ICON_EFFECT_TYPES = ICON_EFFECT_TYPES,
     SPELL_GROWTH_VALUES = SPELL_GROWTH_VALUES,
     CI_SLOT_VALUES = CI_SLOT_VALUES,
@@ -2143,6 +2149,7 @@ M.Assign(GroupPage, {
     QueueSpellIndicators = QueueSpellIndicators,
     SpellSpecValues = SpellSpecValues,
     SpellTrackedSpecValues = SpellTrackedSpecValues,
+    IsAllSpecsSpellSpec = IsAllSpecsSpellSpec,
     CurrentSpellMultiSpec = CurrentSpellMultiSpec,
     EffectiveSpellSpec = EffectiveSpellSpec,
     SpellAuraValues = SpellAuraValues,

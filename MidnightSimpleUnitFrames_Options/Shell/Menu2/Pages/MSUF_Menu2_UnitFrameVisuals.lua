@@ -517,6 +517,26 @@ local function BuildPower(ctx, builder, unit)
             slider = function(s, i) return BindPowerSlider(parent, addFn, s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10], s[11], s[12], s.opts), s[13] or s[9] or i end,
         })
     end
+    local function SetPowerFillMode(key, peerKey, value, reason, historyLabel)
+        value = value == true
+        local function Write()
+            local conf = GetConf(unit)
+            local changed = conf[key] ~= value
+            conf[key] = value
+            if value and conf[peerKey] ~= false then
+                conf[peerKey] = false
+                changed = true
+            end
+            if not changed then return false end
+            M.RequestUnitApply(unit, reason, POWER_OPTS)
+            if M.RequestRefresh then M.RequestRefresh(ctx, "unit-power-fill-mode") end
+            return true
+        end
+        if type(M.RunWithHistory) == "function" then
+            return M.RunWithHistory(historyLabel, "unit:" .. tostring(unit) .. ":powerFillMode", Write)
+        end
+        return Write()
+    end
     local powerNotice, _, powerNoticeButton = CreateSectionNotice(sec, powerNoticeY, "Show Power", 126)
     if powerNoticeButton then
         local powerShortcutMeta
@@ -559,6 +579,7 @@ local function BuildPower(ctx, builder, unit)
             if not (general.powerBarBgMatchBarColor == true or bars.powerBarBgMatchBarColor == true) then
                 refs[#refs + 1] = "bar.power_background"
             end
+            refs[#refs + 1] = "bar.power_loss"
             return refs
         end, {
             title = "Power Bar Colors",
@@ -591,9 +612,16 @@ local function BuildPower(ctx, builder, unit)
         end
         RefreshPowerEnabled()
     end, SettingMeta(ctx, "power.powerBarBorderEnabled", unit, "powerBarBorderEnabled"))
-    BuildPowerControls(borderCard, AddPowerControl, {
-        { "toggle", "Smooth fill", 16, -158, rightW - 32, "powerSmoothFill", false, "MSUF2_POWER_SMOOTH" },
-    })
+    local smoothFill = AddPowerControl(W.ToggleAt(borderCard, "Smooth fill", 16, -158, rightW - 32))
+    M.BindBoolWidget(ctx, smoothFill,
+        function() return ReadBool(unit, "powerSmoothFill", false) end,
+        function(v) SetPowerFillMode("powerSmoothFill", "powerChunkedFill", v, "MSUF2_POWER_SMOOTH", "Smooth power fill") end,
+        SettingMeta(ctx, "power.powerSmoothFill", unit, "powerSmoothFill"))
+    local chunkedFill = AddPowerControl(W.ToggleAt(borderCard, "Chunked power loss", 16, -188, rightW - 32))
+    M.BindBoolWidget(ctx, chunkedFill,
+        function() return ReadBool(unit, "powerChunkedFill", false) end,
+        function(v) SetPowerFillMode("powerChunkedFill", "powerSmoothFill", v, "MSUF2_POWER_CHUNKED", "Chunked power loss") end,
+        SettingMeta(ctx, "power.powerChunkedFill", unit, "powerChunkedFill"))
     local attachedPowerFields = BuildPowerControls(mainCard, AddPowerControl, {
         { "slider", "Power bar height", 16, -76, cardW - 72, 1, 20, 1, "powerBarHeight", 3, "MSUF2_POWER_HEIGHT",
         function()
@@ -1077,6 +1105,10 @@ local function BuildCastbar(ctx, builder, unit)
     local provider
     if canUseBlizzardProvider then
         provider = W.Dropdown(providerCard, "Castbar provider", CASTBAR_BACKEND_VALUES, min(260, controlWRight))
+        -- Player castbar ownership is independent from Player UnitFrame
+        -- ownership, so the page-level frame-disabled gate must not lock this
+        -- provider selector while the MSUF Player frame is off.
+        provider._msuf2UnitFrameGateAlwaysEnabled = true
         W.MoveWidget(provider, providerCard, 16, -52, min(260, controlWRight))
         W.AttachUnitEditFocus(provider, unit, "castbar")
         M.BindDropdownWidget(ctx, provider,

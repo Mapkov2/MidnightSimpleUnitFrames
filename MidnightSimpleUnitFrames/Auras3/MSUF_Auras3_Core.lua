@@ -79,7 +79,7 @@ local function NewPlayerDefensiveContainer()
         placed = {
             type = "icon", anchor = "TOPRIGHT", growth = "LEFTDOWN",
             x = 0, y = 0, size = 24, barWidth = 54,
-            max = 8, perRow = 4, spacing = 2,
+            max = 8, perRow = 4, spacing = 2, stylePadding = 0,
             showCooldown = true, showCooldownSwipe = true, showStacks = true,
         },
         layer = 9,
@@ -104,7 +104,7 @@ local function EnsurePlayerDefensiveCoreDefault(auras, factoryEnabled)
         item = NewPlayerDefensiveContainer()
         record.items[4] = item
     end
-    local canonicalAuraModel = tonumber(auras.profileModelRevision) == 1
+    local canonicalAuraModel = (tonumber(auras.profileModelRevision) or 0) >= 1
     if canonicalAuraModel then
         if type(factoryEnabled) == "boolean" then item.enabled = factoryEnabled end
         item[PLAYER_DEFENSIVE_CORE_DEFAULT_MARKER] = nil
@@ -250,7 +250,10 @@ function A3.EnsureDB()
         end
         db.auras2 = nil
         current._msufAurasRuntime = nil
-        if tonumber(current.profileModelRevision) == 1 then
+        local materialize = (type(MSUF) == "table" and MSUF.MSUF_MaterializeUnitAuraLaneOwners)
+            or _G.MSUF_MaterializeUnitAuraLaneOwners
+        if type(materialize) == "function" then materialize(current) end
+        if tonumber(current.profileModelRevision) and tonumber(current.profileModelRevision) >= 1 then
             -- Canonical profiles already use frame-owned Aura lists. Running
             -- the retired fan-out would only repopulate compatibility records
             -- and migration markers in a freshly reset tree.
@@ -278,7 +281,10 @@ function A3.EnsureDB()
     db.auras3 = current
     db.auras2 = nil
     current._msufAurasRuntime = nil
-    if tonumber(current.profileModelRevision) == 1 then
+    local materialize = (type(MSUF) == "table" and MSUF.MSUF_MaterializeUnitAuraLaneOwners)
+        or _G.MSUF_MaterializeUnitAuraLaneOwners
+    if type(materialize) == "function" then materialize(current) end
+    if tonumber(current.profileModelRevision) and tonumber(current.profileModelRevision) >= 1 then
         current._msufA3FrameOwnedLists_v1 = nil
     else
         MigrateFrameOwnedAuraLists(current)

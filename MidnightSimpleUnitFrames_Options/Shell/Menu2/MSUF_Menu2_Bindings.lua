@@ -1184,13 +1184,13 @@ local PAGE_RESET_INFO = {
     gf_priority = GROUP_RESET_INFO,
     opt_bars = ResetInfo("Bars", "bars", "shared bar textures, gradients, rounded frame corners, absorb display, outlines, highlight borders, power smoothing and all per-unit/group bar overrides"),
     opt_fonts = ResetInfo("Fonts", "fonts", "shared font family, text style, name/power text coloring, name shortening and all per-unit/group font overrides"),
-    auras3 = ResetInfo("Aura Style", "auras", AURA_STYLE_SUMMARY),
-    auras3_buffs = ResetInfo("Aura Buffs", "auras", "Buff basics, cooldown and stack styling"),
-    auras3_debuffs = ResetInfo("Aura Debuffs", "auras", "Debuff basics, cooldown and stack styling"),
-    auras3_custom = ResetInfo("Custom Auras", "auras", "named UnitFrame SpellID displays, icon placement and Full-Frame effects"),
-    auras3_rendering = ResetInfo("Aura Style", "auras", AURA_STYLE_SUMMARY),
-    auras3_filters = ResetInfo("Aura Filters", "auras", "scope-aware Buff and Debuff filters and blacklists"),
-    auras3_styling = ResetInfo("Aura Style", "auras", AURA_STYLE_SUMMARY),
+    auras3 = ResetInfo("Aura Appearance", "auraAppearance", "the currently selected global Aura product appearance only"),
+    auras3_buffs = { label = "Buff Appearance", kind = "auraAppearance", appearanceKind = "buff", summary = "global Buff icon shape, border and shadow appearance" },
+    auras3_debuffs = { label = "Debuff Appearance", kind = "auraAppearance", appearanceKind = "debuff", summary = "global Debuff icon shape, border and shadow appearance" },
+    auras3_custom = ResetInfo("Aura Appearance", "auraAppearance", "the currently selected global Aura product appearance only"),
+    auras3_rendering = ResetInfo("Aura Appearance", "auraAppearance", "the currently selected global Aura product appearance only"),
+    auras3_filters = ResetInfo("Aura Appearance", "auraAppearance", "the currently selected global Aura product appearance only"),
+    auras3_styling = ResetInfo("Aura Appearance", "auraAppearance", "the currently selected global Aura product appearance only"),
     opt_castbar = ResetInfo("Castbar", "castbar", "global castbar behavior, textures, boss castbar and interrupt indicator settings"),
     opt_colors = ResetInfo("Colors", "colors", "frame colors, group-frame colors, class/NPC colors, power colors, castbar colors, aura colors and gameplay color settings"),
     opt_misc = ResetInfo("Miscellaneous", "misc", "language/menu behavior, update pacing, tooltips, Blizzard-frame handling, minimap icon, sounds and range-fade settings"),
@@ -1216,7 +1216,7 @@ local BARS_GENERAL_KEYS = KSW [[
     overAbsorbOverlay fullHealthAbsorbStripe absorbBarTexture healAbsorbBarTexture dispelBorderTrigger bossTargetOutlineMode
     bossTargetHighlightEnabled hlPrioEnabled hlPrioOrder highlightPrioEnabled highlightPrioOrder roundedFramesEnabled roundedUnitFrames
     roundedGroupFrames roundedPowerBars roundedCastbars roundedClassResources roundedMouseover barOutlineColorR barOutlineColorG
-    barOutlineColorB barOutlineColorA
+    barOutlineColorB barOutlineColorA healthLossColorR healthLossColorG healthLossColorB powerLossColorR powerLossColorG powerLossColorB
 ]]
 local BARS_SCOPE_KEYS = KSW [[
     hlOverride hpPowerTextOverride barTexture barBackgroundTexture barBgTexture enableAbsorbBar absorbTextMode absorbAnchorMode
@@ -1225,11 +1225,11 @@ local BARS_SCOPE_KEYS = KSW [[
     overAbsorbOverlay fullHealthAbsorbStripe absorbBarOpacity healAbsorbBarOpacity barOutlineThickness barOutlineLayer barOutlineStrata barOutlineTexture highlightBorderThickness hlAggroSize
     aggroOutlineMode dispelOutlineMode dispelBorderTrigger
     purgeOutlineMode hlPrioEnabled hlPrioOrder enableGradient enablePowerGradient gradientStrength
-    gradientDirection gradientDirRight gradientDirLeft gradientDirUp gradientDirDown powerSmoothFill
+    gradientDirection gradientDirRight gradientDirLeft gradientDirUp gradientDirDown powerSmoothFill powerChunkedFill
     barOutlineColorR barOutlineColorG barOutlineColorB barOutlineColorA
 ]]
 local BARS_TABLE_KEYS = KSW [[
-    barOutlineThickness barOutlineLayer barOutlineStrata barOutlineTexture smoothPowerBar realtimePowerText roundedFramesEnabled roundedUnitFrames
+    barOutlineThickness barOutlineLayer barOutlineStrata barOutlineTexture smoothPowerBar chunkedPowerBar realtimePowerText roundedFramesEnabled roundedUnitFrames
     roundedGroupFrames roundedPowerBars roundedCastbars roundedClassResources roundedMouseover
 ]]
 local FONT_GENERAL_KEYS = KSW "fontKey boldText noOutline textBackdrop fontMonochrome fontShadowStrength fontShadowOpacity fontShadowDistance fontTextAlpha fontBaselineOffset nameClassColor npcNameRed nameNpcClassColor colorPowerTextByType colorHealthTextByHealth nameColorMode nameColorR nameColorG nameColorB"
@@ -1244,6 +1244,7 @@ local MISC_GENERAL_KEYS = KSW [[
     menuLocale slashMenuSnapEnabled hideAdvancedMenu showWelcomeMessage versionCheckEnabled disableUnitInfoTooltips
     unitInfoTooltipStyle unitTooltipProvider unitTooltipAnchor unitTooltipMode unitTooltipModifier
     showMinimapIcon showNavigationIcons previewDragHintAnimationEnabled playTargetSelectLostSounds ellesmereEditModeIntegration
+    nsrtNicknameIntegration
     highlightEnabled highlightStyle highlightThickness
 ]]
 local MISC_UNIT_KEYS = {}
@@ -1267,7 +1268,6 @@ local GROUP_COLOR_KEYS = KSW [[
     ciAggroColorR ciAggroColorG ciAggroColorB
 ]]
 local AURAS_GENERAL_PREFIXES = WL "auras"
-local AURAS_SHARED_COLOR_KEYS = KS("styleBorderColor", "styleShadowColor")
 local function StartsWith(value, prefix)
     return type(value) == "string" and type(prefix) == "string" and value:sub(1, #prefix) == prefix
 end
@@ -1374,13 +1374,6 @@ local function IsClassPowerBarsKey(key)
         or key == "showAltMana"
         or key == "classPowerComboPointColorMode"
 end
-local function ResetAurasSharedColors(db, defaults)
-    if type(db) ~= "table" then return end
-    db.auras3 = db.auras3 or {}
-    db.auras3.shared = db.auras3.shared or {}
-    local src = type(defaults) == "table" and type(defaults.auras3) == "table" and defaults.auras3.shared or nil
-    ResetKeySet(db.auras3.shared, src, AURAS_SHARED_COLOR_KEYS)
-end
 local function FactoryDefaults()
     local create = (type(MSUF) == "table" and MSUF.MSUF_CreateFactoryDefaultProfile) or _G.MSUF_CreateFactoryDefaultProfile
     if type(create) ~= "function" then return nil end
@@ -1429,9 +1422,58 @@ local function ResetFontsPage(db, defaults)
     end
     RetireLegacyUnitAliases(db)
 end
-local function ResetAurasPage(db, defaults)
-    ReplaceRootTable(db, defaults, "auras3")
-    ResetRootFiltered(db, defaults, "general", function(key) return StartsWith(key, AURAS_GENERAL_PREFIXES[1]) end)
+local AURA_APPEARANCE_KINDS = {
+    buff = true, debuff = true, playerDefensives = true, targetDots = true,
+}
+local function ActiveAuraAppearanceKind(info)
+    local kind = info and info.appearanceKind or M.auraAppearanceContainer
+    kind = tostring(kind or "buff")
+    return AURA_APPEARANCE_KINDS[kind] and kind or "buff"
+end
+local AURA_APPEARANCE_LABELS = {
+    buff = "Buff Appearance",
+    debuff = "Debuff Appearance",
+    playerDefensives = "Player Defensives Appearance",
+    targetDots = "Dots on Target Appearance",
+}
+local function ResolvePageResetInfo(pageKey)
+    local base = PAGE_RESET_INFO[pageKey or ""]
+    if not base or base.kind ~= "auraAppearance" then return base end
+    local info = {}
+    for key, value in pairs(base) do info[key] = value end
+    info.appearanceKind = ActiveAuraAppearanceKind(info)
+    info.label = AURA_APPEARANCE_LABELS[info.appearanceKind] or info.label
+    local blizzardAuraScope = (info.appearanceKind == "buff" or info.appearanceKind == "debuff")
+        and ", plus the shared Blizzard Buff/Debuff visibility settings" or ""
+    info.summary = "only the global " .. tostring(info.label)
+        .. " icon shape, border and shadow settings" .. blizzardAuraScope
+        .. "; other Aura types and all Unit/Group lane settings stay unchanged"
+    return info
+end
+local function ResetAuraAppearancePage(db, defaults, info)
+    db.auras3 = type(db.auras3) == "table" and db.auras3 or {}
+    db.auras3.shared = type(db.auras3.shared) == "table" and db.auras3.shared or {}
+    local dst = db.auras3.shared
+    local src = type(defaults) == "table" and type(defaults.auras3) == "table"
+        and type(defaults.auras3.shared) == "table" and defaults.auras3.shared or {}
+    local kind = ActiveAuraAppearanceKind(info)
+    dst.appearanceIconShapes = type(dst.appearanceIconShapes) == "table" and dst.appearanceIconShapes or {}
+    dst.appearanceIconStyles = type(dst.appearanceIconStyles) == "table" and dst.appearanceIconStyles or {}
+    local srcShapes = type(src.appearanceIconShapes) == "table" and src.appearanceIconShapes or {}
+    local srcStyles = type(src.appearanceIconStyles) == "table" and src.appearanceIconStyles or {}
+    dst.appearanceIconShapes[kind] = DeepCopy(srcShapes[kind])
+        or (kind == "playerDefensives" and "FOLLOW_PORTRAIT" or "RECTANGLE")
+    dst.appearanceIconStyles[kind] = DeepCopy(srcStyles[kind]) or {}
+    if kind == "buff" then dst.showWeaponEnchants = src.showWeaponEnchants == true end
+    if kind == "buff" or kind == "debuff" then
+        dst.hideBlizzardAuraFrames = nil
+        dst.hideBlizzardBuffFrame = src.hideBlizzardBuffFrame == true
+        dst.hideBlizzardDebuffFrame = src.hideBlizzardDebuffFrame == true
+        local UF = MSUF and MSUF.UF
+        if UF and type(UF.ApplyBlizzardAuraVisibility) == "function" then
+            UF.ApplyBlizzardAuraVisibility()
+        end
+    end
 end
 local function ResetCastbarPage(db, defaults)
     ResetRootFiltered(db, defaults, "general", function(key)
@@ -1447,7 +1489,6 @@ local function ResetColorsPage(db, defaults)
     for _, key in ipairs({ "gf_party", "gf_raid", "gf_mythicraid" }) do
         ResetUnitFiltered(db, defaults, key, function(scopeKey) return GROUP_COLOR_KEYS[scopeKey] == true end)
     end
-    ResetAurasSharedColors(db, defaults)
 end
 local function ResetMiscPage(db, defaults)
     ResetRootFiltered(db, defaults, "general", function(key) return MISC_GENERAL_KEYS[key] == true end)
@@ -1469,7 +1510,7 @@ local PAGE_RESET_HANDLERS = {
     group = ResetGroupFrames,
     bars = ResetBarsPage,
     fonts = ResetFontsPage,
-    auras = ResetAurasPage,
+    auraAppearance = ResetAuraAppearancePage,
     castbar = ResetCastbarPage,
     colors = ResetColorsPage,
     misc = ResetMiscPage,
@@ -1561,7 +1602,7 @@ local function ApplyDomainPageResetRuntime(info, reason)
         end
         return did
     end
-    if kind == "auras" then
+    if kind == "auraAppearance" then
         return ApplyAurasPageResetRuntime(reason)
     end
     return false
@@ -1589,6 +1630,7 @@ local function ApplyAfterPageReset(pageKey, info)
     if info and info.kind == "misc" then
         local db = M.EnsureDB()
         local general = db and db.general
+        CallGlobal("MSUF_NSRTNicknames_ApplySetting")
         CallGlobal("MSUF_EllesmereEditMode_SetEnabled",
             not (type(general) == "table" and general.ellesmereEditModeIntegration == false))
         CallGlobal("MSUF_Grid2EditMode_SetEnabled",
@@ -1704,7 +1746,7 @@ local function PurgeRuntimeCachesForReset(info)
     end
 end
 local function ResetPageImpl(pageKey)
-    local info = PAGE_RESET_INFO[pageKey or ""]
+    local info = ResolvePageResetInfo(pageKey)
     if not info then return false end
     if info.kind == "profile" then return ResetProfilePage() end
     local defaults = FactoryDefaults()
@@ -1734,7 +1776,7 @@ function M.PageHasReset(pageKey)
     return PAGE_RESET_INFO[pageKey or ""] ~= nil
 end
 function M.BuildPageResetWarning(pageKey)
-    local info = PAGE_RESET_INFO[pageKey or ""]
+    local info = ResolvePageResetInfo(pageKey)
     if not info then return nil end
     local title = info.label or ((M.pages and M.pages[pageKey] and M.pages[pageKey].title) or pageKey or "this menu")
     title = M.Tr and M.Tr(title) or title
@@ -1755,7 +1797,7 @@ function M.BuildPageResetWarning(pageKey)
 end
 function M.ResetPageToDefaults(pageKey)
     if M.BlockCombatAction() then return false end
-    local info = PAGE_RESET_INFO[pageKey or ""]
+    local info = ResolvePageResetInfo(pageKey)
     if not info then return false end
     if info.kind == "profile" then return ResetPageImpl(pageKey) end
     return M.RunWithHistory("Reset " .. tostring(info.label or pageKey), "page:reset:" .. tostring(pageKey), function()

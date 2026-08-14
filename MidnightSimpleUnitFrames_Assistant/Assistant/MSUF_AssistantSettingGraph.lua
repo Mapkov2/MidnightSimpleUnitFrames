@@ -724,63 +724,13 @@ local function ApplyCrossPrefixInheritance(state)
     end
 end
 
-local function ApplyAuraInheritance(state, scanIndex)
-    local info = D.auraInheritance or {}
-    local styleLeaves = ArraySet(info.styleLeafKeys or {})
-    local auraScopes = ArraySet(D.auraScopes or {})
-    for _, setting in ipairs(PrefixSettings(scanIndex, "auras3.")) do
-        local key = tostring(setting.key or "")
-        local scope, relative = key:match("^auras3%.([^.]+)%.(.+)$")
-        if auraScopes[scope] then
-            local prefix = "auras3." .. scope .. "."
-            local styleGate = prefix .. tostring(info.styleGateSuffix or "useSharedStyle")
-            local rulesGate = prefix .. tostring(info.rulesGateSuffix or "useSharedRules")
-            local source = "auras3.shared." .. relative
-            if state.settingsByKey[source] then
-                local leaf = relative:match("([^.]+)$") or ""
-                local isFilter = relative:find("%.filter%.", 1, false) ~= nil
-                local gate, evidence, ruleId
-                if isFilter and state.settingsByKey[rulesGate] then
-                    gate, evidence, ruleId = rulesGate, info.evidenceRules, "aura-rules-inheritance"
-                elseif styleLeaves[leaf] and state.settingsByKey[styleGate] then
-                    gate, evidence, ruleId = styleGate, info.evidenceStyle, "aura-style-inheritance"
-                end
-                if gate then
-                    AddEdge(state, {
-                        from = key,
-                        to = source,
-                        kind = "inheritance",
-                        condition = DEFAULT_TRUE,
-                        gateKey = gate,
-                        gateCondition = DEFAULT_TRUE,
-                        impact = "effectiveValueSource",
-                        reason = "This Aura value comes from Shared while the scope uses shared rules or style.",
-                        evidence = evidence,
-                        ruleId = ruleId,
-                    })
-                    AddEdge(state, {
-                        from = key,
-                        to = gate,
-                        kind = "override",
-                        condition = { operator = "equals", value = false },
-                        impact = "effectiveValueSource",
-                        reason = "Disable shared inheritance to give this Aura scope an independent value.",
-                        evidence = evidence,
-                        ruleId = ruleId .. "-override",
-                    })
-                end
-            end
-        end
-    end
-end
-
 local function ApplyConflicts(state)
     local data = A.AurasRegistryData or {}
     for _, provider in ipairs(D.conflictProviders or {}) do
         if provider.provider == "auraFilterSpecs" then
             for _, spec in ipairs(data.AURA_FILTER_BOOLEAN_SPECS or {}) do
                 for _, conflictLeaf in ipairs(spec.conflicts or {}) do
-                    for _, scope in ipairs({ "shared", "player", "target", "focus", "boss" }) do
+                    for _, scope in ipairs({ "player", "target", "focus", "boss" }) do
                         local from = table.concat({ "auras3", scope, spec.lane, "filter", spec.key }, ".")
                         local to = table.concat({ "auras3", scope, spec.lane, "filter", conflictLeaf }, ".")
                         AddEdge(state, {
@@ -1050,7 +1000,6 @@ local function Build(includeGroupRoots, requestedKey)
     if auraOnly then
         ApplyScopeRoots(state, settings, scanIndex, "aura")
         ApplyPatternGates(state, settings, scanIndex, "aura")
-        ApplyAuraInheritance(state, scanIndex)
         ApplyConflicts(state)
     else
         ApplyScopeRoots(state, settings, scanIndex, includeGroupRoots and "all" or "base")
@@ -1068,7 +1017,6 @@ local function Build(includeGroupRoots, requestedKey)
         ApplyScopedAssociations(state)
         ApplyScopedInheritance(state, scanIndex)
         ApplyCrossPrefixInheritance(state)
-        ApplyAuraInheritance(state, scanIndex)
         ApplyConflicts(state)
     end
     ApplyRegistryAssociations(state, settings, includeGroupRoots, auraOnly and "aura" or "all")

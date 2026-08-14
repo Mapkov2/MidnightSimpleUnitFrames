@@ -192,6 +192,13 @@ Data.AURAS_PARSER = {
             "filter", "filters", "raid", "dispellable", "exclusive", "only", "custom",
             "cooldown", "stack", "duration", "timer", "x ", " y ", "offset", "size", "max",
             "per row", "growth", "anchor", "spacing", "layer", "swipe", "direction", "color", "colour",
+            -- Naming a lane ATTRIBUTE is not a request to show or hide the lane.
+            -- "turn on target debuff type borders" was answered by switching the
+            -- whole Target debuff lane on, leaving Target Debuff Type Border
+            -- untouched -- the player's actual subject.
+            "border", "borders", "tooltip", "tooltips", "sort", "reverse",
+            "opacity", "alpha", "transparency", "font", "zoom", "shape", "mask",
+            "padding", "highlight", "glow",
         },
         [121] = { "debuff", "debuffs" },
         [122] = { "buff", "buffs" },

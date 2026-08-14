@@ -193,9 +193,20 @@ end
 
 local function SetColorCached(bar, r, g, b, a)
   r, g, b, a = r or 1, g or 1, b or 1, a or 1
-  if bar and (bar._msufR ~= r or bar._msufG ~= g or bar._msufB ~= b or bar._msufA ~= a) then
-    bar:SetStatusBarColor(r, g, b, a)
-    bar._msufR, bar._msufG, bar._msufB, bar._msufA = r, g, b, a
+  if not bar then return end
+  -- Keep the configured prediction opacity on the StatusBar owner. The group
+  -- range/health lane owns the fill texture's alpha, so native value updates
+  -- and range restoration can no longer promote absorb fills back to 100%.
+  if bar._msufR ~= r or bar._msufG ~= g or bar._msufB ~= b
+    or bar._msufPredictionOpaqueColor ~= true then
+    bar:SetStatusBarColor(r, g, b, 1)
+    bar._msufR, bar._msufG, bar._msufB = r, g, b
+    bar._msufPredictionOpaqueColor = true
+  end
+  if bar._msufA ~= a or bar._msufPredictionOpacity ~= a then
+    bar:SetAlpha(a)
+    bar._msufA = a
+    bar._msufPredictionOpacity = a
   end
 end
 
@@ -2267,8 +2278,19 @@ local function ApplyPredictionValues(frame, cfg, unit, cacheUnit, event, hp, max
       if refreshAbsorb == true and frame._msufPredictionMixedFollowClamp == true then
         glowAbsorb = ReadDamageAbsorbs(frame, unit)
       end
-      UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, glowAbsorb,
-        event == "UNIT_MAXHEALTH" or event == "UNIT_CONNECTION", refreshAbsorb == true)
+      local holder = frame.overAbsorbGlowBar
+      local knownInactive = refreshAbsorb == true
+        and frame._msufPredictionFullHealthStripe ~= true
+        and issecretvalue(glowAbsorb) ~= true
+        and (type(glowAbsorb) ~= "number" or glowAbsorb <= 0)
+        and (holder == nil or (holder._msufOverAbsorbShown == false
+          and holder._msufOverAbsorbValuePlain == true
+          and (type(holder._msufOverAbsorbValue) ~= "number"
+            or holder._msufOverAbsorbValue <= 0)))
+      if not knownInactive then
+        UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, glowAbsorb,
+          event == "UNIT_MAXHEALTH" or event == "UNIT_CONNECTION", refreshAbsorb == true)
+      end
     end
   end
 

@@ -22,6 +22,8 @@ local tonumber = tonumber
 local type = type
 local UnitGUID = UnitGUID
 local UnitInRange = UnitInRange
+local UnitIsVisible = UnitIsVisible
+local UnitPhaseReason = UnitPhaseReason
 local InCombatLockdown = InCombatLockdown
 local NewTimer = C_Timer.NewTimer
 local GetTime = GetTime
@@ -35,6 +37,13 @@ local IsUnitToken = UF.IsUnitToken
 local FreshUnitState = UF.FreshUnitState
 local ReadConnectedCached = UF.ReadConnectedCached
 local ReadUnitExistsCached = UF.ReadUnitExistsCached
+local Clamp01 = UF.Clamp01 or function(value, fallback)
+  value = tonumber(value)
+  if value == nil then value = fallback or 1 end
+  if value < 0 then return 0 end
+  if value > 1 then return 1 end
+  return value
+end
 
 local RANGE_EVENTS = {
   "UNIT_IN_RANGE_UPDATE", "UNIT_PHASE",
@@ -49,12 +58,14 @@ local RANGE_OFFLINE_EVENTS = {
 local RANGE_SETTLE_EVENTS = {
   "PLAYER_ENTERING_WORLD",
   "ZONE_CHANGED_NEW_AREA",
+  "ENTERED_DIFFERENT_INSTANCE_FROM_PARTY",
   "PLAYER_DIFFICULTY_CHANGED",
   "PLAYER_REGEN_ENABLED",
 }
 local RANGE_SETTLE_EVENT = {
   PLAYER_ENTERING_WORLD = true,
   ZONE_CHANGED_NEW_AREA = true,
+  ENTERED_DIFFERENT_INSTANCE_FROM_PARTY = true,
   PLAYER_DIFFICULTY_CHANGED = true,
   PLAYER_REGEN_ENABLED = true,
 }
@@ -113,6 +124,11 @@ local function ClearRange(frame)
   frame._msufGFRangeCacheable = nil
   frame._msufGFRangePlayerUnit = nil
   frame._msufGFRangeIsPlayerUnit = nil
+  frame._msufGFRangePresenceUnit = nil
+  frame._msufGFRangePresenceKnown = nil
+  frame._msufGFRangeNotPresent = nil
+  frame._msufGFRangePhaseNotPresent = nil
+  frame._msufGFRangeVisibilityNotPresent = nil
   frame._msufGFOfflineUnit = nil
   frame._msufGFOfflineGone = nil
 end
@@ -275,10 +291,7 @@ end
 -- secret unit payload in restricted content, while its inRange payload is safe
 -- to forward into the secret-aware alpha path.
 local function FilteredRangeEventUpdate(frame, event, _unit, inRange)
-  local changed = GroupRangeFade.Update(frame, event, nil, inRange)
-  local applyAuraGate = frame and frame._msufApplyPartyAuraRangeGate
-  if changed and applyAuraGate then applyAuraGate(frame, inRange) end
-  return changed
+  return GroupRangeFade.Update(frame, event, nil, inRange)
 end
 
 local function FilteredUnitEventUpdate(frame, event)
@@ -337,6 +350,106 @@ local function PollCurrentRange(unit)
   return nil, false
 end
 
+-- UnitInRange can briefly retain a positive result across an instance portal.
+-- Blizzard treats a known UnitPhaseReason as its separate "not present" state,
+-- so keep that rare identity signal ahead of the geometric range result. The
+-- reason itself may be secret in restricted content; never compare or cache it
+-- in that case and keep using the native secret-safe range path instead.
+local function ReadRangePresence(unit)
+  if not IsUnitToken(unit) then
+    return nil, false
+  end
+
+  local notVisible
+  if UnitIsVisible then
+    local visible = UnitIsVisible(unit)
+    if issecretvalue(visible) ~= true and type(visible) == "boolean" then
+      notVisible = visible == false
+    end
+  end
+
+  local phaseNotPresent
+  if UnitPhaseReason then
+    local reason = UnitPhaseReason(unit)
+    if issecretvalue(reason) == true then
+      return notVisible == true and true or nil, notVisible == true,
+        nil, notVisible == true and true or nil
+    end
+    phaseNotPresent = reason ~= nil
+    return notVisible == true or phaseNotPresent, true,
+      phaseNotPresent and true or nil, notVisible == true and true or nil
+  end
+  if notVisible ~= nil then
+    return notVisible, true, nil, notVisible == true and true or nil
+  end
+  return nil, false, nil, nil
+end
+
+local function RefreshRangePresence(frame)
+  local unit = frame and frame.MSUFUnitKey
+  if not IsUnitToken(unit) then
+    return false, nil, false
+  end
+
+  local notPresent, known, phaseNotPresent, visibilityNotPresent
+  if FrameIsPlayerUnit(frame) then
+    notPresent, known = false, true
+  else
+    notPresent, known, phaseNotPresent, visibilityNotPresent = ReadRangePresence(unit)
+  end
+
+  local changed = frame._msufGFRangePresenceUnit ~= unit
+    or (frame._msufGFRangePresenceKnown == true) ~= (known == true)
+    or (known == true and frame._msufGFRangeNotPresent ~= notPresent)
+  frame._msufGFRangePresenceUnit = unit
+  frame._msufGFRangePresenceKnown = known == true or nil
+  frame._msufGFRangePhaseNotPresent = phaseNotPresent == true or nil
+  frame._msufGFRangeVisibilityNotPresent = visibilityNotPresent == true or nil
+  if known == true then
+    frame._msufGFRangeNotPresent = notPresent == true
+  else
+    frame._msufGFRangeNotPresent = nil
+  end
+  return changed, notPresent, known
+end
+
+local function PresenceForcesOutOfRange(frame)
+  return frame and frame._msufGFRangePresenceUnit == frame.MSUFUnitKey
+    and frame._msufGFRangePresenceKnown == true
+    and frame._msufGFRangeNotPresent == true
+end
+
+local function RefreshRangeVisibilityEdge(frame)
+  if not (frame and frame._msufGFRangePresenceUnit == frame.MSUFUnitKey
+      and frame._msufGFRangeVisibilityNotPresent == true and UnitIsVisible) then
+    return false
+  end
+  local visible = UnitIsVisible(frame.MSUFUnitKey)
+  if issecretvalue(visible) == true or visible ~= true then return false end
+  -- This is the one recovery edge that is allowed to leave the normal range
+  -- hotpath: refresh both presence signals once so a stale phase reason cannot
+  -- keep the frame faded after visibility returns.
+  local phaseNotPresent
+  local phaseKnown = UnitPhaseReason == nil
+  if UnitPhaseReason then
+    local reason = UnitPhaseReason(frame.MSUFUnitKey)
+    if issecretvalue(reason) ~= true then
+      phaseNotPresent = reason ~= nil
+      phaseKnown = true
+    end
+  end
+  frame._msufGFRangeVisibilityNotPresent = nil
+  frame._msufGFRangePhaseNotPresent = phaseKnown and phaseNotPresent == true and true or nil
+  if phaseKnown then
+    frame._msufGFRangePresenceKnown = true
+    frame._msufGFRangeNotPresent = phaseNotPresent == true
+  else
+    frame._msufGFRangePresenceKnown = nil
+    frame._msufGFRangeNotPresent = nil
+  end
+  return true
+end
+
 local function RefreshSettledRange(frame)
   if not (frame and frame._msufGFRangeRuntimeEnabled == true) then
     return
@@ -345,9 +458,12 @@ local function RefreshSettledRange(frame)
     ApplyAlpha(frame, "MSUF_GF_RANGE_SETTLE")
     return
   end
+  RefreshRangePresence(frame)
   local value, checked
   if FrameIsPlayerUnit(frame) then
     value, checked = true, true
+  elseif PresenceForcesOutOfRange(frame) then
+    value, checked = false, true
   else
     value, checked = PollCurrentRange(frame.MSUFUnitKey)
     if not checked then
@@ -358,6 +474,21 @@ local function RefreshSettledRange(frame)
   if changed then
     ApplyAlpha(frame, nil, rangeValue, rangeSecret)
   end
+end
+
+local function RefreshPresenceEventRange(frame)
+  local presenceChanged, notPresent, presenceKnown = RefreshRangePresence(frame)
+  if presenceKnown == true and notPresent == true then
+    return StoreRange(frame, false)
+  end
+  -- A known, unchanged present state cannot alter the cached range. Unknown
+  -- (including secret) presence conservatively reuses the native range probe.
+  if presenceChanged ~= true and presenceKnown == true then
+    return false
+  end
+  local value, checked = PollCurrentRange(frame and frame.MSUFUnitKey)
+  if not checked then value = nil end
+  return StoreRange(frame, value)
 end
 
 function UF.FlushDeferredGroupRangeSettle(frame)
@@ -655,6 +786,38 @@ local function SetTextureAlpha(tex, alpha, key)
   SetAlphaCached(tex, alpha, key)
 end
 
+local function PredictionHealthAlpha(frame)
+  local cfg = frame and frame._msufAlphaRuntimeCfg
+  if cfg == nil then
+    local spec = frame and frame.MSUFSpec
+    cfg = spec and spec.alpha
+  end
+  if not (cfg and cfg.active == true) then
+    return 1
+  end
+  local alpha = Clamp01(cfg.hpAlpha, 1)
+  if _G.MSUF_UnitEditModeActive == true and alpha < 0.35 then
+    alpha = 0.35
+  end
+  return alpha
+end
+
+local function SetPredictionFillAlpha(bar, alpha, key)
+  local tex = StatusTexture(bar)
+  if tex then
+    SetAlphaCached(tex, alpha, key)
+  end
+end
+
+local function SetPredictionFillAlphaFromBoolean(bar, value, inAlpha, outAlpha)
+  local tex = StatusTexture(bar)
+  if tex and tex.SetAlphaFromBoolean then
+    tex:SetAlphaFromBoolean(value, inAlpha, outAlpha)
+    return true
+  end
+  return false
+end
+
 local function SetStatusAlphaFromBoolean(bar, value, inAlpha, outAlpha)
   local applied = false
   if bar and bar.SetAlphaFromBoolean then
@@ -709,9 +872,10 @@ local function ApplyDirectHealthRangeAlpha(frame, alpha)
 end
 
 local function ApplyPredictionRangeAlpha(frame, alpha)
-  SetStatusAlpha(frame.incomingHealBar, alpha, "_msufGFRangePredict")
-  SetStatusAlpha(frame.absorbBar, alpha, "_msufGFRangePredict")
-  SetStatusAlpha(frame.healAbsorbBar, alpha, "_msufGFRangePredict")
+  alpha = PredictionHealthAlpha(frame) * (tonumber(alpha) or 1)
+  SetPredictionFillAlpha(frame.incomingHealBar, alpha, "_msufGFRangePredict")
+  SetPredictionFillAlpha(frame.absorbBar, alpha, "_msufGFRangePredict")
+  SetPredictionFillAlpha(frame.healAbsorbBar, alpha, "_msufGFRangePredict")
 end
 
 local function ApplyHealthRangeAlpha(frame, alpha)
@@ -757,9 +921,12 @@ local function ApplyHealthRangeAlphaFromBoolean(frame, value, inAlpha, outAlpha,
   end
   applied = SetTextureAlphaFromBoolean(frame.bg, value, inAlpha, outAlpha) or applied
   applied = SetTextureAlphaFromBoolean(frame.hpBarBG, value, inAlpha, outAlpha) or applied
-  applied = SetStatusAlphaFromBoolean(frame.incomingHealBar, value, inAlpha, outAlpha) or applied
-  applied = SetStatusAlphaFromBoolean(frame.absorbBar, value, inAlpha, outAlpha) or applied
-  applied = SetStatusAlphaFromBoolean(frame.healAbsorbBar, value, inAlpha, outAlpha) or applied
+  local predictionAlpha = PredictionHealthAlpha(frame)
+  local predictionIn = predictionAlpha * inAlpha
+  local predictionOut = predictionAlpha * outAlpha
+  applied = SetPredictionFillAlphaFromBoolean(frame.incomingHealBar, value, predictionIn, predictionOut) or applied
+  applied = SetPredictionFillAlphaFromBoolean(frame.absorbBar, value, predictionIn, predictionOut) or applied
+  applied = SetPredictionFillAlphaFromBoolean(frame.healAbsorbBar, value, predictionIn, predictionOut) or applied
   if not applied then
     frame._msufGFRangeHealthBool = nil
     frame._msufGFRangeHealthBoolSecret = nil
@@ -1104,6 +1271,7 @@ function GroupRangeFade.Apply(frame)
   SetSettleRegistration(frame, frame and frame._msufGFRangeRuntimeEnabled == true and FrameVisible(frame))
   if frame then frame._msufGFRangeApplying = true end
   if FrameIsPlayerUnit(frame) then
+    RefreshRangePresence(frame)
     StoreRange(frame, true)
   else
     StoreRange(frame, nil)
@@ -1123,11 +1291,19 @@ function GroupRangeFade.Update(frame, event, unit, inRange)
   local rangeSecret
   if event == "UNIT_IN_RANGE_UPDATE" then
     if UnitEventMatchesFrame(frame, unit) then
-      changed, rangeValue, rangeSecret = StoreRange(frame, FrameIsPlayerUnit(frame) and true or inRange)
+      local value = FrameIsPlayerUnit(frame) and true or inRange
+      if PresenceForcesOutOfRange(frame) then
+        -- The ordinary range hotpath stays unchanged. Only a currently
+        -- not-present frame spends one plain visibility read to let the first
+        -- valid positive range edge restore it after entering our world.
+        RefreshRangeVisibilityEdge(frame)
+        if PresenceForcesOutOfRange(frame) then value = false end
+      end
+      changed, rangeValue, rangeSecret = StoreRange(frame, value)
     end
   elseif event == "UNIT_PHASE" or event == "UNIT_CTR_OPTIONS" or event == "UNIT_OTHER_PARTY_CHANGED" then
     if UnitEventMatchesFrame(frame, unit) then
-      changed, rangeValue, rangeSecret = StoreRange(frame, FrameIsPlayerUnit(frame) and true or nil)
+      changed, rangeValue, rangeSecret = RefreshPresenceEventRange(frame)
     end
   elseif event == "PARTY_MEMBER_ENABLE" or event == "PARTY_MEMBER_DISABLE" then
     ClearOfflineDelay(frame)
@@ -1139,10 +1315,11 @@ function GroupRangeFade.Update(frame, event, unit, inRange)
   elseif event == "MSUF_GF_UNIT_IDENTITY" then
     ClearOfflineDelay(frame)
     SetSettleRegistration(frame, frame and frame._msufGFRangeRuntimeEnabled == true and FrameVisible(frame))
+    ClearRange(frame)
     if FrameIsPlayerUnit(frame) then
+      RefreshRangePresence(frame)
       StoreRange(frame, true)
     else
-      ClearRange(frame)
       RefreshSettledRange(frame)
     end
     changed = true

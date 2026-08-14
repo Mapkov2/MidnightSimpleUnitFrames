@@ -23,81 +23,42 @@ function A.RegistryCoreBuilders.BuildUnitAuraAdvancedHelpers(ctx)
         return nil
     end
 
-    local function AuraUseSharedVisuals(scope)
-        local Model = AuraModel()
-        if Model and type(Model.UseSharedVisuals) == "function" then return Model.UseSharedVisuals(scope) end
-        local auras = EnsureAuraFallbackDB()
-        local pu = auras.perUnit and auras.perUnit[AuraRuntimeUnit(scope)]
-        return not (pu and (pu.overrideLayout == true or pu.overrideSharedLayout == true))
-    end
-
-    local function AuraSetUseSharedVisuals(scope, value)
-        local Model = AuraModel()
-        if Model and type(Model.SetUseSharedVisuals) == "function" then
-            Model.SetUseSharedVisuals(scope, value)
-            return
-        end
-        local auras = EnsureAuraFallbackDB()
-        local unit = AuraRuntimeUnit(scope)
-        auras.perUnit[unit] = type(auras.perUnit[unit]) == "table" and auras.perUnit[unit] or {}
-        auras.perUnit[unit].overrideLayout = not value
-        auras.perUnit[unit].overrideSharedLayout = not value
-    end
-
-    local function AuraUseSharedRules(scope)
-        local Model = AuraModel()
-        local modelValue = Model and type(Model.UseSharedRules) == "function" and Model.UseSharedRules(scope) or nil
-        if scope == "shared" then return true end
-        local auras = EnsureAuraFallbackDB()
-        local pu = auras.perUnit and auras.perUnit[AuraRuntimeUnit(scope)]
-        if pu and pu.overrideFilters ~= nil then return pu.overrideFilters ~= true end
-        if modelValue ~= nil then return modelValue == true end
-        return true
-    end
-
-    local function AuraSetUseSharedRules(scope, value)
-        local Model = AuraModel()
-        if Model and type(Model.SetUseSharedRules) == "function" then Model.SetUseSharedRules(scope, value) end
-        if scope == "shared" then return end
-        local auras = EnsureAuraFallbackDB()
-        local unit = AuraRuntimeUnit(scope)
-        auras.perUnit[unit] = type(auras.perUnit[unit]) == "table" and auras.perUnit[unit] or {}
-        local pu = auras.perUnit[unit]
-        pu.overrideFilters = value ~= true
-        if value ~= true and type(pu.filters) ~= "table" then pu.filters = {} end
-    end
-
     local function FallbackFilters(scope, create)
-        local auras, shared = EnsureAuraFallbackDB()
-        shared.filters = type(shared.filters) == "table" and shared.filters or (create and {} or nil)
-        if scope == "shared" then return shared.filters end
+        if scope ~= "player" and scope ~= "target" and scope ~= "focus" and scope ~= "boss" then return nil end
+        local auras = EnsureAuraFallbackDB()
         local unit = AuraRuntimeUnit(scope)
         local pu = auras.perUnit and auras.perUnit[unit]
         if create and type(pu) ~= "table" then
             pu = {}
             auras.perUnit[unit] = pu
         end
-        if pu and pu.overrideFilters == true then
+        if pu then
             if create and type(pu.filters) ~= "table" then pu.filters = {} end
             return pu.filters
         end
-        return shared.filters
+        return nil
     end
 
-    local function AuraFiltersEnabled(scope)
+    local function AuraFiltersEnabled(scope, kind)
         local Model = AuraModel()
-        local modelValue = Model and type(Model.ScopeFiltersEnabled) == "function" and Model.ScopeFiltersEnabled(scope) or nil
+        local modelValue = Model and type(Model.LaneFiltersEnabled) == "function"
+            and Model.LaneFiltersEnabled(scope, kind) or nil
         local filters = FallbackFilters(scope, false)
-        if type(filters) == "table" and filters.enabled ~= nil then return filters.enabled ~= false end
+        local group = type(filters) == "table" and filters[kind == "buff" and "buffs" or "debuffs"] or nil
+        if type(group) == "table" and group.enabled ~= nil then return group.enabled ~= false end
         if modelValue ~= nil then return modelValue ~= false end
         return true
     end
 
-    local function AuraSetFiltersEnabled(scope, value)
+    local function AuraSetFiltersEnabled(scope, kind, value)
         local Model = AuraModel()
-        if Model and type(Model.SetScopeFiltersEnabled) == "function" then Model.SetScopeFiltersEnabled(scope, value) end
+        if Model and type(Model.SetLaneFiltersEnabled) == "function" then Model.SetLaneFiltersEnabled(scope, kind, value) end
         local filters = FallbackFilters(scope, true)
-        if type(filters) == "table" then filters.enabled = value == true end
+        if type(filters) == "table" then
+            local key = kind == "buff" and "buffs" or "debuffs"
+            filters[key] = type(filters[key]) == "table" and filters[key] or {}
+            filters[key].enabled = value == true
+        end
     end
 
     local function AuraReadFilter(scope, kind, key, defaultValue)
@@ -122,10 +83,6 @@ function A.RegistryCoreBuilders.BuildUnitAuraAdvancedHelpers(ctx)
     end
 
     return {
-        AuraUseSharedVisuals = AuraUseSharedVisuals,
-        AuraSetUseSharedVisuals = AuraSetUseSharedVisuals,
-        AuraUseSharedRules = AuraUseSharedRules,
-        AuraSetUseSharedRules = AuraSetUseSharedRules,
         AuraFiltersEnabled = AuraFiltersEnabled,
         AuraSetFiltersEnabled = AuraSetFiltersEnabled,
         AuraReadFilter = AuraReadFilter,

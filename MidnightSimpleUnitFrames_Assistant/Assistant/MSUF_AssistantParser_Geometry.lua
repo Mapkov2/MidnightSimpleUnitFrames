@@ -2925,6 +2925,21 @@ local function BarOutlineHighlightGlobalKey(attr)
     return nil
 end
 
+-- [285] only lists contiguous wording ("frame outline layer"). Players split
+-- the attribute off the subject with a preposition -- "draw the frame outline
+-- on layer 5", "put the border at layer 3" -- and [160] then claimed the
+-- sentence and wrote thickness. Inside a sentence this lane already owns, a
+-- standalone layer word can only mean the layer control: no thickness or
+-- opacity phrasing uses one, and "texture layer" never reaches here because
+-- BAR_OUTLINE_HIGHLIGHT_BLOCK_TERMS blocks "texture".
+local BAR_OUTLINE_LAYER_WORDS = { "layer", "layers", "strata", "sublevel" }
+local function MentionsStandaloneLayerWord(text)
+    for i = 1, #BAR_OUTLINE_LAYER_WORDS do
+        if text:find("%f[%w]" .. BAR_OUTLINE_LAYER_WORDS[i] .. "%f[%W]") then return true end
+    end
+    return false
+end
+
 local function BarOutlineHighlightSpec(text)
     -- This lane owns broad edge wording -- "border opacity", "border alpha",
     -- "outline thickness". RC9 added Pandemic warning controls that reuse those
@@ -2938,13 +2953,21 @@ local function BarOutlineHighlightSpec(text)
     if ContainsAny(text, GeometryPhrases[158]) then
         return "highlightBorderThickness", "Highlight Border Thickness"
     end
+    -- After [158] so "highlight border thickness" keeps the size control, and
+    -- only for a plain on/off: with a number the sentence is about a dimension,
+    -- not about switching the highlight borders on or off.
+    if ContainsAny(text, GeometryPhrases[287]) and FirstNumber(text) == nil
+        and DetectBoolean(text) ~= nil
+    then
+        return "highlightBorderGroup", "Highlight Borders"
+    end
     if ContainsAny(text, GeometryPhrases[159]) then
         return "barOutlineColorA", "Bar Outline Opacity"
     end
     -- Layer before thickness: the layer phrases in [285] are supersets of
     -- the thickness phrases in [160] ("bar outline strata" contains "bar
     -- outline"), so probing thickness first would never leave a layer match.
-    if ContainsAny(text, GeometryPhrases[285]) then
+    if ContainsAny(text, GeometryPhrases[285]) or MentionsStandaloneLayerWord(text) then
         return "barOutlineLayer", "Bar Outline Layer"
     end
     if ContainsAny(text, GeometryPhrases[160]) then
@@ -2986,6 +3009,36 @@ local function ParseBarOutlineHighlightShortcut(text)
     if not attr then return nil end
 
     local scopes = BarOutlineHighlightScopes(text)
+    -- "Highlight borders" is the page's name for the Aggro/Dispel/Purge trio
+    -- (plus Boss Target on the shared control), so the umbrella phrase writes
+    -- all of them for whichever scope was named.
+    if attr == "highlightBorderGroup" then
+        local on = DetectBoolean(text)
+        if on == nil then return nil end
+        local value = on and "on" or "off"
+        local members = { "aggroOutlineMode", "dispelOutlineMode", "purgeOutlineMode" }
+        local groupChanges = {}
+        local function add(key)
+            local setting = Registry and Registry:GetSetting(key)
+            if setting then groupChanges[#groupChanges + 1] = { setting = setting, value = value } end
+        end
+        if #scopes == 0 then
+            for i = 1, #members do add("general." .. members[i]) end
+            add("general.bossTargetOutlineMode")
+        else
+            for i = 1, #scopes do
+                for j = 1, #members do add("barScope." .. tostring(scopes[i]) .. "." .. members[j]) end
+            end
+        end
+        if #groupChanges == 0 then return nil end
+        return {
+            kind = "changes",
+            changes = groupChanges,
+            label = label,
+            bulkSafe = true,
+            summary = "Changes the bar outline or highlight border option without falling back to broad registry matching.",
+        }
+    end
     local changes = {}
     if #scopes == 0 then
         local setting = Registry and Registry:GetSetting(BarOutlineHighlightGlobalKey(attr))

@@ -179,11 +179,31 @@ local ROOT_FRAME_ENABLED_DETAIL_TERMS = {
     "portrait", "portraits", "power bar", "mana bar",
     "health bar", "hp bar", "castbar", "cast bar", "name", "names", "text", "border", "outline",
     "alpha", "opacity", "range fade", "offline", "solo", "sort", "sorting", "role", "scale", "scaling",
+    -- ContainsAny matches whole words, so every singular above needed its
+    -- plural too: "turn off borders for party frame" was not covered by
+    -- "border" and disabled the party frames.
+    "borders", "outlines", "texts", "castbars", "cast bars", "power bars", "mana bars",
+    "health bars", "hp bars", "scales", "markers", "symbols",
+    -- Parts of a frame that had no entry here at all, so a request about one of
+    -- them could still be answered by switching the whole frame off.
+    "highlight", "highlights", "aggro", "threat", "dispel", "purge",
+    "aura", "auras", "buff", "buffs", "debuff", "debuffs",
+    "gradient", "texture", "color", "colour", "font",
+    "round", "rounded", "corner", "corners", "shape",
+    "spacing", "padding", "column", "columns", "growth", "position", "offset",
 }
 
 local function RootFrameEnabledBlockedByDetail(setting, text)
     if not (setting and setting.attribute == "enabled") then return false end
     if setting.frameType ~= "unitframe" and setting.frameType ~= "group" then return false end
+    return ContainsAny(text, ROOT_FRAME_ENABLED_DETAIL_TERMS)
+end
+
+-- Shared with the followup lane. Two lanes can write a frame's root "enabled"
+-- toggle, they each kept their own idea of "this sentence is about a detail,
+-- not the frame", and the shorter list let "turn off highlight borders for
+-- party frame" disable the player's party frames outright.
+function P.TextNamesFrameDetail(text)
     return ContainsAny(text, ROOT_FRAME_ENABLED_DETAIL_TERMS)
 end
 
@@ -203,7 +223,6 @@ local function IsAuraLaneVisibilitySetting(setting)
     if setting.type ~= "boolean" then return false end
     local key = tostring(setting.key or ""):lower()
     local attr = tostring(setting.attribute or ""):lower()
-    if key == "auras3.shared.showbuffs" or key == "auras3.shared.showdebuffs" then return true end
     if key:find("%.buff%.visible", 1, true) or key:find("%.debuff%.visible", 1, true) then return true end
     if key:find("%.auras%.buff%.enabled", 1, true) or key:find("%.auras%.debuff%.enabled", 1, true) then return true end
     return attr == "aurashowbuffs"
@@ -398,25 +417,6 @@ local function SettingAllowedByExplicitScopes(setting, text)
     local unit = tostring(setting.unit or "")
     local keyScope = SettingKeyScope(setting)
     local units, groups = ExplicitScopes(text)
-    if frameType == "aura"
-        and unit == "shared"
-        and (#units > 0 or #groups > 0)
-        and not ContainsAny(text, RegistryPhrases[10])
-    then
-        return false
-    end
-    -- Shared aura controls can be valid for "all auras", but some lane-level shared growth
-    -- options are deliberately excluded because they would fight the per-frame buff/debuff
-    -- settings the user usually means.
-    if frameType == "aura"
-        and unit == "shared"
-        and HasAllScopeIntent(text)
-        and ContainsAny(text, RegistryPhrases[11])
-        and ContainsAny(text, RegistryPhrases[12])
-    then
-        local key = tostring(setting.key or ""):lower()
-        if key == "auras3.shared.buffgrowth" or key == "auras3.shared.debuffgrowth" then return false end
-    end
     if setting.frameType == "aura" and ContainsAny(text, RegistryPhrases[13])
         and not tostring(setting.attribute or ""):lower():find("filter", 1, true) then
         return false
@@ -424,9 +424,6 @@ local function SettingAllowedByExplicitScopes(setting, text)
     local auraFilterScope = P.ExplicitAuraFilterScope and P.ExplicitAuraFilterScope(text)
     if setting.frameType == "aura" and auraFilterScope then
         return unit == auraFilterScope or keyScope == auraFilterScope
-    end
-    if setting.frameType == "aura" and unit == "shared" and ContainsAny(text, RegistryPhrases[14]) then
-        return true
     end
     if setting.frameType == "group" or setting.frameType == "groupAura" then
         if #groups > 0 then
@@ -1163,6 +1160,42 @@ end
 
 local function MissingValueResponse(matches, raw)
     if #matches == 0 then return nil end
+    -- Media requests put the value in front of the control ("use the flat
+    -- texture for the absorb bar"). The alias reader finds the control and no
+    -- value, so before asking for one, re-read the sentence in the order the
+    -- value parser understands.
+    do
+        local router = A.RouterPrivate
+        -- The stated value may belong to a SIBLING of the control the words
+        -- name: "make the frame outline red" names the outline family, whose
+        -- bare words are the thickness slider, and states a colour.
+        local siblingPlan = type(router) == "table"
+            and type(router.StatedValueKindSiblingPlan) == "function"
+            and router.StatedValueKindSiblingPlan(raw) or nil
+        if siblingPlan then return siblingPlan end
+        local reordered = type(router) == "table"
+            and type(router.CanonicalValueBeforeControlCommand) == "function"
+            and router.CanonicalValueBeforeControlCommand(raw, true) or nil
+        if reordered then
+            for i = 1, #matches do
+                local candidate = matches[i] and matches[i].setting
+                -- P.ValueForRegistrySetting, not the file-local upvalue: the
+                -- local is declared further down and is still nil here.
+                local value = candidate and type(P.ValueForRegistrySetting) == "function"
+                    and P.ValueForRegistrySetting(candidate, Normalize(reordered), reordered) or nil
+                if value ~= nil then
+                    return {
+                        kind = "changes",
+                        changes = { { setting = candidate, value = value } },
+                        label = candidate.label or "Assistant option change",
+                        summary = "Changes the control named after its value.",
+                        raw = raw,
+                        sourceText = raw,
+                    }
+                end
+            end
+        end
+    end
     local best
     for i = 1, #matches do
         if i % 16 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
@@ -1178,6 +1211,41 @@ local function MissingValueResponse(matches, raw)
     local setting = best and best.setting
     if not setting then return nil end
     RefreshRegistrySettingValues(setting)
+    -- A texture request often names its value with no connector at all ("i
+    -- want a solid looking bar texture", "make the empty part of the bar use
+    -- the flat texture"). Before asking, scan the sentence against the known
+    -- texture vocabulary; exactly one distinct target is the stated value.
+    -- Aliases that also appear in the control's own label are skipped so
+    -- "frame outline style" can never read its own name as the value.
+    if setting.type == "string"
+        and (setting.mediaType ~= nil
+            or tostring(setting.label or ""):lower():find("texture", 1, true))
+    then
+        local barsData = A.GlobalBarRegistry and A.GlobalBarRegistry.Data
+        local textureAliases = type(barsData) == "table" and barsData.TEXTURE_KEY_ALIASES or nil
+        if type(textureAliases) == "table" then
+            local padded = " " .. Normalize(raw) .. " "
+            local labelPadded = " " .. Normalize(setting.label or "") .. " "
+            local found
+            for alias, target in pairs(textureAliases) do
+                local phrase = " " .. tostring(alias) .. " "
+                if padded:find(phrase, 1, true) and not labelPadded:find(phrase, 1, true) then
+                    if found ~= nil and found ~= target then found = nil break end
+                    found = target
+                end
+            end
+            if type(found) == "string" and found ~= "" then
+                return {
+                    kind = "changes",
+                    changes = { { setting = setting, value = found } },
+                    label = setting.label or "Assistant option change",
+                    summary = "Texture value named without a connector.",
+                    raw = raw,
+                    sourceText = raw,
+                }
+            end
+        end
+    end
     if (setting.type == "enum" or setting.type == "string")
         and type(setting.values) == "table" and #setting.values > 0 and #setting.values <= 24
     then
@@ -1787,16 +1855,18 @@ local function HideSettingValueForText(text, defaultValue)
 end
 
 local UNIT_LOAD_CONDITION_SPECS = {
-    { key = "loadCondHideMounted", label = "Hide Mounted", terms = { "mounted", "mount", "on mount", "while mounted", "when mounted", "gemountet", "reittier" } },
-    { key = "loadCondHideOutOfCombat", label = "Hide Out of Combat", terms = { "out of combat", "outside combat", "not in combat", "ooc", "while out of combat", "when out of combat", "ausserhalb kampf", "ausser kampf", "nicht im kampf" } },
-    { key = "loadCondHideSolo", label = "Hide Solo", terms = { "solo", "alone", "while solo", "when solo", "allein" } },
-    { key = "loadCondHideInVehicle", label = "Hide in Vehicle", terms = { "in vehicle", "vehicle", "while in vehicle", "when in vehicle", "fahrzeug" } },
+    { key = "loadCondHideInHousing", label = "Hide in Housing", terms = { "housing", "house", "in housing", "while in housing", "when in housing", "player housing", "haus", "spielerhaus" } },
+    { key = "loadCondHideInCombat", label = "Hide in Combat", terms = { "in combat", "combat", "fight", "while in combat", "when in combat", "im kampf", "kampf" } },
     { key = "loadCondHideInGroup", label = "Hide in Group", terms = { "in group", "while in group", "when in group", "grouped", "in party", "in raid", "in gruppe", "gruppe" } },
     { key = "loadCondHideInInstance", label = "Hide in Instance", terms = { "in instance", "instance", "dungeon", "while in instance", "when in instance", "instanz" } },
+    { key = "loadCondHideInVehicle", label = "Hide in Vehicle", terms = { "in vehicle", "vehicle", "while in vehicle", "when in vehicle", "fahrzeug" } },
+    { key = "loadCondHideMounted", label = "Hide Mounted", terms = { "mounted", "mount", "on mount", "while mounted", "when mounted", "gemountet", "reittier" } },
+    { key = "loadCondHideNoTarget", label = "Hide with No Target", terms = { "no target", "without target", "when no target", "target selected", "has target", "with target", "kein ziel", "ohne ziel", "ziel ausgewählt", "hat ein ziel", "mit ziel" } },
+    { key = "loadCondHideOutOfCombat", label = "Hide Out of Combat", terms = { "out of combat", "outside combat", "not in combat", "ooc", "while out of combat", "when out of combat", "ausserhalb kampf", "ausser kampf", "nicht im kampf" } },
+    { key = "loadCondHideOutOfCombatNoTarget", label = "Hide Out of Combat with No Target", terms = { "out of combat and no target", "out of combat with no target", "no target while out of combat", "outside combat with no target", "target selected or in combat", "has target or in combat", "target or combat", "ausserhalb kampf und kein ziel", "kein ziel ausserhalb kampf", "ziel oder im kampf" } },
     { key = "loadCondHideResting", label = "Hide Resting", terms = { "resting", "rested", "rest area", "while resting", "when resting", "ruhend", "erholt" } },
-    { key = "loadCondHideInCombat", label = "Hide in Combat", terms = { "in combat", "combat", "fight", "while in combat", "when in combat", "im kampf", "kampf" } },
+    { key = "loadCondHideSolo", label = "Hide Solo", terms = { "solo", "alone", "while solo", "when solo", "allein" } },
     { key = "loadCondHideStealthed", label = "Hide Stealthed", terms = { "stealthed", "stealth", "in stealth", "while stealthed", "when stealthed", "getarnt", "verstohlen" } },
-    { key = "loadCondHideInHousing", label = "Hide in Housing", terms = { "housing", "house", "in housing", "while in housing", "when in housing", "player housing", "haus", "spielerhaus" } },
 }
 
 local LOAD_CONDITION_TERMS = {
@@ -1851,6 +1921,34 @@ local function HasUnitLoadConditionIntent(text, spec)
     end
     return #units > 0 and HasVisibilityVerb(text)
 end
+
+P.TARGET_GATE_LOAD_CONDITIONS = {
+    loadCondHideNoTarget = true,
+    loadCondHideOutOfCombatNoTarget = true,
+}
+P.TARGET_GATE_OFF_TERMS = {
+    "turn off", "disable", "disabled", "deactivate", "deactivated", "remove", "clear",
+    "dont hide", "do not hide", "never hide", "always show",
+    "deaktivieren", "deaktiviert", "ausschalten", "ausgeschaltet", "entfernen", "loeschen",
+    "nicht verstecken", "nicht ausblenden", "immer anzeigen",
+}
+
+function P.UnitLoadConditionValueForText(text, spec)
+    if spec and P.TARGET_GATE_LOAD_CONDITIONS[spec.key] == true then
+        -- For target gates, "show with a target" describes enabling the Hide
+        -- No Target rule rather than disabling a generic Hide setting. Only an
+        -- explicit request to turn the rule off wins over that semantic form.
+        if ContainsAny(text, P.TARGET_GATE_OFF_TERMS) then return false end
+        return true
+    end
+    return HideSettingValueForText(text, true)
+end
+
+P.TARGET_GATE_INTENT_TERMS = {
+    "no target", "without target", "target selected", "has target", "with target",
+    "target or combat", "target selected or in combat", "has target or in combat",
+    "kein ziel", "ohne ziel", "ziel ausgewählt", "hat ein ziel", "mit ziel", "ziel oder im kampf",
+}
 
 local function GroupAvailabilityAttributeForText(text)
     if ContainsAny(text, RegistryPhrases[26]) then
@@ -2005,12 +2103,37 @@ end
 
 local RELATIVE_INCREASE_TERMS = {
     "increase", "raise", "bump up", "more", "higher", "larger", "bigger", "wider", "taller", "thicker", "grow", "add",
+    "stronger", "strengthen", "rounder", "longer", "brighter", "turn it up", "turn up", "crank", "chunkier",
     "erhoehe", "erhoehen", "hoeher", "groesser", "mehr", "breiter", "dicker",
 }
 local RELATIVE_DECREASE_TERMS = {
     "decrease", "reduce", "lower", "less", "smaller", "narrower", "shorter", "thinner", "shrink", "subtract", "down",
+    "weaker", "weaken", "subtler", "softer", "fainter", "dimmer", "transparent", "tone down", "turn it down",
     "verringere", "reduziere", "tiefer", "niedriger", "kleiner", "weniger", "schmaler", "duenner", "runter",
 }
+
+-- Some phrases pair an increase word with a decrease meaning and the other way
+-- round: "more transparent" is LESS opacity, "less faded" is more. Checked
+-- before the single words, which would otherwise see the "more" and turn the
+-- slider the wrong way. "too <adjective>" states the complaint rather than the
+-- direction, so it is listed with the direction it asks for.
+local RELATIVE_PHRASE_SIGNS = {
+    { "more transparent", -1 }, { "more see through", -1 }, { "more seethrough", -1 },
+    { "less opaque", -1 }, { "more subtle", -1 }, { "more faded", -1 }, { "less visible", -1 },
+    { "too strong", -1 }, { "too intense", -1 }, { "too bright", -1 }, { "too much", -1 },
+    { "less transparent", 1 }, { "less see through", 1 }, { "more opaque", 1 },
+    { "less subtle", 1 }, { "less faded", 1 }, { "more visible", 1 },
+    { "too subtle", 1 }, { "too weak", 1 }, { "too faint", 1 }, { "too thin", 1 },
+    { "too small", 1 }, { "too little", 1 },
+}
+local function RelativePhraseSign(text)
+    text = tostring(text or ""):lower()
+    for i = 1, #RELATIVE_PHRASE_SIGNS do
+        local entry = RELATIVE_PHRASE_SIGNS[i]
+        if text:find(entry[1], 1, true) then return entry[2] end
+    end
+    return nil
+end
 
 P.DIRECTIONAL_MOVE_TERMS = {
     "move", "nudge", "shift", "position", "offset", "left", "right", "up", "down",
@@ -2073,6 +2196,9 @@ local PROPORTIONAL_MULTIPLIER_WORDS = {
     { "twice as", 2 }, { "two times as", 2 }, { "double", 2 }, { "doppelt", 2 },
     { "three times as", 3 }, { "triple", 3 }, { "thrice", 3 },
     { "half as", 0.5 }, { "halve", 0.5 }, { "half the", 0.5 }, { "haelfte", 0.5 },
+    -- "half transparent" states the result as a factor of full opacity; the
+    -- step reader used to take it as one 0.05 decrease (1 -> 0.95).
+    { "half transparent", 0.5 }, { "halb transparent", 0.5 },
 }
 
 -- "20% bigger" and "twice as tall" are changes RELATIVE TO THE CURRENT VALUE, so
@@ -2102,7 +2228,9 @@ function P.ProportionalNumberDeltaForSetting(setting, text)
         if percent == nil then return nil end
         -- A bare percentage says nothing about direction; only pair it with an
         -- explicit increase/decrease word so "set scale to 90%" is left alone.
-        if ContainsAny(text, RELATIVE_INCREASE_TERMS) then factor = 1 + percent / 100
+        local phraseSign = RelativePhraseSign(text)
+        if phraseSign then factor = 1 + phraseSign * percent / 100
+        elseif ContainsAny(text, RELATIVE_INCREASE_TERMS) then factor = 1 + percent / 100
         elseif ContainsAny(text, RELATIVE_DECREASE_TERMS) then factor = 1 - percent / 100
         else return nil end
     end
@@ -2122,9 +2250,11 @@ RelativeNumberDeltaForText = function(setting, text, fallbackAmount)
     -- and treat it as an absolute amount.
     local proportional = P.ProportionalNumberDeltaForSetting(setting, text)
     if proportional ~= nil then return proportional end
-    local sign
-    if ContainsAny(text, RELATIVE_INCREASE_TERMS) then sign = 1 end
-    if ContainsAny(text, RELATIVE_DECREASE_TERMS) then sign = -1 end
+    local sign = RelativePhraseSign(text)
+    if not sign then
+        if ContainsAny(text, RELATIVE_INCREASE_TERMS) then sign = 1 end
+        if ContainsAny(text, RELATIVE_DECREASE_TERMS) then sign = -1 end
+    end
     if not sign then return nil end
     if P.HasAbsoluteNumberTarget(text) then return nil end
     local amount = A._RelativeNumberAmountForText(text)
@@ -2350,7 +2480,22 @@ ValueForRegistrySetting = function(setting, text, raw)
         -- first so "set hp text separator to :" resolves the colon value.
         local symbolValue = P.SymbolEnumValueForRaw and P.SymbolEnumValueForRaw(setting, raw)
         if symbolValue ~= nil then return symbolValue end
-        return EnumValueForText(setting, text)
+        -- "turn it up" is intensity wording, never a direction value. For
+        -- direction-valued enums, mask those phrases so "the bar gradient is
+        -- too subtle, turn it up" cannot select Direction = up; the relative
+        -- strength path owns that request.
+        local enumText = text
+        for i = 1, #(setting.values or {}) do
+            local v = tostring(setting.values[i] or ""):lower()
+            if v == "up" or v == "down" then
+                enumText = tostring(text or "")
+                    :gsub("turn%s+it%s+up", " "):gsub("turn%s+it%s+down", " ")
+                    :gsub("turn%s+up", " "):gsub("turn%s+down", " ")
+                    :gsub("crank%s+it%s+up", " "):gsub("tone%s+it%s+down", " ")
+                break
+            end
+        end
+        return EnumValueForText(setting, enumText)
     end
     if setting.type == "string" then
         -- Some native controls store their fixed choices as strings because
@@ -2877,6 +3022,19 @@ local function ParseScopedFontTextColorShortcut(text)
 
     local setting = Registry and Registry:GetSetting("fontScope." .. tostring(scope) .. "." .. spec.key)
     if not setting then return nil end
+    -- This lane picks the value from the SPEC, not from the sentence: anything
+    -- that is not a "back to default" request becomes spec.on. For Name Text
+    -- Color Mode that is hardcoded CLASS, and the mode words below belong to
+    -- sibling controls it cannot express -- so "set target name color to
+    -- health" was silently written as Class colour, a value the player never
+    -- named. Name Text Color Mode offers only Default and Class; stand down and
+    -- let a lane that can answer the real question have the sentence.
+    if spec.key == "nameColorMode"
+        and ContainsAny(text, RegistryPhrases[428])
+        and not P._FontTextColorDefaultIntent(text, spec)
+    then
+        return nil
+    end
     local bareChoice = spec.key == "colorHealthTextByHealth" and P.ParseBareHPTextColorModeChoice(text)
     if bareChoice then return bareChoice end
     local value
@@ -3513,24 +3671,6 @@ local function ParsePowerColorPriorityShortcut(text, raw)
     return A._ParsePowerColorShortcut and A._ParsePowerColorShortcut(text, raw) or nil
 end
 
-local function ParseSharedAuraFiltersMenuShortcut(text)
-    if not ContainsAny(text, RegistryPhrases[175]) then return nil end
-    if ContainsAny(text, RegistryPhrases[176]) then
-        return nil
-    end
-    local value = DetectBoolean(text)
-    if value == nil then value = true end
-    local changes = {}
-    AddRegisteredChange(changes, "auras3.shared.filters.enabled", value)
-    if #changes == 0 then return nil end
-    return {
-        kind = "changes",
-        changes = changes,
-        label = "Aura Filters",
-        summary = "Changes the shared Aura Filters menu toggle.",
-    }
-end
-
 P.ParseRegistryPriorityShortcut = function(text, raw)
     return ParseBossTargetHighlightShortcut(text)
         or ParseGroupBorderColorShortcut(text, raw)
@@ -3538,7 +3678,6 @@ P.ParseRegistryPriorityShortcut = function(text, raw)
         or ParseDispelOverlayHealthOnlyShortcut(text)
         or ParseClassPowerBooleanDetailShortcut(text)
         or ParsePowerColorPriorityShortcut(text, raw)
-        or ParseSharedAuraFiltersMenuShortcut(text)
         or ParseUnitTextBooleanDetailShortcut(text)
         or ParseUnitStatusDetailShortcut(text)
         or ParseUnitCoreBooleanShortcut(text)
@@ -3926,6 +4065,15 @@ local BAR_GRADIENT_COLOR_TERMS = {
 }
 
 local function BarGradientDirectionValue(text)
+    -- "turn it up" / "tone it down" is intensity wording: "the bar gradient
+    -- is too subtle, turn it up" used to write Direction = UP instead of
+    -- raising the gradient strength. Mask those phrases before the direction
+    -- words are read; genuine direction requests ("gradient from the top",
+    -- "gradient direction up") are untouched.
+    text = tostring(text or "")
+        :gsub("turn%s+it%s+up", " "):gsub("turn%s+it%s+down", " ")
+        :gsub("turn%s+up", " "):gsub("turn%s+down", " ")
+        :gsub("crank%s+it%s+up", " "):gsub("tone%s+it%s+down", " ")
     if ContainsAny(text, RegistryPhrases[210]) then return "RIGHT" end
     if ContainsAny(text, RegistryPhrases[211]) then return "LEFT" end
     if ContainsAny(text, RegistryPhrases[212]) then return "UP" end
@@ -4718,12 +4866,12 @@ local function ParseUnitLoadConditionShortcut(text)
         return {
             kind = "answer",
             status = "ambiguous",
-            text = "Which unit frame visibility rule do you want me to change? MSUF offers Mounted, Out of combat, Solo, In vehicle, In group, In instance, Resting, In combat, and Stealthed.",
+            text = "Which unit frame visibility rule do you want me to change? MSUF offers Housing, In combat, In group, In instance, In vehicle, Mounted, No target, Out of combat, Out of combat and no target, Resting, Solo, and Stealthed.",
             summary = "Asks which unit frame visibility rule to change.",
         }
     end
 
-    local value = HideSettingValueForText(text, true)
+    local value = P.UnitLoadConditionValueForText(text, spec)
     local units, concrete = UnitLoadConditionScopes(text)
     if #units == 0 then
         local choices = UnitLoadConditionChoices(spec, value)
@@ -4756,6 +4904,17 @@ local function ParseUnitLoadConditionShortcut(text)
         label = "Which unit frame?",
         summary = "The request matched a unit frame visibility rule but did not name a unit.",
     }
+end
+
+function P.ParseTargetGateLoadConditionShortcut(text)
+    if not ContainsAny(text, P.TARGET_GATE_INTENT_TERMS) then return nil end
+    local parsed = ParseUnitLoadConditionShortcut(text)
+    local change = parsed and parsed.changes and parsed.changes[1]
+    local key = change and change.setting and change.setting.attribute
+    if key == "loadCondHideNoTarget" or key == "loadCondHideOutOfCombatNoTarget" then
+        return parsed
+    end
+    return nil
 end
 
 local function PowerBarScopes(text, unitOnly)

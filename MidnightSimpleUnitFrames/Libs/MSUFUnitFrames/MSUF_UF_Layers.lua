@@ -73,6 +73,7 @@ Layers.PREVIEW_FRAME_BORDER_OFFSET = Layers.FRAME_BORDER_NORMAL_OFFSET
 Layers.PREVIEW_BOUNDS_OFFSET = 48
 
 local floor = math.floor
+local max = math.max
 local tonumber = tonumber
 
 function Layers.ClampLayer(layer, fallback)
@@ -96,6 +97,27 @@ function Layers.ElementLevel(layer, fallback, detail)
   return Layers.ELEMENT_LEVEL_BASE
     + Layers.ClampLayer(layer, fallback) * Layers.ELEMENT_LEVEL_STRIDE
     + Layers.ClampDetail(detail)
+end
+
+--- Full-frame Aura effects must at least clear the surface they are meant to
+--- recolor.  The configured 0..30 Layer still wins whenever it is higher; this
+--- floor only prevents a low/default Layer from being completely overdrawn by
+--- the health bar or original name text.  All inputs are cold-path layout data.
+function Layers.AuraEffectLevel(layer, priority, targetOwner)
+  priority = floor((tonumber(priority) or 5) + 0.5)
+  if priority < 1 then priority = 1 elseif priority > 10 then priority = 10 end
+  local level = Layers.ElementLevel(layer, 0, 11 - priority)
+  if not (targetOwner and type(targetOwner.GetFrameLevel) == "function") then
+    return level
+  end
+  local targetLevel = targetOwner:GetFrameLevel()
+  local issecretvalue = _G and _G.issecretvalue
+  if type(issecretvalue) == "function" and issecretvalue(targetLevel) == true then
+    return level
+  end
+  targetLevel = tonumber(targetLevel)
+  if targetLevel ~= nil then level = max(level, targetLevel + 1) end
+  return level
 end
 
 function Layers.ParentStrata(frame)

@@ -806,11 +806,18 @@ local function ConfigureClickTarget(button, unit)
     button:SetAttribute("unit", unit)
     button._msufSecureUnit = unit
   end
-  button:SetAttribute("type1", nil)
-  button:SetAttribute("*type1", "target")
-  UF.AttachSecureUnitMenu(button)
-  button._msufSecureType1Target = true
-  button._msufSecureType2Menu = true
+  -- Stamp MSUF's fallback actions once. Click-cast providers replace these
+  -- attributes after ClickCastFrames registration; rewriting them on every
+  -- profile/config apply would silently take routing back from the provider.
+  if button._msufSecureType1Target ~= true then
+    button:SetAttribute("type1", nil)
+    button:SetAttribute("*type1", "target")
+    button._msufSecureType1Target = true
+  end
+  if button._msufSecureType2Menu ~= true then
+    UF.AttachSecureUnitMenu(button)
+    button._msufSecureType2Menu = true
+  end
   if button._msufSecureToggleVehicle ~= true then
     button:SetAttribute("toggleForVehicle", true)
     button._msufSecureToggleVehicle = true

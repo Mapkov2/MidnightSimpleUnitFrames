@@ -291,9 +291,10 @@ local FRAME_NAMES = {
     [systemEnum.MicroMenu or -3] = "MicroMenuContainer",
     [systemEnum.HudTooltip or -4] = "GameTooltipDefaultContainer",
     [systemEnum.Bags or -5] = "BagsBar",
-    [systemEnum.ObjectiveTracker or -6] = "ObjectiveTrackerFrame",
     [systemEnum.DamageMeter or -7] = "DamageMeter",
 }
+--- ObjectiveTrackerFrame is intentionally absent. Its dirty layout reaches
+--- combat-secret aura APIs, so it must remain entirely Blizzard-owned.
 
 local function SystemFrame(systemId)
     local manager = _G.EditModeManagerFrame
@@ -518,26 +519,6 @@ local function ApplyVisual(systemId, entry)
         if classColor ~= nil and type(frame.SetUseClassColor) == "function" then
             frame:SetUseClassColor(classColor == 1)
         end
-    elseif systemId == systemEnum.ObjectiveTracker then
-        --- Height is deliberately NOT exposed: the tracker's UpdateHeight
-        --- branches on IsInDefaultPosition() from the MANAGER's cached state
-        --- (which never learns about data-only saves) and recomputes height
-        --- from the frame's live anchor — driving it from outside fights the
-        --- anchor and destabilizes moving (field: ping-pong, then stuck).
-        --- Opacity and text size go through ObjectiveTrackerManager and
-        --- never touch the anchor.
-        local setting = _G.Enum.EditModeObjectiveTrackerSetting or {}
-        local manager = _G.ObjectiveTrackerManager
-        if type(manager) == "table" then
-            local opacity = map[setting.Opacity or 1]
-            if opacity ~= nil and type(manager.SetOpacity) == "function" then
-                manager:SetOpacity(opacity)
-            end
-            local textSize = map[setting.TextSize or 2]
-            if textSize ~= nil and type(manager.SetTextSize) == "function" then
-                manager:SetTextSize(textSize + 12)
-            end
-        end
     end
 end
 
@@ -547,7 +528,6 @@ local SNAPSHOT_KEYS = {
     [systemEnum.MicroMenu or -3] = "micromenu",
     [systemEnum.HudTooltip or -4] = "tooltip",
     [systemEnum.Bags or -5] = "bags",
-    [systemEnum.ObjectiveTracker or -6] = "tracker",
     [systemEnum.DamageMeter or -7] = "damagemeter",
 }
 
@@ -1018,18 +998,6 @@ local function Activate()
                     "HUD_EDIT_MODE_SETTING_DAMAGE_METER_SHOW_CLASS_COLOR", "Class colors", meterClass),
             }, { meterWidth, meterHeight, meterBar, meterPad, meterAlpha, meterBgAlpha,
                 meterText, meterSpec, meterClass }))
-    end
-    if systemEnum.ObjectiveTracker then
-        local trackerSetting = _G.Enum.EditModeObjectiveTrackerSetting or {}
-        local trackerOpacity = trackerSetting.Opacity or 1
-        local trackerText = trackerSetting.TextSize or 2
-        Add(Element(systemEnum.ObjectiveTracker, "tracker",
-            BlizzardLabel("HUD_EDIT_MODE_OBJECTIVE_TRACKER_LABEL", "Objective Tracker"), 865, {
-                SteppedSetting(systemEnum.ObjectiveTracker, "opacity",
-                    "HUD_EDIT_MODE_SETTING_OBJECTIVE_TRACKER_OPACITY", "Opacity", 0, 100, 1, trackerOpacity),
-                SteppedSetting(systemEnum.ObjectiveTracker, "textsize",
-                    "HUD_EDIT_MODE_SETTING_OBJECTIVE_TRACKER_TEXT_SIZE", "Text Size", 12, 20, 1, trackerText),
-            }, { trackerOpacity, trackerText }))
     end
     API.RegisterSessionListener(OWNER, SessionChanged)
     if API.RefreshOwner then API.RefreshOwner(OWNER) end

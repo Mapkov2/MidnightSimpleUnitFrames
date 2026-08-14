@@ -25,11 +25,13 @@ local C_Timer = _G.C_Timer
 local PowerColor = Text.PowerColor
 local SetShownCached = Text.SetShownCached
 local SetTextCached = Text.SetTextCached
-local SetNameTextColor = Text.SetNameTextColor
-local NameTextColor = Text.NameTextColor
+local ApplyNameTextColor = Text.ApplyNameTextColor or function(frame, unit)
+  Text.SetNameTextColor(frame, Text.NameTextColor(frame, unit))
+end
 local NPCTypeTextColorEnabled = Text.NPCTypeTextColorEnabled
-local SetInlineTextColor = Text.SetInlineTextColor
-local InlineTextColor = Text.InlineTextColor
+local ApplyInlineTextColor = Text.ApplyInlineTextColor or function(frame, unit, inline)
+  Text.SetInlineTextColor(frame, Text.InlineTextColor(frame, unit, inline))
+end
 local SetPowerTextColor = Text.SetPowerTextColor
 local UpdateHealthTextColor = Text.UpdateHealthTextColor
 local HealthPercent = Text.HealthPercent
@@ -691,7 +693,7 @@ end
 
 function Text.UpdateNameColor(frame, event, unit)
   if RegionShown(frame and frame.nameText) then
-    SetNameTextColor(frame, NameTextColor(frame, unit or frame.MSUFUnitKey))
+    ApplyNameTextColor(frame, unit or frame.MSUFUnitKey)
     local rt = frame and frame._msufTextRuntime
     if rt and rt.inlineToT then
       Text.UpdateInline(frame, event, unit)
@@ -739,14 +741,17 @@ function Text.UpdateInline(frame, event, unit)
   end
   SetShownCached(frame.totInlineSep, true)
   SetShownCached(frame.totInlineText, true)
-  SetInlineTextColor(frame, InlineTextColor(frame, inlineUnit, inline))
+  ApplyInlineTextColor(frame, inlineUnit, inline)
 end
 
 local function SetNameTextCached(frame, value)
   SetTextCached(frame.nameText, value)
   local proxy = frame._msufNameAnchorTextActive == true and frame._msufNameAnchorText
   if proxy then SetTextCached(proxy, value) end
-  if frame._msufNameCenterClip == true and RefreshNameCenterClipFit then
+  -- Any no-ellipsis clip window (side or centered) needs the warm fit: it
+  -- tracks whether the name really overflows the window, which decides the
+  -- NAMELEFT/NAMERIGHT status anchor target.
+  if frame._msufNameInlineClip ~= nil and RefreshNameCenterClipFit then
     RefreshNameCenterClipFit(frame)
   end
 end
@@ -1827,10 +1832,14 @@ UF.RegisterElement("HealthText", HealthText)
 local PowerText = {}
 
 function PowerText.IsEnabled(frame, spec)
+  if frame and frame._msufAugPowerReplacementActive == true then return false end
   return PowerTextEnabled(spec)
 end
 
 function PowerText.GetEvents(frame, spec)
+  if frame and frame._msufAugPowerReplacementActive == true then
+    return EMPTY_EVENTS
+  end
   if not PowerTextEnabled(spec) then
     return EMPTY_EVENTS
   end
@@ -1998,11 +2007,69 @@ HealthText.NoDispatchUpdates = {
   [MarkHealthTextDirty] = true,
   [MarkGroupHealthTextDirty] = true,
 }
+-- Core may omit a repeated UNIT_HEALTH marker while either mask containing the
+-- health bit is already pending. The deferred writer rereads the latest unit
+-- values at drain time, so repeated markers carry no event payload or state.
+HealthText.DirtyGateUpdates = {
+  [MarkHealthTextDirty] = true,
+  [MarkGroupHealthTextDirty] = true,
+}
 PowerText.NoDispatchUpdates = { [MarkPowerTextDirty] = true }
 
 UF.RegisterElement("PowerText", PowerText)
 
 local InlineToT = {}
+
+local inlineToTDriver
+local inlineToTOwner
+local inlineToTUnit
+
+local function InlineToTNeedsColorEvents(inline)
+  return inline and ((inline.colorMode and inline.colorMode ~= "DEFAULT")
+    or inline.targetNameClassColor == true
+    or inline.targetNameNpcColor == true
+    or inline.targetNameNpcClassColor == true
+    or inline.totNameClassColor == true
+    or inline.totNameNpcColor == true
+    or inline.totNameNpcClassColor == true)
+end
+
+local function ClearInlineToTDriver(owner)
+  if owner ~= nil and inlineToTOwner ~= owner then return end
+  if inlineToTDriver and inlineToTDriver.UnregisterAllEvents then
+    inlineToTDriver:UnregisterAllEvents()
+  end
+  inlineToTOwner = nil
+  inlineToTUnit = nil
+end
+
+local function ConfigureInlineToTDriver(frame, spec)
+  local inline = spec and spec.text and spec.text.inlineToT
+  if not InlineEnabled(frame, spec) then
+    ClearInlineToTDriver(frame)
+    return false
+  end
+  if not inlineToTDriver then
+    local createFrame = _G.CreateFrame
+    if type(createFrame) ~= "function" then return false end
+    inlineToTDriver = createFrame("Frame")
+    inlineToTDriver:SetScript("OnEvent", function(_, event)
+      local owner = inlineToTOwner
+      local active = owner and owner._msufActiveElements
+      if not (owner and active and active.InlineToT == true) then return end
+      InlineToT.Update(owner, event, inlineToTUnit)
+    end)
+  end
+
+  inlineToTDriver:UnregisterAllEvents()
+  inlineToTOwner = frame
+  inlineToTUnit = inline.unit or "targettarget"
+  local events = InlineToTNeedsColorEvents(inline) and INLINE_COLOR_UNITLESS_EVENTS or INLINE_NAME_UNITLESS_EVENTS
+  for i = 1, #events do
+    inlineToTDriver:RegisterUnitEvent(events[i], inlineToTUnit)
+  end
+  return true
+end
 
 function InlineToT.IsEnabled(frame, spec)
   return InlineEnabled(frame, spec)
@@ -2012,21 +2079,12 @@ function InlineToT.GetEvents()
   return INLINE_TARGET_EVENTS
 end
 
-function InlineToT.GetUnitlessEvents(frame, spec)
-  local inline = spec and spec.text and spec.text.inlineToT
-  if not inline then
-    return EMPTY_EVENTS
-  end
-  if (inline.colorMode and inline.colorMode ~= "DEFAULT")
-    or inline.targetNameClassColor == true
-    or inline.targetNameNpcColor == true
-    or inline.targetNameNpcClassColor == true
-    or inline.totNameClassColor == true
-    or inline.totNameNpcColor == true
-    or inline.totNameNpcClassColor == true then
-    return INLINE_COLOR_UNITLESS_EVENTS
-  end
-  return INLINE_NAME_UNITLESS_EVENTS
+function InlineToT.GetUnitlessEvents()
+  return EMPTY_EVENTS
+end
+
+function InlineToT.Apply(frame, spec)
+  return ConfigureInlineToTDriver(frame, spec)
 end
 
 function InlineToT.Update(frame, event, unit)
@@ -2035,6 +2093,7 @@ end
 InlineToT.NoDispatchUpdates = { [InlineToT.Update] = true }
 
 function InlineToT.Disable(frame)
+  ClearInlineToTDriver(frame)
   SetShownCached(frame and frame.totInlineSep, false)
   SetShownCached(frame and frame.totInlineText, false)
   if frame then

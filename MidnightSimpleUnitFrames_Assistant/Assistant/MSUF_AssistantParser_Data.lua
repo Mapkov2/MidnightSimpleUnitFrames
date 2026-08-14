@@ -141,6 +141,16 @@ Data.ROOT_PARSER = {
         "texture", "gradient", "color", "colors", "colour", "colours",
         "opacity", "alpha", "font", "text size", "font size", "anchor", "offset",
         "delay", "after", "tint", "dead background", "background",
+        -- Shape, size and placement wording names a DIFFERENT attribute of the
+        -- same frames. Without these, "don't round my party and raid frames"
+        -- reached the enabled branch through the bare noun "raid frames", read
+        -- the negation as the value, and planned to switch the player's party
+        -- and raid frames off entirely. This lane owns availability only.
+        "round", "rounded", "square", "corner", "corners", "shape",
+        "outline", "border", "borders", "highlight", "glow", "shadow",
+        "width", "height", "size", "scale", "spacing", "padding", "margin",
+        "position", "move", "layout", "column", "columns", "row", "rows",
+        "sort", "order", "grow", "growth", "direction", "portrait",
     },
         [63] = { "offline in combat", "hide offline in combat" },
         [64] = { "offline members", "offline member", "offline players", "hide offline members", "hide offline" },
@@ -1020,6 +1030,14 @@ Data.ROOT_PARSER = {
         [563] = { "rounded power bars", "rounded powerbar", "power bar corners", "powerbar corners" },
         [564] = { "rounded group frames", "rounded party frames", "rounded raid frames", "group frame corners" },
         [565] = { "rounded unit frames", "rounded unitframes", "unit frame corners", "unitframe corners" },
+        -- Objects of the VERB form ("don't round my party and raid frames").
+        -- The adjective lists above spell "rounded <thing>"; these name the
+        -- thing alone and are consulted only once the verb has opened the lane,
+        -- so a sentence the adjective lists already place cannot be re-aimed.
+        [814] = { "mouseover", "hover", "mouse over" },
+        [815] = { "power bar", "power bars", "powerbar", "powerbars", "mana bar", "mana bars", "resource bar", "resource bars" },
+        [816] = { "party", "raid", "group frame", "group frames", "groupframe", "groupframes", "gruppenframe", "gruppenframes" },
+        [817] = { "unit frame", "unit frames", "unitframe", "unitframes", "einzelframe", "einzelframes" },
         [566] = {
         "unitframe dispel overlay", "unit frame dispel overlay", "dispel overlay", "health bar dispel overlay",
     },
