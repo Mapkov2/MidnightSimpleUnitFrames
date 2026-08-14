@@ -8,10 +8,45 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.07-Beta4",
-    previousVersion = "6.07-Beta3",
-    rangeLabel = "6.07-Beta3 -> 6.07-Beta4",
+    currentVersion = "6.07",
+    previousVersion = "6.06",
+    rangeLabel = "6.06 -> 6.07",
     entries = {
+        {
+            version = "6.07",
+            date = "2026-08-15",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Expanded Texture Layers into three independently configurable, HP-reactive decoration slots with shared gradients, threshold colors, opacity rules, target/combat conditions, presets, and runtime-faithful previews.",
+                        "Added Chunked Health and Power Loss for Unit and Group Frames. Bars update immediately while a configurable loss trail shows recently spent Health or Power without polling.",
+                        "Added profile-wide controls for Blizzard's Player Buff Frame and normal Debuff icons while keeping Private Auras and Deadly Debuff warnings available.",
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Added direct Edit Mode popup controls for Custom Aura 1-4, Dots on Target, and Player Defensive Buffs, including position, size, spacing, reset, undo, Boss synchronization, and Menu focus.",
+                        "Restored Spell Indicator bars with Blizzard's native aura-duration StatusBar, configurable growth direction, smoothing, timer text, geometry, color, alpha, and layer.",
+                        "Increased the Menu Back and Forward buttons for easier navigation.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Fixed Group Aura lanes and Spell Indicators remaining visible for offline, phased, distant-map, or different-instance members. Presence updates remain coalesced and event-driven.",
+                        "Fixed Unit Aura preview handles requiring a second click before their X/Y controls appeared after switching lanes. The first click now survives the settings-page rebuild.",
+                        "Fixed Target of Target identity and color events being routed through the Target frame without unit filtering. Updates now listen only to targettarget, and foreign unit events can no longer recolor the Target health bar.",
+                        "Fixed Texture Layer controls writing to the wrong slot and protected HP-driven alpha values being cached or compared from Lua.",
+                        "Fixed Spell Indicator icon, bar, glow, and full-frame effect ownership, opacity, cleanup, preview parity, and layer ordering.",
+                        "Fixed Level, Race, Class, and other name-relative status text drifting away from shortened or repositioned Unit Frame names.",
+                        "Fixed stale Player portraits, Unit Aura settings writing to the wrong lane, and Objective Tracker state leaking through MSUF's Edit Mode bridge.",
+                        "Fixed Class Resource preview text handles becoming trapped behind higher-layer bar visuals.",
+                    },
+                },
+            },
+        },
         {
             version = "6.07-Beta4",
             date = "2026-08-14",
@@ -62,30 +97,6 @@ local data = {
                         "Fixed Spell Indicator icons and full-frame effects competing for AuraSlot ownership. Both styles now share one native Blizzard assignment while retaining independent element layers. Unsupported expiration-timed full-frame effects now fall back to the active-aura effect without secret-value hooks or polling.",
                         "Improved Assistant handling for conversational bar dimensions, rounded-frame requests, no-target load conditions, Raid filters versus Raid frame scope, Aura lane attributes, and outline layer wording.",
                         "Fixed narrow Assistant navigation, reset, and profile-copy requests being interpreted as broader setting changes.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.07-Beta1",
-            date = "2026-08-14",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "Texture Layers are now three fully configurable, HP-reactive decoration slots. Each texture can follow the shared low/mid/high HP gradient, switch to class or custom colors above a threshold, change opacity or appear only at low health, and combine current-target and combat-state rules. The reorganized setup adds quick Text Background and Highlight presets plus runtime-faithful previews, while HP reactions reuse the existing Health update path without polling.",
-                        "Added Chunked Health and Power Loss for Unit and Group Frames. The live bar updates immediately while a short, configurable loss trail shows what was just spent or lost; Smooth and Chunked modes are mutually exclusive and share runtime-faithful previews, rounded-frame support, copy controls, and dedicated loss colors.",
-                        "Added independent profile-wide switches for Blizzard's player Buff Frame and normal Debuff icons near the minimap. Private Auras and Deadly Debuff warnings remain visible, and the feature stays passive with no polling or recurring MSUF work.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed Group Aura lanes and Spell Indicators remaining visible for members who are offline, phased, on another map, or inside a different instance group. Presence now composes with helpful/hostile assistability and fails closed through coalesced lifecycle events. Identity, phase, and connection changes remain combat-live, while cold map and instance reconciliation is deferred into one post-combat pass.",
-                        "Removed the Objective Tracker from MSUF's Blizzard Edit Mode bridge to avoid propagating dirty layout state into combat-secret UI paths. The tracker remains fully Blizzard-owned, and Group Edit Mode now relies on its single shared state listener.",
-                        "Fixed native Player portraits occasionally remaining stale or blank after login or world entry.",
-                        "Fixed several Unit Aura layout settings writing to the wrong scope, including lane visibility and separate Buff/Debuff style padding.",
-                        "Improved Assistant handling for natural highlight on/off requests, texture names without connector words, border styles and opacity, outline layers, absorb height, gradient intensity, and how-to navigation. Unmatched navigation requests now offer the closest controls without changing settings.",
                     },
                 },
             },

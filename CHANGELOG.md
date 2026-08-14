@@ -1,5 +1,30 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.07 - 2026-08-15
+
+### Highlights
+
+- Expanded **Texture Layers** into three independently configurable, HP-reactive decoration slots with shared gradients, threshold colors, opacity rules, target/combat conditions, presets, and runtime-faithful previews.
+- Added **Chunked Health and Power Loss** for Unit and Group Frames. Bars update immediately while a configurable loss trail shows recently spent Health or Power without polling.
+- Added profile-wide controls for Blizzard's Player Buff Frame and normal Debuff icons while keeping Private Auras and Deadly Debuff warnings available.
+
+### Changes
+
+- Added direct Edit Mode popup controls for Custom Aura 1-4, Dots on Target, and Player Defensive Buffs, including position, size, spacing, reset, undo, Boss synchronization, and Menu focus.
+- Restored Spell Indicator bars with Blizzard's native aura-duration StatusBar, configurable growth direction, smoothing, timer text, geometry, color, alpha, and layer.
+- Increased the Menu Back and Forward buttons for easier navigation.
+
+### Fixes & Performance
+
+- Fixed Group Aura lanes and Spell Indicators remaining visible for offline, phased, distant-map, or different-instance members. Presence updates remain coalesced and event-driven.
+- Fixed Unit Aura preview handles requiring a second click before their X/Y controls appeared after switching lanes. The first click now survives the settings-page rebuild.
+- Fixed Target of Target identity and color events being routed through the Target frame without unit filtering. Updates now listen only to `targettarget`, and foreign unit events can no longer recolor the Target health bar.
+- Fixed Texture Layer controls writing to the wrong slot and protected HP-driven alpha values being cached or compared from Lua.
+- Fixed Spell Indicator icon, bar, glow, and full-frame effect ownership, opacity, cleanup, preview parity, and layer ordering.
+- Fixed Level, Race, Class, and other name-relative status text drifting away from shortened or repositioned Unit Frame names.
+- Fixed stale Player portraits, Unit Aura settings writing to the wrong lane, and Objective Tracker state leaking through MSUF's Edit Mode bridge.
+- Fixed Class Resource preview text handles becoming trapped behind higher-layer bar visuals.
+
 ## 6.07-Beta4 - 2026-08-14
 
 ### Fixes & Performance
