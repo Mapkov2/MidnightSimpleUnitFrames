@@ -1211,6 +1211,19 @@ local function FinalizeScene(scene)
     local function ElementLevel(layer, fallback, detail)
         return PreviewElementLevel(mock, S.Layers, layer, fallback, detail)
     end
+    local function SelectedSpellEffectLevel(layer, priority)
+        local level = ElementLevel(layer, 0, 11 - priority)
+        local effect = scene.selectedSpellEffect
+        if type(effect) == "table" and tostring(effect.type or "none"):lower() == "namecolor" then
+            -- The shared renderer already places Name Overlay above its source.
+            -- Preserve that one target floor when Group Preview rebases the
+            -- selected effect into its private frame-level band.
+            local nameOwner = mock._nameFS and mock._nameFS.GetParent and mock._nameFS:GetParent()
+            local nameLevel = nameOwner and nameOwner.GetFrameLevel and tonumber(nameOwner:GetFrameLevel())
+            if nameLevel ~= nil then level = max(level, nameLevel + 1) end
+        end
+        return level
+    end
     PlaceTextHandles(scene)
     local liveStrata, hostStrata = PreviewHostStrata(scene)
     local auraHandles = {
@@ -1268,7 +1281,7 @@ local function FinalizeScene(scene)
         -- produce a negative local offset below the menu mock. Keep the preview
         -- root on the host strata and express priority in a bounded local band.
         ApplyHandleStrata(scene, selectedEffectRoot, "AUTO", liveStrata, hostStrata)
-        SetPreviewFrameLevel(selectedEffectRoot, ElementLevel(effectLayer, 0, 11 - priority))
+        SetPreviewFrameLevel(selectedEffectRoot, SelectedSpellEffectLevel(effectLayer, priority))
     end
     if selectedEffectOwner then
         SetPreviewFrameLevel(selectedEffectOwner, baseLevel + 1)
