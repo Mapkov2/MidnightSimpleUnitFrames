@@ -50,6 +50,16 @@ jobs:
       - name: Mirror, validate, and push Classic
         shell: pwsh
         run: |
-          & "$env:GITHUB_WORKSPACE/retail/.github/scripts/Sync-ClassicRetail.ps1" `
-            -RetailRoot "$env:GITHUB_WORKSPACE/retail" `
-            -ClassicRoot "$env:GITHUB_WORKSPACE/classic"
+          try {
+            & "$env:GITHUB_WORKSPACE/retail/.github/scripts/Sync-ClassicRetail.ps1" `
+              -RetailRoot "$env:GITHUB_WORKSPACE/retail" `
+              -ClassicRoot "$env:GITHUB_WORKSPACE/classic"
+            if ($LASTEXITCODE -ne 0) {
+              throw "Sync script exited with code $LASTEXITCODE."
+            }
+          } catch {
+            $details = ($_ | Out-String).Trim()
+            $annotation = $details.Replace('%', '%25').Replace("`r", '').Replace("`n", '%0A')
+            Write-Host "::error title=Retail-to-Classic sync failed::$annotation"
+            throw
+          }
