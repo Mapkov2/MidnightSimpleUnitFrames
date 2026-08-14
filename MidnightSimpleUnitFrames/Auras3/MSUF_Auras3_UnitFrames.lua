@@ -5166,6 +5166,11 @@ local function PrepareDispelSensorButton(button, sensor, parentFrame, index)
     if button.EnableMouse then button:EnableMouse(false) end
     button:SetMouseMotionEnabled(false)
     if not LayoutDispelSensorButton(button, sensor, parentFrame, index) then return false end
+    -- Reset reused native buttons before a visual-specific alpha is applied.
+    -- The overlay deliberately owns alpha on the button below: Blizzard's
+    -- PreserveAsset path recolors its texture with SetVertexColor(..., 1) on
+    -- every aura update, which otherwise erases the configured opacity.
+    button:SetAlpha(1)
 
     local icon = button.Icon
     if not icon then
@@ -5241,7 +5246,8 @@ local function PrepareDispelSensorButton(button, sensor, parentFrame, index)
     end
     if sensor.visual == "overlay" then
         region:SetTexture("Interface\\Buttons\\WHITE8X8")
-        region:SetAlpha(Clamp01(sensor.alpha, 0.35))
+        region:SetAlpha(1)
+        button:SetAlpha(Clamp01(sensor.alpha, 0.35))
         button:AddDispelTypeTexture(region, GetSensorOverlayOptions())
         RegisterRoundedDispelOverlayRegion(parentFrame, region)
     elseif sensor.visual == "purge" then
