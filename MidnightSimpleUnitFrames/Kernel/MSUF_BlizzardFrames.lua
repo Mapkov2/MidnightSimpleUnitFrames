@@ -24,7 +24,6 @@ local visibleFrames = {}
 local watcher
 local blizzardAuraHiddenParent
 local buffAuraOriginalParent
-local debuffAuraOriginalParent
 local buffAuraSuppressedByMSUF = false
 local debuffAuraSuppressedByMSUF = false
 
@@ -296,11 +295,13 @@ end
 
 --- The minimap-adjacent player BuffFrame and DebuffFrame are ordinary,
 --- unprotected Blizzard Edit Mode frames on 12.1. Suppression is passive:
---- reparent the requested presentation below one permanently hidden frame.
---- Blizzard can keep updating its own shown state without any MSUF hook,
---- event, timer, or OnUpdate. DebuffFrame's normal icons live below
---- AuraContainer while PrivateAuraAnchors are direct siblings, so moving only
---- the container preserves private encounter auras and DeadlyDebuffFrame.
+--- BuffFrame is parented below one permanently hidden frame, while the normal
+--- Debuff AuraContainer is hidden without changing its hierarchy. Blizzard can
+--- keep updating its own state without any MSUF hook, event, timer, or OnUpdate.
+--- DebuffFrame's normal icons live below
+--- AuraContainer while PrivateAuraAnchors are direct siblings. The container
+--- itself must retain DebuffFrame as its parent because Blizzard's
+--- AuraContainerMixin:UpdateGridLayout calls self:GetParent():UpdateSize().
 local function BlizzardAuraHideSettings()
     local db = _G.MSUF_DB
     local auras = type(db) == "table" and type(db.auras3) == "table" and db.auras3 or nil
@@ -318,7 +319,7 @@ local function EnsureBlizzardAuraHiddenParent()
     return blizzardAuraHiddenParent
 end
 
-local function CanReparentBlizzardAuraFrame(frame)
+local function CanMutateBlizzardAuraFrame(frame)
     if not frame or (frame.IsForbidden and frame:IsForbidden()) then return false end
     -- These frames are unprotected in Blizzard_BuffFrame on 12.1. If that ever
     -- changes, fail closed instead of adding a combat event or touching a
@@ -327,8 +328,8 @@ local function CanReparentBlizzardAuraFrame(frame)
     return true
 end
 
-local function SetPassiveBlizzardAuraSuppression(frame, suppress, originalParent, owned)
-    if not CanReparentBlizzardAuraFrame(frame) then
+local function SetPassiveBlizzardBuffSuppression(frame, suppress, originalParent, owned)
+    if not CanMutateBlizzardAuraFrame(frame) then
         return originalParent, owned, nil
     end
     if not suppress and not owned then
@@ -350,21 +351,34 @@ local function SetPassiveBlizzardAuraSuppression(frame, suppress, originalParent
     return originalParent, owned, nil
 end
 
+local function SetPassiveBlizzardDebuffSuppression(container, suppress, owned)
+    if not CanMutateBlizzardAuraFrame(container) then return owned end
+    local shown = container.IsShown and container:IsShown() == true
+    if suppress then
+        if shown then
+            container:Hide()
+            return true
+        end
+        return owned
+    end
+    if owned then
+        container:Show()
+        return false
+    end
+    return owned
+end
+
 local function ApplyBlizzardAuraVisibility()
     local hideBuffs, hideDebuffs = BlizzardAuraHideSettings()
     local buffFrame = _G.BuffFrame
     local debuffFrame = _G.DebuffFrame
 
-    buffAuraOriginalParent, buffAuraSuppressedByMSUF = SetPassiveBlizzardAuraSuppression(
+    buffAuraOriginalParent, buffAuraSuppressedByMSUF = SetPassiveBlizzardBuffSuppression(
         buffFrame, hideBuffs, buffAuraOriginalParent, buffAuraSuppressedByMSUF)
 
     local debuffContainer = debuffFrame and debuffFrame.AuraContainer
-    local debuffAction
-    debuffAuraOriginalParent, debuffAuraSuppressedByMSUF, debuffAction = SetPassiveBlizzardAuraSuppression(
-        debuffContainer, hideDebuffs, debuffAuraOriginalParent, debuffAuraSuppressedByMSUF)
-    if debuffAction == "restored" and debuffFrame and type(debuffFrame.UpdateAuraContainerAnchor) == "function" then
-        debuffFrame:UpdateAuraContainerAnchor()
-    end
+    debuffAuraSuppressedByMSUF = SetPassiveBlizzardDebuffSuppression(
+        debuffContainer, hideDebuffs, debuffAuraSuppressedByMSUF)
     return buffAuraSuppressedByMSUF, debuffAuraSuppressedByMSUF
 end
 
