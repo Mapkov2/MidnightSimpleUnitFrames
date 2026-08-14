@@ -1802,6 +1802,13 @@ local function ParseReset(text)
             summary = "Restores default anchor and offsets.",
         } or nil
     end
+    -- Whole-page reset is the fallback for "reset player settings". A sentence
+    -- that names a narrower subject is not a request to wipe every option on
+    -- that page: "reset target aura overrides" was answered by offering to
+    -- reset the entire Target page, behind a confirmation whose wording did not
+    -- describe that. Stand down and let a narrower lane -- or a clarification --
+    -- answer instead.
+    if ContainsAny(text, ActionsPhrases[159]) then return nil end
     local action = Registry and Registry:GetAction("reset_unit_page")
     return action and {
         kind = "action",
@@ -1817,6 +1824,11 @@ local function ParseOpen(text, raw)
     local explicit = ContainsAny(text, ActionsPhrases[116])
     local shortcut = false
     if not explicit and DetectBoolean(text) == nil and FirstNumber(text) == nil then
+        -- "edit target auras" asks to be taken somewhere just as plainly as
+        -- "open target auras", and answered with the aura fallback article
+        -- until now. Behind the same no-value guard, so "edit target buff size
+        -- to 30" still applies 30 instead of opening a page.
+        explicit = ContainsAny(text, ActionsPhrases[158])
         shortcut = ContainsAny(text, ActionsPhrases[117])
         if not shortcut then
             for i = 1, #PAGE_TEXT_TARGETS do
