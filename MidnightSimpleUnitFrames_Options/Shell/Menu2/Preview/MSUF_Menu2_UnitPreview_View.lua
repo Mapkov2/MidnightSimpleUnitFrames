@@ -659,11 +659,14 @@ OpenPreviewHandleSettings = function(handle, source)
                 and type(menu.InvalidatePage) == "function"
             then
                 Preview._restoreHandleUnit, Preview._restoreHandleKey, Preview._restoreSourceBox = unit, handle._key, box
+                Preview._restoreSourceShowSerial = tonumber(box and box._msuf2PreviewShowSerial) or 0
                 menu.InvalidatePage(pageKey)
             end
             local selected = menu.SelectPage(pageKey) ~= false
             if selected then Preview.RestoreQueuedHandle(Preview.active)
-            else Preview._restoreHandleUnit, Preview._restoreHandleKey, Preview._restoreSourceBox = nil, nil, nil end
+            else
+                Preview._restoreHandleUnit, Preview._restoreHandleKey, Preview._restoreSourceBox, Preview._restoreSourceShowSerial = nil, nil, nil, nil
+            end
             return selected
         end
         return false
@@ -954,13 +957,15 @@ local function FindUnitPreviewHandle(box, handleKey)
     return nil
 end
 function Preview.RestoreQueuedHandle(box)
-    if not (box and box ~= Preview._restoreSourceBox and SelectPreviewHandle and Preview._restoreHandleKey
+    local sameSourceGeneration = box and box == Preview._restoreSourceBox
+        and (tonumber(box._msuf2PreviewShowSerial) or 0) <= (tonumber(Preview._restoreSourceShowSerial) or 0)
+    if not (box and not sameSourceGeneration and SelectPreviewHandle and Preview._restoreHandleKey
         and tostring(box.key) == tostring(Preview._restoreHandleUnit)
         and (not box.IsShown or box:IsShown()))
     then return false end
     local handle = FindUnitPreviewHandle(box, Preview._restoreHandleKey)
     if not (handle and handle._msufPlaced ~= false and (not handle.IsShown or handle:IsShown())) then return false end
-    Preview._restoreHandleUnit, Preview._restoreHandleKey, Preview._restoreSourceBox = nil, nil, nil
+    Preview._restoreHandleUnit, Preview._restoreHandleKey, Preview._restoreSourceBox, Preview._restoreSourceShowSerial = nil, nil, nil, nil
     SelectPreviewHandle(handle, true)
     return true
 end
@@ -2353,6 +2358,7 @@ local function BuildPreview(parent, panel, width, height)
         end
     end
     box:SetScript("OnShow", function(self)
+        self._msuf2PreviewShowSerial = (tonumber(self._msuf2PreviewShowSerial) or 0) + 1
         Preview.active = self
         if PreviewAnimationActive(self) then StartPreviewAnimationDriver(self) end
         RefreshPreviewAnimationButton(self)
