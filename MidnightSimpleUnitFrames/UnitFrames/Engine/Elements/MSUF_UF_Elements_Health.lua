@@ -686,7 +686,9 @@ end
 
 local function UpdateColorOnly(frame, event, unit)
   if not (frame and frame.hpBar) then return end
-  if not ApplyRuntimeColor(frame, event, unit or frame.MSUFUnitKey) then
+  local frameUnit = frame.MSUFUnitKey
+  if unit ~= nil and issecretvalue(unit) ~= true and unit ~= frameUnit then return end
+  if not ApplyRuntimeColor(frame, event, frameUnit) then
     SetColor(frame)
   end
 end

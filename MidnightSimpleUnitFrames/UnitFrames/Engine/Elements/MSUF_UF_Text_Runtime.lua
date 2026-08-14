@@ -2020,6 +2020,57 @@ UF.RegisterElement("PowerText", PowerText)
 
 local InlineToT = {}
 
+local inlineToTDriver
+local inlineToTOwner
+local inlineToTUnit
+
+local function InlineToTNeedsColorEvents(inline)
+  return inline and ((inline.colorMode and inline.colorMode ~= "DEFAULT")
+    or inline.targetNameClassColor == true
+    or inline.targetNameNpcColor == true
+    or inline.targetNameNpcClassColor == true
+    or inline.totNameClassColor == true
+    or inline.totNameNpcColor == true
+    or inline.totNameNpcClassColor == true)
+end
+
+local function ClearInlineToTDriver(owner)
+  if owner ~= nil and inlineToTOwner ~= owner then return end
+  if inlineToTDriver and inlineToTDriver.UnregisterAllEvents then
+    inlineToTDriver:UnregisterAllEvents()
+  end
+  inlineToTOwner = nil
+  inlineToTUnit = nil
+end
+
+local function ConfigureInlineToTDriver(frame, spec)
+  local inline = spec and spec.text and spec.text.inlineToT
+  if not InlineEnabled(frame, spec) then
+    ClearInlineToTDriver(frame)
+    return false
+  end
+  if not inlineToTDriver then
+    local createFrame = _G.CreateFrame
+    if type(createFrame) ~= "function" then return false end
+    inlineToTDriver = createFrame("Frame")
+    inlineToTDriver:SetScript("OnEvent", function(_, event)
+      local owner = inlineToTOwner
+      local active = owner and owner._msufActiveElements
+      if not (owner and active and active.InlineToT == true) then return end
+      InlineToT.Update(owner, event, inlineToTUnit)
+    end)
+  end
+
+  inlineToTDriver:UnregisterAllEvents()
+  inlineToTOwner = frame
+  inlineToTUnit = inline.unit or "targettarget"
+  local events = InlineToTNeedsColorEvents(inline) and INLINE_COLOR_UNITLESS_EVENTS or INLINE_NAME_UNITLESS_EVENTS
+  for i = 1, #events do
+    inlineToTDriver:RegisterUnitEvent(events[i], inlineToTUnit)
+  end
+  return true
+end
+
 function InlineToT.IsEnabled(frame, spec)
   return InlineEnabled(frame, spec)
 end
@@ -2028,21 +2079,12 @@ function InlineToT.GetEvents()
   return INLINE_TARGET_EVENTS
 end
 
-function InlineToT.GetUnitlessEvents(frame, spec)
-  local inline = spec and spec.text and spec.text.inlineToT
-  if not inline then
-    return EMPTY_EVENTS
-  end
-  if (inline.colorMode and inline.colorMode ~= "DEFAULT")
-    or inline.targetNameClassColor == true
-    or inline.targetNameNpcColor == true
-    or inline.targetNameNpcClassColor == true
-    or inline.totNameClassColor == true
-    or inline.totNameNpcColor == true
-    or inline.totNameNpcClassColor == true then
-    return INLINE_COLOR_UNITLESS_EVENTS
-  end
-  return INLINE_NAME_UNITLESS_EVENTS
+function InlineToT.GetUnitlessEvents()
+  return EMPTY_EVENTS
+end
+
+function InlineToT.Apply(frame, spec)
+  return ConfigureInlineToTDriver(frame, spec)
 end
 
 function InlineToT.Update(frame, event, unit)
@@ -2051,6 +2093,7 @@ end
 InlineToT.NoDispatchUpdates = { [InlineToT.Update] = true }
 
 function InlineToT.Disable(frame)
+  ClearInlineToTDriver(frame)
   SetShownCached(frame and frame.totInlineSep, false)
   SetShownCached(frame and frame.totInlineText, false)
   if frame then
