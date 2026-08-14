@@ -954,6 +954,7 @@ local function PlayerCastbarOnEventImpl(frame, event, ...)
     if HandleActiveEmpowerEvent(frame, event, ...) then return end
 
     if event == "UNIT_SPELLCAST_INTERRUPTED" then
+        if not HasActivePlayerCast(frame) then return end
         if not ActiveUnitMatches(frame, eventUnit) then return end
 
         local castGUID = select(2, ...)

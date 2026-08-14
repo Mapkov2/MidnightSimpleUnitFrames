@@ -194,19 +194,13 @@ end
 local function SetColorCached(bar, r, g, b, a)
   r, g, b, a = r or 1, g or 1, b or 1, a or 1
   if not bar then return end
-  -- Keep the configured prediction opacity on the StatusBar owner. The group
-  -- range/health lane owns the fill texture's alpha, so native value updates
-  -- and range restoration can no longer promote absorb fills back to 100%.
-  if bar._msufR ~= r or bar._msufG ~= g or bar._msufB ~= b
-    or bar._msufPredictionOpaqueColor ~= true then
+  if bar._msufR ~= r or bar._msufG ~= g or bar._msufB ~= b then
     bar:SetStatusBarColor(r, g, b, 1)
     bar._msufR, bar._msufG, bar._msufB = r, g, b
-    bar._msufPredictionOpaqueColor = true
   end
-  if bar._msufA ~= a or bar._msufPredictionOpacity ~= a then
+  if bar._msufA ~= a then
     bar:SetAlpha(a)
     bar._msufA = a
-    bar._msufPredictionOpacity = a
   end
 end
 

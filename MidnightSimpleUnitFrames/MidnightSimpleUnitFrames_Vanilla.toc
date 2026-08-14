@@ -62,8 +62,8 @@ Locales\MSUF_PriorityFrames_FAQ.lua
 # KERNEL / STATE / UI PRIMITIVES
 # ---------------------------------------------------------------
 Kernel\MSUF_Util.lua
-State\MSUF_Changelog.lua
-State\MSUF_Defaults.lua
+Game\Classic\State\MSUF_Changelog.lua
+Game\Classic\State\MSUF_Defaults.lua
 Runtime\MSUF_NumberFormat.lua
 State\MSUF_Profiles.lua
 Game\Classic\MSUF_ProfilePolicy.lua
@@ -146,7 +146,7 @@ Castbars\MSUF_CastbarRuntime.lua
 Castbars\MSUF_CastbarChannelTicks.lua
 Castbars\MSUF_CastbarFrames.lua
 Castbars\MSUF_CastbarAnchors.lua
-Castbars\MSUF_PlayerCastbarRuntime.lua
+Game\Classic\Castbars\MSUF_PlayerCastbarRuntime.lua
 Castbars\MSUF_CastbarPreviewEdit.lua
 Castbars\MSUF_CastbarPreviews.lua
 Castbars\MSUF_CastbarVisuals.lua
@@ -187,4 +187,4 @@ Castbars\MSUF_InterruptReady.lua
 Castbars\MSUF_FocusKickIcon.lua
 UnitFrames\Effects\MSUF_UF_RoundedFrames.lua
 Castbars\MSUF_CastbarRounded.lua
-UnitFrames\Effects\MSUF_UF_TextureLayer.lua
+Game\Classic\UnitFrames\Effects\MSUF_UF_TextureLayer.lua

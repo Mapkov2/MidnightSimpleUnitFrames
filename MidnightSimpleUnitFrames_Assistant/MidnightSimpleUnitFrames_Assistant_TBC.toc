@@ -8,4 +8,4 @@
 ## Dependencies: MidnightSimpleUnitFrames, MidnightSimpleUnitFrames_Options
 ## LoadOnDemand: 1
 
-MSUF_AssistantRuntime.xml
+MSUF_AssistantRuntime_Classic.xml

@@ -12,10 +12,10 @@
 
 MSUF_OptionsLOD_Bootstrap.lua
 Shell\Menu2\MSUF_Menu2.xml
-Shell\Menu2\Search\MSUF_Menu2_Search.xml
-Shell\Menu2\MSUF_Menu2_AfterSearch.xml
-Shell\Menu2\Preview\MSUF_Menu2_UnitPreview.xml
-Shell\Menu2\MSUF_Menu2_AfterUnitPreview.xml
+Shell\Menu2\Search\MSUF_Menu2_Search_Classic.xml
+Shell\Menu2\MSUF_Menu2_AfterSearch_Classic.xml
+Shell\Menu2\Preview\MSUF_Menu2_UnitPreview_Classic.xml
+Shell\Menu2\MSUF_Menu2_AfterUnitPreview_Classic.xml
 Shell\Menu2\Preview\MSUF_Menu2_GroupPreview.xml
-Shell\Menu2\MSUF_Menu2_AfterGroupPreview.xml
+Shell\Menu2\MSUF_Menu2_AfterGroupPreview_Classic.xml
 MSUF_OptionsLOD_Finalize.lua

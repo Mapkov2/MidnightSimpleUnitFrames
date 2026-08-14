@@ -37,13 +37,6 @@ local IsUnitToken = UF.IsUnitToken
 local FreshUnitState = UF.FreshUnitState
 local ReadConnectedCached = UF.ReadConnectedCached
 local ReadUnitExistsCached = UF.ReadUnitExistsCached
-local Clamp01 = UF.Clamp01 or function(value, fallback)
-  value = tonumber(value)
-  if value == nil then value = fallback or 1 end
-  if value < 0 then return 0 end
-  if value > 1 then return 1 end
-  return value
-end
 
 local RANGE_EVENTS = {
   "UNIT_IN_RANGE_UPDATE", "UNIT_PHASE",
@@ -786,38 +779,6 @@ local function SetTextureAlpha(tex, alpha, key)
   SetAlphaCached(tex, alpha, key)
 end
 
-local function PredictionHealthAlpha(frame)
-  local cfg = frame and frame._msufAlphaRuntimeCfg
-  if cfg == nil then
-    local spec = frame and frame.MSUFSpec
-    cfg = spec and spec.alpha
-  end
-  if not (cfg and cfg.active == true) then
-    return 1
-  end
-  local alpha = Clamp01(cfg.hpAlpha, 1)
-  if _G.MSUF_UnitEditModeActive == true and alpha < 0.35 then
-    alpha = 0.35
-  end
-  return alpha
-end
-
-local function SetPredictionFillAlpha(bar, alpha, key)
-  local tex = StatusTexture(bar)
-  if tex then
-    SetAlphaCached(tex, alpha, key)
-  end
-end
-
-local function SetPredictionFillAlphaFromBoolean(bar, value, inAlpha, outAlpha)
-  local tex = StatusTexture(bar)
-  if tex and tex.SetAlphaFromBoolean then
-    tex:SetAlphaFromBoolean(value, inAlpha, outAlpha)
-    return true
-  end
-  return false
-end
-
 local function SetStatusAlphaFromBoolean(bar, value, inAlpha, outAlpha)
   local applied = false
   if bar and bar.SetAlphaFromBoolean then
@@ -872,10 +833,10 @@ local function ApplyDirectHealthRangeAlpha(frame, alpha)
 end
 
 local function ApplyPredictionRangeAlpha(frame, alpha)
-  alpha = PredictionHealthAlpha(frame) * (tonumber(alpha) or 1)
-  SetPredictionFillAlpha(frame.incomingHealBar, alpha, "_msufGFRangePredict")
-  SetPredictionFillAlpha(frame.absorbBar, alpha, "_msufGFRangePredict")
-  SetPredictionFillAlpha(frame.healAbsorbBar, alpha, "_msufGFRangePredict")
+  alpha = (tonumber(frame and frame._msufAlphaLastHP) or 1) * (tonumber(alpha) or 1)
+  SetTextureAlpha(StatusTexture(frame.incomingHealBar), alpha, "_msufGFRangePredict")
+  SetTextureAlpha(StatusTexture(frame.absorbBar), alpha, "_msufGFRangePredict")
+  SetTextureAlpha(StatusTexture(frame.healAbsorbBar), alpha, "_msufGFRangePredict")
 end
 
 local function ApplyHealthRangeAlpha(frame, alpha)
@@ -921,12 +882,12 @@ local function ApplyHealthRangeAlphaFromBoolean(frame, value, inAlpha, outAlpha,
   end
   applied = SetTextureAlphaFromBoolean(frame.bg, value, inAlpha, outAlpha) or applied
   applied = SetTextureAlphaFromBoolean(frame.hpBarBG, value, inAlpha, outAlpha) or applied
-  local predictionAlpha = PredictionHealthAlpha(frame)
+  local predictionAlpha = tonumber(frame and frame._msufAlphaLastHP) or 1
   local predictionIn = predictionAlpha * inAlpha
   local predictionOut = predictionAlpha * outAlpha
-  applied = SetPredictionFillAlphaFromBoolean(frame.incomingHealBar, value, predictionIn, predictionOut) or applied
-  applied = SetPredictionFillAlphaFromBoolean(frame.absorbBar, value, predictionIn, predictionOut) or applied
-  applied = SetPredictionFillAlphaFromBoolean(frame.healAbsorbBar, value, predictionIn, predictionOut) or applied
+  applied = SetTextureAlphaFromBoolean(StatusTexture(frame.incomingHealBar), value, predictionIn, predictionOut) or applied
+  applied = SetTextureAlphaFromBoolean(StatusTexture(frame.absorbBar), value, predictionIn, predictionOut) or applied
+  applied = SetTextureAlphaFromBoolean(StatusTexture(frame.healAbsorbBar), value, predictionIn, predictionOut) or applied
   if not applied then
     frame._msufGFRangeHealthBool = nil
     frame._msufGFRangeHealthBoolSecret = nil

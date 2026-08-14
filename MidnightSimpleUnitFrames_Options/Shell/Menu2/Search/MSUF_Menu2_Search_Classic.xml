@@ -1,0 +1,17 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/">
+    <Script file="MSUF_Menu2_Search_Data.lua"/>
+    <Script file="MSUF_Menu2_Search_Keywords_Classic.lua"/>
+    <Script file="MSUF_Menu2_Search_QueryAliases.lua"/>
+    <Script file="MSUF_Menu2_Search_FAQ.lua"/>
+    <Script file="MSUF_Menu2_Search_FAQ_Catalog_01.lua"/>
+    <Script file="MSUF_Menu2_Search_FAQ_Catalog_02.lua"/>
+    <Script file="MSUF_Menu2_Search_FAQ_Catalog_03.lua"/>
+    <Script file="MSUF_Menu2_Search_FAQ_Catalog_04.lua"/>
+    <Script file="MSUF_Menu2_Search_Text.lua"/>
+    <Script file="MSUF_Menu2_Search_StaticIndex_Data_Classic.lua"/>
+    <Script file="MSUF_Menu2_Search_StaticIndex.lua"/>
+    <Script file="MSUF_Menu2_Search_IndexQuery.lua"/>
+    <Script file="MSUF_Menu2_Search_Routing.lua"/>
+    <Script file="MSUF_Menu2_Search_Render.lua"/>
+    <Script file="MSUF_Menu2_Search_API.lua"/>
+</Ui>

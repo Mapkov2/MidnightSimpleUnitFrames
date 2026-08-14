@@ -1,0 +1,17 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/">
+    <!-- Unit/global page modules load after preview APIs, matching the established Menu2 order. -->
+    <Script file="Pages\MSUF_Menu2_UnitSectionShared.lua"/>
+    <Script file="Pages\MSUF_Menu2_UnitStatusSection_Classic.lua"/>
+    <Script file="Pages\MSUF_Menu2_UnitText.lua"/>
+    <Script file="Pages\MSUF_Menu2_UnitRangeFade.lua"/>
+    <Script file="Pages\MSUF_Menu2_UnitAlpha.lua"/>
+    <Script file="Pages\MSUF_Menu2_UnitTextureLayer_Classic.lua"/>
+    <Script file="Pages\MSUF_Menu2_UnitFrameVisuals.lua"/>
+    <Script file="Pages\MSUF_Menu2_UnitDispel.lua"/>
+    <Script file="Pages\MSUF_Menu2_UnitSections.lua"/>
+    <Script file="Pages\MSUF_Menu2_Global.lua"/>
+    <Script file="Pages\MSUF_Menu2_GlobalFonts.lua"/>
+    <Script file="Pages\MSUF_Menu2_GlobalBars.lua"/>
+    <Script file="Pages\MSUF_Menu2_GlobalCastbars.lua"/>
+    <Script file="Pages\MSUF_Menu2_GlobalMisc.lua"/>
+</Ui>

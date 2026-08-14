@@ -585,8 +585,12 @@ local function ApplyFrameAuraPreview(frame, kind, visual, lane, descriptor, slot
         lane.showAuraSymbol == true and "SYMBOL" or "BORDER", lane.iconShape) then
       -- Shared renderer stamped the matching shaped/rounded border.
     elseif dispelBorder.SetAtlas then
+      local pad = type(A3.NativeAuraDispelBorderPadding) == "function"
+        and A3.NativeAuraDispelBorderPadding(size)
+        or max(1, floor(size / 6 + 0.5))
       dispelBorder:ClearAllPoints()
-      dispelBorder:SetAllPoints(visual)
+      dispelBorder:SetPoint("TOPLEFT", visual, "TOPLEFT", -pad, pad)
+      dispelBorder:SetPoint("BOTTOMRIGHT", visual, "BOTTOMRIGHT", pad, -pad)
       dispelBorder:SetAtlas(lane.showAuraSymbol == true
         and "ui-debuff-border-magic-icon" or "ui-debuff-border-magic-noicon", false)
     else

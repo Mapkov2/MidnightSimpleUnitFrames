@@ -196,6 +196,14 @@ function A3.AuraShapeBorderPath(shape)
     return media and media.border or nil
 end
 
+-- Blizzard's AuraButtonArtTemplate uses a 30px icon inside a 40px debuff
+-- border. SetAtlas(..., IgnoreAtlasSize) keeps our region size, so preserve
+-- that native 4:3 geometry at every configured aura size: five pixels of
+-- padding per side at 30px, scaled and pixel-rounded.
+function A3.NativeAuraDispelBorderPadding(size)
+    return math_max(1, math_floor(((tonumber(size) or 24) / 6) + 0.5))
+end
+
 -- PTR 8 pandemic presentation. Blizzard owns the secret shown state and the
 -- only recurring update; MSUF creates and styles a static child once inside
 -- AuraContainer.initializeFrame. No addon ticker or Lua OnUpdate is added.
@@ -4116,12 +4124,16 @@ local function LayoutButton(button, lane, index)
     button:SetSize(lane.buttonWidth or lane.size, lane.buttonHeight or lane.size)
 end
 
-local function LayoutAuraBorder(button, border, lane)
+local function LayoutAuraBorder(button, border, lane, useNativeAtlas)
     local size = tonumber(lane and lane.size) or DEFAULT_SHARED.iconSize
-    local pad = math_max(1, math_floor((size / 24) + 0.5))
+    local width = tonumber(lane and (lane.buttonWidth or lane.size)) or DEFAULT_SHARED.iconSize
+    local height = tonumber(lane and (lane.buttonHeight or lane.size)) or DEFAULT_SHARED.iconSize
+    local shapedPad = math_max(1, math_floor((size / 24) + 0.5))
+    local padX = useNativeAtlas == true and A3.NativeAuraDispelBorderPadding(width) or shapedPad
+    local padY = useNativeAtlas == true and A3.NativeAuraDispelBorderPadding(height) or shapedPad
     border:ClearAllPoints()
-    border:SetPoint("TOPLEFT", button, "TOPLEFT", -pad, pad)
-    border:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", pad, -pad)
+    border:SetPoint("TOPLEFT", button, "TOPLEFT", -padX, padY)
+    border:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", padX, -padY)
 end
 
 -- Shared icon style rendering. Both the border and the shadow are edge bands
@@ -4891,8 +4903,8 @@ local function PrepareAuraButton(button, lane, index)
         if not border then
             border = visualOwner:CreateTexture(nil, "OVERLAY")
         end
-        LayoutAuraBorder(visualOwner, border, lane)
         local shapedDispel = iconShape ~= Shape.RECTANGLE and A3.AuraShapeBorderPath(iconShape) or nil
+        LayoutAuraBorder(visualOwner, border, lane, shapedDispel == nil)
         if shapedDispel then
             border:SetTexture(shapedDispel)
             if border.SetTexCoord then border:SetTexCoord(0, 1, 0, 1) end
@@ -4921,7 +4933,7 @@ local function PrepareAuraButton(button, lane, index)
             marker:SetSize(markerSize, markerSize)
             marker:SetPoint("TOPLEFT", visualOwner, "TOPLEFT", 1, -1)
         else
-            LayoutAuraBorder(visualOwner, marker, lane)
+            LayoutAuraBorder(visualOwner, marker, lane, true)
         end
         button:AddDispelTypeTexture(marker, A3.GetStealableTextureOptions(lane.stealableStyle))
     elseif button._msufA3StealableMarker then

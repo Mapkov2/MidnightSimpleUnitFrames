@@ -187,6 +187,7 @@ function Status.CreateIcon(parent, color, text)
     if StopRestingFlipbook then f:SetScript("OnHide", StatusIconOnHide) end
     return f
 end
+
 local function ElitePreviewState(key, data)
     local classification = data and data.classification
     if classification == "worldboss" then return "BOSS" end
@@ -195,11 +196,13 @@ local function ElitePreviewState(key, data)
     if classification == "elite" then return "ELITE" end
     return key == "boss" and "BOSS" or "ELITE"
 end
+
 local function ElitePreviewAtlas(state)
     if state == "RARE" then return "UI-HUD-UnitFrame-Target-PortraitOn-Boss-Rare-Star" end
     if state == "RAREELITE" then return "nameplates-icon-elite-silver" end
     return "nameplates-icon-elite-gold"
 end
+
 function Status.SetIconTexture(icon, spec, conf, g, key, data, runtimeCfg, statusPreviewText)
     if not icon or not spec then return end
     local tex, txt = icon.tex, icon.txt
@@ -283,6 +286,13 @@ function Status.SetIconTexture(icon, spec, conf, g, key, data, runtimeCfg, statu
         elseif tex then
             tex:SetTexture((key == "target" or key == "focus") and "Interface\\TargetingFrame\\UI-PVP-Horde" or "Interface\\TargetingFrame\\UI-PVP-Alliance")
             if tex.SetTexCoord then tex:SetTexCoord(0, 1, 0, 1) end
+        end
+    elseif spec.id == "statusPetHappiness" then
+        if tex then
+            tex:SetTexture("Interface\\PetPaperDollFrame\\UI-PetHappiness")
+            -- The full preview uses the healthy target state; the compact icon
+            -- strip on the Pet page exposes Unhappy, Content, and Happy together.
+            if tex.SetTexCoord then tex:SetTexCoord(0, 0.1875, 0, 0.359375) end
         end
     elseif Status.IsTextIndicator(spec) then
         if tex then tex:Hide() end

@@ -9,6 +9,19 @@ M.SearchData = Data
 
 local UF_CORE = "frame basics enable disable hide show width height scale size health power portrait text castbar auras buffs debuffs range fade range check distance check out of range transparency alpha preview anchoring anchor global anchor custom anchor copy to edit mode move drag position x offset y offset color name hp power hide percent sign hide percent symbol percent sign prozentzeichen"
 local UF_STATUS = "status icons status indicators indicator selected indicator level level indicator level text show level"
+local PET_HAPPINESS = ""
+local getMetadata = _G.C_AddOns and _G.C_AddOns.GetAddOnMetadata or _G.GetAddOnMetadata
+local optionsFlavor = type(getMetadata) == "function" and getMetadata(addonName, "X-MSUF-Client") or nil
+if optionsFlavor ~= nil then
+    optionsFlavor = tostring(optionsFlavor):lower():gsub("^%s+", ""):gsub("%s+$", "")
+end
+local petHappinessSupported = optionsFlavor ~= nil and (optionsFlavor == "vanilla" or optionsFlavor == "tbc")
+    or optionsFlavor == nil and MSUF.Client and (MSUF.Client.SupportsPetHappiness == true
+        or MSUF.Client.SupportsPetHappiness == nil
+            and (MSUF.Client.IsVanilla == true or MSUF.Client.IsTBC == true))
+if petHappinessSupported then
+    PET_HAPPINESS = " pet happiness pet mood hunter pet happy content unhappy happiness icon pet loyalty pet damage 125 100 75 haustier zufriedenheit tierzufriedenheit gluecklich zufrieden ungluecklich"
+end
 local function UnitKeywords(subject, statusSubject, extra)
     return "unit frame unitframe " .. subject .. " " .. UF_CORE .. " " .. UF_STATUS .. " " .. statusSubject .. " level anchor level position level layer" .. (extra or "")
 end
@@ -21,10 +34,10 @@ Data.KEYWORDS = {
     uf_focustarget = "unit frame unitframe focus target focus target frame focustarget ft frame basics enable disable hide show width height scale size health portrait text range fade range check distance check out of range transparency alpha preview anchoring anchor global anchor custom anchor copy to edit mode move drag position x offset y offset color name hp " .. UF_STATUS .. " focus target level anchor level position level layer child focus frame",
     uf_focus = UnitKeywords("focus", "focus", " focus kick interrupt"),
     uf_boss = "unit frame unitframe boss frames bossframe bossframes frame basics enable disable hide show width height scale size health power portrait text castbar boss range fade range check distance check out of range transparency alpha auras buffs debuffs preview anchoring anchor boss layout copy to edit mode move drag position x offset y offset color name hp power " .. UF_STATUS .. " boss level anchor level position level layer",
-    uf_pet = UnitKeywords("pet", "pet"),
+    uf_pet = UnitKeywords("pet", "pet", PET_HAPPINESS),
     gf_layout = "group frames groupframes party raid mythic raid layout health text resource power bar name hp text font size text slot delimiter hide percent sign hide percent symbol show power tank healer damage smooth fill range fade range check distance check out of range offline alpha growth direction sorting role order frame scaling scale transparency opacity anchoring anchor position move drag preview show hide player solo enable disable disabled turn off off hide group frames turn off group frames disable group frames hide group frames turn off raid frames disable raid frames hide raid frames raid frames off turn off party frames disable party frames hide party frames party frames off ausschalten deaktivieren ausblenden width height spacing columns rows sorting role group number visibility",
     gf_bars = "group frames groupframes party raid dispel overlay overlay style overlay priority health bar tint any debuff dispel type debuff stripe stripe edge stripe height stripe opacity effects",
-    gf_auras = "group frames groupframes party raid auras buffs debuffs spell indicators tracked spells placed spell icons anchor position x offset y offset icon size max buffs max debuffs spacing layer growth per row hots healer buffs raid debuffs boss debuffs custom spells slots preview frame highlight",
+    gf_auras = "group frames groupframes party raid auras buffs debuffs spell indicators tracked spells placed spell icons anchor position x offset y offset icon size max buffs max debuffs spacing layer growth per row hots healer buffs raid debuffs boss debuffs custom spells slots preview expiring expiration threshold seconds remaining frame highlight",
     gf_indicators = "group frames groupframes party raid indicators status icons corner indicators group number focus glow border dispel aggro threat role icon marker raid marker ready check leader assist dead ghost offline afk dnd",
     gf_priority = "group frames groupframes party raid priority frames priority group frames party priority frames priority party frames priority raid frames extra party frames extra raid frames dungeon priority frames duplicate frames pinned players pinned party members pin player tanks automatic tanks tank frames hover hotkey keybind important players healer externals stable strip slots placement attach group mover edit mode",
     opt_bars = "global style bars textures texture gradient gradient direction hp power absorb display heal prediction incoming heals highlight priority prio display overlay highlight borders outline border aggro purge boss target dispel overlay unitframe unit frame debuff tint any debuff dispellable rounded round corners rounded texture rounded frames rounded frame texture rounded unit frames rounded group frames rounded power bars rounded mouseover highlights mouseover bar colors background tint backdrop bg dark mode shared texture opacity alpha health texture power texture frame outline abgerundet abrundung runde kanten ecken abrunden einschalten ausschalten",

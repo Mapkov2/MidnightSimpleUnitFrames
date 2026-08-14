@@ -1,0 +1,22 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/">
+    <!-- Group/advanced pages stay in Shell/Menu2; only shared helpers reduce duplication. -->
+    <Script file="Pages\MSUF_Menu2_GroupPreview.lua"/>
+    <Script file="Pages\MSUF_Menu2_GroupSpecs.lua"/>
+    <Script file="Pages\MSUF_Menu2_Group.lua"/>
+    <Script file="Pages\MSUF_Menu2_GroupLayout.lua"/>
+    <Script file="Pages\MSUF_Menu2_GroupBars.lua"/>
+    <Script file="Pages\MSUF_Menu2_GroupAuras.lua"/>
+    <Script file="Pages\MSUF_Menu2_GroupIndicators.lua"/>
+    <Script file="Pages\MSUF_Menu2_GroupPriority.lua"/>
+    <Script file="Pages\MSUF_Menu2_Advanced.lua"/>
+    <Script file="MSUF_Menu2_ContextColorPicker.lua"/>
+    <Script file="MSUF_Menu2_TextQuickSettings.lua"/>
+    <Script file="Pages\MSUF_Menu2_ColorPainter.lua"/>
+    <Script file="Pages\MSUF_Menu2_AdvancedColors.lua"/>
+    <Script file="Pages\MSUF_Menu2_AdvancedGameplay.lua"/>
+    <Script file="Preview\MSUF_Menu2_ClassPowerPreview.lua"/>
+    <Script file="Pages\MSUF_Menu2_AdvancedClassPower.lua"/>
+    <Script file="Pages\MSUF_Menu2_AdvancedProfiles.lua"/>
+    <Script file="Pages\MSUF_Menu2_Auras_Classic.lua"/>
+    <Script file="MSUF_Menu2_GuidedTour.lua"/>
+</Ui>
