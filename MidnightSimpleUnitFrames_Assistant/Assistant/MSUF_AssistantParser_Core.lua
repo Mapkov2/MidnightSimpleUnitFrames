@@ -1160,8 +1160,31 @@ local function AddUnique(out, value)
     out[#out + 1] = value
 end
 
+-- "no target" is a game state, not the Target frame. MSUF names a whole family
+-- of load conditions after it -- "Player Hide with No Target", "Boss Hide Out
+-- of Combat with No Target" -- and reading the word as a scope put TWO units in
+-- play, so "turn on player hide with no target" planned a write to the Target
+-- frame's copy as well as the Player's, and the scope-stripped text no longer
+-- matched the control's own label. Masked rather than dropped from the alias
+-- list: "hide the target frame when i have no target" still finds Target
+-- through its other mention.
+local function MaskNonScopeTargetIdioms(text)
+    text = tostring(text or "")
+    if not (text:find("no target", 1, true) or text:find("without", 1, true)
+        or text:find("kein ziel", 1, true) or text:find("ohne ziel", 1, true))
+    then
+        return text
+    end
+    return (text:gsub("%f[%w]no%s+target%f[%W]", " ")
+        :gsub("%f[%w]without%s+a%s+target%f[%W]", " ")
+        :gsub("%f[%w]without%s+target%f[%W]", " ")
+        :gsub("%f[%w]kein%s+ziel%f[%W]", " ")
+        :gsub("%f[%w]ohne%s+ziel%f[%W]", " "))
+end
+
 local function DetectUnits(text)
     local units = {}
+    text = MaskNonScopeTargetIdioms(text)
     if HasPhrase(text, "all unitframes") or HasPhrase(text, "all unitframe") or HasPhrase(text, "every unitframe") or HasPhrase(text, "alle unitframes") then
         for i = 1, #ALL_UNITFRAMES do AddUnique(units, ALL_UNITFRAMES[i]) end
         return units
