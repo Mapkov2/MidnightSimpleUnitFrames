@@ -9330,16 +9330,30 @@ function A.Submit(text)
         local spelledOut = type(A.RouterPrivate) == "table"
             and type(A.RouterPrivate.NamedBooleanIntentPlan) == "function"
             and A.RouterPrivate.NamedBooleanIntentPlan(text) or nil
-        if not (spelledOut and (tonumber(spelledOut.namedWordingTokens) or 0) >= 4) then
+        -- A size stated as a dimension idiom ("make the shield bar 6 pixels
+        -- tall") hides the attribute noun the registry indexes, so the lanes
+        -- above see a bare number on a subject and list every control whose
+        -- name contains that subject -- seven per-unit frame Heights, none of
+        -- them the shield bar. That list is a miss for the same reason spelled
+        -- out wording is: the rewrite resolves to exactly ONE control (checked
+        -- inside CanonicalDimensionCommand), so it decides the sentence.
+        local sized = type(A.RouterPrivate) == "table"
+            and type(A.RouterPrivate.CanonicalDimensionCommand) == "function"
+            and A.RouterPrivate.CanonicalDimensionCommand(text) or nil
+        if not sized and not (spelledOut and (tonumber(spelledOut.namedWordingTokens) or 0) >= 4) then
             if type(A.pendingChoices) == "table" and #A.pendingChoices > 0 then unresolved = false end
             if type(A.pendingCandidates) == "table" and #A.pendingCandidates > 0 then unresolved = false end
         end
         if unresolved and type(A.RouterPrivate) == "table" and type(A.ExecutePlan) == "function" then
             local router = A.RouterPrivate
+            -- The dimension rewrite is consulted last so nothing the existing
+            -- two plans already claim moves.
             local plan = (type(router.StatedValueKindSiblingPlan) == "function"
                     and router.StatedValueKindSiblingPlan(text))
                 or (type(router.NamedBooleanIntentPlan) == "function"
                     and router.NamedBooleanIntentPlan(text))
+                or (sized and type(router.ExactAliasSingleChange) == "function"
+                    and router.ExactAliasSingleChange(sized))
                 or nil
             if plan then
                 -- The normal path already declined this sentence, and the

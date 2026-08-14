@@ -2085,6 +2085,59 @@ local COMPARATIVE_TRAILING_FILLER = {
     "%s+a%s+bit$", "%s+a%s+little$", "%s+a%s+lot$", "%s+slightly$", "%s+please$", "%s+now$",
 }
 
+-- A size is routinely stated as a dimension idiom rather than as an attribute
+-- and a value: "make the shield bar 6 pixels tall", "make my target frame 200
+-- pixels wide". The attribute noun the registry knows ("height", "width")
+-- never appears, so the rewrites above see only a bare number attached to a
+-- subject; the request either drew a pick-list of every per-unit Height or --
+-- worse -- was claimed by a setup article, because "make ... healing ..." also
+-- reads as a request for healer advice.
+--
+-- Each tail names exactly one attribute, so the rewrite is mechanical. This is
+-- deliberately not an alias list: aliases would have to be spelled out per
+-- control and per scope, and the registry keeps only the first
+-- MAX_SETTING_ALIASES of them.
+local DIMENSION_TAILS = {
+    { word = "tall", attribute = "height" },
+    { word = "high", attribute = "height" },
+    { word = "wide", attribute = "width" },
+    { word = "thick", attribute = "thickness" },
+}
+local DIMENSION_UNITS = { "%s*pixels", "%s*pixel", "%s*px", "" }
+
+function R.CanonicalDimensionCommand(text, skipVerify)
+    local norm = R.Normalize(text)
+    if norm == "" or not norm:find("%d") then return nil end
+    for i = 1, #COMPARATIVE_TRAILING_FILLER do
+        norm = R.Trim((norm:gsub(COMPARATIVE_TRAILING_FILLER[i], "")))
+    end
+    for i = 1, #DIMENSION_TAILS do
+        local spec = DIMENSION_TAILS[i]
+        for j = 1, #DIMENSION_UNITS do
+            local body, number = norm:match("^(.-)%s+([-+]?%d+%.?%d*)" .. DIMENSION_UNITS[j] .. "%s+" .. spec.word .. "$")
+            if body and number and body ~= "" then
+                body = body:gsub("^please%s+", ""):gsub("^can%s+you%s+", ""):gsub("^could%s+you%s+", "")
+                    :gsub("^i%s+want%s+", ""):gsub("^i%s+would%s+like%s+", ""):gsub("^id%s+like%s+", "")
+                    :gsub("^i%s+need%s+", ""):gsub("^hey%s+", ""):gsub("^just%s+", "")
+                    :gsub("^now%s+", "")
+                    :gsub("^make%s+", ""):gsub("^set%s+", ""):gsub("^change%s+", "")
+                    :gsub("^the%s+", ""):gsub("^my%s+", "")
+                body = R.Trim(body)
+                if body ~= "" then
+                    -- "make the absorb bar height 6 pixels tall" already names
+                    -- the attribute; appending it again would never match.
+                    local canonical = body:match("%f[%w]" .. spec.attribute .. "$")
+                        and ("set " .. body .. " to " .. number)
+                        or ("set " .. body .. " " .. spec.attribute .. " to " .. number)
+                    if skipVerify then return canonical end
+                    if R.ExactAliasSingleChange(canonical) then return canonical end
+                end
+            end
+        end
+    end
+    return nil
+end
+
 -- The control name a comparative change is about, or nil. Shares the subject
 -- peeling of R.CommandSubjectPhrase so the two can never disagree.
 function R.ComparativeChangeSubject(text)
@@ -2314,6 +2367,7 @@ function R.RequestNamesOneControl(text)
     if R.CanonicalTrailingStateCommand(text) then return true end
     if R.CanonicalValueConnectorCommand(text) then return true end
     if R.CanonicalValueBeforeControlCommand(text) then return true end
+    if R.CanonicalDimensionCommand(text) then return true end
     if R.ComparativeChangeNamesOneControl(text) then return true end
     -- A result-shaped command ("give the health bars a gradient look") names
     -- its control in the subject even though it states no value word, so the
@@ -2358,6 +2412,19 @@ function R.TopicAnswerSurvivesExactControl(result, text)
         or (type(R.CommandSubjectPhrase) == "function" and R.CommandSubjectPhrase(text) ~= nil)
     if not carriesValue then return result end
     if type(R.RequestNamesOneControl) == "function" and R.RequestNamesOneControl(text) then return nil end
+    -- The sentence may describe its control in wording no label or alias
+    -- spells, yet a dedicated parser lane still recognises it in full: "make
+    -- the healing absorb bar 5 pixels tall" is Heal Absorb Bar Height, but the
+    -- word "make" plus the word "healing" also reads as a request for healer
+    -- setup advice, and the article won. A scoreless single-change plan is a
+    -- recognised sentence rather than a fuzzy name guess, so no setup article
+    -- may outrank one. Paid only here -- an article has already been built for
+    -- a value-carrying request, and this parse is the work the request was
+    -- going to do anyway once the article stood down.
+    if type(A.Parse) == "function" and type(R.OpenEndedSpecialistOwnsChange) == "function" then
+        local parsed = A.Parse(text)
+        if R.OpenEndedSpecialistOwnsChange(parsed) then return nil end
+    end
     return result
 end
 
@@ -14465,6 +14532,27 @@ function R.OpenEndedSpecialistProvesUniqueEnumValue(plan, entries)
     return selectedIsCandidate and compatible == 1
 end
 
+-- A parser plan built by a dedicated semantic lane carries no matchScore --
+-- that field is stamped only by the broad fuzzy registry match this Router
+-- lane exists to fail closed against. So a scoreless single-change plan is the
+-- one kind of parser answer that is safe to prefer over "I could not identify
+-- one exact MSUF control": the lane recognised the whole sentence, it did not
+-- guess at a name. Used only at give-up points, never ahead of the Router's own
+-- exact-label and named-control resolution.
+function R.OpenEndedSpecialistOwnsChange(plan)
+    if type(plan) ~= "table" or plan.kind ~= "changes" then return false end
+    if type(plan.changes) ~= "table" or #plan.changes == 0 then return false end
+    for i = 1, #plan.changes do
+        local change = plan.changes[i]
+        if type(change) ~= "table" then return false end
+        if change.matchScore ~= nil then return false end
+        local setting = change.setting
+        if type(setting) ~= "table" or tostring(setting.key or "") == "" then return false end
+        if change.value == nil and change.relativeDelta == nil then return false end
+    end
+    return true
+end
+
 function R.OpenEndedSettingCurrentValue(setting)
     if not (setting and type(setting.get) == "function") then return nil end
     local ok, value = pcall(setting.get)
@@ -15298,6 +15386,24 @@ function R.TryOpenEndedSettingIdea(text, coreHandler)
                 return result
             end
         end
+        -- A dimension idiom hides the attribute noun ("6 pixels tall" is a
+        -- height), so the ranked candidates are every control whose name merely
+        -- contains the subject -- for "make the shield bar 6 pixels tall" that
+        -- was the seven per-unit frame Heights. The rewritten sentence is only
+        -- used when it resolves to exactly one control, which is what separates
+        -- it from the list below.
+        if type(coreHandler) == "function" then
+            local sized = R.CanonicalDimensionCommand(text)
+            if sized then
+                local result = coreHandler(sized)
+                if result and not A.RouterIsUnknownResult(result)
+                    and not (type(A.RouterIsNoClueResult) == "function" and A.RouterIsNoClueResult(result))
+                then
+                    RetainConfidentSettingValueQuestion(entries, result)
+                    return result
+                end
+            end
+        end
         -- Last check before offering a list: the request may spell one control's
         -- visible label in full, for a label no other setting shares. That is
         -- not a candidate among several, it is the control -- and for the types
@@ -15393,6 +15499,25 @@ function R.TryOpenEndedSettingIdea(text, coreHandler)
                 searchResults = R.RegistryLocationResultFollowups(entries, visible),
             }
         end
+        -- Give-up point. Every Router resolution above has declined, so the
+        -- alternative to letting the parser's specialist lane run is telling
+        -- the player to go find the control themselves. "set the raid frame bar
+        -- outline thickness to 3" reaches here -- the singular "raid frame"
+        -- keeps it out of the fuzzy index that the plural form hits -- while
+        -- the bar-outline lane had already resolved it exactly.
+        if type(coreHandler) == "function" and R.OpenEndedSpecialistOwnsChange(specialized) then
+            local savedCache = R._openEndedSettingCache
+            R._openEndedSettingCache = { text = R.Normalize(text), analysis = false }
+            local ok, result = pcall(coreHandler, text)
+            R._openEndedSettingCache = savedCache
+            if not ok then error(result, 0) end
+            if result and not A.RouterIsUnknownResult(result)
+                and not (type(A.RouterIsNoClueResult) == "function" and A.RouterIsNoClueResult(result))
+            then
+                RetainConfidentSettingValueQuestion(entries, result)
+                return result
+            end
+        end
         local page = analysis.page
         if page then
             -- The player supplied a real value and the curated registry could
@@ -15424,6 +15549,7 @@ function R.TryOpenEndedSettingIdea(text, coreHandler)
             local canonical = R.CanonicalTrailingStateCommand(text, true)
                 or R.CanonicalValueConnectorCommand(text, true)
                 or R.CanonicalValueBeforeControlCommand(text, true)
+                or R.CanonicalDimensionCommand(text, true)
             if canonical then
                 local rewritten = coreHandler(canonical)
                 if rewritten and not A.RouterIsUnknownResult(rewritten) then return rewritten end
