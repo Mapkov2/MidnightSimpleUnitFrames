@@ -367,6 +367,7 @@ local OpenPreviewHandleSettings
 local MenuTheme
 local function RefreshHandleSelectionVisuals(box)
     if not box then return end
+    if not box._selectedHandle and Preview.RestoreQueuedHandle(box) then return end
     local guidesOn = PreviewGuidesVisible(box)
     local selected = box._selectedHandle
     if selected and selected.IsShown and not selected:IsShown() then selected = nil; box._selectedHandle = nil end
@@ -654,10 +655,16 @@ OpenPreviewHandleSettings = function(handle, source)
             -- The Aura workspace captures its selected container while the
             -- Unit page is built. Refreshers cannot replace that cached
             -- container, so rebuild only when this preview opens another one.
-            if (lane ~= previousAuraLane or previousAuraTool ~= "layout") and type(menu.InvalidatePage) == "function" then
+            if (lane ~= previousAuraLane or previousAuraTool ~= "layout")
+                and type(menu.InvalidatePage) == "function"
+            then
+                Preview._restoreHandleUnit, Preview._restoreHandleKey = unit, handle._key
                 menu.InvalidatePage(pageKey)
             end
-            return menu.SelectPage(pageKey) ~= false
+            local selected = menu.SelectPage(pageKey) ~= false
+            if selected then Preview.RestoreQueuedHandle(Preview.active)
+            else Preview._restoreHandleUnit, Preview._restoreHandleKey = nil, nil end
+            return selected
         end
         return false
     end
@@ -945,6 +952,17 @@ local function FindUnitPreviewHandle(box, handleKey)
         if handle and handle._key == handleKey then return handle end
     end
     return nil
+end
+function Preview.RestoreQueuedHandle(box)
+    if not (box and SelectPreviewHandle and Preview._restoreHandleKey
+        and tostring(box.key) == tostring(Preview._restoreHandleUnit)
+        and (not box.IsShown or box:IsShown()))
+    then return false end
+    local handle = FindUnitPreviewHandle(box, Preview._restoreHandleKey)
+    if not (handle and handle._msufPlaced ~= false and (not handle.IsShown or handle:IsShown())) then return false end
+    Preview._restoreHandleUnit, Preview._restoreHandleKey = nil, nil
+    SelectPreviewHandle(handle, true)
+    return true
 end
 local function RestoreUnitPreviewSelection(box, previous)
     if not box then return end
