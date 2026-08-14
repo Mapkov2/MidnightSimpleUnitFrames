@@ -2304,7 +2304,7 @@ local function BuildWindowChrome(state)
         local fill, edge = T.CreateSuperellipseLayers(btn, "_msuf2HistNav", 1, "BACKGROUND", "BORDER")
         local icon = btn:CreateTexture(nil, "ARTWORK")
         icon:SetTexture(T.media.dropdownChevron)
-        icon:SetSize(11, 11)
+        icon:SetSize(18, 18)
         icon:SetPoint("CENTER", 0, 0)
         if icon.SetRotation then icon:SetRotation(rotation) end
         btn._msuf2HistNavIcon = icon
