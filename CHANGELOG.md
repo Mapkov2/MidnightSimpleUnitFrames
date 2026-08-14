@@ -9,7 +9,9 @@
 
 ### Fixes & Performance
 
-- Fixed Group Aura lanes and Spell Indicators remaining visible for members who are offline, phased, on another map, or inside a different instance group. Presence now composes with helpful/hostile assistability and fails closed through coalesced lifecycle events.
+- Fixed Group Aura lanes and Spell Indicators remaining visible for members who are offline, phased, on another map, or inside a different instance group. Presence now composes with helpful/hostile assistability and fails closed through coalesced lifecycle events. Identity, phase, and connection changes remain combat-live, while cold map and instance reconciliation is deferred into one post-combat pass.
+- Fixed normal Blizzard Debuff icons becoming unstable when MSUF hid them. Their Aura Container now keeps Blizzard's required parent relationship so native layout updates can continue, while Private Auras and Deadly Debuff warnings remain unaffected.
+- Removed the Objective Tracker from MSUF's Blizzard Edit Mode bridge to avoid propagating dirty layout state into combat-secret UI paths. The tracker remains fully Blizzard-owned, and Group Edit Mode now relies on its single shared state listener.
 - Fixed native Player portraits occasionally remaining stale or blank after login or world entry. Enabled 2D and 3D portraits now receive one cold-path refresh after Blizzard and secure visibility have settled.
 - Fixed several Unit Aura layout settings writing to the wrong scope, including lane visibility and separate Buff/Debuff style padding.
 - Improved Assistant handling for natural highlight on/off requests, texture names without connector words, border styles and opacity, outline layers, absorb height, gradient intensity, and how-to navigation. Unmatched navigation requests now offer the closest controls without changing settings.
