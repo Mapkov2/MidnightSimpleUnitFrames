@@ -313,9 +313,11 @@ local previewFile = assert(io.open(
 local previewSource = previewFile:read("*a")
 previewFile:close()
 local runtimeFontCall =
-  "ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, icon.txt, max(7, sz))"
+  "ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, icon.txt, max(7, sz),"
 local runtimeFontPos = previewSource:find(runtimeFontCall, 1, true)
 Check(runtimeFontPos ~= nil, "identity Preview does not use the compiled runtime font")
+Check(previewSource:find('return (anchor == "NAMERIGHT" or anchor == "NAMELEFT") and "name" or nil', 1, true),
+  "identity Preview changes font roles outside name-relative anchors")
 local previewTextPos = runtimeFontPos and previewSource:find(
   "R.SetPreviewIconTexture(icon, spec, conf, g, key, data, statusCfg, box._previewStatusText)",
   runtimeFontPos, true)
@@ -330,6 +332,20 @@ local identityLayout = identityLayoutPos and statusTextLayoutPos
 Check(identityLayout ~= "", "identity Preview layout branch is missing")
 Check(not identityLayout:find("ApplyPreviewFont(icon.txt", 1, true),
   "identity Preview layout overwrites the compiled runtime font")
+
+local statusFile = assert(io.open(
+  "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Status.lua", "rb"))
+local statusSource = statusFile:read("*a")
+statusFile:close()
+Check(statusSource:find('NAME_FONT_STATUS[key] and nameRelative and "name" or nil', 1, true),
+  "runtime identity text does not share the name font role")
+
+local fontRuntimeFile = assert(io.open(
+  "MidnightSimpleUnitFrames/Runtime/MSUF_FontRuntime.lua", "rb"))
+local fontRuntimeSource = fontRuntimeFile:read("*a")
+fontRuntimeFile:close()
+Check(fontRuntimeSource:find("_MSUF_ApplyFontCached(f._msufNameAnchorText, nameSize", 1, true),
+  "font fallback does not keep the name anchor proxy metric-identical")
 
 if #failures > 0 then
   error("unit name anchor reflow smoke failed:\n - " .. table.concat(failures, "\n - "), 0)

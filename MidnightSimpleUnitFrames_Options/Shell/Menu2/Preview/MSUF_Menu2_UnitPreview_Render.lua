@@ -103,6 +103,10 @@ local function ApplyRuntimePreviewFont(runtimeSpec, fallback, fs, size, role)
     end
 end
 
+local function NameRelativeFontRole(anchor)
+    return (anchor == "NAMERIGHT" or anchor == "NAMELEFT") and "name" or nil
+end
+
 local function PlaceRuntimePreviewName(fs, parent, runtimeText, conf, baselineOffset, resolveNameAnchor)
     local anchor = (runtimeText and runtimeText.nameAnchor) or conf.nameTextAnchor or "TOPLEFT"
     local x = tonumber(runtimeText and runtimeText.nameX)
@@ -3314,7 +3318,8 @@ function Preview.Refresh(box, reason)
                 -- applying the indicator color. Preserve that ownership here so
                 -- glyph metrics (and therefore NAMELEFT/NAMERIGHT placement)
                 -- remain identical when a unit-specific font is configured.
-                ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, icon.txt, max(7, sz))
+                ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, icon.txt, max(7, sz),
+                    NameRelativeFontRole(StatusAnchorOffsets(spec, statusCfg)))
             end
             R.SetPreviewIconTexture(icon, spec, conf, g, key, data, statusCfg, box._previewStatusText)
             if spec.id == "statusCombat" and icon.SetAlpha then

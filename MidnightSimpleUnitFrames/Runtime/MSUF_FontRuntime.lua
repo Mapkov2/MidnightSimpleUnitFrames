@@ -516,6 +516,9 @@ local function _MSUF_ApplyFontsToFrame(f)
     end
 
     if f.nameText then _MSUF_ApplyFontCached(f.nameText, nameSize, false, 0, 0, 0) end
+    -- NAMELEFT/NAMERIGHT status text anchors to this invisible auto-width twin,
+    -- so every font fanout must keep its glyph metrics identical to nameText.
+    if f._msufNameAnchorText then _MSUF_ApplyFontCached(f._msufNameAnchorText, nameSize, false, 0, 0, 0) end
     if f.raidGroupNameText then _MSUF_ApplyFontCached(f.raidGroupNameText, nameSize, false, 0, 0, 0) end
     if f._msufToTInlineSep then _MSUF_ApplyFontCached(f._msufToTInlineSep, nameSize, false, 0, 0, 0) end
     if f._msufToTInlineText then _MSUF_ApplyFontCached(f._msufToTInlineText, nameSize, false, 0, 0, 0) end
