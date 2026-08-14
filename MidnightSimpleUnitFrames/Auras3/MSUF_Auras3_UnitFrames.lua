@@ -4333,7 +4333,11 @@ local function ResolveDurationBarOptions(lane)
     local enum = _G.Enum
     local interpolation = enum and enum.StatusBarInterpolation
     local direction = enum and enum.StatusBarTimerDirection
-    _durationBarOptions.interpolation = interpolation and interpolation.Immediate or nil
+    if lane and lane.durationBarSmooth == true and interpolation and interpolation.ExponentialEaseOut ~= nil then
+        _durationBarOptions.interpolation = interpolation.ExponentialEaseOut
+    else
+        _durationBarOptions.interpolation = interpolation and interpolation.Immediate or nil
+    end
     if lane and lane.durationBarDirection == "ELAPSED" then
         _durationBarOptions.direction = direction and direction.ElapsedTime or nil
     else
@@ -4679,7 +4683,9 @@ local function PrepareAuraButton(button, lane, index)
     -- inherits the container's strata and remains the sole visual owner. The
     -- Spell Indicator exception above is established only in initializeFrame;
     -- later secret-backed assignment never needs another hierarchy mutation.
-    local barOnly = lane.showDurationBar == true and lane.durationBarDisplay == "BAR_ONLY"
+    local spellIndicatorBar = lane.kind == "spellIndicator" and lane.visual == "bar"
+    local barOnly = spellIndicatorBar
+        or (lane.showDurationBar == true and lane.durationBarDisplay == "BAR_ONLY")
     local icon = button.Icon
     if barOnly then
         button:ClearIcon()
@@ -4767,25 +4773,32 @@ local function PrepareAuraButton(button, lane, index)
             bar:SetFrameLevel((visualOwner:GetFrameLevel() or 0)
                 + (FrameLayers.AURA_DURATION_BAR_LEVEL_OFFSET or 2))
         end
-        LayoutDurationBar(visualOwner, bar, lane)
-        ApplyDurationBarColor(bar)
-        if lane.kind == "spellIndicator" and lane.frameEffect
-            and lane.frameEffect.timing == "expiring"
-            and SpellIndicatorsRuntime.BindExpiringDurationBridge then
-            SpellIndicatorsRuntime.BindExpiringDurationBridge(button, bar)
+        if spellIndicatorBar then
+            -- Same proven path as the native Ebon Might bar: the StatusBar is
+            -- a descendant of the CustomAuraButton and fills the complete
+            -- configured Spell Indicator rectangle. Blizzard's
+            -- ApplyDurationBar calls SetTimerDuration(auraDuration, ...) C-side.
+            bar:ClearAllPoints()
+            bar:SetAllPoints(visualOwner)
+            local color = lane.color or {}
+            bar:SetStatusBarColor(
+                Clamp01(color[1], 0.69),
+                Clamp01(color[2], 0.50),
+                Clamp01(color[3], 0.88),
+                Clamp01(color[4], 1))
+        else
+            LayoutDurationBar(visualOwner, bar, lane)
+            ApplyDurationBarColor(bar)
         end
-        button:SetDurationBar(bar, ResolveDurationBarOptions(lane))
-        if lane.kind == "spellIndicator" and lane.frameEffect
-            and lane.frameEffect.timing == "expiring" then
-            button._msufA3ExpiringEffectDurationBound = bar
+        if type(bar.SetReverseFill) == "function" then
+            bar:SetReverseFill(spellIndicatorBar and lane.durationBarReverseFill == true or false)
         end
+        -- Finish every script-side mutation before handing the StatusBar to
+        -- Blizzard, which adds secret BarValue ownership during this call.
         bar:Show()
+        button:SetDurationBar(bar, ResolveDurationBarOptions(lane))
     else
-        if not (lane.kind == "spellIndicator" and lane.frameEffect
-            and lane.frameEffect.timing == "expiring"
-            and button._msufA3ExpiringEffectDurationBound) then
-            button:ClearDurationBar()
-        end
+        button:ClearDurationBar()
         if button._msufA3DurationBar then button._msufA3DurationBar:Hide() end
     end
 

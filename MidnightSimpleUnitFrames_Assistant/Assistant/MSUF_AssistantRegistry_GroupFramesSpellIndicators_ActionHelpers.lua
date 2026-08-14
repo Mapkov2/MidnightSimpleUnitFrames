@@ -54,6 +54,11 @@ function A.GroupFramesRegistry.BuildSpellIndicatorActionHelpers(ctx)
         elseif field == "placedCooldownSwipe" then Placed(entry, true).showCooldownSwipe = value and true or false
         elseif field == "placedCooldown" then Placed(entry, true).showCooldown = value and true or false
         elseif field == "placedCooldownSize" then Placed(entry, true).cooldownSize = ClampNumber(value, 6, 24, 1)
+        elseif field == "placedBarSmoothFill" then Placed(entry, true).barSmoothFill = value and true or false
+        elseif field == "placedBarShowTimer" then Placed(entry, true).barShowTimer = value and true or false
+        elseif field == "placedBarTimerAnchor" then Placed(entry, true).barTimerAnchor = value or "CENTER"
+        elseif field == "placedBarTimerX" then Placed(entry, true).barTimerX = ClampNumber(value, -100, 100, 1)
+        elseif field == "placedBarTimerY" then Placed(entry, true).barTimerY = ClampNumber(value, -100, 100, 1)
         elseif field == "frameType" then
             if value == "none" then entry.frame = false else
                 local frame = FrameEffect(entry, true)

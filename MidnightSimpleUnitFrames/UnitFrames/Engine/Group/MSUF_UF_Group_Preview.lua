@@ -880,7 +880,29 @@ local function ApplySpellIndicatorPreview(frame, kind, visual, slot)
   local barOnly = slot.showDurationBar == true and slot.durationBarDisplay == "BAR_ONLY"
   if hiddenVisual then
     texture:Hide()
-  elseif visualType == "square" or visualType == "bar" then
+  elseif visualType == "bar" then
+    texture:SetTexture(PREVIEW_WHITE)
+    texture:SetTexCoord(0, 1, 0, 1)
+    texture:SetVertexColor(r * 0.18, g * 0.18, b * 0.18, a * 0.55)
+    texture:Show()
+    durationBar = EnsurePreviewTexture(visual, "_durationBar", "OVERLAY", 2)
+    durationBar:ClearAllPoints()
+    local edge = slot.durationBarReverseFill == true and "RIGHT" or "LEFT"
+    durationBar:SetPoint("TOP" .. edge, visual, "TOP" .. edge, 0, 0)
+    durationBar:SetPoint("BOTTOM" .. edge, visual, "BOTTOM" .. edge, 0, 0)
+    durationBar:SetWidth(max(1, width * 0.68))
+    durationBar:SetTexture(PREVIEW_WHITE)
+    durationBar:SetVertexColor(r, g, b, a)
+    durationBar:Show()
+    if slot.showCooldownText == true then
+      timer = EnsurePreviewFontString(visual, "_timer")
+      SetPreviewFont(timer, slot.cooldownSize or 8)
+      timer:SetText("12")
+      timer:SetTextColor(1, 1, 1, 1)
+      PlacePreviewText(timer, visual, slot.cooldownAnchor or "CENTER", slot.cooldownX or 0, slot.cooldownY or 0)
+      timer:Show()
+    end
+  elseif visualType == "square" then
     texture:SetTexture(PREVIEW_WHITE)
     texture:SetTexCoord(0, 1, 0, 1)
     texture:SetVertexColor(r, g, b, a)

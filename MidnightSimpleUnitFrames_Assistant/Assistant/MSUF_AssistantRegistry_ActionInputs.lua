@@ -544,7 +544,8 @@ DefineObject("set_group_spell_indicator_aura", {
     field = Enum({
         "enabled", "onlyOwn", "placedType", "placedAnchor", "placedSize", "placedX", "placedY",
         "placedBarWidth", "placedGrowth", "placedMissing", "placedCooldownSwipe", "placedCooldown",
-        "placedCooldownSize", "frameType", "framePriority", "frameAlpha", "frameThickness", "frameColor",
+        "placedCooldownSize", "placedBarSmoothFill", "placedBarShowTimer", "placedBarTimerAnchor",
+        "placedBarTimerX", "placedBarTimerY", "frameType", "framePriority", "frameAlpha", "frameThickness", "frameColor",
     }),
     value = DYNAMIC_SCALAR,
 }, {
@@ -567,6 +568,11 @@ DefineObject("set_group_spell_indicator_aura", {
                 placedCooldownSwipe = BOOL,
                 placedCooldown = BOOL,
                 placedCooldownSize = Integer(6, 24),
+                placedBarSmoothFill = BOOL,
+                placedBarShowTimer = BOOL,
+                placedBarTimerAnchor = SPELL_PLACED_ANCHOR,
+                placedBarTimerX = Integer(-100, 100),
+                placedBarTimerY = Integer(-100, 100),
                 frameType = SPELL_FRAME_TYPE,
                 framePriority = Integer(1, 10),
                 frameAlpha = Number(0, 1),

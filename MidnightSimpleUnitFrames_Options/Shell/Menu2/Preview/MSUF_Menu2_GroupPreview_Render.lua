@@ -3047,10 +3047,41 @@ function Render.Install(box, ctx, deps)
                 if spellTex then
                     spellTex:SetTexture(WHITE8X8)
                     spellTex:SetTexCoord(0, 1, 0, 1)
-                    spellTex:SetVertexColor(spellR, spellG, spellB, 1)
+                    spellTex:SetVertexColor(spellR * 0.18, spellG * 0.18, spellB * 0.18,
+                        ((color and color[4]) or 1) * 0.55)
                     spellTex:ClearAllPoints()
                     spellTex:SetAllPoints(handle)
                     spellTex:Show()
+                end
+                if spellDurationBar then
+                    -- Menu previews have no live AuraDurationObject. Show one
+                    -- representative native-fill state without adding preview
+                    -- animation or recurring work.
+                    spellDurationBar:SetTexture(WHITE8X8)
+                    spellDurationBar:SetTexCoord(0, 1, 0, 1)
+                    spellDurationBar:SetVertexColor(spellR, spellG, spellB, (color and color[4]) or 1)
+                    spellDurationBar:ClearAllPoints()
+                    local reverseFill = exactSlot and placed.durationBarReverseFill == true
+                        or (not exactSlot and tostring(placed.growth or "RIGHTDOWN"):upper():sub(1, 4) == "LEFT")
+                    local edge = reverseFill and "RIGHT" or "LEFT"
+                    spellDurationBar:SetPoint("TOP" .. edge, handle, "TOP" .. edge, 0, 0)
+                    spellDurationBar:SetPoint("BOTTOM" .. edge, handle, "BOTTOM" .. edge, 0, 0)
+                    spellDurationBar:SetWidth(max(1, barW * 0.68))
+                    spellDurationBar:Show()
+                end
+                local showTimer = exactSlot and placed.showCooldownText == true
+                    or (not exactSlot and placed.barShowTimer == true)
+                if spellTimer and showTimer then
+                    local cooldownSize = max(6, ScaleValue(appearance.cooldownSize or placed.cooldownSize or 8,
+                        previewScale, 6))
+                    SetPreviewFont(spellTimer, cooldownSize)
+                    spellTimer:SetTextColor(1, 1, 1, 1)
+                    PlaceAuraPreviewText(spellTimer, handle,
+                        RuntimeAuraTextAnchor(exactSlot and placed.cooldownAnchor or placed.barTimerAnchor, "CENTER"),
+                        ConfigToOffset(exactSlot and placed.cooldownX or placed.barTimerX or 0, previewScale),
+                        ConfigToOffset(exactSlot and placed.cooldownY or placed.barTimerY or 0, previewScale))
+                    spellTimer:SetText("12")
+                    spellTimer:Show()
                 end
             elseif spellType == "square" then
                 handle:SetSize(spellSize, spellSize)

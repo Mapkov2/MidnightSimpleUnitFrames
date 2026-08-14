@@ -92,7 +92,7 @@ function A.GroupFramesRegistry.RegisterSpellIndicatorActions(ctx)
         type = "configure",
         combatSafe = false,
         captureSnapshot = true,
-        description = "Configures one tracked Group Spell Indicator aura entry, including enable state, own-aura filtering, placed indicator type, anchor, size, offsets, bar width, growth, cooldown text, frame effect, color, opacity, thickness, and priority.",
+        description = "Configures one tracked Group Spell Indicator aura entry, including enable state, own-aura filtering, placed indicator type, anchor, size, offsets, bar width, growth, smooth bar fill, movable bar timer text, cooldown text, frame effect, color, opacity, thickness, and priority.",
         aliases = {
             "configure group spell indicator", "edit group spell indicator", "set group spell indicator",
             "set group tracked spell", "configure tracked spell", "edit tracked spell",
@@ -101,6 +101,8 @@ function A.GroupFramesRegistry.RegisterSpellIndicatorActions(ctx)
             "group spell indicator size", "group spell indicator x offset", "group spell indicator y offset",
             "group spell indicator bar width", "group spell indicator growth", "group spell indicator cooldown",
             "group spell indicator cooldown swipe", "group spell indicator cooldown size",
+            "group spell indicator smooth bar fill", "group spell indicator bar timer",
+            "group spell indicator timer anchor", "group spell indicator timer x", "group spell indicator timer y",
             "group spell indicator frame effect", "group spell indicator frame priority",
             "group spell indicator tint alpha", "group spell indicator opacity", "group spell indicator thickness",
             "group spell indicator color", "party spell indicator anchor", "raid spell indicator anchor",

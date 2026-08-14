@@ -1458,7 +1458,9 @@ local GROUP_MENU_DOMAIN_REPAIR = {
     debuffStripeEdges = { BOTTOM = true, TOP = true },
     placedIndicatorTypes = { icon = true, square = true, bar = true, number = true },
     frameEffectTypes = { healthtint = true, border = true, glow = true, pulse = true, namecolor = true },
-    frameEffectTimings = { always = true, expiring = true },
+    -- Timed full-frame effects cannot be driven reliably from secret 12.1
+    -- group auras. Retained profile values fall back to the active-aura path.
+    frameEffectTimings = { always = true },
     iconEffectTypes = { none = true, glow = true },
     spellGrowth = { RIGHTDOWN = true, LEFTDOWN = true, RIGHTUP = true, LEFTUP = true },
     shiftedNameAnchors = { TOPLEFT = true, TOPRIGHT = true, BOTTOMLEFT = true, BOTTOMRIGHT = true },

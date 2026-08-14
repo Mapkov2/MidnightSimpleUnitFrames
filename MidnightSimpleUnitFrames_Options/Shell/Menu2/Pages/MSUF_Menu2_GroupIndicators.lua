@@ -21,7 +21,7 @@ local WHITE_RGB = { 1, 1, 1 }
 local SPELL_INDICATORS_121_PTR_DISABLED = false
 local issecretvalue = _G.issecretvalue or function(_) return false end
 local STATUS_ICON_RESET_FIELDS = M.WordList "size anchor x y layer iconStyle customIcon"
-local AURA_ANCHORS, STATUS_ICON_ANCHORS, GF_STATUS_ICON_SPECS, GF_STATUS_ICON_VALUES, PLACED_INDICATOR_TYPES, FRAME_EFFECT_TYPES, FRAME_EFFECT_TIMINGS, ICON_EFFECT_TYPES, SPELL_GROWTH_VALUES, CI_SLOT_VALUES, CI_SLOT_DEFAULTS = M.PickDefaults(GP, [[AURA_ANCHORS STATUS_ICON_ANCHORS GF_STATUS_ICON_SPECS GF_STATUS_ICON_VALUES PLACED_INDICATOR_TYPES FRAME_EFFECT_TYPES FRAME_EFFECT_TIMINGS ICON_EFFECT_TYPES SPELL_GROWTH_VALUES CI_SLOT_VALUES CI_SLOT_DEFAULTS]])
+local AURA_ANCHORS, STATUS_ICON_ANCHORS, GF_STATUS_ICON_SPECS, GF_STATUS_ICON_VALUES, PLACED_INDICATOR_TYPES, FRAME_EFFECT_TYPES, ICON_EFFECT_TYPES, SPELL_GROWTH_VALUES, CI_SLOT_VALUES, CI_SLOT_DEFAULTS = M.PickDefaults(GP, [[AURA_ANCHORS STATUS_ICON_ANCHORS GF_STATUS_ICON_SPECS GF_STATUS_ICON_VALUES PLACED_INDICATOR_TYPES FRAME_EFFECT_TYPES ICON_EFFECT_TYPES SPELL_GROWTH_VALUES CI_SLOT_VALUES CI_SLOT_DEFAULTS]])
 local GF, RefreshGFPreview, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection, CurrentScope, BindScopeToggle, ScopeDropdown, ScopeSlider, ScopeColor, SpellIndicators, IconStyleValues, CurrentGFStatusSpec, QueueSpellIndicators, SpellSpecValues, SpellTrackedSpecValues, IsAllSpecsSpellSpec, CurrentSpellMultiSpec, EffectiveSpellSpec, SpellAuraValues, SetCurrentSpellAura, ClearCurrentSpellAura, CurrentSpellAura, CurrentSpellConfig, PlacedConfig, FrameEffectConfig, CICategoryValues, CIFilterValues, CIModeValues, CurrentCISlot, CICustomConfig, BindNestedSlider, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, TrackSectionRefresh, OnOffBadge, OptionText, ControlMeta, RegisterControl = M.Pick(GP, [[GF RefreshGFPreview Conf Val QueueGF Set Bool Num ScopeSection CurrentScope BindScopeToggle ScopeDropdown ScopeSlider ScopeColor SpellIndicators IconStyleValues CurrentGFStatusSpec QueueSpellIndicators SpellSpecValues SpellTrackedSpecValues IsAllSpecsSpellSpec CurrentSpellMultiSpec EffectiveSpellSpec SpellAuraValues SetCurrentSpellAura ClearCurrentSpellAura CurrentSpellAura CurrentSpellConfig PlacedConfig FrameEffectConfig CICategoryValues CIFilterValues CIModeValues CurrentCISlot CICustomConfig BindNestedSlider SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus TrackSectionRefresh OnOffBadge OptionText ControlMeta RegisterControl]])
 OnOffBadge = OnOffBadge or M.OnOffBadge
 OptionText = OptionText or M.OptionText
@@ -1641,7 +1641,7 @@ GP.BuildSpellIndicatorStyleSection = function(ctx, b)
 end
 
 local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
-    local spells = b:CollapsibleSection("si", Tr("Spell Indicators"), 956, false)
+    local spells = b:CollapsibleSection("si", Tr("Spell Indicators"), 848, false)
     local siW = spells._msuf2Width or ctx.width or 720
     local siGap = 28
     local siLeftX = 30
@@ -1653,7 +1653,7 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
     do
         spellSetCard = W.ControlCard(spells, Tr("Choose Spells"), nil, siLeftX - 14, -38, siLeftW + 28, 404)
         W.ControlCard(spells, Tr("Edit Spell"), nil, siRightX - 14, -38, siRightW + 28, 404)
-        placedIndicatorCard = W.ControlCard(spells, Tr("Show on Frame"), nil, siLeftX - 14, -456, siLeftW + 28, 462)
+        placedIndicatorCard = W.ControlCard(spells, Tr("Show on Frame"), nil, siLeftX - 14, -456, siLeftW + 28, 560)
         frameHighlightCard = W.ControlCard(spells, Tr("Highlight Health Bar"), nil, siRightX - 14, -456, siRightW + 28, 468)
     end
     local RefreshSpellIndicatorState = M.RefreshProxy()
@@ -1899,8 +1899,9 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
     local function BindPlacedSlider(label, minValue, maxValue, step, key, default, y)
         return BindConfigSlider(PlacedConfig, siLeftX, siLeftW, label, minValue, maxValue, step, key, default, y)
     end
-    local function BindPlacedToggle(label, key, defaultWhenPlaced, y)
-        local control = W.ToggleAt(spells, Tr(label), siRightX, y, siRightW)
+    local function BindPlacedToggle(label, key, defaultWhenPlaced, y, x, width, afterSet)
+        x, width = x or siRightX, width or siRightW
+        local control = W.ToggleAt(spells, Tr(label), x, y, width)
         M.BindBoolWidget(ctx, control,
             function()
                 local placed = PlacedConfig(CurrentScope(), false)
@@ -1913,29 +1914,14 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
                 local placed = PlacedConfig(CurrentScope(), true)
                 if placed then placed[key] = value and true or false end
                 QueueSpellIndicators(CurrentScope())
+                if afterSet then afterSet() end
             end,
             ControlMeta(ctx, "spell.placed." .. tostring(key)))
+        W.MoveWidget(control, spells, x, y, width, "LEFT")
         return control
     end
     local function BindFrameSlider(label, minValue, maxValue, step, key, default, y)
         return BindConfigSlider(FrameEffectConfig, siRightX, siRightW, label, minValue, maxValue, step, key, default, y)
-    end
-    local function BindFrameDropdown(label, values, key, default, y, afterSet)
-        local control = W.Dropdown(spells, Tr(label), values, siRightW)
-        M.BindDropdownWidget(ctx, control,
-            function()
-                local frame = FrameEffectConfig(CurrentScope(), false)
-                return frame and frame[key] or default
-            end,
-            function(value)
-                local frame = FrameEffectConfig(CurrentScope(), true)
-                if frame then frame[key] = value or default end
-                QueueSpellIndicators(CurrentScope())
-                if afterSet then afterSet() end
-            end,
-            ControlMeta(ctx, "spell.frame." .. tostring(key)))
-        W.MoveWidget(control, spells, siRightX, y, siRightW, "LEFT")
-        return control
     end
     local function BindSpellSubType(label, values, x, y, width, field, applyDefaults, afterSet)
         local control = W.Dropdown(spells, Tr(label), values, width)
@@ -1968,6 +1954,12 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
             placed.anchor = placed.anchor or "TOPLEFT"
             placed.size = tonumber(placed.size) or 18
             placed.cooldownSize = tonumber(placed.cooldownSize) or 8
+            placed.growth = placed.growth or "RIGHTDOWN"
+            if placed.barSmoothFill == nil then placed.barSmoothFill = false end
+            if placed.barShowTimer == nil then placed.barShowTimer = false end
+            placed.barTimerAnchor = placed.barTimerAnchor or "CENTER"
+            placed.barTimerX = tonumber(placed.barTimerX) or 0
+            placed.barTimerY = tonumber(placed.barTimerY) or 0
             if placed.showCooldownSwipe == nil then placed.showCooldownSwipe = true end
         end,
         RefreshPage)
@@ -1976,6 +1968,26 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
     local placedBarWidth = BindPlacedSlider("Bar Width", 8, 120, 1, "barWidth", 42, -654)
     local placedGrowth = BindPlacedDropdown("Growth", SPELL_GROWTH_VALUES, "growth", "RIGHTDOWN", -708)
     local placedIconEffect = BindPlacedDropdown("Icon Effect", ICON_EFFECT_TYPES, "iconEffect", "none", -762, RefreshSpellIndicatorState)
+    local placedBarSmoothFill = BindPlacedToggle("Smooth fill", "barSmoothFill", false, -762,
+        siLeftX, siLeftW)
+    local placedBarShowTimer = BindPlacedToggle("Show Timer Text", "barShowTimer", false, -802,
+        siLeftX, siLeftW, RefreshSpellIndicatorState)
+    local placedBarTimerAnchor = BindPlacedDropdown("Timer Anchor", STATUS_ICON_ANCHORS,
+        "barTimerAnchor", "CENTER", -842)
+    local timerGap = 12
+    local timerSliderW = floor((siLeftW - timerGap) * 0.5)
+    local placedBarTimerX = BindConfigSlider(PlacedConfig, siLeftX, timerSliderW,
+        "Timer X", -100, 100, 1, "barTimerX", 0, -896)
+    local placedBarTimerY = BindConfigSlider(PlacedConfig, siLeftX + timerSliderW + timerGap, timerSliderW,
+        "Timer Y", -100, 100, 1, "barTimerY", 0, -896)
+    if M.AddTooltip then
+        M.AddTooltip(placedGrowth, "Growth",
+            "For Bar, the first direction controls the fill: Right fills left-to-right; Left fills right-to-left. Up or Down remains the secondary layout direction.",
+            { hook = true, titleAsLine = true })
+        M.AddTooltip(placedBarSmoothFill, "Smooth fill",
+            "Uses Blizzard's native StatusBar interpolation when an active aura duration is refreshed. The countdown itself remains C-side.",
+            { hook = true, titleAsLine = true })
+    end
     local frameType = BindSpellSubType("Effect", FRAME_EFFECT_TYPES, siRightX, -490, siRightW, "frame",
         function(frame)
             if not frame.color then
@@ -1985,17 +1997,8 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
             frame.priority = frame.priority or 5
             frame.layer = tonumber(frame.layer) or 0
             frame.strata = frame.strata or "AUTO"
-            frame.timing = frame.timing or "always"
-            frame.expireThreshold = tonumber(frame.expireThreshold) or 5
         end,
         RefreshSpellIndicatorState)
-    local frameTiming = BindFrameDropdown("When", FRAME_EFFECT_TIMINGS, "timing", "always", -544, RefreshSpellIndicatorState)
-    local frameExpireThreshold = BindFrameSlider("Start effect at (seconds remaining)", 1, 30, 1, "expireThreshold", 5, -598)
-    if M.AddTooltip then
-        M.AddTooltip(frameExpireThreshold, "Expiration threshold",
-            "Starts this frame effect when the aura reaches the selected time remaining. Permanent auras never trigger it.",
-            { hook = true, titleAsLine = true })
-    end
     local frameColor = W.Color(spells, Tr("Color"))
     frameColor._msuf2ColorLabel = Tr("Health bar highlight")
     frameColor._msuf2ContextColorCardOverride = frameHighlightCard
@@ -2016,8 +2019,8 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
             QueueSpellIndicators(CurrentScope())
         end,
         ControlMeta(ctx, "spell.frame.color"))
-    W.MoveWidget(frameColor, spells, siRightX, -652, siRightW)
-    local framePriority = BindFrameSlider("Priority", 1, 10, 1, "priority", 5, -706)
+    W.MoveWidget(frameColor, spells, siRightX, -544, siRightW)
+    local framePriority = BindFrameSlider("Priority", 1, 10, 1, "priority", 5, -598)
     local frameAlpha = W.Slider(spells, Tr("Tint Alpha"), 5, 100, 5, siRightW)
     M.BindNumberWidget(ctx, frameAlpha,
         function()
@@ -2034,9 +2037,9 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
             QueueSpellIndicators(CurrentScope())
         end,
         25, StepMeta(ctx, "spell.frame.alpha", 5))
-    W.MoveWidget(frameAlpha, spells, siRightX, -760, siRightW, "LEFT")
-    local frameThickness = BindFrameSlider("Border / Glow Thickness", 1, 8, 1, "thickness", 2, -814)
-    local frameLayer = BindFrameSlider("Effect Layer (0-30)", 0, 30, 1, "layer", 0, -868)
+    W.MoveWidget(frameAlpha, spells, siRightX, -652, siRightW, "LEFT")
+    local frameThickness = BindFrameSlider("Border / Glow Thickness", 1, 8, 1, "thickness", 2, -706)
+    local frameLayer = BindFrameSlider("Effect Layer (0-30)", 0, 30, 1, "layer", 0, -760)
     local spellGridLayoutRows
     local function RefreshSpellGridLayout(rows)
         rows = max(3, tonumber(rows) or 3)
@@ -2052,7 +2055,12 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         W.MoveWidget(placedBarWidth, spells, siLeftX, -654 - extra, siLeftW, "LEFT")
         W.MoveWidget(placedGrowth, spells, siLeftX, -708 - extra, siLeftW, "LEFT")
         W.MoveWidget(placedIconEffect, spells, siLeftX, -762 - extra, siLeftW, "LEFT")
-        local contentHeight = max(956, 936 + extra)
+        W.MoveWidget(placedBarSmoothFill, spells, siLeftX, -762 - extra, siLeftW, "LEFT")
+        W.MoveWidget(placedBarShowTimer, spells, siLeftX, -802 - extra, siLeftW, "LEFT")
+        W.MoveWidget(placedBarTimerAnchor, spells, siLeftX, -842 - extra, siLeftW, "LEFT")
+        W.MoveWidget(placedBarTimerX, spells, siLeftX, -896 - extra, timerSliderW, "LEFT")
+        W.MoveWidget(placedBarTimerY, spells, siLeftX + timerSliderW + timerGap, -896 - extra, timerSliderW, "LEFT")
+        local contentHeight = max(1040, 1020 + extra)
         local entry = spells._msuf2CollapsibleEntry
         if entry and entry.contentHeight ~= contentHeight then
             entry.contentHeight = contentHeight
@@ -2088,10 +2096,12 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         local frame = FrameEffectConfig(CurrentScope(), false)
         local frameKind = frame and frame.type or "none"
         local hasFrame = hasSpell and frameKind ~= "none"
-        local expiringFrame = hasFrame and frame and frame.timing == "expiring"
         RefreshPreviewAllButton()
-        local cdRelevant = placedEnabled and placed.type == "icon"
-        local barRelevant = placedEnabled and placed.type == "bar"
+        local iconSelected = placed and placed.type == "icon"
+        local barSelected = placed and placed.type == "bar"
+        local cdRelevant = placedEnabled and iconSelected
+        local barRelevant = placedEnabled and barSelected
+        local barTimerSelected = barSelected and placed.barShowTimer == true
         SetOptionEnabled(siEnable, not SPELL_INDICATORS_121_PTR_DISABLED)
         SetManyEnabled(indicatorsOn, siLayer, specDrop)
         SetOptionEnabled(multiSpecDrop, indicatorsOn and multi)
@@ -2105,9 +2115,17 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         SetManyEnabled(placedEnabled, placedAnchor, placedSize, placedGrowth)
         SetOptionEnabled(placedBarWidth, barRelevant)
         SetOptionEnabled(placedIconEffect, cdRelevant)
+        W.SetControlShown(placedIconEffect, iconSelected)
+        W.SetControlShown(placedBarSmoothFill, barSelected)
+        W.SetControlShown(placedBarShowTimer, barSelected)
+        W.SetControlShown(placedBarTimerAnchor, barTimerSelected)
+        W.SetControlShown(placedBarTimerX, barTimerSelected)
+        W.SetControlShown(placedBarTimerY, barTimerSelected)
+        SetManyEnabled(barRelevant, placedBarSmoothFill, placedBarShowTimer)
+        SetManyEnabled(barRelevant and barTimerSelected,
+            placedBarTimerAnchor, placedBarTimerX, placedBarTimerY)
         SetOptionEnabled(frameType, hasSpell)
-        SetManyEnabled(hasFrame, frameTiming, frameColor, framePriority, frameAlpha, frameThickness, frameLayer)
-        SetOptionEnabled(frameExpireThreshold, expiringFrame)
+        SetManyEnabled(hasFrame, frameColor, framePriority, frameAlpha, frameThickness, frameLayer)
         local badges = {
             OnOffBadge(indicatorsOn, "Enabled", "Disabled"),
         }

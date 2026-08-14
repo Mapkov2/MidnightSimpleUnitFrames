@@ -105,7 +105,6 @@ statusDNDText|DND Text|statusDNDText|0|statusDNDTextSize|statusDNDTextAnchor|sta
 ]],
     PLACED_INDICATOR_TYPES = VTP "none=None|icon=Icon|square=Square|bar=Bar|number=Number",
     FRAME_EFFECT_TYPES = VTP "none=None|healthtint=Health Tint|border=Border|glow=Glow|pulse=Pulse|namecolor=Name Color",
-    FRAME_EFFECT_TIMINGS = VTP "always=While aura is active|expiring=When aura is expiring",
     ICON_EFFECT_TYPES = VTP "none=None|glow=Animated Glow",
     SPELL_GROWTH_VALUES = VTP "RIGHTDOWN=Right then Down|LEFTDOWN=Left then Down|RIGHTUP=Right then Up|LEFTUP=Left then Up",
     CI_SLOT_VALUES = VTP "TL=Top Left|TR=Top Right|BL=Bottom Left|BR=Bottom Right|C=Center",
