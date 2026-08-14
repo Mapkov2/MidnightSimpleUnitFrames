@@ -4470,9 +4470,11 @@ A3._GetGroupSlotsRootConfig = GetGroupSlotsRootConfig
 
 local function EnsureAuraTextOverlay(button, lane)
     if not button then return nil end
+    local visualOwner = button._msufA3SpellIndicatorVisualHost or button
     local overlay = button._msufA3TextOverlay
-    if not overlay then
-        overlay = CreateFrame("Frame", nil, button)
+    if not overlay or (overlay.GetParent and overlay:GetParent() ~= visualOwner) then
+        if overlay then overlay:Hide() end
+        overlay = CreateFrame("Frame", nil, visualOwner)
         overlay._msufA3TextOverlay = true
         if overlay.EnableMouse then overlay:EnableMouse(false) end
         button._msufA3TextOverlay = overlay
@@ -4484,8 +4486,8 @@ local function EnsureAuraTextOverlay(button, lane)
     -- level cannot strand text/swipe underneath its border. Retain the proven
     -- full-holder surface for the first portrait icon; appended icons use
     -- button-local surfaces so their swipes/text cannot overlap each other.
-    local anchor = button
-    local level = button.GetFrameLevel and (button:GetFrameLevel() or 0) or 0
+    local anchor = visualOwner
+    local level = visualOwner.GetFrameLevel and (visualOwner:GetFrameLevel() or 0) or 0
     if lane and lane.portraitOverlay == true then
         overlay._msufA3PortraitDurationSurface = true
         local holder = button._msufA3ParentFrame
@@ -4504,8 +4506,8 @@ local function EnsureAuraTextOverlay(button, lane)
 end
 
 function A3._AuraCooldownAnchorAndLevel(button, lane)
-    local anchor = button
-    local level = button and button.GetFrameLevel and (button:GetFrameLevel() or 0) or 0
+    local anchor = button and (button._msufA3SpellIndicatorVisualHost or button)
+    local level = anchor and anchor.GetFrameLevel and (anchor:GetFrameLevel() or 0) or 0
     if lane and lane.portraitOverlay == true then
         local holder = button and button._msufA3ParentFrame
         if holder and holder.GetFrameLevel then
@@ -4654,12 +4656,29 @@ local function PrepareAuraButton(button, lane, index)
     if cancelablePlayerBuff then
         button:SetCancelAuraButtons("RightButtonUp")
     end
-    -- Reference-addon model: never touch AuraButton level or strata. Buttons
-    -- spawn at container level + 1 and inherit the container's strata, and the
-    -- container is the single explicitly-written layering authority. Button
-    -- writes are the one surface PTR 7 restricts hardest (template-sealed,
-    -- access-denied while auras are secret), so owning zero of them makes the
-    -- chain immune to those rules.
+    -- One native AuraSlot owns the secret assignment. Spell Indicator icon
+    -- art lives on an independently levelled child, so its user Layer remains
+    -- independent from a full-frame effect without a second aura assignment.
+    local visualOwner = button
+    if lane.kind == "spellIndicator" and lane.frameEffect and lane.visual ~= "none" then
+        visualOwner = button._msufA3SpellIndicatorVisualHost
+        if not visualOwner then
+            visualOwner = CreateFrame("Frame", nil, button)
+            visualOwner:EnableMouse(false)
+            button._msufA3SpellIndicatorVisualHost = visualOwner
+        end
+        visualOwner:ClearAllPoints()
+        visualOwner:SetAllPoints(button)
+        if visualOwner.SetFrameLevel then
+            visualOwner:SetFrameLevel(FrameLayers.ElementLevel and FrameLayers.ElementLevel(lane.layer, 9, 1)
+                or ((button:GetFrameLevel() or 0) + 1))
+        end
+        visualOwner:Show()
+    end
+    -- Normal aura lanes retain the reference-addon model: their AuraButton
+    -- inherits the container's strata and remains the sole visual owner. The
+    -- Spell Indicator exception above is established only in initializeFrame;
+    -- later secret-backed assignment never needs another hierarchy mutation.
     local barOnly = lane.showDurationBar == true and lane.durationBarDisplay == "BAR_ONLY"
     local icon = button.Icon
     if barOnly then
@@ -4673,13 +4692,13 @@ local function PrepareAuraButton(button, lane, index)
             -- The portrait itself is ARTWORK sublevel 0. Use the same sublevel
             -- contract as the proven cast-icon overlay; normal aura lanes keep
             -- their existing layer order.
-            icon = button:CreateTexture(nil, "ARTWORK", nil, lane.portraitOverlay == true and 1 or 0)
+            icon = visualOwner:CreateTexture(nil, "ARTWORK", nil, lane.portraitOverlay == true and 1 or 0)
             button.Icon = icon
         elseif lane.portraitOverlay == true and icon.SetDrawLayer then
             icon:SetDrawLayer("ARTWORK", 1)
         end
         icon:ClearAllPoints()
-        icon:SetAllPoints(button)
+        icon:SetAllPoints(visualOwner)
         ApplyAuraIconZoom(icon, lane)
         icon:SetAlpha(1)
         icon:Show()
@@ -4703,7 +4722,7 @@ local function PrepareAuraButton(button, lane, index)
         local cooldownAnchor, cooldownLevel = A3._AuraCooldownAnchorAndLevel(button, lane)
         local cooldown = button._msufA3Cooldown
         if not cooldown then
-            local cd = CreateFrame("Cooldown", nil, button, "CooldownFrameTemplate")
+            local cd = CreateFrame("Cooldown", nil, visualOwner, "CooldownFrameTemplate")
             if type(cd.SetDrawSwipe) == "function" then cd:SetDrawSwipe(true) end
             if type(cd.SetSwipeColor) == "function" then cd:SetSwipeColor(0, 0, 0, 0.58) end
             if type(cd.SetHideCountdownNumbers) == "function" then cd:SetHideCountdownNumbers(true) end
@@ -4733,27 +4752,40 @@ local function PrepareAuraButton(button, lane, index)
     -- Rectangular/default auras take the no-allocation branch and keep the
     -- exact pre-shape icon, swipe, and border renderer.
     local iconShape = not barOnly and (lane.iconShape or Shape.RECTANGLE) or Shape.RECTANGLE
-    A3.ApplyAuraIconShape(button, iconShape, button._msufA3Cooldown, icon)
+    A3.ApplyAuraIconShape(visualOwner, iconShape, button._msufA3Cooldown, icon)
 
     if lane.showDurationBar == true then
         local bar = button._msufA3DurationBar
         if not bar then
-            bar = CreateFrame("StatusBar", nil, button)
+            bar = CreateFrame("StatusBar", nil, visualOwner)
             bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
             bar:SetMinMaxValues(0, 1)
             bar:SetValue(0)
             button._msufA3DurationBar = bar
         end
         if type(bar.SetFrameLevel) == "function" then
-            bar:SetFrameLevel((button:GetFrameLevel() or 0)
+            bar:SetFrameLevel((visualOwner:GetFrameLevel() or 0)
                 + (FrameLayers.AURA_DURATION_BAR_LEVEL_OFFSET or 2))
         end
-        LayoutDurationBar(button, bar, lane)
+        LayoutDurationBar(visualOwner, bar, lane)
         ApplyDurationBarColor(bar)
+        if lane.kind == "spellIndicator" and lane.frameEffect
+            and lane.frameEffect.timing == "expiring"
+            and SpellIndicatorsRuntime.BindExpiringDurationBridge then
+            SpellIndicatorsRuntime.BindExpiringDurationBridge(button, bar)
+        end
         button:SetDurationBar(bar, ResolveDurationBarOptions(lane))
+        if lane.kind == "spellIndicator" and lane.frameEffect
+            and lane.frameEffect.timing == "expiring" then
+            button._msufA3ExpiringEffectDurationBound = bar
+        end
         bar:Show()
     else
-        button:ClearDurationBar()
+        if not (lane.kind == "spellIndicator" and lane.frameEffect
+            and lane.frameEffect.timing == "expiring"
+            and button._msufA3ExpiringEffectDurationBound) then
+            button:ClearDurationBar()
+        end
         if button._msufA3DurationBar then button._msufA3DurationBar:Hide() end
     end
 
@@ -4844,9 +4876,9 @@ local function PrepareAuraButton(button, lane, index)
     if lane.showAuraBorder == true and not barOnly then
         local border = button._msufA3AuraBorder or button.AuraBorder or button.Border
         if not border then
-            border = button:CreateTexture(nil, "OVERLAY")
+            border = visualOwner:CreateTexture(nil, "OVERLAY")
         end
-        LayoutAuraBorder(button, border, lane)
+        LayoutAuraBorder(visualOwner, border, lane)
         local shapedDispel = iconShape ~= Shape.RECTANGLE and A3.AuraShapeBorderPath(iconShape) or nil
         if shapedDispel then
             border:SetTexture(shapedDispel)
@@ -4867,16 +4899,16 @@ local function PrepareAuraButton(button, lane, index)
     if lane.showStealableMarker == true and not barOnly then
         local marker = button._msufA3StealableMarker
         if not marker then
-            marker = button:CreateTexture(nil, "OVERLAY", nil, 5)
+            marker = visualOwner:CreateTexture(nil, "OVERLAY", nil, 5)
             button._msufA3StealableMarker = marker
         end
         marker:ClearAllPoints()
         if lane.stealableStyle == "ICON" then
             local markerSize = math_max(7, math_floor((lane.size or 24) * 0.42 + 0.5))
             marker:SetSize(markerSize, markerSize)
-            marker:SetPoint("TOPLEFT", button, "TOPLEFT", 1, -1)
+            marker:SetPoint("TOPLEFT", visualOwner, "TOPLEFT", 1, -1)
         else
-            LayoutAuraBorder(button, marker, lane)
+            LayoutAuraBorder(visualOwner, marker, lane)
         end
         button:AddDispelTypeTexture(marker, A3.GetStealableTextureOptions(lane.stealableStyle))
     elseif button._msufA3StealableMarker then
@@ -4886,12 +4918,12 @@ local function PrepareAuraButton(button, lane, index)
     if lane.showAuraSymbol == true and auraBorderBound == true and not barOnly then
         local symbol = button._msufA3AuraSymbol or button.AuraSymbol or button.Symbol
         if not symbol then
-            symbol = button:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            symbol = visualOwner:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         end
         button._msufA3AuraSymbol = symbol
         button.Symbol = symbol
         symbol:ClearAllPoints()
-        symbol:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -1, 1)
+        symbol:SetPoint("BOTTOMRIGHT", visualOwner, "BOTTOMRIGHT", -1, 1)
         symbol:SetJustifyH("RIGHT")
         symbol:SetJustifyV("BOTTOM")
         ApplyFont(symbol, math_min(lane.stackSize or DEFAULT_SHARED.stackTextSize, 14))
@@ -4910,8 +4942,8 @@ local function PrepareAuraButton(button, lane, index)
     local style
     if not barOnly then style = lane.iconStyle end
     local size = lane.size or 0
-    ApplyIconStyleShadow(button, style, size, iconShape)
-    ApplyIconStyleBorder(button, style, size, iconShape)
+    ApplyIconStyleShadow(visualOwner, style, size, iconShape)
+    ApplyIconStyleBorder(visualOwner, style, size, iconShape)
 
     -- AddPandemicRegion controls only the host's secret Shown aspect. Every
     -- child texture is static and was configured above/below once at creation.

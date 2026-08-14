@@ -437,46 +437,9 @@ function Runtime.CompileSlots(unit, spellIndicators, spellIconStyle)
         structuralParts[#structuralParts + 1] = slot._msufA3StructuralSignature
         layoutParts[#layoutParts + 1] = slot._msufA3LayoutSignature
     end
-    local function ExpiringEffectSensor(slot, frameEffect)
-        local sensor = {}
-        for key, value in pairs(slot) do sensor[key] = value end
-        -- Normal Spell Indicator keys are sanitized to [%w_]. A colon keeps
-        -- this native sibling key impossible to collide with a configured
-        -- spell whose own key happens to end in "_expiring".
-        sensor.slotKey = tostring(slot.slotKey) .. ":expiring"
-        sensor.itemKey = tostring(slot.itemKey or slot.slotKey) .. ":expiring"
-        sensor.display = tostring(slot.display or "Spell") .. " (Expiring)"
-        sensor.visual = "none"
-        sensor.hiddenVisual = true
-        sensor.showWhenMissing = false
-        sensor.frameEffect = frameEffect
-        sensor.iconEffect = "none"
-        sensor.size, sensor.width, sensor.height = 1, 1, 1
-        sensor.showCooldownText = false
-        sensor.showCooldownSwipe = false
-        sensor.showDurationBar = false
-        sensor.showStacks = false
-        sensor.showTooltip = false
-        sensor.showAuraBorder = false
-        sensor.showAuraSymbol = false
-        return FinalizeSlot(sensor)
-    end
     for i = 1, #spellIndicators.items do
         local slot = CompileSlot(unit, spellIndicators.items[i], i, spellIndicators.layer, spellIndicators.strata, spellIndicators.iconZoom, spellIconStyle)
-        if slot then
-            local frameEffect = slot.frameEffect
-            local timedFrameEffect = frameEffect and frameEffect.timing == "expiring"
-            if timedFrameEffect and slot.visual ~= "none" then
-                -- Keep all visible-icon duration, swipe, stack, and tooltip
-                -- ownership on the primary AuraButton. The invisible sibling
-                -- owns the native duration sensor for the timed frame effect.
-                slot.frameEffect = nil
-                AddSlot(FinalizeSlot(slot))
-                AddSlot(ExpiringEffectSensor(slot, frameEffect))
-            else
-                AddSlot(slot)
-            end
-        end
+        if slot then AddSlot(slot) end
     end
     if #slots == 0 then return nil end
     return {
@@ -589,10 +552,10 @@ local function EnsureEffectRoot(button, parentFrame)
     if not target then return nil end
     local root = button._msufA3SpellIndicatorEffectRoot
     if not root then
-        -- Live native AuraSlots pass an owner-frame sibling through here so its
-        -- absolute 0..30 Layer cannot be raised by the Spell Icon button. Menu
-        -- previews use their own neutral owner. In both cases this helper owns
-        -- only the actual effect surface below the supplied visibility gate.
+        -- Live effects stay below the native AuraSlot so Blizzard's secret
+        -- visibility is inherited. The AuraSlot itself sits at the universal
+        -- base; this child's absolute level therefore remains independent from
+        -- the separately levelled icon host. Menu previews use a neutral owner.
         root = CreateFrame("Frame", nil, button)
         root:EnableMouse(false)
         root:SetAllPoints(target)
@@ -899,14 +862,13 @@ local function HideButtonIconEffect(button)
     end
 end
 
-local ClearExternalFrameEffects
+local ReleaseExpiringFrameEffects
 
 function Runtime.HideFrameEffects(parentFrame)
     if not parentFrame then return end
-    if ClearExternalFrameEffects then ClearExternalFrameEffects(parentFrame) end
+    if ReleaseExpiringFrameEffects then ReleaseExpiringFrameEffects(parentFrame) end
     -- The owning native container is hidden before this cleanup. Native
-    -- AuraButtons may be forbidden on PTR 5; cleanup only addon-owned sibling
-    -- gates and discard the lookup table for any retained legacy descendants.
+    -- AuraButtons may be forbidden, so only release Lua driver ownership here.
     parentFrame._msufA3SpellIndicatorEffectButtons = nil
     -- Clean up objects created by the pre-native implementation, if a profile
     -- was hot-reloaded from an older build in the same session.
@@ -1132,122 +1094,17 @@ function Runtime.HidePreviewFrameEffect(owner)
     return true
 end
 
-local function ExternalEffectButtonOnShow(button)
-    local gate = button and button._msufA3ExternalEffectGate
-    if gate then gate:Show() end
-end
-
-local function ExternalEffectButtonOnHide(button)
-    local gate = button and button._msufA3ExternalEffectGate
-    if gate then gate:Hide() end
-end
-
-local function EnsureExternalEffectSurface(parentFrame, slot)
-    if not (parentFrame and slot) then return nil, nil end
-    local healthBar = SpellIndicatorHealthBar(parentFrame)
-    if not healthBar then return nil, nil end
-
-    -- One parent-level sink per identity polarity multiplies every configured
-    -- effect in O(1) per identity edge. Neutral effects stay on their own
-    -- always-visible sink; per-slot gates own native visibility/duration below.
-    local identityMode = Runtime.IdentityCandidateMode(slot) or "neutral"
-    local identityGateKey = identityMode == "assist"
-        and "_msufA3SpellIndicatorExternalAssistGate"
-        or identityMode == "hostile"
-            and "_msufA3SpellIndicatorExternalHostileGate"
-            or "_msufA3SpellIndicatorExternalNeutralGate"
-    local assistGate = parentFrame[identityGateKey]
-    if not assistGate then
-        assistGate = CreateFrame("Frame", nil, parentFrame)
-        assistGate:EnableMouse(false)
-        assistGate._msufA3IdentityCandidateMode = identityMode
-        parentFrame[identityGateKey] = assistGate
-    end
-    assistGate:ClearAllPoints()
-    assistGate:SetAllPoints(healthBar)
-    assistGate:Show()
-    SetAssistAlpha(assistGate, GroupOutputVisible(parentFrame, identityMode), 1)
-
-    parentFrame._msufA3SpellIndicatorExternalEffectPool = parentFrame._msufA3SpellIndicatorExternalEffectPool or {}
-    local pool = parentFrame._msufA3SpellIndicatorExternalEffectPool
-    local gate = pool[slot.slotKey]
-    if not gate then
-        gate = CreateFrame("Frame", nil, assistGate)
-        gate:EnableMouse(false)
-        pool[slot.slotKey] = gate
-    elseif gate.GetParent and gate:GetParent() ~= assistGate and gate.SetParent then
-        gate:SetParent(assistGate)
-    end
-    gate:Hide()
-    gate:ClearAllPoints()
-    gate:SetAllPoints(assistGate)
-
-    local effect = slot.frameEffect
-    local pulseOwnsAlpha = type(effect) == "table" and tostring(effect.type or "none"):lower() == "pulse"
-    local effectRoot = gate
-    if pulseOwnsAlpha then
-        effectRoot = gate._msufA3ExternalPulseRoot
-        if not effectRoot then
-            effectRoot = CreateFrame("Frame", nil, gate)
-            effectRoot:EnableMouse(false)
-            gate._msufA3ExternalPulseRoot = effectRoot
-        elseif effectRoot.GetParent and effectRoot:GetParent() ~= gate and effectRoot.SetParent then
-            effectRoot:SetParent(gate)
-        end
-        effectRoot:ClearAllPoints()
-        effectRoot:SetAllPoints(gate)
-    end
-    effectRoot._msufA3SpellIndicatorEffectRoot = effectRoot
-    gate._msufA3ExternalEffectRoot = effectRoot
-    return gate, effectRoot
-end
-
-local function BindExternalEffectGate(button, gate)
-    local oldButton = gate._msufA3ExternalEffectButton
-    if oldButton and oldButton ~= button and oldButton._msufA3ExternalEffectGate == gate then
-        oldButton._msufA3ExternalEffectGate = nil
-    end
-    gate._msufA3ExternalEffectButton = button
-    gate._msufA3ExternalEffectContainer = button._msufA3SpellIndicatorContainer
-    button._msufA3ExternalEffectGate = gate
-    if button._msufA3ExternalEffectLifecycleHooked ~= true and button.HookScript then
-        button._msufA3ExternalEffectLifecycleHooked = true
-        button:HookScript("OnShow", ExternalEffectButtonOnShow)
-        button:HookScript("OnHide", ExternalEffectButtonOnHide)
-    end
-end
-
 local function ApplyAlwaysButtonFrameEffect(button, slot, parentFrame)
     if not (button and slot and parentFrame and type(slot.frameEffect) == "table") then
         HideButtonFrameEffect(button)
         return false
     end
 
-    -- AuraSlot visibility is secret-backed, but forwarding its OnShow/OnHide
-    -- lifecycle requires no secret read. The visible surface stays under the
-    -- unit frame, so its absolute Layer compares directly with text and bars.
-    local gate, effectRoot = EnsureExternalEffectSurface(parentFrame, slot)
-    if not gate then
-        HideButtonFrameEffect(button)
-        return false
-    end
-    gate:SetAlpha(1)
-    if not ApplyButtonFrameEffect(effectRoot, slot, parentFrame) then
-        gate:Hide()
-        return false
-    end
-
-    -- Retire an old descendant effect when code is hot-reloaded in the same UI
-    -- session. Fresh native slots no longer create one below the AuraButton.
-    HideButtonFrameEffect(button)
-    BindExternalEffectGate(button, gate)
-    gate._msufA3ExternalEffectMode = "always"
-    parentFrame._msufA3SpellIndicatorExternalEffectGates = parentFrame._msufA3SpellIndicatorExternalEffectGates or {}
-    parentFrame._msufA3SpellIndicatorExternalEffectGates[gate] = true
-    -- Native AuraSlots are allocated hidden; their first assignment Show starts
-    -- the sibling gate. No aura scan, secret IsShown read, or recurring driver.
-    gate:Hide()
-    return true
+    -- The full-frame surface remains a descendant of the one native AuraSlot.
+    -- Its absolute level is independent from the icon host, while native secret
+    -- visibility, Group presence, range and identity alpha all flow through the
+    -- existing ancestor chain without Lua lifecycle hooks.
+    return ApplyButtonFrameEffect(button, slot, parentFrame)
 end
 
 local function ExpiringEffectCurve(threshold)
@@ -1323,8 +1180,7 @@ local function StartExpiringEffectDriver()
     return true
 end
 
-local function RegisterExpiringEffectGate(gate)
-    local state = gate and gate._msufA3ExpiringEffectState
+local function RegisterExpiringEffectGate(gate, state)
     if not (gate and state and state.durationBridge and state.curve) then return false end
     activeExpiringEffectGates[gate] = state
     UpdateExpiringEffectGate(gate, state)
@@ -1336,33 +1192,66 @@ UnregisterExpiringEffectGate = function(gate)
     StopExpiringEffectDriverIfIdle()
 end
 
+local function RefreshExpiringDurationBridge(bridge)
+    local gate = bridge and bridge.gate
+    local duration = bridge and bridge.duration
+    local state = bridge and bridge.state
+    if not gate then return false end
+
+    -- IsZero has no secret return in the 12.1 LuaDuration API. It deliberately
+    -- combines absent, permanent and expired durations, which is exactly the
+    -- inactive set for a remaining-seconds effect. The secret duration itself
+    -- is still only forwarded through the curve into SetAlpha.
+    UpdateExpiringEffectGate(gate, state)
+    if not (duration and duration.IsZero) or duration:IsZero() then
+        UnregisterExpiringEffectGate(gate)
+        return false
+    end
+    return RegisterExpiringEffectGate(gate, state)
+end
+
+function Runtime.RefreshExpiringDurationBridge(button)
+    return RefreshExpiringDurationBridge(button and button._msufA3ExpiringEffectDurationBridge)
+end
+
+function Runtime.BindExpiringDurationBridge(button, sensor)
+    if not (button and sensor and hooksecurefunc) then return nil end
+    local bridge = button._msufA3ExpiringEffectDurationBridge
+    if bridge and button._msufA3ExpiringEffectDurationHookSensor == sensor then return bridge end
+    bridge = bridge or {}
+    hooksecurefunc(sensor, "SetTimerDuration", function(_, duration)
+        bridge.duration = duration
+        -- After Blizzard binds the AuraButton, this hook touches only the plain
+        -- Lua bridge and addon-owned alpha sink; it never reads the restricted
+        -- AuraButton or StatusBar back from Lua.
+        RefreshExpiringDurationBridge(bridge)
+    end)
+    button._msufA3ExpiringEffectDurationBridge = bridge
+    button._msufA3ExpiringEffectDurationHookSensor = sensor
+    button._msufA3ExpiringEffectDurationBar = sensor
+    return bridge
+end
+
 local function EnsureExpiringDurationBridge(button)
     if not button then return nil end
-    if not (CreateFrame and hooksecurefunc and button.SetDurationBar) then return nil end
+    if not (CreateFrame and button.SetDurationBar) then return nil end
     local bridge = button._msufA3ExpiringEffectDurationBridge
-    if button._msufA3ExpiringEffectDurationBound == true and bridge then return bridge end
     local sensor = button._msufA3ExpiringEffectDurationBar
-    if not (sensor and bridge) then
+    if bridge and sensor and button._msufA3ExpiringEffectDurationBound == sensor then return bridge end
+    if not sensor then
         sensor = CreateFrame("StatusBar", nil, button)
         sensor:SetAllPoints(button)
         sensor:SetAlpha(0)
         if sensor.EnableMouse then sensor:EnableMouse(false) end
         sensor:Hide()
-        bridge = {}
-        -- Blizzard's private AuraButton mixin hands its LuaDuration directly
-        -- to StatusBar:SetTimerDuration. Capture that argument into a plain Lua
-        -- table while the sensor is still addon-owned; never read the StatusBar
-        -- again after SetDurationBar marks it forbidden on 12.1 PTR.
-        hooksecurefunc(sensor, "SetTimerDuration", function(_, duration)
-            bridge.duration = duration
-        end)
-        button._msufA3ExpiringEffectDurationBar = sensor
-        button._msufA3ExpiringEffectDurationBridge = bridge
     end
-    -- Mark first so a synchronous Blizzard refresh cannot re-enter setup. The
-    -- hidden bridge belongs only to the existing timed frame-effect path.
-    button._msufA3ExpiringEffectDurationBound = true
+    bridge = Runtime.BindExpiringDurationBridge(button, sensor)
+    if not bridge then return nil end
+    -- A visible Spell Indicator duration bar is reused when configured. Only a
+    -- slot without one binds this hidden bar, so SetDurationBar ownership never
+    -- replaces a user-facing duration display.
     button:SetDurationBar(sensor, EXPIRING_DURATION_BAR_OPTIONS)
+    button._msufA3ExpiringEffectDurationBound = sensor
     return bridge
 end
 
@@ -1375,77 +1264,49 @@ local function ApplyExpiringButtonFrameEffect(button, slot, parentFrame)
         return false
     end
 
-    local gate, effectRoot = EnsureExternalEffectSurface(parentFrame, slot)
+    local healthBar = SpellIndicatorHealthBar(parentFrame)
+    if not healthBar then return false end
+    local gate = button._msufA3ExpiringFrameEffectGate
     if not gate then
-        HideButtonFrameEffect(button)
+        gate = CreateFrame("Frame", nil, button)
+        gate:EnableMouse(false)
+        button._msufA3ExpiringFrameEffectGate = gate
+    end
+    gate:ClearAllPoints()
+    gate:SetAllPoints(healthBar)
+    SyncFrameStrata(gate, ResolveFrameStrata(parentFrame, effect.strata or slot.strata))
+    if gate.SetFrameLevel then
+        gate:SetFrameLevel(FrameLayers.ElementLevel and FrameLayers.ElementLevel(effect.layer, 0, 0)
+            or ((parentFrame:GetFrameLevel() or 0) + SPELL_FRAME_EFFECT_BASE_OFFSET + (effect.layer or 0)))
+    end
+    if not ApplyButtonFrameEffect(gate, slot, parentFrame) then
         return false
     end
-
-    -- Duration, range, and Pulse each retain their own alpha owner inside the
-    -- shared external surface. Only the duration gate needs the active driver.
+    UnregisterExpiringEffectGate(gate)
     gate:SetAlpha(0)
-    if not ApplyButtonFrameEffect(effectRoot, slot, parentFrame) then
-        gate:Hide()
-        return false
-    end
-
-    HideButtonFrameEffect(button)
-    gate._msufA3ExpiringEffectState = {
+    local state = {
         durationBridge = bridge,
         curve = curve,
-        nameOverlay = effectRoot._msufA3SpellIndicatorNameOverlay,
+        nameOverlay = gate._msufA3SpellIndicatorNameOverlay,
+        ownerContainer = button._msufA3SpellIndicatorContainer,
+        parentFrame = parentFrame,
     }
-    gate:SetScript("OnShow", RegisterExpiringEffectGate)
-    gate:SetScript("OnHide", UnregisterExpiringEffectGate)
-    BindExternalEffectGate(button, gate)
-    gate._msufA3ExternalEffectMode = "expiring"
-    parentFrame._msufA3SpellIndicatorExternalEffectGates = parentFrame._msufA3SpellIndicatorExternalEffectGates or {}
-    parentFrame._msufA3SpellIndicatorExternalEffectGates[gate] = true
-    -- AuraSlot frames are allocated hidden. Let the native assignment lifecycle
-    -- start this gate only while the sensor button actually owns an aura; an
-    -- absent timed aura therefore adds no shared OnUpdate work.
-    gate:Hide()
+    gate._msufA3ExpiringEffectState = state
+    bridge.gate = gate
+    bridge.state = state
+    RefreshExpiringDurationBridge(bridge)
     return true
 end
 
-ClearExternalFrameEffects = function(parentFrame, ownerContainer)
-    local gates = parentFrame and parentFrame._msufA3SpellIndicatorExternalEffectGates
-    if not gates then return end
-    for gate in pairs(gates) do
-        if ownerContainer == nil or gate._msufA3ExternalEffectContainer == ownerContainer then
-            if gate and gate._msufA3ExternalEffectMode == "expiring" then
-                UnregisterExpiringEffectGate(gate)
-            end
-            local effectRoot = gate and gate._msufA3ExternalEffectRoot
-            if effectRoot then HideButtonFrameEffect(effectRoot) end
-            if gate then
-                gate:SetScript("OnShow", nil)
-                gate:SetScript("OnHide", nil)
-                gate._msufA3ExpiringEffectState = nil
-                gate._msufA3ExternalEffectMode = nil
-                gate:SetAlpha(1)
-                gate:Hide()
-            end
-            local button = gate and gate._msufA3ExternalEffectButton
-            if button then button._msufA3ExternalEffectGate = nil end
-            if gate then
-                gate._msufA3ExternalEffectButton = nil
-                gate._msufA3ExternalEffectContainer = nil
-            end
-            gates[gate] = nil
+ReleaseExpiringFrameEffects = function(parentFrame, ownerContainer)
+    if not parentFrame then return end
+    for gate, state in pairs(activeExpiringEffectGates) do
+        if state and state.parentFrame == parentFrame
+            and (ownerContainer == nil or state.ownerContainer == ownerContainer) then
+            activeExpiringEffectGates[gate] = nil
         end
     end
-    if ownerContainer == nil or next(gates) == nil then
-        parentFrame._msufA3SpellIndicatorExternalEffectGates = nil
-    end
-    if ownerContainer == nil then
-        local assistGate = parentFrame._msufA3SpellIndicatorExternalAssistGate
-        local hostileGate = parentFrame._msufA3SpellIndicatorExternalHostileGate
-        local neutralGate = parentFrame._msufA3SpellIndicatorExternalNeutralGate
-        if assistGate then assistGate:Hide() end
-        if hostileGate then hostileGate:Hide() end
-        if neutralGate then neutralGate:Hide() end
-    end
+    StopExpiringEffectDriverIfIdle()
 end
 
 local function ApplyButtonIconEffect(button, slot, parentFrame)
@@ -1457,16 +1318,17 @@ local function ApplyButtonIconEffect(button, slot, parentFrame)
         return false
     end
 
+    local visualOwner = button._msufA3SpellIndicatorVisualHost or button
     local root = button._msufA3SpellIndicatorIconEffectRoot
     if not root then
-        root = CreateFrame("Frame", nil, button)
+        root = CreateFrame("Frame", nil, visualOwner)
         root:EnableMouse(false)
         button._msufA3SpellIndicatorIconEffectRoot = root
     end
     root:ClearAllPoints()
-    root:SetAllPoints(button)
+    root:SetAllPoints(visualOwner)
     SyncFrameStrata(root, ResolveFrameStrata(parentFrame, slot.strata))
-    if root.SetFrameLevel then root:SetFrameLevel((button:GetFrameLevel() or 0) + 4) end
+    if root.SetFrameLevel then root:SetFrameLevel((visualOwner:GetFrameLevel() or 0) + 4) end
     local color = slot.color or {}
     local size = ClampNumber(slot.size, 18, 1, 128)
     StartAnimatedGlow(root, root,
@@ -1479,9 +1341,9 @@ local function ApplyButtonIconEffect(button, slot, parentFrame)
     return true
 end
 
--- Fixed-slot buttons inherit the owning AuraContainer's assist alpha. These
--- addon-owned siblings sit outside the restricted AuraButton tree, so forward
--- the already validated UnitCanAssist boolean to their native sinks.
+-- Fixed-slot buttons and their effect descendants already inherit the owning
+-- AuraContainer's assist alpha. This helper only mirrors the same plain boolean
+-- onto addon-owned missing-indicator previews.
 function Runtime.ApplyGroupAssistGate(parentFrame, canAssist, ready)
     if not parentFrame then return false end
     parentFrame._msufA3GroupAuraOutputOwned = true
@@ -1495,8 +1357,6 @@ function Runtime.ApplyGroupAssistGate(parentFrame, canAssist, ready)
     end
     local assistVisible = GroupOutputVisible(parentFrame, "assist")
     local hostileVisible = GroupOutputVisible(parentFrame, "hostile")
-    any = SetAssistAlpha(parentFrame._msufA3SpellIndicatorExternalAssistGate, assistVisible, 1) or any
-    any = SetAssistAlpha(parentFrame._msufA3SpellIndicatorExternalHostileGate, hostileVisible, 1) or any
     local missing = parentFrame._msufA3SpellIndicatorMissingFrames
     if missing then
         for _, frame in pairs(missing) do
@@ -1516,12 +1376,6 @@ function Runtime.ApplyGroupPresenceGate(parentFrame, present)
     parentFrame._msufA3GroupAuraOutputOwned = true
     parentFrame._msufA3GroupAuraPresenceVisible = present
     local any = false
-    any = SetAssistAlpha(parentFrame._msufA3SpellIndicatorExternalNeutralGate,
-        GroupOutputVisible(parentFrame, "neutral"), 1) or any
-    any = SetAssistAlpha(parentFrame._msufA3SpellIndicatorExternalAssistGate,
-        GroupOutputVisible(parentFrame, "assist"), 1) or any
-    any = SetAssistAlpha(parentFrame._msufA3SpellIndicatorExternalHostileGate,
-        GroupOutputVisible(parentFrame, "hostile"), 1) or any
     local missing = parentFrame._msufA3SpellIndicatorMissingFrames
     if missing then
         for _, frame in pairs(missing) do
@@ -1533,20 +1387,19 @@ function Runtime.ApplyGroupPresenceGate(parentFrame, present)
 end
 
 function Runtime.RefreshFrameEffects(parentFrame)
-    -- Native AuraSlot lifecycle hooks forward visibility to owner-frame sibling
-    -- gates. Refreshing needs no aura scan and never reads AuraSlot:IsShown().
+    -- Effect descendants inherit native AuraSlot visibility directly. Refreshing
+    -- needs no aura scan and never reads AuraSlot:IsShown().
     return parentFrame ~= nil
 end
 
 function Runtime.ReleaseContainerEffects(container, parentFrame)
     if not container then return end
     parentFrame = parentFrame or container._msufA3ParentFrame
-    -- PTR 5 can make every initialized AuraButton (and objects inheriting its
-    -- forbidden aspects) inaccessible to tainted code while aura data is
-    -- secret. Clean only addon-owned sibling gates here; retained icon-effect
-    -- descendants disappear with the owning container.
+    -- Initialized AuraButtons and descendants can be access-restricted while
+    -- aura data is secret. Release only Lua driver ownership here; the effect
+    -- and icon descendants disappear with the owning container.
     if parentFrame then
-        if ClearExternalFrameEffects then ClearExternalFrameEffects(parentFrame, container) end
+        if ReleaseExpiringFrameEffects then ReleaseExpiringFrameEffects(parentFrame, container) end
         parentFrame._msufA3SpellIndicatorEffectButtons = nil
         parentFrame._msufA3SpellIndicatorIconEffectButtons = nil
     end
@@ -1626,8 +1479,18 @@ local function SyncButtonGeometry(button, slot, parentFrame, forceGeometry)
         button:SetPoint(anchor, parentFrame, anchor, x, y)
     end
     SyncFrameStrata(button, ResolveFrameStrata(parentFrame, slot.strata))
-    local level = FrameLayers.ElementLevel and FrameLayers.ElementLevel(slot.layer, 9, 1)
-        or ((parentFrame:GetFrameLevel() or 0) + SpellIconBaseOffset(parentFrame) + (slot.layer or 9))
+    -- The native AuraSlot is only the lowest-level secret-visibility owner.
+    -- Its independently levelled icon host and frame-effect root carry the two
+    -- user Layers, so one assignment can render both in either order.
+    local level
+    if slot.frameEffect then
+        level = (tonumber(FrameLayers.ELEMENT_LEVEL_BASE)
+            or (FrameLayers.ElementLevel and FrameLayers.ElementLevel(0, 0, 0))
+            or ((parentFrame:GetFrameLevel() or 0) + 1)) - 1
+    else
+        level = FrameLayers.ElementLevel and FrameLayers.ElementLevel(slot.layer, 9, 1)
+            or ((parentFrame:GetFrameLevel() or 0) + SpellIconBaseOffset(parentFrame) + (slot.layer or 9))
+    end
     if button.SetFrameLevel and button._msufA3GeomLevel ~= level then
         button._msufA3GeomLevel = level
         button:SetFrameLevel(level)
@@ -1644,33 +1507,39 @@ local function ApplyVisual(button, slot)
     end
     if slot.hiddenVisual == true then
         -- AuraSlot visibility is secret-backed. Effect-only slots therefore
-        -- keep alpha at one and hide only their icon regions. Full-frame sibling
-        -- gates receive the same lifecycle through OnShow/OnHide forwarding.
+        -- keep alpha at one and hide only their icon regions; the descendant
+        -- frame-effect root inherits the native visibility directly.
         button:SetAlpha(1)
         button:ClearIcon()
         button:ClearApplicationCount()
         button:ClearDurationCooldown()
         button:ClearDurationText()
-        if button._msufA3ExpiringEffectDurationBound ~= true then button:ClearDurationBar() end
+        if not button._msufA3ExpiringEffectDurationBound then button:ClearDurationBar() end
         button:ClearDispelTypeTextures()
         button:ClearDispelTypeText()
         icon:Hide()
         if button._msufA3SpellIndicatorSwatch then button._msufA3SpellIndicatorSwatch:Hide() end
         return
     end
-    button:SetAlpha(slot.alpha or 1)
+    local visualOwner = button._msufA3SpellIndicatorVisualHost or button
+    if visualOwner ~= button then
+        button:SetAlpha(1)
+        visualOwner:SetAlpha(slot.alpha or 1)
+    else
+        button:SetAlpha(slot.alpha or 1)
+    end
     if slot.visual == "square" or slot.visual == "bar" then
         icon:SetAlpha(0)
         local swatch = button._msufA3SpellIndicatorSwatch
         if not swatch then
-            swatch = button:CreateTexture(nil, "OVERLAY")
+            swatch = visualOwner:CreateTexture(nil, "OVERLAY")
             button._msufA3SpellIndicatorSwatch = swatch
         end
         swatch:SetTexture("Interface\\Buttons\\WHITE8X8")
         swatch:SetTexCoord(0, 1, 0, 1)
         swatch:SetVertexColor(slot.color[1] or 1, slot.color[2] or 1, slot.color[3] or 1, slot.color[4] or 1)
         swatch:ClearAllPoints()
-        swatch:SetAllPoints(button)
+        swatch:SetAllPoints(visualOwner)
         swatch:Show()
     elseif slot.visual == "number" then
         if button._msufA3SpellIndicatorSwatch then button._msufA3SpellIndicatorSwatch:Hide() end
