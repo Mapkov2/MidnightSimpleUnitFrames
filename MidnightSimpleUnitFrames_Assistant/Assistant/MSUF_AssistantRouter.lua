@@ -80,6 +80,51 @@ R.IMMEDIATE_CONVERSATION_PHRASES = {
     "chatgpt", "chat gpt", "ai assistant", "ai chat", "like chatgpt", "like chat gpt",
 }
 
+-- Small talk is read-only by construction: HumanConversationReply only ever
+-- returns text. The fail-closed read-only gate in front of the conversational
+-- fast lane exists to stop WRITES, but it also swallowed "tell me a joke" --
+-- the "tell me" lead-in reads as a settings lookup -- and the sentence came
+-- back as a settings advisory instead of a joke. That also meant the joke lane
+-- never ran, so ctx.lastConversationKind was never set, and the following
+-- "another one" was read as a follow-up to the last MUTATION and tried to
+-- write. Both phrase lists above are pure conversation, so matching one is
+-- proof the request is not a setting change.
+-- Sentences that ASK rather than TELL. "should i turn off Boss Buff Show
+-- Cooldown Swipe?" names one control and one polarity, so the last-word rescue
+-- hook in Submit read it as a command the lanes had wrongly refused and turned
+-- the swipe off -- answering a question by doing the thing. Every form here is
+-- an interrogative opener, so no imperative can match: "make focus frame on"
+-- and "turn off boss buff show cooldown swipe" are unaffected, which matters
+-- because those are exactly the cases the rescue hook exists for.
+R.ADVICE_QUESTION_OPENERS = {
+    "^should i%f[%W]", "^should we%f[%W]", "^should it%f[%W]", "^should the%f[%W]",
+    "^would it be better%f[%W]", "^would you recommend%f[%W]", "^is it better%f[%W]",
+    "^is it worth%f[%W]", "^do you think%f[%W]", "^whats better%f[%W]",
+    "^what is better%f[%W]", "^which is better%f[%W]", "^is it a good idea%f[%W]",
+    "^sollte ich%f[%W]", "^soll ich%f[%W]", "^waere es besser%f[%W]", "^ist es besser%f[%W]",
+}
+
+function R.IsAdviceQuestion(text)
+    local norm = R.Normalize(text)
+    if norm == "" then return false end
+    for i = 1, #R.ADVICE_QUESTION_OPENERS do
+        if norm:find(R.ADVICE_QUESTION_OPENERS[i]) then return true end
+    end
+    return false
+end
+A.RouterIsAdviceQuestion = R.IsAdviceQuestion
+
+function R.IsPureSmallTalk(text)
+    local norm = R.Normalize(text)
+    if norm == "" then return false end
+    if R.IMMEDIATE_SHORT_CONVERSATION[norm] then return true end
+    for i = 1, #(R.IMMEDIATE_CONVERSATION_PHRASES or {}) do
+        if R.HasNormalizedPhrase(norm, R.IMMEDIATE_CONVERSATION_PHRASES[i]) then return true end
+    end
+    return false
+end
+A.RouterIsPureSmallTalk = R.IsPureSmallTalk
+
 R.MUTATION_TERMS = {    "set", "change", "make", "turn", "enable", "disable", "show", "hide", "move", "nudge", "shift", "reset",
     "copy", "export", "import", "create", "delete", "remove", "add", "put", "clear", "switch", "assign", "rename", "close", "toggle",
     "increase", "decrease", "raise", "lower", "bump", "grow", "shrink", "detach", "attach", "anchor", "follow", "undock", "dock", "embed",
@@ -2253,6 +2298,77 @@ R.NAMED_BOOLEAN_NEGATIONS = {
     "get rid of", "without", "hide", "remove", "turn off", "switch off", "disable",
 }
 
+-- Does the sentence actually contain the enum value that was read out of it?
+-- NamedBooleanIntentPlan treats "the rest of the sentence" as the value once
+-- the subject resolves to one control, and for an enum that let it write a
+-- choice the player never typed: "show me target portrait position dropdown"
+-- resolved Portrait Position and set it to LEFT. A value that cannot be found
+-- in the text -- as its own token, its display label, or one of the control's
+-- registered value aliases -- is an invention, not a reading.
+-- Openers that can ONLY mean "take me there". Deliberately excludes "show me":
+-- "show me how much maximum health i lost" is navigation-shaped but asks for a
+-- feature to be switched on, and treating it as navigation stopped that
+-- working. "direct me to target portrait position left" names a value only to
+-- identify the control it wants opened, so it must never be applied.
+R.UNAMBIGUOUS_NAVIGATION_OPENERS = {
+    "^direct me to%f[%W]", "^take me to%f[%W]", "^bring me to%f[%W]",
+    "^navigate to%f[%W]", "^jump to%f[%W]", "^go to%f[%W]", "^scroll to%f[%W]",
+    "^where is%f[%W]", "^where are%f[%W]", "^where do i find%f[%W]",
+    "^bring mich zu%f[%W]", "^springe zu%f[%W]", "^wo finde ich%f[%W]",
+}
+
+function R.IsUnambiguousNavigationCommand(text)
+    local norm = R.Normalize(text)
+    if norm == "" then return false end
+    for i = 1, #R.UNAMBIGUOUS_NAVIGATION_OPENERS do
+        if norm:find(R.UNAMBIGUOUS_NAVIGATION_OPENERS[i]) then return true end
+    end
+    return false
+end
+A.RouterIsUnambiguousNavigationCommand = R.IsUnambiguousNavigationCommand
+
+R.ENUM_VALUE_LEADIN_PATTERNS = {
+    "^show me%f[%W]", "^take me to%f[%W]", "^bring me to%f[%W]", "^jump to%f[%W]",
+    "^go to%f[%W]", "^where is%f[%W]", "^where are%f[%W]", "^find%f[%W]",
+    "^zeig mir%f[%W]", "^bring mich zu%f[%W]",
+}
+
+function R.EnumValueAppearsInText(setting, value, norm)
+    if value == nil then return false end
+    local stripped = R.Normalize(norm)
+    -- A navigational lead-in is not the value. Enable-style enums register
+    -- one-word polarity aliases ("show", "on", "enabled") pointing at their
+    -- default ON choice -- Portrait Position maps "show" to LEFT -- so the
+    -- "show" in "SHOW ME target portrait position dropdown" was read as that
+    -- alias and the dropdown was written. "show the target portrait" has no
+    -- lead-in and still resolves.
+    for i = 1, #R.ENUM_VALUE_LEADIN_PATTERNS do
+        stripped = stripped:gsub(R.ENUM_VALUE_LEADIN_PATTERNS[i], "")
+    end
+    local hay = " " .. R.Trim(stripped) .. " "
+    local function mentions(phrase)
+        phrase = R.Normalize(phrase)
+        if phrase == "" then return false end
+        return hay:find(" " .. phrase .. " ", 1, true) ~= nil
+    end
+    local target = tostring(value)
+    if mentions(target) then return true end
+    -- Prefixed media keys ("BORDER:SHADOW") are named by their tail in speech.
+    local tail = target:match("[^:]+$")
+    if tail and tail ~= target and mentions(tail) then return true end
+    if type(R.RegistryValueLabel) == "function" then
+        local ok, label = pcall(R.RegistryValueLabel, setting, value)
+        if ok and label and mentions(label) then return true end
+    end
+    local aliases = setting and setting.valueAliases
+    if type(aliases) == "table" then
+        for alias, mapped in pairs(aliases) do
+            if tostring(mapped) == target and mentions(alias) then return true end
+        end
+    end
+    return false
+end
+
 function R.NamedBooleanIntentPlan(text)
     local norm = R.Normalize(text)
     if norm == "" or norm:find("%d") then return nil end
@@ -2309,6 +2425,14 @@ function R.NamedBooleanIntentPlan(text)
         local parser = A.Parser or {}
         local parsed = type(parser.ValueForRegistrySetting) == "function"
             and parser.ValueForRegistrySetting(setting, norm, text) or nil
+        -- Trust an enum reading only if the sentence really says it. The on/off
+        -- inference below is exempt on purpose: that one is meant to be
+        -- inferred from the mention alone.
+        if parsed ~= nil and setting.type == "enum"
+            and not R.EnumValueAppearsInText(setting, parsed, norm)
+        then
+            parsed = nil
+        end
         -- An on/off enum is a toggle wearing an enum's clothes: the border
         -- controls store "on"/"off", so a sentence that describes the result
         -- ("highlight the frame when something is attacking me") states its
@@ -2328,6 +2452,22 @@ function R.NamedBooleanIntentPlan(text)
             local plan = type(parser.PlanForExactRegistrySetting) == "function"
                 and parser.PlanForExactRegistrySetting(setting, norm, text) or nil
             if type(plan) == "table" and plan.kind == "changes" then
+                -- The planner will happily pick an enum choice for a sentence
+                -- that names only the control, which is how "show me target
+                -- portrait position dropdown" became Portrait Position = LEFT.
+                -- A relative step (relativeDelta) is fine -- "a chunkier
+                -- outline" really does state a direction -- but a concrete enum
+                -- value has to be in the words.
+                for i = 1, #(plan.changes or {}) do
+                    local change = plan.changes[i]
+                    local target = change and change.setting
+                    if type(target) == "table" and target.type == "enum"
+                        and change.value ~= nil
+                        and not R.EnumValueAppearsInText(target, change.value, norm)
+                    then
+                        return nil
+                    end
+                end
                 plan.raw, plan.sourceText = text, text
                 plan.namedWordingTokens = bestNamedLength
                 return plan

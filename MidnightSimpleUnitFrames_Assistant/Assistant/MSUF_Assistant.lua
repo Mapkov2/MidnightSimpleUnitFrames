@@ -8613,7 +8613,12 @@ function AP.TryImmediateSubmitResult(text, opts)
     local parser = A.Parser or {}
     local normalized = type(parser.Normalize) == "function" and parser.Normalize(text) or tostring(text or ""):lower()
     if AP.BarOutlineColorSemanticPlan(text) then return nil end
-    if type(A.RouterIsFailClosedReadOnlyRequest) == "function"
+    -- Pure small talk is exempt: it can only produce text, so the fail-closed
+    -- read-only gate has nothing to protect against, and applying it here sent
+    -- "tell me a joke" to the settings advisory instead of the joke lane.
+    local smallTalk = type(A.RouterIsPureSmallTalk) == "function"
+        and A.RouterIsPureSmallTalk(text) == true
+    if not smallTalk and type(A.RouterIsFailClosedReadOnlyRequest) == "function"
         and A.RouterIsFailClosedReadOnlyRequest(text)
     then
         return nil
@@ -9310,6 +9315,29 @@ function A.Submit(text)
         -- the control ("let the target frame have its own bar settings").
         local unresolved = status == "ambiguous" or status == "failed" or status == "info"
             or status == "needs_choice" or status == "unknown" or status == "navigated"
+        -- Only for openers that can ONLY mean navigation. "direct me to target
+        -- portrait position left" names the value to identify the control, and
+        -- this hook applied it. Deliberately not every navigation-shaped
+        -- sentence: "show me how much maximum health i lost" asks for a feature
+        -- to be switched on, and blocking that stopped it working. The other
+        -- half of the problem -- an enum value the sentence never contains at
+        -- all -- is fixed at its source in Router.EnumValueAppearsInText.
+        if type(A.RouterPrivate) == "table"
+            and type(A.RouterPrivate.IsUnambiguousNavigationCommand) == "function"
+            and A.RouterPrivate.IsUnambiguousNavigationCommand(text)
+        then
+            unresolved = false
+        end
+        -- Same rule for a question: "should i turn off Boss Buff Show Cooldown
+        -- Swipe?" names one control and one polarity, which is exactly what
+        -- this hook looks for -- so it answered the question by doing the
+        -- thing. Asking is never permission.
+        if type(A.RouterPrivate) == "table"
+            and type(A.RouterPrivate.IsAdviceQuestion) == "function"
+            and A.RouterPrivate.IsAdviceQuestion(text)
+        then
+            unresolved = false
+        end
         -- A reply that offered real choices is a deliberate clarification and
         -- the player's answer is expected next; overriding it would discard
         -- the retained control (assistant_router_safety_regression pins this).
