@@ -241,6 +241,29 @@ local router = ReadSource("MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_Ass
 assert(router:find("does not register its aura buttons with Masque", 1, true),
     "Assistant must describe Masque as unsupported by MSUF 6.0")
 
+--- ---------------------------------------------------------------------------
+--- 4. Blizzard's Objective Tracker remains Blizzard-owned.
+--- ---------------------------------------------------------------------------
+--- Its dirty layout can reach combat-secret aura APIs. Registering it as an
+--- MSUF mover or applying its manager settings from addon execution can carry
+--- MSUF taint into the deferred tracker update.
+local blizzardEditMode = ReadSource(
+    "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Blizzard.lua")
+assert(not blizzardEditMode:find("systemEnum.ObjectiveTracker", 1, true),
+    "MSUF must not register, snapshot, move or restore the Objective Tracker")
+assert(not blizzardEditMode:find("_G.ObjectiveTrackerManager", 1, true),
+    "MSUF must not apply Objective Tracker manager settings")
+
+--- Group Edit Mode already receives State.Enter/Exit through the shared
+--- listener. A second secure hook of the addon-global transition function is
+--- redundant and makes Blizzard read the tainted global during installation.
+local groupEditMode = ReadSource(
+    "MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_EM2.lua")
+assert(groupEditMode:find("MSUF_RegisterAnyEditModeListener", 1, true),
+    "Group Edit Mode must retain the shared state listener")
+assert(not groupEditMode:find('hooksecurefunc("MSUF_SetMSUFEditModeDirect"', 1, true),
+    "Group Edit Mode must not secure-hook the addon-global direct transition")
+
 print(string.format(
-    "PASS addon interop guards: boss settled in %d SetParent calls, /rl yielded, Masque absent across %d sources",
+    "PASS addon interop guards: boss settled in %d SetParent calls, /rl yielded, Masque absent across %d sources, Objective Tracker delegated",
     setParentCalls, shippedSourceCount))
