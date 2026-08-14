@@ -27,6 +27,7 @@ local W = M.Widgets
 local T = M.Theme
 local CPPreview = M.ClassPowerPreview or {}
 local Layers = MSUF.UF and MSUF.UF.Layers or {}
+local PreviewCore = MSUF.UFPreviewCore or {}
 local Helpers = M.PreviewHelpers or {}
 local ZoomPan = Preview.ZoomPan or {}
 Preview.ZoomPan = ZoomPan
@@ -919,11 +920,17 @@ end
 
 --- Drag handles are preview controls, not runtime frames. They carry the DB
 --- keys they edit so drag/nudge/history code can stay generic.
-local function MakeHandle(preview, key, store, xKey, yKey, defaultX, defaultY, label, color, applyKind, layerKey)
+local function MakeHandle(preview, key, store, xKey, yKey, defaultX, defaultY, label, color, applyKind, layerKey, interactionPriority)
     local h = CreateFrame("Button", nil, PreviewParent(preview), "BackdropTemplate")
     h:SetSize(24, 20)
     h:SetBackdrop({ bgFile = WHITE8, edgeFile = WHITE8, edgeSize = 1 })
-    h:SetFrameLevel((preview.canvas:GetFrameLevel() or 0) + 40)
+    -- Class Resource text can live on any absolute element layer. Keep every
+    -- mouse catcher above that visual stack, and keep the smaller text handles
+    -- deterministically above their broad bar handles.
+    interactionPriority = tonumber(interactionPriority) or 0
+    h:SetFrameLevel((PreviewCore.InteractionFrameLevel
+        and PreviewCore.InteractionFrameLevel(PreviewParent(preview), interactionPriority))
+        or ((preview.canvas:GetFrameLevel() or 0) + 140 + interactionPriority))
     h:EnableMouse(true)
     if Helpers.BindPreviewWheel then Helpers.BindPreviewWheel(h, preview) end
     h:EnableKeyboard(true)
@@ -2659,12 +2666,12 @@ function Preview.Create(ctx, builder)
     end)
     box.dragFrame:Hide()
     box.dragUpdate = DragUpdate
-    box.handleClass = MakeHandle(box, "classPower", "bars", "classPowerOffsetX", "classPowerOffsetY", 0, 0, "Class resource bar", { 0.30, 0.78, 0.55 }, "class", "class")
-    box.handleClassText = MakeHandle(box, "classPowerText", "bars", "classPowerTextOffsetX", "classPowerTextOffsetY", 0, 0, "Class resource text", { 0.30, 0.78, 0.55 }, "classText", "classText")
-    box.handlePower = MakeHandle(box, "detachedPower", "player", "detachedPowerBarOffsetX", "detachedPowerBarOffsetY", 0, -4, "Player power bar", { 0.95, 0.72, 0.18 }, "power", "power")
-    box.handlePowerText = MakeHandle(box, "detachedPowerText", "player", "powerOffsetX", "powerOffsetY", -4, 4, "Player power text", { 0.95, 0.72, 0.18 }, "powerText", "powerText")
-    box.handleHP = MakeHandle(box, "playerHP", "bars", "playerHPBarOffsetX", "playerHPBarOffsetY", 0, 0, "Second player HP bar", { 0.25, 0.90, 0.42 }, "hp", "hp")
-    box.handleHPText = MakeHandle(box, "playerHPText", "bars", "playerHPBarTextOffsetX", "playerHPBarTextOffsetY", 0, 0, "Second player HP text", { 0.25, 0.90, 0.42 }, "hpText", "hpText")
+    box.handleClass = MakeHandle(box, "classPower", "bars", "classPowerOffsetX", "classPowerOffsetY", 0, 0, "Class resource bar", { 0.30, 0.78, 0.55 }, "class", "class", 0)
+    box.handleClassText = MakeHandle(box, "classPowerText", "bars", "classPowerTextOffsetX", "classPowerTextOffsetY", 0, 0, "Class resource text", { 0.30, 0.78, 0.55 }, "classText", "classText", 2)
+    box.handlePower = MakeHandle(box, "detachedPower", "player", "detachedPowerBarOffsetX", "detachedPowerBarOffsetY", 0, -4, "Player power bar", { 0.95, 0.72, 0.18 }, "power", "power", 0)
+    box.handlePowerText = MakeHandle(box, "detachedPowerText", "player", "powerOffsetX", "powerOffsetY", -4, 4, "Player power text", { 0.95, 0.72, 0.18 }, "powerText", "powerText", 2)
+    box.handleHP = MakeHandle(box, "playerHP", "bars", "playerHPBarOffsetX", "playerHPBarOffsetY", 0, 0, "Second player HP bar", { 0.25, 0.90, 0.42 }, "hp", "hp", 0)
+    box.handleHPText = MakeHandle(box, "playerHPText", "bars", "playerHPBarTextOffsetX", "playerHPBarTextOffsetY", 0, 0, "Second player HP text", { 0.25, 0.90, 0.42 }, "hpText", "hpText", 2)
     function box:Refresh()
         --- Keep the persisted Guides choice authoritative across factory reset,
         --- profile switch and Assistant mutation even when this preview frame
