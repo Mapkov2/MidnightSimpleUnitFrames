@@ -957,27 +957,6 @@ local BeginAuraGroupDrag
 
 local function OpenAuraGroupPopup(group)
     if not (group and IsEditModeActive() and not IsConfigBlocked()) then return false end
-    local kind = group._msufA3MoverKind
-    if type(kind) == "string" and kind:match("^custom[1-4]$") then
-        local menu = MSUF and MSUF.MSUF2
-        local unit = group._msufA3Unit
-        local scope = BOSS_UNITS[unit] and "boss" or unit
-        if menu then
-            menu.unitAuraTabSelection = menu.unitAuraTabSelection or {}
-            menu.unitAuraTabSelection[scope] = kind
-            if type(menu.SelectPage) == "function" then
-                ExportPublic("MSUF_EM2_MenuFocusRequest", {
-                    pageKey = "uf_" .. tostring(scope),
-                    sectionId = "auras",
-                    component = kind,
-                    source = "edit-mode-custom-aura",
-                    explicit = true,
-                })
-                menu.SelectPage("uf_" .. tostring(scope))
-                return true
-            end
-        end
-    end
     if type(_G.MSUF_OpenAuras3PositionPopup) ~= "function" then return false end
     ExportPublic("MSUF_EM2_ActiveAuraGroup", group._msufA3MoverKind)
     ExportPublic("MSUF_EM2_ActiveAuraUnit", group._msufA3Unit)

@@ -725,37 +725,71 @@ function Quick.MenuButtonAt(parent, text, x, y, w, h, entries, onSelect, opts)
     menu:Hide()
 
     local itemH = opts.itemHeight or 24
+    local function PaintRow(item, hovered)
+        local row = item and item._row or {}
+        local bg = item and item._bg
+        if bg then
+            local highlighted = row.highlight and true or false
+            local color = (hovered or highlighted) and c.btnHover or nil
+            bg:SetColorTexture(color and color[1] or 0, color and color[2] or 0, color and color[3] or 0,
+                hovered and 0.22 or (highlighted and 0.08 or 0))
+        end
+        local fs = item and item._label
+        if fs then
+            local color = row.highlight and c.title or c.white
+            fs:SetTextColor(color[1], color[2], color[3], color[4] or 1)
+            fs:SetText(Tr(row.label))
+        end
+    end
+
+    local function AcquireRow(index)
+        menu._items = menu._items or {}
+        local item = menu._items[index]
+        if item then return item end
+        item = CreateFrame("Button", nil, menu)
+        item:SetSize(w - 4, itemH)
+        item:SetPoint("TOPLEFT", menu, "TOPLEFT", 2, -(3 + (index - 1) * itemH))
+        item._bg = item:CreateTexture(nil, "BACKGROUND")
+        item._bg:SetAllPoints()
+        item._label = FS(item, "caption", c.white)
+        item._label:SetPoint("LEFT", 8, 0)
+        item:SetScript("OnEnter", function(self) PaintRow(self, true) end)
+        item:SetScript("OnLeave", function(self) PaintRow(self, false) end)
+        item:SetScript("OnClick", function(self)
+            local row = self._row
+            if not row then return end
+            menu:Hide()
+            if onSelect then onSelect(row, btn, menu) end
+            if opts.flashSelection ~= false and Menu2Style.SetButtonText then
+                Menu2Style.SetButtonText(btn, row.label)
+                C_Timer.After(opts.flashSeconds or 1.2, function() Menu2Style.SetButtonText(btn, text) end)
+            end
+        end)
+        menu._items[index] = item
+        return item
+    end
+
     local function BuildRows()
-        if menu._built then return end
-        menu._built = true
+        -- Singleton popups can change source between openings, so resolve
+        -- function-backed entries every time while reusing the row frames.
         local rows = type(entries) == "function" and entries() or entries or {}
         menu:SetSize(w, #rows * itemH + 8)
         for i = 1, #rows do
-            local row = rows[i]
-            local item = CreateFrame("Button", nil, menu)
-            item:SetSize(w - 4, itemH)
-            item:SetPoint("TOPLEFT", menu, "TOPLEFT", 2, -(3 + (i - 1) * itemH))
-            local bg = item:CreateTexture(nil, "BACKGROUND")
-            bg:SetAllPoints()
-            bg:SetColorTexture(row.highlight and c.btnHover[1] or 0, row.highlight and c.btnHover[2] or 0, row.highlight and c.btnHover[3] or 0, row.highlight and 0.08 or 0)
-            local fs = FS(item, "caption", row.highlight and c.title or c.white)
-            fs:SetPoint("LEFT", 8, 0)
-            fs:SetText(Tr(row.label))
-            item:SetScript("OnEnter", function() bg:SetColorTexture(c.btnHover[1], c.btnHover[2], c.btnHover[3], 0.22) end)
-            item:SetScript("OnLeave", function() bg:SetColorTexture(row.highlight and c.btnHover[1] or 0, row.highlight and c.btnHover[2] or 0, row.highlight and c.btnHover[3] or 0, row.highlight and 0.08 or 0) end)
-            item:SetScript("OnClick", function()
-                menu:Hide()
-                if onSelect then onSelect(row, btn, menu) end
-                if opts.flashSelection ~= false and Menu2Style.SetButtonText then
-                    Menu2Style.SetButtonText(btn, row.label)
-                    C_Timer.After(opts.flashSeconds or 1.2, function() Menu2Style.SetButtonText(btn, text) end)
-                end
-            end)
+            local item = AcquireRow(i)
+            item._row = rows[i]
+            PaintRow(item, false)
+            item:Show()
+        end
+        for i = #rows + 1, #(menu._items or {}) do
+            local item = menu._items[i]
+            item._row = nil
+            item:Hide()
         end
     end
     btn:SetScript("OnClick", function()
         if menu:IsShown() then menu:Hide(); return end
         BuildRows()
+        menu._closeTimer = nil
         menu:ClearAllPoints()
         menu:SetPoint(opts.point or "TOP", btn, opts.relativePoint or "BOTTOM", opts.offsetX or 0, opts.offsetY or -3)
         menu:Show()
