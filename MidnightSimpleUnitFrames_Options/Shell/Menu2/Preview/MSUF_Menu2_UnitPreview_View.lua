@@ -1218,9 +1218,6 @@ local function MakeHandle(preview, key, fields, label, color)
     h._selBorder:Hide()
     h:SetScript("OnEnter", function(self)
         self._hovering = true
-        if self._fields and self._fields.auraPreviewKind then
-            RequestPreviewLayoutRefresh(preview, "UNIT_PREVIEW_AURA_EFFECT_HOVER")
-        end
         RefreshHandleSelectionVisuals(preview)
         local showTooltip = GameTooltip and (not PreviewHelpers.ShouldShowPreviewHandleTooltip
             or PreviewHelpers.ShouldShowPreviewHandleTooltip(preview))
@@ -1237,9 +1234,6 @@ local function MakeHandle(preview, key, fields, label, color)
     end)
     h:SetScript("OnLeave", function(self)
         self._hovering = nil
-        if self._fields and self._fields.auraPreviewKind then
-            RequestPreviewLayoutRefresh(preview, "UNIT_PREVIEW_AURA_EFFECT_HOVER_END")
-        end
         RefreshHandleSelectionVisuals(preview)
         if GameTooltip then GameTooltip:Hide() end
     end)

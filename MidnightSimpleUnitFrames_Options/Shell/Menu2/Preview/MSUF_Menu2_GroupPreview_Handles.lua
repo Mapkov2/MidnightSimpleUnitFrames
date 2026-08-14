@@ -223,35 +223,6 @@ function Handles.Install(box, deps)
         if type(M.IsConfigCombatLocked) == "function" and M.IsConfigCombatLocked() then return true end
         return type(InCombatLockdown) == "function" and InCombatLockdown() == true
     end
-    local function SetSpellEffectHover(handle, active)
-        local item = handle and handle._cfgSpellItem
-        if not (item and item.specKey and item.auraName) then return false end
-        local kind = H.CurrentScope()
-        local hover = M.gfSpellIndicatorPreviewHover
-        if active == true then
-            if type(hover) ~= "table" then
-                hover = {}
-                M.gfSpellIndicatorPreviewHover = hover
-            end
-            if hover.owner == handle and hover.kind == kind
-                and hover.specKey == item.specKey and hover.auraName == item.auraName then
-                return false
-            end
-            hover.owner, hover.kind, hover.specKey, hover.auraName = handle, kind, item.specKey, item.auraName
-        else
-            if type(hover) ~= "table" or hover.owner ~= handle then
-                return false
-            end
-            M.gfSpellIndicatorPreviewHover = nil
-        end
-        if box.RequestRefresh then
-            box:RequestRefresh(active == true and "GROUP_PREVIEW_SPELL_EFFECT_HOVER"
-                or "GROUP_PREVIEW_SPELL_EFFECT_HOVER_END")
-        elseif box.Refresh then
-            box:Refresh("GROUP_PREVIEW_SPELL_EFFECT_HOVER")
-        end
-        return true
-    end
     local function RefreshGroupIndicatorDragPreview(handle)
         if ConfigCombatLocked() then return false end
         local gf = MSUF and MSUF.GF
@@ -933,7 +904,6 @@ function Handles.Install(box, deps)
         handle._label = fs
         handle:SetScript("OnEnter", function(self)
             self._hovering = true
-            if self._cfgSpell then SetSpellEffectHover(self, true) end
             RefreshHandleSelection(box)
             local showTooltip = GameTooltip and (not PreviewHelpers.ShouldShowPreviewHandleTooltip
                 or PreviewHelpers.ShouldShowPreviewHandleTooltip(box))
@@ -952,7 +922,6 @@ function Handles.Install(box, deps)
         end)
         handle:SetScript("OnLeave", function(self)
             self._hovering = nil
-            if self._cfgSpell then SetSpellEffectHover(self, false) end
             RefreshHandleSelection(box)
             if GameTooltip then GameTooltip:Hide() end
         end)
@@ -986,7 +955,6 @@ function Handles.Install(box, deps)
         handle:SetScript("OnDragStart", StartHandleDrag)
         handle:SetScript("OnDragStop", function(self, button) StopHandleDrag(self, button, false) end)
         handle:HookScript("OnHide", function(self)
-            if self._cfgSpell then SetSpellEffectHover(self, false) end
             StopHandleDrag(self, nil, false)
             if box._selectedHandle == self then SelectHandle(nil) end
         end)
