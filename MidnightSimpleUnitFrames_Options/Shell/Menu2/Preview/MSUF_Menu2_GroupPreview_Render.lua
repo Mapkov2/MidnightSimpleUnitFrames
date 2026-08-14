@@ -1224,6 +1224,19 @@ local function FinalizeScene(scene)
     local function ElementLevel(layer, fallback, detail)
         return PreviewElementLevel(mock, S.Layers, layer, fallback, detail)
     end
+    local function SpellEffectLevel(root, layer, priority)
+        local level = ElementLevel(layer, 0, 11 - priority)
+        if root and root._msufSpellPreviewKind == "namecolor" then
+            -- The shared renderer initially floors Name Color above the real
+            -- name owner. Preserve that contract when this preview translates
+            -- the effect into its private frame-level band; otherwise the
+            -- original name FontString is painted over the colored overlay.
+            local nameOwner = mock._nameFS and mock._nameFS.GetParent and mock._nameFS:GetParent()
+            local nameLevel = nameOwner and nameOwner.GetFrameLevel and tonumber(nameOwner:GetFrameLevel())
+            if nameLevel ~= nil then level = max(level, nameLevel + 1) end
+        end
+        return level
+    end
     PlaceTextHandles(scene)
     local liveStrata, hostStrata = PreviewHostStrata(scene)
     local auraHandles = {
@@ -1281,7 +1294,7 @@ local function FinalizeScene(scene)
         -- produce a negative local offset below the menu mock. Keep the preview
         -- root on the host strata and express priority in a bounded local band.
         ApplyHandleStrata(scene, selectedEffectRoot, "AUTO", liveStrata, hostStrata)
-        SetPreviewFrameLevel(selectedEffectRoot, ElementLevel(effectLayer, 0, 11 - priority))
+        SetPreviewFrameLevel(selectedEffectRoot, SpellEffectLevel(selectedEffectRoot, effectLayer, priority))
     end
     if selectedEffectOwner then
         SetPreviewFrameLevel(selectedEffectOwner, baseLevel + 1)
@@ -1301,7 +1314,7 @@ local function FinalizeScene(scene)
             local priority = max(1, min(10, floor((tonumber(effectRoot._msufSpellPreviewPriority) or 5) + 0.5)))
             local effectLayer = S.ClampLayer(effectRoot._msufSpellPreviewLayer, 0)
             ApplyHandleStrata(scene, effectRoot, "AUTO", liveStrata, hostStrata)
-            SetPreviewFrameLevel(effectRoot, ElementLevel(effectLayer, 0, 11 - priority))
+            SetPreviewFrameLevel(effectRoot, SpellEffectLevel(effectRoot, effectLayer, priority))
         end
         local iconEffectRoot = handle._msufSpellPreviewIconEffectRoot
         if iconEffectRoot and iconEffectRoot.IsShown and iconEffectRoot:IsShown() then
@@ -2208,6 +2221,7 @@ function Render.Install(box, ctx, deps)
                             runtimeRoot._msufSpellPreviewPriority = max(1,
                                 min(10, floor((tonumber(previewEffect.priority) or 5) + 0.5)))
                             runtimeRoot._msufSpellPreviewLayer = S.ClampLayer(previewEffect.layer, 0)
+                            runtimeRoot._msufSpellPreviewKind = kind
                             return
                         end
                     end
@@ -2230,10 +2244,11 @@ function Render.Install(box, ctx, deps)
             root._msufSpellPreviewStrata = effect.strata or handle._msufSpellIndicatorStrata
             root._msufSpellPreviewPriority = max(1, min(10, floor((tonumber(effect.priority) or 5) + 0.5)))
             root._msufSpellPreviewLayer = S.ClampLayer(effect.layer, 0)
+            local kind = tostring(effect.type or "none"):lower()
+            root._msufSpellPreviewKind = kind
             local color = effect.color or {}
             local r, g, b = color[1] or 1, color[2] or 1, color[3] or 1
             local a = color[4] or 1
-            local kind = tostring(effect.type or "none"):lower()
             if kind == "healthtint" then
                 local tint = root._msufSpellPreviewTint
                 if not tint then
