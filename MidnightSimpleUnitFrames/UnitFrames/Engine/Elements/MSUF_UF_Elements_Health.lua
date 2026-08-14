@@ -457,6 +457,15 @@ local function NotifyHealthState(frame, event, unit, hp, hpSecret)
   end
 end
 
+local function UpdateTextureLayerHealthState(update, frame, unit, hp, maxHP)
+  if frame._msufTexLayerHealthColorMask
+    and frame._msufHealthRuntimeGradient == true and frame._msufHealthStatusGone ~= true then
+    return update(frame, unit, hp, maxHP,
+      frame._msufGradStashR, frame._msufGradStashG, frame._msufGradStashB)
+  end
+  return update(frame, unit, hp, maxHP)
+end
+
 local function UpdateSingle(frame, event, unit)
   unit = unit or frame.MSUFUnitKey
   local rt = frame and frame._msufTextRuntime
@@ -472,6 +481,10 @@ local function UpdateSingle(frame, event, unit)
       and (event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, pct, pctSecret)) then
       if not ApplyRuntimeColor(frame, event, unit, pct, 100) then SetColor(frame) end
     end
+    local updateTextureState = frame._msufTexLayerHealthUpdate
+    if updateTextureState then
+      UpdateTextureLayerHealthState(updateTextureState, frame, unit, pct, 100)
+    end
     if frame._msufUpdateStatusTextIndicator then
       NotifyHealthState(frame, event, unit, pct, pctSecret)
     end
@@ -482,6 +495,10 @@ local function UpdateSingle(frame, event, unit)
   if frame._msufHealthRuntimeColorEnabled ~= false
     and (event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, hp, hpSecret)) then
     if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
+  end
+  local updateTextureState = frame._msufTexLayerHealthUpdate
+  if updateTextureState then
+    UpdateTextureLayerHealthState(updateTextureState, frame, unit, hp, maxHP)
   end
   if frame._msufUpdateStatusTextIndicator then
     NotifyHealthState(frame, event, unit, hp, hpSecret)
@@ -502,6 +519,10 @@ local function UpdateSingleAbsolute(frame, event, unit)
   if frame._msufHealthRuntimeColorEnabled ~= false
     and (event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, hp, hpSecret)) then
     if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
+  end
+  local updateTextureState = frame._msufTexLayerHealthUpdate
+  if updateTextureState then
+    UpdateTextureLayerHealthState(updateTextureState, frame, unit, hp, maxHP)
   end
   if frame._msufUpdateStatusTextIndicator then
     NotifyHealthState(frame, event, unit, hp, hpSecret)
@@ -525,6 +546,10 @@ local function UpdateSingleCurrent(frame, event, unit)
   if frame._msufHealthRuntimeColorEnabled ~= false
     and (event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, hp, hpSecret)) then
     if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
+  end
+  local updateTextureState = frame._msufTexLayerHealthUpdate
+  if updateTextureState then
+    UpdateTextureLayerHealthState(updateTextureState, frame, unit, hp, maxHP)
   end
   if frame._msufUpdateStatusTextIndicator then
     NotifyHealthState(frame, event, unit, hp, hpSecret)

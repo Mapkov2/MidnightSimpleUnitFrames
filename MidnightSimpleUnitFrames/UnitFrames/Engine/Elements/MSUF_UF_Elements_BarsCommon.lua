@@ -1666,6 +1666,7 @@ MSUF.UFBarTextCommon = {
   NPCColor = NPCColor,
   PrepareHealthGradientCurve = HealthGradientCurve,
   GradientColor = GradientColor,
+  HealthGradientColorFromValues = GradientFromValues,
   PreviewHealthGradientColor = PreviewHealthGradientColor,
   HealthColor = HealthColor,
   ApplyHealthStatusColor = ApplyHealthStatusColor,
