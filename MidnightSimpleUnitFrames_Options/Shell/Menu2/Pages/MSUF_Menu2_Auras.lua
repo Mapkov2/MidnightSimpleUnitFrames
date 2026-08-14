@@ -1553,7 +1553,9 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
         if borderAtlas and cfg.iconShape ~= "RECTANGLE" and type(A3.ApplyAuraDispelPreview) == "function" then
             A3.ApplyAuraDispelPreview(icon.dispelBorder, icon, cfg.size, cfg.debuffBorderMode, cfg.iconShape)
         elseif borderAtlas and icon.dispelBorder.SetAtlas then
-            local pad = max(1, floor((cfg.size / 24) + 0.5))
+            local pad = type(A3.NativeAuraDispelBorderPadding) == "function"
+                and A3.NativeAuraDispelBorderPadding(cfg.size)
+                or max(1, floor((cfg.size / 6) + 0.5))
             icon.dispelBorder:ClearAllPoints()
             icon.dispelBorder:SetPoint("TOPLEFT", icon, "TOPLEFT", -pad, pad)
             icon.dispelBorder:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", pad, -pad)

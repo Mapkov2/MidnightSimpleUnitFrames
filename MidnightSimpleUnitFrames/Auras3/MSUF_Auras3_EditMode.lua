@@ -1539,7 +1539,9 @@ local function LayoutPreviewDispelBorder(icon, cfg)
         if border then border:Hide() end
         return
     end
-    local pad = math_max(1, math_floor(size / 24 + 0.5))
+    local pad = type(A3.NativeAuraDispelBorderPadding) == "function"
+        and A3.NativeAuraDispelBorderPadding(size)
+        or math_max(1, math_floor(size / 6 + 0.5))
     border:ClearAllPoints()
     border:SetPoint("TOPLEFT", icon, "TOPLEFT", -pad, pad)
     border:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", pad, -pad)
