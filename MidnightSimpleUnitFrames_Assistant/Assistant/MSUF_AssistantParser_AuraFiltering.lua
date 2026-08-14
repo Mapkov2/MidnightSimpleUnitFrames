@@ -247,7 +247,15 @@ local function ResolveScope(text, ctx)
     end
     if chosen then return "unit", chosen, true end
 
-    if HasAny(text, { "raid", "raid frame", "raid frames", "raid buff", "raid buffs", "raid debuff", "raid debuffs", "raid aura", "raid auras" }) then
+    -- "raid" names a group scope AND a live filter ("Raid / encounter
+    -- relevant"), so in "turn on shared buff raid filter" the head noun is
+    -- "filter" and "raid" is its value -- the same distinction AurasPhrases[153]
+    -- already draws for "player filter". Only that one occurrence is removed:
+    -- "turn on raid buff raid filter" still names the Raid group scope through
+    -- its other mention, while the sentence above no longer writes the Raid
+    -- group lane's filter token for a frame the player never mentioned.
+    local scopeText = (" " .. text .. " "):gsub("%f[%w]raid%s+filter%f[%W]", " ")
+    if HasAny(scopeText, { "raid", "raid frame", "raid frames", "raid buff", "raid buffs", "raid debuff", "raid debuffs", "raid aura", "raid auras" }) then
         return "group", "raid", true
     end
     local kind, scope = ContextScopeLane(ctx)
