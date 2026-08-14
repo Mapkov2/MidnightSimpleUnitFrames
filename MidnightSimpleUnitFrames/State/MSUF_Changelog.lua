@@ -19,6 +19,7 @@ local data = {
                 {
                     title = "Highlights",
                     bullets = {
+                        "Reworked Texture Layers into three fully configurable, HP-reactive decoration slots. Each texture can follow the shared low/mid/high HP gradient, switch to class or custom colors above a threshold, change opacity or appear only at low health, and combine current-target and combat-state rules. The reorganized setup adds quick Text Background and Highlight presets plus runtime-faithful previews, while HP reactions reuse the existing Health update path without polling.",
                         "Added Chunked Health and Power Loss for Unit and Group Frames. The live bar updates immediately while a short, configurable loss trail shows what was just spent or lost; Smooth and Chunked modes are mutually exclusive and share runtime-faithful previews, rounded-frame support, copy controls, and dedicated loss colors.",
                         "Added independent profile-wide switches for Blizzard's player Buff Frame and normal Debuff icons near the minimap. Private Auras and Deadly Debuff warnings remain visible, and the feature stays passive with no polling or recurring MSUF work.",
                     },
