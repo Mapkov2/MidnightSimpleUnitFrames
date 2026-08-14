@@ -123,7 +123,7 @@ Features\Versioning\MSUF_ClientVersionWarning.lua
 Runtime\MSUF_BarBackgroundRuntime.lua
 Runtime\MSUF_IconLayoutRuntime.lua
 Runtime\MSUF_FontRegistry.lua
-Game\Mainline\UnitFrames.xml
+UnitFrames\Embeds\MSUF_UFCore\MSUF_UFCore_Elements.xml
 Integrations\MSUF_Integration_NicknameProviders.lua
 Integrations\MSUF_Integration_NSRTNicknames.lua
 Integrations\MSUF_Integration_ThirdPartyAnchors.lua
@@ -139,7 +139,7 @@ Castbars\MSUF_Castbars_Core.lua
 Castbars\MSUF_CastbarStyle.lua
 Castbars\MSUF_CastbarUtils.lua
 Castbars\MSUF_CastbarRuntime.lua
-Game\Mainline\Castbars\MSUF_CastbarEmpower.lua
+Castbars\MSUF_CastbarEmpower.lua
 Castbars\MSUF_CastbarChannelTicks.lua
 Castbars\MSUF_CastbarFrames.lua
 Castbars\MSUF_CastbarAnchors.lua
@@ -159,8 +159,8 @@ ClassPower\MSUF_CP_Modes.lua
 ClassPower\MSUF_CP_Core.lua
 ClassPower\MSUF_CP_AltMana.lua
 ClassPower\MSUF_CP_PlayerHP.lua
-Game\Mainline\ClassPower\MSUF_CP_BalanceDruid.lua
-Game\Mainline\ClassPower\MSUF_CP_Ironfur.lua
+ClassPower\MSUF_CP_BalanceDruid.lua
+ClassPower\MSUF_CP_Ironfur.lua
 ClassPower\MSUF_CP_EbonMight.lua
 ClassPower\MSUF_CP_Controller.lua
 

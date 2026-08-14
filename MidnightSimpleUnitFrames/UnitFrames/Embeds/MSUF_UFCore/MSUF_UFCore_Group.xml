@@ -1,7 +1,7 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/">
   <Script file="..\..\..\GroupFrames\MSUF_GroupFrames_DB.lua"/>
   <Script file="..\..\Engine\Group\MSUF_UF_Group_Metadata.lua"/>
-  <Script file="..\..\..\Game\Mainline\UnitFrames\Group\MSUF_UF_Group_SpellIndicators_Data.lua"/>
+  <Script file="..\..\Engine\Group\MSUF_UF_Group_SpellIndicators_Data.lua"/>
   <Script file="..\..\Engine\Group\MSUF_UF_Group_SpellRegistry.lua"/>
   <Script file="..\..\..\GroupFrames\MSUF_GroupFrames_DB_SpellIndicators.lua"/>
   <Script file="..\..\Engine\Group\MSUF_UF_Group_Config_Indicators.lua"/>
