@@ -960,6 +960,14 @@ local function BuildScene(box, reason)
     local _, selectedSpellSpecKey, selectedSpellAuraName = S.CurrentSpellInfo(kind)
     scene.selectedSpellSpecKey = selectedSpellSpecKey
     scene.selectedSpellAuraName = selectedSpellAuraName
+    local spellHover = M.gfSpellIndicatorPreviewHover
+    if type(spellHover) == "table" and spellHover.kind == kind then
+        scene.hoveredSpellSpecKey = spellHover.specKey
+        scene.hoveredSpellAuraName = spellHover.auraName
+    end
+    scene.selectedSpellEffectHovered = scene.hoveredSpellSpecKey ~= nil
+        and scene.hoveredSpellSpecKey == selectedSpellSpecKey
+        and scene.hoveredSpellAuraName == selectedSpellAuraName
     scene.previewAllSpecSpellIcons = S.PreviewAllSpecSpellIcons(kind) == true
     scene.rawSelectedPlaced = scene.selectedSpellCfg and scene.selectedSpellCfg.placed
     scene.selectedPlaced = S.CurrentSpellPlaced(kind)
@@ -984,6 +992,9 @@ local function BuildScene(box, reason)
             local item = scene.runtimeSpellItems[i]
             local exactSlot = item and item.spellIndicatorSlot == true
             local selectedItem = item and item.specKey == selectedSpellSpecKey and item.auraName == selectedSpellAuraName
+            local hoveredItem = scene.hoveredSpellSpecKey ~= nil and item
+                and item.specKey == scene.hoveredSpellSpecKey
+                and item.auraName == scene.hoveredSpellAuraName
             local placed = exactSlot and item or (item and item.placed)
             local placedType = placed and (exactSlot and placed.visual or placed.type) or "none"
             local placedShown = placed and placedType ~= "none" and item.hiddenVisual ~= true
@@ -991,16 +1002,18 @@ local function BuildScene(box, reason)
             local effectKind = type(effect) == "table" and tostring(effect.type or "none"):lower() or "none"
             local effectShown = effectKind ~= "" and effectKind ~= "none"
             -- Preview all spells mirrors the compiled runtime set instead of the
-            -- one spec the editor happens to show: Multi-Spec compiles every
-            -- tracked spec, and a spell whose indicator is a frame effect owns no
-            -- placed icon yet still draws. Corner custom slots carry no specKey
-            -- and stay out - they belong to Corner Indicators, not to this list.
+            -- one spec the editor happens to show. Effect-only entries remain in
+            -- that set so hovering their selector tile can wake the matching
+            -- frame effect; all frame effects stay dormant without such a hover.
+            -- Corner custom slots carry no specKey and stay out - they belong to
+            -- Corner Indicators, not to this list.
             local previewAllItem = scene.previewAllSpecSpellIcons == true
                 and not selectedItem and item ~= nil and item.specKey ~= nil
                 and (placedShown or effectShown)
+            local previewHoverItem = hoveredItem and not selectedItem and (placedShown or effectShown)
             if selectedItem then
                 if placedShown then scene.previewSpellItems[#scene.previewSpellItems + 1] = item end
-            elseif previewAllItem then
+            elseif previewAllItem or previewHoverItem then
                 scene.previewSpellItems[#scene.previewSpellItems + 1] = item
             end
             if selectedItem then
@@ -1010,7 +1023,7 @@ local function BuildScene(box, reason)
                     scene.selectedSpellEffectAvailable = effectShown
                 end
                 if effectShown then scene.runtimeSpellEffectAvailable = true end
-            elseif previewAllItem then
+            elseif previewAllItem or previewHoverItem then
                 if placedShown then scene.runtimeSpellPlacedAvailable = true end
                 if effectShown then scene.runtimeSpellEffectAvailable = true end
             end
@@ -1320,7 +1333,8 @@ local function FinalizeScene(scene)
     end
     local spellVisible = scene.layerAvailable.si and SceneLayerOn(scene, "si")
     if selectedEffectOwner then
-        selectedEffectOwner:SetShown(spellVisible and scene.selectedSpellEffectAvailable == true)
+        selectedEffectOwner:SetShown(spellVisible and scene.selectedSpellEffectAvailable == true
+            and scene.selectedSpellEffectHovered == true)
     end
     S.spellHandle:SetShown(spellVisible)
     S.spellHandle:SetAlpha(selected and selected.enabled == false and SceneLayerAlpha(scene, "si") * 0.45
@@ -3188,6 +3202,9 @@ function Render.Install(box, ctx, deps)
                 local placed = exactSlot and item or (item and item.placed)
                 local selectedItem = item and item.specKey == scene.selectedSpellSpecKey
                     and item.auraName == scene.selectedSpellAuraName
+                local hoveredItem = scene.hoveredSpellSpecKey ~= nil and item
+                    and item.specKey == scene.hoveredSpellSpecKey
+                    and item.auraName == scene.hoveredSpellAuraName
                 local effect = (exactSlot and item.frameEffect) or item.frame
                     or (selectedItem and selectedSpellEffect) or nil
                 local handle = box:EnsureSpellIndicatorHandle(item, i)
@@ -3211,11 +3228,10 @@ function Render.Install(box, ctx, deps)
                 end
                 if handle and (placedShown or effect) then
                     dynamicSpellHandlesActive[handle._msufSpellIndicatorPreviewKey] = handle
-                    -- The selected spell's full-frame effect keeps its stable
-                    -- mock-owned preview root. Every other previewed spell owns
-                    -- its own root, so Preview all spells composites the frame
-                    -- effects by priority exactly like the live frame does.
-                    if effect and not selectedItem then
+                    -- Only the hovered Aura owns the temporary frame effect.
+                    -- Non-selected preview entries retain separate roots so a
+                    -- tile/handle hover never mutates the selected spell owner.
+                    if effect and hoveredItem and not selectedItem then
                         ApplySpellEffectPreview(handle, effect)
                     else
                         HideSpellEffectPreview(handle)
@@ -3269,7 +3285,7 @@ function Render.Install(box, ctx, deps)
         end
         selectedSpellEffectOwner:ClearAllPoints()
         selectedSpellEffectOwner:SetAllPoints(mock)
-        if scene.selectedSpellEffectAvailable and selectedSpellEffect then
+        if scene.selectedSpellEffectHovered and scene.selectedSpellEffectAvailable and selectedSpellEffect then
             ApplySpellEffectPreview(selectedSpellEffectOwner, selectedSpellEffect)
         else
             HideSpellEffectPreview(selectedSpellEffectOwner)

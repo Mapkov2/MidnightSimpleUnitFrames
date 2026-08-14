@@ -150,10 +150,9 @@ local FRAME_EFFECT_TYPES = {
     healthtint = true, border = true, glow = true, pulse = true, namecolor = true,
 }
 
---- Reads the effect belonging to the Style workspace currently shown below
---- the large UnitFrame preview.  This intentionally ignores lane enable state:
---- Style already forces its dummy icons visible, and its frame effect must be
---- equally inspectable before the user enables that Aura lane.
+--- Reads the effect belonging to the Aura lane currently hovered in the large
+--- UnitFrame preview. This intentionally ignores lane enable state: menu dummy
+--- icons may remain inspectable before the corresponding runtime lane is on.
 local function SelectedUnitAuraFrameEffect(model, unit, kind)
     if not (model and unit and kind) then return nil end
     local raw
@@ -889,12 +888,9 @@ function Auras.BuildState(key, frameW, frameH, runtimeSpec, forceStandardLanes)
         forceStandardLanes or stylePreviewKind == "buff")
     local debuff = LaneBounds(cfg, "debuff", frameW, frameH, key, runtimeSpec,
         forceStandardLanes or stylePreviewKind == "debuff")
-    local previewFrameEffect = SelectedUnitAuraFrameEffect(model, key, stylePreviewKind)
     local state = {
         unit = key, cfg = cfg, runtime = runtimeAuras,
         buff = buff, debuff = debuff, stylePreviewKind = stylePreviewKind,
-        previewFrameEffect = previewFrameEffect,
-        previewFrameEffectLayer = previewFrameEffect and AURA_PREVIEW_LAYER[stylePreviewKind] or nil,
     }
     for index = 1, 4 do
         local kind = "custom" .. tostring(index)
@@ -1337,6 +1333,8 @@ local function BindDragProxy(frame, handle)
     if frame.EnableMouse then frame:EnableMouse(true) end
     if frame.EnableMouseWheel then frame:EnableMouseWheel(true) end
     if frame.SetPropagateMouseWheel then frame:SetPropagateMouseWheel(false) end
+    frame:SetScript("OnEnter", function() ForwardHandleScript(handle, "OnEnter") end)
+    frame:SetScript("OnLeave", function() ForwardHandleScript(handle, "OnLeave") end)
     frame:SetScript("OnMouseWheel", function(_, delta) ForwardHandleScript(handle, "OnMouseWheel", delta) end)
     if frame.RegisterForClicks then
         frame:RegisterForClicks("LeftButtonDown", "LeftButtonUp", "RightButtonUp")
@@ -1988,6 +1986,22 @@ function Auras.Layout(box, mock, state, S, baseLevel)
         end
     end
     LayoutDefensivePortrait(box, mock, state, S)
-    box._msufAuraFrameEffectPreviewLayer = state.previewFrameEffectLayer
-    LayoutFrameEffectPreview(box, mock, state.previewFrameEffect, S)
+    local hoveredKind
+    if box.handleAuraBuffs and box.handleAuraBuffs._hovering == true then
+        hoveredKind = "buff"
+    elseif box.handleAuraDebuffs and box.handleAuraDebuffs._hovering == true then
+        hoveredKind = "debuff"
+    else
+        for index = 1, 4 do
+            local handle = box["handleAuraCustom" .. tostring(index)]
+            if handle and handle._hovering == true then
+                hoveredKind = "custom" .. tostring(index)
+                break
+            end
+        end
+    end
+    local previewFrameEffect = hoveredKind
+        and SelectedUnitAuraFrameEffect(MenuModel(), state.unit, hoveredKind) or nil
+    box._msufAuraFrameEffectPreviewLayer = previewFrameEffect and AURA_PREVIEW_LAYER[hoveredKind] or nil
+    LayoutFrameEffectPreview(box, mock, previewFrameEffect, S)
 end

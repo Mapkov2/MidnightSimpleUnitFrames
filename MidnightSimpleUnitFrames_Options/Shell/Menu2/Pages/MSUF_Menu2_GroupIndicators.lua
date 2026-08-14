@@ -1109,6 +1109,36 @@ end
 local SpellTileGrid = {}
 SpellTileGrid.__index = SpellTileGrid
 local SpellTileDragOnUpdate
+local function RefreshSpellEffectHoverPreview()
+    if type(M.RefreshGFNativePreviews) == "function" then
+        M.RefreshGFNativePreviews("GROUP_PREVIEW_SPELL_EFFECT_HOVER")
+    elseif type(RefreshGFPreview) == "function" then
+        RefreshGFPreview(CurrentScope(), { spellOnly = true })
+    end
+end
+local function SetSpellEffectHover(tile, active)
+    if not (tile and not tile._isAddTile and tile._specKey and tile._auraName) then return false end
+    local kind = CurrentScope()
+    local hover = M.gfSpellIndicatorPreviewHover
+    if active == true then
+        if type(hover) ~= "table" then
+            hover = {}
+            M.gfSpellIndicatorPreviewHover = hover
+        end
+        if hover.owner == tile and hover.kind == kind
+            and hover.specKey == tile._specKey and hover.auraName == tile._auraName then
+            return false
+        end
+        hover.owner, hover.kind, hover.specKey, hover.auraName = tile, kind, tile._specKey, tile._auraName
+    else
+        if type(hover) ~= "table" or hover.owner ~= tile then
+            return false
+        end
+        M.gfSpellIndicatorPreviewHover = nil
+    end
+    RefreshSpellEffectHoverPreview()
+    return true
+end
 function SpellTileGrid.New(ctx, parent, x, y, width, refreshPage)
     local frame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     frame:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
@@ -1159,8 +1189,10 @@ function SpellTileGrid:OnEnter(tile)
     GameTooltip:Show()
     tile:SetBackdropColor(0.070, 0.085, 0.125, 1)
     tile:SetBackdropBorderColor(color[1], color[2], color[3], 1)
+    SetSpellEffectHover(tile, true)
 end
 function SpellTileGrid:OnLeave(tile)
+    SetSpellEffectHover(tile, false)
     GameTooltip:Hide()
     tile:SetBackdropColor(0.035, 0.040, 0.070, 0.96)
     SetSpellTileBorder(tile, not tile._isAddTile and tile._auraName == CurrentSpellAura(CurrentScope()),
@@ -1279,6 +1311,7 @@ local function SpellTileInputMouseUp(tile, button)
 end
 local function SpellTileOnHide(tile)
     StopSpellTilePendingDrag(tile)
+    SetSpellEffectHover(tile, false)
     if tile._dragged then
         tile:StopMovingOrSizing()
         tile._dragged = false
