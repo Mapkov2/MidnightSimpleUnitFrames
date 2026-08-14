@@ -1,5 +1,14 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.07-Beta2 - 2026-08-14
+
+### Fixes & Performance
+
+- Fixed Texture Layer controls writing to the wrong texture after switching slots or opening another texture from the preview. Each control now remains bound to its own slot, and protected HP-driven alpha values are no longer cached or compared from Lua.
+- Fixed Spell Indicator icons and full-frame effects competing for AuraSlot ownership. Both styles now share one native Blizzard assignment while retaining independent element layers, and expiring effects reuse Blizzard's duration handoff without protected visibility hooks.
+- Improved Assistant handling for conversational bar dimensions, rounded-frame requests, no-target load conditions, Raid filters versus Raid frame scope, Aura lane attributes, and outline layer wording.
+- Fixed narrow Assistant navigation, reset, and profile-copy requests being interpreted as broader setting changes.
+
 ## 6.07-Beta1 - 2026-08-14
 
 ### Highlights
