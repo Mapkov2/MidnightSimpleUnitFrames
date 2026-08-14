@@ -165,13 +165,22 @@ local function BuildTextureLayer(ctx, builder, unit)
 
     M.unitTexLayerSlot = M.unitTexLayerSlot or {}
     M.unitTexLayerTab = M.unitTexLayerTab or {}
-    local function CurrentSlot()
-        local slot = tonumber(M.unitTexLayerSlot[unit]) or 1
+    local function NormalizeSlot(value)
+        local slot = tonumber(value) or 1
         if slot < 1 or slot > #SLOT_PREFIXES then slot = 1 end
         return slot
     end
+    local function CurrentSlot()
+        return NormalizeSlot(M.unitTexLayerSlot[unit])
+    end
+    -- Every control created by this page build belongs to exactly one texture
+    -- slot. Never resolve the prefix from mutable menu state inside a later
+    -- slider/text/dropdown callback: after a slot switch that would let an old
+    -- control write into the newly selected slot.
+    local boundSlot = CurrentSlot()
+    local boundPrefix = SLOT_PREFIXES[boundSlot]
     local function Key(base)
-        return SLOT_PREFIXES[CurrentSlot()] .. base
+        return boundPrefix .. base
     end
     local function RefreshLayer()
         Call("MSUF_RefreshUnitTextureLayers", unit)
@@ -188,7 +197,7 @@ local function BuildTextureLayer(ctx, builder, unit)
     local function ApplyPreset(values, reason)
         if M.BlockCombatAction and M.BlockCombatAction() then return false end
         local conf = GetConf(unit)
-        local prefix = SLOT_PREFIXES[CurrentSlot()]
+        local prefix = boundPrefix
         local changed = false
         for suffix, value in pairs(values) do
             local key = prefix .. suffix
@@ -202,7 +211,7 @@ local function BuildTextureLayer(ctx, builder, unit)
     local function SetHighlightTextureEnabled(enabled)
         if M.BlockCombatAction and M.BlockCombatAction() then return false end
         local conf = GetConf(unit)
-        local prefix = SLOT_PREFIXES[CurrentSlot()]
+        local prefix = boundPrefix
         local changed = ApplyHighlightTextureConfig(conf, prefix, enabled)
         if enabled and conf[prefix .. "Enabled"] ~= true then
             conf[prefix .. "Enabled"] = true
@@ -227,7 +236,7 @@ local function BuildTextureLayer(ctx, builder, unit)
     if W.AttachContextColorReferences then
         local function TextureLayerColorRefs()
             local slotIds = { "texture_layer", "texture_layer2", "texture_layer3" }
-            local slotId = slotIds[CurrentSlot()] or "texture_layer"
+            local slotId = slotIds[boundSlot] or "texture_layer"
             local refs = { slotId .. ".color" }
             if GetConf(unit)[Key("GradientEnabled")] == true then
                 refs[#refs + 1] = slotId .. ".gradient"
@@ -592,9 +601,21 @@ local function BuildTextureLayer(ctx, builder, unit)
         centerY = -52,
         getValue = function() return CurrentSlot() end,
         setValue = function(value)
-            M.unitTexLayerSlot[unit] = tonumber(value) or 1
-            RefreshGradientControls()
-            M.RequestRefresh(ctx, "MSUF2_TEXLAYER_SLOT")
+            local nextSlot = NormalizeSlot(value)
+            local previousSlot = CurrentSlot()
+            if nextSlot == previousSlot then return end
+            -- Commit an in-progress custom path while the old slot remains
+            -- selected. Its callback is slot-bound as an additional safeguard.
+            if customPath and customPath.HasFocus and customPath:HasFocus() and customPath.ClearFocus then
+                customPath:ClearFocus()
+            end
+            M.unitTexLayerSlot[unit] = nextSlot
+            local pageKey = M.activeKey or ("uf_" .. tostring(unit))
+            if M.RebuildPageKeepingScroll and M.RebuildPageKeepingScroll(pageKey) then return end
+            -- A visible control must never change ownership without a rebuild.
+            -- Roll the ephemeral selection back if rebuilding is unavailable.
+            M.unitTexLayerSlot[unit] = previousSlot
+            if M.RequestRefresh then M.RequestRefresh(ctx, "MSUF2_TEXLAYER_SLOT_RESTORE") end
         end,
     })
     if UP.RegisterControl then

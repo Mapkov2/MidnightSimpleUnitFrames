@@ -592,12 +592,15 @@ function Preview.PrepareUnitHandleSubmenu(menu, unit, handle)
     end
     if state then menu[state] = menu[state] or {}; menu[state][unit] = tab end
     local textureSlot = section == "texture_layer" and (tonumber(key:match("^texLayer(%d)$")) or 1)
+    local textureSlotChanged = false
     if textureSlot then
         menu.unitTexLayerSlot = menu.unitTexLayerSlot or {}
         menu.unitTexLayerTab = menu.unitTexLayerTab or {}
+        textureSlotChanged = (tonumber(menu.unitTexLayerSlot[unit]) or 1) ~= textureSlot
         menu.unitTexLayerSlot[unit] = textureSlot
         menu.unitTexLayerTab[unit] = "placement"
     end
+    return textureSlotChanged
 end
 OpenPreviewHandleSettings = function(handle, source)
     if not handle then return false end
@@ -606,7 +609,7 @@ OpenPreviewHandleSettings = function(handle, source)
     local menu = _G.MSUF2 or M2
     local unit = box and box.key or "player"
     local section = Preview.ResolveUnitHandleSection(handle, unit)
-    Preview.PrepareUnitHandleSubmenu(menu, unit, handle)
+    local textureSlotChanged = Preview.PrepareUnitHandleSubmenu(menu, unit, handle)
     if fields.statusRefresh then
         local selected = NormalizeStatusPreviewId(handle._key)
         Preview.selectedStatusId = selected
@@ -682,6 +685,12 @@ OpenPreviewHandleSettings = function(handle, source)
     local sectionId = UNIT_SECTION_IDS[section or ""] or UNIT_SECTION_IDS.text
     local pageKey = box and (box._msuf2PinnedPreviewPageKey or ("uf_" .. tostring(box.key or "player"))) or nil
     if menu and type(menu.SelectPage) == "function" and pageKey then
+        -- Texture controls are intentionally bound to one slot for their whole
+        -- lifetime. Opening another texture handle must therefore rebuild the
+        -- cached Unit page before it is focused.
+        if textureSlotChanged and type(menu.InvalidatePage) == "function" then
+            menu.InvalidatePage(pageKey)
+        end
         ExportPublic("MSUF_EM2_MenuFocusRequest", {
             key = box and box.key,
             component = handle._key,

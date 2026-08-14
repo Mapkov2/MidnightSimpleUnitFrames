@@ -685,9 +685,18 @@ end
 local function SetHolderAlpha(holder, alpha)
   if not holder or alpha == nil then return end
   local secret = issecretvalue(alpha) == true
-  if not secret and holder._msufTexLayerOwnAlpha == alpha then return end
+  local cachedAlpha = holder._msufTexLayerOwnAlpha
+  -- A secret curve result is valid input for Region:SetAlpha, but it must
+  -- never be cached: reading/comparing that value later from tainted Lua is
+  -- forbidden. Also tolerate holders contaminated by the previous ternary
+  -- assignment so the fix takes effect without requiring a fresh frame.
+  if not secret and issecretvalue(cachedAlpha) ~= true and cachedAlpha == alpha then return end
   holder:SetAlpha(alpha)
-  holder._msufTexLayerOwnAlpha = secret and nil or alpha
+  if secret then
+    holder._msufTexLayerOwnAlpha = nil
+  else
+    holder._msufTexLayerOwnAlpha = alpha
+  end
 end
 
 local function EnsureHealthAlphaCurve(holder, threshold, belowAlpha, aboveAlpha)
