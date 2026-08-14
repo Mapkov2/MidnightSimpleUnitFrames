@@ -8,10 +8,37 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.07-Beta2",
-    previousVersion = "6.07-beta1",
-    rangeLabel = "6.07-beta1 -> 6.07-Beta2",
+    currentVersion = "6.07-Beta3",
+    previousVersion = "6.07-beta2",
+    rangeLabel = "6.07-beta2 -> 6.07-Beta3",
     entries = {
+        {
+            version = "6.07-Beta3",
+            date = "2026-08-14",
+            sections = {
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Added direct Edit Mode popup controls for Custom Aura 1-4, Dots on target, and Player Defensive Buffs. Each lane can now adjust position, size, and spacing with reset, undo, Boss synchronization, Menu focus, and Assistant parity.",
+                        "Restored Spell Indicator Display as: Bar with Blizzard's native C-side aura-duration StatusBar. Bars keep their configured geometry, color, alpha and layer while adding Growth-controlled fill direction, optional native smoothing and movable native timer text without Lua polling.",
+                        "Increased the Back and Forward navigation buttons for easier Menu navigation.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Fixed Class Resource preview text handles becoming stuck behind higher-layer bar visuals.",
+                        "Fixed Group Frame Spell Indicator glow previews differing from runtime effects. The preview now uses the shared runtime renderer and cleans up its effect owners when suspended.",
+                        "Fixed Unit Aura handles losing their first-click selection when opening a lane rebuilt its settings page. Selection is now restored only onto the newly created Preview handle.",
+                        "Fixed Spell Indicator full-frame effect opacity and layer ordering against render targets, Aura names, and other text. Persistent effects remain visible while editing, and the selected Group Frame Name Overlay stays above its source text.",
+                        "Fixed name-relative Unit Frame status text ignoring the configured Name anchor and offsets.",
+                        "Fixed Assistant questions and navigation requests applying settings, including enum values that were never stated. Pure small talk now keeps its conversation context without entering a settings lane.",
+                        "Fixed Assistant requests about borders, Auras, text, colors, and other frame details falling through to whole-frame toggles or unrelated position controls. Scoped Highlight Borders now control their Aggro, Dispel, and Purge outlines together.",
+                        "Fixed narrow Group Frame position phrases matching unrelated horizontal or vertical layout controls.",
+                    },
+                },
+            },
+        },
         {
             version = "6.07-Beta2",
             date = "2026-08-14",
@@ -21,7 +48,6 @@ local data = {
                     bullets = {
                         "Fixed Texture Layer controls writing to the wrong texture after switching slots or opening another texture from the preview. Each control now remains bound to its own slot, and protected HP-driven alpha values are no longer cached or compared from Lua.",
                         "Fixed Spell Indicator icons and full-frame effects competing for AuraSlot ownership. Both styles now share one native Blizzard assignment while retaining independent element layers. Unsupported expiration-timed full-frame effects now fall back to the active-aura effect without secret-value hooks or polling.",
-                        "Changed Spell Indicator `Display as: Bar` from a static rectangle to Blizzard's native C-side aura-duration StatusBar. It remains one AuraSlot, keeps the configured position, size, width, color, alpha and layer, adds Growth-controlled fill direction, optional native smoothing and movable native timer text, and adds no Lua timer or polling.",
                         "Improved Assistant handling for conversational bar dimensions, rounded-frame requests, no-target load conditions, Raid filters versus Raid frame scope, Aura lane attributes, and outline layer wording.",
                         "Fixed narrow Assistant navigation, reset, and profile-copy requests being interpreted as broader setting changes.",
                     },
@@ -67,39 +93,6 @@ local data = {
                     bullets = {
                         "Fixed an edge case where Player, Target, Boss, and other Unit Frame health text remained hidden after importing profiles with a conflicting obsolete visibility value. Current profile settings now always win, while legacy-only profiles retain their previous behavior without profile rewrites or recurring runtime work.",
                         "Fixed the MSUF Game Menu button using mismatched dimensions and styling. It now follows the active Game Menu button template, size, font, and EllesmereUI skin without stretching.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.05",
-            date = "2026-08-13",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "Reworked Augmentation Evoker resources into one coherent Player Power surface: segmented Essence remains visible while Ebon Might uses its own native duration row. Runtime, embedded and detached layouts, rounded styling, text layers, Menu previews, search, and the Assistant now share the same geometry and ownership.",
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Added Unit Frame load conditions for No target and Out of combat and no target, including Copy To, search, diagnostics, and Assistant control.",
-                        "Added a dedicated Class Resource text layer so resource numbers, Rune times, and Ebon Might duration text can be ordered independently from the resource bar and normal Player Power text.",
-                        "Added a delayed warning with a direct settings shortcut when Unit Frames are configured to follow Essential Cooldowns but no supported Blizzard or third-party cooldown anchor is active.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed Spell Icon Full-Frame Effects ignoring their configured element layer. Effects now use a frame-local surface so their 0-30 layer orders correctly against bars, text, and other Unit Frame elements.",
-                        "Fixed helpful and hostile Group Aura owners retaining invalid exact-ID assignments after assistability, roster-presence, or instance transitions. Updates remain event-driven and fail closed without polling or restricted Aura reads.",
-                        "Fixed Interrupt Ready colors and Focus Kick state becoming stale when a protected cooldown completed. MSUF now uses Blizzard's native duration completion callback with a one-shot fallback and ignores unrelated cooldown events.",
-                        "Fixed Group Range Fade briefly treating members from another instance or phase as in range after portal and party-presence transitions.",
-                        "Fixed Castbars jumping when switching between Unit Frame anchoring and independent Edit Mode placement.",
-                        "Fixed later canonical Aura profile revisions being mistaken for legacy data eligible for the original Aura reset.",
-                        "Refreshed cached Menu pages when reopening MSUF, made exported profile strings immediately selectable for copying, and exposed the HEX value in the compact color picker.",
-                        "Improved Assistant handling for direct control wording, target-aware visibility requests, outline sizing, background textures, and maximum-health-loss textures.",
                     },
                 },
             },
