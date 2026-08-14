@@ -1,5 +1,11 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.07-Beta4 - 2026-08-14
+
+### Fixes & Performance
+
+- Fixed Level, Race, and Class text with `Left to name` / `Right to name` anchors floating away from shortened names. The text now follows the rendered name edge and only snaps to the shortening cut while the name actually overflows its configured width.
+
 ## 6.07-Beta3 - 2026-08-14
 
 ### Changes

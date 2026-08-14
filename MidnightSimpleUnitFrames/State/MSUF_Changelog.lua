@@ -8,10 +8,22 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.07-Beta3",
-    previousVersion = "6.07-beta2",
-    rangeLabel = "6.07-beta2 -> 6.07-Beta3",
+    currentVersion = "6.07-Beta4",
+    previousVersion = "6.07-Beta3",
+    rangeLabel = "6.07-Beta3 -> 6.07-Beta4",
     entries = {
+        {
+            version = "6.07-Beta4",
+            date = "2026-08-14",
+            sections = {
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Fixed Level, Race, and Class text with Left to name / Right to name anchors floating away from shortened names. The text now follows the rendered name edge and only snaps to the shortening cut while the name actually overflows its configured width.",
+                    },
+                },
+            },
+        },
         {
             version = "6.07-Beta3",
             date = "2026-08-14",
@@ -74,25 +86,6 @@ local data = {
                         "Fixed native Player portraits occasionally remaining stale or blank after login or world entry.",
                         "Fixed several Unit Aura layout settings writing to the wrong scope, including lane visibility and separate Buff/Debuff style padding.",
                         "Improved Assistant handling for natural highlight on/off requests, texture names without connector words, border styles and opacity, outline layers, absorb height, gradient intensity, and how-to navigation. Unmatched navigation requests now offer the closest controls without changing settings.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.06",
-            date = "2026-08-13",
-            sections = {
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Added a Non-Player Auras Debuff filter for Unit and Group Frames, including Menu, profile import, diagnostics, and Assistant support. It keeps encounter and environment Debuffs while excluding effects caused by players or player pets.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed an edge case where Player, Target, Boss, and other Unit Frame health text remained hidden after importing profiles with a conflicting obsolete visibility value. Current profile settings now always win, while legacy-only profiles retain their previous behavior without profile rewrites or recurring runtime work.",
-                        "Fixed the MSUF Game Menu button using mismatched dimensions and styling. It now follows the active Game Menu button template, size, font, and EllesmereUI skin without stretching.",
                     },
                 },
             },
