@@ -4904,8 +4904,20 @@ local function ParseGlobalGradientStrengthPriorityShortcut(normalized)
 end
 A._ParseGlobalGradientStrengthPriorityShortcut = ParseGlobalGradientStrengthPriorityShortcut
 
+-- [560] spells the adjective ("rounded party frames"). Players just as often
+-- use "round" as a verb with the frames as its object -- "don't round my party
+-- and raid frames" -- and that sentence then fell through to a two-word alias
+-- match on "raid frames" that planned to DISABLE the raid frames. Matching the
+-- bare word would also hit "background" and "surround", so require it as a
+-- whole word.
+local ROUNDED_VERB_PATTERN = "%f[%w]rounds?%f[%W]"
+
 local function ParseGlobalRoundedBarsPriorityShortcut(normalized)
-    if not ContainsAny(normalized, P.RootPhrases[560]) then return nil end
+    local verbForm = false
+    if not ContainsAny(normalized, P.RootPhrases[560]) then
+        if not normalized:find(ROUNDED_VERB_PATTERN) then return nil end
+        verbForm = true
+    end
     if ContainsAny(normalized, P.RootPhrases[561]) then
         return nil
     end
@@ -4918,6 +4930,17 @@ local function ParseGlobalRoundedBarsPriorityShortcut(normalized)
     elseif ContainsAny(normalized, P.RootPhrases[564]) then
         key = "bars.roundedGroupFrames"
     elseif ContainsAny(normalized, P.RootPhrases[565]) then
+        key = "bars.roundedUnitFrames"
+    -- The verb form names its object as a bare noun, so the adjective lists
+    -- above cannot see it. Consulted only in that case: a sentence they already
+    -- placed keeps the control they chose.
+    elseif verbForm and ContainsAny(normalized, P.RootPhrases[814]) then
+        key = "bars.roundedMouseover"
+    elseif verbForm and ContainsAny(normalized, P.RootPhrases[815]) then
+        key = "bars.roundedPowerBars"
+    elseif verbForm and ContainsAny(normalized, P.RootPhrases[816]) then
+        key = "bars.roundedGroupFrames"
+    elseif verbForm and ContainsAny(normalized, P.RootPhrases[817]) then
         key = "bars.roundedUnitFrames"
     else
         key = "bars.roundedFramesEnabled"
