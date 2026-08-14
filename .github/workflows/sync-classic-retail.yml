@@ -1,0 +1,55 @@
+name: Sync Retail into Classic
+run-name: Sync Retail ${{ github.sha }} into classic
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/scripts/Sync-ClassicRetail.ps1"
+      - ".github/workflows/sync-classic-retail.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-retail-into-classic
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.repository == 'Mapkov2/MidnightSimpleUnitFrames' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out Retail main
+        uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+          path: retail
+
+      - name: Check out Classic branch
+        uses: actions/checkout@v5
+        with:
+          ref: classic
+          fetch-depth: 0
+          path: classic
+
+      - name: Install Lua 5.1
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes lua5.1
+          sudo ln -sf /usr/bin/lua5.1 /usr/local/bin/lua
+          sudo ln -sf /usr/bin/luac5.1 /usr/local/bin/luac
+
+      - name: Mirror, validate, and push Classic
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE/retail/.github/scripts/Sync-ClassicRetail.ps1" `
+            -RetailRoot "$env:GITHUB_WORKSPACE/retail" `
+            -ClassicRoot "$env:GITHUB_WORKSPACE/classic"
