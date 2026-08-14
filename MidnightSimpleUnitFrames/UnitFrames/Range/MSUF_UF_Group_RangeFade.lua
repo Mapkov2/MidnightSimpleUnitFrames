@@ -833,9 +833,10 @@ local function ApplyDirectHealthRangeAlpha(frame, alpha)
 end
 
 local function ApplyPredictionRangeAlpha(frame, alpha)
-  SetStatusAlpha(frame.incomingHealBar, alpha, "_msufGFRangePredict")
-  SetStatusAlpha(frame.absorbBar, alpha, "_msufGFRangePredict")
-  SetStatusAlpha(frame.healAbsorbBar, alpha, "_msufGFRangePredict")
+  alpha = (tonumber(frame and frame._msufAlphaLastHP) or 1) * (tonumber(alpha) or 1)
+  SetTextureAlpha(StatusTexture(frame.incomingHealBar), alpha, "_msufGFRangePredict")
+  SetTextureAlpha(StatusTexture(frame.absorbBar), alpha, "_msufGFRangePredict")
+  SetTextureAlpha(StatusTexture(frame.healAbsorbBar), alpha, "_msufGFRangePredict")
 end
 
 local function ApplyHealthRangeAlpha(frame, alpha)
@@ -881,9 +882,12 @@ local function ApplyHealthRangeAlphaFromBoolean(frame, value, inAlpha, outAlpha,
   end
   applied = SetTextureAlphaFromBoolean(frame.bg, value, inAlpha, outAlpha) or applied
   applied = SetTextureAlphaFromBoolean(frame.hpBarBG, value, inAlpha, outAlpha) or applied
-  applied = SetStatusAlphaFromBoolean(frame.incomingHealBar, value, inAlpha, outAlpha) or applied
-  applied = SetStatusAlphaFromBoolean(frame.absorbBar, value, inAlpha, outAlpha) or applied
-  applied = SetStatusAlphaFromBoolean(frame.healAbsorbBar, value, inAlpha, outAlpha) or applied
+  local predictionAlpha = tonumber(frame and frame._msufAlphaLastHP) or 1
+  local predictionIn = predictionAlpha * inAlpha
+  local predictionOut = predictionAlpha * outAlpha
+  applied = SetTextureAlphaFromBoolean(StatusTexture(frame.incomingHealBar), value, predictionIn, predictionOut) or applied
+  applied = SetTextureAlphaFromBoolean(StatusTexture(frame.absorbBar), value, predictionIn, predictionOut) or applied
+  applied = SetTextureAlphaFromBoolean(StatusTexture(frame.healAbsorbBar), value, predictionIn, predictionOut) or applied
   if not applied then
     frame._msufGFRangeHealthBool = nil
     frame._msufGFRangeHealthBoolSecret = nil

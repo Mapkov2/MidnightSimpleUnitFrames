@@ -193,9 +193,14 @@ end
 
 local function SetColorCached(bar, r, g, b, a)
   r, g, b, a = r or 1, g or 1, b or 1, a or 1
-  if bar and (bar._msufR ~= r or bar._msufG ~= g or bar._msufB ~= b or bar._msufA ~= a) then
-    bar:SetStatusBarColor(r, g, b, a)
-    bar._msufR, bar._msufG, bar._msufB, bar._msufA = r, g, b, a
+  if not bar then return end
+  if bar._msufR ~= r or bar._msufG ~= g or bar._msufB ~= b then
+    bar:SetStatusBarColor(r, g, b, 1)
+    bar._msufR, bar._msufG, bar._msufB = r, g, b
+  end
+  if bar._msufA ~= a then
+    bar:SetAlpha(a)
+    bar._msufA = a
   end
 end
 
