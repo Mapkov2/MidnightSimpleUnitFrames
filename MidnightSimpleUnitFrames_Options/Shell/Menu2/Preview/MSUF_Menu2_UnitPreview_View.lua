@@ -658,12 +658,12 @@ OpenPreviewHandleSettings = function(handle, source)
             if (lane ~= previousAuraLane or previousAuraTool ~= "layout")
                 and type(menu.InvalidatePage) == "function"
             then
-                Preview._restoreHandleUnit, Preview._restoreHandleKey = unit, handle._key
+                Preview._restoreHandleUnit, Preview._restoreHandleKey, Preview._restoreSourceBox = unit, handle._key, box
                 menu.InvalidatePage(pageKey)
             end
             local selected = menu.SelectPage(pageKey) ~= false
             if selected then Preview.RestoreQueuedHandle(Preview.active)
-            else Preview._restoreHandleUnit, Preview._restoreHandleKey = nil, nil end
+            else Preview._restoreHandleUnit, Preview._restoreHandleKey, Preview._restoreSourceBox = nil, nil, nil end
             return selected
         end
         return false
@@ -954,13 +954,13 @@ local function FindUnitPreviewHandle(box, handleKey)
     return nil
 end
 function Preview.RestoreQueuedHandle(box)
-    if not (box and SelectPreviewHandle and Preview._restoreHandleKey
+    if not (box and box ~= Preview._restoreSourceBox and SelectPreviewHandle and Preview._restoreHandleKey
         and tostring(box.key) == tostring(Preview._restoreHandleUnit)
         and (not box.IsShown or box:IsShown()))
     then return false end
     local handle = FindUnitPreviewHandle(box, Preview._restoreHandleKey)
     if not (handle and handle._msufPlaced ~= false and (not handle.IsShown or handle:IsShown())) then return false end
-    Preview._restoreHandleUnit, Preview._restoreHandleKey = nil, nil
+    Preview._restoreHandleUnit, Preview._restoreHandleKey, Preview._restoreSourceBox = nil, nil, nil
     SelectPreviewHandle(handle, true)
     return true
 end
