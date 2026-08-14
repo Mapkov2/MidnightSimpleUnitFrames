@@ -1812,7 +1812,12 @@ local function ApplyEditModeCustomEffect(group, frame, item)
     if root.SetFrameLevel then
         local priority = Clamp(effect.priority, 5, 1, 10)
         local layer = Clamp(effect.layer, 0, 0, 30)
-        root:SetFrameLevel(FrameLayers.ElementLevel and FrameLayers.ElementLevel(layer, 0, 11 - priority)
+        local targetOwner = health
+        if kind == "namecolor" then
+            targetOwner = nameSource and nameSource.GetParent and nameSource:GetParent() or frame
+        end
+        root:SetFrameLevel(FrameLayers.AuraEffectLevel and FrameLayers.AuraEffectLevel(layer, priority, targetOwner)
+            or FrameLayers.ElementLevel and FrameLayers.ElementLevel(layer, 0, 11 - priority)
             or ((group:GetFrameLevel() or 900) + SPELL_FRAME_EFFECT_BASE_OFFSET + (11 - priority) + layer))
     end
     root.tint:Hide()

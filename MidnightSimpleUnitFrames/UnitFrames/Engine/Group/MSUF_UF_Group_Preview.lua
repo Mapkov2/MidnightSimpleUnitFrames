@@ -773,11 +773,17 @@ local function ApplySpellFrameEffectPreview(visual, frame, slot)
   root:SetAllPoints(health or frame)
   local layers = MSUF and MSUF.UF and MSUF.UF.Layers or {}
   if root.SetFrameLevel and frame.GetFrameLevel then
-    root:SetFrameLevel(layers.ElementLevel and layers.ElementLevel(effect.layer, 0,
-      11 - max(1, min(10, tonumber(effect.priority) or 5)))
+    local priority = max(1, min(10, tonumber(effect.priority) or 5))
+    local targetOwner = health
+    if effectKind == "namecolor" then
+      targetOwner = nameSource and nameSource.GetParent and nameSource:GetParent() or frame
+    end
+    root:SetFrameLevel(layers.AuraEffectLevel and layers.AuraEffectLevel(effect.layer, priority, targetOwner)
+      or layers.ElementLevel and layers.ElementLevel(effect.layer, 0,
+      11 - priority)
       or ((frame:GetFrameLevel() or 0)
         + (tonumber(layers.SPELL_FRAME_EFFECT_BASE_OFFSET) or 1)
-        + (11 - max(1, min(10, tonumber(effect.priority) or 5)))
+        + (11 - priority)
         + max(0, min(30, tonumber(effect.layer) or 0))))
   end
   root._tint:Hide()

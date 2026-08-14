@@ -997,7 +997,13 @@ local function ApplyButtonFrameEffect(button, slot, parentFrame)
         -- Layer is a cold-compiled 0..30 local offset. Zero preserves the
         -- established priority band exactly; no SavedVariables reads occur here.
         local layer = effect.layer or 0
-        root:SetFrameLevel(FrameLayers.ElementLevel and FrameLayers.ElementLevel(layer, 0, 11 - priority)
+        local targetOwner = healthBar
+        if kind == "namecolor" then
+            local nameSource = NameFontString(parentFrame)
+            targetOwner = nameSource and nameSource.GetParent and nameSource:GetParent() or parentFrame
+        end
+        root:SetFrameLevel(FrameLayers.AuraEffectLevel and FrameLayers.AuraEffectLevel(layer, priority, targetOwner)
+            or FrameLayers.ElementLevel and FrameLayers.ElementLevel(layer, 0, 11 - priority)
             or ((parentFrame:GetFrameLevel() or 0) + SPELL_FRAME_EFFECT_BASE_OFFSET + (11 - priority) + layer))
     end
     StopPulse(root)

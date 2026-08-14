@@ -149,10 +149,36 @@ Equal(container[1].frameLevel, spellLevel,
 Equal(container[2].frameLevel, dispelLevel,
     "fixed AuraSlot Layer changed the Dispel sensor Layer")
 
+-- Independently layered full-frame effects still need to clear the concrete
+-- surface they render against. Otherwise the valid default Layer 0 can be
+-- completely overdrawn after the native AuraSlot moves to the shared base.
+local function EffectOwner(level)
+    return { GetFrameLevel = function() return level end }
+end
+
+local configuredLowEffect = Layers.ElementLevel(0, 0, 6)
+Equal(Layers.AuraEffectLevel(0, 5, EffectOwner(configuredLowEffect + 20)),
+    configuredLowEffect + 21, "default Aura effect stayed below its render target")
+local configuredHighEffect = Layers.ElementLevel(14, 0, 6)
+Equal(Layers.AuraEffectLevel(14, 5, EffectOwner(200)), configuredHighEffect,
+    "explicit higher Aura effect Layer was not preserved")
+Equal(Layers.AuraEffectLevel(0, 99, nil), Layers.ElementLevel(0, 0, 1),
+    "Aura effect priority was not clamped")
+
+local spellEffectSource = Read("Auras3/MSUF_Auras3_SpellIndicators.lua")
+local editModeEffectSource = Read("Auras3/MSUF_Auras3_EditMode.lua")
+local groupPreviewEffectSource = Read("UnitFrames/Engine/Group/MSUF_UF_Group_Preview.lua")
+assert(spellEffectSource:find("FrameLayers.AuraEffectLevel", 1, true),
+    "live Aura effects do not use the visible target floor")
+assert(editModeEffectSource:find("FrameLayers.AuraEffectLevel", 1, true),
+    "Edit Mode Aura effects do not use the visible target floor")
+assert(groupPreviewEffectSource:find("layers.AuraEffectLevel", 1, true),
+    "Group preview Aura effects do not use the visible target floor")
+
 local updateSource = runtimeSource:sub(initializerEnd,
     assert(runtimeSource:find("\nlocal function UpdateGroupFlowLane", initializerEnd, true)) - 1)
 assert(not updateSource:find("SetFrameLevel", 1, true)
     and not updateSource:find("SetFrameStrata", 1, true),
     "sealed Group AuraSlot buttons are mutated by the update path")
 
-print("aura_group_slot_layer_smoke: ok (Layers 2/30/7 + mixed Spell/Dispel/flow owner)")
+print("aura_group_slot_layer_smoke: ok (slot Layers + visible effect floor)")
