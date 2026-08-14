@@ -748,7 +748,10 @@ local function SetNameTextCached(frame, value)
   SetTextCached(frame.nameText, value)
   local proxy = frame._msufNameAnchorTextActive == true and frame._msufNameAnchorText
   if proxy then SetTextCached(proxy, value) end
-  if frame._msufNameCenterClip == true and RefreshNameCenterClipFit then
+  -- Any no-ellipsis clip window (side or centered) needs the warm fit: it
+  -- tracks whether the name really overflows the window, which decides the
+  -- NAMELEFT/NAMERIGHT status anchor target.
+  if frame._msufNameInlineClip ~= nil and RefreshNameCenterClipFit then
     RefreshNameCenterClipFit(frame)
   end
 end

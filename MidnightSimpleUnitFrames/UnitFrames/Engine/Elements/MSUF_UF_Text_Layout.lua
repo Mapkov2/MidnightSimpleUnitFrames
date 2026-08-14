@@ -633,7 +633,7 @@ end
 function Text.RefreshNameCenterClipFit(frame)
   local fs = frame and frame.nameText
   local clip = frame and frame._msufNameInlineClip
-  if not (fs and clip and frame._msufNameCenterClip == true) then
+  if not (fs and clip) then
     return
   end
   local overflow = false
@@ -647,8 +647,15 @@ function Text.RefreshNameCenterClipFit(frame)
   end
   if frame._msufNameCenterClipOverflow ~= overflow then
     frame._msufNameCenterClipOverflow = overflow
-    local point, justify = NameCenterClipAnchor(frame, frame._msufNameInlineClipSide)
-    AnchorNameToClip(fs, clip, point, justify)
+    if frame._msufNameCenterClip == true then
+      local point, justify = NameCenterClipAnchor(frame, frame._msufNameInlineClipSide)
+      AnchorNameToClip(fs, clip, point, justify)
+    end
+    -- NAMELEFT/NAMERIGHT status text flips between the glyph-edge twin and
+    -- the window's cut edge with this verdict.
+    if frame._msufNameRelativeStatus == true and RefreshNameRelativeStatusAnchors then
+      RefreshNameRelativeStatusAnchors(frame)
+    end
   end
 end
 
@@ -771,11 +778,39 @@ local function EnsureNameAnchorProxy(frame, spec)
   local text = spec and spec.text or {}
   local shortenMax = text.nameShorten == true and tonumber(text.nameShortenMax) or 0
   local clipped = text.nameLegacyTruncation ~= true and shortenMax and shortenMax > 0
+
+  -- Shortened names render inside a fixed maxChars-wide window, so the window
+  -- edge is not the glyph edge for names that fit it. Hang the twin off the
+  -- same window corner the visible run starts from; its auto-sized far edge
+  -- then coincides with the rendered glyphs without measuring the (possibly
+  -- secret) name. Status anchoring falls back to the window's cut edge only
+  -- while the warm fit reports a real overflow.
+  local clipTarget, clipPoint
+  if clipped and text.directLayout ~= true then
+    if text.nameShortenDots ~= true then
+      clipTarget = frame._msufNameInlineClip
+      if clipTarget then
+        if frame._msufNameCenterClip == true then
+          clipPoint = "TOP"
+        elseif frame._msufNameInlineClipSide == "LEFT" then
+          clipPoint = "TOPRIGHT"
+        else
+          clipPoint = "TOPLEFT"
+        end
+      end
+    else
+      clipTarget = frame.nameText
+      if clipTarget then
+        local justify = clipTarget._msufJustifyH
+        clipPoint = justify == "RIGHT" and "TOPRIGHT" or justify == "CENTER" and "TOP" or "TOPLEFT"
+      end
+    end
+  end
+
   local active = frame._msufNameRelativeStatus == true
     and spec and spec.showName ~= false
-    and text.anchorToBars == true
     and text.directLayout ~= true
-    and not clipped
+    and ((text.anchorToBars == true and not clipped) or clipTarget ~= nil)
   local proxy = frame._msufNameAnchorText
 
   if not active then
@@ -809,22 +844,27 @@ local function EnsureNameAnchorProxy(frame, spec)
     proxy._msufNameAnchorAlpha = 0
   end
 
-  local health = text.nameAnchorToFrame == true and frame or BarTextHealthAnchor(frame)
-  local anchor = text.nameAnchor or "LEFT"
-  local x = tonumber(text.nameX) or 0
-  local y = tonumber(text.nameY) or 0
-  if anchor == "TOP" then
-    LayoutText(proxy, "TOP", "TOP", x, y, "CENTER", health)
-  elseif anchor == "TOPRIGHT" then
-    LayoutText(proxy, "TOPRIGHT", "TOPRIGHT", -3 + x, y, "RIGHT", health)
-  elseif anchor == "TOPLEFT" then
-    LayoutText(proxy, "TOPLEFT", "TOPLEFT", 3 + x, y, "LEFT", health)
-  elseif anchor == "CENTER" then
-    LayoutText(proxy, "CENTER", "CENTER", x, y, "CENTER", health)
-  elseif anchor == "RIGHT" then
-    LayoutText(proxy, "RIGHT", "RIGHT", -3 + x, y, "RIGHT", health)
+  if clipTarget then
+    local justify = clipPoint == "TOPRIGHT" and "RIGHT" or clipPoint == "TOP" and "CENTER" or "LEFT"
+    LayoutText(proxy, clipPoint, clipPoint, 0, 0, justify, clipTarget)
   else
-    LayoutText(proxy, "LEFT", "LEFT", 3 + x, y, "LEFT", health)
+    local health = text.nameAnchorToFrame == true and frame or BarTextHealthAnchor(frame)
+    local anchor = text.nameAnchor or "LEFT"
+    local x = tonumber(text.nameX) or 0
+    local y = tonumber(text.nameY) or 0
+    if anchor == "TOP" then
+      LayoutText(proxy, "TOP", "TOP", x, y, "CENTER", health)
+    elseif anchor == "TOPRIGHT" then
+      LayoutText(proxy, "TOPRIGHT", "TOPRIGHT", -3 + x, y, "RIGHT", health)
+    elseif anchor == "TOPLEFT" then
+      LayoutText(proxy, "TOPLEFT", "TOPLEFT", 3 + x, y, "LEFT", health)
+    elseif anchor == "CENTER" then
+      LayoutText(proxy, "CENTER", "CENTER", x, y, "CENTER", health)
+    elseif anchor == "RIGHT" then
+      LayoutText(proxy, "RIGHT", "RIGHT", -3 + x, y, "RIGHT", health)
+    else
+      LayoutText(proxy, "LEFT", "LEFT", 3 + x, y, "LEFT", health)
+    end
   end
   SetShownCached(proxy, true)
 
@@ -1133,6 +1173,12 @@ function Text.Apply(frame, spec)
     ClearNameClip(frame)
   else
     ApplyNameClip(frame, spec, text)
+    -- The clip window and its side/center verdict only exist after
+    -- ApplyNameClip; re-run the proxy so name-relative status text anchors to
+    -- the glyph edge inside the freshly laid-out window.
+    if frame._msufNameRelativeStatus == true then
+      EnsureNameAnchorProxy(frame, spec)
+    end
   end
   -- Re-anchoring a FontString can invalidate its rendered glyph geometry even
   -- when the text itself is unchanged. Force the next cold runtime name update

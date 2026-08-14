@@ -501,10 +501,19 @@ local function NameRelativeAnchor(frame, anchor)
 
   local clip = frame._msufNameInlineClip
   if clip then
-    if anchor == "NAMERIGHT" then
-      return clip, "LEFT", "RIGHT", 0
+    -- The shorten window stays maxChars wide however short the rendered name
+    -- is, so its edge only matches the glyphs while the name really overflows
+    -- (tracked by the warm fit). Fitting names anchor to the invisible
+    -- auto-width twin that mirrors the visible run inside the window.
+    local target = clip
+    if frame._msufNameCenterClipOverflow ~= true
+      and frame._msufNameAnchorTextActive == true and frame._msufNameAnchorText then
+      target = frame._msufNameAnchorText
     end
-    return clip, "RIGHT", "LEFT", 0
+    if anchor == "NAMERIGHT" then
+      return target, "LEFT", "RIGHT", 0
+    end
+    return target, "RIGHT", "LEFT", 0
   end
 
   -- Bar-anchored name FontStrings span the full health bar, so their region
