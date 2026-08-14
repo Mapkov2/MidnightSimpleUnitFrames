@@ -2925,6 +2925,21 @@ local function BarOutlineHighlightGlobalKey(attr)
     return nil
 end
 
+-- [285] only lists contiguous wording ("frame outline layer"). Players split
+-- the attribute off the subject with a preposition -- "draw the frame outline
+-- on layer 5", "put the border at layer 3" -- and [160] then claimed the
+-- sentence and wrote thickness. Inside a sentence this lane already owns, a
+-- standalone layer word can only mean the layer control: no thickness or
+-- opacity phrasing uses one, and "texture layer" never reaches here because
+-- BAR_OUTLINE_HIGHLIGHT_BLOCK_TERMS blocks "texture".
+local BAR_OUTLINE_LAYER_WORDS = { "layer", "layers", "strata", "sublevel" }
+local function MentionsStandaloneLayerWord(text)
+    for i = 1, #BAR_OUTLINE_LAYER_WORDS do
+        if text:find("%f[%w]" .. BAR_OUTLINE_LAYER_WORDS[i] .. "%f[%W]") then return true end
+    end
+    return false
+end
+
 local function BarOutlineHighlightSpec(text)
     -- This lane owns broad edge wording -- "border opacity", "border alpha",
     -- "outline thickness". RC9 added Pandemic warning controls that reuse those
@@ -2944,7 +2959,7 @@ local function BarOutlineHighlightSpec(text)
     -- Layer before thickness: the layer phrases in [285] are supersets of
     -- the thickness phrases in [160] ("bar outline strata" contains "bar
     -- outline"), so probing thickness first would never leave a layer match.
-    if ContainsAny(text, GeometryPhrases[285]) then
+    if ContainsAny(text, GeometryPhrases[285]) or MentionsStandaloneLayerWord(text) then
         return "barOutlineLayer", "Bar Outline Layer"
     end
     if ContainsAny(text, GeometryPhrases[160]) then
