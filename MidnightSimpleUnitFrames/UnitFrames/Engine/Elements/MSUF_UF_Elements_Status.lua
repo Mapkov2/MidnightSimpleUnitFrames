@@ -194,8 +194,8 @@ local STATUS_REFRESH = {
   "RestingIndicator",
   "IncomingResIndicator",
   "PVPIndicator",
-  "SocialIndicator",
   "StanceIndicator",
+  "TargetingYouIndicator",
   "GroupStatusRuntime",
 }
 local SYMBOL_PATH_CACHE = {}
@@ -898,8 +898,8 @@ local CONFIGURED_REGION_DEFS = {
   { "resting", "restingIndicatorIcon", nil, nil, nil, nil, nil, "resting" },
   { "incomingRes", "incomingResIndicatorIcon", "resurrectIcon", { "resurrectIcon", "incomingResIndicatorIcon" }, { "incomingResIndicatorIcon", "IncomingResIndicator" }, nil, nil, "incomingRes" },
   { "pvp", "pvpIndicatorIcon", "pvpIcon", { "pvpIcon", "pvpIndicatorIcon" }, { "pvpIndicatorIcon", "pvpIcon" } },
-  { "social", "socialIndicatorIcon" },
   { "stance", "stanceIndicatorText", nil, nil, nil, nil, true },
+  { "targetingYou", "targetingYouIndicatorIcon" },
   { "readyCheck", "readyCheckIcon" },
   { "summon", "summonIcon", nil, nil, nil, nil, nil, nil, true },
   { "phase", "phaseIcon", nil, nil, nil, PHASE_TEXTURE, nil, nil, nil, true },
@@ -1956,43 +1956,40 @@ local function UpdatePVP(frame, status)
   end
 end
 
-local SOCIAL_TEXTURES = {
-  bnet = "Interface\\FriendsFrame\\PlusManz-BattleNet",
-  friend = "Interface\\FriendsFrame\\PlusManz-PlusManz",
-  guild = "Interface\\FriendsFrame\\PlusManz-PlusManz",
-}
+--- Shows when the hostile unit bound to this frame currently targets the
+--- player. This mirrors Blizzard_CombatAudioAlertManager's definition and is
+--- refreshed only by UNIT_TARGET or the frame's identity lifecycle.
+function Status.UpdateTargetingYou(frame, status)
+  local cfg = status and status.targetingYou
+  local tex = frame and frame.targetingYouIndicatorIcon
+  local unit = frame and frame.MSUFUnitKey
+  if not (cfg and cfg.enabled and tex and unit) then
+    SetShown(tex, false)
+    return
+  end
 
---- Guild / Friend marker. Relationship data comes from MSUF.UFSocial, which is
---- strictly out-of-combat (nil in lockdown, zero API reads), so this hides in
---- combat and re-resolves on the next out-of-combat target change. The guild
---- variant reuses the friend glyph tinted guild-chat green.
-local function UpdateSocial(frame, status)
-  local cfg = status and status.social
-  local tex = frame.socialIndicatorIcon
-  if not (cfg and cfg.enabled and tex) then
+  local active = status.testMode == true
+  if not active then
+    active = _G.UnitCanAttack and BoolTrue(_G.UnitCanAttack("player", unit))
+      and _G.UnitIsUnit and BoolTrue(_G.UnitIsUnit(unit .. "target", "player"))
+  end
+  if active ~= true then
     SetShown(tex, false)
     return
   end
-  local kind
-  if status.testMode == true then
-    kind = "friend"
+
+  if type(cfg.customIcon) == "string" and cfg.customIcon ~= "" then
+    SetTexture(tex, cfg.customIcon)
+    SetTexCoord(tex, 0, 1, 0, 1)
+  elseif AtlasAvailable(tex, "friends-icon-eye") then
+    SetAtlas(tex, "friends-icon-eye")
   else
-    local social = MSUF.UFSocial
-    kind = social and social.Resolve and social.Resolve(frame.MSUFUnitKey) or nil
+    -- The atlas exists on supported clients. This fallback remains recognizable
+    -- on older/test clients that do not expose C_Texture.GetAtlasInfo.
+    SetTexture(tex, "Interface\\FriendsFrame\\PlusManz-PlusManz")
+    SetTexCoord(tex, 0, 1, 0, 1)
   end
-  local texture = kind and SOCIAL_TEXTURES[kind]
-  if not texture then
-    SetShown(tex, false)
-    return
-  end
-  SetTexture(tex, texture)
-  if tex.SetVertexColor then
-    if kind == "guild" then
-      tex:SetVertexColor(0.25, 1, 0.25)
-    else
-      tex:SetVertexColor(1, 1, 1)
-    end
-  end
+  if tex.SetVertexColor then tex:SetVertexColor(1, 0.28, 0.18) end
   SetShown(tex, true)
 end
 
@@ -2092,10 +2089,6 @@ local STATUS_TEXT_LIFECYCLE_EVENTS = { "PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UN
 local STATUS_TEXT_PLAYER_UNITLESS_EVENTS = { "PLAYER_FLAGS_CHANGED", "PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UNGHOST" }
 local COMBAT_EVENTS = { "UNIT_FLAGS" }
 local COMBAT_PLAYER_EVENTS = { "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED" }
--- Social marker: re-resolve on target swaps and combat edges. The regen pair is
--- required so the icon hides at combat start (resolver answers nil) and comes
--- back after combat without waiting for another target change.
-local SOCIAL_UNITLESS_EVENTS = { "PLAYER_TARGET_CHANGED", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED" }
 local RESTING_PLAYER_EVENTS = { "PLAYER_UPDATE_RESTING", "PLAYER_ENTERING_WORLD" }
 local INCOMING_RES_EVENTS = { "INCOMING_RESURRECT_CHANGED" }
 local PVP_EVENTS = { "UNIT_FACTION" }
@@ -2327,7 +2320,7 @@ local STATUS_INDICATOR_DEFS = {
   { "RestingIndicator", "resting", nil, RESTING_PLAYER_EVENTS, UpdateResting, "restingIndicatorIcon", nil, true },
   { "IncomingResIndicator", "incomingRes", INCOMING_RES_EVENTS, nil, UpdateIncomingRes, "incomingResIndicatorIcon", true },
   { "PVPIndicator", "pvp", nil, nil, UpdatePVP, "pvpIndicatorIcon", true, nil, PVPEvents },
-  { "SocialIndicator", "social", nil, SOCIAL_UNITLESS_EVENTS, UpdateSocial, "socialIndicatorIcon", true },
+  { "TargetingYouIndicator", "targetingYou", { "UNIT_TARGET" }, nil, Status.UpdateTargetingYou, "targetingYouIndicatorIcon", true },
   -- Stance text events fire only on user action or a stance-bar rebuild
   -- (talents, level-up, loading screen). Never add
   -- UPDATE_SHAPESHIFT_COOLDOWN - it fires with practically every GCD and

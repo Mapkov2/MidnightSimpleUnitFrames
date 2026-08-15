@@ -117,8 +117,8 @@ local STATUS_EVENT_ELEMENTS = {
   RestingIndicator = true,
   IncomingResIndicator = true,
   PVPIndicator = true,
-  SocialIndicator = true,
   StanceIndicator = true,
+  TargetingYouIndicator = true,
 }
 
 local IDENTITY_ELEMENTS = {
@@ -142,6 +142,7 @@ local IDENTITY_ELEMENTS = {
   CombatIndicator = true,
   IncomingResIndicator = true,
   PVPIndicator = true,
+  TargetingYouIndicator = true,
 }
 UF.identityElements = IDENTITY_ELEMENTS
 

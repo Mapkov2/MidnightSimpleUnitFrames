@@ -296,11 +296,21 @@ function Status.SetIconTexture(icon, spec, conf, g, key, data, runtimeCfg, statu
             tex:SetTexture((key == "target" or key == "focus") and "Interface\\TargetingFrame\\UI-PVP-Horde" or "Interface\\TargetingFrame\\UI-PVP-Alliance")
             if tex.SetTexCoord then tex:SetTexCoord(0, 1, 0, 1) end
         end
-    elseif spec.id == "social" then
-        if tex then
+    elseif spec.id == "targetingYou" then
+        local customIcon = (runtimeCfg and runtimeCfg.customIcon)
+            or (conf and conf.targetingYouIndicatorCustomIcon)
+            or (g and g.targetingYouIndicatorCustomIcon)
+        if tex and type(customIcon) == "string" and customIcon ~= "" then
+            tex:SetTexture(customIcon)
+            if tex.SetTexCoord then tex:SetTexCoord(0, 1, 0, 1) end
+        elseif tex and tex.SetAtlas and C_Texture and C_Texture.GetAtlasInfo
+            and C_Texture.GetAtlasInfo("friends-icon-eye") then
+            tex:SetAtlas("friends-icon-eye")
+        elseif tex then
             tex:SetTexture("Interface\\FriendsFrame\\PlusManz-PlusManz")
             if tex.SetTexCoord then tex:SetTexCoord(0, 1, 0, 1) end
         end
+        if tex then tex:SetVertexColor(1, 0.28, 0.18, 1) end
     elseif Status.IsTextIndicator(spec) then
         if tex then tex:Hide() end
         if txt then

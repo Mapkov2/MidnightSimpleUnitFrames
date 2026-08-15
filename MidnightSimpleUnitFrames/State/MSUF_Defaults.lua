@@ -181,7 +181,7 @@ local MSUF_DEFAULTS_STATUS_PREFIXES = {
     "leaderIcon", "raidMarker", "levelIndicator", "eliteIcon", "statusText",
     "statusGhostText", "statusAFKText", "statusAFKTimer", "statusAFKTimerText", "statusDNDText",
     "combatStateIndicator", "restedStateIndicator", "restingStateIndicator",
-    "incomingResIndicator", "pvpIndicator", "socialIndicator", "stanceIndicator", "raidGroupName",
+    "incomingResIndicator", "pvpIndicator", "stanceIndicator", "targetingYouIndicator", "raidGroupName",
 }
 local MSUF_DEFAULTS_AURA_NUMERIC_KEYS = {
     offsetX = { -4096, 4096 }, offsetY = { -4096, 4096 },

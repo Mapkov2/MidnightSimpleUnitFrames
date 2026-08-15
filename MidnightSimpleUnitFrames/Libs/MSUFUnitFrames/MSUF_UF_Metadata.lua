@@ -107,7 +107,7 @@ Metadata.hotStateSpecs = {
   [14] = BuildHotSpecs("LevelIndicator:level"),
   [15] = BuildHotSpecs("StatusTextIndicator:statusText GroupStatusRuntime:groupStatus"),
   [16] = BuildHotSpecs("RestingIndicator:resting Alpha:alpha LoadConditions:load GroupStatusRuntime:groupStatus"),
-  [17] = BuildHotSpecs("InlineToT:inline:inlineMode Prediction:prediction:predictionMode Alpha:alpha"),
+  [17] = BuildHotSpecs("InlineToT:inline:inlineMode Prediction:prediction:predictionMode Alpha:alpha TargetingYouIndicator:targetingYou"),
   [18] = BuildHotSpecs("Alpha:alpha Borders:borders"),
 }
 
@@ -115,7 +115,7 @@ Metadata.runtimeUpdateOwners = BuildNameSet(
   "Health Power Text NameText HealthText PowerText InlineToT Portrait Alpha " ..
   "StatusIndicators RaidMarkerIndicator LeaderIndicator LevelIndicator " ..
   "RaidGroupIndicator EliteIndicator StatusTextIndicator CombatIndicator " ..
-  "RestingIndicator IncomingResIndicator PVPIndicator SocialIndicator StanceIndicator " ..
+  "RestingIndicator IncomingResIndicator PVPIndicator StanceIndicator TargetingYouIndicator " ..
   "TempMaxHealth Prediction Borders " ..
   "LoadConditions GroupStatusRuntime RangeFade GroupRangeFade GroupVisuals " ..
   "GroupCornerIndicators")
@@ -152,7 +152,7 @@ local MASK_GROUP_UNIT_STRUCTURE = BuildNameSet("load health power name groupStat
 local STATUS_APPLY_ELEMENTS =
   "StatusIndicators RaidMarkerIndicator LeaderIndicator LevelIndicator " ..
   "RaidGroupIndicator EliteIndicator StatusTextIndicator CombatIndicator " ..
-  "RestingIndicator IncomingResIndicator PVPIndicator SocialIndicator StanceIndicator"
+  "RestingIndicator IncomingResIndicator PVPIndicator StanceIndicator TargetingYouIndicator"
 
 local runtimeReasonMasks = {}
 AddRuntimeReasonMasks(runtimeReasonMasks, MASK_FONT_RUNTIME, "FONT_RUNTIME MSUF2_HP_TEXT_COLOR")
@@ -219,12 +219,12 @@ Metadata.refreshElementGroups = {
     "Health Power Text NameText HealthText PowerText InlineToT Portrait " ..
     "StatusIndicators RaidMarkerIndicator LeaderIndicator TempMaxHealth Prediction LevelIndicator " ..
     "RaidGroupIndicator EliteIndicator StatusTextIndicator CombatIndicator RestingIndicator " ..
-    "IncomingResIndicator PVPIndicator SocialIndicator StanceIndicator Alpha Borders RangeFade Auras"),
+    "IncomingResIndicator PVPIndicator StanceIndicator TargetingYouIndicator Alpha Borders RangeFade Auras"),
   powerText = BuildNameList("Power Text PowerText"),
   colors = BuildNameList(
     "Health Power Text NameText HealthText PowerText InlineToT Portrait " ..
     "StatusIndicators LevelIndicator EliteIndicator StatusTextIndicator CombatIndicator " ..
-    "RestingIndicator IncomingResIndicator PVPIndicator SocialIndicator StanceIndicator " ..
+    "RestingIndicator IncomingResIndicator PVPIndicator StanceIndicator TargetingYouIndicator " ..
     "TempMaxHealth Prediction Borders"),
   text = BuildNameList("Text NameText HealthText PowerText InlineToT"),
   borders = BuildNameList("Borders Power"),

@@ -1116,6 +1116,8 @@ local function StatusAllowed(key, id)
     return key == "player" or key == "target" or key == "focus" or key == "targettarget" or key == "focustarget"
   elseif id == "resting" or id == "stance" then
     return key == "player"
+  elseif id == "targetingYou" then
+    return key == "target" or key == "focus" or key == "boss"
   elseif id == "raidGroup" then
     return key == "player" or key == "target" or key == "targettarget" or key == "focustarget" or key == "focus"
   elseif id == "elite" then
@@ -1193,8 +1195,8 @@ local UNIT_STATUS_ENTRY_DEFS = {
   PrefixedStatusDef("resting", "showRestingIndicator", true, "restedStateIndicator", 39, "TOPLEFT", -40, 50, 25, { "restedStateIndicatorIconStyle", "BLIZZARD" }, { "restedStateIndicatorSymbol", "rested_blizzard_animated", "restingStateIndicatorSymbol" }, { "restedStateIndicatorCustomIcon", "" }),
   PrefixedStatusDef("incomingRes", "showIncomingResIndicator", true, "incomingResIndicator", 18, "TOPRIGHT", 0, 0, 7, nil, { "incomingResIndicatorSymbol", "DEFAULT" }, { "incomingResIndicatorCustomIcon", "" }),
   PrefixedStatusDef("pvp", "showPvpIndicator", true, "pvpIndicator", 18, "TOPRIGHT", 0, 0, 7, nil, nil, { "pvpIndicatorCustomIcon", "" }),
-  PrefixedStatusDef("social", "showSocialIndicator", false, "socialIndicator", 16, "TOPRIGHT", -18, 2, 7),
   PrefixedStatusDef("stance", "showStanceIndicator", false, "stanceIndicator", 12, "TOP", 0, -2, 7),
+  PrefixedStatusDef("targetingYou", "showTargetingYouIndicator", false, "targetingYouIndicator", 18, "TOPRIGHT", -36, 2, 7, nil, nil, { "targetingYouIndicatorCustomIcon", "" }),
 }
 
 local UNIT_STATUS_TEXT_STATE_DEFS = {
