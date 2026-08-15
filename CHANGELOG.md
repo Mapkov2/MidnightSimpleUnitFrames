@@ -1,18 +1,39 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.08-Beta2 - 2026-08-15
+
+### Highlights
+
+- Added an optional, class-colored interrupter name beside the castbar's interrupted state.
+- Added an optional Player Frame **Stance** text indicator for warrior stances, paladin auras, druid forms, and other native stance-bar forms.
+- Added explicit **Uniform** and **Width & height** portrait sizing modes for Unit and Group Frames while preserving existing portrait geometry during migration.
+- Added an optional **Targeting You** status indicator for units currently targeting the player.
+- Added configurable edge softness for circular, rounded, and diamond portraits, with matching Unit Frame, Group Frame, and preview rendering.
+
+### Changes
+
+- Localized the new stance, portrait sizing, and portrait edge-softness controls across all 12 supported locales.
+- Updated Assistant registrations, generated coverage data, search routing, and static search data for the new status and portrait controls.
+- Corrected the bundled release history so features added after Beta 1 are listed under Beta 2 instead of the already-published Beta 1 package.
+
+### Fixes & Performance
+
+- Fixed the Castbar General tab height after adding the interrupter-name option.
+- Changed Target and Focus castbar identity refreshes from deferred callbacks to direct synchronous updates.
+- Cleared the castbar driver's unused `OnUpdate` script once during construction instead of repeating the native transition on target swaps.
+- Fixed player Unit Frames showing the fallback blue or another incorrect health color for identity-restricted PvP targets by routing every player class through Blizzard's native secret-safe class-color pipeline.
+- Streamlined Unit Frame identity refreshes across bars, portraits, status text, regular text, and range fading so unchanged identity state avoids redundant work.
+- Skipped player-only nickname-provider APIs for NPC units while retaining supported NPC nickname sources.
+- Fixed Arena Group Frames using raid instead of party configuration, including runtime, Blizzard-frame ownership, Edit Mode, and previews.
+- Fixed exact-ID aura indicators mixing friendly and hostile filters after switching targets.
+- Limited PvP indicator runtime to arenas, battlegrounds, and War Mode, removing unrelated faction and PvP-timer event traffic outside those modes.
+
 ## 6.08-Beta1 - 2026-08-15
 
 ### Highlights
 
 - Added an optional **Slug** font rendering mode for clearer, more consistent text across Unit and Group Frames.
 - Added configurable AFK timers to Unit and Group Frame status text.
-- Added an optional Player Frame **Stance** text indicator for active warrior stances, paladin auras, druid forms, and other native stance-bar forms.
-- Added explicit **Uniform** and **Width & height** portrait sizing modes for Unit and Group Frames, with existing portrait geometry preserved during migration.
-
-### Changes
-
-- Added an optional interrupter name beside the castbar interrupted state.
-- Added a configurable **Guild / Friend** icon for friendly Target Frame identities.
 
 ### Fixes & Performance
 

@@ -8,10 +8,48 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.08-Beta1",
-    previousVersion = "6.07",
-    rangeLabel = "6.07 -> 6.08-Beta1",
+    currentVersion = "6.08-Beta2",
+    previousVersion = "6.08-beta1",
+    rangeLabel = "6.08-beta1 -> 6.08-Beta2",
     entries = {
+        {
+            version = "6.08-Beta2",
+            date = "2026-08-15",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Added an optional, class-colored interrupter name beside the castbar's interrupted state.",
+                        "Added an optional Player Frame Stance text indicator for warrior stances, paladin auras, druid forms, and other native stance-bar forms.",
+                        "Added explicit Uniform and Width & height portrait sizing modes for Unit and Group Frames while preserving existing portrait geometry during migration.",
+                        "Added an optional Targeting You status indicator for units currently targeting the player.",
+                        "Added configurable edge softness for circular, rounded, and diamond portraits, with matching Unit Frame, Group Frame, and preview rendering.",
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Localized the new stance, portrait sizing, and portrait edge-softness controls across all 12 supported locales.",
+                        "Updated Assistant registrations, generated coverage data, search routing, and static search data for the new status and portrait controls.",
+                        "Corrected the bundled release history so features added after Beta 1 are listed under Beta 2 instead of the already-published Beta 1 package.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Fixed the Castbar General tab height after adding the interrupter-name option.",
+                        "Changed Target and Focus castbar identity refreshes from deferred callbacks to direct synchronous updates.",
+                        "Cleared the castbar driver's unused OnUpdate script once during construction instead of repeating the native transition on target swaps.",
+                        "Fixed player Unit Frames showing the fallback blue or another incorrect health color for identity-restricted PvP targets by routing every player class through Blizzard's native secret-safe class-color pipeline.",
+                        "Streamlined Unit Frame identity refreshes across bars, portraits, status text, regular text, and range fading so unchanged identity state avoids redundant work.",
+                        "Skipped player-only nickname-provider APIs for NPC units while retaining supported NPC nickname sources.",
+                        "Fixed Arena Group Frames using raid instead of party configuration, including runtime, Blizzard-frame ownership, Edit Mode, and previews.",
+                        "Fixed exact-ID aura indicators mixing friendly and hostile filters after switching targets.",
+                        "Limited PvP indicator runtime to arenas, battlegrounds, and War Mode, removing unrelated faction and PvP-timer event traffic outside those modes.",
+                    },
+                },
+            },
+        },
         {
             version = "6.08-Beta1",
             date = "2026-08-15",
@@ -21,15 +59,6 @@ local data = {
                     bullets = {
                         "Added an optional Slug font rendering mode for clearer, more consistent text across Unit and Group Frames.",
                         "Added configurable AFK timers to Unit and Group Frame status text.",
-                        "Added an optional Player Frame Stance text indicator for active warrior stances, paladin auras, druid forms, and other native stance-bar forms.",
-                        "Added explicit Uniform and Width & height portrait sizing modes for Unit and Group Frames, with existing portrait geometry preserved during migration.",
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Added an optional interrupter name beside the castbar interrupted state.",
-                        "Added a configurable Guild / Friend icon for friendly Target Frame identities.",
                     },
                 },
                 {
@@ -84,33 +113,6 @@ local data = {
                     title = "Fixes & Performance",
                     bullets = {
                         "Fixed Level, Race, and Class text with Left to name / Right to name anchors floating away from shortened names. The text now follows the rendered name edge and only snaps to the shortening cut while the name actually overflows its configured width.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.07-Beta3",
-            date = "2026-08-14",
-            sections = {
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Added direct Edit Mode popup controls for Custom Aura 1-4, Dots on target, and Player Defensive Buffs. Each lane can now adjust position, size, and spacing with reset, undo, Boss synchronization, Menu focus, and Assistant parity.",
-                        "Restored Spell Indicator Display as: Bar with Blizzard's native C-side aura-duration StatusBar. Bars keep their configured geometry, color, alpha and layer while adding Growth-controlled fill direction, optional native smoothing and movable native timer text without Lua polling.",
-                        "Increased the Back and Forward navigation buttons for easier Menu navigation.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed Class Resource preview text handles becoming stuck behind higher-layer bar visuals.",
-                        "Fixed Group Frame Spell Indicator glow previews differing from runtime effects. The preview now uses the shared runtime renderer and cleans up its effect owners when suspended.",
-                        "Fixed Unit Aura handles losing their first-click selection when opening a lane rebuilt its settings page. Selection is now restored only onto the newly created Preview handle.",
-                        "Fixed Spell Indicator full-frame effect opacity and layer ordering against render targets, Aura names, and other text. Persistent effects remain visible while editing, and the selected Group Frame Name Overlay stays above its source text.",
-                        "Fixed name-relative Unit Frame status text ignoring the configured Name anchor and offsets.",
-                        "Fixed Assistant questions and navigation requests applying settings, including enum values that were never stated. Pure small talk now keeps its conversation context without entering a settings lane.",
-                        "Fixed Assistant requests about borders, Auras, text, colors, and other frame details falling through to whole-frame toggles or unrelated position controls. Scoped Highlight Borders now control their Aggro, Dispel, and Purge outlines together.",
-                        "Fixed narrow Group Frame position phrases matching unrelated horizontal or vertical layout controls.",
                     },
                 },
             },
