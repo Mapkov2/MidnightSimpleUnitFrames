@@ -384,6 +384,17 @@ local AURA_SENSOR_OVERLAY_OPTIONS = {
 -- to the Lua 5.1 200-local ceiling (see the static-check budget).
 local DS = {
     types = { "Magic", "Curse", "Disease", "Poison", "Bleed" },
+    -- Used only when AuraUtil is unavailable (for example in deterministic
+    -- menu smokes). Live clients resolve the current Blizzard defaults through
+    -- AuraUtil.GetAuraBorderColor so leaving an override disabled remains
+    -- exactly native even if Blizzard adjusts a default later.
+    defaultColors = {
+        Magic = { 0.20, 0.60, 1.00 },
+        Curse = { 0.60, 0.00, 1.00 },
+        Disease = { 0.60, 0.40, 0.00 },
+        Poison = { 0.00, 0.60, 0.00 },
+        Bleed = { 0.80, 0.10, 0.10 },
+    },
     -- Blizzard's own per-type atlases, mirroring AuraUtil's DEBUFF_DISPLAY_INFO
     -- on 12.1. Held literally so the menu preview -- which has no aura and
     -- therefore never reaches AuraUtil -- can draw exactly the same art.
@@ -436,25 +447,149 @@ DS.mediaPath = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUni
     .. "\\Media\\Icons\\DispelTypes\\"
 A3.DispelSymbol = DS
 
+--- Effective harmful-aura color for one Blizzard dispel type. The optional
+--- override is deliberately sparse: an absent entry falls straight through
+--- to AuraUtil, preserving Blizzard's current color without copying it into
+--- SavedVariables.
+function A3.GetDispelTypeColor(dispelType, useOverride)
+    dispelType = DS.defaultColors[dispelType] and dispelType or "Magic"
+    if useOverride ~= false then
+        local general = _G.MSUF_DB and _G.MSUF_DB.general
+        local overrides = general and general.dispelTypeColorOverrides
+        local color = type(overrides) == "table" and overrides[dispelType]
+        if type(color) == "table" then
+            local r = tonumber(color[1] or color.r)
+            local g = tonumber(color[2] or color.g)
+            local b = tonumber(color[3] or color.b)
+            if r and g and b then return Clamp01(r, 0), Clamp01(g, 0), Clamp01(b, 0) end
+        end
+    end
+    local auraUtil = _G.AuraUtil
+    local color = auraUtil and type(auraUtil.GetAuraBorderColor) == "function"
+        and auraUtil.GetAuraBorderColor(dispelType) or nil
+    if color and type(color.GetRGB) == "function" then
+        local r, g, b = color:GetRGB()
+        if r ~= nil and g ~= nil and b ~= nil then return r, g, b end
+    end
+    if type(color) == "table" then
+        local r = tonumber(color.r or color[1])
+        local g = tonumber(color.g or color[2])
+        local b = tonumber(color.b or color[3])
+        if r and g and b then return r, g, b end
+    end
+    local fallback = DS.defaultColors[dispelType]
+    return fallback[1], fallback[2], fallback[3]
+end
+
+function A3.SetDispelColorPreviewType(dispelType)
+    if not DS.defaultColors[dispelType] then return false end
+    A3._dispelColorPreviewType = dispelType
+    return true
+end
+
+function A3.GetDispelColorPreviewType()
+    return DS.defaultColors[A3._dispelColorPreviewType] and A3._dispelColorPreviewType or "Magic"
+end
+
+function A3.HasDispelTypeColorOverride(dispelType)
+    local general = _G.MSUF_DB and _G.MSUF_DB.general
+    local overrides = general and general.dispelTypeColorOverrides
+    local color = type(overrides) == "table" and overrides[dispelType]
+    return type(color) == "table"
+        and tonumber(color[1] or color.r) ~= nil
+        and tonumber(color[2] or color.g) ~= nil
+        and tonumber(color[3] or color.b) ~= nil
+end
+
+function A3.SetDispelVertexColor(texture, dispelType, useOverride, alpha)
+    if not (texture and texture.SetVertexColor) then return false end
+    local r, g, b = A3.GetDispelTypeColor(dispelType, useOverride)
+    texture:SetVertexColor(r, g, b, Clamp01(alpha, 1))
+    return true
+end
+
+function A3.SetDispelColorTexture(texture, dispelType, useOverride, alpha)
+    if not (texture and texture.SetColorTexture) then return false end
+    local r, g, b = A3.GetDispelTypeColor(dispelType, useOverride)
+    texture:SetColorTexture(r, g, b, Clamp01(alpha, 1))
+    return true
+end
+
+--- Keep the most recently edited type first so even a one-icon preview shows
+--- the change. Wider aura lanes continue through the remaining Blizzard types.
+function A3.PreviewDispelTypeForIndex(index)
+    local active = A3.GetDispelColorPreviewType()
+    local activeIndex = 1
+    for i = 1, #DS.types do
+        if DS.types[i] == active then activeIndex = i break end
+    end
+    index = math_max(1, math_floor(tonumber(index) or 1))
+    return DS.types[((activeIndex + index - 2) % #DS.types) + 1]
+end
+
+--- Blizzard secure-copies native texture options at bind time. Build and cache
+--- a map containing only actual overrides; nil means the default path is
+--- structurally identical to the pre-feature configuration.
+function A3.GetCustomDispelColorMap()
+    local general = _G.MSUF_DB and _G.MSUF_DB.general
+    local overrides = general and general.dispelTypeColorOverrides
+    local generation = tonumber(A3._nativeVisualGen) or 0
+    if A3._customDispelColorOverrides == overrides
+        and A3._customDispelColorMapGeneration == generation then
+        return A3._customDispelColorMap
+    end
+    A3._customDispelColorOverrides = overrides
+    A3._customDispelColorMapGeneration = generation
+    if type(overrides) ~= "table" or type(_G.CreateColor) ~= "function" then
+        A3._customDispelColorMap = nil
+        return nil
+    end
+    local map
+    for i = 1, #DS.types do
+        local dispelType = DS.types[i]
+        local color = overrides[dispelType]
+        local r = type(color) == "table" and tonumber(color[1] or color.r) or nil
+        local g = type(color) == "table" and tonumber(color[2] or color.g) or nil
+        local b = type(color) == "table" and tonumber(color[3] or color.b) or nil
+        if r and g and b then
+            map = map or {}
+            map[dispelType] = _G.CreateColor(Clamp01(r, 0), Clamp01(g, 0), Clamp01(b, 0), 1)
+        end
+    end
+    A3._customDispelColorMap = map
+    return A3._customDispelColorMap
+end
+
+function A3.ApplyHarmfulDispelColorOptions(options)
+    if options then options.customDispelColorMap = A3.GetCustomDispelColorMap() end
+    return options
+end
+
 --- Per-type CustomAsset map for one MSUF set, built once and memoized. Cold
 --- path: reached from the sensor prepare and from the menu preview only.
 function DS.AssetMap(style)
-    local cached = DS.assetCache[style]
-    if cached ~= nil then return cached or nil end
     local folder = DS.folders[style]
     if not folder then
         DS.assetCache[style] = false
         return nil
     end
+    local signature = ""
+    for i = 1, #DS.types do
+        signature = signature .. (A3.HasDispelTypeColorOverride(DS.types[i]) and "1" or "0")
+    end
+    local cacheKey = style .. ":" .. signature
+    local cached = DS.assetCache[cacheKey]
+    if cached ~= nil then return cached or nil end
     local map = {}
     for i = 1, #DS.types do
         local dispelType = DS.types[i]
+        local root = signature:sub(i, i) == "1" and (DS.mediaPath .. "Tintable\\") or DS.mediaPath
         map[dispelType] = {
-            asset = DS.mediaPath .. folder .. "\\" .. dispelType:lower() .. ".tga",
+            asset = root .. folder .. "\\" .. dispelType:lower() .. ".tga",
             useAtlasSize = false,
         }
     end
-    DS.assetCache[style] = map
+    DS.assetCache[cacheKey] = map
     return map
 end
 local IDENTITY_AURA_REFRESH_REASONS = {
@@ -1148,7 +1283,7 @@ local function GetAuraBorderOptions(showIcon, preserveAsset)
     local styles = _G.Enum and _G.Enum.CustomAuraButtonDispelTypeTextureStyle
     AURA_BORDER_OPTIONS.style = styles and (preserveAsset == true and styles.PreserveAsset
         or (showIcon == true and styles.BorderWithIcon or styles.Border)) or nil
-    return AURA_BORDER_OPTIONS
+    return A3.ApplyHarmfulDispelColorOptions(AURA_BORDER_OPTIONS)
 end
 
 local function ReadNumber(primary, secondary, key, fallback, minValue, maxValue)
@@ -4346,18 +4481,26 @@ function A3.ApplyIconStylePreview(button, style, size, shape)
     ApplyIconStyleBorder(button, style, size, shape)
 end
 
-function A3.ApplyAuraDispelPreview(border, icon, size, mode, shape)
+function A3.ApplyAuraDispelPreview(border, icon, size, mode, shape, dispelType, useOverride)
     shape = Shape.Normalize(shape)
-    if shape == Shape.RECTANGLE then return false end
-    local path = A3.AuraShapeBorderPath(shape)
-    if not (border and icon and path and mode ~= nil and mode ~= "OFF") then return false end
+    dispelType = DS.defaultColors[dispelType] and dispelType or A3.GetDispelColorPreviewType()
+    if not (border and icon and mode ~= nil and mode ~= "OFF") then return false end
     local pad = math_max(1, math_floor(((tonumber(size) or 24) / 24) + 0.5))
-    border:SetTexture(path)
-    if border.SetTexCoord then border:SetTexCoord(0, 1, 0, 1) end
+    if shape == Shape.RECTANGLE then
+        local atlas = (mode == "SYMBOL" and DS.rings or DS.borders)[dispelType]
+        if not (atlas and border.SetAtlas) then return false end
+        pad = A3.NativeAuraDispelBorderPadding(size)
+        border:SetAtlas(atlas, _G.TextureKitConstants and _G.TextureKitConstants.IgnoreAtlasSize)
+    else
+        local path = A3.AuraShapeBorderPath(shape)
+        if not path then return false end
+        border:SetTexture(path)
+        if border.SetTexCoord then border:SetTexCoord(0, 1, 0, 1) end
+    end
     border:ClearAllPoints()
     border:SetPoint("TOPLEFT", icon, "TOPLEFT", -pad, pad)
     border:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", pad, -pad)
-    border:SetVertexColor(0.20, 0.60, 1.00, 1)
+    A3.SetDispelVertexColor(border, dispelType, useOverride, 1)
     border:Show()
     return true
 end
@@ -5158,13 +5301,13 @@ end
 local function GetSensorOverlayOptions()
     local styles = _G.Enum and _G.Enum.CustomAuraButtonDispelTypeTextureStyle
     AURA_SENSOR_OVERLAY_OPTIONS.style = styles and styles.PreserveAsset or nil
-    return AURA_SENSOR_OVERLAY_OPTIONS
+    return A3.ApplyHarmfulDispelColorOptions(AURA_SENSOR_OVERLAY_OPTIONS)
 end
 
 local function GetSensorBorderOptions()
     local styles = _G.Enum and _G.Enum.CustomAuraButtonDispelTypeTextureStyle
     AURA_SENSOR_BORDER_OPTIONS.style = styles and styles.PreserveAsset or nil
-    return AURA_SENSOR_BORDER_OPTIONS
+    return A3.ApplyHarmfulDispelColorOptions(AURA_SENSOR_BORDER_OPTIONS)
 end
 
 --- Symbol sensors let Blizzard pick the artwork, because only Blizzard may look
@@ -5184,6 +5327,11 @@ function DS.Options(style)
             or nil
         DS.options.customDispelAssetMap = nil
     end
+    -- Custom MSUF symbols switch overridden types to neutral-alpha companions,
+    -- so Blizzard's vertex color replaces their color instead of multiplying
+    -- the already-colored art into near-black. Stock Blizzard atlases remain
+    -- untouched because they have no tint-neutral asset counterpart.
+    DS.options.customDispelColorMap = assets and A3.GetCustomDispelColorMap() or nil
     return DS.options
 end
 
@@ -5388,10 +5536,7 @@ A3._ApplyDispelOverlayPreview = function(frame)
         return A3._HideDispelOverlayPreview(frame)
     end
     RegisterRoundedDispelOverlayRegion(frame, region)
-    local dispel = frame.MSUFSpec.dispel
-    region:SetColorTexture(tonumber(dispel and dispel.r) or 0.25,
-        tonumber(dispel and dispel.g) or 0.75,
-        tonumber(dispel and dispel.b) or 1, 1)
+    A3.SetDispelColorTexture(region, A3.GetDispelColorPreviewType(), true, 1)
     region:SetAlpha(Clamp01(sensor.alpha, 0.35))
     region:Show()
     host:Show()
@@ -5483,6 +5628,11 @@ function DS.PreviewArt(texture, style, dispelType)
     if assets then
         local asset = assets[dispelType]
         texture:SetTexture(asset and asset.asset or nil)
+        if A3.HasDispelTypeColorOverride(dispelType) then
+            A3.SetDispelVertexColor(texture, dispelType, true, 1)
+        else
+            texture:SetVertexColor(1, 1, 1, 1)
+        end
         return
     end
     local atlas = (style == "BLIZZARD_RING" and DS.rings
@@ -5493,6 +5643,7 @@ function DS.PreviewArt(texture, style, dispelType)
     else
         texture:SetTexture(nil)
     end
+    texture:SetVertexColor(1, 1, 1, 1)
 end
 
 --- Turn the host's current on-screen rect back into the offset pair that

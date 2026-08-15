@@ -5081,6 +5081,21 @@ L["On (default): names supplied by Northern Sky Raid Tools replace character nam
 
 -- Guided setup restart confirmation.
 L["Run the guided setup again? The walkthrough starts over at the first step."] = "Запустить пошаговую настройку заново? Обучение начнётся с первого шага."
+L["Dispel Type Colors"] = "Цвета типов рассеивания"
+L["Magic custom"] = "Своя магия"
+L["Magic color"] = "Цвет магии"
+L["Curse custom"] = "Своё проклятие"
+L["Curse color"] = "Цвет проклятия"
+L["Disease custom"] = "Своя болезнь"
+L["Disease color"] = "Цвет болезни"
+L["Poison custom"] = "Свой яд"
+L["Poison color"] = "Цвет яда"
+L["Bleed custom"] = "Своё кровотечение"
+L["Bleed color"] = "Цвет кровотечения"
+L["Optional global overrides for harmful Magic, Curse, Disease, Poison and Bleed indicators. Off uses Blizzard's current default. The last edited type is shown first in every aura preview."] = "Необязательные общие цвета индикаторов вредоносных эффектов магии, проклятия, болезни, яда и кровотечения. При отключении используется текущий стандарт Blizzard. Последний изменённый тип показывается первым во всех предпросмотрах аур."
+L["Timer and Dispel colors are shared by live unit/group auras and every preview. Icon border and shadow colors live in Appearance > Auras, scoped by Aura type."] = "Цвета таймеров и рассеивания общие для активных аур юнитов и групп и всех предпросмотров. Цвета рамки и тени значка находятся в Оформление > Ауры и задаются по типу ауры."
+L["Cooldown timer urgency, global Dispel types, icon borders and shadows."] = "Срочность таймеров, общие типы рассеивания, рамки и тени значков."
+L["Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."] = "Безопасно, Предупреждение, Срочно, Магия, Проклятие, Болезнь, Яд, Кровотечение, рамка и тень значка."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ruRU", LoadLocale)
 elseif MSUF.LOCALE == "ruRU" then LoadLocale() end

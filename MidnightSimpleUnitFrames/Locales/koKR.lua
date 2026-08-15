@@ -5043,6 +5043,21 @@ L["On (default): names supplied by Northern Sky Raid Tools replace character nam
 
 -- Guided setup restart confirmation.
 L["Run the guided setup again? The walkthrough starts over at the first step."] = "가이드 설정을 다시 진행할까요? 설정 안내가 첫 단계부터 다시 시작됩니다."
+L["Dispel Type Colors"] = "해제 유형 색상"
+L["Magic custom"] = "마법 사용자 지정"
+L["Magic color"] = "마법 색상"
+L["Curse custom"] = "저주 사용자 지정"
+L["Curse color"] = "저주 색상"
+L["Disease custom"] = "질병 사용자 지정"
+L["Disease color"] = "질병 색상"
+L["Poison custom"] = "독 사용자 지정"
+L["Poison color"] = "독 색상"
+L["Bleed custom"] = "출혈 사용자 지정"
+L["Bleed color"] = "출혈 색상"
+L["Optional global overrides for harmful Magic, Curse, Disease, Poison and Bleed indicators. Off uses Blizzard's current default. The last edited type is shown first in every aura preview."] = "해로운 마법, 저주, 질병, 독, 출혈 표시의 전역 색상을 선택적으로 바꿉니다. 끄면 Blizzard의 현재 기본값을 사용합니다. 마지막으로 편집한 유형이 모든 오라 미리보기에서 먼저 표시됩니다."
+L["Timer and Dispel colors are shared by live unit/group auras and every preview. Icon border and shadow colors live in Appearance > Auras, scoped by Aura type."] = "타이머와 해제 색상은 실제 유닛 및 그룹 오라와 모든 미리보기에 공통으로 적용됩니다. 아이콘 테두리와 그림자 색상은 외형 > 오라에서 오라 유형별로 설정합니다."
+L["Cooldown timer urgency, global Dispel types, icon borders and shadows."] = "재사용 대기시간 긴급도, 전역 해제 유형, 아이콘 테두리 및 그림자 색상입니다."
+L["Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."] = "안전, 경고, 긴급, 마법, 저주, 질병, 독, 출혈, 아이콘 테두리 및 아이콘 그림자."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end

@@ -418,6 +418,10 @@ end
 local DISPEL_SYMBOL_PREVIEW_ORDER = { "Magic", "Curse", "Disease", "Poison", "Bleed" }
 
 local function DispelSymbolPreviewArt(texture, DS, style, dispelType)
+    if DS and type(DS.PreviewArt) == "function" then
+        DS.PreviewArt(texture, style, dispelType)
+        return
+    end
     texture:SetTexCoord(0, 1, 0, 1)
     local assets = DS and DS.AssetMap and DS.AssetMap(style)
     if assets then
@@ -497,9 +501,14 @@ local function PaintGroupPreviewDispelOverlay(scene)
     else
         region:SetAllPoints(target)
     end
-    local color = scene.runtimeSpec and scene.runtimeSpec.dispel
-    region:SetColorTexture(tonumber(color and color.r) or 0.25,
-        tonumber(color and color.g) or 0.75, tonumber(color and color.b) or 1, 1)
+    local a3 = scene.MSUF and scene.MSUF.MSUF_Auras3
+    if a3 and type(a3.SetDispelColorTexture) == "function" then
+        a3.SetDispelColorTexture(region, a3.GetDispelColorPreviewType(), true, 1)
+    else
+        local color = scene.runtimeSpec and scene.runtimeSpec.dispel
+        region:SetColorTexture(tonumber(color and color.r) or 0.25,
+            tonumber(color and color.g) or 0.75, tonumber(color and color.b) or 1, 1)
+    end
     local alpha = math.max(0, math.min(1, tonumber(overlay.dispelOverlayAlpha) or 0.35))
     local layerAlpha = scene.soloLayer and scene.soloLayer ~= "dispelOverlay" and 0.15 or 1
     region:SetAlpha(alpha * layerAlpha)
@@ -563,7 +572,8 @@ local function PaintGroupPreviewDispelSymbol(scene)
             local iconAlpha = tonumber(symbol.alpha) or 1
             if iconAlpha < 0 then iconAlpha = 0 elseif iconAlpha > 1 then iconAlpha = 1 end
             tex:SetAlpha(iconAlpha)
-            DispelSymbolPreviewArt(tex, DS, symbol.style, DISPEL_SYMBOL_PREVIEW_ORDER[i])
+            local dispelType = DISPEL_SYMBOL_PREVIEW_ORDER[i]
+            DispelSymbolPreviewArt(tex, DS, symbol.style, dispelType)
             tex:Show()
         end
     end
@@ -1476,11 +1486,12 @@ local function RenderAuras(scene)
             end
         end
     end
-    local function LayoutAuraPreviewBorder(border, icon, size, mode, shape)
+    local function LayoutAuraPreviewBorder(border, icon, size, mode, shape, index)
         local atlas = DEBUFF_TYPE_BORDER_PREVIEW_ATLAS[mode]
         local a3 = MSUF and MSUF.MSUF_Auras3
         if a3 and type(a3.ApplyAuraDispelPreview) == "function"
-            and a3.ApplyAuraDispelPreview(border, icon, size, mode, shape) then
+            and a3.ApplyAuraDispelPreview(border, icon, size, mode, shape,
+                a3.PreviewDispelTypeForIndex(index)) then
             return
         end
         if not (border and icon and atlas and border.SetAtlas) then
@@ -1750,7 +1761,7 @@ local function RenderAuras(scene)
                         swipe:Hide()
                     end
                 end
-                LayoutAuraPreviewBorder(border, tex, size, barOnly and "OFF" or dispelMode, cfg.iconShape)
+                LayoutAuraPreviewBorder(border, tex, size, barOnly and "OFF" or dispelMode, cfg.iconShape, i)
                 LayoutAuraDurationBar(durationBar, tex, cfg, size, auraState)
                 if stack then
                     SetPreviewFont(stack, stackSize)

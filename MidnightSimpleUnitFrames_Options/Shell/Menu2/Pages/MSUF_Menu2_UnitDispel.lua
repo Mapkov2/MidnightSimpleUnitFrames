@@ -19,6 +19,10 @@ local SUPPORTED_UNITS = { player = true, target = true, focus = true, boss = tru
 local UNITFRAME_DISPEL_AURA_WARNING = "Dispel Border, Overlay, and Symbol need this UnitFrame's Aura sensor. Enable Buffs or Debuffs, or turn on this Dispel feature to enable the sensor automatically. Set both icon caps to 0 if you want no aura icons."
 local UNITFRAME_DISPEL_AURA_WARNING_COLOR = { 0.90, 0.84, 0.76, 1 }
 local UNIT_APPLY_OPTS = { history = false, preview = true, auras = true, notify = false }
+local DISPEL_COLOR_REFERENCES = {
+    "aura.dispel.magic", "aura.dispel.curse", "aura.dispel.disease",
+    "aura.dispel.poison", "aura.dispel.bleed",
+}
 
 local UNIT_DISPEL_TRIGGERS = VT("BORDER", "Use Dispel border detects", "BY_ME", "Dispellable by me",
     "BY_RAID", "Dispellable by group", "DISPEL_TYPE", "Any dispel type")
@@ -199,6 +203,15 @@ local function BuildUnitDispelOverlaySection(ctx, builder, unit)
     local cardW = min(900, max(320, sectionW - 40))
     local card = W.ControlCard(section, nil, nil, 20, -38, cardW, 326)
     local Sync = M.RefreshProxy()
+    if W.AttachContextColorReferences then
+        W.AttachContextColorReferences(section, DISPEL_COLOR_REFERENCES, {
+            title = "Dispel Type Colors",
+            note = "Shared by Dispel borders, overlays, symbols, and every related preview.",
+            scopeTag = "Shared",
+            historySource = "menu:unit-dispel-overlay-colors",
+            maxTargets = 5,
+        })
+    end
 
     local function BindDropdown(label, values, key, defaultValue, normalizer, reason, y)
         local dropdown = W.Dropdown(card, label, values, 280)

@@ -4987,6 +4987,21 @@ L["On (default): names supplied by Northern Sky Raid Tools replace character nam
 
 -- Guided setup restart confirmation.
 L["Run the guided setup again? The walkthrough starts over at the first step."] = "Executar a configuração guiada novamente? O passo a passo começa de novo na primeira etapa."
+L["Dispel Type Colors"] = "Cores dos tipos de dissipação"
+L["Magic custom"] = "Magia personalizada"
+L["Magic color"] = "Cor de Magia"
+L["Curse custom"] = "Maldição personalizada"
+L["Curse color"] = "Cor de Maldição"
+L["Disease custom"] = "Doença personalizada"
+L["Disease color"] = "Cor de Doença"
+L["Poison custom"] = "Veneno personalizado"
+L["Poison color"] = "Cor de Veneno"
+L["Bleed custom"] = "Sangramento personalizado"
+L["Bleed color"] = "Cor de Sangramento"
+L["Optional global overrides for harmful Magic, Curse, Disease, Poison and Bleed indicators. Off uses Blizzard's current default. The last edited type is shown first in every aura preview."] = "Cores globais opcionais para indicadores nocivos de Magia, Maldição, Doença, Veneno e Sangramento. Desativado usa o padrão atual da Blizzard. O último tipo editado aparece primeiro em todas as prévias de aura."
+L["Timer and Dispel colors are shared by live unit/group auras and every preview. Icon border and shadow colors live in Appearance > Auras, scoped by Aura type."] = "As cores de temporizador e dissipação são compartilhadas pelas auras ativas de unidade e grupo e por todas as prévias. As cores de borda e sombra do ícone ficam em Aparência > Auras, por tipo de aura."
+L["Cooldown timer urgency, global Dispel types, icon borders and shadows."] = "Urgência dos temporizadores, tipos globais de dissipação, bordas e sombras dos ícones."
+L["Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."] = "Seguro, Aviso, Urgente, Magia, Maldição, Doença, Veneno, Sangramento, borda e sombra do ícone."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ptBR", LoadLocale)
 elseif MSUF.LOCALE == "ptBR" then LoadLocale() end

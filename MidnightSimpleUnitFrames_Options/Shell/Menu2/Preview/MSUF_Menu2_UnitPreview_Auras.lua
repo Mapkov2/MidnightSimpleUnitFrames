@@ -1122,9 +1122,14 @@ function Auras.LayoutDispelLayers(box, mock, runtimeSpec, S, baseLevel, overlayA
         else
             region:SetAllPoints(target)
         end
-        local color = runtimeSpec and runtimeSpec.dispel or nil
-        region:SetColorTexture(tonumber(color and color.r) or 0.25,
-            tonumber(color and color.g) or 0.75, tonumber(color and color.b) or 1, 1)
+        local a3 = MSUF and MSUF.MSUF_Auras3
+        if a3 and type(a3.SetDispelColorTexture) == "function" then
+            a3.SetDispelColorTexture(region, a3.GetDispelColorPreviewType(), true, 1)
+        else
+            local color = runtimeSpec and runtimeSpec.dispel or nil
+            region:SetColorTexture(tonumber(color and color.r) or 0.25,
+                tonumber(color and color.g) or 0.75, tonumber(color and color.b) or 1, 1)
+        end
         region:SetAlpha(ClampNumber(overlay.alpha, 0.35, 0, 1))
         region:Show()
         overlayHost:Show()
@@ -1658,12 +1663,13 @@ local function PreviewDebuffBorderMode(cfg)
     if cfg and cfg.useDebuffTypeBorders == true then return "SYMBOL" end
     return "OFF"
 end
-local function LayoutPreviewDispelBorder(icon, size, mode, shape)
+local function LayoutPreviewDispelBorder(icon, size, mode, shape, index)
     local atlas = DEBUFF_TYPE_BORDER_PREVIEW_ATLAS[mode]
     local border = icon and icon.dispelBorder
     local a3 = MSUF and MSUF.MSUF_Auras3
     if a3 and type(a3.ApplyAuraDispelPreview) == "function"
-        and a3.ApplyAuraDispelPreview(border, icon, size, mode, shape) then
+        and a3.ApplyAuraDispelPreview(border, icon, size, mode, shape,
+            a3.PreviewDispelTypeForIndex(index)) then
         return
     end
     if not (atlas and border and border.SetAtlas) then
@@ -1699,7 +1705,7 @@ local function LayoutPreviewStealableMarker(icon, size, enabled, style, shape, i
     local a3 = MSUF and MSUF.MSUF_Auras3
     local mode = style == "BORDER" and "BORDER" or "SYMBOL"
     if a3 and type(a3.ApplyAuraDispelPreview) == "function"
-        and a3.ApplyAuraDispelPreview(marker, icon, size, mode, shape) then
+        and a3.ApplyAuraDispelPreview(marker, icon, size, mode, shape, "Magic", false) then
         return
     end
     marker:Hide()
@@ -1793,7 +1799,7 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
             end
         end
         LayoutPreviewDurationBar(icon.durationBar, icon, textCfg, size, auraState)
-        LayoutPreviewDispelBorder(icon, size, barOnly and "OFF" or debuffBorderMode, bounds.iconShape)
+        LayoutPreviewDispelBorder(icon, size, barOnly and "OFF" or debuffBorderMode, bounds.iconShape, i)
         LayoutPreviewStealableMarker(icon, size, kind == "buff" and cfg.buffShowStealable == true,
             cfg.buffStealableStyle, bounds.iconShape, i)
         if a3 and type(a3.ApplyPandemicVisual) == "function"

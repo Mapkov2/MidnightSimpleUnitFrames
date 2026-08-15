@@ -5062,6 +5062,21 @@ L["On (default): names supplied by Northern Sky Raid Tools replace character nam
 
 -- Guided setup restart confirmation.
 L["Run the guided setup again? The walkthrough starts over at the first step."] = "Eseguire di nuovo la configurazione guidata? La procedura riparte dal primo passaggio."
+L["Dispel Type Colors"] = "Colori dei tipi di dissoluzione"
+L["Magic custom"] = "Magia personalizzata"
+L["Magic color"] = "Colore Magia"
+L["Curse custom"] = "Maledizione personalizzata"
+L["Curse color"] = "Colore Maledizione"
+L["Disease custom"] = "Malattia personalizzata"
+L["Disease color"] = "Colore Malattia"
+L["Poison custom"] = "Veleno personalizzato"
+L["Poison color"] = "Colore Veleno"
+L["Bleed custom"] = "Sanguinamento personalizzato"
+L["Bleed color"] = "Colore Sanguinamento"
+L["Optional global overrides for harmful Magic, Curse, Disease, Poison and Bleed indicators. Off uses Blizzard's current default. The last edited type is shown first in every aura preview."] = "Colori globali opzionali per gli indicatori nocivi di Magia, Maledizione, Malattia, Veleno e Sanguinamento. Disattivato usa il valore attuale di Blizzard. L'ultimo tipo modificato appare per primo in ogni anteprima delle aure."
+L["Timer and Dispel colors are shared by live unit/group auras and every preview. Icon border and shadow colors live in Appearance > Auras, scoped by Aura type."] = "I colori dei timer e delle dissoluzioni sono condivisi dalle aure attive di unità e gruppo e da tutte le anteprime. I colori del bordo e dell'ombra dell'icona sono in Aspetto > Aure, per tipo di aura."
+L["Cooldown timer urgency, global Dispel types, icon borders and shadows."] = "Urgenza dei timer, tipi globali di dissoluzione, bordi e ombre delle icone."
+L["Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."] = "Sicuro, Avviso, Urgente, Magia, Maledizione, Malattia, Veleno, Sanguinamento, bordo e ombra dell'icona."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("itIT", LoadLocale)
 elseif MSUF.LOCALE == "itIT" then LoadLocale() end

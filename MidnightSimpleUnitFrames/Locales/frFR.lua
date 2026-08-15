@@ -5462,6 +5462,21 @@ L["On (default): names supplied by Northern Sky Raid Tools replace character nam
 
 -- Guided setup restart confirmation.
 L["Run the guided setup again? The walkthrough starts over at the first step."] = "Relancer la configuration guidée ? Le parcours reprend depuis la première étape."
+L["Dispel Type Colors"] = "Couleurs des types de dissipation"
+L["Magic custom"] = "Magie personnalisée"
+L["Magic color"] = "Couleur de la magie"
+L["Curse custom"] = "Malédiction personnalisée"
+L["Curse color"] = "Couleur de la malédiction"
+L["Disease custom"] = "Maladie personnalisée"
+L["Disease color"] = "Couleur de la maladie"
+L["Poison custom"] = "Poison personnalisé"
+L["Poison color"] = "Couleur du poison"
+L["Bleed custom"] = "Saignement personnalisé"
+L["Bleed color"] = "Couleur du saignement"
+L["Optional global overrides for harmful Magic, Curse, Disease, Poison and Bleed indicators. Off uses Blizzard's current default. The last edited type is shown first in every aura preview."] = "Couleurs globales facultatives pour les indicateurs néfastes de magie, malédiction, maladie, poison et saignement. Désactivé utilise la valeur actuelle de Blizzard. Le dernier type modifié apparaît en premier dans chaque aperçu d'aura."
+L["Timer and Dispel colors are shared by live unit/group auras and every preview. Icon border and shadow colors live in Appearance > Auras, scoped by Aura type."] = "Les couleurs des minuteurs et dissipations sont partagées par les auras actives d'unité et de groupe et tous les aperçus. Les couleurs de bordure et d'ombre des icônes se trouvent dans Apparence > Auras, par type d'aura."
+L["Cooldown timer urgency, global Dispel types, icon borders and shadows."] = "Urgence des minuteurs, types de dissipation globaux, bordures et ombres des icônes."
+L["Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."] = "Sûr, Avertissement, Urgent, Magie, Malédiction, Maladie, Poison, Saignement, bordure et ombre d'icône."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("frFR", LoadLocale)
 elseif MSUF.LOCALE == "frFR" then LoadLocale() end

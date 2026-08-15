@@ -3886,6 +3886,21 @@ L["Applies the built-in additive highlight style to this texture slot."] = "Appl
 L["Below threshold hides this texture until the unit reaches the configured HP threshold."] = "Below threshold hides this texture until the unit reaches the configured HP threshold."
 L["With HP gradient selected, choose what the texture uses after it passes the threshold."] = "With HP gradient selected, choose what the texture uses after it passes the threshold."
 L["Uses a separate texture opacity below the HP threshold. The normal Opacity from Setup remains active above it."] = "Uses a separate texture opacity below the HP threshold. The normal Opacity from Setup remains active above it."
+L["Dispel Type Colors"] = "Dispel Type Colors"
+L["Magic custom"] = "Magic custom"
+L["Magic color"] = "Magic color"
+L["Curse custom"] = "Curse custom"
+L["Curse color"] = "Curse color"
+L["Disease custom"] = "Disease custom"
+L["Disease color"] = "Disease color"
+L["Poison custom"] = "Poison custom"
+L["Poison color"] = "Poison color"
+L["Bleed custom"] = "Bleed custom"
+L["Bleed color"] = "Bleed color"
+L["Optional global overrides for harmful Magic, Curse, Disease, Poison and Bleed indicators. Off uses Blizzard's current default. The last edited type is shown first in every aura preview."] = "Optional global overrides for harmful Magic, Curse, Disease, Poison and Bleed indicators. Off uses Blizzard's current default. The last edited type is shown first in every aura preview."
+L["Timer and Dispel colors are shared by live unit/group auras and every preview. Icon border and shadow colors live in Appearance > Auras, scoped by Aura type."] = "Timer and Dispel colors are shared by live unit/group auras and every preview. Icon border and shadow colors live in Appearance > Auras, scoped by Aura type."
+L["Cooldown timer urgency, global Dispel types, icon borders and shadows."] = "Cooldown timer urgency, global Dispel types, icon borders and shadows."
+L["Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."] = "Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enUS", LoadLocale)
 elseif MSUF.LOCALE == "enUS" then LoadLocale() end

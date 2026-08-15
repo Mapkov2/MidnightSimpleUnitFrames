@@ -47,6 +47,10 @@ local ROUNDED_PREVIEW_CARD_HEIGHT = 92
 local GRADIENT_DIR_KEYS, PRIORITY_LABELS = M.PickDefaults(GP, [[GRADIENT_DIR_KEYS PRIORITY_LABELS]])
 local DISPEL_TRIGGERS = VT("BY_ME", "Dispellable by me", "BY_RAID", "Dispellable by group",
     "DISPEL_TYPE", "Any dispel type")
+local DISPEL_COLOR_REFERENCES = {
+    "aura.dispel.magic", "aura.dispel.curse", "aura.dispel.disease",
+    "aura.dispel.poison", "aura.dispel.bleed",
+}
 local Call, DB, G, Bars, ReadG, ReadGBool, ReadB, NormalizeScopeKey, ScopeDBKeys, ScopeHasOverride, ScopeSetOverride, CurrentBarsScope, IsGFScope, BarScopeGet, BarScopeSet, BarScopeGetBars, BarScopeSetBars, GradientScopeGet, GradientScopeSet, GradientScopeHasExplicit, TextureValues, CurrentPowerBarScopeUnit, SmoothPowerGet, SmoothPowerSet, ChunkedPowerGet, ChunkedPowerSet, PriorityOrder, PriorityColor, RefreshBorderTestModes, SetAbsorbTextureTest, SetControlEnabled, SetControlsEnabled, ApplyBars, ControlMeta, RegisterControl = M.Pick(GP, [[Call DB G Bars ReadG ReadGBool ReadB NormalizeScopeKey ScopeDBKeys ScopeHasOverride ScopeSetOverride CurrentBarsScope IsGFScope BarScopeGet BarScopeSet BarScopeGetBars BarScopeSetBars GradientScopeGet GradientScopeSet GradientScopeHasExplicit TextureValues CurrentPowerBarScopeUnit SmoothPowerGet SmoothPowerSet ChunkedPowerGet ChunkedPowerSet PriorityOrder PriorityColor RefreshBorderTestModes SetAbsorbTextureTest SetControlEnabled SetControlsEnabled ApplyBars ControlMeta RegisterControl]])
 local IsAbsorbTextureTestEnabled = GP.IsAbsorbTextureTestEnabled or function() return _G.MSUF_AbsorbTextureTestMode == true end
 local BAR_SETTING_BY_PATH = {
@@ -2000,7 +2004,11 @@ local function BuildHighlightSection(ctx, b)
     end
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(modesCard, function()
-            local references = { "bar.aggro_border" }
+            local references = {}
+            for i = 1, #DISPEL_COLOR_REFERENCES do
+                references[i] = DISPEL_COLOR_REFERENCES[i]
+            end
+            references[#references + 1] = "bar.aggro_border"
             if not PURGE_BORDER_121_PTR_DISABLED and PurgeScopeSupported() then
                 references[#references + 1] = "bar.purge_border"
             end
@@ -2008,8 +2016,10 @@ local function BuildHighlightSection(ctx, b)
             return references
         end, {
             title = "Highlight Border Colors",
-            note = "Colors available to the border modes in this card.",
+            note = "Shared Dispel type colors plus the other colors available to this card's border modes.",
+            scopeTag = "Shared",
             historySource = "menu:bars-highlight-colors",
+            maxTargets = 8,
         })
     end
     local function BindBorderTestToggle(label, y, flagName, setterName, enabledFn, noScope, path)
@@ -2222,4 +2232,4 @@ local function BuildBars(ctx)
     end
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
-M.RegisterPage("opt_bars", { title = "MSUF Bars", build = BuildBars, version = 18 })
+M.RegisterPage("opt_bars", { title = "MSUF Bars", build = BuildBars, version = 19 })

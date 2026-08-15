@@ -5083,6 +5083,21 @@ L["On (default): names supplied by Northern Sky Raid Tools replace character nam
 
 -- Guided setup restart confirmation.
 L["Run the guided setup again? The walkthrough starts over at the first step."] = "要再次執行引導設定嗎？導覽將從第一步重新開始。"
+L["Dispel Type Colors"] = "驅散類型顏色"
+L["Magic custom"] = "自訂魔法"
+L["Magic color"] = "魔法顏色"
+L["Curse custom"] = "自訂詛咒"
+L["Curse color"] = "詛咒顏色"
+L["Disease custom"] = "自訂疾病"
+L["Disease color"] = "疾病顏色"
+L["Poison custom"] = "自訂中毒"
+L["Poison color"] = "中毒顏色"
+L["Bleed custom"] = "自訂流血"
+L["Bleed color"] = "流血顏色"
+L["Optional global overrides for harmful Magic, Curse, Disease, Poison and Bleed indicators. Off uses Blizzard's current default. The last edited type is shown first in every aura preview."] = "可選擇全域覆寫有害魔法、詛咒、疾病、中毒和流血指示器的顏色。關閉時使用暴雪目前的預設值。最後編輯的類型會優先顯示在所有光環預覽中。"
+L["Timer and Dispel colors are shared by live unit/group auras and every preview. Icon border and shadow colors live in Appearance > Auras, scoped by Aura type."] = "計時器和驅散顏色由實際單位、隊伍光環及所有預覽共用。圖示邊框和陰影顏色位於外觀 > 光環，並依光環類型設定。"
+L["Cooldown timer urgency, global Dispel types, icon borders and shadows."] = "冷卻計時器緊急度、全域驅散類型，以及圖示邊框和陰影顏色。"
+L["Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."] = "安全、警告、緊急、魔法、詛咒、疾病、中毒、流血、圖示邊框和圖示陰影。"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhTW", LoadLocale)
 elseif MSUF.LOCALE == "zhTW" then LoadLocale() end

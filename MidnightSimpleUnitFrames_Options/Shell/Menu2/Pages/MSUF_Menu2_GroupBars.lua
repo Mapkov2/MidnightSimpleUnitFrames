@@ -23,6 +23,10 @@ BadgeNumber = BadgeNumber or M.BadgeNumber
 OptionText = OptionText or M.OptionText
 local GF_DISPEL_OVERLAY_TRIGGERS = VT("BORDER", "Use Dispel border detects", "BY_ME", "Dispellable by me",
     "BY_RAID", "Dispellable by group", "DISPEL_TYPE", "Any dispel type")
+local DISPEL_COLOR_REFERENCES = {
+    "aura.dispel.magic", "aura.dispel.curse", "aura.dispel.disease",
+    "aura.dispel.poison", "aura.dispel.bleed",
+}
 local function RequestGroupBarsRefresh(ctx, reason)
     if M.RequestRefresh then M.RequestRefresh(ctx, reason or "gf-bars-ui") elseif M.Refresh then M.Refresh(ctx) end
 end
@@ -52,6 +56,15 @@ local function BuildDispelOverlaySection(ctx, b)
     local dispelW = dispel._msuf2Width or b.width or 720
     local dispelCardW = min(900, max(320, dispelW - 40))
     local dispelCard = W.ControlCard(dispel, nil, nil, 20, -38, dispelCardW, 358)
+    if W.AttachContextColorReferences then
+        W.AttachContextColorReferences(dispel, DISPEL_COLOR_REFERENCES, {
+            title = "Dispel Type Colors",
+            note = "Shared by Dispel borders, overlays, symbols, and every related preview.",
+            scopeTag = "Shared",
+            historySource = "menu:group-dispel-overlay-colors",
+            maxTargets = 5,
+        })
+    end
     local dispelToggle = BindScopeToggle(ctx, W.SwitchAt(dispelCard, "Dispel Overlay", 16, -16, 0, "HIDDEN"), "dispelOverlayEnabled", false, "visual")
     local dispelTrigger = W.Dropdown(dispelCard, "Overlay detects", GF_DISPEL_OVERLAY_TRIGGERS, 300)
     M.BindDropdownWidget(ctx, dispelTrigger,
@@ -1100,4 +1113,4 @@ local function BuildGFBars(ctx)
     BuildGFDebuffStripeSection(ctx, b)
     FinalizeScopePage(ctx, b)
 end
-M.RegisterPage("gf_bars", { title = "MSUF Group Dispel Overlay", build = BuildGFBars, version = 21 })
+M.RegisterPage("gf_bars", { title = "MSUF Group Dispel Overlay", build = BuildGFBars, version = 22 })

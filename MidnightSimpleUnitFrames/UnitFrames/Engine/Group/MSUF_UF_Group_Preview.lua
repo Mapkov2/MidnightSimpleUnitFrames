@@ -582,7 +582,8 @@ local function ApplyFrameAuraPreview(frame, kind, visual, lane, descriptor, slot
     dispelBorder = EnsurePreviewTexture(visual, "_dispelBorder", "OVERLAY", 5)
     if A3 and type(A3.ApplyAuraDispelPreview) == "function"
       and A3.ApplyAuraDispelPreview(dispelBorder, visual, size,
-        lane.showAuraSymbol == true and "SYMBOL" or "BORDER", lane.iconShape) then
+        lane.showAuraSymbol == true and "SYMBOL" or "BORDER", lane.iconShape,
+        A3.PreviewDispelTypeForIndex(sampleIndex)) then
       -- Shared renderer stamped the matching shaped/rounded border.
     elseif dispelBorder.SetAtlas then
       local pad = type(A3.NativeAuraDispelBorderPadding) == "function"

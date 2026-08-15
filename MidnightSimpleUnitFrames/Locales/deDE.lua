@@ -5499,6 +5499,21 @@ L["Applies the built-in additive highlight style to this texture slot."] = "Wend
 L["Below threshold hides this texture until the unit reaches the configured HP threshold."] = "Unter Grenzwert blendet diese Textur aus, bis die Einheit den eingestellten HP-Grenzwert erreicht."
 L["With HP gradient selected, choose what the texture uses after it passes the threshold."] = "Bei gewähltem HP-Verlauf bestimmst du hier die Farbe oberhalb des Grenzwerts."
 L["Uses a separate texture opacity below the HP threshold. The normal Opacity from Setup remains active above it."] = "Verwendet unterhalb des HP-Grenzwerts eine eigene Texturdeckkraft. Oberhalb bleibt die normale Deckkraft aus der Einrichtung aktiv."
+L["Dispel Type Colors"] = "Farben der Bannungstypen"
+L["Magic custom"] = "Magie benutzerdefiniert"
+L["Magic color"] = "Magiefarbe"
+L["Curse custom"] = "Fluch benutzerdefiniert"
+L["Curse color"] = "Fluchfarbe"
+L["Disease custom"] = "Krankheit benutzerdefiniert"
+L["Disease color"] = "Krankheitsfarbe"
+L["Poison custom"] = "Gift benutzerdefiniert"
+L["Poison color"] = "Giftfarbe"
+L["Bleed custom"] = "Blutung benutzerdefiniert"
+L["Bleed color"] = "Blutungsfarbe"
+L["Optional global overrides for harmful Magic, Curse, Disease, Poison and Bleed indicators. Off uses Blizzard's current default. The last edited type is shown first in every aura preview."] = "Optionale globale Farben für schädliche Magie-, Fluch-, Krankheits-, Gift- und Blutungsanzeigen. Aus verwendet Blizzards aktuellen Standard. Der zuletzt bearbeitete Typ wird in jeder Auravorschau zuerst angezeigt."
+L["Timer and Dispel colors are shared by live unit/group auras and every preview. Icon border and shadow colors live in Appearance > Auras, scoped by Aura type."] = "Timer- und Bannungsfarben gelten für aktive Einheiten- und Gruppenauren sowie alle Vorschauen. Symbolrahmen- und Schattenfarben befinden sich unter Darstellung > Auren und gelten je Auratyp."
+L["Cooldown timer urgency, global Dispel types, icon borders and shadows."] = "Dringlichkeit der Abklingzeittimer, globale Bannungstypen sowie Symbolrahmen- und Schattenfarben."
+L["Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."] = "Sicher, Warnung, Dringend, Magie, Fluch, Krankheit, Gift, Blutung, Symbolrahmen und Symbolschatten."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("deDE", LoadLocale)
 elseif MSUF.LOCALE == "deDE" then LoadLocale() end

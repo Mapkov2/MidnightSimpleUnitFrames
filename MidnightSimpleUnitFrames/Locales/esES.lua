@@ -5221,6 +5221,21 @@ L["On (default): names supplied by Northern Sky Raid Tools replace character nam
 
 -- Guided setup restart confirmation.
 L["Run the guided setup again? The walkthrough starts over at the first step."] = "¿Ejecutar de nuevo la configuración guiada? El recorrido volverá a empezar en el primer paso."
+L["Dispel Type Colors"] = "Colores de tipos de disipación"
+L["Magic custom"] = "Magia personalizada"
+L["Magic color"] = "Color de Magia"
+L["Curse custom"] = "Maldición personalizada"
+L["Curse color"] = "Color de Maldición"
+L["Disease custom"] = "Enfermedad personalizada"
+L["Disease color"] = "Color de Enfermedad"
+L["Poison custom"] = "Veneno personalizado"
+L["Poison color"] = "Color de Veneno"
+L["Bleed custom"] = "Sangrado personalizado"
+L["Bleed color"] = "Color de Sangrado"
+L["Optional global overrides for harmful Magic, Curse, Disease, Poison and Bleed indicators. Off uses Blizzard's current default. The last edited type is shown first in every aura preview."] = "Colores globales opcionales para indicadores dañinos de Magia, Maldición, Enfermedad, Veneno y Sangrado. Desactivado usa el valor predeterminado actual de Blizzard. El último tipo editado aparece primero en todas las vistas previas de auras."
+L["Timer and Dispel colors are shared by live unit/group auras and every preview. Icon border and shadow colors live in Appearance > Auras, scoped by Aura type."] = "Los colores de temporizador y disipación se comparten entre las auras activas de unidades y grupos y todas las vistas previas. Los colores de borde y sombra del icono están en Apariencia > Auras y se configuran por tipo de aura."
+L["Cooldown timer urgency, global Dispel types, icon borders and shadows."] = "Urgencia del temporizador de reutilización, tipos de disipación globales y colores de bordes y sombras de iconos."
+L["Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."] = "Seguro, Advertencia, Urgente, Magia, Maldición, Enfermedad, Veneno, Sangrado, borde y sombra del icono."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("esES", LoadLocale)
 elseif MSUF.LOCALE == "esES" then LoadLocale() end
