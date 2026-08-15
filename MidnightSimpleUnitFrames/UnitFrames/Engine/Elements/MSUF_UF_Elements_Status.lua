@@ -194,6 +194,7 @@ local STATUS_REFRESH = {
   "RestingIndicator",
   "IncomingResIndicator",
   "PVPIndicator",
+  "SocialIndicator",
   "GroupStatusRuntime",
 }
 local SYMBOL_PATH_CACHE = {}

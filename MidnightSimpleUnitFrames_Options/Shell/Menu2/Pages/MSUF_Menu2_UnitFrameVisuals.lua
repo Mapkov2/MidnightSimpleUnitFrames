@@ -25,7 +25,8 @@ local CASTBAR_TAB_VALUES = VT("general", "General", "icon", "Icon", "spell", "Sp
 --- visible border is painted. "Castbar border color" is the only value the
 --- Castbar Icon Border Color shortcut applies to.
 local CASTBAR_ICON_BORDER_STYLES = VT("NONE", "None", "DARK", "Dark", "CASTBAR", "Castbar border color")
-local CASTBAR_TAB_HEIGHTS = { general = 392, icon = 540, spell = 386, time = 386, advanced = 480 }
+-- general grew by 32px when "Show interrupter name" pushed the Size card down.
+local CASTBAR_TAB_HEIGHTS = { general = 424, icon = 540, spell = 386, time = 386, advanced = 480 }
 local CASTBAR_WIDTH_SOURCE_VALUES = VT("manual", "Manual width", "unitframe", "Auto: Unit Frame", "essential", "Auto: Essential Cooldowns", "utility", "Auto: Utility Cooldowns")
 local CASTBAR_TEXT_ALIGN = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right")
 local CASTBAR_TRUNCATE_VALUES = VT("AUTO", "Auto fit", "CLIP", "Manual width", "NONE", "No width limit")
