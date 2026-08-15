@@ -1244,6 +1244,7 @@ local function ApplyPreviewStatus(frame, kind, index, role)
   end
   SetShown(frame.combatStateIndicatorIcon, false)
   SetShown(frame.statusIndicatorText, false)
+  SetShown(frame.statusAFKTimerText, false)
 end
 
 --- Seed fake unit state into one preview frame after UF.ApplySpec has built the
@@ -1328,6 +1329,7 @@ local function ClearPreviewData(frame)
   SetShown(frame.phaseIcon, false)
   SetShown(frame.raidGroupNameText, false)
   SetShown(frame.statusIndicatorText, false)
+  SetShown(frame.statusAFKTimerText, false)
   if GF.HideSpellIndicators then GF.HideSpellIndicators(frame) end
   if GF.HideFrameAuras then GF.HideFrameAuras(frame) end
 end

@@ -179,7 +179,7 @@ local MSUF_DEFAULTS_TEXT_SCOPE_KEYS = { "player", "target", "targettarget", "tot
 local MSUF_DEFAULTS_GROUP_SCOPE_KEYS = { "gf_party", "gf_raid", "gf_mythicraid" }
 local MSUF_DEFAULTS_STATUS_PREFIXES = {
     "leaderIcon", "raidMarker", "levelIndicator", "eliteIcon", "statusText",
-    "statusGhostText", "statusAFKText", "statusDNDText",
+    "statusGhostText", "statusAFKText", "statusAFKTimer", "statusAFKTimerText", "statusDNDText",
     "combatStateIndicator", "restedStateIndicator", "restingStateIndicator",
     "incomingResIndicator", "pvpIndicator", "raidGroupName",
 }
@@ -521,12 +521,13 @@ local function MSUF_Defaults_NormalizeStatusScope(scope, groupScope)
             "roleIconX", "roleIconY", "raidMarkerX", "raidMarkerY",
             "leaderIconX", "leaderIconY", "assistIconX", "assistIconY",
             "statusOffsetX", "statusOffsetY", "statusGhostOffsetX", "statusGhostOffsetY",
-            "statusAFKOffsetX", "statusAFKOffsetY", "statusDNDOffsetX", "statusDNDOffsetY", "groupNumberX", "groupNumberY",
+            "statusAFKOffsetX", "statusAFKOffsetY", "statusAFKTimerOffsetX", "statusAFKTimerOffsetY",
+            "statusDNDOffsetX", "statusDNDOffsetY", "groupNumberX", "groupNumberY",
         }) do
             changed = MSUF_Defaults_NormalizeNumberField(scope, key, -500, 500) or changed
         end
         changed = MSUF_Defaults_NormalizeNumberField(scope, "groupNumberLayer", 0, 30) or changed
-        for _, key in ipairs({ "roleIconAnchor", "raidMarkerAnchor", "leaderIconAnchor", "assistIconAnchor", "statusTextAnchor", "statusGhostTextAnchor", "statusAFKTextAnchor", "statusDNDTextAnchor", "groupNumberAnchor" }) do
+        for _, key in ipairs({ "roleIconAnchor", "raidMarkerAnchor", "leaderIconAnchor", "assistIconAnchor", "statusTextAnchor", "statusGhostTextAnchor", "statusAFKTextAnchor", "statusAFKTimerTextAnchor", "statusDNDTextAnchor", "groupNumberAnchor" }) do
             changed = MSUF_Defaults_UpperStringField(scope, key) or changed
         end
     end

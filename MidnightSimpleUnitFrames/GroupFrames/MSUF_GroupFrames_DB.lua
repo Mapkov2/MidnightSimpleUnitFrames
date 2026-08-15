@@ -401,6 +401,9 @@ local PARTY_DEFAULTS = {
     statusAFKText          = true,
     statusAFKTextSize      = 14,
     statusAFKTextAnchor    = "CENTER",
+    statusAFKTimerText       = false,
+    statusAFKTimerTextSize   = 10,
+    statusAFKTimerTextAnchor = "CENTER",
     statusDNDText          = true,
     statusDNDTextSize      = 14,
     statusDNDTextAnchor    = "CENTER",
@@ -417,6 +420,7 @@ local PARTY_DEFAULTS = {
     statusTextLayer   = 7,
     statusGhostTextLayer = 7,
     statusAFKTextLayer   = 7,
+    statusAFKTimerTextLayer = 7,
     statusDNDTextLayer   = 7,
     --- Text offsets
     nameOffsetX       = 28, -- clears the complete left status-icon lane
@@ -443,6 +447,8 @@ local PARTY_DEFAULTS = {
     statusGhostOffsetY = 0,
     statusAFKOffsetX   = 0,
     statusAFKOffsetY   = 0,
+    statusAFKTimerOffsetX = 0,
+    statusAFKTimerOffsetY = -10,
     statusDNDOffsetX   = 0,
     statusDNDOffsetY   = 0,
     --- Text layer (frame level relative to bar)
@@ -1473,7 +1479,7 @@ local GROUP_MENU_DOMAIN_REPAIR = {
     statusAnchorFields = {
         "roleIconAnchor", "leaderIconAnchor", "assistIconAnchor", "raidMarkerAnchor",
         "readyCheckAnchor", "summonAnchor", "resurrectAnchor", "pvpIconAnchor", "phaseAnchor",
-        "statusTextAnchor", "statusGhostTextAnchor", "statusAFKTextAnchor", "statusDNDTextAnchor",
+        "statusTextAnchor", "statusGhostTextAnchor", "statusAFKTextAnchor", "statusAFKTimerTextAnchor", "statusDNDTextAnchor",
         "groupNumberAnchor", "dispelSymbolAnchor",
     },
     auraDefaults = {

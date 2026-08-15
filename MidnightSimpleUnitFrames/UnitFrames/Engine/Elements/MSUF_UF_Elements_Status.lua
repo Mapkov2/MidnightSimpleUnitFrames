@@ -1696,7 +1696,58 @@ local function StatusTextIsGone(value)
   return value == "DEAD" or value == "GHOST" or value == "OFFLINE"
 end
 
+local function HideAFKTimerText(frame)
+  if not frame then return end
+  local fs = frame.statusAFKTimerText
+  if fs then
+    SetText(fs, "")
+    SetShown(fs, false)
+  end
+  frame._msufAFKTimerLayout = nil
+  local afkTimer = MSUF.UFAFKTimer
+  if afkTimer and afkTimer.Detach then afkTimer.Detach(frame) end
+end
+
+--- Companion region to the AFK status text: shows how long the unit has been
+--- AFK. Data comes from the shared GUID ledger (MSUF.UFAFKTimer), which is
+--- strictly out-of-combat; ResolveText returns nil in combat or when the
+--- AFK-on edge was never observed, so this hides instead of guessing.
+local function UpdateAFKTimerText(frame, status, cfg, state)
+  local tcfg = cfg and cfg.afkTimer
+  if not (tcfg and tcfg.enabled == true and state == "afk") then
+    HideAFKTimerText(frame)
+    return
+  end
+  local afkTimer = MSUF.UFAFKTimer
+  if not afkTimer then return end
+  local text
+  if status.testMode == true then
+    text = afkTimer.SampleText()
+  else
+    text = afkTimer.ResolveText(frame.MSUFUnitKey)
+  end
+  if type(text) ~= "string" or text == "" then
+    HideAFKTimerText(frame)
+    return
+  end
+  local fs = EnsureText(frame, "statusAFKTimerText", tcfg.layer)
+  if not fs then return end
+  if frame._msufAFKTimerLayout ~= tcfg then
+    frame._msufAFKTimerLayout = tcfg
+    AdoptRegion(frame, fs, tcfg.layer)
+    LayoutRegion(fs, frame, frame.MSUFSpec, tcfg, true)
+  end
+  SetText(fs, text)
+  SetShown(fs, true)
+  if status.testMode ~= true then
+    if afkTimer.Attach then afkTimer.Attach(frame) end
+  elseif afkTimer.Detach then
+    afkTimer.Detach(frame)
+  end
+end
+
 local function ClearStatusText(frame, fs)
+  HideAFKTimerText(frame)
   if frame._msufStatusTextValue == nil
     and frame._msufStatusTextLayout == nil
     and fs and fs._msufStatusShown == false then
@@ -1772,6 +1823,9 @@ local function UpdateStatusText(frame, status, event, seedHP)
       ClearStatusText(frame, fs)
       return
     end
+    -- Before the unchanged early-out: the ledger ticker re-enters this
+    -- function with an unchanged main text and only the duration moves.
+    UpdateAFKTimerText(frame, status, cfg, state)
     if frame._msufStatusTextValue == text
       and frame._msufStatusTextLayout == layout
       and fs._msufStatusShown == true then
@@ -1913,6 +1967,7 @@ function Status.Apply(frame, spec)
   if frame then
     frame._msufStatusTextValue = nil
     frame._msufStatusTextLayout = nil
+    frame._msufAFKTimerLayout = nil
   end
   ApplyConfiguredRegions(frame, spec)
   -- ApplyConfiguredRegions lays the status text out with its base table, but a
@@ -1928,6 +1983,7 @@ end
 
 function Status.Disable(frame)
   StopRestingFlipbook(frame and frame.restingIndicatorIcon)
+  HideAFKTimerText(frame)
   for i = 1, #CONFIGURED_REGION_DEFS do
     HideConfiguredRegion(frame, CONFIGURED_REGION_DEFS[i])
   end

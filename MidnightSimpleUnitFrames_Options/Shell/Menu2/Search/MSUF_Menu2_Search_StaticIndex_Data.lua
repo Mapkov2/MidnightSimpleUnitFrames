@@ -10,7 +10,7 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local Search = M.Search or {}
 M.Search = Search
-Search.StaticIndexRecordCount = 2761
+Search.StaticIndexRecordCount = 2764
 Search.StaticIndexBlob = [==[
 auras3_buffs	Border Alpha (%)	slider			Appearance > Icon Style	border alpha	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eappearance%2Eicon-style%2Estylebordercolor-alpha	border alpha appearance icon style auras style appearance icon style stylebordercolor alpha auras3 buffs slider
 auras3_buffs	Border Style	dropdown			Appearance > Icon Style	border style	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eappearance%2Eicon-style%2Eborder-style	border style appearance icon style auras style appearance icon style border style auras3 buffs dropdown
@@ -316,6 +316,7 @@ gf_auras	Show Stack Count	toggle			Group Style > Buff	show stack count	idgf_aur
 gf_auras	Show Stack Count	toggle			Group Style > Debuff	show stack count	idgf_aurasmenu2%2Egf_auras%2Eauras%2Egroup-style%2Elane%2Edebuff%2Eshowstacks	show stack count group style debuff auras group style lane debuff showstacks gf auras toggle
 gf_auras	Show Stack Count	toggle			Group Style > Externals	show stack count	idgf_aurasmenu2%2Egf_auras%2Eauras%2Egroup-style%2Elane%2Eexternals%2Eshowstacks	show stack count group style externals auras group style lane externals showstacks gf auras toggle
 gf_auras	Show Stack Count	toggle			Spell > Style	show stack count	idgf_aurasmenu2%2Egf_auras%2Egroup%2Espell%2Estyle%2Eshowstacks	show stack count spell style group auras spell style showstacks gf auras toggle
+gf_auras	Show Timer Text	toggle			Spell > Placed	show timer text	idgf_aurasmenu2%2Egf_auras%2Egroup%2Espell%2Eplaced%2Ebarshowtimer	show timer text spell placed group auras spell placed barshowtimer gf auras toggle
 gf_auras	Show Tooltip	toggle			Group Style > Buff	show tooltip	idgf_aurasmenu2%2Egf_auras%2Eauras%2Egroup-style%2Elane%2Ebuff%2Eshowtooltip	show tooltip group style buff auras group style lane buff showtooltip gf auras toggle
 gf_auras	Show Tooltip	toggle			Group Style > Debuff	show tooltip	idgf_aurasmenu2%2Egf_auras%2Eauras%2Egroup-style%2Elane%2Edebuff%2Eshowtooltip	show tooltip group style debuff auras group style lane debuff showtooltip gf auras toggle
 gf_auras	Show Tooltip	toggle			Group Style > Externals	show tooltip	idgf_aurasmenu2%2Egf_auras%2Eauras%2Egroup-style%2Elane%2Eexternals%2Eshowtooltip	show tooltip group style externals auras group style lane externals showtooltip gf auras toggle
@@ -326,6 +327,7 @@ gf_auras	Size	slider			Buff > Layout	size	idgf_aurasmenu2%2Egf_auras%2Eauras%2
 gf_auras	Size	slider			Debuff > Layout	size	idgf_aurasmenu2%2Egf_auras%2Eauras%2Egroup-workspace%2Elane%2Edebuff%2Elayout%2Esize	size debuff layout auras group workspace lane debuff layout size gf auras slider
 gf_auras	Size	slider			Externals > Layout	size	idgf_aurasmenu2%2Egf_auras%2Eauras%2Egroup-workspace%2Elane%2Eexternals%2Elayout%2Esize	size externals layout auras group workspace lane externals layout size gf auras slider
 gf_auras	Size	slider			Spell > Placed	size	idgf_aurasmenu2%2Egf_auras%2Egroup%2Espell%2Eplaced%2Esize	size spell placed group auras spell placed size gf auras slider
+gf_auras	Smooth fill	toggle			Spell > Placed	smooth fill	idgf_aurasmenu2%2Egf_auras%2Egroup%2Espell%2Eplaced%2Ebarsmoothfill	smooth fill spell placed group auras spell placed barsmoothfill gf auras toggle
 gf_auras	Sort By	dropdown			Group Style > Buff	sort by	idgf_aurasmenu2%2Egf_auras%2Eauras%2Egroup-style%2Elane%2Ebuff%2Esortmethod	sort by group style buff auras group style lane buff sortmethod gf auras dropdown
 gf_auras	Sort By	dropdown			Group Style > Debuff	sort by	idgf_aurasmenu2%2Egf_auras%2Eauras%2Egroup-style%2Elane%2Edebuff%2Esortmethod	sort by group style debuff auras group style lane debuff sortmethod gf auras dropdown
 gf_auras	Sort By	dropdown			Group Style > Externals	sort by	idgf_aurasmenu2%2Egf_auras%2Eauras%2Egroup-style%2Elane%2Eexternals%2Esortmethod	sort by group style externals auras group style lane externals sortmethod gf auras dropdown
@@ -346,17 +348,18 @@ gf_auras	Stack Y	slider			Group Style > Buff	stack y	idgf_aurasmenu2%2Egf_aura
 gf_auras	Stack Y	slider			Group Style > Debuff	stack y	idgf_aurasmenu2%2Egf_auras%2Eauras%2Egroup-style%2Elane%2Edebuff%2Estacky	stack y group style debuff auras group style lane debuff stacky gf auras slider
 gf_auras	Stack Y	slider			Group Style > Externals	stack y	idgf_aurasmenu2%2Egf_auras%2Eauras%2Egroup-style%2Elane%2Eexternals%2Estacky	stack y group style externals auras group style lane externals stacky gf auras slider
 gf_auras	Stack Y	slider			Spell > Style	stack y	idgf_aurasmenu2%2Egf_auras%2Egroup%2Espell%2Estyle%2Estacky	stack y spell style group auras spell style stacky gf auras slider
-gf_auras	Start effect at (seconds remaining)	slider			Spell > Frame	start effect at seconds remaining	idgf_aurasmenu2%2Egf_auras%2Egroup%2Espell%2Eframe%2Eexpirethreshold	start effect at seconds remaining spell frame group auras spell frame expirethreshold gf auras slider
 gf_auras	Swipe Direction	dropdown			Group Style > Buff	swipe direction	idgf_aurasmenu2%2Egf_auras%2Eauras%2Egroup-style%2Elane%2Ebuff%2Ecooldown-swipe-direction	swipe direction group style buff auras group style lane buff cooldown swipe direction gf auras dropdown
 gf_auras	Swipe Direction	dropdown			Group Style > Debuff	swipe direction	idgf_aurasmenu2%2Egf_auras%2Eauras%2Egroup-style%2Elane%2Edebuff%2Ecooldown-swipe-direction	swipe direction group style debuff auras group style lane debuff cooldown swipe direction gf auras dropdown
 gf_auras	Swipe Direction	dropdown			Group Style > Externals	swipe direction	idgf_aurasmenu2%2Egf_auras%2Eauras%2Egroup-style%2Elane%2Eexternals%2Ecooldown-swipe-direction	swipe direction group style externals auras group style lane externals cooldown swipe direction gf auras dropdown
 gf_auras	Swipe Direction	dropdown			Spell > Style	swipe direction	idgf_aurasmenu2%2Egf_auras%2Egroup%2Espell%2Estyle%2Ecooldownswipereverse	swipe direction spell style group auras spell style cooldownswipereverse gf auras dropdown
+gf_auras	Timer Anchor	dropdown			Spell > Placed	timer anchor	idgf_aurasmenu2%2Egf_auras%2Egroup%2Espell%2Eplaced%2Ebartimeranchor	timer anchor spell placed group auras spell placed bartimeranchor gf auras dropdown
+gf_auras	Timer X	slider			Spell > Placed	timer x	idgf_aurasmenu2%2Egf_auras%2Egroup%2Espell%2Eplaced%2Ebartimerx	timer x spell placed group auras spell placed bartimerx gf auras slider
+gf_auras	Timer Y	slider			Spell > Placed	timer y	idgf_aurasmenu2%2Egf_auras%2Egroup%2Espell%2Eplaced%2Ebartimery	timer y spell placed group auras spell placed bartimery gf auras slider
 gf_auras	Tint Alpha	slider			Spell > Frame	tint alpha	idgf_aurasmenu2%2Egf_auras%2Egroup%2Espell%2Eframe%2Ealpha	tint alpha spell frame group auras spell frame alpha gf auras slider
 gf_auras	Track selected multi spec	toggle			Spell > Multi Spec	track selected multi spec	idgf_aurasmenu2%2Egf_auras%2Egroup%2Espell%2Emulti_spec%2Etracked	track selected multi spec spell multi spec group auras spell multi spec tracked gf auras toggle
 gf_auras	Visible	toggle			Auras > Buff	visible	idgf_aurasmenu2%2Egf_auras%2Eauras%2Egroup-workspace%2Elane%2Ebuff%2Eenabled	visible auras buff auras group workspace lane buff enabled gf auras toggle
 gf_auras	Visible	toggle			Auras > Debuff	visible	idgf_aurasmenu2%2Egf_auras%2Eauras%2Egroup-workspace%2Elane%2Edebuff%2Eenabled	visible auras debuff auras group workspace lane debuff enabled gf auras toggle
 gf_auras	Visible	toggle			Auras > Externals	visible	idgf_aurasmenu2%2Egf_auras%2Eauras%2Egroup-workspace%2Elane%2Eexternals%2Eenabled	visible auras externals auras group workspace lane externals enabled gf auras toggle
-gf_auras	When	dropdown			Spell > Frame	when	idgf_aurasmenu2%2Egf_auras%2Egroup%2Espell%2Eframe%2Etiming	when spell frame group auras spell frame timing gf auras dropdown
 gf_bars	Debuff Stripe	toggle			Bars > Field	debuff stripe	idgf_barsmenu2%2Egf_bars%2Egroup%2Efield%2Edebuffstripeenabled	debuff stripe bars field group bars field debuffstripeenabled gf bars toggle
 gf_bars	Dispel Overlay	toggle			Bars > Field	dispel overlay	idgf_barsmenu2%2Egf_bars%2Egroup%2Efield%2Edispeloverlayenabled	dispel overlay bars field group bars field dispeloverlayenabled gf bars toggle
 gf_bars	Dispel Symbol	toggle			Bars > Field	dispel symbol	idgf_barsmenu2%2Egf_bars%2Egroup%2Efield%2Edispelsymbolenabled	dispel symbol bars field group bars field dispelsymbolenabled gf bars toggle

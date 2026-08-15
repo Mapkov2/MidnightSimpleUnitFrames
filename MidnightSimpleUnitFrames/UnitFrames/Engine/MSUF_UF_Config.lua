@@ -1722,6 +1722,23 @@ local function CompileUnitStatus(out, conf, general, key)
   statusText.showAFK, statusText.showDND = afkText.enabled, dndText.enabled
   statusText.dead, statusText.ghost, statusText.afk, statusText.dnd = deadText, ghostText, afkText, dndText
 
+  -- AFK timer companion region: independent placement, but it only renders
+  -- while the AFK state text is active, so it needs no own show-state keys.
+  local afkTimer = statusText.afkTimer or {}
+  statusText.afkTimer = afkTimer
+  local afkTimerShow = conf and conf.statusAFKTimerEnabled
+  if afkTimerShow == nil then afkTimerShow = general and general.statusAFKTimerEnabled end
+  afkTimer.enabled = afkTimerShow == true
+  afkTimer.size = StatusNumber(conf, general, "statusAFKTimerSize", 12)
+  afkTimer.anchor = StatusString(conf, general, "statusAFKTimerAnchor", "CENTER")
+  afkTimer.x = StatusNumber(conf, general, "statusAFKTimerOffsetX", 0)
+  afkTimer.y = StatusNumber(conf, general, "statusAFKTimerOffsetY", -14)
+  afkTimer.layer = ClampStatusLayer(StatusNumber(conf, general, "statusAFKTimerLayer", 7), 7)
+  ApplyStatusColor(afkTimer, conf, general, "statusAFKTimer")
+  if afkTimer.colorR == nil then
+    afkTimer.colorR, afkTimer.colorG, afkTimer.colorB = afkText.colorR, afkText.colorG, afkText.colorB
+  end
+
   local pvp = status.pvp
   if pvp.enabled and UF.PVPIndicatorContextActive and not UF.PVPIndicatorContextActive() then
     pvp.enabled = false

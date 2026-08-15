@@ -660,6 +660,7 @@ local GROUP_STATUS_REGIONS = {
   statusText = { "statusTextSize", 14, "statusTextAnchor", "CENTER", "statusOffsetX", 0, "statusOffsetY", 0, "statusTextLayer", 7 },
   statusGhost = { "statusGhostTextSize", 14, "statusGhostTextAnchor", "CENTER", "statusGhostOffsetX", 0, "statusGhostOffsetY", 0, "statusGhostTextLayer", 7 },
   statusAFK = { "statusAFKTextSize", 14, "statusAFKTextAnchor", "CENTER", "statusAFKOffsetX", 0, "statusAFKOffsetY", 0, "statusAFKTextLayer", 7 },
+  statusAFKTimer = { "statusAFKTimerTextSize", 10, "statusAFKTimerTextAnchor", "CENTER", "statusAFKTimerOffsetX", 0, "statusAFKTimerOffsetY", -10, "statusAFKTimerTextLayer", 7 },
   statusDND = { "statusDNDTextSize", 14, "statusDNDTextAnchor", "CENTER", "statusDNDOffsetX", 0, "statusDNDOffsetY", 0, "statusDNDTextLayer", 7 },
   raidGroup = { "groupNumberSize", 10, "groupNumberAnchor", "BOTTOMRIGHT", "groupNumberX", -2, "groupNumberY", 2, "groupNumberLayer", 7 },
 }
@@ -714,6 +715,7 @@ local function CompileStatus(kind, conf)
   statusText.ghost = StatusRegionDef(conf, conf.statusGhostText == true, "statusGhost")
   statusText.afk = StatusRegionDef(conf, conf.statusAFKText == true, "statusAFK")
   statusText.dnd = StatusRegionDef(conf, conf.statusDNDText == true, "statusDND")
+  statusText.afkTimer = StatusRegionDef(conf, conf.statusAFKTimerText == true, "statusAFKTimer")
   local raidGroup = StatusRegionDef(conf, raidGroupEnabled, "raidGroup")
   raidGroup.style = conf.groupNumberStyle or "PAREN"
   --- Every icon carries its own style now, so the non-role indicators stop falling back to the

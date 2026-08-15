@@ -286,7 +286,7 @@ end
 local LEAN_SCOPE_KEYS = {
   "overAbsorbOverlay", "fullHealthAbsorbStripe", "healPredEnabled",
   "aggroEnabled", "ciEnabled", "rangeFadeEnabled",
-  "statusText", "statusGhostText", "statusAFKText", "statusDNDText",
+  "statusText", "statusGhostText", "statusAFKText", "statusAFKTimerText", "statusDNDText",
 }
 -- Absorb-only isolation: flip JUST the over-absorb glow/stripe off, so the
 -- absorb renders as a plain bar (no

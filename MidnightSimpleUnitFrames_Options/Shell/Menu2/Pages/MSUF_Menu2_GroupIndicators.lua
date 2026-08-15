@@ -396,7 +396,7 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
     local function IsTextStatusIconSpec(spec)
         local value = spec and spec.value
         return value == "statusText" or value == "statusGhostText"
-            or value == "statusAFKText" or value == "statusDNDText"
+            or value == "statusAFKText" or value == "statusAFKTimer" or value == "statusDNDText"
     end
     --- The scope-wide style card is gone: it only ever changed role/leader/assist art while
     --- sitting above a per-indicator selector, which read as if it applied to the selection.

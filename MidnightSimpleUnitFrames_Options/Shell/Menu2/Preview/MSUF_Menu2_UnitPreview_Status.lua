@@ -42,6 +42,8 @@ local STATUS_TEXT_STATE_IDS = {
     statusText = "DEAD",
     statusGhostText = "GHOST",
     statusAFKText = "AFK",
+    -- Value doubles as the preview glyph; the AFK timer shows a sample duration.
+    statusAFKTimer = "5m",
     statusDNDText = "DND",
 }
 local function AnchorLikeRuntime(region, anchor, x, y, frame, nameText)

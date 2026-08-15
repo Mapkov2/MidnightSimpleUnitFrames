@@ -532,6 +532,7 @@ statusCombat=combat icon|combat state|in combat icon
 statusText=dead text|dead status|offline text|status text
 statusGhostText=ghost|ghost text
 statusAFKText=afk|afk text
+statusAFKTimer=afk timer|afk duration|afk time
 statusDNDText=dnd|dnd text|do not disturb
 eliteicon=elite|rare|elite icon|rare icon
 raidgroupname=raid group|group number|subgroup
@@ -552,6 +553,7 @@ assistIcon=assist
 raidMarker=raid marker|marker
 statusText=dead|offline
 statusAFKText=afk
+statusAFKTimer=afk timer|afk duration
 statusDNDText=dnd|do not disturb
 roleIcon=role icon|tank|healer|dps
 ]]

@@ -760,6 +760,8 @@ local function RuntimeStatusConfig(status, spec)
         return status.statusText and status.statusText.ghost or nil
     elseif value == "statusAFKText" then
         return status.statusText and status.statusText.afk or nil
+    elseif value == "statusAFKTimer" then
+        return status.statusText and status.statusText.afkTimer or nil
     elseif value == "statusDNDText" then
         return status.statusText and status.statusText.dnd or nil
     end
@@ -1033,7 +1035,7 @@ local function StatusSpecIsText(spec)
     if spec and spec.isText == true then return true end
     local value = spec and spec.value
     return value == "statusText" or value == "statusGhostText"
-        or value == "statusAFKText" or value == "statusDNDText"
+        or value == "statusAFKText" or value == "statusAFKTimer" or value == "statusDNDText"
 end
 --- Sample subgroup label, formatted by the live raid-group formatter so the
 --- preview cannot drift from what the frame actually prints.
@@ -1050,6 +1052,7 @@ local function StatusText(spec, runtimeCfg, conf)
     local value = spec and spec.value
     if value == "statusGhostText" then return "GHOST" end
     if value == "statusAFKText" then return "AFK" end
+    if value == "statusAFKTimer" then return "5m" end
     if value == "statusDNDText" then return "DND" end
     if value == "showGroupNumber" then
         return PreviewRaidGroupText((runtimeCfg and runtimeCfg.style)
@@ -1071,6 +1074,7 @@ local function StatusLabel(spec)
     if value == "statusText" then return "Dead Text" end
     if value == "statusGhostText" then return "Ghost Text" end
     if value == "statusAFKText" then return "AFK Text" end
+    if value == "statusAFKTimer" then return "AFK Timer" end
     if value == "statusDNDText" then return "DND Text" end
     if value == "showGroupNumber" then return "Group #" end
     return (spec and spec.text) or "Status"
