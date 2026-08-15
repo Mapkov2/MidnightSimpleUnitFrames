@@ -147,6 +147,17 @@ local function ConfEnabled(kind)
   return conf and conf.enabled == true
 end
 
+local function LiveGroupKind()
+  if type(GF.GetLiveGroupKind) == "function" then
+    return GF.GetLiveGroupKind()
+  end
+  if IsInRaid and IsInRaid() then
+    return type(GF.GetLiveRaidKind) == "function" and GF.GetLiveRaidKind() or "raid"
+  end
+  if IsInGroup and IsInGroup() then return "party" end
+  return nil
+end
+
 local function AnyGroupFrameEnabled()
   if type(GF.AnyMSUFGroupFrameEnabled) == "function" then
     return GF.AnyMSUFGroupFrameEnabled() == true
@@ -183,11 +194,7 @@ local function SetRuntimeEventsEnabled(enabled, regenOnly)
     eventFrame:RegisterEvent(RUNTIME_EVENTS[i])
   end
   local priorityKind = type(GF.GetPriorityBaseKind) == "function" and GF.GetPriorityBaseKind() or nil
-  if not priorityKind and IsInRaid and IsInRaid() then
-    priorityKind = type(GF.GetLiveRaidKind) == "function" and GF.GetLiveRaidKind() or "raid"
-  elseif not priorityKind and IsInGroup and IsInGroup() then
-    priorityKind = "party"
-  end
+  if not priorityKind then priorityKind = LiveGroupKind() end
   if priorityKind and ConfEnabled(priorityKind)
     and type(GF.PriorityFramesConfigured) == "function" and GF.PriorityFramesConfigured() == true then
     eventFrame:RegisterEvent("UNIT_NAME_UPDATE")
@@ -203,14 +210,14 @@ end
 local function WantParty()
   local conf = Conf("party")
   if not (conf and conf.enabled == true) then return false end
-  if IsInRaid and IsInRaid() then return false end
-  if IsInGroup and IsInGroup() then return true end
+  if LiveGroupKind() == "party" then return true end
   return conf.showSolo == true
 end
 
 local function WantRaid()
-  if not (IsInRaid and IsInRaid()) then return false end
-  return ConfEnabled(LiveRaidKind())
+  local kind = LiveGroupKind()
+  if kind ~= "raid" and kind ~= "mythicraid" then return false end
+  return ConfEnabled(kind)
 end
 
 local function PreviewSuppressesHeader(key)
@@ -225,16 +232,16 @@ end
 
 local function LivePriorityKind()
   if type(GF.GetPriorityBaseKind) == "function" then return GF.GetPriorityBaseKind() end
-  if IsInRaid and IsInRaid() then return LiveRaidKind() end
-  if IsInGroup and IsInGroup() then return "party" end
-  return nil
+  return LiveGroupKind()
 end
 
 local function WantPriorityBase(kind)
   if kind == "party" then
-    return IsInGroup and IsInGroup() and not (IsInRaid and IsInRaid()) and ConfEnabled("party")
+    return LiveGroupKind() == "party" and ConfEnabled("party")
   end
-  if kind == "raid" or kind == "mythicraid" then return WantRaid() end
+  if kind == "raid" or kind == "mythicraid" then
+    return LiveGroupKind() == kind and WantRaid()
+  end
   return false
 end
 
@@ -868,7 +875,7 @@ local function RuntimeOnEvent(self, event, unit)
     local valid
     if type(GF.IsPriorityGroupUnit) == "function" then
       valid = GF.IsPriorityGroupUnit(unit)
-    elseif IsInRaid and IsInRaid() then
+    elseif LiveGroupKind() ~= "party" and IsInRaid and IsInRaid() then
       valid = unit:match("^raid%d+$") ~= nil
     else
       valid = unit == "player" or unit:match("^party[1-4]$") ~= nil

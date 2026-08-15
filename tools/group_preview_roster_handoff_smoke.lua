@@ -167,6 +167,9 @@ local runtimeEventFrame
 local runtimeGF = { headers = {}, _previewActive = {} }
 local scanCalls = 0
 local appliedChildren = 0
+local runtimeInGroup = true
+local runtimeInRaid = false
+local runtimeArenaParty = false
 
 function runtimeGF.GetConf(kind)
   if kind == "party" then return { enabled = true, showSolo = false } end
@@ -175,6 +178,12 @@ end
 
 function runtimeGF.EnsureDB() end
 function runtimeGF.GetLiveRaidKind() return "raid" end
+function runtimeGF.GetLiveGroupKind()
+  if runtimeArenaParty then return "party" end
+  if runtimeInRaid then return "raid" end
+  if runtimeInGroup then return "party" end
+  return nil
+end
 function runtimeGF.ApplyBlizzardGroupFrameOwnership() end
 function runtimeGF.ApplyGroupBorder() end
 
@@ -216,8 +225,8 @@ function runtimeGF.RetireHeader(key)
 end
 
 _G.InCombatLockdown = function() return false end
-_G.IsInGroup = function() return true end
-_G.IsInRaid = function() return false end
+_G.IsInGroup = function() return runtimeInGroup end
+_G.IsInRaid = function() return runtimeInRaid end
 _G.GetNumGroupMembers = function() return 2 end
 _G.CreateFrame = function()
   local frame = { events = {} }
@@ -245,5 +254,31 @@ end
 runtimeGF.UpdateGroupVisibility()
 Equal(scanCalls, 2, "visible handled scan was duplicated by group runtime")
 Equal(appliedChildren, 4, "visible handled scan did not apply each existing Party child once")
+
+-- Arena must keep using the Party configuration even when the roster API also
+-- reports Raid. Before the fix, WantParty retired this exact live header.
+runtimeInRaid = true
+runtimeArenaParty = true
+runtimeGF.UpdateGroupVisibility()
+Check(runtimeGF.headers.party and runtimeGF.headers.party.shown == true,
+  "Arena Raid roster did not keep the Party-configured live header")
+Check(runtimeGF.headers.raid == nil, "Arena Raid roster built a Raid-configured live header")
+
+-- Exercise the real shared resolver separately: its Brawl exception mirrors
+-- Blizzard_UnitFrame/Shared/GroupFrameVisibility.lua.
+local arenaActive = true
+local inBrawl = false
+_G.IsActiveBattlefieldArena = function() return arenaActive end
+_G.C_PvP = { IsInBrawl = function() return inBrawl end }
+_G.GetInstanceInfo = function() return nil, "none", 0 end
+local scopeMSUF = { UF = {} }
+assert(loadfile("MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB.lua"))(
+  "MidnightSimpleUnitFrames", scopeMSUF)
+local scopeGF = assert(scopeMSUF.GF, "group-frame scope API missing")
+Check(scopeGF.IsArenaPartyContext() == true, "non-Brawl Arena was not recognized as Party scope")
+Check(scopeGF.GetLiveGroupKind() == "party", "Arena selected Raid instead of Party configuration")
+inBrawl = true
+Check(scopeGF.IsArenaPartyContext() == false, "Arena Brawl incorrectly forced Party scope")
+Check(scopeGF.GetLiveGroupKind() == "raid", "Arena Brawl did not retain normal Raid scope")
 
 print("PASS group preview roster handoff: roster cache, combat guard, first-show and handled scans")

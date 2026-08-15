@@ -171,6 +171,9 @@ end
 
 local function GetLiveGroupKind()
   local gf = GF()
+  if gf and type(gf.GetLiveGroupKind) == "function" then
+    return NormalizeKind(gf.GetLiveGroupKind())
+  end
   if IsInRaid and IsInRaid() then
     return (gf and type(gf.GetLiveRaidKind) == "function" and NormalizeKind(gf.GetLiveRaidKind())) or "raid"
   end

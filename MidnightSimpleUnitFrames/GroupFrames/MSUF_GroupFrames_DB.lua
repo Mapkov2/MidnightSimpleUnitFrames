@@ -27,7 +27,8 @@ end
 --
 --   * Cross-file internal API    -> GF.* functions used by >1 GroupFrames file
 --       (e.g. GF.GetConf, GF.GetGridMetrics, GF.ApplyButton, GF.CompileSpec,
---        GF.GetConfigDBKey, GF.GetLiveRaidKind, GF.ForEachFrame, GF.MarkDirty,
+--        GF.GetConfigDBKey, GF.GetLiveRaidKind, GF.GetLiveGroupKind,
+--        GF.ForEachFrame, GF.MarkDirty,
 --        the GF.DIRTY_* mask constants, GF.RefreshAll/RefreshVisuals/RebuildAll).
 --       Keep these on GF.*; they are the module's internal contract.
 --
@@ -1838,6 +1839,34 @@ function GF.GetLiveRaidKind()
         return "mythicraid"
     end
     return "raid"
+end
+
+--- Blizzard treats a live Arena as Party scope even when the roster APIs also
+--- report Raid. Keep that precedence in one shared cold-path helper so runtime,
+--- Edit Mode, previews, Priority Frames, borders, and native-frame ownership all
+--- select the same saved configuration. Brawls deliberately retain their normal
+--- roster scope, matching Blizzard_GroupFrameVisibility.
+function GF.IsArenaPartyContext()
+    local isActiveArena = _G.IsActiveBattlefieldArena
+    if type(isActiveArena) ~= "function" or isActiveArena() ~= true then
+        return false
+    end
+    local pvp = _G.C_PvP
+    local isInBrawl = type(pvp) == "table" and pvp.IsInBrawl or nil
+    return type(isInBrawl) ~= "function" or isInBrawl() ~= true
+end
+
+function GF.GetLiveGroupKind()
+    if GF.IsArenaPartyContext and GF.IsArenaPartyContext() then
+        return "party"
+    end
+    if _G.IsInRaid and _G.IsInRaid() then
+        return GF.GetLiveRaidKind and GF.GetLiveRaidKind() or "raid"
+    end
+    if _G.IsInGroup and _G.IsInGroup() then
+        return "party"
+    end
+    return nil
 end
 
 function GF.GetConfigDBKey(kind)

@@ -268,12 +268,18 @@ local function LiveRaidKind(gf)
     if kind == "mythicraid" then return "mythicraid" end
     return "raid"
 end
+local function LiveGroupKind(gf)
+    if gf and type(gf.GetLiveGroupKind) == "function" then return gf.GetLiveGroupKind() end
+    if _G.IsInRaid and _G.IsInRaid() then return LiveRaidKind(gf) end
+    if _G.IsInGroup and _G.IsInGroup() then return "party" end
+    return nil
+end
 local function GroupPreviewRosterState(gf)
     local inGroup = _G.IsInGroup and _G.IsInGroup() and true or false
     local inRaid = _G.IsInRaid and _G.IsInRaid() and true or false
     local count = _G.GetNumGroupMembers and tonumber(_G.GetNumGroupMembers()) or 0
     if count < 0 then count = 0 end
-    return inGroup, inRaid, math.floor(count + 0.5), inRaid and LiveRaidKind(gf) or nil
+    return inGroup, inRaid, math.floor(count + 0.5), LiveGroupKind(gf)
 end
 local function GroupConfEnabled(gf, kind)
     local conf = gf and type(gf.GetConf) == "function" and gf.GetConf(kind) or nil
@@ -281,15 +287,13 @@ local function GroupConfEnabled(gf, kind)
 end
 local function LiveGroupFramesCoverKind(gf, kind)
     kind = kind == "gf_party" and "party" or (kind == "gf_raid" and "raid" or (kind == "gf_mythicraid" and "mythicraid" or kind))
+    local liveKind = LiveGroupKind(gf)
     if kind == "party" then
-        if _G.IsInRaid and _G.IsInRaid() then return false end
         if not GroupConfEnabled(gf, "party") then return false end
         local conf = gf and type(gf.GetConf) == "function" and gf.GetConf("party") or nil
-        return (_G.IsInGroup and _G.IsInGroup()) or (conf and conf.showSolo == true) or false
+        return liveKind == "party" or (liveKind == nil and conf and conf.showSolo == true) or false
     elseif kind == "raid" or kind == "mythicraid" then
-        if not (_G.IsInRaid and _G.IsInRaid()) then return false end
-        local liveKind = LiveRaidKind(gf)
-        return GroupConfEnabled(gf, liveKind)
+        return liveKind == kind and GroupConfEnabled(gf, kind)
     end
     return false
 end
