@@ -12,6 +12,8 @@ if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("frFR")) or (MSUF.L or {})
 
+L["BLIZZARD LIMITATION: During instanced combat, Blizzard may restrict race and class information. Race/Class Text may therefore be unavailable or use fallback identifiers."] = "LIMITATION DE BLIZZARD : Pendant les combats en instance, Blizzard peut restreindre les informations de race et de classe. Le texte de race/classe peut donc être indisponible ou utiliser des identifiants de secours."
+
 -- Commandes de surbrillance au survol.
 L["Soft gradient"] = "Dégradé doux"
 L["Solid border"] = "Bordure pleine"

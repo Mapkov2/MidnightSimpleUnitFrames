@@ -9,6 +9,8 @@ if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("enGB")) or (MSUF.L or {})
 
+L["BLIZZARD LIMITATION: During instanced combat, Blizzard may restrict race and class information. Race/Class Text may therefore be unavailable or use fallback identifiers."] = "BLIZZARD LIMITATION: During instanced combat, Blizzard may restrict race and class information. Race/Class Text may therefore be unavailable or use fallback identifiers."
+
 -- Mouseover highlight controls.
 L["Soft gradient"] = "Soft gradient"
 L["Solid border"] = "Solid border"

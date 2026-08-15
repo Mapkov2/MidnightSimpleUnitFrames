@@ -12,6 +12,8 @@ if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("zhTW")) or (MSUF.L or {})
 
+L["BLIZZARD LIMITATION: During instanced combat, Blizzard may restrict race and class information. Race/Class Text may therefore be unavailable or use fallback identifiers."] = "暴雪限制：在副本戰鬥中，暴雪可能會限制種族與職業資訊。因此，種族／職業文字可能無法使用，或顯示備用識別碼。"
+
 -- 滑鼠游標高亮設定。
 L["Soft gradient"] = "柔和漸層"
 L["Solid border"] = "實線邊框"

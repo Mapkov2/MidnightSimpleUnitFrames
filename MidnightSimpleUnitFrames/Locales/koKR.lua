@@ -12,6 +12,8 @@ if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("koKR")) or (MSUF.L or {})
 
+L["BLIZZARD LIMITATION: During instanced combat, Blizzard may restrict race and class information. Race/Class Text may therefore be unavailable or use fallback identifiers."] = "BLIZZARD 제한: 인스턴스 전투 중에는 Blizzard가 종족 및 직업 정보를 제한할 수 있습니다. 따라서 종족/직업 텍스트를 사용할 수 없거나 대체 식별자가 표시될 수 있습니다."
+
 -- 마우스오버 강조 설정.
 L["Soft gradient"] = "부드러운 그라데이션"
 L["Solid border"] = "단색 테두리"

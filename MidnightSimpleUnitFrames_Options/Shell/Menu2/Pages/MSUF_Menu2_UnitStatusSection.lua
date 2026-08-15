@@ -27,6 +27,8 @@ StatusIconPackValues = StatusIconPackValues or function() return {} end
 local SYMBOL_MEDIA = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Symbols\\"
 local RAID_GROUP_NAME_STYLES = VT("PAREN", "(2)", "BRACKET", "[2]", "NONE", "2")
 local STATUS_ICON_TAB_VALUES = VT("basic", "Basic", "advanced", "Advanced")
+local IDENTITY_RESTRICTION_WARNING_COLOR = { 1.00, 0.64, 0.18, 1 }
+local IDENTITY_RESTRICTION_WARNING = "BLIZZARD LIMITATION: During instanced combat, Blizzard may restrict race and class information. Race/Class Text may therefore be unavailable or use fallback identifiers."
 local DisabledNameAnchorValues = Shared.DisabledNameAnchorValues or function(values) return values or {} end
 local SetSectionHeaderStatus = Shared.SetSectionHeaderStatus or function() end
 local function BuildStatus(ctx, builder, unit)
@@ -293,6 +295,9 @@ local function BuildStatus(ctx, builder, unit)
         "enabled", "show selected indicator", "hide selected indicator", "show level", "hide level",
         "enable level", "disable level", "turn level on", "turn level off",
     }, nil, nil, "status.selected.enabled", nil, selectedStatusContract)
+    local identityRestrictionWarning = W.Text(selectedCard, IDENTITY_RESTRICTION_WARNING,
+        16, -106, selectedControlW, IDENTITY_RESTRICTION_WARNING_COLOR)
+    if identityRestrictionWarning.SetWordWrap then identityRestrictionWarning:SetWordWrap(true) end
     local function CurrentStatusSymbolValues()
         local spec = CurrentStatusSpec(unit)
         return (spec and spec.symbols) or DEFAULT_SYMBOLS
@@ -706,6 +711,8 @@ local function BuildStatus(ctx, builder, unit)
         local hasCustomIcon = spec and spec.customIcon
         local isStatusText = spec and spec.statusTextState ~= nil
         local isTextIndicator = spec and (spec.textIndicator == true or spec.inlineName == true or isStatusText)
+        local isIdentityText = spec and (spec.value == "raceText" or spec.value == "classText")
+        local isEnabled = ReadStatusEnabled(spec)
         local showStateStyle = (hasSymbol or hasIconPack) and true or false
         local showTestMode = spec and spec.statusRuntime and true or false
         LayoutSelectedControls(hasSymbol, hasIconPack, hasCustomIcon)
@@ -715,13 +722,13 @@ local function BuildStatus(ctx, builder, unit)
         ShowControl(iconPack, hasIconPack)
         ShowControl(customIcon, hasCustomIcon)
         ShowControl(selectedTextShortcut, isTextIndicator)
+        ShowControl(identityRestrictionWarning, isIdentityText and isEnabled)
         ShowControl(raidGroupStyle, inlineName)
         ShowControl(test, showTestMode)
         ShowControls(true, anchor, layer, advanced.layer)
         ShowControls(not inlineName, size, previewLabel, current, all, previewCard, advanced.current, advanced.all)
         ShowControls(spec ~= nil, reset, advanced.reset)
         ShowControl(advanced.test, showTestMode and not inlineName)
-        local isEnabled = ReadStatusEnabled(spec)
         SetPreviewCurrentVisual(current, isEnabled)
         SetPreviewCurrentVisual(advanced.current, isEnabled)
         SetControlEnabled(symbol, hasSymbol and isEnabled)

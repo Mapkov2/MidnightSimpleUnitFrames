@@ -1407,6 +1407,22 @@ local function IdentityString(value)
   return "", false
 end
 
+local function IdentityDisplayValue(localizedValue, stableValue)
+  -- UnitRace/UnitClass localized names can be identity-secret in restricted
+  -- instances. Some client builds render those localized secret strings as the
+  -- unit name or as blank text. Their stable second returns remain suitable for
+  -- direct, secret-safe FontString display; never inspect or index them in Lua.
+  if issecretvalue(localizedValue) == true then
+    local _, stablePresent = IdentityString(stableValue)
+    if stablePresent then return stableValue end
+    return localizedValue
+  end
+  if type(localizedValue) == "string" and localizedValue ~= "" then
+    return localizedValue
+  end
+  return stableValue
+end
+
 local function ShowIdentityText(region, value, present)
   if not region then return end
   if present then
@@ -1449,13 +1465,14 @@ local function UpdateIdentityTexts(frame, status)
 
   local raceText, racePresent = "", false
   if showRace and UnitRace then
-    raceText, racePresent = IdentityString(UnitRace(unit))
+    local localizedRace, englishRace = UnitRace(unit)
+    raceText, racePresent = IdentityString(IdentityDisplayValue(localizedRace, englishRace))
   end
 
   local classText, classPresent = "", false
   if showClass then
-    local className = ReadUnitClassCached(frame, unit)
-    classText, classPresent = IdentityString(className)
+    local localizedClass, classToken = ReadUnitClassCached(frame, unit)
+    classText, classPresent = IdentityString(IdentityDisplayValue(localizedClass, classToken))
   end
 
   if showLevel then ShowIdentityText(frame.levelText, levelText, levelPresent) else SetShown(frame.levelText, false) end
