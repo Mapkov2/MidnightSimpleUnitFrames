@@ -684,16 +684,6 @@ local function ApplyStateIconTexture(tex, kind, cfg, status)
   end
 end
 
-local function UnitFramePVPContextualDisabled()
-  local gameRules = _G.C_GameRules
-  local enum = _G.Enum
-  local rule = enum and enum.GameRule and enum.GameRule.UnitFramePvPContextualDisabled
-  if gameRules and type(gameRules.IsGameRuleActive) == "function" and rule ~= nil then
-    return gameRules.IsGameRuleActive(rule) == true
-  end
-  return false
-end
-
 local function PVPAtlasForFaction(factionGroup)
   return PVP_ATLAS_BY_FACTION[factionGroup]
 end
@@ -704,9 +694,6 @@ end
 
 local function ResolvePVPAtlas(frame, unit, unitState)
   if not (unit and UnitExistsRuntime(unit, unitState, frame)) then
-    return nil
-  end
-  if UnitFramePVPContextualDisabled() then
     return nil
   end
   if UnitIsPVPFreeForAll and BoolTrue(UnitIsPVPFreeForAll(unit)) then

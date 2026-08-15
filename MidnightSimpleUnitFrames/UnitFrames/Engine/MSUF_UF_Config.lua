@@ -27,9 +27,6 @@ local CreateFrame = _G.CreateFrame
 local InCombatLockdown = _G.InCombatLockdown
 local IsInInstance = _G.IsInInstance
 local GetInstanceInfo = _G.GetInstanceInfo
-local IsPVPTimerRunning = _G.IsPVPTimerRunning
-local UnitIsPVP = _G.UnitIsPVP
-local UnitIsPVPFreeForAll = _G.UnitIsPVPFreeForAll
 local wipe = _G.wipe or table.wipe or function(t)
     for k in pairs(t) do
         t[k] = nil
@@ -941,7 +938,16 @@ end
 
 local _pvpContextKnown, _pvpContextActive = false, false
 
+local function UnitFramePVPContextualDisabled()
+  local gameRules = _G.C_GameRules
+  local enum = _G.Enum
+  local rule = enum and enum.GameRule and enum.GameRule.UnitFramePvPContextualDisabled
+  return gameRules and type(gameRules.IsGameRuleActive) == "function" and rule ~= nil
+    and APIBool(gameRules.IsGameRuleActive, rule)
+end
+
 local function ComputePVPIndicatorContextActive(warModeOverride)
+  if UnitFramePVPContextualDisabled() then return false end
   local instanceType = CurrentInstanceType()
   if instanceType == "pvp" or instanceType == "arena" then
     return true
@@ -957,29 +963,14 @@ local function ComputePVPIndicatorContextActive(warModeOverride)
   end
 
   local cpvp = _G.C_PvP
-  if cpvp then
-    if type(cpvp.IsWarModeDesired) == "function" then
-      if APIBool(cpvp.IsWarModeDesired) then
-        return true
-      end
-      -- During War Mode deactivation, IsWarModeActive/UnitIsPVP and the PvP
-      -- timer may deliberately remain true. Desired=false means this cold
-      -- visibility path must already be disabled; the timer is UI text only.
-      if APIBool(cpvp.IsWarModeActive) or APIBool(IsPVPTimerRunning) then
-        return false
-      end
-    elseif APIBool(cpvp.IsWarModeActive) then
-      return true
-    end
+  if not cpvp then return false end
+  -- This indicator is intentionally a PvP-mode feature, not a general
+  -- UnitIsPVP flag display. Outside War Mode, arenas and battlegrounds its
+  -- complete UF/GF runtime stays uncompiled even when the profile enables it.
+  if type(cpvp.IsWarModeDesired) == "function" then
+    return APIBool(cpvp.IsWarModeDesired)
   end
-
-  -- A running timer represents PvP deactivation, not a reason to retain the
-  -- icon runtime. Keep manual /pvp as a fallback once no timer is running.
-  if APIBool(IsPVPTimerRunning) then
-    return false
-  end
-  return APIBool(UnitIsPVPFreeForAll, "player")
-    or APIBool(UnitIsPVP, "player")
+  return APIBool(cpvp.IsWarModeActive)
 end
 
 function UF.InvalidatePVPIndicatorContext()
@@ -995,12 +986,8 @@ function UF.PVPIndicatorContextActive()
 end
 
 local PVP_CONTEXT_REFRESH_ELEMENTS = { "StatusIndicators", "PVPIndicator", "GroupStatusRuntime" }
-local PVP_CONTEXT_UNIT_EVENTS = {
-  UNIT_FACTION = true,
-  PLAYER_FLAGS_CHANGED = true,
-  PVP_TIMER_UPDATE = true,
-}
 local PVP_CONTEXT_FORCE_EVENTS = {
+  ACTIVE_GAME_MODE_UPDATED = true,
   PLAYER_ENTERING_WORLD = true,
   WAR_MODE_STATUS_UPDATE = true,
 }
@@ -1033,12 +1020,8 @@ function UF.RefreshPVPIndicatorContext(reason, force, warModeOverride)
   return true
 end
 
-local function RegisterPVPContextEvent(frame, event, unit)
-  if unit then
-    frame:RegisterUnitEvent(event, unit)
-  else
-    frame:RegisterEvent(event)
-  end
+local function RegisterPVPContextEvent(frame, event)
+  frame:RegisterEvent(event)
 end
 
 if not UF.pvpIndicatorContextDriver then
@@ -1048,12 +1031,6 @@ if not UF.pvpIndicatorContextDriver then
     -- native per-frame event routing, so never query context or rebuild UF/GF
     -- specs in combat.
     if InCombatLockdown and InCombatLockdown() then
-      return
-    end
-    -- Several context events carry booleans (WAR_MODE_STATUS_UPDATE and
-    -- PLAYER_ENTERING_WORLD), not unit tokens. Only filter events whose first
-    -- payload is actually a unit or a true War Mode transition gets dropped.
-    if PVP_CONTEXT_UNIT_EVENTS[event] == true and arg1 and arg1 ~= "player" then
       return
     end
     local force = PVP_CONTEXT_FORCE_EVENTS[event] == true
@@ -1069,12 +1046,10 @@ if not UF.pvpIndicatorContextDriver then
       warModeOverride
     )
   end)
+  RegisterPVPContextEvent(pvpDriver, "ACTIVE_GAME_MODE_UPDATED")
   RegisterPVPContextEvent(pvpDriver, "PLAYER_ENTERING_WORLD")
   RegisterPVPContextEvent(pvpDriver, "ZONE_CHANGED_NEW_AREA")
-  RegisterPVPContextEvent(pvpDriver, "PVP_TIMER_UPDATE", "player")
-  RegisterPVPContextEvent(pvpDriver, "PLAYER_FLAGS_CHANGED", "player")
   RegisterPVPContextEvent(pvpDriver, "WAR_MODE_STATUS_UPDATE")
-  RegisterPVPContextEvent(pvpDriver, "UNIT_FACTION", "player")
   UF.pvpIndicatorContextDriver = pvpDriver
 end
 
