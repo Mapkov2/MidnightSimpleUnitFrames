@@ -129,6 +129,7 @@ local PORTRAIT_STYLE_DEFAULTS = {
     portraitRender = "2D",
     portraitClassStyle = "BLIZZARD",
     portraitShape = "SQUARE",
+    portraitSizeMode = "UNIFORM",
     portraitSizeOverride = 0,
     portraitOffsetX = 0,
     portraitOffsetY = 0,

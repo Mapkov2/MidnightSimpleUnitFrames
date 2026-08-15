@@ -3550,6 +3550,15 @@ if g.kickNotReadyColor   == nil then g.kickNotReadyColor   = { ["1"] = 1, ["2"] 
     if g.portraitPlacement == nil then g.portraitPlacement = "ATTACHED" end
     if g.portraitWidth == nil then g.portraitWidth = 0 end
     if g.portraitHeight == nil then g.portraitHeight = 0 end
+    if g.portraitSizeMode ~= "UNIFORM" and g.portraitSizeMode ~= "SEPARATE" then
+        if (tonumber(g.portraitSizeOverride) or 0) > 0 then
+            g.portraitSizeMode = "UNIFORM"
+        elseif (tonumber(g.portraitWidth) or 0) > 0 or (tonumber(g.portraitHeight) or 0) > 0 then
+            g.portraitSizeMode = "SEPARATE"
+        else
+            g.portraitSizeMode = "UNIFORM"
+        end
+    end
     if g.portraitDetachedPoint == nil then g.portraitDetachedPoint = "RIGHT" end
     if g.portraitDetachedTo == nil then g.portraitDetachedTo = "LEFT" end
     if g.portraitLevelOffset == nil then g.portraitLevelOffset = 7 end
@@ -4807,6 +4816,18 @@ local function fill(key, defaults)
         end
         PortraitDefault("portraitClassStyle", "BLIZZARD")
         u.portraitClassStyle = MSUF_Defaults_NormalizePortraitClassStyleValue(u.portraitClassStyle)
+        local inferredPortraitSizeMode
+        if not useLegacyBaseline and u.portraitSizeMode == nil then
+            if (tonumber(u.portraitSizeOverride) or 0) > 0 then
+                inferredPortraitSizeMode = "UNIFORM"
+            elseif (tonumber(u.portraitWidth) or 0) > 0 or (tonumber(u.portraitHeight) or 0) > 0 then
+                inferredPortraitSizeMode = "SEPARATE"
+            end
+        elseif u.portraitSizeMode ~= nil
+            and u.portraitSizeMode ~= "UNIFORM" and u.portraitSizeMode ~= "SEPARATE"
+        then
+            u.portraitSizeMode = nil
+        end
         PortraitDefault("portraitShape", "SQUARE")
         PortraitDefault("portraitSizeOverride", 0)
         --- 6.0: detached/overlay placement, free width+height, art pan and the
@@ -4815,6 +4836,10 @@ local function fill(key, defaults)
         PortraitDefault("portraitPlacement", "ATTACHED")
         PortraitDefault("portraitWidth", 0)
         PortraitDefault("portraitHeight", 0)
+        if u.portraitSizeMode == nil and inferredPortraitSizeMode ~= nil then
+            u.portraitSizeMode = inferredPortraitSizeMode
+        end
+        PortraitDefault("portraitSizeMode", "UNIFORM")
         PortraitDefault("portraitDetachedPoint", "RIGHT")
         PortraitDefault("portraitDetachedTo", "LEFT")
         PortraitDefault("portraitLevelOffset", 7)

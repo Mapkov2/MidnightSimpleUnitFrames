@@ -1050,7 +1050,7 @@ end
 --- never receive portrait settings through the dynamic Group binding path.
 function GroupPage.BuildPortrait(ctx, builder)
     local kind = "party"
-    local cardH = { main = 224, geometry = 386, placement = 382, border = 380, style = 330 }
+    local cardH = { main = 224, geometry = 440, placement = 382, border = 380, style = 330 }
     local tabH = {
         general = cardH.main + 116,
         geometry = cardH.geometry + 116,
@@ -1069,6 +1069,7 @@ function GroupPage.BuildPortrait(ctx, builder)
         borderDirection = VT("UP", "Up", "RIGHT", "Right", "DOWN", "Down", "LEFT", "Left"),
     }
     local renderValues = VT("2D", "2D portrait", "CLASS", "Class portrait")
+    local sizeModeValues = VT("UNIFORM", "Uniform", "SEPARATE", "Width & height")
     local shapeValues = VT("SQUARE", "Square", "CIRCLE", "Circle", "ROUNDED", "Rounded", "DIAMOND", "Diamond")
     local borderValues = VT("NONE", "No border", "SOLID", "Solid", "CLASS_COLOR", "Class color", "REACTION", "Reaction color", "CUSTOM", "Custom color")
     local function ClassStyleValues()
@@ -1313,12 +1314,28 @@ function GroupPage.BuildPortrait(ctx, builder)
     AttachPortraitFocus(side)
     local render = BindDropdown(mainCard, "Render", renderValues, 16, -116, min(220, cardW - 32), "portraitRender", "2D", nil, RefreshPortraitControls)
     local shape = BindDropdown(borderCard, "Shape", shapeValues, 16, -58, min(220, cardW - 32), "portraitShape", "SQUARE", nil, RefreshPortraitControls)
-    local size = BindNumber(geometryCard, "Size override", 16, -62, cardW - 58, 0, 128, 1, "portraitSizeOverride", 0)
-    local width = BindNumber(geometryCard, "Width override", 16, -116, cardW - 58, 0, 256, 1, "portraitWidth", 0)
-    local height = BindNumber(geometryCard, "Height override", 16, -170, cardW - 58, 0, 256, 1, "portraitHeight", 0)
-    local zoom = BindNumber(geometryCard, "Portrait zoom", 16, -224, cardW - 58, 100, 200, 1, "portraitZoom", 100)
-    local panX = BindNumber(geometryCard, "Zoom center X", 16, -278, cardW - 58, -100, 100, 1, "portraitPanX", 0)
-    local panY = BindNumber(geometryCard, "Zoom center Y", 16, -332, cardW - 58, -100, 100, 1, "portraitPanY", 0)
+    local sizeMode = W.Segment(geometryCard, "Size mode", sizeModeValues, min(360, cardW - 32))
+    W.MoveWidget(sizeMode, geometryCard, 16, -62, min(360, cardW - 32))
+    M.BindSegment(ctx, sizeMode,
+        function()
+            local conf = Conf(kind)
+            local mode = conf.portraitSizeMode
+            if mode == "UNIFORM" or mode == "SEPARATE" then return mode end
+            return ((tonumber(conf.portraitWidth) or 0) > 0 or (tonumber(conf.portraitHeight) or 0) > 0)
+                and "SEPARATE" or "UNIFORM"
+        end,
+        function(value)
+            SetValue("portraitSizeMode", value == "SEPARATE" and "SEPARATE" or "UNIFORM")
+            RefreshPortraitControls()
+        end,
+        PortraitMeta("portraitSizeMode", "portraitSizeMode"))
+    AttachPortraitFocus(sizeMode)
+    local size = BindNumber(geometryCard, "Size override", 16, -116, cardW - 58, 0, 128, 1, "portraitSizeOverride", 0)
+    local width = BindNumber(geometryCard, "Width override", 16, -170, cardW - 58, 0, 256, 1, "portraitWidth", 0)
+    local height = BindNumber(geometryCard, "Height override", 16, -224, cardW - 58, 0, 256, 1, "portraitHeight", 0)
+    local zoom = BindNumber(geometryCard, "Portrait zoom", 16, -278, cardW - 58, 100, 200, 1, "portraitZoom", 100)
+    local panX = BindNumber(geometryCard, "Zoom center X", 16, -332, cardW - 58, -100, 100, 1, "portraitPanX", 0)
+    local panY = BindNumber(geometryCard, "Zoom center Y", 16, -386, cardW - 58, -100, 100, 1, "portraitPanY", 0)
     local placement = BindDropdown(placementCard, "Placement", placementValues.modes, 16, -58, min(220, cardW - 32), "portraitPlacement", "ATTACHED", nil, RefreshPortraitControls)
     placement._msuf2SearchText = "Portrait placement attached detached overlay free position anchor"
     local detachedPoint = BindDropdown(placementCard, "Portrait anchor point", placementValues.points, 16, -112, min(220, cardW - 32), "portraitDetachedPoint", "RIGHT")
@@ -1339,12 +1356,22 @@ function GroupPage.BuildPortrait(ctx, builder)
     local castIcon = BindToggle(styleCard, "Show cast spell icon in portrait", 16, -274, cardW - 32, "portraitCastSpellIcon", false)
     castIcon._msuf2SearchText = "Portrait cast spell icon casting channel empower"
     local activeControls = {
-        render, shape, size, width, height, placement, level, alpha,
+        render, shape, sizeMode, size, width, height, placement, level, alpha,
         border, background, castIcon,
     }
     local function Active(conf) return (conf.portraitMode or "OFF") ~= "OFF" end
     local function Placed(conf, value)
         return Active(conf) and (conf.portraitPlacement or "ATTACHED") == value
+    end
+    local function FillsBar(conf)
+        return (conf.portraitPlacement or "ATTACHED") == "OVERLAY"
+            and (conf.portraitOverlayAlign or "LEFT") == "FULL"
+    end
+    local function UsesSeparateSize(conf)
+        local mode = conf.portraitSizeMode
+        if mode == "SEPARATE" then return true end
+        if mode == "UNIFORM" then return false end
+        return (tonumber(conf.portraitWidth) or 0) > 0 or (tonumber(conf.portraitHeight) or 0) > 0
     end
     RefreshPortraitControls = RefreshPortraitControls(M.BindGateGroup(ctx, function() return Conf(kind) end, {
         { enable = portraitEnable },
@@ -1352,6 +1379,13 @@ function GroupPage.BuildPortrait(ctx, builder)
         { controls = side, on = function(conf) return Placed(conf, "ATTACHED") end },
         { controls = { detachedPoint, detachedTo }, on = function(conf) return Placed(conf, "DETACHED") end },
         { controls = overlayAlign, on = function(conf) return Placed(conf, "OVERLAY") end },
+        { controls = sizeMode, on = function(conf) return Active(conf) and not FillsBar(conf) end },
+        { controls = size, on = function(conf)
+            return Active(conf) and not FillsBar(conf) and not UsesSeparateSize(conf)
+        end },
+        { controls = { width, height }, on = function(conf)
+            return Active(conf) and not FillsBar(conf) and UsesSeparateSize(conf)
+        end },
         { controls = { zoom, panX, panY }, on = function(conf) return Active(conf) and (conf.portraitRender or "2D") ~= "CLASS" end },
         { controls = { thickness, borderArt }, on = function(conf) return Active(conf) and (conf.portraitBorderStyle or "NONE") ~= "NONE" end },
         { controls = direction, on = function(conf)

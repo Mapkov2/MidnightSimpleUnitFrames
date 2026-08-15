@@ -670,6 +670,7 @@ PARTY_DEFAULTS.portraitMode = "OFF"
 PARTY_DEFAULTS.portraitRender = "2D"
 PARTY_DEFAULTS.portraitClassStyle = "BLIZZARD"
 PARTY_DEFAULTS.portraitShape = "SQUARE"
+PARTY_DEFAULTS.portraitSizeMode = "UNIFORM"
 PARTY_DEFAULTS.portraitSizeOverride = 0
 PARTY_DEFAULTS.portraitWidth = 0
 PARTY_DEFAULTS.portraitHeight = 0
@@ -1581,6 +1582,18 @@ function GROUP_MENU_DOMAIN_REPAIR.Conf(conf, defaults, isRaid)
     GROUP_MENU_DOMAIN_REPAIR.SpellIndicators(conf)
 end
 
+local function MigratePortraitSizeMode(conf)
+    if type(conf) ~= "table" then return end
+    if conf.portraitSizeMode == "UNIFORM" or conf.portraitSizeMode == "SEPARATE" then return end
+    -- Party's legacy compiler let either positive axis win even when the
+    -- uniform Size field was also populated. Preserve that visible geometry.
+    if (tonumber(conf.portraitWidth) or 0) > 0 or (tonumber(conf.portraitHeight) or 0) > 0 then
+        conf.portraitSizeMode = "SEPARATE"
+    else
+        conf.portraitSizeMode = "UNIFORM"
+    end
+end
+
 function GF.EnsureDB()
     local db = _G.MSUF_DB
     if not db then return end
@@ -1641,6 +1654,7 @@ function GF.EnsureDB()
     MigrateSplitDNDStatusText(db.gf_party)
     MigrateSplitDNDStatusText(db.gf_raid)
     MigrateSplitDNDStatusText(db.gf_mythicraid)
+    MigratePortraitSizeMode(db.gf_party)
     applyDefaults(db.gf_party, PARTY_DEFAULTS)
     applyDefaults(db.gf_raid,  RAID_DEFAULTS)
     applyDefaults(db.gf_mythicraid, MYTHIC_RAID_DEFAULTS)

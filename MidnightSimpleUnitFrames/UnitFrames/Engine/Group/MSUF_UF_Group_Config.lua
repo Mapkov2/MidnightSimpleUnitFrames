@@ -1562,8 +1562,17 @@ local function CompilePortrait(kind, conf, frameHeight)
   local size = override > 0 and math.max(1, override) or autoSize
   local width = Num(conf.portraitWidth, 0)
   local height = Num(conf.portraitHeight, 0)
-  width = width > 0 and math.max(8, width) or size
-  height = height > 0 and math.max(8, height) or size
+  local sizeMode = conf.portraitSizeMode
+  if sizeMode ~= "UNIFORM" and sizeMode ~= "SEPARATE" then
+    -- Legacy Party portraits always let either positive axis override Size.
+    sizeMode = (width > 0 or height > 0) and "SEPARATE" or "UNIFORM"
+  end
+  if sizeMode == "UNIFORM" then
+    width, height = size, size
+  else
+    width = width > 0 and math.max(8, width) or autoSize
+    height = height > 0 and math.max(8, height) or autoSize
+  end
   local shape = PORTRAIT_SHAPES[conf.portraitShape] and conf.portraitShape or "SQUARE"
   local borderStyle = PORTRAIT_BORDERS[conf.portraitBorderStyle] and conf.portraitBorderStyle or "NONE"
   local placement = PORTRAIT_PLACEMENTS[conf.portraitPlacement] and conf.portraitPlacement or "ATTACHED"
@@ -1579,6 +1588,7 @@ local function CompilePortrait(kind, conf, frameHeight)
     castSpellIcon = conf.portraitCastSpellIcon == true,
     shape = shape,
     size = size,
+    sizeMode = sizeMode,
     width = width,
     height = height,
     x = Num(conf.portraitOffsetX, 0),

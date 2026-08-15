@@ -43,6 +43,7 @@ local PORTRAIT_PLACEMENT = {
     borderArt = VT("FLAT", "Flat", "RELIEF", "Relief"),
     borderDirection = VT("UP", "Up", "RIGHT", "Right", "DOWN", "Down", "LEFT", "Left"),
 }
+local PORTRAIT_SIZE_MODES = VT("UNIFORM", "Uniform", "SEPARATE", "Width & height")
 local UnitSectionShared = M.UnitSectionsShared or {}
 local SetSectionHeaderStatus = UnitSectionShared.SetSectionHeaderStatus or function() end
 local CreateSectionNotice = UnitSectionShared.CreateSectionNotice or function() end
@@ -97,7 +98,7 @@ end
 local NormalizePortraitClassStyle = M.NormalizePortraitClassStyle
 -- Card heights. BuildPortrait and PortraitLayoutForWidth must agree on these, so
 -- both read them from here instead of repeating literals.
-local PORTRAIT_CARD_H = { main = 224, geometry = 386, placement = 382, border = 380, style = 220 }
+local PORTRAIT_CARD_H = { main = 224, geometry = 440, placement = 382, border = 380, style = 220 }
 local PORTRAIT_TAB_HEIGHTS = {
     general = PORTRAIT_CARD_H.main + 116,
     geometry = PORTRAIT_CARD_H.geometry + 116,
@@ -292,12 +293,29 @@ local function BuildPortrait(ctx, builder, unit)
         PortraitControlMeta("portrait.position", tostring(unit) .. ".portraitMode"))
     local render = BindPortraitDropdown(mainCard, "Render", PORTRAIT_RENDER, 16, -116, min(220, leftW - 32), "portraitRender", "2D", "MSUF2_PORTRAIT_RENDER", nil, RefreshPortraitControls)
     local shape = BindPortraitDropdown(borderCard, "Shape", PORTRAIT_SHAPES, 16, -58, min(220, leftW - 32), "portraitShape", "SQUARE", "MSUF2_PORTRAIT_SHAPE", nil, RefreshPortraitControls)
-    local size = BindPortraitSlider(geometryCard, "Size override", 16, -62, rightW - 58, 0, 128, 1, "portraitSizeOverride", 0, "MSUF2_PORTRAIT_SIZE", RefreshPortraitControls)
-    local widthOverride = BindPortraitSlider(geometryCard, "Width override", 16, -116, rightW - 58, 0, 256, 1, "portraitWidth", 0, "MSUF2_PORTRAIT_WIDTH")
-    local heightOverride = BindPortraitSlider(geometryCard, "Height override", 16, -170, rightW - 58, 0, 256, 1, "portraitHeight", 0, "MSUF2_PORTRAIT_HEIGHT")
-    local zoom = BindPortraitSlider(geometryCard, "Portrait zoom", 16, -224, rightW - 58, 100, 200, 1, "portraitZoom", 100, "MSUF2_PORTRAIT_ZOOM")
-    local panX = BindPortraitSlider(geometryCard, "Zoom center X", 16, -278, rightW - 58, -100, 100, 1, "portraitPanX", 0, "MSUF2_PORTRAIT_PAN_X")
-    local panY = BindPortraitSlider(geometryCard, "Zoom center Y", 16, -332, rightW - 58, -100, 100, 1, "portraitPanY", 0, "MSUF2_PORTRAIT_PAN_Y")
+    local sizeMode = W.Segment(geometryCard, "Size mode", PORTRAIT_SIZE_MODES, min(360, rightW - 32))
+    W.MoveWidget(sizeMode, geometryCard, 16, -62, min(360, rightW - 32))
+    M.BindSegment(ctx, sizeMode,
+        function()
+            local conf = GetConf(unit)
+            local mode = conf.portraitSizeMode
+            if mode == "UNIFORM" or mode == "SEPARATE" then return mode end
+            if (tonumber(conf.portraitSizeOverride) or 0) > 0 then return "UNIFORM" end
+            return ((tonumber(conf.portraitWidth) or 0) > 0 or (tonumber(conf.portraitHeight) or 0) > 0)
+                and "SEPARATE" or "UNIFORM"
+        end,
+        function(value)
+            value = value == "SEPARATE" and "SEPARATE" or "UNIFORM"
+            SetPortraitValue(unit, "portraitSizeMode", value, "MSUF2_PORTRAIT_SIZE_MODE")
+            RefreshPortraitControls()
+        end,
+        PortraitControlMeta("portrait.portraitSizeMode", tostring(unit) .. ".portraitSizeMode"))
+    local size = BindPortraitSlider(geometryCard, "Size override", 16, -116, rightW - 58, 0, 128, 1, "portraitSizeOverride", 0, "MSUF2_PORTRAIT_SIZE")
+    local widthOverride = BindPortraitSlider(geometryCard, "Width override", 16, -170, rightW - 58, 0, 256, 1, "portraitWidth", 0, "MSUF2_PORTRAIT_WIDTH")
+    local heightOverride = BindPortraitSlider(geometryCard, "Height override", 16, -224, rightW - 58, 0, 256, 1, "portraitHeight", 0, "MSUF2_PORTRAIT_HEIGHT")
+    local zoom = BindPortraitSlider(geometryCard, "Portrait zoom", 16, -278, rightW - 58, 100, 200, 1, "portraitZoom", 100, "MSUF2_PORTRAIT_ZOOM")
+    local panX = BindPortraitSlider(geometryCard, "Zoom center X", 16, -332, rightW - 58, -100, 100, 1, "portraitPanX", 0, "MSUF2_PORTRAIT_PAN_X")
+    local panY = BindPortraitSlider(geometryCard, "Zoom center Y", 16, -386, rightW - 58, -100, 100, 1, "portraitPanY", 0, "MSUF2_PORTRAIT_PAN_Y")
     local placement = BindPortraitDropdown(placementCard, "Placement", PORTRAIT_PLACEMENT.modes, 16, -58, min(220, leftW - 32), "portraitPlacement", "ATTACHED", "MSUF2_PORTRAIT_PLACEMENT", nil, RefreshPortraitControls)
     placement._msuf2SearchText = "Portrait placement attached detached overlay free position anchor"
     local detachedPoint = BindPortraitDropdown(placementCard, "Portrait anchor point", PORTRAIT_PLACEMENT.points, 16, -112, min(220, leftW - 32), "portraitDetachedPoint", "RIGHT", "MSUF2_PORTRAIT_DETACHED_POINT")
@@ -323,7 +341,7 @@ local function BuildPortrait(ctx, builder, unit)
         CASTBAR_UNITS[unit] and function() M.RequestRefresh(ctx, "portrait-cast-icon-mirror") end or nil)
     castSpellIcon._msuf2SearchText = "Portrait cast spell icon casting channel empower"
     local portraitActiveControls = {
-        render, shape, size, widthOverride, heightOverride, portraitBg, castSpellIcon,
+        render, shape, sizeMode, size, widthOverride, heightOverride, portraitBg, castSpellIcon,
         placement, levelOffset, portraitAlpha,
     }
     local function PortraitActive() return NormalizePortrait(unit) ~= "OFF" end
@@ -342,6 +360,13 @@ local function BuildPortrait(ctx, builder, unit)
         return (conf.portraitPlacement or "ATTACHED") == "OVERLAY"
             and (conf.portraitOverlayAlign or "LEFT") == "FULL"
     end
+    local function PortraitUsesSeparateSize(conf)
+        local mode = conf.portraitSizeMode
+        if mode == "SEPARATE" then return true end
+        if mode == "UNIFORM" then return false end
+        if (tonumber(conf.portraitSizeOverride) or 0) > 0 then return false end
+        return (tonumber(conf.portraitWidth) or 0) > 0 or (tonumber(conf.portraitHeight) or 0) > 0
+    end
     RefreshPortraitControls = RefreshPortraitControls(M.BindGateGroup(ctx, function() return GetConf(unit) end, {
         { enable = portraitEnable },
         { controls = portraitActiveControls, on = PortraitActive },
@@ -350,14 +375,16 @@ local function BuildPortrait(ctx, builder, unit)
         { controls = portrait, on = function(conf) return PortraitPlacementIs(conf, "ATTACHED") end },
         { controls = { detachedPoint, detachedTo }, on = function(conf) return PortraitPlacementIs(conf, "DETACHED") end },
         { controls = overlayAlign, on = function(conf) return PortraitPlacementIs(conf, "OVERLAY") end },
-        -- Fill-bar geometry comes from the two bar anchors. In every other
-        -- placement a positive uniform size wins; per-axis overrides are the
-        -- non-square Auto-size mode and must not pretend to affect that square.
-        { controls = size, on = function(conf) return PortraitActive() and not PortraitFillsBar(conf) end },
+        -- Fill-bar geometry comes from the two bar anchors. Every other
+        -- placement exposes one explicit mode: a uniform size or two axes.
+        { controls = sizeMode, on = function(conf) return PortraitActive() and not PortraitFillsBar(conf) end },
+        { controls = size, on = function(conf)
+            return PortraitActive() and not PortraitFillsBar(conf) and not PortraitUsesSeparateSize(conf)
+        end },
         { controls = { widthOverride, heightOverride }, on = function(conf)
             return PortraitActive()
                 and not PortraitFillsBar(conf)
-                and (tonumber(conf.portraitSizeOverride) or 0) <= 0
+                and PortraitUsesSeparateSize(conf)
         end },
         { controls = { zoom, panX, panY }, on = PortraitIs2D },
         { controls = border, on = function(conf) return PortraitActive() and not PortraitShapeIsBlizzard(conf) end },

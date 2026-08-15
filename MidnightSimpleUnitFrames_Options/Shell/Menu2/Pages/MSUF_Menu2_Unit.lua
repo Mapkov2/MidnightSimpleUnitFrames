@@ -223,7 +223,7 @@ local COPY_POWER_BAR_FIELDS = WL [[showPowerBar powerBarHeight embedPowerBarInto
 --- intentionally absent: those live in MSUF_DB.general and are shared by all units.
 --- unit_copy_semantics_smoke extracts the bound keys from the Visuals page source and
 --- fails when a new portrait control is missing here.
-local COPY_PORTRAIT_FIELDS = WL [[portraitMode portraitRender portraitClassStyle portraitCastSpellIcon portraitShape portraitSizeOverride portraitWidth portraitHeight portraitOffsetX portraitOffsetY portraitZoom portraitPanX portraitPanY portraitPlacement portraitDetachedPoint portraitDetachedTo portraitOverlayAlign portraitLevelOffset portraitAlpha portraitBorderStyle portraitBorderArt portraitBorderDirection portraitBorderThickness portraitBgEnabled portraitFillBorder portraitDecoOverride]]
+local COPY_PORTRAIT_FIELDS = WL [[portraitMode portraitRender portraitClassStyle portraitCastSpellIcon portraitShape portraitSizeMode portraitSizeOverride portraitWidth portraitHeight portraitOffsetX portraitOffsetY portraitZoom portraitPanX portraitPanY portraitPlacement portraitDetachedPoint portraitDetachedTo portraitOverlayAlign portraitLevelOffset portraitAlpha portraitBorderStyle portraitBorderArt portraitBorderDirection portraitBorderThickness portraitBgEnabled portraitFillBorder portraitDecoOverride]]
 local COPY_TEXT_FIELDS = WL [[
     showName showHP showPower showPowerText nameTextAnchor nameOffsetX nameOffsetY nameFontSize
     showRaidGroupInName raidGroupNameAnchor raidGroupNameOffsetX raidGroupNameOffsetY raidGroupNameLayer raidGroupNameStyle

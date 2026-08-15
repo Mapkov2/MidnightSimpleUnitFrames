@@ -1645,7 +1645,10 @@ function Preview.Refresh(box, reason)
     -- Auto size (Size override = 0) is resolved by the live Portrait element.
     -- Edit Mode displays that applied holder, so consume the same final geometry
     -- instead of letting Menu2 maintain a second approximation of the auto path.
-    if (tonumber(PortraitStyleGet(key, "portraitSizeOverride", 0)) or 0) <= 0 then
+    local runtimeSizeMode = runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.sizeMode
+    if runtimeSizeMode == "SEPARATE"
+        or (tonumber(PortraitStyleGet(key, "portraitSizeOverride", 0)) or 0) <= 0
+    then
         box._runtimeAppliedPortraitW, box._runtimeAppliedPortraitH = R.RuntimeAppliedPortraitSizeForPreviewKey(key)
         if tonumber(box._runtimeAppliedPortraitW) and box._runtimeAppliedPortraitW > 0 then
             box._runtimePortraitW = box._runtimeAppliedPortraitW

@@ -1637,6 +1637,13 @@ local function CompileUnitPortrait(out, conf, general)
   local portraitOverride = Number(conf.portraitSizeOverride, Number(conf.portraitSize, 0))
   local portraitAutoSize = max(16, Number(out.height, 30) - 4)
   local portraitSize = portraitOverride > 0 and max(1, portraitOverride) or portraitAutoSize
+  local portraitSizeMode = conf.portraitSizeMode
+  if portraitSizeMode ~= "UNIFORM" and portraitSizeMode ~= "SEPARATE" then
+    -- Legacy UnitFrames gave a positive uniform override priority. With Auto
+    -- size, positive axis values were the only signal for non-square geometry.
+    portraitSizeMode = portraitOverride > 0 and "UNIFORM"
+      or ((Number(conf.portraitWidth, 0) > 0 or Number(conf.portraitHeight, 0) > 0) and "SEPARATE" or "UNIFORM")
+  end
   out.portrait.enabled = portraitMode ~= "OFF"
   out.portrait.side = portraitMode == "RIGHT" and "RIGHT" or "LEFT"
   out.portrait.render = NormalizePortraitRender(conf.portraitRender)
@@ -1644,19 +1651,20 @@ local function CompileUnitPortrait(out, conf, general)
   out.portrait.castSpellIcon = conf.portraitCastSpellIcon == true
   out.portrait.shape = NormalizePortraitShape(conf.portraitShape)
   out.portrait.size = portraitSize
+  out.portrait.sizeMode = portraitSizeMode
   out.portrait.x = Number(conf.portraitOffsetX, 0)
   out.portrait.y = Number(conf.portraitOffsetY, 0)
-  --- A positive size override is the explicit square contract. Width/height
-  --- are the advanced non-square mode and only take over while size is Auto
-  --- (0); otherwise stale per-axis values made the visible Size slider inert.
+  --- The explicit mode keeps both value sets intact while making their
+  --- precedence unambiguous. This also lets users return to their previous
+  --- uniform or non-square geometry without destructive slider resets.
   local portraitWidth = Number(conf.portraitWidth, 0)
   local portraitHeight = Number(conf.portraitHeight, 0)
-  if portraitOverride > 0 then
+  if portraitSizeMode == "UNIFORM" then
     out.portrait.width = portraitSize
     out.portrait.height = portraitSize
   else
-    out.portrait.width = portraitWidth > 0 and max(8, portraitWidth) or portraitSize
-    out.portrait.height = portraitHeight > 0 and max(8, portraitHeight) or portraitSize
+    out.portrait.width = portraitWidth > 0 and max(8, portraitWidth) or portraitAutoSize
+    out.portrait.height = portraitHeight > 0 and max(8, portraitHeight) or portraitAutoSize
   end
   out.portrait.placement = NormalizePortraitPlacement(conf.portraitPlacement)
   out.portrait.point = NormalizePortraitAnchorPoint(conf.portraitDetachedPoint, "RIGHT")
@@ -1708,7 +1716,7 @@ local function CompileUnitStatus(out, conf, general, key)
     local def = UNIT_STATUS_ENTRY_DEFS[i]
     local id = def[1]
     local fallbackSize = statusTextSize
-    if id == "level" or id == "race" or id == "classText" then
+    if id == "level" or id == "race" or id == "classText" or id == "stance" then
       fallbackSize = levelSize
     elseif id == "raidGroup" then
       fallbackSize = raidGroupSize
