@@ -95,6 +95,17 @@ local function MSUF_FontApplicationMatches(fs, expectedPath, expectedSize)
     return actualSize ~= nil and expectedSize ~= nil and math.abs(actualSize - expectedSize) <= 0.01
 end
 
+local function MSUF_ApplyFontScaleAnimationMode(fs, flags)
+    if not (fs and type(fs.SetScaleAnimationMode) == "function") then return end
+    local modes = _G.FontStringScaleAnimationMode
+    if type(modes) ~= "table" then return end
+    local useSlug = type(flags) == "string" and flags:upper():find("SLUG", 1, true) ~= nil
+    local mode = useSlug and modes.Vertex or modes.FontSize
+    if mode == nil or fs._msufFontScaleAnimationMode == mode then return end
+    local ok = pcall(fs.SetScaleAnimationMode, fs, mode)
+    if ok then fs._msufFontScaleAnimationMode = mode end
+end
+
 local function MSUF_ClearFontStringApplyCaches(fs)
     if not fs then return end
     fs._msufFontAppliedPath = nil
@@ -120,6 +131,7 @@ local function MSUF_ClearFontStringApplyCaches(fs)
     fs._msufStatusFontEpoch = nil
     fs._msufStatusFontAttemptEpoch = nil
     fs._msufCastbarFontEpoch = nil
+    fs._msufFontScaleAnimationMode = nil
 end
 
 local function MSUF_MarkFontApplyFailed()
@@ -172,6 +184,7 @@ ExportPublic("MSUF_IsKnownFileAsset", _G.MSUF_IsKnownFileAsset or MSUF_IsKnownFi
 ExportPublic("MSUF_GetRegisteredLSMFontPath", MSUF_GetRegisteredLSMFontPath)
 ExportPublic("MSUF_IsRegisteredLSMFontPath", MSUF_IsRegisteredLSMFontPath)
 ExportPublic("MSUF_FontApplicationMatches", MSUF_FontApplicationMatches)
+ExportPublic("MSUF_ApplyFontScaleAnimationMode", MSUF_ApplyFontScaleAnimationMode)
 ExportPublic("MSUF_ClearFontStringApplyCaches", MSUF_ClearFontStringApplyCaches)
 ExportPublic("MSUF_MarkFontApplyFailed", MSUF_MarkFontApplyFailed)
 MSUF.Util = MSUF.Util or {}
@@ -313,6 +326,7 @@ do
         if not (fs and type(fs.SetFont) == "function") then return false end
         path = FontAssetAllowed(path)
         if not path then return false end
+        MSUF_ApplyFontScaleAnimationMode(fs, flags)
         local epoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
         if fs._msufFontAppliedPath == path
             and fs._msufFontAppliedSize == size

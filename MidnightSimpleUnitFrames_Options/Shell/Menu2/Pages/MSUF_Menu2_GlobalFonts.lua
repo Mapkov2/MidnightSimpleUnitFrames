@@ -26,7 +26,7 @@ local FONT_DYNAMIC_SETTING_KEYS_BY_PATH = {
 local FONT_DYNAMIC_SETTING_SUFFIXES_BY_PATH = {
     ["scope.override.enabled"] = { "override" },
     ["text_style.outline"] = { "outline" },
-    ["text_style.rendering"] = { "fontMonochrome" },
+    ["text_style.rendering"] = { "fontMonochrome", "fontSlug" },
     ["text_style.shadow.enabled"] = { "textBackdrop" },
     ["text_style.shadow.opacity"] = { "fontShadowOpacity" },
     ["text_style.shadow.distance"] = { "fontShadowDistance" },
@@ -112,9 +112,12 @@ local function NormalizeBaselineOffset(value)
     if value > 4 then return 4 end
     return value
 end
-local function ComposeFontFlags(outline, monochrome)
+local function ComposeFontFlags(outline, monochrome, slug)
     local flags = ""
     outline = tostring(outline or "OUTLINE"):upper()
+    if slug == true then
+        return (outline == "NONE" or outline == "") and "SLUG" or "OUTLINE,SLUG"
+    end
     if outline == "THICKOUTLINE" then
         flags = "THICKOUTLINE"
     elseif outline ~= "NONE" and outline ~= "" then
@@ -267,7 +270,9 @@ local function PreviewFontKey()
 end
 local function PreviewFontFlags()
     local monochrome = FontScopeGet("fontMonochrome", false) == true
-    return ComposeFontFlags(FontOutlineGetFor(CurrentFontScope()), monochrome)
+    local slug = FontScopeGet("fontSlug", false) == true
+    if slug then monochrome = false end
+    return ComposeFontFlags(FontOutlineGetFor(CurrentFontScope()), monochrome, slug)
 end
 local function ApplyPreviewFont(fs)
     if not (fs and fs.SetFont) then return end
@@ -286,6 +291,8 @@ local function ApplyPreviewFont(fs)
     if type(resolve) == "function" then path = resolve(path, size, flags, key) end
     local resolveSafe = _G.MSUF_ResolveSafeFontPath
     if type(resolveSafe) == "function" then path = resolveSafe(path, size, flags, key) end
+    local applyScaleMode = _G.MSUF_ApplyFontScaleAnimationMode
+    if type(applyScaleMode) == "function" then applyScaleMode(fs, flags) end
     local ok = pcall(fs.SetFont, fs, path, size, flags)
     if not ok then
         pcall(fs.SetFont, fs, STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", size, flags)
@@ -295,6 +302,7 @@ local function ApplyPreviewFont(fs)
     if fs.SetTextColor then fs:SetTextColor(c[1], c[2], c[3], c[4] or 1) end
     if fs.SetShadowOffset then
         local shadowOn = FontScopeGet("textBackdrop", true) == true
+            and not tostring(flags):upper():find("SLUG", 1, true)
         if shadowOn then
             local a, x, y = ShadowMetrics()
             if fs.SetShadowColor then fs:SetShadowColor(0, 0, 0, a) end
@@ -369,6 +377,27 @@ end
 local function SetFontAndApply(key, value, reason, sourceKey)
     FontScopeSet(key, value, reason, sourceKey)
     ApplyFonts(reason)
+end
+local function FontRenderingMode()
+    if FontScopeGet("fontSlug", false) == true then return "SLUG" end
+    if FontScopeGet("fontMonochrome", false) == true then return "SHARP" end
+    return "SMOOTH"
+end
+local function SetFontRenderingMode(value)
+    value = tostring(value or "SMOOTH"):upper()
+    local scope = CurrentFontScope()
+    local slug = value == "SLUG"
+    ScopeWrite(scope, "fontOverride", G(), "fontMonochrome", value == "SHARP")
+    ScopeWrite(scope, "fontOverride", G(), "fontSlug", slug)
+    if slug and FontOutlineGetFor(scope) == "THICKOUTLINE" then
+        if IsGFScope(scope) then
+            ScopeWrite(scope, "fontOverride", G(), "fontOutline", "OUTLINE")
+        else
+            ScopeWrite(scope, "fontOverride", G(), "boldText", false)
+            ScopeWrite(scope, "fontOverride", G(), "noOutline", false)
+        end
+    end
+    ApplyFonts("MSUF2_FONT_RENDERING")
 end
 local function BuildFonts(ctx)
     local b = W.PageBuilder(ctx)
@@ -467,7 +496,7 @@ local function BuildFonts(ctx)
     end
     local function RefreshShadowPreview()
         if not (preview and preview.SetShadowOffset) then return end
-        if FontScopeGet("textBackdrop", true) == true then
+        if FontScopeGet("textBackdrop", true) == true and FontRenderingMode() ~= "SLUG" then
             local alpha, x, y = ShadowMetrics()
             if preview.SetShadowColor then preview:SetShadowColor(0, 0, 0, alpha) end
             preview:SetShadowOffset(x, y)
@@ -504,10 +533,16 @@ local function BuildFonts(ctx)
             RefreshFontPreview()
         end,
         Meta("text_style.outline"))
-    local sharp = BindTextSegment("Rendering", VT("SMOOTH", "Smooth", "SHARP", "Sharp"), 260,
-        function() return FontScopeGet("fontMonochrome", false) and "SHARP" or "SMOOTH" end,
-        function(v) SetFontAndApply("fontMonochrome", v == "SHARP", "MSUF2_FONT_MONOCHROME") end,
-        "text_style.rendering")
+    local rendering = BindTextSegment("Rendering", VT("SMOOTH", "Smooth", "SHARP", "Sharp / Pixel", "SLUG", "Slug"), 420,
+        FontRenderingMode,
+        SetFontRenderingMode,
+        "text_style.rendering",
+        function() RefreshScopedFontControls() end)
+    if M.AddTooltip then
+        M.AddTooltip(rendering, "Font rendering",
+            "Slug uses WoW's crisp vector font renderer. Slug supports None or normal Outline; Thick Outline and text shadow are unavailable while it is active.",
+            { hook = true, owner = "ANCHOR_RIGHT" })
+    end
     local shadow = BindTextSegment("Text shadow", VT("ON", "On", "OFF", "Off"), 260,
         function() return FontScopeGet("textBackdrop", true) and "ON" or "OFF" end,
         function(v) SetFontAndApply("textBackdrop", v == "ON", "MSUF2_FONT_SHADOW") end,
@@ -628,13 +663,15 @@ local function BuildFonts(ctx)
             context = function() return { scope = CurrentFontScope() } end,
         })
     end
-    local scopedFontControls = { outline, sharp, shadow, shadowOpacity, shadowDistance, opacity, baseline, nameColor, healthColor, powerColor }
+    local scopedFontControls = { outline, rendering, shadow, shadowOpacity, shadowDistance, opacity, baseline, nameColor, healthColor, powerColor }
     RefreshScopedFontControls = RefreshScopedFontControls(function()
         local scopeKey = CurrentFontScope()
         local canEdit = CurrentFontScopeCanEdit()
         local gfScope = IsGFScope(scopeKey)
         SetControlsEnabled(scopedFontControls, canEdit)
-        local shadowEnabled = canEdit and FontScopeGet("textBackdrop", true) == true
+        local slug = FontRenderingMode() == "SLUG"
+        SetControlEnabled(shadow, canEdit and not slug)
+        local shadowEnabled = canEdit and not slug and FontScopeGet("textBackdrop", true) == true
         SetControlEnabled(shadowOpacity, shadowEnabled)
         SetControlEnabled(shadowDistance, shadowEnabled)
         SetControlEnabled(npcColor, canEdit and not gfScope)

@@ -1423,9 +1423,12 @@ local function FontFlagsFromGlobal()
   return "OUTLINE"
 end
 
-local function ComposeFontFlags(outline, monochrome)
+local function ComposeFontFlags(outline, monochrome, slug)
   local flags = ""
   outline = tostring(outline or "OUTLINE"):upper()
+  if slug == true then
+    return (outline == "NONE" or outline == "") and "SLUG" or "OUTLINE,SLUG"
+  end
   if outline == "THICKOUTLINE" then
     flags = "THICKOUTLINE"
   elseif outline ~= "NONE" and outline ~= "" then
@@ -1440,6 +1443,7 @@ end
 local function ResolveFontFlags(general, conf)
   local outline = "OUTLINE"
   local monochrome = general and general.fontMonochrome == true
+  local slug = general and general.fontSlug == true
   if general and general.noOutline then
     outline = "NONE"
   elseif general and general.boldText then
@@ -1454,12 +1458,16 @@ local function ResolveFontFlags(general, conf)
     if conf.fontMonochrome ~= nil then
       monochrome = conf.fontMonochrome == true
     end
+    if conf.fontSlug ~= nil then
+      slug = conf.fontSlug == true
+    end
   end
   if not (conf and conf.fontOverride == true)
-    and not (general and (general.noOutline or general.boldText or general.fontMonochrome)) then
+    and not (general and (general.noOutline or general.boldText or general.fontMonochrome or general.fontSlug)) then
     return FontFlagsFromGlobal()
   end
-  return ComposeFontFlags(outline, monochrome)
+  if slug then monochrome = false end
+  return ComposeFontFlags(outline, monochrome, slug)
 end
 
 local function ResolveFontTextAlpha(general, conf)
@@ -1499,7 +1507,7 @@ local ResolveFontShadowMetrics = _G.MSUF_ResolveFontShadowMetrics or function(op
   return opacity, distance, -distance
 end
 
-local function ResolveFontShadow(general, conf)
+local function ResolveFontShadow(general, conf, flags)
   local enabled = not (general and general.textBackdrop == false)
   local alpha, x, y = ResolveFontShadowMetrics(general and general.fontShadowOpacity,
     general and general.fontShadowDistance, general and general.fontShadowStrength)
@@ -1510,6 +1518,7 @@ local function ResolveFontShadow(general, conf)
         conf.fontShadowStrength, alpha, x)
     end
   end
+  if tostring(flags or ""):upper():find("SLUG", 1, true) then enabled = false end
   return enabled, alpha, x, y
 end
 
@@ -1837,7 +1846,7 @@ local function CompileUnitBase(out, unit, key, def, conf, general, bars, bossInd
   ResolveTextColor(general, out.textColor)
   out.textColor.a = ResolveFontTextAlpha(general, conf)
   do
-    local shadowEnabled, shadowAlpha, shadowX, shadowY = ResolveFontShadow(general, conf)
+    local shadowEnabled, shadowAlpha, shadowX, shadowY = ResolveFontShadow(general, conf, out.fontFlags)
     out.fontShadow = shadowEnabled
     out.fontShadowAlpha = shadowAlpha
     out.fontShadowX = shadowX

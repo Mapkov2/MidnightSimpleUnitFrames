@@ -235,7 +235,7 @@ local COPY_TEXT_FIELDS = WL [[
     hpTextLeftOffsetX hpTextLeftOffsetY hpTextCenterOffsetX hpTextCenterOffsetY hpTextRightOffsetX hpTextRightOffsetY
     powerTextLeftOffsetX powerTextLeftOffsetY powerTextCenterOffsetX powerTextCenterOffsetY powerTextRightOffsetX powerTextRightOffsetY
     hpPowerTextOverride
-    fontOverride fontKey boldText noOutline textBackdrop fontMonochrome fontOutline
+    fontOverride fontKey boldText noOutline textBackdrop fontMonochrome fontSlug fontOutline
     fontShadowStrength fontShadowOpacity fontShadowDistance fontTextAlpha fontBaselineOffset
     useGlobalFontColor fontR fontG fontB nameColorMode nameColorR nameColorG nameColorB nameClassColor npcNameRed nameNpcClassColor
     colorPowerTextByType colorHealthTextByHealth

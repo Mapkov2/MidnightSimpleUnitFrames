@@ -70,9 +70,12 @@ local pairs = pairs
 local ipairs = ipairs
 local ResolveFontPathSafe = _G.MSUF_ResolveFontPath or function(path) return path end
 
-local function ComposeFontFlags(outline, monochrome)
+local function ComposeFontFlags(outline, monochrome, slug)
     local flags = ""
     outline = tostring(outline or "OUTLINE"):upper()
+    if slug == true then
+        return (outline == "NONE" or outline == "") and "SLUG" or "OUTLINE,SLUG"
+    end
     if outline == "THICKOUTLINE" then
         flags = "THICKOUTLINE"
     elseif outline ~= "NONE" and outline ~= "" then
@@ -291,6 +294,7 @@ local PARTY_DEFAULTS = {
     --- Font style/color (font family is global)
     fontOutline       = nil,
     fontMonochrome    = nil,
+    fontSlug          = nil,
     textBackdrop      = nil,
     fontShadowStrength = nil,
     fontShadowOpacity = nil,
@@ -2510,13 +2514,16 @@ function GF.ResolveFontFlags(kind)
     local db = _G.MSUF_DB
     local gen = db and db.general
     local monochrome = gen and gen.fontMonochrome == true
+    local slug = gen and gen.fontSlug == true
     --- When override active: use GF-local fontOutline
     if conf.fontOverride then
         local v = conf.fontOutline
         if conf.fontMonochrome ~= nil then monochrome = conf.fontMonochrome == true end
+        if conf.fontSlug ~= nil then slug = conf.fontSlug == true end
+        if slug then monochrome = false end
         if v ~= nil then
             if v == "" then v = "NONE" end
-            if v == "NONE" or v == "OUTLINE" or v == "THICKOUTLINE" then return ComposeFontFlags(v, monochrome) end
+            if v == "NONE" or v == "OUTLINE" or v == "THICKOUTLINE" then return ComposeFontFlags(v, monochrome, slug) end
         end
     end
     --- Fallback: derive from global boldText / noOutline
@@ -2526,8 +2533,9 @@ function GF.ResolveFontFlags(kind)
         elseif gen.noOutline then outline = "NONE" end
     end
     local fn = MSUF.Castbars and MSUF.Castbars._GetFontFlags
-    if type(fn) == "function" and not (gen and (gen.boldText or gen.noOutline or gen.fontMonochrome)) then return fn() end
-    return ComposeFontFlags(outline, monochrome)
+    if type(fn) == "function" and not (gen and (gen.boldText or gen.noOutline or gen.fontMonochrome or gen.fontSlug)) then return fn() end
+    if slug then monochrome = false end
+    return ComposeFontFlags(outline, monochrome, slug)
 end
 
 function GF.ResolveFontTextAlpha(kind)
@@ -2564,6 +2572,7 @@ function GF.ResolveFontShadow(kind)
                 conf.fontShadowStrength, alpha, x)
         end
     end
+    if tostring(GF.ResolveFontFlags(kind) or ""):upper():find("SLUG", 1, true) then enabled = false end
     return enabled, alpha, x, y
 end
 

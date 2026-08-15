@@ -137,14 +137,19 @@ local _MSUF_FONT_FLAGS_CODE = {
     MONOCHROME = 3,
     ["OUTLINE,MONOCHROME"] = 4,
     ["THICKOUTLINE,MONOCHROME"] = 5,
+    SLUG = 6,
+    ["OUTLINE,SLUG"] = 7,
 }
 local _fontState = {}
 local _MSUF_FontPathSerialByKey = {}
 local _MSUF_FontPathSerialNext = 0
 
-local function _MSUF_ComposeFontFlags(outline, monochrome)
+local function _MSUF_ComposeFontFlags(outline, monochrome, slug)
     local flags = ""
     outline = tostring(outline or "OUTLINE"):upper()
+    if slug == true then
+        return (outline == "NONE" or outline == "") and "SLUG" or "OUTLINE,SLUG"
+    end
     if outline == "THICKOUTLINE" then
         flags = "THICKOUTLINE"
     elseif outline ~= "NONE" and outline ~= "" then
@@ -171,6 +176,7 @@ local _MSUF_ShadowMetrics = _G.MSUF_ResolveFontShadowMetrics
 local _MSUF_MatchesApplication = _G.MSUF_FontApplicationMatches
 local _MSUF_PathMatchesFn = _G.MSUF_FontPathMatches or _G.MSUF_FontPathEquals
 local _MSUF_ClearFSCachesFn = _G.MSUF_ClearFontStringApplyCaches
+local _MSUF_ApplyFontScaleMode = _G.MSUF_ApplyFontScaleAnimationMode
 
 local function _MSUF_OutlineFromFlags(flags)
     flags = tostring(flags or ""):upper()
@@ -181,6 +187,10 @@ end
 
 local function _MSUF_MonochromeFromFlags(flags)
     return tostring(flags or ""):upper():find("MONOCHROME", 1, true) ~= nil
+end
+
+local function _MSUF_SlugFromFlags(flags)
+    return tostring(flags or ""):upper():find("SLUG", 1, true) ~= nil
 end
 
 --- Cold-start font coordinator. Path/size readback may become exact before the
@@ -392,6 +402,7 @@ local function _MSUF_SetFontChecked(fs, path, size, flags, fontKey)
     end
     size = _MSUF_NormalizeFontSize(size, 14)
     flags = flags or ""
+    if type(_MSUF_ApplyFontScaleMode) == "function" then _MSUF_ApplyFontScaleMode(fs, flags) end
     local applied
     local ok, result = pcall(fs.SetFont, fs, path, size, flags)
     if not ok then
@@ -445,7 +456,7 @@ local function _MSUF_ApplyFontCached(fs, size, setColor, cr, cg, cb, ca)
         end
     end
 
-    local sh = S.useShadow and 1 or 0
+    local sh = S.useShadow and not _MSUF_SlugFromFlags(S.flags) and 1 or 0
     local sx = sh == 1 and (tonumber(S.shadowX) or 1) or 0
     local sy = sh == 1 and (tonumber(S.shadowY) or -1) or 0
     local sa = sh == 1 and (tonumber(S.shadowAlpha) or 1) or 0
@@ -484,17 +495,21 @@ local function _MSUF_ApplyFontsToFrame(f)
         local cNoOL = conf.noOutline
         local cBold = conf.boldText
         local cMono = conf.fontMonochrome
-        if cNoOL ~= nil or cBold ~= nil or cMono ~= nil then
+        local cSlug = conf.fontSlug
+        if cNoOL ~= nil or cBold ~= nil or cMono ~= nil or cSlug ~= nil then
             _origFlags = S.flags
             local outline = _MSUF_OutlineFromFlags(S.flags)
             local monochrome = _MSUF_MonochromeFromFlags(S.flags)
+            local slug = _MSUF_SlugFromFlags(S.flags)
             if cNoOL ~= nil or cBold ~= nil then
                 if cNoOL then outline = "NONE"
                 elseif cBold then outline = "THICKOUTLINE"
                 else outline = "OUTLINE" end
             end
             if cMono ~= nil then monochrome = cMono == true end
-            S.flags = _MSUF_ComposeFontFlags(outline, monochrome)
+            if cSlug ~= nil then slug = cSlug == true end
+            if slug then monochrome = false end
+            S.flags = _MSUF_ComposeFontFlags(outline, monochrome, slug)
         end
         if conf.textBackdrop ~= nil then
             _origShadow = S.useShadow

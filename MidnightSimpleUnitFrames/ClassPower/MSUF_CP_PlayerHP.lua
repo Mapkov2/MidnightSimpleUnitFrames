@@ -542,8 +542,9 @@ builders.PLAYER_HP = function(E)
             end
             fs._phpTextR, fs._phpTextG, fs._phpTextB, fs._phpTextA = nil, nil, nil, nil
             if fs.SetTextColor then fs:SetTextColor(1, 1, 1, 1) end
-            if fs.SetShadowColor then fs:SetShadowColor(0, 0, 0, 1) end
-            if fs.SetShadowOffset then fs:SetShadowOffset(1, -1) end
+            local useShadow = not tostring(fontFlags or ""):upper():find("SLUG", 1, true)
+            if fs.SetShadowColor then fs:SetShadowColor(0, 0, 0, useShadow and 1 or 0) end
+            if fs.SetShadowOffset then fs:SetShadowOffset(useShadow and 1 or 0, useShadow and -1 or 0) end
         end
         -- Cache the attempt after all three strings have been processed. A
         -- failed requested font remains readable and retries on the next epoch.

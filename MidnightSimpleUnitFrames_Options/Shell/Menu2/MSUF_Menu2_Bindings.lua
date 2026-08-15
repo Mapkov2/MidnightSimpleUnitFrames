@@ -1232,9 +1232,9 @@ local BARS_TABLE_KEYS = KSW [[
     barOutlineThickness barOutlineLayer barOutlineStrata barOutlineTexture smoothPowerBar chunkedPowerBar realtimePowerText roundedFramesEnabled roundedUnitFrames
     roundedGroupFrames roundedPowerBars roundedCastbars roundedClassResources roundedMouseover
 ]]
-local FONT_GENERAL_KEYS = KSW "fontKey boldText noOutline textBackdrop fontMonochrome fontShadowStrength fontShadowOpacity fontShadowDistance fontTextAlpha fontBaselineOffset nameClassColor npcNameRed nameNpcClassColor colorPowerTextByType colorHealthTextByHealth nameColorMode nameColorR nameColorG nameColorB"
+local FONT_GENERAL_KEYS = KSW "fontKey boldText noOutline textBackdrop fontMonochrome fontSlug fontShadowStrength fontShadowOpacity fontShadowDistance fontTextAlpha fontBaselineOffset nameClassColor npcNameRed nameNpcClassColor colorPowerTextByType colorHealthTextByHealth nameColorMode nameColorR nameColorG nameColorB"
 local FONT_SCOPE_KEYS = KSW [[
-    fontOverride fontKey boldText noOutline textBackdrop fontMonochrome fontShadowStrength fontShadowOpacity fontShadowDistance fontTextAlpha fontBaselineOffset nameClassColor npcNameRed nameNpcClassColor colorPowerTextByType colorHealthTextByHealth
+    fontOverride fontKey boldText noOutline textBackdrop fontMonochrome fontSlug fontShadowStrength fontShadowOpacity fontShadowDistance fontTextAlpha fontBaselineOffset nameClassColor npcNameRed nameNpcClassColor colorPowerTextByType colorHealthTextByHealth
     fontOutline useGlobalFontColor fontR fontG fontB nameColorMode nameColorR nameColorG nameColorB nameShortenEnabled nameClipSide
     nameMaxChars nameNoEllipsis shortenNames shortenNameClipSide shortenNameMaxChars shortenNameShowDots
 ]]

@@ -30,7 +30,7 @@ FontData.FONT_OUTLINE_ALIASES = {
     ["no outline"] = "NONE",
 }
 
-FontData.FONT_RENDERING_VALUES = { "SMOOTH", "SHARP" }
+FontData.FONT_RENDERING_VALUES = { "SMOOTH", "SHARP", "SLUG" }
 FontData.FONT_RENDERING_ALIASES = {
     smooth = "SMOOTH",
     normal = "SMOOTH",
@@ -42,6 +42,10 @@ FontData.FONT_RENDERING_ALIASES = {
     mono = "SHARP",
     pixelscharf = "SHARP",
     ["pixel sharp"] = "SHARP",
+    slug = "SLUG",
+    ["slug render"] = "SLUG",
+    ["slug rendering"] = "SLUG",
+    ["slug font"] = "SLUG",
 }
 
 FontData.FONT_SHADOW_STRENGTH_VALUES = { "SOFT", "NORMAL", "DEEP" }

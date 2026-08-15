@@ -2673,6 +2673,10 @@ local FONT_RENDERING_GROUP_SCOPES = {
 
 local function FontRenderingValueForText(text)
     local boolValue = DetectBoolean(text)
+    if tostring(text or ""):find("slug", 1, true) then
+        if boolValue == false then return "SMOOTH" end
+        return "SLUG"
+    end
     if ContainsAny(text, RegistryPhrases[57]) then
         if boolValue == false then return "SMOOTH" end
         return "SHARP"
@@ -2725,7 +2729,7 @@ local function ParseFontRenderingShortcut(text)
         changes = changes,
         label = #changes == 1 and (changes[1].setting.label or "Font Rendering") or "Font Rendering",
         bulkSafe = #changes > 1,
-        summary = "Changes font rendering between smooth and sharp monochrome text.",
+        summary = "Changes font rendering between smooth, sharp monochrome, and Slug text.",
     }
 end
 P.ParseFontRenderingShortcut = ParseFontRenderingShortcut

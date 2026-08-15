@@ -336,6 +336,9 @@ local function FontOutlineSetFor(scope, value, reason)
     scope = NormalizeScopeKey(scope)
     value = tostring(value or "OUTLINE"):upper()
     if value ~= "NONE" and value ~= "THICKOUTLINE" then value = "OUTLINE" end
+    if value == "THICKOUTLINE" and FontScopeGetFor(scope, "fontSlug", false) == true then
+        value = "OUTLINE"
+    end
     if IsGFScope(scope) then
         ScopeWrite(scope, "fontOverride", G(), "fontOutline", value)
         ApplyFontsFor(scope, reason or "MSUF2_GF_FONT_OUTLINE")

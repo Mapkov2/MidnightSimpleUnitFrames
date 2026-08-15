@@ -55,6 +55,11 @@ function A.GlobalRegistry.BuildFontSettingsContext(ctx)
     local function SetScopedFontOutline(scope, value)
         value = FontData.FONT_OUTLINE_ALIASES[value] or value
         if value ~= "THICKOUTLINE" and value ~= "NONE" then value = "OUTLINE" end
+        if value == "THICKOUTLINE"
+            and GlobalScopeRead(scope, "fontOverride", GeneralDB(), "fontSlug", false)
+        then
+            value = "OUTLINE"
+        end
         if GlobalScopeIsGroup(scope) then
             GlobalScopeWrite(scope, "fontOverride", GeneralDB(), "fontOutline", value)
             return

@@ -2330,7 +2330,7 @@ end
 local function MSUF_Defaults_HasScopedFontOverrideValue(scope)
     if type(scope) ~= "table" then return false end
     if scope.fontOutline ~= nil or scope.noOutline ~= nil or scope.boldText ~= nil then return true end
-    if scope.fontMonochrome ~= nil or scope.fontTextAlpha ~= nil or scope.fontBaselineOffset ~= nil then return true end
+    if scope.fontMonochrome ~= nil or scope.fontSlug ~= nil or scope.fontTextAlpha ~= nil or scope.fontBaselineOffset ~= nil then return true end
     if scope.textBackdrop ~= nil or scope.fontShadowStrength ~= nil or scope.fontShadowOpacity ~= nil or scope.fontShadowDistance ~= nil then return true end
     if scope.colorPowerTextByType ~= nil or scope.colorHealthTextByHealth ~= nil then return true end
     if scope.nameClassColor ~= nil or scope.npcNameRed ~= nil or scope.nameNpcClassColor ~= nil then return true end
@@ -2895,12 +2895,25 @@ end
     if g.fontMonochrome == nil then
         g.fontMonochrome = false
     end
+    if g.fontSlug == nil then
+        g.fontSlug = false
+    end
+    if g.fontSlug == true then
+        g.fontMonochrome = false
+        if g.boldText == true then g.boldText = false end
+    end
     MSUF_Defaults_NormalizeFontShadowScope(g, true)
     for _, key in ipairs({
         "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "boss",
         "gf_party", "gf_raid", "gf_mythicraid",
     }) do
-        MSUF_Defaults_NormalizeFontShadowScope(MSUF_DB[key], false)
+        local scope = MSUF_DB[key]
+        if type(scope) == "table" and scope.fontSlug == true then
+            scope.fontMonochrome = false
+            if scope.boldText == true then scope.boldText = false end
+            if scope.fontOutline == "THICKOUTLINE" then scope.fontOutline = "OUTLINE" end
+        end
+        MSUF_Defaults_NormalizeFontShadowScope(scope, false)
     end
     if type(g.fontTextAlpha) ~= "number" then
         g.fontTextAlpha = 1
