@@ -2146,7 +2146,7 @@ function T.StyleFeatureLink(button, label)
 
     local edges = {}
     for index = 1, 4 do
-        local edge = button:CreateTexture(nil, "OVERLAY", 7)
+        local edge = button:CreateTexture(nil, "OVERLAY", nil, 7)
         edge:SetColorTexture(base[1], base[2], base[3], 0.96)
         edges[index] = edge
     end

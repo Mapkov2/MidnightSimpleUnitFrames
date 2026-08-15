@@ -149,5 +149,9 @@ Require(projector, "exact target contract did not activate its declared subcateg
 local theme = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme.lua")
 Require(theme, "function T.StyleFeatureLink", "feature links have no shared yellow hover style")
 Require(theme, "button._msuf2ChangelogLinkOutline = edges", "feature links have no hover outline box")
+Require(theme, 'button:CreateTexture(nil, "OVERLAY", nil, 7)',
+    "feature-link outline does not pass the draw sublevel in WoW's fourth CreateTexture argument")
+assert(not theme:find('button:CreateTexture(nil, "OVERLAY", 7)', 1, true),
+    "feature-link outline passes its sublevel as an inherited texture template")
 
 io.write("changelog_feature_links_smoke: ok\n")
