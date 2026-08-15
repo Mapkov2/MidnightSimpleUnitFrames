@@ -13,6 +13,8 @@ local MSUF = { MSUF_Auras3 = {} }
 _G.MSUF_NS = MSUF
 assert(loadfile("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_DefensiveData.lua"))("MidnightSimpleUnitFrames", MSUF)
 local A3 = assert(MSUF.MSUF_Auras3)
+assert(loadfile("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_SpellIndicators.lua"))("MidnightSimpleUnitFrames", MSUF)
+local spellRuntime = assert(A3.SpellIndicators)
 assert(loadfile("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Menu_Model.lua"))("MidnightSimpleUnitFrames", MSUF)
 local groupAuraFilter = assert(_G.MSUF_GF_AuraFilter)
 assert(groupAuraFilter.NormalizeFilterToken("buff", "BigDefensive") == "BigDefensive"
@@ -60,6 +62,32 @@ assert(not has(runtime, "elseif nonPlayerScoped then"), "classification filters 
 assert(has(runtime, "if broadening and candidatesChanged then"), "friendly transition is not fail-closed")
 assert(not has(runtime, "container:UnregisterEvent(\"AURA_DATA_PROVIDER_SWITCH\")"),
     "CustomAuraContainer event registrations must remain Blizzard-owned")
+assert(has(runtime, "A3._DirectIdentityRefreshUnitWithUnitAuraGate")
+    and has(runtime, "A3._DirectIdentityRefreshUnit = A3._DirectIdentityRefreshUnitBase"),
+    "ordinary Unit exact-ID owners do not topology-switch the direct identity route")
+assert(has(runtime, 'identityCandidateMode = helpful and "assist" or "hostile"'),
+    "ordinary Unit custom exact-ID lanes lack compiled polarity metadata")
+
+local mixedRoot = assert(spellRuntime.CompileSlots("target", {
+    enabled = true,
+    items = {
+        { enabled = true, key = "neutral", nativeFilter = "HELPFUL", allowAnyAura = true,
+            placed = { type = "icon" } },
+        { enabled = true, key = "assist", nativeFilter = "HELPFUL",
+            includeSpellIDs = { [9001] = true }, placed = { type = "icon" } },
+        { enabled = true, key = "hostile", nativeFilter = "HARMFUL",
+            includeSpellIDs = { [9002] = true }, placed = { type = "icon" } },
+    },
+}))
+local unitPrimary, unitAssist, unitHostile = spellRuntime.PartitionUnitRoot(mixedRoot)
+assert(unitPrimary and unitPrimary.rootKey == "SpellIndicators" and #unitPrimary.slots == 1,
+    "neutral Unit indicators did not retain the historical owner key")
+assert(unitAssist and unitAssist.rootKey == "SpellIndicatorsAssist"
+    and unitAssist.identityCandidateMode == "assist",
+    "HELPFUL exact-ID Unit indicators were not isolated")
+assert(unitHostile and unitHostile.rootKey == "SpellIndicatorsHostile"
+    and unitHostile.identityCandidateMode == "hostile",
+    "HARMFUL exact-ID Unit indicators were not isolated")
 
 local blockStart = assert(runtime:find("local function RemoveNativeFilterToken", 1, true))
 local blockStop = assert(runtime:find("local function FinalizeLane", blockStart, true))
