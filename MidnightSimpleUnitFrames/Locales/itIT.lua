@@ -4036,6 +4036,9 @@ L["|cffff0000MSUF:|r Cannot change absorb bars while in combat."] = "|cffff0000M
 L["0 keeps the icon just above the bar and moves it together with the whole-castbar layer. 1-30 pins the icon to that frame level on the shared layer scale, so it can be ordered in front of or behind the bar, texts, and other frame elements."] = "0 mantiene l’icona appena sopra la barra e la sposta insieme al livello dell’intera barra d’incantazione. 1-30 fissa l’icona a quel livello della scala condivisa, per ordinarla davanti o dietro la barra, i testi e gli altri elementi del riquadro."
 
 --- Detached / overlay portrait placement (6.0 Beta 30)
+L["Size mode"] = "Modalità dimensione"
+L["Uniform"] = "Uniforme"
+L["Width & height"] = "Larghezza e altezza"
 L["Width override"] = "Sostituzione della larghezza"
 L["Height override"] = "Sostituzione dell’altezza"
 L["Zoom center X"] = "Centro dello zoom X"

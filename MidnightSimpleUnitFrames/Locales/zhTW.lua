@@ -4057,6 +4057,9 @@ L["|cffff0000MSUF:|r Cannot change absorb bars while in combat."] = "|cffff0000M
 L["0 keeps the icon just above the bar and moves it together with the whole-castbar layer. 1-30 pins the icon to that frame level on the shared layer scale, so it can be ordered in front of or behind the bar, texts, and other frame elements."] = "0 會讓圖示緊貼在條上方，並隨整個施法條圖層一起移動。1-30 會將圖示固定在共享圖層刻度的該框架層級上，從而可以排在條、文字和其他框架元素之前或之後。"
 
 --- Detached / overlay portrait placement (6.0 Beta 30)
+L["Size mode"] = "尺寸模式"
+L["Uniform"] = "統一"
+L["Width & height"] = "寬度和高度"
 L["Width override"] = "寬度覆蓋"
 L["Height override"] = "高度覆蓋"
 L["Zoom center X"] = "縮放中心 X"
