@@ -1,5 +1,17 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.08-Beta1 - 2026-08-15
+
+### Highlights
+
+- Added an optional **Slug** font rendering mode for clearer, more consistent text across Unit and Group Frames.
+- Added configurable AFK timers to Unit and Group Frame status text.
+
+### Fixes & Performance
+
+- Fixed Group Frame absorb overlays ignoring the configured opacity.
+- Fixed aura icon zoom scaling when a debuff border is active.
+
 ## 6.07 - 2026-08-15
 
 ### Highlights

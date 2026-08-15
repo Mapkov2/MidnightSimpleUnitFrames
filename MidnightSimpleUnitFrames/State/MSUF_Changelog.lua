@@ -8,10 +8,30 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.07",
-    previousVersion = "6.06",
-    rangeLabel = "6.06 -> 6.07",
+    currentVersion = "6.08-Beta1",
+    previousVersion = "6.07",
+    rangeLabel = "6.07 -> 6.08-Beta1",
     entries = {
+        {
+            version = "6.08-Beta1",
+            date = "2026-08-15",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Added an optional Slug font rendering mode for clearer, more consistent text across Unit and Group Frames.",
+                        "Added configurable AFK timers to Unit and Group Frame status text.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Fixed Group Frame absorb overlays ignoring the configured opacity.",
+                        "Fixed aura icon zoom scaling when a debuff border is active.",
+                    },
+                },
+            },
+        },
         {
             version = "6.07",
             date = "2026-08-15",
@@ -82,21 +102,6 @@ local data = {
                         "Fixed Assistant questions and navigation requests applying settings, including enum values that were never stated. Pure small talk now keeps its conversation context without entering a settings lane.",
                         "Fixed Assistant requests about borders, Auras, text, colors, and other frame details falling through to whole-frame toggles or unrelated position controls. Scoped Highlight Borders now control their Aggro, Dispel, and Purge outlines together.",
                         "Fixed narrow Group Frame position phrases matching unrelated horizontal or vertical layout controls.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.07-Beta2",
-            date = "2026-08-14",
-            sections = {
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed Texture Layer controls writing to the wrong texture after switching slots or opening another texture from the preview. Each control now remains bound to its own slot, and protected HP-driven alpha values are no longer cached or compared from Lua.",
-                        "Fixed Spell Indicator icons and full-frame effects competing for AuraSlot ownership. Both styles now share one native Blizzard assignment while retaining independent element layers. Unsupported expiration-timed full-frame effects now fall back to the active-aura effect without secret-value hooks or polling.",
-                        "Improved Assistant handling for conversational bar dimensions, rounded-frame requests, no-target load conditions, Raid filters versus Raid frame scope, Aura lane attributes, and outline layer wording.",
-                        "Fixed narrow Assistant navigation, reset, and profile-copy requests being interpreted as broader setting changes.",
                     },
                 },
             },
