@@ -118,6 +118,7 @@ local STATUS_EVENT_ELEMENTS = {
   IncomingResIndicator = true,
   PVPIndicator = true,
   SocialIndicator = true,
+  StanceIndicator = true,
 }
 
 local IDENTITY_ELEMENTS = {

@@ -37,7 +37,9 @@ local MakeFS = PreviewModel.MakeFS
 local FontColor = PreviewModel.FontColor
 local Status = MSUF.UFPreviewStatus or {}
 MSUF.UFPreviewStatus = Status
-local IDENTITY_TEXT_IDS = { level = true, raceText = true, classText = true }
+-- stance renders through the identity-text preview path: name-font sizing and
+-- a plain text glyph, without joining the Dead/Ghost status-text state family.
+local IDENTITY_TEXT_IDS = { level = true, raceText = true, classText = true, stance = true }
 local STATUS_TEXT_STATE_IDS = {
     statusText = "DEAD",
     statusGhostText = "GHOST",
@@ -172,6 +174,14 @@ function Status.IdentityPreviewText(spec, data)
     if id == "level" then return tostring(data.level or "80") end
     if id == "raceText" then return data.race or "Tauren" end
     if id == "classText" then return data.className or data.class or "Warrior" end
+    if id == "stance" then
+        -- Show the player's real stance when one is active so the preview
+        -- matches the live frame; classes without a stance bar get the label.
+        local ns = _G.MSUF_NS
+        local stance = ns and ns.UFStance
+        local name = stance and stance.Resolve and stance.Resolve() or nil
+        return name or "Stance"
+    end
     return ""
 end
 function Status.CreateIcon(parent, color, text)

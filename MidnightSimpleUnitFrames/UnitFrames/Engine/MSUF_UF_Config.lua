@@ -1114,7 +1114,7 @@ local function StatusAllowed(key, id)
     return key == "player" or key == "target"
   elseif id == "pvp" then
     return key == "player" or key == "target" or key == "focus" or key == "targettarget" or key == "focustarget"
-  elseif id == "resting" then
+  elseif id == "resting" or id == "stance" then
     return key == "player"
   elseif id == "raidGroup" then
     return key == "player" or key == "target" or key == "targettarget" or key == "focustarget" or key == "focus"
@@ -1194,6 +1194,7 @@ local UNIT_STATUS_ENTRY_DEFS = {
   PrefixedStatusDef("incomingRes", "showIncomingResIndicator", true, "incomingResIndicator", 18, "TOPRIGHT", 0, 0, 7, nil, { "incomingResIndicatorSymbol", "DEFAULT" }, { "incomingResIndicatorCustomIcon", "" }),
   PrefixedStatusDef("pvp", "showPvpIndicator", true, "pvpIndicator", 18, "TOPRIGHT", 0, 0, 7, nil, nil, { "pvpIndicatorCustomIcon", "" }),
   PrefixedStatusDef("social", "showSocialIndicator", false, "socialIndicator", 16, "TOPRIGHT", -18, 2, 7),
+  PrefixedStatusDef("stance", "showStanceIndicator", false, "stanceIndicator", 12, "TOP", 0, -2, 7),
 }
 
 local UNIT_STATUS_TEXT_STATE_DEFS = {

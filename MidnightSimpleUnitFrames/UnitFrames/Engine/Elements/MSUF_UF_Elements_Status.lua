@@ -195,6 +195,7 @@ local STATUS_REFRESH = {
   "IncomingResIndicator",
   "PVPIndicator",
   "SocialIndicator",
+  "StanceIndicator",
   "GroupStatusRuntime",
 }
 local SYMBOL_PATH_CACHE = {}
@@ -898,6 +899,7 @@ local CONFIGURED_REGION_DEFS = {
   { "incomingRes", "incomingResIndicatorIcon", "resurrectIcon", { "resurrectIcon", "incomingResIndicatorIcon" }, { "incomingResIndicatorIcon", "IncomingResIndicator" }, nil, nil, "incomingRes" },
   { "pvp", "pvpIndicatorIcon", "pvpIcon", { "pvpIcon", "pvpIndicatorIcon" }, { "pvpIndicatorIcon", "pvpIcon" } },
   { "social", "socialIndicatorIcon" },
+  { "stance", "stanceIndicatorText", nil, nil, nil, nil, true },
   { "readyCheck", "readyCheckIcon" },
   { "summon", "summonIcon", nil, nil, nil, nil, nil, nil, true },
   { "phase", "phaseIcon", nil, nil, nil, PHASE_TEXTURE, nil, nil, nil, true },
@@ -908,6 +910,7 @@ local NAME_FONT_STATUS = {
   race = true,
   classText = true,
   raidGroup = true,
+  stance = true,
 }
 
 local function HideConfiguredRegion(frame, def)
@@ -1993,6 +1996,40 @@ local function UpdateSocial(frame, status)
   SetShown(tex, true)
 end
 
+--- Player stance / form / aura text from the native stance bar. Data comes
+--- from MSUF.UFStance (spellID -> name cache, immutable per session); the
+--- reads are the player's own action-bar state, so they stay valid in combat
+--- and the text updates live while stance-dancing. Region creation, font,
+--- color and anchoring are owned by ApplyConfiguredRegions - this only moves
+--- the text. Lives on Status rather than as a local: the file's main chunk
+--- is at Lua's 200-local ceiling.
+function Status.UpdateStanceText(frame, status)
+  local cfg = status and status.stance
+  local fs = frame.stanceIndicatorText
+  if not (cfg and cfg.enabled and fs) then
+    SetShown(fs, false)
+    return
+  end
+  local stance = MSUF.UFStance
+  local text
+  if status.testMode == true then
+    text = stance and stance.SampleText and stance.SampleText() or nil
+  else
+    text = stance and stance.Resolve and stance.Resolve() or nil
+  end
+  if type(text) ~= "string" or text == "" then
+    frame._msufStanceTextValue = nil
+    SetShown(fs, false)
+    return
+  end
+  if frame._msufStanceTextValue == text and fs._msufStatusShown == true then
+    return
+  end
+  frame._msufStanceTextValue = text
+  SetText(fs, text)
+  SetShown(fs, true)
+end
+
 function Status.IsEnabled(frame, spec)
   return spec and spec.status and spec.status.enabled == true
 end
@@ -2291,6 +2328,13 @@ local STATUS_INDICATOR_DEFS = {
   { "IncomingResIndicator", "incomingRes", INCOMING_RES_EVENTS, nil, UpdateIncomingRes, "incomingResIndicatorIcon", true },
   { "PVPIndicator", "pvp", nil, nil, UpdatePVP, "pvpIndicatorIcon", true, nil, PVPEvents },
   { "SocialIndicator", "social", nil, SOCIAL_UNITLESS_EVENTS, UpdateSocial, "socialIndicatorIcon", true },
+  -- Stance text events fire only on user action or a stance-bar rebuild
+  -- (talents, level-up, loading screen). Never add
+  -- UPDATE_SHAPESHIFT_COOLDOWN - it fires with practically every GCD and
+  -- would turn this indicator into a hot path.
+  { "StanceIndicator", "stance", nil,
+    { "UPDATE_SHAPESHIFT_FORM", "UPDATE_SHAPESHIFT_FORMS", "PLAYER_ENTERING_WORLD" },
+    Status.UpdateStanceText, "stanceIndicatorText", true, true },
 }
 
 for i = 1, #STATUS_INDICATOR_DEFS do

@@ -9,6 +9,7 @@
   <Script file="..\..\Engine\Elements\MSUF_UF_Elements_Status.lua"/>
   <Script file="..\..\Engine\Elements\MSUF_UF_Elements_StatusAFKTimer.lua"/>
   <Script file="..\..\Engine\Elements\MSUF_UF_Elements_StatusSocial.lua"/>
+  <Script file="..\..\Engine\Elements\MSUF_UF_Elements_StatusStance.lua"/>
   <Script file="..\..\Engine\Elements\MSUF_UF_Elements_Borders.lua"/>
   <Script file="..\..\Engine\Elements\MSUF_UF_Elements_Alpha.lua"/>
   <Script file="..\..\Engine\Elements\MSUF_UF_Highlight.lua"/>

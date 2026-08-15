@@ -207,4 +207,20 @@ Data.STATUS_CONTROL_SPECS = {
             "battle net friend icon", "social indicator", "social icon",
         },
     },
+    {
+        value = "stance", label = "Stance Text",
+        show = "showStanceIndicator", defaultShow = false,
+        size = "stanceIndicatorSize", defaultSize = 12,
+        anchor = "stanceIndicatorAnchor", defaultAnchor = "TOP",
+        x = "stanceIndicatorOffsetX", defaultX = 0, y = "stanceIndicatorOffsetY", defaultY = -2,
+        layer = "stanceIndicatorLayer", defaultLayer = 7,
+        refresh = "MSUF_RequestStatusIconsRefreshForCurrent", statusRuntime = true,
+        units = { player = true },
+        description = "Shows the name of your active stance, form, or aura from the stance bar as text on the player frame (for example a warrior stance, paladin aura, or druid form). Updates only when the stance changes.",
+        aliases = {
+            "stance text", "stance indicator", "active stance", "stance name",
+            "shapeshift form text", "form text", "warrior stance text",
+            "paladin aura text", "druid form text",
+        },
+    },
 }
