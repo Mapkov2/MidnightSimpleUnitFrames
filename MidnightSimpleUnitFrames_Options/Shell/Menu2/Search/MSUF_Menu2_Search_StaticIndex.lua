@@ -96,8 +96,9 @@ local function Decode()
     local records, count = {}, 0
 
     for line in blob:gmatch("[^\n]+") do
-        local pageKey, label, kind, settingKey, actionKey, hint, labelNorm, searchIdentity, haystack =
-            line:match("^([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t(.*)$")
+        local pageKey, label, kind, settingKey, actionKey, hint, labelNorm, searchIdentity,
+            exactSectionId, exactTargetKinds, exactTargetContracts, haystack =
+            line:match("^([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t(.*)$")
         if pageKey and pageKey ~= "" then
             local page = EnsurePage(pageKey)
             local displayLabel = Translate(label)
@@ -142,6 +143,9 @@ local function Decode()
                     pageKey = pageKey,
                     settingKey = settingKey ~= "" and settingKey or nil,
                     actionKey = actionKey ~= "" and actionKey or nil,
+                    sectionId = exactSectionId ~= "" and exactSectionId or nil,
+                    prepareKinds = exactTargetKinds ~= "" and exactTargetKinds or nil,
+                    prepareContracts = exactTargetContracts ~= "" and exactTargetContracts or nil,
                     label = displayLabel,
                 } or nil,
             }

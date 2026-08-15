@@ -2443,26 +2443,10 @@ end
 
 local function BuildWindowToolbar(state)
     local f, status = state.frame, state.frame.status
-    local function RunToolbarNewTask()
-        if type(M.SelectPage) == "function" then M.SelectPage("home") end
-        if type(M.StartNewAssistantTask) == "function" then return M.StartNewAssistantTask() end
-        if C_Timer and C_Timer.After then
-            C_Timer.After(0, function()
-                if type(M.StartNewAssistantTask) == "function" then
-                    M.StartNewAssistantTask()
-                    return
-                end
-                local A = MSUF and MSUF.Assistant
-                if A and type(A.StartNewTaskWithRuntime) == "function" then
-                    A.StartNewTaskWithRuntime("new-task-toolbar")
-                end
-            end)
-            return true
-        end
-        local A = MSUF and MSUF.Assistant
-        if A and type(A.StartNewTaskWithRuntime) == "function" then
-            return A.StartNewTaskWithRuntime("new-task-toolbar")
-        end
+    local function RunToolbarSeeNewFeatures()
+        if type(M.OpenSeeNewFeatures) == "function" then return M.OpenSeeNewFeatures() end
+        if type(M.SelectPage) == "function" then return M.SelectPage("changelog") end
+        return false
     end
     local function RunToolbarEditMode()
         if type(M.ToggleDashboardEditMode) == "function" then return M.ToggleDashboardEditMode() end
@@ -2487,17 +2471,17 @@ local function BuildWindowToolbar(state)
         })
     end
     M.dashboardToolbarEditModeButton = toolbarEdit
-    local toolbarTask = T.Button(status, "New Task", 104, 24)
-    toolbarTask:SetPoint("RIGHT", toolbarEdit, "LEFT", -12, 0)
-    T.CenterButtonLabel(toolbarTask)
-    toolbarTask:SetScript("OnClick", RunToolbarNewTask)
+    local toolbarFeatures = T.Button(status, "See New Features", 132, 24)
+    toolbarFeatures:SetPoint("RIGHT", toolbarEdit, "LEFT", -12, 0)
+    T.CenterButtonLabel(toolbarFeatures)
+    toolbarFeatures:SetScript("OnClick", RunToolbarSeeNewFeatures)
     if M.RegisterMenuChromeControl then
-        M.RegisterMenuChromeControl(toolbarTask, "toolbar.new-task", "New Task", "ephemeral", {
-            historyMode = "none", help = "Starts a new Assistant task.",
+        M.RegisterMenuChromeControl(toolbarFeatures, "toolbar.see-new-features", "See New Features", "ephemeral", {
+            historyMode = "none", help = "Opens the full changelog with direct links to highlighted features.",
         })
     end
     local toolbarReset = T.Button(status, "Reset page", 88, 24)
-    toolbarReset:SetPoint("RIGHT", toolbarTask, "LEFT", -12, 0)
+    toolbarReset:SetPoint("RIGHT", toolbarFeatures, "LEFT", -12, 0)
     T.CenterButtonLabel(toolbarReset)
     if T.SkinDangerButton then T.SkinDangerButton(toolbarReset) end
     if M.AddTooltip then
@@ -2533,7 +2517,7 @@ local function BuildWindowToolbar(state)
     end
     M.RefreshToolbarPageReset = RefreshToolbarPageReset
     RefreshToolbarPageReset()
-    status.newTaskButton = toolbarTask
+    status.seeNewFeaturesButton = toolbarFeatures
     status.resetPageButton = toolbarReset
     status.editModeButton = toolbarEdit
     function M.ShowStatusFeedback(text, kind, seconds)

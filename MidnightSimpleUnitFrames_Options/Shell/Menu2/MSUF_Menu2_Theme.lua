@@ -2131,6 +2131,54 @@ function T.Font(parent, template, text, color, role)
     fs:SetText(text or "")
     return T.StyleFontString(fs, color or T.colors.text, 1, role)
 end
+
+-- Release-highlight sentences are links, so they use an intentionally distinct
+-- yellow treatment instead of the general blue interaction palette. The hover
+-- outline follows the button's measured multiline height.
+function T.StyleFeatureLink(button, label)
+    if not (button and label and button.CreateTexture) then return nil end
+    local base = T.colors.accent2 or T.colors.warning or { 0.95, 0.72, 0.18, 1 }
+    local hot = { 1.00, 0.84, 0.30, 1 }
+    local fill = button:CreateTexture(nil, "BACKGROUND")
+    fill:SetPoint("TOPLEFT", button, "TOPLEFT", -5, 3)
+    fill:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 5, -3)
+    fill:SetColorTexture(base[1], base[2], base[3], 0.09)
+
+    local edges = {}
+    for index = 1, 4 do
+        local edge = button:CreateTexture(nil, "OVERLAY", 7)
+        edge:SetColorTexture(base[1], base[2], base[3], 0.96)
+        edges[index] = edge
+    end
+    edges[1]:SetPoint("TOPLEFT", button, "TOPLEFT", -5, 3)
+    edges[1]:SetPoint("TOPRIGHT", button, "TOPRIGHT", 5, 3)
+    edges[1]:SetHeight(1)
+    edges[2]:SetPoint("BOTTOMLEFT", button, "BOTTOMLEFT", -5, -3)
+    edges[2]:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 5, -3)
+    edges[2]:SetHeight(1)
+    edges[3]:SetPoint("TOPLEFT", button, "TOPLEFT", -5, 3)
+    edges[3]:SetPoint("BOTTOMLEFT", button, "BOTTOMLEFT", -5, -3)
+    edges[3]:SetWidth(1)
+    edges[4]:SetPoint("TOPRIGHT", button, "TOPRIGHT", 5, 3)
+    edges[4]:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 5, -3)
+    edges[4]:SetWidth(1)
+
+    local function Paint(hovered)
+        local color = hovered and hot or base
+        label:SetTextColor(color[1], color[2], color[3], color[4] or 1)
+        if hovered then
+            fill:Show()
+            for index = 1, #edges do edges[index]:Show() end
+        else
+            fill:Hide()
+            for index = 1, #edges do edges[index]:Hide() end
+        end
+    end
+    button._msuf2ChangelogLinkOutline = edges
+    button._msuf2PaintFeatureLink = Paint
+    Paint(false)
+    return Paint
+end
 function T.CenterButtonLabel(btn)
     if btn and btn._msuf2Label then
         btn._msuf2Label:ClearAllPoints()

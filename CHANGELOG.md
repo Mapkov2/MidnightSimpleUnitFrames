@@ -5,13 +5,19 @@
 ### Highlights
 
 - Added an optional, class-colored interrupter name beside the castbar's interrupted state.
+<!-- msuf-menu-link: {"pageKey":"uf_target","sectionId":"castbar","controlId":"menu2.uf_target.unit.castbar.show_interrupt_source","settingKey":"target.showInterruptSource","prepareKind":"unitCastbarTab","prepareValue":"general","query":"show interrupter name","label":"Show interrupter name"} -->
 - Added an optional Player Frame **Stance** text indicator for warrior stances, paladin auras, druid forms, and other native stance-bar forms.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"status_icons","controlId":"menu2.uf_player.unit.status.selected.enabled","settingKey":"player.showStanceIndicator","prepareKind":"unitStatus","prepareValue":"stance","query":"stance","label":"Stance"} -->
 - Added explicit **Uniform** and **Width & height** portrait sizing modes for Unit and Group Frames while preserving existing portrait geometry during migration.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"portrait","controlId":"menu2.uf_player.unit.portrait.portraitsizemode","settingKey":"player.portraitSizeMode","prepareKind":"unitPortraitTab","prepareValue":"geometry","query":"portrait size mode","label":"Size mode"} -->
 - Added an optional **Targeting You** status indicator for units currently targeting the player.
+<!-- msuf-menu-link: {"pageKey":"uf_target","sectionId":"status_icons","controlId":"menu2.uf_target.unit.status.selected.enabled","settingKey":"target.showTargetingYouIndicator","prepareKind":"unitStatus","prepareValue":"targetingYou","query":"targeting you","label":"Targeting You"} -->
 - Added configurable edge softness for circular, rounded, and diamond portraits, with matching Unit Frame, Group Frame, and preview rendering.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"portrait","controlId":"menu2.uf_player.unit.portrait.portraitedgesoftness","settingKey":"player.portraitEdgeSoftness","prepareKind":"unitPortraitTab","prepareValue":"border","query":"portrait edge softness","label":"Portrait edge softness"} -->
 
 ### Changes
 
+- Replaced the toolbar's **New Task** action with a dedicated **See New Features** changelog page whose highlighted change sentences link directly to their matching MSUF menu settings.
 - Localized the new stance, portrait sizing, and portrait edge-softness controls across all 12 supported locales.
 - Updated Assistant registrations, generated coverage data, search routing, and static search data for the new status and portrait controls.
 - Corrected the bundled release history so features added after Beta 1 are listed under Beta 2 instead of the already-published Beta 1 package.

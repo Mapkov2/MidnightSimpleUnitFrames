@@ -295,6 +295,31 @@ local function BuildStatus(ctx, builder, unit)
         "enabled", "show selected indicator", "hide selected indicator", "show level", "hide level",
         "enable level", "disable level", "turn level on", "turn level off",
     }, nil, nil, "status.selected.enabled", nil, selectedStatusContract)
+    enabled._msuf2ExactTargetKinds = { unitStatus = true }
+    local exactStatusContracts = {}
+    for _, value in ipairs(StatusValues(unit)) do
+        local spec = FindStatusSpec(unit, value.value)
+        if spec and spec.value == value.value then
+            exactStatusContracts[spec.value] = tostring(unit) .. "." .. tostring(spec.show)
+        end
+    end
+    enabled._msuf2ExactTargetContracts = { unitStatus = exactStatusContracts }
+    enabled._msuf2PrepareExactSearchTarget = function(_, exactTarget)
+        if type(exactTarget) ~= "table" or exactTarget.prepareKind ~= "unitStatus" then return false end
+        local spec = FindStatusSpec(unit, tostring(exactTarget.prepareValue or ""))
+        if not spec or spec.value ~= tostring(exactTarget.prepareValue or "")
+            or tostring(exactTarget.settingKey or "") ~= tostring(unit) .. "." .. tostring(spec.show)
+        then
+            return false
+        end
+        M.unitStatusSelection = M.unitStatusSelection or {}
+        M.unitStatusSelection[unit] = spec.value
+        if sec._msuf2GuidedSelectTab and sec._msuf2GuidedSelectTab("basic") == false then return false end
+        if selector and selector.SetValue then selector:SetValue(spec.value) end
+        Call("MSUF_UFPreview_SelectStatusIcon", spec.value)
+        if RefreshStatusSectionState then RefreshStatusSectionState() end
+        return CurrentStatusSpec(unit) == spec
+    end
     local identityRestrictionWarning = W.Text(selectedCard, IDENTITY_RESTRICTION_WARNING,
         16, -106, selectedControlW, IDENTITY_RESTRICTION_WARNING_COLOR)
     if identityRestrictionWarning.SetWordWrap then identityRestrictionWarning:SetWordWrap(true) end

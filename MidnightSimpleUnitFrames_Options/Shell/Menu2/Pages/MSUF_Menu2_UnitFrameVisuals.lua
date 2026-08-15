@@ -263,6 +263,21 @@ local function BuildPortrait(ctx, builder, unit)
         end
         return type(ReadPortraitTab) ~= "function" or ReadPortraitTab() == tab
     end
+    local function BindExactPortraitTabTarget(widget, tab, settingKey)
+        if not widget then return end
+        widget._msuf2ExactTargetKinds = { unitPortraitTab = true }
+        widget._msuf2ExactTargetContracts = {
+            unitPortraitTab = { [tab] = tostring(settingKey or "") },
+        }
+        widget._msuf2PrepareExactSearchTarget = function(_, exactTarget)
+            if type(exactTarget) ~= "table" or exactTarget.prepareKind ~= "unitPortraitTab"
+                or tostring(exactTarget.prepareValue or "") ~= tab
+            then
+                return false
+            end
+            return sec._msuf2GuidedSelectTab and sec._msuf2GuidedSelectTab(tab) == true
+        end
+    end
     local portraitEnable = W.SwitchAt(mainCard, "Portrait", leftW - 62, -24, 0, "HIDDEN")
     M.BindBoolWidget(ctx, portraitEnable,
         function() return NormalizePortrait(unit) ~= "OFF" end,
@@ -310,6 +325,7 @@ local function BuildPortrait(ctx, builder, unit)
             RefreshPortraitControls()
         end,
         PortraitControlMeta("portrait.portraitSizeMode", tostring(unit) .. ".portraitSizeMode"))
+    BindExactPortraitTabTarget(sizeMode, "geometry", tostring(unit) .. ".portraitSizeMode")
     local size = BindPortraitSlider(geometryCard, "Size override", 16, -116, rightW - 58, 0, 128, 1, "portraitSizeOverride", 0, "MSUF2_PORTRAIT_SIZE")
     local widthOverride = BindPortraitSlider(geometryCard, "Width override", 16, -170, rightW - 58, 0, 256, 1, "portraitWidth", 0, "MSUF2_PORTRAIT_WIDTH")
     local heightOverride = BindPortraitSlider(geometryCard, "Height override", 16, -224, rightW - 58, 0, 256, 1, "portraitHeight", 0, "MSUF2_PORTRAIT_HEIGHT")
@@ -328,6 +344,7 @@ local function BuildPortrait(ctx, builder, unit)
     classStyle._msuf2SearchText = "Class portrait style Blizzard Rondo Colored Rondo WoW"
     local border = BindPortraitDropdown(borderCard, "Border", PORTRAIT_BORDERS, 16, -112, min(220, leftW - 32), "portraitBorderStyle", "NONE", "MSUF2_PORTRAIT_BORDER", nil, RefreshPortraitControls)
     local edgeSoftness = BindPortraitSlider(borderCard, "Portrait edge softness", 16, -166, leftW - 58, 0, 30, 2, "portraitEdgeSoftness", 0, "MSUF2_PORTRAIT_EDGE_SOFTNESS")
+    BindExactPortraitTabTarget(edgeSoftness, "border", tostring(unit) .. ".portraitEdgeSoftness")
     edgeSoftness._msuf2SearchText = "Portrait edge softness feather fade borderless percent"
     local borderArt = BindPortraitDropdown(borderCard, "Border art", PORTRAIT_PLACEMENT.borderArt, 16, -220, min(220, leftW - 32), "portraitBorderArt", "FLAT", "MSUF2_PORTRAIT_BORDER_ART", nil, RefreshPortraitControls)
     borderArt._msuf2SearchText = "Portrait border art flat relief beveled ring blizzard style"
@@ -1116,6 +1133,21 @@ local function BuildCastbar(ctx, builder, unit)
         end
         return type(ReadCastbarTab) ~= "function" or ReadCastbarTab() == tab
     end
+    local function BindExactCastbarTabTarget(widget, tab, settingKey)
+        if not widget then return end
+        widget._msuf2ExactTargetKinds = { unitCastbarTab = true }
+        widget._msuf2ExactTargetContracts = {
+            unitCastbarTab = { [tab] = tostring(settingKey or "") },
+        }
+        widget._msuf2PrepareExactSearchTarget = function(_, exactTarget)
+            if type(exactTarget) ~= "table" or exactTarget.prepareKind ~= "unitCastbarTab"
+                or tostring(exactTarget.prepareValue or "") ~= tab
+            then
+                return false
+            end
+            return sec._msuf2GuidedSelectTab and sec._msuf2GuidedSelectTab(tab) == true
+        end
+    end
     local castbarNotice, _, castbarNoticeButton = CreateSectionNotice(generalTab, -334, "Use MSUF", 96)
     if castbarNoticeButton then
         RegisterControl(castbarNoticeButton, ctx, "castbar.use_msuf", "Use MSUF", "button", "setting", {
@@ -1168,6 +1200,7 @@ local function BuildCastbar(ctx, builder, unit)
         function() return ReadBool(unit, "showInterruptSource", false) end,
         function(v) SetBool(unit, "showInterruptSource", v, "MSUF2_CASTBAR_INTERRUPT_SOURCE", { castbar = true, preview = true }) end,
         SettingMeta(ctx, "castbar.show_interrupt_source", unit, "showInterruptSource"))
+    BindExactCastbarTabTarget(interruptSource, "general", tostring(unit) .. ".showInterruptSource")
     local sizeCardW = sizeCard._msuf2Width or (sectionW - 32)
     local sizeRightX = max(350, floor(sizeCardW * 0.52))
     local sizeControlWLeft = min(300, max(220, sizeRightX - 42))

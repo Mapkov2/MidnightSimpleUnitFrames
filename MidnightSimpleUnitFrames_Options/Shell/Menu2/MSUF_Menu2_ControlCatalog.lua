@@ -1943,6 +1943,49 @@ local function SettingDescriptorFingerprint(descriptor)
     return table.concat(parts, "|")
 end
 
+--- Resolves an explicit runtime control identity without label, text, geometry,
+--- or setting-key inference. Changelog links use this path so a renamed label or
+--- a second similarly named control can never redirect the click elsewhere.
+function Catalog.ResolveExactTarget(pageKey, descriptor)
+    pageKey = CleanText(pageKey)
+    descriptor = type(descriptor) == "table" and descriptor or nil
+    local controlId = descriptor and CleanText(descriptor.controlId) or ""
+    if pageKey == "" or controlId == "" then return nil, nil, "missing_exact_identity" end
+
+    local record = STATE.byId[controlId]
+    if not record then return nil, nil, "control_not_built" end
+    if CleanText(record.pageKey) ~= pageKey then return nil, nil, "page_mismatch" end
+    local widget = record.widget
+    if not widget then return nil, nil, "widget_missing" end
+
+    local settingKey = CleanText(descriptor.settingKey)
+    local recordSettingKey = CleanText(record.settingKey)
+    if settingKey ~= "" and recordSettingKey ~= "" and recordSettingKey ~= settingKey then
+        return nil, nil, "setting_mismatch"
+    end
+
+    local prepareKind = CleanText(descriptor.prepareKind)
+    if prepareKind ~= "" then
+        local supported = widget._msuf2ExactTargetKinds
+        local contracts = widget._msuf2ExactTargetContracts
+        local prepare = widget._msuf2PrepareExactSearchTarget
+        if type(supported) ~= "table" or supported[prepareKind] ~= true or type(prepare) ~= "function" then
+            return nil, nil, "unsupported_prepare_kind"
+        end
+        local prepareValue = CleanText(descriptor.prepareValue)
+        local contract = type(contracts) == "table" and contracts[prepareKind] or nil
+        local contractSettingKey = type(contract) == "table" and contract[prepareValue] or nil
+        if prepareValue == "" or contractSettingKey == nil then return nil, nil, "unsupported_prepare_value" end
+        if contractSettingKey ~= true and CleanText(contractSettingKey) ~= settingKey then
+            return nil, nil, "prepare_setting_mismatch"
+        end
+        local ok, prepared = pcall(prepare, widget, descriptor)
+        if not ok or prepared ~= true then return nil, nil, "prepare_failed" end
+    end
+
+    return PublicRecord(record), widget, "control_id"
+end
+
 -- Late-bound exact-control lookup for Search and the load-on-demand Assistant.
 -- This deliberately scans the existing catalog instead of maintaining a second
 -- setting index: exact navigation is a cold user action and should not add idle

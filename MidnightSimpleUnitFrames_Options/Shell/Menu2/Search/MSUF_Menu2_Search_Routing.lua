@@ -173,26 +173,34 @@ end
 
 local function ResolveExactSearchAnchor(pageKey, exactTarget)
     if type(exactTarget) ~= "table" then return nil, nil end
-    local settingKey = tostring(exactTarget.settingKey or "")
+    local controlId = tostring(exactTarget.controlId or "")
     local catalog = M.RuntimeControlCatalog
-    if settingKey == "" or not (catalog and type(catalog.FindBySettingKey) == "function") then return nil, false end
+    if controlId ~= "" then
+        if not (catalog and type(catalog.ResolveExactTarget) == "function") then return nil, false, true end
+        local _, widget = catalog.ResolveExactTarget(pageKey, exactTarget)
+        if widget then return widget, true, true end
+        return nil, false, true
+    end
+    local settingKey = tostring(exactTarget.settingKey or "")
+    if settingKey == "" or not (catalog and type(catalog.FindBySettingKey) == "function") then return nil, false, false end
     local _, widget = catalog.FindBySettingKey(settingKey, pageKey, exactTarget)
     if widget then
         if type(widget._msuf2PrepareExactSearchTarget) == "function" then
             widget:_msuf2PrepareExactSearchTarget(exactTarget)
         end
-        return widget, true
+        return widget, true, true
     end
-    return nil, false
+    return nil, false, true
 end
 
 local function FindCurrentSearchAnchor(pageKey, query, fallback, preferredAnchor, exactTarget)
-    local exactAnchor, exactMatched = ResolveExactSearchAnchor(pageKey, exactTarget)
+    local exactAnchor, exactMatched, exactRequired = ResolveExactSearchAnchor(pageKey, exactTarget)
     if exactMatched then
         local wrapper = M.cache and M.cache[pageKey] and M.cache[pageKey].wrapper
         if SearchAnchorOwnership(wrapper, exactAnchor) then return exactAnchor, true end
-        exactMatched = false
+        return nil, false
     end
+    if exactRequired then return nil, false end
     return FindSearchAnchor(pageKey, query, fallback, preferredAnchor), exactMatched
 end
 

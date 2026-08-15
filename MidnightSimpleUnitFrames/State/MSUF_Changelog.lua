@@ -8,7 +8,9 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
+    sourceSha256 = "5BD6E511D3593AD878CA08BDB291EEDF9F40800EB85E1417348A856BDFEFB743",
     currentVersion = "6.08-Beta2",
+    historyFromVersion = "6.07-Beta4",
     previousVersion = "6.08-beta1",
     rangeLabel = "6.08-beta1 -> 6.08-Beta2",
     entries = {
@@ -19,16 +21,77 @@ local data = {
                 {
                     title = "Highlights",
                     bullets = {
-                        "Added an optional, class-colored interrupter name beside the castbar's interrupted state.",
-                        "Added an optional Player Frame Stance text indicator for warrior stances, paladin auras, druid forms, and other native stance-bar forms.",
-                        "Added explicit Uniform and Width & height portrait sizing modes for Unit and Group Frames while preserving existing portrait geometry during migration.",
-                        "Added an optional Targeting You status indicator for units currently targeting the player.",
-                        "Added configurable edge softness for circular, rounded, and diamond portraits, with matching Unit Frame, Group Frame, and preview rendering.",
+                        {
+                            text = "Added an optional, class-colored interrupter name beside the castbar's interrupted state.",
+                            link = {
+                                pageKey = "uf_target",
+                                query = "show interrupter name",
+                                label = "Show interrupter name",
+                                sectionId = "castbar",
+                                controlId = "menu2.uf_target.unit.castbar.show_interrupt_source",
+                                settingKey = "target.showInterruptSource",
+                                prepareKind = "unitCastbarTab",
+                                prepareValue = "general",
+                            },
+                        },
+                        {
+                            text = "Added an optional Player Frame Stance text indicator for warrior stances, paladin auras, druid forms, and other native stance-bar forms.",
+                            link = {
+                                pageKey = "uf_player",
+                                query = "stance",
+                                label = "Stance",
+                                sectionId = "status_icons",
+                                controlId = "menu2.uf_player.unit.status.selected.enabled",
+                                settingKey = "player.showStanceIndicator",
+                                prepareKind = "unitStatus",
+                                prepareValue = "stance",
+                            },
+                        },
+                        {
+                            text = "Added explicit Uniform and Width & height portrait sizing modes for Unit and Group Frames while preserving existing portrait geometry during migration.",
+                            link = {
+                                pageKey = "uf_player",
+                                query = "portrait size mode",
+                                label = "Size mode",
+                                sectionId = "portrait",
+                                controlId = "menu2.uf_player.unit.portrait.portraitsizemode",
+                                settingKey = "player.portraitSizeMode",
+                                prepareKind = "unitPortraitTab",
+                                prepareValue = "geometry",
+                            },
+                        },
+                        {
+                            text = "Added an optional Targeting You status indicator for units currently targeting the player.",
+                            link = {
+                                pageKey = "uf_target",
+                                query = "targeting you",
+                                label = "Targeting You",
+                                sectionId = "status_icons",
+                                controlId = "menu2.uf_target.unit.status.selected.enabled",
+                                settingKey = "target.showTargetingYouIndicator",
+                                prepareKind = "unitStatus",
+                                prepareValue = "targetingYou",
+                            },
+                        },
+                        {
+                            text = "Added configurable edge softness for circular, rounded, and diamond portraits, with matching Unit Frame, Group Frame, and preview rendering.",
+                            link = {
+                                pageKey = "uf_player",
+                                query = "portrait edge softness",
+                                label = "Portrait edge softness",
+                                sectionId = "portrait",
+                                controlId = "menu2.uf_player.unit.portrait.portraitedgesoftness",
+                                settingKey = "player.portraitEdgeSoftness",
+                                prepareKind = "unitPortraitTab",
+                                prepareValue = "border",
+                            },
+                        },
                     },
                 },
                 {
                     title = "Changes",
                     bullets = {
+                        "Replaced the toolbar's New Task action with a dedicated See New Features changelog page whose highlighted change sentences link directly to their matching MSUF menu settings.",
                         "Localized the new stance, portrait sizing, and portrait edge-softness controls across all 12 supported locales.",
                         "Updated Assistant registrations, generated coverage data, search routing, and static search data for the new status and portrait controls.",
                         "Corrected the bundled release history so features added after Beta 1 are listed under Beta 2 instead of the already-published Beta 1 package.",

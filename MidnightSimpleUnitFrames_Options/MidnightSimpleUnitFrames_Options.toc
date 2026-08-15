@@ -9,6 +9,7 @@
 ## LoadOnDemand: 1
 ## X-MSUF-Options: 1
 
+State\MSUF_ChangelogFull.lua
 MSUF_OptionsLOD_Bootstrap.lua
 Shell\Menu2\MSUF_Menu2.xml
 Shell\Menu2\Search\MSUF_Menu2_Search.xml
