@@ -191,4 +191,20 @@ Data.STATUS_CONTROL_SPECS = {
             "pvp status icon", "war mode indicator", "flagged indicator",
         },
     },
+    {
+        value = "social", label = "Guild / Friend Icon",
+        show = "showSocialIndicator", defaultShow = false,
+        size = "socialIndicatorSize", defaultSize = 16,
+        anchor = "socialIndicatorAnchor", defaultAnchor = "TOPRIGHT",
+        x = "socialIndicatorOffsetX", defaultX = -18, y = "socialIndicatorOffsetY", defaultY = 2,
+        layer = "socialIndicatorLayer", defaultLayer = 7,
+        refresh = "MSUF_RequestStatusIconsRefreshForCurrent", statusRuntime = true,
+        units = { target = true },
+        description = "Shows whether the target is a Battle.net friend, character friend, or guild member. Relationships are only checked out of combat; the icon hides during combat.",
+        aliases = {
+            "guild friend icon", "friend icon", "friend marker", "friend indicator",
+            "guild icon", "guild marker", "guild indicator", "bnet friend icon",
+            "battle net friend icon", "social indicator", "social icon",
+        },
+    },
 }

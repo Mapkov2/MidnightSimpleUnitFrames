@@ -1119,7 +1119,53 @@ local function NormalizeEventForUnit(frame, event)
     return event
 end
 
-local function HandleDriverEvent(frame, event, eventUnit)
+--- Cold path (an interrupt is a one-shot): builds the "Interrupted by <name>"
+--- label from the event's interrupter GUID, mirroring Blizzard's
+--- CastingBarMixin:GetInterruptText. Fails open to the plain label whenever the
+--- per-unit toggle is off or identity is restricted (secret GUID/name), so a
+--- PvP-restricted interrupter can never raise.
+function _G.MSUF_Castbar_ResolveInterruptLabel(interruptedBy, unit, fallback)
+    fallback = fallback or "Interrupted"
+    local issecret = _G.issecretvalue
+    if interruptedBy == nil or (issecret and issecret(interruptedBy) == true) then
+        return fallback
+    end
+    local db = _G.MSUF_DB
+    local unitDB = db and unit and db[unit] or nil
+    if unitDB == nil and type(unit) == "string" and unit:find("^boss") ~= nil then
+        unitDB = db and db.boss or nil
+    end
+    if not (unitDB and unitDB.showInterruptSource == true) then
+        return fallback
+    end
+    local nameFromGUID = _G.UnitNameFromGUID
+    if type(nameFromGUID) ~= "function" then return fallback end
+    local name = nameFromGUID(interruptedBy)
+    if (issecret and issecret(name) == true) or type(name) ~= "string" or name == "" then
+        return fallback
+    end
+    local classFromGUID = _G.UnitClassFromGUID
+    if type(classFromGUID) == "function" then
+        local _, classFilename = classFromGUID(interruptedBy)
+        if not (issecret and issecret(classFilename) == true)
+            and type(classFilename) == "string" and classFilename ~= "" then
+            -- Class color through the secret-safe C API, never a Lua table
+            -- keyed by class (castbar_target_name_color contract).
+            local getClassColor = _G.C_ClassColor and _G.C_ClassColor.GetClassColor
+            local classColor = type(getClassColor) == "function" and getClassColor(classFilename) or nil
+            if classColor and classColor.WrapTextInColorCode then
+                name = classColor:WrapTextInColorCode(name)
+            end
+        end
+    end
+    local fmt = _G.SPELL_INTERRUPTED_BY
+    if type(fmt) == "string" and fmt:find("%%s") ~= nil then
+        return fmt:format(name)
+    end
+    return fallback
+end
+
+local function HandleDriverEvent(frame, event, eventUnit, _castID, _spellID, interruptedBy)
     if frame._msufDriverBackendEnabled ~= true then
         if frame.unit == "target" or frame.unit == "focus" then
             SetDriverEventsRegistered(frame, frame.unit, false)
@@ -1250,7 +1296,7 @@ local function HandleDriverEvent(frame, event, eventUnit)
         CancelTargetFocusRefresh(frame)
         ClearStopExpectation(frame)
         frame.MSUF_kickInterruptibleConfirmed = nil
-        frame:SetInterrupted()
+        frame:SetInterrupted(interruptedBy)
         PublishState(frame, nil, event)
         return
     end
@@ -1452,7 +1498,7 @@ local function CreateCastBar(frameName, unit)
 
     end
 
-    function frame:SetInterrupted()
+    function frame:SetInterrupted(interruptedBy)
         HideChannelHasteMarkers(self)
         ClearFrameOnUpdate(self)
         self._msufHideToken = (self._msufHideToken or 0) + 1
@@ -1482,13 +1528,17 @@ local function CreateCastBar(frameName, unit)
         end
 
         local reverseFill = _G.MSUF_GetReverseFillSafe(self, false)
+        local interruptLabel = "Interrupted"
+        if type(_G.MSUF_Castbar_ResolveInterruptLabel) == "function" then
+            interruptLabel = _G.MSUF_Castbar_ResolveInterruptLabel(interruptedBy, self.unit, interruptLabel)
+        end
         if ApplyInterruptValues then
-            ApplyInterruptValues(castbarRuntime, self, 1, reverseFill, "Interrupted")
+            ApplyInterruptValues(castbarRuntime, self, 1, reverseFill, interruptLabel)
         else
             _G.MSUF_ApplyInterruptBarVisuals(self, {
                 barValue = 1,
                 reverseFill = reverseFill,
-                label = "Interrupted",
+                label = interruptLabel,
             })
         end
 

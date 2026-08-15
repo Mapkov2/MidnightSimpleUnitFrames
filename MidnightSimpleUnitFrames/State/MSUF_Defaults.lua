@@ -181,7 +181,7 @@ local MSUF_DEFAULTS_STATUS_PREFIXES = {
     "leaderIcon", "raidMarker", "levelIndicator", "eliteIcon", "statusText",
     "statusGhostText", "statusAFKText", "statusAFKTimer", "statusAFKTimerText", "statusDNDText",
     "combatStateIndicator", "restedStateIndicator", "restingStateIndicator",
-    "incomingResIndicator", "pvpIndicator", "raidGroupName",
+    "incomingResIndicator", "pvpIndicator", "socialIndicator", "raidGroupName",
 }
 local MSUF_DEFAULTS_AURA_NUMERIC_KEYS = {
     offsetX = { -4096, 4096 }, offsetY = { -4096, 4096 },
@@ -4403,6 +4403,7 @@ local function fill(key, defaults)
         showPowerText = true,
         powerFontSize = 12,
         showInterrupt = true,
+        showInterruptSource = false,
         --- Per-unitframe: reverse fill direction for HP + Power bars.
         --- (false = normal left->right fill)
         reverseFillBars = false,
@@ -4443,6 +4444,7 @@ local function fill(key, defaults)
         showPowerText = true,
         powerFontSize = 12,
         showInterrupt = true,
+        showInterruptSource = false,
         --- Per-unitframe: reverse fill direction for HP + Power bars.
         reverseFillBars = false,
         --- Per-unitframe: vertical fill axis for HP + Power bars.
@@ -4469,6 +4471,7 @@ local function fill(key, defaults)
         showPower = false,
         showPowerText = false,
         showInterrupt = true,
+        showInterruptSource = false,
         --- Per-unitframe: reverse fill direction for HP + Power bars.
         reverseFillBars = false,
         --- Per-unitframe: vertical fill axis for HP + Power bars.
@@ -4582,6 +4585,7 @@ local function fill(key, defaults)
         showPower    = false,
         showPowerText = true,
         showInterrupt = true,
+        showInterruptSource = false,
         portraitMode = "OFF",
         --- Per-unitframe: reverse fill direction for HP + Power bars.
         reverseFillBars = false,

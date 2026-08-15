@@ -534,6 +534,7 @@ statusGhostText=ghost|ghost text
 statusAFKText=afk|afk text
 statusAFKTimer=afk timer|afk duration|afk time
 statusDNDText=dnd|dnd text|do not disturb
+social=friend icon|friend marker|guild icon|guild marker|bnet friend|battle.net friend|guild friend
 eliteicon=elite|rare|elite icon|rare icon
 raidgroupname=raid group|group number|subgroup
 level=level|level text|level indicator

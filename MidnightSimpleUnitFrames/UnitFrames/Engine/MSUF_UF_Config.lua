@@ -1193,6 +1193,7 @@ local UNIT_STATUS_ENTRY_DEFS = {
   PrefixedStatusDef("resting", "showRestingIndicator", true, "restedStateIndicator", 39, "TOPLEFT", -40, 50, 25, { "restedStateIndicatorIconStyle", "BLIZZARD" }, { "restedStateIndicatorSymbol", "rested_blizzard_animated", "restingStateIndicatorSymbol" }, { "restedStateIndicatorCustomIcon", "" }),
   PrefixedStatusDef("incomingRes", "showIncomingResIndicator", true, "incomingResIndicator", 18, "TOPRIGHT", 0, 0, 7, nil, { "incomingResIndicatorSymbol", "DEFAULT" }, { "incomingResIndicatorCustomIcon", "" }),
   PrefixedStatusDef("pvp", "showPvpIndicator", true, "pvpIndicator", 18, "TOPRIGHT", 0, 0, 7, nil, nil, { "pvpIndicatorCustomIcon", "" }),
+  PrefixedStatusDef("social", "showSocialIndicator", false, "socialIndicator", 16, "TOPRIGHT", -18, 2, 7),
 }
 
 local UNIT_STATUS_TEXT_STATE_DEFS = {

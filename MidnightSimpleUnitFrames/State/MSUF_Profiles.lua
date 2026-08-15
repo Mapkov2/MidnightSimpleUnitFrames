@@ -2142,6 +2142,7 @@ local MSUF_PROFILEIO_STATUS_PREFIXES = {
     "restingStateIndicator",
     "incomingResIndicator",
     "pvpIndicator",
+    "socialIndicator",
     "raidGroupName",
 }
 local MSUF_PROFILEIO_GROUP_STATUS_NUMERIC_KEYS = {

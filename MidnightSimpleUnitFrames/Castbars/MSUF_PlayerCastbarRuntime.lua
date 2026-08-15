@@ -898,12 +898,16 @@ local function HandleEmpowerEvent(frame, event, ...)
     return false
 end
 
-local function HandleActiveEmpowerEvent(frame, event)
+local function HandleActiveEmpowerEvent(frame, event, ...)
     if not frame.isEmpower then return false end
 
     if event == "UNIT_SPELLCAST_INTERRUPTED" then
         if type(_G.MSUF_PlayerCastbar_ShowInterruptFeedback) == "function" then
-            _G.MSUF_PlayerCastbar_ShowInterruptFeedback(frame, "Interrupted")
+            local label = "Interrupted"
+            if type(_G.MSUF_Castbar_ResolveInterruptLabel) == "function" then
+                label = _G.MSUF_Castbar_ResolveInterruptLabel(select(4, ...), "player", label)
+            end
+            _G.MSUF_PlayerCastbar_ShowInterruptFeedback(frame, label)
         else
             ClearEmpower(frame, true)
         end
@@ -962,7 +966,11 @@ local function PlayerCastbarOnEventImpl(frame, event, ...)
         if IsDifferentActiveCast(frame, castGUID, spellID, castBarID) then return end
 
         ClearActiveCastIdentity(frame)
-        ShowInterruptFeedback(frame, _G.INTERRUPTED)
+        local interruptLabel = _G.INTERRUPTED
+        if type(_G.MSUF_Castbar_ResolveInterruptLabel) == "function" then
+            interruptLabel = _G.MSUF_Castbar_ResolveInterruptLabel(select(4, ...), "player", interruptLabel)
+        end
+        ShowInterruptFeedback(frame, interruptLabel)
         return
     end
 

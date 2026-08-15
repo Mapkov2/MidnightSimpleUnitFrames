@@ -96,7 +96,7 @@ assert(detailCount == 1, "each Visuals frame refresh must invoke detail layout e
 assert(contains(refreshBody, "ApplyCastbarDetailLayout(frame, forcedUnit, general)"))
 
 local castStart = assert(driver:find("function frame:Cast(state)", 1, true))
-local interruptStart = assert(driver:find("function frame:SetInterrupted()", castStart, true))
+local interruptStart = assert(driver:find("function frame:SetInterrupted(interruptedBy)", castStart, true))
 local castBody = driver:sub(castStart, interruptStart - 1)
 assert(not contains(castBody, "self.timer = true"), "ordinary casts must not arm interrupt feedback")
 assert(not contains(castBody, "C_Timer.After(feedbackDuration"), "ordinary casts must not schedule feedback timers")

@@ -286,6 +286,11 @@ function Status.SetIconTexture(icon, spec, conf, g, key, data, runtimeCfg, statu
             tex:SetTexture((key == "target" or key == "focus") and "Interface\\TargetingFrame\\UI-PVP-Horde" or "Interface\\TargetingFrame\\UI-PVP-Alliance")
             if tex.SetTexCoord then tex:SetTexCoord(0, 1, 0, 1) end
         end
+    elseif spec.id == "social" then
+        if tex then
+            tex:SetTexture("Interface\\FriendsFrame\\PlusManz-PlusManz")
+            if tex.SetTexCoord then tex:SetTexCoord(0, 1, 0, 1) end
+        end
     elseif Status.IsTextIndicator(spec) then
         if tex then tex:Hide() end
         if txt then

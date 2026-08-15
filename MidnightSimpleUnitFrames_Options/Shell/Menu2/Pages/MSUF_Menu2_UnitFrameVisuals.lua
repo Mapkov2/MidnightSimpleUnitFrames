@@ -978,9 +978,9 @@ local function BuildCastbar(ctx, builder, unit)
     local tabFrames = {}
     local generalTab, iconTab, spellTab, timeTab, advancedTab =
         UnitSectionShared.MakeTabFrames(sec, -64, sectionW, tabFrames, "general", "icon", "spell", "time", "advanced")
-    local generalCard = W.ControlCard(generalTab, nil, nil, leftX, -4, leftW, 132)
-    local providerCard = W.ControlCard(generalTab, "Provider & Surface", nil, rightX, -4, rightW, 132)
-    local sizeCard = W.ControlCard(generalTab, "Size", "Width can use manual bounds or follow another frame.", leftX, -154, sectionW - 32, 166)
+    local generalCard = W.ControlCard(generalTab, nil, nil, leftX, -4, leftW, 164)
+    local providerCard = W.ControlCard(generalTab, "Provider & Surface", nil, rightX, -4, rightW, 164)
+    local sizeCard = W.ControlCard(generalTab, "Size", "Width can use manual bounds or follow another frame.", leftX, -186, sectionW - 32, 166)
     local iconCard = W.ControlCard(iconTab, nil, nil, leftX, -4, leftW, 424)
     local portraitIconCard = W.ControlCard(iconTab, "Portrait Cast Icon", nil, rightX, -4, rightW, 156)
     local spellCard = W.ControlCard(spellTab, nil, nil, leftX, -4, leftW, 270)
@@ -1124,6 +1124,15 @@ local function BuildCastbar(ctx, builder, unit)
         function() return ReadBool(unit, "showInterrupt", true) end,
         function(v) SetBool(unit, "showInterrupt", v, "MSUF2_CASTBAR_INTERRUPT", { castbar = true, preview = true }) end,
         SettingMeta(ctx, "castbar.show_interrupt", unit, "showInterrupt"))
+    -- Appends the interrupter's class-colored name to the Interrupted feedback
+    -- (Blizzard's SPELL_INTERRUPTED_BY format); resolution is secret-safe and
+    -- falls back to the plain label against restricted identities.
+    local interruptSource = W.ToggleAt(generalCard, "Show interrupter name", 16, -116, 240)
+    W.AttachUnitEditFocus(interruptSource, unit, "castbar")
+    M.BindBoolWidget(ctx, interruptSource,
+        function() return ReadBool(unit, "showInterruptSource", false) end,
+        function(v) SetBool(unit, "showInterruptSource", v, "MSUF2_CASTBAR_INTERRUPT_SOURCE", { castbar = true, preview = true }) end,
+        SettingMeta(ctx, "castbar.show_interrupt_source", unit, "showInterruptSource"))
     local sizeCardW = sizeCard._msuf2Width or (sectionW - 32)
     local sizeRightX = max(350, floor(sizeCardW * 0.52))
     local sizeControlWLeft = min(300, max(220, sizeRightX - 42))
