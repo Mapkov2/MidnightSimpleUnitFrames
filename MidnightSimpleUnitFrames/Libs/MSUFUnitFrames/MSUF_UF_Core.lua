@@ -117,6 +117,7 @@ local STATUS_EVENT_ELEMENTS = {
   RestingIndicator = true,
   IncomingResIndicator = true,
   PVPIndicator = true,
+  SocialIndicator = true,
 }
 
 local IDENTITY_ELEMENTS = {
