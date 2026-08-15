@@ -91,6 +91,37 @@ function Test-XmlManifest {
     }
 }
 
+function Get-XmlLuaLoadPaths {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $paths = [Collections.Generic.List[string]]::new()
+    $active = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    function Add-XmlLuaLoadPath {
+        param([Parameter(Mandatory = $true)][string]$CurrentPath)
+
+        $full = [IO.Path]::GetFullPath($CurrentPath)
+        if (-not $active.Add($full)) {
+            throw "XML include cycle detected at $full"
+        }
+        [xml]$document = Get-Content -LiteralPath $full -Raw
+        foreach ($node in $document.SelectNodes("//*[local-name()='Script' or local-name()='Include']")) {
+            $reference = $node.GetAttribute("file")
+            if ([string]::IsNullOrWhiteSpace($reference)) { continue }
+            $child = [IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $full) $reference))
+            $extension = [IO.Path]::GetExtension($child)
+            if ($extension -ieq ".xml") {
+                Add-XmlLuaLoadPath -CurrentPath $child
+            } elseif ($extension -ieq ".lua") {
+                $paths.Add($child)
+            }
+        }
+        [void]$active.Remove($full)
+    }
+
+    Add-XmlLuaLoadPath -CurrentPath $Path
+    return $paths.ToArray()
+}
+
 foreach ($target in $targets) {
     $folder = Join-Path $root $target.Folder
     $unsuffixed = Join-Path $folder ($target.Base + ".toc")
@@ -169,16 +200,56 @@ if ($groupOwnershipSource -notmatch 'raidManagerMode' -or
 
 $elementsRoot = Join-Path $root "MidnightSimpleUnitFrames/UnitFrames/Embeds/MSUF_UFCore"
 $gameRoot = Join-Path $root "MidnightSimpleUnitFrames/Game"
+$classicSharedElementsPath = Join-Path $gameRoot "Classic/UnitFrames/MSUF_UFCore_Elements.xml"
+$retailSharedElementsPath = Join-Path $elementsRoot "MSUF_UFCore_Elements.xml"
+$auraCorePath = [IO.Path]::GetFullPath((Join-Path $root "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Core.lua"))
+$retailSharedLoadOrder = @(Get-XmlLuaLoadPaths -Path $retailSharedElementsPath)
+$auraCoreIndex = [Array]::IndexOf($retailSharedLoadOrder, $auraCorePath)
+if ($auraCoreIndex -lt 0) {
+    throw "Retail element manifest no longer loads the shared Auras3 core"
+}
+$classicSharedLoadOrder = @(Get-XmlLuaLoadPaths -Path $classicSharedElementsPath)
+if ($classicSharedLoadOrder.Count -ne ($auraCoreIndex + 1)) {
+    throw "Classic shared element manifest must match the Retail prefix through Auras3 core"
+}
+for ($index = 0; $index -le $auraCoreIndex; $index++) {
+    if ($classicSharedLoadOrder[$index] -ne $retailSharedLoadOrder[$index]) {
+        throw "Classic shared element load order differs from Retail before Auras3 backend selection at index $index"
+    }
+}
+
+$classicAuraBackendPath = [IO.Path]::GetFullPath((Join-Path $root "MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua"))
+$forbiddenRetailAuraPaths = @(
+    "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_DotData.lua",
+    "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_DefensiveData.lua",
+    "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_AuraNameResolver.lua",
+    "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_SpellIndicators.lua",
+    "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua"
+) | ForEach-Object { [IO.Path]::GetFullPath((Join-Path $root $_)) }
 foreach ($flavor in @("Vanilla", "Mists", "TBC")) {
-    $classicElements = Get-Content -LiteralPath (Join-Path $gameRoot "$flavor/UnitFrames.xml") -Raw
+    $classicManifestPath = Join-Path $gameRoot "$flavor/UnitFrames.xml"
+    $classicElements = Get-Content -LiteralPath $classicManifestPath -Raw
     if ($classicElements -notmatch '\.\.\\Classic\\Auras\\MSUF_Auras3_Features\.lua' -or
         $classicElements -notmatch '\.\.\\Classic\\Auras\\MSUF_Auras3_Visuals\.lua' -or
         $classicElements -notmatch '\.\.\\Classic\\Auras\\MSUF_Auras3_UnitFrames\.lua' -or
+        $classicElements -notmatch '\.\.\\Classic\\UnitFrames\\MSUF_UFCore_Elements\.xml' -or
         $classicElements -notmatch 'Auras\\MSUF_Auras3_DotData\.lua' -or
         $classicElements -notmatch 'Auras\\MSUF_Auras3_DefensiveData\.lua' -or
         $classicElements -match 'AuraNameResolver' -or
         $classicElements -match 'Mainline\\Auras') {
         throw "$flavor element manifest must select only the Classic aura backend"
+    }
+    $classicLoadOrder = @(Get-XmlLuaLoadPaths -Path $classicManifestPath)
+    foreach ($forbiddenPath in $forbiddenRetailAuraPaths) {
+        if ([Array]::IndexOf($classicLoadOrder, $forbiddenPath) -ge 0) {
+            throw "$flavor transitively loads Retail aura runtime: $forbiddenPath"
+        }
+    }
+    $classicAuraBackendIndex = [Array]::IndexOf($classicLoadOrder, $classicAuraBackendPath)
+    $classicAuraCoreIndex = [Array]::IndexOf($classicLoadOrder, $auraCorePath)
+    if ($classicAuraBackendIndex -lt 0 -or $classicAuraCoreIndex -lt 0 -or
+        $classicAuraCoreIndex -gt $classicAuraBackendIndex) {
+        throw "$flavor must load Auras3 core before the Classic aura backend"
     }
     $groupElements = Get-Content -LiteralPath (Join-Path $gameRoot "$flavor/UnitFrames/GroupFrames.xml") -Raw
     if ($groupElements -notmatch 'Group\\MSUF_UF_Group_SpellIndicators_Data\.lua' -or

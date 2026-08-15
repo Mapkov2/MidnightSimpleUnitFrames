@@ -1,5 +1,5 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/">
-  <Include file="..\..\UnitFrames\Embeds\MSUF_UFCore\MSUF_UFCore_Elements.xml"/>
+  <Include file="..\Classic\UnitFrames\MSUF_UFCore_Elements.xml"/>
   <Script file="..\Classic\Auras\MSUF_Auras3_DataShared.lua"/>
   <Script file="Auras\MSUF_Auras3_DotData.lua"/>
   <Script file="Auras\MSUF_Auras3_DefensiveData.lua"/>
