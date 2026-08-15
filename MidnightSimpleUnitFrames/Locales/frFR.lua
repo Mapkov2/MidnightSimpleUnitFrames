@@ -4221,7 +4221,6 @@ L[". Shared name-shortening changes do not affect those scopes."] = ". Les modif
 L["AFK Text"] = "Texte AFK"
 L["AFK Timer"] = "Minuteur AFK"
 L["Show interrupter name"] = "Afficher l'auteur de l'interruption"
-L["Guild / Friend"] = "Guilde / Ami"
 L["Stance"] = "Posture"
 L["Absorb Color"] = "Couleur d'absorption"
 L["All icon styling: Appearance > Auras."] = "Tout le style des icônes : Apparence > Auras."
@@ -4437,6 +4436,7 @@ L["0 keeps the icon just above the bar and moves it together with the whole-cast
 
 --- Detached / overlay portrait placement (6.0 Beta 30)
 L["Size mode"] = "Mode de taille"
+L["Portrait edge softness"] = "Adoucissement des bords du portrait"
 L["Uniform"] = "Uniforme"
 L["Width & height"] = "Largeur et hauteur"
 L["Width override"] = "Remplacement de la largeur"

@@ -3842,7 +3842,6 @@ L[". Shared name-shortening changes do not affect those scopes."] = ". 共用名
 L["AFK Text"] = "暫離文字"
 L["AFK Timer"] = "暫離計時"
 L["Show interrupter name"] = "顯示打斷者名字"
-L["Guild / Friend"] = "公會 / 好友"
 L["Stance"] = "姿態"
 L["Absorb Color"] = "吸收顏色"
 L["All icon styling: Appearance > Auras."] = "所有圖示樣式：外觀 > 光環。"
@@ -4058,6 +4057,7 @@ L["0 keeps the icon just above the bar and moves it together with the whole-cast
 
 --- Detached / overlay portrait placement (6.0 Beta 30)
 L["Size mode"] = "尺寸模式"
+L["Portrait edge softness"] = "頭像邊緣柔化"
 L["Uniform"] = "統一"
 L["Width & height"] = "寬度和高度"
 L["Width override"] = "寬度覆蓋"

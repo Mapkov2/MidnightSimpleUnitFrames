@@ -3838,7 +3838,6 @@ L[". Shared name-shortening changes do not affect those scopes."] = ". Изме�
 L["AFK Text"] = "Текст «Нет на месте»"
 L["AFK Timer"] = "Таймер «Нет на месте»"
 L["Show interrupter name"] = "Показывать, кто прервал"
-L["Guild / Friend"] = "Гильдия / Друг"
 L["Stance"] = "Стойка"
 L["Absorb Color"] = "Цвет поглощения"
 L["All icon styling: Appearance > Auras."] = "Оформление всех значков: Внешний вид > Ауры."
@@ -4054,6 +4053,7 @@ L["0 keeps the icon just above the bar and moves it together with the whole-cast
 
 --- Detached / overlay portrait placement (6.0 Beta 30)
 L["Size mode"] = "Режим размера"
+L["Portrait edge softness"] = "Мягкость краев портрета"
 L["Uniform"] = "Одинаковый"
 L["Width & height"] = "Ширина и высота"
 L["Width override"] = "Переопределение ширины"

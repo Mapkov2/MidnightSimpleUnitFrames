@@ -3797,7 +3797,6 @@ L[". Shared name-shortening changes do not affect those scopes."] = ". 공유 �
 L["AFK Text"] = "자리 비움 텍스트"
 L["AFK Timer"] = "자리 비움 타이머"
 L["Show interrupter name"] = "차단 시전자 이름 표시"
-L["Guild / Friend"] = "길드 / 친구"
 L["Stance"] = "태세"
 L["Absorb Color"] = "흡수 색상"
 L["All icon styling: Appearance > Auras."] = "모든 아이콘 스타일: 외형 > 오라."
@@ -4013,6 +4012,7 @@ L["0 keeps the icon just above the bar and moves it together with the whole-cast
 
 --- Detached / overlay portrait placement (6.0 Beta 30)
 L["Size mode"] = "크기 모드"
+L["Portrait edge softness"] = "초상화 가장자리 부드러움"
 L["Uniform"] = "균일"
 L["Width & height"] = "너비 및 높이"
 L["Width override"] = "너비 재정의"
