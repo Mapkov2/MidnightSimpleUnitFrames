@@ -39,6 +39,16 @@ jobs:
           fetch-depth: 0
           path: classic
 
+      - name: Require the Classic validation bundle
+        shell: pwsh
+        run: |
+          $gate = "$env:GITHUB_WORKSPACE/classic/tools/test-classic-prototype.ps1"
+          $smokes = "$env:GITHUB_WORKSPACE/classic/tools/tests"
+          if (-not (Test-Path -LiteralPath $gate -PathType Leaf) -or
+              -not (Test-Path -LiteralPath $smokes -PathType Container)) {
+            throw "The versioned Classic validation bundle is incomplete."
+          }
+
       - name: Install Lua 5.1
         shell: bash
         run: |
