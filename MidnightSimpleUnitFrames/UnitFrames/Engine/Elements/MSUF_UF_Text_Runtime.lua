@@ -695,7 +695,7 @@ function Text.UpdateNameColor(frame, event, unit)
   if RegionShown(frame and frame.nameText) then
     ApplyNameTextColor(frame, unit or frame.MSUFUnitKey)
     local rt = frame and frame._msufTextRuntime
-    if rt and rt.inlineToT then
+    if rt and rt.inlineToT and frame._msufIdentityInlineToTScheduled ~= true then
       Text.UpdateInline(frame, event, unit)
     end
   end

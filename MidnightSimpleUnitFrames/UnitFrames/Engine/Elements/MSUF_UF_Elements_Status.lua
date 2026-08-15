@@ -1970,8 +1970,14 @@ function Status.UpdateTargetingYou(frame, status)
 
   local active = status.testMode == true
   if not active then
+    local dependentUnit = frame._msufTargetingYouDependentUnit
+    if not dependentUnit or frame._msufTargetingYouSourceUnit ~= unit then
+      dependentUnit = unit .. "target"
+      frame._msufTargetingYouDependentUnit = dependentUnit
+      frame._msufTargetingYouSourceUnit = unit
+    end
     active = _G.UnitCanAttack and BoolTrue(_G.UnitCanAttack("player", unit))
-      and _G.UnitIsUnit and BoolTrue(_G.UnitIsUnit(unit .. "target", "player"))
+      and _G.UnitIsUnit and BoolTrue(_G.UnitIsUnit(dependentUnit, "player"))
   end
   if active ~= true then
     SetShown(tex, false)

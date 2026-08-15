@@ -70,7 +70,7 @@ local IsNil = Secrets.IsNil or function(value) return value == nil end
 local issecretvalue = _G.issecretvalue or function(_) return false end
 local SafeNumber = Secrets.SafeNumber or tonumber
 local POWER_TYPE_MANA = Enum and Enum.PowerType and Enum.PowerType.Mana or 0
-local SECRET_DEPENDENT_CLASS_COLOR = 2
+local SECRET_NATIVE_CLASS_COLOR = 2
 
 local npcTypeReferenceLevel
 local npcTypeReferenceInstanceType
@@ -833,8 +833,8 @@ local function ExternalFrameWidth(frameName, relativeTo)
   return nil
 end
 
-local function ClassColorForToken(class)
-  if issecretvalue(class) == true then
+local function ClassColorForToken(class, classIsKnownPlain)
+  if classIsKnownPlain ~= true and issecretvalue(class) == true then
     class = nil
   end
   local c = class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
@@ -864,10 +864,14 @@ end
 
 local function DispatchClassColor(frame, unit, allowSecretPassThrough)
   local _, class = ReadUnitClassCached(frame, unit)
-  if allowSecretPassThrough == true and issecretvalue(class) == true then
-    return class, nil, nil, SECRET_DEPENDENT_CLASS_COLOR
+  local classIsKnownPlain
+  if allowSecretPassThrough == true then
+    if issecretvalue(class) == true then
+      return class, nil, nil, SECRET_NATIVE_CLASS_COLOR
+    end
+    classIsKnownPlain = true
   end
-  local r, g, b = ClassColorForToken(class)
+  local r, g, b = ClassColorForToken(class, classIsKnownPlain)
   if r ~= nil then return r, g, b end
   return 0.12, 0.62, 0.95
 end
@@ -1445,7 +1449,7 @@ local function HealthColor(frame, unit, hp, maxHP, calc, event)
   end
 
   if state and state.isPlayerKnown and state.isPlayer then
-    return DispatchClassColor(frame, unit, unit == "targettarget" or unit == "focustarget")
+    return DispatchClassColor(frame, unit, true)
   end
 
   if health.npcClassColorBar == true and spec and spec.key ~= "pet" and spec.key ~= "boss"
@@ -1453,7 +1457,7 @@ local function HealthColor(frame, unit, hp, maxHP, calc, event)
     local class, secretClass = FriendlyNPCClassToken(state, frame, unit)
     if secretClass == true then
       if unit == "targettarget" or unit == "focustarget" then
-        return class, nil, nil, SECRET_DEPENDENT_CLASS_COLOR
+        return class, nil, nil, SECRET_NATIVE_CLASS_COLOR
       end
       class = nil
     end
@@ -1479,10 +1483,10 @@ local function ApplyHealthStatusColor(bar, frame, unit, hp, maxHP, calc, event)
   local spec = frame and frame.MSUFSpec
   local health = spec and spec.health or {}
   local r, g, b, raw = HealthColor(frame, unit, hp, maxHP, calc, event)
-  if raw == SECRET_DEPENDENT_CLASS_COLOR then
-    -- UnitClass can return an identity-restricted token for targettarget and
-    -- focustarget. C_ClassColor and SetStatusBarColor explicitly accept this
-    -- secret pipeline; never inspect or retain the resulting RGB components.
+  if raw == SECRET_NATIVE_CLASS_COLOR then
+    -- UnitClass can return an identity-restricted token for player units.
+    -- C_ClassColor and SetStatusBarColor explicitly accept this secret
+    -- pipeline; never inspect or retain the resulting RGB values.
     local classColor = C_ClassColor_GetClassColor and C_ClassColor_GetClassColor(r)
     if classColor then
       bar:SetStatusBarColor(classColor:GetRGB())
