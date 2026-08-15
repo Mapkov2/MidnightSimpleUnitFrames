@@ -213,6 +213,17 @@ local GROUP_PORTRAIT_MASKS = {
     ROUNDED = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\rounded_mask.tga",
     DIAMOND = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\diamond_mask.tga",
 }
+local GROUP_PORTRAIT_SOFT_EDGE_MASKS = { SQUARE = {}, CIRCLE = {}, ROUNDED = {}, DIAMOND = {} }
+do
+    local root = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\"
+    for level = 1, 15 do
+        local suffix = (level < 10 and "0" or "") .. tostring(level) .. ".png"
+        GROUP_PORTRAIT_SOFT_EDGE_MASKS.SQUARE[level] = root .. "texture_layer_edge_softness_" .. suffix
+        GROUP_PORTRAIT_SOFT_EDGE_MASKS.CIRCLE[level] = root .. "portrait_edge_softness_circle_" .. suffix
+        GROUP_PORTRAIT_SOFT_EDGE_MASKS.ROUNDED[level] = root .. "portrait_edge_softness_rounded_" .. suffix
+        GROUP_PORTRAIT_SOFT_EDGE_MASKS.DIAMOND[level] = root .. "portrait_edge_softness_diamond_" .. suffix
+    end
+end
 local GROUP_PORTRAIT_SHAPED = { CIRCLE = true, ROUNDED = true, DIAMOND = true }
 local GROUP_PORTRAIT_RING_ART = {
     SQUARE = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Borders\\msuf_portrait_ring_square.tga",
@@ -646,7 +657,13 @@ local function PaintGroupPreviewPortrait(scene)
         handle:SetAlpha(layerAlpha)
     end
     if handle then handle:Show() end
-    if holder.mask then holder.mask:SetTexture(GROUP_PORTRAIT_MASKS[portrait.shape or "SQUARE"] or GROUP_PORTRAIT_MASKS.SQUARE) end
+    if holder.mask then
+        local shape = portrait.shape or "SQUARE"
+        local softMasks = GROUP_PORTRAIT_SOFT_EDGE_MASKS[shape]
+        local mask = softMasks and softMasks[portrait.edgeSoftnessLevel]
+            or GROUP_PORTRAIT_MASKS[shape] or GROUP_PORTRAIT_MASKS.SQUARE
+        holder.mask:SetTexture(mask, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+    end
     local classToken = scene.liveData and scene.liveData.class
         or scene.S.GF_PREVIEW_CLASSES[((scene.kind == "party" and 5 or 2) % #scene.S.GF_PREVIEW_CLASSES) + 1]
     local castTexture = portrait.castSpellIcon == true and scene.box._animationEnabled == true

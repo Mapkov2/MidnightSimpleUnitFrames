@@ -58,6 +58,24 @@ local PORTRAIT_MASKS = V.PORTRAIT_MASKS or {
   ROUNDED = ADDON_PATH .. "\\Media\\Masks\\rounded_mask.tga",
   DIAMOND = ADDON_PATH .. "\\Media\\Masks\\diamond_mask.tga",
 }
+--- Shape-aware feather masks are resolved once at addon load. Portrait.Apply
+--- only indexes these tables when a compiled spec changes; gameplay events
+--- never build paths, calculate gradients, or revisit the mask selection.
+local PORTRAIT_SOFT_EDGE_MASKS = V.PORTRAIT_SOFT_EDGE_MASKS
+if not PORTRAIT_SOFT_EDGE_MASKS then
+  PORTRAIT_SOFT_EDGE_MASKS = { SQUARE = {}, CIRCLE = {}, ROUNDED = {}, DIAMOND = {} }
+  local squareRoot = ADDON_PATH .. "\\Media\\Masks\\texture_layer_edge_softness_"
+  local circleRoot = ADDON_PATH .. "\\Media\\Masks\\portrait_edge_softness_circle_"
+  local roundedRoot = ADDON_PATH .. "\\Media\\Masks\\portrait_edge_softness_rounded_"
+  local diamondRoot = ADDON_PATH .. "\\Media\\Masks\\portrait_edge_softness_diamond_"
+  for level = 1, 15 do
+    local suffix = (level < 10 and "0" or "") .. tostring(level) .. ".png"
+    PORTRAIT_SOFT_EDGE_MASKS.SQUARE[level] = squareRoot .. suffix
+    PORTRAIT_SOFT_EDGE_MASKS.CIRCLE[level] = circleRoot .. suffix
+    PORTRAIT_SOFT_EDGE_MASKS.ROUNDED[level] = roundedRoot .. suffix
+    PORTRAIT_SOFT_EDGE_MASKS.DIAMOND[level] = diamondRoot .. suffix
+  end
+end
 local DYNAMIC_PORTRAIT_BORDER = V.DYNAMIC_PORTRAIT_BORDER or {
   CLASS_COLOR = true,
   REACTION = true,
@@ -584,7 +602,10 @@ local function ApplyPortraitMask(holder, p)
   if p and p.shape == "BLIZZARD" and ApplyBlizzardPortraitMask(mask) then
     return
   end
-  SetMaskTextureCached(mask, PORTRAIT_MASKS[p and p.shape or "SQUARE"] or WHITE)
+  local shape = p and p.shape or "SQUARE"
+  local softMasks = PORTRAIT_SOFT_EDGE_MASKS[shape]
+  local softMask = softMasks and softMasks[p and p.edgeSoftnessLevel]
+  SetMaskTextureCached(mask, softMask or PORTRAIT_MASKS[shape] or WHITE)
 end
 
 --- Placement resolves to (ownPoint, relativePoint) pairs. ATTACHED keeps the

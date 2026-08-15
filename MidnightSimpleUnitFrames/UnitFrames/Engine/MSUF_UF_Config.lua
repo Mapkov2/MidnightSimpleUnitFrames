@@ -1665,8 +1665,10 @@ local function CompileUnitPortrait(out, conf, general)
     out.portrait.width = portraitSize
     out.portrait.height = portraitSize
   else
-    out.portrait.width = portraitWidth > 0 and max(8, portraitWidth) or portraitAutoSize
-    out.portrait.height = portraitHeight > 0 and max(8, portraitHeight) or portraitAutoSize
+    -- A zero axis inherits the retained uniform value. Switching modes is
+    -- therefore visually stable, while Size = 0 still resolves to Auto.
+    out.portrait.width = portraitWidth > 0 and max(8, portraitWidth) or portraitSize
+    out.portrait.height = portraitHeight > 0 and max(8, portraitHeight) or portraitSize
   end
   out.portrait.placement = NormalizePortraitPlacement(conf.portraitPlacement)
   out.portrait.point = NormalizePortraitAnchorPoint(conf.portraitDetachedPoint, "RIGHT")
@@ -1691,6 +1693,12 @@ local function CompileUnitPortrait(out, conf, general)
   out.portrait.border.g = Number(general.portraitBorderColorG, 1)
   out.portrait.border.b = Number(general.portraitBorderColorB, 1)
   out.portrait.border.a = Number(general.portraitBorderColorA, 1)
+  local portraitEdgeSoftnessLevel = min(15, max(0,
+    floor((Number(conf.portraitEdgeSoftness, 0) / 2) + 0.5)))
+  if out.portrait.shape == "BLIZZARD" or out.portrait.border.style ~= "NONE" then
+    portraitEdgeSoftnessLevel = 0
+  end
+  out.portrait.edgeSoftnessLevel = portraitEdgeSoftnessLevel
   out.portrait.bg = out.portrait.bg or {}
   out.portrait.bg.enabled = conf.portraitBgEnabled == true
   out.portrait.bg.r = Number(general.portraitBgColorR, 0.05)

@@ -1570,8 +1570,10 @@ local function CompilePortrait(kind, conf, frameHeight)
   if sizeMode == "UNIFORM" then
     width, height = size, size
   else
-    width = width > 0 and math.max(8, width) or autoSize
-    height = height > 0 and math.max(8, height) or autoSize
+    -- Retain Size as the zero-axis fallback so toggling to independent axes
+    -- never changes the visible portrait before either axis is edited.
+    width = width > 0 and math.max(8, width) or size
+    height = height > 0 and math.max(8, height) or size
   end
   local shape = PORTRAIT_SHAPES[conf.portraitShape] and conf.portraitShape or "SQUARE"
   local borderStyle = PORTRAIT_BORDERS[conf.portraitBorderStyle] and conf.portraitBorderStyle or "NONE"
@@ -1580,6 +1582,9 @@ local function CompilePortrait(kind, conf, frameHeight)
   local relPoint = PORTRAIT_POINTS[conf.portraitDetachedTo] and conf.portraitDetachedTo or "LEFT"
   local overlayAlign = PORTRAIT_OVERLAY_ALIGNMENTS[conf.portraitOverlayAlign] and conf.portraitOverlayAlign or "LEFT"
   local direction = PORTRAIT_BORDER_DIRECTIONS[conf.portraitBorderDirection] and conf.portraitBorderDirection or "UP"
+  local edgeSoftnessLevel = floor((Num(conf.portraitEdgeSoftness, 0) / 2) + 0.5)
+  if edgeSoftnessLevel < 0 then edgeSoftnessLevel = 0 elseif edgeSoftnessLevel > 15 then edgeSoftnessLevel = 15 end
+  if shape == "BLIZZARD" or borderStyle ~= "NONE" then edgeSoftnessLevel = 0 end
   local portrait = {
     enabled = mode ~= "OFF",
     side = mode == "RIGHT" and "RIGHT" or "LEFT",
@@ -1599,6 +1604,7 @@ local function CompilePortrait(kind, conf, frameHeight)
     levelOffset = PortraitLevel(conf.portraitLevelOffset),
     overlayAlign = overlayAlign,
     alpha = Clamp01(Num(conf.portraitAlpha, 100) / 100, 1),
+    edgeSoftnessLevel = edgeSoftnessLevel,
     border = {
       style = borderStyle,
       thickness = math.max(1, Num(conf.portraitBorderThickness, 2)),

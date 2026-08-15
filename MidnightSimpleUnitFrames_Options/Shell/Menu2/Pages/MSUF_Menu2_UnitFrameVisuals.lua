@@ -98,7 +98,7 @@ end
 local NormalizePortraitClassStyle = M.NormalizePortraitClassStyle
 -- Card heights. BuildPortrait and PortraitLayoutForWidth must agree on these, so
 -- both read them from here instead of repeating literals.
-local PORTRAIT_CARD_H = { main = 224, geometry = 440, placement = 382, border = 380, style = 220 }
+local PORTRAIT_CARD_H = { main = 224, geometry = 440, placement = 382, border = 440, style = 220 }
 local PORTRAIT_TAB_HEIGHTS = {
     general = PORTRAIT_CARD_H.main + 116,
     geometry = PORTRAIT_CARD_H.geometry + 116,
@@ -327,12 +327,14 @@ local function BuildPortrait(ctx, builder, unit)
     local classStyle = BindPortraitDropdown(styleCard, "Class portrait style", PortraitClassStyleValues, 16, -58, min(220, rightW - 32), "portraitClassStyle", "BLIZZARD", "MSUF2_PORTRAIT_CLASS_STYLE", NormalizePortraitClassStyle)
     classStyle._msuf2SearchText = "Class portrait style Blizzard Rondo Colored Rondo WoW"
     local border = BindPortraitDropdown(borderCard, "Border", PORTRAIT_BORDERS, 16, -112, min(220, leftW - 32), "portraitBorderStyle", "NONE", "MSUF2_PORTRAIT_BORDER", nil, RefreshPortraitControls)
-    local borderArt = BindPortraitDropdown(borderCard, "Border art", PORTRAIT_PLACEMENT.borderArt, 16, -166, min(220, leftW - 32), "portraitBorderArt", "FLAT", "MSUF2_PORTRAIT_BORDER_ART", nil, RefreshPortraitControls)
+    local edgeSoftness = BindPortraitSlider(borderCard, "Portrait edge softness", 16, -166, leftW - 58, 0, 30, 2, "portraitEdgeSoftness", 0, "MSUF2_PORTRAIT_EDGE_SOFTNESS")
+    edgeSoftness._msuf2SearchText = "Portrait edge softness feather fade borderless percent"
+    local borderArt = BindPortraitDropdown(borderCard, "Border art", PORTRAIT_PLACEMENT.borderArt, 16, -220, min(220, leftW - 32), "portraitBorderArt", "FLAT", "MSUF2_PORTRAIT_BORDER_ART", nil, RefreshPortraitControls)
     borderArt._msuf2SearchText = "Portrait border art flat relief beveled ring blizzard style"
-    local borderDirection = BindPortraitDropdown(borderCard, "Border direction", PORTRAIT_PLACEMENT.borderDirection, 16, -220, min(220, leftW - 32), "portraitBorderDirection", "UP", "MSUF2_PORTRAIT_BORDER_DIRECTION")
+    local borderDirection = BindPortraitDropdown(borderCard, "Border direction", PORTRAIT_PLACEMENT.borderDirection, 16, -274, min(220, leftW - 32), "portraitBorderDirection", "UP", "MSUF2_PORTRAIT_BORDER_DIRECTION")
     borderDirection._msuf2SearchText = "Portrait border direction rotate light up right down left"
-    local borderSize = BindPortraitSlider(borderCard, "Border thickness", 16, -274, leftW - 58, 1, 12, 1, "portraitBorderThickness", 2, "MSUF2_PORTRAIT_BORDER_SIZE")
-    local fillBorder = BindPortraitToggle(borderCard, "Fill border into frame gap", 16, -342, leftW - 32, "portraitFillBorder", false, "MSUF2_PORTRAIT_FILL_BORDER")
+    local borderSize = BindPortraitSlider(borderCard, "Border thickness", 16, -328, leftW - 58, 1, 12, 1, "portraitBorderThickness", 2, "MSUF2_PORTRAIT_BORDER_SIZE")
+    local fillBorder = BindPortraitToggle(borderCard, "Fill border into frame gap", 16, -396, leftW - 32, "portraitFillBorder", false, "MSUF2_PORTRAIT_FILL_BORDER")
     local portraitBg = BindPortraitToggle(styleCard, "Portrait background", 16, -112, rightW - 32, "portraitBgEnabled", false, "MSUF2_PORTRAIT_BG")
     -- The Castbar section's Icon tab hosts a second toggle for this same key on
     -- every unit that has a castbar. Re-run the page refreshers so the twin
@@ -341,7 +343,7 @@ local function BuildPortrait(ctx, builder, unit)
         CASTBAR_UNITS[unit] and function() M.RequestRefresh(ctx, "portrait-cast-icon-mirror") end or nil)
     castSpellIcon._msuf2SearchText = "Portrait cast spell icon casting channel empower"
     local portraitActiveControls = {
-        render, shape, sizeMode, size, widthOverride, heightOverride, portraitBg, castSpellIcon,
+        render, shape, sizeMode, size, widthOverride, heightOverride, edgeSoftness, portraitBg, castSpellIcon,
         placement, levelOffset, portraitAlpha,
     }
     local function PortraitActive() return NormalizePortrait(unit) ~= "OFF" end
@@ -388,6 +390,11 @@ local function BuildPortrait(ctx, builder, unit)
         end },
         { controls = { zoom, panX, panY }, on = PortraitIs2D },
         { controls = border, on = function(conf) return PortraitActive() and not PortraitShapeIsBlizzard(conf) end },
+        { controls = edgeSoftness, on = function(conf)
+            return PortraitActive()
+                and not PortraitShapeIsBlizzard(conf)
+                and ((conf.portraitBorderStyle or "NONE") == "NONE")
+        end },
         { controls = { borderSize, borderArt }, on = function(conf)
             return PortraitActive()
                 and ((conf.portraitBorderStyle or "NONE") ~= "NONE")

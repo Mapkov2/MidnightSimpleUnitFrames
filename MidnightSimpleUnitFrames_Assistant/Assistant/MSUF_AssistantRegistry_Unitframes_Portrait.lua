@@ -172,6 +172,11 @@ function A.UnitframesRegistry.RegisterPortraitSettings(ctx, unit)
             ["custom color"] = "CUSTOM",
         },
     })
+    RegisterUnitNumberSetting(unit, "portraitEdgeSoftness", "portraitEdgeSoftness", "Portrait Edge Softness",
+        0, 0, 30,
+        MakeAliases(unit, "portrait edge softness", "soft portrait edge", "portrait feather", "borderless portrait fade"),
+        { category = "Portrait", step = 2,
+            description = "Softens the portrait silhouette when its border is disabled, from 0 to 30 percent." })
     RegisterUnitNumberSetting(unit, "portraitBorderThickness", "portraitBorderThickness", "Portrait Border Thickness",
         2, 1, 12,
         MakeAliases(unit, "portrait border thickness", "portrait border size", "portrait border thicker", "portrait border thinner"),

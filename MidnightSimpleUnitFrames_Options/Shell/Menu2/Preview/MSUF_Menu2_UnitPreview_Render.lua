@@ -1004,9 +1004,21 @@ function Render.Install(Preview, deps)
         ROUNDED = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\rounded_mask.tga",
         DIAMOND = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\diamond_mask.tga",
     }
-    local function ApplyPreviewPortraitShapeMask(portrait, shape)
+    local PREVIEW_SOFT_EDGE_MASKS = { SQUARE = {}, CIRCLE = {}, ROUNDED = {}, DIAMOND = {} }
+    do
+        local root = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\"
+        for level = 1, 15 do
+            local suffix = (level < 10 and "0" or "") .. tostring(level) .. ".png"
+            PREVIEW_SOFT_EDGE_MASKS.SQUARE[level] = root .. "texture_layer_edge_softness_" .. suffix
+            PREVIEW_SOFT_EDGE_MASKS.CIRCLE[level] = root .. "portrait_edge_softness_circle_" .. suffix
+            PREVIEW_SOFT_EDGE_MASKS.ROUNDED[level] = root .. "portrait_edge_softness_rounded_" .. suffix
+            PREVIEW_SOFT_EDGE_MASKS.DIAMOND[level] = root .. "portrait_edge_softness_diamond_" .. suffix
+        end
+    end
+    local function ApplyPreviewPortraitShapeMask(portrait, shape, edgeSoftnessLevel)
         local wantAtlas = shape == "BLIZZARD"
-        local file = PREVIEW_SHAPE_MASKS[shape]
+        local softMasks = PREVIEW_SOFT_EDGE_MASKS[shape]
+        local file = softMasks and softMasks[edgeSoftnessLevel] or PREVIEW_SHAPE_MASKS[shape]
         local mask = portrait._msufPreviewShapeMask
         if not (wantAtlas or file) then
             if mask and portrait._msufPreviewShapeMasked then
@@ -3154,10 +3166,16 @@ function Preview.Refresh(box, reason)
             if mock.portrait._msufPreviewLayoutWidth ~= nil then mock.portrait._msufPreviewLayoutWidth = nil end
             if mock.portrait._msufPreviewLayoutHeight ~= nil then mock.portrait._msufPreviewLayoutHeight = nil end
         end
-        R.ApplyPreviewPortraitShapeMask(mock.portrait, previewShape)
+        local bStyle = box._runtimePortraitBorderStyle or (portraitBorder and portraitBorder.style) or PortraitStyleGet(key, "portraitBorderStyle", "NONE")
+        local edgeSoftnessLevel = tonumber(runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.edgeSoftnessLevel)
+        if edgeSoftnessLevel == nil then
+            edgeSoftnessLevel = floor(((tonumber(PortraitStyleGet(key, "portraitEdgeSoftness", 0)) or 0) / 2) + 0.5)
+            if edgeSoftnessLevel < 0 then edgeSoftnessLevel = 0 elseif edgeSoftnessLevel > 15 then edgeSoftnessLevel = 15 end
+            if previewShape == "BLIZZARD" or bStyle ~= "NONE" then edgeSoftnessLevel = 0 end
+        end
+        R.ApplyPreviewPortraitShapeMask(mock.portrait, previewShape, edgeSoftnessLevel)
         R.LayoutPreviewBlizzardPortrait(mock.portrait, previewShape == "BLIZZARD",
             S(box._runtimePortraitW), S(box._runtimePortraitH))
-        local bStyle = box._runtimePortraitBorderStyle or (portraitBorder and portraitBorder.style) or PortraitStyleGet(key, "portraitBorderStyle", "NONE")
         -- The Blizzard ring shape parks every MSUF border renderer, exactly
         -- like the live element.
         if previewShape == "BLIZZARD" or bStyle == "NONE" then

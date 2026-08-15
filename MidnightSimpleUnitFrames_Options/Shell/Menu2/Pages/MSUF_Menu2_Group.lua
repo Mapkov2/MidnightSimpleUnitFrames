@@ -1050,7 +1050,7 @@ end
 --- never receive portrait settings through the dynamic Group binding path.
 function GroupPage.BuildPortrait(ctx, builder)
     local kind = "party"
-    local cardH = { main = 224, geometry = 440, placement = 382, border = 380, style = 330 }
+    local cardH = { main = 224, geometry = 440, placement = 382, border = 440, style = 330 }
     local tabH = {
         general = cardH.main + 116,
         geometry = cardH.geometry + 116,
@@ -1345,10 +1345,12 @@ function GroupPage.BuildPortrait(ctx, builder)
     level._msuf2SearchText = "Portrait layer offset frame level behind in front of bars"
     local alpha = BindNumber(placementCard, "Portrait opacity", 16, -328, cardW - 58, 0, 100, 1, "portraitAlpha", 100)
     local border = BindDropdown(borderCard, "Border", borderValues, 16, -112, min(220, cardW - 32), "portraitBorderStyle", "NONE", nil, RefreshPortraitControls)
-    local borderArt = BindDropdown(borderCard, "Border art", placementValues.borderArt, 16, -166, min(220, cardW - 32), "portraitBorderArt", "FLAT", nil, RefreshPortraitControls)
-    local direction = BindDropdown(borderCard, "Border direction", placementValues.borderDirection, 16, -220, min(220, cardW - 32), "portraitBorderDirection", "UP")
-    local thickness = BindNumber(borderCard, "Border thickness", 16, -274, cardW - 58, 1, 12, 1, "portraitBorderThickness", 2)
-    local fill = BindToggle(borderCard, "Fill border into frame gap", 16, -342, cardW - 32, "portraitFillBorder", false)
+    local edgeSoftness = BindNumber(borderCard, "Portrait edge softness", 16, -166, cardW - 58, 0, 30, 2, "portraitEdgeSoftness", 0)
+    edgeSoftness._msuf2SearchText = "Portrait edge softness feather fade borderless percent"
+    local borderArt = BindDropdown(borderCard, "Border art", placementValues.borderArt, 16, -220, min(220, cardW - 32), "portraitBorderArt", "FLAT", nil, RefreshPortraitControls)
+    local direction = BindDropdown(borderCard, "Border direction", placementValues.borderDirection, 16, -274, min(220, cardW - 32), "portraitBorderDirection", "UP")
+    local thickness = BindNumber(borderCard, "Border thickness", 16, -328, cardW - 58, 1, 12, 1, "portraitBorderThickness", 2)
+    local fill = BindToggle(borderCard, "Fill border into frame gap", 16, -396, cardW - 32, "portraitFillBorder", false)
     local classStyle = BindDropdown(styleCard, "Class portrait style", ClassStyleValues, 16, -58, min(220, cardW - 32), "portraitClassStyle", "BLIZZARD", M.NormalizePortraitClassStyle)
     local background = BindToggle(styleCard, "Portrait background", 16, -112, cardW - 32, "portraitBgEnabled", false, RefreshPortraitControls)
     local backgroundColor = BindColor(styleCard, "Portrait Background Color", 16, -158, min(260, cardW - 32), "portraitBgColor", { 0.05, 0.05, 0.05 })
@@ -1357,7 +1359,7 @@ function GroupPage.BuildPortrait(ctx, builder)
     castIcon._msuf2SearchText = "Portrait cast spell icon casting channel empower"
     local activeControls = {
         render, shape, sizeMode, size, width, height, placement, level, alpha,
-        border, background, castIcon,
+        border, edgeSoftness, background, castIcon,
     }
     local function Active(conf) return (conf.portraitMode or "OFF") ~= "OFF" end
     local function Placed(conf, value)
@@ -1387,6 +1389,11 @@ function GroupPage.BuildPortrait(ctx, builder)
             return Active(conf) and not FillsBar(conf) and UsesSeparateSize(conf)
         end },
         { controls = { zoom, panX, panY }, on = function(conf) return Active(conf) and (conf.portraitRender or "2D") ~= "CLASS" end },
+        { controls = edgeSoftness, on = function(conf)
+            return Active(conf)
+                and (conf.portraitShape or "SQUARE") ~= "BLIZZARD"
+                and (conf.portraitBorderStyle or "NONE") == "NONE"
+        end },
         { controls = { thickness, borderArt }, on = function(conf) return Active(conf) and (conf.portraitBorderStyle or "NONE") ~= "NONE" end },
         { controls = direction, on = function(conf)
             return Active(conf) and (conf.portraitBorderStyle or "NONE") ~= "NONE"

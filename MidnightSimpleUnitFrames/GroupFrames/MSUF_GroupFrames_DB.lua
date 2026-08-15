@@ -687,6 +687,7 @@ PARTY_DEFAULTS.portraitLevelOffset = 7
 PARTY_DEFAULTS.portraitAlpha = 100
 PARTY_DEFAULTS.portraitCastSpellIcon = false
 PARTY_DEFAULTS.portraitBorderStyle = "NONE"
+PARTY_DEFAULTS.portraitEdgeSoftness = 0
 PARTY_DEFAULTS.portraitBorderThickness = 2
 PARTY_DEFAULTS.portraitFillBorder = false
 PARTY_DEFAULTS.portraitBorderArt = "FLAT"

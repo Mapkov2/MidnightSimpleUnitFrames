@@ -59,10 +59,11 @@ function A.GroupFramesRegistry.RegisterPortraitSettings(ctx)
             description = description,
         })
     end
-    local function Number(attr, key, label, defaultValue, minValue, maxValue, step, aliases, percent)
+    local function Number(attr, key, label, defaultValue, minValue, maxValue, step, aliases, percent, description)
         RegisterGroupNumber(scope, attr, key, label, defaultValue, minValue, maxValue, step, "config", aliases, {
             page = page.page,
             percent = percent == true,
+            description = description,
         })
     end
     local function Boolean(attr, key, label, defaultValue, aliases)
@@ -173,6 +174,9 @@ function A.GroupFramesRegistry.RegisterPortraitSettings(ctx)
             reaction = "REACTION", ["reaction color"] = "REACTION",
             custom = "CUSTOM", ["custom color"] = "CUSTOM",
         })
+    Number("portraitEdgeSoftness", "portraitEdgeSoftness", "Portrait Edge Softness", 0, 0, 30, 2,
+        Aliases("portrait edge softness", "soft portrait edge", "portrait feather", "borderless portrait fade"),
+        false, "Softens the portrait silhouette when its border is disabled, from 0 to 30 percent.")
     Number("portraitBorderThickness", "portraitBorderThickness", "Portrait Border Thickness", 2, 1, 12, 1,
         Aliases("portrait border thickness", "portrait border size"))
     Boolean("portraitFillBorder", "portraitFillBorder", "Portrait Fill Border Gap", false,

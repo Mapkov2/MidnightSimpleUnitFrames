@@ -3570,6 +3570,7 @@ if g.kickNotReadyColor   == nil then g.kickNotReadyColor   = { ["1"] = 1, ["2"] 
     if g.portraitOffsetY == nil then g.portraitOffsetY = 0 end
     if g.portraitZoom == nil then g.portraitZoom = 100 end
     if g.portraitBorderStyle == nil then g.portraitBorderStyle = "NONE" end
+    if g.portraitEdgeSoftness == nil then g.portraitEdgeSoftness = 0 end
     if g.portraitBorderThickness == nil then g.portraitBorderThickness = 2 end
     if g.portraitBorderColorR == nil then g.portraitBorderColorR = 1 end
     if g.portraitBorderColorG == nil then g.portraitBorderColorG = 1 end
@@ -4851,6 +4852,7 @@ local function fill(key, defaults)
         PortraitDefault("portraitOffsetY", 0)
         PortraitDefault("portraitZoom", 100)
         PortraitDefault("portraitBorderStyle", "NONE")
+        PortraitDefault("portraitEdgeSoftness", 0)
         PortraitDefault("portraitBorderThickness", 2)
         PortraitDefault("portraitBorderColorR", 1)
         PortraitDefault("portraitBorderColorG", 1)
