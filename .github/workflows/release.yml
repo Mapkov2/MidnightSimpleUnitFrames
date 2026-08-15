@@ -118,7 +118,10 @@ jobs:
               $tagContents = $tagContentLines -join [Environment]::NewLine
             }
           }
-          if (-not [string]::IsNullOrWhiteSpace($tagContents)) {
+          # A manual dispatch is an explicit recovery/routing instruction and
+          # takes precedence over the immutable release tag annotation.
+          if ($env:GITHUB_EVENT_NAME -ne "workflow_dispatch" -and
+              -not [string]::IsNullOrWhiteSpace($tagContents)) {
             $match = [regex]::Match($tagContents, '(?im)^\s*publish-target\s*:\s*(all|github|wago|curseforge|wago\+curseforge)\s*$')
             if ($match.Success) {
               $target = $match.Groups[1].Value
