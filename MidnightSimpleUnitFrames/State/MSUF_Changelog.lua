@@ -21,6 +21,15 @@ local data = {
                     bullets = {
                         "Added an optional Slug font rendering mode for clearer, more consistent text across Unit and Group Frames.",
                         "Added configurable AFK timers to Unit and Group Frame status text.",
+                        "Added an optional Player Frame Stance text indicator for active warrior stances, paladin auras, druid forms, and other native stance-bar forms.",
+                        "Added explicit Uniform and Width & height portrait sizing modes for Unit and Group Frames, with existing portrait geometry preserved during migration.",
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Added an optional interrupter name beside the castbar interrupted state.",
+                        "Added a configurable Guild / Friend icon for friendly Target Frame identities.",
                     },
                 },
                 {
