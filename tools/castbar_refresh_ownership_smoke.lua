@@ -101,6 +101,12 @@ local castBody = driver:sub(castStart, interruptStart - 1)
 assert(not contains(castBody, "self.timer = true"), "ordinary casts must not arm interrupt feedback")
 assert(not contains(castBody, "C_Timer.After(feedbackDuration"), "ordinary casts must not schedule feedback timers")
 assert(not contains(driver, "_msufInterruptToken"), "obsolete interrupt timer token should not survive")
+assert(contains(driver, "local function RefreshTargetFocusChanged(frame)"),
+    "target/focus identity must refresh through the synchronous live-client path")
+assert(not contains(driver, "ScheduleTargetFocusChanged")
+    and not contains(driver, "_msufTargetFocusRefreshQueued")
+    and not contains(driver, "_msufTargetFocusRefreshCallback"),
+    "target/focus identity retained a zero-delay scheduler")
 assert(contains(driver, "C_Timer.After(0, self._msufInactiveRecheckCB)"))
 assert(contains(driver, "C_Timer.After(feedbackDuration, self._msufInterruptHideCB)"))
 assert(contains(player, "C_Timer.After(0, frame._msufSoftResyncCB)"))
