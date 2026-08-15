@@ -28,7 +28,9 @@ local names = {
     player = { "Native", "Realm" },
     target = { "Native", "Realm" },
     party1 = { "Other", "Realm" },
+    npc = { "Creature", nil },
 }
+local fullNameReads, isPlayerReads = 0, 0
 local eventFrame
 local unitRefreshes, groupRefreshes = 0, 0
 local lastGroupRefreshUnit
@@ -41,8 +43,13 @@ _G.UnitName = function(unit)
     return entry and entry[1] or nil
 end
 _G.UnitFullName = function(unit)
+    fullNameReads = fullNameReads + 1
     local entry = names[unit]
     return entry and entry[1] or nil, entry and entry[2] or nil
+end
+_G.UnitIsPlayer = function(unit)
+    isPlayerReads = isPlayerReads + 1
+    return unit ~= "npc"
 end
 _G.GetNormalizedRealmName = function() return "Realm" end
 _G.issecretvalue = function() return false end
@@ -121,6 +128,7 @@ local capabilities = API.GetCapabilities()
 Check(capabilities.eventDriven and capabilities.cached and capabilities.multipleProviders,
     "nickname API capabilities missing")
 Check(capabilities.targetedUpdates == true, "targeted update capability missing")
+Check(capabilities.playerOnlyProviders == true, "player-only provider fastpath missing")
 Check(capabilities.combatUpdates == false and capabilities.polling == false,
     "combat/polling capability boundary drifted")
 
@@ -245,6 +253,12 @@ Check(API.IsProviderRegistered("NorthernSkyRaidTools"),
 Check(activeResolver("player") == "NSRTFirst", "NSRT nickname was not resolved")
 Check(type(nsrtCallbacks.NSRT_NICKNAME_UPDATED) == "function",
     "NSRT nickname callback was not registered")
+local fullNameReadsBeforeNPC = fullNameReads
+local isPlayerReadsBeforeNPC = isPlayerReads
+Check(activeResolver("npc") == "Creature", "player-only provider changed an NPC name")
+Check(fullNameReads == fullNameReadsBeforeNPC
+    and isPlayerReads == isPlayerReadsBeforeNPC + 1,
+    "player-only provider performed a full-name/provider lookup for an NPC")
 
 _G.MSUF_DB.general.nsrtNicknameIntegration = false
 Check(type(_G.MSUF_NSRTNicknames_ApplySetting) == "function",

@@ -156,18 +156,20 @@ local function FullNameForUnit(unit)
   return name .. "-" .. realm
 end
 
-local function ResolveDisplayName(unit)
+local function ResolveDisplayName(unit, name, fullName, playerOnlyPrevalidated, identityPrepared)
   if not UnitName then
     return nil
   end
 
-  local name = UnitName(unit)
+  if name == nil and identityPrepared ~= true then
+    name = UnitName(unit)
+  end
   local nameSecret = issecretvalue(name) == true
   if not nameSecret and name == nil then
     return ""
   end
 
-  if UnitIsPlayer then
+  if playerOnlyPrevalidated ~= true and UnitIsPlayer then
     local isPlayer = UnitIsPlayer(unit)
     if issecretvalue(isPlayer) == true or isPlayer ~= true then
       return name
@@ -186,7 +188,9 @@ local function ResolveDisplayName(unit)
     return name
   end
 
-  local fullName = FullNameForUnit(unit)
+  if fullName == nil and identityPrepared ~= true then
+    fullName = FullNameForUnit(unit)
+  end
   if fullName then
     local fullDisplayName = nicknameByFullName[fullName]
     if fullDisplayName then
@@ -207,7 +211,11 @@ local function UpdateResolver()
   local nicknameCount = enabled and RebuildNicknameCache(nicknames) or 0
   if enabled and nicknameCount > 0 then
     if not providerRegistered then
-      local ok = NicknameAPI.RegisterProvider(PROVIDER_OWNER, ResolveDisplayName, PROVIDER_PRIORITY)
+      local ok = NicknameAPI.RegisterProvider(PROVIDER_OWNER, {
+        resolve = ResolveDisplayName,
+        priority = PROVIDER_PRIORITY,
+        playerOnly = true,
+      })
       providerRegistered = ok == true
     else
       NicknameAPI.NotifyChanged(PROVIDER_OWNER)
