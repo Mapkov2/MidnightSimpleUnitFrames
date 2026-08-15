@@ -391,7 +391,12 @@ end
 local ClearEmpowerState = _G.MSUF_ClearEmpowerState or function() end
 
 local function ClearFrameOnUpdate(frame)
-    if frame and frame.SetScript then frame:SetScript("OnUpdate", nil) end
+    if not (frame and frame.SetScript) or frame._msufDriverOnUpdateCleared == true then return end
+    frame:SetScript("OnUpdate", nil)
+    -- Driver frames are bare Frames and this module never installs a Lua
+    -- OnUpdate. Remember the one-time cleanup so idle target swaps do not
+    -- repeat the native SetScript transition.
+    frame._msufDriverOnUpdateCleared = true
 end
 
 local function BuildState(frame)
@@ -1522,6 +1527,7 @@ local function CreateCastBar(frameName, unit)
     SetDriverEventsRegistered(frame, unit, true)
     AnchorDriverFrameToUnitFrame(frame, unit)
     BuildCastbarFrameElements(frame)
+    ClearFrameOnUpdate(frame)
     -- Resolve the shared ColorObjects while this hidden frame is constructed;
     -- otherwise their first CreateColor calls land in the first active cast.
     if frame.UpdateColorForInterruptible then

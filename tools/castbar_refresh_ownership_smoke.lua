@@ -103,6 +103,10 @@ assert(not contains(castBody, "C_Timer.After(feedbackDuration"), "ordinary casts
 assert(not contains(driver, "_msufInterruptToken"), "obsolete interrupt timer token should not survive")
 assert(contains(driver, "local function RefreshTargetFocusChanged(frame)"),
     "target/focus identity must refresh through the synchronous live-client path")
+assert(contains(driver, "frame._msufDriverOnUpdateCleared == true")
+    and contains(driver, "frame._msufDriverOnUpdateCleared = true")
+    and contains(driver, "BuildCastbarFrameElements(frame)\n    ClearFrameOnUpdate(frame)"),
+    "driver frames must clear OnUpdate once before entering the target-swap hotpath")
 assert(not contains(driver, "ScheduleTargetFocusChanged")
     and not contains(driver, "_msufTargetFocusRefreshQueued")
     and not contains(driver, "_msufTargetFocusRefreshCallback"),
