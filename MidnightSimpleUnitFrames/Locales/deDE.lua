@@ -5514,6 +5514,21 @@ L["Optional global overrides for harmful Magic, Curse, Disease, Poison and Bleed
 L["Timer and Dispel colors are shared by live unit/group auras and every preview. Icon border and shadow colors live in Appearance > Auras, scoped by Aura type."] = "Timer- und Bannungsfarben gelten für aktive Einheiten- und Gruppenauren sowie alle Vorschauen. Symbolrahmen- und Schattenfarben befinden sich unter Darstellung > Auren und gelten je Auratyp."
 L["Cooldown timer urgency, global Dispel types, icon borders and shadows."] = "Dringlichkeit der Abklingzeittimer, globale Bannungstypen sowie Symbolrahmen- und Schattenfarben."
 L["Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."] = "Sicher, Warnung, Dringend, Magie, Fluch, Krankheit, Gift, Blutung, Symbolrahmen und Symbolschatten."
+L["Custom Priority"] = "Feste Priorität"
+L["Custom priority"] = "Feste Priorität"
+L["Custom Priority packs active tracked DoTs into the configured order. Inactive entries leave no gap; when A appears after B, the display automatically changes from B to A-B."] = "Feste Priorität ordnet aktive verfolgte DoTs kompakt in der festgelegten Reihenfolge an. Inaktive Einträge lassen keine Lücke; erscheint A nach B, wechselt die Anzeige automatisch von B zu A-B."
+L["Up"] = "Hoch"
+L["Down"] = "Runter"
+L["Move up"] = "Nach oben"
+L["Move down"] = "Nach unten"
+L["Remove DoT"] = "DoT entfernen"
+L["Raises this DoT in the fixed priority order."] = "Verschiebt diesen DoT in der festen Prioritätsreihenfolge nach oben."
+L["Lowers this DoT in the fixed priority order."] = "Verschiebt diesen DoT in der festen Prioritätsreihenfolge nach unten."
+L["Stops tracking this DoT."] = "Beendet die Überwachung dieses DoTs."
+L["%d tracked DoTs"] = "%d überwachte DoTs"
+L[" - clear Search to reorder"] = " - Suche leeren, um neu zu sortieren"
+L[" - dynamic priority active"] = " - dynamische Priorität aktiv"
+L[" - choose Custom Priority under Ordering to use this order"] = " - unter Sortierung Feste Priorität wählen, um diese Reihenfolge zu verwenden"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("deDE", LoadLocale)
 elseif MSUF.LOCALE == "deDE" then LoadLocale() end

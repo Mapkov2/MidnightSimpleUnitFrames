@@ -84,8 +84,14 @@ end
 local MUTED = ThemeColor("muted", { 0.55, 0.66, 0.82, 0.92 })
 local GF_AURA_WORKSPACE_TOOLS = {
     { value = "layout", text = "Layout" },
+    { value = "behavior", text = "Ordering" },
     { value = "filters", text = "Filters" },
     { value = "blacklist", text = "Blacklist" },
+    { value = "style", text = "Style" },
+}
+local GF_AURA_EXTERNAL_TOOLS = {
+    { value = "layout", text = "Layout" },
+    { value = "behavior", text = "Ordering" },
     { value = "style", text = "Style" },
 }
 local GF_AURA_WORKSPACE_LANES = {
@@ -97,14 +103,23 @@ local GF_AURA_WORKSPACE_LANES = {
 -- Helpful auras on friendly group units were already eligible; NeverSecret
 -- harmful auras such as Sated/Exhaustion are now eligible there as well.
 local GF_AURA_BLACKLIST_AVAILABLE = true
-local GF_AURA_WORKSPACE_TOOL_OK = { layout = true, filters = true, blacklist = GF_AURA_BLACKLIST_AVAILABLE, style = true }
+local GF_AURA_WORKSPACE_TOOL_OK = { layout = true, behavior = true, filters = true, blacklist = GF_AURA_BLACKLIST_AVAILABLE, style = true }
+local GF_AURA_EXTERNAL_TOOL_OK = { layout = true, behavior = true, style = true }
+local function AuraWorkspaceTools(lane)
+    return lane == "externals" and GF_AURA_EXTERNAL_TOOLS or GF_AURA_WORKSPACE_TOOLS
+end
+local function AuraWorkspaceToolAllowed(lane, tool)
+    local allowed = lane == "externals" and GF_AURA_EXTERNAL_TOOL_OK or GF_AURA_WORKSPACE_TOOL_OK
+    return allowed[tool] == true
+end
 local function CurrentAuraWorkspaceTool(scope, lane)
     M.gfAuraToolSelection = M.gfAuraToolSelection or {}
     local scopeState = M.gfAuraToolSelection[scope]
     if type(scopeState) ~= "table" then scopeState = {}; M.gfAuraToolSelection[scope] = scopeState end
     local tool = scopeState[lane]
-    if not GF_AURA_WORKSPACE_TOOL_OK[tool] then
+    if not AuraWorkspaceToolAllowed(lane, tool) then
         tool = tool == "blacklist" and "filters" or "layout"
+        if not AuraWorkspaceToolAllowed(lane, tool) then tool = "layout" end
         scopeState[lane] = tool
     end
     return tool
@@ -113,7 +128,7 @@ local function SetAuraWorkspaceTool(scope, lane, tool)
     M.gfAuraToolSelection = M.gfAuraToolSelection or {}
     local scopeState = M.gfAuraToolSelection[scope]
     if type(scopeState) ~= "table" then scopeState = {}; M.gfAuraToolSelection[scope] = scopeState end
-    scopeState[lane] = GF_AURA_WORKSPACE_TOOL_OK[tool] and tool or "layout"
+    scopeState[lane] = AuraWorkspaceToolAllowed(lane, tool) and tool or "layout"
 end
 local function CurrentAuraWorkspaceLane(scope)
     M.gfAuraLaneSelection = M.gfAuraLaneSelection or {}
@@ -128,14 +143,37 @@ end
 local function RebuildGroupAuraPage(ctx)
     M.CallIf(M.RebuildPageKeepingScroll, (ctx and ctx.key) or M.activeKey or "gf_auras")
 end
-local function BuildAuraWorkspaceTabs(ctx, section, scope, lane, width)
+local function AuraWorkspaceLayout(lane, width)
     local sectionW = tonumber(width) or 720
+    local containerCenterY = -28
+    local containerMetrics = W.MeasureScopeOverrideBar and W.MeasureScopeOverrideBar(GF_AURA_WORKSPACE_LANES, {
+        width = sectionW,
+        labelWidth = 72,
+        centerY = containerCenterY,
+    })
+    local toolCenterY = math.min(-62, ((containerMetrics and containerMetrics.bottomY) or -40) - 22)
+    local toolMetrics = W.MeasureScopeOverrideBar and W.MeasureScopeOverrideBar(AuraWorkspaceTools(lane), {
+        width = sectionW,
+        labelWidth = 72,
+        centerY = toolCenterY,
+    })
+    local footerY = ((toolMetrics and toolMetrics.bottomY) or (toolCenterY - 12)) - 2
+    return {
+        containerCenterY = containerCenterY,
+        toolCenterY = toolCenterY,
+        footerY = footerY,
+        height = math.max(104, math.abs(footerY) + 28),
+    }
+end
+local function BuildAuraWorkspaceTabs(ctx, section, scope, lane, width, layout)
+    local sectionW = tonumber(width) or 720
+    layout = layout or AuraWorkspaceLayout(lane, sectionW)
     local laneBar = W.ScopeOverrideBar(ctx, section, {
         values = GF_AURA_WORKSPACE_LANES,
         width = sectionW,
         label = "Container:",
         labelWidth = 72,
-        centerY = -28,
+        centerY = layout.containerCenterY,
         getValue = function() return CurrentAuraWorkspaceLane(scope) end,
         setValue = function(value)
             if CurrentAuraWorkspaceLane(scope) == value then return end
@@ -145,13 +183,11 @@ local function BuildAuraWorkspaceTabs(ctx, section, scope, lane, width)
     })
     RegisterAuraControl(ctx, laneBar, "Container", "segment", "group-workspace.container-selector", "ephemeral")
     local toolBar = W.ScopeOverrideBar(ctx, section, {
-        values = lane == "externals"
-            and { GF_AURA_WORKSPACE_TOOLS[1], GF_AURA_WORKSPACE_TOOLS[4] }
-            or GF_AURA_WORKSPACE_TOOLS,
+        values = AuraWorkspaceTools(lane),
         width = sectionW,
         label = "Edit:",
         labelWidth = 72,
-        centerY = -62,
+        centerY = layout.toolCenterY,
         getValue = function() return CurrentAuraWorkspaceTool(scope, lane) end,
         setValue = function(value)
             if CurrentAuraWorkspaceTool(scope, lane) == value then return end
@@ -172,7 +208,7 @@ local function BuildAuraWorkspaceTabs(ctx, section, scope, lane, width)
     end
     local sharedLane = lane == "debuff" and "debuff" or "buff"
     local openStyle = T.Button(section, "Shared Aura Style", 150, 22)
-    openStyle:SetPoint("TOPRIGHT", section, "TOPRIGHT", -16, -76)
+    openStyle:SetPoint("TOPRIGHT", section, "TOPRIGHT", -16, layout.footerY)
     if T.CenterButtonLabel then T.CenterButtonLabel(openStyle) end
     openStyle:SetScript("OnClick", function()
         M.SetMenuStateValue("auraAppearanceContainer", sharedLane)
@@ -185,7 +221,8 @@ local function BuildAuraWorkspaceTabs(ctx, section, scope, lane, width)
             "Opens the global Aura icon theme: border, shadow, colors, lane padding and native Player weapon enchants. This GroupFrame's individual Style stays here.",
             { hook = true, titleAsLine = true })
     end
-    W.Text(section, "Individual Style is edited here. Shared icon theme: Appearance > Aura Style.", 16, -84, sectionW - 198, MUTED)
+    W.Text(section, "Ordering and individual Style are edited here. Shared icon theme: Appearance > Aura Style.",
+        16, layout.footerY - 8, sectionW - 198, MUTED)
 end
 local function NativeAuraKey(groupKey)
     if groupKey == "buff" then return "buffs" end
@@ -395,12 +432,13 @@ local function BuildGFAuras(ctx)
 
     local outer = b:CollapsibleSection("auras", "Auras", 120, false)
     local auraBuilder = CreateNestedGroupAuraBuilder(ctx, b, outer)
-    local top = auraBuilder:Section("", 104)
+    local workspaceLayout = AuraWorkspaceLayout(lane, auraBuilder.width or 720)
+    local top = auraBuilder:Section("", workspaceLayout.height)
     if top.title then top.title:Hide() end
     if W.RegisterGuidedRegion then
         W.RegisterGuidedRegion(ctx, top, "Aura lane and tools", "group_aura_tools")
     end
-    BuildAuraWorkspaceTabs(ctx, top, scope, lane, top._msuf2Width or auraBuilder.width or 720)
+    BuildAuraWorkspaceTabs(ctx, top, scope, lane, top._msuf2Width or auraBuilder.width or 720, workspaceLayout)
     if type(M.AttachAuraFontsAndColors) == "function" then
         M.AttachAuraFontsAndColors(top, M.Format("Auras"), scope)
     end

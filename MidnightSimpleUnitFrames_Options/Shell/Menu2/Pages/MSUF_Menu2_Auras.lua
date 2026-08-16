@@ -65,6 +65,7 @@ M.AURA_PANDEMIC_BLEND_VALUES = M.AURA_PANDEMIC_BLEND_VALUES or VTP "ADD=Additive
 local AURA_SORT_DIRECTION_VALUES = VTP "NORMAL=Normal|REVERSE=Reversed"
 local BUFF_AURA_SORT_METHOD_VALUES = VTP "DEFAULT=Player & Priority First|BIG_DEFENSIVE=Other Defensives First|IMPORTANT_FIRST=Important First|EXPIRATION=Player First, Expiring Soon|EXPIRATION_ONLY=Expiring Soon|NAME=Player First, then Name|NAME_ONLY=Name|INSTANCE_ID=Arrival Order"
 local DEBUFF_AURA_SORT_METHOD_VALUES = VTP "DEFAULT=Player & Priority First|UNIT_FRAME_DEBUFF=Debuff Type First|IMPORTANT_FIRST=Important First|EXPIRATION=Player First, Expiring Soon|EXPIRATION_ONLY=Expiring Soon|NAME=Player First, then Name|NAME_ONLY=Name|INSTANCE_ID=Arrival Order"
+local TARGET_DOT_AURA_SORT_METHOD_VALUES = VTP "CUSTOM_PRIORITY=Custom Priority|DEFAULT=Player & Priority First|UNIT_FRAME_DEBUFF=Debuff Type First|IMPORTANT_FIRST=Important First|EXPIRATION=Player First, Expiring Soon|EXPIRATION_ONLY=Expiring Soon|NAME=Player First, then Name|NAME_ONLY=Name|INSTANCE_ID=Arrival Order"
 local DURATION_BAR_DISPLAY_VALUES = VTP "BAR_ONLY=Bar Only|OVERLAY=Icon + Bar"
 local DURATION_BAR_POSITION_VALUES = VTP "BOTTOM=Bottom|TOP=Top"
 local DURATION_BAR_DIRECTION_VALUES = VTP "REMAINING=Remaining|ELAPSED=Elapsed"
@@ -114,7 +115,8 @@ function M.AttachAuraFontsAndColors(section, title, unit)
 end
 local BUFF_AURA_SORT_METHOD_OK = { DEFAULT=true, BIG_DEFENSIVE=true, IMPORTANT_FIRST=true, EXPIRATION=true, EXPIRATION_ONLY=true, NAME=true, NAME_ONLY=true, INSTANCE_ID=true }
 local DEBUFF_AURA_SORT_METHOD_OK = { DEFAULT=true, UNIT_FRAME_DEBUFF=true, IMPORTANT_FIRST=true, EXPIRATION=true, EXPIRATION_ONLY=true, NAME=true, NAME_ONLY=true, INSTANCE_ID=true }
-local function AuraSortMethodValues(lane)
+local function AuraSortMethodValues(lane, allowCustomPriority)
+    if allowCustomPriority == true then return TARGET_DOT_AURA_SORT_METHOD_VALUES end
     return lane == "debuff" and DEBUFF_AURA_SORT_METHOD_VALUES or BUFF_AURA_SORT_METHOD_VALUES
 end
 local function ChoiceLabel(values, value, fallback)
@@ -132,14 +134,15 @@ local AURA_ANCHOR_LABELS = {
 local AURA_SORT_SUMMARY_LABELS = {
     DEFAULT = "Priority first", BIG_DEFENSIVE = "Defensives first", UNIT_FRAME_DEBUFF = "Debuff type first",
     IMPORTANT_FIRST = "Important first", EXPIRATION = "Player + expiring", EXPIRATION_ONLY = "Expiring soon",
-    NAME = "Player + name", NAME_ONLY = "Name", INSTANCE_ID = "Arrival order",
+    NAME = "Player + name", NAME_ONLY = "Name", INSTANCE_ID = "Arrival order", CUSTOM_PRIORITY = "Custom priority",
 }
 local function AnchorLabel(value)
     value = tostring(value or "CENTER"):upper()
     return AURA_ANCHOR_LABELS[value] or value
 end
-local function NormalizeAuraSortMethodForLane(lane, value)
+local function NormalizeAuraSortMethodForLane(lane, value, allowCustomPriority)
     value = tostring(value or "DEFAULT"):upper()
+    if allowCustomPriority == true and value == "CUSTOM_PRIORITY" then return value end
     local allowed = lane == "debuff" and DEBUFF_AURA_SORT_METHOD_OK or BUFF_AURA_SORT_METHOD_OK
     return allowed[value] and value or "DEFAULT"
 end
@@ -291,6 +294,13 @@ local function AuraControlMeta(ctx, path, classification, assistantContract)
         meta.assistantDisposition = "dynamic"
         meta.assistantDispositionReason = "This Aura control targets the selected scope, lane, tool, or container on the current Aura workspace."
     end
+    return meta
+end
+local function AuraControlMetaAtVisiblePath(ctx, identityPath, visiblePath, classification, assistantContract)
+    local meta = AuraControlMeta(ctx, identityPath, classification, assistantContract)
+    visiblePath = tostring(visiblePath or identityPath or "control"):lower():gsub("[^%w%._/-]+", "-")
+    visiblePath = visiblePath:gsub("/", "."):gsub("^%.+", ""):gsub("%.+$", "")
+    meta.controlPath = "auras/" .. visiblePath:gsub("%.", "/")
     return meta
 end
 local function RegisterAuraControl(ctx, widget, label, kind, path, classification, navigationKey)
@@ -1002,7 +1012,7 @@ local function BindGroupSlider(ctx, parent, label, x, y, minVal, maxVal, step, w
         end,
         AuraControlMeta(ctx, "group-style.lane." .. AuraCatalogToken(groupKey, "lane") .. "." .. AuraCatalogToken(key), nil, assistantContract))
 end
-local function BindGroupDropdown(ctx, parent, label, x, y, values, width, scope, groupKey, key, defaultValue, mode, afterSet)
+local function BindGroupDropdown(ctx, parent, label, x, y, values, width, scope, groupKey, key, defaultValue, mode, afterSet, controlMeta)
     return BindDropdown(ctx, parent, label, x, y, values, width,
         function()
             local group = GFReadGroup(scope, groupKey)
@@ -1018,7 +1028,7 @@ local function BindGroupDropdown(ctx, parent, label, x, y, values, width, scope,
             GFWriteGroupValue(scope, groupKey, key, value, mode or "visual")
             if afterSet then afterSet(value) end
         end,
-        AuraControlMeta(ctx, "group-style.lane." .. AuraCatalogToken(groupKey, "lane") .. "." .. AuraCatalogToken(key)))
+        controlMeta or AuraControlMeta(ctx, "group-style.lane." .. AuraCatalogToken(groupKey, "lane") .. "." .. AuraCatalogToken(key)))
 end
 local function ReadGroupDebuffTypeBorderMode(scope, groupKey)
     local group = GFReadGroup(scope, groupKey or "debuff")
@@ -1978,23 +1988,6 @@ local function BuildUnitStyle(ctx, b, scope, options)
     local function WriteScopeSwipeDirection(value)
         WriteScopeBool("cooldownSwipeReverse", value == "REVERSE")
     end
-    local function ReadScopeSortMethod()
-        local value = type(Model.ReadLaneStyleString) == "function"
-            and Model.ReadLaneStyleString(unit, lane, "sortMethod", "DEFAULT") or "DEFAULT"
-        return NormalizeAuraSortMethodForLane(lane, value)
-    end
-    local function WriteScopeSortMethod(value)
-        value = NormalizeAuraSortMethodForLane(lane, value)
-        if type(Model.WriteLaneStyleString) == "function" then
-            Model.WriteLaneStyleString(unit, lane, "sortMethod", value)
-        end
-    end
-    local function ReadScopeSortDirection()
-        return ReadScopeBool("sortReverse", false) and "REVERSE" or "NORMAL"
-    end
-    local function WriteScopeSortDirection(value)
-        WriteScopeBool("sortReverse", value == "REVERSE")
-    end
     local function ReadScopeDurationBarDisplay()
         if type(Model.ReadLaneDurationBarDisplay) == "function" then return Model.ReadLaneDurationBarDisplay(unit, lane) end
         local value = Model.ReadValue and Model.ReadValue(unit, "durationBarDisplay", "BAR_ONLY") or "BAR_ONLY"
@@ -2614,15 +2607,6 @@ local function BuildUnitStyle(ctx, b, scope, options)
     EffectSlider("Thickness", 2, -96, 1, 16, 1, "Thickness", 2, "AURAS3_LANE_FRAME_EFFECT_THICKNESS")
     EffectSlider("Priority", 0, -150, 1, 10, 1, "Priority", 5, "AURAS3_LANE_FRAME_EFFECT_PRIORITY")
 
-    local behavior = b:CollapsibleSection(baseId .. "_behavior", "Ordering", 156, false)
-    local bw = BodyWidth(behavior)
-    local sortMethod = BindStyleDropdown(behavior, "Sort By", 24, -48, AuraSortMethodValues(lane), bw - 48,
-        ReadScopeSortMethod, WriteScopeSortMethod, "AURAS3_SORT_METHOD")
-    AddTooltip(sortMethod, "Aura sorting", "Only relevant sorting methods are shown for buffs and debuffs.")
-    local sortDirection = BindStyleDropdown(behavior, "Order", 24, -104, AURA_SORT_DIRECTION_VALUES, bw - 48,
-        ReadScopeSortDirection, WriteScopeSortDirection, "AURAS3_SORT_DIRECTION")
-    AddTooltip(sortDirection, "Aura sort order", "Reversed flips the complete priority order.")
-
     M.TrackRefresh(ctx, function()
         -- Individual Style editors are always actionable. The first write to a
         -- formerly inherited lane activates its sparse per-frame override.
@@ -2680,14 +2664,79 @@ local function BuildUnitStyle(ctx, b, scope, options)
                 kind = effectType == "none" and "muted" or "accent", showWhenClosed = true,
             }})
 
-            local sortKey = ReadScopeSortMethod()
-            W.SetCollapsibleBadges(behavior, {{
-                text = (AURA_SORT_SUMMARY_LABELS[sortKey] or sortKey) .. " / " .. ChoiceLabel(AURA_SORT_DIRECTION_VALUES, ReadScopeSortDirection(), "Normal"),
-                kind = "info", showWhenClosed = true,
-            }})
         end
     end)
 end
+
+local function BuildUnitOrdering(ctx, b, unit, lane)
+    lane = lane == "debuff" and "debuff" or "buff"
+    local baseId = "aura_style_" .. tostring(unit or "unit") .. "_" .. lane
+    local section = b:CollapsibleSection(baseId .. "_behavior", "Ordering", 156, false)
+    local width = section and (section._msuf2Width or section.GetWidth and section:GetWidth()) or b.width or 720
+    local function ReadSortMethod()
+        local value = type(Model.ReadLaneStyleString) == "function"
+            and Model.ReadLaneStyleString(unit, lane, "sortMethod", "DEFAULT") or "DEFAULT"
+        return NormalizeAuraSortMethodForLane(lane, value)
+    end
+    local function ReadSortDirection()
+        local reverse = false
+        if type(Model.ReadLaneStyleBool) == "function" then
+            reverse = Model.ReadLaneStyleBool(unit, lane, "sortReverse", false)
+        elseif type(Model.ReadBool) == "function" then
+            reverse = Model.ReadBool(unit, "sortReverse", false)
+        end
+        return reverse == true and "REVERSE" or "NORMAL"
+    end
+    local function ApplyOrdering(reason)
+        ApplyUnit(ctx, unit, reason)
+        local apply = M.ApplyService or _G.MSUF_Menu2_ApplyService
+        if apply and type(apply.Flush) == "function" then apply.Flush() end
+        local refreshOwnedPreview = ctx and ctx._msuf2RefreshUnitPreview
+        if type(refreshOwnedPreview) == "function" then
+            refreshOwnedPreview(reason)
+        elseif type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
+            _G.MSUF_UFPreview_RequestRefresh(reason)
+        end
+    end
+    local sortMethod = BindDropdown(ctx, section, "Sort By", 24, -48, AuraSortMethodValues(lane), width - 48,
+        ReadSortMethod,
+        function(value)
+            value = NormalizeAuraSortMethodForLane(lane, value)
+            if type(Model.WriteLaneStyleString) == "function" then
+                Model.WriteLaneStyleString(unit, lane, "sortMethod", value)
+            end
+            ApplyOrdering("AURAS3_SORT_METHOD")
+        end,
+        AuraControlMetaAtVisiblePath(ctx,
+            "style.lane." .. AuraCatalogToken(lane) .. "." .. AuraCatalogToken("AURAS3_SORT_METHOD"),
+            "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".ordering.sort-method"))
+    AddTooltip(sortMethod, "Aura sorting", "Only relevant sorting methods are shown for buffs and debuffs.")
+    local sortDirection = BindDropdown(ctx, section, "Order", 24, -104, AURA_SORT_DIRECTION_VALUES, width - 48,
+        ReadSortDirection,
+        function(value)
+            if type(Model.WriteLaneStyleBool) == "function" then
+                Model.WriteLaneStyleBool(unit, lane, "sortReverse", value == "REVERSE")
+            elseif type(Model.WriteBool) == "function" then
+                Model.WriteBool(unit, "sortReverse", value == "REVERSE")
+            end
+            ApplyOrdering("AURAS3_SORT_DIRECTION")
+        end,
+        AuraControlMetaAtVisiblePath(ctx,
+            "style.lane." .. AuraCatalogToken(lane) .. "." .. AuraCatalogToken("AURAS3_SORT_DIRECTION"),
+            "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".ordering.sort-direction"))
+    AddTooltip(sortDirection, "Aura sort order", "Reversed flips the complete priority order.")
+    if W.SetCollapsibleBadges then
+        M.TrackRefresh(ctx, function()
+            local sortKey = ReadSortMethod()
+            W.SetCollapsibleBadges(section, {{
+                text = (AURA_SORT_SUMMARY_LABELS[sortKey] or sortKey) .. " / "
+                    .. ChoiceLabel(AURA_SORT_DIRECTION_VALUES, ReadSortDirection(), "Normal"),
+                kind = "info", showWhenClosed = true,
+            }})
+        end)
+    end
+end
+
 local function BuildGroupStyle(ctx, b, scope, options)
     options = type(options) == "table" and options or nil
     local embeddedGroupPreview = options and options.embeddedGroupPreview == true
@@ -2850,23 +2899,10 @@ local function BuildGroupStyle(ctx, b, scope, options)
     BindGroupSlider(ctx, stack, "Stack X", 24, -210, -40, 40, 1, stackSmallW, scope, lane, "stackX", 0, "geometry", RefreshStylePreview)
     BindGroupSlider(ctx, stack, "Stack Y", 32 + stackSmallW, -210, -40, 40, 1, stackSmallW, scope, lane, "stackY", 0, "geometry", RefreshStylePreview)
 
-    local behavior = b:CollapsibleSection(baseId .. "_behavior", "Ordering", 216, false)
-    local bw = BodyWidth(behavior)
-    local groupSortMethod = BindGroupDropdown(ctx, behavior, "Sort By", 24, -48, AuraSortMethodValues(lane), bw - 48,
-        scope, lane, "sortMethod", "DEFAULT", "visual")
-    AddTooltip(groupSortMethod, "Aura sorting", "Only relevant sorting methods are shown for buffs and debuffs.")
-    local groupSortDirection = BindDropdown(ctx, behavior, "Order", 24, -104, AURA_SORT_DIRECTION_VALUES, bw - 48,
-        function()
-            local group = GFReadGroup(scope, lane)
-            return group.sortReverse == true and "REVERSE" or "NORMAL"
-        end,
-        function(v)
-            GFWriteGroupValue(scope, lane, "sortReverse", v == "REVERSE", "visual")
-        end,
-        AuraControlMeta(ctx, "group-style.lane." .. AuraCatalogToken(lane) .. ".sort-direction"))
-    AddTooltip(groupSortDirection, "Aura sort order", "Reversed flips the complete priority order.")
-    BindGroupRootSwitch(ctx, behavior, "Scale Icons for Large Groups", 24, -160, bw - 48, scope, "dynamicScale", false, "geometry", RefreshStylePreview)
-    W.Text(behavior, "85% above 15 members · 70% above 25", 24, -192, bw - 48, T.colors.muted)
+    local largeGroups = b:CollapsibleSection(baseId .. "_large_groups", "Large Groups", 112, false)
+    local lgw = BodyWidth(largeGroups)
+    BindGroupRootSwitch(ctx, largeGroups, "Scale Icons for Large Groups", 24, -48, lgw - 48, scope, "dynamicScale", false, "geometry", RefreshStylePreview)
+    W.Text(largeGroups, "85% above 15 members / 70% above 25", 24, -78, lgw - 48, T.colors.muted)
 
     M.TrackRefresh(ctx, function()
         if not W.SetCollapsibleBadges then return end
@@ -2910,12 +2946,46 @@ local function BuildGroupStyle(ctx, b, scope, options)
             kind = stackEnabled and "accent" or "muted", showWhenClosed = true,
         }})
 
-        local sortKey = NormalizeAuraSortMethodForLane(lane, group.sortMethod or "DEFAULT")
-        W.SetCollapsibleBadges(behavior, {
-            { text = (AURA_SORT_SUMMARY_LABELS[sortKey] or sortKey) .. " / " .. (group.sortReverse == true and "Reversed" or "Normal"), kind = "info", showWhenClosed = true },
+        W.SetCollapsibleBadges(largeGroups, {
             ToggleBadge("Large-group scaling", root.dynamicScale == true),
         })
     end)
+end
+
+local function BuildGroupOrdering(ctx, b, scope, lane)
+    lane = lane == "externals" and "externals" or (lane == "debuff" and "debuff" or "buff")
+    local baseId = "aura_style_group_" .. tostring(scope or "group") .. "_" .. lane
+    local section = b:CollapsibleSection(baseId .. "_behavior", "Ordering", 156, false)
+    local width = section and (section._msuf2Width or section.GetWidth and section:GetWidth()) or b.width or 720
+    local groupSortMethod = BindGroupDropdown(ctx, section, "Sort By", 24, -48, AuraSortMethodValues(lane), width - 48,
+        scope, lane, "sortMethod", "DEFAULT", "visual", nil,
+        AuraControlMetaAtVisiblePath(ctx,
+            "group-style.lane." .. AuraCatalogToken(lane) .. ".sortmethod",
+            "group-workspace.lane." .. AuraCatalogToken(lane) .. ".ordering.sort-method"))
+    AddTooltip(groupSortMethod, "Aura sorting", "Only relevant sorting methods are shown for helpful and harmful auras.")
+    local groupSortDirection = BindDropdown(ctx, section, "Order", 24, -104, AURA_SORT_DIRECTION_VALUES, width - 48,
+        function()
+            local group = GFReadGroup(scope, lane)
+            return group.sortReverse == true and "REVERSE" or "NORMAL"
+        end,
+        function(value)
+            GFWriteGroupValue(scope, lane, "sortReverse", value == "REVERSE", "visual")
+        end,
+        AuraControlMetaAtVisiblePath(ctx,
+            "group-style.lane." .. AuraCatalogToken(lane) .. ".sort-direction",
+            "group-workspace.lane." .. AuraCatalogToken(lane) .. ".ordering.sort-direction"))
+    AddTooltip(groupSortDirection, "Aura sort order", "Reversed flips the complete priority order.")
+    if W.SetCollapsibleBadges then
+        M.TrackRefresh(ctx, function()
+            local group = GFReadGroup(scope, lane)
+            local sortKey = NormalizeAuraSortMethodForLane(lane, group.sortMethod or "DEFAULT")
+            W.SetCollapsibleBadges(section, {{
+                text = (AURA_SORT_SUMMARY_LABELS[sortKey] or sortKey) .. " / "
+                    .. (group.sortReverse == true and "Reversed" or "Normal"),
+                kind = "info", showWhenClosed = true,
+            }})
+        end)
+    end
 end
 local function CustomStyleSectionId(index, suffix)
     return "aura_style_custom_" .. tostring(index or 1) .. "_" .. tostring(suffix or "section")
@@ -3250,15 +3320,14 @@ end
 local UNIT_AURA_CHOICE_WIDTH = 92
 local UNIT_AURA_WORKSPACE_TABS = UniformChoiceWidths(VTP "buff=Buffs|debuff=Debuffs|custom1=Custom 1|custom2=Custom 2|custom3=Custom 3|custom4=Dots on target", UNIT_AURA_CHOICE_WIDTH)
 M._unitAuraWorkspaceTabsPlayer = UniformChoiceWidths(VTP "buff=Buffs|debuff=Debuffs|custom1=Custom 1|custom2=Custom 2|custom3=Custom 3|custom4=Defensives", UNIT_AURA_CHOICE_WIDTH)
-local UNIT_AURA_NORMAL_TOOLS = UniformChoiceWidths(VTP "layout=Layout|filters=Filters|blacklist=Blacklist|style=Style", UNIT_AURA_CHOICE_WIDTH)
-local UNIT_AURA_CUSTOM_TOOLS = UniformChoiceWidths(VTP "setup=Setup|layout=Layout|filters=Filters|whitelist=Whitelist|style=Style", UNIT_AURA_CHOICE_WIDTH)
-local UNIT_AURA_TARGET_DOT_TOOLS = UniformChoiceWidths(VTP "setup=Setup|layout=Layout|dots=Dots|style=Style", UNIT_AURA_CHOICE_WIDTH)
-M._unitAuraPlayerDefensiveTools = UniformChoiceWidths(VTP "setup=Setup|layout=Layout|defensives=Defensives|style=Style", UNIT_AURA_CHOICE_WIDTH)
-local UNIT_AURA_NORMAL_TOOL_OK = { layout = true, filters = true, blacklist = true, style = true }
-local UNIT_AURA_CUSTOM_TOOL_OK = { setup = true, whitelist = true, filters = true, layout = true, style = true }
-local UNIT_AURA_TARGET_DOT_TOOL_OK = { setup = true, layout = true, dots = true, style = true }
-M._unitAuraPlayerDefensiveToolOK = M._unitAuraPlayerDefensiveToolOK
-    or { setup = true, layout = true, defensives = true, style = true }
+local UNIT_AURA_NORMAL_TOOLS = UniformChoiceWidths(VTP "layout=Layout|behavior=Ordering|filters=Filters|blacklist=Blacklist|style=Style", UNIT_AURA_CHOICE_WIDTH)
+local UNIT_AURA_CUSTOM_TOOLS = UniformChoiceWidths(VTP "setup=Setup|layout=Layout|behavior=Ordering|filters=Filters|whitelist=Whitelist|style=Style", UNIT_AURA_CHOICE_WIDTH)
+local UNIT_AURA_TARGET_DOT_TOOLS = UniformChoiceWidths(VTP "setup=Setup|layout=Layout|behavior=Ordering|dots=Dots|style=Style", UNIT_AURA_CHOICE_WIDTH)
+M._unitAuraPlayerDefensiveTools = UniformChoiceWidths(VTP "setup=Setup|layout=Layout|behavior=Ordering|defensives=Defensives|style=Style", UNIT_AURA_CHOICE_WIDTH)
+local UNIT_AURA_NORMAL_TOOL_OK = { layout = true, behavior = true, filters = true, blacklist = true, style = true }
+local UNIT_AURA_CUSTOM_TOOL_OK = { setup = true, behavior = true, whitelist = true, filters = true, layout = true, style = true }
+local UNIT_AURA_TARGET_DOT_TOOL_OK = { setup = true, layout = true, behavior = true, dots = true, style = true }
+M._unitAuraPlayerDefensiveToolOK = { setup = true, layout = true, behavior = true, defensives = true, style = true }
 
 local function CurrentUnitAuraTool(unit, container)
     M.unitAuraToolSelection = M.unitAuraToolSelection or {}
@@ -4091,6 +4160,8 @@ function M.BuildAuras3GroupLaneWorkspace(ctx, b, scope, lane, opts)
     if opts and opts.compact == true then
         if opts.tool == "style" then
             BuildGroupStyle(ctx, b, scope, { embeddedGroupPreview = true, lane = lane })
+        elseif opts.tool == "behavior" then
+            BuildGroupOrdering(ctx, b, scope, lane)
         elseif opts.tool == "blacklist" then
             BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
         else
@@ -4219,12 +4290,12 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
     AddTooltip(openStyle, "Global Aura Appearance",
         "Opens the global Aura icon appearance: shape, border, shadow, colors and native Player weapon enchants. This frame's container Style stays here.")
     local workspaceHint = W.Text(top,
-        "Aura Options and Aura Style belong to this UnitFrame. Global icon appearance: Appearance > Aura Style.",
+        "Aura Options, Ordering and Aura Style belong to this UnitFrame. Global icon appearance: Appearance > Aura Style.",
         16, footerY - 8, sectionW - 198, T.colors.muted)
     M.TrackRefresh(ctx, function()
         workspaceHint:SetText(normalLane and UnitDispelRequested(unit) and not UnitAuraSensorEnabled(unit)
             and UNIT_AURA_DISPEL_WARNING
-            or "Aura Options and Aura Style belong to this UnitFrame. Global icon appearance: Appearance > Aura Style.")
+            or "Aura Options, Ordering and Aura Style belong to this UnitFrame. Global icon appearance: Appearance > Aura Style.")
     end)
 
     if normalLane then
@@ -4232,6 +4303,8 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
         SetCurrentLane("auraFilterLane", currentTab)
         if currentTool == "style" then
             BuildUnitStyle(ctx, auraBuilder, unit, { embeddedUnitPreview = true })
+        elseif currentTool == "behavior" then
+            BuildUnitOrdering(ctx, auraBuilder, unit, currentTab)
         elseif currentTool == "filters" then
             BuildCompactUnitAuraFilters(ctx, auraBuilder, unit, currentTab)
         elseif currentTool == "blacklist" then
@@ -4466,7 +4539,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
     end
 
     if tool == "dots" and isTargetDots then
-        local section = b:Section("Dots on target", 370)
+        local section = b:Section("Dots on target", 430)
         local w = section._msuf2Width or b.width or 720
         local inner = w - 48
         local values = type(Model.TargetDotValues) == "function" and Model.TargetDotValues() or {}
@@ -4534,13 +4607,13 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                 if refreshList then refreshList() end
             end)
         end
-        local empty = W.Text(section, "No DoT selected. Choose one above or add a custom Spell ID.", 24, -260, inner, T.colors.muted)
+        local empty = W.Text(section, "No DoT selected. Choose one above or add a custom Spell ID.", 24, -288, inner, T.colors.muted)
         local listScroll = CreateFrame("ScrollFrame", nil, section, "UIPanelScrollFrameTemplate")
         listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -236)
-        listScroll:SetSize(inner - 20, 104)
+        listScroll:SetSize(inner - 20, 164)
         if listScroll.EnableMouseWheel then listScroll:EnableMouseWheel(true) end
         local listChild = CreateFrame("Frame", nil, listScroll)
-        listChild:SetSize(inner - 44, 104)
+        listChild:SetSize(inner - 44, 164)
         listScroll:SetScrollChild(listChild)
         if listScroll.SetPropagateMouseWheel then listScroll:SetPropagateMouseWheel(false) end
         listScroll:SetScript("OnMouseWheel", function(self, delta) HandleNestedScrollWheel(self, delta, 32) end)
@@ -4548,21 +4621,47 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
         local function EnsureRow(i)
             local row = rows[i]
             if row then return row end
-            row = CreateFrame("Button", nil, listChild)
-            row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((i - 1) * 24))
-            row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((i - 1) * 24))
-            row:SetHeight(20)
+            row = CreateFrame("Frame", nil, listChild)
+            row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((i - 1) * 34))
+            row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((i - 1) * 34))
+            row:SetHeight(30)
+            if T.ApplyBackdrop then T.ApplyBackdrop(row, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft) end
+            row.rank = T.Font(row, "GameFontDisableSmall", "", T.colors.accent)
+            row.rank:SetPoint("LEFT", row, "LEFT", 7, 0)
+            row.rank:SetWidth(24)
             row.icon = row:CreateTexture(nil, "ARTWORK")
-            row.icon:SetPoint("LEFT", row, "LEFT", 3, 0)
-            row.icon:SetSize(17, 17)
+            row.icon:SetPoint("LEFT", row.rank, "RIGHT", 3, 0)
+            row.icon:SetSize(20, 20)
             row.text = T.Font(row, "GameFontHighlightSmall", "", T.colors.text)
             row.text:SetPoint("LEFT", row.icon, "RIGHT", 8, 0)
-            row:SetScript("OnClick", function(self)
-                if self._spellID and Model.RemoveCustomContainerSpell(unit, index, self._spellID) then
+            row.up = ActionButton(row, "Up", 38)
+            row.up:SetPoint("RIGHT", row, "RIGHT", -84, 0)
+            row.down = ActionButton(row, "Down", 48)
+            row.down:SetPoint("LEFT", row.up, "RIGHT", 3, 0)
+            row.remove = ActionButton(row, "X", 30, "danger")
+            row.remove:SetPoint("LEFT", row.down, "RIGHT", 3, 0)
+            row.text:SetPoint("RIGHT", row.up, "LEFT", -8, 0)
+            row.up:SetScript("OnClick", function()
+                if row._spellID and Model.MoveCustomContainerSpell(unit, index, row._spellID, -1) then
+                    Apply("AURAS3_TARGET_DOT_PRIORITY", true)
+                    Rebuild(ctx)
+                end
+            end)
+            row.down:SetScript("OnClick", function()
+                if row._spellID and Model.MoveCustomContainerSpell(unit, index, row._spellID, 1) then
+                    Apply("AURAS3_TARGET_DOT_PRIORITY", true)
+                    Rebuild(ctx)
+                end
+            end)
+            row.remove:SetScript("OnClick", function()
+                if row._spellID and Model.RemoveCustomContainerSpell(unit, index, row._spellID) then
                     Apply("AURAS3_TARGET_DOT_REMOVE", true)
                     Rebuild(ctx)
                 end
             end)
+            AddTooltip(row.up, "Move up", "Raises this DoT in the fixed priority order.")
+            AddTooltip(row.down, "Move down", "Lowers this DoT in the fixed priority order.")
+            AddTooltip(row.remove, "Remove DoT", "Stops tracking this DoT.")
             rows[i] = row
             return row
         end
@@ -4575,23 +4674,35 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                 local haystack = (tostring(entry.text or "") .. " " .. tostring(entry.spellID or "")):lower()
                 if query == "" or haystack:find(query, 1, true) then visible[#visible + 1] = entry end
             end
-            status:SetText((#entries == 1 and Tr("1 tracked DoT · click an entry to remove")
-                or M.Format("%d tracked DoTs · click an entry to remove", #entries))
+            local customPriority = tostring(item.placed.sortMethod or ""):upper() == "CUSTOM_PRIORITY"
+            status:SetText(M.Format("%d tracked DoTs", #entries)
+                .. (customPriority and query ~= "" and Tr(" - clear Search to reorder")
+                    or customPriority and Tr(" - dynamic priority active")
+                    or Tr(" - choose Custom Priority under Ordering to use this order"))
                 .. MatchSuffix(query, #visible))
             empty:SetText(#entries == 0 and Tr("No DoT selected. Choose one above or add a custom Spell ID.")
                 or M.Format(Tr("No results for \"%s\"."), query))
             empty:SetShown(#visible == 0)
             listScroll:SetShown(#visible > 0)
-            listChild:SetHeight(max(104, #visible * 24))
+            listChild:SetHeight(max(164, #visible * 34))
             for i = 1, max(#rows, #visible) do
                 local row, entry = rows[i], visible[i]
                 if entry then
                     row = EnsureRow(i)
                     row._spellID = entry.spellID
+                    row.rank:SetText("#" .. tostring(entry.priority or i))
                     row.icon:SetTexture(entry.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
                     row.text:SetText(entry.text or tostring(entry.spellID))
-                    RegisterAuraControl(ctx, row, entry.text or tostring(entry.spellID), "button",
+                    RegisterAuraControl(ctx, row.remove, "Remove " .. (entry.text or tostring(entry.spellID)), "button",
                         customActionPath .. ".dots.entry." .. AuraCatalogToken(entry.spellID) .. ".remove", "action")
+                    RegisterAuraControl(ctx, row.up, "Raise " .. (entry.text or tostring(entry.spellID)), "button",
+                        customActionPath .. ".dots.entry." .. AuraCatalogToken(entry.spellID) .. ".up", "action")
+                    RegisterAuraControl(ctx, row.down, "Lower " .. (entry.text or tostring(entry.spellID)), "button",
+                        customActionPath .. ".dots.entry." .. AuraCatalogToken(entry.spellID) .. ".down", "action")
+                    if type(W.SetControlsEnabled) == "function" then
+                        W.SetControlsEnabled({ row.up }, customPriority and query == "" and (entry.priority or i) > 1)
+                        W.SetControlsEnabled({ row.down }, customPriority and query == "" and (entry.priority or i) < #entries)
+                    end
                     row:Show()
                 elseif row then row._spellID = nil; row:Hide() end
             end
@@ -5213,29 +5324,51 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
 
     if tool == "behavior" then
         local sortLane = (isTargetDots or tostring(item.auraType or "BUFF"):upper() == "DEBUFF") and "debuff" or "buff"
-        local section = b:CollapsibleSection(CustomStyleSectionId(index, "behavior"), "Ordering", 96, false)
+        local section = b:CollapsibleSection(CustomStyleSectionId(index, "behavior"), "Ordering", 156, false)
         local w = section._msuf2Width or b.width or 720
-        local col4, gap = Grid(w, 4)
-        -- The sort-method choice list differs between helpful and harmful
-        -- containers, so the catalog path carries the lane type exactly like
-        -- the Buff/Debuff style pages do; a shared path would merge two
-        -- different value domains into one schema row.
-        local sortMethod = BindDropdown(ctx, section, "Sort By", 24, -34, AuraSortMethodValues(sortLane), col4,
-            function() return NormalizeAuraSortMethodForLane(sortLane, item.placed.sortMethod) end,
-            function(value) item.placed.sortMethod = value or "DEFAULT"; Apply("AURAS3_CUSTOM_SORT_METHOD") end,
-            AuraControlMeta(ctx, "custom-container.behavior." .. sortLane .. "-sort-method"))
-        AddTooltip(sortMethod, "Aura sorting", "Only relevant sorting methods are shown for buffs and debuffs.")
-        local sortDirection = BindDropdown(ctx, section, "Order", 24 + col4 + gap, -34, AURA_SORT_DIRECTION_VALUES, col4,
+        -- Keep every custom container's identity separate. Dots on target has
+        -- the additional CUSTOM_PRIORITY value, while Custom 1-3 can each
+        -- point at a different persisted container in the same UnitFrame.
+        local orderingPath = customActionPath .. ".ordering"
+        local visibleOrderingPath = isTargetDots and "custom-container.dots-on-target.ordering"
+            or (isPlayerDefensives and "custom-container.defensive-buffs.ordering" or orderingPath)
+        local sortMethod = BindDropdown(ctx, section, "Sort By", 24, -48, AuraSortMethodValues(sortLane, isTargetDots), w - 48,
+            function() return NormalizeAuraSortMethodForLane(sortLane, item.placed.sortMethod, isTargetDots) end,
+            function(value)
+                if isTargetDots and value == "CUSTOM_PRIORITY"
+                    and type(Model.EnableCustomContainerSpellPriority) == "function" then
+                    Model.EnableCustomContainerSpellPriority(unit, index)
+                else
+                    item.placed.sortMethod = value or "DEFAULT"
+                end
+                Apply("AURAS3_CUSTOM_SORT_METHOD", isTargetDots)
+            end,
+            AuraControlMetaAtVisiblePath(ctx,
+                orderingPath .. "." .. sortLane .. "-sort-method",
+                visibleOrderingPath .. "." .. sortLane .. "-sort-method"))
+        AddTooltip(sortMethod, "Aura sorting", isTargetDots
+            and "Custom Priority packs active tracked DoTs into the configured order. Inactive entries leave no gap; when A appears after B, the display automatically changes from B to A-B."
+            or "Only relevant sorting methods are shown for buffs and debuffs.")
+        local sortDirection = BindDropdown(ctx, section, "Order", 24, -104, AURA_SORT_DIRECTION_VALUES, w - 48,
             function() return item.placed.sortReverse == true and "REVERSE" or "NORMAL" end,
             function(value) item.placed.sortReverse = value == "REVERSE"; Apply("AURAS3_CUSTOM_SORT_DIRECTION") end,
-            AuraControlMeta(ctx, "custom-container.behavior.sort-direction"))
+            AuraControlMetaAtVisiblePath(ctx,
+                orderingPath .. ".sort-direction",
+                visibleOrderingPath .. ".sort-direction"))
         AddTooltip(sortDirection, "Aura sort order", "Reversed flips the complete priority order.")
+        if isTargetDots and type(W.SetControlsEnabled) == "function" then
+            M.TrackRefresh(ctx, function()
+                W.SetControlsEnabled({ sortDirection },
+                    NormalizeAuraSortMethodForLane(sortLane, item.placed.sortMethod, true) ~= "CUSTOM_PRIORITY")
+            end)
+        end
         if W.SetCollapsibleBadges then
             M.TrackRefresh(ctx, function()
-                local sortKey = NormalizeAuraSortMethodForLane(sortLane, item.placed.sortMethod)
+                local sortKey = NormalizeAuraSortMethodForLane(sortLane, item.placed.sortMethod, isTargetDots)
+                local suffix = sortKey == "CUSTOM_PRIORITY" and "" or " / "
+                    .. ChoiceLabel(AURA_SORT_DIRECTION_VALUES, item.placed.sortReverse == true and "REVERSE" or "NORMAL", "Normal")
                 W.SetCollapsibleBadges(section, {{
-                    text = (AURA_SORT_SUMMARY_LABELS[sortKey] or sortKey) .. " / "
-                        .. ChoiceLabel(AURA_SORT_DIRECTION_VALUES, item.placed.sortReverse == true and "REVERSE" or "NORMAL", "Normal"),
+                    text = (AURA_SORT_SUMMARY_LABELS[sortKey] or sortKey) .. suffix,
                     kind = "info", showWhenClosed = true,
                 }})
             end)

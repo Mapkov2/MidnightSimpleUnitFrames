@@ -2519,6 +2519,73 @@ local function WriteCustomContainerSpellSet(item, set)
     item.spellIDs = table.concat(ids, ", ")
 end
 
+local function ReconcileCustomContainerSpellPriority(item, create)
+    local set = CustomContainerSpellSet(item)
+    local raw = item and item.prioritySpellIDs
+    local ordered, seen = {}, {}
+    local function Add(value)
+        local spellID = tonumber(value)
+        if spellID then spellID = math_floor(spellID + 0.5) end
+        if spellID and spellID > 0 and set[spellID] == true and not seen[spellID] then
+            seen[spellID] = true
+            ordered[#ordered + 1] = spellID
+        end
+    end
+    if type(raw) == "string" then
+        for token in raw:gmatch("%d+") do Add(token) end
+    elseif type(raw) == "table" then
+        for i = 1, #raw do Add(raw[i]) end
+        for key, value in pairs(raw) do
+            if type(key) ~= "number" or key < 1 or key > #raw or key % 1 ~= 0 then
+                Add((type(value) == "number" or type(value) == "string") and value or key)
+            end
+        end
+    end
+    if create == true then
+        local missing = {}
+        for spellID in pairs(set) do
+            if not seen[spellID] then
+                local _, name = SpellInfo(spellID)
+                missing[#missing + 1] = {
+                    spellID = spellID,
+                    key = tostring(name or ""):lower() .. "\030" .. tostring(spellID),
+                }
+            end
+        end
+        table_sort(missing, function(a, b) return a.key < b.key end)
+        for i = 1, #missing do ordered[#ordered + 1] = missing[i].spellID end
+    end
+    if create == true or raw ~= nil then item.prioritySpellIDs = ordered end
+    return ordered
+end
+
+function Model.EnableCustomContainerSpellPriority(unit, index)
+    local item = Model.CustomContainer(unit, index, true)
+    if not item then return false end
+    ReconcileCustomContainerSpellPriority(item, true)
+    item.placed = type(item.placed) == "table" and item.placed or {}
+    item.placed.sortMethod = "CUSTOM_PRIORITY"
+    item.placed.sortReverse = false
+    return true
+end
+
+function Model.MoveCustomContainerSpell(unit, index, value, direction)
+    local spellID = SpellIDFromInput(value)
+    local item = Model.CustomContainer(unit, index, true)
+    if not (spellID and item) then return false, "invalid" end
+    local ordered = ReconcileCustomContainerSpellPriority(item, true)
+    local from
+    for i = 1, #ordered do
+        if ordered[i] == spellID then from = i; break end
+    end
+    direction = tonumber(direction) or 0
+    local to = from and (direction < 0 and from - 1 or direction > 0 and from + 1 or from)
+    if not (from and to and to >= 1 and to <= #ordered and to ~= from) then return false, "unchanged" end
+    ordered[from], ordered[to] = ordered[to], ordered[from]
+    item.prioritySpellIDs = ordered
+    return true
+end
+
 function Model.AddCustomContainerSpell(unit, index, value, allowCustomID)
     unit = NormalizeScope(unit)
     if unit == "shared" then unit = "player" end
@@ -2554,6 +2621,7 @@ function Model.AddCustomContainerSpell(unit, index, value, allowCustomID)
     end
     set[spellID] = true
     WriteCustomContainerSpellSet(item, set)
+    if item.prioritySpellIDs ~= nil then ReconcileCustomContainerSpellPriority(item, true) end
     return true
 end
 
@@ -2566,6 +2634,7 @@ function Model.RemoveCustomContainerSpell(unit, index, value)
     set[spellID] = nil
     if type(item.customSpellIDs) == "table" then item.customSpellIDs[spellID] = nil end
     WriteCustomContainerSpellSet(item, set)
+    if item.prioritySpellIDs ~= nil then ReconcileCustomContainerSpellPriority(item, false) end
     return true
 end
 
@@ -2578,23 +2647,39 @@ function Model.ClearCustomContainerSpells(unit, index)
     end
     if count > 0 then WriteCustomContainerSpellSet(item, {}) end
     item.customSpellIDs = nil
+    item.prioritySpellIDs = nil
     return count
 end
 
 function Model.CustomContainerSpellEntries(unit, index)
     local item = Model.CustomContainer(unit, index, false)
     local customSpellIDs = type(item and item.customSpellIDs) == "table" and item.customSpellIDs or nil
-    local out = {}
+    local out, bySpellID = {}, {}
     for spellID in pairs(CustomContainerSpellSet(item)) do
         local id, name, icon = SpellInfo(spellID)
         id = id or spellID
-        out[#out + 1] = {
+        local entry = {
             value = tostring(id), spellID = id, icon = icon,
             text = (type(name) == "string" and name ~= "" and name or "Spell") .. " (#" .. tostring(id) .. ")",
             customID = customSpellIDs and customSpellIDs[id] == true or false,
         }
+        out[#out + 1] = entry
+        bySpellID[id] = entry
     end
     table_sort(out, function(a, b) return tostring(a.text) < tostring(b.text) end)
+    local priority = ReconcileCustomContainerSpellPriority(item, false)
+    if #priority > 0 then
+        local prioritized, used = {}, {}
+        for i = 1, #priority do
+            local entry = bySpellID[priority[i]]
+            if entry then prioritized[#prioritized + 1] = entry; used[entry] = true end
+        end
+        for i = 1, #out do
+            if not used[out[i]] then prioritized[#prioritized + 1] = out[i] end
+        end
+        out = prioritized
+    end
+    for i = 1, #out do out[i].priority = i end
     return out
 end
 
