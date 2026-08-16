@@ -5236,6 +5236,19 @@ L["Optional global overrides for harmful Magic, Curse, Disease, Poison and Bleed
 L["Timer and Dispel colors are shared by live unit/group auras and every preview. Icon border and shadow colors live in Appearance > Auras, scoped by Aura type."] = "Los colores de temporizador y disipación se comparten entre las auras activas de unidades y grupos y todas las vistas previas. Los colores de borde y sombra del icono están en Apariencia > Auras y se configuran por tipo de aura."
 L["Cooldown timer urgency, global Dispel types, icon borders and shadows."] = "Urgencia del temporizador de reutilización, tipos de disipación globales y colores de bordes y sombras de iconos."
 L["Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."] = "Seguro, Advertencia, Urgente, Magia, Maldición, Enfermedad, Veneno, Sangrado, borde y sombra del icono."
+
+--- Arena frames (dedicated arena1-3 unit frames)
+L["Arena"] = "Arena"
+L["Arena Castbar"] = "Barra de lanzamiento de arena"
+L["Arena Frames"] = "Marcos de arena"
+L["Arena Layout"] = "Distribución de arena"
+L["Arena Opponent"] = "Oponente de arena"
+L["Arena castbar preview"] = "Vista previa de la barra de lanzamiento de arena"
+L["Arena frame layout"] = "Distribución de marcos de arena"
+L["Arena spacing"] = "Espaciado de arena"
+L["Aura settings are only available for Player, Target, Focus, Boss, and Arena Frames."] = "Los ajustes de aura solo están disponibles para los marcos de jugador, objetivo, foco, jefe y arena."
+L["Castbar settings are only available for Player, Target, Focus, Boss, and Arena Frames."] = "Los ajustes de la barra de lanzamiento solo están disponibles para los marcos de jugador, objetivo, foco, jefe y arena."
+L["MSUF Arena Frames"] = "MSUF Marcos de arena"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("esMX", LoadLocale)
 elseif MSUF.LOCALE == "esMX" then LoadLocale() end

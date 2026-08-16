@@ -28,7 +28,7 @@ local function Meta(path, classification, exact)
     return ControlMeta("opt_castbar", "global", path, classification, resolved)
 end
 local WHITE8 = "Interface\\Buttons\\WHITE8X8"
-local CASTBAR_PREVIEW_UNITS = M.KeySetFromWords "player target focus boss"
+local CASTBAR_PREVIEW_UNITS = M.KeySetFromWords "player target focus boss arena"
 local CASTBAR_PREVIEW_TYPES = M.KeySetFromWords "normal channel empowered"
 local CASTBAR_PAGE_WORK_DELAY = 0.04
 local CASTBAR_PREVIEW_REFRESH_INTERVAL = 1 / 30
@@ -53,6 +53,7 @@ end
 local function NormalizeCastbarPreviewUnit(unit)
     unit = tostring(unit or ""):lower()
     if unit == "boss1" or unit == "bosses" or unit == "boss frames" then unit = "boss" end
+    if unit == "arena1" or unit == "arenas" or unit == "arena frames" then unit = "arena" end
     return CASTBAR_PREVIEW_UNITS[unit] and unit or "player"
 end
 local function NormalizeCastbarPreviewType(kind)
@@ -156,7 +157,7 @@ local function BuildCastbars(ctx)
             local fallbackW, fallbackH = 271, 18
             if unit == "target" then fallbackW = 272
             elseif unit == "focus" then fallbackW = 175
-            elseif unit == "boss" then fallbackW, fallbackH = 176, 12 end
+            elseif unit == "boss" or unit == "arena" then fallbackW, fallbackH = 176, 12 end
             return CastbarPreview.ReadSize(unit, g,
                 tonumber(ReadG("castbarGlobalWidth", fallbackW)) or fallbackW,
                 tonumber(ReadG("castbarGlobalHeight", fallbackH)) or fallbackH)
@@ -172,6 +173,7 @@ local function BuildCastbars(ctx)
         end
         local function CastbarShowTime(unit, g)
             if unit == "boss" then return not (g and g.showBossCastTime == false) end
+            if unit == "arena" then return not (g and g.showArenaCastTime == false) end
             local key = (unit == "player" and "showPlayerCastTime")
                 or (unit == "target" and "showTargetCastTime")
                 or (unit == "focus" and "showFocusCastTime")
@@ -181,6 +183,7 @@ local function BuildCastbars(ctx)
             if unit == "target" then return g and g.castbarTargetShowTargetName == true end
             if unit == "focus" then return g and g.castbarFocusShowTargetName == true end
             if unit == "boss" then return g and g.showBossCastTargetName == true end
+            if unit == "arena" then return g and g.showArenaCastTargetName == true end
             return false
         end
         local function PreviewTexture(parent, layer, r, g, b, a, texture, subLevel)
@@ -213,6 +216,7 @@ local function BuildCastbars(ctx)
             { key = "target", text = "Target" },
             { key = "focus", text = "Focus" },
             { key = "boss", text = "Boss" },
+            { key = "arena", text = "Arena" },
         }, 52, 4, M.SetCastbarPreviewUnit, "preview.unit")
         local buttonGap, interruptW = 6, 90
         local buttonW = compactControls
@@ -420,7 +424,7 @@ local function BuildCastbars(ctx)
             if type(shorten) ~= "function" then return text end
 
             preview._spellNameShortenFrame = preview._spellNameShortenFrame or {}
-            preview._spellNameShortenFrame.unit = unit == "boss" and "boss1" or unit
+            preview._spellNameShortenFrame.unit = (unit == "boss" and "boss1") or (unit == "arena" and "arena1") or unit
             return shorten(preview._spellNameShortenFrame, text)
         end
         local function CastDuration(kind)
@@ -473,6 +477,7 @@ local function BuildCastbars(ctx)
             if unit == "target" then return "kickReadyShowTarget" end
             if unit == "focus" then return "kickReadyShowFocus" end
             if unit == "boss" then return "kickReadyShowBoss" end
+            if unit == "arena" then return "kickReadyShowArena" end
             return nil
         end
         local function ReadColorTable(tbl, dr, dg, db)
@@ -553,6 +558,7 @@ local function BuildCastbars(ctx)
                 or unit == "target" and "castbarTarget"
                 or unit == "focus" and "castbarFocus"
                 or unit == "boss" and "bossCast"
+                or unit == "arena" and "arenaCast"
             local thickness = prefix and tonumber(gdb and gdb[prefix .. "IconBorderThickness"]) or 0
             local style = prefix and tostring((gdb and gdb[prefix .. "IconBorderStyle"]) or "NONE"):upper() or "NONE"
             thickness = max(0, min(8, floor((thickness or 0) + 0.5)))

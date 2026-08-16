@@ -3780,6 +3780,19 @@ L["Optional global overrides for harmful Magic, Curse, Disease, Poison and Bleed
 L["Timer and Dispel colors are shared by live unit/group auras and every preview. Icon border and shadow colors live in Appearance > Auras, scoped by Aura type."] = "Timer and Dispel colors are shared by live unit/group auras and every preview. Icon border and shadow colors live in Appearance > Auras, scoped by Aura type."
 L["Cooldown timer urgency, global Dispel types, icon borders and shadows."] = "Cooldown timer urgency, global Dispel types, icon borders and shadows."
 L["Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."] = "Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."
+
+--- Arena frames (dedicated arena1-3 unit frames)
+L["Arena"] = "Arena"
+L["Arena Castbar"] = "Arena Castbar"
+L["Arena Frames"] = "Arena Frames"
+L["Arena Layout"] = "Arena Layout"
+L["Arena Opponent"] = "Arena Opponent"
+L["Arena castbar preview"] = "Arena castbar preview"
+L["Arena frame layout"] = "Arena frame layout"
+L["Arena spacing"] = "Arena spacing"
+L["Aura settings are only available for Player, Target, Focus, Boss, and Arena Frames."] = "Aura settings are only available for Player, Target, Focus, Boss, and Arena Frames."
+L["Castbar settings are only available for Player, Target, Focus, Boss, and Arena Frames."] = "Castbar settings are only available for Player, Target, Focus, Boss, and Arena Frames."
+L["MSUF Arena Frames"] = "MSUF Arena Frames"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enGB", LoadLocale)
 elseif MSUF.LOCALE == "enGB" then LoadLocale() end

@@ -27,6 +27,7 @@ function Castbar.OffsetFields(unitKey)
     local dx, dy = 0, 0
     if type(_G.MSUF_GetCastbarDefaultOffsets) == "function" then dx, dy = _G.MSUF_GetCastbarDefaultOffsets(unitKey) end
     if unitKey == "boss" then return "bossCastbarOffsetX", "bossCastbarOffsetY", dx or 0, dy or 0 end
+    if unitKey == "arena" then return "arenaCastbarOffsetX", "arenaCastbarOffsetY", dx or 0, dy or 0 end
     local prefix = type(_G.MSUF_GetCastbarPrefix) == "function" and _G.MSUF_GetCastbarPrefix(unitKey) or nil
     if not prefix or prefix == "" then return nil, nil, dx or 0, dy or 0 end
     return prefix .. "OffsetX", prefix .. "OffsetY", dx or 0, dy or 0
@@ -43,6 +44,7 @@ function Castbar.Detached(key, g)
     key = CanonKey(key)
     if not g then return false end
     if key == "boss" then return g.bossCastbarDetached == true end
+    if key == "arena" then return g.arenaCastbarDetached == true end
     local prefix = Castbar.Prefix(key)
     return prefix and g[prefix .. "Detached"] == true or false
 end
@@ -64,6 +66,7 @@ local function WidthSourceKey(key)
     if key == "target" then return "castbarTargetMatchWidth", "castbarTargetMatchUnitWidth" end
     if key == "focus" then return "castbarFocusMatchWidth", "castbarFocusMatchUnitWidth" end
     if key == "boss" then return "bossCastbarMatchWidth", "castbarBossMatchUnitWidth", "castbarBossMatchWidth" end
+    if key == "arena" then return "arenaCastbarMatchWidth", "castbarArenaMatchUnitWidth", "castbarArenaMatchWidth" end
 end
 local function WidthSource(g, key)
     if not g then return nil end
@@ -93,6 +96,12 @@ local function RuntimeCastbarFrame(key)
             or _G.MSUF_BossCastbar
             or _G.MSUF_BossCastbarPreview
             or _G.MSUF_BossCastbarPreview1
+    elseif key == "arena" then
+        local bars = _G.MSUF_ArenaCastbars
+        return (bars and bars[1])
+            or _G.MSUF_ArenaCastbar1
+            or _G.MSUF_ArenaCastbarPreview
+            or _G.MSUF_ArenaCastbarPreview1
     elseif key == "player" then
         return _G.MSUF_PlayerCastbar or _G.MSUF_PlayerCastBar or _G.MSUF_PlayerCastbarPreview
     elseif key == "target" then
@@ -103,7 +112,7 @@ local function RuntimeCastbarFrame(key)
 end
 local function RuntimeUnitFrame(key)
     key = CanonKey(key)
-    local unit = key == "boss" and "boss1" or key
+    local unit = (key == "boss" and "boss1") or (key == "arena" and "arena1") or key
     return CoreFrame(unit) or (unit and _G["MSUF_" .. unit])
 end
 local function EffectiveScaleProxy(frame)
@@ -138,7 +147,7 @@ function Castbar.ReadSize(key, g, fallbackW, fallbackH)
         w = ReadExternalWidth(widthSource, targetFrame) or nil
     end
     if type(_G.MSUF_GetCastbarDesiredSize) == "function" then
-        local desiredUnit = key == "boss" and "boss1" or key
+        local desiredUnit = (key == "boss" and "boss1") or (key == "arena" and "arena1") or key
         local desiredW, desiredH = _G.MSUF_GetCastbarDesiredSize(desiredUnit, g or {}, targetFrame, fallbackW, fallbackH)
         if not w or w <= 0 then w = desiredW end
         h = desiredH
@@ -146,6 +155,8 @@ function Castbar.ReadSize(key, g, fallbackW, fallbackH)
     if not w or w <= 0 then
         if key == "boss" then
             w = g and tonumber(g.bossCastbarWidth)
+        elseif key == "arena" then
+            w = g and tonumber(g.arenaCastbarWidth)
         else
             local prefix = Castbar.Prefix(key)
             w = prefix and g and tonumber(g[prefix .. "BarWidth"]) or nil
@@ -154,6 +165,8 @@ function Castbar.ReadSize(key, g, fallbackW, fallbackH)
     if not h or h <= 0 then
         if key == "boss" then
             h = g and tonumber(g.bossCastbarHeight)
+        elseif key == "arena" then
+            h = g and tonumber(g.arenaCastbarHeight)
         else
             local prefix = Castbar.Prefix(key)
             h = prefix and g and tonumber(g[prefix .. "BarHeight"]) or nil
@@ -168,6 +181,7 @@ end
 local function TextKey(key, suffix, bossKey)
     key = CanonKey(key)
     if key == "boss" then return bossKey end
+    if key == "arena" and bossKey then return (bossKey:gsub("^bossCast", "arenaCast")) end
     local prefix = Castbar.Prefix(key)
     return prefix and (prefix .. suffix) or nil
 end
@@ -250,10 +264,12 @@ function Castbar.Enabled(key, g)
     if key == "target" then return g.enableTargetCastbar ~= false end
     if key == "focus" then return g.enableFocusCastbar ~= false end
     if key == "boss" then return g.enableBossCastbar ~= false end
+    if key == "arena" then return g.enableArenaCastbar ~= false end
     return false
 end
 function Castbar.ShowIcon(key, g)
     if key == "boss" then return g.showBossCastIcon ~= false end
+    if key == "arena" then return g.showArenaCastIcon ~= false end
     if key == "player" and g.castbarPlayerShowIcon ~= nil then return g.castbarPlayerShowIcon ~= false end
     if key == "target" and g.castbarTargetShowIcon ~= nil then return g.castbarTargetShowIcon ~= false end
     if key == "focus" and g.castbarFocusShowIcon ~= nil then return g.castbarFocusShowIcon ~= false end
@@ -261,6 +277,7 @@ function Castbar.ShowIcon(key, g)
 end
 function Castbar.ShowText(key, g)
     if key == "boss" then return g.showBossCastName ~= false end
+    if key == "arena" then return g.showArenaCastName ~= false end
     if key == "player" and g.castbarPlayerShowSpellName ~= nil then return g.castbarPlayerShowSpellName ~= false end
     if key == "target" and g.castbarTargetShowSpellName ~= nil then return g.castbarTargetShowSpellName ~= false end
     if key == "focus" and g.castbarFocusShowSpellName ~= nil then return g.castbarFocusShowSpellName ~= false end

@@ -5477,6 +5477,19 @@ L["Optional global overrides for harmful Magic, Curse, Disease, Poison and Bleed
 L["Timer and Dispel colors are shared by live unit/group auras and every preview. Icon border and shadow colors live in Appearance > Auras, scoped by Aura type."] = "Les couleurs des minuteurs et dissipations sont partagées par les auras actives d'unité et de groupe et tous les aperçus. Les couleurs de bordure et d'ombre des icônes se trouvent dans Apparence > Auras, par type d'aura."
 L["Cooldown timer urgency, global Dispel types, icon borders and shadows."] = "Urgence des minuteurs, types de dissipation globaux, bordures et ombres des icônes."
 L["Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."] = "Sûr, Avertissement, Urgent, Magie, Malédiction, Maladie, Poison, Saignement, bordure et ombre d'icône."
+
+--- Arena frames (dedicated arena1-3 unit frames)
+L["Arena"] = "Arène"
+L["Arena Castbar"] = "Barre d'incantation d'arène"
+L["Arena Frames"] = "Cadres d'arène"
+L["Arena Layout"] = "Disposition d'arène"
+L["Arena Opponent"] = "Adversaire d'arène"
+L["Arena castbar preview"] = "Aperçu de la barre d'incantation d'arène"
+L["Arena frame layout"] = "Disposition des cadres d'arène"
+L["Arena spacing"] = "Espacement d'arène"
+L["Aura settings are only available for Player, Target, Focus, Boss, and Arena Frames."] = "Les réglages des auras ne sont disponibles que pour les cadres Joueur, Cible, Focalisation, Boss et Arène."
+L["Castbar settings are only available for Player, Target, Focus, Boss, and Arena Frames."] = "Les réglages de la barre d'incantation ne sont disponibles que pour les cadres Joueur, Cible, Focalisation, Boss et Arène."
+L["MSUF Arena Frames"] = "MSUF Cadres d'arène"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("frFR", LoadLocale)
 elseif MSUF.LOCALE == "frFR" then LoadLocale() end

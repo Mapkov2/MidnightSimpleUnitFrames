@@ -5002,6 +5002,19 @@ L["Optional global overrides for harmful Magic, Curse, Disease, Poison and Bleed
 L["Timer and Dispel colors are shared by live unit/group auras and every preview. Icon border and shadow colors live in Appearance > Auras, scoped by Aura type."] = "As cores de temporizador e dissipação são compartilhadas pelas auras ativas de unidade e grupo e por todas as prévias. As cores de borda e sombra do ícone ficam em Aparência > Auras, por tipo de aura."
 L["Cooldown timer urgency, global Dispel types, icon borders and shadows."] = "Urgência dos temporizadores, tipos globais de dissipação, bordas e sombras dos ícones."
 L["Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."] = "Seguro, Aviso, Urgente, Magia, Maldição, Doença, Veneno, Sangramento, borda e sombra do ícone."
+
+--- Arena frames (dedicated arena1-3 unit frames)
+L["Arena"] = "Arena"
+L["Arena Castbar"] = "Barra de lançamento de arena"
+L["Arena Frames"] = "Quadros de arena"
+L["Arena Layout"] = "Layout de arena"
+L["Arena Opponent"] = "Oponente de arena"
+L["Arena castbar preview"] = "Prévia da barra de lançamento de arena"
+L["Arena frame layout"] = "Layout dos quadros de arena"
+L["Arena spacing"] = "Espaçamento de arena"
+L["Aura settings are only available for Player, Target, Focus, Boss, and Arena Frames."] = "As configurações de aura só estão disponíveis para os quadros de Jogador, Alvo, Foco, Chefe e Arena."
+L["Castbar settings are only available for Player, Target, Focus, Boss, and Arena Frames."] = "As configurações da barra de lançamento só estão disponíveis para os quadros de Jogador, Alvo, Foco, Chefe e Arena."
+L["MSUF Arena Frames"] = "MSUF Quadros de arena"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ptBR", LoadLocale)
 elseif MSUF.LOCALE == "ptBR" then LoadLocale() end

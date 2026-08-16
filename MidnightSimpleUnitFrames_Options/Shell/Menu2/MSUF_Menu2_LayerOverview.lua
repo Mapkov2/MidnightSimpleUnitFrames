@@ -32,12 +32,14 @@ local UNIT_SCOPES = {
     { key = "focus", label = "Focus" },
     { key = "pet", label = "Pet" },
     { key = "boss", label = "Boss" },
+    { key = "arena", label = "Arena" },
 }
 local UNIT_AURA_SCOPES = {
     { key = "player", runtimeKey = "player", label = "Player", flag = "showPlayer", flagDefault = false },
     { key = "target", runtimeKey = "target", label = "Target", flag = "showTarget", flagDefault = true },
     { key = "focus", runtimeKey = "focus", label = "Focus", flag = "showFocus", flagDefault = false },
     { key = "boss", runtimeKey = "boss1", label = "Boss", flag = "showBoss", flagDefault = true },
+    { key = "arena", runtimeKey = "arena1", label = "Arena", flag = "showArena", flagDefault = true },
 }
 local GROUP_SCOPES = {
     { key = "party", dbKey = "gf_party", label = "Party" },
@@ -53,6 +55,7 @@ local BAR_SCOPES = {
     { key = "focus", label = "Focus" },
     { key = "pet", label = "Pet" },
     { key = "boss", label = "Boss" },
+    { key = "arena", label = "Arena" },
     { key = "gf_party", label = "Party" },
     { key = "gf_raid", label = "Raid" },
     { key = "gf_mythicraid", label = "Mythic Raid" },
@@ -1056,7 +1059,7 @@ end
 
 local SCOPE_LABEL = {
     player = "Player", target = "Target", targettarget = "Target of Target",
-    focustarget = "Focus Target", focus = "Focus", pet = "Pet", boss = "Boss",
+    focustarget = "Focus Target", focus = "Focus", pet = "Pet", boss = "Boss", arena = "Arena",
     party = "Party", raid = "Raid", mythicraid = "Mythic Raid",
 }
 local AREA_ORDER = {

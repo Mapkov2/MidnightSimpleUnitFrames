@@ -354,7 +354,7 @@ local function ResolvePreviewHealthTextColor(renderState, runtimeText, conf, gen
 end
 local function PreviewLiveFrame(key)
     local uf = MSUF and MSUF.UF
-    local unit = key == "boss" and "boss1" or key
+    local unit = (key == "boss" and "boss1") or (key == "arena" and "arena1") or key
     local frame = uf and type(uf.GetFrame) == "function" and uf.GetFrame(unit) or nil
     if not frame then frame = uf and uf.frames and uf.frames[unit] or nil end
     return frame
@@ -386,7 +386,7 @@ end
 local function ShortenCastbarPreviewSpellName(key, text)
     local shorten = _G.MSUF_ShortenCastbarSpellName
     if type(shorten) ~= "function" then return text end
-    return shorten({ unit = key == "boss" and "boss1" or key }, text)
+    return shorten({ unit = (key == "boss" and "boss1") or (key == "arena" and "arena1") or key }, text)
 end
 local function HideCastbarPreviewIconBorder(icon)
     local border = icon and icon._msufCastbarPreviewBorder
@@ -728,7 +728,7 @@ local function ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, s
         AnchorCastbarPreviewText(mock.cast.text, surface, textPosition, textX, textY, CastbarPreviewJustifyForPosition(textPosition), S)
         local textMaxWidth = ReadCastbarNum(g, key, "SpellNameMaxWidth", "bossCastSpellNameMaxWidth", 0)
         local truncate = NormalizeCastbarPreviewTruncate(CastbarPreview.ReadString(g, key, "SpellNameTruncate", "bossCastSpellNameTruncate", "AUTO"))
-        local spellName = ShortenCastbarPreviewSpellName(key, TR(key == "boss" and "Celestial Ruin" or "Arcane Surge"))
+        local spellName = ShortenCastbarPreviewSpellName(key, TR((key == "boss" and "Celestial Ruin") or (key == "arena" and "Greater Pyroblast") or "Arcane Surge"))
         mock.cast.text:SetText(spellName)
         if truncate == "NONE" then
             local naturalWidth = (mock.cast.text.GetStringWidth and mock.cast.text:GetStringWidth()) or scw
@@ -791,6 +791,9 @@ local function ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, s
         if key == "boss" then
             timeX = -2 + (tonumber(g.bossCastTimeOffsetX) or 0)
             timeY = tonumber(g.bossCastTimeOffsetY) or 0
+        elseif key == "arena" then
+            timeX = -2 + (tonumber(g.arenaCastTimeOffsetX) or 0)
+            timeY = tonumber(g.arenaCastTimeOffsetY) or 0
         end
         local timeSize = ReadCastbarNum(g, key, "TimeFontSize", "bossCastTimeFontSize", g.castbarTimeFontSize or g.fontSize or 14)
         if not timeSize or timeSize <= 0 then timeSize = g.fontSize or 14 end
@@ -1616,8 +1619,8 @@ function Preview.Refresh(box, reason)
     local ch = canvas:GetHeight() or 180
     if cw <= 1 then cw = 600 end
     if ch <= 1 then ch = 180 end
-    local w = tonumber(runtimeSpec and runtimeSpec.width) or tonumber(conf.width or conf.frameWidth) or (key == "boss" and 180 or (key == "focus" and 180 or 275))
-    local h = tonumber(runtimeSpec and runtimeSpec.height) or tonumber(conf.height or conf.frameHeight) or (key == "boss" and 30 or (key == "focus" and 30 or 40))
+    local w = tonumber(runtimeSpec and runtimeSpec.width) or tonumber(conf.width or conf.frameWidth) or ((key == "boss" or key == "arena") and 180 or (key == "focus" and 180 or 275))
+    local h = tonumber(runtimeSpec and runtimeSpec.height) or tonumber(conf.height or conf.frameHeight) or ((key == "boss" or key == "arena") and 30 or (key == "focus" and 30 or 40))
     w, h = R.ClampUnitPreviewSize(w, h)
     local mode = (runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.side) or conf.portraitMode
     local hasPortrait
@@ -1681,7 +1684,7 @@ function Preview.Refresh(box, reason)
     local castEnabled = runtimeSpec and runtimeSpec.castbar and runtimeSpec.castbar.enabled == true
     if not (runtimeSpec and runtimeSpec.castbar) then castEnabled = CastbarEnabled(key, g) end
     if box._msuf2ColorPainterForceCastbar == true then castEnabled = true end
-    local castW, castBarH = ReadCastbarSize(key, g, w, key == "boss" and 12 or 18)
+    local castW, castBarH = ReadCastbarSize(key, g, w, (key == "boss" or key == "arena") and 12 or 18)
     local castXKey, castYKey, castDefX, castDefY = CastbarOffsetFields(key)
     local castOffsetX = castXKey and tonumber(g[castXKey]) or nil
     local castOffsetY = castYKey and tonumber(g[castYKey]) or nil
@@ -1699,7 +1702,7 @@ function Preview.Refresh(box, reason)
         end
     end
     box._bossBorderInset = 0
-    if key == "boss"
+    if (key == "boss" or key == "arena")
         and runtimeSpec and runtimeSpec.border
         and runtimeSpec.border.enabled == true
     then
@@ -2042,7 +2045,7 @@ function Preview.Refresh(box, reason)
         elseif key == "player" then
             cLeft = (w - castW) * 0.5 + castOffsetX
             cBottom = h + castOffsetY
-        elseif key == "boss" then
+        elseif key == "boss" or key == "arena" then
             cLeft = castOffsetX - box._bossBorderInset
             cBottom = castOffsetY - box._bossBorderInset - box._bossCastbarGap - castBarH
                 + (box._runtimePowerEmbedded == true and (tonumber(runtimePower and runtimePower.height) or ReadPowerBarHeight(conf)) or 0)
@@ -2055,6 +2058,7 @@ function Preview.Refresh(box, reason)
             local showTargetName = (key == "target" and g.castbarTargetShowTargetName == true)
                 or (key == "focus" and g.castbarFocusShowTargetName == true)
                 or (key == "boss" and g.showBossCastTargetName == true)
+                or (key == "arena" and g.showArenaCastTargetName == true)
             local targetPadX = showTargetName and (abs(R.ReadCastbarNum(g, key, "TargetNameOffsetX", "bossCastTargetNameOffsetX", 0) or 0) + 96) or 0
             local targetPadY = showTargetName and (abs(R.ReadCastbarNum(g, key, "TargetNameOffsetY", "bossCastTargetNameOffsetY", 1) or 1) + 24) or 0
             local detailPadX = max(
@@ -3193,7 +3197,7 @@ function Preview.Refresh(box, reason)
         elseif bStyle == "CLASS_COLOR" then
             R.LayoutPreviewPortraitBorder(mock.portrait, S(box._runtimePortraitBorderThickness), box._runtimePortraitBorderFill, cr, cg, cb, 1)
         elseif bStyle == "REACTION" then
-            local hostile = (key == "target" or key == "boss" or key == "focus" or key == "focustarget")
+            local hostile = (key == "target" or key == "boss" or key == "arena" or key == "focus" or key == "focustarget")
             R.LayoutPreviewPortraitBorder(mock.portrait, S(box._runtimePortraitBorderThickness), box._runtimePortraitBorderFill, hostile and 1 or 0.1, hostile and 0.2 or 0.85, 0.1, 1)
         else
             R.LayoutPreviewPortraitBorder(mock.portrait, S(box._runtimePortraitBorderThickness), box._runtimePortraitBorderFill, 1, 1, 1, 1)
@@ -3261,7 +3265,7 @@ function Preview.Refresh(box, reason)
             mock.cast:SetPoint("CENTER", mock, "CENTER", box._detachedCastBaseOffsetX, box._detachedCastBaseOffsetY)
         elseif key == "player" then
             mock.cast:SetPoint("BOTTOM", mock, "TOP", S(castOffsetX), S(castOffsetY))
-        elseif key == "boss" then
+        elseif key == "boss" or key == "arena" then
             mock.cast:SetPoint("TOPLEFT", mock, "BOTTOMLEFT",
                 S(castOffsetX - box._bossBorderInset),
                 S(castOffsetY - box._bossBorderInset - box._bossCastbarGap)

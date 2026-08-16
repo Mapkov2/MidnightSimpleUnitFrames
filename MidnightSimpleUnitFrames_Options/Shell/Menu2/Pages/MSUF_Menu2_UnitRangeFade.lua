@@ -9,7 +9,7 @@ local floor = math.floor
 local max = math.max
 local PercentValue = M.PercentValue
 local SettingMeta = UP.SettingMeta
-local RANGE_FADE_UNITS = M.KeySetFromWords "target targettarget focus focustarget pet boss"
+local RANGE_FADE_UNITS = M.KeySetFromWords "target targettarget focus focustarget pet boss arena"
 local function BuildRangeFade(ctx, builder, unit)
     local ReadBool = UP.ReadBool
     local SetBool = UP.SetBool

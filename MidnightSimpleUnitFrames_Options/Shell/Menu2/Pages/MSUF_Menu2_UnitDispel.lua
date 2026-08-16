@@ -15,7 +15,7 @@ local SetControlsEnabled = W.SetControlsEnabled
 local GetConf = UP.GetConf
 local GetGeneral = UP.GetGeneral
 
-local SUPPORTED_UNITS = { player = true, target = true, focus = true, boss = true }
+local SUPPORTED_UNITS = { player = true, target = true, focus = true, boss = true, arena = true }
 local UNITFRAME_DISPEL_AURA_WARNING = "Dispel Border, Overlay, and Symbol need this UnitFrame's Aura sensor. Enable Buffs or Debuffs, or turn on this Dispel feature to enable the sensor automatically. Set both icon caps to 0 if you want no aura icons."
 local UNITFRAME_DISPEL_AURA_WARNING_COLOR = { 0.90, 0.84, 0.76, 1 }
 local UNIT_APPLY_OPTS = { history = false, preview = true, auras = true, notify = false }

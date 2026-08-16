@@ -5058,6 +5058,19 @@ L["Optional global overrides for harmful Magic, Curse, Disease, Poison and Bleed
 L["Timer and Dispel colors are shared by live unit/group auras and every preview. Icon border and shadow colors live in Appearance > Auras, scoped by Aura type."] = "타이머와 해제 색상은 실제 유닛 및 그룹 오라와 모든 미리보기에 공통으로 적용됩니다. 아이콘 테두리와 그림자 색상은 외형 > 오라에서 오라 유형별로 설정합니다."
 L["Cooldown timer urgency, global Dispel types, icon borders and shadows."] = "재사용 대기시간 긴급도, 전역 해제 유형, 아이콘 테두리 및 그림자 색상입니다."
 L["Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."] = "안전, 경고, 긴급, 마법, 저주, 질병, 독, 출혈, 아이콘 테두리 및 아이콘 그림자."
+
+--- Arena frames (dedicated arena1-3 unit frames)
+L["Arena"] = "투기장"
+L["Arena Castbar"] = "투기장 시전 바"
+L["Arena Frames"] = "투기장 프레임"
+L["Arena Layout"] = "투기장 배치"
+L["Arena Opponent"] = "투기장 상대"
+L["Arena castbar preview"] = "투기장 시전 바 미리보기"
+L["Arena frame layout"] = "투기장 프레임 배치"
+L["Arena spacing"] = "투기장 간격"
+L["Aura settings are only available for Player, Target, Focus, Boss, and Arena Frames."] = "오라 설정은 플레이어, 대상, 주시 대상, 우두머리, 투기장 프레임에서만 사용할 수 있습니다."
+L["Castbar settings are only available for Player, Target, Focus, Boss, and Arena Frames."] = "시전 바 설정은 플레이어, 대상, 주시 대상, 우두머리, 투기장 프레임에서만 사용할 수 있습니다."
+L["MSUF Arena Frames"] = "MSUF 투기장 프레임"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end

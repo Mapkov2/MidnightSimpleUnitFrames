@@ -242,7 +242,7 @@ classpower|class|resource resources power;clickcast|click|cast casting;clickthro
 nameshortening|name|shortening;globalcooldown|global|cooldown;fokuskick|focus|kick;interruptready|interrupt|ready;leveltext|level|text;levelindicator|level|indicator;statusindicators|status|indicator indicators;statusicons|status|icon icons
 onoff|turn|off;minimapicon|minimap|icon button;kofi|ko|fi;menuscale|menu|scale;uiscale|ui|scale;targetsound|target|sound sounds;unitauras|unit|aura auras;globalstyle|global|style;spellid|spell|id
 healthtext|health|text;powertext|power|text;nametext|name|text;classcolor|class|color;rangecheck|range|check checker checking;distancecheck|distance|check checker checking;outofrange|out|range;unitframe|unit|frame frames
-playerframe|player|frame;targetframe|target|frame;focusframe|focus|frame;petframe|pet|frame;bossframes|boss|frame frames;partyframes|party|frame frames;raidframes|raid|frame frames
+playerframe|player|frame;targetframe|target|frame;focusframe|focus|frame;petframe|pet|frame;bossframes|boss|frame frames;arenaframes|arena|frame frames;partyframes|party|frame frames;raidframes|raid|frame frames
 ]]):gmatch("[^;]+") do
     row = row:match("^%s*(.-)%s*$")
     local result, firstWords, secondWords = row:match("^([^|]*)|([^|]*)|(.+)$")

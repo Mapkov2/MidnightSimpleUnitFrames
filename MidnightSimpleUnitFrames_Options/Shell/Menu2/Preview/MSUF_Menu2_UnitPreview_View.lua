@@ -507,6 +507,9 @@ end
 local function CastbarSubOffsetKey(unitKey, suffix, bossKey)
     unitKey = CanonKey(unitKey)
     if unitKey == "boss" then return bossKey end
+    -- Arena shares the boss-style flat key family; derive arenaCast* from the
+    -- declared bossCast* field name instead of a per-unit prefix.
+    if unitKey == "arena" and bossKey then return (bossKey:gsub("^bossCast", "arenaCast")) end
     local prefix = PreviewCastbar.Prefix and PreviewCastbar.Prefix(unitKey) or nil
     return prefix and (prefix .. suffix) or nil
 end
@@ -945,6 +948,7 @@ local function ExactUnitPreviewKey(value)
     if value == "tot" then return "targettarget" end
     if value == "focus_target" or value == "focustargettarget" then return "focustarget" end
     if value:match("^boss%d+$") then return "boss" end
+    if value:match("^arena%d+$") then return "arena" end
     return nil
 end
 local function FindUnitPreviewHandle(box, handleKey)
@@ -1443,7 +1447,7 @@ end
 --- listener for the whole fight (only the single re-arm signal stays), and
 --- the driver exists only while a preview box is in use.
 local LIVE_STATE_UNIT_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_POWER_UPDATE", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_NAME_UPDATE", "UNIT_LEVEL", "UNIT_FACTION" }
-local LIVE_STATE_UNIT_TOKENS = { player = "player", target = "target", targettarget = "targettarget", focustarget = "focustarget", focus = "focus", boss = "boss1", pet = "pet" }
+local LIVE_STATE_UNIT_TOKENS = { player = "player", target = "target", targettarget = "targettarget", focustarget = "focustarget", focus = "focus", boss = "boss1", arena = "arena1", pet = "pet" }
 local SyncUnitPreviewLiveState
 local function UnitPreviewLiveStateEvent(driver, event)
     local box = driver._msufLiveStateBox

@@ -67,9 +67,9 @@ Apply.pendingGroups = pendingGroups
 Apply.pendingGroupReason = pendingGroupReason
 
 local APPLY_FLUSH_DELAY = 0.04
-local UNIT_KEYS = KeySet("player", "target", "targettarget", "focustarget", "focus", "pet", "boss")
-local UNIT_AURA_SCOPES = KeySet("player", "target", "focus", "boss")
-local CASTBAR_UNITS = KeySet("player", "target", "focus", "boss")
+local UNIT_KEYS = KeySet("player", "target", "targettarget", "focustarget", "focus", "pet", "boss", "arena")
+local UNIT_AURA_SCOPES = KeySet("player", "target", "focus", "boss", "arena")
+local CASTBAR_UNITS = KeySet("player", "target", "focus", "boss", "arena")
 
 local function WipeTable(t)
     for k in pairs(t) do t[k] = nil end
@@ -295,6 +295,7 @@ end
 local function NormalizeCastbarUnit(unit)
     unit = tostring(unit or "")
     if unit:match("^boss%d+$") then return "boss" end
+    if unit:match("^arena%d+$") then return "arena" end
     if CASTBAR_UNITS[unit] == true then return unit end
     return nil
 end
@@ -410,6 +411,7 @@ local function ApplyAllCastbars()
     did = ApplyUnitCastbar("target") or did
     did = ApplyUnitCastbar("focus") or did
     did = ApplyUnitCastbar("boss") or did
+    did = ApplyUnitCastbar("arena") or did
     if did then return true end
     return Apply.CallGlobal("MSUF_UpdateCastbarVisuals")
 end

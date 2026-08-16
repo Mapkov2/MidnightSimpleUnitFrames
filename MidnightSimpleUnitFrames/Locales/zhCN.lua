@@ -5698,6 +5698,19 @@ L["Optional global overrides for harmful Magic, Curse, Disease, Poison and Bleed
 L["Timer and Dispel colors are shared by live unit/group auras and every preview. Icon border and shadow colors live in Appearance > Auras, scoped by Aura type."] = "计时器和驱散颜色由实际单位、队伍光环及所有预览共享。图标边框和阴影颜色位于外观 > 光环中，并按光环类型设置。"
 L["Cooldown timer urgency, global Dispel types, icon borders and shadows."] = "冷却计时器紧急度、全局驱散类型以及图标边框和阴影颜色。"
 L["Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."] = "安全、警告、紧急、魔法、诅咒、疾病、中毒、流血、图标边框和图标阴影。"
+
+--- Arena frames (dedicated arena1-3 unit frames)
+L["Arena"] = "竞技场"
+L["Arena Castbar"] = "竞技场施法条"
+L["Arena Frames"] = "竞技场框体"
+L["Arena Layout"] = "竞技场布局"
+L["Arena Opponent"] = "竞技场对手"
+L["Arena castbar preview"] = "竞技场施法条预览"
+L["Arena frame layout"] = "竞技场框体布局"
+L["Arena spacing"] = "竞技场间距"
+L["Aura settings are only available for Player, Target, Focus, Boss, and Arena Frames."] = "光环设置仅适用于玩家、目标、焦点、首领和竞技场框体。"
+L["Castbar settings are only available for Player, Target, Focus, Boss, and Arena Frames."] = "施法条设置仅适用于玩家、目标、焦点、首领和竞技场框体。"
+L["MSUF Arena Frames"] = "MSUF 竞技场框体"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhCN", LoadLocale)
 elseif MSUF.LOCALE == "zhCN" then LoadLocale() end

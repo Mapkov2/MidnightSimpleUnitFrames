@@ -1384,7 +1384,7 @@ function Page:RefreshControlState()
     -- resource text is disabled, so its shared text styling/layer stays usable.
     SetControlsEnabled(self.groups.cpText, cpOn)
     local anyDetached = false
-    for _, key in ipairs({ "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" }) do
+    for _, key in ipairs({ "player", "target", "focus", "targettarget", "focustarget", "pet", "boss", "arena" }) do
         if db[key] and db[key].powerBarDetached then anyDetached = true; break end
     end
     local playerDetached = db.player and db.player.powerBarDetached == true

@@ -317,7 +317,7 @@ local function ApplyNameShortening(reason)
     local scope = CurrentFontScope()
     if IsGFScope(scope) then return end
     if scope == "shared" then
-        for _, unit in ipairs({ "player", "target", "targettarget", "focustarget", "focus", "pet", "boss" }) do
+        for _, unit in ipairs({ "player", "target", "targettarget", "focustarget", "focus", "pet", "boss", "arena" }) do
             M.RequestUnitApply(unit, reason or "MSUF2_SHORTEN_NAMES", { text = true, preview = true })
         end
     elseif UNIT_SCOPE_KEYS[scope] then

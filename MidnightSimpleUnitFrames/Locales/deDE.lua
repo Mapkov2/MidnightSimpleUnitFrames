@@ -5514,6 +5514,19 @@ L["Optional global overrides for harmful Magic, Curse, Disease, Poison and Bleed
 L["Timer and Dispel colors are shared by live unit/group auras and every preview. Icon border and shadow colors live in Appearance > Auras, scoped by Aura type."] = "Timer- und Bannungsfarben gelten für aktive Einheiten- und Gruppenauren sowie alle Vorschauen. Symbolrahmen- und Schattenfarben befinden sich unter Darstellung > Auren und gelten je Auratyp."
 L["Cooldown timer urgency, global Dispel types, icon borders and shadows."] = "Dringlichkeit der Abklingzeittimer, globale Bannungstypen sowie Symbolrahmen- und Schattenfarben."
 L["Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."] = "Sicher, Warnung, Dringend, Magie, Fluch, Krankheit, Gift, Blutung, Symbolrahmen und Symbolschatten."
+
+--- Arena frames (dedicated arena1-3 unit frames)
+L["Arena"] = "Arena"
+L["Arena Castbar"] = "Arena-Zauberleiste"
+L["Arena Frames"] = "Arena-Frames"
+L["Arena Layout"] = "Arena-Layout"
+L["Arena Opponent"] = "Arena-Gegner"
+L["Arena castbar preview"] = "Arena-Castbar-Vorschau"
+L["Arena frame layout"] = "Arena-Frame-Anordnung"
+L["Arena spacing"] = "Arena-Abstand"
+L["Aura settings are only available for Player, Target, Focus, Boss, and Arena Frames."] = "Aura-Einstellungen sind nur für Spieler-, Ziel-, Fokus-, Boss- und Arena-Frames verfügbar."
+L["Castbar settings are only available for Player, Target, Focus, Boss, and Arena Frames."] = "Zauberleisten-Einstellungen sind nur für Spieler-, Ziel-, Fokus-, Boss- und Arena-Frames verfügbar."
+L["MSUF Arena Frames"] = "MSUF Arena-Frames"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("deDE", LoadLocale)
 elseif MSUF.LOCALE == "deDE" then LoadLocale() end

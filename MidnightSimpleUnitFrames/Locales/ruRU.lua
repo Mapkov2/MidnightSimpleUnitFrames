@@ -5096,6 +5096,19 @@ L["Optional global overrides for harmful Magic, Curse, Disease, Poison and Bleed
 L["Timer and Dispel colors are shared by live unit/group auras and every preview. Icon border and shadow colors live in Appearance > Auras, scoped by Aura type."] = "Цвета таймеров и рассеивания общие для активных аур юнитов и групп и всех предпросмотров. Цвета рамки и тени значка находятся в Оформление > Ауры и задаются по типу ауры."
 L["Cooldown timer urgency, global Dispel types, icon borders and shadows."] = "Срочность таймеров, общие типы рассеивания, рамки и тени значков."
 L["Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."] = "Безопасно, Предупреждение, Срочно, Магия, Проклятие, Болезнь, Яд, Кровотечение, рамка и тень значка."
+
+--- Arena frames (dedicated arena1-3 unit frames)
+L["Arena"] = "Арена"
+L["Arena Castbar"] = "Полоса заклинаний арены"
+L["Arena Frames"] = "Фреймы арены"
+L["Arena Layout"] = "Расположение арены"
+L["Arena Opponent"] = "Соперник на арене"
+L["Arena castbar preview"] = "Предпросмотр полосы заклинаний арены"
+L["Arena frame layout"] = "Расположение фреймов арены"
+L["Arena spacing"] = "Интервал арены"
+L["Aura settings are only available for Player, Target, Focus, Boss, and Arena Frames."] = "Настройки аур доступны только для фреймов игрока, цели, фокуса, босса и арены."
+L["Castbar settings are only available for Player, Target, Focus, Boss, and Arena Frames."] = "Настройки полосы заклинаний доступны только для фреймов игрока, цели, фокуса, босса и арены."
+L["MSUF Arena Frames"] = "MSUF Фреймы арены"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ruRU", LoadLocale)
 elseif MSUF.LOCALE == "ruRU" then LoadLocale() end

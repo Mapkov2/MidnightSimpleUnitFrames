@@ -15,8 +15,8 @@ local VT = M.ValueTextList
 local POWER_UNITS, CASTBAR_FIELDS, PORTRAIT_RENDER, PORTRAIT_SHAPES, PORTRAIT_BORDERS = M.PickDefaults(UP, [[POWER_UNITS CASTBAR_FIELDS PORTRAIT_RENDER PORTRAIT_SHAPES PORTRAIT_BORDERS]])
 local GetConf, GetGeneral, GetBars, Call, UnitTopLabel, ReadBool, SetBool, ReadNumber, SetNumber, ReadGeneralBool, SetGeneralBool, NormalizePortrait, SetPortraitValue, IsPlayerPowerManagedByClassResources, ControlMeta, SettingMeta, ReviewedMeta, RegisterControl = M.Pick(UP, [[GetConf GetGeneral GetBars Call UnitTopLabel ReadBool SetBool ReadNumber SetNumber ReadGeneralBool SetGeneralBool NormalizePortrait SetPortraitValue IsPlayerPowerManagedByClassResources ControlMeta SettingMeta ReviewedMeta RegisterControl]])
 local CASTBAR_BACKEND_VALUES = VT("MSUF", "MSUF castbar", "BLIZZARD", "Blizzard castbar")
-local CASTBAR_PREFIX = { player = "castbarPlayer", target = "castbarTarget", focus = "castbarFocus", boss = "bossCast" }
-local CASTBAR_UNITS = M.KeySetFromWords "player target focus boss"
+local CASTBAR_PREFIX = { player = "castbarPlayer", target = "castbarTarget", focus = "castbarFocus", boss = "bossCast", arena = "arenaCast" }
+local CASTBAR_UNITS = M.KeySetFromWords "player target focus boss arena"
 local CASTBAR_ICON_POSITIONS = VT("LEFT", "Left", "RIGHT", "Right", "INSIDE_LEFT", "Inside Left", "INSIDE_RIGHT", "Inside Right")
 local CASTBAR_TEXT_POSITIONS = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right", "ABOVE", "Above", "BELOW", "Below")
 local CASTBAR_TIME_FORMATS = VT("CURRENT", "Remaining", "ELAPSED", "Elapsed", "ELAPSED_MAX", "Elapsed / Total", "CURRENT_MAX", "Remaining / Total")
@@ -856,10 +856,12 @@ local function BuildCastbar(ctx, builder, unit)
     end
     local function CastbarWidthKey()
         if unit == "boss" then return "bossCastbarWidth" end
+        if unit == "arena" then return "arenaCastbarWidth" end
         return prefix and (prefix .. "BarWidth") or nil
     end
     local function CastbarHeightKey()
         if unit == "boss" then return "bossCastbarHeight" end
+        if unit == "arena" then return "arenaCastbarHeight" end
         return prefix and (prefix .. "BarHeight") or nil
     end
     local function CastbarWidthSourceKey()
@@ -872,6 +874,7 @@ local function BuildCastbar(ctx, builder, unit)
         if unit == "target" then return "castbarTargetMatchWidth" end
         if unit == "focus" then return "castbarFocusMatchWidth" end
         if unit == "boss" then return "bossCastbarMatchWidth" end
+        if unit == "arena" then return "arenaCastbarMatchWidth" end
     end
     local function NormalizeWidthSource(value)
         local fn = _G.MSUF_NormalizeCastbarWidthSource or _G.MSUF_NormalizePlayerCastbarWidthSource
@@ -1226,12 +1229,12 @@ local function BuildCastbar(ctx, builder, unit)
     AddControl(nil, manualWidth)
     W.AttachUnitEditFocus(manualWidth, unit, "castbar")
     M.BindNumberWidget(ctx, manualWidth,
-        function() return ReadGeneralNumber(widthKey, unit == "boss" and 176 or (unit == "focus" and 175 or 272)) end,
+        function() return ReadGeneralNumber(widthKey, (unit == "boss" or unit == "arena") and 176 or (unit == "focus" and 175 or 272)) end,
         function(v)
             if not widthKey then return end
             SetGeneralNumber(widthKey, v, "MSUF2_CASTBAR_WIDTH")
         end,
-        unit == "boss" and 176 or (unit == "focus" and 175 or 272), (function()
+        (unit == "boss" or unit == "arena") and 176 or (unit == "focus" and 175 or 272), (function()
             local meta = SettingMeta(ctx, "castbar.manual_width", "general", widthKey)
             meta.step, meta.roundStep = 1, true
             return meta
@@ -1241,12 +1244,12 @@ local function BuildCastbar(ctx, builder, unit)
     AddControl(nil, height)
     W.AttachUnitEditFocus(height, unit, "castbar")
     M.BindNumberWidget(ctx, height,
-        function() return ReadGeneralNumber(heightKey, unit == "boss" and 12 or 18) end,
+        function() return ReadGeneralNumber(heightKey, (unit == "boss" or unit == "arena") and 12 or 18) end,
         function(v)
             if not heightKey then return end
             SetGeneralNumber(heightKey, v, "MSUF2_CASTBAR_HEIGHT")
         end,
-        unit == "boss" and 12 or 18, (function()
+        (unit == "boss" or unit == "arena") and 12 or 18, (function()
             local meta = SettingMeta(ctx, "castbar.height", "general", heightKey)
             meta.step, meta.roundStep = 1, true
             return meta
@@ -1345,7 +1348,7 @@ local function BuildCastbar(ctx, builder, unit)
         return ReadSpellTextWidthMode() == "CLIP"
     end
     local function DefaultSpellTextManualWidth()
-        local base = unit == "boss" and 176 or (unit == "focus" and 175 or 272)
+        local base = (unit == "boss" or unit == "arena") and 176 or (unit == "focus" and 175 or 272)
         local value = ReadGeneralNumber(CastbarWidthKey(), base) - 64
         return max(40, min(260, floor(value + 0.5)))
     end

@@ -18,7 +18,7 @@ local VTR = M.ValueTextRows
 local VTP = M.ValueTextPairs
 local KLR, KSW, WL = M.KeyLabelRows, M.KeySetFromWords, M.WordList
 local NAV_SUBPAGE_LABELS = M.navSubpageLabels or {}
-local UNIT_PAGES = { uf_player = { unit = "player", title = "MSUF Player", label = NAV_SUBPAGE_LABELS.uf_player or "Player" }, uf_target = { unit = "target", title = "MSUF Target", label = NAV_SUBPAGE_LABELS.uf_target or "Target" }, uf_targettarget = { unit = "targettarget", title = "MSUF Target of Target", label = NAV_SUBPAGE_LABELS.uf_targettarget or "Target of Target" }, uf_focustarget = { unit = "focustarget", title = "MSUF Focus Target", label = NAV_SUBPAGE_LABELS.uf_focustarget or "Focus Target" }, uf_focus = { unit = "focus", title = "MSUF Focus", label = NAV_SUBPAGE_LABELS.uf_focus or "Focus" }, uf_pet = { unit = "pet", title = "MSUF Pet", label = NAV_SUBPAGE_LABELS.uf_pet or "Pet" }, uf_boss = { unit = "boss", title = "MSUF Boss Frames", label = NAV_SUBPAGE_LABELS.uf_boss or "Boss" } }
+local UNIT_PAGES = { uf_player = { unit = "player", title = "MSUF Player", label = NAV_SUBPAGE_LABELS.uf_player or "Player" }, uf_target = { unit = "target", title = "MSUF Target", label = NAV_SUBPAGE_LABELS.uf_target or "Target" }, uf_targettarget = { unit = "targettarget", title = "MSUF Target of Target", label = NAV_SUBPAGE_LABELS.uf_targettarget or "Target of Target" }, uf_focustarget = { unit = "focustarget", title = "MSUF Focus Target", label = NAV_SUBPAGE_LABELS.uf_focustarget or "Focus Target" }, uf_focus = { unit = "focus", title = "MSUF Focus", label = NAV_SUBPAGE_LABELS.uf_focus or "Focus" }, uf_pet = { unit = "pet", title = "MSUF Pet", label = NAV_SUBPAGE_LABELS.uf_pet or "Pet" }, uf_boss = { unit = "boss", title = "MSUF Boss Frames", label = NAV_SUBPAGE_LABELS.uf_boss or "Boss" }, uf_arena = { unit = "arena", title = "MSUF Arena Frames", label = NAV_SUBPAGE_LABELS.uf_arena or "Arena" } }
 local POWER_UNITS = {}
 local CanDetachUnitPowerBar = _G.MSUF_CanDetachUnitPowerBar
 for _, page in pairs(UNIT_PAGES) do
@@ -60,6 +60,14 @@ local CASTBAR_FIELDS = {
         timeFormat = "bossCastTimeFormat", w = "bossCastbarWidth", h = "bossCastbarHeight",
         match = "bossCastbarMatchWidth", detached = "bossCastbarDetached",
         offsetX = "bossCastbarOffsetX", offsetY = "bossCastbarOffsetY",
+    },
+    arena = {
+        stylePrefix = "arenaCast", enable = "enableArenaCastbar", backend = "arenaCastbarBackend",
+        providerMemory = "arenaCastbarBackendBeforeHide", time = "showArenaCastTime",
+        icon = "showArenaCastIcon", text = "showArenaCastName", targetName = "showArenaCastTargetName",
+        timeFormat = "arenaCastTimeFormat", w = "arenaCastbarWidth", h = "arenaCastbarHeight",
+        match = "arenaCastbarMatchWidth", detached = "arenaCastbarDetached",
+        offsetX = "arenaCastbarOffsetX", offsetY = "arenaCastbarOffsetY",
     },
 }
 local CASTBAR_COPY_SUFFIXES = WL [[IconPosition IconSize IconZoom IconOffsetX IconOffsetY IconSpacing IconBorderThickness IconBorderStyle IconFrameLevelOffset SpellNamePosition SpellNameFontSize TextOffsetX TextOffsetY SpellNameMaxWidth SpellNameTruncate TimePosition TimeFontSize TimeOffsetX TimeOffsetY FrameLevelOffset SpellNameColorR SpellNameColorG SpellNameColorB TimeColorR TimeColorG TimeColorB]]
@@ -309,9 +317,10 @@ local COPY_LOAD_CONDITION_FIELDS = WL [[loadCondHideInHousing loadCondHideInComb
 --- so it has no semantic equivalent on Player/Target/Focus and must never be cleared
 --- when a normal unit's frame size is copied to Boss.
 local COPY_LAYOUT_FIELDS = WL [[width height]]
-local AURA_COPY_UNITS = KSW("player target focus boss")
-local AURA_COPY_FLAGS = { player = "showPlayer", target = "showTarget", focus = "showFocus", boss = "showBoss" }
+local AURA_COPY_UNITS = KSW("player target focus boss arena")
+local AURA_COPY_FLAGS = { player = "showPlayer", target = "showTarget", focus = "showFocus", boss = "showBoss", arena = "showArena" }
 local AURA_BOSS_RUNTIME_UNITS = WL("boss1 boss2 boss3 boss4 boss5")
+local AURA_ARENA_RUNTIME_UNITS = WL("arena1 arena2 arena3")
 local UF_COPY_CATEGORIES = {
     { key = "basics",       label = "Frame Basics",     default = true, description = "Copies the frame toggle, fill direction and health coloring, plus this unit's Bars overrides: bar textures, outline, highlight priority, gradient, absorb and heal prediction." },
     { key = "text",         label = "Text",             default = true, description = "Copies every text slot with its content, size and position, plus this unit's font overrides: font, outline, shadow, text color and name shortening." },
@@ -334,9 +343,9 @@ local function NewCopyScopeDefaults()
     end
     return t
 end
-local UNIT_COPY_TARGETS = VTP "player=Player|target=Target|targettarget=Target of Target|focustarget=Focus Target|focus=Focus|pet=Pet|boss=Boss Frames"
-local UNIT_LABELS = { player = "Player", target = "Target", targettarget = "Target of Target", focustarget = "Focus Target", focus = "Focus", pet = "Pet", boss = "Boss Frames" }
-local UNIT_PILL_WIDTHS = { targettarget = 116, focustarget = 104, boss = 92, target = 62, focus = 58, pet = 46 }
+local UNIT_COPY_TARGETS = VTP "player=Player|target=Target|targettarget=Target of Target|focustarget=Focus Target|focus=Focus|pet=Pet|boss=Boss Frames|arena=Arena Frames"
+local UNIT_LABELS = { player = "Player", target = "Target", targettarget = "Target of Target", focustarget = "Focus Target", focus = "Focus", pet = "Pet", boss = "Boss Frames", arena = "Arena Frames" }
+local UNIT_PILL_WIDTHS = { targettarget = 116, focustarget = 104, boss = 92, arena = 92, target = 62, focus = 58, pet = 46 }
 local function DefaultCopyTarget(unit)
     for i = 1, #UNIT_COPY_TARGETS do
         local value = UNIT_COPY_TARGETS[i].value
@@ -351,13 +360,14 @@ end
 local function UnitTopPillWidth(unit)
     return UNIT_PILL_WIDTHS[unit] or 56
 end
-local UNIT_KEY_SET = KSW("player target targettarget focustarget focus pet boss")
+local UNIT_KEY_SET = KSW("player target targettarget focustarget focus pet boss arena")
 local function CanonUnitKey(key)
     if type(key) ~= "string" then return key end
     key = key:lower()
     if key == "tot" or key == "targetoftarget" or key == "target_of_target" then return "targettarget" end
     if key == "focus_target" or key == "focustargettarget" then return "focustarget" end
     if key:match("^boss") then return "boss" end
+    if key:match("^arena") then return "arena" end
     return key
 end
 local function EnsureUnitDB(key)
@@ -405,6 +415,7 @@ local PB_SHOW_KEY_MAP = {
     target = "showTargetPowerBar",
     focus = "showFocusPowerBar",
     boss = "showBossPowerBar",
+    arena = "showArenaPowerBar",
 }
 local PB_SHOW_DEFAULTS = {
     player = true,
@@ -414,6 +425,7 @@ local PB_SHOW_DEFAULTS = {
     focustarget = false,
     pet = true,
     boss = true,
+    arena = true,
 }
 local function ConfBool(value) if value ~= nil then return true, value ~= false end end
 local function ConfTrue(value) if value ~= nil then return true, value == true end end
@@ -528,12 +540,18 @@ local function CopyCastbar(g, src, dst)
 end
 local function AuraRuntimeSource(unit)
     unit = CanonUnitKey(unit)
-    return unit == "boss" and "boss1" or unit
+    if unit == "boss" then return "boss1" end
+    if unit == "arena" then return "arena1" end
+    return unit
 end
 local function ForEachAuraRuntimeTarget(unit, callback)
     unit = CanonUnitKey(unit)
     if unit == "boss" then
         for i = 1, #AURA_BOSS_RUNTIME_UNITS do callback(AURA_BOSS_RUNTIME_UNITS[i]) end
+        return
+    end
+    if unit == "arena" then
+        for i = 1, #AURA_ARENA_RUNTIME_UNITS do callback(AURA_ARENA_RUNTIME_UNITS[i]) end
         return
     end
     callback(unit)
@@ -587,6 +605,7 @@ local function EnsureAuras3CopyDB()
     if auras.showTarget == nil then auras.showTarget = true end
     if auras.showFocus == nil then auras.showFocus = true end
     if auras.showBoss == nil then auras.showBoss = true end
+    if auras.showArena == nil then auras.showArena = true end
     if type(auras.perUnit) ~= "table" then auras.perUnit = {} end
     return auras
 end
@@ -959,6 +978,97 @@ local function SetBossPagePreviewActive(active)
         C_Timer.After(0.12, SyncBossPagePreview)
     end
 end
+
+--- Arena page preview: mirrors the boss page-preview coordinator against the
+--- arena preview globals/entry points exported by the engine.
+local arenaPagePreviewEvents
+local arenaPagePreviewPendingCleanup
+local function ClearArenaPagePreviewForCombat()
+    local clear = _G.MSUF_ClearArenaUnitframePreviewForCombat
+    return type(clear) == "function" and clear() == true
+end
+local function ArenaPreviewFramesVisible()
+    local sawFrame = false
+    for i = 1, 3 do
+        local unit = "arena" .. i
+        local frame = CoreFrame(unit) or _G["MSUF_" .. unit]
+        if frame then
+            sawFrame = true
+            if frame.IsShown and not frame:IsShown() then return false end
+        end
+    end
+    return sawFrame
+end
+local function SyncArenaPagePreview()
+    local active = (_G.MSUF2_ArenaUnitframePreviewActive == true)
+    if BossPagePreviewInCombat() then
+        local cleared = ClearArenaPagePreviewForCombat()
+        _G.MSUF2_ArenaUnitframePreviewActive = nil
+        if active or cleared then arenaPagePreviewPendingCleanup = true end
+        return
+    end
+    if type(_G.MSUF_ApplyArenaUnitframePreviewState) == "function" then
+        _G.MSUF_ApplyArenaUnitframePreviewState(active, active and "MSUF2_ARENA_PAGE" or "MSUF2_ARENA_PAGE_OFF")
+        return
+    end
+    if type(_G.MSUF_SyncArenaUnitframePreviewWithUnitEdit) == "function" then _G.MSUF_SyncArenaUnitframePreviewWithUnitEdit() end
+end
+local function EnsureArenaPagePreviewEvents()
+    if arenaPagePreviewEvents then return arenaPagePreviewEvents end
+    arenaPagePreviewEvents = CreateFrame("Frame")
+    arenaPagePreviewEvents:SetScript("OnEvent", function(self, event)
+        if event == "PLAYER_REGEN_DISABLED" then
+            ClearArenaPagePreviewForCombat()
+            _G.MSUF2_ArenaUnitframePreviewActive = nil
+            arenaPagePreviewPendingCleanup = true
+            return
+        end
+        if event == "PLAYER_REGEN_ENABLED" and arenaPagePreviewPendingCleanup then
+            arenaPagePreviewPendingCleanup = nil
+            SyncArenaPagePreview()
+            if _G.MSUF2_ArenaUnitframePreviewActive ~= true then self:UnregisterAllEvents() end
+            return
+        end
+        if _G.MSUF2_ArenaUnitframePreviewActive == true then SyncArenaPagePreview() end
+    end)
+    return arenaPagePreviewEvents
+end
+local function SetArenaPagePreviewActive(active)
+    active = active and true or false
+    if active and BossPagePreviewInCombat() then
+        ClearArenaPagePreviewForCombat()
+        _G.MSUF2_ArenaUnitframePreviewActive = nil
+        arenaPagePreviewPendingCleanup = nil
+        if arenaPagePreviewEvents then arenaPagePreviewEvents:UnregisterAllEvents() end
+        return
+    end
+    local current = _G.MSUF2_ArenaUnitframePreviewActive == true
+    if current == active then
+        if active and not BossPagePreviewInCombat() and not ArenaPreviewFramesVisible() then SyncArenaPagePreview() end
+        if not active and _G.MSUF_ArenaTestMode == true and not BossPagePreviewInCombat() then SyncArenaPagePreview() end
+        return
+    end
+    _G.MSUF2_ArenaUnitframePreviewActive = active or nil
+    local events = EnsureArenaPagePreviewEvents()
+    if active then
+        arenaPagePreviewPendingCleanup = nil
+        events:RegisterEvent("PLAYER_REGEN_DISABLED")
+        events:RegisterEvent("PLAYER_REGEN_ENABLED")
+    elseif BossPagePreviewInCombat() then
+        arenaPagePreviewPendingCleanup = true
+        events:UnregisterEvent("PLAYER_REGEN_DISABLED")
+        events:RegisterEvent("PLAYER_REGEN_ENABLED")
+        return
+    else
+        arenaPagePreviewPendingCleanup = nil
+        events:UnregisterAllEvents()
+    end
+    SyncArenaPagePreview()
+    if active then
+        C_Timer.After(0, SyncArenaPagePreview)
+        C_Timer.After(0.12, SyncArenaPagePreview)
+    end
+end
 local function ReadBool(unit, key, default)
     local conf = GetConf(unit)
     local value = conf[key]
@@ -1166,6 +1276,7 @@ M.Assign(UnitPage, {
     ToggleEditMode = ToggleEditMode,
     IsEditModeActive = IsEditModeActive,
     SetBossPagePreviewActive = SetBossPagePreviewActive,
+    SetArenaPagePreviewActive = SetArenaPagePreviewActive,
     ReadBool = ReadBool,
     SetBool = SetBool,
     ReadNumber = ReadNumber,
