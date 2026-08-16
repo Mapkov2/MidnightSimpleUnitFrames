@@ -2651,7 +2651,6 @@ L["Group Target Highlight"] = "Group Target Highlight"
 L["Language, menu behavior, frame highlights, tooltips and Blizzard frames."] = "Language, menu behavior, frame highlights, tooltips and Blizzard frames."
 L["Open Highlights"] = "Open Highlights"
 
-
 --- Fill Direction and Power bar textures (6.0 Beta 26)
 L["Power Bar Texture"] = "Power Bar Texture"
 L["Power Background Texture"] = "Power Background Texture"
@@ -3780,6 +3779,40 @@ L["Optional global overrides for harmful Magic, Curse, Disease, Poison and Bleed
 L["Timer and Dispel colors are shared by live unit/group auras and every preview. Icon border and shadow colors live in Appearance > Auras, scoped by Aura type."] = "Timer and Dispel colors are shared by live unit/group auras and every preview. Icon border and shadow colors live in Appearance > Auras, scoped by Aura type."
 L["Cooldown timer urgency, global Dispel types, icon borders and shadows."] = "Cooldown timer urgency, global Dispel types, icon borders and shadows."
 L["Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."] = "Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."
+
+L["Preview height"] = "Preview height"
+L["Drag to resize the preview. Double-click resets the default height."] = "Drag to resize the preview. Double-click resets the default height."
+
+L["Delete everything"] = "Delete everything"
+L["Factory reset MSUF?\n\nThis deletes EVERY MSUF profile and setting for this account. This cannot be undone - export any profile you want to keep first."] = "Factory reset MSUF?\n\nThis deletes EVERY MSUF profile and setting for this account. This cannot be undone - export any profile you want to keep first."
+L["Deletes every MSUF profile and setting for this account. Asks for confirmation first; export a profile backup before using this."] = "Deletes every MSUF profile and setting for this account. Asks for confirmation first; export a profile backup before using this."
+L["Replace profile"] = "Replace profile"
+L["Import legacy string into profile '%s'?\n\nThis replaces the entire active profile and clears the Undo history. Turn on 'Import and create new profile' to keep your current profile untouched."] = "Import legacy string into profile '%s'?\n\nThis replaces the entire active profile and clears the Undo history. Turn on 'Import and create new profile' to keep your current profile untouched."
+L["Legacy import failed"] = "Legacy import failed"
+L["COPY FLOW - Open Copy To, select All categories, pick a destination, then press Copy Selected."] = "COPY FLOW - Open Copy To, select All categories, pick a destination, then press Copy Selected."
+
+L["Opens a copyable link to the MSUF profile imports on Wago."] = "Opens a copyable link to the MSUF profile imports on Wago."
+L["Reads and applies the global WoW UI scale percentage directly."] = "Reads and applies the global WoW UI scale percentage directly."
+L["Reads and applies the MSUF configuration-menu scale percentage directly."] = "Reads and applies the MSUF configuration-menu scale percentage directly."
+L["Reads and applies the MSUF unit-frame scale percentage directly."] = "Reads and applies the MSUF unit-frame scale percentage directly."
+L["Clears the current settings search."] = "Clears the current settings search."
+L["Dismisses the one-time settings-search introduction."] = "Dismisses the one-time settings-search introduction."
+L["Runs this built-in MSUF support search."] = "Runs this built-in MSUF support search."
+L["Opens the previous page from the menu page history."] = "Opens the previous page from the menu page history."
+L["Opens the next page from the menu page history."] = "Opens the next page from the menu page history."
+L["Closes the MSUF menu window, including its minimized bar."] = "Closes the MSUF menu window, including its minimized bar."
+L["Maximizes the MSUF menu window; the same title-bar button restores it when maximized."] = "Maximizes the MSUF menu window; the same title-bar button restores it when maximized."
+L["Minimizes the MSUF menu to its compact draggable bar."] = "Minimizes the MSUF menu to its compact draggable bar."
+L["Restores the minimized or maximized MSUF menu window."] = "Restores the minimized or maximized MSUF menu window."
+L["Round MSUF castbar surfaces and outlines. Blizzard castbars, spell icons, and the GCD bar are not changed."] = "Round MSUF castbar surfaces and outlines. Blizzard castbars, spell icons, and the GCD bar are not changed."
+L["Round rectangular class resource bars. Circle, Diamond, and Hex shapes are unchanged."] = "Round rectangular class resource bars. Circle, Diamond, and Hex shapes are unchanged."
+L["Controls how subtle or strong the rounded corners appear. Masks, outlines, highlights, mouseover edges, power bars, enabled class resources, and enabled castbars use the same value."] = "Controls how subtle or strong the rounded corners appear. Masks, outlines, highlights, mouseover edges, power bars, enabled class resources, and enabled castbars use the same value."
+L["Status icon controls include the Level indicator, visibility, anchor, size, and layer. Position is edited in Preview."] = "Status icon controls include the Level indicator, visibility, anchor, size, and layer. Position is edited in Preview."
+L["Why is this disabled?"] = "Why is this disabled?"
+L["This UnitFrame is disabled. Turn on its Enable toggle in Frame Basics first."] = "This UnitFrame is disabled. Turn on its Enable toggle in Frame Basics first."
+
+L["GO TO SETTINGS"] = "GO TO SETTINGS"
+L["Move and place MSUF frames on screen. Opens MSUF Edit Mode for this frame."] = "Move and place MSUF frames on screen. Opens MSUF Edit Mode for this frame."
 
 --- Arena frames (dedicated arena1-3 unit frames)
 L["Arena"] = "Arena"

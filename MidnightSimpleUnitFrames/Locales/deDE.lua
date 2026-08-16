@@ -4311,7 +4311,6 @@ L["Language, menu behavior, frame highlights, tooltips and Blizzard frames."] = 
 L["Open Highlights"] = "Hervorhebungen öffnen"
 L["|cffff625f•|r|cff61d683•|r|cff5aa7ff•|r  Colors..."] = "|cffff625f•|r|cff61d683•|r|cff5aa7ff•|r  Farben..."
 
-
 --- Fill Direction and Power bar textures (6.0 Beta 26)
 L["Power Bar Texture"] = "Energieleisten-Textur"
 L["Power Background Texture"] = "Energie-Hintergrundtextur"
@@ -5514,6 +5513,46 @@ L["Optional global overrides for harmful Magic, Curse, Disease, Poison and Bleed
 L["Timer and Dispel colors are shared by live unit/group auras and every preview. Icon border and shadow colors live in Appearance > Auras, scoped by Aura type."] = "Timer- und Bannungsfarben gelten für aktive Einheiten- und Gruppenauren sowie alle Vorschauen. Symbolrahmen- und Schattenfarben befinden sich unter Darstellung > Auren und gelten je Auratyp."
 L["Cooldown timer urgency, global Dispel types, icon borders and shadows."] = "Dringlichkeit der Abklingzeittimer, globale Bannungstypen sowie Symbolrahmen- und Schattenfarben."
 L["Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."] = "Sicher, Warnung, Dringend, Magie, Fluch, Krankheit, Gift, Blutung, Symbolrahmen und Symbolschatten."
+
+L["Preview height"] = "Vorschau-Höhe"
+L["Drag to resize the preview. Double-click resets the default height."] = "Ziehen, um die Vorschau zu vergrößern oder zu verkleinern. Doppelklick stellt die Standardhöhe wieder her."
+
+L["Delete everything"] = "Alles löschen"
+L["Factory reset MSUF?\n\nThis deletes EVERY MSUF profile and setting for this account. This cannot be undone - export any profile you want to keep first."] = "MSUF auf Werkseinstellungen zurücksetzen?\n\nDies löscht JEDES MSUF-Profil und alle Einstellungen dieses Accounts. Das kann nicht rückgängig gemacht werden – exportiere vorher jedes Profil, das du behalten willst."
+L["Deletes every MSUF profile and setting for this account. Asks for confirmation first; export a profile backup before using this."] = "Löscht jedes MSUF-Profil und alle Einstellungen dieses Accounts. Fragt zuerst nach Bestätigung; exportiere vorher ein Profil-Backup."
+L["Replace profile"] = "Profil ersetzen"
+L["Import legacy string into profile '%s'?\n\nThis replaces the entire active profile and clears the Undo history. Turn on 'Import and create new profile' to keep your current profile untouched."] = "Legacy-String in Profil '%s' importieren?\n\nDies ersetzt das gesamte aktive Profil und leert den Rückgängig-Verlauf. Aktiviere „Importieren und neues Profil erstellen“, um dein aktuelles Profil unangetastet zu lassen."
+L["Legacy import failed"] = "Legacy-Import fehlgeschlagen"
+L["COPY FLOW - Open Copy To, select All categories, pick a destination, then press Copy Selected."] = "KOPIERVORGANG – Öffnen Sie „Kopieren nach“, wählen Sie „Alle Kategorien“, wählen Sie ein Ziel und drücken Sie dann „Auswahl kopieren“."
+
+L["Opens a copyable link to the MSUF profile imports on Wago."] = "Öffnet einen kopierbaren Link zu den MSUF-Profilimporten auf Wago."
+L["Reads and applies the global WoW UI scale percentage directly."] = "Liest und setzt direkt die globale WoW-UI-Skalierung in Prozent."
+L["Reads and applies the MSUF configuration-menu scale percentage directly."] = "Liest und setzt direkt die Skalierung des MSUF-Konfigurationsmenüs in Prozent."
+L["Reads and applies the MSUF unit-frame scale percentage directly."] = "Liest und setzt direkt die Skalierung der MSUF-Unitframes in Prozent."
+L["Clears the current settings search."] = "Leert die aktuelle Einstellungssuche."
+L["Dismisses the one-time settings-search introduction."] = "Blendet die einmalige Einführung zur Einstellungssuche aus."
+L["Runs this built-in MSUF support search."] = "Führt diese integrierte MSUF-Hilfesuche aus."
+L["Opens the previous page from the menu page history."] = "Öffnet die vorherige Seite aus dem Seitenverlauf des Menüs."
+L["Opens the next page from the menu page history."] = "Öffnet die nächste Seite aus dem Seitenverlauf des Menüs."
+L["Closes the MSUF menu window, including its minimized bar."] = "Schließt das MSUF-Menüfenster einschließlich seiner minimierten Leiste."
+L["Maximizes the MSUF menu window; the same title-bar button restores it when maximized."] = "Maximiert das MSUF-Menüfenster; derselbe Titelleisten-Button stellt es im maximierten Zustand wieder her."
+L["Minimizes the MSUF menu to its compact draggable bar."] = "Minimiert das MSUF-Menü zu seiner kompakten, verschiebbaren Leiste."
+L["Restores the minimized or maximized MSUF menu window."] = "Stellt das minimierte oder maximierte MSUF-Menüfenster wieder her."
+L["Round MSUF castbar surfaces and outlines. Blizzard castbars, spell icons, and the GCD bar are not changed."] = "Rundet MSUF-Castbar-Flächen und -Umrandungen ab. Blizzard-Castbars, Zauber-Icons und die GCD-Leiste bleiben unverändert."
+L["Round rectangular class resource bars. Circle, Diamond, and Hex shapes are unchanged."] = "Rundet rechteckige Klassenressourcen-Balken ab. Kreis-, Diamant- und Hex-Formen bleiben unverändert."
+L["Controls how subtle or strong the rounded corners appear. Masks, outlines, highlights, mouseover edges, power bars, enabled class resources, and enabled castbars use the same value."] = "Steuert, wie dezent oder stark die abgerundeten Ecken wirken. Masken, Umrandungen, Hervorhebungen, Mouseover-Kanten, Ressourcenleisten, aktivierte Klassenressourcen und aktivierte Castbars verwenden denselben Wert."
+L["Master switch for the rounded frame texture style."] = "Hauptschalter für den abgerundeten Frame-Texturstil."
+L["Enable or disable rounded textures on group frames."] = "Aktiviert oder deaktiviert abgerundete Texturen auf Gruppenframes."
+L["Enable or disable rounded mouseover highlight edges."] = "Aktiviert oder deaktiviert abgerundete Mouseover-Hervorhebungskanten."
+L["Enable or disable rounded textures on power bars."] = "Aktiviert oder deaktiviert abgerundete Texturen auf Ressourcenleisten."
+L["Enable or disable rounded textures on unit frames."] = "Aktiviert oder deaktiviert abgerundete Texturen auf Unitframes."
+L["Status icon controls include the Level indicator, visibility, anchor, size, and layer. Position is edited in Preview."] = "Statussymbol-Einstellungen umfassen Stufenanzeige, Sichtbarkeit, Anker, Größe und Ebene. Die Position wird in der Vorschau bearbeitet."
+L["Why is this disabled?"] = "Warum ist das deaktiviert?"
+L["This UnitFrame is disabled. Turn on its Enable toggle in Frame Basics first."] = "Dieser Unitframe ist deaktiviert. Schalte zuerst seinen Aktivieren-Schalter unter Frame Basics ein."
+
+L["GO TO SETTINGS"] = "ZU DEN EINSTELLUNGEN"
+L["Search is paused in combat."] = "Die Suche ist im Kampf pausiert."
+L["Move and place MSUF frames on screen. Opens MSUF Edit Mode for this frame."] = "Verschiebe und platziere MSUF-Frames auf dem Bildschirm. Öffnet den MSUF-Edit-Mode für diesen Frame."
 
 --- Arena frames (dedicated arena1-3 unit frames)
 L["Arena"] = "Arena"

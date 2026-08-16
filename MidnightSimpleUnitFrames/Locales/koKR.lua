@@ -3921,7 +3921,6 @@ L["Language, menu behavior, frame highlights, tooltips and Blizzard frames."] = 
 L["Open Highlights"] = "강조 설정 열기"
 L["|cffff625f•|r|cff61d683•|r|cff5aa7ff•|r  Colors..."] = "|cffff625f•|r|cff61d683•|r|cff5aa7ff•|r  색상..."
 
-
 --- Fill Direction and Power bar textures (6.0 Beta 26)
 L["Power Bar Texture"] = "자원 바 텍스처"
 L["Power Background Texture"] = "자원 배경 텍스처"
@@ -5058,6 +5057,41 @@ L["Optional global overrides for harmful Magic, Curse, Disease, Poison and Bleed
 L["Timer and Dispel colors are shared by live unit/group auras and every preview. Icon border and shadow colors live in Appearance > Auras, scoped by Aura type."] = "타이머와 해제 색상은 실제 유닛 및 그룹 오라와 모든 미리보기에 공통으로 적용됩니다. 아이콘 테두리와 그림자 색상은 외형 > 오라에서 오라 유형별로 설정합니다."
 L["Cooldown timer urgency, global Dispel types, icon borders and shadows."] = "재사용 대기시간 긴급도, 전역 해제 유형, 아이콘 테두리 및 그림자 색상입니다."
 L["Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."] = "안전, 경고, 긴급, 마법, 저주, 질병, 독, 출혈, 아이콘 테두리 및 아이콘 그림자."
+
+L["Preview height"] = "미리보기 높이"
+L["Drag to resize the preview. Double-click resets the default height."] = "드래그하여 미리보기 크기를 조절합니다. 더블 클릭하면 기본 높이로 되돌립니다."
+
+L["Delete everything"] = "전부 삭제"
+L["Factory reset MSUF?\n\nThis deletes EVERY MSUF profile and setting for this account. This cannot be undone - export any profile you want to keep first."] = "MSUF를 초기화할까요?\n\n이 계정의 모든 MSUF 프로필과 설정이 삭제됩니다. 되돌릴 수 없으니, 유지할 프로필은 먼저 내보내세요."
+L["Deletes every MSUF profile and setting for this account. Asks for confirmation first; export a profile backup before using this."] = "이 계정의 모든 MSUF 프로필과 설정을 삭제합니다. 먼저 확인을 요청합니다. 사용 전에 프로필 백업을 내보내세요."
+L["Replace profile"] = "프로필 교체"
+L["Import legacy string into profile '%s'?\n\nThis replaces the entire active profile and clears the Undo history. Turn on 'Import and create new profile' to keep your current profile untouched."] = "레거시 문자열을 '%s' 프로필로 가져올까요?\n\n활성 프로필 전체가 교체되고 실행 취소 기록이 지워집니다. 현재 프로필을 그대로 두려면 '가져오고 새 프로필 만들기'를 켜세요."
+L["Legacy import failed"] = "레거시 가져오기 실패"
+L["COPY FLOW - Open Copy To, select All categories, pick a destination, then press Copy Selected."] = "복사 흐름 - 복사 대상을 열고 모든 카테고리를 선택한 뒤 대상을 고르고 선택 항목 복사를 누릅니다."
+
+L["Opens a copyable link to the MSUF profile imports on Wago."] = "Wago의 MSUF 프로필 가져오기로 연결되는 복사 가능한 링크를 엽니다."
+L["Reads and applies the global WoW UI scale percentage directly."] = "WoW 전역 UI 배율 백분율을 직접 읽고 적용합니다."
+L["Reads and applies the MSUF configuration-menu scale percentage directly."] = "MSUF 설정 메뉴 배율 백분율을 직접 읽고 적용합니다."
+L["Reads and applies the MSUF unit-frame scale percentage directly."] = "MSUF 유닛 프레임 배율 백분율을 직접 읽고 적용합니다."
+L["Clears the current settings search."] = "현재 설정 검색을 지웁니다."
+L["Dismisses the one-time settings-search introduction."] = "일회성 설정 검색 소개를 닫습니다."
+L["Runs this built-in MSUF support search."] = "이 내장 MSUF 지원 검색을 실행합니다."
+L["Opens the previous page from the menu page history."] = "메뉴 페이지 기록에서 이전 페이지를 엽니다."
+L["Opens the next page from the menu page history."] = "메뉴 페이지 기록에서 다음 페이지를 엽니다."
+L["Closes the MSUF menu window, including its minimized bar."] = "최소화된 막대를 포함하여 MSUF 메뉴 창을 닫습니다."
+L["Maximizes the MSUF menu window; the same title-bar button restores it when maximized."] = "MSUF 메뉴 창을 최대화합니다. 최대화된 상태에서는 같은 제목 표시줄 버튼이 창을 복원합니다."
+L["Minimizes the MSUF menu to its compact draggable bar."] = "MSUF 메뉴를 끌 수 있는 컴팩트 막대로 최소화합니다."
+L["Restores the minimized or maximized MSUF menu window."] = "최소화되거나 최대화된 MSUF 메뉴 창을 복원합니다."
+L["Round MSUF castbar surfaces and outlines. Blizzard castbars, spell icons, and the GCD bar are not changed."] = "MSUF 시전바 표면과 외곽선을 둥글게 만듭니다. 블리자드 시전바, 주문 아이콘, GCD 바는 변경되지 않습니다."
+L["Round rectangular class resource bars. Circle, Diamond, and Hex shapes are unchanged."] = "직사각형 직업 자원 바를 둥글게 만듭니다. 원형, 다이아몬드, 육각형 모양은 변경되지 않습니다."
+L["Controls how subtle or strong the rounded corners appear. Masks, outlines, highlights, mouseover edges, power bars, enabled class resources, and enabled castbars use the same value."] = "둥근 모서리의 정도를 조절합니다. 마스크, 외곽선, 강조, 마우스오버 가장자리, 자원 바, 활성화된 직업 자원과 시전바가 같은 값을 사용합니다."
+L["Status icon controls include the Level indicator, visibility, anchor, size, and layer. Position is edited in Preview."] = "상태 아이콘 설정에는 레벨 표시, 표시 여부, 고정 위치, 크기, 레이어가 포함됩니다. 위치는 미리보기에서 편집합니다."
+L["Why is this disabled?"] = "왜 비활성화되어 있나요?"
+L["This UnitFrame is disabled. Turn on its Enable toggle in Frame Basics first."] = "이 유닛 프레임은 비활성화되어 있습니다. 먼저 Frame Basics에서 활성화 스위치를 켜세요."
+
+L["GO TO SETTINGS"] = "설정으로 이동"
+L["Search is paused in combat."] = "전투 중에는 검색이 일시 중지됩니다."
+L["Move and place MSUF frames on screen. Opens MSUF Edit Mode for this frame."] = "MSUF 프레임을 화면에서 이동하고 배치합니다. 이 프레임의 MSUF 편집 모드를 엽니다."
 
 --- Arena frames (dedicated arena1-3 unit frames)
 L["Arena"] = "투기장"

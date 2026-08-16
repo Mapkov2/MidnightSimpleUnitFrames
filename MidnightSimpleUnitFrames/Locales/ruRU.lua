@@ -3747,7 +3747,6 @@ L["Open Rounded Texture"] = "Открыть Скруглённую тексту�
 L["TRY IT RIGHT HERE"] = "ПОПРОБУЙТЕ ПРЯМО ЗДЕСЬ"
 L["CURRENT PROFILE: %s - NOTHING CHANGES UNTIL YOU CHANGE IT"] = "ТЕКУЩИЙ ПРОФИЛЬ: %s – НИЧЕГО НЕ МЕНЯЕТСЯ, ПОКА ВЫ САМИ НЕ ИЗМЕНИТЕ"
 
-
 -- Бета 24: раздел цветов и поддержка Помощника.
 L["A new on-demand Assistant can find exact settings, explain controls and prepare reversible changes."] = "Новый Помощник по запросу находит точные настройки, объясняет элементы управления и готовит обратимые изменения."
 L["Bar color follows health percent (low / mid / high)."] = "Цвет полосы зависит от процента здоровья (низкий / средний / высокий)."
@@ -3961,7 +3960,6 @@ L["Group Target Highlight"] = "Подсветка цели группы"
 L["Language, menu behavior, frame highlights, tooltips and Blizzard frames."] = "Язык, поведение меню, подсветка рамок, подсказки и рамки Blizzard."
 L["Open Highlights"] = "Открыть подсветку"
 L["|cffff625f•|r|cff61d683•|r|cff5aa7ff•|r  Colors..."] = "|cffff625f•|r|cff61d683•|r|cff5aa7ff•|r  Цвета..."
-
 
 --- Fill Direction and Power bar textures (6.0 Beta 26)
 L["Power Bar Texture"] = "Текстура полосы ресурса"
@@ -5096,6 +5094,41 @@ L["Optional global overrides for harmful Magic, Curse, Disease, Poison and Bleed
 L["Timer and Dispel colors are shared by live unit/group auras and every preview. Icon border and shadow colors live in Appearance > Auras, scoped by Aura type."] = "Цвета таймеров и рассеивания общие для активных аур юнитов и групп и всех предпросмотров. Цвета рамки и тени значка находятся в Оформление > Ауры и задаются по типу ауры."
 L["Cooldown timer urgency, global Dispel types, icon borders and shadows."] = "Срочность таймеров, общие типы рассеивания, рамки и тени значков."
 L["Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."] = "Безопасно, Предупреждение, Срочно, Магия, Проклятие, Болезнь, Яд, Кровотечение, рамка и тень значка."
+
+L["Preview height"] = "Высота предпросмотра"
+L["Drag to resize the preview. Double-click resets the default height."] = "Перетащите, чтобы изменить размер предпросмотра. Двойной щелчок восстанавливает высоту по умолчанию."
+
+L["Delete everything"] = "Удалить всё"
+L["Factory reset MSUF?\n\nThis deletes EVERY MSUF profile and setting for this account. This cannot be undone - export any profile you want to keep first."] = "Выполнить полный сброс MSUF?\n\nБудут удалены ВСЕ профили и настройки MSUF этой учётной записи. Это нельзя отменить — сначала экспортируйте профили, которые хотите сохранить."
+L["Deletes every MSUF profile and setting for this account. Asks for confirmation first; export a profile backup before using this."] = "Удаляет все профили и настройки MSUF этой учётной записи. Сначала запрашивает подтверждение; заранее экспортируйте резервную копию профиля."
+L["Replace profile"] = "Заменить профиль"
+L["Import legacy string into profile '%s'?\n\nThis replaces the entire active profile and clears the Undo history. Turn on 'Import and create new profile' to keep your current profile untouched."] = "Импортировать старую строку в профиль '%s'?\n\nЭто заменит весь активный профиль и очистит историю отмены. Включите «Импортировать и создать новый профиль», чтобы не трогать текущий профиль."
+L["Legacy import failed"] = "Не удалось импортировать старый профиль"
+L["COPY FLOW - Open Copy To, select All categories, pick a destination, then press Copy Selected."] = "ПОРЯДОК КОПИРОВАНИЯ: откройте «Копировать в», выберите «Все категории», выберите место назначения и нажмите «Копировать выбранное»."
+
+L["Opens a copyable link to the MSUF profile imports on Wago."] = "Открывает копируемую ссылку на импорт профилей MSUF на Wago."
+L["Reads and applies the global WoW UI scale percentage directly."] = "Считывает и напрямую применяет глобальный масштаб интерфейса WoW в процентах."
+L["Reads and applies the MSUF configuration-menu scale percentage directly."] = "Считывает и напрямую применяет масштаб меню настроек MSUF в процентах."
+L["Reads and applies the MSUF unit-frame scale percentage directly."] = "Считывает и напрямую применяет масштаб рамок MSUF в процентах."
+L["Clears the current settings search."] = "Очищает текущий поиск настроек."
+L["Dismisses the one-time settings-search introduction."] = "Скрывает одноразовое введение в поиск настроек."
+L["Runs this built-in MSUF support search."] = "Запускает этот встроенный поиск поддержки MSUF."
+L["Opens the previous page from the menu page history."] = "Открывает предыдущую страницу из истории страниц меню."
+L["Opens the next page from the menu page history."] = "Открывает следующую страницу из истории страниц меню."
+L["Closes the MSUF menu window, including its minimized bar."] = "Закрывает окно меню MSUF, включая его свёрнутую панель."
+L["Maximizes the MSUF menu window; the same title-bar button restores it when maximized."] = "Разворачивает окно меню MSUF; та же кнопка в заголовке восстанавливает его в развёрнутом состоянии."
+L["Minimizes the MSUF menu to its compact draggable bar."] = "Сворачивает меню MSUF в компактную перетаскиваемую панель."
+L["Restores the minimized or maximized MSUF menu window."] = "Восстанавливает свёрнутое или развёрнутое окно меню MSUF."
+L["Round MSUF castbar surfaces and outlines. Blizzard castbars, spell icons, and the GCD bar are not changed."] = "Скругляет поверхности и контуры полос заклинаний MSUF. Полосы Blizzard, значки заклинаний и полоса ГКД не меняются."
+L["Round rectangular class resource bars. Circle, Diamond, and Hex shapes are unchanged."] = "Скругляет прямоугольные полосы классовых ресурсов. Формы круга, ромба и шестиугольника не меняются."
+L["Controls how subtle or strong the rounded corners appear. Masks, outlines, highlights, mouseover edges, power bars, enabled class resources, and enabled castbars use the same value."] = "Управляет тем, насколько мягко или сильно выражены скруглённые углы. Маски, контуры, подсветки, края при наведении, полосы ресурса, включённые классовые ресурсы и полосы заклинаний используют одно значение."
+L["Status icon controls include the Level indicator, visibility, anchor, size, and layer. Position is edited in Preview."] = "Настройки значков статуса включают индикатор уровня, видимость, привязку, размер и слой. Положение редактируется в предпросмотре."
+L["Why is this disabled?"] = "Почему это отключено?"
+L["This UnitFrame is disabled. Turn on its Enable toggle in Frame Basics first."] = "Эта рамка отключена. Сначала включите её переключатель в Frame Basics."
+
+L["GO TO SETTINGS"] = "К НАСТРОЙКАМ"
+L["Search is paused in combat."] = "Поиск приостановлен в бою."
+L["Move and place MSUF frames on screen. Opens MSUF Edit Mode for this frame."] = "Перемещайте и размещайте рамки MSUF на экране. Открывает режим редактирования MSUF для этой рамки."
 
 --- Arena frames (dedicated arena1-3 unit frames)
 L["Arena"] = "Арена"

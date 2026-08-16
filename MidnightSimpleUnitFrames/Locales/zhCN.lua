@@ -4567,7 +4567,6 @@ L["Language, menu behavior, frame highlights, tooltips and Blizzard frames."] = 
 L["Open Highlights"] = "打开高亮设置"
 L["|cffff625f•|r|cff61d683•|r|cff5aa7ff•|r  Colors..."] = "|cffff625f•|r|cff61d683•|r|cff5aa7ff•|r  颜色..."
 
-
 --- Fill Direction and Power bar textures (6.0 Beta 26)
 L["Power Bar Texture"] = "能量条材质"
 L["Power Background Texture"] = "能量背景材质"
@@ -5698,6 +5697,41 @@ L["Optional global overrides for harmful Magic, Curse, Disease, Poison and Bleed
 L["Timer and Dispel colors are shared by live unit/group auras and every preview. Icon border and shadow colors live in Appearance > Auras, scoped by Aura type."] = "计时器和驱散颜色由实际单位、队伍光环及所有预览共享。图标边框和阴影颜色位于外观 > 光环中，并按光环类型设置。"
 L["Cooldown timer urgency, global Dispel types, icon borders and shadows."] = "冷却计时器紧急度、全局驱散类型以及图标边框和阴影颜色。"
 L["Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."] = "安全、警告、紧急、魔法、诅咒、疾病、中毒、流血、图标边框和图标阴影。"
+
+L["Preview height"] = "预览高度"
+L["Drag to resize the preview. Double-click resets the default height."] = "拖动以调整预览大小。双击恢复默认高度。"
+
+L["Delete everything"] = "全部删除"
+L["Factory reset MSUF?\n\nThis deletes EVERY MSUF profile and setting for this account. This cannot be undone - export any profile you want to keep first."] = "恢复 MSUF 出厂设置？\n\n这将删除此账号的所有 MSUF 配置文件和设置，且无法撤销。请先导出你想保留的配置文件。"
+L["Deletes every MSUF profile and setting for this account. Asks for confirmation first; export a profile backup before using this."] = "删除此账号的所有 MSUF 配置文件和设置。会先要求确认；使用前请先导出配置文件备份。"
+L["Replace profile"] = "替换配置文件"
+L["Import legacy string into profile '%s'?\n\nThis replaces the entire active profile and clears the Undo history. Turn on 'Import and create new profile' to keep your current profile untouched."] = "将旧版字符串导入配置文件 '%s'？\n\n这将替换整个当前配置文件并清空撤销历史。开启“导入并创建新配置文件”可保持当前配置文件不变。"
+L["Legacy import failed"] = "旧版导入失败"
+L["COPY FLOW - Open Copy To, select All categories, pick a destination, then press Copy Selected."] = "复制流程 - 打开复制到，选择所有类别，选择目的地，然后按复制所选。"
+
+L["Opens a copyable link to the MSUF profile imports on Wago."] = "打开可复制的 Wago MSUF 配置文件导入链接。"
+L["Reads and applies the global WoW UI scale percentage directly."] = "直接读取并应用全局魔兰界面缩放百分比。"
+L["Reads and applies the MSUF configuration-menu scale percentage directly."] = "直接读取并应用 MSUF 配置菜单缩放百分比。"
+L["Reads and applies the MSUF unit-frame scale percentage directly."] = "直接读取并应用 MSUF 单位框体缩放百分比。"
+L["Clears the current settings search."] = "清除当前的设置搜索。"
+L["Dismisses the one-time settings-search introduction."] = "关闭一次性的设置搜索介绍。"
+L["Runs this built-in MSUF support search."] = "运行此内置的 MSUF 支持搜索。"
+L["Opens the previous page from the menu page history."] = "打开菜单页面历史中的上一页。"
+L["Opens the next page from the menu page history."] = "打开菜单页面历史中的下一页。"
+L["Closes the MSUF menu window, including its minimized bar."] = "关闭 MSUF 菜单窗口，包括其最小化条。"
+L["Maximizes the MSUF menu window; the same title-bar button restores it when maximized."] = "最大化 MSUF 菜单窗口；最大化时同一标题栏按钮可将其还原。"
+L["Minimizes the MSUF menu to its compact draggable bar."] = "将 MSUF 菜单最小化为可拖动的紧凑条。"
+L["Restores the minimized or maximized MSUF menu window."] = "还原最小化或最大化的 MSUF 菜单窗口。"
+L["Round MSUF castbar surfaces and outlines. Blizzard castbars, spell icons, and the GCD bar are not changed."] = "圆角化 MSUF 施法条表面和轮廓。暴雪施法条、法术图标和 GCD 条不受影响。"
+L["Round rectangular class resource bars. Circle, Diamond, and Hex shapes are unchanged."] = "圆角化矩形职业资源条。圆形、菱形和六边形样式不受影响。"
+L["Controls how subtle or strong the rounded corners appear. Masks, outlines, highlights, mouseover edges, power bars, enabled class resources, and enabled castbars use the same value."] = "控制圆角的柔和或强烈程度。遮罩、轮廓、高亮、鼠标悬停边缘、能量条、已启用的职业资源和施法条使用同一数值。"
+L["Status icon controls include the Level indicator, visibility, anchor, size, and layer. Position is edited in Preview."] = "状态图标设置包括等级指示、可见性、锚点、大小和层级。位置在预览中编辑。"
+L["Why is this disabled?"] = "为什么此项被禁用？"
+L["This UnitFrame is disabled. Turn on its Enable toggle in Frame Basics first."] = "此单位框体已禁用。请先在 Frame Basics 中打开其启用开关。"
+
+L["GO TO SETTINGS"] = "前往设置"
+L["Search is paused in combat."] = "战斗中搜索已暂停。"
+L["Move and place MSUF frames on screen. Opens MSUF Edit Mode for this frame."] = "在屏幕上移动和放置 MSUF 框体。为此框体打开 MSUF 编辑模式。"
 
 --- Arena frames (dedicated arena1-3 unit frames)
 L["Arena"] = "竞技场"
