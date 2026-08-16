@@ -16,12 +16,16 @@ local function CastbarUnit(unit)
   if type(unit) == "string" and unit:match("^boss%d+$") then
     return "boss"
   end
+  if type(unit) == "string" and unit:match("^arena%d+$") then
+    return "arena"
+  end
   return unit
 end
 
 local function IsCastbarUnit(unit)
   unit = CastbarUnit(unit)
   return unit == "player" or unit == "target" or unit == "focus" or unit == "boss"
+    or unit == "arena"
 end
 
 local function HideFrame(frame)
@@ -72,6 +76,9 @@ local function QueueCastbarRefresh(unit)
     if not refreshed and (not unit or unit == "boss") and type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
       _G.MSUF_UpdateBossCastbarPreview()
     end
+    if not refreshed and (not unit or unit == "arena") and type(_G.MSUF_UpdateArenaCastbarPreview) == "function" then
+      _G.MSUF_UpdateArenaCastbarPreview()
+    end
   end, "_msufCastbarRefreshQueued_" .. tostring(unit or "all"))
 end
 
@@ -94,6 +101,11 @@ local function HideMSUFCastbar(unit)
     for i = 1, 10 do
       HideFrame(_G["MSUF_boss" .. i .. "CastBar"])
       HideFrame(_G["MSUF_Boss" .. i .. "CastBar"])
+    end
+  elseif unit == "arena" then
+    for i = 1, 3 do
+      HideFrame(_G["MSUF_arena" .. i .. "CastBar"])
+      HideFrame(_G["MSUF_Arena" .. i .. "CastBar"])
     end
   end
 end

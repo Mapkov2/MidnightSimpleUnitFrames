@@ -62,11 +62,39 @@ if type(IsBossUnitToken) ~= "function" then
 end
 ExportPublic("MSUF_IsBossUnitToken", IsBossUnitToken)
 
+local GetArenaIndexFromToken = _G.MSUF_GetArenaIndexFromToken
+if type(GetArenaIndexFromToken) ~= "function" then
+    function GetArenaIndexFromToken(u)
+    if type(u) ~= "string" then
+        return nil
+    end
+    --- Fast prefix check; rejects "arenapet1" via the strict numeric tail.
+    if string_sub(u, 1, 5) ~= "arena" then
+        return nil
+    end
+    local n = tonumber(string_sub(u, 6))
+    if n and n >= 1 then
+        return n
+    end
+    return nil
+end
+end
+ExportPublic("MSUF_GetArenaIndexFromToken", GetArenaIndexFromToken)
+
+local IsArenaUnitToken = _G.MSUF_IsArenaUnitToken
+if type(IsArenaUnitToken) ~= "function" then
+    function IsArenaUnitToken(u)
+    return GetArenaIndexFromToken(u) ~= nil
+    end
+end
+ExportPublic("MSUF_IsArenaUnitToken", IsArenaUnitToken)
+
 local MSUF_POWER_BAR_SHOW_KEYS = {
     player = "showPlayerPowerBar",
     target = "showTargetPowerBar",
     focus  = "showFocusPowerBar",
     boss   = "showBossPowerBar",
+    arena  = "showArenaPowerBar",
 }
 local MSUF_POWER_BAR_DEFAULTS = {
     player = true,
@@ -76,6 +104,7 @@ local MSUF_POWER_BAR_DEFAULTS = {
     focustarget = false,
     pet = true,
     boss = true,
+    arena = true,
 }
 local MSUF_POWER_BAR_UNIT_KEYS = {
     player = true,
@@ -85,6 +114,7 @@ local MSUF_POWER_BAR_UNIT_KEYS = {
     focustarget = true,
     pet = true,
     boss = true,
+    arena = true,
 }
 
 local CanonPowerBarUnitKey = _G.MSUF_CanonPowerBarUnitKey
@@ -98,6 +128,8 @@ if type(CanonPowerBarUnitKey) ~= "function" then
         unitKey = "focustarget"
     elseif GetBossIndexFromToken(unitKey) then
         unitKey = "boss"
+    elseif GetArenaIndexFromToken(unitKey) then
+        unitKey = "arena"
     end
     if MSUF_POWER_BAR_UNIT_KEYS[unitKey] then return unitKey end
     return nil
@@ -540,6 +572,7 @@ local function MSUF_GetCastbarTimeFormatDBKey(unit)
     if unit == "target" then return "castbarTargetTimeFormat" end
     if unit == "focus" then return "castbarFocusTimeFormat" end
     if unit == "boss" or unit:match("^boss%d+$") then return "bossCastTimeFormat" end
+    if unit == "arena" or unit:match("^arena%d+$") then return "arenaCastTimeFormat" end
     return nil
 end
 

@@ -32,6 +32,7 @@ local CASTBAR_KEYS = {
     target = "enableTargetCastbar",
     focus = "enableFocusCastbar",
     boss = "enableBossCastbar",
+    arena = "enableArenaCastbar",
 }
 
 local UNIT_KEYS = {
@@ -42,6 +43,7 @@ local UNIT_KEYS = {
     focus = "focus",
     focustarget = "focustarget",
     boss = "boss",
+    arena = "arena",
 }
 
 local function General()
@@ -52,6 +54,9 @@ end
 local function UnitGroup(unit)
     if type(unit) == "string" and unit:match("^boss%d*$") then
         return "boss"
+    end
+    if type(unit) == "string" and unit:match("^arena%d*$") then
+        return "arena"
     end
     if unit == "targetoftarget" or unit == "tot" then
         return "targettarget"
@@ -87,6 +92,9 @@ end
 local function CastbarUnit(unit)
     if type(unit) == "string" and unit:match("^boss%d*$") then
         return "boss"
+    end
+    if type(unit) == "string" and unit:match("^arena%d*$") then
+        return "arena"
     end
     return unit
 end
@@ -417,6 +425,31 @@ local function DisableBlizzardFrames()
         HandleFrame(_G.BossTargetFrameContainer, nil, "boss")
         for i = 1, MAX_BOSS_FRAMES do
             HandleFrame(_G["Boss" .. i .. "TargetFrame"], true, "boss")
+        end
+    end
+
+    --- CompactArenaFrame is a secure CompactUnitFrame system parented to
+    --- UIParent (never to CompactRaidFrameContainer), so the group adapter's
+    --- container hide cannot reach it. Suppress it with the hidden-parent +
+    --- SetParent-hook technique only: its RefreshMembers/UpdateShownState
+    --- re-show loop uses SetShown, which cannot undo a hidden parent. Do NOT
+    --- unregister events or touch its secure member unit buttons - the same
+    --- taint policy the Compact party/raid adapter documents. Restore is
+    --- /reload-only, matching every other Compact-frame ownership decision.
+    if ShouldHideBlizzardUnitFrame("arena") then
+        local arenaFrame = _G.CompactArenaFrame
+        if arenaFrame and arenaFrame.SetParent then
+            Hide(arenaFrame)
+            if InCombatLockdown and InCombatLockdown() and arenaFrame.IsProtected and arenaFrame:IsProtected() then
+                looseFrames[arenaFrame] = true
+                EnsureWatcher():RegisterEvent("PLAYER_REGEN_ENABLED")
+            else
+                arenaFrame:SetParent(HiddenParent())
+            end
+            if not hookedFrames[arenaFrame] then
+                hooksecurefunc(arenaFrame, "SetParent", ResetParent)
+                hookedFrames[arenaFrame] = true
+            end
         end
     end
 

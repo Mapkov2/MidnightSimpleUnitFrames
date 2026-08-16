@@ -69,8 +69,9 @@ local MSUF_RESET_DEFAULTS = {
     targettarget = { width=220, height=30, offsetX=260, offsetY=225, showName=true, showHP=true, showPower=false },
     focustarget = { width=180, height=30, offsetX=260, offsetY=180, showName=true, showHP=true, showPower=false },
     boss   = { width=180, height=30, offsetX=360, offsetY=230, spacing=-96, bossLayoutMode="VERTICAL_DOWN", showName=true, showHP=true, showPower=false },
+    arena  = { width=180, height=30, offsetX=360, offsetY=-40, spacing=-96, bossLayoutMode="VERTICAL_DOWN", showName=true, showHP=true, showPower=true },
 }
-local MSUF_RESET_ANCHOR_UNITS = { "player", "target", "focus", "focustarget", "pet", "targettarget", "boss" }
+local MSUF_RESET_ANCHOR_UNITS = { "player", "target", "focus", "focustarget", "pet", "targettarget", "boss", "arena" }
 local MSUF_FullResetPending = false
 local function MSUF_ResetPositionAnchorsToScreen()
     if type(MSUF_DB) ~= "table" then return end
