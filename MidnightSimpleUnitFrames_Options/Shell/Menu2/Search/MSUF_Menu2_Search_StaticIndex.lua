@@ -102,17 +102,30 @@ local function Decode()
         if pageKey and pageKey ~= "" then
             local page = EnsurePage(pageKey)
             local displayLabel = Translate(label)
-            -- The baked text is English. A localized label is added on top instead of
-            -- replacing it, so a player can find a setting by either wording.
+            -- The baked text is English. The localized label becomes the
+            -- primary scoring label and the English wording stays scorable as
+            -- labelNormAlt, so community terminology (Wago/Discord guides)
+            -- keeps its full label bonuses on localized clients.
+            local labelNormAlt
             if displayLabel ~= label then
                 local localizedNorm = Normalize(displayLabel)
                 if localizedNorm ~= "" and localizedNorm ~= labelNorm then
+                    labelNormAlt = labelNorm
                     labelNorm = localizedNorm
                     haystack = haystack .. " " .. localizedNorm
                 end
             end
             local displayHint = hint
             if displayHint ~= "" then
+                -- Best-effort per-segment translation of the baked English
+                -- section path ("Buff > Filters"), so breadcrumbs stop reading
+                -- half localized, half English.
+                local translated = {}
+                for segment in displayHint:gmatch("[^>]+") do
+                    segment = segment:gsub("^%s+", ""):gsub("%s+$", "")
+                    if segment ~= "" then translated[#translated + 1] = Translate(segment) end
+                end
+                if #translated > 0 then displayHint = table.concat(translated, " > ") end
                 displayHint = page.title .. " > " .. displayHint
             else
                 displayHint = page.title
@@ -132,6 +145,7 @@ local function Decode()
                 title = page.title,
                 group = page.group,
                 labelNorm = labelNorm,
+                labelNormAlt = labelNormAlt,
                 searchIdentity = searchIdentity,
                 titleNorm = page.titleNorm,
                 groupNorm = page.groupNorm,
@@ -152,8 +166,9 @@ local function Decode()
         end
     end
 
-    -- The decoded records own their own substrings now, so the source blob can go.
-    Search.StaticIndexBlob = nil
+    -- The blob is deliberately retained: a menu-language change without a
+    -- reload rebuilds the decoded records from it (see GetRecords), which was
+    -- impossible while the blob was released after the first decode.
     return records
 end
 
@@ -174,13 +189,18 @@ local function CombatLocked()
 end
 
 --- Returns the decoded static records, building them on first use.
---- Menu language changes force a reload (see M.SetMenuLocale), so the decoded set
---- cannot go stale within a session and is built exactly once.
+--- A menu-language change without a reload ("Not now" on the reload prompt)
+--- invalidates the decoded set: the locale key is compared on every call and
+--- a mismatch re-decodes from the retained blob, so labels can never stay in
+--- the previous session language.
 ---
---- The first decode is the only non-trivial cost this module has, so it never runs
+--- The decode is the only non-trivial cost this module has, so it never runs
 --- in combat. Callers are already gated; this is the backstop that keeps a stray
 --- entry point from spending it at the worst possible moment.
 function StaticIndex.GetRecords()
+    if state.records and state.localeKey ~= LocaleKey() then
+        state.records = nil
+    end
     if not state.records then
         if CombatLocked() then return EMPTY end
         state.records = Decode()
@@ -195,6 +215,6 @@ function StaticIndex.IsDecoded()
 end
 
 function StaticIndex.ClearCache()
-    if type(Search.StaticIndexBlob) == "string" then state.records = nil end
+    state.records = nil
     state.localeKey = nil
 end

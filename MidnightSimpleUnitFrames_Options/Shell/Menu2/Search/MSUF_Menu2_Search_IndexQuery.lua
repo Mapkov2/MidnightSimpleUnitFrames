@@ -82,6 +82,11 @@ local function SearchCombatLocked()
     return (_G.InCombatLockdown and _G.InCombatLockdown())
         or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
 end
+--- The palette's empty state must be able to say "paused in combat" instead of
+--- the misleading "no exact setting found" while search is combat-gated.
+function M.SearchIsCombatLocked()
+    return SearchCombatLocked() and true or false
+end
 
 local function CancelSearchBackgroundIndex()
     SEARCH_STATE.indexing = false
@@ -430,14 +435,18 @@ end
 
 local function SearchClauseScore(rec, clause, fuzzyDistanceCache)
     local haystack = rec.haystack or ""
+    -- labelNormAlt carries the English label on localized clients, so community
+    -- terminology (Wago/Discord guides) earns full label bonuses there too.
+    local labelAlt = rec.labelNormAlt
     local best = 0
     for i = 1, #clause.terms do
         local term = clause.terms[i]
         local score = 0
         if haystack:find(term, 1, true) then
-            if rec.labelNorm == term or rec.titleNorm == term then score = score + 180 end
-            if rec.labelNorm:find(term, 1, true) == 1 or rec.titleNorm:find(term, 1, true) == 1 then score = score + 90 end
-            if rec.labelNorm:find(term, 1, true) then score = score + 70 end
+            if rec.labelNorm == term or (labelAlt and labelAlt == term) or rec.titleNorm == term then score = score + 180 end
+            if rec.labelNorm:find(term, 1, true) == 1 or (labelAlt and labelAlt:find(term, 1, true) == 1)
+                or rec.titleNorm:find(term, 1, true) == 1 then score = score + 90 end
+            if rec.labelNorm:find(term, 1, true) or (labelAlt and labelAlt:find(term, 1, true)) then score = score + 70 end
             if rec.titleNorm:find(term, 1, true) then score = score + 55 end
             if rec.hintNorm and rec.hintNorm:find(term, 1, true) then score = score + 45 end
             if rec.groupNorm:find(term, 1, true) then score = score + 35 end
@@ -618,8 +627,10 @@ local function SearchResultSpecificityBoost(rec, clauses)
     if clauseCount == 0 then return 0 end
 
     local label = rec.labelNorm or ""
+    local labelAlt = rec.labelNormAlt or ""
     local title = rec.titleNorm or ""
     local direct = 0
+    local labelAny = false
     for i = 1, clauseCount do
         local clause = clauses[i]
         local terms = clause and clause.terms
@@ -627,9 +638,16 @@ local function SearchResultSpecificityBoost(rec, clauses)
         if type(terms) == "table" then
             for k = 1, #terms do
                 local term = terms[k]
-                if term and term ~= "" and (label:find(term, 1, true) or title:find(term, 1, true)) then
-                    matched = true
-                    break
+                if term and term ~= "" then
+                    if label:find(term, 1, true) or (labelAlt ~= "" and labelAlt:find(term, 1, true)) then
+                        matched = true
+                        labelAny = true
+                        break
+                    end
+                    if title:find(term, 1, true) then
+                        matched = true
+                        break
+                    end
                 end
             end
         end
@@ -648,9 +666,12 @@ local function SearchResultSpecificityBoost(rec, clauses)
             boost = boost + 90
         elseif rec.kind == "faq" then
             boost = boost + 100
-        else
+        elseif labelAny then
             boost = boost + 260
         end
+        -- Control records whose only "direct" hits are page-title words get no
+        -- specificity bonus: the user typed a page name, so the page record
+        -- must stay on top instead of an arbitrary control from that page.
     end
     return boost
 end
@@ -904,6 +925,35 @@ function M.UnregisterSearchWidget(widget)
     return true
 end
 
+--- Auto-tooltip gate: only hand-written help that adds information beyond the
+--- label is worth a hover tooltip. "Enables the bar outline" on a control that
+--- is already labelled "Bar outline" is noise and stays silent.
+local HELP_TOOLTIP_KINDS = {
+    toggle = true, slider = true, dropdown = true, select = true,
+    textinput = true, color = true, button = true,
+}
+local HELP_TOOLTIP_STOP = {}
+for word in ([[the a an this that these those of for to in on with and or is are be it its
+enable enables enabled disable disables disabled set sets setting settings change changes
+choose chooses select selects selected toggle toggles show shows hide hides use uses used
+turn turns adjust adjusts control controls option options value values when if]]):gmatch("%S+") do
+    HELP_TOOLTIP_STOP[word] = true
+end
+local function HelpTooltipAddsInformation(help, label)
+    help = tostring(help or "")
+    if #help < 20 then return false end
+    local labelTokens = {}
+    for token in tostring(label or ""):lower():gmatch("%w+") do labelTokens[token] = true end
+    local informative = 0
+    for token in help:lower():gmatch("%w+") do
+        if not labelTokens[token] and not HELP_TOOLTIP_STOP[token] then
+            informative = informative + 1
+            if informative >= 2 then return true end
+        end
+    end
+    return false
+end
+
 function M.RegisterSearchWidget(widget, meta)
     if not widget or type(meta) ~= "table" then return end
     if widget._msuf2ControlPartOf ~= nil then
@@ -944,6 +994,22 @@ function M.RegisterSearchWidget(widget, meta)
     -- Sending them early created fallback IDs that were promoted moments later.
     if catalogInteractive then
         catalogId = RegisterSearchRuntimeControl(widget, meta, pageKey, kind, label, rawLabel, help, command)
+    end
+
+    --- Help written for search/assistant becomes a hover tooltip automatically:
+    --- nothing is ever generated, chrome (ephemeral/navigation) stays silent,
+    --- and a manual AddTooltip always wins - AddTooltip stamps the widget, so
+    --- this only fires for controls nothing else has claimed.
+    if help and help ~= "" and type(M.AddTooltip) == "function"
+        and widget._msuf2TooltipWired == nil
+        and meta.helpTooltip ~= false
+        and HELP_TOOLTIP_KINDS[kind]
+        and catalogClass ~= "ephemeral" and catalogClass ~= "navigation"
+        and not meta.ephemeral
+        and HelpTooltipAddsInformation(help, label)
+    then
+        widget._msuf2TooltipWired = "auto"
+        M.AddTooltip(widget, rawLabel or label, help, { hook = true, labelHit = true })
     end
 
     local id = widget._msuf2SearchRegistryId
@@ -1055,6 +1121,9 @@ local function AddSearchRecord(records, seenRecords, pageInfo, label, anchor, ki
         AddSearchText(parts, pageInfo.group)
         AddSearchText(parts, pageInfo.title)
     end
+    -- Localized clients search in both wordings: the translated label they see
+    -- and the English label the community writes guides with.
+    if displayLabel ~= label then AddSearchText(parts, displayLabel) end
     if kind == "page" then
         AddRawSearchText(parts, SEARCH_KEYWORDS[pageInfo.key])
     end
@@ -1119,6 +1188,7 @@ local function AddSearchRecord(records, seenRecords, pageInfo, label, anchor, ki
         kind = kind,
         anchor = anchor,
         labelNorm = labelNorm,
+        labelNormAlt = displayLabel ~= label and idLabelNorm or nil,
         groupNorm = groupNorm,
         titleNorm = titleNorm,
         hintNorm = hintNorm,

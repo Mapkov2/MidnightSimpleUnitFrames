@@ -326,7 +326,17 @@ local function CreatePaletteController(parent, searchBox)
         palette:SetHeight(HEADER_H + contentRows * ROW_H + FOOTER_H + PANEL_PAD * 2)
         self.status:SetShown(visible == 0)
         if visible == 0 then
-            self.status:SetText(pending and Tr("Searching settings...") or Tr("No exact setting found."))
+            local emptyText
+            if pending then
+                emptyText = Tr("Searching settings...")
+            elseif type(M.SearchIsCombatLocked) == "function" and M.SearchIsCombatLocked() then
+                -- Combat gates the whole search surface; claiming "not found"
+                -- here would tell the user their setting does not exist.
+                emptyText = Tr("Search is paused in combat.")
+            else
+                emptyText = Tr("No exact setting found.")
+            end
+            self.status:SetText(emptyText)
         end
 
         local bridge = SearchBridge()
