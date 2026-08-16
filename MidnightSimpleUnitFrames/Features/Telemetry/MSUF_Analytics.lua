@@ -247,6 +247,7 @@ local function CollectSessionSnapshot(target)
     UnitSwitch("UF_Focus", "focus")
     UnitSwitch("UF_Pet", "pet")
     UnitSwitch("UF_Boss", "boss")
+    UnitSwitch("UF_Arena", "arena")
     ApplyCounter(target, "UF_EnabledCount", unitCount)
 
     ApplyCounter(target, "Player_Width", Round(db.player and db.player.width))
@@ -265,6 +266,7 @@ local function CollectSessionSnapshot(target)
     CastbarSwitch("Castbar_Target", general.enableTargetCastbar)
     CastbarSwitch("Castbar_Focus", general.enableFocusCastbar)
     CastbarSwitch("Castbar_Boss", general.enableBossCastbar)
+    CastbarSwitch("Castbar_Arena", general.enableArenaCastbar)
     ApplyCounter(target, "Castbar_EnabledCount", castbarCount)
 
     local groupCount = 0

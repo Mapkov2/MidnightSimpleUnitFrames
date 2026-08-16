@@ -127,6 +127,7 @@ local function ConfForUnitKey(unitKey)
   local db = _G.MSUF_DB
   if not db or type(unitKey) ~= "string" then return nil end
   if unitKey:match("^boss%d+$") then unitKey = "boss" end
+  if unitKey:match("^arena%d+$") then unitKey = "arena" end
   local conf = db[unitKey]
   return type(conf) == "table" and conf or nil
 end
@@ -185,6 +186,7 @@ local function ResolveClassRGB(unitKey)
   local UnitClass = _G.UnitClass
   if type(UnitClass) ~= "function" then return nil end
   local unit = unitKey == "boss" and "boss1" or unitKey
+  if unit == "arena" then unit = "arena1" end
   local exists = _G.UnitExists
   if type(exists) == "function" and exists(unit) ~= true then return nil end
   local _, token = UnitClass(unit)
@@ -216,6 +218,7 @@ local wantFocusEvents = false
 local wantUnitTargetTarget = false
 local wantUnitTargetFocus = false
 local wantBossEvents = false
+local wantArenaEvents = false
 local RefreshUnitTextureLayers
 local RefreshDynamicTextureLayers
 local ApplyHealthStateFrame
@@ -231,6 +234,8 @@ local DYNAMIC_MASK_FIELDS = {
   "_msufTexLayerUnitTargetFocusColorMask",
   "_msufTexLayerBossMask",
   "_msufTexLayerBossColorMask",
+  "_msufTexLayerArenaMask",
+  "_msufTexLayerArenaColorMask",
 }
 local dynamicFrameLists, dynamicFrameCounts = {}, {}
 for i = 1, #DYNAMIC_MASK_FIELDS do
@@ -256,6 +261,8 @@ local function DriverOnEvent(_, event, unit)
     end
   elseif event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" then
     RefreshDynamicTextureLayers("_msufTexLayerBossMask", "_msufTexLayerBossColorMask")
+  elseif event == "ARENA_OPPONENT_UPDATE" then
+    RefreshDynamicTextureLayers("_msufTexLayerArenaMask", "_msufTexLayerArenaColorMask")
   end
 end
 
@@ -298,6 +305,7 @@ local function SyncDriverEvents()
   SetDriverEvent("PLAYER_FOCUS_CHANGED", wantFocusEvents)
   SetDriverUnitEvent("UNIT_TARGET", wantUnitTargetTarget, wantUnitTargetFocus)
   SetDriverEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT", wantBossEvents)
+  SetDriverEvent("ARENA_OPPONENT_UPDATE", wantArenaEvents)
 end
 
 local function AddMaskBit(mask, bit)
@@ -312,8 +320,10 @@ local function CompileDynamicMasks(frame, unitKey, conf)
   local unitTargetTargetMask, unitTargetFocusMask, bossMask = 0, 0, 0
   local targetColorMask, focusColorMask = 0, 0
   local unitTargetTargetColorMask, unitTargetFocusColorMask, bossColorMask = 0, 0, 0
+  local arenaMask, arenaColorMask = 0, 0
   local healthMask, healthColorMask, healthDirectGradientMask = 0, 0, 0
   local bossUnit = unitKey:match("^boss") ~= nil
+  local arenaUnit = unitKey:match("^arena") ~= nil
   for slot = 1, #SLOT_KEYS do
     local keys = SLOT_KEYS[slot]
     if conf[keys.Enabled] == true then
@@ -379,6 +389,13 @@ local function CompileDynamicMasks(frame, unitKey, conf)
           bossColorMask = AddMaskBit(bossColorMask, bit)
         end
       end
+      if arenaUnit and (targetOnly or classColor) then
+        if targetOnly then
+          arenaMask = AddMaskBit(arenaMask, bit)
+        else
+          arenaColorMask = AddMaskBit(arenaColorMask, bit)
+        end
+      end
     end
   end
   frame._msufTexLayerRegenMask = regenMask > 0 and regenMask or nil
@@ -394,6 +411,8 @@ local function CompileDynamicMasks(frame, unitKey, conf)
     and unitTargetFocusColorMask or nil
   frame._msufTexLayerBossMask = bossMask > 0 and bossMask or nil
   frame._msufTexLayerBossColorMask = bossColorMask > 0 and bossColorMask or nil
+  frame._msufTexLayerArenaMask = arenaMask > 0 and arenaMask or nil
+  frame._msufTexLayerArenaColorMask = arenaColorMask > 0 and arenaColorMask or nil
   frame._msufTexLayerHealthMask = healthMask > 0 and healthMask or nil
   frame._msufTexLayerHealthColorMask = healthColorMask > 0 and healthColorMask or nil
   frame._msufTexLayerHealthDirectGradientMask = healthDirectGradientMask > 0 and healthDirectGradientMask or nil
@@ -413,6 +432,17 @@ local function CompileDynamicMasks(frame, unitKey, conf)
       if conf[keys.Enabled] == true and (colorMode == "CLASS"
           or (colorMode == "HEALTH" and conf[keys.HealthAboveMode] == "CLASS")) then
         wantBossEvents = true
+        break
+      end
+    end
+  end
+  if arenaUnit then
+    for slot = 1, #SLOT_KEYS do
+      local keys = SLOT_KEYS[slot]
+      local colorMode = conf[keys.ColorMode]
+      if conf[keys.Enabled] == true and (colorMode == "CLASS"
+          or (colorMode == "HEALTH" and conf[keys.HealthAboveMode] == "CLASS")) then
+        wantArenaEvents = true
         break
       end
     end
@@ -1125,6 +1155,7 @@ local function FrameMatchesUnitScope(frame, unit)
   if not unitKey then return false end
   if unitKey == unit then return true end
   if unit == "boss" and unitKey:match("^boss%d+$") then return true end
+  if unit == "arena" and unitKey:match("^arena%d+$") then return true end
   local UF = MSUF and MSUF.UF
   local units = UF and type(UF.UnitsForConfigKey) == "function" and UF.UnitsForConfigKey(unit) or nil
   for i = 1, #(units or {}) do
@@ -1135,6 +1166,7 @@ end
 
 local function RecomputeDriverNeeds(frames)
   wantRegenEvents, wantTargetEvents, wantFocusEvents, wantUnitTargetTarget, wantUnitTargetFocus, wantBossEvents = false, false, false, false, false, false
+  wantArenaEvents = false
   for i = 1, #DYNAMIC_MASK_FIELDS do
     local field = DYNAMIC_MASK_FIELDS[i]
     local list = dynamicFrameLists[field]

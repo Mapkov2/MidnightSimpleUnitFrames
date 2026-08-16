@@ -799,8 +799,22 @@ local function BossPreviewClassToken(unit, frame)
   return nil
 end
 
+--- Arena previews seed a class identity into the synthetic unit state; use it
+--- so class portraits render for opponents that do not exist yet.
+local function ArenaPreviewClassToken(unit, frame)
+  if type(unit) ~= "string" or not unit:match("^arena[1-3]$") then
+    return nil
+  end
+  if frame and frame._msufArenaPreviewForced == true then
+    local state = frame._msufUnitState
+    local token = type(state) == "table" and state.classToken or nil
+    if type(token) == "string" and token ~= "" then return token end
+  end
+  return nil
+end
+
 ApplyClassPortrait = function(texture, unit, p, class, frame, force)
-  class = class or BossPreviewClassToken(unit, frame) or UnitClassToken(unit)
+  class = class or BossPreviewClassToken(unit, frame) or ArenaPreviewClassToken(unit, frame) or UnitClassToken(unit)
   local frameUnit = frame and frame.MSUFUnitKey
   local classStyle = p and p.classStyle or "BLIZZARD"
   if texture

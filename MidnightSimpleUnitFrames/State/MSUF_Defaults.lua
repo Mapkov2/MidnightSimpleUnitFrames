@@ -163,7 +163,7 @@ local function MSUF_Defaults_NormalizePortraitRenderDB(db)
     if g and g.portraitClassStyle ~= nil then
         g.portraitClassStyle = MSUF_Defaults_NormalizePortraitClassStyleValue(g.portraitClassStyle)
     end
-    for _, unitKey in ipairs({ "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "boss" }) do
+    for _, unitKey in ipairs({ "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "boss", "arena" }) do
         local u = db[unitKey]
         if type(u) == "table" and u.portraitRender ~= nil then
             u.portraitRender = MSUF_Defaults_NormalizePortraitRenderValue(u.portraitRender)
@@ -175,7 +175,7 @@ local function MSUF_Defaults_NormalizePortraitRenderDB(db)
 end
 ExportPublic("MSUF_NormalizePortraitRenderDB", MSUF_Defaults_NormalizePortraitRenderDB)
 
-local MSUF_DEFAULTS_TEXT_SCOPE_KEYS = { "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "boss" }
+local MSUF_DEFAULTS_TEXT_SCOPE_KEYS = { "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "boss", "arena" }
 local MSUF_DEFAULTS_GROUP_SCOPE_KEYS = { "gf_party", "gf_raid", "gf_mythicraid" }
 local MSUF_DEFAULTS_STATUS_PREFIXES = {
     "leaderIcon", "raidMarker", "levelIndicator", "eliteIcon", "statusText",
@@ -300,6 +300,7 @@ local function MSUF_Defaults_A2AuraFrameKey(unit)
     if unit == "tot" or unit == "targetoftarget" then return "targettarget" end
     if unit == "focus_target" or unit == "focustargettarget" then return "focustarget" end
     if type(unit) == "string" and unit:match("^boss%d+$") then return "boss" end
+    if type(unit) == "string" and unit:match("^arena%d+$") then return "arena" end
     return unit
 end
 
@@ -761,6 +762,8 @@ ExportPublic("MSUF_NormalizeProfileTo60Defaults", MSUF_Defaults_NormalizeProfile
 
 local MSUF_DEFAULT_BOSS_OFFSET_X = 360
 local MSUF_DEFAULT_BOSS_OFFSET_Y = 230
+local MSUF_DEFAULT_ARENA_OFFSET_X = 360
+local MSUF_DEFAULT_ARENA_OFFSET_Y = -40
 
 --- Default position offsets per unit, mirrored from the fill() defaults below.
 --- Exposed so Edit Mode popups can offer a "Reset position" action that only
@@ -773,6 +776,7 @@ local MSUF_DEFAULT_UNIT_OFFSETS = {
     focustarget  = { 260, 180 },
     pet          = { -275, -250 },
     boss         = { MSUF_DEFAULT_BOSS_OFFSET_X, MSUF_DEFAULT_BOSS_OFFSET_Y },
+    arena        = { MSUF_DEFAULT_ARENA_OFFSET_X, MSUF_DEFAULT_ARENA_OFFSET_Y },
 }
 local function MSUF_GetDefaultUnitOffsets(unit)
     local o = unit and MSUF_DEFAULT_UNIT_OFFSETS[unit]
@@ -891,7 +895,7 @@ local function MSUF_Defaults_ApplyPredictionBarBaseline(db)
     db.general.showSelfHealPrediction = true
 
     for _, key in ipairs({
-        "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "boss",
+        "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "boss", "arena",
     }) do
         Apply(db[key])
     end
@@ -1039,7 +1043,7 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     db.bars.chunkedPowerBar = false
     db.bars.classPowerSmoothFill = false
     db.bars.altManaSmoothFill = false
-    for _, key in ipairs({ "player", "target", "targettarget", "focustarget", "focus", "pet", "boss" }) do
+    for _, key in ipairs({ "player", "target", "targettarget", "focustarget", "focus", "pet", "boss", "arena" }) do
         if type(db[key]) == "table" then
             db[key].smoothFill = false
             db[key].chunkedFill = false
@@ -1184,6 +1188,7 @@ end
 -- afterwards cannot alter a Unit lane.
 local MSUF_DEFAULTS_UNIT_AURA_RUNTIME_UNITS = {
     "player", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5",
+    "arena1", "arena2", "arena3",
 }
 local MSUF_DEFAULTS_UNIT_AURA_LANES = {
     buff = {
@@ -1446,6 +1451,7 @@ local function MSUF_Defaults_CreateCanonicalUnitAuras()
         showTarget = true,
         showFocus = false,
         showBoss = true,
+        showArena = true,
         customDisplays = {
             serial = 0,
             shared = { items = {} },
@@ -1462,6 +1468,7 @@ local function MSUF_Defaults_CreateCanonicalUnitAuras()
         },
         shared = {
             bossEditTogether = true,
+            arenaEditTogether = true,
             hideBlizzardBuffFrame = false,
             hideBlizzardDebuffFrame = false,
             buffGroupOffsetX = 0,
@@ -1597,6 +1604,26 @@ local function MSUF_Defaults_CreateCanonicalUnitAuras()
             filters = Filters(),
         }
     end
+    --- Arena per-unit defaults (1-3): debuffs matter most on enemy players,
+    --- keep the compact boss-style lane geometry.
+    for i = 1, 3 do
+        local key = "arena" .. i
+        auras.perUnit[key] = {
+            overrideLayout = true,
+            overrideFilters = false,
+            layout = {
+                buffGroupOffsetX = -1,
+                buffGroupOffsetY = -3,
+                debuffGroupOffsetX = 234,
+                debuffGroupOffsetY = -45,
+                buffGroupIconSize = 26,
+                debuffGroupIconSize = 26,
+                buffSpacing = 2,
+                debuffSpacing = 2,
+            },
+            filters = Filters(),
+        }
+    end
     MSUF_Defaults_MaterializeUnitAuraLaneOwners(auras)
     return auras
 end
@@ -1658,6 +1685,10 @@ local function MSUF_Defaults_CreateFactoryUnitAuras()
         maxBuffs = 3, maxDebuffs = 4 })
     for i = 1, 5 do
         SetScope("boss" .. i, { buffX = -1, buffY = 28, debuffX = 131, debuffY = -2,
+            maxBuffs = 3, maxDebuffs = 4 })
+    end
+    for i = 1, 3 do
+        SetScope("arena" .. i, { buffX = -1, buffY = 28, debuffX = 131, debuffY = -2,
             maxBuffs = 3, maxDebuffs = 4 })
     end
 
@@ -2006,7 +2037,7 @@ local MSUF_DEFAULTS_CURRENT_PROFILE_SCHEMA = 600
 --- Persisted completion marker for the broad default-fill/repair pass below.
 --- Bump this whenever MSUF_EnsureDB_Heavy gains a new mandatory default or
 --- one-shot repair; current profiles can then be repaired exactly once again.
-local MSUF_DEFAULTS_CURRENT_REVISION = 13
+local MSUF_DEFAULTS_CURRENT_REVISION = 14
 local MSUF_DEFAULTS_NAVIGATION_ICONS_REVISION = 7
 local MSUF_DEFAULTS_CLASS_POWER_PREVIEW_GUIDES_REVISION = 9
 local MSUF_DEFAULTS_PLAYER_DEFENSIVE_SHAPE_REVISION = 10
@@ -2027,6 +2058,7 @@ local MSUF_DEFAULTS_ROOT_TABLE_KEYS = {
     "focus",
     "pet",
     "boss",
+    "arena",
 }
 local function MSUF_Defaults_EnsureRootTables()
     for _, key in ipairs(MSUF_DEFAULTS_ROOT_TABLE_KEYS) do
@@ -2238,7 +2270,7 @@ local function MSUF_Defaults_MigrateDispelPriorityProfile(db, force)
         return false
     end
     MSUF_Defaults_MigratePriorityScope(db.general, true)
-    for _, key in ipairs({ "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "boss" }) do
+    for _, key in ipairs({ "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "boss", "arena" }) do
         MSUF_Defaults_MigratePriorityScope(db[key], false)
     end
     for _, key in ipairs({ "gf_party", "gf_raid", "gf_mythicraid" }) do
@@ -2349,7 +2381,7 @@ end
 
 local function MSUF_Defaults_ClearScopedFontKeys()
     for _, key in ipairs({
-        "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "boss",
+        "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "boss", "arena",
         "gf_party", "gf_raid", "gf_mythicraid",
     }) do
         local scope = MSUF_DB and MSUF_DB[key]
@@ -2838,7 +2870,7 @@ end
         end
     end
     NormalizeStaticOutlineColor(g)
-    for _, key in ipairs({ "player", "target", "focus", "boss", "pet", "targettarget", "focustarget", "gf_party", "gf_raid", "gf_mythicraid" }) do
+    for _, key in ipairs({ "player", "target", "focus", "boss", "arena", "pet", "targettarget", "focustarget", "gf_party", "gf_raid", "gf_mythicraid" }) do
         NormalizeStaticOutlineColor(MSUF_DB[key])
     end
     if g.barBorderStyle == nil then
@@ -2904,7 +2936,7 @@ end
     end
     MSUF_Defaults_NormalizeFontShadowScope(g, true)
     for _, key in ipairs({
-        "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "boss",
+        "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "boss", "arena",
         "gf_party", "gf_raid", "gf_mythicraid",
     }) do
         local scope = MSUF_DB[key]
@@ -3161,6 +3193,9 @@ if g.castbarUnifiedFillDirection ~= nil then
     if g.enableBossCastbar == nil then
         g.enableBossCastbar = true
     end
+    if g.enableArenaCastbar == nil then
+        g.enableArenaCastbar = true
+    end
     local function _NormalizeCastbarBackendDefault(value)
         if value == true then return "MSUF" end
         if value == false then return "BLIZZARD" end
@@ -3185,6 +3220,7 @@ if g.castbarUnifiedFillDirection ~= nil then
     _InitCastbarBackend("target", "castbarTargetBackend", "enableTargetCastbar")
     _InitCastbarBackend("focus", "castbarFocusBackend", "enableFocusCastbar")
     _InitCastbarBackend("boss", "bossCastbarBackend", "enableBossCastbar")
+    _InitCastbarBackend("arena", "arenaCastbarBackend", "enableArenaCastbar")
 if g.showPlayerCastTime == nil then
     g.showPlayerCastTime = true
 end
@@ -3196,6 +3232,9 @@ if g.showFocusCastTime == nil then
 end
 if g.showBossCastTime == nil then
     g.showBossCastTime = true
+end
+if g.showArenaCastTime == nil then
+    g.showArenaCastTime = true
 end
 if g.castbarPlayerTimeFormat == nil then
     g.castbarPlayerTimeFormat = "CURRENT"
@@ -3209,6 +3248,9 @@ end
 if g.bossCastTimeFormat == nil then
     g.bossCastTimeFormat = "CURRENT"
 end
+if g.arenaCastTimeFormat == nil then
+    g.arenaCastTimeFormat = "CURRENT"
+end
 if g.bossCastbarOffsetX == nil then
     g.bossCastbarOffsetX = 2
 end
@@ -3220,6 +3262,20 @@ if g.bossCastbarWidth == nil then
 end
 if g.bossCastbarHeight == nil then
     g.bossCastbarHeight = 12
+end
+--- Arena castbars start on the boss physical edge-anchor model directly:
+--- castbar TOP anchors to the frame outline BOTTOM, no legacy conversion.
+if g.arenaCastbarOffsetX == nil then
+    g.arenaCastbarOffsetX = 2
+end
+if g.arenaCastbarOffsetY == nil then
+    g.arenaCastbarOffsetY = 0
+end
+if g.arenaCastbarWidth == nil then
+    g.arenaCastbarWidth = 176
+end
+if g.arenaCastbarHeight == nil then
+    g.arenaCastbarHeight = 12
 end
 -- Attached boss castbars now use a stable edge-to-edge anchor: castbar TOP to
 -- the visible boss outline BOTTOM. Convert the legacy TOP-of-container /
@@ -3376,10 +3432,12 @@ NormalizeCastbarWidthSourceKey("castbarPlayerMatchWidth", "castbarPlayerMatchUni
 NormalizeCastbarWidthSourceKey("castbarTargetMatchWidth", "castbarTargetMatchUnitWidth")
 NormalizeCastbarWidthSourceKey("castbarFocusMatchWidth", "castbarFocusMatchUnitWidth")
 NormalizeCastbarWidthSourceKey("bossCastbarMatchWidth", "castbarBossMatchUnitWidth", "castbarBossMatchWidth")
+NormalizeCastbarWidthSourceKey("arenaCastbarMatchWidth", "castbarArenaMatchUnitWidth", "castbarArenaMatchWidth")
 --- Interrupt Ready Indicator
 if g.kickReadyShowTarget == nil then g.kickReadyShowTarget = false end
 if g.kickReadyShowFocus  == nil then g.kickReadyShowFocus  = false end
 if g.kickReadyShowBoss   == nil then g.kickReadyShowBoss   = false end
+if g.kickReadyShowArena  == nil then g.kickReadyShowArena  = false end
 if g.kickReadyStyle      == nil then g.kickReadyStyle      = "border" end
 if g.kickReadySize       == nil then g.kickReadySize       = 8 end
 if g.kickReadyAnchor     == nil then g.kickReadyAnchor     = "RIGHT" end
@@ -3397,6 +3455,7 @@ if g.kickNotReadyColor   == nil then g.kickNotReadyColor   = { ["1"] = 1, ["2"] 
     if g.castbarTargetShowTargetName == nil then g.castbarTargetShowTargetName = false end
     if g.castbarFocusShowTargetName == nil then g.castbarFocusShowTargetName = false end
     if g.showBossCastTargetName == nil then g.showBossCastTargetName = false end
+    if g.showArenaCastTargetName == nil then g.showArenaCastTargetName = false end
     local function InitCastTargetTextDefaults(prefix)
         if g[prefix .. "TargetNamePosition"] == nil then g[prefix .. "TargetNamePosition"] = "BELOW" end
         if g[prefix .. "TargetNameFontSize"] == nil then g[prefix .. "TargetNameFontSize"] = 10 end
@@ -3407,6 +3466,7 @@ if g.kickNotReadyColor   == nil then g.kickNotReadyColor   = { ["1"] = 1, ["2"] 
     InitCastTargetTextDefaults("castbarTarget")
     InitCastTargetTextDefaults("castbarFocus")
     InitCastTargetTextDefaults("bossCast")
+    InitCastTargetTextDefaults("arenaCast")
     if g.castbarTargetTextOffsetX == nil then g.castbarTargetTextOffsetX = 0 end
     if g.castbarTargetTextOffsetY == nil then g.castbarTargetTextOffsetY = 0 end
     if g.castbarFocusTextOffsetX == nil then g.castbarFocusTextOffsetX = 0 end
@@ -3464,6 +3524,17 @@ if g.kickNotReadyColor   == nil then g.kickNotReadyColor   = { ["1"] = 1, ["2"] 
     if g.bossCastTimeOffsetX == nil then g.bossCastTimeOffsetX = 0 end
     if g.bossCastTimeOffsetY == nil then g.bossCastTimeOffsetY = 0 end
     InitCastbarDetailDefaults("bossCast")
+    --- Arena castbar UI bits (ArenaCastbars module reads these from general)
+    if g.showArenaCastIcon == nil then g.showArenaCastIcon = true end
+    if g.showArenaCastName == nil then g.showArenaCastName = true end
+    if g.arenaPreviewEnabled == nil then g.arenaPreviewEnabled = true end
+    if g.arenaCastIconOffsetX == nil then g.arenaCastIconOffsetX = 0 end
+    if g.arenaCastIconOffsetY == nil then g.arenaCastIconOffsetY = 0 end
+    if g.arenaCastTextOffsetX == nil then g.arenaCastTextOffsetX = 0 end
+    if g.arenaCastTextOffsetY == nil then g.arenaCastTextOffsetY = 0 end
+    if g.arenaCastTimeOffsetX == nil then g.arenaCastTimeOffsetX = 0 end
+    if g.arenaCastTimeOffsetY == nil then g.arenaCastTimeOffsetY = 0 end
+    InitCastbarDetailDefaults("arenaCast")
     --- Focus Kick Icon defaults
     if g.enableFocusKickIcon == nil then g.enableFocusKickIcon = false end
     if g.focusKickIconWidth == nil then g.focusKickIconWidth = 40 end
@@ -3613,7 +3684,7 @@ if g.kickNotReadyColor   == nil then g.kickNotReadyColor   = { ["1"] = 1, ["2"] 
     end
 
     g.powerTextMode = _MSUF_MigratePowerMode(g.powerTextMode)
-    for _, unitKey in ipairs({"player","target","focus","targettarget","focustarget","pet","boss"}) do
+    for _, unitKey in ipairs({"player","target","focus","targettarget","focustarget","pet","boss","arena"}) do
         local u = MSUF_DB[unitKey]
         if type(u) == "table" then
             u.powerTextMode = _MSUF_MigratePowerMode(u.powerTextMode)
@@ -3666,7 +3737,7 @@ if g.kickNotReadyColor   == nil then g.kickNotReadyColor   = { ["1"] = 1, ["2"] 
             hpTextLayer = tonumber(g.hpTextLayer) or tonumber(g.textLayer) or 5,
             powerTextLayer = tonumber(g.powerTextLayer) or 2,
         }
-        for _, unitKey in ipairs({"player","target","focus","targettarget","focustarget","pet","boss"}) do
+        for _, unitKey in ipairs({"player","target","focus","targettarget","focustarget","pet","boss","arena"}) do
             MSUF_DB[unitKey] = MSUF_DB[unitKey] or {}
             local u = MSUF_DB[unitKey]
             if type(u) == "table" then
@@ -3914,7 +3985,7 @@ if g.kickNotReadyColor   == nil then g.kickNotReadyColor   = { ["1"] = 1, ["2"] 
         g.showRaidMarker = true
     end
     local legacyShowRaidMarker = g.showRaidMarker
-    for _, key in ipairs({"player","target","focus","targettarget","focustarget","pet","boss"}) do
+    for _, key in ipairs({"player","target","focus","targettarget","focustarget","pet","boss","arena"}) do
         MSUF_DB[key] = MSUF_DB[key] or {}
         if MSUF_DB[key].showRaidMarker == nil and legacyShowRaidMarker ~= nil then
             MSUF_DB[key].showRaidMarker = legacyShowRaidMarker
@@ -3927,7 +3998,7 @@ local legacyRaidMarkerOffsetX = g.raidMarkerOffsetX
 local legacyRaidMarkerOffsetY = g.raidMarkerOffsetY
 local legacyRaidMarkerAnchor  = g.raidMarkerAnchor
 local legacyRaidMarkerSize    = g.raidMarkerSize
-for _, key in ipairs({"player","target","focus","targettarget","focustarget","pet","boss"}) do
+for _, key in ipairs({"player","target","focus","targettarget","focustarget","pet","boss","arena"}) do
     MSUF_DB[key] = MSUF_DB[key] or {}
     local conf = MSUF_DB[key]
     if conf.raidMarkerOffsetX == nil and legacyRaidMarkerOffsetX ~= nil then
@@ -3962,11 +4033,12 @@ for _, key in ipairs({"player","target","focus","targettarget","focustarget","pe
     if conf.raidMarkerSize == nil then conf.raidMarkerSize = 14 end
     if conf.raidMarkerLayer == nil then conf.raidMarkerLayer = 7 end
 end
---- PvP flag defaults (per-unit)
-for _, key in ipairs({"player","target","focus","targettarget","focustarget"}) do
+--- PvP flag defaults (per-unit). Arena opponents are always PvP-flagged, so
+--- the indicator ships disabled there; the control stays available.
+for _, key in ipairs({"player","target","focus","targettarget","focustarget","arena"}) do
     MSUF_DB[key] = MSUF_DB[key] or {}
     local conf = MSUF_DB[key]
-    if conf.showPvpIndicator == nil then conf.showPvpIndicator = true end
+    if conf.showPvpIndicator == nil then conf.showPvpIndicator = (key ~= "arena") end
     if conf.pvpIndicatorSize == nil then conf.pvpIndicatorSize = 18 end
     if conf.pvpIndicatorAnchor == nil then conf.pvpIndicatorAnchor = "TOPRIGHT" end
     if conf.pvpIndicatorOffsetX == nil then conf.pvpIndicatorOffsetX = 0 end
@@ -3995,6 +4067,9 @@ if MSUF_DB.bars == nil then
     end
         if MSUF_DB.bars.showBossPowerBar == nil then
         MSUF_DB.bars.showBossPowerBar = true
+    end
+    if MSUF_DB.bars.showArenaPowerBar == nil then
+        MSUF_DB.bars.showArenaPowerBar = true
     end
     if MSUF_DB.bars.showFocusPowerBar == nil then
         MSUF_DB.bars.showFocusPowerBar = true
@@ -4621,8 +4696,39 @@ local function fill(key, defaults)
     --- Range fade: also fade castbar / auras when boss is out of range (off by default).
     if MSUF_DB.boss.rangeFadeCastbar == nil then MSUF_DB.boss.rangeFadeCastbar = false end
     if MSUF_DB.boss.rangeFadeAuras   == nil then MSUF_DB.boss.rangeFadeAuras   = false end
+    fill("arena", {
+        width        = 180,
+        height       = 30,
+        offsetX      = MSUF_DEFAULT_ARENA_OFFSET_X,
+        offsetY      = MSUF_DEFAULT_ARENA_OFFSET_Y,
+        spacing      = -96,
+        --- Arena reuses the boss stacked-container model and its exact key
+        --- names (spacing/bossLayoutMode), so the engine delta math, Edit Mode
+        --- drag path, and copy-coverage allowlists apply unchanged.
+        bossLayoutMode = "VERTICAL_DOWN",
+        showName     = true,
+        showLevelIndicator = false,
+        showHP       = true,
+        showPower    = true,
+        showPowerText = false,
+        showInterrupt = true,
+        showInterruptSource = false,
+        portraitMode = "OFF",
+        reverseFillBars = false,
+        verticalFillBars = false,
+        powerBarTexture = "",
+        powerBarBgTexture = "",
+    })
+    for k, v in pairs(textDefaults) do
+        if MSUF_DB.arena[k] == nil then MSUF_DB.arena[k] = v end
+    end
+    --- Range fade: castbar/aura follow-fade for arena opponents (off by default).
+    if MSUF_DB.arena.rangeFadeCastbar == nil then MSUF_DB.arena.rangeFadeCastbar = false end
+    if MSUF_DB.arena.rangeFadeAuras   == nil then MSUF_DB.arena.rangeFadeAuras   = false end
+    --- Trinket/CC readiness icon next to each arena frame (secret-safe swipe).
+    if MSUF_DB.arena.showTrinket == nil then MSUF_DB.arena.showTrinket = true end
     if MSUF_DB.general.rangeFadeEnabled == nil then MSUF_DB.general.rangeFadeEnabled = true end
-    for _, unitKey in ipairs({ "target", "targettarget", "focustarget", "focus", "pet", "boss" }) do
+    for _, unitKey in ipairs({ "target", "targettarget", "focustarget", "focus", "pet", "boss", "arena" }) do
         MSUF_DB[unitKey] = MSUF_DB[unitKey] or {}
         if MSUF_DB[unitKey].rangeFadeEnabled == nil then MSUF_DB[unitKey].rangeFadeEnabled = true end
         if MSUF_DB[unitKey].rangeFadeAlpha == nil then MSUF_DB[unitKey].rangeFadeAlpha = 0.4 end
@@ -4635,8 +4741,9 @@ local function fill(key, defaults)
             target = "showTargetPowerBar",
             focus  = "showFocusPowerBar",
             boss   = "showBossPowerBar",
+            arena  = "showArenaPowerBar",
         }
-        for _, unitKey in ipairs({"player", "target", "focus", "targettarget", "focustarget", "pet", "boss"}) do
+        for _, unitKey in ipairs({"player", "target", "focus", "targettarget", "focustarget", "pet", "boss", "arena"}) do
             MSUF_DB[unitKey] = MSUF_DB[unitKey] or {}
             local u = MSUF_DB[unitKey]
             local legacyShowKey = showKeys[unitKey]
@@ -4710,7 +4817,7 @@ local function fill(key, defaults)
         if bars._msufDetachedPowerBorderMigrated_v1 ~= true then
             local legacyOutline = tonumber(bars.detachedPowerBarOutline)
             if legacyOutline and legacyOutline > 0 and legacyOutline ~= 1 then
-                for _, unitKey in ipairs({"player", "target", "focus", "targettarget", "focustarget", "pet", "boss"}) do
+                for _, unitKey in ipairs({"player", "target", "focus", "targettarget", "focustarget", "pet", "boss", "arena"}) do
                     local u = MSUF_DB[unitKey]
                     local shape = tostring(u.detachedPowerBarShape or "BAR"):upper()
                     if u.powerBarDetached == true and u.powerBarBorderEnabled ~= true
@@ -4723,7 +4830,7 @@ local function fill(key, defaults)
             bars._msufDetachedPowerBorderMigrated_v1 = true
         end
     end
-    for _, unitKey in ipairs({"player", "target", "targettarget", "focustarget", "focus", "pet", "boss"}) do
+    for _, unitKey in ipairs({"player", "target", "targettarget", "focustarget", "focus", "pet", "boss", "arena"}) do
         MSUF_DB[unitKey] = MSUF_DB[unitKey] or {}
         local u = MSUF_DB[unitKey]
         if u.enabled == nil then
@@ -4884,7 +4991,7 @@ local function fill(key, defaults)
             "alphaHPOutOfCombat", "alphaPreserveHPColor", "bgA", "hpTextIgnoreAlpha",
         }
         for _, key in ipairs({
-            "player", "target", "targettarget", "focustarget", "focus", "pet", "boss",
+            "player", "target", "targettarget", "focustarget", "focus", "pet", "boss", "arena",
             "gf_party", "gf_raid", "gf_mythicraid",
         }) do
             local conf = MSUF_DB[key]
@@ -4903,7 +5010,7 @@ local function fill(key, defaults)
     end
     for _, key in ipairs({
         "general",
-        "player", "target", "targettarget", "focustarget", "focus", "pet", "boss",
+        "player", "target", "targettarget", "focustarget", "focus", "pet", "boss", "arena",
         "gf_party", "gf_raid", "gf_mythicraid",
     }) do
         MSUF_Defaults_NormalizeFontField(MSUF_DB[key])

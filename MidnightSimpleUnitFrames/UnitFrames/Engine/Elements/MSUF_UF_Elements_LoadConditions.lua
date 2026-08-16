@@ -53,6 +53,11 @@ local BOSS_PREVIEW_UNITS = {
   boss4 = true,
   boss5 = true,
 }
+local ARENA_PREVIEW_UNITS = {
+  arena1 = true,
+  arena2 = true,
+  arena3 = true,
+}
 local BOSS_PREVIEW_REFRESH_ELEMENTS = {
   "Alpha",
   "Health",
@@ -109,6 +114,11 @@ local function ShouldForcePreview(frame)
   if BOSS_PREVIEW_UNITS[unit] == true then
     return _G.MSUF_BossTestMode == true
       or _G.MSUF2_BossUnitframePreviewActive == true
+      or _G.MSUF_PreviewTestMode == true
+  end
+  if ARENA_PREVIEW_UNITS[unit] == true then
+    return _G.MSUF_ArenaTestMode == true
+      or _G.MSUF2_ArenaUnitframePreviewActive == true
       or _G.MSUF_PreviewTestMode == true
   end
   return false
@@ -708,3 +718,312 @@ local function MSUF_SyncBossUnitframePreviewWithUnitEdit()
   return UF.ApplyBossPreviewState(active, active and "MSUF_BOSS_PREVIEW_SYNC" or "MSUF_BOSS_PREVIEW_OFF")
 end
 ExportPublic("MSUF_SyncBossUnitframePreviewWithUnitEdit", MSUF_SyncBossUnitframePreviewWithUnitEdit)
+
+--------------------------------------------------------------------------------
+-- Arena unit-frame preview. Mirrors the boss preview pipeline above, with one
+-- deliberate difference: synthetic opponents are class-colored PLAYERS, so the
+-- seeded unit state carries a class identity instead of an NPC kind and the
+-- health color resolves through the class palette when the profile uses it.
+--------------------------------------------------------------------------------
+
+local arenaPreviewAppliedActive
+local arenaPreviewCombatCleanupPending
+local ARENA_PREVIEW_LIGHT_REASONS = {
+  MSUF_ARENA_PREVIEW = true,
+  MSUF_ARENA_PREVIEW_SYNC = true,
+  MSUF_ARENA_PREVIEW_OFF = true,
+  MSUF2_ARENA_PAGE_CORE = true,
+  MSUF2_ARENA_PAGE_FALLBACK = true,
+}
+-- Fixed per-slot identities keep the preview deterministic across sessions.
+local ARENA_PREVIEW_CLASSES = { "MAGE", "ROGUE", "PRIEST" }
+local ARENA_PREVIEW_CLASS_FALLBACK_COLORS = {
+  MAGE = { 0.25, 0.78, 0.92 },
+  ROGUE = { 1, 0.96, 0.41 },
+  PRIEST = { 1, 1, 1 },
+}
+local ARENA_PREVIEW_HP_PERCENT = { 65, 45, 80 }
+
+local function ArenaPreviewClassColor(classToken)
+  local getColor = _G.C_ClassColor and _G.C_ClassColor.GetClassColor
+  if type(getColor) == "function" and classToken then
+    local color = getColor(classToken)
+    if color and color.r then
+      return color.r, color.g, color.b
+    end
+  end
+  local fallback = ARENA_PREVIEW_CLASS_FALLBACK_COLORS[classToken]
+  if fallback then
+    return fallback[1], fallback[2], fallback[3]
+  end
+  return 0.85, 0.10, 0.10
+end
+
+local function ResolveArenaPreviewHealthColor(frame, pct, classToken)
+  local spec = frame and frame.MSUFSpec
+  local health = spec and spec.health or {}
+  local mode = health.mode
+  local alpha = tonumber(health.alpha or health.a) or 1
+  if mode == "dark" or mode == "unified" then
+    return health.r or 1, health.g or 1, health.b or 1, alpha
+  elseif mode == "gradient" then
+    local common = MSUF and MSUF.UFBarTextCommon
+    local resolveGradient = common and common.PreviewHealthGradientColor
+    if type(resolveGradient) == "function" then
+      local r, g, b = resolveGradient(health, pct)
+      if r ~= nil then return r, g, b, 1 end
+    end
+  end
+  -- Class mode (and any unresolved mode): a synthetic opponent is a hostile
+  -- player of a fixed class, exactly what runtime would class-color live.
+  local r, g, b = ArenaPreviewClassColor(classToken)
+  return r, g, b, 1
+end
+UF.ResolveArenaPreviewHealthColor = ResolveArenaPreviewHealthColor
+
+local function ArenaPreviewPercent(unit)
+  local index = tonumber(type(unit) == "string" and unit:match("^arena(%d+)$") or nil) or 1
+  return ARENA_PREVIEW_HP_PERCENT[index] or 65
+end
+
+local function ArenaPreviewPowerPercent()
+  return 100
+end
+
+local function ArenaLiveUnitExists(unit)
+  return UnitExistsPlain(unit) == true
+end
+
+local function ApplyArenaPreviewText(frame, hp, hpMax, power, powerMax, classToken)
+  if not frame then
+    return
+  end
+  if frame.nameText then
+    local names = _G.LOCALIZED_CLASS_NAMES_MALE
+    local label = (type(names) == "table" and names[classToken]) or "Arena Preview"
+    frame.nameText:SetText(label)
+    SetShown(frame.nameText, true)
+  end
+  if frame.levelText then
+    frame.levelText:SetText("80")
+    SetShown(frame.levelText, true)
+  end
+
+  local text = MSUF and MSUF.UFText
+  local rt = frame._msufTextRuntime
+  if not (text and text.UpdateTextSlots and rt) then
+    return
+  end
+  rt.healthMissing = nil
+  text.UpdateTextSlots(rt.healthSlots, rt.healthSlotCount, hp, hpMax, frame.MSUFUnitKey, ArenaPreviewPercent, rt.healthNeedsPercent, rt)
+  text.UpdateTextSlots(rt.powerSlots, rt.powerSlotCount, power, powerMax, frame.MSUFUnitKey, ArenaPreviewPowerPercent, rt.powerNeedsPercent, rt)
+end
+
+local function ApplyArenaPreviewFrameData(frame, index)
+  if not frame then
+    return
+  end
+  index = tonumber(index) or 1
+  local classToken = ARENA_PREVIEW_CLASSES[index] or "MAGE"
+  local pct = ARENA_PREVIEW_HP_PERCENT[index] or 65
+  local hpMax = 1000000
+  local hp = math.floor(hpMax * pct / 100)
+  local powerMax = 240000
+  local power = powerMax
+
+  frame._msufArenaPreviewForced = true
+  local state = frame._msufUnitState
+  if type(state) == "table" then
+    state.exists = true
+    state.existsKnown = true
+    state.dead = false
+    state.connected = true
+    state.connectedKnown = true
+    state.identityIsPlayerRead = true
+    state.isPlayer = true
+    state.isPlayerKnown = true
+    state.identityClassRead = true
+    local names = _G.LOCALIZED_CLASS_NAMES_MALE
+    state.className = (type(names) == "table" and names[classToken]) or classToken
+    state.classToken = classToken
+  end
+
+  local r, g, b, a = ResolveArenaPreviewHealthColor(frame, pct / 100, classToken)
+  SetBarPreview(frame.hpBar or frame.Health, hp, hpMax, r, g, b, a)
+  frame._msufAlphaLastHP = nil
+  SetBarPreview(frame.targetPowerBar or frame.powerBar or frame.Power, power, powerMax, 0.05, 0.64, 0.92)
+  ApplyArenaPreviewText(frame, hp, hpMax, power, powerMax, classToken)
+end
+
+local function ClearArenaPreviewFrameForRuntime(frame, restoreVisuals)
+  if not frame or frame._msufArenaPreviewForced ~= true then return false end
+  frame._msufArenaPreviewForced = nil
+  frame._msufUnitState = nil
+  frame._msufAlphaLastFrame = nil
+  frame._msufAlphaLastHP = nil
+  frame._msufAlphaLastFG = nil
+
+  local healthBar = frame.hpBar or frame.Health
+  InvalidateBossPreviewBar(healthBar, restoreVisuals)
+  InvalidateBossPreviewBar(frame.targetPowerBar or frame.powerBar or frame.Power, restoreVisuals)
+
+  if restoreVisuals then
+    frame._msufRangeInRange = nil
+    frame._msufRangeMulApplied = nil
+    local applyRange = UF.ApplyRangeModifier or _G.MSUF_UF_ApplyRangeModifier
+    if type(applyRange) == "function" then
+      applyRange(frame, 1, true)
+    end
+    local unit = frame.MSUFUnitKey
+    local refreshColor = _G.MSUF_UFCore_RefreshHealthBarColor
+    if ArenaLiveUnitExists(unit) and type(refreshColor) == "function" then
+      refreshColor(frame, "MSUF_ARENA_PREVIEW_HANDOFF")
+    end
+  end
+  return true
+end
+
+local function ClearArenaPreviewFramesForCombat()
+  _G.MSUF2_ArenaUnitframePreviewActive = nil
+  local cleared = false
+  for i = 1, 3 do
+    local frame = UF.frames and UF.frames["arena" .. i]
+    if ClearArenaPreviewFrameForRuntime(frame, true) then cleared = true end
+  end
+  if cleared then arenaPreviewCombatCleanupPending = true end
+  return cleared
+end
+UF.ClearArenaPreviewFramesForCombat = ClearArenaPreviewFramesForCombat
+ExportPublic("MSUF_ClearArenaUnitframePreviewForCombat", ClearArenaPreviewFramesForCombat)
+
+local function ApplyArenaPreviewFrames(active)
+  for i = 1, 3 do
+    local frame = UF.frames and UF.frames["arena" .. i]
+    local unit = "arena" .. i
+    if frame and active and not ArenaLiveUnitExists(unit) then
+      frame:Show()
+      if frame.SetAlpha then frame:SetAlpha(1) end
+      if frame.EnableMouse then frame:EnableMouse(true) end
+      ApplyArenaPreviewFrameData(frame, i)
+    elseif frame then
+      ClearArenaPreviewFrameForRuntime(frame, true)
+    end
+  end
+end
+
+local function ArenaPreviewFramesReady(active)
+  local frames = UF.frames
+  if type(frames) ~= "table" then
+    return false
+  end
+  local sawFrame = false
+  for i = 1, 3 do
+    local frame = frames["arena" .. i]
+    if frame then
+      sawFrame = true
+      if active then
+        if frame._msufArenaPreviewForced ~= true then return false end
+        if frame.IsShown and not frame:IsShown() then return false end
+      elseif frame._msufArenaPreviewForced == true then
+        return false
+      end
+    end
+  end
+  return sawFrame
+end
+
+local function CanUseLightArenaPreviewApply(active, reason)
+  if arenaPreviewCombatCleanupPending == true then
+    return false
+  end
+  if arenaPreviewAppliedActive ~= active then
+    return false
+  end
+  if BossPreviewConfigDirty() then
+    return false
+  end
+  if ARENA_PREVIEW_LIGHT_REASONS[reason or ""] ~= true then
+    return false
+  end
+  return ArenaPreviewFramesReady(active)
+end
+
+local function RefreshArenaAuras()
+  local A3 = MSUF and MSUF.MSUF_Auras3
+  if A3 and type(A3.RequestScope) == "function" then
+    A3.RequestScope("arena", "MSUF_ARENA_PREVIEW")
+    return
+  end
+  if A3 and type(A3.RequestUnit) == "function" then
+    A3.RequestUnit("arena")
+    return
+  end
+  if A3 and type(A3.RefreshUnit) == "function" then
+    for i = 1, 3 do
+      A3.RefreshUnit("arena" .. i)
+    end
+    return
+  end
+  if A3 and type(A3.RefreshAll) == "function" then
+    A3.RefreshAll()
+  end
+end
+
+function UF.ApplyArenaPreviewState(active, reason)
+  active = active == true
+  if BossPreviewCombatLocked() then
+    ClearArenaPreviewFramesForCombat()
+    return false
+  end
+
+  local refreshReason = reason or "MSUF_ARENA_PREVIEW"
+  if CanUseLightArenaPreviewApply(active, refreshReason) then
+    ApplyArenaPreviewFrames(active)
+    return true
+  end
+
+  ApplyArenaPreviewFrames(active)
+  UF.RefreshVisibilityDrivers("arena")
+  if type(UF.RefreshElements) == "function" then
+    UF.RefreshElements("arena", BOSS_PREVIEW_REFRESH_ELEMENTS, refreshReason)
+  end
+  UF.UpdateRuntime("arena", refreshReason)
+
+  if active then
+    ApplyArenaPreviewFrames(true)
+  end
+  RefreshArenaAuras()
+  if type(_G.MSUF_UpdateArenaCastbarPreview) == "function" then
+    _G.MSUF_UpdateArenaCastbarPreview()
+  end
+  local em2 = _G.MSUF_EM2
+  if em2 and em2.Movers and type(em2.Movers.SyncAll) == "function" then
+    em2.Movers.SyncAll()
+  end
+  arenaPreviewAppliedActive = active
+  arenaPreviewCombatCleanupPending = nil
+  return true
+end
+
+local function MSUF_ApplyArenaUnitframePreviewState(active, reason)
+  if BossPreviewCombatLocked() then
+    ClearArenaPreviewFramesForCombat()
+    return false
+  end
+  _G.MSUF2_ArenaUnitframePreviewActive = active == true and true or nil
+  return UF.ApplyArenaPreviewState(active, reason or "MSUF_ARENA_PREVIEW")
+end
+ExportPublic("MSUF_ApplyArenaUnitframePreviewState", MSUF_ApplyArenaUnitframePreviewState)
+
+local function MSUF_SyncArenaUnitframePreviewWithUnitEdit()
+  if BossPreviewCombatLocked() then
+    ClearArenaPreviewFramesForCombat()
+    return false
+  end
+  local editActive = _G.MSUF_UnitEditModeActive == true
+  local active = _G.MSUF2_ArenaUnitframePreviewActive == true
+    or (_G.MSUF_ArenaTestMode == true and editActive)
+    or (_G.MSUF_PreviewTestMode == true and editActive)
+  return UF.ApplyArenaPreviewState(active, active and "MSUF_ARENA_PREVIEW_SYNC" or "MSUF_ARENA_PREVIEW_OFF")
+end
+ExportPublic("MSUF_SyncArenaUnitframePreviewWithUnitEdit", MSUF_SyncArenaUnitframePreviewWithUnitEdit)

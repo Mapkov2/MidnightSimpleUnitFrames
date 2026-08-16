@@ -422,6 +422,9 @@ local function ApplyCastbarRangeAlphaExport(castbarOrUnit, mul, force)
   if not frame and tostring(unit):match("^boss%d+$") then
     frame = UF.frames and UF.frames.boss
   end
+  if not frame and tostring(unit):match("^arena%d+$") then
+    frame = UF.frames and UF.frames.arena
+  end
   if not frame then
     return false
   end
@@ -498,6 +501,7 @@ ExportPublic("MSUF_RefreshCombatUnitAlphas", RefreshCombatUnitAlphas)
 
 local function GetDesiredUnitAlpha(key)
   local unit = key == "boss" and "boss1" or key
+  if unit == "arena" then unit = "arena1" end
   if unit == "tot" or unit == "targetoftarget" then
     unit = "targettarget"
   end

@@ -345,7 +345,7 @@ local function MSUF_ProfileIO_ApplyCastbarRuntime(reason)
         return MSUF_ProfileIO_RunProtected("MSUF_ApplyAllCastbarsAndSync", applyAll)
     end
 
-    local units = { "player", "target", "focus", "boss" }
+    local units = { "player", "target", "focus", "boss", "arena" }
     local applied = false
     for i = 1, #units do
         local unit = units[i]
@@ -362,6 +362,7 @@ local function MSUF_ProfileIO_ApplyCastbarRuntime(reason)
     MSUF_ProfileIO_CallGlobal("MSUF_ReanchorTargetCastBar")
     MSUF_ProfileIO_CallGlobal("MSUF_ReanchorFocusCastBar")
     MSUF_ProfileIO_CallGlobal("MSUF_ReanchorBossCastBar")
+    MSUF_ProfileIO_CallGlobal("MSUF_ReanchorArenaCastBar")
     return MSUF_ProfileIO_CallGlobal("MSUF_UpdateCastbarVisuals")
 end
 
@@ -1718,7 +1719,7 @@ local MSUF_PROFILEIO_UNIT_TEXTURE_WARNING_KEYS = {
 }
 
 local MSUF_PROFILEIO_MEDIA_UNIT_SCOPE_KEYS = {
-    "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "boss",
+    "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "boss", "arena",
 }
 
 local MSUF_PROFILEIO_GROUP_TEXTURE_WARNING_KEYS = {
@@ -1827,7 +1828,7 @@ local function MSUF_ProfileIO_NormalizeImportedFontSizes(profile)
     return profile
 end
 
-local MSUF_PROFILEIO_UNIT_KEYS = { "player", "target", "targettarget", "focustarget", "focus", "pet", "boss" }
+local MSUF_PROFILEIO_UNIT_KEYS = { "player", "target", "targettarget", "focustarget", "focus", "pet", "boss", "arena" }
 local MSUF_PROFILEIO_DEPRECATED_UNIT_ALIASES = {
     { canonical = "targettarget", aliases = { "tot", "targetoftarget", "target_of_target" } },
     { canonical = "focustarget", aliases = { "focus_target", "focustargettarget" } },
@@ -1924,6 +1925,8 @@ local function MSUF_ProfileIO_NormalizeUnitFramePositionDB(profile, preferLegacy
             conf.anchorToUnitframe = "focustarget"
         elseif anchor:match("^boss%d+$") then
             conf.anchorToUnitframe = "boss"
+        elseif anchor:match("^arena%d+$") then
+            conf.anchorToUnitframe = "arena"
         end
     end
 
@@ -1968,6 +1971,9 @@ local function MSUF_ProfileIO_NormalizeUnitFramePositionDB(profile, preferLegacy
     end
     for i = 1, 5 do
         NormalizeUnit(profile["boss" .. i])
+    end
+    for i = 1, 3 do
+        NormalizeUnit(profile["arena" .. i])
     end
     if type(profile.general) == "table" and profile.general.anchorName == "UI_Parent" then
         profile.general.anchorName = "UIParent"
@@ -2071,6 +2077,7 @@ end
 local MSUF_PROFILEIO_UNIT_AURA_RESET_UNITS = {
     "player", "target", "focus",
     "boss1", "boss2", "boss3", "boss4", "boss5",
+    "arena1", "arena2", "arena3",
 }
 local MSUF_PROFILEIO_LEGACY_UNIT_NAME_ANCHORS = {
     LEFT = "TOPLEFT",
@@ -2082,6 +2089,7 @@ local MSUF_PROFILEIO_TEXT_SCOPE_KEYS = {
     "player", "target", "targettarget",
     "focus", "focustarget",
     "pet", "boss", "boss1", "boss2", "boss3", "boss4", "boss5",
+    "arena", "arena1", "arena2", "arena3",
     "gf_party", "gf_raid", "gf_mythicraid",
 }
 local MSUF_PROFILEIO_TEXT_NUMERIC_KEYS = {
@@ -3992,7 +4000,7 @@ local MSUF_UNITFRAME_ALPHA_DEFAULTS = {
     powerBarBgAlpha = 0.85,
     alphaExcludeTextPortrait = false,
 }
-local MSUF_UNITFRAME_UNIT_KEYS = { "player", "target", "targettarget", "focustarget", "focus", "pet", "boss" }
+local MSUF_UNITFRAME_UNIT_KEYS = { "player", "target", "targettarget", "focustarget", "focus", "pet", "boss", "arena" }
 local function MSUF_IsUnitframeAlphaKey(key)
     return (type(key) == "string") and (MSUF_UNITFRAME_ALPHA_KEYS[key] == true)
 end
@@ -4002,6 +4010,7 @@ local function MSUF_IsCastbarKey(k)
     --- Core castbar markers
     if lk:find("castbar", 1, true) then  return true end
     if lk:find("bosscast", 1, true) then  return true end
+    if lk:find("arenacast", 1, true) then  return true end
     if lk:find("empower", 1, true) then  return true end
     --- Enable toggles / timing
     if lk == "enableplayercastbar" or lk == "enabletargetcastbar" or lk == "enablefocuscastbar" then  return true end

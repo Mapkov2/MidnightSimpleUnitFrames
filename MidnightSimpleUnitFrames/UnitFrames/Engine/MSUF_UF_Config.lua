@@ -83,6 +83,7 @@ local DEFAULTS = {
   focustarget = { width = 180, height = 30, x = 260, y = 180, showName = true, showPower = false },
   pet = { width = 220, height = 30, x = -275, y = -250, showName = true, showPower = true },
   boss = { width = 180, height = 30, x = 500, y = 180, showName = true, showPower = false },
+  arena = { width = 180, height = 30, x = 360, y = -40, showName = true, showPower = true },
 }
 
 local POWER_KEYS = {
@@ -90,6 +91,7 @@ local POWER_KEYS = {
   target = "showTargetPowerBar",
   focus = "showFocusPowerBar",
   boss = "showBossPowerBar",
+  arena = "showArenaPowerBar",
 }
 
 local function IsCooldownViewerFrameName(frameName)
@@ -101,6 +103,7 @@ local CASTBAR_KEYS = {
   target = "enableTargetCastbar",
   focus = "enableFocusCastbar",
   boss = "enableBossCastbar",
+  arena = "enableArenaCastbar",
 }
 
 local RANGE_KEYS = {
@@ -110,6 +113,7 @@ local RANGE_KEYS = {
   focustarget = true,
   pet = true,
   boss = true,
+  arena = true,
 }
 
 local CLASS_TOKENS = {
@@ -1089,6 +1093,7 @@ local function StatusAllowed(key, id)
     return key == "player" or key == "target"
   elseif id == "pvp" then
     return key == "player" or key == "target" or key == "focus" or key == "targettarget" or key == "focustarget"
+      or key == "arena"
   elseif id == "resting" or id == "stance" then
     return key == "player"
   elseif id == "raidGroup" then
@@ -1764,7 +1769,9 @@ local function ResolveUnitContext(db, unit)
   end
   local general = type(db.general) == "table" and db.general or {}
   local bars = type(db.bars) == "table" and db.bars or {}
-  local bossIndex = unit and unit:match("^boss(%d+)$")
+  -- Arena frames reuse the boss stacked-layout model (same spacing/layout-mode
+  -- keys), so both families resolve to the same container index here.
+  local bossIndex = unit and (unit:match("^boss(%d+)$") or unit:match("^arena(%d+)$"))
   return key, def, conf, general, bars, bossIndex
 end
 
@@ -2334,6 +2341,12 @@ local function MSUF_GetBossLayoutDelta(index, conf)
   return BossLayoutDelta(conf, index, DEFAULTS.boss)
 end
 ExportPublic("MSUF_GetBossLayoutDelta", MSUF_GetBossLayoutDelta)
+
+ExportPublic("MSUF_GetArenaLayoutDelta", function(index, conf)
+  local db = EnsureDB()
+  conf = conf or (db and db.arena) or {}
+  return BossLayoutDelta(conf, index, DEFAULTS.arena)
+end)
 
 function Config.RefreshUnit(unit)
   if not (unit and UF.IsManagedUnit and UF.IsManagedUnit(unit)) then

@@ -500,7 +500,10 @@ end
 
 local function IsBossFrame(frame)
   local unit = frame and frame.MSUFUnitKey
-  return type(unit) == "string" and unit:match("^boss%d+$") ~= nil
+  if type(unit) ~= "string" then return false end
+  -- Arena frames share the boss stacked-container model, so they inherit the
+  -- same physical pixel-snap geometry to keep odd/even stacks phase-identical.
+  return unit:match("^boss%d+$") ~= nil or unit:match("^arena%d+$") ~= nil
 end
 
 -- Boss unitframes are CENTER anchored. At fractional UI scales, odd and even
@@ -594,6 +597,13 @@ local function RefreshBossPhysicalGeometry()
   local count = tonumber(_G.MSUF_MAX_BOSS_FRAMES or _G.MAX_BOSS_FRAMES) or 5
   for index = 1, count do
     local unit = "boss" .. index
+    local frame = (UF.frames and UF.frames[unit]) or _G["MSUF_" .. unit]
+    if frame and ApplyBossPhysicalBarGeometry(frame) then
+      changed = true
+    end
+  end
+  for index = 1, 3 do
+    local unit = "arena" .. index
     local frame = (UF.frames and UF.frames[unit]) or _G["MSUF_" .. unit]
     if frame and ApplyBossPhysicalBarGeometry(frame) then
       changed = true
@@ -1286,7 +1296,7 @@ function Factory.EnsureDeferredDriver()
   return true
 end
 
-local LATE_ANCHOR_KEYS = { "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" }
+local LATE_ANCHOR_KEYS = { "player", "target", "focus", "targettarget", "focustarget", "pet", "boss", "arena" }
 local LATE_GROUP_ANCHOR_KEYS = { "gf_party", "gf_raid", "gf_mythicraid", "gf_priority" }
 local COOLDOWN_WIDTH_MODES = {
   cooldown = "EssentialCooldownViewer",
@@ -1315,6 +1325,7 @@ local CASTBAR_WIDTH_CONFIG = {
   { "castbarTargetMatchWidth", "enableTargetCastbar" },
   { "castbarFocusMatchWidth", "enableFocusCastbar" },
   { "bossCastbarMatchWidth", "enableBossCastbar" },
+  { "arenaCastbarMatchWidth", "enableArenaCastbar" },
 }
 local CASTBAR_WIDTH_SOURCE_BITS = { essential = 1, utility = 2 }
 local cooldownWidthHooked = setmetatable({}, { __mode = "k" })
@@ -1998,9 +2009,13 @@ do
     RefreshBossPhysicalGeometry()
     if type(UF.RefreshBorders) == "function" then
       UF.RefreshBorders("boss")
+      UF.RefreshBorders("arena")
     end
     if type(_G.MSUF_ApplyBossCastbarPositionSetting) == "function" then
       _G.MSUF_ApplyBossCastbarPositionSetting(false)
+    end
+    if type(_G.MSUF_ApplyArenaCastbarPositionSetting) == "function" then
+      _G.MSUF_ApplyArenaCastbarPositionSetting(false)
     end
   end)
 end
