@@ -8,7 +8,7 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "683ED69C371ED343DDC4F0956944DC3522ADC0095157D6DBBDEB2E5170195E29",
+    sourceSha256 = "31C3AB7247B9DE2F1D8DF9878DAB5D2F39777EFC26AE8173A136B7738959FFC2",
     currentVersion = "6.09-Beta1",
     historyFromVersion = "6.08-Beta1",
     previousVersion = "6.08",
