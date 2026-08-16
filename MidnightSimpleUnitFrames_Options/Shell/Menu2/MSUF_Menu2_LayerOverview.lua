@@ -97,7 +97,6 @@ local FALLBACK_UNIT_STATUS_SPECS = {
     { text = "Incoming Rez", show = "showIncomingResIndicator", defaultShow = true, layer = "incomingResIndicatorLayer", defaultLayer = 7, units = "player target" },
     { text = "PvP Flag", show = "showPvpIndicator", defaultShow = true, layer = "pvpIndicatorLayer", defaultLayer = 7, units = "player target focus targettarget focustarget" },
     { text = "Stance", show = "showStanceIndicator", defaultShow = false, layer = "stanceIndicatorLayer", defaultLayer = 7, units = "player" },
-    { text = "Targeting You", show = "showTargetingYouIndicator", defaultShow = false, layer = "targetingYouIndicatorLayer", defaultLayer = 7, units = "target focus boss" },
 }
 local FALLBACK_GROUP_STATUS_SPECS = {
     { text = "Role Icon", enabled = "roleIcon", layer = "roleIconLayer", defaultLayer = 1 },

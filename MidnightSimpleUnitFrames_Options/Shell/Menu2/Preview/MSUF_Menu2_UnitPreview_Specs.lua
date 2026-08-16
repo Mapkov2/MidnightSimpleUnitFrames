@@ -53,7 +53,6 @@ statusResting|showRestingIndicator|restedStateIndicatorSize|restedStateIndicator
 statusIncomingRes|showIncomingResIndicator|incomingResIndicatorSize|incomingResIndicatorAnchor|incomingResIndicatorOffsetX|incomingResIndicatorOffsetY|incomingResIndicatorLayer|7|18|TOPRIGHT|0|0|+|0.22,1.0,0.56|Incoming Rez icon|MSUF_RequestStatusIncomingResIndicatorRefresh||player target|incomingResIndicatorCustomIcon
 statusPvp|showPvpIndicator|pvpIndicatorSize|pvpIndicatorAnchor|pvpIndicatorOffsetX|pvpIndicatorOffsetY|pvpIndicatorLayer|7|18|TOPRIGHT|0|0|PVP|0.32,0.62,1.0|PvP flag (War Mode/PvP)|MSUF_RequestStatusPvpIndicatorRefresh||player target focus targettarget focustarget|pvpIndicatorCustomIcon
 stance|showStanceIndicator|stanceIndicatorSize|stanceIndicatorAnchor|stanceIndicatorOffsetX|stanceIndicatorOffsetY|stanceIndicatorLayer|7|12|TOP|0|-2|Stance|0.45,0.70,1.0|Stance text|MSUF_RequestStatusIconsRefreshForCurrent|false|player|
-targetingYou|showTargetingYouIndicator|targetingYouIndicatorSize|targetingYouIndicatorAnchor|targetingYouIndicatorOffsetX|targetingYouIndicatorOffsetY|targetingYouIndicatorLayer|7|18|TOPRIGHT|-36|2|Eye|1.0,0.28,0.18|Targeting You|MSUF_RequestStatusIconsRefreshForCurrent|false|target focus boss|targetingYouIndicatorCustomIcon
 ]]
 specs.PreviewLayers = LayerRows [[
 guides|Guides|0.42,0.72,1.00|Mover highlights and selected borders.

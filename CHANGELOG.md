@@ -1,5 +1,51 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.08 - 2026-08-16
+
+### Highlights
+
+- Added optional profile-wide custom colors for **Magic, Curse, Disease, Poison, and Bleed** across Unit and Group Frame dispel visuals while preserving Blizzard's native defaults whenever no override is enabled.
+<!-- msuf-menu-link: {"pageKey":"opt_colors","sectionId":"colors_auras","controlId":"menu2.opt.colors.advanced.auras.dispel.magic.color","settingKey":"general.dispelTypeColorOverrides.Magic","prepareKind":"","prepareValue":"","query":"magic dispel color","label":"Magic color"} -->
+- Added an optional, class-colored interrupter name beside the castbar's interrupted state.
+<!-- msuf-menu-link: {"pageKey":"uf_target","sectionId":"castbar","controlId":"menu2.uf_target.unit.castbar.show_interrupt_source","settingKey":"target.showInterruptSource","prepareKind":"unitCastbarTab","prepareValue":"general","query":"show interrupter name","label":"Show interrupter name"} -->
+- Added configurable AFK timers to Unit and Group Frame status text.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"status_icons","controlId":"menu2.uf_player.unit.status.selected.enabled","settingKey":"player.statusAFKTimerEnabled","prepareKind":"unitStatus","prepareValue":"statusAFKTimer","query":"afk timer","label":"AFK Timer"} -->
+- Added an optional Player Frame **Stance** text indicator for warrior stances, paladin auras, druid forms, and other native stance-bar forms.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"status_icons","controlId":"menu2.uf_player.unit.status.selected.enabled","settingKey":"player.showStanceIndicator","prepareKind":"unitStatus","prepareValue":"stance","query":"stance","label":"Stance"} -->
+- Added explicit **Uniform** and **Width & height** portrait sizing modes for Unit and Group Frames while preserving existing portrait geometry during migration.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"portrait","controlId":"menu2.uf_player.unit.portrait.portraitsizemode","settingKey":"player.portraitSizeMode","prepareKind":"unitPortraitTab","prepareValue":"geometry","query":"portrait size mode","label":"Size mode"} -->
+- Added configurable edge softness for circular, rounded, and diamond portraits, with matching Unit Frame, Group Frame, and preview rendering.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"portrait","controlId":"menu2.uf_player.unit.portrait.portraitedgesoftness","settingKey":"player.portraitEdgeSoftness","prepareKind":"unitPortraitTab","prepareValue":"border","query":"portrait edge softness","label":"Portrait edge softness"} -->
+
+### Changes
+
+- Added an optional **Slug** font rendering mode for clearer, more consistent text across Unit Frames, Group Frames, Castbars, Class Resources, and other MSUF text.
+- Applied custom Dispel colors consistently to Unit Dispel Overlays, Group Dispel Overlays, Dispel Highlight Borders, MSUF Dispel symbols, Edit Mode, and every matching Menu preview.
+- Added `:::` color shortcuts to Unit Dispel Overlay, Group Dispel Overlay, and Highlight Borders for direct access to the matching global Dispel colors.
+- Kept original Blizzard and MSUF Dispel artwork for default colors; tint-neutral MSUF symbol assets are selected only for Dispel types with an active custom override.
+- Replaced the toolbar's **New Task** action with a dedicated **See New Features** changelog page. Highlighted feature sentences now link directly to their exact MSUF Menu controls and subcategories.
+- Localized the new Dispel colors, AFK timer, stance, portrait sizing, portrait edge-softness, and related controls across all 12 supported locales.
+- Updated Assistant registrations, profile behavior, copy/reset handling, search routing, generated coverage data, and static search data for the new controls.
+- Added daily GitHub synchronization from Retail `main` to the Classic repository, clearer sync-failure reporting, and required versioned Classic validation.
+- Added manual release-channel recovery support to the GitHub release workflow.
+
+### Fixes & Performance
+
+- Fixed custom MSUF Dispel symbols becoming black or incorrectly multiplied after recoloring. Custom overrides now use tint-neutral, alpha-identical companions, while unchanged colors continue using the original assets.
+- Fixed Group Frame absorb overlays ignoring the configured opacity.
+- Fixed aura icon zoom scaling when a Debuff border is active, including runtime and preview rendering.
+- Fixed the Castbar General tab height after adding the interrupter-name option.
+- Changed Target and Focus castbar identity refreshes from deferred callbacks to direct synchronous updates.
+- Cleared the castbar driver's unused `OnUpdate` script once during construction instead of repeating the native transition on target swaps.
+- Fixed player Unit Frames showing the fallback blue or another incorrect health color for identity-restricted PvP targets by routing every player class through Blizzard's native secret-safe class-color pipeline.
+- Fixed restricted Race and Class status text showing a unit name or blank value by using Blizzard's stable identity return directly when localized identity text is protected.
+- Streamlined Unit Frame identity refreshes across bars, portraits, status text, regular text, and range fading so unchanged identity state avoids redundant work.
+- Skipped player-only nickname-provider APIs for NPC units while retaining supported NPC nickname sources.
+- Fixed Arena Group Frames using Raid instead of Party configuration across runtime, Blizzard-frame ownership, Edit Mode, and previews.
+- Fixed exact-ID aura indicators mixing friendly and hostile filters after switching targets.
+- Limited PvP indicator runtime to Arenas, Battlegrounds, and War Mode, removing unrelated faction and PvP-timer event traffic outside those modes.
+- Fixed the **See New Features** hover outline passing its texture sublevel as an inherited template instead of the correct draw-sublevel argument.
+
 ## 6.08-Beta2 - 2026-08-15
 
 ### Highlights
@@ -10,8 +56,6 @@
 <!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"status_icons","controlId":"menu2.uf_player.unit.status.selected.enabled","settingKey":"player.showStanceIndicator","prepareKind":"unitStatus","prepareValue":"stance","query":"stance","label":"Stance"} -->
 - Added explicit **Uniform** and **Width & height** portrait sizing modes for Unit and Group Frames while preserving existing portrait geometry during migration.
 <!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"portrait","controlId":"menu2.uf_player.unit.portrait.portraitsizemode","settingKey":"player.portraitSizeMode","prepareKind":"unitPortraitTab","prepareValue":"geometry","query":"portrait size mode","label":"Size mode"} -->
-- Added an optional **Targeting You** status indicator for units currently targeting the player.
-<!-- msuf-menu-link: {"pageKey":"uf_target","sectionId":"status_icons","controlId":"menu2.uf_target.unit.status.selected.enabled","settingKey":"target.showTargetingYouIndicator","prepareKind":"unitStatus","prepareValue":"targetingYou","query":"targeting you","label":"Targeting You"} -->
 - Added configurable edge softness for circular, rounded, and diamond portraits, with matching Unit Frame, Group Frame, and preview rendering.
 <!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"portrait","controlId":"menu2.uf_player.unit.portrait.portraitedgesoftness","settingKey":"player.portraitEdgeSoftness","prepareKind":"unitPortraitTab","prepareValue":"border","query":"portrait edge softness","label":"Portrait edge softness"} -->
 

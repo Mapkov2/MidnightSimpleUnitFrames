@@ -195,7 +195,6 @@ local STATUS_REFRESH = {
   "IncomingResIndicator",
   "PVPIndicator",
   "StanceIndicator",
-  "TargetingYouIndicator",
   "GroupStatusRuntime",
 }
 local SYMBOL_PATH_CACHE = {}
@@ -886,7 +885,6 @@ local CONFIGURED_REGION_DEFS = {
   { "incomingRes", "incomingResIndicatorIcon", "resurrectIcon", { "resurrectIcon", "incomingResIndicatorIcon" }, { "incomingResIndicatorIcon", "IncomingResIndicator" }, nil, nil, "incomingRes" },
   { "pvp", "pvpIndicatorIcon", "pvpIcon", { "pvpIcon", "pvpIndicatorIcon" }, { "pvpIndicatorIcon", "pvpIcon" } },
   { "stance", "stanceIndicatorText", nil, nil, nil, nil, true },
-  { "targetingYou", "targetingYouIndicatorIcon" },
   { "readyCheck", "readyCheckIcon" },
   { "summon", "summonIcon", nil, nil, nil, nil, nil, nil, true },
   { "phase", "phaseIcon", nil, nil, nil, PHASE_TEXTURE, nil, nil, nil, true },
@@ -1960,49 +1958,6 @@ local function UpdatePVP(frame, status)
   end
 end
 
---- Shows when the hostile unit bound to this frame currently targets the
---- player. This mirrors Blizzard_CombatAudioAlertManager's definition and is
---- refreshed only by UNIT_TARGET or the frame's identity lifecycle.
-function Status.UpdateTargetingYou(frame, status)
-  local cfg = status and status.targetingYou
-  local tex = frame and frame.targetingYouIndicatorIcon
-  local unit = frame and frame.MSUFUnitKey
-  if not (cfg and cfg.enabled and tex and unit) then
-    SetShown(tex, false)
-    return
-  end
-
-  local active = status.testMode == true
-  if not active then
-    local dependentUnit = frame._msufTargetingYouDependentUnit
-    if not dependentUnit or frame._msufTargetingYouSourceUnit ~= unit then
-      dependentUnit = unit .. "target"
-      frame._msufTargetingYouDependentUnit = dependentUnit
-      frame._msufTargetingYouSourceUnit = unit
-    end
-    active = _G.UnitCanAttack and BoolTrue(_G.UnitCanAttack("player", unit))
-      and _G.UnitIsUnit and BoolTrue(_G.UnitIsUnit(dependentUnit, "player"))
-  end
-  if active ~= true then
-    SetShown(tex, false)
-    return
-  end
-
-  if type(cfg.customIcon) == "string" and cfg.customIcon ~= "" then
-    SetTexture(tex, cfg.customIcon)
-    SetTexCoord(tex, 0, 1, 0, 1)
-  elseif AtlasAvailable(tex, "friends-icon-eye") then
-    SetAtlas(tex, "friends-icon-eye")
-  else
-    -- The atlas exists on supported clients. This fallback remains recognizable
-    -- on older/test clients that do not expose C_Texture.GetAtlasInfo.
-    SetTexture(tex, "Interface\\FriendsFrame\\PlusManz-PlusManz")
-    SetTexCoord(tex, 0, 1, 0, 1)
-  end
-  if tex.SetVertexColor then tex:SetVertexColor(1, 0.28, 0.18) end
-  SetShown(tex, true)
-end
-
 --- Player stance / form / aura text from the native stance bar. Data comes
 --- from MSUF.UFStance (spellID -> name cache, immutable per session); the
 --- reads are the player's own action-bar state, so they stay valid in combat
@@ -2330,7 +2285,6 @@ local STATUS_INDICATOR_DEFS = {
   { "RestingIndicator", "resting", nil, RESTING_PLAYER_EVENTS, UpdateResting, "restingIndicatorIcon", nil, true },
   { "IncomingResIndicator", "incomingRes", INCOMING_RES_EVENTS, nil, UpdateIncomingRes, "incomingResIndicatorIcon", true },
   { "PVPIndicator", "pvp", nil, nil, UpdatePVP, "pvpIndicatorIcon", true, nil, PVPEvents },
-  { "TargetingYouIndicator", "targetingYou", { "UNIT_TARGET" }, nil, Status.UpdateTargetingYou, "targetingYouIndicatorIcon", true },
   -- Stance text events fire only on user action or a stance-bar rebuild
   -- (talents, level-up, loading screen). Never add
   -- UPDATE_SHAPESHIFT_COOLDOWN - it fires with practically every GCD and

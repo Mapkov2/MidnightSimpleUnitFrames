@@ -39,7 +39,7 @@ local full = assert(Load("MidnightSimpleUnitFrames_Options/State/MSUF_ChangelogF
     "full Options changelog payload missing")
 assert(type(compact.entries) == "table" and #compact.entries == 4,
     "compact core changelog must retain four releases")
-assert(type(full.entries) == "table" and #full.entries == 12
+assert(type(full.entries) == "table" and #full.entries == 13
     and full.historyFromVersion == "6.02" and full.entries[#full.entries].version == "6.02",
     "full LoD changelog must contain only releases from 6.02 through current")
 assert(type(compact.sourceSha256) == "string" and compact.sourceSha256 == full.sourceSha256,
@@ -78,9 +78,6 @@ for index, bullet in ipairs(highlights) do
         "current highlight " .. index .. " has no exact control ID")
     assert(type(link.settingKey) == "string" and link.settingKey ~= "",
         "current highlight " .. index .. " has no exact setting key")
-    assert(type(link.prepareKind) == "string" and link.prepareKind ~= ""
-        and type(link.prepareValue) == "string" and link.prepareValue ~= "",
-        "current highlight " .. index .. " has no exact subcategory contract")
     local identity = "id" .. string.char(31) .. link.pageKey .. string.char(31)
         .. EncodeIdentityComponent(link.controlId)
     local row = assert(staticRows[identity],
@@ -89,9 +86,15 @@ for index, bullet in ipairs(highlights) do
         "current highlight " .. index .. " page/section differs from the built Menu2 control")
     assert(row[4] == "" or row[4] == link.settingKey,
         "current highlight " .. index .. " setting differs from the built Menu2 control")
-    local expectedContract = table.concat({ link.prepareKind, link.prepareValue, link.settingKey }, "=")
-    assert(("|" .. row[11] .. "|"):find("|" .. expectedContract .. "|", 1, true),
-        "current highlight " .. index .. " subcategory is not supported by the built Menu2 control")
+    local hasPrepare = type(link.prepareKind) == "string" and link.prepareKind ~= ""
+        and type(link.prepareValue) == "string" and link.prepareValue ~= ""
+    assert(row[4] ~= "" or hasPrepare,
+        "current highlight " .. index .. " dynamic control has no exact subcategory contract")
+    if hasPrepare then
+        local expectedContract = table.concat({ link.prepareKind, link.prepareValue, link.settingKey }, "=")
+        assert(("|" .. row[11] .. "|"):find("|" .. expectedContract .. "|", 1, true),
+            "current highlight " .. index .. " subcategory is not supported by the built Menu2 control")
+    end
 end
 
 local window = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Window.lua")
@@ -104,6 +107,7 @@ Require(page, 'M.RegisterPage("changelog"', "dedicated changelog page is not reg
 Require(page, "local route = { accordion = { [pageKey .. \":\" .. sectionId] = true } }",
     "highlight links do not open their exact accordion section")
 Require(page, "bridge.OpenSearchTarget(", "highlight links bypass exact Menu search routing")
+Require(page, "sectionId = sectionId,", "highlight links do not pass their exact section to runtime routing")
 Require(page, "focused == true and exact == true", "highlight links accept an inexact navigation result")
 Require(page, 'M.OpenChangelogMenuLink = OpenMenuLink', "Dashboard cannot reuse changelog links")
 Require(page, 'local button = CreateFrame("Button", nil, root)', "full changelog highlight text is not clickable")
@@ -143,6 +147,8 @@ Require(catalog, 'return nil, nil, "unsupported_prepare_value"',
 local routing = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_Routing.lua")
 Require(routing, "if exactRequired then return nil, false end",
     "exact changelog navigation can still fall back to fuzzy text routing")
+Require(routing, "entry._msuf2ResolveMissingSection(sectionId)",
+    "exact changelog navigation does not activate lazy selector-owned sections")
 local projector = Read(".github/scripts/search_static_index_project.lua")
 Require(projector, "exact target contract did not activate its declared subcategory",
     "static index generation does not execute exact subcategory hooks")

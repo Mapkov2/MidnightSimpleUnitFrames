@@ -207,20 +207,4 @@ Data.STATUS_CONTROL_SPECS = {
             "paladin aura text", "druid form text",
         },
     },
-    {
-        value = "targetingYou", label = "Targeting You",
-        show = "showTargetingYouIndicator", defaultShow = false,
-        size = "targetingYouIndicatorSize", defaultSize = 18,
-        anchor = "targetingYouIndicatorAnchor", defaultAnchor = "TOPRIGHT",
-        x = "targetingYouIndicatorOffsetX", defaultX = -36, y = "targetingYouIndicatorOffsetY", defaultY = 2,
-        layer = "targetingYouIndicatorLayer", defaultLayer = 7,
-        refresh = "MSUF_RequestStatusIconsRefreshForCurrent", statusRuntime = true,
-        customIcon = "targetingYouIndicatorCustomIcon",
-        units = { target = true, focus = true, boss = true },
-        description = "Shows a red eye when the hostile unit on this frame is currently targeting you. Updates only on target changes and has no polling cost.",
-        aliases = {
-            "targeting you", "targeting me", "targets me", "enemy targeting me",
-            "aggro eye", "target eye", "target of enemy indicator",
-        },
-    },
 }

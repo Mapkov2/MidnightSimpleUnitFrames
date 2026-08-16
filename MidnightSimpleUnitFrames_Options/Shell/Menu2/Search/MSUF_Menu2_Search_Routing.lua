@@ -173,6 +173,20 @@ end
 
 local function ResolveExactSearchAnchor(pageKey, exactTarget)
     if type(exactTarget) ~= "table" then return nil, nil end
+    local sectionId = tostring(exactTarget.sectionId or "")
+    if sectionId ~= "" then
+        local entry = M.cache and M.cache[pageKey]
+        local sections = entry and entry.sections
+        local section = sections and sections[sectionId]
+        local visible = section and section.IsVisible and section:IsVisible()
+        if not visible and entry and type(entry._msuf2ResolveMissingSection) == "function" then
+            -- Some pages (currently Colors) build selector-owned section groups
+            -- lazily. Activate/materialize the declared exact section before
+            -- resolving its runtime control; otherwise a changelog/search link
+            -- can fail on a cold page or resolve a widget under a hidden group.
+            entry._msuf2ResolveMissingSection(sectionId)
+        end
+    end
     local controlId = tostring(exactTarget.controlId or "")
     local catalog = M.RuntimeControlCatalog
     if controlId ~= "" then
@@ -543,7 +557,6 @@ statusAFKText=afk|afk text
 statusAFKTimer=afk timer|afk duration|afk time
 statusDNDText=dnd|dnd text|do not disturb
 stance=stance|stance text|stance indicator|shapeshift form|warrior stance|druid form|paladin aura
-targetingYou=targeting you|targeting me|targets me|enemy targeting me|aggro eye|target eye
 eliteicon=elite|rare|elite icon|rare icon
 raidgroupname=raid group|group number|subgroup
 level=level|level text|level indicator

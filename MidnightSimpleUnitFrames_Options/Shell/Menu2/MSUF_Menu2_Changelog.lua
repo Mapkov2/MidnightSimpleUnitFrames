@@ -48,6 +48,7 @@ local function OpenMenuLink(link)
     if bridge and type(bridge.OpenSearchTarget) == "function" then
         local exactTarget = {
             pageKey = pageKey,
+            sectionId = sectionId,
             controlId = controlId,
             settingKey = tostring(link.settingKey or ""),
             prepareKind = tostring(link.prepareKind or ""),
