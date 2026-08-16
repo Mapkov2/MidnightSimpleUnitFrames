@@ -911,6 +911,44 @@ local function BuildDashboardUX(ctx)
         W.Text(hero, "The Assistant dashboard module is not available. Use the navigation pages and search to configure MSUF.", 22, -82, mainW - 44, T.colors.muted)
     end
     local featureBlockBottom = mainTop - heroH
+    do
+        -- Jump-to-settings hub. The Dashboard is the landing page of every
+        -- session and previously linked to no configuration page at all; the
+        -- rail was the only way forward.
+        local JUMP_PAGES = {
+            { key = "uf_player", label = "Unitframes" },
+            { key = "gf_layout", label = "Party/Raid Frames" },
+            { key = "opt_bars", label = "Bars" },
+            { key = "opt_castbar", label = "Cast Bars" },
+            { key = "opt_colors", label = "Colors" },
+            { key = "opt_fonts", label = "Fonts" },
+            { key = "auras3_styling", label = "Auras" },
+            { key = "classpower", label = "Class Resources" },
+            { key = "gameplay", label = "Gameplay" },
+            { key = "profiles", label = "Profiles" },
+        }
+        local jumpCols = (mainW >= 760 and 5) or (mainW >= 560 and 4) or (mainW >= 420 and 3) or 2
+        local jumpRows = math.ceil(#JUMP_PAGES / jumpCols)
+        local jumpBtnH = 26
+        local jumpH = 40 + jumpRows * (jumpBtnH + 8)
+        local jumpTop = featureBlockBottom - 16
+        local jump = Card(root, "", x0, jumpTop, mainW, jumpH, T.colors.panel2, T.colors.borderSoft)
+        Kicker(jump, "GO TO SETTINGS", 16, -14)
+        local jumpGap = 8
+        local jumpBtnW = math.floor((mainW - 32 - (jumpCols - 1) * jumpGap) / jumpCols)
+        for i = 1, #JUMP_PAGES do
+            local spec = JUMP_PAGES[i]
+            local col = (i - 1) % jumpCols
+            local row = math.floor((i - 1) / jumpCols)
+            local btn = Button(jump, spec.label,
+                16 + col * (jumpBtnW + jumpGap), -36 - row * (jumpBtnH + 8),
+                jumpBtnW, jumpBtnH, function()
+                    if type(M.SelectPage) == "function" then M.SelectPage(spec.key) end
+                end, nil, "jump." .. spec.key, "navigation")
+            M.CallIf(T.AttachNavIcon, btn, spec.key, false, true)
+        end
+        featureBlockBottom = jumpTop - jumpH
+    end
     local function DashboardDisclosure(parent, title, open, stateKey, width, fillPills, semanticPath)
         local head = CreateFrame("Button", nil, parent)
         head:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
@@ -979,9 +1017,11 @@ local function BuildDashboardUX(ctx)
             end
         end, nil, "display_recovery.print_help")
         AddTooltip(printHelp, "Print Help", "Lists every MSUF slash command in chat, diagnostics included.")
-        Button(recovery, "Factory Reset All", recoveryWrap and 16 or (recoveryW - 152), factoryY, 136, 22, function()
-            M.CallIf(M.StageFactoryReset)
+        local factoryReset = Button(recovery, "Factory Reset All", recoveryWrap and 16 or (recoveryW - 152), factoryY, 136, 22, function()
+            M.CallIf(M.ConfirmFactoryReset)
         end, "danger", "display_recovery.factory_reset_all", "action", { confirmRequired = true })
+        AddTooltip(factoryReset, "Factory Reset All",
+            "Deletes every MSUF profile and setting for this account. Asks for confirmation first; export a profile backup before using this.")
         if recoveryWrap then
             W.Text(recovery, "Factory reset affects every MSUF setting.", 160, -128, recoveryW - 176, T.colors.muted)
         end

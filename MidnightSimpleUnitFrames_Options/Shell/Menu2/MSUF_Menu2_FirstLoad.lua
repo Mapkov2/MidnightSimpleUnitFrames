@@ -444,7 +444,11 @@ function M.ExecuteFirstLoadDashboardAction(action)
         return true, Tr("Closed the first-time setup. Start Guided Setup from the Dashboard anytime.")
     elseif action == "full_settings" then
         CallLifecycle(firstLoad, "Dismiss", "full_settings")
-        InvalidateHome()
+        InvalidateHomeCache()
+        -- "Open full settings" must land on actual settings. The Dashboard has
+        -- no configuration controls, so it was a dead end for the one button
+        -- that promises the full product.
+        if type(M.SelectPage) == "function" then M.SelectPage("uf_player") else InvalidateHome() end
         return true, Tr("Opened the full MSUF settings.")
     end
     return false, Tr("Unknown first-load action.")

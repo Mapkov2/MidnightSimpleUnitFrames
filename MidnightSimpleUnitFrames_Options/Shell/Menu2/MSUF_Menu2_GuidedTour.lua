@@ -247,7 +247,7 @@ local STAGES = {
     {
         id = "group_copy_apply", pageKey = "gf_layout", icon = "gf_layout", area = "groupframes", title = "Copy Party to Raid",
         ensureCopyPopup = "group", includeSections = { ["region:group_copy_popup"] = true }, includeEphemeralControls = true, controlLimit = 1,
-        controlPaths = { "group/copy/target/raid", "group/copy/target/mythicraid", "group/copy/target/party" },
+        controlPaths = { "group/copy/run" },
         impact = "Skipping does not copy the Party setup.",
     },
     {
@@ -691,7 +691,7 @@ local function StageCue(stage, position, touched)
     if stage.id == "gf_party_auras" then return Tr("AURA WORKSPACE - Choose Buffs, Debuffs, or External Defensives, then choose the editing tool.") end
     if stage.id == "gf_party_corner_icons" then return Tr("MSUF POWER MOVE - Assign each corner or bind a custom spell to the selected slot.") end
     if stage.id:match("^gf_party_") then return Tr("PARTY CORE - Change the new green setting and watch the Party Preview update.") end
-    if stage.id:match("^group_copy_") then return Tr("COPY FLOW - Open Copy To, select All categories, then press a destination to copy Party instantly.") end
+    if stage.id:match("^group_copy_") then return Tr("COPY FLOW - Open Copy To, select All categories, pick a destination, then press Copy Selected.") end
     if stage.id == "opt_bars" then return Tr("Sample = visual only · tests = temporary · scope = shared/unit/group") end
     if stage.id == "opt_castbar" then return Tr("Simulate casts here; position castbar handles in Preview or MSUF Edit Mode.") end
     if stage.id == "opt_fonts" then return Tr("Use the scope selector for shared, unit and group text; compare readability in Preview.") end

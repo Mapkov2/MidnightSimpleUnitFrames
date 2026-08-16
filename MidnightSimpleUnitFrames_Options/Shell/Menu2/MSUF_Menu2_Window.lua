@@ -215,6 +215,41 @@ local function SaveWindowSize(frame)
     g.msuf2WindowW = WINDOW_W
     g.msuf2WindowH = WINDOW_H
 end
+--- Window position persistence. Size was always saved; the position reset to
+--- CENTER every session, so a menu dragged to a second monitor edge had to be
+--- re-placed on every login. Stored in UIParent coordinates (LibWindow math:
+--- GetLeft() is in the frame's own scale space, offsets divide back by it).
+local function ReadSavedWindowPosition()
+    local g = M.GetGeneralDB and M.GetGeneralDB()
+    if type(g) ~= "table" then return nil end
+    local x, y = tonumber(g.msuf2WindowX), tonumber(g.msuf2WindowY)
+    if x == nil or y == nil then return nil end
+    return x, y
+end
+local function SaveWindowPosition(frame)
+    if not (frame and frame.GetLeft and frame.GetBottom) then return end
+    -- Only the normal state is a user-chosen position; maximized/minimized
+    -- geometry is owned by the window-state machine.
+    local state = frame._msuf2WindowState
+    if state ~= nil and state ~= "normal" then return end
+    local g = M.GetGeneralDB and M.GetGeneralDB()
+    if type(g) ~= "table" then return end
+    local left, bottom = frame:GetLeft(), frame:GetBottom()
+    if not (left and bottom) then return end
+    local scale = (frame.GetScale and frame:GetScale()) or 1
+    if not scale or scale == 0 then scale = 1 end
+    g.msuf2WindowX = floor(left * scale + 0.5)
+    g.msuf2WindowY = floor(bottom * scale + 0.5)
+end
+local function ApplySavedWindowPosition(frame)
+    local x, y = ReadSavedWindowPosition()
+    if not x then return false end
+    local scale = (frame.GetScale and frame:GetScale()) or 1
+    if not scale or scale == 0 then scale = 1 end
+    frame:ClearAllPoints()
+    frame:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", x / scale, y / scale)
+    return true
+end
 local RebuildActivePageForResize
 local ApplyMenuFrameScale
 local SNAP_EDGE_PX = 24
@@ -1563,6 +1598,24 @@ function M.SelectPage(key)
             M.scrollFrame:_msuf2RefreshScrollBar()
         end
     end
+    local combatScroll = M._msuf2CombatCloseScroll
+    if combatScroll then
+        -- One-shot: whichever page opens first after a combat force-close
+        -- consumes the snapshot; only the same page restores its position.
+        M._msuf2CombatCloseScroll = nil
+        local restoreOffset = tonumber(combatScroll.offset) or 0
+        if combatScroll.pageKey == key and restoreOffset > 0 then
+            local function RestoreCombatScroll()
+                if M.activeKey ~= key or not (M.scrollFrame and M.scrollFrame.SetVerticalScroll) then return end
+                local viewH = (M.scrollFrame.GetHeight and M.scrollFrame:GetHeight()) or 0
+                local childH = (M.scrollChild and M.scrollChild.GetHeight and M.scrollChild:GetHeight()) or 0
+                local maxOffset = childH - viewH
+                if maxOffset < 0 then maxOffset = 0 end
+                M.scrollFrame:SetVerticalScroll(restoreOffset > maxOffset and maxOffset or restoreOffset)
+            end
+            if C_Timer and C_Timer.After then C_Timer.After(0, RestoreCombatScroll) else RestoreCombatScroll() end
+        end
+    end
     entry.wrapper:Show()
     -- The wrapper is visible and activeKey committed: this is the earliest
     -- moment the docked panels' page-ownership gates pass, so wake their
@@ -1705,6 +1758,7 @@ local function BuildWindowShell()
     ExportPublic("MSUF_StandaloneOptionsWindow", f)
     f:SetSize(WINDOW_W, WINDOW_H)
     f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    ApplySavedWindowPosition(f)
     ApplyMenuFramePriority(f)
     f:EnableMouse(true)
     f:SetMovable(true)
@@ -2112,6 +2166,7 @@ local function InstallWindowInteractions(state)
         -- an invisible edge snap, and never re-apply snap after fallback cleanup.
         if applySnap and wasDragging then ApplySlashMenuSnap(f) end
         f._msuf2LastSnapLayout = nil
+        if wasDragging then SaveWindowPosition(f) end
     end
     f._msuf2BeginWindowDrag = BeginWindowDrag
     f._msuf2FinishWindowDrag = FinishWindowDrag
@@ -2594,6 +2649,14 @@ local function InstallWindowStatusRuntime(state)
             return
         end
         if event == "PLAYER_REGEN_DISABLED" then
+            -- Remember the reading position: the page itself is already
+            -- session-remembered, but losing the scroll to a stray pull made
+            -- the combat close disproportionately expensive.
+            M._msuf2CombatCloseScroll = {
+                pageKey = M.activeKey,
+                offset = (M.scrollFrame and M.scrollFrame.GetVerticalScroll
+                    and M.scrollFrame:GetVerticalScroll()) or 0,
+            }
             M.CallIf(M.BlockCombatAction)
             M.HideSlashMenuAndMinibar(f)
             return
@@ -2649,6 +2712,10 @@ local function InstallWindowLifecycle(state)
         M.CallIf(M.UpdateMenuCombatListener)
     end)
     f:SetScript("OnHide", function()
+        -- Geometry is still intact here; captures snap/animated final
+        -- positions that the drag handler never saw. Non-normal window states
+        -- are skipped inside SaveWindowPosition.
+        SaveWindowPosition(f)
         M.CallIf(M.ClearPendingFixedPreviewExpansion)
         M.CallIf(M.SetActivePageHeader, nil)
         M.CallIf(M.HideLayerOverview)
