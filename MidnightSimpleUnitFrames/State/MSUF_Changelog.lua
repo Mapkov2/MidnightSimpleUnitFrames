@@ -8,7 +8,7 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "300A48F843417767EF38712D12AB0997368E02FAE8B41B108CC80CB842E44F44",
+    sourceSha256 = "83930B6DB2BD237CE11EEEBA4652AAB3D4904B6D2E86D3FA7398F8DFA98573E8",
     currentVersion = "6.08",
     historyFromVersion = "6.07",
     previousVersion = "6.07",
@@ -130,7 +130,6 @@ local data = {
                         "Fixed Arena Group Frames using Raid instead of Party configuration across runtime, Blizzard-frame ownership, Edit Mode, and previews.",
                         "Fixed exact-ID aura indicators mixing friendly and hostile filters after switching targets.",
                         "Limited PvP indicator runtime to Arenas, Battlegrounds, and War Mode, removing unrelated faction and PvP-timer event traffic outside those modes.",
-                        "Fixed the See New Features hover outline passing its texture sublevel as an inherited template instead of the correct draw-sublevel argument.",
                     },
                 },
             },
