@@ -25,6 +25,12 @@ local AURA_ANCHORS, STATUS_ICON_ANCHORS, GF_STATUS_ICON_SPECS, GF_STATUS_ICON_VA
 local GF, RefreshGFPreview, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection, CurrentScope, BindScopeToggle, ScopeDropdown, ScopeSlider, ScopeColor, SpellIndicators, IconStyleValues, CurrentGFStatusSpec, QueueSpellIndicators, SpellSpecValues, SpellTrackedSpecValues, IsAllSpecsSpellSpec, CurrentSpellMultiSpec, EffectiveSpellSpec, SpellAuraValues, SetCurrentSpellAura, ClearCurrentSpellAura, CurrentSpellAura, CurrentSpellConfig, PlacedConfig, FrameEffectConfig, CICategoryValues, CIFilterValues, CIModeValues, CurrentCISlot, CICustomConfig, BindNestedSlider, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, TrackSectionRefresh, OnOffBadge, OptionText, ControlMeta, RegisterControl = M.Pick(GP, [[GF RefreshGFPreview Conf Val QueueGF Set Bool Num ScopeSection CurrentScope BindScopeToggle ScopeDropdown ScopeSlider ScopeColor SpellIndicators IconStyleValues CurrentGFStatusSpec QueueSpellIndicators SpellSpecValues SpellTrackedSpecValues IsAllSpecsSpellSpec CurrentSpellMultiSpec EffectiveSpellSpec SpellAuraValues SetCurrentSpellAura ClearCurrentSpellAura CurrentSpellAura CurrentSpellConfig PlacedConfig FrameEffectConfig CICategoryValues CIFilterValues CIModeValues CurrentCISlot CICustomConfig BindNestedSlider SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus TrackSectionRefresh OnOffBadge OptionText ControlMeta RegisterControl]])
 OnOffBadge = OnOffBadge or M.OnOffBadge
 OptionText = OptionText or M.OptionText
+local function ResolvePlacedSpellIndicatorControlVisibility(placed)
+    local placedType = type(placed) == "table" and tostring(placed.type or "none"):lower() or "none"
+    local iconSelected = placedType == "icon"
+    local barSelected = placedType == "bar"
+    return iconSelected, barSelected, barSelected and placed.barShowTimer == true
+end
 SetCurrentSpellAura = SetCurrentSpellAura or function(kind, auraName)
     M.gfSpellIndicatorSelection = M.gfSpellIndicatorSelection or {}
     M.gfSpellIndicatorSelection[kind] = auraName or ""
@@ -1725,6 +1731,7 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         M.gfPreviewAllSpecSpellIcons[kind] = enabled == true or nil
         RefreshPreviewAllButton()
         M.CallIf(RefreshGFPreview)
+        RefreshSpellIndicatorState()
         return PreviewAllSpecIconsEnabled() == (enabled == true)
     end
     previewAll:SetScript("OnClick", function()
@@ -1980,6 +1987,20 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         "Timer X", -100, 100, 1, "barTimerX", 0, -896)
     local placedBarTimerY = BindConfigSlider(PlacedConfig, siLeftX + timerSliderW + timerGap, timerSliderW,
         "Timer Y", -100, 100, 1, "barTimerY", 0, -896)
+    local function RefreshPlacedControlVisibility(placed)
+        local iconSelected, barSelected, barTimerSelected = ResolvePlacedSpellIndicatorControlVisibility(placed)
+        W.SetControlShown(placedIconEffect, iconSelected)
+        W.SetControlShown(placedBarSmoothFill, barSelected)
+        W.SetControlShown(placedBarShowTimer, barSelected)
+        W.SetControlShown(placedBarTimerAnchor, barTimerSelected)
+        W.SetControlShown(placedBarTimerX, barTimerSelected)
+        W.SetControlShown(placedBarTimerY, barTimerSelected)
+        return iconSelected, barSelected, barTimerSelected
+    end
+    -- Dropdowns are visible when constructed. Apply the selected Display-as
+    -- shape immediately so a skipped/late page refresh cannot expose controls
+    -- from another shape, including after toggling Preview all spells.
+    RefreshPlacedControlVisibility(PlacedConfig(CurrentScope(), false))
     if M.AddTooltip then
         M.AddTooltip(placedGrowth, "Growth",
             "For Bar, the first direction controls the fill: Right fills left-to-right; Left fills right-to-left. Up or Down remains the secondary layout direction.",
@@ -2097,11 +2118,9 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         local frameKind = frame and frame.type or "none"
         local hasFrame = hasSpell and frameKind ~= "none"
         RefreshPreviewAllButton()
-        local iconSelected = placed and placed.type == "icon"
-        local barSelected = placed and placed.type == "bar"
+        local iconSelected, barSelected, barTimerSelected = RefreshPlacedControlVisibility(placed)
         local cdRelevant = placedEnabled and iconSelected
         local barRelevant = placedEnabled and barSelected
-        local barTimerSelected = barSelected and placed.barShowTimer == true
         SetOptionEnabled(siEnable, not SPELL_INDICATORS_121_PTR_DISABLED)
         SetManyEnabled(indicatorsOn, siLayer, specDrop)
         SetOptionEnabled(multiSpecDrop, indicatorsOn and multi)
@@ -2115,12 +2134,6 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         SetManyEnabled(placedEnabled, placedAnchor, placedSize, placedGrowth)
         SetOptionEnabled(placedBarWidth, barRelevant)
         SetOptionEnabled(placedIconEffect, cdRelevant)
-        W.SetControlShown(placedIconEffect, iconSelected)
-        W.SetControlShown(placedBarSmoothFill, barSelected)
-        W.SetControlShown(placedBarShowTimer, barSelected)
-        W.SetControlShown(placedBarTimerAnchor, barTimerSelected)
-        W.SetControlShown(placedBarTimerX, barTimerSelected)
-        W.SetControlShown(placedBarTimerY, barTimerSelected)
         SetManyEnabled(barRelevant, placedBarSmoothFill, placedBarShowTimer)
         SetManyEnabled(barRelevant and barTimerSelected,
             placedBarTimerAnchor, placedBarTimerX, placedBarTimerY)
