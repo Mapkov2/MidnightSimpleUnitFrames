@@ -10,7 +10,7 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local Search = M.Search or {}
 M.Search = Search
-Search.StaticIndexSourceSha256 = "FAE396B1BA0A9AA12CC7B5F381DA19DA03B4DE48D0E3298B1081E8DD415D123C"
+Search.StaticIndexSourceSha256 = "1155C1DB183B1FA68924EC20A15DE10766112A6C8CFCC3252F470F6F07884414"
 Search.StaticIndexRecordCount = 2824
 Search.StaticIndexBlob = [==[
 auras3_buffs	Border Alpha (%)	slider			Appearance > Icon Style	border alpha	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eappearance%2Eicon-style%2Estylebordercolor-alpha	aura_style_appearance_buff_icon_style			border alpha appearance icon style auras style appearance icon style stylebordercolor alpha auras3 buffs slider
@@ -1009,7 +1009,7 @@ uf_boss	Color	color			Buff > Full Frame	color	iduf_bossmenu2%2Euf_boss%2Eauras
 uf_boss	Color	color			Custom Container > Effect	color	iduf_bossmenu2%2Euf_boss%2Eauras%2Ecustom-container%2Eeffect%2Ecolor				color custom container effect auras custom container effect color uf boss color
 uf_boss	Color	color			Debuff > Full Frame	color	iduf_bossmenu2%2Euf_boss%2Eauras%2Estyle%2Elane%2Edebuff%2Efull-frame%2Ecolor				color debuff full frame auras style lane debuff full frame color uf boss color
 uf_boss	Container name	textinput			Custom Container > Setup	container name	iduf_bossmenu2%2Euf_boss%2Eauras%2Ecustom-container%2Esetup%2Ename				container name custom container setup auras custom container setup name uf boss textinput
-uf_boss	Container:	segment			Auras	container	iduf_bossmenu2%2Euf_boss%2Eauras%2Eunit-workspace%2Econtainer-selector	auras			container auras auras unit workspace container selector uf boss segment
+uf_boss	Container:	segment			Auras	container	iduf_bossmenu2%2Euf_boss%2Eauras%2Eunit-workspace%2Econtainer-selector	auras	unitAuraWorkspace	unitAuraWorkspace=custom4_behavior=auras3.boss.custom4.placed.sortMethod	container auras auras unit workspace container selector uf boss segment
 uf_boss	Continue HP gradient	dropdown			Unit > Texture Layer	continue hp gradient	iduf_bossmenu2%2Euf_boss%2Eunit%2Etexture_layer%2Ehealthabovemode	texture_layer			continue hp gradient unit texture layer unit texture layer healthabovemode uf boss dropdown
 uf_boss	Cooldown X	slider			Custom Container > Appearance	cooldown x	iduf_bossmenu2%2Euf_boss%2Eauras%2Ecustom-container%2Eappearance%2Ecooldownx				cooldown x custom container appearance auras custom container appearance cooldownx uf boss slider
 uf_boss	Cooldown Y	slider			Custom Container > Appearance	cooldown y	iduf_bossmenu2%2Euf_boss%2Eauras%2Ecustom-container%2Eappearance%2Ecooldowny				cooldown y custom container appearance auras custom container appearance cooldowny uf boss slider
@@ -1384,7 +1384,7 @@ uf_focus	Color	color			Buff > Full Frame	color	iduf_focusmenu2%2Euf_focus%2Eau
 uf_focus	Color	color			Custom Container > Effect	color	iduf_focusmenu2%2Euf_focus%2Eauras%2Ecustom-container%2Eeffect%2Ecolor				color custom container effect auras custom container effect color uf focus color
 uf_focus	Color	color			Debuff > Full Frame	color	iduf_focusmenu2%2Euf_focus%2Eauras%2Estyle%2Elane%2Edebuff%2Efull-frame%2Ecolor				color debuff full frame auras style lane debuff full frame color uf focus color
 uf_focus	Container name	textinput			Custom Container > Setup	container name	iduf_focusmenu2%2Euf_focus%2Eauras%2Ecustom-container%2Esetup%2Ename				container name custom container setup auras custom container setup name uf focus textinput
-uf_focus	Container:	segment			Auras	container	iduf_focusmenu2%2Euf_focus%2Eauras%2Eunit-workspace%2Econtainer-selector	auras			container auras auras unit workspace container selector uf focus segment
+uf_focus	Container:	segment			Auras	container	iduf_focusmenu2%2Euf_focus%2Eauras%2Eunit-workspace%2Econtainer-selector	auras	unitAuraWorkspace	unitAuraWorkspace=custom4_behavior=auras3.focus.custom4.placed.sortMethod	container auras auras unit workspace container selector uf focus segment
 uf_focus	Continue HP gradient	dropdown			Unit > Texture Layer	continue hp gradient	iduf_focusmenu2%2Euf_focus%2Eunit%2Etexture_layer%2Ehealthabovemode	texture_layer			continue hp gradient unit texture layer unit texture layer healthabovemode uf focus dropdown
 uf_focus	Cooldown X	slider			Custom Container > Appearance	cooldown x	iduf_focusmenu2%2Euf_focus%2Eauras%2Ecustom-container%2Eappearance%2Ecooldownx				cooldown x custom container appearance auras custom container appearance cooldownx uf focus slider
 uf_focus	Cooldown Y	slider			Custom Container > Appearance	cooldown y	iduf_focusmenu2%2Euf_focus%2Eauras%2Ecustom-container%2Eappearance%2Ecooldowny				cooldown y custom container appearance auras custom container appearance cooldowny uf focus slider
@@ -2391,7 +2391,7 @@ uf_target	Color	color			Buff > Full Frame	color	iduf_targetmenu2%2Euf_target%2
 uf_target	Color	color			Custom Container > Effect	color	iduf_targetmenu2%2Euf_target%2Eauras%2Ecustom-container%2Eeffect%2Ecolor				color custom container effect auras custom container effect color uf target color
 uf_target	Color	color			Debuff > Full Frame	color	iduf_targetmenu2%2Euf_target%2Eauras%2Estyle%2Elane%2Edebuff%2Efull-frame%2Ecolor				color debuff full frame auras style lane debuff full frame color uf target color
 uf_target	Container name	textinput			Custom Container > Setup	container name	iduf_targetmenu2%2Euf_target%2Eauras%2Ecustom-container%2Esetup%2Ename				container name custom container setup auras custom container setup name uf target textinput
-uf_target	Container:	segment			Auras	container	iduf_targetmenu2%2Euf_target%2Eauras%2Eunit-workspace%2Econtainer-selector	auras			container auras auras unit workspace container selector uf target segment
+uf_target	Container:	segment			Auras	container	iduf_targetmenu2%2Euf_target%2Eauras%2Eunit-workspace%2Econtainer-selector	auras	unitAuraWorkspace	unitAuraWorkspace=custom4_behavior=auras3.target.custom4.placed.sortMethod	container auras auras unit workspace container selector uf target segment
 uf_target	Continue HP gradient	dropdown			Unit > Texture Layer	continue hp gradient	iduf_targetmenu2%2Euf_target%2Eunit%2Etexture_layer%2Ehealthabovemode	texture_layer			continue hp gradient unit texture layer unit texture layer healthabovemode uf target dropdown
 uf_target	Cooldown X	slider			Custom Container > Appearance	cooldown x	iduf_targetmenu2%2Euf_target%2Eauras%2Ecustom-container%2Eappearance%2Ecooldownx				cooldown x custom container appearance auras custom container appearance cooldownx uf target slider
 uf_target	Cooldown Y	slider			Custom Container > Appearance	cooldown y	iduf_targetmenu2%2Euf_target%2Eauras%2Ecustom-container%2Eappearance%2Ecooldowny				cooldown y custom container appearance auras custom container appearance cooldowny uf target slider

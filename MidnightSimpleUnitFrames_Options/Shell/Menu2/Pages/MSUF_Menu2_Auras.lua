@@ -4267,6 +4267,29 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
             Rebuild(ctx)
         end,
     }), workspaceTabs, "unit-workspace.container-selector", customContainerContract)
+    if containerBar and unit ~= "player" then
+        local exactKind = "unitAuraWorkspace"
+        local exactValue = "custom4_behavior"
+        local exactSettingKey = "auras3." .. tostring(unit) .. ".custom4.placed.sortMethod"
+        containerBar._msuf2ExactTargetKinds = { [exactKind] = true }
+        containerBar._msuf2ExactTargetContracts = {
+            [exactKind] = { [exactValue] = exactSettingKey },
+        }
+        containerBar._msuf2PrepareExactSearchTarget = function(_, exactTarget)
+            if type(exactTarget) ~= "table" or exactTarget.prepareKind ~= exactKind
+                or tostring(exactTarget.prepareValue or "") ~= exactValue
+            then
+                return false
+            end
+            local alreadySelected = M.unitAuraTabSelection[unit] == "custom4"
+                and CurrentUnitAuraTool(unit, "custom4") == "behavior"
+            if not alreadySelected then
+                M.unitAuraTabSelection[unit] = "custom4"
+                SetUnitAuraTool(unit, "custom4", "behavior")
+            end
+            return true
+        end
+    end
     local toolBar = RegisterAuraChoiceBar(ctx, W.ScopeOverrideBar(ctx, top, {
         values = tools,
         width = sectionW,
