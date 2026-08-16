@@ -22,6 +22,7 @@ Data.UNIT_LABELS = {
     focus = "Focus",
     pet = "Pet",
     boss = "Boss",
+    arena = "Arena",
     party = "Party",
     raid = "Raid",
     mythicraid = "Mythic Raid",
@@ -36,6 +37,7 @@ Data.UNIT_ALIASES = {
     focus = { "focus", "fokus" },
     pet = { "pet", "begleiter" },
     boss = { "boss", "boss frames", "bossframes" },
+    arena = { "arena", "arena frames", "arenaframes" },
     party = { "party", "party frame", "party frames", "partyframe", "group", "group frames", "gruppenframes", "gruppe" },
     raid = { "raid", "raid frame", "raid frames", "raidframe", "schlachtzug" },
     mythicraid = { "mythicraid", "mythic raid", "mythic raid frame", "mythic raid frames", "mythicraidframe" },
@@ -69,6 +71,7 @@ Data.AURA_UNIT_FLAGS = {
     target = "showTarget",
     focus = "showFocus",
     boss = "showBoss",
+    arena = "showArena",
 }
 
 Data.GLOBAL_SCOPE_ORDER = {
@@ -79,6 +82,7 @@ Data.GLOBAL_SCOPE_ORDER = {
     "focus",
     "pet",
     "boss",
+    "arena",
     "gf_party",
     "gf_raid",
 }
@@ -92,6 +96,7 @@ Data.GLOBAL_SCOPE_META = {
     focus = { label = "Focus", aliases = { "focus", "focus frame", "focus unitframe" } },
     pet = { label = "Pet", aliases = { "pet", "pet frame", "pet unitframe" } },
     boss = { label = "Boss", aliases = { "boss", "boss frames", "bossframes" } },
+    arena = { label = "Arena", aliases = { "arena", "arena frames", "arenaframes" } },
     gf_party = { label = "Party", aliases = { "party", "party frames", "party group", "group frames", "group frame" } },
     gf_raid = { label = "Raid", aliases = { "raid", "raid frames", "mythic raid", "mythicraid", "raid group" } },
 }

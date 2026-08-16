@@ -30,7 +30,7 @@ local ApplyUnit = C.ApplyUnit
 local CallGlobal = C.CallGlobal
 local ClampNumber = C.ClampNumber
 
-local UNIT_KEYS = { "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" }
+local UNIT_KEYS = { "player", "target", "focus", "targettarget", "focustarget", "pet", "boss", "arena" }
 
 local UnitframeData = A.UnitframeRegistryData
 if type(UnitframeData) ~= "table" then return end

@@ -283,3 +283,22 @@ RegisterUnitEnum("boss", "bossLayoutMode", "bossLayoutMode", "Boss Frame Layout"
     end,
     applyOpts = { preview = true },
 })
+
+--- Arena mirrors the boss stacked-container settings (same key names).
+RegisterUnitNumberSetting("arena", "spacing", "spacing", "Arena Spacing", -96, -400, 0, MakeAliases("arena", "spacing", "frame spacing", "closer together", "farther apart", "gap between frames", "distance between frames"), {
+    category = "Arena Layout",
+    applyOpts = { preview = true },
+})
+
+RegisterUnitEnum("arena", "bossLayoutMode", "bossLayoutMode", "Arena Frame Layout", "VERTICAL_DOWN", ctx.BOSS_LAYOUT_VALUES, MakeAliases("arena", "frame layout", "layout"), {
+    category = "Arena Layout",
+    valueAliases = ctx.BOSS_LAYOUT_ALIASES,
+    get = function()
+        return NormalizeBossLayoutMode(UnitDB("arena").bossLayoutMode)
+    end,
+    set = function(_, value)
+        local conf = UnitDB("arena")
+        conf.bossLayoutMode = NormalizeBossLayoutMode(value)
+    end,
+    applyOpts = { preview = true },
+})

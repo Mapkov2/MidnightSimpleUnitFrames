@@ -77,6 +77,7 @@ function A.CastbarsRegistry.RegisterDetailSettings(ctx)
         target = { prefix = "castbarTarget", iconDefault = 0, textX = 0, textY = 0, timeX = -2, timeY = 0 },
         focus = { prefix = "castbarFocus", iconDefault = 0, textX = 0, textY = 0, timeX = -2, timeY = 0 },
         boss = { prefix = "bossCast", iconDefault = 0, textX = 0, textY = 0, timeX = 0, timeY = 0 },
+        arena = { prefix = "arenaCast", iconDefault = 0, textX = 0, textY = 0, timeX = 0, timeY = 0 },
     }
     for unit, spec in pairs(detail) do
         local aliases

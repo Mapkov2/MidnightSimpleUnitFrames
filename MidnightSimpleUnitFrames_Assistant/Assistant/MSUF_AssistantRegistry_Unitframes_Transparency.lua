@@ -12,7 +12,7 @@ M.Assistant = A
 
 A.UnitframesRegistry = A.UnitframesRegistry or {}
 
-local RANGE_FADE_UNITS = { target = true, targettarget = true, focus = true, focustarget = true, pet = true, boss = true }
+local RANGE_FADE_UNITS = { target = true, targettarget = true, focus = true, focustarget = true, pet = true, boss = true, arena = true }
 
 function A.UnitframesRegistry.RegisterTransparencyAndRangeSettings(ctx, unit)
     if type(ctx) ~= "table" or type(unit) ~= "string" then return end

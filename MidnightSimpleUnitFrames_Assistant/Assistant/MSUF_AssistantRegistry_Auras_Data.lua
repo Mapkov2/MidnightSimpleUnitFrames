@@ -14,7 +14,7 @@ M.Assistant = A
 local Data = A.AurasRegistryData or {}
 A.AurasRegistryData = Data
 
-Data.AURA_UNITS = { "player", "target", "focus", "boss" }
+Data.AURA_UNITS = { "player", "target", "focus", "boss", "arena" }
 Data.AURA_SCOPES = { "player", "target", "focus", "boss" }
 Data.AURA_LANES = {
     { key = "buff", label = "Buff", plural = "Buffs" },

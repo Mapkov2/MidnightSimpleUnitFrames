@@ -29,7 +29,7 @@ M.Assistant = A
 local Audit = A.CoverageAudit or {}
 A.CoverageAudit = Audit
 
-local UNIT_SCOPES = { "player", "target", "targettarget", "focustarget", "focus", "pet", "boss" }
+local UNIT_SCOPES = { "player", "target", "targettarget", "focustarget", "focus", "pet", "boss", "arena" }
 local GROUP_SCOPES = { "gf_party", "gf_raid", "gf_mythicraid", "gf_priority" }
 local FLAT_SCOPES = { "general", "bars", "gameplay" }
 
