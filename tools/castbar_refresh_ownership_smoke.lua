@@ -96,11 +96,21 @@ assert(detailCount == 1, "each Visuals frame refresh must invoke detail layout e
 assert(contains(refreshBody, "ApplyCastbarDetailLayout(frame, forcedUnit, general)"))
 
 local castStart = assert(driver:find("function frame:Cast(state)", 1, true))
-local interruptStart = assert(driver:find("function frame:SetInterrupted()", castStart, true))
+local interruptStart = assert(driver:find("function frame:SetInterrupted(interruptedBy)", castStart, true))
 local castBody = driver:sub(castStart, interruptStart - 1)
 assert(not contains(castBody, "self.timer = true"), "ordinary casts must not arm interrupt feedback")
 assert(not contains(castBody, "C_Timer.After(feedbackDuration"), "ordinary casts must not schedule feedback timers")
 assert(not contains(driver, "_msufInterruptToken"), "obsolete interrupt timer token should not survive")
+assert(contains(driver, "local function RefreshTargetFocusChanged(frame)"),
+    "target/focus identity must refresh through the synchronous live-client path")
+assert(contains(driver, "frame._msufDriverOnUpdateCleared == true")
+    and contains(driver, "frame._msufDriverOnUpdateCleared = true")
+    and contains(driver, "BuildCastbarFrameElements(frame)\n    ClearFrameOnUpdate(frame)"),
+    "driver frames must clear OnUpdate once before entering the target-swap hotpath")
+assert(not contains(driver, "ScheduleTargetFocusChanged")
+    and not contains(driver, "_msufTargetFocusRefreshQueued")
+    and not contains(driver, "_msufTargetFocusRefreshCallback"),
+    "target/focus identity retained a zero-delay scheduler")
 assert(contains(driver, "C_Timer.After(0, self._msufInactiveRecheckCB)"))
 assert(contains(driver, "C_Timer.After(feedbackDuration, self._msufInterruptHideCB)"))
 assert(contains(player, "C_Timer.After(0, frame._msufSoftResyncCB)"))
