@@ -195,7 +195,13 @@ function Get-Menu2SourceSha256 {
     $files = @(Get-ChildItem -LiteralPath $sourceRoot -File -Recurse | Where-Object {
         ($_.Extension -ieq ".lua" -or $_.Extension -ieq ".xml") -and
         [System.IO.Path]::GetFullPath($_.FullName) -ine $generatedPath
-    } | Sort-Object { $_.FullName.Substring($sourceRoot.Length).Replace('\', '/') })
+    })
+    [System.Array]::Sort($files, [System.Comparison[object]]{
+        param($left, $right)
+        $leftRelative = $left.FullName.Substring($sourceRoot.Length).TrimStart([char[]]@('\', '/')).Replace('\', '/')
+        $rightRelative = $right.FullName.Substring($sourceRoot.Length).TrimStart([char[]]@('\', '/')).Replace('\', '/')
+        return [System.StringComparer]::Ordinal.Compare($leftRelative, $rightRelative)
+    })
     $hash = [System.Security.Cryptography.IncrementalHash]::CreateHash(
         [System.Security.Cryptography.HashAlgorithmName]::SHA256)
     $utf8 = [System.Text.UTF8Encoding]::new($false)
@@ -204,7 +210,8 @@ function Get-Menu2SourceSha256 {
             $relative = $file.FullName.Substring($sourceRoot.Length).TrimStart([char[]]@('\', '/')).Replace('\', '/')
             $hash.AppendData($utf8.GetBytes($relative))
             $hash.AppendData([byte[]](0))
-            $hash.AppendData([System.IO.File]::ReadAllBytes($file.FullName))
+            $content = [System.IO.File]::ReadAllText($file.FullName).Replace("`r`n", "`n").Replace("`r", "`n")
+            $hash.AppendData($utf8.GetBytes($content))
             $hash.AppendData([byte[]](0))
         }
         return ([System.BitConverter]::ToString($hash.GetHashAndReset())).Replace('-', '')
