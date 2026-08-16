@@ -111,6 +111,7 @@ Features\Gameplay\MSUF_Feature_GameplayConfig.lua
 Features\Gameplay\MSUF_Feature_GameplayRuntime.lua
 Features\Gameplay\MSUF_Feature_TargetSound.lua
 Features\Gameplay\MSUF_Feature_TotemPreview.lua
+Features\Gameplay\MSUF_Feature_ArenaMatch.lua
 Features\Telemetry\MSUF_Analytics.lua
 Features\Diagnostics\MSUF_Feature_GroupPulse.lua
 Features\Diagnostics\MSUF_Feature_AuraLayerProbe.lua
@@ -152,6 +153,8 @@ Castbars\MSUF_CastbarDriver.lua
 Castbars\MSUF_FocusKick_StateDriver.lua
 Castbars\MSUF_BossCastbars.lua
 Castbars\MSUF_BossCastbars_Preview.lua
+Castbars\MSUF_ArenaCastbars.lua
+Castbars\MSUF_ArenaCastbars_Preview.lua
 Castbars\MSUF_Castbars.lua
 Castbars\MSUF_CastbarGCD.lua
 ClassPower\MSUF_CP_Constants.lua
