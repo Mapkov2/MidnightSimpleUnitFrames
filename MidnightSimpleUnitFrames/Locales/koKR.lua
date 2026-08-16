@@ -3921,6 +3921,7 @@ L["Language, menu behavior, frame highlights, tooltips and Blizzard frames."] = 
 L["Open Highlights"] = "강조 설정 열기"
 L["|cffff625f•|r|cff61d683•|r|cff5aa7ff•|r  Colors..."] = "|cffff625f•|r|cff61d683•|r|cff5aa7ff•|r  색상..."
 
+
 --- Fill Direction and Power bar textures (6.0 Beta 26)
 L["Power Bar Texture"] = "자원 바 텍스처"
 L["Power Background Texture"] = "자원 배경 텍스처"
@@ -5092,6 +5093,9 @@ L["This UnitFrame is disabled. Turn on its Enable toggle in Frame Basics first."
 L["GO TO SETTINGS"] = "설정으로 이동"
 L["Search is paused in combat."] = "전투 중에는 검색이 일시 중지됩니다."
 L["Move and place MSUF frames on screen. Opens MSUF Edit Mode for this frame."] = "MSUF 프레임을 화면에서 이동하고 배치합니다. 이 프레임의 MSUF 편집 모드를 엽니다."
+
+L["Theme updated"] = "테마가 업데이트됨"
+L["Theme reset"] = "테마가 초기화됨"
 
 --- Arena frames (dedicated arena1-3 unit frames)
 L["Arena"] = "투기장"

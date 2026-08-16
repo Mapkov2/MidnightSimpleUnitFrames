@@ -6,6 +6,7 @@
     <Script file="MSUF_Menu2_WindowPriority.lua"/>
     <Script file="MSUF_Menu2_Theme_Tokens.lua"/>
     <Script file="MSUF_Menu2_Theme.lua"/>
+    <Script file="MSUF_Menu2_ThemeSkin.lua"/>
     <Script file="MSUF_Menu2_Widgets.lua"/>
     <Script file="MSUF_Menu2_LayerOverview.lua"/>
     <Script file="MSUF_Menu2_ControlGates.lua"/>

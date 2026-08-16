@@ -530,10 +530,46 @@ local function SetSuperellipseVertexColor(self, r, g, b, a)
     self.M:SetVertexColor(r, g, b, a)
     self.R:SetVertexColor(r, g, b, a)
 end
-local function CreateSuperellipseParts(frame, layer, subLevel)
+--- Provider shape sets (see MSUF_Menu2_ThemeSkin.lua) replace the three-part
+--- superellipse with ONE engine-sliced texture per role. Applied lazily so a
+--- pill set can re-resolve its height-bound asset on every relayout.
+function T.ApplyShapeSliceTexture(parts, frame)
+    local set = T.activeShapeSet
+    local tex = parts and parts.single
+    if not (set and tex) then return end
+    local spec = set
+    if set.kind == "pill" and type(set.ResolvePill) == "function" then
+        spec = set.ResolvePill((frame and frame.GetHeight and frame:GetHeight()) or 24)
+    end
+    if not spec then return end
+    local path = (parts._assetRole == "edge") and spec.edge or spec.fill
+    if not path or parts._appliedShapePath == path then return end
+    parts._appliedShapePath = path
+    tex:SetTexture(path)
+    if tex.SetTextureSliceMargins and spec.margins then
+        tex:SetTextureSliceMargins(spec.margins[1], spec.margins[2], spec.margins[3], spec.margins[4])
+        if tex.SetTextureSliceMode then
+            tex:SetTextureSliceMode((Enum and Enum.UITextureSliceMode and Enum.UITextureSliceMode.Stretched) or 0)
+        end
+    end
+end
+local function CreateSuperellipseParts(frame, layer, subLevel, assetRole)
     -- The pill/superellipse skin is three textures, not a nine-slice frame. This keeps
     -- allocation cheap for dense option rows while still allowing gradient fills.
     subLevel = subLevel or 0
+    if T.activeShapeSet then
+        -- Provider shape active: one slice-margin texture carries the whole
+        -- silhouette. L/M/R alias it so every existing SetVertexColor caller
+        -- keeps working unchanged.
+        local tex = frame:CreateTexture(nil, layer, nil, subLevel)
+        SmoothTexture(tex)
+        local parts = { single = tex, L = tex, M = tex, R = tex, _assetRole = assetRole or "fill" }
+        parts.SetVertexColor = function(_, r, g, b, a)
+            tex:SetVertexColor(r, g, b, a or 1)
+        end
+        T.ApplyShapeSliceTexture(parts, frame)
+        return parts
+    end
     local left = frame:CreateTexture(nil, layer, nil, subLevel)
     left:SetTexture(T.media.superellipse)
     left:SetTexCoord(0.00, 0.25, 0, 1)
@@ -550,6 +586,14 @@ local function CreateSuperellipseParts(frame, layer, subLevel)
 end
 local function LayoutSuperellipseParts(parts, frame, inset, capW, rightPad)
     rightPad = tonumber(rightPad) or 0
+    if parts.single then
+        local p = tonumber(inset) or 1
+        parts.single:ClearAllPoints()
+        parts.single:SetPoint("TOPLEFT", frame, "TOPLEFT", p, -p)
+        parts.single:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -p - rightPad, p)
+        T.ApplyShapeSliceTexture(parts, frame)
+        return
+    end
     parts.L:ClearAllPoints()
     parts.M:ClearAllPoints()
     parts.R:ClearAllPoints()
@@ -571,8 +615,8 @@ function T.CreateSuperellipseLayers(frame, key, inset, fillLayer, borderLayer)
     fillLayer = fillLayer or "BACKGROUND"
     borderLayer = borderLayer or "BORDER"
     local h = (frame.GetHeight and frame:GetHeight()) or 22
-    local fill = CreateSuperellipseParts(frame, fillLayer, 0)
-    local border = CreateSuperellipseParts(frame, borderLayer, -1)
+    local fill = CreateSuperellipseParts(frame, fillLayer, 0, "fill")
+    local border = CreateSuperellipseParts(frame, borderLayer, -1, "edge")
     local function Layout()
         local frameW = (frame.GetWidth and frame:GetWidth()) or 120
         local w = frameW

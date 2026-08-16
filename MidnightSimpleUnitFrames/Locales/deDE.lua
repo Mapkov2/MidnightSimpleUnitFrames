@@ -4311,6 +4311,7 @@ L["Language, menu behavior, frame highlights, tooltips and Blizzard frames."] = 
 L["Open Highlights"] = "Hervorhebungen öffnen"
 L["|cffff625f•|r|cff61d683•|r|cff5aa7ff•|r  Colors..."] = "|cffff625f•|r|cff61d683•|r|cff5aa7ff•|r  Farben..."
 
+
 --- Fill Direction and Power bar textures (6.0 Beta 26)
 L["Power Bar Texture"] = "Energieleisten-Textur"
 L["Power Background Texture"] = "Energie-Hintergrundtextur"
@@ -5553,6 +5554,9 @@ L["This UnitFrame is disabled. Turn on its Enable toggle in Frame Basics first."
 L["GO TO SETTINGS"] = "ZU DEN EINSTELLUNGEN"
 L["Search is paused in combat."] = "Die Suche ist im Kampf pausiert."
 L["Move and place MSUF frames on screen. Opens MSUF Edit Mode for this frame."] = "Verschiebe und platziere MSUF-Frames auf dem Bildschirm. Öffnet den MSUF-Edit-Mode für diesen Frame."
+
+L["Theme updated"] = "Theme aktualisiert"
+L["Theme reset"] = "Theme zurückgesetzt"
 
 --- Arena frames (dedicated arena1-3 unit frames)
 L["Arena"] = "Arena"

@@ -3966,6 +3966,7 @@ L["Language, menu behavior, frame highlights, tooltips and Blizzard frames."] = 
 L["Open Highlights"] = "開啟醒目提示"
 L["|cffff625f•|r|cff61d683•|r|cff5aa7ff•|r  Colors..."] = "|cffff625f•|r|cff61d683•|r|cff5aa7ff•|r  顏色..."
 
+
 --- Fill Direction and Power bar textures (6.0 Beta 26)
 L["Power Bar Texture"] = "能量條材質"
 L["Power Background Texture"] = "能量背景材質"
@@ -5132,6 +5133,9 @@ L["This UnitFrame is disabled. Turn on its Enable toggle in Frame Basics first."
 L["GO TO SETTINGS"] = "前往設定"
 L["Search is paused in combat."] = "戰鬥中搜尋已暫停。"
 L["Move and place MSUF frames on screen. Opens MSUF Edit Mode for this frame."] = "在畫面上移動與放置 MSUF 框架。為此框架開啟 MSUF 編輯模式。"
+
+L["Theme updated"] = "主題已更新"
+L["Theme reset"] = "主題已重設"
 
 --- Arena frames (dedicated arena1-3 unit frames)
 L["Arena"] = "競技場"

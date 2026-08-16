@@ -3730,6 +3730,7 @@ L["Open Rounded Texture"] = "Apri Texture arrotondata"
 L["TRY IT RIGHT HERE"] = "PROVALO PROPRIO QUI"
 L["CURRENT PROFILE: %s - NOTHING CHANGES UNTIL YOU CHANGE IT"] = "PROFILO ATTUALE: %s - NULLA CAMBIA FINCHÉ NON LO CAMBI TU"
 
+
 -- Beta 24: area Colori e copertura dell'Assistente.
 L["A new on-demand Assistant can find exact settings, explain controls and prepare reversible changes."] = "Un nuovo Assistente su richiesta può trovare impostazioni precise, spiegare i controlli e preparare modifiche reversibili."
 L["Bar color follows health percent (low / mid / high)."] = "Il colore della barra segue la percentuale di salute (bassa / media / alta)."
@@ -3943,6 +3944,7 @@ L["Group Target Highlight"] = "Evidenziazione bersaglio del gruppo"
 L["Language, menu behavior, frame highlights, tooltips and Blizzard frames."] = "Lingua, comportamento del menu, evidenziazioni dei riquadri, tooltip e riquadri Blizzard."
 L["Open Highlights"] = "Apri evidenziazioni"
 L["|cffff625f•|r|cff61d683•|r|cff5aa7ff•|r  Colors..."] = "|cffff625f•|r|cff61d683•|r|cff5aa7ff•|r  Colori..."
+
 
 --- Fill Direction and Power bar textures (6.0 Beta 26)
 L["Power Bar Texture"] = "Texture barra risorsa"
@@ -5110,6 +5112,9 @@ L["This UnitFrame is disabled. Turn on its Enable toggle in Frame Basics first."
 L["GO TO SETTINGS"] = "VAI ALLE IMPOSTAZIONI"
 L["Search is paused in combat."] = "La ricerca è in pausa durante il combattimento."
 L["Move and place MSUF frames on screen. Opens MSUF Edit Mode for this frame."] = "Sposta e posiziona i riquadri MSUF sullo schermo. Apre la modalità modifica di MSUF per questo riquadro."
+
+L["Theme updated"] = "Tema aggiornato"
+L["Theme reset"] = "Tema ripristinato"
 
 --- Arena frames (dedicated arena1-3 unit frames)
 L["Arena"] = "Arena"

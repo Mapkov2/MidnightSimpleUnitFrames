@@ -59,6 +59,7 @@ Locales\MSUF_PriorityFrames_FAQ.lua
 # KERNEL / STATE / UI PRIMITIVES
 # ---------------------------------------------------------------
 Kernel\MSUF_Util.lua
+Runtime\MSUF_UIThemeBridge.lua
 State\MSUF_Changelog.lua
 State\MSUF_Defaults.lua
 Runtime\MSUF_NumberFormat.lua

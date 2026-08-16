@@ -2651,6 +2651,7 @@ L["Group Target Highlight"] = "Group Target Highlight"
 L["Language, menu behavior, frame highlights, tooltips and Blizzard frames."] = "Language, menu behavior, frame highlights, tooltips and Blizzard frames."
 L["Open Highlights"] = "Open Highlights"
 
+
 --- Fill Direction and Power bar textures (6.0 Beta 26)
 L["Power Bar Texture"] = "Power Bar Texture"
 L["Power Background Texture"] = "Power Background Texture"
@@ -3813,6 +3814,9 @@ L["This UnitFrame is disabled. Turn on its Enable toggle in Frame Basics first."
 
 L["GO TO SETTINGS"] = "GO TO SETTINGS"
 L["Move and place MSUF frames on screen. Opens MSUF Edit Mode for this frame."] = "Move and place MSUF frames on screen. Opens MSUF Edit Mode for this frame."
+
+L["Theme updated"] = "Theme updated"
+L["Theme reset"] = "Theme reset"
 
 --- Arena frames (dedicated arena1-3 unit frames)
 L["Arena"] = "Arena"

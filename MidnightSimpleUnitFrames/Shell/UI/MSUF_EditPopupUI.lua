@@ -942,3 +942,42 @@ do
         _G["MSUF_InstallEditPopupUI"] = InstallEditPopupUI
     end
 end
+
+--- UI theme bridge consumption (Runtime/MSUF_UIThemeBridge.lua): a registered
+--- skin provider recolors the Edit Mode popup chrome through the same
+--- value-only contract the Menu2 tokens use. Rows are mutated in place because
+--- the popup modules capture references to this table at their file load.
+--- Text and semantic rows (title/white/muted/gold/orange) stay MSUF-owned.
+local function ApplyUIThemeToEditPopupColors()
+    local getTheme = rawget(_G, "MSUF_GetUITheme")
+    local theme = type(getTheme) == "function" and getTheme() or nil
+    local palette = theme and theme.palette
+    if type(palette) ~= "table" then return false end
+    local function Write(name, source, alpha)
+        local row = C[name]
+        if row and source then
+            row[1], row[2], row[3] = source[1], source[2], source[3]
+            row[4] = alpha or source[4] or row[4]
+        end
+    end
+    Write("panelBg", palette.surface, 0.95)
+    Write("panelEdge", palette.border, 0.90)
+    Write("cardBg", palette.card, 0.40)
+    Write("cardEdge", palette.borderSoft, 0.60)
+    Write("divider", palette.border, 0.25)
+    Write("inputBg", palette.input, 0.90)
+    Write("inputEdge", palette.borderSoft, 0.70)
+    Write("stepBg", palette.buttonFillAlt, 0.85)
+    Write("stepHover", palette.hover, 0.15)
+    Write("btnBg", palette.buttonFill, 0.90)
+    Write("btnEdge", palette.buttonBorder, 0.65)
+    Write("btnHover", palette.hover, 0.12)
+    Write("checkFill", palette.pressed, 1.00)
+    Write("checkEdge", palette.accentBright, 0.90)
+    return true
+end
+ApplyUIThemeToEditPopupColors()
+do
+    local addListener = rawget(_G, "MSUF_AddUIThemeListener")
+    if type(addListener) == "function" then addListener(ApplyUIThemeToEditPopupColors) end
+end
