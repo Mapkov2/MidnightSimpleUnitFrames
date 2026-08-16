@@ -743,6 +743,12 @@ local function ResolveSortMode(key, conf)
       mode = "INDEX"
     end
   end
+  -- Preserve raid groups is an independent layout contract. Derive the
+  -- effective group-aware mode without overwriting the user's saved sort mode,
+  -- so disabling the option restores the previous INDEX/NAME/ROLE behavior.
+  if key ~= "party" and conf.preserveRaidGroups == true then
+    mode = (mode == "ROLE" or mode == "GROUP_ROLE") and "GROUP_ROLE" or "GROUP"
+  end
   if key == "party" and (mode == "GROUP" or mode == "GROUP_ROLE") then
     mode = conf.sortByRole == true and "ROLE" or "INDEX"
   end

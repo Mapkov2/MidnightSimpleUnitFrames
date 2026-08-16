@@ -100,4 +100,87 @@ configs.party.raidManagerMode = "SHOW"
 assert(GF.ApplyBlizzardGroupFrameOwnership("classic-signature-smoke") == true, "ownership apply failed")
 assert(updateShownSelf == manager, "Classic CompactRaidFrameManager_UpdateShown must receive manager self")
 
-print("classic raid-manager mode smoke passed")
+-- Preserve raid groups must be an effective header mode, not just a saved
+-- checkbox that leaves an already-valid INDEX sort untouched.
+local function NewHeaderFrame(parent)
+    local frame = { parent = parent, attributes = {}, shown = false, width = 0, height = 0 }
+    function frame:EnableMouse() end
+    function frame:SetClampedToScreen() end
+    function frame:SetSize(width, height) self.width, self.height = width, height end
+    function frame:SetWidth(width) self.width = width end
+    function frame:SetHeight(height) self.height = height end
+    function frame:GetWidth() return self.width end
+    function frame:GetHeight() return self.height end
+    function frame:ClearAllPoints() end
+    function frame:SetPoint() end
+    function frame:Show() self.shown = true end
+    function frame:Hide() self.shown = false end
+    function frame:IsShown() return self.shown end
+    function frame:SetParent(value) self.parent = value end
+    function frame:GetParent() return self.parent end
+    function frame:SetAttribute(key, value) self.attributes[key] = value end
+    function frame:GetAttribute(key) return self.attributes[key] end
+    function frame:GetChildren() return end
+    return frame
+end
+
+local headerUIParent = NewHeaderFrame(nil)
+headerUIParent.width, headerUIParent.height = 1920, 1080
+local headerConf = {
+    enabled = true, showPlayer = true, showSolo = false,
+    width = 80, height = 32, spacing = 1, growth = "DOWN",
+    unitsPerColumn = 5, maxColumns = 8,
+    preserveRaidGroups = false, sortMode = "INDEX",
+}
+local groups = { 2, 1, 2, 1 }
+local roles = { "HEALER", "DAMAGER", "TANK", "HEALER" }
+
+_G.UIParent = headerUIParent
+_G.PetBattleFrameHider = nil
+_G.CreateFrame = function(_, _, parent) return NewHeaderFrame(parent) end
+_G.GetNumGroupMembers = function() return #groups end
+_G.GetNumSubgroupMembers = function() return 0 end
+_G.GetRaidRosterInfo = function(index) return "Member" .. index, nil, groups[index] end
+_G.IsInGroup = function() return true end
+_G.IsInRaid = function() return true end
+_G.UnitName = function(unit)
+    local index = tonumber(tostring(unit):match("raid(%d+)$"))
+    return index and ("Member" .. index) or "Player"
+end
+_G.UnitGUID = function(unit) return tostring(unit) .. "-guid" end
+_G.UnitClass = function() return "Priest", "PRIEST" end
+_G.UnitGroupRolesAssigned = function(unit)
+    local index = tonumber(tostring(unit):match("raid(%d+)$"))
+    return index and roles[index] or "DAMAGER"
+end
+
+_G.MSUF_NS.Client = { IsClassic = true }
+GF.GetConf = function() return headerConf end
+GF.GetScaledFrameMetrics = function() return 80, 32, 1 end
+local headersPath = root .. "/MidnightSimpleUnitFrames/Game/Classic/UnitFrames/Group/MSUF_UF_Group_Headers.lua"
+assert(loadfile(headersPath))("MidnightSimpleUnitFrames", _G.MSUF_NS)
+
+local header = assert(GF.SetupHeader("raid", "raid"), "Classic raid header did not build")
+assert(header:GetAttribute("_msufSortMode") == "INDEX",
+    "Classic raid header changed INDEX without Preserve raid groups")
+assert(header:GetAttribute("nameList") == "Member1,Member2,Member3,Member4",
+    "Classic INDEX raid order was not stable")
+
+headerConf.preserveRaidGroups = true
+header = assert(GF.SetupHeader("raid", "raid"), "preserved Classic raid header did not rebuild")
+assert(header:GetAttribute("_msufSortMode") == "GROUP",
+    "Preserve raid groups did not derive GROUP from INDEX")
+assert(header:GetAttribute("nameList") == "Member2,Member4,Member1,Member3",
+    "Preserve raid groups did not keep subgroup members together")
+
+headerConf.sortMode = "ROLE"
+header = assert(GF.SetupHeader("raid", "raid"), "group-role Classic raid header did not rebuild")
+assert(header:GetAttribute("_msufSortMode") == "GROUP_ROLE",
+    "Preserve raid groups did not derive GROUP_ROLE from ROLE")
+
+headerConf.preserveRaidGroups = false
+header = assert(GF.SetupHeader("raid", "raid"), "restored Classic raid header did not rebuild")
+assert(header:GetAttribute("_msufSortMode") == "ROLE" and headerConf.sortMode == "ROLE",
+    "disabling Preserve raid groups did not restore the saved sort mode")
+
+print("classic raid-manager and group-header smoke passed")
