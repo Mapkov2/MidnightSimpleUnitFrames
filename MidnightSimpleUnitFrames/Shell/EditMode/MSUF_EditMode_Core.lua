@@ -349,6 +349,7 @@ Util.UNIT_PAGE_KEYS = Util.UNIT_PAGE_KEYS or {
     focus = "uf_focus",
     pet = "uf_pet",
     boss = "uf_boss",
+    arena = "uf_arena",
 }
 Util.UNIT_LABELS = Util.UNIT_LABELS or {
     player = "Player",
@@ -358,6 +359,7 @@ Util.UNIT_LABELS = Util.UNIT_LABELS or {
     focus = "Focus",
     pet = "Pet",
     boss = "Boss",
+    arena = "Arena",
 }
 function Util.UnitPageKey(unit, fallback)
     local key = Util.UNIT_PAGE_KEYS[unit]
@@ -373,12 +375,16 @@ function Util.NormalizeUnitKey(unit)
     if unit == "targettarget" or unit == "tot" then return "targettarget" end
     if unit == "focustarget" or unit == "focus_target" or unit == "focustargettarget" then return "focustarget" end
     if _G.MSUF_GetBossIndexFromToken and _G.MSUF_GetBossIndexFromToken(unit) then return "boss" end
+    if _G.MSUF_GetArenaIndexFromToken and _G.MSUF_GetArenaIndexFromToken(unit) then return "arena" end
     return unit
 end
 function Util.NormalizeSimpleUnit(unit, allowBossIndex)
     if unit == "boss" then return allowBossIndex and "boss1" or "boss" end
+    if unit == "arena" then return allowBossIndex and "arena1" or "arena" end
     if allowBossIndex and type(unit) == "string" and unit:match("^boss%d+$") then return unit end
     if (not allowBossIndex) and type(unit) == "string" and unit:match("^boss%d+$") then return "boss" end
+    if allowBossIndex and type(unit) == "string" and unit:match("^arena%d+$") then return unit end
+    if (not allowBossIndex) and type(unit) == "string" and unit:match("^arena%d+$") then return "arena" end
     if unit == "player" or unit == "target" or unit == "focus" or unit == "pet" then return unit end
     return nil
 end
@@ -396,7 +402,9 @@ function Util.NormalizeFocusKey(key)
     if key == "uf_focus" then return "focus" end
     if key == "uf_pet" then return "pet" end
     if key == "uf_boss" then return "boss" end
+    if key == "uf_arena" then return "arena" end
     if key:match("^boss%d+$") then return "boss" end
+    if key:match("^arena%d+$") then return "arena" end
     return key
 end
 
