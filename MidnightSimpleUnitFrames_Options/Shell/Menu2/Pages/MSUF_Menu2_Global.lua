@@ -100,9 +100,9 @@ local function SetB(key, value, reason, opts)
     b[key] = value
     M.RequestGeneralApply(reason or ("MSUF2_BARS_" .. tostring(key)), Targeted(opts))
 end
-local UNIT_SCOPE_KEYS = M.KeySetFromWords "player target targettarget focustarget focus pet boss"
+local UNIT_SCOPE_KEYS = M.KeySetFromWords "player target targettarget focustarget focus pet boss arena"
 local TEXT_SCOPE_KEYS = M.KeySetFromWords "hpTextMode textLeft textCenter textRight hpTextLeftHidePercentSymbol hpTextCenterHidePercentSymbol hpTextRightHidePercentSymbol hpTextReverse hpTextSeparator powerTextMode powerTextLeft powerTextCenter powerTextRight powerTextLeftHidePercentSymbol powerTextCenterHidePercentSymbol powerTextRightHidePercentSymbol powerTextSeparator"
-local POWER_BAR_SCOPE_UNITS = M.KeySetFromWords "player target focus boss"
+local POWER_BAR_SCOPE_UNITS = M.KeySetFromWords "player target focus boss arena"
 local function NormalizeScopeKey(scope)
     scope = tostring(scope or "shared"):lower()
     scope = scope:gsub("%s+", "")
@@ -562,7 +562,7 @@ local function MenuFontKeySet(value)
     G().menuFontKey = FontSelectionValue(value) or ""
 end
 local TextureValues = M.StatusBarTextureItems
-local GLOBAL_SCOPE_VALUES = VTP "shared=Shared|player=Player|target=Target|targettarget=ToT|focustarget=Focus Target|focus=Focus|pet=Pet|boss=Boss|gf_party=Party|gf_raid=Raid"
+local GLOBAL_SCOPE_VALUES = VTP "shared=Shared|player=Player|target=Target|targettarget=ToT|focustarget=Focus Target|focus=Focus|pet=Pet|boss=Boss|arena=Arena|gf_party=Party|gf_raid=Raid"
 local function CurrentPowerBarScopeUnit()
     local key = CurrentBarsScope()
     return POWER_BAR_SCOPE_UNITS[key] and key or nil

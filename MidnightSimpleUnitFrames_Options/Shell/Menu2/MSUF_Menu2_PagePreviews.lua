@@ -86,9 +86,82 @@ local function SyncBossPageAuraPreviewFlag(auraActive)
     if a3 and type(a3.RefreshEditPreview) == "function" then a3.RefreshEditPreview("boss") end
 end
 
+--- Arena page preview coordination: mirrors the boss lanes against the arena
+--- preview globals so the same Window call sites drive both stacks.
+local lastArenaPreviewActive
+local lastArenaPreviewFn
+local function ClearArenaPagePreviewForCombat()
+    local clear = _G.MSUF_ClearArenaUnitframePreviewForCombat
+    return type(clear) == "function" and clear() == true
+end
+local function ApplyArenaPagePreviewFallback(active, reason)
+    if BossPagePreviewInCombat() then
+        ClearArenaPagePreviewForCombat()
+        _G.MSUF2_ArenaUnitframePreviewActive = nil
+        return
+    end
+    _G.MSUF2_ArenaUnitframePreviewActive = active and true or nil
+    if type(_G.MSUF_ApplyArenaUnitframePreviewState) == "function" then
+        _G.MSUF_ApplyArenaUnitframePreviewState(active and true or false, reason or "MSUF2_ARENA_PAGE")
+        return
+    end
+    if type(_G.MSUF_SyncArenaUnitframePreviewWithUnitEdit) == "function" then _G.MSUF_SyncArenaUnitframePreviewWithUnitEdit() end
+end
+local function ArenaPreviewFramesVisible()
+    local sawFrame = false
+    for i = 1, 3 do
+        local unit = "arena" .. i
+        local frame = CoreFrame(unit) or _G["MSUF_" .. unit]
+        if frame then
+            sawFrame = true
+            if frame.IsShown and not frame:IsShown() then return false end
+        end
+    end
+    return sawFrame
+end
+local function SyncArenaPageAuraPreviewFlag(auraActive)
+    auraActive = auraActive == true and not BossPagePreviewInCombat()
+    local current = _G.MSUF2_ArenaPageAuraPreviewActive == true
+    if current == auraActive then return end
+    _G.MSUF2_ArenaPageAuraPreviewActive = auraActive or nil
+    local a3 = (MSUF and MSUF.MSUF_Auras3)
+        or (_G.MSUF_NS and _G.MSUF_NS.MSUF_Auras3)
+        or _G.MSUF_Auras3
+    if a3 and type(a3.RefreshEditPreview) == "function" then a3.RefreshEditPreview("arena") end
+end
+local function SyncArenaPagePreviewForKey(key, force)
+    local frameShown = M.frame and M.frame.IsShown and M.frame:IsShown()
+    local active = (key == "uf_arena") and frameShown
+    if BossPagePreviewInCombat() then
+        ClearArenaPagePreviewForCombat()
+        _G.MSUF2_ArenaUnitframePreviewActive = nil
+        _G.MSUF2_ArenaPageAuraPreviewActive = nil
+        lastArenaPreviewActive = nil
+        return
+    end
+    SyncArenaPageAuraPreviewFlag(active == true)
+    local arenaActive = active and true or false
+    local fn = M.UnitPage and M.UnitPage.SetArenaPagePreviewActive
+    local globalActive = (_G.MSUF2_ArenaUnitframePreviewActive == true)
+    local visible = (not arenaActive) or ArenaPreviewFramesVisible()
+    if not force and lastArenaPreviewActive == arenaActive and lastArenaPreviewFn == fn
+        and globalActive == arenaActive and visible then
+        return
+    end
+    lastArenaPreviewActive = arenaActive
+    lastArenaPreviewFn = fn
+    if type(fn) == "function" then
+        fn(arenaActive)
+        if arenaActive and type(_G.MSUF_ApplyArenaUnitframePreviewState) == "function" and not BossPagePreviewInCombat() then _G.MSUF_ApplyArenaUnitframePreviewState(true, "MSUF2_ARENA_PAGE_CORE") end
+    else
+        ApplyArenaPagePreviewFallback(arenaActive, "MSUF2_ARENA_PAGE_FALLBACK")
+    end
+end
 local function SyncBossPagePreviewForKey(key, force)
     local frameShown = M.frame and M.frame.IsShown and M.frame:IsShown()
     local active = (key == "uf_boss") and frameShown
+    -- Keep the arena preview in step for every Window-driven page change.
+    SyncArenaPagePreviewForKey(key, force)
     if BossPagePreviewInCombat() then
         ClearBossPagePreviewForCombat()
         _G.MSUF2_BossUnitframePreviewActive = nil
@@ -122,7 +195,7 @@ local function SyncBossPagePreviewForKey(key, force)
 end
 local function RequestBossPagePreviewForKey(key, force)
     bossPreviewRequestSerial = bossPreviewRequestSerial + 1
-    if force or key ~= "uf_boss" then
+    if force or (key ~= "uf_boss" and key ~= "uf_arena") then
         SyncBossPagePreviewForKey(key, force)
         return
     end
@@ -138,9 +211,14 @@ local function RequestBossPagePreviewForKey(key, force)
         SyncBossPagePreviewForKey(key, force)
     end)
 end
+local function RequestArenaPagePreviewForKey(key, force)
+    return RequestBossPagePreviewForKey(key, force)
+end
 local function ResetBossPagePreviewCache()
     lastBossPreviewActive = nil
     lastBossPreviewFn = nil
+    lastArenaPreviewActive = nil
+    lastArenaPreviewFn = nil
     lastCastbarPagePreviewUnit = nil
     bossPreviewRequestSerial = bossPreviewRequestSerial + 1
 end
@@ -484,6 +562,8 @@ function M.OnCollapsibleSectionStateChanged(pageKey, sectionId, open, entry)
 end
 M.SyncBossPagePreviewForKey = SyncBossPagePreviewForKey
 M.RequestBossPagePreviewForKey = RequestBossPagePreviewForKey
+M.SyncArenaPagePreviewForKey = SyncArenaPagePreviewForKey
+M.RequestArenaPagePreviewForKey = RequestArenaPagePreviewForKey
 M.ResetBossPagePreviewCache = ResetBossPagePreviewCache
 M.ResetStatusIndicatorTestModeOnMenuExit = ResetStatusIndicatorTestModeOnMenuExit
 M.SyncGFPagePreviewForKey = SyncGroupPagePreviewForKey

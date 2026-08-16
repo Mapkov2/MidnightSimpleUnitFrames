@@ -1698,7 +1698,7 @@ local function SettingDescriptorSignatures(settingKey, pageKey, descriptor)
     ignored.uf, ignored.gf, ignored.unit = true, true, true
     local scope = tostring(settingKey or ""):match("^([^%.]+)")
     local nonSemanticScope = {
-        player = true, target = true, focus = true, pet = true, boss = true,
+        player = true, target = true, focus = true, pet = true, boss = true, arena = true,
         targettarget = true, focustarget = true, general = true, bars = true,
         menu = true, auras3 = true, barScope = true, fontScope = true,
         gf_party = true, gf_raid = true, gf_mythicraid = true,

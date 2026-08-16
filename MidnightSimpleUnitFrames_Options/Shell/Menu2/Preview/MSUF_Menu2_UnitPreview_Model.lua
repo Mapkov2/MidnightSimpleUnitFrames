@@ -43,11 +43,11 @@ Preview.Model = Model
 local PreviewHelpers = M.PreviewHelpers or {}
 local UnitPage = M.UnitPage or {}
 local CanDetachUnitPowerBar = _G.MSUF_CanDetachUnitPowerBar
-local UNIT_KEYS = { "player", "target", "targettarget", "focustarget", "focus", "boss", "pet" }
+local UNIT_KEYS = { "player", "target", "targettarget", "focustarget", "focus", "boss", "arena", "pet" }
 local UNIT_SET = {}
 for i = 1, #UNIT_KEYS do UNIT_SET[UNIT_KEYS[i]] = true end
 local CONTROL_CHILD_KEYS, CONTROL_NAME_SUFFIXES = M.WordList "minusButton plusButton Button _msufPeelButton", M.WordList "Button Text Low High"
-local UNIT_LABELS = { player = "Player", target = "Target", targettarget = "Target of Target", focustarget = "Focus Target", focus = "Focus", boss = "Boss Frames", pet = "Pet" }
+local UNIT_LABELS = { player = "Player", target = "Target", targettarget = "Target of Target", focustarget = "Focus Target", focus = "Focus", boss = "Boss Frames", arena = "Arena Frames", pet = "Pet" }
 local UNIT_DATA = {
     -- Stylized fallback data. The preview prefers a live snapshot of the real
     -- unit (see LiveUnitData below) so it mirrors the frame's current state;
@@ -60,12 +60,14 @@ local UNIT_DATA = {
     focus = { name = "Voidcaller", class = "WARLOCK", className = "Warlock", race = "Orc", hp = 0.63, power = 0.81, powerToken = "MANA", level = "81", elite = true, classification = "rareelite", reactionKind = "enemy", npcKind = "npcCaster", portraitTexture = "Interface\\ICONS\\Spell_Shadow_Metamorphosis" },
     boss = { name = "Boss Preview", class = "DEATHKNIGHT", className = "Death Knight", race = "Undead", hp = 0.55, power = 0.35, powerToken = "MANA", level = "??", elite = true, classification = "worldboss", reactionKind = "enemy", npcKind = "npcBoss", portraitTexture = "Interface\\ICONS\\Achievement_Boss_LichKing" },
     pet = { name = "Companion", class = "HUNTER", className = "Hunter", race = "Beast", hp = 0.79, power = 0.44, powerToken = "FOCUS", level = "80", elite = false, isPet = true, reactionKind = "friendly", portraitTexture = "Interface\\ICONS\\Ability_Hunter_BeastCall" },
+    arena = { name = "Arena Opponent", class = "MAGE", className = "Mage", race = "Human", hp = 0.65, power = 0.80, powerToken = "MANA", level = "80", elite = false, isPlayer = true, reactionKind = "enemy", portraitTexture = "Interface\\ICONS\\Spell_Frost_FrostBolt02" },
 }
 local POWER_BAR_MASTER_KEYS = {
     player = "showPlayerPowerBar",
     target = "showTargetPowerBar",
     focus = "showFocusPowerBar",
     boss = "showBossPowerBar",
+    arena = "showArenaPowerBar",
 }
 local POWER_BAR_DEFAULT_ON = {
     player = true,
@@ -75,6 +77,7 @@ local POWER_BAR_DEFAULT_ON = {
     focustarget = false,
     pet = true,
     boss = false,
+    arena = true,
 }
 local function PreviewRaidGroupNameAllowed(key)
     return key == "player" or key == "target" or key == "targettarget" or key == "focustarget" or key == "focus"
@@ -151,11 +154,12 @@ local function CanonKey(key)
     if key == "tot" then return "targettarget" end
     if key == "focus_target" or key == "focustargettarget" then return "focustarget" end
     if type(key) == "string" and key:match("^boss%d+$") then return "boss" end
+    if type(key) == "string" and key:match("^arena%d+$") then return "arena" end
     if UNIT_SET[key] then return key end
     return "player"
 end
 local IsSecretValue = _G.issecretvalue or function(_) return false end
-local LIVE_UNIT_TOKENS = { player = "player", target = "target", targettarget = "targettarget", focustarget = "focustarget", focus = "focus", boss = "boss1", pet = "pet" }
+local LIVE_UNIT_TOKENS = { player = "player", target = "target", targettarget = "targettarget", focustarget = "focustarget", focus = "focus", boss = "boss1", arena = "arena1", pet = "pet" }
 local liveUnitDataCache = {}
 local function LiveNumber(value)
     if value == nil or IsSecretValue(value) == true then return nil end

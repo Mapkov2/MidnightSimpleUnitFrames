@@ -5579,6 +5579,19 @@ L["Lets the self-cast filter decide about this entry again. It will be hidden on
 L["always shown"] = "toujours affiché"
 L["hidden on this character"] = "masqué sur ce personnage"
 L["Hides every whitelisted spell this character cannot cast, without leaving a gap. One whitelist can then serve all your characters: the Mage keeps Arcane Intellect, the Rogue keeps the poisons. Nothing reports which class owns a Spell ID, so a flask buff looks exactly like a foreign class ability here - protect those with a bound item, or with Always show on the row in the Whitelist. MSUF re-checks this only when your spellbook or talents actually change, never during combat."] = "Masque chaque sort de la liste blanche que ce personnage ne peut pas lancer, sans laisser de trou. Une seule liste blanche sert alors tous vos personnages : le mage garde Intelligence arcanique, le voleur garde ses poisons. Rien n'indique à quelle classe appartient un ID de sort : un buff de flacon ressemble donc exactement à un sort d'une autre classe. Protégez-les avec un objet lié ou avec Toujours afficher sur la ligne. MSUF ne revérifie cela que lorsque votre grimoire ou vos talents changent réellement, jamais en combat."
+
+--- Arena frames (dedicated arena1-3 unit frames)
+L["Arena"] = "Arène"
+L["Arena Castbar"] = "Barre d'incantation d'arène"
+L["Arena Frames"] = "Cadres d'arène"
+L["Arena Layout"] = "Disposition d'arène"
+L["Arena Opponent"] = "Adversaire d'arène"
+L["Arena castbar preview"] = "Aperçu de la barre d'incantation d'arène"
+L["Arena frame layout"] = "Disposition des cadres d'arène"
+L["Arena spacing"] = "Espacement d'arène"
+L["Aura settings are only available for Player, Target, Focus, Boss, and Arena Frames."] = "Les réglages des auras ne sont disponibles que pour les cadres Joueur, Cible, Focalisation, Boss et Arène."
+L["Castbar settings are only available for Player, Target, Focus, Boss, and Arena Frames."] = "Les réglages de la barre d'incantation ne sont disponibles que pour les cadres Joueur, Cible, Focalisation, Boss et Arène."
+L["MSUF Arena Frames"] = "MSUF Cadres d'arène"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("frFR", LoadLocale)
 elseif MSUF.LOCALE == "frFR" then LoadLocale() end

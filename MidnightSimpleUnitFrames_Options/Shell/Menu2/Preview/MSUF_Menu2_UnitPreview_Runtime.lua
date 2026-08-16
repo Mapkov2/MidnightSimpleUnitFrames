@@ -65,7 +65,7 @@ end
 function Runtime.SpecForPreviewKey(key)
     local uf = MSUF and MSUF.UF
     local config = uf and uf.Config
-    local runtimeUnit = key == "boss" and "boss1" or key
+    local runtimeUnit = (key == "boss" and "boss1") or (key == "arena" and "arena1") or key
     if not runtimeUnit then return nil end
     local dbRef, profileName = _G.MSUF_DB, _G.MSUF_ActiveProfile
     if config and (dbRef ~= lastDBRef or profileName ~= lastProfileName) then
@@ -83,7 +83,7 @@ function Runtime.SpecForPreviewKey(key)
     return spec
 end
 function Runtime.AppliedPortraitSizeForPreviewKey(key)
-    local runtimeUnit = key == "boss" and "boss1" or key
+    local runtimeUnit = (key == "boss" and "boss1") or (key == "arena" and "arena1") or key
     local frame = CoreFrame(runtimeUnit) or (runtimeUnit and _G["MSUF_" .. runtimeUnit])
     local portrait = frame and frame.MSUFSpec and frame.MSUFSpec.portrait
     local holder = frame and frame.MSUFPortraitHolder
@@ -102,7 +102,7 @@ function Runtime.AppliedPortraitSizeForPreviewKey(key)
     return width, height
 end
 function Runtime.VisualScaleForPreviewKey(key, targetFrame)
-    local runtimeUnit = key == "boss" and "boss1" or key
+    local runtimeUnit = (key == "boss" and "boss1") or (key == "arena" and "arena1") or key
     local frame = CoreFrame(runtimeUnit) or (runtimeUnit and _G["MSUF_" .. runtimeUnit])
     local runtimeEffective = frame and frame.GetEffectiveScale and tonumber(frame:GetEffectiveScale())
     local targetEffective = targetFrame and targetFrame.GetEffectiveScale and tonumber(targetFrame:GetEffectiveScale())
@@ -140,7 +140,7 @@ function Runtime.DetachedCastbarOffsetForPreviewKey(key)
     -- Unit Preview canvas is unit-frame-relative. Project the already-applied
     -- live geometry into unit-frame coordinates so the preview mirrors the
     -- real relationship without rewriting the user's absolute position.
-    local runtimeUnit = key == "boss" and "boss1" or key
+    local runtimeUnit = (key == "boss" and "boss1") or (key == "arena" and "arena1") or key
     local unitFrame = CoreFrame(runtimeUnit) or (runtimeUnit and _G["MSUF_" .. runtimeUnit])
     local castbar = LiveCastbarFrame(key)
     local unitX, unitY = ScaledCenter(unitFrame)

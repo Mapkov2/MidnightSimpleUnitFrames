@@ -5179,6 +5179,19 @@ L["Lets the self-cast filter decide about this entry again. It will be hidden on
 L["always shown"] = "sempre visibile"
 L["hidden on this character"] = "nascosto su questo personaggio"
 L["Hides every whitelisted spell this character cannot cast, without leaving a gap. One whitelist can then serve all your characters: the Mage keeps Arcane Intellect, the Rogue keeps the poisons. Nothing reports which class owns a Spell ID, so a flask buff looks exactly like a foreign class ability here - protect those with a bound item, or with Always show on the row in the Whitelist. MSUF re-checks this only when your spellbook or talents actually change, never during combat."] = "Nasconde ogni incantesimo in whitelist che questo personaggio non può lanciare, senza lasciare buchi. Una sola whitelist serve così tutti i tuoi personaggi: il mago mantiene Intelletto arcano, il ladro i veleni. Nulla dice a quale classe appartenga un ID incantesimo, quindi un beneficio da fiala sembra identico a un incantesimo di un'altra classe: proteggili con un oggetto collegato o con Mostra sempre sulla riga. MSUF ricontrolla solo quando il libro degli incantesimi o i talenti cambiano davvero, mai in combattimento."
+
+--- Arena frames (dedicated arena1-3 unit frames)
+L["Arena"] = "Arena"
+L["Arena Castbar"] = "Barra di lancio arena"
+L["Arena Frames"] = "Riquadri arena"
+L["Arena Layout"] = "Disposizione arena"
+L["Arena Opponent"] = "Avversario d'arena"
+L["Arena castbar preview"] = "Anteprima della barra di lancio arena"
+L["Arena frame layout"] = "Disposizione dei riquadri arena"
+L["Arena spacing"] = "Spaziatura arena"
+L["Aura settings are only available for Player, Target, Focus, Boss, and Arena Frames."] = "Le impostazioni delle aure sono disponibili solo per i riquadri Giocatore, Bersaglio, Focus, Boss e Arena."
+L["Castbar settings are only available for Player, Target, Focus, Boss, and Arena Frames."] = "Le impostazioni della barra di lancio sono disponibili solo per i riquadri Giocatore, Bersaglio, Focus, Boss e Arena."
+L["MSUF Arena Frames"] = "MSUF Riquadri arena"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("itIT", LoadLocale)
 elseif MSUF.LOCALE == "itIT" then LoadLocale() end

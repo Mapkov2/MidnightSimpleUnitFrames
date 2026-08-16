@@ -9,7 +9,7 @@ local floor = math.floor
 local max = math.max
 local PercentValue = M.PercentValue
 local SettingMeta = UP.SettingMeta
-local RANGE_FADE_UNITS = M.KeySetFromWords "target targettarget focus focustarget pet boss"
+local RANGE_FADE_UNITS = M.KeySetFromWords "target targettarget focus focustarget pet boss arena"
 local function RangeFadeSectionHeight(_, _, unit)
     return unit == "boss" and 350 or 230
 end
