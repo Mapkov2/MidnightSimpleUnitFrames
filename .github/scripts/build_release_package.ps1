@@ -533,7 +533,15 @@ foreach ($staticLine in ($staticIndexContent -split '\r?\n')) {
 # payloads were regenerated from this exact CHANGELOG.md. The local generator
 # records the source hash in both files; CI stays independent from local tools.
 $changelogSourcePath = Join-Path $repoRoot "CHANGELOG.md"
-$changelogSourceHash = (Get-FileHash -LiteralPath $changelogSourcePath -Algorithm SHA256).Hash.ToUpperInvariant()
+$changelogText = [System.IO.File]::ReadAllText($changelogSourcePath).Replace("`r`n", "`n").Replace("`r", "`n")
+$changelogHash = [System.Security.Cryptography.SHA256]::Create()
+try {
+    $changelogSourceHash = ([System.BitConverter]::ToString(
+        $changelogHash.ComputeHash(([System.Text.UTF8Encoding]::new($false)).GetBytes($changelogText))
+    )).Replace('-', '')
+} finally {
+    $changelogHash.Dispose()
+}
 $stagedChangelogPaths = @(
     (Join-Path $stagePath "MidnightSimpleUnitFrames/State/MSUF_Changelog.lua"),
     (Join-Path $stagePath "$optionsAddonName/State/MSUF_ChangelogFull.lua")
