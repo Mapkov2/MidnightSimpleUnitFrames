@@ -227,13 +227,20 @@ local scanCalls = 0
 local helpfulSlots = { 101 }
 local harmfulSlots = { 202 }
 local nativePlayerAuraIDs = {}
+local playerFilterLeaksAll = false
+local partyInRange = true
+_G.UnitInRange = function(unit)
+    if unit == "party1" then return partyInRange, true end
+    return true, true
+end
 local function FilteredAuraSlots(slots, filter)
     local playerOnly = filter and filter:find("|PLAYER", 1, true) ~= nil
     local out = {}
     for i = 1, #slots do
         local slot = slots[i]
         local data = auraBySlot[slot]
-        if data and (not playerOnly or nativePlayerAuraIDs[data.auraInstanceID] == true) then
+        if data and (not playerOnly or playerFilterLeaksAll
+            or nativePlayerAuraIDs[data.auraInstanceID] == true) then
             out[#out + 1] = slot
         end
     end
@@ -723,6 +730,49 @@ assert(groupBuff.visible == 1 and groupBuff[1].auraInstanceID == 7101,
     "Classic group Only Mine / Hide Permanent filters did not compose")
 assert(groupDebuff.visible == 1 and groupDebuff[1].auraInstanceID == 8101,
     "Classic group debuff Only Mine / Hide Permanent filters did not compose")
+
+-- Some Classic clients broaden a native |PLAYER scan to every aura while a
+-- group unit is explicitly out of range. Known caster data may still preserve
+-- an owned aura, but unreadable caster data must fail closed instead of turning
+-- Only Mine into an unfiltered lane.
+partyInRange = false
+playerFilterLeaksAll = true
+auraBySlot[103].duration, auraBySlot[103].expirationTime = 20, 70
+auraBySlot[204].duration, auraBySlot[204].expirationTime = 18, 68
+auraBySlot[103].sourceUnit = { _secret = true }
+auraBySlot[103].isFromPlayerOrPlayerPet = true
+auraBySlot[204].sourceUnit = { _secret = true }
+auraBySlot[204].isFromPlayerOrPlayerPet = true
+assert(registered.Update(groupFrame, "UNIT_AURA", "party1", { isFullUpdate = true }) == true,
+    "Classic out-of-range Only Mine refresh did not run")
+assert(groupBuff.visible == 1 and groupBuff[1].auraInstanceID == 7101,
+    "Classic out-of-range Only Mine broadened to a foreign buff")
+assert(groupDebuff.visible == 1 and groupDebuff[1].auraInstanceID == 8101,
+    "Classic out-of-range Only Mine broadened to a foreign debuff")
+
+auraBySlot[101].sourceUnit = { _secret = true }
+auraBySlot[101].isFromPlayerOrPlayerPet = true
+auraBySlot[202].sourceUnit = { _secret = true }
+auraBySlot[202].isFromPlayerOrPlayerPet = true
+assert(registered.Update(groupFrame, "UNIT_AURA", "party1", { isFullUpdate = true }) == true,
+    "Classic protected out-of-range Only Mine refresh did not run")
+assert(groupBuff.visible == 0 and groupDebuff.visible == 0,
+    "Classic protected out-of-range Only Mine displayed unverified auras")
+
+partyInRange = true
+playerFilterLeaksAll = false
+auraBySlot[101].sourceUnit, auraBySlot[101].isFromPlayerOrPlayerPet = "player", nil
+auraBySlot[202].sourceUnit, auraBySlot[202].isFromPlayerOrPlayerPet = "player", nil
+auraBySlot[103].sourceUnit, auraBySlot[103].isFromPlayerOrPlayerPet = "party2", false
+auraBySlot[204].sourceUnit, auraBySlot[204].isFromPlayerOrPlayerPet = "party2", false
+auraBySlot[103].duration, auraBySlot[103].expirationTime = 0, 0
+auraBySlot[204].duration, auraBySlot[204].expirationTime = 0, 0
+assert(registered.Update(groupFrame, "UNIT_AURA", "party1", { isFullUpdate = true }) == true,
+    "Classic in-range Only Mine recovery refresh did not run")
+assert(groupBuff.visible == 1 and groupBuff[1].auraInstanceID == 7101
+    and groupDebuff.visible == 1 and groupDebuff[1].auraInstanceID == 8101,
+    "Classic Only Mine did not recover after returning in range")
+
 auraBySlot[101].duration = 0
 auraBySlot[101].expirationTime = 0
 auraBySlot[202].duration = 0

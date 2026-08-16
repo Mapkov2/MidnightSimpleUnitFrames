@@ -2098,20 +2098,24 @@ local function ProcessData(lane, unit, data, fromLaneScan)
     local auraInstanceID = data.auraInstanceID
     if auraInstanceID == nil then return nil end
     local cfg = lane.config
-    if cfg.nativePlayerFilter == true then
+    if cfg.nativePlayerFilter == true
+        and lane._msufA3NativePlayerFilterTrusted ~= false then
         -- Full-scan data already passed Blizzard's PLAYER filter. Delta
         -- payloads do not carry that guarantee, so test their exact native
         -- membership before they can enter or remain in an Only Mine lane.
         data.isPlayerAura = fromLaneScan == true
             or not Filtered(unit, auraInstanceID, cfg.filter)
-    elseif cfg.needsPlayerFlag == true then
+        return data
+    end
+    if cfg.needsPlayerFlag == true then
         -- Mists/TBC do not reliably populate isFromPlayerOrPlayerPet (the
         -- player's own party-frame HoTs carried false/nil, which blanked
         -- "only mine" lanes). Blizzard compares sourceUnit through UnitIsUnit,
         -- because the player or pet can arrive through an equivalent group /
         -- vehicle token. A positive legacy flag is still useful, but false is
-        -- not authoritative; fall back to PLAYER scan membership when neither
-        -- source gives a positive identity.
+        -- not authoritative. Fall back to PLAYER scan membership only while
+        -- that native filter is trustworthy: on an explicitly out-of-range
+        -- group unit some Classic clients return every aura for |PLAYER.
         local sourceUnit = data.sourceUnit
         local fromPlayer = data.isFromPlayerOrPlayerPet
         if sourceUnit ~= nil and not IsSecret(sourceUnit) then
@@ -2125,11 +2129,14 @@ local function ProcessData(lane, unit, data, fromLaneScan)
                     or sourceUnit == "pet" or sourceUnit == "vehicle"
             end
             data.isPlayerAura = sourceIsPlayer == true
-                or (fromPlayer ~= nil and not IsSecret(fromPlayer) and fromPlayer == true)
-        elseif fromPlayer ~= nil and not IsSecret(fromPlayer) and fromPlayer == true then
+                or (lane._msufA3NativePlayerFilterTrusted ~= false
+                    and fromPlayer ~= nil and not IsSecret(fromPlayer) and fromPlayer == true)
+        elseif lane._msufA3NativePlayerFilterTrusted ~= false
+            and fromPlayer ~= nil and not IsSecret(fromPlayer) and fromPlayer == true then
             data.isPlayerAura = true
         else
-            data.isPlayerAura = not Filtered(unit, auraInstanceID, cfg.playerFilter)
+            data.isPlayerAura = lane._msufA3NativePlayerFilterTrusted ~= false
+                and not Filtered(unit, auraInstanceID, cfg.playerFilter)
         end
     end
     return data
@@ -3749,6 +3756,21 @@ end
 local function UpdateAuraLaneRuntime(lane, unit, updateInfo, full)
     if not (lane and lane.config and lane.config.enabled) then
         return false, false
+    end
+    local cfg = lane.config
+    if cfg.nativePlayerFilter == true then
+        local trusted = true
+        local unitInRange = _G.UnitInRange
+        if unit ~= "player" and type(unitInRange) == "function" then
+            local inRange, checkedRange = unitInRange(unit)
+            if not IsSecret(inRange) and not IsSecret(checkedRange)
+                and checkedRange == true and inRange == false then
+                trusted = false
+            end
+        end
+        lane._msufA3NativePlayerFilterTrusted = trusted
+    else
+        lane._msufA3NativePlayerFilterTrusted = nil
     end
     local laneAffectsVisual = LaneAffectsFrameAuraVisual(lane)
     if full then
