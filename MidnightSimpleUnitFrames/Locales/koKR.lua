@@ -12,6 +12,8 @@ if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("koKR")) or (MSUF.L or {})
 
+L["BLIZZARD LIMITATION: During instanced combat, Blizzard may restrict race and class information. Race/Class Text may therefore be unavailable or use fallback identifiers."] = "BLIZZARD 제한: 인스턴스 전투 중에는 Blizzard가 종족 및 직업 정보를 제한할 수 있습니다. 따라서 종족/직업 텍스트를 사용할 수 없거나 대체 식별자가 표시될 수 있습니다."
+
 -- 마우스오버 강조 설정.
 L["Soft gradient"] = "부드러운 그라데이션"
 L["Solid border"] = "단색 테두리"
@@ -3252,6 +3254,11 @@ L["Move vs size"] = "이동 대 크기"
 L["Mover handles and selected borders."] = "무버 핸들과 선택된 테두리."
 L["Name Text"] = "이름 텍스트"
 L["New Task"] = "새 작업"
+L["See New Features"] = "새 기능 보기"
+L["Menu link unavailable"] = "메뉴 링크를 사용할 수 없음"
+L["Browse releases from 6.02 onward. Highlight links open the matching feature directly in the MSUF menu."] = "6.02 이후 릴리스를 살펴보세요. 하이라이트 링크는 MSUF 메뉴에서 해당 기능을 바로 엽니다."
+L["Opens and highlights this feature's setting."] = "이 기능의 설정을 열고 강조 표시합니다."
+L["Shows this bundled release entry."] = "포함된 이 릴리스 항목을 표시합니다."
 L["New profile name"] = "새 프로필 이름"
 L["No"] = "아니요"
 L["No blacklisted spells. Add one above or use a preset."] = "블랙리스트에 등록된 주문이 없습니다. 위에 하나를 추가하거나 사전 설정을 사용하세요."
@@ -3795,6 +3802,9 @@ L["%s scope"] = "%s 범위"
 L["%s uses Blizzard frames. WoW's own settings decide when they appear."] = "%s에서 Blizzard 프레임을 사용합니다. 표시 시점은 WoW 설정에서 결정합니다."
 L[". Shared name-shortening changes do not affect those scopes."] = ". 공유 이름 축약 변경은 해당 범위에 적용되지 않습니다."
 L["AFK Text"] = "자리 비움 텍스트"
+L["AFK Timer"] = "자리 비움 타이머"
+L["Show interrupter name"] = "차단 시전자 이름 표시"
+L["Stance"] = "태세"
 L["Absorb Color"] = "흡수 색상"
 L["All icon styling: Appearance > Auras."] = "모든 아이콘 스타일: 외형 > 오라."
 L["Alternative Mana Color"] = "대체 마나 색상"
@@ -4008,6 +4018,10 @@ L["|cffff0000MSUF:|r Cannot change absorb bars while in combat."] = "|cffff0000M
 L["0 keeps the icon just above the bar and moves it together with the whole-castbar layer. 1-30 pins the icon to that frame level on the shared layer scale, so it can be ordered in front of or behind the bar, texts, and other frame elements."] = "0은 아이콘을 바 바로 위에 유지하고 시전 바 전체 레이어와 함께 이동합니다. 1-30은 아이콘을 공유 레이어 첩도의 해당 프레임 레벨에 고정하여 바, 글자, 다른 프레임 요소의 앞이나 뒤로 정렬할 수 있습니다."
 
 --- Detached / overlay portrait placement (6.0 Beta 30)
+L["Size mode"] = "크기 모드"
+L["Portrait edge softness"] = "초상화 가장자리 부드러움"
+L["Uniform"] = "균일"
+L["Width & height"] = "너비 및 높이"
 L["Width override"] = "너비 재정의"
 L["Height override"] = "높이 재정의"
 L["Zoom center X"] = "확대 중심 X"
@@ -5029,6 +5043,21 @@ L["On (default): names supplied by Northern Sky Raid Tools replace character nam
 
 -- Guided setup restart confirmation.
 L["Run the guided setup again? The walkthrough starts over at the first step."] = "가이드 설정을 다시 진행할까요? 설정 안내가 첫 단계부터 다시 시작됩니다."
+L["Dispel Type Colors"] = "해제 유형 색상"
+L["Magic custom"] = "마법 사용자 지정"
+L["Magic color"] = "마법 색상"
+L["Curse custom"] = "저주 사용자 지정"
+L["Curse color"] = "저주 색상"
+L["Disease custom"] = "질병 사용자 지정"
+L["Disease color"] = "질병 색상"
+L["Poison custom"] = "독 사용자 지정"
+L["Poison color"] = "독 색상"
+L["Bleed custom"] = "출혈 사용자 지정"
+L["Bleed color"] = "출혈 색상"
+L["Optional global overrides for harmful Magic, Curse, Disease, Poison and Bleed indicators. Off uses Blizzard's current default. The last edited type is shown first in every aura preview."] = "해로운 마법, 저주, 질병, 독, 출혈 표시의 전역 색상을 선택적으로 바꿉니다. 끄면 Blizzard의 현재 기본값을 사용합니다. 마지막으로 편집한 유형이 모든 오라 미리보기에서 먼저 표시됩니다."
+L["Timer and Dispel colors are shared by live unit/group auras and every preview. Icon border and shadow colors live in Appearance > Auras, scoped by Aura type."] = "타이머와 해제 색상은 실제 유닛 및 그룹 오라와 모든 미리보기에 공통으로 적용됩니다. 아이콘 테두리와 그림자 색상은 외형 > 오라에서 오라 유형별로 설정합니다."
+L["Cooldown timer urgency, global Dispel types, icon borders and shadows."] = "재사용 대기시간 긴급도, 전역 해제 유형, 아이콘 테두리 및 그림자 색상입니다."
+L["Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."] = "안전, 경고, 긴급, 마법, 저주, 질병, 독, 출혈, 아이콘 테두리 및 아이콘 그림자."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end

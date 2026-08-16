@@ -637,6 +637,11 @@ local function GeneralDB()
 end
 
 local function DispelTestColor(frame)
+  local A3 = MSUF and MSUF.MSUF_Auras3
+  if A3 and type(A3.GetDispelTypeColor) == "function" then
+    local r, g, b = A3.GetDispelTypeColor(A3.GetDispelColorPreviewType())
+    return r, g, b, 1
+  end
   local dispel = frame and frame.MSUFSpec and frame.MSUFSpec.dispel
   return dispel and dispel.r or 0.25, dispel and dispel.g or 0.75, dispel and dispel.b or 1, 1
 end

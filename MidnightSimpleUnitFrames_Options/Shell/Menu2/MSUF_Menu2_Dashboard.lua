@@ -432,13 +432,47 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
         y = y - h - (gap or 4)
         return fs
     end
-    local function AddBullet(text, dotColor, textColor)
+    local function AddBullet(value, dotColor, textColor, isHighlight)
+        local text, link
+        if type(value) == "table" then
+            text = tostring(value.text or "")
+            link = type(value.link) == "table" and value.link or nil
+        else
+            text = tostring(value or "")
+        end
         dotColor = dotColor or T.colors.accent
         textColor = textColor or bodyColor
         local dot = child:CreateTexture(nil, "ARTWORK")
         dot:SetSize(5, 5)
         dot:SetPoint("TOPLEFT", child, "TOPLEFT", 9, y - 6)
         dot:SetColorTexture(dotColor[1], dotColor[2], dotColor[3], 0.95)
+        if isHighlight and link then
+            local button = CreateFrame("Button", nil, child)
+            button:SetPoint("TOPLEFT", child, "TOPLEFT", 22, y)
+            local linkWidth = max(40, scrollW - 32)
+            button:SetWidth(linkWidth)
+            local fs = RawFont(button, "GameFontHighlightSmall", M.Tr(text), T.colors.accent2 or T.colors.warning, 0, "body")
+            fs:SetPoint("TOPLEFT", button, "TOPLEFT", 0, 0)
+            fs:SetWidth(linkWidth)
+            fs:SetJustifyH("LEFT")
+            if fs.SetWordWrap then fs:SetWordWrap(true) end
+            if fs.SetNonSpaceWrap then fs:SetNonSpaceWrap(true) end
+            if fs.SetSpacing then fs:SetSpacing(3) end
+            local h = max((fs.GetStringHeight and fs:GetStringHeight()) or 0, (fs.GetHeight and fs:GetHeight()) or 0, 14)
+            button:SetHeight(h)
+            local PaintFeatureLink = type(T.StyleFeatureLink) == "function" and T.StyleFeatureLink(button, fs) or nil
+            button:SetScript("OnClick", function()
+                if type(M.OpenChangelogMenuLink) == "function" then M.OpenChangelogMenuLink(link) end
+            end)
+            button:SetScript("OnEnter", function()
+                if PaintFeatureLink then PaintFeatureLink(true) end
+            end)
+            button:SetScript("OnLeave", function()
+                if PaintFeatureLink then PaintFeatureLink(false) end
+            end)
+            y = y - h - 9
+            return button
+        end
         return AddText(text, "GameFontHighlightSmall", textColor, 22, 9, true, "body")
     end
     local function AddRule()
@@ -474,9 +508,10 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
                         AddText(sectionTitle, "GameFontNormalSmall", isHighlights and T.colors.accent or T.colors.accent2, 0, 7, true, "card")
                         for bulletIndex = 1, #section.bullets do
                             AddBullet(
-                                tostring(section.bullets[bulletIndex] or ""),
+                                section.bullets[bulletIndex],
                                 isHighlights and T.colors.accent2 or nil,
-                                isHighlights and T.colors.text or nil
+                                isHighlights and T.colors.text or nil,
+                                isHighlights
                             )
                         end
                     end

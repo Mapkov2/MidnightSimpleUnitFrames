@@ -122,6 +122,7 @@ function A.GlobalRegistry.RegisterScopedFontDetailSettings(ctx)
         })
         local renderingAliases = {
             "font rendering", "text rendering", "font smoothing", "text smoothing", "sharp text", "pixel font", "monochrome font",
+            "slug rendering", "slug font", "font slug",
         }
         if isShared then
             renderingAliases[#renderingAliases + 1] = "global font rendering"
@@ -146,8 +147,18 @@ function A.GlobalRegistry.RegisterScopedFontDetailSettings(ctx)
             flag = "fontOverride",
             values = FONT_RENDERING_VALUES,
             valueAliases = FONT_RENDERING_ALIASES,
-            get = function(scopeKey) return GlobalScopeRead(scopeKey, "fontOverride", GeneralDB(), "fontMonochrome", false) and "SHARP" or "SMOOTH" end,
-            set = function(scopeKey, value) GlobalScopeWrite(scopeKey, "fontOverride", GeneralDB(), "fontMonochrome", value == "SHARP") end,
+            get = function(scopeKey)
+                if GlobalScopeRead(scopeKey, "fontOverride", GeneralDB(), "fontSlug", false) then return "SLUG" end
+                return GlobalScopeRead(scopeKey, "fontOverride", GeneralDB(), "fontMonochrome", false) and "SHARP" or "SMOOTH"
+            end,
+            set = function(scopeKey, value)
+                GlobalScopeWrite(scopeKey, "fontOverride", GeneralDB(), "fontMonochrome", value == "SHARP")
+                GlobalScopeWrite(scopeKey, "fontOverride", GeneralDB(), "fontSlug", value == "SLUG")
+                if value == "SLUG" and ScopedFontOutline(scopeKey) == "THICKOUTLINE" then
+                    SetScopedFontOutline(scopeKey, "OUTLINE")
+                end
+            end,
+            dbScopeKeys = { "fontMonochrome", "fontSlug" },
             apply = ApplyFonts,
             reason = "MSUF_ASSISTANT_FONT_RENDERING",
         })

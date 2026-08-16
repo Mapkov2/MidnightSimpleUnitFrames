@@ -305,6 +305,7 @@ local STATUS_TEXT_COLOR_SPECS = {
     { prefix = "statusText",         label = "Dead Text Color",       nouns = { "dead text color", "dead color", "death text color" } },
     { prefix = "statusGhostText",    label = "Ghost Text Color",      nouns = { "ghost text color", "ghost color" } },
     { prefix = "statusAFKText",      label = "AFK Text Color",        nouns = { "afk text color", "afk color", "away text color" } },
+    { prefix = "statusAFKTimer",     label = "AFK Timer Color",       nouns = { "afk timer color", "afk duration color", "afk time color" } },
     { prefix = "statusDNDText",      label = "DND Text Color",        nouns = { "dnd text color", "dnd color", "do not disturb text color" } },
 }
 

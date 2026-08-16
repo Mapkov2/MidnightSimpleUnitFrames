@@ -115,7 +115,8 @@ Metadata.runtimeUpdateOwners = BuildNameSet(
   "Health Power Text NameText HealthText PowerText InlineToT Portrait Alpha " ..
   "StatusIndicators RaidMarkerIndicator LeaderIndicator LevelIndicator " ..
   "RaidGroupIndicator EliteIndicator StatusTextIndicator CombatIndicator " ..
-  "RestingIndicator IncomingResIndicator PVPIndicator TempMaxHealth Prediction Borders " ..
+  "RestingIndicator IncomingResIndicator PVPIndicator StanceIndicator " ..
+  "TempMaxHealth Prediction Borders " ..
   "LoadConditions GroupStatusRuntime RangeFade GroupRangeFade GroupVisuals " ..
   "GroupCornerIndicators")
 
@@ -151,7 +152,7 @@ local MASK_GROUP_UNIT_STRUCTURE = BuildNameSet("load health power name groupStat
 local STATUS_APPLY_ELEMENTS =
   "StatusIndicators RaidMarkerIndicator LeaderIndicator LevelIndicator " ..
   "RaidGroupIndicator EliteIndicator StatusTextIndicator CombatIndicator " ..
-  "RestingIndicator IncomingResIndicator PVPIndicator"
+  "RestingIndicator IncomingResIndicator PVPIndicator StanceIndicator"
 
 local runtimeReasonMasks = {}
 AddRuntimeReasonMasks(runtimeReasonMasks, MASK_FONT_RUNTIME, "FONT_RUNTIME MSUF2_HP_TEXT_COLOR")
@@ -218,12 +219,13 @@ Metadata.refreshElementGroups = {
     "Health Power Text NameText HealthText PowerText InlineToT Portrait " ..
     "StatusIndicators RaidMarkerIndicator LeaderIndicator TempMaxHealth Prediction LevelIndicator " ..
     "RaidGroupIndicator EliteIndicator StatusTextIndicator CombatIndicator RestingIndicator " ..
-    "IncomingResIndicator PVPIndicator Alpha Borders RangeFade Auras"),
+    "IncomingResIndicator PVPIndicator StanceIndicator Alpha Borders RangeFade Auras"),
   powerText = BuildNameList("Power Text PowerText"),
   colors = BuildNameList(
     "Health Power Text NameText HealthText PowerText InlineToT Portrait " ..
     "StatusIndicators LevelIndicator EliteIndicator StatusTextIndicator CombatIndicator " ..
-    "RestingIndicator IncomingResIndicator PVPIndicator TempMaxHealth Prediction Borders"),
+    "RestingIndicator IncomingResIndicator PVPIndicator StanceIndicator " ..
+    "TempMaxHealth Prediction Borders"),
   text = BuildNameList("Text NameText HealthText PowerText InlineToT"),
   borders = BuildNameList("Borders Power"),
   reverseFill = BuildNameList("Health Power TempMaxHealth Prediction"),

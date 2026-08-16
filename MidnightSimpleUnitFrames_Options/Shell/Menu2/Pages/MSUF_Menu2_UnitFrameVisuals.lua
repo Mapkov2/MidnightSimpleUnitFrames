@@ -25,7 +25,8 @@ local CASTBAR_TAB_VALUES = VT("general", "General", "icon", "Icon", "spell", "Sp
 --- visible border is painted. "Castbar border color" is the only value the
 --- Castbar Icon Border Color shortcut applies to.
 local CASTBAR_ICON_BORDER_STYLES = VT("NONE", "None", "DARK", "Dark", "CASTBAR", "Castbar border color")
-local CASTBAR_TAB_HEIGHTS = { general = 392, icon = 540, spell = 386, time = 386, advanced = 480 }
+-- general grew by 32px when "Show interrupter name" pushed the Size card down.
+local CASTBAR_TAB_HEIGHTS = { general = 424, icon = 540, spell = 386, time = 386, advanced = 480 }
 local CASTBAR_WIDTH_SOURCE_VALUES = VT("manual", "Manual width", "unitframe", "Auto: Unit Frame", "essential", "Auto: Essential Cooldowns", "utility", "Auto: Utility Cooldowns")
 local CASTBAR_TEXT_ALIGN = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right")
 local CASTBAR_TRUNCATE_VALUES = VT("AUTO", "Auto fit", "CLIP", "Manual width", "NONE", "No width limit")
@@ -42,6 +43,7 @@ local PORTRAIT_PLACEMENT = {
     borderArt = VT("FLAT", "Flat", "RELIEF", "Relief"),
     borderDirection = VT("UP", "Up", "RIGHT", "Right", "DOWN", "Down", "LEFT", "Left"),
 }
+local PORTRAIT_SIZE_MODES = VT("UNIFORM", "Uniform", "SEPARATE", "Width & height")
 local UnitSectionShared = M.UnitSectionsShared or {}
 local SetSectionHeaderStatus = UnitSectionShared.SetSectionHeaderStatus or function() end
 local CreateSectionNotice = UnitSectionShared.CreateSectionNotice or function() end
@@ -96,7 +98,7 @@ end
 local NormalizePortraitClassStyle = M.NormalizePortraitClassStyle
 -- Card heights. BuildPortrait and PortraitLayoutForWidth must agree on these, so
 -- both read them from here instead of repeating literals.
-local PORTRAIT_CARD_H = { main = 224, geometry = 386, placement = 382, border = 380, style = 220 }
+local PORTRAIT_CARD_H = { main = 224, geometry = 440, placement = 382, border = 440, style = 220 }
 local PORTRAIT_TAB_HEIGHTS = {
     general = PORTRAIT_CARD_H.main + 116,
     geometry = PORTRAIT_CARD_H.geometry + 116,
@@ -261,6 +263,21 @@ local function BuildPortrait(ctx, builder, unit)
         end
         return type(ReadPortraitTab) ~= "function" or ReadPortraitTab() == tab
     end
+    local function BindExactPortraitTabTarget(widget, tab, settingKey)
+        if not widget then return end
+        widget._msuf2ExactTargetKinds = { unitPortraitTab = true }
+        widget._msuf2ExactTargetContracts = {
+            unitPortraitTab = { [tab] = tostring(settingKey or "") },
+        }
+        widget._msuf2PrepareExactSearchTarget = function(_, exactTarget)
+            if type(exactTarget) ~= "table" or exactTarget.prepareKind ~= "unitPortraitTab"
+                or tostring(exactTarget.prepareValue or "") ~= tab
+            then
+                return false
+            end
+            return sec._msuf2GuidedSelectTab and sec._msuf2GuidedSelectTab(tab) == true
+        end
+    end
     local portraitEnable = W.SwitchAt(mainCard, "Portrait", leftW - 62, -24, 0, "HIDDEN")
     M.BindBoolWidget(ctx, portraitEnable,
         function() return NormalizePortrait(unit) ~= "OFF" end,
@@ -291,12 +308,30 @@ local function BuildPortrait(ctx, builder, unit)
         PortraitControlMeta("portrait.position", tostring(unit) .. ".portraitMode"))
     local render = BindPortraitDropdown(mainCard, "Render", PORTRAIT_RENDER, 16, -116, min(220, leftW - 32), "portraitRender", "2D", "MSUF2_PORTRAIT_RENDER", nil, RefreshPortraitControls)
     local shape = BindPortraitDropdown(borderCard, "Shape", PORTRAIT_SHAPES, 16, -58, min(220, leftW - 32), "portraitShape", "SQUARE", "MSUF2_PORTRAIT_SHAPE", nil, RefreshPortraitControls)
-    local size = BindPortraitSlider(geometryCard, "Size override", 16, -62, rightW - 58, 0, 128, 1, "portraitSizeOverride", 0, "MSUF2_PORTRAIT_SIZE", RefreshPortraitControls)
-    local widthOverride = BindPortraitSlider(geometryCard, "Width override", 16, -116, rightW - 58, 0, 256, 1, "portraitWidth", 0, "MSUF2_PORTRAIT_WIDTH")
-    local heightOverride = BindPortraitSlider(geometryCard, "Height override", 16, -170, rightW - 58, 0, 256, 1, "portraitHeight", 0, "MSUF2_PORTRAIT_HEIGHT")
-    local zoom = BindPortraitSlider(geometryCard, "Portrait zoom", 16, -224, rightW - 58, 100, 200, 1, "portraitZoom", 100, "MSUF2_PORTRAIT_ZOOM")
-    local panX = BindPortraitSlider(geometryCard, "Zoom center X", 16, -278, rightW - 58, -100, 100, 1, "portraitPanX", 0, "MSUF2_PORTRAIT_PAN_X")
-    local panY = BindPortraitSlider(geometryCard, "Zoom center Y", 16, -332, rightW - 58, -100, 100, 1, "portraitPanY", 0, "MSUF2_PORTRAIT_PAN_Y")
+    local sizeMode = W.Segment(geometryCard, "Size mode", PORTRAIT_SIZE_MODES, min(360, rightW - 32))
+    W.MoveWidget(sizeMode, geometryCard, 16, -62, min(360, rightW - 32))
+    M.BindSegment(ctx, sizeMode,
+        function()
+            local conf = GetConf(unit)
+            local mode = conf.portraitSizeMode
+            if mode == "UNIFORM" or mode == "SEPARATE" then return mode end
+            if (tonumber(conf.portraitSizeOverride) or 0) > 0 then return "UNIFORM" end
+            return ((tonumber(conf.portraitWidth) or 0) > 0 or (tonumber(conf.portraitHeight) or 0) > 0)
+                and "SEPARATE" or "UNIFORM"
+        end,
+        function(value)
+            value = value == "SEPARATE" and "SEPARATE" or "UNIFORM"
+            SetPortraitValue(unit, "portraitSizeMode", value, "MSUF2_PORTRAIT_SIZE_MODE")
+            RefreshPortraitControls()
+        end,
+        PortraitControlMeta("portrait.portraitSizeMode", tostring(unit) .. ".portraitSizeMode"))
+    BindExactPortraitTabTarget(sizeMode, "geometry", tostring(unit) .. ".portraitSizeMode")
+    local size = BindPortraitSlider(geometryCard, "Size override", 16, -116, rightW - 58, 0, 128, 1, "portraitSizeOverride", 0, "MSUF2_PORTRAIT_SIZE")
+    local widthOverride = BindPortraitSlider(geometryCard, "Width override", 16, -170, rightW - 58, 0, 256, 1, "portraitWidth", 0, "MSUF2_PORTRAIT_WIDTH")
+    local heightOverride = BindPortraitSlider(geometryCard, "Height override", 16, -224, rightW - 58, 0, 256, 1, "portraitHeight", 0, "MSUF2_PORTRAIT_HEIGHT")
+    local zoom = BindPortraitSlider(geometryCard, "Portrait zoom", 16, -278, rightW - 58, 100, 200, 1, "portraitZoom", 100, "MSUF2_PORTRAIT_ZOOM")
+    local panX = BindPortraitSlider(geometryCard, "Zoom center X", 16, -332, rightW - 58, -100, 100, 1, "portraitPanX", 0, "MSUF2_PORTRAIT_PAN_X")
+    local panY = BindPortraitSlider(geometryCard, "Zoom center Y", 16, -386, rightW - 58, -100, 100, 1, "portraitPanY", 0, "MSUF2_PORTRAIT_PAN_Y")
     local placement = BindPortraitDropdown(placementCard, "Placement", PORTRAIT_PLACEMENT.modes, 16, -58, min(220, leftW - 32), "portraitPlacement", "ATTACHED", "MSUF2_PORTRAIT_PLACEMENT", nil, RefreshPortraitControls)
     placement._msuf2SearchText = "Portrait placement attached detached overlay free position anchor"
     local detachedPoint = BindPortraitDropdown(placementCard, "Portrait anchor point", PORTRAIT_PLACEMENT.points, 16, -112, min(220, leftW - 32), "portraitDetachedPoint", "RIGHT", "MSUF2_PORTRAIT_DETACHED_POINT")
@@ -308,12 +343,15 @@ local function BuildPortrait(ctx, builder, unit)
     local classStyle = BindPortraitDropdown(styleCard, "Class portrait style", PortraitClassStyleValues, 16, -58, min(220, rightW - 32), "portraitClassStyle", "BLIZZARD", "MSUF2_PORTRAIT_CLASS_STYLE", NormalizePortraitClassStyle)
     classStyle._msuf2SearchText = "Class portrait style Blizzard Rondo Colored Rondo WoW"
     local border = BindPortraitDropdown(borderCard, "Border", PORTRAIT_BORDERS, 16, -112, min(220, leftW - 32), "portraitBorderStyle", "NONE", "MSUF2_PORTRAIT_BORDER", nil, RefreshPortraitControls)
-    local borderArt = BindPortraitDropdown(borderCard, "Border art", PORTRAIT_PLACEMENT.borderArt, 16, -166, min(220, leftW - 32), "portraitBorderArt", "FLAT", "MSUF2_PORTRAIT_BORDER_ART", nil, RefreshPortraitControls)
+    local edgeSoftness = BindPortraitSlider(borderCard, "Portrait edge softness", 16, -166, leftW - 58, 0, 30, 2, "portraitEdgeSoftness", 0, "MSUF2_PORTRAIT_EDGE_SOFTNESS")
+    BindExactPortraitTabTarget(edgeSoftness, "border", tostring(unit) .. ".portraitEdgeSoftness")
+    edgeSoftness._msuf2SearchText = "Portrait edge softness feather fade borderless percent"
+    local borderArt = BindPortraitDropdown(borderCard, "Border art", PORTRAIT_PLACEMENT.borderArt, 16, -220, min(220, leftW - 32), "portraitBorderArt", "FLAT", "MSUF2_PORTRAIT_BORDER_ART", nil, RefreshPortraitControls)
     borderArt._msuf2SearchText = "Portrait border art flat relief beveled ring blizzard style"
-    local borderDirection = BindPortraitDropdown(borderCard, "Border direction", PORTRAIT_PLACEMENT.borderDirection, 16, -220, min(220, leftW - 32), "portraitBorderDirection", "UP", "MSUF2_PORTRAIT_BORDER_DIRECTION")
+    local borderDirection = BindPortraitDropdown(borderCard, "Border direction", PORTRAIT_PLACEMENT.borderDirection, 16, -274, min(220, leftW - 32), "portraitBorderDirection", "UP", "MSUF2_PORTRAIT_BORDER_DIRECTION")
     borderDirection._msuf2SearchText = "Portrait border direction rotate light up right down left"
-    local borderSize = BindPortraitSlider(borderCard, "Border thickness", 16, -274, leftW - 58, 1, 12, 1, "portraitBorderThickness", 2, "MSUF2_PORTRAIT_BORDER_SIZE")
-    local fillBorder = BindPortraitToggle(borderCard, "Fill border into frame gap", 16, -342, leftW - 32, "portraitFillBorder", false, "MSUF2_PORTRAIT_FILL_BORDER")
+    local borderSize = BindPortraitSlider(borderCard, "Border thickness", 16, -328, leftW - 58, 1, 12, 1, "portraitBorderThickness", 2, "MSUF2_PORTRAIT_BORDER_SIZE")
+    local fillBorder = BindPortraitToggle(borderCard, "Fill border into frame gap", 16, -396, leftW - 32, "portraitFillBorder", false, "MSUF2_PORTRAIT_FILL_BORDER")
     local portraitBg = BindPortraitToggle(styleCard, "Portrait background", 16, -112, rightW - 32, "portraitBgEnabled", false, "MSUF2_PORTRAIT_BG")
     -- The Castbar section's Icon tab hosts a second toggle for this same key on
     -- every unit that has a castbar. Re-run the page refreshers so the twin
@@ -322,7 +360,7 @@ local function BuildPortrait(ctx, builder, unit)
         CASTBAR_UNITS[unit] and function() M.RequestRefresh(ctx, "portrait-cast-icon-mirror") end or nil)
     castSpellIcon._msuf2SearchText = "Portrait cast spell icon casting channel empower"
     local portraitActiveControls = {
-        render, shape, size, widthOverride, heightOverride, portraitBg, castSpellIcon,
+        render, shape, sizeMode, size, widthOverride, heightOverride, edgeSoftness, portraitBg, castSpellIcon,
         placement, levelOffset, portraitAlpha,
     }
     local function PortraitActive() return NormalizePortrait(unit) ~= "OFF" end
@@ -341,6 +379,13 @@ local function BuildPortrait(ctx, builder, unit)
         return (conf.portraitPlacement or "ATTACHED") == "OVERLAY"
             and (conf.portraitOverlayAlign or "LEFT") == "FULL"
     end
+    local function PortraitUsesSeparateSize(conf)
+        local mode = conf.portraitSizeMode
+        if mode == "SEPARATE" then return true end
+        if mode == "UNIFORM" then return false end
+        if (tonumber(conf.portraitSizeOverride) or 0) > 0 then return false end
+        return (tonumber(conf.portraitWidth) or 0) > 0 or (tonumber(conf.portraitHeight) or 0) > 0
+    end
     RefreshPortraitControls = RefreshPortraitControls(M.BindGateGroup(ctx, function() return GetConf(unit) end, {
         { enable = portraitEnable },
         { controls = portraitActiveControls, on = PortraitActive },
@@ -349,17 +394,24 @@ local function BuildPortrait(ctx, builder, unit)
         { controls = portrait, on = function(conf) return PortraitPlacementIs(conf, "ATTACHED") end },
         { controls = { detachedPoint, detachedTo }, on = function(conf) return PortraitPlacementIs(conf, "DETACHED") end },
         { controls = overlayAlign, on = function(conf) return PortraitPlacementIs(conf, "OVERLAY") end },
-        -- Fill-bar geometry comes from the two bar anchors. In every other
-        -- placement a positive uniform size wins; per-axis overrides are the
-        -- non-square Auto-size mode and must not pretend to affect that square.
-        { controls = size, on = function(conf) return PortraitActive() and not PortraitFillsBar(conf) end },
+        -- Fill-bar geometry comes from the two bar anchors. Every other
+        -- placement exposes one explicit mode: a uniform size or two axes.
+        { controls = sizeMode, on = function(conf) return PortraitActive() and not PortraitFillsBar(conf) end },
+        { controls = size, on = function(conf)
+            return PortraitActive() and not PortraitFillsBar(conf) and not PortraitUsesSeparateSize(conf)
+        end },
         { controls = { widthOverride, heightOverride }, on = function(conf)
             return PortraitActive()
                 and not PortraitFillsBar(conf)
-                and (tonumber(conf.portraitSizeOverride) or 0) <= 0
+                and PortraitUsesSeparateSize(conf)
         end },
         { controls = { zoom, panX, panY }, on = PortraitIs2D },
         { controls = border, on = function(conf) return PortraitActive() and not PortraitShapeIsBlizzard(conf) end },
+        { controls = edgeSoftness, on = function(conf)
+            return PortraitActive()
+                and not PortraitShapeIsBlizzard(conf)
+                and ((conf.portraitBorderStyle or "NONE") == "NONE")
+        end },
         { controls = { borderSize, borderArt }, on = function(conf)
             return PortraitActive()
                 and ((conf.portraitBorderStyle or "NONE") ~= "NONE")
@@ -978,9 +1030,9 @@ local function BuildCastbar(ctx, builder, unit)
     local tabFrames = {}
     local generalTab, iconTab, spellTab, timeTab, advancedTab =
         UnitSectionShared.MakeTabFrames(sec, -64, sectionW, tabFrames, "general", "icon", "spell", "time", "advanced")
-    local generalCard = W.ControlCard(generalTab, nil, nil, leftX, -4, leftW, 132)
-    local providerCard = W.ControlCard(generalTab, "Provider & Surface", nil, rightX, -4, rightW, 132)
-    local sizeCard = W.ControlCard(generalTab, "Size", "Width can use manual bounds or follow another frame.", leftX, -154, sectionW - 32, 166)
+    local generalCard = W.ControlCard(generalTab, nil, nil, leftX, -4, leftW, 164)
+    local providerCard = W.ControlCard(generalTab, "Provider & Surface", nil, rightX, -4, rightW, 164)
+    local sizeCard = W.ControlCard(generalTab, "Size", "Width can use manual bounds or follow another frame.", leftX, -186, sectionW - 32, 166)
     local iconCard = W.ControlCard(iconTab, nil, nil, leftX, -4, leftW, 424)
     local portraitIconCard = W.ControlCard(iconTab, "Portrait Cast Icon", nil, rightX, -4, rightW, 156)
     local spellCard = W.ControlCard(spellTab, nil, nil, leftX, -4, leftW, 270)
@@ -1081,6 +1133,21 @@ local function BuildCastbar(ctx, builder, unit)
         end
         return type(ReadCastbarTab) ~= "function" or ReadCastbarTab() == tab
     end
+    local function BindExactCastbarTabTarget(widget, tab, settingKey)
+        if not widget then return end
+        widget._msuf2ExactTargetKinds = { unitCastbarTab = true }
+        widget._msuf2ExactTargetContracts = {
+            unitCastbarTab = { [tab] = tostring(settingKey or "") },
+        }
+        widget._msuf2PrepareExactSearchTarget = function(_, exactTarget)
+            if type(exactTarget) ~= "table" or exactTarget.prepareKind ~= "unitCastbarTab"
+                or tostring(exactTarget.prepareValue or "") ~= tab
+            then
+                return false
+            end
+            return sec._msuf2GuidedSelectTab and sec._msuf2GuidedSelectTab(tab) == true
+        end
+    end
     local castbarNotice, _, castbarNoticeButton = CreateSectionNotice(generalTab, -334, "Use MSUF", 96)
     if castbarNoticeButton then
         RegisterControl(castbarNoticeButton, ctx, "castbar.use_msuf", "Use MSUF", "button", "setting", {
@@ -1124,6 +1191,16 @@ local function BuildCastbar(ctx, builder, unit)
         function() return ReadBool(unit, "showInterrupt", true) end,
         function(v) SetBool(unit, "showInterrupt", v, "MSUF2_CASTBAR_INTERRUPT", { castbar = true, preview = true }) end,
         SettingMeta(ctx, "castbar.show_interrupt", unit, "showInterrupt"))
+    -- Appends the interrupter's class-colored name to the Interrupted feedback
+    -- (Blizzard's SPELL_INTERRUPTED_BY format); resolution is secret-safe and
+    -- falls back to the plain label against restricted identities.
+    local interruptSource = W.ToggleAt(generalCard, "Show interrupter name", 16, -116, 240)
+    W.AttachUnitEditFocus(interruptSource, unit, "castbar")
+    M.BindBoolWidget(ctx, interruptSource,
+        function() return ReadBool(unit, "showInterruptSource", false) end,
+        function(v) SetBool(unit, "showInterruptSource", v, "MSUF2_CASTBAR_INTERRUPT_SOURCE", { castbar = true, preview = true }) end,
+        SettingMeta(ctx, "castbar.show_interrupt_source", unit, "showInterruptSource"))
+    BindExactCastbarTabTarget(interruptSource, "general", tostring(unit) .. ".showInterruptSource")
     local sizeCardW = sizeCard._msuf2Width or (sectionW - 32)
     local sizeRightX = max(350, floor(sizeCardW * 0.52))
     local sizeControlWLeft = min(300, max(220, sizeRightX - 42))

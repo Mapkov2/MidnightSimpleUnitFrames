@@ -49,6 +49,15 @@ local IsUnitToken = UF and UF.IsUnitToken or function(unit)
   return issecretvalue(unit) ~= true and type(unit) == "string" and unit ~= ""
 end
 
+local function LiveGroupKind()
+  if type(GF.GetLiveGroupKind) == "function" then return GF.GetLiveGroupKind() end
+  if IsInRaid and IsInRaid() then
+    return type(GF.GetLiveRaidKind) == "function" and GF.GetLiveRaidKind() or "raid"
+  end
+  if IsInGroup and IsInGroup() then return "party" end
+  return nil
+end
+
 local VALID_POINTS = {
   CENTER = true,
   TOP = true,
@@ -655,9 +664,8 @@ local function BuildPlayerFirstRoleNameList(key, kind, conf)
   end
   local entries = {}
   if kind == "party" then
-    local inGroup = IsInGroup and IsInGroup()
-    local inRaid = IsInRaid and IsInRaid()
-    if inGroup and not inRaid then
+    local liveKind = LiveGroupKind()
+    if liveKind == "party" then
       if conf.showPlayer ~= false then
         AddNameListEntry(entries, "player", 0, conf)
       end
@@ -962,13 +970,13 @@ end
 
 local function GroupBorderScopeActive(anchorKind, conf)
   if type(conf) ~= "table" or conf.enabled ~= true then return false end
+  local liveKind = LiveGroupKind()
   if anchorKind == "party" then
-    if IsInRaid and IsInRaid() then return false end
-    if IsInGroup and IsInGroup() then return true end
+    if liveKind == "party" then return true end
     return conf.showSolo == true
   end
   if anchorKind == "raid" or anchorKind == "mythicraid" then
-    return IsInRaid and IsInRaid() and true or false
+    return liveKind == anchorKind
   end
   return false
 end

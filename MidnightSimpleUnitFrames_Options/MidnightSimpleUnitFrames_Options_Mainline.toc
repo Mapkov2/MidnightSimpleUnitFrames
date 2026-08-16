@@ -3,12 +3,13 @@
 ## Notes: Load-on-demand configuration UI for Midnight Simple Unit Frames.
 ## Author: Mapko
 ## Category: Combat
-## Version: 6.07
+## Version: 6.08
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## Dependencies: MidnightSimpleUnitFrames
 ## LoadOnDemand: 1
 ## X-MSUF-Options: 1
 
+State\MSUF_ChangelogFull.lua
 MSUF_OptionsLOD_Bootstrap.lua
 Shell\Menu2\MSUF_Menu2.xml
 Shell\Menu2\Search\MSUF_Menu2_Search.xml

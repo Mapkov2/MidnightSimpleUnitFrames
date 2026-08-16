@@ -216,18 +216,25 @@ local function MonochromeFromFlags(flags)
     return tostring(flags or ""):upper():find("MONOCHROME", 1, true) ~= nil
 end
 
+local function SlugFromFlags(flags)
+    return tostring(flags or ""):upper():find("SLUG", 1, true) ~= nil
+end
+
 local function ComposeFontFlags(outline, globalFlags)
     outline = tostring(outline or "GLOBAL"):upper()
     if outline == "GLOBAL" or outline == "" then
         return globalFlags or "OUTLINE"
     end
+    local slug = SlugFromFlags(globalFlags)
     local flags = ""
-    if outline == "THICKOUTLINE" then
+    if outline == "THICKOUTLINE" and not slug then
         flags = "THICKOUTLINE"
     elseif outline ~= "NONE" then
         flags = "OUTLINE"
     end
-    if MonochromeFromFlags(globalFlags) then
+    if slug then
+        flags = flags ~= "" and (flags .. ",SLUG") or "SLUG"
+    elseif MonochromeFromFlags(globalFlags) then
         flags = flags ~= "" and (flags .. ",MONOCHROME") or "MONOCHROME"
     end
     return flags
@@ -285,6 +292,7 @@ local function ApplyFont(fontString, g, unit, prefix, suffix, size, colorSuffix)
     -- for this one FontString so those safe recolors cannot reset it to 100%.
     local targetTextAlpha = colorSuffix == "TargetName"
     local shadowEnabled, shadowAlpha, shadowX, shadowY = ResolveFontShadow(g, unit)
+    if SlugFromFlags(flags) then shadowEnabled = false end
     local shadow = shadowEnabled and (KeyPart(shadowAlpha) .. ":" .. KeyPart(shadowX)) or "NONE"
     local fontCacheKey = fontPath .. "|"
         .. KeyPart(size) .. "|"

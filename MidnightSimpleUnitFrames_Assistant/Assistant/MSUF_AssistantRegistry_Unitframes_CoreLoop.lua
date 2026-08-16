@@ -128,6 +128,12 @@ function A.UnitframesRegistry.RegisterCoreLoopSettings(ctx)
                 frameType = "castbar",
                 castbar = true,
             })
+            RegisterUnitBooleanSetting(unit, "showInterruptSource", "showInterruptSource", "Show Castbar Interrupter Name", false,
+                MakeAliases(unit, "show interrupter name", "interrupter name", "interrupted by name"), {
+                category = "Cast Bar",
+                frameType = "castbar",
+                castbar = true,
+            })
         end
 
         if type(RegisterUnitStatusIconSettings) == "function" then

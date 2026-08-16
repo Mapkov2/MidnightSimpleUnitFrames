@@ -117,6 +117,7 @@ local STATUS_EVENT_ELEMENTS = {
   RestingIndicator = true,
   IncomingResIndicator = true,
   PVPIndicator = true,
+  StanceIndicator = true,
 }
 
 local IDENTITY_ELEMENTS = {
@@ -306,7 +307,10 @@ local function ReadUnitIsPlayerCached(frame, unit)
     end
   end
 
-  local state = IdentityDispatchState(frame, unit)
+  -- FreshUnitState already proved that this is the bound unit in the current
+  -- dispatch. Reuse that table directly instead of re-running the guarded
+  -- identity lookup for every status/text consumer in the same target swap.
+  local state = unitState or IdentityDispatchState(frame, unit)
   if state and state.identityIsPlayerRead == true then
     return state.isPlayer, state.isPlayerKnown == true
   end
@@ -328,7 +332,7 @@ end
 UF.ReadUnitIsPlayerCached = ReadUnitIsPlayerCached
 
 local function ReadUnitClassCached(frame, unit)
-  local state = IdentityDispatchState(frame, unit)
+  local state = FreshUnitState(frame, unit) or IdentityDispatchState(frame, unit)
   if state and state.identityClassRead == true then
     return state.className, state.classToken
   end
@@ -2225,6 +2229,7 @@ local IDENTITY_STEP_PREDICTION = 3
 local function CompileIdentityRuntimePath(list, labels, count)
   if not count or count <= 0 then return nil end
   local kinds = {}
+  local inlineToTScheduled = false
   for i = 1, count do
     local label = labels[i]
     if label == "HealthText" then
@@ -2236,11 +2241,20 @@ local function CompileIdentityRuntimePath(list, labels, count)
     else
       kinds[i] = IDENTITY_STEP_NORMAL
     end
+    if label == "InlineToT" then
+      inlineToTScheduled = true
+    end
   end
 
   return function(frame, event, unit,
       hp, hpMax, healthPercentReady,
       power, powerMax, powerType, powerToken, powerMetaChanged)
+    -- NameText color updates normally keep InlineToT in sync. Identity plans
+    -- already contain InlineToT as their own step, so mark the batch and let
+    -- that one authoritative step do the work instead of updating it twice.
+    if inlineToTScheduled then
+      frame._msufIdentityInlineToTScheduled = true
+    end
     for i = 1, count do
       local update = list[i]
       local kind = kinds[i]
@@ -2264,6 +2278,9 @@ local function CompileIdentityRuntimePath(list, labels, count)
       else
         update(frame, event, unit)
       end
+    end
+    if inlineToTScheduled then
+      frame._msufIdentityInlineToTScheduled = nil
     end
   end
 end

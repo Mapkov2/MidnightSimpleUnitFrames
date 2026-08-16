@@ -10,6 +10,8 @@ if not Text then return end
 
 local UnitName = Text.UnitName or _G.UnitName
 local UnitFullName = _G.UnitFullName
+local UnitIsPlayer = _G.UnitIsPlayer
+local ReadUnitIsPlayerCached = MSUF.UF and MSUF.UF.ReadUnitIsPlayerCached
 local GetNormalizedRealmName = _G.GetNormalizedRealmName
 local CreateFrame = Text.CreateFrame or _G.CreateFrame
 local InCombatLockdown = Text.InCombatLockdown or _G.InCombatLockdown
@@ -23,6 +25,7 @@ local API = { VERSION = 1 }
 local providers = {}
 local orderedProviders = {}
 local providerCount = 0
+local playerOnlyProviderCount = 0
 local resolverInstalled = false
 local orderDirty = false
 local pendingApply = false
@@ -176,8 +179,12 @@ end
 local function RebuildProviderOrder()
   Wipe(orderedProviders)
   providerCount = 0
+  playerOnlyProviderCount = 0
   for _, record in pairs(providers) do
     providerCount = providerCount + 1
+    if record.playerOnly == true then
+      playerOnlyProviderCount = playerOnlyProviderCount + 1
+    end
     record.failed = false
     orderedProviders[providerCount] = record
   end
@@ -190,7 +197,7 @@ local function RebuildProviderOrder()
   orderDirty = false
 end
 
-local function ResolveDisplayName(unit)
+local function ResolveDisplayName(unit, frame)
   if not UnitName then return nil end
 
   local nativeName = UnitName(unit)
@@ -205,6 +212,28 @@ local function ResolveDisplayName(unit)
   -- unknown or ambiguous identities keep their native name until combat ends.
   if InCombat() then
     return FrozenDisplayName(nativeName, nil)
+  end
+
+  local playerOnlyPrevalidated
+  if providerCount > 0 and playerOnlyProviderCount == providerCount then
+    local raw, known
+    if frame and ReadUnitIsPlayerCached then
+      raw, known = ReadUnitIsPlayerCached(frame, unit)
+      if known ~= true or raw ~= true then
+        return nativeName
+      end
+    elseif UnitIsPlayer then
+      raw = UnitIsPlayer(unit)
+      if issecretvalue(raw) == true or raw ~= true then
+        return nativeName
+      end
+    else
+      raw = true
+    end
+    if raw ~= true then
+      return nativeName
+    end
+    playerOnlyPrevalidated = true
   end
 
   local fullName = FullNameForUnit(unit, nativeName)
@@ -222,7 +251,8 @@ local function ResolveDisplayName(unit)
   for i = 1, providerCount do
     local record = orderedProviders[i]
     if record and not record.failed then
-      local ok, result = pcall(record.resolve, unit, nativeName, fullName)
+      local ok, result = pcall(record.resolve, unit, nativeName, fullName,
+        playerOnlyPrevalidated == true and record.playerOnly == true or nil, true)
       if not ok then
         record.failed = true
         ReportProviderError(record, result)
@@ -422,6 +452,7 @@ function API.GetCapabilities()
     priorities = true,
     cached = true,
     targetedUpdates = true,
+    playerOnlyProviders = true,
     eventDriven = true,
     combatUpdates = false,
     polling = false,
@@ -432,9 +463,11 @@ function API.RegisterProvider(owner, provider, priority)
   if not ValidOwner(owner) then return false, "invalid_owner" end
 
   local resolve = provider
+  local playerOnly = false
   if type(provider) == "table" then
     resolve = provider.resolve
     priority = provider.priority
+    playerOnly = provider.playerOnly == true
   end
   if type(resolve) ~= "function" then return false, "invalid_resolver" end
   if priority == nil then priority = 0 end
@@ -442,7 +475,8 @@ function API.RegisterProvider(owner, provider, priority)
 
   local ownerKey = OwnerKey(owner)
   local current = providers[ownerKey]
-  if current and current.resolve == resolve and current.priority == priority then
+  if current and current.resolve == resolve and current.priority == priority
+    and current.playerOnly == playerOnly then
     return true, "unchanged"
   end
 
@@ -451,6 +485,7 @@ function API.RegisterProvider(owner, provider, priority)
     ownerKey = ownerKey,
     resolve = resolve,
     priority = priority,
+    playerOnly = playerOnly,
   }
   orderDirty = true
   return RequestApply()

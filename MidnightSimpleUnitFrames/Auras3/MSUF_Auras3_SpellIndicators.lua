@@ -236,8 +236,7 @@ local function SlotStructuralSignature(slot)
     -- The public 12.1 AuraSlot filter setter reparses assignments without
     -- recreating the access-restricted AuraButton. Only slot topology and
     -- initializeFrame-owned visuals remain structural.
-    return tostring(slot.slotKey) .. "\030" .. tostring(slot.nativeFilter)
-        .. "\030" .. tostring(slot.identityCandidateMode)
+    return tostring(slot.slotKey) .. "\030" .. tostring(slot.identityCandidateMode)
         .. "\030" .. tostring(SlotLayoutSignature(slot))
 end
 
@@ -526,6 +525,28 @@ function Runtime.PartitionRoot(slotRoot, mode, rootKey)
         _msufA3StructuralSignature = mode .. "\030" .. table_concat(structuralParts, "\029"),
         _msufA3LayoutSignature = mode .. "\030" .. table_concat(layoutParts, "\029"),
     }
+end
+
+-- Ordinary Unit Frames can own mixed neutral/HELPFUL/HARMFUL fixed slots in
+-- one compiled root. Exact-ID candidate filters are identity-sensitive, so
+-- split only roots that actually contain such slots. The first live partition
+-- retains the historical root key; the optional polarity siblings are cold
+-- config artifacts and therefore add no UNIT_AURA/runtime dispatch work.
+function Runtime.PartitionUnitRoot(slotRoot)
+    if not Runtime.IsRoot(slotRoot) then return nil, nil, nil end
+    local baseKey = slotRoot.rootKey or "SpellIndicators"
+    local assist = Runtime.PartitionRoot(slotRoot, "assist", baseKey .. "Assist")
+    local hostile = Runtime.PartitionRoot(slotRoot, "hostile", baseKey .. "Hostile")
+    if not assist and not hostile then return slotRoot, nil, nil end
+
+    local neutral = Runtime.PartitionRoot(slotRoot, "neutral", baseKey)
+    if neutral then return neutral, assist, hostile end
+    if assist then
+        assist.rootKey = baseKey
+        return assist, nil, hostile
+    end
+    hostile.rootKey = baseKey
+    return hostile, nil, nil
 end
 
 function Runtime.Install(deps)
@@ -1161,6 +1182,30 @@ function Runtime.ApplyGroupAssistGate(parentFrame, canAssist, ready)
                 any = SetAssistAlpha(frame, assistVisible, 1) or any
             elseif mode == "hostile" then
                 any = SetAssistAlpha(frame, hostileVisible, 1) or any
+            end
+        end
+    end
+    return any
+end
+
+-- Ordinary Unit exact-ID containers inherit their visible AuraButtons and
+-- effect descendants through container alpha. Missing-indicator surfaces are
+-- parent-frame siblings, so mirror the same identity gate only onto surfaces
+-- owned by this container. Neutral and other-container surfaces stay untouched.
+function Runtime.ApplyUnitIdentityGate(container, canAssist, ready)
+    local parentFrame = container and container._msufA3ParentFrame
+    local missing = parentFrame and parentFrame._msufA3SpellIndicatorMissingFrames
+    if not missing then return false end
+    local known = issecretvalue(canAssist) ~= true and type(canAssist) == "boolean"
+    local any = false
+    for _, frame in pairs(missing) do
+        if frame and frame._msufA3MissingOwnerContainer == container then
+            local mode = frame._msufA3IdentityCandidateMode
+            if mode == "assist" or mode == "hostile" then
+                local visible = ready == true and known
+                    and (mode == "hostile" and canAssist == false
+                        or mode == "assist" and canAssist == true)
+                any = SetAssistAlpha(frame, visible, 1) or any
             end
         end
     end

@@ -59,10 +59,11 @@ function A.GroupFramesRegistry.RegisterPortraitSettings(ctx)
             description = description,
         })
     end
-    local function Number(attr, key, label, defaultValue, minValue, maxValue, step, aliases, percent)
+    local function Number(attr, key, label, defaultValue, minValue, maxValue, step, aliases, percent, description)
         RegisterGroupNumber(scope, attr, key, label, defaultValue, minValue, maxValue, step, "config", aliases, {
             page = page.page,
             percent = percent == true,
+            description = description,
         })
     end
     local function Boolean(attr, key, label, defaultValue, aliases)
@@ -102,6 +103,13 @@ function A.GroupFramesRegistry.RegisterPortraitSettings(ctx)
         Aliases("portrait shape"), {
             square = "SQUARE", circle = "CIRCLE", round = "CIRCLE", rounded = "ROUNDED", diamond = "DIAMOND",
         })
+    Enum("portraitSizeMode", "portraitSizeMode", "Portrait Size Mode", "UNIFORM",
+        { "UNIFORM", "SEPARATE" },
+        Aliases("portrait size mode", "uniform portrait size", "separate portrait width and height"), {
+            uniform = "UNIFORM", square = "UNIFORM", linked = "UNIFORM", locked = "UNIFORM",
+            separate = "SEPARATE", independent = "SEPARATE", custom = "SEPARATE",
+            ["width and height"] = "SEPARATE", ["width & height"] = "SEPARATE",
+        }, "Uniform uses one size for both axes; Width & Height applies the two axis overrides independently.")
     Number("portraitSizeOverride", "portraitSizeOverride", "Portrait Size Override", 0, 0, 128, 1,
         Aliases("portrait size", "portrait size override"))
     Number("portraitWidth", "portraitWidth", "Portrait Width Override", 0, 0, 256, 1,
@@ -166,6 +174,9 @@ function A.GroupFramesRegistry.RegisterPortraitSettings(ctx)
             reaction = "REACTION", ["reaction color"] = "REACTION",
             custom = "CUSTOM", ["custom color"] = "CUSTOM",
         })
+    Number("portraitEdgeSoftness", "portraitEdgeSoftness", "Portrait Edge Softness", 0, 0, 30, 2,
+        Aliases("portrait edge softness", "soft portrait edge", "portrait feather", "borderless portrait fade"),
+        false, "Softens the portrait silhouette when its border is disabled, from 0 to 30 percent.")
     Number("portraitBorderThickness", "portraitBorderThickness", "Portrait Border Thickness", 2, 1, 12, 1,
         Aliases("portrait border thickness", "portrait border size"))
     Boolean("portraitFillBorder", "portraitFillBorder", "Portrait Fill Border Gap", false,

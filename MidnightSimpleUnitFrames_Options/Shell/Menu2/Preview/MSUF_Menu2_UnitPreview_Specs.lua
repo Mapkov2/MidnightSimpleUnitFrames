@@ -46,11 +46,13 @@ elite|showEliteIcon|eliteIconSize|eliteIconAnchor|eliteIconOffsetX|eliteIconOffs
 statusText|statusDeadTextEnabled|statusTextSize|statusTextAnchor|statusTextOffsetX|statusTextOffsetY|statusTextLayer|7|16|CENTER|0|0|DEAD|0.68,0.70,0.74|Dead / Offline text|MSUF_RequestStatusTextRefresh||
 statusGhostText|statusGhostTextEnabled|statusGhostTextSize|statusGhostTextAnchor|statusGhostTextOffsetX|statusGhostTextOffsetY|statusGhostTextLayer|7|16|CENTER|0|0|GHOST|0.68,0.70,0.74|Ghost text|MSUF_RequestStatusTextRefresh||
 statusAFKText|statusAFKTextEnabled|statusAFKTextSize|statusAFKTextAnchor|statusAFKTextOffsetX|statusAFKTextOffsetY|statusAFKTextLayer|7|16|CENTER|0|0|AFK|0.68,0.70,0.74|AFK text|MSUF_RequestStatusTextRefresh|false|
+statusAFKTimer|statusAFKTimerEnabled|statusAFKTimerSize|statusAFKTimerAnchor|statusAFKTimerOffsetX|statusAFKTimerOffsetY|statusAFKTimerLayer|7|12|CENTER|0|-14|5m|0.55,0.75,0.62|AFK timer|MSUF_RequestStatusTextRefresh|false|
 statusDNDText|statusDNDTextEnabled|statusDNDTextSize|statusDNDTextAnchor|statusDNDTextOffsetX|statusDNDTextOffsetY|statusDNDTextLayer|7|16|CENTER|0|0|DND|0.68,0.70,0.74|DND text|MSUF_RequestStatusTextRefresh|false|
 statusCombat|showCombatStateIndicator|combatStateIndicatorSize|combatStateIndicatorAnchor|combatStateIndicatorOffsetX|combatStateIndicatorOffsetY|combatStateIndicatorLayer|7|18|TOPLEFT|0|0|C|1.0,0.22,0.16|Combat icon|MSUF_RequestStatusCombatIndicatorRefresh||player target|combatStateIndicatorCustomIcon
 statusResting|showRestingIndicator|restedStateIndicatorSize|restedStateIndicatorAnchor|restedStateIndicatorOffsetX|restedStateIndicatorOffsetY|restedStateIndicatorLayer|25|39|TOPLEFT|-40|50|Z|0.34,0.62,1.0|Rested icon|MSUF_RequestStatusRestingIndicatorRefresh||player|restedStateIndicatorCustomIcon
 statusIncomingRes|showIncomingResIndicator|incomingResIndicatorSize|incomingResIndicatorAnchor|incomingResIndicatorOffsetX|incomingResIndicatorOffsetY|incomingResIndicatorLayer|7|18|TOPRIGHT|0|0|+|0.22,1.0,0.56|Incoming Rez icon|MSUF_RequestStatusIncomingResIndicatorRefresh||player target|incomingResIndicatorCustomIcon
 statusPvp|showPvpIndicator|pvpIndicatorSize|pvpIndicatorAnchor|pvpIndicatorOffsetX|pvpIndicatorOffsetY|pvpIndicatorLayer|7|18|TOPRIGHT|0|0|PVP|0.32,0.62,1.0|PvP flag (War Mode/PvP)|MSUF_RequestStatusPvpIndicatorRefresh||player target focus targettarget focustarget|pvpIndicatorCustomIcon
+stance|showStanceIndicator|stanceIndicatorSize|stanceIndicatorAnchor|stanceIndicatorOffsetX|stanceIndicatorOffsetY|stanceIndicatorLayer|7|12|TOP|0|-2|Stance|0.45,0.70,1.0|Stance text|MSUF_RequestStatusIconsRefreshForCurrent|false|player|
 ]]
 specs.PreviewLayers = LayerRows [[
 guides|Guides|0.42,0.72,1.00|Mover highlights and selected borders.

@@ -90,11 +90,13 @@ local FALLBACK_UNIT_STATUS_SPECS = {
     { text = "Dead / Offline Text", show = "statusDeadTextEnabled", defaultShow = true, layer = "statusTextLayer", defaultLayer = 7 },
     { text = "Ghost Text", show = "statusGhostTextEnabled", defaultShow = true, layer = "statusGhostTextLayer", defaultLayer = 7 },
     { text = "AFK Text", show = "statusAFKTextEnabled", defaultShow = false, layer = "statusAFKTextLayer", defaultLayer = 7 },
+    { text = "AFK Timer", show = "statusAFKTimerEnabled", defaultShow = false, layer = "statusAFKTimerLayer", defaultLayer = 7 },
     { text = "DND Text", show = "statusDNDTextEnabled", defaultShow = false, layer = "statusDNDTextLayer", defaultLayer = 7 },
     { text = "Combat", show = "showCombatStateIndicator", defaultShow = true, layer = "combatStateIndicatorLayer", defaultLayer = 7, units = "player target" },
     { text = "Rested", show = "showRestingIndicator", defaultShow = false, layer = "restedStateIndicatorLayer", defaultLayer = 7, units = "player" },
     { text = "Incoming Rez", show = "showIncomingResIndicator", defaultShow = true, layer = "incomingResIndicatorLayer", defaultLayer = 7, units = "player target" },
     { text = "PvP Flag", show = "showPvpIndicator", defaultShow = true, layer = "pvpIndicatorLayer", defaultLayer = 7, units = "player target focus targettarget focustarget" },
+    { text = "Stance", show = "showStanceIndicator", defaultShow = false, layer = "stanceIndicatorLayer", defaultLayer = 7, units = "player" },
 }
 local FALLBACK_GROUP_STATUS_SPECS = {
     { text = "Role Icon", enabled = "roleIcon", layer = "roleIconLayer", defaultLayer = 1 },
@@ -109,6 +111,7 @@ local FALLBACK_GROUP_STATUS_SPECS = {
     { text = "Dead Text", enabled = "statusText", layer = "statusTextLayer", defaultLayer = 7 },
     { text = "Ghost Text", enabled = "statusGhostText", layer = "statusGhostTextLayer", defaultLayer = 7 },
     { text = "AFK Text", enabled = "statusAFKText", layer = "statusAFKTextLayer", defaultLayer = 7 },
+    { text = "AFK Timer", enabled = "statusAFKTimerText", layer = "statusAFKTimerTextLayer", defaultLayer = 7 },
     { text = "DND Text", enabled = "statusDNDText", layer = "statusDNDTextLayer", defaultLayer = 7 },
 }
 

@@ -582,7 +582,8 @@ local function ApplyFrameAuraPreview(frame, kind, visual, lane, descriptor, slot
     dispelBorder = EnsurePreviewTexture(visual, "_dispelBorder", "OVERLAY", 5)
     if A3 and type(A3.ApplyAuraDispelPreview) == "function"
       and A3.ApplyAuraDispelPreview(dispelBorder, visual, size,
-        lane.showAuraSymbol == true and "SYMBOL" or "BORDER", lane.iconShape) then
+        lane.showAuraSymbol == true and "SYMBOL" or "BORDER", lane.iconShape,
+        A3.PreviewDispelTypeForIndex(sampleIndex)) then
       -- Shared renderer stamped the matching shaped/rounded border.
     elseif dispelBorder.SetAtlas then
       local pad = type(A3.NativeAuraDispelBorderPadding) == "function"
@@ -1244,6 +1245,7 @@ local function ApplyPreviewStatus(frame, kind, index, role)
   end
   SetShown(frame.combatStateIndicatorIcon, false)
   SetShown(frame.statusIndicatorText, false)
+  SetShown(frame.statusAFKTimerText, false)
 end
 
 --- Seed fake unit state into one preview frame after UF.ApplySpec has built the
@@ -1328,6 +1330,7 @@ local function ClearPreviewData(frame)
   SetShown(frame.phaseIcon, false)
   SetShown(frame.raidGroupNameText, false)
   SetShown(frame.statusIndicatorText, false)
+  SetShown(frame.statusAFKTimerText, false)
   if GF.HideSpellIndicators then GF.HideSpellIndicators(frame) end
   if GF.HideFrameAuras then GF.HideFrameAuras(frame) end
 end

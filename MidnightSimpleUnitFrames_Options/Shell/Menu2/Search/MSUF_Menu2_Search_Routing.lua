@@ -173,26 +173,48 @@ end
 
 local function ResolveExactSearchAnchor(pageKey, exactTarget)
     if type(exactTarget) ~= "table" then return nil, nil end
-    local settingKey = tostring(exactTarget.settingKey or "")
+    local sectionId = tostring(exactTarget.sectionId or "")
+    if sectionId ~= "" then
+        local entry = M.cache and M.cache[pageKey]
+        local sections = entry and entry.sections
+        local section = sections and sections[sectionId]
+        local visible = section and section.IsVisible and section:IsVisible()
+        if not visible and entry and type(entry._msuf2ResolveMissingSection) == "function" then
+            -- Some pages (currently Colors) build selector-owned section groups
+            -- lazily. Activate/materialize the declared exact section before
+            -- resolving its runtime control; otherwise a changelog/search link
+            -- can fail on a cold page or resolve a widget under a hidden group.
+            entry._msuf2ResolveMissingSection(sectionId)
+        end
+    end
+    local controlId = tostring(exactTarget.controlId or "")
     local catalog = M.RuntimeControlCatalog
-    if settingKey == "" or not (catalog and type(catalog.FindBySettingKey) == "function") then return nil, false end
+    if controlId ~= "" then
+        if not (catalog and type(catalog.ResolveExactTarget) == "function") then return nil, false, true end
+        local _, widget = catalog.ResolveExactTarget(pageKey, exactTarget)
+        if widget then return widget, true, true end
+        return nil, false, true
+    end
+    local settingKey = tostring(exactTarget.settingKey or "")
+    if settingKey == "" or not (catalog and type(catalog.FindBySettingKey) == "function") then return nil, false, false end
     local _, widget = catalog.FindBySettingKey(settingKey, pageKey, exactTarget)
     if widget then
         if type(widget._msuf2PrepareExactSearchTarget) == "function" then
             widget:_msuf2PrepareExactSearchTarget(exactTarget)
         end
-        return widget, true
+        return widget, true, true
     end
-    return nil, false
+    return nil, false, true
 end
 
 local function FindCurrentSearchAnchor(pageKey, query, fallback, preferredAnchor, exactTarget)
-    local exactAnchor, exactMatched = ResolveExactSearchAnchor(pageKey, exactTarget)
+    local exactAnchor, exactMatched, exactRequired = ResolveExactSearchAnchor(pageKey, exactTarget)
     if exactMatched then
         local wrapper = M.cache and M.cache[pageKey] and M.cache[pageKey].wrapper
         if SearchAnchorOwnership(wrapper, exactAnchor) then return exactAnchor, true end
-        exactMatched = false
+        return nil, false
     end
+    if exactRequired then return nil, false end
     return FindSearchAnchor(pageKey, query, fallback, preferredAnchor), exactMatched
 end
 
@@ -532,7 +554,9 @@ statusCombat=combat icon|combat state|in combat icon
 statusText=dead text|dead status|offline text|status text
 statusGhostText=ghost|ghost text
 statusAFKText=afk|afk text
+statusAFKTimer=afk timer|afk duration|afk time
 statusDNDText=dnd|dnd text|do not disturb
+stance=stance|stance text|stance indicator|shapeshift form|warrior stance|druid form|paladin aura
 eliteicon=elite|rare|elite icon|rare icon
 raidgroupname=raid group|group number|subgroup
 level=level|level text|level indicator
@@ -552,6 +576,7 @@ assistIcon=assist
 raidMarker=raid marker|marker
 statusText=dead|offline
 statusAFKText=afk
+statusAFKTimer=afk timer|afk duration
 statusDNDText=dnd|do not disturb
 roleIcon=role icon|tank|healer|dps
 ]]

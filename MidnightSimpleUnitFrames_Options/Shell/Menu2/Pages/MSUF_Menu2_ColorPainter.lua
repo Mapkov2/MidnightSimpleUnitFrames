@@ -343,8 +343,8 @@ local function ResolveCategoryAnchors(unitBoxes, groupBox, categoryKey)
             elseif categoryKey == "cast" then
                 Add(mock.cast, "colors_castbar", LabelFor("Castbar Colors"), 30, "Interruptible cast color")
             elseif categoryKey == "auras" then
-                Add(unitBox.handleAuraBuffs, "colors_auras", LabelFor("Aura Colors"), 30, "Icon Border Color")
-                Add(unitBox.handleAuraDebuffs, "colors_auras", LabelFor("Aura Colors"), 30, "Icon Border Color")
+                Add(unitBox.handleAuraBuffs, "colors_auras", LabelFor("Aura Colors"), 30, "Magic color")
+                Add(unitBox.handleAuraDebuffs, "colors_auras", LabelFor("Aura Colors"), 30, "Magic color")
             elseif categoryKey == "resources" then
                 Add(mock.powerBG or mock.power, "colors_power", LabelFor("Power Bar Colors"), 20, "Color")
                 Add(mock.detachedPower, "colors_power", LabelFor("Detached Power Bar Colors"), 25, "Color")

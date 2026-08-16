@@ -236,6 +236,10 @@ GetGlobalFontFlags = function()
     local db = EnsureDB()
     local general = db.general
 
+    if general.fontSlug then
+        if general.noOutline then return "SLUG" end
+        return "OUTLINE,SLUG"
+    end
     if general.noOutline then
         if general.fontMonochrome then return "MONOCHROME" end
         return ""
@@ -259,6 +263,7 @@ local function GetGlobalFontSettings()
     end
     local fontSize = general.fontSize or 14
     local textBackdrop = general.textBackdrop ~= false
+        and not tostring(fontFlags):upper():find("SLUG", 1, true)
     return fontPath, fontFlags, red, green, blue, fontSize, textBackdrop
 end
 MSUF.MSUF_GetGlobalFontSettings = GetGlobalFontSettings

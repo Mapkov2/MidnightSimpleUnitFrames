@@ -27,7 +27,8 @@ end
 --
 --   * Cross-file internal API    -> GF.* functions used by >1 GroupFrames file
 --       (e.g. GF.GetConf, GF.GetGridMetrics, GF.ApplyButton, GF.CompileSpec,
---        GF.GetConfigDBKey, GF.GetLiveRaidKind, GF.ForEachFrame, GF.MarkDirty,
+--        GF.GetConfigDBKey, GF.GetLiveRaidKind, GF.GetLiveGroupKind,
+--        GF.ForEachFrame, GF.MarkDirty,
 --        the GF.DIRTY_* mask constants, GF.RefreshAll/RefreshVisuals/RebuildAll).
 --       Keep these on GF.*; they are the module's internal contract.
 --
@@ -70,9 +71,12 @@ local pairs = pairs
 local ipairs = ipairs
 local ResolveFontPathSafe = _G.MSUF_ResolveFontPath or function(path) return path end
 
-local function ComposeFontFlags(outline, monochrome)
+local function ComposeFontFlags(outline, monochrome, slug)
     local flags = ""
     outline = tostring(outline or "OUTLINE"):upper()
+    if slug == true then
+        return (outline == "NONE" or outline == "") and "SLUG" or "OUTLINE,SLUG"
+    end
     if outline == "THICKOUTLINE" then
         flags = "THICKOUTLINE"
     elseif outline ~= "NONE" and outline ~= "" then
@@ -291,6 +295,7 @@ local PARTY_DEFAULTS = {
     --- Font style/color (font family is global)
     fontOutline       = nil,
     fontMonochrome    = nil,
+    fontSlug          = nil,
     textBackdrop      = nil,
     fontShadowStrength = nil,
     fontShadowOpacity = nil,
@@ -401,6 +406,9 @@ local PARTY_DEFAULTS = {
     statusAFKText          = true,
     statusAFKTextSize      = 14,
     statusAFKTextAnchor    = "CENTER",
+    statusAFKTimerText       = false,
+    statusAFKTimerTextSize   = 10,
+    statusAFKTimerTextAnchor = "CENTER",
     statusDNDText          = true,
     statusDNDTextSize      = 14,
     statusDNDTextAnchor    = "CENTER",
@@ -417,6 +425,7 @@ local PARTY_DEFAULTS = {
     statusTextLayer   = 7,
     statusGhostTextLayer = 7,
     statusAFKTextLayer   = 7,
+    statusAFKTimerTextLayer = 7,
     statusDNDTextLayer   = 7,
     --- Text offsets
     nameOffsetX       = 28, -- clears the complete left status-icon lane
@@ -443,6 +452,8 @@ local PARTY_DEFAULTS = {
     statusGhostOffsetY = 0,
     statusAFKOffsetX   = 0,
     statusAFKOffsetY   = 0,
+    statusAFKTimerOffsetX = 0,
+    statusAFKTimerOffsetY = -10,
     statusDNDOffsetX   = 0,
     statusDNDOffsetY   = 0,
     --- Text layer (frame level relative to bar)
@@ -660,6 +671,7 @@ PARTY_DEFAULTS.portraitMode = "OFF"
 PARTY_DEFAULTS.portraitRender = "2D"
 PARTY_DEFAULTS.portraitClassStyle = "BLIZZARD"
 PARTY_DEFAULTS.portraitShape = "SQUARE"
+PARTY_DEFAULTS.portraitSizeMode = "UNIFORM"
 PARTY_DEFAULTS.portraitSizeOverride = 0
 PARTY_DEFAULTS.portraitWidth = 0
 PARTY_DEFAULTS.portraitHeight = 0
@@ -676,6 +688,7 @@ PARTY_DEFAULTS.portraitLevelOffset = 7
 PARTY_DEFAULTS.portraitAlpha = 100
 PARTY_DEFAULTS.portraitCastSpellIcon = false
 PARTY_DEFAULTS.portraitBorderStyle = "NONE"
+PARTY_DEFAULTS.portraitEdgeSoftness = 0
 PARTY_DEFAULTS.portraitBorderThickness = 2
 PARTY_DEFAULTS.portraitFillBorder = false
 PARTY_DEFAULTS.portraitBorderArt = "FLAT"
@@ -1473,7 +1486,7 @@ local GROUP_MENU_DOMAIN_REPAIR = {
     statusAnchorFields = {
         "roleIconAnchor", "leaderIconAnchor", "assistIconAnchor", "raidMarkerAnchor",
         "readyCheckAnchor", "summonAnchor", "resurrectAnchor", "pvpIconAnchor", "phaseAnchor",
-        "statusTextAnchor", "statusGhostTextAnchor", "statusAFKTextAnchor", "statusDNDTextAnchor",
+        "statusTextAnchor", "statusGhostTextAnchor", "statusAFKTextAnchor", "statusAFKTimerTextAnchor", "statusDNDTextAnchor",
         "groupNumberAnchor", "dispelSymbolAnchor",
     },
     auraDefaults = {
@@ -1571,6 +1584,18 @@ function GROUP_MENU_DOMAIN_REPAIR.Conf(conf, defaults, isRaid)
     GROUP_MENU_DOMAIN_REPAIR.SpellIndicators(conf)
 end
 
+local function MigratePortraitSizeMode(conf)
+    if type(conf) ~= "table" then return end
+    if conf.portraitSizeMode == "UNIFORM" or conf.portraitSizeMode == "SEPARATE" then return end
+    -- Party's legacy compiler let either positive axis win even when the
+    -- uniform Size field was also populated. Preserve that visible geometry.
+    if (tonumber(conf.portraitWidth) or 0) > 0 or (tonumber(conf.portraitHeight) or 0) > 0 then
+        conf.portraitSizeMode = "SEPARATE"
+    else
+        conf.portraitSizeMode = "UNIFORM"
+    end
+end
+
 function GF.EnsureDB()
     local db = _G.MSUF_DB
     if not db then return end
@@ -1631,6 +1656,7 @@ function GF.EnsureDB()
     MigrateSplitDNDStatusText(db.gf_party)
     MigrateSplitDNDStatusText(db.gf_raid)
     MigrateSplitDNDStatusText(db.gf_mythicraid)
+    MigratePortraitSizeMode(db.gf_party)
     applyDefaults(db.gf_party, PARTY_DEFAULTS)
     applyDefaults(db.gf_raid,  RAID_DEFAULTS)
     applyDefaults(db.gf_mythicraid, MYTHIC_RAID_DEFAULTS)
@@ -1813,6 +1839,34 @@ function GF.GetLiveRaidKind()
         return "mythicraid"
     end
     return "raid"
+end
+
+--- Blizzard treats a live Arena as Party scope even when the roster APIs also
+--- report Raid. Keep that precedence in one shared cold-path helper so runtime,
+--- Edit Mode, previews, Priority Frames, borders, and native-frame ownership all
+--- select the same saved configuration. Brawls deliberately retain their normal
+--- roster scope, matching Blizzard_GroupFrameVisibility.
+function GF.IsArenaPartyContext()
+    local isActiveArena = _G.IsActiveBattlefieldArena
+    if type(isActiveArena) ~= "function" or isActiveArena() ~= true then
+        return false
+    end
+    local pvp = _G.C_PvP
+    local isInBrawl = type(pvp) == "table" and pvp.IsInBrawl or nil
+    return type(isInBrawl) ~= "function" or isInBrawl() ~= true
+end
+
+function GF.GetLiveGroupKind()
+    if GF.IsArenaPartyContext and GF.IsArenaPartyContext() then
+        return "party"
+    end
+    if _G.IsInRaid and _G.IsInRaid() then
+        return GF.GetLiveRaidKind and GF.GetLiveRaidKind() or "raid"
+    end
+    if _G.IsInGroup and _G.IsInGroup() then
+        return "party"
+    end
+    return nil
 end
 
 function GF.GetConfigDBKey(kind)
@@ -2504,13 +2558,16 @@ function GF.ResolveFontFlags(kind)
     local db = _G.MSUF_DB
     local gen = db and db.general
     local monochrome = gen and gen.fontMonochrome == true
+    local slug = gen and gen.fontSlug == true
     --- When override active: use GF-local fontOutline
     if conf.fontOverride then
         local v = conf.fontOutline
         if conf.fontMonochrome ~= nil then monochrome = conf.fontMonochrome == true end
+        if conf.fontSlug ~= nil then slug = conf.fontSlug == true end
+        if slug then monochrome = false end
         if v ~= nil then
             if v == "" then v = "NONE" end
-            if v == "NONE" or v == "OUTLINE" or v == "THICKOUTLINE" then return ComposeFontFlags(v, monochrome) end
+            if v == "NONE" or v == "OUTLINE" or v == "THICKOUTLINE" then return ComposeFontFlags(v, monochrome, slug) end
         end
     end
     --- Fallback: derive from global boldText / noOutline
@@ -2520,8 +2577,9 @@ function GF.ResolveFontFlags(kind)
         elseif gen.noOutline then outline = "NONE" end
     end
     local fn = MSUF.Castbars and MSUF.Castbars._GetFontFlags
-    if type(fn) == "function" and not (gen and (gen.boldText or gen.noOutline or gen.fontMonochrome)) then return fn() end
-    return ComposeFontFlags(outline, monochrome)
+    if type(fn) == "function" and not (gen and (gen.boldText or gen.noOutline or gen.fontMonochrome or gen.fontSlug)) then return fn() end
+    if slug then monochrome = false end
+    return ComposeFontFlags(outline, monochrome, slug)
 end
 
 function GF.ResolveFontTextAlpha(kind)
@@ -2558,6 +2616,7 @@ function GF.ResolveFontShadow(kind)
                 conf.fontShadowStrength, alpha, x)
         end
     end
+    if tostring(GF.ResolveFontFlags(kind) or ""):upper():find("SLUG", 1, true) then enabled = false end
     return enabled, alpha, x, y
 end
 

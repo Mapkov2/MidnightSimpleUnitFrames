@@ -7,6 +7,8 @@
   <Script file="..\..\..\UnitFrames\Engine\Elements\MSUF_UF_Elements_Portrait.lua"/>
   <Script file="..\..\..\UnitFrames\Engine\Elements\MSUF_UF_Elements_Prediction.lua"/>
   <Script file="..\..\..\UnitFrames\Engine\Elements\MSUF_UF_Elements_Status.lua"/>
+  <Script file="..\..\..\UnitFrames\Engine\Elements\MSUF_UF_Elements_StatusAFKTimer.lua"/>
+  <Script file="..\..\..\UnitFrames\Engine\Elements\MSUF_UF_Elements_StatusStance.lua"/>
   <Script file="..\..\..\UnitFrames\Engine\Elements\MSUF_UF_Elements_Borders.lua"/>
   <Script file="..\..\..\UnitFrames\Engine\Elements\MSUF_UF_Elements_Alpha.lua"/>
   <Script file="..\..\..\UnitFrames\Engine\Elements\MSUF_UF_Highlight.lua"/>

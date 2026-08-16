@@ -12,6 +12,8 @@ if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("zhTW")) or (MSUF.L or {})
 
+L["BLIZZARD LIMITATION: During instanced combat, Blizzard may restrict race and class information. Race/Class Text may therefore be unavailable or use fallback identifiers."] = "暴雪限制：在副本戰鬥中，暴雪可能會限制種族與職業資訊。因此，種族／職業文字可能無法使用，或顯示備用識別碼。"
+
 -- 滑鼠游標高亮設定。
 L["Soft gradient"] = "柔和漸層"
 L["Solid border"] = "實線邊框"
@@ -3300,6 +3302,11 @@ L["Move vs size"] = "移動與大小"
 L["Mover handles and selected borders."] = "移動器手把和選定的邊框。"
 L["Name Text"] = "名稱 文字"
 L["New Task"] = "新任務"
+L["See New Features"] = "查看新功能"
+L["Menu link unavailable"] = "選單連結無法使用"
+L["Browse releases from 6.02 onward. Highlight links open the matching feature directly in the MSUF menu."] = "瀏覽 6.02 及之後的版本。重點連結會直接在 MSUF 選單中開啟對應功能。"
+L["Opens and highlights this feature's setting."] = "開啟並醒目顯示此功能的設定。"
+L["Shows this bundled release entry."] = "顯示此隨附版本項目。"
 L["New profile name"] = "新的個人資料名稱"
 L["No"] = "否"
 L["No blacklisted spells. Add one above or use a preset."] = "沒有列入黑名單的咒語。在上面添加一個或使用預設。"
@@ -3840,6 +3847,9 @@ L["%s scope"] = "%s範圍"
 L["%s uses Blizzard frames. WoW's own settings decide when they appear."] = "%s使用暴雪框架。由WoW本身設定決定何時顯示。"
 L[". Shared name-shortening changes do not affect those scopes."] = ". 共用名稱縮短設定的變更不會影響這些範圍。"
 L["AFK Text"] = "暫離文字"
+L["AFK Timer"] = "暫離計時"
+L["Show interrupter name"] = "顯示打斷者名字"
+L["Stance"] = "姿態"
 L["Absorb Color"] = "吸收顏色"
 L["All icon styling: Appearance > Auras."] = "所有圖示樣式：外觀 > 光環。"
 L["Alternative Mana Color"] = "替代法力顏色"
@@ -4053,6 +4063,10 @@ L["|cffff0000MSUF:|r Cannot change absorb bars while in combat."] = "|cffff0000M
 L["0 keeps the icon just above the bar and moves it together with the whole-castbar layer. 1-30 pins the icon to that frame level on the shared layer scale, so it can be ordered in front of or behind the bar, texts, and other frame elements."] = "0 會讓圖示緊貼在條上方，並隨整個施法條圖層一起移動。1-30 會將圖示固定在共享圖層刻度的該框架層級上，從而可以排在條、文字和其他框架元素之前或之後。"
 
 --- Detached / overlay portrait placement (6.0 Beta 30)
+L["Size mode"] = "尺寸模式"
+L["Portrait edge softness"] = "頭像邊緣柔化"
+L["Uniform"] = "統一"
+L["Width & height"] = "寬度和高度"
 L["Width override"] = "寬度覆蓋"
 L["Height override"] = "高度覆蓋"
 L["Zoom center X"] = "縮放中心 X"
@@ -5069,6 +5083,21 @@ L["On (default): names supplied by Northern Sky Raid Tools replace character nam
 
 -- Guided setup restart confirmation.
 L["Run the guided setup again? The walkthrough starts over at the first step."] = "要再次執行引導設定嗎？導覽將從第一步重新開始。"
+L["Dispel Type Colors"] = "驅散類型顏色"
+L["Magic custom"] = "自訂魔法"
+L["Magic color"] = "魔法顏色"
+L["Curse custom"] = "自訂詛咒"
+L["Curse color"] = "詛咒顏色"
+L["Disease custom"] = "自訂疾病"
+L["Disease color"] = "疾病顏色"
+L["Poison custom"] = "自訂中毒"
+L["Poison color"] = "中毒顏色"
+L["Bleed custom"] = "自訂流血"
+L["Bleed color"] = "流血顏色"
+L["Optional global overrides for harmful Magic, Curse, Disease, Poison and Bleed indicators. Off uses Blizzard's current default. The last edited type is shown first in every aura preview."] = "可選擇全域覆寫有害魔法、詛咒、疾病、中毒和流血指示器的顏色。關閉時使用暴雪目前的預設值。最後編輯的類型會優先顯示在所有光環預覽中。"
+L["Timer and Dispel colors are shared by live unit/group auras and every preview. Icon border and shadow colors live in Appearance > Auras, scoped by Aura type."] = "計時器和驅散顏色由實際單位、隊伍光環及所有預覽共用。圖示邊框和陰影顏色位於外觀 > 光環，並依光環類型設定。"
+L["Cooldown timer urgency, global Dispel types, icon borders and shadows."] = "冷卻計時器緊急度、全域驅散類型，以及圖示邊框和陰影顏色。"
+L["Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."] = "安全、警告、緊急、魔法、詛咒、疾病、中毒、流血、圖示邊框和圖示陰影。"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhTW", LoadLocale)
 elseif MSUF.LOCALE == "zhTW" then LoadLocale() end

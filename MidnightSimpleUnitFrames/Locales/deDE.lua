@@ -5,6 +5,8 @@ if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("deDE")) or (MSUF.L or {})
 
+L["BLIZZARD LIMITATION: During instanced combat, Blizzard may restrict race and class information. Race/Class Text may therefore be unavailable or use fallback identifiers."] = "BLIZZARD-EINSCHRÄNKUNG: Im instanzierten Kampf kann Blizzard Informationen zu Volk und Klasse einschränken. Der Text für Volk/Klasse kann daher fehlen oder auf Ersatzbezeichner zurückfallen."
+
 L["Force Blizzard frame on"] = "Blizzard-Frame erzwingen"
 L["Keeps Blizzard's native frame active independently of the MSUF frame. Leave MSUF Enable on to show both, or turn MSUF Enable off to use only Blizzard. A UI reload is required."] = "Hält den nativen Blizzard-Frame unabhängig vom MSUF-Frame aktiv. Lasse MSUF Aktivieren eingeschaltet, um beide anzuzeigen, oder schalte MSUF Aktivieren aus, um nur Blizzard zu verwenden. Ein UI-Neuladen ist erforderlich."
 L["Shared name shortening affects all unit names and group frames unless a scope has custom font settings."] = "Die gemeinsame Namenskürzung betrifft alle Einheitennamen und Gruppenframes, sofern ein Bereich keine benutzerdefinierten Schrifteinstellungen verwendet."
@@ -3602,6 +3604,11 @@ L["Move vs size"] = "Bewegung vs. Größe"
 L["Mover handles and selected borders."] = "Mover-Handles und ausgewählte Ränder."
 L["Name Text"] = "Namenstext"
 L["New Task"] = "Neue Aufgabe"
+L["See New Features"] = "Neue Funktionen ansehen"
+L["Menu link unavailable"] = "Menü-Link nicht verfügbar"
+L["Browse releases from 6.02 onward. Highlight links open the matching feature directly in the MSUF menu."] = "Durchsuche Releases ab 6.02. Highlight-Links öffnen die passende Funktion direkt im MSUF-Menü."
+L["Opens and highlights this feature's setting."] = "Öffnet und markiert die Einstellung dieser Funktion."
+L["Shows this bundled release entry."] = "Zeigt diesen enthaltenen Release-Eintrag."
 L["New profile name"] = "Neuer Profilname"
 L["No"] = "Nein"
 L["No blacklisted spells. Add one above or use a preset."] = "Keine Zauber auf der schwarzen Liste. Fügen Sie oben eine hinzu oder verwenden Sie eine Voreinstellung."
@@ -4184,6 +4191,9 @@ L["%s scope"] = "Bereich %s"
 L["%s uses Blizzard frames. WoW's own settings decide when they appear."] = "%s verwendet Blizzard-Rahmen. Die WoW-Einstellungen bestimmen, wann sie erscheinen."
 L[". Shared name-shortening changes do not affect those scopes."] = ". Änderungen an der gemeinsamen Namenskürzung wirken sich nicht auf diese Bereiche aus."
 L["AFK Text"] = "AFK-Text"
+L["AFK Timer"] = "AFK-Timer"
+L["Show interrupter name"] = "Namen des Unterbrechers anzeigen"
+L["Stance"] = "Haltung"
 L["Absorb Color"] = "Absorptionsfarbe"
 L["All icon styling: Appearance > Auras."] = "Gesamter Symbolstil: Aussehen > Auren."
 L["Alternative Mana Color"] = "Alternative Manafarbe"
@@ -4398,6 +4408,10 @@ L["|cffff0000MSUF:|r Cannot change absorb bars while in combat."] = "|cffff0000M
 L["0 keeps the icon just above the bar and moves it together with the whole-castbar layer. 1-30 pins the icon to that frame level on the shared layer scale, so it can be ordered in front of or behind the bar, texts, and other frame elements."] = "0 hält das Symbol direkt über der Leiste und bewegt es zusammen mit der Gesamt-Zauberleisten-Ebene. 1-30 fixiert das Symbol auf dieser Frame-Ebene der geteilten Ebenen-Skala, sodass es vor oder hinter Leiste, Texten und anderen Frame-Elementen einsortiert werden kann."
 
 --- Detached / overlay portrait placement (6.0 Beta 30)
+L["Size mode"] = "Größenmodus"
+L["Portrait edge softness"] = "Porträt-Kantenweichheit"
+L["Uniform"] = "Einheitlich"
+L["Width & height"] = "Breite & Höhe"
 L["Width override"] = "Breiten-Override"
 L["Height override"] = "Höhen-Override"
 L["Zoom center X"] = "Zoom-Zentrum X"
@@ -5485,6 +5499,21 @@ L["Applies the built-in additive highlight style to this texture slot."] = "Wend
 L["Below threshold hides this texture until the unit reaches the configured HP threshold."] = "Unter Grenzwert blendet diese Textur aus, bis die Einheit den eingestellten HP-Grenzwert erreicht."
 L["With HP gradient selected, choose what the texture uses after it passes the threshold."] = "Bei gewähltem HP-Verlauf bestimmst du hier die Farbe oberhalb des Grenzwerts."
 L["Uses a separate texture opacity below the HP threshold. The normal Opacity from Setup remains active above it."] = "Verwendet unterhalb des HP-Grenzwerts eine eigene Texturdeckkraft. Oberhalb bleibt die normale Deckkraft aus der Einrichtung aktiv."
+L["Dispel Type Colors"] = "Farben der Bannungstypen"
+L["Magic custom"] = "Magie benutzerdefiniert"
+L["Magic color"] = "Magiefarbe"
+L["Curse custom"] = "Fluch benutzerdefiniert"
+L["Curse color"] = "Fluchfarbe"
+L["Disease custom"] = "Krankheit benutzerdefiniert"
+L["Disease color"] = "Krankheitsfarbe"
+L["Poison custom"] = "Gift benutzerdefiniert"
+L["Poison color"] = "Giftfarbe"
+L["Bleed custom"] = "Blutung benutzerdefiniert"
+L["Bleed color"] = "Blutungsfarbe"
+L["Optional global overrides for harmful Magic, Curse, Disease, Poison and Bleed indicators. Off uses Blizzard's current default. The last edited type is shown first in every aura preview."] = "Optionale globale Farben für schädliche Magie-, Fluch-, Krankheits-, Gift- und Blutungsanzeigen. Aus verwendet Blizzards aktuellen Standard. Der zuletzt bearbeitete Typ wird in jeder Auravorschau zuerst angezeigt."
+L["Timer and Dispel colors are shared by live unit/group auras and every preview. Icon border and shadow colors live in Appearance > Auras, scoped by Aura type."] = "Timer- und Bannungsfarben gelten für aktive Einheiten- und Gruppenauren sowie alle Vorschauen. Symbolrahmen- und Schattenfarben befinden sich unter Darstellung > Auren und gelten je Auratyp."
+L["Cooldown timer urgency, global Dispel types, icon borders and shadows."] = "Dringlichkeit der Abklingzeittimer, globale Bannungstypen sowie Symbolrahmen- und Schattenfarben."
+L["Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."] = "Sicher, Warnung, Dringend, Magie, Fluch, Krankheit, Gift, Blutung, Symbolrahmen und Symbolschatten."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("deDE", LoadLocale)
 elseif MSUF.LOCALE == "deDE" then LoadLocale() end

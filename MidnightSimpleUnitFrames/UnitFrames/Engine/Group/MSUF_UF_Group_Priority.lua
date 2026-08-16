@@ -71,6 +71,9 @@ local function PriorityConf()
 end
 
 local function CurrentGroupType()
+  local kind = type(GF.GetLiveGroupKind) == "function" and GF.GetLiveGroupKind() or nil
+  if kind == "party" then return "party" end
+  if kind == "raid" or kind == "mythicraid" then return "raid" end
   if IsInRaid and IsInRaid() then return "raid" end
   if IsInGroup and IsInGroup() then return "party" end
   return nil

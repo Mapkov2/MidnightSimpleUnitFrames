@@ -13,6 +13,13 @@ M.Assistant = A
 A.GlobalRegistry = A.GlobalRegistry or {}
 
 local PORTRAIT_COLOR_UNITS = { "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" }
+local DISPEL_COLOR_ROWS = {
+    { key = "Magic", label = "Magic Dispel Color", dr = 0.20, dg = 0.60, db = 1.00, aliases = { "magic dispel color", "magic debuff color", "magic aura color" } },
+    { key = "Curse", label = "Curse Dispel Color", dr = 0.60, dg = 0.00, db = 1.00, aliases = { "curse dispel color", "curse debuff color", "curse aura color" } },
+    { key = "Disease", label = "Disease Dispel Color", dr = 0.60, dg = 0.40, db = 0.00, aliases = { "disease dispel color", "disease debuff color", "disease aura color" } },
+    { key = "Poison", label = "Poison Dispel Color", dr = 0.00, dg = 0.60, db = 0.00, aliases = { "poison dispel color", "poison debuff color", "poison aura color" } },
+    { key = "Bleed", label = "Bleed Dispel Color", dr = 0.80, dg = 0.10, db = 0.10, aliases = { "bleed dispel color", "bleed debuff color", "bleed aura color" } },
+}
 
 function A.GlobalRegistry.CreateAuraAndPortraitColorSettings(ctx)
     if type(ctx) ~= "table" then return nil end
@@ -44,6 +51,30 @@ function A.GlobalRegistry.CreateAuraAndPortraitColorSettings(ctx)
             local unit = PORTRAIT_COLOR_UNITS[i]
             db[unit] = type(db[unit]) == "table" and db[unit] or {}
             db[unit][prefix .. "R"], db[unit][prefix .. "G"], db[unit][prefix .. "B"] = r, gCol, b
+        end
+    end
+
+    local function DispelDefaultRGB(row)
+        local a3 = MSUF and MSUF.MSUF_Auras3
+        if a3 and type(a3.GetDispelTypeColor) == "function" then
+            return a3.GetDispelTypeColor(row.key, false)
+        end
+        return row.dr, row.dg, row.db
+    end
+
+    local function DispelRGB(row)
+        local r, g, b = DispelDefaultRGB(row)
+        return TableRGB(GeneralDB().dispelTypeColorOverrides, row.key, r, g, b)
+    end
+
+    local function SetDispelRGB(row, r, g, b)
+        local general = GeneralDB()
+        general.dispelTypeColorOverrides = type(general.dispelTypeColorOverrides) == "table"
+            and general.dispelTypeColorOverrides or {}
+        general.dispelTypeColorOverrides[row.key] = { r, g, b }
+        local a3 = MSUF and MSUF.MSUF_Auras3
+        if a3 and type(a3.SetDispelColorPreviewType) == "function" then
+            a3.SetDispelColorPreviewType(row.key)
         end
     end
 
@@ -100,6 +131,16 @@ function A.GlobalRegistry.CreateAuraAndPortraitColorSettings(ctx)
                 description = "Aura cooldown text bucket threshold.",
                 exactAliases = row.aliases,
             })
+        end
+        for i = 1, #DISPEL_COLOR_ROWS do
+            local row = DISPEL_COLOR_ROWS[i]
+            ColorSetting("general.dispelTypeColorOverrides." .. row.key, row.label, row.aliases, function()
+                return DispelRGB(row)
+            end, function(r, g, b)
+                SetDispelRGB(row, r, g, b)
+            end, { category = "Colors / Auras", attribute = "dispel" .. row.key .. "Color",
+                defaultR = row.dr, defaultG = row.dg, defaultB = row.db,
+                apply = ApplyAuraColors, exactAliases = row.aliases })
         end
 
         ColorSetting("general.portraitBorderColor", "Portrait Border Color", {

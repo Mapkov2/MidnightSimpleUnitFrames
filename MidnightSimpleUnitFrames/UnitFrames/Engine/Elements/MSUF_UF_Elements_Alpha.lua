@@ -180,6 +180,7 @@ local TEXT_ALPHA_FIELDS = {
   "totInlineText",
   "raidGroupNameText",
   "statusIndicatorText",
+  "statusAFKTimerText",
 }
 
 local function StatusBarTexture(bar)

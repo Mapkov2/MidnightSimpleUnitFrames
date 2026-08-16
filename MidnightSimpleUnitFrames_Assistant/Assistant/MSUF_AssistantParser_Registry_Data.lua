@@ -167,6 +167,7 @@ Data.REGISTRY_PARSER = {
         [61] = {
         "font rendering", "text rendering", "font smoothing", "text smoothing",
         "sharp text", "sharp font", "pixel font", "monochrome font", "font monochrome",
+        "slug rendering", "slug font", "font slug",
         "global font rendering", "shared font rendering", "default font rendering",
     },
         [62] = { "text opacity", "text alpha", "font opacity", "font alpha" },

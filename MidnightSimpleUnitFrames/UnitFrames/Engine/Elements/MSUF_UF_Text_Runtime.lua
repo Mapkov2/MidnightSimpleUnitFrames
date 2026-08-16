@@ -20,6 +20,7 @@ local UnitPowerType = Text.UnitPowerType
 local InCombatLockdown = Text.InCombatLockdown
 local UnitName = Text.UnitName
 local ReadDisplayName = UnitName
+local displayNameResolverUsesFrame = false
 local GetTime = Text.GetTime
 local C_Timer = _G.C_Timer
 local PowerColor = Text.PowerColor
@@ -197,7 +198,13 @@ local function IsFiniteNumber(value)
 end
 
 function Text.SetDisplayNameResolver(resolver)
-  ReadDisplayName = type(resolver) == "function" and resolver or UnitName
+  if type(resolver) == "function" then
+    ReadDisplayName = resolver
+    displayNameResolverUsesFrame = true
+  else
+    ReadDisplayName = UnitName
+    displayNameResolverUsesFrame = false
+  end
 end
 
 if type(Text._pendingDisplayNameResolver) == "function" then
@@ -695,7 +702,7 @@ function Text.UpdateNameColor(frame, event, unit)
   if RegionShown(frame and frame.nameText) then
     ApplyNameTextColor(frame, unit or frame.MSUFUnitKey)
     local rt = frame and frame._msufTextRuntime
-    if rt and rt.inlineToT then
+    if rt and rt.inlineToT and frame._msufIdentityInlineToTScheduled ~= true then
       Text.UpdateInline(frame, event, unit)
     end
   end
@@ -734,7 +741,12 @@ function Text.UpdateInline(frame, event, unit)
     SetTextCached(frame.totInlineSep, inline.separator)
     frame._msufInlineStamp = stamp
   end
-  local name = ReadDisplayName(inlineUnit)
+  local name
+  if displayNameResolverUsesFrame then
+    name = ReadDisplayName(inlineUnit, frame)
+  else
+    name = ReadDisplayName(inlineUnit)
+  end
   SetTextCached(frame.totInlineText, name)
   if AnchorInlineToName then
     AnchorInlineToName(frame)
@@ -887,7 +899,13 @@ function Text.UpdateName(frame, event, unit)
     Text.UpdateNameColor(frame, event, unit)
     return
   end
-  SetNameTextCached(frame, TruncateLegacyGroupName(ReadDisplayName(unit), rt))
+  local displayName
+  if displayNameResolverUsesFrame then
+    displayName = ReadDisplayName(unit, frame)
+  else
+    displayName = ReadDisplayName(unit)
+  end
+  SetNameTextCached(frame, TruncateLegacyGroupName(displayName, rt))
   frame._msufNameTextUnit = unit
   Text.UpdateNameColor(frame, event, unit)
 end

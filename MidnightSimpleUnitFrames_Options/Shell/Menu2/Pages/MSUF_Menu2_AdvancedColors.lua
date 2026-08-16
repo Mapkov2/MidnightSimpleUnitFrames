@@ -41,6 +41,11 @@ local COLOR_SETTING_KEY_BY_PATH = {
     ["auras.cooldown.safe_seconds"] = "general.aurasCooldownTextSafeSeconds",
     ["auras.cooldown.urgent_seconds"] = "general.aurasCooldownTextUrgentSeconds",
     ["auras.cooldown.warning_seconds"] = "general.aurasCooldownTextWarningSeconds",
+    ["auras.dispel.magic.color"] = "general.dispelTypeColorOverrides.Magic",
+    ["auras.dispel.curse.color"] = "general.dispelTypeColorOverrides.Curse",
+    ["auras.dispel.disease.color"] = "general.dispelTypeColorOverrides.Disease",
+    ["auras.dispel.poison.color"] = "general.dispelTypeColorOverrides.Poison",
+    ["auras.dispel.bleed.color"] = "general.dispelTypeColorOverrides.Bleed",
     ["background.dark_mode_custom_color"] = "general.darkBgCustomColor",
     ["background.follow_class_color"] = "general.barBgClassColor",
     ["background.follow_health_color"] = "general.barBgMatchHPColor",
@@ -118,6 +123,13 @@ local COLOR_ACTION_FIXED_ARGS_BY_PATH = {
     ["class_power.editor.reset_foreground"] = { background = false },
     ["class_power.editor.reset_background"] = { background = true },
 }
+M.DISPEL_COLOR_SPECS = M.DISPEL_COLOR_SPECS or {
+    { key = "Magic", path = "magic" },
+    { key = "Curse", path = "curse" },
+    { key = "Disease", path = "disease" },
+    { key = "Poison", path = "poison" },
+    { key = "Bleed", path = "bleed" },
+}
 local function PrefixedSettingKeys(prefix, tokens)
     local keys = {}
     for token in tostring(tokens or ""):gmatch("%S+") do keys[#keys + 1] = prefix .. token end
@@ -188,10 +200,14 @@ local COLOR_DYNAMIC_SETTING_PATTERNS_BY_PATH = {
         "^[%a]+%.levelIndicatorColor$", "^[%a]+%.raceIndicatorColor$",
         "^[%a]+%.classTextIndicatorColor$", "^[%a]+%.raidGroupNameColor$",
         "^[%a]+%.statusTextColor$", "^[%a]+%.statusGhostTextColor$",
-        "^[%a]+%.statusAFKTextColor$", "^[%a]+%.statusDNDTextColor$",
+        "^[%a]+%.statusAFKTextColor$", "^[%a]+%.statusAFKTimerColor$",
+        "^[%a]+%.statusDNDTextColor$",
     },
 }
 local function ColorReviewedDisposition(path)
+    if path:match("^auras%.dispel%.[a-z]+%.enabled$") then
+        return "compound", "This switch adds or removes one optional entry in the shared dispel-type color map."
+    end
     if path:match("^texture_layer%d*%.") then
         return "compound", "This swatch writes the persisted RGB channels for one texture layer color as a single visible color."
     end
@@ -306,6 +322,71 @@ local function ApplyAuraColors()
         ApplyAuras()
     end
     CallGlobal("MSUF_GF_ForceAuraTextColorRefresh")
+end
+
+function M._DispelTypeColorSpec(dispelType)
+    for i = 1, #M.DISPEL_COLOR_SPECS do
+        local spec = M.DISPEL_COLOR_SPECS[i]
+        if spec.key == dispelType then return spec end
+    end
+end
+
+function M._SetDispelColorPreviewType(dispelType)
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    if a3 and type(a3.SetDispelColorPreviewType) == "function" then
+        a3.SetDispelColorPreviewType(dispelType)
+    end
+end
+
+function M._GetDispelTypeRGB(dispelType, useOverride)
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    if a3 and type(a3.GetDispelTypeColor) == "function" then
+        return a3.GetDispelTypeColor(dispelType, useOverride)
+    end
+    if dispelType == "Curse" then return 0.60, 0.00, 1.00 end
+    if dispelType == "Disease" then return 0.60, 0.40, 0.00 end
+    if dispelType == "Poison" then return 0.00, 0.60, 0.00 end
+    if dispelType == "Bleed" then return 0.80, 0.10, 0.10 end
+    return 0.20, 0.60, 1.00
+end
+
+function M._HasDispelTypeColorOverride(dispelType)
+    local overrides = G().dispelTypeColorOverrides
+    return type(overrides) == "table" and type(overrides[dispelType]) == "table"
+end
+
+function M._SetDispelTypeRGB(dispelType, r, g, b)
+    if not M._DispelTypeColorSpec(dispelType) then return false end
+    local general = G()
+    general.dispelTypeColorOverrides = type(general.dispelTypeColorOverrides) == "table"
+        and general.dispelTypeColorOverrides or {}
+    general.dispelTypeColorOverrides[dispelType] = {
+        max(0, min(1, tonumber(r) or 0)),
+        max(0, min(1, tonumber(g) or 0)),
+        max(0, min(1, tonumber(b) or 0)),
+    }
+    M._SetDispelColorPreviewType(dispelType)
+    ApplyAuraColors()
+    return true
+end
+
+function M._SetDispelTypeColorEnabled(dispelType, enabled)
+    if not M._DispelTypeColorSpec(dispelType) then return false end
+    local general = G()
+    if enabled == true then
+        if not M._HasDispelTypeColorOverride(dispelType) then
+            local r, g, b = M._GetDispelTypeRGB(dispelType, false)
+            general.dispelTypeColorOverrides = type(general.dispelTypeColorOverrides) == "table"
+                and general.dispelTypeColorOverrides or {}
+            general.dispelTypeColorOverrides[dispelType] = { r, g, b }
+        end
+    elseif type(general.dispelTypeColorOverrides) == "table" then
+        general.dispelTypeColorOverrides[dispelType] = nil
+        if next(general.dispelTypeColorOverrides) == nil then general.dispelTypeColorOverrides = nil end
+    end
+    M._SetDispelColorPreviewType(dispelType)
+    ApplyAuraColors()
+    return true
 end
 local function ApplyClassPowerColors()
     local apply = CurrentApplyService()
@@ -1064,6 +1145,7 @@ local function ResetAuraColorSettings()
     g.aurasCooldownTextSafeSeconds = 60
     g.aurasCooldownTextWarningSeconds = 15
     g.aurasCooldownTextUrgentSeconds = 5
+    g.dispelTypeColorOverrides = nil
     ApplyAuraColors()
 end
 local function SetAllPortraitRGB(prefix, r, g, b)
@@ -1230,7 +1312,7 @@ local function BuildPowerAndClassPowerColors(ctx, b, CH)
 end
 local function BuildAuraAndPortraitColors(ctx, b, CH, part)
     if part ~= "portrait" then
-    local auras = b:CollapsibleSection("colors_auras", "Auras", 624, false)
+    local auras = b:CollapsibleSection("colors_auras", "Auras", 900, false)
     local w = auras._msuf2Width or b.width or 720
     local colW = max(310, floor((w - 58) / 2))
     local rightX = 24 + colW + 18
@@ -1301,8 +1383,29 @@ local function BuildAuraAndPortraitColors(ctx, b, CH, part)
         function(v) WriteAuraNumber("aurasCooldownTextUrgentSeconds", v, 0, 30) end,
         Meta("auras.cooldown.urgent_seconds"))
     W.Text(markers, "Thresholds choose when Warning and Urgent replace the Safe timer color.", 16, -276, colW - 32, T.colors.muted)
-    W.Text(auras, "Timer colors are shared by live unit/group auras and every preview. Icon border and shadow colors live in Appearance > Auras, scoped by Aura type.", 24, -448, w - 48, T.colors.muted)
-    CH.ButtonAt(auras, "Reset aura colors", 24, -492, 150, ResetAuraColorSettings, "auras.reset")
+    local dispel = Card(auras, "Dispel Type Colors", nil, 24, -448, w - 48, 310)
+    W.Text(dispel, "Optional global overrides for harmful Magic, Curse, Disease, Poison and Bleed indicators. Off uses Blizzard's current default. The last edited type is shown first in every aura preview.", 16, -52, w - 80, T.colors.muted)
+    for i = 1, #M.DISPEL_COLOR_SPECS do
+        local spec = M.DISPEL_COLOR_SPECS[i]
+        local dispelType, y = spec.key, -104 - ((i - 1) * 38)
+        local color, custom
+        custom = ValueSwitchAt(ctx, dispel, dispelType .. " custom", 16, y, 250,
+            function() return M._HasDispelTypeColorOverride(dispelType) end,
+            function(value)
+                M._SetDispelTypeColorEnabled(dispelType, value)
+                if color then color:SetRGB(M._GetDispelTypeRGB(dispelType, true)) end
+            end,
+            Meta("auras.dispel." .. spec.path .. ".enabled"))
+        color = ColorValueAt(ctx, dispel, dispelType .. " color", 330, y,
+            function() return M._GetDispelTypeRGB(dispelType, true) end,
+            function(r, g, blue)
+                M._SetDispelTypeRGB(dispelType, r, g, blue)
+                if custom then custom:SetChecked(true) end
+            end,
+            120, 44, Meta("auras.dispel." .. spec.path .. ".color"))
+    end
+    W.Text(auras, "Timer and Dispel colors are shared by live unit/group auras and every preview. Icon border and shadow colors live in Appearance > Auras, scoped by Aura type.", 24, -786, w - 48, T.colors.muted)
+    CH.ButtonAt(auras, "Reset aura colors", 24, -838, 150, ResetAuraColorSettings, "auras.reset")
     M.TrackRefresh(ctx, RefreshColorSamples)
     end
     if part == "auras" then return end
@@ -2432,6 +2535,17 @@ end)
 local function AuraTableFactory(id, label, key, dr, dg, db)
     FixedContextFactory(id, function() return ContextTable(id, label, G, key, dr, dg, db, ApplyAuraColors) end)
 end
+local function ContextDispelType(id, dispelType)
+    local target = ContextTarget(id, dispelType .. " dispel",
+        function() return M._GetDispelTypeRGB(dispelType, true) end,
+        function(r, g, b) M._SetDispelTypeRGB(dispelType, r, g, b) end)
+    local state = ContextStoredState(G, { "dispelTypeColorOverrides" }, function()
+        M._SetDispelColorPreviewType(dispelType)
+        ApplyAuraColors()
+    end)
+    target.captureState, target.restoreState = state.captureState, state.restoreState
+    return target
+end
 FixedContextFactory("aura.cooldown.safe", function()
     local target = ContextTarget("aura.cooldown.safe", "Cooldown safe", M._ContextGetAuraSafeRGB, M._ContextSetAuraSafeRGB)
     local state = ContextStoredState(G, { "aurasCooldownTextSafeColor" }, ApplyAuraColors)
@@ -2440,6 +2554,11 @@ FixedContextFactory("aura.cooldown.safe", function()
 end)
 AuraTableFactory("aura.cooldown.warning", "Cooldown warning", "aurasCooldownTextWarningColor", 1, 0.85, 0.20)
 AuraTableFactory("aura.cooldown.urgent", "Cooldown urgent", "aurasCooldownTextUrgentColor", 1, 0.55, 0.10)
+FixedContextFactory("aura.dispel.magic", function() return ContextDispelType("aura.dispel.magic", "Magic") end)
+FixedContextFactory("aura.dispel.curse", function() return ContextDispelType("aura.dispel.curse", "Curse") end)
+FixedContextFactory("aura.dispel.disease", function() return ContextDispelType("aura.dispel.disease", "Disease") end)
+FixedContextFactory("aura.dispel.poison", function() return ContextDispelType("aura.dispel.poison", "Poison") end)
+FixedContextFactory("aura.dispel.bleed", function() return ContextDispelType("aura.dispel.bleed", "Bleed") end)
 
 FixedContextFactory("group.health", function()
     local target = ContextTarget("group.health", "Group health bar", GroupHealthBarRGB, SetGroupHealthBarRGB)
@@ -3227,8 +3346,8 @@ local COLOR_PAINTER_CATEGORIES = {
         subtitle = "Interrupt states, text, border and kick feedback.",
         pickerNote = "Cast states, feedback, text, border and background." },
     { key = "auras", title = "Auras & Icons", shortTitle = "Auras",
-        subtitle = "Cooldown timer urgency plus shared icon border and shadow colors.",
-        pickerNote = "Safe, Warning, Urgent, icon border and icon shadow." },
+        subtitle = "Cooldown timer urgency, global Dispel types, icon borders and shadows.",
+        pickerNote = "Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow." },
     { key = "resources", title = "Power & Class Resources", shortTitle = "Resources",
         subtitle = "Power bar colors and Class Resource colors (combo points, holy power, ...).",
         pickerNote = "Power and Class Resource colors." },
@@ -3501,4 +3620,4 @@ local function BuildColors(ctx)
     b:RelayoutCollapsibles()
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
-M.RegisterPage("opt_colors", { title = "MSUF Colors", build = BuildColors, version = 20 })
+M.RegisterPage("opt_colors", { title = "MSUF Colors", build = BuildColors, version = 21 })

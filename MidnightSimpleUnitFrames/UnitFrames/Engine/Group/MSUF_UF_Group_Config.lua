@@ -660,6 +660,7 @@ local GROUP_STATUS_REGIONS = {
   statusText = { "statusTextSize", 14, "statusTextAnchor", "CENTER", "statusOffsetX", 0, "statusOffsetY", 0, "statusTextLayer", 7 },
   statusGhost = { "statusGhostTextSize", 14, "statusGhostTextAnchor", "CENTER", "statusGhostOffsetX", 0, "statusGhostOffsetY", 0, "statusGhostTextLayer", 7 },
   statusAFK = { "statusAFKTextSize", 14, "statusAFKTextAnchor", "CENTER", "statusAFKOffsetX", 0, "statusAFKOffsetY", 0, "statusAFKTextLayer", 7 },
+  statusAFKTimer = { "statusAFKTimerTextSize", 10, "statusAFKTimerTextAnchor", "CENTER", "statusAFKTimerOffsetX", 0, "statusAFKTimerOffsetY", -10, "statusAFKTimerTextLayer", 7 },
   statusDND = { "statusDNDTextSize", 14, "statusDNDTextAnchor", "CENTER", "statusDNDOffsetX", 0, "statusDNDOffsetY", 0, "statusDNDTextLayer", 7 },
   raidGroup = { "groupNumberSize", 10, "groupNumberAnchor", "BOTTOMRIGHT", "groupNumberX", -2, "groupNumberY", 2, "groupNumberLayer", 7 },
 }
@@ -714,6 +715,7 @@ local function CompileStatus(kind, conf)
   statusText.ghost = StatusRegionDef(conf, conf.statusGhostText == true, "statusGhost")
   statusText.afk = StatusRegionDef(conf, conf.statusAFKText == true, "statusAFK")
   statusText.dnd = StatusRegionDef(conf, conf.statusDNDText == true, "statusDND")
+  statusText.afkTimer = StatusRegionDef(conf, conf.statusAFKTimerText == true, "statusAFKTimer")
   local raidGroup = StatusRegionDef(conf, raidGroupEnabled, "raidGroup")
   raidGroup.style = conf.groupNumberStyle or "PAREN"
   --- Every icon carries its own style now, so the non-role indicators stop falling back to the
@@ -1560,8 +1562,19 @@ local function CompilePortrait(kind, conf, frameHeight)
   local size = override > 0 and math.max(1, override) or autoSize
   local width = Num(conf.portraitWidth, 0)
   local height = Num(conf.portraitHeight, 0)
-  width = width > 0 and math.max(8, width) or size
-  height = height > 0 and math.max(8, height) or size
+  local sizeMode = conf.portraitSizeMode
+  if sizeMode ~= "UNIFORM" and sizeMode ~= "SEPARATE" then
+    -- Legacy Party portraits always let either positive axis override Size.
+    sizeMode = (width > 0 or height > 0) and "SEPARATE" or "UNIFORM"
+  end
+  if sizeMode == "UNIFORM" then
+    width, height = size, size
+  else
+    -- Retain Size as the zero-axis fallback so toggling to independent axes
+    -- never changes the visible portrait before either axis is edited.
+    width = width > 0 and math.max(8, width) or size
+    height = height > 0 and math.max(8, height) or size
+  end
   local shape = PORTRAIT_SHAPES[conf.portraitShape] and conf.portraitShape or "SQUARE"
   local borderStyle = PORTRAIT_BORDERS[conf.portraitBorderStyle] and conf.portraitBorderStyle or "NONE"
   local placement = PORTRAIT_PLACEMENTS[conf.portraitPlacement] and conf.portraitPlacement or "ATTACHED"
@@ -1569,6 +1582,9 @@ local function CompilePortrait(kind, conf, frameHeight)
   local relPoint = PORTRAIT_POINTS[conf.portraitDetachedTo] and conf.portraitDetachedTo or "LEFT"
   local overlayAlign = PORTRAIT_OVERLAY_ALIGNMENTS[conf.portraitOverlayAlign] and conf.portraitOverlayAlign or "LEFT"
   local direction = PORTRAIT_BORDER_DIRECTIONS[conf.portraitBorderDirection] and conf.portraitBorderDirection or "UP"
+  local edgeSoftnessLevel = floor((Num(conf.portraitEdgeSoftness, 0) / 2) + 0.5)
+  if edgeSoftnessLevel < 0 then edgeSoftnessLevel = 0 elseif edgeSoftnessLevel > 15 then edgeSoftnessLevel = 15 end
+  if shape == "BLIZZARD" or borderStyle ~= "NONE" then edgeSoftnessLevel = 0 end
   local portrait = {
     enabled = mode ~= "OFF",
     side = mode == "RIGHT" and "RIGHT" or "LEFT",
@@ -1577,6 +1593,7 @@ local function CompilePortrait(kind, conf, frameHeight)
     castSpellIcon = conf.portraitCastSpellIcon == true,
     shape = shape,
     size = size,
+    sizeMode = sizeMode,
     width = width,
     height = height,
     x = Num(conf.portraitOffsetX, 0),
@@ -1587,6 +1604,7 @@ local function CompilePortrait(kind, conf, frameHeight)
     levelOffset = PortraitLevel(conf.portraitLevelOffset),
     overlayAlign = overlayAlign,
     alpha = Clamp01(Num(conf.portraitAlpha, 100) / 100, 1),
+    edgeSoftnessLevel = edgeSoftnessLevel,
     border = {
       style = borderStyle,
       thickness = math.max(1, Num(conf.portraitBorderThickness, 2)),

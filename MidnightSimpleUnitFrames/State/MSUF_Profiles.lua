@@ -1772,6 +1772,8 @@ local MSUF_PROFILEIO_POSITIVE_FONT_SIZE_KEYS = {
     statusTextSize = 14,
     statusGhostTextSize = 14,
     statusAFKTextSize = 14,
+    statusAFKTimerSize = 12,
+    statusAFKTimerTextSize = 10,
     statusDNDTextSize = 14,
     playerHPBarTextSize = 14,
     combatFontSize = 24,
@@ -2133,12 +2135,14 @@ local MSUF_PROFILEIO_STATUS_PREFIXES = {
     "statusText",
     "statusGhostText",
     "statusAFKText",
+    "statusAFKTimer",
     "statusDNDText",
     "combatStateIndicator",
     "restedStateIndicator",
     "restingStateIndicator",
     "incomingResIndicator",
     "pvpIndicator",
+    "stanceIndicator",
     "raidGroupName",
 }
 local MSUF_PROFILEIO_GROUP_STATUS_NUMERIC_KEYS = {
@@ -2170,6 +2174,10 @@ local MSUF_PROFILEIO_GROUP_STATUS_NUMERIC_KEYS = {
     statusAFKOffsetX = { -500, 500 },
     statusAFKOffsetY = { -500, 500 },
     statusAFKTextLayer = { 0, 30 },
+    statusAFKTimerTextSize = { 1, 256 },
+    statusAFKTimerOffsetX = { -500, 500 },
+    statusAFKTimerOffsetY = { -500, 500 },
+    statusAFKTimerTextLayer = { 0, 30 },
     statusDNDTextSize = { 1, 256 },
     statusDNDOffsetX = { -500, 500 },
     statusDNDOffsetY = { -500, 500 },
@@ -2187,6 +2195,7 @@ local MSUF_PROFILEIO_GROUP_STATUS_ANCHOR_KEYS = {
     "statusTextAnchor",
     "statusGhostTextAnchor",
     "statusAFKTextAnchor",
+    "statusAFKTimerTextAnchor",
     "statusDNDTextAnchor",
     "groupNumberAnchor",
 }
@@ -2412,7 +2421,7 @@ end
 local function MSUF_ProfileIO_HasScopedFontOverrideValue(scope)
     if type(scope) ~= "table" then return false end
     if scope.fontOutline ~= nil or scope.noOutline ~= nil or scope.boldText ~= nil then return true end
-    if scope.fontMonochrome ~= nil or scope.fontTextAlpha ~= nil or scope.fontBaselineOffset ~= nil then return true end
+    if scope.fontMonochrome ~= nil or scope.fontSlug ~= nil or scope.fontTextAlpha ~= nil or scope.fontBaselineOffset ~= nil then return true end
     if scope.textBackdrop ~= nil or scope.fontShadowStrength ~= nil or scope.fontShadowOpacity ~= nil or scope.fontShadowDistance ~= nil then return true end
     if scope.colorPowerTextByHealth ~= nil then return true end
     if scope.colorPowerTextByType ~= nil or scope.colorHealthTextByHealth ~= nil then return true end

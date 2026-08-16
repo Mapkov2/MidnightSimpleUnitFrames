@@ -95,20 +95,26 @@ function A.EditModeRegistry.BuildGroupPreviewHelpers(ctx)
         return "raid"
     end
 
+    local function LiveGroupKind(gf)
+        if gf and type(gf.GetLiveGroupKind) == "function" then return gf.GetLiveGroupKind() end
+        if _G.IsInRaid and _G.IsInRaid() then return LiveRaidKind(gf) end
+        if _G.IsInGroup and _G.IsInGroup() then return "party" end
+        return nil
+    end
+
     local function GroupConfEnabled(gf, scope)
         local conf = gf and type(gf.GetConf) == "function" and gf.GetConf(scope) or nil
         return conf and conf.enabled == true
     end
 
     local function LiveGroupFramesCoverScope(gf, scope)
+        local liveKind = LiveGroupKind(gf)
         if scope == "party" then
-            if _G.IsInRaid and _G.IsInRaid() then return false end
             if not GroupConfEnabled(gf, "party") then return false end
             local conf = gf and type(gf.GetConf) == "function" and gf.GetConf("party") or nil
-            return (_G.IsInGroup and _G.IsInGroup()) or (conf and conf.showSolo == true) or false
+            return liveKind == "party" or (liveKind == nil and conf and conf.showSolo == true) or false
         elseif scope == "raid" or scope == "mythicraid" then
-            if not (_G.IsInRaid and _G.IsInRaid()) then return false end
-            return GroupConfEnabled(gf, LiveRaidKind(gf))
+            return liveKind == scope and GroupConfEnabled(gf, scope)
         end
         return false
     end

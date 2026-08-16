@@ -402,20 +402,24 @@ local function LiveRaidKind()
   return GF.GetLiveRaidKind and GF.GetLiveRaidKind() or "raid"
 end
 
+local function LiveGroupKind()
+  if type(GF.GetLiveGroupKind) == "function" then return GF.GetLiveGroupKind() end
+  if IsInRaid and IsInRaid() then return LiveRaidKind() end
+  if IsInGroup and IsInGroup() then return "party" end
+  return nil
+end
+
 local function PartyScopeActive()
   local party = GF.GetConf and GF.GetConf("party") or nil
-  if not (party and party.enabled == true) or (IsInRaid and IsInRaid()) then
-    return false
-  end
-  if IsInGroup and IsInGroup() then
-    return true
-  end
+  if not (party and party.enabled == true) then return false end
+  if LiveGroupKind() == "party" then return true end
   return party.showSolo == true and party.showPlayer ~= false
 end
 
 local function RaidScopeActive()
-  if not (IsInRaid and IsInRaid()) then return false end
-  local raid = GF.GetConf and GF.GetConf(LiveRaidKind()) or nil
+  local kind = LiveGroupKind()
+  if kind ~= "raid" and kind ~= "mythicraid" then return false end
+  local raid = GF.GetConf and GF.GetConf(kind) or nil
   return raid and raid.enabled == true
 end
 

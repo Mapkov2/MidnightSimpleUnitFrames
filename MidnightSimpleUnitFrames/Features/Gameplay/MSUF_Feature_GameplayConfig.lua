@@ -191,7 +191,9 @@ local function GetGameplayFontSettings(kind)
     else
         flags = "OUTLINE"
     end
-    if general.fontMonochrome then
+    if general.fontSlug then
+        flags = flags == "" and "SLUG" or "OUTLINE,SLUG"
+    elseif general.fontMonochrome then
         flags = flags ~= "" and (flags .. ",MONOCHROME") or "MONOCHROME"
     end
 
@@ -220,6 +222,7 @@ local function GetGameplayFontSettings(kind)
     end
 
     local useShadow = not (general and general.textBackdrop == false)
+        and not tostring(flags or ""):upper():find("SLUG", 1, true)
 
     return fontPath, flags, fr, fg, fb, effSize, useShadow
 end

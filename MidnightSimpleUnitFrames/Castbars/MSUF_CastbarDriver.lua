@@ -391,7 +391,12 @@ end
 local ClearEmpowerState = _G.MSUF_ClearEmpowerState or function() end
 
 local function ClearFrameOnUpdate(frame)
-    if frame and frame.SetScript then frame:SetScript("OnUpdate", nil) end
+    if not (frame and frame.SetScript) or frame._msufDriverOnUpdateCleared == true then return end
+    frame:SetScript("OnUpdate", nil)
+    -- Driver frames are bare Frames and this module never installs a Lua
+    -- OnUpdate. Remember the one-time cleanup so idle target swaps do not
+    -- repeat the native SetScript transition.
+    frame._msufDriverOnUpdateCleared = true
 end
 
 local function BuildState(frame)
@@ -948,7 +953,21 @@ local function RefreshAllCastTargetTextColors()
 end
 ExportPublic("MSUF_RefreshAllCastTargetTextColors", RefreshAllCastTargetTextColors)
 
-local function RefreshTargetFocusImmediate(frame)
+local function RefreshTargetFocusChanged(frame)
+    if not frame then return false end
+    local wasIdle = CastbarAlreadyIdle(frame)
+    InvalidateTargetFocusState(frame)
+
+    -- Blizzard's live TargetSpellBarMixin resolves UnitCastingInfo and
+    -- UnitChannelInfo synchronously on PLAYER_TARGET_CHANGED. Do the same:
+    -- retire the old unit first, then build the replacement state in this
+    -- event instead of paying for a zero-delay callback on every target swap.
+    if not wasIdle then
+        StopDriverFrame(frame, "HARDHIDE")
+    else
+        ClearFrameOnUpdate(frame)
+    end
+
     local state = BuildState(frame)
     if CastStateHasSpell(state) then
         StoreActiveStateIdentity(frame, state)
@@ -956,72 +975,7 @@ local function RefreshTargetFocusImmediate(frame)
         return true
     end
 
-    -- ScheduleTargetFocusChanged already invalidated the active identity,
-    -- removed OnUpdate, and hard-stopped any visible previous cast. The
-    -- overwhelmingly common no-cast result therefore needs no second cleanup.
-    if CastbarAlreadyIdle(frame) then
-        return false
-    end
-
-    StoreActiveStateIdentity(frame, nil)
-    UpdateCastTargetText(frame, nil)
-
-    StopDriverFrame(frame, "HARDHIDE")
     return false
-end
-
-local function FlushTargetFocusChanged(frame)
-    if not frame then return end
-    frame._msufTargetFocusRefreshQueued = nil
-    local token = frame._msufTargetFocusRefreshToken
-    frame._msufTargetFocusRefreshToken = nil
-    if token == nil
-        or token ~= frame._msufCastToken
-        or frame._msufDriverBackendEnabled ~= true then
-        return
-    end
-    RefreshTargetFocusImmediate(frame)
-end
-
-local function CancelTargetFocusRefresh(frame)
-    if frame then
-        frame._msufTargetFocusRefreshToken = nil
-    end
-end
-
-local function ScheduleTargetFocusChanged(frame)
-    if not frame then return end
-    InvalidateTargetFocusState(frame)
-    frame._msufTargetFocusRefreshToken = frame._msufCastToken
-
-    -- Never leave the previous unit's cast visible while the new target/focus
-    -- is resolved on the next frame.
-    if not CastbarAlreadyIdle(frame) then
-        -- Hard-hide the previous unit once. Runtime owns OnUpdate/native/manager
-        -- cleanup, and the queued refresh can now take its idle fast path when
-        -- the replacement unit has no cast instead of stopping a second time.
-        StopDriverFrame(frame, "HARDHIDE")
-    else
-        -- Retain the stale-script safety net for an already hidden idle frame.
-        ClearFrameOnUpdate(frame)
-    end
-
-    if frame._msufTargetFocusRefreshQueued == true then return end
-    frame._msufTargetFocusRefreshQueued = true
-    local callback = frame._msufTargetFocusRefreshCallback
-    if not callback then
-        callback = function() FlushTargetFocusChanged(frame) end
-        frame._msufTargetFocusRefreshCallback = callback
-    end
-
-    local scheduleOnce = _G.MSUF_ScheduleOnce
-    if type(scheduleOnce) == "function" then
-        scheduleOnce(callback, callback)
-    elseif C_Timer and C_Timer.After then
-        C_Timer.After(0, callback)
-    else
-        callback()
-    end
 end
 
 local function ScheduleStopConfirmation(frame, castType)
@@ -1119,7 +1073,53 @@ local function NormalizeEventForUnit(frame, event)
     return event
 end
 
-local function HandleDriverEvent(frame, event, eventUnit)
+--- Cold path (an interrupt is a one-shot): builds the "Interrupted by <name>"
+--- label from the event's interrupter GUID, mirroring Blizzard's
+--- CastingBarMixin:GetInterruptText. Fails open to the plain label whenever the
+--- per-unit toggle is off or identity is restricted (secret GUID/name), so a
+--- PvP-restricted interrupter can never raise.
+function _G.MSUF_Castbar_ResolveInterruptLabel(interruptedBy, unit, fallback)
+    fallback = fallback or "Interrupted"
+    local issecret = _G.issecretvalue
+    if interruptedBy == nil or (issecret and issecret(interruptedBy) == true) then
+        return fallback
+    end
+    local db = _G.MSUF_DB
+    local unitDB = db and unit and db[unit] or nil
+    if unitDB == nil and type(unit) == "string" and unit:find("^boss") ~= nil then
+        unitDB = db and db.boss or nil
+    end
+    if not (unitDB and unitDB.showInterruptSource == true) then
+        return fallback
+    end
+    local nameFromGUID = _G.UnitNameFromGUID
+    if type(nameFromGUID) ~= "function" then return fallback end
+    local name = nameFromGUID(interruptedBy)
+    if (issecret and issecret(name) == true) or type(name) ~= "string" or name == "" then
+        return fallback
+    end
+    local classFromGUID = _G.UnitClassFromGUID
+    if type(classFromGUID) == "function" then
+        local _, classFilename = classFromGUID(interruptedBy)
+        if not (issecret and issecret(classFilename) == true)
+            and type(classFilename) == "string" and classFilename ~= "" then
+            -- Class color through the secret-safe C API, never a Lua table
+            -- keyed by class (castbar_target_name_color contract).
+            local getClassColor = _G.C_ClassColor and _G.C_ClassColor.GetClassColor
+            local classColor = type(getClassColor) == "function" and getClassColor(classFilename) or nil
+            if classColor and classColor.WrapTextInColorCode then
+                name = classColor:WrapTextInColorCode(name)
+            end
+        end
+    end
+    local fmt = _G.SPELL_INTERRUPTED_BY
+    if type(fmt) == "string" and fmt:find("%%s") ~= nil then
+        return fmt:format(name)
+    end
+    return fallback
+end
+
+local function HandleDriverEvent(frame, event, eventUnit, _castID, _spellID, interruptedBy)
     if frame._msufDriverBackendEnabled ~= true then
         if frame.unit == "target" or frame.unit == "focus" then
             SetDriverEventsRegistered(frame, frame.unit, false)
@@ -1130,7 +1130,7 @@ local function HandleDriverEvent(frame, event, eventUnit)
 
     if (event == "PLAYER_TARGET_CHANGED" and frame.unit == "target")
         or (event == "PLAYER_FOCUS_CHANGED" and frame.unit == "focus") then
-        ScheduleTargetFocusChanged(frame)
+        RefreshTargetFocusChanged(frame)
         return
     end
 
@@ -1167,7 +1167,6 @@ local function HandleDriverEvent(frame, event, eventUnit)
     if event == "UNIT_SPELLCAST_DELAYED"
         or event == "UNIT_SPELLCAST_CHANNEL_UPDATE"
         or event == "UNIT_SPELLCAST_EMPOWER_UPDATE" then
-        CancelTargetFocusRefresh(frame)
         InvalidateBuildState(frame.unit)
         if event == "UNIT_SPELLCAST_CHANNEL_UPDATE"
             and (frame._msufStopTimer1 or frame._msufStopTimer2 or frame._msufStopTimer3) then
@@ -1179,28 +1178,24 @@ local function HandleDriverEvent(frame, event, eventUnit)
     end
 
     if event == "UNIT_SPELLCAST_STOP" or event == "UNIT_SPELLCAST_EMPOWER_STOP" then
-        CancelTargetFocusRefresh(frame)
         frame.MSUF_kickInterruptibleConfirmed = nil
         ScheduleStopConfirmation(frame, "CAST")
         return
     end
 
     if event == "UNIT_SPELLCAST_CHANNEL_STOP" then
-        CancelTargetFocusRefresh(frame)
         frame.MSUF_kickInterruptibleConfirmed = nil
         ScheduleStopConfirmation(frame, "CHANNEL")
         return
     end
 
     if event == "UNIT_SPELLCAST_FAILED" then
-        CancelTargetFocusRefresh(frame)
         frame.MSUF_kickInterruptibleConfirmed = nil
         ScheduleStopConfirmation(frame, "CAST")
         return
     end
 
     if event == "UNIT_SPELLCAST_SUCCEEDED" then
-        CancelTargetFocusRefresh(frame)
         InvalidateBuildState(frame.unit)
         if frame.unit ~= "player" then
             RefreshFromEngine(frame, event)
@@ -1247,10 +1242,9 @@ local function HandleDriverEvent(frame, event, eventUnit)
 
     if event == "UNIT_SPELLCAST_INTERRUPTED" then
         if eventUnit ~= frame.unit then return end
-        CancelTargetFocusRefresh(frame)
         ClearStopExpectation(frame)
         frame.MSUF_kickInterruptibleConfirmed = nil
-        frame:SetInterrupted()
+        frame:SetInterrupted(interruptedBy)
         PublishState(frame, nil, event)
         return
     end
@@ -1452,7 +1446,7 @@ local function CreateCastBar(frameName, unit)
 
     end
 
-    function frame:SetInterrupted()
+    function frame:SetInterrupted(interruptedBy)
         HideChannelHasteMarkers(self)
         ClearFrameOnUpdate(self)
         self._msufHideToken = (self._msufHideToken or 0) + 1
@@ -1482,13 +1476,17 @@ local function CreateCastBar(frameName, unit)
         end
 
         local reverseFill = _G.MSUF_GetReverseFillSafe(self, false)
+        local interruptLabel = "Interrupted"
+        if type(_G.MSUF_Castbar_ResolveInterruptLabel) == "function" then
+            interruptLabel = _G.MSUF_Castbar_ResolveInterruptLabel(interruptedBy, self.unit, interruptLabel)
+        end
         if ApplyInterruptValues then
-            ApplyInterruptValues(castbarRuntime, self, 1, reverseFill, "Interrupted")
+            ApplyInterruptValues(castbarRuntime, self, 1, reverseFill, interruptLabel)
         else
             _G.MSUF_ApplyInterruptBarVisuals(self, {
                 barValue = 1,
                 reverseFill = reverseFill,
-                label = "Interrupted",
+                label = interruptLabel,
             })
         end
 
@@ -1529,6 +1527,7 @@ local function CreateCastBar(frameName, unit)
     SetDriverEventsRegistered(frame, unit, true)
     AnchorDriverFrameToUnitFrame(frame, unit)
     BuildCastbarFrameElements(frame)
+    ClearFrameOnUpdate(frame)
     -- Resolve the shared ColorObjects while this hidden frame is constructed;
     -- otherwise their first CreateColor calls land in the first active cast.
     if frame.UpdateColorForInterruptible then

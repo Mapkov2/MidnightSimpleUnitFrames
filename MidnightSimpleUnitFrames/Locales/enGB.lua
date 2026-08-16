@@ -9,6 +9,8 @@ if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("enGB")) or (MSUF.L or {})
 
+L["BLIZZARD LIMITATION: During instanced combat, Blizzard may restrict race and class information. Race/Class Text may therefore be unavailable or use fallback identifiers."] = "BLIZZARD LIMITATION: During instanced combat, Blizzard may restrict race and class information. Race/Class Text may therefore be unavailable or use fallback identifiers."
+
 -- Mouseover highlight controls.
 L["Soft gradient"] = "Soft gradient"
 L["Solid border"] = "Solid border"
@@ -1692,6 +1694,11 @@ L["Move vs size"] = "Move vs size"
 L["Mover handles and selected borders."] = "Mover handles and selected borders."
 L["Name Text"] = "Name Text"
 L["New Task"] = "New Task"
+L["See New Features"] = "See New Features"
+L["Menu link unavailable"] = "Menu link unavailable"
+L["Browse releases from 6.02 onward. Highlight links open the matching feature directly in the MSUF menu."] = "Browse releases from 6.02 onward. Highlight links open the matching feature directly in the MSUF menu."
+L["Opens and highlights this feature's setting."] = "Opens and highlights this feature's setting."
+L["Shows this bundled release entry."] = "Shows this bundled release entry."
 L["New profile name"] = "New profile name"
 L["No"] = "No"
 L["No blacklisted spells. Add one above or use a preset."] = "No blacklisted spells. Add one above or use a preset."
@@ -2513,6 +2520,9 @@ L["%s scope"] = "%s scope"
 L["%s uses Blizzard frames. WoW's own settings decide when they appear."] = "%s uses Blizzard frames. WoW's own settings decide when they appear."
 L[". Shared name-shortening changes do not affect those scopes."] = ". Shared name-shortening changes do not affect those scopes."
 L["AFK Text"] = "AFK Text"
+L["AFK Timer"] = "AFK Timer"
+L["Show interrupter name"] = "Show interrupter name"
+L["Stance"] = "Stance"
 L["Absorb Color"] = "Absorb Colour"
 L["All icon styling: Appearance > Auras."] = "All icon styling: Appearance > Auras."
 L["Alternative Mana Color"] = "Alternative Mana Colour"
@@ -2741,6 +2751,10 @@ L["|cffff0000MSUF:|r Cannot change absorb bars while in combat."] = "|cffff0000M
 L["0 keeps the icon just above the bar and moves it together with the whole-castbar layer. 1-30 pins the icon to that frame level on the shared layer scale, so it can be ordered in front of or behind the bar, texts, and other frame elements."] = "0 keeps the icon just above the bar and moves it together with the whole-castbar layer. 1-30 pins the icon to that frame level on the shared layer scale, so it can be ordered in front of or behind the bar, texts, and other frame elements."
 
 --- Detached / overlay portrait placement (6.0 Beta 30)
+L["Size mode"] = "Size mode"
+L["Portrait edge softness"] = "Portrait edge softness"
+L["Uniform"] = "Uniform"
+L["Width & height"] = "Width & height"
 L["Width override"] = "Width override"
 L["Height override"] = "Height override"
 L["Zoom center X"] = "Zoom center X"
@@ -3751,6 +3765,21 @@ L["On (default): names supplied by Northern Sky Raid Tools replace character nam
 
 -- Guided setup restart confirmation.
 L["Run the guided setup again? The walkthrough starts over at the first step."] = "Run the guided setup again? The walkthrough starts over at the first step."
+L["Dispel Type Colors"] = "Dispel Type Colors"
+L["Magic custom"] = "Magic custom"
+L["Magic color"] = "Magic color"
+L["Curse custom"] = "Curse custom"
+L["Curse color"] = "Curse color"
+L["Disease custom"] = "Disease custom"
+L["Disease color"] = "Disease color"
+L["Poison custom"] = "Poison custom"
+L["Poison color"] = "Poison color"
+L["Bleed custom"] = "Bleed custom"
+L["Bleed color"] = "Bleed color"
+L["Optional global overrides for harmful Magic, Curse, Disease, Poison and Bleed indicators. Off uses Blizzard's current default. The last edited type is shown first in every aura preview."] = "Optional global overrides for harmful Magic, Curse, Disease, Poison and Bleed indicators. Off uses Blizzard's current default. The last edited type is shown first in every aura preview."
+L["Timer and Dispel colors are shared by live unit/group auras and every preview. Icon border and shadow colors live in Appearance > Auras, scoped by Aura type."] = "Timer and Dispel colors are shared by live unit/group auras and every preview. Icon border and shadow colors live in Appearance > Auras, scoped by Aura type."
+L["Cooldown timer urgency, global Dispel types, icon borders and shadows."] = "Cooldown timer urgency, global Dispel types, icon borders and shadows."
+L["Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."] = "Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enGB", LoadLocale)
 elseif MSUF.LOCALE == "enGB" then LoadLocale() end

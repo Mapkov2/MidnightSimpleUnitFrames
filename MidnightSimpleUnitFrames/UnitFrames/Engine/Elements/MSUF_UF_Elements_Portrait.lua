@@ -58,6 +58,24 @@ local PORTRAIT_MASKS = V.PORTRAIT_MASKS or {
   ROUNDED = ADDON_PATH .. "\\Media\\Masks\\rounded_mask.tga",
   DIAMOND = ADDON_PATH .. "\\Media\\Masks\\diamond_mask.tga",
 }
+--- Shape-aware feather masks are resolved once at addon load. Portrait.Apply
+--- only indexes these tables when a compiled spec changes; gameplay events
+--- never build paths, calculate gradients, or revisit the mask selection.
+local PORTRAIT_SOFT_EDGE_MASKS = V.PORTRAIT_SOFT_EDGE_MASKS
+if not PORTRAIT_SOFT_EDGE_MASKS then
+  PORTRAIT_SOFT_EDGE_MASKS = { SQUARE = {}, CIRCLE = {}, ROUNDED = {}, DIAMOND = {} }
+  local squareRoot = ADDON_PATH .. "\\Media\\Masks\\texture_layer_edge_softness_"
+  local circleRoot = ADDON_PATH .. "\\Media\\Masks\\portrait_edge_softness_circle_"
+  local roundedRoot = ADDON_PATH .. "\\Media\\Masks\\portrait_edge_softness_rounded_"
+  local diamondRoot = ADDON_PATH .. "\\Media\\Masks\\portrait_edge_softness_diamond_"
+  for level = 1, 15 do
+    local suffix = (level < 10 and "0" or "") .. tostring(level) .. ".png"
+    PORTRAIT_SOFT_EDGE_MASKS.SQUARE[level] = squareRoot .. suffix
+    PORTRAIT_SOFT_EDGE_MASKS.CIRCLE[level] = circleRoot .. suffix
+    PORTRAIT_SOFT_EDGE_MASKS.ROUNDED[level] = roundedRoot .. suffix
+    PORTRAIT_SOFT_EDGE_MASKS.DIAMOND[level] = diamondRoot .. suffix
+  end
+end
 local DYNAMIC_PORTRAIT_BORDER = V.DYNAMIC_PORTRAIT_BORDER or {
   CLASS_COLOR = true,
   REACTION = true,
@@ -166,6 +184,11 @@ local PORTRAIT_UNIT_STATE_EVENTS = {
   PORTRAITS_UPDATED = true,
   PARTY_MEMBER_ENABLE = true,
   PARTY_MEMBER_DISABLE = true,
+}
+local PORTRAIT_DIRECT_IDENTITY_EVENTS = {
+  PLAYER_TARGET_CHANGED = true,
+  PLAYER_FOCUS_CHANGED = true,
+  UNIT_TARGET = true,
 }
 local PORTRAIT_UNITLESS_EVENTS = { "PORTRAITS_UPDATED" }
 local TARGET_PORTRAIT_EXTRA_EVENTS = { "PORTRAITS_UPDATED", "PARTY_MEMBER_ENABLE", "PARTY_MEMBER_DISABLE" }
@@ -371,7 +394,7 @@ local function ApplyPortraitUpdate(frame, castAlreadyChecked,
     local force = frame._msufPortraitForceRefresh == true
     frame._msufPortraitNeedsVisibleRefresh = nil
     local showingCast = false
-    if castAlreadyChecked ~= true then
+    if castAlreadyChecked ~= true and p.castSpellIcon == true then
       showingCast = UpdateCastPortrait(frame, p)
     end
     if not showingCast then
@@ -584,7 +607,10 @@ local function ApplyPortraitMask(holder, p)
   if p and p.shape == "BLIZZARD" and ApplyBlizzardPortraitMask(mask) then
     return
   end
-  SetMaskTextureCached(mask, PORTRAIT_MASKS[p and p.shape or "SQUARE"] or WHITE)
+  local shape = p and p.shape or "SQUARE"
+  local softMasks = PORTRAIT_SOFT_EDGE_MASKS[shape]
+  local softMask = softMasks and softMasks[p and p.edgeSoftnessLevel]
+  SetMaskTextureCached(mask, softMask or PORTRAIT_MASKS[shape] or WHITE)
 end
 
 --- Placement resolves to (ownPoint, relativePoint) pairs. ATTACHED keeps the
@@ -1549,6 +1575,8 @@ function Portrait.Apply(frame, spec)
   frame._msufUpdatePortraitConnection = Portrait.UpdateConnectionState
   if p.castSpellIcon == true then
     EnsureCastPortraitIcon(frame)
+  else
+    RestoreCastPortraitIcon(frame, true)
   end
   LayoutPortrait(frame, p)
   ApplyPortraitMask(holder, p)
@@ -1563,7 +1591,7 @@ function Portrait.Apply(frame, spec)
     if PortraitFrameVisible(frame) then
       local force = frame._msufPortraitForceRefresh == true
       frame._msufPortraitNeedsVisibleRefresh = nil
-      local showingCast = UpdateCastPortrait(frame, p)
+      local showingCast = p.castSpellIcon == true and UpdateCastPortrait(frame, p) or false
       if not showingCast then
         frame._msufPortraitForceRefresh = nil
         if p.render == "CLASS" then
@@ -1660,7 +1688,7 @@ function Portrait.Update(frame, event, unit)
     return
   end
 
-  local showingCast = UpdateCastPortrait(frame, p, event)
+  local showingCast = p.castSpellIcon == true and UpdateCastPortrait(frame, p, event) or false
   if showingCast then
     if PortraitBorderNeedsUpdate(event, p) then
       LayoutPortraitBorder(frame.MSUFPortraitHolder, p, ResolvePortraitBorderColor(frame, p))
@@ -1680,6 +1708,13 @@ function Portrait.Update(frame, event, unit)
       local changed, keyPrepared, preparedKey, preparedGuid, preparedExists
       if forceRefresh == true or frame._msufPortraitForceRefresh == true then
         changed = true
+      elseif PORTRAIT_DIRECT_IDENTITY_EVENTS[event] == true then
+        -- These events guarantee that the bound identity changed. Resolve the
+        -- native portrait directly; building a GUID/availability/render key
+        -- first can only confirm what the event already told us. A nil prepared
+        -- key intentionally leaves the next soft identity event free to seed a
+        -- normal stable key without repeating work in this swap.
+        changed, keyPrepared = true, true
       else
         changed, keyPrepared, preparedKey, preparedGuid, preparedExists =
           UnitPortraitKeyChanged(texture, unit, frame, p)
@@ -1688,7 +1723,13 @@ function Portrait.Update(frame, event, unit)
         -- The identity predicate already paid for the complete 2D key. Reuse
         -- that exact snapshot in ApplyUnitPortrait instead of repeating GUID,
         -- availability and sixteen key-part conversions in the same event.
-        ApplyPortraitUpdate(frame, true,
+        local force = frame._msufPortraitForceRefresh == true
+        frame._msufPortraitNeedsVisibleRefresh = nil
+        frame._msufPortraitForceRefresh = nil
+        -- Portrait.Update already resolved config, texture, visibility and the
+        -- optional cast overlay. Stay in this stack frame instead of entering
+        -- ApplyPortraitUpdate, which would repeat those guards and visibility.
+        ApplyUnitPortrait(texture, unit, frame, p, force,
           keyPrepared, preparedKey, preparedGuid, preparedExists)
       else
         frame._msufPortraitNeedsVisibleRefresh = nil

@@ -85,6 +85,7 @@ Registry:RegisterAction({
         g.aurasCooldownTextSafeSeconds = 60
         g.aurasCooldownTextWarningSeconds = 15
         g.aurasCooldownTextUrgentSeconds = 5
+        g.dispelTypeColorOverrides = nil
         ApplyAuraColors("MSUF_ASSISTANT_RESET_AURA_COLORS")
         return true, "Done. Aura colors reset."
     end,

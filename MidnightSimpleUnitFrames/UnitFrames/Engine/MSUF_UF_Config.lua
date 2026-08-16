@@ -27,9 +27,6 @@ local CreateFrame = _G.CreateFrame
 local InCombatLockdown = _G.InCombatLockdown
 local IsInInstance = _G.IsInInstance
 local GetInstanceInfo = _G.GetInstanceInfo
-local IsPVPTimerRunning = _G.IsPVPTimerRunning
-local UnitIsPVP = _G.UnitIsPVP
-local UnitIsPVPFreeForAll = _G.UnitIsPVPFreeForAll
 local wipe = _G.wipe or table.wipe or function(t)
     for k in pairs(t) do
         t[k] = nil
@@ -941,7 +938,16 @@ end
 
 local _pvpContextKnown, _pvpContextActive = false, false
 
+local function UnitFramePVPContextualDisabled()
+  local gameRules = _G.C_GameRules
+  local enum = _G.Enum
+  local rule = enum and enum.GameRule and enum.GameRule.UnitFramePvPContextualDisabled
+  return gameRules and type(gameRules.IsGameRuleActive) == "function" and rule ~= nil
+    and APIBool(gameRules.IsGameRuleActive, rule)
+end
+
 local function ComputePVPIndicatorContextActive(warModeOverride)
+  if UnitFramePVPContextualDisabled() then return false end
   local instanceType = CurrentInstanceType()
   if instanceType == "pvp" or instanceType == "arena" then
     return true
@@ -957,29 +963,14 @@ local function ComputePVPIndicatorContextActive(warModeOverride)
   end
 
   local cpvp = _G.C_PvP
-  if cpvp then
-    if type(cpvp.IsWarModeDesired) == "function" then
-      if APIBool(cpvp.IsWarModeDesired) then
-        return true
-      end
-      -- During War Mode deactivation, IsWarModeActive/UnitIsPVP and the PvP
-      -- timer may deliberately remain true. Desired=false means this cold
-      -- visibility path must already be disabled; the timer is UI text only.
-      if APIBool(cpvp.IsWarModeActive) or APIBool(IsPVPTimerRunning) then
-        return false
-      end
-    elseif APIBool(cpvp.IsWarModeActive) then
-      return true
-    end
+  if not cpvp then return false end
+  -- This indicator is intentionally a PvP-mode feature, not a general
+  -- UnitIsPVP flag display. Outside War Mode, arenas and battlegrounds its
+  -- complete UF/GF runtime stays uncompiled even when the profile enables it.
+  if type(cpvp.IsWarModeDesired) == "function" then
+    return APIBool(cpvp.IsWarModeDesired)
   end
-
-  -- A running timer represents PvP deactivation, not a reason to retain the
-  -- icon runtime. Keep manual /pvp as a fallback once no timer is running.
-  if APIBool(IsPVPTimerRunning) then
-    return false
-  end
-  return APIBool(UnitIsPVPFreeForAll, "player")
-    or APIBool(UnitIsPVP, "player")
+  return APIBool(cpvp.IsWarModeActive)
 end
 
 function UF.InvalidatePVPIndicatorContext()
@@ -995,12 +986,8 @@ function UF.PVPIndicatorContextActive()
 end
 
 local PVP_CONTEXT_REFRESH_ELEMENTS = { "StatusIndicators", "PVPIndicator", "GroupStatusRuntime" }
-local PVP_CONTEXT_UNIT_EVENTS = {
-  UNIT_FACTION = true,
-  PLAYER_FLAGS_CHANGED = true,
-  PVP_TIMER_UPDATE = true,
-}
 local PVP_CONTEXT_FORCE_EVENTS = {
+  ACTIVE_GAME_MODE_UPDATED = true,
   PLAYER_ENTERING_WORLD = true,
   WAR_MODE_STATUS_UPDATE = true,
 }
@@ -1033,12 +1020,8 @@ function UF.RefreshPVPIndicatorContext(reason, force, warModeOverride)
   return true
 end
 
-local function RegisterPVPContextEvent(frame, event, unit)
-  if unit then
-    frame:RegisterUnitEvent(event, unit)
-  else
-    frame:RegisterEvent(event)
-  end
+local function RegisterPVPContextEvent(frame, event)
+  frame:RegisterEvent(event)
 end
 
 if not UF.pvpIndicatorContextDriver then
@@ -1048,12 +1031,6 @@ if not UF.pvpIndicatorContextDriver then
     -- native per-frame event routing, so never query context or rebuild UF/GF
     -- specs in combat.
     if InCombatLockdown and InCombatLockdown() then
-      return
-    end
-    -- Several context events carry booleans (WAR_MODE_STATUS_UPDATE and
-    -- PLAYER_ENTERING_WORLD), not unit tokens. Only filter events whose first
-    -- payload is actually a unit or a true War Mode transition gets dropped.
-    if PVP_CONTEXT_UNIT_EVENTS[event] == true and arg1 and arg1 ~= "player" then
       return
     end
     local force = PVP_CONTEXT_FORCE_EVENTS[event] == true
@@ -1069,12 +1046,10 @@ if not UF.pvpIndicatorContextDriver then
       warModeOverride
     )
   end)
+  RegisterPVPContextEvent(pvpDriver, "ACTIVE_GAME_MODE_UPDATED")
   RegisterPVPContextEvent(pvpDriver, "PLAYER_ENTERING_WORLD")
   RegisterPVPContextEvent(pvpDriver, "ZONE_CHANGED_NEW_AREA")
-  RegisterPVPContextEvent(pvpDriver, "PVP_TIMER_UPDATE", "player")
-  RegisterPVPContextEvent(pvpDriver, "PLAYER_FLAGS_CHANGED", "player")
   RegisterPVPContextEvent(pvpDriver, "WAR_MODE_STATUS_UPDATE")
-  RegisterPVPContextEvent(pvpDriver, "UNIT_FACTION", "player")
   UF.pvpIndicatorContextDriver = pvpDriver
 end
 
@@ -1114,7 +1089,7 @@ local function StatusAllowed(key, id)
     return key == "player" or key == "target"
   elseif id == "pvp" then
     return key == "player" or key == "target" or key == "focus" or key == "targettarget" or key == "focustarget"
-  elseif id == "resting" then
+  elseif id == "resting" or id == "stance" then
     return key == "player"
   elseif id == "raidGroup" then
     return key == "player" or key == "target" or key == "targettarget" or key == "focustarget" or key == "focus"
@@ -1193,6 +1168,7 @@ local UNIT_STATUS_ENTRY_DEFS = {
   PrefixedStatusDef("resting", "showRestingIndicator", true, "restedStateIndicator", 39, "TOPLEFT", -40, 50, 25, { "restedStateIndicatorIconStyle", "BLIZZARD" }, { "restedStateIndicatorSymbol", "rested_blizzard_animated", "restingStateIndicatorSymbol" }, { "restedStateIndicatorCustomIcon", "" }),
   PrefixedStatusDef("incomingRes", "showIncomingResIndicator", true, "incomingResIndicator", 18, "TOPRIGHT", 0, 0, 7, nil, { "incomingResIndicatorSymbol", "DEFAULT" }, { "incomingResIndicatorCustomIcon", "" }),
   PrefixedStatusDef("pvp", "showPvpIndicator", true, "pvpIndicator", 18, "TOPRIGHT", 0, 0, 7, nil, nil, { "pvpIndicatorCustomIcon", "" }),
+  PrefixedStatusDef("stance", "showStanceIndicator", false, "stanceIndicator", 12, "TOP", 0, -2, 7),
 }
 
 local UNIT_STATUS_TEXT_STATE_DEFS = {
@@ -1423,9 +1399,12 @@ local function FontFlagsFromGlobal()
   return "OUTLINE"
 end
 
-local function ComposeFontFlags(outline, monochrome)
+local function ComposeFontFlags(outline, monochrome, slug)
   local flags = ""
   outline = tostring(outline or "OUTLINE"):upper()
+  if slug == true then
+    return (outline == "NONE" or outline == "") and "SLUG" or "OUTLINE,SLUG"
+  end
   if outline == "THICKOUTLINE" then
     flags = "THICKOUTLINE"
   elseif outline ~= "NONE" and outline ~= "" then
@@ -1440,6 +1419,7 @@ end
 local function ResolveFontFlags(general, conf)
   local outline = "OUTLINE"
   local monochrome = general and general.fontMonochrome == true
+  local slug = general and general.fontSlug == true
   if general and general.noOutline then
     outline = "NONE"
   elseif general and general.boldText then
@@ -1454,12 +1434,16 @@ local function ResolveFontFlags(general, conf)
     if conf.fontMonochrome ~= nil then
       monochrome = conf.fontMonochrome == true
     end
+    if conf.fontSlug ~= nil then
+      slug = conf.fontSlug == true
+    end
   end
   if not (conf and conf.fontOverride == true)
-    and not (general and (general.noOutline or general.boldText or general.fontMonochrome)) then
+    and not (general and (general.noOutline or general.boldText or general.fontMonochrome or general.fontSlug)) then
     return FontFlagsFromGlobal()
   end
-  return ComposeFontFlags(outline, monochrome)
+  if slug then monochrome = false end
+  return ComposeFontFlags(outline, monochrome, slug)
 end
 
 local function ResolveFontTextAlpha(general, conf)
@@ -1499,7 +1483,7 @@ local ResolveFontShadowMetrics = _G.MSUF_ResolveFontShadowMetrics or function(op
   return opacity, distance, -distance
 end
 
-local function ResolveFontShadow(general, conf)
+local function ResolveFontShadow(general, conf, flags)
   local enabled = not (general and general.textBackdrop == false)
   local alpha, x, y = ResolveFontShadowMetrics(general and general.fontShadowOpacity,
     general and general.fontShadowDistance, general and general.fontShadowStrength)
@@ -1510,6 +1494,7 @@ local function ResolveFontShadow(general, conf)
         conf.fontShadowStrength, alpha, x)
     end
   end
+  if tostring(flags or ""):upper():find("SLUG", 1, true) then enabled = false end
   return enabled, alpha, x, y
 end
 
@@ -1626,6 +1611,13 @@ local function CompileUnitPortrait(out, conf, general)
   local portraitOverride = Number(conf.portraitSizeOverride, Number(conf.portraitSize, 0))
   local portraitAutoSize = max(16, Number(out.height, 30) - 4)
   local portraitSize = portraitOverride > 0 and max(1, portraitOverride) or portraitAutoSize
+  local portraitSizeMode = conf.portraitSizeMode
+  if portraitSizeMode ~= "UNIFORM" and portraitSizeMode ~= "SEPARATE" then
+    -- Legacy UnitFrames gave a positive uniform override priority. With Auto
+    -- size, positive axis values were the only signal for non-square geometry.
+    portraitSizeMode = portraitOverride > 0 and "UNIFORM"
+      or ((Number(conf.portraitWidth, 0) > 0 or Number(conf.portraitHeight, 0) > 0) and "SEPARATE" or "UNIFORM")
+  end
   out.portrait.enabled = portraitMode ~= "OFF"
   out.portrait.side = portraitMode == "RIGHT" and "RIGHT" or "LEFT"
   out.portrait.render = NormalizePortraitRender(conf.portraitRender)
@@ -1633,17 +1625,20 @@ local function CompileUnitPortrait(out, conf, general)
   out.portrait.castSpellIcon = conf.portraitCastSpellIcon == true
   out.portrait.shape = NormalizePortraitShape(conf.portraitShape)
   out.portrait.size = portraitSize
+  out.portrait.sizeMode = portraitSizeMode
   out.portrait.x = Number(conf.portraitOffsetX, 0)
   out.portrait.y = Number(conf.portraitOffsetY, 0)
-  --- A positive size override is the explicit square contract. Width/height
-  --- are the advanced non-square mode and only take over while size is Auto
-  --- (0); otherwise stale per-axis values made the visible Size slider inert.
+  --- The explicit mode keeps both value sets intact while making their
+  --- precedence unambiguous. This also lets users return to their previous
+  --- uniform or non-square geometry without destructive slider resets.
   local portraitWidth = Number(conf.portraitWidth, 0)
   local portraitHeight = Number(conf.portraitHeight, 0)
-  if portraitOverride > 0 then
+  if portraitSizeMode == "UNIFORM" then
     out.portrait.width = portraitSize
     out.portrait.height = portraitSize
   else
+    -- A zero axis inherits the retained uniform value. Switching modes is
+    -- therefore visually stable, while Size = 0 still resolves to Auto.
     out.portrait.width = portraitWidth > 0 and max(8, portraitWidth) or portraitSize
     out.portrait.height = portraitHeight > 0 and max(8, portraitHeight) or portraitSize
   end
@@ -1670,6 +1665,12 @@ local function CompileUnitPortrait(out, conf, general)
   out.portrait.border.g = Number(general.portraitBorderColorG, 1)
   out.portrait.border.b = Number(general.portraitBorderColorB, 1)
   out.portrait.border.a = Number(general.portraitBorderColorA, 1)
+  local portraitEdgeSoftnessLevel = min(15, max(0,
+    floor((Number(conf.portraitEdgeSoftness, 0) / 2) + 0.5)))
+  if out.portrait.shape == "BLIZZARD" or out.portrait.border.style ~= "NONE" then
+    portraitEdgeSoftnessLevel = 0
+  end
+  out.portrait.edgeSoftnessLevel = portraitEdgeSoftnessLevel
   out.portrait.bg = out.portrait.bg or {}
   out.portrait.bg.enabled = conf.portraitBgEnabled == true
   out.portrait.bg.r = Number(general.portraitBgColorR, 0.05)
@@ -1697,7 +1698,7 @@ local function CompileUnitStatus(out, conf, general, key)
     local def = UNIT_STATUS_ENTRY_DEFS[i]
     local id = def[1]
     local fallbackSize = statusTextSize
-    if id == "level" or id == "race" or id == "classText" then
+    if id == "level" or id == "race" or id == "classText" or id == "stance" then
       fallbackSize = levelSize
     elseif id == "raidGroup" then
       fallbackSize = raidGroupSize
@@ -1721,6 +1722,23 @@ local function CompileUnitStatus(out, conf, general, key)
   statusText.showDead, statusText.showGhost = deadText.enabled, ghostText.enabled
   statusText.showAFK, statusText.showDND = afkText.enabled, dndText.enabled
   statusText.dead, statusText.ghost, statusText.afk, statusText.dnd = deadText, ghostText, afkText, dndText
+
+  -- AFK timer companion region: independent placement, but it only renders
+  -- while the AFK state text is active, so it needs no own show-state keys.
+  local afkTimer = statusText.afkTimer or {}
+  statusText.afkTimer = afkTimer
+  local afkTimerShow = conf and conf.statusAFKTimerEnabled
+  if afkTimerShow == nil then afkTimerShow = general and general.statusAFKTimerEnabled end
+  afkTimer.enabled = afkTimerShow == true
+  afkTimer.size = StatusNumber(conf, general, "statusAFKTimerSize", 12)
+  afkTimer.anchor = StatusString(conf, general, "statusAFKTimerAnchor", "CENTER")
+  afkTimer.x = StatusNumber(conf, general, "statusAFKTimerOffsetX", 0)
+  afkTimer.y = StatusNumber(conf, general, "statusAFKTimerOffsetY", -14)
+  afkTimer.layer = ClampStatusLayer(StatusNumber(conf, general, "statusAFKTimerLayer", 7), 7)
+  ApplyStatusColor(afkTimer, conf, general, "statusAFKTimer")
+  if afkTimer.colorR == nil then
+    afkTimer.colorR, afkTimer.colorG, afkTimer.colorB = afkText.colorR, afkText.colorG, afkText.colorB
+  end
 
   local pvp = status.pvp
   if pvp.enabled and UF.PVPIndicatorContextActive and not UF.PVPIndicatorContextActive() then
@@ -1820,7 +1838,7 @@ local function CompileUnitBase(out, unit, key, def, conf, general, bars, bossInd
   ResolveTextColor(general, out.textColor)
   out.textColor.a = ResolveFontTextAlpha(general, conf)
   do
-    local shadowEnabled, shadowAlpha, shadowX, shadowY = ResolveFontShadow(general, conf)
+    local shadowEnabled, shadowAlpha, shadowX, shadowY = ResolveFontShadow(general, conf, out.fontFlags)
     out.fontShadow = shadowEnabled
     out.fontShadowAlpha = shadowAlpha
     out.fontShadowX = shadowX

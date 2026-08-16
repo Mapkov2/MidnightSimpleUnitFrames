@@ -101,6 +101,7 @@ phaseIcon|Phase|phaseIcon|phaseIconStyle|phaseIconSize|phaseAnchor|phaseX|phaseY
 statusText|Dead Text|statusText|0|statusTextSize|statusTextAnchor|statusOffsetX|statusOffsetY|statusTextLayer|14|CENTER|7|0
 statusGhostText|Ghost Text|statusGhostText|0|statusGhostTextSize|statusGhostTextAnchor|statusGhostOffsetX|statusGhostOffsetY|statusGhostTextLayer|14|CENTER|7|0
 statusAFKText|AFK Text|statusAFKText|0|statusAFKTextSize|statusAFKTextAnchor|statusAFKOffsetX|statusAFKOffsetY|statusAFKTextLayer|14|CENTER|7|0
+statusAFKTimer|AFK Timer|statusAFKTimerText|0|statusAFKTimerTextSize|statusAFKTimerTextAnchor|statusAFKTimerOffsetX|statusAFKTimerOffsetY|statusAFKTimerTextLayer|10|CENTER|7|0
 statusDNDText|DND Text|statusDNDText|0|statusDNDTextSize|statusDNDTextAnchor|statusDNDOffsetX|statusDNDOffsetY|statusDNDTextLayer|14|CENTER|7|0
 ]],
     PLACED_INDICATOR_TYPES = VTP "none=None|icon=Icon|square=Square|bar=Bar|number=Number",

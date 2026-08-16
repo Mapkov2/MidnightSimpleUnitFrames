@@ -269,6 +269,9 @@ function A.GlobalBarRegistry.RegisterTextureGradientSettings(ctx)
         end,
         apply = function() ApplyBarGradients("MSUF_ASSISTANT_POWER_GRADIENT_DIRECTION") end,
         combatSafe = false,
+        menuControlDisposition = "standalone",
+        menuControlDispositionReason = "Menu2 exposes power-gradient direction as four independent toggle actions; this Assistant enum is their atomic single-direction controller.",
+        menuControlDispositionEvidence = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GlobalBars.lua BuildDirectionPad",
         description = "Which edge the power bar gradient fades from.",
     })
 end

@@ -16,6 +16,7 @@ local UnitframeData = A.UnitframeRegistryData or {}
 local PORTRAIT_MODE_VALUES = UnitframeData.PORTRAIT_MODE_VALUES or {}
 local PORTRAIT_RENDER_VALUES = UnitframeData.PORTRAIT_RENDER_VALUES or {}
 local PORTRAIT_SHAPE_VALUES = UnitframeData.PORTRAIT_SHAPE_VALUES_UNIT or UnitframeData.PORTRAIT_SHAPE_VALUES or {}
+local PORTRAIT_SIZE_MODE_VALUES = { "UNIFORM", "SEPARATE" }
 local PORTRAIT_BORDER_VALUES = UnitframeData.PORTRAIT_BORDER_VALUES or {}
 local PORTRAIT_PLACEMENT_VALUES = UnitframeData.PORTRAIT_PLACEMENT_VALUES or {}
 local PORTRAIT_ANCHOR_POINT_VALUES = UnitframeData.PORTRAIT_ANCHOR_POINT_VALUES or {}
@@ -120,6 +121,17 @@ function A.UnitframesRegistry.RegisterPortraitSettings(ctx, unit)
             goldring = "BLIZZARD",
         },
     })
+    RegisterUnitEnum(unit, "portraitSizeMode", "portraitSizeMode", "Portrait Size Mode", "UNIFORM",
+        PORTRAIT_SIZE_MODE_VALUES,
+        MakeAliases(unit, "portrait size mode", "uniform portrait size", "separate portrait width and height"), {
+        category = "Portrait",
+        description = "Uniform uses one size for both axes; Width & Height applies the two axis overrides independently.",
+        valueAliases = {
+            uniform = "UNIFORM", square = "UNIFORM", linked = "UNIFORM", locked = "UNIFORM",
+            separate = "SEPARATE", independent = "SEPARATE", custom = "SEPARATE",
+            ["width and height"] = "SEPARATE", ["width & height"] = "SEPARATE",
+        },
+    })
     RegisterUnitNumberSetting(unit, "portraitSizeOverride", "portraitSizeOverride", "Portrait Size Override",
         0, 0, 128, MakeAliases(unit, "portrait size", "portrait size override"), { category = "Portrait" })
     RegisterUnitNumberSetting(unit, "portraitOffsetX", "portraitOffsetX", "Portrait X Offset",
@@ -160,6 +172,11 @@ function A.UnitframesRegistry.RegisterPortraitSettings(ctx, unit)
             ["custom color"] = "CUSTOM",
         },
     })
+    RegisterUnitNumberSetting(unit, "portraitEdgeSoftness", "portraitEdgeSoftness", "Portrait Edge Softness",
+        0, 0, 30,
+        MakeAliases(unit, "portrait edge softness", "soft portrait edge", "portrait feather", "borderless portrait fade"),
+        { category = "Portrait", step = 2,
+            description = "Softens the portrait silhouette when its border is disabled, from 0 to 30 percent." })
     RegisterUnitNumberSetting(unit, "portraitBorderThickness", "portraitBorderThickness", "Portrait Border Thickness",
         2, 1, 12,
         MakeAliases(unit, "portrait border thickness", "portrait border size", "portrait border thicker", "portrait border thinner"),

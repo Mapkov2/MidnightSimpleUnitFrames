@@ -449,12 +449,6 @@ local function EvaluateIfActive(unit, force)
   return false
 end
 
-local function EvaluateTargetUnits(force)
-  if activeUnits.target then
-    TargetRefresh(force)
-  end
-end
-
 local function EvaluateFocusUnits(force)
   EvaluateIfActive("focus", force)
 end
@@ -552,10 +546,10 @@ SyncTargetSpells = function()
   end
 end
 
-TargetRefresh = function(force)
+TargetRefresh = function(force, preparedFrame)
   SyncTargetSpells()
   TargetClearStates()
-  local frame = FrameForUnit("target")
+  local frame = preparedFrame or FrameForUnit("target")
   if not FrameRangeActive(frame) then
     ClearUnit("target", force)
     return false
@@ -794,10 +788,14 @@ local function RangeUnitScheduled(unit)
 end
 
 local function ScheduleTargetRange()
-  if not RangeUnitScheduled("target") then
+  if not activeUnits.target then
     return false
   end
-  EvaluateTargetUnits(false)
+  local frame = FrameForUnit("target")
+  if not (FrameRangeActive(frame) and FrameVisible(frame)) then
+    return false
+  end
+  TargetRefresh(false, frame)
   return true
 end
 

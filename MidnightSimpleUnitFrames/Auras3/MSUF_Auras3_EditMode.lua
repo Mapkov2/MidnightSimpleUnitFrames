@@ -1526,13 +1526,14 @@ local function LayoutPreviewSwipe(icon, cfg, remainingFrac)
     swipe:Show()
 end
 
-local function LayoutPreviewDispelBorder(icon, cfg)
+local function LayoutPreviewDispelBorder(icon, cfg, index)
     local border = icon and icon.DispelBorder
     local atlas = cfg and DEBUFF_TYPE_BORDER_PREVIEW_ATLAS[cfg.debuffBorderMode]
     local barOnly = cfg and cfg.showDurationBar == true and cfg.durationBarDisplay == "BAR_ONLY"
     local size = math_max(1, (icon and icon.GetWidth and icon:GetWidth()) or 24)
     if not barOnly and type(A3.ApplyAuraDispelPreview) == "function"
-        and A3.ApplyAuraDispelPreview(border, icon, size, cfg and cfg.debuffBorderMode, cfg and cfg.iconShape) then
+        and A3.ApplyAuraDispelPreview(border, icon, size, cfg and cfg.debuffBorderMode,
+            cfg and cfg.iconShape, A3.PreviewDispelTypeForIndex(index)) then
         return
     end
     if not (border and atlas and border.SetAtlas and not barOnly) then
@@ -1557,7 +1558,7 @@ local function ApplyIconZoom(texture, zoom)
     texture:SetTexCoord(inset, 1 - inset, inset, 1 - inset)
 end
 
-local function ApplyPreviewIconText(icon, unit, cfg)
+local function ApplyPreviewIconText(icon, unit, cfg, index)
     cfg = cfg or ReadTextConfig(unit)
     local barOnly = cfg.showDurationBar == true and cfg.durationBarDisplay == "BAR_ONLY"
     if icon.Icon then icon.Icon:SetShown(not barOnly) end
@@ -1573,7 +1574,7 @@ local function ApplyPreviewIconText(icon, unit, cfg)
         icon.CooldownText:SetShown(cfg.showCooldownText ~= false)
     end
     LayoutPreviewSwipe(icon, cfg)
-    LayoutPreviewDispelBorder(icon, cfg)
+    LayoutPreviewDispelBorder(icon, cfg, index)
     if icon.DurationBar then
         if cfg.showDurationBar == true then
             local height = Clamp(cfg.durationBarHeight, 2, 1, 16)
@@ -2081,7 +2082,7 @@ function EM.RefreshUnit(unit)
                     end
                     if icon.Count then icon.Count:SetText(i == 1 and "3" or "") end
                     if icon.CooldownText then icon.CooldownText:SetText(i == 1 and "1m" or "32") end
-                    ApplyPreviewIconText(icon, unit, textCfg)
+                    ApplyPreviewIconText(icon, unit, textCfg, i)
                     if type(A3.ApplyIconStylePreview) == "function" then
                         A3.ApplyIconStylePreview(icon, iconStyle, size, iconShape)
                     end
