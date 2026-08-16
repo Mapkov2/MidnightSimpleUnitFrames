@@ -70,7 +70,7 @@ function Popups.Open(key, anchorFrame)
     local pType = cfg and cfg.popupType
 
     if not pType then
-        if key == "player" or key == "target" or key == "focus" or key == "focustarget" or key == "targettarget" or key == "pet" or key:match("^boss%d") then
+        if key == "player" or key == "target" or key == "focus" or key == "focustarget" or key == "targettarget" or key == "pet" or key:match("^boss%d") or key:match("^arena%d") then
             pType = "unit"
         elseif key:sub(1, 8) == "castbar_" then
             pType = "castbar"
@@ -94,6 +94,7 @@ function Popups.Open(key, anchorFrame)
         ExportPublic("MSUF_EM2_ActiveAuraUnit", nil)
         local unit = key
         if key:match("^boss%d") then unit = "boss" end
+        if key:match("^arena%d") then unit = "arena" end
         local frame = cfg and cfg.getFrame and cfg.getFrame()
         if EM2.UnitPopup then
             EM2.UnitPopup.Open(unit, frame or anchorFrame)
@@ -105,6 +106,7 @@ function Popups.Open(key, anchorFrame)
         local unit = key
         if key:sub(1, 8) == "castbar_" then unit = key:sub(9) end
         if type(unit) == "string" and unit:match("^boss%d+$") then unit = "boss" end
+        if type(unit) == "string" and unit:match("^arena%d+$") then unit = "arena" end
         local frame = cfg and cfg.getFrame and cfg.getFrame()
         if EM2.CastPopup then EM2.CastPopup.Open(unit, frame or anchorFrame) end
     elseif pType == "aura" then
@@ -167,6 +169,7 @@ local UNIT_COPY_TARGETS = {
     { key="targettarget", label="ToT" },
     { key="pet", label="Pet" },
     { key="boss", label="Boss" },
+    { key="arena", label="Arena" },
 }
 local San = Quick.San
 local CanDetachUnitPowerBar = _G.MSUF_CanDetachUnitPowerBar

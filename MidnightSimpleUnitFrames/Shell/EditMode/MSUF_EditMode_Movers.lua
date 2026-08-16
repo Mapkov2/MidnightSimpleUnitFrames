@@ -658,6 +658,36 @@ local function GetBossSupplementalMoverBounds()
     return bounds
 end
 
+local function GetArenaUF(i)
+    return GetUF("arena" .. i)
+end
+
+local function GetArenaCastbarFrame(index)
+    return _G["MSUF_ArenaCastbarPreview" .. index] or _G["MSUF_ArenaCastbar" .. index]
+end
+
+local function GetArenaSupplementalMoverBounds()
+    local bounds = {}
+    for i = 2, 3 do
+        local l, r, t, b = UnitVisualBounds(GetArenaUF(i))
+        if l then
+            bounds[#bounds + 1] = { l = l, r = r, t = t, b = b }
+        end
+    end
+    return bounds
+end
+
+local function GetArenaCastbarSupplementalMoverBounds()
+    local bounds = {}
+    for i = 2, 3 do
+        local l, r, t, b = FrameRectToUI(GetArenaCastbarFrame(i))
+        if l then
+            bounds[#bounds + 1] = { l = l, r = r, t = t, b = b }
+        end
+    end
+    return bounds
+end
+
 local function GetConf(key)
     local db = _G.MSUF_DB
     return db and db[key]
@@ -686,6 +716,17 @@ local function BossEnabled(i)
     end
 end
 
+local function ArenaEnabled(i)
+    return function()
+        local f = GetArenaUF(i)
+        if not f then return false end
+        local db = _G.MSUF_DB
+        if not db or not db.arena then return true end
+        if db.arena.enabled == false then return false end
+        return true
+    end
+end
+
 local function GetCastbarFrame(unit)
     local frame
     if unit == "player" then
@@ -696,6 +737,8 @@ local function GetCastbarFrame(unit)
         frame = _G.MSUF_FocusCastbarPreview or _G.MSUF_FocusCastbar
     elseif unit == "boss" then
         frame = GetBossCastbarFrame(1)
+    elseif unit == "arena" then
+        frame = GetArenaCastbarFrame(1)
     end
     if frame and frame.IsShown and not frame:IsShown() then return nil end
     return frame
@@ -736,6 +779,7 @@ local function CastbarEnabled(unit)
             if unit == "target" and g.enableTargetCastbar == false then return false end
             if unit == "focus" and g.enableFocusCastbar == false then return false end
             if unit == "boss" and g.enableBossCastbar == false then return false end
+            if unit == "arena" and g.enableArenaCastbar == false then return false end
         end
         return GetCastbarFrame(unit) ~= nil
     end
@@ -751,7 +795,9 @@ local function RegisterCastbarMover(unit, label, order)
         canNudge    = true,
         castbarUnit = unit,
         getFrame    = function() return GetCastbarFrame(unit) end,
-        getSupplementalMoverBounds = unit == "boss" and GetBossCastbarSupplementalMoverBounds or nil,
+        getSupplementalMoverBounds = (unit == "boss" and GetBossCastbarSupplementalMoverBounds)
+            or (unit == "arena" and GetArenaCastbarSupplementalMoverBounds)
+            or nil,
         getConf     = GetCastbarConf,
         isEnabled   = CastbarEnabled(unit),
     })
@@ -799,10 +845,26 @@ local function RegisterAll()
         isEnabled = BossEnabled(1),
     })
 
+    --- Arena 1-3 mirror the boss cluster: one mover/config, one mouse region
+    --- per frame, dragging any arena frame moves the whole group.
+    Reg.Register({
+        key       = "arena",
+        label     = "Arena",
+        order     = 62,
+        popupType = "unit",
+        canResize = true,
+        canNudge  = true,
+        getFrame  = function() return GetArenaUF(1) end,
+        getSupplementalMoverBounds = GetArenaSupplementalMoverBounds,
+        getConf   = function() return GetConf("arena") end,
+        isEnabled = ArenaEnabled(1),
+    })
+
     RegisterCastbarMover("player", "Player Castbar", 110)
     RegisterCastbarMover("target", "Target Castbar", 111)
     RegisterCastbarMover("focus", "Focus Castbar", 112)
     RegisterCastbarMover("boss", "Boss Castbar", 113)
+    RegisterCastbarMover("arena", "Arena Castbar", 114)
 
     --- Future Phase 2 registrations:
     --- Auras3 groups (per-unit)
@@ -1034,6 +1096,7 @@ local CASTBAR_TEST_FUNCS = {
     "MSUF_SetTargetCastbarTestMode",
     "MSUF_SetFocusCastbarTestMode",
     "MSUF_SetBossCastbarTestMode",
+    "MSUF_SetArenaCastbarTestMode",
 }
 local previewMoverSyncQueued = false
 local previewReforceQueued = false
@@ -1105,6 +1168,7 @@ local function MSUF_SyncAllUnitPreviews()
     if IsConfigCombatLocked() then
         ExportPublic("MSUF_PreviewTestMode", false)
         ExportPublic("MSUF_BossTestMode", false)
+        ExportPublic("MSUF_ArenaTestMode", false)
         if type(_G.MSUF_HideAllCastbarPreviews) == "function" then
             _G.MSUF_HideAllCastbarPreviews()
         end
@@ -1118,6 +1182,12 @@ local function MSUF_SyncAllUnitPreviews()
     ExportPublic("MSUF_BossTestMode", want)
     if _G.MSUF_SyncBossUnitframePreviewWithUnitEdit then
         _G.MSUF_SyncBossUnitframePreviewWithUnitEdit()
+    end
+
+    --- 1b) Arena: mirrors the boss preview system
+    ExportPublic("MSUF_ArenaTestMode", want)
+    if _G.MSUF_SyncArenaUnitframePreviewWithUnitEdit then
+        _G.MSUF_SyncArenaUnitframePreviewWithUnitEdit()
     end
 
     --- 2) Non-player: refresh visibility drivers (reads MSUF_PreviewTestMode),
@@ -1267,6 +1337,7 @@ do
         if IsConfigCombatLocked() then
             ExportPublic("MSUF_PreviewTestMode", false)
             ExportPublic("MSUF_BossTestMode", false)
+            ExportPublic("MSUF_ArenaTestMode", false)
             if type(_G.MSUF_HideAllCastbarPreviews) == "function" then
                 _G.MSUF_HideAllCastbarPreviews()
             end
@@ -1276,6 +1347,7 @@ do
 
         ExportPublic("MSUF_PreviewTestMode", want)
         ExportPublic("MSUF_BossTestMode", want)
+        ExportPublic("MSUF_ArenaTestMode", want)
         if want then
             InstallPipelineWrappers()
         else
@@ -1304,6 +1376,9 @@ do
         Phase(0, function()
             if _G.MSUF_SyncBossUnitframePreviewWithUnitEdit then
                 _G.MSUF_SyncBossUnitframePreviewWithUnitEdit()
+            end
+            if _G.MSUF_SyncArenaUnitframePreviewWithUnitEdit then
+                _G.MSUF_SyncArenaUnitframePreviewWithUnitEdit()
             end
         end)
 
@@ -1420,6 +1495,11 @@ local function CastbarToggleFrameCenter(unit)
         runtime = (bossCastbars and bossCastbars[1])
             or _G.MSUF_BossCastbar1
             or _G.MSUF_boss1CastBar
+    elseif unit == "arena" then
+        preview = _G.MSUF_ArenaCastbarPreview or _G.MSUF_ArenaCastbarPreview1
+        local arenaCastbars = _G.MSUF_ArenaCastbars
+        runtime = (arenaCastbars and arenaCastbars[1])
+            or _G.MSUF_ArenaCastbar1
     end
 
     local function Center(frame)
@@ -1441,6 +1521,7 @@ local function ApplyCastbarAnchorState(unit)
             target = "MSUF_ReanchorTargetCastBar",
             focus  = "MSUF_ReanchorFocusCastBar",
             boss   = "MSUF_ApplyBossCastbarPositionSetting",
+            arena  = "MSUF_ApplyArenaCastbarPositionSetting",
         }
         local ra = reanchorFns[unit]
         if ra and type(_G[ra]) == "function" then _G[ra]() end
@@ -1472,6 +1553,10 @@ local MSUF_EM_SetCastbarAnchoredToUnit = _G.MSUF_EM_SetCastbarAnchoredToUnit or 
         detachedKey = "bossCastbarDetached"
         oxKey = "bossCastbarOffsetX"
         oyKey = "bossCastbarOffsetY"
+    elseif unit == "arena" then
+        detachedKey = "arenaCastbarDetached"
+        oxKey = "arenaCastbarOffsetX"
+        oyKey = "arenaCastbarOffsetY"
     else
         local prefix = _G.MSUF_GetCastbarPrefix and _G.MSUF_GetCastbarPrefix(unit)
         if not prefix then return end

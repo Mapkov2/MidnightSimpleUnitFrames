@@ -101,7 +101,7 @@ local function UpdateOverlay()
         l[3]:SetText("ECV: |cFFAAAAAAnot found|r")
     end
 
-    local units = { "player", "target", "focus", "targettarget", "pet", "boss1" }
+    local units = { "player", "target", "focus", "targettarget", "pet", "boss1", "arena1" }
     for i, unit in ipairs(units) do
         local frame = (UF and type(UF.GetFrame) == "function" and UF.GetFrame(unit))
             or (frames and frames[unit])
