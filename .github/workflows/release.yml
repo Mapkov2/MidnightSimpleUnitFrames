@@ -503,7 +503,12 @@ jobs:
             throw "Could not find CHANGELOG.md section for release '$tag' ('$display')."
           }
 
-          $notes = [string[]]$lines[$start..($end - 1)]
+          # msuf-menu-link comments are private metadata for the interactive
+          # in-game changelog. Discord and distribution sites do not all honor
+          # HTML comments, so never include them in public release notes.
+          $notes = [string[]]@($lines[$start..($end - 1)] | Where-Object {
+            $_ -notmatch '^\s*<!--\s*msuf-menu-link:\s*\{.*\}\s*-->\s*$'
+          })
 
           function Close-List {
             if ($script:InList) {
@@ -514,6 +519,9 @@ jobs:
 
           function Add-HtmlLine([string]$line) {
             $trimmed = $line.Trim()
+            if ($trimmed -match '^<!--\s*msuf-menu-link:') {
+              return
+            }
             if ([string]::IsNullOrWhiteSpace($trimmed)) {
               Close-List
               return
