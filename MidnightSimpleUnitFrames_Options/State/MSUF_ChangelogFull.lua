@@ -8,12 +8,51 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "7E2C3BBD8F6C69D4F7B4BFF349ABDF4DA052DA0E9817C747974DB8EA8414EC0C",
-    currentVersion = "6.08",
+    sourceSha256 = "683ED69C371ED343DDC4F0956944DC3522ADC0095157D6DBBDEB2E5170195E29",
+    currentVersion = "6.09-Beta1",
     historyFromVersion = "6.02",
-    previousVersion = "6.07",
-    rangeLabel = "6.07 -> 6.08",
+    previousVersion = "6.08",
+    rangeLabel = "6.08 -> 6.09-Beta1",
     entries = {
+        {
+            version = "6.09-Beta1",
+            date = "2026-08-17",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Added dynamic Custom Priority ordering for Dots on target, keeping the configured spell order compact and stable as tracked DoTs appear or expire.",
+                            link = {
+                                pageKey = "uf_target",
+                                query = "dots on target custom priority",
+                                label = "Custom Priority",
+                                sectionId = "auras",
+                                controlId = "menu2.uf_target.auras.unit-workspace.container-selector",
+                                settingKey = "auras3.target.custom4.placed.sortMethod",
+                                prepareKind = "unitAuraWorkspace",
+                                prepareValue = "custom4_behavior",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Moved aura ordering out of Style into dedicated, scope-aware Ordering workspaces for Unit Frames, Group Frames, custom aura containers, and external defensives.",
+                        "Added priority reordering controls to the tracked DoT list and kept inactive entries gap-free at runtime.",
+                        "Added Deathstalker's Mark for Rogues and Atmospheric Exposure for Druids to the tracked target-effect presets.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Fixed Spell Indicator controls from an inactive display type remaining visible after selection or preview changes.",
+                        "Kept Custom Priority event-driven through native aura groups without polling or recurring OnUpdate work.",
+                    },
+                },
+            },
+        },
         {
             version = "6.08",
             date = "2026-08-16",

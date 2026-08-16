@@ -1,5 +1,23 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.09-Beta1 - 2026-08-17
+
+### Highlights
+
+- Added dynamic **Custom Priority** ordering for **Dots on target**, keeping the configured spell order compact and stable as tracked DoTs appear or expire.
+<!-- msuf-menu-link: {"pageKey":"uf_target","sectionId":"auras","controlId":"menu2.uf_target.auras.unit-workspace.container-selector","settingKey":"auras3.target.custom4.placed.sortMethod","prepareKind":"unitAuraWorkspace","prepareValue":"custom4_behavior","query":"dots on target custom priority","label":"Custom Priority"} -->
+
+### Changes
+
+- Moved aura ordering out of Style into dedicated, scope-aware **Ordering** workspaces for Unit Frames, Group Frames, custom aura containers, and external defensives.
+- Added priority reordering controls to the tracked DoT list and kept inactive entries gap-free at runtime.
+- Added Deathstalker's Mark for Rogues and Atmospheric Exposure for Druids to the tracked target-effect presets.
+
+### Fixes & Performance
+
+- Fixed Spell Indicator controls from an inactive display type remaining visible after selection or preview changes.
+- Kept Custom Priority event-driven through native aura groups without polling or recurring `OnUpdate` work.
+
 ## 6.08 - 2026-08-16
 
 ### Highlights

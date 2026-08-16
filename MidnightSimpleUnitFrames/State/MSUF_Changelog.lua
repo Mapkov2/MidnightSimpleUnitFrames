@@ -8,12 +8,51 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "7E2C3BBD8F6C69D4F7B4BFF349ABDF4DA052DA0E9817C747974DB8EA8414EC0C",
-    currentVersion = "6.08",
-    historyFromVersion = "6.07",
-    previousVersion = "6.07",
-    rangeLabel = "6.07 -> 6.08",
+    sourceSha256 = "683ED69C371ED343DDC4F0956944DC3522ADC0095157D6DBBDEB2E5170195E29",
+    currentVersion = "6.09-Beta1",
+    historyFromVersion = "6.08-Beta1",
+    previousVersion = "6.08",
+    rangeLabel = "6.08 -> 6.09-Beta1",
     entries = {
+        {
+            version = "6.09-Beta1",
+            date = "2026-08-17",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Added dynamic Custom Priority ordering for Dots on target, keeping the configured spell order compact and stable as tracked DoTs appear or expire.",
+                            link = {
+                                pageKey = "uf_target",
+                                query = "dots on target custom priority",
+                                label = "Custom Priority",
+                                sectionId = "auras",
+                                controlId = "menu2.uf_target.auras.unit-workspace.container-selector",
+                                settingKey = "auras3.target.custom4.placed.sortMethod",
+                                prepareKind = "unitAuraWorkspace",
+                                prepareValue = "custom4_behavior",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Moved aura ordering out of Style into dedicated, scope-aware Ordering workspaces for Unit Frames, Group Frames, custom aura containers, and external defensives.",
+                        "Added priority reordering controls to the tracked DoT list and kept inactive entries gap-free at runtime.",
+                        "Added Deathstalker's Mark for Rogues and Atmospheric Exposure for Druids to the tracked target-effect presets.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Fixed Spell Indicator controls from an inactive display type remaining visible after selection or preview changes.",
+                        "Kept Custom Priority event-driven through native aura groups without polling or recurring OnUpdate work.",
+                    },
+                },
+            },
+        },
         {
             version = "6.08",
             date = "2026-08-16",
@@ -236,41 +275,6 @@ local data = {
                     bullets = {
                         "Fixed Group Frame absorb overlays ignoring the configured opacity.",
                         "Fixed aura icon zoom scaling when a debuff border is active.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.07",
-            date = "2026-08-15",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "Expanded Texture Layers into three independently configurable, HP-reactive decoration slots with shared gradients, threshold colors, opacity rules, target/combat conditions, presets, and runtime-faithful previews.",
-                        "Added League of Legends-style Health and Power loss feedback for Unit and Group Frames. Bars update immediately while a configurable trailing chunk shows recently lost Health or spent Power without polling.",
-                        "Added profile-wide controls for Blizzard's Player Buff Frame and normal Debuff icons while keeping Private Auras and Deadly Debuff warnings available.",
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Added direct Edit Mode popup controls for Custom Aura 1-4, Dots on Target, and Player Defensive Buffs, including position, size, spacing, reset, undo, Boss synchronization, and Menu focus.",
-                        "Restored Spell Indicator bars with Blizzard's native aura-duration StatusBar, configurable growth direction, smoothing, timer text, geometry, color, alpha, and layer.",
-                        "Increased the Menu Back and Forward buttons for easier navigation.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed Group Aura lanes and Spell Indicators remaining visible for offline, phased, distant-map, or different-instance members. Presence updates remain coalesced and event-driven.",
-                        "Fixed Unit Aura preview handles requiring a second click before their X/Y controls appeared after switching lanes. The first click now survives the settings-page rebuild.",
-                        "Fixed Target of Target identity and color events being routed through the Target frame without unit filtering. Updates now listen only to targettarget, and foreign unit events can no longer recolor the Target health bar.",
-                        "Fixed Texture Layer controls writing to the wrong slot and protected HP-driven alpha values being cached or compared from Lua.",
-                        "Fixed Spell Indicator icon, bar, glow, and full-frame effect ownership, opacity, cleanup, preview parity, and layer ordering.",
-                        "Fixed Level, Race, Class, and other name-relative status text drifting away from shortened or repositioned Unit Frame names.",
-                        "Fixed stale Player portraits, Unit Aura settings writing to the wrong lane, and Objective Tracker state leaking through MSUF's Edit Mode bridge.",
-                        "Fixed Class Resource preview text handles becoming trapped behind higher-layer bar visuals.",
                     },
                 },
             },
