@@ -205,6 +205,9 @@ local function EnsureGeneral()
 end
 local function AddTooltip(widget, title, body, opts)
     if not (widget and (widget.SetScript or widget.HookScript)) then return widget end
+    -- The stamp lets the search layer's automatic help-tooltip wiring skip
+    -- widgets a page already claimed; explicit calls always win.
+    widget._msuf2TooltipWired = widget._msuf2TooltipWired or "manual"
     opts = opts or {}
     local owner = opts.owner or "ANCHOR_RIGHT"
     local titleColor = opts.titleColor or { 1, 1, 1 }
@@ -703,6 +706,8 @@ end
 ---   enable    = widget | {widgets} -- the master toggle itself; enabled by `enableOn` (default: always on)
 ---   enableOn  = fn(cfg) -> bool    -- optional gate for `enable` (e.g. hasTotemFrame)
 ---   when      = fn(cfg) -> bool    -- optional: skip this entry entirely when false (control left untouched)
+---   reason    = string             -- optional: shown as a tooltip while `controls` are disabled,
+---                                  -- so the user learns WHICH toggle unlocks them
 --- }
 --- opts.also:    extra fn run at the end of every refresh (e.g. a preview repaint).
 --- opts.override: fn(cfg, setEnabled) run last, for page-specific final adjustments
@@ -724,15 +729,28 @@ function M.BindGateGroup(ctx, source, entries, opts)
             W.SetControlEnabled(target, enabled)
         end
     end
+    local function setReason(target, reason)
+        if not (target and reason and W.SetControlDisabledReason) then return end
+        if type(target) == "table" and target[1] ~= nil and not target.GetObjectType then
+            for i = 1, #target do W.SetControlDisabledReason(target[i], reason) end
+        else
+            W.SetControlDisabledReason(target, reason)
+        end
+    end
+    local reasonsApplied = false
     local function refresh()
         local cfg = M.CallIf(source)
         for i = 1, #entries do
             local e = entries[i]
             if (not e.when) or e.when(cfg) then
                 if e.enable then setEnabled(e.enable, e.enableOn and (e.enableOn(cfg) and true or false) or true) end
-                if e.controls then setEnabled(e.controls, e.on and (e.on(cfg) and true or false) or false) end
+                if e.controls then
+                    if not reasonsApplied and e.reason then setReason(e.controls, e.reason) end
+                    setEnabled(e.controls, e.on and (e.on(cfg) and true or false) or false)
+                end
             end
         end
+        reasonsApplied = true
         if opts.override then opts.override(cfg, setEnabled) end
         M.CallIf(opts.also)
     end

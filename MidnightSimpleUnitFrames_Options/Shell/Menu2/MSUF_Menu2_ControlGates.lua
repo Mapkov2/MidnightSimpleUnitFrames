@@ -48,6 +48,11 @@ function Gates.Apply(root, gateKey, enabled, opts)
                 stale[i] = nil
             end
         end
+        -- Store the reason before the gate disables the control, so the
+        -- enabled-state pass keeps the mouse on for the reason tooltip.
+        if opts.reason and not enabled and W.SetControlDisabledReason then
+            W.SetControlDisabledReason(control, opts.reason)
+        end
         W.SetControlGateEnabled(control, gateKey, enabled)
     end)
     return changed

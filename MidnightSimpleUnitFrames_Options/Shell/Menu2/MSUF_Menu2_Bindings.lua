@@ -219,6 +219,30 @@ function M.StageFactoryReset()
     M.CallIf(M.SetFixedPreviewExpandedPreference, true)
     return true
 end
+--- Dialog-guarded entry for UI buttons. The slash path already demands a
+--- typed "confirm"; a one-click button must never be the easier way to wipe
+--- every profile on the account. Assistant commands keep calling
+--- StageFactoryReset directly behind their own confirmation flow.
+function M.ConfirmFactoryReset()
+    if M.BlockCombatAction and M.BlockCombatAction() then return false end
+    if not (_G.StaticPopupDialogs and _G.StaticPopup_Show) then
+        -- Headless/stub environments have no dialog layer; fall back to the
+        -- staged reset rather than silently doing nothing.
+        return M.StageFactoryReset()
+    end
+    M.InstallStaticPopup("MSUF2_CONFIRM_FACTORY_RESET", {
+        text = "%s",
+        button1 = M.Tr("Delete everything"),
+        button2 = _G.CANCEL or M.Tr("Cancel"),
+        showAlert = true,
+        OnAccept = function()
+            M.CallIf(M.StageFactoryReset)
+        end,
+    })
+    _G.StaticPopup_Show("MSUF2_CONFIRM_FACTORY_RESET",
+        M.Tr("Factory reset MSUF?\n\nThis deletes EVERY MSUF profile and setting for this account. This cannot be undone - export any profile you want to keep first."))
+    return true
+end
 local function BlockCombatAndRefresh(ctx)
     if not M.BlockCombatAction() then return false end
     M.CallIf(M.Refresh, ctx)

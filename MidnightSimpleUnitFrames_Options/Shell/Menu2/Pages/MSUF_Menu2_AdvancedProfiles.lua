@@ -1017,19 +1017,97 @@ local function BuildProfiles(ctx)
         SyncBlizzEMFlag()
     end)
     SyncBlizzEMFlag()
+    local function RunLegacyImportIntoCurrent(text)
+        if BlockCombatAction() then return false end
+        -- Explicit false is the only reliable failure signal; some legacy apply
+        -- paths historically return nil on success.
+        local called, imported = CallMSUF("MSUF_ImportLegacyFromString", text)
+        if not called or imported == false then
+            if M.ShowStatusFeedback then M.ShowStatusFeedback(M.Tr("Legacy import failed"), "danger", 1.8) end
+            RefreshAfterProfileChange(ctx)
+            return false
+        end
+        ClearProfileHistory()
+        M.RequestGeneralApply("MSUF2_PROFILE_LEGACY_IMPORT", { preview = true, applyAll = false, notify = false })
+        RefreshAfterProfileChange(ctx)
+        if M.ShowStatusFeedback then M.ShowStatusFeedback(M.Tr("Legacy profile imported"), "ok", 1.7) end
+        return true
+    end
+    local function ImportLegacyIntoNewProfile(text)
+        -- Same transactional shape as ImportIntoNewProfile: create, switch,
+        -- import, roll the created profile back if any required step fails.
+        local name = Trim(importProfileName:GetText())
+        if not (name and name ~= "") then
+            PrintProfileMessage("|cffff0000", "Enter a new profile name first.")
+            return false
+        end
+        if ProfileExists(name) then
+            PrintProfileMessage("|cffff0000", M.Format("Profile '%s' already exists.", name))
+            return false
+        end
+        if type(_G.MSUF_CreateProfile) ~= "function" or type(_G.MSUF_SwitchProfile) ~= "function" then
+            PrintProfileMessage("|cffff0000", "Import failed: profile API is not available.")
+            return false
+        end
+        local previous = ActiveProfileName()
+        CallMSUF("MSUF_CreateProfile", name)
+        if not ProfileExists(name) then
+            PrintProfileMessage("|cffff0000", M.Format("Import failed: could not create profile '%s'.", name))
+            return false
+        end
+        local previousExists = ProfileExists(previous)
+        CallMSUF("MSUF_SwitchProfile", name)
+        if _G.MSUF_ActiveProfile ~= name then
+            if previousExists then CallMSUF("MSUF_SwitchProfile", previous) end
+            DeleteCreatedProfile(name)
+            PrintProfileMessage("|cffff0000", M.Format("Import failed: could not switch to profile '%s'.", name))
+            return false
+        end
+        local called, imported = CallMSUF("MSUF_ImportLegacyFromString", text)
+        if not called or imported == false then
+            if previousExists then CallMSUF("MSUF_SwitchProfile", previous) end
+            DeleteCreatedProfile(name)
+            PrintProfileMessage("|cffff0000", M.Tr("Import failed."))
+            RefreshAfterProfileChange(ctx)
+            return false
+        end
+        ClearProfileHistory()
+        M.RequestGeneralApply("MSUF2_PROFILE_LEGACY_IMPORT", { preview = true, applyAll = false, notify = false })
+        RefreshAfterProfileChange(ctx)
+        M.profileImportNewName = ""
+        importProfileName:SetText("")
+        ReloadAfterNewProfileImport(name)
+        return true
+    end
     local legacy = ProfileButton(actionsCard, "Import Legacy", function()
         if BlockCombatAction() then return end
         local text = blob:GetText()
-        if text and text ~= "" and type(_G.MSUF_ImportLegacyFromString) == "function" then
-            M.profileImportString = text
-            CallMSUF("MSUF_ImportLegacyFromString", text)
-            ClearProfileHistory()
-            M.RequestGeneralApply("MSUF2_PROFILE_LEGACY_IMPORT", { preview = true, applyAll = false, notify = false })
-            RefreshAfterProfileChange(ctx)
-            if M.ShowStatusFeedback then M.ShowStatusFeedback(M.Tr("Legacy profile imported"), "ok", 1.7) end
-        elseif M.ShowStatusFeedback then
-            M.ShowStatusFeedback(M.Tr("Legacy import unavailable"), "danger", 1.8)
+        if not (text and text ~= "" and type(_G.MSUF_ImportLegacyFromString) == "function") then
+            if M.ShowStatusFeedback then M.ShowStatusFeedback(M.Tr("Legacy import unavailable"), "danger", 1.8) end
+            return
         end
+        M.profileImportString = text
+        if M.profileImportCreateNew == true then
+            ImportLegacyIntoNewProfile(text)
+            return
+        end
+        if not (_G.StaticPopupDialogs and _G.StaticPopup_Show) then
+            RunLegacyImportIntoCurrent(text)
+            return
+        end
+        M.InstallStaticPopup("MSUF2_CONFIRM_LEGACY_IMPORT", {
+            text = "%s",
+            button1 = M.Tr("Replace profile"),
+            button2 = CANCEL or M.Tr("Cancel"),
+            showAlert = true,
+            OnAccept = function(_, data)
+                if data and type(data.run) == "function" then data.run() end
+            end,
+        })
+        _G.StaticPopup_Show("MSUF2_CONFIRM_LEGACY_IMPORT",
+            M.Format(M.Tr("Import legacy string into profile '%s'?\n\nThis replaces the entire active profile and clears the Undo history. Turn on 'Import and create new profile' to keep your current profile untouched."),
+                tostring(ActiveProfileName() or "Default")),
+            nil, { run = function() RunLegacyImportIntoCurrent(text) end })
     end, nil, "import.legacy", true, nil, nil, nil, ioButtonW)
     local wago = ProfileButton(actionsCard, "Browse Wago Profiles", function()
         if not CallMSUF("MSUF_ShowCopyLink", "Wago MSUF Profiles", WAGO_PROFILES_URL) then
