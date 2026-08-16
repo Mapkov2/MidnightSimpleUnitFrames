@@ -22,6 +22,7 @@ _G.C_Spell = {
         return names[spellID]
     end,
     IsSpellImportant = function(spellID) return spellID == 999001 end,
+    IsExternalDefensive = function(spellID) return spellID == 900100 end,
 }
 
 local path = root .. "/MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Features.lua"
@@ -115,6 +116,30 @@ assert(features.MatchFilterRequirements(rawPlan, "target", {
 assert(features.MatchFilterRequirements(rawPlan, "target", {
     spellId = 999001, auraInstanceID = 7, dispelName = "Magic", isPlayerAura = true,
 }, function() return true end) == false, "Classic !PLAYER predicate accepted a player aura")
+
+local externalPlan = features.CompileRawFilter("HELPFUL|EXTERNAL_DEFENSIVE", true)
+assert(externalPlan.scanFilter == "HELPFUL" and externalPlan.requirements.externalDefensive == true,
+    "Classic External Defensive plan did not keep a helpful base scan")
+assert(features.MatchFilterRequirements(externalPlan, "party1", {
+    spellId = 900100, auraInstanceID = 8,
+}, function() error("documented external predicate unexpectedly fell back to a token scan") end) == true,
+    "Classic External Defensive plan rejected a classified defensive")
+assert(features.MatchFilterRequirements(externalPlan, "party1", {
+    spellId = 54861, auraInstanceID = 9,
+}, function() return true end) == false,
+    "Classic External Defensive plan accepted Nitro Boosts")
+
+local nonExternalPlan = features.CompileRawFilter("HELPFUL|!EXTERNAL_DEFENSIVE", true)
+assert(nonExternalPlan.scanFilter == "HELPFUL" and nonExternalPlan.requirements.notExternalDefensive == true,
+    "Classic normal Buff plan lost the External Defensive exclusion")
+assert(features.MatchFilterRequirements(nonExternalPlan, "party1", {
+    spellId = 54861, auraInstanceID = 10,
+}, function() return false end) == true,
+    "Classic normal Buff plan rejected a regular helpful aura")
+assert(features.MatchFilterRequirements(nonExternalPlan, "party1", {
+    spellId = 900100, auraInstanceID = 11,
+}, function() return false end) == false,
+    "Classic normal Buff plan retained an External Defensive")
 
 local dormantSettings = {
     includeNameplateOnly = true, raid = true, externalDefensive = true,

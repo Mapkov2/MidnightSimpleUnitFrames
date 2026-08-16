@@ -1150,14 +1150,25 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
     if kind == "buff" or kind == "debuff" then
         -- Generic Classic group lanes support only All and Player. Do not
         -- rewrite the stored token: Retail can consume it again after import.
+        -- The External lane's auto-blacklist is an internal ownership rule,
+        -- not a user-selected Retail filter, so preserve that one negation.
         local playerOnly = false
+        local excludeExternalDefensives = false
         for token in tostring(rawFilter):gmatch("[^|]+") do
-            if token:upper():gsub("%s+", "") == "PLAYER" then playerOnly = true end
+            token = token:upper():gsub("%s+", "")
+            if token == "PLAYER" then
+                playerOnly = true
+            elseif token == "!EXTERNAL_DEFENSIVE" or token == "NOT_EXTERNAL_DEFENSIVE" then
+                excludeExternalDefensives = true
+            end
         end
         rawFilter = playerOnly and (spec.filter .. "|PLAYER") or spec.filter
+        if kind == "buff" and excludeExternalDefensives then
+            rawFilter = rawFilter .. "|!EXTERNAL_DEFENSIVE"
+        end
     end
     local filterPlan = A3.ClassicFeatures and A3.ClassicFeatures.CompileRawFilter
-        and A3.ClassicFeatures.CompileRawFilter(rawFilter, kind == "buff") or nil
+        and A3.ClassicFeatures.CompileRawFilter(rawFilter, spec.harmful ~= true) or nil
     local filter = filterPlan and filterPlan.scanFilter or spec.filter
     local nativePlayerFilter = filterPlan and filterPlan.nativePlayerFilter == true or false
     local black = CompileBlacklistHash(source[spec.blacklistKey])

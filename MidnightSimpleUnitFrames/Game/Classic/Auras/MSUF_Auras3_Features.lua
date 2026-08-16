@@ -188,6 +188,7 @@ function Features.CompileRawFilter(filter, helpful)
         elseif token == "!CANCELABLE" or token == "NOT_CANCELABLE" then req.notCancelable = true
         elseif token == "CROWD_CONTROL" then req.crowdControl = true
         elseif token == "EXTERNAL_DEFENSIVE" then req.externalDefensive = true
+        elseif token == "!EXTERNAL_DEFENSIVE" or token == "NOT_EXTERNAL_DEFENSIVE" then req.notExternalDefensive = true
         elseif token == "BIG_DEFENSIVE" then req.bigDefensive = true
         elseif token == "STEALABLE" then req.stealable = true
         elseif token == "BOSS" then req.boss = true
@@ -202,6 +203,16 @@ function Features.IsImportantAura(data)
     local isImportant = C_Spell and C_Spell.IsSpellImportant
     if not (spellID and type(isImportant) == "function") then return false end
     return isImportant(spellID) == true
+end
+
+function Features.IsExternalDefensiveAura(data)
+    local rawSpellID = data and data.spellId
+    local spellID = not IsSecret(rawSpellID) and tonumber(rawSpellID) or nil
+    local isExternalDefensive = C_Spell and C_Spell.IsExternalDefensive
+    if not (spellID and type(isExternalDefensive) == "function") then return nil end
+    local result = isExternalDefensive(spellID)
+    if IsSecret(result) then return nil end
+    return result == true
 end
 
 function Features.MatchFilterRequirements(plan, unit, data, matchFilter)
@@ -225,8 +236,16 @@ function Features.MatchFilterRequirements(plan, unit, data, matchFilter)
     if req.cancelable == true and not matchFilter(unit, auraInstanceID, "HELPFUL|CANCELABLE") then return false end
     if req.notCancelable == true and not matchFilter(unit, auraInstanceID, "HELPFUL|NOT_CANCELABLE") then return false end
     if req.crowdControl == true and not matchFilter(unit, auraInstanceID, "HARMFUL|CROWD_CONTROL") then return false end
-    if req.externalDefensive == true
-        and not matchFilter(unit, auraInstanceID, "HELPFUL|EXTERNAL_DEFENSIVE") then return false end
+    if req.externalDefensive == true or req.notExternalDefensive == true then
+        local externalDefensive = Features.IsExternalDefensiveAura(data)
+        if externalDefensive == nil then
+            externalDefensive = type(matchFilter) == "function"
+                and matchFilter(unit, auraInstanceID, "HELPFUL|EXTERNAL_DEFENSIVE") == true
+                or false
+        end
+        if req.externalDefensive == true and externalDefensive ~= true then return false end
+        if req.notExternalDefensive == true and externalDefensive == true then return false end
+    end
     if req.bigDefensive == true
         and not matchFilter(unit, auraInstanceID, "HELPFUL|BIG_DEFENSIVE") then return false end
     return true

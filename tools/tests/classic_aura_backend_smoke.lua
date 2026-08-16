@@ -201,7 +201,7 @@ _G.MSUF_DB.gf_party = {
             enabled = true, filterToken = "Player",
             blacklist = { hidePermanent = true, spells = {} },
         },
-        externals = { enabled = false },
+        externals = { enabled = true, max = 2, autoBlacklistBuffs = true },
     },
 }
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Menu_Model.lua"))(
@@ -212,7 +212,7 @@ namespace.GF.GetScaledFrameMetrics = function() return 80, 32 end
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Config.lua"))(
     "MidnightSimpleUnitFrames", namespace)
 local compiledGroupSpec = namespace.GF.CompileSpec("party")
-assert(compiledGroupSpec.auras.buffFilter == "HELPFUL|PLAYER"
+assert(compiledGroupSpec.auras.buffFilter == "HELPFUL|PLAYER|!EXTERNAL_DEFENSIVE"
     and compiledGroupSpec.auras.buffHidePermanent == true,
     "Classic Group buff settings were lost before the Aura backend")
 assert(compiledGroupSpec.auras.debuffFilter == "HARMFUL|PLAYER"
@@ -227,10 +227,15 @@ assert(registered.IsEnabled(integratedGroupFrame) == true,
 local integratedGroupConfig = assert(integratedGroupFrame._msufA3GroupConfig,
     "Classic integrated Group aura backend config missing")
 assert(integratedGroupConfig.lanes.buff.hidePermanent == true
-    and integratedGroupConfig.lanes.buff.filter == "HELPFUL|PLAYER",
+    and integratedGroupConfig.lanes.buff.filter == "HELPFUL|PLAYER"
+    and integratedGroupConfig.lanes.buff.filterRequirements.player == true
+    and integratedGroupConfig.lanes.buff.filterRequirements.notExternalDefensive == true,
     "Classic integrated Group buff filters did not reach the renderer")
 assert(integratedGroupConfig.lanes.debuff.hidePermanent == true
     and integratedGroupConfig.lanes.debuff.filter == "HARMFUL|PLAYER",
     "Classic integrated Group debuff filters did not reach the renderer")
+assert(integratedGroupConfig.lanes.external.filter == "HELPFUL"
+    and integratedGroupConfig.lanes.external.filterRequirements.externalDefensive == true,
+    "Classic integrated External Defensive lane did not keep its helpful classification")
 
 print("classic aura backend smoke passed")
